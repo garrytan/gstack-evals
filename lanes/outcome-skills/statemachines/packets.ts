@@ -9,11 +9,13 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Lang } from "./langs.ts";
+import { rustCode, type Lang } from "./langs.ts";
+import { treeVolume } from "./oracle.ts";
 import { blocks } from "./secondary.ts";
+import { applyPatches, copyVolume, dropVolume, runName, runTests, type Mode } from "./testrun.ts";
 import { CHAT_PRICES } from "../../../src/runner/pricing/prices.ts";
 import { ITEMS } from "./items.ts";
-import { smFail } from "./unit.ts";
+import { readUnit, smFail } from "./unit.ts";
 
 export const LABELLERS = { astra: "openai/gpt-6-astra", opus: "anthropic/claude-opus-5-5" } as const;
 /** Section 10: GPT-6 Astra judges Opus sessions; Opus 5.5 judges Sol and particle-1 sessions. */
@@ -212,54 +214,91 @@ export const LOG_HEADER: Partial<Record<Lang, { line: string; has: RegExp }>> = 
   c: { line: "#include <stdio.h>", has: /^\s*#\s*include\s*<stdio\.h>/m },
   cpp: { line: "#include <iostream>", has: /^\s*#\s*include\s*<iostream>/m },
 };
-const QUOTES: Record<Lang, string> = { go: '"`', rust: '"', java: "\"'", csharp: "\"'", c: "\"'", cpp: "\"'", js: "\"'`", ts: "\"'`", python: "\"'" };
+const QUOTES: Record<Exclude<Lang, "rust">, string> = { go: "\"'", java: "\"'", csharp: "\"'", c: "\"'", cpp: "\"'", js: "\"'", ts: "\"'", python: "\"'" };
+/** Quotes that open a string that may run on over lines: Python's triple quotes, Go's raw strings, JavaScript and
+ *  TypeScript template literals, Java's text blocks and C#'s raw strings. */
+const LONG_QUOTES: Partial<Record<Lang, string[]>> = { python: ['"""', "'''"], go: ["`"], js: ["`"], ts: ["`"], java: ['"""'], csharp: ['"""'] };
+/** Languages where a backslash that ends a line continues a one-line string onto the next. */
+const SPLICE: ReadonlySet<Lang> = new Set<Lang>(["python", "c", "cpp", "js", "ts"]);
 const TS_TYPE = /^\s*(?:export\s+)?(?:declare\s+)?(?:interface\s+\w|type\s+\w[^=]*=)/;
 const indentOf = (l: string) => /^\s*/.exec(l)![0];
+const brackets = (s: string) => (s.match(/[([{]/g)?.length ?? 0) - (s.match(/[)\]}]/g)?.length ?? 0);
+const sq = (s: string) => "'" + s.replace(/'/g, "'\\''") + "'";
 
-/** A line with its one-line string literals blanked and its line comment cut, columns kept. */
-function code(lang: Lang, line: string): string {
-  let out = "", q = "";
-  for (let i = 0; i < line.length; i++) {
-    const c = line[i]!;
-    if (q) {
-      if (c === "\\") {
+/** The file's lines as code: string and char literals blanked between their quotes, comments blanked, columns kept. A
+ *  string that runs on over lines (LONG_QUOTES, or a one-line string that a final backslash continues where SPLICE
+ *  allows it) stays blanked on every line it covers, and a quote inside a block comment opens nothing. Rust goes through
+ *  rustCode. open[i] says a string is still open at the end of line i. */
+function codeLines(lang: Lang, lines: string[]): { code: string[]; open: boolean[] } {
+  if (lang === "rust") return { code: rustCode(lines.join("\n")).split("\n"), open: lines.map(() => false) };
+  const long = LONG_QUOTES[lang] ?? [];
+  const code: string[] = [], open: boolean[] = [];
+  let q = "", comment = false;
+  for (const line of lines) {
+    let out = "", spliced = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i]!;
+      if (comment) {
+        if (line.startsWith("*/", i)) {
+          comment = false;
+          out += "  ";
+          i++;
+        } else out += " ";
+      } else if (q) {
+        if (c === "\\" && !((q === "`" && lang === "go") || (q === '"""' && lang === "csharp"))) {
+          spliced = i + 1 === line.length;
+          out += spliced ? " " : "  ";
+          i++;
+        } else if (line.startsWith(q, i)) {
+          out += q;
+          i += q.length - 1;
+          q = "";
+        } else out += " ";
+      } else if (lang === "python" ? c === "#" : line.startsWith("//", i)) {
+        out += " ".repeat(line.length - i);
+        break;
+      } else if (lang !== "python" && line.startsWith("/*", i)) {
+        comment = true;
         out += "  ";
         i++;
-      } else if (c === q) {
-        q = "";
-        out += c;
-      } else out += " ";
-      continue;
+      } else if (long.some((x) => line.startsWith(x, i)) || QUOTES[lang].includes(c)) {
+        q = long.find((x) => line.startsWith(x, i)) ?? c;
+        out += q;
+        i += q.length - 1;
+      } else out += c;
     }
-    if (lang === "python" ? c === "#" : c === "/" && line[i + 1] === "/") break;
-    if (QUOTES[lang].includes(c)) q = c;
-    out += c;
+    if (q && !long.includes(q) && !(spliced && SPLICE.has(lang))) q = "";
+    code.push(out);
+    open.push(q !== "");
   }
-  return out;
+  return { code, open };
 }
 
-/** The function bodies the stock diffs touch: each line that opens one (FUNCTION_LINE) and the body's last line. A line
- *  after a macro continuation, a Java or C# type with a parameter list (a record or primary constructor), a Java or C#
- *  anonymous class or object initializer passed as an argument, a TypeScript
- *  type or interface member, and a TypeScript signature whose return type is an object type open no body and are left out. */
-function functionBodies(lang: Lang, lines: string[]): Array<{ at: number; end: number }> {
+/** The function bodies the stock diffs touch: each line that opens one (FUNCTION_LINE) and the body's last line, read on
+ *  the file's code (codeLines), so braces in strings, comments and Go runes count for nothing. A line after a macro
+ *  continuation, a Java or C# type with a parameter list (a record or primary constructor), a Java or C# anonymous class
+ *  or object initializer passed as an argument (whatever its constructor call nests), a TypeScript type or interface
+ *  member, and a TypeScript signature whose return type is an object type open no body and are left out. A Python body
+ *  runs on over the lines of a string it leaves open. */
+function functionBodies(lang: Lang, lines: string[], m: { code: string[]; open: boolean[] }): Array<{ at: number; end: number }> {
   const depth = [0];
-  for (const l of lines) {
-    const c = code(lang, l);
-    depth.push(depth.at(-1)! + (c.match(/\{/g)?.length ?? 0) - (c.match(/\}/g)?.length ?? 0));
-  }
+  for (const c of m.code) depth.push(depth.at(-1)! + (c.match(/\{/g)?.length ?? 0) - (c.match(/\}/g)?.length ?? 0));
   const typed = new Set<number>();
   if (lang === "ts" || lang === "js") lines.forEach((l, i) => {
     if (TS_TYPE.test(l)) for (let j = i; j < lines.length && (j === i || depth[j]! > depth[i]!); j++) typed.add(j);
   });
   const out: Array<{ at: number; end: number }> = [];
   lines.forEach((l, i) => {
-    if (!FUNCTION_LINE[lang].test(l) || (i > 0 && /\\\s*$/.test(lines[i - 1]!)) || typed.has(i)) return;
-    if ((lang === "java" || lang === "csharp") && /\b(?:class|record|struct|interface|enum)\b/.test(code(lang, l).split("(")[0]!)) return;
-    if ((lang === "java" || lang === "csharp") && /\bnew\s+[\w.<>\[\], ]+\([^()]*\)\s*\{\s*$/.test(code(lang, l))) return;
+    if (!FUNCTION_LINE[lang].test(l) || (i > 0 && /\\\s*$/.test(lines[i - 1]!)) || typed.has(i) || !m.code[i]!.trim() || (i > 0 && m.open[i - 1])) return;
+    if (lang === "java" || lang === "csharp") {
+      if (/\b(?:class|record|struct|interface|enum)\b/.test(m.code[i]!.split("(")[0]!)) return;
+      let flat = m.code[i]!, was = "";
+      while (flat !== was) [was, flat] = [flat, flat.replace(/\([^()]*\)/g, "\u0001")];
+      if (/\bnew\s+[\w.<>\[\], ]+\u0001\s*\{\s*$/.test(flat)) return;
+    }
     if (lang === "ts" && /\)\s*:\s*\{\s*$/.test(l)) return;
     let end = i;
-    if (lang === "python") while (end + 1 < lines.length && (!lines[end + 1]!.trim() || indentOf(lines[end + 1]!).length > indentOf(l).length)) end++;
+    if (lang === "python") while (end + 1 < lines.length && (m.open[end] || !lines[end + 1]!.trim() || indentOf(lines[end + 1]!).length > indentOf(l).length)) end++;
     else while (end + 1 < lines.length && depth[end + 1]! > depth[i]!) end++;
     out.push({ at: i, end });
   });
@@ -269,8 +308,9 @@ function functionBodies(lang: Lang, lines: string[]): Array<{ at: number; end: n
 /** The log line for one function body and the line it goes after, or null where a statement can't go first: a Go
  *  signature ending in an anonymous struct or interface type, a Rust const fn, a Java enum constant's body or a
  *  constructor that must call super or this first, and a Python body whose indent can't be read. A Python body takes its
- *  first statement's indent, and its log line goes after a docstring so the docstring stays the body's first statement. */
-function logLine(lang: Lang, lines: string[], f: { at: number; end: number }, unit: string): { after: number; line: string } | null {
+ *  first statement's indent, and its log line goes after a docstring's whole statement (to the line where no string or
+ *  bracket is left open and no backslash continues it) so the docstring stays the body's first statement. */
+function logLine(lang: Lang, lines: string[], m: { code: string[]; open: boolean[] }, f: { at: number; end: number }, unit: string): { after: number; line: string } | null {
   const l = lines[f.at]!;
   const b = lines.findIndex((x, i) => i > f.at && i <= f.end && x.trim() && !(lang === "python" && x.trim().startsWith("#")));
   const body = b < 0 ? undefined : lines[b];
@@ -280,34 +320,57 @@ function logLine(lang: Lang, lines: string[], f: { at: number; end: number }, un
   if (lang !== "python") return { after: f.at, line: indentOf(l) + unit + LOG_CALL[lang] };
   const ind = indentOf(body ?? "");
   if (!(ind.length > indentOf(l).length && ind.startsWith(indentOf(l)))) return null;
-  const doc = /^\s*[rRuUbB]{0,2}("""|'''|"|')/.exec(body!)?.[1];
-  if (!doc) return { after: f.at, line: ind + LOG_CALL.python };
-  const rest = body!.trim().replace(/^[rRuUbB]{0,2}/, "").slice(doc.length);
-  const after = doc.length === 1 || rest.includes(doc) ? b : lines.findIndex((x, i) => i > b && i <= f.end && x.includes(doc));
-  return after < 0 ? null : { after, line: ind + LOG_CALL.python };
+  if (!/^\s*[rRuUbB]{0,2}("""|'''|"|')/.test(body!)) return { after: f.at, line: ind + LOG_CALL.python };
+  for (let j = b, depth = 0; j <= f.end; j++) {
+    depth += brackets(m.code[j]!);
+    if (!m.open[j] && depth <= 0 && !/\\$/.test(m.code[j]!)) return { after: j, line: ind + LOG_CALL.python };
+  }
+  return null;
 }
 
-/** The C or C++ header line added before the file's first #include outside any #if (an include guard's block counts as
- *  outside), else after the include guard's #define, else at the top. */
-function withHeader(lines: string[], header: string): string[] {
-  let depth = 0, guard = -1;
-  const at = (i: number) => [...lines.slice(0, i), header, ...lines.slice(i)];
-  for (let i = 0; i < lines.length; i++) {
-    const d = /^\s*#\s*(\w+)/.exec(lines[i]!)?.[1];
-    if (d === "include" && (depth === 0 || (depth === 1 && guard >= 0))) return at(i);
-    if (d === "if" || d === "ifdef" || d === "ifndef") {
-      const next = lines.slice(i + 1).find((x) => x.trim());
-      if (depth === 0 && guard < 0 && d === "ifndef" && /^\s*#\s*define\b/.test(next ?? "")) guard = lines.indexOf(next!, i + 1);
-      depth++;
-    } else if (d === "endif") depth--;
+/** Where the C or C++ header line goes: after the last #include outside any #if (an include guard's block counts as
+ *  outside) among the preprocessor lines before the file's first line of code, so a config.h that sets feature macros
+ *  still comes first; else after the include guard's #define; else at the top. An include guard is an #ifndef X followed
+ *  by #define X whose #endif ends the file. */
+function headerAt(code: string[]): number {
+  const d: Array<string | null> = [];
+  let cont = false;
+  for (const c of code) {
+    const m: RegExpExecArray | null = cont ? null : /^\s*#\s*(\w*)/.exec(c);
+    d.push(cont || !c.trim() ? "" : m ? m[1]! : null);
+    cont = (cont || !!m) && /\\$/.test(c);
   }
-  return at(guard >= 0 ? guard + 1 : 0);
+  const opens = (x: string | null) => x === "if" || x === "ifdef" || x === "ifndef";
+  const endOf = (i: number) => {
+    for (let k = i, n = 0; k < d.length; k++) {
+      if (opens(d[k]!)) n++;
+      else if (d[k] === "endif" && --n === 0) return k;
+    }
+    return -1;
+  };
+  let depth = 0, last = -1, guard = -1;
+  for (let i = 0; i < d.length && d[i] !== null; i++) {
+    if (d[i] === "include" && (depth === 0 || (depth === 1 && guard >= 0))) last = i;
+    if (d[i] === "ifndef" && depth === 0 && guard < 0) {
+      const name = /^\s*#\s*ifndef\s+(\w+)/.exec(code[i]!)?.[1];
+      const next = d.findIndex((x, k) => k > i && x !== "");
+      const end = endOf(i);
+      if (name && next > i && d[next] === "define" && new RegExp("^\\s*#\\s*define\\s+" + name + "\\b").test(code[next]!) && end > 0 && d.slice(end + 1).every((x) => x === "")) guard = next;
+    }
+    if (opens(d[i]!)) depth++;
+    else if (d[i] === "endif") depth--;
+  }
+  return last >= 0 ? last + 1 : guard >= 0 ? guard + 1 : 0;
 }
 
 /** The rename-only diff: the file's first local (LOCAL_NAME) whose every use sits in the body of the function that
- *  declares it, renamed there. A use as a member, a key, a field shorthand or a named argument, a use inside a string or
- *  comment on its line, or a Python global or nonlocal of that name skips the local, so the rename keeps the behavior. */
-function renameOnly(x: { lang: Lang; path: string; text: string }, lines: string[], fns: Array<{ at: number; end: number }>): string | null {
+ *  declares it, renamed there. A use as a member, a key, a field shorthand or a named argument (a Python one inside an
+ *  open bracket on any line), a use inside a string or comment, or a Python global or nonlocal of that name skips the
+ *  local, so the rename keeps the behavior. Outside Python, a use must also sit in the scope of a declaration of that
+ *  name in the same function: from the end of its declarator (in Go and Rust, the end of its statement) to the close of
+ *  its block, which for a declaration in an if, for, while, switch, catch, using or try header is the block that header
+ *  opens. */
+function renameOnly(x: { lang: Lang; path: string; text: string }, lines: string[], code: string[], fns: Array<{ at: number; end: number }>): string | null {
   const word = (n: string, flags = "") => new RegExp("(?<![\\w$])" + n.replace(/\$/g, "\\$") + "(?![\\w$])", flags);
   const starts = [0];
   for (const l of lines) starts.push(starts.at(-1)! + l.length + 1);
@@ -328,16 +391,47 @@ function renameOnly(x: { lang: Lang; path: string; text: string }, lines: string
     }
     return null;
   };
+  const all = code.join("\n");
+  const bracket = [0];
+  for (const c of code) bracket.push(bracket.at(-1)! + brackets(c));
+  const scope = (p: number, name: string): [number, number] => {
+    const i = lineAt(p), lineEnd = starts[i]! + lines[i]!.length;
+    const header = /^\s*(?:\}\s*)?(?:else\s+)?(?:if|for|foreach|while|switch|select|catch|using|lock|try)\b/.test(code[i]!);
+    let start = p + name.length, end = all.length;
+    if (x.lang === "go" || x.lang === "rust") {
+      start = all.length;
+      for (let k = p + name.length, n = 0; k < all.length; k++) {
+        const c = all[k]!;
+        if (n <= 0 && (c === ";" || c === "\n" || (header && c === "{"))) {
+          start = k;
+          break;
+        }
+        n += "([{".includes(c) ? 1 : ")]}".includes(c) ? -1 : 0;
+      }
+    }
+    for (let k = p, r = 0; k < all.length; k++) {
+      r += all[k] === "{" ? 1 : all[k] === "}" ? -1 : 0;
+      if (header ? k >= lineEnd && r < 1 : r < 0) {
+        end = k;
+        break;
+      }
+    }
+    return [start, end];
+  };
   const suffix = x.lang === "python" || x.lang === "rust" ? "_value" : "Value";
-  for (const m of x.text.matchAll(new RegExp(LOCAL_NAME[x.lang].source, LOCAL_NAME[x.lang].flags.replace("g", "") + "g"))) {
-    const name = m[1]!, declAt = m.index! + m[0].indexOf(name), at = lineAt(declAt);
+  const decls = [...x.text.matchAll(new RegExp(LOCAL_NAME[x.lang].source, LOCAL_NAME[x.lang].flags.replace("g", "") + "g"))].map((m) => ({ name: m[1]!, at: m.index! + m[0].indexOf(m[1]!) }));
+  for (const { name, at: declAt } of decls) {
+    const at = lineAt(declAt);
     const f = fns.filter((g) => g.at < at && at <= g.end).at(-1);
     if (!f || word(name + suffix).test(x.text) || (x.lang === "python" && new RegExp("\\b(?:global|nonlocal)\\b.*" + word(name).source).test(x.text))) continue;
+    const own = x.lang === "python" ? [] : decls.filter((d) => d.name === name && f.at < lineAt(d.at) && lineAt(d.at) <= f.end).map((d) => ({ at: d.at, scope: scope(d.at, name) }));
     const bad = [...x.text.matchAll(word(name, "g"))].some((o) => {
-      const i = lineAt(o.index!), col = o.index! - starts[i]!, c = code(x.lang, lines[i]!);
+      const i = lineAt(o.index!), col = o.index! - starts[i]!, c = code[i]!;
       const before = c.slice(0, col), after = c.slice(col + name.length);
       return i <= f.at || i > f.end || c.slice(col, col + name.length) !== name || /(?:\.|->|::)\s*$/.test(before) || (o.index !== declAt && /^\s*:(?![:=])/.test(after)) ||
-        (/^\s*[,}]/.test(after) && (opener(before) === "{" || !before.trim())) || (x.lang === "python" && /[(,]\s*$/.test(before) && /^\s*=(?!=)/.test(after));
+        (/^\s*[,}]/.test(after) && (opener(before) === "{" || !before.trim())) ||
+        (x.lang === "python" && /^\s*=(?!=)/.test(after) && (/[(,]\s*$/.test(before) || bracket[i]! + brackets(before) > 0)) ||
+        (x.lang !== "python" && !own.some((d) => d.at === o.index || (o.index! >= d.scope[0] && o.index! < d.scope[1])));
     });
     if (!bad) return unified(x.path, x.text, lines.map((l, i) => (i > f.at && i <= f.end ? l.replace(word(name, "g"), name + suffix) : l)).join("\n"));
   }
@@ -360,28 +454,72 @@ function unified(path: string, before: string, after: string): string | null {
 
 /** The three stock diffs from one file of the unit's own tree, by keyless transforms that keep the file valid. A kind the
  *  file cannot give (no local to rename safely, no function a log call can open, a Rust no_std file) is null. Logging
- *  adds the header a C or C++ log call needs. */
+ *  adds the header a C or C++ log call needs. buildStock checks them in the unit's runtime image before any judge sees
+ *  them. */
 export function stockDiffs(x: { lang: Lang; path: string; text: string }): Array<{ kind: StockKind; diff: string | null }> {
   const lines = x.text.split("\n");
-  const fns = functionBodies(x.lang, lines);
+  const m = codeLines(x.lang, lines);
+  const fns = functionBodies(x.lang, lines, m);
   const fn = new Set(fns.map((f) => f.at));
   const unit = lines.some((l) => l.startsWith("\t")) ? "\t" : "    ";
   const comment = x.lang === "python" ? "#" : "//";
   const commented = lines.flatMap((l, i) => (fn.has(i) ? ["", indentOf(l) + comment + " Reviewed.", l] : [l]));
   if (!fn.size) commented.unshift(comment + " Reviewed.");
   const logs = new Map(fns.flatMap((f) => {
-    const s = logLine(x.lang, lines, f, unit);
+    const s = logLine(x.lang, lines, m, f, unit);
     return s === null ? [] : [[s.after, s.line] as const];
   }));
-  let logged = lines.flatMap((l, i) => (logs.has(i) ? [l, logs.get(i)!] : [l]));
+  const logged = lines.flatMap((l, i) => (logs.has(i) ? [l, logs.get(i)!] : [l]));
   const header = LOG_HEADER[x.lang];
-  if (header && !header.has.test(x.text)) logged = withHeader(logged, header.line);
+  if (header && !header.has.test(x.text)) logged.splice(headerAt(m.code), 0, header.line);
   const noStd = x.lang === "rust" && /^\s*#!\[no_std\]/m.test(x.text);
   return [
     { kind: "comments_whitespace", diff: unified(x.path, x.text, commented.join("\n")) },
-    { kind: "rename_only", diff: renameOnly(x, lines, fns) },
+    { kind: "rename_only", diff: renameOnly(x, lines, m.code, fns) },
     { kind: "logging", diff: logs.size && !noStd ? unified(x.path, x.text, logged.join("\n")) : null },
   ];
+}
+
+/** The parse a stock file gets after its unit's rebuild commands, for the languages whose rebuild need not read every
+ *  source file: Python compiles the file, JavaScript runs node --check on it. */
+const STOCK_PARSE: Partial<Record<Lang, (file: string) => string>> = {
+  python: (f) => 'p="$(command -v python3 || command -v python)" && "$p" -c ' + sq("import sys; compile(open(sys.argv[1], 'rb').read(), sys.argv[1], 'exec')") + " " + sq(f),
+  js: (f) => "node --check " + sq(f),
+};
+export interface StockBuild { kind: StockKind; diff: string | null; build: string }
+
+/** Section 10's stock diffs checked before any judge sees them. In the unit's runtime image, on fresh copies of its
+ *  prepared tree, the unit's own rebuild commands and STOCK_PARSE's parse of the file run once on the tree as it is (the
+ *  control) and once with each stock diff applied. A kind stands when some command passes on the control and every
+ *  command that passes there passes with the diff. A kind that does not apply or fails is null, and so is every kind when
+ *  the unit has no such command or its control passes none; build says why. */
+export function buildStock(unitDir: string, path: string, stock: ReadonlyArray<{ kind: StockKind; diff: string | null }>, o: { mode?: Mode; volume?: string } = {}): { commands: string[]; control: number[] | string; kinds: StockBuild[] } {
+  const u = readUnit(unitDir);
+  const image = u.image.runtime_id ?? smFail("E_SM_UNIT", u.id + " has no runtime image; run its oracle first");
+  const mode = o.mode ?? "hardened", volume = o.volume ?? treeVolume(u.id);
+  const parse = STOCK_PARSE[u.lang];
+  const commands = [...u.commands.rebuild, ...(parse ? [parse(join(u.repo_dir, path))] : [])];
+  const run = (label: string, diff: string | null): number[] | string => {
+    const copy = runName(u.id + "-stock-" + label);
+    copyVolume(image, volume, copy, mode);
+    try {
+      if (diff !== null && applyPatches(image, copy, u.repo_dir, [["stock", diff]], mode)) return "does not apply";
+      const t = runTests({ image, volume: copy, repoDir: u.repo_dir, workDir: u.work_dir, commands: { rebuild: commands, test: [], print: [] }, mode, label: u.id + "-stock-" + label, rule: "exempt" });
+      return t.stopped || t.infra || t.exits.length < commands.length ? "stopped" : t.exits;
+    } finally {
+      dropVolume(copy);
+    }
+  };
+  const control = commands.length ? run("control", null) : "no rebuild or parse command";
+  const passed = typeof control === "string" ? [] : control.map((e) => e === 0);
+  const kinds = stock.map((s): StockBuild => {
+    if (s.diff === null) return { kind: s.kind, diff: null, build: "none" };
+    if (!passed.includes(true)) return { kind: s.kind, diff: null, build: "the control passes no command: " + (typeof control === "string" ? control : "exits " + control.join(",")) };
+    const r = run(s.kind, s.diff);
+    if (typeof r === "string") return { kind: s.kind, diff: null, build: r };
+    return passed.every((p, k) => !p || r[k] === 0) ? { kind: s.kind, diff: s.diff, build: "ok" } : { kind: s.kind, diff: null, build: "exits " + r.join(",") + " where the control exits " + (control as number[]).join(",") };
+  });
+  return { commands, control, kinds };
 }
 
 /** Each judge's queue: its diffs in order, with the three stock diffs after every 50th. */
@@ -438,17 +576,24 @@ export function plantDiffs(x: { lang: Lang; path: string; text: string }): Array
 export interface R78Key { schema: "sm-r78-key.v1"; packet: string; unit: string; kind: "bad" | "neutral"; axis: Axis | null; made_by: PlantKind | StockKind; lines_total: number }
 
 /** The labelled set: units in draw order, six items from each unit's base-tree file (three plants, known-bad, and its
- *  three stock diffs, known-neutral), skipping a unit that cannot give all six, until PLANT_UNITS units give 24 of each. */
-export function labelledSet(units: ReadonlyArray<{ unit: string; lang: Lang; path: string; text: string; files: string[] }>) {
+ *  three stock diffs, known-neutral, once check has built them), skipping a unit that cannot give all six, until
+ *  PLANT_UNITS units give 24 of each. check runs only on a unit whose six items all exist; built records what it said. */
+export function labelledSet(units: ReadonlyArray<{ unit: string; lang: Lang; path: string; text: string; files: string[] }>, check: (u: { unit: string; lang: Lang; path: string }, stock: Array<{ kind: StockKind; diff: string | null }>) => StockBuild[]) {
   const items: Array<{ packet: JudgePacket; key: R78Key }> = [];
   const skipped: string[] = [];
+  const built: Array<{ unit: string; kinds: Array<{ kind: StockKind; build: string }> }> = [];
   let taken = 0;
   for (const u of units) {
     if (taken === PLANT_UNITS) break;
-    const made = [
-      ...plantDiffs(u).map((p) => ({ kind: "bad" as const, axis: p.axis as Axis | null, made_by: p.kind as PlantKind | StockKind, diff: p.diff })),
-      ...stockDiffs(u).map((s) => ({ kind: "neutral" as const, axis: null, made_by: s.kind, diff: s.diff })),
-    ];
+    const plants = plantDiffs(u).map((p) => ({ kind: "bad" as const, axis: p.axis as Axis | null, made_by: p.kind as PlantKind | StockKind, diff: p.diff }));
+    const stock = stockDiffs(u);
+    if ([...plants, ...stock].some((m) => m.diff === null)) {
+      skipped.push(u.unit);
+      continue;
+    }
+    const checked = check(u, stock);
+    built.push({ unit: u.unit, kinds: checked.map((s) => ({ kind: s.kind, build: s.build })) });
+    const made = [...plants, ...checked.map((s) => ({ kind: "neutral" as const, axis: null, made_by: s.kind as PlantKind | StockKind, diff: s.diff }))];
     if (made.some((m) => m.diff === null)) {
       skipped.push(u.unit);
       continue;
@@ -461,7 +606,7 @@ export function labelledSet(units: ReadonlyArray<{ unit: string; lang: Lang; pat
     }
   }
   if (taken < PLANT_UNITS) smFail("E_SM_PACKET", "the labelled set needs " + PLANT_UNITS + " units that give all six items; " + taken + " did, skipped " + skipped.join(", "));
-  return { items, skipped };
+  return { items, skipped, built };
 }
 
 export interface R78Row { id: string; a: JudgeAnswer | null; b: JudgeAnswer | null }

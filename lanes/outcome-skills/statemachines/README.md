@@ -510,6 +510,18 @@ model or unit (E_SM_PACKET).
   block with no field set, which real_agent writes when no close answer came, ends the session as infra and the
   session keeps its record, instead of being refused. An allowance_stops that is not a number refuses the session
   (E_SM_ARM). No rule changes.
+- Stock diffs build before a judge sees them (pre-data build fix, 2026-11-10, GST-1959, packets.ts buildStock and
+  stockDiffs, cli.ts): `sm packets stock` (now with --unit-dir) and `sm packets labelled` (now with unit_dir in each
+  spec entry) apply each stock diff to a fresh copy of the unit's prepared tree in its runtime image and run the unit's
+  rebuild commands there, plus a compile of the file for Python and node --check for JavaScript. The same commands run
+  first on the tree without the diff (the control). A kind that does not apply, or fails a command its control passes,
+  is none, and so is every kind of a unit whose control passes no command. stock-build-<unit>.json (stock-build.json for
+  the labelled set) records why, and the labelled set skips such a unit, as section 10 says. The transforms now read
+  each file's code with multi-line strings, block comments and Go runes blanked; put a C or C++ header after the
+  includes before the first line of code, and take an include guard only when its #endif ends the file; put a Python
+  log line after a docstring's whole statement; leave out a Python keyword argument on any line of a call and a Java or
+  C# anonymous class whose constructor call nests parentheses; and rename a local only where every use sits in the
+  scope of a declaration of that name. No rule changes.
 - A run builds nothing when a rebuild command exits non-zero (rebuild_failed), when the print command reads report paths
   and none of them holds a fresh file (no_fresh_report), or when a stale file could not be moved aside (stale_unhidden).
   The parser does not run then, and the run parses nothing. A test command's own exit never sets it. Every one of the

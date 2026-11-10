@@ -2,7 +2,8 @@
 // The ten items #290 left to fix before any family SM data: the seven named notes in its body (A3's home links and home
 // check, one registry for the /qa pin, scoring only scorable first stages, the SM stage's model, a failed proxy finalize
 // and an unknown spend), an empty first stage's follow-on tree, and stock diffs that stay valid in every language. Each
-// test failed on the merged harness (d85f75a). No key, no paid call; the stock diffs compile with the toolchains present.
+// test failed on the merged harness (d85f75a). The GST-1959 blocks add #314's stock-diff follow-ups and the stock build
+// check; each of their tests failed on 5390c71. No key, no paid call; the stock diffs compile with the toolchains present.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -17,11 +18,11 @@ import { MeteringProxy } from "../../src/runner/proxy/metering-proxy.ts";
 import { REGISTRY_PATH } from "../../lanes/outcome-skills/arms/registry.ts";
 import { serveStages, type StageSpec } from "../../lanes/outcome-skills/driver/stage.ts";
 import { main } from "../../lanes/outcome-skills/statemachines/cli.ts";
-import { fixtureRow } from "../../lanes/outcome-skills/statemachines/fixtures.ts";
+import { fixtureRow, scoreUnit } from "../../lanes/outcome-skills/statemachines/fixtures.ts";
 import { computeStart } from "../../lanes/outcome-skills/statemachines/followon.ts";
 import { qaHomeCopy } from "../../lanes/outcome-skills/statemachines/image.ts";
 import type { Lang } from "../../lanes/outcome-skills/statemachines/langs.ts";
-import { stockDiffs } from "../../lanes/outcome-skills/statemachines/packets.ts";
+import { buildStock, stockDiffs, type StockKind } from "../../lanes/outcome-skills/statemachines/packets.ts";
 import { treeVolume } from "../../lanes/outcome-skills/statemachines/oracle.ts";
 import { runSession } from "../../lanes/outcome-skills/statemachines/run.ts";
 import { sessionEnd, type PlannedSession } from "../../lanes/outcome-skills/statemachines/session.ts";
@@ -335,6 +336,142 @@ describe("stock diffs stay valid code (pre-data item 9)", () => {
   }
 });
 
+describe("stock diffs stay valid code: the #314 follow-ups (GST-1959)", () => {
+  const has = (bin: string) => spawnSync("sh", ["-c", "command -v " + bin], { encoding: "utf8" }).status === 0;
+  const dotnet = has("dotnet") ? spawnSync("dotnet", ["--version"], { encoding: "utf8" }).stdout.trim().split(".")[0] : null;
+  const KINDS = ["comments_whitespace", "rename_only", "logging"] as const;
+  const stock = (lang: Lang, path: string, text: string[]) => Object.fromEntries(stockDiffs({ lang, path, text: text.join("\n") }).map((s) => [s.kind, s.diff])) as Record<StockKind, string | null>;
+  const tree = (files: Record<string, string[]>, diff: string | null) => {
+    const d = scratch("gst1959");
+    for (const [p, t] of Object.entries(files)) {
+      mkdirSync(dirname(join(d, p)), { recursive: true });
+      writeFileSync(join(d, p), t.join("\n"));
+    }
+    if (diff === null) return { d, error: null };
+    writeFileSync(join(d, "stock.patch"), diff);
+    const a = spawnSync("git", ["apply", "stock.patch"], { cwd: d, encoding: "utf8" });
+    return { d, error: a.status === 0 ? null : "does not apply: " + a.stderr.trim() };
+  };
+  /** "ok" when the files, with the diff applied, pass the check run in their dir, else the reason. */
+  const passes = (files: Record<string, string[]>, diff: string | null, argv: (d: string) => string[]) => {
+    const t = tree(files, diff);
+    if (t.error) return t.error;
+    const v = argv(t.d);
+    const r = spawnSync(v[0]!, v.slice(1), { cwd: t.d, encoding: "utf8", timeout: 300_000, env: { ...process.env, DOTNET_CLI_TELEMETRY_OPTOUT: "1", DOTNET_NOLOGO: "1", PYTHONDONTWRITEBYTECODE: "1" } });
+    return r.status === 0 ? "ok" : (r.stdout + r.stderr).trim().split("\n").slice(0, 4).join(" | ");
+  };
+  /** The base file and each stock kind of path checked: "ok", "none" for a kind the file can't give, or the reason. */
+  const every = (lang: Lang, files: Record<string, string[]>, path: string, argv: (d: string) => string[]) => {
+    const s = stock(lang, path, files[path]!);
+    return [passes(files, null, argv), ...KINDS.map((k) => (s[k] === null ? "none" : passes(files, s[k], argv)))];
+  };
+  const after = (path: string, text: string[], diff: string) => {
+    const t = tree({ [path]: text }, diff);
+    if (t.error) throw new Error(t.error);
+    return readFileSync(join(t.d, path), "utf8").split("\n");
+  };
+  const gcc = (file: string) => (d: string) => ["gcc", "-fsyntax-only", "-std=c11", "-Werror=implicit-function-declaration", "-I", d, "-x", "c", join(d, file)];
+  const pyc = (file: string) => () => ["python3", "-c", "import sys; compile(open(sys.argv[1]).read(), sys.argv[1], 'exec')", file];
+
+  // Value: protects=section 10's logging stock diff in Java and C#, where an anonymous class or object initializer passed as an argument opens no method body; fails_when=a constructor call with nested parentheses (new Handler(Looper.getMainLooper()) {) reads as a method opener, so a log statement lands at class-member level or inside the initializer and the diff no longer compiles; why_new=the Captain's item 6 for GST-1959, Capy finding 01M730S3RJ7SYPBY0HH8CPGF17 on #314 (packets.ts:259); seam=packets.ts functionBodies; no_claim=an anonymous class whose constructor call spans lines
+  test("java and c#: an anonymous class or object initializer whose constructor call nests parentheses gets no log line", () => {
+    const java = ["class Looper {", "    static Object getMainLooper() {", "        return null;", "    }", "}", "", "class Handler {", "    Handler(Object o) {", "    }", "", "    void handle() {", "    }", "}", "",
+      "public class Poster {", "    void post(java.util.List<Handler> hs) {", "        hs.add(new Handler(Looper.getMainLooper()) {", "            void handle() {", "                int k = 1;", "            }", "        });", "    }", "}", ""];
+    const cs = ["public class Cell {", "    public int V;", "    public Cell(int v) {", "        V = v;", "    }", "}", "", "public class Grid {", "    static int Make() {", "        return 1;", "    }", "",
+      "    public void Fill(System.Collections.Generic.List<Cell> cells) {", "        cells.Add(new Cell(Make()) {", "            V = 2", "        });", "    }", "}", ""];
+    expect(stock("java", "src/Poster.java", java).logging).not.toContain("getMainLooper()) {\n+");
+    expect(stock("csharp", "src/Grid.cs", cs).logging).not.toContain("new Cell(Make()) {\n+");
+    if (has("javac")) expect(every("java", { "src/Poster.java": java }, "src/Poster.java", (d) => ["javac", "-d", join(d, "out"), "src/Poster.java"])).toEqual(["ok", "ok", "none", "ok"]);
+    if (dotnet) {
+      const csproj = '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net' + dotnet + '.0</TargetFramework><OutputType>Library</OutputType><ImplicitUsings>disable</ImplicitUsings><Nullable>disable</Nullable></PropertyGroup></Project>';
+      expect(every("csharp", { "src/Grid.cs": cs, "x.csproj": [csproj] }, "src/Grid.cs", (d) => ["dotnet", "build", "-nologo", "-v", "q", join(d, "x.csproj")])).toEqual(["ok", "ok", "none", "ok"]);
+    }
+  }, 600_000);
+
+  // Value: protects=section 10's logging stock diff in C, where a config.h first in the file sets the feature macros the system headers read; fails_when=stdio.h goes in above the project's first include, so the feature macros come too late and a POSIX call (strdup) is undeclared; why_new=the Captain's item 7 for GST-1959, the outside voice's first finding on #314 (packets.ts withHeader); seam=packets.ts stockDiffs and withHeader; no_claim=a project header that defines a macro named like a stdio.h function
+  test("c: stdio.h goes after the includes before the first line of code, so a config.h that sets feature macros stays first", () => {
+    const files = { "config.h": ["#define _POSIX_C_SOURCE 200809L", "#include <stdio.h>", ""], "src/dup.c": ["/* Copies strings. */", '#include "config.h"', "#include <string.h>", "", "char *dup(const char *s) {", "    char *copy = strdup(s);", "    return copy;", "}", ""] };
+    expect(after("src/dup.c", files["src/dup.c"], stock("c", "src/dup.c", files["src/dup.c"]).logging!).slice(0, 4)).toEqual(["/* Copies strings. */", '#include "config.h"', "#include <string.h>", "#include <stdio.h>"]);
+    if (has("gcc")) expect(every("c", files, "src/dup.c", gcc("src/dup.c"))).toEqual(["ok", "ok", "ok", "ok"]);
+  });
+
+  // Value: protects=section 10's logging stock diff in C and C++ files with an #ifndef block that sets a default before a platform #ifdef; fails_when=an #ifndef X / #define X / #endif read as the include guard puts stdio.h inside a later #ifdef _WIN32, so the diff no longer compiles on Linux; why_new=the Captain's item 11 for GST-1959, adversarial-native#3 on #314 (packets.ts withHeader); seam=packets.ts withHeader; no_claim=a guard opened after other directives
+  test("c: an #ifndef block that only sets a default is no include guard, and a real guard still takes stdio.h inside it", () => {
+    const fill = ["#ifndef BUFSZ", "#define BUFSZ 64", "#endif", "#ifdef _WIN32", "#include <windows.h>", "#endif", "", "int fill(char *b) {", "    int used = BUFSZ;", "    b[0] = 0;", "    return used;", "}", ""];
+    expect(after("src/fill.c", fill, stock("c", "src/fill.c", fill).logging!).slice(0, 2)).toEqual(["#include <stdio.h>", "#ifndef BUFSZ"]);
+    const sum = ["#ifndef SUM_H", "#define SUM_H", "", "#include <stddef.h>", "", "static inline int sum(const int *items, size_t n) {", "    int total = 0;", "    for (size_t i = 0; i < n; i++) {", "        total += items[i];", "    }", "    return total;", "}", "", "#endif", ""];
+    expect(after("src/sum.h", sum, stock("c", "src/sum.h", sum).logging!).slice(0, 5)).toEqual(["#ifndef SUM_H", "#define SUM_H", "", "#include <stddef.h>", "#include <stdio.h>"]);
+    if (has("gcc")) {
+      expect(every("c", { "src/fill.c": fill }, "src/fill.c", gcc("src/fill.c"))).toEqual(["ok", "ok", "ok", "ok"]);
+      expect(every("c", { "src/sum.h": sum }, "src/sum.h", gcc("src/sum.h"))).toEqual(["ok", "ok", "ok", "ok"]);
+    }
+  });
+
+  // Value: protects=section 10's logging stock diff in Python, where a docstring can run on over lines through a backslash outside the string or inside it; fails_when=the log line goes in after the docstring's first physical line, inside the string expression, and the file no longer compiles; why_new=the Captain's item 8 for GST-1959, the outside voice's second finding on #314 (packets.ts logLine); seam=packets.ts functionBodies and logLine; no_claim=a docstring in parentheses
+  test("python: a docstring continued by a backslash keeps the log line after its last line", () => {
+    const outside = ["def total(items):", '    "Sum " \\', '        "the items."', "    result = 0", "    for v in items:", "        result += v", "    return result", ""];
+    const inside = ["def total(items):", '    "Sum \\', 'the items."', "    result = 0", "    return result", ""];
+    expect(stock("python", "t.py", outside).logging).toContain('         "the items."\n+    print("enter")');
+    expect(stock("python", "t.py", inside).logging).toContain(' the items."\n+    print("enter")');
+    if (has("python3")) for (const text of [outside, inside]) expect(every("python", { "t.py": text }, "t.py", pyc("t.py"))).toEqual(["ok", "ok", "ok", "ok"]);
+  });
+
+  // Value: protects=section 10's rename-only stock diff in Python as a refactor that keeps behavior; fails_when=a keyword argument on its own line in a multi-line call (timeout=30,) reads as the file's first local and is renamed, so the call raises TypeError; why_new=the Captain's item 9 for GST-1959, adversarial-native#1 on #314 (packets.ts:340); seam=packets.ts renameOnly; no_claim=keyword names built at run time (**kwargs)
+  test("python: a keyword argument on its own line in a multi-line call is never renamed", () => {
+    const text = ["def fetch(client):", "    client.configure(", "        timeout=30,", "    )", '    result = client.get("/items")', "    return result", ""];
+    const r = stock("python", "t.py", text).rename_only!;
+    expect(r).not.toContain("timeout_value");
+    expect(r).toContain('+    result_value = client.get("/items")');
+    const call = () => ["python3", "-c", "import runpy; ns = runpy.run_path('t.py'); C = type('C', (), {'configure': lambda self, timeout: setattr(self, 't', timeout), 'get': lambda self, p: (p, self.t)}); assert ns['fetch'](C()) == ('/items', 30)"];
+    if (has("python3")) expect([passes({ "t.py": text }, null, call), passes({ "t.py": text }, r, call)]).toEqual(["ok", "ok"]);
+  });
+
+  // Value: protects=section 10's stock diffs as changes that keep every string the program prints or returns; fails_when=a use of the local inside a string that runs on over lines (a Python triple-quoted string, a Go raw string, a JavaScript template literal) is renamed, or a def inside a docstring takes a comment or log line; why_new=the Captain's item 10 for GST-1959, adversarial-native#2 on #314 (packets.ts code()); seam=packets.ts renameOnly and its line masking; no_claim=C# verbatim strings and C++ raw strings
+  test("python, go and js: a local used inside a multi-line string is not renamed, and the next local is", () => {
+    const cases: Array<[Lang, string, string[], string, string]> = [
+      ["python", "t.py", ["def greet():", "    text = '''hello", "    text here'''", "    size = len(text)", "    return text, size", ""], "text_value", "size_value"],
+      ["go", "c.go", ["package core", "", "func Banner() (string, int) {", "\tlabel := `title", "label here`", "\twidth := len(label)", "\treturn label, width", "}", ""], "labelValue", "widthValue"],
+      ["js", "c.mjs", ["export function banner() {", "  const label = `title", "label here`;", "  const width = label.length;", "  return [label, width];", "}", ""], "labelValue", "widthValue"],
+    ];
+    for (const [lang, path, text, kept, renamed] of cases) {
+      const r = stock(lang, path, text).rename_only;
+      expect([lang, r?.includes(kept), r?.includes(renamed)]).toEqual([lang, false, true]);
+    }
+    const doc = ["def outer():", '    """Example:', "", "    def inner(x):", "        '''Doc.'''", "        return x", '    """', "    return 1", ""];
+    for (const k of ["comments_whitespace", "logging"] as const) {
+      const got = after("t.py", doc, stock("python", "t.py", doc)[k]!), at = got.indexOf(doc[1]!);
+      expect(got.slice(at, at + 6)).toEqual(doc.slice(1, 7));
+    }
+  });
+
+  // Value: protects=section 10's stock diffs in Go files with rune literals, where brace depth decides each function body's end; fails_when=a rune literal '{' adds to the depth, the body runs to the end of the file, and the rename reaches a package-level variable another file uses; why_new=the Captain's item 17 for GST-1959, adversarial-native#9 on #314 (packets.ts:215); seam=packets.ts functionBodies and its line masking; no_claim=Rust char literals, which the Rust masking reads
+  test("go: a rune literal '{' opens no block, so the rename stays in its own function", () => {
+    const text = ["package core", "", "func Open(s string) int {", "\tcount := 0", "\tfor _, r := range s {", "\t\tif r == '{' {", "\t\t\tcount++", "\t\t}", "\t}", "\treturn count", "}", "", "var count = 1", "", "func More() int {", "\twidth := count", "\treturn width", "}", ""];
+    const r = stock("go", "c.go", text).rename_only!;
+    expect(r.split("\n").filter((l) => l.startsWith("-") && !l.startsWith("---"))).toEqual(["-\twidth := count", "-\treturn width"]);
+    const other = ["package core", "", "func Other() int {", "\treturn count", "}", ""];
+    if (has("go")) expect(every("go", { "c.go": text, "other.go": other }, "c.go", (d) => ["go", "build", "-o", join(d, "out"), join(d, "c.go"), join(d, "other.go")])).toEqual(["ok", "ok", "ok", "ok"]);
+  }, 600_000);
+
+  // Value: protects=section 10's rename-only stock diff in Go when the name is also a package-level variable in another file of the package; fails_when=a use of the name before the local's declaration, after its block ends, or in its own initializer refers to the package-level variable but is renamed, so the diff stops compiling; why_new=the Captain's item 18 for GST-1959, adversarial-native#10 on #314 (packets.ts renameOnly); seam=packets.ts renameOnly; no_claim=shadowing through forms LOCAL_NAME does not read (a range clause, a closure's parameter)
+  test("go: a use outside the local's scope blocks the rename, and a name declared again in a later block is still renamed", () => {
+    const other = ["package core", "", "var count = 10", ""];
+    const blocked = [
+      ["package core", "", "func Pick(ok bool) int {", "\tif ok {", "\t\tcount := 1", "\t\t_ = count", "\t}", "\treturn count", "}", ""],
+      ["package core", "", "func Twice() int {", "\tn := count * 2", "\tcount := n", "\treturn count", "}", ""],
+      ["package core", "", "func Bump() int {", "\tcount := count + 1", "\treturn count", "}", ""],
+    ];
+    for (const text of blocked) expect(stock("go", "c.go", text).rename_only).toBeNull();
+    const again = ["package core", "", "func Sum(a, b []int) int {", "\tfor _, v := range a {", "\t\ttotal := v", "\t\t_ = total", "\t}", "\tfor _, v := range b {", "\t\ttotal := v", "\t\t_ = total", "\t}", "\treturn count", "}", ""];
+    expect(stock("go", "c.go", again).rename_only!.split("\n").filter((l) => l.startsWith("+") && !l.startsWith("+++"))).toEqual(["+\t\ttotalValue := v", "+\t\t_ = totalValue", "+\t\ttotalValue := v", "+\t\t_ = totalValue"]);
+    const build = (d: string) => ["go", "build", "-o", join(d, "out"), join(d, "c.go"), join(d, "other.go")];
+    if (has("go")) {
+      for (const text of blocked) expect(every("go", { "c.go": text, "other.go": other }, "c.go", build)).toEqual(["ok", "ok", "none", "ok"]);
+      expect(every("go", { "c.go": again, "other.go": other }, "c.go", build)).toEqual(["ok", "ok", "ok", "ok"]);
+    }
+  }, 600_000);
+});
+
 describe.skipIf(process.env.GSTACK_EVALS_DOCKER !== "1")("a session record and A3's image through runSession, with Harbor stubbed (docker)", () => {
   const pid = process.pid;
   const d = (args: string[], input?: string) => spawnSync("docker", args, { encoding: "utf8", input, timeout: 900_000 });
@@ -401,3 +538,36 @@ describe.skipIf(process.env.GSTACK_EVALS_DOCKER !== "1")("a session record and A
   }, 900_000);
 });
 
+const GO_IMAGE = process.env.SM_SCORE_GO_IMAGE ?? "";
+describe.skipIf(!(process.env.GSTACK_EVALS_DOCKER === "1" && GO_IMAGE))("the stock build check in the unit's runtime image (GST-1959, docker, SM_SCORE_GO_IMAGE)", () => {
+  const volumes: string[] = [];
+  afterAll(() => volumes.forEach((v) => spawnSync("docker", ["volume", "rm", "-f", v])));
+  const unit = (id: string, lang: Lang, files: Record<string, string>, rebuild: string[]) => {
+    const u = scoreUnit({ id, lang, image: GO_IMAGE, files, tests: {}, commands: { rebuild, test: ["true"], print: [] }, f2p: ["t"], stable: ["t"], known: ["t"] });
+    volumes.push(u.volume);
+    return u;
+  };
+  const read = (r: ReturnType<typeof buildStock>) => r.kinds.map((k) => [k.kind, k.diff === null, k.build.replace(/^exits .*/, "exits")]);
+
+  // Value: protects=section 10's stock diffs as code that builds in the unit's own runtime image before any judge sees them; fails_when=a kind that fails the unit's rebuild or the Python parse, or does not apply, still reaches a judge, or a kind stands when the control built nothing; why_new=the Captain's build check for GST-1959; seam=packets.ts buildStock; no_claim=a real unit's rebuild commands, or hardened mode (the scorer's Docker tests run root too)
+  test("go and python: a kind that builds stands, one that fails to build or apply is null with its reason, and a control that builds nothing nulls every kind", () => {
+    const go = ["package core", "", "func Count(items []int) int {", "\ttotal := 0", "\tfor _, v := range items {", "\t\ttotal += v", "\t}", "\treturn total", "}", ""].join("\n");
+    const mod = "module example.com/core\n\ngo 1.16\n";
+    const g = unit("stock-go", "go", { "go.mod": mod, "core.go": go }, ["cd /w && go build ./..."]);
+    const gs = stockDiffs({ lang: "go", path: "core.go", text: go }).map((s) => (s.kind === "logging" ? { ...s, diff: s.diff!.replace('println("enter")', "println(enter)") } : s));
+    const gr = buildStock(g.dir, "core.go", gs, { mode: "root", volume: g.volume });
+    expect(gr.control).toEqual([0]);
+    expect(read(gr)).toEqual([["comments_whitespace", false, "ok"], ["rename_only", false, "ok"], ["logging", true, "exits"]]);
+
+    const py = ["def total(items):", "    result = 0", "    for v in items:", "        result += v", "    return result", ""].join("\n");
+    const p = unit("stock-py", "python", { "src/total.py": py }, []);
+    const ps = stockDiffs({ lang: "python", path: "src/total.py", text: py }).map((s) =>
+      s.kind === "logging" ? { ...s, diff: s.diff!.replace('+    print("enter")', '+  print("enter")') } : s.kind === "comments_whitespace" ? { ...s, diff: s.diff!.replace(" def total(items):", " def other(items):") } : s);
+    const pr = buildStock(p.dir, "src/total.py", ps, { mode: "root", volume: p.volume });
+    expect([pr.commands.length, pr.control]).toEqual([1, [0]]);
+    expect(read(pr)).toEqual([["comments_whitespace", true, "does not apply"], ["rename_only", false, "ok"], ["logging", true, "exits"]]);
+
+    const n = unit("stock-none", "go", { "go.mod": mod, "core.go": go }, ["cd /w && false"]);
+    expect(buildStock(n.dir, "core.go", stockDiffs({ lang: "go", path: "core.go", text: go }), { mode: "root", volume: n.volume }).kinds.map((k) => [k.diff, k.build])).toEqual(Array(3).fill([null, "the control passes no command: exits 1"]));
+  }, 900_000);
+});
