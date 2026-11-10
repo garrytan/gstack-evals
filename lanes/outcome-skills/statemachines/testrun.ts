@@ -54,10 +54,10 @@ const sq = (s: string) => "'" + s.replace(/'/g, "'\\''") + "'";
  *  (reports.ts reportDirs) that is missing, only where its nearest existing parent resolves inside repoDir, and writes an
  *  SM_MKDIR line for each one it created. Every rebuild, test and print command reads its stdin from /dev/null, because the
  *  script itself reaches bash -s on stdin and a command that reads stdin (ant, mvn, gradle, npx) would swallow the rest. */
-export function runScript(c: { rebuild: string[]; test: string[]; print: string[] }, repoDir: string): string {
+export function runScript(c: { rebuild: string[]; test: string[]; print: string[] }, repoDir: string, workDir = repoDir): string {
   const cmd = (x: string) => "( " + x + " ) </dev/null\necho \"SM_EXIT $?\" >&2";
   const paths = printReading(c).paths;
-  const mk = reportDirs(c).map((d) => '( cd "$SM_WD"' + (d.cwd ? " && cd " + sq(d.cwd) : "") + ' 2>/dev/null && sm_d="$(pwd -P)"/' + sq(d.dir) + ' && ! [ -e "$sm_d" ] && ! [ -L "$sm_d" ] && sm_a=$sm_d && while [ -n "$sm_a" ] && ! [ -e "$sm_a" ] && ! [ -L "$sm_a" ]; do sm_a=${sm_a%/*}; done && sm_a=$(cd "${sm_a:-/}" 2>/dev/null && pwd -P) && [ -n "$SM_REPOP" ] && case $sm_a/ in "$SM_REPOP"/*) mkdir -p -- "$sm_d" && printf "SM_MKDIR %s\\n" "${sm_d#"$SM_REPOP"/}";; esac ) || true');
+  const mk = reportDirs(c, { repoDir, workDir }).map((d) => '( cd "$SM_WD"' + (d.cwd ? " && cd " + sq(d.cwd) : "") + ' 2>/dev/null && sm_d="$(pwd -P)"/' + sq(d.dir) + ' && ! [ -e "$sm_d" ] && ! [ -L "$sm_d" ] && sm_a=$sm_d && while [ -n "$sm_a" ] && ! [ -e "$sm_a" ] && ! [ -L "$sm_a" ]; do sm_a=${sm_a%/*}; done && sm_a=$(cd "${sm_a:-/}" 2>/dev/null && pwd -P) && [ -n "$SM_REPOP" ] && case $sm_a/ in "$SM_REPOP"/*) mkdir -p -- "$sm_d" && printf "SM_MKDIR %s\\n" "${sm_d#"$SM_REPOP"/}";; esac ) || true');
   const start = paths.length
     ? [
         "SM_WD=$PWD; SM_REPO=" + sq(repoDir) + "; SM_T=$(mktemp -d 2>/dev/null || { mkdir -p /tmp/.sm-$$ && echo /tmp/.sm-$$; })",
@@ -142,7 +142,7 @@ export function runTests(o: { image: string; volume: string; repoDir: string; wo
   let r;
   try {
     const home = homeVol ? { volume: homeVol, path: homeVolume(o.image, homeVol) } : undefined;
-    r = dockerRun(name, runArgs({ ...o, name, home }), { timeoutMs: limit, input: runScript(o.commands, o.repoDir) });
+    r = dockerRun(name, runArgs({ ...o, name, home }), { timeoutMs: limit, input: runScript(o.commands, o.repoDir, o.workDir || o.repoDir) });
   } finally {
     if (homeVol) dropVolume(homeVol);
   }

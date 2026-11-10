@@ -461,6 +461,12 @@ model or unit (E_SM_PACKET).
   that reads stdin (ant, mvn, gradle, npx) swallowed the rest of the script and later commands never ran
   (gwtproject__gwt-10054: ant test never ran). 219 of the 1,077 cached rows start one of those tools, all 160 Java rows
   among them. Every rebuild, test and print command now reads its stdin from /dev/null.
+- Absolute report paths inside the tree (pre-data build change, 2026-11-09): reportDirs takes the unit's repo dir and
+  work dir, and reads a print path that is absolute (or absolute through the print command's cd) and under the repo dir
+  as its tree-relative path. It matches it against what the test commands write after their own cd's, with the same
+  rules: no directory the test command makes or cd's into, no .. step, no glob in the directory, nothing outside the
+  tree. 9 more of the 1,077 cached rows are selected (oauth2-proxy__oauth2-proxy-2524: `cd /testbed && go test -v -json
+  ./... > reports/results.json`, then `cat /testbed/reports/results.json`).
 - A run builds nothing when a rebuild command exits non-zero (rebuild_failed), when the print command reads report paths
   and none of them holds a fresh file (no_fresh_report), or when a stale file could not be moved aside (stale_unhidden).
   The parser does not run then, and the run parses nothing. A test command's own exit never sets it. Every one of the

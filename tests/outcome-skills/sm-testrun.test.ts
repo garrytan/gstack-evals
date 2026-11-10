@@ -116,6 +116,29 @@ describe.skipIf(!on)("report directories the test command writes into (docker)",
       drop(v);
     }
   }, 180_000);
+  test("a hardened run that prints an absolute path inside the tree writes its report into a directory created at its start and reads fresh", () => {
+    const v = tree("true");
+    try {
+      const t = runTests({ image: PY_IMAGE, volume: v.copy, repoDir: "/w", mode: "hardened", label: "dirs-abs", commands: { rebuild: [], test: ['cd /w && echo "SM_DIR_PROBE $(stat -c %u reports) $(ls -A reports | wc -l)" && echo "t1 pass" > reports/out.json'], print: ["cat /w/reports/out.json"] } });
+      expect(t.created_dirs).toEqual(["reports"]);
+      expect(t.stderr).toContain("SM_DIR_PROBE 10001 0");
+      expect(t.reports).toMatchObject({ fresh: 1 });
+      expect(t.built_nothing).toBeNull();
+      expect(t.log).toBe("t1 pass\n");
+    } finally {
+      drop(v);
+    }
+  }, 180_000);
+  test("a hardened run that prints an absolute path and writes nothing still reads no_fresh_report", () => {
+    const v = tree("true");
+    try {
+      const t = runTests({ image: PY_IMAGE, volume: v.copy, repoDir: "/w", mode: "hardened", label: "dirs-abs-none", commands: { rebuild: [], test: ["cd /w && true || tee reports/out.json"], print: ["cat /w/reports/out.json"] } });
+      expect(t.created_dirs).toEqual(["reports"]);
+      expect(t.built_nothing).toBe("no_fresh_report");
+    } finally {
+      drop(v);
+    }
+  }, 180_000);
   test("a hardened run that writes nothing still reads no_fresh_report", () => {
     const v = tree("true");
     try {

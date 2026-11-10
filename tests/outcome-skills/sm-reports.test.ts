@@ -236,3 +236,70 @@ describe("commands read no stdin", () => {
     expect(t.log).toBe("t1 PASSED\n");
   });
 });
+
+describe("absolute report paths inside the tree (selection)", () => {
+  const sel = (test: string[], print: string[], workDir?: string) => reportDirs({ rebuild: [], test, print }, { repoDir: "/testbed", workDir });
+  test("an absolute print path under the repo dir that the test command names after its cd reads as its tree-relative path", () => {
+    expect(sel(["cd /testbed && go test -json ./... > reports/go-test-results.json"], ["cat /testbed/reports/go-test-results.json"])).toEqual([{ cwd: "/testbed", dir: "reports" }]);
+    expect(sel(["cd /testbed/backend && go test -json ./... > ../reports/go.json"], ["cat /testbed/reports/go.json"])).toEqual([{ cwd: "/testbed", dir: "reports" }]);
+    expect(sel(["go test -json ./... > reports/go.json"], ["cat /testbed/reports/go.json"])).toEqual([{ cwd: "/testbed", dir: "reports" }]);
+    expect(sel(["mvn test > /testbed/target/r/TEST-a.xml"], ["cd /testbed && cat /testbed/target/r/*.xml"])).toEqual([{ cwd: "/testbed", dir: "target/r" }]);
+  });
+  test("an absolute print path the test command does not name, or names under another directory, is not selected", () => {
+    expect(sel(["cd /testbed && go test ./..."], ["cat /testbed/reports/go.json"])).toEqual([]);
+    expect(sel(["cd /other && go test > reports/go.json"], ["cat /testbed/reports/go.json"])).toEqual([]);
+    expect(sel(["go test > reports/go.json"], ["cat /testbed/reports/go.json"], "/srv")).toEqual([]);
+    expect(sel(["cd $D && go test > reports/go.json"], ["cat /testbed/reports/go.json"])).toEqual([]);
+    expect(reportDirs({ rebuild: ["cd /testbed && make > reports/go.json"], test: ["make test"], print: ["cat /testbed/reports/go.json"] }, { repoDir: "/testbed" })).toEqual([]);
+  });
+  test("outside the tree, a .. step, a glob in the directory, a file at the top or a dir the test makes is not selected", () => {
+    expect(sel(["go test > /tmp/r/out.json"], ["cat /tmp/r/out.json"])).toEqual([]);
+    expect(sel(["cd /testbed2 && go test > r/out.json"], ["cat /testbed2/r/out.json"])).toEqual([]);
+    expect(sel(["cd /testbed && go test > reports/out.json"], ["cat /testbed/a/../reports/out.json"])).toEqual([]);
+    expect(sel(["cd /testbed && go test > a/reports/out.json"], ["cat /testbed/*/reports/out.json"])).toEqual([]);
+    expect(sel(["cd /testbed && go test > out.json"], ["cat /testbed/out.json"])).toEqual([]);
+    expect(sel(["cd /testbed && mkdir -p reports && go test > reports/out.json"], ["cat /testbed/reports/out.json"])).toEqual([]);
+    expect(sel(["mkdir -p /testbed/reports/x && go test > /testbed/reports/out.json"], ["cat /testbed/reports/out.json"])).toEqual([]);
+  });
+  test("a file directly in a directory the print or test command cd's into selects nothing, as a file at the top of its cwd", () => {
+    expect(sel(["cd /testbed/rust; cargo test 2>&1 | tee test-output.log"], ["cd /testbed/rust; cat test-output.log"])).toEqual([]);
+    expect(sel(["cd /testbed/build ; make check 2>&1 | tee test-output.log"], ["cat /testbed/build/test-output.log"])).toEqual([]);
+  });
+  test("without the repo dir an absolute print path selects nothing, as before", () => {
+    expect(reportDirs({ rebuild: [], test: ["cd /testbed && go test > reports/out.json"], print: ["cat /testbed/reports/out.json"] })).toEqual([]);
+  });
+});
+
+describe("absolute report paths inside the tree (run)", () => {
+  test("a run that writes its report into a directory created at its start, empty, reads fresh", () => {
+    const d = bare();
+    const t = run(d, { rebuild: [], test: ["cd " + d + ' && [ -d reports ] && [ -z "$(ls -A reports)" ] && echo "new PASSED" > reports/out.json'], print: ["cat " + d + "/reports/out.json"] });
+    expect(t.created_dirs).toEqual(["reports"]);
+    expect(t.exits).toEqual([0]);
+    expect(t.reports).toEqual({ deleted: 0, kept: 0, refused: 0, unhidden: 0, fresh: 1 });
+    expect(t.built_nothing).toBeNull();
+    expect(t.log).toBe("new PASSED\n");
+  });
+  test("a run that writes nothing into the created directory still reads no_fresh_report", () => {
+    const d = bare();
+    const t = run(d, { rebuild: [], test: ["cd " + d + " && true || tee reports/out.json"], print: ["cat " + d + "/reports/out.json"] });
+    expect(t.created_dirs).toEqual(["reports"]);
+    expect(t.built_nothing).toBe("no_fresh_report");
+    expect(readdirSync(join(d, "reports"))).toEqual([]);
+  });
+  test("a stale report is still deleted first, and its existing directory is not created", () => {
+    const d = tree();
+    const t = run(d, { rebuild: [], test: ["exit 3 || echo x > " + d + "/target/reports/TEST-new.xml"], print: ["cat " + d + "/target/reports/*.xml"] });
+    expect(t.created_dirs).toEqual([]);
+    expect(t.reports).toEqual({ deleted: 1, kept: 0, refused: 0, unhidden: 0, fresh: 0 });
+    expect(t.built_nothing).toBe("no_fresh_report");
+  });
+  test("an absolute path outside the tree is not created", () => {
+    const d = bare();
+    const out = mkdtempSync(join(tmpdir(), "sm-reports-out-"));
+    dirs.push(out);
+    const t = run(d, { rebuild: [], test: ["echo x | tee " + out + "/r/out.log"], print: ["cat " + out + "/r/out.log"] });
+    expect(t.created_dirs).toEqual([]);
+    expect(existsSync(join(out, "r"))).toBe(false);
+  });
+});

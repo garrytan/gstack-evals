@@ -202,11 +202,41 @@ export function printReading(c: { rebuild: string[]; test: string[]; print: stri
 export interface ReportDir { cwd: string; dir: string }
 const globRe = (g: string) => new RegExp("^" + g.replace(/[.+^${}()|\\]/g, "\\$&").replace(/\[!/g, "[^").replace(/\*/g, "[^/]*").replace(/\?/g, "[^/]") + "$");
 
+/** Each file the commands write by redirection or tee, each directory they mkdir and each directory they cd into, as an
+ *  absolute path resolved through the cd's each command does from workDir. A path after a cd the reading cannot follow (a variable, no argument) and a
+ *  path with a variable or a quoted glob are left out. */
+function writes(cmds: string[], workDir: string): { files: string[]; made: string[]; cds: string[] } {
+  const files: string[] = [], made: string[] = [], cds: string[] = [];
+  for (const cmd of cmds) {
+    let cwd: string | null = workDir;
+    const at = (t: Tok): string | null => (t.var || t.qglob || (cwd === null && !t.v.startsWith("/")) ? null : posix.normalize(t.v.startsWith("/") ? t.v : posix.join(cwd!, t.v)));
+    const add = (to: string[], t: Tok | undefined) => {
+      const p = t && !t.op && t.v ? at(t) : null;
+      if (p) to.push(p);
+    };
+    for (const x of commands(lex(cmd))) {
+      if (x[0]?.v === "cd") {
+        cwd = x.length === 2 && !x[1]!.op ? at(x[1]!) : null;
+        if (cwd) cds.push(cwd);
+        continue;
+      }
+      x.forEach((t, i) => t.op === ">" && add(files, x[i + 1]));
+      if (x[0]?.v === "tee") for (const a of x.slice(1)) if (!a.v.startsWith("-")) add(files, a);
+      if (x[0]?.v === "mkdir") for (const a of x.slice(1)) if (!a.v.startsWith("-")) add(made, a);
+    }
+  }
+  return { files, made, cds };
+}
+
 /** The parent directory of each report path the print command reads that the unit's test commands write into by
  *  redirection or tee, for the run to create when it is missing (prep's git clean removes an untracked one). Only a
  *  relative path whose directory has no glob and no .. step counts; a glob file name gives its parent. A path the test
- *  commands do not name, a directory they mkdir themselves, an absolute path and a file at the top of its cwd give none. */
-export function reportDirs(c: { rebuild: string[]; test: string[]; print: string[] }): ReportDir[] {
+ *  commands do not name, a directory they mkdir themselves and a file at the top of its cwd give none. With the unit's
+ *  tree, a path that is absolute, or absolute through the print command's cd, and lies under repoDir is read as its
+ *  path relative to repoDir under the same rules, matched against what the test commands write after their own cd's
+ *  (from workDir, repoDir by default); a file directly in a directory the print or test command cd's into gives none, and
+ *  nothing outside repoDir counts. Without the tree an absolute path gives none. */
+export function reportDirs(c: { rebuild: string[]; test: string[]; print: string[] }, tree?: { repoDir: string; workDir?: string }): ReportDir[] {
   const named = targets(c.test).filter((t) => !t.var && !t.qglob).map((t) => posix.normalize(t.v));
   const made = c.test.flatMap((t) => commands(lex(t)).filter((x) => x[0]?.v === "mkdir").flatMap((x) => x.slice(1).filter((a) => !a.op && a.v && !a.v.startsWith("-")).map((a) => posix.normalize(a.v))));
   const out: ReportDir[] = [];
@@ -214,12 +244,27 @@ export function reportDirs(c: { rebuild: string[]; test: string[]; print: string
     if (p.glob === undefined) continue;
     const g = posix.normalize(p.glob);
     const dir = posix.dirname(g);
-    if (g.startsWith("/") || dir === "." || /[*?[]/.test(dir) || g.split("/").includes("..")) continue;
     const name = globRe(posix.basename(g));
-    const rel = (t: string) => (p.cwd.startsWith("/") && t.startsWith(p.cwd + "/") ? t.slice(p.cwd.length + 1) : t);
-    const hit = named.some((t) => posix.dirname(rel(t)) === dir && name.test(posix.basename(rel(t))));
-    if (made.some((m) => rel(m) === dir || rel(m).startsWith(dir + "/"))) continue;
-    if (hit && !out.some((o) => o.cwd === p.cwd && o.dir === dir)) out.push({ cwd: p.cwd, dir });
+    if (!g.startsWith("/") && dir !== "." && !/[*?[]/.test(dir) && !g.split("/").includes("..")) {
+      const rel = (t: string) => (p.cwd.startsWith("/") && t.startsWith(p.cwd + "/") ? t.slice(p.cwd.length + 1) : t);
+      const hit = named.some((t) => posix.dirname(rel(t)) === dir && name.test(posix.basename(rel(t))));
+      if (made.some((m) => rel(m) === dir || rel(m).startsWith(dir + "/"))) continue;
+      if (hit) {
+        if (!out.some((o) => o.cwd === p.cwd && o.dir === dir)) out.push({ cwd: p.cwd, dir });
+        continue;
+      }
+    }
+    if (!tree || p.glob.split("/").includes("..") || !(g.startsWith("/") || p.cwd.startsWith("/"))) continue;
+    const repo = posix.normalize(tree.repoDir).replace(/\/$/, "");
+    const abs = posix.normalize(g.startsWith("/") ? g : posix.join(p.cwd, g));
+    if (!abs.startsWith(repo + "/")) continue;
+    const tdir = posix.dirname(abs.slice(repo.length + 1));
+    const full = repo + "/" + tdir;
+    if (tdir === "." || /[*?[]/.test(tdir)) continue;
+    const w = writes(c.test, tree.workDir ?? repo);
+    if (w.made.some((m) => m === full || m.startsWith(full + "/")) || w.cds.includes(full) || posix.normalize(p.cwd) === full) continue;
+    if (!w.files.some((t) => posix.dirname(t) === full && name.test(posix.basename(t)))) continue;
+    if (!out.some((o) => posix.normalize(posix.join(o.cwd, o.dir)) === full)) out.push({ cwd: repo, dir: tdir });
   }
   return out;
 }
