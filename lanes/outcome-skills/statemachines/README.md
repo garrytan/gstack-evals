@@ -493,6 +493,10 @@ model or unit (E_SM_PACKET).
   clean runs in a runtime-image container, failed on a VOLUME under repo_dir (cthackers__adm-zip-559: /testbed/mnt_tmp)
   and stopped every follow-on on the unit with E_SM_HISTORY. It now keeps those mount points out of git clean the same
   way. With no such mount it runs the same commands as before.
+- The same mount point in the strip (pre-data build change, 2026-11-10, sh/rewrite.sh): a strip path that is a mount
+  point, or holds one, failed the history rewrite with E_SM_HISTORY. The mount point now stays and everything around it
+  goes, so a VOLUME at a .claude dir leaves an empty .claude dir, which the build's empty-mount check still covers. No
+  unit in the oracle run failed there; with no such mount the strip removes the same paths as before.
 - A run builds nothing when a rebuild command exits non-zero (rebuild_failed), when the print command reads report paths
   and none of them holds a fresh file (no_fresh_report), or when a stale file could not be moved aside (stale_unhidden).
   The parser does not run then, and the run parses nothing. A test command's own exit never sets it. Every one of the

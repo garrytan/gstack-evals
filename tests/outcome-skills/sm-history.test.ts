@@ -84,7 +84,7 @@ describe.skipIf(!(process.env.GSTACK_EVALS_DOCKER === "1" && MNT_IMAGE))("histor
 describe.skipIf(process.env.GSTACK_EVALS_DOCKER !== "1")("session image on a runtime image that declares a VOLUME inside the repo dir (docker)", () => {
   const pid = process.pid;
   const d = (args: string[], input?: string) => spawnSync("docker", args, { encoding: "utf8", input, timeout: 900_000 });
-  const tag = { git: "sm-test-git:" + pid, plain: "sm-test-novol:" + pid, vol: "sm-test-vol:" + pid, full: "sm-test-volfull:" + pid };
+  const tag = { git: "sm-test-git:" + pid, plain: "sm-test-novol:" + pid, vol: "sm-test-vol:" + pid, full: "sm-test-volfull:" + pid, claude: "sm-test-volclaude:" + pid, deep: "sm-test-voldeep:" + pid };
   const tree = { one: "sm-test-tree1-" + pid, two: "sm-test-tree2-" + pid };
   const built: string[] = [];
   const unit = (t: string): SmUnit => ({ id: "vol-unit", repo_dir: "/w", image: { runtime_id: d(["image", "inspect", "--format", "{{.Id}}", t]).stdout.trim() } }) as unknown as SmUnit;
@@ -96,13 +96,15 @@ describe.skipIf(process.env.GSTACK_EVALS_DOCKER !== "1")("session image on a run
     expect(d(["build", "-q", "-t", tag.plain, "-"], "FROM " + tag.git + "\nRUN mkdir -p /w && echo orig > /w/orig.txt\n").status).toBe(0);
     expect(d(["build", "-q", "-t", tag.vol, "-"], "FROM " + tag.plain + "\nVOLUME /w/mnt_tmp\n").status).toBe(0);
     expect(d(["build", "-q", "-t", tag.full, "-"], "FROM " + tag.plain + "\nRUN mkdir -p /w/mnt_tmp && echo orig > /w/mnt_tmp/x\nVOLUME /w/mnt_tmp\n").status).toBe(0);
+    expect(d(["build", "-q", "-t", tag.claude, "-"], "FROM " + tag.plain + "\nVOLUME /w/.claude\n").status).toBe(0);
+    expect(d(["build", "-q", "-t", tag.deep, "-"], "FROM " + tag.plain + "\nVOLUME /w/deep/.claude/cache\n").status).toBe(0);
     for (const [v, n] of [[tree.one, 1], [tree.two, 2]] as const) {
       d(["volume", "create", v]);
       expect(d(["run", "--rm", "--network", "none", "-v", v + ":/d", "--entrypoint", "sh", tag.git, "-c", repo(n)]).status).toBe(0);
     }
   }, 900_000);
   afterAll(() => {
-    for (const t of [...built, tag.full, tag.vol, tag.plain, tag.git]) d(["image", "rm", "-f", t]);
+    for (const t of [...built, tag.deep, tag.claude, tag.full, tag.vol, tag.plain, tag.git]) d(["image", "rm", "-f", t]);
     for (const v of Object.values(tree)) d(["volume", "rm", "-f", v]);
   });
   test("an image with no volume builds as before: one commit, a clean tree, the image's own files gone", () => {
@@ -139,6 +141,26 @@ describe.skipIf(process.env.GSTACK_EVALS_DOCKER !== "1")("session image on a run
       } finally {
         dropVolume(vols.S0);
         dropVolume(vols.A1);
+      }
+      expect(anon()).toEqual(before);
+    }, 300_000);
+  }
+  const stripTree = "cd /d && git init -q && mkdir -p .claude deep/.claude && echo a > a.txt && echo m > CLAUDE.md && echo '{}' > deep/.claude/settings.json && git add -A && git -c user.name=t -c user.email=t@e commit -qm c0 && git rev-parse HEAD";
+  const stripLook = (v: string) => d(["run", "--rm", "--network", "none", "-v", v + ":/w", "--entrypoint", "sh", tag.git, "-c", "cd /w && git config --global --add safe.directory '*' && echo \"STATUS[$(git status --porcelain)]\" && git rev-list --all --count && git ls-files && find . -mindepth 1 -path ./.git -prune -o -print | LC_ALL=C sort"]).stdout.trim().split("\n");
+  for (const [kind, t, left] of [["no volume", "plain", []], ["a VOLUME at a .claude dir", "claude", ["./.claude"]], ["a VOLUME inside a .claude dir", "deep", ["./deep/.claude", "./deep/.claude/cache"]]] as const) {
+    test("the strip on an image with " + kind + ": every .claude dir and CLAUDE.md go and the history becomes one commit" + (left.length ? ", with the mount point kept and no anonymous volume left" : ", as before"), () => {
+      const before = anon();
+      const v = "sm-test-strip-" + t + "-" + pid;
+      try {
+        d(["volume", "create", v]);
+        const s = d(["run", "--rm", "--network", "none", "-v", v + ":/d", "--entrypoint", "sh", tag.git, "-c", stripTree]);
+        expect(s.status).toBe(0);
+        const out = prepareBase({ kind: "docker", image: tag[t], volume: v, repoDir: "/w", name: "sm-test-strip-" + pid }, s.stdout.trim(), "/w", "strip");
+        expect(out.removed).toEqual([".claude", "CLAUDE.md", "deep/.claude"]);
+        expect(out.preflight).toContain("count=1");
+        expect(stripLook(v)).toEqual(["STATUS[]", "1", "a.txt", ...["./a.txt", "./deep", ...left].sort()]);
+      } finally {
+        dropVolume(v);
       }
       expect(anon()).toEqual(before);
     }, 300_000);
