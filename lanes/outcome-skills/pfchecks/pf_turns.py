@@ -3,8 +3,9 @@
 Harbor and by the dry run. The task turn runs on its own slot, then capture.sh commits S in the session container and
 wrapup.sh saves it, then the wrap-up turn resumes the same Claude Code session in a new CLI process with its own limits
 (300 s, 20 turns) on its own slot. An upstream or infra end of the wrap-up turn puts the tree back to S (wrapup.sh reset)
-and reruns the wrap-up turn once on a new slot naming meta.rerun. A wrap-up turn refused for its allowance (an E_ALLOWANCE
-refusal on its slot, or the driver's 409 on its open, raised as OpenRefused) is never rerun. wrapup.sh keep then keeps only
+and reruns the wrap-up turn once on a new slot naming meta.rerun. A wrap-up turn refused for its allowance (an allowance
+stop on its slot, which the driver's close answer counts in allowance_stops, or the driver's 409 on its open, raised as
+OpenRefused) is never rerun; the proxy's other E_ALLOWANCE refusals are no allowance stop. wrapup.sh keep then keeps only
 CHECKS.json and counts every other change. S leaves the container as a git bundle.
 
 Each turn ends as real_agent's _drive ends a phase: the agent ended its turn and its background tasks are quiet (quiet_sec,
@@ -98,7 +99,7 @@ class Session:
             if phase != "wrapup":
                 raise
             self.summary["slots"].append({"phase": phase, "rerun": rerun, "id": None, "allowance_micros": None, "close": None, "open_refused": str(e)[:300]})
-            return {"phase": phase, "termination": "open_refused", "drive": {"error": str(e)[:400]}, "session_id": sid, "wall_s": 0.0, "refused": ["CAP_STOP"]}
+            return {"phase": phase, "termination": "open_refused", "drive": {"error": str(e)[:400]}, "session_id": sid, "wall_s": 0.0, "refused": ["CAP_STOP"], "allowance_stops": 0}
 
         async def can_use_tool(tool_name, tool_input, ctx):
             if tool_name == "AskUserQuestion":
@@ -153,7 +154,7 @@ class Session:
                 pass
             closed = self.slots.close(slot, "turn_end")
         self.summary["slots"].append({"phase": phase, "rerun": rerun, "id": slot.get("id"), "allowance_micros": slot.get("allowance_micros"), "close": closed})
-        return {"phase": phase, "termination": termination, "drive": end, "session_id": sid, "wall_s": round(time.time() - started, 1), "refused": (closed or {}).get("refusals") or []}
+        return {"phase": phase, "termination": termination, "drive": end, "session_id": sid, "wall_s": round(time.time() - started, 1), "refused": (closed or {}).get("refusals") or [], "allowance_stops": int((closed or {}).get("allowance_stops") or 0)}
 
     async def run(self) -> dict:
         cfg = self.cfg
@@ -170,7 +171,7 @@ class Session:
         for attempt in (1, 2):
             w = await self.turn("wrapup", cfg["wrapup_text"], task["session_id"], RERUN["wrapup"] if attempt == 2 else None)
             out["wrapup"].append(w)
-            if w["termination"] not in ("error_result", "error", "cli_exit") or {"E_ALLOWANCE", "CAP_STOP"} & set(w["refused"]) or attempt == 2:
+            if w["termination"] not in ("error_result", "error", "cli_exit") or w["allowance_stops"] or "CAP_STOP" in w["refused"] or attempt == 2:
                 break
             self.script("wrapup.sh", "reset", repo, work)
         out["keep"] = self.script("wrapup.sh", "keep", repo, work)

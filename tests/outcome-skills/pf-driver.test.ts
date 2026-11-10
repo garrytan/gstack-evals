@@ -237,3 +237,27 @@ test("a PF slot's close answer carries the effort and thinking fields of its fir
   expect(await served.stop()).toBe(0);
   local.close?.();
 });
+
+test("a PF slot refuses provider-side tools and capabilities, and its close answer counts an allowance stop only for the slot's allowance check", async () => {
+  const { serve, local } = ledger({ "pf-opus": { cap: 100 } });
+  const served = await serve([{ item: "pf-opus", arm: "pf-opus", arms: TOLD }]);
+  const { open } = client(served.control);
+  const close = async (id: string) => (await (await fetch(served.control + "/sessions/" + id + "/close", { method: "POST", body: JSON.stringify({ reason: "turn_end" }) })).json()) as Record<string, any>;
+  const caller = (slot: { json: Record<string, any> }) => (body: Record<string, unknown>) => fetch(slot.json.base_url + "/v1/messages", { method: "POST", headers: { "content-type": "application/json", "x-api-key": slot.json.token }, body: JSON.stringify({ model: OPUS, max_tokens: 100, messages: [{ role: "user", content: "hi" }], ...body }) });
+  const task = await open({ arm: "pf:P", cap: 12, phase: "task" });
+  const call = caller(task);
+  const web = await call({ tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 1 }] });
+  expect(web.status).toBe(403);
+  expect(((await web.json()) as Record<string, any>).code).toBe("E_PROXY_SERVER_TOOL");
+  const mcp = await call({ mcp_servers: [{ type: "url", url: "https://example.invalid/mcp", name: "x" }] });
+  expect(mcp.status).toBe(403);
+  expect(((await mcp.json()) as Record<string, any>).code).toBe("E_PROXY_SERVER_TOOL");
+  expect((await call({ model: OPUS + ":online" })).status).toBe(403);
+  expect((await call({})).status).toBe(200);
+  expect(await close(task.json.id)).toMatchObject({ refusals: ["E_PROXY_SERVER_TOOL", "E_PROXY_SERVER_TOOL", "E_ALLOWANCE"], allowance_stops: 0 });
+  const wrap = await open({ arm: "pf:P", cap: 6, phase: "wrapup" });
+  expect((await caller(wrap)({ messages: [{ role: "user", content: "x".repeat(4_000_000) }] })).status).toBe(402);
+  expect(await close(wrap.json.id)).toMatchObject({ refusals: ["E_ALLOWANCE"], allowance_stops: 1 });
+  expect(await served.stop()).toBe(0);
+  local.close?.();
+});

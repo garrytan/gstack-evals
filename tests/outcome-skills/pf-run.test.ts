@@ -107,7 +107,7 @@ test("runCopy gives the blind probe its one-line scope and refuses a blind sessi
   expect(() => runCopy({ ...blind, scope: "flag/\nmore" }, image, 1, temp("pf-run-copy-"))).toThrow("E_PF_ARM");
 });
 
-const turn = (termination: string, refused: string[] = []) => ({ termination, refused, wall_s: 12.5 });
+const turn = (termination: string, refused: string[] = [], allowance_stops = 0) => ({ termination, refused, allowance_stops, wall_s: 12.5 });
 const slot = (phase: string, spent: number, rerun: string | null = null, first?: Record<string, unknown> | null) => ({ phase, rerun, id: "ses_" + phase + spent, allowance_micros: 1, close: { spent_micros: spent, ...(first !== undefined ? { first_request: first } : {}) } });
 const summary = (o: { task?: unknown; wrapup?: unknown[]; slots?: unknown[] }) => ({
   task: o.task ?? null, wrapup: o.wrapup ?? [], slots: o.slots ?? [],
@@ -131,14 +131,14 @@ test("pfRecord: a completed session scores, with each turn's spend, the lease, t
 test("pfRecord: a limit in either turn still scores, and a wrap-up time or turn limit is the scored wrap-up end", () => {
   const i = input("C");
   expect(pfRecord(i, 1, summary({ task: turn("wall_limit"), wrapup: [turn("completed")] }), null)).toMatchObject({ task: { end: "limit_wall" }, wrapup_end: "completed", gap: null });
-  expect(pfRecord(i, 1, summary({ task: turn("completed", ["E_ALLOWANCE"]), wrapup: [turn("completed")] }), null)).toMatchObject({ task: { end: "limit_allowance" }, gap: null });
+  expect(pfRecord(i, 1, summary({ task: turn("completed", ["E_ALLOWANCE"], 1), wrapup: [turn("completed")] }), null)).toMatchObject({ task: { end: "limit_allowance" }, gap: null });
   expect(pfRecord(i, 1, summary({ task: turn("completed"), wrapup: [turn("turn_ceiling")] }), null)).toMatchObject({ wrapup_end: "limit_turns", gap: null });
   expect(pfRecord(i, 1, summary({ task: turn("completed"), wrapup: [turn("wall_limit")] }), null)).toMatchObject({ wrapup_end: "limit_wall", gap: null });
 });
 
 test("pfRecord: a wrap-up turn refused for its allowance, by the proxy or at the driver's open, is gap E_PF_WRAPUP_ALLOWANCE with no rerun and no session retry", () => {
   const i = input("P");
-  const proxy = summary({ task: turn("completed"), wrapup: [turn("error_result", ["E_ALLOWANCE"])], slots: [slot("task", 10), slot("wrapup", 2)] });
+  const proxy = summary({ task: turn("completed"), wrapup: [turn("error_result", ["E_ALLOWANCE"], 1)], slots: [slot("task", 10), slot("wrapup", 2)] });
   const a = pfRecord(i, 1, proxy, null);
   expect(a).toMatchObject({ attempt: 1, task: { end: "completed" }, wrapup: { ends: ["limit_allowance"], spent_micros: 2 }, wrapup_end: null, gap: "E_PF_WRAPUP_ALLOWANCE" });
   expect(retriesSession(proxy, a)).toBe(false);
@@ -147,7 +147,17 @@ test("pfRecord: a wrap-up turn refused for its allowance, by the proxy or at the
   expect(b).toMatchObject({ wrapup: { ends: ["limit_allowance"], spent_micros: 0 }, wrapup_end: null, gap: "E_PF_WRAPUP_ALLOWANCE" });
   expect(retriesSession(open, b)).toBe(false);
   expect(pfRecord(i, 1, summary({ task: turn("completed"), wrapup: [turn("error_result"), { termination: "open_refused", refused: ["CAP_STOP"], wall_s: 0 }] }), null)).toMatchObject({ wrapup: { ends: ["upstream", "limit_allowance"] }, gap: "E_PF_WRAPUP_ALLOWANCE" });
-  expect(pfRecord(i, 1, summary({ task: turn("completed"), wrapup: [turn("completed", ["E_ALLOWANCE"])] }), null)).toMatchObject({ wrapup_end: null, gap: "E_PF_WRAPUP_ALLOWANCE" });
+  expect(pfRecord(i, 1, summary({ task: turn("completed"), wrapup: [turn("completed", ["E_ALLOWANCE"], 1)] }), null)).toMatchObject({ wrapup_end: null, gap: "E_PF_WRAPUP_ALLOWANCE" });
+});
+
+test("pfRecord: only the proxy's allowance stop count makes an allowance end; an E_ALLOWANCE refusal for anything else (a model off the allowlist, a body that is not JSON) does not", () => {
+  const i = input("P");
+  expect(pfRecord(i, 1, summary({ task: turn("completed", ["E_ALLOWANCE"]), wrapup: [turn("completed")] }), null)).toMatchObject({ task: { end: "completed" }, wrapup_end: "completed", gap: null });
+  expect(pfRecord(i, 1, summary({ task: turn("error_result", ["E_ALLOWANCE"]), wrapup: [] }), null)).toMatchObject({ task: { end: "upstream" } });
+  expect(pfRecord(i, 1, summary({ task: turn("error_result", ["E_ALLOWANCE"], 1), wrapup: [turn("completed")] }), null)).toMatchObject({ task: { end: "limit_allowance" }, wrapup_end: "completed", gap: null });
+  expect(pfRecord(i, 1, summary({ task: turn("completed"), wrapup: [turn("completed", ["E_ALLOWANCE"])] }), null)).toMatchObject({ wrapup: { ends: ["completed"] }, wrapup_end: "completed", gap: null });
+  expect(pfRecord(i, 1, summary({ task: turn("completed"), wrapup: [turn("error_result", ["E_ALLOWANCE"]), turn("completed")] }), null)).toMatchObject({ wrapup: { ends: ["upstream", "completed"] }, wrapup_end: "completed", gap: null });
+  expect(pfRecord(i, 1, summary({ task: turn("completed"), wrapup: [turn("error_result", ["E_ALLOWANCE"], 1)] }), null)).toMatchObject({ wrapup: { ends: ["limit_allowance"] }, gap: "E_PF_WRAPUP_ALLOWANCE" });
 });
 
 test("pfRecord: effort is the task slot's proxy record; with the dry run's record, a match scores and a missing or different record is an infra gap", () => {

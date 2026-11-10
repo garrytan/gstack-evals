@@ -123,9 +123,9 @@ Rules as built
   #290's planPart reads its seed. Items: pf-opus, pf-sol, pf-particle in the test part; pf-admit in admission; pf-blind.
 - Ends: endKind is #290's. Task turn: completed or a limit goes to the wrap-up; upstream or infra retries the whole
   session once, then E_PF_UPSTREAM_GAP or E_PF_INFRA_GAP. Wrap-up: upstream or infra reruns the wrap-up turn once after
-  wrapup.sh reset, resuming the same Claude Code session; a second is a gap. A wrap-up refused for its allowance (the
-  proxy's E_ALLOWANCE on its slot, or the driver's 409 CAP_STOP on its open, which pf_turns.py records as termination
-  open_refused) is gap E_PF_WRAPUP_ALLOWANCE, with no wrap-up rerun and no session retry. A task open the driver refuses
+  wrapup.sh reset, resuming the same Claude Code session; a second is a gap. A wrap-up refused for its allowance (an
+  allowance stop on its slot, which the driver's close answer counts in allowance_stops, or the driver's 409 CAP_STOP on
+  its open, which pf_turns.py records as termination open_refused) is gap E_PF_WRAPUP_ALLOWANCE, with no wrap-up rerun and no session retry. A task open the driver refuses
   with 409 CAP_STOP raises LedgerCapStop in PfAgent, Harbor records it as the trial's exception, and pfRecord reads it as a
   cap stop: no gap, no retry, and runPfSession ends the part with CAP_STOP after writing the record.
 - Between turns: capture.sh commit (S), then wrapup.sh save. After the wrap-up: wrapup.sh keep copies CHECKS.json (a

@@ -46,7 +46,7 @@ export function taskStep(ends: EndKind[]): { action: "wrapup" } | { action: "ret
   return { action: "gap", code: last === "upstream" ? "E_PF_UPSTREAM_GAP" : "E_PF_INFRA_GAP" };
 }
 /** Section 5, wrap-up turn: completed or a time or turn limit is scored (a limit with no valid manifest scores 0, "no
- *  manifest (wrap-up limit)"); a wrap-up refused for its allowance (limit_allowance: the proxy's E_ALLOWANCE on its slot, or
+ *  manifest (wrap-up limit)"); a wrap-up refused for its allowance (limit_allowance: an allowance stop on its slot, or
  *  the driver's refusal of its open) is gap E_PF_WRAPUP_ALLOWANCE, with no rerun; an upstream end reruns only the wrap-up
  *  turn once, resuming the same session on the saved S, and a second is a gap. An infra end in the wrap-up turn takes the
  *  same one rerun (this build's reading of "Infra: one rerun"). */

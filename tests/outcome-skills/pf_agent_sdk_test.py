@@ -93,9 +93,10 @@ for line in sys.stdin:
 
 class Control:
     """The driver's control plane: one slot per open, its base URL on this server, a fixed spend per close, and the
-    proxy-recorded effort fields on the first close. cap_stop True refuses every open with 409; "wrapup" only wrap-up opens."""
+    proxy-recorded effort fields on the first close. cap_stop True refuses every open with 409; "wrapup" only wrap-up opens.
+    wrapup_refusals and wrapup_stops are every wrap-up close's refusal codes and allowance stop count."""
 
-    def __init__(self, cap_stop=False, wrapup_refusals=()):
+    def __init__(self, cap_stop=False, wrapup_refusals=(), wrapup_stops=0):
         self.opens, self.closes, self.refused = [], [], []
         outer = self
 
@@ -115,7 +116,7 @@ class Control:
                 outer.closes.append({"path": self.path, **body})
                 first = {"thinking": {"type": "adaptive"}, "output_config": None, "reasoning": None, "reasoning_effort": None, "effort": None} if len(outer.closes) == 1 else None
                 refusals = list(wrapup_refusals) if len(outer.closes) > 1 else []
-                return self.answer(200, {"spent_micros": 1000 * len(outer.closes), "requests": 1, "ok_responses": 1, "refused": len(refusals), "refusals": refusals, "usage": {}, "first_request": first})
+                return self.answer(200, {"spent_micros": 1000 * len(outer.closes), "requests": 1, "ok_responses": 1, "refused": len(refusals), "refusals": refusals, "allowance_stops": wrapup_stops if len(outer.closes) > 1 else 0, "usage": {}, "first_request": first})
 
             def answer(self, code, obj):
                 raw = json.dumps(obj).encode()
@@ -139,7 +140,7 @@ def sh(cwd, cmd):
     return r.stdout.strip()
 
 
-def session(scenario="ok", instr=False, cap_stop=False, arm="P", wrapup_refusals=()):
+def session(scenario="ok", instr=False, cap_stop=False, arm="P", wrapup_refusals=(), wrapup_stops=0):
     """One PfAgent trial; returns the error it raised, the control plane's calls, the stub's log and pf-summary.json."""
     d = Path(tempfile.mkdtemp(prefix="pf-agent-sdk-"))
     DIRS.append(d)
@@ -165,7 +166,7 @@ def session(scenario="ok", instr=False, cap_stop=False, arm="P", wrapup_refusals
     (d / "pf-config.json").write_text(json.dumps(pf))
     manifest = d / "images.json"
     manifest.write_text(json.dumps({"schema": "tg-images.v1", "rows": [{"label": LABEL, "image_id": IMAGE}]}))
-    control = Control(cap_stop, wrapup_refusals)
+    control = Control(cap_stop, wrapup_refusals, wrapup_stops)
     pf_agent.SH_DIR = str(d / "pf-sh")
     pf_agent.WORK = str(d / "pf-work")
     agent = pf_agent.PfAgent(
@@ -260,11 +261,19 @@ def test_a_tree_refusal_opens_no_slot_and_starts_no_claude():
 
 
 def test_a_wrapup_stopped_at_its_allowance_by_the_proxy_is_not_rerun():
-    s = session("wrapup_error", wrapup_refusals=("E_ALLOWANCE",))
+    s = session("wrapup_error", wrapup_refusals=("E_ALLOWANCE",), wrapup_stops=1)
     check(s.error is None, repr(s.error))
     check([o["meta"]["phase"] for o in s.control.opens] == ["task", "wrapup"], s.control.opens)
-    check([(w["termination"], w["refused"]) for w in s.summary["wrapup"]] == [("error_result", ["E_ALLOWANCE"])], s.summary["wrapup"])
+    check([(w["termination"], w["refused"], w["allowance_stops"]) for w in s.summary["wrapup"]] == [("error_result", ["E_ALLOWANCE"], 1)], s.summary["wrapup"])
+    check(s.summary["task"]["allowance_stops"] == 0, s.summary["task"])
     check([x["phase"] for x in s.stub] == ["task", "wrapup"], s.stub)
+
+
+def test_a_wrapup_e_allowance_refusal_that_is_no_allowance_stop_is_rerun_once():
+    s = session("wrapup_error", wrapup_refusals=("E_ALLOWANCE",))
+    check(s.error is None, repr(s.error))
+    check([(o["meta"]["phase"], o["meta"].get("rerun")) for o in s.control.opens] == [("task", None), ("wrapup", None), ("wrapup", "wrapup_upstream_or_infra")], s.control.opens)
+    check([(w["termination"], w["refused"], w["allowance_stops"]) for w in s.summary["wrapup"]] == [("error_result", ["E_ALLOWANCE"], 0), ("completed", ["E_ALLOWANCE"], 0)], s.summary["wrapup"])
 
 
 def test_a_cap_stop_on_the_wrapup_open_refuses_the_wrapup_once_with_no_rerun_and_keeps_s():
