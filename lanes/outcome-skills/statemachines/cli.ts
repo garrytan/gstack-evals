@@ -276,7 +276,7 @@ export async function main(argv: string[]): Promise<number> {
         console.log("ORACLE " + id + " " + v.verdict + " " + v.detail.replace(/\n/g, " ").slice(0, 300));
         if (v.verdict === "E_SM_INFRA_GAP") {
           infra[c.lang] = (infra[c.lang] ?? 0) + 1;
-          return false;
+          return "infra";
         }
         const why = v.verdict === "E_SM_ORACLE_UNSTABLE" ? v.verdict + ": " + (readUnit(dir).oracle?.reason ?? "not recorded") : v.verdict;
         if (v.verdict !== "kept") drops[why] = (drops[why] ?? 0) + 1;
@@ -285,7 +285,9 @@ export async function main(argv: string[]): Promise<number> {
       writeFileSync(join(units, "fill.json"), JSON.stringify(res, null, 1) + "\n");
       console.log("admission=" + res.admission.length + " state=" + res.state.length + " other=" + res.other.length + " reserve=" + res.reserve.length + " retry=" + res.retry.length + " drops=" + JSON.stringify(drops));
       for (const [lang, n] of Object.entries(infra)) console.log("infra_errors " + lang + "=" + n + " (neither kept nor dropped; rerun resumes them)");
-      return 0;
+      if (!res.infra.length) return 0;
+      console.error("E_SM_INFRA_GAP the fill is not final: " + res.infra.join(", ") + " hit an infra error, neither kept nor dropped; rerun sm oracle to resume them");
+      return 2;
     }
     if (sub === "size") {
       const { pos, f } = flags(rest, ["--ids", "--pull-log"]);

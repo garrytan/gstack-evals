@@ -50,6 +50,19 @@ describe("draw", () => {
     expect(f.walked.some((w) => w.kept === "cap")).toBe(true);
   });
 
+  test("fill: a unit with an infra error is neither kept nor dropped, and its slot is filled only for that pass", async () => {
+    const d = draw(units(), 11);
+    const clean = await fill(d, () => true);
+    const hit = clean.state[0]!;
+    const f = await fill(d, (id) => (id === hit ? "infra" : true));
+    expect(clean.infra).toEqual([]);
+    expect(f.infra).toEqual([hit]);
+    expect(f.walked.filter((w) => w.id === hit).map((w) => w.kept)).toEqual(["infra"]);
+    expect([...f.admission, ...f.state, ...f.other, ...f.reserve].includes(hit)).toBe(false);
+    expect(f.state.length).toBe(30);
+    expect(await fill(d, (id) => id !== hit)).toEqual({ ...f, infra: [], walked: f.walked.map((w) => (w.id === hit ? { ...w, kept: false } : w)) });
+  });
+
   test("a short stratum's gap is filled from the other", async () => {
     const u = units().map((x) => ({ ...x, repo: x.id }));
     const d = draw(u.filter((x) => x.stratum !== "state" || x.id.endsWith("-u1")), 5);

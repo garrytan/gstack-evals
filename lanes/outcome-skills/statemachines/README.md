@@ -471,7 +471,8 @@ model or unit (E_SM_PACKET).
   /tmp mode, which is 0755 root in some images (both vercel__turborepo units), so uid 10001 could not make the mark dir
   and every run read fresh=0. The hardened /tmp tmpfs now mounts rw,exec,size=4g,mode=1777. A run that still cannot
   make its mark dir writes SM_INFRA no_mark_dir and stops; TestRun.infra and the oracle run record carry it, the unit's
-  verdict is E_SM_INFRA_GAP (neither kept nor dropped, counted per language on its own line, rerun on the next pass),
+  verdict is E_SM_INFRA_GAP (neither kept nor dropped, counted per language on its own line, rerun on the next pass;
+  fill lists it under infra, and sm oracle exits with E_SM_INFRA_GAP while any remain, so that fill is not final),
   and a scoring run with it fails as E_SM_INFRA_GAP instead of scoring broke. The pstack eval (#305) shares this
   container code.
 - A run builds nothing when a rebuild command exits non-zero (rebuild_failed), when the print command reads report paths

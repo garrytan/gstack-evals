@@ -72,19 +72,21 @@ export function draw(units: DrawUnit[], seed: number): Draw {
   };
 }
 
-export interface Fill { admission: string[]; state: string[]; other: string[]; reserve: string[]; retry: string[]; walked: { id: string; slot: string; kept: boolean | "cap" }[] }
+export interface Fill { admission: string[]; state: string[]; other: string[]; reserve: string[]; retry: string[]; infra: string[]; walked: { id: string; slot: string; kept: boolean | "cap" | "infra" }[] }
 
-/** Walks the draw lazily. passes(id) is the oracle; each id is asked at most once. retry is only filled when asked. */
-export async function fill(d: Draw, passes: (id: string) => Promise<boolean> | boolean, opts: { retry?: boolean } = {}): Promise<Fill> {
-  const f: Fill = { admission: [], state: [], other: [], reserve: [], retry: [], walked: [] };
-  const used = new Set<string>(), asked = new Map<string, boolean>(), perRepo = new Map<string, number>();
+/** Walks the draw lazily. passes(id) is the oracle; each id is asked at most once. retry is only filled when asked. An id
+ *  whose oracle hit an infra error is neither kept nor dropped: it goes on infra and the walk moves on for this pass only,
+ *  so a fill with infra ids is not final, and once a rerun settles them the fill depends only on keeps and drops. */
+export async function fill(d: Draw, passes: (id: string) => Promise<boolean | "infra"> | boolean | "infra", opts: { retry?: boolean } = {}): Promise<Fill> {
+  const f: Fill = { admission: [], state: [], other: [], reserve: [], retry: [], infra: [], walked: [] };
+  const used = new Set<string>(), asked = new Map<string, boolean | "infra">(), perRepo = new Map<string, number>();
   const pos: Record<"admission" | "state" | "other", number> = { admission: 0, state: 0, other: 0 };
   /** The next kept unit of one order, or null when it runs out. */
   const next = async (list: "admission" | "state" | "other", slot: string): Promise<string | null> => {
     const ids = d[list];
     while (pos[list] < ids.length) {
       const id = ids[pos[list]++]!;
-      if (used.has(id) || asked.get(id) === false) continue;
+      if (used.has(id) || (asked.has(id) && asked.get(id) !== true)) continue;
       const repo = d.repo[id] ?? id;
       if ((perRepo.get(repo) ?? 0) >= SIZES.cap) {
         f.walked.push({ id, slot, kept: "cap" });
@@ -93,7 +95,8 @@ export async function fill(d: Draw, passes: (id: string) => Promise<boolean> | b
       if (!asked.has(id)) asked.set(id, await passes(id));
       const kept = asked.get(id)!;
       f.walked.push({ id, slot, kept });
-      if (!kept) continue;
+      if (kept === "infra") f.infra.push(id);
+      if (kept !== true) continue;
       used.add(id);
       perRepo.set(repo, (perRepo.get(repo) ?? 0) + 1);
       return id;
