@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // Decision-routing batch plans (preregistration sections 5, 8 and 9) from the frozen draw lists beside the
-// preregistration: calibration is N on both models over calibration.txt (dr-calibration-r2, which replaced the closed
-// dr-calibration after its first batch stopped); the pilot is R and P on both
+// preregistration: calibration is N on both models over calibration.txt (dr-calibration-r3, which replaced the closed
+// dr-calibration and dr-calibration-r2 after their batches stopped); the pilot is R and P on both
 // models over pilot.txt (dr-pilot-rp) plus J on both models, F on Opus and W over its first 12 (dr-pilot-jfw); scored is
 // N, R and P per model over scored.txt (dr-scored-opus, dr-scored-sol); the subset stage is F on Opus and J on both models
 // (dr-subset) plus W (dr-w-reference) over subset.txt. A failed scored task's spare replacement is not planned here.
@@ -13,7 +13,7 @@ import type { PlanRow } from "./controller.ts";
 
 export const PREREG = resolve(import.meta.dir, "../../../wiki/plans/2026-11-09-geva-411-decision-routing-prereg");
 /** The line item calibration runs on, and the only one admission reads. */
-export const CALIBRATION_ITEM = "dr-calibration-r2";
+export const CALIBRATION_ITEM = "dr-calibration-r3";
 type Cell = [PlanRow["cell"], PlanRow["model"]];
 
 const rows = (tasks: string[], item: string, cells: Cell[]): PlanRow[] => tasks.flatMap((task) => cells.map(([cell, model]) => ({ task, cell, model, item })));

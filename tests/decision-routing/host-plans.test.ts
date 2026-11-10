@@ -34,7 +34,7 @@ test("task counts follow draw.txt: 40 calibration, 20 and 12 pilot, 280 scored, 
 
 test("cells and models per stage", () => {
   const cells = (rows: Array<{ cell: string; model: string; item: string }>) => [...new Set(rows.map((r) => r.item + " " + r.cell + " " + r.model))].sort();
-  expect(cells(plans.calibration)).toEqual(["dr-calibration-r2 N opus", "dr-calibration-r2 N sol"]);
+  expect(cells(plans.calibration)).toEqual(["dr-calibration-r3 N opus", "dr-calibration-r3 N sol"]);
   expect(cells(plans.pilot)).toEqual(["dr-pilot-jfw F opus", "dr-pilot-jfw J opus", "dr-pilot-jfw J sol", "dr-pilot-jfw W particle", "dr-pilot-rp P opus", "dr-pilot-rp P sol", "dr-pilot-rp R opus", "dr-pilot-rp R sol"]);
   expect(cells(plans.scored)).toEqual(["dr-scored-opus N opus", "dr-scored-opus P opus", "dr-scored-opus R opus", "dr-scored-sol N sol", "dr-scored-sol P sol", "dr-scored-sol R sol"]);
   expect(cells(plans.subset)).toEqual(["dr-subset F opus", "dr-subset J opus", "dr-subset J sol", "dr-w-reference W particle"]);

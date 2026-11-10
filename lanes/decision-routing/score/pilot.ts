@@ -26,7 +26,7 @@ export const NO_ANSWER_LINE = 0.02;
 export const PARTICLE_MAX_TOKENS = { base: 8000, raised: 16000 } as const;
 export const ITEMS_FILE = join(import.meta.dir, "..", "config", "items.json");
 /** Items whose caps the Captain records before the pilot re-cost; their caps come from items.json. */
-const RECORDED = ["dr-calibration-r2", "dr-pilot-rp", "dr-pilot-jfw", "dr-replay", "dr-crew"];
+const RECORDED = ["dr-calibration-r3", "dr-pilot-rp", "dr-pilot-jfw", "dr-replay", "dr-crew"];
 
 export interface Scope { S: number; S2: number; w: boolean; jSol: boolean; f: boolean }
 export const FULL_SCOPE: Scope = { S: 280, S2: 100, w: true, jSol: true, f: true };
@@ -49,7 +49,7 @@ export function plan(rate: Readonly<Record<string, number>>, scope: Scope, items
     labelRuns += cells.filter((c) => (o.labelled ?? []).includes(c.split(":")[0]!)).length * n * LABEL_RUNS_PER_SESSION;
   };
   for (const row of itemsFile.items) if (row.closed_micros !== undefined) items.push({ item: row.item, sessions: 0, expected: row.closed_micros / 1e6, cap: row.closed_micros / 1e6 });
-  add("dr-calibration-r2", ["N:opus", "N:sol"], 40, { extra: SHADOW_PER_SESSION * 2 * 40, m: 1.5, labelled: ["N"] });
+  add("dr-calibration-r3", ["N:opus", "N:sol"], 40, { extra: SHADOW_PER_SESSION * 2 * 40, m: 1.5, labelled: ["N"] });
   add("dr-pilot-rp", ["R:opus", "R:sol", "P:opus", "P:sol"], 20, { m: 1.5 });
   add("dr-pilot-jfw", ["J:opus", "J:sol", "F:opus", "W:-"], 12, { m: 1.5 });
   add("dr-scored-opus", ["N:opus", "R:opus", "P:opus"], scope.S, { labelled: ["R", "P"] });

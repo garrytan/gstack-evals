@@ -54,7 +54,7 @@ function trial(root: string, name: string, model: string, cell: string, runs: Ar
   const dr = join(root, name, "agent", "dr");
   mkdirSync(dr, { recursive: true });
   writeFileSync(join(root, name, "result.json"), JSON.stringify({ task_name: "owner__repo-" + name.split("__")[0]!.slice(1) }));
-  writeFileSync(join(root, name, "config.json"), JSON.stringify({ agent: { kwargs: { cell, model, item: cell === "N" ? "dr-calibration-r2" : "dr-pilot-rp" } } }));
+  writeFileSync(join(root, name, "config.json"), JSON.stringify({ agent: { kwargs: { cell, model, item: cell === "N" ? "dr-calibration-r3" : "dr-pilot-rp" } } }));
   writeFileSync(join(dr, "dr-summary.json"), JSON.stringify({ session: name, model, cell, exit_status: "submitted", session_ms: 1 }));
   writeFileSync(join(dr, "meter.json"), JSON.stringify({ meter_id: "m-" + name }));
   writeFileSync(join(dr, "trajectory.json"), JSON.stringify(traj(runs)));
@@ -86,12 +86,14 @@ test("per model and cell counts, the over-10% flag and the gap between cells", (
   }
 });
 
-test("admit reads only the dr-calibration-r2 run: a calibration session from the closed dr-calibration item is refused, nothing read", async () => {
+test("admit reads only the dr-calibration-r3 run: calibration sessions from the closed dr-calibration and dr-calibration-r2 items are refused, nothing read", async () => {
   const root = mkdtempSync(join(tmpdir(), "dr-admit-item-"));
   try {
     trial(join(root, "cal"), "t1__N__opus", "opus", "N", [["ls", "", 0]]);
     const old = trial(join(root, "cal"), "t2__N__opus", "opus", "N", [["ls", "", 0]]);
     writeFileSync(join(old, "config.json"), JSON.stringify({ agent: { kwargs: { cell: "N", model: "opus", item: "dr-calibration" } } }));
+    const r2 = trial(join(root, "cal"), "t3__N__opus", "opus", "N", [["ls", "", 0]]);
+    writeFileSync(join(r2, "config.json"), JSON.stringify({ agent: { kwargs: { cell: "N", model: "opus", item: "dr-calibration-r2" } } }));
     trial(join(root, "pil"), "t1__R__opus", "opus", "R", [["ls", "", 0]]);
     writeFileSync(join(root, "j.ndjson"), "");
     const out = join(root, "admission.json");
@@ -105,7 +107,7 @@ test("admit reads only the dr-calibration-r2 run: a calibration session from the
       console.error = err;
     }
     expect(code).toBe(2);
-    expect(errs.join("\n")).toStartWith("E_USAGE admission reads only the dr-calibration-r2 run");
+    expect(errs.join("\n")).toStartWith("E_USAGE admission reads only the dr-calibration-r3 run: 2 calibration session(s)");
     expect(errs.join("\n")).toContain("t2__N__opus");
     expect(existsSync(out)).toBe(false);
   } finally {

@@ -50,6 +50,8 @@ export const MAX_OUTPUT_TOKENS = 32_000;
 export const PILOT_SESSION_STOP_MICROS = 2_500_000;
 export const HARBOR_RETRY = { max_retries: 1, include_exceptions: ["DrInfraError", "EnvironmentStartTimeoutError", "AgentSetupTimeoutError"] };
 export const AGENT_IMPORT_PATH = "dr_harbor:DecisionRoutingAgent";
+/** Harbor's docker environment with the rig's egress sidecar build context (agent/dr_sidecar.py, agent/egress-sidecar). */
+export const ENVIRONMENT_IMPORT_PATH = "dr_sidecar:DrDockerEnvironment";
 /** The runner's container firewall (host/post-boot.sh) lets containers reach the host only on these ports, one per leased item. */
 export const PROXY_PORT_FIRST = 47100;
 export const PROXY_PORT_COUNT = 8;
@@ -208,7 +210,8 @@ export function reservedPorts(file = "/proc/sys/net/ipv4/ip_local_reserved_ports
 }
 
 /**
- * One Harbor job with one trial: the decision-routing agent, docker with delete, the proxy host on the agent's allowlist.
+ * One Harbor job with one trial: the decision-routing agent, docker with delete and the rig's egress sidecar, the proxy
+ * host on the agent's allowlist.
  * The task's [agent] network_mode is allowlist with no host, and Harbor merges only the agent's extra_allowed_hosts into
  * it; environment.extra_allowed_hosts reaches the setup baseline alone, so the agent's run would reach no proxy.
  */
@@ -220,7 +223,7 @@ export function harborJob(row: PlanRow, o: JobInputs, markersFile?: string) {
     n_concurrent_trials: 1,
     quiet: true,
     retry: HARBOR_RETRY,
-    environment: { type: "docker", delete: true },
+    environment: { type: "docker", import_path: ENVIRONMENT_IMPORT_PATH, delete: true },
     agents: [{ import_path: AGENT_IMPORT_PATH, extra_allowed_hosts: [o.proxyHost], kwargs: { cell: row.cell, model: row.model, runtime_tarball: o.runtimeTarball, runtime_sha256: o.runtimeSha256, pin_file: o.pinFile, item: row.item, ...(markersFile ? { markers_file: markersFile } : {}) } }],
     tasks: [{ path: join(o.tasksDir, row.task) }],
   };

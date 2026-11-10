@@ -95,7 +95,7 @@ describe("plan, job and env", () => {
     }
   });
 
-  test("a Harbor job runs the decision-routing agent once, in docker with delete, with the proxy host allowlisted for the agent's run only", () => {
+  test("a Harbor job runs the decision-routing agent once, in docker with delete and the rig's egress sidecar, with the proxy host allowlisted for the agent's run only", () => {
     const row: PlanRow = { task: "django-1", cell: "R", model: "sol", item: "dr-pilot-rp" };
     expect(harborJob(row, { out: "/o", tasksDir: "/tasks", proxyHost: "172.17.0.1", runtimeTarball: "/rt.tgz", runtimeSha256: "ab", pinFile: "/pin.json" })).toEqual({
       job_name: "django-1__R__sol",
@@ -104,7 +104,7 @@ describe("plan, job and env", () => {
       n_concurrent_trials: 1,
       quiet: true,
       retry: { max_retries: 1, include_exceptions: ["DrInfraError", "EnvironmentStartTimeoutError", "AgentSetupTimeoutError"] },
-      environment: { type: "docker", delete: true },
+      environment: { type: "docker", import_path: "dr_sidecar:DrDockerEnvironment", delete: true },
       agents: [{ import_path: "dr_harbor:DecisionRoutingAgent", extra_allowed_hosts: ["172.17.0.1"], kwargs: { cell: "R", model: "sol", runtime_tarball: "/rt.tgz", runtime_sha256: "ab", pin_file: "/pin.json", item: "dr-pilot-rp" } }],
       tasks: [{ path: "/tasks/django-1" }],
     });

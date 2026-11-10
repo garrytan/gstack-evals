@@ -19,8 +19,8 @@ import { readItem } from "../../src/runner/ledger/record.ts";
 
 const REAL_RECORD = process.env.DR_REAL_RECORD ?? "";
 const CELLS = JSON.parse(readFileSync(join(import.meta.dir, "../../lanes/decision-routing/config/cells.json"), "utf8"));
-const ITEM = "dr-calibration-r2";
-const RUN = "dr-calibration-r2@0123456789ab";
+const ITEM = "dr-calibration-r3";
+const RUN = "dr-calibration-r3@0123456789ab";
 const sha = (text: string) => createHash("sha256").update(text).digest("hex");
 const FAKE_HARBOR = `import { readFileSync, writeFileSync } from "node:fs";
 const env = process.env;
@@ -160,35 +160,37 @@ describe.skipIf(!REAL_RECORD || !existsSync(join(REAL_RECORD, "items", ITEM)))("
   }, 90_000);
 });
 
-test("a plan row on the closed dr-calibration item is refused with DR_ITEM_CLOSED before anything is written, leased or launched", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "dr-closed-"));
-  dirs.push(dir);
-  writeFileSync(join(dir, "fake-harbor.ts"), FAKE_HARBOR);
-  writeFileSync(join(dir, "runtime.tgz"), "runtime");
-  writeFileSync(join(dir, "pin.json"), "{}");
-  const err = await runBatch({
-    plan: [{ task: "task-0", cell: "N", model: "opus", item: "dr-calibration" }],
-    out: join(dir, "out"),
-    runId: "dr-calibration@0123456789ab",
-    temp: true,
-    harbor: [process.execPath, join(dir, "fake-harbor.ts")],
-    tasksDir: join(dir, "tasks"),
-    proxyHost: "127.0.0.1",
-    runtimeTarball: join(dir, "runtime.tgz"),
-    runtimeSha256: sha("runtime"),
-    pinFile: join(dir, "pin.json"),
-    pinSha256: sha("{}"),
-    concurrency: 1,
-    pollMs: 20,
-    log: () => {},
-    env: { PATH: process.env.PATH ?? "", HOME: dir, ANTHROPIC_API_KEY: "sk-ant-fake-0123456789" },
-    fetch: async () => Response.json({ id: "msg", usage: { input_tokens: 100, output_tokens: 20 } }),
-  }).then(() => null, (e) => e);
-  expect(err).toBeInstanceOf(ControllerError);
-  expect((err as ControllerError).code).toBe("DR_ITEM_CLOSED");
-  expect((err as Error).message).toStartWith("DR_ITEM_CLOSED: line item dr-calibration is closed");
-  expect(existsSync(join(dir, "out"))).toBe(false);
-});
+for (const item of ["dr-calibration", "dr-calibration-r2"]) {
+  test("a plan row on the closed " + item + " item is refused with DR_ITEM_CLOSED before anything is written, leased or launched", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "dr-closed-"));
+    dirs.push(dir);
+    writeFileSync(join(dir, "fake-harbor.ts"), FAKE_HARBOR);
+    writeFileSync(join(dir, "runtime.tgz"), "runtime");
+    writeFileSync(join(dir, "pin.json"), "{}");
+    const err = await runBatch({
+      plan: [{ task: "task-0", cell: "N", model: "opus", item }],
+      out: join(dir, "out"),
+      runId: item + "@0123456789ab",
+      temp: true,
+      harbor: [process.execPath, join(dir, "fake-harbor.ts")],
+      tasksDir: join(dir, "tasks"),
+      proxyHost: "127.0.0.1",
+      runtimeTarball: join(dir, "runtime.tgz"),
+      runtimeSha256: sha("runtime"),
+      pinFile: join(dir, "pin.json"),
+      pinSha256: sha("{}"),
+      concurrency: 1,
+      pollMs: 20,
+      log: () => {},
+      env: { PATH: process.env.PATH ?? "", HOME: dir, ANTHROPIC_API_KEY: "sk-ant-fake-0123456789" },
+      fetch: async () => Response.json({ id: "msg", usage: { input_tokens: 100, output_tokens: 20 } }),
+    }).then(() => null, (e) => e);
+    expect(err).toBeInstanceOf(ControllerError);
+    expect((err as ControllerError).code).toBe("DR_ITEM_CLOSED");
+    expect((err as Error).message).toStartWith("DR_ITEM_CLOSED: line item " + item + " is closed");
+    expect(existsSync(join(dir, "out"))).toBe(false);
+  });
+}
 
 describe.skipIf(!REAL_RECORD || !existsSync(join(REAL_RECORD, "items", ITEM)))("pre-lease reserve check", () => {
   test("the reserve is CONCURRENCY sessions at the cells' allowance: 6 x $5", () => {

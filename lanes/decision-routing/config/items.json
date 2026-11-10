@@ -14,7 +14,14 @@
     {
       "item": "dr-calibration-r2",
       "cap_micros": 88860000,
-      "what": "Calibration at the fixed head: N on both models, deciders in shadow after each session (80 sessions)"
+      "what": "Calibration, second batch: N on both models, deciders in shadow after each session; 13 of its 80 sessions launched before it stopped",
+      "closed_micros": 1923524,
+      "closed": "its batch, run dr-calibration-r2@8e65098317a0, stopped on a meter check and settled $1.923524; Harbor's egress sidecar cut 3 of its 152 model calls at 15 s, so the item takes no new lease, calibration runs on dr-calibration-r3 with the sidecar fixed, and this partial batch is reported beside it and never pooled"
+    },
+    {
+      "item": "dr-calibration-r3",
+      "cap_micros": 86930000,
+      "what": "Calibration with the egress sidecar's read timeout fixed: N on both models, deciders in shadow after each session (80 sessions)"
     },
     {
       "item": "dr-pilot-rp",
