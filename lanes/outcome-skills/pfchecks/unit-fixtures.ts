@@ -118,4 +118,84 @@ function blocky(c: FixtureCtx): UnitFixture {
   };
 }
 
-export const FIXTURES: Record<string, (c: FixtureCtx) => UnitFixture> = { "0xERR0R__blocky-2016": blocky };
+/** gitoxide (Rust). The bug: a three-way text merge with the Myers diff reports a conflict for two changes that do not
+ *  overlap; the fix post-processes the diff before collecting its hunks (gix-merge/src/blob/builtin_driver/text/utils.rs).
+ *  Every Rust test file under gix-merge/tests/ is its own test target, so each check is one file that carries its own copy
+ *  of the probe. Entries spell cargo test as cargo t where a token must name nothing: "test" is a word of every Rust test. */
+function gitoxide(c: FixtureCtx): UnitFixture {
+  const FIX = "gix-merge/src/blob/builtin_driver/text/utils.rs";
+  const probe = [
+    "use gix_merge::blob::{builtin_driver, builtin_driver::text::Conflict, Resolution};", "",
+    "/// Merges two changes that do not overlap (ours drops the first line, theirs the third) with the Myers diff, and",
+    "/// reports whether the merge completed without a conflict.",
+    "fn myers_clean() -> bool {",
+    '    let base = b"one\\n\\ntwo\\nthree\\n\\n";',
+    '    let ours = b"\\n\\ntwo\\nthree\\n";',
+    '    let theirs = b"one\\n\\nthree\\n\\n";',
+    "    let labels = builtin_driver::text::Labels { ancestor: None, current: None, other: None };",
+    "    let options = builtin_driver::text::Options {",
+    "        diff_algorithm: imara_diff::Algorithm::Myers,",
+    "        conflict: Conflict::Keep { style: builtin_driver::text::ConflictStyle::Merge, marker_size: 7.try_into().unwrap() },",
+    "    };",
+    "    let mut out = Vec::new();",
+    "    let mut input = imara_diff::InternedInput::default();",
+    "    builtin_driver::text(&mut out, &mut input, labels, ours, base, theirs, options) == Resolution::Complete",
+    "}", "",
+  ].join("\n");
+  const rsTest = (name: string, body: string[], head = "") => (head ? head + "\n" : "") + "#[test]\nfn " + name + "() {\n" + body.map((l) => "    " + l).join("\n") + "\n}\n";
+  const withProbe = (name: string, body: string[]) => rsTest(name, body, probe);
+  const files: Record<string, string> = {
+    "gix-merge/tests/pfcheck_fail.rs": rsTest("pfcheck_fail", ['panic!("this check always fails");']),
+    "gix-merge/tests/pfcheck_pass.rs": rsTest("pfcheck_pass", ['println!("this check always passes");']),
+    "gix-merge/tests/pfcheck_golden.rs": withProbe("pfcheck_golden", ['assert!(!myers_clean(), "the merge completed; the recorded output has a conflict");']),
+    "gix-merge/tests/pfcheck_own.rs": rsTest("pfcheck_own", ['assert!(gix_merge::pf_helper(), "the helper says no");']),
+    "gix-merge/tests/pfcheck_random.rs": rsTest("pfcheck_random", ["use std::hash::{BuildHasher, Hasher};", "let mut h = std::collections::hash_map::RandomState::new().build_hasher();", "h.write_u8(0);", 'assert!(h.finish() % 4 == 0, "unlucky draw");']),
+    "gix-merge/tests/pfcheck_hang.rs": withProbe("pfcheck_hang", ["if !myers_clean() {", "    loop {", "        std::thread::sleep(std::time::Duration::from_secs(3600));", "    }", "}"]),
+    "gix-merge/tests/pfcheck_replay.rs": withProbe("pfcheck_replay", ['assert!(myers_clean(), "two changes that do not overlap gave a conflict");']),
+    "gix-merge/tests/pfcheck_static.rs": rsTest("pfcheck_static", ['let src = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/blob/builtin_driver/text/utils.rs")).unwrap();', 'assert!(src.contains("postprocess_lines"), "utils.rs does not post-process the diff");']),
+    "checks/hash.sh": '[ "$(sha256sum ' + FIX + ' | cut -c1-64)" != "' + c.baseSha(FIX) + '" ]\n',
+    "checks/changed.sh": 'g() { git -c safe.directory="*" "$@"; }; ! g diff --quiet "$(g rev-list --max-parents=0 HEAD)" -- ' + FIX + "\n",
+    "checks/sync.sh": '[ "$(sha256sum ' + FIX + ' | cut -c1-64)" = "' + c.baseSha(FIX) + '" ] || { echo "verify-merge is out of sync with the code: resync"; exit 1; }; cargo test -p gix-merge --test pfcheck_replay\n',
+    "checks/built.sh": 'find "${CARGO_TARGET_DIR:-target}/debug/deps" -name "libgix_merge-*.rlib" -newer ' + FIX + ' | grep -q . || { echo "gix-merge is not built"; exit 1; }; cargo test -p gix-merge --test pfcheck_replay\n',
+    ...verifyFiles("generated-do-not-edit/verify-merge", "verify-merge"),
+  };
+  const ct = (name: string) => "cargo test -p gix-merge --test " + name;
+  return {
+    files,
+    after: "printf '\\n/// The agent edit a check imports.\\npub fn pf_helper() -> bool {\\n    true\\n}\\n' >> gix-merge/src/lib.rs && " + applyTestPatch(c.testPatch),
+    manifest: [
+      { role: "regress", command: "cargo test -p gix-merge --test merge false_conflict", want: "catch" },
+      { role: "fail", command: ct("pfcheck_fail"), want: "no_catch" },
+      { role: "pass", command: ct("pfcheck_pass"), want: "no_catch" },
+      { role: "golden", command: ct("pfcheck_golden"), want: "no_catch" },
+      { role: "hash", command: "bash checks/hash.sh", want: "no_catch" },
+      { role: "changed", command: "bash checks/changed.sh", want: "no_catch" },
+      { role: "own", command: ct("pfcheck_own"), want: "no_catch" },
+      { role: "outside", command: "bash /tmp/pf-outside/builtin_driver.rs", want: "no_catch" },
+      { role: "random", command: ct("pfcheck_random"), want: "no_catch" },
+      { role: "hang", command: ct("pfcheck_hang"), want: "catch" },
+      { role: "built", command: "bash checks/built.sh", want: "catch" },
+      { role: "inline", command: 'python3 -c "print(1)" gix-merge/tests/merge/blob/builtin_driver.rs', want: "inline" },
+      { role: "nothing", command: "ls -la", want: "names_nothing" },
+      { role: "static", command: ct("pfcheck_static"), want: "catch" },
+      { role: "sync", command: "bash checks/sync.sh", want: "no_catch" },
+      { role: "late", command: "cargo t -p gix-merge --test pfcheck_late", want: "names_nothing" },
+      { role: "tlc", command: tlc("generated-do-not-edit/verify-merge"), want: "no_catch" },
+    ],
+    late: { path: "gix-merge/tests/pfcheck_late.rs", text: rsTest("pfcheck_late", []) },
+    verify: Object.keys(verifyFiles("generated-do-not-edit/verify-merge", "verify-merge")).sort(),
+    compile: {
+      files: {
+        "gix-merge/tests/pfcheck_pkg.rs": withProbe("pfcheck_pkg", ['assert!(myers_clean(), "two changes that do not overlap gave a conflict");']),
+        "gix-merge/tests/pfcheck_broken.rs": rsTest("pfcheck_broken", ["let _ = OldName;"]),
+      },
+      command: "cargo test -p gix-merge pfcheck_pkg", broken: "gix-merge/tests/pfcheck_broken.rs", own: "gix-merge/tests/pfcheck_pkg.rs",
+    },
+    cap: { files: { "gix-merge/tests/pfcheck_fail.rs": files["gix-merge/tests/pfcheck_fail.rs"]! }, command: ct("pfcheck_fail") },
+    na: {
+      api: "the fix adds no name to the repository's API: its one new call, postprocess_lines, is a method of the gix-imara-diff crate that the parent already has, so a test that calls it builds and runs on the parent and no parent failure names it",
+    },
+  };
+}
+
+export const FIXTURES: Record<string, (c: FixtureCtx) => UnitFixture> = { "0xERR0R__blocky-2016": blocky, "GitoxideLabs__gitoxide-2476": gitoxide };

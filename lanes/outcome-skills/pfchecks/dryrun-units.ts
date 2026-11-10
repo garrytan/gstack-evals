@@ -3,7 +3,8 @@
 // this drives the fixtures that depend on the unit (unit-fixtures.ts) on a real one: its image, its prepared tree, its
 // rebuild and its own fail-to-pass test. Three stub sessions run through the driver on the unit's session image, one per
 // arm (P on Opus, C on Sol, N on particle-1), and a fourth, on a copy of the tree holding a hostile CLAUDE.md, is refused.
-// Each session is scored in the unit's runtime image by the Docker executor in hardened mode, as outcome pf score does.
+// Each session is scored in the unit's runtime image by the Docker executor in hardened mode, as outcome pf score does;
+// the three sessions score at the same time, once the neutral record exists (it may still be in the making).
 // The session mechanics that do not depend on the unit (leases, slots, effort, allowances, D, W4) stay with dryrun.ts.
 // One PASS, FAIL or N/A line per fixture (N/A: the fixture cannot apply to this unit, and why); exit 1 on any FAIL.
 // Usage: bun dryrun-units.ts --unit <unit dir> --neutral <pf-neutral.v1 record> --out <dir>
@@ -114,7 +115,7 @@ export async function main(argv: string[]): Promise<number> {
     const C = await runOne("uC", "C", SOL, volume);
     const N = await runOne("uN", "N", P1, volume);
     const H = await runOne("uhostile", "C", SOL, hostileVol);
-    for (const r of [P, C, N, H]) tags.add(r.run.image.tag);
+    for (const r of [P, C, N, H]) tags.add(r.run.image.image_id);
     await batch.stop();
 
     const pBodies = JSON.stringify(st.bodies.filter((b) => b.session === "uP").map((b) => b.body.messages));
@@ -141,7 +142,13 @@ export async function main(argv: string[]): Promise<number> {
     const reached = st.bodies.filter((b) => JSON.stringify(b.body).includes("PF-HOSTILE")).length;
     rule("hostile CLAUDE.md reaches no arm, and the refusal is gap E_PF_ARM with one attempt", /E_PF_ARM/.test(String(H.turns.refused ?? "")) && reached === 0 && st.bodies.every((b) => b.session !== "uhostile") && H.run.record.gap === "E_PF_ARM" && H.run.attempts.length === 1, "refused: " + String(H.turns.refused ?? "no").slice(0, 120) + "; request bodies holding the text " + reached + "; gap " + H.run.record.gap + ", attempts " + H.run.attempts.length);
 
-    const cP = await score(P);
+    spawnSync("docker", ["volume", "rm", "-f", hostileVol]);
+    for (const t of tags) spawnSync("docker", ["rmi", "-f", t]);
+    if (!existsSync(neutral)) {
+      console.log("waiting for the neutral record " + neutral);
+      while (!existsSync(neutral)) await Bun.sleep(30_000);
+    }
+    const [cP, cC, cN] = await Promise.all([score(P), score(C), score(N, 1)]);
     const got = outcomes(cP);
     const entries = ((cP as any).entries ?? []) as Array<{ index: number; outcome: string; why: string; runs: Array<{ tree: string; exit: number; pass: boolean; timed_out: boolean; wall_ms: number }> }>;
     const entry = (role: Role) => entries.find((e) => e.index === fx.manifest.findIndex((m) => m.role === role));
@@ -163,7 +170,6 @@ export async function main(argv: string[]): Promise<number> {
     rule("sync-gated replay detected", (sec.sync_gate ?? []).includes(at("sync")), "sync_gate " + JSON.stringify(sec.sync_gate));
     console.log("P scoring: wall " + (cP as any).wall_ms + " ms, ceiling hit " + (cP as any).ceiling_hit + ", api_guess " + JSON.stringify(sec.api_guess) + ", drift " + JSON.stringify(sec.drift) + ", compile_blocked " + JSON.stringify((cP as any).compile_blocked));
 
-    const cC = await score(C);
     const cb = ((cC as any).compile_blocked ?? []) as Array<{ index: number; dropped: string[]; outcome: string; why: string }>;
     const fixLog = (((cC as any).entries ?? [])[0]?.runs ?? []).find((x: { tree: string; pass: boolean }) => x.tree === "fix" && !x.pass)?.log ?? "";
     const fixLines = fixLog.split("\n") as string[];
@@ -172,7 +178,6 @@ export async function main(argv: string[]): Promise<number> {
     if (!cb.length && naming.length && !errorLine) say("N/A compile-blocked entry reruns without the other agent files: the reading needs a line holding \"error\" (or the line after it) that names the broken file, and this unit's compiler names it on a line with no such word, so the reading cannot fire here; first fix-run failure: " + naming.slice(0, 2).join(" | ") + "; compile_rerun " + cC.readings.compile_rerun);
     else rule("compile-blocked entry reruns without the other agent files", outcomes(cC)[0] === "no_catch" && cb.some((x) => x.index === 0 && x.dropped.includes(fx.compile.broken) && !x.dropped.includes(fx.compile.own) && x.outcome === "catch") && cC.readings.compile_rerun === 1, "primary " + outcomes(cC)[0] + " (" + ((cC as any).entries ?? [])[0]?.why + "), compile_blocked " + JSON.stringify(cb) + ", compile_rerun " + cC.readings.compile_rerun + "; first fix-run failure names the broken file: " + naming.slice(0, 2).join(" | "));
 
-    const cN = await score(N, 1);
     const oN = outcomes(cN);
     rule("entry beyond the cap and entries the ceiling leaves unreached are non-catches", cN.score === 0 && oN[25] === "beyond_cap" && oN.includes("unreached"), "score " + cN.score + ", beyond_cap " + oN.filter((x) => x === "beyond_cap").length + ", unreached " + oN.filter((x) => x === "unreached").length + ", ceiling_hit " + (cN as any).ceiling_hit);
   } catch (e) {
@@ -181,7 +186,7 @@ export async function main(argv: string[]): Promise<number> {
   } finally {
     server.stop(true);
     spawnSync("docker", ["volume", "rm", "-f", hostileVol]);
-    for (const t of tags) spawnSync("docker", ["rmi", t]);
+    for (const t of tags) spawnSync("docker", ["rmi", "-f", t]);
   }
   writeFileSync(join(W, "dryrun.txt"), lines.join("\n") + "\n");
   const bad = lines.filter((l) => l.startsWith("FAIL")).length;
