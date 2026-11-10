@@ -231,7 +231,7 @@ export const UBI_RUNNER = { file: "quick/laneb/l1/ubi-runner.sh", sha256: "c040c
 // D1 (pre-data harness amendment): the lines every arm's task image gets after Lane B's runtime copy, through L1's profile
 // and prepare-run.ts (TASK_SETUP), and that the task-fit screen and the d1-checks dry-run step apply. One file, read at
 // this sha256: its one ENV PATH line (the env directories before $PATH, envDirs) and its one RUN line (the origin).
-export const TASK_SETUP = { file: join(REPO, "lanes/harness-mechanics/task-setup.Dockerfile"), sha256: "f3fe2161b1bbc785c06d0af5986cad643a2c75b118751761a47f22ede7795349" };
+export const TASK_SETUP = { file: join(REPO, "lanes/harness-mechanics/task-setup.Dockerfile"), sha256: "f8d45b73aab99354418a2a0a1d6c23e519582ed41fabe99fcca0970704feda7d" };
 export function taskSetup(): { text: string; path: string; envDirs: string[]; run: string } {
   const text = readFileSync(TASK_SETUP.file, "utf8");
   if (sha256(text) !== TASK_SETUP.sha256) throw new Error("E_HM_PIN " + TASK_SETUP.file + " has sha256 " + sha256(text) + ", not the pinned " + TASK_SETUP.sha256);
