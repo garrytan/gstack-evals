@@ -229,7 +229,7 @@ const sq = (s: string) => "'" + s.replace(/'/g, "'\\''") + "'";
  *  string that runs on over lines (LONG_QUOTES, or a one-line string that a final backslash continues where SPLICE
  *  allows it) stays blanked on every line it covers, and a quote inside a block comment opens nothing. A JavaScript or
  *  TypeScript template's ${...} is code, so a template nested in it is a string of its own. Rust goes through rustCode.
- *  open[i] says a string is still open at the end of line i. */
+ *  open[i] says a string, or a template's ${...}, is still open at the end of line i. */
 function codeLines(lang: Lang, lines: string[]): { code: string[]; open: boolean[] } {
   if (lang === "rust") return { code: rustCode(lines.join("\n")).split("\n"), open: lines.map(() => false) };
   const long = LONG_QUOTES[lang] ?? [];
@@ -284,7 +284,7 @@ function codeLines(lang: Lang, lines: string[]): { code: string[]; open: boolean
     }
     if (q && !long.includes(q) && !(spliced && SPLICE.has(lang))) q = "";
     code.push(out);
-    open.push(q !== "");
+    open.push(q !== "" || interp.length > 0);
   }
   return { code, open };
 }
@@ -293,8 +293,9 @@ function codeLines(lang: Lang, lines: string[]): { code: string[]; open: boolean
  *  the file's code (codeLines), so braces in strings, comments and Go runes count for nothing. A line after a macro
  *  continuation, a Java or C# type with a parameter list (a record or primary constructor), a Java or C# anonymous class
  *  or object initializer passed as an argument (whatever its constructor call nests), a TypeScript type or interface
- *  member, and a TypeScript signature whose return type is an object type open no body and are left out. A Python body
- *  runs on over the lines of a string it leaves open. */
+ *  member, a TypeScript signature whose return type is an object type, and a line that ends inside a string or a
+ *  template's ${...} or follows one that does, open no body and are left out. A Python body runs on over the lines of a
+ *  string it leaves open. */
 function functionBodies(lang: Lang, lines: string[], m: { code: string[]; open: boolean[] }): Array<{ at: number; end: number }> {
   const depth = [0];
   for (const c of m.code) depth.push(depth.at(-1)! + (c.match(/\{/g)?.length ?? 0) - (c.match(/\}/g)?.length ?? 0));
@@ -304,7 +305,7 @@ function functionBodies(lang: Lang, lines: string[], m: { code: string[]; open: 
   });
   const out: Array<{ at: number; end: number }> = [];
   lines.forEach((l, i) => {
-    if (!FUNCTION_LINE[lang].test(l) || (i > 0 && /\\\s*$/.test(lines[i - 1]!)) || typed.has(i) || !m.code[i]!.trim() || (i > 0 && m.open[i - 1])) return;
+    if (!FUNCTION_LINE[lang].test(l) || (i > 0 && /\\\s*$/.test(lines[i - 1]!)) || typed.has(i) || !m.code[i]!.trim() || m.open[i] || (i > 0 && m.open[i - 1])) return;
     if (lang === "java" || lang === "csharp") {
       if (/\b(?:class|record|struct|interface|enum)\b/.test(m.code[i]!.split("(")[0]!)) return;
       let flat = m.code[i]!, was = "";

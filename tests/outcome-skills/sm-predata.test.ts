@@ -457,6 +457,19 @@ describe("stock diffs stay valid code: the #314 follow-ups (GST-1959)", () => {
     expect([a?.includes("countValue"), a?.includes("widthValue"), b?.includes("${personValue} and"), b?.includes("nested ${personValue}")]).toEqual([false, true, true, true]);
     if (has("node")) expect([run(nested, a ?? null), run(inner, b ?? null)]).toEqual([run(nested, null), run(inner, null)]);
   });
+  // Value: protects=section 10's stock diffs as neutral controls in JavaScript and TypeScript files where a line inside a template looks like a function opener; fails_when=a line that ends inside a template, or that starts inside an open ${...} and ends in template text, takes a comment or log line, so the template's text and the program's output change while the file still parses; why_new=Capy finding 01M737G151WR5CBSQ5SR906NGN on #316 (packets.ts codeLines open flag); seam=packets.ts codeLines and functionBodies; no_claim=a function written inside ${...}, which these lines leave without a comment or log line
+  test("js: a function-like line in a template's text, after a ${...} or where the template opens, takes no comment or log line", () => {
+    const text = ["export function render(prefix) {", "  const source = `${prefix", "}(x) => {", "  body", "}`;", "  return source;", "}", "", "export function other() {", "  const words = `(y) => {", "  inside", "}`;", "  return words;", "}", ""];
+    const out = (diff: string | null) => {
+      const t = tree({ "c.mjs": text }, diff);
+      if (t.error) return t.error;
+      const r = spawnSync("node", ["-e", "import('./c.mjs').then((m) => console.log(JSON.stringify([m.render('p'), m.other()])))"], { cwd: t.d, encoding: "utf8" });
+      return r.status === 0 ? r.stdout.trim().split("\n").at(-1) : "exit " + r.status + ": " + r.stderr.trim();
+    };
+    const s = stock("js", "c.mjs", text);
+    expect(KINDS.map((k) => s[k] === null)).toEqual([false, false, false]);
+    if (has("node")) expect(KINDS.map((k) => out(s[k]))).toEqual(KINDS.map(() => out(null)));
+  });
 
   // Value: protects=section 10's stock diffs in Go files with rune literals, where brace depth decides each function body's end; fails_when=a rune literal '{' adds to the depth, the body runs to the end of the file, and the rename reaches a package-level variable another file uses; why_new=the Captain's item 17 for GST-1959, adversarial-native#9 on #314 (packets.ts:215); seam=packets.ts functionBodies and its line masking; no_claim=Rust char literals, which the Rust masking reads
   test("go: a rune literal '{' opens no block, so the rename stays in its own function", () => {
