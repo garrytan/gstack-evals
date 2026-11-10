@@ -55,6 +55,14 @@
 //   token per four bytes of the request, and sent nowhere, as Lane B's proxy answers them (quick/laneb/config/proxy.json,
 //   count_tokens estimate). Refused, they counted toward review-units' 2% degraded share (GEVA-89: all 106 of particle-1's
 //   refusals). The answer only sizes Claude Code's own context checks; the reservation still bounds input by bytes.
+// - Input-token counts (pricing/input-count.ts): before it reserves, an Anthropic Messages call, an OpenAI Responses call
+//   with no stored context, and an OpenRouter Messages call for a model pinned to the openai provider have their input
+//   counted by the provider's free counter, after every refusal check, with nothing reserved, settled or metered for the
+//   count. The call reserves its input at that count with its plan's allowances, never above the byte bound, and the
+//   long-context tier follows the count. A count that fails, answers no positive whole number or is slower than
+//   countTimeoutMs leaves the byte bound, and the reserve line's input_count records which. A settled call whose real input
+//   exceeds its counted input writes a count_overrun line, and its provider and route reserve at the byte bound for the rest
+//   of the proxy's life. A proxy given fetch and no count sender counts nothing.
 // - Decision routing (B3): a typesafe provider serves TypeSafe's POST /v1/systemone with TYPESAFE_API_KEY as a bearer, takes
 //   the SDK's zstd request body (decoded before the tripwire and the price, and refused once it decodes past 16 MiB), and adds no output cap, since Jev's output is
 //   free. ProxyOptions.allowanceCode DR_ALLOWANCE_STOP turns a slot's allowance refusal into a 403 whose body every SDK shows
@@ -72,7 +80,8 @@ import { BlockList, isIP } from "node:net";
 import { zstdDecompressSync } from "node:zlib";
 import { docAnchor, type ReasonCode } from "../../errors/codes.ts";
 import type { CallOutcome, CellAttempt, LedgerReply, ReservationLedger, TokenUsage } from "../../types.ts";
-import { chatPrice, maskMarkers, openRouterRouting, PriceError, priceRequest, quoteClientValue, refuseRequestShape, reservationMicros, sseUsage, UNQUOTED, usageCost, type MeteredProvider } from "../pricing/prices.ts";
+import { countedInputTokens, countPlan } from "../pricing/input-count.ts";
+import { chatPrice, maskMarkers, openRouterRouting, PriceError, priceRequest, quoteClientValue, refuseRequestShape, reservationMicros, sseUsage, UNQUOTED, usageCost, type MeteredProvider, type RequestPrice } from "../pricing/prices.ts";
 import { findLeaks } from "./sanitize.ts";
 
 export const UPSTREAM: Record<MeteredProvider, string> = { anthropic: "https://api.anthropic.com", openai: "https://api.openai.com", openrouter: "https://openrouter.ai/api", typesafe: "https://api.typesafe.ai" };
@@ -122,6 +131,8 @@ export const FINALIZE_TIMEOUT_MS = 30_000;
 export const FINALIZE_MAX_MS = 120_000;
 /** One provider call may run this long; long reasoning calls exceed Bun's own 300-second fetch timeout, which is off. */
 export const UPSTREAM_DEADLINE_MS = 900_000;
+/** How long a free input-token count may take before the call reserves at its byte bound instead. */
+export const COUNT_TIMEOUT_MS = 10_000;
 /** A zstd request body that decodes past this many bytes is refused, and decoding stops there. */
 export const MAX_DECODED_BODY_BYTES = 16 * 1024 * 1024;
 const NO_TOKENS: TokenUsage = { input: 0, output: 0, reasoning: 0, cache_read: 0, cache_write: 0 };
@@ -200,6 +211,14 @@ export interface ProxyOptions {
   sleep?: (ms: number) => Promise<void>;
   /** The code a slot's allowance refusal carries: E_ALLOWANCE (402, the default) or DR_ALLOWANCE_STOP (403, decision routing). */
   allowanceCode?: "E_ALLOWANCE" | "DR_ALLOWANCE_STOP";
+  /**
+   * Sends the free input-token counts that size a paid call's input reservation (countPlan). Defaults to fetch when the
+   * proxy sends upstream itself; a proxy given fetch and no count counts nothing and reserves every call at its byte bound,
+   * so a stub's or tap's record of upstream sends stays as it was.
+   */
+  count?: Send;
+  /** How long a count may take before the call reserves at its byte bound instead (COUNT_TIMEOUT_MS by default). */
+  countTimeoutMs?: number;
 }
 
 export interface BindRequest {
@@ -285,6 +304,8 @@ interface CallContext {
   bytes?: number;
   /** When the current attempt was sent, for its outcome line's latency_ms. */
   sentAt?: number;
+  /** The input tokens a free count reserved for this call, and the counted route (provider and route) a short count stops. */
+  counted?: { route: string; counter: "anthropic" | "openai"; tokens: number };
 }
 
 const hash = (secret: string) => createHash("sha256").update(secret).digest();
@@ -477,6 +498,8 @@ export class MeteringProxy {
   private inflight = new Map<string, number>();
   private waiters = new Map<string, Array<() => void>>();
   private pausedUntil: Record<MeteredProvider, number> = { anthropic: 0, openai: 0, openrouter: 0, typesafe: 0 };
+  /** Counted routes (provider and route) a call's real input once ran past, with that call's reservation id: they reserve at the byte bound for the proxy's life. */
+  private shortCounts = new Map<string, string>();
   private managementHash: Buffer;
 
   constructor(private options: ProxyOptions) {
@@ -796,6 +819,8 @@ export class MeteringProxy {
       if (e instanceof PriceError) return this.refuse(ctx, "E_ALLOWANCE", 402, `unpriced request refused: ${e.message}`);
       throw e;
     }
+    const counted = await this.countInput(ctx, body, price, headers);
+    if (counted) price = { ...price, inputTokens: counted.tokens };
     const maxMicros = reservationMicros(price);
     const meter = this.meter(slot);
     if (!meter.cache_write.includes(price.cacheWrite)) meter.cache_write = (["none", "5m", "1h"] as const).filter((m) => m === price.cacheWrite || meter.cache_write.includes(m));
@@ -820,7 +845,7 @@ export class MeteringProxy {
       }
       const idempotencyKey = `${slot.cell.meter_id}:${call}:${attempt}`;
       const reservation = { idempotency_key: idempotencyKey, lease_id: o.leaseId, cell: slot.cell, max_micros: maxMicros };
-      this.journal({ kind: "reserve", ...reservation, provider, route, model: ctx.model, try: attempt, source: ctx.source });
+      this.journal({ kind: "reserve", ...reservation, provider, route, model: ctx.model, try: attempt, source: ctx.source, ...(counted ? { input_count: counted.line } : {}) });
       slot.committedMicros += maxMicros;
       slot.inflightMicros += maxMicros;
       slot.inflightCalls++;
@@ -930,6 +955,47 @@ export class MeteringProxy {
   }
 
   /**
+   * The input tokens a free provider count bounds this call at (countPlan), with the reserve line's input_count record, or
+   * null when the call's route has no counter or the proxy has no count sender. It runs after every refusal check, so a count
+   * carries nothing the tripwire or a shape check refuses, and it reserves, settles and meters nothing. A count that fails,
+   * answers no positive whole number or takes longer than countTimeoutMs, a missing key, and a route a short count has
+   * stopped all give the byte bound, with the reason in the record.
+   */
+  private async countInput(ctx: CallContext, body: Record<string, unknown>, price: RequestPrice, headers: Headers): Promise<{ tokens: number; line: Record<string, unknown> } | null> {
+    const o = this.options;
+    const send = o.count ?? (o.fetch ? null : (input: string, init: RequestInit) => fetch(input, init));
+    const plan = send && countPlan(ctx.provider, ctx.route, body, price);
+    if (!plan) return null;
+    const route = `${ctx.provider}${ctx.route}`;
+    const fallback = (reason: string) => ({ tokens: price.inputTokens, line: { counter: plan.counter, count: null, tokens: price.inputTokens, byte_tokens: price.inputTokens, fallback: reason } });
+    const short = this.shortCounts.get(route);
+    if (short) return fallback(`reservation ${short} on this route used more input than its count reserved, so the route reserves at its byte bound`);
+    let countHeaders = headers;
+    if (plan.counter !== ctx.provider) {
+      const key = (o.env ?? process.env)[KEY_ENV[plan.counter]];
+      if (!key) return fallback(`${KEY_ENV[plan.counter]} is not set in the proxy's environment`);
+      ctx.secrets.push(key);
+      countHeaders = new Headers({ "content-type": "application/json", authorization: `Bearer ${key}` });
+    }
+    const ms = o.countTimeoutMs ?? COUNT_TIMEOUT_MS;
+    const signal = AbortSignal.timeout(ms);
+    const late = new Promise<never>((_, reject) => signal.addEventListener("abort", () => reject(new Error(`no answer within ${ms} ms`))));
+    late.catch(() => {});
+    try {
+      const res = await Promise.race([send(`${UPSTREAM[plan.counter]}${plan.path}`, { method: "POST", headers: countHeaders, body: JSON.stringify(plan.body), signal }), late]);
+      const text = await Promise.race([res.text(), late]);
+      if (!res.ok) return fallback(`the count answered ${res.status}`);
+      const count = (JSON.parse(text) as { input_tokens?: unknown } | null)?.input_tokens;
+      if (typeof count !== "number" || !Number.isSafeInteger(count) || count <= 0) return fallback("the count answered no positive whole number of input tokens");
+      const tokens = countedInputTokens(plan, count, price.inputTokens);
+      ctx.counted = { route, counter: plan.counter, tokens };
+      return { tokens, line: { counter: plan.counter, count, tokens, byte_tokens: price.inputTokens } };
+    } catch (e) {
+      return fallback(`the count failed: ${scrubbedCause(e, ctx.secrets).slice(0, 200)}`);
+    }
+  }
+
+  /**
    * Journal the outcome first, so a lost ledger acknowledgement is repaired by reconcileJournal, then settle and meter.
    * A journal write that fails is reported on stderr and counted as unsettled; the call is still metered and settled.
    */
@@ -947,6 +1013,15 @@ export class MeteringProxy {
     ctx.slot.inflightMicros -= maxMicros;
     ctx.slot.inflightCalls--;
     const prompt = outcome.kind === "spent" ? outcome.usage.input + outcome.usage.cache_read + outcome.usage.cache_write : 0;
+    const counted = ctx.counted;
+    if (counted && prompt > counted.tokens) {
+      if (!this.shortCounts.has(counted.route)) this.shortCounts.set(counted.route, rid);
+      try {
+        this.journal({ kind: "count_overrun", reservation_id: rid, meter_id: ctx.slot.cell.meter_id, provider: ctx.provider, route: ctx.route, model: ctx.model, counter: counted.counter, reserved_tokens: counted.tokens, real_tokens: prompt, source: ctx.source });
+      } catch (e) {
+        console.error(`E_INTERNAL: metering proxy: reservation ${rid} used more input than its count reserved, and its count_overrun line was not journaled: ${scrubbedCause(e, ctx.secrets)}`);
+      }
+    }
     if (prompt > 0) {
       meter.largest_prompt = Math.max(meter.largest_prompt ?? 0, prompt);
       if (ctx.bytes) meter.bytes_per_token = Math.max(meter.bytes_per_token ?? 0, ctx.bytes / prompt);
