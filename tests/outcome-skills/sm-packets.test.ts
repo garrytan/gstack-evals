@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { blocks } from "../../lanes/outcome-skills/statemachines/secondary.ts";
 import {
   assertBlind, cohenKappa, combineLabels, DIFF_LINE_CAP, judgedVerdict, judgeFor, judgePacket, judgeQueue, labelAgreement, labelledSet, labelPacket, PLANT_UNITS, plantDiffs, r78Check, r78Price, readJudgeAnswer, readLabelAnswer, stockDiffs, stockFlag,
-  type JudgeAnswer, type LabelAnswer,
+  type JudgeAnswer, type LabelAnswer, type StockKind,
 } from "../../lanes/outcome-skills/statemachines/packets.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "sm-packets-"));
@@ -187,6 +187,7 @@ describe("R78 check with planted items", () => {
   ].join("\n");
   const unit = (i: number, text = go("Store" + i)) => ({ unit: "u" + i, lang: "go" as const, path: "pkg/core/c" + i + ".go", text, files: ["pkg/core/c" + i + ".go", "go.mod"] });
   const units = [unit(0), unit(1, "package x\n"), ...Array.from({ length: 9 }, (_, i) => unit(i + 2))];
+  const builds = (u: { unit: string }, stock: Array<{ kind: StockKind; diff: string | null }>) => stock.map((s) => ({ ...s, build: "ok" }));
 
   test("each plant is mechanical, aimed at one axis, from the base text alone", () => {
     const p = plantDiffs({ lang: "go", path: "pkg/core/c.go", text: go("Store") });
@@ -197,7 +198,7 @@ describe("R78 check with planted items", () => {
     expect(plantDiffs({ lang: "go", path: "x.go", text: "package x\n" }).every((x) => x.diff === null)).toBe(true);
   });
   test("the labelled set is deterministic, fixed in its counts, blind, and skips units in draw order", () => {
-    const s = labelledSet(units), again = labelledSet(units);
+    const s = labelledSet(units, builds), again = labelledSet(units, builds);
     expect(s).toEqual(again);
     expect(PLANT_UNITS).toBe(8);
     expect(s.skipped).toEqual(["u1"]);
@@ -211,7 +212,21 @@ describe("R78 check with planted items", () => {
       for (const w of ["plant", "neutral", "known", "stock", "u0"]) expect(t.includes(w)).toBe(false);
       expect(x.key.packet).toBe(x.packet.packet);
     }
-    expect(() => labelledSet(units.slice(0, 5))).toThrow("E_SM_PACKET");
+    expect(() => labelledSet(units.slice(0, 5), builds)).toThrow("E_SM_PACKET");
+  });
+  // Value: protects=section 10's R78 labelled set, whose neutral items must be code that still builds; fails_when=a unit whose stock diff fails its build check in the unit's runtime image still gives a neutral item, or the check runs on a unit that can't give all six anyway; why_new=the Captain's build check for GST-1959 (a kind that fails to build is null, and a unit with a null kind is skipped, as the prereg's skip rule says); seam=packets.ts labelledSet's check; no_claim=the Docker check itself (sm-predata.test.ts)
+  test("a unit whose stock diff fails its build check is skipped, and the next unit in draw order is taken", () => {
+    const seen: string[] = [];
+    const check = (u: { unit: string }, stock: Array<{ kind: StockKind; diff: string | null }>) => {
+      seen.push(u.unit);
+      return stock.map((s) => (u.unit === "u3" && s.kind === "logging" ? { kind: s.kind, diff: null, build: "exits 2 where the control exits 0" } : { ...s, build: "ok" }));
+    };
+    const s = labelledSet(units, check);
+    expect(s.skipped).toEqual(["u1", "u3"]);
+    expect([...new Set(s.items.map((x) => x.key.unit))]).toEqual(["u0", "u2", "u4", "u5", "u6", "u7", "u8", "u9"]);
+    expect(s.items.length).toBe(48);
+    expect(seen).toEqual(["u0", "u2", "u3", "u4", "u5", "u6", "u7", "u8", "u9"]);
+    expect(s.built.find((b) => b.unit === "u3")!.kinds).toEqual([{ kind: "comments_whitespace", build: "ok" }, { kind: "rename_only", build: "ok" }, { kind: "logging", build: "exits 2 where the control exits 0" }]);
   });
 
   const ja = (u: number, d = u, x = u): JudgeAnswer => ({ ux: { score: u, reason: "r" }, dx: { score: d, reason: "r" }, ax: { score: x, reason: "r" }, hunks: [] });

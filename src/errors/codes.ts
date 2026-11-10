@@ -1880,6 +1880,15 @@ export const CODES = {
     resumable: true,
     owner: "U20",
   },
+  E_SM_USAGE_HALT: {
+    exit: 2,
+    meaning: "A paid label or judge call (sm packets send) reported usage past the preregistration's per-call bound of 20,000 input or 1,500 output tokens. The item halted before its next send, and the halt line in the send's replies.jsonl names the call's meter, the packet, the reader and the usage. Every later send on that --out is refused until the halt is lifted.",
+    fix: "Bring the halt line to the Captain. Once the Captain rules, record the ruling in the run record and send again with --lift-halt <meter>. The halted call is never sent again.",
+    side_effects: PARTIAL,
+    retry_safe: false,
+    resumable: true,
+    owner: "U20",
+  },
   E_PROXY_SERVER_TOOL: {
     exit: 2,
     meaning: "The metering proxy refused a request whose tools list carries a provider-side tool (a typed tool such as web_search or web_fetch), or whose body asks for mcp_servers, plugins or web_search_options at the top level, before pricing it, because its lease runs with refuseServerTools on (the state machines family's stages).",

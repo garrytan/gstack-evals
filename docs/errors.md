@@ -231,6 +231,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_SM_PACKET](#e_sm_packet) | 2 | U20 |
 | [E_SM_JUDGE_ANSWER](#e_sm_judge_answer) | 1 | U20 |
 | [E_SM_SECONDARY](#e_sm_secondary) | 2 | U20 |
+| [E_SM_USAGE_HALT](#e_sm_usage_halt) | 2 | U20 |
 | [E_PROXY_SERVER_TOOL](#e_proxy_server_tool) | 2 | U20 |
 | [E_PF_SEED](#e_pf_seed) | 2 | U20 |
 | [E_PF_INPUT](#e_pf_input) | 2 | U20 |
@@ -1706,6 +1707,14 @@ A keyless secondary (preregistration section 10) could not read the local clone 
 Fix: Clone the public repository with full history (git clone --filter=blob:none) and fetch refs/pull/&lt;n>/head into refs/sm/pull-&lt;n>, then rerun. Never read history from a paid or keyed API.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_SM_USAGE_HALT
+
+A paid label or judge call (sm packets send) reported usage past the preregistration's per-call bound of 20,000 input or 1,500 output tokens. The item halted before its next send, and the halt line in the send's replies.jsonl names the call's meter, the packet, the reader and the usage. Every later send on that --out is refused until the halt is lifted.
+
+Fix: Bring the halt line to the Captain. Once the Captain rules, record the ruling in the run record and send again with --lift-halt &lt;meter>. The halted call is never sent again.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: yes. Owner: U20.
 
 ### E_PROXY_SERVER_TOOL
 
