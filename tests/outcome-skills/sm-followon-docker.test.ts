@@ -77,6 +77,22 @@ describe.skipIf(!on)("follow-on scorer in Docker", () => {
     expect(notDrift.rec).toMatchObject({ change: { empty: true }, f2p_pass: false, drift: { drift: false, ids: [] } });
   }, 900_000);
 
+  // Value: protects=section 8's follow-on on a first stage that changed nothing; fails_when=computeStart refuses an empty first-stage patch on A1 or S2, or the empty commit two changes the start set or the scores; why_new=the Captain's pre-data item 8 for #290; seam=followon.ts computeStart and scoreFollowon on sh/followon.sh's empty commit two; no_claim=what an unchanged first stage says about its arm
+  test("Go: an A1 or S2 first stage that changed nothing starts from the base tree under an empty commit two and scores as on S0", () => {
+    const u = scoreUnit({
+      id: "go-empty", lang: "go", image: GO_IMAGE, files: GO, tests: { "mul_test.go": TEST("TestMul", "if Add(Mul(2, 3), 0) != 6 {\n\t\tt.Fatal(\"mul\")\n\t}") },
+      commands: { ...out("go test -v ./..."), rebuild: ["cd /w && go build ./..."] }, f2p: ["TestMul"], stable: ["TestAdd"], known: ["TestAdd", "TestMul"],
+    });
+    volumes.push(u.volume);
+    const fix = patchOf(u.repo, MUL_FIX);
+    for (const tree of ["A1", "S2"] as const) {
+      const e = follow(u, tree, "", fix);
+      expect(e.start).toMatchObject({ ids: ["TestAdd"], gap: null });
+      expect(e.start.runs).toHaveLength(3);
+      expect(e.rec).toMatchObject({ applied: true, merge: "clean", f2p_pass: true, incremental: 1, end_to_end: 1, gap: null, start: { ids: 1 } });
+    }
+  }, 900_000);
+
   test("Python: an import error naming a renamed function is drift; a wrong fix on the same tree with the name kept is not", () => {
     const RUN = ["import glob, importlib, sys, traceback", "sys.path.insert(0, '.')", "for f in sorted(glob.glob('test_*.py')):", "    try:", "        m = importlib.import_module(f[:-3])", "    except Exception:", "        traceback.print_exc(file=sys.stdout)", "        continue",
       "    for n in sorted(x for x in dir(m) if x.startswith('test_')):", "        try:", "            getattr(m, n)()", "            print('PASS ' + n)", "        except Exception:", "            traceback.print_exc(file=sys.stdout)", "            print('FAIL ' + n)", ""].join("\n");

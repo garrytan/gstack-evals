@@ -147,11 +147,12 @@ export interface StartSet {
 
 /** Section 8 item 2. On S0 the base stable set. On A1 and S2: the base-run patches merged over the tree by the same
  *  hunk-wise git apply --3way as scoring (on an unchanged base tree it gives the plain git apply the oracle does), then
- *  three runs; the start set is the ids that pass in all three. A merge conflict is a gap for the tree. */
+ *  three runs; the start set is the ids that pass in all three. A merge conflict is a gap for the tree. A first stage
+ *  that changed nothing leaves its tree as the base tree under an empty commit two, and that tree is scored the same way. */
 export function computeStart(o: { unitDir: string; tree: Tree; treePatch: string; model?: string | null; mode?: Mode; volume?: string; limitMs?: number }): StartSet {
   const u = readUnit(o.unitDir);
   if (!u.oracle?.stable.length) smFail("E_SM_UNIT", u.id + " has no oracle stable set");
-  if ((o.tree === "S0") !== (o.treePatch === "")) smFail("E_SM_ARM", "S0 takes no first-stage patch and A1 and S2 each take one");
+  if (o.tree === "S0" && o.treePatch !== "") smFail("E_SM_ARM", "S0 takes no first-stage patch");
   const image = u.image.runtime_id ?? smFail("E_SM_UNIT", u.id + " has no runtime image");
   const res: StartSet = { schema: "sm-start.v1", unit: u.id, model: o.model ?? null, tree: o.tree, tree_patch_sha256: sha(o.treePatch), head: "", ids: [], ids_sha256: "", runs: [], merge: null, conflict: [], gap: null };
   const st = runName("start").toLowerCase();

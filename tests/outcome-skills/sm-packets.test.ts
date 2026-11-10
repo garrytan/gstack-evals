@@ -141,7 +141,7 @@ describe("stock diffs", () => {
     expect(removed.length).toBe(3);
     for (const l of removed) expect(l).toContain("total");
     const logs = s[2]!.diff!.split("\n").filter((l) => l.startsWith("+") && !l.startsWith("+++"));
-    expect(logs).toEqual(["+\tlog.Println(\"enter\")", "+\tlog.Println(\"enter\")"]);
+    expect(logs).toEqual(["+\tprintln(\"enter\")", "+\tprintln(\"enter\")"]);
     expect(blocks(s[2]!.diff!).length).toBe(2);
   });
   test("a file with no local to rename gives no rename diff", () => {

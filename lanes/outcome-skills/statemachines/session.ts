@@ -53,11 +53,12 @@ export function endKind(o: { termination: string | null; refusals?: string[]; al
   return "infra";
 }
 
-/** The end kind and unpriced spend of one session from real_agent's real-summary.json, whose proxy block copies the driver's close answer. A harness failure is infra whatever the block holds, and so is a block with no field set, which real_agent writes when no close answer came; otherwise refusals must be the close answer's array of refusal codes, and allowance_stops and unknown_micros numbers, or the session is refused, so an allowance stop is never read as an upstream end. */
+/** The end kind and unpriced spend of one session from real_agent's real-summary.json, whose proxy block copies the driver's close answer. A harness failure is infra whatever the block holds, and so is a block with no field set, which real_agent writes when no close answer came, and so is a close answer whose proxy finalize failed (finalized false), whose counts are unknown; otherwise refusals must be the close answer's array of refusal codes, and allowance_stops and unknown_micros numbers, or the session is refused, so an allowance stop is never read as an upstream end. */
 export function sessionEnd(summary: { termination?: string | null; proxy?: Record<string, any> | null } | null, harness: boolean): { end: EndKind; unknown_micros: number } {
   const p = summary?.proxy ?? {};
   if (!summary || harness) return { end: "infra", unknown_micros: typeof p.unknown_micros === "number" ? p.unknown_micros : 0 };
   if (Object.values(p).every((v) => v === null || v === undefined)) return { end: "infra", unknown_micros: 0 };
+  if (p.finalized === false) return { end: "infra", unknown_micros: typeof p.unknown_micros === "number" ? p.unknown_micros : 0 };
   if (!Array.isArray(p.refusals) || !p.refusals.every((c: unknown) => typeof c === "string")) return smFail("E_SM_ARM", "real-summary.json's proxy.refusals is " + JSON.stringify(p.refusals) + ", not the close answer's array of refusal codes");
   if (typeof p.unknown_micros !== "number") return smFail("E_SM_ARM", "real-summary.json's proxy.unknown_micros is " + JSON.stringify(p.unknown_micros) + ", not the close answer's number");
   if (typeof p.allowance_stops !== "number") return smFail("E_SM_ARM", "real-summary.json's proxy.allowance_stops is " + JSON.stringify(p.allowance_stops) + ", not the close answer's number");
@@ -76,10 +77,19 @@ export function nextStep(ends: EndKind[]): { action: "score" } | { action: "retr
 export interface SessionRecord {
   schema: "sm-session.v1"; unit: string; part: number; index: number; model: string; cell: string; stage: "first" | "followon";
   tree_ref: null | { tree: string; first_session: string | null }; lease_id: string; slot: string; started_at: string; ended_at: string; wall_ms: number;
-  turns: number | null; spent_micros: number; unknown_micros: number; end: EndKind; attempt: 1 | 2;
+  /** spent_micros is the driver's close answer as real_agent copied it, and null when none reached real-summary.json: an unknown spend is never written as 0 (the lease's ledger still holds it). */
+  turns: number | null; spent_micros: number | null; unknown_micros: number; end: EndKind; attempt: 1 | 2;
   questions: { ask_user_question: number; prose: number }; runtime_id: string; disallowed_tools: string[]; env: { CLAUDE_CODE_DISABLE_BUNDLED_SKILLS: "1" };
   strip: { removed: string[] }; memory_loaded: string[]; tree_patch: { path: string; sha256: string } | null; transcript: string;
   exposure: Record<string, unknown>; reads: { inputs: number; gstack: number; drive: number };
+}
+
+/** Section 6: a session that ended upstream or infra is never scored and seeds no follow-on tree. On attempt 1 it gets its
+ *  one retry from a fresh container; on attempt 2 it is a gap, and a first stage's gap removes that tree's follow-ons. */
+export function refuseUnscored(s: { end: EndKind; attempt: number }): void {
+  if (s.end !== "upstream" && s.end !== "infra") return;
+  if (s.attempt !== 2) smFail("E_SM_ARM", "the session ended " + s.end + " on attempt " + s.attempt + ", so it is not scored and seeds no follow-on: it gets one retry from a fresh container (sm session run --attempt 2) before it is a gap");
+  smFail(s.end === "upstream" ? "E_SM_UPSTREAM_GAP" : "E_SM_INFRA_GAP", "the session ended " + s.end + " on its retry, so it is a gap: it is not scored and seeds no follow-on; analysis reads the gap from its session record");
 }
 
 export function writeSessionRecord(file: string, r: SessionRecord): void {
