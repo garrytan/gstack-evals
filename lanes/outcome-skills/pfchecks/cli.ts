@@ -22,7 +22,7 @@ export const HELP = `Usage: gstack-evals outcome pf <command>
   told --unit <dir> [--unit <dir>]...
   neutral --unit <dir> --out <dir> [--image <id>] [--volume <name>] [--mode hardened|root]
   score --s <repo> [--ref HEAD] --unit <dir> --neutral <record.json> --checks <CHECKS.json> --session <session.json> --out <catch.json>
-        [--transcript <sdk-messages.jsonl>] [--claude-session <claude-session.jsonl>] [--image <id>] [--mode hardened|root] [--mount <spec>]... [--env K=V]... [--breaks]
+        [--transcript <sdk-messages.jsonl>] [--claude-session <claude-session.jsonl>] [--image <id>] [--volume <name>] [--mode hardened|root] [--mount <spec>]... [--env K=V]... [--breaks]
   analyze --prereg <prereg.json> --out <analysis.json> <catch.json>...
   admission --in <admission.json> [--out <file>]
   reprice --in <reprice.json> [--out <file>]
@@ -104,10 +104,11 @@ async function run(cmd: string, a: Args): Promise<number> {
     const unitDir = need(a, "unit");
     const u0 = readUnit(unitDir);
     const image = (a.image as string | undefined) ?? u0.image.runtime_id ?? u0.image.image_id ?? "";
+    const base = (a.volume as string | undefined) ?? smTreeVolume(u0.id);
     const rec = await scoreSession({
       s: need(a, "s"), ref: a.ref as string | undefined, unitDir, neutral: need(a, "neutral"), checks: need(a, "checks"), session: need(a, "session"), transcript: (a.transcript as string | undefined) ?? null, claudeSession: (a["claude-session"] as string | undefined) ?? null,
-      exec: (repo, u) => dockerExecutor({ repo, image, repoDir: u.repo_dir, workDir: u.work_dir, mode: md, mounts, env, rebuild: u.commands.rebuild }),
-      breaks: a.breaks ? dockerBreaks(unitDir, image, md, (repo, t, vol) => treeVolume(repo, t, image, vol)) : undefined,
+      exec: (repo, u) => dockerExecutor({ repo, image, base, repoDir: u.repo_dir, workDir: u.work_dir, mode: md, mounts, env, rebuild: u.commands.rebuild }),
+      breaks: a.breaks ? dockerBreaks(unitDir, image, md, (repo, t, vol) => treeVolume(repo, t, image, vol, base)) : undefined,
     });
     write(need(a, "out"), rec);
     console.log(rec.unit + " score " + rec.score + (rec.gap ? " gap " + rec.gap : ""));

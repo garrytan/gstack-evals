@@ -299,7 +299,7 @@ export async function main(argv: string[]): Promise<number> {
     const mounts = [toolsMount(), ...(r.arm === "P" ? [pstackMount()] : [])].flatMap((m) => ["--mount", m]);
     const env = Object.fromEntries(toolsEnv(FIXTURE_IMAGE).map((e) => [e.slice(0, e.indexOf("=")), e.slice(e.indexOf("=") + 1)]));
     const rec = JSON.parse(readFileSync(file, "utf8")) as PfSessionRecord;
-    const c = await scoreSession({ s: rec.s!.repo, ref: "HEAD", unitDir: fx.dir, neutral, checks: rec.checks, session: file, transcript: rec.transcript, exec: (repo, u) => dockerExecutor({ repo, image: FIXTURE_IMAGE, repoDir: "/w", workDir: "/w", mode: "root", mounts, env, rebuild: u.commands.rebuild }), ...(ceiling !== undefined ? { ceiling_ms: ceiling } : {}) });
+    const c = await scoreSession({ s: rec.s!.repo, ref: "HEAD", unitDir: fx.dir, neutral, checks: rec.checks, session: file, transcript: rec.transcript, exec: (repo, u) => dockerExecutor({ repo, image: FIXTURE_IMAGE, base: r.input.volume, repoDir: "/w", workDir: "/w", mode: "root", mounts, env, rebuild: u.commands.rebuild }), ...(ceiling !== undefined ? { ceiling_ms: ceiling } : {}) });
     writeFileSync(join(r.out, "catch.json"), JSON.stringify(c, null, 1) + "\n");
     return c;
   };

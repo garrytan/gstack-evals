@@ -2024,6 +2024,15 @@ export const CODES = {
     resumable: true,
     owner: "U20",
   },
+  E_PF_TREE_STATE: {
+    exit: 2,
+    meaning: "A pstack-checks scoring tree, built from a copy of the prepared tree volume with the tree commit checked out over it, is not exact: the prepared tree holds an untracked file that isn't ignored, or after the checkout HEAD, the working tree or the index differs from the commit. Scoring stops, because such a file would be leftover state the oracle did not run with.",
+    fix: "Read the files the line names and take the count per language to the Captain before any scoring continues. Never force a checkout over an untracked file.",
+    side_effects: NO_SPEND,
+    retry_safe: false,
+    resumable: true,
+    owner: "U20",
+  },
 } as const satisfies Record<string, CodeInfo>;
 
 export type ReasonCode = keyof typeof CODES;

@@ -247,6 +247,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_PF_TOOLS](#e_pf_tools) | 2 | U20 |
 | [E_PF_PLUGIN](#e_pf_plugin) | 2 | U20 |
 | [E_PF_DRYRUN](#e_pf_dryrun) | 1 | U20 |
+| [E_PF_TREE_STATE](#e_pf_tree_state) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -1763,6 +1764,14 @@ The pstack plugin for arm P could not be installed: prereg.json's pin differs fr
 Fix: Fetch the pinned cursor/plugins commit into a local clone and build the plugin volume again.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_PF_TREE_STATE
+
+A pstack-checks scoring tree, built from a copy of the prepared tree volume with the tree commit checked out over it, is not exact: the prepared tree holds an untracked file that isn't ignored, or after the checkout HEAD, the working tree or the index differs from the commit. Scoring stops, because such a file would be leftover state the oracle did not run with.
+
+Fix: Read the files the line names and take the count per language to the Captain before any scoring continues. Never force a checkout over an untracked file.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: yes. Owner: U20.
 
 ## Exit 3: calibration failed (INCOMPLETE)
 

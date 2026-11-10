@@ -111,32 +111,78 @@ function runAsync(name: string, args: string[], input: string, timeoutMs: number
   });
 }
 
-/** A volume holding the tree commit checked out on branch main of a clone of the scoring repo, history included. */
-export function treeVolume(repo: string, commit: string, image: string, volume: string): void {
+/** The tree volume's container script, run as root with the prepared tree at /b, a clone holding only the tree commit's
+ *  history on branch main at /s and the new volume at /d; $1 is the tree commit. An untracked file that isn't ignored stops
+ *  it before the checkout, so no checkout is forced over one; after the checkout HEAD, the working tree and the index must
+ *  equal the commit and no such file may remain. Ignored files, the build state among them, stay as the image left them. */
+export const TREE_SCRIPT = String.raw`set -e
+c="$1"
+cp -a /b/. /d/
+cd /d
+export HOME=/tmp/pf-tree-home
+mkdir -p "$HOME"
+git config --global --add safe.directory '*'
+git config --global core.quotePath false
+u=$(git ls-files --others --exclude-standard)
+if [ -n "$u" ]; then printf '%s\n' "$u" | sed 's/^/PF_UNTRACKED before /'; exit 3; fi
+git fetch -q --no-tags /s main
+git checkout -q -f -B main "$c"
+git remote | while read -r x; do git remote remove "$x"; done
+git for-each-ref --format='%(refname)' | while read -r ref; do [ "$ref" = refs/heads/main ] || git update-ref -d "$ref"; done
+rm -f .git/FETCH_HEAD .git/ORIG_HEAD
+[ "$(git rev-parse HEAD)" = "$c" ] || { echo "PF_TREE_DIFF HEAD is $(git rev-parse HEAD)"; exit 4; }
+git diff --quiet "$c" -- || { git diff --name-only "$c" -- | sed 's/^/PF_TREE_DIFF tracked /'; exit 4; }
+git diff --cached --quiet "$c" -- || { echo "PF_TREE_DIFF staged"; exit 4; }
+u=$(git ls-files --others --exclude-standard)
+if [ -n "$u" ]; then printf '%s\n' "$u" | sed 's/^/PF_UNTRACKED after /'; exit 3; fi
+echo PF_TREE_OK
+`;
+
+/** Reads the tree script's result: PF_TREE_OK passes; untracked files that aren't ignored, or a tree that differs from its
+ *  commit, stop scoring with E_PF_TREE_STATE; any other failure is a harness fault. */
+export function readTree(status: number, stdout: string, stderr: string, volume: string): void {
+  if (status === 0 && /^PF_TREE_OK$/m.test(stdout)) return;
+  const untracked = [...stdout.matchAll(/^PF_UNTRACKED (before|after) (.+)$/gm)];
+  if (untracked.length) pfFail("E_PF_TREE_STATE", volume + ": " + untracked.length + " untracked file(s) that aren't ignored, " + untracked[0]![1] + " the checkout: " + untracked.slice(0, 20).map((m) => m[2]).join(", "));
+  const diff = [...stdout.matchAll(/^PF_TREE_DIFF (.+)$/gm)].map((m) => m[1]!);
+  if (diff.length) pfFail("E_PF_TREE_STATE", volume + ": the tree differs from its commit after the checkout: " + diff.slice(0, 20).join(", "));
+  pfFail("E_PF_INFRA_GAP", "building the tree volume " + volume + " failed: " + (stderr || stdout).slice(-300));
+}
+
+/** A scoring tree volume (plan section 6.5, A1): a copy of base, the prepared tree volume the oracle and the neutral gate
+ *  run on (the image's repo dir, build state and ignored files included), with the tree commit checked out over it on
+ *  branch main. The commit's history comes from a clone of the scoring repo whose only ref is main at the commit. */
+export function treeVolume(repo: string, commit: string, image: string, volume: string, base: string): void {
   const tmp = mkdtempSync(join(tmpdir(), "pf-vol-"));
   try {
     git(tmp, ["clone", "-q", "--no-hardlinks", "--no-checkout", repo, "r"]);
     const r = join(tmp, "r");
-    git(r, ["checkout", "-q", "-B", "main", commit]);
+    git(r, ["update-ref", "refs/heads/main", commit]);
     git(r, ["remote", "remove", "origin"]);
     for (const ref of git(r, ["for-each-ref", "--format=%(refname)"]).stdout.split("\n").filter((x) => x && x !== "refs/heads/main")) git(r, ["update-ref", "-d", ref]);
     if (docker(["volume", "create", volume], { timeoutMs: 60_000 }).status !== 0) pfFail("E_PF_INFRA_GAP", "docker volume create " + volume + " failed");
-    const c = dockerRun(runName("pf-vol"), ["--rm", "--network", "none", "--user", "0:0", "-v", r + ":/s:ro", "-v", volume + ":/d", "--entrypoint", "sh", image, "-c", "cp -a /s/. /d/"], { timeoutMs: 1_800_000 });
-    if (c.status !== 0) pfFail("E_PF_INFRA_GAP", "copying the tree into " + volume + " failed: " + c.stderr.slice(-300));
+    const c = dockerRun(runName("pf-vol"), ["--rm", "--network", "none", "--user", "0:0", "-v", base + ":/b:ro", "-v", r + ":/s:ro", "-v", volume + ":/d", "--entrypoint", "sh", image, "-c", TREE_SCRIPT, "pf-tree", commit], { timeoutMs: 1_800_000 });
+    try {
+      readTree(c.status ?? -1, c.stdout ?? "", c.stderr ?? "", volume);
+    } catch (e) {
+      dropVolume(volume);
+      throw e;
+    }
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
 }
 
-/** The Docker executor. Tree volumes are made once per commit (treeVolume) and copied fresh for every run. mounts are raw
+/** The Docker executor. Tree volumes are made once per commit (treeVolume, from the prepared tree volume base) and copied
+ *  fresh for every run. mounts are raw
  *  docker run arguments the caller passes (the tools volume, the plugin dir); env is the frozen environment. */
-export function dockerExecutor(o: { repo: string; image: string; repoDir: string; workDir?: string; mode: Mode; mounts?: string[]; env?: Record<string, string>; rebuild: string[]; rebuildLimitMs?: number }): Executor & { cleanup: () => void } {
+export function dockerExecutor(o: { repo: string; image: string; base: string; repoDir: string; workDir?: string; mode: Mode; mounts?: string[]; env?: Record<string, string>; rebuild: string[]; rebuildLimitMs?: number }): Executor & { cleanup: () => void } {
   const vols = new Map<string, string>();
   const exec = async (s: RunSpec): Promise<RunOut> => {
     let vol = vols.get(s.commit);
     if (!vol) {
-      vol = "pf-tree-" + s.commit.slice(0, 12) + "-" + process.pid;
-      treeVolume(o.repo, s.commit, o.image, vol);
+      vol = runName("pf-tree-" + s.commit.slice(0, 12));
+      treeVolume(o.repo, s.commit, o.image, vol, o.base);
       vols.set(s.commit, vol);
     }
     const name = runName("pf-" + s.label);
