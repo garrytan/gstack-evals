@@ -27,12 +27,12 @@ Each row ran the same model or models on the same tasks with and without gstack,
 **Reading the table.** A skill is a written procedure the agent can open, and a hook is a small program that can stop the agent until a rule is met. "On its own" means the task didn't name the skill, and the routing and description rows compare an older and a newer gstack. [Skills and models explained](docs/all-results.md#reading-the-table).
 
 1. Nearly all test bugs came from reviews by gstack or its close relatives, so the test may suit gstack. A gstack session cost 8.9 times as much. [Full note](docs/all-results.md#review-full-procedure)
-2. These rows test a newer gstack's hooks and skill descriptions together against the older version, and count opens: pass rates showed no change we could measure. [Full note](docs/all-results.md#skill-routing-overhaul)
+2. These rows test a newer gstack's hooks and skill descriptions together against the older version, and count opens: pass rates showed no change, but the test was too small to see one. [Full note](docs/all-results.md#skill-routing-overhaul)
 3. No verdict: the small pilot that decides whether a test goes ahead stopped this one. [Full note](docs/all-results.md#skill-routing-overhaul-on-gpt-61-sol)
 4. All of the gain came from Sol, whose own change wasn't the planned comparison, and Sol's old-wording rate pools gstack with a placebo. Solving tasks wasn't tested. [Full note](docs/all-results.md#investigate-description-that-says-when-to-use-it)
 5. The score is whether a review named the issue that later decided the plan's fate, not whether the plan got better. The gate hook checks the review's steps. [Full note](docs/all-results.md#plan-ceo-review)
 6. The stricter test fixed in advance didn't pass, so this isn't a confirmed loss. [Full note](docs/all-results.md#plan-ceo-review-on-particle-1)
-7. Plain Opus solved every finished trial, so there was no room for a gain and the comparison never ran. [Full note](docs/all-results.md#plan-eng-review-and-autoplan)
+7. Plain Opus solved every finished trial, so there was no room for a gain and the comparison never ran. Asked to use these skills, Opus showed no sign of running their steps. [Full note](docs/all-results.md#plan-eng-review-and-autoplan)
 
 Every row passed a read by a model from another lab and a rerun by a separate team ([/review's checks](wiki/board/2026-11-09-geva-421-r2-independent-checks.md), [the claim check](wiki/board/2026-11-09-geva-431-claim-check-corrections.md)); [all results](docs/all-results.md) lists the rest. Some linked posts print an older, stronger verdict, and the claim check's wording, used here, is the current one.
 
