@@ -1693,8 +1693,17 @@ export const CODES = {
   },
   E_SM_AMBIGUOUS_TEST: {
     exit: 1,
-    meaning: "The oracle preflight (post section 3) dropped a Go unit: every dataset fail-to-pass id is a bare test name (no package path before it) whose top-level test func more than one package dir defines, so the dataset parser's result for that name can be another package's. A Go unit also drops this way when the scan for those funcs does not finish (fail closed). The record lists the ids.",
+    meaning: "The oracle preflight (post section 3) dropped a Go unit: every dataset fail-to-pass id is a bare test name (no package path before it) whose top-level test func more than one package dir defines, so the dataset parser's result for that name can be another package's. The record lists the ids.",
     fix: "Nothing to fix: the unit drops and the next unit in draw order is tried.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: true,
+    owner: "U20",
+  },
+  E_SM_TEST_SCAN: {
+    exit: 1,
+    meaning: "The oracle preflight (post section 3) dropped a Go unit, fail closed: the scan for its top-level test funcs ran in the unit's image and failed (grep missing or erroring), so the bare test ids that more than one package defines cannot be found. A scan that never finishes is an infra error instead (E_SM_INFRA_GAP).",
+    fix: "Nothing to fix per run: the image lacks a working grep, which is fixed per image, not by a rerun. The unit drops and the next unit in draw order is tried.",
     side_effects: NO_SPEND,
     retry_safe: true,
     resumable: true,

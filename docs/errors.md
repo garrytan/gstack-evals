@@ -211,6 +211,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_SM_LEAKED](#e_sm_leaked) | 1 | U20 |
 | [E_SM_HISTORY](#e_sm_history) | 1 | U20 |
 | [E_SM_AMBIGUOUS_TEST](#e_sm_ambiguous_test) | 1 | U20 |
+| [E_SM_TEST_SCAN](#e_sm_test_scan) | 1 | U20 |
 | [E_SM_ORACLE_UNSTABLE](#e_sm_oracle_unstable) | 1 | U20 |
 | [E_SM_SLOW_TEST](#e_sm_slow_test) | 1 | U20 |
 | [E_SM_SMOKE](#e_sm_smoke) | 1 | U20 |
@@ -338,9 +339,17 @@ Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 
 ### E_SM_AMBIGUOUS_TEST
 
-The oracle preflight (post section 3) dropped a Go unit: every dataset fail-to-pass id is a bare test name (no package path before it) whose top-level test func more than one package dir defines, so the dataset parser's result for that name can be another package's. A Go unit also drops this way when the scan for those funcs does not finish (fail closed). The record lists the ids.
+The oracle preflight (post section 3) dropped a Go unit: every dataset fail-to-pass id is a bare test name (no package path before it) whose top-level test func more than one package dir defines, so the dataset parser's result for that name can be another package's. The record lists the ids.
 
 Fix: Nothing to fix: the unit drops and the next unit in draw order is tried.
+
+Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_SM_TEST_SCAN
+
+The oracle preflight (post section 3) dropped a Go unit, fail closed: the scan for its top-level test funcs ran in the unit's image and failed (grep missing or erroring), so the bare test ids that more than one package defines cannot be found. A scan that never finishes is an infra error instead (E_SM_INFRA_GAP).
+
+Fix: Nothing to fix per run: the image lacks a working grep, which is fixed per image, not by a rerun. The unit drops and the next unit in draw order is tried.
 
 Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
 

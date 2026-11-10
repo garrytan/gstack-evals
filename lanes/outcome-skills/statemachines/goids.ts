@@ -43,11 +43,13 @@ export function goAmbiguous(defs: Map<string, Set<string>>): (id: string) => boo
   };
 }
 
-/** goTestDefs over the tree in where, with the base patches' new funcs. A scan that does not finish fails closed: the
- *  unit drops as E_SM_AMBIGUOUS_TEST. */
+/** goTestDefs over the tree in where, with the base patches' new funcs. A scan that runs and fails in the image (a missing
+ *  grep) fails closed: the unit drops as E_SM_TEST_SCAN, since that is fixed per image. A scan that never reports its end
+ *  (a timeout or a failed docker run) is an infra error, E_SM_INFRA_GAP, neither kept nor dropped. */
 export function goDefsIn(where: Where, patches: string[]): Map<string, Set<string>> {
   const r = runBash(where, SCAN);
   const exit = (r.stderr.match(/DEFSEXIT (\d+)/) ?? [])[1];
-  if (exit !== "0" && exit !== "1") smFail("E_SM_AMBIGUOUS_TEST", "the Go test func scan did not finish (grep exit " + (exit ?? "none") + "); the unit drops, fail closed");
+  if (exit === undefined) smFail("E_SM_INFRA_GAP", "the Go test func scan did not finish (docker exit " + r.status + "): an infra error, neither kept nor dropped");
+  if (exit !== "0" && exit !== "1") smFail("E_SM_TEST_SCAN", "the Go test func scan failed in the image (grep exit " + exit + "); the unit drops, fail closed");
   return goTestDefs(r.stdout, patches);
 }

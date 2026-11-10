@@ -479,8 +479,9 @@ model or unit (E_SM_PACKET).
   func to the package dirs whose *_test.go files define it (the tree plus the base patches; vendor, testdata and dirs
   starting with . or _ left out). judge drops a bare id (no package path; a subtest counts as its top-level test) whose
   name more than one dir defines from the fail-to-pass and stable sets and lists it under ambiguous; the oracle record
-  keeps the dropped fail-to-pass ids and the dropped stable count. A unit whose every fail-to-pass id goes this way, or
-  whose scan does not finish, drops as E_SM_AMBIGUOUS_TEST. Package-qualified ids are never touched.
+  keeps the dropped fail-to-pass ids and the dropped stable count. A unit whose every fail-to-pass id goes this way drops
+  as E_SM_AMBIGUOUS_TEST; a scan that runs and fails in the image drops as E_SM_TEST_SCAN, and one that never finishes
+  is E_SM_INFRA_GAP. Package-qualified ids are never touched.
 - A run builds nothing when a rebuild command exits non-zero (rebuild_failed), when the print command reads report paths
   and none of them holds a fresh file (no_fresh_report), or when a stale file could not be moved aside (stale_unhidden).
   The parser does not run then, and the run parses nothing. A test command's own exit never sets it. Every one of the

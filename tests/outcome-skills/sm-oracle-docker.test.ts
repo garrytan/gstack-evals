@@ -136,7 +136,7 @@ describe("ambiguous Go test ids (B3, keyless)", () => {
 });
 
 describe.skipIf(!on)("oracle in Docker", () => {
-  test("the Go test func scan reads the tree's *_test.go files and fails closed when it can't finish", () => {
+  test("the Go test func scan reads the tree's *_test.go files; a scan that runs and fails drops as E_SM_TEST_SCAN, one that never finishes is an infra error", () => {
     const vol = "sm-test-godefs-" + process.pid, nogrep = "sm-test-nogrep:" + process.pid;
     docker(["volume", "create", vol]);
     try {
@@ -146,7 +146,8 @@ describe.skipIf(!on)("oracle in Docker", () => {
       expect(defs.get("TestDup")).toEqual(new Set(["a", "b"]));
       expect(defs.get("TestOne")).toEqual(new Set(["a"]));
       expect(docker(["build", "-q", "-t", nogrep, "-"], { input: "FROM " + PY_IMAGE + "\nRUN rm -f /usr/bin/grep /bin/grep\n" }).status).toBe(0);
-      expect(() => goDefsIn({ kind: "docker", image: nogrep, volume: vol, repoDir: "/w", name: "sm-test-godefs-nogrep-" + process.pid }, [])).toThrow(/^E_SM_AMBIGUOUS_TEST .*grep exit 127/);
+      expect(() => goDefsIn({ kind: "docker", image: nogrep, volume: vol, repoDir: "/w", name: "sm-test-godefs-nogrep-" + process.pid }, [])).toThrow(/^E_SM_TEST_SCAN .*grep exit 127/);
+      expect(() => goDefsIn({ kind: "docker", image: PY_IMAGE, volume: vol, repoDir: "/w", name: "sm-test-godefs-slow-" + process.pid, timeoutMs: 1 }, [])).toThrow(/^E_SM_INFRA_GAP /);
     } finally {
       docker(["volume", "rm", "-f", vol]);
       docker(["rmi", "-f", nogrep]);
