@@ -1,9 +1,9 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
-// D1 (pre-data harness amendment), keylessly and both ways: the lane file's origin RUN and PATH, prepare-run's TASK_SETUP,
+// D1 (pre-data harness amendment) and D7's history strip, keylessly and both ways: the lane file's RUN and PATH, prepare-run's TASK_SETUP,
 // the hm profile, checks_trust on gstack-tar arms only, laneb_hooks.py's CHECKS_TRUST, the screen's resume cache and the
 // d1-checks step's parsers. The live check is dry-run step d1-checks.
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { armSpec, jobConfig } from "../../quick/laneb/runner/grid.ts";
@@ -13,6 +13,7 @@ import { ARMS, bundleLists, REPO, sha256, TASK_SETUP, taskSetup } from "../../la
 import { HM_PROFILE } from "../../lanes/harness-mechanics/plans.ts";
 import { pool, screen, type Detect } from "../../lanes/harness-mechanics/screen.ts";
 import { checksTrust, D1, D1_TASK, d1Order, editPick, loopResult, verifyLoop } from "../../lanes/harness-mechanics/d1.ts";
+import { gitOut, leakyTree } from "./d7-fixture.ts";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "hm-d1-"));
 const kwargs = (spec: string) => {
@@ -58,6 +59,44 @@ describe("the lane file", () => {
     const r = runSetup(w, origin);
     expect(r.exitCode).not.toBe(0);
     expect(r.stderr.toString()).toContain("D1 origin refused");
+    expect(existsSync(origin)).toBe(false);
+  });
+});
+
+describe("D7: the RUN strips history past the base before D1's origin", () => {
+  for (const detached of [false, true]) test("on a tree with HEAD " + (detached ? "detached" : "on a branch") + ", every ref past the base, the reflogs, the pseudo refs and the .keep go, D1's fetch leaves FETCH_HEAD at the base, and gc leaves no commit past it", () => {
+    const t = leakyTree({ detached }), origin = join(t.root, "opt", "hm-origin.git");
+    const r = runSetup(t.w, origin);
+    expect([r.exitCode, r.stderr.toString()]).toEqual([0, ""]);
+    expect(gitOut(t.w, "for-each-ref", "--format=%(refname)").split("\n")).toEqual(["refs/heads/work", "refs/remotes/origin/HEAD", "refs/remotes/origin/main", "refs/tags/v0.1"]);
+    expect(gitOut(t.w, "rev-parse", "HEAD", "origin/main")).toBe(t.base + "\n" + t.base);
+    expect(git(t.w, "symbolic-ref", "-q", "HEAD").exitCode).toBe(detached ? 1 : 0);
+    expect(git(t.w, "cat-file", "-e", t.future).exitCode).not.toBe(0);
+    const commits = gitOut(t.w, "cat-file", "--batch-all-objects", "--batch-check=%(objecttype) %(objectname)").split("\n").filter((l) => l.startsWith("commit ")).map((l) => l.slice(7)).sort();
+    expect(commits).toEqual([t.old, t.base].sort());
+    expect(existsSync(join(t.w, ".git", "ORIG_HEAD"))).toBe(false);
+    expect(readFileSync(join(t.w, ".git", "FETCH_HEAD"), "utf8").match(/[0-9a-f]{40}/g)).toEqual([t.base]);
+    expect(readdirSync(join(t.w, ".git", "objects", "pack")).filter((f) => f.endsWith(".keep"))).toEqual([]);
+    expect(gitOut(t.w, "reflog", "show", "HEAD")).toBe("");
+    expect(gitOut(t.w, "status", "--porcelain")).toBe("");
+    expect(gitOut(origin, "for-each-ref", "--format=%(refname) %(objectname)")).toBe("refs/heads/main " + t.base);
+  });
+  test("the RUN refuses a tree that borrows objects through an alternates file, before it strips or adds anything", () => {
+    const t = leakyTree(), origin = join(t.root, "opt", "hm-origin.git");
+    writeFileSync(join(t.w, ".git", "objects", "info", "alternates"), join(t.root, "elsewhere", "objects") + "\n");
+    const r = runSetup(t.w, origin);
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr.toString()).toContain("fatal: D7 history refused: the tree borrows objects through an alternates file");
+    expect(existsSync(origin)).toBe(false);
+    expect(gitOut(t.w, "rev-parse", "-q", "--verify", "refs/tags/v9^{commit}")).toBe(t.future);
+  });
+  test("the RUN refuses a tree holding a nested .git", () => {
+    const t = leakyTree(), origin = join(t.root, "opt", "hm-origin.git");
+    mkdirSync(join(t.w, "vendor", "pkg"), { recursive: true });
+    Bun.spawnSync(["git", "init", "-q", join(t.w, "vendor", "pkg")]);
+    const r = runSetup(t.w, origin);
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr.toString()).toContain("fatal: D7 history refused: the tree holds a submodule or a nested .git");
     expect(existsSync(origin)).toBe(false);
   });
 });
