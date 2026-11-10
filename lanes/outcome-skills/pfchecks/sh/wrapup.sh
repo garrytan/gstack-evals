@@ -4,7 +4,9 @@
 # (capture.sh commit): it records S's head and inventory. "keep <repo> <dir>" runs after the wrap-up turn: it copies
 # CHECKS.json from the repository root (a regular file only) to <dir>/CHECKS.json, prints PF_DISCARD <path> for every
 # other path the wrap-up turn added, changed or deleted, puts the tree back to S, and prints one PF_WRAPUP line.
-# "reset <repo> <dir>" puts the tree back to S only, before a wrap-up rerun.
+# "reset <repo> <dir>" puts the tree back to S only, before a wrap-up rerun. A mount point under the repository root (an
+# image's VOLUME inside the repo dir) stays out of git clean, which cannot remove it; files the wrap-up turn left inside
+# one are still removed by the inventory pass.
 set -euo pipefail
 cmd=$1
 repo=$2
@@ -12,8 +14,12 @@ dir=$3
 here=$(cd "$(dirname "$0")" && pwd)
 g() { git -C "$repo" -c safe.directory='*' -c core.quotepath=off "$@"; }
 reset() {
+  local ex=() m
+  if [ -r /proc/self/mountinfo ]; then
+    while read -r _ _ _ _ m _; do case "$m" in "$repo"/*) ex+=(-e "/${m#"$repo"/}/");; esac; done < /proc/self/mountinfo
+  fi
   g reset -q --hard "$(cat "$dir/s.head")"
-  g clean -fdq
+  g clean -fdq ${ex[@]+"${ex[@]}"}
   bash "$here/capture.sh" inventory "$repo" > "$dir/now.inv"
   awk -F'\t' 'NR==FNR { a[$2] = 1; next } !($2 in a) { print $2 }' "$dir/s.inv" "$dir/now.inv" | while IFS= read -r f; do rm -f -- "$repo/$f"; done
 }
