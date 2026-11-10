@@ -1,12 +1,14 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // The paid step for the state machines family's packets (GST-1959): section 3's labeller packets under sm-labels and
 // section 10's judge packets under sm-judges. It leases its own item through the ledger and sends each call through an
-// in-process metering proxy, one slot per call, as the product-value meter and noloss judge-run do. Each call's
-// allowance is the per-call bound the prereg prices with (20,000 input and 1,500 output tokens at prices.ts prices, from
-// r78Price), and before each call the stage driver's room check runs: the lease's reserve less what it holds and what
-// calls in flight may still spend. A call that does not fit cap-stops the item in the ledger and nothing more is sent;
-// the ledger then admits no new lease on the item, so a cap stop is never retried. A call the proxy refuses at its own
-// allowance check, before any send, is an allowance stop for that packet and reader and is never sent again. Every reply
+// in-process metering proxy, one slot per call, as the product-value meter and noloss judge-run do. Calls run one at a
+// time. Each call's slot allowance is its packet's byte worst case by the proxy's own formula (prices.ts priceRequest and
+// reservationMicros on the exact body the proxy forwards), and before each call the lease's room (its reserve less what
+// it holds) must hold that worst case. A call that does not fit cap-stops the item in the ledger and nothing more is
+// sent; the ledger then admits no new lease on the item, so a cap stop is never retried. After each call settles, its
+// reported usage is checked against the prereg's bound of 20,000 input and 1,500 output tokens (R78_PRICE_BOUND). A call
+// past it, or one the proxy refuses at its allowance check, halts the item before the next send: a halt line in the
+// replies file refuses every later send until one with --lift-halt records the Captain's ruling. Every reply
 // goes through the strict readers that sm packets read uses; a malformed one is recorded with E_SM_JUDGE_ANSWER and
 // never asked again, since the prereg allows no re-ask. An upstream failure is recorded and stops the send. A call once
 // sent is never sent again, including one whose answer a stopped send never recorded (recorded as lost): its send line
@@ -25,11 +27,12 @@ import { usd } from "../../../src/runner/ledger/money.ts";
 import { ledgerPath, recordPath } from "../../../src/runner/ledger/paths.ts";
 import { LedgerError, readItem } from "../../../src/runner/ledger/record.ts";
 import { cutShort } from "../../../src/runner/ledger/sessions.ts";
+import { priceRequest, reservationMicros } from "../../../src/runner/pricing/prices.ts";
 import { MeteringProxy, reconcileJournal } from "../../../src/runner/proxy/metering-proxy.ts";
 import { rigAdmission } from "../../../src/rig/admission.ts";
 import { DEFAULT_RETRY } from "../driver/stage.ts";
 import { ITEMS } from "./items.ts";
-import { assertBlind, judgeFor, LABELLERS, R78_PRICE_BOUND, r78Price, readJudgeAnswer, readLabelAnswer, type JudgePacket, type LabelPacket } from "./packets.ts";
+import { assertBlind, judgeFor, LABELLERS, R78_PRICE_BOUND, readJudgeAnswer, readLabelAnswer, type JudgePacket, type LabelPacket } from "./packets.ts";
 import { smFail } from "./unit.ts";
 
 export type Reader = keyof typeof LABELLERS;
@@ -38,8 +41,8 @@ const READERS = Object.keys(LABELLERS) as Reader[];
 const OUTCOMES: Outcome[] = ["answered", "malformed", "allowance_stop", "cap_stop", "upstream", "lost"];
 const KEY_ENV = { anthropic: "ANTHROPIC_API_KEY", openai: "OPENAI_API_KEY" } as const;
 const MODEL = Object.fromEntries(READERS.map((r) => [r, { provider: LABELLERS[r].split("/")[0] as keyof typeof KEY_ENV, model: LABELLERS[r].split("/")[1]! }])) as Record<Reader, { provider: keyof typeof KEY_ENV; model: string }>;
-/** Each reader's per-call allowance in micros: the prereg's per-call bound at its model's prices.ts prices. */
-const ALLOWANCE = Object.fromEntries(READERS.map((r) => [r, Math.round(r78Price().per_call_usd[r] * 1e6)])) as Record<Reader, number>;
+/** The fields the metering proxy adds to a request before it prices it, sent up front so the worst case priced here is the one the proxy reserves. */
+const PROXY_FIELDS = { openai: { service_tier: "default" }, anthropic: { inference_geo: "global" } } as const;
 const KINDS: Record<string, { packet: string; keys: string[] }> = {
   "sm-labels": { packet: "sm-label-packet.v1", keys: ["sm-label-key.v1"] },
   "sm-judges": { packet: "sm-judge-packet.v1", keys: ["sm-judge-key.v1", "sm-r78-key.v1"] },
@@ -54,7 +57,8 @@ export interface SendOptions {
   out: string;
   record?: string;
   ledger?: string;
-  concurrency?: number;
+  /** Meter ids of halts the Captain ruled on. Each must name a halt standing in the replies file; the send records the lift and goes on. */
+  lift_halts?: string[];
   env?: Record<string, string | undefined>;
   fetch?: (input: string, init: RequestInit) => Promise<Response>;
   sleep?: (ms: number) => Promise<void>;
@@ -174,8 +178,6 @@ export async function sendPackets(o: SendOptions): Promise<SendResult> {
 
 async function sendHeld(o: SendOptions, record: string): Promise<SendResult> {
   const def = ITEMS[o.item]!;
-  const concurrency = o.concurrency ?? 4;
-  if (!Number.isSafeInteger(concurrency) || concurrency < 1) smFail("E_USAGE", "--concurrency must be a whole number from 1");
   if (!o.run_id) smFail("E_USAGE", "a send names its run with --run");
   const packetsDir = resolve(o.packets), out = resolve(o.out);
   if (out === packetsDir || out.startsWith(packetsDir + sep)) smFail("E_USAGE", "--out " + out + " is inside --packets " + packetsDir + "; write the replies beside the packets, never among them");
@@ -208,7 +210,7 @@ async function sendHeld(o: SendOptions, record: string): Promise<SendResult> {
     counts[r.outcome]++;
     write({ event: "reply", packet: job.packet, reader: job.reader, model: LABELLERS[job.reader], outcome: r.outcome, code: r.code ?? null, why: r.why ?? null, answer: r.answer ?? null, raw: r.raw ?? null, micros: r.micros ?? null, meter_id: r.meter_id ?? null });
   };
-  const prior: Array<{ event?: string; item?: string; run_id?: string; packet: string; reader: Reader; meter_id?: string }> = [];
+  const prior: Array<{ at?: string; event?: string; item?: string; run_id?: string; packet: string; reader: Reader; meter_id?: string; outcome?: Outcome; code?: ReasonCode; why?: string }> = [];
   for (const l of existsSync(repliesFile) ? readFileSync(repliesFile, "utf8").split("\n") : []) {
     try {
       prior.push(JSON.parse(l));
@@ -217,10 +219,20 @@ async function sendHeld(o: SendOptions, record: string): Promise<SendResult> {
   const other = prior.find((l) => l.item !== o.item || l.run_id !== o.run_id);
   if (other) smFail("E_USAGE", repliesFile + " holds replies of " + other.item + " for run " + other.run_id + ", not " + o.item + " for run " + o.run_id + "; give each send its own --out");
   const k = (j: { packet: string; reader: string }) => j.packet + " " + j.reader;
-  const done = new Set(prior.filter((l) => l.event === "reply").map(k));
+  const done = new Set(prior.filter((l) => l.event === "reply" && l.outcome !== "cap_stop").map(k));
   const lost = new Map<string, (typeof prior)[number]>();
   for (const l of prior) if (l.event === "send" && !done.has(k(l)) && !lost.has(k(l))) lost.set(k(l), l);
   const todo = order.filter((j) => !done.has(k(j)) && !lost.has(k(j)));
+  const halts = new Map<string, (typeof prior)[number]>();
+  for (const l of prior) {
+    if (l.event === "halt" && l.meter_id) halts.set(l.meter_id, l);
+    if (l.event === "lift" && l.meter_id) halts.delete(l.meter_id);
+  }
+  const lifts = [...new Set(o.lift_halts ?? [])];
+  const unknownLift = lifts.find((m) => !halts.has(m));
+  if (unknownLift) smFail("E_USAGE", "--lift-halt " + unknownLift + " names no halt standing in " + repliesFile + "; nothing was opened");
+  const standing = [...halts.values()].find((h) => !lifts.includes(h.meter_id!));
+  if (standing) smFail(standing.code ?? "E_SM_USAGE_HALT", "line item " + o.item + " halted at " + standing.at + ": " + standing.why + "; once the Captain rules, send again with --lift-halt " + standing.meter_id + "; nothing was opened");
   const missing = [...new Set(todo.map((j) => KEY_ENV[MODEL[j.reader].provider]))].filter((name) => !env[name]);
   if (missing.length) smFail("E_KEY_MISSING", "the readers need " + missing.join(" and ") + ", not set; nothing was opened");
 
@@ -233,6 +245,7 @@ async function sendHeld(o: SendOptions, record: string): Promise<SendResult> {
     const named = new Set(prior.flatMap((l) => (l.event === "send" && l.meter_id ? [l.meter_id] : [])));
     const unnamed = state.leases.filter(({ lease }) => lease.run_id === o.run_id).flatMap(({ lease }) => [...local.meters(lease.lease_id).keys()].filter((m) => !named.has(m)).map((m) => "lease " + lease.lease_id + " meter " + m));
     if (unnamed.length) smFail("E_USAGE", repliesFile + " names no send for " + unnamed.join(", ") + ", which the ledger holds for run " + o.run_id + " on line item " + o.item + ". A send resumes only from the --out that holds its replies, so a replies file that is missing, emptied, cut short by a crash or from another --out can't serve the run; nothing was recovered, settled or opened");
+    for (const m of lifts) write({ event: "lift", packet: halts.get(m)!.packet, reader: halts.get(m)!.reader, meter_id: m });
     for (const l of lost.values()) reply({ packet: l.packet, reader: l.reader }, { outcome: "lost", code: "UPSTREAM", why: "sent on meter " + l.meter_id + ", but that send stopped before its answer was recorded; the proxy journal settles the call as unknown at its full reservation, and it is never sent again", meter_id: l.meter_id });
     if (state.open && state.open.run_id === o.run_id && local.getLease(state.open.lease_id)) {
       const stale = join(out, state.open.lease_id + ".journal.ndjson");
@@ -253,40 +266,33 @@ async function sendHeld(o: SendOptions, record: string): Promise<SendResult> {
   const journal = join(out, lease.lease_id + ".journal.ndjson");
   const proxy = new MeteringProxy({ ledger: local, leaseId: lease.lease_id, host: "127.0.0.1", managementSocket: join(tmpdir(), "sm-send-" + randomBytes(6).toString("hex") + ".sock"), managementToken: randomBytes(24).toString("hex"), journal, retry: DEFAULT_RETRY, env, fetch: o.fetch, sleep: o.sleep, maxOutputTokens: R78_PRICE_BOUND.output_tokens, refuseServerTools: true });
   const scope = o.item + " only";
-  const live = new Map<string, number>();
   let capped = false;
   let stop = null as { code: ReasonCode; why: string } | null;
   let crash: unknown = null;
 
   const call = async (job: Job) => {
-    const allowance = ALLOWANCE[job.reader];
-    const meters = local.meters(lease.lease_id);
-    let pending = 0;
-    for (const [meter_id, allowed] of live) pending += Math.max(0, allowed - (meters.get(meter_id)?.held_micros ?? 0));
+    const { provider, model } = MODEL[job.reader];
+    const body = { ...judgeRequest(provider, model, packets.get(job.packet)!.prompt, R78_PRICE_BOUND.output_tokens, provider === "openai" ? JUDGE_REASONING_EFFORT : undefined), ...PROXY_FIELDS[provider] };
+    const worst = reservationMicros(priceRequest(provider, body, R78_PRICE_BOUND.output_tokens, JUDGE_ROUTE[provider]));
     const held = local.held(lease.lease_id);
-    const room = lease.reserved_micros - held - pending;
-    if (room < allowance) {
-      const why = "line item " + o.item + " has " + usd(Math.max(room, 0)) + " of room on lease " + lease.lease_id + " (" + usd(lease.reserved_micros) + " reserved, " + usd(held) + " held, " + usd(pending) + " still allowed to calls in flight); a " + job.reader + " call needs " + usd(allowance) + ". Do not retry: the item ends incomplete, scope " + scope;
-      if (!capped) {
-        capped = true;
-        local.stageStop(lease.lease_id, scope);
-        ledger(() => recordStop(record, lease.lease_id, scope));
-      }
+    const room = lease.reserved_micros - held;
+    if (room < worst) {
+      const why = "line item " + o.item + " has " + usd(Math.max(room, 0)) + " of room on lease " + lease.lease_id + " (" + usd(lease.reserved_micros) + " reserved, " + usd(held) + " held); a " + job.reader + " call on packet " + job.packet + " has a byte worst case of " + usd(worst) + ". Do not retry: the item ends incomplete, scope " + scope;
+      capped = true;
+      local.stageStop(lease.lease_id, scope);
+      ledger(() => recordStop(record, lease.lease_id, scope));
       reply(job, { outcome: "cap_stop", code: "CAP_STOP", why });
-      stop ??= { code: "CAP_STOP", why };
+      stop = { code: "CAP_STOP", why };
       return;
     }
-    const { provider, model } = MODEL[job.reader];
-    const b = proxy.bind({ cell: { run_id: o.run_id, arm: job.reader, task: job.packet, model, trial: 1, attempt: 1 }, models: [provider + ":" + model], allowance_micros: allowance });
-    live.set(b.meter_id, allowance);
-    write({ event: "send", packet: job.packet, reader: job.reader, meter_id: b.meter_id });
+    const b = proxy.bind({ cell: { run_id: o.run_id, arm: job.reader, task: job.packet, model, trial: 1, attempt: 1 }, models: [provider + ":" + model], allowance_micros: worst });
+    write({ event: "send", packet: job.packet, reader: job.reader, meter_id: b.meter_id, worst_micros: worst });
     result.sent++;
     let status = 0;
     let text = "";
     let problem: { code?: string; detail?: string } | null = null;
     let meter: Awaited<ReturnType<MeteringProxy["finalize"]>>;
     try {
-      const body = judgeRequest(provider, model, packets.get(job.packet)!.prompt, R78_PRICE_BOUND.output_tokens, provider === "openai" ? JUDGE_REASONING_EFFORT : undefined);
       const res = await fetch("http://127.0.0.1:" + proxy.port + "/" + b.slot + "/" + provider + JUDGE_ROUTE[provider], { method: "POST", headers: { authorization: "Bearer " + b.token, "content-type": "application/json" }, body: JSON.stringify(body), timeout: false } as RequestInit);
       status = res.status;
       text = await res.text();
@@ -296,50 +302,53 @@ async function sendHeld(o: SendOptions, record: string): Promise<SendResult> {
     } finally {
       meter = await proxy.finalize(b.meter_id);
       proxy.unbind(b.slot);
-      live.delete(b.meter_id);
     }
-    const base = { micros: local.meters(lease.lease_id).get(b.meter_id)?.held_micros ?? 0, meter_id: b.meter_id };
-    if (status === 200) {
-      let answer: string | null = null;
-      try {
-        answer = judgeAnswer(provider, JSON.parse(text));
-      } catch {}
-      if (answer !== null) {
-        const raw = join("raw", job.reader, job.packet + ".txt");
-        mkdirSync(join(out, "raw", job.reader), { recursive: true });
-        writeFileSync(join(out, raw), answer);
-        const { packet } = packets.get(job.packet)!;
-        const read = packet.schema === "sm-judge-packet.v1" ? readJudgeAnswer(answer, packet) : readLabelAnswer(answer);
-        reply(job, read.ok ? { outcome: "answered", answer: read.answer, raw, ...base } : { outcome: "malformed", code: read.code, why: read.why, raw, ...base });
-        return;
+    const settled = local.meters(lease.lease_id).get(b.meter_id);
+    const base = { micros: settled?.held_micros ?? 0, meter_id: b.meter_id };
+    const r = ((): Parameters<typeof reply>[1] => {
+      if (status === 200) {
+        let answer: string | null = null;
+        try {
+          answer = judgeAnswer(provider, JSON.parse(text));
+        } catch {}
+        if (answer !== null) {
+          const raw = join("raw", job.reader, job.packet + ".txt");
+          mkdirSync(join(out, "raw", job.reader), { recursive: true });
+          writeFileSync(join(out, raw), answer);
+          const { packet } = packets.get(job.packet)!;
+          const read = packet.schema === "sm-judge-packet.v1" ? readJudgeAnswer(answer, packet) : readLabelAnswer(answer);
+          return read.ok ? { outcome: "answered", answer: read.answer, raw, ...base } : { outcome: "malformed", code: read.code, why: read.why, raw, ...base };
+        }
       }
-    }
-    if (meter.requests === 0 && meter.allowance_stops > 0) {
-      reply(job, { outcome: "allowance_stop", code: "E_ALLOWANCE", why: problem?.detail ?? "the proxy refused the call at its allowance check", ...base });
-      return;
-    }
-    const code: ReasonCode = meter.requests === 0 && problem?.code && Object.hasOwn(CODES, problem.code) ? (problem.code as ReasonCode) : "UPSTREAM";
-    const why = (meter.requests ? "sent " + meter.requests + " time(s), provider answers " + JSON.stringify(meter.upstream.statuses) + (meter.upstream.failed ? ", " + meter.upstream.failed + " lost in transit" : "") + "; " : "") + "the proxy answered HTTP " + status + (problem?.detail ? ": " + problem.detail : status === 200 ? ": the provider's response is not JSON" : "");
-    reply(job, { outcome: "upstream", code, why, ...base });
-    stop ??= { code, why: job.reader + " on packet " + job.packet + ": " + why + "; the send stops, and a rerun sends only what is not recorded" };
+      if (meter.requests === 0 && meter.allowance_stops > 0) return { outcome: "allowance_stop", code: "E_ALLOWANCE", why: (problem?.detail ?? "the proxy refused the call at its allowance check") + ", though the sender priced its worst case at " + usd(worst), ...base };
+      const code: ReasonCode = meter.requests === 0 && problem?.code && Object.hasOwn(CODES, problem.code) ? (problem.code as ReasonCode) : "UPSTREAM";
+      const why = (meter.requests ? "sent " + meter.requests + " time(s), provider answers " + JSON.stringify(meter.upstream.statuses) + (meter.upstream.failed ? ", " + meter.upstream.failed + " lost in transit" : "") + "; " : "") + "the proxy answered HTTP " + status + (problem?.detail ? ": " + problem.detail : status === 200 ? ": the provider's response is not JSON" : "");
+      return { outcome: "upstream", code, why, ...base };
+    })();
+    reply(job, r);
+    if (r.outcome === "upstream") stop ??= { code: r.code!, why: job.reader + " on packet " + job.packet + ": " + r.why + "; the send stops, and a rerun sends only what is not recorded" };
+    const u = settled?.usage;
+    const usage = u ? { input: u.input + u.cache_read + u.cache_write, output: u.output + u.reasoning } : null;
+    const past = usage !== null && (usage.input > R78_PRICE_BOUND.input_tokens || usage.output > R78_PRICE_BOUND.output_tokens);
+    if (!past && r.outcome !== "allowance_stop") return;
+    const halt = past
+      ? { code: "E_SM_USAGE_HALT" as ReasonCode, why: job.reader + " on packet " + job.packet + " (meter " + b.meter_id + ") reported " + usage!.input + " input and " + usage!.output + " output tokens, past the prereg's bound of " + R78_PRICE_BOUND.input_tokens + " input and " + R78_PRICE_BOUND.output_tokens + " output tokens" }
+      : { code: "E_ALLOWANCE" as ReasonCode, why: job.reader + " on packet " + job.packet + " (meter " + b.meter_id + "): " + r.why };
+    write({ event: "halt", packet: job.packet, reader: job.reader, meter_id: b.meter_id, code: halt.code, why: halt.why, usage });
+    stop = { code: halt.code, why: halt.why + "; the item halts before the next send until the Captain rules, then send again with --lift-halt " + b.meter_id };
   };
 
   try {
     proxy.start();
-    const queue = [...todo];
-    await Promise.all(
-      Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
-        while (!stop && queue.length) {
-          const job = queue.shift()!;
-          try {
-            await call(job);
-          } catch (e) {
-            crash ??= e;
-            stop ??= { code: "E_INTERNAL", why: (e as Error).message };
-          }
-        }
-      }),
-    );
+    for (const job of todo) {
+      if (stop) break;
+      try {
+        await call(job);
+      } catch (e) {
+        crash ??= e;
+        stop ??= { code: "E_INTERNAL", why: (e as Error).message };
+      }
+    }
   } finally {
     proxy.stop();
     try {

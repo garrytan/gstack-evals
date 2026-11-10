@@ -445,7 +445,7 @@ model or unit (E_SM_PACKET).
 
 `sm packets send --item sm-labels|sm-judges --run <id> --packets <dir> --out <dir>` is the paid step for the packets
 above. It leases its own item through the ledger (openLease, settleLease) and sends each call through an in-process
-metering proxy, one slot per call, as the product-value meter and noloss judge-run do. The stage driver cannot serve
+metering proxy, one slot per call and one call at a time, as the product-value meter and noloss judge-run do. The stage driver cannot serve
 these two items: neither names a session model, sm-labels pays for two models, and a driver stage takes one model and
 counts sessions.
 
@@ -457,16 +457,20 @@ counts sessions.
 - The prompt is the packet's body as JSON, the exact text its id digests. A packet that no longer matches its digest, or
   has no key, is refused before anything is opened (E_SM_PACKET). The routes and request shape are judge.ts's
   (JUDGE_ROUTE, judgeRequest, JUDGE_REASONING_EFFORT on OpenAI), with a 1,500-token output cap.
-- Each call's allowance is the prereg's per-call bound priced from prices.ts (r78Price: Astra $0.275, Opus $0.11). Before
-  each call the lease's room (reserved, less held, less what calls in flight may still spend) must hold that allowance,
-  as the driver's open checks a session's. A call that does not fit cap-stops the item: the stop is written to the
-  record, nothing more is sent, and the lease closes with cap_stop, so the ledger admits no new lease (CAP_STOP).
+- Each call reserves its packet's byte worst case by the proxy's own formula (prices.ts priceRequest and
+  reservationMicros): request bytes plus 64 at the input rate (Astra's $12.50/M cache-write rate, Opus's $4/M), plus
+  1,500 output tokens. The sender prices the exact body the proxy forwards, so it adds service_tier and inference_geo
+  itself. Before each call the lease's room (reserved, less held) must hold that worst case. A call that does not fit
+  cap-stops the item before it is sent: the stop is written to the record, nothing more is sent, and the lease closes
+  with cap_stop, so the ledger admits no new lease (CAP_STOP).
 - Before any call: no recorded cap is E_LEDGER_MISSING; a cap-stopped item, or one with nothing left, is CAP_STOP; an
   item bound to another run is E_ITEM_BOUND.
-- The proxy reserves input at one token per request byte, so a request body over about 15,900 bytes (Astra) or 19,900
-  bytes (Opus) does not fit the per-call allowance. The proxy refuses it before any send, and the call is an allowance
-  stop (E_ALLOWANCE) for that packet and reader, recorded and never sent again. On a 5xx the proxy retries only while
-  the allowance holds another worst case.
+- After each call settles, its reported usage (input with cache reads and writes, output with reasoning) is checked
+  against the prereg's bound of 20,000 input and 1,500 output tokens (R78_PRICE_BOUND). A call past it halts the item
+  before the next send (E_SM_USAGE_HALT): a halt line in replies.jsonl names the meter, packet, reader and usage, and
+  every later send is refused until `--lift-halt <meter>` records the Captain's ruling. The halted call keeps its reply
+  and is never sent again. A call the proxy refuses at its own allowance check halts the item the same way
+  (E_ALLOWANCE). The slot's allowance is one worst case, so the proxy does not resend a charged 5xx.
 - Each reply goes through the readers `sm packets read` uses. A malformed one is recorded (E_SM_JUDGE_ANSWER) with its
   raw text and never asked again: the prereg allows no re-ask.
 - An upstream failure is recorded (UPSTREAM) and stops the send. The lease settles by the ledger's rules: a 4xx releases
@@ -477,8 +481,9 @@ counts sessions.
   (E_USAGE) and never settles a lease the live one meters. Each send line is fsynced before its call goes out. A send
   whose replies.jsonl does not name every call the ledger holds for the item and run (another --out, or a file emptied
   or cut short) is refused before it recovers, settles or sends anything (E_USAGE).
-- --out holds replies.jsonl (a send line before each call, then one reply line per call with packet, reader, model,
-  outcome, code, why, answer, raw and micros), raw/<reader>/<packet>.txt and each lease's proxy journal.
+- --out holds replies.jsonl (a send line with the call's worst case before each call, then one reply line per call with
+  packet, reader, model, outcome, code, why, answer, raw and micros, plus a halt line for each halt and a lift line for
+  each ruling), raw/<reader>/<packet>.txt and each lease's proxy journal.
 
 
 ## Stale report readings (reports.ts, testrun.ts)
@@ -549,6 +554,15 @@ counts sessions.
   block with no field set, which real_agent writes when no close answer came, ends the session as infra and the
   session keeps its record, instead of being refused. An allowance_stops that is not a number refuses the session
   (E_SM_ARM). No rule changes.
+- Paid packet sends reserve each call's byte worst case, one call at a time (pre-data build change, 2026-11-10, send.ts,
+  accepted by GSTA-2): the proxy reserves input at one token per request byte, so at the prereg's per-call price a
+  request over 15,936 bytes (Astra) or 19,936 bytes (Opus) could never be sent, and a full judge packet is larger (1,500
+  lines of 40 bytes is about 65 KB). Each label and judge call now reserves its packet's byte worst case by the proxy's
+  own formula (about $0.89 for Astra and $0.29 for Opus on that packet) and runs alone, and a call that does not fit the
+  item's remaining cap cap-stops the item before it is sent. After each call settles, its reported usage is checked
+  against the prereg's bound of 20,000 input and 1,500 output tokens, and a call past it halts the item for the
+  Captain's ruling (E_SM_USAGE_HALT). The pricing bound (R78_PRICE_BOUND, r78Price), the $160.05 plan and the $180
+  sm-judges cap do not change.
 - A run builds nothing when a rebuild command exits non-zero (rebuild_failed), when the print command reads report paths
   and none of them holds a fresh file (no_fresh_report), or when a stale file could not be moved aside (stale_unhidden).
   The parser does not run then, and the run parses nothing. A test command's own exit never sets it. Every one of the

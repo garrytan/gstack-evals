@@ -11,10 +11,12 @@ import { join } from "node:path";
 import { main } from "../../lanes/outcome-skills/statemachines/cli.ts";
 import { judgeKey, judgePacket, labelledQueue, labelPacket } from "../../lanes/outcome-skills/statemachines/packets.ts";
 import { sendPackets, type SendOptions } from "../../lanes/outcome-skills/statemachines/send.ts";
+import { JUDGE_ROUTE } from "../../src/adapters/judge.ts";
 import { recordProgram } from "../../src/runner/ledger/envelope.ts";
 import { openLease, reconcileLease, recordApproval, recordStop } from "../../src/runner/ledger/ledger.ts";
 import { openLocalLedger } from "../../src/runner/ledger/local.ts";
 import { readItem } from "../../src/runner/ledger/record.ts";
+import { priceRequest, reservationMicros } from "../../src/runner/pricing/prices.ts";
 
 const D = 1_000_000;
 const KEYS = { OPENAI_API_KEY: "fake-openai-value-for-sm-send-tests", ANTHROPIC_API_KEY: "fake-anthropic-value-for-sm-send-tests" };
@@ -71,6 +73,22 @@ function judged(s: Setup, name: string, model: string | null): string {
   return put(s.packets, packet, key);
 }
 
+/** A judge packet whose diff fills the 1,500-line cut with lines of width bytes, with one key per session model named. */
+function bigJudged(s: Setup, name: string, models: string[], width = 40): string {
+  const p = "src/" + name + ".go";
+  const diff = "diff --git a/" + p + " b/" + p + "\n--- a/" + p + "\n+++ b/" + p + "\n@@ -1,0 +1,1496 @@\n" + ("+" + "x".repeat(width - 1) + "\n").repeat(1496);
+  const { packet, lines_total } = judgePacket({ diff, files: [p] });
+  writeFileSync(join(s.packets, packet.packet + ".json"), JSON.stringify(packet, null, 1) + "\n");
+  models.forEach((model, i) => writeFileSync(join(s.packets, packet.packet + "-" + i + ".key.json"), JSON.stringify(judgeKey(packet, { unit: "acme__" + name, model, cell: "A" + i, lines_total, stock: null }))));
+  return packet.packet;
+}
+
+/** What the proxy's own formula reserves for the request it forwarded upstream. */
+const proxyWorst = (c: Call) => {
+  const provider = c.body.input ? "openai" : "anthropic";
+  return reservationMicros(priceRequest(provider, c.body, 1500, JUDGE_ROUTE[provider]));
+};
+
 /** A fake provider behind the proxy. The prompt is the packet's body as JSON, so its digest is the packet id. */
 const upstream = (calls: Call[], reply: (model: string, packet: string) => Reply) => async (_url: string, init: RequestInit) => {
   const body = JSON.parse(String(init.body));
@@ -90,7 +108,7 @@ const upstream = (calls: Call[], reply: (model: string, packet: string) => Reply
 const outDir = (s: Setup, item: Item) => join(s.root, "out-" + item);
 async function send(s: Setup, item: string, calls: Call[], reply: (model: string, packet: string) => Reply = () => ({}), extra: Partial<SendOptions> = {}) {
   try {
-    const result = await sendPackets({ item, run_id: "run-1", packets: s.packets, out: outDir(s, item as Item), record: s.record, ledger: s.ledger, concurrency: 1, env: KEYS, fetch: upstream(calls, reply), sleep: async () => {}, requireAdmission: () => null, log: () => {}, ...extra });
+    const result = await sendPackets({ item, run_id: "run-1", packets: s.packets, out: outDir(s, item as Item), record: s.record, ledger: s.ledger, env: KEYS, fetch: upstream(calls, reply), sleep: async () => {}, requireAdmission: () => null, log: () => {}, ...extra });
     return { code: "ok", message: "", result };
   } catch (e) {
     const message = (e as Error).message;
@@ -165,6 +183,76 @@ describe("a send on the item's own lease", () => {
     writeFileSync(join(t.packets, "b-opus.key.json"), JSON.stringify(key("claude-opus-5-5", "A1")));
     const tampered = await send(t, "sm-judges", calls, () => ({ text: JUDGE }));
     expect([tampered.code, calls.length, readItem(t.record, "sm-judges").leases.length]).toEqual(["E_SM_PACKET", 2, 0]);
+  });
+});
+
+describe("each call reserves its packet's byte worst case and runs alone", () => {
+  test("a 1,500-line judge packet, refused before at the per-call price, now sends to both judges, each call reserving what the proxy's formula reserves for its request", async () => {
+    const s = setup({ "sm-judges": 180 });
+    const id = bigJudged(s, "big", ["claude-opus-5-5", "openai/gpt-6.1-sol"]);
+    const calls: Call[] = [];
+    const r = await send(s, "sm-judges", calls, () => ({ text: JUDGE }));
+    expect([r.code, r.message]).toEqual(["ok", ""]);
+    expect(sentTo(calls).sort()).toEqual(["claude-opus-5-5 " + id, "gpt-6-astra " + id]);
+    const worst = calls.map(proxyWorst);
+    expect(worst.map((w, i) => w > (calls[i]!.model === "gpt-6-astra" ? 275_000 : 110_000))).toEqual([true, true]);
+    expect(reserved(s, "sm-judges")).toEqual(worst);
+    expect(lines(s, "sm-judges").filter((l) => l.event === "send").map((l) => l.worst_micros)).toEqual(worst);
+    expect(replies(s, "sm-judges").map((x) => x.outcome)).toEqual(["answered", "answered"]);
+  });
+
+  test("calls run one at a time: no call starts before the one before it settles", async () => {
+    const s = setup({ "sm-labels": 150 });
+    labels(s, 2);
+    const calls: Call[] = [];
+    let live = 0, peak = 0;
+    const plain = upstream(calls, () => ({}));
+    const r = await send(s, "sm-labels", calls, undefined, { fetch: async (url, init) => { peak = Math.max(peak, ++live); try { await Bun.sleep(5); return await plain(url, init); } finally { live--; } } });
+    expect([r.code, calls.length, peak]).toEqual(["ok", 4, 1]);
+  });
+
+  test("a call whose byte worst case does not fit the item's remaining cap is refused before it is sent and cap-stops the item, never retried", async () => {
+    const s = setup({ "sm-judges": 0.5 });
+    const id = bigJudged(s, "big", ["claude-opus-5-5"]);
+    const calls: Call[] = [];
+    const r = await send(s, "sm-judges", calls, () => ({ text: JUDGE }));
+    expect([r.code, calls.length]).toEqual(["CAP_STOP", 0]);
+    expect(r.message).toContain(id);
+    expect(replies(s, "sm-judges").map((x) => [x.packet, x.reader, x.outcome, x.code])).toEqual([[id, "astra", "cap_stop", "CAP_STOP"]]);
+    const item = readItem(s.record, "sm-judges");
+    expect(item.stops.map((x) => x.scope)).toEqual(["sm-judges only"]);
+    expect(item.leases[0]!.close).toMatchObject({ spent_micros: 0, cap_stop: "sm-judges only" });
+    const rerun = await send(s, "sm-judges", calls, () => ({ text: JUDGE }));
+    expect([rerun.code, calls.length, readItem(s.record, "sm-judges").leases.length]).toEqual(["CAP_STOP", 0, 1]);
+  });
+
+  test("a call whose reported usage passes the prereg's bound of 20,000 input or 1,500 output tokens halts the item before the next send; a rerun is refused until --lift-halt records the Captain's ruling", async () => {
+    const s = setup({ "sm-labels": 150 });
+    const [a, b] = labels(s, 2, (i) => "x".repeat(30_000) + " (" + i + ").\n") as [string, string];
+    const calls: Call[] = [];
+    const over = (model: string, packet: string): Reply => (model === "gpt-6-astra" && packet === a ? { usage: { input: 20_001, output: 100 } } : {});
+    const r = await send(s, "sm-labels", calls, over);
+    expect(r.code).toBe("E_SM_USAGE_HALT");
+    expect(sentTo(calls)).toEqual(["gpt-6-astra " + a]);
+    const sent = lines(s, "sm-labels").find((l) => l.event === "send");
+    expect(lines(s, "sm-labels").find((l) => l.event === "halt")).toMatchObject({ packet: a, reader: "astra", meter_id: sent.meter_id, code: "E_SM_USAGE_HALT", usage: { input: 20_001, output: 100 } });
+    expect(r.message).toContain(sent.meter_id);
+    expect(replies(s, "sm-labels").map((x) => [x.packet, x.reader, x.outcome])).toEqual([[a, "astra", "answered"]]);
+    const item = readItem(s.record, "sm-labels");
+    expect([item.open, item.stops.length, item.leases[0]!.close!.how]).toEqual([null, 0, "settled"]);
+    const again = await send(s, "sm-labels", calls);
+    expect([again.code, calls.length]).toEqual(["E_SM_USAGE_HALT", 1]);
+    expect(again.message).toContain("--lift-halt " + sent.meter_id);
+    expect((await send(s, "sm-labels", calls, undefined, { lift_halts: ["m-none"] })).code).toBe("E_USAGE");
+    const lifted = await send(s, "sm-labels", calls, undefined, { lift_halts: [sent.meter_id] });
+    expect([lifted.code, lifted.message]).toEqual(["ok", ""]);
+    expect(sentTo(calls.slice(1))).toEqual(["claude-opus-5-5 " + a, "gpt-6-astra " + b, "claude-opus-5-5 " + b]);
+    expect(lines(s, "sm-labels").filter((l) => l.event === "lift").map((l) => l.meter_id)).toEqual([sent.meter_id]);
+
+    const t = setup({ "sm-labels": 150 });
+    labels(t, 1);
+    const out = await send(t, "sm-labels", calls, (model) => (model === "gpt-6-astra" ? { usage: { input: 100, output: 1_501 } } : {}));
+    expect([out.code, calls.length]).toEqual(["E_SM_USAGE_HALT", 5]);
   });
 });
 
@@ -275,52 +363,19 @@ describe("refusals before any lease or call", () => {
 });
 
 describe("stops are never retried", () => {
-  test("a call whose allowance does not fit the item's room cap-stops the item: the stop is recorded, nothing more is sent, and a rerun is refused without a call", async () => {
-    const s = setup({ "sm-labels": 0.5 });
-    const [a, b] = labels(s, 2) as [string, string];
+  test("a call whose byte worst case no longer fits the room left after earlier calls cap-stops the item: the stop is recorded, nothing more is sent, and a rerun is refused without a call", async () => {
+    const s = setup({ "sm-judges": 1 });
+    const [a, b] = [bigJudged(s, "big1", ["claude-opus-5-5"]), bigJudged(s, "big2", ["claude-opus-5-5"])].sort() as [string, string];
     const calls: Call[] = [];
-    const r = await send(s, "sm-labels", calls, () => ({ usage: AT_BOUND }));
+    const r = await send(s, "sm-judges", calls, () => ({ text: JUDGE, usage: AT_BOUND }));
     expect(r.code).toBe("CAP_STOP");
-    expect(sentTo(calls)).toEqual(["gpt-6-astra " + a, "claude-opus-5-5 " + a]);
-    expect(replies(s, "sm-labels").map((x) => [x.packet, x.reader, x.outcome, x.code])).toEqual([[a, "astra", "answered", null], [a, "opus", "answered", null], [b, "astra", "cap_stop", "CAP_STOP"]]);
-    const item = readItem(s.record, "sm-labels");
-    expect(item.stops.map((x) => x.scope)).toEqual(["sm-labels only"]);
-    expect(item.leases[0]!.close).toMatchObject({ spent_micros: 275_000 + 110_000, cap_stop: "sm-labels only" });
-    const rerun = await send(s, "sm-labels", calls, () => ({ usage: AT_BOUND }));
-    expect([rerun.code, calls.length, readItem(s.record, "sm-labels").leases.length]).toEqual(["CAP_STOP", 2, 1]);
-
-    const tight = setup({ "sm-labels": 0.2 });
-    labels(tight, 1);
-    const first = await send(tight, "sm-labels", calls);
-    expect([first.code, calls.length]).toEqual(["CAP_STOP", 2]);
-    expect(readItem(tight.record, "sm-labels").leases[0]!.close).toMatchObject({ spent_micros: 0, cap_stop: "sm-labels only" });
-  });
-
-  test("calls in flight hold their allowance against the room, so concurrent sends never pass the cap", async () => {
-    const s = setup({ "sm-labels": 0.5 });
-    const [a] = labels(s, 2) as [string, string];
-    const calls: Call[] = [];
-    const r = await send(s, "sm-labels", calls, () => ({ usage: AT_BOUND }), { concurrency: 3 });
-    expect(r.code).toBe("CAP_STOP");
-    expect(sentTo(calls)).toEqual(["gpt-6-astra " + a, "claude-opus-5-5 " + a]);
-    expect(readItem(s.record, "sm-labels").leases[0]!.close!.spent_micros).toBeLessThanOrEqual(500_000);
-  });
-
-  test("a packet whose worst case is over a reader's per-call allowance is an allowance stop for that reader only, sent nowhere and never again", async () => {
-    const s = setup({ "sm-labels": 150 });
-    const ids = labels(s, 2, (i) => (i === 0 ? "x".repeat(15_000) + "\n" : "A short issue.\n"));
-    const big = ids.find((id) => readFileSync(join(s.packets, id + ".json"), "utf8").includes("xxxx"))!, small = ids.find((id) => id !== big)!;
-    const calls: Call[] = [];
-    const r = await send(s, "sm-labels", calls);
-    expect([r.code, r.message]).toEqual(["ok", ""]);
-    expect(sentTo(calls).sort()).toEqual(["claude-opus-5-5 " + big, "claude-opus-5-5 " + small, "gpt-6-astra " + small].sort());
-    const stop = replies(s, "sm-labels").find((x) => x.packet === big && x.reader === "astra");
-    expect([stop.outcome, stop.code, stop.answer]).toEqual(["allowance_stop", "E_ALLOWANCE", null]);
-    expect(stop.why).toContain("allowance of $0.27");
-    expect(replies(s, "sm-labels").find((x) => x.packet === big && x.reader === "opus").outcome).toBe("answered");
-    expect(Math.max(...reserved(s, "sm-labels"))).toBeLessThanOrEqual(275_000);
-    await send(s, "sm-labels", calls);
-    expect(calls.length).toBe(3);
+    expect(sentTo(calls)).toEqual(["gpt-6-astra " + a]);
+    expect(replies(s, "sm-judges").map((x) => [x.packet, x.reader, x.outcome, x.code])).toEqual([[a, "astra", "answered", null], [b, "astra", "cap_stop", "CAP_STOP"]]);
+    const item = readItem(s.record, "sm-judges");
+    expect(item.stops.map((x) => x.scope)).toEqual(["sm-judges only"]);
+    expect(item.leases[0]!.close).toMatchObject({ spent_micros: 275_000, cap_stop: "sm-judges only" });
+    const rerun = await send(s, "sm-judges", calls, () => ({ text: JUDGE, usage: AT_BOUND }));
+    expect([rerun.code, calls.length, readItem(s.record, "sm-judges").leases.length]).toEqual(["CAP_STOP", 1, 1]);
   });
 });
 
@@ -342,7 +397,7 @@ describe("failures are recorded, never resent", () => {
     expect(calls.length).toBe(2);
   });
 
-  test("an upstream error stops the send and settles its reservation by the ledger's rules: released on a 4xx, held as unknown when the send is lost, and on a 5xx charged for each send the proxy's retry fits inside the call's allowance", async () => {
+  test("an upstream error stops the send and settles its reservation by the ledger's rules: released on a 4xx, held as unknown when the send is lost, and on a 5xx charged once at the call's worst case, which is the whole of its allowance, so the proxy does not resend it", async () => {
     const calls: Call[] = [];
     const four = setup({ "sm-labels": 150 });
     const [a, b] = labels(four, 2) as [string, string];
@@ -367,14 +422,12 @@ describe("failures are recorded, never resent", () => {
     const m = calls.length;
     const r5 = await send(five, "sm-labels", calls, () => ({ status: 500 }));
     expect(r5.code).toBe("UPSTREAM");
-    const charged = reserved(five, "sm-labels") as [number, number];
-    expect([calls.length - m, charged.length]).toEqual([2, 2]);
-    expect(charged[0] + charged[1]).toBeLessThanOrEqual(275_000);
-    expect(3 * charged[0]).toBeGreaterThan(275_000);
+    const charged = reserved(five, "sm-labels") as [number];
+    expect([calls.length - m, charged]).toEqual([1, [proxyWorst(calls[m]!)]]);
     expect(replies(five, "sm-labels").map((x) => [x.outcome, x.code])).toEqual([["upstream", "UPSTREAM"]]);
-    expect(readItem(five.record, "sm-labels").leases[0]!.close).toMatchObject({ spent_micros: charged[0] + charged[1], unknown_micros: 0 });
+    expect(readItem(five.record, "sm-labels").leases[0]!.close).toMatchObject({ spent_micros: charged[0], unknown_micros: 0 });
     await send(five, "sm-labels", calls);
-    expect(sentTo(calls.slice(m))).toEqual(["gpt-6-astra " + p5, "gpt-6-astra " + p5, "claude-opus-5-5 " + p5]);
+    expect(sentTo(calls.slice(m))).toEqual(["gpt-6-astra " + p5, "claude-opus-5-5 " + p5]);
   });
 
   test("a call whose answer was never recorded is recorded as lost on the next send and never resent", async () => {

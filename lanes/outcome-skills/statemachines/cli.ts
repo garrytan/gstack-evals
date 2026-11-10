@@ -79,10 +79,12 @@ export const HELP = `gstack-evals outcome sm <command>
                                                      minted once and reused on a rerun; ids are the labelled packets and the real ones
   packets r78 --real <rows.json> --labelled <rows.json> --out <file>  the R78 check (a Astra, b Opus); labelled rows add kind, axis
   packets r78-price                                   the sm-judges calls priced at the per-call bound, against the item cap
-  packets send --item sm-labels|sm-judges --run <id> --packets <dir> --out <dir> [--record <dir>] [--ledger <file>] [--concurrency 4]
+  packets send --item sm-labels|sm-judges --run <id> --packets <dir> --out <dir> [--record <dir>] [--ledger <file>] [--lift-halt <meter,...>]
                                                      the paid step: each packet to its readers (labels: Astra and Opus;
-                                                     judges: the key's judge, and both on queued items), one call each on
-                                                     the item's own lease at the per-call bound; replies.jsonl in --out
+                                                     judges: the key's judge, and both on queued items), one call at a
+                                                     time on the item's own lease, each reserving its packet's byte worst
+                                                     case; a call past 20,000 input or 1,500 output tokens halts the item
+                                                     until --lift-halt records the Captain's ruling; replies.jsonl in --out
   secondary --unit <dir> --patch <arm.patch> [--outcome <outcome.json>] [--tree <base dir>] [--clone <dir>] --out <file>
                                                      section 10's keyless secondaries: found it, what it changed and, with
                                                      a local clone, later-fix overlap
@@ -430,8 +432,8 @@ export async function main(argv: string[]): Promise<number> {
         return p.fits ? 0 : 1;
       }
       if (what === "send") {
-        const { f } = flags(r, ["--item", "--run", "--packets", "--out", "--record", "--ledger", "--concurrency"]);
-        const s = await sendPackets({ item: need(f, "--item"), run_id: need(f, "--run"), packets: need(f, "--packets"), out: need(f, "--out"), record: f.get("--record"), ledger: f.get("--ledger"), concurrency: Number(f.get("--concurrency") ?? 4) });
+        const { f } = flags(r, ["--item", "--run", "--packets", "--out", "--record", "--ledger", "--lift-halt"]);
+        const s = await sendPackets({ item: need(f, "--item"), run_id: need(f, "--run"), packets: need(f, "--packets"), out: need(f, "--out"), record: f.get("--record"), ledger: f.get("--ledger"), lift_halts: f.get("--lift-halt")?.split(",").filter(Boolean) });
         console.log("send item=" + s.item + " run=" + s.run_id + " lease=" + (s.lease_id ?? "none") + " sent=" + s.sent + " " + Object.entries(s.counts).map(([k, v]) => k + "=" + v).join(" ") + " spent_micros=" + s.spent_micros + " unknown_micros=" + s.unknown_micros + " replies=" + s.replies);
         return 0;
       }
