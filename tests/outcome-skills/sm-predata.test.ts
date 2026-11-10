@@ -6,7 +6,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { recordProgram } from "../../src/runner/ledger/envelope.ts";
@@ -18,6 +18,7 @@ import { REGISTRY_PATH } from "../../lanes/outcome-skills/arms/registry.ts";
 import { serveStages, type StageSpec } from "../../lanes/outcome-skills/driver/stage.ts";
 import { main } from "../../lanes/outcome-skills/statemachines/cli.ts";
 import { fixtureRow } from "../../lanes/outcome-skills/statemachines/fixtures.ts";
+import { contain, containInputs } from "../../lanes/outcome-skills/statemachines/contain.ts";
 import { computeStart } from "../../lanes/outcome-skills/statemachines/followon.ts";
 import { qaHomeCopy } from "../../lanes/outcome-skills/statemachines/image.ts";
 import type { Lang } from "../../lanes/outcome-skills/statemachines/langs.ts";
@@ -55,70 +56,147 @@ const unitDir = (root: string, patch?: (u: Record<string, any>) => void, id = fi
   return dir;
 };
 
-describe("A3's home (#290 notes 1 and 3)", () => {
-  // Value: protects=A3's /qa home in the session image, where gstack's setup has written its own host dir into symlinks and text files; fails_when=an absolute link into the install dir is copied as is (it dangles at /root), a text file keeps the host dir, or a host's .capy reaches the image; why_new=#290 named note 1 (image.ts absolute symlinks) and the .capy/git-shim.log a Capy host writes during qa-install.sh (note 3); seam=image.ts qaHomeCopy; no_claim=a gstack install at the recorded pin, or a binary that embeds the host dir (listed, left as built)
-  test("the copy makes links into the home relative, names /root for the host dir, lists binaries and leaves out .capy", () => {
+describe("A3's home (#290 notes 1 and 3, #314 note 4)", () => {
+  // Value: protects=A3's /qa home in the session image, installed by qa-install.sh with the home mounted at /root, so every link, text file and compiled binary already names the session's home; fails_when=the copy rewrites or drops what the install wrote, a host's .capy reaches the image, or the digest the session record keeps does not follow the home's content; why_new=#314 note 4 and the Captain's B2 (2026-11-10: install at /root); seam=image.ts qaHomeCopy; no_claim=a gstack install at the recorded pin (the PR's real install covers it)
+  test("the copy keeps a home installed at /root as written, leaves out .capy and records the home's digest", () => {
     const root = scratch("qahome");
     const src = join(root, "host-home");
-    for (const d of [".claude/skills/gstack/qa", ".gstack", ".capy"]) mkdirSync(join(src, d), { recursive: true });
+    for (const d of [".claude/skills/gstack/qa", ".claude/skills/gstack/browse/dist", ".gstack", ".capy"]) mkdirSync(join(src, d), { recursive: true });
     writeFileSync(join(src, ".claude/skills/gstack/qa/SKILL.md"), "qa\n");
-    symlinkSync(join(src, ".claude/skills/gstack/qa"), join(src, ".claude/skills/qa"));
+    symlinkSync("/root/.claude/skills/gstack/qa", join(src, ".claude/skills/qa"));
     symlinkSync("gstack/qa/SKILL.md", join(src, ".claude/skills/qa.md"));
-    writeFileSync(join(src, ".claude/settings.json"), JSON.stringify({ hook: src + "/.claude/skills/gstack/bin/hook" }));
-    writeFileSync(join(src, ".gstack/browse"), Buffer.concat([Buffer.from("ELF\0"), Buffer.from(src + "/x")]));
+    const settings = JSON.stringify({ hook: "/root/.claude/skills/gstack/bin/hook" });
+    writeFileSync(join(src, ".claude/settings.json"), settings);
+    const browse = Buffer.concat([Buffer.from("ELF\0"), Buffer.from("/root/.claude/skills/gstack/browse/src")]);
+    writeFileSync(join(src, ".claude/skills/gstack/browse/dist/browse"), browse);
     writeFileSync(join(src, ".capy/git-shim.log"), "log\n");
     const dst = join(root, "copy");
-    expect(qaHomeCopy(src, dst)).toEqual({ paths: ["/root/.claude/skills", "/root/.gstack"], links: 1, files: 1, binaries: ["/.gstack/browse"] });
-    expect(readlinkSync(join(dst, ".claude/skills/qa"))).toBe("gstack/qa");
-    expect(realpathSync(join(dst, ".claude/skills/qa"))).toBe(join(realpathSync(dst), ".claude/skills/gstack/qa"));
+    const got = qaHomeCopy(src, dst);
+    expect(Object.keys(got).sort()).toEqual(["paths", "sha256"]);
+    expect(got.paths).toEqual(["/root/.claude/skills", "/root/.gstack"]);
+    expect(got.sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(readlinkSync(join(dst, ".claude/skills/qa"))).toBe("/root/.claude/skills/gstack/qa");
     expect(readlinkSync(join(dst, ".claude/skills/qa.md"))).toBe("gstack/qa/SKILL.md");
-    expect(JSON.parse(readFileSync(join(dst, ".claude/settings.json"), "utf8")).hook).toBe("/root/.claude/skills/gstack/bin/hook");
-    expect(readFileSync(join(dst, ".gstack/browse")).includes(Buffer.from(src))).toBe(true);
+    expect(readFileSync(join(dst, ".claude/settings.json"), "utf8")).toBe(settings);
+    expect(readFileSync(join(dst, ".claude/skills/gstack/browse/dist/browse")).equals(browse)).toBe(true);
     expect(existsSync(join(dst, ".capy"))).toBe(false);
+    expect(qaHomeCopy(src, join(root, "again")).sha256).toBe(got.sha256);
+    writeFileSync(join(src, ".claude/skills/gstack/qa/SKILL.md"), "qa, changed\n");
+    expect(qaHomeCopy(src, join(root, "changed")).sha256).not.toBe(got.sha256);
   });
 
-  // Value: protects=files the install wrote that name no host dir; fails_when=a relative --qa-home such as "." becomes a root the rewrite matches, so "./helper.ts" or a sentence's last period turns into /root; why_new=Capy's review of #314; seam=image.ts qaHomeCopy; no_claim=which dir an operator passes
-  test("a relative home path is resolved first, so text that names no host dir is left as written", () => {
+  // Value: protects=A3's session from a home installed outside the container, whose compiled binaries (gstack's browse resolves its root from its build dir) and text name a dir the session doesn't have; fails_when=a binary or text file that names the host dir is copied into the image, or the refusal does not name the file; why_new=#314 review note 4 (adversarial-native, Medium: qa_home.binaries was computed and dropped); seam=image.ts qaHomeCopy; no_claim=a foreign path that is not the host dir the home was copied from
+  test("a binary or a text file that names the host dir fails closed and names the file", () => {
+    const root = scratch("qahome-host");
+    const src = join(root, "host-home");
+    mkdirSync(join(src, ".claude/skills/gstack/browse/dist"), { recursive: true });
+    const bin = join(src, ".claude/skills/gstack/browse/dist/browse");
+    writeFileSync(bin, Buffer.concat([Buffer.from("ELF\0"), Buffer.from(realpathSync(src) + "/.claude/skills/gstack/browse/src")]));
+    expect(() => qaHomeCopy(src, join(root, "bin"))).toThrow(/^E_SM_ARM A3's home names its host dir .* in \/\.claude\/skills\/gstack\/browse\/dist\/browse/);
+    rmSync(bin);
+    writeFileSync(join(src, ".claude/settings.json"), JSON.stringify({ hook: src + "/.claude/skills/gstack/bin/hook" }));
+    expect(() => qaHomeCopy(src, join(root, "text"))).toThrow(/^E_SM_ARM A3's home names its host dir .* in \/\.claude\/settings\.json/);
+  });
+
+  // Value: protects=A3's session from a home installed under another home, whose compiled browse binary names that home's gstack checkout and resolves its root there; fails_when=a binary that names gstack's checkout under any home but /root is copied, the refusal does not name it, or a binary naming /root's checkout, or text quoting another home's gstack path as an example, is refused; why_new=the Captain's B2 condition 3 (2026-11-10: the refusal fires on any binary naming a dir other than /root, with a foreign-path fixture); seam=image.ts qaHomeCopy; no_claim=which homes a gstack build machine uses
+  test("a binary that names gstack's checkout under a home other than /root fails closed, and /root's or quoted text passes", () => {
+    const root = scratch("qahome-foreign");
+    const src = join(root, "home");
+    mkdirSync(join(src, ".claude/skills/gstack/browse/dist"), { recursive: true });
+    const bin = join(src, ".claude/skills/gstack/browse/dist/browse");
+    const elf = (path: string) => Buffer.concat([Buffer.from("ELF\0"), Buffer.from(path)]);
+    writeFileSync(join(src, ".claude/skills/gstack/README.md"), "Installed at " + join("/", "home", "runner", ".claude/skills/gstack") + " or " + join("/", "github", "home", ".claude/skills/gstack") + " on CI.\n");
+    writeFileSync(bin, elf("/root/.claude/skills/gstack/browse/src"));
+    expect(qaHomeCopy(src, join(root, "ok")).paths).toEqual(["/root/.claude/skills"]);
+    for (const [i, foreign] of [join("/", "home", "runner", ".claude/skills/gstack/browse/src"), join("/", "github", "home", ".claude/skills/gstack")].entries()) {
+      writeFileSync(bin, elf(foreign));
+      expect(() => qaHomeCopy(src, join(root, "foreign-" + i))).toThrow(/^E_SM_ARM A3's home names its host dir .* or another home's gstack checkout in \/\.claude\/skills\/gstack\/browse\/dist\/browse \(binaries 1, text files 0\)/);
+    }
+  });
+
+  // Value: protects=files the install wrote that name no host dir; fails_when=a relative --qa-home such as "." becomes a root the host-dir check matches, so "./helper.ts" or a sentence's last period fails the copy, or a relative path hides the host dir it names; why_new=Capy's review of #314; seam=image.ts qaHomeCopy; no_claim=which dir an operator passes
+  test("a relative home path is resolved first, so text that names no host dir passes as written", () => {
     const root = scratch("qahome-rel");
     const src = join(root, "host-home");
     mkdirSync(join(src, ".claude/skills/gstack"), { recursive: true });
-    const script = 'import { help } from "./helper.ts";\n// Ends with a period.\nconst home = "' + src + '/.claude";\n';
+    const script = 'import { help } from "./helper.ts";\n// Ends with a period.\nconst home = "/root/.claude";\n';
     writeFileSync(join(src, ".claude/skills/gstack/run.ts"), script);
     const cwd = process.cwd();
     process.chdir(src);
     try {
-      expect(qaHomeCopy(".", join(root, "dot")).files).toBe(1);
-      expect(qaHomeCopy(relative(src, src + "/../host-home"), join(root, "rel")).files).toBe(1);
+      qaHomeCopy(".", join(root, "dot"));
+      qaHomeCopy(relative(src, src + "/../host-home"), join(root, "rel"));
+      writeFileSync(join(src, ".claude/skills/gstack/host.ts"), 'const home = "' + src + '/.claude";\n');
+      expect(() => qaHomeCopy(".", join(root, "named"))).toThrow(/^E_SM_ARM A3's home names its host dir .* in \/\.claude\/skills\/gstack\/host\.ts/);
     } finally {
       process.chdir(cwd);
     }
-    for (const d of ["dot", "rel"]) expect(readFileSync(join(root, d, ".claude/skills/gstack/run.ts"), "utf8")).toBe(script.replace(src, "/root"));
+    for (const d of ["dot", "rel"]) expect(readFileSync(join(root, d, ".claude/skills/gstack/run.ts"), "utf8")).toBe(script);
   });
 
-  // Value: protects=the host's pinned /qa install: a --qa-home given as a symlink is copied as the tree it names, and the host's files stay as written; fails_when=the copy keeps the link and the rewrite walks through it into the host install; why_new=the /ship review of #314 (red team on image.ts); seam=image.ts qaHomeCopy; no_claim=how an operator names the dir
-  test("a home given as a symlink is copied as its tree, and the host install stays as written", () => {
+  // Value: protects=the host's pinned /qa install: a --qa-home given as a symlink is copied as the tree it names, and a file naming the dir it resolves to is still the host dir; fails_when=the copy keeps the link, or only the link's own path counts as the host dir; why_new=the /ship review of #314 (red team on image.ts); seam=image.ts qaHomeCopy; no_claim=how an operator names the dir
+  test("a home given as a symlink is copied as its tree, and a file that names the dir it resolves to fails closed", () => {
     const root = scratch("qahome-link");
     const real = join(root, "real");
     mkdirSync(join(real, ".claude/skills/gstack"), { recursive: true });
-    const text = "path=" + realpathSync(real) + "/x\n";
-    writeFileSync(join(real, ".claude/skills/gstack/f.txt"), text);
+    writeFileSync(join(real, ".claude/skills/gstack/f.txt"), "path=/root/x\n");
     symlinkSync(real, join(root, "link"));
     const dst = join(root, "copy");
-    expect(qaHomeCopy(join(root, "link"), dst).files).toBe(1);
+    qaHomeCopy(join(root, "link"), dst);
     expect(lstatSync(dst).isDirectory()).toBe(true);
     expect(readFileSync(join(dst, ".claude/skills/gstack/f.txt"), "utf8")).toBe("path=/root/x\n");
-    expect(readFileSync(join(real, ".claude/skills/gstack/f.txt"), "utf8")).toBe(text);
+    writeFileSync(join(real, ".claude/skills/gstack/f.txt"), "path=" + realpathSync(real) + "/x\n");
+    expect(() => qaHomeCopy(join(root, "link"), join(root, "copy2"))).toThrow(/^E_SM_ARM A3's home names its host dir .* in \/\.claude\/skills\/gstack\/f\.txt/);
   });
 
-  // Value: protects=the session home holding nothing from outside the install; fails_when=a link that leaves the home, absolute or relative, is copied into the image; why_new=#290 named note 1; seam=image.ts qaHomeCopy; no_claim=links gstack's setup writes today, which all point inside the home
+  // Value: protects=the session home holding nothing from outside the install; fails_when=a link that leaves the home, absolute, relative or into the host dir (a home installed outside the container), is copied into the image; why_new=#290 named note 1 and #314 note 4; seam=image.ts qaHomeCopy; no_claim=links gstack's setup writes today, which all point inside the home
   test("a link that leaves the home fails closed", () => {
-    for (const target of ["/etc", "../../.."]) {
+    for (const target of ["/etc", "../../..", "host"]) {
       const root = scratch("qahome-out");
       const src = join(root, "host-home");
       mkdirSync(join(src, ".claude/skills/gstack"), { recursive: true });
-      symlinkSync(target, join(src, ".claude/skills/out"));
+      symlinkSync(target === "host" ? join(src, ".claude/skills/gstack") : target, join(src, ".claude/skills/out"));
       expect(() => qaHomeCopy(src, join(root, "copy"))).toThrow(/^E_SM_ARM A3's home links \/\.claude\/skills\/out to .*outside the home/);
     }
+  });
+
+  // Value: protects=the Captain's conditions for A3's install (2026-11-10, B2): it runs the way a user installs gstack, in a throwaway container whose /root is the home dir, with no API key, no drive and no host env, and the container goes whatever the outcome; fails_when=the install runs on the host, mounts anything but the home and a local source (read-only), passes a variable outside its fixed list or a host value, keeps the container, or calls docker before the pin, the command and a clean home are checked; why_new=#314 note 4 and the Captain's B2; seam=arms/qa-install.sh with a stub docker; no_claim=the install itself (the PR's real install at the pin)
+  test("qa-install.sh installs in a throwaway container with the home at /root, no keys, no drive and no host env", () => {
+    const root = scratch("qa-install");
+    const stub = join(root, "bin");
+    mkdirSync(stub);
+    writeFileSync(join(stub, "docker"), ["#!/usr/bin/env bash", "n=$(ls \"$STUB_DIR\" | grep -c '^call' || true)", "printf '%s\\0' \"$@\" > \"$STUB_DIR/call$n\"", "case \"$1\" in build) cat > \"$STUB_DIR/stdin$n\"; echo sha256:" + "7".repeat(64) + ";; run) exit \"$STUB_RUN_EXIT\";; esac", ""].join("\n"), { mode: 0o755 });
+    const src = join(root, "src");
+    mkdirSync(src);
+    let n = 0;
+    const install = (home: string, exit: number, from = src, sha = "a".repeat(40)) => {
+      const dir = join(root, "calls" + n++);
+      mkdirSync(dir);
+      const r = spawnSync("bash", [join(ROOT, "lanes/outcome-skills/arms/qa-install.sh"), from, home, sha, "./setup --host claude"], { encoding: "utf8", env: { PATH: stub + ":" + process.env.PATH, HOME: root, STUB_DIR: dir, STUB_RUN_EXIT: String(exit), ANTHROPIC_API_KEY: "sk-ant-test-not-a-key", CAPY_DRIVE: join("/", "home", "user", ".capy/drive") } });
+      const calls = readdirSync(dir).filter((f) => f.startsWith("call")).sort().map((f) => readFileSync(join(dir, f), "utf8").split("\0").slice(0, -1));
+      const run = calls.find((c) => c[0] === "run") ?? [];
+      const opt = (flag: string) => run.flatMap((a, i) => (a === flag ? [run[i + 1]!] : []));
+      return { status: r.status, calls, run, opt, stdin: existsSync(join(dir, "stdin0")) ? readFileSync(join(dir, "stdin0"), "utf8") : "" };
+    };
+    const home = join(root, "home");
+    const ok = install(home, 0);
+    expect(ok.status).toBe(0);
+    expect(ok.calls.map((c) => c[0])).toEqual(["build", "run", "rm"]);
+    expect(ok.stdin).toMatch(/^FROM buildpack-deps:trixie@sha256:[0-9a-f]{64}\nCOPY --from=oven\/bun:1\.4\.4@sha256:[0-9a-f]{64} \/usr\/local\/bin\/bun \/usr\/local\/bin\/bun\n$/);
+    expect(ok.opt("-v")).toEqual([realpathSync(home) + ":/root", realpathSync(src) + ":/qa-src:ro"]);
+    expect(ok.opt("-e")).toEqual(["HOME=/root", "PATH=/usr/local/bin:/usr/bin:/bin", "USER=root", "LANG=C.UTF-8", "TERM=dumb", "GSTACK_SKIP_PLAYWRIGHT=1", "GSTACK_SKIP_FONTS=1"]);
+    expect(ok.run.some((a) => a.includes("sk-ant-test-not-a-key") || a.includes(".capy") || a.startsWith("--env") || a === "--privileged")).toBe(false);
+    expect(ok.run).toContain("sha256:" + "7".repeat(64));
+    expect(ok.run.slice(-4)).toEqual(["/qa-src", "a".repeat(40), "./setup --host claude", process.getuid!() + ":" + process.getgid!()]);
+    expect(ok.calls[2]).toEqual(["rm", "-f", "-v", ok.opt("--name")[0]!]);
+    const failed = install(join(root, "home-failed"), 1);
+    expect(failed.status).toBe(1);
+    expect(failed.calls.map((c) => c[0])).toEqual(["build", "run", "rm"]);
+    const remote = install(join(root, "home-remote"), 0, "https://git.capy.ai/garrytan/gstack.git");
+    expect(remote.opt("-v")).toEqual([realpathSync(join(root, "home-remote")) + ":/root"]);
+    expect(remote.run.at(-4)).toBe("https://git.capy.ai/garrytan/gstack.git");
+    mkdirSync(join(root, "used/.claude/skills"), { recursive: true });
+    for (const [h, sha] of [[join(root, "used"), "a".repeat(40)], [join(root, "home-bad-sha"), "not-a-sha"]] as const) expect(install(h, 0, src, sha)).toMatchObject({ status: 2, calls: [] });
   });
 
   // Value: protects=section 4's A3 home check against what the /qa install wrote; fails_when=a told session whose home holds exactly the install's checked paths (here with ~/.local/share/gstack, which gstack's setup can write) is refused, a path the build did not list passes, or a drive passes because the task listed it; why_new=#290 named note 3 (QA_HOME may refuse every A3 session); seam=real_agent.py _open_sm with task.json qa_home (run.ts, image.ts qaHomeCopy); no_claim=which paths a given gstack version writes
@@ -144,6 +222,33 @@ print(json.dumps([check(qa + home, built), check(qa + home + "HOME /root/.claude
 `;
     expect(JSON.parse(py(code))).toEqual(["ok", "E_SM_STRIP", "E_SM_STRIP"]);
   });
+});
+
+// Value: protects=section 4's A3 home, where Claude Code would load ~/.claude/CLAUDE.md as user memory in every session, so A3's home may hold it in no case, as a no-gstack home may not; fails_when=a task.json qa_home that lists /root/.claude/CLAUDE.md (the image build lists every checked path the install wrote) lets the file pass, or the refusal does not name it; why_new=#314 review note 5 (adversarial-native, Low); seam=real_agent.py _open_sm; no_claim=whether a gstack version writes that file (setup at b6155921 writes none)
+test("real_agent's A3 check refuses a home CLAUDE.md even when the image build listed it, and passes the listed install without it", () => {
+  const code = `
+import json, sys, types
+sys.path.insert(0, sys.argv[1])
+import unit_test as u
+ra = u.ra
+ra.egress.apply = lambda c, allow: {"event": "egress", "allow": allow}
+def check(stdout, qa_home):
+    fake = types.SimpleNamespace(options=types.SimpleNamespace(probe_node=""), _exec=lambda c, s, stdin=None, timeout=0: types.SimpleNamespace(returncode=0, stdout=stdout.encode(), stderr=b""))
+    task = {"repo_dir": "/testbed", "commits": 1, "base_commit": "b" * 40, "qa_sha": "a" * 40, "qa_home": qa_home}
+    try:
+        ra.RealAgent._open_sm(fake, "c", "t", task, "http://10.0.0.2:9000", True, lambda e: None)
+        return "ok"
+    except ra.SandboxSetupError as e:
+        return str(e)
+qa = "COMMITS 1\\nHEAD " + "b" * 40 + "\\nGSTACK " + "a" * 40 + "\\n"
+built = ["/root/.claude/skills", "/root/.gstack"]
+home = "".join("HOME " + p + "\\n" for p in built)
+memory = "/root/.claude/CLAUDE.md"
+print(json.dumps([check(qa + home + "HOME " + memory + "\\n", built + [memory]), check(qa + home, built + [memory]), check(qa + home, built)]))
+`;
+  const [listed, absent, plain] = JSON.parse(py(code)) as string[];
+  expect(listed).toStartWith("E_SM_STRIP A3's home holds ['/root/.claude/CLAUDE.md'], outside the /qa install's own");
+  expect([absent, plain]).toEqual(["ok", "ok"]);
 });
 
 // Value: protects=one registry file for A3's /qa pin, read by run.ts and handed to real_agent as arms_path; fails_when=run.ts checks the pin in the default registry while the session reads another; why_new=#290 named note 2; seam=run.ts runSession registry; no_claim=real_agent's own read of arms_path, which sm-session.test.ts's sm_turn test covers
@@ -231,8 +336,23 @@ describe("the SM stage (#290 notes 5 and 6)", () => {
     const body = JSON.parse(String(init.body)) as { model: string };
     return Response.json({ id: "msg_1", type: "message", role: "assistant", model: body.model, content: [{ type: "text", text: "ok" }], stop_reason: "end_turn", usage: { input_tokens: 10, output_tokens: 10, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } });
   };
-  const serve = (l: ReturnType<typeof ledger>, stages: StageSpec[]) =>
-    serveStages({ record: l.record, local: l.db, run_id: "r1", envelope_host: "m1", machine: "m1", stages, host: "127.0.0.1", dir: join(l.root, "run"), fetch: fetchStub, requireAdmission: () => null, env: { ANTHROPIC_API_KEY: "upstream-key", OPENROUTER_API_KEY: "upstream-key" }, log: () => {} });
+  const serve = (l: ReturnType<typeof ledger>, stages: StageSpec[], extra: { lift_halts?: string[]; now?: () => number } = {}) =>
+    serveStages({ record: l.record, local: l.db, run_id: "r1", envelope_host: "m1", machine: "m1", stages, host: "127.0.0.1", dir: join(l.root, "run"), fetch: fetchStub, requireAdmission: () => null, env: { ANTHROPIC_API_KEY: "upstream-key", OPENROUTER_API_KEY: "upstream-key" }, log: () => {}, ...extra });
+  const OPUS_STAGE: StageSpec[] = [{ item: "sm-opus", arm: "sm-opus", model: "claude-opus-5-5", arms: ARMS }];
+  const openA1 = async (control: string, key: string, model = "claude-opus-5-5") => (await fetch(control + "/sessions", { method: "POST", body: JSON.stringify({ trial: "t-" + key, model, cap_usd: model === "claude-opus-5-5" ? 15 : 3, meta: { arm: "sm:A1", task: key + "/A1", trial_n: 1 }, open_key: key + model, ledger: "u4" }) }));
+  const closeWith = async (control: string, id: string, finalizeFails: boolean) => {
+    const finalize = MeteringProxy.prototype.finalize;
+    if (finalizeFails)
+      MeteringProxy.prototype.finalize = async () => {
+        throw new Error("finalize failed in this test");
+      };
+    try {
+      return (await (await fetch(control + "/sessions/" + id + "/close", { method: "POST", body: JSON.stringify({ reason: "agent_finished" }) })).json()) as Record<string, any>;
+    } finally {
+      MeteringProxy.prototype.finalize = finalize;
+    }
+  };
+  const runLines = (l: ReturnType<typeof ledger>, event: string) => readFileSync(join(l.root, "run", "sessions.jsonl"), "utf8").split("\n").filter(Boolean).map((x) => JSON.parse(x) as Record<string, any>).filter((e) => e.event === event);
 
   // Value: protects=section 13's money table, where each model's sessions draw on that model's own line item; fails_when=a stage pays for one model's sessions from another model's item, or from a name that is no family SM item; why_new=#290 named note 5 (stage.ts SM stage check); seam=driver/stage.ts serveStages with statemachines/items.ts ITEMS; no_claim=the item caps themselves (sm-items.test.ts)
   test("a stage pays only for its line item's own model, before any lease opens", async () => {
@@ -263,7 +383,84 @@ describe("the SM stage (#290 notes 5 and 6)", () => {
     const proxy = JSON.parse(py("import json, sys\nsys.path.insert(0, sys.argv[1])\nimport unit_test as u\nprint(json.dumps(u.ra.proxy_summary(json.loads(sys.argv[2]))))", JSON.stringify(answer)));
     expect(proxy.finalized).toBe(false);
     expect(sessionEnd({ termination: "error_result", proxy }, false)).toEqual({ end: "infra", unknown_micros: answer.unknown_micros });
+    expect(await served.stop()).toBe(2);
+    l.db.close?.();
+  });
+
+  // Value: protects=section 6's one retry when a close's proxy finalize failed: its allowance stops are unknown (null), so the item halts before any retry and the Captain rules after reading the journal; fails_when=the halted stage opens another session, a relaunch opens a lease on the item before the halt is lifted, the run record misses the session id or the journal path, or a lift leaves the item halted; why_new=#314 review note 8 and the Captain's halt (2026-11-10); seam=driver/stage.ts closeSession, open and serve; no_claim=the Captain's ruling, which the lane records elsewhere
+  test("a close whose proxy finalize failed halts its item: the run record names the session and its journal, and no session or lease opens until the halt is lifted", async () => {
+    const l = ledger(["sm-opus", "sm-particle"]);
+    const served = await serve(l, [...OPUS_STAGE, { item: "sm-particle", arm: "sm-particle", model: "particle-ai/particle-1", arms: ARMS }]);
+    const s1 = (await (await openA1(served.control, "u1")).json()) as Record<string, any>;
+    expect((await closeWith(served.control, s1.id, true)).finalized).toBe(false);
+    const journal = join(realpathSync(join(l.root, "run")), s1.lease_id + ".journal.ndjson");
+    expect(runLines(l, "halt")).toEqual([expect.objectContaining({ item: "sm-opus", id: s1.id, lease_id: s1.lease_id, meter_id: s1.meter_id, journal })]);
+    expect(existsSync(journal)).toBe(true);
+    const again = await openA1(served.control, "u2");
+    expect(again.status).toBe(423);
+    expect(((await again.json()) as Record<string, any>).code).toBe("E_SM_FINALIZE_HALT");
+    const other = await openA1(served.control, "u2", "particle-ai/particle-1");
+    expect(other.status).toBe(200);
+    expect((await closeWith(served.control, ((await other.json()) as Record<string, any>).id, false)).finalized).toBe(true);
+    expect(await served.stop()).toBe(2);
+    const relaunch = await serve(l, OPUS_STAGE).then(async (s) => (await s.stop(), "served"), (e: LedgerError) => e.code + " " + e.message);
+    expect(relaunch).toStartWith("E_SM_FINALIZE_HALT line item sm-opus halted in run r1");
+    expect(relaunch).toContain(s1.id);
+    expect(relaunch).toContain(journal);
+    expect(readItem(l.record, "sm-opus").leases.length).toBe(1);
+    const lifted = await serve(l, OPUS_STAGE, { lift_halts: [s1.id] });
+    expect(readItem(l.record, "sm-opus").leases.length).toBe(2);
+    expect(runLines(l, "lift")).toEqual([expect.objectContaining({ item: "sm-opus", id: s1.id })]);
+    const s2 = await openA1(lifted.control, "u2");
+    expect(s2.status).toBe(200);
+    expect((await closeWith(lifted.control, ((await s2.json()) as Record<string, any>).id, false)).finalized).toBe(true);
+    expect(await lifted.stop()).toBe(0);
+    l.db.close?.();
+  });
+
+  // Value: protects=the halt's exit and settled row when the stage is already draining (its lease is too short for another open), where E_SM_FINALIZE_HALT says the driver exits 2; fails_when=the halt line is written but the stage settles lease_expired and the driver exits 0; why_new=#318 /ship review (state-machines specialist, stage.ts drain); seam=driver/stage.ts closeSession and drain; no_claim=the halt on a serving stage (the test above)
+  test("a halt on a stage already draining for its lease settles halted, and the driver exits 2", async () => {
+    const l = ledger(["sm-opus"]);
+    let clock = Date.now();
+    const served = await serve(l, OPUS_STAGE, { now: () => clock });
+    const s1 = (await (await openA1(served.control, "u1")).json()) as Record<string, any>;
+    clock += 365 * 24 * 3600 * 1000;
+    expect((await openA1(served.control, "u2")).status).toBe(503);
+    expect((await closeWith(served.control, s1.id, true)).finalized).toBe(false);
+    expect(runLines(l, "halt")).toEqual([expect.objectContaining({ item: "sm-opus", id: s1.id })]);
+    expect(await served.stop()).toBe(2);
+    expect(runLines(l, "settled")).toEqual([expect.objectContaining({ item: "sm-opus", ended: "halted" })]);
+    l.db.close?.();
+  });
+
+  // Value: protects=--lift-halt's refusal of an id that names no standing halt (unknown, or already lifted), before any recovery or lease; fails_when=a stale or made-up lift opens a lease or writes a lift line; why_new=#318 /ship review (testing specialist, stage.ts --lift-halt); seam=driver/stage.ts serve; no_claim=the lift that succeeds (the test above)
+  test("a --lift-halt naming no standing halt is refused before any lease opens", async () => {
+    const l = ledger(["sm-opus"]);
+    const served = await serve(l, OPUS_STAGE);
+    const s1 = (await (await openA1(served.control, "u1")).json()) as Record<string, any>;
+    expect((await closeWith(served.control, s1.id, true)).finalized).toBe(false);
+    expect(await served.stop()).toBe(2);
+    const lifted = await serve(l, OPUS_STAGE, { lift_halts: [s1.id] });
+    expect(await lifted.stop()).toBe(0);
+    const tried = (ids: string[]) => serve(l, OPUS_STAGE, { lift_halts: ids }).then(async (s) => (await s.stop(), "served"), (e: LedgerError) => e.code + " " + e.message);
+    for (const id of [s1.id, "made-up"]) expect(await tried([id])).toStartWith("E_USAGE --lift-halt " + id + " names no halt still standing in run r1");
+    expect(readItem(l.record, "sm-opus").leases.length).toBe(2);
+    expect(runLines(l, "lift").length).toBe(1);
+    l.db.close?.();
+  });
+
+  // Value: protects=every close whose proxy finalize ran, which the halt must leave alone; fails_when=a finalized close writes a halt, stops the stage or changes the driver's exit; why_new=the Captain's halt (2026-11-10), its other direction; seam=driver/stage.ts closeSession; no_claim=the close answer's figures (sm-driver.test.ts)
+  test("a close whose proxy finalize ran writes no halt, and its stage keeps serving", async () => {
+    const l = ledger(["sm-opus"]);
+    const served = await serve(l, OPUS_STAGE);
+    const s1 = (await (await openA1(served.control, "u1")).json()) as Record<string, any>;
+    expect((await closeWith(served.control, s1.id, false)).finalized).toBe(true);
+    expect(runLines(l, "halt")).toEqual([]);
+    const s2 = await openA1(served.control, "u2");
+    expect(s2.status).toBe(200);
+    expect((await closeWith(served.control, ((await s2.json()) as Record<string, any>).id, false)).finalized).toBe(true);
     expect(await served.stop()).toBe(0);
+    expect((await serve(l, OPUS_STAGE).then(async (s) => s.stop()))).toBe(0);
     l.db.close?.();
   });
 });
@@ -354,7 +551,7 @@ describe.skipIf(process.env.GSTACK_EVALS_DOCKER !== "1")("a session record and A
     expect(d(["build", "-q", "-t", tag, "-"], "FROM " + PY_IMAGE + "\nRUN apt-get update -qq && apt-get install -y -qq --no-install-recommends git >/dev/null && rm -rf /var/lib/apt/lists/*\n").status).toBe(0);
     runtime = d(["image", "inspect", "--format", "{{.Id}}", tag]).stdout.trim();
     d(["volume", "create", treeVolume(id)]);
-    expect(d(["run", "--rm", "--network", "none", "-v", treeVolume(id) + ":/d", "--entrypoint", "sh", tag, "-c", "cd /d && git init -q && mkdir src && echo a > src/a.txt && git add -A && git -c user.name=t -c user.email=t@e commit -qm c0"]).status).toBe(0);
+    expect(d(["run", "--rm", "--network", "none", "-v", treeVolume(id) + ":/d", "--entrypoint", "sh", tag, "-c", "cd /d && git init -q && mkdir src && echo 'fn reset() {}' > src/a.txt && git add -A && git -c user.name=t -c user.email=t@e commit -qm c0"]).status).toBe(0);
   }, 900_000);
   afterAll(() => {
     for (const t of [...built, tag]) d(["image", "rm", "-f", t]);
@@ -376,13 +573,13 @@ describe.skipIf(process.env.GSTACK_EVALS_DOCKER !== "1")("a session record and A
   test("a session with no summary, or with an all-null proxy block, records its spend as unknown, never 0", () => {
     for (const mode of ["none", "nullproxy"]) {
       const r = run(mode, "A0", "sm:A0");
-      expect(r.record).toMatchObject({ spent_micros: null, end: "infra", unknown_micros: 0 });
+      expect(r.record).toMatchObject({ spent_micros: null, end: "infra", unknown_micros: 0, qa_home_sha256: null });
       expect(JSON.parse(readFileSync(join(r.out, "session.json"), "utf8")).spent_micros).toBeNull();
     }
   }, 900_000);
 
-  // Value: protects=A3's session as built: the registry run.ts checks is the one real_agent reads, the task lists the home paths the build wrote, and the install's links and settings work at /root; fails_when=arms_path names another registry, task.json carries no qa_home, a link dangles at the host dir, a text file keeps the host dir, or the host's .capy reaches /root; why_new=#290 named notes 1, 2 and 3; seam=run.ts runSession, image.ts buildSessionImage and qaHomeCopy; no_claim=a gstack install at the pin, or real_agent's check in a live container
-  test("A3's image holds the install with working links at /root and no .capy, and real_agent gets the same registry and the built home paths", () => {
+  // Value: protects=A3's session as built: the registry run.ts checks is the one real_agent reads, the task lists the home paths the build wrote, the session record keeps the home's digest, and the install's links and settings, written at /root, work there; fails_when=arms_path names another registry, task.json carries no qa_home, the record has no digest, a link dangles, a text file changes, or the host's .capy reaches /root; why_new=#290 named notes 1, 2 and 3, and the Captain's B2 (install at /root, digest in the run record); seam=run.ts runSession, image.ts buildSessionImage and qaHomeCopy; no_claim=a gstack install at the pin, or real_agent's check in a live container
+  test("A3's image holds the install as written at /root and no .capy, and real_agent gets the same registry, the built home paths and the home's digest", () => {
     const reg = JSON.parse(readFileSync(REGISTRY_PATH, "utf8"));
     reg.sm.pins.qa = { ...reg.sm.pins.qa, sha: "a".repeat(40) };
     const registry = join(root, "registry.json");
@@ -390,14 +587,218 @@ describe.skipIf(process.env.GSTACK_EVALS_DOCKER !== "1")("a session record and A
     const home = join(root, "host-home");
     for (const p of [".claude/skills/gstack/qa", ".gstack", ".capy"]) mkdirSync(join(home, p), { recursive: true });
     writeFileSync(join(home, ".claude/skills/gstack/qa/SKILL.md"), "qa\n");
-    symlinkSync(join(home, ".claude/skills/gstack/qa"), join(home, ".claude/skills/qa"));
-    writeFileSync(join(home, ".claude/settings.json"), JSON.stringify({ hook: home + "/.claude/skills/gstack/bin/hook" }) + "\n");
+    symlinkSync("/root/.claude/skills/gstack/qa", join(home, ".claude/skills/qa"));
+    writeFileSync(join(home, ".claude/settings.json"), JSON.stringify({ hook: "/root/.claude/skills/gstack/bin/hook" }) + "\n");
     writeFileSync(join(home, ".capy/git-shim.log"), "log\n");
     const r = run("nullproxy", "A3", "qa:told", { qaHome: home, qaSha: "a".repeat(40), registry });
     expect(r.args).toContain("arms_path=" + registry);
     expect(JSON.parse(readFileSync(join(r.out, "task.json"), "utf8"))).toMatchObject({ qa_sha: "a".repeat(40), qa_home: ["/root/.claude/skills", "/root/.gstack"] });
+    expect(r.record.qa_home_sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(r.record.qa_home_sha256).toBe(r.image.qa_home!.sha256);
+    expect(JSON.parse(readFileSync(join(r.out, "session.json"), "utf8")).qa_home_sha256).toBe(r.image.qa_home!.sha256);
     const look = d(["run", "--rm", "--network", "none", "--entrypoint", "sh", r.image.image_id, "-c", "readlink /root/.claude/skills/qa; cat /root/.claude/skills/qa/SKILL.md; cat /root/.claude/settings.json; ls -A /root | grep -c '^.capy$' || true"]);
-    expect(look.stdout.trim().split("\n")).toEqual(["gstack/qa", "qa", JSON.stringify({ hook: "/root/.claude/skills/gstack/bin/hook" }), "0"]);
+    expect(look.stdout.trim().split("\n")).toEqual(["/root/.claude/skills/gstack/qa", "qa", JSON.stringify({ hook: "/root/.claude/skills/gstack/bin/hook" }), "0"]);
   }, 900_000);
+
+  // Value: protects=A3's session check on the /qa install: a home qa-install.sh hands back to the host user is root's in the image, as a root install's is, so real_agent's SM_CHECK reads the gstack checkout's commit; fails_when=the copy keeps the host uid, git refuses the checkout as another user's, SM_CHECK prints GSTACK none and real_agent refuses every A3 session; why_new=the PR's real install at the pin (C1, #314 note 4); seam=image.ts BUILD's copy of /sm-in/home, real_agent.py SM_CHECK; no_claim=a gstack install at the pin (the PR's real install covers it)
+  test("A3's home is root's in the image, so real_agent's check reads the /qa checkout's commit", () => {
+    const home = join(root, "owned-home");
+    const gs = join(home, ".claude/skills/gstack");
+    mkdirSync(gs, { recursive: true });
+    writeFileSync(join(gs, "SKILL.md"), "gstack\n");
+    const git = (args: string[]) => spawnSync("git", ["-C", gs, "-c", "user.name=t", "-c", "user.email=t@e", ...args], { encoding: "utf8" });
+    expect(git(["init", "-q"]).status).toBe(0);
+    expect(git(["add", "-A"]).status).toBe(0);
+    expect(git(["commit", "-qm", "c0"]).status).toBe(0);
+    const sha = git(["rev-parse", "HEAD"]).stdout.trim();
+    const reg = JSON.parse(readFileSync(REGISTRY_PATH, "utf8"));
+    reg.sm.pins.qa = { ...reg.sm.pins.qa, sha };
+    const registry = join(root, "owned-registry.json");
+    writeFileSync(registry, JSON.stringify(reg));
+    const r = run("nullproxy", "A3", "qa:told", { qaHome: home, qaSha: sha, registry });
+    const smCheck = readFileSync(join(import.meta.dir, "../../lanes/real-outcome/agent/real_agent.py"), "utf8").match(/SM_CHECK = r"""([\s\S]*?)"""/)![1]!.replace("{repo}", "/w");
+    const look = d(["run", "--rm", "--network", "none", "--entrypoint", "sh", r.image.image_id, "-c", smCheck]);
+    expect(look.stdout.split("\n").filter((l) => l.startsWith("GSTACK "))).toEqual(["GSTACK " + sha]);
+    const owners = d(["run", "--rm", "--network", "none", "--entrypoint", "sh", r.image.image_id, "-c", "find /root -maxdepth 4 ! -user 0 | head -3; stat -c %u:%g /root"]);
+    expect(owners.stdout.trim()).toBe("0:0");
+  }, 900_000);
+
+  // Value: protects=the halt before any session: a session image whose store holds a commit past the base (packed and unreachable, so the build's commit count passes) is refused with E_SM_CONTAIN before Harbor runs, and sm contain writes one record line per check for a clean unit and fails the bad one; fails_when=runSession opens a session on that image, sm contain passes it, a clean unit fails, or the record misses a check; why_new=the Captain's containment scope for C1 (GSTA-2, 2026-11-10); seam=run.ts runSession, cli.ts sm contain, contain.ts containImage in the built image; no_claim=what a real SWE-rebench image holds (the PR's runs on real units)
+  test("an image holding a later commit halts before Harbor with E_SM_CONTAIN, and sm contain records each check", async () => {
+    const id2 = id + "-contain";
+    d(["volume", "create", treeVolume(id2)]);
+    try {
+      const g = "git -c user.name=t -c user.email=t@e";
+      expect(d(["run", "--rm", "--network", "none", "-v", treeVolume(id2) + ":/d", "--entrypoint", "sh", tag, "-c", "cd /d && git init -q && mkdir src && echo 'fn reset() {}' > src/a.txt && git add -A && " + g + " commit -qm c0 && git checkout -qb b2 && echo b > src/a.txt && " + g + " commit -qam c1 && git checkout -q - && git repack -a -d -q && git branch -q -D b2 && rm -rf .git/logs"]).status).toBe(0);
+      const bad = unitDir(scratch("contain-bad"), (u) => Object.assign(u, { repo_dir: "/w", work_dir: "/w", scope: { dir: "src" }, image: { ...u.image, runtime_id: runtime } }), id2);
+      const out = join(scratch("contain-run"), "out");
+      process.env.SM_STUB_DIR = dirname(out);
+      process.env.SM_STUB_MODE = "nullproxy";
+      expect(() => runSession({ unitDir: bad, session: { unit: id2, part: 1, index: 0, model: "claude-opus-5-5", cell: "A0", stage: "first", arm: "sm:A0" }, control: "http://127.0.0.1:1", proxy: "127.0.0.1:1", out, harbor })).toThrow(/^E_SM_CONTAIN .* objects \(1: [0-9a-f]{40}\)/);
+      expect(existsSync(join(dirname(out), "args"))).toBe(false);
+      const rec = join(scratch("contain-rec"), "run.jsonl");
+      const okOut = join(dirname(rec), "ok.json");
+      expect(await main(["contain", "--unit", unit(), "--out", okOut, "--record", rec])).toBe(0);
+      expect(JSON.parse(readFileSync(okOut, "utf8"))).toMatchObject({ schema: "sm-contain.v1", unit: id, ok: true });
+      const badOut = join(dirname(rec), "bad.json");
+      expect(await main(["contain", "--unit", bad, "--out", badOut, "--record", rec])).not.toBe(0);
+      expect(JSON.parse(readFileSync(badOut, "utf8"))).toMatchObject({ unit: id2, ok: false });
+      const lines = readFileSync(rec, "utf8").trim().split("\n").map((l) => JSON.parse(l));
+      expect(lines.map((l) => [l.unit, l.image, l.check, l.ok])).toEqual([
+        [id, "first", "refs", true], [id, "first", "objects", true], [id, "first", "stores", true], [id, "first", "scan", true],
+        [id2, "first", "refs", true], [id2, "first", "objects", false], [id2, "first", "stores", true], [id2, "first", "scan", true],
+      ]);
+      expect(lines[3]).toMatchObject({ archives: expect.any(Number), archive_paths: expect.any(Array) });
+    } finally {
+      d(["volume", "rm", "-f", treeVolume(id2)]);
+    }
+  }, 900_000);
+});
+
+
+// Value: protects=the session workspace against the upstream fix reaching it as git objects or leftover files (GEVA-503: 12 of 40 SWE-rebench images carried the fix and its tests behind tags past the base, and particle-1 found them with git log --all in 19 of 160 sessions); fails_when=a ref, a commit object, another object store or a file outside the repo that holds a hidden test name or a test-side marker passes, a clean, follow-on or pinned A3 workspace fails, or a finding carries the test text instead of its sha256; why_new=the Captain's containment scope for C1 (GSTA-2, 2026-11-10); seam=contain.ts contain with sh/contain.sh on a fixture root; no_claim=what a real image holds (the PR's runs on real units)
+describe("the containment check before any session (E_SM_CONTAIN)", () => {
+  const NAME = "test_hidden_contain_probe";
+  const MARK = '    assert contain_probe("x") == 42  # the hidden check';
+  const git = (dir: string, ...args: string[]) => {
+    const r = spawnSync("git", ["-C", dir, "-c", "user.name=t", "-c", "user.email=t@e", "-c", "init.defaultBranch=main", ...args], { encoding: "utf8" });
+    if (r.status !== 0) throw new Error(r.stderr);
+    return r.stdout.trim();
+  };
+  const tree = (label: string) => {
+    const root = scratch("contain-" + label);
+    const w = join(root, "w");
+    mkdirSync(w, { recursive: true });
+    git(w, "init", "-q");
+    writeFileSync(join(w, "a.py"), "def f():\n    return 1\n");
+    git(w, "add", "-A");
+    git(w, "commit", "-qm", "base");
+    return { root, w, base: git(w, "rev-parse", "HEAD") };
+  };
+  const later = (w: string) => {
+    writeFileSync(join(w, "a.py"), "def f():\n    return 2\n");
+    git(w, "commit", "-qam", "fix");
+    return git(w, "rev-parse", "HEAD");
+  };
+  const check = (t: { root: string; w: string; base: string }, o: { want?: string; qaPin?: string; names?: string[] } = {}) =>
+    contain({ kind: "host", root: t.root, repo: t.w }, { want: o.want ?? t.base, names: o.names ?? [NAME], markers: [MARK], ...(o.qaPin ? { qaPin: o.qaPin } : {}) });
+  const clean = { refs: { ok: true, findings: [] }, objects: { ok: true, findings: [] }, stores: { ok: true, findings: [] }, scan: { ok: true, findings: [] } };
+
+  test("a clean one-commit tree and a two-commit follow-on tree pass every check, and archives outside the repo are only listed", () => {
+    const t = tree("clean");
+    mkdirSync(join(t.root, "opt"), { recursive: true });
+    writeFileSync(join(t.root, "opt/dep.whl"), "PK");
+    writeFileSync(join(t.w, "inside.zip"), "PK");
+    expect(check(t)).toEqual({ ok: true, checks: clean, archives: ["/opt/dep.whl"] });
+    const two = later(t.w);
+    expect(check(t, { want: two })).toEqual({ ok: true, checks: clean, archives: ["/opt/dep.whl"] });
+  });
+
+  test("a tag past the base fails the refs check, peeled, and its commit fails the objects check", () => {
+    const t = tree("tag");
+    const fix = later(t.w);
+    git(t.w, "tag", "-a", "v2", "-m", "release", fix);
+    git(t.w, "reset", "-q", "--hard", t.base);
+    const r = check(t);
+    expect(r.ok).toBe(false);
+    expect(r.checks.refs.ok).toBe(false);
+    expect(r.checks.refs.findings).toContain("refs/tags/v2 " + fix);
+    expect(r.checks.objects.findings).toEqual([fix]);
+    git(t.w, "pack-refs", "--all");
+    expect(check(t).checks.refs.findings).toContain("packed-refs " + fix);
+  });
+
+  test("an unreachable later commit inside a pack fails the objects check while every ref is clean", () => {
+    const t = tree("pack");
+    git(t.w, "checkout", "-qb", "b2");
+    const fix = later(t.w);
+    git(t.w, "checkout", "-q", "main");
+    git(t.w, "repack", "-a", "-d", "-q");
+    git(t.w, "branch", "-q", "-D", "b2");
+    rmSync(join(t.w, ".git/logs"), { recursive: true, force: true });
+    expect(git(t.w, "count-objects", "-v")).toMatch(/^in-pack: [1-9]/m);
+    const r = check(t);
+    expect(r.checks.refs).toEqual({ ok: true, findings: [] });
+    expect(r.checks.objects).toEqual({ ok: false, findings: [fix] });
+    expect(r.ok).toBe(false);
+  });
+
+  test("an alternates file, the alternates variable and a nested .git each fail the stores check", () => {
+    const other = tree("alt-src");
+    later(other.w);
+    const t = tree("alt");
+    writeFileSync(join(t.w, ".git/objects/info/alternates"), join(other.w, ".git/objects") + "\n");
+    expect(check(t).checks.stores.findings).toContain("alternates /w/.git/objects/info/alternates");
+    rmSync(join(t.w, ".git/objects/info/alternates"));
+    process.env.GIT_ALTERNATE_OBJECT_DIRECTORIES = join(t.root, "nowhere");
+    try {
+      expect(check(t).checks.stores.findings).toContain("env GIT_ALTERNATE_OBJECT_DIRECTORIES");
+    } finally {
+      delete process.env.GIT_ALTERNATE_OBJECT_DIRECTORIES;
+    }
+    const lib = join(t.w, "vendor/lib");
+    mkdirSync(lib, { recursive: true });
+    git(lib, "init", "-q");
+    writeFileSync(join(lib, "b.py"), "x = 1\n");
+    git(lib, "add", "-A");
+    git(lib, "commit", "-qm", "later");
+    writeFileSync(join(t.w, ".gitmodules"), "[submodule]\n");
+    const r = check(t);
+    expect(r.checks.stores.ok).toBe(false);
+    expect(r.checks.stores.findings).toEqual(expect.arrayContaining(["nested /w/vendor/lib/.git", "gitmodules /w/.gitmodules", "store /w/vendor/lib/.git"]));
+    expect(check(t).ok).toBe(false);
+  });
+
+  test("a /tmp patch carrying a marker and a file outside the repo naming a hidden test fail the scan by path and sha256 only", () => {
+    const t = tree("scan");
+    writeFileSync(join(t.w, "b.py"), "def test_known_in_base():\n    pass\n");
+    git(t.w, "add", "-A");
+    git(t.w, "commit", "-qm", "base2");
+    const base = git(t.w, "rev-parse", "HEAD");
+    mkdirSync(join(t.root, "tmp"), { recursive: true });
+    mkdirSync(join(t.root, "opt/left"), { recursive: true });
+    writeFileSync(join(t.root, "tmp/fix.patch"), "--- a/t.py\n+++ b/t.py\n@@ -1 +1,2 @@\n+" + MARK + "\n");
+    writeFileSync(join(t.root, "opt/left/test_x.py"), "def " + NAME + "():\n    pass\ndef test_known_in_base():\n    pass\n");
+    const r = check({ ...t, base }, { names: [NAME, "test_known_in_base"] });
+    expect(r.checks.scan.ok).toBe(false);
+    expect(r.checks.scan.findings.sort()).toEqual(["marker /tmp/fix.patch sha256=" + sha(MARK), "name /opt/left/test_x.py sha256=" + sha(NAME)]);
+    expect(JSON.stringify(r)).not.toContain(NAME);
+    expect(JSON.stringify(r)).not.toContain("contain_probe");
+    expect(r.ok).toBe(false);
+  });
+
+  test("A3's gstack checkout passes only at the /qa pin, and any other object store on the filesystem fails", () => {
+    const t = tree("qa");
+    const gs = join(t.root, "root/.claude/skills/gstack");
+    mkdirSync(gs, { recursive: true });
+    git(gs, "init", "-q");
+    writeFileSync(join(gs, "SKILL.md"), "gstack\n");
+    git(gs, "add", "-A");
+    git(gs, "commit", "-qm", "pin");
+    const pin = git(gs, "rev-parse", "HEAD");
+    expect(check(t, { qaPin: pin })).toEqual({ ok: true, checks: clean, archives: [] });
+    expect(check(t, { qaPin: "f".repeat(40) }).checks.stores).toEqual({ ok: false, findings: ["store /root/.claude/skills/gstack/.git"] });
+    expect(check(t).checks.stores).toEqual({ ok: false, findings: ["store /root/.claude/skills/gstack/.git"] });
+  });
+
+  // Value: protects=the record and the E_SM_CONTAIN message when the check cannot read the repo; fails_when=a CHECK line that says fail reads as a passing check; why_new=Capy's review of #318; seam=contain.ts parseContain; no_claim=why a repo dir is missing
+  test("a check the script reports as failed reads as failed, as do the checks that never ran", () => {
+    const t = tree("norepo");
+    const r = contain({ kind: "host", root: t.root, repo: join(t.root, "missing") }, { want: t.base, names: [NAME], markers: [MARK] });
+    expect(r.ok).toBe(false);
+    expect(Object.values(r.checks).map((c) => c.ok)).toEqual([false, false, false, false]);
+  });
+
+  test("the inputs are the FAIL_TO_PASS leaf names and the 30-code-point lines test.patch and fix-tests.patch add", () => {
+    const dir = unitDir(scratch("contain-inputs"), (u) => { u.tests.f2p = ["tests/test_a.py::TestK::test_one[p1]", "src/lib.rs::tests::two", "testThree(com.x.FooTest)", "com.x.BarTest#testFour", "TestFive/sub_case"]; });
+    const files = { "test.patch": "diff --git a/t b/t\n--- a/t\n+++ b/t\n@@ -0,0 +1,2 @@\n+short\n+" + MARK + "\n", "fix-tests.patch": "diff --git a/s b/s\n--- a/s\n+++ b/s\n@@ -0,0 +1 @@\n+        assert_eq!(parse_contain(\"y\"), Some(7));\n" };
+    const u = JSON.parse(readFileSync(join(dir, "unit.json"), "utf8"));
+    for (const [n, body] of Object.entries(files)) {
+      writeFileSync(join(dir, n), body);
+      u.files[n] = sha(body);
+    }
+    writeFileSync(join(dir, "unit.json"), JSON.stringify(u));
+    expect(containInputs(dir)).toEqual({ names: ["test_one", "two", "testThree", "testFour", "sub_case"], markers: [MARK, '        assert_eq!(parse_contain("y"), Some(7));'] });
+  });
 });
 

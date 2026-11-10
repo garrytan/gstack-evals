@@ -54,7 +54,12 @@ test("limits are section 6's, per model, first stage and follow-on", () => {
   expect(() => smLimits(reg, "sm:A0", "claude-sonnet-5-5")).toThrow(/^E_SM_ARM /);
 });
 
-// Value: protects=the one user turn each arm sends; fails_when=the scope or issue text is substituted wrongly, a bad scope passes, or qa:told runs before its pin is recorded; why_new=GEVA-436 P2; seam=arms.ts smTurn (real_agent's sm_user.sm_turn matches it, sm-session.test.ts); no_claim=the scope rule itself (P1 scope.ts)
+// Value: protects=A3's /qa pin as the Captain approved it on 2026-11-10 (A1, B1): gstack main's last commit on 2026-11-08 UTC, its VERSION, and the install command qa-install.sh runs; fails_when=the pin, its version or its install command moves; why_new=GST-1959 C1; seam=registry.json sm.pins.qa; no_claim=that the sha is main's last commit that day (the PR body shows the clone commands and their output)
+test("the /qa pin is gstack b6155921 at 1.98.0.0, installed with ./setup --host claude", () => {
+  expect(loadRegistry().sm!.pins.qa).toEqual({ repo: "garrytan/gstack", sha: "b6155921a564ba9ec2470fd2cb3894c05e2c2d13", version: "1.98.0.0", install: "./setup --host claude" });
+});
+
+// Value: protects=the one user turn each arm sends; fails_when=the scope or issue text is substituted wrongly, a bad scope passes, or qa:told runs while its pin is null; why_new=GEVA-436 P2; seam=arms.ts smTurn (real_agent's sm_user.sm_turn matches it, sm-session.test.ts); no_claim=the scope rule itself (P1 scope.ts)
 test("smTurn fills the scope and the issue text, and refuses a bad scope and an unpinned qa:told", () => {
   const reg = loadRegistry();
   expect(smTurn(reg, "sm:A0", { scope: "src/core" })).toBe("Find and fix the bugs in my app.\n\nMy app is the repository in this directory. Focus on `src/core`. Don't stop to ask.");
@@ -62,7 +67,10 @@ test("smTurn fills the scope and the issue text, and refuses a bad scope and an 
   expect(smTurn(reg, "sm:A1", { scope: "$&x" })).toContain("Focus on `$&x`.");
   for (const scope of ["", "a\nb", "a`b"]) expect(() => smTurn(reg, "sm:A0", { scope })).toThrow(/^E_SM_ARM /);
   expect(() => smTurn(reg, "sm:followon", { statement: " \n" })).toThrow(/^E_SM_ARM /);
-  expect(() => smTurn(reg, "qa:told", { scope: "src" })).toThrow(/qa pin/);
+  const unpinned = structuredClone(reg);
+  unpinned.sm!.pins.qa = { repo: "garrytan/gstack", sha: null, version: null, install: null };
+  expect(() => smTurn(unpinned, "qa:told", { scope: "src" })).toThrow(/qa pin/);
+  expect(smTurn(reg, "qa:told", { scope: "src" })).toBe(reg.sm!.arms["qa:told"]!.turns[0]!.text.replace("{scope}", "src"));
 });
 
 // Value: protects=the loader's family SM branch; fails_when=a broken SM arm loads, or the branch changes what G accepts; why_new=GEVA-436 P2; seam=registry.ts loadRegistry, arms.ts checkSm; no_claim=G's own refusals (registry.test.ts)
