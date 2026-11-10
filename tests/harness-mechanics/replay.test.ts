@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { readRows, toMicros } from "../../quick/laneb/runner/ledger.ts";
 import { approve, itemTotals } from "../../lanes/harness-mechanics/money.ts";
 import { CAPS_USD, HM, REPO, sha256 } from "../../lanes/harness-mechanics/pins.ts";
-import { admit, batchFits, cohenKappa, countProblems, DECISIONS, decide, drawStratified, LABELS, labelsRead, loadItems, metrics, PER_CALL_USD, runReplay, splitOf, truthOf, tune, type Dec, type ReplayClients, type Row } from "../../lanes/harness-mechanics/replay.ts";
+import { admit, batchFits, cohenKappa, countProblems, DECISIONS, decide, drawStratified, LABELS, labelsRead, loadItems, metrics, PER_CALL_USD, runReplay, splitOf, truthOf, tune, type Dec, type ReplayClient, type ReplayClients, type Row } from "../../lanes/harness-mechanics/replay.ts";
 import { FIXTURE_COUNTS, fakeClients, fixtureItems, fixtureText, stepReplay } from "../../lanes/harness-mechanics/replay-fake.ts";
 
 const FIXTURE = join(REPO, "tests/harness-mechanics/fixtures/replay/items.jsonl");
@@ -72,7 +72,7 @@ describe("items, draws and splits", () => {
 });
 
 describe("tuning and the report", () => {
-  const rows = (scores: number[], truth: boolean[], split: Row["split"] = "dev"): Row[] => scores.map((sc, i) => ({ id: split + i, point: "done", task: "t" + i, split, tests_pass: !truth[i], jev: ans(sc >= 0.5 ? "block" : "allow", sc), p1: ans(truth[i] ? "block" : "allow", truth[i] ? 0.9 : 0.1), det: ans("block") }));
+  const rows = (scores: number[], truth: boolean[], split: Row["split"] = "dev"): Row[] => scores.map((sc, i) => ({ id: split + i, point: "done", task: "t" + i, split, tests_pass: !truth[i], jev: ans(sc >= 0.5 ? "block" : "allow", sc), p1: ans(truth[i] ? "block" : "allow", truth[i] ? 0.9 : 0.1), p1g: ans(truth[i] ? "block" : "allow", truth[i] ? 0.9 : 0.1), det: ans("block") }));
   // Jev sits on the wrong side at 0.45 and 0.55; everything else is sure and right.
   const dev = rows([0.9, 0.95, 0.45, 0.1, 0.05, 0.55, 0.85, 0.15], [true, true, true, false, false, false, true, false]);
   test("the band is the one with least escalation whose dev balanced accuracy is within 1 point of particle-1 alone's", () => {
@@ -92,6 +92,13 @@ describe("tuning and the report", () => {
     expect(decide(inside, "cascade", [0.45, 0.55])).toMatchObject({ label: "block", esc: true, cost: 0.002, ms: 10 });
     expect(decide(outside, "cascade", [0.45, 0.55])).toMatchObject({ label: "block", esc: false, cost: 0.001, ms: 5 });
     expect(decide(inside, "jev")).toMatchObject({ label: "allow", esc: false });
+  });
+  test("inside the band the cascade takes particle-1's answer shown Jev's guess, and an exact rule or a fail-open never escalates", () => {
+    const row = (jev: Row["jev"]): Row => ({ id: "x", point: "done", task: "t", split: "dev", tests_pass: false, jev, p1: ans("allow", 0.2), p1g: { ...ans("block", 0.8), cost_usd: 0.004 }, det: ans("block") });
+    expect(decide(row(ans("allow", 0.5)), "cascade", [0.45, 0.55])).toMatchObject({ label: "block", p: 0.8, esc: true, cost: 0.005 });
+    expect(decide(row(ans("allow", 0.5)), "p1")).toMatchObject({ label: "allow", esc: false });
+    expect(decide(row({ ...ans("allow"), rule: "status_not_done", cost_usd: 0 }), "cascade", [0, 0.1])).toMatchObject({ label: "allow", p: 0, esc: false, cost: 0 });
+    expect(decide(row({ ...ans("allow"), fail_open: true }), "cascade", [0, 0.1])).toMatchObject({ label: "allow", esc: false, cost: 0.001 });
   });
   test("binary metrics: balanced accuracy, block precision and recall, false-block rate, ECE over 10 bins, Brier, escalation, latency, cost per 1,000", () => {
     const ds = [dec("block", "block", 0.9, { esc: true, ms: 10 }), dec("block", "allow", 0.2, { ms: 20 }), dec("allow", "block", 0.6, { ms: 30 }), dec("allow", "allow", 0.1, { ms: 40 })];
@@ -123,7 +130,7 @@ describe("the run", () => {
     writeFileSync(start, "stand-in for the decision-routing results post\n");
     return { d, ledger, o: { items: fixtureItems(), itemsSha256: sha256(fixtureText()), clients, out: join(d, "out"), start, ledger, counts: FIXTURE_COUNTS } };
   };
-  const wrap = (f: (who: string, c: ReplayClients[keyof ReplayClients]) => ReplayClients[keyof ReplayClients]) => Object.fromEntries(Object.entries(fakeClients("clean")).map(([who, c]) => [who, f(who, c)])) as ReplayClients;
+  const wrap = (f: (who: string, c: ReplayClient) => ReplayClient) => Object.fromEntries(Object.entries(fakeClients("clean")).map(([who, c]) => [who, f(who, c as ReplayClient)])) as unknown as ReplayClients;
   test("one lease opens and settles at the metered cost, done items get no labeler calls, and a second run on the item is refused", async () => {
     const seen: { who: string; point: string; answers: readonly string[] }[] = [];
     const { ledger, o } = setup(wrap((who, c) => (req) => { seen.push({ who, point: req.point, answers: req.answers }); return c(req); }));
@@ -145,10 +152,10 @@ describe("the run", () => {
     await expect(runReplay({ ...o, start: join(o.out, "missing.md") })).rejects.toThrow(/^E_HM_REPLAY start rule/);
   });
   test("the batch stop: settled spend, in-flight reservations and the batch's calls at the dearest call stay at or under $90; before any call settles the dearest is the plan's estimate times 1.5", () => {
-    expect(PER_CALL_USD).toBeCloseTo(60 / (3 * 480 + 5 * (400 + 400 + 200)), 12);
+    expect(PER_CALL_USD).toBeCloseTo(60 / (4 * 480 + 6 * (400 + 400 + 200)), 12);
     const fresh = { spent: 0, inflightMicros: 0, settled: 0, worst: 0, lease: 90 };
-    expect(batchFits(fresh, 6439)).toBe(true);
-    expect(batchFits(fresh, 6441)).toBe(false);
+    expect(batchFits(fresh, 7919)).toBe(true);
+    expect(batchFits(fresh, 7921)).toBe(false);
     const seen = { spent: 50, inflightMicros: 0, settled: 40, worst: 1, lease: 90 };
     expect(batchFits(seen, 40)).toBe(true);
     expect(batchFits(seen, 41)).toBe(false);
@@ -162,7 +169,7 @@ describe("the run", () => {
     const per = new Map<string, number>(), point = new Map(o.items.map((i) => [i.id, i.point]));
     for (const id of seen) per.set(id, (per.get(id) ?? 0) + 1);
     expect(per.size).toBe(HM.concurrent);
-    for (const [id, n] of per) expect(n).toBe(point.get(id) === "done" ? 3 : 5);
+    for (const [id, n] of per) expect(n).toBe(point.get(id) === "done" ? 4 : 6);
     expect(itemTotals(readRows(ledger), "stage2-replay").settled).toBe(toMicros(3 * seen.length));
   });
   test("a cap stop ends the run incomplete inside the lease, and a client that reports no cost stops it", async () => {
@@ -172,6 +179,39 @@ describe("the run", () => {
     expect(t.open).toBe(0);
     expect(t.settled).toBeLessThanOrEqual(t.cap);
     await expect(runReplay(setup(wrap((who, c) => (who === "det" ? async () => ({ label: "allow", tokens: 0 }) as any : c))).o)).rejects.toThrow(/^E_HM_REPLAY .*cost_usd/);
+  });
+  test("particle-1 is asked again, shown Jev's guess, only where Jev's answer can escalate", async () => {
+    const guesses = new Map<string, unknown>(), shown = new Map<string, unknown>();
+    const { o } = setup(wrap((who, c) => async (req) => {
+      if (who === "p1" && req.guess) guesses.set(req.id, req.guess);
+      const a = await c(req);
+      if (who !== "jev") return a;
+      if (req.id.endsWith("-0")) return { label: "allow", rule: "status_not_done", cost_usd: 0, tokens: 0, latency_ms: 0 };
+      if (req.id.endsWith("-1")) return { label: "allow", fail_open: true, cost_usd: 0.0001, tokens: 0, latency_ms: 2000 };
+      shown.set(req.id, a.shown);
+      return a;
+    }));
+    await runReplay(o);
+    const rows = ["answers-dev.jsonl", "answers-held.jsonl"].flatMap((f) => readFileSync(join(o.out, f), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as Row));
+    const lone = rows.filter((r) => r.jev.rule || r.jev.fail_open);
+    expect(lone.length).toBeGreaterThan(0);
+    for (const r of lone) expect(r.p1g === undefined && !guesses.has(r.id)).toBe(true);
+    for (const r of rows.filter((x) => !x.jev.rule && !x.jev.fail_open)) {
+      expect(guesses.get(r.id)).toEqual(shown.get(r.id));
+      expect(r.p1g).toBeDefined();
+    }
+  });
+  test("a client's stop ends the run after every call in flight settles at its metered cost, and close runs", async () => {
+    let calls = 0, closed = 0;
+    const base = fakeClients("clean"), stop = { ...base, close: async () => { closed++; } } as ReplayClients;
+    stop.jev = async (req) => { const n = ++calls, a = await base.jev(req); return n === 3 ? { ...a, cost_usd: 0.5, stop: "E_HM_JEV_VERSION the TypeSafe response's model attribute is absent" } : a; };
+    const counted: number[] = [];
+    for (const who of ["astra", "opus", "p1", "det"] as const) { const c = base[who]; stop[who] = async (req) => { const a = await c(req); counted.push(a.cost_usd); return a; }; }
+    const { ledger, o } = setup(stop);
+    await expect(runReplay(o)).rejects.toThrow(/^E_HM_REPLAY jev stopped the run on .*E_HM_JEV_VERSION/);
+    const jevSpent = 0.0001 * (calls - 1) + 0.5;
+    expect(Math.abs(itemTotals(readRows(ledger), "stage2-replay").settled - toMicros(jevSpent + counted.reduce((a, b) => a + b, 0)))).toBeLessThanOrEqual(2);
+    expect(closed).toBe(1);
   });
   test("hm replay run refuses the fixture's counts with E_HM_REPLAY and exit 2", () => {
     const { d } = setup();

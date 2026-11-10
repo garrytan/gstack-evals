@@ -88,7 +88,8 @@
       "tests/harness-mechanics/sessions.test.ts"
     ],
     "lanes/harness-mechanics/judge/**": [
-      "tests/harness-mechanics/hooks.test.ts"
+      "tests/harness-mechanics/hooks.test.ts",
+      "tests/harness-mechanics/replay-clients.test.ts"
     ],
     "src/errors/codes.ts": [
       "tests/errors.test.ts"
@@ -197,6 +198,12 @@
     ],
     "tests/decision-routing/stubs/**": [
       "tests/decision-routing/agent-sdk.test.ts"
+    ],
+    "lanes/harness-mechanics/risky-written.txt": [
+      "tests/harness-mechanics/replay-items.test.ts"
+    ],
+    "tests/harness-mechanics/replay_bridge_driver.py": [
+      "tests/harness-mechanics/replay-clients.test.ts"
     ]
   },
   "guards": [

@@ -15,6 +15,7 @@ import { stepLeases, stepLedger, stepReserve } from "./money.ts";
 import { stepD1Checks } from "./d1.ts";
 import { stepSessionPath } from "./session-path.ts";
 import { stepReplay } from "./replay-fake.ts";
+import { stepReplayClients } from "./replay-dryrun.ts";
 import { stepJudgeHooks } from "./judge-dryrun.ts";
 
 export type StepResult = { pass: boolean; detail: string };
@@ -57,6 +58,7 @@ export const STEPS: Step[] = [
   { name: "d1-checks", units: [5, 6], run: stepD1Checks },
   { name: "d2-session-path", units: [5, 6], run: stepSessionPath },
   { name: "10-replay", units: [8], run: stepReplay },
+  { name: "10-replay-clients", units: [7, 8], run: stepReplayClients },
 ];
 
 export function dryrun(out: string, steps: Step[] = STEPS): { lines: string[]; pass: boolean } {

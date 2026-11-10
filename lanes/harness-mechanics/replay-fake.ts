@@ -37,7 +37,7 @@ export function fixtureItems(): ReplayItem[] {
 export const fixtureText = () => fixtureItems().map((i) => JSON.stringify(i)).join("\n") + "\n";
 
 const truth = (r: ReplayRequest) => /\[truth ([^\]]+)\]/.exec(r.text)![1]!;
-const say = (label: string, score: number | undefined, cost_usd: number, tokens: number, latency_ms: number): Promise<ReplayAnswer> => Promise.resolve({ label, ...(score === undefined ? {} : { score }), cost_usd, tokens, latency_ms });
+const say = (label: string, score: number | undefined, cost_usd: number, tokens: number, latency_ms: number, shown?: Record<string, unknown>): Promise<ReplayAnswer> => Promise.resolve({ label, ...(score === undefined ? {} : { score }), cost_usd, tokens, latency_ms, ...(shown ? { shown } : {}) });
 // The right decision: route's class, or block (deny) unless the truth is allow (not risky).
 const right = (r: ReplayRequest) => { const t = truth(r); return r.point === "route" ? t : t === "allow" || t === "not risky" ? "allow" : r.answers[0]!; };
 const other = (r: ReplayRequest, label: string) => r.answers[(r.answers.indexOf(label) + 1) % r.answers.length]!;
@@ -49,9 +49,9 @@ export function fakeClients(scenario: "clean" | "null"): ReplayClients {
     opus: (r) => say(scenario === "null" && r.point === "risky" ? r.answers[Math.floor(u(r.id, "guess") * r.answers.length)]! : u(r.id, "opus") < 0.08 ? other(r, truth(r)) : truth(r), undefined, 0.001, 500, 700),
     jev: (r) => {
       const d = right(r), unsure = u(r.id, "jev") < 0.25;
-      if (r.point === "route") return say(unsure ? other(r, d) : d, unsure ? 0.4 : 0.9, 0.0001, 200, 40);
+      if (r.point === "route") { const label = unsure ? other(r, d) : d, score = unsure ? 0.4 : 0.9; return say(label, score, 0.0001, 200, 40, { answer: label, confidence: score }); }
       const p = d === "allow" ? (unsure ? 0.55 : 0.15 - 0.1 * u(r.id, "s")) : unsure ? 0.45 : 0.85 + 0.1 * u(r.id, "s");
-      return say(binary(r, p), p, 0.0001, 200, 40);
+      return say(binary(r, p), p, 0.0001, 200, 40, { answer: binary(r, p), score: p });
     },
     p1: (r) => {
       const d = right(r);
@@ -97,7 +97,7 @@ export function stepReplay(out: string): StepResult {
     const r = JSON.parse(readFileSync(join(o, "report.json"), "utf8")) as ReplayReport, bandText = readFileSync(join(o, "band.json"), "utf8"), band = JSON.parse(bandText);
     const dev = jsonl(join(o, "answers-dev.jsonl")), rows = [...dev, ...jsonl(join(o, "answers-held.jsonl"))];
     if (r.band_sha256 !== sha256(bandText) || r.points.some((pt) => JSON.stringify(tune(dev, pt.point).band) !== JSON.stringify(band[pt.point].band))) bad.push(scenario + ": the band is not the one dev alone picks");
-    const spent = rows.reduce((s, x) => s + [x.astra, x.opus, x.jev, x.p1, x.det].reduce((a, y) => a + (y?.cost_usd ?? 0), 0), 0), t = itemTotals(readRows(ledger), item);
+    const spent = rows.reduce((s, x) => s + [x.astra, x.opus, x.jev, x.p1, x.p1g, x.det].reduce((a, y) => a + (y?.cost_usd ?? 0), 0), 0), t = itemTotals(readRows(ledger), item);
     if (t.open || Math.abs(t.settled - toMicros(spent)) > 1 || t.cap !== toMicros(cap)) bad.push(scenario + ": the ledger after one lease is off");
     try { itemCheck(readRows(ledger), item, cap); bad.push(scenario + ": the item would serve a second run"); } catch {}
     const got = r.h3_admission.points.map((x) => x.result);

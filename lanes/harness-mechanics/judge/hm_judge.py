@@ -337,6 +337,17 @@ def _calls(rec):
     return 0 if rec.get("error") == "state_over_limit" else rec.get("retries", 0) + 1
 
 
+def jev_check(seen, err):
+    """Every TypeSafe response's model attribute against the pin: (stop error or None, version, other-version error or None). No
+    readable Jev version, or an answer with no response recorded, stops (E1); another Jev version fails open."""
+    unknown = [v for v in seen if not (isinstance(v, str) and JEV_VERSION.fullmatch(v))]
+    if unknown or (not seen and not err):
+        what = "absent" if not unknown else "missing or not a string" if unknown[-1] is None else repr(unknown[-1])[:80]
+        return STOP_CODE + " the TypeSafe response's model attribute is " + what + ", not a Jev version, so the session stops", None, None
+    bad = [v for v in seen if v != JEV_MODEL]
+    return None, (bad or seen or [None])[-1], ("jev version " + bad[-1] + " is not the pinned " + JEV_MODEL) if bad else None
+
+
 def judge(state, question, backend, band, jev, particle):
     """One judgment call: Jev outside the band acts; inside it particle-1 answers, shown Jev's guess. judge-p1 asks particle-1 only."""
     out = {"backend": backend, "p_jev": None, "escalated": False, "answer": None, "fail_open": False, "error": None,
@@ -352,17 +363,13 @@ def judge(state, question, backend, band, jev, particle):
         jev.versions.clear()
         rec, err, ms = timed(lambda: jev.ask(state, {"q": {"type": "noul", "instructions": question}})["q"], LIMIT_S["jev"])
         add(rec, ms)
-        seen = list(jev.versions)
-        unknown = [v for v in seen if not (isinstance(v, str) and JEV_VERSION.fullmatch(v))]
-        if unknown or (not seen and not err):
-            what = "absent" if not unknown else "missing or not a string" if unknown[-1] is None else repr(unknown[-1])[:80]
-            out.update(stopped=True, error=STOP_CODE + " the TypeSafe response's model attribute is " + what + ", not a Jev version, so the session stops")
+        stop, version, other = jev_check(list(jev.versions), err)
+        if stop:
+            out.update(stopped=True, error=stop)
             return out
-        bad = [v for v in seen if v != JEV_MODEL]
-        if seen:
-            out["jev_version"] = (bad or seen)[-1]
-        if bad:
-            out.update(fail_open=True, error="jev version " + bad[-1] + " is not the pinned " + JEV_MODEL)
+        out["jev_version"] = version
+        if other:
+            out.update(fail_open=True, error=other)
             return out
         if err:
             out.update(fail_open=True, error="jev: " + err)
@@ -394,18 +401,33 @@ def line(point, rule, **kw):
     return rec
 
 
-def done(facts, cfg, band, jev, particle):
-    """The done point after the contract hook allowed the stop: (Claude Code's hook output or None, the log line)."""
+def done_rule(facts):
+    """Section 8's exact rules for the done point: the rule that allows the stop, or None when the hook would ask."""
     if not facts.get("claims_done", True):
-        return None, line("done", "status_not_done")
+        return "status_not_done"
     check = facts.get("check")
     if check and not check.get("is_error") and not any(m in (check.get("output") or "").lower() for m in FAIL_MARKERS):
-        return None, line("done", "last_check_clean")
+        return "last_check_clean"
+    return None
+
+
+def done_state(facts):
+    """What the done question is asked on: the final message's last 2,000 characters, the last check and the last 4,000
+    characters of its output, and the edited files."""
+    check = facts.get("check")
+    return {"final_message": (facts.get("final_text") or "")[-2000:], "last_check_command": check["cmd"] if check else None,
+            "last_check_output": (check.get("output") or "")[-4000:] if check else None, "edited_files": facts.get("edited_files") or []}
+
+
+def done(facts, cfg, band, jev, particle):
+    """The done point after the contract hook allowed the stop: (Claude Code's hook output or None, the log line)."""
+    rule = done_rule(facts)
+    if rule:
+        return None, line("done", rule)
     mark = os.path.join(cfg["state_dir"], "done-blocked")
     if os.path.exists(mark):
         return None, line("done", "after_block")
-    state = {"final_message": (facts.get("final_text") or "")[-2000:], "last_check_command": check["cmd"] if check else None,
-             "last_check_output": (check.get("output") or "")[-4000:] if check else None, "edited_files": facts.get("edited_files") or []}
+    state = done_state(facts)
     j = judge(state, DONE_Q, cfg["backend"], band, jev, particle)
     if j["stopped"]:
         return {"continue": False, "stopReason": j["error"]}, line("done", None, req_digest=digest(state, DONE_Q), **j)
@@ -425,18 +447,29 @@ def _repo_root(cwd):
     return r.stdout.decode().strip() if r.returncode == 0 else cwd
 
 
-def risky(payload, cfg, band, jev, particle):
-    """The risky point on PreToolUse for Bash: (Claude Code's hook output or None, the log line)."""
-    command = str((payload.get("tool_input") or {}).get("command", ""))
-    if listed(command):
-        return None, line("risky", "read_only_list")
-    r = subprocess.run([os.path.expanduser(cfg["careful"])], input=json.dumps(payload).encode(), capture_output=True, timeout=30)
+def risky_rule(payload, careful):
+    """Section 8's lists for the risky point: ("read_only_list", None) allows, ("careful", careful's reason) denies, and
+    (None, None) means the hook would ask."""
+    if listed(str((payload.get("tool_input") or {}).get("command", ""))):
+        return "read_only_list", None
+    r = subprocess.run([os.path.expanduser(careful)], input=json.dumps(payload).encode(), capture_output=True, timeout=30)
     try:
         hso = json.loads(r.stdout.decode() or "{}").get("hookSpecificOutput") or {}
     except ValueError:
         hso = {}
     if hso.get("permissionDecision") in ("ask", "deny"):
-        return _deny(str(hso.get("permissionDecisionReason", ""))), line("risky", "careful", acted=True)
+        return "careful", str(hso.get("permissionDecisionReason", ""))
+    return None, None
+
+
+def risky(payload, cfg, band, jev, particle):
+    """The risky point on PreToolUse for Bash: (Claude Code's hook output or None, the log line)."""
+    command = str((payload.get("tool_input") or {}).get("command", ""))
+    rule, reason = risky_rule(payload, cfg["careful"])
+    if rule == "read_only_list":
+        return None, line("risky", rule)
+    if rule == "careful":
+        return _deny(reason), line("risky", rule, acted=True)
     cwd = payload.get("cwd") or os.getcwd()
     state = {"command": command, "working_directory": cwd, "repository_root": _repo_root(cwd)}
     j = judge(state, RISKY_Q, cfg["backend"], band, jev, particle)

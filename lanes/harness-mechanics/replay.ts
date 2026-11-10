@@ -34,12 +34,17 @@ const POSITIVE: Record<Point, string | null> = { route: null, done: "block", ris
 // tests_pass is the final diff's hidden-test result and text is what the live done hook would see. risky: origin is
 // sampled (with model) or written, and text is the command with its task's working directory.
 export type ReplayItem = { point: Point; id: string; task: string; text: string; source?: string; model?: string; origin?: "sampled" | "written"; tests_pass?: boolean };
-export type ReplayRequest = { point: Point; id: string; task: string; text: string; answers: readonly string[] };
-// score: for done and risky the client's probability of block or deny, for route its confidence in label.
-export type ReplayAnswer = { label: string; score?: number; cost_usd: number; tokens: number; latency_ms?: number };
+// guess: set on particle-1's second request for an item, Jev's guess as the cascade shows it (section 8).
+export type ReplayRequest = { point: Point; id: string; task: string; text: string; answers: readonly string[]; guess?: Record<string, unknown> };
+// score: for done and risky the client's probability of block or deny, for route its confidence in label. rule: one of
+// section 8's exact rules decided, so no backend was asked. fail_open: the backend erred or passed its timeout, so the hook
+// would allow. shown: on a Jev answer the cascade can escalate, Jev's guess as particle-1 is shown it. stop: the run stops
+// (E1, another Jev version) once this call's metered cost is counted.
+export type ReplayAnswer = { label: string; score?: number; cost_usd: number; tokens: number; latency_ms?: number; rule?: string; fail_open?: boolean; shown?: Record<string, unknown>; stop?: string };
 export type ReplayClient = (req: ReplayRequest) => Promise<ReplayAnswer>;
-export type ReplayClients = { astra: ReplayClient; opus: ReplayClient; jev: ReplayClient; p1: ReplayClient; det: ReplayClient };
-export type Row = { id: string; point: Point; task: string; split: Split; astra?: ReplayAnswer; opus?: ReplayAnswer; tests_pass?: boolean; jev: ReplayAnswer; p1: ReplayAnswer; det: ReplayAnswer };
+export type ReplayClients = { astra: ReplayClient; opus: ReplayClient; jev: ReplayClient; p1: ReplayClient; det: ReplayClient; close?: () => Promise<void> };
+// p1g: particle-1's answer shown Jev's guess, on every item whose Jev answer can escalate.
+export type Row = { id: string; point: Point; task: string; split: Split; astra?: ReplayAnswer; opus?: ReplayAnswer; tests_pass?: boolean; jev: ReplayAnswer; p1: ReplayAnswer; p1g?: ReplayAnswer; det: ReplayAnswer };
 export type Dec = { cluster: string; truth: string; label: string; p: number; cost: number; tokens: number; ms: number; esc: boolean };
 export type Counts = { route: number; done: number; risky_sampled: number; risky_written: number };
 
@@ -128,13 +133,18 @@ export function truthOf(r: Row): string | null {
 
 const prob = (point: Point, a: ReplayAnswer) => (typeof a.score === "number" && a.score >= 0 && a.score <= 1 ? a.score : POSITIVE[point] ? (a.label === POSITIVE[point] ? 1 : 0) : 1);
 
-// One backend's decision on a row. The cascade escalates to particle-1 when Jev's score sits inside the band (both calls
-// paid, both latencies added); outside it Jev's own decision stands. A label outside the answer set counts as allow.
+// A Jev answer the cascade can escalate: a backend answer, not an exact rule's and not a fail-open.
+const escalates = (a: ReplayAnswer) => !a.rule && !a.fail_open;
+
+// One backend's decision on a row. The cascade escalates when Jev's answer can escalate and its score sits inside the band,
+// to particle-1 shown Jev's guess (both calls paid, both latencies added); outside it Jev's own decision stands. A label
+// outside the answer set counts as allow.
 export function decide(r: Row, b: Backend, band: Band = null): Dec {
   const base = { cluster: r.task, truth: truthOf(r) ?? "" };
   if (b !== "cascade") { const a = r[b]; return { ...base, label: a.label, p: prob(r.point, a), cost: a.cost_usd, tokens: a.tokens, ms: a.latency_ms ?? 0, esc: false }; }
-  const s = prob(r.point, r.jev), esc = band !== null && band[0] <= s && s <= band[1], a = esc ? r.p1 : r.jev;
-  return { ...base, label: a.label, p: prob(r.point, a), cost: r.jev.cost_usd + (esc ? r.p1.cost_usd : 0), tokens: r.jev.tokens + (esc ? r.p1.tokens : 0), ms: (r.jev.latency_ms ?? 0) + (esc ? r.p1.latency_ms ?? 0 : 0), esc };
+  const s = prob(r.point, r.jev), esc = band !== null && escalates(r.jev) && band[0] <= s && s <= band[1];
+  const g = esc ? r.p1g ?? fail(r.id + " can escalate but has no particle-1 answer shown Jev's guess") : null, a = g ?? r.jev;
+  return { ...base, label: a.label, p: prob(r.point, a), cost: r.jev.cost_usd + (g?.cost_usd ?? 0), tokens: r.jev.tokens + (g?.tokens ?? 0), ms: (r.jev.latency_ms ?? 0) + (g ? g.latency_ms ?? 0 : 0), esc };
 }
 
 // Balanced accuracy: the mean recall over block (or deny) and allow, or over the route classes present.
@@ -245,9 +255,9 @@ const ITEM = "stage2-replay";
 export type Spend = { spent: number; inflightMicros: number; settled: number; worst: number; lease: number };
 
 // Section 22 gives the replay's expected $60 and no per-call figure, so the plan's per-call estimate is $60 over the
-// planned calls: three per done item and five per route or risky item.
-const C = REPLAY.counts;
-export const PER_CALL_USD = REPLAY.expectedUsd / (3 * C.done + 5 * (C.route + C.risky_sampled + C.risky_written));
+// planned calls: four per done item and six per route or risky item (rowOf's most).
+const C = REPLAY.counts, CALLS: Record<Point, number> = { route: 6, done: 4, risky: 6 };
+export const PER_CALL_USD = REPLAY.expectedUsd / (CALLS.done * C.done + CALLS.route * (C.route + C.risky_sampled + C.risky_written));
 
 // The batch stop: settled spend, plus every in-flight reservation, plus the batch's calls at the dearest call seen so
 // far must stay at or under the lease. Before any call has settled, the dearest call is the per-call estimate times m.
@@ -262,23 +272,39 @@ export function preflight(o: RunOpts) {
   itemCheck(readRows(o.ledger), ITEM, CAPS_USD[ITEM]);
 }
 
+// Every promise settles before the first failure is thrown, so each call's metered cost is counted before the lease settles.
+async function settled<T extends unknown[]>(ps: { [K in keyof T]: Promise<T[K]> }): Promise<T> {
+  const rs = await Promise.allSettled(ps), bad = rs.find((r) => r.status === "rejected");
+  if (bad) throw (bad as PromiseRejectedResult).reason;
+  return rs.map((r) => (r as PromiseFulfilledResult<unknown>).value) as T;
+}
+
+// One item's calls: Jev, particle-1 alone and the deterministic version, particle-1 again shown Jev's guess where Jev's
+// answer can escalate, and the two labelers on route and risky items.
 async function rowOf(i: ReplayItem, split: Split, c: ReplayClients, spend: Spend): Promise<Row> {
-  const ask = async (who: keyof ReplayClients, answers: readonly string[]): Promise<ReplayAnswer> => {
+  const ask = async (who: Exclude<keyof ReplayClients, "close">, answers: readonly string[], guess?: Record<string, unknown>): Promise<ReplayAnswer> => {
     const hold = toMicros(dearest(spend)), t0 = performance.now();
     spend.inflightMicros += hold;
-    const a = await c[who]({ point: i.point, id: i.id, task: i.task, text: i.text, answers });
-    spend.inflightMicros -= hold;
+    let a: ReplayAnswer;
+    try { a = await c[who]({ point: i.point, id: i.id, task: i.task, text: i.text, answers, ...(guess ? { guess } : {}) }); } finally { spend.inflightMicros -= hold; }
     if (typeof a?.cost_usd !== "number" || !Number.isFinite(a.cost_usd) || a.cost_usd < 0) fail(who + " answered " + i.id + " without a cost_usd; every call is metered");
     spend.spent += a.cost_usd;
     spend.worst = Math.max(spend.worst, a.cost_usd);
     spend.settled++;
-    return { label: String(a.label), ...(typeof a.score === "number" ? { score: a.score } : {}), cost_usd: a.cost_usd, tokens: Number(a.tokens) || 0, latency_ms: a.latency_ms ?? performance.now() - t0 };
+    if (a.stop) fail(who + " stopped the run on " + i.id + ": " + a.stop);
+    return { label: String(a.label), ...(typeof a.score === "number" ? { score: a.score } : {}), cost_usd: a.cost_usd, tokens: Number(a.tokens) || 0, latency_ms: a.latency_ms ?? performance.now() - t0,
+      ...(a.rule ? { rule: String(a.rule) } : {}), ...(a.fail_open ? { fail_open: true } : {}), ...(a.shown ? { shown: a.shown } : {}) };
   };
-  const [jev, p1, det] = await Promise.all((["jev", "p1", "det"] as const).map((b) => ask(b, DECISIONS[i.point])));
-  const base = { id: i.id, point: i.point, task: i.task, split, jev: jev!, p1: p1!, det: det! };
-  if (i.point === "done") return { ...base, tests_pass: i.tests_pass };
-  const [astra, opus] = await Promise.all([ask("astra", LABELS[i.point]), ask("opus", LABELS[i.point])]);
-  return { ...base, astra, opus };
+  const D = DECISIONS[i.point], L = LABELS[i.point];
+  const cascade = ask("jev", D).then(async (jev) => {
+    if (!escalates(jev)) return { jev };
+    if (!jev.shown) fail("jev answered " + i.id + " with no guess for particle-1 to be shown");
+    return { jev, p1g: await ask("p1", D, jev.shown) };
+  });
+  const labels = i.point === "done" ? Promise.resolve(null) : settled<[ReplayAnswer, ReplayAnswer]>([ask("astra", L), ask("opus", L)]);
+  const [{ jev, p1g }, p1, det, lab] = await settled<[{ jev: ReplayAnswer; p1g?: ReplayAnswer }, ReplayAnswer, ReplayAnswer, [ReplayAnswer, ReplayAnswer] | null]>([cascade, ask("p1", D), ask("det", D), labels]);
+  const base = { id: i.id, point: i.point, task: i.task, split, jev, p1, ...(p1g ? { p1g } : {}), det };
+  return lab ? { ...base, astra: lab[0], opus: lab[1] } : { ...base, tests_pass: i.tests_pass };
 }
 
 // HM.concurrent items at a time. A batch that fails the batch stop ends the run before its first call, incomplete and
@@ -286,9 +312,9 @@ async function rowOf(i: ReplayItem, split: Split, c: ReplayClients, spend: Spend
 async function collect(items: ReplayItem[], split: Map<string, Split>, c: ReplayClients, spend: Spend): Promise<Row[]> {
   const rows: Row[] = [];
   for (let k = 0; k < items.length; k += HM.concurrent) {
-    const batch = items.slice(k, k + HM.concurrent), calls = batch.reduce((s, i) => s + (i.point === "done" ? 3 : 5), 0);
+    const batch = items.slice(k, k + HM.concurrent), calls = batch.reduce((s, i) => s + CALLS[i.point], 0);
     if (!batchFits(spend, calls)) fail("cap stop: $" + spend.spent.toFixed(2) + " settled, $" + (spend.inflightMicros / 1_000_000).toFixed(2) + " in flight and " + calls + " more calls at up to $" + dearest(spend).toFixed(4) + " each would pass the lease of $" + spend.lease + "; the replay is incomplete and is never retried");
-    rows.push(...(await Promise.all(batch.map((i) => rowOf(i, split.get(i.id)!, c, spend)))));
+    rows.push(...(await settled<Row[]>(batch.map((i) => rowOf(i, split.get(i.id)!, c, spend)))));
   }
   return rows;
 }
@@ -315,6 +341,7 @@ export async function runReplay(o: RunOpts): Promise<ReplayReport> {
     writeJsonl(join(o.out, "answers-held.jsonl"), await collect(part("held"), split, o.clients, spend));
   } finally {
     ledger.settle(id, toMicros(spend.spent));
+    await o.clients.close?.();
   }
   return replayReport(o.out);
 }

@@ -35,7 +35,8 @@ export function journalCheck(path: string): JournalCheck {
   return { pass: custody_hits === 0, custody_hits, marker_hits, detail: custody_hits + " custody hit(s), " + marker_hits + " marker hit(s) logged" };
 }
 
-class MemLedger implements ReservationLedger {
+/** An in-memory ReservationLedger that grants every reserve: for a proxy whose spend another ledger bounds. */
+export class MemLedger implements ReservationLedger {
   private held = new Map<string, Reservation>();
   async reserve(r: { idempotency_key: string; lease_id: string; cell: CellAttempt; max_micros: number }): Promise<LedgerReply> {
     const reservation: Reservation = { reservation_id: "res_" + (this.held.size + 1), ...r, state: "reserved", spent_micros: null, usage: null };

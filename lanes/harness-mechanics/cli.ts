@@ -8,7 +8,7 @@ import { l1Main } from "../../quick/laneb/l1/l1.ts";
 import { admission, readFitRows, report, type HmRowIn, type ReportConfig } from "./analyze.ts";
 import { dryrun } from "./dryrun.ts";
 import { harborEnvRecord } from "./arms.ts";
-import { CLOSING, REPO } from "./pins.ts";
+import { CLOSING, REPO, sha256 } from "./pins.ts";
 import { HM_PROFILE } from "./plans.ts";
 import { patternsCommand } from "./score.ts";
 import { approve, doneCheck, isItem, launchGuard, markDone, type HmCrew, type Item } from "./money.ts";
@@ -19,7 +19,7 @@ import { screenCommand, screenVm } from "./screen.ts";
 import { buildHmTable } from "./table.ts";
 import { countProblems, itemsFromEnv, replayReport, runReplay } from "./replay.ts";
 
-const USAGE = "E_USAGE usage: hm dryrun --out <dir> | prepare <work> --item <item> | host-up|attach|recover|host-down <work> | launch|relaunch|rerun <work> --part <part> | approve --ledger <jsonl> --item <item> --usd <cap> --approved-by <who> | done --ledger <jsonl> --item <item> [--work <work>] | guard <work> | screen --out <dir> | fit --out <dir> [--only <task>] | build-check --out <dir> [--list calibration|scored] [--shard k/n] | fit-vm start|status|finish <work> | screen-vm start|finish <work> | table <config.json> <out.jsonl> | patterns <job dir>... | admission <stage1 table.jsonl> [--fit <fit rows.jsonl> --fit-sha256 <sha256>] [--out <dir>] | report <table.jsonl> <config.json> <out dir> | replay items | replay run --clients <module.ts> --start <file> --ledger <jsonl> --out <dir> | replay report <out dir>";
+const USAGE = "E_USAGE usage: hm dryrun --out <dir> | prepare <work> --item <item> | host-up|attach|recover|host-down <work> | launch|relaunch|rerun <work> --part <part> | approve --ledger <jsonl> --item <item> --usd <cap> --approved-by <who> | done --ledger <jsonl> --item <item> [--work <work>] | guard <work> | screen --out <dir> | fit --out <dir> [--only <task>] | build-check --out <dir> [--list calibration|scored] [--shard k/n] | fit-vm start|status|finish <work> | screen-vm start|finish <work> | table <config.json> <out.jsonl> | patterns <job dir>... | admission <stage1 table.jsonl> [--fit <fit rows.jsonl> --fit-sha256 <sha256>] [--out <dir>] | report <table.jsonl> <config.json> <out dir> | replay items | replay build --config <json> --out <file> | replay run --clients <module.ts> --start <file> --ledger <jsonl> --out <dir> | replay report <out dir>";
 const readTable = (p: string) => readFileSync(p, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as HmRowIn);
 // HM_SIMS cuts power.py's Monte Carlo for keyless tests; the report runs power.py's own 2,000 without it.
 const sims = () => (process.env.HM_SIMS ? Number(process.env.HM_SIMS) : undefined);
@@ -103,6 +103,18 @@ export async function main(argv: string[]): Promise<number> {
         return 0;
       }
       if (sub === "report" && rest[1]) { console.log("h3_admission " + JSON.stringify(replayReport(resolve(rest[1])).h3_admission)); return 0; }
+      if (sub === "build") {
+        const config = opt("config"), out = opt("out");
+        if (!config || !out) throw new Error(USAGE);
+        const { buildItemsFromConfig } = await import("./replay-items.ts");
+        const items = buildItemsFromConfig(JSON.parse(readFileSync(resolve(config), "utf8")));
+        const bad = countProblems(items);
+        if (bad.length) throw new Error("E_HM_REPLAY counts: " + bad.join("; "));
+        const text = items.map((i) => JSON.stringify(i)).join("\n") + "\n";
+        writeFileSync(resolve(out), text);
+        console.log("wrote " + resolve(out) + ": " + items.length + " items at the preregistered counts, sha256 " + sha256(text));
+        return 0;
+      }
       throw new Error(USAGE);
     }
     if (cmd === "table") {
