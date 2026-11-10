@@ -17,6 +17,7 @@ import { PF_STAGES, serveStages } from "../driver/stage.ts";
 import { LocalLedger } from "../../../src/runner/ledger/local.ts";
 import { readItem } from "../../../src/runner/ledger/record.ts";
 import { usd } from "../../../src/runner/ledger/money.ts";
+import { countedInputTokens, countPlan } from "../../../src/runner/pricing/input-count.ts";
 import { priceRequest, reservationMicros } from "../../../src/runner/pricing/prices.ts";
 import { UPSTREAM } from "../../../src/runner/proxy/metering-proxy.ts";
 import { sse } from "../../../quick/laneb/runner/fake_upstream.ts";
@@ -120,27 +121,35 @@ export const WRAP_BYTES = 560_000;
 
 /** Section 13's largest request: a 200k-token context, about 700 KB of request body at 3.5 bytes a token. */
 export const CEILING_BYTES = 700_000;
+export const CEILING_TOKENS = 200_000;
 /** The pinned Claude Code runs up to 20 subagents at once unless CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS says otherwise. */
 export const SUBAGENTS_DEFAULT = 20;
 /** Section 15's concurrency line. The metering proxy refuses a call when its slot's settled spend, plus the worst cases
  *  of its calls still in flight, plus the new call's worst case would pass the allowance, so calls in flight at once can
  *  stop a session that has spent little. A subagent started in the background leaves the main loop free to call, so a
  *  session can hold the main loop's call and one per subagent in flight. Each allowance must hold that many calls at
- *  the worst case of one request at the ceiling, priced as the proxy prices it. */
+ *  the worst case of one request at the ceiling, priced as the proxy prices it: at its free input count (countPlan, a
+ *  count of CEILING_TOKENS with the plan's margins), and at the byte bound the proxy falls back to when a count fails or
+ *  its route has overrun a count. */
 export function concurrencyCheck(env: Readonly<Record<string, string>>) {
   const inflight = 1 + Number(env.CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS ?? SUBAGENTS_DEFAULT);
   const output = Number(env.CLAUDE_CODE_MAX_OUTPUT_TOKENS);
   const models = MODELS.map((model) => {
+    const provider = model === OPUS ? "anthropic" : "openrouter";
     const body = { model, max_tokens: output, system: [{ type: "text", text: "", cache_control: { type: "ephemeral" } }], tools: [{ name: "Bash", description: "", input_schema: { type: "object" } }], messages: [{ role: "user", content: "" }] };
     body.messages[0]!.content = "x".repeat(CEILING_BYTES - Buffer.byteLength(JSON.stringify(body)));
-    const worst = reservationMicros(priceRequest(model === OPUS ? "anthropic" : "openrouter", body, output, "/v1/messages"));
+    const price = priceRequest(provider, body, output, "/v1/messages");
+    const byte = reservationMicros(price);
+    const plan = countPlan(provider, "/v1/messages", body, price);
+    const tokens = plan ? countedInputTokens(plan, CEILING_TOKENS, price.inputTokens) : null;
+    const counted = tokens === null ? byte : reservationMicros({ ...price, inputTokens: tokens });
     const arms: PfArm[] = model === OPUS ? ["P", "C", "N", "blind"] : ["P", "C", "N"];
     const allowances = [...arms.map((arm) => ({ slot: arm + " task", usd: sessionLimits(arm, model).task.allowance_usd })), { slot: "wrap-up", usd: sessionLimits("P", model).wrapup.allowance_usd }];
-    return { model, worst_micros: worst, allowances: allowances.map((a) => ({ ...a, holds: Math.floor((a.usd * 1_000_000) / worst) })) };
+    return { model, counter: plan?.counter ?? null, counted_tokens: tokens, counted_micros: counted, byte_micros: byte, allowances: allowances.map((a) => ({ ...a, holds: Math.floor((a.usd * 1_000_000) / counted), holds_bytes: Math.floor((a.usd * 1_000_000) / byte) })) };
   });
-  const ok = models.every((m) => m.allowances.every((a) => a.holds >= inflight));
-  const detail = inflight + " calls in flight (the main loop and " + (inflight - 1) + " subagents); worst case of one call at a " + CEILING_BYTES + "-byte request with " + output + " output tokens: " +
-    models.map((m) => m.model + " " + usd(m.worst_micros) + ", " + m.allowances.map((a) => a.slot + " $" + a.usd.toFixed(2) + " holds " + a.holds).join(", ")).join("; ");
+  const ok = models.every((m) => m.allowances.every((a) => a.holds >= inflight && a.holds_bytes >= inflight));
+  const detail = inflight + " calls in flight (the main loop and " + (inflight - 1) + " subagents); worst case of one call with " + output + " output tokens, counted at " + CEILING_TOKENS + " input tokens where the route has a free count, and at the byte fallback of a " + CEILING_BYTES + "-byte request: " +
+    models.map((m) => m.model + " " + (m.counter ? usd(m.counted_micros) + " counted (" + m.counter + ", " + m.counted_tokens + " tokens)" : "no count on its route") + ", " + usd(m.byte_micros) + " byte fallback, " + m.allowances.map((a) => a.slot + " $" + a.usd.toFixed(2) + " holds " + a.holds + (m.counter ? " counted, " + a.holds_bytes + " at bytes" : "")).join(", ")).join("; ");
   return { ok, inflight, models, detail };
 }
 export interface StubSession {

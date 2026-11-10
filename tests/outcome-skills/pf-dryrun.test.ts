@@ -72,12 +72,21 @@ test("the concurrency line: each allowance holds the worst case of one call at a
   const now = concurrencyCheck(CLAUDE_ENV);
   expect(now.inflight).toBe(3);
   expect(now.ok).toBe(true);
-  const holds = (model: string) => Object.fromEntries(now.models.find((m) => m.model === model)!.allowances.map((a) => [a.slot, a.holds]));
-  expect(now.models.filter((m) => m.model !== P1).map((m) => m.worst_micros)).toEqual([4_145_320, 3_985_320]);
-  expect(holds(OPUS)).toEqual({ "P task": 3, "C task": 3, "N task": 3, "blind task": 3, "wrap-up": 3 });
-  expect(holds(SOL)).toEqual({ "P task": 3, "C task": 3, "N task": 3, "wrap-up": 3 });
-  expect(holds(P1)).toEqual({ "P task": 48, "C task": 48, "N task": 29, "wrap-up": 4 });
+  const holds = (model: string, key: "holds" | "holds_bytes") => Object.fromEntries(now.models.find((m) => m.model === model)!.allowances.map((a) => [a.slot, a[key]]));
+  expect(now.models.map((m) => [m.model, m.counter, m.counted_tokens, m.counted_micros, m.byte_micros])).toEqual([
+    [OPUS, "anthropic", 204_064, 1_660_320, 4_145_320],
+    [SOL, "openai", 210_048, 845_120, 3_985_320],
+    [P1, null, null, 102_107, 102_107],
+  ]);
+  expect(holds(OPUS, "holds")).toEqual({ "P task": 7, "C task": 7, "N task": 7, "blind task": 9, "wrap-up": 7 });
+  expect(holds(SOL, "holds")).toEqual({ "P task": 14, "C task": 14, "N task": 14, "wrap-up": 14 });
+  expect(holds(P1, "holds")).toEqual({ "P task": 48, "C task": 48, "N task": 29, "wrap-up": 4 });
+  expect(holds(OPUS, "holds_bytes")).toEqual({ "P task": 3, "C task": 3, "N task": 3, "blind task": 3, "wrap-up": 3 });
+  expect(holds(SOL, "holds_bytes")).toEqual({ "P task": 3, "C task": 3, "N task": 3, "wrap-up": 3 });
+  expect(holds(P1, "holds_bytes")).toEqual(holds(P1, "holds"));
   expect(now.detail).toContain("3 calls in flight");
+  expect(now.detail).toContain("counted at 200000 input tokens");
+  expect(now.detail).toContain("byte fallback");
   const { CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: _, ...unset } = CLAUDE_ENV;
   expect(concurrencyCheck(unset)).toMatchObject({ inflight: 21, ok: false });
   expect(concurrencyCheck({ ...CLAUDE_ENV, CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: "3" })).toMatchObject({ inflight: 4, ok: false });

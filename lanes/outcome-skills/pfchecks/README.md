@@ -217,8 +217,10 @@ cold first wrap-up request at a 160k-token stub context, about 560 KB, then the 
 write; each line fails if either request is at the 1h cache-write rate), W4 (the first wrap-up answer reports 95% of its
 request's worst case, so the proxy refuses the next) and hostile (a tree holding CLAUDE.md, refused before any slot, gap
 E_PF_ARM with one attempt). A line with no session prices one request at section 13's 200k-token ceiling (700,000
-bytes, 32,000 output tokens) per model as the proxy prices it, and fails unless every task and wrap-up allowance holds
-that worst case once for each call a session can hold in flight: the main loop plus CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS
+bytes, 32,000 output tokens) per model as the proxy prices it, twice: at its free input count (input-count.ts
+countPlan and countedInputTokens on a count of 200,000 tokens; particle-1's route has none) and at the byte bound the
+proxy falls back to. It fails unless every task and wrap-up allowance holds both worst cases once for each call a
+session can hold in flight: the main loop plus CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS
 (ARM_ENV sets 2; the pinned Claude Code's default is 20). effort.json comes from batch 1's proxy records, and every session after it is checked against
 it. The first Bash call of probe (P), B (C), C (N) and blind runs the PATH probe: the line passes only when, as root and as
 uid 1000, every arm's PATH is /opt/pf-tools/bin then the image's own PATH, bun resolves to /opt/pf-tools/bin/bun, and
