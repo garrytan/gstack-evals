@@ -13,7 +13,7 @@ import { readFileSync } from "node:fs";
 
 export const HELP = `Usage: gstack-evals outcome serve --run <id> --envelope-host <machine id> --stage <item>=<arm> [--stage ...]
            --host <ip> --dir <run dir> [--planned 24] [--reruns 2] [--control-port <n>] [--ttl-hours 72]
-           [--ledger <path>] [--ledger-record <dir>] [--pf-allowance <json file>] [--registry <arms file>]
+           [--ledger <path>] [--ledger-record <dir>] [--pf-allowance <json file>] [--registry <arms file>] [--lift-halt <session id>[,<session id>]]
 A family SM stage is --stage <item>=<model>@<arm>,<arm>: one lease on the item for that model, serving each named SM arm
 at its per-model allowance, with a proxy that refuses provider-side tools.
 A PF stage is --stage <pf item>=pf:<arm>,pf:<arm> (pf:P, pf:C, pf:N, or pf:blind on pf-blind): one lease on the item for
@@ -25,6 +25,8 @@ control plane on 127.0.0.1 that real_agent's U4 mode opens and closes sessions o
 stage= line per stage, serves until POST /stop, SIGTERM or SIGINT, and settles every lease on every exit path.
 --registry names the arms file the driver reads each arm's limits from (default: arms/registry.json); real_agent's
 arms_path must name the same file. Provider keys come from its environment as the proxy reads them. Guide: wiki/plans/2026-11-04-geva-286-u4-session-driver.
+A family SM session that closes with its proxy finalize failed halts its item (E_SM_FINALIZE_HALT); --lift-halt names the
+sessions whose halt the Captain ruled on, after reading the proxy journal, so the launch serves the item again.
 
 Usage: gstack-evals outcome images pin --out <manifest.json> --set <name> --commit <sha> <task dir>...
        gstack-evals outcome images check <manifest.json> --sha256 <hex>
@@ -60,7 +62,7 @@ export async function main(argv: string[]): Promise<number> {
   }
   const flags = new Map<string, string>();
   const stages: StageSpec[] = [];
-  const allowed = new Set(["--run", "--envelope-host", "--stage", "--host", "--dir", "--planned", "--reruns", "--control-port", "--ttl-hours", "--ledger", "--ledger-record", "--pf-allowance", "--registry"]);
+  const allowed = new Set(["--run", "--envelope-host", "--stage", "--host", "--dir", "--planned", "--reruns", "--control-port", "--ttl-hours", "--ledger", "--ledger-record", "--pf-allowance", "--registry", "--lift-halt"]);
   for (let i = 0; i < rest.length; i += 2) {
     const [k, v] = [rest[i]!, rest[i + 1]];
     if (!allowed.has(k) || v === undefined) {
@@ -120,6 +122,7 @@ export async function main(argv: string[]): Promise<number> {
       ttl_ms: ttlHours === undefined ? undefined : Math.round(ttlHours * 3_600_000),
       ...(pfAllowance ? { pf_allowance: pfAllowance } : {}),
       registry,
+      ...(flags.has("--lift-halt") ? { lift_halts: flags.get("--lift-halt")!.split(",") } : {}),
     });
     console.log("control=" + served.control);
     for (const s of served.stages) console.log("stage=" + s.item + " arm=" + s.arm + " lease=" + s.lease_id + " reserved=" + s.reserved_micros + " proxy=" + s.proxy);

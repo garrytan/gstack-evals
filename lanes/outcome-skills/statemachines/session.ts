@@ -53,12 +53,12 @@ export function endKind(o: { termination: string | null; refusals?: string[]; al
   return "infra";
 }
 
-/** The end kind and unpriced spend of one session from real_agent's real-summary.json, whose proxy block copies the driver's close answer. A harness failure is infra whatever the block holds, and so is a block with no field set, which real_agent writes when no close answer came, and so is a close answer whose proxy finalize failed (finalized false), whose counts are unknown; otherwise refusals must be the close answer's array of refusal codes, and allowance_stops and unknown_micros numbers, or the session is refused, so an allowance stop is never read as an upstream end. */
+/** The end kind and unpriced spend of one session from real_agent's real-summary.json, whose proxy block copies the driver's close answer. A harness failure is infra whatever the block holds, and so is a block with no field set, which real_agent writes when no close answer came. A close answer whose proxy finalize failed (finalized false) ends limit_allowance when it still names an allowance stop (allowance_stops above 0), so a real stop is scored as is and never spends again, and infra otherwise, since its counts are unknown (the driver's own close path then reports allowance_stops null and halts the item). Otherwise refusals must be the close answer's array of refusal codes, and allowance_stops and unknown_micros numbers, or the session is refused, so an allowance stop is never read as an upstream end. */
 export function sessionEnd(summary: { termination?: string | null; proxy?: Record<string, any> | null } | null, harness: boolean): { end: EndKind; unknown_micros: number } {
   const p = summary?.proxy ?? {};
   if (!summary || harness) return { end: "infra", unknown_micros: typeof p.unknown_micros === "number" ? p.unknown_micros : 0 };
   if (Object.values(p).every((v) => v === null || v === undefined)) return { end: "infra", unknown_micros: 0 };
-  if (p.finalized === false) return { end: "infra", unknown_micros: typeof p.unknown_micros === "number" ? p.unknown_micros : 0 };
+  if (p.finalized === false) return { end: typeof p.allowance_stops === "number" && p.allowance_stops > 0 ? "limit_allowance" : "infra", unknown_micros: typeof p.unknown_micros === "number" ? p.unknown_micros : 0 };
   if (!Array.isArray(p.refusals) || !p.refusals.every((c: unknown) => typeof c === "string")) return smFail("E_SM_ARM", "real-summary.json's proxy.refusals is " + JSON.stringify(p.refusals) + ", not the close answer's array of refusal codes");
   if (typeof p.unknown_micros !== "number") return smFail("E_SM_ARM", "real-summary.json's proxy.unknown_micros is " + JSON.stringify(p.unknown_micros) + ", not the close answer's number");
   if (typeof p.allowance_stops !== "number") return smFail("E_SM_ARM", "real-summary.json's proxy.allowance_stops is " + JSON.stringify(p.allowance_stops) + ", not the close answer's number");
@@ -81,6 +81,8 @@ export interface SessionRecord {
   turns: number | null; spent_micros: number | null; unknown_micros: number; end: EndKind; attempt: 1 | 2;
   questions: { ask_user_question: number; prose: number }; runtime_id: string; disallowed_tools: string[]; env: { CLAUDE_CODE_DISABLE_BUNDLED_SKILLS: "1" };
   strip: { removed: string[] }; memory_loaded: string[]; tree_patch: { path: string; sha256: string } | null; transcript: string;
+  /** A3 only: the file digest of the /qa home the image build copied into /root (image.ts qaHomeCopy); null in every other arm. */
+  qa_home_sha256: string | null;
   exposure: Record<string, unknown>; reads: { inputs: number; gstack: number; drive: number };
 }
 

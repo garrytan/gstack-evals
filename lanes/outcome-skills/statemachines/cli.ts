@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { CODES, docAnchor, isReasonCode } from "../../../src/errors/codes.ts";
 import { draw, readPrereg, type Draw, type DrawUnit } from "./draw.ts";
 import { hiddenMarkdown, hiddenUnit, inSourceUnits, staticCounts, type HiddenRecord } from "./hidden.ts";
-import { oracleUnit, oracleWalk, Pacer } from "./oracle.ts";
+import { oracleUnit, oracleWalk, Pacer, treeVolume } from "./oracle.ts";
 import { sample } from "./sample.ts";
 import { screen } from "./screen.ts";
 import { fetchMultiLang, manifestSize, pinCandidates, readRows, splitCandidates, type Candidate } from "./source.ts";
@@ -20,6 +20,10 @@ import { scoreFirst, type OutcomeRecord, type ScoreInput } from "./score.ts";
 import { planPart, refuseUnscored, type PlannedSession, type SessionRecord } from "./session.ts";
 import { LANGS, type Lang } from "./langs.ts";
 import { dryrun, type DryrunConfig } from "./dryrun.ts";
+import { assertContained, containImage, type ContainCheck } from "./contain.ts";
+import { buildSessionImage } from "./image.ts";
+import { docker } from "../../real-outcome/task/docker.ts";
+import { loadRegistry, REGISTRY_PATH } from "../arms/registry.ts";
 import { assertBlind, AXES, judgeFor, judgeKey, judgePacket, LABELLERS, labelledQueue, labelledSet, labelPacket, r78Check, r78Price, readJudgeAnswer, readLabelAnswer, stockDiffs, type JudgePacket, type R78Labelled, type R78Row } from "./packets.ts";
 import { foundIt, laterFix, whatChanged } from "./secondary.ts";
 
@@ -61,6 +65,12 @@ export const HELP = `gstack-evals outcome sm <command>
                                                      per unit, model and tree: replicate means, the 2-of-3 keep rule,
                                                      first-stage gaps (sm-outcome.v1 records in --firsts), inherited fixes
                                                      and drift counts
+  contain --unit <dir> --out <file> [--record <run record>] [--qa-home <dir>] [--tree-patch <file>]
+                                                     the containment check before sm-admit: builds the unit's first-stage
+                                                     image (with --qa-home, A3's too, at registry.json's /qa pin; with
+                                                     --tree-patch, a follow-on) and checks refs, objects, object stores and
+                                                     the files outside the repo; one record line per image and check;
+                                                     any failure exits with E_SM_CONTAIN and the unit halts
   dryrun --config <config.json> --out-dir <dir> [--from <case>]
                                                      section 18's scorer cases on real units, one PASS or FAIL line each,
                                                      stopping at the first miss; ends DRYRUN: ok
@@ -324,6 +334,37 @@ export async function main(argv: string[]): Promise<number> {
       if (attempt !== 1 && attempt !== 2) throw new Error("E_USAGE --attempt is 1 or 2");
       const res = runSession({ unitDir: need(f, "--unit"), session, control: need(f, "--control"), proxy: need(f, "--proxy"), out: need(f, "--out"), attempt, ...(f.has("--first") ? { first: f.get("--first")! } : {}), ...(f.has("--qa-home") ? { qaHome: f.get("--qa-home")! } : {}), ...(f.has("--qa-sha") ? { qaSha: f.get("--qa-sha")! } : {}), ...(f.has("--harbor") ? { harbor: f.get("--harbor")! } : {}) });
       console.log("session=" + session.cell + " end=" + res.record.end + " image=" + res.image.image_id + " lease=" + res.record.lease_id + " harbor_exit=" + res.harbor_exit + " record=" + join(need(f, "--out"), "session.json"));
+      return 0;
+    }
+    if (sub === "contain") {
+      const { f } = flags(rest, ["--unit", "--out", "--record", "--qa-home", "--tree-patch"]);
+      const dir = need(f, "--unit");
+      const u = readUnit(dir);
+      const qaPin = f.has("--qa-home") ? (loadRegistry(REGISTRY_PATH).sm?.pins?.qa?.sha ?? (() => { throw new Error("E_SM_ARM A3's image needs the /qa pin recorded in registry.json sm.pins.qa"); })()) : undefined;
+      const builds: Array<{ image: "first" | "qa" | "followon"; o: Parameters<typeof buildSessionImage>[1] }> = [
+        { image: "first", o: { volume: treeVolume(u.id), stage: "first" } },
+        ...(f.has("--qa-home") ? [{ image: "qa" as const, o: { volume: treeVolume(u.id), stage: "first" as const, qaHome: f.get("--qa-home")! } }] : []),
+        ...(f.has("--tree-patch") ? [{ image: "followon" as const, o: { volume: treeVolume(u.id), stage: "followon" as const, treePatch: readFileSync(f.get("--tree-patch")!, "utf8") } }] : []),
+      ];
+      const images = builds.map((b) => {
+        const img = buildSessionImage(u, b.o);
+        try {
+          return { image: b.image, head: img.head, ...containImage(img, u, dir, b.image === "qa" ? qaPin : undefined) };
+        } finally {
+          docker(["image", "rm", "-f", img.tag], { timeoutMs: 120_000 });
+        }
+      });
+      const ok = images.every((i) => i.ok);
+      writeNew(need(f, "--out"), { schema: "sm-contain.v1", unit: u.id, ok, images });
+      for (const i of images) {
+        for (const check of ["refs", "objects", "stores", "scan"] as ContainCheck[]) {
+          const c = i.checks[check];
+          const line = { event: "sm_contain", unit: u.id, image: i.image, head: i.head, check, ok: c.ok, findings: c.findings, ...(check === "scan" ? { archives: i.archives.length, archive_paths: i.archives } : {}) };
+          if (f.has("--record")) appendFileSync(f.get("--record")!, JSON.stringify(line) + "\n");
+          console.log("contain unit=" + u.id + " image=" + i.image + " check=" + check + " " + (c.ok ? "ok" : "fail findings=" + c.findings.length) + (check === "scan" ? " archives=" + i.archives.length : ""));
+        }
+      }
+      for (const i of images) assertContained(u.id + " (" + i.image + " image)", i);
       return 0;
     }
     if (sub === "dryrun") {
