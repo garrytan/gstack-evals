@@ -3,7 +3,7 @@
 // sets in seeded order (seed 20261108), quotas first, from audited units only, with the units digest; and the drop step
 // that removes any candidate or unit matching a list of (repository, commit) pairs, for the counts-only custody opening
 // against the sealed T-G and H task lists.
-//   er sets calibration|comparison|reserve --work <custody dir> --out <sets.json> [--write]
+//   er sets calibration|comparison|reserve --work <custody dir> --out <sets.json> [--write] [--floor <type>=<n> --ruling <text>]
 //   er sets drop --work <custody dir> --pairs <file> [--candidates <mine.json> ...]
 // The rules: 16 calibration units, 4 a type, only from units whose keys exist; then 56 comparison units, aiming at 14 a
 // type and holding at least 10 of each; then 6 reserve units. At most 4 units a repository for mobile and consumer and
@@ -18,6 +18,10 @@
 // - Supply stops (section 16, item 9) raise E_ER_SUPPLY_SHORT: a type short of 4 calibration units, a type short of 10
 //   comparison units, or fewer than 48 comparison units in all. Transposed units are not built here, so the stop goes
 //   to the Captain, who decides whether transposition fills a type.
+// - A Captain ruling may lower one type's floor for one draw instead: --floor <type>=<n>, with n from 1 to one under the
+//   frozen floor, and --ruling with the ruling's words. That type then needs n units and every other type the frozen
+//   floor; quotas, seeded order, caps and the 48-unit minimum are unchanged. The set file records the override and the
+//   ruling text.
 // - The units digest is sha256 over the set's sorted lines "id, sha256 of unit.json, plan.md and key.json, and the
 //   repo/ tree hash", after --write records set and rank.
 // - drop matches a repository case-insensitively and a commit of at least 7 hex as a prefix of the unit's merge or base
@@ -53,8 +57,14 @@ export interface PoolUnit {
 const byOrder = (a: PoolUnit, b: PoolUnit) => (order(a.id) < order(b.id) ? -1 : 1);
 const holds = (a: PoolUnit, b: PoolUnit) => a.aftermath.includes(b.merge_sha) || b.aftermath.includes(a.merge_sha);
 
+export interface FloorOverride {
+  type: ProjectType;
+  floor: number;
+  ruling: string;
+}
+
 /** One draw from the pool: units already in a set are skipped but count toward the caps and the aftermath rule. */
-export function draw(what: Draw, pool: readonly PoolUnit[]): PoolUnit[] {
+export function draw(what: Draw, pool: readonly PoolUnit[], override?: FloorOverride): PoolUnit[] {
   const size = SIZES[what];
   const taken = pool.filter((u) => isDrawn(u));
   const free = pool.filter((u) => !taken.includes(u)).sort(byOrder);
@@ -68,8 +78,9 @@ export function draw(what: Draw, pool: readonly PoolUnit[]): PoolUnit[] {
     }
   }
   const counts = PROJECT_TYPES.map((t) => t + " " + chosen.filter((u) => u.type === t).length).join(", ");
-  const short = PROJECT_TYPES.filter((t) => chosen.filter((u) => u.type === t).length < size.floor);
-  if (short.length) throw new PvError("E_ER_SUPPLY_SHORT", "the " + what + " set needs at least " + size.floor + " units of each type; " + short.join(" and ") + " fall short (" + counts + ")");
+  const floor = (t: ProjectType) => (override?.type === t ? override.floor : size.floor);
+  const short = PROJECT_TYPES.filter((t) => chosen.filter((u) => u.type === t).length < floor(t));
+  if (short.length) throw new PvError("E_ER_SUPPLY_SHORT", "the " + what + " set needs at least " + size.floor + " units of each type" + (override ? " (" + override.type + " " + override.floor + " by ruling)" : "") + "; " + short.join(" and ") + " fall short (" + counts + ")");
   for (const u of free) {
     if (chosen.length >= size.total) break;
     if (!chosen.includes(u) && fits(u)) chosen.push(u);
@@ -113,11 +124,11 @@ export function readPairs(text: string): Pair[] {
 
 export const matches = (pairs: readonly Pair[], repo: string, shas: readonly string[]) => pairs.some((p) => p.repo === repo.toLowerCase() && shas.some((s) => s.toLowerCase().startsWith(p.commit)));
 
-const USAGE = "er sets calibration|comparison|reserve --work <custody dir> --out <sets.json> [--write] | er sets drop --work <custody dir> --pairs <file> [--candidates <mine.json> ...]";
+const USAGE = "er sets calibration|comparison|reserve --work <custody dir> --out <sets.json> [--write] [--floor <type>=<n> --ruling <text>] | er sets drop --work <custody dir> --pairs <file> [--candidates <mine.json> ...]";
 
 export function run(argv: string[], io: Io, o: { custodyRoot?: string; head?: string } = {}): number {
   const [what, ...rest] = argv;
-  const a = parseArgs(rest, { work: "one", out: "one", write: "flag", pairs: "one", candidates: "many" }, USAGE);
+  const a = parseArgs(rest, { work: "one", out: "one", write: "flag", pairs: "one", candidates: "many", floor: "one", ruling: "one" }, USAGE);
   need(a, ["work"], USAGE);
   const work = custody(a.one.work!, o.custodyRoot);
   const units = join(work, "units");
@@ -147,15 +158,23 @@ export function run(argv: string[], io: Io, o: { custodyRoot?: string; head?: st
   need(a, ["out"], USAGE);
   refuseInRepo("--out", a.one.out!);
   if (existsSync(a.one.out!)) throw new PvError("E_USAGE", a.one.out + " exists; each set is drawn once");
+  let override: FloorOverride | undefined;
+  if (a.one.floor !== undefined || a.one.ruling !== undefined) {
+    const m = /^([a-z]+)=([0-9]+)$/.exec(a.one.floor ?? "");
+    const type = m?.[1] as ProjectType, floor = Number(m?.[2]), ruling = (a.one.ruling ?? "").trim();
+    if (!m || !PROJECT_TYPES.includes(type) || floor < 1 || floor >= SIZES[what as Draw].floor || !ruling)
+      throw new PvError("E_USAGE", "--floor <type>=<n> names one type and a number from 1 to one under the frozen floor (" + SIZES[what as Draw].floor + "), and --ruling gives the ruling's words; usage: " + USAGE);
+    override = { type, floor, ruling };
+  }
   const pool: PoolUnit[] = ids.filter((id) => !auditProblems(join(units, id)).length).map((id) => {
     const m = readJson(join(units, id, "unit.json")) as UnitMeta;
     return { id, type: m.type, repo: m.repo, set: m.set, merge_sha: m.merge_sha, aftermath: m.aftermath ?? [], rank: m.rank };
   });
-  const chosen = draw(what as Draw, pool);
+  const chosen = draw(what as Draw, pool, override);
   if (a.flag.has("write")) chosen.forEach((u, i) => put(join(units, u.id, "unit.json"), { ...(readJson(join(units, u.id, "unit.json")) as UnitMeta), set: what, rank: i + 1 }));
   const digest = unitsDigest(units, chosen.map((u) => u.id));
   const counts = Object.fromEntries(PROJECT_TYPES.map((t) => [t, chosen.filter((u) => u.type === t).length]));
-  writeJson(a.one.out!, { seed: "20261108", head: o.head ?? pinnedHead(), set: what, pool: pool.length, drawn: chosen.map((u, i) => ({ rank: i + 1, id: u.id, type: u.type })), counts, units_digest: digest, written: a.flag.has("write") });
-  io.out("er sets " + what + ": " + chosen.length + " drawn from " + pool.length + " audited units (" + PROJECT_TYPES.map((t) => t + " " + counts[t]).join(", ") + "); units digest " + digest);
+  writeJson(a.one.out!, { seed: "20261108", head: o.head ?? pinnedHead(), set: what, pool: pool.length, drawn: chosen.map((u, i) => ({ rank: i + 1, id: u.id, type: u.type })), counts, units_digest: digest, written: a.flag.has("write"), ...(override ? { floor_override: override } : {}) });
+  io.out("er sets " + what + ": " + chosen.length + " drawn from " + pool.length + " audited units (" + PROJECT_TYPES.map((t) => t + " " + counts[t]).join(", ") + "); units digest " + digest + (override ? "; " + override.type + " floor " + override.floor + " by ruling" : ""));
   return 0;
 }

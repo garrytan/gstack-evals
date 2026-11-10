@@ -187,8 +187,10 @@ tests/er drives each in both directions.
 16. Sets: audited means unit.json, a classifier label and a primary item neither generic nor mentioned. Pilot units may
     be drawn. Quotas take each type's first units in seeded order (sha256("20261108\n" + id)); the comparison set's free
     places take the next units of any type. E_ER_SUPPLY_SHORT stops a draw with a type short of 4 calibration or 10
-    comparison units, or under 48 comparison units in all; transposition is the Captain's call. The units digest is
-    sha256 over the sorted lines of id and the hashes of unit.json, plan.md, key.json and the repo/ tree.
+    comparison units, or under 48 comparison units in all; transposition is the Captain's call. A Captain ruling may
+    instead lower one type's floor for one draw (--floor <type>=<n> --ruling <text>), and the set file records both.
+    The units digest is sha256 over the sorted lines of id and the hashes of unit.json, plan.md, key.json and the
+    repo/ tree.
 17. Drop: a repository matches case-insensitively and a commit of at least 7 hex as a prefix of the merge or base
     commit. Matched units are deleted; matched candidates become ineligible. Counts only.
 18. Candidate diffs: a merge commit's diff is taken against its first parent, its pull request's net change, as a

@@ -73,6 +73,18 @@ describe("er sets (section 4)", () => {
     expect(draw("comparison", pool({ mobile: 12, consumer: 12, server: 12, devtools: 12 }))).toHaveLength(48);
     expect(() => draw("comparison", pool({ mobile: 11, consumer: 12, server: 12, devtools: 12 }))).toThrow(/under 48/);
   });
+  test("a ruled floor override lowers only the named type's floor; without one the draw still stops", () => {
+    const ruling = { type: "mobile" as ProjectType, floor: 9, ruling: "test ruling" };
+    const short = pool({ mobile: 9, consumer: 20, server: 20, devtools: 20 });
+    expect(() => draw("comparison", short)).toThrow(/E_ER_SUPPLY_SHORT.*mobile fall short/);
+    const c = draw("comparison", short, ruling);
+    expect(c).toHaveLength(56);
+    expect(c.filter((u) => u.type === "mobile")).toHaveLength(9);
+    expect(() => draw("comparison", pool({ mobile: 8, consumer: 20, server: 20, devtools: 20 }), ruling)).toThrow(/mobile 9 by ruling.*mobile fall short/);
+    expect(() => draw("comparison", pool({ mobile: 9, consumer: 9, server: 20, devtools: 20 }), ruling)).toThrow(/; consumer fall short/);
+    const met = pool({ mobile: 12, consumer: 20, server: 20, devtools: 20 });
+    expect(draw("comparison", met, ruling).map((u) => u.id)).toEqual(draw("comparison", met).map((u) => u.id));
+  });
   test("reserve: the next 6; units already in a set never return but count toward caps", () => {
     const p = pool({ mobile: 3, consumer: 3, server: 3, devtools: 3 });
     Object.assign(p[0]!, { set: "comparison", rank: 1 });
@@ -141,5 +153,33 @@ describe("er sets (section 4)", () => {
     expect(sets(["drop", "--work", work, "--pairs", join(t.dir, "pairs.txt")], d.io, { custodyRoot: root })).toBe(0);
     expect(d.out[0]).toBe("er sets drop: 1 pairs read, 1 units removed, 0 candidates made ineligible");
     expect(existsSync(join(work, "units", "er-mobile-0"))).toBe(false);
+  });
+  test("--floor with --ruling writes the override and the ruling's words into the set file; bad overrides are refused", () => {
+    const root = join(t.dir, "shm-floor");
+    const work = join(root, "work");
+    let k = 0;
+    for (const [ty, count] of [["mobile", 3], ["consumer", 5], ["server", 5], ["devtools", 5]] as [ProjectType, number][])
+      for (let i = 0; i < count; i++) {
+        const id = "er-f" + ty + "-" + i;
+        const u = join(work, "units", id);
+        mkdirSync(u, { recursive: true });
+        buildRepo(join(u, "repo"), [{ name: "a", message: "base", date: "2026-07-01T00:00:00Z", files: { "f.txt": id } }]);
+        writeFileSync(join(u, "unit.json"), JSON.stringify({ id, set: "pilot", type: ty, repo: "o/" + id, merge_sha: (++k).toString(16).padStart(8, "0") + "bb", base_sha: "b", aftermath: [] }));
+        writeFileSync(join(u, "plan.md"), "plan");
+        writeFileSync(join(u, "classify.json"), JSON.stringify({ type: ty }));
+        writeFileSync(join(u, "key.json"), JSON.stringify({ unit: id, items: [{ id: "k1", generic: false, mentioned: false }], primary: ["k1"] }));
+      }
+    const go = (out: string, ...extra: string[]) => sets(["calibration", "--work", work, "--out", join(t.dir, out), ...extra], capture().io, { custodyRoot: root, head: "test" });
+    expect(() => go("f0.json")).toThrow(/E_ER_SUPPLY_SHORT/);
+    expect(existsSync(join(t.dir, "f0.json"))).toBe(false);
+    for (const bad of [["--floor", "mobile=3"], ["--ruling", "words"], ["--floor", "mobile=4", "--ruling", "words"], ["--floor", "mobile=0", "--ruling", "words"], ["--floor", "phone=3", "--ruling", "words"], ["--floor", "mobile=3,server=3", "--ruling", "words"], ["--floor", "mobile=3", "--ruling", " "]])
+      expect(() => go("bad.json", ...bad)).toThrow(/E_USAGE/);
+    const c = capture();
+    expect(sets(["calibration", "--work", work, "--out", join(t.dir, "f1.json"), "--floor", "mobile=3", "--ruling", "A (test): mobile at 3"], c.io, { custodyRoot: root, head: "test" })).toBe(0);
+    const out = JSON.parse(readFileSync(join(t.dir, "f1.json"), "utf8"));
+    expect(out.floor_override).toEqual({ type: "mobile", floor: 3, ruling: "A (test): mobile at 3" });
+    expect(out.counts.mobile).toBe(3);
+    expect(out.drawn).toHaveLength(16);
+    expect(c.out[0]).toMatch(/mobile floor 3 by ruling$/);
   });
 });
