@@ -45,7 +45,7 @@ export function neutralEdit(lang: Lang, text: string, mode: NeutralMode): string
 
 /** The fix with its in-source test hunks left out: fix-source.patch when prep split the fix, else fix.patch, the same
  *  choice oracle.ts oneRun makes for its fixed runs. */
-export const fixSourcePatch = (dir: string): string => readFileSync(join(dir, existsSync(join(dir, "fix-source.patch")) ? "fix-source.patch" : "fix.patch"), "utf8");
+export const fixSourcePatch = (dir: string): string => readFileSync(join(dir, existsSync(join(dir, "fix-source.patch")) ? "fix-source.patch" : "fix.patch"), "latin1");
 export const unitTestFiles = (dir: string): Set<string> => new Set(patchFiles(readFileSync(join(dir, "test.patch"), "utf8")));
 
 /** The files the neutral edit touches: the non-test source files the fix changes that exist at base. */

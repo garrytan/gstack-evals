@@ -250,7 +250,7 @@ function agentscope(c: FixtureCtx): UnitFixture {
     "checks/changed.sh": 'g() { git -c safe.directory="*" "$@"; }; ! g diff --quiet "$(g rev-list --max-parents=0 HEAD)" -- ' + FIX + "\n",
     "checks/sync.sh": '[ "$(sha256sum ' + FIX + ' | cut -c1-64)" = "' + c.baseSha(FIX) + '" ] || { echo "verify-tools is out of sync with the code: resync"; exit 1; }; ' + MVN + "PFReplayTest\n",
     "checks/built.sh": '[ -n "$(find ' + MOD + "/target/classes/io/agentscope/extensions/model/anthropic/formatter/AnthropicToolsHelper.class -newer " + FIX + ' 2>/dev/null)" ] || { echo "the helper is not built"; exit 1; }; ' + MVN + "PFReplayTest\n",
-    ...verifyFiles("workspace/verify-tools", "verify-tools"),
+    ...verifyFiles("openspec/verify-tools", "verify-tools"),
   };
   return {
     files,
@@ -271,11 +271,11 @@ function agentscope(c: FixtureCtx): UnitFixture {
       { role: "nothing", command: "ls -la", want: "names_nothing" },
       { role: "static", command: MVN + "PFStaticTest", want: "catch" },
       { role: "sync", command: "bash checks/sync.sh", want: "no_catch" },
-      { role: "late", command: MVN + "PFLateTest", want: "names_nothing" },
-      { role: "tlc", command: tlc("workspace/verify-tools"), want: "no_catch" },
+      { role: "late", command: "mvn -o -q -pl " + MOD + " integration-test -Dtest=PFLateTest", want: "names_nothing" },
+      { role: "tlc", command: tlc("openspec/verify-tools"), want: "no_catch" },
     ],
     late: { path: DIR + "PFLateTest.java", text: jTest("PFLateTest", [], []) },
-    verify: Object.keys(verifyFiles("workspace/verify-tools", "verify-tools")).sort(),
+    verify: Object.keys(verifyFiles("openspec/verify-tools", "verify-tools")).sort(),
     compile: {
       files: {
         [DIR + "PFPkgTest.java"]: jTest("PFPkgTest", [assertTrue], ['assertTrue(parallelOff(), "parallel tool calls set to false left parallel tool use on");'], true),

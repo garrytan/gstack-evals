@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { fixSourcePatch } from "../../lanes/outcome-skills/pfchecks/neutral.ts";
 import { buildTrees, git, show, withoutFiles } from "../../lanes/outcome-skills/pfchecks/trees.ts";
 
 const g = (d: string, ...a: string[]) => spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...a], { cwd: d, encoding: "utf8" }).stdout;
@@ -63,4 +64,25 @@ test("rust: hunks wholly inside a test module stay, product hunks go back, mixed
   const tm = buildTrees({ repo: m.d, ref: "HEAD", lang: "rust", testFiles: new Set(), fixPatch: m.patch, neutral: { mode: "end", files: [] } });
   expect(tm.plan.mixed_hunks).toBe(1);
   expect(show(m.d, tm.parent, "src/lib.rs")).toBe(base);
+});
+test("a fix with bytes outside ASCII lands byte for byte in the fix tree, read the way scoring reads it", () => {
+  const base = { "a.go": "package a\n// caf\u00e9 au lait\nfunc F() int { return 1 }\n", "README.md": "x\n" };
+  const fixed = { "a.go": "package a\n// caf\u00e9 au lait\nfunc F() int { return 2 } // two \u2014 not one\n" };
+  const { d, patch } = repo(base, fixed, { "README.md": "y\n" });
+  const unit = mkdtempSync(join(tmpdir(), "pf-unit-"));
+  writeFileSync(join(unit, "fix-source.patch"), patch);
+  const t = buildTrees({ repo: d, ref: "HEAD", lang: "go", testFiles: new Set(), fixPatch: fixSourcePatch(unit), neutral: N });
+  expect(t.gap).toBeNull();
+  expect(Buffer.from(show(d, t.fix!, "a.go"), "latin1").equals(Buffer.from(fixed["a.go"], "utf8"))).toBe(true);
+  expect(Buffer.from(show(d, t.parent, "a.go"), "latin1").equals(Buffer.from(base["a.go"], "utf8"))).toBe(true);
+});
+test("a fix that adds bytes outside ASCII next to ASCII context lands byte for byte too", () => {
+  const base = { "a.go": "package a\nfunc F() int { return 1 }\n", "README.md": "x\n" };
+  const fixed = { "a.go": "package a\n// set \u2014 and \u00e9\nfunc F() int { return 2 }\n" };
+  const { d, patch } = repo(base, fixed, { "README.md": "y\n" });
+  const unit = mkdtempSync(join(tmpdir(), "pf-unit-"));
+  writeFileSync(join(unit, "fix-source.patch"), patch);
+  const t = buildTrees({ repo: d, ref: "HEAD", lang: "go", testFiles: new Set(), fixPatch: fixSourcePatch(unit), neutral: N });
+  expect(t.gap).toBeNull();
+  expect(Buffer.from(show(d, t.fix!, "a.go"), "latin1").toString("hex")).toBe(Buffer.from(fixed["a.go"], "utf8").toString("hex"));
 });
