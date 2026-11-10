@@ -117,7 +117,7 @@ export async function main(argv: string[]): Promise<number> {
 
   // The hostile tree: the unit's prepared tree with a CLAUDE.md in its one commit, every ref moved to it.
   const hostileVol = "pf-dry-unit-hostile-" + process.pid;
-  const hv = spawnSync("docker", ["run", "--rm", "--network", "none", "--user", "0:0", "-v", volume + ":/s:ro", "-v", hostileVol + ":/d", "--entrypoint", "sh", image, "-c", 'cp -a /s/. /d/ && cd /d && printf "%s\\n" "$0" > CLAUDE.md && git -c safe.directory=/d add -f CLAUDE.md && git -c safe.directory=/d -c user.name=fixture -c user.email=fixture@example.invalid commit -q --amend --no-edit && for r in $(git -c safe.directory=/d for-each-ref --format="%(refname)"); do git -c safe.directory=/d update-ref "$r" HEAD; done', HOSTILE], { encoding: "utf8" });
+  const hv = spawnSync("docker", ["run", "--rm", "--network", "none", "--user", "0:0", "-v", volume + ":/s:ro", "-v", hostileVol + ":/d", "--entrypoint", "sh", image, "-c", 'cp -a /s/. /d/ && cd /d && printf "%s\\n" "$0" > CLAUDE.md && git -c safe.directory=/d add -f CLAUDE.md && git -c safe.directory=/d -c user.name=fixture -c user.email=fixture@example.invalid commit -q --amend --no-edit && for r in $(git -c safe.directory=/d for-each-ref --format="%(refname)"); do git -c safe.directory=/d update-ref "$r" HEAD; done && rm -f .git/ORIG_HEAD .git/FETCH_HEAD && git -c safe.directory=/d reflog expire --expire=now --all && git -c safe.directory=/d gc -q --prune=now', HOSTILE], { encoding: "utf8" });
   if (hv.status !== 0) {
     spawnSync("docker", ["volume", "rm", "-f", hostileVol]);
     throw new Error("hostile volume: " + hv.stderr);
