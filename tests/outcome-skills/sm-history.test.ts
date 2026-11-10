@@ -6,7 +6,8 @@ import { join } from "node:path";
 import { fixtureRepo, gitOut } from "../../lanes/outcome-skills/statemachines/fixtures.ts";
 import { importsOf, prepareBase, prepareFollowOn, preflight, stripPlan } from "../../lanes/outcome-skills/statemachines/history.ts";
 import { buildSessionImage } from "../../lanes/outcome-skills/statemachines/image.ts";
-import { PY_IMAGE } from "../../lanes/outcome-skills/statemachines/testrun.ts";
+import { startTree } from "../../lanes/outcome-skills/statemachines/followon.ts";
+import { dropVolume, PY_IMAGE } from "../../lanes/outcome-skills/statemachines/testrun.ts";
 import type { SmUnit } from "../../lanes/outcome-skills/statemachines/unit.ts";
 
 const files = {
@@ -123,6 +124,25 @@ describe.skipIf(process.env.GSTACK_EVALS_DOCKER !== "1")("session image on a run
     expect(() => buildSessionImage(unit(tag.vol), { volume: tree.two, stage: "first" })).toThrow(/^E_SM_HISTORY .*has 2 commits, not 1/);
     expect(anon()).toEqual(before);
   }, 300_000);
+  const treeLook = (v: string) => d(["run", "--rm", "--network", "none", "-v", v + ":/w", "--entrypoint", "sh", tag.git, "-c", "cd /w && git config --global --add safe.directory '*' && echo \"STATUS[$(git status --porcelain)]\" && git rev-list --all --count && ls -A"]).stdout.trim().split("\n");
+  const firstStage = "diff --git a/b.txt b/b.txt\nnew file mode 100644\nindex 0000000..1700d02\n--- /dev/null\n+++ b/b.txt\n@@ -0,0 +1 @@\n+first stage\n";
+  for (const [kind, t, mnt] of [["no volume", "plain", []], ["a VOLUME inside the repo dir", "vol", ["mnt_tmp"]]] as const) {
+    test("follow-on start trees on an image with " + kind + ": S0 is the base tree's one commit and A1 adds the first stage as commit two, with the untracked file cleaned" + (mnt.length ? ", the mount point kept out of git clean and no anonymous volume left" : ", as before"), () => {
+      const before = anon();
+      const u = unit(tag[t]);
+      const vols = { S0: "sm-test-start-s0-" + t + "-" + pid, A1: "sm-test-start-a1-" + t + "-" + pid };
+      try {
+        expect(startTree(u, u.image.runtime_id!, tree.one, "S0", "", vols.S0).commits).toBe(1);
+        expect(treeLook(vols.S0)).toEqual(["STATUS[]", "1", ".git", "a.txt", ...mnt]);
+        expect(startTree(u, u.image.runtime_id!, tree.one, "A1", firstStage, vols.A1).commits).toBe(2);
+        expect(treeLook(vols.A1)).toEqual(["STATUS[]", "2", ".git", "a.txt", "b.txt", ...mnt]);
+      } finally {
+        dropVolume(vols.S0);
+        dropVolume(vols.A1);
+      }
+      expect(anon()).toEqual(before);
+    }, 300_000);
+  }
   test("an image whose volume path already holds files fails closed, since every session's volume would start with them", () => {
     const before = anon();
     expect(() => buildSessionImage(unit(tag.full), { volume: tree.one, stage: "first" })).toThrow(/^E_SM_HISTORY .*SM_MOUNT_NOT_EMPTY mnt_tmp/);

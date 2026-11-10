@@ -489,6 +489,10 @@ model or unit (E_SM_PACKET).
   one still holds files after the copy. The build container goes with docker rm -f -v, and harbor run gets --delete
   (compose down --volumes), so neither a failed build nor a session leaves an anonymous volume. With no such mount the
   build runs the same commands as before.
+- The same mount point in the follow-on start tree (pre-data build change, 2026-11-10, followon.ts startTree): its git
+  clean runs in a runtime-image container, failed on a VOLUME under repo_dir (cthackers__adm-zip-559: /testbed/mnt_tmp)
+  and stopped every follow-on on the unit with E_SM_HISTORY. It now keeps those mount points out of git clean the same
+  way. With no such mount it runs the same commands as before.
 - A run builds nothing when a rebuild command exits non-zero (rebuild_failed), when the print command reads report paths
   and none of them holds a fresh file (no_fresh_report), or when a stale file could not be moved aside (stale_unhidden).
   The parser does not run then, and the run parses nothing. A test command's own exit never sets it. Every one of the

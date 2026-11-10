@@ -129,10 +129,11 @@ export function readCreated(records: Array<{ type: string; content?: unknown }>,
 // ---- Trees and start sets (Docker) ----
 
 /** A follow-on tree in volume dst, built as the session image builds it: a copy of the base tree volume, git clean, and
- *  for A1 and S2 the first stage's patch committed as commit two by sh/followon.sh. */
+ *  for A1 and S2 the first stage's patch committed as commit two by sh/followon.sh. A volume the runtime image declares
+ *  inside repo_dir is mounted in the container, so its mount point stays out of git clean, which cannot remove it. */
 export function startTree(u: SmUnit, image: string, baseVolume: string, tree: Tree, treePatch: string, dst: string): { commits: number; head: string } {
   copyVolume(image, baseVolume, dst, "root");
-  const script = 'cd "$1" && git config --global --add safe.directory "*" 2>/dev/null; git clean -fdq && { [ "$3" = S0 ] || bash "$2/followon.sh" "$1" "$2" >&2; } && echo "COMMITS $(git rev-list --all --count)" && echo "HEAD $(git rev-parse HEAD)"';
+  const script = 'cd "$1" && git config --global --add safe.directory "*" 2>/dev/null; ex=(); while read -r _ _ _ _ m _; do case "$m" in "$1"/*) ex+=(-e "/${m#"$1"/}/");; esac; done < /proc/self/mountinfo; git clean -fdq "${ex[@]}" && { [ "$3" = S0 ] || bash "$2/followon.sh" "$1" "$2" >&2; } && echo "COMMITS $(git rev-list --all --count)" && echo "HEAD $(git rev-parse HEAD)"';
   const r = runBash({ kind: "docker", image, volume: dst, repoDir: u.repo_dir, name: runName("start-tree") }, script, { "tree.patch": treePatch, "followon.sh": sh("followon.sh") }, [tree]);
   const commits = Number((r.stdout.match(/^COMMITS (\d+)$/m) ?? [])[1]), head = (r.stdout.match(/^HEAD ([0-9a-f]{40})$/m) ?? [])[1] ?? "";
   if (r.status !== 0 || commits !== (tree === "S0" ? 1 : 2) || !head) smFail("E_SM_HISTORY", u.id + ": the " + tree + " follow-on tree has " + (commits || "no") + " commits (exit " + r.status + ": " + r.stderr.trim().slice(-300) + ")");
