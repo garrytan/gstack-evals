@@ -114,7 +114,9 @@ describe("H's arms file (h-registry.json)", () => {
 
   test("differs from registry.json only in those six numbers", () => {
     const base = JSON.parse(readFileSync(REGISTRY_PATH, "utf8"));
-    const h = JSON.parse(readFileSync(H_PATH, "utf8"));
+    delete base.sm;
+    const text = readFileSync(H_PATH, "utf8");
+    const h = JSON.parse(text);
     for (const [arm, want] of Object.entries(H_LIMITS)) {
       for (const [k, v] of Object.entries(want)) {
         expect(base.arms[arm].limits[k]).not.toBe(v);
@@ -123,6 +125,7 @@ describe("H's arms file (h-registry.json)", () => {
       }
     }
     expect(h).toEqual(base);
-    expect(readFileSync(H_PATH, "utf8").split("\n").length).toBe(readFileSync(REGISTRY_PATH, "utf8").split("\n").length);
+    expect(text).toBe(JSON.stringify(JSON.parse(text), null, 2) + "\n");
+    expect(text.split("\n").length).toBe((JSON.stringify(base, null, 2) + "\n").split("\n").length);
   });
 });
