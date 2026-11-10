@@ -441,6 +441,40 @@ model or unit (E_SM_PACKET).
   scores below 0; false-fail rate the share of good-labelled diffs it scores below 0. On this label set both judges
   agree by construction, so the literal rates are 1 and 0 (open point). (Reported.)
 
+## The paid sender for packets (send.ts, GST-1959)
+
+`sm packets send --item sm-labels|sm-judges --run <id> --packets <dir> --out <dir>` is the paid step for the packets
+above. It leases its own item through the ledger (openLease, settleLease) and sends each call through an in-process
+metering proxy, one slot per call, as the product-value meter and noloss judge-run do. The stage driver cannot serve
+these two items: neither names a session model, sm-labels pays for two models, and a driver stage takes one model and
+counts sessions.
+
+- Readers. Labels: GPT-6 Astra and Opus 5.5 each answer every label packet. Judges: the key's frozen judge (Astra for
+  Opus runs, Opus for Sol and particle-1 runs), plus every judge whose queue (queue-astra.json, queue-opus.json, from
+  `sm packets queue`) names the packet; an R78 labelled item must be in both queues. Each judge sends its queue in
+  order, then its other packets by id, and the two readers take turns.
+- The prompt is the packet's body as JSON, the exact text its id digests. A packet that no longer matches its digest, or
+  has no key, is refused before anything is opened (E_SM_PACKET). The routes and request shape are judge.ts's
+  (JUDGE_ROUTE, judgeRequest, JUDGE_REASONING_EFFORT on OpenAI), with a 1,500-token output cap.
+- Each call's allowance is the prereg's per-call bound priced from prices.ts (r78Price: Astra $0.275, Opus $0.11). Before
+  each call the lease's room (reserved, less held, less what calls in flight may still spend) must hold that allowance,
+  as the driver's open checks a session's. A call that does not fit cap-stops the item: the stop is written to the
+  record, nothing more is sent, and the lease closes with cap_stop, so the ledger admits no new lease (CAP_STOP).
+- Before any call: no recorded cap is E_LEDGER_MISSING; a cap-stopped item, or one with nothing left, is CAP_STOP; an
+  item bound to another run is E_ITEM_BOUND.
+- The proxy reserves input at one token per request byte, so a request body over about 15,900 bytes (Astra) or 19,900
+  bytes (Opus) does not fit the per-call allowance. The proxy refuses it before any send, and the call is an allowance
+  stop (E_ALLOWANCE) for that packet and reader, recorded and never sent again. On a 5xx the proxy retries only while
+  the allowance holds another worst case.
+- Each reply goes through the readers `sm packets read` uses. A malformed one is recorded (E_SM_JUDGE_ANSWER) with its
+  raw text and never asked again: the prereg allows no re-ask.
+- An upstream failure is recorded (UPSTREAM) and stops the send. The lease settles by the ledger's rules: a 4xx releases
+  the reservation, a lost send keeps it as unknown, and a 5xx without usage is charged. A rerun with the same --run and
+  --out sends only calls with no record; a call that a stopped send sent but never recorded is recorded as lost and
+  never sent again.
+- --out holds replies.jsonl (a send line before each call, then one reply line per call with packet, reader, model,
+  outcome, code, why, answer, raw and micros), raw/<reader>/<packet>.txt and each lease's proxy journal.
+
 
 ## Stale report readings (reports.ts, testrun.ts)
 

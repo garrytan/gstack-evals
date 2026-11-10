@@ -22,6 +22,7 @@ import { LANGS, type Lang } from "./langs.ts";
 import { dryrun, type DryrunConfig } from "./dryrun.ts";
 import { assertBlind, AXES, judgeFor, judgeKey, judgePacket, LABELLERS, labelledQueue, labelledSet, labelPacket, r78Check, r78Price, readJudgeAnswer, readLabelAnswer, stockDiffs, type JudgePacket, type R78Labelled, type R78Row } from "./packets.ts";
 import { foundIt, laterFix, whatChanged } from "./secondary.ts";
+import { sendPackets } from "./send.ts";
 
 export const HELP = `gstack-evals outcome sm <command>
   source fetch --cache <dir>                         download the pinned MultiLang parquet files and check their sha256
@@ -78,6 +79,10 @@ export const HELP = `gstack-evals outcome sm <command>
                                                      minted once and reused on a rerun; ids are the labelled packets and the real ones
   packets r78 --real <rows.json> --labelled <rows.json> --out <file>  the R78 check (a Astra, b Opus); labelled rows add kind, axis
   packets r78-price                                   the sm-judges calls priced at the per-call bound, against the item cap
+  packets send --item sm-labels|sm-judges --run <id> --packets <dir> --out <dir> [--record <dir>] [--ledger <file>] [--concurrency 4]
+                                                     the paid step: each packet to its readers (labels: Astra and Opus;
+                                                     judges: the key's judge, and both on queued items), one call each on
+                                                     the item's own lease at the per-call bound; replies.jsonl in --out
   secondary --unit <dir> --patch <arm.patch> [--outcome <outcome.json>] [--tree <base dir>] [--clone <dir>] --out <file>
                                                      section 10's keyless secondaries: found it, what it changed and, with
                                                      a local clone, later-fix overlap
@@ -423,6 +428,12 @@ export async function main(argv: string[]): Promise<number> {
         console.log("sm-judges calls " + Object.entries(p.calls).map(([k, v]) => k + "=" + v).join(" ") + " bound in=" + p.bound.input_tokens + " out=" + p.bound.output_tokens + " per_call astra=" + p.per_call_usd.astra.toFixed(4) + " opus=" + p.per_call_usd.opus.toFixed(4));
         console.log("sm-judges usd=" + p.usd.toFixed(2) + " cap=" + p.cap_usd + " fits=" + p.fits);
         return p.fits ? 0 : 1;
+      }
+      if (what === "send") {
+        const { f } = flags(r, ["--item", "--run", "--packets", "--out", "--record", "--ledger", "--concurrency"]);
+        const s = await sendPackets({ item: need(f, "--item"), run_id: need(f, "--run"), packets: need(f, "--packets"), out: need(f, "--out"), record: f.get("--record"), ledger: f.get("--ledger"), concurrency: Number(f.get("--concurrency") ?? 4) });
+        console.log("send item=" + s.item + " run=" + s.run_id + " lease=" + (s.lease_id ?? "none") + " sent=" + s.sent + " " + Object.entries(s.counts).map(([k, v]) => k + "=" + v).join(" ") + " spent_micros=" + s.spent_micros + " unknown_micros=" + s.unknown_micros + " replies=" + s.replies);
+        return 0;
       }
       console.log(HELP.split("\n").filter((l, k, a) => /^  packets/.test(l) || (/^ {14}/.test(l) && a.slice(0, k).reverse().find((x) => /^  \S/.test(x))?.startsWith("  packets"))).join("\n"));
       return what === undefined || what === "--help" ? (what ? 0 : 2) : 2;
