@@ -162,7 +162,8 @@ describe("input-token counts for the reservation", () => {
       ["zero", counted(0)],
       ["fraction", counted(1.5)],
       ["text", () => new Response("not json")],
-      ["slow", (_url, init) => new Promise<Response>((_, reject) => init.signal!.addEventListener("abort", () => reject(new Error("aborted"))))],
+      ["slow", () => new Promise<Response>(() => {})],
+      ["slow body", () => new Response(new ReadableStream({ start() {} }))],
     ];
     for (const [name, count] of failures) {
       const t = setup({ count, extra: { countTimeoutMs: 50 } });
