@@ -21,8 +21,9 @@ import { closeOpenSessions, cutShort, meterFigures } from "../../../src/runner/l
 import { isTrialNetworkHost, MeteringProxy, reconcileJournal, type RetryBudget } from "../../../src/runner/proxy/metering-proxy.ts";
 import { loadRegistry, type Registry } from "../arms/registry.ts";
 import { isSmArm, smArm, smLimits, smProvider } from "../statemachines/arms.ts";
+import { ITEMS } from "../statemachines/items.ts";
 import { sessionLimits, type PfArm } from "../pfchecks/arms.ts";
-import { ALLOWANCE, ITEMS, MODEL_ITEM, MODELS, type Arm } from "../pfchecks/items.ts";
+import { ALLOWANCE, ITEMS as PF_ITEMS, MODEL_ITEM, MODELS, type Arm } from "../pfchecks/items.ts";
 import { PfError } from "../pfchecks/prereg.ts";
 import { EFFORT_KEYS } from "../pfchecks/session.ts";
 
@@ -36,7 +37,7 @@ const PF_TOLD = ["pf:P", "pf:C", "pf:N"];
 export const PF_STAGES: Record<string, { models: readonly string[]; arms: string[] }> = {
   "pf-admit": { models: MODELS, arms: PF_TOLD },
   ...Object.fromEntries(Object.entries(MODEL_ITEM).map(([model, item]) => [item, { models: [model], arms: PF_TOLD }])),
-  "pf-blind": { models: [ITEMS["pf-blind"]!.model!], arms: ["pf:blind"] },
+  "pf-blind": { models: [PF_ITEMS["pf-blind"]!.model!], arms: ["pf:blind"] },
 };
 
 export interface StageSpec {
@@ -102,18 +103,20 @@ export interface CloseAnswer {
   /** How many of the session's calls had no recorded cost at the close: the calls unknown_micros holds for. */
   unknown_calls: number;
   usage: { input_tokens: number; output_tokens: number; cache_read_input_tokens: number; cache_creation_input_tokens: number };
-  requests: number;
-  ok_responses: number;
-  refused: number;
+  /** False when the proxy's finalize failed: then the proxy's counts below are null, not 0, and the session ends as infra. */
+  finalized: boolean;
+  requests: number | null;
+  ok_responses: number | null;
+  refused: number | null;
   /** The distinct reason codes of the proxy's refusals (E_ALLOWANCE, E_PROXY_SERVER_TOOL and so on), so a session's end kind can tell an allowance stop. */
-  refusals: string[];
+  refusals: string[] | null;
   /** Refusals at the slot's allowance check, the proxy's only allowance stop; the end kind reads this, never the E_ALLOWANCE code. */
-  allowance_stops: number;
+  allowance_stops: number | null;
   /** PF sessions only: the effort and thinking fields (pfchecks session.ts EFFORT_KEYS) of the slot's first request with a tools list, as its metering proxy recorded them, or null when it sent none. */
   first_request?: Record<string, unknown> | null;
-  unknown: number;
-  undrained: number;
-  unsettled: number;
+  unknown: number | null;
+  undrained: number | null;
+  unsettled: number | null;
 }
 
 interface Session {
@@ -282,6 +285,8 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
     }
     if (!st.model || !st.arms?.length || st.arms.some((a) => !isSmArm(reg, a)) || new Set(st.arms.map((a) => smArm(reg, a).kind === "told")).size !== 1) fail("E_USAGE", "SM stage " + st.item + " needs a model and a list of family SM arms, all told or none told");
     smProvider(reg, st.model!);
+    const def = ITEMS[st.item];
+    if (def?.model !== st.model) fail("E_USAGE", "SM stage " + st.item + " pays for model " + st.model + ", but " + (def ? "line item " + st.item + " pays for " + (def.model ?? "no model's sessions") : st.item + " is not one of family SM's line items (" + Object.keys(ITEMS).join(", ") + ")") + "; nothing was opened");
   }
   const servedBy = o.stages.flatMap((s) => (pfStage(s) ? (s.arms ?? [s.arm]).flatMap((a) => PF_STAGES[s.item]!.models.map((m) => a + "@" + m)) : smStage(s) ? s.arms!.map((a) => a + "@" + s.model) : [s.arm]));
   if (new Set(o.stages.map((s) => s.item)).size !== o.stages.length || new Set(servedBy).size !== servedBy.length) fail("E_USAGE", "each stage needs its own line item and its own arm, since a session's arm picks its stage");
@@ -524,14 +529,15 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
         unknown_micros: m?.unknown_micros ?? 0,
         unknown_calls: m?.unknown_calls ?? 0,
         usage: { input_tokens: u.input, output_tokens: u.output + u.reasoning, cache_read_input_tokens: u.cache_read, cache_creation_input_tokens: u.cache_write },
-        requests: meter?.requests ?? 0,
-        ok_responses: Object.entries(meter?.upstream.statuses ?? {}).reduce((n, [code, k]) => n + (code.startsWith("2") ? k : 0), 0),
-        refused: meter?.refused ?? 0,
-        refusals: [...(meter?.refusals ?? [])],
-        allowance_stops: meter?.allowance_stops ?? 0,
-        unknown: meter?.unknown ?? 0,
-        undrained: meter?.undrained ?? 0,
-        unsettled: meter?.unsettled ?? 0,
+        finalized: meter !== null,
+        requests: meter ? meter.requests : null,
+        ok_responses: meter ? Object.entries(meter.upstream.statuses).reduce((n, [code, k]) => n + (code.startsWith("2") ? k : 0), 0) : null,
+        refused: meter ? meter.refused : null,
+        refusals: meter ? [...meter.refusals] : null,
+        allowance_stops: meter ? meter.allowance_stops : null,
+        unknown: meter ? meter.unknown : null,
+        undrained: meter ? meter.undrained : null,
+        unsettled: meter ? meter.unsettled : null,
         ...(s.pf ? { refusals: (existsSync(s.journal) ? readFileSync(s.journal, "utf8").split("\n") : []).flatMap((l) => { try { const j = JSON.parse(l); return j.kind === "refusal" && j.meter_id === sess.meter_id ? [String(j.code)] : []; } catch { return []; } }), first_request: meter?.first_request ?? null } : {}),
       };
       sess.closed = answer;

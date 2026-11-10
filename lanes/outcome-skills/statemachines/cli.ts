@@ -17,7 +17,7 @@ import { rebenchCandidates, rebenchRowById } from "./rebench.ts";
 import { runSession } from "./run.ts";
 import { computeStart, firstInfo, scoreFollowon, treeCounts, treeScores, TREES, type FollowonRecord, type StartSet, type Tree } from "./followon.ts";
 import { scoreFirst, type OutcomeRecord, type ScoreInput } from "./score.ts";
-import { planPart, type PlannedSession, type SessionRecord } from "./session.ts";
+import { planPart, refuseUnscored, type PlannedSession, type SessionRecord } from "./session.ts";
 import { LANGS, type Lang } from "./langs.ts";
 import { dryrun, type DryrunConfig } from "./dryrun.ts";
 import { assertBlind, AXES, judgeFor, judgeKey, judgePacket, LABELLERS, labelledQueue, labelledSet, labelPacket, r78Check, r78Price, readJudgeAnswer, readLabelAnswer, stockDiffs, type JudgePacket, type R78Labelled, type R78Row } from "./packets.ts";
@@ -108,6 +108,7 @@ function scoreFollowonCli(r: string[]): number {
     if (f.has("--first")) {
       const s = readJson<SessionRecord>(f.get("--first")!);
       if (s.schema !== "sm-session.v1" || s.stage !== "first" || s.unit !== u.id || s.cell !== tree || !s.tree_patch) throw new Error("E_SM_ARM " + f.get("--first") + " is not " + tree + "'s first-stage record on " + u.id + " with a tree patch");
+      refuseUnscored(s);
       treePatch = readFileSync(s.tree_patch.path, "utf8");
       if (createHash("sha256").update(treePatch).digest("hex") !== s.tree_patch.sha256) throw new Error("E_SM_ARM " + s.tree_patch.path + " is not the patch the first-stage record pins");
     } else treePatch = readFileSync(f.get("--tree-patch")!, "utf8");
@@ -461,6 +462,7 @@ export async function main(argv: string[]): Promise<number> {
         const s = readJson<SessionRecord>(f.get("--session")!);
         if (s.schema !== "sm-session.v1" || s.stage !== "first") throw new Error("E_SM_ARM " + f.get("--session") + " is not a first-stage sm-session.v1 record");
         if (s.unit !== readUnit(unitDir).id) throw new Error("E_SM_ARM the session is on " + s.unit + ", not this unit");
+        refuseUnscored(s);
         if (!s.tree_patch) throw new Error("E_SM_ARM the session has no tree patch to score");
         input = { unitDir, patchFile: s.tree_patch.path, patchSha: s.tree_patch.sha256, cell: s.cell, model: s.model, session: s.lease_id + "/" + s.cell };
       } else input = { unitDir, patchFile: f.get("--patch")!, cell: need(f, "--cell") };
