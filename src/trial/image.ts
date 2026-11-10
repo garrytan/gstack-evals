@@ -245,7 +245,8 @@ function record(dir: string, entry: Retained): Retained {
 
 const fileSha = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
 
-/** Saves an image once, by its id, as <dir>/images/<id>.tar, and lists it in <dir>/MANIFEST.jsonl. */
+/** Saves an image once, by its id, as <dir>/images/<id>.tar, and lists it in <dir>/MANIFEST.jsonl. Each call writes its own
+ * temp file and renames it into place, so runs that retain the same image at once never share a partial file. */
 export function retainImage(image: string, dir: string, run: Runner = dockerRun, docker = "docker"): Retained | ImageStop {
   const found = inspect(run, image, docker);
   if (!found) return { ok: false, code: "E_IMAGE_STALE", message: "cannot retain " + image + ": no local image has that name" };
@@ -253,23 +254,33 @@ export function retainImage(image: string, dir: string, run: Runner = dockerRun,
   const path = join(dir, file);
   if (!existsSync(path)) {
     mkdirSync(join(dir, "images"), { recursive: true });
-    const r = run(docker, ["save", "-o", path + ".tmp", found.id], { timeoutMs: 1_800_000 });
-    if (r.status !== 0) return { ok: false, code: "E_IMAGE_BUILD", message: "docker save " + found.id + " exited " + r.status + ": " + lastLine(r.stderr) };
-    renameSync(path + ".tmp", path);
+    const tmp = path + ".tmp-" + process.pid + "-" + randomBytes(4).toString("hex");
+    const r = run(docker, ["save", "-o", tmp, found.id], { timeoutMs: 1_800_000 });
+    if (r.status !== 0) {
+      rmSync(tmp, { force: true });
+      return { ok: false, code: "E_IMAGE_BUILD", message: "docker save " + found.id + " exited " + r.status + ": " + lastLine(r.stderr) };
+    }
+    renameSync(tmp, path);
   }
   return record(dir, { kind: "image", ref: found.id, file, sha256: fileSha(path), bytes: lstatSync(path).size });
 }
 
-/** Archives a tree once, by its tree sha256, as a byte-stable tar (sorted, owner 0, mtime 0) under <dir>/trees/. */
+/** Archives a tree once, by its tree sha256, as a byte-stable tar (sorted, owner 0, mtime 0) under <dir>/trees/. Each call
+ * writes its own temp file and renames it into place: four product-value items that first retained one gstack install at
+ * once shared <tree>.tar.tmp, and the renames after the first failed with ENOENT. */
 export function retainTree(src: string, dir: string): Retained {
   const tree = dirTreeSha256(src);
   const file = join("trees", tree + ".tar");
   const path = join(dir, file);
   if (!existsSync(path)) {
     mkdirSync(join(dir, "trees"), { recursive: true });
-    const r = spawnSync("tar", ["--sort=name", "--mtime=@0", "--owner=0", "--group=0", "--numeric-owner", "-C", src, "-cf", path + ".tmp", "."], { encoding: "utf8" });
-    if (r.status !== 0) throw new Error("tar of " + src + " failed: " + r.stderr);
-    renameSync(path + ".tmp", path);
+    const tmp = path + ".tmp-" + process.pid + "-" + randomBytes(4).toString("hex");
+    const r = spawnSync("tar", ["--sort=name", "--mtime=@0", "--owner=0", "--group=0", "--numeric-owner", "-C", src, "-cf", tmp, "."], { encoding: "utf8" });
+    if (r.status !== 0) {
+      rmSync(tmp, { force: true });
+      throw new Error("tar of " + src + " failed: " + r.stderr);
+    }
+    renameSync(tmp, path);
   }
   return record(dir, { kind: "tree", ref: tree, file: file.split(sep).join("/"), sha256: fileSha(path), bytes: lstatSync(path).size });
 }

@@ -11,7 +11,7 @@ describe("ledger", () => {
     const p = join(mkdtempSync(join(tmpdir(), "ledger-")), "l.jsonl");
     const l = new Ledger(p, 10, "t");
     expect(() => l.reserve("a", 1, {})).toThrow("E_LEDGER_MISSING");
-    l.approve({ words: ["Rec"], by: "x", source: "y" });
+    l.approve({ words: ["(paraphrase) took the recommendation"], by: "x", source: "y" });
     l.reserve("a", 4, {});
     l.reserve("b", 4, {});
     expect(() => l.reserve("c", 4, {})).toThrow(CapStop);
@@ -25,7 +25,7 @@ describe("ledger", () => {
   });
   const approved = (cap = 10) => {
     const p = join(mkdtempSync(join(tmpdir(), "ledger-")), "l.jsonl");
-    new Ledger(p, cap, "t").approve({ words: ["Rec"], by: "x", source: "y" });
+    new Ledger(p, cap, "t").approve({ words: ["(paraphrase) took the recommendation"], by: "x", source: "y" });
     return p;
   };
   test("settleStale charges a stopped runner's open reserve in full, once", () => {
@@ -64,19 +64,19 @@ describe("ledger", () => {
   test("only a complete approval for this cap, not a fake one, authorizes a paid ledger", () => {
     const p = join(mkdtempSync(join(tmpdir(), "ledger-")), "l.jsonl");
     expect(() => new Ledger(p, 10, "t").approve({ words: [], by: "x", source: "y" })).toThrow("E_APPROVAL");
-    expect(() => new Ledger(p, 10, "t").approve({ words: ["Rec"], by: "", source: "y" })).toThrow("E_APPROVAL");
+    expect(() => new Ledger(p, 10, "t").approve({ words: ["(paraphrase) took the recommendation"], by: "", source: "y" })).toThrow("E_APPROVAL");
     new Ledger(p, 10, "t", undefined, true).approve({ words: ["fake"], by: "test", source: "none" });
     expect(new Ledger(p, 10, "t", undefined, true).hasApproval()).toBe(true);
     expect(new Ledger(p, 10, "t").hasApproval()).toBe(false);
     const q = join(mkdtempSync(join(tmpdir(), "ledger-")), "l.jsonl");
-    new Ledger(q, 20, "t").approve({ words: ["Rec"], by: "x", source: "y" });
+    new Ledger(q, 20, "t").approve({ words: ["(paraphrase) took the recommendation"], by: "x", source: "y" });
     expect(new Ledger(q, 10, "t").hasApproval()).toBe(false);
     expect(new Ledger(q, 20, "t").hasApproval()).toBe(true);
   });
   test("approve on an approved ledger with rows adds nothing and keeps it authorized", () => {
     for (const fake of [false, true]) {
       const p = join(mkdtempSync(join(tmpdir(), "ledger-")), "l.jsonl");
-      const a = fake ? { words: ["keyless fake run, no spend"], by: "lanea-quick test", source: "none" } : { words: ["Rec"], by: "x", source: "y" };
+      const a = fake ? { words: ["keyless fake run, no spend"], by: "lanea-quick test", source: "none" } : { words: ["(paraphrase) took the recommendation"], by: "x", source: "y" };
       const l = new Ledger(p, 10, "t", undefined, fake);
       l.approve(a);
       l.reserve("a", 1, {});
@@ -91,21 +91,21 @@ describe("ledger", () => {
     const p = join(mkdtempSync(join(tmpdir(), "ledger-")), "l.jsonl");
     writeFileSync(p, JSON.stringify({ type: "approval", item: "t", cap_usd: 10, words: ["keyless fake run, no spend"], by: "lanea-quick test", source: "none" }) + "\n");
     expect(new Ledger(p, 10, "t").hasApproval()).toBe(false);
-    expect(() => new Ledger(p, 10, "t").approve({ words: ["Rec"], by: "x", source: "y" })).toThrow("E_APPROVAL");
+    expect(() => new Ledger(p, 10, "t").approve({ words: ["(paraphrase) took the recommendation"], by: "x", source: "y" })).toThrow("E_APPROVAL");
     const q = join(mkdtempSync(join(tmpdir(), "ledger-")), "l.jsonl");
-    writeFileSync(q, JSON.stringify({ type: "reserve", reservation_id: "a", usd: 1 }) + "\n" + JSON.stringify({ type: "approval", item: "t", cap_usd: 10, words: ["Rec"], by: "x", source: "y" }) + "\n");
+    writeFileSync(q, JSON.stringify({ type: "reserve", reservation_id: "a", usd: 1 }) + "\n" + JSON.stringify({ type: "approval", item: "t", cap_usd: 10, words: ["(paraphrase) took the recommendation"], by: "x", source: "y" }) + "\n");
     expect(new Ledger(q, 10, "t").hasApproval()).toBe(false);
   });
   test("a resume fails closed on a ledger approved for another item or another cap, and writes nothing", () => {
     const p = join(mkdtempSync(join(tmpdir(), "ledger-")), "l.jsonl");
-    new Ledger(p, 35, "lanea-quick-rerun").approve({ words: ["Rec"], by: "x", source: "y" });
+    new Ledger(p, 35, "lanea-quick-rerun").approve({ words: ["(paraphrase) took the recommendation"], by: "x", source: "y" });
     expect(JSON.parse(readFileSync(p, "utf8"))).toMatchObject({ type: "approval", item: "lanea-quick-rerun", cap_usd: 35 });
     const before = readFileSync(p, "utf8");
     for (const [cap, item] of [[35, "lanea-quick"], [130, "lanea-quick-rerun"]] as const) {
       const l = new Ledger(p, cap, item);
       expect(l.hasApproval()).toBe(false);
       expect(() => l.reserve("a", 1, {})).toThrow("E_LEDGER_MISSING");
-      expect(() => l.approve({ words: ["Rec"], by: "x", source: "y" })).toThrow("E_APPROVAL");
+      expect(() => l.approve({ words: ["(paraphrase) took the recommendation"], by: "x", source: "y" })).toThrow("E_APPROVAL");
     }
     expect(readFileSync(p, "utf8")).toBe(before);
     new Ledger(p, 35, "lanea-quick-rerun").reserve("a", 1, {});
@@ -149,7 +149,7 @@ describe("ledger", () => {
   test("settleStale leaves a settled reserve alone", () => {
     const p = join(mkdtempSync(join(tmpdir(), "ledger-")), "l.jsonl");
     const l = new Ledger(p, 10, "t");
-    l.approve({ words: ["Rec"], by: "x", source: "y" });
+    l.approve({ words: ["(paraphrase) took the recommendation"], by: "x", source: "y" });
     l.reserve("done", 3, {});
     l.settle("done", 1, {});
     l.reserve("orphan", 4, {});
@@ -163,7 +163,7 @@ describe("reserver", () => {
   test("waits for its own open reserves to settle instead of stopping, and stops only on settled spend", async () => {
     const p = join(mkdtempSync(join(tmpdir(), "ledger-")), "l.jsonl");
     const l = new Ledger(p, 130, "t");
-    l.approve({ words: ["Rec"], by: "x", source: "y" });
+    l.approve({ words: ["(paraphrase) took the recommendation"], by: "x", source: "y" });
     for (let i = 0; i < 90; i++) {
       l.reserve(`s${i}`, 1, {});
       l.settle(`s${i}`, 1, {});
@@ -190,7 +190,7 @@ describe("reserver", () => {
   });
   test("halt frees a waiting reserve", async () => {
     const l = new Ledger(join(mkdtempSync(join(tmpdir(), "ledger-")), "l.jsonl"), 10, "t");
-    l.approve({ words: ["Rec"], by: "x", source: "y" });
+    l.approve({ words: ["(paraphrase) took the recommendation"], by: "x", source: "y" });
     const r = new Reserver(l);
     await r.reserve("a", 6, {});
     const waiting = r.reserve("b", 6, {});
@@ -201,7 +201,7 @@ describe("reserver", () => {
   test("a runner error settles each reserve still open once in full and leaves settled ones alone", async () => {
     const p = join(mkdtempSync(join(tmpdir(), "ledger-")), "l.jsonl");
     const l = new Ledger(p, 10, "t");
-    l.approve({ words: ["Rec"], by: "x", source: "y" });
+    l.approve({ words: ["(paraphrase) took the recommendation"], by: "x", source: "y" });
     const r = new Reserver(l);
     await r.reserve("a", 4, {});
     await r.reserve("b", 3, {});

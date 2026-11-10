@@ -2,7 +2,7 @@
 
 `gstack-evals skill-eval` answers one question: did an edited skill (a diet or a rewrite) lose anything the old copy did, on your tasks, your host and your model? It runs the old copy twice (before, before2), the new copy (after) and no skill (none) on the same tasks, several times each, and writes a verdict. Exit 0 means no loss was detected on this run. It is a diagnostic, never proof that the two copies are equivalent.
 
-This page is for callers: /write-skill (GStack Minder), HARN-1 and GBRA-225. It describes what gstack-evals v0.0.x (milestone M1a) has built. The design source is interface v0.5 (wiki/plans/2026-10-29-gsta-25-skill-eval-interface-v0-5.md); where this page and the interface differ, this page says what the code does today.
+This page is for callers: /write-skill (the gstack Captain), the harness Captain and a gbrain crew thread. It describes what gstack-evals v0.0.x (milestone M1a) has built. The design source is interface v0.5 (wiki/plans/2026-10-29-gsta-25-skill-eval-interface-v0-5.md); where this page and the interface differ, this page says what the code does today.
 
 ## What runs today
 

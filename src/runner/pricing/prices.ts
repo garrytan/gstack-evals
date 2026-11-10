@@ -13,10 +13,14 @@
 //   token per byte of the outgoing body (upstream's proxy applied the same floor on top of a 3-bytes-per-token estimate).
 // - Inputs the provider bills beyond their bytes (remote media, stored files, hosted tools) are refused, and Anthropic's
 //   one-hour cache writes are priced at twice input, in the reservation and the settlement.
+// - TypeSafe's System One (decision routing, B3) is priced again, for the pinned Jev versions only: input tokens at the row,
+//   output free, and a reservation that bounds every question reading the whole request at one token per byte.
 
 import type { TokenUsage } from "../../types.ts";
 
 export type Provider = "anthropic" | "openai" | "openrouter";
+/** Every provider the metering proxy meters: the chat providers and TypeSafe's System One. */
+export type MeteredProvider = Provider | "typesafe";
 
 interface TokenPrices {
   input: number;
@@ -71,6 +75,15 @@ export const OPENROUTER_MODELS: Record<string, ChatPrice> = {
   "google/gemini-4-argon": { input: 2, output: 10, cache_read: 0.1, cache_write: 0.1875, providers: ["google-vertex"], image: 0.000002 },
 };
 
+/**
+ * TypeSafe models by model id, USD per 1M tokens. TypeSafe's models page (https://typesafe.ai/pricing), read
+ * 2026-11-09T05:04Z: jev-1.14.0 and jev-1.13.0 at $42 per billion input tokens ($0.042 per million); output tokens are free.
+ */
+export const TYPESAFE_MODELS: Record<string, ChatPrice> = {
+  "jev-1.13.0": { input: 0.042, output: 0 },
+  "jev-1.14.0": { input: 0.042, output: 0 },
+};
+
 /** List prices, USD per 1M tokens, as harness-evals checked them on 2026-10-02 to 2026-10-08. */
 export const CHAT_PRICES: Record<string, ChatPrice> = {
   "anthropic:claude-haiku-5-5": { input: 0.1, output: 0.5, cache_read: 0.01, cache_write: 0.125, long: { above_input_tokens: 100_000, input: 0.5, output: 2.5, cache_read: 0.05, cache_write: 0.625 } },
@@ -82,6 +95,7 @@ export const CHAT_PRICES: Record<string, ChatPrice> = {
   "openai:gpt-6-luna": { input: 0.1, output: 0.5, cache_read: 0.01, cache_write: 0.125, long: { above_input_tokens: 272_000, input: 0.2, output: 0.75, cache_read: 0.02, cache_write: 0.25 } },
   "openai:gpt-6-astra": { input: 10, output: 50, cache_read: 1, cache_write: 12.5, long: { above_input_tokens: 272_000, input: 20, output: 75, cache_read: 2, cache_write: 25 } },
   ...Object.fromEntries(Object.entries(OPENROUTER_MODELS).map(([id, price]) => [`openrouter:${id}`, price])),
+  ...Object.fromEntries(Object.entries(TYPESAFE_MODELS).map(([id, price]) => [`typesafe:${id}`, price])),
 };
 
 /** The provider object the proxy sends with every OpenRouter call: the row's pinned providers and quantizations, if any, no provider that may train on or keep the data (data_collection deny), and its prices as the most OpenRouter may route to, at the long-prompt rates where those are higher (a prompt past the row's threshold is billed at them), with no per-request charge and no per-image charge above the row's listed image price (0 for a row that lists none). */
@@ -106,7 +120,7 @@ export const TOOL_USE_SYSTEM_TOKENS = 1_000;
 export class PriceError extends Error {}
 
 export interface RequestPrice extends TokenPrices {
-  provider: Provider;
+  provider: MeteredProvider;
   model: string;
   /** The usage shape the route reports: Anthropic Messages (cache reads and writes beside input_tokens) or OpenAI (inside it). */
   format: "anthropic" | "openai";
@@ -153,7 +167,7 @@ function unboundedInput(value: unknown, key = ""): string | null {
 }
 
 /** Price a chat request from its outgoing JSON body, or throw PriceError: a request the table cannot price is never forwarded. */
-export function priceRequest(provider: Provider, body: Record<string, unknown>, maxOutputTokens: number, route = ""): RequestPrice {
+export function priceRequest(provider: MeteredProvider, body: Record<string, unknown>, maxOutputTokens: number, route = ""): RequestPrice {
   const model = typeof body.model === "string" ? body.model : "";
   if (!model) throw new PriceError("the request names no model, so its cost cannot be reserved");
   const price = chatPrice(`${provider}:${model}`);
@@ -161,6 +175,11 @@ export function priceRequest(provider: Provider, body: Record<string, unknown>, 
   const unbounded = unboundedInput(body);
   if (unbounded) throw new PriceError(`the request uses ${unbounded}, whose cost the proxy cannot bound from the request`);
   if (body.n !== undefined && body.n !== 1) throw new PriceError(`n=${JSON.stringify(body.n)} asks for several completions, each billed in full`);
+  if (provider === "typesafe") {
+    const questions = body.questions && typeof body.questions === "object" && !Array.isArray(body.questions) ? Object.keys(body.questions).length : 0;
+    if (questions === 0) throw new PriceError("a System One request with no questions cannot be priced");
+    return { provider, model, format: "openai", ...price, cacheWrite: "none", inputTokens: (Buffer.byteLength(JSON.stringify(body)) + REQUEST_OVERHEAD_TOKENS) * questions, maxOutputTokens: 0 };
+  }
   if (provider === "openai" && body.service_tier !== undefined && body.service_tier !== "default") throw new PriceError(`service_tier ${JSON.stringify(body.service_tier)} may bill above the standard rates in the price table`);
   if (provider === "anthropic" && body.speed !== undefined && body.speed !== "standard") throw new PriceError(`speed ${JSON.stringify(body.speed)} bills above the standard rates in the price table`);
   if (provider === "anthropic" && body.inference_geo !== undefined && body.inference_geo !== "global") throw new PriceError(`inference_geo ${JSON.stringify(body.inference_geo)} may bill above the standard rates in the price table`);

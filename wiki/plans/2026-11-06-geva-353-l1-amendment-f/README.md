@@ -62,6 +62,8 @@ The tests were written before the change, in tests/proxy-accounting.test.ts:
 
 ## Order and ceiling
 
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
+
 The order stays Sol, then particle-1: l1-route-sol (done), pilot-sol (done), l1-route-sol-f, f1-sol, the optional f1-sol-offu, l1-route-p1, pilot-p1, f1-p1. [ceiling-plan.json](ceiling-plan.json) adds l1-route-sol-f after pilot-sol and points f1-sol's `after` at it; nothing else in the plan changes. f1-sol-offu joins the plan only after f1-sol is done, as Amendment E says.
 
 The ceiling check with l1-route-sol-f at its cap ([ceiling-check.txt](ceiling-check.txt)) reads: "CEILING PASS l1-route-sol-f: the sum $3054.35 with l1-route-sol-f's cap is at or under $3300.00". That leaves $245.65 at caps, with every unlaunched item at its cap and crew at its credits when the check ran. Amendment F's crew spend is capped at $45. It bills GEVA-353, which crew.json counts, so the margin shrinks by what the rest of this amendment spends. Each launch is still decided by the check at that moment.

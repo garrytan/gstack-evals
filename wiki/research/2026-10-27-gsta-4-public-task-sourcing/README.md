@@ -11,7 +11,7 @@ status: done
 source: Captain drive handoffs/GSTA-4/task-sourcing.md (sha256 4421dc06bd8b2157917caa0af60320ba49aadaadb59d4fdeace29ac8ecc1a9e3) and notes/ from four GSTA-4 research subagents, copied by GSTA-6 on 2026-10-28
 attachments:
   - e94162dc1b01ffa53189d1dac54f3ae2ba46d3ba12fef567ec22dd62ac698f03  notes/s1-swebench-deepswe.md
-  - 0a8da5eb36a86f93d2bb3e5fee431c6936efaff37319d51a1cc39c236b4e7c93  notes/s2-tbench-harbor-generators.md
+  - f3a7d40e64705d43ab975eca7aa7fe679ec5099ee6f241bd276fa356b5003083  notes/s2-tbench-harbor-generators.md
   - 8f89c333070fc06a39a053934c4bdf717c31a1b537149758cad41befb81ae91b  notes/s3-review-qa-lifecycle.md
   - 639c1568c1b9d7ba4c0e1db1327f9d4764548242907d96a371d1e374ba75bf95  notes/s4-selection-contamination.md
 ---
@@ -19,7 +19,7 @@ attachments:
 
 GSTA-4, research only, 2026-10-27. No repo code, no paid model runs. Four research subagents gathered sources. Their full notes, with a URL for every claim, are in this folder under notes/ (s1 SWE family and DeepSWE, s2 Terminal-Bench, Harbor and generators, s3 review, QA and lifecycle sets, s4 selection, contamination and model cutoffs). ⚠ marks self-reported, vendor-run or aggregator-only figures.
 
-gstack: ok not-needed for=none (no checkout at /home/user/.local/share/gstack; before the first workflow run: bash /home/user/.capy/drive/user-garry-tan/skills/gstack/scripts/install.sh --for <skill>)
+gstack: ok not-needed for=none (no gstack checkout on this machine; before the first workflow run, run the gstack skill's install script from the owner's user-scope Capy drive with --for <skill>)
 
 ## 1. Answer
 

@@ -298,6 +298,125 @@ describe("the check", () => {
     const out = problems(root, { markers: [], baseFiles: merged });
     expect(out).toContainEqual(BUNDLE + "/notes/a.md: merged post was edited; only its status may change (write a new post that supersedes it)");
   });
+
+  test("lets an edit through only when a waiver row matches its path and both digests", () => {
+    const text = post(fields(DECISION_ID, "decision"));
+    const edited = text.replace("Body.", "Edited body.");
+    const row = (before: string, after: string) => [DECISION, before, after, "GST-1060 public cleanup, wording only"].join("\t") + "\n";
+    const WAIVER = "wiki/edits/cleanup.tsv";
+    const root = makeWiki({ [DECISION]: edited, [WAIVER]: row(sha(text), sha(edited)) });
+    const check = () => problems(root, { markers: [], baseFiles: new Map([[DECISION, Buffer.from(text)]]) });
+    expect(check()).toEqual([]);
+
+    write(root, DECISION, edited.replace("Edited body.", "Edited again."));
+    expect(check()).toContainEqual(expect.stringContaining(DECISION + ": merged post was edited"));
+
+    write(root, DECISION, edited);
+    unlinkSync(join(root, WAIVER));
+    expect(check()).toContainEqual(expect.stringContaining(DECISION + ": merged post was edited"));
+
+    write(root, WAIVER, row(sha("another text"), sha(edited)));
+    expect(check()).toContainEqual(expect.stringContaining(DECISION + ": merged post was edited"));
+
+    write(root, WAIVER, row(sha(text), sha(edited)));
+    unlinkSync(join(root, DECISION));
+    expect(check()).toContainEqual(expect.stringContaining(DECISION + ": merged file was removed or renamed"));
+  });
+
+  test("fails on malformed waiver rows and on other files in wiki/edits/", () => {
+    const text = post(fields(DECISION_ID, "decision"));
+    const d = sha(text);
+    const rows = [
+      [DECISION, d, d],
+      [DECISION, d.toUpperCase(), d, "why"],
+      [DECISION, d, d.slice(1), "why"],
+      [DECISION, d, d, " "],
+      ["wiki/board/2026-10-28-gsta-9-missing.md", d, d, "why"],
+      [DECISION, d, d, "why", "more"],
+    ];
+    const root = makeWiki({ [DECISION]: text, "wiki/edits/bad.tsv": rows.map((r) => r.join("\t")).join("\n") + "\n", "wiki/edits/notes.md": "x" });
+    const fields4 = "a waiver row is four tab-separated fields: path, sha256 before, sha256 after, reason";
+    expect(problems(root, { markers: [], baseFiles: new Map([[DECISION, Buffer.from(text)]]) })).toEqual([
+      "wiki/edits/notes.md: unexpected file: wiki/edits/ holds only <name>.tsv waiver files",
+      "wiki/edits/bad.tsv:1: " + fields4,
+      "wiki/edits/bad.tsv:2: a waiver digest must be 64 lowercase hex characters",
+      "wiki/edits/bad.tsv:3: a waiver digest must be 64 lowercase hex characters",
+      "wiki/edits/bad.tsv:4: a waiver row needs a reason",
+      'wiki/edits/bad.tsv:5: waiver path "wiki/board/2026-10-28-gsta-9-missing.md" is not a merged file at the base',
+      "wiki/edits/bad.tsv:6: " + fields4,
+    ]);
+  });
+
+  test("counts a waiver row only in the change that adds it, and only when it matches an edit there", () => {
+    const text = post(fields(DECISION_ID, "decision"));
+    const edited = text.replace("Body.", "Edited body.");
+    const WAIVER = "wiki/edits/cleanup.tsv";
+    const row = (before: string, after: string) => [DECISION, before, after, "public cleanup, wording only"].join("\t") + "\n";
+    const unused = WAIVER + ':1: waiver row for "' + DECISION + '" matches no edit in this change: before must be its sha256 at the base and after its sha256 now';
+    const edit = DECISION + ": merged post was edited; only its status may change (write a new post that supersedes it)";
+    const base = (files: Record<string, string>) => new Map(Object.entries(files).map(([path, t]) => [path, Buffer.from(t)]));
+    const root = makeWiki({ [DECISION]: edited, [WAIVER]: row(sha(text), sha(edited)) });
+    const check = (files: Record<string, string>) => problems(root, { markers: [], baseFiles: base(files) });
+    expect(check({ [DECISION]: text })).toEqual([]);
+
+    write(root, DECISION, text);
+    expect(check({ [DECISION]: text })).toEqual([unused]);
+
+    write(root, DECISION, edited);
+    const after = sha(edited);
+    write(root, WAIVER, row(sha(text), after.slice(0, -1) + (after.endsWith("0") ? "1" : "0")));
+    expect(check({ [DECISION]: text })).toEqual([unused, edit]);
+
+    write(root, WAIVER, row(sha(text), sha(edited)));
+    expect(check({ [DECISION]: text, [WAIVER]: row(sha(text), sha(edited)) })).toEqual([edit]);
+
+    write(root, DECISION, edited.replace("Edited body.", "Edited again."));
+    expect(check({ [DECISION]: edited, [WAIVER]: row(sha(text), sha(edited)) })).toEqual([edit]);
+  });
+
+  test("lets a waiver row name only a markdown file in a wiki section, and keeps a bundle's attachment names", () => {
+    const note = "# Notes\n\nThe owner said so.\n";
+    const reworded = "# Notes\n\nThe owner decided.\n";
+    const data = '{"passed": 36}\n';
+    const changed = '{"passed": 37}\n';
+    const README = BUNDLE + "/README.md";
+    const NOTE = BUNDLE + "/notes/a.md";
+    const DATA = BUNDLE + "/summary.json";
+    const V2 = BUNDLE + "/summary-v2.json";
+    const OLD = "wiki/edits/old.tsv";
+    const NEW = "wiki/edits/new.tsv";
+    const brief = (n: string, d: string, extra: string[] = []) => post(fields("2026-10-28-gsta-9-a-brief", "research", { attachments: [sha(n) + "  notes/a.md", sha(d) + "  summary.json", ...extra] }));
+    const row = (path: string, before: string, after: string) => [path, sha(before), sha(after), "public cleanup"].join("\t") + "\n";
+    const refused = (path: string) => NEW + ':1: waiver path "' + path + '" is not a markdown file in a wiki section; a row may waive a post, a bundle README.md or a .md attachment';
+    const renamed = NEW + ':1: waiver row for "' + README + "\" changes the bundle's attachment names; a waived README keeps the attachments it had at the base";
+    const edited = (path: string) => path + ": merged post was edited; only its status may change (write a new post that supersedes it)";
+    const merged = (files: Record<string, string>) => new Map(Object.entries(files).map(([path, t]) => [path, Buffer.from(t)]));
+    const base = { [README]: brief(note, data), [NOTE]: note, [DATA]: data };
+    const root = makeWiki({ [README]: brief(reworded, data), [NOTE]: reworded, [DATA]: data, [NEW]: row(NOTE, note, reworded) + row(README, brief(note, data), brief(reworded, data)) });
+    const check = (files: Record<string, string> = base) => problems(root, { markers: [], baseFiles: merged(files) });
+    expect(check()).toEqual([]);
+
+    write(root, NOTE, note);
+    write(root, DATA, changed);
+    write(root, README, brief(note, changed));
+    write(root, NEW, row(DATA, data, changed) + row(README, brief(note, data), brief(note, changed)));
+    expect(check()).toEqual([refused(DATA), edited(DATA)]);
+
+    const added = brief(note, data, [sha(changed) + "  summary-v2.json"]);
+    write(root, DATA, data);
+    write(root, V2, changed);
+    write(root, README, added);
+    write(root, NEW, row(README, brief(note, data), added));
+    expect(check()).toEqual([renamed, edited(README)]);
+
+    const oldRows = [README, sha("older text"), sha(brief(note, data)), "earlier cleanup"].join("\t") + "\n";
+    const rewritten = oldRows.replace("earlier cleanup", "rewritten reason");
+    unlinkSync(join(root, V2));
+    write(root, README, brief(note, data));
+    write(root, OLD, rewritten);
+    write(root, NEW, row(OLD, oldRows, rewritten));
+    expect(check({ ...base, [OLD]: oldRows })).toEqual([refused(OLD), edited(OLD)]);
+  });
 });
 
 describe("the index", () => {

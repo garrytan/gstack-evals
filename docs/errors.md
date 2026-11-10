@@ -167,8 +167,43 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_MUTATION_DOCKER](#e_mutation_docker) | 2 | U20 |
 | [E_MUTATION_INPUT](#e_mutation_input) | 2 | U20 |
 | [E_PIN_MISMATCH](#e_pin_mismatch) | 2 | U20 |
+| [E_AR_FRAME_DRIFT](#e_ar_frame_drift) | 2 | U20 |
+| [E_AR_UNREADABLE](#e_ar_unreadable) | warning | U20 |
+| [E_AR_SUPPLY_SHORT](#e_ar_supply_short) | 2 | U20 |
+| [E_AR_SMOKE_FAIL](#e_ar_smoke_fail) | 2 | U20 |
+| [E_AR_PACKET_LEAK](#e_ar_packet_leak) | 2 | U20 |
+| [E_AR_LABEL_MISSING](#e_ar_label_missing) | warning | U20 |
+| [E_AR_JUDGE_KAPPA](#e_ar_judge_kappa) | 2 | U20 |
+| [E_AR_PROVIDER_DRIFT](#e_ar_provider_drift) | 2 | U20 |
+| [E_AR_CUSTODY](#e_ar_custody) | 2 | U20 |
 | [E_TRANSCRIPT_UNREADABLE](#e_transcript_unreadable) | warning | U20 |
 | [ENVELOPE_OVER](#envelope_over) | warning | U4 |
+| [DR_ALLOWANCE_STOP](#dr_allowance_stop) | 2 | U6 |
+| [DR_STEP_STOP](#dr_step_stop) | 2 | U6 |
+| [DR_WALL_STOP](#dr_wall_stop) | 2 | U6 |
+| [DR_DECIDER_FAILED](#dr_decider_failed) | warning | U6 |
+| [DR_STATE_OVER_LIMIT](#dr_state_over_limit) | warning | U6 |
+| [DR_LABEL_MISSING](#dr_label_missing) | warning | U6 |
+| [DR_CELL_DEGRADED](#dr_cell_degraded) | warning | U6 |
+| [DR_CUSTODY_HIT](#dr_custody_hit) | 2 | U6 |
+| [DR_ADMISSION_STOP](#dr_admission_stop) | 2 | U6 |
+| [DR_PILOT_SESSION_STOP](#dr_pilot_session_stop) | 2 | U6 |
+| [E_DR_PIN](#e_dr_pin) | 2 | U6 |
+| [E_DR_RUNTIME](#e_dr_runtime) | 2 | U6 |
+| [E_DR_RUNNER](#e_dr_runner) | 2 | U6 |
+| [E_DR_STOPPED](#e_dr_stopped) | 2 | U6 |
+| [E_PV_NO_BLOCK](#e_pv_no_block) | warning | U20 |
+| [E_PV_INFRA_MISSING](#e_pv_infra_missing) | warning | U20 |
+| [E_PV_WEB_CONTAMINATED](#e_pv_web_contaminated) | warning | U20 |
+| [E_PV_LABEL_MISSING](#e_pv_label_missing) | warning | U20 |
+| [E_PV_JUDGE_KAPPA](#e_pv_judge_kappa) | warning | U20 |
+| [E_PV_STOCK_FAIL](#e_pv_stock_fail) | warning | U20 |
+| [E_PV_NO_READ](#e_pv_no_read) | warning | U20 |
+| [E_PV_EXPOSURE_FALLBACK](#e_pv_exposure_fallback) | warning | U20 |
+| [E_PV_EXPOSURE_STOP](#e_pv_exposure_stop) | warning | U20 |
+| [E_PV_LEAK_EXPOSED](#e_pv_leak_exposed) | warning | U20 |
+| [E_PV_PROVIDER_DRIFT](#e_pv_provider_drift) | 2 | U20 |
+| [E_PV_SUPPLY_SHORT](#e_pv_supply_short) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -1190,6 +1225,158 @@ Fix: Copy the record again from the path the message names (the Captain-drive pa
 
 Exit 2. Side effects: None: refused before anything was prepared, bound or launched. Retry safe: yes. Resumable: no. Owner: U20.
 
+### E_AR_FRAME_DRIFT
+
+The autoplan record audit (lanes/autoplan-audit) found its frozen inputs changed: the frame snapshot's manifest digests, a per-file digest, the run id list, a missing or extra file, the pinned gstack Pre-Gate table or a frozen matched path differs from what the preregistration froze. The run stops before any reading.
+
+Fix: Restore the frozen snapshot (or the pinned gstack clone) and rerun. Never edit the frozen digests to fit; a changed frame is a new preregistration.
+
+Exit 2. Side effects: Partial: the run's sink keeps what was written before the stop, marked incomplete; the open lease is settled at the spend recorded so far. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_AR_SUPPLY_SHORT
+
+The autoplan audit's gold supply is short: fewer than 80 HIT units or 40 ablatable ones in stage 1, too few eligible lean runs or units for GATE-2, or a gold class still under 40 after its one top-up. GATE-2's panel part stops; the free readings stand.
+
+Fix: Report it to the Captain. GATE-2 reads NO READ; its mechanical hit share prints. Do not lower the bar or redraw to fill the pool.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_AR_SMOKE_FAIL
+
+The autoplan audit's smoke failed: a record parser on one gstack minor version, or a panel judge and effort pair whose label does not parse, whose quote fails the check or whose reply stops at its output limit.
+
+Fix: One repair is allowed (parser, prompt format or output limit) before any gold or production call. A second failure drops that instrument and its check reads NO READ.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_AR_PACKET_LEAK
+
+The autoplan audit's outbound check refused a packet, a reply cache file or an aggregate export: it holds a replaced token class, a 6-word run of owner words, a secret pattern, an email address, a withheld task id or a part with no allowed source. Nothing was sent; the run stops.
+
+Fix: Find the source of the leak with the run's private log, fix the scrub or the source, and start a new run with a new sink. Never relax the scan.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_AR_JUDGE_KAPPA
+
+The autoplan audit's judge check failed: GPT-6 Astra's or Claude Opus 5.5's Cohen's kappa against gold is below 0.6, or Gemini 4 Argon's is (under the Captain's pre-data ruling a failed Argon check makes GATE-2 read NO READ). GATE-2's panel part stops.
+
+Fix: Report it to the Captain. GATE-2 reads NO READ and its mechanical hit share prints. Never re-judge to pass the check.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_AR_PROVIDER_DRIFT
+
+An autoplan audit call to Gemini 4 Argon through OpenRouter was served by a provider other than its pin (Google Vertex), or named none. Argon's calls stop; split units with no Argon vote are missing.
+
+Fix: Report it to the Captain with the provider OpenRouter named. Do not move the pin during the run.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_AR_CUSTODY
+
+The autoplan audit's told-session custody failed: a told record's digest differs, decryption failed, the identity or a decrypted file is still on disk after its removal, or the sink is not on /dev/shm. The run stops.
+
+Fix: Delete any leftover decrypted file (test ! -e after), log the incident in CUSTODY.md and report it to the Captain before anything else.
+
+Exit 2. Side effects: Partial: CUSTODY.md holds every opening and the incident; no told content left the machine. Retry safe: yes. Resumable: no. Owner: U20.
+
+### DR_ALLOWANCE_STOP
+
+Decision routing: the metering proxy refused a session's next model or decider call because the session's $5 allowance could not hold its worst case. The proxy answers HTTP 403 with DR_ALLOWANCE_STOP in the body and journals the refusal; the session wrapper ends the session as allowance_stop, never as an infrastructure error, so Harbor does not rerun it.
+
+Fix: Nothing to repair in the session: the verifier grades the patch in /testbed as it stands and the stop prints per cell. If many sessions stop this way, send the proxy journal and the per-cell counts to the Captain; the allowance is frozen by the preregistration.
+
+Exit 2. Side effects: Partial: the session's earlier calls are spent, settled and counted; the refused call was neither reserved nor sent. Retry safe: no. Resumable: no. Owner: U6.
+
+### DR_STEP_STOP
+
+Decision routing: a session reached 100 executed actions (main-model and decider actions alike), so the action counter ended it as step_stop before running another action.
+
+Fix: Nothing to repair: the verifier grades the patch in /testbed as it stands, and the stop prints per cell and kind. The limit is frozen by the preregistration.
+
+Exit 2. Side effects: Partial: the session's spend and time count; actions past the 100th in the same reply were not run. Retry safe: no. Resumable: no. Owner: U6.
+
+### DR_WALL_STOP
+
+Decision routing: a session ran past its 2,700-second wall limit, so it ended as wall_stop.
+
+Fix: Nothing to repair: the verifier grades the patch in /testbed as it stands, and the stop prints per cell and kind. If wall stops cluster on one host, check that host's load before the next batch.
+
+Exit 2. Side effects: Partial: the session's spend and time count up to the stop. Retry safe: no. Resumable: no. Owner: U6.
+
+### DR_CUSTODY_HIT
+
+Decision routing: a request on a decision-routing slot carried the slot's planted canary, content that exists only on the runner, so the run stopped and the hit was logged. This holds for any model, main or decider, since the frontier decider asks the main model's own id. Any other runner-only marker (a hidden test name or a path absent from the pristine image), on a main-model or a decider request, is logged as a marker_hit line and never stops a session or a batch. An existing test name, or an agent diff equal to the real fix, is not a marker.
+
+Fix: Stop and report to the Captain with the hit's log line. Find how the content reached the agent's side, fix the custody path, and start a new batch only on the Captain's word. Do not --resume.
+
+Exit 2. Side effects: Partial: sessions that already ended keep their spend and grades; the controller settles every open lease. Retry safe: no. Resumable: no. Owner: U6.
+
+### DR_ADMISSION_STOP
+
+Decision routing: an admission rule of the preregistration (room in the control, transfer, or the MDD inside the margin) failed on calibration or pilot data, so the run stopped for the Captain before the next stage.
+
+Fix: Send the admission printout to the Captain and wait for a decision. Nothing reruns to change an admission reading.
+
+Exit 2. Side effects: None beyond the finished stages: their spend is settled, and no session of the next stage was launched. Retry safe: no. Resumable: no. Owner: U6.
+
+### DR_PILOT_SESSION_STOP
+
+Decision routing: a pilot session's proxy meter passed $2.50, so the controller stopped the batch: it launches no new session and lets running ones end.
+
+Fix: Send the session's meter and journal to the Captain and wait for a decision before any relaunch. The controller reconciles open leases before it starts again.
+
+Exit 2. Side effects: Partial: running sessions ended and their spend counts; every lease is settled. Retry safe: no. Resumable: no. Owner: U6.
+
+### E_DR_PIN
+
+Decision routing: the pin file's sha256, or one of the digests it names (questions, mapping, safety rule), is not the one the run was frozen with, so nothing launched.
+
+Fix: Copy the pinned file again from the run record and rerun the same command. Never edit a pin to match a changed file.
+
+Exit 2. Side effects: None: refused before any lease, proxy or session started. Retry safe: yes. Resumable: no. Owner: U6.
+
+### E_DR_RUNTIME
+
+Decision routing: the runtime tarball's sha256 is not the pinned one, so no session was launched with it.
+
+Fix: Rebuild the tarball with lanes/decision-routing/agent/runtime/build.sh at the pinned commit, or copy the pinned tarball again, and rerun.
+
+Exit 2. Side effects: None: refused before any session started. Retry safe: yes. Resumable: no. Owner: U6.
+
+### E_DR_RUNNER
+
+Decision routing: lanes/decision-routing/host/vm.sh was given an Ubicloud runner whose sha256 is not the pinned one, or no UBI_OWNER or UBI_TTL_HOURS, so it did not call the runner.
+
+Fix: Point vm.sh at the pinned copy of ubi-runner.sh with its sha256, set UBI_OWNER to the thread code and UBI_TTL_HOURS to cover the longest batch, and rerun.
+
+Exit 2. Side effects: None: refused before any VM call. Retry safe: yes. Resumable: no. Owner: U6.
+
+### E_DR_STOPPED
+
+Decision routing: the controller found its STOP file, so it launched no new session, let running sessions end and settled every lease.
+
+Fix: Remove the STOP file once the reason for it is dealt with, then relaunch the same plan; the controller reconciles open leases first and runs only the sessions that never launched.
+
+Exit 2. Side effects: Partial: sessions that ran keep their spend and results; every lease is settled. Retry safe: yes. Resumable: yes. Owner: U6.
+
+### E_PV_PROVIDER_DRIFT
+
+Product-value eval (section 17, rule 6): a call through OpenRouter was served by a provider other than the one its route pins (OpenAI for GPT-6.1 Sol, the recorded serving provider for particle-1 and Gemini), or the provider's recorded terms changed. That model's items stop for the Captain.
+
+Fix: Stop leasing the model's items, keep the journal line that shows the provider, and send the question to the Captain. Never retry on another provider.
+
+Exit 2. Side effects: Calls already sent on the lease stay on its journal and its spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_PV_SUPPLY_SHORT
+
+Product-value eval (section 4): supply is short. A named project type has fewer than 4 eligible units across both sources, the pooled count of passing comparison units is under 48, or a second named type is short of 2 audited public units in the calibration slice. Authoring stops and the question goes to the Captain.
+
+Fix: Stop authoring, report the counts per type and source, and wait for the Captain's ruling before any more authoring spend.
+
+Exit 2. Side effects: None beyond the authoring spend already settled. Retry safe: no. Resumable: no. Owner: U20.
+
 ## Exit 3: calibration failed (INCOMPLETE)
 
 ### CALIBRATION_SKILL
@@ -1402,6 +1589,22 @@ Fix: Report the LOSS with its false-alarm reading and no claim. Adjudicate any u
 
 Warning. Owner: U13.
 
+### E_AR_UNREADABLE
+
+A record file in the autoplan audit's frame (run.json, decisions.jsonl, findings.jsonl, gate.json, a bound result or another file a check reads) is missing or does not parse. The units that need it are counted missing; the run goes on.
+
+Fix: Nothing to fix in the run: the count prints beside each reading, and a stratum under 90% readable reads NO READ.
+
+Warning. Owner: U20.
+
+### E_AR_LABEL_MISSING
+
+A panel reply in the autoplan audit gave no usable label: it did not parse after the lenient parse, its evidence quote is not in the packet's built text, the call failed after its one retry or its outcome is unknown. The label is counted missing and never re-asked.
+
+Fix: Nothing to fix in the run: missing labels print, and GATE-2 reads on its missing bounds.
+
+Warning. Owner: U20.
+
 ### E_TRANSCRIPT_UNREADABLE
 
 R3c's localization reader (quick/laneb/r3/r3c.ts) found a graded trial whose sdk-messages.jsonl has no readable main-thread assistant text: no assistant text block, or assistant records written without the parent_tool_use_id field, so main-thread text can't be told from a subagent's. The trial's localization is a recorded error, never a miss, and the localization lines print no rates while any graded trial has one.
@@ -1417,3 +1620,115 @@ A program's line, or one of its skills' lines, holds more than its ceiling: crew
 Fix: Nothing to undo: the money is spent and recorded. Report it to the Captain with gstack-evals ledger status --program &lt;program>. The line's skill stops as incomplete.
 
 Warning. Owner: U4.
+
+### DR_DECIDER_FAILED
+
+Decision routing: a decider call (Jev, particle-1 or the typed frontier question) failed after its retry, so the decision fell to the next layer (for relevance, the hit is kept) and the session went on. Its cost and time are billed, and decision-level scores count it as wrong.
+
+Fix: Nothing to undo. Read the session's decisions.jsonl and the proxy journal for the cause. Over 5% of a cell's decisions failing marks the cell degraded (DR_CELL_DEGRADED).
+
+Warning. Owner: U6.
+
+### DR_STATE_OVER_LIMIT
+
+Decision routing: a decision state stayed over Jev's 32K per-question limit after trimming, so Jev was not asked and the decision went to the next layer. It is counted per cell.
+
+Fix: Nothing to undo. If the count is high, report it with the results; the trimming rule is frozen by the preregistration.
+
+Warning. Owner: U6.
+
+### DR_LABEL_MISSING
+
+Decision routing: a grounded label could not be computed for a decision (for example, a snapshot that will not build), so that decision has no label. It is counted and never imputed.
+
+Fix: Nothing to undo. Read the label run's log on the runner for the cause; the decision stays unlabelled in every score.
+
+Warning. Owner: U6.
+
+### DR_CELL_DEGRADED
+
+Decision routing: over 5% of a cell's decisions had a decider failure, so the cell is marked degraded, and a null on it reads FIX-METHOD on infrastructure.
+
+Fix: Report the cell and its failure causes from the proxy journal with the results. Nothing reruns to change the reading.
+
+Warning. Owner: U6.
+
+### E_PV_NO_BLOCK
+
+Product-value eval (prereg 2026-11-08-geva-403, section 6): a completed reply holds no plan-changes block that the strict parse or the one frozen lenient parse can read. The review scores 0 and counts as no-block in its cell; it is not missing.
+
+Fix: Nothing to rerun: no-block is the arm's own outcome. The no-block rate prints per cell, and smoke rule 1 reads it for the gstack arms.
+
+Warning. Owner: U20.
+
+### E_PV_INFRA_MISSING
+
+Product-value eval (section 6): a session ended on an infrastructure failure (an API error, a crash, a harness timeout, an allowance stop or a context overflow before any reply) and its one retry under the same named reason failed too. The session is missing: it counts against coverage and never scores 0.
+
+Fix: Nothing to rerun: a missing session stays missing. If one cause repeats across sessions, read the session logs the message names and report it before the next item leases.
+
+Warning. Owner: U20.
+
+### E_PV_WEB_CONTAMINATED
+
+Product-value eval (section 5): a session's transcript holds a successful WebSearch or WebFetch result even though every arm runs with both tools denied. The session is excluded as missing, counted against coverage and reported per arm.
+
+Fix: Check that the arm's disallowed tools list still names WebSearch and WebFetch and that the trial network reaches only the metering proxy; then report the count per arm.
+
+Warning. Owner: U20.
+
+### E_PV_LABEL_MISSING
+
+Product-value eval (section 7): a judge left a (list, key item) cell without a parsable label after the packet was resent once, whole, or a Gemini tie-break failed twice. The cell stays unlabelled and counts against coverage, never as not anticipated, and a review with any unlabelled primary cell is unscored.
+
+Fix: Nothing to resend: the frozen rule allows one resend per packet and one retry per tie-break. Read the judge's raw reply named in the message; the coverage line reports the cell.
+
+Warning. Owner: U20.
+
+### E_PV_JUDGE_KAPPA
+
+Product-value eval (section 7, R78): a production judge's Cohen's kappa against the gold cells is under 0.6, on all gold cells or on real-list cells alone. Only the contrasts of the models that judge serves read untested (judge); the other judges' contrasts stand.
+
+Fix: Nothing to rerun under this preregistration. Report the judge's catch rate, false-fail rate and both kappas beside each contrast it serves.
+
+Warning. Owner: U20.
+
+### E_PV_STOCK_FAIL
+
+Product-value eval (section 8): for at least one production judge, one stock row was credited with a primary item on more than one unit in eight (more than 3 of the 24 calibration units in stage 1, more than n/8 rounded down of n comparison units in stage 2). In stage 1 the family stops; in stage 2 every contrast of the family reads untested (stock).
+
+Fix: Nothing to rerun. Report the per-judge, per-row counts; the next attempt needs a new preregistration.
+
+Warning. Owner: U20.
+
+### E_PV_NO_READ
+
+Product-value eval (sections 7 and 10): a reading cannot be made. Either a production judge has fewer than 40 gold cells in either class from at least 40 distinct lists (NO READ (judge)), or a stage 1 admission input failed: the Astra judge's check on Opus lists or the none arm's parse rate under 95%.
+
+Fix: Nothing to rerun under this preregistration. Report which input failed and its counts; the family ends at stage 1.
+
+Warning. Owner: U20.
+
+### E_PV_EXPOSURE_FALLBACK
+
+Product-value eval (section 10, smoke rules 2 and 3): a smoke rule tripped and its frozen fallback applies. Rule 2: fewer than 4 of plan-ceo-review's 6 Opus smoke blocks carried an expansion proposal, so every plan-family arm gets the fallback sentence and the smoke reruns. Rule 3: plan-ceo-review was exposed in fewer than 5 of 6 Opus smoke sessions, so its stage 2 arm runs under gstack's opt-in gate after its own 6-session smoke.
+
+Fix: Run the fallback items the Captain recorded for the rule (pv-s1-plan-fb-*), name the fallback in every headline that reports the family, and read admission only after the rerun.
+
+Warning. Owner: U20.
+
+### E_PV_EXPOSURE_STOP
+
+Product-value eval (sections 10 and 11): a skill arm's exposure is too low to go on. Either its exposure after the first 32 Opus skill sessions of stage 2 is under 0.70 (its cells read untested and its remaining caps are released), or office-hours was exposed in fewer than 5 of its 6 Opus smoke sessions, so its stage 2 does not start (FIX-METHOD on the instrument).
+
+Fix: Stop leasing that arm's items and report the exposure count and the detector lines behind it to the Captain.
+
+Warning. Owner: U20.
+
+### E_PV_LEAK_EXPOSED
+
+Product-value eval (section 11): a model's stated training cutoff falls after a unit's plan date, so that unit's cells are descriptive and out of the model's primaries. When more than a quarter of a model's units are leak-exposed, the model's primaries read untested (leak).
+
+Fix: Nothing to rerun. Check the cutoff the build recorded from the provider's published documentation and the unit's plan date, and report the count per model.
+
+Warning. Owner: U20.

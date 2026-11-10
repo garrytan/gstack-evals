@@ -1,5 +1,6 @@
 # Keyless CI: typecheck, unit tests, the reason-code doc and the wiki check. Nothing here needs a secret.
-# Actions are pinned to commit SHAs. Bun is downloaded at a pinned version and checked against the release's SHA-256.
+# Actions are pinned to commit SHAs. Bun is downloaded at a pinned version, from the release or, when GitHub's release download
+# fails four times, from npm, and checked against a pinned SHA-256.
 # workflow_dispatch lets gstack's merge train run these checks on train/<nonce> as the train's free run (U19). Main's copy keeps
 # the token read-only, but a dispatch runs the dispatched ref's copy, so trains stay off until gstack dispatches them on the base
 # ref (GST-254, gstack GST-255). The checkout keeps no credentials, since no step needs them.
@@ -10,6 +11,11 @@
 # after its command passed. .gstack/pregate.json's run_profiles and ship_lanes_from say which runs and lanes it covers.
 # gstack is fetched at the commit sealed.yml pins, because tests/ci/sealed-workflow.test.ts runs sealed.yml's steps with
 # gstack's real sealed checker on scratch repositories.
+# Docs-only pull requests: when every path a pull request into the default branch changes is human-facing docs, typecheck
+# and the tests skip, and so does the tested-tree record, so no lane carries from that run. errors:check, wiki:check and
+# sealed.yml still run, and the checks job still reports success. The default branch's scripts/docs-only.ts decides, on the
+# merge commit against its first parent, so a branch never changes the rule that judges it. A push, a dispatch, a pull request
+# into another branch, a base without the script or any classifier error runs every check.
 name: ci
 
 on:
@@ -31,30 +37,69 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Install Bun, checked against the release's SHA-256
+      - name: Install Bun from the release zip, or from npm if GitHub's download keeps failing, checked against a pinned SHA-256
+        # Four tries at the release zip, with waits of 15, 30 and 60 seconds between them, then the same version's npm package.
+        # The tries take about two minutes when each fails fast and about four when each stalls to its 30-second limit, and the
+        # npm download, with curl's own retries, can add about four more, so the job's time limit must cover about eight
+        # (workflow-hygiene.test.ts checks it). Either archive must match its pinned digest before it is unpacked, and the step
+        # fails unless the binary reports BUN_VERSION. Both archives hold the same binary (sha256 10702245766b225e70bbf6235fd6b47214fd94b4760d00ffaed8ab0df57ac235).
         env:
           BUN_VERSION: 1.4.4
           BUN_SHA256: bf8ccbfb2b0b80159e0f9a6d15c55317add8077534dbc6130a3edb52fccb395c # bun-linux-x64.zip in the release's SHASUMS256.txt
+          BUN_NPM_SHA256: 93ca5a2abe45f3bcac6dd55baff8bb06c4ac824b70f89650b54e5c8b80dbef18 # @oven/bun-linux-x64-1.4.4.tgz on registry.npmjs.org (its dist.integrity is sha512-CHbbkmHVM28T1GFq+6GL4Ao4ujwwYwj1CxFFwEFzLanPfNsId9AhbIP0Q4reWuWBkGimUkoQygrK7Rgjtj3vog==)
         run: |
-          curl -fsSL --retry 3 -o "$RUNNER_TEMP/bun.zip" "https://github.com/oven-sh/bun/releases/download/bun-v$BUN_VERSION/bun-linux-x64.zip"
-          printf '%s  %s\n' "$BUN_SHA256" "$RUNNER_TEMP/bun.zip" | sha256sum -c --strict -
-          unzip -q -o "$RUNNER_TEMP/bun.zip" -d "$RUNNER_TEMP"
+          for delay in 15 30 60 end; do
+            curl -fsSL --connect-timeout 10 --max-time 30 -o "$RUNNER_TEMP/bun.zip" "https://github.com/oven-sh/bun/releases/download/bun-v$BUN_VERSION/bun-linux-x64.zip" && break
+            rm -f "$RUNNER_TEMP/bun.zip"
+            [ "$delay" = end ] && break
+            echo "::warning::The Bun release download failed; trying again in ${delay}s"
+            sleep "$delay"
+          done
+          if [ -f "$RUNNER_TEMP/bun.zip" ]; then
+            printf '%s  %s\n' "$BUN_SHA256" "$RUNNER_TEMP/bun.zip" | sha256sum -c --strict -
+            unzip -q -o "$RUNNER_TEMP/bun.zip" -d "$RUNNER_TEMP"
+          else
+            echo "::warning::The Bun release download failed 4 times, so this job installs @oven/bun-linux-x64@$BUN_VERSION from registry.npmjs.org"
+            curl -fsSL --retry 3 --connect-timeout 10 --max-time 60 -o "$RUNNER_TEMP/bun.tgz" "https://registry.npmjs.org/@oven/bun-linux-x64/-/bun-linux-x64-$BUN_VERSION.tgz"
+            printf '%s  %s\n' "$BUN_NPM_SHA256" "$RUNNER_TEMP/bun.tgz" | sha256sum -c --strict -
+            mkdir -p "$RUNNER_TEMP/bun-linux-x64"
+            tar -xzf "$RUNNER_TEMP/bun.tgz" -C "$RUNNER_TEMP/bun-linux-x64" --strip-components=2 package/bin/bun
+          fi
+          test -x "$RUNNER_TEMP/bun-linux-x64/bun"
+          test "$("$RUNNER_TEMP/bun-linux-x64/bun" --version)" = "$BUN_VERSION"
           printf '%s\n' "$RUNNER_TEMP/bun-linux-x64" >> "$GITHUB_PATH"
+      - name: Docs-only scope (the base branch's scripts/docs-only.ts; any error runs every check)
+        id: scope
+        if: github.event_name == 'pull_request' && github.base_ref == github.event.repository.default_branch
+        shell: bash
+        run: |
+          if ! git show HEAD^1:scripts/docs-only.ts > "$RUNNER_TEMP/docs-only.ts" 2> "$RUNNER_TEMP/docs-only-show.txt"; then
+            echo "DOCS_ONLY: no (no scripts/docs-only.ts on the base: $(head -n 1 "$RUNNER_TEMP/docs-only-show.txt")), so every check runs"
+            exit 0
+          fi
+          code=0
+          bun --no-env-file --config=/dev/null "$RUNNER_TEMP/docs-only.ts" --base HEAD^1 --head HEAD --github-output "$GITHUB_OUTPUT" || code=$?
+          [ "$code" -le 1 ] || echo "::warning::scripts/docs-only.ts exited $code, so every check runs"
+          grep -q '^docs_only=' "$GITHUB_OUTPUT" || echo "::warning::scripts/docs-only.ts wrote no verdict (exit $code), so every check runs"
       - name: Install (frozen lockfile)
         run: bun install --frozen-lockfile
       - name: Fetch gstack at the pinned commit
         env:
-          GSTACK_SHA: 68410828fd85611caea2c8429846f683849f425a # gstack v1.93.17.0
+          GSTACK_SHA: 9ab50347ac3728b7bdf03735b4ccceca88b6d958 # gstack v1.99.0.0
         run: |
           git init -q "$RUNNER_TEMP/gstack"
           git -C "$RUNNER_TEMP/gstack" fetch -q --depth 1 https://github.com/garrytan/gstack.git "$GSTACK_SHA"
           git -C "$RUNNER_TEMP/gstack" checkout -q --detach FETCH_HEAD
           test "$(git -C "$RUNNER_TEMP/gstack" rev-parse HEAD)" = "$GSTACK_SHA"
       - name: Typecheck
+        if: steps.scope.outputs.docs_only != 'true'
         run: |
           bun run typecheck
           echo 'bun run typecheck' >> "$RUNNER_TEMP/checks-passed.txt"
+      - name: Install age (the autoplan audit dry run's custody clause)
+        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends age
       - name: Tests
+        if: steps.scope.outputs.docs_only != 'true'
         run: bun test --reporter=junit --reporter-outfile="$RUNNER_TEMP/junit.xml"
       - name: Reason-code doc is fresh (docs/errors.md from src/errors/codes.ts)
         run: |
@@ -74,10 +119,12 @@ jobs:
           [ "$BASE_IS_DEFAULT" = true ] || { echo "wiki:check ran against $GITHUB_BASE_REF, not the default branch: no carry entry"; exit 0; }
           echo 'bun run wiki:check' >> "$RUNNER_TEMP/checks-passed.txt"
       - name: Record the tested tree for CI carry (tree.json)
+        if: steps.scope.outputs.docs_only != 'true'
         env:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: bun scripts/ci-tree.ts record --junit "$RUNNER_TEMP/junit.xml" --checks "$RUNNER_TEMP/checks-passed.txt" --out "$RUNNER_TEMP/tested-tree/tree.json"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: steps.scope.outputs.docs_only != 'true'
         with:
           name: tested-tree
           path: ${{ runner.temp }}/tested-tree/tree.json

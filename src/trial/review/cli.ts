@@ -27,6 +27,8 @@ import { loadReaderMap } from "./readers.ts";
 import { CEO_LENS, CEO_PARSER_SHA256, CEO_SEVERITY_MAP, CEO_TEMPLATE_SHA256, ceoArmLine, type CeoArm } from "./ceo-outcome.ts";
 import { CEO_RUN_PLAN_ARM, forcedPrefixOk, isCeoRunArm } from "./ceo-arms.ts";
 import { ENFORCED_ARM, GATE_CONFIG } from "./skill-gates.ts";
+import { PV_LENS } from "./product-value.ts";
+import { pvMain } from "./pv-cli.ts";
 import { TOLD_COMMANDS, TOLD_PREFIX, TOLD_SHA256, toldArmOf, toldSkill } from "./told.ts";
 import { buildUnitRepo, buildUnitTree, DEFAULT_BRANCHES, DEFAULT_INSTALL, historyProblems, UnitError, unitTaskId, type UnitRepo } from "./unit.ts";
 
@@ -54,6 +56,7 @@ export const REVIEW_UNITS_HELP = [
   "(the stage 2 amendment's hook-enforced arm: gstack-forced's prompt, the /plan-ceo-review gate on, its record in trial.json's gate), one follow-up turn,",
   "cap stops always on, gaps listed in arm.json rather than stopping the arm, stops.json for a cap stop, and an --out outside the repo.",
   "--sealed-root names the directory outside the repo that holds a sealed suite.",
+  "--plan product-value runs the product-value eval's units (src/trial/review/pv-cli.ts); see review-units --plan product-value --help.",
   "",
   "--system-prompt sets an arm's system prompt: sdk-default (no system prompt option, the default) or claude-code-preset.",
   "--told-prefix gives a code arm's told command the text of a file (one line that opens with the arm's own command, or for a",
@@ -116,6 +119,7 @@ const pairs = (flag: string, values: readonly string[] = []): Map<string, string
 const usd = (micros: number) => "$" + (micros / 1_000_000).toFixed(2);
 
 export async function main(argv: string[], io: Io = { out: console.log, err: console.error }, env: Env = process.env): Promise<number> {
+  if (argv.some((a, i) => a === "--plan" && argv[i + 1] === PV_LENS)) return pvMain(argv, io, env);
   if (argv.includes("--help") || argv.includes("-h")) {
     io.out(REVIEW_UNITS_HELP);
     return 0;
@@ -149,7 +153,7 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   }
   const { suite } = loaded;
   const planFlag = one("--plan");
-  if (planFlag !== null && !isPlanLens(planFlag) && planFlag !== CEO_LENS) throw new Usage("--plan takes a lens: " + [...Object.keys(PLAN_LENSES), CEO_LENS].join(", "));
+  if (planFlag !== null && !isPlanLens(planFlag) && planFlag !== CEO_LENS) throw new Usage("--plan takes a lens: " + [...Object.keys(PLAN_LENSES), CEO_LENS, PV_LENS].join(", "));
   const ceo = planFlag === CEO_LENS;
   const lens: PlanLens | null = ceo ? "ceo" : (planFlag as PlanLens | null);
   if (ceo && suite.kind !== "ceo-outcome") throw new Usage("--plan ceo-outcome needs a ceo-outcome suite, and suite " + suite.id + " is " + suite.kind + "\n  fix: pass a ceo-outcome suite with --suite, or another --plan for this one");

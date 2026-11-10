@@ -12,6 +12,12 @@
     }
   ],
   "dependencies": {
+    "lanes/autoplan-audit/crashchild.ts": [
+      "tests/autoplan-audit/dryrun.test.ts"
+    ],
+    "lanes/autoplan-audit/power-check.py": [
+      "tests/autoplan-audit/stats.test.ts"
+    ],
     "lanes/tbv/adapt.ts": [
       "tests/tbv/dryrun.test.ts",
       "tests/tbv/regression.test.ts"
@@ -79,10 +85,14 @@
       "tests/errors.test.ts"
     ],
     "src/runner/proxy/**": [
-      "tests/proxy/metering-proxy.test.ts"
+      "tests/proxy/metering-proxy.test.ts",
+      "tests/decision-routing/proxy-dr.test.ts",
+      "tests/decision-routing/custody.test.ts"
     ],
     "src/runner/pricing/**": [
-      "tests/proxy/metering-proxy.test.ts"
+      "tests/proxy/metering-proxy.test.ts",
+      "tests/decision-routing/proxy-dr.test.ts",
+      "tests/decision-routing/custody.test.ts"
     ],
     ".gstack/pregate.json": [
       "tests/wiki.test.ts",
@@ -151,6 +161,33 @@
     ],
     "tests/trial/fixtures/**": [
       "tests/trial/grader.test.ts"
+    ],
+    "lanes/decision-routing/**": [
+      "tests/decision-routing/agent-sdk.test.ts",
+      "tests/decision-routing/agent-units.test.ts",
+      "tests/decision-routing/custody.test.ts",
+      "tests/decision-routing/dryrun.test.ts",
+      "tests/decision-routing/host-controller.test.ts",
+      "tests/decision-routing/host-vm.test.ts",
+      "tests/decision-routing/labels-rules.test.ts",
+      "tests/decision-routing/pilot.test.ts",
+      "tests/decision-routing/proxy-dr.test.ts",
+      "tests/decision-routing/proxy-fake.test.ts",
+      "tests/decision-routing/score-acting.test.ts",
+      "tests/decision-routing/score-admission.test.ts",
+      "tests/decision-routing/score-cli.test.ts",
+      "tests/decision-routing/score-offplan.test.ts",
+      "tests/decision-routing/score-session.test.ts",
+      "tests/decision-routing/score-verdicts.test.ts",
+      "tests/decision-routing/tune-bands.test.ts"
+    ],
+    "tests/decision-routing/*.py": [
+      "tests/decision-routing/agent-sdk.test.ts",
+      "tests/decision-routing/agent-units.test.ts",
+      "tests/decision-routing/dryrun.test.ts"
+    ],
+    "tests/decision-routing/stubs/**": [
+      "tests/decision-routing/agent-sdk.test.ts"
     ]
   },
   "guards": [

@@ -2,12 +2,12 @@
 id: 2026-11-08-geva-353-l1-sol-particle-results
 kind: finding
 title: "L1 on GPT-6.1 Sol and particle-1: the overhaul's routing got untold particle-1 to open /investigate in 15.0% of fresh SWE-rebench sessions (0% before), a KEEP; Sol's untold line had no room, and told adherence failed the probe audit on both"
-summary: "Sol and particle-1, 80 SWE-rebench tasks each: particle-1 B1 +15.0 [+7.5, +22.5] KEEP; Sol B1 saturated; B3 FIX-METHOD on both (probe audit failed); pass rates flat. $412.95 paid."
+summary: "Sol and particle-1, 80 SWE-rebench tasks each: particle-1 B1 +15.0 [+7.5, +22.5] KEEP; Sol B1 saturated; B3 FIX-METHOD on both (probe audit failed); pass rates flat."
 author: GEVA-353
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
 date: 2026-11-08
-status: open
+status: superseded
 links:
   - 2026-11-06-geva-350-l1-overhaul-results
   - 2026-11-03-geva-254-l1-overhaul-prereg-2000
@@ -48,7 +48,7 @@ On Sol the untold line had no room to show a gain. Sol already opened /investiga
 
 Told adherence carries no verdict on either model. Sol wrote a complete /investigate record, by probe I, in 63 of 80 after-t sessions and 6 of 80 before-t sessions. B3 reads +71.3 points (95% CI +60.0 to +81.3), but probe I failed its blind audit (kappa 0.10), so the frozen verdict is **FIX-METHOD (method)**. The audit showed why: under the before pin Sol labels one report line "Regression tests:" in the plural, the pinned probe doesn't read that label, and so it missed whole reports in before-t. B3's +71.3 is too high by an amount this run can't measure. particle-1 wrote complete records in 19 of 80 after-t and 34 of 80 before-t sessions: -18.8 points (95% CI -31.3 to -6.3). That is a descriptive line, because particle-1's pilot (6 of 10) didn't admit B3, and probe I failed its audit there too (kappa 0.40), with most of its misses in after-t. Both end in FIX-METHOD. The probe gate (probe I complete in F1 after-t, bar 50%) read 78.8% on Sol (met), and 23.8% on particle-1 and 30.0% on Opus (both not met).
 
-Pass rate didn't move on either model. On Sol, told after passed 62.5%, told before 62.5% and no gstack 61.3%: O5 is +0.0 points (95% CI -5.0 to +5.0) against an MDD of 19.3. On particle-1 the three were 71.3%, 70.0% and 75.0%: O5 is +1.3 points (95% CI -7.5 to +10.0) against an MDD of 17.6. Neither carries a verdict. Sol's and particle-1's paid runs cost $412.95, and L1's all-in figure at the final ceiling read was $1,637.70 of its $3,300 line.
+Pass rate didn't move on either model. On Sol, told after passed 62.5%, told before 62.5% and no gstack 61.3%: O5 is +0.0 points (95% CI -5.0 to +5.0) against an MDD of 19.3. On particle-1 the three were 71.3%, 70.0% and 75.0%: O5 is +1.3 points (95% CI -7.5 to +10.0) against an MDD of 17.6. Neither carries a verdict.
 
 ## How it works
 
@@ -73,8 +73,8 @@ Sol's before-t report item, 11 of 80, is where the blind audit found the probe w
 
 Everything not listed here is as the Opus post's Setup gives it: the question, both pins, the arms and their tars, F1's 80 tasks and four parts, the probes and the analysis.
 
-- **Models.** gpt-6.1-sol (OpenRouter's openai/gpt-6.1-sol, provider openai only, no fallback) and particle-1 (OpenRouter's particle-ai/particle-1, provider particle-ai only, no fallback), each inside Claude Code through Lane B's metering proxy, with a $5 allowance per SWE-rebench session and 100 turns.
-- **Order.** Section 9's leftover rule as Amendment E built it at a $3,300 line: Sol first (l1-route-sol, pilot-sol, l1-route-sol-f, f1-sol, f1-sol-offu), then particle-1 (l1-route-p1, pilot-p1, f1-p1), each launch behind a passing ceiling check. Every item ran and settled, and none hit a cap stop.
+- **Models.** gpt-6.1-sol (OpenRouter's openai/gpt-6.1-sol, provider openai only, no fallback) and particle-1 (OpenRouter's particle-ai/particle-1, provider particle-ai only, no fallback), each inside Claude Code through Lane B's metering proxy, with a dollar allowance per SWE-rebench session (the amount is in Agent notes) and 100 turns.
+- **Order.** Section 9's leftover rule as Amendment E built it (the line's size is in Agent notes): Sol first (l1-route-sol, pilot-sol, l1-route-sol-f, f1-sol, f1-sol-offu), then particle-1 (l1-route-p1, pilot-p1, f1-p1), each launch behind a passing ceiling check. Every item ran and settled, and none hit a cap stop.
 - **Arms.** F1 ran none, before-u, after-u, before-t and after-t on both models, 400 sessions each. Amendment E added off-u on Sol only (f1-sol-offu, 80 sessions, its own launch after f1-sol). Neither model ran off-t, so S6's off-t lines print no outcome, and neither ran the TB2 twin, so S12 prints no outcome.
 - **Pilots.** 32 sessions per model: the pilot's 10 tasks on before-u and before-t, and 3 smoke tasks on after-u, after-t, off-u and off-t. The pilot rows feed admission only.
 - **Input bound.** OpenRouter has no token-count endpoint, so the proxy reserves each request's input from its body bytes. Amendment F moved Sol from one token per byte to one per 3 bytes after the pilot. particle-1 stayed at one per byte. See Run disclosures.
@@ -170,7 +170,7 @@ Every session of every arm was graded on both models: infra 0, cap stops 0, cont
 - **S10, probe I against the contract's own check** (after-t, 80). Sol: both met 63, probe only 0, contract only 16, neither 0, unrecorded 1. particle-1: both met 19, probe only 0, contract only 58, neither 0, unrecorded 3. The contract is never the score.
 - **S11, hooks.** The route hook fired in 36 of 80 after-u sessions on each model by the proxy's reading, and in 19 of 19 on the routed stratum. The proxy's and the transcript's readings disagree in 28 of 512 Sol sessions and 2 of 432 particle-1 sessions. They were not traced, and this post's hook counts use the proxy's reading.
 - **S13, background work at the result.** No F1 arm on either model is near the 10% rule. Sol's smoke after-u and after-t each had 1 of 3.
-- **Stops inside sessions.** Sol hit the $5 allowance in 4 of 32 pilot sessions and 8 of 480 F1 sessions (before-u 1, after-u 1, before-t 2, after-t 1, off-u 3), and the turn cap in 4 F1 sessions (none 1, before-t 2, after-t 1). particle-1 never hit the allowance and hit the turn cap in 21 F1 sessions (none 3, before-u 5, after-u 3, before-t 7, after-t 3). These sessions stay in the tables as graded, with their verifier result.
+- **Stops inside sessions.** Sol hit the session allowance in 4 of 32 pilot sessions and 8 of 480 F1 sessions (before-u 1, after-u 1, before-t 2, after-t 1, off-u 3), and the turn cap in 4 F1 sessions (none 1, before-t 2, after-t 1). particle-1 never hit the allowance and hit the turn cap in 21 F1 sessions (none 3, before-u 5, after-u 3, before-t 7, after-t 3). These sessions stay in the tables as graded, with their verifier result.
 
 ## Opus 5.5 beside Sol and particle-1
 
@@ -249,8 +249,8 @@ particle-1's B1 is a KEEP and needs no cycle. Sol's B3 reads a gain but carries 
 None of these changes a primary, a cap, an arm, a draw or a scoring rule.
 
 1. **Harbor telemetry.** Harbor jobs on the part VMs ran with Harbor's PostHog telemetry on, as every Opus L1 part did. launch.sh passes no HARBOR_TELEMETRY to the VM. The payload is counts, durations, token and cost totals, enum labels and flag names, with no task, repository or path identifiers. The local route checks set HARBOR_TELEMETRY=0.
-2. **The input estimate on the OpenRouter route.** The proxy bounds each request's input from its body bytes, because OpenRouter has no token count. At one token per byte, pilot-sol had 4 of 32 allowance stops, all on unit8co__darts-2985, refused at $0.78 to $1.16 spent against the $5 allowance. Amendment F set Sol's bound to one token per 3 bytes for every later Sol item (the pilot's tightest request ran at 3.35 bytes per token). particle-1 stayed at one token per byte, where a 700 KB request reserves about $0.21.
-3. **The vyper-4801 refusals.** In f1-sol's part f1-3, 15 requests on vyperlang__vyper-4801, one session in each of the five arms, ended with the provider's content flag for possible cybersecurity content, passed through by OpenRouter, or were the retry that followed. A stream cut before it reports input is charged its bytes/3 worst case, so the ledger holds $11.676007 of worst-case charges for requests the provider refused, and the log can't show what the provider billed. The watch run after every part from l1-route-sol-f on (watch-f, sha256 e2dad529) found no other such request. Sol's off-u session on the same task drew no flag.
+2. **The input estimate on the OpenRouter route.** The proxy bounds each request's input from its body bytes, because OpenRouter has no token count. At one token per byte, pilot-sol had 4 of 32 allowance stops, all on unit8co__darts-2985 (the spend at each refusal and the allowance are in Agent notes). Amendment F set Sol's bound to one token per 3 bytes for every later Sol item (the pilot's tightest request ran at 3.35 bytes per token). particle-1 stayed at one token per byte.
+3. **The vyper-4801 refusals.** In f1-sol's part f1-3, 15 requests on vyperlang__vyper-4801, one session in each of the five arms, ended with the provider's content flag for possible cybersecurity content, passed through by OpenRouter, or were the retry that followed. A stream cut before it reports input is charged its bytes/3 worst case, so the ledger holds worst-case charges for requests the provider refused (the amount is in Agent notes), and the log can't show what the provider billed. The watch run after every part from l1-route-sol-f on (watch-f, sha256 e2dad529) found no other such request. Sol's off-u session on the same task drew no flag.
 4. **Sol's and off-u's allowance stops.** Under one token per 3 bytes, f1-sol had 5 of 400 allowance stops (before-t 2, before-u 1, after-t 1, after-u 1, none 0) and f1-sol-offu 3 of 80. Two of f1-sol's five are the vyper-4801 sessions in before-t and after-u, where the worst-case charges pushed spend toward the allowance. The pilot's 4 stops (item 2) are in the pilot rows that admission reads.
 5. **particle-1's pilot loads.** In pilot-p1, particle-1 loaded /investigate in 0 of 32 sessions, told arms included (before-t 0 of 10, after-t 0 of 3, off-t 0 of 3). That is why B1 was admitted (before-u 0 of 10). F1's probe gate makes the exposure call for B3.
 6. **A score seen before the read audit.** While counting exposure on f1-p1, the run's operator printed load_investigate per F1 arm (after-u 12 of 80, every other arm 0 of 80). That is B1's measure, seen before the read audit. No other score line was read early, and the read audit changed no load count.
@@ -258,6 +258,60 @@ None of these changes a primary, a cap, an arm, a draw or a scoring rule.
 8. **Seven particle-1 packets labeled by a fresh reader.** Two readers stopped on the crew's cost watch with 7 packets left. One fresh Opus 5.5 reader labeled them at medium effort, where the other 18 readers ran at high effort. The 7 packets are all probe L packets, and probe L agreed on all 32.
 
 ## Cost
+
+The dollar figures are in Agent notes. after-t's cost per pass is 1.24 times none's on Sol and 1.18 times on particle-1 (Opus: 1.27), the ratio #169's G3 named (descriptive here).
+
+## Limits and threats
+
+- **One model per verdict.** Each verdict is one model's on one route. Sol and particle-1 ran through OpenRouter with one provider each and no fallback; a provider can change its serving between launches, which the off-u contrast is exposed to.
+- **A fresh public draw, not a sealed set.** As in the Opus post, F's 80 tasks were public before the after pin froze, and the verdicts bind these two pins only.
+- **Probe I failed its audit on all three models.** On Sol the cause is known and narrow. On particle-1 and Opus the binding item is Fix. A fixed probe needs a fresh blind audit before any B3 reading.
+- **The blind audit's limits.** The packets hide labels, not everything: the after pin's skill text reads differently from the before pin's. All readers were Opus 5.5, one model family, reading Sol and particle-1 sessions. Seven packets were labeled by a reader at a lower effort than the rest (Run disclosures). The renderer's output holds transcripts and stays private.
+- **Admission rests on pilot rows that held allowance stops.** Sol's pilot had 4 stops under the one-token-per-byte bound, 1 each in before-u and before-t. Admission read those rows as graded.
+- **Pass rate is unpowered by design.** O5 and every pass-rate secondary have MDDs near 18 to 19 points.
+
+## Replicate it
+
+Reanalysis is keyless from a checkout at 5a01538a with bun install, given the trial dirs (not public: they hold transcripts). The run's own commands, as this post ran them, once per model:
+
+    bun quick/laneb/l1/table.ts <table-config with the pilot, smoke and F1 jobs> sessions.jsonl
+    bun quick/laneb/l1/audit.ts xargs <none job dirs>
+    bun quick/laneb/l1/audit.ts contamination <rebuilt arms dir> <job dirs>
+    bun quick/laneb/l1/audit.ts apply contamination.tsv sessions.jsonl applied.jsonl applied-without-listed.jsonl
+    bun quick/laneb/l1/analyze.ts audit-sample applied.jsonl gpt-6.1-sol    (or particle-1)
+    bun quick/laneb/l1/analyze.ts report applied.jsonl analysis-config.json report.json
+    bun quick/laneb/l1/ceiling.ts final --ledger <each L1 ledger> --void-ledger pilot-opus.jsonl --work <f1-sol, f1-sol-offu and f1-p1 work dirs> --crew crew.json --plan ceiling-plan.json --post GEVA-353
+
+The record leaves out the paid launches, which need the ledger, Ubicloud and an OpenRouter key; the blind renderer, the readers' sessions and the short script that joined their labels to the keys; and the crew file, which the operator writes from each thread's counter.
+
+## What is held out, and why
+
+Nothing is sealed. F and the pilot are public tasks, listed in the prereg and Amendment C. The trial dirs and ledgers stay in the Captain's drive because they hold transcripts. Final ledgers: l1-route-sol 1fe79e81e06d5ffc4978fd8977fbe158fae2209a0a2b67494416e905261bf1da, pilot-sol 37616b99b7e25379b4d06c55d2e1c9651f79ae82e1bb1af4065eafe4052d170a, l1-route-sol-f 30a72d2a72e860dbd5a62cdf844a601248ce206ad9544a61156f654e0ee6b86b, f1-sol 2625a8e3743cc551d30e63e2cb101fc8225904c127d22466129c78e31966fc1c, f1-sol-offu 47f711875ad2ffbe954d6dfb599ac010ad8645efb947392890e88d32238e2cd9, l1-route-p1 2cb0157cb4a88d988df89e307815e6c73a5caca48cfc94693764a5c4f3860e71, pilot-p1 11ac983e66479d794e9b15aa01b8cc022e5b997a9ed8c452616a4cff30b6ca6a, f1-p1 66c68e7d32226861adf9854edda48f2096ba1c50f19497d173fd3cb9954e4057. Analysis inputs: Sol's audited table 82da9ec61274e136892c348a4e9f4210c045d8912b590612dccd08773ca742fd, particle-1's audited table c630fafc1f1f76d923100bb292e9134b973caea9a10018c1371f28c03005f8f8, Sol's audit labels 8a41fd56bb592ff56122621ea69b5ca7d147f7c28ccf1532ea2b62488b25e971, particle-1's audit labels 511cb1b1910c81e476c94e8fb0773601d9d4f051e3d47e5dbd2a0fcf9e63450e, and the crew file at the final read f59dfc90f63a47179aab6be8ae04e8086c34bd1ab337523f052e9e77ee24ff87.
+
+## Attribution
+
+SWE-rebench is the work of Nebius AI R&D, used under CC-BY-4.0; Lane B runs its tasks in their published images with a separate verifier, and each task repository keeps its own open-source licence. Harbor is Apache-2.0. gstack at both pins is MIT. Sol and particle-1 were reached through OpenRouter.
+
+## Changelog
+
+- 2026-11-08: first version.
+
+<details>
+<summary>Agent notes</summary>
+
+Sol's and particle-1's paid runs cost $412.95, and L1's all-in figure at the final ceiling read was $1,637.70 of its $3,300 line.
+
+**Models.** gpt-6.1-sol (OpenRouter's openai/gpt-6.1-sol, provider openai only, no fallback) and particle-1 (OpenRouter's particle-ai/particle-1, provider particle-ai only, no fallback), each inside Claude Code through Lane B's metering proxy, with a $5 allowance per SWE-rebench session and 100 turns.
+
+**Order.** Section 9's leftover rule as Amendment E built it at a $3,300 line: Sol first (l1-route-sol, pilot-sol, l1-route-sol-f, f1-sol, f1-sol-offu), then particle-1 (l1-route-p1, pilot-p1, f1-p1), each launch behind a passing ceiling check.
+
+**Stops inside sessions.** Sol hit the $5 allowance in 4 of 32 pilot sessions and 8 of 480 F1 sessions (before-u 1, after-u 1, before-t 2, after-t 1, off-u 3), and the turn cap in 4 F1 sessions (none 1, before-t 2, after-t 1). particle-1 never hit the allowance and hit the turn cap in 21 F1 sessions (none 3, before-u 5, after-u 3, before-t 7, after-t 3).
+
+At one token per byte, pilot-sol had 4 of 32 allowance stops, all on unit8co__darts-2985, refused at $0.78 to $1.16 spent against the $5 allowance. Amendment F set Sol's bound to one token per 3 bytes for every later Sol item (the pilot's tightest request ran at 3.35 bytes per token). particle-1 stayed at one token per byte, where a 700 KB request reserves about $0.21.
+
+A stream cut before it reports input is charged its bytes/3 worst case, so the ledger holds $11.676007 of worst-case charges for requests the provider refused, and the log can't show what the provider billed.
+
+**Cost**
 
 Every Sol and particle-1 item settled in full with no reserve open, read from the ledgers.
 
@@ -312,40 +366,9 @@ after-t's cost per pass is 1.24 times none's on Sol and 1.18 times on particle-1
 
 **Prices.** The build's quick/laneb/config/proxy.json (sha256 078942d9), in dollars per million tokens, as used on 2026-11-06 and 2026-11-07. gpt-6.1-sol: input 2, output 10, cache write 2.50, cache read 0.10; above 272,000 prompt tokens, input 4, output 15, cache write 5, cache read 0.20. particle-1: input 0.25, output 1, cache write 0.25, cache read 0.03. Part VMs are reserved and settled at $0.60 an hour (the Opus post compares that with Ubicloud's published rate), and awake hosts at $0.08 an hour.
 
-## Limits and threats
+From the summary: $412.95 paid.
 
-- **One model per verdict.** Each verdict is one model's on one route. Sol and particle-1 ran through OpenRouter with one provider each and no fallback; a provider can change its serving between launches, which the off-u contrast is exposed to.
-- **A fresh public draw, not a sealed set.** As in the Opus post, F's 80 tasks were public before the after pin froze, and the verdicts bind these two pins only.
-- **Probe I failed its audit on all three models.** On Sol the cause is known and narrow. On particle-1 and Opus the binding item is Fix. A fixed probe needs a fresh blind audit before any B3 reading.
-- **The blind audit's limits.** The packets hide labels, not everything: the after pin's skill text reads differently from the before pin's. All readers were Opus 5.5, one model family, reading Sol and particle-1 sessions. Seven packets were labeled by a reader at a lower effort than the rest (Run disclosures). The renderer's output holds transcripts and stays private.
-- **Admission rests on pilot rows that held allowance stops.** Sol's pilot had 4 stops under the one-token-per-byte bound, 1 each in before-u and before-t. Admission read those rows as graded.
-- **Pass rate is unpowered by design.** O5 and every pass-rate secondary have MDDs near 18 to 19 points.
-
-## Replicate it
-
-Reanalysis is keyless from a checkout at 5a01538a with bun install, given the trial dirs (not public: they hold transcripts). The run's own commands, as this post ran them, once per model:
-
-    bun quick/laneb/l1/table.ts <table-config with the pilot, smoke and F1 jobs> sessions.jsonl
-    bun quick/laneb/l1/audit.ts xargs <none job dirs>
-    bun quick/laneb/l1/audit.ts contamination <rebuilt arms dir> <job dirs>
-    bun quick/laneb/l1/audit.ts apply contamination.tsv sessions.jsonl applied.jsonl applied-without-listed.jsonl
-    bun quick/laneb/l1/analyze.ts audit-sample applied.jsonl gpt-6.1-sol    (or particle-1)
-    bun quick/laneb/l1/analyze.ts report applied.jsonl analysis-config.json report.json
-    bun quick/laneb/l1/ceiling.ts final --ledger <each L1 ledger> --void-ledger pilot-opus.jsonl --work <f1-sol, f1-sol-offu and f1-p1 work dirs> --crew crew.json --plan ceiling-plan.json --post GEVA-353
-
-The record leaves out the paid launches, which need the ledger, Ubicloud and an OpenRouter key; the blind renderer, the readers' sessions and the short script that joined their labels to the keys; and the crew file, which the operator writes from each thread's counter.
-
-## What is held out, and why
-
-Nothing is sealed. F and the pilot are public tasks, listed in the prereg and Amendment C. The trial dirs and ledgers stay in the Captain's drive because they hold transcripts. Final ledgers: l1-route-sol 1fe79e81e06d5ffc4978fd8977fbe158fae2209a0a2b67494416e905261bf1da, pilot-sol 37616b99b7e25379b4d06c55d2e1c9651f79ae82e1bb1af4065eafe4052d170a, l1-route-sol-f 30a72d2a72e860dbd5a62cdf844a601248ce206ad9544a61156f654e0ee6b86b, f1-sol 2625a8e3743cc551d30e63e2cb101fc8225904c127d22466129c78e31966fc1c, f1-sol-offu 47f711875ad2ffbe954d6dfb599ac010ad8645efb947392890e88d32238e2cd9, l1-route-p1 2cb0157cb4a88d988df89e307815e6c73a5caca48cfc94693764a5c4f3860e71, pilot-p1 11ac983e66479d794e9b15aa01b8cc022e5b997a9ed8c452616a4cff30b6ca6a, f1-p1 66c68e7d32226861adf9854edda48f2096ba1c50f19497d173fd3cb9954e4057. Analysis inputs: Sol's audited table 82da9ec61274e136892c348a4e9f4210c045d8912b590612dccd08773ca742fd, particle-1's audited table c630fafc1f1f76d923100bb292e9134b973caea9a10018c1371f28c03005f8f8, Sol's audit labels 8a41fd56bb592ff56122621ea69b5ca7d147f7c28ccf1532ea2b62488b25e971, particle-1's audit labels 511cb1b1910c81e476c94e8fb0773601d9d4f051e3d47e5dbd2a0fcf9e63450e, and the crew file at the final read f59dfc90f63a47179aab6be8ae04e8086c34bd1ab337523f052e9e77ee24ff87.
-
-## Attribution
-
-SWE-rebench is the work of Nebius AI R&D, used under CC-BY-4.0; Lane B runs its tasks in their published images with a separate verifier, and each task repository keeps its own open-source licence. Harbor is Apache-2.0. gstack at both pins is MIT. Sol and particle-1 were reached through OpenRouter.
-
-## Changelog
-
-- 2026-11-08: first version.
+</details>
 
 ## Disclosures
 

@@ -73,7 +73,7 @@ copy. A failure refuses with E_UNIT_IMAGE, and the unit is dropped for every arm
 The rig's arm installer takes one target skill for every arm, so one invocation runs arms that share a told skill:
 none with gstack, or none with one other stack. `--dry-run` prints the plan and writes nothing.
 
-## Per-arm and per-run settings (GEVA-109)
+## Per-arm and per-run settings
 
 Every default keeps a frozen preregistration's run as it was: same options, same prompts, same session keys.
 
@@ -85,7 +85,7 @@ Every default keeps a frozen preregistration's run as it was: same options, same
   example R2's full-procedure /review line); it must open with a command TOLD_COMMANDS in told.ts declares for the arm:
   its own, and for a gstack arm also /ship (R56-1's review panel). The arm's install target is the skill that command
   names, in the rig's install and in each session alike (/ship installs ship). A code prefix with a control character (a
-  CR, tab or BOM included) is refused, and the refusal names the character. The template and TOLD_SHA256 stay the same. On plan units (GEVA-115, plan-told.ts) only a gstack plan arm takes one: the line must open with the lens's
+  CR, tab or BOM included) is refused, and the refusal names the character. The template and TOLD_SHA256 stay the same. On plan units (plan-told.ts) only a gstack plan arm takes one: the line must open with the lens's
   command (/plan-ceo-review) and add words after it, and the arm's line becomes that line, a space and "Review this plan
   for problems.". A prefix that holds that ask, starts or ends with whitespace, or has a control character (a CR, tab or
   BOM included) is refused, and the refusal names the character. A gstack-<suffix> arm needs a prefix (E_USAGE without
@@ -121,11 +121,11 @@ run.json check refuses a resume under another allowance.
 
 ## Cap stops and reader rows (R2 build)
 
-R48 follow-ups prereg, section 3.6, and GEVA-116's note on #119.
+R48 follow-ups prereg, section 3.6, and a review note on #119.
 
 - **Cap stops.** A run with `--cap-stops` records a code session that either cap ends as its own termination:
   turn_cap (the CLI's error_max_turns result) or allowance_stop (the proxy's E_ALLOWANCE refusal that
-  names the slot's allowance). A capped session is scored, never a coverage gap (GSTA-2's ruling for R2), and counts
+  names the slot's allowance). A capped session is scored, never a coverage gap (the Captain's ruling for R2), and counts
   against its own arm, the same in every arm: its findings are those of the latest main-agent text block in the session's
   transcript.ndjson whose last json block parses as findings (an AskUserQuestion's question never counts), and with no
   such block, or no readable transcript, it is a missing pass, scored as finding nothing. arm.json counts them
@@ -161,7 +161,7 @@ B1 to B4), with `--sealed-root` when the suite is sealed. plan.ts holds what dif
 - Arms: `none` ("Review this plan for problems."), `gstack=<gstack repo>@<sha>` (`/plan-ceo-review` and that line),
   `lens` (the lens line from the skill's description, then that line), `placebo` (Lane B's placebo tree generated
   from the gstack arm, with the gstack line) and `gstack-auto=<gstack repo>@<sha>`, a frozen placeholder for
-  GST-537's CEO-only /autoplan that refuses every gstack until a release sets GSTACK_AUTO. A gstack stack arm named
+  the CEO-only /autoplan that refuses every gstack until a release sets GSTACK_AUTO. A gstack stack arm named
   `gstack-<suffix>` (not gstack-auto) is a second gstack arm, such as a forced-procedure arm, and needs its
   own `--told-prefix`. `--arm-models
   <arm>=<model>[,<model>]` limits an arm to some of `--models`, so lens runs only on Opus and placebo only on particle-1.
@@ -230,3 +230,8 @@ as its amendments change it), with `--sealed-root` when the suite is sealed. ceo
   `gstack-evals ceo rows` takes `--order <file>` at `--stage 2`, and `--smoke-round 1` or `2` at stage 1 to read stage
   1's smoke or its rerun.
 - The out dir must sit outside the repo.
+
+## Product-value units
+
+review-units --plan product-value --family plan|brief runs prereg 2026-11-08-geva-403's review sessions (product-value.ts, pv-cli.ts). Each arm's first line and the closing template are frozen in product-value.ts and tested against the post. Every arm runs with the claude-code-preset system prompt, 150 turns, a 3600 s timeout, one session at a time, a 200,000-token window and web tools denied. The gstack arm runs the 23f9d07 pin unattended; plan-ceo-review-gate adds gstack's opt-in gate for smoke rule 3. --pv-fallback-sentence adds smoke rule 2's sentence on the plan family only. The dry run asserts both families' mounts and prints each arm's prompt sha256. Each session's journal entry holds one parse with the parser's sha256, its end state, every attempt and its spend; arm.json's product_value counts them. lanes/product-value/README.md lists the build-time choices.
+

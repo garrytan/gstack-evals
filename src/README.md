@@ -17,10 +17,10 @@ The layout from plan v3.2, "Repository layout and reuse". Each folder names the 
 | runner/proxy/ | The metering proxy, vendored from harness-evals | U3 |
 | runner/ledger/ | The budget ledger, written new: write-once approvals and leases, local SQLite reservations, settle and reconcile | U4 |
 | runner/prereg/ | The preregistration checker, vendored, and the prereg.json format and its checks | U2 |
-| runner/stats/ | The statistics kit, vendored, with two fixes, and the outcome-per-skill scorer for the G family (build step O4) | U2, GST-1325 |
+| runner/stats/ | The statistics kit, vendored, with two fixes, and the outcome-per-skill scorer for the G family (build step O4) | U2 |
 | runner/pricing/ | The price table the proxy and preflight read, vendored with the proxy | U3 |
 | trial/ | The trial module: isolation, images, network, env allowlist, state root, grading delta, cache | U9 |
-| trial/review/ | Review units as trials: unit repos and trees, the told prompt, the findings parser, cost.tsv from the proxy journal, the run loop and the review-units command | U9, GST-381 |
-| waste/ | The gstack-evals waste crew-log reader behind `gstack-evals waste`: Capy thread exports, /ship receipts and per-PR replay data, counts and digests only | GST-1114 |
+| trial/review/ | Review units as trials: unit repos and trees, the told prompt, the findings parser, cost.tsv from the proxy journal, the run loop and the review-units command | U9 |
+| waste/ | The gstack-evals waste crew-log reader behind `gstack-evals waste`: Capy thread exports, /ship receipts and per-PR replay data, counts and digests only | waste baseline |
 
 Vendored files keep their upstream copyright line in the file header and get an entry in [NOTICE.md](../NOTICE.md).

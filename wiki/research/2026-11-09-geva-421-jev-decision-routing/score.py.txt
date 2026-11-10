@@ -1,0 +1,141 @@
+"""Score a point. Usage: python score.py <point_dir> [--plot out.png]
+Truth: item truth, or for consensus-pending/constructed items the Opus 5.5 and GPT-6 Astra labels when they agree
+(and, for constructed items, also agree with the constructed label); other items are excluded and counted."""
+import sys, os, json, importlib.util
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import stats
+
+def load_point(d):
+    spec = importlib.util.spec_from_file_location("point", os.path.join(d, "point.py"))
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+def load(d, arm):
+    p = os.path.join(d, "results", arm + ".jsonl")
+    out = {}
+    if os.path.exists(p):
+        for line in open(p):
+            if line.strip():
+                r = json.loads(line)
+                if not r.get("error"):
+                    out[r["id"]] = r
+    return out
+
+def main():
+    d = os.path.abspath(sys.argv[1])
+    plot = sys.argv[sys.argv.index("--plot") + 1] if "--plot" in sys.argv else None
+    P = load_point(d)
+    items = [json.loads(l) for l in open(os.path.join(d, "items.jsonl")) if l.strip()]
+    items = [it for it in items if not it.get("exclude")]
+    lo, la = load(d, "label_opus"), load(d, "label_astra")
+    truth, excluded = {}, {"no_label": 0, "labels_disagree": 0, "disagree_with_construction": 0}
+    label_cost = sum(r.get("cost_usd", 0) for r in lo.values()) + sum(r.get("cost_usd", 0) for r in la.values())
+    for it in items:
+        src = it.get("truth_source")
+        if src == "consensus-pending" or (src == "constructed" and (lo or la)):
+            a, b = lo.get(it["id"]), la.get(it["id"])
+            if not a or not b:
+                excluded["no_label"] += 1
+                continue
+            if not P.is_correct(a["label"], b["label"]) or not P.is_correct(b["label"], a["label"]):
+                excluded["labels_disagree"] += 1
+                continue
+            if src == "constructed" and not P.is_correct(a["label"], it["truth"]):
+                excluded["disagree_with_construction"] += 1
+                continue
+            truth[it["id"]] = it["truth"] if src == "constructed" else a["label"]
+        elif it.get("truth") is not None:
+            truth[it["id"]] = it["truth"]
+    split = {it["id"]: it.get("split") for it in items}
+    arms = {a: load(d, a) for a in ("current", "particle", "jev", "esc")}
+    def corr(arm, i):
+        lab = arms[arm][i].get("label")
+        if lab is None or (hasattr(P, "OPTIONS") and lab not in P.OPTIONS and lab != truth[i]):
+            return 0
+        return int(P.is_correct(lab, truth[i]))
+    def noans(arm, i):
+        lab = arms[arm][i].get("label")
+        return int(lab is None or (hasattr(P, "OPTIONS") and lab not in P.OPTIONS))
+    res = {"point": os.path.relpath(d, os.path.expanduser("~/.capy/work/jev/points")), "items": len(items), "scored": len(truth), "excluded": excluded, "label_cost_usd": label_cost}
+    dev = [i for i in truth if split[i] == "dev"]
+    held = [i for i in truth if split[i] == "held"]
+    res["n_dev"], res["n_held"] = len(dev), len(held)
+    # Arms on held: only items every available arm answered, so comparisons are paired.
+    avail = [a for a in arms if arms[a]]
+    have_cascade = bool(arms["jev"]) and bool(arms["esc"])
+    common = [i for i in held if all(i in arms[a] for a in avail)]
+    res["n_held_paired"] = len(common)
+    rows = {}
+    for a in avail:
+        c = [corr(a, i) for i in common]
+        k = sum(c)
+        costs = [arms[a][i].get("cost_usd") or 0 for i in common]
+        lats = [arms[a][i].get("latency_ms") for i in common if arms[a][i].get("latency_ms") is not None]
+        rows[a] = {"acc": k / len(c) if c else None, "k": k, "n": len(c), "ci": stats.wilson(k, len(c)), "no_answer": sum(noans(a, i) for i in common), "cost_per_decision": sum(costs) / len(costs) if costs else None, "lat_p50": stats.pct(lats, 0.5), "lat_p90": stats.pct(lats, 0.9), "_c": c}
+    if have_cascade:
+        dev_c = [i for i in dev if i in arms["jev"] and i in arms["esc"] and (i in arms["current"] if arms["current"] else True)]
+        target = (sum(corr("current", i) for i in dev_c) / len(dev_c)) if (arms["current"] and dev_c) else 1.0
+        tune = stats.tune_threshold([arms["jev"][i]["conf"] for i in dev_c], [corr("jev", i) for i in dev_c], [corr("esc", i) for i in dev_c], target)
+        tune["target_dev_acc"] = target
+        tune["n_dev"] = len(dev_c)
+        res["tune"] = tune
+        best = stats.tune_threshold([arms["jev"][i]["conf"] for i in dev_c], [corr("jev", i) for i in dev_c], [corr("esc", i) for i in dev_c], 2.0)
+        res["tune_max_dev_acc"] = best
+        tau = tune["tau"]
+        c, costs, lats, esc_n = [], [], [], 0
+        for i in common:
+            j = arms["jev"][i]
+            if j["conf"] < tau:
+                esc_n += 1
+                c.append(corr("esc", i))
+                costs.append((j.get("cost_usd") or 0) + (arms["esc"][i].get("cost_usd") or 0))
+                if j.get("latency_ms") is not None and arms["esc"][i].get("latency_ms") is not None:
+                    lats.append(j["latency_ms"] + arms["esc"][i]["latency_ms"])
+            else:
+                c.append(corr("jev", i))
+                costs.append(j.get("cost_usd") or 0)
+                if j.get("latency_ms") is not None:
+                    lats.append(j["latency_ms"])
+        k = sum(c)
+        def cascade_at(t):
+            cc, cs = [], []
+            for i in common:
+                j = arms["jev"][i]
+                if j["conf"] < t:
+                    cc.append(corr("esc", i)); cs.append((j.get("cost_usd") or 0) + (arms["esc"][i].get("cost_usd") or 0))
+                else:
+                    cc.append(corr("jev", i)); cs.append(j.get("cost_usd") or 0)
+            return cc, cs, sum(1 for i in common if arms["jev"][i]["conf"] < t)
+        c2, cs2, e2 = cascade_at(best["tau"])
+        rows["cascade_maxacc"] = {"acc": sum(c2) / len(c2) if c2 else None, "k": sum(c2), "n": len(c2), "ci": stats.wilson(sum(c2), len(c2)), "cost_per_decision": sum(cs2) / len(cs2) if cs2 else None, "esc_rate": e2 / len(c2) if c2 else None, "lat_p50": None, "lat_p90": None, "_c": c2}
+        rows["cascade"] = {"acc": k / len(c) if c else None, "k": k, "n": len(c), "ci": stats.wilson(k, len(c)), "cost_per_decision": sum(costs) / len(costs) if costs else None, "lat_p50": stats.pct(lats, 0.5), "lat_p90": stats.pct(lats, 0.9), "esc_rate": esc_n / len(c) if c else None, "_c": c}
+        conf = [arms["jev"][i]["conf"] for i in common]
+        cj = [corr("jev", i) for i in common]
+        cal, ece = stats.calibration(conf, cj)
+        res["calibration_held"] = {"rows": cal, "ece": ece}
+        if plot:
+            import matplotlib
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+            fig, ax = plt.subplots(figsize=(4.2, 4.2))
+            xs = [r[3] for r in cal]; ys = [r[4] for r in cal]; ns = [r[2] for r in cal]
+            ax.plot([0.5, 1], [0.5, 1], "--", color="#999")
+            ax.scatter(xs, ys, s=[20 + 4 * n for n in ns], color="#c2185b")
+            for x, y, n in zip(xs, ys, ns):
+                ax.annotate(str(n), (x, y), textcoords="offset points", xytext=(6, -10), fontsize=8)
+            ax.set_xlim(0.45, 1.02); ax.set_ylim(0, 1.02)
+            ax.set_xlabel("Jev stated probability of its answer"); ax.set_ylabel("hit rate (held)")
+            ax.set_title(res["point"] + " (ECE %.2f, n=%d)" % (ece, len(conf)), fontsize=9)
+            fig.tight_layout(); fig.savefig(plot, dpi=130)
+    if "current" in rows:
+        for a in rows:
+            if a != "current":
+                rows[a]["vs_current"] = stats.paired_diff(rows["current"]["_c"], rows[a]["_c"])
+    for a in rows:
+        rows[a].pop("_c", None)
+    res["arms"] = rows
+    print(json.dumps(res, indent=1, default=str))
+
+if __name__ == "__main__":
+    main()

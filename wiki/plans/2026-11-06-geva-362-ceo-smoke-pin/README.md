@@ -159,6 +159,8 @@ An E_ALLOWANCE stop that leaves no block scores as a miss, and such stops fall m
 
 ### 4.5 J: one shared judge cap (binding)
 
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
+
 The three stage 2 judge items share one cap: the all-in table's judges line, which projection prints from section 7.3's formula (the larger of twice the projected judges and $70, $70.00 at this table). No cap is recorded from section 7.3's per-item rule, under which each judge item was capped at the stage 2 envelope less stage 2's settled spend, about $309 each at the amendment's table. The judges run one at a time, and each judge item is recorded at the shared cap less what the earlier judge items settled, so the three together can't pass it. The figure is set when the Captain records stage 2's caps, from the projection at that step. It enters every all-in check as that one line.
 
 ### 4.6 K: the cache-write mode

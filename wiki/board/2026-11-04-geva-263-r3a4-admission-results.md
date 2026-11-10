@@ -2,7 +2,7 @@
 id: 2026-11-04-geva-263-r3a4-admission-results
 kind: finding
 title: "R3a4: plain Opus 5.5 left 71 of 200 SWE-rebench tasks unsolved and plain GPT-6.1 Sol left 81, and both told pilots showed the procedure in 10 of 10, so both models pass admission for R3b (no effect claimed)"
-summary: "R3a4 admission passed on both models: with no skill Opus 5.5 left 71 of 200 SWE-rebench tasks unsolved and Sol 81; told pilots 10 of 10 exposed. No effect claimed. Paid: $192.04."
+summary: "R3a4 admission passed on both models: with no skill Opus 5.5 left 71 of 200 SWE-rebench tasks unsolved and Sol 81; told pilots 10 of 10 exposed. No effect claimed."
 author: GEVA-263
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
@@ -47,7 +47,7 @@ This section is an explanation, not a result. SWE-rebench's pool tasks were crea
 
 - **Question.** Does each model with no skill leave at least 30 of 200 drawn tasks unsolved, and does told /investigate with the procedure line show the procedure in at least 7 of 10 pilot trials? (#112 section 4.3; amendment 4 section 10.)
 - **Arms.** Screen: none, with no skill, the plain task prompt and an empty skills directory in its arm tar. Pilot: told, gstack at 61e201ec (v1.91.295.0) with the prompt prefixed by /investigate and followed by the procedure line (arm name gstack in the analysis). Every arm sets CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1.
-- **Models.** claude-opus-5-5 on the Anthropic API. openai/gpt-6.1-sol through OpenRouter, with the provider pinned to OpenAI and no fallbacks. Both go through the metering proxy with a $12 allowance per session (config/cells.r3a4.json at the pin).
+- **Models.** claude-opus-5-5 on the Anthropic API. openai/gpt-6.1-sol through OpenRouter, with the provider pinned to OpenAI and no fallbacks.
 - **Harness.** Lane B's runner at 616de34: Harbor at f3a5a923 and Claude Code 2.1.312, each part on its own Ubicloud standard-16 VM in eu-central-h1, six trials at a time.
 - **Tasks.** The 354-task pool (sha256 7d2b2735cd50836364cc2c1fba9a2dd07a5ce42e9ea0f9c4b8d699b9e81ea1af). The oracle preflight ran the reference solution twice on every pool task and dropped 8 that failed both passes, keeping 346 (drop list sha256 dd23d16ce1b32669e219c82d48c2b7bd0fa34289b6dda628445a0939cc36cc6f). The screen drew 200 with seed 20261104 (ids in draw order sha256 440bac4fb8c1193292562d4199b9b86e19bf993d32138c6e93f2410e4a9c2055) as screen-a and screen-b of 100 each, one none trial per task. The pilot drew 10 of those 200 with seed 20261105 (sha256 e4c16fb029f58453d370e89c73e76db64b8ed8b9824bde623c697c8c173ccbc0), one told trial each. Both models got the same tasks. SWE-rebench is the work of Nebius AI R&D (arXiv 2505.20411 and 2602.23866), used under CC-BY-4.0; amendment 4 section 17 lists what we changed.
 - **Grading.** A trial passes when the task's own tests pass in the separate verifier. The procedure gate (r3/exposure.ts at the pin) counts a told trial as exposed when it opened /investigate and the agent's text matches DEBUG REPORT or a "Phase 1" to "Phase 5" heading.
@@ -55,22 +55,20 @@ This section is an explanation, not a result. SWE-rebench's pool tasks were crea
 
 ## Result
 
-analyze's lines, exactly as printed. It exited 0 for both models.
+analyze's printed output, with each model's settle line and the cost clauses of its R3b start line moved to Agent notes. It exited 0 for both models.
 
 Opus 5.5:
 
 ```text
-r3a4-opus: 200 screen trials, 10 pilot trials, settled $85.40 of $550, open reserves 0
 admission: 71 of 200 graded screen tasks unsolved by Opus 5.5 none (0 infra); pilot exposure 10 of 10 graded told trials
-R3b start: 70 tasks; measured cost per trial none $0.37, told $0.74; projection r3b4-opus $232, r3b4-particle $473 (planning estimate $0.75 a trial); the Captain records both caps before R3b starts
+R3b start: 70 tasks; the Captain records both caps before R3b starts
 ```
 
 GPT-6.1 Sol:
 
 ```text
-r3a4-sol: 200 screen trials, 10 pilot trials, settled $103.85 of $700, open reserves 0
 admission: 81 of 200 graded screen tasks unsolved by GPT-6.1 Sol none (0 infra); pilot exposure 10 of 10 graded told trials
-R3b start for GPT-6.1 Sol: 70 tasks; measured cost per trial none $0.44, told $0.90; projection r3b4-sol $280; the Captain records r3b4-sol's cap before Sol's R3b starts
+R3b start for GPT-6.1 Sol: 70 tasks; the Captain records r3b4-sol's cap before Sol's R3b starts
 ```
 
 Counts from each run's record.json and trials.jsonl:
@@ -100,15 +98,15 @@ Digests, sha256 of one id per line: the admitted lists, sorted, are df48f3cc0c9e
 
 - **Gate patterns.** Every exposed pilot trial matched DEBUG REPORT. A Phase heading matched in no Opus trial and in one Sol trial.
 - **Pilot passes.** 8 of 10 for each model. The pilot's tasks were drawn from all 200, and only two of them are admitted for each model; told failed both, on both models. One trial on each of 10 tasks is not a comparison, and the prereg freezes none.
-- **Sol's allowance stop.** One screen-b none session had 6 requests refused at the session budget check, at $3.02 of its $12, and still passed. The check counts each request's worst-case cost before sending it, so it can refuse well under the allowance.
-- **Told against none cost.** A told trial cost about twice a none trial: $0.74 against $0.37 on Opus and $0.90 against $0.44 on Sol. The pilot's 10 tasks are not the screen's 200, so the ratio is rough.
+- **Sol's allowance stop.** One screen-b none session had 6 requests refused at the session budget check and still passed; the amounts are in Agent notes. The check counts each request's worst-case cost before sending it, so it can refuse well under the allowance.
+- **Told against none cost.** A told trial cost about twice a none trial; the costs are in Agent notes. The pilot's 10 tasks are not the screen's 200, so the ratio is rough.
 
 ## Deviations
 
 Three deviations, each ruled on by the Captain during the run (rulings recorded as GSTA-2). None changes an admission rule or count.
 
 1. **Sol's screens ran without the run-time oracle gate.** Amendment 4 section 9 keeps `ORACLE=1`, so each part runs the reference solution on its tasks before its paid trials. GEVA-249's prepare ran without it, so prepare wrote no oracle.json for screen-a and screen-b, and vm-run.sh skipped the gate in both without a word. The Captain's ruling A1: "screen-a and screen-b stand on the preflight, with no oracle pass added afterward, and the reading gives infra per part beside the admitted count." The oracle preflight had passed every drawn task's reference solution twice at the same pinned image digests, and the table above gives infra per part (0 in each). Sol's pilot ran with the gate restored from a keyless scratch prepare whose plan.json was byte-identical to the live run's, and the gate passed. The Opus run caught the same miss before its bind and prepared again with `ORACLE=1`, so every Opus part ran the gate.
-2. **Sol's screen-b controller died when the run machine slept, and screen-b was relaunched by hand.** The run thread ended a turn with no registered wait on its watcher. The machine slept, which killed the detached controller, the ledger service and the ssh session after screen-b's VM had pulled its images and before any trial ran. The ledger holds no screen-b session from that launch, so no model call was lost or counted twice. The Captain's ruling B: "GSTA-2 rules a hand relaunch of R3a4 Sol screen-b after its controller died before any trial ran: fresh VM reserve r3a4-sol-screen-b/vm2 sized to the worst case and settled by hand, model calls through launch.sh under r3a4-sol, launch-exit from the captured exit status." The first VM was settled by hand at $3.528667 for 5.881111 hours, over its $2.40 block, because no second block was reserved after the controller died. vm2 was reserved by hand at $4.80 and settled at $1.559000. Between screen-b and the pilot, a script mirrored screen.ts's stop checks and printed the projection, $179.77, which fits $700.
+2. **Sol's screen-b controller died when the run machine slept, and screen-b was relaunched by hand.** The run thread ended a turn with no registered wait on its watcher. The machine slept, which killed the detached controller, the ledger service and the ssh session after screen-b's VM had pulled its images and before any trial ran. The ledger holds no screen-b session from that launch, so no model call was lost or counted twice.
 3. **The none arms see skills that ship inside 10 task repositories.** Amendment 4 section 16 says the none arm has an empty skills directory. Its arm tar does, but 10 of the 200 task checkouts carry their own project skills, and both arms run in the task's environment. The Captain ruled the Opus fastmcp-3237 hit "a descriptive note, not contamination" and the task-repo skills a deviation to list, with no rule change. They are descriptive, listed here and excluded from nothing. The next section traces them.
 
 ## Read audit of the none arms (descriptive)
@@ -122,7 +120,51 @@ scan.py ran over every part before analyze, as amendment 4 section 16 says. No g
 
 So every generic hit traces to a task repository or to the arm's own empty directory. The none arm stays free of gstack, by construction and by audit. The 10 tasks give both arms the same project skills, so they favor neither arm by design. R3 amendment 5 has R3b report the same counts per arm.
 
-## Cost
+## Why null? (R48)
+
+This post reports an admission pass, not a null. No effect was estimated, so no Why-null cycle runs here. R3b's results post runs it if R3b ends null.
+
+## Limits
+
+- **Contamination.** Every pool task predates Opus 5.5's training cutoff, and most predate Sol's (amendment 4 section 6). That raises solve rates in both arms and biases toward saturation and a null. Every number here is about these tasks only.
+- **Single draws.** One none trial per task, as frozen, so 71 and 81 are single draws; the intervals show the range.
+- **Procedure visible, not followed.** The procedure line names the pattern the gate looks for, so exposure shows the procedure was visible, not that it was followed (amendment 4 section 7's known limit).
+- **Sol's screens without the run-time gate** (deviation 1), covered by the preflight.
+- **Task-repo skills** in 10 of 200 tasks (deviation 3).
+- **Transcripts.** The counts come from analyze's output, the run records and the ledgers. The read audit above used only skill names, Skill call names and path strings; no agent reasoning or task text was read.
+
+## Replicate it
+
+The commands that ran are in amendment 4 sections 9 and 10 and in the run records: GEVA-248's step files and scripts/ (oracle preflight, prepare, probe, run) and GEVA-249's step scripts (route check, prepare, probe, launch, relaunch.sh for screen-b). The outcome step is `bun quick/laneb/r3/screen.ts analyze <work dir> --item <item>` from the pin's export, with LEDGER, DROPS and DROPS_SHA256 set, and the lines it printed are above, with the settle lines and cost clauses moved to Agent notes. This record leaves out the trial records and transcripts, which stay in the Captain's drive, so an outsider can't rerun analyze on them.
+
+## What is held out
+
+Nothing is sealed. The run records stay private only because they hold model transcripts and expired proxy session tokens. This post publishes counts and digests.
+
+## Changelog
+
+- 2026-11-04: first version (GEVA-263).
+
+<details>
+<summary>Agent notes</summary>
+
+Both go through the metering proxy with a $12 allowance per session (config/cells.r3a4.json at the pin).
+
+r3a4-opus: 200 screen trials, 10 pilot trials, settled $85.40 of $550, open reserves 0
+
+R3b start: 70 tasks; measured cost per trial none $0.37, told $0.74; projection r3b4-opus $232, r3b4-particle $473 (planning estimate $0.75 a trial); the Captain records both caps before R3b starts
+
+r3a4-sol: 200 screen trials, 10 pilot trials, settled $103.85 of $700, open reserves 0
+
+R3b start for GPT-6.1 Sol: 70 tasks; measured cost per trial none $0.44, told $0.90; projection r3b4-sol $280; the Captain records r3b4-sol's cap before Sol's R3b starts
+
+**Sol's allowance stop.** One screen-b none session had 6 requests refused at the session budget check, at $3.02 of its $12, and still passed.
+
+**Told against none cost.** A told trial cost about twice a none trial: $0.74 against $0.37 on Opus and $0.90 against $0.44 on Sol.
+
+The Captain's ruling B: "GSTA-2 rules a hand relaunch of R3a4 Sol screen-b after its controller died before any trial ran: fresh VM reserve r3a4-sol-screen-b/vm2 sized to the worst case and settled by hand, model calls through launch.sh under r3a4-sol, launch-exit from the captured exit status." The first VM was settled by hand at $3.528667 for 5.881111 hours, over its $2.40 block, because no second block was reserved after the controller died. vm2 was reserved by hand at $4.80 and settled at $1.559000. Between screen-b and the pilot, a script mirrored screen.ts's stop checks and printed the projection, $179.77, which fits $700.
+
+**Cost**
 
 Every R3a4 item, from the item ledgers in the Captain's drive (ledger/), settled in full with no reserve open:
 
@@ -151,30 +193,11 @@ Prices are the pin's config/proxy.json, in dollars per million tokens, as used o
 
 **VMs.** Every VM is destroyed. The Opus thread made 4 oracle shards, 1 probe and 3 part VMs, and `UBI_OWNER=GEVA-248 list --mine` came back empty. The Sol thread made 1 probe and VMs for screen-a, screen-b (two), and the pilot, and `UBI_OWNER=GEVA-249 list --mine` came back empty at 02:00:28Z.
 
-## Why null? (R48)
+A fresh replication is a paid screen: about $88 for Opus with the oracle preflight and about $104 for Sol at these runs' costs.
 
-This post reports an admission pass, not a null. No effect was estimated, so no Why-null cycle runs here. R3b's results post runs it if R3b ends null.
+From the summary: Paid: $192.04.
 
-## Limits
-
-- **Contamination.** Every pool task predates Opus 5.5's training cutoff, and most predate Sol's (amendment 4 section 6). That raises solve rates in both arms and biases toward saturation and a null. Every number here is about these tasks only.
-- **Single draws.** One none trial per task, as frozen, so 71 and 81 are single draws; the intervals show the range.
-- **Procedure visible, not followed.** The procedure line names the pattern the gate looks for, so exposure shows the procedure was visible, not that it was followed (amendment 4 section 7's known limit).
-- **Sol's screens without the run-time gate** (deviation 1), covered by the preflight.
-- **Task-repo skills** in 10 of 200 tasks (deviation 3).
-- **Transcripts.** The counts come from analyze's output, the run records and the ledgers. The read audit above used only skill names, Skill call names and path strings; no agent reasoning or task text was read.
-
-## Replicate it
-
-The commands that ran are in amendment 4 sections 9 and 10 and in the run records: GEVA-248's step files and scripts/ (oracle preflight, prepare, probe, run) and GEVA-249's step scripts (route check, prepare, probe, launch, relaunch.sh for screen-b). The outcome step is `bun quick/laneb/r3/screen.ts analyze <work dir> --item <item>` from the pin's export, with LEDGER, DROPS and DROPS_SHA256 set, and the lines it printed are quoted above. This record leaves out the trial records and transcripts, which stay in the Captain's drive, so an outsider can't rerun analyze on them. A fresh replication is a paid screen: about $88 for Opus with the oracle preflight and about $104 for Sol at these runs' costs.
-
-## What is held out
-
-Nothing is sealed. The run records stay private only because they hold model transcripts and expired proxy session tokens. This post publishes counts and digests.
-
-## Changelog
-
-- 2026-11-04: first version (GEVA-263).
+</details>
 
 ## Disclosures
 

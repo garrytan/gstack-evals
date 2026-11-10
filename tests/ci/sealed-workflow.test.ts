@@ -96,9 +96,11 @@ describe("sealed.yml", () => {
 
   test("runs only known commands, so nothing from the pull request executes", () => {
     const known = /^(git |test |mkdir -p |printf |attributes=|policy=|find \. |grep -Eq |curl -fsSL |unzip -q |bun --no-env-file --config=\/dev\/null "\$RUNNER_TEMP\/gstack\/bin\/gstack-pregate" )/;
+    // The Bun install's retry loop and npm fallback (tests/ci/bun-install.test.ts runs them), matched line for line.
+    const bunInstall = /^(for delay in 15 30 60 end; do|rm -f "\$RUNNER_TEMP\/bun\.zip"|\[ "\$delay" = end \] && break|echo "::warning::The Bun release download failed[^"$]*(\$\{delay\}s|\$BUN_VERSION from registry\.npmjs\.org)"|sleep "\$delay"|done|if \[ -f "\$RUNNER_TEMP\/bun\.zip" \]; then|else|fi|tar -xzf "\$RUNNER_TEMP\/bun\.tgz" -C "\$RUNNER_TEMP\/bun-linux-x64" --strip-components=2 package\/bin\/bun)$/;
     const lines = job.steps.flatMap((s) => (s.run ?? "").split("\n").map((l) => l.trim()).filter(Boolean));
     expect(lines.length).toBeGreaterThan(0);
-    for (const line of lines) expect(line).toMatch(known);
+    for (const line of lines) expect([line, known.test(line) || bunInstall.test(line)]).toEqual([line, true]);
   });
 
   test("points origin/<default> at the base before the scan: the default branch's tip for a pull request, the pre-push commit for a push", () => {
