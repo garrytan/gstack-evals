@@ -147,3 +147,21 @@ test("the meter records each refusal's code once, in the order met, beside the r
   expect(m.refusals).toEqual(["E_PROXY_SERVER_TOOL", "E_ALLOWANCE"]);
 });
 
+// Value: protects=section 6's end kind input, the one refusal that is an allowance stop; fails_when=a model or output-cap refusal, which shares the E_ALLOWANCE code, counts as a stop, or the slot's allowance check is not counted; why_new=#290 pass two; seam=metering-proxy.ts Meter allowance_stops; no_claim=the status or body of any refusal, which stay as they were
+test("the meter counts an allowance stop only at the slot's allowance check, not for another E_ALLOWANCE refusal", async () => {
+  const t = setup({});
+  expect((await t.call({ ...plain, model: "claude-sonnet-5-5" })).status).toBe(403);
+  expect((await t.call({ ...plain, max_tokens: 1_000_000 })).status).toBe(400);
+  expect((await t.call(plain)).status).toBe(200);
+  const stray = await t.proxy.finalize(t.slot.meter_id);
+  expect(stray.refusals).toEqual(["E_ALLOWANCE"]);
+  expect(stray.allowance_stops).toBe(0);
+  const u = setup({});
+  const res = await u.call({ ...plain, messages: [{ role: "user", content: "x".repeat(1_300_000) }] });
+  expect(res.status).toBe(402);
+  expect(((await res.json()) as { code?: string }).code).toBe("E_ALLOWANCE");
+  const stopped = await u.proxy.finalize(u.slot.meter_id);
+  expect(stopped.refusals).toEqual(["E_ALLOWANCE"]);
+  expect(stopped.allowance_stops).toBe(1);
+});
+

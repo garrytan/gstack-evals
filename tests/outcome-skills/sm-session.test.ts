@@ -45,7 +45,8 @@ test("the plan is seeded, holds every cell once per unit and model, and puts fol
 // Value: protects=section 6's end kinds and the one-retry rule; fails_when=a limit counts as a gap, an upstream end is scored, or a third try is allowed; why_new=GEVA-436 P2; seam=session.ts endKind, nextStep; no_claim=gap propagation across contrasts (P4)
 test("end kinds map from real_agent's termination, and upstream or infra ends retry once, then gap", () => {
   expect(["completed", "bg_wait_expired", "wall_limit", "turn_ceiling", "error_result", "cli_exit", "error"].map((termination) => endKind({ termination }))).toEqual(["completed", "completed", "limit_wall", "limit_turns", "upstream", "infra", "infra"]);
-  expect(endKind({ termination: "error_result", refusals: ["E_ALLOWANCE"] })).toBe("limit_allowance");
+  expect(endKind({ termination: "error_result", refusals: ["E_ALLOWANCE"] })).toBe("upstream");
+  expect(endKind({ termination: "error_result", refusals: ["E_ALLOWANCE"], allowance_stop: true })).toBe("limit_allowance");
   expect(endKind({ termination: "error", upstream_status: 529 })).toBe("upstream");
   expect(endKind({ termination: "completed", harness: true })).toBe("infra");
   expect(nextStep(["completed"])).toEqual({ action: "score" });
@@ -117,17 +118,30 @@ print(json.dumps(out))
 
 // Value: protects=section 6's end kind from real_agent's summary; fails_when=a count or a missing refusals is read as no refusals, or unknown_micros is dropped or written as 0; why_new=#290 review (red team CRITICAL); seam=session.ts sessionEnd; no_claim=the driver's close answer (sm-driver.test.ts)
 test("sessionEnd reads the refusal codes and unknown_micros real_agent copied, refuses refusals that are not an array of codes, and leaves a harness failure as infra", () => {
-  const proxy = { spent_micros: 5, requests: 3, ok_responses: 1, refused: 1, refusals: ["E_ALLOWANCE"], unknown_micros: 7, unknown_calls: 1 };
+  const proxy = { spent_micros: 5, requests: 3, ok_responses: 1, refused: 1, refusals: ["E_ALLOWANCE"], allowance_stops: 1, unknown_micros: 7, unknown_calls: 1 };
   expect(sessionEnd({ termination: "error_result", proxy }, false)).toEqual({ end: "limit_allowance", unknown_micros: 7 });
   expect(nextStep([sessionEnd({ termination: "error_result", proxy }, false).end])).toEqual({ action: "score" });
-  expect(sessionEnd({ termination: "error_result", proxy: { ...proxy, refused: 0, refusals: [] } }, false)).toEqual({ end: "upstream", unknown_micros: 7 });
-  expect(nextStep([sessionEnd({ termination: "error_result", proxy: { ...proxy, refusals: ["UPSTREAM"] } }, false).end])).toEqual({ action: "retry" });
+  expect(sessionEnd({ termination: "error_result", proxy: { ...proxy, allowance_stops: 0 } }, false)).toEqual({ end: "upstream", unknown_micros: 7 });
+  expect(nextStep([sessionEnd({ termination: "error_result", proxy: { ...proxy, allowance_stops: 0 } }, false).end])).toEqual({ action: "retry" });
+  expect(sessionEnd({ termination: "error_result", proxy: { ...proxy, refused: 0, refusals: [], allowance_stops: 0 } }, false)).toEqual({ end: "upstream", unknown_micros: 7 });
+  expect(nextStep([sessionEnd({ termination: "error_result", proxy: { ...proxy, refusals: ["UPSTREAM"], allowance_stops: 0 } }, false).end])).toEqual({ action: "retry" });
+  expect(() => sessionEnd({ termination: "error_result", proxy: { ...proxy, allowance_stops: undefined } }, false)).toThrow(/^E_SM_ARM /);
+  expect(() => sessionEnd({ termination: "error_result", proxy: { ...proxy, allowance_stops: "1" } }, false)).toThrow(/^E_SM_ARM /);
   expect(() => sessionEnd({ termination: "error_result", proxy: { ...proxy, refusals: 1 } }, false)).toThrow(/^E_SM_ARM /);
   expect(() => sessionEnd({ termination: "error_result", proxy: { ...proxy, refusals: undefined } }, false)).toThrow(/^E_SM_ARM /);
   expect(() => sessionEnd({ termination: "error_result", proxy: { ...proxy, refusals: [402] } }, false)).toThrow(/^E_SM_ARM /);
   expect(() => sessionEnd({ termination: "completed", proxy: { ...proxy, unknown_micros: null } }, false)).toThrow(/^E_SM_ARM /);
   expect(sessionEnd(null, true)).toEqual({ end: "infra", unknown_micros: 0 });
   expect(sessionEnd({ termination: "completed", proxy: { refused: 1 } }, true)).toEqual({ end: "infra", unknown_micros: 0 });
+});
+
+// Value: protects=the record of a session whose close answer never came; fails_when=real_agent's all-null proxy block throws, so runSession writes no record for a session that spent and the infra retry never runs, or a block with only some fields set is read as a failed close; why_new=#290 pass two; seam=session.ts sessionEnd; no_claim=the spend of that session, which stays on its lease
+test("a session whose close answer never came ends as infra, while a block with only some fields set is still refused", () => {
+  const none = { spent_micros: null, requests: null, ok_responses: null, refused: null, refusals: null, allowance_stops: null, unknown_micros: null, unknown_calls: null };
+  expect(sessionEnd({ termination: "completed", proxy: none }, false)).toEqual({ end: "infra", unknown_micros: 0 });
+  expect(nextStep([sessionEnd({ termination: "error_result", proxy: none }, false).end])).toEqual({ action: "retry" });
+  expect(sessionEnd({ termination: "completed", proxy: {} }, false)).toEqual({ end: "infra", unknown_micros: 0 });
+  expect(() => sessionEnd({ termination: "completed", proxy: { ...none, spent_micros: 5 } }, false)).toThrow(/^E_SM_ARM /);
 });
 
 // Value: protects=A3's /qa pin on the path that runs; fails_when=qa:told builds its turn with no recorded pin, or with a task qa_sha that is not the pin; why_new=#290 review (red team); seam=sm_user.py sm_turn; no_claim=the install at that pin (real_agent _open_sm)
@@ -173,10 +187,10 @@ print(json.dumps([check(qa), check(qa + "HOME /root/.capy\\n"), check(qa + "HOME
 });
 
 // Value: protects=A3's /qa pin in run.ts before any image is built; fails_when=A3 runs while registry.json sm.pins.qa.sha is null or another sha than --qa-sha; why_new=#290 review (red team); seam=run.ts runSession; no_claim=a pinned A3 run
-test("runSession refuses A3 while registry.json holds no /qa pin, before any image is built", () => {
+test("runSession refuses A3 unless --qa-sha is registry.json's /qa pin, before any image is built", () => {
   const dir = join(mkdtempSync(join(tmpdir(), "sm-run-")), "u");
   writeUnit(dir, { ...toCandidate("rust", fixtureRow()), image_digest: "sha256:" + "c".repeat(64) }, fixtureRow());
   const session: PlannedSession = { unit: "u", part: 1, index: 0, model: "claude-opus-5-5", cell: "A3", stage: "first", arm: "qa:told" };
-  expect(loadRegistry().sm!.pins.qa.sha).toBeNull();
-  expect(() => runSession({ unitDir: dir, session, control: "http://127.0.0.1:1", proxy: "127.0.0.1:1", out: join(dir, "../out"), qaHome: dir, qaSha: "a".repeat(40) })).toThrow(/^E_SM_ARM .*\/qa pin/);
+  const qaSha = loadRegistry().sm!.pins.qa.sha === "a".repeat(40) ? "b".repeat(40) : "a".repeat(40);
+  expect(() => runSession({ unitDir: dir, session, control: "http://127.0.0.1:1", proxy: "127.0.0.1:1", out: join(dir, "../out"), qaHome: dir, qaSha })).toThrow(/^E_SM_ARM .*\/qa pin/);
 });

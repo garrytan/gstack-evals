@@ -41,11 +41,11 @@ export function planPart(units: string[], models: string[], orderSeed: number, p
 
 export type EndKind = "completed" | "limit_wall" | "limit_turns" | "limit_allowance" | "upstream" | "infra";
 
-/** Section 6's end kind. termination is real_agent's; refusals are the proxy codes the session met; harness is a failure outside the model (container, pull, Harbor, agent setup). */
-export function endKind(o: { termination: string | null; refusals?: string[]; upstream_status?: number | null; harness?: boolean }): EndKind {
+/** Section 6's end kind. termination is real_agent's; refusals are the proxy codes the session met; allowance_stop is a refusal at the slot's allowance check, the one E_ALLOWANCE refusal that is a stop; harness is a failure outside the model (container, pull, Harbor, agent setup). */
+export function endKind(o: { termination: string | null; refusals?: string[]; allowance_stop?: boolean; upstream_status?: number | null; harness?: boolean }): EndKind {
   if (o.harness) return "infra";
   const refused = o.refusals ?? [];
-  if (refused.includes("E_ALLOWANCE")) return "limit_allowance";
+  if (o.allowance_stop) return "limit_allowance";
   if (o.termination === "wall_limit") return "limit_wall";
   if (o.termination === "turn_ceiling") return "limit_turns";
   if (o.termination === "completed" || o.termination === "bg_wait_expired") return "completed";
@@ -53,13 +53,15 @@ export function endKind(o: { termination: string | null; refusals?: string[]; up
   return "infra";
 }
 
-/** The end kind and unpriced spend of one session from real_agent's real-summary.json, whose proxy block copies the driver's close answer. A harness failure is infra whatever the block holds; otherwise refusals must be the close answer's array of refusal codes and unknown_micros a number, or the session is refused, so an allowance stop is never read as an upstream end. */
+/** The end kind and unpriced spend of one session from real_agent's real-summary.json, whose proxy block copies the driver's close answer. A harness failure is infra whatever the block holds, and so is a block with no field set, which real_agent writes when no close answer came; otherwise refusals must be the close answer's array of refusal codes, and allowance_stops and unknown_micros numbers, or the session is refused, so an allowance stop is never read as an upstream end. */
 export function sessionEnd(summary: { termination?: string | null; proxy?: Record<string, any> | null } | null, harness: boolean): { end: EndKind; unknown_micros: number } {
   const p = summary?.proxy ?? {};
   if (!summary || harness) return { end: "infra", unknown_micros: typeof p.unknown_micros === "number" ? p.unknown_micros : 0 };
+  if (Object.values(p).every((v) => v === null || v === undefined)) return { end: "infra", unknown_micros: 0 };
   if (!Array.isArray(p.refusals) || !p.refusals.every((c: unknown) => typeof c === "string")) return smFail("E_SM_ARM", "real-summary.json's proxy.refusals is " + JSON.stringify(p.refusals) + ", not the close answer's array of refusal codes");
   if (typeof p.unknown_micros !== "number") return smFail("E_SM_ARM", "real-summary.json's proxy.unknown_micros is " + JSON.stringify(p.unknown_micros) + ", not the close answer's number");
-  return { end: endKind({ termination: summary.termination ?? null, refusals: p.refusals }), unknown_micros: p.unknown_micros };
+  if (typeof p.allowance_stops !== "number") return smFail("E_SM_ARM", "real-summary.json's proxy.allowance_stops is " + JSON.stringify(p.allowance_stops) + ", not the close answer's number");
+  return { end: endKind({ termination: summary.termination ?? null, refusals: p.refusals, allowance_stop: p.allowance_stops > 0 }), unknown_micros: p.unknown_micros };
 }
 
 /** Scored as is, one retry from a fresh container, or a gap with its code. */

@@ -503,6 +503,13 @@ model or unit (E_SM_PACKET).
   limit_allowance and is scored as section 6 says, not retried as upstream. Refusals that are not an array of codes, or
   an unknown_micros that is not a number, refuse the session (E_SM_ARM). The session record's unknown_micros is the
   close answer's, not 0. No rule changes.
+- Only the allowance check ends a session as a limit (pre-data build fix, 2026-11-10, metering-proxy.ts, stage.ts,
+  real_agent.py, session.ts): E_ALLOWANCE also names the proxy's route, model, body, output-cap and price refusals, so
+  the meter now counts allowance_stops, the refusals at the slot's allowance check alone. The close answer and
+  real-summary.json carry it, and endKind reads only that count. No refusal's code, status or body changes. A proxy
+  block with no field set, which real_agent writes when no close answer came, ends the session as infra and the
+  session keeps its record, instead of being refused. An allowance_stops that is not a number refuses the session
+  (E_SM_ARM). No rule changes.
 - A run builds nothing when a rebuild command exits non-zero (rebuild_failed), when the print command reads report paths
   and none of them holds a fresh file (no_fresh_report), or when a stale file could not be moved aside (stale_unhidden).
   The parser does not run then, and the run parses nothing. A test command's own exit never sets it. Every one of the

@@ -110,8 +110,8 @@ STATEMENT = "{statement}"
 # file the strip rule removes, and the home paths that would carry gstack or a drive into a no-gstack arm.
 # The home paths A3's /qa install itself writes: its skills dir and the ~/.gstack state gstack's setup creates.
 QA_HOME = ("/root/.claude/skills", "/root/.gstack")
-# The close answer's fields real-summary.json's proxy block keeps: run.ts reads refusals and unknown_micros for the session record.
-PROXY_KEYS = ("spent_micros", "requests", "ok_responses", "refused", "refusals", "unknown_micros", "unknown_calls")
+# The close answer's fields real-summary.json's proxy block keeps: run.ts reads refusals, allowance_stops and unknown_micros for the session record.
+PROXY_KEYS = ("spent_micros", "requests", "ok_responses", "refused", "refusals", "allowance_stops", "unknown_micros", "unknown_calls")
 
 
 def proxy_summary(closed) -> dict:
