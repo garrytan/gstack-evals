@@ -7,7 +7,8 @@
 // and git rev-parse origin/main HEAD the same commit twice. Then D7's object-level read (D7_CHECK) runs in a throwaway
 // container of the built image, with no network: every ref of the tree and of D1's origin, FETCH_HEAD, ORIG_HEAD and the
 // other pseudo refs among them, points at the base or an ancestor; every commit object is the base or an ancestor; no
-// object is unreachable; no alternates file; no git directory anywhere besides the tree's and the origin's; and no file
+// object is unreachable; no alternates file; each submodule sits at the commit the base pins and reads the same way
+// against it; no git directory anywhere besides the tree's, the origin's and those submodules'; and no file
 // outside the base commit's tracked files holds one of the task's hidden test names as a whole word (a name inside a
 // longer identifier, as installed packages' own tests hold, is not a hit). The names (d7Names) come from the
 // task's tests and the pristine listing and reach the container through a read-only mount, never an image layer. Rows
@@ -21,7 +22,7 @@ import { pristineListing, runnerOnlyMarkers, type Pristine } from "../decision-r
 import { bundleLists, SCREEN, screenedFromEnv } from "./pins.ts";
 import { imageRef, pool, rebenchRoot, trialEnvironment } from "./screen.ts";
 
-export type D7Read = { base: string | null; names: number; refs: string[]; pseudo: string[]; commits: Record<string, number>; unreachable: Record<string, number>; alternates: string[]; origin: boolean; git_dirs: string[]; hits: string[]; done: boolean };
+export type D7Read = { base: string | null; names: number; refs: string[]; pseudo: string[]; commits: Record<string, number>; unreachable: Record<string, number>; alternates: string[]; origin: boolean; git_dirs: string[]; subheads: string[]; hits: string[]; done: boolean };
 export type BuildRow = { task: string; pass: boolean; error?: string; workdir?: string; pwd?: string; main?: string; head?: string; d7?: D7Read };
 
 /** D7's read, as sh, for a throwaway container of the built image. ROOT, REPO, ORIGIN, SELF (the read-only mount holding
@@ -34,25 +35,35 @@ echo "D7 base $B"
 W=$(mktemp -d)
 git --git-dir="$G" rev-list "$B" | sort > "$W/a"
 side() {
+  A=$3
   for r in $(git --git-dir="$2" for-each-ref --format='%(refname)'); do
     case "$r" in refs/replace/*) echo "D7 ref $1 $r"; continue ;; esac
-    c=$(git --git-dir="$2" rev-parse -q --verify "$r^{commit}") && grep -qx "$c" "$W/a" || echo "D7 ref $1 $r"
+    c=$(git --git-dir="$2" rev-parse -q --verify "$r^{commit}") && grep -qx "$c" "$A" || echo "D7 ref $1 $r"
   done
   for f in FETCH_HEAD ORIG_HEAD MERGE_HEAD CHERRY_PICK_HEAD REVERT_HEAD BISECT_HEAD AUTO_MERGE; do
     [ -e "$2/$f" ] || continue
-    for c in $(grep -o '[0-9a-f]\\{40\\}' "$2/$f"); do grep -qx "$c" "$W/a" || { echo "D7 pseudo $1 $f"; break; }; done
+    for c in $(grep -o '[0-9a-f]\\{40\\}' "$2/$f"); do grep -qx "$c" "$A" || { echo "D7 pseudo $1 $f"; break; }; done
   done
   { [ -s "$2/objects/info/alternates" ] || [ -s "$2/objects/info/http-alternates" ]; } && echo "D7 alternates $1"
-  echo "D7 commits $1 $(git --git-dir="$2" cat-file --batch-all-objects --batch-check='%(objecttype) %(objectname)' | sed -n 's/^commit //p' | sort | comm -23 - "$W/a" | wc -l)"
+  echo "D7 commits $1 $(git --git-dir="$2" cat-file --batch-all-objects --batch-check='%(objecttype) %(objectname)' | sed -n 's/^commit //p' | sort | comm -23 - "$A" | wc -l)"
   echo "D7 unreachable $1 $(git --git-dir="$2" fsck --unreachable --no-reflogs --no-progress 2>/dev/null | grep -c '^unreachable ')"
 }
-side testbed "$G"
-if [ -d "$O" ]; then side origin "$O"; else echo "D7 noorigin"; fi
-rm -rf "$W"
+side testbed "$G" "$W/a"
+if [ -d "$O" ]; then side origin "$O" "$W/a"; else echo "D7 noorigin"; fi
+echo "$G" > "$W/dirs"; echo "$O" >> "$W/dirs"; echo "$T" > "$W/tops"
+git -C "$T" ls-tree -r HEAD | awk '$2 == "commit"' > "$W/subs"
+while read -r m t c p <&3; do
+  [ -e "$T/$p/.git" ] || continue
+  D=$(git -C "$T/$p" rev-parse --absolute-git-dir 2>/dev/null) || { echo "D7 subhead $p"; continue; }
+  [ "$(git -C "$T/$p" rev-parse -q --verify 'HEAD^{commit}')" = "$c" ] || echo "D7 subhead $p"
+  git --git-dir="$D" rev-list "$c" 2>/dev/null | sort > "$W/s"
+  side "sub:$(printf '%s' "$p" | sed 's/ /%20/g')" "$D" "$W/s"
+  echo "$D" >> "$W/dirs"; echo "$T/$p" >> "$W/tops"
+done 3< "$W/subs"
 find "$R/" -xdev -path "$S" -prune -o -type f -name HEAD -print 2>/dev/null | while read -r h; do
   d=\${h%/HEAD}
   [ -d "$d/objects" ] && [ -d "$d/refs" ] || continue
-  [ "$d" = "$G" ] || [ "$d" = "$O" ] || echo "D7 gitdir $d"
+  grep -qxF "$d" "$W/dirs" || echo "D7 gitdir $d"
 done
 if [ -s "$N" ]; then
   echo "D7 names $(grep -c . "$N")"
@@ -61,18 +72,20 @@ if [ -s "$N" ]; then
     case "$e" in "$S"|"$R/proc"|"$R/sys"|"$R/dev") continue ;; esac
     grep -rlwF -D skip -f "$N" -- "$e" 2>/dev/null
   done | while read -r f; do
-    case "$f" in "$G"/*|"$O"/*) continue ;; esac
-    case "$f" in "$T"/*) git -C "$T" show "HEAD:\${f#"$T"/}" 2>/dev/null | grep -qwF -f "$N" && continue ;; esac
+    while read -r d; do case "$f" in "$d"/*) f=; break ;; esac; done < "$W/dirs"
+    [ -n "$f" ] || continue
+    case "$f" in "$T"/*) u=$(git -C "$(dirname "$f")" rev-parse --show-toplevel 2>/dev/null) && grep -qxF "$u" "$W/tops" && git -C "$u" show "HEAD:\${f#"$u"/}" 2>/dev/null | grep -qwF -f "$N" && continue ;; esac
     echo "D7 hit $f"
   done
 else
   echo "D7 names 0"
 fi
+rm -rf "$W"
 echo "D7 done"
 `;
 
 export function readD7(out: string): D7Read {
-  const d: D7Read = { base: null, names: 0, refs: [], pseudo: [], commits: {}, unreachable: {}, alternates: [], origin: true, git_dirs: [], hits: [], done: false };
+  const d: D7Read = { base: null, names: 0, refs: [], pseudo: [], commits: {}, unreachable: {}, alternates: [], origin: true, git_dirs: [], subheads: [], hits: [], done: false };
   for (const line of out.split("\n")) {
     const m = /^D7 (\S+) ?(.*)$/.exec(line);
     if (!m) continue;
@@ -85,6 +98,7 @@ export function readD7(out: string): D7Read {
     else if (key === "alternates") d.alternates.push(value);
     else if (key === "noorigin") d.origin = false;
     else if (key === "gitdir") d.git_dirs.push(value);
+    else if (key === "subhead") d.subheads.push(value);
     else if (key === "hit") d.hits.push(value);
     else if (key === "done") d.done = true;
   }
@@ -103,6 +117,7 @@ export function d7Problems(d: D7Read): string[] {
   for (const side of d.alternates) p.push(side + " borrows objects through an alternates file");
   if (!d.origin) p.push("no D1 origin repository");
   for (const g of d.git_dirs) p.push("a git directory at " + g + " besides the tree's and the origin's");
+  for (const m of d.subheads) p.push("the submodule at " + m + " is not at the commit the base pins");
   for (const h of d.hits) p.push("a hidden test name in " + h);
   return p.map((x) => "D7: " + x);
 }
@@ -117,12 +132,13 @@ export function d7Names(taskDir: string, pristine: Pristine): string[] {
   return runnerOnlyMarkers({ testSide: filesText(join(taskDir, "tests")), fixSide: "", publicText: existsSync(issue) ? readFileSync(issue, "utf8") : "", pristine, canary: "DRCANARY-" + "0".repeat(32) }).slice(1);
 }
 
-/** The line of a failed docker build (--progress=plain) that says why: the step's last fatal line, else its last error
- * line, else the build's last line. */
+/** The line of a failed docker build (--progress=plain) that says why: the last fatal line, else error line, that a
+ * step's command printed (BuildKit puts a timestamp before those, and not before the lines that quote the step's own
+ * text), else any such line, else the build's last line. */
 export function buildError(stderr: string): string {
-  const lines = stderr.trim().split("\n").map((l) => l.trim()).filter(Boolean);
-  const pick = (re: RegExp) => lines.filter((l) => re.test(l) && !/^ERROR: failed to (build|solve)/.test(l)).at(-1);
-  return (pick(/\bfatal:/i) ?? pick(/\berror:/i) ?? lines.at(-1) ?? "").slice(0, 300);
+  const lines = stderr.trim().split("\n").map((l) => l.trim()).filter(Boolean), said = lines.filter((l) => /^(#\d+ )?\d+\.\d+ /.test(l));
+  const pick = (from: string[], re: RegExp) => from.filter((l) => re.test(l) && !/^ERROR: failed to (build|solve)/.test(l)).at(-1);
+  return (pick(said, /\bfatal:/i) ?? pick(said, /\berror:/i) ?? pick(lines, /\bfatal:/i) ?? pick(lines, /\berror:/i) ?? lines.at(-1) ?? "").slice(0, 300);
 }
 
 /** A built image's reads against the rule: WORKDIR /testbed, pwd /testbed with no -w, origin/main equal to HEAD there,
@@ -144,7 +160,7 @@ export async function buildCheck(out: string, tasks: string[], log: (l: string) 
   const dk = (args: string[], timeoutSec = 600) => { const r = Bun.spawnSync([docker, ...args], { stdout: "pipe", stderr: "pipe", timeout: timeoutSec * 1000 }); return { code: r.exitCode, out: r.stdout.toString(), err: r.stderr.toString() }; };
   const runner: DockerRunner = { run: async (args, o) => { const r = dk(args, Math.ceil((o?.timeoutMs ?? 600_000) / 1000)); return { code: r.code ?? 1, stdout: r.out, stderr: r.err }; } };
   for (const [i, task] of tasks.entries()) {
-    const ref = imageRef(p.get(task)!), tag = "hm-build-" + (i + 1), ctx = mkdtempSync(join(tmpdir(), "hm-build-"));
+    const ref = imageRef(p.get(task)!), tag = "hm-build-" + process.pid + "-" + (i + 1), ctx = mkdtempSync(join(tmpdir(), "hm-build-"));
     const read: Omit<BuildRow, "pass"> = { task };
     try {
       for (;;) {
