@@ -4,7 +4,11 @@
 // copies the /qa install's home into /root after the tree. A follow-on commits the first stage's change on top as the
 // second commit (sh/followon.sh). The container is committed with the runtime image's own entrypoint, command, work dir
 // and user, and the image is pinned by id. The session sees only the top layer's tree, so the image's original repository
-// and history never reach it. Untracked files the prep runs left in the volume (test output) are cleaned; ignored files stay. sessionManifest writes the one-row manifest real_agent's image check reads.
+// and history never reach it. Untracked files the prep runs left in the volume (test output) are cleaned; ignored files stay.
+// A volume the runtime image declares inside repo_dir is mounted in the build container: the rm and git clean skip its
+// mount point, it must be empty after the copy (else what sits there would start every session's volume, so the build
+// fails closed), and the build container goes with its anonymous volumes. sessionManifest writes the one-row manifest
+// real_agent's image check reads.
 import { createHash } from "node:crypto";
 import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -18,10 +22,22 @@ export const SESSION_REPO = "gstack-evals-sm-session";
 
 const BUILD = `set -euo pipefail
 repo="$1"
-rm -rf "$repo"
+mnts=(); ex=()
+while read -r _ _ _ _ m _; do case "$m" in "$repo"/*) mnts+=("$m"); ex+=(-e "/\${m#"$repo"/}/");; esac; done < /proc/self/mountinfo
+sm_clear() {
+  local e m keep
+  for e in "$1"/* "$1"/.[!.]* "$1"/..?*; do
+    [ -e "$e" ] || [ -L "$e" ] || continue
+    keep=
+    for m in "\${mnts[@]}"; do case "$m" in "$e") keep=mount;; "$e"/*) keep=\${keep:-above};; esac; done
+    case "$keep" in mount) ;; above) sm_clear "$e";; *) rm -rf -- "$e";; esac
+  done
+}
+if [ \${#mnts[@]} -eq 0 ]; then rm -rf "$repo"; else sm_clear "$repo"; fi
 mkdir -p "$repo"
 cp -a /sm-src/. "$repo"/
-git -C "$repo" clean -fdq
+git -C "$repo" clean -fdq \${ex[@]+"\${ex[@]}"}
+for m in \${mnts[@]+"\${mnts[@]}"}; do if [ -n "$(ls -A "$m")" ]; then echo "SM_MOUNT_NOT_EMPTY \${m#"$repo"/}" >&2; exit 3; fi; done
 if [ -d /sm-in/home ]; then cp -a /sm-in/home/. /root/; fi
 if [ -f /sm-in/second ]; then bash /sm-in/followon.sh "$repo" /sm-in >&2; fi
 cd "$repo"
@@ -64,7 +80,7 @@ export function buildSessionImage(u: SmUnit, o: { volume: string; stage: "first"
     if (JSON.stringify(cfg.Entrypoint?.length ? cfg.Entrypoint : null) !== entry) return smFail("E_SM_INFRA_GAP", "the session image " + tag + " has entrypoint " + entry + ", not the runtime image's");
     return { image_id: id, tag, runtime_id: runtime, volume: o.volume, commits, head: got.HEAD!, home: o.qaHome ? "qa" : "none", tree_patch_sha256: o.treePatch === undefined ? null : createHash("sha256").update(o.treePatch).digest("hex") };
   } finally {
-    docker(["rm", "-f", name], { timeoutMs: 60_000 });
+    docker(["rm", "-f", "-v", name], { timeoutMs: 60_000 });
     rmSync(inDir, { recursive: true, force: true });
   }
 }

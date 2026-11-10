@@ -11,7 +11,9 @@ import { docker, dockerRun } from "../../real-outcome/task/docker.ts";
 import { withRuntime } from "../images/manifest.ts";
 import { prepareBase, type Where } from "./history.ts";
 import { classifyHits, leakCheck, needles, ownNames, scan, type LeakHit, type HitKind } from "./leak.ts";
+import { fill, type Draw, type Fill } from "./draw.ts";
 import { needsBase, splitFix } from "./fixsplit.ts";
+import { goAmbiguous, goDefsIn } from "./goids.ts";
 import { runBash } from "./history.ts";
 import { scope } from "./scope.ts";
 import { applyPatches, copyVolume, dropVolume, LIMIT_MS, parseRun, passed, runName, runTests, type Mode, type RebuildRule } from "./testrun.ts";
@@ -196,7 +198,8 @@ export function oneRun(dir: string, u: SmUnit, volume: string, image: string, tr
     const rule: RebuildRule = u.oracle?.rebuild_rule?.applies ? "applies" : "exempt";
     const t = runTests({ image, volume: copy, repoDir: u.repo_dir, workDir: u.work_dir, commands: u.commands, mode, limitMs, label: u.id + "-" + tree + n, rule });
     const log = t.log === t.stderr ? t.stderr : t.stderr + "\n" + t.log;
-    const stale = { stale_deleted: t.reports?.deleted ?? 0, stale_refused: t.reports?.refused ?? 0, built_nothing: t.built_nothing, stale_fresh: t.reports ? t.reports.fresh : null, created_dirs: t.created_dirs };
+    const stale = { stale_deleted: t.reports?.deleted ?? 0, stale_refused: t.reports?.refused ?? 0, built_nothing: t.built_nothing, stale_fresh: t.reports ? t.reports.fresh : null, created_dirs: t.created_dirs, infra: t.infra };
+    if (t.infra) return { run: { tree, n, wall_ms: t.wall_ms, exit: t.exit, parsed_sha256: null, stopped: false, exits: t.exits, ...stale }, parsed: null, log };
     if (t.stopped) return { run: { tree, n, wall_ms: t.wall_ms, exit: t.exit, parsed_sha256: null, stopped: true, exits: t.exits, ...stale }, parsed: null, log };
     const parsed = parseRun(t, rf(join(dir, "parser.py"), "utf8"), u.id + "-" + tree + n);
     return { run: { tree, n, wall_ms: t.wall_ms, exit: t.exit, parsed_sha256: sha(JSON.stringify(parsed)), stopped: false, exits: t.exits, ...stale }, parsed, log };
@@ -208,21 +211,55 @@ export function oneRun(dir: string, u: SmUnit, volume: string, image: string, tr
 /** The keep rule over six parsed runs (three base, three fixed). A dataset fail-to-pass id that passes on every base run
  *  is not fail-to-pass: it leaves the unit's set (removed). One that passes on some base runs and fails on others leaves it
  *  as flaky on base (flaky), never a reason for instability. The unit's set is the ids that fail on every base run; one of
- *  them that does not pass on every fixed run makes the unit unstable. */
-export function judge(f2p: string[], base: (Record<string, string> | null)[], fixed: (Record<string, string> | null)[]): { kept: boolean; stable: string[]; failing: string[]; f2p: string[]; removed: string[]; flaky: string[]; reason: string } {
+ *  them that does not pass on every fixed run makes the unit unstable. An id drop matches (a bare Go test name more than
+ *  one package defines, goids.ts) leaves both sets before any of that and is listed under ambiguous; a unit whose every
+ *  dataset fail-to-pass id it matches drops as E_SM_AMBIGUOUS_TEST. */
+export function judge(f2p: string[], base: (Record<string, string> | null)[], fixed: (Record<string, string> | null)[], drop: (id: string) => boolean = () => false): { kept: boolean; stable: string[]; failing: string[]; f2p: string[]; removed: string[]; flaky: string[]; ambiguous: { f2p: string[]; stable: string[] }; reason: string; code: "kept" | "E_SM_ORACLE_UNSTABLE" | "E_SM_AMBIGUOUS_TEST" } {
   const all = [...base, ...fixed];
-  if (all.some((r) => r === null)) return { kept: false, stable: [], failing: [], f2p: [], removed: [], flaky: [], reason: "a run did not produce a parsed log" };
+  const none = { stable: [], failing: [], f2p: [], removed: [], flaky: [] };
+  if (all.some((r) => r === null)) return { kept: false, ...none, ambiguous: { f2p: [], stable: [] }, reason: "a run did not produce a parsed log", code: "E_SM_ORACLE_UNSTABLE" };
+  const inAll = (id: string) => all.every((r) => passed(r!, id));
+  const ambiguous = { f2p: f2p.filter(drop), stable: Object.keys(all[0]!).filter((id) => drop(id) && inAll(id)).sort() };
+  if (f2p.length && ambiguous.f2p.length === f2p.length) return { kept: false, ...none, ambiguous, reason: "every fail-to-pass id is a bare Go test name defined in more than one package", code: "E_SM_AMBIGUOUS_TEST" };
+  const ids = f2p.filter((id) => !drop(id));
   const passes = (id: string) => base.filter((r) => passed(r!, id)).length;
-  const removed = f2p.filter((id) => passes(id) === base.length);
-  const flaky = f2p.filter((id) => passes(id) > 0 && passes(id) < base.length);
-  const kept = f2p.filter((id) => passes(id) === 0);
+  const removed = ids.filter((id) => passes(id) === base.length);
+  const flaky = ids.filter((id) => passes(id) > 0 && passes(id) < base.length);
+  const kept = ids.filter((id) => passes(id) === 0);
   const failing = kept.filter((id) => fixed.some((r) => !passed(r!, id)));
-  const stable = Object.keys(all[0]!).filter((id) => all.every((r) => passed(r!, id))).sort();
-  const out = { stable, failing, f2p: kept, removed, flaky };
-  if (failing.length) return { kept: false, ...out, reason: "fail-to-pass tests failing on base but not passing on every fixed run" };
-  if (!kept.length) return { kept: false, ...out, reason: "no fail-to-pass test" };
-  if (!stable.length) return { kept: false, ...out, reason: "no stable test" };
-  return { kept: true, ...out, reason: "kept" };
+  const stable = Object.keys(all[0]!).filter((id) => !drop(id) && inAll(id)).sort();
+  const out = { stable, failing, f2p: kept, removed, flaky, ambiguous };
+  const unstable = (reason: string) => ({ kept: false, ...out, reason, code: "E_SM_ORACLE_UNSTABLE" as const });
+  if (failing.length) return unstable("fail-to-pass tests failing on base but not passing on every fixed run");
+  if (!kept.length) return unstable("no fail-to-pass test");
+  if (!stable.length) return unstable("no stable test");
+  return { kept: true, ...out, reason: "kept", code: "kept" };
+}
+
+/** The verdict one oracle run ends the unit with, or null to go on: a run that could not make its mark dir is an infra
+ *  error (neither kept nor dropped; a rerun resumes it), and a run past the limit is too slow. */
+export function runStop(r: OracleRun, limitMs: number): { code: "E_SM_INFRA_GAP" | "E_SM_SLOW_TEST"; detail: string } | null {
+  if (r.infra) return { code: "E_SM_INFRA_GAP", detail: r.tree + " run " + r.n + " could not make its mark dir (" + r.infra + "): an infra error, neither kept nor dropped" };
+  if (r.stopped) return { code: "E_SM_SLOW_TEST", detail: r.tree + " run " + r.n + " passed " + limitMs + " ms (wall " + r.wall_ms + " ms)" };
+  return null;
+}
+
+/** sm oracle's walk over a draw: fill asks each unit's verdict once. An infra error is neither kept nor dropped: it counts
+ *  per language on its own line and leaves the fill not final, so a rerun resumes it. Drops count by code, with the
+ *  reason for an unstable unit. */
+export async function oracleWalk(d: Draw, verdict: (id: string) => Promise<{ verdict: string; lang: string; reason?: string }>, opts: { retry?: boolean } = {}): Promise<{ fill: Fill; drops: Record<string, number>; infra: Record<string, number>; final: boolean }> {
+  const drops: Record<string, number> = {}, infra: Record<string, number> = {};
+  const res = await fill(d, async (id) => {
+    const v = await verdict(id);
+    if (v.verdict === "E_SM_INFRA_GAP") {
+      infra[v.lang] = (infra[v.lang] ?? 0) + 1;
+      return "infra";
+    }
+    const why = v.verdict === "E_SM_ORACLE_UNSTABLE" ? v.verdict + ": " + (v.reason ?? "not recorded") : v.verdict;
+    if (v.verdict !== "kept") drops[why] = (drops[why] ?? 0) + 1;
+    return v.verdict === "kept";
+  }, opts);
+  return { fill: res, drops, infra, final: !res.infra.length };
 }
 
 /** Rule (c)'s flag: the rebuild rule applies only where the rebuild exits 0 on every fixed oracle run. */
@@ -271,9 +308,10 @@ export async function oracleUnit(dir: string, pacer: Pacer, opts: { mode?: Mode;
         const r = oneRun(dir, u, p.volume, s.runtime_id, tree, n, opts.mode ?? "hardened", opts.limitMs);
         u.oracle.runs.push(r.run);
         u.oracle.max_wall_ms = Math.max(u.oracle.max_wall_ms, r.run.wall_ms);
-        if (r.run.stopped) {
-          u.oracle.verdict = "E_SM_SLOW_TEST";
-          return done("E_SM_SLOW_TEST", tree + " run " + n + " passed " + (opts.limitMs ?? LIMIT_MS) + " ms (wall " + r.run.wall_ms + " ms)");
+        const stop = runStop(r.run, opts.limitMs ?? LIMIT_MS);
+        if (stop) {
+          u.oracle.verdict = stop.code;
+          return done(stop.code, stop.detail);
         }
         (tree === "base" ? base : fixed).push(r.parsed);
         logs[tree].push(r.log);
@@ -288,7 +326,9 @@ export async function oracleUnit(dir: string, pacer: Pacer, opts: { mode?: Mode;
         r.parsed_sha256 = sha(JSON.stringify({}));
         base[k] = {};
       });
-    const j = judge(u.tests.f2p, base, fixed);
+    const drop = u.lang === "go" ? goAmbiguous(goDefsIn({ kind: "docker", image: s.runtime_id, volume: p.volume, repoDir: u.repo_dir, name: runName(u.id + "-godefs") }, basePatches(dir).map(([, t]) => t))) : undefined;
+    const j = judge(u.tests.f2p, base, fixed, drop);
+    if (drop) u.oracle.ambiguous = { f2p: j.ambiguous.f2p, stable: j.ambiguous.stable.length };
     u.oracle.stable = j.stable;
     u.oracle.stable_sha256 = sha(j.stable.join("\n"));
     u.oracle.f2p = j.f2p;
@@ -299,7 +339,7 @@ export async function oracleUnit(dir: string, pacer: Pacer, opts: { mode?: Mode;
     u.oracle.f2p_ok = !j.failing.length && base.every(Boolean) && fixed.every(Boolean);
     const guard = j.kept && !u.oracle.rebuild_rule.applies ? staleBinaryGuard(u.oracle.runs.filter((r) => r.tree === "fixed").map((run, i) => ({ run, parsed: fixed[i]! })), base as Record<string, string>[], j.f2p, nb) : null;
     if (guard) u.oracle.reason = guard;
-    u.oracle.verdict = j.kept && !guard ? "kept" : "E_SM_ORACLE_UNSTABLE";
+    u.oracle.verdict = guard ? "E_SM_ORACLE_UNSTABLE" : j.code;
     return done(u.oracle.verdict, (guard ?? j.reason) + "; rebuild rule " + (u.oracle.rebuild_rule.applies ? "applies" : "exempt") + " (fixed rebuild exits " + u.oracle.rebuild_rule.fixed_rebuild_exits.map((x) => x.join(",")).join(" ") + ");" + (j.failing.length ? ": " + j.failing.slice(0, 20).join(", ") : "") + "; fail-to-pass kept " + j.f2p.length + " removed " + j.removed.length + " flaky " + j.flaky.length + "; stable " + j.stable.length + (u.oracle.targets ? "; cargo stopped early " + u.oracle.targets.cargo_stopped_early : ""));
   } catch (e) {
     const code = codeOf(e);

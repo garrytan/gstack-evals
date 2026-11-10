@@ -10,7 +10,10 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { patchOf, scoreUnit } from "../../lanes/outcome-skills/statemachines/fixtures.ts";
-import { scoreFirst } from "../../lanes/outcome-skills/statemachines/score.ts";
+import { scoreFirst, scoringRun } from "../../lanes/outcome-skills/statemachines/score.ts";
+import { PY_IMAGE } from "../../lanes/outcome-skills/statemachines/testrun.ts";
+import type { SmUnit } from "../../lanes/outcome-skills/statemachines/unit.ts";
+import { docker } from "../../lanes/real-outcome/task/docker.ts";
 
 const RUST_IMAGE = process.env.SM_SCORE_RUST_IMAGE ?? "", GO_IMAGE = process.env.SM_SCORE_GO_IMAGE ?? "";
 const on = process.env.GSTACK_EVALS_DOCKER === "1" && !!RUST_IMAGE && !!GO_IMAGE;
@@ -86,4 +89,23 @@ describe.skipIf(!on)("first-stage scorer in Docker", () => {
     expect(skip.adapted.fell_back_to_strict).toMatch(/^skip marker: tests\/test_calc.py pytest.skip\(/);
     expect(skip.adapted.outcome).toBe("clean_fix");
   }, 600_000);
+});
+
+describe.skipIf(process.env.GSTACK_EVALS_DOCKER !== "1")("a scoring run with an infra error (docker)", () => {
+  test("a scoring run that can't make its start mark fails as E_SM_INFRA_GAP and is never scored; the same run on a working image scores", () => {
+    const img = "sm-test-score-notouch:" + process.pid, vol = "sm-test-score-infra-" + process.pid;
+    expect(docker(["build", "-q", "-t", img, "-"], { input: "FROM " + PY_IMAGE + "\nRUN ln -sf /bin/false /usr/bin/touch\n" }).status).toBe(0);
+    docker(["volume", "create", vol]);
+    try {
+      expect(docker(["run", "--rm", "--network", "none", "-v", vol + ":/w", "--entrypoint", "sh", PY_IMAGE, "-c", "mkdir /w/reports"]).status).toBe(0);
+      const dir = mkdtempSync(join(tmp, "infra-"));
+      writeFileSync(join(dir, "parser.py"), "def parser(log: str) -> dict[str, str]:\n    return {l.split()[0]: l.split()[1] for l in log.splitlines() if l}\n");
+      const u = { id: "infra-unit", repo_dir: "/w", work_dir: "", commands: { rebuild: [], test: ["echo 't1 pass' > reports/out.log"], print: ["cat reports/out.log"] }, oracle: { rebuild_rule: { applies: true, fixed_rebuild_exits: [] } } } as unknown as SmUnit;
+      expect(() => scoringRun(dir, u, img, vol, 1, "hardened", "score")).toThrow(/^E_SM_INFRA_GAP infra-unit score1: the run could not make its mark dir \(no_mark_dir\)/);
+      expect(scoringRun(dir, u, PY_IMAGE, vol, 2, "hardened", "score").view).toEqual({ parsed: { t1: "pass" }, build_failed: false });
+    } finally {
+      docker(["volume", "rm", "-f", vol]);
+      docker(["rmi", "-f", img]);
+    }
+  }, 300_000);
 });

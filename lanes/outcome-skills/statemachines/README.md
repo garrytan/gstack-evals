@@ -457,6 +457,38 @@ model or unit (E_SM_PACKET).
   reportDirs). It skips a directory the test command makes itself, an absolute path, a .. step, a glob in the
   directory (a glob file name gives its parent) and any path whose nearest existing parent resolves outside the tree.
   Each created directory gets an SM_MKDIR line; the run's created_dirs and the oracle record list them.
+- Commands read no stdin (pre-data build change, 2026-11-09): the run script reaches bash -s on stdin, so a command
+  that reads stdin (ant, mvn, gradle, npx) swallowed the rest of the script and later commands never ran
+  (gwtproject__gwt-10054: ant test never ran). 219 of the 1,077 cached rows start one of those tools, all 160 Java rows
+  among them. Every rebuild, test and print command now reads its stdin from /dev/null.
+- Absolute report paths inside the tree (pre-data build change, 2026-11-09): reportDirs takes the unit's repo dir and
+  work dir, and reads a print path that is absolute (or absolute through the print command's cd) and under the repo dir
+  as its tree-relative path. It matches it against what the test commands write after their own cd's, with the same
+  rules: no directory the test command makes or cd's into, no .. step, no glob in the directory, nothing outside the
+  tree. 9 more of the 1,077 cached rows are selected (oauth2-proxy__oauth2-proxy-2524: `cd /testbed && go test -v -json
+  ./... > reports/results.json`, then `cat /testbed/reports/results.json`).
+- A /tmp the run user can write (pre-data build change, 2026-11-09): a tmpfs mounted with no mode copies the image's
+  /tmp mode, which is 0755 root in some images (both vercel__turborepo units), so uid 10001 could not make the mark dir
+  and every run read fresh=0. The hardened /tmp tmpfs now mounts rw,exec,size=4g,mode=1777. A run that still cannot
+  make its mark dir writes SM_INFRA no_mark_dir and stops; TestRun.infra and the oracle run record carry it, the unit's
+  verdict is E_SM_INFRA_GAP (neither kept nor dropped, counted per language on its own line, rerun on the next pass;
+  fill lists it under infra, and sm oracle exits with E_SM_INFRA_GAP while any remain, so that fill is not final),
+  and a scoring run with it fails as E_SM_INFRA_GAP instead of scoring broke. The pstack eval (#305) shares this
+  container code.
+- Bare Go test names (pre-data build change, 2026-11-09, goids.ts): for a Go unit the oracle maps each top-level test
+  func to the package dirs whose *_test.go files define it (the tree plus the base patches; vendor, testdata and dirs
+  starting with . or _ left out). judge drops a bare id (no package path; a subtest counts as its top-level test) whose
+  name more than one dir defines from the fail-to-pass and stable sets and lists it under ambiguous; the oracle record
+  keeps the dropped fail-to-pass ids and the dropped stable count. A unit whose every fail-to-pass id goes this way drops
+  as E_SM_AMBIGUOUS_TEST; a scan that runs and fails in the image drops as E_SM_TEST_SCAN, and one that never finishes
+  is E_SM_INFRA_GAP. Package-qualified ids are never touched.
+- A volume inside the repo dir (pre-data build change, 2026-11-09, image.ts): a runtime image that declares a VOLUME
+  under repo_dir (0xERR0R__blocky-2016: /testbed/mnt_tmp) gets an anonymous volume there in the build container, and
+  rm -rf failed on it. The build now reads the mount points under repo_dir from /proc/self/mountinfo, deletes around
+  them, keeps them out of git clean (as sh/rewrite.sh does), and stops with SM_MOUNT_NOT_EMPTY under E_SM_HISTORY when
+  one still holds files after the copy. The build container goes with docker rm -f -v, and harbor run gets --delete
+  (compose down --volumes), so neither a failed build nor a session leaves an anonymous volume. With no such mount the
+  build runs the same commands as before.
 - A run builds nothing when a rebuild command exits non-zero (rebuild_failed), when the print command reads report paths
   and none of them holds a fresh file (no_fresh_report), or when a stale file could not be moved aside (stale_unhidden).
   The parser does not run then, and the run parses nothing. A test command's own exit never sets it. Every one of the
