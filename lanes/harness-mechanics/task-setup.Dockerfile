@@ -1,11 +1,15 @@
-# Harness mechanics D1 (pre-data amendment). prepare-run.ts appends these lines after Lane B's runtime-copy.Dockerfile
-# in every arm's task image, none and plain-2 included, when L1's profile names this file (TASK_SETUP). Both testbed env
-# prefixes go first on PATH (D2: on miniconda and /opt/conda images the env's python3 and pytest come before the base
-# env's), and a local bare origin gets main at the base commit, so gstack-checks finds a pregate
-# context. WORKDIR /testbed comes before the origin RUN: some task images set no WORKDIR, and it also makes /testbed the
-# directory Claude Code, the snapshot strip and CHECKS_TRUST start in. The verifier is built from the pristine image, so
-# grading is untouched. The task-fit screen, the fit probe, the dry run and the build check read this file; nothing
-# copies it. HM_ORIGIN is unset in every build; keyless tests set it.
+# Harness mechanics D1 (pre-data amendment) and D7 (found in Stage 1). prepare-run.ts appends these lines after Lane B's
+# runtime-copy.Dockerfile in every arm's task image, none and plain-2 included, when L1's profile names this file
+# (TASK_SETUP). Both testbed env prefixes go first on PATH (D2: on miniconda and /opt/conda images the env's python3 and
+# pytest come before the base env's). WORKDIR /testbed comes before the RUN: some task images set no WORKDIR, and it also
+# makes /testbed the directory Claude Code, the snapshot strip and CHECKS_TRUST start in. The RUN first strips history
+# past the base commit (D7): 12 of Stage 1's 40 task images held the upstream fix, hidden tests included, behind tags. It
+# refuses a tree that borrows objects (alternates) or holds a nested .git, deletes every ref whose commit is not the base or
+# an ancestor (replace refs always), FETCH_HEAD, ORIG_HEAD and the other pseudo refs, linked worktrees and .keep marks,
+# expires the reflogs, prunes with gc, then refuses the build if any ref or commit past the base is left. Then a local bare
+# origin gets main at the base commit (D1), so gstack-checks finds a pregate context. The verifier is built from the
+# pristine image, so grading is untouched. The task-fit screen, the fit probe, the dry run and the build check read this
+# file; nothing copies it. HM_ORIGIN is unset in every build; keyless tests set it.
 ENV PATH=/opt/miniconda3/envs/testbed/bin:/opt/conda/envs/testbed/bin:$PATH
 WORKDIR /testbed
-RUN O="${HM_ORIGIN:-/opt/hm-origin.git}"; if git remote get-url origin >/dev/null 2>&1; then echo "D1 origin refused: the task tree has an origin remote already" >&2; exit 1; fi && git init -q --bare "$O" && git push -q "$O" HEAD:refs/heads/main && git remote add origin "$O" && git fetch -q origin && git remote set-head origin main
+RUN export GIT_NO_REPLACE_OBJECTS=1 && d7() { echo "fatal: D7 history refused: $1" >&2; exit 1; } && B=$(git rev-parse -q --verify 'HEAD^{commit}') && G=$(git rev-parse --git-dir) && { [ ! -s "$G/objects/info/alternates" ] && [ ! -s "$G/objects/info/http-alternates" ] || d7 "the tree borrows objects through an alternates file"; } && { [ ! -e "$G/modules" ] && [ -z "$(find . -path ./.git -prune -o -name .git -print | head -n 1)" ] || d7 "the tree holds a submodule or a nested .git"; } && git for-each-ref --format='%(refname)' > "$G/hm-d7-refs" && while read -r r; do case "$r" in refs/replace/*) git update-ref --no-deref -d "$r" ;; *) { c=$(git rev-parse -q --verify "$r^{commit}") && git merge-base --is-ancestor "$c" "$B"; } || git update-ref --no-deref -d "$r" ;; esac || d7 "could not delete $r"; done < "$G/hm-d7-refs" && rm -rf "$G/hm-d7-refs" "$G/worktrees" "$G/FETCH_HEAD" "$G/ORIG_HEAD" "$G/MERGE_HEAD" "$G/CHERRY_PICK_HEAD" "$G/REVERT_HEAD" "$G/BISECT_HEAD" "$G/AUTO_MERGE" "$G"/objects/pack/*.keep && git reflog expire --expire=now --all && git -c gc.cruftPacks=false gc --prune=now --quiet && L=$(git for-each-ref --format='%(refname)' | while read -r r; do { c=$(git rev-parse -q --verify "$r^{commit}") && git merge-base --is-ancestor "$c" "$B"; } || echo "$r"; done) && { [ -z "$L" ] || d7 "refs past the base remain: $L"; } && git rev-list "$B" | LC_ALL=C sort > "$G/hm-d7-base" && n=$(git cat-file --batch-all-objects --batch-check='%(objecttype) %(objectname)' | sed -n 's/^commit //p' | LC_ALL=C sort | LC_ALL=C comm -23 - "$G/hm-d7-base" | wc -l) && rm -f "$G/hm-d7-base" && { [ "$n" -eq 0 ] || d7 "$n commits are not the base or its ancestors"; } || exit 1; O="${HM_ORIGIN:-/opt/hm-origin.git}"; if git remote get-url origin >/dev/null 2>&1; then echo "D1 origin refused: the task tree has an origin remote already" >&2; exit 1; fi && git init -q --bare "$O" && git push -q "$O" HEAD:refs/heads/main && git remote add origin "$O" && git fetch -q origin && git remote set-head origin main

@@ -25,6 +25,8 @@ export function pool(): Map<string, Task> {
   return new Map((d.tasks as Task[]).map((t) => [t.task_id, t]));
 }
 export const imageRef = (t: Task) => t.image.replace(/:[^:/]+$/, "") + "@" + t.image_digest;
+// The pinned Harbor's SWE-rebench export: SWEREBENCH, else its default download path.
+export const rebenchRoot = () => process.env.SWEREBENCH ?? join(process.env.HOME ?? "", ".capy/work/ref/swe-rebench-leaderboard");
 
 // A task's trial environment directory, written as L1's prepare-run.ts writes it under the hm profile: materializeRebench
 // from the SWEREBENCH export (the pinned Harbor's, as Stage 1 sets it) with Lane B's runtime stages, runtime-copy.Dockerfile
@@ -32,7 +34,7 @@ export const imageRef = (t: Task) => t.image.replace(/:[^:/]+$/, "") + "@" + t.i
 // images are the trials' own, WORKDIR included. Returns <dest>/environment.
 export function trialEnvironment(task: string, dest: string): string {
   const lane = join(REPO, "quick/laneb"), runner = join(lane, "runner");
-  const root = process.env.SWEREBENCH ?? join(process.env.HOME ?? "", ".capy/work/ref/swe-rebench-leaderboard");
+  const root = rebenchRoot();
   const t = loadRebenchPool(join(lane, R3A4_POOL_FILE), R3A4_POOL_SHA256).find((x) => x.task_id === task);
   if (!t) throw new Error("E_USAGE " + task + " is not a swerebench-r3a4 pool task");
   if (!existsSync(join(root, task))) throw new Error("E_USAGE " + task + " is not in the SWE-rebench export at " + root + "; set SWEREBENCH to the pinned Harbor's export");
