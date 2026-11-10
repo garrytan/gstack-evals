@@ -663,7 +663,10 @@ counts sessions.
 - A lost call that settled past the bound halts the item (pre-data build change, 2026-11-11, send.ts; the Captain's
   pre-run list item 7, GSTA-2, from #317's deferred findings): when a send stopped after a call settled but before its
   reply and halt were recorded, the next send records the call as lost, and if the call's settled usage passes the
-  prereg's bound it also writes the usage halt and stops (E_SM_USAGE_HALT) until --lift-halt. The lost call is never
+  prereg's bound it also writes the usage halt and stops (E_SM_USAGE_HALT) until --lift-halt. A lost call on a lease
+  the owner reconciled has no usage any ledger shows, so it halts the same way with the reason "usage unknown"; its
+  halt line and the error name the lease's proxy journal (<lease>.journal.ndjson in --out) and the provider export the
+  reconcile cites, which the Captain reads before ruling (the Captain's pick A on #320, GSTA-2). The lost call is never
   sent again.
 - A replies line that won't parse is refused (pre-data build change, 2026-11-11, send.ts; the Captain's pre-run list
   item 8, GSTA-2): only the lines a crash cut short at the end of replies.jsonl may fail to parse. The next send writes

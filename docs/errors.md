@@ -1624,9 +1624,9 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 
 ### E_SM_USAGE_HALT
 
-A paid label or judge call (sm packets send) reported usage past the preregistration's per-call bound of 20,000 input or 1,500 output tokens. The item halted before its next send, and the halt line in the send's replies.jsonl names the call's meter, the packet, the reader and the usage. A call whose reply and halt a crash lost halts the same way at the next send, once its settled usage shows it past the bound. Every later send on that --out is refused until the halt is lifted.
+A paid label or judge call (sm packets send) reported usage past the preregistration's per-call bound of 20,000 input or 1,500 output tokens. The item halted before its next send, and the halt line in the send's replies.jsonl names the call's meter, the packet, the reader and the usage. A call whose reply and halt a crash lost halts the same way at the next send, once its settled usage shows it past the bound. A call sent on a lease the owner reconciled (its ledger lost) and never answered halts the same way as usage unknown, and its halt line names the lease's proxy journal and the provider export the reconcile cites. Every later send on that --out is refused until the halt is lifted.
 
-Fix: Bring the halt line to the Captain. Once the Captain rules, record the ruling in the run record and send again with --lift-halt &lt;meter>. The halted call is never sent again.
+Fix: Bring the halt line to the Captain, with the proxy journal lines and the provider export it names when its usage is unknown. Once the Captain rules, record the ruling in the run record and send again with --lift-halt &lt;meter>. The halted call is never sent again.
 
 Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: yes. Owner: U20.
 

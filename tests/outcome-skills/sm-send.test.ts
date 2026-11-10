@@ -497,34 +497,35 @@ describe("pre-run fixes for #317's deferred findings", () => {
     expect([sameOut.code, calls.length, readItem(s.record, "sm-labels").leases.length]).toEqual(["E_USAGE", 2, 1]);
   });
 
-  // Value: protects=calls already paid for when the run's lease was reconciled because its ledger is gone: the reconciled lease is exempt from the fresh-ledger refusal only when this --out's replies.jsonl records it (the lease line a send writes when it opens a lease), so every packet it answered or charged is known and none is asked again; fails_when=a reconciled lease lets a send on a fresh ledger go ahead from a missing replies file, or from one that does not record that lease, or the send that goes ahead asks again a call the replies record; why_new=the Captain's correction on #320 (item 6's reconciled exemption must not reopen OV1); seam=send.ts sendHeld with a lease opened on another local ledger and reconciled on the record; no_claim=the cap-stopped and drained items, which report CAP_STOP (the refusals test)
-  test("a reconciled lease is exempt from the fresh-ledger refusal only when this --out's replies record it, and then nothing they record is asked again", async () => {
-    const dead = (s: Setup) => {
-      const gone = openLocalLedger({ path: join(s.root, "gone.sqlite"), rule: "--ledger" });
-      const lease = openLease(s.record, gone, { item: "sm-labels", run_id: "run-1", ttl_ms: 1_000, requireAdmission: () => null });
-      gone.close();
-      const source = join(s.root, "usage.csv");
-      writeFileSync(source, "spent,1\n");
-      reconcileLease(s.record, { lease_id: lease.lease_id, spent_micros: D, quotes: [quote], source, now: new Date(Date.now() + 60_000) });
-      return lease.lease_id;
-    };
-    const recorded = (s: Setup, a: string, b: string, lease_id: string | null) => {
-      mkdirSync(outDir(s, "sm-labels"), { recursive: true });
-      const at = { item: "sm-labels", run_id: "run-1" };
-      const rows = [
-        ...(lease_id ? [{ ...at, event: "lease", lease_id }] : []),
-        { ...at, event: "send", packet: a, reader: "astra", meter_id: "m-a" },
-        { ...at, event: "reply", packet: a, reader: "astra", outcome: "answered", code: null, meter_id: "m-a" },
-        { ...at, event: "send", packet: b, reader: "astra", meter_id: "m-b" },
-      ];
-      writeFileSync(join(outDir(s, "sm-labels"), "replies.jsonl"), rows.map((r) => JSON.stringify(r)).join("\n") + "\n");
-    };
+  const reconciled = (s: Setup) => {
+    const gone = openLocalLedger({ path: join(s.root, "gone.sqlite"), rule: "--ledger" });
+    const lease = openLease(s.record, gone, { item: "sm-labels", run_id: "run-1", ttl_ms: 1_000, requireAdmission: () => null });
+    gone.close();
+    const source = join(s.root, "usage.csv");
+    writeFileSync(source, "spent,1\n");
+    reconcileLease(s.record, { lease_id: lease.lease_id, spent_micros: D, quotes: [quote], source, now: new Date(Date.now() + 60_000) });
+    return { lease_id: lease.lease_id, source };
+  };
+  /** Writes the replies a dead send on lease_id left: a/astra answered, and with lost, b/astra sent and never answered. */
+  const recorded = (s: Setup, a: string, b: string, lease_id: string | null, lost: boolean) => {
+    mkdirSync(outDir(s, "sm-labels"), { recursive: true });
+    const at = { item: "sm-labels", run_id: "run-1" };
+    const rows = [
+      ...(lease_id ? [{ ...at, event: "lease", lease_id }] : []),
+      { ...at, event: "send", packet: a, reader: "astra", meter_id: "m-a" },
+      { ...at, event: "reply", packet: a, reader: "astra", outcome: "answered", code: null, meter_id: "m-a" },
+      ...(lost ? [{ ...at, event: "send", packet: b, reader: "astra", meter_id: "m-b" }] : []),
+    ];
+    writeFileSync(join(outDir(s, "sm-labels"), "replies.jsonl"), rows.map((r) => JSON.stringify(r)).join("\n") + "\n");
+  };
 
+  // Value: protects=calls already paid for when the run's lease was reconciled because its ledger is gone: the reconciled lease is exempt from the fresh-ledger refusal only when this --out's replies.jsonl records it (the lease line a send writes when it opens a lease), so every packet it answered or charged is known and none is asked again; fails_when=a reconciled lease lets a send on a fresh ledger go ahead from a missing replies file, or from one that does not record that lease, or the send that goes ahead asks again a call the replies record; why_new=the Captain's correction on #320 (item 6's reconciled exemption must not reopen OV1); seam=send.ts sendHeld with a lease opened on another local ledger and reconciled on the record; no_claim=the cap-stopped and drained items, which report CAP_STOP (the refusals test), and a lost call on the reconciled lease (the next test)
+  test("a reconciled lease is exempt from the fresh-ledger refusal only when this --out's replies record it, and then nothing they record is asked again", async () => {
     for (const replies of ["missing", "unrecorded"] as const) {
       const m = setup({ "sm-labels": 150 });
       const [ma, mb] = labels(m, 2) as [string, string];
-      const lease_id = dead(m);
-      if (replies === "unrecorded") recorded(m, ma, mb, null);
+      const { lease_id } = reconciled(m);
+      if (replies === "unrecorded") recorded(m, ma, mb, null, false);
       const none: Call[] = [];
       const refused = await send(m, "sm-labels", none, undefined, { ledger: join(m.root, "fresh.sqlite") });
       expect([replies, refused.code, none.length, readItem(m.record, "sm-labels").leases.length]).toEqual([replies, "E_USAGE", 0, 1]);
@@ -533,15 +534,38 @@ describe("pre-run fixes for #317's deferred findings", () => {
 
     const s = setup({ "sm-labels": 150 });
     const [a, b] = labels(s, 2) as [string, string];
-    const old = dead(s);
-    recorded(s, a, b, old);
+    recorded(s, a, b, reconciled(s).lease_id, false);
     const calls: Call[] = [];
     const ok = await send(s, "sm-labels", calls, undefined, { ledger: join(s.root, "fresh.sqlite") });
     expect([ok.code, ok.message]).toEqual(["ok", ""]);
-    expect(sentTo(calls)).toEqual(["claude-opus-5-5 " + a, "claude-opus-5-5 " + b]);
-    expect(replies(s, "sm-labels").map((x) => [x.packet, x.reader, x.outcome])).toEqual([[a, "astra", "answered"], [b, "astra", "lost"], [a, "opus", "answered"], [b, "opus", "answered"]]);
+    expect(sentTo(calls)).toEqual(["claude-opus-5-5 " + a, "gpt-6-astra " + b, "claude-opus-5-5 " + b]);
+    expect(replies(s, "sm-labels").map((x) => [x.packet, x.reader, x.outcome])).toEqual([[a, "astra", "answered"], [a, "opus", "answered"], [b, "astra", "answered"], [b, "opus", "answered"]]);
+    expect(lines(s, "sm-labels").filter((l) => l.event === "halt")).toEqual([]);
     const leases = readItem(s.record, "sm-labels").leases.map((x) => x.lease.lease_id);
     expect(lines(s, "sm-labels").filter((l) => l.event === "lease").map((l) => l.lease_id)).toEqual(leases);
+  });
+
+  // Value: protects=the usage halt for a call whose usage no ledger can show: a call sent on a lease the owner reconciled (its ledger gone) and never answered has unknown usage, so the next send halts the item (E_SM_USAGE_HALT, usage unknown) and names the lease's proxy journal and the provider export the reconcile cites, which the Captain reads before ruling; fails_when=the send records the call as lost and goes on sending, the halt or its message omits the journal or the export, a send without the lift goes ahead, or the lifted call is sent again; why_new=Capy's review of 7191a4f on #320 and the Captain's pick A (GSTA-2, 2026-11-11); seam=send.ts sendHeld's lost-call recovery with a lease opened on another local ledger and reconciled on the record; no_claim=what the journal or export shows, which the Captain reads
+  test("a lost call on a reconciled lease halts the item as usage unknown, naming the lease's proxy journal and the export the reconcile cites, and after the lift it stays lost, never resent", async () => {
+    const s = setup({ "sm-labels": 150 });
+    const [a, b] = labels(s, 2) as [string, string];
+    const { lease_id, source } = reconciled(s);
+    recorded(s, a, b, lease_id, true);
+    const journal = join(outDir(s, "sm-labels"), lease_id + ".journal.ndjson");
+    const fresh = { ledger: join(s.root, "fresh.sqlite") };
+    const calls: Call[] = [];
+    const halted = await send(s, "sm-labels", calls, undefined, fresh);
+    expect([halted.code, calls.length, readItem(s.record, "sm-labels").leases.length]).toEqual(["E_SM_USAGE_HALT", 0, 1]);
+    for (const part of ["usage unknown", "--lift-halt m-b", journal, source]) expect(halted.message).toContain(part);
+    expect(lines(s, "sm-labels").filter((l) => l.event === "halt")).toEqual([expect.objectContaining({ packet: b, reader: "astra", meter_id: "m-b", code: "E_SM_USAGE_HALT", usage: null, lease_id, journal, source })]);
+    expect(replies(s, "sm-labels").map((x) => [x.packet, x.reader, x.outcome])).toEqual([[a, "astra", "answered"], [b, "astra", "lost"]]);
+    const again = await send(s, "sm-labels", calls, undefined, fresh);
+    expect([again.code, calls.length]).toEqual(["E_SM_USAGE_HALT", 0]);
+    for (const part of ["usage unknown", journal, source]) expect(again.message).toContain(part);
+    const lifted = await send(s, "sm-labels", calls, undefined, { ...fresh, lift_halts: ["m-b"] });
+    expect([lifted.code, lifted.message]).toEqual(["ok", ""]);
+    expect(sentTo(calls)).toEqual(["claude-opus-5-5 " + a, "claude-opus-5-5 " + b]);
+    expect(lines(s, "sm-labels").filter((l) => l.event === "halt").length).toBe(1);
   });
 
   // Value: protects=the usage halt across a crash after the call settles: a send whose reply and halt never reached replies.jsonl but whose settled usage passes 20,000 input or 1,500 output tokens becomes a standing halt at the next send, before any lease opens; fails_when=the next send records the call as lost and goes on sending; why_new=#317 deferred outside-voice finding 2, the Captain's pre-run list item 7; seam=send.ts sendHeld's lost-call recovery, with replies.jsonl cut after the call's send line; no_claim=a call whose usage the ledger never settled, which stays lost at its full reservation
