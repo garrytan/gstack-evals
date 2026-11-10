@@ -611,6 +611,19 @@ counts sessions.
   against the prereg's bound of 20,000 input and 1,500 output tokens, and a call past it halts the item for the
   Captain's ruling (E_SM_USAGE_HALT). The pricing bound (R78_PRICE_BOUND, r78Price), the $160.05 plan and the $180
   sm-judges cap do not change.
+- Stock diffs build before a judge sees them (pre-data build fix, 2026-11-10, GST-1959, packets.ts buildStock and
+  stockDiffs, cli.ts): `sm packets stock` (now with --unit-dir) and `sm packets labelled` (now with unit_dir in each
+  spec entry) apply each stock diff to a fresh copy of the unit's prepared tree in its runtime image and run the unit's
+  rebuild commands there, plus a compile of the file for Python and node --check for JavaScript. The same commands run
+  first on the tree without the diff (the control). A kind that does not apply, or fails a command its control passes,
+  is none, and so is every kind of a unit whose control passes no command. stock-build-<unit>.json (stock-build.json for
+  the labelled set) records why, and the labelled set skips such a unit, as section 10 says. The transforms now read
+  each file's code with multi-line strings, block comments and Go runes blanked, and a JavaScript or TypeScript
+  template's ${...} read as code; put a C or C++ header after the
+  includes before the first line of code, and take an include guard only when its #endif ends the file; put a Python
+  log line after a docstring's whole statement; leave out a Python keyword argument on any line of a call and a Java or
+  C# anonymous class whose constructor call nests parentheses; and rename a local only where every use sits in the
+  scope of a declaration of that name. No rule changes.
 - The containment check finds object stores with no HEAD file (pre-data build change, 2026-11-11, sh/contain.sh; the
   Captain's pre-run list item 1, GSTA-2, from #318's deferred findings): a pack (pack/pack-<hash>.idx or .pack) or loose
   objects (a two-hex-digit dir holding object files) anywhere but proc and sys fail the stores check as "objects <dir>",
