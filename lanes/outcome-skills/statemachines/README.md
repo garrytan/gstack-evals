@@ -154,8 +154,9 @@ tests/outcome-skills/sm-arms.test.ts pins every text by sha256 and checks it aga
 
 - "Its sentence, then this suffix": the sentence, a blank line, then the suffix, as the follow-on turn puts its blank line.
 - A3 runs on the first stage's limits (section 6), since section 17 scores it by section 7.
-- The /qa pin (sha, version and install command) is recorded at freeze in sm.pins.qa. Until then qa:told refuses to
-  build a turn, and arms/qa-install.sh refuses a missing sha or command.
+- The /qa pin (sha, version and install command) is recorded in sm.pins.qa: garrytan/gstack b6155921 (1.98.0.0), main's
+  last commit on 2026-11-08 UTC, installed with `./setup --host claude`. qa:told refuses to build a turn while the pin is
+  null, and arms/qa-install.sh refuses a missing sha or command.
 - The proxy routes: Opus on anthropic, Sol (openai/gpt-6.1-sol) and particle-1 on OpenRouter's Messages route, as Claude
   Code arms used before.
 
@@ -167,7 +168,7 @@ real_agent's family SM mode (arm in the registry's "sm" block): one turn, no sid
 tree keeps its one-commit or two-commit history; egress allows only the proxy. Before any session opens it checks, in the
 container, the commit count and head the task names, that no CLAUDE.md, CLAUDE.local.md, AGENTS.md or .claude is in the
 tree (E_SM_STRIP), and that a no-gstack home holds no ~/.claude/skills, ~/.claude/CLAUDE.md, ~/.local/share/gstack, ~/.capy
-or ~/.gstack, while A3's home holds gstack at the /qa pin. Nobody answers: AskUserQuestion gets section 6's fixed line,
+or ~/.gstack, while A3's home holds gstack at the /qa pin and no ~/.claude/CLAUDE.md. Nobody answers: AskUserQuestion gets section 6's fixed line,
 a prose question ends the turn, and both are counted (sm_user.py). Claude Code's own transcripts are copied out as
 claude-projects.tar for the memory audit.
 
@@ -510,6 +511,36 @@ model or unit (E_SM_PACKET).
   block with no field set, which real_agent writes when no close answer came, ends the session as infra and the
   session keeps its record, instead of being refused. An allowance_stops that is not a number refuses the session
   (E_SM_ARM). No rule changes.
+- A close whose proxy finalize failed halts its item (pre-data build change, 2026-11-10, session.ts sessionEnd,
+  driver/stage.ts; #314 review note 8; the Captain accepted, GSTA-2): a close answer with finalized false still ends
+  limit_allowance when it names an allowance stop (allowance_stops above 0), so a real stop is scored as is and never
+  spends again. The driver's own close path can't report one: when finalize fails, allowance_stops is null, so the
+  session ends infra. The driver then halts that SM line item before any retry: it writes a halt line with the session
+  id and its proxy journal path to the run's sessions.jsonl, opens no more sessions on the item (E_SM_FINALIZE_HALT,
+  HTTP 423), settles its lease, exits 2, and refuses a lease on the item at the next launch. The Captain reads the
+  journal and rules; a launch with --lift-halt <session id> records the lift and serves the item again. Section 6's
+  retry rule is unchanged: the halt only delays the retry until that ruling. With today's in-process proxy, finalize
+  can't fail, so this path does not fire.
+- A3's home is installed at /root (pre-data build change, 2026-11-10, arms/qa-install.sh, image.ts qaHomeCopy; #314
+  review note 4; the Captain accepted, GSTA-2): qa-install.sh runs the clone, checkout and `./setup --host claude` in a
+  throwaway container (buildpack-deps trixie with Bun 1.4.4, both by digest) with the home dir mounted at /root, no API
+  key, no drive and no host environment, and removes the container afterwards. Every link, text file and compiled binary
+  then names /root, so the image build copies the home as written, owned by root as a root install's is (cp -a had kept
+  the host user's uid, so git refused the gstack checkout, the session check read no commit and refused every A3
+  session); the old rewrite of host-dir links and text is gone (no other arm used it). The copy fails closed (E_SM_ARM) on a link that leaves the home, a file that names the host
+  dir, or a binary that names gstack's checkout under any home but /root, and names the files. At the pin, a home
+  installed on the host left the host dir in gstack's browse binary, which resolves its root from it. The session
+  record keeps the copied home's file digest (qa_home_sha256). A3 still has no Chromium (GSTACK_SKIP_PLAYWRIGHT=1), so
+  /qa's browser steps can't run in it.
+- No home CLAUDE.md in A3 (pre-data build fix, 2026-11-10, real_agent.py; #314 review note 5): A3's home check took any
+  path the image build listed, so a /root/.claude/CLAUDE.md the install wrote would pass. It is now refused in A3 as in
+  every no-gstack arm, even when listed. No rule changes.
+- Two /qa caps above section 17's $50 (deviation, 2026-11-10, items.ts, recorded before any outcome data; the Captain
+  accepted, GSTA-2): an item opens a session only while its remaining cap covers the allowance, so n sessions at mean m
+  with k concurrent need (n - k) * m + k * allowance. At the /qa line's planning price (twice section 16's first-stage
+  price with VMs: $6.16 on Opus and Sol, $0.76 on particle-1), k = 1 and E1's doubled allowance, sm-qa-admit needs
+  4 * 6.16 + 30 = $54.64 and sm-qa-particle 59 * 0.76 + 6 = $50.84. They are $55 and $51; the $6 comes from the line's
+  reserve, so the line stays $1,100 (items $986, crew use $60 counted). No other cap moves.
 - A run builds nothing when a rebuild command exits non-zero (rebuild_failed), when the print command reads report paths
   and none of them holds a fresh file (no_fresh_report), or when a stale file could not be moved aside (stale_unhidden).
   The parser does not run then, and the run parses nothing. A test command's own exit never sets it. Every one of the

@@ -111,7 +111,7 @@ export function runSession(i: RunInput): { record: SessionRecord; image: Session
     turns: lb?.result?.num_turns ?? null, spent_micros: typeof summary?.proxy?.spent_micros === "number" ? summary.proxy.spent_micros : null, unknown_micros, end, attempt,
     questions: questionCounts(summary?.persona ?? {}), runtime_id: image.runtime_id, disallowed_tools: ["WebSearch", "WebFetch"], env: { CLAUDE_CODE_DISABLE_BUNDLED_SKILLS: "1" },
     strip: { removed: u.strip?.removed ?? [] }, memory_loaded: memoryPaths(records), tree_patch: final?.patch_sha256 && existsSync(patchPath) ? { path: patchPath, sha256: final.patch_sha256 } : null,
-    transcript: ev ? join(ev, "sdk-messages.jsonl") : "", exposure: s.cell === "A1" || s.cell === "S2" ? { text: textExposure(records, s.cell) } : told ? qaExposure(records) : {},
+    transcript: ev ? join(ev, "sdk-messages.jsonl") : "", qa_home_sha256: image.qa_home?.sha256 ?? null, exposure: s.cell === "A1" || s.cell === "S2" ? { text: textExposure(records, s.cell) } : told ? qaExposure(records) : {},
     reads: (({ inputs, gstack, drive }) => ({ inputs, gstack, drive }))(readAudit(records)),
   };
   writeSessionRecord(join(i.out, "session.json"), record);

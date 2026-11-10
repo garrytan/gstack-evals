@@ -224,6 +224,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_SM_STRIP](#e_sm_strip) | 2 | U20 |
 | [E_SM_UPSTREAM_GAP](#e_sm_upstream_gap) | 2 | U20 |
 | [E_SM_INFRA_GAP](#e_sm_infra_gap) | 2 | U20 |
+| [E_SM_FINALIZE_HALT](#e_sm_finalize_halt) | 2 | U20 |
 | [E_SM_APPLY_FAILED](#e_sm_apply_failed) | 1 | U20 |
 | [E_SM_TEST_PATCH_CONFLICT](#e_sm_test_patch_conflict) | 2 | U20 |
 | [E_SM_PACKET](#e_sm_packet) | 2 | U20 |
@@ -1549,9 +1550,9 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 
 ### E_SM_ARM
 
-A state machines arm (family SM in lanes/outcome-skills/arms/registry.json) is refused: an SM arm whose name, kind, install, clean room, turns or per-model limits break the family's shape, an arm text that is not the preregistration's, a scope that is empty or multi-line, or a qa:told run while the /qa pin is not recorded.
+A state machines arm (family SM in lanes/outcome-skills/arms/registry.json) is refused: an SM arm whose name, kind, install, clean room, turns or per-model limits break the family's shape, an arm text that is not the preregistration's, a scope that is empty or multi-line, a qa:told run while the /qa pin is not recorded, or an A3 home the image build refuses (image.ts qaHomeCopy): a link that leaves the home, a file that names the host dir the home was copied from, or a binary that names gstack's checkout under a home other than /root.
 
-Fix: Restore registry.json's family SM arms from the preregistration (tests/outcome-skills/sm-arms.test.ts pins every text by sha256), record the /qa pin at freeze, and pass the unit's scope as one line.
+Fix: Restore registry.json's family SM arms from the preregistration (tests/outcome-skills/sm-arms.test.ts pins every text by sha256), record the /qa pin at freeze, and pass the unit's scope as one line. For an A3 home, install it again into an empty dir with lanes/outcome-skills/arms/qa-install.sh, which runs gstack's setup in a container with that dir at /root.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
 
@@ -1578,6 +1579,14 @@ A state machines session failed outside the model twice (container, pull, Harbor
 Fix: Read the session's agent log for the failure, fix the harness, and report the gap per arm and cell; a gap is never rerun a third time.
 
 Exit 2. Side effects: The two tries spent what the proxy metered for them. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_SM_FINALIZE_HALT
+
+A state machines session closed with its metering proxy's finalize failed (the close answer's finalized is false), so its refusal and allowance-stop counts are unknown (allowance_stops is null). The driver halts that line item: it writes a halt line naming the session and its proxy journal to the run's sessions.jsonl, opens no more sessions on the item (HTTP 423), settles its lease, exits 2, and refuses to open a lease on the item at the next launch. A real allowance stop is never retried, and the session's one retry (preregistration section 6) waits for the Captain's ruling.
+
+Fix: Bring the session id and the proxy journal the halt line names to the Captain, who reads the journal and rules. Then relaunch the driver for the same run with --lift-halt &lt;session id>; the launch records the lift and serves the item again.
+
+Exit 2. Side effects: The session spent what its lease's ledger meter holds; the halted stage's lease is settled. Retry safe: no. Resumable: no. Owner: U20.
 
 ### E_SM_TEST_PATCH_CONFLICT
 

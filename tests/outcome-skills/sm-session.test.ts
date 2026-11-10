@@ -4,7 +4,7 @@
 // tests/real-outcome/agent-units.test.ts does.
 import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadRegistry, REGISTRY_PATH } from "../../lanes/outcome-skills/arms/registry.ts";
@@ -144,6 +144,18 @@ test("a session whose close answer never came ends as infra, while a block with 
   expect(() => sessionEnd({ termination: "completed", proxy: { ...none, spent_micros: 5 } }, false)).toThrow(/^E_SM_ARM /);
 });
 
+// Value: protects=section 6's limit for a real allowance stop whose proxy finalize failed: it is scored as is and never retried, so it can't spend a second time; fails_when=a close answer with finalized false and a known allowance_stops above 0 ends infra and gets a retry, or one whose count is unknown (null) or 0 is scored; why_new=#314 review note 8 (adversarial-native, Low); seam=session.ts sessionEnd; no_claim=the driver's close path, where allowance_stops is null whenever finalized is false, so that item halts instead (sm-predata.test.ts)
+test("a known allowance stop ends limit_allowance even when finalize failed, and an unknown or zero count still ends infra", () => {
+  const failed = { spent_micros: 5, requests: null, ok_responses: null, refused: null, refusals: null, allowance_stops: 1, unknown_micros: 7, unknown_calls: 1, finalized: false };
+  expect(sessionEnd({ termination: "error_result", proxy: failed }, false)).toEqual({ end: "limit_allowance", unknown_micros: 7 });
+  expect(nextStep([sessionEnd({ termination: "error_result", proxy: failed }, false).end])).toEqual({ action: "score" });
+  for (const allowance_stops of [null, 0]) {
+    expect(sessionEnd({ termination: "error_result", proxy: { ...failed, allowance_stops } }, false)).toEqual({ end: "infra", unknown_micros: 7 });
+    expect(nextStep([sessionEnd({ termination: "error_result", proxy: { ...failed, allowance_stops } }, false).end])).toEqual({ action: "retry" });
+  }
+  expect(sessionEnd({ termination: "completed", proxy: failed }, true)).toEqual({ end: "infra", unknown_micros: 7 });
+});
+
 // Value: protects=A3's /qa pin on the path that runs; fails_when=qa:told builds its turn with no recorded pin, or with a task qa_sha that is not the pin; why_new=#290 review (red team); seam=sm_user.py sm_turn; no_claim=the install at that pin (real_agent _open_sm)
 test("real_agent's qa:told turn refuses a null or missing /qa pin and a task qa_sha that is not the pin", () => {
   const code = `
@@ -193,4 +205,9 @@ test("runSession refuses A3 unless --qa-sha is registry.json's /qa pin, before a
   const session: PlannedSession = { unit: "u", part: 1, index: 0, model: "claude-opus-5-5", cell: "A3", stage: "first", arm: "qa:told" };
   const qaSha = loadRegistry().sm!.pins.qa.sha === "a".repeat(40) ? "b".repeat(40) : "a".repeat(40);
   expect(() => runSession({ unitDir: dir, session, control: "http://127.0.0.1:1", proxy: "127.0.0.1:1", out: join(dir, "../out"), qaHome: dir, qaSha })).toThrow(/^E_SM_ARM .*\/qa pin/);
+  const reg = JSON.parse(readFileSync(REGISTRY_PATH, "utf8"));
+  reg.sm.pins.qa = { ...reg.sm.pins.qa, sha: null, version: null, install: null };
+  const registry = join(dir, "../unpinned.json");
+  writeFileSync(registry, JSON.stringify(reg));
+  expect(() => runSession({ unitDir: dir, session, control: "http://127.0.0.1:1", proxy: "127.0.0.1:1", out: join(dir, "../out"), qaHome: dir, qaSha: "a".repeat(40), registry })).toThrow(/^E_SM_ARM .*\/qa pin.* the pin is null/);
 });
