@@ -480,6 +480,18 @@ describe("stock diffs stay valid code: the #314 follow-ups (GST-1959)", () => {
     if (has("go")) expect(every("go", { "c.go": text, "other.go": other }, "c.go", (d) => ["go", "build", "-o", join(d, "out"), join(d, "c.go"), join(d, "other.go")])).toEqual(["ok", "ok", "ok", "ok"]);
   }, 600_000);
 
+  // Value: protects=section 10's rename-only stock diff as a refactor that keeps behavior when a block opens and closes on one line; fails_when=a declaration inside a one-line if or try block reads as a header declaration, its scope runs to the end of the line, and a later use there that names an outer binding is renamed, a ReferenceError a syntax check misses; why_new=the specialist red-team finding on #316 (packets.ts:430); seam=packets.ts renameOnly scope(); no_claim=a block that opens in a header's own parentheses (a lambda)
+  test("a use after a one-line block closes is outside the local's scope, and a header declaration still renames its own block", () => {
+    const js = ["export function f(ok) {", "  if (ok) { const count = 1; use(count); } return count;", "}", ""];
+    const java = ["class C {", "  int f() {", "    try { int count = parse(); use(count); } catch (Exception e) { return count; }", "    return 0;", "  }", "}", ""];
+    for (const [lang, path, text] of [["js", "c.mjs", js], ["ts", "c.ts", js], ["java", "C.java", java]] as const) {
+      const r = stock(lang, path, [...text]).rename_only;
+      expect(r === null || !/return countValue/.test(r)).toBe(true);
+    }
+    const header = ["export function g(xs) {", "  for (let step = 0; step < xs.length; step++) { use(xs[step], step); }", "  return xs;", "}", ""];
+    expect(stock("js", "g.mjs", header).rename_only?.includes("for (let stepValue = 0; stepValue < xs.length; stepValue++) { use(xs[stepValue], stepValue); }")).toBe(true);
+  });
+
   // Value: protects=section 10's rename-only stock diff in Go when the name is also a package-level variable in another file of the package; fails_when=a use of the name before the local's declaration, after its block ends, or in its own initializer refers to the package-level variable but is renamed, so the diff stops compiling; why_new=the Captain's item 18 for GST-1959, adversarial-native#10 on #314 (packets.ts renameOnly); seam=packets.ts renameOnly; no_claim=shadowing through forms LOCAL_NAME does not read (a range clause, a closure's parameter)
   test("go: a use outside the local's scope blocks the rename, and a name declared again in a later block is still renamed", () => {
     const other = ["package core", "", "var count = 10", ""];

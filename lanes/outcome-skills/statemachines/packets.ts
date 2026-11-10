@@ -412,7 +412,7 @@ function renameOnly(x: { lang: Lang; path: string; text: string }, lines: string
   for (const c of code) bracket.push(bracket.at(-1)! + brackets(c));
   const scope = (p: number, name: string): [number, number] => {
     const i = lineAt(p), lineEnd = starts[i]! + lines[i]!.length;
-    const header = /^\s*(?:\}\s*)?(?:else\s+)?(?:if|for|foreach|while|switch|select|catch|using|lock|try)\b/.test(code[i]!);
+    const header = /^\s*(?:\}\s*)?(?:else\s+)?(?:if|for|foreach|while|switch|select|catch|using|lock|try)\b/.test(code[i]!) && !code[i]!.slice(0, p - starts[i]!).replace(/^\s*\}/, "").includes("{");
     let start = p + name.length, end = all.length;
     if (x.lang === "go" || x.lang === "rust") {
       start = all.length;
