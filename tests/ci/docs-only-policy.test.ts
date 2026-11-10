@@ -11,7 +11,8 @@ import { compareVersions } from "../../src/trial/review/plan.ts";
 // built-in README.md, docs/**.md and changelog.d/*.md (pregate's lanes, CI carry and land use it; gstack 1.99.0.0 and later
 // read it). ci.yml decides with scripts/docs-only.ts, so the block must never admit a change that rule refuses. These checks
 // run gstack's classifier, from the commit ci.yml fetches, beside scripts/docs-only.ts: on the block, on single paths, and on
-// the same sample diffs in both directions.
+// the same sample diffs in both directions. ci.yml fetches gstack into $RUNNER_TEMP/gstack; elsewhere a local install at
+// ~/.local/share/gstack serves, and without one the checks that need it skip. On GitHub Actions a missing gstack fails.
 //
 // gstack's globs have only * and ** (deny also takes ?) and match case-sensitively, so two parts of our rule are written
 // another way. Our rule refuses any name holding "prompt" or "brief" in any case: each deny glob pins three letters of the
@@ -29,9 +30,10 @@ const BLOCK = { ...POLICY.docs_only, label: ".gstack/ship-policy.json" };
 const GSTACK = [process.env.RUNNER_TEMP ? join(process.env.RUNNER_TEMP, "gstack") : "", join(homedir(), ".local", "share", "gstack")].find(
   (d) => d && existsSync(join(d, "lib", "docs-only.ts")),
 );
-if (!GSTACK) throw new Error("gstack not found: ci.yml fetches it into $RUNNER_TEMP/gstack; elsewhere install it at ~/.local/share/gstack");
-const gstack = await import(join(GSTACK, "lib", "docs-only.ts"));
-const shipPolicy = await import(join(GSTACK, "lib", "ship-policy.ts"));
+const LIVE = GSTACK !== undefined || process.env.GITHUB_ACTIONS === "true";
+if (!GSTACK && LIVE) throw new Error("gstack not found: ci.yml fetches it into $RUNNER_TEMP/gstack");
+const gstack = GSTACK ? await import(join(GSTACK, "lib", "docs-only.ts")) : null;
+const shipPolicy = GSTACK ? await import(join(GSTACK, "lib", "ship-policy.ts")) : null;
 const ENV = { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@example.com", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@example.com" };
 const NAME_RULE = "must be YYYY-MM-DD-<author>-<slug>";
 
@@ -56,7 +58,7 @@ const wikiProblems = (p: string): string[] => {
 };
 
 describe("the docs_only block in .gstack/ship-policy.json", () => {
-  test("passes the policy check of the gstack this test runs, which reads every key in it", () => {
+  test.skipIf(!LIVE)("passes the policy check of the gstack this test runs, which reads every key in it", () => {
     expect(shipPolicy.validatePolicy(POLICY)).toEqual([]);
     expect(shipPolicy.policyWarnings(POLICY)).toEqual([]);
     expect(compareVersions(POLICY.min_gstack_version, shipPolicy.minimumReader(POLICY))).toBeGreaterThanOrEqual(0);
@@ -77,7 +79,7 @@ describe("the docs_only block in .gstack/ship-policy.json", () => {
   });
 });
 
-describe("single paths, by name and place", () => {
+describe.skipIf(!LIVE)("single paths, by name and place", () => {
   const FOLDERS = ["", "docs/", "docs/guide/", "docs/briefs/", "docs/Brief/", "docs/prompts/", "docs/benchmarks/r1/", "docs/skills/", "docs/evals/", "wiki/", "wiki/board/", "wiki/plans/", "wiki/research/", "changelog.d/", "src/", "tests/", ".github/", "wiki/board/2030-01-02-ann-bundle/", "wiki/board/2030-01-02-ann-pilot-results/", "wiki/board/2030-01-02-ann-arm-prereg/", "wiki/board/a-b-c-d/", "wiki/board/2030-01-02-ann-bundle/sub/"];
   const NAMES = ["README.md", "setup-notes.md", "SKILL.md", "AGENTS.md", "CREW.md", "crew.md", "CLAUDE.md", "review-prompt.md", "Prompt-Guide.md", "PROMPTS.md", "arm-brief.md", "Debriefing.md", "release-policy.md", "preferences.md", "prereg.md", "2030-01-02-ann-handoff.md", "2030-01-02-ann-brief.md", "2030-01-02-ann-pilot-results.md", "2030-01-02-ann-arm-prereg.md", "a-b-c-d.md", "2030-01-02-Ann-handoff.md", "page.mdx", "data.json"];
   const PATHS = FOLDERS.flatMap((f) => NAMES.map((n) => f + n));
@@ -106,7 +108,7 @@ describe("single paths, by name and place", () => {
   });
 });
 
-describe("the same sample diffs through both classifiers", () => {
+describe.skipIf(!LIVE)("the same sample diffs through both classifiers", () => {
   const BASE: Record<string, string> = {
     "README.md": "# repo\n",
     "AGENTS.md": "Read the wiki rules first.\n",
