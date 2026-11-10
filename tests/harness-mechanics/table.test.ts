@@ -7,7 +7,7 @@ import { appendFileSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { relaunchRects } from "../../quick/laneb/l1/l1.ts";
-import { needsRerun } from "../../lanes/harness-mechanics/money.ts";
+import { attempt2Owed, needsRerun } from "../../lanes/harness-mechanics/money.ts";
 import { HM_PROFILE } from "../../lanes/harness-mechanics/plans.ts";
 import { hmRow } from "../../lanes/harness-mechanics/table.ts";
 
@@ -50,6 +50,60 @@ describe("stopped sessions score the shipped diff", () => {
     expect(shape(row({ reward: 1, ok: 0 }))).toEqual(["infra", false, true]);
     expect(shape(row({ reward: 1 }))).toEqual(["graded", true, false]);
     expect(shape(row({ reward: 0 }))).toEqual(["graded", false, false]);
+  });
+});
+
+describe("D5: a session the egress sidecar cut owes section 13's attempt 2", () => {
+  const at = (s: number) => new Date(Date.UTC(2026, 10, 10, 7, 11, 0) + s * 1000).toISOString();
+  const req = (s: number) => ({ type: "api-request", timestamp: at(s) });
+  const reset = (s: number, attempt: number) => ({ type: "system", subtype: "api_error", level: "error", timestamp: at(s), retryAttempt: attempt, retryInMs: 600, maxRetries: 9, error: { message: "Connection error.", formatted: "Connection dropped (ECONNRESET)", connection: { code: "ECONNRESET" } } });
+  const apiError = (s: number, text: string) => ({ type: "assistant", isApiErrorMessage: true, timestamp: at(s), message: { role: "assistant", content: [{ type: "text", text }] } });
+  const said = (s: number) => ({ type: "assistant", timestamp: at(s), message: { role: "assistant", content: [{ type: "tool_use", id: "t", name: "Bash", input: {} }] } });
+  const DROPPED = "API Error: Connection dropped (ECONNRESET). Check the gateway set in ANTHROPIC_BASE_URL, then try again.";
+  const CUT = [req(0), said(5), req(10), reset(25, 1), req(25.6), reset(40.6, 2), req(41.8), apiError(56.8, DROPPED), { type: "user", timestamp: at(57), message: { role: "user", content: "<task-notification>" } }, req(57), said(80)];
+  const NOBYTE = [{ event: "request", session: "s-1", stream: false, complete: true, ms: 26_000 }, { event: "request", session: "s-1", stream: false, complete: true, ms: 30_500 }];
+  let k = 0;
+  const cell = (transcript: object[], requests: object[], o: { refused?: number } = {}) => {
+    const name = "t5__" + ++k, d = join(job, name);
+    mkdirSync(join(d, "evaluator", "claude-projects", "-testbed"), { recursive: true });
+    writeFileSync(join(d, "config.json"), JSON.stringify({ agent: { name: "laneb-claude-code", kwargs: { arm: "verify-prose", upstream_model: "gpt-6.1-sol" } }, task: { path: "tasks/t5" } }));
+    writeFileSync(join(d, "result.json"), JSON.stringify({ trial_name: name, verifier_result: { rewards: { reward: 1 } } }));
+    writeFileSync(join(d, "evaluator", "sdk-messages.jsonl"), "");
+    writeFileSync(join(d, "evaluator", "claude-projects", "-testbed", "s.jsonl"), transcript.map((x) => JSON.stringify(x)).join("\n") + "\n");
+    const sess = [{ id: "s-1", ok_responses: 20, refused_budget: o.refused ?? 0, spent_micros: 1_000_000, closed_at: "x" } as any];
+    const bySession = new Map<string, any[]>();
+    for (const r of requests as any[]) bySession.set(r.session, [...(bySession.get(r.session) ?? []), r]);
+    return hmRow(d, { part: "s1-1", sessions: new Map([[name, sess]]), requests: bySession, home: "/root" })!;
+  };
+  test("the cut cell qualifies: connection resets at about 15 s with no byte, then the turn ends on the API error", () => {
+    const r = cell(CUT, NOBYTE);
+    expect(shape(r)).toEqual(["infra", false, true]);
+    expect(r.reason).toBe("sidecar reset (D5): 2 connection resets at about 15 s with no byte toward the agent, then an API error");
+  });
+  test("a session_cap ending never qualifies: it is the frozen allowance stop and grades on the shipped diff", () => {
+    const r = cell([req(0), said(5), req(10), apiError(10.2, "API Error: 400 laneb proxy: session budget exhausted")], NOBYTE, { refused: 6 });
+    expect([...shape(r), r.allowance_stop, r.reason]).toEqual(["graded", true, false, true, "allowance stop, graded on the shipped diff"]);
+  });
+  test("a clean session never qualifies", () => {
+    expect(shape(cell([req(0), said(5), req(10), said(20)], []))).toEqual(["graded", true, false]);
+  });
+  test("resets that are not the sidecar's, or that the agent recovered from, never qualify", () => {
+    expect(shape(cell([req(0), reset(30, 1), req(30.6), apiError(60.6, DROPPED)], NOBYTE))).toEqual(["graded", true, false]);
+    expect(shape(cell([req(0), reset(15, 1), req(15.6), said(40)], NOBYTE))).toEqual(["graded", true, false]);
+    expect(shape(cell(CUT, [{ event: "request", session: "s-1", stream: true, complete: true, ms: 26_000 }]))).toEqual(["graded", true, false]);
+    expect(shape(cell(CUT, [{ event: "request", session: "s-2", stream: false, complete: true, ms: 26_000 }]))).toEqual(["graded", true, false]);
+    expect(shape(cell([req(0), reset(15, 1), { type: "system", subtype: "api_error", timestamp: at(30), error: { message: "Overloaded", status: 529 } }, req(30.6), apiError(45.6, DROPPED)], NOBYTE))).toEqual(["graded", true, false]);
+  });
+  test("attempt2Owed reads each part's proxy requests beside its sessions and owes the cut cell", () => {
+    const root = mkdtempSync(join(tmpdir(), "hm-d5-")), d = join(root, "pulled/jobs/job/t5__a"), out = join(root, "pulled/out");
+    mkdirSync(join(d, "evaluator", "claude-projects", "-testbed"), { recursive: true });
+    mkdirSync(out, { recursive: true });
+    writeFileSync(join(d, "config.json"), JSON.stringify({ agent: { name: "laneb-claude-code", kwargs: { arm: "verify-prose", upstream_model: "gpt-6.1-sol" } }, task: { path: "tasks/t5" } }));
+    writeFileSync(join(d, "result.json"), JSON.stringify({ trial_name: "t5__a", verifier_result: { rewards: { reward: 0 } } }));
+    writeFileSync(join(d, "evaluator", "claude-projects", "-testbed", "s.jsonl"), CUT.map((x) => JSON.stringify(x)).join("\n") + "\n");
+    writeFileSync(join(out, "proxy-sessions.jsonl"), JSON.stringify({ id: "s-1", trial: "t5__a__env", ok_responses: 20, refused_budget: 0, spent_micros: 1000, opened_at: "t", closed_at: "x" }) + "\n");
+    writeFileSync(join(out, "proxy-requests.jsonl"), NOBYTE.map((x) => JSON.stringify(x)).join("\n") + "\n");
+    expect(attempt2Owed([{ part: "s1-1", dir: join(root, "pulled") }]).owed).toEqual([{ task: "t5", arm: "verify-prose", reason: "sidecar reset (D5): 2 connection resets at about 15 s with no byte toward the agent, then an API error" }]);
   });
 });
 

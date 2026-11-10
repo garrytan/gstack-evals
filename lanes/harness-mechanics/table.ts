@@ -4,10 +4,11 @@
 // Outcome: a trial is graded when it has a verifier reward and a model response reached the agent. Section 13 ships the
 // diff at session end whatever stopped the session, so an allowance stop, a turn-cap stop or a model error after a
 // response scores by the verifier's reward on that diff. No verifier reward is a verifier infrastructure error (rerun
-// once, then missing); LedgerCapStop is a cap stop; anything else is infra. A no-gstack
+// once, then missing); LedgerCapStop is a cap stop; a session the egress sidecar cut is infra and reruns once (D5, below);
+// anything else is infra. A no-gstack
 // session whose read audit hits a gstack path or a drive is contaminated.
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { readSessionRows, sessionsByTrial, type SessionRow } from "../../quick/laneb/analysis/analyze.ts";
 import { parseLog, runProbes } from "../../quick/laneb/l1/probes.ts";
 import type { HmArm, HmSessionRow } from "../../src/types.ts";
@@ -15,9 +16,38 @@ import { ARMS, NO_GSTACK } from "./pins.ts";
 import { scoreSession } from "./score.ts";
 
 const readJson = (p: string) => { try { return JSON.parse(readFileSync(p, "utf8")); } catch { return null; } };
+const jsonLines = (text: string) => text.split("\n").flatMap((l) => { try { return l.trim() ? [JSON.parse(l)] : []; } catch { return []; } });
 export type HmTableConfig = { jobs: { dir: string; part?: string }[]; sessions: string[]; home?: string };
+export type ProxyRequest = { event?: string; session?: string; stream?: boolean; ms?: number };
 
-export function hmRow(dir: string, ctx: { part: string | null; sessions: Map<string, SessionRow[]>; home: string }): HmSessionRow | null {
+// D5, a deviation decided before any outcome was read (the Captain's ruling A): Harbor's egress sidecar resets the agent's
+// connection once 15 s pass with no byte toward it, which a non-streaming response (Claude Code's fallback after a stream
+// error) cannot avoid. A session matches when its transcript shows one or more ECONNRESET api_error records, each 14 to
+// 16 s after the api-request before it, and then, with no answer and no other API error between, an API error message
+// naming ECONNRESET 14 to 16 s after its own request; and the proxy holds a non-streaming request for the session that ran
+// past 15 s. A session_cap 400 or any other API error never matches.
+function sidecarCut(recs: any[], requests: ProxyRequest[]): string | null {
+  let resets = 0, tainted = false, sent = NaN;
+  const after = (x: any) => (Date.parse(String(x.timestamp)) - sent) / 1000;
+  for (const x of recs) {
+    if (x?.type === "api-request") { sent = Date.parse(String(x.timestamp)); continue; }
+    if (x?.type === "system" && x.subtype === "api_error") {
+      if (x.error?.connection?.code === "ECONNRESET" && after(x) >= 14 && after(x) <= 16 && !tainted) resets++;
+      else tainted = true;
+      continue;
+    }
+    if (x?.type !== "assistant") continue;
+    if (x.isApiErrorMessage === true && resets && !tainted && JSON.stringify(x.message?.content ?? "").includes("ECONNRESET") && after(x) >= 14 && after(x) <= 16
+      && requests.some((r) => r.event === "request" && r.stream === false && (r.ms ?? 0) > 15_000)) {
+      return "sidecar reset (D5): " + resets + " connection resets at about 15 s with no byte toward the agent, then an API error";
+    }
+    resets = 0;
+    tainted = false;
+  }
+  return null;
+}
+
+export function hmRow(dir: string, ctx: { part: string | null; sessions: Map<string, SessionRow[]>; requests?: Map<string, ProxyRequest[]>; home: string }): HmSessionRow | null {
   const config = readJson(join(dir, "config.json"));
   if (!config || config.agent?.name !== "laneb-claude-code") return null;
   const result = readJson(join(dir, "result.json"));
@@ -40,11 +70,17 @@ export function hmRow(dir: string, ctx: { part: string | null; sessions: Map<str
   const raw = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : NaN;
   const reward = result && Number.isFinite(raw) ? raw : null;
   const allowance = (last?.refused_budget ?? 0) > 0;
+  const cc = join(dir, "evaluator", "claude-projects");
+  const main = existsSync(cc) ? readdirSync(cc).flatMap((p) => (statSync(join(cc, p)).isDirectory() ? readdirSync(join(cc, p)).filter((f) => f.endsWith(".jsonl")).map((f) => join(cc, p, f)) : [])) : [];
+  const stem = main.length === 1 ? basename(main[0]!, ".jsonl") : null;
+  const transcript = stem ? readFileSync(main[0]!, "utf8") : null;
+  const cut = transcript ? sidecarCut(jsonLines(transcript), rows.flatMap((r) => ctx.requests?.get(r.id) ?? [])) : null;
   let outcome: HmSessionRow["outcome"] = "infra";
   let reason: string;
   if (exc === "LedgerCapStop") { outcome = "cap_stop"; reason = "ledger cap stop"; }
   else if (!result) reason = "no result.json";
   else if (!responded) reason = "no model response reached the agent" + (exc ? " (" + exc + ")" : "");
+  else if (cut) reason = cut;
   else if (reward === null) reason = "no verifier reward, verifier infrastructure error" + (allowance ? " (allowance stop)" : p.turn_cap ? " (turn cap)" : exc ? " (" + exc + ")" : "");
   else { outcome = "graded"; reason = allowance ? "allowance stop, graded on the shipped diff" : p.turn_cap ? "turn cap, graded on the shipped diff" : exc ? exc + ", graded on the shipped diff" : "graded"; }
   if (outcome === "graded" && !gstack && p.audit_hits.length) { outcome = "contaminated"; reason = "read audit: " + p.audit_hits[0]; }
@@ -52,9 +88,6 @@ export function hmRow(dir: string, ctx: { part: string | null; sessions: Map<str
   const evidence = readJson(join(dir, "evaluator", "l1-evidence.json")) ?? {};
   const flag = (x: unknown) => (typeof x === "boolean" ? x : null);
   const pass = outcome === "graded" && reward !== null && reward >= 1;
-  const cc = join(dir, "evaluator", "claude-projects");
-  const main = existsSync(cc) ? readdirSync(cc).flatMap((p) => (statSync(join(cc, p)).isDirectory() ? readdirSync(join(cc, p)).filter((f) => f.endsWith(".jsonl")).map((f) => join(cc, p, f)) : [])) : [];
-  const stem = main.length === 1 ? basename(main[0]!, ".jsonl") : null;
   const hooks = join(dir, "evaluator", "gstack-hooks");
   const recFile = stem ? join(hooks, "skill-contracts", stem.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 128) + ".json") : "";
   const record = !stem || !existsSync(hooks) ? null : existsSync(recFile) ? readJson(recFile) : false;
@@ -76,7 +109,7 @@ export function hmRow(dir: string, ctx: { part: string | null; sessions: Map<str
     contract_record: flag(evidence.contract_record),
     contract_check_met: flag(evidence.contract_check_met),
     audit_hits: p.audit_hits,
-    score: scoreSession(recs, { pass: outcome === "graded" ? pass : null, transcript: stem ? readFileSync(main[0]!, "utf8") : null, record }),
+    score: scoreSession(recs, { pass: outcome === "graded" ? pass : null, transcript, record }),
   };
 }
 
@@ -84,11 +117,15 @@ export function buildHmTable(cfg: HmTableConfig): HmSessionRow[] {
   if (!Array.isArray(cfg.jobs) || !cfg.jobs.length) throw new Error("E_USAGE hm table: the config needs jobs, each {dir, part}");
   if (!Array.isArray(cfg.sessions)) throw new Error("E_USAGE hm table: the config needs sessions, the proxy-sessions.jsonl files of the runs in jobs");
   const sessions = sessionsByTrial(readSessionRows(cfg.sessions));
+  const requests = new Map<string, ProxyRequest[]>();
+  for (const f of cfg.sessions.map((s) => join(dirname(s), "proxy-requests.jsonl")).filter((f) => existsSync(f))) {
+    for (const r of jsonLines(readFileSync(f, "utf8")) as ProxyRequest[]) if (r.event === "request" && typeof r.session === "string") requests.set(r.session, [...(requests.get(r.session) ?? []), r]);
+  }
   const out: HmSessionRow[] = [];
   for (const job of cfg.jobs) for (const name of readdirSync(job.dir).sort()) {
     const d = join(job.dir, name);
     if (!statSync(d).isDirectory()) continue;
-    const row = hmRow(d, { part: job.part ?? null, sessions, home: cfg.home ?? "/root" });
+    const row = hmRow(d, { part: job.part ?? null, sessions, requests, home: cfg.home ?? "/root" });
     if (row) out.push(row);
   }
   return out;

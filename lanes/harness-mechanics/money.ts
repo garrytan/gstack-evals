@@ -156,7 +156,7 @@ export function runSessions(ledger: Ledger, prefix: string, costsUsd: number[], 
 // Section 13: a session that ends with no successful response reruns once as attempt 2, and a second failure is missing.
 // Allowance stops, turn-limit stops and model errors after a response never rerun, and a cap stop never reruns. A session
 // with no verifier reward is a verifier infrastructure error and reruns once.
-const NO_RESPONSE = /^(no result\.json|no model response reached the agent|no verifier reward)/;
+const NO_RESPONSE = /^(no result\.json|no model response reached the agent|sidecar reset \(D5\)|no verifier reward)/;
 export const needsRerun = (r: Pick<HmSessionRow, "outcome" | "reason">) => r.outcome === "infra" && NO_RESPONSE.test(r.reason);
 export function infraRerun(first: HmSessionRow[], second: HmSessionRow[] = []) {
   const key = (r: HmSessionRow) => r.task + "\t" + r.arm, rerun = first.filter(needsRerun), again = new Map(second.map((r) => [key(r), r]));
