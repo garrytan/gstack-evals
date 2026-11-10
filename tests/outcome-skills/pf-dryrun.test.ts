@@ -8,8 +8,9 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { priceRequest, reservationMicros, usageCost } from "../../src/runner/pricing/prices.ts";
 import { WRAPUP_ALLOWANCE } from "../../lanes/outcome-skills/pfchecks/arms.ts";
-import { BASE_FLAG, MANIFEST_A, WRAP_BYTES, WRAP_CONTEXT_TOKENS, agentFiles, misses, outcomes, stubReply } from "../../lanes/outcome-skills/pfchecks/dryrun.ts";
-import { OPUS, SOL } from "../../lanes/outcome-skills/pfchecks/items.ts";
+import { BASE_FLAG, MANIFEST_A, WRAP_BYTES, WRAP_CONTEXT_TOKENS, agentFiles, concurrencyCheck, misses, outcomes, stubReply } from "../../lanes/outcome-skills/pfchecks/dryrun.ts";
+import { OPUS, P1, SOL } from "../../lanes/outcome-skills/pfchecks/items.ts";
+import { CLAUDE_ENV } from "../../lanes/outcome-skills/pfchecks/run.ts";
 import { readManifest } from "../../lanes/outcome-skills/pfchecks/manifest.ts";
 
 test("the stub's script: the task turn plants files once; the wrap-up writes the manifest, loops to its limit, or ends upstream once", () => {
@@ -60,6 +61,22 @@ test("a one-hour cache write would not hold Sol's wrap-up pair at the stub conte
   expect(sol.cache).toBe("1h");
   expect(sol.worst).toBeLessThan(sol.allowance);
   expect(sol.write + sol.worst).toBeGreaterThan(sol.allowance);
+});
+
+test("the concurrency line: each allowance against the worst case of one call at a 200k-token context times the calls a session can hold in flight", () => {
+  const now = concurrencyCheck(CLAUDE_ENV);
+  expect(now.inflight).toBe(21);
+  expect(now.ok).toBe(false);
+  const opus = now.models.find((m) => m.model === OPUS)!, sol = now.models.find((m) => m.model === SOL)!, p1 = now.models.find((m) => m.model === P1)!;
+  expect([opus.worst_micros, sol.worst_micros]).toEqual([4_145_320, 3_985_320]);
+  expect(Object.fromEntries(opus.allowances.map((a) => [a.slot, a.holds]))).toEqual({ "P task": 2, "C task": 2, "N task": 1, "blind task": 3, "wrap-up": 1 });
+  expect(Object.fromEntries(sol.allowances.map((a) => [a.slot, a.holds]))).toEqual({ "P task": 3, "C task": 3, "N task": 1, "wrap-up": 1 });
+  expect(p1.allowances.find((a) => a.slot === "wrap-up")!.holds).toBe(4);
+  expect(now.detail).toContain("21 calls in flight");
+  const serial = concurrencyCheck({ ...CLAUDE_ENV, CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: "0" });
+  expect(serial.inflight).toBe(1);
+  expect(serial.ok).toBe(true);
+  expect(concurrencyCheck({ ...CLAUDE_ENV, CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: "1" }).ok).toBe(false);
 });
 
 test("the fixture manifest covers section 15's entry fixtures and reads as the scorer reads it", () => {

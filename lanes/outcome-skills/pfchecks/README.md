@@ -209,7 +209,10 @@ names and a background task), A (19 manifest entries), B (26 entries and the sco
 cold first wrap-up request at a 160k-token stub context, about 560 KB, then the next after the stub reports a full cache
 write; each line fails if either request is at the 1h cache-write rate), W4 (the first wrap-up answer reports 95% of its
 request's worst case, so the proxy refuses the next) and hostile (a tree holding CLAUDE.md, refused before any slot, gap
-E_PF_ARM with one attempt). effort.json comes from batch 1's proxy records, and every session after it is checked against
+E_PF_ARM with one attempt). A line with no session prices one request at section 13's 200k-token ceiling (700,000
+bytes, 32,000 output tokens) per model as the proxy prices it, and fails unless every task and wrap-up allowance holds
+that worst case once for each call a session can hold in flight: the main loop plus CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS
+(20 in the pinned Claude Code unless the session env sets it). effort.json comes from batch 1's proxy records, and every session after it is checked against
 it. The first Bash call of probe (P), B (C), C (N) and blind runs the PATH probe: the line passes only when, as root and as
 uid 1000, every arm's PATH is /opt/pf-tools/bin then the image's own PATH, bun resolves to /opt/pf-tools/bin/bun, and
 statechart starts with no args (exit 2 and its usage, not 127) where pstack is mounted. pf-labels and pf-oracle pay for

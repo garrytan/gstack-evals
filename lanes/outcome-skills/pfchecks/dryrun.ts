@@ -24,12 +24,12 @@ import { patchOf, scoreUnit } from "../statemachines/fixtures.ts";
 import { CLAUDE_BIN } from "../statemachines/stub-claude.ts";
 import { NAMES, NO_ANSWER, WRAPUP, sessionLimits, taskTurn, type Names, type PfArm } from "./arms.ts";
 import { readCapture } from "./capture.ts";
-import { ITEMS, LINE, OPUS, P1, SOL } from "./items.ts";
+import { ITEMS, LINE, MODELS, OPUS, P1, SOL } from "./items.ts";
 import { P_HEADING } from "./exposure.ts";
 import { pstackMount, buildPstackVolume, PSTACK_DIR } from "./pstack.ts";
 import { dockerExecutor } from "./runner.ts";
 import { CONTAIN_RECORD, type ContainRecord } from "./containment.ts";
-import { pfRecord, runPfSession, type PfRun, type PfRunInput } from "./run.ts";
+import { CLAUDE_ENV, pfRecord, runPfSession, type PfRun, type PfRunInput } from "./run.ts";
 import { scoreSession, type CatchRecord } from "./score.ts";
 import { effortFields, effortHolds, readWrapup, type PfSessionRecord } from "./session.ts";
 import { buildToolsVolume, imagePath, runTlc, tla2tools, toolsEnv, toolsMount, toolsVolume, TLC_CFG, TLC_SPEC, TOOLS_DIR } from "./tools.ts";
@@ -117,6 +117,32 @@ export function writeCommand(files: Record<string, string>): string {
 /** The wrap-up allowance fixture (section 15): a 160k-token stub context, about 560 KB of request body at 3.5 bytes a token. */
 export const WRAP_CONTEXT_TOKENS = 160_000;
 export const WRAP_BYTES = 560_000;
+
+/** Section 13's largest request: a 200k-token context, about 700 KB of request body at 3.5 bytes a token. */
+export const CEILING_BYTES = 700_000;
+/** The pinned Claude Code runs up to 20 subagents at once unless CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS says otherwise. */
+export const SUBAGENTS_DEFAULT = 20;
+/** Section 15's concurrency line. The metering proxy refuses a call when its slot's settled spend, plus the worst cases
+ *  of its calls still in flight, plus the new call's worst case would pass the allowance, so calls in flight at once can
+ *  stop a session that has spent little. A subagent started in the background leaves the main loop free to call, so a
+ *  session can hold the main loop's call and one per subagent in flight. Each allowance must hold that many calls at
+ *  the worst case of one request at the ceiling, priced as the proxy prices it. */
+export function concurrencyCheck(env: Readonly<Record<string, string>>) {
+  const inflight = 1 + Number(env.CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS ?? SUBAGENTS_DEFAULT);
+  const output = Number(env.CLAUDE_CODE_MAX_OUTPUT_TOKENS);
+  const models = MODELS.map((model) => {
+    const body = { model, max_tokens: output, system: [{ type: "text", text: "", cache_control: { type: "ephemeral" } }], tools: [{ name: "Bash", description: "", input_schema: { type: "object" } }], messages: [{ role: "user", content: "" }] };
+    body.messages[0]!.content = "x".repeat(CEILING_BYTES - Buffer.byteLength(JSON.stringify(body)));
+    const worst = reservationMicros(priceRequest(model === OPUS ? "anthropic" : "openrouter", body, output, "/v1/messages"));
+    const arms: PfArm[] = model === OPUS ? ["P", "C", "N", "blind"] : ["P", "C", "N"];
+    const allowances = [...arms.map((arm) => ({ slot: arm + " task", usd: sessionLimits(arm, model).task.allowance_usd })), { slot: "wrap-up", usd: sessionLimits("P", model).wrapup.allowance_usd }];
+    return { model, worst_micros: worst, allowances: allowances.map((a) => ({ ...a, holds: Math.floor((a.usd * 1_000_000) / worst) })) };
+  });
+  const ok = models.every((m) => m.allowances.every((a) => a.holds >= inflight));
+  const detail = inflight + " calls in flight (the main loop and " + (inflight - 1) + " subagents); worst case of one call at a " + CEILING_BYTES + "-byte request with " + output + " output tokens: " +
+    models.map((m) => m.model + " " + usd(m.worst_micros) + ", " + m.allowances.map((a) => a.slot + " $" + a.usd.toFixed(2) + " holds " + a.holds).join(", ")).join("; ");
+  return { ok, inflight, models, detail };
+}
 export interface StubSession {
   task: string; wrapup: "manifest" | "limit" | "upstream" | "none"; checks?: string; bg?: string;
   /** The task turn's last answer is text that brings the next request, the wrap-up's first, to about this many bytes. */
@@ -432,6 +458,8 @@ export async function main(argv: string[]): Promise<number> {
     const wslots = ((W4.turns.slots ?? []) as Array<Record<string, any>>).filter((x) => x.phase === "wrapup").length;
     rule("wrap-up turn refused for its allowance is gap E_PF_WRAPUP_ALLOWANCE, with one wrap-up attempt and one session attempt", W4.run.record.gap === "E_PF_WRAPUP_ALLOWANCE" && JSON.stringify(W4.run.record.wrapup?.ends) === '["limit_allowance"]' && wslots === 1 && W4.run.attempts.length === 1 && w4.refusals.some((x) => x.startsWith("E_ALLOWANCE ")), "gap " + W4.run.record.gap + ", wrap-up ends " + JSON.stringify(W4.run.record.wrapup?.ends) + ", wrap-up slots " + wslots + ", session attempts " + W4.run.attempts.length + "; " + showWrap(w4));
     slotLine("W4", W4);
+    const conc = concurrencyCheck(CLAUDE_ENV);
+    rule("each allowance holds the worst case of one call at a 200k-token context times the calls a session can hold in flight", conc.ok, conc.detail);
     const H = await runOne("hostile", "C", OPUS, names, true);
     const reached = st.bodies.filter((b) => JSON.stringify(b.body).includes("PF-HOSTILE")).length;
     for (const [n, r] of Object.entries({ probe, A, B, C, D })) rule("claude --version is 2.1.312 in session " + n, /^2\.1\.312 /.test(String(r.turns.claude_version)), String(r.turns.claude_version));
