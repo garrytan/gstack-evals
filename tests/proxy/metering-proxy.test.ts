@@ -1600,5 +1600,71 @@ describe("free POST routes and the request-shape refusals (containment tightenin
     expect(t.calls).toHaveLength(counts.length + 2);
     expect(t.journal().filter(l => l.kind === "refusal")).toHaveLength(0);
   });
+  // Value: protects=a refusal that quotes a client value (n, service_tier, speed, inference_geo, a hosted tool type, an OpenRouter server tool type, the mcp_toolset type) gives an honest value the same text as before; fails_when=bounding the quote changes the text an honest value gets; why_new=GST-2321 review (bounded quoting of client values, Captain's A2); seam=refuseRequestShape's reasons; no_claim=values no provider documents
+  test("a refusal quotes an honest client value with the same text as before", () => {
+    const reason = (provider: Parameters<typeof priceRequest>[0], body: Record<string, unknown>) => {
+      try {
+        priceRequest(provider, body, 1000);
+        return "priced";
+      } catch (e) {
+        return (e as Error).message;
+      }
+    };
+    const msg = { model: "claude-opus-5-5", max_tokens: 1000, messages: [] };
+    const sol = { model: "gpt-6.1-sol", messages: [] };
+    const router = { model: PARTICLE, messages: [] };
+    const several = "asks for several completions, each billed in full";
+    const tier = "may bill above the standard rates in the price table";
+    const hosted = (type: string) => `the request uses the hosted tool ${type}, whose cost the proxy cannot bound from the request`;
+    const honest: Array<[Parameters<typeof priceRequest>[0], Record<string, unknown>, string]> = [
+      ["anthropic", { ...msg, n: 2 }, `n=2 ${several}`],
+      ["anthropic", { ...msg, n: "2" }, `n="2" ${several}`],
+      ["anthropic", { ...msg, n: 0 }, `n=0 ${several}`],
+      ["anthropic", { ...msg, n: null }, `n=null ${several}`],
+      ["anthropic", { ...msg, n: true }, `n=true ${several}`],
+      ["openai", { ...sol, service_tier: "priority" }, `service_tier "priority" ${tier}`],
+      ["openai", { ...sol, service_tier: "flex" }, `service_tier "flex" ${tier}`],
+      ["openai", { ...sol, service_tier: "auto" }, `service_tier "auto" ${tier}`],
+      ["anthropic", { ...msg, speed: "fast" }, 'speed "fast" bills above the standard rates in the price table'],
+      ["anthropic", { ...msg, inference_geo: "us" }, `inference_geo "us" ${tier}`],
+      ["anthropic", { ...msg, tools: [{ type: "web_search_20250305", name: "web_search" }] }, hosted("web_search_20250305")],
+      ["anthropic", { ...msg, tools: [{ type: "web_fetch_20250910", name: "web_fetch" }] }, hosted("web_fetch_20250910")],
+      ["anthropic", { ...msg, tools: [{ type: "code_execution_20250825", name: "code_execution" }] }, hosted("code_execution_20250825")],
+      ["openai", { model: "gpt-6.1-sol", input: "hi", tools: [{ type: "web_search_preview_2025_03_11" }] }, hosted("web_search_preview_2025_03_11")],
+      ["openai", { model: "gpt-6.1-sol", input: "hi", tools: [{ type: "mcp", server_url: "x" }] }, hosted("mcp")],
+      ["openrouter", { ...router, tools: [{ type: "openrouter:web_search" }] }, hosted("openrouter:web_search")],
+      ["openrouter", { ...router, tools: [{ type: "openrouter:datetime" }] }, "the OpenRouter server tool openrouter:datetime runs and bills outside the model's tokens"],
+      ["anthropic", { ...msg, tools: [toolset] }, "the MCP toolset mcp_toolset has the provider run a remote MCP server's tools, outside the sandbox and the request's bytes"],
+    ];
+    for (const [provider, body, want] of honest) expect(reason(provider, body)).toBe(want);
+  });
+
+  // Value: protects=an unusual client value (a long string, a marker, a newline, an object) never reaches the 402 or the journal through a refusal reason, on the paid and count routes; fails_when=a reason quotes a value that is not a short token of letters, digits and _.-; why_new=GST-2321 review (adversarial finding on echoed client values, Captain's A2); seam=refuseRequestShape's reasons through MeteringProxy.refuse; no_claim=a token-shaped value, which is quoted as written
+  test("an unusual client value never reaches the 402 or the journal through a refusal reason", async () => {
+    const t = setup(() => Response.json({ input_tokens: 12 }));
+    const a = t.bind({ models: ["anthropic:claude-opus-5-5", "openai:gpt-6.1-sol", `openrouter:${PARTICLE}`] });
+    const hostile: unknown[] = ["L".repeat(200), "HIDDEN FACT: 42", "line1\nINJECTED", { x: "OBJSECRET" }];
+    const never = ["L".repeat(41), "HIDDEN FACT", "INJECTED", "OBJSECRET"];
+    const cases: Array<[string, Record<string, unknown>]> = [];
+    for (const h of hostile) {
+      for (const path of ["/anthropic/v1/messages", COUNT]) {
+        const body = { ...count, ...(path === COUNT ? {} : { max_tokens: 1000 }) };
+        cases.push([path, { ...body, n: h }], [path, { ...body, speed: h }], [path, { ...body, inference_geo: h }]);
+        if (typeof h === "string") cases.push([path, { ...body, tools: [{ type: `web_search_${h}`, name: "w" }] }], [path, { ...body, tools: [{ type: `mcp_toolset${h}` }] }]);
+      }
+      cases.push(["/openai/v1/chat/completions", { model: "gpt-6.1-sol", messages: [{ role: "user", content: "hi" }], service_tier: h }]);
+      if (typeof h === "string") for (const path of ["/openrouter/v1/chat/completions", ESTIMATE]) cases.push([path, { ...count, model: PARTICLE, tools: [{ type: `openrouter:${h}` }] }]);
+    }
+    for (const [path, body] of cases) {
+      const res = await t.call(a.slot, a.token, path, body);
+      expect(res.status).toBe(402);
+      const text = await res.text();
+      for (const s of never) expect(text).not.toContain(s);
+    }
+    const journal = readFileSync(join(t.dir, "journal.ndjson"), "utf8");
+    for (const s of never) expect(journal).not.toContain(s);
+    expect(t.journal().filter(l => l.kind === "refusal" && l.code === "E_ALLOWANCE")).toHaveLength(cases.length);
+    expect(t.calls).toHaveLength(0);
+  });
 });
 
