@@ -95,7 +95,7 @@ export function readWrapup(stdout: string): Discard {
  *  state.sh found (none for an infra gap), the end of the turn before it, raw (wall_limit, bg_wait_expired...), and on
  *  a timeout the files and bytes the session wrote as the capture lists them (stopped: counting stopped at the
  *  2,000,000-file or 8 GiB line, so both are lower bounds); written is null when the step did not time out. */
-export interface PfPostTurn { step: string; timed_out: boolean; failed: string; causes: string[]; after: { phase: string; termination: string } | null; written?: { files: number; bytes: number; stopped: boolean } | null }
+export interface PfPostTurn { step: string; timed_out: boolean; failed: string; causes: string[]; after: { phase: string; termination: string } | null; written?: { files: number; bytes: number; stopped: boolean } | null; kill_confirmed?: boolean | null }
 export interface PfSessionRecord {
   schema: "pf-session.v1"; unit: string; part: number; index: number; model: string; arm: PfArm; item: string; lease_id: string;
   attempt: 1 | 2; names: Names; task: { end: EndKind; turns: number | null; wall_ms: number; spent_micros: number };

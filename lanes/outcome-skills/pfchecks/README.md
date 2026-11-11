@@ -197,7 +197,9 @@ Rules as built
   saves the base's filter.* values beside inv (inv.filters), and with no inv.filters state.sh names no filter.
 - A post-turn step that fails or times out (the capture, a wrap-up reset or keep, the bundle) takes no retry, and the
   session still writes its record. Each step runs as its own process group in the container, so a step that times out
-  is killed whole there before sh/state.sh reads the tree, and the session then ends. When sh/state.sh finds the cause in what the agent wrote (a work file the step needs
+  is killed whole there before sh/state.sh reads the tree, and the session then ends. The kill counts only once no
+  process is left in the group, within 5 s; a kill that cannot be confirmed skips sh/state.sh, since the step may still
+  change the tree, and the step is E_PF_CAPTURE, with post_turn.kill_confirmed false. When sh/state.sh finds the cause in what the agent wrote (a work file the step needs
   gone, an s.head that names no commit, a broken .git, config, HEAD or index, a git filter the session added to .git/config or changed there, unmerged
   entries, a lock the agent's git left during the session (read only when the step did not time out, since a timeout
   stops the step's own git, which may leave its lock), a path changed during the session that the step cannot read

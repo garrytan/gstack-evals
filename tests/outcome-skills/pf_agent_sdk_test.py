@@ -419,14 +419,21 @@ def with_scripts(edit, **kw):
         pf_agent.SH = saved
 
 
-def with_step(fail, **kw):
+def with_step(fail, started=True, **kw):
     """One session whose container commands go through fail(script, args) first: a CompletedProcess or an exception it
     returns stands in for that command's run, and None runs it. A post-turn step's own command and args reach fail, not
-    pf_turns' process-group wrapper around them."""
+    pf_turns' process-group wrapper around them. With started, a step that fail times out first starts its real process
+    group (sleep 60, cut at 1 s), as a step that timed out leaves one for KILL to end."""
     real = pf_agent.Session.sh
 
     def sh(self, script, *args, timeout=600):
-        r = fail(args[1], args[3:]) if script == getattr(pf_turns, "GROUP", None) else fail(script, args)
+        group = script == getattr(pf_turns, "GROUP", None)
+        r = fail(args[1], args[3:]) if group else fail(script, args)
+        if group and started and isinstance(r, subprocess.TimeoutExpired):
+            try:
+                real(self, script, args[0], "sleep 60", timeout=1)
+            except subprocess.TimeoutExpired:
+                pass
         if isinstance(r, BaseException):
             raise r
         return r or real(self, script, *args, timeout=timeout)
@@ -500,6 +507,40 @@ def test_a_base_repo_lfs_filter_leaves_an_infra_failure_of_the_capture_infra_and
     check(added.error is None, repr(added.error))
     check(added.summary["refused"].startswith("E_PF_ARM post_turn capture.sh commit: "), added.summary.get("refused"))
     check((added.summary.get("post_turn") or {}).get("causes") == ["filter .git/config sets filter.pf.clean", "filter .git/config sets filter.pf.required"], added.summary.get("post_turn"))
+
+
+def test_the_kill_script_exits_0_only_once_the_steps_group_is_gone():
+    work = Path(tempfile.mkdtemp(prefix="pf-kill-"))
+    DIRS.append(work)
+    kill = lambda: subprocess.run(["bash", "-c", pf_turns.KILL, "bash", str(work)], capture_output=True, timeout=30).returncode
+    pid = int(subprocess.run(["bash", "-c", "setsid sleep 60 >/dev/null 2>&1 & echo $!"], capture_output=True, text=True).stdout)
+    (work / "pf-step.pid").write_text(f"{pid}\n")
+    check(kill() == 0, "a group the signal ended was not confirmed gone")
+    zombie = subprocess.Popen(["sleep", "60"], start_new_session=True)
+    (work / "pf-step.pid").write_text(f"{zombie.pid}\n")
+    try:
+        check(kill() != 0, "the kill script exited 0 while a process of the group was still there")
+    finally:
+        zombie.kill()
+        zombie.wait()
+
+
+def test_a_timed_out_step_whose_kill_is_not_confirmed_is_infra_and_state_sh_does_not_read_the_tree():
+    def unconfirmed(script, args):
+        if script == pf_turns.KILL:
+            return subprocess.CompletedProcess([], 1, b"", b"")
+        return subprocess.TimeoutExpired("docker", 600) if "capture.sh" in script and "commit" in args else None
+
+    s = with_step(unconfirmed, scenario="task_grow")
+    pid = (s.dir / "pf-work" / "pf-step.pid").read_text().strip()
+    subprocess.run(["kill", "-KILL", "--", "-" + pid], capture_output=True)
+    check(s.error is None, repr(s.error))
+    check(s.summary["refused"].startswith("E_PF_CAPTURE capture.sh commit timed out after 600 s") and "kill of its process group was not confirmed" in s.summary["refused"], s.summary.get("refused"))
+    pt = s.summary.get("post_turn") or {}
+    check(pt.get("kill_confirmed") is False and pt.get("causes") == [] and pt.get("written") is None, pt)
+    confirmed = with_step(lambda script, args: subprocess.TimeoutExpired("docker", 600) if "capture.sh" in script and "commit" in args else None, scenario="task_grow")
+    check(confirmed.summary["refused"].startswith("E_PF_ARM post_turn capture.sh commit: grown"), confirmed.summary.get("refused"))
+    check((confirmed.summary.get("post_turn") or {}).get("kill_confirmed") is True, confirmed.summary.get("post_turn"))
 
 
 def test_a_lock_the_harness_capture_leaves_as_it_times_out_stays_infra():
