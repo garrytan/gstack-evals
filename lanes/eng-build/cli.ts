@@ -14,6 +14,7 @@ import { EbError, fail } from "./errors.ts";
 import { SIZE } from "./frozen.ts";
 import { exposureGate, gateState, pilotLine, pilotReading } from "./gates.ts";
 import { ITEMS, reproject, type Design, type Measured } from "./ledger.ts";
+import { removeCoverageImages } from "./coverage.ts";
 import { buildLauncher, noteLauncher, reviewLauncher } from "./launch.ts";
 import { bundleFor, buildUnits, paidItem, readUnits, runBuilds, runReviews, screenAll, underLease, unitGrader, writeNotes, type BuiltUnit, type ReviewUnit } from "./pipeline.ts";
 import { main as recountMain } from "./recount.ts";
@@ -220,7 +221,7 @@ const review: Run = async (a, io) => {
   const out = need(a, "--out");
   const list = json<ReviewUnit[]>(need(a, "--review-units"));
   const skill = arms as Exclude<Arm, "none">[];
-  await underLease(p, reviewLauncher({ arms: skill, reviewer, out, env: process.env, ...(a.flags.has("--policy") ? { policy: a.flags.get("--policy")! } : {}) }), async (session) => {
+  await underLease(p, reviewLauncher({ arms: skill, reviewer, out, env: process.env, log: logTo(io), ...(a.flags.has("--policy") ? { policy: a.flags.get("--policy")! } : {}) }), async (session) => {
     for (const arm of skill) {
       const recs = await runReviews({ units: list, arm, reviewer, reps, out, session, log: logTo(io) });
       io.out("review " + arm + " on " + reviewer + ": " + recs.length + " sessions, " + recs.filter((r) => r.outcome === "upstream_gap" || r.outcome === "infra_gap").length + " gaps, $" + recs.reduce((s, r) => s + r.costUsd, 0).toFixed(2));
@@ -255,14 +256,18 @@ const build: Run = async (a, io) => {
   const out = need(a, "--out");
   const reviews = reviewer === null ? [] : readRecords(join(need(a, "--reviews"), "records"));
   const launcher = buildLauncher({ arm: arms, units: all, repos: need(a, "--repos"), plans: need(a, "--plans"), bundles: reviewer === null ? null : join(need(a, "--reviews"), "bundles"), out, host: need(a, "--host"), envelopeHost: need(a, "--envelope-host"), sidecar: need(a, "--sidecar"), forbidden: [unitsDir, join(homedir(), ".capy", "drive")], planned: list.length * reps.length * arms.length });
-  const grader = unitGrader({ dirs: new Map([...all].map(([id, u]) => [id, u.dir])), work: need(a, "--work") });
-  await underLease(p, launcher, async (session) => {
-    for (const arm of arms) {
-      const done = await runBuilds({ units: list, arm, reviewer, reps, pilot: a.bools.has("--pilot"), reviews, out, session, grader, log: logTo(io) });
-      writeFileSync(join(out, "builds-" + arm + (reviewer ? "-" + reviewer : "") + ".json"), JSON.stringify(done, null, 1) + "\n");
-      io.out("build " + arm + (reviewer ? " on " + reviewer : "") + ": " + done.length + " cells, $" + done.reduce((s, b) => s + b.costUsd, 0).toFixed(2));
-    }
-  });
+  const grader = unitGrader({ dirs: new Map([...all].map(([id, u]) => [id, u.dir])), work: need(a, "--work"), log: logTo(io) });
+  try {
+    await underLease(p, launcher, async (session) => {
+      for (const arm of arms) {
+        const done = await runBuilds({ units: list, arm, reviewer, reps, pilot: a.bools.has("--pilot"), reviews, out, session, grader, log: logTo(io) });
+        writeFileSync(join(out, "builds-" + arm + (reviewer ? "-" + reviewer : "") + ".json"), JSON.stringify(done, null, 1) + "\n");
+        io.out("build " + arm + (reviewer ? " on " + reviewer : "") + ": " + done.length + " cells, $" + done.reduce((s, b) => s + b.costUsd, 0).toFixed(2));
+      }
+    });
+  } finally {
+    removeCoverageImages();
+  }
   return 0;
 };
 
@@ -271,8 +276,12 @@ const grade: Run = async (a, io) => {
   const units = readUnits(join(dir, ".."));
   const u = [...units.values()].find((x) => x.dir === dir) ?? fail("E_USAGE", dir + " is not a built unit folder");
   const runs = a.flags.has("--runs") ? Number(a.flags.get("--runs")) : 3;
-  const r = await unitGrader({ dirs: new Map([[u.unit.id, dir]]), work: need(a, "--work"), runs })({ unit: u.unit, tree: need(a, "--tree") });
-  io.out(JSON.stringify(r));
+  try {
+    const r = await unitGrader({ dirs: new Map([[u.unit.id, dir]]), work: need(a, "--work"), runs, log: logTo(io) })({ unit: u.unit, tree: need(a, "--tree") });
+    io.out(JSON.stringify(r));
+  } finally {
+    removeCoverageImages();
+  }
   return 0;
 };
 

@@ -18,7 +18,7 @@ import { armNamespaces, dockerRig, slotModels } from "../../src/skill-eval/cli/r
 import { ER_COVERAGE_DIR, ER_INSTALL_SKILL, ER_REC_USER, ER_SKILL, ER_SYSTEM_PROMPT, erFreeform } from "../../src/trial/review/eng-review.ts";
 import { STATE_ROOT_DIR } from "../../src/trial/state-root.ts";
 import { runTrial } from "../../src/trial/trial.ts";
-import { erOutcome } from "../eng-review/parse.ts";
+import { erOutcome, type ErOutcome } from "../eng-review/parse.ts";
 import { serveStages } from "../outcome-skills/driver/stage.ts";
 import { HARBOR_MODEL } from "../outcome-skills/statemachines/run.ts";
 import { sessionEnd } from "../outcome-skills/statemachines/session.ts";
@@ -58,7 +58,7 @@ export function noteLauncher(o: { out: string; cacheDir: string; env?: Record<st
 }
 
 /** Reviews: the Docker rig opens the item's lease, builds the arm's install from reviewArmSpec and starts the proxy. */
-export function reviewLauncher(o: { arms: Exclude<Arm, "none">[]; reviewer: Reviewer; out: string; env: Record<string, string | undefined>; policy?: string }): Launcher<ReviewSession> {
+export function reviewLauncher(o: { arms: Exclude<Arm, "none">[]; reviewer: Reviewer; out: string; env: Record<string, string | undefined>; policy?: string; log?: (line: string) => void }): Launcher<ReviewSession> {
   return async (p) => {
     const loaded = loadPolicy(o.policy ?? DEFAULT_POLICY);
     if ("problem" in loaded) return fail("E_USAGE", "model policy: " + loaded.problem);
@@ -94,15 +94,24 @@ export function reviewLauncher(o: { arms: Exclude<Arm, "none">[]; reviewer: Revi
       const meter = await rig.finalize(binding.meter_id);
       const transcriptFile = join(run, "host", "transcript.ndjson");
       const transcript = existsSync(transcriptFile) ? readFileSync(transcriptFile, "utf8") : null;
-      const read = erOutcome(trial.record.termination, transcript).outcome;
-      if (read.state === "cap") fail("E_EB_CELL_INCOMPLETE", "the proxy stopped cell " + s.cell + " at the cap; the stage is incomplete and is never retried to change a reading");
-      const end: AttemptEnd = read.state === "arm-stop" ? "limit" : read.state === "infra" ? (read.reason === "API error" ? "upstream" : "infra") : "completed";
+      const { end, why } = reviewEnd(erOutcome(trial.record.termination, transcript).outcome, s.cell);
+      if (why) o.log?.("cell " + s.cell + " a" + s.attempt + ": " + why);
       const plan = join(work, "plan.md");
       const dirOf = (d: string) => (existsSync(d) ? d : null);
       return { end, costUsd: meter.micros / 1_000_000, result: { dir: run, outputs: { plan: existsSync(plan) ? readFileSync(plan, "utf8") : null, transcript: transcript ?? "", stateRoot: skillArm ? dirOf(join(run, "host", "gstack-state")) : null, coverage: dirOf(join(run, "host", "plan-coverage")) }, finalRepo: join(work, "repo"), blocks: hook?.blocks() ?? 0 } };
     };
     return { lease_id: rig.recovery?.lease_id ?? "", backend: session, close: async () => void (await rig.close()) };
   };
+}
+
+/** A review attempt's end from eng-review's outcome reading. A web result despite the denied web tools is a containment
+ * failure: infra, so it gets one rerun and then a gap, with the reason printed. A cap stop ends the stage incomplete. */
+export function reviewEnd(read: ErOutcome, cell: string): { end: AttemptEnd; why: string | null } {
+  if (read.state === "cap") return fail("E_EB_CELL_INCOMPLETE", "the proxy stopped cell " + cell + " at the cap; the stage is incomplete and is never retried to change a reading");
+  if (read.state === "contaminated") return { end: "infra", why: read.web.length + " web result" + (read.web.length === 1 ? "" : "s") + " despite the denied web tools, a containment failure, so the attempt ends infra (one rerun, then a gap)" };
+  if (read.state === "arm-stop") return { end: "limit", why: null };
+  if (read.state === "infra") return { end: read.reason === "API error" ? "upstream" : "infra", why: null };
+  return { end: "completed", why: null };
 }
 
 const KEYS = /^(ANTHROPIC|OPENAI|OPENROUTER|UBICLOUD|GEMINI|GOOGLE|XAI|DEEPSEEK|TYPESAFE)_[A-Z_]*KEY$|_TOKEN$/;
@@ -178,7 +187,7 @@ export function buildLauncher(o: { arm: Arm | Arm[]; units: Map<string, { dir: s
       env.ANTHROPIC_API_KEY = "placeholder-not-a-key";
       env.PYTHONPATH = join(ROOT, "lanes/real-outcome/agent") + ":" + join(ROOT, "quick/laneb/runner/agent");
       env.PYTHONDONTWRITEBYTECODE = "1";
-      const ak = { skip_install: "true", task_json: taskJson, arm: s.armName, arm_tar: armTar, upstream_model: BUILD_MODEL, arms_path: arms, control_url: served.control, ledger: "u4", task_label: label, trial_n: String(s.attempt), image_id: eb.image.id, manifest, manifest_sha256: sha(manifestText), repo_dir: "/work/repo", workdir: "/work", sidecar_url: o.sidecar };
+      const ak = { skip_install: "true", task_json: taskJson, arm: s.armName, arm_tar: armTar, upstream_model: BUILD_MODEL, arms_path: arms, control_url: served.control, ledger: "u4", task_label: label, trial_n: "1", ...(s.attempt > 1 ? { rerun: "fresh container after an upstream or infra end" } : {}), image_id: eb.image.id, manifest, manifest_sha256: sha(manifestText), repo_dir: "/work/repo", workdir: "/work", sidecar_url: o.sidecar };
       const proxy = /^https?:\/\//.test(stage.proxy) ? stage.proxy : "http://" + stage.proxy;
       const model = HARBOR_MODEL[BUILD_MODEL] ?? fail("E_USAGE", "no Harbor model for " + BUILD_MODEL);
       const h = spawnSync(o.harbor ?? "harbor", ["run", "-y", "-p", task, "-a", "real_agent:RealAgent", "-m", model, "--base-url", proxy, ...Object.entries(ak).flatMap(([k, v]) => ["--ak", k + "=" + v]), "-e", "docker", "--extra-docker-compose", join(ROOT, "quick/laneb/runner/agent-caps.compose.yaml"), "--extra-docker-compose", compose, "-o", join(out, "jobs"), "--job-name", "eb-" + sha(label + s.attempt + Date.now()).slice(0, 12), "--disable-verification", "--delete"], { env, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, timeout: (registry.arms[s.armName]!.limits.wall_limit_sec + 900) * 1000 });

@@ -21,6 +21,8 @@ import type { ErEvidence } from "../eng-review/exposure.ts";
 import { isSkillArm, reviewPrompt, reviewStopHook } from "./arms.ts";
 import { assertComplete, cellId, loadCell, runBuildCell, saveCell, type BuildSession, type Grader, type GraderResult } from "./build-stage.ts";
 import { assembleBundle, bundleParts, repoEdits, writeBundle, type Bundle, type ReviewOutputs } from "./bundle.ts";
+import { catchBuild } from "./catch.ts";
+import { coverageBuild } from "./coverage.ts";
 import { fail } from "./errors.ts";
 import { itemOf, leaseItem, settleItem } from "./ledger.ts";
 import { fixOnlyNames, noteRequest, writeNote, type ModelCall } from "./note.ts";
@@ -302,9 +304,11 @@ export function testLinesAdded(patch: string): number {
 }
 
 /** The verifier's grader: the build's final.patch (in the tree folder the session returns) graded in the unit's pinned
- * image, 3 runs, on the functional set and each aftermath item's set. Real-bug catches, coverage and mutation are left
- * null until the catch and coverage modules plug in. */
-export function unitGrader(o: { dirs: Map<string, string>; work: string; runs?: number; seed?: number }): Grader {
+ * image, 3 runs, on the functional set and each aftermath item's set; the real-bug catch moves the build's own tests
+ * onto the real merged and fixed trees (catch.ts), printing how many real trees they compiled and ran on and each
+ * E_EB_TRANSPLANT drop; changed-line coverage is the share when the tool scored the tree, else null (coverage.ts).
+ * Mutation stays null and is not reported. */
+export function unitGrader(o: { dirs: Map<string, string>; work: string; runs?: number; seed?: number; catchBuild?: typeof catchBuild; coverageBuild?: typeof coverageBuild; log?: (line: string) => void }): Grader {
   return async ({ unit, tree }): Promise<GraderResult> => {
     const dir = o.dirs.get(unit.id) ?? fail("E_USAGE", "no unit folder for " + unit.id);
     const patch = readFileSync(join(tree, "final.patch"), "utf8");
@@ -315,18 +319,20 @@ export function unitGrader(o: { dirs: Map<string, string>; work: string; runs?: 
     const functional = caseRuns(on(eb.sets[0]!, unit.functional), unit.functional);
     const aftermath: GraderResult["aftermath"] = {};
     const anchors: GraderResult["anchors"] = {};
-    const catches: GraderResult["catches"] = {};
     for (const a of unit.aftermath) {
       const set = eb.sets.find((s) => s.item === a.item);
       if (!set || a.cases.length === 0) continue;
       const g = on(set, [...a.cases, ...a.anchors]);
       aftermath[a.item] = caseRuns(g, a.cases);
       anchors[a.item] = caseRuns(g, a.anchors);
-      catches[a.item] = null;
     }
     const tSets = eb.sets.filter((s) => s.role === "T");
     const tGrid = Object.assign({}, ...tSets.map((s) => on(s, unit.tCases)));
-    return { functional, aftermath, anchors, tCases: caseRuns(tGrid, unit.tCases), catches, coverage: null, mutation: null, testLinesAdded: testLinesAdded(patch) };
+    const c = (o.catchBuild ?? catchBuild)({ unitDir: dir, patch, work: o.work, runs, seed });
+    for (const d of c.drops) o.log?.(d.code + " unit " + d.unit + ": " + d.step + " (" + d.cls + "); the build's tests in it are not moved");
+    o.log?.("catch " + unit.id + ": the build's own tests compiled and ran on " + c.compiled + " of " + c.trees + " real trees");
+    const cov = (o.coverageBuild ?? coverageBuild)({ unitDir: dir, patch });
+    return { functional, aftermath, anchors, tCases: caseRuns(tGrid, unit.tCases), catches: { ...c.catches }, coverage: cov.scored ? cov.share : null, mutation: null, testLinesAdded: testLinesAdded(patch) };
   };
 }
 

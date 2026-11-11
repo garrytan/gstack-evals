@@ -15,8 +15,8 @@ describe("dry run", () => {
     try {
       const r = await dryRun({ part: "all", seams });
       expect(r.ok).toBe(false);
-      expect(r.failed).toEqual(["seam transplant catch", "seam transplant no-catch"]);
-      expect(r.skipped).toEqual(["recipe go", "recipe node", "recipe node-rust", "recipe python", "adapter jest", "adapter vitest", "adapter mocha", "adapter node-test", "adapter cargo", "classify t-case", "region product-hash", "rebuild stale-artifact", "leak image"].map((s) => "seam " + s));
+      expect(r.failed).toEqual([]);
+      expect(r.skipped).toEqual(["recipe go", "recipe node", "recipe node-rust", "recipe python", "adapter jest", "adapter vitest", "adapter mocha", "adapter node-test", "adapter cargo", "classify t-case", "region product-hash", "rebuild stale-artifact", "transplant catch", "transplant no-catch", "leak image"].map((s) => "seam " + s));
       expect(r.lines).toContain("SKIP seam leak image: needs Docker: set GSTACK_EVALS_DOCKER=1 to build and grade its fixture unit; not a pass");
       for (const s of ["classify fail-to-pass", "classify anchor", "region rust-inline", "stophook blocks", "bundle cap"]) expect(r.lines).toContain("ok seam " + s + ": " + SEAMS[s as keyof typeof SEAMS].expect);
     } finally {

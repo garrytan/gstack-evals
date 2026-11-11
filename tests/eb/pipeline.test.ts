@@ -10,7 +10,7 @@ import { readItem } from "../../src/runner/ledger/record.ts";
 import { main } from "../../lanes/eng-build/cli.ts";
 import { fixtureUnit, oneCommitRepo, stubBuild, stubGrader, stubReview, tempLedger } from "../../lanes/eng-build/dryrun-pipeline.ts";
 import { EbError } from "../../lanes/eng-build/errors.ts";
-import { buildEnd } from "../../lanes/eng-build/launch.ts";
+import { buildEnd, reviewEnd } from "../../lanes/eng-build/launch.ts";
 import { bundleFor, buildUnits, paidItem, runBuilds, runReviews, screenAll, stubLauncher, testLinesAdded, underLease, unitGrader, writeNotes, type Launcher, type ReviewSession } from "../../lanes/eng-build/pipeline.ts";
 import { removeLabelled } from "../../lanes/eng-build/screen.ts";
 import { buildUnit, readUnit, type BuildOutcome } from "../../lanes/eng-build/unit.ts";
@@ -161,6 +161,23 @@ describe("the build stage", () => {
   });
 });
 
+describe("review attempt ends", () => {
+  test("web results despite the denial are a containment failure: infra with its reason, so one rerun and then a gap", async () => {
+    const web = reviewEnd({ state: "contaminated", web: ["https://example.com"] } as never, "u1:precut:opus:1");
+    expect(web).toEqual({ end: "infra", why: "1 web result despite the denied web tools, a containment failure, so the attempt ends infra (one rerun, then a gap)" });
+    expect(reviewEnd({ state: "arm-stop", reason: "turn limit", detail: "" } as never, "c").end).toBe("limit");
+    expect(reviewEnd({ state: "infra", reason: "API error", detail: "" } as never, "c").end).toBe("upstream");
+    expect(reviewEnd({ state: "infra", reason: "crash", detail: "" } as never, "c").end).toBe("infra");
+    expect(reviewEnd({ state: "no-block" } as never, "c").end).toBe("completed");
+    expect(await codeOf(() => reviewEnd({ state: "cap" } as never, "c"))).toStartWith("E_EB_CELL_INCOMPLETE the proxy stopped cell c at the cap");
+    const dir = fresh();
+    const unit = { id: "u9", repo: oneCommitRepo(join(dir, "base")), plan: join(dir, "plan.md") };
+    writeFileSync(unit.plan, "# Plan\n");
+    const recs = await runReviews({ units: [unit], arm: "plain", reviewer: "opus", reps: [1], out: join(dir, "out"), session: async (s) => ({ end: web.end, costUsd: 0.1, result: { dir: s.dir, outputs: { plan: null, transcript: "", stateRoot: null, coverage: null }, finalRepo: join(s.seed, "repo"), blocks: 0 } }) });
+    expect(recs[0]!.outcome).toBe("infra_gap");
+  });
+});
+
 describe("eb subcommands", () => {
   const run = async (argv: string[]) => {
     const out: string[] = [];
@@ -190,6 +207,7 @@ describe.skipIf(process.env.GSTACK_EVALS_DOCKER !== "1")("the grader in Docker (
     const r = await unitGrader({ dirs: new Map([[unit.id, out.dir]]), work: fresh(), runs: 2 })({ unit, tree });
     expect(r.aftermath.B1).toEqual([{ id: ".::TestMulZero", runs: ["pass", "pass"] }]);
     expect(r.functional.map((c) => c.runs)).toEqual([["pass", "pass"], ["pass", "pass"]]);
-    expect(r.catches).toEqual({ B1: null });
+    expect(r.catches).toEqual({ B1: false });
+    expect(r.coverage).toBe(0);
   }, 1_800_000);
 });

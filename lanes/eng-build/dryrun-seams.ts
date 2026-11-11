@@ -4,7 +4,7 @@
 // cold rebuild, T items and leak check build a real unit from the synthetic repositories in tests/eng-build/fixture.ts
 // and grade it in the verifier's sandbox, so they run only under GSTACK_EVALS_DOCKER=1, as the Docker tests do. Without
 // Docker each of them returns a SKIP line with its reason, which the dry run prints and counts as a failure, never a
-// pass. The two transplant seams wait on the catch rule's own module and stay unwired here.
+// pass. The transplant seams build their own Go unit in catch.ts, also under Docker.
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -15,6 +15,7 @@ import { reviewStopHook } from "./arms.ts";
 import { assembleBundle } from "./bundle.ts";
 import type { Seams } from "./dryrun.ts";
 import { EbError } from "./errors.ts";
+import { seamCleanup, seamTransplantCatch, seamTransplantNoCatch } from "./catch.ts";
 import { leakCheck } from "./leak.ts";
 import { removeLabelled } from "./screen.ts";
 import type { CaseClass } from "./types.ts";
@@ -72,7 +73,7 @@ function pureSeams(): Seams {
   };
 }
 
-const DOCKER_SEAMS = ["recipe go", "recipe node", "recipe node-rust", "recipe python", "adapter jest", "adapter vitest", "adapter mocha", "adapter node-test", "adapter cargo", "classify t-case", "region product-hash", "rebuild stale-artifact", "leak image"] as const;
+const DOCKER_SEAMS = ["recipe go", "recipe node", "recipe node-rust", "recipe python", "adapter jest", "adapter vitest", "adapter mocha", "adapter node-test", "adapter cargo", "classify t-case", "region product-hash", "rebuild stale-artifact", "leak image", "transplant catch", "transplant no-catch"] as const;
 
 const codeOf = (f: () => unknown): string => {
   try {
@@ -161,6 +162,8 @@ function dockerSeams(dir: string): Seams {
       const line = (GO_CALC + GO_BUGGY).split("\n").find((l) => l.startsWith("func Add"))!;
       return codeOf(() => leakCheck({ unit: "ebgo", image: out.eb.image.id, repo: fx.spec.repo, runner: out.eb.groups[0]!.runner, needles: [line] }));
     },
+    "transplant catch": seamTransplantCatch,
+    "transplant no-catch": seamTransplantNoCatch,
   };
 }
 
@@ -176,6 +179,7 @@ export function wiredSeams(env: Record<string, string | undefined> = process.env
   return {
     seams: { ...pure, ...dockerSeams(dir) },
     close: () => {
+      seamCleanup();
       removeLabelled();
       rmSync(dir, { recursive: true, force: true });
     },

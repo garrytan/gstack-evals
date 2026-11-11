@@ -26,7 +26,16 @@ The lane for the eng-review build read (prereg 2026-11-11-geva-522-eng-review-bu
   gives no data for is unscored.
 - recount.ts: regrades built units in the verifier's sandbox and prints counts only. Under 16 clean units it exits 2
   with E_EB_FEW_UNITS.
+- pipeline.ts: the run's stages (screen, units, notes, reviews and bundles, builds, grading) behind the eb
+  subcommands. Each paid stage runs under one lease on its item and stops if the lease is still open after it.
+- launch.ts: the paid stages' real launchers: the product-value meter for notes, the Docker rig for reviews, and the
+  outcome driver with Harbor and real_agent for builds.
+- dryrun.ts, dryrun-seams.ts, dryrun-pipeline.ts: `gstack-evals eb dryrun`. Seams that need Docker run under
+  GSTACK_EVALS_DOCKER=1 and print SKIP otherwise, which is never a pass.
+
+Harness constants (not frozen by the prereg): NOTE_MAX_TOKENS in launch.ts caps each note writer and audit answer at
+4000 output tokens. The prereg fixes the note as one paragraph and sets no token count.
 
 Limits: Go and Python need the project at the repository root. An image holds at most two toolchains, and the
 second must be Rust or Node. The base check runs the merge's own test files that exist at base, or else the
-nearest test files at base. There is no lanes/eng-build/cli.ts yet, so `gstack-evals eb` still exits "not built yet".
+nearest test files at base.
