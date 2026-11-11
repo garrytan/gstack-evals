@@ -43,6 +43,8 @@ ends with a gap writes its record and exits 0.
 ## Readings this build chose
 
 Draw and screens
+- The pool refuses a candidates file in which a row in a language with a test-module detector (rust) has no sm source
+  split fields, or malformed ones (E_PF_INPUT), since the screen's mixed-hunk drop needs them.
 - One seededRandom(draw_seed) shuffles each month once, months in the order the draw first walks them (March to June
   2026, then July 2026, then February 2026 back to January 2025). Ids are sorted before each shuffle.
 - The reserve units pass every gate and count toward the 3-per-repository cap, like kept units.

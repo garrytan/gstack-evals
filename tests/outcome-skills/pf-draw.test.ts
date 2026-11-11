@@ -53,3 +53,16 @@ test("the pool keeps the window and the screen", () => {
   const c = (id: string, created_at: string, extra: object = {}) => ({ id, repo: "r", month: created_at.slice(0, 7), created_at, image_digest: "sha256:x", f2p: 1, p2p: 1, fix_source_files: 1, feature_screen: false, ...extra }) as any;
   expect(poolOf([c("a", "2024-12-31T00:00:00Z"), c("b", "2025-01-01T00:00:00Z"), c("c", "2026-08-01T00:00:00Z"), c("d", "2026-07-31T23:00:00Z"), c("e", "2026-03-01", { f2p: 0 })]).map((u) => u.id)).toEqual(["b", "d"]);
 });
+
+// Value: protects=the Captain's ruling item 6 on #324: section 2's pool, mixed-hunk drop included, comes only from a candidates file where every row in a language with a test-module detector carries sm source split's fields; fails_when=poolOf takes a rust row with no split or a malformed one, or refuses rows that all carry a split count or a split error, or a row in a language with no detector; why_new=a candidates file from before sm source split gave a pool 7 units larger (805, not 798) with no error; seam=draw.ts poolOf; no_claim=the paid pool file itself (checked by hand, not committed)
+test("the pool refuses rows in a language with a test-module detector that carry no split fields or malformed ones", () => {
+  const c = (id: string, extra: object = {}) => ({ id, repo: "r", lang: "rust", month: "2026-03", created_at: "2026-03-01T00:00:00Z", image_digest: "sha256:x", f2p: 1, p2p: 1, fix_source_files: 1, feature_screen: false, ...extra }) as any;
+  const ok = c("ok", { split: { source_files: 1, mixed: 0, test_hunks: 2 } });
+  const mixed = c("mixed", { split: { source_files: 1, mixed: 1, test_hunks: 0 } });
+  const err = c("err", { split: { error: "raw src/a.rs answered 404" } });
+  expect(poolOf([ok, mixed, err, c("go", { lang: "go" })]).map((u) => u.id)).toEqual(["ok", "go"]);
+  expect(() => poolOf([ok, c("bare"), c("bare2")])).toThrow(/^E_PF_INPUT 2 rust candidates carry no sm source split fields or malformed ones, so section 2's mixed-hunk screen cannot run: bare, bare2; /);
+  for (const split of [null, {}, { source_files: 1, mixed: 0 }, { source_files: 1, mixed: -1, test_hunks: 0 }, { source_files: 1.5, mixed: 0, test_hunks: 0 }, { error: 3 }, { error: "x", mixed: 0 }, [1, 0, 0]]) {
+    expect(() => poolOf([c("bad", { split })])).toThrow(/^E_PF_INPUT 1 rust candidates carry no sm source split fields or malformed ones, so section 2's mixed-hunk screen cannot run: bad; /);
+  }
+});
