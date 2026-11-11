@@ -25,7 +25,7 @@ attachments:
 
 ## Approval
 
-Gate 1 approved on 2026-11-11, after one lean gstack /autoplan review (run autoplan-20261111153348, gate revision 1, one Opus 5.5 reviewer) and one GPT-6.1 Sol outside reader the Captain asked for, by the Captain (approval record r-9508324db40f). The Captain took every recommendation: the authoring price kept at about $20 a usable unit (A), the fixed test sequence (B, made a true sequence that stops at the first test that doesn't reject), the five High review fixes (C to G), approval with those changes (H), every finding of the outside reader (I), the conditional Sol and particle-1 stage with its projection going to the Captain and the owner before any spend (K), and the token plan for the build (L). The comparison size (J) went to the project owner: SIZE_RULING. After the gate, the keyless build run showed that a build session reaches the sandbox sidecar as well as the metering proxy. The Captain kept the sidecar on the condition that two keyless gates check it for every unit before the pilot (section 13). This post approves no item's spend: no paid call runs until it merges and the Captain records each item's cap.
+Gate 1 approved on 2026-11-11, after one lean gstack /autoplan review (run autoplan-20261111153348, gate revision 1, one Opus 5.5 reviewer) and one GPT-6.1 Sol outside reader the Captain asked for, by the Captain (approval record r-9508324db40f). The Captain took every recommendation: the authoring price kept at about $20 a usable unit (A), the fixed test sequence (B, made a true sequence that stops at the first test that doesn't reject), the five High review fixes (C to G), approval with those changes (H), every finding of the outside reader (I), the conditional Sol and particle-1 stage with its projection going to the Captain and the owner before any spend (K), and the token plan for the build (L). The comparison size (J) went to the project owner, who answered "Do it" on 2026-11-12, which takes the recommended J1: 48 comparison units with 3 reviews and builds a cell. After the gate, the keyless build run showed that a build session reaches the sandbox sidecar as well as the metering proxy. The Captain kept the sidecar on the condition that two keyless gates check it for every unit before the pilot (section 13). This post approves no item's spend: no paid call runs until it merges and the Captain records each item's cap.
 
 ## ELI5
 
@@ -155,7 +155,7 @@ On the calibration units, with the Stop hook on: 6 Opus sessions of each skill a
 
 ### 8. Comparison
 
-**Size, one frozen parameter:** 48 comparison build units with 3 reviews and builds a cell (no review: 2). The owner's pick between this and 40 units with 2 builds a cell changes only this parameter and the MDD and money lines tied to it.
+**Size, one frozen parameter:** 48 comparison build units with 3 reviews and builds a cell (no review: 2). The project owner picked this size (see Approval).
 
 48 comparison build units. Opus reviewers: the plain, pre-cut, eng phase and candidate arms, 3 reviews a unit each, each review built once by Opus; no review built twice. Cells run interleaved in a seeded order per unit.
 
