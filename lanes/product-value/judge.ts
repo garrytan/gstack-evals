@@ -252,10 +252,10 @@ function versionTap(base: typeof fetch, dir: string): typeof fetch {
 }
 
 /** Opens the metered client on a judge item and returns a Caller that records each reply's model version. */
-export async function openJudge(o: { item: string; runId: string; out: string; cacheDir: string; record?: string; ledger?: string; env?: Record<string, string | undefined>; fetch?: typeof fetch; io: Io }): Promise<{ call: Caller; close: () => Promise<void> }> {
+export async function openJudge(o: { item: string; runId: string; out: string; cacheDir: string; record?: string; ledger?: string; env?: Record<string, string | undefined>; fetch?: typeof fetch; io: Io; maxOutputTokens?: number }): Promise<{ call: Caller; close: () => Promise<void> }> {
   const vdir = join(o.cacheDir, "versions");
   mkdirSync(vdir, { recursive: true, mode: 0o700 });
-  const meter = await openMeter({ item: o.item, runId: o.runId, out: o.out, cacheDir: o.cacheDir, maxOutputTokens: 32_000, record: o.record, ledger: o.ledger, env: o.env, fetch: versionTap(o.fetch ?? fetch, vdir), warn: (code, m) => o.io.err(code + " " + m) });
+  const meter = await openMeter({ item: o.item, runId: o.runId, out: o.out, cacheDir: o.cacheDir, maxOutputTokens: o.maxOutputTokens ?? 32_000, record: o.record, ledger: o.ledger, env: o.env, fetch: versionTap(o.fetch ?? fetch, vdir), warn: (code, m) => o.io.err(code + " " + m) });
   const call: Caller = async (c) => {
     const key = JUDGE_MODEL[c.judge];
     const r = await meter.call({ model: key, prompt: c.prompt, maxTokens: c.maxTokens, effort: c.effort, label: c.label });
