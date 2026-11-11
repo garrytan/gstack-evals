@@ -194,7 +194,8 @@ Rules as built
   the agent planted, no filter, excludesFile or other setting from the machine's system or global config and no
   $XDG_CONFIG_HOME/git/ignore (which git reads with no config) runs or counts; .git/config and .git/config.worktree still
   apply, and state.sh names a filter set in either (through an include too) that the base repo did not have with that value: the start inventory
-  saves the base's filter.* values beside inv (inv.filters), and with no inv.filters state.sh names no filter.
+  reads the base's filter.* values, pf_turns keeps them in its own memory on the host and sends them on state.sh's
+  stdin, so the agent cannot edit or delete them, and when that read failed state.sh gets none and names every filter.
 - A post-turn step that fails or times out (the capture, a wrap-up reset or keep, the bundle) takes no retry, and the
   session still writes its record. Each step runs as its own process group in the container, so a step that times out
   is killed whole there before sh/state.sh reads the tree, and the session then ends. The kill counts only once no

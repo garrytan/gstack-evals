@@ -466,7 +466,7 @@ test("the session budget sums the code's own timeouts, retries and walls, and ru
   expect(egress).toContain("exec_fn(container, script, None, " + BOUNDS.egress_probe_s + ")");
   expect(agent).toMatch(new RegExp("^CLOSE_TIMEOUT_S = " + BOUNDS.close_s + "$", "m"));
   expect(agent).toContain('f"{container}:{SH_DIR}"], capture_output=True, text=True, timeout=' + BOUNDS.copy_s + ")");
-  expect(turns).toContain("def sh(self, script: str, *args: str, timeout: float = " + BOUNDS.step_s + ")");
+  expect(turns).toContain("def sh(self, script: str, *args: str, input: bytes | None = None, timeout: float = " + BOUNDS.step_s + ")");
   expect(turns).toMatch(new RegExp("^KILL_TIMEOUT_S = " + BOUNDS.kill_s + "$", "m"));
   expect(turns).toContain("wait_for(client.disconnect(), timeout=" + BOUNDS.disconnect_s + ")");
   expect(turns.match(/self\.sh\(/g)?.length).toBe(9);

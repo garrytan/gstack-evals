@@ -5,8 +5,9 @@
 # changes, what the agent could have written, and prints one PF_ARM_STATE line per cause it finds there: a work file the
 # step needs (each <name>: inv, s.head, s.inv) missing, or an s.head that names no commit; a repository root or .git that
 # is not a directory; a .git/config git cannot read, a filter (filter.*, in .git/config or .git/config.worktree,
-# through an include too) the base repo did not have with that value (<work>/inv.filters, saved at the start
-# inventory; no filter line when it is missing), or a .git/config that leaves the root outside git's work tree; a HEAD
+# through an include too) the base repo did not have with that value (the start inventory's capture.sh filters lines,
+# which pf_turns keeps on the host and sends on stdin, so the agent cannot change them; with an empty stdin every filter
+# counts), or a .git/config that leaves the root outside git's work tree; a HEAD
 # that names no commit; an index git cannot read, or one with unmerged entries; a .lock file under .git made during the session (newer than <work>/inv) that was there before the
 # step started (not newer than <work>/pf-step.stamp), which the agent's own git left, read only when the step did not
 # time out, since a timeout stops the step's own git, whose lock can fall in the stamp's clock tick; a path the capture
@@ -26,6 +27,7 @@ fi
 repo=$1
 work=$2
 shift 2
+base=$(cat)
 here=$(cd "$(dirname "$0")" && pwd)
 files=2000000
 bytes=8589934592
@@ -40,9 +42,7 @@ done
 [ -d "$repo" ] || { say "repo $repo is not a directory"; exit 0; }
 [ -d "$repo/.git" ] || { say "git_dir .git is not a directory"; exit 0; }
 g config --local -l >/dev/null 2>&1 || { say "config .git/config is unreadable"; exit 0; }
-if [ -f "$work/inv.filters" ]; then
-  bash "$here/capture.sh" filters "$repo" 2>/dev/null | grep -vxF -f "$work/inv.filters" | cut -f1 | LC_ALL=C sort -u | head -n 20 | while IFS= read -r k; do say "filter .git/config sets $k"; done
-fi
+bash "$here/capture.sh" filters "$repo" 2>/dev/null | grep -vxF -f <(printf '%s\n' "$base") | cut -f1 | LC_ALL=C sort -u | head -n 20 | while IFS= read -r k; do say "filter .git/config sets $k"; done
 [ "$(g rev-parse --is-inside-work-tree 2>/dev/null)" = true ] || { say "worktree git sees no work tree at the repository root"; exit 0; }
 if [ "$need_head" = 1 ] && [ -f "$work/s.head" ] && ! g cat-file -e "$(head -c 200 "$work/s.head" | tr -d '[:space:]')^{commit}" 2>/dev/null; then say "s.head names no commit"; fi
 g rev-parse -q --verify 'HEAD^{commit}' >/dev/null 2>&1 || say "head HEAD names no commit"
