@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { commitLocal, inventoryLocal } from "../../lanes/outcome-skills/pfchecks/capture.ts";
@@ -81,6 +81,24 @@ test("wrapup.sh keeps only CHECKS.json, counts every other change, and puts the 
   expect(git(repo, ["rev-parse", "HEAD"]).stdout.trim()).toBe(cap.head);
   const none = spawnSync("bash", [WRAP, "keep", repo, dir], { encoding: "utf8" });
   expect(readWrapup(none.stdout)).toEqual({ checks: false, discarded: [] });
+});
+
+// Value: protects=section 4's wrap-up rule that every change the wrap-up turn makes but CHECKS.json is discarded and counted, a change to a file's executable bit included; fails_when=the inventory compares content only, so a chmod in the wrap-up turn is neither counted nor known to the reset; why_new=#305's Capy review (capture.sh:56) on the inventory both scripts share; seam=sh/wrapup.sh keep with sh/capture.sh inventory; no_claim=the task turn's capture (pf-capture.test.ts)
+test("wrapup.sh counts a change to a file's executable bit alone as discarded and puts the mode back to S", () => {
+  const repo = mkdtempSync(join(tmpdir(), "pf-wrap-mode-"));
+  writeFileSync(join(repo, "run.sh"), "#!/bin/sh\nexit 0\n");
+  git(repo, ["init", "-q"]);
+  git(repo, ["add", "-A"]);
+  git(repo, ["commit", "-qm", "base"]);
+  const inv = join(repo, "..", "pf-wrap-mode-inv-" + process.pid);
+  writeFileSync(inv, inventoryLocal(repo));
+  const dir = mkdtempSync(join(tmpdir(), "pf-wrapdir-mode-"));
+  commitLocal(repo, inv, dir);
+  chmodSync(join(repo, "run.sh"), 0o755);
+  const r = spawnSync("bash", [WRAP, "keep", repo, dir], { encoding: "utf8" });
+  expect(r.status).toBe(0);
+  expect(readWrapup(r.stdout)).toEqual({ checks: false, discarded: ["run.sh"] });
+  expect(statSync(join(repo, "run.sh")).mode & 0o100).toBe(0);
 });
 
 test("the session record refuses a plugin on C and a record with no S", () => {
