@@ -41,6 +41,11 @@ from real_agent import SM_CHECK, RealAgent, message_record  # noqa: E402
 from sm_user import NoAnswer  # noqa: E402
 
 RERUN = {"task": "task_upstream_or_infra", "wrapup": "wrapup_upstream_or_infra"}
+# A post-turn step runs as its own process group in the container, its leader's pid in <work>/pf-step.pid, so a step that
+# times out is killed whole there (docker exec stops only its client) before state.sh reads the tree.
+GROUP = 'w=$1; shift; set -m; bash -c "$@" & p=$!; set +m; echo "$p" > "$w/pf-step.pid"; wait "$p"'
+KILL = 'p=$(cat "$1/pf-step.pid" 2>/dev/null) && kill -KILL -- "-$p" 2>/dev/null; true'
+KILL_TIMEOUT_S = 60
 ENDS = {"wall_limit": "limit_wall", "turn_ceiling": "limit_turns", "completed": "completed", "bg_wait_expired": "completed"}
 
 
@@ -93,7 +98,8 @@ class Session:
         """One post-turn step in the container: the session-end commit, a wrap-up reset or keep, or the S bundle. When it
         fails or times out, sh/state.sh reads what the agent could have written (the work files the step needs, the
         repository's git state and filters, a lock the agent's git left, a path the step cannot read and, after a timeout,
-        named by --timed-out, a tree the session grew) and a cause there, or a path that vanished while the step hashed or
+        named by --timed-out, a tree the session grew; a step that timed out is killed first, as its whole process group)
+        and a cause there, or a path that vanished while the step hashed or
         added it, raises E_PF_ARM post_turn. Anything else raises E_PF_CAPTURE: the harness, the host, docker or the
         network (#305's run notes item 4)."""
         cfg = self.cfg
@@ -101,7 +107,7 @@ class Session:
         timed_out = []
         try:
             self.sh('mkdir -p "$1" && touch "$1/pf-step.stamp"', cfg["work"])
-            res = self.sh(cmd, *args)
+            res = self.sh(GROUP, cfg["work"], cmd, "bash", *args)
             if res.returncode == 0:
                 return res.stdout
             err = res.stderr.decode(errors="replace")
@@ -109,6 +115,10 @@ class Session:
         except subprocess.TimeoutExpired as e:
             failed = f"timed out after {e.timeout:.0f} s"
             timed_out = ["--timed-out"]
+            try:
+                self.sh(KILL, cfg["work"], timeout=KILL_TIMEOUT_S)
+            except subprocess.TimeoutExpired:
+                pass
         try:
             probe = self.sh('d=$1; shift; bash "$d/state.sh" "$@"', cfg["sh_dir"], *timed_out, cfg["repo"], cfg["work"], *needs).stdout.decode(errors="replace")
         except subprocess.TimeoutExpired:

@@ -183,7 +183,8 @@ Rules as built
   regular file at the root), prints PF_DISCARD for every other added, changed or deleted path, and puts the tree back to S.
   S leaves the container as a git bundle, which score.ts fetches as --s with ref HEAD.
 - A post-turn step that fails or times out (the capture, a wrap-up reset or keep, the bundle) takes no retry, and the
-  session still writes its record. When sh/state.sh finds the cause in what the agent wrote (a work file the step needs
+  session still writes its record. Each step runs as its own process group in the container, so a step that times out
+  is killed whole there before sh/state.sh reads the tree, and the session then ends. When sh/state.sh finds the cause in what the agent wrote (a work file the step needs
   gone, an s.head that names no commit, a broken .git, config, HEAD or index, a git filter set in .git/config, unmerged
   entries, a lock the agent's git left during the session (read only when the step did not time out, since a timeout
   stops the step's own git, which may leave its lock), a path changed during the session that the step cannot read

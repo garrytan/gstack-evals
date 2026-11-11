@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import traceback
 import types
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -29,6 +30,7 @@ import claude_agent_sdk  # noqa: E402
 import egress  # noqa: E402
 import laneb_agent as lb  # noqa: E402
 import pf_agent  # noqa: E402
+import pf_turns  # noqa: E402
 
 assert claude_agent_sdk.__version__ == "0.2.174", claude_agent_sdk.__version__
 IMAGE = "sha256:" + "d" * 64
@@ -414,11 +416,12 @@ def with_scripts(edit, **kw):
 
 def with_step(fail, **kw):
     """One session whose container commands go through fail(script, args) first: a CompletedProcess or an exception it
-    returns stands in for that command's run, and None runs it."""
+    returns stands in for that command's run, and None runs it. A post-turn step's own command and args reach fail, not
+    pf_turns' process-group wrapper around them."""
     real = pf_agent.Session.sh
 
     def sh(self, script, *args, timeout=600):
-        r = fail(script, args)
+        r = fail(args[1], args[3:]) if script == getattr(pf_turns, "GROUP", None) else fail(script, args)
         if isinstance(r, BaseException):
             raise r
         return r or real(self, script, *args, timeout=timeout)
@@ -474,6 +477,28 @@ def test_a_lock_the_harness_capture_leaves_as_it_times_out_stays_infra():
     s = with_step(fail)
     check(s.error is None, repr(s.error))
     check(s.summary["refused"].startswith("E_PF_CAPTURE capture.sh commit timed out after 600 s"), s.summary.get("refused"))
+
+
+def test_a_post_turn_step_that_times_out_is_killed_before_state_sh_reads_the_tree():
+    def edit(d):
+        cap = d / "capture.sh"
+        cap.write_text(cap.read_text().replace("  commit)\n", '  commit)\n    (sleep 3; : > "$4/late") >/dev/null 2>&1 &\n    wait\n', 1))
+
+    real = pf_agent.Session.sh
+
+    def sh(self, script, *args, timeout=600):
+        capture = "commit" in args and "capture.sh" in script + " ".join(args)
+        return real(self, script, *args, timeout=1 if capture else timeout)
+
+    pf_agent.Session.sh = sh
+    try:
+        s = with_scripts(edit)
+    finally:
+        pf_agent.Session.sh = real
+    check(s.error is None, repr(s.error))
+    check(s.summary["refused"].startswith("E_PF_CAPTURE capture.sh commit timed out after 1 s"), s.summary.get("refused"))
+    time.sleep(4)
+    check(not (s.dir / "pf-work" / "late").exists(), "the timed-out capture kept running and wrote to the tree after state.sh read it")
 
 
 def test_a_wrapup_turn_that_removes_s_head_makes_the_keep_failure_the_arms():
