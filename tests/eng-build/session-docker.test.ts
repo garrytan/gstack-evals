@@ -4,7 +4,7 @@
 // this process, and, with EB_HARBOR naming a Harbor binary at its pin, the whole keyless build run (lanes/eng-build/e2e.ts).
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { preflight } from "../../lanes/eng-build/build-stage.ts";
@@ -69,6 +69,34 @@ describe.skipIf(!DOCKER)("build session image in Docker (GSTACK_EVALS_DOCKER=1)"
     } finally {
       stub.stop(true);
       removeSessionImages();
+    }
+  }, 1_800_000);
+
+
+  // Value: protects=a src-layout Python builder importing its own edits at /work/repo; fails_when=the session's editable
+  // install still resolves the package from the unit image's /testbed, or the unit image itself changes.
+  test("an editable install on /testbed resolves to /work/repo in the session, and the unit image keeps /testbed", () => {
+    const ctx = mkdtempSync(join(tmpdir(), "eb-py-"));
+    const tree = mkdtempSync(join(tmpdir(), "eb-py-tree-"));
+    const tag = "gstack-evals-eb-pytest:editable";
+    try {
+      const put = (root: string, p: string, s: string) => (mkdirSync(join(root, p, ".."), { recursive: true }), writeFileSync(join(root, p), s));
+      put(ctx, "proj/pyproject.toml", '[build-system]\nrequires = ["setuptools>=64"]\nbuild-backend = "setuptools.build_meta"\n\n[project]\nname = "ebpkg"\nversion = "0.1"\n\n[tool.setuptools.packages.find]\nwhere = ["src"]\n');
+      put(ctx, "proj/src/ebpkg/__init__.py", 'VALUE = "base"\n');
+      put(ctx, "Dockerfile", "FROM " + IMAGES["python:3.12"] + "\nCOPY proj /testbed\nRUN pip install -q -e /testbed\n");
+      expect(docker(["build", "-q", "--label", "gstack-evals.eb=pytest", "-t", tag, ctx]).status).toBe(0);
+      const base = docker(["image", "inspect", "-f", "{{.Id}}", tag]).stdout.trim();
+      const img = sessionImage(base);
+      put(tree, "src/ebpkg/__init__.py", 'VALUE = "tree"\n');
+      const probe = ["python", "-c", "import ebpkg; print(ebpkg.__file__, ebpkg.VALUE)"];
+      expect(docker(["run", "--rm", "--network", "none", "-e", "PYTHONDONTWRITEBYTECODE=1", "-v", tree + ":/work/repo", "--entrypoint", probe[0]!, img.id, ...probe.slice(1)]).stdout.trim()).toBe("/work/repo/src/ebpkg/__init__.py tree");
+      expect(docker(["run", "--rm", "--network", "none", "--entrypoint", probe[0]!, base, ...probe.slice(1)]).stdout.trim()).toBe("/testbed/src/ebpkg/__init__.py base");
+      expect(docker(["image", "inspect", "-f", "{{.Id}}", tag]).stdout.trim()).toBe(base);
+    } finally {
+      removeSessionImages();
+      docker(["rmi", "-f", tag]);
+      rmSync(ctx, { recursive: true, force: true });
+      rmSync(tree, { recursive: true, force: true });
     }
   }, 1_800_000);
 

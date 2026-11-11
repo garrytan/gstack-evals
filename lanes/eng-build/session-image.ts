@@ -25,9 +25,42 @@ export const SESSION_LABEL = "gstack-evals.eb=session";
 /** Node for the gh stub and real_agent's egress probe, pinned by digest (node:24-bookworm-slim, Node 24.22.2). */
 export const NODE_IMAGE = "node:24-bookworm-slim@sha256:01d566e8d94d8c619591d78652babfccd3c6992a3dffa9ed5ab39e11cf6c70e9";
 
-/** Where the session image lists the dependency folders it copied from the unit image's project to the build tree's
- * path, one path per line relative to the project root. */
+/** Where the session image lists the dependencies it copied from the unit image's project to the build tree's path, one
+ * per line as "d <path>" (a folder) or "f <path>" (a file), relative to the project root. */
 export const DEPS_FILE = "/opt/eb/deps";
+
+/**
+ * The session layer's dependency step, run as root at image build. It copies from the unit image's project (T) to the
+ * build tree's path (R) every in-project dependency the base commit does not track: node_modules folders, Yarn PnP's
+ * .pnp.cjs and .pnp.loader.mjs, and .yarn (or, when .yarn holds tracked files such as a committed release, each of its
+ * untracked children, such as cache, unplugged and install-state.gz). Then it points every editable Python install
+ * at R: each __editable__ finder, .pth and .egg-link file in a site-packages or dist-packages folder that names T gets
+ * T's paths rewritten to R, so a builder imports its own edits at /work/repo. EB_T, EB_R, EB_D and EB_SITE override the
+ * paths for the keyless test.
+ */
+export const DEPS_SCRIPT = [
+  "set -e",
+  'T="${EB_T:-' + TESTBED + '}"; R="${EB_R:-' + REPO_DIR + '}"; D="${EB_D:-/opt/eb}"; SITE="${EB_SITE:-/}"',
+  'mkdir -p "$D"; : > "$D/deps"; : > "$D/editable"',
+  '[ -d "$T" ] || exit 0',
+  "untracked() { [ -z \"$(git -C \"$T\" -c safe.directory='*' ls-files -- \":(literal)$1\" | head -n 1)\" ]; }",
+  'take() { mkdir -p "$R/$(dirname "$1")"; cp -a "$T/$1" "$R/$1"; if [ -d "$T/$1" ]; then echo "d $1" >> "$D/deps"; else echo "f $1" >> "$D/deps"; fi; }',
+  'cd "$T"',
+  "find . -path ./.git -prune -o -type d \\( -name node_modules -o -name .yarn \\) -prune -print -o -type f \\( -name .pnp.cjs -o -name .pnp.loader.mjs \\) -print | sed 's|^\\./||' | LC_ALL=C sort > \"$D/found\"",
+  'while IFS= read -r p; do',
+  '  if untracked "$p"; then take "$p"',
+  '  elif [ "$(basename "$p")" = .yarn ]; then',
+  '    for c in "$p"/* "$p"/.[!.]*; do if [ -e "$c" ] && untracked "$c"; then take "$c"; fi; done',
+  "  fi",
+  'done < "$D/found"',
+  'rm -f "$D/found"',
+  "find \"$SITE\" -xdev \\( -path /proc -o -path /sys -o -path /dev -o -path \"$T\" -o -path \"$R\" \\) -prune -o -type f \\( -name '__editable__*' -o -name '*.pth' -o -name '*.egg-link' \\) -path '*-packages/*' -print | LC_ALL=C sort > \"$D/site\"",
+  'while IFS= read -r f; do',
+  '  if grep -qF "$T" "$f"; then sed -i -e "s#$T\\([^A-Za-z0-9_.-]\\)#$R\\1#g" -e "s#$T\\$#$R#" "$f"; echo "$f" >> "$D/editable"; fi',
+  'done < "$D/site"',
+  'rm -f "$D/site"',
+  "",
+].join("\n");
 
 export interface ClaudePin {
   version: string;
@@ -54,7 +87,7 @@ export function sessionDockerfile(base: string, pin: ClaudePin = claudePin()): s
     pin.add.replace(/ \S+$/, " /tmp/claude-code.tgz"),
     "RUN tar -xzf /tmp/claude-code.tgz -C /tmp package/claude && install -m 0755 /tmp/package/claude /usr/local/bin/claude && rm -rf /tmp/claude-code.tgz /tmp/package \\",
     " && mkdir -p /logs/artifacts && git config --system --add safe.directory " + REPO_DIR + " && /usr/local/bin/claude --version && /opt/laneb/bin/node --version",
-    "RUN set -e; mkdir -p /opt/eb; : > " + DEPS_FILE + "; if [ -d " + TESTBED + " ]; then cd " + TESTBED + "; find . -path ./.git -prune -o -type d -name node_modules -prune -print | sed 's|^\\./||' | LC_ALL=C sort > /tmp/eb-deps; while IFS= read -r p; do if [ -z \"$(git -c safe.directory='*' ls-files -- \":(literal)$p\" | head -n 1)\" ]; then mkdir -p \"" + REPO_DIR + "/$(dirname \"$p\")\"; cp -a \"$p\" \"" + REPO_DIR + "/$p\"; echo \"$p\" >> " + DEPS_FILE + "; fi; done < /tmp/eb-deps; rm -f /tmp/eb-deps; fi",
+    "RUN echo " + Buffer.from(DEPS_SCRIPT).toString("base64") + " | base64 -d | sh",
     "ENV PATH=$PATH:/opt/laneb/bin CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1",
     "",
   ].join("\n");
@@ -66,11 +99,17 @@ export interface SessionImage {
   /** The unit image the session image sits on, by id. */
   base: string;
   claude: string;
-  /** In-project dependency folders (Node's node_modules) the base commit does not track, copied from the unit image's
-   * project to the same paths under the build tree, relative to it. The launcher mounts each as a volume over the bind
-   * mounted tree, so the session sees the installed dependencies with no network, and the patch leaves them out. */
+  /** In-project dependencies (node_modules, Yarn PnP's files and .yarn) the base commit does not track, copied from the
+   * unit image's project to the same paths under the build tree, relative to it. The launcher mounts each folder as a
+   * volume over the bind mounted tree, so the session sees the installed dependencies with no network, and the patch
+   * leaves every entry out. */
   deps: string[];
+  /** The entries of deps that are files (Yarn PnP's .pnp.cjs, for one). A volume can only hold a folder, so the launcher
+   * copies these into the tree instead and removes them after the session. */
+  depFiles: string[];
 }
+
+const DEP_PATH = /^([^/\0]+\/)*(node_modules|\.pnp\.cjs|\.pnp\.loader\.mjs|\.yarn(\/[^/\0]+)?)$/;
 
 const docker = (bin: string, args: string[], timeout = 120_000) => spawnSync(bin, args, { encoding: "utf8", timeout, maxBuffer: 16 * 1024 * 1024 });
 const layers = (bin: string, image: string): string[] => JSON.parse(docker(bin, ["image", "inspect", "--format", "{{json .RootFS.Layers}}", image]).stdout || "[]") as string[];
@@ -110,9 +149,11 @@ export function sessionImage(unitImage: string, o: { docker?: string } = {}): Se
   const claude = v.stdout.trim().split(" ")[0] ?? "";
   if (v.status !== 0 || claude !== pin.version) fail("E_USAGE", "claude --version in " + tag + " prints " + JSON.stringify(v.stdout.trim() || v.stderr.trim().slice(-200)) + ", not " + pin.version);
   const d = docker(bin, ["run", "--rm", "--network", "none", "--entrypoint", "cat", id, DEPS_FILE], 60_000);
-  const deps = d.stdout.split("\n").filter(Boolean);
-  if (d.status !== 0 || deps.some((x) => !/^([^/\0]+\/)*node_modules$/.test(x) || x.split("/").some((s) => s === ".." || s === "."))) fail("E_USAGE", "the session image " + tag + " lists no readable dependency folders in " + DEPS_FILE + ": " + JSON.stringify(d.stdout.slice(0, 300) || d.stderr.trim().slice(-200)));
-  return { tag, id, base: unitImage, claude, deps };
+  const rows = d.stdout.split("\n").filter(Boolean).map((l) => ({ kind: l.slice(0, 2), path: l.slice(2) }));
+  if (d.status !== 0 || rows.some((r) => (r.kind !== "d " && r.kind !== "f ") || !DEP_PATH.test(r.path) || r.path.split("/").some((s) => s === ".." || s === "."))) fail("E_USAGE", "the session image " + tag + " lists no readable dependencies in " + DEPS_FILE + ": " + JSON.stringify(d.stdout.slice(0, 300) || d.stderr.trim().slice(-200)));
+  const deps = rows.map((r) => r.path);
+  const depFiles = rows.filter((r) => r.kind === "f ").map((r) => r.path);
+  return { tag, id, base: unitImage, claude, deps, depFiles };
 }
 
 /** Removes every session image this lane built, by label; the unit images stay. Returns how many it removed. */

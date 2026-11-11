@@ -40,10 +40,12 @@ The lane for the eng-review build read (prereg 2026-11-11-geva-522-eng-review-bu
 - session-image.ts: the build session's image. It layers Claude Code at the review stage's pin (docker/host-cli.json
   and the checksum line in docker/trial.Dockerfile) and a pinned Node on the unit image, which keeps its id for the
   grader. It adds no gstack and no drive, and it sets CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1. It copies each in-project
-  dependency folder the base commit does not track (Node's node_modules) from the unit image's project to the same
-  path under /work/repo. The launcher mounts each one as a volume over the build tree, so the session runs the tests
-  offline, lists it in task.json's exclude so real_agent leaves it out of the patch, and removes the empty mountpoints
-  after the session. Python, Go and Rust keep their dependencies outside the project, so they need nothing.
+  dependency the base commit does not track (node_modules, Yarn PnP's .pnp.cjs and .pnp.loader.mjs, and .yarn or its
+  untracked children) from the unit image's project to the same path under /work/repo. The launcher mounts each folder
+  as a volume over the build tree and copies each file into it, so the session runs the tests offline. It lists every
+  entry in task.json's exclude so real_agent leaves it out of the patch, and restores the tree after the session. The
+  layer also rewrites editable Python installs that point at /testbed to point at /work/repo, so a builder imports
+  its own edits. Go and Rust keep their dependencies outside the project, so they need nothing.
 - e2e.ts: the build stage's paid path end to end, keyless. It builds one Go fixture unit and runs it through the build
   launcher, the outcome driver on a temporary ledger, Harbor, real_agent, the sandbox sidecar and Claude Code against a
   stub upstream. Then it grades the built tree. `bun lanes/eng-build/e2e.ts --harbor <harbor bin>` prints one PASS or

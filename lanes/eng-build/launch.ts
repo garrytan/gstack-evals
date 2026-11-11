@@ -118,9 +118,10 @@ export function reviewEnd(read: ErOutcome, cell: string): { end: AttemptEnd; why
 
 const KEYS = /^(ANTHROPIC|OPENAI|OPENROUTER|UBICLOUD|GEMINI|GOOGLE|XAI|DEEPSEEK|TYPESAFE)_[A-Z_]*KEY$|_TOKEN$/;
 
-/** Removes the empty mountpoints Docker made in the build tree for the dependency volumes, and each parent it made with
- * them, so the tree holds what it held before the session. */
-export function restoreTree(tree: string, deps: string[]): void {
+/** Removes the dependency files the launcher copied into the build tree and the empty mountpoints Docker made for the
+ * dependency volumes, and each parent made with them, so the tree holds what it held before the session. */
+export function restoreTree(tree: string, deps: string[], files: string[] = []): void {
+  for (const f of files) rmSync(join(tree, f), { force: true });
   for (const d of deps) {
     for (let rel = d; rel !== "." && rel !== ""; rel = posix.dirname(rel)) {
       const at = join(tree, rel);
@@ -218,9 +219,13 @@ export function buildLauncher(o: { arm: Arm | Arm[]; units: Map<string, { dir: s
       writeFileSync(join(task, "task.toml"), sessionToml(s.unit.id, img.tag, registry.arms[s.armName]!.limits.wall_limit_sec));
       writeFileSync(join(task, "instruction.md"), s.prompt);
       const compose = join(out, "mounts.compose.yaml");
-      writeFileSync(compose, "services:\n  main:\n    volumes:\n" + [...mounts, ...img.deps.map((d) => REPO_DIR + "/" + d)].map((m) => "      - " + JSON.stringify(m) + "\n").join(""));
+      writeFileSync(compose, "services:\n  main:\n    volumes:\n" + [...mounts, ...img.deps.filter((d) => !img.depFiles.includes(d)).map((d) => REPO_DIR + "/" + d)].map((m) => "      - " + JSON.stringify(m) + "\n").join(""));
       const taskJson = join(out, "task.json");
       writeFileSync(taskJson, JSON.stringify(trialTask(tree, img.deps)));
+      if (img.depFiles.length) {
+        const tar = spawnSync(o.docker ?? "docker", ["run", "--rm", "--network", "none", "--entrypoint", "tar", img.id, "-C", REPO_DIR, "-cf", "-", "--", ...img.depFiles], { timeout: 300_000, maxBuffer: 1024 * 1024 * 1024 });
+        if (tar.status !== 0 || spawnSync("tar", ["-x", "-C", tree, "-f", "-"], { input: tar.stdout }).status !== 0) fail("E_USAGE", "could not copy the dependency files " + img.depFiles.join(", ") + " from the session image into the build tree");
+      }
       const label = s.cell;
       const manifest = join(out, "images.json");
       const manifestText = JSON.stringify({ rows: [{ label, image_id: img.id, unit_image_id: eb.image.id, claude_code: img.claude }] }) + "\n";
@@ -237,7 +242,7 @@ export function buildLauncher(o: { arm: Arm | Arm[]; units: Map<string, { dir: s
       const h = await runAsync(o.harbor ?? "harbor", ["run", "-y", "-p", task, "-a", "real_agent:RealAgent", "-m", model, "--base-url", proxy, ...Object.entries(ak).flatMap(([k, v]) => ["--ak", k + "=" + v]), "-e", "docker", "--extra-docker-compose", join(ROOT, "quick/laneb/runner/agent-caps.compose.yaml"), "--extra-docker-compose", compose, "-o", join(out, "jobs"), "--job-name", "eb-" + sha(label + s.attempt + Date.now()).slice(0, 12), "--disable-verification", "--delete"], env, (registry.arms[s.armName]!.limits.wall_limit_sec + 900) * 1000);
       writeFileSync(join(out, "harbor.log"), h);
       spawnSync(o.docker ?? "docker", ["run", "--rm", "--network", "none", "--user", "0:0", "-v", tree + ":/eb-tree", "--entrypoint", "chown", img.id, "-R", (process.getuid?.() ?? 1000) + ":" + (process.getgid?.() ?? 1000), "/eb-tree"], { encoding: "utf8", timeout: 300_000 });
-      restoreTree(tree, img.deps);
+      restoreTree(tree, img.deps, img.depFiles);
       const ev = findDir(join(out, "jobs"), "evaluator");
       const summary = ev && existsSync(join(ev, "real-summary.json")) ? (JSON.parse(readFileSync(join(ev, "real-summary.json"), "utf8")) as Record<string, any>) : null;
       const spent = typeof summary?.proxy?.spent_micros === "number" ? summary.proxy.spent_micros / 1_000_000 : 0;

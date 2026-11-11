@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildRegistry } from "../../lanes/eng-build/build-stage.ts";
 import { sessionToml } from "../../lanes/eng-build/launch.ts";
 import { EB_BUILD_SKILL, EB_PROGRAM, EB_RUN, itemOf } from "../../lanes/eng-build/ledger.ts";
-import { claudePin, NODE_IMAGE, sessionDockerfile } from "../../lanes/eng-build/session-image.ts";
+import { claudePin, DEPS_SCRIPT, NODE_IMAGE, sessionDockerfile } from "../../lanes/eng-build/session-image.ts";
 import { serveStages } from "../../lanes/outcome-skills/driver/stage.ts";
 import { recordProgram } from "../../src/runner/ledger/envelope.ts";
 import { recordApproval } from "../../src/runner/ledger/ledger.ts";
@@ -29,6 +30,40 @@ describe("build session image", () => {
     expect(text).toContain(claudePin().add.replace(/ \S+$/, " /tmp/claude-code.tgz"));
     expect(text).toContain("CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1");
     expect(text).not.toMatch(/gstack\b(?!-evals)|\.capy|skills/);
+  });
+  // Value: protects=dependencies a build session needs that live inside the project, and Python editable installs that
+  // point at the unit image's project; fails_when=a Yarn PnP file or .yarn's untracked cache stays out of the build tree
+  // or out of the deps list, a tracked file is copied, or an editable finder still names the unit image's project.
+  test("the dependency step copies untracked Yarn PnP files and .yarn's untracked children, and repoints editable installs", () => {
+    const dir = mkdtempSync(join(tmpdir(), "eb-deps-"));
+    try {
+      const T = join(dir, "testbed");
+      const R = join(dir, "work/repo");
+      const put = (p: string, s = "x\n") => (mkdirSync(join(p, ".."), { recursive: true }), writeFileSync(p, s));
+      put(join(T, "package.json"), "{}\n");
+      put(join(T, ".yarn/releases/yarn-4.cjs"));
+      const git = (args: string[]) => spawnSync("git", ["-C", T, "-c", "user.name=t", "-c", "user.email=t@example.invalid", ...args], { encoding: "utf8" });
+      git(["init", "-q"]);
+      git(["add", "-A"]);
+      git(["commit", "-q", "-m", "base"]);
+      for (const p of [".pnp.cjs", ".pnp.loader.mjs", ".yarn/cache/left-pad.zip", ".yarn/install-state.gz", "node_modules/.bin/x", "web/node_modules/y/index.js"]) put(join(T, p));
+      const site = join(dir, "site/lib/python3.12/site-packages");
+      put(join(site, "__editable___pkg_0_1_finder.py"), "MAPPING = {'pkg': '" + T + "/src/pkg'}\n");
+      put(join(site, "__editable__.flat-0.1.pth"), T + "\n");
+      put(join(site, "other.pth"), "/usr/lib/other\n");
+      const r = spawnSync("sh", ["-c", DEPS_SCRIPT], { env: { ...process.env, EB_T: T, EB_R: R, EB_D: join(dir, "eb"), EB_SITE: join(dir, "site") }, encoding: "utf8" });
+      expect(r.stderr).toBe("");
+      expect(r.status).toBe(0);
+      expect(readFileSync(join(dir, "eb/deps"), "utf8").split("\n").filter(Boolean)).toEqual(["f .pnp.cjs", "f .pnp.loader.mjs", "d .yarn/cache", "f .yarn/install-state.gz", "d node_modules", "d web/node_modules"]);
+      expect(existsSync(join(R, ".yarn/cache/left-pad.zip")) && existsSync(join(R, ".pnp.cjs")) && existsSync(join(R, "web/node_modules/y/index.js"))).toBe(true);
+      expect(existsSync(join(R, ".yarn/releases"))).toBe(false);
+      expect(readFileSync(join(site, "__editable___pkg_0_1_finder.py"), "utf8")).toBe("MAPPING = {'pkg': '" + R + "/src/pkg'}\n");
+      expect(readFileSync(join(site, "__editable__.flat-0.1.pth"), "utf8")).toBe(R + "\n");
+      expect(readFileSync(join(site, "other.pth"), "utf8")).toBe("/usr/lib/other\n");
+      expect(readFileSync(join(dir, "eb/editable"), "utf8").split("\n").filter(Boolean).length).toBe(2);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
   test("the Harbor task gives the session image and no Harbor network policy, so real_agent's egress table decides", () => {
     const toml = sessionToml("u1", "gstack-evals-eb-session:x", 10800);
