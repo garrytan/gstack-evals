@@ -12,8 +12,8 @@ import { smTurn } from "../../lanes/outcome-skills/statemachines/arms.ts";
 import { auditByArm, readAudit } from "../../lanes/outcome-skills/statemachines/audit.ts";
 import { qaExposure, textExposure } from "../../lanes/outcome-skills/statemachines/exposure.ts";
 import { fixtureRow } from "../../lanes/outcome-skills/statemachines/fixtures.ts";
-import { runSession } from "../../lanes/outcome-skills/statemachines/run.ts";
-import { endKind, nextStep, planPart, questionCounts, sessionEnd, type PlannedSession } from "../../lanes/outcome-skills/statemachines/session.ts";
+import { runSession, sessionText } from "../../lanes/outcome-skills/statemachines/run.ts";
+import { endKind, nextStep, planPart, questionCounts, replicateOf, sessionEnd, type PlannedSession } from "../../lanes/outcome-skills/statemachines/session.ts";
 import { toCandidate } from "../../lanes/outcome-skills/statemachines/source.ts";
 import { writeUnit } from "../../lanes/outcome-skills/statemachines/unit.ts";
 
@@ -211,3 +211,51 @@ test("runSession refuses A3 unless --qa-sha is registry.json's /qa pin, before a
   writeFileSync(registry, JSON.stringify(reg));
   expect(() => runSession({ unitDir: dir, session, control: "http://127.0.0.1:1", proxy: "127.0.0.1:1", out: join(dir, "../out"), qaHome: dir, qaSha: "a".repeat(40), registry })).toThrow(/^E_SM_ARM .*\/qa pin.* the pin is null/);
 });
+
+const smUnit = (over: { file_scope?: string[] } = {}) => {
+  const u = writeUnit(join(mkdtempSync(join(tmpdir(), "sm-text-")), "u"), { ...toCandidate("rust", fixtureRow()), image_digest: "sha256:" + "c".repeat(64) }, fixtureRow());
+  return { ...u, scope: { dir: "src", files: 12, lines: 900, widened: 1 }, ...over };
+};
+const firstA1: PlannedSession = { unit: "u", part: 0, index: 0, model: "claude-opus-5-5", cell: "A1", stage: "first", arm: "sm:A1" };
+const followS0: PlannedSession = { unit: "u", part: 0, index: 5, model: "claude-opus-5-5", cell: "F-S0-2", stage: "followon", arm: "sm:followon", tree: "S0", replicate: 2 };
+
+// Value: protects=section 12's file-scope retry as the arm's one turn carries it (claim 1 FLOOR); fails_when=--scope file still names the folder, drops a file the fix patch touches, joins them over more than one line, or passes a path sm_user.py refuses; why_new=GEVA-520 (the 04c23a3 harness never read file_scope); seam=run.ts sessionText; no_claim=the FLOOR reading (admission.ts claim1Admission)
+test("a first stage at file scope names every file the fix patch touches on one line, and real_agent's turn takes it", () => {
+  const u = smUnit({ file_scope: ["src/counter.rs", "CHANGELOG.md", "src/lib/reset.rs"] });
+  const instruction = "The arm's turn names the scope.\n";
+  expect(sessionText(u, firstA1, "The counter keeps its old value.\n")).toEqual({ scope: "src", scope_mode: "folder", instruction, cell: "A1" });
+  const file = sessionText(u, firstA1, "The counter keeps its old value.\n", { scope: "file" });
+  expect(file).toEqual({ scope: "src/counter.rs, CHANGELOG.md, src/lib/reset.rs", scope_mode: "file", instruction, cell: "A1" });
+  const reg = loadRegistry();
+  const out = py("import json, sys; sys.path.insert(0, sys.argv[1]); import unit_test as u; import sm_user; reg = json.load(open(sys.argv[2])); print(json.dumps(sm_user.sm_turn(reg['sm']['arms']['sm:A1'], {'scope': sys.argv[3]}, '', u.ra.js_trim_end)))", REGISTRY_PATH, file.scope);
+  expect(JSON.parse(out)).toBe(smTurn(reg, "sm:A1", { scope: file.scope }));
+  expect(JSON.parse(out)).toContain("Focus on `src/counter.rs, CHANGELOG.md, src/lib/reset.rs`.");
+  expect(() => sessionText(smUnit({ file_scope: [] }), firstA1, "x", { scope: "file" })).toThrow(/^E_SM_ARM .*file_scope/);
+  expect(() => sessionText(smUnit({ file_scope: ["src/a`b.rs"] }), firstA1, "x", { scope: "file" })).toThrow(/^E_SM_ARM .*one line with no backtick/);
+  expect(() => sessionText(smUnit({ file_scope: ["src/a.rs", "src/b\n.rs"] }), firstA1, "x", { scope: "file" })).toThrow(/^E_SM_ARM .*one line with no backtick/);
+  expect(() => sessionText(u, followS0, "x", { scope: "file" })).toThrow(/^E_SM_ARM .*--scope is a first stage's/);
+});
+
+// Value: protects=section 12's one raise attempt (R61): the follow-on's issue cut to its title and first paragraph, in a cell of its own; fails_when=--issue cut sends the full issue, keeps the plan's cell (so a raise session shares the full-issue session's record key and analysis's latest-by-attempt keying drops one), loses its replicate, or applies to a first stage; why_new=GEVA-520 (issueCut had no caller); seam=run.ts sessionText, session.ts replicateOf; no_claim=the CEILING reading (admission.ts claim2Admission)
+test("a follow-on with the cut issue gets issueCut's text and the cell F-<tree>-<n>-cut, which keeps its replicate", () => {
+  const u = smUnit();
+  const issue = "Counter keeps its value after reset\nCalling reset() leaves the old total.\nSeen on 1.2.\n\nSteps:\n1. add\n2. reset\n";
+  expect(sessionText(u, followS0, issue)).toEqual({ scope: "src", scope_mode: null, instruction: issue, cell: "F-S0-2" });
+  expect(sessionText(u, followS0, issue, { issue: "cut" })).toEqual({ scope: "src", scope_mode: null, instruction: "Counter keeps its value after reset\nCalling reset() leaves the old total.\nSeen on 1.2.\n", cell: "F-S0-2-cut" });
+  expect(sessionText(u, { ...followS0, cell: "F-A1-3", tree: "A1", replicate: 3, after: "A1" }, issue, { issue: "cut" }).cell).toBe("F-A1-3-cut");
+  expect([replicateOf("F-S0-2-cut"), replicateOf("F-A1-3"), replicateOf("F-S2-1-cut"), replicateOf("A1"), replicateOf("F-S0-2-raw"), replicateOf("F-X1-2")]).toEqual([2, 3, 1, null, null, null]);
+  expect(() => sessionText(u, followS0, "\n\n  \n", { issue: "cut" })).toThrow(/^E_SM_ARM .*cut issue is empty/);
+  expect(() => sessionText(u, firstA1, issue, { issue: "cut" })).toThrow(/^E_SM_ARM .*--issue is a follow-on's/);
+});
+
+// Value: protects=the refusals before any image is built or session opened; fails_when=runSession builds an image or calls Harbor for a file-scope session with no file_scope or a cut first stage; why_new=GEVA-520; seam=run.ts runSession; no_claim=a paid run at file scope
+test("runSession refuses a file-scope session with no file_scope and a cut first stage, before any image is built", () => {
+  const dir = join(mkdtempSync(join(tmpdir(), "sm-run-")), "u");
+  writeUnit(dir, { ...toCandidate("rust", fixtureRow()), image_digest: "sha256:" + "c".repeat(64) }, fixtureRow());
+  const unit = JSON.parse(readFileSync(join(dir, "unit.json"), "utf8"));
+  writeFileSync(join(dir, "unit.json"), JSON.stringify({ ...unit, scope: { dir: "src", files: 12, lines: 900, widened: 1 }, file_scope: [] }));
+  const base = { unitDir: dir, control: "http://127.0.0.1:1", proxy: "127.0.0.1:1", out: join(dir, "../out"), harbor: "/nonexistent/harbor" };
+  expect(() => runSession({ ...base, session: { ...firstA1, cell: "A0", arm: "sm:A0" }, scope: "file" })).toThrow(/^E_SM_ARM .*file_scope/);
+  expect(() => runSession({ ...base, session: firstA1, issue: "cut" })).toThrow(/^E_SM_ARM .*--issue is a follow-on's/);
+});
+
