@@ -314,20 +314,20 @@ const sessionTree = (prefix: string) => {
 // Value: protects=the Captain's ruling item 4 on #324 (red-team#3): a post-turn step that times out on a tree the agent grew is the arm's; fails_when=state.sh names no growth on a timed-out step after the session wrote 8 GiB the capture lists, or names it below 8 GiB, without --timed-out, for a pruned directory or for files from before the session; why_new=every step timeout was E_PF_CAPTURE, whatever the tree held; seam=sh/state.sh with capture.sh size; no_claim=the 2,000,000-file bound's value (capture.sh size's own test covers the file count and its stop)
 test("on a timed-out step, state.sh names a tree the session grew by 8 GiB, and nothing below that, without --timed-out, in a pruned directory or from before the session", () => {
   const { d, repo, work, state, later } = sessionTree("pf-state-grown-");
-  expect(state(["--timed-out"])).toEqual([]);
+  expect(state(["--timed-out"])).toEqual(["PF_TREE_SIZE files=0 bytes=0 stopped=0"]);
   const big = join(repo, "states.bin");
   writeFileSync(big, "");
   truncateSync(big, 8 * 2 ** 30 - 1);
-  expect(state(["--timed-out"])).toEqual([]);
+  expect(state(["--timed-out"])).toEqual(["PF_TREE_SIZE files=1 bytes=8589934591 stopped=0"]);
   truncateSync(big, 8 * 2 ** 30);
-  expect(state(["--timed-out"])).toEqual(["PF_ARM_STATE grown the session wrote files=1 bytes=8589934592, at least 2000000 files or 8589934592 bytes"]);
+  expect(state(["--timed-out"])).toEqual(["PF_ARM_STATE grown the session wrote files=1 bytes=8589934592, at least 2000000 files or 8589934592 bytes", "PF_TREE_SIZE files=1 bytes=8589934592 stopped=1"]);
   expect(state()).toEqual([]);
   mkdirSync(join(repo, "node_modules"));
   renameSync(big, join(repo, "node_modules", "states.bin"));
-  expect(state(["--timed-out"])).toEqual([]);
+  expect(state(["--timed-out"])).toEqual(["PF_TREE_SIZE files=0 bytes=0 stopped=0"]);
   renameSync(join(repo, "node_modules", "states.bin"), big);
   later(join(work, "inv"));
-  expect(state(["--timed-out"])).toEqual([]);
+  expect(state(["--timed-out"])).toEqual(["PF_TREE_SIZE files=0 bytes=0 stopped=0"]);
   rmSync(d, { recursive: true, force: true });
 });
 
@@ -346,9 +346,9 @@ test("capture.sh size counts the files and bytes the session wrote as the captur
     expect([r.status, r.stderr]).toEqual([0, ""]);
     return r.stdout;
   };
-  expect(size("100", "1000")).toBe("files=5 bytes=10\n");
-  expect(size("3", "1000")).toBe("files=3 bytes=6\n");
-  expect(size("100", "4")).toBe("files=2 bytes=4\n");
+  expect(size("100", "1000")).toBe("files=5 bytes=10 stopped=0\n");
+  expect(size("3", "1000")).toBe("files=3 bytes=6 stopped=1\n");
+  expect(size("100", "4")).toBe("files=2 bytes=4 stopped=1\n");
   rmSync(d, { recursive: true, force: true });
 });
 
@@ -433,6 +433,6 @@ test("on a timed-out step, state.sh names no lock, even one in the same clock ti
   writeFileSync(lock, "");
   expect(spawnSync("touch", ["-r", join(work, "pf-step.stamp"), lock]).status).toBe(0);
   expect(state()).toEqual(["PF_ARM_STATE lock .git/index.lock"]);
-  expect(state(["--timed-out"])).toEqual([]);
+  expect(state(["--timed-out"])).toEqual(["PF_TREE_SIZE files=1 bytes=2 stopped=0"]);
   rmSync(d, { recursive: true, force: true });
 });

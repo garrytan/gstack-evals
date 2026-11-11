@@ -11,7 +11,8 @@
 # time out, since a timeout stops the step's own git, whose lock can fall in the stamp's clock tick; a path the capture
 # lists, changed during the session, that the step cannot read or enter (capture.sh unreadable); and, on a timeout,
 # files the capture lists, changed during the session, that number at least 2,000,000 or hold at least 8 GiB (capture.sh
-# size). On a 4-core Capy machine (2026-11-11) the commit added about 7,000 files or 31 MB of random bytes a second, so
+# size), with one "PF_TREE_SIZE files=N bytes=B stopped=S" line on every timeout, above the line or below it. On a
+# 4-core Capy machine (2026-11-11) the commit added about 7,000 files or 31 MB of random bytes a second, so
 # either alone takes about half the step's 600 s. No line means the cause lies in the harness, the host, docker or the
 # network. It always exits 0.
 timed=0
@@ -55,10 +56,14 @@ if [ -f "$work/inv" ]; then
     size=$(bash "$here/capture.sh" size "$repo" "$work/inv" "$files" "$bytes" 2>/dev/null)
     n=${size#files=}
     n=${n%% *}
-    b=${size##*bytes=}
+    b=${size#*bytes=}
+    b=${b%% *}
     case $n$b in
       ''|*[!0-9]*) ;;
-      *) if [ "$n" -ge "$files" ] || [ "$b" -ge "$bytes" ]; then say "grown the session wrote $size, at least $files files or $bytes bytes"; fi ;;
+      *)
+        if [ "$n" -ge "$files" ] || [ "$b" -ge "$bytes" ]; then say "grown the session wrote files=$n bytes=$b, at least $files files or $bytes bytes"; fi
+        printf 'PF_TREE_SIZE %s\n' "$size"
+        ;;
     esac
   fi
 fi

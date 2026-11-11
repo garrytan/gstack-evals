@@ -467,6 +467,18 @@ def test_a_capture_that_times_out_on_a_tree_the_task_turn_grew_is_the_arms():
     check([o["meta"]["phase"] for o in s.control.opens] == ["task"] and s.summary["wrapup"] == [], s.summary)
 
 
+def test_a_capture_timeout_records_the_files_and_bytes_the_session_wrote_below_and_above_the_line():
+    def timeout(script, args):
+        return subprocess.TimeoutExpired("docker", 600) if "capture.sh" in script and "commit" in args else None
+
+    below = with_step(timeout)
+    check(below.summary["refused"].startswith("E_PF_CAPTURE capture.sh commit timed out after 600 s"), below.summary.get("refused"))
+    check((below.summary.get("post_turn") or {}).get("written") == {"files": 1, "bytes": 27, "stopped": False}, below.summary.get("post_turn"))
+    above = with_step(timeout, scenario="task_grow")
+    w = (above.summary.get("post_turn") or {}).get("written") or {}
+    check(above.summary["refused"].startswith("E_PF_ARM post_turn capture.sh commit: grown") and w.get("stopped") is True and w.get("bytes", 0) >= 8 << 30 and w.get("files", 0) >= 1, above.summary.get("post_turn"))
+
+
 def test_a_capture_that_fails_on_a_git_filter_the_task_turn_set_is_the_arms():
     s = session("task_filter")
     check(s.error is None, repr(s.error))

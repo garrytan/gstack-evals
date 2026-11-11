@@ -194,7 +194,10 @@ Rules as built
   post_turn and the record is gap E_PF_ARM, reason post_turn. Otherwise (the harness, the host, docker or the network) it
   is E_PF_CAPTURE and gap E_PF_INFRA_GAP. Either way pf_turns writes post_turn to pf-summary.json and pfRecord copies it
   to the session record: the step, whether it timed out, its failure, the PF_ARM_STATE causes (a lock reads "lock
-  .git/index.lock") and the raw end of the turn before it (after.termination: wall_limit, bg_wait_expired and so on). Neither masks a wrap-up refused for its allowance (E_PF_WRAPUP_ALLOWANCE).
+  .git/index.lock") and the raw end of the turn before it (after.termination: wall_limit, bg_wait_expired and so on).
+  On a timeout, written holds the files and bytes the session wrote as the capture lists them, for an arm gap and an
+  infra gap alike, from state.sh's PF_TREE_SIZE line; stopped true means counting stopped at the line, so both are
+  lower bounds. Neither masks a wrap-up refused for its allowance (E_PF_WRAPUP_ALLOWANCE).
 - The wrap-up turn is a new CLI process with --resume and its own max turns, deadline and proxy slot (its allowance).
 - Before any turn pf_turns.py refuses a tree holding CLAUDE.md, CLAUDE.local.md, AGENTS.md or .claude, or a home holding
   gstack or a drive path (E_PF_ARM), as real_agent's SM check does. AskUserQuestion gets #290's NoAnswer reply.

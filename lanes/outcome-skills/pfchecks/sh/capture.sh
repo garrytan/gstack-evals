@@ -15,8 +15,9 @@
 # commit adds with core.fileMode on, so git records it. A listed file that is gone when it is hashed (a process the agent
 # left running deleted it) fails the run with one "PF_ARM_STATE vanished <path>" line on stderr per such file, the cause
 # pf_turns routes to the arm. So does a listed symlink gone when its target is read, and a changed path gone when the commit
-# adds it. "size <repo> <since> <files> <bytes>" prints "files=N bytes=B" for the files and symlinks the inventory lists
-# whose status changed after <since> was written, stopping once N reaches <files> or B reaches <bytes>.
+# adds it. "size <repo> <since> <files> <bytes>" prints "files=N bytes=B stopped=S" for the files and symlinks the
+# inventory lists whose status changed after <since> was written, stopping once N reaches <files> or B reaches <bytes>
+# (S 1, so N and B are lower bounds), else S 0.
 # "unreadable <repo> <since>" prints each such path, symlinks left out, that this user cannot read, or a directory it
 # cannot enter, one per line. sh/state.sh reads both after a step fails.
 set -euo pipefail
@@ -111,7 +112,7 @@ case $cmd in
     ;;
   size)
     { walk \( -type f -o -type l \) -cnewer "$3" -print0 | xargs -0 -r stat -c %s -- || true; } 2>/dev/null \
-      | awk -v F="$4" -v B="$5" '{ n++; b += $1; if (n >= F + 0 || b >= B + 0) exit } END { printf "files=%.0f bytes=%.0f\n", n, b }'
+      | awk -v F="$4" -v B="$5" '{ n++; b += $1; if (n >= F + 0 || b >= B + 0) { s = 1; exit } } END { printf "files=%.0f bytes=%.0f stopped=%d\n", n, b, s }'
     ;;
   unreadable) { walk ! -type l -cnewer "$3" \( ! -readable -o -type d ! -executable \) -print 2>/dev/null || true; } | sed 's|^\./||' | LC_ALL=C sort ;;
   *) echo "usage: capture.sh inventory <repo> | commit <repo> <inventory> [<dir>] | size <repo> <since> <files> <bytes> | unreadable <repo> <since>" >&2; exit 2 ;;

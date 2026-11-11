@@ -26,6 +26,7 @@ summary may have spent.
 """
 import asyncio
 import json
+import re
 import shlex
 import subprocess
 import sys
@@ -125,7 +126,9 @@ class Session:
         except subprocess.TimeoutExpired:
             probe = ""
         causes = list(dict.fromkeys(l[len("PF_ARM_STATE "):] for l in (err + "\n" + probe).splitlines() if l.startswith("PF_ARM_STATE ")))
-        self.summary["post_turn"] = {"step": what, "timed_out": bool(timed_out), "failed": failed[:400], "causes": causes, "after": self.last_turn}
+        size = re.search(r"^PF_TREE_SIZE files=(\d+) bytes=(\d+) stopped=([01])$", probe, re.M)
+        written = {"files": int(size[1]), "bytes": int(size[2]), "stopped": size[3] == "1"} if size else None
+        self.summary["post_turn"] = {"step": what, "timed_out": bool(timed_out), "failed": failed[:400], "causes": causes, "after": self.last_turn, "written": written}
         if causes:
             raise RuntimeError(f"E_PF_ARM post_turn {what}: {'; '.join(dict.fromkeys(causes))}"[:600])
         raise RuntimeError(f"E_PF_CAPTURE {what} {failed}")
