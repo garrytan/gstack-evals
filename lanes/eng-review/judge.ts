@@ -7,6 +7,7 @@
 //   where they disagree (printed only). Pairwise packets go to the production judge of their model; arm-guess and
 //   recognition packets to Astra. Generic-screen packets go to Astra and Opus, each on its own.
 // - Effort: medium in production, generic, pairwise, arm-guess and recognition; maximum in the judge check.
+// - Output: each prompt's frozen cap, except Opus's audit call, which gets 64,000 tokens (GSTA-2 deviation, 2026-11-11).
 // - A packet with a missing or unparsable cell is resent once, whole, and the resend's answer replaces the first; a failed
 //   Gemini tie-break is retried once; a cell still missing stays unlabelled (E_ER_LABEL_MISSING).
 // - Every record names the judge model, the provider's version string and the effort, with the prompt's and packet's
@@ -44,6 +45,9 @@ export const EFFORT = { production: "medium", check: "max" } as const;
 /** Gemini 4 Argon lists low, medium and high, so the judge check's maximum effort reaches it as high. */
 export const effortFor = (judge: JudgeKey, effort: string): string => (judge === "gemini" && effort === "max" ? "high" : effort);
 const MAX_TOKENS: Record<PromptName, number> = { brief: 16_000, audit: 32_000, pairwise: 4_000, armguess: 2_000, recognition: 4_000 };
+/** Opus 5.5 at maximum effort spent all 32,000 output tokens thinking on the audit prompt and returned no text (stage 1,
+ * 2026-11-11), so its audit call gets 64,000 (GSTA-2 deviation); every other judge and prompt keeps its frozen cap. */
+export const maxTokensFor = (judge: JudgeKey, prompt: PromptName): number => (judge === "opus" && prompt === "audit" ? 64_000 : MAX_TOKENS[prompt]);
 
 export interface Reply {
   text: string | null;
@@ -122,7 +126,7 @@ async function labelOnce(p: PacketFile, judge: JudgeKey, effort: string, call: C
   let reply: Reply = { text: null, model_id: "", version: null, problem: null };
   let parsed: Parsed = { cells: new Map(), missing: [] };
   for (let attempt = 1; attempt <= 2; attempt++) {
-    reply = await call({ judge, prompt: attempt === 1 ? base : base + RESEND_NOTE, effort, maxTokens: MAX_TOKENS[prompt], label: p.id + ":" + judge + ":" + attempt });
+    reply = await call({ judge, prompt: attempt === 1 ? base : base + RESEND_NOTE, effort, maxTokens: maxTokensFor(judge, prompt), label: p.id + ":" + judge + ":" + attempt });
     parsed = parseLabels(reply.text, p, prompt === "audit");
     const open = only ? only.filter((k) => !parsed.cells.has(k)).length : parsed.missing.length;
     logs.push({ packet: p.id, judge, attempt, model_id: reply.model_id, version: reply.version, effort, problem: reply.problem, missing: open });
@@ -209,7 +213,7 @@ async function askOnce<T>(p: PacketFile, judge: JudgeKey, effort: string, call: 
   const base = loadPrompt(p.prompt).replace("{{PACKET}}", renderPacket(p));
   let out: { value: T | null; reply: Reply } = { value: null, reply: { text: null, model_id: "", version: null, problem: null } };
   for (let attempt = 1; attempt <= 2; attempt++) {
-    const reply = await call({ judge, prompt: attempt === 1 ? base : base + RESEND_NOTE, effort, maxTokens: MAX_TOKENS[p.prompt], label: p.id + ":" + judge + ":" + attempt });
+    const reply = await call({ judge, prompt: attempt === 1 ? base : base + RESEND_NOTE, effort, maxTokens: maxTokensFor(judge, p.prompt), label: p.id + ":" + judge + ":" + attempt });
     const value = reply.text === null ? null : read(lastJson(reply.text));
     logs.push({ packet: p.id, judge, attempt, model_id: reply.model_id, version: reply.version, effort, problem: reply.problem, missing: value === null ? 1 : 0 });
     out = { value, reply };
@@ -251,7 +255,7 @@ export async function judgePackets(o: { map: PacketMap; packets: Map<string, Pac
 
 /** Wraps the product-value meter's judge client: its provider-drift stop becomes E_ER_PROVIDER_DRIFT. */
 export async function openErJudge(o: Parameters<typeof openJudge>[0]): Promise<{ call: Caller; close: () => Promise<void> }> {
-  const j = await openJudge(o);
+  const j = await openJudge({ ...o, maxOutputTokens: o.maxOutputTokens ?? 64_000 });
   const call: Caller = async (c) => {
     try {
       return await (j.call as PvCaller)(c);
