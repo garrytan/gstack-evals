@@ -217,7 +217,12 @@
       "tests/outcome-skills/pf-arms.test.ts",
       "tests/outcome-skills/pf-session.test.ts",
       "tests/outcome-skills/pf-score.test.ts",
-      "tests/outcome-skills/pf-dryrun.test.ts"
+      "tests/outcome-skills/pf-dryrun.test.ts",
+      "tests/outcome-skills/pf-agent.test.ts",
+      "tests/outcome-skills/pf-containment.test.ts"
+    ],
+    "tests/outcome-skills/pf_agent_sdk_test.py": [
+      "tests/outcome-skills/pf-agent.test.ts"
     ],
     "wiki/plans/2026-11-09-geva-487-pstack-checks-prereg/**": [
       "tests/outcome-skills/pf-arms.test.ts",

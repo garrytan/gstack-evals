@@ -2,6 +2,7 @@
 // Plan sections 10 and 13: the admission readings (FLOOR, the contrast floor, CEILING with the cut-report check,
 // EXPOSURE, INFRA, cost), the re-price and the n rule, the mid-run check after 10 test units, and the blind-probe fit.
 import { issueCut, p95 } from "../statemachines/admission.ts";
+import { WRAPUP_ALLOWANCE } from "./arms.ts";
 import { ALLOWANCE, LINE, MODEL_ITEM, MODELS, OPUS, OWNER_MICROS, PLANNING, VM_USD, ITEMS, type Arm } from "./items.ts";
 
 export { issueCut };
@@ -69,17 +70,30 @@ export function reprice(measured: Record<string, Partial<Record<Arm, number[]>>>
   }
   return out;
 }
-/** A model item's re-priced cap for n units: n x (the three arms' prices plus a VM each), rounded up to $10. */
-export const itemCap = (prices: Record<Arm, number>, n: number): number => ceil10(n * (prices.P + prices.C + prices.N + 3 * VM_USD));
+const central = (prices: Record<Arm, number>, n: number) => n * (prices.P + prices.C + prices.N + 3 * VM_USD);
+/** A model item's cost cap for n units: n x (the three arms' prices plus a VM each), rounded up to $10. */
+export const costCap = (prices: Record<Arm, number>, n: number): number => ceil10(central(prices, n));
+/** Section 13's tightest point of a model item at n units, its last task open: the item's central cost, less that last
+ *  session's own price and VM, plus the session's task and wrap-up allowances (with the allowances in force: items.ts
+ *  ALLOWANCE, or costReading's doubled table). The largest over the three arms; 0 with no unit. */
+export function tightestOpen(model: string, prices: Record<Arm, number>, n: number, allowance: Record<Arm, Record<string, number>> = ALLOWANCE): number {
+  if (n < 1) return 0;
+  return Math.max(...(["P", "C", "N"] as Arm[]).map((a) => central(prices, n) - (prices[a] + VM_USD) + allowance[a][model]! + WRAPUP_ALLOWANCE[model]!));
+}
+/** A model item's re-priced cap for n units (the Captain's ruling A1 on #305's run notes item 7): the larger of its cost cap
+ *  and its tightest last open, the latter rounded up to the cent, so the cap holds that open's reserve at any n. */
+export const itemCap = (model: string, prices: Record<Arm, number>, n: number, allowance: Record<Arm, Record<string, number>> = ALLOWANCE): number =>
+  Math.max(costCap(prices, n), Math.ceil(tightestOpen(model, prices, n, allowance) * 100 - 1e-6) / 100);
 
-/** The n rule: the largest n up to 60, never above the supply, whose three re-priced caps fit inside what is left of the
- *  line (its $1,980 less the spend recorded so far and the crew use still held back). Under 30 the Captain decides. */
-export function nRule(prices: Record<string, Record<Arm, number>>, o: { supply: number; spent_usd: number; crew_held_usd: number }): { n: number; caps: Record<string, number>; left_usd: number; captain: boolean; owner: boolean } {
+/** The n rule: the largest n up to 60, never above the supply, whose three re-priced caps (itemCap, with the allowances in
+ *  force) fit inside what is left of the line (its $1,980 less the spend recorded so far and the crew use still held
+ *  back). Under 30 the Captain decides. */
+export function nRule(prices: Record<string, Record<Arm, number>>, o: { supply: number; spent_usd: number; crew_held_usd: number; allowance?: Record<Arm, Record<string, number>> }): { n: number; caps: Record<string, number>; left_usd: number; captain: boolean; owner: boolean } {
   const left_usd = LINE.cap_micros / M - o.spent_usd - o.crew_held_usd;
-  const total = (n: number) => MODELS.reduce((s, m) => s + itemCap(prices[m]!, n), 0);
+  const total = (n: number) => MODELS.reduce((s, m) => s + itemCap(m, prices[m]!, n, o.allowance), 0);
   let n = 0;
   for (let k = Math.min(60, o.supply); k >= 1; k--) if (total(k) <= left_usd + 1e-9) { n = k; break; }
-  const caps = Object.fromEntries(MODELS.map((m) => [MODEL_ITEM[m]!, itemCap(prices[m]!, n)]));
+  const caps = Object.fromEntries(MODELS.map((m) => [MODEL_ITEM[m]!, n ? itemCap(m, prices[m]!, n, o.allowance) : 0]));
   return { n, caps, left_usd, captain: n < 30, owner: o.spent_usd + total(n) > OWNER_MICROS / M };
 }
 

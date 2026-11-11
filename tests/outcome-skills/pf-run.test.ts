@@ -325,3 +325,31 @@ test("pfRecord: wrapup.sh keep failing after a completed wrap-up turn is gap E_P
   expect(JSON.parse(readFileSync(file, "utf8"))).toMatchObject({ gap: "E_PF_INFRA_GAP", attempt: 1 });
   expect(pfRecord(i, 1, { ...failed, refused: undefined, keep: "PF_WRAPUP checks=0 discarded=0\n" }, null, null, image.head)).toMatchObject({ gap: null, wrapup_end: "completed" });
 });
+
+// Value: protects=sections 5 and 6.8's routing of a post-turn failure (#305's run notes item 4); fails_when=a capture, wrap-up or bundle step that failed on what the agent wrote (pf_turns' E_PF_ARM post_turn) reads as a tree-check refusal, gets a session retry or an infra gap, or a post-turn failure of either kind masks a wrap-up refused for its allowance; why_new=every post-turn failure was E_PF_INFRA_GAP, whatever its cause, and it masked E_PF_WRAPUP_ALLOWANCE; seam=run.ts pfRecord and retryAfter over pf_turns' summary (pf_agent_sdk_test.py drives the real failures); no_claim=state.sh's reading of the tree (pf-capture.test.ts)
+test("pfRecord: a post-turn failure in what the agent wrote is gap E_PF_ARM with reason post_turn and no retry, and a post-turn failure of either kind leaves a wrap-up refused for its allowance E_PF_WRAPUP_ALLOWANCE", () => {
+  const i = input("C");
+  const done = summary({ task: turn("completed"), wrapup: [turn("completed")], slots: [slot("task", 10), slot("wrapup", 2)] });
+  const keep = { ...done, keep: null, checks: false, refused: "E_PF_ARM post_turn wrapup.sh keep: lock .git/index.lock" };
+  const r = pfRecord(i, 1, keep, temp("pf-run-ev-"), null, image.head);
+  expect(r).toMatchObject({ gap: "E_PF_ARM", gap_reason: "post_turn", s: null, task: { end: "completed" }, wrapup: { ends: ["completed"] } });
+  expect(retriesSession(keep, r)).toBe(false);
+  expect(retryAfter(i, 1, keep, r, "/out/a1")).toBe(false);
+  const file = join(temp("pf-run-post-"), "session.json");
+  finishSession(file, r);
+  expect(JSON.parse(readFileSync(file, "utf8"))).toMatchObject({ gap: "E_PF_ARM", gap_reason: "post_turn", attempt: 1 });
+  const capture = { ...summary({ task: turn("wall_limit"), slots: [slot("task", 10)] }), capture: null, keep: null, refused: "E_PF_ARM post_turn capture.sh commit: missing inv" };
+  const c = pfRecord(i, 1, capture, null, null, image.head);
+  expect(c).toMatchObject({ gap: "E_PF_ARM", gap_reason: "post_turn", task: { end: "limit_wall" }, wrapup: null });
+  expect(retriesSession(capture, c)).toBe(false);
+  const stopped = (refused: string) => ({ ...summary({ task: turn("completed"), wrapup: [turn("error_result", ["E_ALLOWANCE"], 1)], slots: [slot("task", 10), slot("wrapup", 2)] }), keep: null, checks: false, refused });
+  for (const refused of ["E_PF_ARM post_turn wrapup.sh keep: missing s.head", "E_PF_CAPTURE wrapup.sh keep exited 1: no s.head", "E_PF_CAPTURE bundle exited 128: fatal"]) {
+    const w = stopped(refused);
+    const rec = pfRecord(i, 1, w, null, null, image.head);
+    expect([refused, rec.gap, rec.gap_reason, rec.wrapup?.ends]).toEqual([refused, "E_PF_WRAPUP_ALLOWANCE", null, ["limit_allowance"]]);
+    expect(retriesSession(w, rec)).toBe(false);
+  }
+  const open = { ...summary({ task: turn("completed"), wrapup: [{ termination: "open_refused", refused: ["CAP_STOP"], wall_s: 0 }], slots: [slot("task", 10)] }), keep: null, refused: "E_PF_ARM post_turn wrapup.sh keep: lock .git/index.lock" };
+  expect(pfRecord(i, 1, open, null, null, image.head)).toMatchObject({ gap: "E_PF_WRAPUP_ALLOWANCE", gap_reason: null });
+  expect(pfRecord(i, 1, { refused: "E_PF_ARM the session tree or home holds files the strip rule removes", task: null, wrapup: [], slots: [], events: [] }, null)).toMatchObject({ gap: "E_PF_ARM", gap_reason: "tree_check" });
+});

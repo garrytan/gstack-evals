@@ -2,13 +2,16 @@
 """The pstack-checks two-turn session (plan sections 4 and 5) on the real Claude Agent SDK, used by pf_agent.PfAgent under
 Harbor and by the dry run. The task turn runs on its own slot, then capture.sh commits S in the session container and
 saves its head and inventory in the same run, then the wrap-up turn resumes the same Claude Code session in a new CLI process with its own limits
-(300 s, 20 turns) on its own slot. An upstream or infra end of the wrap-up turn puts the tree back to S (wrapup.sh reset)
+(300 s, 20 turns) on its own slot. A task turn that ends upstream or infra (task_end) ends the session there, before the
+capture, so run.ts retries the whole session; a completed or limit end, an allowance stop included, goes on. An upstream or infra end of the wrap-up turn puts the tree back to S (wrapup.sh reset)
 and reruns the wrap-up turn once on a new slot naming meta.rerun. A wrap-up turn refused for its allowance (an allowance
 stop on its slot, which the driver's close answer counts in allowance_stops, or the driver's 409 on its open, raised as
 OpenRefused) is never rerun; the proxy's other E_ALLOWANCE refusals are no allowance stop. A turn whose close answer says
 the proxy's finalize failed (finalized false), with no allowance stop counted, halts the session: nothing more opens
 after such a task turn, such a wrap-up turn is not rerun, and run.ts stops with E_PF_FINALIZE_HALT. wrapup.sh keep then keeps only
-CHECKS.json and counts every other change. S leaves the container as a git bundle.
+CHECKS.json and counts every other change. S leaves the container as a git bundle. A post-turn step that fails (the
+capture, a reset, the keep or the bundle) ends the session with a refusal: E_PF_ARM post_turn when the cause lies in what
+the agent wrote, as sh/state.sh reads it, and E_PF_CAPTURE otherwise (Session.step).
 
 Each turn ends as real_agent's _drive ends a phase: the agent ended its turn and its background tasks are quiet (quiet_sec,
 then bg_wait_sec with nothing ends it as bg_wait_expired), bounded by the turn's wall limit. AskUserQuestion and prose
@@ -37,6 +40,19 @@ from real_agent import SM_CHECK, RealAgent, message_record  # noqa: E402
 from sm_user import NoAnswer  # noqa: E402
 
 RERUN = {"task": "task_upstream_or_infra", "wrapup": "wrapup_upstream_or_infra"}
+ENDS = {"wall_limit": "limit_wall", "turn_ceiling": "limit_turns", "completed": "completed", "bg_wait_expired": "completed"}
+
+
+def task_end(t: dict) -> str:
+    """The task turn's end kind as run.ts pfRecord reads it (statemachines/session.ts endKind): a harness error, or a close
+    whose proxy finalize failed with no allowance stop counted, is infra; an allowance stop is limit_allowance whatever the
+    termination; then the wall and turn limits and completed; an UPSTREAM refusal or an error_result is upstream; anything
+    else is infra. Only completed and limit ends go on to the capture and the wrap-up turn (section 5)."""
+    if t["termination"] == "error" or (t["finalized"] is False and not t["allowance_stops"]):
+        return "infra"
+    if t["allowance_stops"]:
+        return "limit_allowance"
+    return ENDS.get(t["termination"]) or ("upstream" if "UPSTREAM" in t["refused"] or t["termination"] == "error_result" else "infra")
 
 
 class OpenRefused(Exception):
@@ -72,11 +88,34 @@ class Session:
     def sh(self, script: str, *args: str, timeout: float = 600) -> subprocess.CompletedProcess:
         return subprocess.run([*self.cfg["exec_prefix"], "bash", "-c", script, "bash", *args], capture_output=True, timeout=timeout)
 
-    def script(self, name: str, *args: str) -> str:
-        res = self.sh('d=$1; shift; bash "$d/' + name + '" "$@"', self.cfg["sh_dir"], *args)
-        if res.returncode != 0:
-            raise RuntimeError(f"E_PF_CAPTURE {name} {args[0] if args else ''} exited {res.returncode}: {res.stderr.decode(errors='replace')[-300:]}")
-        return res.stdout.decode(errors="replace")
+    def step(self, what: str, needs: tuple, cmd: str, *args: str) -> bytes:
+        """One post-turn step in the container: the session-end commit, a wrap-up reset or keep, or the S bundle. When it
+        fails or times out, sh/state.sh reads what the agent could have written (the work files the step needs, the
+        repository's git state, a lock the agent's git left) and a cause there, or a file that vanished while the step
+        hashed the tree, raises E_PF_ARM post_turn. Anything else raises E_PF_CAPTURE: the harness, the host, docker or the
+        network (#305's run notes item 4)."""
+        cfg = self.cfg
+        err = ""
+        try:
+            self.sh('mkdir -p "$1" && touch "$1/pf-step.stamp"', cfg["work"])
+            res = self.sh(cmd, *args)
+            if res.returncode == 0:
+                return res.stdout
+            err = res.stderr.decode(errors="replace")
+            failed = f"exited {res.returncode}: {err[-300:]}"
+        except subprocess.TimeoutExpired as e:
+            failed = f"timed out after {e.timeout:.0f} s"
+        try:
+            probe = self.sh('d=$1; shift; bash "$d/state.sh" "$@"', cfg["sh_dir"], cfg["repo"], cfg["work"], *needs).stdout.decode(errors="replace")
+        except subprocess.TimeoutExpired:
+            probe = ""
+        causes = [l[len("PF_ARM_STATE "):] for l in (err + "\n" + probe).splitlines() if l.startswith("PF_ARM_STATE ")]
+        if causes:
+            raise RuntimeError(f"E_PF_ARM post_turn {what}: {'; '.join(dict.fromkeys(causes))}"[:600])
+        raise RuntimeError(f"E_PF_CAPTURE {what} {failed}")
+
+    def script(self, name: str, *args: str, needs: tuple = ()) -> str:
+        return self.step(name + " " + args[0], needs, 'd=$1; shift; bash "$d/' + name + '" "$@"', self.cfg["sh_dir"], *args).decode(errors="replace")
 
     def check(self) -> None:
         cfg = self.cfg
@@ -166,21 +205,20 @@ class Session:
         out["claude_version"] = self.sh("claude --version").stdout.decode(errors="replace").strip()
         self.sh('mkdir -p "$2" && bash "$1/capture.sh" inventory "$3" > "$2/inv"', cfg["sh_dir"], work, repo)
         task = out["task"] = await self.turn("task", cfg["task_text"], None)
-        if task["termination"] in ("error", "cli_exit") or not task["session_id"] or (task["finalized"] is False and not task["allowance_stops"]):
+        if task_end(task) in ("upstream", "infra") or not task["session_id"]:
             return out
-        out["capture"] = self.script("capture.sh", "commit", repo, work + "/inv", work)
+        out["capture"] = self.script("capture.sh", "commit", repo, work + "/inv", work, needs=("inv",))
         for attempt in (1, 2):
             w = await self.turn("wrapup", cfg["wrapup_text"], task["session_id"], RERUN["wrapup"] if attempt == 2 else None)
             out["wrapup"].append(w)
             if w["termination"] not in ("error_result", "error", "cli_exit") or w["finalized"] is False or w["allowance_stops"] or "CAP_STOP" in w["refused"] or attempt == 2:
                 break
-            self.script("wrapup.sh", "reset", repo, work)
-        out["keep"] = self.script("wrapup.sh", "keep", repo, work)
+            self.script("wrapup.sh", "reset", repo, work, needs=("s.head", "s.inv"))
+        out["keep"] = self.script("wrapup.sh", "keep", repo, work, needs=("s.head", "s.inv"))
         out["checks"] = "PF_WRAPUP checks=1" in out["keep"]
         if out["checks"]:
             (self.out / "CHECKS.json").write_bytes(self.sh('cat "$1/CHECKS.json"', work).stdout)
-        bundle = self.sh('git -C "$1" -c safe.directory="*" bundle create "$2/s.bundle" HEAD >/dev/null 2>&1 && cat "$2/s.bundle"', repo, work)
-        (self.out / "s.bundle").write_bytes(bundle.stdout)
+        (self.out / "s.bundle").write_bytes(self.step("bundle", (), 'git -C "$1" -c safe.directory="*" bundle create "$2/s.bundle" HEAD >/dev/null && cat "$2/s.bundle"', repo, work))
         return out
 
     def finish(self, refused: str | None = None) -> dict:

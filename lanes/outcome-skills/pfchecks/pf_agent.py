@@ -30,6 +30,9 @@ from real_agent import FREEZE, RealAgent, RealOptions, SandboxSetupError
 SH = Path(__file__).resolve().parent / "sh"
 SH_DIR = "/opt/pf-sh"
 WORK = "/tmp/pf-work"
+CLOSE_KEYS = ("spent_micros", "requests", "ok_responses", "refused", "refusals", "allowance_stops", "reservation_bound", "usage", "first_request", "finalized")
+# The close request's timeout, as laneb's close: above the proxy's 30 s drain plus its settle retries.
+CLOSE_TIMEOUT_S = 120
 
 
 class PfOptions(RealOptions):
@@ -40,7 +43,9 @@ class DriverSlots:
     """One U4 slot per turn on the outcome-skills driver: phase task or wrapup in meta, cap_usd from that turn's allowance.
     A 409 on a wrap-up open raises OpenRefused (the wrap-up is refused for its allowance); on a task open, LedgerCapStop.
     Each close keeps the driver's answer, first_request (the proxy-recorded effort fields) and finalized (false when the
-    proxy's finalize failed, so the answer's counts are unknown) included."""
+    proxy's finalize failed, so the answer's counts are unknown) included. The driver's close is idempotent, so a close
+    request that fails is sent again, up to OPEN_ATTEMPTS times; when none is answered the counts are unknown too, and the
+    close reads as a failed finalize (finalized false, every count null, with the error), which halts the session."""
 
     def __init__(self, agent: "PfAgent", trial: str, limits: dict, log):
         self.agent, self.trial, self.limits, self.log = agent, trial, limits, log
@@ -70,12 +75,16 @@ class DriverSlots:
         raise lb.LanebInfraError("unreachable")
 
     def close(self, slot: dict, reason: str) -> dict:
-        try:
-            closed = lb.post_json(self.agent.options.control_url + f"/sessions/{slot['id']}/close", {"reason": reason})
-        except Exception as e:
-            self.log({"event": "close_failed", "session": slot["id"], "message": str(e)[:300]})
-            return {"error": f"{type(e).__name__}: {e}"[:300]}
-        info = {k: closed.get(k) for k in ("spent_micros", "requests", "ok_responses", "refused", "refusals", "allowance_stops", "reservation_bound", "usage", "first_request", "finalized")}
+        for attempt in range(1, lb.OPEN_ATTEMPTS + 1):
+            try:
+                closed = lb.post_json(self.agent.options.control_url + f"/sessions/{slot['id']}/close", {"reason": reason}, timeout=CLOSE_TIMEOUT_S)
+                break
+            except Exception as e:
+                self.log({"event": "close_failed", "session": slot["id"], "attempt": attempt, "message": str(e)[:300]})
+                if attempt == lb.OPEN_ATTEMPTS:
+                    return {**dict.fromkeys(CLOSE_KEYS), "finalized": False, "error": f"{type(e).__name__}: {e}"[:300]}
+                time.sleep(lb.OPEN_RETRY_S)
+        info = {k: closed.get(k) for k in CLOSE_KEYS}
         self.log({"event": "slot_close", "phase": slot["phase"], "session": slot["id"], **{k: info[k] for k in ("spent_micros", "refused", "allowance_stops", "finalized")}})
         return info
 

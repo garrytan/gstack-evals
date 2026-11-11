@@ -9,7 +9,18 @@ plan and the dry run (section "Sessions, arms and the dry run" below).
 ## Commands
 
 `gstack-evals outcome pf --help` lists them: `draw`, `told`, `neutral`, `score`, `analyze`, `admission`, `reprice`,
-`items`, `dryrun` and `contain`. Every refusal prints its reason code first (docs/errors.md, codes E_PF_*).
+`session plan`, `session run`, `items`, `dryrun` and `contain`. Every refusal prints its reason code first (docs/errors.md,
+codes E_PF_*).
+
+The paid run's entry point mirrors the state machines eval's `sm session` commands. `session plan` writes one part's
+sessions (pf-plan.v1, planPart from prereg.json's order_seed, never over an existing file). `session run` runs one planned
+session through runPfSession on the unit's tree volume (the blind probe with the unit's scope dir), and refuses before any
+session an index the plan does not hold, a unit other than the planned one, or a run without the dry run's effort.json
+(an object with one record per model). The session reads the unit's issue.md unless `--issue <file>` names another bug
+report, such as section 10's raise report or the cut report; that file's text goes to the agent as it is.
+Its exit is 10 at a cap stop, 11 at a finalize halt (E_PF_FINALIZE_HALT) and 12 at a containment halt
+(E_PF_CONTAINMENT), so the runner VM's loop, which stops at the first non-zero exit, can tell them apart; a session that
+ends with a gap writes its record and exits 0.
 
 ## Files
 
@@ -18,7 +29,7 @@ plan and the dry run (section "Sessions, arms and the dry run" below).
   its validation. capture.ts and sh/capture.sh: section 6.1. transplant.ts: 6.2. trees.ts: 6.3. manifest.ts: 6.4.
   runner.ts: 6.5 to 6.8. secondaries.ts: section 9. exposure.ts: section 8. analysis.ts: section 12. admission.ts:
   sections 10 and 13. items.ts: the frozen items and prices. score.ts: one session to a pf-catch.v1 record.
-  containment.ts and sh/contain.sh: section 15's containment check.
+  containment.ts, sh/contain.sh and sh/tree-digest.sh (the check's reuse key): section 15's containment check.
 
 ## Entry points for the session build step
 
@@ -55,8 +66,12 @@ Neutral tree
   run (stopped, or built nothing) counts as every test failing.
 
 Capture and transplant
-- The inventory leaves out .git and the build-output names at any depth; symlinks hash their target text; paths with a
-  tab or newline are skipped. Deleted paths are staged with git rm --cached. "Forced" is what git check-ignore reports.
+- The inventory leaves out .git and the build-output names at any depth, except a listed directory under which the base
+  commit tracks a file other than a placeholder (.gitkeep, .keep, .gitignore, .empty); symlinks hash their target text;
+  paths with a tab or newline are skipped. Every name reaches the hasher with its ./ prefix, so a root file named - is
+  read as a file. A regular file's owner executable bit is part of its entry, so a chmod alone is a change, and the
+  commit adds with core.fileMode on. Deleted paths are staged with git rm --cached. "Forced" is what git check-ignore
+  reports.
 - Deleted files that are not test files are restored (source, protected configuration and other files alike); only
   deleted source files count as product edits.
 - Existing files that are neither source nor test (docs, data, resources) stay as S has them, as the plan's "everything
@@ -106,8 +121,12 @@ Analysis and money
 - Pooled Holm runs over the two bootstrap p values; per-model Holm over the two exact McNemar p values.
 - The process contrast reads as a fair test when at least 75% of P sessions loaded the skill and ran a checker.
 - Re-price: per session and arm, Opus 1.2 x its measured mean, Sol and particle-1 max(planning, 1.5 x measured mean); an
-  item's cap for n units is n x (the three arms' prices plus three $0.40 VMs), rounded up to $10. The margin is in the
-  price, so the cap adds no second 1.2. At planning prices this gives Opus $580 at n = 28, the post's cap.
+  item's cost cap for n units is n x (the three arms' prices plus three $0.40 VMs), rounded up to $10. The margin is in
+  the price, so the cap adds no second 1.2. At planning prices this gives Opus $580 at n = 28, the post's cap. The item's
+  cap is the larger of its cost cap and its tightest last open at the same prices, rounded up to the cent (section 13's
+  rule: the central cost less the last session's own price and VM, plus that session's task and wrap-up allowances, with
+  the allowances in force, so reprice.json may carry costReading's allowance table), and n is chosen with those caps
+  (the Captain's ruling on #305's run notes item 7). That makes the Opus cap $594.40 at n = 28.
 - Ceiling readings: ceiling_missing reads a session that scored 0 with at least one unreached entry as missing;
   no_flagged drops every unit with 5T + 8R >= 10,800 s, where T is the largest entry timeout over the unit's rows and R
   the median over its sessions of each session's median run overhead (call_ms less wall_ms plus rebuild_ms). The report
@@ -126,8 +145,9 @@ Analysis and money
 ## Sessions, arms and the dry run
 
 Files: arms.ts (section 4's texts and sections 5 and 13's limits), tools.ts (the tools volume), pstack.ts (the plugin
-volume), session.ts (plan, end rules, effort fields, pf-session.v1), sh/wrapup.sh (the wrap-up keep rule), pf_turns.py (the
-two-turn session on the real Claude Agent SDK) and dryrun.ts (`gstack-evals outcome pf dryrun`).
+volume), session.ts (plan, end rules, effort fields, pf-session.v1), sh/wrapup.sh (the wrap-up keep rule), sh/state.sh
+(the post-turn cause probe), pf_turns.py (the two-turn session on the real Claude Agent SDK) and dryrun.ts
+(`gstack-evals outcome pf dryrun`).
 
 Rules as built
 - Task turn: the arm's text, a blank line, "Here is the bug report:", a blank line, the issue text with JavaScript's
@@ -139,12 +159,15 @@ Rules as built
 - Session plan: per unit, every (model, arm) cell of the part shuffled by one seededRandom(order_seed + part) stream, as
   #290's planPart reads its seed. Items: pf-opus, pf-sol, pf-particle in the test part; pf-admit in admission; pf-blind.
 - Ends: endKind is #290's. Task turn: completed or a limit goes to the wrap-up; upstream or infra retries the whole
-  session once, then E_PF_UPSTREAM_GAP or E_PF_INFRA_GAP. Wrap-up: upstream or infra reruns the wrap-up turn once after
+  session once, then E_PF_UPSTREAM_GAP or E_PF_INFRA_GAP. pf_turns.py reads the task turn's end the same way (task_end),
+  so an upstream or infra end stops the session before the capture and the paid wrap-up, and an allowance stop, even
+  one that ends in error_result, still goes on to them. Wrap-up: upstream or infra reruns the wrap-up turn once after
   wrapup.sh reset, resuming the same Claude Code session; a second is a gap. A wrap-up refused for its allowance (an
   allowance stop on its slot, which the driver's close answer counts in allowance_stops, or the driver's 409 CAP_STOP on
   its open, which pf_turns.py records as termination open_refused) is gap E_PF_WRAPUP_ALLOWANCE, with no wrap-up rerun and no session retry. A turn
   whose close answer says the proxy's finalize failed (finalized false) has unknown counts and is an infra end, unless it
-  also counts an allowance stop, which reads first. Such a turn with no allowance stop halts the session before any
+  also counts an allowance stop, which reads first. The driver's close is idempotent, so PfAgent sends a failed close
+  request again (3 tries, 120 s each); a close that is never answered has unknown counts too and reads as finalized false. Such a turn with no allowance stop halts the session before any
   retry or wrap-up rerun (E_PF_FINALIZE_HALT, no session record), and the driver halts the item's stage and names the
   session and the lease's journal; the Captain rules on a retry after reading it. The halt line stays in the run's
   sessions.jsonl, so a relaunch refuses the item (E_SM_FINALIZE_HALT, the family SM halt's reading) until --lift-halt
@@ -155,6 +178,12 @@ Rules as built
   tree is hashed once, in one batched sha256sum pass. After the wrap-up: wrapup.sh keep copies CHECKS.json (a
   regular file at the root), prints PF_DISCARD for every other added, changed or deleted path, and puts the tree back to S.
   S leaves the container as a git bundle, which score.ts fetches as --s with ref HEAD.
+- A post-turn step that fails or times out (the capture, a wrap-up reset or keep, the bundle) takes no retry, and the
+  session still writes its record. When sh/state.sh finds the cause in what the agent wrote (a work file the step needs
+  gone, an s.head that names no commit, a broken .git, config, HEAD or index, unmerged entries, a lock the agent's git
+  left during the session) or capture.sh saw a file vanish while it hashed the tree, pf_turns refuses with E_PF_ARM
+  post_turn and the record is gap E_PF_ARM, reason post_turn. Otherwise (the harness, the host, docker or the network) it
+  is E_PF_CAPTURE and gap E_PF_INFRA_GAP. Neither masks a wrap-up refused for its allowance (E_PF_WRAPUP_ALLOWANCE).
 - The wrap-up turn is a new CLI process with --resume and its own max turns, deadline and proxy slot (its allowance).
 - Before any turn pf_turns.py refuses a tree holding CLAUDE.md, CLAUDE.local.md, AGENTS.md or .claude, or a home holding
   gstack or a drive path (E_PF_ARM), as real_agent's SM check does. AskUserQuestion gets #290's NoAnswer reply.
@@ -243,8 +272,11 @@ run. It waits for the neutral record, so it can start while the neutral gate sti
 
 - Containment comes first, on the session image built as the first session's would be, and every session waits on it.
   runPfSession runs the same gate (containUnit) before every session: the unit's first session runs the check and
-  records it in the unit dir's pf-contain.json, one entry per session image tag; later sessions on the same image reuse
-  a passing entry, and a failure halts the unit with E_PF_CONTAINMENT before any session, without dropping it.
+  records it in the unit dir's pf-contain.json, one entry per session image tag; a later session reuses a passing entry
+  when the tree volume's content digest (sh/tree-digest.sh: every entry's type, mode, name, file hash and link target,
+  .git included, no times), the tag, the runtime image, the head and the check script's sha256 all match. The image id
+  is not in the key, since every session image is a new build. A failure halts the unit with E_PF_CONTAINMENT before
+  any session, without dropping it.
   `gstack-evals outcome pf contain --unit <dir>` runs the check alone and writes the same record. sh/contain.sh runs as root with no network in
   a container of that image. It fails when any ref (branches, tags, remotes, notes, replace refs, stash, packed refs,
   FETCH_HEAD, ORIG_HEAD and the other special heads) or reflog entry points past the base commit, when any commit object is neither the base nor an
