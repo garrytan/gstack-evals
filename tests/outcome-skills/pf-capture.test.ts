@@ -502,3 +502,20 @@ test("capture.sh commit, wrapup.sh keep and state.sh run no hook, fsmonitor or f
   expect(seen).toEqual({ capture: "PF_CAPTURE changed=2 deleted=0 forced=0 head=H\n", commit: [], wrapup: "PF_DISCARD later.txt\nPF_WRAPUP checks=0 discarded=1\n", keep: [], state: [] });
   rmSync(d, { recursive: true, force: true });
 });
+
+// Value: protects=the owner's addition to the Captain's ruling item 9 on #324: no ignore file outside the repository marks a path the harness's git captures as forced; fails_when=capture.sh commit counts a path as forced because an ignore file under XDG_CONFIG_HOME, which git reads with no config at all, lists it; why_new=item 9 cleared the global and system config, but git still read $XDG_CONFIG_HOME/git/ignore as its default core.excludesFile; seam=the git calls in sh/capture.sh, sh/state.sh, sh/wrapup.sh and pf_turns' bundle step, which now pass core.excludesFile=/dev/null; no_claim=a .gitignore or .git/info/exclude inside the repository, which still apply
+test("capture.sh commit counts no path as forced through an ignore file under XDG_CONFIG_HOME", () => {
+  const { d, repo, work } = sessionTree("pf-cap-xdg-");
+  const xdg = join(d, "xdg");
+  mkdirSync(join(xdg, "git"), { recursive: true });
+  writeFileSync(join(xdg, "git", "ignore"), "new.txt\n");
+  const env = { ...process.env, HOME: join(d, "home"), XDG_CONFIG_HOME: xdg };
+  const run = (...a: string[]) => spawnSync("bash", a, { encoding: "utf8", env });
+  const inv = join(d, "inv");
+  writeFileSync(inv, run(join(SH, "capture.sh"), "inventory", repo).stdout);
+  writeFileSync(join(repo, "new.txt"), "new\n");
+  expect(spawnSync("git", ["check-ignore", "-q", "new.txt"], { cwd: repo, env }).status).toBe(0);
+  const c = run(join(SH, "capture.sh"), "commit", repo, inv, work);
+  expect([c.status, c.stdout.replace(/head=[0-9a-f]{40}/, "head=H")]).toEqual([0, "PF_CAPTURE changed=1 deleted=0 forced=0 head=H\n"]);
+  rmSync(d, { recursive: true, force: true });
+});

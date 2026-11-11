@@ -186,8 +186,9 @@ Rules as built
   regular file at the root), prints PF_DISCARD for every other added, changed or deleted path, and puts the tree back to S.
   S leaves the container as a git bundle, which score.ts fetches as --s with ref HEAD. Every git call in these post-turn
   steps (capture.sh, wrapup.sh, state.sh and the bundle) runs with core.hooksPath=/dev/null, core.fsmonitor=false,
-  GIT_CONFIG_NOSYSTEM=1 and GIT_CONFIG_GLOBAL=/dev/null, so no hook or fsmonitor command the agent planted and no
-  filter, excludesFile or other setting from the machine's system or global config runs or counts; .git/config still
+  core.excludesFile=/dev/null, GIT_CONFIG_NOSYSTEM=1 and GIT_CONFIG_GLOBAL=/dev/null, so no hook or fsmonitor command
+  the agent planted, no filter, excludesFile or other setting from the machine's system or global config and no
+  $XDG_CONFIG_HOME/git/ignore (which git reads with no config) runs or counts; .git/config still
   applies, and state.sh names a filter set there that the base repo did not have with that value: the start inventory
   saves the base's filter.* values beside inv (inv.filters), and with no inv.filters state.sh names no filter.
 - A post-turn step that fails or times out (the capture, a wrap-up reset or keep, the bundle) takes no retry, and the
