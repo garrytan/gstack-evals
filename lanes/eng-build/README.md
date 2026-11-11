@@ -16,6 +16,14 @@ The lane for the eng-review build read (prereg 2026-11-11-geva-522-eng-review-bu
 - leak.ts: checks that no line the fix added is in the unit's exact image.
 - note.ts: the statement note writer and its audit (prompts/note-writer.md, prompts/note-audit.md). The model call
   is injected, so tests make none.
+- catch.ts: real-bug catch. A build's own new and changed test files move onto the unit's real merged tree and its
+  real fixed tree, with product files at the real content (the pfchecks transplant, under the test-region rule). A B
+  item is caught when one of the build's cases fails at assertion level in all 3 merged runs and passes in all 3
+  fixed runs. It also counts the real trees the build's tests compiled and ran on. A file the rule can't split drops
+  with E_EB_TRANSPLANT. The dry run's "transplant catch" and "transplant no-catch" seams live here.
+- coverage.ts: changed-line coverage. The share of the build's changed product lines its own tests execute, with go
+  test -coverprofile, pytest-cov, c8 or cargo-llvm-cov in a coverage image layered on the unit image. A tree the tool
+  gives no data for is unscored.
 - recount.ts: regrades built units in the verifier's sandbox and prints counts only. Under 16 clean units it exits 2
   with E_EB_FEW_UNITS.
 
