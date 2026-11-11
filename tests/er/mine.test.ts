@@ -110,6 +110,16 @@ describe("mining the shop fixture", () => {
     const g = mineClone({ repoDir: shop.dir, repo: "fixture/shop", licence: "GPL-3.0", branch: "main", meta: shop.meta, minedAt: "2026-11-08" });
     expect(g.candidates.find((c) => c.change === shop.sha.u1)!.reasons).toEqual(["licence_disagrees"]);
   });
+  test("window_open reads the close against when the data was read, on both sides of the close", () => {
+    const open = (minedAt: string, fetched: string) => mineClone({ repoDir: shop.dir, repo: "fixture/shop", licence: "MIT", branch: "main", meta: { ...shop.meta, fetched_at: fetched }, minedAt }).candidates.find((c) => c.change === shop.sha.u1)!;
+    const u = open("2026-11-08", "2026-11-08T00:00:00Z");
+    expect(u.window_closes).toBe("2026-09-08T10:00:00.000Z");
+    expect(open("2026-09-08T09:59:59.999Z", "2026-09-08T09:59:59.999Z").window_open).toBe(true);
+    expect(open("2026-09-08T10:00:00.000Z", "2026-09-08T10:00:00.000Z").window_open).toBe(false);
+    expect(open("2026-09-08T12:00:00.000Z", "2026-09-08T09:59:59.999Z").window_open).toBe(true);
+    expect(open("2026-09-08", "2026-09-08T12:00:00Z").window_open).toBe(true);
+    expect(open("2026-09-09", "2026-09-09T00:00:00Z").window_open).toBe(false);
+  });
   test("a mining date inside the window keeps later aftermath out", () => {
     const early = mineClone({ repoDir: shop.dir, repo: "fixture/shop", licence: "MIT", branch: "main", meta: shop.meta, minedAt: "2026-07-31" });
     const u = early.candidates.find((c) => c.change === shop.sha.u1)!;

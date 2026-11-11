@@ -59,6 +59,11 @@ export const order = (id: string) => createHash("sha256").update(SEED + "\n" + i
 export const words = (s: string) => (s.match(/\S+/g) ?? []).length;
 export const addDays = (iso: string, d: number) => new Date(Date.parse(iso) + d * 86_400_000).toISOString();
 export const endOf = (day: string) => (day.length === 10 ? day + "T23:59:59.999Z" : day);
+/** When a record's data was read: the earlier of its metadata fetch and its mining time. A bare mining day reads as its
+ * first instant, since the clone may have been fetched at any time that day: comparing a window's close with the end of
+ * the mining day read windows that closed later that day as closed, though their aftermath was mined before the close. */
+export const readAt = (minedAt: string, meta: RepoMeta | null): number =>
+  Math.min(Date.parse(minedAt.length === 10 ? minedAt + "T00:00:00.000Z" : minedAt), ...(meta && Number.isFinite(Date.parse(meta.fetched_at)) ? [Date.parse(meta.fetched_at)] : []));
 
 const EXT: Record<string, string> = {
   py: "Python", pyi: "Python", ts: "TypeScript", tsx: "TypeScript", mts: "TypeScript", cts: "TypeScript", js: "JavaScript", jsx: "JavaScript", mjs: "JavaScript", cjs: "JavaScript",
@@ -278,7 +283,7 @@ export function mineClone(o: { repoDir: string; repo: string; licence: string; b
     for (const f of source) langs.set(languageOf(f.path)!, (langs.get(languageOf(f.path)!) ?? 0) + f.added + f.deleted);
     const cand: Candidate = {
       id: o.repo + "@" + u.id.slice(0, 12), repo: o.repo, licence: o.licence, change: u.id, base: u.parent, pr: u.pr?.number ?? null, subject: u.pr?.title ?? u.subject, merged_at: merged, exposed_at: u.exposure.at,
-      wave: Date.parse(merged) <= Date.parse(endOf(WINDOW.wave1By)) ? 1 : 2, window_closes: closes, window_open: Date.parse(endOf(o.minedAt)) < Date.parse(closes), kind,
+      wave: Date.parse(merged) <= Date.parse(endOf(WINDOW.wave1By)) ? 1 : 2, window_closes: closes, window_open: readAt(o.minedAt, o.meta) < Date.parse(closes), kind,
       language: [...langs].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null, source_files: source.length, source_added: added, files: u.files.map((f) => f.path),
       test_files: u.files.filter((f) => f.cls === "test" && f.status !== "D").map((f) => f.path), base_bytes: null, aftermath: [], plan_words: null, reasons, eligible: false,
     };
