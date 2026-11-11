@@ -461,6 +461,21 @@ def test_a_capture_that_fails_on_a_git_filter_the_task_turn_set_is_the_arms():
     check([o["meta"]["phase"] for o in s.control.opens] == ["task"] and s.summary["capture"] is None, s.summary)
 
 
+def test_a_lock_the_harness_capture_leaves_as_it_times_out_stays_infra():
+    def fail(script, args):
+        if "capture.sh" not in script or "commit" not in args:
+            return None
+        stamp = os.stat(os.path.join(args[4], "pf-step.stamp"))
+        lock = os.path.join(args[2], ".git", "index.lock")
+        open(lock, "w").close()
+        os.utime(lock, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
+        return subprocess.TimeoutExpired("docker", 600)
+
+    s = with_step(fail)
+    check(s.error is None, repr(s.error))
+    check(s.summary["refused"].startswith("E_PF_CAPTURE capture.sh commit timed out after 600 s"), s.summary.get("refused"))
+
+
 def test_a_wrapup_turn_that_removes_s_head_makes_the_keep_failure_the_arms():
     s = session("wrapup_rm_head")
     check(s.error is None, repr(s.error))

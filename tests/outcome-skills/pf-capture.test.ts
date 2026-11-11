@@ -423,3 +423,16 @@ test("state.sh names every filter key the session set in .git/config, through an
   expect(state()).toEqual(["PF_ARM_STATE filter .git/config sets filter.y.smudge"]);
   rmSync(d, { recursive: true, force: true });
 });
+
+// Value: protects=the Captain's ruling item 5 on #324 (red-team#4): a lock the harness's own git leaves when pf_turns times its step out is infra; fails_when=state.sh names a lock on a timed-out step, or stops naming one the session's git left when the step failed without a timeout; why_new=a lock from the step's own git whose mtime fell in the stamp's clock tick read as the agent's; seam=sh/state.sh --timed-out; no_claim=a lock the agent's git left when the harness ended its turn (red-team#4's turn-end case)
+test("on a timed-out step, state.sh names no lock, even one in the same clock tick as the step's stamp, and still names it when the step failed", () => {
+  const { d, repo, work, state } = sessionTree("pf-state-timeout-lock-");
+  const past = new Date(Date.now() - 300_000);
+  utimesSync(join(work, "inv"), past, past);
+  const lock = join(repo, ".git", "index.lock");
+  writeFileSync(lock, "");
+  expect(spawnSync("touch", ["-r", join(work, "pf-step.stamp"), lock]).status).toBe(0);
+  expect(state()).toEqual(["PF_ARM_STATE lock .git/index.lock"]);
+  expect(state(["--timed-out"])).toEqual([]);
+  rmSync(d, { recursive: true, force: true });
+});

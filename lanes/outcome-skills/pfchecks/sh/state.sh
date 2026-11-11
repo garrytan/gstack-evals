@@ -7,11 +7,13 @@
 # is not a directory; a .git/config git cannot read, one that sets a filter (filter.*, through an include too), or one
 # that leaves the root outside git's work tree; a HEAD that names no commit; an index git cannot read, or one with
 # unmerged entries; a .lock file under .git made during the session (newer than <work>/inv) that was there before the
-# step started (not newer than <work>/pf-step.stamp), which the agent's own git left; a path the capture lists, changed
-# during the session, that the step cannot read or enter (capture.sh unreadable); and, on a timeout, files the capture
-# lists, changed during the session, that number at least 2,000,000 or hold at least 8 GiB (capture.sh size). On the
-# runner the commit adds about 7,000 files or 31 MB of random bytes a second, so either alone takes about half the
-# step's 600 s. No line means the cause lies in the harness, the host, docker or the network. It always exits 0.
+# step started (not newer than <work>/pf-step.stamp), which the agent's own git left, read only when the step did not
+# time out, since a timeout stops the step's own git, whose lock can fall in the stamp's clock tick; a path the capture
+# lists, changed during the session, that the step cannot read or enter (capture.sh unreadable); and, on a timeout,
+# files the capture lists, changed during the session, that number at least 2,000,000 or hold at least 8 GiB (capture.sh
+# size). On a 4-core Capy machine (2026-11-11) the commit added about 7,000 files or 31 MB of random bytes a second, so
+# either alone takes about half the step's 600 s. No line means the cause lies in the harness, the host, docker or the
+# network. It always exits 0.
 timed=0
 if [ "${1:-}" = --timed-out ]; then
   timed=1
@@ -42,7 +44,7 @@ if g ls-files -s >/dev/null 2>&1; then
 else
   say "index the index is unreadable"
 fi
-if [ -f "$work/pf-step.stamp" ]; then
+if [ "$timed" = 0 ] && [ -f "$work/pf-step.stamp" ]; then
   since=()
   [ -f "$work/inv" ] && since=(-newer "$work/inv")
   find "$repo/.git" -name '*.lock' ${since[@]+"${since[@]}"} ! -newer "$work/pf-step.stamp" -print 2>/dev/null | LC_ALL=C sort | head -n 20 | while IFS= read -r f; do say "lock ${f#"$repo"/}"; done

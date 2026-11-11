@@ -183,7 +183,8 @@ Rules as built
 - A post-turn step that fails or times out (the capture, a wrap-up reset or keep, the bundle) takes no retry, and the
   session still writes its record. When sh/state.sh finds the cause in what the agent wrote (a work file the step needs
   gone, an s.head that names no commit, a broken .git, config, HEAD or index, a git filter set in .git/config, unmerged
-  entries, a lock the agent's git left during the session, a path changed during the session that the step cannot read
+  entries, a lock the agent's git left during the session (read only when the step did not time out, since a timeout
+  stops the step's own git, which may leave its lock), a path changed during the session that the step cannot read
   or enter, or, when the step timed out, files changed during the session that number at least 2,000,000 or hold at
   least 8 GiB) or capture.sh saw a file or link vanish while it hashed or added the tree, pf_turns refuses with E_PF_ARM
   post_turn and the record is gap E_PF_ARM, reason post_turn. Otherwise (the harness, the host, docker or the network) it
