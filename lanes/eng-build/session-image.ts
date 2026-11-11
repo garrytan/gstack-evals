@@ -15,6 +15,7 @@ import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { REPO_DIR as TESTBED } from "../real-outcome/task/format.ts";
 import { REPO_DIR } from "./build-stage.ts";
 import { fail } from "./errors.ts";
 
@@ -23,6 +24,10 @@ export const SESSION_REPO = "gstack-evals-eb-session";
 export const SESSION_LABEL = "gstack-evals.eb=session";
 /** Node for the gh stub and real_agent's egress probe, pinned by digest (node:24-bookworm-slim, Node 24.22.2). */
 export const NODE_IMAGE = "node:24-bookworm-slim@sha256:01d566e8d94d8c619591d78652babfccd3c6992a3dffa9ed5ab39e11cf6c70e9";
+
+/** Where the session image lists the dependency folders it copied from the unit image's project to the build tree's
+ * path, one path per line relative to the project root. */
+export const DEPS_FILE = "/opt/eb/deps";
 
 export interface ClaudePin {
   version: string;
@@ -49,6 +54,7 @@ export function sessionDockerfile(base: string, pin: ClaudePin = claudePin()): s
     pin.add.replace(/ \S+$/, " /tmp/claude-code.tgz"),
     "RUN tar -xzf /tmp/claude-code.tgz -C /tmp package/claude && install -m 0755 /tmp/package/claude /usr/local/bin/claude && rm -rf /tmp/claude-code.tgz /tmp/package \\",
     " && mkdir -p /logs/artifacts && git config --system --add safe.directory " + REPO_DIR + " && /usr/local/bin/claude --version && /opt/laneb/bin/node --version",
+    "RUN set -e; mkdir -p /opt/eb; : > " + DEPS_FILE + "; if [ -d " + TESTBED + " ]; then cd " + TESTBED + "; find . -path ./.git -prune -o -type d -name node_modules -prune -print | sed 's|^\\./||' | LC_ALL=C sort > /tmp/eb-deps; while IFS= read -r p; do if [ -z \"$(git -c safe.directory='*' ls-files -- \":(literal)$p\" | head -n 1)\" ]; then mkdir -p \"" + REPO_DIR + "/$(dirname \"$p\")\"; cp -a \"$p\" \"" + REPO_DIR + "/$p\"; echo \"$p\" >> " + DEPS_FILE + "; fi; done < /tmp/eb-deps; rm -f /tmp/eb-deps; fi",
     "ENV PATH=$PATH:/opt/laneb/bin CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1",
     "",
   ].join("\n");
@@ -60,6 +66,10 @@ export interface SessionImage {
   /** The unit image the session image sits on, by id. */
   base: string;
   claude: string;
+  /** In-project dependency folders (Node's node_modules) the base commit does not track, copied from the unit image's
+   * project to the same paths under the build tree, relative to it. The launcher mounts each as a volume over the bind
+   * mounted tree, so the session sees the installed dependencies with no network, and the patch leaves them out. */
+  deps: string[];
 }
 
 const docker = (bin: string, args: string[], timeout = 120_000) => spawnSync(bin, args, { encoding: "utf8", timeout, maxBuffer: 16 * 1024 * 1024 });
@@ -99,7 +109,10 @@ export function sessionImage(unitImage: string, o: { docker?: string } = {}): Se
   const v = docker(bin, ["run", "--rm", "--network", "none", "--entrypoint", "claude", id, "--version"], 60_000);
   const claude = v.stdout.trim().split(" ")[0] ?? "";
   if (v.status !== 0 || claude !== pin.version) fail("E_USAGE", "claude --version in " + tag + " prints " + JSON.stringify(v.stdout.trim() || v.stderr.trim().slice(-200)) + ", not " + pin.version);
-  return { tag, id, base: unitImage, claude };
+  const d = docker(bin, ["run", "--rm", "--network", "none", "--entrypoint", "cat", id, DEPS_FILE], 60_000);
+  const deps = d.stdout.split("\n").filter(Boolean);
+  if (d.status !== 0 || deps.some((x) => !/^([^/\0]+\/)*node_modules$/.test(x) || x.split("/").some((s) => s === ".." || s === "."))) fail("E_USAGE", "the session image " + tag + " lists no readable dependency folders in " + DEPS_FILE + ": " + JSON.stringify(d.stdout.slice(0, 300) || d.stderr.trim().slice(-200)));
+  return { tag, id, base: unitImage, claude, deps };
 }
 
 /** Removes every session image this lane built, by label; the unit images stay. Returns how many it removed. */

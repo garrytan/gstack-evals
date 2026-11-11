@@ -8,7 +8,11 @@
 // unitGrader) scores the built tree. Every key variable is removed before anything starts, so no key reaches Harbor, the
 // driver or the container; the upstream key is a placeholder only the stub sees. It prints one PASS or FAIL line per check,
 // counts and outcome words only, and removes the images and containers it made.
-// Usage: bun lanes/eng-build/e2e.ts --harbor <harbor bin> [--keep]
+// With --fixture node the unit is the Node (npm, vitest) fixture instead: the session image copies its node_modules under
+// /work/repo, the stub's Bash call removes the ignore rule and runs the recipe's test command there, and three more checks
+// read the result: the tests ran offline at /work/repo, the patch holds no file from node_modules, and the tree and the
+// volumes are back as they were.
+// Usage: bun lanes/eng-build/e2e.ts --harbor <harbor bin> [--fixture go|node] [--keep]
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -17,7 +21,7 @@ import { sse } from "../../quick/laneb/runner/fake_upstream.ts";
 import { recordProgram } from "../../src/runner/ledger/envelope.ts";
 import { machineId, recordApproval } from "../../src/runner/ledger/ledger.ts";
 import { readItem } from "../../src/runner/ledger/record.ts";
-import { GO_CALC, GO_FIXED, goRepo } from "../../tests/eng-build/fixture.ts";
+import { GO_CALC, GO_FIXED, goRepo, nodeLock, nodeRepo } from "../../tests/eng-build/fixture.ts";
 import { startSidecar } from "../real-outcome/sandbox/sidecar.ts";
 import { removeCoverageImages } from "./coverage.ts";
 import { buildLauncher } from "./launch.ts";
@@ -32,6 +36,8 @@ for (const k of Object.keys(process.env)) if (KEYS.test(k)) delete process.env[k
 const arg = (k: string) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : undefined; };
 const harbor = arg("--harbor") ?? "harbor";
 const keep = process.argv.includes("--keep");
+const fixture = arg("--fixture") ?? "go";
+if (fixture !== "go" && fixture !== "node") throw new Error("--fixture is go or node");
 const D = 1_000_000;
 const ITEM = "eb-builds-opus";
 const quote = { words: "keyless end-to-end run on a temporary ledger, not an approval", by: "eb e2e", source: "lanes/eng-build/e2e.ts" };
@@ -52,7 +58,7 @@ const find = (dir: string, name: string): string | null => {
 
 mkdirSync(join(homedir(), ".capy/work"), { recursive: true });
 const W = mkdtempSync(join(homedir(), ".capy/work/eb-e2e-"));
-const fx = goRepo(join(W, "fixture"));
+const fx = fixture === "node" ? nodeRepo(join(W, "fixture"), "vitest", nodeLock) : goRepo(join(W, "fixture"));
 const id = fx.spec.id;
 const unitDir = join(W, "units", id);
 const built = buildUnit(fx.spec, fx.repo, unitDir, { work: join(W, "work"), labels: join(W, "labels.json"), seed: 7 });
@@ -67,16 +73,21 @@ git(repo, ["init", "-q", "-b", "main"]);
 git(repo, ["add", "-A"]);
 git(repo, ["commit", "-q", "-m", "base"]);
 mkdirSync(join(W, "plans"), { recursive: true });
-writeFileSync(join(W, "plans", id + ".md"), "# Plan\n\nAdd Mul(a, b int) int to the calculator, with tests.\n");
-const note = "The change adds Mul(a, b int) int, which returns the product of a and b.";
+writeFileSync(join(W, "plans", id + ".md"), fixture === "node" ? "# Plan\n\nAdd mul(a, b) to the calculator, with tests.\n" : "# Plan\n\nAdd Mul(a, b int) int to the calculator, with tests.\n");
+const note = fixture === "node" ? "The change adds mul(a, b), which returns the product of a and b." : "The change adds Mul(a, b int) int, which returns the product of a and b.";
 
 const record = join(W, "record");
 recordProgram(record, { program: EB_PROGRAM, cap_micros: itemOf(ITEM).capUsd * D, skill_cap_micros: itemOf(ITEM).capUsd * D, skills: [EB_BUILD_SKILL], credit_rate_micros: D, quotes: [quote] });
 recordApproval(record, { action: "init", item: ITEM, cap_micros: itemOf(ITEM).capUsd * D, quotes: [quote], admission: "warn", program: EB_PROGRAM, skills: [EB_BUILD_SKILL] });
 const paid = paidItem("build", { item: ITEM, capUsd: "20", record, ledger: join(W, "ledger.sqlite") });
 
-const fixed = Buffer.from(GO_CALC + GO_FIXED).toString("base64");
-const test = Buffer.from('package calc\n\nimport "testing"\n\nfunc TestMulBuild(t *testing.T) {\n\tif Mul(0, 5) != 0 || Mul(2, 3) != 6 {\n\t\tt.Fatal("mul")\n\t}\n}\n').toString("base64");
+const b64 = (s: string) => Buffer.from(s).toString("base64");
+const runner = built.eb.groups[0]!.runner;
+const testCommand = runner.kind === "vitest" ? "cd /work/repo" + (runner.root ? "/" + runner.root : "") + " && " + ["node", ...runner.node_args, "/work/repo/" + runner.bin, "run", ...runner.args].join(" ") : "";
+const edit = fixture === "node"
+  ? "echo " + b64("export const add = (a, b) => a + b;\nexport const mul = (a, b) => a * b;\n") + " | base64 -d > src/calc.js && echo " + b64('import { expect, test } from "vitest";\nimport { mul } from "../src/calc.js";\n\ntest("mul build", () => {\n  expect(mul(0, 5)).toBe(0);\n  expect(mul(2, 3)).toBe(6);\n});\n') + " | base64 -d > test/mul.test.js && : > .gitignore && pwd && " + testCommand + " 2>&1 | tail -n 20"
+  : "echo " + b64(GO_CALC + GO_FIXED) + " | base64 -d > calc.go && echo " + b64('package calc\n\nimport "testing"\n\nfunc TestMulBuild(t *testing.T) {\n\tif Mul(0, 5) != 0 || Mul(2, 3) != 6 {\n\t\tt.Fatal("mul")\n\t}\n}\n') + " | base64 -d > calc_mul_test.go";
+let toolResult = "";
 const stubLog: Array<{ main: boolean; edit: boolean; tools: string[]; skills: string[] }> = [];
 const stub = Bun.serve({
   hostname: "127.0.0.1",
@@ -88,18 +99,21 @@ const stub = Bun.serve({
     if (path.endsWith("/count_tokens")) return Response.json({ input_tokens: 10 });
     const main = Array.isArray(body.tools) && body.tools.length > 0;
     const text = JSON.stringify(body.messages ?? []);
-    const edit = main && !text.includes("tool_result");
+    const first = main && !text.includes("tool_result");
+    if (main && !first && !toolResult) toolResult = JSON.stringify((body.messages ?? []).flatMap((m: any) => (Array.isArray(m.content) ? m.content : [])).filter((c: any) => c.type === "tool_result").map((c: any) => c.content));
     const skills = [...new Set([...JSON.stringify(body).matchAll(/- ([a-z][a-z0-9:-]*): /g)].map((m) => m[1]!))].filter((s) => /plugin-authoring|doctor|skill/.test(s));
-    stubLog.push({ main, edit, tools: main ? body.tools.map((t: any) => t.name ?? t.type) : [], skills });
-    const reply = edit ? [{ type: "tool_use", id: "toolu_eb_e2e_" + stubLog.length, name: "Bash", input: { command: "echo " + fixed + " | base64 -d > calc.go && echo " + test + " | base64 -d > calc_mul_test.go", description: "Write Mul and its test" } }] : [{ type: "text", text: "Done." }];
+    stubLog.push({ main, edit: first, tools: main ? body.tools.map((t: any) => t.name ?? t.type) : [], skills });
+    const reply = first ? [{ type: "tool_use", id: "toolu_eb_e2e_" + stubLog.length, name: "Bash", input: { command: edit, description: "Write Mul and its test" } }] : [{ type: "text", text: "Done." }];
     if (body.stream) return new Response(sse(body.model, reply as any), { headers: { "content-type": "text/event-stream" } });
-    return Response.json({ id: "msg_eb_e2e", type: "message", role: "assistant", model: body.model, content: reply, stop_reason: edit ? "tool_use" : "end_turn", usage: { input_tokens: 10, output_tokens: 10, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } });
+    return Response.json({ id: "msg_eb_e2e", type: "message", role: "assistant", model: body.model, content: reply, stop_reason: first ? "tool_use" : "end_turn", usage: { input_tokens: 10, output_tokens: 10, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } });
   },
 });
 const gw = docker(["network", "inspect", "bridge", "-f", "{{(index .IPAM.Config 0).Gateway}}"]).stdout.trim();
 const sidecar = startSidecar({ root: join(W, "sidecar"), agentHost: gw, agentPort: 0, controlPort: 0 });
 const machine = machineId();
 let lease = "";
+const volumes = () => docker(["volume", "ls", "-q"]).stdout.split("\n").filter(Boolean).length;
+const volumesBefore = volumes();
 try {
   const launcher = buildLauncher({ arm: "none", units: new Map([[id, { dir: unitDir }]]), repos: join(W, "repos"), plans: join(W, "plans"), bundles: null, out: join(W, "build"), host: gw, envelopeHost: machine, sidecar: sidecar.controlUrl, forbidden: [join(W, "units"), join(homedir(), ".capy", "drive")], planned: 1, harbor, serve: { machine, fetch: (url, init) => fetch(url.replace("https://api.anthropic.com", "http://127.0.0.1:" + stub.port), init), env: { ANTHROPIC_API_KEY: "stub-not-a-key" }, requireAdmission: () => null, log: (l) => console.error(l) } });
   const grader = unitGrader({ dirs: new Map([[id, unitDir]]), work: join(W, "work"), log: (l) => console.log(l) });
@@ -117,6 +131,14 @@ try {
   rule("grader scores the built tree", pass(b.functional) === built.eb.unit.functional.length && pass(b.aftermath.B1) === built.eb.unit.aftermath[0]!.cases.length, "functional " + pass(b.functional) + " of " + b.functional.length + " pass, aftermath B1 " + pass(b.aftermath.B1) + " of " + (b.aftermath.B1?.length ?? 0) + " pass, test lines added " + b.testLinesAdded + ", catch B1 " + JSON.stringify(b.catches.B1 ?? null));
   const ev = find(join(W, "build", "sessions"), "evaluator");
   const events = ev ? lines(join(ev, "usersim-events.jsonl")) : [];
+  if (fixture === "node") {
+    const patch = ev && existsSync(join(ev, "final.patch")) ? readFileSync(join(ev, "final.patch"), "utf8") : "";
+    const files = [...patch.matchAll(/^diff --git a\/(\S+) /gm)].map((m) => m[1]!);
+    const a1 = find(join(W, "build", "sessions"), "a1");
+    rule("the recipe's test command runs at /work/repo in the session, offline, on the image's dependencies", toolResult.includes("/work/repo") && /Tests\s+\d+ passed/.test(toolResult) && !/failed|ERR_MODULE_NOT_FOUND|Cannot find/.test(toolResult), (toolResult.includes("/work/repo") ? "ran at /work/repo" : "no /work/repo in the tool result") + ", " + (/Tests\s+(\d+) passed/.exec(toolResult)?.[1] ?? "no") + " tests passed with the ignore rule removed");
+    rule("the patch leaves the dependency folder out", files.length > 0 && files.includes("src/calc.js") && files.includes(".gitignore") && !files.some((f) => /(^|\/)node_modules(\/|$)/.test(f)), files.length + " files in the patch, " + files.filter((f) => /(^|\/)node_modules(\/|$)/.test(f)).length + " under node_modules");
+    rule("the tree is restored and the dependency volumes are gone", a1 !== null && !existsSync(join(a1, "repo", "node_modules")) && volumes() === volumesBefore, (a1 && existsSync(join(a1, "repo", "node_modules")) ? "a node_modules mountpoint is left in the tree" : "no mountpoint left") + ", " + (volumes() - volumesBefore) + " volumes left");
+  }
   const egress = events.find((e) => e.event === "egress");
   const probe = (events.find((e) => e.event === "egress_probe")?.result ?? {}) as Record<string, string>;
   const allow: string[] = egress?.allow ?? [];

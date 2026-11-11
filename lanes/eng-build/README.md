@@ -13,7 +13,14 @@ The lane for the eng-review build read (prereg 2026-11-11-geva-522-eng-review-bu
   restore set for the merge's own tests (tests/), one for base (base/) and one per later fix (aftermath/<item>/),
   builds the image, grades each real tree 3 times and applies the fail-to-pass rule, the anchors and the base split.
   Every tree builds cold, and a real tree's product hashes are recorded so a recount can refuse a changed tree.
-- leak.ts: checks that no line the fix added is in the unit's exact image.
+- leak.ts: checks that no line the fix added is in the unit's exact image, and (sessionLeakCheck) in the session image
+  a builder runs in.
+- contain.ts: the unit stage's containment gates, run on every unit before the pilot (`eb units --repos`). It runs the
+  leak check on the session image, then opens the real sandbox sidecar on the unit's build tree with the build
+  launcher's own trial spec. The origin must hold the base branch at base and nothing else: no tag or other ref, no
+  object beyond those reachable from base, nothing unreachable. The gh stub must answer nothing about any pull request
+  or issue in any state, by list, REST path or search. A failure drops the unit with E_EB_LEAK, step leak,
+  sidecar-origin or sidecar-gh.
 - note.ts: the statement note writer and its audit (prompts/note-writer.md, prompts/note-audit.md). The model call
   is injected, so tests make none.
 - catch.ts: real-bug catch. A build's own new and changed test files move onto the unit's real merged tree and its
@@ -32,11 +39,16 @@ The lane for the eng-review build read (prereg 2026-11-11-geva-522-eng-review-bu
   outcome driver with Harbor and real_agent for builds.
 - session-image.ts: the build session's image. It layers Claude Code at the review stage's pin (docker/host-cli.json
   and the checksum line in docker/trial.Dockerfile) and a pinned Node on the unit image, which keeps its id for the
-  grader. It adds no gstack and no drive, and it sets CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1.
+  grader. It adds no gstack and no drive, and it sets CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1. It copies each in-project
+  dependency folder the base commit does not track (Node's node_modules) from the unit image's project to the same
+  path under /work/repo. The launcher mounts each one as a volume over the build tree, so the session runs the tests
+  offline, lists it in task.json's exclude so real_agent leaves it out of the patch, and removes the empty mountpoints
+  after the session. Python, Go and Rust keep their dependencies outside the project, so they need nothing.
 - e2e.ts: the build stage's paid path end to end, keyless. It builds one Go fixture unit and runs it through the build
   launcher, the outcome driver on a temporary ledger, Harbor, real_agent, the sandbox sidecar and Claude Code against a
   stub upstream. Then it grades the built tree. `bun lanes/eng-build/e2e.ts --harbor <harbor bin>` prints one PASS or
-  FAIL line per check.
+  FAIL line per check. `--fixture node` runs the Node (vitest) fixture instead and also checks that the recipe's test
+  command runs at /work/repo and that the patch holds no file from node_modules.
 - dryrun.ts, dryrun-seams.ts, dryrun-pipeline.ts: `gstack-evals eb dryrun`. Seams that need Docker run under
   GSTACK_EVALS_DOCKER=1 and print SKIP otherwise, which is never a pass.
 

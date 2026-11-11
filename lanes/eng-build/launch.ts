@@ -6,7 +6,7 @@
 // agent (real_agent) through Harbor. None of this runs keyless: the tests drive the same stages through stub launchers.
 import { spawn, spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, posix } from "node:path";
 import { BACKGROUND_WAIT_MS } from "../../src/adapters/claude-code/driver.ts";
 import { hostDriver } from "../../src/adapters/host.ts";
@@ -23,7 +23,8 @@ import { serveStages, type ServeOptions } from "../outcome-skills/driver/stage.t
 import { HARBOR_MODEL } from "../outcome-skills/statemachines/run.ts";
 import { sessionEnd } from "../outcome-skills/statemachines/session.ts";
 import { isSkillArm, REVIEW_SESSION } from "./arms.ts";
-import { armName, BUILD_MODEL, buildMounts, buildRegistry, checkMounts, preflight, prepareTree, type BuildSession } from "./build-stage.ts";
+import { armName, BUILD_MODEL, buildMounts, buildRegistry, checkMounts, preflight, prepareTree, REPO_DIR, type BuildSession } from "./build-stage.ts";
+import { trialTask } from "./contain.ts";
 import { fail } from "./errors.ts";
 import { EB_BUILD_SKILL, EB_RUN } from "./ledger.ts";
 import { NOTE_MODELS, type ModelCall } from "./note.ts";
@@ -117,6 +118,18 @@ export function reviewEnd(read: ErOutcome, cell: string): { end: AttemptEnd; why
 
 const KEYS = /^(ANTHROPIC|OPENAI|OPENROUTER|UBICLOUD|GEMINI|GOOGLE|XAI|DEEPSEEK|TYPESAFE)_[A-Z_]*KEY$|_TOKEN$/;
 
+/** Removes the empty mountpoints Docker made in the build tree for the dependency volumes, and each parent it made with
+ * them, so the tree holds what it held before the session. */
+export function restoreTree(tree: string, deps: string[]): void {
+  for (const d of deps) {
+    for (let rel = d; rel !== "." && rel !== ""; rel = posix.dirname(rel)) {
+      const at = join(tree, rel);
+      if (!existsSync(at) || readdirSync(at).length > 0) break;
+      rmdirSync(at);
+    }
+  }
+}
+
 function findDir(dir: string, name: string): string | null {
   if (!existsSync(dir)) return null;
   for (const e of readdirSync(dir, { withFileTypes: true })) {
@@ -205,11 +218,9 @@ export function buildLauncher(o: { arm: Arm | Arm[]; units: Map<string, { dir: s
       writeFileSync(join(task, "task.toml"), sessionToml(s.unit.id, img.tag, registry.arms[s.armName]!.limits.wall_limit_sec));
       writeFileSync(join(task, "instruction.md"), s.prompt);
       const compose = join(out, "mounts.compose.yaml");
-      writeFileSync(compose, "services:\n  main:\n    volumes:\n" + mounts.map((m) => "      - " + JSON.stringify(m) + "\n").join(""));
-      const head = spawnSync("git", ["-C", tree, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim();
-      const branch = spawnSync("git", ["-C", tree, "rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8" }).stdout.trim();
+      writeFileSync(compose, "services:\n  main:\n    volumes:\n" + [...mounts, ...img.deps.map((d) => REPO_DIR + "/" + d)].map((m) => "      - " + JSON.stringify(m) + "\n").join(""));
       const taskJson = join(out, "task.json");
-      writeFileSync(taskJson, JSON.stringify({ repo_dir: "/work/repo", base_branch: branch, base_commit: head, start_ref: branch, kind: "K1" }));
+      writeFileSync(taskJson, JSON.stringify(trialTask(tree, img.deps)));
       const label = s.cell;
       const manifest = join(out, "images.json");
       const manifestText = JSON.stringify({ rows: [{ label, image_id: img.id, unit_image_id: eb.image.id, claude_code: img.claude }] }) + "\n";
@@ -226,6 +237,7 @@ export function buildLauncher(o: { arm: Arm | Arm[]; units: Map<string, { dir: s
       const h = await runAsync(o.harbor ?? "harbor", ["run", "-y", "-p", task, "-a", "real_agent:RealAgent", "-m", model, "--base-url", proxy, ...Object.entries(ak).flatMap(([k, v]) => ["--ak", k + "=" + v]), "-e", "docker", "--extra-docker-compose", join(ROOT, "quick/laneb/runner/agent-caps.compose.yaml"), "--extra-docker-compose", compose, "-o", join(out, "jobs"), "--job-name", "eb-" + sha(label + s.attempt + Date.now()).slice(0, 12), "--disable-verification", "--delete"], env, (registry.arms[s.armName]!.limits.wall_limit_sec + 900) * 1000);
       writeFileSync(join(out, "harbor.log"), h);
       spawnSync(o.docker ?? "docker", ["run", "--rm", "--network", "none", "--user", "0:0", "-v", tree + ":/eb-tree", "--entrypoint", "chown", img.id, "-R", (process.getuid?.() ?? 1000) + ":" + (process.getgid?.() ?? 1000), "/eb-tree"], { encoding: "utf8", timeout: 300_000 });
+      restoreTree(tree, img.deps);
       const ev = findDir(join(out, "jobs"), "evaluator");
       const summary = ev && existsSync(join(ev, "real-summary.json")) ? (JSON.parse(readFileSync(join(ev, "real-summary.json"), "utf8")) as Record<string, any>) : null;
       const spent = typeof summary?.proxy?.spent_micros === "number" ? summary.proxy.spent_micros / 1_000_000 : 0;
