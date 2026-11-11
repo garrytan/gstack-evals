@@ -36,13 +36,13 @@ export function loadUnits(dir: string, o: { keys: boolean }): Map<string, Loaded
     if (!existsSync(join(udir, "unit.json"))) continue;
     const meta = readJson<UnitMeta>(join(udir, "unit.json"), "unit file");
     if (meta.id !== name) throw new PvError("E_USAGE", "unit folder " + name + " holds unit.json for " + JSON.stringify(meta.id));
-    let key: Key | null = null;
+    let answer: Key | null = null;
     if (o.keys) {
-      key = readJson<Key>(join(udir, "key.json"), "key file");
-      const kp = key.unit === name ? keyProblem(key) : "key.json in " + name + " names unit " + JSON.stringify(key.unit);
+      answer = readJson<Key>(join(udir, "key.json"), "key file");
+      const kp = answer.unit === name ? keyProblem(answer) : "key.json in " + name + " names unit " + JSON.stringify(answer.unit);
       if (kp) throw new PvError("E_USAGE", kp);
     }
-    out.set(name, { meta, key, dir: udir });
+    out.set(name, { meta, key: answer, dir: udir });
   }
   if (!out.size) throw new PvError("E_USAGE", "units directory " + dir + " holds no unit folders with unit.json");
   return out;
