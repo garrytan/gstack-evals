@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // Plan section 6.3: the three scoring trees, each one commit on top of S with the same fixed identity, date and message,
-// so every tree has the same history shape and only content differs. Parent is T; fix is T plus the fix less its
+// so every tree has the same history shape and only content differs. Parent is T (transplant.ts: build output goes back
+// to base and its new files stay out, on every tree); fix is T plus the fix less its
 // in-source test-module hunks, applied with git apply --3way (a conflict is the gap E_PF_FIX_CONFLICT); neutral is T plus
 // the unit's validated neutral edit. All git work runs on a host clone of S.
 import { spawnSync } from "node:child_process";
@@ -68,7 +69,8 @@ export function buildTrees(o: { repo: string; ref: string; lang: Lang; testFiles
   const wt = mkdtempSync(join(tmpdir(), "pf-tree-"));
   git(o.repo, ["worktree", "add", "-q", "--detach", "-f", wt, s]);
   try {
-    if (plan.restore.length) git(wt, ["--literal-pathspecs", "checkout", base, "--", ...plan.restore]);
+    if (plan.restore.length) git(wt, ["--literal-pathspecs", "checkout", base, "--pathspec-from-file=-", "--pathspec-file-nul"], { input: plan.restore.join("\0") });
+    if (plan.drop.length) git(wt, ["--literal-pathspecs", "rm", "-q", "-f", "--pathspec-from-file=-", "--pathspec-file-nul"], { input: plan.drop.join("\0") });
     for (const w of plan.write) writeFileSync(join(wt, w.path), w.text, "latin1");
     if (plan.write.length) git(wt, ["--literal-pathspecs", "add", "--", ...plan.write.map((w) => w.path)]);
     const tTree = one(wt, ["write-tree"]);

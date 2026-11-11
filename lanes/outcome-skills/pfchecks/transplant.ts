@@ -4,14 +4,34 @@
 // TEST_MODULES), the agent's hunks wholly inside a test module stay and every other hunk goes back to base; a hunk the
 // detector can't place wholly inside or outside goes back too and is counted as mixed. New files, edits to existing
 // test files, protected build and test configuration and other existing files stay as S has them. Deleted files that
-// are not test files are restored.
+// are not test files are restored. Section 6.1's listed build-output directories (target, build, out, dist, bin, obj): one
+// inside a src/, test/ or tests/ directory holds source (src/bin, a Java package named build) and takes the rules above;
+// any other holds build output (a root dist/, packages/x/dist), so its changed and deleted files go back to base, its new
+// files are left out, and none of them counts as a test file or a product edit.
 import { parsePatch, walk } from "../statemachines/fixsplit.ts";
 import { classify, isProtected, TEST_MODULES, type Lang } from "../statemachines/langs.ts";
 
 export interface Change { path: string; status: "A" | "M" | "D" }
+
+const LISTED = new Set(["target", "build", "out", "dist", "bin", "obj"]);
+const HOLDS_SOURCE = new Set(["src", "test", "tests"]);
+/** Where a path sits against the listed build-output directories: "output" under one that no src/, test/ or tests/
+ *  directory holds, "source" under one inside such a directory, null under none. */
+function listedDir(path: string): "output" | "source" | null {
+  let inSource = false;
+  for (const part of path.split("/").slice(0, -1)) {
+    if (HOLDS_SOURCE.has(part)) inSource = true;
+    else if (LISTED.has(part)) return inSource ? "source" : "output";
+  }
+  return null;
+}
 export interface TransplantPlan {
   /** Paths checked out again from base. */
   restore: string[];
+  /** New files in build-output directories, left out of T. */
+  drop: string[];
+  /** Every changed, deleted or new path in a build-output directory (restored or dropped). */
+  build_output: string[];
   /** Source files with in-source test modules, written with only their kept hunks. */
   write: { path: string; text: string }[];
   /** Existing non-test source files S changed or deleted outside test modules (section 9's product edits). */
@@ -33,11 +53,17 @@ function place(ranges: { old: [number, number][]; new: [number, number][] }, mk:
 
 /** fileDiff(path) returns the file's base text and its unified diff from base to S (latin1). */
 export function planTransplant(lang: Lang, testFiles: ReadonlySet<string>, changes: Change[], fileDiff: (path: string) => { base: string; diff: string }): TransplantPlan {
-  const plan: TransplantPlan = { restore: [], write: [], product_files: [], deleted_restored: [], kept_test_hunks: 0, restored_hunks: 0, mixed_hunks: 0 };
+  const plan: TransplantPlan = { restore: [], drop: [], build_output: [], write: [], product_files: [], deleted_restored: [], kept_test_hunks: 0, restored_hunks: 0, mixed_hunks: 0 };
   const detect = TEST_MODULES[lang];
   for (const c of [...changes].sort((a, b) => (a.path < b.path ? -1 : 1))) {
+    const dir = listedDir(c.path);
+    if (dir === "output") {
+      (c.status === "A" ? plan.drop : plan.restore).push(c.path);
+      plan.build_output.push(c.path);
+      continue;
+    }
     if (c.status === "A") continue;
-    const cls = classify(lang, c.path, testFiles);
+    const cls = testFiles.has(c.path) ? "test" : classify(lang, dir === "source" ? c.path.split("/").map((p, i, a) => (i < a.length - 1 && LISTED.has(p) ? "_" + p : p)).join("/") : c.path, testFiles);
     if (c.status === "D") {
       if (cls === "test") continue;
       plan.restore.push(c.path);
