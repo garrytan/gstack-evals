@@ -5,14 +5,14 @@
 import { afterAll, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { SessionImage } from "../../lanes/outcome-skills/statemachines/image.ts";
 import { sessionLimits, type PfArm } from "../../lanes/outcome-skills/pfchecks/arms.ts";
 import { OPUS, P1 } from "../../lanes/outcome-skills/pfchecks/items.ts";
 import { PSTACK_DIR, pstackVolume } from "../../lanes/outcome-skills/pfchecks/pstack.ts";
-import { TASK_RERUN, finishSession, harbor, pfRecord, retriesSession, retryAfter, runCopy, type PfRunInput } from "../../lanes/outcome-skills/pfchecks/run.ts";
+import { TASK_RERUN, finishSession, harbor, pfRecord, retriesSession, retryAfter, runCopy, runPfSession, type PfRunInput } from "../../lanes/outcome-skills/pfchecks/run.ts";
 import { toolsVolume } from "../../lanes/outcome-skills/pfchecks/tools.ts";
 
 const roots: string[] = [];
@@ -375,4 +375,15 @@ test("pfRecord: a post-turn failure in what the agent wrote is gap E_PF_ARM with
   const open = { ...summary({ task: turn("completed"), wrapup: [{ termination: "open_refused", refused: ["CAP_STOP"], wall_s: 0 }], slots: [slot("task", 10)] }), keep: null, refused: "E_PF_ARM post_turn wrapup.sh keep: lock .git/index.lock" };
   expect(pfRecord(i, 1, open, null, null, image.head)).toMatchObject({ gap: "E_PF_WRAPUP_ALLOWANCE", gap_reason: null });
   expect(pfRecord(i, 1, { refused: "E_PF_ARM the session tree or home holds files the strip rule removes", task: null, wrapup: [], slots: [], events: [] }, null)).toMatchObject({ gap: "E_PF_ARM", gap_reason: "tree_check" });
+});
+
+// Value: protects=the Captain's ruling item 7 on #324 (p2/specialist-batched#1, p2/red-team#1): section 3's effort check compares every effort key, whoever calls runPfSession; fails_when=runPfSession takes an effort record with an entry that is a scalar, null, an array, an empty object, a partial object or one with another key, or makes its run dir first; why_new=effortFields read a missing key as null, so a malformed entry matched a session that sent no effort fields; seam=run.ts runPfSession; no_claim=session run's own refusal (pf-session-cli.test.ts)
+test("runPfSession refuses an effort record with an entry that is a scalar, an empty object or a partial object before it makes its run dir", async () => {
+  const full = { thinking: null, output_config: null, reasoning: null, reasoning_effort: null, effort: null };
+  for (const [model, entry] of [[OPUS, 7], [OPUS, "high"], [OPUS, null], [OPUS, []], [OPUS, {}], [OPUS, { thinking: null }], [OPUS, { ...full, extra: 1 }], [P1, {}]] as const) {
+    const out = join(temp("pf-run-effort-"), "s");
+    const i: PfRunInput = { ...input("P"), unitDir: join(out, "..", "no-unit"), out, effort: { [OPUS]: full, [P1]: full, [model]: entry } as any };
+    await expect(runPfSession(i)).rejects.toThrow(/^E_PF_INPUT the effort record is not the dry run's effort\.json: /);
+    expect(existsSync(out)).toBe(false);
+  }
 });

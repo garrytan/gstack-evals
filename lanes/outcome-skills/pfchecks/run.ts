@@ -22,7 +22,7 @@ import { containUnit, treeDigest } from "./containment.ts";
 import type { Arm } from "./items.ts";
 import { pfFail } from "./prereg.ts";
 import { PSTACK_DIR, pstackVolume } from "./pstack.ts";
-import { effortFields, effortHolds, endKind, readWrapup, taskStep, wrapupStep, writeSessionRecord, type EndKind, type PfPlanned, type PfSessionRecord } from "./session.ts";
+import { effortFields, effortHolds, effortProblem, endKind, readWrapup, taskStep, wrapupStep, writeSessionRecord, type EndKind, type PfPlanned, type PfSessionRecord } from "./session.ts";
 import { TOOLS_DIR, toolsEnv, toolsVolume } from "./tools.ts";
 
 const ROOT = join(import.meta.dir, "../../..");
@@ -228,6 +228,8 @@ export function finishSession(file: string, record: PfSessionRecord): void {
  *  writes out/session.json. Async, so a caller serving the control plane in this process keeps serving it. */
 export async function runPfSession(i: PfRunInput): Promise<PfRun> {
   if (existsSync(i.out)) pfFail("E_PF_ARM", i.out + " exists; each session writes a new run dir");
+  const badEffort = i.effort && effortProblem(i.effort);
+  if (badEffort) pfFail("E_PF_INPUT", "the effort record is not the dry run's effort.json: " + badEffort);
   if (i.effort && !i.effort[i.session.model]) pfFail("E_PF_INPUT", "the effort record has no entry for " + i.session.model + "; the dry run's effort.json names every model");
   mkdirSync(i.out, { recursive: true });
   const u = readUnit(i.unitDir);

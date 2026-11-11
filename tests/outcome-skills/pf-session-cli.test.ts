@@ -86,9 +86,10 @@ const planFile = async (units: string, kind = "test") => {
   expect((await session(["plan", "--units", units, "--prereg", PREREG, "--part", "1", "--kind", kind, "--out", out])).exit).toBe(0);
   return out;
 };
+const NO_EFFORT = { thinking: null, output_config: null, reasoning: null, reasoning_effort: null, effort: null };
 const effortFile = () => {
   const p = join(temp("pf-cli-effort-"), "effort.json");
-  writeFileSync(p, JSON.stringify({ [OPUS]: { thinking: { type: "adaptive" } }, [SOL]: { reasoning: null } }));
+  writeFileSync(p, JSON.stringify({ [OPUS]: { ...NO_EFFORT, thinking: { type: "adaptive" } }, [SOL]: NO_EFFORT }));
   return p;
 };
 const runArgs = (o: { unit: string; plan: string; index: string; effort?: string; out?: string }) => ["run", "--unit", o.unit, "--plan", o.plan, "--index", o.index, "--control", "http://172.17.0.1:9000", "--proxy", "172.17.0.1:9001", "--names", "short", "--out", o.out ?? join(temp("pf-cli-out-"), "s"), ...(o.effort ? ["--effort", o.effort] : [])];
@@ -123,6 +124,20 @@ test("session run refuses an index outside the plan, a run without effort.json a
   expect(i.scope).toBeUndefined();
   const blind = await session(runArgs({ unit, plan: await planFile("pf-cli-flag", "blind"), index: "0", effort }));
   expect([blind.exit, blind.calls[0]?.session.arm, blind.calls[0]?.scope]).toEqual([0, "blind", "flag/"]);
+});
+
+// Value: protects=the Captain's ruling item 7 on #324 (p2/specialist-batched#1, p2/red-team#1): section 3's effort check compares every effort key; fails_when=session run starts a session with an effort.json entry that is a scalar, an empty object, a partial object or one with another key, or refuses one with exactly the effort keys; why_new=effortFields read a missing key as null, so a malformed entry matched a session that sent no effort fields; seam=pfchecks/cli.ts session run; no_claim=runPfSession's own check (pf-run.test.ts)
+test("session run refuses an effort.json entry that is a scalar, an empty object, a partial object or one with another key", async () => {
+  const unit = unitDir("pf-cli-flag");
+  const plan = await planFile("pf-cli-flag");
+  for (const entry of [7, "high", null, [], {}, { thinking: { type: "adaptive" } }, { ...NO_EFFORT, extra: 1 }]) {
+    const bad = join(temp("pf-cli-effort-"), "effort.json");
+    writeFileSync(bad, JSON.stringify({ [OPUS]: NO_EFFORT, [SOL]: entry }));
+    const r = await session(runArgs({ unit, plan, index: "0", effort: bad }));
+    expect([JSON.stringify(entry), r.exit, r.stderr[0]?.split(" ")[0], r.calls.length]).toEqual([JSON.stringify(entry), 2, "E_USAGE", 0]);
+  }
+  const ok = await session(runArgs({ unit, plan, index: "0", effort: effortFile() }));
+  expect([ok.exit, ok.calls.length]).toEqual([0, 1]);
 });
 
 // Value: protects=section 10's raise and cut-report sessions on the paid run (#305's run notes item 10); fails_when=session run with --issue passes runPfSession anything but that file's text as issue, or sets issue without the flag; why_new=session run never set issue, so every session read the unit's issue.md and the raise's report with the changed files, or the cut report, could not run; seam=pfchecks/cli.ts session run --issue; no_claim=which report admission picks (admission.ts), how runCopy builds the task turn (pf-run.test.ts)

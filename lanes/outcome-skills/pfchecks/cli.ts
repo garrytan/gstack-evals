@@ -16,7 +16,7 @@ import { itemsTable } from "./items.ts";
 import { dockerNeutralRun, neutralFiles, validateNeutral, volumeTexts } from "./neutral.ts";
 import { PfError, readPrereg } from "./prereg.ts";
 import { runPfSession, type PfRun, type PfRunInput } from "./run.ts";
-import { planPart, type PfPlanned } from "./session.ts";
+import { EFFORT_KEYS, effortProblem, planPart, type PfPlanned } from "./session.ts";
 import { dockerExecutor, treeVolume } from "./runner.ts";
 import { dockerBreaks, rowOf, scoreSession, type CatchRecord } from "./score.ts";
 import { toldScreen } from "./told.ts";
@@ -92,7 +92,8 @@ async function run(cmd: string, a: Args, deps: Deps): Promise<number> {
     const u = readUnit(unitDir);
     if (u.id !== session.unit) throw new PfError("E_USAGE", "session " + index + " is on unit " + session.unit + ", not " + u.id);
     const effort = readJson(need(a, "effort"));
-    if (effort === null || typeof effort !== "object" || Array.isArray(effort)) throw new PfError("E_USAGE", "--effort is the dry run's effort.json, an object with one record per model");
+    const badEffort = effortProblem(effort);
+    if (badEffort) throw new PfError("E_USAGE", "--effort is the dry run's effort.json, an object with one record per model, each with exactly the keys " + EFFORT_KEYS.join(", ") + ": " + badEffort);
     const names = need(a, "names");
     if (names !== "short" && names !== "plugin") throw new PfError("E_USAGE", "--names is short or plugin");
     const res = await deps.runPfSession({

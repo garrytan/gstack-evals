@@ -68,6 +68,18 @@ export const effortDiffers = (recorded: Record<string, unknown>, body: Record<st
 /** Section 3's effort check: the session's fields, as the driver's proxy recorded them from its task slot's first main
  *  request, equal the dry run's record for its model (effort.json). No recorded fields, or no record for the model, fails. */
 export const effortHolds = (recorded: Record<string, unknown> | null, want: Record<string, unknown> | undefined): boolean => recorded !== null && want !== undefined && !effortDiffers(want, recorded);
+/** What makes an effort record something other than the dry run's effort.json (an object whose every entry is an object
+ *  with exactly EFFORT_KEYS, as effortFields writes it), or null when it is one. A missing key would read null. */
+export function effortProblem(effort: unknown): string | null {
+  if (effort === null || typeof effort !== "object" || Array.isArray(effort)) return "it is not an object with one record per model";
+  const want = [...EFFORT_KEYS].sort().join(", ");
+  for (const [model, e] of Object.entries(effort)) {
+    if (e === null || typeof e !== "object" || Array.isArray(e)) return model + "'s entry is " + JSON.stringify(e) + ", not an object";
+    const keys = Object.keys(e).sort().join(", ");
+    if (keys !== want) return model + "'s entry has keys " + (keys || "none") + ", not exactly " + want;
+  }
+  return null;
+}
 
 export interface Discard { checks: boolean; discarded: string[] }
 /** wrapup.sh keep's lines: PF_DISCARD <path> per discarded change and one PF_WRAPUP line. */

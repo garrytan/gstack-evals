@@ -16,7 +16,7 @@ The paid run's entry point mirrors the state machines eval's `sm session` comman
 sessions (pf-plan.v1, planPart from prereg.json's order_seed, never over an existing file). `session run` runs one planned
 session through runPfSession on the unit's tree volume (the blind probe with the unit's scope dir), and refuses before any
 session an index the plan does not hold, a unit other than the planned one, or a run without the dry run's effort.json
-(an object with one record per model). The session reads the unit's issue.md unless `--issue <file>` names another bug
+(an object with one record per model, each an object with exactly the EFFORT_KEYS, which runPfSession checks too). The session reads the unit's issue.md unless `--issue <file>` names another bug
 report, such as section 10's raise report or the cut report; that file's text goes to the agent as it is.
 Its exit is 10 at a cap stop, 11 at a finalize halt (E_PF_FINALIZE_HALT) and 12 at a containment halt
 (E_PF_CONTAINMENT), so the runner VM's loop, which stops at the first non-zero exit, can tell them apart; a session that
