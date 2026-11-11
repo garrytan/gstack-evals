@@ -126,7 +126,7 @@ export async function runSideChecks(): Promise<Case[]> {
       return { pass: typeof seq[0] === "string" && typeof seq[1] === "string" && seq[2] === null && hook.blocks() === 2, detail: "blocks, blocks, releases; " + hook.blocks() + " blocks" };
     });
     add("the session loop through the real Agent SDK: retries, end states, the Stop hook and admission", () => testFile("tests/er/run-sdk.test.ts"));
-    add("admission per attempt", () => ({ pass: erAdmits(5e6, 1, 10e6, 25e6) && !erAdmits(5e6 + 1, 1, 10e6, 25e6) && erAdmits(0, 0, 10e6, 10e6) && !erAdmits(0, 0, 10e6, 10e6 - 1), detail: "settled plus in-flight allowances plus its own allowance must fit under the cap" }));
+    add("admission per attempt", () => ({ pass: erAdmits(5e6, 10e6, 10e6, 25e6) && !erAdmits(5e6 + 1, 10e6, 10e6, 25e6) && erAdmits(0, 0, 10e6, 10e6) && !erAdmits(0, 0, 10e6, 10e6 - 1), detail: "settled plus in-flight allowances plus its own allowance must fit under the cap" }));
     const clone = gstackClone(scratch);
     add("the renderer on a plan.md without its headings", () => {
       if (!clone) return { pass: false, detail: "no gstack clone" };
