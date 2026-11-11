@@ -192,15 +192,15 @@ Rules as built
   steps (capture.sh, wrapup.sh, state.sh and the bundle) runs with core.hooksPath=/dev/null, core.fsmonitor=false,
   core.excludesFile=/dev/null, GIT_CONFIG_NOSYSTEM=1 and GIT_CONFIG_GLOBAL=/dev/null, so no hook or fsmonitor command
   the agent planted, no filter, excludesFile or other setting from the machine's system or global config and no
-  $XDG_CONFIG_HOME/git/ignore (which git reads with no config) runs or counts; .git/config still
-  applies, and state.sh names a filter set there that the base repo did not have with that value: the start inventory
+  $XDG_CONFIG_HOME/git/ignore (which git reads with no config) runs or counts; .git/config and .git/config.worktree still
+  apply, and state.sh names a filter set in either (through an include too) that the base repo did not have with that value: the start inventory
   saves the base's filter.* values beside inv (inv.filters), and with no inv.filters state.sh names no filter.
 - A post-turn step that fails or times out (the capture, a wrap-up reset or keep, the bundle) takes no retry, and the
   session still writes its record. Each step runs as its own process group in the container, so a step that times out
   is killed whole there before sh/state.sh reads the tree, and the session then ends. The kill counts only once no
   process is left in the group, within 5 s; a kill that cannot be confirmed skips sh/state.sh, since the step may still
   change the tree, and the step is E_PF_CAPTURE, with post_turn.kill_confirmed false. When sh/state.sh finds the cause in what the agent wrote (a work file the step needs
-  gone, an s.head that names no commit, a broken .git, config, HEAD or index, a git filter the session added to .git/config or changed there, unmerged
+  gone, an s.head that names no commit, a broken .git, config, HEAD or index, a git filter the session added to .git/config or .git/config.worktree or changed there, unmerged
   entries, a lock the agent's git left during the session (read only when the step did not time out, since a timeout
   stops the step's own git, which may leave its lock), a path changed during the session that the step cannot read
   or enter, or, when the step timed out, files changed during the session that number at least 2,000,000 or hold at
@@ -251,7 +251,8 @@ Readings this build chose
   claude --version from inside the container.
 
 Harbor runner. run.ts runs one session the real way. buildSessionImage (statemachines/image.ts) makes the session image
-from the unit's prepared tree volume. runCopy writes a Harbor run copy whose task.toml sets Harbor's agent timeout to
+from the unit's prepared tree volume. A unit with a missing or malformed runtime image id refuses with E_SM_INFRA_GAP
+("run its oracle first", image.ts runtimeId) before any docker call, in runPfSession, `pf contain` and dryrun-units.ts. runCopy writes a Harbor run copy whose task.toml sets Harbor's agent timeout to
 the session's budget (run.ts sessionBudget: every pre-open and post-turn container call at its timeout, each slot open
 and close with its retries, the task wall and both wrap-up walls, and a 600 s margin; 17,184 s for P, C and blind and
 15,384 s for N), and run.ts kills Harbor only after that plus its agent setup, image build and another margin. The copy names that image as the task's docker_image, a
