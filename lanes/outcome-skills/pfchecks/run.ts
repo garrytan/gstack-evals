@@ -104,7 +104,8 @@ export function sessionBudget(limits: { task: { wall_limit_sec: number }; wrapup
 }
 
 /** One attempt's run copy, pf_config, task.json and image manifest under dir; returns Harbor's argv and env. Its task.toml
- *  sets Harbor's agent timeout to the session's budget (sessionBudget), in place of the unit's. */
+ *  sets Harbor's agent timeout to the session's budget (sessionBudget), in place of the unit's. A table header may carry a
+ *  trailing # comment. */
 export function runCopy(i: PfRunInput, image: SessionImage, attempt: 1 | 2, dir: string): { argv: string[]; env: Record<string, string>; config: Record<string, any> } {
   const u = readUnit(i.unitDir);
   const s = i.session;
@@ -117,12 +118,12 @@ export function runCopy(i: PfRunInput, image: SessionImage, attempt: 1 | 2, dir:
   const agentS = sessionBudget(sessionLimits(s.arm, s.model, i.allowance)).agent_s;
   let section = "";
   const lines = toml.replace(/^\[environment\]$/m, "[environment]\ndocker_image = " + JSON.stringify(image.tag)).split("\n").flatMap((l) => {
-    const h = l.match(/^\s*\[([^\]]+)\]\s*$/);
+    const h = l.match(/^\s*\[([^\]]+)\]\s*(#.*)?$/);
     if (h) section = h[1]!;
     if (section === "agent" && !h && /^\s*timeout_sec\s*=/.test(l)) return [];
     return h && section === "agent" ? [l, "timeout_sec = " + agentS] : [l];
   });
-  writeFileSync(join(task, "task.toml"), (lines.some((l) => /^\s*\[agent\]\s*$/.test(l)) ? lines : [...lines, "[agent]", "timeout_sec = " + agentS, ""]).join("\n"));
+  writeFileSync(join(task, "task.toml"), (lines.some((l) => /^\s*\[agent\]\s*(#.*)?$/.test(l)) ? lines : [...lines, "[agent]", "timeout_sec = " + agentS, ""]).join("\n"));
   writeFileSync(join(task, "instruction.md"), "The arm's turn carries the task.\n");
   const label = u.id + "/" + s.model + "/" + s.arm + "/" + s.index;
   const taskJson = join(dir, "task.json");

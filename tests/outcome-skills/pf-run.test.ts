@@ -435,6 +435,23 @@ test("on a stub clock, the run copy's agent timeout lets a task turn run to its 
   }
 });
 
+// Value: protects=the owner's ruling on adversarial-native#7: a task.toml header with a trailing comment is still a header; fails_when=the run copy appends a second [agent] table after a commented [agent] header, keeps the unit's agent timeout_sec, or drops the timeout_sec of a table whose header carries a comment; why_new=runCopy's header regexes ended at the closing bracket, so [agent] # comment read as no header, and Harbor got two [agent] tables; seam=run.ts runCopy's task.toml; no_claim=quoted or dotted table names
+test("runCopy reads a task.toml header with a trailing comment as a header, so it sets one [agent] timeout and keeps the other tables'", () => {
+  const i = input("P");
+  const toml = 'version = "1.0"\n\n[agent] # Harbor\'s agent phase\ntimeout_sec = 5400\n\n[verifier]   # checks\ntimeout_sec = 900\n\n[environment]\ndocker_image = "old"\n';
+  writeFileSync(join(i.unitDir, "harbor/task.toml"), toml);
+  const u = JSON.parse(readFileSync(join(i.unitDir, "unit.json"), "utf8"));
+  u.files["harbor/task.toml"] = sha(toml);
+  writeFileSync(join(i.unitDir, "unit.json"), JSON.stringify(u));
+  const dir = temp("pf-run-toml-");
+  runCopy(i, image, 1, dir);
+  const written = readFileSync(join(dir, "task/task.toml"), "utf8");
+  const agentS = sessionBudget(sessionLimits("P", OPUS)).agent_s;
+  expect(written.match(/^\s*\[agent\]/gm)?.length).toBe(1);
+  expect(written).toContain("[agent] # Harbor's agent phase\ntimeout_sec = " + agentS + "\n");
+  expect(written).toContain("[verifier]   # checks\ntimeout_sec = 900\n");
+  expect(written.match(/timeout_sec/g)?.length).toBe(2);
+});
 // Value: protects=the Captain's ruling A(i) on #324: the session budget is the code's own bounds, not an estimate; fails_when=a timeout, retry count or wall the budget sums differs from the one in its source file, a post-turn container call or step is added without the budget counting it, the terms do not add up, or run.ts's timer does not sit above Harbor's agent timeout, agent setup and image build; why_new=Harbor's agent timeout was the unit's 5400 s and run.ts's timer a fixed 900 s over the walls; seam=run.ts BOUNDS and sessionBudget; no_claim=Harbor's own build_timeout_sec default (read from the pinned Harbor, not this repo)
 test("the session budget sums the code's own timeouts, retries and walls, and run.ts's timer sits above Harbor's agent timeout", () => {
   const src = (p: string) => readFileSync(join(import.meta.dir, "../..", p), "utf8");
