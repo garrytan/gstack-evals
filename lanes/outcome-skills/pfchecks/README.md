@@ -188,11 +188,12 @@ Rules as built
   steps (capture.sh, wrapup.sh, state.sh and the bundle) runs with core.hooksPath=/dev/null, core.fsmonitor=false,
   GIT_CONFIG_NOSYSTEM=1 and GIT_CONFIG_GLOBAL=/dev/null, so no hook or fsmonitor command the agent planted and no
   filter, excludesFile or other setting from the machine's system or global config runs or counts; .git/config still
-  applies, and state.sh names a filter set there.
+  applies, and state.sh names a filter set there that the base repo did not have with that value: the start inventory
+  saves the base's filter.* values beside inv (inv.filters), and with no inv.filters state.sh names no filter.
 - A post-turn step that fails or times out (the capture, a wrap-up reset or keep, the bundle) takes no retry, and the
   session still writes its record. Each step runs as its own process group in the container, so a step that times out
   is killed whole there before sh/state.sh reads the tree, and the session then ends. When sh/state.sh finds the cause in what the agent wrote (a work file the step needs
-  gone, an s.head that names no commit, a broken .git, config, HEAD or index, a git filter set in .git/config, unmerged
+  gone, an s.head that names no commit, a broken .git, config, HEAD or index, a git filter the session added to .git/config or changed there, unmerged
   entries, a lock the agent's git left during the session (read only when the step did not time out, since a timeout
   stops the step's own git, which may leave its lock), a path changed during the session that the step cannot read
   or enter, or, when the step timed out, files changed during the session that number at least 2,000,000 or hold at

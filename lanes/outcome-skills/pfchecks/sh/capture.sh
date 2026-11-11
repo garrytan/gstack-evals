@@ -19,7 +19,9 @@
 # inventory lists whose status changed after <since> was written, stopping once N reaches <files> or B reaches <bytes>
 # (S 1, so N and B are lower bounds), else S 0.
 # "unreadable <repo> <since>" prints each such path, symlinks left out, that this user cannot read, or a directory it
-# cannot enter, one per line. sh/state.sh reads both after a step fails. Every git call here runs with no hooks, no
+# cannot enter, one per line. sh/state.sh reads both after a step fails. "filters <repo>" prints one "<key>\t<value>"
+# line, sorted, for each filter.* value in .git/config, through an include too. pf_turns saves it beside the start
+# inventory as inv.filters, so state.sh can tell the base repo's filters from the session's. Every git call here runs with no hooks, no
 # fsmonitor and no system or global config, so nothing the agent planted in .git/hooks or core.fsmonitor runs, and no
 # excludesFile outside the repository marks a path as forced.
 set -euo pipefail
@@ -117,6 +119,7 @@ case $cmd in
     { walk \( -type f -o -type l \) -cnewer "$3" -print0 | xargs -0 -r stat -c %s -- || true; } 2>/dev/null \
       | awk -v F="$4" -v B="$5" '{ n++; b += $1; if (n >= F + 0 || b >= B + 0) { s = 1; exit } } END { printf "files=%.0f bytes=%.0f stopped=%d\n", n, b, s }'
     ;;
+  filters) { g config --local --includes -z --get-regexp '^filter\.' || true; } | tr '\n\0' '\t\n' | LC_ALL=C sort ;;
   unreadable) { walk ! -type l -cnewer "$3" \( ! -readable -o -type d ! -executable \) -print 2>/dev/null || true; } | sed 's|^\./||' | LC_ALL=C sort ;;
-  *) echo "usage: capture.sh inventory <repo> | commit <repo> <inventory> [<dir>] | size <repo> <since> <files> <bytes> | unreadable <repo> <since>" >&2; exit 2 ;;
+  *) echo "usage: capture.sh inventory <repo> | commit <repo> <inventory> [<dir>] | size <repo> <since> <files> <bytes> | unreadable <repo> <since> | filters <repo>" >&2; exit 2 ;;
 esac

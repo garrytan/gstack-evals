@@ -300,6 +300,7 @@ const sessionTree = (prefix: string) => {
   git(repo, "commit", "-q", "-m", "base");
   Bun.sleepSync(30);
   writeFileSync(join(work, "inv"), "");
+  writeFileSync(join(work, "inv.filters"), "");
   writeFileSync(join(work, "pf-step.stamp"), "");
   Bun.sleepSync(30);
   const state = (pre: string[] = [], env: Record<string, string> = {}) => {
@@ -421,6 +422,24 @@ test("state.sh names every filter key the session set in .git/config, through an
   writeFileSync(join(d, "extra.cfg"), '[filter "y"]\n\tsmudge = cat\n');
   git(repo, "config", "include.path", join(d, "extra.cfg"));
   expect(state()).toEqual(["PF_ARM_STATE filter .git/config sets filter.y.smudge"]);
+  rmSync(d, { recursive: true, force: true });
+});
+
+// Value: protects=the owner's ruling B1: a git filter the dataset image's base repo already had is not the arm's; fails_when=state.sh names a filter key whose value the start inventory saved unchanged, misses one the session added or changed, or names any filter when inv.filters is missing; why_new=state.sh named every filter key in .git/config, so a base filter.lfs turned any infra failure of a post-turn step into E_PF_ARM post_turn; seam=sh/state.sh over <work>/inv.filters, which capture.sh filters writes at the start inventory; no_claim=the routing in pf_turns (pf_agent_sdk_test.py)
+test("state.sh names only the filter keys the session added or changed since the start inventory, and none when inv.filters is missing", () => {
+  const { d, repo, work, state } = sessionTree("pf-state-base-filter-");
+  git(repo, "config", "filter.lfs.clean", "git-lfs clean -- %f");
+  git(repo, "config", "filter.lfs.smudge", "git-lfs smudge -- %f");
+  git(repo, "config", "filter.lfs.required", "true");
+  const saved = spawnSync("bash", [join(SH, "capture.sh"), "filters", repo], { encoding: "utf8" });
+  expect([saved.status, saved.stdout]).toEqual([0, "filter.lfs.clean\tgit-lfs clean -- %f\nfilter.lfs.required\ttrue\nfilter.lfs.smudge\tgit-lfs smudge -- %f\n"]);
+  writeFileSync(join(work, "inv.filters"), saved.stdout);
+  expect(state()).toEqual([]);
+  git(repo, "config", "filter.lfs.clean", "sh -c 'cat'");
+  git(repo, "config", "filter.x.smudge", "cat");
+  expect(state()).toEqual(["PF_ARM_STATE filter .git/config sets filter.lfs.clean", "PF_ARM_STATE filter .git/config sets filter.x.smudge"]);
+  rmSync(join(work, "inv.filters"));
+  expect(state()).toEqual([]);
   rmSync(d, { recursive: true, force: true });
 });
 

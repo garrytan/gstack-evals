@@ -226,7 +226,7 @@ class Session:
         repo, work = cfg["repo"], cfg["work"]
         self.check()
         out["claude_version"] = self.sh("claude --version").stdout.decode(errors="replace").strip()
-        self.sh('mkdir -p "$2" && bash "$1/capture.sh" inventory "$3" > "$2/inv"', cfg["sh_dir"], work, repo)
+        self.sh('mkdir -p "$2" && bash "$1/capture.sh" inventory "$3" > "$2/inv" && bash "$1/capture.sh" filters "$3" > "$2/inv.filters"', cfg["sh_dir"], work, repo)
         task = out["task"] = await self.turn("task", cfg["task_text"], None)
         if task_end(task) in ("upstream", "infra") or not task["session_id"]:
             return out

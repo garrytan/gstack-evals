@@ -169,8 +169,9 @@ def sh(cwd, cmd):
     return r.stdout.strip()
 
 
-def session(scenario="ok", instr=False, cap_stop=False, arm="P", wrapup_refusals=(), wrapup_stops=0, unfinalized=(), task_refusals=(), task_stops=0, failing_closes=None, task_wall=60):
-    """One PfAgent trial; returns the error it raised, the control plane's calls, the stub's log and pf-summary.json."""
+def session(scenario="ok", instr=False, cap_stop=False, arm="P", wrapup_refusals=(), wrapup_stops=0, unfinalized=(), task_refusals=(), task_stops=0, failing_closes=None, task_wall=60, base_lfs=False):
+    """One PfAgent trial; returns the error it raised, the control plane's calls, the stub's log and pf-summary.json.
+    base_lfs sets the filter.lfs keys git lfs install --local writes in the base repo's .git/config."""
     d = Path(tempfile.mkdtemp(prefix="pf-agent-sdk-"))
     DIRS.append(d)
     repo, bindir = d / "testbed", d / "bin"
@@ -181,6 +182,8 @@ def session(scenario="ok", instr=False, cap_stop=False, arm="P", wrapup_refusals
     if instr:
         (repo / "CLAUDE.md").write_text("PF-HOSTILE\n")
     sh(repo, "git init -q -b main && git add -A && git commit -qm base")
+    if base_lfs:
+        sh(repo, "git config filter.lfs.clean 'git-lfs clean -- %f' && git config filter.lfs.smudge 'git-lfs smudge -- %f' && git config filter.lfs.process 'git-lfs filter-process' && git config filter.lfs.required true")
     task = {"repo_dir": str(repo), "commits": 1, "base_commit": sh(repo, "git rev-parse HEAD"), "kind": "PF"}
     (d / "task.json").write_text(json.dumps(task))
     for name, body in (("docker", FAKE_DOCKER), ("claude", STUB_CLAUDE)):
@@ -484,6 +487,19 @@ def test_a_capture_that_fails_on_a_git_filter_the_task_turn_set_is_the_arms():
     check(s.error is None, repr(s.error))
     check(s.summary["refused"].startswith("E_PF_ARM post_turn capture.sh commit: ") and "filter .git/config sets filter.pf.clean" in s.summary["refused"], s.summary.get("refused"))
     check([o["meta"]["phase"] for o in s.control.opens] == ["task"] and s.summary["capture"] is None, s.summary)
+
+def test_a_base_repo_lfs_filter_leaves_an_infra_failure_of_the_capture_infra_and_a_session_filter_still_makes_it_the_arms():
+    def fail(script, args):
+        return subprocess.CompletedProcess([], 1, b"", b"Error response from daemon: container cid is not running\n") if "capture.sh" in script and "commit" in args else None
+
+    base = with_step(fail, base_lfs=True)
+    check(base.error is None, repr(base.error))
+    check(base.summary["refused"].startswith("E_PF_CAPTURE capture.sh commit exited 1: Error response from daemon"), base.summary.get("refused"))
+    check((base.summary.get("post_turn") or {}).get("causes") == [], base.summary.get("post_turn"))
+    added = with_step(fail, scenario="task_filter", base_lfs=True)
+    check(added.error is None, repr(added.error))
+    check(added.summary["refused"].startswith("E_PF_ARM post_turn capture.sh commit: "), added.summary.get("refused"))
+    check((added.summary.get("post_turn") or {}).get("causes") == ["filter .git/config sets filter.pf.clean", "filter .git/config sets filter.pf.required"], added.summary.get("post_turn"))
 
 
 def test_a_lock_the_harness_capture_leaves_as_it_times_out_stays_infra():
