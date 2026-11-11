@@ -30,8 +30,34 @@ The lane for the eng-review build read (prereg 2026-11-11-geva-522-eng-review-bu
   subcommands. Each paid stage runs under one lease on its item and stops if the lease is still open after it.
 - launch.ts: the paid stages' real launchers: the product-value meter for notes, the Docker rig for reviews, and the
   outcome driver with Harbor and real_agent for builds.
+- session-image.ts: the build session's image. It layers Claude Code at the review stage's pin (docker/host-cli.json
+  and the checksum line in docker/trial.Dockerfile) and a pinned Node on the unit image, which keeps its id for the
+  grader. It adds no gstack and no drive, and it sets CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1.
+- e2e.ts: the build stage's paid path end to end, keyless. It builds one Go fixture unit and runs it through the build
+  launcher, the outcome driver on a temporary ledger, Harbor, real_agent, the sandbox sidecar and Claude Code against a
+  stub upstream. Then it grades the built tree. `bun lanes/eng-build/e2e.ts --harbor <harbor bin>` prints one PASS or
+  FAIL line per check.
 - dryrun.ts, dryrun-seams.ts, dryrun-pipeline.ts: `gstack-evals eb dryrun`. Seams that need Docker run under
   GSTACK_EVALS_DOCKER=1 and print SKIP otherwise, which is never a pass.
+
+## Run steps for the build items
+
+The build launcher runs on the outcome driver, and the driver serves only an item that belongs to a program. Before the
+first build, record the program's envelope once. Then init each build item into it with the one skill the build stage
+charges, eb-build (ledger.ts EB_PROGRAM and EB_BUILD_SKILL). The driver reserves an item's whole remaining cap when it
+opens a lease, so the envelope must hold every build item's plan cap:
+
+```
+gstack-evals ledger envelope --program geva-522-eb --cap 5880 --skill-cap 5880 --skills eb-build --credit-rate 1 --words <owner's words> --by <who> --source <ref>
+gstack-evals ledger init --item eb-builds-opus --cap 2150 --admission required --program geva-522-eb --skills eb-build --words <owner's words> --by <who> --source <ref>
+gstack-evals ledger init --item eb-stage-sol --cap 2400 --admission required --program geva-522-eb --skills eb-build --words <owner's words> --by <who> --source <ref>
+gstack-evals ledger init --item eb-stage-particle --cap 1330 --admission required --program geva-522-eb --skills eb-build --words <owner's words> --by <who> --source <ref>
+```
+
+An item's program is fixed at init, so these steps come before any lease on the item. The run host needs Docker, the
+review stage's trial image (`gstack-evals doctor`), and Harbor at quick/laneb/runner/vm-bootstrap.sh's pin. It serves the
+sandbox sidecar (`gstack-evals real sandbox serve`) and passes its control URL as `eb build --sidecar`. Run e2e.ts once
+on that host before the first paid build.
 
 Harness constants (not frozen by the prereg): NOTE_MAX_TOKENS in launch.ts caps each note writer and audit answer at
 4000 output tokens. The prereg fixes the note as one paragraph and sets no token count.
