@@ -269,10 +269,10 @@ function ownCases(): Record<string, Case> {
       const w = (c: number) => untestedWhy({ headroom: true, arm: "precut", gate: fullGate(), coverage: c, plainCoverage: 1, reachGuard: null });
       return "0.89 " + (w(0.89) ?? "tested") + "; 0.90 " + (w(0.9) ?? "tested");
     },
-    "keep at functional lower bounds -0.10 and -0.11": () => {
+    "keep at functional lower bounds -0.099, -0.10 and -0.11": () => {
       const step = { test: "precut" as const, status: "confirmatory" as const, reading: helps, word: "helps" as const, rejects: true, why: "" };
       const v = (lo: number) => verdict("precut", step, facts(helps, { functional: RD(0, lo, 0.1, 0.9) })).verdict;
-      return "-0.10 " + v(-0.1) + "; -0.11 " + v(-0.11);
+      return "-0.099 " + v(-0.099) + "; -0.10 " + v(-0.1) + "; -0.11 " + v(-0.11);
     },
     "candidate cut at upper bounds 0.049 and 0.050": () => {
       const step = (r: Reading) => ({ test: "candidate" as const, status: "confirmatory" as const, reading: r, word: null, rejects: false, why: "does not reject" });
@@ -517,7 +517,7 @@ export const EXPECTED: Record<string, string> = {
   "pooled with arms out at the gate": "one out: tested; two out: untested (fewer than 2 arms passed the exposure gate); member under 0.80 late: untested (member engphase: exposure 0.79 is under 0.80); member stopped: untested (member precut: stopped at the interim exposure check)",
   "reach guard -0.051 and -0.050": "-0.051 reach guard: reach minus plain upper bound -0.051 is below -0.05; -0.050 tested",
   "coverage 0.89 and 0.90": "0.89 coverage 0.89 is under 0.90; 0.90 tested",
-  "keep at functional lower bounds -0.10 and -0.11": "-0.10 KEEP; -0.11 helps",
+  "keep at functional lower bounds -0.099, -0.10 and -0.11": "-0.099 KEEP; -0.10 helps; -0.11 helps",
   "candidate cut at upper bounds 0.049 and 0.050": "0.049 CUT-CANDIDATE; 0.050 no measurable difference; 0.01 to 0.04 helps CUT-CANDIDATE",
   "cut needs exposure, headroom and coverage": "exposure 0.79 untested, no headroom untested, coverage 0.85 untested",
   "precut and engphase never read cut": "precut no measurable difference, engphase no measurable difference",

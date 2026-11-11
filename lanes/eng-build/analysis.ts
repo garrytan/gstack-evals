@@ -346,9 +346,9 @@ export function verdict(arm: SkillArm, step: Step, f: ArmFacts): { verdict: Verd
   const r = f.reading;
   if (r === null) return { verdict: "untested", why: "no paired units" };
   if (arm === "candidate" && at(r.hi) < FROZEN.cutUpper) return { verdict: "CUT-CANDIDATE", why: "upper bound " + fmt(r.hi) + " is below +" + FROZEN.cutUpper.toFixed(2) };
-  const fnOk = f.functional !== null && at(f.functional.lo) >= FROZEN.keepFunctionalLower;
-  if (step.status === "confirmatory" && step.word === "helps" && fnOk) return { verdict: "KEEP", why: "helps in the fixed sequence; functional solved minus plain lower bound " + fmt(f.functional!.lo) + " is not below " + FROZEN.keepFunctionalLower.toFixed(2) };
-  if (step.status === "confirmatory") return { verdict: step.word!, why: step.why + (step.word === "helps" ? "; functional solved minus plain lower bound " + fmt(f.functional?.lo) + " is below " + FROZEN.keepFunctionalLower.toFixed(2) + ", so no KEEP" : "") };
+  const fnOk = f.functional !== null && at(f.functional.lo) > FROZEN.keepFunctionalLower;
+  if (step.status === "confirmatory" && step.word === "helps" && fnOk) return { verdict: "KEEP", why: "helps in the fixed sequence; functional solved minus plain lower bound " + fmt(f.functional!.lo) + " is above " + FROZEN.keepFunctionalLower.toFixed(2) };
+  if (step.status === "confirmatory") return { verdict: step.word!, why: step.why + (step.word === "helps" ? "; functional solved minus plain lower bound " + fmt(f.functional?.lo) + " is not above " + FROZEN.keepFunctionalLower.toFixed(2) + ", so no KEEP" : "") };
   return { verdict: holdsZero(r) ? "no measurable difference" : "not shown", why: "descriptive: " + step.why };
 }
 

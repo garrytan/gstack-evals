@@ -61,6 +61,7 @@ describe("sequence, Holm and verdicts", () => {
     const step = { test: "candidate" as const, status: "confirmatory" as const, reading: r, word: "helps" as const, rejects: true, why: "" };
     expect(verdict("candidate", step, facts(r)).verdict).toBe("CUT-CANDIDATE");
     expect(verdict("precut", { ...step, test: "precut" }, facts(r)).verdict).toBe("KEEP");
+    expect(verdict("precut", { ...step, test: "precut" }, facts(r, { functional: RD(0, -0.1, 0.1, 1) })).verdict).toBe("helps");
     expect(verdict("candidate", step, facts(r, { untested: "exposure 0.79 is under 0.80" })).verdict).toBe("untested");
   });
   test("a descriptive arm never reads helps", () => {
