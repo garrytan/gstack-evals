@@ -55,7 +55,7 @@ function find(dir: string, name: string): string | null {
 export function sessionText(u: SmUnit, s: PlannedSession, issue: string, o: { scope?: "folder" | "file"; issue?: "full" | "cut" } = {}): { scope: string; scope_mode: "folder" | "file" | null; instruction: string; cell: string } {
   if (s.stage === "first" && o.issue) return smFail("E_SM_ARM", "--issue is a follow-on's; " + s.cell + " is a first stage, whose turn names the scope");
   if (s.stage === "followon" && o.scope) return smFail("E_SM_ARM", "--scope is a first stage's; " + s.cell + " is a follow-on, whose turn is the issue");
-  const folder = u.scope?.dir ?? smFail("E_SM_ARM", "unit " + u.id + " has no scope");
+  const folder = u.scope?.dir ?? "";
   if (s.stage === "followon") {
     if (o.issue !== "cut") return { scope: folder, scope_mode: null, instruction: issue, cell: s.cell };
     const cut = issueCut(issue);
@@ -108,7 +108,7 @@ export function runSession(i: RunInput): { record: SessionRecord; image: Session
   writeFileSync(join(task, "instruction.md"), text.instruction);
   const label = u.id + "/" + s.model + "/" + text.cell;
   const taskJson = join(i.out, "task.json");
-  writeFileSync(taskJson, JSON.stringify({ repo_dir: u.repo_dir, commits: image.commits, base_commit: image.head, kind: "SM", scope: text.scope, ...(told ? { qa_sha: i.qaSha, qa_home: image.qa_home!.paths } : {}) }));
+  writeFileSync(taskJson, JSON.stringify({ repo_dir: u.repo_dir, commits: image.commits, base_commit: image.head, kind: "SM", scope: text.scope || smFail("E_SM_ARM", "unit " + u.id + " has no scope"), ...(told ? { qa_sha: i.qaSha, qa_home: image.qa_home!.paths } : {}) }));
   const manifest = join(i.out, "images.json");
   const manifestSha = sessionManifest(manifest, label, image);
   const armTar = join(i.out, "arm.tar");
