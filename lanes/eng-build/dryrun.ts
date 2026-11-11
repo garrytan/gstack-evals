@@ -38,7 +38,7 @@ export const SEAMS = {
   "recipe python": { seam: "unit builder recipe", fixture: "a Python package (pip, pytest)", expect: "per-case results at base and merge" },
   "adapter jest": { seam: "verifier runner adapter", fixture: "the jest negative fixture: a pass, an assertion failure, a missing export and a load error", expect: "pass assert missing_name load" },
   "adapter vitest": { seam: "verifier runner adapter", fixture: "the vitest negative fixture", expect: "pass assert missing_name load" },
-  "adapter mocha": { seam: "verifier runner adapter", fixture: "the mocha negative fixture", expect: "pass assert missing_name load" },
+  "adapter mocha": { seam: "verifier runner adapter", fixture: "the mocha negative fixture (an ES module's missing export fails at link time, so it reads load)", expect: "pass assert load load" },
   "adapter node-test": { seam: "verifier runner adapter", fixture: "the node:test negative fixture", expect: "pass assert missing_name load" },
   "adapter cargo": { seam: "verifier runner adapter", fixture: "the cargo negative fixture (a missing name is a compile error)", expect: "pass assert compile" },
   "classify fail-to-pass": { seam: "unit builder case rule", fixture: "assert on merged and on the fix's parent, pass on the fix, in 3 runs, fix touching merged lines", expect: "aftermath" },
@@ -591,6 +591,7 @@ export interface DryRunResult {
   ok: boolean;
   lines: string[];
   failed: string[];
+  skipped: string[];
 }
 
 export async function runCases(o: { part: "own" | "all"; seams?: Seams; expected?: Record<string, string> }): Promise<Map<string, string>> {
@@ -619,16 +620,21 @@ export async function runCases(o: { part: "own" | "all"; seams?: Seams; expected
   return got;
 }
 
-/** The run-side check: every expected case needs its exact line, by name; a missing, extra or "undefined" line fails. */
+/** The run-side check: every expected case needs its exact line, by name; a missing, extra or "undefined" line fails.
+ * A seam that could not run here returns "SKIP <reason>": it prints as SKIP with its reason and the run is not ok. */
 export function check(got: Map<string, string>, expected: Record<string, string>, part: "own" | "all"): DryRunResult {
   const lines: string[] = [];
   const failed: string[] = [];
+  const skipped: string[] = [];
   const want = Object.entries(expected).filter(([name]) => part === "all" || !name.startsWith("seam "));
   for (const [name, line] of want) {
     const g = got.get(name);
     if (g === undefined) {
       failed.push(name);
       lines.push("FAIL " + name + ": no line was printed");
+    } else if (g.startsWith("SKIP ")) {
+      skipped.push(name);
+      lines.push("SKIP " + name + ": " + g.slice(5) + "; not a pass");
     } else if (g.includes("undefined")) {
       failed.push(name);
       lines.push("FAIL " + name + ": the line holds the word undefined: " + g);
@@ -643,7 +649,7 @@ export function check(got: Map<string, string>, expected: Record<string, string>
       lines.push("FAIL " + name + ": printed a line no expected case names");
     }
   }
-  return { ok: failed.length === 0, lines, failed };
+  return { ok: failed.length === 0 && skipped.length === 0, lines, failed, skipped };
 }
 
 export async function dryRun(o: { part?: "own" | "all"; seams?: Seams; expected?: Record<string, string> } = {}): Promise<DryRunResult> {

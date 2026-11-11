@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { wiredSeams } from "../../lanes/eng-build/dryrun-seams.ts";
 import { check, dryRun, EXPECTED, SEAMS, type Seams } from "../../lanes/eng-build/dryrun.ts";
 
 const stubs = Object.fromEntries(Object.entries(SEAMS).map(([k, v]) => [k, async () => v.expect])) as Seams;
@@ -8,6 +9,19 @@ describe("dry run", () => {
     const r = await dryRun({ part: "own" });
     expect(r.failed).toEqual([]);
     expect(r.ok).toBe(true);
+  });
+  test("without Docker the wired seams run the pure rules, and every Docker seam prints SKIP with its reason, never a pass", async () => {
+    const { seams, close } = wiredSeams({});
+    try {
+      const r = await dryRun({ part: "all", seams });
+      expect(r.ok).toBe(false);
+      expect(r.failed).toEqual(["seam transplant catch", "seam transplant no-catch"]);
+      expect(r.skipped).toEqual(["recipe go", "recipe node", "recipe node-rust", "recipe python", "adapter jest", "adapter vitest", "adapter mocha", "adapter node-test", "adapter cargo", "classify t-case", "region product-hash", "rebuild stale-artifact", "leak image"].map((s) => "seam " + s));
+      expect(r.lines).toContain("SKIP seam leak image: needs Docker: set GSTACK_EVALS_DOCKER=1 to build and grade its fixture unit; not a pass");
+      for (const s of ["classify fail-to-pass", "classify anchor", "region rust-inline", "stophook blocks", "bundle cap"]) expect(r.lines).toContain("ok seam " + s + ": " + SEAMS[s as keyof typeof SEAMS].expect);
+    } finally {
+      close();
+    }
   });
   test("all fails while a seam is open, naming the case", async () => {
     const r = await dryRun({ part: "all", seams: { ...stubs, "bundle cap": undefined } });

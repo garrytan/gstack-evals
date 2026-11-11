@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { CODES, docAnchor, type ReasonCode } from "../../src/errors/codes.ts";
 import { analyze } from "./analysis.ts";
 import { dryRun } from "./dryrun.ts";
+import { wiredSeams } from "./dryrun-seams.ts";
 import { EbError, fail } from "./errors.ts";
 import { SIZE } from "./frozen.ts";
 import { exposureGate, gateState, pilotLine, pilotReading } from "./gates.ts";
@@ -125,10 +126,17 @@ const items: Run = (_a, io) => {
 const dryrun: Run = async (a, io) => {
   const part = a.flags.get("--part") ?? "all";
   if (part !== "own" && part !== "all") fail("E_USAGE", "--part is own or all");
-  const r = await dryRun({ part: part as "own" | "all" });
-  for (const l of r.lines) (l.startsWith("FAIL") ? io.err : io.out)(l);
+  const wired = part === "all" ? wiredSeams() : null;
+  let r: Awaited<ReturnType<typeof dryRun>>;
+  try {
+    r = await dryRun({ part: part as "own" | "all", ...(wired ? { seams: wired.seams } : {}) });
+  } finally {
+    wired?.close();
+  }
+  for (const l of r.lines) (l.startsWith("FAIL") || l.startsWith("SKIP") ? io.err : io.out)(l);
   if (!r.ok) {
-    io.err("E_EB_DRYRUN_FAIL " + r.failed.length + " case(s) failed: " + r.failed.join(", "));
+    const failed = r.failed.length ? r.failed.length + " case(s) failed: " + r.failed.join(", ") : "no case failed";
+    io.err("E_EB_DRYRUN_FAIL " + failed + (r.skipped.length ? "; " + r.skipped.length + " seam(s) skipped, never a pass: " + r.skipped.join(", ") : ""));
     return 2;
   }
   io.out("dry run: " + r.lines.length + " cases, every line matches");
