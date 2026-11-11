@@ -268,7 +268,7 @@ export async function retryAfter(i: PfRunInput, attempt: 1 | 2, summary: Record<
   }
   const refusedTask = !unread && record.cap_stop && opens.length === 1 && (opens[0] as { phase?: unknown } | null)?.phase === "task";
   if ((opens.length || unread) && !refusedTask) {
-    const stop = await fetch(i.control + "/stop", { method: "POST", signal: AbortSignal.timeout(10_000) }).then((r) => (r.ok ? null : "it answered " + r.status), (e: Error) => e.message);
+    const stop = await fetch(i.control + "/stop", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: "E_PF_FINALIZE_HALT", session: label }), signal: AbortSignal.timeout(10_000) }).then((r) => (r.ok ? null : "it answered " + r.status), (e: Error) => e.message);
     pfFail("E_PF_FINALIZE_HALT", label + ": " + (ended ?? "the attempt ended") + (unread ? " with an open log run.ts cannot read in full (" + join(ev!, OPENS) + ": " + unread + "), so pf_turns may have opened a slot" : " after pf_turns opened a slot (" + join(ev!, OPENS) + ")") + ", and no summary names that slot's counts, so it may have spent; the session halts with no retry and no session record, and " + (stop ? "pf-run's POST " + i.control + "/stop failed (" + stop + "), so the driver may still serve opens: stop it by hand; " : "pf-run stopped the driver through POST " + i.control + "/stop, so the item opens nothing more until the Captain rules on the lease's journal; ") + dir);
   }
   return attempt === 1 && retriesSession(summary, record);

@@ -210,6 +210,47 @@ test("a no-summary halt after a logged open stops the driver through POST /stop,
   local.close?.();
 });
 
+// Value: protects=the Captain's ruling C1 item 3 on #327: pf-run's halt stop is a halt the driver records, never a completed run, while an operator's stop keeps its meaning; fails_when=the stop from retryAfter's no-summary halt leaves no halt_stop line naming E_PF_FINALIZE_HALT and the session in sessions.jsonl or no E_PF_FINALIZE_HALT log line, settles any stage as completed (an unrun one included), ends the driver with exit 0, writes a halt or stop line, or keeps the next launch from serving the items, or an operator's plain POST /stop or served.stop() (SIGTERM's path) stops settling stages with no live session as completed with exit 0; why_new=pf-run sent a bare POST /stop, so the driver marked every stage with no live session ended=completed, unrun ones included, and exited 0; seam=run.ts retryAfter's stop request over driver/stage.ts POST /stop, settleStage and finish; no_claim=whether an operator's stop should settle unrun stages as completed (left as it was, by the ruling)
+test("pf-run's halt stop records E_PF_FINALIZE_HALT and the session, settles no stage as completed and exits 2; a plain POST /stop or SIGTERM's stop still settles completed and exits 0", async () => {
+  const stages: StageSpec[] = [{ item: "pf-opus", arm: "pf-opus", arms: TOLD }, { item: "pf-sol", arm: "pf-sol", arms: TOLD }];
+  const run = async (how: "plain" | "signal" | "halt") => {
+    const l = ledger({ "pf-opus": { cap: 100 }, "pf-sol": { cap: 100 } });
+    const lines: string[] = [];
+    const served = await l.serve(stages, { log: (line) => lines.push(line) });
+    const { open, closeAll } = client(served.control);
+    expect((await open({ arm: "pf:N", cap: 13, phase: "task", task: "u1" })).status).toBe(200);
+    await closeAll();
+    if (how === "plain") expect((await fetch(served.control + "/stop", { method: "POST" })).status).toBe(200);
+    if (how === "signal") void served.stop();
+    if (how === "halt") {
+      const ev = join(l.root, "ev");
+      mkdirSync(ev);
+      writeFileSync(join(ev, "pf-opens.jsonl"), JSON.stringify({ phase: "task", rerun: null, at: 2.5 }) + "\n");
+      const i = { session: { unit: "u2", part: 0, index: 1, model: OPUS, arm: "N", item: "pf-opus" }, names: "short", control: served.control, effort: null } as unknown as PfRunInput;
+      await expect(retryAfter(i, 1, null, pfRecord(i, 1, null, ev), "/out/a1", "Harbor exited 1", ev)).rejects.toThrow(/pf-run stopped the driver through POST /);
+    }
+    const code = await served.done;
+    const events = readFileSync(join(l.root, "run", "sessions.jsonl"), "utf8").trim().split("\n").map((e) => JSON.parse(e) as Record<string, any>);
+    return { ...l, code, lines, events, settled: events.filter((e) => e.event === "settled").map((e) => e.item + "=" + e.ended).sort() };
+  };
+  for (const how of ["plain", "signal"] as const) {
+    const r = await run(how);
+    expect([r.code, r.settled]).toEqual([0, ["pf-opus=completed", "pf-sol=completed"]]);
+    expect(r.events.filter((e) => e.event === "halt_stop")).toEqual([]);
+    r.local.close?.();
+  }
+  const halt = await run("halt");
+  expect([halt.code, halt.settled]).toEqual([2, ["pf-opus=failed", "pf-sol=failed"]]);
+  expect(halt.events.filter((e) => e.event === "halt_stop").map((e) => [e.code, e.session])).toEqual([["E_PF_FINALIZE_HALT", "u2/claude-opus-5-5/N/1 attempt 1"]]);
+  expect(halt.lines.filter((line) => line.startsWith("E_PF_FINALIZE_HALT "))).toEqual([expect.stringContaining("u2/claude-opus-5-5/N/1 attempt 1")]);
+  expect(halt.events.filter((e) => e.event === "halt" || e.event === "stop")).toEqual([]);
+  const again = await halt.serve(stages);
+  expect(again.stages.map((s) => s.item)).toEqual(["pf-opus", "pf-sol"]);
+  void again.stop();
+  expect(await again.done).toBe(0);
+  halt.local.close?.();
+});
+
 test("pf-blind serves pf:blind on Opus only, and the doubled allowance table changes the task cap a told open must name", async () => {
   const { serve, local } = ledger({ "pf-blind": { cap: 100 }, "pf-opus": { cap: 100 } });
   const doubled = costReading({ P: [10, 10, 10], C: [1, 1], N: [1] }).allowance;
