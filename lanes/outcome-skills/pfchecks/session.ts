@@ -83,6 +83,11 @@ export interface PfSessionRecord {
   schema: "pf-session.v1"; unit: string; part: number; index: number; model: string; arm: PfArm; item: string; lease_id: string;
   attempt: 1 | 2; names: Names; task: { end: EndKind; turns: number | null; wall_ms: number; spent_micros: number };
   wrapup: { ends: EndKind[]; turns: number | null; spent_micros: number } | null; wrapup_end: EndKind | null; gap: string | null;
+  /** Why an E_PF_ARM gap: tree_check (the tree or home check refused before any open) or head_mismatch (the S bundle's HEAD
+   *  is not the head capture.sh committed); null for every other gap. */
+  gap_reason: string | null;
+  /** The unit's base commit (the session image's head); scoring checks that S's root is this commit. */
+  base_commit: string | null;
   capture: Capture | null; forced: string[]; discarded: string[]; checks: string | null; s: { repo: string; ref: string } | null; transcript: string | null;
   claude_session: string | null; effort: Record<string, unknown> | null; questions: { ask_user_question: number; prose: number };
   /** The driver refused the task open with 409 CAP_STOP (the agent's LedgerCapStop): the part ends incomplete, with no gap and no retry. */

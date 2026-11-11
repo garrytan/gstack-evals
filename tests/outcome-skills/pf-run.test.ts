@@ -3,6 +3,7 @@
 // pf-summary.json (run.ts pfRecord): the end rules of both turns, the whole-session retry and the tree-check refusal.
 // Keyless and docker-free: a hand-made unit dir and a made-up session image.
 import { afterAll, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -285,4 +286,28 @@ test("pfRecord: a wrap-up upstream or infra end reruns the wrap-up once on the s
   expect(pfRecord(i, 1, summary({ task: turn("completed"), wrapup: [turn("error_result"), turn("error")] }), null)).toMatchObject({ gap: "E_PF_INFRA_GAP" });
   expect(pfRecord(i, 1, summary({ task: turn("completed"), wrapup: [turn("error_result")] }), null)).toMatchObject({ wrapup_end: null, gap: "E_PF_INFRA_GAP" });
   expect(pfRecord(i, 1, summary({ task: turn("completed"), wrapup: [] }), null)).toMatchObject({ wrapup: null, gap: "E_PF_INFRA_GAP" });
+});
+
+// Value: protects=section 6.8's S custody from the task turn's capture to the exported bundle; fails_when=an S bundle whose HEAD is not the head capture.sh committed scores, retries, or leaves the session with no record, or the record drops the unit's base commit; why_new=the bundle was trusted as S whatever its HEAD; seam=run.ts pfRecord over the attempt's s.bundle; no_claim=S's root against the base commit (pf-score.test.ts)
+test("pfRecord: an S bundle whose HEAD is not the head captured after the task turn is gap E_PF_ARM (head_mismatch) with no retry, and the record carries the unit's base commit", () => {
+  const repo = temp("pf-run-s-"), ev = temp("pf-run-ev-");
+  const gitc = (...a: string[]) => spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...a], { cwd: repo, encoding: "utf8" }).stdout.trim();
+  gitc("init", "-q");
+  gitc("commit", "-q", "--allow-empty", "-m", "session end");
+  gitc("bundle", "create", join(ev, "s.bundle"), "HEAD");
+  const head = gitc("rev-parse", "HEAD");
+  const i = input("C");
+  const at = (h: string) => ({ ...summary({ task: turn("completed"), wrapup: [turn("completed")] }), capture: "PF_CAPTURE changed=1 deleted=0 forced=0 head=" + h + "\n" });
+  expect(pfRecord(i, 1, at(head), ev, null, image.head)).toMatchObject({ gap: null, gap_reason: null, base_commit: image.head, s: { repo: join(ev, "s.bundle"), ref: "HEAD" }, wrapup_end: "completed" });
+  const moved = at("f".repeat(40));
+  const bad = pfRecord(i, 1, moved, ev, null, image.head);
+  expect(bad).toMatchObject({ gap: "E_PF_ARM", gap_reason: "head_mismatch", base_commit: image.head, wrapup_end: "completed" });
+  expect(retriesSession(moved, bad)).toBe(false);
+  expect(retryAfter(i, 1, moved, bad, "/out/a1")).toBe(false);
+  const file = join(temp("pf-run-head-"), "session.json");
+  finishSession(file, bad);
+  expect(JSON.parse(readFileSync(file, "utf8"))).toMatchObject({ gap: "E_PF_ARM", gap_reason: "head_mismatch" });
+  writeFileSync(join(ev, "s.bundle"), "not a bundle\n");
+  expect(pfRecord(i, 1, at(head), ev, null, image.head)).toMatchObject({ gap: "E_PF_ARM", gap_reason: "head_mismatch" });
+  expect(pfRecord(i, 1, { refused: "E_PF_ARM the tree holds CLAUDE.md", task: null, wrapup: [], slots: [], events: [] }, null)).toMatchObject({ gap: "E_PF_ARM", gap_reason: "tree_check" });
 });

@@ -88,7 +88,7 @@ test("the session record refuses a plugin on C and a record with no S", () => {
   const dir = mkdtempSync(join(tmpdir(), "pf-rec-"));
   const r: PfSessionRecord = {
     schema: "pf-session.v1", unit: "u", part: 1, index: 0, model: "claude-opus-5-5", arm: "C", item: "pf-opus", lease_id: "l", attempt: 1, names: "short",
-    task: { end: "completed", turns: 3, wall_ms: 1, spent_micros: 1 }, wrapup: { ends: ["completed"], turns: 1, spent_micros: 1 }, wrapup_end: "completed", gap: null,
+    task: { end: "completed", turns: 3, wall_ms: 1, spent_micros: 1 }, wrapup: { ends: ["completed"], turns: 1, spent_micros: 1 }, wrapup_end: "completed", gap: null, gap_reason: null, base_commit: "b".repeat(40),
     capture: null, forced: [], discarded: [], checks: null, s: { repo: "/r", ref: "HEAD" }, transcript: null, claude_session: null, effort: null, questions: { ask_user_question: 0, prose: 0 }, cap_stop: false,
     env: { CLAUDE_CODE_DISABLE_BUNDLED_SKILLS: "1", CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: "2" }, disallowed_tools: ["WebSearch", "WebFetch"], plugin: null, tools: "pf-tools-x",
     in_flight: { reservation_bound: 0, subagents: 0, subagent_cap_refused: 0 },

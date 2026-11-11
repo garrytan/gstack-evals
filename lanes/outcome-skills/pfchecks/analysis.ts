@@ -5,7 +5,7 @@
 // exact McNemar p and the counts worse and better beside them. Per model the same contrasts carry the exact McNemar p
 // with Holm over P minus N and P minus C; C minus N is descriptive. Beside every verdict: the gap worst case, the reading
 // that scores fix-merge conflicts and fix-tree rebuild failures as misses, the reading that scores tree-check refusals
-// (E_PF_ARM) as misses for the arm that produced them, the static-text, API-guess and compile-blocked readings, the
+// and S base or head mismatches (E_PF_ARM) as misses for the arm that produced them, the static-text, API-guess and compile-blocked readings, the
 // E_PF_ARM and E_PF_WRAPUP_ALLOWANCE gaps per arm and model, and the exposure rates. Strata are descriptive.
 import { exactMcNemar, holmAdjusted, seededRandom } from "../../../src/runner/stats/paired.ts";
 import type { Arm } from "./items.ts";
@@ -17,7 +17,7 @@ export const READINGS = ["primary", "worst_case", "conflict_as_miss", "arm_refus
 export type Reading = (typeof READINGS)[number];
 export const MISS_GAPS = new Set(["E_PF_FIX_CONFLICT", "E_PF_REBUILD_FIX"]);
 /** Gaps an arm's own session can cause, counted per arm and model beside every verdict. */
-export const NAMED_GAPS = { E_PF_ARM: "tree-check refusals", E_PF_WRAPUP_ALLOWANCE: "wrap-up refused for its allowance" } as const;
+export const NAMED_GAPS = { E_PF_ARM: "tree-check refusals and S base or head mismatches", E_PF_WRAPUP_ALLOWANCE: "wrap-up refused for its allowance" } as const;
 
 export function valueOf(r: Row, k: Reading): Score {
   if (k === "primary") return r.score;

@@ -68,11 +68,29 @@ test("tree-check refusals and wrap-up allowance gaps: counted per arm and model 
   expect(verdicts.length).toBe(3 + 3 * 3);
   for (const [, i] of verdicts) {
     const block = lines.slice(i + 1, lines.findIndex((l, j) => j > i && !l.startsWith("    ")));
-    expect(block.some((l) => l.startsWith("    E_PF_ARM gaps (tree-check refusals):"))).toBe(true);
+    expect(block.some((l) => l.startsWith("    E_PF_ARM gaps (tree-check refusals and S base or head mismatches):"))).toBe(true);
     expect(block.some((l) => l.startsWith("    E_PF_WRAPUP_ALLOWANCE gaps (wrap-up refused for its allowance):"))).toBe(true);
     expect(block.some((l) => l.startsWith("    arm_refusal_as_miss:"))).toBe(true);
   }
   expect(lines.find((l) => l.startsWith("    E_PF_ARM gaps") && l.includes(OPUS + " P 2"))).toBeDefined();
+});
+// Value: protects=section 12's treatment of S base and head mismatches, the same as tree-check refusals; fails_when=a mismatch gap enters the contrast, misses the cell's 10% incomplete line, prints under no code beside a verdict, or is not a miss for its own arm in the as-miss reading; why_new=the two gaps are new and must not let an arm improve its rate by tampering with S; seam=score.ts rowOf over scoreSession's gap records, then analysis.ts analyse and report; no_claim=where the gaps arise (pf-run.test.ts, pf-score.test.ts)
+test("S base and head mismatches read as E_PF_ARM: out of the contrast, toward the incomplete line, printed per arm and model beside every verdict, and misses for their own arm", () => {
+  const rec = (unit: string, reason: string) => ({ schema: "pf-catch.v1" as const, unit, repo: "r" + (Number(unit.slice(1)) % 6), month: "2026-07", stratum: "july-2026", model: OPUS, arm: "P" as const, in_flight: null, score: null, gap: "E_PF_ARM", gap_reason: reason, readings: { no_static: null, no_api_guess: null, compile_rerun: null } });
+  const swap: Record<string, string> = { u0: "base_mismatch", u1: "head_mismatch" };
+  const g = rows().map((r) => (r.model === OPUS && r.arm === "P" && swap[r.unit] ? rowOf(rec(r.unit, swap[r.unit]!) as any) : r));
+  expect(g.filter((r) => r.gap === "E_PF_ARM").map((r) => [r.unit, r.score])).toEqual([["u0", null], ["u1", null]]);
+  expect(cellsOf(g).find((c) => c.model === OPUS && c.arm === "P")).toMatchObject({ units: 12, gaps: 2, incomplete: true });
+  const a = analyse(g, 5);
+  const pn = a.pooled["P-N"];
+  expect(pn.n).toBe(34);
+  expect(pn.verdict).toBe("INCOMPLETE");
+  expect(pn.readings.arm_refusal_as_miss!.n).toBe(36);
+  expect(pn.readings.arm_refusal_as_miss!.delta).toBeCloseTo((pn.delta * 34 - 2) / 36);
+  expect(pn.named_gaps.E_PF_ARM![OPUS]).toEqual({ P: 2, N: 0 });
+  expect(a.incomplete).toEqual([{ model: OPUS, arm: "P", units: 12, gaps: 2, incomplete: true }]);
+  const lines = report(a);
+  expect(lines.filter((l) => l.startsWith("    E_PF_ARM gaps (tree-check refusals and S base or head mismatches): ") && l.includes(OPUS + " P 2")).length).toBe(4);
 });
 test("breaks secondary: sessions measured, with a break and not measured, counted per arm and model", () => {
   const b = rows().map((r): Row => (r.model === OPUS && r.arm === "P" && r.unit === "u0" ? { ...r, breaks: null, breaks_unmeasured: true } : r.model === OPUS && r.arm === "P" && r.unit === "u1" ? { ...r, breaks: 3, breaks_unmeasured: false } : r.model === SOL && r.arm === "N" && r.unit === "u2" ? { ...r, breaks: 0, breaks_unmeasured: false } : r));

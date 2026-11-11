@@ -7,7 +7,7 @@
 // infra retries the whole session once as attempt 2 from a fresh container, naming meta.rerun; a task open the driver
 // refuses with 409 CAP_STOP (LedgerCapStop) ends the part as a cap stop, never retried. Every provider key is
 // unset for Harbor and HARBOR_TELEMETRY is 0; the only credential the session holds is the driver's slot token.
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -128,6 +128,11 @@ function harbor(bin: string, argv: string[], env: Record<string, string>, timeou
 }
 
 const armRefusal = (summary: Record<string, any> | null) => typeof summary?.refused === "string" && /^E_PF_ARM/.test(summary.refused);
+/** The commit an S bundle's HEAD names, or null when git cannot read the bundle. */
+function bundleHead(file: string): string | null {
+  const r = spawnSync("git", ["bundle", "list-heads", file], { encoding: "utf8" });
+  return r.status === 0 ? (/^([0-9a-f]{40}) HEAD$/m.exec(r.stdout)?.[1] ?? null) : null;
+}
 /** Whether an attempt's end retries the whole session from a fresh container: a task turn's upstream or infra end does,
  *  a tree or home refusal before any open or a cap stop never does. */
 export const retriesSession = (summary: Record<string, any> | null, record: PfSessionRecord): boolean => !record.cap_stop && !armRefusal(summary) && taskStep([record.task.end]).action === "retry_session";
@@ -139,8 +144,10 @@ export const retriesSession = (summary: Record<string, any> | null, record: PfSe
  *  an allowance stop reads first, so a turn that also counts one stays an allowance end. The effort fields are the task slot's, as the driver's
  *  proxy recorded them; with i.effort, missing or different fields make the session gap E_PF_INFRA_GAP. exception is
  *  Harbor's exception type for the trial: LedgerCapStop (the driver refused the task open with 409 CAP_STOP) is a cap stop,
- *  which ends the part with no gap and no retry, as the other lanes read it. */
-export function pfRecord(i: PfRunInput, attempt: 1 | 2, summary: Record<string, any> | null, ev: string | null, exception: string | null = null): PfSessionRecord {
+ *  which ends the part with no gap and no retry, as the other lanes read it. An S bundle whose HEAD is not the head the
+ *  session-end commit printed (PF_CAPTURE head=) is gap E_PF_ARM with reason head_mismatch, with no retry. base is the
+ *  unit's base commit (the session image's head), carried in the record for scoring's root check. */
+export function pfRecord(i: PfRunInput, attempt: 1 | 2, summary: Record<string, any> | null, ev: string | null, exception: string | null = null, base: string | null = null): PfSessionRecord {
   const capStop = exception === "LedgerCapStop";
   const s = i.session;
   const slots = (summary?.slots ?? []) as Array<Record<string, any>>;
@@ -153,19 +160,21 @@ export function pfRecord(i: PfRunInput, attempt: 1 | 2, summary: Record<string, 
   const ws = ts?.action === "wrapup" && ends.length ? wrapupStep(ends) : null;
   const first = slots.find((x) => x.phase === "task")?.close?.first_request as Record<string, unknown> | null | undefined;
   const effort = first ? effortFields(first) : null;
-  const gap = capStop ? null : !ts ? "E_PF_ARM" : i.effort && !effortHolds(effort, i.effort[s.model]) ? "E_PF_INFRA_GAP" : ts.action === "gap" ? ts.code : ts.action === "retry_session" ? "E_PF_INFRA_GAP" : !ws ? "E_PF_INFRA_GAP" : ws.action === "gap" ? ws.code : ws.action === "rerun_wrapup" ? "E_PF_INFRA_GAP" : null;
   const cap = summary?.capture ? readCapture(summary.capture) : null;
   const keep = summary?.keep ? readWrapup(summary.keep) : { checks: false, discarded: [] as string[] };
   const cs = ev ? join(ev, "claude-session.jsonl") : "";
   const sdk = ev ? join(ev, "sdk-messages.jsonl") : "";
   const bundle = ev ? join(ev, "s.bundle") : "";
+  const hasS = !!bundle && existsSync(bundle) && statSync(bundle).size > 0;
+  const reason = capStop ? null : !ts ? "tree_check" : cap && hasS && bundleHead(bundle) !== cap.head ? "head_mismatch" : null;
+  const gap = capStop ? null : reason ? "E_PF_ARM" : i.effort && !effortHolds(effort, i.effort[s.model]) ? "E_PF_INFRA_GAP" : ts!.action === "gap" ? ts!.code : ts!.action === "retry_session" ? "E_PF_INFRA_GAP" : !ws ? "E_PF_INFRA_GAP" : ws.action === "gap" ? ws.code : ws.action === "rerun_wrapup" ? "E_PF_INFRA_GAP" : null;
   const q = Object.values((summary?.questions ?? {}) as Record<string, { ask_user_question?: number; prose_questions?: number }>);
   return {
     schema: "pf-session.v1", unit: s.unit, part: s.part, index: s.index, model: s.model, arm: s.arm, item: s.item, attempt, names: i.names,
     lease_id: ((summary?.events ?? []) as Array<Record<string, any>>).find((e) => e.event === "u4_slot")?.lease_id ?? "",
     task: { end: tEnd, turns: null, wall_ms: Math.round((t?.wall_s ?? 0) * 1000), spent_micros: spent("task") }, wrapup: ends.length ? { ends, turns: null, spent_micros: spent("wrapup") } : null,
-    wrapup_end: ws?.action === "score" ? ws.wrapup_end : null, gap, capture: cap, forced: cap?.forced ?? [], discarded: keep.discarded,
-    checks: keep.checks && ev ? join(ev, "CHECKS.json") : null, s: bundle && existsSync(bundle) && statSync(bundle).size > 0 ? { repo: bundle, ref: "HEAD" } : null,
+    wrapup_end: ws?.action === "score" ? ws.wrapup_end : null, gap, gap_reason: reason, base_commit: base, capture: cap, forced: cap?.forced ?? [], discarded: keep.discarded,
+    checks: keep.checks && ev ? join(ev, "CHECKS.json") : null, s: hasS ? { repo: bundle, ref: "HEAD" } : null,
     transcript: ev ? join(ev, "sdk-messages.jsonl") : null, claude_session: cs && existsSync(cs) && statSync(cs).size > 0 ? cs : null, effort,
     questions: { ask_user_question: sum(q.map((x) => x.ask_user_question)), prose: sum(q.map((x) => x.prose_questions)) }, cap_stop: capStop, env: { ...ARM_ENV },
     disallowed_tools: [...DISALLOWED_TOOLS], plugin: loadsPlugin(s.arm) ? PSTACK_DIR : null, tools: toolsVolume(),
@@ -214,7 +223,7 @@ export async function runPfSession(i: PfRunInput): Promise<PfRun> {
     const summary = ev && existsSync(join(ev, "pf-summary.json")) ? (JSON.parse(readFileSync(join(ev, "pf-summary.json"), "utf8")) as Record<string, any>) : null;
     const result = ev && existsSync(join(dirname(ev), "result.json")) ? (JSON.parse(readFileSync(join(dirname(ev), "result.json"), "utf8")) as Record<string, any>) : null;
     attempts.push({ dir, harbor_exit: exit, summary, evaluator: ev });
-    record = pfRecord(i, attempt, summary, ev, result?.exception_info?.exception_type ?? null);
+    record = pfRecord(i, attempt, summary, ev, result?.exception_info?.exception_type ?? null, image.head);
     if (!retryAfter(i, attempt, summary, record, dir)) break;
   }
   const file = join(i.out, "session.json");

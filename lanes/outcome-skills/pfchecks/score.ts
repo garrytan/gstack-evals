@@ -25,8 +25,9 @@ import { buildTrees, changesOf, git, show, withoutFiles } from "./trees.ts";
 /** The session record fields scoring reads (the session runner writes the rest). gap: the session's own harness gap
  *  (E_PF_UPSTREAM_GAP or E_PF_INFRA_GAP after its one retry); wrapup_end: how the wrap-up turn ended; forced: the
  *  force-captured paths from the session-end commit; claude_session: Claude Code's own transcript (claude-session.jsonl, by
- *  default beside the transcript), where P's skill body appears. */
-export interface SessionIn { unit?: string; model?: string; arm?: Arm; gap?: string | null; wrapup_end?: string | null; forced?: string[]; transcript?: string | null; claude_session?: string | null; in_flight?: { reservation_bound: number; subagents: number; subagent_cap_refused: number } }
+ *  default beside the transcript), where P's skill body appears; base_commit: the unit's base commit, which S's root must
+ *  equal, else the session is gap E_PF_ARM with reason base_mismatch (section 6.8). */
+export interface SessionIn { unit?: string; model?: string; arm?: Arm; gap?: string | null; gap_reason?: string | null; base_commit?: string | null; wrapup_end?: string | null; forced?: string[]; transcript?: string | null; claude_session?: string | null; in_flight?: { reservation_bound: number; subagents: number; subagent_cap_refused: number } }
 
 export interface ScoreIn {
   s: string; ref?: string; unitDir: string; neutral: string; checks: string | null; session: string; transcript?: string | null; claudeSession?: string | null;
@@ -50,13 +51,15 @@ export async function scoreSession(o: ScoreIn) {
   if (nrec.schema !== "pf-neutral.v1" || nrec.id !== u.id || nrec.verdict !== "kept" || !nrec.mode) pfFail("E_PF_INPUT", o.neutral + " is not a kept neutral record for " + u.id);
   const sess = readJson<SessionIn>(o.session);
   const head = { schema: "pf-catch.v1" as const, unit: u.id, repo: u.repo, month: u.month, stratum: stratumOf(u.month), model: sess.model ?? null, arm: sess.arm ?? null, in_flight: sess.in_flight ?? null };
-  if (sess.gap) return { ...head, score: null, gap: sess.gap, readings: { no_static: null, no_api_guess: null, compile_rerun: null } };
+  if (sess.gap) return { ...head, score: null, gap: sess.gap, gap_reason: sess.gap_reason ?? null, readings: { no_static: null, no_api_guess: null, compile_rerun: null } };
+  if (!sess.base_commit) pfFail("E_PF_INPUT", o.session + " names no base_commit; the session record carries the unit's base commit");
   const tmp = mkdtempSync(join(tmpdir(), "pf-score-"));
   const repo = join(tmp, "repo");
   let exec: (Executor & { cleanup?: () => void }) | null = null;
   try {
     git(tmp, ["init", "-q", repo]);
     git(repo, ["fetch", "-q", "--no-tags", o.s, "+" + (o.ref ?? "HEAD") + ":refs/pf/s"]);
+    if (git(repo, ["rev-list", "--max-parents=0", "refs/pf/s"]).stdout.trim() !== sess.base_commit) return { ...head, score: null, gap: "E_PF_ARM", gap_reason: "base_mismatch", readings: { no_static: null, no_api_guess: null, compile_rerun: null } };
     const testFiles = unitTestFiles(o.unitDir);
     const trees = buildTrees({ repo, ref: "refs/pf/s", lang: u.lang, testFiles, fixPatch: fixSourcePatch(o.unitDir), neutral: { mode: nrec.mode!, files: nrec.files } });
     const tChanges = changesOf(repo, trees.base, trees.parent);

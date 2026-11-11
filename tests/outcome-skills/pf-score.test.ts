@@ -40,7 +40,8 @@ function fixture() {
   const neutral = join(s, "neutral.json");
   writeFileSync(neutral, JSON.stringify({ schema: "pf-neutral.v1", id: "pf-score-flag", verdict: "kept", mode: "both", files: ["flag/flag.go"], tried: [], patch_sha256: null }));
   const file = (name: string, body: unknown) => { const p = join(s, name); writeFileSync(p, typeof body === "string" ? body : JSON.stringify(body)); return p; };
-  return { fx, repo, cap, neutral, file };
+  const base = spawnSync("git", ["-C", repo, "rev-list", "--max-parents=0", "HEAD"], { encoding: "utf8" }).stdout.trim();
+  return { fx, repo, cap, neutral, file, base };
 }
 
 /** Reads the tree a run gets: regress passes when flag.go holds the fix; pkg fails to compile on a fixed tree that still holds broken_test.go. */
@@ -65,7 +66,7 @@ const contentExec = (repo: string): Executor & { calls: string[]; asides: string
 test.skipIf(!HAS_DOCKER)("scoreSession: catch, transplant, compile-blocked rerun and breaks on a fake unit dir", async () => {
   const f = fixture();
   const checks = f.file("CHECKS.json", [{ name: "pkg", command: "bash flag/pkg_test.go" }, { name: "r", command: "bash checks/regress_test.sh" }, { name: "n", command: "ls" }]);
-  const session = f.file("session.json", { unit: "pf-score-flag", model: "claude-opus-5-5", arm: "N", gap: null, wrapup_end: "completed", forced: f.cap.forced });
+  const session = f.file("session.json", { unit: "pf-score-flag", model: "claude-opus-5-5", arm: "N", base_commit: f.base, gap: null, wrapup_end: "completed", forced: f.cap.forced });
   let ex: ReturnType<typeof contentExec> | null = null;
   const breaks = () => ({ runs: [{ t1: "pass", t2: "pass" }, { t1: "fail", t2: "pass" }, { t1: "fail", t2: "pass" }], skipped: [], unmeasured: null });
   const c: any = await scoreSession({ s: f.repo, unitDir: f.fx.dir, neutral: f.neutral, checks, session, exec: (repo) => (ex = contentExec(repo)), breaks });
@@ -89,7 +90,7 @@ test.skipIf(!HAS_DOCKER)("scoreSession: catch, transplant, compile-blocked rerun
 test.skipIf(!HAS_DOCKER)("scoreSession: breaks not measured is null with its reason, and a skipped fix test patch is named and its missing tests count neither way", async () => {
   const f = fixture();
   const checks = f.file("CHECKS.json", [{ name: "r", command: "bash checks/regress_test.sh" }]);
-  const session = f.file("session.json", { unit: "pf-score-flag", model: "claude-opus-5-5", arm: "N", gap: null, wrapup_end: "completed", forced: f.cap.forced });
+  const session = f.file("session.json", { unit: "pf-score-flag", model: "claude-opus-5-5", arm: "N", base_commit: f.base, gap: null, wrapup_end: "completed", forced: f.cap.forced });
   const run = (b: any): Promise<any> => scoreSession({ s: f.repo, unitDir: f.fx.dir, neutral: f.neutral, checks, session, exec: (repo) => contentExec(repo), breaks: () => b });
   const stopped = await run({ runs: [{ t1: "pass" }, null, { t1: "pass" }], skipped: ["test.patch"], unmeasured: "run 2 stopped after skipping test.patch" });
   expect(stopped.secondaries).toMatchObject({ breaks: null, breaks_skipped: ["test.patch"], breaks_unmeasured: "run 2 stopped after skipping test.patch" });
@@ -103,7 +104,7 @@ test.skipIf(!HAS_DOCKER)("scoreSession: P's exposure reads the skill body from t
   const f = fixture();
   const sdk = f.file("sdk-messages.jsonl", JSON.stringify({ type: "AssistantMessage", phase: "task", content: [{ type: "tool_use", name: "Read", input: { file_path: "/opt/pf-pstack/skills/statechart/SKILL.md" } }] }) + "\n");
   const cc = (name: string, text: string) => f.file(name, JSON.stringify({ type: "user", message: { role: "user", content: text } }) + "\n");
-  const rec = (name: string, claude_session: string) => f.file(name, { unit: "pf-score-flag", model: "claude-opus-5-5", arm: "P", gap: null, wrapup_end: "limit_turns", forced: [], transcript: sdk, claude_session });
+  const rec = (name: string, claude_session: string) => f.file(name, { unit: "pf-score-flag", model: "claude-opus-5-5", arm: "P", base_commit: f.base, gap: null, wrapup_end: "limit_turns", forced: [], transcript: sdk, claude_session });
   const run = (session: string): Promise<any> => scoreSession({ s: f.repo, unitDir: f.fx.dir, neutral: f.neutral, checks: null, session, exec: () => { throw new Error("no run expected"); } });
   const loaded = await run(rec("p-body.json", cc("claude-session.jsonl", "# Create a formal verification skill\nSteps")));
   expect(loaded.exposure).toMatchObject({ body: true, statechart_read: true, loaded: true });
@@ -113,7 +114,7 @@ test.skipIf(!HAS_DOCKER)("scoreSession: P's exposure reads the skill body from t
 
 test.skipIf(!HAS_DOCKER)("scoreSession: a wrap-up limit with no manifest scores 0 without a run; a session gap scores null", async () => {
   const f = fixture();
-  const limit = f.file("limit.json", { unit: "pf-score-flag", model: "claude-opus-5-5", arm: "P", gap: null, wrapup_end: "limit_turns", forced: [] });
+  const limit = f.file("limit.json", { unit: "pf-score-flag", model: "claude-opus-5-5", arm: "P", base_commit: f.base, gap: null, wrapup_end: "limit_turns", forced: [] });
   const none: any = await scoreSession({ s: f.repo, unitDir: f.fx.dir, neutral: f.neutral, checks: null, session: limit, exec: () => { throw new Error("no run expected"); } });
   expect(none.score).toBe(0);
   expect(none.manifest.none).toBe("wrapup_limit");
@@ -121,4 +122,24 @@ test.skipIf(!HAS_DOCKER)("scoreSession: a wrap-up limit with no manifest scores 
   const g: any = await scoreSession({ s: f.repo, unitDir: f.fx.dir, neutral: f.neutral, checks: null, session: gap, exec: () => { throw new Error("no run expected"); } });
   expect(g.score).toBeNull();
   expect(g.gap).toBe("E_PF_UPSTREAM_GAP");
+});
+
+// Value: protects=section 6.8's rule that S sits on the unit's base commit; fails_when=an S whose root is not the session record's base commit (a rewritten base, a second root) builds scoring trees or stops the scorer, or a record with no base commit scores; why_new=the scorer took S's root as the base whatever it was; seam=score.ts scoreSession before trees.ts buildTrees; no_claim=the bundle's HEAD against the capture (pf-run.test.ts)
+test.skipIf(!HAS_DOCKER)("scoreSession: an S whose root is not the unit's base commit is gap E_PF_ARM (base_mismatch) with no run, and a record with no base commit is refused", async () => {
+  const f = fixture();
+  const none = () => { throw new Error("no run expected"); };
+  const rec = (name: string, base: unknown) => f.file(name, { unit: "pf-score-flag", model: "claude-opus-5-5", arm: "N", base_commit: base, gap: null, wrapup_end: "limit_turns", forced: [] });
+  const ok: any = await scoreSession({ s: f.repo, unitDir: f.fx.dir, neutral: f.neutral, checks: null, session: rec("ok.json", f.base), exec: none });
+  expect(ok).toMatchObject({ score: 0, gap: null });
+  const wrong: any = await scoreSession({ s: f.repo, unitDir: f.fx.dir, neutral: f.neutral, checks: null, session: rec("wrong.json", "0".repeat(40)), exec: none });
+  expect(wrong).toMatchObject({ score: null, gap: "E_PF_ARM", gap_reason: "base_mismatch", readings: { no_static: null, no_api_guess: null, compile_rerun: null } });
+  const g = (...a: string[]) => spawnSync("git", ["-C", f.repo, "-c", "user.name=t", "-c", "user.email=t@t", ...a], { encoding: "utf8" });
+  const empty = spawnSync("git", ["-C", f.repo, "mktree"], { input: "", encoding: "utf8" }).stdout.trim();
+  const orphan = g("commit-tree", empty, "-m", "other root").stdout.trim();
+  g("merge", "-q", "--allow-unrelated-histories", "-m", "join", orphan);
+  const two: any = await scoreSession({ s: f.repo, unitDir: f.fx.dir, neutral: f.neutral, checks: null, session: rec("two.json", f.base), exec: none });
+  expect(two).toMatchObject({ score: null, gap: "E_PF_ARM", gap_reason: "base_mismatch" });
+  await expect(scoreSession({ s: f.repo, unitDir: f.fx.dir, neutral: f.neutral, checks: null, session: rec("nobase.json", null), exec: none })).rejects.toThrow(/^E_PF_INPUT .*base_commit/);
+  const passed: any = await scoreSession({ s: f.repo, unitDir: f.fx.dir, neutral: f.neutral, checks: null, session: f.file("gap.json", { unit: "pf-score-flag", model: "claude-opus-5-5", arm: "P", gap: "E_PF_ARM", gap_reason: "head_mismatch" }), exec: none });
+  expect(passed).toMatchObject({ score: null, gap: "E_PF_ARM", gap_reason: "head_mismatch" });
 });
