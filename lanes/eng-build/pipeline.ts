@@ -29,7 +29,7 @@ import { fixOnlyNames, noteRequest, writeNote, type ModelCall } from "./note.ts"
 import { isGap, prepareReviewTree, reviewRecord, runSession, type Attempt } from "./review-stage.ts";
 import type { Candidate, ScreenResult } from "./screen.ts";
 import type { Arm, BuildUnit, GradedBuild, Reviewer, ReviewRecord } from "./types.ts";
-import { caseRuns, gradeSet, readUnit, type BuildOutcome, type UnitSpec } from "./unit.ts";
+import { caseRuns, gradeSet, readUnit, type BuildOutcome, type Drop, type UnitSpec } from "./unit.ts";
 
 const sha = (s: string | Buffer) => createHash("sha256").update(s).digest("hex");
 const safe = (key: string) => key.replace(/[^A-Za-z0-9._-]/g, "_");
@@ -126,23 +126,31 @@ export interface BuiltUnit {
 }
 
 /** Builds every spec's unit into <out>/<id> and returns the ones that qualify; a drop prints its code. A unit already in
- * <out> is read back, never rebuilt. */
-export function buildUnits(o: { specs: { spec: UnitSpec; repo: string }[]; out: string; work: string; labels: string; seed: number; build: (spec: UnitSpec, repo: string, out: string, o: { work: string; labels: string; seed: number }) => BuildOutcome; log?: (l: string) => void }): BuiltUnit[] {
+ * <out> is read back, never rebuilt. gate (the containment gates, contain.ts) runs on every unit, built or read back, and
+ * a drop it returns leaves the unit out through the same printed line as a build drop. */
+export async function buildUnits(o: { specs: { spec: UnitSpec; repo: string }[]; out: string; work: string; labels: string; seed: number; build: (spec: UnitSpec, repo: string, out: string, o: { work: string; labels: string; seed: number }) => BuildOutcome; log?: (l: string) => void; gate?: (u: BuiltUnit) => Promise<Drop[]> }): Promise<BuiltUnit[]> {
   const kept: BuiltUnit[] = [];
+  const dropped = (id: string, drops: Drop[]) => {
+    for (const d of drops) o.log?.(d.code + " unit " + id + ": " + d.step + " (" + d.cls + ")");
+    return drops.length > 0;
+  };
   for (const { spec, repo } of o.specs) {
     const dir = join(o.out, safe(spec.id));
+    let u: BuiltUnit;
     if (existsSync(join(dir, "eb.json"))) {
-      kept.push({ dir, repo, spec, unit: readUnit(dir).eb.unit });
+      u = { dir, repo, spec, unit: readUnit(dir).eb.unit };
       o.log?.("unit " + spec.id + ": read back from " + dir);
-      continue;
+    } else {
+      const r = o.build(spec, repo, dir, { work: o.work, labels: o.labels, seed: o.seed });
+      if (!r.qualifies) {
+        dropped(spec.id, r.eb.drops);
+        continue;
+      }
+      u = { dir: r.dir, repo, spec, unit: r.eb.unit };
+      o.log?.("unit " + spec.id + ": built, " + r.eb.unit.functional.length + " functional, " + r.eb.unit.aftermath.reduce((s, a) => s + a.cases.length, 0) + " aftermath cases");
     }
-    const r = o.build(spec, repo, dir, { work: o.work, labels: o.labels, seed: o.seed });
-    if (!r.qualifies) {
-      for (const d of r.eb.drops) o.log?.(d.code + " unit " + spec.id + ": " + d.step + " (" + d.cls + ")");
-      continue;
-    }
-    kept.push({ dir: r.dir, repo, spec, unit: r.eb.unit });
-    o.log?.("unit " + spec.id + ": built, " + r.eb.unit.functional.length + " functional, " + r.eb.unit.aftermath.reduce((s, a) => s + a.cases.length, 0) + " aftermath cases");
+    if (o.gate && dropped(spec.id, await o.gate(u))) continue;
+    kept.push(u);
   }
   return kept;
 }

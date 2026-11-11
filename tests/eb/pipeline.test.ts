@@ -61,16 +61,28 @@ describe("paid stages run under one ledger lease", () => {
 });
 
 describe("screen, units and notes", () => {
-  test("screen prints a drop with its code; units keeps only qualifying units and prints each drop", () => {
+  test("screen prints a drop with its code; units keeps only qualifying units and prints each drop", async () => {
     const lines: string[] = [];
     const r = screenAll({ candidates: [{ id: "c1", base: "a", merge: "b", fixes: [] }], repo: "/fixture/repo", work: "/fixture/work", screen: (c) => ({ id: c.id, qualifies: false, code: "E_EB_NO_AFTERMATH", step: "fix", cls: "no_test_change", ecosystems: [], functionalPass: 0, f2p: [], base: { pass: 0, fail: 0, no_result: 0 }, steps: [] }), log: (l) => lines.push(l) });
     expect(r.map((x) => x.qualifies)).toEqual([false]);
     expect(lines).toEqual(["E_EB_NO_AFTERMATH screen c1: dropped at fix (no_test_change)"]);
     const fx = goRepo(join(fresh(), "repo"));
     const out: string[] = [];
-    const kept = buildUnits({ specs: [{ spec: fx.spec, repo: fx.repo }], out: fresh(), work: fresh(), labels: join(fresh(), "labels.json"), seed: 1, build: (_s, _r, dir) => ({ qualifies: false, dir, eb: { unit: fixtureUnit("ebgo"), drops: [{ code: "E_EB_IMAGE", step: "merged", cls: "no_functional_pass", cases: 0 }] } }) as unknown as BuildOutcome, log: (l) => out.push(l) });
+    const kept = await buildUnits({ specs: [{ spec: fx.spec, repo: fx.repo }], out: fresh(), work: fresh(), labels: join(fresh(), "labels.json"), seed: 1, build: (_s, _r, dir) => ({ qualifies: false, dir, eb: { unit: fixtureUnit("ebgo"), drops: [{ code: "E_EB_IMAGE", step: "merged", cls: "no_functional_pass", cases: 0 }] } }) as unknown as BuildOutcome, log: (l) => out.push(l) });
     expect(kept).toEqual([]);
     expect(out).toEqual(["E_EB_IMAGE unit ebgo: merged (no_functional_pass)"]);
+  });
+
+  // Value: protects=the unit stage's containment gates dropping a unit before the pilot; fails_when=a unit whose gate
+  // returns a drop still reaches units.json, or the drop prints in another shape than a build drop.
+  test("units leaves out a qualifying unit whose containment gate drops it, with the build drop's line", async () => {
+    const fx = goRepo(join(fresh(), "repo"));
+    const out: string[] = [];
+    const seen: string[] = [];
+    const kept = await buildUnits({ specs: [{ spec: fx.spec, repo: fx.repo }], out: fresh(), work: fresh(), labels: join(fresh(), "labels.json"), seed: 1, build: (_s, _r, dir) => ({ qualifies: true, dir, eb: { unit: fixtureUnit("ebgo"), drops: [] } }) as unknown as BuildOutcome, log: (l) => out.push(l), gate: async (u) => (seen.push(u.unit.id), [{ code: "E_EB_LEAK", step: "sidecar-origin", cls: "tag", cases: 0 }]) });
+    expect(kept).toEqual([]);
+    expect(seen).toEqual(["ebgo"]);
+    expect(out.filter((l) => l.startsWith("E_"))).toEqual(["E_EB_LEAK unit ebgo: sidecar-origin (tag)"]);
   });
 
   test("notes: a refused note is written nowhere; a written note is never asked for again", async () => {

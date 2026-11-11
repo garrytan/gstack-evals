@@ -2,8 +2,8 @@
 // The eng-review build read's keyless dry run (prereg 2026-11-11-geva-522-eng-review-build-read-prereg, section 11). It
 // drives every frozen rule the plan lists on synthetic fixtures: this lane's own modules (scoring, the pilot's lines, the
 // exposure gate and interim stop, the fixed sequence, Holm, the reach guard, the verdict precedence, the gap rules, the
-// re-projection, the mounts and strip rule, the cache, one ledger lease per item on a temporary ledger and the route
-// probe on a stubbed call) for real, and the rules other modules own (recipes, runner adapters, the case classifier,
+// re-projection, the mounts and strip rule, the cache, the containment gates on a real sidecar, one ledger lease per item
+// on a temporary ledger and the route probe on a stubbed call) for real, and the rules other modules own (recipes, runner adapters, the case classifier,
 // the test region, the cold rebuild, the Stop hook, the bundle cap, the transplant and the leak check) through named
 // seams, each a function that runs that module on its fixture and returns its outcome word.
 //
@@ -25,7 +25,7 @@ import { FROZEN } from "./frozen.ts";
 import { exposureGate, finalUntested, gateState, interimCheck, interimStops, pilotLine, pilotReading, recountGate, type GateState, type PilotReading } from "./gates.ts";
 import { EB_RUN, ITEMS, leaseItem, reproject, settleItem } from "./ledger.ts";
 import { installCommand, prepareReviewTree, reviewArmSpec } from "./review-stage.ts";
-import { pipelineCase } from "./dryrun-pipeline.ts";
+import { pipelineCase, SIDECAR_CASES, sidecarCase } from "./dryrun-pipeline.ts";
 import { probeRoutes, ROUTES } from "./routes.ts";
 import type { Arm, BuildUnit, CaseClass, CaseRuns, Ecosystem, GradedBuild, Reviewer, ReviewRecord, SessionOutcome, SkillArm } from "./types.ts";
 
@@ -55,7 +55,7 @@ export const SEAMS = {
   "bundle cap": { seam: "review bundle", fixture: "a review whose plan, reply and skill files hold 12,500 words", expect: "truncated at 12000 words" },
   "transplant catch": { seam: "real-bug catch", fixture: "a build test red in 3 merged runs and green in 3 fixed runs", expect: "catch" },
   "transplant no-catch": { seam: "real-bug catch", fixture: "a build test red in 2 of 3 merged runs", expect: "no catch" },
-  "leak image": { seam: "leak check", fixture: "an image whose module cache holds the fix's added product line", expect: "E_EB_LEAK" },
+  "leak image": { seam: "leak check", fixture: "the session image on a unit image whose module cache holds the fix's added product line", expect: "E_EB_LEAK" },
 } as const;
 export type SeamCase = keyof typeof SEAMS;
 export type Seams = Partial<Record<SeamCase, () => Promise<string>>>;
@@ -432,6 +432,7 @@ function ownCases(): Record<string, Case> {
     },
     "every E_EB code": () => codeTable(),
     "pipeline end to end": () => pipelineCase(),
+    ...Object.fromEntries(Object.keys(SIDECAR_CASES).map((n) => [n, () => sidecarCase(n as keyof typeof SIDECAR_CASES)])),
   };
 }
 
@@ -584,6 +585,13 @@ export const EXPECTED: Record<string, string> = {
   "route probe": "6 routes, one call each: ok; a 429 on particle-1: FAIL (route review-particle: FAIL openrouter particle-ai/particle-1 on eb-exposure-smoke, cost unknown (status 429))",
   "every E_EB code": "18 codes; exits as the plan's table: yes; printed lines start with their code: yes",
   "pipeline end to end": "1 screened, 1 built, 1 noted; 4 reviews, 4 bundles, Stop hook on candidate engphase precut; 5 builds, 5 graded; eb-build-units 1 opened, 1 settled; eb-reviews-opus 1 opened, 1 settled; eb-builds-opus 1 opened, 1 settled",
+  "sidecar clean": "pass",
+  "sidecar extra ref": "E_EB_LEAK sidecar-origin (extra_ref)",
+  "sidecar tag": "E_EB_LEAK sidecar-origin (tag)",
+  "sidecar unreachable object": "E_EB_LEAK sidecar-origin (unreachable)",
+  "sidecar extra pack": "E_EB_LEAK sidecar-origin (object_count)",
+  "sidecar gh issue": "E_EB_LEAK sidecar-gh (issue_open)",
+  "sidecar gh pr": "E_EB_LEAK sidecar-origin (extra_ref); E_EB_LEAK sidecar-gh (pr_open)",
 };
 for (const [name, s] of Object.entries(SEAMS)) EXPECTED["seam " + name] = s.expect;
 

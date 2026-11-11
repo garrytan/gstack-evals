@@ -13,6 +13,7 @@ import { projectNames, sortHits } from "../real-outcome/task/check.ts";
 import { dockerRun } from "../real-outcome/task/docker.ts";
 import { REPO_DIR, type Runner } from "../real-outcome/task/format.ts";
 import { fail } from "./errors.ts";
+import { sessionImage } from "./session-image.ts";
 import { ebProtected } from "./unit.ts";
 
 /** Lines a diff adds, trimmed, at least 20 characters with a word in them: the shape L2 looks for. */
@@ -66,4 +67,12 @@ export function leakCheck(o: { unit: string; image: string; repo: string; runner
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+}
+
+/** The leak check on the session image a builder runs in: the unit image with the session layer on top and the
+ * project's dependency folders copied under /work/repo, built (or reused) by id, so a needle the session layer brings in
+ * refuses the unit the same way a needle in the unit image does. */
+export function sessionLeakCheck(o: { unit: string; image: string; repo: string; runner: Runner; needles: string[]; docker?: string }): LeakResult {
+  if (o.needles.length === 0) return { needles: 0, leaks: [], installed: 0 };
+  return leakCheck({ ...o, image: sessionImage(o.image, { docker: o.docker }).id });
 }

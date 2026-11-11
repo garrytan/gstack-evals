@@ -11,6 +11,7 @@ import { goRepo } from "../../tests/eng-build/fixture.ts";
 import { recordApproval } from "../../src/runner/ledger/ledger.ts";
 import { readItem } from "../../src/runner/ledger/record.ts";
 import type { BuildSession, Grader } from "./build-stage.ts";
+import { sidecarGates, type Gh } from "./contain.ts";
 import { itemOf } from "./ledger.ts";
 import { noteRequest, type ModelCall } from "./note.ts";
 import { buildUnits, openingEvidence, paidItem, runBuilds, runReviews, screenAll, stubLauncher, underLease, writeNotes, type ReviewSession, type ReviewUnit } from "./pipeline.ts";
@@ -63,7 +64,7 @@ export async function pipelineCase(): Promise<string> {
     const cand: Candidate = { id: fx.spec.id, base: fx.sha.base!, merge: fx.sha.merge!, fixes: [{ commit: fx.sha.fix!, kind: "fix" }] };
     const screened = screenAll({ candidates: [cand], repo: fx.repo, work: dir, screen: (c): ScreenResult => ({ id: c.id, qualifies: true, code: null, step: null, cls: null, ecosystems: ["go"], functionalPass: 1, f2p: [1], base: { pass: 0, fail: 1, no_result: 0 }, steps: [] }) });
     const unit = fixtureUnit(fx.spec.id);
-    const built = buildUnits({ specs: [{ spec: fx.spec, repo: fx.repo }], out: join(dir, "units"), work: dir, labels: join(dir, "labels.json"), seed: 7, build: (spec, _repo, out) => ({ qualifies: true, dir: out, eb: { unit, drops: [] } }) as unknown as BuildOutcome });
+    const built = await buildUnits({ specs: [{ spec: fx.spec, repo: fx.repo }], out: join(dir, "units"), work: dir, labels: join(dir, "labels.json"), seed: 7, build: (spec, _repo, out) => ({ qualifies: true, dir: out, eb: { unit, drops: [] } }) as unknown as BuildOutcome });
     const names = noteRequest(fx.repo, fx.spec.base, fx.spec.merge).names.map((n) => n.name);
     const call: ModelCall = async (role) => (role === "writer" ? "The change adds " + names.join(" and ") + " to the calculator." : "PASS");
     const notes = await underLease(pay("notes", "eb-build-units"), stubLauncher(call), (c) => writeNotes({ units: built, out: join(dir, "notes"), call: c }));
@@ -91,6 +92,35 @@ export async function pipelineCase(): Promise<string> {
     });
     const hooks = Object.entries(seen.hooks).filter(([, on]) => on).map(([a]) => a).sort().join(" ");
     return screened.filter((x) => x.qualifies).length + " screened, " + built.length + " built, " + notes.written.length + " noted; " + recs.length + " reviews, " + bundles + " bundles, Stop hook on " + hooks + "; " + builds.length + " builds, " + graded + " graded; " + leases.join("; ");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+/** The containment gates' dry-run cases: each opens the real sidecar on a one-commit build tree, plants its defect in
+ * the trial's origin or gh stub, and returns the drops the gates print, or pass. */
+export const SIDECAR_CASES = {
+  "sidecar clean": async () => {},
+  "sidecar extra ref": async (t: Tamper) => void og(t.origin, ["update-ref", "refs/heads/later", head(t.origin)]),
+  "sidecar tag": async (t: Tamper) => void og(t.origin, ["tag", "later", head(t.origin)]),
+  "sidecar unreachable object": async (t: Tamper) => void spawnSync("git", ["--git-dir", t.origin, "hash-object", "-w", "--stdin"], { input: "the later fix's line\n", encoding: "utf8" }),
+  "sidecar extra pack": async (t: Tamper) => void spawnSync("git", ["--git-dir", t.origin, "pack-objects", "-q", join(t.origin, "objects/pack/extra")], { input: og(t.origin, ["rev-list", "--objects", head(t.origin)]), encoding: "utf8" }),
+  "sidecar gh issue": async (t: Tamper) => void (await t.gh(["issue", "create", "--title", "The later fix", "--body", "Fixes the bug."])),
+  "sidecar gh pr": async (t: Tamper) => {
+    const c = og(t.origin, ["-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid", "commit-tree", head(t.origin) + "^{tree}", "-p", head(t.origin), "-m", "later"]).trim();
+    og(t.origin, ["update-ref", "refs/heads/later", c]);
+    await t.gh(["pr", "create", "--head", "later", "--base", "main", "--title", "The later fix", "--body", "Fixes the bug."]);
+  },
+} as const;
+type Tamper = { origin: string; gh: Gh };
+const og = (origin: string, args: string[]) => spawnSync("git", ["--git-dir", origin, ...args], { encoding: "utf8" }).stdout;
+const head = (origin: string) => og(origin, ["rev-parse", "refs/heads/main"]).trim();
+
+export async function sidecarCase(name: keyof typeof SIDECAR_CASES): Promise<string> {
+  const dir = mkdtempSync(join(tmpdir(), "eb-sidecar-"));
+  try {
+    const drops = await sidecarGates({ tree: oneCommitRepo(join(dir, "tree")), tamper: SIDECAR_CASES[name] });
+    return drops.map((d) => d.code + " " + d.step + " (" + d.cls + ")").join("; ") || "pass";
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

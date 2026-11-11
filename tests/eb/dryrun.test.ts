@@ -1,6 +1,9 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { wiredSeams } from "../../lanes/eng-build/dryrun-seams.ts";
 import { check, dryRun, EXPECTED, SEAMS, type Seams } from "../../lanes/eng-build/dryrun.ts";
+
+// The own part opens the real sidecar seven times for the containment gates, which takes a few seconds.
+setDefaultTimeout(60_000);
 
 const stubs = Object.fromEntries(Object.entries(SEAMS).map(([k, v]) => [k, async () => v.expect])) as Seams;
 

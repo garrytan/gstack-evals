@@ -32,4 +32,4 @@ test("dryrun --part own passes", async () => {
   const c = capture();
   expect(await main(["dryrun", "--part", "own"], c.io)).toBe(0);
   expect(c.out.at(-1)).toStartWith("dry run: ");
-});
+}, 60_000);

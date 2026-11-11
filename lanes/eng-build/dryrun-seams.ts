@@ -16,7 +16,8 @@ import { assembleBundle } from "./bundle.ts";
 import type { Seams } from "./dryrun.ts";
 import { EbError } from "./errors.ts";
 import { seamCleanup, seamTransplantCatch, seamTransplantNoCatch } from "./catch.ts";
-import { leakCheck } from "./leak.ts";
+import { sessionLeakCheck } from "./leak.ts";
+import { removeSessionImages } from "./session-image.ts";
 import { removeLabelled } from "./screen.ts";
 import type { CaseClass } from "./types.ts";
 import { aftermathCases, anchorCases, baseOutcome, buildUnit, gradeSet, readUnit, type BuildOutcome, type Grid } from "./unit.ts";
@@ -160,7 +161,7 @@ function dockerSeams(dir: string): Seams {
     "leak image": async () => {
       const { fx, out } = build("go", goRepo);
       const line = (GO_CALC + GO_BUGGY).split("\n").find((l) => l.startsWith("func Add"))!;
-      return codeOf(() => leakCheck({ unit: "ebgo", image: out.eb.image.id, repo: fx.spec.repo, runner: out.eb.groups[0]!.runner, needles: [line] }));
+      return codeOf(() => sessionLeakCheck({ unit: "ebgo", image: out.eb.image.id, repo: fx.spec.repo, runner: out.eb.groups[0]!.runner, needles: [line] }));
     },
     "transplant catch": seamTransplantCatch,
     "transplant no-catch": seamTransplantNoCatch,
@@ -181,6 +182,7 @@ export function wiredSeams(env: Record<string, string | undefined> = process.env
     close: () => {
       seamCleanup();
       removeLabelled();
+      removeSessionImages();
       rmSync(dir, { recursive: true, force: true });
     },
   };

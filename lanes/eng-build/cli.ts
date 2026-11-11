@@ -14,6 +14,7 @@ import { EbError, fail } from "./errors.ts";
 import { SIZE } from "./frozen.ts";
 import { exposureGate, gateState, pilotLine, pilotReading } from "./gates.ts";
 import { ITEMS, reproject, type Design, type Measured } from "./ledger.ts";
+import { containUnit } from "./contain.ts";
 import { removeCoverageImages } from "./coverage.ts";
 import { buildLauncher, noteLauncher, reviewLauncher } from "./launch.ts";
 import { bundleFor, buildUnits, paidItem, readUnits, runBuilds, runReviews, screenAll, underLease, unitGrader, writeNotes, type BuiltUnit, type ReviewUnit } from "./pipeline.ts";
@@ -179,11 +180,14 @@ const paid = (stage: "notes" | "review" | "build", a: Args) => paidItem(stage, {
 const logTo = (io: Io) => (l: string) => (/^E_[A-Z_]+ /.test(l) ? io.err : io.out)(l);
 const PAID = "--item <item> --cap-usd <usd> --ledger-record <dir> --ledger <file>";
 
-/** Joins each spec with the unit buildUnits wrote for it, dropping specs whose unit did not qualify. */
+/** Joins each spec with the unit buildUnits wrote for it, dropping specs whose unit did not qualify or did not pass the
+ * containment gates (units.json lists the units that did both). */
 const builtUnits = (a: Args): BuiltUnit[] => {
   const units = readUnits(need(a, "--units"));
+  const listed = join(need(a, "--units"), "units.json");
+  const passed = existsSync(listed) ? new Set(json<{ id: string }[]>(listed).map((u) => u.id)) : null;
   return json<{ spec: UnitSpec; repo: string }[]>(need(a, "--specs")).flatMap(({ spec, repo }) => {
-    const u = units.get(spec.id);
+    const u = passed === null || passed.has(spec.id) ? units.get(spec.id) : undefined;
     return u ? [{ dir: u.dir, repo, spec, unit: u.unit }] : [];
   });
 };
@@ -195,8 +199,9 @@ const screen: Run = (a, io) => {
   return 0;
 };
 
-const units: Run = (a, io) => {
-  const kept = buildUnits({ specs: json<{ spec: UnitSpec; repo: string }[]>(need(a, "--specs")), out: need(a, "--out"), work: need(a, "--work"), labels: need(a, "--labels"), seed: seed(a), build: buildUnit, log: logTo(io) });
+const units: Run = async (a, io) => {
+  const trees = need(a, "--repos");
+  const kept = await buildUnits({ specs: json<{ spec: UnitSpec; repo: string }[]>(need(a, "--specs")), out: need(a, "--out"), work: need(a, "--work"), labels: need(a, "--labels"), seed: seed(a), build: buildUnit, log: logTo(io), gate: (u) => containUnit({ dir: u.dir, repo: u.repo, spec: u.spec, trees }) });
   writeFileSync(join(need(a, "--out"), "units.json"), JSON.stringify(kept.map((k) => k.unit), null, 1) + "\n");
   io.out("units: " + kept.length + " built and qualifying");
   return 0;
@@ -295,7 +300,7 @@ export const SUBCOMMANDS: Record<string, { run: Run; bools: string[]; usage: str
   dryrun: { run: dryrun, bools: [], usage: "[--part own|all]", summary: "the keyless dry run of every frozen rule; all fails until every seam is wired" },
   power: { run: power, bools: [], usage: "[power.py arguments]", summary: "the parametric MDD simulation (power.py)" },
   screen: { run: screen, bools: [], usage: "--candidates <json> --repo <dir> --work <dir> [--out <json>]", summary: "screen candidate merges for a live aftermath case (Docker, no model call)" },
-  units: { run: units, bools: [], usage: "--specs <json> --out <dir> --work <dir> --labels <file> --seed <n>", summary: "build units from their specs and keep the ones that qualify (Docker, no model call)" },
+  units: { run: units, bools: [], usage: "--specs <json> --out <dir> --work <dir> --labels <file> --seed <n> --repos <dir>", summary: "build units from their specs and keep the ones that qualify and pass the containment gates on their build trees in --repos (Docker, no model call)" },
   notes: { run: notes, bools: [], usage: "--specs <json> --units <dir> --out <dir> --cache <dir> " + PAID, summary: "write and audit each unit's statement note (paid: eb-build-units)" },
   recount: { run: recount, bools: [], usage: "[recount.ts arguments]", summary: "the clean-unit recount, counts only" },
   review: { run: review, bools: [], usage: "--review-units <json> --arm <arm> --reviewer opus|sol|particle --reps 1,2,3 --out <dir> [--policy <file>] " + PAID, summary: "run the review sessions for one arm and reviewer, and their bundles (paid)" },
