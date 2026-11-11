@@ -169,7 +169,7 @@ export function jsFailClass(text: string): { cls: FailClass; name?: string; exc?
   const exc = /\b(ReferenceError|TypeError|SyntaxError|RangeError|AssertionError|Error)\b/.exec(text)?.[1];
   const ref = /ReferenceError:? (?:\[Error\]:? )?([\w$]+) is not defined/.exec(text);
   if (ref) return { cls: "missing_name", name: ref[1], exc: "ReferenceError" };
-  const call = /TypeError:? (?:\[Error\]:? )?(?:[\w$.()\[\]]*?\.)?([\w$]+) is not a (?:function|constructor)/.exec(text);
+  const call = /TypeError:? (?:\[Error\]:? )?(?:\(0\s*,\s*)?(?:[\w$.()\[\]]*?\.)?([\w$]+)\)? is not a (?:function|constructor)/.exec(text);
   if (call) return { cls: "missing_name", name: call[1], exc: "TypeError" };
   const read = /TypeError:? (?:\[Error\]:? )?Cannot read propert(?:y|ies) of undefined \(reading '([^']+)'\)/.exec(text);
   if (read) return { cls: "missing_name", name: read[1], exc: "TypeError" };

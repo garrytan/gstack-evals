@@ -11,7 +11,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync }
 import { join } from "node:path";
 import { docker, dockerRun } from "./docker.ts";
 import { regressionFrozen, sha256, TaskError, targetOf, type Runner, type TaskJson } from "./format.ts";
-import { parseCargo, parseGoTest, parseJestJson, parseMochaJson, parseNodeEvents, parsePytest, resultFor, type Parsed, type TestResult } from "./record.ts";
+import { jsFailClass, parseCargo, parseGoTest, parseJestJson, parseMochaJson, parseNodeEvents, parsePytest, resultFor, type Parsed, type TestResult } from "./record.ts";
 import { productText, splice } from "./region.ts";
 
 export const RUN_UID = "10001:10001";
@@ -129,8 +129,9 @@ export function targets(t: TaskJson, only?: string[]): string[] {
 }
 
 /** The sh entrypoint of a node runner: $0 is the project dir, the rest is the runner's argv, and the start line comes out
- * before node starts. */
-export const NODE_ENTRY = 'echo "' + RUN_STARTED + '"; cd "$0" && exec "$@"';
+ * before node starts. Its stderr goes to /out/stderr.txt, read only when the record holds no result (a run that died
+ * before its reporter wrote anything fails as a session collection failure). */
+export const NODE_ENTRY = 'echo "' + RUN_STARTED + '"; cd "$0" && exec "$@" 2> /out/stderr.txt';
 
 /** The directory a project-relative path lives in, under /testbed. */
 const inRepo = (root: string, path = ""): string => ["/testbed", root, path].filter(Boolean).join("/");
@@ -168,7 +169,7 @@ export function runArgs(r: Exclude<Runner, { kind: "pytest" | "go" }>, files: st
     r.kind === "jest"
       ? [...node, bin, ...r.args, "--ci", "--json", "--outputFile=/out/record.json", "--cacheDirectory=/tmp/jest", "--watchAll=false", "--rootDir=" + inRepo(r.root), "--config", cfg ?? JSON.stringify({ rootDir: inRepo(r.root) }), "--runTestsByPath", ...rel]
       : r.kind === "vitest"
-        ? [...node, bin, "run", ...r.args, "--root", inRepo(r.root), "--config", cfg ?? "/verifier/vitest.none.cjs", "--reporter=json", "--outputFile=/out/record.json", "--watch=false", ...rel]
+        ? [...node, bin, "run", ...r.args, "--root", inRepo(r.root), "--config", cfg ?? (r.args.includes("--configLoader") ? "/verifier/vitest.none.mjs" : "/verifier/vitest.none.cjs"), "--reporter=json", "--outputFile=/out/record.json", "--watch=false", ...rel]
         : r.kind === "mocha"
           ? [...node, bin, ...r.args, "--no-config", "--no-package", ...(cfg ? ["--config", cfg] : []), "--reporter", "json", "--reporter-option", "output=/out/record.json", ...rel]
           : [...node, ...r.args, "--test", "--test-reporter=/verifier/node-reporter.mjs", "--test-reporter-destination=/out/record.jsonl", ...rel];
@@ -180,8 +181,12 @@ export function parseRecord(r: Runner, read: (file: string) => string | null): P
   if (r.kind === "pytest") return parsePytest(read("record.jsonl") ?? "");
   if (r.kind === "go") return parseGoTest(read("record.jsonl") ?? "", read("stderr.txt") ?? "", r.module);
   if (r.kind === "cargo") return parseCargo(read("record.txt") ?? "", r.root);
-  if (r.kind === "nodetest") return parseNodeEvents(read("record.jsonl") ?? "");
-  return r.kind === "mocha" ? parseMochaJson(read("record.json") ?? "") : parseJestJson(read("record.json") ?? "");
+  const p = r.kind === "nodetest" ? parseNodeEvents(read("record.jsonl") ?? "") : r.kind === "mocha" ? parseMochaJson(read("record.json") ?? "") : parseJestJson(read("record.json") ?? "");
+  if (p.seen.length > 0 || Object.keys(p.results).length > 0) return p;
+  const err = (read("stderr.txt") ?? "").slice(-4000);
+  if (!err.trim()) return p;
+  const c = jsFailClass(err);
+  return { ...p, results: { "collect:<session>": { status: "fail", cls: c.cls === "assert" ? "load" : c.cls, ...(c.name ? { name: c.name } : {}), msg: err.slice(-300) } } };
 }
 
 function shuffled<T>(xs: T[], seed: number): T[] {

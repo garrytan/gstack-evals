@@ -423,7 +423,7 @@ export function caseClass(runner: Runner["kind"], r: TestResult, run: { timed_ou
     return r.cls === "assert" ? "assert" : r.cls === "missing_name" ? "missing_name" : "load";
   }
   if (/error TS\d{4}/.test(text)) return "compile";
-  if (/ReferenceError|TypeError:? (?:\[Error\]:? )?(?:[\w$.()[\]]*?\.)?[\w$]+ is not a (?:function|constructor)|TypeError:? (?:\[Error\]:? )?Cannot read propert(?:y|ies) of undefined/.test(text)) return "missing_name";
+  if (/ReferenceError|TypeError:? (?:\[Error\]:? )?(?:\(0\s*,\s*)?(?:[\w$.()[\]]*?\.)?[\w$]+\)? is not a (?:function|constructor)|TypeError:? (?:\[Error\]:? )?Cannot read propert(?:y|ies) of undefined/.test(text)) return "missing_name";
   return r.cls === "assert" ? "assert" : r.cls === "missing_name" ? "missing_name" : "load";
 }
 

@@ -5,6 +5,7 @@ import { describe, expect, test } from "bun:test";
 import { parseCargo, parseJestJson, parseMochaJson, parseNodeEvents, resultFor } from "../../lanes/real-outcome/task/record.ts";
 import { caseClass, classifyLog, ecoOfFile, findProject, needRecipe, nodeRunner, parsePytestJunit, recipeFor, runClasses, runnable, screenTest, verifierRunner } from "../../lanes/eng-build/recipes.ts";
 import { EbError } from "../../lanes/eng-build/errors.ts";
+import { parseRecord } from "../../lanes/real-outcome/task/verify.ts";
 
 const code = (f: () => unknown): string => {
   try {
@@ -76,6 +77,8 @@ describe("the case classifier carries the primary", () => {
   test("a JS ReferenceError or a TypeError calling or reading through undefined is never assert", () => {
     expect(caseClass("jest", fail({ cls: "assert", msg: "TypeError: m.mul is not a function" }), {}, false)).toBe("missing_name");
     expect(caseClass("vitest", fail({ cls: "assert", msg: "ReferenceError: nope is not defined" }), {}, false)).toBe("missing_name");
+    expect(caseClass("vitest", fail({ cls: "assert", msg: "TypeError: (0 , mul) is not a function" }), {}, false)).toBe("missing_name");
+    expect(caseClass("vitest", fail({ cls: "assert", msg: "TypeError: (0 , __vi_import_0__.mul) is not a function" }), {}, false)).toBe("missing_name");
     expect(caseClass("mocha", fail({ cls: "assert", msg: "TypeError: Cannot read properties of undefined (reading 'x')" }), {}, false)).toBe("missing_name");
     expect(caseClass("nodetest", fail({ cls: "assert", msg: "AssertionError: 3 == 4" }), {}, false)).toBe("assert");
     expect(caseClass("jest", fail({ cls: "assert", msg: "src/a.ts: error TS2339: Property" }), {}, false)).toBe("compile");
@@ -133,6 +136,19 @@ describe("record parsers", () => {
     expect(p.results["t/n.test.js::ref"]).toMatchObject({ cls: "missing_name" });
     expect(p.results["t/n.test.js::sk"].status).toBe("skip");
     expect(resultFor(p, "t/bad.test.js::any")).toMatchObject({ status: "fail", cls: "load" });
+    const gone = parseNodeEvents(JSON.stringify({ event: "test:fail", path: ["t/m.test.js"], file: "/testbed/t/m.test.js", msg: "test failed SyntaxError: The requested module '../src/calc.js' does not provide an export named 'mul'" }));
+    expect(resultFor(gone, "t/m.test.js::calc > muls")).toMatchObject({ status: "fail", cls: "missing_name", name: "mul" });
+  });
+  test("a node run whose record holds nothing fails every id from its stderr; a record with results ignores stderr", () => {
+    const mocha = { kind: "mocha" as const, root: "", bin: "node_modules/mocha/bin/mocha.js", config: null, build: null, node_args: [], args: [] };
+    const files = (record: string | null, stderr: string | null) => (f: string) => (f === "record.json" ? record : f === "stderr.txt" ? stderr : null);
+    const died = parseRecord(mocha, files(null, "SyntaxError: The requested module '../src/calc.js' does not provide an export named 'mul'\n"));
+    expect(resultFor(died, "test/calc.spec.js::calc muls")).toMatchObject({ status: "fail", cls: "missing_name", name: "mul" });
+    const crashed = parseRecord(mocha, files("", "Error: boom\n    at x.js:1\n"));
+    expect(resultFor(crashed, "test/calc.spec.js::calc muls")).toMatchObject({ status: "fail", cls: "load" });
+    expect(parseRecord(mocha, files(null, ""))).toEqual({ results: {}, seen: [], notes: [] });
+    const ok = parseRecord(mocha, files(JSON.stringify({ passes: [{ fullTitle: "calc adds", file: "/testbed/test/calc.spec.js" }], failures: [], pending: [] }), "Error: noise\n"));
+    expect(ok.results).toEqual({ "test/calc.spec.js::calc adds": { status: "pass" } });
   });
   test("cargo text: ids by target source, and a panic is an assert", () => {
     const text = ["     Running unittests src/lib.rs (target/debug/deps/x-1)", "test tests::adds ... ok", "test tests::bad ... FAILED", "", "---- tests::bad stdout ----", "thread 'tests::bad' panicked at src/lib.rs:9:30:", "assertion failed", "", "failures:", "     Running tests/it.rs (target/debug/deps/it-2)", "test outer ... ok", "test slow ... ignored"].join("\n");
