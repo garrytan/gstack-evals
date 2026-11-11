@@ -22,7 +22,7 @@ import { containUnit, treeDigest } from "./containment.ts";
 import type { Arm } from "./items.ts";
 import { pfFail } from "./prereg.ts";
 import { PSTACK_DIR, pstackVolume } from "./pstack.ts";
-import { effortFields, effortHolds, effortProblem, endKind, readWrapup, taskStep, wrapupStep, writeSessionRecord, type EndKind, type PfPlanned, type PfSessionRecord } from "./session.ts";
+import { effortFields, effortHolds, effortProblem, endKind, readWrapup, taskStep, wrapupStep, writeSessionRecord, type EndKind, type PfPlanned, type PfPostTurn, type PfSessionRecord } from "./session.ts";
 import { TOOLS_DIR, toolsEnv, toolsVolume } from "./tools.ts";
 
 const ROOT = join(import.meta.dir, "../../..");
@@ -232,7 +232,7 @@ export function pfRecord(i: PfRunInput, attempt: 1 | 2, summary: Record<string, 
     schema: "pf-session.v1", unit: s.unit, part: s.part, index: s.index, model: s.model, arm: s.arm, item: s.item, attempt, names: i.names,
     lease_id: ((summary?.events ?? []) as Array<Record<string, any>>).find((e) => e.event === "u4_slot")?.lease_id ?? "",
     task: { end: tEnd, turns: null, wall_ms: Math.round((t?.wall_s ?? 0) * 1000), spent_micros: spent("task") }, wrapup: ends.length ? { ends, turns: null, spent_micros: spent("wrapup") } : null,
-    wrapup_end: ws?.action === "score" ? ws.wrapup_end : null, gap, gap_reason: reason, base_commit: base, capture: cap, forced: cap?.forced ?? [], discarded: keep.discarded,
+    wrapup_end: ws?.action === "score" ? ws.wrapup_end : null, gap, gap_reason: reason, post_turn: (summary?.post_turn as PfPostTurn | undefined) ?? null, base_commit: base, capture: cap, forced: cap?.forced ?? [], discarded: keep.discarded,
     checks: keep.checks && ev ? join(ev, "CHECKS.json") : null, s: hasS ? { repo: bundle, ref: "HEAD" } : null,
     transcript: ev ? join(ev, "sdk-messages.jsonl") : null, claude_session: cs && existsSync(cs) && statSync(cs).size > 0 ? cs : null, effort,
     questions: { ask_user_question: sum(q.map((x) => x.ask_user_question)), prose: sum(q.map((x) => x.prose_questions)) }, cap_stop: capStop, env: { ...ARM_ENV },

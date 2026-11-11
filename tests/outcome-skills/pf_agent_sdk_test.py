@@ -85,7 +85,7 @@ for line in sys.stdin:
         if phase == "task":
             os.makedirs("checks", exist_ok=True)
             open("checks/regress_test.sh", "w").write("grep -q reset flag/flag.go\n")
-            if scenario == "task_lock":
+            if scenario in ("task_lock", "task_lock_wall"):
                 open(".git/index.lock", "w").close()
             if scenario == "task_grow":
                 with open("states.bin", "w") as f:
@@ -102,6 +102,8 @@ for line in sys.stdin:
             open("late_%d.txt" % n, "w").write("wrap-up file\n")
         send({"type": "system", "subtype": "init", "session_id": "s-1", "tools": ["Bash"], "skills": [], "model": "claude-opus-5-5", "claude_code_version": "2.1.312"})
         send({"type": "assistant", "message": {"id": "m%d" % n, "type": "message", "role": "assistant", "model": "stub", "content": [{"type": "text", "text": "Done."}], "stop_reason": None, "usage": {"input_tokens": 1, "output_tokens": 1}}, "parent_tool_use_id": None, "session_id": "s-1", "uuid": "u%d" % n})
+        if scenario == "task_lock_wall" and phase == "task":
+            continue
         send({"type": "result", "subtype": "error_during_execution" if error else "success", "duration_ms": 1, "duration_api_ms": 1, "is_error": error, "num_turns": 1, "session_id": "s-1", "total_cost_usd": 0, "usage": {}, "result": "Done."})
 '''
 
@@ -167,7 +169,7 @@ def sh(cwd, cmd):
     return r.stdout.strip()
 
 
-def session(scenario="ok", instr=False, cap_stop=False, arm="P", wrapup_refusals=(), wrapup_stops=0, unfinalized=(), task_refusals=(), task_stops=0, failing_closes=None):
+def session(scenario="ok", instr=False, cap_stop=False, arm="P", wrapup_refusals=(), wrapup_stops=0, unfinalized=(), task_refusals=(), task_stops=0, failing_closes=None, task_wall=60):
     """One PfAgent trial; returns the error it raised, the control plane's calls, the stub's log and pf-summary.json."""
     d = Path(tempfile.mkdtemp(prefix="pf-agent-sdk-"))
     DIRS.append(d)
@@ -187,7 +189,7 @@ def session(scenario="ok", instr=False, cap_stop=False, arm="P", wrapup_refusals
     rig = {"quiet_sec": 0.2, "bg_wait_sec": 1}
     pf = {
         "schema": "pf-config.v1", "arm": arm, "names": "short", "task_text": "Write a test that catches the bug.", "wrapup_text": "Last step. Write CHECKS.json.",
-        "limits": {"task": {"wall_limit_sec": 60, "max_turns": 250, "allowance_usd": 12, **rig}, "wrapup": {"wall_limit_sec": 60, "max_turns": 20, "allowance_usd": 6, **rig}},
+        "limits": {"task": {"wall_limit_sec": task_wall, "max_turns": 250, "allowance_usd": 12, **rig}, "wrapup": {"wall_limit_sec": 60, "max_turns": 20, "allowance_usd": 6, **rig}},
         "no_answer": "No one is available to answer. Use your own judgment.", "plugin": "/opt/pf-pstack" if arm == "P" else None, "env": {"CLAUDE_CODE_DISABLE_BUNDLED_SKILLS": "1"},
     }
     (d / "pf-config.json").write_text(json.dumps(pf))
@@ -438,6 +440,14 @@ def test_an_index_lock_the_task_turn_left_makes_the_capture_failure_the_arms():
     check(s.error is None, repr(s.error))
     check(s.summary["refused"].startswith("E_PF_ARM post_turn capture.sh commit: ") and "lock .git/index.lock" in s.summary["refused"], s.summary.get("refused"))
     check([o["meta"]["phase"] for o in s.control.opens] == ["task"] and s.summary["capture"] is None and s.summary["wrapup"] == [], s.summary)
+
+
+def test_a_lock_the_agents_git_left_at_a_wall_limit_end_is_a_post_turn_cause_after_that_end():
+    s = session("task_lock_wall", task_wall=3)
+    check(s.error is None, repr(s.error))
+    check(s.summary["refused"].startswith("E_PF_ARM post_turn capture.sh commit: "), s.summary.get("refused"))
+    pt = s.summary.get("post_turn") or {}
+    check(pt.get("step") == "capture.sh commit" and pt.get("timed_out") is False and pt.get("causes") == ["lock .git/index.lock"] and pt.get("after") == {"phase": "task", "termination": "wall_limit"}, pt)
 
 
 def test_a_lock_the_harness_capture_leaves_as_it_fails_stays_infra():

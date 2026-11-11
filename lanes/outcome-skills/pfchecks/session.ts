@@ -91,6 +91,9 @@ export function readWrapup(stdout: string): Discard {
   return { checks: m[1] === "1", discarded };
 }
 
+/** A failed post-turn step as pf_turns saw it: the step, whether it timed out, its failure, the PF_ARM_STATE causes
+ *  state.sh found (none for an infra gap) and the end of the turn before it, raw (wall_limit, bg_wait_expired...). */
+export interface PfPostTurn { step: string; timed_out: boolean; failed: string; causes: string[]; after: { phase: string; termination: string } | null }
 export interface PfSessionRecord {
   schema: "pf-session.v1"; unit: string; part: number; index: number; model: string; arm: PfArm; item: string; lease_id: string;
   attempt: 1 | 2; names: Names; task: { end: EndKind; turns: number | null; wall_ms: number; spent_micros: number };
@@ -99,6 +102,8 @@ export interface PfSessionRecord {
    *  is not the head capture.sh committed) or post_turn (a post-turn step failed on what the agent wrote); null for every
    *  other gap. */
   gap_reason: string | null;
+  /** pf_turns' record of the post-turn step that failed, for an arm gap or an infra gap alike; null when none did. */
+  post_turn?: PfPostTurn | null;
   /** The unit's base commit (the session image's head); scoring checks that S's root is this commit. */
   base_commit: string | null;
   capture: Capture | null; forced: string[]; discarded: string[]; checks: string | null; s: { repo: string; ref: string } | null; transcript: string | null;

@@ -89,7 +89,8 @@ class Session:
         self.user.per_turn(["task", "wrapup"])
         self.transcript = (self.out / "sdk-messages.jsonl").open("a")
         self.started = time.time()
-        self.summary = {"claude_version": None, "check": None, "task": None, "wrapup": [], "slots": [], "capture": None, "keep": None, "checks": False}
+        self.summary = {"claude_version": None, "check": None, "task": None, "wrapup": [], "slots": [], "capture": None, "keep": None, "checks": False, "post_turn": None}
+        self.last_turn = None
 
     def sh(self, script: str, *args: str, timeout: float = 600) -> subprocess.CompletedProcess:
         return subprocess.run([*self.cfg["exec_prefix"], "bash", "-c", script, "bash", *args], capture_output=True, timeout=timeout)
@@ -123,7 +124,8 @@ class Session:
             probe = self.sh('d=$1; shift; bash "$d/state.sh" "$@"', cfg["sh_dir"], *timed_out, cfg["repo"], cfg["work"], *needs).stdout.decode(errors="replace")
         except subprocess.TimeoutExpired:
             probe = ""
-        causes = [l[len("PF_ARM_STATE "):] for l in (err + "\n" + probe).splitlines() if l.startswith("PF_ARM_STATE ")]
+        causes = list(dict.fromkeys(l[len("PF_ARM_STATE "):] for l in (err + "\n" + probe).splitlines() if l.startswith("PF_ARM_STATE ")))
+        self.summary["post_turn"] = {"step": what, "timed_out": bool(timed_out), "failed": failed[:400], "causes": causes, "after": self.last_turn}
         if causes:
             raise RuntimeError(f"E_PF_ARM post_turn {what}: {'; '.join(dict.fromkeys(causes))}"[:600])
         raise RuntimeError(f"E_PF_CAPTURE {what} {failed}")
@@ -156,6 +158,7 @@ class Session:
             if phase != "wrapup":
                 raise
             self.summary["slots"].append({"phase": phase, "rerun": rerun, "id": None, "allowance_micros": None, "close": None, "open_refused": str(e)[:300]})
+            self.last_turn = {"phase": phase, "termination": "open_refused"}
             return {"phase": phase, "termination": "open_refused", "drive": {"error": str(e)[:400]}, "session_id": sid, "wall_s": 0.0, "refused": ["CAP_STOP"], "allowance_stops": 0, "finalized": None}
 
         async def can_use_tool(tool_name, tool_input, ctx):
@@ -211,6 +214,7 @@ class Session:
                 pass
             closed = self.slots.close(slot, "turn_end")
         self.summary["slots"].append({"phase": phase, "rerun": rerun, "id": slot.get("id"), "allowance_micros": slot.get("allowance_micros"), "close": closed})
+        self.last_turn = {"phase": phase, "termination": termination}
         return {"phase": phase, "termination": termination, "drive": end, "session_id": sid, "wall_s": round(time.time() - started, 1), "refused": (closed or {}).get("refusals") or [], "allowance_stops": int((closed or {}).get("allowance_stops") or 0), "finalized": (closed or {}).get("finalized")}
 
     async def run(self) -> dict:

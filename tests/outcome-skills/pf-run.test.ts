@@ -478,3 +478,17 @@ test("E_PF_CAPTURE's entry says a post-turn capture failure follows paid turns a
   expect(e.side_effects).not.toBe("None: refused before any spend.");
   expect(e.meaning).toContain("after");
 });
+
+// Value: protects=the Captain's ruling B on #324: the run report counts lock gaps the agent's git left, per arm and model, apart from other arm gaps; fails_when=the session record carries no post_turn object, or one whose causes or turn end a script cannot read, for an arm gap or an infra gap, or carries one when no post-turn step failed; why_new=the record kept only gap_reason post_turn, and the cause lived in the refusal text; seam=run.ts pfRecord over pf_turns' summary.post_turn; no_claim=that pf_turns writes it (pf_agent_sdk_test.py)
+test("pfRecord carries the summary's post_turn object, a lock cause after a wall-limit end a script can read, for an arm gap and an infra gap", () => {
+  const i = input("P");
+  const base = { task: turn("wall_limit"), slots: [slot("task", 4)] };
+  const pt = { step: "capture.sh commit", timed_out: false, failed: "exited 128: fatal", causes: ["lock .git/index.lock"], after: { phase: "task", termination: "wall_limit" } };
+  const arm = pfRecord(i, 1, { ...summary(base), capture: null, keep: null, refused: "E_PF_ARM post_turn capture.sh commit: lock .git/index.lock", post_turn: pt }, null) as any;
+  expect([arm.gap, arm.gap_reason, arm.post_turn]).toEqual(["E_PF_ARM", "post_turn", pt]);
+  expect(arm.post_turn.causes.some((c: string) => c.startsWith("lock ")) && arm.post_turn.after.termination === "wall_limit").toBe(true);
+  const ipt = { ...pt, timed_out: true, failed: "timed out after 600 s", causes: [] };
+  const infra = pfRecord(i, 1, { ...summary(base), capture: null, keep: null, refused: "E_PF_CAPTURE capture.sh commit timed out after 600 s", post_turn: ipt }, null) as any;
+  expect([infra.gap, infra.post_turn]).toEqual(["E_PF_INFRA_GAP", ipt]);
+  expect((pfRecord(i, 1, summary({ task: turn("completed"), wrapup: [turn("completed")], slots: [slot("task", 4), slot("wrapup", 2)] }), null) as any).post_turn).toBeNull();
+});
