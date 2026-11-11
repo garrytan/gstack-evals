@@ -34,7 +34,7 @@ export const HELP = `Usage: gstack-evals outcome pf <command>
   reprice --in <reprice.json> [--out <file>]
   session plan --units <id,id,...> --prereg <prereg.json> --part <n> [--kind test|admit|blind] [--models <model,...>] --out <plan.json>
   session run --unit <dir> --plan <plan.json> --index <n> --control <url> --proxy <host:port> --names short|plugin --effort <effort.json> --out <dir>
-              [--volume <tree volume>] [--allowance <allowance.json>] [--harbor <bin>] [--claude <bin>]
+              [--volume <tree volume>] [--allowance <allowance.json>] [--issue <report.md>] [--harbor <bin>] [--claude <bin>]
               exits 10 at a cap stop, 11 at a finalize halt and 12 at a containment halt
   items
 Plan sections 2, 6 to 13 (README.md in this lane). Codes E_PF_* in docs/errors.md.`;
@@ -97,6 +97,7 @@ async function run(cmd: string, a: Args, deps: Deps): Promise<number> {
     const res = await deps.runPfSession({
       unitDir, session, names, control: need(a, "control"), proxy: need(a, "proxy"), out: need(a, "out"), volume: (a.volume as string | undefined) ?? smTreeVolume(u.id), effort,
       ...(session.arm === "blind" ? { scope: u.scope?.dir } : {}), ...(a.allowance === undefined ? {} : { allowance: readJson(need(a, "allowance")) }),
+      ...(a.issue === undefined ? {} : { issue: readFileSync(need(a, "issue"), "utf8") }),
       ...(a.harbor === undefined ? {} : { harbor: need(a, "harbor") }), ...(a.claude === undefined ? {} : { claude: need(a, "claude") }),
     });
     console.log("session=" + [session.unit, session.model, session.arm, session.index].join("/") + " gap=" + res.record.gap + " record=" + res.file);

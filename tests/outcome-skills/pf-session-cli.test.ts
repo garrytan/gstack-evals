@@ -119,6 +119,20 @@ test("session run refuses an index outside the plan, a run without effort.json a
   expect([blind.exit, blind.calls[0]?.session.arm, blind.calls[0]?.scope]).toEqual([0, "blind", "flag/"]);
 });
 
+// Value: protects=section 10's raise and cut-report sessions on the paid run (#305's run notes item 10); fails_when=session run with --issue passes runPfSession anything but that file's text as issue, or sets issue without the flag; why_new=session run never set issue, so every session read the unit's issue.md and the raise's report with the changed files, or the cut report, could not run; seam=pfchecks/cli.ts session run --issue; no_claim=which report admission picks (admission.ts), how runCopy builds the task turn (pf-run.test.ts)
+test("session run passes the --issue file's text as the session's bug report, and leaves issue unset without the flag", async () => {
+  const unit = unitDir("pf-cli-flag");
+  const plan = await planFile("pf-cli-flag");
+  const effort = effortFile();
+  const plain = await session(runArgs({ unit, plan, index: "0", effort }));
+  expect([plain.exit, plain.calls.length]).toEqual([0, 1]);
+  expect("issue" in plain.calls[0]!).toBe(false);
+  const report = join(temp("pf-cli-issue-"), "raise.md");
+  writeFileSync(report, "The flag is never reset.\n\nThe fix changed parser.py.\n");
+  const raised = await session([...runArgs({ unit, plan, index: "0", effort }), "--issue", report]);
+  expect([raised.exit, raised.calls.length, raised.calls[0]?.issue]).toEqual([0, 1, "The flag is never reset.\n\nThe fix changed parser.py.\n"]);
+});
+
 // Value: protects=the runner VM's loop, which stops at the first non-zero exit (#305's run notes item 10); fails_when=a cap stop, a finalize halt or a containment halt in session run exits 0, or two of them share an exit, or a session that ends with a gap exits non-zero; why_new=the three stops exited 2, 2 and 1, so the loop could not tell them apart; seam=pfchecks/cli.ts main's exit for session; no_claim=when runPfSession raises each (pf-run.test.ts, pf-containment.test.ts)
 test("session run exits 10 at a cap stop, 11 at a finalize halt and 12 at a containment halt, and 0 for a session that ends with a gap", async () => {
   expect(SESSION_EXIT).toEqual({ CAP_STOP: 10, E_PF_FINALIZE_HALT: 11, E_PF_CONTAINMENT: 12 });
