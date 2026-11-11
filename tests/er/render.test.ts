@@ -8,7 +8,7 @@ import { appendFileSync, existsSync, mkdtempSync, readFileSync, statSync, writeF
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { removeTree } from "../../src/trial/cleanup.ts";
-import { ER_ENGPHASE_GSTACK, renderEngPhase, run, section, skipList } from "../../lanes/eng-review/render.ts";
+import { ER_ENGPHASE_GSTACK, placeOpeningFile, renderEngPhase, run, section, skipList } from "../../lanes/eng-review/render.ts";
 
 const CLONE = join(homedir(), ".capy", "work", "gstack");
 const PRECUT = "b493d4e31ac9619ef7e52e176d590ad4f454cd66";
@@ -122,6 +122,14 @@ describe.skipIf(!HAVE)("er render at the eng phase pin", () => {
     expect(other.files.find((x) => x.name === "eng-implementation.md")!.sha256).not.toBe(r.files.find((x) => x.name === "eng-implementation.md")!.sha256);
   });
 
+  test("a resume renders into the same out: equal files are reused, another plan's are refused (F10)", () => {
+    const out = join(scratch(), "out");
+    const first = renderEngPhase({ gstack: PIN, plan: PLAIN, out });
+    const again = renderEngPhase({ gstack: PIN, plan: PLAIN, out });
+    expect(again.files).toEqual(first.files);
+    expect(() => renderEngPhase({ gstack: PIN, plan: PLAIN + "\nAlso log cache misses.\n", out })).toThrow(/^E_EB_CACHE_STALE opening file /);
+  });
+
   test("a plan with no headings at all is wrapped whole", () => {
     expect(f["eng-implementation.md"]).toBe(PLAIN);
     expect(r.text).toContain("It has no Implementation plan and Review record headings of its own");
@@ -224,3 +232,22 @@ describe("er render's section reader", () => {
 function dirname0(p: string): string {
   return p.slice(0, p.lastIndexOf("/"));
 }
+
+describe("er render's opening file placement (F10)", () => {
+  test("writes a new file read-only, reuses one with the same bytes and refuses one with other bytes", () => {
+    const host = join(scratch(), "methodology.md");
+    placeOpeningFile(host, "same text\n");
+    expect(statSync(host).mode & 0o777).toBe(0o444);
+    expect(() => placeOpeningFile(host, "same text\n")).not.toThrow();
+    expect(readFileSync(host, "utf8")).toBe("same text\n");
+    let err: (Error & { code?: string }) | null = null;
+    try {
+      placeOpeningFile(host, "other text\n");
+    } catch (e) {
+      err = e as Error & { code?: string };
+    }
+    expect(err?.code).toBe("E_EB_CACHE_STALE");
+    expect(err?.message).toBe("E_EB_CACHE_STALE opening file " + host + " holds sha256 " + sha("same text\n") + ", not the rendered " + sha("other text\n") + "; start a new run in a new --out");
+    expect(readFileSync(host, "utf8")).toBe("same text\n");
+  });
+});

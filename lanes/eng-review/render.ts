@@ -65,7 +65,7 @@ export interface EngPhaseOpening {
 }
 
 const sha256 = (t: string | Buffer) => createHash("sha256").update(t).digest("hex");
-const fail = (code: "E_USAGE" | "E_INTERNAL", message: string) => Object.assign(new Error(code + " " + message), { code });
+const fail = (code: "E_USAGE" | "E_INTERNAL" | "E_EB_CACHE_STALE", message: string) => Object.assign(new Error(code + " " + message), { code });
 
 function git(dir: string, args: string[]): string {
   const r = spawnSync("git", ["-C", dir, ...args], { encoding: "utf8" });
@@ -248,13 +248,21 @@ export function renderEngPhase(o: { gstack: string; plan: string; out: string })
     mkdirSync(o.out, { recursive: true });
     const files = contents.map(([name, body]) => {
       const host = join(o.out, name);
-      writeFileSync(host, body, { flag: "wx", mode: 0o444 });
+      placeOpeningFile(host, body);
       return { name, host, mount: MOUNT_DIR + "/" + name, sha256: sha256(body) };
     });
     return { text, sha256: sha256(text), files, methodology: methodologyMount, readRanges };
   } finally {
     removeTree(scratch);
   }
+}
+
+/** Writes one opening file read-only, or reuses the file already there when its bytes are the same (a resumed run renders
+ * its openings again). A file with other bytes is refused: the run's openings no longer match its units. */
+export function placeOpeningFile(host: string, body: string): void {
+  if (!existsSync(host)) return writeFileSync(host, body, { flag: "wx", mode: 0o444 });
+  const found = readFileSync(host);
+  if (!found.equals(Buffer.from(body))) throw fail("E_EB_CACHE_STALE", "opening file " + host + " holds sha256 " + sha256(found) + ", not the rendered " + sha256(body) + "; start a new run in a new --out");
 }
 
 const HELP = "gstack-evals er render --gstack <checkout at 199931029> --plan <plan.md> --out <dir>\n  Renders the eng phase arm's opening for one unit: writes the files to mount read-only under /work/autoplan/, plus opening.md and opening.json, into --out (outside this repo, absent or empty), and prints the opening's sha256.";
