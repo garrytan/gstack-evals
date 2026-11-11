@@ -274,7 +274,9 @@ run. It waits for the neutral record, so it can start while the neutral gate sti
   runPfSession runs the same gate (containUnit) before every session: the unit's first session runs the check and
   records it in the unit dir's pf-contain.json, one entry per session image tag; a later session reuses a passing entry
   when the tree volume's content digest (sh/tree-digest.sh: every entry's type, mode, name, file hash and link target,
-  .git included, no times), the tag, the runtime image, the head and the check script's sha256 all match. The digest is
+  .git included, no times), the tag, the runtime image, the head, the base commit and the sha256s of the check script, the
+  session image's build script (statemachines image.ts BUILD), fix.patch, test.patch and the fail-to-pass ids all match
+  (containment.ts reuseKey). The digest is
   taken before the image build and again after the gate, and both must match the entry. A check whose two digests
   differ stores its entry with no digest, so no later session reuses it. The image id is not in the key, since every
   session image is a new build. A failure halts the unit with E_PF_CONTAINMENT before any session, without dropping it.

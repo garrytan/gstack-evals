@@ -21,7 +21,7 @@ import { smFail, type SmUnit } from "./unit.ts";
 const SH = join(import.meta.dir, "sh");
 export const SESSION_REPO = "gstack-evals-sm-session";
 
-const BUILD = `set -euo pipefail
+export const BUILD = `set -euo pipefail
 repo="$1"
 mnts=(); ex=()
 while read -r _ _ _ _ m _; do case "$m" in "$repo"/*) mnts+=("$m"); ex+=(-e "/\${m#"$repo"/}/");; esac; done < /proc/self/mountinfo

@@ -24,7 +24,7 @@ import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { dockerRun } from "../../real-outcome/task/docker.ts";
-import type { SessionImage } from "../statemachines/image.ts";
+import { BUILD, type SessionImage } from "../statemachines/image.ts";
 import { runName } from "../statemachines/testrun.ts";
 import { added30, type SmUnit } from "../statemachines/unit.ts";
 import { pfFail } from "./prereg.ts";
@@ -32,6 +32,9 @@ import { pfFail } from "./prereg.ts";
 export const CONTAIN_SCRIPT = readFileSync(join(import.meta.dir, "sh", "contain.sh"), "utf8");
 /** The check script's sha256, part of the reuse key, so a record the scan as it was before wrote is never reused. */
 export const CONTAIN_SCRIPT_SHA256 = createHash("sha256").update(CONTAIN_SCRIPT).digest("hex");
+/** The session image's build script's sha256 (statemachines image.ts BUILD), part of the reuse key: it turns the tree volume
+ *  into the repository the check reads. */
+export const BUILD_SHA256 = createHash("sha256").update(BUILD).digest("hex");
 export const TREE_DIGEST_SCRIPT = readFileSync(join(import.meta.dir, "sh", "tree-digest.sh"), "utf8");
 export const CONTAIN_RECORD = "pf-contain.json";
 const MUST_ZERO = ["bad_refs", "bad_commits", "alternates", "gitfile", "modules", "nested", "tracked_changed", "repo_fix_blobs", "clones", "leaked_after", "leaked_fix", "hits"];
@@ -131,18 +134,27 @@ export function treeDigest(image: Pick<SessionImage, "runtime_id" | "volume">): 
   return readDigest(r, "tree volume " + image.volume);
 }
 
+/** The reuse key's parts that the check's own inputs set: the check script, the session image's build script, and the
+ *  files containInputs reads (fix.patch, test.patch, the fail-to-pass ids) and the base commit, each by sha256 but the
+ *  commit id. */
+export function reuseKey(unitDir: string, u: Pick<SmUnit, "base_commit" | "tests">): { script_sha256: string; build_sha256: string; fix_sha256: string; test_sha256: string; f2p_sha256: string; base_commit: string } {
+  const sha = (b: string | Buffer) => createHash("sha256").update(b).digest("hex");
+  return { script_sha256: CONTAIN_SCRIPT_SHA256, build_sha256: BUILD_SHA256, fix_sha256: sha(readFileSync(join(unitDir, "fix.patch"))), test_sha256: sha(readFileSync(join(unitDir, "test.patch"))), f2p_sha256: sha(JSON.stringify(u.tests.f2p)), base_commit: u.base_commit };
+}
+
 /** tree_digest is null when the tree volume's digest after the check differs from the one taken before the image build:
  *  the image may hold another tree than either digest names, so no session reuses the record. */
-export interface ContainRecord extends ContainResult { schema: "pf-contain.v1"; unit: string; tag: string; image_id: string; runtime_id: string; head: string; tree_digest: string | null; script_sha256: string; after_source: string; after: number }
+export interface ContainRecord extends ContainResult, ReturnType<typeof reuseKey> { schema: "pf-contain.v1"; unit: string; tag: string; image_id: string; runtime_id: string; head: string; tree_digest: string | null; after_source: string; after: number }
 
 /** Runs the check on the unit's session image and records it in the unit dir (pf-contain.json, one entry per image tag),
- *  with the check script's sha256 and the tree volume's digest that the gate's reuse key reads. before is the volume's
+ *  with the reuse key (reuseKey) and the tree volume's digest that the gate reads. before is the volume's
  *  digest taken before buildSessionImage; digest reads it again after the check, and the record keeps it only when the two
  *  match. */
 export function checkUnit(unitDir: string, u: SmUnit, image: SessionImage, before: string, digest: (image: SessionImage) => string = treeDigest): ContainRecord {
+  const key = reuseKey(unitDir, u);
   const after = upstreamAfter({ image: image.runtime_id }, u.repo_dir, u.base_commit);
   const result = containImage(image.tag, u.repo_dir, containInputs(unitDir, u, after.ids));
-  const rec: ContainRecord = { schema: "pf-contain.v1", unit: u.id, tag: image.tag, image_id: image.image_id, runtime_id: image.runtime_id, head: image.head, tree_digest: digest(image) === before ? before : null, script_sha256: CONTAIN_SCRIPT_SHA256, after_source: after.source, after: after.ids.length, ...result };
+  const rec: ContainRecord = { schema: "pf-contain.v1", unit: u.id, tag: image.tag, image_id: image.image_id, runtime_id: image.runtime_id, head: image.head, tree_digest: digest(image) === before ? before : null, ...key, after_source: after.source, after: after.ids.length, ...result };
   const file = join(unitDir, CONTAIN_RECORD);
   const all = existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as { schema: string; checks: Record<string, ContainRecord> }) : { schema: "pf-contain.v1", checks: {} };
   all.checks[image.tag] = rec;
@@ -152,7 +164,7 @@ export function checkUnit(unitDir: string, u: SmUnit, image: SessionImage, befor
 }
 
 /** The gate before each session: a passing record for this session image's tag is reused when the tag, the runtime image,
- *  the head and the check script match and the tree volume's content digest matches it twice, as before (taken before
+ *  the head and every part of reuseKey match and the tree volume's content digest matches it twice, as before (taken before
  *  buildSessionImage) and as digest reads it again now, else checkUnit runs. The image id is not in the key: every session
  *  image is a new build with a new id, and its content is the runtime image plus the tree volume at that head. A failure
  *  halts the unit with E_PF_CONTAINMENT before any session; the unit is not dropped, and the record stays for the
@@ -160,7 +172,8 @@ export function checkUnit(unitDir: string, u: SmUnit, image: SessionImage, befor
 export function containUnit(unitDir: string, u: SmUnit, image: SessionImage, before: string, digest: (image: SessionImage) => string = treeDigest): ContainRecord {
   const file = join(unitDir, CONTAIN_RECORD);
   const prior = existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as { checks?: Record<string, ContainRecord> }).checks?.[image.tag] : undefined;
-  const rec = prior?.ok && prior.tree_digest === before && prior.tag === image.tag && prior.runtime_id === image.runtime_id && prior.head === image.head && prior.script_sha256 === CONTAIN_SCRIPT_SHA256 && digest(image) === before ? prior : checkUnit(unitDir, u, image, before, digest);
+  const key = reuseKey(unitDir, u);
+  const rec = prior?.ok && prior.tree_digest === before && prior.tag === image.tag && prior.runtime_id === image.runtime_id && prior.head === image.head && Object.entries(key).every(([k, v]) => prior[k as keyof typeof key] === v) && digest(image) === before ? prior : checkUnit(unitDir, u, image, before, digest);
   if (!rec.ok) pfFail("E_PF_CONTAINMENT", u.id + ": the containment check failed on session image " + image.tag + " (" + rec.detail + "); the unit halts before any session and is not dropped; record " + file);
   return rec;
 }
