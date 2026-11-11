@@ -85,6 +85,14 @@ for line in sys.stdin:
             open("checks/regress_test.sh", "w").write("grep -q reset flag/flag.go\n")
             if scenario == "task_lock":
                 open(".git/index.lock", "w").close()
+            if scenario == "task_grow":
+                with open("states.bin", "w") as f:
+                    f.truncate(8 << 30)
+            if scenario == "task_filter":
+                import subprocess
+                subprocess.run(["git", "config", "filter.pf.clean", "false"], check=True)
+                subprocess.run(["git", "config", "filter.pf.required", "true"], check=True)
+                open(".gitattributes", "w").write("* filter=pf\n")
         else:
             if scenario == "wrapup_rm_head":
                 os.remove(os.path.join(os.environ["PF_STUB_WORK"], "s.head"))
@@ -437,6 +445,20 @@ def test_a_lock_the_harness_capture_leaves_as_it_fails_stays_infra():
     s = with_scripts(edit)
     check(s.error is None, repr(s.error))
     check(s.summary["refused"].startswith("E_PF_CAPTURE capture.sh commit exited 3: capture died"), s.summary.get("refused"))
+
+
+def test_a_capture_that_times_out_on_a_tree_the_task_turn_grew_is_the_arms():
+    s = with_step(lambda script, args: subprocess.TimeoutExpired("docker", 600) if "capture.sh" in script and "commit" in args else None, scenario="task_grow")
+    check(s.error is None, repr(s.error))
+    check(s.summary["refused"].startswith("E_PF_ARM post_turn capture.sh commit: grown the session wrote files=") and s.summary["refused"].endswith(", at least 2000000 files or 8589934592 bytes"), s.summary.get("refused"))
+    check([o["meta"]["phase"] for o in s.control.opens] == ["task"] and s.summary["wrapup"] == [], s.summary)
+
+
+def test_a_capture_that_fails_on_a_git_filter_the_task_turn_set_is_the_arms():
+    s = session("task_filter")
+    check(s.error is None, repr(s.error))
+    check(s.summary["refused"].startswith("E_PF_ARM post_turn capture.sh commit: ") and "filter .git/config sets filter.pf.clean" in s.summary["refused"], s.summary.get("refused"))
+    check([o["meta"]["phase"] for o in s.control.opens] == ["task"] and s.summary["capture"] is None, s.summary)
 
 
 def test_a_wrapup_turn_that_removes_s_head_makes_the_keep_failure_the_arms():

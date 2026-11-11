@@ -92,11 +92,13 @@ class Session:
     def step(self, what: str, needs: tuple, cmd: str, *args: str) -> bytes:
         """One post-turn step in the container: the session-end commit, a wrap-up reset or keep, or the S bundle. When it
         fails or times out, sh/state.sh reads what the agent could have written (the work files the step needs, the
-        repository's git state, a lock the agent's git left) and a cause there, or a file that vanished while the step
-        hashed the tree, raises E_PF_ARM post_turn. Anything else raises E_PF_CAPTURE: the harness, the host, docker or the
+        repository's git state and filters, a lock the agent's git left, a path the step cannot read and, after a timeout,
+        named by --timed-out, a tree the session grew) and a cause there, or a path that vanished while the step hashed or
+        added it, raises E_PF_ARM post_turn. Anything else raises E_PF_CAPTURE: the harness, the host, docker or the
         network (#305's run notes item 4)."""
         cfg = self.cfg
         err = ""
+        timed_out = []
         try:
             self.sh('mkdir -p "$1" && touch "$1/pf-step.stamp"', cfg["work"])
             res = self.sh(cmd, *args)
@@ -106,8 +108,9 @@ class Session:
             failed = f"exited {res.returncode}: {err[-300:]}"
         except subprocess.TimeoutExpired as e:
             failed = f"timed out after {e.timeout:.0f} s"
+            timed_out = ["--timed-out"]
         try:
-            probe = self.sh('d=$1; shift; bash "$d/state.sh" "$@"', cfg["sh_dir"], cfg["repo"], cfg["work"], *needs).stdout.decode(errors="replace")
+            probe = self.sh('d=$1; shift; bash "$d/state.sh" "$@"', cfg["sh_dir"], *timed_out, cfg["repo"], cfg["work"], *needs).stdout.decode(errors="replace")
         except subprocess.TimeoutExpired:
             probe = ""
         causes = [l[len("PF_ARM_STATE "):] for l in (err + "\n" + probe).splitlines() if l.startswith("PF_ARM_STATE ")]

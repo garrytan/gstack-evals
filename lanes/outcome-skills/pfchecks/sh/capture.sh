@@ -14,13 +14,17 @@
 # file whose owner executable bit is set carries +x after its hash, so a change to the bit alone is a change, and the
 # commit adds with core.fileMode on, so git records it. A listed file that is gone when it is hashed (a process the agent
 # left running deleted it) fails the run with one "PF_ARM_STATE vanished <path>" line on stderr per such file, the cause
-# pf_turns routes to the arm.
+# pf_turns routes to the arm. So does a listed symlink gone when its target is read, and a changed path gone when the commit
+# adds it. "size <repo> <since> <files> <bytes>" prints "files=N bytes=B" for the files and symlinks the inventory lists
+# whose status changed after <since> was written, stopping once N reaches <files> or B reaches <bytes>.
+# "unreadable <repo> <since>" prints each such path, symlinks left out, that this user cannot read, or a directory it
+# cannot enter, one per line. sh/state.sh reads both after a step fails.
 set -euo pipefail
 cmd=$1
 repo=$2
 cd "$repo"
 g() { git -c safe.directory='*' -c core.quotepath=off "$@"; }
-list() {
+walk() {
   local keep=() d f p base
   local -A kept=()
   base=$(g rev-list --max-parents=0 HEAD 2>/dev/null | head -n 1 || true)
@@ -44,10 +48,11 @@ list() {
   find . \( -name .git -prune \) -o \( -type d \( -name node_modules -o -name .venv -o -name venv -o -name __pycache__ -o -name .gradle -o -name .pytest_cache \
     -o -name .tox -o -name .mypy_cache -o -name .cache -o -name CMakeFiles -o -name 'cmake-build-*' \) -prune \) \
     -o \( -type d \( -name target -o -name build -o -name out -o -name dist -o -name bin -o -name obj \) ${keep[@]+"${keep[@]}"} -prune \) \
-    -o \( \( -type f -o -type l \) -print0 \) | LC_ALL=C sort -z
+    -o \( "$@" \)
 }
+list() { walk \( -type f -o -type l \) -print0 | LC_ALL=C sort -z; }
 hashes() {
-  local t f h m
+  local t f h m l
   t=$(mktemp -d)
   while IFS= read -r -d '' f; do
     f=${f#./}
@@ -61,7 +66,12 @@ hashes() {
   fi
   while IFS= read -r -d '' f; do
     if [ "${f:0:1}" = L ]; then
-      h=$(printf 'link:%s' "$(readlink -- "${f:1}")" | sha256sum)
+      if ! l=$(readlink -- "${f:1}"); then
+        printf 'PF_ARM_STATE vanished %s\n' "${f:1}" >&2
+        rm -rf "$t"
+        exit 1
+      fi
+      h=$(printf 'link:%s' "$l" | sha256sum)
     else
       IFS= read -r h <&5; h=${h#\\}; h=${h%% *}
       IFS= read -r m <&6
@@ -81,7 +91,11 @@ case $cmd in
     awk -F'\t' 'NR==FNR { a[$2] = $1; next } !($2 in a) || a[$2] != $1 { print $2 }' "$inv" "$t/now" > "$t/changed"
     awk -F'\t' 'NR==FNR { a[$2] = 1; next } !($2 in a) { print $2 }' "$t/now" "$inv" > "$t/deleted"
     g check-ignore --stdin < "$t/changed" > "$t/forced" || true
-    tr '\n' '\0' < "$t/changed" | xargs -0 -r git -c safe.directory='*' -c core.fileMode=true --literal-pathspecs add --force --
+    if ! tr '\n' '\0' < "$t/changed" | xargs -0 -r git -c safe.directory='*' -c core.fileMode=true --literal-pathspecs add --force --; then
+      while IFS= read -r f; do [ -e "$f" ] || [ -L "$f" ] || printf 'PF_ARM_STATE vanished %s\n' "$f" >&2; done < "$t/changed"
+      rm -rf "$t"
+      exit 1
+    fi
     tr '\n' '\0' < "$t/deleted" | xargs -0 -r git -c safe.directory='*' --literal-pathspecs rm --cached -q --ignore-unmatch --
     GIT_COMMITTER_DATE="2000-01-01T00:00:01Z" g -c user.name=session -c user.email=session@localhost -c commit.gpgsign=false -c gc.auto=0 \
       commit -q --no-verify --allow-empty --date "2000-01-01T00:00:01Z" -m "session end"
@@ -95,5 +109,10 @@ case $cmd in
     printf 'PF_CAPTURE changed=%s deleted=%s forced=%s head=%s\n' "$(wc -l < "$t/changed" | tr -d ' ')" "$(wc -l < "$t/deleted" | tr -d ' ')" "$(wc -l < "$t/forced" | tr -d ' ')" "$head"
     rm -rf "$t"
     ;;
-  *) echo "usage: capture.sh inventory <repo> | commit <repo> <inventory> [<dir>]" >&2; exit 2 ;;
+  size)
+    { walk \( -type f -o -type l \) -cnewer "$3" -print0 | xargs -0 -r stat -c %s -- || true; } 2>/dev/null \
+      | awk -v F="$4" -v B="$5" '{ n++; b += $1; if (n >= F + 0 || b >= B + 0) exit } END { printf "files=%.0f bytes=%.0f\n", n, b }'
+    ;;
+  unreadable) { walk ! -type l -cnewer "$3" \( ! -readable -o -type d ! -executable \) -print 2>/dev/null || true; } | sed 's|^\./||' | LC_ALL=C sort ;;
+  *) echo "usage: capture.sh inventory <repo> | commit <repo> <inventory> [<dir>] | size <repo> <since> <files> <bytes> | unreadable <repo> <since>" >&2; exit 2 ;;
 esac

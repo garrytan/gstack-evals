@@ -2,7 +2,7 @@
 import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, truncateSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { commitLocal, inventoryLocal } from "../../lanes/outcome-skills/pfchecks/capture.ts";
@@ -285,5 +285,141 @@ test("state.sh names each cause in what the agent wrote, and nothing on a clean 
   expect(state()).toEqual(["PF_ARM_STATE git_dir .git is not a directory"]);
   rmSync(repo, { recursive: true, force: true });
   expect(state()).toEqual(["PF_ARM_STATE repo " + repo + " is not a directory"]);
+  rmSync(d, { recursive: true, force: true });
+});
+
+const sessionTree = (prefix: string) => {
+  const d = mkdtempSync(join(tmpdir(), prefix));
+  const repo = join(d, "repo");
+  const work = join(d, "work");
+  mkdirSync(repo);
+  mkdirSync(work);
+  git(repo, "init", "-q", "-b", "main");
+  writeFileSync(join(repo, "a.txt"), "a\n");
+  git(repo, "add", "-A");
+  git(repo, "commit", "-q", "-m", "base");
+  Bun.sleepSync(30);
+  writeFileSync(join(work, "inv"), "");
+  writeFileSync(join(work, "pf-step.stamp"), "");
+  Bun.sleepSync(30);
+  const state = (pre: string[] = [], env: Record<string, string> = {}) => {
+    const r = spawnSync("bash", [join(SH, "state.sh"), ...pre, repo, work], { encoding: "utf8", env: { ...process.env, ...env } });
+    expect(r.status).toBe(0);
+    return r.stdout.split("\n").filter(Boolean);
+  };
+  const later = (p: string) => utimesSync(p, new Date(Date.now() + 60_000), new Date(Date.now() + 60_000));
+  return { d, repo, work, state, later };
+};
+
+// Value: protects=the Captain's ruling item 4 on #324 (red-team#3): a post-turn step that times out on a tree the agent grew is the arm's; fails_when=state.sh names no growth on a timed-out step after the session wrote 8 GiB the capture lists, or names it below 8 GiB, without --timed-out, for a pruned directory or for files from before the session; why_new=every step timeout was E_PF_CAPTURE, whatever the tree held; seam=sh/state.sh with capture.sh size; no_claim=the 2,000,000-file bound's value (capture.sh size's own test covers the file count and its stop)
+test("on a timed-out step, state.sh names a tree the session grew by 8 GiB, and nothing below that, without --timed-out, in a pruned directory or from before the session", () => {
+  const { d, repo, work, state, later } = sessionTree("pf-state-grown-");
+  expect(state(["--timed-out"])).toEqual([]);
+  const big = join(repo, "states.bin");
+  writeFileSync(big, "");
+  truncateSync(big, 8 * 2 ** 30 - 1);
+  expect(state(["--timed-out"])).toEqual([]);
+  truncateSync(big, 8 * 2 ** 30);
+  expect(state(["--timed-out"])).toEqual(["PF_ARM_STATE grown the session wrote files=1 bytes=8589934592, at least 2000000 files or 8589934592 bytes"]);
+  expect(state()).toEqual([]);
+  mkdirSync(join(repo, "node_modules"));
+  renameSync(big, join(repo, "node_modules", "states.bin"));
+  expect(state(["--timed-out"])).toEqual([]);
+  renameSync(join(repo, "node_modules", "states.bin"), big);
+  later(join(work, "inv"));
+  expect(state(["--timed-out"])).toEqual([]);
+  rmSync(d, { recursive: true, force: true });
+});
+
+// Value: protects=the Captain's ruling item 4 on #324: the growth count state.sh reads on a timeout; fails_when=capture.sh size counts a file the capture does not list (a pruned directory, .git, a file from before the session), misses one it lists, or does not stop at the first bound reached; why_new=nothing counted what the session wrote; seam=capture.sh size; no_claim=the routing (state.sh's test, pf_agent_sdk_test.py)
+test("capture.sh size counts the files and bytes the session wrote as the capture lists them, and stops at the first bound it reaches", () => {
+  const { d, repo, work } = sessionTree("pf-size-");
+  mkdirSync(join(repo, "new"));
+  for (const n of [1, 2, 3, 4, 5]) writeFileSync(join(repo, "new", "f" + n), "x\n");
+  mkdirSync(join(repo, "node_modules"));
+  writeFileSync(join(repo, "node_modules", "skip"), "skipped\n");
+  mkdirSync(join(repo, "target"));
+  writeFileSync(join(repo, "target", "skip"), "skipped\n");
+  writeFileSync(join(repo, ".git", "skip"), "skipped\n");
+  const size = (...limits: string[]) => {
+    const r = spawnSync("bash", [join(SH, "capture.sh"), "size", repo, join(work, "inv"), ...limits], { encoding: "utf8" });
+    expect([r.status, r.stderr]).toEqual([0, ""]);
+    return r.stdout;
+  };
+  expect(size("100", "1000")).toBe("files=5 bytes=10\n");
+  expect(size("3", "1000")).toBe("files=3 bytes=6\n");
+  expect(size("100", "4")).toBe("files=2 bytes=4\n");
+  rmSync(d, { recursive: true, force: true });
+});
+
+// Value: protects=the Captain's ruling item 4 on #324 (adversarial-native#2): a file or directory the agent made unreadable makes a failed capture the arm's; fails_when=state.sh misses an unreadable file or a directory the capture cannot enter, or names a symlink, a path in a pruned directory or one from before the session; why_new=sha256sum's and find's permission errors printed no PF_ARM_STATE line, so the failure was E_PF_CAPTURE; seam=sh/state.sh with capture.sh unreadable; no_claim=a step run as root, where nothing is unreadable
+test.skipIf(process.getuid?.() === 0)("state.sh names a file or directory the session made unreadable, as the capture lists it, after the inventory fails on them", () => {
+  const { d, repo, work, state, later } = sessionTree("pf-state-unreadable-");
+  writeFileSync(join(repo, "u.txt"), "u\n");
+  chmodSync(join(repo, "u.txt"), 0);
+  mkdirSync(join(repo, "locked"));
+  writeFileSync(join(repo, "locked", "f"), "f\n");
+  chmodSync(join(repo, "locked"), 0o600);
+  mkdirSync(join(repo, "node_modules"));
+  writeFileSync(join(repo, "node_modules", "x"), "x\n");
+  chmodSync(join(repo, "node_modules", "x"), 0);
+  symlinkSync("missing", join(repo, "dangling"));
+  const inv = spawnSync("bash", [join(SH, "capture.sh"), "inventory", repo], { encoding: "utf8" });
+  expect(inv.status).not.toBe(0);
+  expect(state()).toEqual(["PF_ARM_STATE unreadable locked", "PF_ARM_STATE unreadable u.txt"]);
+  later(join(work, "inv"));
+  expect(state()).toEqual([]);
+  chmodSync(join(repo, "locked"), 0o755);
+  rmSync(d, { recursive: true, force: true });
+});
+
+// Value: protects=the Captain's ruling item 4 on #324 (adversarial-native#2): a link the agent's process removes makes a failed capture the arm's; fails_when=a symlink that vanishes while the tree is hashed hashes as link: and the run passes, or a file that vanishes before the commit adds it fails with no PF_ARM_STATE line, or a line names a path that is still there; why_new=readlink failed silently inside $( ), and a failed git add named no cause; seam=capture.sh hashes and commit; no_claim=the routing (pf_agent_sdk_test.py)
+test("a symlink that vanishes while the capture hashes the tree, or a file that vanishes before the commit adds it, fails with a PF_ARM_STATE vanished line naming only that path", () => {
+  const d = mkdtempSync(join(tmpdir(), "pf-cap-vanish-link-"));
+  const repo = join(d, "repo");
+  mkdirSync(repo);
+  git(repo, "init", "-q", "-b", "main");
+  writeFileSync(join(repo, "keep.txt"), "keep\n");
+  symlinkSync("keep.txt", join(repo, "link"));
+  git(repo, "add", "-A");
+  git(repo, "commit", "-q", "-m", "base");
+  const which = (c: string) => spawnSync("sh", ["-c", "command -v " + c], { encoding: "utf8" }).stdout.trim();
+  const bin = join(d, "bin");
+  mkdirSync(bin);
+  writeFileSync(join(bin, "sha256sum"), "#!/bin/sh\nrm -f ./link\nexec " + which("sha256sum") + ' "$@"\n');
+  chmodSync(join(bin, "sha256sum"), 0o755);
+  const run = (path: string, ...args: string[]) => spawnSync("bash", [join(SH, "capture.sh"), ...args], { encoding: "utf8", env: { ...process.env, PATH: path } });
+  const arm = (r: { stderr: string }) => r.stderr.split("\n").filter((l) => l.startsWith("PF_ARM_STATE "));
+  const clean = run(process.env.PATH ?? "", "inventory", repo);
+  expect([clean.status, clean.stderr]).toEqual([0, ""]);
+  writeFileSync(join(d, "inv"), clean.stdout);
+  const r = run(bin + ":" + (process.env.PATH ?? ""), "inventory", repo);
+  expect(r.status).not.toBe(0);
+  expect(arm(r)).toEqual(["PF_ARM_STATE vanished link"]);
+  symlinkSync("keep.txt", join(repo, "link"));
+  writeFileSync(join(repo, "new.txt"), "new\n");
+  const gbin = join(d, "gbin");
+  mkdirSync(gbin);
+  writeFileSync(join(gbin, "git"), '#!/bin/sh\ncase " $* " in *" check-ignore "*) rm -f new.txt ;; esac\nPATH=${PATH#*:} exec git "$@"\n');
+  chmodSync(join(gbin, "git"), 0o755);
+  const c = run(gbin + ":" + (process.env.PATH ?? ""), "commit", repo, join(d, "inv"));
+  expect(c.status).not.toBe(0);
+  expect(arm(c)).toEqual(["PF_ARM_STATE vanished new.txt"]);
+  rmSync(d, { recursive: true, force: true });
+});
+
+// Value: protects=the Captain's ruling item 4 on #324 (adversarial-native#2): git filters the agent set make a failed post-turn step the arm's; fails_when=state.sh misses a filter key in .git/config or in a file it includes, or names one from another config file; why_new=a filter in .git/config that git can still read printed no PF_ARM_STATE line; seam=sh/state.sh; no_claim=fsmonitor, hooks or the global config
+test("state.sh names every filter key the session set in .git/config, through an include too, and none from the global config", () => {
+  const { d, repo, state } = sessionTree("pf-state-filter-");
+  const global = join(d, "global.cfg");
+  writeFileSync(global, '[filter "lfs"]\n\tclean = git-lfs clean -- %f\n');
+  expect(state([], { GIT_CONFIG_GLOBAL: global })).toEqual([]);
+  git(repo, "config", "filter.x.clean", "false");
+  git(repo, "config", "filter.x.required", "true");
+  expect(state()).toEqual(["PF_ARM_STATE filter .git/config sets filter.x.clean", "PF_ARM_STATE filter .git/config sets filter.x.required"]);
+  git(repo, "config", "--remove-section", "filter.x");
+  writeFileSync(join(d, "extra.cfg"), '[filter "y"]\n\tsmudge = cat\n');
+  git(repo, "config", "include.path", join(d, "extra.cfg"));
+  expect(state()).toEqual(["PF_ARM_STATE filter .git/config sets filter.y.smudge"]);
   rmSync(d, { recursive: true, force: true });
 });

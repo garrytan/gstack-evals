@@ -20,7 +20,7 @@ describe.skipIf(!HAS_SDK)("the PF agent on the real pinned Agent SDK, with a stu
     const out = r.stdout + r.stderr;
     if (r.status !== 0) console.log(out);
     expect(out).not.toContain("FAIL");
-    expect(out.match(/^PASS /gm)?.length).toBe(22);
+    expect(out.match(/^PASS /gm)?.length).toBe(24);
     expect(r.status).toBe(0);
   }, 300_000);
 });
