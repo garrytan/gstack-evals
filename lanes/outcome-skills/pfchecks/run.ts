@@ -71,7 +71,40 @@ export function composeOverlay(arm: PfArm, image: string, claude: string): { ser
   return { services: { main: { volumes, environment } }, volumes: Object.fromEntries(named.map((v) => [v, { external: true as const }])) };
 }
 
-/** One attempt's run copy, pf_config, task.json and image manifest under dir; returns Harbor's argv and env. */
+/** The code's own bounds on one attempt, in seconds, each from the file and constant its key names: laneb_agent.py
+ *  PROBE_TIMEOUT_S (docker ps, docker inspect), OPEN_ATTEMPTS, OPEN_RETRY_S, post_json's timeout (a slot open) and
+ *  DEFAULT_SETUP_TIMEOUT_SEC (Harbor's agent setup); egress.py _helper (each nft call) and probe; pf_agent.py's docker cp
+ *  and CLOSE_TIMEOUT_S; pf_turns.py Session.sh's default timeout, KILL_TIMEOUT_S and the client.disconnect wait; Harbor's
+ *  default environment build_timeout_sec. The budget's test reads each one from its source file. */
+export const BOUNDS = { probe_s: 60, tries: 3, sleep_s: 2, open_s: 30, setup_s: 900, egress_s: 120, egress_probe_s: 60, copy_s: 120, close_s: 120, step_s: 600, kill_s: 60, disconnect_s: 30, build_s: 600, margin_s: 600 } as const;
+
+/** Section 4's session along the longest path an attempt can take inside Harbor's agent phase: every pre-open call and
+ *  every post-turn container call at its timeout, each turn's slot open and close with every retry, each turn at its
+ *  wall (the SDK connect counts inside it), and the last step timing out, killed, then read by state.sh. Harbor's agent
+ *  timeout (agent_s) is that sum plus a margin; run.ts's own timer (timer_ms) adds Harbor's agent setup and image
+ *  build and another margin on top. */
+export function sessionBudget(limits: { task: { wall_limit_sec: number }; wrapup: { wall_limit_sec: number } }): { terms: Array<[string, number]>; agent_s: number; timer_ms: number } {
+  const b = BOUNDS;
+  const turn = (wall: number) => b.tries * b.open_s + (b.tries - 1) * b.sleep_s + wall + b.disconnect_s + b.tries * b.close_s + (b.tries - 1) * b.sleep_s;
+  const terms: Array<[string, number]> = [
+    ["pre-open: docker ps and docker inspect, 2 x probe_s", 2 * b.probe_s],
+    ["pre-open: the egress write and its two reads, 3 x egress_s", 3 * b.egress_s],
+    ["pre-open: the egress probe, egress_probe_s", b.egress_probe_s],
+    ["pre-open: docker cp of the pf scripts, copy_s", b.copy_s],
+    ["pre-open: the tree check, claude --version and the start inventory, 3 x step_s", 3 * b.step_s],
+    ["task turn: open, wall, disconnect, close with retries", turn(limits.task.wall_limit_sec)],
+    ["wrap-up turns: 2 x (open, wall, disconnect, close with retries)", 2 * turn(limits.wrapup.wall_limit_sec)],
+    ["post-turn steps: capture, reset, keep and bundle, each a stamp and its command, 8 x step_s", 8 * b.step_s],
+    ["post-turn copies: CHECKS.json and the transcript, 2 x step_s", 2 * b.step_s],
+    ["the last step's timeout: its kill and state.sh, kill_s + step_s", b.kill_s + b.step_s],
+    ["margin, margin_s", b.margin_s],
+  ];
+  const agent_s = terms.reduce((n, t) => n + t[1], 0);
+  return { terms, agent_s, timer_ms: (agent_s + b.setup_s + b.build_s + b.margin_s) * 1000 };
+}
+
+/** One attempt's run copy, pf_config, task.json and image manifest under dir; returns Harbor's argv and env. Its task.toml
+ *  sets Harbor's agent timeout to the session's budget (sessionBudget), in place of the unit's. */
 export function runCopy(i: PfRunInput, image: SessionImage, attempt: 1 | 2, dir: string): { argv: string[]; env: Record<string, string>; config: Record<string, any> } {
   const u = readUnit(i.unitDir);
   const s = i.session;
@@ -81,7 +114,15 @@ export function runCopy(i: PfRunInput, image: SessionImage, attempt: 1 | 2, dir:
   writeFileSync(join(task, "environment/Dockerfile"), "FROM " + image.tag + "\n");
   const toml = readFileSync(join(i.unitDir, "harbor/task.toml"), "utf8").replace(/^\s*docker_image\s*=.*\n?/m, "");
   if (!/^\[environment\]$/m.test(toml)) pfFail("E_PF_ARM", "unit " + u.id + "'s harbor/task.toml has no [environment] section");
-  writeFileSync(join(task, "task.toml"), toml.replace(/^\[environment\]$/m, "[environment]\ndocker_image = " + JSON.stringify(image.tag)));
+  const agentS = sessionBudget(sessionLimits(s.arm, s.model, i.allowance)).agent_s;
+  let section = "";
+  const lines = toml.replace(/^\[environment\]$/m, "[environment]\ndocker_image = " + JSON.stringify(image.tag)).split("\n").flatMap((l) => {
+    const h = l.match(/^\s*\[([^\]]+)\]\s*$/);
+    if (h) section = h[1]!;
+    if (section === "agent" && !h && /^\s*timeout_sec\s*=/.test(l)) return [];
+    return h && section === "agent" ? [l, "timeout_sec = " + agentS] : [l];
+  });
+  writeFileSync(join(task, "task.toml"), (lines.some((l) => /^\s*\[agent\]\s*$/.test(l)) ? lines : [...lines, "[agent]", "timeout_sec = " + agentS, ""]).join("\n"));
   writeFileSync(join(task, "instruction.md"), "The arm's turn carries the task.\n");
   const label = u.id + "/" + s.model + "/" + s.arm + "/" + s.index;
   const taskJson = join(dir, "task.json");
@@ -237,7 +278,7 @@ export async function runPfSession(i: PfRunInput): Promise<PfRun> {
   const image = buildSessionImage(u, { volume: i.volume, stage: "first" });
   containUnit(i.unitDir, u, image, before);
   const limits = sessionLimits(i.session.arm, i.session.model, i.allowance);
-  const timeout = (limits.task.wall_limit_sec + 2 * limits.wrapup.wall_limit_sec + 900) * 1000;
+  const timeout = sessionBudget(limits).timer_ms;
   const attempts: PfRun["attempts"] = [];
   let record: PfSessionRecord | null = null;
   for (const attempt of [1, 2] as const) {

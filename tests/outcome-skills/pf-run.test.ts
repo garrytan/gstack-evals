@@ -13,7 +13,7 @@ import type { SessionImage } from "../../lanes/outcome-skills/statemachines/imag
 import { sessionLimits, type PfArm } from "../../lanes/outcome-skills/pfchecks/arms.ts";
 import { OPUS, P1 } from "../../lanes/outcome-skills/pfchecks/items.ts";
 import { PSTACK_DIR, pstackVolume } from "../../lanes/outcome-skills/pfchecks/pstack.ts";
-import { TASK_RERUN, finishSession, harbor, pfRecord, retriesSession, retryAfter, runCopy, runPfSession, type PfRunInput } from "../../lanes/outcome-skills/pfchecks/run.ts";
+import { BOUNDS, TASK_RERUN, finishSession, harbor, pfRecord, retriesSession, retryAfter, runCopy, runPfSession, sessionBudget, type PfRunInput } from "../../lanes/outcome-skills/pfchecks/run.ts";
 import { toolsVolume } from "../../lanes/outcome-skills/pfchecks/tools.ts";
 
 const roots: string[] = [];
@@ -395,4 +395,67 @@ test("E_PF_ARM's entry says its session gaps follow paid turns and are not retry
   expect([e.exit, e.retry_safe]).toEqual([2, false]);
   expect(e.side_effects).not.toBe("None: refused before any spend.");
   for (const reason of ["tree_check", "post_turn", "head_mismatch", "base_mismatch"]) expect(e.meaning).toContain(reason);
+});
+
+// Value: protects=the Captain's ruling A(i) on #324: Harbor's agent phase outlasts section 4's session, so a task turn that runs to its wall still gets both wrap-up turns; fails_when=the run copy's task.toml keeps the unit's [agent] timeout_sec, or sets one the session's longest path (each step at its code timeout, each turn at its wall) passes before the last step ends; why_new=the unit's 5400 s agent timeout cut off a P, C or blind session at its task wall, before the capture and the wrap-up; seam=run.ts runCopy's task.toml; no_claim=that the code's constants are these (the budget's own drift test)
+test("on a stub clock, the run copy's agent timeout lets a task turn run to its wall and both wrap-up turns run to theirs, and the unit's 5400 s does not", () => {
+  const STEP = 600, OPEN = 3 * 30 + 2 * 2, CLOSE = 3 * 120 + 2 * 2, DISCONNECT = 30, WRAPUP = 300;
+  const turn = (wall: number) => OPEN + wall + DISCONNECT + CLOSE;
+  const phases = (taskWall: number): Array<[string, number]> => [
+    ["pre-open", 2 * 60 + 3 * 120 + 60 + 120 + 3 * STEP], ["task turn", turn(taskWall)], ["capture", 2 * STEP], ["wrap-up 1", turn(WRAPUP)], ["reset", 2 * STEP],
+    ["wrap-up 2", turn(WRAPUP)], ["keep", 2 * STEP], ["CHECKS.json", STEP], ["bundle", 2 * STEP + 60 + STEP], ["transcript", STEP],
+  ];
+  const reached = (timeout: number, taskWall: number) => {
+    let clock = 0;
+    const done: string[] = [];
+    for (const [name, s] of phases(taskWall)) {
+      clock += s;
+      if (clock > timeout) break;
+      done.push(name);
+    }
+    return done;
+  };
+  expect(reached(5400, 5400)).toEqual(["pre-open"]);
+  for (const [arm, wall] of [["P", 5400], ["C", 5400], ["N", 3600], ["blind", 5400]] as const) {
+    const i = { ...input(arm), ...(arm === "blind" ? { scope: "flag/" } : {}) };
+    const toml = 'version = "1.0"\n\n[agent]\ntimeout_sec = 5400\n\n[verifier]\ntimeout_sec = 900\n\n[environment]\ndocker_image = "old"\n';
+    writeFileSync(join(i.unitDir, "harbor/task.toml"), toml);
+    const u = JSON.parse(readFileSync(join(i.unitDir, "unit.json"), "utf8"));
+    u.files["harbor/task.toml"] = sha(toml);
+    writeFileSync(join(i.unitDir, "unit.json"), JSON.stringify(u));
+    const dir = temp("pf-run-clock-");
+    runCopy(i, image, 1, dir);
+    const written = readFileSync(join(dir, "task/task.toml"), "utf8");
+    const agent = Number(written.match(/^\[agent\]\ntimeout_sec = (\d+)$/m)?.[1]);
+    expect([arm, reached(agent, wall)]).toEqual([arm, phases(wall).map((p) => p[0])]);
+    expect(written).toContain("[verifier]\ntimeout_sec = 900\n");
+    expect(written.match(/timeout_sec/g)?.length).toBe(2);
+  }
+});
+
+// Value: protects=the Captain's ruling A(i) on #324: the session budget is the code's own bounds, not an estimate; fails_when=a timeout, retry count or wall the budget sums differs from the one in its source file, a post-turn container call or step is added without the budget counting it, the terms do not add up, or run.ts's timer does not sit above Harbor's agent timeout, agent setup and image build; why_new=Harbor's agent timeout was the unit's 5400 s and run.ts's timer a fixed 900 s over the walls; seam=run.ts BOUNDS and sessionBudget; no_claim=Harbor's own build_timeout_sec default (read from the pinned Harbor, not this repo)
+test("the session budget sums the code's own timeouts, retries and walls, and run.ts's timer sits above Harbor's agent timeout", () => {
+  const src = (p: string) => readFileSync(join(import.meta.dir, "../..", p), "utf8");
+  const laneb = src("quick/laneb/runner/agent/laneb_agent.py"), egress = src("lanes/real-outcome/agent/egress.py"), agent = src("lanes/outcome-skills/pfchecks/pf_agent.py"), turns = src("lanes/outcome-skills/pfchecks/pf_turns.py");
+  expect(laneb).toMatch(new RegExp("^PROBE_TIMEOUT_S = " + BOUNDS.probe_s + "$", "m"));
+  expect(laneb).toMatch(new RegExp("^OPEN_ATTEMPTS = " + BOUNDS.tries + "$", "m"));
+  expect(laneb).toMatch(new RegExp("^OPEN_RETRY_S = " + BOUNDS.sleep_s + "$", "m"));
+  expect(laneb).toContain("def post_json(url: str, body: dict, timeout: float = " + BOUNDS.open_s + ")");
+  expect(laneb).toContain("DEFAULT_SETUP_TIMEOUT_SEC = " + BOUNDS.setup_s + ".0");
+  expect(egress).toContain('docker: str = "docker", timeout: float = ' + BOUNDS.egress_s + ")");
+  expect(egress.match(/= _helper\(container|\[_helper\(container/g)?.length).toBe(2);
+  expect(egress).toContain("exec_fn(container, script, None, " + BOUNDS.egress_probe_s + ")");
+  expect(agent).toMatch(new RegExp("^CLOSE_TIMEOUT_S = " + BOUNDS.close_s + "$", "m"));
+  expect(agent).toContain('f"{container}:{SH_DIR}"], capture_output=True, text=True, timeout=' + BOUNDS.copy_s + ")");
+  expect(turns).toContain("def sh(self, script: str, *args: str, timeout: float = " + BOUNDS.step_s + ")");
+  expect(turns).toMatch(new RegExp("^KILL_TIMEOUT_S = " + BOUNDS.kill_s + "$", "m"));
+  expect(turns).toContain("wait_for(client.disconnect(), timeout=" + BOUNDS.disconnect_s + ")");
+  expect(turns.match(/self\.sh\(/g)?.length).toBe(9);
+  expect(turns.match(/= self\.script\(|\bself\.script\("wrapup|self\.step\("bundle"/g)?.length).toBe(4);
+  for (const [arm, wall] of [["P", 5400], ["N", 3600]] as const) {
+    const b = sessionBudget(sessionLimits(arm, OPUS));
+    expect(b.terms.reduce((n, t) => n + t[1], 0)).toBe(b.agent_s);
+    expect(b.agent_s).toBe(wall + 11784);
+    expect(b.timer_ms).toBe((b.agent_s + BOUNDS.setup_s + BOUNDS.build_s + BOUNDS.margin_s) * 1000);
+  }
 });

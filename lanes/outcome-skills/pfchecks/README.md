@@ -231,7 +231,10 @@ Readings this build chose
   claude --version from inside the container.
 
 Harbor runner. run.ts runs one session the real way. buildSessionImage (statemachines/image.ts) makes the session image
-from the unit's prepared tree volume. runCopy writes a Harbor run copy that names that image as the task's docker_image, a
+from the unit's prepared tree volume. runCopy writes a Harbor run copy whose task.toml sets Harbor's agent timeout to
+the session's budget (run.ts sessionBudget: every pre-open and post-turn container call at its timeout, each slot open
+and close with its retries, the task wall and both wrap-up walls, and a 600 s margin; 17,184 s for P, C and blind and
+15,384 s for N), and run.ts kills Harbor only after that plus its agent setup, image build and another margin. The copy names that image as the task's docker_image, a
 compose overlay that mounts the tools volume read-only at /opt/pf-tools for every arm, the pstack volume at /opt/pf-pstack
 for P and the blind probe and the pinned Claude Code read-only at /usr/local/bin/claude, and pf-config.json (both turn
 texts, both turns' limits, the frozen no-answer reply, the plugin dir and Claude Code's env). Harbor runs
