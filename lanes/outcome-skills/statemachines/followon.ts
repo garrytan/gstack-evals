@@ -69,6 +69,7 @@ export function treeScores(recs: FollowonRecord[], firsts: FirstInfo[], replicat
   for (const f of firsts) if ((f.cell === "A1" || f.cell === "S2") && !groups.has(key(f.unit, f.model, f.cell))) groups.set(key(f.unit, f.model, f.cell), { unit: f.unit, model: f.model, tree: f.cell, recs: [] });
   const out: TreeScore[] = [];
   for (const g of groups.values()) {
+    if (new Set(g.recs.map((r) => /-cut$/.test(r.cell))).size > 1) smFail("E_SM_ARM", g.unit + " " + g.tree + ": the follow-on records mix full-issue and cut cells; score each issue form on its own");
     const first = g.tree === "S0" ? null : firsts.find((f) => f.unit === g.unit && f.model === g.model && f.cell === g.tree) ?? null;
     const seen = new Set<number>();
     const reps = g.recs.filter((r) => r.replicate === null || !seen.has(r.replicate) && !!seen.add(r.replicate));

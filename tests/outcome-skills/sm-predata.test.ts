@@ -857,6 +857,30 @@ describe.skipIf(process.env.GSTACK_EVALS_DOCKER !== "1")("a session record and A
     }
   }, 900_000);
 
+  // Value: protects=section 12's two branches on the path that runs: the file-scope line reaches task.json and the record, and a cut follow-on's run copy holds the cut issue under its own cell; fails_when=runSession writes the folder at file scope, the full issue for a cut follow-on, or the plan's cell into the record; why_new=GEVA-520 (the 04c23a3 harness had no path for either); seam=run.ts runSession; no_claim=a paid session at file scope
+  test("a file-scope first stage and a cut follow-on carry their text into the run copy and their record", () => {
+    const dir = join(scratch("run-s12"), "u");
+    const row = fixtureRow({ instance_id: id, problem_statement: "Counter keeps its value after reset\nCalling reset() leaves the old total.\n\nSteps: add, then reset.\n" });
+    writeUnit(dir, { ...toCandidate("rust", row), image_digest: "sha256:" + "c".repeat(64) }, row);
+    const u = JSON.parse(readFileSync(join(dir, "unit.json"), "utf8"));
+    writeFileSync(join(dir, "unit.json"), JSON.stringify({ ...u, repo_dir: "/w", work_dir: "/w", scope: { dir: "src" }, file_scope: ["src/a.txt", "CHANGELOG.md"], image: { ...u.image, runtime_id: runtime } }));
+    const go = (session: PlannedSession, extra: { scope?: "file"; issue?: "cut" }) => {
+      const out = join(scratch("run-s12-out"), "out");
+      process.env.SM_STUB_DIR = dirname(out);
+      process.env.SM_STUB_MODE = "nullproxy";
+      const res = runSession({ unitDir: dir, session, control: "http://127.0.0.1:1", proxy: "127.0.0.1:1", out, harbor, ...extra });
+      built.push(res.image.tag);
+      return { ...res, out };
+    };
+    const first = go({ unit: id, part: 0, index: 0, model: "claude-opus-5-5", cell: "A1", stage: "first", arm: "sm:A1" }, { scope: "file" });
+    expect(JSON.parse(readFileSync(join(first.out, "task.json"), "utf8")).scope).toBe("src/a.txt, CHANGELOG.md");
+    expect(first.record).toMatchObject({ cell: "A1", scope: "file" });
+    const follow = go({ unit: id, part: 0, index: 1, model: "claude-opus-5-5", cell: "F-S0-2", stage: "followon", arm: "sm:followon", tree: "S0", replicate: 2 }, { issue: "cut" });
+    expect(readFileSync(join(follow.out, "task/instruction.md"), "utf8")).toBe("Counter keeps its value after reset\nCalling reset() leaves the old total.\n");
+    expect(follow.record).toMatchObject({ cell: "F-S0-2-cut", scope: null, tree_ref: { tree: "S0", first_session: null } });
+    expect(JSON.parse(readFileSync(join(follow.out, "session.json"), "utf8")).cell).toBe("F-S0-2-cut");
+  }, 900_000);
+
   // Value: protects=A3's session as built: the registry run.ts checks is the one real_agent reads, the task lists the home paths the build wrote, the session record keeps the home's digest, and the install's links and settings, written at /root, work there; fails_when=arms_path names another registry, task.json carries no qa_home, the record has no digest, a link dangles, a text file changes, or the host's .capy reaches /root; why_new=#290 named notes 1, 2 and 3, and the Captain's B2 (install at /root, digest in the run record); seam=run.ts runSession, image.ts buildSessionImage and qaHomeCopy; no_claim=a gstack install at the pin, or real_agent's check in a live container
   test("A3's image holds the install as written at /root and no .capy, and real_agent gets the same registry, the built home paths and the home's digest", () => {
     const reg = JSON.parse(readFileSync(REGISTRY_PATH, "utf8"));
@@ -1458,4 +1482,39 @@ describe("stock diffs keep the program's behavior: the #316 follow-ups (GST-1959
     }
     expect(existsSync(join(root, "out")) || existsSync(join(root, "lab"))).toBe(false);
   });
+});
+const smMain = async (argv: string[]) => {
+  const errs: string[] = [];
+  const orig = console.error;
+  console.error = (...a: unknown[]) => void errs.push(a.join(" "));
+  try {
+    return { code: await main(argv), err: errs[0] ?? "" };
+  } finally {
+    console.error = orig;
+  }
+};
+
+// Value: protects=section 12's claim 1 retry: a file-scope reading scores only sessions that ran at file scope; fails_when=sm score first --scope file scores a folder-scope record or one with no scope, or --scope changes anything when it matches or is left off; why_new=the /ship review of #325 (red team: nothing read SessionRecord.scope); seam=cli.ts sm score first --scope; no_claim=claim1Admission's bands
+test("sm score first --scope refuses a session record whose scope differs; a matching or missing --scope changes nothing", async () => {
+  const root = scratch("scope");
+  const dir = unitDir(root);
+  writeFileSync(join(root, "p.patch"), "");
+  const rec = (name: string, scope: unknown) => {
+    const f = join(root, name + ".json");
+    writeFileSync(f, JSON.stringify({ schema: "sm-session.v1", unit: fixtureRow().instance_id, stage: "first", cell: "A1", model: "claude-opus-5-5", lease_id: "l1", end: "infra", attempt: 1, ...(scope === undefined ? {} : { scope }), tree_patch: { path: join(root, "p.patch"), sha256: sha("") } }));
+    return f;
+  };
+  const score = (f: string, ...scope: string[]) => smMain(["score", "first", "--unit", dir, "--session", f, ...scope, "--out", join(root, crypto.randomUUID() + ".out.json")]);
+  const folder = rec("folder", "folder"), file = rec("file", "file"), none = rec("none", undefined);
+  expect((await score(folder, "--scope", "file")).err).toStartWith("E_SM_ARM " + folder + " ran at scope \"folder\", not file");
+  expect((await score(file, "--scope", "folder")).err).toStartWith("E_SM_ARM " + file + " ran at scope \"file\", not folder");
+  expect((await score(none, "--scope", "folder")).err).toStartWith("E_SM_ARM " + none + " ran at scope null, not folder");
+  expect(await score(folder, "--scope", "files")).toMatchObject({ code: 2, err: "E_USAGE --scope is folder or file" });
+  for (const [f, scope] of [[file, ["--scope", "file"]], [folder, []], [none, []]] as const) expect((await score(f, ...scope)).err).toStartWith("E_SM_ARM the session ended infra on attempt 1, so it is not scored");
+});
+
+// Value: protects=the two section 12 flags take only the values they name; fails_when=sm session run accepts --scope files or --issue cuts and runs a folder-scope or full-issue session under the plan's cell; why_new=the /ship review of #325 (specialist: no test for these refusals); seam=cli.ts sm session run; no_claim=runSession's own refusals (sm-session.test.ts)
+test("sm session run refuses a --scope or --issue value it does not name, before any plan read", async () => {
+  expect(await smMain(["session", "run", "--scope", "files"])).toMatchObject({ code: 2, err: "E_USAGE --scope is folder or file" });
+  expect(await smMain(["session", "run", "--issue", "cuts"])).toMatchObject({ code: 2, err: "E_USAGE --issue is full or cut" });
 });

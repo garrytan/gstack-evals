@@ -227,7 +227,13 @@ nine follow-ons shuffled the same way, each after its tree's first stage. End ki
   docker_image (so Harbor runs the pinned image itself and builds nothing), task.json (repo_dir, commits, head, scope =
   unit scope.dir), an empty arm tar, Harbor with real_agent in SM mode on ledger u4 with every provider key unset, then
   sm-session.v1 from real_agent's files. A first stage's instruction.md holds no issue text; the follow-on's holds
-  issue.md. Opus runs on the anthropic route. Sol and particle-1 run on the openrouter route as
+  issue.md.
+- Section 12's two branches (sessionText in run.ts). With --scope file, a first stage's scope is every file the fix
+  patch touches (unit.json file_scope), joined by ", " into the one line the turn takes, for the claim 1 FLOOR retry;
+  the record's scope field says folder or file (null on a follow-on). With --issue cut, a follow-on's instruction.md is
+  issueCut(issue.md), the title and first paragraph, for the claim 2 raise attempt, and its record's cell is
+  F-<tree>-<n>-cut, so it never shares a record key with the full-issue session on the same unit; replicateOf reads the
+  replicate from either form. Opus runs on the anthropic route. Sol and particle-1 run on the openrouter route as
   anthropic/openai/gpt-6.1-sol and anthropic/particle-ai/particle-1: Harbor drops the leading anthropic/, so Claude Code sends
   the OpenRouter id the slot allows, and the proxy pins the price row's provider with allow_fallbacks false.
 - CLI: gstack-evals outcome sm session plan and sm session run. The driver serves an SM stage with
@@ -239,7 +245,8 @@ nine follow-ons shuffled the same way, each after its tree's first stage. End ki
 ## First-stage scorer (score.ts, P3a)
 
 `gstack-evals outcome sm score first --unit <dir> (--session <session.json> | --patch <file> --cell <name>) --out <file>`
-scores one change as section 7 reads and writes sm-outcome.v1. Steps, in order:
+scores one change as section 7 reads and writes sm-outcome.v1. With `--scope folder|file` it first refuses a session
+record whose `scope` differs, so a section 12 file-scope retry scores only file-scope sessions. Steps, in order:
 
 1. Extraction: the session's snapshot patch (real_agent's working tree against base, untracked files included) split per
    file by extractChange, which e2e.ts also uses. Binary files are listed and left out. An unsafe path makes the change

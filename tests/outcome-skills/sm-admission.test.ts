@@ -39,10 +39,15 @@ describe("admission readings", () => {
     expect(claim2Admission(0.95, 0.1)).toMatchObject({ reading: "FLOOR" });
   });
 
-  test("the issue cut keeps the title line and the text up to the first blank line", () => {
+  // Value: protects=section 12's raise attempt, which cuts the follow-on's issue to its title and first paragraph; fails_when=a blank line after the title drops the first paragraph, a body that starts on line 2 cuts differently from before, CRLF survives, or text after the first paragraph is kept; why_new=section 12's "title and first paragraph" (Captain ruling D on #325: a blank line after the title is skipped); seam=admission.ts issueCut; no_claim=the CEILING reading (admission.ts claim2Admission)
+  test("the issue cut keeps the title and its first paragraph, skipping blank lines after the title", () => {
     expect(issueCut("Title here\nfirst para line 1\nline 2\n\nsecond para\n")).toBe("Title here\nfirst para line 1\nline 2\n");
-    expect(issueCut("\n\nOnly title\n\nrest")).toBe("Only title\n");
     expect(issueCut("A\r\nB\r\n\r\nC")).toBe("A\nB\n");
+    expect(issueCut("\n\nOnly title\n\nrest")).toBe("Only title\n\nrest\n");
+    expect(issueCut("Title\n\nFirst a\nb\n\nSecond\n")).toBe("Title\n\nFirst a\nb\n");
+    expect(issueCut("Title\n\n \n\nPara\n\nX")).toBe("Title\n\nPara\n");
+    expect(issueCut("A\r\n\r\nB\r\nC\r\n\r\nD")).toBe("A\n\nB\nC\n");
+    expect(issueCut("Title\n\n\n")).toBe("Title\n");
   });
 
   test("cost: nearest-rank p95 against half the Opus allowance, per stage; the doubling returns new limits for every model", () => {

@@ -39,6 +39,9 @@ export function planPart(units: string[], models: string[], orderSeed: number, p
   return out;
 }
 
+/** A follow-on cell's replicate: F-<tree>-<n>, or F-<tree>-<n>-cut for a session with the cut issue (run.ts sessionText). */
+export const replicateOf = (cell: string): number | null => Number((/^F-(?:S0|A1|S2)-(\d+)(?:-cut)?$/.exec(cell) ?? [])[1]) || null;
+
 export type EndKind = "completed" | "limit_wall" | "limit_turns" | "limit_allowance" | "upstream" | "infra";
 
 /** Section 6's end kind. termination is real_agent's; refusals are the proxy codes the session met; allowance_stop is a refusal at the slot's allowance check, the one E_ALLOWANCE refusal that is a stop; harness is a failure outside the model (container, pull, Harbor, agent setup). */
@@ -79,6 +82,8 @@ export interface SessionRecord {
   tree_ref: null | { tree: string; first_session: string | null }; lease_id: string; slot: string; started_at: string; ended_at: string; wall_ms: number;
   /** spent_micros is the driver's close answer as real_agent copied it, and null when none reached real-summary.json: an unknown spend is never written as 0 (the lease's ledger still holds it). */
   turns: number | null; spent_micros: number | null; unknown_micros: number; end: EndKind; attempt: 1 | 2;
+  /** A first stage's scope rule: "folder" (scope.dir) or "file" (every file the fix patch touches, section 12's retry); null on a follow-on. */
+  scope: "folder" | "file" | null;
   questions: { ask_user_question: number; prose: number }; runtime_id: string; disallowed_tools: string[]; env: { CLAUDE_CODE_DISABLE_BUNDLED_SKILLS: "1" };
   strip: { removed: string[] }; memory_loaded: string[]; tree_patch: { path: string; sha256: string } | null; transcript: string;
   /** A3 only: the file digest of the /qa home the image build copied into /root (image.ts qaHomeCopy); null in every other arm. */

@@ -276,3 +276,14 @@ describe("buildInput from records in the scorer's contract shape, and from older
     expect(() => buildInput({ units, outcomes: [{ schema: "sm-outcome.v1", stage: "first", unit: "u1", model: "m", cell: "A1", strict: {}, adapted: {}, fallbacks: [{ reason: "other" }] }], followons: [], bootstrap_seed: SEED })).toThrow(/^E_SM_ANALYSIS /);
   });
 });
+// Value: protects=section 12's raise attempt in analysis: a full-issue follow-on never hides or merges with a cut one on the same replicate; fails_when=buildInput keys F-S0-n and F-S0-n-cut alike, so a scored full record drops a cut attempt's gap or two scored forms refuse only as duplicate rows; why_new=the /ship review of #325 (outside voice, Captain ruling E1); seam=analysis.ts buildInput; no_claim=the claim 2 test-run reading
+test("buildInput refuses full-issue and cut follow-ons mixed on one unit, model and tree; a cut-only input reads as a full one", () => {
+  const units = [{ schema: "sm-unit.v1", id: "u1", repo: "org/a", month: "2026-07", labels: null }];
+  const fo = (replicate: number, cell: string) => ({ schema: "sm-followon.v1", unit: "u1", model: "m", tree: "S0", replicate, cell, gap: null, incremental: 1, end_to_end: 1, drift: { drift: false } });
+  const gap = (cell: string) => ({ schema: "sm-session.v1", unit: "u1", model: "m", cell, stage: "followon", tree_ref: { tree: "S0", first_session: null }, end: "infra", attempt: 2 });
+  expect(() => buildInput({ units, outcomes: [], followons: [fo(1, "F-S0-1"), fo(2, "F-S0-2-cut")], bootstrap_seed: SEED })).toThrow(/^E_SM_ANALYSIS .*mix full-issue and cut/);
+  expect(() => buildInput({ units, outcomes: [], followons: [fo(1, "F-S0-1")], sessions: [gap("F-S0-1-cut")], bootstrap_seed: SEED })).toThrow(/^E_SM_ANALYSIS .*mix full-issue and cut/);
+  const full = buildInput({ units, outcomes: [], followons: [fo(1, "F-S0-1")], sessions: [gap("F-S0-2")], bootstrap_seed: SEED });
+  expect(full.followon.length).toBe(2);
+  expect(buildInput({ units, outcomes: [], followons: [fo(1, "F-S0-1-cut")], sessions: [gap("F-S0-2-cut")], bootstrap_seed: SEED })).toEqual(full);
+});

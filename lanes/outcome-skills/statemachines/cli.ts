@@ -17,7 +17,7 @@ import { rebenchCandidates, rebenchRowById } from "./rebench.ts";
 import { runSession } from "./run.ts";
 import { computeStart, firstInfo, scoreFollowon, treeCounts, treeScores, TREES, type FollowonRecord, type StartSet, type Tree } from "./followon.ts";
 import { scoreFirst, type OutcomeRecord, type ScoreInput } from "./score.ts";
-import { planPart, refuseUnscored, type PlannedSession, type SessionRecord } from "./session.ts";
+import { planPart, refuseUnscored, replicateOf, type PlannedSession, type SessionRecord } from "./session.ts";
 import { LANGS, type Lang } from "./langs.ts";
 import { dryrun, type DryrunConfig } from "./dryrun.ts";
 import { assertContained, containImage, type ContainCheck } from "./contain.ts";
@@ -49,12 +49,17 @@ export const HELP = `gstack-evals outcome sm <command>
                                                      one part's sessions in order (cells shuffled by the frozen order seed)
   session run --unit <dir> --plan <plan.json> --index <n> --control <url> --proxy <url> --out <run dir>
               [--attempt 2] [--first <session.json>] [--qa-home <dir> --qa-sha <sha>] [--harbor <bin>]
+              [--scope folder|file] [--issue full|cut]
                                                      one session: its image, a Harbor run of real_agent in SM mode on the
-                                                     driver at --control (gstack-evals outcome serve), and session.json
+                                                     driver at --control (gstack-evals outcome serve), and session.json;
+                                                     --scope file names every file the fix patch touches (a first
+                                                     stage), --issue cut sends the issue's title and first paragraph
+                                                     in the cell <cell>-cut (a follow-on), section 12's two branches
   score first --unit <dir> (--session <session.json> | --patch <file> --cell <name>) --out <outcome.json>
-              [--mode hardened|root] [--run-empty]
+              [--mode hardened|root] [--run-empty] [--scope folder|file]
                                                      section 7's first-stage score: strict and adapted readings, the fix's
-                                                     tests by git apply --3way, the unit's own runs, sm-outcome.v1
+                                                     tests by git apply --3way, the unit's own runs, sm-outcome.v1;
+                                                     --scope refuses a --session record that ran at another scope rule
   score followon --unit <dir> --tree S0|A1|S2 [--first <session.json> | --tree-patch <file>] [--first-outcome <outcome.json>]
               --start <start.json> (--session <session.json> | --patch <file> --cell <name>) --out <followon.json>
               [--mode hardened|root]
@@ -155,7 +160,7 @@ function scoreFollowonCli(r: string[]): number {
     start = computeStart({ unitDir, tree, treePatch, model, mode });
     writeNew(startFile, start);
   }
-  const replicate = Number((cell.match(/^F-(?:S0|A1|S2)-(\d+)$/) ?? [])[1]) || null;
+  const replicate = replicateOf(cell);
   const rec = scoreFollowon({ unitDir, tree, treePatch, start, patchFile, ...(patchSha ? { patchSha } : {}), cell, replicate, model, session: followon, first: fo ? firstInfo(fo) : null, mode });
   writeNew(need(f, "--out"), rec);
   console.log("tree=" + tree + " start=" + (start.gap ?? start.ids.length) + " incremental=" + (rec.incremental ?? rec.gap) + " end_to_end=" + (rec.end_to_end ?? rec.gap) + " whole=" + (rec.whole ? rec.whole.incremental + "/" + rec.whole.end_to_end : "none") + (rec.whole_note ? " (" + rec.whole_note + ")" : "") + " drift=" + rec.drift.drift + (rec.drift.ids.length ? " (" + rec.drift.ids.join(",") + ")" : "") + " record=" + need(f, "--out"));
@@ -336,14 +341,17 @@ export async function main(argv: string[]): Promise<number> {
         return 0;
       }
       if (what !== "run") throw new Error("E_USAGE sm session takes plan or run");
-      const { f } = flags(r, ["--unit", "--plan", "--index", "--control", "--proxy", "--out", "--attempt", "--first", "--qa-home", "--qa-sha", "--harbor"]);
+      const { f } = flags(r, ["--unit", "--plan", "--index", "--control", "--proxy", "--out", "--attempt", "--first", "--qa-home", "--qa-sha", "--harbor", "--scope", "--issue"]);
+      const scope = f.get("--scope"), issue = f.get("--issue");
+      if (scope !== undefined && scope !== "folder" && scope !== "file") throw new Error("E_USAGE --scope is folder or file");
+      if (issue !== undefined && issue !== "full" && issue !== "cut") throw new Error("E_USAGE --issue is full or cut");
       const index = Number(need(f, "--index"));
       const session = readJson<{ sessions: PlannedSession[] }>(need(f, "--plan")).sessions.find((x) => x.index === index);
       if (!session) throw new Error("E_USAGE the plan has no session " + index);
       const attempt = Number(f.get("--attempt") ?? 1);
       if (attempt !== 1 && attempt !== 2) throw new Error("E_USAGE --attempt is 1 or 2");
-      const res = runSession({ unitDir: need(f, "--unit"), session, control: need(f, "--control"), proxy: need(f, "--proxy"), out: need(f, "--out"), attempt, ...(f.has("--first") ? { first: f.get("--first")! } : {}), ...(f.has("--qa-home") ? { qaHome: f.get("--qa-home")! } : {}), ...(f.has("--qa-sha") ? { qaSha: f.get("--qa-sha")! } : {}), ...(f.has("--harbor") ? { harbor: f.get("--harbor")! } : {}) });
-      console.log("session=" + session.cell + " end=" + res.record.end + " image=" + res.image.image_id + " lease=" + res.record.lease_id + " harbor_exit=" + res.harbor_exit + " record=" + join(need(f, "--out"), "session.json"));
+      const res = runSession({ unitDir: need(f, "--unit"), session, control: need(f, "--control"), proxy: need(f, "--proxy"), out: need(f, "--out"), attempt, ...(f.has("--first") ? { first: f.get("--first")! } : {}), ...(f.has("--qa-home") ? { qaHome: f.get("--qa-home")! } : {}), ...(f.has("--qa-sha") ? { qaSha: f.get("--qa-sha")! } : {}), ...(f.has("--harbor") ? { harbor: f.get("--harbor")! } : {}), ...(scope ? { scope } : {}), ...(issue ? { issue } : {}) });
+      console.log("session=" + res.record.cell + " end=" + res.record.end + " image=" + res.image.image_id + " lease=" + res.record.lease_id + " harbor_exit=" + res.harbor_exit + " record=" + join(need(f, "--out"), "session.json"));
       return 0;
     }
     if (sub === "contain") {
@@ -523,16 +531,20 @@ export async function main(argv: string[]): Promise<number> {
       }
       if (what === "followon") return scoreFollowonCli(r);
       if (what !== "first") throw new Error("E_USAGE sm score takes first or followon");
-      const { f } = flags(r, ["--unit", "--session", "--patch", "--cell", "--out", "--mode"], ["--run-empty"]);
+      const { f } = flags(r, ["--unit", "--session", "--patch", "--cell", "--out", "--mode", "--scope"], ["--run-empty"]);
       const mode = f.get("--mode") ?? "hardened";
       if (mode !== "hardened" && mode !== "root") throw new Error("E_USAGE --mode is hardened or root");
+      const scope = f.get("--scope");
+      if (scope !== undefined && scope !== "folder" && scope !== "file") throw new Error("E_USAGE --scope is folder or file");
       if (f.has("--session") === f.has("--patch")) throw new Error("E_USAGE give --session or --patch, not both");
+      if (scope !== undefined && !f.has("--session")) throw new Error("E_USAGE --scope checks a --session record's scope rule");
       const unitDir = need(f, "--unit");
       let input: ScoreInput;
       if (f.has("--session")) {
         const s = readJson<SessionRecord>(f.get("--session")!);
         if (s.schema !== "sm-session.v1" || s.stage !== "first") throw new Error("E_SM_ARM " + f.get("--session") + " is not a first-stage sm-session.v1 record");
         if (s.unit !== readUnit(unitDir).id) throw new Error("E_SM_ARM the session is on " + s.unit + ", not this unit");
+        if (scope !== undefined && s.scope !== scope) throw new Error("E_SM_ARM " + f.get("--session") + " ran at scope " + JSON.stringify(s.scope ?? null) + ", not " + scope);
         refuseUnscored(s);
         if (!s.tree_patch) throw new Error("E_SM_ARM the session has no tree patch to score");
         input = { unitDir, patchFile: s.tree_patch.path, patchSha: s.tree_patch.sha256, cell: s.cell, model: s.model, session: s.lease_id + "/" + s.cell };
