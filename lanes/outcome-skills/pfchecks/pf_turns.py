@@ -95,14 +95,17 @@ class Session:
         self.started = time.time()
         self.summary = {"claude_version": None, "check": None, "task": None, "wrapup": [], "slots": [], "capture": None, "keep": None, "checks": False, "post_turn": None}
         self.last_turn = None
+        self.filters = b""
 
-    def sh(self, script: str, *args: str, timeout: float = 600) -> subprocess.CompletedProcess:
-        return subprocess.run([*self.cfg["exec_prefix"], "bash", "-c", script, "bash", *args], capture_output=True, timeout=timeout)
+    def sh(self, script: str, *args: str, input: bytes | None = None, timeout: float = 600) -> subprocess.CompletedProcess:
+        return subprocess.run([*self.cfg["exec_prefix"], "bash", "-c", script, "bash", *args], input=input, capture_output=True, timeout=timeout)
 
     def step(self, what: str, needs: tuple, cmd: str, *args: str) -> bytes:
         """One post-turn step in the container: the session-end commit, a wrap-up reset or keep, or the S bundle. When it
         fails or times out, sh/state.sh reads what the agent could have written (the work files the step needs, the
-        repository's git state and filters, a lock the agent's git left, a path the step cannot read and, after a timeout,
+        repository's git state, its filters against the base's (self.filters, the start inventory's capture.sh filters
+        lines, kept on the host and sent on state.sh's stdin, so the agent cannot change them; empty when that call
+        failed, so every filter counts), a lock the agent's git left, a path the step cannot read and, after a timeout,
         named by --timed-out, a tree the session grew; a step that timed out is killed first, as its whole process group)
         and a cause there, or a path that vanished while the step hashed or
         added it, raises E_PF_ARM post_turn. Anything else raises E_PF_CAPTURE: the harness, the host, docker or the
@@ -129,7 +132,7 @@ class Session:
         probe = ""
         if killed is not False:
             try:
-                probe = self.sh('d=$1; shift; bash "$d/state.sh" "$@"', cfg["sh_dir"], *timed_out, cfg["repo"], cfg["work"], *needs).stdout.decode(errors="replace")
+                probe = self.sh('d=$1; shift; bash "$d/state.sh" "$@"', cfg["sh_dir"], *timed_out, cfg["repo"], cfg["work"], *needs, input=self.filters).stdout.decode(errors="replace")
             except subprocess.TimeoutExpired:
                 pass
         causes = list(dict.fromkeys(l[len("PF_ARM_STATE "):] for l in (err + "\n" + probe).splitlines() if l.startswith("PF_ARM_STATE ")))
@@ -233,7 +236,8 @@ class Session:
         repo, work = cfg["repo"], cfg["work"]
         self.check()
         out["claude_version"] = self.sh("claude --version").stdout.decode(errors="replace").strip()
-        self.sh('mkdir -p "$2" && bash "$1/capture.sh" inventory "$3" > "$2/inv" && bash "$1/capture.sh" filters "$3" > "$2/inv.filters"', cfg["sh_dir"], work, repo)
+        start = self.sh('mkdir -p "$2" && bash "$1/capture.sh" inventory "$3" > "$2/inv" && bash "$1/capture.sh" filters "$3"', cfg["sh_dir"], work, repo)
+        self.filters = start.stdout if start.returncode == 0 else b""
         task = out["task"] = await self.turn("task", cfg["task_text"], None)
         if task_end(task) in ("upstream", "infra") or not task["session_id"]:
             return out
