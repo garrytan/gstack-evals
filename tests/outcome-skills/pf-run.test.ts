@@ -470,3 +470,11 @@ test("an attempt with no summary after a logged slot open halts with E_PF_FINALI
   expect(() => retryAfter(i, 1, null, none, "/out/a1", null, ev)).toThrow(/^E_PF_FINALIZE_HALT pf-run-flag\/claude-opus-5-5\/C\/3 attempt 1: the attempt ended after pf_turns opened a slot/);
   for (const ended of ["Harbor ended on AgentTimeoutError", "Harbor exited 1"]) expect(() => retryAfter(i, 1, null, none, "/out/a1", ended, ev)).toThrow(new RegExp("attempt 1: " + ended + " after pf_turns opened a slot"));
 });
+
+// Value: protects=the Captain's ruling D on #324: E_PF_CAPTURE's entry fits a post-turn capture failure, which comes after paid turns; fails_when=E_PF_CAPTURE says it is refused before any spend or is retry safe, or changes its exit; why_new=the entry said "None: refused before any spend" and "retry safe" for a capture that runs after the task turn spent; seam=src/errors/codes.ts E_PF_CAPTURE; no_claim=docs/errors.md (bun run errors:check)
+test("E_PF_CAPTURE's entry says a post-turn capture failure follows paid turns and is not retry safe, and keeps exit 2", () => {
+  const e = CODES.E_PF_CAPTURE;
+  expect([e.exit, e.retry_safe]).toEqual([2, false]);
+  expect(e.side_effects).not.toBe("None: refused before any spend.");
+  expect(e.meaning).toContain("after");
+});

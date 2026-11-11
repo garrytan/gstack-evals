@@ -1798,11 +1798,11 @@ Exit 2. Side effects: Partial: the halted session's calls stay in the lease's jo
 
 ### E_PF_CAPTURE
 
-The session-end capture (sh/capture.sh) failed or printed no PF_CAPTURE line, so the session tree S was not committed.
+A post-turn step (the session-end capture sh/capture.sh, a wrap-up reset or keep, or the S bundle) failed or timed out after the task turn, or the capture printed no PF_CAPTURE line, and sh/state.sh found no cause in what the agent wrote. The session record is gap E_PF_INFRA_GAP.
 
-Fix: Fix the capture step in the session runner and rerun the session as an infra end.
+Fix: Fix the step in the session runner. The session takes no retry; the gap stays in the run's record.
 
-Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+Exit 2. Side effects: The task turn, and the wrap-up turn when it ran, have spent through the driver's proxy, and the session record is written. Retry safe: no. Resumable: no. Owner: U20.
 
 ### E_PF_ARM
 
