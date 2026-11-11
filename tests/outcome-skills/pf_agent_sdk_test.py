@@ -543,6 +543,38 @@ def test_a_timed_out_step_whose_kill_is_not_confirmed_is_infra_and_state_sh_does
     check((confirmed.summary.get("post_turn") or {}).get("kill_confirmed") is True, confirmed.summary.get("post_turn"))
 
 
+def test_a_stale_pid_file_from_an_earlier_step_is_never_killed():
+    innocent = int(subprocess.run(["bash", "-c", "setsid sleep 60 >/dev/null 2>&1 & echo $!"], capture_output=True, text=True).stdout)
+
+    def stale(script, args):
+        if "pf-step.stamp" in script:
+            Path(args[0]).mkdir(parents=True, exist_ok=True)
+            (Path(args[0]) / "pf-step.pid").write_text(f"{innocent}\n")
+            return None
+        return subprocess.TimeoutExpired("docker", 600) if "capture.sh" in script and "commit" in args else None
+
+    try:
+        s = with_step(stale, started=False)
+        alive = Path(f"/proc/{innocent}/stat").exists() and Path(f"/proc/{innocent}/stat").read_text().split(") ")[1][0] != "Z"
+        check(alive, "KILL killed the process group a stale pf-step.pid named")
+        check(s.summary["refused"].startswith("E_PF_CAPTURE capture.sh commit timed out") and (s.summary.get("post_turn") or {}).get("kill_confirmed") is False, s.summary.get("refused"))
+    finally:
+        subprocess.run(["kill", "-KILL", "--", "-%d" % innocent], capture_output=True)
+
+
+def test_the_kill_script_refuses_a_pid_of_1_0_or_one_that_is_not_a_number():
+    work = Path(tempfile.mkdtemp(prefix="pf-kill-pid-"))
+    DIRS.append(work)
+    (work / "bin").mkdir()
+    log = work / "kill.log"
+    (work / "bin" / "kill").write_text(f"#!/bin/sh\necho \"$*\" >> '{log}'\nexit 1\n")
+    (work / "bin" / "kill").chmod(0o755)
+    for pid in ("1", "0", "-1", "12x", ""):
+        (work / "pf-step.pid").write_text(pid + "\n")
+        r = subprocess.run(["bash", "-c", "enable -n kill; " + pf_turns.KILL, "bash", str(work)], capture_output=True, env={**os.environ, "PATH": str(work / "bin") + ":" + os.environ["PATH"]}, timeout=30)
+        check(r.returncode != 0 and not log.exists(), (pid, r.returncode, log.exists() and log.read_text()))
+
+
 def test_a_lock_the_harness_capture_leaves_as_it_times_out_stays_infra():
     def fail(script, args):
         if "capture.sh" not in script or "commit" not in args:

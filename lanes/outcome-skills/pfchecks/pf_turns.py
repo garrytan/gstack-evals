@@ -43,10 +43,12 @@ from sm_user import NoAnswer  # noqa: E402
 
 RERUN = {"task": "task_upstream_or_infra", "wrapup": "wrapup_upstream_or_infra"}
 # A post-turn step runs as its own process group in the container, its leader's pid in <work>/pf-step.pid, so a step that
-# times out is killed whole there (docker exec stops only its client) before state.sh reads the tree. KILL exits 0 only
-# once kill -0 finds no process left in the group, within 5 s of the signal; otherwise the kill is not confirmed.
+# times out is killed whole there (docker exec stops only its client) before state.sh reads the tree. Each step's stamp
+# removes the last step's pid file first, and KILL refuses (exits 1) unless the pid is a number above 1, so a stale pid
+# or kill -- -1 never ends another group. KILL exits 0 only once kill -0 finds no process left in the group, within 5 s
+# of the signal; otherwise the kill is not confirmed.
 GROUP = 'w=$1; shift; set -m; bash -c "$@" & p=$!; set +m; echo "$p" > "$w/pf-step.pid"; wait "$p"'
-KILL = 'p=$(cat "$1/pf-step.pid" 2>/dev/null) || exit 1; kill -KILL -- "-$p" 2>/dev/null; i=0; while kill -0 -- "-$p" 2>/dev/null; do i=$((i + 1)); [ "$i" -lt 50 ] || exit 1; sleep 0.1; done'
+KILL = 'p=$(cat "$1/pf-step.pid" 2>/dev/null) || exit 1; case $p in ""|*[!0-9]*) exit 1 ;; esac; [ "$p" -gt 1 ] || exit 1; kill -KILL -- "-$p" 2>/dev/null; i=0; while kill -0 -- "-$p" 2>/dev/null; do i=$((i + 1)); [ "$i" -lt 50 ] || exit 1; sleep 0.1; done'
 KILL_TIMEOUT_S = 60
 ENDS = {"wall_limit": "limit_wall", "turn_ceiling": "limit_turns", "completed": "completed", "bg_wait_expired": "completed"}
 
@@ -111,7 +113,7 @@ class Session:
         timed_out = []
         killed = None
         try:
-            self.sh('mkdir -p "$1" && touch "$1/pf-step.stamp"', cfg["work"])
+            self.sh('mkdir -p "$1" && rm -f "$1/pf-step.pid" && touch "$1/pf-step.stamp"', cfg["work"])
             res = self.sh(GROUP, cfg["work"], cmd, "bash", *args)
             if res.returncode == 0:
                 return res.stdout
