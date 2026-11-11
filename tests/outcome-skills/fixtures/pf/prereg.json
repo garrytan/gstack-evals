@@ -1,0 +1,12 @@
+{
+ "schema": "pf-prereg.v1",
+ "draw_seed": 2654435761,
+ "order_seed": 1013904223,
+ "bootstrap_seed": 1664525,
+ "pins": {
+  "swe_bench_live_multilang": {
+   "revision": "eb09c2e5db6e4c5a95e01c903c8fd1d5da33c4f3"
+  }
+ },
+ "note": "Test fixture with invented seeds; the real file lives in the post bundle."
+}

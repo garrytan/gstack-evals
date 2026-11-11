@@ -211,6 +211,8 @@ export interface ProxyOptions {
   forbiddenMarkers?: string[];
   /** Refuse with E_PROXY_SERVER_TOOL, before pricing, any request whose tools list carries a provider-side tool (a typed tool other than custom, such as web_search). Off by default; the state machines family turns it on for its stages. */
   refuseServerTools?: boolean;
+  /** Copy these top-level fields of a slot's first paid request whose tools list is non-empty, as the client sent them (null for a field it left out), into the slot's meter as first_request. Off by default; the pstack-checks family turns it on for its stages to record each session's effort and thinking fields. */
+  firstRequestFields?: string[];
   sleep?: (ms: number) => Promise<void>;
   /** The code a slot's allowance refusal carries: E_ALLOWANCE (402, the default) or DR_ALLOWANCE_STOP (403, decision routing). */
   allowanceCode?: "E_ALLOWANCE" | "DR_ALLOWANCE_STOP";
@@ -275,6 +277,8 @@ export interface Meter {
   bytes_per_token: number | null;
   /** The cache-write modes the priced requests asked for (priceRequest's cacheWrite), distinct, in the order none, 5m, 1h that the scorer's row contract reads. */
   cache_write: string[];
+  /** With ProxyOptions.firstRequestFields only: those fields of the slot's first paid request with a non-empty tools list. Absent when it sent none. */
+  first_request?: Record<string, unknown>;
 }
 
 interface Slot {
@@ -803,6 +807,7 @@ export class MeteringProxy {
       return Response.json({ input_tokens: Math.ceil(Buffer.byteLength(raw) / 4) });
     }
     if (allowed.free) return forwardFree(JSON.stringify(body));
+    if (o.firstRequestFields && Array.isArray(body.tools) && body.tools.length > 0) this.meter(slot).first_request ??= structuredClone(Object.fromEntries(o.firstRequestFields.map(k => [k, body[k] ?? null])));
     if (body.stream === true && route === "/v1/chat/completions") body.stream_options = { ...(body.stream_options ?? {}), include_usage: true };
     if (provider === "openai" && body.service_tier === undefined) body.service_tier = "default";
     if (provider === "anthropic" && body.inference_geo === undefined && acceptsInferenceGeo(ctx.model)) body.inference_geo = "global";
