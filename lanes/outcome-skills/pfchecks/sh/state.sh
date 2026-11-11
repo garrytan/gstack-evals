@@ -14,7 +14,8 @@
 # files the capture lists, changed during the session, that number at least 2,000,000 or hold at least 8 GiB (capture.sh
 # size), with one "PF_TREE_SIZE files=N bytes=B stopped=S" line on every timeout, above the line or below it. On a
 # 4-core Capy machine (2026-11-11) the commit added about 7,000 files or 31 MB of random bytes a second, so
-# either alone takes about half the step's 600 s. No line means the cause lies in the harness, the host, docker or the
+# either alone takes about half the step's 600 s. On a timeout the size count runs before the unreadable scan, which is
+# skipped once the tree has grown, so a tree too big to walk in time is named by the cheap count. No line means the cause lies in the harness, the host, docker or the
 # network. It always exits 0. Its git runs with no hooks, no fsmonitor, no system or global config
 # and no ignore file outside the repository.
 timed=0
@@ -56,7 +57,7 @@ if [ "$timed" = 0 ] && [ -f "$work/pf-step.stamp" ]; then
   find "$repo/.git" -name '*.lock' ${since[@]+"${since[@]}"} ! -newer "$work/pf-step.stamp" -print 2>/dev/null | LC_ALL=C sort | head -n 20 | while IFS= read -r f; do say "lock ${f#"$repo"/}"; done
 fi
 if [ -f "$work/inv" ]; then
-  bash "$here/capture.sh" unreadable "$repo" "$work/inv" 2>/dev/null | head -n 20 | while IFS= read -r f; do say "unreadable $f"; done
+  grown=0
   if [ "$timed" = 1 ]; then
     size=$(bash "$here/capture.sh" size "$repo" "$work/inv" "$files" "$bytes" 2>/dev/null)
     n=${size#files=}
@@ -66,10 +67,14 @@ if [ -f "$work/inv" ]; then
     case $n$b in
       ''|*[!0-9]*) ;;
       *)
-        if [ "$n" -ge "$files" ] || [ "$b" -ge "$bytes" ]; then say "grown the session wrote files=$n bytes=$b, at least $files files or $bytes bytes"; fi
+        if [ "$n" -ge "$files" ] || [ "$b" -ge "$bytes" ]; then
+          say "grown the session wrote files=$n bytes=$b, at least $files files or $bytes bytes"
+          grown=1
+        fi
         printf 'PF_TREE_SIZE %s\n' "$size"
         ;;
     esac
   fi
+  [ "$grown" = 1 ] || bash "$here/capture.sh" unreadable "$repo" "$work/inv" 2>/dev/null | head -n 20 | while IFS= read -r f; do say "unreadable $f"; done
 fi
 exit 0

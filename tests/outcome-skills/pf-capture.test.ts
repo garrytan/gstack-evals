@@ -519,3 +519,24 @@ test("capture.sh commit counts no path as forced through an ignore file under XD
   expect([c.status, c.stdout.replace(/head=[0-9a-f]{40}/, "head=H")]).toEqual([0, "PF_CAPTURE changed=1 deleted=0 forced=0 head=H\n"]);
   rmSync(d, { recursive: true, force: true });
 });
+
+// Value: protects=the owner's ruling F1: on a timeout the cheap size count runs first, and a tree it already finds grown is not walked again; fails_when=state.sh --timed-out runs the unreadable scan before capture.sh size, or runs it after size names the grown line, or skips it on a tree that has not grown; why_new=the unreadable scan walked the whole tree first, so on a grown tree it could spend state.sh's own timeout before size ran; seam=sh/state.sh's order of capture.sh calls; no_claim=either count's own result (their own tests)
+test("on a timed-out step, state.sh runs capture.sh size before the unreadable scan, and skips the scan once the tree has grown", () => {
+  const { d, repo, work } = sessionTree("pf-state-order-");
+  const sh = join(d, "sh");
+  const log = join(d, "calls");
+  mkdirSync(sh);
+  writeFileSync(join(sh, "state.sh"), readFileSync(join(SH, "state.sh")));
+  writeFileSync(join(sh, "capture.sh"), `#!/usr/bin/env bash\necho "$1" >> '${log}'\nexec bash '${join(SH, "capture.sh")}' "$@"\n`);
+  const run = () => {
+    rmSync(log, { force: true });
+    const r = spawnSync("bash", [join(sh, "state.sh"), "--timed-out", repo, work], { encoding: "utf8" });
+    return { grown: r.stdout.includes("PF_ARM_STATE grown "), calls: readFileSync(log, "utf8").split("\n").filter((c) => c === "size" || c === "unreadable") };
+  };
+  writeFileSync(join(repo, "b.txt"), "b\n");
+  expect(run()).toEqual({ grown: false, calls: ["size", "unreadable"] });
+  writeFileSync(join(repo, "states.bin"), "");
+  truncateSync(join(repo, "states.bin"), 8 * 2 ** 30);
+  expect(run()).toEqual({ grown: true, calls: ["size"] });
+  rmSync(d, { recursive: true, force: true });
+});
