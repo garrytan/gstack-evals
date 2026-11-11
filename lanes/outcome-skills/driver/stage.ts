@@ -50,6 +50,8 @@ export interface StageSpec {
   model?: string;
   /** Family SM's arms, or a PF stage's: pf:P, pf:C, pf:N on a told PF item, pf:blind on pf-blind. A PF stage takes its models from PF_STAGES, and its proxy refuses provider-side tools and records each slot's first main request's effort fields. */
   arms?: string[];
+  /** A none stage on a registry with no told arm (the eng-review build read's builds): the program skills its item charges. G's none stage always charges every told arm's skill. */
+  skills?: string[];
 }
 
 export interface ServeOptions {
@@ -413,7 +415,8 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
     if (s.cap_micros === null) return fail("E_LEDGER_MISSING", "no approved cap is on record for line item " + st.item + "; nothing was opened");
     if (s.program === null) return fail("E_USAGE", "line item " + st.item + " is in no program; a G stage is admitted by O6's envelope, so its item joins the program with --program at init; nothing was opened");
     const arm = pfStage(st) ? null : smStage(st) ? smArm(reg, st.arms![0]!) : reg.arms[st.arm]!;
-    const want = !arm ? ["pf"] : smStage(st) ? [arm.kind === "told" ? arm.skill! : "sm"] : arm.kind === "told" ? [arm.skill!] : [...new Set(Object.values(reg.arms).flatMap((a) => (a.kind === "told" && a.skill ? [a.skill] : [])))];
+    const told = [...new Set(Object.values(reg.arms).flatMap((a) => (a.kind === "told" && a.skill ? [a.skill] : [])))];
+    const want = !arm ? ["pf"] : smStage(st) ? [arm.kind === "told" ? arm.skill! : "sm"] : arm.kind === "told" ? [arm.skill!] : told.length ? told : st.skills ?? [];
     if (s.skills.length !== want.length || want.some((k) => !s.skills.includes(k))) fail("E_USAGE", "line item " + st.item + " splits its spend across " + (s.skills.join(", ") || "no skill") + ", but arm " + st.arm + " spends for " + want.join(", ") + "; a stage's item carries its own arm's skills, so the envelope charges the skill that spends; nothing was opened");
     if (s.run_id !== null && s.run_id !== o.run_id) fail("E_ITEM_BOUND", "line item " + st.item + " is bound to run " + s.run_id + ", so run " + o.run_id + " cannot spend from it; nothing was opened");
     if (s.open) fail("E_LEASE_UNSETTLED", "lease " + s.open.lease_id + " on line item " + st.item + " (machine " + s.open.machine_id + ", run " + s.open.run_id + ") is still open; settle it on that machine, then launch the driver again; nothing was opened");

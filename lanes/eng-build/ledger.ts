@@ -16,6 +16,11 @@ import type { SkillArm } from "./types.ts";
 /** Every lease of the line names this run, so one item serves the pilot, the comparison and the route probe alike. */
 export const EB_RUN = "geva-522-eb";
 
+/** The outcome driver serves only an item in a program, split across the program's skills. The build items join program
+ * EB_PROGRAM at init with the one skill EB_BUILD_SKILL, which the build launcher's stage charges. */
+export const EB_PROGRAM = "geva-522-eb";
+export const EB_BUILD_SKILL = "eb-build";
+
 export interface EbItem {
   item: string;
   row: string;
