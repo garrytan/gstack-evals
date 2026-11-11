@@ -137,7 +137,7 @@ export function screenCandidate(c: Candidate, repo: string, o: ScreenOptions): S
     checkout(c.merge);
 
     /** Runs test files at the tree checked out now; returns every in-scope case's class. */
-    const runFiles = (files: string[], rev: string, phase: string): Record<string, CaseClass> | null => {
+    const runFiles = (files: string[], rev: string, phase: string, want: string[] = []): Record<string, CaseClass> | null => {
       const names = new Set(listing(repo, rev).keys());
       const groups = new Map<string, { eco: Ecosystem; root: string; projdir: string; files: string[] }>();
       for (const f of files) {
@@ -184,7 +184,8 @@ export function screenCandidate(c: Candidate, repo: string, o: ScreenOptions): S
         };
         const parsed = parseScreen(runner, host);
         const ids = [...new Set([...parsed.seen, ...Object.keys(parsed.results)])].filter((id) => inScope(runner.kind, id, scopes) && !(runner.kind === "go" && id.includes("/")));
-        Object.assign(out, runClasses(runner.kind, parsed, ids, { timed_out: st.timed_out }));
+        const wanted = want.filter((id) => inScope(runner.kind, id, scopes) && !ids.includes(id));
+        Object.assign(out, runClasses(runner.kind, parsed, [...ids, ...wanted], { timed_out: st.timed_out }));
         st.cases = ids.length;
         if (ids.length === 0) st.cls = st.timed_out ? "timeout" : classifyLog((host(".log") ?? "") + (host(".err") ?? ""));
       }
@@ -251,12 +252,19 @@ export function screenCandidate(c: Candidate, repo: string, o: ScreenOptions): S
     if (live.length === 0) throw new Stop("E_EB_NO_AFTERMATH", "aftermath", "no_fail_to_pass");
 
     checkout(c.base);
-    const baseOwn = own.whole.filter((p) => listing(repo, c.base).has(p));
+    const baseNames = [...listing(repo, c.base).keys()];
+    const testAt = (p: string) => {
+      const eco = ecoOfFile(p);
+      return eco !== null && hasRecipe(eco) && runnable(eco, p);
+    };
+    const near = (keep: (p: string) => boolean) => baseNames.filter((p) => keep(p) && testAt(p)).sort().slice(0, MAXF);
+    let baseOwn = ownFiles.filter((p) => baseNames.includes(p));
+    if (baseOwn.length === 0) baseOwn = near((p) => ownFiles.some((q) => dirname(q) === dirname(p)));
     const atBase = baseOwn.length ? runFiles(baseOwn, c.base, "base") : null;
     for (const l of live) {
       const added = overlay(l.fix.commit, l.fix.tc);
       try {
-        const r = runFiles(l.files, l.fix.commit, "baseT" + l.i) ?? {};
+        const r = runFiles(l.files, l.fix.commit, "baseT" + l.i, l.cases) ?? {};
         for (const id of l.cases) res.base[r[id] === "pass" ? "pass" : r[id] === undefined || r[id] === "no_result" || r[id] === "timeout" ? "no_result" : "fail"]++;
       } finally {
         restoreTree(c.base, added);

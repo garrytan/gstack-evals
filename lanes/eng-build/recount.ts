@@ -31,18 +31,18 @@ export function recountUnit(dir: string, o: { work: string; runs?: number; seed?
   if (!LICENCES.includes(task.licence) && !o.custody) return { ...row, reason: "licence" };
   if (docker(["image", "inspect", eb.image.id]).status !== 0) return { ...row, reason: "image_missing" };
   const patch = (label: string) => readFileSync(join(dir, treePatch(label)), "utf8");
-  const grade = (label: string, set: EbTask["sets"][number]): Grid => gradeSet({ taskDir: dir, task, eb, set, label, patch: patch(label), runs, seed: o.seed ?? eb.seed + 1000, work: o.work, check: true });
+  const grade = (label: string, set: EbTask["sets"][number], want: string[]): Grid => gradeSet({ taskDir: dir, task, eb, set, label, patch: patch(label), runs, seed: o.seed ?? eb.seed + 1000, work: o.work, check: true, want });
   try {
-    const functional = grade("merged", eb.sets[0]);
+    const functional = grade("merged", eb.sets[0], eb.unit.functional);
     row.functional = eb.unit.functional.filter((id) => functional[id]?.length === runs && functional[id].every((c) => c === "pass")).length;
     if (eb.unit.functional.length === 0 || row.functional < eb.unit.functional.length) return { ...row, reason: "v1_functional" };
     for (const a of eb.unit.aftermath) {
       if (a.cases.length === 0) continue;
       const set = eb.sets.find((s) => s.item === a.item)!;
-      const merged = grade("merged", set);
+      const merged = grade("merged", set, a.cases);
       const parentLabel = existsSync(join(dir, treePatch("parent:" + a.item))) ? "parent:" + a.item : "merged";
-      const parent = parentLabel === "merged" ? merged : grade(parentLabel, set);
-      const fixed = grade("fix:" + a.item, set);
+      const parent = parentLabel === "merged" ? merged : grade(parentLabel, set, a.cases);
+      const fixed = grade("fix:" + a.item, set, a.cases);
       row.aftermath += aftermathCases(merged, parent, fixed, runs).filter((id) => a.cases.includes(id)).length;
     }
   } catch (error) {

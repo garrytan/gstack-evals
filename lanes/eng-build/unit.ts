@@ -33,7 +33,7 @@ const EB_RES = EB_PROTECT.map((p) => new RegExp(p));
 export const ebProtected = (path: string): boolean => isProtectedPath(path) || EB_RES.some((re) => re.test(path));
 
 /** The verifier's own files every restore set carries, copied from lanes/real-outcome/task/verifier/. */
-export const SET_FILES = ["prepare.sh", "vrun.py", "cold.sh", "node-reporter.mjs", "vitest.none.cjs"];
+export const SET_FILES = ["prepare.sh", "vrun.py", "cold.sh", "node-reporter.mjs", "vitest.none.cjs", "vitest.none.mjs"];
 
 export interface ItemSpec {
   item: string;
@@ -467,7 +467,11 @@ export function buildUnit(spec: UnitSpec, repo: string, out: string, o: BuildOpt
   writeSet(repo, join(out, "tests"), merge, null, [{ rev: merge, paths: own.regions }]);
   withPyConfig(join(out, "tests"));
   sets.push({ dir: "tests", role: "functional", item: null, groups: scoped(merge, [...own.whole, ...own.regions].filter((p) => runnableIn(p))) });
-  const baseOwn = own.whole.filter((p) => baseNames.has(p) && runnableIn(p));
+  const ownRunnable = [...own.whole, ...own.regions].filter((p) => runnableIn(p));
+  const near = (keep: (p: string) => boolean) => [...baseNames].filter((p) => keep(p) && runnableIn(p)).sort().slice(0, 20);
+  let baseOwn = ownRunnable.filter((p) => baseNames.has(p));
+  if (baseOwn.length === 0) baseOwn = near((p) => ownRunnable.some((q) => dirname(q) === dirname(p)));
+  if (baseOwn.length === 0) baseOwn = near((p) => groups.some((g) => g.projdir === "" || p.startsWith(g.projdir + "/")));
   writeSet(repo, join(out, "base"), base, null, []);
   withPyConfig(join(out, "base"));
   sets.push({ dir: "base", role: "base", item: null, groups: scoped(base, baseOwn) });
@@ -522,10 +526,10 @@ export function buildUnit(spec: UnitSpec, repo: string, out: string, o: BuildOpt
     seed,
   };
   mkdirSync(join(out, "trees"), { recursive: true });
-  const grid = (label: string, rev: string, set: RestoreSet) => {
+  const grid = (label: string, rev: string, set: RestoreSet, want?: string[]) => {
     const patch = rev === base ? "" : diff(repo, base, rev);
     writeFileSync(join(out, treePatch(label)), patch);
-    return gradeSet({ taskDir: out, task, eb, set, label, patch, runs, seed, work: o.work, cpus: o.cpus });
+    return gradeSet({ taskDir: out, task, eb, set, label, patch, runs, seed, work: o.work, cpus: o.cpus, want });
   };
   const functional = grid("merged", merge, sets[0]);
   eb.unit.functional = Object.keys(functional).filter((k) => all(functional[k], "pass") && functional[k].length === runs).sort();
@@ -548,7 +552,7 @@ export function buildUnit(spec: UnitSpec, repo: string, out: string, o: BuildOpt
     const att = attributed(repo, base, merge, it.commit);
     const cases = att.ofChange > 0 ? aftermathCases(merged, parent, fixed, runs) : [];
     if (att.ofChange === 0) drops.push({ code: "E_EB_NO_AFTERMATH", step: "attribution:" + it.item, cls: att.touched === 0 ? "no_product_change" : "not_attributed", cases: aftermathCases(merged, parent, fixed, runs).length });
-    const atBaseT = cases.length ? grid("base", base, set) : {};
+    const atBaseT = cases.length ? grid("base", base, set, cases) : {};
     eb.unit.aftermath.push({
       item: it.item,
       cases,
@@ -608,6 +612,8 @@ export interface GradeOptions {
   cpus?: number;
   /** Check a real tree's product hashes against those recorded at the build, instead of recording them. */
   check?: boolean;
+  /** Ids to classify even when no run reported them (a case on a tree that does not compile). */
+  want?: string[];
 }
 
 /** Grades one tree on one restore set: each runner group in its own verifier call, reading only the ids in the set's
@@ -632,7 +638,7 @@ export function gradeSet(o: GradeOptions): Grid {
       cold: true,
       beforeRuns: (p) => productCheck(o, sg.group, p),
     });
-    for (const [id, runs] of Object.entries(treeGrid(tree, g.runner.kind, sg.scopes))) grid[id] = runs;
+    for (const [id, runs] of Object.entries(treeGrid(tree, g.runner.kind, sg.scopes, o.want))) grid[id] = runs;
   }
   return grid;
 }
@@ -655,8 +661,8 @@ function productCheck(o: GradeOptions, group: number, p: TreeResult["prepare"]):
 }
 
 /** Every in-scope id's class in each run of a tree. */
-export function treeGrid(tree: TreeResult, runner: Runner["kind"], scopes: string[]): Grid {
-  const ids = new Set<string>();
+export function treeGrid(tree: TreeResult, runner: Runner["kind"], scopes: string[], want: string[] = []): Grid {
+  const ids = new Set<string>(want.filter((id) => inScope(runner, id, scopes)));
   for (const r of tree.runs) for (const id of [...r.parsed.seen, ...Object.keys(r.parsed.results)]) if (inScope(runner, id, scopes) && !(runner === "go" && id.includes("/"))) ids.add(id);
   const grid: Grid = {};
   for (const id of [...ids].sort()) grid[id] = tree.runs.map((r) => runClasses(runner, r.parsed, [id], { timed_out: r.timed_out, stopped: r.out_full || r.killed })[id]);

@@ -48,7 +48,7 @@ describe("what moves into a graded tree", () => {
     expect(readFileSync(join(dir, "restore.list"), "utf8")).toBe("calc_test.go\ngo.mod\ntests/test_ops.py\n");
     expect(readFileSync(join(dir, "restore/calc_test.go"), "utf8")).toContain("TestMulZero");
     expect(readFileSync(join(dir, "regions.list"), "utf8")).toBe("src/lib.rs\n");
-    for (const f of ["prepare.sh", "vrun.py", "cold.sh", "node-reporter.mjs", "vitest.none.cjs", "protect.ere"]) expect(existsSync(join(dir, f))).toBe(true);
+    for (const f of ["prepare.sh", "vrun.py", "cold.sh", "node-reporter.mjs", "vitest.none.cjs", "vitest.none.mjs", "protect.ere"]) expect(existsSync(join(dir, f))).toBe(true);
     expect(ebProtected(".cargo/config.toml")).toBe(true);
     expect(ebProtected("jest.config.ts")).toBe(true);
     expect(ebProtected("src/lib.rs")).toBe(false);
