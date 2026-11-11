@@ -90,11 +90,16 @@ for line in sys.stdin:
             if scenario == "task_grow":
                 with open("states.bin", "w") as f:
                     f.truncate(8 << 30)
-            if scenario == "task_filter":
+            if scenario in ("task_filter", "task_filter_forge", "task_filter_rm"):
                 import subprocess
                 subprocess.run(["git", "config", "filter.pf.clean", "false"], check=True)
                 subprocess.run(["git", "config", "filter.pf.required", "true"], check=True)
                 open(".gitattributes", "w").write("* filter=pf\n")
+            saved = os.path.join(os.environ["PF_STUB_WORK"], "inv.filters")
+            if scenario == "task_filter_forge":
+                open(saved, "a").write("filter.pf.clean\tfalse\nfilter.pf.required\ttrue\n")
+            if scenario == "task_filter_rm" and os.path.exists(saved):
+                os.remove(saved)
         else:
             if scenario == "wrapup_rm_head":
                 os.remove(os.path.join(os.environ["PF_STUB_WORK"], "s.head"))
@@ -426,7 +431,7 @@ def with_step(fail, started=True, **kw):
     group (sleep 60, cut at 1 s), as a step that timed out leaves one for KILL to end."""
     real = pf_agent.Session.sh
 
-    def sh(self, script, *args, timeout=600):
+    def sh(self, script, *args, timeout=600, **opts):
         group = script == getattr(pf_turns, "GROUP", None)
         r = fail(args[1], args[3:]) if group else fail(script, args)
         if group and started and isinstance(r, subprocess.TimeoutExpired):
@@ -436,7 +441,7 @@ def with_step(fail, started=True, **kw):
                 pass
         if isinstance(r, BaseException):
             raise r
-        return r or real(self, script, *args, timeout=timeout)
+        return r or real(self, script, *args, timeout=timeout, **opts)
 
     pf_agent.Session.sh = sh
     try:
@@ -507,6 +512,26 @@ def test_a_base_repo_lfs_filter_leaves_an_infra_failure_of_the_capture_infra_and
     check(added.error is None, repr(added.error))
     check(added.summary["refused"].startswith("E_PF_ARM post_turn capture.sh commit: "), added.summary.get("refused"))
     check((added.summary.get("post_turn") or {}).get("causes") == ["filter .git/config sets filter.pf.clean", "filter .git/config sets filter.pf.required"], added.summary.get("post_turn"))
+
+
+def test_a_filter_the_task_turn_planted_stays_the_arms_when_it_forges_or_deletes_inv_filters_in_the_work_dir_or_the_baseline_is_lost():
+    planted = ["filter .git/config sets filter.pf.clean", "filter .git/config sets filter.pf.required"]
+    for scenario in ("task_filter_forge", "task_filter_rm"):
+        s = session(scenario, base_lfs=True)
+        check(s.error is None, (scenario, repr(s.error)))
+        check(s.summary["refused"].startswith("E_PF_ARM post_turn capture.sh commit: "), (scenario, s.summary.get("refused")))
+        check((s.summary.get("post_turn") or {}).get("causes") == planted, (scenario, s.summary.get("post_turn")))
+
+    def lost(script, args):
+        if "inventory" not in script:
+            return None
+        r = subprocess.run(["bash", "-c", script, "bash", *args], capture_output=True)
+        return subprocess.CompletedProcess([], 1, r.stdout + b"filter.pf.clean\tfalse\nfilter.pf.required\ttrue\n", b"docker exec failed\n")
+
+    s = with_step(lost, scenario="task_filter", base_lfs=True)
+    check(s.error is None, repr(s.error))
+    causes = (s.summary.get("post_turn") or {}).get("causes") or []
+    check(s.summary["refused"].startswith("E_PF_ARM post_turn capture.sh commit: ") and set(planted) <= set(causes), s.summary.get("post_turn"))
 
 
 def test_the_kill_script_exits_0_only_once_the_steps_group_is_gone():
@@ -597,9 +622,9 @@ def test_a_post_turn_step_that_times_out_is_killed_before_state_sh_reads_the_tre
 
     real = pf_agent.Session.sh
 
-    def sh(self, script, *args, timeout=600):
+    def sh(self, script, *args, timeout=600, **opts):
         capture = "commit" in args and "capture.sh" in script + " ".join(args)
-        return real(self, script, *args, timeout=1 if capture else timeout)
+        return real(self, script, *args, timeout=1 if capture else timeout, **opts)
 
     pf_agent.Session.sh = sh
     try:

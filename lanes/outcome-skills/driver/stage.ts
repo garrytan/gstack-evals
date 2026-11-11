@@ -165,7 +165,7 @@ interface Stage {
   journal: string;
   state: "serving" | "draining" | "stopped";
   ended: Ended | null;
-  /** Set when a close's proxy finalize failed and halted the stage, even on a stage that keeps ended cap_stop. */
+  /** Set when a close's proxy finalize failed and halted the stage, or pf-run's halt stop reached it while it still served or drained, even on a stage that keeps ended cap_stop. */
   halted: boolean;
   scope: string | null;
   live: Map<string, Session>;
@@ -179,7 +179,7 @@ interface Stage {
 export interface Served {
   control: string;
   stages: Array<{ item: string; arm: string; lease_id: string; reserved_micros: number; proxy: string }>;
-  /** Resolves with the exit code once every stage is settled: 0, or 2 when the driver failed, a lease is still open, a stage ended failed or a close halted a stage. */
+  /** Resolves with the exit code once every stage is settled: 0, or 2 when the driver failed, a lease is still open, a stage ended failed, or a close or pf-run's halt stop halted a stage. */
   done: Promise<number>;
   stop(ended?: Ended): Promise<number>;
 }
@@ -476,6 +476,18 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
             return Response.json(await closeSession(sess, reason));
           }
           if (req.method === "POST" && path === "/stop") {
+            const b = (await req.json().catch(() => null)) as { code?: unknown; session?: unknown } | null;
+            if (b?.code === "E_PF_FINALIZE_HALT") {
+              const session = typeof b.session === "string" && b.session ? b.session : "(not named)";
+              record({ event: "halt_stop", code: b.code, session }, true);
+              warn("E_PF_FINALIZE_HALT", "outcome driver: pf-run halted session " + session + " and stopped the driver; every stage still serving settles as failed, never completed, and the driver exits 2; the next launch of the run waits for the Captain's ruling on that session");
+              for (const s of stages) {
+                if (s.state === "stopped") continue;
+                s.halted = true;
+                s.ended ??= "failed";
+                s.scope ??= "halt stop: session " + session;
+              }
+            }
             setTimeout(() => void stop(), 0);
             return Response.json({ stopping: true });
           }

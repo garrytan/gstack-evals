@@ -21,8 +21,8 @@
 # "unreadable <repo> <since>" prints each such path, symlinks left out, that this user cannot read, or a directory it
 # cannot enter, one per line. sh/state.sh reads both after a step fails. "filters <repo>" prints one "<key>\t<value>"
 # line, sorted, for each filter.* value in every repo-level scope (.git/config and, under extensions.worktreeConfig,
-# .git/config.worktree), through an include too. pf_turns saves it beside the start inventory as inv.filters, so
-# state.sh can tell the base repo's filters from the session's. Every git call here runs
+# .git/config.worktree), through an include too. pf_turns keeps the start inventory's lines on the host and sends them
+# on state.sh's stdin, so state.sh can tell the base repo's filters from the session's. Every git call here runs
 # with no hooks, no fsmonitor, no system or global config and core.excludesFile=/dev/null, so nothing the agent planted
 # in .git/hooks or core.fsmonitor runs, and no ignore file outside the repository (an excludesFile, or
 # $XDG_CONFIG_HOME/git/ignore, which git reads with no config) marks a path as forced.
