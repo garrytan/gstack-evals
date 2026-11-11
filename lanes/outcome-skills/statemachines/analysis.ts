@@ -11,6 +11,7 @@
 // follow-on scores, with the exact two-sided unit-level sign-flip p computed by convolution (exactSignFlip).
 import { clusteredPairedDelta, exactMcNemar, seededRandom } from "../../../src/runner/stats/paired.ts";
 import { stage2Rule, type Stage2 } from "./admission.ts";
+import { replicateOf } from "./session.ts";
 
 const refuse = (m: string): never => {
   throw new Error("E_SM_ANALYSIS " + m);
@@ -622,7 +623,7 @@ export function buildInput(src: BuildSources): AnalysisInput {
     const bit = (x: unknown) => (x === 0 || x === 1 ? x : null);
     let gap = typeof f.gap === "string" ? f.gap : null;
     if (gap && gap !== "first_stage_test_patch_conflict" && start && typeof start.gap === "string") gap = "start_set_conflict";
-    const rep = typeof f.replicate === "number" ? f.replicate : Number(/-(\d+)$/.exec(String(f.cell))?.[1] ?? NaN);
+    const rep = typeof f.replicate === "number" ? f.replicate : replicateOf(String(f.cell)) ?? NaN;
     followon.push({
       unit: String(f.unit), model, tree: String(f.tree) as Tree, rep, gap,
       incremental: bit(st ? st.incremental : f.incremental), end_to_end: bit(st ? st.end_to_end : f.end_to_end),
@@ -634,7 +635,7 @@ export function buildInput(src: BuildSources): AnalysisInput {
   for (const s of sessions) {
     if (s.stage !== "followon" || !sessionGap(s)) continue;
     const tree = obj(s.tree_ref)?.tree ?? /^F-(S0|A1|S2)-/.exec(String(s.cell))?.[1];
-    const rep = Number(/-(\d+)$/.exec(String(s.cell))?.[1] ?? NaN);
+    const rep = replicateOf(String(s.cell)) ?? NaN;
     const k = String(s.unit) + "\u0000" + String(s.model) + "\u0000" + String(tree) + "\u0000" + rep;
     if (seenF.has(k) || latest.get(String(s.unit) + "\u0000" + String(s.model) + "\u0000" + String(s.cell)) !== s) continue;
     followon.push({ unit: String(s.unit), model: String(s.model), tree: String(tree) as Tree, rep, gap: sessionGap(s), incremental: null, end_to_end: null, whole: null, drift: false });

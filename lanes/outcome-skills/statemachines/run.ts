@@ -11,12 +11,13 @@ import { join } from "node:path";
 import { loadRegistry, REGISTRY_PATH } from "../arms/registry.ts";
 import { readAudit } from "./audit.ts";
 import { qaExposure, readSession, textExposure } from "./exposure.ts";
+import { issueCut } from "./admission.ts";
 import { assertContained, containImage } from "./contain.ts";
 import { buildSessionImage, sessionManifest, type SessionImage } from "./image.ts";
 import { treeVolume } from "./oracle.ts";
 import { questionCounts, refuseUnscored, sessionEnd, writeSessionRecord, type PlannedSession, type SessionRecord } from "./session.ts";
 import { memoryPaths } from "./strip.ts";
-import { readUnit, smFail } from "./unit.ts";
+import { readUnit, smFail, type SmUnit } from "./unit.ts";
 
 const ROOT = join(import.meta.dir, "../../..");
 const KEYS = /^(ANTHROPIC|OPENAI|OPENROUTER|UBICLOUD|GEMINI|GOOGLE|XAI|DEEPSEEK|TYPESAFE)_[A-Z_]*KEY$|_TOKEN$/;
@@ -25,6 +26,8 @@ export const HARBOR_MODEL: Record<string, string> = { "claude-opus-5-5": "anthro
 export interface RunInput {
   unitDir: string; session: PlannedSession; control: string; proxy: string; out: string;
   attempt?: 1 | 2; first?: string; qaHome?: string; qaSha?: string; harbor?: string; jobName?: string;
+  /** Section 12's branches: a first stage at file scope (the claim 1 FLOOR retry), a follow-on with the cut issue (the claim 2 raise attempt). */
+  scope?: "folder" | "file"; issue?: "full" | "cut";
   /** The arms registry: A3's /qa pin is read from it here, and real_agent reads its turns and the same pin from it as arms_path. */
   registry?: string;
 }
@@ -42,6 +45,29 @@ function find(dir: string, name: string): string | null {
     }
   }
   return null;
+}
+
+/** What the run copy says for one session, and the cell its record keeps. A first stage's instruction holds no issue text
+ *  and its turn names the scope: the unit's folder, or at file scope (section 12's claim 1 retry) every file the fix patch
+ *  touches (unit.json file_scope), joined into the one line sm_user.py takes. A follow-on's instruction is the issue, or with
+ *  the cut issue (section 12's claim 2 raise attempt) issueCut's title and first paragraph, in the cell <cell>-cut so it
+ *  never shares a record key with the full-issue session on the same unit. */
+export function sessionText(u: SmUnit, s: PlannedSession, issue: string, o: { scope?: "folder" | "file"; issue?: "full" | "cut" } = {}): { scope: string; scope_mode: "folder" | "file" | null; instruction: string; cell: string } {
+  if (s.stage === "first" && o.issue) return smFail("E_SM_ARM", "--issue is a follow-on's; " + s.cell + " is a first stage, whose turn names the scope");
+  if (s.stage === "followon" && o.scope) return smFail("E_SM_ARM", "--scope is a first stage's; " + s.cell + " is a follow-on, whose turn is the issue");
+  const folder = u.scope?.dir ?? smFail("E_SM_ARM", "unit " + u.id + " has no scope");
+  if (s.stage === "followon") {
+    if (o.issue !== "cut") return { scope: folder, scope_mode: null, instruction: issue, cell: s.cell };
+    const cut = issueCut(issue);
+    if (!cut.trim()) return smFail("E_SM_ARM", "unit " + u.id + "'s cut issue is empty");
+    return { scope: folder, scope_mode: null, instruction: cut, cell: s.cell + "-cut" };
+  }
+  const instruction = "The arm's turn names the scope.\n";
+  if (o.scope !== "file") return { scope: folder, scope_mode: "folder", instruction, cell: s.cell };
+  if (!u.file_scope.length) return smFail("E_SM_ARM", "unit " + u.id + " has no file_scope, so it has no file-scope line");
+  const bad = u.file_scope.find((p) => /[\n\r`]/.test(p));
+  if (bad !== undefined) return smFail("E_SM_ARM", "unit " + u.id + "'s file scope must be one line with no backtick, and " + JSON.stringify(bad) + " is not");
+  return { scope: u.file_scope.join(", "), scope_mode: "file", instruction, cell: s.cell };
 }
 
 /** Builds the image and run copy, runs Harbor, writes out/session.json and returns the record. */
@@ -70,6 +96,7 @@ export function runSession(i: RunInput): { record: SessionRecord; image: Session
   const arms = i.registry ?? REGISTRY_PATH;
   const qaPin = told ? loadRegistry(arms).sm?.pins?.qa?.sha : undefined;
   if (told && (!qaPin || qaPin !== i.qaSha)) return smFail("E_SM_ARM", "A3 runs only once the /qa pin is recorded in registry.json sm.pins.qa and --qa-sha equals it; the pin is " + (qaPin ?? "null") + ", --qa-sha " + i.qaSha);
+  const text = sessionText(u, s, s.stage === "followon" ? readFileSync(join(i.unitDir, "issue.md"), "utf8") : "", { ...(i.scope ? { scope: i.scope } : {}), ...(i.issue ? { issue: i.issue } : {}) });
   const image = buildSessionImage(u, { volume: treeVolume(u.id), stage: s.stage, ...(treePatch !== undefined ? { treePatch } : {}), ...(told ? { qaHome: i.qaHome } : {}) });
   assertContained(u.id + "/" + s.model + "/" + s.cell, containImage(image, u, i.unitDir, told ? qaPin ?? undefined : undefined));
   const task = join(i.out, "task");
@@ -78,10 +105,10 @@ export function runSession(i: RunInput): { record: SessionRecord; image: Session
   const toml = readFileSync(join(i.unitDir, "harbor/task.toml"), "utf8").replace(/^\s*docker_image\s*=.*\n?/m, "");
   if (!/^\[environment\]$/m.test(toml)) return smFail("E_SM_ARM", "unit " + u.id + "'s harbor/task.toml has no [environment] section");
   writeFileSync(join(task, "task.toml"), toml.replace(/^\[environment\]$/m, "[environment]\ndocker_image = " + JSON.stringify(image.tag)));
-  writeFileSync(join(task, "instruction.md"), s.stage === "followon" ? readFileSync(join(i.unitDir, "issue.md"), "utf8") : "The arm's turn names the scope.\n");
-  const label = u.id + "/" + s.model + "/" + s.cell;
+  writeFileSync(join(task, "instruction.md"), text.instruction);
+  const label = u.id + "/" + s.model + "/" + text.cell;
   const taskJson = join(i.out, "task.json");
-  writeFileSync(taskJson, JSON.stringify({ repo_dir: u.repo_dir, commits: image.commits, base_commit: image.head, kind: "SM", scope: u.scope?.dir ?? smFail("E_SM_ARM", "unit " + u.id + " has no scope"), ...(told ? { qa_sha: i.qaSha, qa_home: image.qa_home!.paths } : {}) }));
+  writeFileSync(taskJson, JSON.stringify({ repo_dir: u.repo_dir, commits: image.commits, base_commit: image.head, kind: "SM", scope: text.scope, ...(told ? { qa_sha: i.qaSha, qa_home: image.qa_home!.paths } : {}) }));
   const manifest = join(i.out, "images.json");
   const manifestSha = sessionManifest(manifest, label, image);
   const armTar = join(i.out, "arm.tar");
@@ -108,10 +135,10 @@ export function runSession(i: RunInput): { record: SessionRecord; image: Session
   const final = summary?.final as { patch_sha256?: string } | undefined;
   const patchPath = ev ? join(ev, "final.patch") : "";
   const record: SessionRecord = {
-    schema: "sm-session.v1", unit: u.id, part: s.part, index: s.index, model: s.model, cell: s.cell, stage: s.stage, tree_ref: treeRef,
+    schema: "sm-session.v1", unit: u.id, part: s.part, index: s.index, model: s.model, cell: text.cell, stage: s.stage, tree_ref: treeRef,
     lease_id: slot?.lease_id ?? "", slot: slot?.meter_id ?? "", started_at: new Date(started).toISOString(), ended_at: new Date(ended).toISOString(), wall_ms: ended - started,
     turns: lb?.result?.num_turns ?? null, spent_micros: typeof summary?.proxy?.spent_micros === "number" ? summary.proxy.spent_micros : null, unknown_micros, end, attempt,
-    questions: questionCounts(summary?.persona ?? {}), runtime_id: image.runtime_id, disallowed_tools: ["WebSearch", "WebFetch"], env: { CLAUDE_CODE_DISABLE_BUNDLED_SKILLS: "1" },
+    scope: text.scope_mode, questions: questionCounts(summary?.persona ?? {}), runtime_id: image.runtime_id, disallowed_tools: ["WebSearch", "WebFetch"], env: { CLAUDE_CODE_DISABLE_BUNDLED_SKILLS: "1" },
     strip: { removed: u.strip?.removed ?? [] }, memory_loaded: memoryPaths(records), tree_patch: final?.patch_sha256 && existsSync(patchPath) ? { path: patchPath, sha256: final.patch_sha256 } : null,
     transcript: ev ? join(ev, "sdk-messages.jsonl") : "", qa_home_sha256: image.qa_home?.sha256 ?? null, exposure: s.cell === "A1" || s.cell === "S2" ? { text: textExposure(records, s.cell) } : told ? qaExposure(records) : {},
     reads: (({ inputs, gstack, drive }) => ({ inputs, gstack, drive }))(readAudit(records)),
