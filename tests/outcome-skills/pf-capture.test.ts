@@ -540,3 +540,17 @@ test("on a timed-out step, state.sh runs capture.sh size before the unreadable s
   expect(run()).toEqual({ grown: true, calls: ["size"] });
   rmSync(d, { recursive: true, force: true });
 });
+
+// Value: protects=the owner's ruling G1: the base-versus-session filter comparison reads every repo-level config scope; fails_when=a filter the session planted in .git/config.worktree under extensions.worktreeConfig is not named, or one the start inventory already saw there is; why_new=capture.sh filters read only --local, so a worktree-scope filter, which the harness's git still applies, was never a cause; seam=capture.sh filters and state.sh; no_claim=the system and global scopes, which the harness's git does not read
+test("state.sh names a filter the session planted in .git/config.worktree under extensions.worktreeConfig, and not one the start inventory saw there", () => {
+  const { d, repo, work, state } = sessionTree("pf-state-worktree-filter-");
+  git(repo, "config", "extensions.worktreeConfig", "true");
+  const save = () => writeFileSync(join(work, "inv.filters"), spawnSync("bash", [join(SH, "capture.sh"), "filters", repo], { encoding: "utf8" }).stdout);
+  save();
+  writeFileSync(join(repo, ".git", "config.worktree"), '[filter "w"]\n\tclean = cat\n');
+  expect(git(repo, "config", "--get", "filter.w.clean").stdout).toBe("cat\n");
+  expect(state()).toEqual(["PF_ARM_STATE filter .git/config sets filter.w.clean"]);
+  save();
+  expect(state()).toEqual([]);
+  rmSync(d, { recursive: true, force: true });
+});

@@ -4,10 +4,10 @@
 # <name>..." only after a capture, wrap-up or bundle step failed or, with --timed-out, timed out. It reads, and never
 # changes, what the agent could have written, and prints one PF_ARM_STATE line per cause it finds there: a work file the
 # step needs (each <name>: inv, s.head, s.inv) missing, or an s.head that names no commit; a repository root or .git that
-# is not a directory; a .git/config git cannot read, one that sets a filter (filter.*, through an include too) the base
-# repo did not have with that value (<work>/inv.filters, saved at the start inventory; no filter line when it is
-# missing), or one that leaves the root outside git's work tree; a HEAD that names no commit; an index git cannot read, or one with
-# unmerged entries; a .lock file under .git made during the session (newer than <work>/inv) that was there before the
+# is not a directory; a .git/config git cannot read, a filter (filter.*, in .git/config or .git/config.worktree,
+# through an include too) the base repo did not have with that value (<work>/inv.filters, saved at the start
+# inventory; no filter line when it is missing), or a .git/config that leaves the root outside git's work tree; a HEAD
+# that names no commit; an index git cannot read, or one with unmerged entries; a .lock file under .git made during the session (newer than <work>/inv) that was there before the
 # step started (not newer than <work>/pf-step.stamp), which the agent's own git left, read only when the step did not
 # time out, since a timeout stops the step's own git, whose lock can fall in the stamp's clock tick; a path the capture
 # lists, changed during the session, that the step cannot read or enter (capture.sh unreadable); and, on a timeout,
