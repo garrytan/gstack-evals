@@ -323,6 +323,24 @@ def test_a_cap_stop_on_the_task_open_raises_before_claude_starts():
     check(s.stub == [] and s.summary is None, s.stub)
 
 
+def test_a_failing_keep_after_a_completed_wrapup_still_writes_the_summary_with_the_refusal_and_no_bundle():
+    sh_copy = Path(tempfile.mkdtemp(prefix="pf-sh-"))
+    DIRS.append(sh_copy)
+    shutil.copytree(pf_agent.SH, sh_copy, dirs_exist_ok=True)
+    wrap = sh_copy / "wrapup.sh"
+    wrap.write_text(wrap.read_text().replace("  keep)\n", "  keep)\n    echo 'keep failed' >&2; exit 3\n", 1))
+    saved, pf_agent.SH = pf_agent.SH, sh_copy
+    try:
+        s = session()
+    finally:
+        pf_agent.SH = saved
+    check(s.error is None, repr(s.error))
+    sm = s.summary
+    check(sm is not None and sm["refused"].startswith("E_PF_CAPTURE wrapup.sh keep exited 3"), sm and sm.get("refused"))
+    check(sm["task"]["termination"] == "completed" and [w["termination"] for w in sm["wrapup"]] == ["completed"], (sm["task"], sm["wrapup"]))
+    check("PF_CAPTURE changed=1 " in sm["capture"] and sm["keep"] is None and sm["checks"] is False, (sm["capture"], sm["keep"]))
+    check(not (s.ev / "s.bundle").exists(), sorted(p.name for p in s.ev.iterdir()))
+
 if __name__ == "__main__":
     failed = 0
     for name, fn in [(k, v) for k, v in list(globals().items()) if k.startswith("test_")]:

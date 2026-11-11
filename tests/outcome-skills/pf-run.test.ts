@@ -311,3 +311,17 @@ test("pfRecord: an S bundle whose HEAD is not the head captured after the task t
   expect(pfRecord(i, 1, at(head), ev, null, image.head)).toMatchObject({ gap: "E_PF_ARM", gap_reason: "head_mismatch" });
   expect(pfRecord(i, 1, { refused: "E_PF_ARM the tree holds CLAUDE.md", task: null, wrapup: [], slots: [], events: [] }, null)).toMatchObject({ gap: "E_PF_ARM", gap_reason: "tree_check" });
 });
+
+// Value: protects=section 5's end rules when wrapup.sh keep fails after a completed wrap-up turn; fails_when=such a session scores, retries, writes no session.json or stops the driver loop; why_new=the refusal left a no-gap record with no S, which writeSessionRecord refuses, so the run threw; seam=run.ts pfRecord, retryAfter and finishSession over pf_turns' summary (pf_agent_sdk_test.py drives the real keep failure); no_claim=the capture or reset steps
+test("pfRecord: wrapup.sh keep failing after a completed wrap-up turn is gap E_PF_INFRA_GAP with no retry, and the session still gets its session.json", () => {
+  const i = input("C");
+  const failed = { ...summary({ task: turn("completed"), wrapup: [turn("completed")], slots: [slot("task", 10), slot("wrapup", 2)] }), keep: null, checks: false, refused: "E_PF_CAPTURE wrapup.sh keep exited 3: keep failed" };
+  const r = pfRecord(i, 1, failed, temp("pf-run-ev-"), null, image.head);
+  expect(r).toMatchObject({ gap: "E_PF_INFRA_GAP", gap_reason: null, s: null, wrapup: { ends: ["completed"] }, discarded: [], checks: null });
+  expect(retriesSession(failed, r)).toBe(false);
+  expect(retryAfter(i, 1, failed, r, "/out/a1")).toBe(false);
+  const file = join(temp("pf-run-keep-"), "session.json");
+  finishSession(file, r);
+  expect(JSON.parse(readFileSync(file, "utf8"))).toMatchObject({ gap: "E_PF_INFRA_GAP", attempt: 1 });
+  expect(pfRecord(i, 1, { ...failed, refused: undefined, keep: "PF_WRAPUP checks=0 discarded=0\n" }, null, null, image.head)).toMatchObject({ gap: null, wrapup_end: "completed" });
+});

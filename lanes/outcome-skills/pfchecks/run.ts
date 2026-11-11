@@ -146,7 +146,9 @@ export const retriesSession = (summary: Record<string, any> | null, record: PfSe
  *  Harbor's exception type for the trial: LedgerCapStop (the driver refused the task open with 409 CAP_STOP) is a cap stop,
  *  which ends the part with no gap and no retry, as the other lanes read it. An S bundle whose HEAD is not the head the
  *  session-end commit printed (PF_CAPTURE head=) is gap E_PF_ARM with reason head_mismatch, with no retry. base is the
- *  unit's base commit (the session image's head), carried in the record for scoring's root check. */
+ *  unit's base commit (the session image's head), carried in the record for scoring's root check. A capture or wrap-up
+ *  script that fails after its turn (pf_turns' E_PF_CAPTURE refusal, such as wrapup.sh keep after a completed wrap-up turn)
+ *  is gap E_PF_INFRA_GAP with no retry, so the session still writes its session.json and the driver goes on. */
 export function pfRecord(i: PfRunInput, attempt: 1 | 2, summary: Record<string, any> | null, ev: string | null, exception: string | null = null, base: string | null = null): PfSessionRecord {
   const capStop = exception === "LedgerCapStop";
   const s = i.session;
@@ -167,7 +169,8 @@ export function pfRecord(i: PfRunInput, attempt: 1 | 2, summary: Record<string, 
   const bundle = ev ? join(ev, "s.bundle") : "";
   const hasS = !!bundle && existsSync(bundle) && statSync(bundle).size > 0;
   const reason = capStop ? null : !ts ? "tree_check" : cap && hasS && bundleHead(bundle) !== cap.head ? "head_mismatch" : null;
-  const gap = capStop ? null : reason ? "E_PF_ARM" : i.effort && !effortHolds(effort, i.effort[s.model]) ? "E_PF_INFRA_GAP" : ts!.action === "gap" ? ts!.code : ts!.action === "retry_session" ? "E_PF_INFRA_GAP" : !ws ? "E_PF_INFRA_GAP" : ws.action === "gap" ? ws.code : ws.action === "rerun_wrapup" ? "E_PF_INFRA_GAP" : null;
+  const scriptFailed = typeof summary?.refused === "string" && /^E_PF_CAPTURE /.test(summary.refused);
+  const gap = capStop ? null : reason ? "E_PF_ARM" : scriptFailed ? "E_PF_INFRA_GAP" : i.effort && !effortHolds(effort, i.effort[s.model]) ? "E_PF_INFRA_GAP" : ts!.action === "gap" ? ts!.code : ts!.action === "retry_session" ? "E_PF_INFRA_GAP" : !ws ? "E_PF_INFRA_GAP" : ws.action === "gap" ? ws.code : ws.action === "rerun_wrapup" ? "E_PF_INFRA_GAP" : null;
   const q = Object.values((summary?.questions ?? {}) as Record<string, { ask_user_question?: number; prose_questions?: number }>);
   return {
     schema: "pf-session.v1", unit: s.unit, part: s.part, index: s.index, model: s.model, arm: s.arm, item: s.item, attempt, names: i.names,
