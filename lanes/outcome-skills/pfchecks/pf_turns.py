@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Garry Tan. MIT License.
 """The pstack-checks two-turn session (plan sections 4 and 5) on the real Claude Agent SDK, used by pf_agent.PfAgent under
 Harbor and by the dry run. The task turn runs on its own slot, then capture.sh commits S in the session container and
-wrapup.sh saves it, then the wrap-up turn resumes the same Claude Code session in a new CLI process with its own limits
+saves its head and inventory in the same run, then the wrap-up turn resumes the same Claude Code session in a new CLI process with its own limits
 (300 s, 20 turns) on its own slot. An upstream or infra end of the wrap-up turn puts the tree back to S (wrapup.sh reset)
 and reruns the wrap-up turn once on a new slot naming meta.rerun. A wrap-up turn refused for its allowance (an allowance
 stop on its slot, which the driver's close answer counts in allowance_stops, or the driver's 409 on its open, raised as
@@ -168,8 +168,7 @@ class Session:
         task = out["task"] = await self.turn("task", cfg["task_text"], None)
         if task["termination"] in ("error", "cli_exit") or not task["session_id"] or (task["finalized"] is False and not task["allowance_stops"]):
             return out
-        out["capture"] = self.script("capture.sh", "commit", repo, work + "/inv")
-        self.script("wrapup.sh", "save", repo, work)
+        out["capture"] = self.script("capture.sh", "commit", repo, work + "/inv", work)
         for attempt in (1, 2):
             w = await self.turn("wrapup", cfg["wrapup_text"], task["session_id"], RERUN["wrapup"] if attempt == 2 else None)
             out["wrapup"].append(w)

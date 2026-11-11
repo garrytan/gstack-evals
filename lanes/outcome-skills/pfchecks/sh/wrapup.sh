@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Copyright (c) 2026 Garry Tan. MIT License.
-# Plan section 4's wrap-up rule, run in the session container. "save <repo> <dir>" runs right after the session-end commit
-# (capture.sh commit): it records S's head and inventory. "keep <repo> <dir>" runs after the wrap-up turn: it copies
+# Plan section 4's wrap-up rule, run in the session container. The session-end commit (capture.sh commit <repo> <inventory>
+# <dir>) records S's head and inventory in <dir> (s.head, s.inv). "keep <repo> <dir>" runs after the wrap-up turn: it copies
 # CHECKS.json from the repository root (a regular file only) to <dir>/CHECKS.json, prints PF_DISCARD <path> for every
 # other path the wrap-up turn added, changed or deleted, puts the tree back to S, and prints one PF_WRAPUP line.
 # "reset <repo> <dir>" puts the tree back to S only, before a wrap-up rerun. A mount point under the repository root (an
@@ -24,11 +24,6 @@ reset() {
   awk -F'\t' 'NR==FNR { a[$2] = 1; next } !($2 in a) { print $2 }' "$dir/s.inv" "$dir/now.inv" | while IFS= read -r f; do rm -f -- "$repo/$f"; done
 }
 case $cmd in
-  save)
-    mkdir -p "$dir"
-    g rev-parse HEAD > "$dir/s.head"
-    bash "$here/capture.sh" inventory "$repo" > "$dir/s.inv"
-    ;;
   keep)
     rm -f "$dir/CHECKS.json"
     checks=0
@@ -41,5 +36,5 @@ case $cmd in
     printf 'PF_WRAPUP checks=%s discarded=%s\n' "$checks" "$(wc -l < "$dir/discarded" | tr -d ' ')"
     ;;
   reset) reset ;;
-  *) echo "usage: wrapup.sh save|keep|reset <repo> <dir>" >&2; exit 2 ;;
+  *) echo "usage: wrapup.sh keep|reset <repo> <dir>" >&2; exit 2 ;;
 esac

@@ -65,10 +65,9 @@ test("wrapup.sh keeps only CHECKS.json, counts every other change, and puts the 
   writeFileSync(inv, inventoryLocal(repo));
   mkdirSync(join(repo, "gen"));
   writeFileSync(join(repo, "gen", "model.tla"), "---- MODULE M ----\n====\n");
-  const cap = commitLocal(repo, inv);
-  expect(cap.forced).toEqual(["gen/model.tla"]);
   const dir = mkdtempSync(join(tmpdir(), "pf-wrapdir-"));
-  expect(spawnSync("bash", [WRAP, "save", repo, dir]).status).toBe(0);
+  const cap = commitLocal(repo, inv, dir);
+  expect(cap.forced).toEqual(["gen/model.tla"]);
   writeFileSync(join(repo, "CHECKS.json"), '[{"name":"m","command":"bash run.sh"}]');
   writeFileSync(join(repo, "a_test.go"), "package a\n");
   writeFileSync(join(repo, "gen", "late.txt"), "x");

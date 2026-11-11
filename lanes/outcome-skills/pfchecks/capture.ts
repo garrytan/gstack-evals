@@ -26,4 +26,5 @@ const sh = (args: string[]) => {
   return r.stdout;
 };
 export const inventoryLocal = (repo: string): string => sh(["inventory", repo]);
-export const commitLocal = (repo: string, inventory: string): Capture => readCapture(sh(["commit", repo, inventory]));
+/** With save, the commit also writes S's head and inventory there (save/s.head, save/s.inv) for wrapup.sh. */
+export const commitLocal = (repo: string, inventory: string, save?: string): Capture => readCapture(sh(["commit", repo, inventory, ...(save ? [save] : [])]));

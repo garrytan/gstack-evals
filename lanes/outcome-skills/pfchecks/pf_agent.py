@@ -5,8 +5,8 @@ real_agent.py untouched. Per trial it:
   1. checks the trial container runs the image the T-G manifest pins for its task (real_agent's U4 image check);
   2. allows egress to the metering proxy only, as real_agent's family SM open does;
   3. copies sh/capture.sh and sh/wrapup.sh into the container and runs pf_turns' two-turn core there: the tree and home
-     check before any open, the inventory, the task turn on its own driver slot (meta.phase task), capture.sh commit and
-     wrapup.sh save, the wrap-up turn on its own slot (meta.phase wrapup) resuming the same session in a new CLI process,
+     check before any open, the inventory, the task turn on its own driver slot (meta.phase task), capture.sh commit
+     (which also saves S's head and inventory), the wrap-up turn on its own slot (meta.phase wrapup) resuming the same session in a new CLI process,
      one wrap-up rerun on a new slot naming meta.rerun after wrapup.sh reset, then wrapup.sh keep and the S bundle.
 Claude Code is the container's own pinned binary, run through real_agent's docker-exec wrapper (FREEZE) as cli_path.
 pf_config is a host JSON file run.ts writes: task_text, wrapup_text, limits per phase (with allowance_usd), no_answer,

@@ -151,7 +151,8 @@ Rules as built
   names the session. A task open the driver refuses
   with 409 CAP_STOP raises LedgerCapStop in PfAgent, Harbor records it as the trial's exception, and pfRecord reads it as a
   cap stop: no gap, no retry, and runPfSession ends the part with CAP_STOP after writing the record.
-- Between turns: capture.sh commit (S), then wrapup.sh save. After the wrap-up: wrapup.sh keep copies CHECKS.json (a
+- Between turns: capture.sh commit (S), which also saves S's head and inventory for wrapup.sh in the same run, so the
+  tree is hashed once, in one batched sha256sum pass. After the wrap-up: wrapup.sh keep copies CHECKS.json (a
   regular file at the root), prints PF_DISCARD for every other added, changed or deleted path, and puts the tree back to S.
   S leaves the container as a git bundle, which score.ts fetches as --s with ref HEAD.
 - The wrap-up turn is a new CLI process with --resume and its own max turns, deadline and proxy slot (its allowance).
