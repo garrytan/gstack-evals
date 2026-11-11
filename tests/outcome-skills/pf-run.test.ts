@@ -216,13 +216,13 @@ test("an attempt run.ts killed at its timeout after a slot open, with no summary
   const i = input("P");
   const ev = temp("pf-run-ev-");
   const none = pfRecord(i, 1, null, ev);
-  expect(retryAfter(i, 1, null, none, "/out/a1", true, ev)).toBe(true);
+  const killed = "Harbor was killed at its timeout";
+  expect(retryAfter(i, 1, null, none, "/out/a1", killed, ev)).toBe(true);
   writeFileSync(join(ev, "pf-opens.jsonl"), JSON.stringify({ phase: "task", rerun: null, at: 3.1 }) + "\n");
-  expect(() => retryAfter(i, 1, null, none, "/out/a1", true, ev)).toThrow(/^E_PF_FINALIZE_HALT pf-run-flag\/claude-opus-5-5\/P\/3 attempt 1: Harbor was killed at its timeout after pf_turns opened a slot/);
-  expect(() => retryAfter(i, 2, null, pfRecord(i, 2, null, ev), "/out/a2", true, ev)).toThrow("E_PF_FINALIZE_HALT");
-  expect(retryAfter(i, 1, null, none, "/out/a1", false, ev)).toBe(true);
+  expect(() => retryAfter(i, 1, null, none, "/out/a1", killed, ev)).toThrow(/^E_PF_FINALIZE_HALT pf-run-flag\/claude-opus-5-5\/P\/3 attempt 1: Harbor was killed at its timeout after pf_turns opened a slot/);
+  expect(() => retryAfter(i, 2, null, pfRecord(i, 2, null, ev), "/out/a2", killed, ev)).toThrow("E_PF_FINALIZE_HALT");
   const done = summary({ task: turn("completed"), wrapup: [turn("completed")], slots: [slot("task", 4), slot("wrapup", 2)] });
-  expect(retryAfter(i, 1, done, pfRecord(i, 1, done, null), "/out/a1", true, ev)).toBe(false);
+  expect(retryAfter(i, 1, done, pfRecord(i, 1, done, null), "/out/a1", killed, ev)).toBe(false);
 });
 
 test("harbor() says whether its timer killed Harbor", async () => {
@@ -458,4 +458,15 @@ test("the session budget sums the code's own timeouts, retries and walls, and ru
     expect(b.agent_s).toBe(wall + 11784);
     expect(b.timer_ms).toBe((b.agent_s + BOUNDS.setup_s + BOUNDS.build_s + BOUNDS.margin_s) * 1000);
   }
+});
+
+// Value: protects=the Captain's ruling A(ii) on #324: any attempt that ends with no summary after pf_turns logged a slot open may have spent, so it halts, whatever ended it; fails_when=such an attempt gets the whole-session retry because run.ts did not kill it (Harbor's AgentTimeoutError, a crash, any other exit), the halt line does not say what ended it, or an attempt with no logged open halts; why_new=item 3 halted only on run.ts's own kill; seam=run.ts retryAfter; no_claim=how runPfSession names the end (its harbor exit, kill and result.json exception)
+test("an attempt with no summary after a logged slot open halts with E_PF_FINALIZE_HALT whatever ended it", () => {
+  const i = input("C");
+  const ev = temp("pf-run-ev-");
+  const none = pfRecord(i, 1, null, ev);
+  for (const ended of [null, "Harbor ended on AgentTimeoutError", "Harbor exited 1"]) expect(retryAfter(i, 1, null, none, "/out/a1", ended, ev)).toBe(true);
+  writeFileSync(join(ev, "pf-opens.jsonl"), JSON.stringify({ phase: "wrapup", rerun: null, at: 5410.2 }) + "\n");
+  expect(() => retryAfter(i, 1, null, none, "/out/a1", null, ev)).toThrow(/^E_PF_FINALIZE_HALT pf-run-flag\/claude-opus-5-5\/C\/3 attempt 1: the attempt ended after pf_turns opened a slot/);
+  for (const ended of ["Harbor ended on AgentTimeoutError", "Harbor exited 1"]) expect(() => retryAfter(i, 1, null, none, "/out/a1", ended, ev)).toThrow(new RegExp("attempt 1: " + ended + " after pf_turns opened a slot"));
 });

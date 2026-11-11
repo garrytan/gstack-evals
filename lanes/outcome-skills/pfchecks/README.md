@@ -173,8 +173,9 @@ Rules as built
   retry or wrap-up rerun (E_PF_FINALIZE_HALT, no session record), and the driver halts the item's stage and names the
   session and the lease's journal; the Captain rules on a retry after reading it. The halt line stays in the run's
   sessions.jsonl, so a relaunch refuses the item (E_SM_FINALIZE_HALT, the family SM halt's reading) until --lift-halt
-  names the session. pf_turns.py writes a line to pf-opens.jsonl before each slot open request. When run.ts kills Harbor
-  at its timeout and the attempt has no pf-summary.json but pf-opens.jsonl has a line, that slot may have spent with
+  names the session. pf_turns.py writes a line to pf-opens.jsonl before each slot open request. When an attempt
+  has no pf-summary.json but pf-opens.jsonl has a line, whatever ended it (run.ts's kill at its timeout, Harbor's
+  AgentTimeoutError, a crash or any other exit), that slot may have spent with
   counts nothing names, so the session halts the same way (E_PF_FINALIZE_HALT) instead of retrying. A task open the driver refuses
   with 409 CAP_STOP raises LedgerCapStop in PfAgent, Harbor records it as the trial's exception, and pfRecord reads it as a
   cap stop: no gap, no retry, and runPfSession ends the part with CAP_STOP after writing the record.
