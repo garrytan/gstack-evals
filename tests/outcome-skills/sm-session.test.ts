@@ -242,6 +242,7 @@ test("a follow-on with the cut issue gets issueCut's text and the cell F-<tree>-
   const issue = "Counter keeps its value after reset\nCalling reset() leaves the old total.\nSeen on 1.2.\n\nSteps:\n1. add\n2. reset\n";
   expect(sessionText(u, followS0, issue)).toEqual({ scope: "src", scope_mode: null, instruction: issue, cell: "F-S0-2" });
   expect(sessionText(u, followS0, issue, { issue: "cut" })).toEqual({ scope: "src", scope_mode: null, instruction: "Counter keeps its value after reset\nCalling reset() leaves the old total.\nSeen on 1.2.\n", cell: "F-S0-2-cut" });
+  expect(sessionText(u, followS0, "Title\n\nCalling reset() leaves the old total.\n\nSteps\n", { issue: "cut" })).toEqual({ scope: "src", scope_mode: null, instruction: "Title\n\nCalling reset() leaves the old total.\n", cell: "F-S0-2-cut" });
   expect(sessionText(u, { ...followS0, cell: "F-A1-3", tree: "A1", replicate: 3, after: "A1" }, issue, { issue: "cut" }).cell).toBe("F-A1-3-cut");
   expect([replicateOf("F-S0-2-cut"), replicateOf("F-A1-3"), replicateOf("F-S2-1-cut"), replicateOf("A1"), replicateOf("F-S0-2-raw"), replicateOf("F-X1-2")]).toEqual([2, 3, 1, null, null, null]);
   expect(() => sessionText(u, followS0, "\n\n  \n", { issue: "cut" })).toThrow(/^E_SM_ARM .*cut issue is empty/);

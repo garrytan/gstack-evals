@@ -57,14 +57,18 @@ export function claim2Admission(mean: number, raised?: number): Claim2Admission 
   return { reading: "OK", mean, raised, issue: "cut", models: "all three", next: "claim 2 runs on every model with the cut issue (raised mean " + raised.toFixed(3) + ")" };
 }
 
-/** The raise attempt's issue cut: the title line plus the text up to the first blank line after it. */
+/** The raise attempt's issue cut: the title and its first paragraph; a blank line after the title is skipped. */
 export function issueCut(issue: string): string {
   const lines = issue.replace(/\r\n/g, "\n").split("\n");
-  let start = 0;
-  while (start < lines.length && !lines[start]!.trim()) start++;
-  const out = [lines[start] ?? ""];
-  for (let i = start + 1; i < lines.length && lines[i]!.trim() !== ""; i++) out.push(lines[i]!);
-  return out.join("\n").trimEnd() + "\n";
+  const blank = (i: number) => !lines[i]!.trim();
+  let i = 0;
+  while (i < lines.length && blank(i)) i++;
+  const title = lines[i++] ?? "";
+  const gap = i < lines.length && blank(i);
+  while (i < lines.length && blank(i)) i++;
+  const para: string[] = [];
+  for (; i < lines.length && !blank(i); i++) para.push(lines[i]!);
+  return [title, ...(gap && para.length ? [""] : []), ...para].join("\n").trimEnd() + "\n";
 }
 
 /** Nearest-rank 95th percentile. */
