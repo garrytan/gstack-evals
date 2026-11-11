@@ -11,18 +11,18 @@ import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { buildSessionImage, sessionManifest, type SessionImage } from "../statemachines/image.ts";
+import { buildSessionImage, runtimeId, sessionManifest, type SessionImage } from "../statemachines/image.ts";
 import { HARBOR_MODEL } from "../statemachines/run.ts";
 import { CLAUDE_BIN } from "../statemachines/stub-claude.ts";
 import { readUnit } from "../statemachines/unit.ts";
 import { ARM_ENV, DISALLOWED_TOOLS, NO_ANSWER, WRAPUP, loadsPlugin, sessionLimits, taskTurn, type Names, type PfArm } from "./arms.ts";
 import { readCapture } from "./capture.ts";
 import { readSession, subagentUse } from "./exposure.ts";
-import { containUnit } from "./containment.ts";
+import { containUnit, treeDigest } from "./containment.ts";
 import type { Arm } from "./items.ts";
 import { pfFail } from "./prereg.ts";
 import { PSTACK_DIR, pstackVolume } from "./pstack.ts";
-import { effortFields, effortHolds, endKind, readWrapup, taskStep, wrapupStep, writeSessionRecord, type EndKind, type PfPlanned, type PfSessionRecord } from "./session.ts";
+import { effortFields, effortHolds, effortProblem, endKind, readWrapup, taskStep, wrapupStep, writeSessionRecord, type EndKind, type PfPlanned, type PfPostTurn, type PfSessionRecord } from "./session.ts";
 import { TOOLS_DIR, toolsEnv, toolsVolume } from "./tools.ts";
 
 const ROOT = join(import.meta.dir, "../../..");
@@ -71,7 +71,41 @@ export function composeOverlay(arm: PfArm, image: string, claude: string): { ser
   return { services: { main: { volumes, environment } }, volumes: Object.fromEntries(named.map((v) => [v, { external: true as const }])) };
 }
 
-/** One attempt's run copy, pf_config, task.json and image manifest under dir; returns Harbor's argv and env. */
+/** The code's own bounds on one attempt, in seconds, each from the file and constant its key names: laneb_agent.py
+ *  PROBE_TIMEOUT_S (docker ps, docker inspect), OPEN_ATTEMPTS, OPEN_RETRY_S, post_json's timeout (a slot open) and
+ *  DEFAULT_SETUP_TIMEOUT_SEC (Harbor's agent setup); egress.py _helper (each nft call) and probe; pf_agent.py's docker cp
+ *  and CLOSE_TIMEOUT_S; pf_turns.py Session.sh's default timeout, KILL_TIMEOUT_S and the client.disconnect wait; Harbor's
+ *  default environment build_timeout_sec. The budget's test reads each one from its source file. */
+export const BOUNDS = { probe_s: 60, tries: 3, sleep_s: 2, open_s: 30, setup_s: 900, egress_s: 120, egress_probe_s: 60, copy_s: 120, close_s: 120, step_s: 600, kill_s: 60, disconnect_s: 30, build_s: 600, margin_s: 600 } as const;
+
+/** Section 4's session along the longest path an attempt can take inside Harbor's agent phase: every pre-open call and
+ *  every post-turn container call at its timeout, each turn's slot open and close with every retry, each turn at its
+ *  wall (the SDK connect counts inside it), and the last step timing out, killed, then read by state.sh. Harbor's agent
+ *  timeout (agent_s) is that sum plus a margin; run.ts's own timer (timer_ms) adds Harbor's agent setup and image
+ *  build and another margin on top. */
+export function sessionBudget(limits: { task: { wall_limit_sec: number }; wrapup: { wall_limit_sec: number } }): { terms: Array<[string, number]>; agent_s: number; timer_ms: number } {
+  const b = BOUNDS;
+  const turn = (wall: number) => b.tries * b.open_s + (b.tries - 1) * b.sleep_s + wall + b.disconnect_s + b.tries * b.close_s + (b.tries - 1) * b.sleep_s;
+  const terms: Array<[string, number]> = [
+    ["pre-open: docker ps and docker inspect, 2 x probe_s", 2 * b.probe_s],
+    ["pre-open: the egress write and its two reads, 3 x egress_s", 3 * b.egress_s],
+    ["pre-open: the egress probe, egress_probe_s", b.egress_probe_s],
+    ["pre-open: docker cp of the pf scripts, copy_s", b.copy_s],
+    ["pre-open: the tree check, claude --version and the start inventory, 3 x step_s", 3 * b.step_s],
+    ["task turn: open, wall, disconnect, close with retries", turn(limits.task.wall_limit_sec)],
+    ["wrap-up turns: 2 x (open, wall, disconnect, close with retries)", 2 * turn(limits.wrapup.wall_limit_sec)],
+    ["post-turn steps: capture, reset, keep and bundle, each a stamp and its command, 8 x step_s", 8 * b.step_s],
+    ["post-turn copies: CHECKS.json and the transcript, 2 x step_s", 2 * b.step_s],
+    ["the last step's timeout: its kill and state.sh, kill_s + step_s", b.kill_s + b.step_s],
+    ["margin, margin_s", b.margin_s],
+  ];
+  const agent_s = terms.reduce((n, t) => n + t[1], 0);
+  return { terms, agent_s, timer_ms: (agent_s + b.setup_s + b.build_s + b.margin_s) * 1000 };
+}
+
+/** One attempt's run copy, pf_config, task.json and image manifest under dir; returns Harbor's argv and env. Its task.toml
+ *  sets Harbor's agent timeout to the session's budget (sessionBudget), in place of the unit's. A table header may carry a
+ *  trailing # comment. */
 export function runCopy(i: PfRunInput, image: SessionImage, attempt: 1 | 2, dir: string): { argv: string[]; env: Record<string, string>; config: Record<string, any> } {
   const u = readUnit(i.unitDir);
   const s = i.session;
@@ -81,7 +115,15 @@ export function runCopy(i: PfRunInput, image: SessionImage, attempt: 1 | 2, dir:
   writeFileSync(join(task, "environment/Dockerfile"), "FROM " + image.tag + "\n");
   const toml = readFileSync(join(i.unitDir, "harbor/task.toml"), "utf8").replace(/^\s*docker_image\s*=.*\n?/m, "");
   if (!/^\[environment\]$/m.test(toml)) pfFail("E_PF_ARM", "unit " + u.id + "'s harbor/task.toml has no [environment] section");
-  writeFileSync(join(task, "task.toml"), toml.replace(/^\[environment\]$/m, "[environment]\ndocker_image = " + JSON.stringify(image.tag)));
+  const agentS = sessionBudget(sessionLimits(s.arm, s.model, i.allowance)).agent_s;
+  let section = "";
+  const lines = toml.replace(/^\[environment\]$/m, "[environment]\ndocker_image = " + JSON.stringify(image.tag)).split("\n").flatMap((l) => {
+    const h = l.match(/^\s*\[([^\]]+)\]\s*(#.*)?$/);
+    if (h) section = h[1]!;
+    if (section === "agent" && !h && /^\s*timeout_sec\s*=/.test(l)) return [];
+    return h && section === "agent" ? [l, "timeout_sec = " + agentS] : [l];
+  });
+  writeFileSync(join(task, "task.toml"), (lines.some((l) => /^\s*\[agent\]\s*(#.*)?$/.test(l)) ? lines : [...lines, "[agent]", "timeout_sec = " + agentS, ""]).join("\n"));
   writeFileSync(join(task, "instruction.md"), "The arm's turn carries the task.\n");
   const label = u.id + "/" + s.model + "/" + s.arm + "/" + s.index;
   const taskJson = join(dir, "task.json");
@@ -112,20 +154,28 @@ export function runCopy(i: PfRunInput, image: SessionImage, attempt: 1 | 2, dir:
   return { argv, env, config };
 }
 
-function harbor(bin: string, argv: string[], env: Record<string, string>, timeoutMs: number, log: string): Promise<number> {
+/** Runs Harbor and kills it at timeoutMs; killed says whether that timer fired. */
+export function harbor(bin: string, argv: string[], env: Record<string, string>, timeoutMs: number, log: string): Promise<{ exit: number; killed: boolean }> {
   return new Promise((done) => {
     const c = spawn(bin, argv, { env, stdio: ["ignore", "pipe", "pipe"] });
     const chunks: Buffer[] = [];
     c.stdout.on("data", (d) => chunks.push(d));
     c.stderr.on("data", (d) => chunks.push(d));
-    const timer = setTimeout(() => c.kill("SIGTERM"), timeoutMs);
+    let killed = false;
+    const timer = setTimeout(() => {
+      killed = true;
+      c.kill("SIGTERM");
+    }, timeoutMs);
     c.on("close", (n) => {
       clearTimeout(timer);
       writeFileSync(log, Buffer.concat(chunks));
-      done(n ?? 1);
+      done({ exit: n ?? 1, killed });
     });
   });
 }
+
+/** pf_turns' line per slot open, written before the open request, in the evaluator dir. */
+export const OPENS = "pf-opens.jsonl";
 
 /** pf_turns' refusal of a post-turn step whose cause lies in what the agent wrote (Session.step). */
 const POST_TURN = /^E_PF_ARM post_turn /;
@@ -183,7 +233,7 @@ export function pfRecord(i: PfRunInput, attempt: 1 | 2, summary: Record<string, 
     schema: "pf-session.v1", unit: s.unit, part: s.part, index: s.index, model: s.model, arm: s.arm, item: s.item, attempt, names: i.names,
     lease_id: ((summary?.events ?? []) as Array<Record<string, any>>).find((e) => e.event === "u4_slot")?.lease_id ?? "",
     task: { end: tEnd, turns: null, wall_ms: Math.round((t?.wall_s ?? 0) * 1000), spent_micros: spent("task") }, wrapup: ends.length ? { ends, turns: null, spent_micros: spent("wrapup") } : null,
-    wrapup_end: ws?.action === "score" ? ws.wrapup_end : null, gap, gap_reason: reason, base_commit: base, capture: cap, forced: cap?.forced ?? [], discarded: keep.discarded,
+    wrapup_end: ws?.action === "score" ? ws.wrapup_end : null, gap, gap_reason: reason, post_turn: (summary?.post_turn as PfPostTurn | undefined) ?? null, base_commit: base, capture: cap, forced: cap?.forced ?? [], discarded: keep.discarded,
     checks: keep.checks && ev ? join(ev, "CHECKS.json") : null, s: hasS ? { repo: bundle, ref: "HEAD" } : null,
     transcript: ev ? join(ev, "sdk-messages.jsonl") : null, claude_session: cs && existsSync(cs) && statSync(cs).size > 0 ? cs : null, effort,
     questions: { ask_user_question: sum(q.map((x) => x.ask_user_question)), prose: sum(q.map((x) => x.prose_questions)) }, cap_stop: capStop, env: { ...ARM_ENV },
@@ -195,11 +245,23 @@ export function pfRecord(i: PfRunInput, attempt: 1 | 2, summary: Record<string, 
 /** After one attempt, whether the whole session retries from a fresh container. A slot whose close answer says the proxy's
  *  finalize failed (finalized false), with no allowance stop counted, first halts the session with E_PF_FINALIZE_HALT:
  *  no retry and no session record, while the driver halts the item's stage and names the lease's journal, which the
- *  Captain reads before ruling on a retry. */
-export function retryAfter(i: PfRunInput, attempt: 1 | 2, summary: Record<string, any> | null, record: PfSessionRecord, dir: string): boolean {
+ *  Captain reads before ruling on a retry. So does any attempt that left no summary after pf_turns recorded a slot open
+ *  in ev's pf-opens.jsonl, whatever ended it (ended names it for the halt line: run.ts's kill, Harbor's exception, its
+ *  exit): that slot's counts are unknown, and it may have spent, so before that halt pf-run stops the driver through its
+ *  POST <control>/stop, and the item opens nothing more; a stop that fails still halts, and the halt line says so. One end is exempt: a cap stop (Harbor's exception
+ *  LedgerCapStop) whose pf-opens.jsonl holds exactly one line, the task open. The driver refused that open with 409
+ *  CAP_STOP, so no slot exists and nothing spent; the attempt goes on to finishSession, which ends the part with CAP_STOP. */
+export async function retryAfter(i: PfRunInput, attempt: 1 | 2, summary: Record<string, any> | null, record: PfSessionRecord, dir: string, ended: string | null = null, ev: string | null = null): Promise<boolean> {
   const lost = ((summary?.slots ?? []) as Array<Record<string, any>>).filter((x) => x.close?.finalized === false && !((x.close?.allowance_stops ?? 0) > 0)).map((x) => String(x.id));
   const s = i.session;
-  if (lost.length) pfFail("E_PF_FINALIZE_HALT", s.unit + "/" + s.model + "/" + s.arm + "/" + s.index + " attempt " + attempt + ": the proxy's finalize failed at the close of session " + lost.join(", ") + " on lease " + record.lease_id + ", so its counts are unknown; the session halts with no retry and no session record, and the driver's E_PF_FINALIZE_HALT line names the journal (" + record.lease_id + ".journal.ndjson in its run dir); " + dir);
+  const label = s.unit + "/" + s.model + "/" + s.arm + "/" + s.index + " attempt " + attempt;
+  if (lost.length) pfFail("E_PF_FINALIZE_HALT", label + ": the proxy's finalize failed at the close of session " + lost.join(", ") + " on lease " + record.lease_id + ", so its counts are unknown; the session halts with no retry and no session record, and the driver's E_PF_FINALIZE_HALT line names the journal (" + record.lease_id + ".journal.ndjson in its run dir); " + dir);
+  const opens = !summary && ev && existsSync(join(ev, OPENS)) ? readFileSync(join(ev, OPENS), "utf8").trim().split("\n").filter(Boolean) : [];
+  const refusedTask = record.cap_stop && opens.length === 1 && JSON.parse(opens[0]!).phase === "task";
+  if (opens.length && !refusedTask) {
+    const stop = await fetch(i.control + "/stop", { method: "POST", signal: AbortSignal.timeout(10_000) }).then((r) => (r.ok ? null : "it answered " + r.status), (e: Error) => e.message);
+    pfFail("E_PF_FINALIZE_HALT", label + ": " + (ended ?? "the attempt ended") + " after pf_turns opened a slot (" + join(ev!, OPENS) + "), and no summary names that slot's counts, so it may have spent; the session halts with no retry and no session record, and " + (stop ? "pf-run's POST " + i.control + "/stop failed (" + stop + "), so the driver may still serve opens: stop it by hand; " : "pf-run stopped the driver through POST " + i.control + "/stop, so the item opens nothing more until the Captain rules on the lease's journal; ") + dir);
+  }
   return attempt === 1 && retriesSession(summary, record);
 }
 
@@ -209,32 +271,38 @@ export function finishSession(file: string, record: PfSessionRecord): void {
   if (record.cap_stop) pfFail("CAP_STOP", record.unit + "/" + record.model + "/" + record.arm + "/" + record.index + " stopped at the cap (LedgerCapStop): the driver refused its task open, so the part ends incomplete and is not retried; " + file);
 }
 
-/** Builds the image, runs the containment gate on it (containUnit: the unit's first session runs the check, later ones
- *  reuse its passing record, and a failure halts the unit with E_PF_CONTAINMENT), runs Harbor (and the whole-session retry
- *  from a fresh container when the task turn ends upstream or infra, unless a failed proxy finalize halts it first), and
+/** Builds the image, runs the containment gate on it (containUnit with the tree volume's digest from before the build: the
+ *  unit's first session runs the check, later ones reuse its passing record, and a failure halts the unit with
+ *  E_PF_CONTAINMENT), runs Harbor (and the whole-session retry
+ *  from a fresh container when the task turn ends upstream or infra, unless a failed proxy finalize, or an attempt that
+ *  left no summary after a slot opened, halts it first), and
  *  writes out/session.json. Async, so a caller serving the control plane in this process keeps serving it. */
 export async function runPfSession(i: PfRunInput): Promise<PfRun> {
   if (existsSync(i.out)) pfFail("E_PF_ARM", i.out + " exists; each session writes a new run dir");
+  const badEffort = i.effort && effortProblem(i.effort);
+  if (badEffort) pfFail("E_PF_INPUT", "the effort record is not the dry run's effort.json: " + badEffort);
   if (i.effort && !i.effort[i.session.model]) pfFail("E_PF_INPUT", "the effort record has no entry for " + i.session.model + "; the dry run's effort.json names every model");
   mkdirSync(i.out, { recursive: true });
   const u = readUnit(i.unitDir);
+  const before = treeDigest({ runtime_id: runtimeId(u), volume: i.volume });
   const image = buildSessionImage(u, { volume: i.volume, stage: "first" });
-  containUnit(i.unitDir, u, image);
+  containUnit(i.unitDir, u, image, before);
   const limits = sessionLimits(i.session.arm, i.session.model, i.allowance);
-  const timeout = (limits.task.wall_limit_sec + 2 * limits.wrapup.wall_limit_sec + 900) * 1000;
+  const timeout = sessionBudget(limits).timer_ms;
   const attempts: PfRun["attempts"] = [];
   let record: PfSessionRecord | null = null;
   for (const attempt of [1, 2] as const) {
     const dir = join(i.out, "a" + attempt);
     mkdirSync(dir, { recursive: true });
     const { argv, env } = runCopy(i, image, attempt, dir);
-    const exit = await harbor(i.harbor ?? "harbor", argv, env, timeout, join(dir, "harbor.log"));
+    const { exit, killed } = await harbor(i.harbor ?? "harbor", argv, env, timeout, join(dir, "harbor.log"));
     const ev = find(join(dir, "jobs"), "evaluator");
     const summary = ev && existsSync(join(ev, "pf-summary.json")) ? (JSON.parse(readFileSync(join(ev, "pf-summary.json"), "utf8")) as Record<string, any>) : null;
     const result = ev && existsSync(join(dirname(ev), "result.json")) ? (JSON.parse(readFileSync(join(dirname(ev), "result.json"), "utf8")) as Record<string, any>) : null;
     attempts.push({ dir, harbor_exit: exit, summary, evaluator: ev });
-    record = pfRecord(i, attempt, summary, ev, result?.exception_info?.exception_type ?? null, image.head);
-    if (!retryAfter(i, attempt, summary, record, dir)) break;
+    const exception: string | null = result?.exception_info?.exception_type ?? null;
+    record = pfRecord(i, attempt, summary, ev, exception, image.head);
+    if (!(await retryAfter(i, attempt, summary, record, dir, killed ? "Harbor was killed at its timeout" : exception ? "Harbor ended on " + exception : "Harbor exited " + exit, ev))) break;
   }
   const file = join(i.out, "session.json");
   finishSession(file, record!);

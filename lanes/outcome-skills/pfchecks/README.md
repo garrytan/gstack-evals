@@ -16,7 +16,7 @@ The paid run's entry point mirrors the state machines eval's `sm session` comman
 sessions (pf-plan.v1, planPart from prereg.json's order_seed, never over an existing file). `session run` runs one planned
 session through runPfSession on the unit's tree volume (the blind probe with the unit's scope dir), and refuses before any
 session an index the plan does not hold, a unit other than the planned one, or a run without the dry run's effort.json
-(an object with one record per model). The session reads the unit's issue.md unless `--issue <file>` names another bug
+(an object with one record per model, each an object with exactly the EFFORT_KEYS, which runPfSession checks too). The session reads the unit's issue.md unless `--issue <file>` names another bug
 report, such as section 10's raise report or the cut report; that file's text goes to the agent as it is.
 Its exit is 10 at a cap stop, 11 at a finalize halt (E_PF_FINALIZE_HALT) and 12 at a containment halt
 (E_PF_CONTAINMENT), so the runner VM's loop, which stops at the first non-zero exit, can tell them apart; a session that
@@ -43,6 +43,8 @@ ends with a gap writes its record and exits 0.
 ## Readings this build chose
 
 Draw and screens
+- The pool refuses a candidates file in which a row in a language with a test-module detector (rust) has no sm source
+  split fields, or malformed ones (E_PF_INPUT), since the screen's mixed-hunk drop needs them.
 - One seededRandom(draw_seed) shuffles each month once, months in the order the draw first walks them (March to June
   2026, then July 2026, then February 2026 back to January 2025). Ids are sorted before each shuffle.
 - The reserve units pass every gate and count toward the 3-per-repository cap, like kept units.
@@ -171,19 +173,45 @@ Rules as built
   retry or wrap-up rerun (E_PF_FINALIZE_HALT, no session record), and the driver halts the item's stage and names the
   session and the lease's journal; the Captain rules on a retry after reading it. The halt line stays in the run's
   sessions.jsonl, so a relaunch refuses the item (E_SM_FINALIZE_HALT, the family SM halt's reading) until --lift-halt
-  names the session. A task open the driver refuses
+  names the session. pf_turns.py writes a line to pf-opens.jsonl before each slot open request. When an attempt
+  has no pf-summary.json but pf-opens.jsonl has a line, whatever ended it (run.ts's kill at its timeout, Harbor's
+  AgentTimeoutError, a crash or any other exit), that slot may have spent with counts nothing names. The driver saw no
+  failed finalize here, so it does not halt the stage itself: pf-run calls the driver's POST <control>/stop first, which
+  settles every stage and ends the driver, and then halts with E_PF_FINALIZE_HALT, no retry and no session record. A
+  stop call that fails still halts, and the halt line says so, so the operator stops the driver by hand. The driver
+  writes no halt line for this stop, so nothing refuses a relaunch by itself: the next launch of the run needs the
+  Captain's ruling on that session, after reading the lease's journal, and that ruling is the lift. A task open the driver refuses
   with 409 CAP_STOP raises LedgerCapStop in PfAgent, Harbor records it as the trial's exception, and pfRecord reads it as a
-  cap stop: no gap, no retry, and runPfSession ends the part with CAP_STOP after writing the record.
+  cap stop: no gap, no retry, and runPfSession ends the part with CAP_STOP after writing the record. That attempt has no
+  summary but logged its task open, so it is the one exemption from the halt: a cap stop whose pf-opens.jsonl holds exactly
+  one line, the task open, does not halt, since the refused open got no slot and reserved nothing. Any other mix halts.
 - Between turns: capture.sh commit (S), which also saves S's head and inventory for wrapup.sh in the same run, so the
   tree is hashed once, in one batched sha256sum pass. After the wrap-up: wrapup.sh keep copies CHECKS.json (a
   regular file at the root), prints PF_DISCARD for every other added, changed or deleted path, and puts the tree back to S.
-  S leaves the container as a git bundle, which score.ts fetches as --s with ref HEAD.
+  S leaves the container as a git bundle, which score.ts fetches as --s with ref HEAD. Every git call in these post-turn
+  steps (capture.sh, wrapup.sh, state.sh and the bundle) runs with core.hooksPath=/dev/null, core.fsmonitor=false,
+  core.excludesFile=/dev/null, GIT_CONFIG_NOSYSTEM=1 and GIT_CONFIG_GLOBAL=/dev/null, so no hook or fsmonitor command
+  the agent planted, no filter, excludesFile or other setting from the machine's system or global config and no
+  $XDG_CONFIG_HOME/git/ignore (which git reads with no config) runs or counts; .git/config and .git/config.worktree still
+  apply, and state.sh names a filter set in either (through an include too) that the base repo did not have with that value: the start inventory
+  saves the base's filter.* values beside inv (inv.filters), and with no inv.filters state.sh names no filter.
 - A post-turn step that fails or times out (the capture, a wrap-up reset or keep, the bundle) takes no retry, and the
-  session still writes its record. When sh/state.sh finds the cause in what the agent wrote (a work file the step needs
-  gone, an s.head that names no commit, a broken .git, config, HEAD or index, unmerged entries, a lock the agent's git
-  left during the session) or capture.sh saw a file vanish while it hashed the tree, pf_turns refuses with E_PF_ARM
+  session still writes its record. Each step runs as its own process group in the container, so a step that times out
+  is killed whole there before sh/state.sh reads the tree, and the session then ends. The kill counts only once no
+  process is left in the group, within 5 s; a kill that cannot be confirmed skips sh/state.sh, since the step may still
+  change the tree, and the step is E_PF_CAPTURE, with post_turn.kill_confirmed false. When sh/state.sh finds the cause in what the agent wrote (a work file the step needs
+  gone, an s.head that names no commit, a broken .git, config, HEAD or index, a git filter the session added to .git/config or .git/config.worktree or changed there, unmerged
+  entries, a lock the agent's git left during the session (read only when the step did not time out, since a timeout
+  stops the step's own git, which may leave its lock), a path changed during the session that the step cannot read
+  or enter, or, when the step timed out, files changed during the session that number at least 2,000,000 or hold at
+  least 8 GiB) or capture.sh saw a file or link vanish while it hashed or added the tree, pf_turns refuses with E_PF_ARM
   post_turn and the record is gap E_PF_ARM, reason post_turn. Otherwise (the harness, the host, docker or the network) it
-  is E_PF_CAPTURE and gap E_PF_INFRA_GAP. Neither masks a wrap-up refused for its allowance (E_PF_WRAPUP_ALLOWANCE).
+  is E_PF_CAPTURE and gap E_PF_INFRA_GAP. Either way pf_turns writes post_turn to pf-summary.json and pfRecord copies it
+  to the session record: the step, whether it timed out, its failure, the PF_ARM_STATE causes (a lock reads "lock
+  .git/index.lock") and the raw end of the turn before it (after.termination: wall_limit, bg_wait_expired and so on).
+  On a timeout, written holds the files and bytes the session wrote as the capture lists them, for an arm gap and an
+  infra gap alike, from state.sh's PF_TREE_SIZE line; stopped true means counting stopped at the line, so both are
+  lower bounds. Neither masks a wrap-up refused for its allowance (E_PF_WRAPUP_ALLOWANCE).
 - The wrap-up turn is a new CLI process with --resume and its own max turns, deadline and proxy slot (its allowance).
 - Before any turn pf_turns.py refuses a tree holding CLAUDE.md, CLAUDE.local.md, AGENTS.md or .claude, or a home holding
   gstack or a drive path (E_PF_ARM), as real_agent's SM check does. AskUserQuestion gets #290's NoAnswer reply.
@@ -223,7 +251,11 @@ Readings this build chose
   claude --version from inside the container.
 
 Harbor runner. run.ts runs one session the real way. buildSessionImage (statemachines/image.ts) makes the session image
-from the unit's prepared tree volume. runCopy writes a Harbor run copy that names that image as the task's docker_image, a
+from the unit's prepared tree volume. A unit with a missing or malformed runtime image id refuses with E_SM_INFRA_GAP
+("run its oracle first", image.ts runtimeId) before any docker call, in runPfSession, `pf contain` and dryrun-units.ts. runCopy writes a Harbor run copy whose task.toml sets Harbor's agent timeout to
+the session's budget (run.ts sessionBudget: every pre-open and post-turn container call at its timeout, each slot open
+and close with its retries, the task wall and both wrap-up walls, and a 600 s margin; 17,184 s for P, C and blind and
+15,384 s for N), and run.ts kills Harbor only after that plus its agent setup, image build and another margin. The copy names that image as the task's docker_image, a
 compose overlay that mounts the tools volume read-only at /opt/pf-tools for every arm, the pstack volume at /opt/pf-pstack
 for P and the blind probe and the pinned Claude Code read-only at /usr/local/bin/claude, and pf-config.json (both turn
 texts, both turns' limits, the frozen no-answer reply, the plugin dir and Claude Code's env). Harbor runs
@@ -274,9 +306,12 @@ run. It waits for the neutral record, so it can start while the neutral gate sti
   runPfSession runs the same gate (containUnit) before every session: the unit's first session runs the check and
   records it in the unit dir's pf-contain.json, one entry per session image tag; a later session reuses a passing entry
   when the tree volume's content digest (sh/tree-digest.sh: every entry's type, mode, name, file hash and link target,
-  .git included, no times), the tag, the runtime image, the head and the check script's sha256 all match. The image id
-  is not in the key, since every session image is a new build. A failure halts the unit with E_PF_CONTAINMENT before
-  any session, without dropping it.
+  .git included, no times), the tag, the runtime image, the head, the base commit and the sha256s of the check script, the
+  session image's build script (statemachines image.ts BUILD), fix.patch, test.patch and the fail-to-pass ids all match
+  (containment.ts reuseKey). The digest is
+  taken before the image build and again after the gate, and both must match the entry. A check whose two digests
+  differ stores its entry with no digest, so no later session reuses it. The image id is not in the key, since every
+  session image is a new build. A failure halts the unit with E_PF_CONTAINMENT before any session, without dropping it.
   `gstack-evals outcome pf contain --unit <dir>` runs the check alone and writes the same record. sh/contain.sh runs as root with no network in
   a container of that image. It fails when any ref (branches, tags, remotes, notes, replace refs, stash, packed refs,
   FETCH_HEAD, ORIG_HEAD and the other special heads) or reflog entry points past the base commit, when any commit object is neither the base nor an

@@ -21,7 +21,7 @@ import { smFail, type SmUnit } from "./unit.ts";
 const SH = join(import.meta.dir, "sh");
 export const SESSION_REPO = "gstack-evals-sm-session";
 
-const BUILD = `set -euo pipefail
+export const BUILD = `set -euo pipefail
 repo="$1"
 mnts=(); ex=()
 while read -r _ _ _ _ m _; do case "$m" in "$repo"/*) mnts+=("$m"); ex+=(-e "/\${m#"$repo"/}/");; esac; done < /proc/self/mountinfo
@@ -106,10 +106,15 @@ export function qaHomeCopy(src: string, dst: string): QaHome {
   return { paths: HOME_CHECKED.filter((p) => lexists(join(dst, p))).map((p) => SESSION_HOME + "/" + p), sha256: digest.digest("hex") };
 }
 
+/** The unit's runtime image id (sha256:<64 hex>), which its oracle records; a missing or malformed one refuses with E_SM_INFRA_GAP, so callers check it before any docker call. */
+export function runtimeId(u: SmUnit): string {
+  const runtime = u.image.runtime_id;
+  return runtime && /^sha256:[0-9a-f]{64}$/.test(runtime) ? runtime : smFail("E_SM_INFRA_GAP", "unit " + u.id + " has no runtime image id; run its oracle first");
+}
+
 /** Builds one session's image. treePatch (follow-on only) is the first stage's full-tree patch, "" for S0. qaHome (A3 only) is the host dir qa-install.sh filled. */
 export function buildSessionImage(u: SmUnit, o: { volume: string; stage: "first" | "followon"; treePatch?: string; qaHome?: string }): SessionImage {
-  const runtime = u.image.runtime_id;
-  if (!runtime || !/^sha256:[0-9a-f]{64}$/.test(runtime)) return smFail("E_SM_INFRA_GAP", "unit " + u.id + " has no runtime image id; run its oracle first");
+  const runtime = runtimeId(u);
   if ((o.stage === "followon") !== (o.treePatch !== undefined)) return smFail("E_SM_ARM", "a follow-on image takes the first stage's tree patch, and only a follow-on does");
   if (o.qaHome !== undefined && (o.stage !== "first" || !existsSync(join(o.qaHome, ".claude/skills/gstack")))) return smFail("E_SM_ARM", "A3's home is a first-stage home holding .claude/skills/gstack, not " + o.qaHome);
   const ins = docker(["image", "inspect", "--format", "{{json .Config}}", runtime], { timeoutMs: 30_000 });

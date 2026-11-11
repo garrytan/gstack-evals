@@ -4,7 +4,7 @@
 // wrap-up allowance pending on the lease, and the allowance table admission may double. On a temporary ledger with a stub
 // upstream, in the style of sm-driver.test.ts; no key, no paid call.
 import { afterAll, expect, jest, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { recordProgram } from "../../src/runner/ledger/envelope.ts";
@@ -14,6 +14,7 @@ import { MeteringProxy } from "../../src/runner/proxy/metering-proxy.ts";
 import { serveStages, type ServeOptions, type StageSpec } from "../../lanes/outcome-skills/driver/stage.ts";
 import { costReading } from "../../lanes/outcome-skills/pfchecks/admission.ts";
 import { OPUS, P1, SOL } from "../../lanes/outcome-skills/pfchecks/items.ts";
+import { pfRecord, retryAfter, type PfRunInput } from "../../lanes/outcome-skills/pfchecks/run.ts";
 
 const D = 1_000_000;
 const quote = { words: "test words", by: "test", source: "pf-driver.test.ts" };
@@ -156,6 +157,57 @@ test("a task open needs room for its task and wrap-up allowances, the wrap-up's 
   await c3.closeAll();
   await s3.done;
   two.local.close?.();
+});
+
+// Value: protects=the owner's ruling A2, which lets run.ts end a refused task open as a cap stop because that open got no slot and reserved nothing; fails_when=a task open refused with 409 CAP_STOP for lack of room writes a reserve line to the lease's journal, puts a meter on the lease, changes the lease's held_micros or answers with a slot, or an open that got a slot creates no tracked session or meter; why_new=retryAfter now skips its no-summary halt for such a cap stop, and that is safe only while a refused open spends nothing; seam=driver/stage.ts's open handler over the proxy journal, LocalLedger.meters and GET /status; no_claim=how run.ts reads the cap stop (pf-run.test.ts)
+test("a task open refused with 409 CAP_STOP for lack of room reserves nothing, meters nothing and holds nothing on the lease, while an open that got a slot is a tracked session with a meter", async () => {
+  const { serve, local, root } = ledger({ "pf-opus": { cap: 26.5 } });
+  const served = await serve([{ item: "pf-opus", arm: "pf-opus", arms: TOLD }]);
+  const { open, closeAll } = client(served.control);
+  const lease = served.stages[0]!.lease_id;
+  const journal = join(root, "run", lease + ".journal.ndjson");
+  const reserves = () => readFileSync(journal, "utf8").trim().split("\n").map((l) => JSON.parse(l)).filter((e) => e.kind === "reserve");
+  const held = async () => ((await (await fetch(served.control + "/status")).json()) as { stages: Array<{ held_micros: number | null; live: string[] }> }).stages[0]!;
+  const got = await open({ arm: "pf:N", cap: 13, phase: "task", task: "u1" });
+  expect(got.status).toBe(200);
+  expect(got.json.id).toMatch(/^ses_/);
+  expect((await fetch(got.json.base_url + "/v1/messages", { method: "POST", headers: { "content-type": "application/json", "x-api-key": got.json.token }, body: JSON.stringify({ model: OPUS, max_tokens: 100, messages: [{ role: "user", content: "hi" }] }) })).status).toBe(200);
+  expect(reserves().map((e) => e.cell.meter_id)).toEqual([got.json.meter_id]);
+  expect([...local.meters(lease).keys()]).toEqual([got.json.meter_id]);
+  const before = await held();
+  expect(before.live).toEqual([got.json.id]);
+  expect(before.held_micros).toBeGreaterThan(0);
+  const refused = await open({ arm: "pf:N", cap: 13, phase: "task", task: "u2" });
+  expect([refused.status, refused.json.code]).toEqual([409, "CAP_STOP"]);
+  expect([refused.json.id, refused.json.meter_id, refused.json.token]).toEqual([undefined, undefined, undefined]);
+  expect(reserves().map((e) => e.cell.meter_id)).toEqual([got.json.meter_id]);
+  expect([...local.meters(lease).keys()]).toEqual([got.json.meter_id]);
+  expect(await held()).toMatchObject({ held_micros: before.held_micros, live: [got.json.id] });
+  const opens = readFileSync(join(root, "run", "sessions.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l)).filter((e) => e.event === "open");
+  expect(opens.map((e) => e.task)).toEqual(["u1"]);
+  await closeAll();
+  await served.done;
+  local.close?.();
+});
+
+// Value: protects=the owner's ruling D2: an attempt with no summary after a logged open may have spent, so pf-run stops the driver before it halts, and nothing else opens on the item until the Captain rules; fails_when=retryAfter halts with E_PF_FINALIZE_HALT and the driver still answers a POST /sessions open, a stop call that fails keeps the session from halting, or the halt line does not say whether the stop worked; why_new=the halt ended pf-run alone, and the driver went on serving opens on the item; seam=run.ts retryAfter's no-summary halt over the driver's POST /stop; no_claim=a relaunch's refusal, which the driver does not record for this stop (README: the Captain's ruling and lift)
+test("a no-summary halt after a logged open stops the driver through POST /stop, so its next open is refused, and a stop that fails still halts and says so", async () => {
+  const { serve, local, root } = ledger({ "pf-opus": { cap: 100 } });
+  const served = await serve([{ item: "pf-opus", arm: "pf-opus", arms: TOLD }]);
+  const { open, closeAll } = client(served.control);
+  expect((await open({ arm: "pf:N", cap: 13, phase: "task", task: "u1" })).status).toBe(200);
+  await closeAll();
+  const ev = join(root, "ev");
+  mkdirSync(ev);
+  writeFileSync(join(ev, "pf-opens.jsonl"), JSON.stringify({ phase: "task", rerun: null, at: 2.5 }) + "\n");
+  const i = { session: { unit: "u2", part: 0, index: 1, model: OPUS, arm: "N", item: "pf-opus" }, names: "short", control: served.control, effort: null } as unknown as PfRunInput;
+  await expect(retryAfter(i, 1, null, pfRecord(i, 1, null, ev), "/out/a1", "Harbor exited 1", ev)).rejects.toThrow(/^E_PF_FINALIZE_HALT u2\/claude-opus-5-5\/N\/1 attempt 1: Harbor exited 1 after pf_turns opened a slot .*pf-run stopped the driver through POST /);
+  await served.done;
+  const next = await open({ arm: "pf:N", cap: 13, phase: "task", task: "u3" }).then((r) => r.status, () => "connection refused");
+  expect(next).not.toBe(200);
+  const gone = { ...i, control: served.control };
+  await expect(retryAfter(gone, 1, null, pfRecord(gone, 1, null, ev), "/out/a1", "Harbor exited 1", ev)).rejects.toThrow(/^E_PF_FINALIZE_HALT .*pf-run's POST .*\/stop failed \(/);
+  local.close?.();
 });
 
 test("pf-blind serves pf:blind on Opus only, and the doubled allowance table changes the task cap a told open must name", async () => {

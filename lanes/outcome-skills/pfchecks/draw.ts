@@ -6,11 +6,14 @@
 // back to January 2025 until n are kept; the next 10 kept in that order are the reserve. At most 3 kept units a repository
 // across all of them, reserve included; a dropped unit uses no slot; each candidate is asked once. The gates run lazily in
 // draw order: labels, the oracle record, the told-mode screen, the neutral validation. A gate whose input is not there
-// yet stops the walk and names the candidate it waits on (E_PF_PENDING).
+// yet stops the walk and names the candidate it waits on (E_PF_PENDING). The pool needs sm source split's fields on every
+// row in a language with a test-module detector (rust), so the screen's mixed-hunk drop runs, and refuses the file
+// otherwise (E_PF_INPUT).
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ReasonCode } from "../../../src/errors/codes.ts";
 import { seededRandom } from "../../../src/runner/stats/paired.ts";
+import { TEST_MODULES } from "../statemachines/langs.ts";
 import { combineLabels, type LabelAnswer } from "../statemachines/packets.ts";
 import { screenOne } from "../statemachines/screen.ts";
 import type { Candidate } from "../statemachines/source.ts";
@@ -31,7 +34,16 @@ export type Stratum = "july-2026" | "jan-jun-2026" | "pre-2026";
 export const stratumOf = (month: string): Stratum => (month === "2026-07" ? "july-2026" : month >= "2026-01" ? "jan-jun-2026" : "pre-2026");
 
 export interface DrawUnit { id: string; repo: string; month: string }
+const splitShaped = (s: unknown): boolean => {
+  if (!s || typeof s !== "object" || Array.isArray(s)) return false;
+  const o = s as Record<string, unknown>;
+  const keys = Object.keys(o).sort().join(",");
+  if (keys === "error") return typeof o.error === "string";
+  return keys === "mixed,source_files,test_hunks" && [o.mixed, o.source_files, o.test_hunks].every((v) => Number.isInteger(v) && (v as number) >= 0);
+};
 export function poolOf(cands: Candidate[]): DrawUnit[] {
+  const bare = cands.filter((c) => TEST_MODULES[c.lang] && !splitShaped(c.split));
+  if (bare.length) pfFail("E_PF_INPUT", bare.length + " " + [...new Set(bare.map((c) => c.lang))].sort().join(", ") + " candidates carry no sm source split fields or malformed ones, so section 2's mixed-hunk screen cannot run: " + bare.slice(0, 5).map((c) => c.id).join(", ") + (bare.length > 5 ? " and " + (bare.length - 5) + " more" : "") + "; run sm source split on the candidates file first");
   return cands.filter((c) => c.created_at.slice(0, 10) >= WINDOW.from && c.created_at.slice(0, 10) <= WINDOW.to && screenOne(c) === null).map((c) => ({ id: c.id, repo: c.repo, month: c.month }));
 }
 

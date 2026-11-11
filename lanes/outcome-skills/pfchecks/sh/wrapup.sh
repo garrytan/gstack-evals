@@ -6,13 +6,15 @@
 # other path the wrap-up turn added, changed or deleted, puts the tree back to S, and prints one PF_WRAPUP line.
 # "reset <repo> <dir>" puts the tree back to S only, before a wrap-up rerun. A mount point under the repository root (an
 # image's VOLUME inside the repo dir) stays out of git clean, which cannot remove it; files the wrap-up turn left inside
-# one are still removed by the inventory pass.
+# one are still removed by the inventory pass. Its git runs with no hooks, no fsmonitor, no system or global config
+# and no ignore file outside the repository.
 set -euo pipefail
 cmd=$1
 repo=$2
 dir=$3
 here=$(cd "$(dirname "$0")" && pwd)
-g() { git -C "$repo" -c safe.directory='*' -c core.quotepath=off "$@"; }
+export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
+g() { git -C "$repo" -c safe.directory='*' -c core.quotepath=off -c core.hooksPath=/dev/null -c core.fsmonitor=false -c core.excludesFile=/dev/null "$@"; }
 reset() {
   local ex=() m
   if [ -r /proc/self/mountinfo ]; then

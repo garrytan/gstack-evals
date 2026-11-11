@@ -68,6 +68,18 @@ export const effortDiffers = (recorded: Record<string, unknown>, body: Record<st
 /** Section 3's effort check: the session's fields, as the driver's proxy recorded them from its task slot's first main
  *  request, equal the dry run's record for its model (effort.json). No recorded fields, or no record for the model, fails. */
 export const effortHolds = (recorded: Record<string, unknown> | null, want: Record<string, unknown> | undefined): boolean => recorded !== null && want !== undefined && !effortDiffers(want, recorded);
+/** What makes an effort record something other than the dry run's effort.json (an object whose every entry is an object
+ *  with exactly EFFORT_KEYS, as effortFields writes it), or null when it is one. A missing key would read null. */
+export function effortProblem(effort: unknown): string | null {
+  if (effort === null || typeof effort !== "object" || Array.isArray(effort)) return "it is not an object with one record per model";
+  const want = [...EFFORT_KEYS].sort().join(", ");
+  for (const [model, e] of Object.entries(effort)) {
+    if (e === null || typeof e !== "object" || Array.isArray(e)) return model + "'s entry is " + JSON.stringify(e) + ", not an object";
+    const keys = Object.keys(e).sort().join(", ");
+    if (keys !== want) return model + "'s entry has keys " + (keys || "none") + ", not exactly " + want;
+  }
+  return null;
+}
 
 export interface Discard { checks: boolean; discarded: string[] }
 /** wrapup.sh keep's lines: PF_DISCARD <path> per discarded change and one PF_WRAPUP line. */
@@ -79,6 +91,11 @@ export function readWrapup(stdout: string): Discard {
   return { checks: m[1] === "1", discarded };
 }
 
+/** A failed post-turn step as pf_turns saw it: the step, whether it timed out, its failure, the PF_ARM_STATE causes
+ *  state.sh found (none for an infra gap), the end of the turn before it, raw (wall_limit, bg_wait_expired...), and on
+ *  a timeout the files and bytes the session wrote as the capture lists them (stopped: counting stopped at the
+ *  2,000,000-file or 8 GiB line, so both are lower bounds); written is null when the step did not time out. */
+export interface PfPostTurn { step: string; timed_out: boolean; failed: string; causes: string[]; after: { phase: string; termination: string } | null; written?: { files: number; bytes: number; stopped: boolean } | null; kill_confirmed?: boolean | null }
 export interface PfSessionRecord {
   schema: "pf-session.v1"; unit: string; part: number; index: number; model: string; arm: PfArm; item: string; lease_id: string;
   attempt: 1 | 2; names: Names; task: { end: EndKind; turns: number | null; wall_ms: number; spent_micros: number };
@@ -87,6 +104,8 @@ export interface PfSessionRecord {
    *  is not the head capture.sh committed) or post_turn (a post-turn step failed on what the agent wrote); null for every
    *  other gap. */
   gap_reason: string | null;
+  /** pf_turns' record of the post-turn step that failed, for an arm gap or an infra gap alike; null when none did. */
+  post_turn?: PfPostTurn | null;
   /** The unit's base commit (the session image's head); scoring checks that S's root is this commit. */
   base_commit: string | null;
   capture: Capture | null; forced: string[]; discarded: string[]; checks: string | null; s: { repo: string; ref: string } | null; transcript: string | null;

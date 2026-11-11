@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import traceback
 import types
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -29,6 +30,7 @@ import claude_agent_sdk  # noqa: E402
 import egress  # noqa: E402
 import laneb_agent as lb  # noqa: E402
 import pf_agent  # noqa: E402
+import pf_turns  # noqa: E402
 
 assert claude_agent_sdk.__version__ == "0.2.174", claude_agent_sdk.__version__
 IMAGE = "sha256:" + "d" * 64
@@ -83,8 +85,16 @@ for line in sys.stdin:
         if phase == "task":
             os.makedirs("checks", exist_ok=True)
             open("checks/regress_test.sh", "w").write("grep -q reset flag/flag.go\n")
-            if scenario == "task_lock":
+            if scenario in ("task_lock", "task_lock_wall"):
                 open(".git/index.lock", "w").close()
+            if scenario == "task_grow":
+                with open("states.bin", "w") as f:
+                    f.truncate(8 << 30)
+            if scenario == "task_filter":
+                import subprocess
+                subprocess.run(["git", "config", "filter.pf.clean", "false"], check=True)
+                subprocess.run(["git", "config", "filter.pf.required", "true"], check=True)
+                open(".gitattributes", "w").write("* filter=pf\n")
         else:
             if scenario == "wrapup_rm_head":
                 os.remove(os.path.join(os.environ["PF_STUB_WORK"], "s.head"))
@@ -92,6 +102,8 @@ for line in sys.stdin:
             open("late_%d.txt" % n, "w").write("wrap-up file\n")
         send({"type": "system", "subtype": "init", "session_id": "s-1", "tools": ["Bash"], "skills": [], "model": "claude-opus-5-5", "claude_code_version": "2.1.312"})
         send({"type": "assistant", "message": {"id": "m%d" % n, "type": "message", "role": "assistant", "model": "stub", "content": [{"type": "text", "text": "Done."}], "stop_reason": None, "usage": {"input_tokens": 1, "output_tokens": 1}}, "parent_tool_use_id": None, "session_id": "s-1", "uuid": "u%d" % n})
+        if scenario == "task_lock_wall" and phase == "task":
+            continue
         send({"type": "result", "subtype": "error_during_execution" if error else "success", "duration_ms": 1, "duration_api_ms": 1, "is_error": error, "num_turns": 1, "session_id": "s-1", "total_cost_usd": 0, "usage": {}, "result": "Done."})
 '''
 
@@ -157,8 +169,9 @@ def sh(cwd, cmd):
     return r.stdout.strip()
 
 
-def session(scenario="ok", instr=False, cap_stop=False, arm="P", wrapup_refusals=(), wrapup_stops=0, unfinalized=(), task_refusals=(), task_stops=0, failing_closes=None):
-    """One PfAgent trial; returns the error it raised, the control plane's calls, the stub's log and pf-summary.json."""
+def session(scenario="ok", instr=False, cap_stop=False, arm="P", wrapup_refusals=(), wrapup_stops=0, unfinalized=(), task_refusals=(), task_stops=0, failing_closes=None, task_wall=60, base_lfs=False):
+    """One PfAgent trial; returns the error it raised, the control plane's calls, the stub's log and pf-summary.json.
+    base_lfs sets the filter.lfs keys git lfs install --local writes in the base repo's .git/config."""
     d = Path(tempfile.mkdtemp(prefix="pf-agent-sdk-"))
     DIRS.append(d)
     repo, bindir = d / "testbed", d / "bin"
@@ -169,6 +182,8 @@ def session(scenario="ok", instr=False, cap_stop=False, arm="P", wrapup_refusals
     if instr:
         (repo / "CLAUDE.md").write_text("PF-HOSTILE\n")
     sh(repo, "git init -q -b main && git add -A && git commit -qm base")
+    if base_lfs:
+        sh(repo, "git config filter.lfs.clean 'git-lfs clean -- %f' && git config filter.lfs.smudge 'git-lfs smudge -- %f' && git config filter.lfs.process 'git-lfs filter-process' && git config filter.lfs.required true")
     task = {"repo_dir": str(repo), "commits": 1, "base_commit": sh(repo, "git rev-parse HEAD"), "kind": "PF"}
     (d / "task.json").write_text(json.dumps(task))
     for name, body in (("docker", FAKE_DOCKER), ("claude", STUB_CLAUDE)):
@@ -177,7 +192,7 @@ def session(scenario="ok", instr=False, cap_stop=False, arm="P", wrapup_refusals
     rig = {"quiet_sec": 0.2, "bg_wait_sec": 1}
     pf = {
         "schema": "pf-config.v1", "arm": arm, "names": "short", "task_text": "Write a test that catches the bug.", "wrapup_text": "Last step. Write CHECKS.json.",
-        "limits": {"task": {"wall_limit_sec": 60, "max_turns": 250, "allowance_usd": 12, **rig}, "wrapup": {"wall_limit_sec": 60, "max_turns": 20, "allowance_usd": 6, **rig}},
+        "limits": {"task": {"wall_limit_sec": task_wall, "max_turns": 250, "allowance_usd": 12, **rig}, "wrapup": {"wall_limit_sec": 60, "max_turns": 20, "allowance_usd": 6, **rig}},
         "no_answer": "No one is available to answer. Use your own judgment.", "plugin": "/opt/pf-pstack" if arm == "P" else None, "env": {"CLAUDE_CODE_DISABLE_BUNDLED_SKILLS": "1"},
     }
     (d / "pf-config.json").write_text(json.dumps(pf))
@@ -380,6 +395,17 @@ def test_a_cap_stop_on_the_task_open_raises_before_claude_starts():
     check(s.stub == [] and s.summary is None, s.stub)
 
 
+def test_each_slot_open_is_recorded_before_its_request():
+    s = session("wrapup_error")
+    check(s.error is None, repr(s.error))
+    opens = [json.loads(line) for line in (s.ev / "pf-opens.jsonl").read_text().splitlines()]
+    check([(o["phase"], o["rerun"]) for o in opens] == [("task", None), ("wrapup", None), ("wrapup", "wrapup_upstream_or_infra")], opens)
+    c = session(cap_stop=True)
+    check(isinstance(c.error, lb.LedgerCapStop) and c.summary is None, repr(c.error))
+    opens = [json.loads(line) for line in (c.ev / "pf-opens.jsonl").read_text().splitlines()] if (c.ev / "pf-opens.jsonl").exists() else []
+    check([o["phase"] for o in opens] == ["task"], opens)
+
+
 def with_scripts(edit, **kw):
     """One session with pf_agent.SH swapped for a copy of the pf scripts that edit(sh_dir) changed."""
     sh_copy = Path(tempfile.mkdtemp(prefix="pf-sh-"))
@@ -393,13 +419,21 @@ def with_scripts(edit, **kw):
         pf_agent.SH = saved
 
 
-def with_step(fail, **kw):
+def with_step(fail, started=True, **kw):
     """One session whose container commands go through fail(script, args) first: a CompletedProcess or an exception it
-    returns stands in for that command's run, and None runs it."""
+    returns stands in for that command's run, and None runs it. A post-turn step's own command and args reach fail, not
+    pf_turns' process-group wrapper around them. With started, a step that fail times out first starts its real process
+    group (sleep 60, cut at 1 s), as a step that timed out leaves one for KILL to end."""
     real = pf_agent.Session.sh
 
     def sh(self, script, *args, timeout=600):
-        r = fail(script, args)
+        group = script == getattr(pf_turns, "GROUP", None)
+        r = fail(args[1], args[3:]) if group else fail(script, args)
+        if group and started and isinstance(r, subprocess.TimeoutExpired):
+            try:
+                real(self, script, args[0], "sleep 60", timeout=1)
+            except subprocess.TimeoutExpired:
+                pass
         if isinstance(r, BaseException):
             raise r
         return r or real(self, script, *args, timeout=timeout)
@@ -418,6 +452,14 @@ def test_an_index_lock_the_task_turn_left_makes_the_capture_failure_the_arms():
     check([o["meta"]["phase"] for o in s.control.opens] == ["task"] and s.summary["capture"] is None and s.summary["wrapup"] == [], s.summary)
 
 
+def test_a_lock_the_agents_git_left_at_a_wall_limit_end_is_a_post_turn_cause_after_that_end():
+    s = session("task_lock_wall", task_wall=3)
+    check(s.error is None, repr(s.error))
+    check(s.summary["refused"].startswith("E_PF_ARM post_turn capture.sh commit: "), s.summary.get("refused"))
+    pt = s.summary.get("post_turn") or {}
+    check(pt.get("step") == "capture.sh commit" and pt.get("timed_out") is False and pt.get("causes") == ["lock .git/index.lock"] and pt.get("after") == {"phase": "task", "termination": "wall_limit"}, pt)
+
+
 def test_a_lock_the_harness_capture_leaves_as_it_fails_stays_infra():
     def edit(d):
         cap = d / "capture.sh"
@@ -426,6 +468,148 @@ def test_a_lock_the_harness_capture_leaves_as_it_fails_stays_infra():
     s = with_scripts(edit)
     check(s.error is None, repr(s.error))
     check(s.summary["refused"].startswith("E_PF_CAPTURE capture.sh commit exited 3: capture died"), s.summary.get("refused"))
+
+
+def test_a_capture_that_times_out_on_a_tree_the_task_turn_grew_is_the_arms():
+    s = with_step(lambda script, args: subprocess.TimeoutExpired("docker", 600) if "capture.sh" in script and "commit" in args else None, scenario="task_grow")
+    check(s.error is None, repr(s.error))
+    check(s.summary["refused"].startswith("E_PF_ARM post_turn capture.sh commit: grown the session wrote files=") and s.summary["refused"].endswith(", at least 2000000 files or 8589934592 bytes"), s.summary.get("refused"))
+    check([o["meta"]["phase"] for o in s.control.opens] == ["task"] and s.summary["wrapup"] == [], s.summary)
+
+
+def test_a_capture_timeout_records_the_files_and_bytes_the_session_wrote_below_and_above_the_line():
+    def timeout(script, args):
+        return subprocess.TimeoutExpired("docker", 600) if "capture.sh" in script and "commit" in args else None
+
+    below = with_step(timeout)
+    check(below.summary["refused"].startswith("E_PF_CAPTURE capture.sh commit timed out after 600 s"), below.summary.get("refused"))
+    check((below.summary.get("post_turn") or {}).get("written") == {"files": 1, "bytes": 27, "stopped": False}, below.summary.get("post_turn"))
+    above = with_step(timeout, scenario="task_grow")
+    w = (above.summary.get("post_turn") or {}).get("written") or {}
+    check(above.summary["refused"].startswith("E_PF_ARM post_turn capture.sh commit: grown") and w.get("stopped") is True and w.get("bytes", 0) >= 8 << 30 and w.get("files", 0) >= 1, above.summary.get("post_turn"))
+
+
+def test_a_capture_that_fails_on_a_git_filter_the_task_turn_set_is_the_arms():
+    s = session("task_filter")
+    check(s.error is None, repr(s.error))
+    check(s.summary["refused"].startswith("E_PF_ARM post_turn capture.sh commit: ") and "filter .git/config sets filter.pf.clean" in s.summary["refused"], s.summary.get("refused"))
+    check([o["meta"]["phase"] for o in s.control.opens] == ["task"] and s.summary["capture"] is None, s.summary)
+
+def test_a_base_repo_lfs_filter_leaves_an_infra_failure_of_the_capture_infra_and_a_session_filter_still_makes_it_the_arms():
+    def fail(script, args):
+        return subprocess.CompletedProcess([], 1, b"", b"Error response from daemon: container cid is not running\n") if "capture.sh" in script and "commit" in args else None
+
+    base = with_step(fail, base_lfs=True)
+    check(base.error is None, repr(base.error))
+    check(base.summary["refused"].startswith("E_PF_CAPTURE capture.sh commit exited 1: Error response from daemon"), base.summary.get("refused"))
+    check((base.summary.get("post_turn") or {}).get("causes") == [], base.summary.get("post_turn"))
+    added = with_step(fail, scenario="task_filter", base_lfs=True)
+    check(added.error is None, repr(added.error))
+    check(added.summary["refused"].startswith("E_PF_ARM post_turn capture.sh commit: "), added.summary.get("refused"))
+    check((added.summary.get("post_turn") or {}).get("causes") == ["filter .git/config sets filter.pf.clean", "filter .git/config sets filter.pf.required"], added.summary.get("post_turn"))
+
+
+def test_the_kill_script_exits_0_only_once_the_steps_group_is_gone():
+    work = Path(tempfile.mkdtemp(prefix="pf-kill-"))
+    DIRS.append(work)
+    kill = lambda: subprocess.run(["bash", "-c", pf_turns.KILL, "bash", str(work)], capture_output=True, timeout=30).returncode
+    pid = int(subprocess.run(["bash", "-c", "setsid sleep 60 >/dev/null 2>&1 & echo $!"], capture_output=True, text=True).stdout)
+    (work / "pf-step.pid").write_text(f"{pid}\n")
+    check(kill() == 0, "a group the signal ended was not confirmed gone")
+    zombie = subprocess.Popen(["sleep", "60"], start_new_session=True)
+    (work / "pf-step.pid").write_text(f"{zombie.pid}\n")
+    try:
+        check(kill() != 0, "the kill script exited 0 while a process of the group was still there")
+    finally:
+        zombie.kill()
+        zombie.wait()
+
+
+def test_a_timed_out_step_whose_kill_is_not_confirmed_is_infra_and_state_sh_does_not_read_the_tree():
+    def unconfirmed(script, args):
+        if script == pf_turns.KILL:
+            return subprocess.CompletedProcess([], 1, b"", b"")
+        return subprocess.TimeoutExpired("docker", 600) if "capture.sh" in script and "commit" in args else None
+
+    s = with_step(unconfirmed, scenario="task_grow")
+    pid = (s.dir / "pf-work" / "pf-step.pid").read_text().strip()
+    subprocess.run(["kill", "-KILL", "--", "-" + pid], capture_output=True)
+    check(s.error is None, repr(s.error))
+    check(s.summary["refused"].startswith("E_PF_CAPTURE capture.sh commit timed out after 600 s") and "kill of its process group was not confirmed" in s.summary["refused"], s.summary.get("refused"))
+    pt = s.summary.get("post_turn") or {}
+    check(pt.get("kill_confirmed") is False and pt.get("causes") == [] and pt.get("written") is None, pt)
+    confirmed = with_step(lambda script, args: subprocess.TimeoutExpired("docker", 600) if "capture.sh" in script and "commit" in args else None, scenario="task_grow")
+    check(confirmed.summary["refused"].startswith("E_PF_ARM post_turn capture.sh commit: grown"), confirmed.summary.get("refused"))
+    check((confirmed.summary.get("post_turn") or {}).get("kill_confirmed") is True, confirmed.summary.get("post_turn"))
+
+
+def test_a_stale_pid_file_from_an_earlier_step_is_never_killed():
+    innocent = int(subprocess.run(["bash", "-c", "setsid sleep 60 >/dev/null 2>&1 & echo $!"], capture_output=True, text=True).stdout)
+
+    def stale(script, args):
+        if "pf-step.stamp" in script:
+            Path(args[0]).mkdir(parents=True, exist_ok=True)
+            (Path(args[0]) / "pf-step.pid").write_text(f"{innocent}\n")
+            return None
+        return subprocess.TimeoutExpired("docker", 600) if "capture.sh" in script and "commit" in args else None
+
+    try:
+        s = with_step(stale, started=False)
+        alive = Path(f"/proc/{innocent}/stat").exists() and Path(f"/proc/{innocent}/stat").read_text().split(") ")[1][0] != "Z"
+        check(alive, "KILL killed the process group a stale pf-step.pid named")
+        check(s.summary["refused"].startswith("E_PF_CAPTURE capture.sh commit timed out") and (s.summary.get("post_turn") or {}).get("kill_confirmed") is False, s.summary.get("refused"))
+    finally:
+        subprocess.run(["kill", "-KILL", "--", "-%d" % innocent], capture_output=True)
+
+
+def test_the_kill_script_refuses_a_pid_of_1_0_or_one_that_is_not_a_number():
+    work = Path(tempfile.mkdtemp(prefix="pf-kill-pid-"))
+    DIRS.append(work)
+    (work / "bin").mkdir()
+    log = work / "kill.log"
+    (work / "bin" / "kill").write_text(f"#!/bin/sh\necho \"$*\" >> '{log}'\nexit 1\n")
+    (work / "bin" / "kill").chmod(0o755)
+    for pid in ("1", "0", "-1", "12x", ""):
+        (work / "pf-step.pid").write_text(pid + "\n")
+        r = subprocess.run(["bash", "-c", "enable -n kill; " + pf_turns.KILL, "bash", str(work)], capture_output=True, env={**os.environ, "PATH": str(work / "bin") + ":" + os.environ["PATH"]}, timeout=30)
+        check(r.returncode != 0 and not log.exists(), (pid, r.returncode, log.exists() and log.read_text()))
+
+
+def test_a_lock_the_harness_capture_leaves_as_it_times_out_stays_infra():
+    def fail(script, args):
+        if "capture.sh" not in script or "commit" not in args:
+            return None
+        stamp = os.stat(os.path.join(args[4], "pf-step.stamp"))
+        lock = os.path.join(args[2], ".git", "index.lock")
+        open(lock, "w").close()
+        os.utime(lock, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
+        return subprocess.TimeoutExpired("docker", 600)
+
+    s = with_step(fail)
+    check(s.error is None, repr(s.error))
+    check(s.summary["refused"].startswith("E_PF_CAPTURE capture.sh commit timed out after 600 s"), s.summary.get("refused"))
+
+
+def test_a_post_turn_step_that_times_out_is_killed_before_state_sh_reads_the_tree():
+    def edit(d):
+        cap = d / "capture.sh"
+        cap.write_text(cap.read_text().replace("  commit)\n", '  commit)\n    (sleep 3; : > "$4/late") >/dev/null 2>&1 &\n    wait\n', 1))
+
+    real = pf_agent.Session.sh
+
+    def sh(self, script, *args, timeout=600):
+        capture = "commit" in args and "capture.sh" in script + " ".join(args)
+        return real(self, script, *args, timeout=1 if capture else timeout)
+
+    pf_agent.Session.sh = sh
+    try:
+        s = with_scripts(edit)
+    finally:
+        pf_agent.Session.sh = real
+    check(s.error is None, repr(s.error))
+    check(s.summary["refused"].startswith("E_PF_CAPTURE capture.sh commit timed out after 1 s"), s.summary.get("refused"))
+    time.sleep(4)
+    check(not (s.dir / "pf-work" / "late").exists(), "the timed-out capture kept running and wrote to the tree after state.sh read it")
 
 
 def test_a_wrapup_turn_that_removes_s_head_makes_the_keep_failure_the_arms():

@@ -21,10 +21,12 @@ Before any slot opens the tree must hold none of the files the strip rule remove
 real_agent's family SM check reads them, with the commit count and head the task names when it names them.
 Usage: python pf_turns.py <config.json>. It writes pf-summary.json, sdk-messages.jsonl (records carry phase task or
 wrapup), claude-session.jsonl (Claude Code's own transcript), usersim-events.jsonl, s.bundle and CHECKS.json (when kept)
-under out.
+under out, and pf-opens.jsonl, one line before each slot open request, so run.ts can tell that a killed attempt with no
+summary may have spent.
 """
 import asyncio
 import json
+import re
 import shlex
 import subprocess
 import sys
@@ -40,6 +42,14 @@ from real_agent import SM_CHECK, RealAgent, message_record  # noqa: E402
 from sm_user import NoAnswer  # noqa: E402
 
 RERUN = {"task": "task_upstream_or_infra", "wrapup": "wrapup_upstream_or_infra"}
+# A post-turn step runs as its own process group in the container, its leader's pid in <work>/pf-step.pid, so a step that
+# times out is killed whole there (docker exec stops only its client) before state.sh reads the tree. Each step's stamp
+# removes the last step's pid file first, and KILL refuses (exits 1) unless the pid is a number above 1, so a stale pid
+# or kill -- -1 never ends another group. KILL exits 0 only once kill -0 finds no process left in the group, within 5 s
+# of the signal; otherwise the kill is not confirmed.
+GROUP = 'w=$1; shift; set -m; bash -c "$@" & p=$!; set +m; echo "$p" > "$w/pf-step.pid"; wait "$p"'
+KILL = 'p=$(cat "$1/pf-step.pid" 2>/dev/null) || exit 1; case $p in ""|*[!0-9]*) exit 1 ;; esac; [ "$p" -gt 1 ] || exit 1; kill -KILL -- "-$p" 2>/dev/null; i=0; while kill -0 -- "-$p" 2>/dev/null; do i=$((i + 1)); [ "$i" -lt 50 ] || exit 1; sleep 0.1; done'
+KILL_TIMEOUT_S = 60
 ENDS = {"wall_limit": "limit_wall", "turn_ceiling": "limit_turns", "completed": "completed", "bg_wait_expired": "completed"}
 
 
@@ -83,7 +93,8 @@ class Session:
         self.user.per_turn(["task", "wrapup"])
         self.transcript = (self.out / "sdk-messages.jsonl").open("a")
         self.started = time.time()
-        self.summary = {"claude_version": None, "check": None, "task": None, "wrapup": [], "slots": [], "capture": None, "keep": None, "checks": False}
+        self.summary = {"claude_version": None, "check": None, "task": None, "wrapup": [], "slots": [], "capture": None, "keep": None, "checks": False, "post_turn": None}
+        self.last_turn = None
 
     def sh(self, script: str, *args: str, timeout: float = 600) -> subprocess.CompletedProcess:
         return subprocess.run([*self.cfg["exec_prefix"], "bash", "-c", script, "bash", *args], capture_output=True, timeout=timeout)
@@ -91,28 +102,43 @@ class Session:
     def step(self, what: str, needs: tuple, cmd: str, *args: str) -> bytes:
         """One post-turn step in the container: the session-end commit, a wrap-up reset or keep, or the S bundle. When it
         fails or times out, sh/state.sh reads what the agent could have written (the work files the step needs, the
-        repository's git state, a lock the agent's git left) and a cause there, or a file that vanished while the step
-        hashed the tree, raises E_PF_ARM post_turn. Anything else raises E_PF_CAPTURE: the harness, the host, docker or the
-        network (#305's run notes item 4)."""
+        repository's git state and filters, a lock the agent's git left, a path the step cannot read and, after a timeout,
+        named by --timed-out, a tree the session grew; a step that timed out is killed first, as its whole process group)
+        and a cause there, or a path that vanished while the step hashed or
+        added it, raises E_PF_ARM post_turn. Anything else raises E_PF_CAPTURE: the harness, the host, docker or the
+        network (#305's run notes item 4). So does a timed-out step whose kill KILL cannot confirm, with no state.sh read,
+        since the step may still be changing the tree; post_turn's kill_confirmed says which (null with no timeout)."""
         cfg = self.cfg
         err = ""
+        timed_out = []
+        killed = None
         try:
-            self.sh('mkdir -p "$1" && touch "$1/pf-step.stamp"', cfg["work"])
-            res = self.sh(cmd, *args)
+            self.sh('mkdir -p "$1" && rm -f "$1/pf-step.pid" && touch "$1/pf-step.stamp"', cfg["work"])
+            res = self.sh(GROUP, cfg["work"], cmd, "bash", *args)
             if res.returncode == 0:
                 return res.stdout
             err = res.stderr.decode(errors="replace")
             failed = f"exited {res.returncode}: {err[-300:]}"
         except subprocess.TimeoutExpired as e:
             failed = f"timed out after {e.timeout:.0f} s"
-        try:
-            probe = self.sh('d=$1; shift; bash "$d/state.sh" "$@"', cfg["sh_dir"], cfg["repo"], cfg["work"], *needs).stdout.decode(errors="replace")
-        except subprocess.TimeoutExpired:
-            probe = ""
-        causes = [l[len("PF_ARM_STATE "):] for l in (err + "\n" + probe).splitlines() if l.startswith("PF_ARM_STATE ")]
+            timed_out = ["--timed-out"]
+            try:
+                killed = self.sh(KILL, cfg["work"], timeout=KILL_TIMEOUT_S).returncode == 0
+            except Exception:
+                killed = False
+        probe = ""
+        if killed is not False:
+            try:
+                probe = self.sh('d=$1; shift; bash "$d/state.sh" "$@"', cfg["sh_dir"], *timed_out, cfg["repo"], cfg["work"], *needs).stdout.decode(errors="replace")
+            except subprocess.TimeoutExpired:
+                pass
+        causes = list(dict.fromkeys(l[len("PF_ARM_STATE "):] for l in (err + "\n" + probe).splitlines() if l.startswith("PF_ARM_STATE ")))
+        size = re.search(r"^PF_TREE_SIZE files=(\d+) bytes=(\d+) stopped=([01])$", probe, re.M)
+        written = {"files": int(size[1]), "bytes": int(size[2]), "stopped": size[3] == "1"} if size else None
+        self.summary["post_turn"] = {"step": what, "timed_out": bool(timed_out), "failed": failed[:400], "causes": causes, "after": self.last_turn, "written": written, "kill_confirmed": killed}
         if causes:
             raise RuntimeError(f"E_PF_ARM post_turn {what}: {'; '.join(dict.fromkeys(causes))}"[:600])
-        raise RuntimeError(f"E_PF_CAPTURE {what} {failed}")
+        raise RuntimeError(f"E_PF_CAPTURE {what} {failed}" + ("; the kill of its process group was not confirmed, so state.sh did not read the tree" if killed is False else ""))
 
     def script(self, name: str, *args: str, needs: tuple = ()) -> str:
         return self.step(name + " " + args[0], needs, 'd=$1; shift; bash "$d/' + name + '" "$@"', self.cfg["sh_dir"], *args).decode(errors="replace")
@@ -134,12 +160,15 @@ class Session:
         limits = cfg["limits"][phase]
         self.limits = limits
         sid = resume
+        with (self.out / "pf-opens.jsonl").open("a") as f:
+            f.write(json.dumps({"phase": phase, "rerun": rerun, "at": round(time.time() - self.started, 1)}) + "\n")
         try:
             slot = self.slots.open(phase, rerun)
         except OpenRefused as e:
             if phase != "wrapup":
                 raise
             self.summary["slots"].append({"phase": phase, "rerun": rerun, "id": None, "allowance_micros": None, "close": None, "open_refused": str(e)[:300]})
+            self.last_turn = {"phase": phase, "termination": "open_refused"}
             return {"phase": phase, "termination": "open_refused", "drive": {"error": str(e)[:400]}, "session_id": sid, "wall_s": 0.0, "refused": ["CAP_STOP"], "allowance_stops": 0, "finalized": None}
 
         async def can_use_tool(tool_name, tool_input, ctx):
@@ -195,6 +224,7 @@ class Session:
                 pass
             closed = self.slots.close(slot, "turn_end")
         self.summary["slots"].append({"phase": phase, "rerun": rerun, "id": slot.get("id"), "allowance_micros": slot.get("allowance_micros"), "close": closed})
+        self.last_turn = {"phase": phase, "termination": termination}
         return {"phase": phase, "termination": termination, "drive": end, "session_id": sid, "wall_s": round(time.time() - started, 1), "refused": (closed or {}).get("refusals") or [], "allowance_stops": int((closed or {}).get("allowance_stops") or 0), "finalized": (closed or {}).get("finalized")}
 
     async def run(self) -> dict:
@@ -203,7 +233,7 @@ class Session:
         repo, work = cfg["repo"], cfg["work"]
         self.check()
         out["claude_version"] = self.sh("claude --version").stdout.decode(errors="replace").strip()
-        self.sh('mkdir -p "$2" && bash "$1/capture.sh" inventory "$3" > "$2/inv"', cfg["sh_dir"], work, repo)
+        self.sh('mkdir -p "$2" && bash "$1/capture.sh" inventory "$3" > "$2/inv" && bash "$1/capture.sh" filters "$3" > "$2/inv.filters"', cfg["sh_dir"], work, repo)
         task = out["task"] = await self.turn("task", cfg["task_text"], None)
         if task_end(task) in ("upstream", "infra") or not task["session_id"]:
             return out
@@ -218,7 +248,7 @@ class Session:
         out["checks"] = "PF_WRAPUP checks=1" in out["keep"]
         if out["checks"]:
             (self.out / "CHECKS.json").write_bytes(self.sh('cat "$1/CHECKS.json"', work).stdout)
-        (self.out / "s.bundle").write_bytes(self.step("bundle", (), 'git -C "$1" -c safe.directory="*" bundle create "$2/s.bundle" HEAD >/dev/null && cat "$2/s.bundle"', repo, work))
+        (self.out / "s.bundle").write_bytes(self.step("bundle", (), 'GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null git -C "$1" -c safe.directory="*" -c core.hooksPath=/dev/null -c core.fsmonitor=false -c core.excludesFile=/dev/null bundle create "$2/s.bundle" HEAD >/dev/null && cat "$2/s.bundle"', repo, work))
         return out
 
     def finish(self, refused: str | None = None) -> dict:
