@@ -28,7 +28,7 @@ import { CLAUDE_BIN } from "../statemachines/stub-claude.ts";
 import { passed } from "../statemachines/testrun.ts";
 import { readUnit, type SmUnit } from "../statemachines/unit.ts";
 import type { PfArm } from "./arms.ts";
-import { checkUnit } from "./containment.ts";
+import { checkUnit, treeDigest } from "./containment.ts";
 import { manifest, outcomes, PATH_PROBE, startStub, writeCommand, type StubSession } from "./dryrun.ts";
 import { P_HEADING } from "./exposure.ts";
 import { ITEMS, LINE, OPUS, P1, SOL } from "./items.ts";
@@ -107,9 +107,10 @@ export async function main(argv: string[]): Promise<number> {
   rule("real TLC run from the tools volume, offline, in the unit image", tlc.exit !== 0 && /Invariant NeverDone is violated/.test(tlc.out), "volume " + tv.volume + ", image " + image + ", exit " + tlc.exit + ", " + (tlc.out.match(/TLC2 Version [^\n]*/)?.[0] ?? "no version"));
 
   // Containment, before any session: the session image's repository holds only the base commit and its filesystem no hidden marker.
+  const before = treeDigest({ runtime_id: image, volume });
   const contained = buildSessionImage(u, { volume, stage: "first" });
   try {
-    const ct = checkUnit(unitDir, u, contained);
+    const ct = checkUnit(unitDir, u, contained, before);
     rule("containment: every ref and commit at the base commit, no alternates, nested repo, clone, fix blob or later commit, no hidden marker on the session image's filesystem", ct.ok, ct.detail + "; after " + ct.after_source + " " + ct.after + "; other git dirs " + ct.gitdirs.length + (ct.gitdirs.length ? " (" + ct.gitdirs.slice(0, 5).map((d) => d.path + " " + d.commits).join(", ") + (ct.gitdirs.length > 5 ? ", ..." : "") + ")" : ""));
   } finally {
     spawnSync("docker", ["rmi", contained.tag]);

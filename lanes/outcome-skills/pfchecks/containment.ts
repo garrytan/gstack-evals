@@ -16,7 +16,8 @@
 // (whole lines, as the leak scan), or the leaf name of a hidden fail-to-pass test, 12 characters or more, that no file in
 // the base commit's tree holds (fixed strings). Base content comes from the base commit's blobs, never the index or the
 // working tree. runPfSession runs containUnit before every session, so a unit's
-// first session runs the check and later ones reuse its passing record while the session image is the same.
+// first session runs the check and later ones reuse its passing record while the session image is the same and the tree
+// volume's digest, taken before the image build and again after the gate, matches the record.
 import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
@@ -130,13 +131,18 @@ export function treeDigest(image: Pick<SessionImage, "runtime_id" | "volume">): 
   return readDigest(r, "tree volume " + image.volume);
 }
 
-export interface ContainRecord extends ContainResult { schema: "pf-contain.v1"; unit: string; tag: string; image_id: string; runtime_id: string; head: string; tree_digest: string; script_sha256: string; after_source: string; after: number }
+/** tree_digest is null when the tree volume's digest after the check differs from the one taken before the image build:
+ *  the image may hold another tree than either digest names, so no session reuses the record. */
+export interface ContainRecord extends ContainResult { schema: "pf-contain.v1"; unit: string; tag: string; image_id: string; runtime_id: string; head: string; tree_digest: string | null; script_sha256: string; after_source: string; after: number }
 
 /** Runs the check on the unit's session image and records it in the unit dir (pf-contain.json, one entry per image tag),
- *  with the tree volume's digest and the check script's sha256 that the gate's reuse key reads. */
-export function checkUnit(unitDir: string, u: SmUnit, image: SessionImage, digest: string = treeDigest(image)): ContainRecord {
+ *  with the check script's sha256 and the tree volume's digest that the gate's reuse key reads. before is the volume's
+ *  digest taken before buildSessionImage; digest reads it again after the check, and the record keeps it only when the two
+ *  match. */
+export function checkUnit(unitDir: string, u: SmUnit, image: SessionImage, before: string, digest: (image: SessionImage) => string = treeDigest): ContainRecord {
   const after = upstreamAfter({ image: image.runtime_id }, u.repo_dir, u.base_commit);
-  const rec: ContainRecord = { schema: "pf-contain.v1", unit: u.id, tag: image.tag, image_id: image.image_id, runtime_id: image.runtime_id, head: image.head, tree_digest: digest, script_sha256: CONTAIN_SCRIPT_SHA256, after_source: after.source, after: after.ids.length, ...containImage(image.tag, u.repo_dir, containInputs(unitDir, u, after.ids)) };
+  const result = containImage(image.tag, u.repo_dir, containInputs(unitDir, u, after.ids));
+  const rec: ContainRecord = { schema: "pf-contain.v1", unit: u.id, tag: image.tag, image_id: image.image_id, runtime_id: image.runtime_id, head: image.head, tree_digest: digest(image) === before ? before : null, script_sha256: CONTAIN_SCRIPT_SHA256, after_source: after.source, after: after.ids.length, ...result };
   const file = join(unitDir, CONTAIN_RECORD);
   const all = existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as { schema: string; checks: Record<string, ContainRecord> }) : { schema: "pf-contain.v1", checks: {} };
   all.checks[image.tag] = rec;
@@ -145,15 +151,16 @@ export function checkUnit(unitDir: string, u: SmUnit, image: SessionImage, diges
   return rec;
 }
 
-/** The gate before each session: a passing record for this session image's tag is reused when the tree volume's content
- *  digest, the tag, the runtime image, the head and the check script all match, else checkUnit runs. The image id is not
- *  in the key: every session image is a new build with a new id, and its content is the runtime image plus the tree volume
- *  at that head. A failure halts the unit with E_PF_CONTAINMENT before any session; the unit is not dropped, and the
- *  record stays for the Captain. */
-export function containUnit(unitDir: string, u: SmUnit, image: SessionImage, digest: string = treeDigest(image)): ContainRecord {
+/** The gate before each session: a passing record for this session image's tag is reused when the tag, the runtime image,
+ *  the head and the check script match and the tree volume's content digest matches it twice, as before (taken before
+ *  buildSessionImage) and as digest reads it again now, else checkUnit runs. The image id is not in the key: every session
+ *  image is a new build with a new id, and its content is the runtime image plus the tree volume at that head. A failure
+ *  halts the unit with E_PF_CONTAINMENT before any session; the unit is not dropped, and the record stays for the
+ *  Captain. */
+export function containUnit(unitDir: string, u: SmUnit, image: SessionImage, before: string, digest: (image: SessionImage) => string = treeDigest): ContainRecord {
   const file = join(unitDir, CONTAIN_RECORD);
   const prior = existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as { checks?: Record<string, ContainRecord> }).checks?.[image.tag] : undefined;
-  const rec = prior?.ok && prior.tree_digest === digest && prior.tag === image.tag && prior.runtime_id === image.runtime_id && prior.head === image.head && prior.script_sha256 === CONTAIN_SCRIPT_SHA256 ? prior : checkUnit(unitDir, u, image, digest);
+  const rec = prior?.ok && prior.tree_digest === before && prior.tag === image.tag && prior.runtime_id === image.runtime_id && prior.head === image.head && prior.script_sha256 === CONTAIN_SCRIPT_SHA256 && digest(image) === before ? prior : checkUnit(unitDir, u, image, before, digest);
   if (!rec.ok) pfFail("E_PF_CONTAINMENT", u.id + ": the containment check failed on session image " + image.tag + " (" + rec.detail + "); the unit halts before any session and is not dropped; record " + file);
   return rec;
 }

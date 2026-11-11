@@ -10,7 +10,7 @@ import { buildSessionImage } from "../statemachines/image.ts";
 import { docker } from "../../real-outcome/task/docker.ts";
 import { analyse, report } from "./analysis.ts";
 import * as adm from "./admission.ts";
-import { checkUnit } from "./containment.ts";
+import { checkUnit, treeDigest } from "./containment.ts";
 import { labelsGate, neutralGate, oracleGate, poolOf, readLabels, toldGate, walkDraw } from "./draw.ts";
 import { itemsTable } from "./items.ts";
 import { dockerNeutralRun, neutralFiles, validateNeutral, volumeTexts } from "./neutral.ts";
@@ -132,9 +132,11 @@ async function run(cmd: string, a: Args, deps: Deps): Promise<number> {
     let bad = 0;
     for (const dir of list(a, "unit")) {
       const u = readUnit(dir);
-      const img = buildSessionImage(u, { volume: smTreeVolume(u.id), stage: "first" });
+      const volume = smTreeVolume(u.id);
+      const before = treeDigest({ runtime_id: u.image.runtime_id ?? "", volume });
+      const img = buildSessionImage(u, { volume, stage: "first" });
       try {
-        const r = checkUnit(dir, u, img);
+        const r = checkUnit(dir, u, img, before);
         for (const d of r.gitdirs) console.log("PF_CONTAIN " + u.id + " gitdir commits=" + d.commits + " " + d.path);
         for (const f of r.findings) console.log("PF_CONTAIN " + u.id + " " + f);
         console.log("PF_CONTAIN " + u.id + " after " + r.after_source + " " + r.after);

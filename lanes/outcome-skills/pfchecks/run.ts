@@ -18,7 +18,7 @@ import { readUnit } from "../statemachines/unit.ts";
 import { ARM_ENV, DISALLOWED_TOOLS, NO_ANSWER, WRAPUP, loadsPlugin, sessionLimits, taskTurn, type Names, type PfArm } from "./arms.ts";
 import { readCapture } from "./capture.ts";
 import { readSession, subagentUse } from "./exposure.ts";
-import { containUnit } from "./containment.ts";
+import { containUnit, treeDigest } from "./containment.ts";
 import type { Arm } from "./items.ts";
 import { pfFail } from "./prereg.ts";
 import { PSTACK_DIR, pstackVolume } from "./pstack.ts";
@@ -209,8 +209,9 @@ export function finishSession(file: string, record: PfSessionRecord): void {
   if (record.cap_stop) pfFail("CAP_STOP", record.unit + "/" + record.model + "/" + record.arm + "/" + record.index + " stopped at the cap (LedgerCapStop): the driver refused its task open, so the part ends incomplete and is not retried; " + file);
 }
 
-/** Builds the image, runs the containment gate on it (containUnit: the unit's first session runs the check, later ones
- *  reuse its passing record, and a failure halts the unit with E_PF_CONTAINMENT), runs Harbor (and the whole-session retry
+/** Builds the image, runs the containment gate on it (containUnit with the tree volume's digest from before the build: the
+ *  unit's first session runs the check, later ones reuse its passing record, and a failure halts the unit with
+ *  E_PF_CONTAINMENT), runs Harbor (and the whole-session retry
  *  from a fresh container when the task turn ends upstream or infra, unless a failed proxy finalize halts it first), and
  *  writes out/session.json. Async, so a caller serving the control plane in this process keeps serving it. */
 export async function runPfSession(i: PfRunInput): Promise<PfRun> {
@@ -218,8 +219,9 @@ export async function runPfSession(i: PfRunInput): Promise<PfRun> {
   if (i.effort && !i.effort[i.session.model]) pfFail("E_PF_INPUT", "the effort record has no entry for " + i.session.model + "; the dry run's effort.json names every model");
   mkdirSync(i.out, { recursive: true });
   const u = readUnit(i.unitDir);
+  const before = treeDigest({ runtime_id: u.image.runtime_id ?? "", volume: i.volume });
   const image = buildSessionImage(u, { volume: i.volume, stage: "first" });
-  containUnit(i.unitDir, u, image);
+  containUnit(i.unitDir, u, image, before);
   const limits = sessionLimits(i.session.arm, i.session.model, i.allowance);
   const timeout = (limits.task.wall_limit_sec + 2 * limits.wrapup.wall_limit_sec + 900) * 1000;
   const attempts: PfRun["attempts"] = [];

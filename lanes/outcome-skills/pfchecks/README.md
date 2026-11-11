@@ -274,9 +274,10 @@ run. It waits for the neutral record, so it can start while the neutral gate sti
   runPfSession runs the same gate (containUnit) before every session: the unit's first session runs the check and
   records it in the unit dir's pf-contain.json, one entry per session image tag; a later session reuses a passing entry
   when the tree volume's content digest (sh/tree-digest.sh: every entry's type, mode, name, file hash and link target,
-  .git included, no times), the tag, the runtime image, the head and the check script's sha256 all match. The image id
-  is not in the key, since every session image is a new build. A failure halts the unit with E_PF_CONTAINMENT before
-  any session, without dropping it.
+  .git included, no times), the tag, the runtime image, the head and the check script's sha256 all match. The digest is
+  taken before the image build and again after the gate, and both must match the entry. A check whose two digests
+  differ stores its entry with no digest, so no later session reuses it. The image id is not in the key, since every
+  session image is a new build. A failure halts the unit with E_PF_CONTAINMENT before any session, without dropping it.
   `gstack-evals outcome pf contain --unit <dir>` runs the check alone and writes the same record. sh/contain.sh runs as root with no network in
   a container of that image. It fails when any ref (branches, tags, remotes, notes, replace refs, stash, packed refs,
   FETCH_HEAD, ORIG_HEAD and the other special heads) or reflog entry points past the base commit, when any commit object is neither the base nor an
