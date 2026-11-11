@@ -12,7 +12,7 @@
 //   and blocks with one fixed message naming the missing outputs, at most FROZEN.stopHook.maxBlocks times.
 // - Session: the claude-code-preset system prompt, a 200,000-token window (the 1M context off), bundled skills off,
 //   WebSearch and WebFetch denied, and FROZEN.sessions.review's dollars, turns and minutes. CLAUDE.md, AGENTS.md and
-//   .claude/ are stripped from the unit's tree at any depth before arm setup, by the tree's builder.
+//   .claude/ are stripped from the unit's tree at any depth before arm setup, by prepareReviewTree (review-stage.ts).
 import type { ErEvidence } from "../eng-review/exposure.ts";
 import { ER_MAX_BLOCKS, erStopHook } from "../eng-review/stophook.ts";
 import { ER_FORCED, ER_PINS } from "../../src/trial/review/eng-review.ts";

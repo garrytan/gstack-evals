@@ -12,8 +12,12 @@
 //   exposedBeforeBlock is exposure with no Stop hook block: the hook blocks only an unexposed stop, so a session it
 //   blocked was not exposed at its first stop. blocks, the bundle's words and cut, the discarded repository edits and
 //   the cost come from the last attempt; the cost sums every attempt.
+import { stackInstall } from "../../src/arms/install.ts";
+import { stackKind } from "../../src/arms/stacks.ts";
+import type { ArmSpec } from "../../src/types.ts";
 import { erExposure, type ErEvidence } from "../eng-review/exposure.ts";
-import { isSkillArm } from "./arms.ts";
+import { isSkillArm, REVIEW_ARMS } from "./arms.ts";
+import { prepareTree } from "./build-stage.ts";
 import type { Bundle } from "./bundle.ts";
 import type { Arm, ReviewRecord, Reviewer, SessionOutcome } from "./types.ts";
 
@@ -51,6 +55,33 @@ export async function runSession<T>(cell: string, start: (attempt: number) => Pr
       return { outcome, attempts, retries: attempts.length - 1 };
     }
   }
+}
+
+/**
+ * Readies a unit's review tree before arm setup, in every arm: CLAUDE.md, AGENTS.md and .claude/ stripped at any depth
+ * (build-stage.ts's strip rule, the same one the build stage runs), base alone with no remote, and no stripped name in
+ * the base commit. Returns what the strip removed.
+ */
+export const prepareReviewTree = (repo: string): string[] => prepareTree(repo);
+
+/**
+ * The arm as the install layer (src/arms/install.ts) takes it, exactly as arms.ts's table says: none runs no session,
+ * plain is bare (no gstack), pre-cut and the eng phase are gstack at their pins with the default install, and the
+ * candidate is gstack at its pin with "./setup --host claude". Never er-cli's specs, which give every skill arm the
+ * default install.
+ */
+export function reviewArmSpec(arm: Arm): ArmSpec | null {
+  const a = REVIEW_ARMS[arm];
+  if (!a.session) return null;
+  if (!a.gstack) return { name: arm, kind: "bare" };
+  return { name: arm, kind: "stack", stack: { repo: a.gstack.repo, sha: a.gstack.sha }, install: a.gstack.install === "default" ? {} : { claude: a.gstack.install } };
+}
+
+/** The command the install layer runs for the arm on claude, resolved the way src/arms/install.ts resolves a stack arm; null when the arm installs nothing. */
+export function installCommand(arm: Arm): string | null {
+  const spec = reviewArmSpec(arm);
+  if (!spec || spec.kind !== "stack") return null;
+  return spec.install.claude ?? stackKind(spec.stack)?.install.claude ?? stackInstall("claude");
 }
 
 export const isGap = (o: SessionOutcome) => o === "upstream_gap" || o === "infra_gap";

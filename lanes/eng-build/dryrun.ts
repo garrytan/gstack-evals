@@ -11,7 +11,7 @@
 // extra or different line and on any line holding "undefined", and prints the case name each time: there is no
 // wildcard. An unwired seam prints OPEN and fails, so the dry run passes only once every module plugs in.
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CODES, type ReasonCode } from "../../src/errors/codes.ts";
@@ -24,6 +24,7 @@ import { EbError } from "./errors.ts";
 import { FROZEN } from "./frozen.ts";
 import { exposureGate, finalUntested, gateState, interimCheck, interimStops, pilotLine, pilotReading, recountGate, type GateState, type PilotReading } from "./gates.ts";
 import { EB_RUN, ITEMS, leaseItem, reproject, settleItem } from "./ledger.ts";
+import { installCommand, prepareReviewTree, reviewArmSpec } from "./review-stage.ts";
 import { probeRoutes, ROUTES } from "./routes.ts";
 import type { Arm, BuildUnit, CaseClass, CaseRuns, Ecosystem, GradedBuild, Reviewer, ReviewRecord, SessionOutcome, SkillArm } from "./types.ts";
 
@@ -356,6 +357,38 @@ function ownCases(): Record<string, Case> {
       }
       return "removed " + stripTree(dir).join(", ") + "; kept .git/CLAUDE.md " + existsSync(join(dir, ".git/CLAUDE.md")) + ", src/main.go " + existsSync(join(dir, "src/main.go"));
     }),
+    "review strip rule": () => withTmp((dir) => {
+      const repo = (name: string, committed: string[], loose: string[]) => {
+        const d = join(dir, name);
+        mkdirSync(d);
+        const g = (...a: string[]) => spawnSync("git", ["-C", d, "-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid", "-c", "commit.gpgsign=false", ...a], { encoding: "utf8" });
+        g("init", "-q");
+        for (const p of [...committed, ...loose]) {
+          mkdirSync(join(d, p, ".."), { recursive: true });
+          writeFileSync(join(d, p), "x");
+        }
+        g("add", ...committed);
+        g("commit", "-q", "-m", "base");
+        return d;
+      };
+      const clean = repo("clean", ["src/app.ts"], ["CLAUDE.md", "a/AGENTS.md", "a/.claude/settings.json"]);
+      const removed = prepareReviewTree(clean);
+      const dirty = repo("dirty", ["src/app.ts", "CLAUDE.md"], []);
+      return "removed " + removed.join(", ") + "; a base commit holding CLAUDE.md " + codeOf(() => prepareReviewTree(dirty));
+    }),
+    "review installs per the arms table": () =>
+      (["none", "plain", "precut", "engphase", "candidate"] as Arm[])
+        .map((arm) => {
+          const spec = reviewArmSpec(arm);
+          return arm + " " + (spec === null ? "no session" : spec.kind === "bare" ? "bare, no gstack" : installCommand(arm) + " at " + (spec.kind === "stack" ? spec.stack.sha.slice(0, 9) : ""));
+        })
+        .join("; "),
+    "no eb module goes through er-cli": () => {
+      const dir = import.meta.dir;
+      const pattern = new RegExp("from\\s+[\"'][^\"']*" + "er-" + "cli");
+      const hits = readdirSync(dir).filter((f) => f.endsWith(".ts") && pattern.test(readFileSync(join(dir, f), "utf8")));
+      return hits.length ? "imported by " + hits.join(", ") : "no eb module imports it";
+    },
     "no later history": () => withTmp((dir) => {
       const g = (...a: string[]) => spawnSync("git", ["-C", dir, "-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid", "-c", "commit.gpgsign=false", ...a], { encoding: "utf8" });
       g("init", "-q");
@@ -538,6 +571,9 @@ export const EXPECTED: Record<string, string> = {
   mounts: "/s/repo:/work/repo /s/plan.md:/work/plan.md:ro | /s/repo:/work/repo /s/plan.md:/work/plan.md:ro /s/review:/work/review:ro",
   "mounts refuse hidden tests, key, history and drives": "E_USAGE, E_USAGE, E_USAGE, E_USAGE, E_USAGE, no stop",
   "strip rule": "removed CLAUDE.md, a/AGENTS.md, a/b/.claude, a/b/CLAUDE.local.md; kept .git/CLAUDE.md true, src/main.go true",
+  "review strip rule": "removed CLAUDE.md, a/.claude, a/AGENTS.md; a base commit holding CLAUDE.md E_USAGE",
+  "review installs per the arms table": "none no session; plain bare, no gstack; precut ./setup --host claude --no-browser -q at b493d4e31; engphase ./setup --host claude --no-browser -q at 199931029; candidate ./setup --host claude at 57295cbc5",
+  "no eb module goes through er-cli": "no eb module imports it",
   "no later history": "base only no stop, with a remote E_USAGE, two commits E_USAGE",
   "cache stale": "fresh reads, absent null, tampered E_EB_CACHE_STALE",
   "cell incomplete": "E_EB_CELL_INCOMPLETE; complete no stop",

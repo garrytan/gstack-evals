@@ -99,7 +99,9 @@ export function checkMounts(specs: string[], forbidden: string[]): void {
   }
 }
 
-const STRIP = new Set(["CLAUDE.md", "CLAUDE.local.md", "AGENTS.md", ".claude"]);
+/** The names the strip rule removes: the plan's CLAUDE.md, AGENTS.md and .claude/, plus CLAUDE.local.md, which real_agent's session check also refuses. */
+export const STRIP_NAMES = ["CLAUDE.md", "CLAUDE.local.md", "AGENTS.md", ".claude"] as const;
+const STRIP = new Set<string>(STRIP_NAMES);
 
 /** The strip rule: CLAUDE.md, CLAUDE.local.md, AGENTS.md and .claude removed at any depth outside .git, before arm setup. Returns what it removed. */
 export function stripTree(root: string): string[] {
@@ -129,6 +131,21 @@ export function assertNoHistory(repo: string): void {
   const n = Number(count.stdout.trim());
   const extra = refs.stdout.split("\n").filter((r) => r && !r.startsWith("refs/heads/"));
   if (n !== 1 || remotes.stdout.trim() || extra.length) fail("E_USAGE", repo + ": the build tree must hold base alone (1 commit, no remote, no other ref); it holds " + n + " commit(s)" + (remotes.stdout.trim() ? ", remote " + remotes.stdout.trim().split("\n").join(", ") : "") + (extra.length ? ", refs " + extra.join(", ") : ""));
+}
+
+/**
+ * Readies a review or build tree before arm setup: the strip rule on the working tree, then the no-history check, then a
+ * check that the base commit itself holds no stripped name, since a session could read one back with git show. Returns
+ * what the strip removed.
+ */
+export function prepareTree(repo: string): string[] {
+  const removed = stripTree(repo);
+  assertNoHistory(repo);
+  const ls = git(repo, ["ls-tree", "-r", "--name-only", "-z", "HEAD"]);
+  if (ls.status !== 0) fail("E_USAGE", repo + ": git could not list the base commit (" + ls.stderr.trim() + ")");
+  const tracked = ls.stdout.split(" ").filter((p) => p && p.split("/").some((s) => STRIP.has(s)));
+  if (tracked.length) fail("E_USAGE", repo + ": the base commit still holds " + tracked.slice(0, 5).join(", ") + (tracked.length > 5 ? " and " + (tracked.length - 5) + " more" : "") + "; strip the tree before its one commit is made, then prepare it again");
+  return removed;
 }
 
 /** The guards the Lane B agent must still carry, read from its source: bundled skills off, web tools denied, MCP config strict. */
