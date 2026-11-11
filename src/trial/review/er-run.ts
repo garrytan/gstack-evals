@@ -240,8 +240,8 @@ export async function runErUnits(o: ErRunInput, rig: HostRig, log: (line: string
     entries.push(entry);
     appendFileSync(erJournal(o.out), JSON.stringify(entry) + "\n");
   };
-  while (queue.length && stoppedAt === null) {
-    if (inFlight < o.parallel && erAdmits(settled, inFlight, ER_ALLOWANCE_MICROS, o.cap)) {
+  while ((queue.length || inFlight > 0) && stoppedAt === null) {
+    if (queue.length && inFlight < o.parallel && erAdmits(settled, inFlight, ER_ALLOWANCE_MICROS, o.cap)) {
       const job = queue.shift()!;
       inFlight++;
       const p: Promise<void> = attemptOnce(job.cell, job.attempt).then((r) => {
@@ -254,7 +254,7 @@ export async function runErUnits(o: ErRunInput, rig: HostRig, log: (line: string
       running.add(p);
       continue;
     }
-    if (inFlight === 0) {
+    if (queue.length && inFlight === 0) {
       stoppedAt = "the next attempt (" + cellName(queue[0]!.cell) + " a" + queue[0]!.attempt + ") does not fit: $" + (settled / 1e6).toFixed(2) + " settled plus its $" + (ER_ALLOWANCE_MICROS / 1e6).toFixed(2) + " allowance passes the $" + (o.cap / 1e6).toFixed(2) + " cap";
       break;
     }

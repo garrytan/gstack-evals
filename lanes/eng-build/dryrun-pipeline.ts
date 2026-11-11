@@ -11,12 +11,13 @@ import { goRepo } from "../../tests/eng-build/fixture.ts";
 import { recordApproval } from "../../src/runner/ledger/ledger.ts";
 import { readItem } from "../../src/runner/ledger/record.ts";
 import type { BuildSession, Grader } from "./build-stage.ts";
+import { repoEdits } from "./bundle.ts";
 import { sidecarGates, type Gh } from "./contain.ts";
 import { itemOf } from "./ledger.ts";
 import { noteRequest, type ModelCall } from "./note.ts";
-import { buildUnits, openingEvidence, paidItem, runBuilds, runReviews, screenAll, stubLauncher, underLease, writeNotes, type ReviewSession, type ReviewUnit } from "./pipeline.ts";
+import { buildUnits, exposureStop, openingEvidence, paidItem, reviewKey, runBuilds, runReviews, screenAll, stubLauncher, underLease, writeNotes, type ReviewSession, type ReviewUnit } from "./pipeline.ts";
 import type { Candidate, ScreenResult } from "./screen.ts";
-import type { Arm, BuildUnit, CaseRuns } from "./types.ts";
+import type { Arm, BuildUnit, CaseRuns, ReviewRecord } from "./types.ts";
 import type { BuildOutcome } from "./unit.ts";
 
 const git = (dir: string, args: string[]) => spawnSync("git", ["-C", dir, "-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid", ...args], { encoding: "utf8" });
@@ -47,7 +48,7 @@ export const stubReview = (seen: { hooks: Record<string, boolean>; prompts: stri
   const hook = s.hook((t) => ({ transcript: t, stateRoot: null, coverage: null, opening: s.arm === "engphase" ? openingEvidence(s.unit) : null }));
   seen.hooks[s.arm] = hook !== null;
   seen.prompts.push(s.prompt);
-  return { end: "completed", costUsd: 0.5, result: { dir: s.dir, outputs: { plan: "# Plan\n\nImproved by the " + s.arm + " review.\n", transcript: "", stateRoot: null, coverage: null }, finalRepo: join(s.seed, "repo"), blocks: 0 } };
+  return { end: "completed", costUsd: 0.5, result: { dir: s.dir, outputs: { plan: "# Plan\n\nImproved by the " + s.arm + " review.\n", transcript: "", stateRoot: null, coverage: null }, repoEdits: repoEdits(s.unit.repo, join(s.seed, "repo")), blocks: 0 } };
 };
 
 const runs = (id: string, c: CaseRuns["runs"][number]): CaseRuns => ({ id, runs: [c, c, c] });
@@ -92,6 +93,38 @@ export async function pipelineCase(): Promise<string> {
     });
     const hooks = Object.entries(seen.hooks).filter(([, on]) => on).map(([a]) => a).sort().join(" ");
     return screened.filter((x) => x.qualifies).length + " screened, " + built.length + " built, " + notes.written.length + " noted; " + recs.length + " reviews, " + bundles + " bundles, Stop hook on " + hooks + "; " + builds.length + " builds, " + graded + " graded; " + leases.join("; ");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+/** The interim exposure stop in run order: 23 precut sessions on Opus already recorded, `exposed` of them exposed, then
+ * runReviews over 25 planned sessions with a stub whose sessions read unexposed. Returns what ran, whether the stop was
+ * written and how many sessions a resume runs. */
+export async function interimRun(exposed: number): Promise<string> {
+  const dir = mkdtempSync(join(tmpdir(), "eb-interim-"));
+  try {
+    const unit: ReviewUnit = { id: "u-interim", repo: oneCommitRepo(join(dir, "base")), plan: join(dir, "plan.md") };
+    writeFileSync(unit.plan, "# Plan\n");
+    const out = join(dir, "reviews");
+    const reps = Array.from({ length: 25 }, (_, i) => i + 1);
+    mkdirSync(join(out, "records"), { recursive: true });
+    for (const rep of reps.slice(0, 23)) {
+      const rec: ReviewRecord = { unit: unit.id, arm: "precut", reviewer: "opus", rep, outcome: "completed", exposed: rep <= exposed, exposedBeforeBlock: rep <= exposed, blocks: 0, bundleWords: 10, truncated: false, repoEditsDiscarded: 0, costUsd: 1 };
+      writeFileSync(join(out, "records", reviewKey(unit.id, "precut", "opus", rep) + ".json"), JSON.stringify(rec));
+    }
+    const lines: string[] = [];
+    let ran = 0;
+    const inner = stubReview({ hooks: {}, prompts: [] });
+    const session: ReviewSession = async (s) => {
+      ran++;
+      return inner(s);
+    };
+    await runReviews({ units: [unit], arm: "precut", reviewer: "opus", reps, out, session, log: (l) => lines.push(l) });
+    const first = ran;
+    await runReviews({ units: [unit], arm: "precut", reviewer: "opus", reps, out, session, log: (l) => lines.push(l) });
+    const stop = exposureStop(out, "precut", "opus");
+    return exposed + " of 24: ran " + first + ", " + (stop ? "stopped and recorded (" + lines.filter((l) => l.startsWith("E_EB_EXPOSURE_STOP ")).length + " stop lines), a resume ran " + (ran - first) : "went on");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

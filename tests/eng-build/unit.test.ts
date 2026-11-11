@@ -7,7 +7,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { leakNeedles } from "../../lanes/eng-build/leak.ts";
 import { fixOnlyNames, NOTE_MODELS, noteRequest, publicNames, refusal, writeNote } from "../../lanes/eng-build/note.ts";
-import { aftermathCases, anchorCases, attributed, baseOutcome, ebProtected, imageEnv, inScope, renderEbDockerfile, repoLabel, rustModule, scopesOf, targetOfFile, testChanges, writeSet, type Grid } from "../../lanes/eng-build/unit.ts";
+import { aftermathCases, anchorCases, attributed, baseOutcome, ebProtected, goSubtest, imageEnv, inScope, treeGrid, renderEbDockerfile, repoLabel, rustModule, scopesOf, targetOfFile, testChanges, writeSet, type Grid } from "../../lanes/eng-build/unit.ts";
 import { recipeFor } from "../../lanes/eng-build/recipes.ts";
 import { buildRepo, MIT, tempDir } from "../real/fixture.ts";
 
@@ -159,5 +159,17 @@ describe("the statement note and the leak needles", () => {
     expect(needles).toContain("assert ops.scale(2) == 4");
     expect(needles.some((l) => l.includes("TestMulZero"))).toBe(false);
     expect(needles).not.toContain("func Add(a, b int) int {");
+  });
+});
+
+describe("Go test ids in a graded tree", () => {
+  // Value: protects=aftermath and catch cases in nested Go packages; fails_when=a top-level test such as internal/calc::TestMulZero is read as a subtest and dropped from the grid.
+  test("a top-level test in a nested package stays in the grid; only a name with a / after :: is a subtest", () => {
+    const parsed = { seen: ["internal/calc::TestMulZero", "internal/calc::TestMulZero/zero", ".::TestAdd"], results: { "internal/calc::TestMulZero": { status: "pass" }, "internal/calc::TestMulZero/zero": { status: "pass" }, ".::TestAdd": { status: "fail" } }, notes: [] };
+    const tree = { runs: [{ parsed, timed_out: false, out_full: false, killed: false }] } as unknown as Parameters<typeof treeGrid>[0];
+    const grid = treeGrid(tree, "go", ["internal/calc::TestMulZero", ".::TestAdd"]);
+    expect(Object.keys(grid)).toEqual([".::TestAdd", "internal/calc::TestMulZero"]);
+    expect(grid["internal/calc::TestMulZero"]).toEqual(["pass"]);
+    expect([goSubtest("internal/calc::TestMulZero"), goSubtest("internal/calc::TestMulZero/zero"), goSubtest(".::TestAdd/case")]).toEqual([false, true, true]);
   });
 });

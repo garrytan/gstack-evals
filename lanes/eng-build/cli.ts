@@ -17,7 +17,7 @@ import { ITEMS, reproject, type Design, type Measured } from "./ledger.ts";
 import { containUnit } from "./contain.ts";
 import { removeCoverageImages } from "./coverage.ts";
 import { buildLauncher, noteLauncher, reviewLauncher } from "./launch.ts";
-import { bundleFor, buildUnits, paidItem, readUnits, runBuilds, runReviews, screenAll, underLease, unitGrader, writeNotes, type BuiltUnit, type ReviewUnit } from "./pipeline.ts";
+import { admittedUnits, bundleFor, buildUnits, exposureStop, paidItem, readUnits, runBuilds, runReviews, screenAll, underLease, unitGrader, writeNotes, type BuiltUnit, type ReviewUnit } from "./pipeline.ts";
 import { main as recountMain } from "./recount.ts";
 import { liveRouteCalls, probeRoutes, ROUTES } from "./routes.ts";
 import { screenCandidate, type Candidate } from "./screen.ts";
@@ -180,14 +180,12 @@ const paid = (stage: "notes" | "review" | "build", a: Args) => paidItem(stage, {
 const logTo = (io: Io) => (l: string) => (/^E_[A-Z_]+ /.test(l) ? io.err : io.out)(l);
 const PAID = "--item <item> --cap-usd <usd> --ledger-record <dir> --ledger <file>";
 
-/** Joins each spec with the unit buildUnits wrote for it, dropping specs whose unit did not qualify or did not pass the
+/** Joins each spec with the unit buildUnits admitted for it, dropping specs whose unit did not qualify or did not pass the
  * containment gates (units.json lists the units that did both). */
 const builtUnits = (a: Args): BuiltUnit[] => {
-  const units = readUnits(need(a, "--units"));
-  const listed = join(need(a, "--units"), "units.json");
-  const passed = existsSync(listed) ? new Set(json<{ id: string }[]>(listed).map((u) => u.id)) : null;
+  const units = admittedUnits(need(a, "--units"));
   return json<{ spec: UnitSpec; repo: string }[]>(need(a, "--specs")).flatMap(({ spec, repo }) => {
-    const u = passed === null || passed.has(spec.id) ? units.get(spec.id) : undefined;
+    const u = units.get(spec.id);
     return u ? [{ dir: u.dir, repo, spec, unit: u.unit }] : [];
   });
 };
@@ -226,6 +224,7 @@ const review: Run = async (a, io) => {
   const out = need(a, "--out");
   const list = json<ReviewUnit[]>(need(a, "--review-units"));
   const skill = arms as Exclude<Arm, "none">[];
+  refuseStopped(out, skill, reviewer);
   await underLease(p, reviewLauncher({ arms: skill, reviewer, out, env: process.env, log: logTo(io), ...(a.flags.has("--policy") ? { policy: a.flags.get("--policy")! } : {}) }), async (session) => {
     for (const arm of skill) {
       const recs = await runReviews({ units: list, arm, reviewer, reps, out, session, log: logTo(io) });
@@ -244,14 +243,23 @@ const bundle: Run = (a, io) => {
   return 0;
 };
 
+/** Refuses, before any lease opens, an arm whose interim exposure stop the review stage recorded in reviewsOut. */
+const refuseStopped = (reviewsOut: string, arms: Arm[], reviewer: Reviewer) => {
+  for (const arm of arms) {
+    const s = exposureStop(reviewsOut, arm, reviewer);
+    if (s) fail("E_EB_EXPOSURE_STOP", "arm " + arm + " on " + reviewer + " stopped at the interim exposure check, exposure " + s.exposure.toFixed(3) + " in its first sessions; drop it from --arm, and nothing ran");
+  }
+};
+
 const readRecords = (dir: string): ReviewRecord[] => (existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith(".json")).map((f) => json<ReviewRecord>(join(dir, f))) : []);
 
 const build: Run = async (a, io) => {
   const arms = armsOf(a);
   const p = paid("build", a);
   const reviewer = arms.includes("none") ? null : reviewerOf(a);
+  if (reviewer !== null) refuseStopped(need(a, "--reviews"), arms, reviewer);
   const unitsDir = need(a, "--units");
-  const all = readUnits(unitsDir);
+  const all = admittedUnits(unitsDir);
   const notesDir = need(a, "--notes");
   const list = [...all.values()].map(({ unit }) => {
     const f = join(notesDir, unit.id.replace(/[^A-Za-z0-9._-]/g, "_") + ".md");

@@ -2,7 +2,8 @@
 // The eng-review run loop through the real Claude Code driver, the real pinned Agent SDK and a stub CLI
 // (tests/er/stub-er-cli.cjs), run as its own process for the reason tests/pv/pv-sdk.ts gives. Each arm answers through
 // the stub's env, one answer per attempt in spawn order. Usage: bun er-sdk.ts <records dir> <out dir> <scratch dir>
-// <cap usd> <parallel>. Prints the run's stops, the most attempts in flight at once and the spawn counts as JSON.
+// <cap usd> <parallel> [first-only|drain]. drain runs one pass of none and candidate, so the queue empties while an
+// attempt that will retry is still in flight. Prints the run's stops, the most attempts in flight at once and the spawn counts as JSON.
 import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -89,7 +90,8 @@ if (import.meta.main) {
     recovery: null,
   };
   try {
-    const input = { units: [{ id: UNIT, task, tree: treeDir, tree_sha256: tree.tree_sha256, opening: null }], arms: ARMS, models: [OPUS], passes: 2, parallel: Number(parallel), cap: Math.round(Number(capUsd) * 1e6), out, runId: "er", policy: loadPolicy(DEFAULT_POLICY) as LoadedPolicy, enforce: "candidate" as const, keyBase: { image_digest: null, recipe: "test", adapter_sha256: "test" } };
+    const drain = mode === "drain";
+    const input = { units: [{ id: UNIT, task, tree: treeDir, tree_sha256: tree.tree_sha256, opening: null }], arms: drain ? (["none", "candidate"] as ArmId[]) : ARMS, models: [OPUS], passes: drain ? 1 : 2, parallel: Number(parallel), cap: Math.round(Number(capUsd) * 1e6), out, runId: "er", policy: loadPolicy(DEFAULT_POLICY) as LoadedPolicy, enforce: "candidate" as const, keyBase: { image_digest: null, recipe: "test", adapter_sha256: "test" } };
     const first = mode === "first-only" ? await runErUnits({ ...input, firstOnly: true }, rig, (line) => console.error(line)) : null;
     const firstJournal = first ? readErJournal(out).size : null;
     const run = await runErUnits(input, rig, (line) => console.error(line));

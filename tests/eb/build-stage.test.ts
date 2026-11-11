@@ -7,7 +7,11 @@ describe("build stage", () => {
   test("the no-review prompt drops the review line, and both end with the note", () => {
     expect(buildPrompt("none", "N")).toBe("Implement the plan in plan.md in /work/repo, with tests.\n\nN");
     expect(buildPrompt("plain", "N")).toContain("/work/review/");
-    expect(() => buildPrompt("plain", "  ")).toThrow();
+  });
+  // Value: protects=the build of a unit that adds no public names; fails_when=an empty note stops the build after its lease opened, or leaves a note paragraph in the prompt.
+  test("an empty note leaves the note paragraph out: the fixed lines, then nothing", () => {
+    expect(buildPrompt("none", "")).toBe("Implement the plan in plan.md in /work/repo, with tests.");
+    expect(buildPrompt("plain", "  \n")).toBe("Implement the plan in plan.md in /work/repo, with tests. A reviewer's notes on the plan are in /work/review/; use them as you see fit.");
   });
   test("limits are H's and match the frozen build limits", () => {
     const l = buildLimits();

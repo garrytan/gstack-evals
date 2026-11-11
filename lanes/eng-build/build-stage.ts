@@ -34,11 +34,12 @@ export const REVIEW_LINE = "A reviewer's notes on the plan are in /work/review/;
 export const BUILD_ARMS = { none: "eb-build:none", reviewed: "eb-build:reviewed" } as const;
 export const armName = (arm: Arm) => (arm === "none" ? BUILD_ARMS.none : BUILD_ARMS.reviewed);
 
-/** The build prompt: the build line, the review line for reviewed arms, then the statement note, identical across arms. */
+/** The build prompt: the build line, the review line for reviewed arms, then the statement note, identical across arms. A
+ * unit that adds no public names has an empty note, and its prompt is the fixed lines alone. */
 export function buildPrompt(arm: Arm, note: string): string {
   const text = note.trim();
-  if (!text) fail("E_USAGE", "the statement note is empty; every build prompt ends with the unit's note");
-  return (arm === "none" ? BUILD_LINE : BUILD_LINE + " " + REVIEW_LINE) + "\n\n" + text;
+  const fixed = arm === "none" ? BUILD_LINE : BUILD_LINE + " " + REVIEW_LINE;
+  return text ? fixed + "\n\n" + text : fixed;
 }
 
 type Limits = Registry["arms"][string]["limits"];

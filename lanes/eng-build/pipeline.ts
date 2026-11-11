@@ -20,10 +20,11 @@ import type { ReadOnlyMount } from "../../src/trial/sandbox.ts";
 import type { ErEvidence } from "../eng-review/exposure.ts";
 import { isSkillArm, reviewPrompt, reviewStopHook } from "./arms.ts";
 import { assertComplete, cellId, loadCell, runBuildCell, saveCell, type BuildSession, type Grader, type GraderResult } from "./build-stage.ts";
-import { assembleBundle, bundleParts, repoEdits, writeBundle, type Bundle, type ReviewOutputs } from "./bundle.ts";
+import { assembleBundle, bundleParts, writeBundle, type Bundle, type ReviewOutputs } from "./bundle.ts";
 import { catchBuild } from "./catch.ts";
 import { coverageBuild } from "./coverage.ts";
 import { fail } from "./errors.ts";
+import { interimCheck } from "./gates.ts";
 import { itemOf, leaseItem, settleItem } from "./ledger.ts";
 import { fixOnlyNames, noteRequest, writeNote, type ModelCall } from "./note.ts";
 import { isGap, prepareReviewTree, reviewRecord, runSession, type Attempt } from "./review-stage.ts";
@@ -125,9 +126,20 @@ export interface BuiltUnit {
   unit: BuildUnit;
 }
 
+/** Each built unit's admission record, beside its eb.json: whether it qualified at the build and what the build and the
+ * containment gates dropped. */
+export const ADMISSION_FILE = "admission.json";
+export interface Admission {
+  qualifies: boolean;
+  drops: Drop[];
+  gate: Drop[] | null;
+}
+
 /** Builds every spec's unit into <out>/<id> and returns the ones that qualify; a drop prints its code. A unit already in
- * <out> is read back, never rebuilt. gate (the containment gates, contain.ts) runs on every unit, built or read back, and
- * a drop it returns leaves the unit out through the same printed line as a build drop. */
+ * <out> is read back, never rebuilt, and is admitted again only when its admission record says it qualified. gate (the
+ * containment gates, contain.ts: the leak check and both sidecar gates) runs on every qualifying unit, built or read back,
+ * and a drop it returns leaves the unit out through the same printed line as a build drop. Each unit's admission record
+ * keeps both verdicts. */
 export async function buildUnits(o: { specs: { spec: UnitSpec; repo: string }[]; out: string; work: string; labels: string; seed: number; build: (spec: UnitSpec, repo: string, out: string, o: { work: string; labels: string; seed: number }) => BuildOutcome; log?: (l: string) => void; gate?: (u: BuiltUnit) => Promise<Drop[]> }): Promise<BuiltUnit[]> {
   const kept: BuiltUnit[] = [];
   const dropped = (id: string, drops: Drop[]) => {
@@ -136,20 +148,38 @@ export async function buildUnits(o: { specs: { spec: UnitSpec; repo: string }[];
   };
   for (const { spec, repo } of o.specs) {
     const dir = join(o.out, safe(spec.id));
+    const admission = join(dir, ADMISSION_FILE);
     let u: BuiltUnit;
+    let built: Admission;
     if (existsSync(join(dir, "eb.json"))) {
+      const found = existsSync(admission) ? (JSON.parse(readFileSync(admission, "utf8")) as Admission) : null;
+      if (found === null) {
+        dropped(spec.id, [{ code: "E_EB_CACHE_STALE", step: "admission", cls: "no_admission_record", cases: 0 }]);
+        continue;
+      }
+      if (!found.qualifies) {
+        dropped(spec.id, found.drops);
+        continue;
+      }
+      built = found;
       u = { dir, repo, spec, unit: readUnit(dir).eb.unit };
       o.log?.("unit " + spec.id + ": read back from " + dir);
     } else {
       const r = o.build(spec, repo, dir, { work: o.work, labels: o.labels, seed: o.seed });
+      built = { qualifies: r.qualifies, drops: [...(r.drop ? [r.drop] : []), ...r.eb.drops], gate: null };
       if (!r.qualifies) {
-        dropped(spec.id, r.eb.drops);
+        mkdirSync(r.dir, { recursive: true });
+        writeJson(join(r.dir, ADMISSION_FILE), built);
+        dropped(spec.id, built.drops);
         continue;
       }
       u = { dir: r.dir, repo, spec, unit: r.eb.unit };
       o.log?.("unit " + spec.id + ": built, " + r.eb.unit.functional.length + " functional, " + r.eb.unit.aftermath.reduce((s, a) => s + a.cases.length, 0) + " aftermath cases");
     }
-    if (o.gate && dropped(spec.id, await o.gate(u))) continue;
+    const gate = o.gate ? await o.gate(u) : null;
+    mkdirSync(u.dir, { recursive: true });
+    writeJson(join(u.dir, ADMISSION_FILE), { ...built, gate });
+    if (gate && dropped(spec.id, gate)) continue;
     kept.push(u);
   }
   return kept;
@@ -204,8 +234,8 @@ export const openingEvidence = (u: ReviewUnit): ErEvidence["opening"] => (u.open
 export interface ReviewLeft {
   dir: string;
   outputs: ReviewOutputs;
-  /** The review's repo/ at the end, for the discarded-edits count. */
-  finalRepo: string;
+  /** Files the review changed, added or removed in its repo/, counted before the work tree is removed. */
+  repoEdits: number;
   blocks: number;
 }
 
@@ -223,13 +253,37 @@ export function bundleFor(arm: Exclude<Arm, "none">, outputs: ReviewOutputs, rev
   return b;
 }
 
-/** Runs every unit by rep cell for one arm and reviewer. A cell with a record in <out>/records is kept, never rerun. */
+/** Where a skill arm's interim exposure stop is kept in a review out folder, so a resume and the build stage see it. */
+export const stopFile = (out: string, arm: Arm, reviewer: Reviewer) => join(out, "stops", safe(arm + "-" + reviewer) + ".json");
+
+/** The arm's recorded interim stop in a review out folder, or null. */
+export function exposureStop(out: string, arm: Arm, reviewer: Reviewer): { line: string; exposure: number } | null {
+  const f = stopFile(out, arm, reviewer);
+  return existsSync(f) ? (JSON.parse(readFileSync(f, "utf8")) as { line: string; exposure: number }) : null;
+}
+
+/** Runs every unit by rep cell for one arm and reviewer. A cell with a record in <out>/records is kept, never rerun. A
+ * skill arm's interim exposure check runs in run order after each record: once its first 24 sessions read under 0.70, the
+ * stop is written to <out>/stops, E_EB_EXPOSURE_STOP prints, and no further session of that arm on that reviewer runs,
+ * now or on a resume. */
 export async function runReviews(o: { units: ReviewUnit[]; arm: Exclude<Arm, "none">; reviewer: Reviewer; reps: number[]; out: string; session: ReviewSession; log?: (l: string) => void }): Promise<ReviewRecord[]> {
   const records = join(o.out, "records");
   mkdirSync(records, { recursive: true });
   const done: ReviewRecord[] = [];
   const planned: string[] = [];
   const closed = new Set<string>();
+  const skill = isSkillArm(o.arm) ? o.arm : null;
+  let stopped = skill !== null && exposureStop(o.out, o.arm, o.reviewer) !== null;
+  if (stopped) o.log?.(exposureStop(o.out, o.arm, o.reviewer)!.line);
+  const interim = () => {
+    if (skill === null || stopped) return;
+    const i = interimCheck(skill, o.reviewer, done);
+    if (!i.stop) return;
+    stopped = true;
+    mkdirSync(join(o.out, "stops"), { recursive: true });
+    writeJson(stopFile(o.out, o.arm, o.reviewer), { arm: o.arm, reviewer: o.reviewer, exposure: i.exposure, line: i.line });
+    o.log?.(i.line!);
+  };
   for (const u of o.units) {
     for (const rep of o.reps) {
       const key = reviewKey(u.id, o.arm, o.reviewer, rep);
@@ -238,8 +292,10 @@ export async function runReviews(o: { units: ReviewUnit[]; arm: Exclude<Arm, "no
       if (existsSync(file)) {
         done.push(JSON.parse(readFileSync(file, "utf8")) as ReviewRecord);
         closed.add(key);
+        interim();
         continue;
       }
+      if (stopped) continue;
       const cell = cellId(u.id, o.arm, o.reviewer, rep);
       const prompt = reviewPrompt(o.arm, o.arm === "engphase" ? u.opening?.text ?? null : null);
       const base = join(o.out, "sessions", key);
@@ -257,12 +313,14 @@ export async function runReviews(o: { units: ReviewUnit[]; arm: Exclude<Arm, "no
       const left = last.result;
       const gap = isGap(run.outcome);
       const bundle = gap ? { words: 0, truncated: false } : bundleFor(o.arm, left.outputs, join(o.out, "bundles", key));
-      const rec = reviewRecord({ unit: u.id, arm: o.arm, reviewer: o.reviewer, rep, outcome: run.outcome, evidence: { transcript: left.outputs.transcript, stateRoot: left.outputs.stateRoot, coverage: left.outputs.coverage, opening: o.arm === "engphase" ? openingEvidence(u) : null }, blocks: left.blocks, bundle, repoEditsDiscarded: gap ? 0 : repoEdits(u.repo, left.finalRepo), costUsd: run.attempts.reduce((s, a) => s + a.costUsd, 0) });
+      const rec = reviewRecord({ unit: u.id, arm: o.arm, reviewer: o.reviewer, rep, outcome: run.outcome, evidence: { transcript: left.outputs.transcript, stateRoot: left.outputs.stateRoot, coverage: left.outputs.coverage, opening: o.arm === "engphase" ? openingEvidence(u) : null }, blocks: left.blocks, bundle, repoEditsDiscarded: gap ? 0 : left.repoEdits, costUsd: run.attempts.reduce((s, a) => s + a.costUsd, 0) });
       writeJson(file, rec);
       done.push(rec);
       closed.add(key);
+      interim();
     }
   }
+  if (stopped) return done;
   assertComplete("review " + o.arm + " on " + o.reviewer, planned, closed);
   return done;
 }
@@ -342,6 +400,23 @@ export function unitGrader(o: { dirs: Map<string, string>; work: string; runs?: 
     const cov = (o.coverageBuild ?? coverageBuild)({ unitDir: dir, patch });
     return { functional, aftermath, anchors, tCases: caseRuns(tGrid, unit.tCases), catches: { ...c.catches }, coverage: cov.scored ? cov.share : null, mutation: null, testLinesAdded: testLinesAdded(patch) };
   };
+}
+
+/** The units a paid stage may run: the ones buildUnits admitted into <dir>/units.json, each read from its own folder and
+ * checked against its admission record. A unit folder that units.json doesn't list never runs. */
+export function admittedUnits(dir: string): Map<string, { dir: string; unit: BuildUnit }> {
+  const listed = join(dir, "units.json");
+  if (!existsSync(listed)) fail("E_USAGE", dir + " has no units.json; run eb units, which lists the units that qualified and passed the containment gates");
+  const all = readUnits(dir);
+  const out = new Map<string, { dir: string; unit: BuildUnit }>();
+  for (const { id } of JSON.parse(readFileSync(listed, "utf8")) as { id: string }[]) {
+    const u = all.get(id) ?? fail("E_USAGE", "units.json lists " + id + ", which has no unit folder in " + dir);
+    const file = join(u.dir, ADMISSION_FILE);
+    const a = existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as Admission) : null;
+    if (!a?.qualifies || a.gate === null || a.gate.length > 0) fail("E_USAGE", "units.json lists " + id + ", but its admission record doesn't show it qualified and passed the containment gates; rerun eb units");
+    out.set(id, u);
+  }
+  return out;
 }
 
 /** Reads a folder of built units (one subfolder each, as buildUnits writes them). */

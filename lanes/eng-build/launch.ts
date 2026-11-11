@@ -6,7 +6,7 @@
 // agent (real_agent) through Harbor. None of this runs keyless: the tests drive the same stages through stub launchers.
 import { spawn, spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, posix } from "node:path";
 import { BACKGROUND_WAIT_MS } from "../../src/adapters/claude-code/driver.ts";
 import { hostDriver } from "../../src/adapters/host.ts";
@@ -24,6 +24,7 @@ import { HARBOR_MODEL } from "../outcome-skills/statemachines/run.ts";
 import { sessionEnd } from "../outcome-skills/statemachines/session.ts";
 import { isSkillArm, REVIEW_SESSION } from "./arms.ts";
 import { armName, BUILD_MODEL, buildMounts, buildRegistry, checkMounts, preflight, prepareTree, REPO_DIR, type BuildSession } from "./build-stage.ts";
+import { repoEdits } from "./bundle.ts";
 import { trialTask } from "./contain.ts";
 import { fail } from "./errors.ts";
 import { EB_BUILD_SKILL, EB_RUN } from "./ledger.ts";
@@ -91,19 +92,42 @@ export function reviewLauncher(o: { arms: Exclude<Arm, "none">[]; reviewer: Revi
       const opening = s.arm === "engphase" ? openingEvidence(s.unit) : null;
       if (opening) writeFileSync(join(run, "host", "er-opening.json"), JSON.stringify(opening, null, 2) + "\n");
       const hook = s.hook((t) => ({ transcript: t, stateRoot: join(work, STATE_ROOT_DIR), coverage: join(work, ER_COVERAGE_DIR), opening }));
+      let captured: ReviewCapture | null = null;
+      const gate = (w: string) => {
+        captured = captureReview(w, s.unit.repo, join(run, "host"));
+        return { copy_out: [], gate: { plan: captured.plan !== null, repo_edits: captured.repoEdits } };
+      };
       const agent = (rig.driver ?? hostDriver)({ host: "claude", model, provider, proxy: { baseUrl: rig.baseUrl, slot: binding.slot, token: binding.token }, interactive: true, skill, out: join(run, "host"), entry: { user: ER_REC_USER }, freeform: erFreeform, systemPrompt: ER_SYSTEM_PROMPT, maxTurns: REVIEW_SESSION.maxTurns, ...(skillArm ? { sessionKind: "unattended" as const } : {}), disable1mContext: true, capStops: true, backgroundWaitMs: BACKGROUND_WAIT_MS, ...(hook ? { stopHook: hook.onStop } : {}) });
-      const trial = await runTrial({ cell: { model, arm: s.arm, round: 1, trial: s.rep }, task: { id: s.unit.id, prompt: s.prompt }, tasksDir: empty, sandbox, agent, dir: run, timeoutS: REVIEW_SESSION.timeoutS, network: rig.network, seed: s.seed, root: true, copyDirs: [{ from: STATE_ROOT_DIR, to: join(run, "host", "gstack-state") }, { from: ER_COVERAGE_DIR, to: join(run, "host", "plan-coverage") }], ...(skillArm ? {} : { stateRoot: false as const }), ...(s.arm === "engphase" && s.unit.opening?.mounts ? { mounts: s.unit.opening.mounts } : {}) });
+      const trial = await runTrial({ cell: { model, arm: s.arm, round: 1, trial: s.rep }, task: { id: s.unit.id, prompt: s.prompt }, tasksDir: empty, sandbox, agent, dir: run, timeoutS: REVIEW_SESSION.timeoutS, network: rig.network, seed: s.seed, root: true, gate, copyDirs: [{ from: STATE_ROOT_DIR, to: join(run, "host", "gstack-state") }, { from: ER_COVERAGE_DIR, to: join(run, "host", "plan-coverage") }], ...(skillArm ? {} : { stateRoot: false as const }), ...(s.arm === "engphase" && s.unit.opening?.mounts ? { mounts: s.unit.opening.mounts } : {}) });
       const meter = await rig.finalize(binding.meter_id);
       const transcriptFile = join(run, "host", "transcript.ndjson");
       const transcript = existsSync(transcriptFile) ? readFileSync(transcriptFile, "utf8") : null;
       const { end, why } = reviewEnd(erOutcome(trial.record.termination, transcript).outcome, s.cell);
       if (why) o.log?.("cell " + s.cell + " a" + s.attempt + ": " + why);
-      const plan = join(work, "plan.md");
+      const kept = (captured as ReviewCapture | null) ?? fail("E_USAGE", "cell " + s.cell + " a" + s.attempt + ": the trial ended before its work tree was read");
       const dirOf = (d: string) => (existsSync(d) ? d : null);
-      return { end, costUsd: meter.micros / 1_000_000, result: { dir: run, outputs: { plan: existsSync(plan) ? readFileSync(plan, "utf8") : null, transcript: transcript ?? "", stateRoot: skillArm ? dirOf(join(run, "host", "gstack-state")) : null, coverage: dirOf(join(run, "host", "plan-coverage")) }, finalRepo: join(work, "repo"), blocks: hook?.blocks() ?? 0 } };
+      return { end, costUsd: meter.micros / 1_000_000, result: { dir: run, outputs: { plan: kept.plan, transcript: transcript ?? "", stateRoot: skillArm ? dirOf(join(run, "host", "gstack-state")) : null, coverage: dirOf(join(run, "host", "plan-coverage")) }, repoEdits: kept.repoEdits, blocks: hook?.blocks() ?? 0 } };
     };
     return { lease_id: rig.recovery?.lease_id ?? "", backend: session, close: async () => void (await rig.close()) };
   };
+}
+
+export interface ReviewCapture {
+  plan: string | null;
+  repoEdits: number;
+}
+
+/** What a review attempt leaves in its work tree, read before runTrial removes the tree: the final plan.md, copied to
+ * <host>/plan.md, and the count of repository edits against the unit's base tree. The reply and the skill's written files
+ * reach the host through the transcript and runTrial's copyDirs. */
+export function captureReview(work: string, baseRepo: string, host: string): ReviewCapture {
+  const file = join(work, "plan.md");
+  const plan = lstatSync(file, { throwIfNoEntry: false })?.isFile() ? readFileSync(file, "utf8") : null;
+  if (plan !== null) {
+    mkdirSync(host, { recursive: true });
+    writeFileSync(join(host, "plan.md"), plan);
+  }
+  return { plan, repoEdits: repoEdits(baseRepo, join(work, "repo")) };
 }
 
 /** A review attempt's end from eng-review's outcome reading. A web result despite the denied web tools is a containment

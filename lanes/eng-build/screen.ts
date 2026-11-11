@@ -16,7 +16,7 @@ import type { ReasonCode } from "../../src/errors/codes.ts";
 import { EbError } from "./errors.ts";
 import { classifyLog, ecoOfFile, findProject, hasRecipe, isDepFile, parseScreen, recipeFor, runClasses, runnable, screenTest, verifierRunner, type Recipe } from "./recipes.ts";
 import type { CaseClass, Ecosystem } from "./types.ts";
-import { attributed, inScope, listing, scopesOf, testChanges } from "./unit.ts";
+import { attributed, goSubtest, inScope, listing, scopesOf, testChanges } from "./unit.ts";
 
 export const SCREEN_LABEL = "gstack-evals.eb=screen";
 
@@ -183,7 +183,7 @@ export function screenCandidate(c: Candidate, repo: string, o: ScreenOptions): S
           return existsSync(f) ? readFileSync(f, "utf8") : null;
         };
         const parsed = parseScreen(runner, host);
-        const ids = [...new Set([...parsed.seen, ...Object.keys(parsed.results)])].filter((id) => inScope(runner.kind, id, scopes) && !(runner.kind === "go" && id.includes("/")));
+        const ids = [...new Set([...parsed.seen, ...Object.keys(parsed.results)])].filter((id) => inScope(runner.kind, id, scopes) && !(runner.kind === "go" && goSubtest(id)));
         const wanted = want.filter((id) => inScope(runner.kind, id, scopes) && !ids.includes(id));
         Object.assign(out, runClasses(runner.kind, parsed, [...ids, ...wanted], { timed_out: st.timed_out }));
         st.cases = ids.length;

@@ -88,6 +88,17 @@ describe("the eng-review session loop through the real Agent SDK", () => {
     expect(readErStops(capped.out).map((s) => s.how)).toEqual(Array(8).fill("unstarted"));
     expect(readErJournal(capped.out).size).toBe(0);
   });
+  // Value: protects=a retry whose attempt was in flight when the queue emptied; fails_when=the loop exits on an empty queue and the cell ends with no journal entry and no stop.
+  test("a retry enqueued after the queue emptied still runs: the loop waits for every attempt in flight", () => {
+    const drained = launch("drain", "60", "2", "drain");
+    const journal = [...readErJournal(drained.out).values()];
+    const cand = journal.find((e) => e.cell.arm === "candidate");
+    expect(journal.length).toBe(2);
+    expect(cand?.end_state).toBe("missing");
+    expect(cand?.attempts.map((a) => a.reason)).toEqual(["API error", "API error"]);
+    expect(drained.result.spawned).toEqual({ none: 1, candidate: 2 });
+    expect(drained.result.stops).toEqual([]);
+  });
   test("--first-only runs one session per arm and holds the rest unstopped; the resume runs them", () => {
     const held = launch("first-only", "60", "1", "first-only");
     expect(held.result.first).toEqual({ held: 4, stops: [], stopped: 0, journal: 4 });

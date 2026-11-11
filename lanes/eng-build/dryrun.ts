@@ -25,7 +25,7 @@ import { FROZEN } from "./frozen.ts";
 import { exposureGate, finalUntested, gateState, interimCheck, interimStops, pilotLine, pilotReading, recountGate, type GateState, type PilotReading } from "./gates.ts";
 import { EB_RUN, ITEMS, leaseItem, reproject, settleItem } from "./ledger.ts";
 import { installCommand, prepareReviewTree, reviewArmSpec } from "./review-stage.ts";
-import { pipelineCase, SIDECAR_CASES, sidecarCase } from "./dryrun-pipeline.ts";
+import { interimRun, pipelineCase, SIDECAR_CASES, sidecarCase } from "./dryrun-pipeline.ts";
 import { probeRoutes, ROUTES } from "./routes.ts";
 import type { Arm, BuildUnit, CaseClass, CaseRuns, Ecosystem, GradedBuild, Reviewer, ReviewRecord, SessionOutcome, SkillArm } from "./types.ts";
 
@@ -221,7 +221,7 @@ function ownCases(): Record<string, Case> {
       const g = exposureGate(SKILL_ARMS.flatMap((arm) => [1, 2, 3, 4, 5, 6].map((i) => review("cal", arm, "opus", i, arm === "candidate"))));
       return (g.stop ? "stop" : "go") + ": " + g.lines.at(-1);
     },
-    "interim 0.69 and 0.70": () => "0.69 " + (interimStops(0.69) ? "stops" : "goes on") + "; 0.70 " + (interimStops(0.7) ? "stops" : "goes on"),
+    "interim 0.69 and 0.70": async () => "0.69 " + (interimStops(0.69) ? "stops" : "goes on") + "; 0.70 " + (interimStops(0.7) ? "stops" : "goes on") + "; in run order, " + (await interimRun(16)) + "; " + (await interimRun(17)),
     "interim after 24 sessions": () => {
       const s = (n: number, len = 24) => Array.from({ length: len }, (_, i) => review("u" + i, "precut", "opus", 1, i < n));
       const a = interimCheck("precut", "opus", s(16));
@@ -541,7 +541,7 @@ export const EXPECTED: Record<string, string> = {
   "exposure gate opus 4 and 5 of 6": "4 of 6: precut out, members engphase+candidate; 5 of 6: members precut+engphase+candidate",
   "exposure gate other 1 and 2 of 3": "precut 2 of 3 runs, engphase 2 of 3 runs, candidate 1 of 3 does not run",
   "exposure gate fewer than two opus arms": "stop: E_EB_EXPOSURE_GATE 1 Opus arm passed the gate, needs 2; the comparison does not start, stop for the Captain",
-  "interim 0.69 and 0.70": "0.69 stops; 0.70 goes on",
+  "interim 0.69 and 0.70": "0.69 stops; 0.70 goes on; in run order, 16 of 24: ran 1, stopped and recorded (2 stop lines), a resume ran 0; 17 of 24: ran 2, went on",
   "interim after 24 sessions": "16 of 24 stops, 17 of 24 goes on, 23 sessions no reading yet; E_EB_EXPOSURE_STOP arm precut on opus: exposure 0.667 after 24 sessions is under 0.70; the arm stops and its leases settle, the pooled primary reads untested, the other arms go on",
   "final exposure 0.79 and 0.80": "0.79 untested; 0.80 tested",
   "gate state interim stop makes pooled untested": "members precut+engphase+candidate, engphase stopped true, final 0.667",

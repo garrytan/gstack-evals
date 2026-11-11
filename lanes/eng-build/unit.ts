@@ -213,6 +213,9 @@ export function targetOfFile(runner: Runner, path: string, projdir: string): str
   return path;
 }
 
+/** A Go subtest: a "/" in the test name after "::", never in the package path before it. */
+export const goSubtest = (id: string): boolean => id.slice(id.indexOf("::") + 2).includes("/");
+
 export const inScope = (runner: Runner["kind"], id: string, scopes: string[]): boolean =>
   !id.startsWith("collect:") && (runner === "go" ? scopes.includes(id) : scopes.some((s) => id.startsWith(s)));
 
@@ -663,7 +666,7 @@ function productCheck(o: GradeOptions, group: number, p: TreeResult["prepare"]):
 /** Every in-scope id's class in each run of a tree. */
 export function treeGrid(tree: TreeResult, runner: Runner["kind"], scopes: string[], want: string[] = []): Grid {
   const ids = new Set<string>(want.filter((id) => inScope(runner, id, scopes)));
-  for (const r of tree.runs) for (const id of [...r.parsed.seen, ...Object.keys(r.parsed.results)]) if (inScope(runner, id, scopes) && !(runner === "go" && id.includes("/"))) ids.add(id);
+  for (const r of tree.runs) for (const id of [...r.parsed.seen, ...Object.keys(r.parsed.results)]) if (inScope(runner, id, scopes) && !(runner === "go" && goSubtest(id))) ids.add(id);
   const grid: Grid = {};
   for (const id of [...ids].sort()) grid[id] = tree.runs.map((r) => runClasses(runner, r.parsed, [id], { timed_out: r.timed_out, stopped: r.out_full || r.killed })[id]);
   return grid;

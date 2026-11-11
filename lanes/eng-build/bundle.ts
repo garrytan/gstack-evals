@@ -101,9 +101,10 @@ function entries(root: string, rel = "", out = new Map<string, string>()): Map<s
   return out;
 }
 
-/** Files the review changed, added or removed in its repo/ against the base tree; the build never sees these edits. */
+/** Files the review changed, added or removed in its repo/ against the base tree; the build never sees these edits. A
+ * repo/ the review removed counts every base file as removed. */
 export function repoEdits(baseRepo: string, finalRepo: string): number {
-  const a = entries(baseRepo), b = entries(finalRepo);
+  const a = entries(baseRepo), b = lstatSync(finalRepo, { throwIfNoEntry: false })?.isDirectory() ? entries(finalRepo) : new Map<string, string>();
   let n = 0;
   for (const [k, v] of a) if (b.get(k) !== v) n++;
   for (const k of b.keys()) if (!a.has(k)) n++;

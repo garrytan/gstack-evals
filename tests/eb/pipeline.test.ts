@@ -4,16 +4,16 @@
 // bundles and resume, the build stage with its cache and gap rule, the test-line count, the build session's end rule,
 // and the eb subcommands' refusals. The grader runs a real unit only under GSTACK_EVALS_DOCKER=1.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { readItem } from "../../src/runner/ledger/record.ts";
 import { main } from "../../lanes/eng-build/cli.ts";
-import { fixtureUnit, oneCommitRepo, stubBuild, stubGrader, stubReview, tempLedger } from "../../lanes/eng-build/dryrun-pipeline.ts";
+import { fixtureUnit, interimRun, oneCommitRepo, stubBuild, stubGrader, stubReview, tempLedger } from "../../lanes/eng-build/dryrun-pipeline.ts";
 import { EbError } from "../../lanes/eng-build/errors.ts";
 import { buildEnd, reviewEnd } from "../../lanes/eng-build/launch.ts";
-import { bundleFor, buildUnits, paidItem, runBuilds, runReviews, screenAll, stubLauncher, testLinesAdded, underLease, unitGrader, writeNotes, type Launcher, type ReviewSession } from "../../lanes/eng-build/pipeline.ts";
+import { ADMISSION_FILE, admittedUnits, bundleFor, buildUnits, paidItem, stopFile, type Admission, runBuilds, runReviews, screenAll, stubLauncher, testLinesAdded, underLease, unitGrader, writeNotes, type Launcher, type ReviewSession } from "../../lanes/eng-build/pipeline.ts";
 import { removeLabelled } from "../../lanes/eng-build/screen.ts";
-import { buildUnit, readUnit, type BuildOutcome } from "../../lanes/eng-build/unit.ts";
+import { buildUnit, EB_SCHEMA, readUnit, type BuildOutcome } from "../../lanes/eng-build/unit.ts";
 import { patchFrom, tempDir } from "../real/fixture.ts";
 import { goRepo, GO_CALC, GO_FIXED } from "../eng-build/fixture.ts";
 
@@ -127,7 +127,7 @@ describe("the review stage", () => {
     const unit = { id: "u2", repo: oneCommitRepo(join(dir, "base")), plan: join(dir, "plan.md") };
     writeFileSync(unit.plan, "# Plan\n");
     const lines: string[] = [];
-    const recs = await runReviews({ units: [unit], arm: "plain", reviewer: "sol", reps: [1], out: join(dir, "out"), log: (l) => lines.push(l), session: async (s) => ({ end: "upstream", costUsd: 0.25, result: { dir: s.dir, outputs: { plan: null, transcript: "", stateRoot: null, coverage: null }, finalRepo: join(s.seed, "repo"), blocks: 0 } }) });
+    const recs = await runReviews({ units: [unit], arm: "plain", reviewer: "sol", reps: [1], out: join(dir, "out"), log: (l) => lines.push(l), session: async (s) => ({ end: "upstream", costUsd: 0.25, result: { dir: s.dir, outputs: { plan: null, transcript: "", stateRoot: null, coverage: null }, repoEdits: 0, blocks: 0 } }) });
     expect(recs[0]).toMatchObject({ outcome: "upstream_gap", bundleWords: 0, costUsd: 0.5 });
     expect(existsSync(join(dir, "out", "bundles"))).toBe(false);
   });
@@ -185,7 +185,7 @@ describe("review attempt ends", () => {
     const dir = fresh();
     const unit = { id: "u9", repo: oneCommitRepo(join(dir, "base")), plan: join(dir, "plan.md") };
     writeFileSync(unit.plan, "# Plan\n");
-    const recs = await runReviews({ units: [unit], arm: "plain", reviewer: "opus", reps: [1], out: join(dir, "out"), session: async (s) => ({ end: web.end, costUsd: 0.1, result: { dir: s.dir, outputs: { plan: null, transcript: "", stateRoot: null, coverage: null }, finalRepo: join(s.seed, "repo"), blocks: 0 } }) });
+    const recs = await runReviews({ units: [unit], arm: "plain", reviewer: "opus", reps: [1], out: join(dir, "out"), session: async (s) => ({ end: web.end, costUsd: 0.1, result: { dir: s.dir, outputs: { plan: null, transcript: "", stateRoot: null, coverage: null }, repoEdits: 0, blocks: 0 } }) });
     expect(recs[0]!.outcome).toBe("infra_gap");
   });
 });
@@ -204,6 +204,83 @@ describe("eb subcommands", () => {
       expect(r.err).toStartWith("E_USAGE gstack-evals eb " + sub + ": the paid " + sub + " stage runs only under a ledger lease");
     }
     expect((await run(["review", "--arm", "none,plain"])).err).toStartWith("E_USAGE gstack-evals eb review: the none arm runs no review session");
+  });
+});
+
+
+describe("admission and the interim stop", () => {
+  const run = async (argv: string[]) => {
+    const err: string[] = [];
+    const code = await main(argv, { out: () => {}, err: (t) => err.push(t) });
+    return { code, err: err.join("\n") };
+  };
+  const unitFolder = (root: string, id: string, admission: Admission | null) => {
+    const d = join(root, id);
+    mkdirSync(d, { recursive: true });
+    writeFileSync(join(d, "eb.json"), JSON.stringify({ schema: EB_SCHEMA, unit: fixtureUnit(id) }));
+    writeFileSync(join(d, "task.json"), "{}");
+    if (admission) writeFileSync(join(d, ADMISSION_FILE), JSON.stringify(admission));
+    return d;
+  };
+
+  // Value: protects=the unit stage's qualification and gate verdicts on a resume; fails_when=a cached unit that failed qualification, or has no admission record, is read back and admitted.
+  test("a cached unit comes back only when its admission record says it qualified; the build never reruns", async () => {
+    const fx = goRepo(join(fresh(), "repo"));
+    const out = fresh();
+    const lines: string[] = [];
+    const drop = { code: "E_EB_IMAGE" as const, step: "merged", cls: "no_functional_pass", cases: 0 };
+    await buildUnits({ specs: [{ spec: fx.spec, repo: fx.repo }], out, work: fresh(), labels: join(fresh(), "labels.json"), seed: 1, build: (_s, _r, dir) => ({ qualifies: false, dir, drop, eb: { unit: fixtureUnit("ebgo"), drops: [] } }) as unknown as BuildOutcome, log: (l) => lines.push(l) });
+    const dir = join(out, fx.spec.id.replace(/[^A-Za-z0-9._-]/g, "_"));
+    expect(JSON.parse(readFileSync(join(dir, ADMISSION_FILE), "utf8"))).toEqual({ qualifies: false, drops: [drop], gate: null });
+    writeFileSync(join(dir, "eb.json"), "{\"schema\":\"cached\"}");
+    let rebuilt = 0;
+    const again = await buildUnits({ specs: [{ spec: fx.spec, repo: fx.repo }], out, work: fresh(), labels: join(fresh(), "labels.json"), seed: 1, build: () => { rebuilt++; throw new Error("rebuilt"); }, log: (l) => lines.push(l), gate: async () => [] });
+    expect([again.length, rebuilt]).toEqual([0, 0]);
+    expect(lines.filter((l) => l.startsWith("E_"))).toEqual(["E_EB_IMAGE unit ebgo: merged (no_functional_pass)", "E_EB_IMAGE unit ebgo: merged (no_functional_pass)"]);
+    rmSync(join(dir, ADMISSION_FILE));
+    const none: string[] = [];
+    await buildUnits({ specs: [{ spec: fx.spec, repo: fx.repo }], out, work: fresh(), labels: join(fresh(), "labels.json"), seed: 1, build: () => { throw new Error("rebuilt"); }, log: (l) => none.push(l) });
+    expect(none).toEqual(["E_EB_CACHE_STALE unit ebgo: admission (no_admission_record)"]);
+  });
+
+  // Value: protects=the paid stages from units that failed qualification or containment; fails_when=build or notes reads every unit folder instead of units.json's admitted list.
+  test("paid stages read only units.json's admitted list, checked against each admission record", async () => {
+    const root = fresh();
+    unitFolder(root, "ua", { qualifies: true, drops: [], gate: [] });
+    unitFolder(root, "ub", { qualifies: true, drops: [], gate: [{ code: "E_EB_LEAK", step: "leak", cls: "needle", cases: 0 }] });
+    unitFolder(root, "uc", { qualifies: false, drops: [], gate: null });
+    expect(await codeOf(() => admittedUnits(root))).toStartWith("E_USAGE " + root + " has no units.json");
+    writeFileSync(join(root, "units.json"), JSON.stringify([{ id: "ua" }]));
+    expect([...admittedUnits(root).keys()]).toEqual(["ua"]);
+    writeFileSync(join(root, "units.json"), JSON.stringify([{ id: "ua" }, { id: "ub" }]));
+    expect(await codeOf(() => admittedUnits(root))).toStartWith("E_USAGE units.json lists ub, but its admission record doesn't show it qualified and passed the containment gates");
+    const dir = fresh();
+    mkdirSync(dir, { recursive: true });
+    const l = tempLedger(dir, ["eb-builds-opus"]);
+    const bare = fresh();
+    unitFolder(bare, "ua", { qualifies: true, drops: [], gate: [] });
+    const r = await run(["build", "--arm", "none", "--reps", "1", "--units", bare, "--notes", fresh(), "--item", "eb-builds-opus", "--cap-usd", "5", "--ledger-record", l.record, "--ledger", l.ledger]);
+    expect(r.code).toBe(2);
+    expect(r.err).toStartWith("E_USAGE gstack-evals eb build: " + bare + " has no units.json");
+    expect(readItem(l.record, "eb-builds-opus").leases.length).toBe(0);
+  });
+
+  // Value: protects=the frozen interim stop before further spend; fails_when=an arm under 0.70 after its first 24 sessions keeps running reviews, or a resume or the build stage doesn't see the stop.
+  test("the interim stop runs in run order after each record, is kept on disk, and refuses further reviews and builds", async () => {
+    expect(await interimRun(16)).toBe("16 of 24: ran 1, stopped and recorded (2 stop lines), a resume ran 0");
+    expect(await interimRun(17)).toBe("17 of 24: ran 2, went on");
+    const out = fresh();
+    mkdirSync(join(out, "stops"), { recursive: true });
+    writeFileSync(stopFile(out, "precut", "opus"), JSON.stringify({ arm: "precut", reviewer: "opus", exposure: 16 / 24, line: "E_EB_EXPOSURE_STOP arm precut on opus" }));
+    const dir = fresh();
+    mkdirSync(dir, { recursive: true });
+    const l = tempLedger(dir, ["eb-reviews-opus", "eb-builds-opus"]);
+    writeFileSync(join(dir, "units.json"), "[]");
+    const rv = await run(["review", "--arm", "plain,precut", "--reviewer", "opus", "--reps", "1", "--out", out, "--review-units", join(dir, "units.json"), "--item", "eb-reviews-opus", "--cap-usd", "5", "--ledger-record", l.record, "--ledger", l.ledger]);
+    expect([rv.code, rv.err.split("\n")[0]]).toEqual([2, "E_EB_EXPOSURE_STOP gstack-evals eb review: arm precut on opus stopped at the interim exposure check, exposure 0.667 in its first sessions; drop it from --arm, and nothing ran"]);
+    const bd = await run(["build", "--arm", "precut", "--reviewer", "opus", "--reps", "1", "--reviews", out, "--item", "eb-builds-opus", "--cap-usd", "5", "--ledger-record", l.record, "--ledger", l.ledger]);
+    expect([bd.code, bd.err.split("\n")[0]]).toEqual([2, "E_EB_EXPOSURE_STOP gstack-evals eb build: arm precut on opus stopped at the interim exposure check, exposure 0.667 in its first sessions; drop it from --arm, and nothing ran"]);
+    expect([readItem(l.record, "eb-reviews-opus").leases.length, readItem(l.record, "eb-builds-opus").leases.length]).toEqual([0, 0]);
   });
 });
 
