@@ -16,7 +16,7 @@
 // (whole lines, as the leak scan), or the leaf name of a hidden fail-to-pass test, 12 characters or more, that no file in
 // the base commit's tree holds (fixed strings). Base content comes from the base commit's blobs, never the index or the
 // working tree. runPfSession runs containUnit before every session, so a unit's
-// first session runs the check and later ones reuse its passing record.
+// first session runs the check and later ones reuse its passing record while the session image is the same.
 import { existsSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
@@ -123,12 +123,13 @@ export function checkUnit(unitDir: string, u: SmUnit, image: SessionImage): Cont
   return rec;
 }
 
-/** The gate before each session: a passing record for this session image's tag is reused, else checkUnit runs. A failure
+/** The gate before each session: a passing record for this session image's tag is reused when its image, runtime image and
+ *  head all match the session image's, else checkUnit runs. A failure
  *  halts the unit with E_PF_CONTAINMENT before any session; the unit is not dropped, and the record stays for the Captain. */
 export function containUnit(unitDir: string, u: SmUnit, image: SessionImage): ContainRecord {
   const file = join(unitDir, CONTAIN_RECORD);
   const prior = existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as { checks?: Record<string, ContainRecord> }).checks?.[image.tag] : undefined;
-  const rec = prior?.ok ? prior : checkUnit(unitDir, u, image);
+  const rec = prior?.ok && prior.image_id === image.image_id && prior.runtime_id === image.runtime_id && prior.head === image.head ? prior : checkUnit(unitDir, u, image);
   if (!rec.ok) pfFail("E_PF_CONTAINMENT", u.id + ": the containment check failed on session image " + image.tag + " (" + rec.detail + "); the unit halts before any session and is not dropped; record " + file);
   return rec;
 }

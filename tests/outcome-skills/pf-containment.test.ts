@@ -261,12 +261,17 @@ test("a check that did not finish does not pass", () => {
   expect(readContain("PF_CONTAIN error no HEAD commit in /x\nPF_CONTAIN done\n").ok).toBe(false);
 });
 
-test("the gate before a session reuses a passing record for the same session image tag and runs no check", () => {
+// Value: protects=section 15's containment gate across rebuilt session images; fails_when=a passing record is reused for a tag whose image, runtime image or head changed since the check ran; why_new=the gate keyed reuse on the tag alone; seam=containment.ts containUnit; no_claim=the check itself (contain.sh, the tests above)
+test("the gate before a session reuses a passing record only when its tag, image, runtime image and head all match, and otherwise runs the check again", () => {
   const d = mkdtempSync(join(tmpdir(), "pf-contain-gate-"));
-  const prior = { schema: "pf-contain.v1", unit: "u", tag: "gstack-evals-sm-session:abc", ok: true, summary: { commits: "1" }, findings: [], gitdirs: [], detail: "passed earlier" };
+  const image = { tag: "gstack-evals-sm-session:abc", runtime_id: "sha256:" + "0".repeat(64), image_id: "sha256:" + "1".repeat(64), head: "b".repeat(40) } as unknown as SessionImage;
+  const prior = { schema: "pf-contain.v1", unit: "u", tag: image.tag, image_id: image.image_id, runtime_id: image.runtime_id, head: image.head, ok: true, summary: { commits: "1" }, findings: [], gitdirs: [], detail: "passed earlier" };
   writeFileSync(join(d, CONTAIN_RECORD), JSON.stringify({ schema: "pf-contain.v1", checks: { [prior.tag]: prior } }));
   const u = { id: "u", repo_dir: "/testbed", base_commit: "a".repeat(40), tests: { f2p: [], p2p: [] } } as unknown as SmUnit;
-  const image = { tag: prior.tag, runtime_id: "sha256:" + "0".repeat(64), image_id: "sha256:" + "1".repeat(64), head: "b".repeat(40) } as unknown as SessionImage;
   expect(containUnit(d, u, image)).toEqual(prior as never);
+  for (const k of ["image_id", "runtime_id", "head"] as const) {
+    const changed = { ...image, [k]: k === "head" ? "c".repeat(40) : "sha256:" + "9".repeat(64) } as SessionImage;
+    expect(() => containUnit(d, u, changed)).toThrow(/^E_PF_INFRA_GAP listing the commits after base/);
+  }
   rmSync(d, { recursive: true, force: true });
 });
