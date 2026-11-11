@@ -25,6 +25,7 @@ import { FROZEN } from "./frozen.ts";
 import { exposureGate, finalUntested, gateState, interimCheck, interimStops, pilotLine, pilotReading, recountGate, type GateState, type PilotReading } from "./gates.ts";
 import { EB_RUN, ITEMS, leaseItem, reproject, settleItem } from "./ledger.ts";
 import { installCommand, prepareReviewTree, reviewArmSpec } from "./review-stage.ts";
+import { pipelineCase } from "./dryrun-pipeline.ts";
 import { probeRoutes, ROUTES } from "./routes.ts";
 import type { Arm, BuildUnit, CaseClass, CaseRuns, Ecosystem, GradedBuild, Reviewer, ReviewRecord, SessionOutcome, SkillArm } from "./types.ts";
 
@@ -430,6 +431,7 @@ function ownCases(): Record<string, Case> {
       return seen.length + " routes, one call each: " + (ok.ok ? "ok" : "FAIL") + "; a 429 on particle-1: " + (bad.ok ? "ok" : "FAIL") + " (" + bad.lines.at(-1) + ")";
     },
     "every E_EB code": () => codeTable(),
+    "pipeline end to end": () => pipelineCase(),
   };
 }
 
@@ -581,6 +583,7 @@ export const EXPECTED: Record<string, string> = {
   "one ledger lease per item": "9 items, 9 leases opened and settled on run geva-522-eb; a second run on eb-reviews-opus: E_ITEM_BOUND",
   "route probe": "6 routes, one call each: ok; a 429 on particle-1: FAIL (route review-particle: FAIL openrouter particle-ai/particle-1 on eb-exposure-smoke, cost unknown (status 429))",
   "every E_EB code": "18 codes; exits as the plan's table: yes; printed lines start with their code: yes",
+  "pipeline end to end": "1 screened, 1 built, 1 noted; 4 reviews, 4 bundles, Stop hook on candidate engphase precut; 5 builds, 5 graded; eb-build-units 1 opened, 1 settled; eb-reviews-opus 1 opened, 1 settled; eb-builds-opus 1 opened, 1 settled",
 };
 for (const [name, s] of Object.entries(SEAMS)) EXPECTED["seam " + name] = s.expect;
 
