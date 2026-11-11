@@ -76,7 +76,7 @@ A session counts as exposed when a tool result showed a hidden test name, or fix
 
 ### Terminal-Bench 2: fix-code-vulnerability
 
-Of the 37 Terminal-Bench 2 images in these runs, 33 keep no `.git` at all. Three keep history by design: fix-git asks the agent to recover a lost commit, git-leak-recovery asks it to find a secret in history, and sanitize-git-repo's HEAD holds the secret the task asks it to remove.
+Of the 39 Terminal-Bench 2 images in these runs, 35 keep no `.git` at all. Three keep history by design: fix-git asks the agent to recover a lost commit, git-leak-recovery asks it to find a secret in history, and sanitize-git-repo's HEAD holds the secret the task asks it to remove.
 
 The fourth is fix-code-vulnerability. Its HEAD commit holds bottle.py with the security fix in place, and the image build deletes four lines from the header checks in the working tree. So `git diff`, `git stash`, `git checkout` or `git show HEAD:bottle.py` prints the fix. A session counts as exposed when either of the fix's two error messages first appears in a tool result, before the agent's own output holds it.
 
@@ -191,6 +191,7 @@ The session scan and the reruns need the run archives, which stay private becaus
 - The Run D change was taken to the Captain before writing. The ruling: a claim line that changes form is not a moved verdict, because the row's verdict (the pooled D2 lift) holds, so the note shows Sol's D1 both ways.
 - Run D's two dropped Sol opens: the frozen output's skill counts go from cso 3 to 2 in the gstack arm and cso 2 to 1 in the placebo arm.
 - fix-code-vulnerability's image HEAD is 0207a34f0c5716cd292dd4480253ad35d3da49f3.
+- The two Terminal-Bench 2 images outside the 37-task set, adaptive-rejection-sampler and largest-eigenval (only the quick looks ran them), were checked during review at the digests their 20251031 tags resolve to on 2026-11-11. Neither keeps a .git. The other 37 pinned digests still match those tags.
 
 </details>
 
