@@ -4,7 +4,7 @@
 // the Docker rig and eng-review's session loop (src/trial/review/er-run.ts's attempt, with the build read's prompt, arm
 // installs and Stop hook on every skill arm), and the build sessions on the outcome-skills session driver with the Lane B
 // agent (real_agent) through Harbor. None of this runs keyless: the tests drive the same stages through stub launchers.
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, posix } from "node:path";
@@ -19,17 +19,18 @@ import { ER_COVERAGE_DIR, ER_INSTALL_SKILL, ER_REC_USER, ER_SKILL, ER_SYSTEM_PRO
 import { STATE_ROOT_DIR } from "../../src/trial/state-root.ts";
 import { runTrial } from "../../src/trial/trial.ts";
 import { erOutcome, type ErOutcome } from "../eng-review/parse.ts";
-import { serveStages } from "../outcome-skills/driver/stage.ts";
+import { serveStages, type ServeOptions } from "../outcome-skills/driver/stage.ts";
 import { HARBOR_MODEL } from "../outcome-skills/statemachines/run.ts";
 import { sessionEnd } from "../outcome-skills/statemachines/session.ts";
 import { isSkillArm, REVIEW_SESSION } from "./arms.ts";
 import { armName, BUILD_MODEL, buildMounts, buildRegistry, checkMounts, preflight, prepareTree, type BuildSession } from "./build-stage.ts";
 import { fail } from "./errors.ts";
-import { EB_RUN } from "./ledger.ts";
+import { EB_BUILD_SKILL, EB_RUN } from "./ledger.ts";
 import { NOTE_MODELS, type ModelCall } from "./note.ts";
 import { reviewArmSpec, type AttemptEnd } from "./review-stage.ts";
 import { openingEvidence, type Launcher, type ReviewSession } from "./pipeline.ts";
 import type { Arm, Reviewer, SessionOutcome } from "./types.ts";
+import { sessionImage, type SessionImage } from "./session-image.ts";
 import { readUnit } from "./unit.ts";
 import { openMeter } from "../product-value/meter.ts";
 
@@ -134,13 +135,44 @@ export function buildEnd(summary: Record<string, any> | null): SessionOutcome {
   return end === "completed" ? "completed" : end === "upstream" ? "upstream_gap" : end === "infra" ? "infra_gap" : "limit";
 }
 
+/** Runs a command without blocking this process, which serves the driver's control plane and proxy to the session; resolves with its output, after a kill at timeoutMs. */
+function runAsync(cmd: string, args: string[], env: Record<string, string>, timeoutMs: number): Promise<string> {
+  return new Promise((done) => {
+    const c = spawn(cmd, args, { env, stdio: ["ignore", "pipe", "pipe"] });
+    let out = "";
+    c.stdout.on("data", (d) => (out += d));
+    c.stderr.on("data", (d) => (out += d));
+    const timer = setTimeout(() => c.kill("SIGKILL"), timeoutMs);
+    c.on("error", (e) => (out += "\n" + e.message));
+    c.on("close", () => {
+      clearTimeout(timer);
+      done(out);
+    });
+  });
+}
+
 /**
- * Builds: the outcome driver opens the item's lease and serves one stage for the arm (kind none, from buildRegistry), and
- * each attempt is one Harbor run of real_agent on the driver's control plane (ledger u4) in the unit's pinned image, with
- * the build tree, plan and bundle mounted by buildMounts after checkMounts and the clean-room preflight. real_agent's
- * non-SM path opens its trial on the real-outcome sandbox sidecar, which the operator serves at sidecar.
+ * The Harbor task.toml of one build session, in family SM's shape (statemachines/unit.ts): the session image, no Harbor
+ * network policy, and an agent timeout past the arm's wall limit, so real_agent's own wall limit ends the session. The
+ * unit's real-outcome task.toml is the verifier's: its agent allowlist with no hosts and its no-network environment
+ * would leave real_agent no route to the proxy, and Harbor refuses the allowlist on a kernel without nftables inet.
+ * real_agent's egress table (ip and ip6 families) is what limits the session: its non-SM path allows the proxy and the
+ * sidecar's agent plane only, and its probe checks that.
  */
-export function buildLauncher(o: { arm: Arm | Arm[]; units: Map<string, { dir: string }>; repos: string; plans: string; bundles: string | null; out: string; host: string; envelopeHost: string; sidecar: string; forbidden: string[]; planned: number; harbor?: string; docker?: string }): Launcher<BuildSession> {
+export function sessionToml(id: string, image: string, wallSec: number): string {
+  return ["version = \"1.0\"", "", "[metadata]", "id = " + JSON.stringify(id), "", "[agent]", "timeout_sec = " + (wallSec + 600), "", "[verifier]", "timeout_sec = 900", "", "[environment]", "docker_image = " + JSON.stringify(image), ""].join("\n");
+}
+
+/**
+ * Builds: the outcome driver opens the item's lease and serves one stage for the arm (kind none, from buildRegistry,
+ * charging EB_BUILD_SKILL), and each attempt is one Harbor run of real_agent on the driver's control plane (ledger u4) in
+ * the unit's session image (session-image.ts: the unit's pinned image with the review stage's Claude Code on top, built
+ * once per unit and removed on close), with the build tree, plan and bundle mounted by buildMounts after checkMounts and
+ * the clean-room preflight on that image. Harbor runs as a child process this one awaits, so the driver keeps serving
+ * the session's control plane and proxy meanwhile. real_agent's non-SM path opens its trial on the real-outcome sandbox sidecar,
+ * which the operator serves at sidecar. serve passes the keyless end-to-end run's stub upstream to the driver.
+ */
+export function buildLauncher(o: { arm: Arm | Arm[]; units: Map<string, { dir: string }>; repos: string; plans: string; bundles: string | null; out: string; host: string; envelopeHost: string; sidecar: string; forbidden: string[]; planned: number; harbor?: string; docker?: string; serve?: Pick<ServeOptions, "fetch" | "env" | "requireAdmission" | "machine" | "log"> }): Launcher<BuildSession> {
   return async (p) => {
     const names = [...new Set((Array.isArray(o.arm) ? o.arm : [o.arm]).map(armName))];
     if (names.length !== 1) fail("E_USAGE", "one build launch serves one driver stage, so it runs the none arm alone or reviewed arms together");
@@ -149,8 +181,9 @@ export function buildLauncher(o: { arm: Arm | Arm[]; units: Map<string, { dir: s
     const arms = join(o.out, "eb-registry.json");
     mkdirSync(o.out, { recursive: true });
     writeFileSync(arms, JSON.stringify(registry, null, 2) + "\n");
-    const served = await serveStages({ record: p.record, local, run_id: EB_RUN, envelope_host: o.envelopeHost, stages: [{ item: p.item, arm: names[0]! }], host: o.host, dir: join(o.out, "driver"), planned: o.planned, registry });
+    const served = await serveStages({ record: p.record, local, run_id: EB_RUN, envelope_host: o.envelopeHost, stages: [{ item: p.item, arm: names[0]!, skills: [EB_BUILD_SKILL] }], host: o.host, dir: join(o.out, "driver"), planned: o.planned, registry, ...o.serve });
     const stage = served.stages[0]!;
+    const images = new Map<string, SessionImage>();
     const session: BuildSession = async (s) => {
       const unit = o.units.get(s.unit.id) ?? fail("E_USAGE", "no unit folder for " + s.unit.id);
       const { eb } = readUnit(unit.dir);
@@ -163,13 +196,13 @@ export function buildLauncher(o: { arm: Arm | Arm[]; units: Map<string, { dir: s
       const review = s.arm === "none" ? null : join(o.bundles ?? fail("E_USAGE", "a reviewed arm builds from its review bundles; pass --bundles"), s.cell.replace(/[^A-Za-z0-9._-]/g, "_"));
       const mounts = buildMounts({ arm: s.arm, repo: tree, plan, review });
       checkMounts(mounts, [unit.dir, ...o.forbidden]);
-      preflight({ docker: o.docker ?? "docker", image: eb.image.tag, digest: eb.image.id, mounts });
+      const img = images.get(eb.image.id) ?? sessionImage(eb.image.id, { docker: o.docker });
+      images.set(eb.image.id, img);
+      preflight({ docker: o.docker ?? "docker", image: img.tag, digest: img.id, mounts });
       const task = join(out, "task");
       mkdirSync(join(task, "environment"), { recursive: true });
-      writeFileSync(join(task, "environment/Dockerfile"), "FROM " + eb.image.tag + "\n");
-      const toml = readFileSync(join(unit.dir, "task.toml"), "utf8").replace(/^\s*docker_image\s*=.*\n?/m, "");
-      if (!/^\[environment\]$/m.test(toml)) fail("E_USAGE", "unit " + s.unit.id + "'s task.toml has no [environment] section");
-      writeFileSync(join(task, "task.toml"), toml.replace(/^\[environment\]$/m, "[environment]\ndocker_image = " + JSON.stringify(eb.image.tag)));
+      writeFileSync(join(task, "environment/Dockerfile"), "FROM " + img.tag + "\n");
+      writeFileSync(join(task, "task.toml"), sessionToml(s.unit.id, img.tag, registry.arms[s.armName]!.limits.wall_limit_sec));
       writeFileSync(join(task, "instruction.md"), s.prompt);
       const compose = join(out, "mounts.compose.yaml");
       writeFileSync(compose, "services:\n  main:\n    volumes:\n" + mounts.map((m) => "      - " + JSON.stringify(m) + "\n").join(""));
@@ -179,7 +212,7 @@ export function buildLauncher(o: { arm: Arm | Arm[]; units: Map<string, { dir: s
       writeFileSync(taskJson, JSON.stringify({ repo_dir: "/work/repo", base_branch: branch, base_commit: head, start_ref: branch, kind: "K1" }));
       const label = s.cell;
       const manifest = join(out, "images.json");
-      const manifestText = JSON.stringify({ rows: [{ label, image_id: eb.image.id }] }) + "\n";
+      const manifestText = JSON.stringify({ rows: [{ label, image_id: img.id, unit_image_id: eb.image.id, claude_code: img.claude }] }) + "\n";
       writeFileSync(manifest, manifestText);
       const armTar = join(out, "arm.tar");
       writeFileSync(armTar, Buffer.alloc(10240));
@@ -187,11 +220,12 @@ export function buildLauncher(o: { arm: Arm | Arm[]; units: Map<string, { dir: s
       env.ANTHROPIC_API_KEY = "placeholder-not-a-key";
       env.PYTHONPATH = join(ROOT, "lanes/real-outcome/agent") + ":" + join(ROOT, "quick/laneb/runner/agent");
       env.PYTHONDONTWRITEBYTECODE = "1";
-      const ak = { skip_install: "true", task_json: taskJson, arm: s.armName, arm_tar: armTar, upstream_model: BUILD_MODEL, arms_path: arms, control_url: served.control, ledger: "u4", task_label: label, trial_n: "1", ...(s.attempt > 1 ? { rerun: "fresh container after an upstream or infra end" } : {}), image_id: eb.image.id, manifest, manifest_sha256: sha(manifestText), repo_dir: "/work/repo", workdir: "/work", sidecar_url: o.sidecar };
+      const ak = { skip_install: "true", task_json: taskJson, arm: s.armName, arm_tar: armTar, upstream_model: BUILD_MODEL, arms_path: arms, control_url: served.control, ledger: "u4", task_label: label, trial_n: "1", ...(s.attempt > 1 ? { rerun: "fresh container after an upstream or infra end" } : {}), image_id: img.id, manifest, manifest_sha256: sha(manifestText), repo_dir: "/work/repo", workdir: "/work", sidecar_url: o.sidecar };
       const proxy = /^https?:\/\//.test(stage.proxy) ? stage.proxy : "http://" + stage.proxy;
       const model = HARBOR_MODEL[BUILD_MODEL] ?? fail("E_USAGE", "no Harbor model for " + BUILD_MODEL);
-      const h = spawnSync(o.harbor ?? "harbor", ["run", "-y", "-p", task, "-a", "real_agent:RealAgent", "-m", model, "--base-url", proxy, ...Object.entries(ak).flatMap(([k, v]) => ["--ak", k + "=" + v]), "-e", "docker", "--extra-docker-compose", join(ROOT, "quick/laneb/runner/agent-caps.compose.yaml"), "--extra-docker-compose", compose, "-o", join(out, "jobs"), "--job-name", "eb-" + sha(label + s.attempt + Date.now()).slice(0, 12), "--disable-verification", "--delete"], { env, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, timeout: (registry.arms[s.armName]!.limits.wall_limit_sec + 900) * 1000 });
-      writeFileSync(join(out, "harbor.log"), (h.stdout ?? "") + (h.stderr ?? ""));
+      const h = await runAsync(o.harbor ?? "harbor", ["run", "-y", "-p", task, "-a", "real_agent:RealAgent", "-m", model, "--base-url", proxy, ...Object.entries(ak).flatMap(([k, v]) => ["--ak", k + "=" + v]), "-e", "docker", "--extra-docker-compose", join(ROOT, "quick/laneb/runner/agent-caps.compose.yaml"), "--extra-docker-compose", compose, "-o", join(out, "jobs"), "--job-name", "eb-" + sha(label + s.attempt + Date.now()).slice(0, 12), "--disable-verification", "--delete"], env, (registry.arms[s.armName]!.limits.wall_limit_sec + 900) * 1000);
+      writeFileSync(join(out, "harbor.log"), h);
+      spawnSync(o.docker ?? "docker", ["run", "--rm", "--network", "none", "--user", "0:0", "-v", tree + ":/eb-tree", "--entrypoint", "chown", img.id, "-R", (process.getuid?.() ?? 1000) + ":" + (process.getgid?.() ?? 1000), "/eb-tree"], { encoding: "utf8", timeout: 300_000 });
       const ev = findDir(join(out, "jobs"), "evaluator");
       const summary = ev && existsSync(join(ev, "real-summary.json")) ? (JSON.parse(readFileSync(join(ev, "real-summary.json"), "utf8")) as Record<string, any>) : null;
       const spent = typeof summary?.proxy?.spent_micros === "number" ? summary.proxy.spent_micros / 1_000_000 : 0;
@@ -206,6 +240,7 @@ export function buildLauncher(o: { arm: Arm | Arm[]; units: Map<string, { dir: s
           await served.stop();
         } finally {
           local.close();
+          if (images.size) spawnSync(o.docker ?? "docker", ["rmi", "-f", "--no-prune", ...[...images.values()].map((i) => i.tag)], { encoding: "utf8", timeout: 120_000 });
         }
       },
     };
