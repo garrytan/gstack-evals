@@ -246,17 +246,21 @@ export function pfRecord(i: PfRunInput, attempt: 1 | 2, summary: Record<string, 
  *  no retry and no session record, while the driver halts the item's stage and names the lease's journal, which the
  *  Captain reads before ruling on a retry. So does any attempt that left no summary after pf_turns recorded a slot open
  *  in ev's pf-opens.jsonl, whatever ended it (ended names it for the halt line: run.ts's kill, Harbor's exception, its
- *  exit): that slot's counts are unknown, and it may have spent. One end is exempt: a cap stop (Harbor's exception
+ *  exit): that slot's counts are unknown, and it may have spent, so before that halt pf-run stops the driver through its
+ *  POST <control>/stop, and the item opens nothing more; a stop that fails still halts, and the halt line says so. One end is exempt: a cap stop (Harbor's exception
  *  LedgerCapStop) whose pf-opens.jsonl holds exactly one line, the task open. The driver refused that open with 409
  *  CAP_STOP, so no slot exists and nothing spent; the attempt goes on to finishSession, which ends the part with CAP_STOP. */
-export function retryAfter(i: PfRunInput, attempt: 1 | 2, summary: Record<string, any> | null, record: PfSessionRecord, dir: string, ended: string | null = null, ev: string | null = null): boolean {
+export async function retryAfter(i: PfRunInput, attempt: 1 | 2, summary: Record<string, any> | null, record: PfSessionRecord, dir: string, ended: string | null = null, ev: string | null = null): Promise<boolean> {
   const lost = ((summary?.slots ?? []) as Array<Record<string, any>>).filter((x) => x.close?.finalized === false && !((x.close?.allowance_stops ?? 0) > 0)).map((x) => String(x.id));
   const s = i.session;
   const label = s.unit + "/" + s.model + "/" + s.arm + "/" + s.index + " attempt " + attempt;
   if (lost.length) pfFail("E_PF_FINALIZE_HALT", label + ": the proxy's finalize failed at the close of session " + lost.join(", ") + " on lease " + record.lease_id + ", so its counts are unknown; the session halts with no retry and no session record, and the driver's E_PF_FINALIZE_HALT line names the journal (" + record.lease_id + ".journal.ndjson in its run dir); " + dir);
   const opens = !summary && ev && existsSync(join(ev, OPENS)) ? readFileSync(join(ev, OPENS), "utf8").trim().split("\n").filter(Boolean) : [];
   const refusedTask = record.cap_stop && opens.length === 1 && JSON.parse(opens[0]!).phase === "task";
-  if (opens.length && !refusedTask) pfFail("E_PF_FINALIZE_HALT", label + ": " + (ended ?? "the attempt ended") + " after pf_turns opened a slot (" + join(ev!, OPENS) + "), and no summary names that slot's counts, so it may have spent; the session halts with no retry and no session record, and the driver's E_PF_FINALIZE_HALT line names the lease's journal; " + dir);
+  if (opens.length && !refusedTask) {
+    const stop = await fetch(i.control + "/stop", { method: "POST", signal: AbortSignal.timeout(10_000) }).then((r) => (r.ok ? null : "it answered " + r.status), (e: Error) => e.message);
+    pfFail("E_PF_FINALIZE_HALT", label + ": " + (ended ?? "the attempt ended") + " after pf_turns opened a slot (" + join(ev!, OPENS) + "), and no summary names that slot's counts, so it may have spent; the session halts with no retry and no session record, and " + (stop ? "pf-run's POST " + i.control + "/stop failed (" + stop + "), so the driver may still serve opens: stop it by hand; " : "pf-run stopped the driver through POST " + i.control + "/stop, so the item opens nothing more until the Captain rules on the lease's journal; ") + dir);
+  }
   return attempt === 1 && retriesSession(summary, record);
 }
 
@@ -297,7 +301,7 @@ export async function runPfSession(i: PfRunInput): Promise<PfRun> {
     attempts.push({ dir, harbor_exit: exit, summary, evaluator: ev });
     const exception: string | null = result?.exception_info?.exception_type ?? null;
     record = pfRecord(i, attempt, summary, ev, exception, image.head);
-    if (!retryAfter(i, attempt, summary, record, dir, killed ? "Harbor was killed at its timeout" : exception ? "Harbor ended on " + exception : "Harbor exited " + exit, ev)) break;
+    if (!(await retryAfter(i, attempt, summary, record, dir, killed ? "Harbor was killed at its timeout" : exception ? "Harbor ended on " + exception : "Harbor exited " + exit, ev))) break;
   }
   const file = join(i.out, "session.json");
   finishSession(file, record!);

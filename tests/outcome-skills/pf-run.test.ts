@@ -44,7 +44,7 @@ function unitDir(): string {
 }
 
 const image: SessionImage = { image_id: "sha256:" + "e".repeat(64), tag: "pf-session:test", runtime_id: "sha256:" + "c".repeat(64), volume: "v", commits: 1, head: "a".repeat(40), home: "none", tree_patch_sha256: null, qa_home: null };
-const input = (arm: PfArm, model = OPUS): PfRunInput => ({ unitDir: unitDir(), session: { unit: "pf-run-flag", part: 0, index: 3, model, arm, item: "pf-opus" }, names: "short", control: "http://172.17.0.1:9000", proxy: "172.17.0.1:9001", out: "/unused", volume: "v", claude: "/opt/claude", probeNode: "", effort: null });
+const input = (arm: PfArm, model = OPUS): PfRunInput => ({ unitDir: unitDir(), session: { unit: "pf-run-flag", part: 0, index: 3, model, arm, item: "pf-opus" }, names: "short", control: "http://127.0.0.1:9", proxy: "172.17.0.1:9001", out: "/unused", volume: "v", claude: "/opt/claude", probeNode: "", effort: null });
 const ak = (argv: string[]): Record<string, string> => Object.fromEntries(argv.flatMap((a, i) => (argv[i - 1] === "--ak" ? [[a.slice(0, a.indexOf("=")), a.slice(a.indexOf("=") + 1)]] : [])));
 
 test("runCopy writes the run copy naming the session image, the pf config and the overlay, with no provider key", () => {
@@ -194,35 +194,35 @@ test("pfRecord: a turn whose proxy finalize failed is an infra end, read after i
 });
 
 // Value: protects=the Captain's ruling that a failed proxy finalize is a harness fault to read before any retry; fails_when=a slot with unknown counts gets the automatic fresh-container retry, or a retry starts on attempt 2's slot, or a slot that counts an allowance stop halts; why_new=today's in-process proxy never reports finalized false, so one that does is a fault, not an infra end to retry; seam=run.ts retryAfter, which runPfSession calls after every attempt; no_claim=the driver's halt of the stage (pf-driver.test.ts)
-test("a slot whose proxy finalize failed halts the session with E_PF_FINALIZE_HALT before its fresh-container retry; a slot that also counts an allowance stop does not halt", () => {
+test("a slot whose proxy finalize failed halts the session with E_PF_FINALIZE_HALT before its fresh-container retry; a slot that also counts an allowance stop does not halt", async () => {
   const i = input("P");
   const lostSlot = (phase: string, stops: number | null = null) => ({ ...slot(phase, 9), id: "ses_lost_" + phase, close: { spent_micros: 9, finalized: false, allowance_stops: stops } });
   const task = summary({ task: turn("completed", [], 0, false), slots: [lostSlot("task")] });
   const a1 = pfRecord(i, 1, task, null);
   expect(retriesSession(task, a1)).toBe(true);
-  expect(() => retryAfter(i, 1, task, a1, "/out/a1")).toThrow(/^E_PF_FINALIZE_HALT pf-run-flag\/claude-opus-5-5\/P\/3 attempt 1: the proxy's finalize failed at the close of session ses_lost_task on lease pf-opus\.0001\.abcdef/);
+  await expect(retryAfter(i, 1, task, a1, "/out/a1")).rejects.toThrow(/^E_PF_FINALIZE_HALT pf-run-flag\/claude-opus-5-5\/P\/3 attempt 1: the proxy's finalize failed at the close of session ses_lost_task on lease pf-opus\.0001\.abcdef/);
   const wrap = summary({ task: turn("completed"), wrapup: [turn("completed", [], 0, false)], slots: [slot("task", 4), lostSlot("wrapup")] });
-  expect(() => retryAfter(i, 1, wrap, pfRecord(i, 1, wrap, null), "/out/a1")).toThrow("session ses_lost_wrapup");
-  expect(() => retryAfter(i, 2, task, pfRecord(i, 2, task, null), "/out/a2")).toThrow("E_PF_FINALIZE_HALT");
+  await expect(retryAfter(i, 1, wrap, pfRecord(i, 1, wrap, null), "/out/a1")).rejects.toThrow("session ses_lost_wrapup");
+  await expect(retryAfter(i, 2, task, pfRecord(i, 2, task, null), "/out/a2")).rejects.toThrow("E_PF_FINALIZE_HALT");
   const upstream = summary({ task: turn("error_result"), slots: [{ ...slot("task", 5), close: { spent_micros: 5, finalized: true } }] });
-  expect(retryAfter(i, 1, upstream, pfRecord(i, 1, upstream, null), "/out/a1")).toBe(true);
-  expect(retryAfter(i, 2, upstream, pfRecord(i, 2, upstream, null), "/out/a2")).toBe(false);
+  expect(await retryAfter(i, 1, upstream, pfRecord(i, 1, upstream, null), "/out/a1")).toBe(true);
+  expect(await retryAfter(i, 2, upstream, pfRecord(i, 2, upstream, null), "/out/a2")).toBe(false);
   const both = summary({ task: turn("error_result", ["E_ALLOWANCE"], 1, false), wrapup: [turn("completed")], slots: [lostSlot("task", 1), slot("wrapup", 2)] });
-  expect(retryAfter(i, 1, both, pfRecord(i, 1, both, null), "/out/a1")).toBe(false);
+  expect(await retryAfter(i, 1, both, pfRecord(i, 1, both, null), "/out/a1")).toBe(false);
 });
 
 // Value: protects=the Captain's ruling on #324's red-team#2: a Harbor kill after a turn opened may already have been charged, so it halts as a failed finalize does; fails_when=an attempt run.ts killed at its timeout after pf_turns recorded a slot open, with no summary, gets the whole-session retry, or a kill before any open, an attempt that ended on its own, or a killed attempt that still wrote its summary halts; why_new=a kill leaves no pf-summary.json, and pfRecord read that as an infra end and retried the whole session; seam=run.ts retryAfter over the evaluator dir's pf-opens.jsonl; no_claim=that pf_turns writes the line before each open (pf_agent_sdk_test.py)
-test("an attempt run.ts killed at its timeout after a slot open, with no summary, halts with E_PF_FINALIZE_HALT instead of retrying the whole session", () => {
+test("an attempt run.ts killed at its timeout after a slot open, with no summary, halts with E_PF_FINALIZE_HALT instead of retrying the whole session", async () => {
   const i = input("P");
   const ev = temp("pf-run-ev-");
   const none = pfRecord(i, 1, null, ev);
   const killed = "Harbor was killed at its timeout";
-  expect(retryAfter(i, 1, null, none, "/out/a1", killed, ev)).toBe(true);
+  expect(await retryAfter(i, 1, null, none, "/out/a1", killed, ev)).toBe(true);
   writeFileSync(join(ev, "pf-opens.jsonl"), JSON.stringify({ phase: "task", rerun: null, at: 3.1 }) + "\n");
-  expect(() => retryAfter(i, 1, null, none, "/out/a1", killed, ev)).toThrow(/^E_PF_FINALIZE_HALT pf-run-flag\/claude-opus-5-5\/P\/3 attempt 1: Harbor was killed at its timeout after pf_turns opened a slot/);
-  expect(() => retryAfter(i, 2, null, pfRecord(i, 2, null, ev), "/out/a2", killed, ev)).toThrow("E_PF_FINALIZE_HALT");
+  await expect(retryAfter(i, 1, null, none, "/out/a1", killed, ev)).rejects.toThrow(/^E_PF_FINALIZE_HALT pf-run-flag\/claude-opus-5-5\/P\/3 attempt 1: Harbor was killed at its timeout after pf_turns opened a slot/);
+  await expect(retryAfter(i, 2, null, pfRecord(i, 2, null, ev), "/out/a2", killed, ev)).rejects.toThrow("E_PF_FINALIZE_HALT");
   const done = summary({ task: turn("completed"), wrapup: [turn("completed")], slots: [slot("task", 4), slot("wrapup", 2)] });
-  expect(retryAfter(i, 1, done, pfRecord(i, 1, done, null), "/out/a1", killed, ev)).toBe(false);
+  expect(await retryAfter(i, 1, done, pfRecord(i, 1, done, null), "/out/a1", killed, ev)).toBe(false);
 });
 
 test("harbor() says whether its timer killed Harbor", async () => {
@@ -313,7 +313,7 @@ test("pfRecord: a wrap-up upstream or infra end reruns the wrap-up once on the s
 });
 
 // Value: protects=section 6.8's S custody from the task turn's capture to the exported bundle; fails_when=an S bundle whose HEAD is not the head capture.sh committed scores, retries, or leaves the session with no record, or the record drops the unit's base commit; why_new=the bundle was trusted as S whatever its HEAD; seam=run.ts pfRecord over the attempt's s.bundle; no_claim=S's root against the base commit (pf-score.test.ts)
-test("pfRecord: an S bundle whose HEAD is not the head captured after the task turn is gap E_PF_ARM (head_mismatch) with no retry, and the record carries the unit's base commit", () => {
+test("pfRecord: an S bundle whose HEAD is not the head captured after the task turn is gap E_PF_ARM (head_mismatch) with no retry, and the record carries the unit's base commit", async () => {
   const repo = temp("pf-run-s-"), ev = temp("pf-run-ev-");
   const gitc = (...a: string[]) => spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...a], { cwd: repo, encoding: "utf8" }).stdout.trim();
   gitc("init", "-q");
@@ -327,7 +327,7 @@ test("pfRecord: an S bundle whose HEAD is not the head captured after the task t
   const bad = pfRecord(i, 1, moved, ev, null, image.head);
   expect(bad).toMatchObject({ gap: "E_PF_ARM", gap_reason: "head_mismatch", base_commit: image.head, wrapup_end: "completed" });
   expect(retriesSession(moved, bad)).toBe(false);
-  expect(retryAfter(i, 1, moved, bad, "/out/a1")).toBe(false);
+  expect(await retryAfter(i, 1, moved, bad, "/out/a1")).toBe(false);
   const file = join(temp("pf-run-head-"), "session.json");
   finishSession(file, bad);
   expect(JSON.parse(readFileSync(file, "utf8"))).toMatchObject({ gap: "E_PF_ARM", gap_reason: "head_mismatch" });
@@ -337,13 +337,13 @@ test("pfRecord: an S bundle whose HEAD is not the head captured after the task t
 });
 
 // Value: protects=section 5's end rules when wrapup.sh keep fails after a completed wrap-up turn; fails_when=such a session scores, retries, writes no session.json or stops the driver loop; why_new=the refusal left a no-gap record with no S, which writeSessionRecord refuses, so the run threw; seam=run.ts pfRecord, retryAfter and finishSession over pf_turns' summary (pf_agent_sdk_test.py drives the real keep failure); no_claim=the capture or reset steps
-test("pfRecord: wrapup.sh keep failing after a completed wrap-up turn is gap E_PF_INFRA_GAP with no retry, and the session still gets its session.json", () => {
+test("pfRecord: wrapup.sh keep failing after a completed wrap-up turn is gap E_PF_INFRA_GAP with no retry, and the session still gets its session.json", async () => {
   const i = input("C");
   const failed = { ...summary({ task: turn("completed"), wrapup: [turn("completed")], slots: [slot("task", 10), slot("wrapup", 2)] }), keep: null, checks: false, refused: "E_PF_CAPTURE wrapup.sh keep exited 3: keep failed" };
   const r = pfRecord(i, 1, failed, temp("pf-run-ev-"), null, image.head);
   expect(r).toMatchObject({ gap: "E_PF_INFRA_GAP", gap_reason: null, s: null, wrapup: { ends: ["completed"] }, discarded: [], checks: null });
   expect(retriesSession(failed, r)).toBe(false);
-  expect(retryAfter(i, 1, failed, r, "/out/a1")).toBe(false);
+  expect(await retryAfter(i, 1, failed, r, "/out/a1")).toBe(false);
   const file = join(temp("pf-run-keep-"), "session.json");
   finishSession(file, r);
   expect(JSON.parse(readFileSync(file, "utf8"))).toMatchObject({ gap: "E_PF_INFRA_GAP", attempt: 1 });
@@ -351,14 +351,14 @@ test("pfRecord: wrapup.sh keep failing after a completed wrap-up turn is gap E_P
 });
 
 // Value: protects=sections 5 and 6.8's routing of a post-turn failure (#305's run notes item 4); fails_when=a capture, wrap-up or bundle step that failed on what the agent wrote (pf_turns' E_PF_ARM post_turn) reads as a tree-check refusal, gets a session retry or an infra gap, or a post-turn failure of either kind masks a wrap-up refused for its allowance; why_new=every post-turn failure was E_PF_INFRA_GAP, whatever its cause, and it masked E_PF_WRAPUP_ALLOWANCE; seam=run.ts pfRecord and retryAfter over pf_turns' summary (pf_agent_sdk_test.py drives the real failures); no_claim=state.sh's reading of the tree (pf-capture.test.ts)
-test("pfRecord: a post-turn failure in what the agent wrote is gap E_PF_ARM with reason post_turn and no retry, and a post-turn failure of either kind leaves a wrap-up refused for its allowance E_PF_WRAPUP_ALLOWANCE", () => {
+test("pfRecord: a post-turn failure in what the agent wrote is gap E_PF_ARM with reason post_turn and no retry, and a post-turn failure of either kind leaves a wrap-up refused for its allowance E_PF_WRAPUP_ALLOWANCE", async () => {
   const i = input("C");
   const done = summary({ task: turn("completed"), wrapup: [turn("completed")], slots: [slot("task", 10), slot("wrapup", 2)] });
   const keep = { ...done, keep: null, checks: false, refused: "E_PF_ARM post_turn wrapup.sh keep: lock .git/index.lock" };
   const r = pfRecord(i, 1, keep, temp("pf-run-ev-"), null, image.head);
   expect(r).toMatchObject({ gap: "E_PF_ARM", gap_reason: "post_turn", s: null, task: { end: "completed" }, wrapup: { ends: ["completed"] } });
   expect(retriesSession(keep, r)).toBe(false);
-  expect(retryAfter(i, 1, keep, r, "/out/a1")).toBe(false);
+  expect(await retryAfter(i, 1, keep, r, "/out/a1")).toBe(false);
   const file = join(temp("pf-run-post-"), "session.json");
   finishSession(file, r);
   expect(JSON.parse(readFileSync(file, "utf8"))).toMatchObject({ gap: "E_PF_ARM", gap_reason: "post_turn", attempt: 1 });
@@ -461,18 +461,18 @@ test("the session budget sums the code's own timeouts, retries and walls, and ru
 });
 
 // Value: protects=the Captain's ruling A(ii) on #324: any attempt that ends with no summary after pf_turns logged a slot open may have spent, so it halts, whatever ended it; fails_when=such an attempt gets the whole-session retry because run.ts did not kill it (Harbor's AgentTimeoutError, a crash, any other exit), the halt line does not say what ended it, or an attempt with no logged open halts; why_new=item 3 halted only on run.ts's own kill; seam=run.ts retryAfter; no_claim=how runPfSession names the end (its harbor exit, kill and result.json exception)
-test("an attempt with no summary after a logged slot open halts with E_PF_FINALIZE_HALT whatever ended it", () => {
+test("an attempt with no summary after a logged slot open halts with E_PF_FINALIZE_HALT whatever ended it", async () => {
   const i = input("C");
   const ev = temp("pf-run-ev-");
   const none = pfRecord(i, 1, null, ev);
-  for (const ended of [null, "Harbor ended on AgentTimeoutError", "Harbor exited 1"]) expect(retryAfter(i, 1, null, none, "/out/a1", ended, ev)).toBe(true);
+  for (const ended of [null, "Harbor ended on AgentTimeoutError", "Harbor exited 1"]) expect(await retryAfter(i, 1, null, none, "/out/a1", ended, ev)).toBe(true);
   writeFileSync(join(ev, "pf-opens.jsonl"), JSON.stringify({ phase: "wrapup", rerun: null, at: 5410.2 }) + "\n");
-  expect(() => retryAfter(i, 1, null, none, "/out/a1", null, ev)).toThrow(/^E_PF_FINALIZE_HALT pf-run-flag\/claude-opus-5-5\/C\/3 attempt 1: the attempt ended after pf_turns opened a slot/);
-  for (const ended of ["Harbor ended on AgentTimeoutError", "Harbor exited 1"]) expect(() => retryAfter(i, 1, null, none, "/out/a1", ended, ev)).toThrow(new RegExp("attempt 1: " + ended + " after pf_turns opened a slot"));
+  await expect(retryAfter(i, 1, null, none, "/out/a1", null, ev)).rejects.toThrow(/^E_PF_FINALIZE_HALT pf-run-flag\/claude-opus-5-5\/C\/3 attempt 1: the attempt ended after pf_turns opened a slot/);
+  for (const ended of ["Harbor ended on AgentTimeoutError", "Harbor exited 1"]) await expect(retryAfter(i, 1, null, none, "/out/a1", ended, ev)).rejects.toThrow(new RegExp("attempt 1: " + ended + " after pf_turns opened a slot"));
 });
 
 // Value: protects=the owner's ruling A2: a task open the driver refused at the cap ends the part as a cap stop, while any other open with no summary still halts; fails_when=a cap stop whose only logged open is the task open halts with E_PF_FINALIZE_HALT or writes no session.json, or a cap stop with a second logged open or a lone wrap-up open line, or a task open line with no cap stop, does not halt; why_new=pf_turns logs the task open before DriverSlots.open raises LedgerCapStop, so no summary is written and retryAfter halted a normal cap stop; seam=run.ts retryAfter then finishSession over a real evaluator dir; no_claim=that a refused open reserves nothing (pf-driver.test.ts)
-test("a cap stop whose only logged open is the task open ends as CAP_STOP with a session record; a second open line, a lone wrap-up line or no cap stop halts", () => {
+test("a cap stop whose only logged open is the task open ends as CAP_STOP with a session record; a second open line, a lone wrap-up line or no cap stop halts", async () => {
   const i = input("P");
   const ev = (...phases: string[]) => {
     const dir = temp("pf-run-ev-");
@@ -483,17 +483,17 @@ test("a cap stop whose only logged open is the task open ends as CAP_STOP with a
   for (const attempt of [1, 2] as const) {
     const dir = ev("task");
     const r = pfRecord(i, attempt, null, dir, "LedgerCapStop");
-    expect(retryAfter(i, attempt, null, r, "/out/a" + attempt, ended, dir)).toBe(false);
+    expect(await retryAfter(i, attempt, null, r, "/out/a" + attempt, ended, dir)).toBe(false);
     const file = join(temp("pf-run-cap-"), "session.json");
     expect(() => finishSession(file, r)).toThrow(/^CAP_STOP /);
     expect(JSON.parse(readFileSync(file, "utf8"))).toMatchObject({ cap_stop: true, gap: null, attempt });
   }
   for (const phases of [["task", "wrapup"], ["task", "task"], ["wrapup"]]) {
     const dir = ev(...phases);
-    expect(() => retryAfter(i, 1, null, pfRecord(i, 1, null, dir, "LedgerCapStop"), "/out/a1", ended, dir)).toThrow(/^E_PF_FINALIZE_HALT /);
+    await expect(retryAfter(i, 1, null, pfRecord(i, 1, null, dir, "LedgerCapStop"), "/out/a1", ended, dir)).rejects.toThrow(/^E_PF_FINALIZE_HALT /);
   }
   const dir = ev("task");
-  for (const exception of [null, "LanebInfraError", "RuntimeError"]) expect(() => retryAfter(i, 1, null, pfRecord(i, 1, null, dir, exception), "/out/a1", "Harbor exited 1", dir)).toThrow(/^E_PF_FINALIZE_HALT /);
+  for (const exception of [null, "LanebInfraError", "RuntimeError"]) await expect(retryAfter(i, 1, null, pfRecord(i, 1, null, dir, exception), "/out/a1", "Harbor exited 1", dir)).rejects.toThrow(/^E_PF_FINALIZE_HALT /);
 });
 
 // Value: protects=the Captain's ruling D on #324: E_PF_CAPTURE's entry fits a post-turn capture failure, which comes after paid turns; fails_when=E_PF_CAPTURE says it is refused before any spend or is retry safe, or changes its exit; why_new=the entry said "None: refused before any spend" and "retry safe" for a capture that runs after the task turn spent; seam=src/errors/codes.ts E_PF_CAPTURE; no_claim=docs/errors.md (bun run errors:check)
