@@ -20,7 +20,7 @@ import type { SessionEnd, Termination, TokenUsage, TrialRecord } from "../types.
 import { removeTree, type CleanupOptions } from "./cleanup.ts";
 import { importDelta, PLACEHOLDER, snapshot, type Delta } from "./delta.ts";
 import { DELTA_VAR, trialEnv, TrialEnvError } from "./env.ts";
-import type { AgentSession, Sandbox, StepResult } from "./sandbox.ts";
+import type { AgentSession, ReadOnlyMount, Sandbox, StepResult } from "./sandbox.ts";
 import { seedStateRoot, type Proactive } from "./state-root.ts";
 
 /** What a host adapter (U10) or the replay driver reports for one session. */
@@ -90,6 +90,14 @@ export interface TrialSpec {
   stateProjectFiles?: Record<string, string>;
   /** A directory copied into the work dir before setup, such as a review unit's repository; it never holds an answer key. */
   seed?: string;
+  /** The agent sees the work dir at the sandbox's work root (/work in docker) instead of under its task id. */
+  root?: boolean;
+  /** Host files and directories the agent sees read-only, such as an eng-review eng phase session's rendered input. */
+  mounts?: readonly ReadOnlyMount[];
+  /** false: no gstack state root is seeded and no GSTACK_STATE_ROOT or GSTACK_HOME is set (an arm with no gstack). */
+  stateRoot?: false;
+  /** Like copyDir, for more directories, after it. */
+  copyDirs?: ReadonlyArray<{ from: string; to: string }>;
 }
 
 export interface TrialRun {
@@ -164,7 +172,7 @@ export async function runTrial(spec: TrialSpec): Promise<TrialRun> {
   mkdirSync(work, { recursive: true });
   if (spec.seed) cpSync(spec.seed, work, { recursive: true, verbatimSymlinks: true });
   cpSync(spec.tasksDir, fixtures, { recursive: true });
-  const workPath = sandbox.workPath(work, task.id);
+  const workPath = sandbox.workPath(work, task.id, spec.root);
   const home = sandbox.homePath(spec.dir);
   const declared = spec.entry?.env ?? [];
   const source = spec.source ?? process.env;
@@ -179,8 +187,8 @@ export async function runTrial(spec: TrialSpec): Promise<TrialRun> {
       const failures = copyNamed(work, spec.copyOut.name, spec.copyOut.to);
       if (failures.length) logs.copy_out = failures;
     }
-    if (spec.copyDir) {
-      const failures = copyDir(join(work, spec.copyDir.from), spec.copyDir.to).map((f) => spec.copyDir!.from + ": " + f);
+    for (const c of [...(spec.copyDir ? [spec.copyDir] : []), ...(spec.copyDirs ?? [])]) {
+      const failures = copyDir(join(work, c.from), c.to).map((f) => c.from + ": " + f);
       if (failures.length) logs.copy_out = [...((logs.copy_out as string[] | undefined) ?? []), ...failures];
     }
     const gate = spec.gate?.(work);
@@ -204,9 +212,9 @@ export async function runTrial(spec: TrialSpec): Promise<TrialRun> {
       logs.setup = { exitCode: r.exitCode, timedOut: r.timedOut, stderr: tail(r) };
       if (r.exitCode !== 0) return missing("E_TASKS_INVALID", "setup " + (r.timedOut ? "timed out" : "exited " + r.exitCode) + ": " + tail(r));
     }
-    const stateEnv = seedStateRoot(work, workPath, spec.proactive ?? "core", spec.stateConfig, spec.stateFiles, spec.stateProjectFiles);
+    const stateEnv = spec.stateRoot === false ? {} : seedStateRoot(work, workPath, spec.proactive ?? "core", spec.stateConfig, spec.stateFiles, spec.stateProjectFiles);
     snapshot(work, baseline);
-    const session = sandbox.agent(task.id, { work, env: trialEnv("agent", { PATH, HOME: home, LANG: "C.UTF-8", TERM: "dumb", ...stateEnv, ...spec.agent.env }, declared, source), network: spec.network ?? null });
+    const session = sandbox.agent(task.id, { work, env: trialEnv("agent", { PATH, HOME: home, LANG: "C.UTF-8", TERM: "dumb", ...stateEnv, ...spec.agent.env }, declared, source), network: spec.network ?? null, ...(spec.root ? { root: true } : {}), ...(spec.mounts?.length ? { mounts: spec.mounts } : {}) });
     let outcome: AgentOutcome;
     try {
       outcome = await spec.agent.run(session, task, timeoutMs);

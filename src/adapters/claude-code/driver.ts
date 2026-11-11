@@ -103,6 +103,10 @@
 //   messages the transcript holds) is true. Never at any other result or termination, and never twice.
 // - session.json records the session's own clock (session_ms: from the first message to the end, less credited stalls
 //   and the persona's pauses, the clock the timeout runs on), the stall credit, the pauses and whether the follow-up went.
+// - stopHook (the eng-review lens's --enforce fallback) runs as an SDK-side Stop hook on the transcript so far, the same
+//   messages the transcript holds plus, when the hook input carries it, the last assistant text as one more assistant
+//   message (the CLI can fire the hook before the SDK yields that message). A string it returns blocks the stop with that
+//   reason; null lets the session stop.
 import type { ChildProcess } from "node:child_process";
 import { appendFileSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -171,6 +175,8 @@ export interface ClaudeCodeOptions {
   query?: QueryFn;
   /** One follow-up user message, at most once: at a success result with no simulator reply and nothing holding the session, when needed(the transcript.ndjson text so far) is true. */
   followUp?: { text: string; needed: (transcript: string) => boolean };
+  /** An SDK-side Stop hook: given the transcript text so far, a reason blocks the stop, null releases it. */
+  stopHook?: (transcript: string) => string | null;
   /** Plugin roots in the agent's HOME, loaded for the session as plugin directories. */
   plugins?: string[];
   /** The cell's cross-family voice through the Codex CLI: the provider of the slot's route and the model Codex runs. */
@@ -513,7 +519,14 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
             ...(o.plugins?.length ? { plugins: o.plugins.map((path) => ({ type: "local", path })) } : {}),
             abortController: abort,
             canUseTool,
-            hooks: { PreToolUse: [{ hooks: [async (_input: unknown, toolUseID: string | undefined) => (toolUseID && hooked.add(toolUseID), ROUTE_TO_CAN_USE_TOOL)] }] },
+            hooks: {
+              PreToolUse: [{ hooks: [async (_input: unknown, toolUseID: string | undefined) => (toolUseID && hooked.add(toolUseID), ROUTE_TO_CAN_USE_TOOL)] }],
+              ...(o.stopHook ? { Stop: [{ hooks: [async (input: { additionalContext?: unknown }) => {
+                const last = typeof input?.additionalContext === "string" && input.additionalContext ? [{ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: input.additionalContext }] }, parent_tool_use_id: null }] : [];
+                const reason = o.stopHook!([...messages, ...last].map((m) => JSON.stringify(m)).join("\n") + "\n");
+                return reason === null ? {} : { decision: "block", reason };
+              }] }] } : {}),
+            },
             spawnClaudeCodeProcess: (s: { args: string[]; env: Record<string, string | undefined> }) => {
               let cli: ChildProcess;
               try {

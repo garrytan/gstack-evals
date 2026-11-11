@@ -255,6 +255,8 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_PF_PLUGIN](#e_pf_plugin) | 2 | U20 |
 | [E_PF_DRYRUN](#e_pf_dryrun) | 1 | U20 |
 | [E_PF_TREE_STATE](#e_pf_tree_state) | 2 | U20 |
+| [E_ER_PROVIDER_DRIFT](#e_er_provider_drift) | 2 | U20 |
+| [E_ER_SUPPLY_SHORT](#e_er_supply_short) | 2 | U20 |
 | [E_EB_NOT_BUILT](#e_eb_not_built) | 2 | U20 |
 | [E_EB_NO_RECIPE](#e_eb_no_recipe) | warning | U20 |
 | [E_EB_IMAGE](#e_eb_image) | warning | U20 |
@@ -1853,6 +1855,22 @@ A pstack-checks scoring tree, built from a copy of the prepared tree volume with
 Fix: Read the files the line names and take the count per language to the Captain before any scoring continues. Never force a checkout over an untracked file.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_ER_PROVIDER_DRIFT
+
+Plan-eng-review intentions eval (section 16, rule 6): a call through OpenRouter was served by a provider other than the one its route pins (OpenAI for GPT-6.1 Sol, the recorded serving provider for particle-1 and Gemini), or the provider's recorded terms changed. That model's items stop for the Captain.
+
+Fix: Stop leasing the model's items, keep the journal line that shows the provider, and send the question to the Captain. Never retry on another provider.
+
+Exit 2. Side effects: Calls already sent on the lease stay on its journal and its spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_ER_SUPPLY_SHORT
+
+Plan-eng-review intentions eval (section 16, rule 9): a named project type has fewer than 6 eligible units from the frame and transposition can't fill it to 10, or the pooled count of passing comparison units is under 48. Authoring stops and the question goes to the Captain.
+
+Fix: Stop authoring, report the counts per type, with and without copyleft, and wait for the Captain's ruling before any more authoring spend.
+
+Exit 2. Side effects: None beyond the authoring spend already settled. Retry safe: no. Resumable: no. Owner: U20.
 
 ### E_EB_NOT_BUILT
 
