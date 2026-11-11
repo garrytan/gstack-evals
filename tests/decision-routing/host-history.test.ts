@@ -142,6 +142,67 @@ describe("history.sh against a SWE-rebench-shaped /testbed", () => {
     expect(row.counts).toMatchObject({ d_worktree: "0", d_objects: "0", d_gitmeta: "0" });
   });
 
+  test("strip trims each submodule store to the commit the base tree pins and deletes a store the base pins nothing for; check fails a store past its pin (c)", () => {
+    const src = temp("dr-history-sub-");
+    sh(src, "git init -q -b main && git config user.email t@example.com && git config user.name t && git config commit.gpgsign false && echo a > data.txt && git add -A && git commit -q -m s1");
+    const s1 = sh(src, "git rev-parse HEAD");
+    sh(src, "echo b > data.txt && git commit -q -am s2 && git branch -q extra");
+    const s2 = sh(src, "git rev-parse HEAD");
+    const root = temp("dr-history-root-");
+    const repo = join(root, "testbed");
+    mkdirSync(repo);
+    sh(repo, "git init -q && git config user.email t@example.com && git config user.name t && git config commit.gpgsign false && echo x > lib.py && git -c protocol.file.allow=always submodule add -q " + src + " data/sub && git -C data/sub checkout -q --detach " + s1 + " && git add -A && git commit -q -m base");
+    sh(repo, "git clone -q --bare " + src + " .git/modules/stray");
+    const work = temp("dr-history-work-");
+    const markers = join(work, "markers");
+    writeFileSync(markers, HIDDEN + "\n");
+    const env = { ...process.env, DR_REPO: repo, DR_ROOT: root, DR_WORK: join(work, "scratch") };
+    const run = (...args: string[]) => spawnSync("sh", [HISTORY_SH, ...args], { env, encoding: "utf8" });
+    const before = parseResult("t", run("check", markers).stdout);
+    expect(before.failed).toEqual(["c"]);
+    expect(before.counts).toMatchObject({ c_modstore: "2", modstores: "2" });
+    expect(run("strip").status).toBe(0);
+    const store = join(repo, ".git", "modules", "data", "sub");
+    expect(sh(join(repo, "data", "sub"), "git rev-parse HEAD")).toBe(s1);
+    expect(spawnSync("git", ["--git-dir=" + store, "cat-file", "-e", s2 + "^{commit}"]).status).not.toBe(0);
+    expect(existsSync(join(repo, ".git", "modules", "stray"))).toBe(false);
+    expect(sh(repo, "git status --porcelain")).toBe("");
+    const after = parseResult("t", run("check", markers).stdout);
+    expect(after).toMatchObject({ pass: true, failed: [] });
+    expect(after.counts).toMatchObject({ c_modstore: "0", modstores: "1", c_gitlinks: "1" });
+  });
+
+  test("a marker in a file another project's package installed (listed in a dist-info RECORD under site-packages) is counted apart; one no RECORD lists fails (d)", () => {
+    const f = fixture();
+    expect(f.run("strip").status).toBe(0);
+    const sp = join(f.root, "opt", "env", "lib", "python3.12", "site-packages");
+    mkdirSync(join(sp, "otherpkg", "tests"), { recursive: true });
+    mkdirSync(join(sp, "otherpkg-1.0.dist-info"));
+    writeFileSync(join(sp, "otherpkg", "tests", "test_other.py"), "def " + HIDDEN + "():\n    pass\n");
+    writeFileSync(join(sp, "otherpkg-1.0.dist-info", "RECORD"), "otherpkg/__init__.py,,\notherpkg/tests/test_other.py,sha256=x,30\notherpkg-1.0.dist-info/RECORD,,\n");
+    const a = f.run("check", f.markers);
+    const ra = parseResult("t", a.stdout);
+    expect(ra).toMatchObject({ pass: true, failed: [] });
+    expect(ra.counts).toMatchObject({ d_outside: "0", d_thirdparty: "1" });
+    expect(a.stderr).toContain("third-party: " + join(sp, "otherpkg", "tests", "test_other.py"));
+    writeFileSync(join(sp, "otherpkg", "tests", "conftest.py"), "# " + HIDDEN + "\n");
+    const rb = parseResult("t", f.run("check", f.markers).stdout);
+    expect(rb.failed).toEqual(["d"]);
+    expect(rb.counts).toMatchObject({ d_outside: "1", d_thirdparty: "1" });
+  });
+
+  test("a RECORD does not clear a file under a top-level name the repository itself holds at its base (d)", () => {
+    const f = fixture();
+    expect(f.run("strip").status).toBe(0);
+    const sp = join(f.root, "opt", "env", "lib", "python3.12", "site-packages");
+    mkdirSync(join(sp, "lib-2.0.dist-info"), { recursive: true });
+    writeFileSync(join(sp, "lib.py"), "def " + HIDDEN + "():\n    pass\n");
+    writeFileSync(join(sp, "lib-2.0.dist-info", "RECORD"), "lib.py,sha256=x,30\nlib-2.0.dist-info/RECORD,,\n");
+    const r = parseResult("t", f.run("check", f.markers).stdout);
+    expect(r.failed).toEqual(["d"]);
+    expect(r.counts).toMatchObject({ d_outside: "1", d_thirdparty: "0" });
+  });
+
   test("strip fails the build when another object store of the same repository still holds the fix", () => {
     const f = fixture();
     sh(f.root, "git clone -q --mirror " + f.repo + " " + join(f.root, "opt", "mirror.git"));
