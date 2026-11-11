@@ -1219,3 +1219,16 @@ describe("settle paths close the run's open sessions, a staged none stop refuses
   });
 });
 
+
+describe("the driver's lease size", () => {
+  // Value: protects=a stage's --cap-usd; fails_when=serveStages ignores amount_micros, or a caller that passes none stops reserving the item's cap left.
+  test("amount_micros caps each stage's lease; without it each lease reserves its item's cap left", async () => {
+    const w = world({ "i-none": 229, "i-pe": 572 });
+    const served = await w.serve([NONE, PE], { amount_micros: 100 * D });
+    expect(served.stages.map((s) => s.reserved_micros)).toEqual([100 * D, 100 * D]);
+    expect(await served.stop()).toBe(0);
+    const again = await w.serve([NONE, PE]);
+    expect(again.stages.map((s) => s.reserved_micros)).toEqual([229 * D, 572 * D]);
+    expect(await again.stop()).toBe(0);
+  });
+});

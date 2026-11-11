@@ -77,8 +77,12 @@ export function pilotLine(r: PilotReading): PilotDecision {
 // ---------------------------------------------------------------------------------------------------------------------
 // Exposure (section 7).
 
-/** The detector's exposed share over the sessions given; a session with no exposure reading counts as not exposed. */
-export const exposureShare = (rs: ReviewRecord[]): number | null => (rs.length ? rs.filter((r) => r.exposed === true).length / rs.length : null);
+/** The detector's exposed share over the sessions given. A session that ended in a gap counts as neither exposed nor
+ * unexposed and is left out of both counts; any other session with no exposure reading counts as not exposed. */
+export function exposureShare(rs: ReviewRecord[]): number | null {
+  const read = rs.filter((r) => !isGap(r));
+  return read.length ? read.filter((r) => r.exposed === true).length / read.length : null;
+}
 
 export interface GateArm {
   arm: SkillArm;
@@ -120,7 +124,7 @@ export function exposureGate(smoke: ReviewRecord[]): GateResult {
 
 export interface Interim {
   stop: boolean;
-  /** Exposure over the first 24 sessions, or null before 24 have run. */
+  /** Exposure over the first 24 sessions, or null before 24 have run or when all 24 ended in gaps. */
   exposure: number | null;
   line: string | null;
 }
@@ -134,8 +138,8 @@ export const finalUntested = (e: number | null) => e === null || at(e) < FROZEN.
 export function interimCheck(arm: SkillArm, reviewer: Reviewer, sessions: ReviewRecord[]): Interim {
   const I = FROZEN.exposure.interim;
   if (sessions.length < I.after) return { stop: false, exposure: null, line: null };
-  const e = exposureShare(sessions.slice(0, I.after))!;
-  if (!interimStops(e)) return { stop: false, exposure: e, line: null };
+  const e = exposureShare(sessions.slice(0, I.after));
+  if (e === null || !interimStops(e)) return { stop: false, exposure: e, line: null };
   return { stop: true, exposure: e, line: "E_EB_EXPOSURE_STOP arm " + arm + " on " + reviewer + ": exposure " + lvl(e) + " after " + I.after + " sessions is under " + I.min.toFixed(2) + "; the arm stops and its leases settle, the pooled primary reads untested, the other arms go on" };
 }
 

@@ -7,7 +7,7 @@
 // in every merged run and passes in every fixed run. A missing name or a compile error on the merged tree is not a
 // catch: the test has to run against the real code and see the bug. The share of real trees on which the build's own
 // tests compiled and ran prints beside it.
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { planTransplant, type Change } from "../outcome-skills/pfchecks/transplant.ts";
@@ -82,9 +82,14 @@ export function splitBuild(unitDir: string, eb: EbTask, patch: string): BuildSpl
     for (const c of out.changes) {
       if (c.status === "D" || inInstallDir(c.path)) continue;
       const group = groupOf(eb, c.path);
+      if (!lstatSync(join(dir, c.path)).isFile()) {
+        out.drops.push({ code: "E_EB_TRANSPLANT", unit: eb.unit.id, step: "split:" + c.path, cls: "not_a_regular_file" });
+        continue;
+      }
       const text = readFileSync(join(dir, c.path), "utf8");
       if (tests.has(c.path)) {
         if (group !== null) out.tests.push({ path: c.path, text, group });
+        else out.drops.push({ code: "E_EB_TRANSPLANT", unit: eb.unit.id, step: "split:" + c.path, cls: "no_runner_group" });
         continue;
       }
       const eco = ecoOfFile(c.path);

@@ -22,7 +22,7 @@ import { analyze, compatibility, functional, holm, isGap, passes, primary, reach
 import { agentGuards, assertComplete, assertNoHistory, buildMounts, buildPrompt, buildRegistry, checkMounts, loadCell, runBuildCell, runSessionCell, saveCell, stripTree } from "./build-stage.ts";
 import { EbError } from "./errors.ts";
 import { FROZEN } from "./frozen.ts";
-import { exposureGate, finalUntested, gateState, interimCheck, interimStops, pilotLine, pilotReading, recountGate, type GateState, type PilotReading } from "./gates.ts";
+import { exposureGate, exposureShare, finalUntested, gateState, interimCheck, interimStops, pilotLine, pilotReading, recountGate, type GateState, type PilotReading } from "./gates.ts";
 import { EB_RUN, ITEMS, leaseItem, reproject, settleItem } from "./ledger.ts";
 import { installCommand, prepareReviewTree, reviewArmSpec } from "./review-stage.ts";
 import { interimRun, pipelineCase, SIDECAR_CASES, sidecarCase } from "./dryrun-pipeline.ts";
@@ -230,6 +230,11 @@ function ownCases(): Record<string, Case> {
       return "16 of 24 " + (a.stop ? "stops" : "goes on") + ", 17 of 24 " + (b.stop ? "stops" : "goes on") + ", 23 sessions " + (c.exposure === null ? "no reading yet" : "read") + "; " + a.line;
     },
     "final exposure 0.79 and 0.80": () => "0.79 " + (finalUntested(0.79) ? "untested" : "tested") + "; 0.80 " + (finalUntested(0.8) ? "untested" : "tested"),
+    "exposure leaves gap sessions out": () => {
+      const s = Array.from({ length: 24 }, (_, i) => review("u" + i, "precut", "opus", 1, i < 16 ? true : null, i < 16 ? {} : { outcome: "infra_gap" }));
+      const i = interimCheck("precut", "opus", s);
+      return "16 exposed and 8 gaps of 24: " + (i.stop ? "stops" : "goes on") + " at " + i.exposure!.toFixed(3) + ", final " + exposureShare(s)!.toFixed(3);
+    },
     "gate state interim stop makes pooled untested": () => {
       const g = exposureGate(SKILL_ARMS.flatMap((arm) => [1, 2, 3, 4, 5, 6].map((i) => review("cal", arm, "opus", i, true))));
       const comp = [...SKILL_ARMS.flatMap((arm) => Array.from({ length: 24 }, (_, i) => review("u" + i, arm, "opus", 1, arm === "engphase" ? i < 16 : true)))];
@@ -544,6 +549,7 @@ export const EXPECTED: Record<string, string> = {
   "interim 0.69 and 0.70": "0.69 stops; 0.70 goes on; in run order, 16 of 24: ran 1, stopped and recorded (2 stop lines), a resume ran 0; 17 of 24: ran 2, went on",
   "interim after 24 sessions": "16 of 24 stops, 17 of 24 goes on, 23 sessions no reading yet; E_EB_EXPOSURE_STOP arm precut on opus: exposure 0.667 after 24 sessions is under 0.70; the arm stops and its leases settle, the pooled primary reads untested, the other arms go on",
   "final exposure 0.79 and 0.80": "0.79 untested; 0.80 tested",
+  "exposure leaves gap sessions out": "16 exposed and 8 gaps of 24: goes on at 1.000, final 1.000",
   "gate state interim stop makes pooled untested": "members precut+engphase+candidate, engphase stopped true, final 0.667",
   "tools 89% and 90% of trees": "0.89 not reported; 0.90 reported",
   "sequence stops at each test":

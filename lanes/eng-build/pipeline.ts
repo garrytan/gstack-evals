@@ -23,7 +23,7 @@ import { assertComplete, cellId, loadCell, runBuildCell, saveCell, type BuildSes
 import { assembleBundle, bundleParts, writeBundle, type Bundle, type ReviewOutputs } from "./bundle.ts";
 import { catchBuild } from "./catch.ts";
 import { coverageBuild } from "./coverage.ts";
-import { fail } from "./errors.ts";
+import { EbError, fail } from "./errors.ts";
 import { interimCheck } from "./gates.ts";
 import { itemOf, leaseItem, settleItem } from "./ledger.ts";
 import { fixOnlyNames, noteRequest, writeNote, type ModelCall } from "./note.ts";
@@ -165,7 +165,18 @@ export async function buildUnits(o: { specs: { spec: UnitSpec; repo: string }[];
       u = { dir, repo, spec, unit: readUnit(dir).eb.unit };
       o.log?.("unit " + spec.id + ": read back from " + dir);
     } else {
-      const r = o.build(spec, repo, dir, { work: o.work, labels: o.labels, seed: o.seed });
+      let r: BuildOutcome;
+      try {
+        r = o.build(spec, repo, dir, { work: o.work, labels: o.labels, seed: o.seed });
+      } catch (error) {
+        if (!(error instanceof EbError) || (error.code !== "E_EB_NO_RECIPE" && error.code !== "E_EB_IMAGE")) throw error;
+        const m = /step=(\S+) class=([^\s:]+)/.exec(error.message);
+        built = { qualifies: false, drops: [{ code: error.code, step: m?.[1] ?? "build", cls: m?.[2] ?? "unit_rejected", cases: 0 }], gate: null };
+        mkdirSync(dir, { recursive: true });
+        writeJson(join(dir, ADMISSION_FILE), built);
+        dropped(spec.id, built.drops);
+        continue;
+      }
       built = { qualifies: r.qualifies, drops: [...(r.drop ? [r.drop] : []), ...r.eb.drops], gate: null };
       if (!r.qualifies) {
         mkdirSync(r.dir, { recursive: true });

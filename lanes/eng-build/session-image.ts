@@ -35,7 +35,8 @@ export const DEPS_FILE = "/opt/eb/deps";
  * .pnp.cjs and .pnp.loader.mjs, and .yarn (or, when .yarn holds tracked files such as a committed release, each of its
  * untracked children, such as cache, unplugged and install-state.gz). Then it points every editable Python install
  * at R: each __editable__ finder, .pth and .egg-link file in a site-packages or dist-packages folder that names T gets
- * T's paths rewritten to R, so a builder imports its own edits at /work/repo. EB_T, EB_R, EB_D and EB_SITE override the
+ * T's paths rewritten to R, so a builder imports its own edits at /work/repo. It also deletes every CLAUDE.md,
+ * CLAUDE.local.md, AGENTS.md and .claude inside the copied dependency folders, which the tree's strip rule never reaches. EB_T, EB_R, EB_D and EB_SITE override the
  * paths for the keyless test.
  */
 export const DEPS_SCRIPT = [
@@ -54,6 +55,7 @@ export const DEPS_SCRIPT = [
   "  fi",
   'done < "$D/found"',
   'rm -f "$D/found"',
+  'cut -c3- "$D/deps" | while IFS= read -r p; do if [ -d "$R/$p" ]; then find "$R/$p" \\( -name CLAUDE.md -o -name CLAUDE.local.md -o -name AGENTS.md -o -name .claude \\) -prune -exec rm -rf {} +; fi; done',
   "find \"$SITE\" -xdev \\( -path /proc -o -path /sys -o -path /dev -o -path \"$T\" -o -path \"$R\" \\) -prune -o -type f \\( -name '__editable__*' -o -name '*.pth' -o -name '*.egg-link' \\) -path '*-packages/*' -print | LC_ALL=C sort > \"$D/site\"",
   'while IFS= read -r f; do',
   '  if grep -qF "$T" "$f"; then sed -i -e "s#$T\\([^A-Za-z0-9_.-]\\)#$R\\1#g" -e "s#$T\\$#$R#" "$f"; echo "$f" >> "$D/editable"; fi',

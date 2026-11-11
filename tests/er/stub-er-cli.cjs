@@ -33,7 +33,7 @@ function play() {
   out({ type: "assistant", message: { id: "m" + n, type: "message", role: "assistant", model: "stub", content: t.content, stop_reason: "end_turn", usage }, parent_tool_use_id: null, session_id: "s", uuid: "a" + n });
   if (!stopIds.length) return result("success");
   pending = "stub-" + n;
-  out({ type: "control_request", request_id: pending, request: { subtype: "hook_callback", callback_id: stopIds[0], input: { hook_event_name: "Stop", stop_hook_active: n > 1, session_id: "s", transcript_path: "", cwd: process.cwd() } } });
+  out({ type: "control_request", request_id: pending, request: { subtype: "hook_callback", callback_id: stopIds[0], input: { hook_event_name: "Stop", stop_hook_active: n > 1, session_id: "s", transcript_path: "", cwd: process.cwd(), last_assistant_message: (t.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n") } } });
 }
 rl.on("line", (line) => {
   let m;

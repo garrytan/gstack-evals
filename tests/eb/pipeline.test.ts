@@ -300,3 +300,20 @@ describe.skipIf(process.env.GSTACK_EVALS_DOCKER !== "1")("the grader in Docker (
     expect(r.coverage).toBe(0);
   }, 1_800_000);
 });
+
+describe("a unit the builder rejects", () => {
+  // Value: protects=the unit stage's batch; fails_when=a routine unit rejection (no recipe, a failed image) throws out of buildUnits and ends the batch before later units or the admission records.
+  test("an expected rejection is recorded as an admission drop and the batch goes on; any other throw still stops it", async () => {
+    const fx = goRepo(join(fresh(), "repo"));
+    const other = { ...fx.spec, id: fx.spec.id + "-b" };
+    const out = fresh();
+    const lines: string[] = [];
+    let calls = 0;
+    const kept = await buildUnits({ specs: [{ spec: fx.spec, repo: fx.repo }, { spec: other, repo: fx.repo }], out, work: fresh(), labels: join(fresh(), "labels.json"), seed: 1, build: (_s, _r, dir) => (calls++ === 0 ? (() => { throw new EbError("E_EB_NO_RECIPE", "u step=recipe class=bun-test: no frozen recipe"); })() : ({ qualifies: false, dir, eb: { unit: fixtureUnit("ebgo"), drops: [] } } as unknown as BuildOutcome)), log: (l) => lines.push(l) });
+    expect([kept.length, calls]).toEqual([0, 2]);
+    expect(lines.filter((l) => l.startsWith("E_EB_NO_RECIPE"))).toEqual(["E_EB_NO_RECIPE unit " + fx.spec.id + ": recipe (bun-test)"]);
+    expect(JSON.parse(readFileSync(join(out, fx.spec.id.replace(/[^A-Za-z0-9._-]/g, "_"), ADMISSION_FILE), "utf8"))).toEqual({ qualifies: false, drops: [{ code: "E_EB_NO_RECIPE", step: "recipe", cls: "bun-test", cases: 0 }], gate: null });
+    const fatal = buildUnits({ specs: [{ spec: fx.spec, repo: fx.repo }], out: fresh(), work: fresh(), labels: join(fresh(), "labels.json"), seed: 1, build: () => { throw new EbError("E_EB_PRODUCT_HASH", "changed"); } });
+    expect(await fatal.then(() => "ok", (e: EbError) => e.code)).toBe("E_EB_PRODUCT_HASH");
+  });
+});

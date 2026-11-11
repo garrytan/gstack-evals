@@ -11,6 +11,7 @@ import { join, posix } from "node:path";
 import { BACKGROUND_WAIT_MS } from "../../src/adapters/claude-code/driver.ts";
 import { hostDriver } from "../../src/adapters/host.ts";
 import { openLocalLedger } from "../../src/runner/ledger/local.ts";
+import { LedgerError } from "../../src/runner/ledger/record.ts";
 import { ledgerPath, recordPath } from "../../src/runner/ledger/paths.ts";
 import type { ResolvedArms } from "../../src/skill-eval/cli/arms.ts";
 import { DEFAULT_POLICY, loadPolicy, providerOf, type LoadedPolicy } from "../../src/skill-eval/cli/policy.ts";
@@ -26,7 +27,7 @@ import { isSkillArm, REVIEW_SESSION } from "./arms.ts";
 import { armName, BUILD_MODEL, buildMounts, buildRegistry, checkMounts, preflight, prepareTree, REPO_DIR, type BuildSession } from "./build-stage.ts";
 import { repoEdits } from "./bundle.ts";
 import { trialTask } from "./contain.ts";
-import { fail } from "./errors.ts";
+import { EbError, fail } from "./errors.ts";
 import { EB_BUILD_SKILL, EB_RUN } from "./ledger.ts";
 import { NOTE_MODELS, type ModelCall } from "./note.ts";
 import { reviewArmSpec, type AttemptEnd } from "./review-stage.ts";
@@ -48,7 +49,7 @@ export const NOTE_MAX_TOKENS = 4000;
 /** Notes: the meter opens the item's lease, and each role's call goes through its proxy. */
 export function noteLauncher(o: { out: string; cacheDir: string; env?: Record<string, string | undefined> }): Launcher<ModelCall> {
   return async (p) => {
-    const meter = await openMeter({ item: p.item, runId: EB_RUN, out: o.out, cacheDir: o.cacheDir, maxOutputTokens: NOTE_MAX_TOKENS, record: p.record, ledger: p.ledger, env: o.env });
+    const meter = await openMeter({ item: p.item, runId: EB_RUN, out: o.out, cacheDir: o.cacheDir, maxOutputTokens: NOTE_MAX_TOKENS, amountMicros: Math.round(p.capUsd * 1_000_000), record: p.record, ledger: p.ledger, env: o.env });
     const key = { writer: "sol", audit: "opus" } as const;
     if (NOTE_MODELS.writer !== "openai/gpt-6.1-sol" || NOTE_MODELS.audit !== "anthropic/claude-opus-5-5") fail("E_USAGE", "note.ts's models moved; update the note launcher's route keys");
     const call: ModelCall = async (role, prompt) => {
@@ -98,18 +99,37 @@ export function reviewLauncher(o: { arms: Exclude<Arm, "none">[]; reviewer: Revi
         return { copy_out: [], gate: { plan: captured.plan !== null, repo_edits: captured.repoEdits } };
       };
       const agent = (rig.driver ?? hostDriver)({ host: "claude", model, provider, proxy: { baseUrl: rig.baseUrl, slot: binding.slot, token: binding.token }, interactive: true, skill, out: join(run, "host"), entry: { user: ER_REC_USER }, freeform: erFreeform, systemPrompt: ER_SYSTEM_PROMPT, maxTurns: REVIEW_SESSION.maxTurns, ...(skillArm ? { sessionKind: "unattended" as const } : {}), disable1mContext: true, capStops: true, backgroundWaitMs: BACKGROUND_WAIT_MS, ...(hook ? { stopHook: hook.onStop } : {}) });
-      const trial = await runTrial({ cell: { model, arm: s.arm, round: 1, trial: s.rep }, task: { id: s.unit.id, prompt: s.prompt }, tasksDir: empty, sandbox, agent, dir: run, timeoutS: REVIEW_SESSION.timeoutS, network: rig.network, seed: s.seed, root: true, gate, copyDirs: [{ from: STATE_ROOT_DIR, to: join(run, "host", "gstack-state") }, { from: ER_COVERAGE_DIR, to: join(run, "host", "plan-coverage") }], ...(skillArm ? {} : { stateRoot: false as const }), ...(s.arm === "engphase" && s.unit.opening?.mounts ? { mounts: s.unit.opening.mounts } : {}) });
-      const meter = await rig.finalize(binding.meter_id);
+      const ran = await finishTrial(() => runTrial({ cell: { model, arm: s.arm, round: 1, trial: s.rep }, task: { id: s.unit.id, prompt: s.prompt }, tasksDir: empty, sandbox, agent, dir: run, timeoutS: REVIEW_SESSION.timeoutS, network: rig.network, seed: s.seed, root: true, gate, copyDirs: [{ from: STATE_ROOT_DIR, to: join(run, "host", "gstack-state") }, { from: ER_COVERAGE_DIR, to: join(run, "host", "plan-coverage") }], ...(skillArm ? {} : { stateRoot: false as const }), ...(s.arm === "engphase" && s.unit.opening?.mounts ? { mounts: s.unit.opening.mounts } : {}) }), () => rig.finalize(binding.meter_id));
+      if (ran.trial === null) {
+        o.log?.("cell " + s.cell + " a" + s.attempt + ": the trial threw " + ran.error + ", so the attempt ends infra (one rerun, then a gap)");
+        return { end: "infra", costUsd: ran.micros / 1_000_000, result: { dir: run, outputs: { plan: null, transcript: "", stateRoot: null, coverage: null }, repoEdits: 0, blocks: hook?.blocks() ?? 0 } };
+      }
+      const trial = ran.trial;
       const transcriptFile = join(run, "host", "transcript.ndjson");
       const transcript = existsSync(transcriptFile) ? readFileSync(transcriptFile, "utf8") : null;
       const { end, why } = reviewEnd(erOutcome(trial.record.termination, transcript).outcome, s.cell);
       if (why) o.log?.("cell " + s.cell + " a" + s.attempt + ": " + why);
       const kept = (captured as ReviewCapture | null) ?? fail("E_USAGE", "cell " + s.cell + " a" + s.attempt + ": the trial ended before its work tree was read");
       const dirOf = (d: string) => (existsSync(d) ? d : null);
-      return { end, costUsd: meter.micros / 1_000_000, result: { dir: run, outputs: { plan: kept.plan, transcript: transcript ?? "", stateRoot: skillArm ? dirOf(join(run, "host", "gstack-state")) : null, coverage: dirOf(join(run, "host", "plan-coverage")) }, repoEdits: kept.repoEdits, blocks: hook?.blocks() ?? 0 } };
+      return { end, costUsd: ran.micros / 1_000_000, result: { dir: run, outputs: { plan: kept.plan, transcript: transcript ?? "", stateRoot: skillArm ? dirOf(join(run, "host", "gstack-state")) : null, coverage: dirOf(join(run, "host", "plan-coverage")) }, repoEdits: kept.repoEdits, blocks: hook?.blocks() ?? 0 } };
     };
     return { lease_id: rig.recovery?.lease_id ?? "", backend: session, close: async () => void (await rig.close()) };
   };
+}
+
+/** Runs a review attempt's trial and finalizes its meter on every path. A throw from the ledger or this lane, such as a
+ * cap stop, still stops the stage once the meter is final; any other throw, such as the sandbox failing to start, ends
+ * the attempt infra (one rerun, then a gap) with its message. */
+export async function finishTrial<T>(run: () => Promise<T>, finalize: () => Promise<{ micros: number }>): Promise<{ trial: T; micros: number } | { trial: null; error: string; micros: number }> {
+  let trial: T;
+  try {
+    trial = await run();
+  } catch (error) {
+    const { micros } = await finalize();
+    if (error instanceof EbError || error instanceof LedgerError) throw error;
+    return { trial: null, error: (error instanceof Error ? error.name + ": " + error.message : String(error)).slice(0, 300), micros };
+  }
+  return { trial, micros: (await finalize()).micros };
 }
 
 export interface ReviewCapture {
@@ -168,6 +188,14 @@ function findDir(dir: string, name: string): string | null {
 
 /** A Lane B session's end from real_agent's real-summary.json: the outcome driver's end kind (statemachines/session.ts
  * sessionEnd), with every limit scored as is and an upstream or infra end sent to the outcome rule's retry. */
+/** Stops a build attempt that the item's cap or a halt ended: the driver stage ended cap_stop or halted, or real_agent's
+ * session open met the cap (its ledger_cap_stop event). The stage is then incomplete, so the cell is never saved as a gap
+ * and never retried to change a reading. */
+export function buildStop(cell: string, ended: string | null, events: string | null): void {
+  const refused = (events ?? "").split("\n").some((l) => /"event":\s*"ledger_cap_stop"/.test(l));
+  if (ended === "cap_stop" || ended === "halted" || refused) fail("E_EB_CELL_INCOMPLETE", "the driver stopped cell " + cell + " (" + (ended === "cap_stop" || ended === "halted" ? "its stage ended " + ended : "the session open met the cap") + "); the stage is incomplete and is never retried to change a reading");
+}
+
 export function buildEnd(summary: Record<string, any> | null): SessionOutcome {
   const { end } = sessionEnd(summary, !summary);
   return end === "completed" ? "completed" : end === "upstream" ? "upstream_gap" : end === "infra" ? "infra_gap" : "limit";
@@ -219,10 +247,12 @@ export function buildLauncher(o: { arm: Arm | Arm[]; units: Map<string, { dir: s
     const arms = join(o.out, "eb-registry.json");
     mkdirSync(o.out, { recursive: true });
     writeFileSync(arms, JSON.stringify(registry, null, 2) + "\n");
-    const served = await serveStages({ record: p.record, local, run_id: EB_RUN, envelope_host: o.envelopeHost, stages: [{ item: p.item, arm: names[0]!, skills: [EB_BUILD_SKILL] }], host: o.host, dir: join(o.out, "driver"), planned: o.planned, registry, ...o.serve });
+    const served = await serveStages({ record: p.record, local, run_id: EB_RUN, envelope_host: o.envelopeHost, stages: [{ item: p.item, arm: names[0]!, skills: [EB_BUILD_SKILL] }], host: o.host, dir: join(o.out, "driver"), planned: o.planned, registry, amount_micros: Math.round(p.capUsd * 1_000_000), ...o.serve });
     const stage = served.stages[0]!;
+    const stageEnded = async () => ((await (await fetch(served.control + "/status")).json()) as { stages: { lease_id: string; ended: string | null }[] }).stages.find((x) => x.lease_id === stage.lease_id)?.ended ?? null;
     const images = new Map<string, SessionImage>();
     const session: BuildSession = async (s) => {
+      buildStop(s.cell, await stageEnded(), null);
       const unit = o.units.get(s.unit.id) ?? fail("E_USAGE", "no unit folder for " + s.unit.id);
       const { eb } = readUnit(unit.dir);
       const out = join(o.out, "sessions", s.cell.replace(/[^A-Za-z0-9._-]/g, "_"), "a" + s.attempt);
@@ -268,6 +298,7 @@ export function buildLauncher(o: { arm: Arm | Arm[]; units: Map<string, { dir: s
       spawnSync(o.docker ?? "docker", ["run", "--rm", "--network", "none", "--user", "0:0", "-v", tree + ":/eb-tree", "--entrypoint", "chown", img.id, "-R", (process.getuid?.() ?? 1000) + ":" + (process.getgid?.() ?? 1000), "/eb-tree"], { encoding: "utf8", timeout: 300_000 });
       restoreTree(tree, img.deps, img.depFiles);
       const ev = findDir(join(out, "jobs"), "evaluator");
+      buildStop(s.cell, await stageEnded(), ev && existsSync(join(ev, "usersim-events.jsonl")) ? readFileSync(join(ev, "usersim-events.jsonl"), "utf8") : null);
       const summary = ev && existsSync(join(ev, "real-summary.json")) ? (JSON.parse(readFileSync(join(ev, "real-summary.json"), "utf8")) as Record<string, any>) : null;
       const spent = typeof summary?.proxy?.spent_micros === "number" ? summary.proxy.spent_micros / 1_000_000 : 0;
       const outcome = buildEnd(summary);
@@ -277,12 +308,14 @@ export function buildLauncher(o: { arm: Arm | Arm[]; units: Map<string, { dir: s
       lease_id: stage.lease_id,
       backend: session,
       close: async () => {
+        let code = 2;
         try {
-          await served.stop();
+          code = await served.stop();
         } finally {
           local.close();
           if (images.size) spawnSync(o.docker ?? "docker", ["rmi", "-f", "--no-prune", ...[...images.values()].map((i) => i.tag)], { encoding: "utf8", timeout: 120_000 });
         }
+        if (code !== 0) fail("E_EB_CELL_INCOMPLETE", "the build stage's driver ended with exit " + code + " (a stage failed or halted, or a lease stayed open), so the stage is incomplete; read " + join(o.out, "driver") + " before anything else spends");
       },
     };
   };

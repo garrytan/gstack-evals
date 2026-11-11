@@ -18,6 +18,7 @@ import { gradeTrial, type VerdictTask } from "../../src/skill-eval/verdict/grade
 import type { SidecarTask } from "../../src/skill-eval/contract/sidecar.ts";
 import type { TrialRecord } from "../../src/types.ts";
 import { HAS_CLAUDE_CLI, harness, KEYS, type Harness, type Script } from "./harness.ts";
+import { stopTranscript } from "../../src/adapters/claude-code/driver.ts";
 
 let open: Harness[] = [];
 afterEach(() => {
@@ -945,4 +946,13 @@ describe.skipIf(!HAS_CLAUDE_CLI)("GST-734: background work on the real CLI", () 
     expect(refusals.every((l) => l.code === "E_ALLOWANCE")).toBe(true);
     expect(readFileSync(join(h.dir, "host", "transcript.ndjson"), "utf8")).toContain('"parent_tool_use_id":"toolu_rA"');
   }, 240_000);
+});
+
+describe("the Stop hook's transcript", () => {
+  // Value: protects=the exposure reading of a review's final message; fails_when=the Stop hook reads a field the pinned SDK never sends, so the last assistant message is missing from the transcript the hook reads.
+  test("the hook input's last_assistant_message joins the messages as one more assistant message", () => {
+    const lines = stopTranscript([{ type: "user" }], { last_assistant_message: "done" }).trim().split("\n").map((l) => JSON.parse(l));
+    expect(lines).toEqual([{ type: "user" }, { type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "done" }] }, parent_tool_use_id: null }]);
+    expect(stopTranscript([{ type: "user" }], { additionalContext: "done" } as never)).toBe('{"type":"user"}\n');
+  });
 });

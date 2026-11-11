@@ -99,7 +99,7 @@ export function reviewRecord(o: {
   repoEditsDiscarded: number;
   costUsd: number;
 }): ReviewRecord {
-  const exposed = isSkillArm(o.arm) ? erExposure(o.arm, o.evidence).exposed : null;
+  const exposed = isSkillArm(o.arm) && !isGap(o.outcome) ? erExposure(o.arm, o.evidence).exposed : null;
   return {
     unit: o.unit,
     arm: o.arm,

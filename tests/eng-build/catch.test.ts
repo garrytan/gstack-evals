@@ -4,6 +4,13 @@ import { describe, expect, test } from "bun:test";
 import { caught, compiledOn, movesWhole } from "../../lanes/eng-build/catch.ts";
 import { parseGoCover, parseLcov, share } from "../../lanes/eng-build/coverage.ts";
 import type { CaseClass } from "../../lanes/eng-build/types.ts";
+import { spawnSync } from "node:child_process";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { splitBuild } from "../../lanes/eng-build/catch.ts";
+import { overlayTests } from "../../lanes/eng-build/screen.ts";
+import type { EbTask } from "../../lanes/eng-build/unit.ts";
 
 const R = (...c: CaseClass[]) => c;
 
@@ -52,5 +59,78 @@ describe("changed-line coverage", () => {
     ]);
     const hits = new Map([["a.go", new Map([[3, 1], [4, 0], [5, 2]])]]);
     expect(share(changed, hits)).toEqual({ lines: 4, covered: 2 });
+  });
+});
+
+const sh = (cwd: string, args: string[]) => {
+  const r = spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@example.invalid", ...args], { cwd, encoding: "utf8" });
+  if (r.status !== 0) throw new Error(r.stderr);
+  return r.stdout;
+};
+const putFile = (p: string, s: string) => (mkdirSync(join(p, ".."), { recursive: true }), writeFileSync(p, s));
+
+describe("splitting a build's changes", () => {
+  // Value: protects=the catch and coverage grades from what a build's patch adds; fails_when=a symlinked test file is read through its link (outside the tree), or a test file with no runner group vanishes with no drop.
+  test("a symlink is never read and drops; a test file with no runner group drops", () => {
+    const root = mkdtempSync(join(tmpdir(), "eb-split-"));
+    try {
+      const repo = join(root, "repo");
+      putFile(join(repo, "go.mod"), "module calc\n");
+      putFile(join(repo, "calc.go"), "package calc\n");
+      sh(repo, ["init", "-q", "-b", "main"]);
+      sh(repo, ["add", "-A"]);
+      sh(repo, ["commit", "-q", "-m", "base"]);
+      const unit = join(root, "unit");
+      mkdirSync(join(unit, "environment"), { recursive: true });
+      sh(repo, ["bundle", "create", "-q", join(unit, "environment/task.bundle"), "main"]);
+      const work = join(root, "work");
+      sh(root, ["clone", "-q", repo, work]);
+      putFile(join(root, "secret.txt"), "outside\n");
+      symlinkSync(join(root, "secret.txt"), join(work, "calc_test.go"));
+      putFile(join(work, "web/app.test.js"), "test('x', () => {});\n");
+      sh(work, ["add", "-A"]);
+      const patch = sh(work, ["diff", "--cached", "--binary", "HEAD"]);
+      const eb = { unit: { id: "u1" }, groups: [{ eco: "go", projdir: "" }] } as unknown as EbTask;
+      const s = splitBuild(unit, eb, patch);
+      try {
+        expect(lstatSync(join(s.dir, "calc_test.go")).isSymbolicLink()).toBe(true);
+        expect(s.tests).toEqual([]);
+        expect(s.drops.map((d) => d.step + " " + d.cls).sort()).toEqual(["split:calc_test.go not_a_regular_file", "split:web/app.test.js no_runner_group"]);
+      } finally {
+        s.cleanup();
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("the screen's test overlay", () => {
+  // Value: protects=files outside a screened unit's work tree; fails_when=a symlink at a test path or at a folder above it sends the overlay's write or delete outside the tree.
+  test("a symlinked target or parent folder is removed before the write or delete", () => {
+    const root = mkdtempSync(join(tmpdir(), "eb-overlay-"));
+    try {
+      const repo = join(root, "repo");
+      putFile(join(repo, "pkg/a_test.go"), "package pkg\n");
+      putFile(join(repo, "b_test.go"), "package calc\n");
+      sh(repo, ["init", "-q", "-b", "main"]);
+      sh(repo, ["add", "-A"]);
+      sh(repo, ["commit", "-q", "-m", "fix"]);
+      const rev = sh(repo, ["rev-parse", "HEAD"]).trim();
+      const wt = join(root, "wt");
+      const out = join(root, "outside");
+      putFile(join(out, "a_test.go"), "keep\n");
+      putFile(join(out, "target"), "keep\n");
+      putFile(join(out, "gone"), "keep\n");
+      mkdirSync(wt, { recursive: true });
+      symlinkSync(out, join(wt, "pkg"));
+      symlinkSync(join(out, "target"), join(wt, "b_test.go"));
+      symlinkSync(join(out, "gone"), join(wt, "c_test.go"));
+      overlayTests(wt, repo, rev, { whole: ["pkg/a_test.go", "b_test.go"], regions: [], deleted: ["c_test.go"] } as never);
+      expect([readFileSync(join(out, "a_test.go"), "utf8"), readFileSync(join(out, "target"), "utf8"), readFileSync(join(out, "gone"), "utf8")]).toEqual(["keep\n", "keep\n", "keep\n"]);
+      expect([lstatSync(join(wt, "pkg")).isDirectory(), readFileSync(join(wt, "pkg/a_test.go"), "utf8"), readFileSync(join(wt, "b_test.go"), "utf8"), existsSync(join(wt, "c_test.go"))]).toEqual([true, "package pkg\n", "package calc\n", false]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

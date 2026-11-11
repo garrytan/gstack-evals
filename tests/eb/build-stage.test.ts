@@ -2,6 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { agentGuards, buildLimits, buildMounts, buildPrompt, buildRegistry, checkMounts, runSessionCell } from "../../lanes/eng-build/build-stage.ts";
 import { FROZEN } from "../../lanes/eng-build/frozen.ts";
 import type { SessionOutcome } from "../../lanes/eng-build/types.ts";
+import { mkdirSync, mkdtempSync, existsSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { runBuildCell, saveCell, loadCell } from "../../lanes/eng-build/build-stage.ts";
+import type { GradedBuild } from "../../lanes/eng-build/types.ts";
 
 describe("build stage", () => {
   test("the no-review prompt drops the review line, and both end with the note", () => {
@@ -32,5 +37,33 @@ describe("build stage", () => {
     expect((await run(["upstream_gap", "completed"])).gap).toBe(false);
     expect((await run(["upstream_gap", "upstream_gap"])).line).toStartWith("E_EB_GAP cell c:");
     expect((await run(["infra_gap", "upstream_gap", "infra_gap"])).attempts.length).toBe(3);
+  });
+});
+
+describe("a build cell with no review record", () => {
+  // Value: protects=the build stage's gap counts; fails_when=a reviewed arm's missing review record is built as an infra gap and cached, so a resume never runs the review.
+  test("stops before any session or cache instead of recording a gap", async () => {
+    let ran = 0;
+    const cell = runBuildCell({ unit: { id: "u1" } as never, arm: "precut", reviewer: "opus", rep: 1, pilot: false, note: "", review: null, session: async () => (ran++, { outcome: "completed", tree: null, costUsd: 0 }), grader: async () => { throw new Error("graded"); } });
+    expect(await cell.then(() => "ok", (e: Error & { code?: string }) => e.code + " " + e.message)).toStartWith("E_USAGE cell u1:precut:opus:1: its review record is missing");
+    expect(ran).toBe(0);
+  });
+});
+
+describe("the cell cache's write order", () => {
+  // Value: protects=--resume after a crash mid-write; fails_when=a cell lands before its digest, so a crash between them leaves a cell every resume refuses as stale.
+  test("the digest lands before the cell, so a failed digest write leaves no cell", () => {
+    const dir = mkdtempSync(join(tmpdir(), "eb-cell-"));
+    try {
+      const b = { unit: "u1", arm: "none", reviewer: null, rep: 1, pilot: false, outcome: "completed" } as unknown as GradedBuild;
+      mkdirSync(join(dir, "u1_none_-_1.sha256"));
+      expect(() => saveCell(dir, b)).toThrow();
+      expect(existsSync(join(dir, "u1_none_-_1.json"))).toBe(false);
+      rmSync(join(dir, "u1_none_-_1.sha256"), { recursive: true });
+      expect(loadCell(dir, "u1_none_-_1")).toBeNull();
+      expect(loadCell(dir, saveCell(dir, b))).toEqual(b);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

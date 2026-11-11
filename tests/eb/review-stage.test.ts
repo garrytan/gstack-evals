@@ -62,3 +62,11 @@ describe("review record", () => {
     expect(reviewRecord({ ...base, arm: "plain", evidence: ev(nd(say(review()))), blocks: 0 })).toMatchObject({ arm: "plain", exposed: null, exposedBeforeBlock: null });
   });
 });
+
+describe("a gap review's exposure", () => {
+  // Value: protects=the exposure shares' gap rule; fails_when=a skill-arm review that ended in a gap carries an exposure reading.
+  test("a skill-arm review that ended in a gap has no exposure reading", () => {
+    const r = reviewRecord({ unit: "u1", arm: "precut", reviewer: "opus", rep: 1, outcome: "infra_gap", evidence: { transcript: "", stateRoot: null, coverage: null, opening: null }, blocks: 0, bundle: { words: 0, truncated: false }, repoEditsDiscarded: 0, costUsd: 0 });
+    expect([r.exposed, r.exposedBeforeBlock]).toEqual([null, null]);
+  });
+});

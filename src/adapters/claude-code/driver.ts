@@ -334,6 +334,14 @@ export interface ClaudeCodeDriver extends AgentDriver {
   sim: UserSim | null;
 }
 
+/** The Stop hook's transcript: the messages so far, plus the hook input's last_assistant_message (the pinned SDK's
+ * StopHookInput field) as one more assistant message, since the CLI can fire Stop before the SDK yields that message. */
+export function stopTranscript(messages: readonly unknown[], input: { last_assistant_message?: unknown } | null | undefined): string {
+  const text = input?.last_assistant_message;
+  const last = typeof text === "string" && text ? [{ type: "assistant", message: { role: "assistant", content: [{ type: "text", text }] }, parent_tool_use_id: null }] : [];
+  return [...messages, ...last].map((m) => JSON.stringify(m)).join("\n") + "\n";
+}
+
 export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
   const stderrLog = join(o.out, "cli-stderr.log");
   const log = (line: string) => {
@@ -521,9 +529,8 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
             canUseTool,
             hooks: {
               PreToolUse: [{ hooks: [async (_input: unknown, toolUseID: string | undefined) => (toolUseID && hooked.add(toolUseID), ROUTE_TO_CAN_USE_TOOL)] }],
-              ...(o.stopHook ? { Stop: [{ hooks: [async (input: { additionalContext?: unknown }) => {
-                const last = typeof input?.additionalContext === "string" && input.additionalContext ? [{ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: input.additionalContext }] }, parent_tool_use_id: null }] : [];
-                const reason = o.stopHook!([...messages, ...last].map((m) => JSON.stringify(m)).join("\n") + "\n");
+              ...(o.stopHook ? { Stop: [{ hooks: [async (input: { last_assistant_message?: unknown }) => {
+                const reason = o.stopHook!(stopTranscript(messages, input));
                 return reason === null ? {} : { decision: "block", reason };
               }] }] } : {}),
             },

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { EbError } from "../../lanes/eng-build/errors.ts";
 import { exposureGate, gateState, interimCheck, pilotLine, recountGate } from "../../lanes/eng-build/gates.ts";
 import type { ReviewRecord, SkillArm } from "../../lanes/eng-build/types.ts";
+import { exposureShare } from "../../lanes/eng-build/gates.ts";
 
 const rec = (arm: SkillArm, reviewer: ReviewRecord["reviewer"], i: number, exposed: boolean): ReviewRecord => ({ unit: "u" + i, arm, reviewer, rep: 1, outcome: "completed", exposed, exposedBeforeBlock: exposed, blocks: 0, bundleWords: 100, truncated: false, repoEditsDiscarded: 0, costUsd: 1 });
 
@@ -38,5 +39,17 @@ describe("exposure", () => {
     const st = gateState(g, "opus", [rec("candidate", "opus", 1, true), rec("candidate", "opus", 2, false)]);
     expect(st.final.candidate).toBe(0.5);
     expect(st.final.precut).toBeNull();
+  });
+});
+
+describe("gap sessions and the exposure shares", () => {
+  const gap = (i: number): ReviewRecord => ({ ...rec("precut", "opus", i, false), outcome: "infra_gap", exposed: null, exposedBeforeBlock: null });
+  // Value: protects=the 0.70 interim stop and the 0.80 line; fails_when=a gap session counts as unexposed, so infrastructure trouble stops an arm or reads it untested.
+  test("a gap counts as neither exposed nor unexposed, at the interim and at the end", () => {
+    const rs = [...Array.from({ length: 16 }, (_, i) => rec("precut", "opus", i, true)), ...Array.from({ length: 8 }, (_, i) => gap(16 + i))];
+    expect(exposureShare(rs)).toBe(1);
+    expect(interimCheck("precut", "opus", rs)).toEqual({ stop: false, exposure: 1, line: null });
+    expect(interimCheck("precut", "opus", Array.from({ length: 24 }, (_, i) => gap(i)))).toEqual({ stop: false, exposure: null, line: null });
+    expect(exposureShare([rec("precut", "opus", 1, true), rec("precut", "opus", 2, false), gap(3)])).toBe(0.5);
   });
 });

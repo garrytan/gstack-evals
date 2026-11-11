@@ -68,6 +68,8 @@ export interface ServeOptions {
   reruns?: number;
   control_port?: number;
   ttl_ms?: number;
+  /** The most each stage's lease reserves, in micros; without it a lease reserves what the item's cap has left. */
+  amount_micros?: number;
   /** Added to an arm's wall limit for a slot's deadline; 120 s by default. */
   deadline_grace_ms?: number;
   /** PF stages' task-turn allowance table: items.ts ALLOWANCE by default, or admission.ts costReading's doubled one. */
@@ -524,7 +526,7 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
   record({ event: "launch", nonce: holder.nonce });
   for (const [i, { st }] of plans.entries()) {
     try {
-      const lease = openLease(o.record, o.local, { item: st.item, run_id: o.run_id, machine_id: machine, holder, ttl_ms: ttl, warn, requireAdmission: o.requireAdmission, ...(o.now ? { now: new Date(now()) } : {}) });
+      const lease = openLease(o.record, o.local, { item: st.item, run_id: o.run_id, machine_id: machine, holder, ttl_ms: ttl, amount_micros: o.amount_micros, warn, requireAdmission: o.requireAdmission, ...(o.now ? { now: new Date(now()) } : {}) });
       opened.push(lease.lease_id);
       const journal = join(dir, lease.lease_id + ".journal.ndjson");
       const sm = smStage(st);

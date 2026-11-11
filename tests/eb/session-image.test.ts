@@ -46,7 +46,7 @@ describe("build session image", () => {
       git(["init", "-q"]);
       git(["add", "-A"]);
       git(["commit", "-q", "-m", "base"]);
-      for (const p of [".pnp.cjs", ".pnp.loader.mjs", ".yarn/cache/left-pad.zip", ".yarn/install-state.gz", "node_modules/.bin/x", "web/node_modules/y/index.js"]) put(join(T, p));
+      for (const p of [".pnp.cjs", ".pnp.loader.mjs", ".yarn/cache/left-pad.zip", ".yarn/install-state.gz", "node_modules/.bin/x", "web/node_modules/y/index.js", "node_modules/z/CLAUDE.md", "node_modules/z/AGENTS.md", "node_modules/z/CLAUDE.local.md", "node_modules/z/.claude/settings.json", "web/node_modules/y/CLAUDE.md"]) put(join(T, p));
       const site = join(dir, "site/lib/python3.12/site-packages");
       put(join(site, "__editable___pkg_0_1_finder.py"), "MAPPING = {'pkg': '" + T + "/src/pkg'}\n");
       put(join(site, "__editable__.flat-0.1.pth"), T + "\n");
@@ -57,6 +57,8 @@ describe("build session image", () => {
       expect(readFileSync(join(dir, "eb/deps"), "utf8").split("\n").filter(Boolean)).toEqual(["f .pnp.cjs", "f .pnp.loader.mjs", "d .yarn/cache", "f .yarn/install-state.gz", "d node_modules", "d web/node_modules"]);
       expect(existsSync(join(R, ".yarn/cache/left-pad.zip")) && existsSync(join(R, ".pnp.cjs")) && existsSync(join(R, "web/node_modules/y/index.js"))).toBe(true);
       expect(existsSync(join(R, ".yarn/releases"))).toBe(false);
+      expect(["node_modules/z/CLAUDE.md", "node_modules/z/AGENTS.md", "node_modules/z/CLAUDE.local.md", "node_modules/z/.claude", "web/node_modules/y/CLAUDE.md"].filter((p) => existsSync(join(R, p)))).toEqual([]);
+      expect(existsSync(join(R, "node_modules/.bin/x"))).toBe(true);
       expect(readFileSync(join(site, "__editable___pkg_0_1_finder.py"), "utf8")).toBe("MAPPING = {'pkg': '" + R + "/src/pkg'}\n");
       expect(readFileSync(join(site, "__editable__.flat-0.1.pth"), "utf8")).toBe(R + "\n");
       expect(readFileSync(join(site, "other.pth"), "utf8")).toBe("/usr/lib/other\n");

@@ -207,13 +207,15 @@ export const cellId = (unit: string, arm: Arm, reviewer: Reviewer | null, rep: n
 
 const empty = (): GraderResult => ({ functional: [], aftermath: {}, anchors: {}, tCases: [], catches: {}, coverage: null, mutation: null, testLinesAdded: 0 });
 
-/** One build cell: a reviewed arm whose review ended in a gap is a gap and never builds; otherwise the session rules, then the grader. */
+/** One build cell: a reviewed arm with no review record stops, one whose review ended in a gap is a gap and never builds;
+ * otherwise the session rules, then the grader. */
 export async function runBuildCell(o: { unit: BuildUnit; arm: Arm; reviewer: Reviewer | null; rep: number; pilot: boolean; note: string; review: ReviewRecord | null; session: BuildSession; grader: Grader; log?: (line: string) => void }): Promise<GradedBuild> {
   const cell = cellId(o.unit.id, o.arm, o.reviewer, o.rep);
   const meta = { unit: o.unit.id, arm: o.arm, reviewer: o.reviewer, rep: o.rep, pilot: o.pilot };
-  if (o.arm !== "none" && (o.review === null || o.review.outcome === "upstream_gap" || o.review.outcome === "infra_gap")) {
-    o.log?.("E_EB_GAP cell " + cell + ": its review ended " + (o.review?.outcome ?? "missing") + ", so the build is not run; recorded as a gap");
-    return { ...meta, outcome: o.review?.outcome ?? "infra_gap", ...empty(), costUsd: 0 };
+  if (o.arm !== "none" && o.review === null) fail("E_USAGE", "cell " + cell + ": its review record is missing, so nothing is built or cached for it; run the review stage for this cell, then --resume");
+  if (o.arm !== "none" && (o.review!.outcome === "upstream_gap" || o.review!.outcome === "infra_gap")) {
+    o.log?.("E_EB_GAP cell " + cell + ": its review ended " + o.review!.outcome + ", so the build is not run; recorded as a gap");
+    return { ...meta, outcome: o.review!.outcome, ...empty(), costUsd: 0 };
   }
   const prompt = buildPrompt(o.arm, o.note);
   let cost = 0;
@@ -237,14 +239,16 @@ export async function runBuildCell(o: { unit: BuildUnit; arm: Arm; reviewer: Rev
 
 const digest = (text: string) => createHash("sha256").update(text).digest("hex");
 
-/** Writes a finished cell and its digest. */
+/** Writes a finished cell's digest, then the cell, each through a rename, so a crash leaves either no cell (rerun on
+ * --resume) or a cell that matches its digest. */
 export function saveCell(dir: string, b: GradedBuild): string {
   mkdirSync(dir, { recursive: true });
   const key = cellId(b.unit, b.arm, b.reviewer, b.rep).replace(/[^A-Za-z0-9._-]/g, "_");
   const text = JSON.stringify(b);
+  writeFileSync(join(dir, key + ".sha256.tmp"), digest(text) + "\n");
+  renameSync(join(dir, key + ".sha256.tmp"), join(dir, key + ".sha256"));
   writeFileSync(join(dir, key + ".json.tmp"), text);
   renameSync(join(dir, key + ".json.tmp"), join(dir, key + ".json"));
-  writeFileSync(join(dir, key + ".sha256"), digest(text) + "\n");
   return key;
 }
 

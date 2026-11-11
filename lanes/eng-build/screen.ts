@@ -6,7 +6,7 @@
 // sweep (removeLabelled) clears whatever a dead run left. One run per tree: the build's 3-run rule settles flaky cases.
 // Prints and returns counts only, never repository content.
 import { randomBytes } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { git, gitRun, showFile } from "../real-outcome/mine/git.ts";
 import { docker } from "../real-outcome/task/docker.ts";
@@ -191,21 +191,7 @@ export function screenCandidate(c: Candidate, repo: string, o: ScreenOptions): S
       }
       return out;
     };
-    const overlay = (rev: string, tc: ReturnType<typeof testChanges>): string[] => {
-      const added: string[] = [];
-      for (const p of tc.deleted) rmSync(join(wt, p), { force: true });
-      for (const p of tc.whole) {
-        const text = Bun.spawnSync(["git", "cat-file", "blob", rev + ":" + p], { cwd: repo }).stdout as Buffer;
-        if (!existsSync(join(wt, p))) added.push(p);
-        mkdirSync(dirname(join(wt, p)), { recursive: true });
-        writeFileSync(join(wt, p), text);
-      }
-      for (const p of tc.regions) {
-        const tree = existsSync(join(wt, p)) ? readFileSync(join(wt, p), "utf8") : null;
-        writeFileSync(join(wt, p), splice(p, tree, showFile(repo, rev, p)!));
-      }
-      return added;
-    };
+    const overlay = (rev: string, tc: ReturnType<typeof testChanges>) => overlayTests(wt, repo, rev, tc);
     const restoreTree = (sha: string, added: string[]) => {
       for (const p of added) rmSync(join(wt, p), { force: true });
       checkout(sha);
@@ -290,6 +276,37 @@ export function screenCandidate(c: Candidate, repo: string, o: ScreenOptions): S
 }
 
 /** Removes every container and volume the screen labelled, for a run that died before its own cleanup. */
+/** Lays a commit's test changes over the work tree wt: deletions, whole files and spliced regions. A symlink at a target
+ * path or at any folder above it inside wt is removed first, so no write or delete follows a link out of the tree.
+ * Returns the paths it added. */
+export function overlayTests(wt: string, repo: string, rev: string, tc: ReturnType<typeof testChanges>): string[] {
+  const unlink = (p: string) => {
+    const parts = p.split("/");
+    for (let i = 1; i <= parts.length; i++) {
+      const at = join(wt, ...parts.slice(0, i));
+      if (lstatSync(at, { throwIfNoEntry: false })?.isSymbolicLink()) unlinkSync(at);
+    }
+  };
+  const added: string[] = [];
+  for (const p of tc.deleted) {
+    unlink(p);
+    rmSync(join(wt, p), { force: true });
+  }
+  for (const p of tc.whole) {
+    unlink(p);
+    const text = Bun.spawnSync(["git", "cat-file", "blob", rev + ":" + p], { cwd: repo }).stdout as Buffer;
+    if (!existsSync(join(wt, p))) added.push(p);
+    mkdirSync(dirname(join(wt, p)), { recursive: true });
+    writeFileSync(join(wt, p), text);
+  }
+  for (const p of tc.regions) {
+    unlink(p);
+    const tree = existsSync(join(wt, p)) ? readFileSync(join(wt, p), "utf8") : null;
+    writeFileSync(join(wt, p), splice(p, tree, showFile(repo, rev, p)!));
+  }
+  return added;
+}
+
 export function removeLabelled(): { containers: number; volumes: number } {
   const ids = docker(["ps", "-aq", "--filter", "label=" + SCREEN_LABEL]).stdout.split("\n").filter(Boolean);
   if (ids.length) docker(["rm", "-f", ...ids]);
