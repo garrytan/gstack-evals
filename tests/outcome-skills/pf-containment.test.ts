@@ -304,6 +304,7 @@ test("the tree digest follows content, modes, link targets, ignored files and .g
     ["the file named -", (dir) => writeFileSync(join(dir, "-"), "dasH\n")],
     ["an executable bit", (dir) => chmodSync(join(dir, "a.txt"), 0o755)],
     ["a link target", (dir) => { rmSync(join(dir, "link")); symlinkSync(".gitignore", join(dir, "link")); }],
+    ["a link target that differs only by a trailing newline", (dir) => { rmSync(join(dir, "link")); symlinkSync("a.txt\n", join(dir, "link")); }],
     ["an ignored file", (dir) => writeFileSync(join(dir, "build/new.o"), "obj")],
     ["the git directory", (dir) => writeFileSync(join(dir, ".git/refs/tags/later"), "c".repeat(40) + "\n")],
   ];

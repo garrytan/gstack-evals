@@ -92,6 +92,7 @@ async function run(cmd: string, a: Args, deps: Deps): Promise<number> {
     const u = readUnit(unitDir);
     if (u.id !== session.unit) throw new PfError("E_USAGE", "session " + index + " is on unit " + session.unit + ", not " + u.id);
     const effort = readJson(need(a, "effort"));
+    if (effort === null || typeof effort !== "object" || Array.isArray(effort)) throw new PfError("E_USAGE", "--effort is the dry run's effort.json, an object with one record per model");
     const names = need(a, "names");
     if (names !== "short" && names !== "plugin") throw new PfError("E_USAGE", "--names is short or plugin");
     const res = await deps.runPfSession({

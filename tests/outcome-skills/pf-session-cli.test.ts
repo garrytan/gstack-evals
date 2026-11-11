@@ -105,6 +105,12 @@ test("session run refuses an index outside the plan, a run without effort.json a
   const noEffort = await session(runArgs({ unit, plan, index: "0" }));
   expect([noEffort.exit, noEffort.stderr[0]?.split(" ")[0], noEffort.calls.length]).toEqual([2, "E_USAGE", 0]);
   expect(noEffort.stderr[0]).toContain("--effort");
+  for (const body of ["null", "[]", "\"effort\"", "7"]) {
+    const bad = join(temp("pf-cli-effort-"), "effort.json");
+    writeFileSync(bad, body);
+    const r = await session(runArgs({ unit, plan, index: "0", effort: bad }));
+    expect([body, r.exit, r.stderr[0]?.split(" ")[0], r.calls.length]).toEqual([body, 2, "E_USAGE", 0]);
+  }
   const other = await session(runArgs({ unit: unitDir("pf-cli-other"), plan, index: "0", effort }));
   expect([other.exit, other.calls.length]).toEqual([2, 0]);
   const sessions = JSON.parse(readFileSync(plan, "utf8")).sessions;
