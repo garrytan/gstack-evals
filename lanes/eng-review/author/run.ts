@@ -94,7 +94,7 @@ export function buildUnitRepo(clone: string, base: string, dest: string): void {
     const [mode, type, sha] = meta.split(" ");
     return { mode: mode!, type: type!, sha: sha!, path };
   }).filter((e) => e.type === "blob");
-  const r = spawnSync("git", ["-c", "core.hooksPath=/dev/null", "cat-file", "--batch"], { cwd: clone, input: entries.map((e) => e.sha).join("\n") + "\n", maxBuffer: 2 * 1024 * 1024 * 1024, env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: "/nonexistent", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" } });
+  const r = spawnSync("git", ["-c", "core.hooksPath=/dev/null", "cat-file", "--batch"], { cwd: clone, input: entries.map((e) => e.sha).join("\n") + "\n", maxBuffer: 2 * 1024 * 1024 * 1024, env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: "/nonexistent", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null", GIT_OPTIONAL_LOCKS: "0" } });
   const buf = r.stdout as Buffer;
   let at = 0;
   for (const e of entries) {

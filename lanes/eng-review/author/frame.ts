@@ -143,7 +143,7 @@ export interface Miner {
 
 const realMiner: Miner = {
   clone: (repo, dir) => {
-    const r = spawnSync("git", ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "clone", "--quiet", "--no-checkout", "--single-branch", "--no-tags", "--shallow-since=" + SHALLOW_SINCE, "https://github.com/" + repo + ".git", dir], { env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: "/nonexistent", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null", GIT_TERMINAL_PROMPT: "0", GIT_LFS_SKIP_SMUDGE: "1" }, timeout: 20 * 60_000, encoding: "utf8" });
+    const r = spawnSync("git", ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "clone", "--quiet", "--no-checkout", "--single-branch", "--no-tags", "--shallow-since=" + SHALLOW_SINCE, "https://github.com/" + repo + ".git", dir], { env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: "/nonexistent", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null", GIT_TERMINAL_PROMPT: "0", GIT_LFS_SKIP_SMUDGE: "1", GIT_OPTIONAL_LOCKS: "0" }, timeout: 20 * 60_000, encoding: "utf8" });
     return r.status === 0;
   },
   meta: (repo) => {

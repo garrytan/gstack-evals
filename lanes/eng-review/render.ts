@@ -68,7 +68,7 @@ const sha256 = (t: string | Buffer) => createHash("sha256").update(t).digest("he
 const fail = (code: "E_USAGE" | "E_INTERNAL" | "E_EB_CACHE_STALE", message: string) => Object.assign(new Error(code + " " + message), { code });
 
 function git(dir: string, args: string[]): string {
-  const r = spawnSync("git", ["-C", dir, ...args], { encoding: "utf8" });
+  const r = spawnSync("git", ["-C", dir, ...args], { encoding: "utf8", env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" } });
   if (r.status !== 0) throw fail("E_USAGE", "not a gstack checkout: " + dir + " (" + (r.stderr || "git failed").trim() + ")");
   return r.stdout.trim();
 }

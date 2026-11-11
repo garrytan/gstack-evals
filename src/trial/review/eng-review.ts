@@ -97,7 +97,7 @@ export const ER_UNIT_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 export const erTaskId = (unitId: string): string => "unit-" + sha256(unitId).slice(0, 12);
 
 /** git with hooks, filters and LFS smudge off, on a repository that never runs its own code here. */
-export const safeGit = (repo: string, args: string[]) => spawnSync("git", ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "filter.lfs.smudge=", "-c", "filter.lfs.process=", "-c", "filter.lfs.required=false", "-c", "safe.directory=*", "-C", repo, ...args], { encoding: "utf8", timeout: 120_000, env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: "/nonexistent", GIT_CONFIG_NOSYSTEM: "1", GIT_TERMINAL_PROMPT: "0", LANG: "C" } });
+export const safeGit = (repo: string, args: string[]) => spawnSync("git", ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "filter.lfs.smudge=", "-c", "filter.lfs.process=", "-c", "filter.lfs.required=false", "-c", "safe.directory=*", "-C", repo, ...args], { encoding: "utf8", timeout: 120_000, env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: "/nonexistent", GIT_OPTIONAL_LOCKS: "0", GIT_CONFIG_NOSYSTEM: "1", GIT_TERMINAL_PROMPT: "0", LANG: "C" } });
 
 /** Why repo is not one commit with no parent, no remote and no later history. */
 export function gitHistoryProblems(repo: string): string[] {
@@ -185,7 +185,7 @@ export function clonePinProblems(clone: string): string[] {
     if (version !== pin.version) p.push(arm + ": VERSION at " + pin.sha.slice(0, 9) + " reads " + JSON.stringify(version) + ", not " + pin.version);
   }
   for (const [path, want] of Object.entries(ER_CANDIDATE_DIGESTS)) {
-    const r = spawnSync("git", ["-c", "core.hooksPath=/dev/null", "-c", "safe.directory=*", "-C", clone, "show", ER_PINS.candidate.sha + ":" + path], { timeout: 60_000 });
+    const r = spawnSync("git", ["-c", "core.hooksPath=/dev/null", "-c", "safe.directory=*", "-C", clone, "show", ER_PINS.candidate.sha + ":" + path], { timeout: 60_000, env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" } });
     const got = r.status === 0 ? sha256(r.stdout) : null;
     if (got !== want) p.push("candidate: " + path + " at " + ER_PINS.candidate.sha.slice(0, 9) + " has sha256 " + (got ?? "none") + ", not " + want);
   }
