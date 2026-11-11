@@ -6,10 +6,12 @@
 // trial counts. The ledger is the only trust root: a cap stop is written into O6's record when it fires, before the 409
 // that reports it, after which O6 admits no new lease on that item, and a launch whose sessions.jsonl does not name every
 // launch and session meter the ledger holds for the run is refused. A family SM close whose proxy finalize failed halts
-// its item the same way through sessions.jsonl (a halt line with the session and its journal) until a launch lifts it.
+// its item the same way through sessions.jsonl (a halt line with the session and its journal, on disk before the close)
+// until a launch lifts it, and so does a family SM session the driver never closed itself: one its crash recovery
+// closes, or one ledger settle or reconcile closed.
 import { Database } from "bun:sqlite";
 import { createHash, randomBytes } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { docAnchor, type ReasonCode } from "../../../src/errors/codes.ts";
 import { rigAdmission } from "../../../src/rig/admission.ts";
@@ -161,6 +163,8 @@ interface Stage {
   journal: string;
   state: "serving" | "draining" | "stopped";
   ended: Ended | null;
+  /** Set when a close's proxy finalize failed and halted the stage, even on a stage that keeps ended cap_stop. */
+  halted: boolean;
   scope: string | null;
   live: Map<string, Session>;
   opens: number;
@@ -173,7 +177,7 @@ interface Stage {
 export interface Served {
   control: string;
   stages: Array<{ item: string; arm: string; lease_id: string; reserved_micros: number; proxy: string }>;
-  /** Resolves with the exit code once every stage is settled: 0, or 2 when the driver failed, a lease is still open or a stage ended failed. */
+  /** Resolves with the exit code once every stage is settled: 0, or 2 when the driver failed, a lease is still open, a stage ended failed or a close halted a stage. */
   done: Promise<number>;
   stop(ended?: Ended): Promise<number>;
 }
@@ -310,11 +314,18 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
   const rival = rivalHolder(o.record, o.run_id, dir);
   if (rival) fail("E_USAGE", holderBound(rival, holder).message + "; nothing was recovered, settled or opened");
   const sessionsFile = join(dir, "sessions.jsonl");
-  const record = (line: Record<string, unknown>) => {
+  const record = (line: Record<string, unknown>, durable = false) => {
     const fresh = existsSync(sessionsFile) && cutShort(sessionsFile) ? "\n" : "";
     appendFileSync(sessionsFile, fresh + JSON.stringify({ at: new Date(now()).toISOString(), run_id: o.run_id, ...line }) + "\n");
+    if (!durable) return;
+    const fd = openSync(sessionsFile, "r");
+    try {
+      fsyncSync(fd);
+    } finally {
+      closeSync(fd);
+    }
   };
-  const lines: Array<{ at?: string; event?: string; id?: string; item?: string; lease_id?: string; ended?: string; code?: string; scope?: string | null; nonce?: string; meter_id?: string; journal?: string }> = [];
+  const lines: Array<{ at?: string; event?: string; id?: string; item?: string; lease_id?: string; ended?: string; code?: string; scope?: string | null; nonce?: string; meter_id?: string; journal?: string; model?: string; reason?: string; finalized?: boolean; cause?: string }> = [];
   for (const line of existsSync(sessionsFile) ? readFileSync(sessionsFile, "utf8").split("\n") : []) {
     try {
       const e = JSON.parse(line);
@@ -345,14 +356,25 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
     }
   }
   for (const e of lines) if (e.item && (e.event === "stop" || (e.event === "settled" && e.ended === "cap_stop") || (e.event === "refuse" && e.code === "CAP_STOP"))) noteStop(e.item, { at: e.at ?? "an unrecorded time", scope: e.scope ?? "" });
-  const halts = new Map<string, { item: string; at: string; journal: string }>();
+  const halts = new Map<string, { item: string; at: string; journal: string; cause?: string }>();
   for (const e of lines) {
-    if (e.event === "halt" && e.id && e.item) halts.set(e.id, { item: e.item, at: e.at ?? "an unrecorded time", journal: e.journal ?? "(no journal path)" });
+    if (e.event === "halt" && e.id && e.item) halts.set(e.id, { item: e.item, at: e.at ?? "an unrecorded time", journal: e.journal ?? "(no journal path)", ...(e.cause ? { cause: e.cause } : {}) });
     if (e.event === "lift" && e.id) halts.delete(e.id);
   }
   const lifts = [...new Set(o.lift_halts ?? [])];
   const unknownLift = lifts.find((id) => !halts.has(id));
   if (unknownLift) fail("E_USAGE", "--lift-halt " + unknownLift + " names no halt still standing in run " + o.run_id + "'s " + sessionsFile + "; nothing was recovered or opened");
+  const smOpens = new Map(lines.flatMap((e) => (e.event === "open" && e.id && e.model !== undefined ? [[e.id, e] as const] : [])));
+  const closedIds = new Set(lines.flatMap((e) => (e.event === "close" && e.id ? [e.id] : [])));
+  const haltedIds = new Set(lines.flatMap((e) => (e.event === "halt" && e.id ? [e.id] : [])));
+  const haltUnfinalized = (e: { id?: string; item?: string; lease_id?: string; meter_id?: string }, cause: string) => {
+    const halt = { item: e.item!, at: new Date(now()).toISOString(), journal: join(dir, e.lease_id + ".journal.ndjson"), cause };
+    record({ event: "halt", item: halt.item, id: e.id, lease_id: e.lease_id, meter_id: e.meter_id, journal: halt.journal, cause }, true);
+    halts.set(e.id!, halt);
+    haltedIds.add(e.id!);
+    log("E_SM_FINALIZE_HALT outcome driver: session " + e.id + " on line item " + halt.item + " was closed as " + cause + ", never by the driver's own close, so its proxy finalize never ran and its allowance stops are unknown; the item opens no more sessions or leases until the Captain rules on the proxy journal " + halt.journal + " and a relaunch lifts the halt with --lift-halt " + e.id);
+  };
+  for (const e of lines) if (e.event === "close" && e.id && smOpens.has(e.id) && e.finalized !== true && !haltedIds.has(e.id)) haltUnfinalized(smOpens.get(e.id)!, e.reason ?? "unknown");
 
   const failures: string[] = [];
   for (const item of listItems(o.record)) {
@@ -364,6 +386,7 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
         const rec = await reconcileJournal(journal, o.local);
         for (const r of rec.refused) warn(r.code as ReasonCode, "recovering lease " + lease.lease_id + ": " + r.message);
       } else warn("JOURNAL_MISSING", "lease " + lease.lease_id + " on line item " + item + " has no proxy journal at " + journal + ", so its settle charges every unanswered call at its full reservation");
+      for (const [id, e] of smOpens) if (e.lease_id === lease.lease_id && !closedIds.has(id) && !haltedIds.has(id)) haltUnfinalized(e, "recovered");
       closeOpenSessions(lease, "recovered", meterFigures(o.local, lease.lease_id), new Date(now()));
       const stop = capped.get("") ?? capped.get(item);
       const close = settleLease(o.record, o.local, lease.lease_id, warn, stop ? stop.scope || "cap_stop" : undefined);
@@ -386,7 +409,7 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
     const stop = capped.get("") ?? capped.get(st.item);
     if (stop) fail("CAP_STOP", (capped.has("") ? "the none stage cap-stopped in run " + o.run_id + " at " + stop.at + " (scope " + stop.scope + "), which ends both skills incomplete" : "stage " + st.item + " cap-stopped in run " + o.run_id + " at " + stop.at + " (scope " + stop.scope + "), which ends its skill incomplete") + "; a cap stop is not retried (plan section 6); nothing was opened");
     const halt = [...halts].find(([, h]) => h.item === st.item);
-    if (halt) fail("E_SM_FINALIZE_HALT", "line item " + st.item + " halted in run " + o.run_id + " at " + halt[1].at + ": session " + halt[0] + " closed with its proxy finalize failed, so its allowance stops are unknown and its retry waits for the Captain's ruling on the proxy journal " + halt[1].journal + "; once the Captain rules, relaunch with --lift-halt " + halt[0] + "; nothing was opened");
+    if (halt) fail("E_SM_FINALIZE_HALT", "line item " + st.item + " halted in run " + o.run_id + " at " + halt[1].at + ": session " + halt[0] + (halt[1].cause ? " was closed as " + halt[1].cause + ", never by the driver's own close, so its proxy finalize never ran" : " closed with its proxy finalize failed") + ", so its allowance stops are unknown and its retry waits for the Captain's ruling on the proxy journal " + halt[1].journal + "; once the Captain rules, relaunch with --lift-halt " + halt[0] + "; nothing was opened");
     if (s.cap_micros === null) return fail("E_LEDGER_MISSING", "no approved cap is on record for line item " + st.item + "; nothing was opened");
     if (s.program === null) return fail("E_USAGE", "line item " + st.item + " is in no program; a G stage is admitted by O6's envelope, so its item joins the program with --program at init; nothing was opened");
     const arm = pfStage(st) ? null : smStage(st) ? smArm(reg, st.arms![0]!) : reg.arms[st.arm]!;
@@ -492,7 +515,7 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
       const sm = smStage(st);
       const pf = pfStage(st);
       const proxy = new MeteringProxy({ ledger: o.local, leaseId: lease.lease_id, host: o.host, managementSocket: join(dir, "p" + i + ".sock"), managementToken: randomBytes(24).toString("hex"), journal, retry: o.retry ?? DEFAULT_RETRY, env: o.env, fetch: o.fetch, ...(sm || pf ? { refuseServerTools: true } : {}), ...(pf ? { firstRequestFields: [...EFFORT_KEYS] } : {}) });
-      const stage: Stage = { item: st.item, arm: st.arm, kind: pf ? "prompt" : sm ? smArm(reg, st.arms![0]!).kind : reg.arms[st.arm]!.kind, arms: pf ? [...(st.arms ?? [st.arm])] : sm ? [...st.arms!] : [st.arm], ...(sm ? { model: st.model } : {}), ...(pf ? { models: PF_STAGES[st.item]!.models } : {}), pf, lease_id: lease.lease_id, reserved: lease.reserved_micros, expires: Date.parse(lease.expires_at), proxy, journal, state: "serving", ended: null, scope: null, live: new Map(), opens: 0, reruns: 0, finished: 0, settling: null, close: null };
+      const stage: Stage = { item: st.item, arm: st.arm, kind: pf ? "prompt" : sm ? smArm(reg, st.arms![0]!).kind : reg.arms[st.arm]!.kind, arms: pf ? [...(st.arms ?? [st.arm])] : sm ? [...st.arms!] : [st.arm], ...(sm ? { model: st.model } : {}), ...(pf ? { models: PF_STAGES[st.item]!.models } : {}), pf, lease_id: lease.lease_id, reserved: lease.reserved_micros, expires: Date.parse(lease.expires_at), proxy, journal, state: "serving", ended: null, halted: false, scope: null, live: new Map(), opens: 0, reruns: 0, finished: 0, settling: null, close: null };
       stages.push(stage);
       proxy.start();
     } catch (error) {
@@ -570,14 +593,17 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
       if (hold?.task === sess.id) hold.until = now() + grace;
       s.live.delete(sess.id);
       s.finished++;
+      const halt = !meter && s.model !== undefined;
+      const pfHalt = s.pf && !meter;
+      if (halt || pfHalt) record({ event: "halt", item: s.item, id: sess.id, lease_id: s.lease_id, meter_id: sess.meter_id, journal: s.journal }, true);
       record({ event: "close", item: s.item, ...answer });
-      if (s.pf && !answer.finalized) {
+      if (pfHalt) {
+        s.halted = true;
         warn("E_PF_FINALIZE_HALT", "PF session " + sess.id + " on stage " + s.item + " (lease " + s.lease_id + "): the proxy's finalize failed, so its counts are unknown; the stage takes no more opens, and the Captain rules on a retry after reading the journal " + s.journal);
-        record({ event: "halt", item: s.item, id: sess.id, lease_id: s.lease_id, journal: s.journal });
         drain(s, "failed", "finalize halt: session " + sess.id);
       }
-      if (!meter && s.model !== undefined) {
-        record({ event: "halt", item: s.item, id: sess.id, lease_id: s.lease_id, meter_id: sess.meter_id, journal: s.journal });
+      if (halt) {
+        s.halted = true;
         log("E_SM_FINALIZE_HALT outcome driver: session " + sess.id + " on line item " + s.item + " closed with its proxy finalize failed, so its allowance stops are unknown; the item opens no more sessions or leases until the Captain rules on the proxy journal " + s.journal + " and a relaunch lifts the halt with --lift-halt " + sess.id);
         drain(s, "halted", null);
         if (s.ended !== "cap_stop") s.ended = "halted";
@@ -645,7 +671,7 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
       await control.stop();
       const open = ledgerStatus(o.record).filter((i) => stages.some((s) => s.item === i.item) && i.open_lease);
       if (open.length) log("E_LEASE_UNSETTLED outcome driver: still open: " + open.map((i) => i.open_lease!.lease_id).join(", ") + "; settle each with gstack-evals ledger settle --lease <id> on this machine");
-      const code = failed || open.length || stages.some((s) => s.ended === "failed" || s.ended === "halted") ? 2 : 0;
+      const code = failed || open.length || stages.some((s) => s.ended === "failed" || s.ended === "halted" || s.halted) ? 2 : 0;
       if (held.lock) rmSync(held.lock, { force: true });
       held.run?.close();
       resolveDone(code);

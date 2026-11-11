@@ -1670,7 +1670,7 @@ Exit 2. Side effects: The two tries spent what the proxy metered for them. Retry
 
 ### E_SM_FINALIZE_HALT
 
-A state machines session closed with its metering proxy's finalize failed (the close answer's finalized is false), so its refusal and allowance-stop counts are unknown (allowance_stops is null). The driver halts that line item: it writes a halt line naming the session and its proxy journal to the run's sessions.jsonl, opens no more sessions on the item (HTTP 423), settles its lease, exits 2, and refuses to open a lease on the item at the next launch. A real allowance stop is never retried, and the session's one retry (preregistration section 6) waits for the Captain's ruling.
+A state machines session closed with its metering proxy's finalize failed (the close answer's finalized is false), so its refusal and allowance-stop counts are unknown (allowance_stops is null). The driver halts that line item: it writes a halt line naming the session and its proxy journal to the run's sessions.jsonl, opens no more sessions on the item (HTTP 423), settles its lease, exits 2, and refuses to open a lease on the item at the next launch. A real allowance stop is never retried, and the session's one retry (preregistration section 6) waits for the Captain's ruling. A session the driver never closed itself halts its item the same way, its halt line naming the cause: one the driver's crash recovery closes (recovered), or one ledger settle or reconcile closed (settled, reconciled). A halt line the driver writes itself, at its own close or in its crash recovery, is on disk before the close line; a session ledger settle or reconcile closed gets its halt line at the next launch.
 
 Fix: Bring the session id and the proxy journal the halt line names to the Captain, who reads the journal and rules. Then relaunch the driver for the same run with --lift-halt &lt;session id>; the launch records the lift and serves the item again.
 
@@ -1678,7 +1678,7 @@ Exit 2. Side effects: The session spent what its lease's ledger meter holds; the
 
 ### E_SM_CONTAIN
 
-A state machines session image fails the containment check that runs before any session (statemachines/contain.ts, sh/contain.sh): a ref, pseudo-ref or packed-refs line names a commit past the base, a commit object in the store is not the base or one of its ancestors, the repo has alternates, a .gitmodules or a nested .git, another git object store exists on the image's filesystem (A3's gstack checkout at the /qa pin is the one exception), or a file outside the repo holds a hidden test name or a test-side marker. Findings name refs, commits, paths and sha256s, never the test text.
+A state machines session image fails the containment check that runs before any session (statemachines/contain.ts, sh/contain.sh): a ref, pseudo-ref or packed-refs line names a commit past the base, a commit object in the store is not the base or one of its ancestors, the repo has alternates, a .gitmodules or a nested .git, another git object store exists on the image's filesystem, with or without a HEAD file (A3's gstack checkout at the /qa pin is the one exception), a file outside the repo or a file in the repo that the base commit does not hold byte for byte (untracked, ignored, staged but never committed, or tracked with a working copy that differs from the base commit's) holds a hidden test name or a test-side marker, or a git listing, find or grep inside the check failed (an error finding). Findings name refs, commits, paths and sha256s, never the test text. A file or dir the check can't read is listed, never failed.
 
 Fix: Bring the unit and the failed checks to the Captain. The unit halts and is not dropped. Fix the image or the setup step (strip every ref and object past the base, as GEVA-503's D7 does) test-first, and repin only between parts; then rerun sm contain on the unit.
 
@@ -1710,9 +1710,9 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 
 ### E_SM_USAGE_HALT
 
-A paid label or judge call (sm packets send) reported usage past the preregistration's per-call bound of 20,000 input or 1,500 output tokens. The item halted before its next send, and the halt line in the send's replies.jsonl names the call's meter, the packet, the reader and the usage. Every later send on that --out is refused until the halt is lifted.
+A paid label or judge call (sm packets send) reported usage past the preregistration's per-call bound of 20,000 input or 1,500 output tokens. The item halted before its next send, and the halt line in the send's replies.jsonl names the call's meter, the packet, the reader and the usage. A call whose reply and halt a crash lost halts the same way at the next send, once its settled usage shows it past the bound. A call sent on a lease the owner reconciled (its ledger lost) and never answered halts the same way as usage unknown, and its halt line names the lease's proxy journal and the provider export the reconcile cites. So does a call never answered on a lease the send's ledger holds, when its meter shows the call unknown; its halt line names the lease and its proxy journal. Every later send on that --out is refused until the halt is lifted.
 
-Fix: Bring the halt line to the Captain. Once the Captain rules, record the ruling in the run record and send again with --lift-halt &lt;meter>. The halted call is never sent again.
+Fix: Bring the halt line to the Captain, with the proxy journal lines and the provider export it names when its usage is unknown. Once the Captain rules, record the ruling in the run record and send again with --lift-halt &lt;meter>. The halted call is never sent again.
 
 Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: yes. Owner: U20.
 

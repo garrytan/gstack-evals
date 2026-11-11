@@ -7,19 +7,20 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { recordProgram } from "../../src/runner/ledger/envelope.ts";
-import { recordApproval } from "../../src/runner/ledger/ledger.ts";
+import { recordApproval, settleLease } from "../../src/runner/ledger/ledger.ts";
 import { LocalLedger } from "../../src/runner/ledger/local.ts";
+import { closeOpenSessions, meterFigures } from "../../src/runner/ledger/sessions.ts";
 import { readItem, type LedgerError } from "../../src/runner/ledger/record.ts";
 import { MeteringProxy } from "../../src/runner/proxy/metering-proxy.ts";
 import { REGISTRY_PATH } from "../../lanes/outcome-skills/arms/registry.ts";
 import { serveStages, type StageSpec } from "../../lanes/outcome-skills/driver/stage.ts";
 import { main } from "../../lanes/outcome-skills/statemachines/cli.ts";
 import { fixtureRow, scoreUnit } from "../../lanes/outcome-skills/statemachines/fixtures.ts";
-import { contain, containInputs } from "../../lanes/outcome-skills/statemachines/contain.ts";
+import { CONTAIN_SCRIPT, contain, containInputs, parseContain } from "../../lanes/outcome-skills/statemachines/contain.ts";
 import { computeStart } from "../../lanes/outcome-skills/statemachines/followon.ts";
 import { qaHomeCopy } from "../../lanes/outcome-skills/statemachines/image.ts";
 import type { Lang } from "../../lanes/outcome-skills/statemachines/langs.ts";
@@ -465,6 +466,107 @@ describe("the SM stage (#290 notes 5 and 6)", () => {
     expect((await serve(l, OPUS_STAGE).then(async (s) => s.stop()))).toBe(0);
     l.db.close?.();
   });
+
+  const launchTry = (l: ReturnType<typeof ledger>, extra: { lift_halts?: string[] } = {}) => serve(l, OPUS_STAGE, extra).then(async (s) => (await s.stop(), "served"), (e: LedgerError) => e.code + " " + e.message);
+  const fileLines = (l: ReturnType<typeof ledger>) => readFileSync(join(l.root, "run", "sessions.jsonl"), "utf8").split("\n").filter(Boolean);
+  const indexOf = (all: string[], event: string, id: string) => all.findIndex((x) => { const e = JSON.parse(x); return e.event === event && e.id === id; });
+
+  // Value: protects=the finalize halt across a crash between its two lines: the halt goes to disk (fsynced) before the close, so a crash between them leaves a standing halt, never a close with no halt; fails_when=the close line is written first, so a sessions.jsonl cut after it lets the relaunch serve the item; why_new=#318 deferred finding (outside voice and native adversarial, stage.ts:509), the Captain's pre-run list item 4; seam=driver/stage.ts closeSession and serve, with sessions.jsonl cut where a crash would leave it; no_claim=a power loss inside the halt's own write, which leaves neither line
+  test("a crash between the halt line and the close line keeps the halt, because the halt is on disk first", async () => {
+    const l = ledger(["sm-opus"]);
+    const served = await serve(l, OPUS_STAGE);
+    const s1 = (await (await openA1(served.control, "u1")).json()) as Record<string, any>;
+    expect((await closeWith(served.control, s1.id, true)).finalized).toBe(false);
+    expect(await served.stop()).toBe(2);
+    const file = join(l.root, "run", "sessions.jsonl");
+    const all = fileLines(l);
+    expect(indexOf(all, "halt", s1.id)).toBeLessThan(indexOf(all, "close", s1.id));
+    writeFileSync(file, all.slice(0, Math.min(indexOf(all, "halt", s1.id), indexOf(all, "close", s1.id)) + 1).join("\n") + "\n");
+    const relaunch = await launchTry(l);
+    expect(relaunch).toStartWith("E_SM_FINALIZE_HALT line item sm-opus halted in run r1");
+    expect(relaunch).toContain(s1.id);
+    expect(readItem(l.record, "sm-opus").leases.length).toBe(1);
+    l.db.close?.();
+  });
+
+  // Value: protects=the driver's exit when a finalize halt lands on a stage already draining for its cap stop: the stage keeps cap_stop (its lease settles with the stop's scope) and the driver exits 2, as E_SM_FINALIZE_HALT says; fails_when=the driver exits 0 after a halt, or the settled row loses its cap stop; why_new=Capy finding 01M73CFWQ5H4WR50GAYPG0KCSR on #318 (stage.ts:514), the Captain's pre-run list item 4; seam=driver/stage.ts closeSession, capStop and finish; no_claim=a halt on a serving stage (the halt test above)
+  test("a halt on a stage draining for its cap stop keeps the cap stop, and the driver exits 2", async () => {
+    const l = ledger(["sm-opus"]);
+    const served = await serve(l, OPUS_STAGE);
+    const live: Array<Record<string, any>> = [];
+    for (const k of ["u1", "u2", "u3", "u4", "u5", "u6"]) {
+      const r = await openA1(served.control, k);
+      expect(r.status).toBe(200);
+      live.push((await r.json()) as Record<string, any>);
+    }
+    expect((await openA1(served.control, "u7")).status).toBe(409);
+    expect((await closeWith(served.control, live[0]!.id, true)).finalized).toBe(false);
+    for (const s of live.slice(1)) expect((await closeWith(served.control, s.id, false)).finalized).toBe(true);
+    expect(await served.done).toBe(2);
+    expect(runLines(l, "halt")).toEqual([expect.objectContaining({ item: "sm-opus", id: live[0]!.id })]);
+    expect(runLines(l, "settled")).toEqual([expect.objectContaining({ item: "sm-opus", ended: "cap_stop" })]);
+    expect(readItem(l.record, "sm-opus").leases[0]!.close?.cap_stop).toBeTruthy();
+    l.db.close?.();
+  });
+
+  /** Launches the driver in a child process, opens one A1 session on it, then kills the child with kill -9 while the session is live. */
+  const crashLive = async (l: ReturnType<typeof ledger>, key: string) => {
+    const at = (p: string) => JSON.stringify(join(import.meta.dir, "../..", p));
+    const child = join(l.root, "child-" + key + ".ts");
+    writeFileSync(child, [
+      "import { serveStages } from " + at("lanes/outcome-skills/driver/stage.ts") + ";",
+      "import { LocalLedger } from " + at("src/runner/ledger/local.ts") + ";",
+      'const fetch = async (_url: string, init: RequestInit) => Response.json({ id: "msg_1", type: "message", role: "assistant", model: JSON.parse(String(init.body)).model, content: [{ type: "text", text: "ok" }], stop_reason: "end_turn", usage: { input_tokens: 10, output_tokens: 10, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } });',
+      "const served = await serveStages({ record: " + JSON.stringify(l.record) + ", local: LocalLedger.open(" + JSON.stringify(join(l.root, "ledger.sqlite")) + '), run_id: "r1", envelope_host: "m1", machine: "m1", stages: ' + JSON.stringify(OPUS_STAGE) + ', host: "127.0.0.1", dir: ' + JSON.stringify(join(l.root, "run")) + ', fetch, requireAdmission: () => null, env: { ANTHROPIC_API_KEY: "upstream-key" }, log: () => {} });',
+      'console.log("CONTROL " + served.control);',
+      "await new Promise(() => {});",
+    ].join("\n"));
+    const proc = Bun.spawn(["bun", child], { stdout: "pipe", stderr: "pipe" });
+    const reader = proc.stdout.getReader();
+    let out = "";
+    while (!out.includes("\n")) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      out += new TextDecoder().decode(value);
+    }
+    const control = out.match(/CONTROL (\S+)/)?.[1];
+    expect(control).toBeDefined();
+    const opened = await openA1(control!, key);
+    expect(opened.status).toBe(200);
+    const s = (await opened.json()) as Record<string, any>;
+    proc.kill(9);
+    await proc.exited;
+    expect(readItem(l.record, "sm-opus").open?.lease_id).toBe(s.lease_id);
+    return s;
+  };
+
+  // Value: protects=section 6's one retry after a driver crash: a session the driver never closed itself (crash recovery closes it as recovered, or ledger settle closes it as settled) has unknown allowance stops, like a failed finalize, so its item halts at the relaunch before any lease opens and waits for the Captain's ruling on the journal; fails_when=the relaunch serves the item (so the infra end's retry spends with no halt), the halt goes to disk after the recovered close, or a lift leaves the item halted; why_new=#318 deferred finding (Red Team, stage.ts:315), the Captain's pre-run list item 5; seam=driver/stage.ts serve's recovery, with the driver killed by kill -9 in a child process; no_claim=how real_agent ends the session (its proxy block is all null when no close answer comes, so sessionEnd reads infra)
+  test("a session the driver never closed itself, after a kill -9, halts its item at the relaunch until --lift-halt, whether recovery or ledger settle closes it", async () => {
+    const l = ledger(["sm-opus"]);
+    const s1 = await crashLive(l, "u1");
+    const relaunch = await launchTry(l);
+    expect(relaunch).toStartWith("E_SM_FINALIZE_HALT line item sm-opus halted in run r1");
+    expect(relaunch).toContain(s1.id);
+    const all = fileLines(l);
+    expect(JSON.parse(all[indexOf(all, "halt", s1.id)]!)).toMatchObject({ item: "sm-opus", lease_id: s1.lease_id, meter_id: s1.meter_id, cause: "recovered" });
+    expect(indexOf(all, "halt", s1.id)).toBeLessThan(indexOf(all, "close", s1.id));
+    expect(JSON.parse(all[indexOf(all, "close", s1.id)]!).reason).toBe("recovered");
+    expect(readItem(l.record, "sm-opus").leases.map((x) => x.close?.how ?? "open")).toEqual(["settled"]);
+    const lifted = await serve(l, OPUS_STAGE, { lift_halts: [s1.id] });
+    expect(await lifted.stop()).toBe(0);
+    expect(readItem(l.record, "sm-opus").leases.length).toBe(2);
+
+    const s2 = await crashLive(l, "u2");
+    const lease = readItem(l.record, "sm-opus").open!;
+    settleLease(l.record, l.db, lease.lease_id, () => {});
+    expect(closeOpenSessions(lease, "settled", meterFigures(l.db, lease.lease_id), new Date())).toBe(1);
+    const afterSettle = await launchTry(l);
+    expect(afterSettle).toStartWith("E_SM_FINALIZE_HALT line item sm-opus halted in run r1");
+    expect(afterSettle).toContain(s2.id);
+    expect(readItem(l.record, "sm-opus").leases.length).toBe(3);
+    expect(await (await serve(l, OPUS_STAGE, { lift_halts: [s2.id] })).stop()).toBe(0);
+    l.db.close?.();
+  }, 60_000);
 });
 
 // Value: protects=section 8's follow-on on a first stage that changed nothing: its tree is the base tree under an empty commit two and is scored like any other; fails_when=computeStart refuses an empty first-stage patch on A1 or S2, so that tree's three follow-ons are lost, or S0 takes a patch; why_new=the Captain's pre-data item 8 for #290; seam=followon.ts computeStart; no_claim=the start set itself, which sm-followon-docker.test.ts runs in Docker
@@ -977,6 +1079,208 @@ describe("the containment check before any session (E_SM_CONTAIN)", () => {
     writeFileSync(join(dir, "unit.json"), JSON.stringify(u));
     expect(containInputs(dir)).toEqual({ names: ["test_one", "two", "testThree", "testFour", "sub_case"], markers: [MARK, '        assert_eq!(parse_contain("y"), Some(7));'] });
   });
+
+  const commitBase = (t: { root: string; w: string; base: string }, files: Record<string, string>) => {
+    for (const [p, body] of Object.entries(files)) writeFileSync(join(t.w, p), body);
+    git(t.w, "add", "-A");
+    git(t.w, "commit", "-qm", "base2");
+    return { ...t, base: git(t.w, "rev-parse", "HEAD") };
+  };
+
+  // Value: protects=the stores check against a git object store that has no HEAD file (a packed or loose cache, the kind an alternates file reads), and against a store that only an alternates file or GIT_ALTERNATE_OBJECT_DIRECTORIES names; fails_when=such a store passes, or a cache that only looks like hex (npm's index-v5, a webpack .pack) fails a clean tree; why_new=#318 deferred finding (outside voice, contain.sh:49), the Captain's pre-run list item 1; seam=contain.ts contain with sh/contain.sh on a fixture root; no_claim=what a real image holds (the Captain's runs on the three dry-run units)
+  test("an object store with no HEAD file fails the stores check, packed or loose, and so does every store an alternates file or the alternates variable reaches", () => {
+    const src = tree("nohead-src");
+    later(src.w);
+    git(src.w, "repack", "-a", "-d", "-q");
+    const loose = tree("nohead-loose");
+    later(loose.w);
+    const t = tree("nohead");
+    cpSync(join(src.w, ".git/objects/pack"), join(t.root, "opt/cache/objects/pack"), { recursive: true });
+    expect(check(t).checks.stores).toEqual({ ok: false, findings: ["objects /opt/cache/objects"] });
+    rmSync(join(t.root, "opt"), { recursive: true, force: true });
+    cpSync(join(loose.w, ".git/objects"), join(t.root, "srv/objects"), { recursive: true });
+    expect(check(t).checks.stores).toEqual({ ok: false, findings: ["objects /srv/objects"] });
+    rmSync(join(t.root, "srv"), { recursive: true, force: true });
+    mkdirSync(join(t.root, "empty/objects"), { recursive: true });
+    writeFileSync(join(t.w, ".git/objects/info/alternates"), join(t.root, "empty/objects") + "\n" + join(src.w, ".git/objects") + "\n");
+    expect(check(t).checks.stores).toEqual({ ok: false, findings: ["alternates /w/.git/objects/info/alternates", "reached /empty/objects", "reached " + join(src.w, ".git/objects")] });
+    rmSync(join(t.w, ".git/objects/info/alternates"));
+    process.env.GIT_ALTERNATE_OBJECT_DIRECTORIES = join(t.root, "empty/objects") + ":" + join(src.w, ".git/objects");
+    try {
+      expect(check(t).checks.stores).toEqual({ ok: false, findings: ["env GIT_ALTERNATE_OBJECT_DIRECTORIES", "reached /empty/objects", "reached " + join(src.w, ".git/objects")] });
+    } finally {
+      delete process.env.GIT_ALTERNATE_OBJECT_DIRECTORIES;
+    }
+    const c = tree("nohead-clean");
+    mkdirSync(join(c.root, "root/.npm/_cacache/index-v5/ab/cd"), { recursive: true });
+    writeFileSync(join(c.root, "root/.npm/_cacache/index-v5/ab/cd", "e".repeat(60)), "{}\n");
+    mkdirSync(join(c.root, "opt/app/node_modules/.cache/webpack/default"), { recursive: true });
+    writeFileSync(join(c.root, "opt/app/node_modules/.cache/webpack/default/0.pack"), "x\n");
+    expect(check(c)).toEqual({ ok: true, checks: clean, archives: [] });
+  });
+
+  // Value: protects=the refs, objects and scan checks against a tool that fails: a git listing that exits non-zero, or a grep that cannot read what it scans, must fail its check instead of reading as an empty, clean listing; fails_when=a failed git for-each-ref, git rev-list or scan grep leaves its check passing; why_new=#318 deferred findings (security specialist, contain.sh:37; Red Team and native adversarial, contain.sh:66), the Captain's pre-run list item 2; seam=contain.ts contain with sh/contain.sh, a git on PATH that fails for-each-ref, a pack index cut short under a later commit (git cat-file then lists nothing from that pack and still exits 0), and a grep on PATH that fails the scan's calls; no_claim=which real failures a real image can raise
+  test("a git listing or a scan grep that fails reads as a failed check, never as clean", () => {
+    const shims = scratch("tool-shims");
+    const shimmed = <T>(tool: string, when: string, f: () => T): T => {
+      const real = spawnSync("sh", ["-c", "command -v " + tool], { encoding: "utf8" }).stdout.trim();
+      const dir = join(shims, tool);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, tool), "#!/bin/sh\ncase \" $* \" in " + when + ") exit 2;; esac\nexec " + real + " \"$@\"\n", { mode: 0o755 });
+      const path = process.env.PATH;
+      process.env.PATH = dir + ":" + path;
+      try {
+        return f();
+      } finally {
+        process.env.PATH = path;
+      }
+    };
+    const t = tree("toolerr");
+    const r = shimmed("git", '*" for-each-ref "*', () => check(t));
+    expect(r.checks.refs).toEqual({ ok: false, findings: ["error git for-each-ref"] });
+    expect([r.ok, r.checks.objects.ok, r.checks.stores.ok, r.checks.scan.ok]).toEqual([false, true, true, true]);
+
+    const p = tree("badidx");
+    git(p.w, "checkout", "-qb", "b2");
+    const fix = later(p.w);
+    git(p.w, "checkout", "-q", "main");
+    expect(spawnSync("git", ["-C", p.w, "pack-objects", "--revs", "-q", join(p.w, ".git/objects/pack/pack")], { input: fix + "\n^" + p.base + "\n" }).status).toBe(0);
+    git(p.w, "prune-packed");
+    git(p.w, "branch", "-q", "-D", "b2");
+    rmSync(join(p.w, ".git/logs"), { recursive: true, force: true });
+    const idx = join(p.w, ".git/objects/pack", readdirSync(join(p.w, ".git/objects/pack")).find((n) => n.endsWith(".idx"))!);
+    chmodSync(idx, 0o644);
+    writeFileSync(idx, readFileSync(idx).subarray(0, 100));
+    const o = check(p);
+    expect(o.checks.objects.ok).toBe(false);
+    expect(o.checks.objects.findings).toContain("error git cat-file");
+    expect([o.ok, o.checks.refs.ok]).toEqual([false, true]);
+
+    const g = tree("grepfail");
+    mkdirSync(join(g.root, "opt"), { recursive: true });
+    writeFileSync(join(g.root, "opt/dep.py"), "x = 1\n");
+    const s = shimmed("grep", '*" -H "*', () => check(g));
+    expect(s.checks.scan).toEqual({ ok: false, findings: ["error grep markers", "error grep names"] });
+    expect([s.ok, s.checks.refs.ok, s.checks.objects.ok, s.checks.stores.ok]).toEqual([false, true, true, true]);
+  });
+
+  // Value: protects=clean trees from failing on files the check cannot read: an unreadable file or dir is skipped and listed by path, never failed and never read as an error; fails_when=an unreadable file or dir fails a clean tree, raises an error line, or goes unlisted; why_new=the Captain's pre-run list item 2 (fail closed without failing clean units); seam=contain.ts contain with sh/contain.sh as a user that cannot read the files; no_claim=root in a session image, which reads every file (the docker test drops root's read override to show it there)
+  test.skipIf(process.getuid?.() === 0)("a file or dir the check can't read is skipped and listed, and never fails a clean tree", () => {
+    const t = commitBase(tree("unreadable"), { ".gitignore": "target/\n" });
+    mkdirSync(join(t.root, "opt/locked"), { recursive: true });
+    writeFileSync(join(t.root, "opt/locked/t.py"), "x = 1\n");
+    writeFileSync(join(t.root, "opt/secret.txt"), "x = 2\n");
+    mkdirSync(join(t.w, "target"), { recursive: true });
+    writeFileSync(join(t.w, "target/cache.bin"), "x = 3\n");
+    const locked = [join(t.root, "opt/secret.txt"), join(t.w, "target/cache.bin"), join(t.root, "opt/locked")];
+    for (const p of locked) chmodSync(p, 0);
+    try {
+      expect(check(t)).toEqual({ ok: true, checks: clean, archives: [], unreadable: ["/opt/locked", "/opt/secret.txt", "/w/target/cache.bin"] });
+    } finally {
+      for (const p of locked) chmodSync(p, 0o755);
+    }
+  });
+
+  // Value: protects=the scan of the repo's own leftovers: every file in the repo that git does not track (ignored build output, dependency trees and test caches, and plain untracked files) is scanned, and tracked base files are not; fails_when=an ignored or untracked file in the repo naming a hidden test or holding a marker passes, or a tracked base file is scanned; why_new=#318 deferred finding (Red Team, contain.sh:57), the Captain's pre-run list item 3; seam=contain.ts contain with sh/contain.sh on a fixture root; no_claim=what a real image's repo holds
+  test("files in the repo that git does not track are scanned, ignored ones included, and tracked base files are not", () => {
+    const t = commitBase(tree("untracked"), { ".gitignore": "target/\nnode_modules/\n.pytest_cache/\n", "b.py": MARK + "  # a longer base line\n" });
+    mkdirSync(join(t.w, "target/debug"), { recursive: true });
+    writeFileSync(join(t.w, "target/debug/leak.txt"), "fn " + NAME + "() {}\n");
+    mkdirSync(join(t.w, "node_modules/x"), { recursive: true });
+    writeFileSync(join(t.w, "node_modules/x/t.js"), MARK + "\n");
+    mkdirSync(join(t.w, ".pytest_cache/v/cache"), { recursive: true });
+    writeFileSync(join(t.w, ".pytest_cache/v/cache/nodeids"), JSON.stringify(["tests/test_a.py::" + NAME]) + "\n");
+    writeFileSync(join(t.w, "notes.txt"), NAME + "\n");
+    const r = check(t);
+    expect(r.checks.scan).toEqual({ ok: false, findings: ["marker /w/node_modules/x/t.js sha256=" + sha(MARK), "name /w/.pytest_cache/v/cache/nodeids sha256=" + sha(NAME), "name /w/notes.txt sha256=" + sha(NAME), "name /w/target/debug/leak.txt sha256=" + sha(NAME)] });
+    expect([r.ok, r.checks.refs.ok, r.checks.objects.ok, r.checks.stores.ok]).toEqual([false, true, true, true]);
+  });
+
+  // Value: protects=the scan against content the base commit does not hold byte for byte: a file staged but never committed and a tracked file whose working copy changed are scanned, and base names and markers come from want's blobs, so a base name a changed file still holds is no hit; fails_when=a staged-only or changed tracked file naming a hidden test or holding a marker passes, a clean base fails, or a name want's own copy of a changed file holds becomes a hit; why_new=the Red Team's CRITICAL on #320 (contain.sh:100), the Captain's ruling A2 (GSTA-2, 2026-11-11); seam=contain.ts contain with sh/contain.sh on a fixture root; no_claim=what a real image's index and working tree hold
+  test("a file staged but never committed and a tracked file changed in the working tree are scanned, and base names come from want's blobs", () => {
+    const t = commitBase(tree("changed"), { "b.py": "def test_base_name():\n    pass\n" });
+    const names = [NAME, "test_base_name"];
+    expect(check(t, { names })).toEqual({ ok: true, checks: clean, archives: [] });
+    writeFileSync(join(t.w, "leak.py"), "def " + NAME + "():\n    pass\n");
+    git(t.w, "add", "leak.py");
+    appendFileSync(join(t.w, "a.py"), MARK + "\n");
+    appendFileSync(join(t.w, "b.py"), "# edited\n");
+    const r = check(t, { names });
+    expect(r.checks.scan).toEqual({ ok: false, findings: ["marker /w/a.py sha256=" + sha(MARK), "name /w/leak.py sha256=" + sha(NAME)] });
+    expect([r.ok, r.checks.refs.ok, r.checks.objects.ok, r.checks.stores.ok]).toEqual([false, true, true, true]);
+  });
+});
+
+// Value: protects=sh/contain.sh as it runs in a real session image (Debian's git, grep and find, as root): a git store with no HEAD file fails the stores check, an ignored file in the repo naming a hidden test fails the scan, a grep that fails fails the scan, and a clean tree stays clean, also when root cannot read a file (its read override dropped); fails_when=any of those passes, or the unreadable file fails the clean tree; why_new=the Captain's pre-run list (a docker test for contain.sh covering a no-HEAD store, a tool error, an unreadable file and an ignored file holding a hidden name); seam=contain.ts contain (docker kind) and the script run directly with --cap-drop DAC_OVERRIDE and DAC_READ_SEARCH; no_claim=the three dry-run units, which the Captain runs on their own images
+describe.skipIf(process.env.GSTACK_EVALS_DOCKER !== "1")("contain.sh in a real container (docker)", () => {
+  const NAME = "test_hidden_contain_probe";
+  const MARK = '    assert contain_probe("x") == 42  # the hidden check';
+  const d = (args: string[], input?: string) => spawnSync("docker", args, { encoding: "utf8", input, timeout: 900_000 });
+  const pid = process.pid;
+  const base = "sm-contain-docker-base:" + pid;
+  const tag = (k: string) => "sm-contain-docker-" + k + ":" + pid;
+  const git = "git -c user.name=t -c user.email=t@e";
+  const CASES: Record<string, string> = {
+    clean: "",
+    nohead: "RUN git init -q /s && cd /s && echo later > l.txt && git add l.txt && " + git + " commit -qm later && git repack -a -d -q && mkdir -p /opt/cache/objects && cp -r .git/objects/pack /opt/cache/objects/ && rm -rf /s",
+    ignored: "RUN echo 'fn " + NAME + "() {}' > /w/target/leak.rs",
+    staged: "RUN cd /w && echo 'def " + NAME + "(): pass' > leak.py && git add leak.py",
+    modified: "RUN echo '" + MARK + "' >> /w/a.py",
+    grepfail: "RUN printf '#!/bin/sh\\ncase \" $* \" in *\" -H \"*) exit 2;; esac\\nexec /usr/bin/grep \"$@\"\\n' > /usr/local/bin/grep && chmod 755 /usr/local/bin/grep",
+  };
+  const want: Record<string, string> = {};
+  beforeAll(() => {
+    expect(d(["build", "-q", "-t", base, "-"], "FROM " + PY_IMAGE + "\nRUN apt-get update -qq && apt-get install -y -qq --no-install-recommends git >/dev/null && rm -rf /var/lib/apt/lists/*\nRUN mkdir /w && cd /w && git init -q && printf 'def f():\\n    return 1\\n' > a.py && printf 'target/\\n' > .gitignore && git add -A && " + git + " commit -qm base && mkdir target && echo built > target/build.log\nRUN mkdir -p /opt/locked && echo 'x = 1' > /opt/locked/t.py && chown -R 4321 /opt/locked && chmod 700 /opt/locked && echo 'x = 2' > /opt/secret.txt && chmod 000 /opt/secret.txt\n").status).toBe(0);
+    for (const [k, run] of Object.entries(CASES)) {
+      expect(d(["build", "-q", "-t", tag(k), "-"], "FROM " + base + "\n" + run + "\n").status).toBe(0);
+      want[k] = d(["run", "--rm", "--network", "none", "--entrypoint", "git", tag(k), "-C", "/w", "rev-parse", "HEAD"]).stdout.trim();
+    }
+  }, 900_000);
+  afterAll(() => {
+    for (const k of Object.keys(CASES)) d(["image", "rm", "-f", tag(k)]);
+    d(["image", "rm", "-f", base]);
+  });
+  const inside = (k: string) => contain({ kind: "docker", image: tag(k), repoDir: "/w" }, { want: want[k]!, names: [NAME], markers: [MARK] });
+  const clean = { refs: { ok: true, findings: [] }, objects: { ok: true, findings: [] }, stores: { ok: true, findings: [] }, scan: { ok: true, findings: [] } };
+
+  test("a clean tree passes as root, and with root's read override dropped its unreadable file and dir are listed, never failed", () => {
+    const root = inside("clean");
+    expect([root.ok, root.checks, root.unreadable]).toEqual([true, clean, undefined]);
+    const inDir = scratch("contain-docker-in");
+    chmodSync(inDir, 0o755);
+    for (const [n, body] of Object.entries({ want: want.clean + "\n", names: NAME + "\n", markers: MARK + "\n", qa_pin: "" })) writeFileSync(join(inDir, n), body, { mode: 0o644 });
+    const r = d(["run", "--rm", "--network", "none", "--user", "0:0", "--cap-drop", "DAC_OVERRIDE", "--cap-drop", "DAC_READ_SEARCH", "-v", inDir + ":/sm-in:ro", "--entrypoint", "bash", tag("clean"), "-c", CONTAIN_SCRIPT, "bash", "/w", "/sm-in", "/"]);
+    expect(r.status).toBe(0);
+    const p = parseContain(r.stdout);
+    expect([p.ok, p.checks]).toEqual([true, clean]);
+    expect(p.unreadable).toEqual(expect.arrayContaining(["/opt/locked", "/opt/secret.txt"]));
+  }, 900_000);
+
+  test("a git object store with no HEAD file fails the stores check", () => {
+    const r = inside("nohead");
+    expect(r.checks.stores).toEqual({ ok: false, findings: ["objects /opt/cache/objects"] });
+    expect([r.ok, r.checks.refs.ok, r.checks.objects.ok, r.checks.scan.ok]).toEqual([false, true, true, true]);
+  }, 900_000);
+
+  test("an ignored file in the repo naming a hidden test fails the scan", () => {
+    const r = inside("ignored");
+    expect(r.checks.scan).toEqual({ ok: false, findings: ["name /w/target/leak.rs sha256=" + sha(NAME)] });
+    expect([r.ok, r.checks.refs.ok, r.checks.objects.ok, r.checks.stores.ok]).toEqual([false, true, true, true]);
+  }, 900_000);
+
+  test("a grep that fails during the scan fails the scan instead of reading as clean", () => {
+    const r = inside("grepfail");
+    expect(r.checks.scan).toEqual({ ok: false, findings: ["error grep markers", "error grep names"] });
+    expect([r.ok, r.checks.refs.ok, r.checks.objects.ok, r.checks.stores.ok]).toEqual([false, true, true, true]);
+  }, 900_000);
+
+  test("a file staged but never committed and a tracked file changed in the working tree fail the scan", () => {
+    const st = inside("staged");
+    expect(st.checks.scan).toEqual({ ok: false, findings: ["name /w/leak.py sha256=" + sha(NAME)] });
+    const m = inside("modified");
+    expect(m.checks.scan).toEqual({ ok: false, findings: ["marker /w/a.py sha256=" + sha(MARK)] });
+    expect([st.ok, st.checks.refs.ok, st.checks.objects.ok, st.checks.stores.ok, m.ok, m.checks.refs.ok, m.checks.objects.ok, m.checks.stores.ok]).toEqual([false, true, true, true, false, true, true, true]);
+  }, 900_000);
 });
 
 const GO_IMAGE = process.env.SM_SCORE_GO_IMAGE ?? "";

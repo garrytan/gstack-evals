@@ -647,6 +647,68 @@ counts sessions.
   --unit that is not the unit in --unit-dir, and sm packets labelled refuses a unit listed twice or a spec entry whose
   unit_dir holds another unit (E_USAGE), so no stock-build record or judge key names a unit other than the one its diffs
   came from.
+- The containment check finds object stores with no HEAD file (pre-data build change, 2026-11-11, sh/contain.sh; the
+  Captain's pre-run list item 1, GSTA-2, from #318's deferred findings): a pack (pack/pack-<hash>.idx or .pack) or loose
+  objects (a two-hex-digit dir holding object files) anywhere but proc and sys fail the stores check as "objects <dir>",
+  unless the dir is the objects dir of a git dir the check already reads (the repo, A3's gstack checkout at the /qa pin,
+  or a store it already reports). An alternates file or GIT_ALTERNATE_OBJECT_DIRECTORIES still fails the check, and now
+  each store it reaches is listed as "reached <dir>". npm's and webpack's hashed caches do not match.
+- A tool that fails inside the containment check fails its check (pre-data build change, 2026-11-11, sh/contain.sh,
+  contain.ts; the Captain's pre-run list item 2, GSTA-2, from #318's deferred findings): a git listing, find or grep
+  that exits with an error adds an "error <tool>" finding instead of reading as an empty, clean listing. git cat-file
+  also counts as failed when it writes to stderr, since it skips a broken pack index with exit 0. Files and dirs the
+  check can't read are skipped and listed in the result's unreadable field, never failed, so a clean unit stays clean.
+  The scan's git ls-tree, git hash-object and git grep calls count the same way (the Captain's ruling A2 on #320,
+  GSTA-2, 2026-11-11).
+- The containment scan reads every file in the repo that the base commit does not hold (pre-data build change,
+  2026-11-11, sh/contain.sh; the Captain's pre-run list item 3, GSTA-2, from #318's deferred findings, and the Captain's
+  ruling A2 on #320, GSTA-2, 2026-11-11): every file in the repo that want does not hold byte for byte is scanned for
+  hidden test names and markers like a file outside the repo. That covers untracked files, ignored ones (build output,
+  dependency trees, test caches), files staged but never committed, and tracked files whose working copy differs from
+  want's blob. The tracked list and the base names and markers come from want's tree, never from the index or the
+  working tree. Files equal to want's blobs and the repo's .git dir are not scanned, and only archives outside the repo
+  are listed.
+- A finalize halt is on disk before its close (pre-data build change, 2026-11-11, driver/stage.ts; the Captain's pre-run
+  list item 4, GSTA-2, from #318's deferred findings): the driver writes and fsyncs the halt line before the close line,
+  so a crash between them leaves a standing halt, never a close with no halt.
+- A finalize halt on a stage draining for its cap stop exits 2 (pre-data build change, 2026-11-11, driver/stage.ts; the
+  Captain's pre-run list item 4, GSTA-2, Capy's finding on #318): the stage keeps ended cap_stop and its lease settles
+  with the stop's scope, as before, and the driver now exits 2, as E_SM_FINALIZE_HALT says.
+- A family SM session the driver never closed itself halts its item (pre-data build change, 2026-11-11,
+  driver/stage.ts; the Captain's pre-run list item 5, GSTA-2, from #318's deferred findings): after a crash, the
+  relaunch's recovery closes a live session as recovered, and ledger settle or reconcile closes one as settled or
+  reconciled. None of these closes ran the proxy's finalize, so the session's allowance stops are unknown and section
+  6's retry could spend with no halt. The driver now writes a halt line with the cause (recovery writes it before its
+  close line), then refuses the item (E_SM_FINALIZE_HALT) until a launch lifts it with --lift-halt <session id>.
+  Recovery still settles the lease. Section 6's retry rule is unchanged: the halt only delays the retry until the
+  Captain rules.
+- A send refuses a run whose lease its local ledger lacks (pre-data build change, 2026-11-11, send.ts; the Captain's
+  pre-run list item 6, GSTA-2, from #317's deferred findings): when the item record holds a lease of the run that the
+  send's local ledger does not hold, the send is refused (E_USAGE) before it recovers, settles or opens anything, since
+  another ledger can't tell which calls are already paid for. A lease the owner reconciled is exempt only when the
+  --out's replies.jsonl holds its lease line (each send now writes one when it opens a lease, before any call), since
+  those replies record every call it made and none is asked again; with them missing, the send is refused as above (the
+  Captain's correction on #320). An item that is cap-stopped or has no cap left still reports CAP_STOP first, and when
+  it also holds such a lease the send stops with CAP_STOP before it writes any lift, recovery or lost-reply line (the
+  Captain's ruling C on #320, GSTA-2, 2026-11-11).
+- A lost call that settled past the bound halts the item (pre-data build change, 2026-11-11, send.ts; the Captain's
+  pre-run list item 7, GSTA-2, from #317's deferred findings): when a send stopped after a call settled but before its
+  reply and halt were recorded, the next send records the call as lost, and if the call's settled usage passes the
+  prereg's bound it also writes the usage halt and stops (E_SM_USAGE_HALT) until --lift-halt. A lost call on a lease the
+  owner reconciled has no usage any ledger shows, so it halts the same way with the reason "usage unknown"; its halt
+  line and the error name the lease's proxy journal (<lease>.journal.ndjson in --out) and the provider export the
+  reconcile cites, which the Captain reads before ruling (the Captain's pick A on #320, GSTA-2). A lost call on a lease
+  this ledger still holds halts the same way as usage unknown when its meter shows the call unknown, and its halt line
+  and the error name the lease and its proxy journal; a lost call with no meter on the lease never reached its
+  reservation and stays unhalted (the Captain's ruling B2 on #320, GSTA-2, 2026-11-11). The lost call is never sent
+  again.
+- A replies line that won't parse is refused (pre-data build change, 2026-11-11, send.ts; the Captain's pre-run list
+  item 8, GSTA-2): only the lines a crash cut short at the end of replies.jsonl may fail to parse. The next send writes
+  a torn line after them, so later sends read past them; any other unparseable line refuses the send (E_USAGE) instead
+  of being dropped.
+- A key whose packet is missing is refused (pre-data build change, 2026-11-11, send.ts; the Captain's pre-run list item
+  9, GSTA-2): the send refuses the packets dir (E_SM_PACKET) before it opens anything, as it already does for a packet
+  with no key.
 - A run builds nothing when a rebuild command exits non-zero (rebuild_failed), when the print command reads report paths
   and none of them holds a fresh file (no_fresh_report), or when a stale file could not be moved aside (stale_unhidden).
   The parser does not run then, and the run parses nothing. A test command's own exit never sets it. Every one of the
