@@ -179,7 +179,8 @@ Rules as built
   failed finalize here, so it does not halt the stage itself: pf-run calls the driver's POST <control>/stop first, with a
   JSON body naming E_PF_FINALIZE_HALT and the session, and then halts with E_PF_FINALIZE_HALT, no retry and no session
   record. The driver records that reason (a halt_stop line in sessions.jsonl and an E_PF_FINALIZE_HALT log line naming
-  the session), settles every stage still serving as failed, never completed, and exits 2. A stop call that fails
+  the session), settles every stage still serving as failed, never completed (a stage already draining keeps the end
+  it drained with and is marked halted), and exits 2. A stop call that fails
   still halts, and the halt line says so, so the operator stops the driver by hand. The halt_stop line is not a halt
   line, so nothing refuses a relaunch by itself: the next launch of the run needs the
   Captain's ruling on that session, after reading the lease's journal, and that ruling is the lift. A task open the driver refuses
@@ -368,4 +369,4 @@ Record, 2026-11-10, keyless, stub sessions:
 - Per arm, model, task and trial: the task phase opens at most twice, the second naming meta.rerun (the whole-session retry). Within each task attempt the wrap-up opens at most twice, the second naming meta.rerun, and only after that attempt's task open. planned and reruns count task opens only.
 - A task open needs room for its task allowance plus its wrap-up allowance. The wrap-up allowance stays pending until the wrap-up opens, a new task attempt replaces it, or the task slot has been closed for the deadline grace.
 - --pf-allowance takes the task-turn table (costReading's doubled one after admission); the default is items.ts ALLOWANCE. Sol and particle-1 route through OpenRouter, Opus through Anthropic, from registry.json's sm.models map.
-- POST /stop with a JSON body whose code is E_PF_FINALIZE_HALT (pf-run's halt stop) records a halt_stop line naming the session, settles every stage still serving as failed and exits 2. A plain POST /stop, SIGTERM or SIGINT keeps its meaning: every stage with no live session settles as completed, one that never ran included, and the driver exits 0 unless something else failed.
+- POST /stop with a JSON body whose code is E_PF_FINALIZE_HALT (pf-run's halt stop) records a halt_stop line naming the session, settles every stage still serving as failed (one already draining keeps the end it drained with and is marked halted) and exits 2. A plain POST /stop, SIGTERM or SIGINT keeps its meaning: every stage with no live session settles as completed, one that never ran included, and the driver exits 0 unless something else failed.
