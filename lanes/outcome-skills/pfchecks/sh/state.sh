@@ -14,7 +14,7 @@
 # size), with one "PF_TREE_SIZE files=N bytes=B stopped=S" line on every timeout, above the line or below it. On a
 # 4-core Capy machine (2026-11-11) the commit added about 7,000 files or 31 MB of random bytes a second, so
 # either alone takes about half the step's 600 s. No line means the cause lies in the harness, the host, docker or the
-# network. It always exits 0.
+# network. It always exits 0. Its git runs with no hooks, no fsmonitor and no system or global config.
 timed=0
 if [ "${1:-}" = --timed-out ]; then
   timed=1
@@ -27,7 +27,8 @@ here=$(cd "$(dirname "$0")" && pwd)
 files=2000000
 bytes=8589934592
 say() { printf 'PF_ARM_STATE %s\n' "$*"; }
-g() { git -C "$repo" -c safe.directory='*' -c core.quotepath=off "$@"; }
+export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
+g() { git -C "$repo" -c safe.directory='*' -c core.quotepath=off -c core.hooksPath=/dev/null -c core.fsmonitor=false "$@"; }
 need_head=0
 for n in "$@"; do
   [ -f "$work/$n" ] || say "missing $n"

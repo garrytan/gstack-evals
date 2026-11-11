@@ -436,3 +436,50 @@ test("on a timed-out step, state.sh names no lock, even one in the same clock ti
   expect(state(["--timed-out"])).toEqual(["PF_TREE_SIZE files=1 bytes=2 stopped=0"]);
   rmSync(d, { recursive: true, force: true });
 });
+
+// Value: protects=the Captain's ruling item 9 on #324: the harness's git after a paid turn runs nothing the session or the machine's git config set up; fails_when=a hook in .git/hooks, a core.fsmonitor command in .git/config, a filter from the system config or an excludesFile from the global config runs or counts during capture.sh commit, wrapup.sh keep or state.sh; why_new=commit passed --no-verify, but post-commit, reference-transaction, post-checkout, fsmonitor and outside config still reached the harness's git; seam=sh/capture.sh, sh/wrapup.sh and sh/state.sh git calls; no_claim=pf_turns' bundle step (bundle create runs no hook and reads no index) and the default ignore file under XDG_CONFIG_HOME, which git reads without any config
+test("capture.sh commit, wrapup.sh keep and state.sh run no hook, fsmonitor or filter, and read no global or system config", () => {
+  const { d, repo, work } = sessionTree("pf-cap-hooks-");
+  const marks = join(d, "marks");
+  const mark = (name: string) => {
+    const p = join(d, "mark-" + name);
+    writeFileSync(p, `#!/bin/sh\necho ${name} >> '${marks}'\n`);
+    chmodSync(p, 0o755);
+    return p;
+  };
+  for (const h of ["post-commit", "post-checkout", "reference-transaction", "post-index-change"]) {
+    writeFileSync(join(repo, ".git", "hooks", h), `#!/bin/sh\necho ${h} >> '${marks}'\n`);
+    chmodSync(join(repo, ".git", "hooks", h), 0o755);
+  }
+  git(repo, "config", "core.fsmonitor", mark("fsmonitor"));
+  const home = join(d, "home");
+  mkdirSync(join(home, ".config"), { recursive: true });
+  writeFileSync(join(d, "global-ignore"), "new.txt\n");
+  writeFileSync(join(home, ".gitconfig"), `[core]\n\texcludesFile = ${join(d, "global-ignore")}\n`);
+  const sys = join(d, "system.cfg");
+  writeFileSync(join(d, "attrs"), "sys.txt filter=mark\n");
+  spawnSync("git", ["config", "--file", sys, "core.attributesFile", join(d, "attrs")]);
+  spawnSync("git", ["config", "--file", sys, "filter.mark.clean", `sh -c 'echo filter >> "${marks}"; cat'`]);
+  const env: Record<string, string | undefined> = { ...process.env, HOME: home, XDG_CONFIG_HOME: join(home, ".config"), GIT_CONFIG_SYSTEM: sys };
+  delete env.GIT_CONFIG_GLOBAL;
+  delete env.GIT_CONFIG_NOSYSTEM;
+  const run = (...a: string[]) => spawnSync("bash", a, { encoding: "utf8", env });
+  const ran = () => {
+    let s = "";
+    try { s = readFileSync(marks, "utf8"); rmSync(marks); } catch {}
+    return [...new Set(s.split("\n").filter(Boolean))].sort();
+  };
+  const inv = join(d, "inv");
+  writeFileSync(inv, run(join(SH, "capture.sh"), "inventory", repo).stdout);
+  writeFileSync(join(repo, "new.txt"), "new\n");
+  writeFileSync(join(repo, "sys.txt"), "sys\n");
+  const c = run(join(SH, "capture.sh"), "commit", repo, inv, work);
+  const seen: Record<string, unknown> = { capture: c.stdout.replace(/head=[0-9a-f]{40}/, "head=H"), commit: ran() };
+  writeFileSync(join(repo, "later.txt"), "x\n");
+  seen.wrapup = run(join(SH, "wrapup.sh"), "keep", repo, work).stdout;
+  seen.keep = ran();
+  run(join(SH, "state.sh"), repo, work, "s.head");
+  seen.state = ran();
+  expect(seen).toEqual({ capture: "PF_CAPTURE changed=2 deleted=0 forced=0 head=H\n", commit: [], wrapup: "PF_DISCARD later.txt\nPF_WRAPUP checks=0 discarded=1\n", keep: [], state: [] });
+  rmSync(d, { recursive: true, force: true });
+});

@@ -19,12 +19,15 @@
 # inventory lists whose status changed after <since> was written, stopping once N reaches <files> or B reaches <bytes>
 # (S 1, so N and B are lower bounds), else S 0.
 # "unreadable <repo> <since>" prints each such path, symlinks left out, that this user cannot read, or a directory it
-# cannot enter, one per line. sh/state.sh reads both after a step fails.
+# cannot enter, one per line. sh/state.sh reads both after a step fails. Every git call here runs with no hooks, no
+# fsmonitor and no system or global config, so nothing the agent planted in .git/hooks or core.fsmonitor runs, and no
+# excludesFile outside the repository marks a path as forced.
 set -euo pipefail
 cmd=$1
 repo=$2
 cd "$repo"
-g() { git -c safe.directory='*' -c core.quotepath=off "$@"; }
+export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
+g() { git -c safe.directory='*' -c core.quotepath=off -c core.hooksPath=/dev/null -c core.fsmonitor=false "$@"; }
 walk() {
   local keep=() d f p base
   local -A kept=()
@@ -92,12 +95,12 @@ case $cmd in
     awk -F'\t' 'NR==FNR { a[$2] = $1; next } !($2 in a) || a[$2] != $1 { print $2 }' "$inv" "$t/now" > "$t/changed"
     awk -F'\t' 'NR==FNR { a[$2] = 1; next } !($2 in a) { print $2 }' "$t/now" "$inv" > "$t/deleted"
     g check-ignore --stdin < "$t/changed" > "$t/forced" || true
-    if ! tr '\n' '\0' < "$t/changed" | xargs -0 -r git -c safe.directory='*' -c core.fileMode=true --literal-pathspecs add --force --; then
+    if ! tr '\n' '\0' < "$t/changed" | xargs -0 -r git -c safe.directory='*' -c core.hooksPath=/dev/null -c core.fsmonitor=false -c core.fileMode=true --literal-pathspecs add --force --; then
       while IFS= read -r f; do [ -e "$f" ] || [ -L "$f" ] || printf 'PF_ARM_STATE vanished %s\n' "$f" >&2; done < "$t/changed"
       rm -rf "$t"
       exit 1
     fi
-    tr '\n' '\0' < "$t/deleted" | xargs -0 -r git -c safe.directory='*' --literal-pathspecs rm --cached -q --ignore-unmatch --
+    tr '\n' '\0' < "$t/deleted" | xargs -0 -r git -c safe.directory='*' -c core.hooksPath=/dev/null -c core.fsmonitor=false --literal-pathspecs rm --cached -q --ignore-unmatch --
     GIT_COMMITTER_DATE="2000-01-01T00:00:01Z" g -c user.name=session -c user.email=session@localhost -c commit.gpgsign=false -c gc.auto=0 \
       commit -q --no-verify --allow-empty --date "2000-01-01T00:00:01Z" -m "session end"
     head=$(g rev-parse HEAD)

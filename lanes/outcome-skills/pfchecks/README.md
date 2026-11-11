@@ -182,7 +182,11 @@ Rules as built
 - Between turns: capture.sh commit (S), which also saves S's head and inventory for wrapup.sh in the same run, so the
   tree is hashed once, in one batched sha256sum pass. After the wrap-up: wrapup.sh keep copies CHECKS.json (a
   regular file at the root), prints PF_DISCARD for every other added, changed or deleted path, and puts the tree back to S.
-  S leaves the container as a git bundle, which score.ts fetches as --s with ref HEAD.
+  S leaves the container as a git bundle, which score.ts fetches as --s with ref HEAD. Every git call in these post-turn
+  steps (capture.sh, wrapup.sh, state.sh and the bundle) runs with core.hooksPath=/dev/null, core.fsmonitor=false,
+  GIT_CONFIG_NOSYSTEM=1 and GIT_CONFIG_GLOBAL=/dev/null, so no hook or fsmonitor command the agent planted and no
+  filter, excludesFile or other setting from the machine's system or global config runs or counts; .git/config still
+  applies, and state.sh names a filter set there.
 - A post-turn step that fails or times out (the capture, a wrap-up reset or keep, the bundle) takes no retry, and the
   session still writes its record. Each step runs as its own process group in the container, so a step that times out
   is killed whole there before sh/state.sh reads the tree, and the session then ends. When sh/state.sh finds the cause in what the agent wrote (a work file the step needs

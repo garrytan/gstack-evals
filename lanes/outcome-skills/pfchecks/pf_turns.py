@@ -241,7 +241,7 @@ class Session:
         out["checks"] = "PF_WRAPUP checks=1" in out["keep"]
         if out["checks"]:
             (self.out / "CHECKS.json").write_bytes(self.sh('cat "$1/CHECKS.json"', work).stdout)
-        (self.out / "s.bundle").write_bytes(self.step("bundle", (), 'git -C "$1" -c safe.directory="*" bundle create "$2/s.bundle" HEAD >/dev/null && cat "$2/s.bundle"', repo, work))
+        (self.out / "s.bundle").write_bytes(self.step("bundle", (), 'GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null git -C "$1" -c safe.directory="*" -c core.hooksPath=/dev/null -c core.fsmonitor=false bundle create "$2/s.bundle" HEAD >/dev/null && cat "$2/s.bundle"', repo, work))
         return out
 
     def finish(self, refused: str | None = None) -> dict:
