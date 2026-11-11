@@ -29,7 +29,9 @@
 //   problem on a dropped item doesn't count; on any other item they fail the round. A missing candidate fails it only
 //   when both auditors name it, as an item stays only when both keep it.
 // - Before each audit, an item's kind is set from its candidate's (B or R as B, T, C).
-// - A candidate's diff is a merge commit's diff against its first parent, its pull request's net change.
+// - A candidate's diff is a merge commit's diff against its first parent, its pull request's net change. A B candidate's
+//   diff puts every hunk that deletes or edits a line blamed on the change first, then the rest, before the 2,500-word
+//   cut (F8, prereg 2026-11-11-geva-522 section 3), so a long fix never cuts the blamed hunks away.
 // - Primary order: B (defect revert, then a fix linked to an issue opened by someone outside the maintainer team, then
 //   other fixes), then C, then T, then sha256("20261108\n" + unit + "\n" + item id); mentioned and generic items never
 //   enter; at most 6.
@@ -39,6 +41,7 @@ import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, realpat
 import { dirname, join, resolve, sep } from "node:path";
 import { listChanges } from "../../real-outcome/mine/changes.ts";
 import { git, gitLines, gitRun } from "../../real-outcome/mine/git.ts";
+import { blame } from "../../real-outcome/mine/szz.ts";
 import { graphql } from "../../product-value/author/gh.ts";
 import { ask, cut, fence, pinnedHead } from "../../product-value/author/run.ts";
 import { need, parseArgs, PvError, readRecords } from "../../product-value/io.ts";
@@ -188,13 +191,14 @@ export function collect(clone: string, c: Candidate, query: Query): Material | s
     prs.slice(i, i + 10).forEach((pr, j) => info.set(pr, d?.repository?.["p" + j] ?? null));
   }
   const count: Record<string, number> = {};
+  const owned = new Set(gitLines(clone, ["rev-list", c.base + ".." + c.change]));
   const candidates: CandidateText[] = kept.map((x) => {
     const p = x.pr === null ? null : info.get(x.pr);
     const issues = (p?.closingIssuesReferences?.nodes ?? []).map((q: any) => ({ number: q.number, title: q.title ?? "", user: !["OWNER", "MEMBER", "COLLABORATOR"].includes(q.authorAssociation), body: cut(q.body ?? "", 250) }));
     count[x.kind] = (count[x.kind] ?? 0) + 1;
     return {
       id: x.kind + count[x.kind], kind: x.kind, change: x.change, pr: x.pr, merged_at: x.merged_at, subject: x.subject, message: cut(git(clone, ["log", "-1", "--format=%B", x.change]).trim(), 300),
-      pr_text: p ? p.title + "\n" + cut(p.body ?? "", 400) : "", issues, diff: cut(candidateDiff(clone, x.change), 2500),
+      pr_text: p ? p.title + "\n" + cut(p.body ?? "", 400) : "", issues, diff: cut(x.kind === "B" ? blamedFirst(clone, x.change, owned) : candidateDiff(clone, x.change), 2500),
       sites: x.kind === "B" ? x.sites ?? [] : x.kind === "R" ? x.files.map((file) => ({ file, function: null })) : [],
     };
   });
@@ -224,6 +228,39 @@ const draftOf = (x: any): Draft => ({ items: Array.isArray(x?.items) ? x.items.f
 
 /** A candidate's diff: a merge commit's against its first parent, its pull request's net change (plain git show prints a clean merge's combined diff, which is empty). */
 export const candidateDiff = (clone: string, sha: string) => gitRun(clone, ["show", "--format=", "--diff-merges=first-parent", "--no-ext-diff", "--no-textconv", "--no-renames", sha]).stdout;
+
+/** F8: a fix's diff with every hunk that deletes or edits a non-blank line blamed (at the fix's first parent) on one of
+ * the owned commits first, in diff order, then the other hunks, each group under its file's header. */
+export function blamedFirst(clone: string, sha: string, owned: ReadonlySet<string>): string {
+  const first: string[] = [], rest: string[] = [];
+  for (const file of candidateDiff(clone, sha).split(/^(?=diff --git )/m)) {
+    const at = file.search(/^@@ /m);
+    if (at < 0) {
+      rest.push(file);
+      continue;
+    }
+    const head = file.slice(0, at);
+    const path = /^--- a\/(.+)$/m.exec(head)?.[1] ?? null;
+    const hunks = file.slice(at).split(/^(?=@@ )/m);
+    const deleted = hunks.map((h) => {
+      let n = Number(/^@@ -(\d+)/.exec(h)?.[1] ?? 0);
+      const lines: number[] = [];
+      for (const l of h.split("\n").slice(1)) {
+        if (l.startsWith("-")) {
+          if (l.slice(1).trim()) lines.push(n);
+          n++;
+        } else if (l.startsWith(" ")) n++;
+      }
+      return lines;
+    });
+    const all = deleted.flat();
+    const who = path && all.length ? blame(clone, sha + "^1", path, all) : new Map<number, string>();
+    const hit = deleted.map((lines) => lines.some((n) => owned.has(who.get(n) ?? "")));
+    if (hit.some(Boolean)) first.push(head + hunks.filter((_, i) => hit[i]).join(""));
+    if (!hit.every(Boolean)) rest.push(head + hunks.filter((_, i) => !hit[i]).join(""));
+  }
+  return first.join("") + rest.join("");
+}
 
 /** An item's kind follows its candidate's: a B or R candidate keys as B, a T candidate as T and a C candidate as C, since section 3 takes B candidates only from SZZ and reverts. */
 export function withKinds(m: Material, d: Draft): Draft {
