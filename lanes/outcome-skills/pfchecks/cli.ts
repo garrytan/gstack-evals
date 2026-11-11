@@ -154,7 +154,7 @@ async function run(cmd: string, a: Args): Promise<number> {
   if (cmd === "reprice") {
     const x = readJson(need(a, "in"));
     const prices = adm.reprice(x.measured ?? {});
-    const n = adm.nRule(prices, { supply: x.supply, spent_usd: x.spent_usd, crew_held_usd: x.crew_held_usd });
+    const n = adm.nRule(prices, { supply: x.supply, spent_usd: x.spent_usd, crew_held_usd: x.crew_held_usd, allowance: x.allowance });
     write(a.out as string | undefined, { prices, ...n, mid: x.mid ? adm.midRunCheck(x.mid.model, x.mid) : null, blind_fits: x.blind_spent_usd === undefined ? null : adm.blindFits(x.blind_spent_usd) });
     if (n.captain) console.error("captain: n = " + n.n + " is under 30; the Captain decides before any test session");
     return 0;

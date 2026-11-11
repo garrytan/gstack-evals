@@ -110,8 +110,12 @@ Analysis and money
 - Pooled Holm runs over the two bootstrap p values; per-model Holm over the two exact McNemar p values.
 - The process contrast reads as a fair test when at least 75% of P sessions loaded the skill and ran a checker.
 - Re-price: per session and arm, Opus 1.2 x its measured mean, Sol and particle-1 max(planning, 1.5 x measured mean); an
-  item's cap for n units is n x (the three arms' prices plus three $0.40 VMs), rounded up to $10. The margin is in the
-  price, so the cap adds no second 1.2. At planning prices this gives Opus $580 at n = 28, the post's cap.
+  item's cost cap for n units is n x (the three arms' prices plus three $0.40 VMs), rounded up to $10. The margin is in
+  the price, so the cap adds no second 1.2. At planning prices this gives Opus $580 at n = 28, the post's cap. The item's
+  cap is the larger of its cost cap and its tightest last open at the same prices, rounded up to the cent (section 13's
+  rule: the central cost less the last session's own price and VM, plus that session's task and wrap-up allowances, with
+  the allowances in force, so reprice.json may carry costReading's allowance table), and n is chosen with those caps
+  (the Captain's ruling on #305's run notes item 7). That makes the Opus cap $594.40 at n = 28.
 - Ceiling readings: ceiling_missing reads a session that scored 0 with at least one unreached entry as missing;
   no_flagged drops every unit with 5T + 8R >= 10,800 s, where T is the largest entry timeout over the unit's rows and R
   the median over its sessions of each session's median run overhead (call_ms less wall_ms plus rebuild_ms). The report

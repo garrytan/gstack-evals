@@ -1,8 +1,8 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 import { expect, test } from "bun:test";
 import { analyse, bootstrap, ceilingOf, cellsOf, flaggedUnits, mddText, report, valueOf, verdictOf, wilson, type Row } from "../../lanes/outcome-skills/pfchecks/analysis.ts";
-import { blindFits, ceilingReading, contrastFloor, costReading, exposureReading, floorReading, infraReading, itemCap, midRunCheck, nRule, reprice } from "../../lanes/outcome-skills/pfchecks/admission.ts";
-import { ITEMS, LINE, lineItemsMicros, OPUS, P1, PLANNING, SOL } from "../../lanes/outcome-skills/pfchecks/items.ts";
+import { blindFits, ceilingReading, contrastFloor, costCap, costReading, exposureReading, floorReading, infraReading, itemCap, midRunCheck, nRule, reprice, tightestOpen } from "../../lanes/outcome-skills/pfchecks/admission.ts";
+import { ALLOWANCE, ITEMS, LINE, lineItemsMicros, OPUS, P1, PLANNING, SOL } from "../../lanes/outcome-skills/pfchecks/items.ts";
 import { rowOf } from "../../lanes/outcome-skills/pfchecks/score.ts";
 
 const rows = (): Row[] => {
@@ -127,7 +127,8 @@ test("the re-price, the n rule, the mid-run check and the blind fit", () => {
   expect(p[OPUS]!.P).toBeCloseTo(8.4);
   expect(p[SOL]!.P).toBeCloseTo(6.3);
   expect(p[P1]).toEqual(PLANNING[P1]!);
-  expect(itemCap(p[OPUS]!, 28)).toBe(580);
+  expect(costCap(p[OPUS]!, 28)).toBe(580);
+  expect(itemCap(OPUS, p[OPUS]!, 28)).toBe(594.4);
   const n = nRule(p, { supply: 50, spent_usd: 500, crew_held_usd: 250 });
   expect(n.left_usd).toBe(1230);
   expect(n.caps["pf-opus"]! + n.caps["pf-sol"]! + n.caps["pf-particle"]!).toBeLessThanOrEqual(1230);
@@ -136,6 +137,24 @@ test("the re-price, the n rule, the mid-run check and the blind fit", () => {
   expect(midRunCheck(SOL, { cap_usd: 370, spent_usd: 200, done: 10, n: 28, measured: { P: [10], C: [10], N: [3] } }).stop).toBe(true);
   expect(blindFits(1860)).toBe(true);
   expect(blindFits(1861)).toBe(false);
+});
+
+// Value: protects=section 13's tightest-open rule at re-priced prices (#305's run notes item 7, the Captain's ruling A1); fails_when=a re-priced cap is smaller than its item's tightest last open (the central cost less the last session's own price and VM, plus that open's task and wrap-up allowances, with the allowances in force), or n is chosen with cost-only caps; why_new=itemCap was cost-only, so at a small n a cap could not hold one session's reserve (Sol at n = 1: $20 against $24); seam=admission.ts costCap, tightestOpen, itemCap and nRule; no_claim=the re-price itself (the test above)
+test("each re-priced cap is the larger of its cost cap and its tightest last open, which gives section 13's table at planning prices, and n is chosen with those caps", () => {
+  const plan = reprice({});
+  expect([costCap(plan[OPUS]!, 28), tightestOpen(OPUS, plan[OPUS]!, 28), itemCap(OPUS, plan[OPUS]!, 28)]).toEqual([490, expect.closeTo(505.2, 6), 505.2]);
+  expect([costCap(plan[SOL]!, 28), tightestOpen(SOL, plan[SOL]!, 28), itemCap(SOL, plan[SOL]!, 28)]).toEqual([310, expect.closeTo(324.8, 6), 324.8]);
+  expect([costCap(plan[P1]!, 28), tightestOpen(P1, plan[P1]!, 28), itemCap(P1, plan[P1]!, 28)]).toEqual([220, expect.closeTo(215.1, 6), 220]);
+  expect([costCap(plan[SOL]!, 1), itemCap(SOL, plan[SOL]!, 1)]).toEqual([20, 33.2]);
+  expect(itemCap(SOL, plan[SOL]!, 1)).toBeGreaterThanOrEqual(ALLOWANCE.N[SOL]! + 12);
+  const doubled = costReading({ P: [20], C: [], N: [] }).allowance;
+  expect(doubled.P[OPUS]).toBe(26);
+  expect(itemCap(OPUS, plan[OPUS]!, 28, doubled)).toBe(513.2);
+  const left = { supply: 60, spent_usd: 1980 - 1030, crew_held_usd: 0 };
+  expect(nRule(plan, left)).toMatchObject({ n: 27, caps: { "pf-opus": 488, "pf-sol": 314, "pf-particle": 210 } });
+  expect(nRule(plan, { ...left, spent_usd: 1980 - 1050 })).toMatchObject({ n: 28, caps: { "pf-opus": 505.2, "pf-sol": 324.8, "pf-particle": 220 } });
+  expect(nRule(plan, { ...left, spent_usd: 1980 - 1050, allowance: doubled }).n).toBe(27);
+  expect(nRule(plan, { supply: 60, spent_usd: 1980, crew_held_usd: 0 })).toMatchObject({ n: 0, caps: { "pf-opus": 0, "pf-sol": 0, "pf-particle": 0 } });
 });
 
 test("the two ceiling sensitivity readings: unreached entries as missing, and units the 5T + 8R limit flags dropped", () => {
