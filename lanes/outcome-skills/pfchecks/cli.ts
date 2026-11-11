@@ -15,6 +15,8 @@ import { labelsGate, neutralGate, oracleGate, poolOf, readLabels, toldGate, walk
 import { itemsTable } from "./items.ts";
 import { dockerNeutralRun, neutralFiles, validateNeutral, volumeTexts } from "./neutral.ts";
 import { PfError, readPrereg } from "./prereg.ts";
+import { runPfSession, type PfRun, type PfRunInput } from "./run.ts";
+import { planPart, type PfPlanned } from "./session.ts";
 import { dockerExecutor, treeVolume } from "./runner.ts";
 import { dockerBreaks, rowOf, scoreSession, type CatchRecord } from "./score.ts";
 import { toldScreen } from "./told.ts";
@@ -30,8 +32,16 @@ export const HELP = `Usage: gstack-evals outcome pf <command>
   analyze --prereg <prereg.json> --out <analysis.json> <catch.json>...
   admission --in <admission.json> [--out <file>]
   reprice --in <reprice.json> [--out <file>]
+  session plan --units <id,id,...> --prereg <prereg.json> --part <n> [--kind test|admit|blind] [--models <model,...>] --out <plan.json>
+  session run --unit <dir> --plan <plan.json> --index <n> --control <url> --proxy <host:port> --names short|plugin --effort <effort.json> --out <dir>
+              [--volume <tree volume>] [--allowance <allowance.json>] [--harbor <bin>] [--claude <bin>]
+              exits 10 at a cap stop, 11 at a finalize halt and 12 at a containment halt
   items
-Plan sections 2, 6 to 10, 12 and 13 (README.md in this lane). Codes E_PF_* in docs/errors.md.`;
+Plan sections 2, 6 to 13 (README.md in this lane). Codes E_PF_* in docs/errors.md.`;
+
+/** session run's own exits for the stops the runner VM's loop must tell apart; every other refusal exits as its code does. */
+export const SESSION_EXIT: Record<string, number> = { CAP_STOP: 10, E_PF_FINALIZE_HALT: 11, E_PF_CONTAINMENT: 12 };
+type Deps = { runPfSession: (i: PfRunInput) => Promise<PfRun> };
 
 type Args = { _: string[]; [k: string]: string | string[] | boolean | undefined } & { _: string[] };
 const MULTI = new Set(["labels", "unit", "mount", "env"]);
@@ -60,8 +70,38 @@ const readJson = (p: string) => JSON.parse(readFileSync(p, "utf8"));
 const write = (p: string | undefined, v: unknown) => { if (p) writeFileSync(p, JSON.stringify(v, null, 1) + "\n"); else console.log(JSON.stringify(v, null, 1)); };
 const mode = (a: Args) => { const m = (a.mode as string | undefined) ?? "hardened"; if (m !== "hardened" && m !== "root") throw new PfError("E_USAGE", "--mode is hardened or root"); return m; };
 
-async function run(cmd: string, a: Args): Promise<number> {
+async function run(cmd: string, a: Args, deps: Deps): Promise<number> {
   if (cmd === "items") { for (const l of itemsTable()) console.log(l); return 0; }
+  if (cmd === "session") {
+    const what = a._[0];
+    if (what === "plan") {
+      const kind = (a.kind as string | undefined) ?? "test";
+      if (kind !== "test" && kind !== "admit" && kind !== "blind") throw new PfError("E_USAGE", "--kind is test, admit or blind");
+      const part = Number(need(a, "part"));
+      if (!Number.isSafeInteger(part) || part < 0) throw new PfError("E_USAGE", "--part is a whole number");
+      const sessions = planPart(need(a, "units").split(","), readPrereg(need(a, "prereg")).order_seed, part, kind, a.models === undefined ? undefined : need(a, "models").split(","));
+      writeFileSync(need(a, "out"), JSON.stringify({ schema: "pf-plan.v1", kind, part, sessions }, null, 1) + "\n", { flag: "wx" });
+      console.log("sessions=" + sessions.length + " units=" + new Set(sessions.map((s) => s.unit)).size);
+      return 0;
+    }
+    if (what !== "run") throw new PfError("E_USAGE", "pf session takes plan or run");
+    const index = Number(need(a, "index"));
+    const session = (readJson(need(a, "plan")).sessions as PfPlanned[]).find((x) => x.index === index);
+    if (!session) throw new PfError("E_USAGE", "the plan has no session " + need(a, "index"));
+    const unitDir = need(a, "unit");
+    const u = readUnit(unitDir);
+    if (u.id !== session.unit) throw new PfError("E_USAGE", "session " + index + " is on unit " + session.unit + ", not " + u.id);
+    const effort = readJson(need(a, "effort"));
+    const names = need(a, "names");
+    if (names !== "short" && names !== "plugin") throw new PfError("E_USAGE", "--names is short or plugin");
+    const res = await deps.runPfSession({
+      unitDir, session, names, control: need(a, "control"), proxy: need(a, "proxy"), out: need(a, "out"), volume: (a.volume as string | undefined) ?? smTreeVolume(u.id), effort,
+      ...(session.arm === "blind" ? { scope: u.scope?.dir } : {}), ...(a.allowance === undefined ? {} : { allowance: readJson(need(a, "allowance")) }),
+      ...(a.harbor === undefined ? {} : { harbor: need(a, "harbor") }), ...(a.claude === undefined ? {} : { claude: need(a, "claude") }),
+    });
+    console.log("session=" + [session.unit, session.model, session.arm, session.index].join("/") + " gap=" + res.record.gap + " record=" + res.file);
+    return 0;
+  }
   if (cmd === "draw") {
     const seeds = readPrereg(need(a, "prereg"));
     const cj = readJson(need(a, "candidates"));
@@ -162,7 +202,7 @@ async function run(cmd: string, a: Args): Promise<number> {
   throw new PfError("E_USAGE", "unknown pf command " + JSON.stringify(cmd) + "; gstack-evals outcome pf --help lists them");
 }
 
-export async function main(argv: string[]): Promise<number> {
+export async function main(argv: string[], deps: Deps = { runPfSession }): Promise<number> {
   const [cmd, ...rest] = argv;
   if (cmd === undefined || cmd === "--help" || cmd === "-h") {
     console.log(HELP);
@@ -170,11 +210,12 @@ export async function main(argv: string[]): Promise<number> {
   }
   if (cmd === "dryrun") return await (await import("./dryrun.ts")).main(rest);
   try {
-    return await run(cmd, parse(rest));
+    return await run(cmd, parse(rest), deps);
   } catch (e) {
     const msg = (e as Error).message;
     const code = e instanceof PfError ? e.code : msg.split(" ")[0]!;
     console.error(isReasonCode(code) ? msg : "E_PF_INPUT " + msg);
+    if (cmd === "session" && SESSION_EXIT[code] !== undefined) return SESSION_EXIT[code]!;
     const exit = isReasonCode(code) ? (CODES[code] as { exit: number | null }).exit : 2;
     return exit === null || exit === undefined ? 2 : exit;
   }

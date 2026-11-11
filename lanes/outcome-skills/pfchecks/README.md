@@ -9,7 +9,16 @@ plan and the dry run (section "Sessions, arms and the dry run" below).
 ## Commands
 
 `gstack-evals outcome pf --help` lists them: `draw`, `told`, `neutral`, `score`, `analyze`, `admission`, `reprice`,
-`items`, `dryrun` and `contain`. Every refusal prints its reason code first (docs/errors.md, codes E_PF_*).
+`session plan`, `session run`, `items`, `dryrun` and `contain`. Every refusal prints its reason code first (docs/errors.md,
+codes E_PF_*).
+
+The paid run's entry point mirrors the state machines eval's `sm session` commands. `session plan` writes one part's
+sessions (pf-plan.v1, planPart from prereg.json's order_seed, never over an existing file). `session run` runs one planned
+session through runPfSession on the unit's tree volume (the blind probe with the unit's scope dir), and refuses before any
+session an index the plan does not hold, a unit other than the planned one, or a run without the dry run's effort.json.
+Its exit is 10 at a cap stop, 11 at a finalize halt (E_PF_FINALIZE_HALT) and 12 at a containment halt
+(E_PF_CONTAINMENT), so the runner VM's loop, which stops at the first non-zero exit, can tell them apart; a session that
+ends with a gap writes its record and exits 0.
 
 ## Files
 
