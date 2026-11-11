@@ -2,7 +2,8 @@
 """The pstack-checks two-turn session (plan sections 4 and 5) on the real Claude Agent SDK, used by pf_agent.PfAgent under
 Harbor and by the dry run. The task turn runs on its own slot, then capture.sh commits S in the session container and
 saves its head and inventory in the same run, then the wrap-up turn resumes the same Claude Code session in a new CLI process with its own limits
-(300 s, 20 turns) on its own slot. An upstream or infra end of the wrap-up turn puts the tree back to S (wrapup.sh reset)
+(300 s, 20 turns) on its own slot. A task turn that ends upstream or infra (task_end) ends the session there, before the
+capture, so run.ts retries the whole session; a completed or limit end, an allowance stop included, goes on. An upstream or infra end of the wrap-up turn puts the tree back to S (wrapup.sh reset)
 and reruns the wrap-up turn once on a new slot naming meta.rerun. A wrap-up turn refused for its allowance (an allowance
 stop on its slot, which the driver's close answer counts in allowance_stops, or the driver's 409 on its open, raised as
 OpenRefused) is never rerun; the proxy's other E_ALLOWANCE refusals are no allowance stop. A turn whose close answer says
@@ -37,6 +38,19 @@ from real_agent import SM_CHECK, RealAgent, message_record  # noqa: E402
 from sm_user import NoAnswer  # noqa: E402
 
 RERUN = {"task": "task_upstream_or_infra", "wrapup": "wrapup_upstream_or_infra"}
+ENDS = {"wall_limit": "limit_wall", "turn_ceiling": "limit_turns", "completed": "completed", "bg_wait_expired": "completed"}
+
+
+def task_end(t: dict) -> str:
+    """The task turn's end kind as run.ts pfRecord reads it (statemachines/session.ts endKind): a harness error, or a close
+    whose proxy finalize failed with no allowance stop counted, is infra; an allowance stop is limit_allowance whatever the
+    termination; then the wall and turn limits and completed; an UPSTREAM refusal or an error_result is upstream; anything
+    else is infra. Only completed and limit ends go on to the capture and the wrap-up turn (section 5)."""
+    if t["termination"] == "error" or (t["finalized"] is False and not t["allowance_stops"]):
+        return "infra"
+    if t["allowance_stops"]:
+        return "limit_allowance"
+    return ENDS.get(t["termination"]) or ("upstream" if "UPSTREAM" in t["refused"] or t["termination"] == "error_result" else "infra")
 
 
 class OpenRefused(Exception):
@@ -166,7 +180,7 @@ class Session:
         out["claude_version"] = self.sh("claude --version").stdout.decode(errors="replace").strip()
         self.sh('mkdir -p "$2" && bash "$1/capture.sh" inventory "$3" > "$2/inv"', cfg["sh_dir"], work, repo)
         task = out["task"] = await self.turn("task", cfg["task_text"], None)
-        if task["termination"] in ("error", "cli_exit") or not task["session_id"] or (task["finalized"] is False and not task["allowance_stops"]):
+        if task_end(task) in ("upstream", "infra") or not task["session_id"]:
             return out
         out["capture"] = self.script("capture.sh", "commit", repo, work + "/inv", work)
         for attempt in (1, 2):

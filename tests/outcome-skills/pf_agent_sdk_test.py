@@ -70,7 +70,8 @@ n = int(open(counter).read()) + 1 if os.path.exists(counter) else 1
 open(counter, "w").write(str(n))
 with open(log, "a") as f:
     f.write(json.dumps({"phase": phase, "n": n, "argv": argv, "cwd": os.getcwd(), "base_url": os.environ.get("ANTHROPIC_BASE_URL"), "token": os.environ.get("ANTHROPIC_API_KEY"), "bundled": os.environ.get("CLAUDE_CODE_DISABLE_BUNDLED_SKILLS"), "model": os.environ.get("ANTHROPIC_MODEL")}) + "\n")
-error = os.environ.get("PF_STUB_SCENARIO") == "wrapup_error" and phase == "wrapup" and n == 1
+scenario = os.environ.get("PF_STUB_SCENARIO")
+error = (scenario == "wrapup_error" and phase == "wrapup" and n == 1) or (scenario == "task_error" and phase == "task")
 def send(o):
     sys.stdout.write(json.dumps(o) + "\n")
     sys.stdout.flush()
@@ -96,10 +97,12 @@ class Control:
     proxy-recorded effort fields on the first close. cap_stop True refuses every open with 409; "wrapup" only wrap-up opens.
     wrapup_refusals and wrapup_stops are every wrap-up close's refusal codes and allowance stop count. unfinalized names the
     closes (1 is the first) whose proxy finalize failed: finalized false and the driver's null counts, but a wrap-up close
-    still carries wrapup_stops when set, the case where a turn has both."""
+    still carries wrapup_stops when set, the case where a turn has both. task_refusals and task_stops are the task close's.
+    failing_closes maps a slot id to how many of its close requests answer 503 before one is served."""
 
-    def __init__(self, cap_stop=False, wrapup_refusals=(), wrapup_stops=0, unfinalized=()):
-        self.opens, self.closes, self.refused = [], [], []
+    def __init__(self, cap_stop=False, wrapup_refusals=(), wrapup_stops=0, unfinalized=(), task_refusals=(), task_stops=0, failing_closes=None):
+        self.opens, self.closes, self.refused, self.close_failures = [], [], [], []
+        failing = dict(failing_closes or {})
         outer = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -115,12 +118,17 @@ class Control:
                     outer.opens.append(body)
                     n = len(outer.opens)
                     return self.answer(200, {"id": f"ses_{n}", "token": f"tok-{n}", "base_url": f"{outer.url}/slot{n}/anthropic", "ledger": "u4", "item": "pf-opus", "lease_id": "pf-opus.0001.abcdef", "meter_id": f"m{n}", "allowance_micros": round(body["cap_usd"] * 1e6)})
+                sid = self.path.split("/")[2]
+                if failing.get(sid, 0) > 0:
+                    failing[sid] -= 1
+                    outer.close_failures.append(self.path)
+                    return self.answer(503, {"code": "UNAVAILABLE", "detail": "driver busy"})
                 outer.closes.append({"path": self.path, **body})
                 n = len(outer.closes)
                 lost = n in unfinalized
                 first = {"thinking": {"type": "adaptive"}, "output_config": None, "reasoning": None, "reasoning_effort": None, "effort": None} if n == 1 and not lost else None
-                refusals = list(wrapup_refusals) if n > 1 else []
-                stops = wrapup_stops if n > 1 else 0
+                refusals = list(wrapup_refusals) if n > 1 else list(task_refusals)
+                stops = wrapup_stops if n > 1 else task_stops
                 return self.answer(200, {"spent_micros": 1000 * n, "finalized": not lost, "requests": None if lost else 1, "ok_responses": None if lost else 1, "refused": None if lost else len(refusals), "refusals": refusals, "allowance_stops": (stops or None) if lost else stops, "usage": {}, "first_request": first})
 
             def answer(self, code, obj):
@@ -145,7 +153,7 @@ def sh(cwd, cmd):
     return r.stdout.strip()
 
 
-def session(scenario="ok", instr=False, cap_stop=False, arm="P", wrapup_refusals=(), wrapup_stops=0, unfinalized=()):
+def session(scenario="ok", instr=False, cap_stop=False, arm="P", wrapup_refusals=(), wrapup_stops=0, unfinalized=(), task_refusals=(), task_stops=0, failing_closes=None):
     """One PfAgent trial; returns the error it raised, the control plane's calls, the stub's log and pf-summary.json."""
     d = Path(tempfile.mkdtemp(prefix="pf-agent-sdk-"))
     DIRS.append(d)
@@ -171,7 +179,7 @@ def session(scenario="ok", instr=False, cap_stop=False, arm="P", wrapup_refusals
     (d / "pf-config.json").write_text(json.dumps(pf))
     manifest = d / "images.json"
     manifest.write_text(json.dumps({"schema": "tg-images.v1", "rows": [{"label": LABEL, "image_id": IMAGE}]}))
-    control = Control(cap_stop, wrapup_refusals, wrapup_stops, unfinalized)
+    control = Control(cap_stop, wrapup_refusals, wrapup_stops, unfinalized, task_refusals, task_stops, failing_closes)
     pf_agent.SH_DIR = str(d / "pf-sh")
     pf_agent.WORK = str(d / "pf-work")
     agent = pf_agent.PfAgent(
@@ -302,6 +310,51 @@ def test_a_wrapup_allowance_stop_whose_proxy_finalize_failed_is_not_rerun():
     check(s.error is None, repr(s.error))
     check([o["meta"]["phase"] for o in s.control.opens] == ["task", "wrapup"], s.control.opens)
     check([(w["termination"], w["refused"], w["allowance_stops"], w["finalized"]) for w in s.summary["wrapup"]] == [("error_result", ["E_ALLOWANCE"], 1, False)], s.summary["wrapup"])
+    check([x["phase"] for x in s.stub] == ["task", "wrapup"], s.stub)
+
+
+def test_an_upstream_task_end_ends_the_session_before_the_capture_and_the_wrapup():
+    s = session("task_error")
+    check(s.error is None, repr(s.error))
+    check([o["meta"]["phase"] for o in s.control.opens] == ["task"], s.control.opens)
+    check(s.summary["task"]["termination"] == "error_result" and s.summary["task"]["allowance_stops"] == 0, s.summary["task"])
+    check(s.summary["capture"] is None and s.summary["wrapup"] == [] and s.summary["keep"] is None, s.summary)
+    check([x["phase"] for x in s.stub] == ["task"] and not (s.ev / "s.bundle").exists(), s.stub)
+
+
+def test_a_task_error_result_at_its_allowance_stop_still_runs_the_capture_and_the_wrapup():
+    s = session("task_error", task_refusals=("E_ALLOWANCE",), task_stops=1)
+    check(s.error is None, repr(s.error))
+    check([o["meta"]["phase"] for o in s.control.opens] == ["task", "wrapup"], s.control.opens)
+    check((s.summary["task"]["termination"], s.summary["task"]["allowance_stops"]) == ("error_result", 1), s.summary["task"])
+    check("PF_CAPTURE changed=1 " in s.summary["capture"] and [w["termination"] for w in s.summary["wrapup"]] == ["completed"], s.summary)
+    check([x["phase"] for x in s.stub] == ["task", "wrapup"] and (s.ev / "s.bundle").stat().st_size > 0, s.stub)
+
+
+def test_a_task_close_that_fails_once_is_sent_again_and_its_answer_read():
+    s = session(failing_closes={"ses_1": 1})
+    check(s.error is None, repr(s.error))
+    check(s.control.close_failures == ["/sessions/ses_1/close"] and [c["path"] for c in s.control.closes] == ["/sessions/ses_1/close", "/sessions/ses_2/close"], (s.control.close_failures, s.control.closes))
+    check(s.summary["slots"][0]["close"]["spent_micros"] == 1000 and s.summary["task"]["finalized"] is True, s.summary["slots"])
+    check([w["termination"] for w in s.summary["wrapup"]] == ["completed"], s.summary["wrapup"])
+    check([e["event"] for e in s.summary["events"] if e["event"] in ("close_failed", "slot_close")] == ["close_failed", "slot_close", "slot_close"], s.summary["events"])
+
+
+def test_a_task_close_that_keeps_failing_reads_as_a_failed_finalize_and_ends_the_session_before_the_wrapup():
+    s = session(failing_closes={"ses_1": 99})
+    check(s.error is None, repr(s.error))
+    check(s.control.close_failures == ["/sessions/ses_1/close"] * lb.OPEN_ATTEMPTS and s.control.closes == [], (s.control.close_failures, s.control.closes))
+    close = s.summary["slots"][0]["close"]
+    check(close["finalized"] is False and close["allowance_stops"] is None and close["spent_micros"] is None and "503" in close["error"], close)
+    check(s.summary["task"]["finalized"] is False and s.summary["task"]["allowance_stops"] == 0, s.summary["task"])
+    check([o["meta"]["phase"] for o in s.control.opens] == ["task"] and s.summary["capture"] is None and s.summary["wrapup"] == [], s.summary)
+
+
+def test_a_wrapup_close_that_keeps_failing_is_not_rerun():
+    s = session("wrapup_error", failing_closes={"ses_2": 99})
+    check(s.error is None, repr(s.error))
+    check([o["meta"]["phase"] for o in s.control.opens] == ["task", "wrapup"], s.control.opens)
+    check([(w["termination"], w["finalized"]) for w in s.summary["wrapup"]] == [("error_result", False)], s.summary["wrapup"])
     check([x["phase"] for x in s.stub] == ["task", "wrapup"], s.stub)
 
 
