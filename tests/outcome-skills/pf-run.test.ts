@@ -471,6 +471,31 @@ test("an attempt with no summary after a logged slot open halts with E_PF_FINALI
   for (const ended of ["Harbor ended on AgentTimeoutError", "Harbor exited 1"]) expect(() => retryAfter(i, 1, null, none, "/out/a1", ended, ev)).toThrow(new RegExp("attempt 1: " + ended + " after pf_turns opened a slot"));
 });
 
+// Value: protects=the owner's ruling A2: a task open the driver refused at the cap ends the part as a cap stop, while any other open with no summary still halts; fails_when=a cap stop whose only logged open is the task open halts with E_PF_FINALIZE_HALT or writes no session.json, or a cap stop with a second logged open or a lone wrap-up open line, or a task open line with no cap stop, does not halt; why_new=pf_turns logs the task open before DriverSlots.open raises LedgerCapStop, so no summary is written and retryAfter halted a normal cap stop; seam=run.ts retryAfter then finishSession over a real evaluator dir; no_claim=that a refused open reserves nothing (pf-driver.test.ts)
+test("a cap stop whose only logged open is the task open ends as CAP_STOP with a session record; a second open line, a lone wrap-up line or no cap stop halts", () => {
+  const i = input("P");
+  const ev = (...phases: string[]) => {
+    const dir = temp("pf-run-ev-");
+    writeFileSync(join(dir, "pf-opens.jsonl"), phases.map((phase) => JSON.stringify({ phase, rerun: null, at: 3.1 }) + "\n").join(""));
+    return dir;
+  };
+  const ended = "Harbor ended on LedgerCapStop";
+  for (const attempt of [1, 2] as const) {
+    const dir = ev("task");
+    const r = pfRecord(i, attempt, null, dir, "LedgerCapStop");
+    expect(retryAfter(i, attempt, null, r, "/out/a" + attempt, ended, dir)).toBe(false);
+    const file = join(temp("pf-run-cap-"), "session.json");
+    expect(() => finishSession(file, r)).toThrow(/^CAP_STOP /);
+    expect(JSON.parse(readFileSync(file, "utf8"))).toMatchObject({ cap_stop: true, gap: null, attempt });
+  }
+  for (const phases of [["task", "wrapup"], ["task", "task"], ["wrapup"]]) {
+    const dir = ev(...phases);
+    expect(() => retryAfter(i, 1, null, pfRecord(i, 1, null, dir, "LedgerCapStop"), "/out/a1", ended, dir)).toThrow(/^E_PF_FINALIZE_HALT /);
+  }
+  const dir = ev("task");
+  for (const exception of [null, "LanebInfraError", "RuntimeError"]) expect(() => retryAfter(i, 1, null, pfRecord(i, 1, null, dir, exception), "/out/a1", "Harbor exited 1", dir)).toThrow(/^E_PF_FINALIZE_HALT /);
+});
+
 // Value: protects=the Captain's ruling D on #324: E_PF_CAPTURE's entry fits a post-turn capture failure, which comes after paid turns; fails_when=E_PF_CAPTURE says it is refused before any spend or is retry safe, or changes its exit; why_new=the entry said "None: refused before any spend" and "retry safe" for a capture that runs after the task turn spent; seam=src/errors/codes.ts E_PF_CAPTURE; no_claim=docs/errors.md (bun run errors:check)
 test("E_PF_CAPTURE's entry says a post-turn capture failure follows paid turns and is not retry safe, and keeps exit 2", () => {
   const e = CODES.E_PF_CAPTURE;

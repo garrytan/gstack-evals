@@ -246,13 +246,17 @@ export function pfRecord(i: PfRunInput, attempt: 1 | 2, summary: Record<string, 
  *  no retry and no session record, while the driver halts the item's stage and names the lease's journal, which the
  *  Captain reads before ruling on a retry. So does any attempt that left no summary after pf_turns recorded a slot open
  *  in ev's pf-opens.jsonl, whatever ended it (ended names it for the halt line: run.ts's kill, Harbor's exception, its
- *  exit): that slot's counts are unknown, and it may have spent. */
+ *  exit): that slot's counts are unknown, and it may have spent. One end is exempt: a cap stop (Harbor's exception
+ *  LedgerCapStop) whose pf-opens.jsonl holds exactly one line, the task open. The driver refused that open with 409
+ *  CAP_STOP, so no slot exists and nothing spent; the attempt goes on to finishSession, which ends the part with CAP_STOP. */
 export function retryAfter(i: PfRunInput, attempt: 1 | 2, summary: Record<string, any> | null, record: PfSessionRecord, dir: string, ended: string | null = null, ev: string | null = null): boolean {
   const lost = ((summary?.slots ?? []) as Array<Record<string, any>>).filter((x) => x.close?.finalized === false && !((x.close?.allowance_stops ?? 0) > 0)).map((x) => String(x.id));
   const s = i.session;
   const label = s.unit + "/" + s.model + "/" + s.arm + "/" + s.index + " attempt " + attempt;
   if (lost.length) pfFail("E_PF_FINALIZE_HALT", label + ": the proxy's finalize failed at the close of session " + lost.join(", ") + " on lease " + record.lease_id + ", so its counts are unknown; the session halts with no retry and no session record, and the driver's E_PF_FINALIZE_HALT line names the journal (" + record.lease_id + ".journal.ndjson in its run dir); " + dir);
-  if (!summary && ev && existsSync(join(ev, OPENS)) && readFileSync(join(ev, OPENS), "utf8").trim()) pfFail("E_PF_FINALIZE_HALT", label + ": " + (ended ?? "the attempt ended") + " after pf_turns opened a slot (" + join(ev, OPENS) + "), and no summary names that slot's counts, so it may have spent; the session halts with no retry and no session record, and the driver's E_PF_FINALIZE_HALT line names the lease's journal; " + dir);
+  const opens = !summary && ev && existsSync(join(ev, OPENS)) ? readFileSync(join(ev, OPENS), "utf8").trim().split("\n").filter(Boolean) : [];
+  const refusedTask = record.cap_stop && opens.length === 1 && JSON.parse(opens[0]!).phase === "task";
+  if (opens.length && !refusedTask) pfFail("E_PF_FINALIZE_HALT", label + ": " + (ended ?? "the attempt ended") + " after pf_turns opened a slot (" + join(ev!, OPENS) + "), and no summary names that slot's counts, so it may have spent; the session halts with no retry and no session record, and the driver's E_PF_FINALIZE_HALT line names the lease's journal; " + dir);
   return attempt === 1 && retriesSession(summary, record);
 }
 

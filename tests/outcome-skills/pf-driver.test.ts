@@ -158,6 +158,37 @@ test("a task open needs room for its task and wrap-up allowances, the wrap-up's 
   two.local.close?.();
 });
 
+// Value: protects=the owner's ruling A2, which lets run.ts end a refused task open as a cap stop because that open got no slot and reserved nothing; fails_when=a task open refused with 409 CAP_STOP for lack of room writes a reserve line to the lease's journal, puts a meter on the lease, changes the lease's held_micros or answers with a slot, or an open that got a slot creates no tracked session or meter; why_new=retryAfter now skips its no-summary halt for such a cap stop, and that is safe only while a refused open spends nothing; seam=driver/stage.ts's open handler over the proxy journal, LocalLedger.meters and GET /status; no_claim=how run.ts reads the cap stop (pf-run.test.ts)
+test("a task open refused with 409 CAP_STOP for lack of room reserves nothing, meters nothing and holds nothing on the lease, while an open that got a slot is a tracked session with a meter", async () => {
+  const { serve, local, root } = ledger({ "pf-opus": { cap: 26.5 } });
+  const served = await serve([{ item: "pf-opus", arm: "pf-opus", arms: TOLD }]);
+  const { open, closeAll } = client(served.control);
+  const lease = served.stages[0]!.lease_id;
+  const journal = join(root, "run", lease + ".journal.ndjson");
+  const reserves = () => readFileSync(journal, "utf8").trim().split("\n").map((l) => JSON.parse(l)).filter((e) => e.kind === "reserve");
+  const held = async () => ((await (await fetch(served.control + "/status")).json()) as { stages: Array<{ held_micros: number | null; live: string[] }> }).stages[0]!;
+  const got = await open({ arm: "pf:N", cap: 13, phase: "task", task: "u1" });
+  expect(got.status).toBe(200);
+  expect(got.json.id).toMatch(/^ses_/);
+  expect((await fetch(got.json.base_url + "/v1/messages", { method: "POST", headers: { "content-type": "application/json", "x-api-key": got.json.token }, body: JSON.stringify({ model: OPUS, max_tokens: 100, messages: [{ role: "user", content: "hi" }] }) })).status).toBe(200);
+  expect(reserves().map((e) => e.cell.meter_id)).toEqual([got.json.meter_id]);
+  expect([...local.meters(lease).keys()]).toEqual([got.json.meter_id]);
+  const before = await held();
+  expect(before.live).toEqual([got.json.id]);
+  expect(before.held_micros).toBeGreaterThan(0);
+  const refused = await open({ arm: "pf:N", cap: 13, phase: "task", task: "u2" });
+  expect([refused.status, refused.json.code]).toEqual([409, "CAP_STOP"]);
+  expect([refused.json.id, refused.json.meter_id, refused.json.token]).toEqual([undefined, undefined, undefined]);
+  expect(reserves().map((e) => e.cell.meter_id)).toEqual([got.json.meter_id]);
+  expect([...local.meters(lease).keys()]).toEqual([got.json.meter_id]);
+  expect(await held()).toMatchObject({ held_micros: before.held_micros, live: [got.json.id] });
+  const opens = readFileSync(join(root, "run", "sessions.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l)).filter((e) => e.event === "open");
+  expect(opens.map((e) => e.task)).toEqual(["u1"]);
+  await closeAll();
+  await served.done;
+  local.close?.();
+});
+
 test("pf-blind serves pf:blind on Opus only, and the doubled allowance table changes the task cap a told open must name", async () => {
   const { serve, local } = ledger({ "pf-blind": { cap: 100 }, "pf-opus": { cap: 100 } });
   const doubled = costReading({ P: [10, 10, 10], C: [1, 1], N: [1] }).allowance;

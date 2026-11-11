@@ -178,7 +178,9 @@ Rules as built
   AgentTimeoutError, a crash or any other exit), that slot may have spent with
   counts nothing names, so the session halts the same way (E_PF_FINALIZE_HALT) instead of retrying. A task open the driver refuses
   with 409 CAP_STOP raises LedgerCapStop in PfAgent, Harbor records it as the trial's exception, and pfRecord reads it as a
-  cap stop: no gap, no retry, and runPfSession ends the part with CAP_STOP after writing the record.
+  cap stop: no gap, no retry, and runPfSession ends the part with CAP_STOP after writing the record. That attempt has no
+  summary but logged its task open, so it is the one exemption from the halt: a cap stop whose pf-opens.jsonl holds exactly
+  one line, the task open, does not halt, since the refused open got no slot and reserved nothing. Any other mix halts.
 - Between turns: capture.sh commit (S), which also saves S's head and inventory for wrapup.sh in the same run, so the
   tree is hashed once, in one batched sha256sum pass. After the wrap-up: wrapup.sh keep copies CHECKS.json (a
   regular file at the root), prints PF_DISCARD for every other added, changed or deleted path, and puts the tree back to S.
