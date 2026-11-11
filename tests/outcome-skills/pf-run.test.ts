@@ -515,6 +515,40 @@ test("a cap stop whose only logged open is the task open ends as CAP_STOP with a
   for (const exception of [null, "LanebInfraError", "RuntimeError"]) await expect(retryAfter(i, 1, null, pfRecord(i, 1, null, dir, exception), "/out/a1", "Harbor exited 1", dir)).rejects.toThrow(/^E_PF_FINALIZE_HALT /);
 });
 
+// Value: protects=the Captain's ruling C1 item 2 on #327: an open log run.ts cannot read in full counts as an open that may have happened, so the attempt stops the driver and halts; fails_when=a cap stop whose pf-opens.jsonl holds an unparseable line, a line that is not an object or a cut-off line after the task open, or whose log cannot be read, throws anything but E_PF_FINALIZE_HALT, skips POST /stop or takes the cap-stop exemption, or a well-formed lone task open line stops being exempt; why_new=JSON.parse threw a bare SyntaxError on one bad line, which skipped both the driver stop and E_PF_FINALIZE_HALT; seam=run.ts retryAfter over the evaluator dir's pf-opens.jsonl; no_claim=what the driver does with the stop (pf-driver.test.ts)
+test("a cap stop whose open log has a malformed line or cannot be read stops the driver and halts with E_PF_FINALIZE_HALT, never the cap-stop exemption", async () => {
+  const stops: string[] = [];
+  const control = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: async (req) => {
+      if (new URL(req.url).pathname !== "/stop") return new Response("no route", { status: 404 });
+      stops.push(await req.text());
+      return Response.json({ stopping: true });
+    },
+  });
+  try {
+    const i = { ...input("P"), control: "http://127.0.0.1:" + control.port };
+    const ended = "Harbor ended on LedgerCapStop";
+    const task = JSON.stringify({ phase: "task", rerun: null, at: 3.1 });
+    const logs: Array<(file: string) => void> = [(f) => writeFileSync(f, '{"phase": "ta\n'), (f) => writeFileSync(f, "null\n"), (f) => writeFileSync(f, task + '\n{"phase": "wr'), (f) => mkdirSync(f)];
+    for (const write of logs) {
+      const dir = temp("pf-run-ev-");
+      write(join(dir, "pf-opens.jsonl"));
+      const before = stops.length;
+      await expect(retryAfter(i, 1, null, pfRecord(i, 1, null, dir, "LedgerCapStop"), "/out/a1", ended, dir)).rejects.toThrow(/^E_PF_FINALIZE_HALT pf-run-flag\/claude-opus-5-5\/P\/3 attempt 1: .*pf-run stopped the driver through POST /);
+      expect(stops.length).toBe(before + 1);
+    }
+    const dir = temp("pf-run-ev-");
+    writeFileSync(join(dir, "pf-opens.jsonl"), task + "\n");
+    const before = stops.length;
+    expect(await retryAfter(i, 1, null, pfRecord(i, 1, null, dir, "LedgerCapStop"), "/out/a1", ended, dir)).toBe(false);
+    expect(stops.length).toBe(before);
+  } finally {
+    control.stop(true);
+  }
+});
+
 // Value: protects=the owner's ruling on adversarial-native#5: a unit with no valid runtime image id refuses clearly before any docker call; fails_when=runPfSession or pf contain on a unit with a missing or malformed runtime_id calls docker, or refuses with anything but E_SM_INFRA_GAP "run its oracle first"; why_new=both took the tree volume's digest with docker run on that id before buildSessionImage checked it, so the refusal was a docker error; seam=run.ts runPfSession and pfchecks/cli.ts contain over statemachines/image.ts runtimeId; no_claim=dryrun-units.ts, which calls the same check but needs a real unit fixture
 test("runPfSession and pf contain refuse a unit with a missing or malformed runtime id with E_SM_INFRA_GAP before any docker call", async () => {
   const bin = temp("pf-run-docker-");

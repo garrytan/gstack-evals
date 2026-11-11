@@ -248,7 +248,8 @@ export function pfRecord(i: PfRunInput, attempt: 1 | 2, summary: Record<string, 
  *  Captain reads before ruling on a retry. So does any attempt that left no summary after pf_turns recorded a slot open
  *  in ev's pf-opens.jsonl, whatever ended it (ended names it for the halt line: run.ts's kill, Harbor's exception, its
  *  exit): that slot's counts are unknown, and it may have spent, so before that halt pf-run stops the driver through its
- *  POST <control>/stop, and the item opens nothing more; a stop that fails still halts, and the halt line says so. One end is exempt: a cap stop (Harbor's exception
+ *  POST <control>/stop, and the item opens nothing more; a stop that fails still halts, and the halt line says so. An open
+ *  log with a line that is not JSON, or one run.ts cannot read, counts as an open that may have happened. One end is exempt: a cap stop (Harbor's exception
  *  LedgerCapStop) whose pf-opens.jsonl holds exactly one line, the task open. The driver refused that open with 409
  *  CAP_STOP, so no slot exists and nothing spent; the attempt goes on to finishSession, which ends the part with CAP_STOP. */
 export async function retryAfter(i: PfRunInput, attempt: 1 | 2, summary: Record<string, any> | null, record: PfSessionRecord, dir: string, ended: string | null = null, ev: string | null = null): Promise<boolean> {
@@ -256,11 +257,19 @@ export async function retryAfter(i: PfRunInput, attempt: 1 | 2, summary: Record<
   const s = i.session;
   const label = s.unit + "/" + s.model + "/" + s.arm + "/" + s.index + " attempt " + attempt;
   if (lost.length) pfFail("E_PF_FINALIZE_HALT", label + ": the proxy's finalize failed at the close of session " + lost.join(", ") + " on lease " + record.lease_id + ", so its counts are unknown; the session halts with no retry and no session record, and the driver's E_PF_FINALIZE_HALT line names the journal (" + record.lease_id + ".journal.ndjson in its run dir); " + dir);
-  const opens = !summary && ev && existsSync(join(ev, OPENS)) ? readFileSync(join(ev, OPENS), "utf8").trim().split("\n").filter(Boolean) : [];
-  const refusedTask = record.cap_stop && opens.length === 1 && JSON.parse(opens[0]!).phase === "task";
-  if (opens.length && !refusedTask) {
+  let opens: unknown[] = [];
+  let unread: string | null = null;
+  if (!summary && ev && existsSync(join(ev, OPENS))) {
+    try {
+      opens = readFileSync(join(ev, OPENS), "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l));
+    } catch (e) {
+      unread = (e as Error).message;
+    }
+  }
+  const refusedTask = !unread && record.cap_stop && opens.length === 1 && (opens[0] as { phase?: unknown } | null)?.phase === "task";
+  if ((opens.length || unread) && !refusedTask) {
     const stop = await fetch(i.control + "/stop", { method: "POST", signal: AbortSignal.timeout(10_000) }).then((r) => (r.ok ? null : "it answered " + r.status), (e: Error) => e.message);
-    pfFail("E_PF_FINALIZE_HALT", label + ": " + (ended ?? "the attempt ended") + " after pf_turns opened a slot (" + join(ev!, OPENS) + "), and no summary names that slot's counts, so it may have spent; the session halts with no retry and no session record, and " + (stop ? "pf-run's POST " + i.control + "/stop failed (" + stop + "), so the driver may still serve opens: stop it by hand; " : "pf-run stopped the driver through POST " + i.control + "/stop, so the item opens nothing more until the Captain rules on the lease's journal; ") + dir);
+    pfFail("E_PF_FINALIZE_HALT", label + ": " + (ended ?? "the attempt ended") + (unread ? " with an open log run.ts cannot read in full (" + join(ev!, OPENS) + ": " + unread + "), so pf_turns may have opened a slot" : " after pf_turns opened a slot (" + join(ev!, OPENS) + ")") + ", and no summary names that slot's counts, so it may have spent; the session halts with no retry and no session record, and " + (stop ? "pf-run's POST " + i.control + "/stop failed (" + stop + "), so the driver may still serve opens: stop it by hand; " : "pf-run stopped the driver through POST " + i.control + "/stop, so the item opens nothing more until the Captain rules on the lease's journal; ") + dir);
   }
   return attempt === 1 && retriesSession(summary, record);
 }
