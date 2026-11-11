@@ -1,12 +1,12 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { SessionImage } from "../../lanes/outcome-skills/statemachines/image.ts";
 import type { SmUnit } from "../../lanes/outcome-skills/statemachines/unit.ts";
-import { CONTAIN_RECORD, containHost, containInputs, containUnit, leafName, readContain, upstreamAfter } from "../../lanes/outcome-skills/pfchecks/containment.ts";
+import { CONTAIN_RECORD, CONTAIN_SCRIPT_SHA256, containHost, containInputs, containUnit, leafName, readContain, treeDigest, treeDigestHost, upstreamAfter } from "../../lanes/outcome-skills/pfchecks/containment.ts";
 
 const g = (d: string, ...a: string[]) => spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...a], { cwd: d, encoding: "utf8" }).stdout.trim();
 const put = (d: string, files: Record<string, string>) => { for (const [p, t] of Object.entries(files)) { mkdirSync(dirname(join(d, p)), { recursive: true }); writeFileSync(join(d, p), t); } };
@@ -261,17 +261,78 @@ test("a check that did not finish does not pass", () => {
   expect(readContain("PF_CONTAIN error no HEAD commit in /x\nPF_CONTAIN done\n").ok).toBe(false);
 });
 
-// Value: protects=section 15's containment gate across rebuilt session images; fails_when=a passing record is reused for a tag whose image, runtime image or head changed since the check ran; why_new=the gate keyed reuse on the tag alone; seam=containment.ts containUnit; no_claim=the check itself (contain.sh, the tests above)
-test("the gate before a session reuses a passing record only when its tag, image, runtime image and head all match, and otherwise runs the check again", () => {
+// Value: protects=section 15's containment gate across rebuilt session images; fails_when=a passing record is reused after the tree volume's content, the tag, the runtime image, the head or the check script changed, or a rebuilt image of the same content (a new image id) runs the check again; why_new=#305's run notes item 2: every session image gets a new image id, so the image-id key reran the check before every session; seam=containment.ts containUnit; no_claim=the check itself (contain.sh, the tests above) and the digest (the tests below)
+test("the gate before a session reuses a passing record when the tree digest, tag, runtime image, head and check script all match, whatever the image id, and otherwise runs the check again", () => {
   const d = mkdtempSync(join(tmpdir(), "pf-contain-gate-"));
-  const image = { tag: "gstack-evals-sm-session:abc", runtime_id: "sha256:" + "0".repeat(64), image_id: "sha256:" + "1".repeat(64), head: "b".repeat(40) } as unknown as SessionImage;
-  const prior = { schema: "pf-contain.v1", unit: "u", tag: image.tag, image_id: image.image_id, runtime_id: image.runtime_id, head: image.head, ok: true, summary: { commits: "1" }, findings: [], gitdirs: [], detail: "passed earlier" };
-  writeFileSync(join(d, CONTAIN_RECORD), JSON.stringify({ schema: "pf-contain.v1", checks: { [prior.tag]: prior } }));
+  const image = { tag: "gstack-evals-sm-session:abc", runtime_id: "sha256:" + "0".repeat(64), image_id: "sha256:" + "1".repeat(64), head: "b".repeat(40), volume: "pf-vol" } as unknown as SessionImage;
+  const digest = "d".repeat(64);
+  const prior = { schema: "pf-contain.v1", unit: "u", tag: image.tag, image_id: image.image_id, runtime_id: image.runtime_id, head: image.head, tree_digest: digest, script_sha256: CONTAIN_SCRIPT_SHA256, ok: true, summary: { commits: "1" }, findings: [], gitdirs: [], detail: "passed earlier" };
+  const write = (rec: Record<string, unknown>) => writeFileSync(join(d, CONTAIN_RECORD), JSON.stringify({ schema: "pf-contain.v1", checks: { [image.tag]: rec } }));
   const u = { id: "u", repo_dir: "/testbed", base_commit: "a".repeat(40), tests: { f2p: [], p2p: [] } } as unknown as SmUnit;
-  expect(containUnit(d, u, image)).toEqual(prior as never);
-  for (const k of ["image_id", "runtime_id", "head"] as const) {
-    const changed = { ...image, [k]: k === "head" ? "c".repeat(40) : "sha256:" + "9".repeat(64) } as SessionImage;
-    expect(() => containUnit(d, u, changed)).toThrow(/^E_PF_INFRA_GAP listing the commits after base/);
+  const reruns = /^E_PF_INFRA_GAP listing the commits after base/;
+  write(prior);
+  expect(containUnit(d, u, image, digest)).toEqual(prior as never);
+  expect(containUnit(d, u, { ...image, image_id: "sha256:" + "2".repeat(64) }, digest)).toEqual(prior as never);
+  expect(() => containUnit(d, u, image, "e".repeat(64))).toThrow(reruns);
+  for (const k of ["tag", "runtime_id", "head"] as const) {
+    const changed = { ...image, [k]: k === "head" ? "c".repeat(40) : k === "tag" ? "gstack-evals-sm-session:def" : "sha256:" + "9".repeat(64) } as SessionImage;
+    expect(() => containUnit(d, u, changed, digest)).toThrow(reruns);
   }
+  write({ ...prior, script_sha256: "f".repeat(64) });
+  expect(() => containUnit(d, u, image, digest)).toThrow(reruns);
+  const { tree_digest: _t, script_sha256: _s, ...older } = prior;
+  write(older);
+  expect(() => containUnit(d, u, image, digest)).toThrow(reruns);
+  write({ ...prior, ok: false });
+  expect(() => containUnit(d, u, image, digest)).toThrow(reruns);
   rmSync(d, { recursive: true, force: true });
 });
+
+// Value: protects=the containment gate's reuse key (tree-digest.sh); fails_when=the digest misses a change to a file's bytes, its executable bit, a symlink's target, an ignored file, a file named - or the git directory, or changes on a copy that differs only in modification times; why_new=#305's run notes item 2 keys reuse on the tree volume's content; seam=containment.ts treeDigestHost and sh/tree-digest.sh; no_claim=the Docker volume path (pf-containment-docker below)
+test("the tree digest follows content, modes, link targets, ignored files and .git, and ignores modification times", () => {
+  const { root, repo } = fixture();
+  put(repo, { "build/out.o": "obj", "-": "dash\n" });
+  symlinkSync("a.txt", join(repo, "link"));
+  const base = treeDigestHost(repo);
+  expect(base).toMatch(/^[0-9a-f]{64}$/);
+  const copy = join(root, "copy");
+  spawnSync("cp", ["-r", repo, copy]);
+  utimesSync(join(copy, "a.txt"), new Date(0), new Date(0));
+  expect(treeDigestHost(copy)).toBe(base);
+  const changes: Array<[string, (dir: string) => void]> = [
+    ["a byte", (dir) => writeFileSync(join(dir, "a.txt"), "base line one\nbase line twO\n")],
+    ["the file named -", (dir) => writeFileSync(join(dir, "-"), "dasH\n")],
+    ["an executable bit", (dir) => chmodSync(join(dir, "a.txt"), 0o755)],
+    ["a link target", (dir) => { rmSync(join(dir, "link")); symlinkSync(".gitignore", join(dir, "link")); }],
+    ["an ignored file", (dir) => writeFileSync(join(dir, "build/new.o"), "obj")],
+    ["the git directory", (dir) => writeFileSync(join(dir, ".git/refs/tags/later"), "c".repeat(40) + "\n")],
+  ];
+  for (const [what, change] of changes) {
+    const t = join(root, "t-" + what.replace(/\W+/g, "-"));
+    spawnSync("cp", ["-a", repo, t]);
+    change(t);
+    expect([what, treeDigestHost(t) === base]).toEqual([what, false]);
+  }
+  rmSync(root, { recursive: true, force: true });
+});
+
+const DOCKER_IMAGE = process.env.PF_DOCKER_IMAGE ?? "";
+const dockerOn = process.env.GSTACK_EVALS_DOCKER === "1" && !!DOCKER_IMAGE;
+// Value: protects=the containment gate's reuse key on a real tree volume; fails_when=treeDigest differs from the host digest of the same tree, or misses a change made inside the volume; why_new=#305's run notes item 2; seam=containment.ts treeDigest; no_claim=the session image build (statemachines image.ts)
+test.skipIf(!dockerOn)("treeDigest reads the tree volume read-only in a runtime image container, as the host digest reads the same tree, and follows a change inside it", () => {
+  const { root, repo } = fixture();
+  const vol = "pf-digest-test-" + process.pid;
+  const docker = (...a: string[]) => spawnSync("docker", a, { encoding: "utf8" });
+  try {
+    expect(docker("run", "--rm", "-v", vol + ":/d", "-v", repo + ":/s:ro", "--entrypoint", "sh", DOCKER_IMAGE, "-c", "cp -a /s/. /d/").status).toBe(0);
+    const image = { runtime_id: DOCKER_IMAGE, volume: vol } as unknown as SessionImage;
+    const first = treeDigest(image);
+    expect(first).toBe(treeDigestHost(repo));
+    expect(treeDigest(image)).toBe(first);
+    expect(docker("run", "--rm", "-v", vol + ":/d", "--entrypoint", "sh", DOCKER_IMAGE, "-c", "echo later > /d/later.txt").status).toBe(0);
+    expect(treeDigest(image)).not.toBe(first);
+  } finally {
+    docker("volume", "rm", "-f", vol);
+    rmSync(root, { recursive: true, force: true });
+  }
+}, 120_000);
