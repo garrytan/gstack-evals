@@ -147,6 +147,7 @@ export async function runErUnits(o: ErRunInput, rig: HostRig, log: (line: string
   const stale = plan.filter((c) => prior.has(erCellId(c)) && prior.get(erCellId(c))!.key !== keyOf(c));
   if (stale.length) {
     stops.push({ code: "E_CACHE_STALE", message: stale.length + " journaled session" + (stale.length === 1 ? "" : "s") + " no longer match their key (" + stale.slice(0, 3).map(cellName).join(", ") + "); start a new run in a new --out" });
+    for (const s of stops) log(s.code + " " + s.message);
     return { entries: [], stopped: [], stops, spent_usd: 0, carried_usd: 0, held: 0 };
   }
   const entries: ErEntry[] = plan.flatMap((c) => (prior.has(erCellId(c)) ? [prior.get(erCellId(c))!] : []));
