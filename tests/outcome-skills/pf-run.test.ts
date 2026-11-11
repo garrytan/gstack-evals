@@ -8,6 +8,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { CODES } from "../../src/errors/codes.ts";
 import type { SessionImage } from "../../lanes/outcome-skills/statemachines/image.ts";
 import { sessionLimits, type PfArm } from "../../lanes/outcome-skills/pfchecks/arms.ts";
 import { OPUS, P1 } from "../../lanes/outcome-skills/pfchecks/items.ts";
@@ -386,4 +387,12 @@ test("runPfSession refuses an effort record with an entry that is a scalar, an e
     await expect(runPfSession(i)).rejects.toThrow(/^E_PF_INPUT the effort record is not the dry run's effort\.json: /);
     expect(existsSync(out)).toBe(false);
   }
+});
+
+// Value: protects=the Captain's ruling item 8 on #324: E_PF_ARM's docs entry fits its session gaps, which come after paid turns; fails_when=E_PF_ARM says it is refused before any spend or is retry safe, drops a gap reason the session record can carry, or changes its exit; why_new=the entry said "None: refused before any spend" and "retry safe" while post_turn, head_mismatch and base_mismatch gaps follow paid turns; seam=src/errors/codes.ts E_PF_ARM; no_claim=docs/errors.md (bun run errors:check)
+test("E_PF_ARM's entry says its session gaps follow paid turns and are not retry safe, and keeps exit 2", () => {
+  const e = CODES.E_PF_ARM;
+  expect([e.exit, e.retry_safe]).toEqual([2, false]);
+  expect(e.side_effects).not.toBe("None: refused before any spend.");
+  for (const reason of ["tree_check", "post_turn", "head_mismatch", "base_mismatch"]) expect(e.meaning).toContain(reason);
 });
