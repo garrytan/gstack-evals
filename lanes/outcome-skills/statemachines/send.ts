@@ -16,7 +16,10 @@
 // that names both codes and is never sent again. Any other call once
 // sent is never sent again, including one whose answer a stopped send never recorded (recorded as lost): its send line
 // is on disk before the call goes out, one live send holds the item, and a send whose replies file does not name every
-// call the ledger holds for the item and run is refused before it recovers or sends anything.
+// call the ledger holds for the item and run is refused before it recovers or sends anything. So is a send whose local
+// ledger lacks one of the run's leases, unless the owner reconciled that lease and the replies file holds its lease
+// line, which a send writes when it opens a lease. A call such a lease sent and never answered has no usage any ledger
+// shows, so it halts the item as usage unknown, naming the lease's proxy journal and the export the reconcile cites.
 import { createHash, randomBytes } from "node:crypto";
 import { Database } from "bun:sqlite";
 import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, writeFileSync, writeSync } from "node:fs";
@@ -28,7 +31,7 @@ import { openLease, recordStop, settleLease, type RequireAdmission } from "../..
 import { openLocalLedger } from "../../../src/runner/ledger/local.ts";
 import { usd } from "../../../src/runner/ledger/money.ts";
 import { ledgerPath, recordPath } from "../../../src/runner/ledger/paths.ts";
-import { LedgerError, readItem } from "../../../src/runner/ledger/record.ts";
+import { capStopRefusal, LedgerError, readItem } from "../../../src/runner/ledger/record.ts";
 import { cutShort } from "../../../src/runner/ledger/sessions.ts";
 import { priceRequest, reservationMicros } from "../../../src/runner/pricing/prices.ts";
 import { MeteringProxy, reconcileJournal } from "../../../src/runner/proxy/metering-proxy.ts";
@@ -121,6 +124,7 @@ function loadPackets(item: string, dir: string) {
       queues.set(reader!, [...new Set(v.order as string[])]);
     }
   }
+  for (const [id, named] of keys) if (!packets.has(id)) smFail("E_SM_PACKET", "a " + named[0]!.schema + " in " + dir + " names packet " + id + ", which is not in " + dir + "; a key is sent only beside its packet, so a key whose packet is missing is refused, never skipped; nothing was opened");
   const readers = new Map<string, Set<Reader>>();
   for (const [id, { packet }] of packets) {
     const set = new Set<Reader>();
@@ -192,12 +196,15 @@ async function sendHeld(o: SendOptions, record: string): Promise<SendResult> {
   mkdirSync(out, { recursive: true });
   const repliesFile = join(out, "replies.jsonl");
   const counts = Object.fromEntries(OUTCOMES.map((k) => [k, 0])) as Record<Outcome, number>;
+  let torn = 0;
   const write = (line: Record<string, unknown>) => {
     const fresh = !existsSync(repliesFile);
     const fd = openSync(repliesFile, "a");
     try {
-      writeSync(fd, (!fresh && cutShort(repliesFile) ? "\n" : "") + JSON.stringify({ at: new Date().toISOString(), item: o.item, run_id: o.run_id, ...line }) + "\n");
+      const stamp = { at: new Date().toISOString(), item: o.item, run_id: o.run_id };
+      writeSync(fd, (!fresh && cutShort(repliesFile) ? "\n" : "") + (torn ? JSON.stringify({ ...stamp, event: "torn", lines: torn }) + "\n" : "") + JSON.stringify({ ...stamp, ...line }) + "\n");
       fsyncSync(fd);
+      torn = 0;
     } finally {
       closeSync(fd);
     }
@@ -213,11 +220,21 @@ async function sendHeld(o: SendOptions, record: string): Promise<SendResult> {
     counts[r.outcome]++;
     write({ event: "reply", packet: job.packet, reader: job.reader, model: LABELLERS[job.reader], outcome: r.outcome, code: r.code ?? null, ...(r.first_code ? { first_code: r.first_code } : {}), why: r.why ?? null, answer: r.answer ?? null, raw: r.raw ?? null, micros: r.micros ?? null, meter_id: r.meter_id ?? null });
   };
-  const prior: Array<{ at?: string; event?: string; item?: string; run_id?: string; packet: string; reader: Reader; meter_id?: string; outcome?: Outcome; code?: ReasonCode; why?: string }> = [];
-  for (const l of existsSync(repliesFile) ? readFileSync(repliesFile, "utf8").split("\n") : []) {
+  const prior: Array<{ at?: string; event?: string; item?: string; run_id?: string; packet: string; reader: Reader; meter_id?: string; lease_id?: string; outcome?: Outcome; code?: ReasonCode; why?: string }> = [];
+  const rows = existsSync(repliesFile) ? readFileSync(repliesFile, "utf8").split("\n") : [];
+  if (rows.at(-1) === "") rows.pop();
+  for (const [i, row] of rows.entries()) {
+    let v: unknown = null;
     try {
-      prior.push(JSON.parse(l));
+      v = JSON.parse(row);
     } catch {}
+    if (!v || typeof v !== "object" || Array.isArray(v)) {
+      torn++;
+      continue;
+    }
+    if (torn && (v as { event?: unknown }).event !== "torn") smFail("E_USAGE", repliesFile + " line " + (i - torn + 1) + " won't parse. Only the lines a crash cut short at the end of the file may, and the next send marks them with a torn line; nothing was opened");
+    torn = 0;
+    prior.push(v as (typeof prior)[number]);
   }
   const other = prior.find((l) => l.item !== o.item || l.run_id !== o.run_id);
   if (other) smFail("E_USAGE", repliesFile + " holds replies of " + other.item + " for run " + other.run_id + ", not " + o.item + " for run " + o.run_id + "; give each send its own --out");
@@ -248,17 +265,53 @@ async function sendHeld(o: SendOptions, record: string): Promise<SendResult> {
   try {
     const state = ledger(() => readItem(record, o.item));
     if (state.cap_micros !== null && (state.program !== def!.program || state.skills.join() !== def!.skills.join())) smFail("E_USAGE", "line item " + o.item + " is recorded in program " + (state.program ?? "none") + " for " + (state.skills.join(", ") || "no skill") + ", not " + def!.program + " for " + def!.skills.join(", ") + " (items.ts); nothing was opened");
+    const cannotLease = capStopRefusal(state) !== null || (state.cap_micros !== null && state.committed_micros >= state.cap_micros);
+    const leased = new Set(prior.flatMap((l) => (l.event === "lease" && l.lease_id ? [l.lease_id] : [])));
+    const unheld = state.leases.filter(({ lease, close }) => lease.run_id === o.run_id && !local.getLease(lease.lease_id) && !(close?.how === "reconciled" && leased.has(lease.lease_id))).map(({ lease }) => lease.lease_id);
+    if (unheld.length && cannotLease) smFail("CAP_STOP", (capStopRefusal(state)?.message ?? "line item " + o.item + " has " + usd(Math.max(state.cap_micros! - state.committed_micros, 0)) + " left of its " + usd(state.cap_micros!) + " cap (" + usd(state.committed_micros) + " committed)") + "; it also holds run " + o.run_id + "'s lease " + unheld.join(", ") + ", which the local ledger at " + local.path + " does not hold; nothing was lifted, recovered, settled or opened");
+    if (unheld.length) smFail("E_USAGE", "line item " + o.item + " holds run " + o.run_id + "'s lease " + unheld.join(", ") + ", which the local ledger at " + local.path + " does not hold. A send resumes only on the ledger that sent the run's calls, since another ledger can't tell which calls are already paid for. The one exception is a lease the owner reconciled whose lease line is in " + repliesFile + ", since those replies record every call it made; nothing was recovered, settled or opened");
     const named = new Set(prior.flatMap((l) => (l.event === "send" && l.meter_id ? [l.meter_id] : [])));
     const unnamed = state.leases.filter(({ lease }) => lease.run_id === o.run_id).flatMap(({ lease }) => [...local.meters(lease.lease_id).keys()].filter((m) => !named.has(m)).map((m) => "lease " + lease.lease_id + " meter " + m));
     if (unnamed.length) smFail("E_USAGE", repliesFile + " names no send for " + unnamed.join(", ") + ", which the ledger holds for run " + o.run_id + " on line item " + o.item + ". A send resumes only from the --out that holds its replies, so a replies file that is missing, emptied, cut short by a crash or from another --out can't serve the run; nothing was recovered, settled or opened");
     for (const m of lifts) write({ event: "lift", packet: halts.get(m)!.packet, reader: halts.get(m)!.reader, meter_id: m });
-    for (const l of lost.values()) reply({ packet: l.packet, reader: l.reader }, { outcome: "lost", code: "UPSTREAM", why: "sent on meter " + l.meter_id + ", but that send stopped before its answer was recorded; the proxy journal settles the call as unknown at its full reservation, and it is never sent again", meter_id: l.meter_id });
     if (state.open && state.open.run_id === o.run_id && local.getLease(state.open.lease_id)) {
       const stale = join(out, state.open.lease_id + ".journal.ndjson");
       if (existsSync(stale)) for (const r of (await reconcileJournal(stale, local)).refused) warn(r.code as ReasonCode, "recovering lease " + state.open.lease_id + ": " + r.message);
       const close = ledger(() => settleLease(record, local, state.open!.lease_id, warn));
       log("SEND_RECOVERED item=" + o.item + " lease=" + close.lease_id + " spent=" + usd(close.spent_micros) + " unknown=" + usd(close.unknown_micros));
     }
+    const halted = new Set(prior.flatMap((l) => (l.event === "halt" && l.meter_id ? [l.meter_id] : [])));
+    const runLeases = state.leases.filter(({ lease }) => lease.run_id === o.run_id).map(({ lease }) => lease.lease_id);
+    const leaseOf = new Map<string, string>();
+    let current: string | undefined;
+    for (const l of prior) {
+      if (l.event === "lease" && l.lease_id) current = l.lease_id;
+      if (l.event === "send" && l.meter_id && current) leaseOf.set(l.meter_id, current);
+    }
+    const newHalts: Array<{ meter_id: string; why: string }> = [];
+    for (const l of lost.values()) {
+      const metered = runLeases.flatMap((id) => {
+        const m = local.meters(id).get(l.meter_id!);
+        return m ? [{ lease_id: id, meter: m }] : [];
+      })[0];
+      const u = metered?.meter.usage;
+      const usage = u ? { input: u.input + u.cache_read + u.cache_write, output: u.output + u.reasoning } : null;
+      const gone = state.leases.find(({ lease, close }) => lease.lease_id === leaseOf.get(l.meter_id!) && close?.how === "reconciled" && !local.getLease(lease.lease_id));
+      const past = usage !== null && (usage.input > R78_PRICE_BOUND.input_tokens || usage.output > R78_PRICE_BOUND.output_tokens);
+      const unknown = !gone && !past && metered && metered.meter.unknown_calls > 0 ? metered.lease_id : null;
+      if ((gone || past || unknown) && !halted.has(l.meter_id!)) {
+        const journal = gone ? join(out, gone.lease.lease_id + ".journal.ndjson") : unknown ? join(out, unknown + ".journal.ndjson") : null;
+        const why = gone
+          ? l.reader + " on packet " + l.packet + " (meter " + l.meter_id + "): usage unknown. It was sent on lease " + gone.lease.lease_id + ", which the owner reconciled from the provider export " + (gone.close!.source ?? "(none named)") + " after its ledger was lost, and its send stopped before its reply was recorded, so no ledger shows its usage; read the lease's proxy journal " + journal + " and that export"
+          : unknown
+          ? l.reader + " on packet " + l.packet + " (meter " + l.meter_id + "): usage unknown. It was sent on lease " + unknown + ", which this ledger holds, and its send stopped before its reply was recorded; the ledger holds the call as unknown at its full reservation, so no settled usage shows it within the bound; read the lease's proxy journal " + journal
+          : l.reader + " on packet " + l.packet + " (meter " + l.meter_id + ") settled at " + usage!.input + " input and " + usage!.output + " output tokens, past the prereg's bound of " + R78_PRICE_BOUND.input_tokens + " input and " + R78_PRICE_BOUND.output_tokens + " output tokens, and its send stopped before its reply and halt were recorded";
+        write({ event: "halt", packet: l.packet, reader: l.reader, meter_id: l.meter_id, code: "E_SM_USAGE_HALT", why, usage: unknown ? null : usage, ...(gone ? { lease_id: gone.lease.lease_id, journal, source: gone.close!.source ?? null, source_sha256: gone.close!.source_sha256 ?? null } : unknown ? { lease_id: unknown, journal } : {}) });
+        newHalts.push({ meter_id: l.meter_id!, why });
+      }
+      reply({ packet: l.packet, reader: l.reader }, { outcome: "lost", code: "UPSTREAM", why: "sent on meter " + l.meter_id + ", but that send stopped before its answer was recorded; the proxy journal settles the call as unknown at its full reservation, and it is never sent again", meter_id: l.meter_id });
+    }
+    if (newHalts.length) smFail("E_SM_USAGE_HALT", "line item " + o.item + " halted on a call its last send never recorded: " + newHalts.map((h) => h.why).join("; ") + ". The halt lines are in " + repliesFile + ". Once the Captain rules, send again with --lift-halt " + newHalts.map((h) => h.meter_id).join(",") + "; nothing was opened");
     if (!todo.length) {
       local.close();
       return result;
@@ -269,6 +322,7 @@ async function sendHeld(o: SendOptions, record: string): Promise<SendResult> {
     throw e;
   }
   result.lease_id = lease.lease_id;
+  write({ event: "lease", lease_id: lease.lease_id });
   const journal = join(out, lease.lease_id + ".journal.ndjson");
   const proxy = new MeteringProxy({ ledger: local, leaseId: lease.lease_id, host: "127.0.0.1", managementSocket: join(tmpdir(), "sm-send-" + randomBytes(6).toString("hex") + ".sock"), managementToken: randomBytes(24).toString("hex"), journal, retry: DEFAULT_RETRY, env, fetch: o.fetch, sleep: o.sleep, maxOutputTokens: R78_PRICE_BOUND.output_tokens, refuseServerTools: true });
   const scope = o.item + " only";
