@@ -10,8 +10,9 @@ import { randomBytes } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { docker, dockerRun } from "./docker.ts";
-import { regressionFrozen, TaskError, targetOf, type TaskJson } from "./format.ts";
-import { parseGoTest, parsePytest, resultFor, type Parsed, type TestResult } from "./record.ts";
+import { regressionFrozen, sha256, TaskError, targetOf, type Runner, type TaskJson } from "./format.ts";
+import { parseCargo, parseGoTest, parseJestJson, parseMochaJson, parseNodeEvents, parsePytest, resultFor, type Parsed, type TestResult } from "./record.ts";
+import { productText, splice } from "./region.ts";
 
 export const RUN_UID = "10001:10001";
 
@@ -40,11 +41,20 @@ export interface RunRecord {
   parsed: Parsed;
 }
 
+/** The cold rebuild's record: ignored build outputs the tree brought (removed), the build's outcome, the tree's product
+ * file hashes as given (test regions taken out), and product files the rebuild or the test move changed. */
+export interface ColdRecord {
+  removed: string[];
+  build: "none" | "ok" | "failed" | "timeout";
+  products: Record<string, string>;
+  changed: string[];
+}
+
 export interface TreeResult {
   label: string;
   /** skipped: patch sections git apply left out because they sit in installed-dependency directories; restored:
    * dependency directories the tree still changed, created or replaced, reset to the image's copy. */
-  prepare: { patch: string; deleted: string[]; unlinked: string[]; skipped: string[]; restored: string[]; error?: string };
+  prepare: { patch: string; deleted: string[]; unlinked: string[]; skipped: string[]; restored: string[]; error?: string; cold?: ColdRecord };
   runs: RunRecord[];
 }
 
@@ -60,6 +70,17 @@ export interface VerifyOptions {
   work: string;
   releaseEdits?: boolean;
   cpus?: number;
+  /** The restore set mounted as /verifier: the task's tests/ by default, or another set (an aftermath group) laid out
+   * the same way. */
+  testsDir?: string;
+  /** The ids this run reads, in place of the task's lists: a restore set run apart reads only its own ids. */
+  ids?: string[];
+  /** Cold rebuild (the eng-review build read): drop ignored build outputs the tree brought, run runner.build offline as
+   * the run user, restore the hidden tests and installed dependencies again, move test regions, and hash the product
+   * files before and after. */
+  cold?: boolean;
+  /** Called with the prepared tree before the first run; it throws to refuse the tree (a product hash mismatch). */
+  beforeRuns?: (prepare: TreeResult["prepare"]) => void;
 }
 
 /** The most READ_OUT reads of one /out file: well under the docker client's 256 MiB output buffer and no larger than
@@ -101,9 +122,66 @@ export function requiredTests(t: TaskJson): string[] {
 export const configName = (config: string): string => ".real-verifier-config." + (config.endsWith(".toml") ? "toml" : config.endsWith(".cfg") ? "cfg" : "ini");
 
 /** Runner targets: test files for pytest, package dirs for go. Every required id's target, plus the regression scope. */
-export function targets(t: TaskJson): string[] {
+export function targets(t: TaskJson, only?: string[]): string[] {
+  if (only) return [...new Set(only.map(targetOf))].sort();
   const ids = [...t.tests.functional, ...t.tests.escaped_defect, ...t.tests.regression];
   return [...new Set([...ids.map(targetOf), ...t.tests.regression_scope])].sort();
+}
+
+/** The sh entrypoint of a node runner: $0 is the project dir, the rest is the runner's argv, and the start line comes out
+ * before node starts. */
+export const NODE_ENTRY = 'echo "' + RUN_STARTED + '"; cd "$0" && exec "$@"';
+
+/** The directory a project-relative path lives in, under /testbed. */
+const inRepo = (root: string, path = ""): string => ["/testbed", root, path].filter(Boolean).join("/");
+
+/** cargo test's target selectors for target sources relative to the project dir. */
+export function cargoSelectors(root: string, sources: string[]): string[] {
+  const sel = new Set<string>();
+  for (const s of sources) {
+    const p = (root && s.startsWith(root + "/") ? s.slice(root.length + 1) : s).split("/");
+    if (p[0] === "tests" && p.length === 2) sel.add("--test=" + p[1].replace(/\.rs$/, ""));
+    else if (p[0] === "tests" && p.length === 3 && p[2] === "main.rs") sel.add("--test=" + p[1]);
+    else if (p[0] === "src" && p[p.length - 1] === "main.rs" && p.length === 2) sel.add("--bins");
+    else sel.add("--lib");
+  }
+  return [...sel].sort();
+}
+
+/** The docker run environment and the entrypoint arguments after the image for one hidden run of a node runner or cargo. */
+export function runArgs(r: Exclude<Runner, { kind: "pytest" | "go" }>, files: string[]): { env: string[]; entry: string[] } {
+  const rel = files.map((f) => (r.root && f.startsWith(r.root + "/") ? f.slice(r.root.length + 1) : f));
+  if (r.kind === "cargo") {
+    const script = [
+      'echo "' + RUN_STARTED + '"',
+      "export RUSTUP_TOOLCHAIN=$(ls /usr/local/rustup/toolchains 2>/dev/null | head -1 | sed 's/-x86_64.*//')",
+      "mkdir -p /tmp/cargo",
+      "for d in registry git; do [ -e /usr/local/cargo/$d ] && ln -s /usr/local/cargo/$d /tmp/cargo/$d; done",
+      'cd "$0" && cargo test --offline ' + (r.package ? "-p " + r.package.replace(/[^\w.-]/g, "") + " " : "") + cargoSelectors(r.root, files).join(" ") + " --no-fail-fast -- --test-threads=1 > /out/record.txt 2>&1; echo $? > /out/exit",
+    ].join("; ");
+    return { env: ["-e", "CARGO_HOME=/tmp/cargo", "-e", "CARGO_TARGET_DIR=/tmp/target", "-e", "CARGO_INCREMENTAL=0", "-e", "CARGO_TERM_COLOR=never", "-e", "CARGO_BUILD_JOBS=2"], entry: ["-c", script, inRepo(r.root)] };
+  }
+  const node = ["node", ...r.node_args];
+  const bin = inRepo("", r.bin);
+  const cfg = r.config === null ? null : r.config.startsWith("{") ? r.config : inRepo("", r.config);
+  const argv =
+    r.kind === "jest"
+      ? [...node, bin, ...r.args, "--ci", "--json", "--outputFile=/out/record.json", "--cacheDirectory=/tmp/jest", "--watchAll=false", "--rootDir=" + inRepo(r.root), "--config", cfg ?? JSON.stringify({ rootDir: inRepo(r.root) }), "--runTestsByPath", ...rel]
+      : r.kind === "vitest"
+        ? [...node, bin, "run", ...r.args, "--root", inRepo(r.root), "--config", cfg ?? "/verifier/vitest.none.cjs", "--reporter=json", "--outputFile=/out/record.json", "--watch=false", ...rel]
+        : r.kind === "mocha"
+          ? [...node, bin, ...r.args, "--no-config", "--no-package", ...(cfg ? ["--config", cfg] : []), "--reporter", "json", "--reporter-option", "output=/out/record.json", ...rel]
+          : [...node, ...r.args, "--test", "--test-reporter=/verifier/node-reporter.mjs", "--test-reporter-destination=/out/record.jsonl", ...rel];
+  return { env: ["-e", "NODE_OPTIONS=", "-e", "CI=true", "-e", "TZ=UTC", "-e", "NO_COLOR=1", "-e", "FORCE_COLOR=0", "-e", "npm_config_cache=/tmp/npm", "-e", "XDG_CACHE_HOME=/tmp/cache"], entry: ["-c", NODE_ENTRY, inRepo(r.root), ...argv] };
+}
+
+/** One run's record, parsed by the runner's own parser. */
+export function parseRecord(r: Runner, read: (file: string) => string | null): Parsed {
+  if (r.kind === "pytest") return parsePytest(read("record.jsonl") ?? "");
+  if (r.kind === "go") return parseGoTest(read("record.jsonl") ?? "", read("stderr.txt") ?? "", r.module);
+  if (r.kind === "cargo") return parseCargo(read("record.txt") ?? "", r.root);
+  if (r.kind === "nodetest") return parseNodeEvents(read("record.jsonl") ?? "");
+  return r.kind === "mocha" ? parseMochaJson(read("record.json") ?? "") : parseJestJson(read("record.json") ?? "");
 }
 
 function shuffled<T>(xs: T[], seed: number): T[] {
@@ -126,7 +204,7 @@ export function verifyTree(o: VerifyOptions): TreeResult {
   chmodSync(join(dir, "status"), 0o777);
   writeFileSync(join(dir, "input/tree.patch"), o.patch);
   const volume = "real-verify-" + randomBytes(6).toString("hex");
-  const tests = join(o.taskDir, "tests");
+  const tests = o.testsDir ?? join(o.taskDir, "tests");
   const limits = o.task.limits;
   try {
     if (docker(["volume", "create", volume]).status !== 0) throw new TaskError("E_REAL_TASK_DOCKER", "docker volume create failed");
@@ -143,6 +221,9 @@ export function verifyTree(o: VerifyOptions): TreeResult {
     if (prep.status !== 0 || !prepState.includes("done")) {
       throw new TaskError("E_REAL_TASK_DOCKER", o.label + ": prepare failed (" + (prepState[0] ?? "exit " + prep.status) + "): " + (prep.stderr + readLines(join(dir, "status/apply.err")).join(" ")).trim().slice(0, 400));
     }
+    const prepared: TreeResult["prepare"] = { patch: prepState[0] ?? "", deleted: status("deleted.txt"), unlinked: status("unlinked.txt"), skipped: status("skipped.txt"), restored: status("restored.txt") };
+    if (o.cold) prepared.cold = coldRebuild(o, volume, tests, join(dir, "status"));
+    o.beforeRuns?.(prepared);
     const runs: RunRecord[] = [];
     for (let i = 0; i < o.runs; i++) {
       const seed = o.seed + i;
@@ -154,14 +235,18 @@ export function verifyTree(o: VerifyOptions): TreeResult {
         if (vol.status !== 0) throw noVerdict("the /out volume was not created", vol);
         const holder = dockerRun(out, ["-d", "--rm", "--network", "none", "--user", RUN_UID, "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "-v", out + ":/out", "--entrypoint", "sleep", o.image, "infinity"], { timeoutMs: 120000 });
         if (holder.status !== 0) throw noVerdict("the container holding /out did not start", holder);
-        const put = docker(["exec", "-i", out, "sh", "-c", "cat > /out/targets.txt"], { input: shuffled(targets(o.task), seed).join("\n") + "\n", timeoutMs: 120000 });
+        const order = shuffled(targets(o.task, o.ids), seed);
+        const put = docker(["exec", "-i", out, "sh", "-c", "cat > /out/targets.txt"], { input: order.join("\n") + "\n", timeoutMs: 120000 });
         if (put.status !== 0) throw noVerdict("the targets were not written to /out", put);
         const base = ["--rm", "--network", "none", "--user", RUN_UID, "--read-only", "--tmpfs", "/tmp:rw,exec,size=2g", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--cpus", String(o.cpus ?? limits.cpus), "--memory", limits.memory, "--pids-limit", "2048", "-e", "HOME=/tmp", "-v", volume + ":/testbed:ro", "-v", tests + ":/verifier:ro", "-v", out + ":/out", "--workdir", "/testbed"];
         const r = o.task.runner;
+        const other = r.kind !== "pytest" && r.kind !== "go" ? runArgs(r, order) : null;
         const cmd =
           r.kind === "pytest"
             ? [...base, "-e", "PYTHONDONTWRITEBYTECODE=1", "-e", "PYTHONPYCACHEPREFIX=/tmp/pycache", "--entrypoint", "sh", o.image, "-c", PYTEST_ENTRY, r.python, "/out/record.jsonl", "/testbed/" + configName(r.config), "/out/targets.txt", String(seed)]
-            : [...base, "-e", "GOFLAGS=-mod=readonly", "-e", "GOPROXY=off", "-e", "GOTOOLCHAIN=local", "-e", "GOCACHE=/tmp/gocache", "-e", "GOTMPDIR=/tmp", "--entrypoint", "sh", o.image, "-c", 'echo "' + RUN_STARTED + '"; go test -json -count=1 -shuffle=' + seed + ' $(sed "s|^|./|" /out/targets.txt) > /out/record.jsonl 2> /out/stderr.txt; echo $? > /out/exit'];
+            : r.kind === "go"
+              ? [...base, "-e", "GOFLAGS=-mod=readonly", "-e", "GOPROXY=off", "-e", "GOTOOLCHAIN=local", "-e", "GOCACHE=/tmp/gocache", "-e", "GOTMPDIR=/tmp", "--entrypoint", "sh", o.image, "-c", 'echo "' + RUN_STARTED + '"; go test -json -count=1 -shuffle=' + seed + ' $(sed "s|^|./|" /out/targets.txt) > /out/record.jsonl 2> /out/stderr.txt; echo $? > /out/exit']
+              : [...base, ...other!.env, "--entrypoint", "sh", o.image, ...other!.entry];
         const res = dockerRun(name, cmd, { timeoutMs: limits.verifier_sec * 1000 });
         const infra = runInfra(res);
         if (infra) throw new TaskError("E_REAL_TASK_DOCKER", o.label + ": run " + (i + 1) + " of " + o.runs + " has no verdict: " + infra + ": " + res.stderr.trim().slice(0, 400));
@@ -174,16 +259,15 @@ export function verifyTree(o: VerifyOptions): TreeResult {
           if (text === undefined) throw noVerdict("/out/" + file + " could not be read", f);
           return text;
         };
-        const record = read("record.jsonl") ?? "";
-        const parsed = r.kind === "pytest" ? parsePytest(record) : parseGoTest(record, read("stderr.txt") ?? "", r.module);
-        const exitLine = (read("exit") ?? "").split("\n").filter(Boolean)[0];
-        runs.push({ seed, wall_ms: res.wall_ms, timed_out: res.timed_out, out_full: blocks === 0 || inodes === 0, killed: res.error !== undefined && !res.timed_out, exit: r.kind === "pytest" ? res.status : Number(exitLine ?? res.status), parsed });
+        const parsed = parseRecord(r, read);
+        const exitLine = r.kind === "go" || r.kind === "cargo" ? (read("exit") ?? "").split("\n").filter(Boolean)[0] : undefined;
+        runs.push({ seed, wall_ms: res.wall_ms, timed_out: res.timed_out, out_full: blocks === 0 || inodes === 0, killed: res.error !== undefined && !res.timed_out, exit: Number(exitLine ?? res.status), parsed });
       } finally {
         docker(["rm", "-f", out]);
         docker(["volume", "rm", "-f", out]);
       }
     }
-    return { label: o.label, prepare: { patch: prepState[0] ?? "", deleted: status("deleted.txt"), unlinked: status("unlinked.txt"), skipped: status("skipped.txt"), restored: status("restored.txt") }, runs };
+    return { label: o.label, prepare: prepared, runs };
   } finally {
     docker(["volume", "rm", "-f", volume]);
   }
@@ -196,4 +280,59 @@ export const idResults = (tree: TreeResult, id: string): TestResult[] => tree.ru
  * full or was killed past the output buffer fails whatever its record says. */
 export function allPass(tree: TreeResult, ids: string[]): boolean {
   return tree.runs.length > 0 && ids.length > 0 && tree.runs.every((r) => !stopped(r)) && ids.every((id) => idResults(tree, id).every((r) => r.status === "pass"));
+}
+
+
+/** Reads one tree file in the prepared volume: exit 3 when it is not a regular file. */
+const READ_TREE = '[ -f "$1" ] && [ ! -L "$1" ] || exit 3; exec cat -- "$1"';
+/** Writes one tree file in the prepared volume from stdin, clearing any symlink at or above it first. */
+const WRITE_TREE = 'set -f; acc=/work; IFS=/; for c in $2; do acc=$acc/$c; [ -L "$acc" ] && rm -f "$acc"; done; mkdir -p "$(dirname "$1")" && rm -rf "$1" && cat > "$1" && chmod a+r "$1"';
+
+/** The cold rebuild between prepare and the first run (VerifyOptions.cold): every step but the rebuild itself runs as
+ * root with no network and never runs tree code; the rebuild runs as the run user with no network, fresh caches in
+ * /tmp and a read-only root. */
+function coldRebuild(o: VerifyOptions, volume: string, tests: string, status: string): ColdRecord {
+  const r = o.task.runner;
+  const build = r.kind !== "pytest" && r.kind !== "go" ? r.build : null;
+  const root = r.kind !== "pytest" && r.kind !== "go" ? r.root : "";
+  const asRoot = (what: string, args: string[], input?: string) => {
+    const res = dockerRun("real-cold-" + randomBytes(6).toString("hex"), ["--rm", "-i", "--network", "none", "--user", "0:0", "--entrypoint", "sh", "-v", volume + ":/work", ...args], { timeoutMs: 600000, input });
+    if (res.status !== 0 && res.status !== 3) throw new TaskError("E_REAL_TASK_DOCKER", o.label + ": cold rebuild " + what + " failed (docker exited " + res.status + "): " + res.stderr.trim().slice(0, 400));
+    return res;
+  };
+  const step = (mode: string) => asRoot(mode, ["-e", "MODE=" + mode, "-e", "BUILD=" + (build ? "1" : "0"), "-v", tests + ":/verifier:ro", "-v", status + ":/status", o.image, "/verifier/cold.sh"]);
+  const readTree = (path: string): string | null => {
+    const res = asRoot("read of " + path, [o.image, "-c", READ_TREE, "sh", "/work/" + path]);
+    return res.status === 0 ? res.stdout : null;
+  };
+  step("clean");
+  const regions = readLines(join(tests, "regions.list"));
+  const before = new Map(regions.map((p) => [p, readTree(p)]));
+  let state: ColdRecord["build"] = "none";
+  if (build) {
+    const limits = o.task.limits;
+    const res = dockerRun("real-build-" + randomBytes(6).toString("hex"), ["--rm", "--network", "none", "--user", RUN_UID, "--read-only", "--tmpfs", "/tmp:rw,exec,size=2g", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--cpus", String(o.cpus ?? limits.cpus), "--memory", limits.memory, "--pids-limit", "2048", "-e", "HOME=/tmp", "-e", "CI=true", "-e", "npm_config_cache=/tmp/npm", "-e", "XDG_CACHE_HOME=/tmp/cache", "-e", "NODE_OPTIONS=", "-v", volume + ":/testbed", "--workdir", inRepo(root), "--entrypoint", "sh", o.image, "-c", build], { timeoutMs: limits.verifier_sec * 1000 });
+    state = res.timed_out ? "timeout" : res.status === 0 ? "ok" : "failed";
+  }
+  step("seal");
+  const restored = new Set(readLines(join(tests, "restore.list")));
+  const protect = readLines(join(tests, "protect.ere")).map((s) => new RegExp(s));
+  const isProduct = (p: string) => !restored.has(p) && !regions.includes(p) && !protect.some((re) => re.test(p)) && !p.startsWith(".real-verifier-config.");
+  const hashes = (file: string): Record<string, string> => Object.fromEntries(readLines(join(status, file)).map((l) => [l.slice(66), l.slice(0, 64)] as const).filter(([p]) => isProduct(p)));
+  const a = hashes("hash-a.txt");
+  const b = hashes("hash-b.txt");
+  const changed = [...new Set([...Object.keys(a), ...Object.keys(b)])].filter((p) => a[p] !== b[p]);
+  const products: Record<string, string> = { ...a };
+  for (const p of regions) {
+    const was = before.get(p) ?? null;
+    const now = readTree(p);
+    const product = (t: string | null) => (t === null ? "absent" : sha256(productText(p, t)));
+    products[p] = product(was);
+    if (product(was) !== product(now)) changed.push(p);
+    const moved = splice(p, now, readFileSync(join(tests, "regions", p), "utf8"));
+    asRoot("write of " + p, [o.image, "-c", WRITE_TREE, "sh", "/work/" + p, p], moved);
+    const after = readTree(p);
+    if (after === null || (now === null ? productText(p, after).trim() !== "" : product(after) !== product(now))) changed.push(p);
+  }
+  return { removed: readLines(join(status, "cold-removed.txt")), build: state, products: Object.fromEntries(Object.entries(products).sort(([x], [y]) => x.localeCompare(y))), changed: [...new Set(changed)].sort() };
 }
