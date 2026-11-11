@@ -68,7 +68,7 @@ test("tree-check refusals and wrap-up allowance gaps: counted per arm and model 
   expect(verdicts.length).toBe(3 + 3 * 3);
   for (const [, i] of verdicts) {
     const block = lines.slice(i + 1, lines.findIndex((l, j) => j > i && !l.startsWith("    ")));
-    expect(block.some((l) => l.startsWith("    E_PF_ARM gaps (tree-check refusals and S base or head mismatches):"))).toBe(true);
+    expect(block.some((l) => l.startsWith("    E_PF_ARM gaps (tree-check refusals, S base or head mismatches and post-turn failures on what the agent wrote):"))).toBe(true);
     expect(block.some((l) => l.startsWith("    E_PF_WRAPUP_ALLOWANCE gaps (wrap-up refused for its allowance):"))).toBe(true);
     expect(block.some((l) => l.startsWith("    arm_refusal_as_miss:"))).toBe(true);
   }
@@ -90,7 +90,7 @@ test("S base and head mismatches read as E_PF_ARM: out of the contrast, toward t
   expect(pn.named_gaps.E_PF_ARM![OPUS]).toEqual({ P: 2, N: 0 });
   expect(a.incomplete).toEqual([{ model: OPUS, arm: "P", units: 12, gaps: 2, incomplete: true }]);
   const lines = report(a);
-  expect(lines.filter((l) => l.startsWith("    E_PF_ARM gaps (tree-check refusals and S base or head mismatches): ") && l.includes(OPUS + " P 2")).length).toBe(4);
+  expect(lines.filter((l) => l.startsWith("    E_PF_ARM gaps (tree-check refusals, S base or head mismatches and post-turn failures on what the agent wrote): ") && l.includes(OPUS + " P 2")).length).toBe(4);
 });
 test("breaks secondary: sessions measured, with a break and not measured, counted per arm and model", () => {
   const b = rows().map((r): Row => (r.model === OPUS && r.arm === "P" && r.unit === "u0" ? { ...r, breaks: null, breaks_unmeasured: true } : r.model === OPUS && r.arm === "P" && r.unit === "u1" ? { ...r, breaks: 3, breaks_unmeasured: false } : r.model === SOL && r.arm === "N" && r.unit === "u2" ? { ...r, breaks: 0, breaks_unmeasured: false } : r));

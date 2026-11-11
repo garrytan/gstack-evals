@@ -12,7 +12,9 @@
 # once. Hashing reads every file in one batched sha256sum pass, each name with its ./ prefix so a file named - is read as
 # a file and not as stdin; a symlink hashes as link:<target>, and a name holding a tab or newline is skipped. A regular
 # file whose owner executable bit is set carries +x after its hash, so a change to the bit alone is a change, and the
-# commit adds with core.fileMode on, so git records it.
+# commit adds with core.fileMode on, so git records it. A listed file that is gone when it is hashed (a process the agent
+# left running deleted it) fails the run with one "PF_ARM_STATE vanished <path>" line on stderr per such file, the cause
+# pf_turns routes to the arm.
 set -euo pipefail
 cmd=$1
 repo=$2
@@ -52,8 +54,11 @@ hashes() {
     case $f in *$'\n'*|*$'\t'*) continue;; esac
     if [ -L "$f" ]; then printf 'L%s\0' "$f" >&3; else printf 'F%s\0' "$f" >&3; printf './%s\0' "$f" >&4; fi
   done 3> "$t/all" 4> "$t/files"
-  xargs -0 -r sha256sum -- < "$t/files" > "$t/sums"
-  xargs -0 -r stat -c '%a' -- < "$t/files" > "$t/modes"
+  if ! xargs -0 -r sha256sum -- < "$t/files" > "$t/sums" || ! xargs -0 -r stat -c '%a' -- < "$t/files" > "$t/modes"; then
+    while IFS= read -r -d '' f; do [ -e "$f" ] || [ -L "$f" ] || printf 'PF_ARM_STATE vanished %s\n' "${f#./}" >&2; done < "$t/files"
+    rm -rf "$t"
+    exit 1
+  fi
   while IFS= read -r -d '' f; do
     if [ "${f:0:1}" = L ]; then
       h=$(printf 'link:%s' "$(readlink -- "${f:1}")" | sha256sum)

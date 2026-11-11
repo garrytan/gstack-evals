@@ -83,7 +83,11 @@ for line in sys.stdin:
         if phase == "task":
             os.makedirs("checks", exist_ok=True)
             open("checks/regress_test.sh", "w").write("grep -q reset flag/flag.go\n")
+            if scenario == "task_lock":
+                open(".git/index.lock", "w").close()
         else:
+            if scenario == "wrapup_rm_head":
+                os.remove(os.path.join(os.environ["PF_STUB_WORK"], "s.head"))
             open("CHECKS.json", "w").write(json.dumps([{"name": "regress", "command": "bash checks/regress_test.sh", "what_it_checks": "the reset"}]))
             open("late_%d.txt" % n, "w").write("wrap-up file\n")
         send({"type": "system", "subtype": "init", "session_id": "s-1", "tools": ["Bash"], "skills": [], "model": "claude-opus-5-5", "claude_code_version": "2.1.312"})
@@ -193,7 +197,7 @@ def session(scenario="ok", instr=False, cap_stop=False, arm="P", wrapup_refusals
     egress.apply = lambda container, allow: {"event": "egress", "allow": allow}
     stub_log = d / "stub.jsonl"
     saved = dict(os.environ)
-    os.environ.update({**GIT_ENV, "PATH": str(bindir) + ":" + os.environ["PATH"], "PF_STUB_LOG": str(stub_log), "PF_STUB_SCENARIO": scenario})
+    os.environ.update({**GIT_ENV, "PATH": str(bindir) + ":" + os.environ["PATH"], "PF_STUB_LOG": str(stub_log), "PF_STUB_SCENARIO": scenario, "PF_STUB_WORK": pf_agent.WORK})
     context = types.SimpleNamespace(cost_usd=None, metadata=None)
     error = None
     try:
@@ -374,6 +378,74 @@ def test_a_cap_stop_on_the_task_open_raises_before_claude_starts():
     s = session(cap_stop=True)
     check(isinstance(s.error, lb.LedgerCapStop), repr(s.error))
     check(s.stub == [] and s.summary is None, s.stub)
+
+
+def with_scripts(edit, **kw):
+    """One session with pf_agent.SH swapped for a copy of the pf scripts that edit(sh_dir) changed."""
+    sh_copy = Path(tempfile.mkdtemp(prefix="pf-sh-"))
+    DIRS.append(sh_copy)
+    shutil.copytree(pf_agent.SH, sh_copy, dirs_exist_ok=True)
+    edit(sh_copy)
+    saved, pf_agent.SH = pf_agent.SH, sh_copy
+    try:
+        return session(**kw)
+    finally:
+        pf_agent.SH = saved
+
+
+def with_step(fail, **kw):
+    """One session whose container commands go through fail(script, args) first: a CompletedProcess or an exception it
+    returns stands in for that command's run, and None runs it."""
+    real = pf_agent.Session.sh
+
+    def sh(self, script, *args, timeout=600):
+        r = fail(script, args)
+        if isinstance(r, BaseException):
+            raise r
+        return r or real(self, script, *args, timeout=timeout)
+
+    pf_agent.Session.sh = sh
+    try:
+        return session(**kw)
+    finally:
+        pf_agent.Session.sh = real
+
+
+def test_an_index_lock_the_task_turn_left_makes_the_capture_failure_the_arms():
+    s = session("task_lock")
+    check(s.error is None, repr(s.error))
+    check(s.summary["refused"].startswith("E_PF_ARM post_turn capture.sh commit: ") and "lock .git/index.lock" in s.summary["refused"], s.summary.get("refused"))
+    check([o["meta"]["phase"] for o in s.control.opens] == ["task"] and s.summary["capture"] is None and s.summary["wrapup"] == [], s.summary)
+
+
+def test_a_lock_the_harness_capture_leaves_as_it_fails_stays_infra():
+    def edit(d):
+        cap = d / "capture.sh"
+        cap.write_text(cap.read_text().replace("  commit)\n", "  commit)\n    : > .git/index.lock; echo 'capture died' >&2; exit 3\n", 1))
+
+    s = with_scripts(edit)
+    check(s.error is None, repr(s.error))
+    check(s.summary["refused"].startswith("E_PF_CAPTURE capture.sh commit exited 3: capture died"), s.summary.get("refused"))
+
+
+def test_a_wrapup_turn_that_removes_s_head_makes_the_keep_failure_the_arms():
+    s = session("wrapup_rm_head")
+    check(s.error is None, repr(s.error))
+    check(s.summary["refused"].startswith("E_PF_ARM post_turn wrapup.sh keep: ") and "missing s.head" in s.summary["refused"], s.summary.get("refused"))
+    check([w["termination"] for w in s.summary["wrapup"]] == ["completed"] and s.summary["keep"] is None and not (s.ev / "s.bundle").exists(), s.summary)
+
+
+def test_a_failed_s_bundle_is_a_refusal_and_leaves_no_bundle():
+    s = with_step(lambda script, args: subprocess.CompletedProcess([], 128, b"", b"fatal: bundle failed\n") if "bundle create" in script else None)
+    check(s.error is None, repr(s.error))
+    check(s.summary["refused"].startswith("E_PF_CAPTURE bundle exited 128: fatal: bundle failed"), s.summary.get("refused"))
+    check(s.summary["checks"] is True and not (s.ev / "s.bundle").exists(), sorted(p.name for p in s.ev.iterdir()))
+
+
+def test_a_post_turn_step_that_times_out_is_a_refusal_and_not_an_escape():
+    s = with_step(lambda script, args: subprocess.TimeoutExpired("docker", 600) if "wrapup.sh" in script and "keep" in args else None)
+    check(s.error is None, repr(s.error))
+    check(s.summary is not None and s.summary["refused"].startswith("E_PF_CAPTURE wrapup.sh keep timed out after 600 s"), s.summary and s.summary.get("refused"))
 
 
 def test_a_failing_keep_after_a_completed_wrapup_still_writes_the_summary_with_the_refusal_and_no_bundle():

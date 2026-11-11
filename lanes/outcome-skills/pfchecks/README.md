@@ -55,8 +55,12 @@ Neutral tree
   run (stopped, or built nothing) counts as every test failing.
 
 Capture and transplant
-- The inventory leaves out .git and the build-output names at any depth; symlinks hash their target text; paths with a
-  tab or newline are skipped. Deleted paths are staged with git rm --cached. "Forced" is what git check-ignore reports.
+- The inventory leaves out .git and the build-output names at any depth, except a listed directory under which the base
+  commit tracks a file other than a placeholder (.gitkeep, .keep, .gitignore, .empty); symlinks hash their target text;
+  paths with a tab or newline are skipped. Every name reaches the hasher with its ./ prefix, so a root file named - is
+  read as a file. A regular file's owner executable bit is part of its entry, so a chmod alone is a change, and the
+  commit adds with core.fileMode on. Deleted paths are staged with git rm --cached. "Forced" is what git check-ignore
+  reports.
 - Deleted files that are not test files are restored (source, protected configuration and other files alike); only
   deleted source files count as product edits.
 - Existing files that are neither source nor test (docs, data, resources) stay as S has them, as the plan's "everything
@@ -139,12 +143,15 @@ Rules as built
 - Session plan: per unit, every (model, arm) cell of the part shuffled by one seededRandom(order_seed + part) stream, as
   #290's planPart reads its seed. Items: pf-opus, pf-sol, pf-particle in the test part; pf-admit in admission; pf-blind.
 - Ends: endKind is #290's. Task turn: completed or a limit goes to the wrap-up; upstream or infra retries the whole
-  session once, then E_PF_UPSTREAM_GAP or E_PF_INFRA_GAP. Wrap-up: upstream or infra reruns the wrap-up turn once after
+  session once, then E_PF_UPSTREAM_GAP or E_PF_INFRA_GAP. pf_turns.py reads the task turn's end the same way (task_end),
+  so an upstream or infra end stops the session before the capture and the paid wrap-up, and an allowance stop, even
+  one that ends in error_result, still goes on to them. Wrap-up: upstream or infra reruns the wrap-up turn once after
   wrapup.sh reset, resuming the same Claude Code session; a second is a gap. A wrap-up refused for its allowance (an
   allowance stop on its slot, which the driver's close answer counts in allowance_stops, or the driver's 409 CAP_STOP on
   its open, which pf_turns.py records as termination open_refused) is gap E_PF_WRAPUP_ALLOWANCE, with no wrap-up rerun and no session retry. A turn
   whose close answer says the proxy's finalize failed (finalized false) has unknown counts and is an infra end, unless it
-  also counts an allowance stop, which reads first. Such a turn with no allowance stop halts the session before any
+  also counts an allowance stop, which reads first. The driver's close is idempotent, so PfAgent sends a failed close
+  request again (3 tries, 120 s each); a close that is never answered has unknown counts too and reads as finalized false. Such a turn with no allowance stop halts the session before any
   retry or wrap-up rerun (E_PF_FINALIZE_HALT, no session record), and the driver halts the item's stage and names the
   session and the lease's journal; the Captain rules on a retry after reading it. The halt line stays in the run's
   sessions.jsonl, so a relaunch refuses the item (E_SM_FINALIZE_HALT, the family SM halt's reading) until --lift-halt
@@ -155,6 +162,12 @@ Rules as built
   tree is hashed once, in one batched sha256sum pass. After the wrap-up: wrapup.sh keep copies CHECKS.json (a
   regular file at the root), prints PF_DISCARD for every other added, changed or deleted path, and puts the tree back to S.
   S leaves the container as a git bundle, which score.ts fetches as --s with ref HEAD.
+- A post-turn step that fails or times out (the capture, a wrap-up reset or keep, the bundle) takes no retry, and the
+  session still writes its record. When sh/state.sh finds the cause in what the agent wrote (a work file the step needs
+  gone, an s.head that names no commit, a broken .git, config, HEAD or index, unmerged entries, a lock the agent's git
+  left during the session) or capture.sh saw a file vanish while it hashed the tree, pf_turns refuses with E_PF_ARM
+  post_turn and the record is gap E_PF_ARM, reason post_turn. Otherwise (the harness, the host, docker or the network) it
+  is E_PF_CAPTURE and gap E_PF_INFRA_GAP. Neither masks a wrap-up refused for its allowance (E_PF_WRAPUP_ALLOWANCE).
 - The wrap-up turn is a new CLI process with --resume and its own max turns, deadline and proxy slot (its allowance).
 - Before any turn pf_turns.py refuses a tree holding CLAUDE.md, CLAUDE.local.md, AGENTS.md or .claude, or a home holding
   gstack or a drive path (E_PF_ARM), as real_agent's SM check does. AskUserQuestion gets #290's NoAnswer reply.
@@ -243,8 +256,11 @@ run. It waits for the neutral record, so it can start while the neutral gate sti
 
 - Containment comes first, on the session image built as the first session's would be, and every session waits on it.
   runPfSession runs the same gate (containUnit) before every session: the unit's first session runs the check and
-  records it in the unit dir's pf-contain.json, one entry per session image tag; later sessions on the same image reuse
-  a passing entry, and a failure halts the unit with E_PF_CONTAINMENT before any session, without dropping it.
+  records it in the unit dir's pf-contain.json, one entry per session image tag; a later session reuses a passing entry
+  when the tree volume's content digest (sh/tree-digest.sh: every entry's type, mode, name, file hash and link target,
+  .git included, no times), the tag, the runtime image, the head and the check script's sha256 all match. The image id
+  is not in the key, since every session image is a new build. A failure halts the unit with E_PF_CONTAINMENT before
+  any session, without dropping it.
   `gstack-evals outcome pf contain --unit <dir>` runs the check alone and writes the same record. sh/contain.sh runs as root with no network in
   a container of that image. It fails when any ref (branches, tags, remotes, notes, replace refs, stash, packed refs,
   FETCH_HEAD, ORIG_HEAD and the other special heads) or reflog entry points past the base commit, when any commit object is neither the base nor an

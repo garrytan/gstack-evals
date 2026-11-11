@@ -127,7 +127,10 @@ function harbor(bin: string, argv: string[], env: Record<string, string>, timeou
   });
 }
 
-const armRefusal = (summary: Record<string, any> | null) => typeof summary?.refused === "string" && /^E_PF_ARM/.test(summary.refused);
+/** pf_turns' refusal of a post-turn step whose cause lies in what the agent wrote (Session.step). */
+const POST_TURN = /^E_PF_ARM post_turn /;
+/** The tree or home check's refusal before any open. */
+const armRefusal = (summary: Record<string, any> | null) => typeof summary?.refused === "string" && /^E_PF_ARM/.test(summary.refused) && !POST_TURN.test(summary.refused);
 /** The commit an S bundle's HEAD names, or null when git cannot read the bundle. */
 function bundleHead(file: string): string | null {
   const r = spawnSync("git", ["bundle", "list-heads", file], { encoding: "utf8" });
@@ -146,9 +149,11 @@ export const retriesSession = (summary: Record<string, any> | null, record: PfSe
  *  Harbor's exception type for the trial: LedgerCapStop (the driver refused the task open with 409 CAP_STOP) is a cap stop,
  *  which ends the part with no gap and no retry, as the other lanes read it. An S bundle whose HEAD is not the head the
  *  session-end commit printed (PF_CAPTURE head=) is gap E_PF_ARM with reason head_mismatch, with no retry. base is the
- *  unit's base commit (the session image's head), carried in the record for scoring's root check. A capture or wrap-up
- *  script that fails after its turn (pf_turns' E_PF_CAPTURE refusal, such as wrapup.sh keep after a completed wrap-up turn)
- *  is gap E_PF_INFRA_GAP with no retry, so the session still writes its session.json and the driver goes on. */
+ *  unit's base commit (the session image's head), carried in the record for scoring's root check. A post-turn step that
+ *  fails (the capture, a wrap-up reset or keep, the S bundle) takes no retry, and the session still writes its
+ *  session.json: when its cause lies in what the agent wrote (pf_turns' E_PF_ARM post_turn refusal) it is gap E_PF_ARM with
+ *  reason post_turn, and otherwise (E_PF_CAPTURE) gap E_PF_INFRA_GAP. Neither masks a wrap-up turn refused for its
+ *  allowance, which stays E_PF_WRAPUP_ALLOWANCE. */
 export function pfRecord(i: PfRunInput, attempt: 1 | 2, summary: Record<string, any> | null, ev: string | null, exception: string | null = null, base: string | null = null): PfSessionRecord {
   const capStop = exception === "LedgerCapStop";
   const s = i.session;
@@ -168,8 +173,10 @@ export function pfRecord(i: PfRunInput, attempt: 1 | 2, summary: Record<string, 
   const sdk = ev ? join(ev, "sdk-messages.jsonl") : "";
   const bundle = ev ? join(ev, "s.bundle") : "";
   const hasS = !!bundle && existsSync(bundle) && statSync(bundle).size > 0;
-  const reason = capStop ? null : !ts ? "tree_check" : cap && hasS && bundleHead(bundle) !== cap.head ? "head_mismatch" : null;
-  const scriptFailed = typeof summary?.refused === "string" && /^E_PF_CAPTURE /.test(summary.refused);
+  const refused = typeof summary?.refused === "string" ? summary.refused : "";
+  const wrapAllowance = ws?.action === "gap" && ws.code === "E_PF_WRAPUP_ALLOWANCE";
+  const reason = capStop ? null : !ts ? "tree_check" : cap && hasS && bundleHead(bundle) !== cap.head ? "head_mismatch" : POST_TURN.test(refused) && !wrapAllowance ? "post_turn" : null;
+  const scriptFailed = /^E_PF_CAPTURE /.test(refused) && !wrapAllowance;
   const gap = capStop ? null : reason ? "E_PF_ARM" : scriptFailed ? "E_PF_INFRA_GAP" : i.effort && !effortHolds(effort, i.effort[s.model]) ? "E_PF_INFRA_GAP" : ts!.action === "gap" ? ts!.code : ts!.action === "retry_session" ? "E_PF_INFRA_GAP" : !ws ? "E_PF_INFRA_GAP" : ws.action === "gap" ? ws.code : ws.action === "rerun_wrapup" ? "E_PF_INFRA_GAP" : null;
   const q = Object.values((summary?.questions ?? {}) as Record<string, { ask_user_question?: number; prose_questions?: number }>);
   return {
