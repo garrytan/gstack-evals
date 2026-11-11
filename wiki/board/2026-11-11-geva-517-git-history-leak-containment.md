@@ -44,7 +44,7 @@ This note links the affected posts and supersedes none of them. Merged posts don
 
 1. Refs past the starting commit. List every branch, tag, remote ref, reflog entry, stash and ORIG_HEAD, and flag any that isn't the starting commit or one of its ancestors. Delete them, then prune, so their objects go too.
 2. The object store. List every object (`git cat-file --batch-all-objects`), not just what the refs reach, and look for the hidden test names and the fix commit. An object no ref points to still answers `git show <sha>`.
-3. The working tree against HEAD. If `git diff` in a fresh container prints anything, the agent sees it on its first look. Commit the broken state the task wants, or drop `.git`.
+3. The working tree against HEAD. If `git diff HEAD` in a fresh container prints anything, the agent sees it on its first look. Make the broken state the starting commit with no fixed version anywhere in its history, or drop `.git`.
 
 **Every rerun reproduced the published output first.** Where a number could move, the post's own frozen analysis ran unchanged before anything was removed, and matched what the post printed. The small gaps are listed under Limits.
 
@@ -76,7 +76,7 @@ A session counts as exposed when a tool result showed a hidden test name, or fix
 
 ### Terminal-Bench 2: fix-code-vulnerability
 
-Of the 39 Terminal-Bench 2 images in these runs, 35 keep no `.git` at all. Three keep history by design: fix-git asks the agent to recover a lost commit, git-leak-recovery asks it to find a secret in history, and sanitize-git-repo's HEAD holds the secret the task asks it to remove.
+Of the 39 Terminal-Bench 2 images behind the analysed trials in these posts, 35 keep no `.git` at all. Three keep history by design: fix-git asks the agent to recover a lost commit, git-leak-recovery asks it to find a secret in history, and sanitize-git-repo's HEAD holds the secret the task asks it to remove. We also checked crack-7z-hash, which stacks round 1 started and every post dropped before analysis: its `.git` is a clone of the password-cracking tool the task uses, with one branch and no commit outside HEAD's history.
 
 The fourth is fix-code-vulnerability. Its HEAD commit holds bottle.py with the security fix in place, and the image build deletes four lines from the header checks in the working tree. So `git diff`, `git stash`, `git checkout` or `git show HEAD:bottle.py` prints the fix. A session counts as exposed when either of the fix's two error messages first appears in a tool result, before the agent's own output holds it.
 
@@ -163,7 +163,7 @@ Our first scan counted a session as exposed whenever two lines of the upstream f
 
 ## What this steers
 
-- Patch or retire fix-code-vulnerability before the next Terminal-Bench 2 run: commit the broken file, or remove `.git` from the image.
+- Patch or retire fix-code-vulnerability before the next Terminal-Bench 2 run: rebuild its history so no commit holds the fix, or remove `.git` from the image.
 - Strip refs past the starting commit, and prune, before the next SWE-rebench run.
 - Scan the cheap model's sessions first. particle-1 dug in about one L1 session in six; Opus 5.5 never did.
 
@@ -175,7 +175,7 @@ The image check needs only the public images. Inside a task's repository in the 
 git for-each-ref                                   # every ref; flag any that isn't the starting commit or its ancestor
 git rev-list --all --reflog --not <starting commit>    # later commits that refs or the reflog reach
 git cat-file --batch-all-objects --batch-check     # every object, reachable or not
-git diff --stat                                    # the working tree against HEAD; for fix-code-vulnerability this shows the fix
+git diff HEAD --stat                               # the working tree against HEAD; for fix-code-vulnerability this shows the fix
 ```
 
 The session scan and the reruns need the run archives, which stay private because they hold full transcripts.
@@ -191,7 +191,7 @@ The session scan and the reruns need the run archives, which stay private becaus
 - The Run D change was taken to the Captain before writing. The ruling: a claim line that changes form is not a moved verdict, because the row's verdict (the pooled D2 lift) holds, so the note shows Sol's D1 both ways.
 - Run D's two dropped Sol opens: the frozen output's skill counts go from cso 3 to 2 in the gstack arm and cso 2 to 1 in the placebo arm.
 - fix-code-vulnerability's image HEAD is 0207a34f0c5716cd292dd4480253ad35d3da49f3.
-- The two Terminal-Bench 2 images outside the 37-task set, adaptive-rejection-sampler and largest-eigenval (only the quick looks ran them), were checked during review at the digests their 20251031 tags resolve to on 2026-11-11. Neither keeps a .git. The other 37 pinned digests still match those tags.
+- Three Terminal-Bench 2 images were checked during review, at the digests their 20251031 tags resolve to on 2026-11-11: adaptive-rejection-sampler and largest-eigenval (the quick looks analysed them; stacks round 1 ran both and dropped them under its oracle rule), and crack-7z-hash (started in stacks round 1, dropped before analysis everywhere). The first two keep no .git. crack-7z-hash keeps a John the Ripper clone whose 17,055 commits are all ancestors of HEAD. The other 37 pinned digests still match those tags.
 
 </details>
 
