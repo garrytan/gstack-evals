@@ -112,20 +112,28 @@ export function runCopy(i: PfRunInput, image: SessionImage, attempt: 1 | 2, dir:
   return { argv, env, config };
 }
 
-function harbor(bin: string, argv: string[], env: Record<string, string>, timeoutMs: number, log: string): Promise<number> {
+/** Runs Harbor and kills it at timeoutMs; killed says whether that timer fired. */
+export function harbor(bin: string, argv: string[], env: Record<string, string>, timeoutMs: number, log: string): Promise<{ exit: number; killed: boolean }> {
   return new Promise((done) => {
     const c = spawn(bin, argv, { env, stdio: ["ignore", "pipe", "pipe"] });
     const chunks: Buffer[] = [];
     c.stdout.on("data", (d) => chunks.push(d));
     c.stderr.on("data", (d) => chunks.push(d));
-    const timer = setTimeout(() => c.kill("SIGTERM"), timeoutMs);
+    let killed = false;
+    const timer = setTimeout(() => {
+      killed = true;
+      c.kill("SIGTERM");
+    }, timeoutMs);
     c.on("close", (n) => {
       clearTimeout(timer);
       writeFileSync(log, Buffer.concat(chunks));
-      done(n ?? 1);
+      done({ exit: n ?? 1, killed });
     });
   });
 }
+
+/** pf_turns' line per slot open, written before the open request, in the evaluator dir. */
+export const OPENS = "pf-opens.jsonl";
 
 /** pf_turns' refusal of a post-turn step whose cause lies in what the agent wrote (Session.step). */
 const POST_TURN = /^E_PF_ARM post_turn /;
@@ -195,11 +203,14 @@ export function pfRecord(i: PfRunInput, attempt: 1 | 2, summary: Record<string, 
 /** After one attempt, whether the whole session retries from a fresh container. A slot whose close answer says the proxy's
  *  finalize failed (finalized false), with no allowance stop counted, first halts the session with E_PF_FINALIZE_HALT:
  *  no retry and no session record, while the driver halts the item's stage and names the lease's journal, which the
- *  Captain reads before ruling on a retry. */
-export function retryAfter(i: PfRunInput, attempt: 1 | 2, summary: Record<string, any> | null, record: PfSessionRecord, dir: string): boolean {
+ *  Captain reads before ruling on a retry. So does an attempt run.ts killed at its timeout (killed) that left no summary
+ *  after pf_turns recorded a slot open in ev's pf-opens.jsonl: that slot's counts are unknown, and it may have spent. */
+export function retryAfter(i: PfRunInput, attempt: 1 | 2, summary: Record<string, any> | null, record: PfSessionRecord, dir: string, killed = false, ev: string | null = null): boolean {
   const lost = ((summary?.slots ?? []) as Array<Record<string, any>>).filter((x) => x.close?.finalized === false && !((x.close?.allowance_stops ?? 0) > 0)).map((x) => String(x.id));
   const s = i.session;
-  if (lost.length) pfFail("E_PF_FINALIZE_HALT", s.unit + "/" + s.model + "/" + s.arm + "/" + s.index + " attempt " + attempt + ": the proxy's finalize failed at the close of session " + lost.join(", ") + " on lease " + record.lease_id + ", so its counts are unknown; the session halts with no retry and no session record, and the driver's E_PF_FINALIZE_HALT line names the journal (" + record.lease_id + ".journal.ndjson in its run dir); " + dir);
+  const label = s.unit + "/" + s.model + "/" + s.arm + "/" + s.index + " attempt " + attempt;
+  if (lost.length) pfFail("E_PF_FINALIZE_HALT", label + ": the proxy's finalize failed at the close of session " + lost.join(", ") + " on lease " + record.lease_id + ", so its counts are unknown; the session halts with no retry and no session record, and the driver's E_PF_FINALIZE_HALT line names the journal (" + record.lease_id + ".journal.ndjson in its run dir); " + dir);
+  if (killed && !summary && ev && existsSync(join(ev, OPENS)) && readFileSync(join(ev, OPENS), "utf8").trim()) pfFail("E_PF_FINALIZE_HALT", label + ": Harbor was killed at its timeout after pf_turns opened a slot (" + join(ev, OPENS) + "), and no summary names that slot's counts, so it may have spent; the session halts with no retry and no session record, and the driver's E_PF_FINALIZE_HALT line names the lease's journal; " + dir);
   return attempt === 1 && retriesSession(summary, record);
 }
 
@@ -212,7 +223,8 @@ export function finishSession(file: string, record: PfSessionRecord): void {
 /** Builds the image, runs the containment gate on it (containUnit with the tree volume's digest from before the build: the
  *  unit's first session runs the check, later ones reuse its passing record, and a failure halts the unit with
  *  E_PF_CONTAINMENT), runs Harbor (and the whole-session retry
- *  from a fresh container when the task turn ends upstream or infra, unless a failed proxy finalize halts it first), and
+ *  from a fresh container when the task turn ends upstream or infra, unless a failed proxy finalize, or a kill at the
+ *  timeout after a slot opened, halts it first), and
  *  writes out/session.json. Async, so a caller serving the control plane in this process keeps serving it. */
 export async function runPfSession(i: PfRunInput): Promise<PfRun> {
   if (existsSync(i.out)) pfFail("E_PF_ARM", i.out + " exists; each session writes a new run dir");
@@ -230,13 +242,13 @@ export async function runPfSession(i: PfRunInput): Promise<PfRun> {
     const dir = join(i.out, "a" + attempt);
     mkdirSync(dir, { recursive: true });
     const { argv, env } = runCopy(i, image, attempt, dir);
-    const exit = await harbor(i.harbor ?? "harbor", argv, env, timeout, join(dir, "harbor.log"));
+    const { exit, killed } = await harbor(i.harbor ?? "harbor", argv, env, timeout, join(dir, "harbor.log"));
     const ev = find(join(dir, "jobs"), "evaluator");
     const summary = ev && existsSync(join(ev, "pf-summary.json")) ? (JSON.parse(readFileSync(join(ev, "pf-summary.json"), "utf8")) as Record<string, any>) : null;
     const result = ev && existsSync(join(dirname(ev), "result.json")) ? (JSON.parse(readFileSync(join(dirname(ev), "result.json"), "utf8")) as Record<string, any>) : null;
     attempts.push({ dir, harbor_exit: exit, summary, evaluator: ev });
     record = pfRecord(i, attempt, summary, ev, result?.exception_info?.exception_type ?? null, image.head);
-    if (!retryAfter(i, attempt, summary, record, dir)) break;
+    if (!retryAfter(i, attempt, summary, record, dir, killed, ev)) break;
   }
   const file = join(i.out, "session.json");
   finishSession(file, record!);

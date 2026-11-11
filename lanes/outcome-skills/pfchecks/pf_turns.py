@@ -21,7 +21,8 @@ Before any slot opens the tree must hold none of the files the strip rule remove
 real_agent's family SM check reads them, with the commit count and head the task names when it names them.
 Usage: python pf_turns.py <config.json>. It writes pf-summary.json, sdk-messages.jsonl (records carry phase task or
 wrapup), claude-session.jsonl (Claude Code's own transcript), usersim-events.jsonl, s.bundle and CHECKS.json (when kept)
-under out.
+under out, and pf-opens.jsonl, one line before each slot open request, so run.ts can tell that a killed attempt with no
+summary may have spent.
 """
 import asyncio
 import json
@@ -134,6 +135,8 @@ class Session:
         limits = cfg["limits"][phase]
         self.limits = limits
         sid = resume
+        with (self.out / "pf-opens.jsonl").open("a") as f:
+            f.write(json.dumps({"phase": phase, "rerun": rerun, "at": round(time.time() - self.started, 1)}) + "\n")
         try:
             slot = self.slots.open(phase, rerun)
         except OpenRefused as e:

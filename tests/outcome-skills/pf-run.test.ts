@@ -12,7 +12,7 @@ import type { SessionImage } from "../../lanes/outcome-skills/statemachines/imag
 import { sessionLimits, type PfArm } from "../../lanes/outcome-skills/pfchecks/arms.ts";
 import { OPUS, P1 } from "../../lanes/outcome-skills/pfchecks/items.ts";
 import { PSTACK_DIR, pstackVolume } from "../../lanes/outcome-skills/pfchecks/pstack.ts";
-import { TASK_RERUN, finishSession, pfRecord, retriesSession, retryAfter, runCopy, type PfRunInput } from "../../lanes/outcome-skills/pfchecks/run.ts";
+import { TASK_RERUN, finishSession, harbor, pfRecord, retriesSession, retryAfter, runCopy, type PfRunInput } from "../../lanes/outcome-skills/pfchecks/run.ts";
 import { toolsVolume } from "../../lanes/outcome-skills/pfchecks/tools.ts";
 
 const roots: string[] = [];
@@ -208,6 +208,29 @@ test("a slot whose proxy finalize failed halts the session with E_PF_FINALIZE_HA
   expect(retryAfter(i, 2, upstream, pfRecord(i, 2, upstream, null), "/out/a2")).toBe(false);
   const both = summary({ task: turn("error_result", ["E_ALLOWANCE"], 1, false), wrapup: [turn("completed")], slots: [lostSlot("task", 1), slot("wrapup", 2)] });
   expect(retryAfter(i, 1, both, pfRecord(i, 1, both, null), "/out/a1")).toBe(false);
+});
+
+// Value: protects=the Captain's ruling on #324's red-team#2: a Harbor kill after a turn opened may already have been charged, so it halts as a failed finalize does; fails_when=an attempt run.ts killed at its timeout after pf_turns recorded a slot open, with no summary, gets the whole-session retry, or a kill before any open, an attempt that ended on its own, or a killed attempt that still wrote its summary halts; why_new=a kill leaves no pf-summary.json, and pfRecord read that as an infra end and retried the whole session; seam=run.ts retryAfter over the evaluator dir's pf-opens.jsonl; no_claim=that pf_turns writes the line before each open (pf_agent_sdk_test.py)
+test("an attempt run.ts killed at its timeout after a slot open, with no summary, halts with E_PF_FINALIZE_HALT instead of retrying the whole session", () => {
+  const i = input("P");
+  const ev = temp("pf-run-ev-");
+  const none = pfRecord(i, 1, null, ev);
+  expect(retryAfter(i, 1, null, none, "/out/a1", true, ev)).toBe(true);
+  writeFileSync(join(ev, "pf-opens.jsonl"), JSON.stringify({ phase: "task", rerun: null, at: 3.1 }) + "\n");
+  expect(() => retryAfter(i, 1, null, none, "/out/a1", true, ev)).toThrow(/^E_PF_FINALIZE_HALT pf-run-flag\/claude-opus-5-5\/P\/3 attempt 1: Harbor was killed at its timeout after pf_turns opened a slot/);
+  expect(() => retryAfter(i, 2, null, pfRecord(i, 2, null, ev), "/out/a2", true, ev)).toThrow("E_PF_FINALIZE_HALT");
+  expect(retryAfter(i, 1, null, none, "/out/a1", false, ev)).toBe(true);
+  const done = summary({ task: turn("completed"), wrapup: [turn("completed")], slots: [slot("task", 4), slot("wrapup", 2)] });
+  expect(retryAfter(i, 1, done, pfRecord(i, 1, done, null), "/out/a1", true, ev)).toBe(false);
+});
+
+test("harbor() says whether its timer killed Harbor", async () => {
+  const dir = temp("pf-run-harbor-");
+  const bin = join(dir, "harbor");
+  writeFileSync(bin, "#!/bin/sh\n[ \"$1\" = slow ] && exec sleep 30\necho done\n", { mode: 0o755 });
+  expect(await harbor(bin, ["slow"], {}, 300, join(dir, "slow.log"))).toEqual({ exit: 1, killed: true });
+  expect(await harbor(bin, ["fast"], {}, 10_000, join(dir, "fast.log"))).toEqual({ exit: 0, killed: false });
+  expect(readFileSync(join(dir, "fast.log"), "utf8")).toBe("done\n");
 });
 
 test("pfRecord: effort is the task slot's proxy record; with the dry run's record, a match scores and a missing or different record is an infra gap", () => {

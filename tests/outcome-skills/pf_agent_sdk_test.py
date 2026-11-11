@@ -380,6 +380,17 @@ def test_a_cap_stop_on_the_task_open_raises_before_claude_starts():
     check(s.stub == [] and s.summary is None, s.stub)
 
 
+def test_each_slot_open_is_recorded_before_its_request():
+    s = session("wrapup_error")
+    check(s.error is None, repr(s.error))
+    opens = [json.loads(line) for line in (s.ev / "pf-opens.jsonl").read_text().splitlines()]
+    check([(o["phase"], o["rerun"]) for o in opens] == [("task", None), ("wrapup", None), ("wrapup", "wrapup_upstream_or_infra")], opens)
+    c = session(cap_stop=True)
+    check(isinstance(c.error, lb.LedgerCapStop) and c.summary is None, repr(c.error))
+    opens = [json.loads(line) for line in (c.ev / "pf-opens.jsonl").read_text().splitlines()] if (c.ev / "pf-opens.jsonl").exists() else []
+    check([o["phase"] for o in opens] == ["task"], opens)
+
+
 def with_scripts(edit, **kw):
     """One session with pf_agent.SH swapped for a copy of the pf scripts that edit(sh_dir) changed."""
     sh_copy = Path(tempfile.mkdtemp(prefix="pf-sh-"))
