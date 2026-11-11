@@ -706,6 +706,38 @@ def test_the_second_reading_only_adds_holds():
     assert [t for t, a, b in zip(cases, first, full) if b and not a] == list(RECALL_HELD)
 
 
+def test_snapshot_leaves_out_excluded_dependency_folders_whatever_gitignore_says():
+    """The build stage mounts in-project dependency folders into the tree and lists them in task.json's exclude. With the
+    ignore rule removed, and with a symlink named node_modules (which a node_modules/ pattern never matches), the patch
+    still holds no excluded path; a task with no exclude list adds nothing to the script."""
+    import os
+    import subprocess
+
+    assert ra.snapshot_exclude({}) == "" and ra.snapshot_exclude({"exclude": []}) == ""
+    with tempfile.TemporaryDirectory() as d:
+        git = ["git", "-C", d, "-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid"]
+        subprocess.run(git[:3] + ["init", "-q", "-b", "main"], check=True)
+        Path(d, ".gitignore").write_text("node_modules/\n")
+        Path(d, "pkg").mkdir()
+        Path(d, "pkg/index.js").write_text("module.exports = 1;\n")
+        subprocess.run(git + ["add", "-A"], check=True)
+        subprocess.run(git + ["commit", "-q", "-m", "base"], check=True)
+        base = subprocess.run(git[:3] + ["rev-parse", "HEAD"], check=True, capture_output=True, text=True).stdout.strip()
+        Path(d, "node_modules/dep").mkdir(parents=True)
+        Path(d, "node_modules/dep/index.js").write_text("module.exports = 2;\n")
+        os.symlink("../node_modules", Path(d, "pkg/node_modules"))
+        Path(d, ".gitignore").write_text("")
+        Path(d, "pkg/index.js").write_text("module.exports = 3;\n")
+
+        def files(task):
+            script = ra.SNAPSHOT.format(repo=d, base=base, exclude=ra.snapshot_exclude(task))
+            out = subprocess.run(["sh", "-c", script], check=True, capture_output=True, text=True).stdout
+            return sorted(re.findall(r"^diff --git a/(\S+) ", out, re.M))
+
+        assert files({}) == [".gitignore", "node_modules/dep/index.js", "pkg/index.js", "pkg/node_modules"]
+        assert files({"exclude": ["node_modules", "pkg/node_modules"]}) == [".gitignore", "pkg/index.js"]
+
+
 def main():
     failed = 0
     for name, fn in list(globals().items()):

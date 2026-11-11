@@ -220,10 +220,20 @@ mkdir -p "$d/objects"
 if [ -f "$gitdir/index" ]; then cp "$gitdir/index" "$d/index"; else GIT_INDEX_FILE="$d/index" git read-tree HEAD; fi
 export GIT_INDEX_FILE="$d/index" GIT_OBJECT_DIRECTORY="$d/objects" GIT_ALTERNATE_OBJECT_DIRECTORIES="$gitdir/objects"
 git add -A >/dev/null 2>&1
-tree=$(git write-tree)
+{exclude}tree=$(git write-tree)
 echo "TREE $tree $(git rev-parse HEAD) $(git symbolic-ref -q --short HEAD || echo DETACHED)"
 git diff --binary {base} "$tree"
 """
+
+
+def snapshot_exclude(task: dict) -> str:
+    """The SNAPSHOT line that drops the task's excluded paths (in-project dependency folders the build stage mounts into
+    the tree) from the temporary index, matched literally, so a folder or a symlink by that name never reaches the
+    patch whatever .gitignore says. A task with no exclude list adds nothing."""
+    paths = task.get("exclude") or []
+    if not paths:
+        return ""
+    return "git rm -r -q --cached --ignore-unmatch -- " + " ".join(shlex.quote(":(literal)" + p) for p in paths) + " >/dev/null\n"
 
 
 class RealAgent(lb.LanebAgent):
@@ -352,7 +362,7 @@ class RealAgent(lb.LanebAgent):
     def _snapshot(self, container: str, task: dict, name: str) -> dict:
         """The working tree against base, written to evaluator/<name>.patch, without touching the agent's index or objects.
         The temporary index starts as a copy of the agent's, so a tracked file that matches .gitignore stays in the tree."""
-        res = self._exec(container, SNAPSHOT.format(repo=shlex.quote(task["repo_dir"]), base=task["base_commit"]), timeout=300)
+        res = self._exec(container, SNAPSHOT.format(repo=shlex.quote(task["repo_dir"]), base=task["base_commit"], exclude=snapshot_exclude(task)), timeout=300)
         out = res.stdout
         head, _, patch = out.partition(b"\n")
         parts = head.decode(errors="replace").split()

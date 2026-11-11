@@ -271,6 +271,12 @@
     ],
     "tests/decision-routing/stubs/**": [
       "tests/decision-routing/agent-sdk.test.ts"
+    ],
+    "tests/er/stub-er-cli.cjs": [
+      "tests/er/run-sdk.test.ts"
+    ],
+    "tests/er/test-contain-check.py": [
+      "tests/er/contain-check.test.ts"
     ]
   },
   "guards": [
