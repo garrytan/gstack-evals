@@ -185,3 +185,10 @@ describe("drift forms", () => {
     expect(decideDrift(true, [], base, new Set())).toEqual({ drift: false, ids: [] });
   });
 });
+// Value: protects=section 12's raise attempt reading, where the cut issue's follow-ons are scored apart from the full issue's; fails_when=treeScores averages full-issue and -cut records of one unit, model and tree together, or refuses them only when their replicates overlap; why_new=the /ship review of #325 (red team: treeScores grouped both issue forms); seam=followon.ts treeScores; no_claim=claim2Admission's bands
+test("tree scores refuse a set that mixes full-issue and cut follow-ons for one unit, model and tree; a cut-only set scores as a full one", () => {
+  const cut = (r: FollowonRecord): FollowonRecord => ({ ...r, cell: r.cell + "-cut" });
+  expect(() => treeScores([rec("S0", 1), cut(rec("S0", 2)), rec("S0", 3)], [])).toThrow(/^E_SM_ARM .*mix full-issue and cut/);
+  const recs = [rec("S0", 1), rec("S0", 2, { incremental: 0, end_to_end: 0 }), rec("S0", 3)];
+  expect(treeScores(recs.map(cut), [])).toEqual(treeScores(recs, []));
+});

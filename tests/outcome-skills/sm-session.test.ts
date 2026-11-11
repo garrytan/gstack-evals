@@ -232,6 +232,7 @@ test("a first stage at file scope names every file the fix patch touches on one 
   expect(JSON.parse(out)).toContain("Focus on `src/counter.rs, CHANGELOG.md, src/lib/reset.rs`.");
   expect(() => sessionText(smUnit({ file_scope: [] }), firstA1, "x", { scope: "file" })).toThrow(/^E_SM_ARM .*file_scope/);
   expect(() => sessionText(smUnit({ file_scope: ["src/a`b.rs"] }), firstA1, "x", { scope: "file" })).toThrow(/^E_SM_ARM .*one line with no backtick/);
+  expect(() => sessionText({ ...smUnit(), scope: null }, firstA1, "x", { scope: "file" })).toThrow(/^E_SM_ARM .*has no scope/);
   expect(() => sessionText(smUnit({ file_scope: ["src/a.rs", "src/b\n.rs"] }), firstA1, "x", { scope: "file" })).toThrow(/^E_SM_ARM .*one line with no backtick/);
   expect(() => sessionText(u, followS0, "x", { scope: "file" })).toThrow(/^E_SM_ARM .*--scope is a first stage's/);
 });

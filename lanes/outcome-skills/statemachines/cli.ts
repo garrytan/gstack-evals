@@ -56,9 +56,10 @@ export const HELP = `gstack-evals outcome sm <command>
                                                      stage), --issue cut sends the issue's title and first paragraph
                                                      in the cell <cell>-cut (a follow-on), section 12's two branches
   score first --unit <dir> (--session <session.json> | --patch <file> --cell <name>) --out <outcome.json>
-              [--mode hardened|root] [--run-empty]
+              [--mode hardened|root] [--run-empty] [--scope folder|file]
                                                      section 7's first-stage score: strict and adapted readings, the fix's
-                                                     tests by git apply --3way, the unit's own runs, sm-outcome.v1
+                                                     tests by git apply --3way, the unit's own runs, sm-outcome.v1;
+                                                     --scope refuses a --session record that ran at another scope rule
   score followon --unit <dir> --tree S0|A1|S2 [--first <session.json> | --tree-patch <file>] [--first-outcome <outcome.json>]
               --start <start.json> (--session <session.json> | --patch <file> --cell <name>) --out <followon.json>
               [--mode hardened|root]
@@ -530,16 +531,20 @@ export async function main(argv: string[]): Promise<number> {
       }
       if (what === "followon") return scoreFollowonCli(r);
       if (what !== "first") throw new Error("E_USAGE sm score takes first or followon");
-      const { f } = flags(r, ["--unit", "--session", "--patch", "--cell", "--out", "--mode"], ["--run-empty"]);
+      const { f } = flags(r, ["--unit", "--session", "--patch", "--cell", "--out", "--mode", "--scope"], ["--run-empty"]);
       const mode = f.get("--mode") ?? "hardened";
       if (mode !== "hardened" && mode !== "root") throw new Error("E_USAGE --mode is hardened or root");
+      const scope = f.get("--scope");
+      if (scope !== undefined && scope !== "folder" && scope !== "file") throw new Error("E_USAGE --scope is folder or file");
       if (f.has("--session") === f.has("--patch")) throw new Error("E_USAGE give --session or --patch, not both");
+      if (scope !== undefined && !f.has("--session")) throw new Error("E_USAGE --scope checks a --session record's scope rule");
       const unitDir = need(f, "--unit");
       let input: ScoreInput;
       if (f.has("--session")) {
         const s = readJson<SessionRecord>(f.get("--session")!);
         if (s.schema !== "sm-session.v1" || s.stage !== "first") throw new Error("E_SM_ARM " + f.get("--session") + " is not a first-stage sm-session.v1 record");
         if (s.unit !== readUnit(unitDir).id) throw new Error("E_SM_ARM the session is on " + s.unit + ", not this unit");
+        if (scope !== undefined && s.scope !== scope) throw new Error("E_SM_ARM " + f.get("--session") + " ran at scope " + JSON.stringify(s.scope ?? null) + ", not " + scope);
         refuseUnscored(s);
         if (!s.tree_patch) throw new Error("E_SM_ARM the session has no tree patch to score");
         input = { unitDir, patchFile: s.tree_patch.path, patchSha: s.tree_patch.sha256, cell: s.cell, model: s.model, session: s.lease_id + "/" + s.cell };

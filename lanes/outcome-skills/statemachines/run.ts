@@ -64,6 +64,7 @@ export function sessionText(u: SmUnit, s: PlannedSession, issue: string, o: { sc
   }
   const instruction = "The arm's turn names the scope.\n";
   if (o.scope !== "file") return { scope: folder, scope_mode: "folder", instruction, cell: s.cell };
+  if (!folder) return smFail("E_SM_ARM", "unit " + u.id + " has no scope");
   if (!u.file_scope.length) return smFail("E_SM_ARM", "unit " + u.id + " has no file_scope, so it has no file-scope line");
   const bad = u.file_scope.find((p) => /[\n\r`]/.test(p));
   if (bad !== undefined) return smFail("E_SM_ARM", "unit " + u.id + "'s file scope must be one line with no backtick, and " + JSON.stringify(bad) + " is not");

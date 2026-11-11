@@ -1483,3 +1483,38 @@ describe("stock diffs keep the program's behavior: the #316 follow-ups (GST-1959
     expect(existsSync(join(root, "out")) || existsSync(join(root, "lab"))).toBe(false);
   });
 });
+const smMain = async (argv: string[]) => {
+  const errs: string[] = [];
+  const orig = console.error;
+  console.error = (...a: unknown[]) => void errs.push(a.join(" "));
+  try {
+    return { code: await main(argv), err: errs[0] ?? "" };
+  } finally {
+    console.error = orig;
+  }
+};
+
+// Value: protects=section 12's claim 1 retry: a file-scope reading scores only sessions that ran at file scope; fails_when=sm score first --scope file scores a folder-scope record or one with no scope, or --scope changes anything when it matches or is left off; why_new=the /ship review of #325 (red team: nothing read SessionRecord.scope); seam=cli.ts sm score first --scope; no_claim=claim1Admission's bands
+test("sm score first --scope refuses a session record whose scope differs; a matching or missing --scope changes nothing", async () => {
+  const root = scratch("scope");
+  const dir = unitDir(root);
+  writeFileSync(join(root, "p.patch"), "");
+  const rec = (name: string, scope: unknown) => {
+    const f = join(root, name + ".json");
+    writeFileSync(f, JSON.stringify({ schema: "sm-session.v1", unit: fixtureRow().instance_id, stage: "first", cell: "A1", model: "claude-opus-5-5", lease_id: "l1", end: "infra", attempt: 1, ...(scope === undefined ? {} : { scope }), tree_patch: { path: join(root, "p.patch"), sha256: sha("") } }));
+    return f;
+  };
+  const score = (f: string, ...scope: string[]) => smMain(["score", "first", "--unit", dir, "--session", f, ...scope, "--out", join(root, crypto.randomUUID() + ".out.json")]);
+  const folder = rec("folder", "folder"), file = rec("file", "file"), none = rec("none", undefined);
+  expect((await score(folder, "--scope", "file")).err).toStartWith("E_SM_ARM " + folder + " ran at scope \"folder\", not file");
+  expect((await score(file, "--scope", "folder")).err).toStartWith("E_SM_ARM " + file + " ran at scope \"file\", not folder");
+  expect((await score(none, "--scope", "folder")).err).toStartWith("E_SM_ARM " + none + " ran at scope null, not folder");
+  expect(await score(folder, "--scope", "files")).toMatchObject({ code: 2, err: "E_USAGE --scope is folder or file" });
+  for (const [f, scope] of [[file, ["--scope", "file"]], [folder, []], [none, []]] as const) expect((await score(f, ...scope)).err).toStartWith("E_SM_ARM the session ended infra on attempt 1, so it is not scored");
+});
+
+// Value: protects=the two section 12 flags take only the values they name; fails_when=sm session run accepts --scope files or --issue cuts and runs a folder-scope or full-issue session under the plan's cell; why_new=the /ship review of #325 (specialist: no test for these refusals); seam=cli.ts sm session run; no_claim=runSession's own refusals (sm-session.test.ts)
+test("sm session run refuses a --scope or --issue value it does not name, before any plan read", async () => {
+  expect(await smMain(["session", "run", "--scope", "files"])).toMatchObject({ code: 2, err: "E_USAGE --scope is folder or file" });
+  expect(await smMain(["session", "run", "--issue", "cuts"])).toMatchObject({ code: 2, err: "E_USAGE --issue is full or cut" });
+});

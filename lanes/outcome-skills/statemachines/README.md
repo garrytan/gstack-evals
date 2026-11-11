@@ -245,7 +245,8 @@ nine follow-ons shuffled the same way, each after its tree's first stage. End ki
 ## First-stage scorer (score.ts, P3a)
 
 `gstack-evals outcome sm score first --unit <dir> (--session <session.json> | --patch <file> --cell <name>) --out <file>`
-scores one change as section 7 reads and writes sm-outcome.v1. Steps, in order:
+scores one change as section 7 reads and writes sm-outcome.v1. With `--scope folder|file` it first refuses a session
+record whose `scope` differs, so a section 12 file-scope retry scores only file-scope sessions. Steps, in order:
 
 1. Extraction: the session's snapshot patch (real_agent's working tree against base, untracked files included) split per
    file by extractChange, which e2e.ts also uses. Binary files are listed and left out. An unsafe path makes the change
