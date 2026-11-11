@@ -11,7 +11,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { buildSessionImage, sessionManifest, type SessionImage } from "../statemachines/image.ts";
+import { buildSessionImage, runtimeId, sessionManifest, type SessionImage } from "../statemachines/image.ts";
 import { HARBOR_MODEL } from "../statemachines/run.ts";
 import { CLAUDE_BIN } from "../statemachines/stub-claude.ts";
 import { readUnit } from "../statemachines/unit.ts";
@@ -283,7 +283,7 @@ export async function runPfSession(i: PfRunInput): Promise<PfRun> {
   if (i.effort && !i.effort[i.session.model]) pfFail("E_PF_INPUT", "the effort record has no entry for " + i.session.model + "; the dry run's effort.json names every model");
   mkdirSync(i.out, { recursive: true });
   const u = readUnit(i.unitDir);
-  const before = treeDigest({ runtime_id: u.image.runtime_id ?? "", volume: i.volume });
+  const before = treeDigest({ runtime_id: runtimeId(u), volume: i.volume });
   const image = buildSessionImage(u, { volume: i.volume, stage: "first" });
   containUnit(i.unitDir, u, image, before);
   const limits = sessionLimits(i.session.arm, i.session.model, i.allowance);

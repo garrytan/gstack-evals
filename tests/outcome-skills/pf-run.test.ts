@@ -15,6 +15,8 @@ import { OPUS, P1 } from "../../lanes/outcome-skills/pfchecks/items.ts";
 import { PSTACK_DIR, pstackVolume } from "../../lanes/outcome-skills/pfchecks/pstack.ts";
 import { BOUNDS, TASK_RERUN, finishSession, harbor, pfRecord, retriesSession, retryAfter, runCopy, runPfSession, sessionBudget, type PfRunInput } from "../../lanes/outcome-skills/pfchecks/run.ts";
 import { toolsVolume } from "../../lanes/outcome-skills/pfchecks/tools.ts";
+import { main as pfMain } from "../../lanes/outcome-skills/pfchecks/cli.ts";
+import { DOCKER_ENV } from "../../lanes/real-outcome/task/docker.ts";
 
 const roots: string[] = [];
 afterAll(() => roots.forEach((r) => rmSync(r, { recursive: true, force: true })));
@@ -494,6 +496,28 @@ test("a cap stop whose only logged open is the task open ends as CAP_STOP with a
   }
   const dir = ev("task");
   for (const exception of [null, "LanebInfraError", "RuntimeError"]) await expect(retryAfter(i, 1, null, pfRecord(i, 1, null, dir, exception), "/out/a1", "Harbor exited 1", dir)).rejects.toThrow(/^E_PF_FINALIZE_HALT /);
+});
+
+// Value: protects=the owner's ruling on adversarial-native#5: a unit with no valid runtime image id refuses clearly before any docker call; fails_when=runPfSession or pf contain on a unit with a missing or malformed runtime_id calls docker, or refuses with anything but E_SM_INFRA_GAP "run its oracle first"; why_new=both took the tree volume's digest with docker run on that id before buildSessionImage checked it, so the refusal was a docker error; seam=run.ts runPfSession and pfchecks/cli.ts contain over statemachines/image.ts runtimeId; no_claim=dryrun-units.ts, which calls the same check but needs a real unit fixture
+test("runPfSession and pf contain refuse a unit with a missing or malformed runtime id with E_SM_INFRA_GAP before any docker call", async () => {
+  const bin = temp("pf-run-docker-");
+  const log = join(bin, "calls");
+  writeFileSync(join(bin, "docker"), "#!/bin/sh\necho \"$*\" >> '" + log + "'\nexit 1\n", { mode: 0o755 });
+  const path = DOCKER_ENV.PATH;
+  DOCKER_ENV.PATH = bin + ":" + path;
+  try {
+    for (const runtime of [undefined, "latest"]) {
+      const i = { ...input("P"), out: join(temp("pf-run-out-"), "s") };
+      const u = JSON.parse(readFileSync(join(i.unitDir, "unit.json"), "utf8"));
+      u.image.runtime_id = runtime;
+      writeFileSync(join(i.unitDir, "unit.json"), JSON.stringify(u));
+      await expect(runPfSession(i)).rejects.toThrow(/^E_SM_INFRA_GAP unit pf-run-flag has no runtime image id; run its oracle first/);
+      expect(await pfMain(["contain", "--unit", i.unitDir])).toBe(CODES.E_SM_INFRA_GAP.exit ?? 2);
+    }
+    expect(existsSync(log) ? readFileSync(log, "utf8") : "").toBe("");
+  } finally {
+    DOCKER_ENV.PATH = path;
+  }
 });
 
 // Value: protects=the Captain's ruling D on #324: E_PF_CAPTURE's entry fits a post-turn capture failure, which comes after paid turns; fails_when=E_PF_CAPTURE says it is refused before any spend or is retry safe, or changes its exit; why_new=the entry said "None: refused before any spend" and "retry safe" for a capture that runs after the task turn spent; seam=src/errors/codes.ts E_PF_CAPTURE; no_claim=docs/errors.md (bun run errors:check)

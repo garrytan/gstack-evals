@@ -23,7 +23,7 @@ import { LocalLedger } from "../../../src/runner/ledger/local.ts";
 import { UPSTREAM } from "../../../src/runner/proxy/metering-proxy.ts";
 import { PF_STAGES, serveStages } from "../driver/stage.ts";
 import { treeVolume as smTreeVolume } from "../statemachines/oracle.ts";
-import { buildSessionImage } from "../statemachines/image.ts";
+import { buildSessionImage, runtimeId } from "../statemachines/image.ts";
 import { CLAUDE_BIN } from "../statemachines/stub-claude.ts";
 import { passed } from "../statemachines/testrun.ts";
 import { readUnit, type SmUnit } from "../statemachines/unit.ts";
@@ -87,8 +87,7 @@ export async function main(argv: string[]): Promise<number> {
   const u = readUnit(unitDir);
   const make = FIXTURES[u.id];
   if (!make) { console.error("E_USAGE no real-unit fixture for " + u.id + "; unit-fixtures.ts FIXTURES names " + Object.keys(FIXTURES).join(", ")); return 2; }
-  const image = u.image.runtime_id;
-  if (!image) { console.error("E_USAGE " + u.id + " has no runtime image; run its oracle first"); return 2; }
+  const image = runtimeId(u);
   const harbor = arg("--harbor") ?? join(homedir(), ".capy/work/real/venv/bin/harbor");
   const claudeBin = arg("--claude") ?? CLAUDE_BIN;
   mkdirSync(W, { recursive: true });

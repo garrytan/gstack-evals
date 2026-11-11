@@ -6,7 +6,7 @@ import { CODES, isReasonCode } from "../../../src/errors/codes.ts";
 import type { Candidate } from "../statemachines/source.ts";
 import { readUnit } from "../statemachines/unit.ts";
 import { treeVolume as smTreeVolume } from "../statemachines/oracle.ts";
-import { buildSessionImage } from "../statemachines/image.ts";
+import { buildSessionImage, runtimeId } from "../statemachines/image.ts";
 import { docker } from "../../real-outcome/task/docker.ts";
 import { analyse, report } from "./analysis.ts";
 import * as adm from "./admission.ts";
@@ -134,7 +134,7 @@ async function run(cmd: string, a: Args, deps: Deps): Promise<number> {
     for (const dir of list(a, "unit")) {
       const u = readUnit(dir);
       const volume = smTreeVolume(u.id);
-      const before = treeDigest({ runtime_id: u.image.runtime_id ?? "", volume });
+      const before = treeDigest({ runtime_id: runtimeId(u), volume });
       const img = buildSessionImage(u, { volume, stage: "first" });
       try {
         const r = checkUnit(dir, u, img, before);
