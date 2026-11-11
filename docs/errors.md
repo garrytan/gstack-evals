@@ -255,6 +255,24 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_PF_PLUGIN](#e_pf_plugin) | 2 | U20 |
 | [E_PF_DRYRUN](#e_pf_dryrun) | 1 | U20 |
 | [E_PF_TREE_STATE](#e_pf_tree_state) | 2 | U20 |
+| [E_EB_NOT_BUILT](#e_eb_not_built) | 2 | U20 |
+| [E_EB_NO_RECIPE](#e_eb_no_recipe) | warning | U20 |
+| [E_EB_IMAGE](#e_eb_image) | warning | U20 |
+| [E_EB_NO_AFTERMATH](#e_eb_no_aftermath) | warning | U20 |
+| [E_EB_TRANSPLANT](#e_eb_transplant) | warning | U20 |
+| [E_EB_PRODUCT_HASH](#e_eb_product_hash) | 2 | U20 |
+| [E_EB_LEAK](#e_eb_leak) | 2 | U20 |
+| [E_EB_FEW_UNITS](#e_eb_few_units) | 2 | U20 |
+| [E_EB_REACH](#e_eb_reach) | 2 | U20 |
+| [E_EB_FLOOR](#e_eb_floor) | 2 | U20 |
+| [E_EB_CEILING](#e_eb_ceiling) | 2 | U20 |
+| [E_EB_EXPOSURE_GATE](#e_eb_exposure_gate) | 2 | U20 |
+| [E_EB_EXPOSURE_STOP](#e_eb_exposure_stop) | 2 | U20 |
+| [E_EB_GAP](#e_eb_gap) | warning | U20 |
+| [E_EB_CELL_INCOMPLETE](#e_eb_cell_incomplete) | 2 | U20 |
+| [E_EB_CACHE_STALE](#e_eb_cache_stale) | 2 | U20 |
+| [E_EB_REPROJECT](#e_eb_reproject) | 2 | U20 |
+| [E_EB_DRYRUN_FAIL](#e_eb_dryrun_fail) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -1836,6 +1854,110 @@ Fix: Read the files the line names and take the count per language to the Captai
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: yes. Owner: U20.
 
+### E_EB_NOT_BUILT
+
+An eng-review build read command or function is declared but not built yet (lanes/eng-build). Nothing ran.
+
+Fix: Use a build of gstack-evals that has it, or build the unit that owns it.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_EB_PRODUCT_HASH
+
+Before a graded run, the product files of a build-read tree did not match the hashes recorded for it, so a test move or a rebuild changed product code. Nothing was scored for that tree.
+
+Fix: Read the files the line names, fix the transplant or rebuild step, and grade the tree again from its sealed copy.
+
+Exit 2. Side effects: None for spend: the build session is already settled; no score was written for the tree. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_EB_LEAK
+
+The leak check found a later fix's added product lines, or the merge's lines, in the image a build-read builder would use, so the builder could read the answer. No session started on that image.
+
+Fix: Rebuild the unit's image without the leaking dependency or cache, or drop the unit, and take the count to the Captain.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_EB_FEW_UNITS
+
+After the recount in the verifier's own sandbox, fewer than 16 clean build-read units qualify, so the pilot cannot run at its frozen size. No lease was opened.
+
+Fix: Take the clean count to the Captain, who decides whether the pilot runs on the units that exist.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_EB_REACH
+
+The build-read pilot's reach is under 0.60: later-fix tests mostly give no assertion-level result against independently built code, so the instrument can't read the primary. The attempt ends as FIX-METHOD on the instrument.
+
+Fix: Bring the reading to the Captain. Do not --resume.
+
+Exit 2. Side effects: The pilot's builds and their spend are settled in the ledger, open leases are settled and the run record is sealed. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_EB_FLOOR
+
+The build-read pilot's plain-review later-fix pass share is under 0.10. With plain functional solved at 0.50 or more the attempt ends as FIX-METHOD on task fit; under 0.50 it ends as FIX-METHOD on the build setup. The line prints both readings.
+
+Fix: Bring the reading to the Captain. Do not --resume.
+
+Exit 2. Side effects: The pilot's builds and their spend are settled in the ledger, open leases are settled and the run record is sealed. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_EB_CEILING
+
+The build-read pilot's plain-review later-fix pass share is above 0.85, or its 95% lower bound is above 0.75: plain-review builds already pass nearly all of them. The attempt ends as FIX-METHOD on saturation.
+
+Fix: Bring the reading to the Captain. Do not --resume.
+
+Exit 2. Side effects: The pilot's builds and their spend are settled in the ledger, open leases are settled and the run record is sealed. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_EB_EXPOSURE_GATE
+
+A build-read skill arm failed its exposure gate (under 5 of 6 Opus sessions, or under 2 of 3 Sol or particle-1 sessions, ran the procedure). That arm reads untested and its cap is released; with fewer than two Opus arms through the gate the comparison does not start.
+
+Fix: Bring the gate's counts to the Captain. With at least two Opus arms through, --resume continues to new-unit authoring.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_EB_EXPOSURE_STOP
+
+A build-read skill arm's exposure is under 0.70 after its first 24 comparison sessions, so that arm stops, its leases settle and the pooled primary reads untested. The other arms go on.
+
+Fix: None for the stopped arm. --resume continues the other arms.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_EB_CELL_INCOMPLETE
+
+A build-read batch ended with cells neither scored nor recorded as gaps, so no reading is printed for that stage.
+
+Fix: --resume runs only the open cells; completed cells and their spend are kept.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_EB_CACHE_STALE
+
+A build-read cache entry's recorded digest does not match what is on disk, so the cached result could be stale. Nothing was scored from it; the line prints the cache key and both digests.
+
+Fix: Rebuild the cache entry from its sealed source, then --resume.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_EB_REPROJECT
+
+The build-read re-projection after the pilot, on measured costs and the refitted power model, no longer fits the recorded caps after the frozen cuts, or the cuts would take the pooled MDD past 0.12. Nothing further spends.
+
+Fix: Bring the projection, caps and MDD the line prints to the Captain.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_EB_DRYRUN_FAIL
+
+An eng-review build read dry-run fixture printed FAIL: a frozen rule did not hold on the fixture units or the scoring path. The line names the case.
+
+Fix: Read the FAIL line, fix the rule's code, and run the dry run again before any spend.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
 ## Exit 3: calibration failed (INCOMPLETE)
 
 ### CALIBRATION_SKILL
@@ -2189,5 +2311,45 @@ Warning. Owner: U20.
 Product-value eval (section 11): a model's stated training cutoff falls after a unit's plan date, so that unit's cells are descriptive and out of the model's primaries. When more than a quarter of a model's units are leak-exposed, the model's primaries read untested (leak).
 
 Fix: Nothing to rerun. Check the cutoff the build recorded from the provider's published documentation and the unit's plan date, and report the count per model.
+
+Warning. Owner: U20.
+
+### E_EB_NO_RECIPE
+
+A build-read unit's ecosystem has no frozen recipe (only Go, Node, Python and Rust have one), so the unit drops with this reason. Nothing is paid.
+
+Fix: None: the drop is recorded in the unit accounting. A new recipe needs a new preregistration.
+
+Warning. Owner: U20.
+
+### E_EB_IMAGE
+
+A build-read unit's image did not build, or its install or per-case test run failed at base or at the merge under the frozen recipe, so the unit drops with this reason.
+
+Fix: None: the drop is recorded with its step and failure class.
+
+Warning. Owner: U20.
+
+### E_EB_NO_AFTERMATH
+
+No later-fix case of a build-read unit passed the frozen rule (an assertion failure on the merged tree and on the fix's parent, a pass on the fix, in every run, and a fix that touches lines the merge changed), so the unit drops.
+
+Fix: None: the drop is recorded with the count of cases each step removed.
+
+Warning. Owner: U20.
+
+### E_EB_TRANSPLANT
+
+A fix's test file holds product code and test code in a way the test-region rule cannot split, so its cases drop rather than move product code into a graded tree.
+
+Fix: None: the cases are recorded as dropped with the file's class.
+
+Warning. Owner: U20.
+
+### E_EB_GAP
+
+A build-read session ended in a second upstream error or a second infrastructure failure, so its cell is a recorded gap. Every verdict also prints the reading that scores gaps as 0.
+
+Fix: None: the gap is recorded under the frozen session rule.
 
 Warning. Owner: U20.
