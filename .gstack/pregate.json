@@ -41,6 +41,9 @@
     "lanes/review-noloss/suites/**": [
       "tests/noloss/catalog.test.ts"
     ],
+    "lanes/eng-review/run-checks.ts": [
+      "tests/er/dryrun.test.ts"
+    ],
     "lanes/outcome-skills/**": [
       "tests/outcome-skills/autoplan.test.ts",
       "tests/outcome-skills/clean-room.test.ts",
