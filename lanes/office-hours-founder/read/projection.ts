@@ -120,24 +120,26 @@ const median = (xs: readonly number[]) => {
 /** Three times the median measured session, and at least the costliest one. */
 const allowanceOf = (usd: readonly number[]) => r4(Math.max(3 * median(usd), ...usd));
 
+type PerCell = Readonly<Record<ArmId, Readonly<Record<ModelId, number>>>>;
+
 /**
- * Section 13 after the smoke: none from stage 1's none sessions, office-hours from each model's smoke, lens from Opus's
- * two lens smoke sessions scaled for Sol and particle-1 by the cost ratios. The simulator keeps its frozen allowance.
+ * Section 13's measured sessions, from stage 1's sessions: none from each model's none sessions, office-hours from each
+ * model's smoke, lens from Opus's two lens smoke sessions, which the cost ratios scale for Sol and particle-1.
  */
-export function allowances(stage1: readonly ScoredSession[], smoke: readonly ScoredSession[]): { arm: Record<ArmId, Record<ModelId, number>>; sim: number } {
-  const usd = (xs: readonly ScoredSession[], arm: ArmId, model: ModelId) => {
-    const v = xs.filter((s) => s.stage === 1 && s.kind === "arm" && s.arm === arm && s.model === model).map((s) => s.usd);
-    if (!v.length) throw new Error("no measured " + arm + " session on " + model + " to set its allowance");
-    return v;
+function perCell(sessions: readonly ScoredSession[], read: (xs: number[]) => number, field: "usd" | "sim_usd", scaleLens: boolean): Record<ArmId, Record<ModelId, number>> {
+  const of = (arm: ArmId, model: ModelId) => {
+    const v = sessions.filter((s) => s.stage === 1 && s.kind === "arm" && s.arm === arm && s.model === (arm === "lens" ? "opus" : model)).map((s) => s[field]);
+    if (!v.length) throw new Error("E_USAGE no measured " + arm + " session on " + (arm === "lens" ? "opus" : model) + " in stage 1");
+    return r4(read(v) * (arm === "lens" && scaleLens ? RATIO[model] : 1));
   };
-  const lens = allowanceOf(usd(smoke, "lens", "opus"));
-  const arm = {
-    none: Object.fromEntries(MODELS.map((m) => [m, allowanceOf(usd(stage1, "none", m))])),
-    lens: Object.fromEntries(MODELS.map((m) => [m, r4(lens * RATIO[m])])),
-    "office-hours": Object.fromEntries(MODELS.map((m) => [m, allowanceOf(usd(smoke, "office-hours", m))])),
-  } as Record<ArmId, Record<ModelId, number>>;
-  return { arm, sim: PRE_SMOKE_SIM_ALLOWANCE };
+  return Object.fromEntries((["none", "lens", "office-hours"] as const).map((a) => [a, Object.fromEntries(MODELS.map((m) => [m, of(a, m)]))])) as Record<ArmId, Record<ModelId, number>>;
 }
+
+/** Section 13 after the smoke: three times the median measured session and at least the costliest. The simulator keeps its frozen allowance. */
+export const allowances = (sessions: readonly ScoredSession[]): { arm: Record<ArmId, Record<ModelId, number>>; sim: number } => ({ arm: perCell(sessions, allowanceOf, "usd", true), sim: PRE_SMOKE_SIM_ALLOWANCE });
+
+/** The median measured session per arm and model, on the arm's slot and on the simulator (Argon, so the lens figure isn't scaled), for the money projection. */
+export const medians = (sessions: readonly ScoredSession[]): { session: PerCell; sim: PerCell } => ({ session: perCell(sessions, median, "usd", true), sim: perCell(sessions, median, "sim_usd", false) });
 
 // ---- Section 13: round admission ----
 
@@ -178,9 +180,9 @@ export function admitRound(round: readonly ManifestEntry[], allow: { arm: Readon
 
 // ---- Section 13: the money projection and the net-envelope cuts ----
 
-export const ITEMS = ["stage 2 runs", "real stratum runs", "simulator", "judges", "pitch-only runs", "pitch-only labels"] as const;
+/** The ledger items (dryrun.ts ITEMS) the manifests drive; the pitch-only cell has its own runs and labels items. */
+export const ITEMS = ["of-s2-runs", "of-s2-sim", "of-s2-labels", "of-real-runs", "of-real-sim", "of-real-labels", "of-pitch-runs", "of-pitch-labels"] as const;
 export type Item = (typeof ITEMS)[number];
-type PerCell = Readonly<Record<ArmId, Readonly<Record<ModelId, number>>>>;
 
 export interface MoneyInput {
   comparison: readonly string[];
@@ -209,12 +211,14 @@ export function project(i: MoneyInput, cuts: readonly Cut[]): Omit<Money, "capta
   const sum = (m: readonly ManifestEntry[], c: PerCell) => m.reduce((t, e) => t + c[e.arm][e.model], 0);
   const packets = (m: readonly ManifestEntry[], c: Readonly<Record<ModelId, number>>) => [...new Set(m.map((e) => e.model + "|" + e.unit + "|" + e.pass))].reduce((t, k) => t + c[k.split("|")[0] as ModelId], 0);
   const derived: Record<Item, number> = {
-    "stage 2 runs": sum(primary, i.cost.session),
-    "real stratum runs": sum(real, i.cost.session),
-    simulator: sum(primary, i.cost.sim) + sum(real, i.cost.sim),
-    judges: packets(primary, i.cost.packet) + packets(real, i.cost.packet),
-    "pitch-only runs": sum(pitch, i.cost.pitch),
-    "pitch-only labels": packets(pitch, i.cost.pitch_packet),
+    "of-s2-runs": sum(primary, i.cost.session),
+    "of-s2-sim": sum(primary, i.cost.sim),
+    "of-s2-labels": packets(primary, i.cost.packet),
+    "of-real-runs": sum(real, i.cost.session),
+    "of-real-sim": sum(real, i.cost.sim),
+    "of-real-labels": packets(real, i.cost.packet),
+    "of-pitch-runs": sum(pitch, i.cost.pitch),
+    "of-pitch-labels": packets(pitch, i.cost.pitch_packet),
   };
   const items = [
     ...ITEMS.map((name) => ({ name, cap: i.items[name].cap, spent: i.items[name].spent, projected: r4(derived[name] + i.items[name].extra) })),

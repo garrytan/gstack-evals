@@ -2,7 +2,8 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { PRE_SMOKE_ALLOWANCE, PRE_SMOKE_SIM_ALLOWANCE } from "../../../lanes/office-hours-founder/frozen.ts";
-import { admitRound, allowances, CAPTAIN_STOP, estimate, moneyProjection, POWER_PY, powerMdd, project, rounds, type MoneyInput } from "../../../lanes/office-hours-founder/read/projection.ts";
+import { ITEMS as LEDGER_ITEMS } from "../../../lanes/office-hours-founder/dryrun.ts";
+import { admitRound, allowances, CAPTAIN_STOP, estimate, ITEMS, medians, moneyProjection, POWER_PY, powerMdd, project, rounds, type MoneyInput } from "../../../lanes/office-hours-founder/read/projection.ts";
 import { session } from "../../../lanes/office-hours-founder/read/seams.ts";
 import { CUTS, manifest } from "../../../lanes/office-hours-founder/read/stage2.ts";
 
@@ -43,12 +44,14 @@ describe("allowances", () => {
       ...[1, 2].map((usd) => session({ stage: 1, arm: "lens", usd })),
       ...(["opus", "sol", "particle"] as const).flatMap((model) => [2, 2, 3].map((usd) => session({ stage: 1, model, arm: "office-hours", usd }))),
     ];
-    const a = allowances(stage1, smoke);
+    const a = allowances([...stage1, ...smoke]);
     expect(a.arm.none).toEqual({ opus: 5, sol: 3, particle: 3 });
     expect(a.arm.lens).toEqual({ opus: 4.5, sol: 2.7, particle: 0.45 });
     expect(a.arm["office-hours"].opus).toBe(6);
     expect(a.sim).toBe(PRE_SMOKE_SIM_ALLOWANCE);
-    expect(() => allowances([], smoke)).toThrow("no measured none session");
+    expect(() => allowances(smoke)).toThrow("no measured none session");
+    expect(medians([...stage1, ...smoke]).session).toMatchObject({ none: { opus: 1 }, lens: { opus: 1.5, sol: 0.9 }, "office-hours": { opus: 2 } });
+    expect(medians([...stage1, ...smoke]).sim.lens).toEqual({ opus: 0.1, sol: 0.1, particle: 0.1 });
   });
 });
 
@@ -78,16 +81,20 @@ describe("moneyProjection", () => {
     comparison: Array.from({ length: 8 }, (_, k) => "u" + k),
     real: ["r1", "r2"],
     cost: { session: one, sim: one, pitch: one, packet: per, pitch_packet: per },
-    items: { "stage 2 runs": item, "real stratum runs": item, simulator: item, judges: item, "pitch-only runs": item, "pitch-only labels": item },
+    items: Object.fromEntries(ITEMS.map((x) => [x, item])) as MoneyInput["items"],
     others: [{ name: "stage 1", cap: 100, spent: 10, projected: 0 }],
     ceiling,
   });
-  test("the pitch-only cell is its own item for runs and labels", () => {
+  test("the manifest-driven items are ledger items, and the pitch-only cell has its own runs and labels items", () => {
+    expect(ITEMS.every((x) => (LEDGER_ITEMS as readonly string[]).includes(x))).toBe(true);
     const p = project(input(1e6), []);
-    expect(p.items.find((x) => x.name === "pitch-only runs")!.projected).toBe(8 * 3 * 3);
-    expect(p.items.find((x) => x.name === "pitch-only labels")!.projected).toBe(8 * 3);
-    expect(p.items.find((x) => x.name === "stage 2 runs")!.projected).toBe(8 * 3 * 4);
-    expect(p.items.find((x) => x.name === "judges")!.projected).toBe(8 * 4 + 2 * 4);
+    const at = (name: string) => p.items.find((x) => x.name === name)!.projected;
+    expect(at("of-pitch-runs")).toBe(8 * 3 * 3);
+    expect(at("of-pitch-labels")).toBe(8 * 3);
+    expect(at("of-s2-runs")).toBe(8 * 3 * 4);
+    expect(at("of-s2-sim")).toBe(8 * 3 * 4);
+    expect(at("of-s2-labels")).toBe(8 * 4);
+    expect(at("of-real-labels")).toBe(2 * 4);
   });
   test("cuts go in the frozen order until it fits", () => {
     const ceiling = project(input(0), CUTS.slice(0, 2)).total;
