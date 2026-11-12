@@ -23,8 +23,9 @@ export const RATIO: Readonly<Record<ModelId, number>> = { opus: 1, sol: 0.6, par
 
 /** Runs a python3 program with stdin; returns stdout. Injected so tests make no subprocess call. */
 export type Python = (program: string, stdin: string) => string;
+/** python3 with power.py's own pinned numpy, the command its header names. */
 export const python3: Python = (program, stdin) => {
-  const r = spawnSync("python3", ["-c", program], { input: stdin, encoding: "utf8" });
+  const r = spawnSync("uv", ["run", "--with", "numpy==2.3.4", "python", "-c", program], { input: stdin, encoding: "utf8" });
   if (r.status !== 0) throw new Error("power.py rerun failed: " + (r.stderr || r.error?.message));
   return r.stdout;
 };
