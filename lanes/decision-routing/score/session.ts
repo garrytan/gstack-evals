@@ -82,9 +82,9 @@ export function callUsd(call: Call, prices: PriceTable): number {
   return (u.input * rates.input + u.cache_read * (rates.cache_read ?? rates.input) + u.cache_write * (rates.cache_write ?? rates.input) + (u.output + u.reasoning) * rates.output) / 1e6;
 }
 
-/** The repository of a SWE-bench style task id, owner__repo-number, as owner/repo. */
+/** The repository of a SWE-bench style task id, owner__repo-number with SWE-rebench's optional _interface suffix, as owner/repo. */
 export function taskRepo(task: string): string {
-  const m = /^([A-Za-z0-9_.-]+?)__([A-Za-z0-9_.-]+)-\d+$/.exec(task);
+  const m = /^([A-Za-z0-9_.-]+?)__([A-Za-z0-9_.-]+)-\d+(?:_interface)?$/.exec(task);
   if (!m) throw new Error("task id " + JSON.stringify(task) + " is not owner__repo-number, so its repository cluster is unknown");
   return m[1] + "/" + m[2];
 }

@@ -1,0 +1,25 @@
+#!/usr/bin/env python3
+# GEVA-501: success rates per cell and model over the planned tasks (reward >= 1 from verifier/reward.txt or result.json),
+# taking each task's graded attempt (batch1c replaces batch1's empty-key attempt). Descriptive, for the R48 control rates.
+import json, os, glob, collections
+R = "$WORK/runs/dr-scored@906185467619"
+planned = set(json.load(open("$WORK/reading-scored/planned.json"))["tasks"])
+best = {}
+order = ["batch1", "batch1b", "batch1c", "batch2", "batch3", "batch4", "batch5", "batch6"]
+for b in order:
+    for res in glob.glob(f"{R}/{b}/harbor/*/*/result.json"):
+        tdir = os.path.dirname(res); sess = os.path.basename(os.path.dirname(tdir)); parts = sess.split("__")
+        cell, model = parts[-2], parts[-1]; task = "__".join(parts[:-2])
+        rf = os.path.join(tdir, "verifier", "reward.txt")
+        try:
+            rw = float(open(rf).read().strip()) if os.path.exists(rf) else json.load(open(res)).get("verifier_result", {}).get("rewards", {}).get("reward")
+        except Exception:
+            rw = None
+        if rw is None: continue
+        best[(task, cell, model)] = 1 if rw >= 1 else 0
+rate = collections.defaultdict(lambda: [0, 0])
+for (task, cell, model), s in best.items():
+    if task in planned or cell in ("J", "F", "W"):
+        rate[(cell, model)][0] += s; rate[(cell, model)][1] += 1
+for k in sorted(rate):
+    s, n = rate[k]; print(k[0], k[1], "%d of %d, %.1f%%" % (s, n, 100 * s / n))

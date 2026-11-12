@@ -4,7 +4,8 @@
 // settled at $0 with their shadow reservations; calls with an unknown outcome, charged at their reservation; calls
 // without usage that the proxy booked above $0, charged at that booked charge; cells whose
 // decider failures pass 5% (DR_CELL_DEGRADED, beside the verdicts they touch); test-pass labels dropped because the
-// command is not a bare runner; sessions that hit the image's base env; S10 acting rates.
+// command is not a bare runner; sessions that hit the image's base env; commands the non-root agent user can make fail
+// (score/nonroot.ts, a reading with no verdict); S10 acting rates.
 //   score --trials <dir>... --journal <file>... --prices <prices.json> --planned <planned.json> --admission <admission.json> [--labels <labels.jsonl>...] [--json <out>]
 // planned.json: {"tasks": [task ids]}. admission.json: written by admit; contrasts["R-N"] and ["R-P"] carry admitted.
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
@@ -12,6 +13,7 @@ import { join } from "node:path";
 import { NOT_BARE_RUNNER } from "../labels/runner-exit.ts";
 import { actingRates, deciderFailures, type FailureRow } from "./acting.ts";
 import { primaryA, primaryB, printA, printB } from "./primary.ts";
+import { nonrootReading, printNonroot } from "./nonroot.ts";
 import { infraAttempts, loadPrices, readJournal, readTrial, rerunRows, type SessionOutcome } from "./session.ts";
 
 const flag = (argv: string[], name: string): string | undefined => { const i = argv.indexOf(name); return i < 0 ? undefined : argv[i + 1]; };
@@ -131,6 +133,8 @@ export async function main(argv: string[]): Promise<number> {
   lines.push("", "calls with an unknown outcome (no usage came back), charged at their full reservation:", ...(unknown.size ? [...unknown.entries()].sort().map(([k, u]) => "  " + k + ": " + u.count + ", reserved $" + (u.reserved_micros / 1e6).toFixed(2)) : ["  none"]));
   lines.push("", "calls without usage that the proxy booked above $0, charged at that booked charge:", ...(booked.size ? [...booked.entries()].sort().map(([k, b]) => "  " + k + ": " + b.count + ", booked $" + (b.booked_micros / 1e6).toFixed(2)) : ["  none"]));
   lines.push("", "sessions that hit the image's base env (No module named, or the agent ran conda activate testbed):", ...[...baseEnv.entries()].sort().map(([k, b]) => "  " + k + ": " + b.hit + " of " + b.sessions));
+  report.nonroot = nonrootReading(dirs);
+  lines.push("", ...printNonroot(report.nonroot as ReturnType<typeof nonrootReading>));
   const labelRows = flags(argv, "--labels").flatMap(jsonl);
   const labels = new Map<string, unknown>(labelRows.map((l: any) => [l.decision_id, l.label]));
   const notRunner = new Set(labelRows.filter((l: any) => l.missing === NOT_BARE_RUNNER).map((l: any) => l.decision_id));

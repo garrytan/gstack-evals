@@ -7,7 +7,7 @@ author: GEVA-407
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
 date: 2026-11-09
-status: done
+status: superseded
 links:
   - 2026-11-08-geva-403-product-value-prereg
   - 2026-11-08-geva-402-ceo-stage-2-results

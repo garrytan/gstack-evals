@@ -1,0 +1,32 @@
+joined rows 64966 labelled 35333
+
+per decider and type (pooled over models, then per model): n labelled, accuracy, no-answers
+  jev done: n 853, accuracy 0.543, no-answers 0
+  jev done opus: n 443, accuracy 0.528, no-answers 0
+  jev done sol: n 410, accuracy 0.559, no-answers 0
+  jev relevant: n 5388, accuracy 0.852, no-answers 0
+  jev relevant opus: n 1255, accuracy 0.855, no-answers 0
+  jev relevant sol: n 4133, accuracy 0.851, no-answers 0
+  jev safe: n 11233, accuracy 0.906, no-answers 14
+  jev safe opus: n 5893, accuracy 0.887, no-answers 14
+  jev safe sol: n 5340, accuracy 0.928, no-answers 0
+  jev tests_passed: n 5, accuracy 0.800, no-answers 0
+  jev tests_passed opus: n 5, accuracy 0.800, no-answers 0
+  particle_guess done: n 1258, accuracy 0.563, no-answers 36
+  particle_guess done opus: n 653, accuracy 0.574, no-answers 18
+  particle_guess done sol: n 605, accuracy 0.550, no-answers 18
+  particle_guess relevant: n 8062, accuracy 0.565, no-answers 1192
+  particle_guess relevant opus: n 1923, accuracy 0.507, no-answers 236
+  particle_guess relevant sol: n 6139, accuracy 0.583, no-answers 956
+  particle_guess safe: n 8523, accuracy 0.919, no-answers 3
+  particle_guess safe opus: n 4621, accuracy 0.904, no-answers 1
+  particle_guess safe sol: n 3902, accuracy 0.937, no-answers 2
+  particle_guess tests_passed: n 11, accuracy 0.818, no-answers 0
+  particle_guess tests_passed opus: n 11, accuracy 0.818, no-answers 0
+
+Jev accuracy by confidence band and ECE (10 equal bins over [0,1], answered rows only)
+  safe: n 11219, ECE 0.041; 0.5-0.6 n 367 acc 0.47, 0.6-0.7 n 421 acc 0.54, 0.7-0.8 n 700 acc 0.64, 0.8-0.9 n 1803 acc 0.83, 0.9-1.0 n 7928 acc 0.99
+  done: n 853, ECE 0.151; 0.5-0.6 n 257 acc 0.50, 0.6-0.7 n 159 acc 0.57, 0.7-0.8 n 194 acc 0.49, 0.8-0.9 n 228 acc 0.60, 0.9-1.0 n 15 acc 0.73
+  relevant: n 5388, ECE 0.097; 0.5-0.6 n 806 acc 0.58, 0.6-0.7 n 953 acc 0.74, 0.7-0.8 n 1221 acc 0.89, 0.8-0.9 n 1637 acc 0.97, 0.9-1.0 n 771 acc 0.98
+  tests_passed: n 5, ECE 0.172; 0.9-1.0 n 5 acc 0.80
+  next_step: no labelled Jev answers

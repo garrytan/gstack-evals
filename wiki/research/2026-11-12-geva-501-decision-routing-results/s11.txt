@@ -1,0 +1,62 @@
+guess_ablation: 198 sessions, 6204 states, 21240 decider rows, sessions without a label file 0
+
+per decider and type, pooled then per model: rows, labelled, accuracy on labelled, no-answers
+  jev done: rows 227, labelled 227, accuracy 0.546, no-answers 0
+  jev done opus: rows 114, labelled 114, accuracy 0.561, no-answers 0
+  jev done sol: rows 113, labelled 113, accuracy 0.531, no-answers 0
+  jev next_step: rows 2630, labelled 0, no-answers 0
+  jev next_step opus: rows 1345, labelled 0, no-answers 0
+  jev next_step sol: rows 1285, labelled 0, no-answers 0
+  jev relevant: rows 902, labelled 902, accuracy 0.856, no-answers 0
+  jev relevant opus: rows 203, labelled 203, accuracy 0.882, no-answers 0
+  jev relevant sol: rows 699, labelled 699, accuracy 0.848, no-answers 0
+  jev safe: rows 2880, labelled 2880, accuracy 0.901, no-answers 0
+  jev safe opus: rows 1494, labelled 1494, accuracy 0.882, no-answers 0
+  jev safe sol: rows 1386, labelled 1386, accuracy 0.923, no-answers 0
+  jev tests_passed: rows 441, labelled 2, accuracy 1.000, no-answers 0
+  jev tests_passed opus: rows 224, labelled 2, accuracy 1.000, no-answers 0
+  jev tests_passed sol: rows 217, labelled 0, no-answers 0
+  particle_guess done: rows 227, labelled 227, accuracy 0.626, no-answers 1
+  particle_guess done opus: rows 114, labelled 114, accuracy 0.614, no-answers 1
+  particle_guess done sol: rows 113, labelled 113, accuracy 0.637, no-answers 0
+  particle_guess next_step: rows 2630, labelled 0, no-answers 1
+  particle_guess next_step opus: rows 1345, labelled 0, no-answers 0
+  particle_guess next_step sol: rows 1285, labelled 0, no-answers 1
+  particle_guess relevant: rows 902, labelled 902, accuracy 0.619, no-answers 0
+  particle_guess relevant opus: rows 203, labelled 203, accuracy 0.709, no-answers 0
+  particle_guess relevant sol: rows 699, labelled 699, accuracy 0.592, no-answers 0
+  particle_guess safe: rows 2880, labelled 2880, accuracy 0.925, no-answers 1
+  particle_guess safe opus: rows 1494, labelled 1494, accuracy 0.916, no-answers 0
+  particle_guess safe sol: rows 1386, labelled 1386, accuracy 0.935, no-answers 1
+  particle_guess tests_passed: rows 441, labelled 2, accuracy 1.000, no-answers 0
+  particle_guess tests_passed opus: rows 224, labelled 2, accuracy 1.000, no-answers 0
+  particle_guess tests_passed sol: rows 217, labelled 0, no-answers 0
+  particle_noguess done: rows 227, labelled 227, accuracy 0.639, no-answers 5
+  particle_noguess done opus: rows 114, labelled 114, accuracy 0.640, no-answers 3
+  particle_noguess done sol: rows 113, labelled 113, accuracy 0.637, no-answers 2
+  particle_noguess next_step: rows 2630, labelled 0, no-answers 0
+  particle_noguess next_step opus: rows 1345, labelled 0, no-answers 0
+  particle_noguess next_step sol: rows 1285, labelled 0, no-answers 0
+  particle_noguess relevant: rows 902, labelled 902, accuracy 0.683, no-answers 252
+  particle_noguess relevant opus: rows 203, labelled 203, accuracy 0.631, no-answers 70
+  particle_noguess relevant sol: rows 699, labelled 699, accuracy 0.698, no-answers 182
+  particle_noguess safe: rows 2880, labelled 2880, accuracy 0.924, no-answers 0
+  particle_noguess safe opus: rows 1494, labelled 1494, accuracy 0.908, no-answers 0
+  particle_noguess safe sol: rows 1386, labelled 1386, accuracy 0.942, no-answers 0
+  particle_noguess tests_passed: rows 441, labelled 2, accuracy 1.000, no-answers 0
+  particle_noguess tests_passed opus: rows 224, labelled 2, accuracy 1.000, no-answers 0
+  particle_noguess tests_passed sol: rows 217, labelled 0, no-answers 0
+
+S11 particle-1 with Jev's guess against without, same states: per type, paired rows, same answer, labelled pairs, guess right only, noguess right only, both right
+  done: 227, same 196 (86.3%), labelled 227, guess only 12, noguess only 15, both 130
+  next_step: 2630, same 2374 (90.3%), labelled 0, guess only 0, noguess only 0, both 0
+  relevant: 902, same 451 (50.0%), labelled 902, guess only 129, noguess only 187, both 429
+  safe: 2880, same 2735 (95.0%), labelled 2880, guess only 74, noguess only 71, both 2591
+  tests_passed: 441, same 430 (97.5%), labelled 2, guess only 0, noguess only 0, both 2
+
+particle-1 with the guess against Jev 1.13's logged answer: per type, paired rows, same answer, labelled pairs, guess right only, jev1.13 right only, both right
+  done: 227, same 193 (85.0%), labelled 227, guess only 26, jev1.13 only 8, both 116
+  next_step: 2630, same 2336 (88.8%), labelled 0, guess only 0, jev1.13 only 0, both 0
+  relevant: 902, same 606 (67.2%), labelled 902, guess only 41, jev1.13 only 255, both 517
+  safe: 2880, same 2753 (95.6%), labelled 2880, guess only 98, jev1.13 only 29, both 2567
+  tests_passed: 441, same 428 (97.1%), labelled 2, guess only 0, jev1.13 only 0, both 2

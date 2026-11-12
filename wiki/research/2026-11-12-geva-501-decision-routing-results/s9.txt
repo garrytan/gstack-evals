@@ -1,0 +1,104 @@
+## S9 rule
+
+THE RULE
+1. Pairs: per creative model, every task graded in both cells (pairOnTasks, the scorer's pairing) whose successes differ.
+2. Paths: each session's main-model turns in trajectory order (assistant messages without extra.dr_controller), each
+   turn's commands joined by a newline and trimmed. The paths part at turn k, the first index where the two command
+   sequences differ; if one is a prefix of the other, k is the shorter length; if they are identical, the pair is
+   NEVER PARTED.
+3. Window: in each routed session, the decisions logged after main turn k-1's response and before main turn k's response
+   (decision t_ms against assistant extra.timestamp, both on the session clock t0 = end_ts - session_ms; a session with
+   no turn k closes the window at its end). These are the decisions on turn k-1's commands and before query k, so the
+   last decisions before the paths parted. k = 0 gives an empty window: FIRST TURN.
+4. The window's kind is that of its last decision (by seq) that changed what the agent saw or did:
+     done acted "done"                       SUBMIT LET THROUGH (the done check let the submit stand)
+     done acted "third_submit_stands"        THIRD SUBMIT STANDS
+     done acted "not_done"                   SUBMIT BLOCKED
+     relevant, a dropped hit the real fix edits (grounded label)   DROPPED HIT IN THE REAL FIX
+     relevant, other dropped hits            DROPPED HIT OUTSIDE THE FIX
+     safe acted "blocked"                    BLOCKED COMMAND
+     next_step with a guard                  LOOP GUARD
+     next_step acted (a decider-run action)  DECIDER ACTION
+   A window where no decision intervened is EXIT: the next-step layer handed the turn to the main model and nothing a
+   decider did changed what it saw (the exit-storm kind; the main model's own turn). Detail: whether the window's
+   next_step deciders all picked the exit, or one picked an action that no acting band let act.
+5. Pair kind: R against N reads R's window (N logs no decisions). R against P reads both windows; the pair kind is the
+   side that intervened, both named (R first) when both did, EXIT when neither did.
+6. Beside it, a second trace that is not about the parting point: the last intervening decision anywhere in the failing
+   routed session (R in R against N; whichever of R and P failed in R against P), same table, with its grounded label.
+POST HOC, added after the counts above were read: (a) the same parting rule with every digit run masked, because a
+spot check (vyperlang__vyper-4801, opus R vs N) parted at turn 0 on "head -30" against "head -40" and then matched;
+(b) exposure: how many routed sessions in discordant pairs had each intervention kind anywhere, against all routed
+sessions on paired tasks. Neither changes the rule or the counts above.
+
+## context: the parting turn over every paired task (concordant and discordant), by turn index
+
+| contrast | paired tasks | parted at turn 0 | at turn 1 to 2 | at turn 3 or later | never parted |
+|---|---|---|---|---|---|
+| opus R vs N | 279 | 213 | 66 | 0 | 0 |
+| opus R vs P | 279 | 216 | 62 | 1 | 0 |
+| sol R vs N | 279 | 243 | 35 | 1 | 0 |
+| sol R vs P | 279 | 251 | 28 | 0 | 0 |
+
+## opus R vs N: 21 discordant tasks (R passed 12, R failed 9); parting turn median 0, range 0 to 1
+
+| kind of the last decision before the paths parted | tasks | R passed (better) | R failed (worse) |
+|---|---|---|---|
+| FIRST TURN | 17 | BerriAI__litellm-16899, celestoai__smolvm-172, cpp-linter__cpp-linter-hooks-142, getmoto__moto-9841, piskvorky__smart_open-889, python-markdown__markdown-1587, schemathesis__schemathesis-3405, tox-dev__tox-3666 | basicmachines-co__basic-memory-334, keras-team__keras-22138, meltano__meltano-9950, narwhals-dev__narwhals-3480, openai__openai-agents-python-1984, plone__cookieplone-templates-308, pyjanitor-devs__pyjanitor-1593, vprusso__toqito-1484_interface, vyperlang__vyper-4801 |
+| EXIT | 4 | SciTools__iris-6754, cal-itp__benefits-3330, pandas-dev__pandas-64796, sqlfluff__sqlfluff-7617 | none |
+
+second trace, the failing routed session's last intervening decision anywhere:
+  N (no decision layer): 12 (BerriAI__litellm-16899, SciTools__iris-6754, cal-itp__benefits-3330, celestoai__smolvm-172, cpp-linter__cpp-linter-hooks-142, getmoto__moto-9841, pandas-dev__pandas-64796, piskvorky__smart_open-889, python-markdown__markdown-1587, schemathesis__schemathesis-3405, sqlfluff__sqlfluff-7617, tox-dev__tox-3666)
+  R SUBMIT LET THROUGH (snapshot passes hidden tests: false): 8 (basicmachines-co__basic-memory-334, keras-team__keras-22138, meltano__meltano-9950, narwhals-dev__narwhals-3480, openai__openai-agents-python-1984, plone__cookieplone-templates-308, vprusso__toqito-1484_interface, vyperlang__vyper-4801)
+  R THIRD SUBMIT STANDS (snapshot passes hidden tests: false): 1 (pyjanitor-devs__pyjanitor-1593)
+
+EXIT detail (R window): all exit 4
+
+## opus R vs P: 19 discordant tasks (R passed 10, R failed 9); parting turn median 0, range 0 to 2
+
+| kind of the last decision before the paths parted | tasks | R passed (better) | R failed (worse) |
+|---|---|---|---|
+| FIRST TURN | 12 | BerriAI__litellm-16899, celestoai__smolvm-172, cpp-linter__cpp-linter-hooks-142, getmoto__moto-9841, narwhals-dev__narwhals-3478, piskvorky__smart_open-889 | joke2k__faker-2309, jsonpickle__jsonpickle-587, meltano__meltano-9950, narwhals-dev__narwhals-3480, openai__openai-agents-python-1984, pyjanitor-devs__pyjanitor-1593 |
+| EXIT | 7 | SciTools__iris-6754, cal-itp__benefits-3330, marimo-team__marimo-8401, sqlfluff__sqlfluff-7617 | huggingface__transformers-43721_interface, keras-team__keras-22138, vyperlang__vyper-4801 |
+
+second trace, the failing routed session's last intervening decision anywhere:
+  P SUBMIT LET THROUGH (snapshot passes hidden tests: false): 10 (BerriAI__litellm-16899, SciTools__iris-6754, cal-itp__benefits-3330, celestoai__smolvm-172, cpp-linter__cpp-linter-hooks-142, getmoto__moto-9841, marimo-team__marimo-8401, narwhals-dev__narwhals-3478, piskvorky__smart_open-889, sqlfluff__sqlfluff-7617)
+  R SUBMIT LET THROUGH (snapshot passes hidden tests: false): 8 (huggingface__transformers-43721_interface, joke2k__faker-2309, jsonpickle__jsonpickle-587, keras-team__keras-22138, meltano__meltano-9950, narwhals-dev__narwhals-3480, openai__openai-agents-python-1984, vyperlang__vyper-4801)
+  R THIRD SUBMIT STANDS (snapshot passes hidden tests: false): 1 (pyjanitor-devs__pyjanitor-1593)
+
+EXIT detail (R window): all exit 6, an action no band let act 1
+
+## sol R vs N: 9 discordant tasks (R passed 6, R failed 3); parting turn median 0, range 0 to 0
+
+| kind of the last decision before the paths parted | tasks | R passed (better) | R failed (worse) |
+|---|---|---|---|
+| FIRST TURN | 9 | UXARRAY__uxarray-1423, basicmachines-co__basic-memory-334, cal-itp__benefits-3330, equinor__ert-11988, raullenchai__rapid-mlx-228, sqlfluff__sqlfluff-7615 | dstackai__gpuhunt-197, huggingface__transformers-43721_interface, koxudaxi__datamodel-code-generator-2998 |
+
+second trace, the failing routed session's last intervening decision anywhere:
+  N (no decision layer): 6 (UXARRAY__uxarray-1423, basicmachines-co__basic-memory-334, cal-itp__benefits-3330, equinor__ert-11988, raullenchai__rapid-mlx-228, sqlfluff__sqlfluff-7615)
+  R SUBMIT LET THROUGH (snapshot passes hidden tests: false): 3 (dstackai__gpuhunt-197, huggingface__transformers-43721_interface, koxudaxi__datamodel-code-generator-2998)
+
+## sol R vs P: 10 discordant tasks (R passed 2, R failed 8); parting turn median 0, range 0 to 0
+
+| kind of the last decision before the paths parted | tasks | R passed (better) | R failed (worse) |
+|---|---|---|---|
+| FIRST TURN | 10 | sqlfluff__sqlfluff-7615, sqlfluff__sqlfluff-7617 | dstackai__gpuhunt-197, idaholab__montepy-882, koxudaxi__datamodel-code-generator-2998, packit__packit-2684, psf__black-4952, pymc-devs__pytensor-1701, python-markdown__markdown-1587, tox-dev__sphinx-autodoc-typehints-607 |
+
+second trace, the failing routed session's last intervening decision anywhere:
+  R SUBMIT LET THROUGH (snapshot passes hidden tests: false): 8 (dstackai__gpuhunt-197, idaholab__montepy-882, koxudaxi__datamodel-code-generator-2998, packit__packit-2684, psf__black-4952, pymc-devs__pytensor-1701, python-markdown__markdown-1587, tox-dev__sphinx-autodoc-typehints-607)
+  P SUBMIT LET THROUGH (snapshot passes hidden tests: false): 2 (sqlfluff__sqlfluff-7615, sqlfluff__sqlfluff-7617)
+
+## post hoc (added after the counts above were read)
+
+opus R vs N, digits masked: k=0 FIRST TURN: 16; k=1 EXIT: 3; k=2 EXIT: 2
+opus R vs N, routed sessions with at least one of each intervention, discordant pairs against all paired tasks: BLOCKED COMMAND 9 of 21 against 83 of 279; SUBMIT BLOCKED 3 of 21 against 48 of 279; DROPPED HIT IN THE REAL FIX 0 of 21 against 2 of 279; DROPPED HIT OUTSIDE THE FIX 1 of 21 against 9 of 279; LOOP GUARD 0 of 21 against 0 of 279; DECIDER ACTION 0 of 21 against 0 of 279
+
+opus R vs P, digits masked: k=0 FIRST TURN / P FIRST TURN: 12; k=1 EXIT / P EXIT: 4; k=2 EXIT / P EXIT: 3
+opus R vs P, routed sessions with at least one of each intervention, discordant pairs against all paired tasks: BLOCKED COMMAND 14 of 38 against 199 of 558; SUBMIT BLOCKED 10 of 38 against 95 of 558; DROPPED HIT IN THE REAL FIX 0 of 38 against 2 of 558; DROPPED HIT OUTSIDE THE FIX 0 of 38 against 9 of 558; LOOP GUARD 0 of 38 against 0 of 558; DECIDER ACTION 0 of 38 against 0 of 558
+
+sol R vs N, digits masked: k=0 FIRST TURN: 9
+sol R vs N, routed sessions with at least one of each intervention, discordant pairs against all paired tasks: BLOCKED COMMAND 4 of 9 against 83 of 279; SUBMIT BLOCKED 2 of 9 against 26 of 279; DROPPED HIT IN THE REAL FIX 0 of 9 against 8 of 279; DROPPED HIT OUTSIDE THE FIX 1 of 9 against 33 of 279; LOOP GUARD 0 of 9 against 0 of 279; DECIDER ACTION 0 of 9 against 0 of 279
+
+sol R vs P, digits masked: k=0 FIRST TURN / P FIRST TURN: 10
+sol R vs P, routed sessions with at least one of each intervention, discordant pairs against all paired tasks: BLOCKED COMMAND 12 of 20 against 195 of 558; SUBMIT BLOCKED 4 of 20 against 47 of 558; DROPPED HIT IN THE REAL FIX 0 of 20 against 8 of 558; DROPPED HIT OUTSIDE THE FIX 0 of 20 against 33 of 558; LOOP GUARD 0 of 20 against 0 of 558; DECIDER ACTION 0 of 20 against 0 of 558
+

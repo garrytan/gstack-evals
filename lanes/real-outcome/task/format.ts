@@ -16,7 +16,17 @@ export const LICENCES = ["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause"];
 export const PROTECT_ERE = [...TEST_PATTERNS, ...RUNNER_CONFIG_PATTERNS].join("\n") + "\n";
 
 export type Kind = "K1" | "K2" | "K3" | "K4";
-export type Runner = { kind: "pytest"; python: string; config: string } | { kind: "go"; module: string };
+export type NodeRunner = "jest" | "vitest" | "mocha" | "nodetest";
+/** The hidden run's runner. Node runners and cargo run in the project dir `root` (relative to the repository, "" for its
+ * root). `bin` is the runner's entry script inside an installed-dependency dir, so the runner comes from the image.
+ * `config` is gold's runner config, restored in the tree (a path) or, for jest, inline JSON; null runs with none.
+ * `build` is the cold rebuild's command, run offline before the hidden tests are restored again. `node_args` go to node
+ * before the runner (such as --import tsx), and `args` to the runner, both frozen when the task is built. */
+export type Runner =
+  | { kind: "pytest"; python: string; config: string }
+  | { kind: "go"; module: string }
+  | { kind: NodeRunner; root: string; bin: string; config: string | null; build: string | null; node_args: string[]; args: string[] }
+  | { kind: "cargo"; root: string; package: string | null; build: null };
 
 export interface Audit {
   pass: boolean;
@@ -224,7 +234,8 @@ const required = (t: TaskJson): string[] => [
 export const targetOf = (id: string): string => id.split("::")[0];
 
 /** A test id the task may list: <file>.py::<name> for pytest, <package dir>::<TopLevelTest> for Go (no subtests). */
-export const validTestId = (runner: "pytest" | "go", id: string): boolean => (runner === "go" ? /^[^:]+::Test[A-Za-z0-9_]*$/ : /^[^:]+\.py::\S+$/).test(id);
+export const validTestId = (runner: Runner["kind"], id: string): boolean =>
+  (runner === "go" ? /^[^:]+::Test[A-Za-z0-9_]*$/ : runner === "pytest" ? /^[^:]+\.py::\S+$/ : runner === "cargo" ? /^[^:]+\.rs::\S+$/ : /^[^:]+\.[cm]?[jt]sx?::.+$/).test(id);
 
 /** sha256 over the regression scope and the regression and quarantine lists check derived from it. */
 export const regressionDigest = (t: TaskJson): string => sha256(JSON.stringify([t.tests.regression_scope, t.tests.regression, t.tests.quarantine]));
@@ -265,7 +276,7 @@ export function readTask(dir: string): TaskJson {
   const ids = [...functional, ...escaped, ...t.tests.regression];
   if (ids.length === 0 && regressionFrozen(t)) fail("no required test: functional, escaped_defect and the frozen regression list are all empty");
   if (new Set(ids).size !== ids.length) fail("a test id is listed twice across functional, escaped_defect and regression");
-  if (ids.some((id) => !validTestId(t.runner.kind, id))) fail(t.runner.kind === "go" ? "go ids are <package dir>::<TopLevelTest>" : "pytest ids are <file>.py::<name>");
+  if (ids.some((id) => !validTestId(t.runner.kind, id))) fail(t.runner.kind === "go" ? "go ids are <package dir>::<TopLevelTest>" : t.runner.kind === "pytest" ? "pytest ids are <file>.py::<name>" : t.runner.kind === "cargo" ? "cargo ids are <target source>.rs::<test path>" : "node ids are <test file>::<full name>");
   const { files, links } = walk(dir);
   if (links.length > 0) fail("symlinks are not allowed: " + links.join(", "));
   for (const f of required(t)) if (!files.includes(f)) fail("missing " + f);
@@ -283,7 +294,7 @@ export function readTask(dir: string): TaskJson {
   for (const p of restored) if (!files.includes("tests/restore/" + p) || INSTALL_DIRS.some((d) => p.split("/").includes(d))) fail("restore.list names " + p + " without its file");
   for (const id of ids) {
     const target = targetOf(id);
-    const ok = t.runner.kind === "pytest" ? restored.has(target) : [...restored].some((p) => p.endsWith("_test.go") && (target === "." ? !p.includes("/") : p.startsWith(target + "/") && !p.slice(target.length + 1).includes("/")));
+    const ok = t.runner.kind === "cargo" ? restored.has(target) || target.endsWith(".rs") : t.runner.kind !== "go" ? restored.has(target) : [...restored].some((p) => p.endsWith("_test.go") && (target === "." ? !p.includes("/") : p.startsWith(target + "/") && !p.slice(target.length + 1).includes("/")));
     if (!ok) fail("test id " + id + " has no restored test file");
   }
   const statement = readFileSync(join(dir, "instruction.md"), "utf8");

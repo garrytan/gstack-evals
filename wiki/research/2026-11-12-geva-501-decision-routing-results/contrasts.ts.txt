@@ -1,0 +1,26 @@
+// S1 decomposition, S2 ingredients and S8 switching against routing (prereg section 11), on the 100-task subset.
+// Every contrast is treatment against control on tasks graded in both, same creative model, via lib.ts contrast():
+// success treatment minus control with clusteredPairedDelta, bill and time ratios treatment/control with clusterRatio,
+// repository clusters, seed 20261111, 10,000 draws. MDD = 2.80 x sqrt(d / n) at the realised discordance d.
+import { load, cellOf, contrast, subset, row, HEADER, save, type Contrast } from "./lib.ts";
+
+const L = load();
+const S = L.sessions;
+const sub = (cell: string, model: string) => cellOf(S, cell, model, subset);
+const out: Record<string, Contrast[]> = { S1: [], S2: [], S8: [] };
+out.S1.push(contrast("S1 opus F vs N (restructuring)", sub("F", "opus"), sub("N", "opus"), subset));
+out.S1.push(contrast("S1 opus R vs F (decider swap)", sub("R", "opus"), sub("F", "opus"), subset));
+out.S1.push(contrast("S1 opus R vs N on the subset (sum of the two steps)", sub("R", "opus"), sub("N", "opus"), subset));
+for (const m of ["opus", "sol"]) out.S2.push(contrast("S2 " + m + " R vs J (particle-1 as the middle layer)", sub("R", m), sub("J", m), subset));
+out.S2.push(contrast("S2 opus J vs F (Jev at a fixed threshold vs the typed frontier)", sub("J", "opus"), sub("F", "opus"), subset));
+for (const m of ["opus", "sol"]) out.S2.push(contrast("S2 " + m + " J vs N (context)", sub("J", m), sub("N", m), subset));
+const W = cellOf(S, "W", "particle", subset);
+for (const m of ["opus", "sol"]) for (const c of ["N", "R", "P"]) out.S8.push(contrast("S8 W vs " + m + " " + c, W, sub(c, m), subset));
+const lines: string[] = [];
+for (const [k, rows] of Object.entries(out)) {
+  lines.push("## " + k, "", HEADER, ...rows.map(row), "");
+  for (const r of rows) lines.push("coverage " + r.label + ": treatment graded " + r.coverage.treatment + ", control graded " + r.coverage.control);
+  lines.push("");
+}
+save("contrasts", lines.join("\n"), out);
+console.log(lines.join("\n"));

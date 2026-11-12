@@ -181,5 +181,35 @@ passes. A task that fails a rule is dropped for every arm, and its reason is cou
 
 ## Runners
 
-This version runs pytest and Go. A repository on another runner (vitest, jest, cargo) needs its adapter in
-verify.ts and record.ts first, with a negative-fixture test like tests/real/task-docker.test.ts.
+The verifier runs pytest, Go, jest, vitest, mocha, node:test and cargo. Every runner keeps the same contract: the
+start line prints before any interpreter starts, the root is read-only, the run is uid 10001 with no network, and
+each case gets a per-case result and a failure class (assert, missing_name, load, compile, setup).
+
+- pytest and Go are the original adapters. They need the project at the repository root.
+- jest and vitest write their JSON report to /out/record.json. The verifier passes the config itself: gold's config
+  from the restore set, or an empty one (verifier/vitest.none.cjs, or vitest.none.mjs when vitest 3.1 or later loads
+  configs with its module runner), so a config in the tree never loads. Ids read `<file>::<full name>`.
+- mocha runs with `--no-config --no-package` and its JSON reporter, so a .mocharc or package.json key in the tree is
+  ignored. Ids read `<file>::<full title>`. On Node 22, mocha replaces an ES module import error with
+  ERR_INTERNAL_ASSERTION, so a missing export under mocha reads load, not missing_name. Both are failures, never assert.
+- node:test runs with the verifier's own reporter (verifier/node-reporter.mjs), because node 22's junit output has
+  no file attribute. Ids read `<file>::<suite > ... > name>`. A file that fails to load reports with the end of its
+  stderr, so a missing export reads as missing_name.
+- A node runner's stderr goes to /out/stderr.txt. It is read only when the record holds no result: a run that died
+  before its reporter wrote anything fails every id as a session collection failure.
+- cargo runs `cargo test --offline` with fresh CARGO_HOME and target directories under /tmp and the image's registry
+  linked read-only. Ids read `<target source>::<test path>`. A target that does not compile fails every id in it as
+  compile.
+- Node shuffle is not supported; the run seed is recorded only.
+
+**Cold rebuild.** With `cold` set (the eng-review build read), cold.sh first removes every ignored file the tree
+brought that is not identical to the pristine image's copy and hashes the product files (hash-a). The runner's build
+step then runs as uid 10001 with no network. A second pass re-restores the protected files and dependency
+directories and hashes again (hash-b). A product file that changed between the two refuses the tree. So a stale
+compiled file in a build tree can't decide a test.
+
+**Test regions.** A file that mixes product code and tests moves only its test region (region.ts). For Rust that is
+the single `#[cfg(test)]` module of a source file; a file with more than one such module, or another mix, is refused.
+
+The verifier's own files (prepare.sh, vrun.py and VERIFIER_FILES) are unchanged, so sealed real-outcome tasks stay
+valid.

@@ -1,0 +1,52 @@
+== Claim 1, bug fixing: paired binary, one session per unit, arm and model
+d (discordant share) | MDD n=60 | MDD n=60, deff 1.2 | MDD pooled 3 models n=180, deff 1.2
+0.10 | 11.4 | 12.5 | 7.2
+0.15 | 14.0 | 15.3 | 8.9
+0.20 | 16.2 | 17.7 | 10.2
+0.30 | 19.8 | 21.7 | 12.5
+
+== Claim 1, expected 95% upper bound on A1 - A2 at n = 60 when the true difference is negative
+true -10 pts, d 0.20: expected upper bound +1.0 pts
+true -15 pts, d 0.25: expected upper bound -2.9 pts
+true -5 pts, d 0.15: expected upper bound +4.7 pts
+true +0 pts, d 0.15: expected upper bound +9.8 pts
+
+== Claim 2, structure: per-unit difference of mean follow-on success over k replicates per tree
+Unit success rates drawn from a mixture: 40% near 0.95, 25% near 0.05, 35% uniform 0.2 to 0.8 (SWE-style tasks).
+k | unit-by-tree sd | SD of unit difference | MDD n=60 | MDD n=60, deff 1.2
+1 | 0.00 | 0.465 | 16.8 | 18.4
+1 | 0.10 | 0.495 | 17.9 | 19.6
+2 | 0.00 | 0.329 | 11.9 | 13.0
+2 | 0.10 | 0.360 | 13.0 | 14.3
+3 | 0.00 | 0.273 | 9.9 | 10.8
+3 | 0.10 | 0.304 | 11.0 | 12.0
+
+== Claim 2 end to end, k = 3, when the first stage leaves a stable test broken on a share of trees (the unit then fails on that tree)
+carry-over share | SD of unit difference | MDD n=60, deff 1.2
+0.05 | 0.330 | 13.1
+0.10 | 0.355 | 14.0
+0.20 | 0.400 | 15.8
+The incremental score (claim 2 primary) is measured against the start tree, so carry-over does not enter it; its MDD is the k = 3 row above.
+
+== Money at planning prices (USD); caps are central x 1.2 on model items, rounded up to $10
+sm-labels | Astra and Opus eligibility labels, about 450 candidates | 100 | 150
+sm-oracle | VMs only: three base and three fixed runs per candidate | 40 | 60
+sm-admit | 15 admission units, Opus: plain and verbatim, and 3 follow-ons on the untouched tree; the cap covers the file-scope and ceiling-raise branches | 128 | 270
+sm-opus | opus: plain, verbatim, lens swap and refactor control on 60 units; 3 follow-ons on untouched, verbatim and refactor trees | 1160 | 1400
+sm-sol | sol: plain, verbatim, lens swap and refactor control on 60 units; 3 follow-ons on untouched, verbatim and refactor trees | 1214 | 1460
+sm-particle | particle: plain, verbatim, lens swap and refactor control on 60 units; 3 follow-ons on untouched, verbatim and refactor trees | 188 | 230
+sm-judges | R78 label check, UX/DX/AX on 720 first-stage diffs, stock diffs | 145 | 180
+crew model use (counted from the counters, not capped) | 250
+TOTAL central 3226; caps 3750 + crew 250 = 4000
+
+== Separate /qa line
+qa opus | 365 | 440
+qa sol | 365 | 440
+qa particle | 41 | 50
+qa admit exposure, 5 Opus /qa sessions | 30 | 50
+QA TOTAL central 861 (with $60 crew); caps 1040
+
+== Stage 2 on a claim 1 signal, per model, 120 more units, three arms
+opus: about 1109
+sol: about 1109
+particle: about 137
