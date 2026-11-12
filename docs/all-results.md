@@ -131,8 +131,8 @@ These results have no numbers here, because they haven't yet had both checks the
 
 **Sending a coding agent's small decisions to cheaper models**
 
-- **NO SAVING**, Opus 5.5 and GPT-6.1 Sol: on 279 real GitHub issues, routing a coding agent's small decisions to Jev, a small calibrated model, then to particle-1 for the ones Jev was unsure of, cost 29.7% more than the plain agent on Opus 5.5 (95% range 19.8% to 40.4% more) and 18.8% more on GPT-6.1 Sol (9.2% to 28.9% more). Task success moved +1.1 points on each model (Opus -2.2 to +4.3, Sol -1.1 to +3.3), no difference we could measure. [Results](../wiki/research/2026-11-12-geva-501-decision-routing-results/README.md)
-- **PARTICLE-1 ALONE IS ENOUGH**, Opus 5.5 and GPT-6.1 Sol: sending every one of those decisions to particle-1, with no Jev step, did as well as the router. Against particle-1 alone, the router's success moved +0.4 points on Opus (-2.5 to +3.3) and -2.2 on Sol (-4.6 to +0.4), and its bill ratio was 0.966 on Opus (0.885 to 1.046) and 0.992 on Sol (0.919 to 1.066), so it was neither cheaper nor, by the rule fixed in advance, faster. [Results](../wiki/research/2026-11-12-geva-501-decision-routing-results/README.md)
+- **NO SAVING**, Opus 5.5 and GPT-6.1 Sol: on 279 real GitHub issues, routing a coding agent's small decisions to Jev, a small calibrated model, then to particle-1 for the ones Jev was unsure of, cost more than the plain agent on both models, with no difference we could measure in task success. [Results](../wiki/research/2026-11-12-geva-501-decision-routing-results/README.md)
+- **PARTICLE-1 ALONE IS ENOUGH**, Opus 5.5 and GPT-6.1 Sol: sending every one of those decisions to particle-1, with no Jev step, did as well as the router, and the router was neither cheaper nor, by the rule fixed in advance, faster. [Results](../wiki/research/2026-11-12-geva-501-decision-routing-results/README.md)
 
 ## Corrections
 
