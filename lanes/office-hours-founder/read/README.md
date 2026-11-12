@@ -30,6 +30,8 @@ side produces. The only subprocess is power.py's rerun, and that runner is injec
   cuts. The pitch-only cell has its own runs item and its own labels item.
 - headline.ts: section 16's opening bullets, one fixed shape per verdict, with AN-1's condition, the repairs that ran
   and the population sentence.
+- cli.ts: `export const commands`, the rows the lane's cli.ts merges into its table: `of stage1`, `of projection`,
+  `of stage2` and `of headline`, described below. None makes a model call or spends.
 - seams.ts: `export const seams: Seam[]`, one seam per side of every start rule 7 edge this area owns, on invented
   fixtures. Its fixture builders are exported for the tests in tests/of/read/.
 
@@ -42,6 +44,24 @@ side produces. The only subprocess is power.py's rerun, and that runner is injec
 - The audit module: the stage's audit result as { pass, no_read, repaired }.
 - The run side: the frozen manifests, whether the stage stopped, the arm-guess tally, and repair names exactly as
   stage1.ts's REPAIR spells them.
+
+## Commands
+
+Every data path (units, scored sessions, stock credits, packet maps, labels, manifests, outputs) must sit outside the
+repo. Each output file is written once, so a second run needs a new --out. Every error line on stderr starts with its
+reason code. The commands print counts, readings and the sha256 of what they wrote, never unit text.
+
+- `of stage1 --units-dir --scored... --stock... --audit --map --labels... --check-map --check-labels... --out
+  [--ceiling-attempt]` prints section 10 in read order, which reading ends the eval, which models read untested, the
+  AN-2 lines and whether stage 2 may start, and writes stage1.json. --audit is sim/fidelity.ts's stage 1 outcome; --map
+  and --labels are stage 1's production packets and labels, and --check-map and --check-labels the judge check's pass.
+- `of projection --units-dir --scored... --map --approvals --ceiling --out [--record] [--extra <item>=<usd>]...` prints
+  the re-estimate, power.py's MDDs, every ledger item's spend, projection and cap, the cuts, and whether stage 2 may
+  start on the projection. It writes projection.json and allowances.json, the file `of run --allowances` reads.
+- `of stage2 --units-dir --scored... --stock... --manifest... --stage1 --projection --map... --labels... --audit --out
+  [--arm-guess <correct>/<total>]` prints section 11's readings per model and writes stage2.json. --manifest takes the
+  frozen manifest.json of every stage 2, pitch-only and real-stratum launch.
+- `of headline --stage2 [--next <model>=<what the next attempt changes>]...` prints section 16's bullets.
 
 ## Build-time choices
 
@@ -97,9 +117,31 @@ side produces. The only subprocess is power.py's rerun, and that runner is injec
     units at 2 passes, control 0.25 and ICC 0.5 gave a W MDD of 0.13, as power.txt prints, and a guard MDD of 0.14.
 24. The simulator keeps its frozen allowance after the smoke, since section 13 resets arm allowances only. The lens
     median over Opus's two smoke sessions is their mean.
-25. The money projection takes per-session and per-packet figures as inputs. One label packet covers a model, unit and
-    pass. The pitch-only cell has no simulator cost, because the closing message replaces the founder. A projection
-    doesn't fit when the line or any item passes its cap. The Captain stop is checked before any cut.
+25. The money projection runs on the eval's ledger items. Stage 2, the real stratum and the pitch-only cell each have
+    runs and labels items, and stage 2 and the real stratum each have a simulator item. One label packet covers a model,
+    unit and pass. The pitch-only cell has no simulator cost, because the closing message replaces the founder. A
+    projection doesn't fit when the line or any item passes its cap. The Captain stop is checked before any cut.
 26. Headlines: for untested and not shown, the results writer supplies what the next attempt changes, and the bullet
     refuses without it. Points are the difference times 100. Every bullet ends with the population sentence and names
     the repairs that ran. Bullets sort helps, no measurable difference, hurts, not shown, then untested.
+27. The sessions in force: when --scored holds a session twice, the version with more repairs wins, because a repair's
+    rerun wrote it. Two versions under the same repairs refuse. Office-hours smoke sessions carrying forced-line or
+    limit-30 are the re-smoke round, and the rest are the first round.
+28. The judge check's cells: each gold cell of the check pass is found again in the stage 1 production packet that
+    holds the same blocks (same model and unit, shuffled-key packets left out), and scored on that model's production
+    label. Session blocks are real blocks; oracle blocks are oracle cells; stock rows 1 and 2 are the other anchors.
+    Near-miss blocks are scored only on their fixed labels, and stock row 3 is never an anchor, so neither is a gold
+    cell. A gold cell with no production label counts as unlabelled.
+29. The audit outcome: pass, repair, fix-method and no-read map onto the stage 1 reading, and the simulator repair counts
+    as made when the sessions in force carry sim-prompt. In stage 2, void and no-read void the stage.
+30. The projection's session costs are stage 1's measured medians. The pitch-only cell is projected at its arm's full
+    session median, since a pitch session is a shortened session of the same arm. The label packet cost is the spend on
+    of-s1-labels over stage 1's production packets; a stage 2 or real unit-pass is two packets (true key and shuffled
+    key), and a pitch unit is one. Spend is each item's committed amount in the ledger record. --extra adds projected
+    spend the manifests don't show, such as the stage 2 audit or the gold re-check. --ceiling is the line's ceiling,
+    because crew and the reserve aren't ledger items.
+31. Stage 2 reads stopped when a stage 2 launch's stops.json beside its manifest lists a stop. Each cell's entries run in
+    cellRounds order, the run side's, which the interim stop counts in. The MDD at the effective design reruns power.py
+    with projection.json's estimates.
+32. The reading commands exit 0 once they write their reading, whatever it says. A reason code the reading carries goes
+    to stderr as an information line, and the stdout lines say whether stage 2 may start.
