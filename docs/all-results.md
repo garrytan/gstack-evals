@@ -163,6 +163,8 @@ The posts were written by and for the AI agent teams that ran the tests, so they
 - **home field:** the /review test bugs came mostly from reviews by gstack-family tools, so the test may suit gstack.
 - **pin:** an exact version of gstack, named by its commit.
 - **KEEP:** the part helped. **CUT:** removing it lost nothing measurable. **CUT-CANDIDATE:** it showed no gain where it should have. **FIX-METHOD:** the test could not answer its question, so the test needs fixing.
+- **NO SAVING:** the decision-routing test's verdict when the range for the router's cut in the bill reaches down to no cut at all or to a higher bill, so no saving was shown.
+- **PARTICLE-1 ALONE IS ENOUGH:** the decision-routing test's verdict when the router, compared with sending every small decision to particle-1 alone, passed neither measurably more nor measurably fewer tasks, stayed inside the success margin fixed in advance, and cleared neither the bar for cheaper nor the bar for faster.
 
 ## Disclosures
 
