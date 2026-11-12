@@ -1,0 +1,77 @@
+{
+  "schema": "pf-prereg.v1",
+  "post": "2026-11-09-geva-487-pstack-checks-prereg",
+  "draw_seed": 2233969356,
+  "bootstrap_seed": 3702137237,
+  "order_seed": 2151444076,
+  "seed_use": {
+    "draw_seed": "section 2: the seeded order of admission, raise, test and reserve units",
+    "bootstrap_seed": "section 12: every bootstrap over repositories (10,000 resamples)",
+    "order_seed": "section 11: the seeded order of a unit's sessions within its part"
+  },
+  "minted_at": "2026-11-09T16:58:24.880Z",
+  "mint_command": "node -e 'const c=require(\"crypto\");const b=c.randomBytes(12);console.log(JSON.stringify({minted_at:new Date().toISOString(),draw_seed:b.readUInt32BE(0),bootstrap_seed:b.readUInt32BE(4),order_seed:b.readUInt32BE(8)}))'",
+  "mint_rule": "Minted once from crypto random bytes as unsigned 32-bit integers before any draw or label call. Never re-minted.",
+  "draw_order": {
+    "window": [
+      "2025-01-01",
+      "2026-07-31"
+    ],
+    "per_month": "ids sorted, then shuffled with one seededRandom(draw_seed) stream, months taken in the order below",
+    "admission_months": [
+      "2026-03",
+      "2026-04",
+      "2026-05",
+      "2026-06"
+    ],
+    "admission_n": 8,
+    "raise_n": 8,
+    "test_months": [
+      "2026-07",
+      "2026-06",
+      "2026-05",
+      "2026-04",
+      "2026-03",
+      "2026-02",
+      "2026-01",
+      "2025-12",
+      "2025-11",
+      "2025-10",
+      "2025-09",
+      "2025-08",
+      "2025-07",
+      "2025-06",
+      "2025-05",
+      "2025-04",
+      "2025-03",
+      "2025-02",
+      "2025-01"
+    ],
+    "reserve_n": 10,
+    "per_repository_cap": 3,
+    "gates_in_order": [
+      "labels",
+      "oracle",
+      "told_screen",
+      "neutral_validation"
+    ]
+  },
+  "pins": {
+    "swe_bench_live_multilang": {
+      "dataset": "SWE-bench-Live/MultiLang",
+      "revision": "eb09c2e5db6e4c5a95e01c903c8fd1d5da33c4f3"
+    },
+    "pstack": {
+      "repo": "cursor/plugins",
+      "commit": "c742dd61706fbacc1b95f1a20b7b988cf096ce6c",
+      "tree": "harness/pstack/claude-code",
+      "tree_sha": "cdbbd4ca5dd2f4ca0eef3294e7b981c0c610d4bb",
+      "plugin_version": "0.15.36"
+    },
+    "tla2tools": {
+      "version": "1.7.4",
+      "url": "https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar",
+      "sha256": "936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88"
+    }
+  }
+}

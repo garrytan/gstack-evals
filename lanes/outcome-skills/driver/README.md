@@ -2,6 +2,10 @@
 
 `gstack-evals outcome serve` runs one G admission batch on the program's envelope host: one U4 lease per stage at its line item's cap, one metering-proxy slot per session, and a control plane on 127.0.0.1 that real_agent opens and closes sessions on. The leases, their closes and every cap stop live in O6's record.
 
+A PF stage (pstack-checks, `--stage <pf item>=pf:<arm>,...`) serves the PF arms on its item's models and opens two slots per session, a task turn and a wrap-up turn, each named by meta.phase and held to that phase's allowance and wall limit. A task open needs room for both allowances; lanes/outcome-skills/pfchecks/README.md "Driver" lists the rules.
+
+The driver takes the arms a stage may name, each arm's limits and the pinned model from an arms file: lanes/outcome-skills/arms/registry.json by default, or the file `--registry <arms file>` names, in the same shape (the larger-features headroom check ran with lanes/outcome-skills/arms/h-registry.json). real_agent's `arms_path` must name the same file.
+
 ## Operator rule: a driver failure ends the item
 
 If the driver fails with E_INTERNAL or E_LEASE_UNSETTLED, each line item it was serving ends incomplete, and the driver is not launched again for that item unless the Captain reads the ledger and rules otherwise.

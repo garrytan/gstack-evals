@@ -5,10 +5,13 @@
 // launch's nonce, and a run binds to the directory of its first lease, so that directory's sessions.jsonl holds the run's
 // trial counts. The ledger is the only trust root: a cap stop is written into O6's record when it fires, before the 409
 // that reports it, after which O6 admits no new lease on that item, and a launch whose sessions.jsonl does not name every
-// launch and session meter the ledger holds for the run is refused.
+// launch and session meter the ledger holds for the run is refused. A family SM close whose proxy finalize failed halts
+// its item the same way through sessions.jsonl (a halt line with the session and its journal, on disk before the close)
+// until a launch lifts it, and so does a family SM session the driver never closed itself: one its crash recovery
+// closes, or one ledger settle or reconcile closed.
 import { Database } from "bun:sqlite";
 import { createHash, randomBytes } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { docAnchor, type ReasonCode } from "../../../src/errors/codes.ts";
 import { rigAdmission } from "../../../src/rig/admission.ts";
@@ -20,14 +23,35 @@ import { holderBound, LedgerError, listItems, readItem, type CloseFile, type Hol
 import { closeOpenSessions, cutShort, meterFigures } from "../../../src/runner/ledger/sessions.ts";
 import { isTrialNetworkHost, MeteringProxy, reconcileJournal, type RetryBudget } from "../../../src/runner/proxy/metering-proxy.ts";
 import { loadRegistry, type Registry } from "../arms/registry.ts";
+import { isSmArm, smArm, smLimits, smProvider } from "../statemachines/arms.ts";
+import { ITEMS } from "../statemachines/items.ts";
+import { sessionLimits, type PfArm } from "../pfchecks/arms.ts";
+import { ALLOWANCE, ITEMS as PF_ITEMS, MODEL_ITEM, MODELS, type Arm } from "../pfchecks/items.ts";
+import { PfError } from "../pfchecks/prereg.ts";
+import { EFFORT_KEYS, reservationBound } from "../pfchecks/session.ts";
 
 export const DEFAULT_TTL_MS = 72 * 3_600_000;
 export const DEADLINE_GRACE_MS = 120_000;
 export const DEFAULT_RETRY: RetryBudget = { attempts: 3, elapsed_ms: 300_000 };
 
+/** The pstack-checks (PF) items a PF stage may name: the models each pays for and the PF arms its sessions may name.
+ *  pf-admit runs Opus's told admission sessions and the Sol and particle-1 price probe, so it serves all three models. */
+const PF_TOLD = ["pf:P", "pf:C", "pf:N"];
+export const PF_STAGES: Record<string, { models: readonly string[]; arms: string[] }> = {
+  "pf-admit": { models: MODELS, arms: PF_TOLD },
+  ...Object.fromEntries(Object.entries(MODEL_ITEM).map(([model, item]) => [item, { models: [model], arms: PF_TOLD }])),
+  "pf-blind": { models: [PF_ITEMS["pf-blind"]!.model!], arms: ["pf:blind"] },
+};
+
 export interface StageSpec {
   item: string;
   arm: string;
+  /** Family SM only: the model the stage's item pays for, and every SM arm its sessions may name (arm is the stage's label then). Its proxy refuses provider-side tools. */
+  model?: string;
+  /** Family SM's arms, or a PF stage's: pf:P, pf:C, pf:N on a told PF item, pf:blind on pf-blind. A PF stage takes its models from PF_STAGES, and its proxy refuses provider-side tools and records each slot's first main request's effort fields. */
+  arms?: string[];
+  /** A none stage on a registry with no told arm (the eng-review build read's builds): the program skills its item charges. G's none stage always charges every told arm's skill. */
+  skills?: string[];
 }
 
 export interface ServeOptions {
@@ -44,20 +68,26 @@ export interface ServeOptions {
   reruns?: number;
   control_port?: number;
   ttl_ms?: number;
+  /** The most each stage's lease reserves, in micros; without it a lease reserves what the item's cap has left. */
+  amount_micros?: number;
   /** Added to an arm's wall limit for a slot's deadline; 120 s by default. */
   deadline_grace_ms?: number;
+  /** PF stages' task-turn allowance table: items.ts ALLOWANCE by default, or admission.ts costReading's doubled one. */
+  pf_allowance?: Record<Arm, Record<string, number>>;
   retry?: RetryBudget;
   registry?: Registry;
   env?: Record<string, string | undefined>;
   fetch?: (input: string, init: RequestInit) => Promise<Response>;
   requireAdmission?: RequireAdmission;
+  /** Family SM: sessions whose finalize halt (E_SM_FINALIZE_HALT) the Captain ruled on after reading the proxy journal. Each must name a halt in this run; the launch records the lift and serves the item again. */
+  lift_halts?: string[];
   machine?: string;
   now?: () => number;
   /** Receives every notice line, code first. */
   log?: (line: string) => void;
 }
 
-export type Ended = "completed" | "cap_stop" | "lease_expired" | "failed";
+export type Ended = "completed" | "cap_stop" | "lease_expired" | "failed" | "halted";
 
 export interface OpenAnswer {
   id: string;
@@ -82,12 +112,28 @@ export interface CloseAnswer {
   /** How many of the session's calls had no recorded cost at the close: the calls unknown_micros holds for. */
   unknown_calls: number;
   usage: { input_tokens: number; output_tokens: number; cache_read_input_tokens: number; cache_creation_input_tokens: number };
-  requests: number;
-  ok_responses: number;
-  refused: number;
-  unknown: number;
-  undrained: number;
-  unsettled: number;
+  /** False when the proxy's finalize failed: then the proxy's counts below are null, not 0, and the session ends as infra. */
+  finalized: boolean;
+  requests: number | null;
+  ok_responses: number | null;
+  refused: number | null;
+  /** The distinct reason codes of the proxy's refusals (E_ALLOWANCE, E_PROXY_SERVER_TOOL and so on), so a session's end kind can tell an allowance stop. */
+  refusals: string[] | null;
+  /** Refusals at the slot's allowance check, the proxy's only allowance stop; the end kind reads this, never the E_ALLOWANCE code. */
+  allowance_stops: number | null;
+  /** PF sessions only: the effort and thinking fields (pfchecks session.ts EFFORT_KEYS) of the slot's first request with a tools list, as its metering proxy recorded them, or null when it sent none. */
+  first_request?: Record<string, unknown> | null;
+  /** PF sessions only: the slot's allowance stops that only its calls still in flight caused (pfchecks session.ts reservationBound). */
+  reservation_bound?: number;
+  unknown: number | null;
+  undrained: number | null;
+  unsettled: number | null;
+}
+
+/** A PF close answer's journal reads: every refusal code on the slot's meter, and its reservation-bound allowance stops. */
+function pfClose(journal: string, meterId: string, allowance: number, first: Record<string, unknown> | null): Pick<CloseAnswer, "refusals" | "first_request" | "reservation_bound"> {
+  const lines = (existsSync(journal) ? readFileSync(journal, "utf8").split("\n") : []).flatMap((l) => { try { return [JSON.parse(l) as Record<string, any>]; } catch { return []; } });
+  return { refusals: lines.filter((j) => j.kind === "refusal" && j.meter_id === meterId).map((j) => String(j.code)), first_request: first, reservation_bound: reservationBound(lines, meterId, allowance) };
 }
 
 interface Session {
@@ -100,12 +146,20 @@ interface Session {
   timer: ReturnType<typeof setTimeout>;
   closing: Promise<CloseAnswer> | null;
   closed: CloseAnswer | null;
+  /** PF only: the session's arm|model|task|trial key, so its close starts the grace on its wrap-up hold. */
+  key?: string;
 }
 
 interface Stage {
   item: string;
   arm: string;
-  kind: "none" | "told";
+  kind: "none" | "told" | "prompt" | "followon";
+  /** The arms its sessions may name: [arm] for G; the stage's SM arms for family SM, with its model. */
+  arms: string[];
+  model?: string;
+  /** PF stages only: the models the item pays for. */
+  models?: readonly string[];
+  pf: boolean;
   lease_id: string;
   reserved: number;
   expires: number;
@@ -113,6 +167,8 @@ interface Stage {
   journal: string;
   state: "serving" | "draining" | "stopped";
   ended: Ended | null;
+  /** Set when a close's proxy finalize failed and halted the stage, or pf-run's halt stop reached it while it still served or drained, even on a stage that keeps ended cap_stop. */
+  halted: boolean;
   scope: string | null;
   live: Map<string, Session>;
   opens: number;
@@ -125,7 +181,7 @@ interface Stage {
 export interface Served {
   control: string;
   stages: Array<{ item: string; arm: string; lease_id: string; reserved_micros: number; proxy: string }>;
-  /** Resolves with the exit code once every stage is settled: 0, or 2 when the driver failed, a lease is still open or a stage ended failed. */
+  /** Resolves with the exit code once every stage is settled: 0, or 2 when the driver failed, a lease is still open, a stage ended failed, or a close or pf-run's halt stop halted a stage. */
   done: Promise<number>;
   stop(ended?: Ended): Promise<number>;
 }
@@ -219,8 +275,40 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
     fail("E_USAGE", "can't listen on --host " + o.host + " (" + (e as Error).message + "); give an address on this machine; nothing was opened");
   }
   if (!o.stages.length) fail("E_USAGE", "name at least one --stage <item>=<arm>");
-  for (const st of o.stages) if (!Object.hasOwn(reg.arms, st.arm)) fail("E_USAGE", "stage " + st.item + " names arm " + st.arm + ", which the registry does not hold; it holds " + Object.keys(reg.arms).join(", "));
-  if (new Set(o.stages.map((s) => s.item)).size !== o.stages.length || new Set(o.stages.map((s) => s.arm)).size !== o.stages.length) fail("E_USAGE", "each stage needs its own line item and its own arm, since a session's arm picks its stage");
+  const pfStage = (st: StageSpec) => [st.arm, ...(st.arms ?? [])].some((a) => a.startsWith("pf:"));
+  const smStage = (st: StageSpec) => !pfStage(st) && (st.model !== undefined || st.arms !== undefined);
+  const pfAllowance = o.pf_allowance ?? ALLOWANCE;
+  for (const st of o.stages) {
+    if (pfStage(st)) {
+      const arms = st.arms ?? [st.arm];
+      if (arms.some((a) => !a.startsWith("pf:"))) fail("E_USAGE", "stage " + st.item + " mixes PF arms with G or SM arms; a PF stage serves PF arms only");
+      const pf = Object.hasOwn(PF_STAGES, st.item) ? PF_STAGES[st.item]! : fail("E_USAGE", "PF stage " + st.item + " is not a PF item; PF stages are " + Object.keys(PF_STAGES).join(", "));
+      if (st.model !== undefined) fail("E_USAGE", "PF stage " + st.item + " takes its models from its item (" + pf.models.join(", ") + "), not a stage model");
+      const stray = arms.filter((a) => !pf.arms.includes(a));
+      if (!arms.length || stray.length) fail("E_USAGE", "PF stage " + st.item + " serves " + pf.arms.join(", ") + ", not " + (stray.join(", ") || "no arm"));
+      for (const a of arms) {
+        for (const model of pf.models) {
+          smProvider(reg, model);
+          try {
+            sessionLimits(a.slice(3) as PfArm, model, pfAllowance);
+          } catch (e) {
+            fail("E_USAGE", "PF stage " + st.item + ": " + (e instanceof PfError ? e.message : String(e)));
+          }
+        }
+      }
+      continue;
+    }
+    if (!smStage(st)) {
+      if (!Object.hasOwn(reg.arms, st.arm)) fail("E_USAGE", "stage " + st.item + " names arm " + st.arm + ", which the registry does not hold; it holds " + Object.keys(reg.arms).join(", "));
+      continue;
+    }
+    if (!st.model || !st.arms?.length || st.arms.some((a) => !isSmArm(reg, a)) || new Set(st.arms.map((a) => smArm(reg, a).kind === "told")).size !== 1) fail("E_USAGE", "SM stage " + st.item + " needs a model and a list of family SM arms, all told or none told");
+    smProvider(reg, st.model!);
+    const def = ITEMS[st.item];
+    if (def?.model !== st.model) fail("E_USAGE", "SM stage " + st.item + " pays for model " + st.model + ", but " + (def ? "line item " + st.item + " pays for " + (def.model ?? "no model's sessions") : st.item + " is not one of family SM's line items (" + Object.keys(ITEMS).join(", ") + ")") + "; nothing was opened");
+  }
+  const servedBy = o.stages.flatMap((s) => (pfStage(s) ? (s.arms ?? [s.arm]).flatMap((a) => PF_STAGES[s.item]!.models.map((m) => a + "@" + m)) : smStage(s) ? s.arms!.map((a) => a + "@" + s.model) : [s.arm]));
+  if (new Set(o.stages.map((s) => s.item)).size !== o.stages.length || new Set(servedBy).size !== servedBy.length) fail("E_USAGE", "each stage needs its own line item and its own arm, since a session's arm picks its stage");
   mkdirSync(o.dir, { recursive: true });
   const dir = realpathSync(o.dir);
   if (!existsSync(o.record)) fail("E_LEDGER_MISSING", "no approval record is at " + o.record + "; nothing was opened");
@@ -230,11 +318,18 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
   const rival = rivalHolder(o.record, o.run_id, dir);
   if (rival) fail("E_USAGE", holderBound(rival, holder).message + "; nothing was recovered, settled or opened");
   const sessionsFile = join(dir, "sessions.jsonl");
-  const record = (line: Record<string, unknown>) => {
+  const record = (line: Record<string, unknown>, durable = false) => {
     const fresh = existsSync(sessionsFile) && cutShort(sessionsFile) ? "\n" : "";
     appendFileSync(sessionsFile, fresh + JSON.stringify({ at: new Date(now()).toISOString(), run_id: o.run_id, ...line }) + "\n");
+    if (!durable) return;
+    const fd = openSync(sessionsFile, "r");
+    try {
+      fsyncSync(fd);
+    } finally {
+      closeSync(fd);
+    }
   };
-  const lines: Array<{ at?: string; event?: string; id?: string; item?: string; lease_id?: string; ended?: string; code?: string; scope?: string | null; nonce?: string; meter_id?: string }> = [];
+  const lines: Array<{ at?: string; event?: string; id?: string; item?: string; lease_id?: string; ended?: string; code?: string; scope?: string | null; nonce?: string; meter_id?: string; journal?: string; model?: string; reason?: string; finalized?: boolean; cause?: string }> = [];
   for (const line of existsSync(sessionsFile) ? readFileSync(sessionsFile, "utf8").split("\n") : []) {
     try {
       const e = JSON.parse(line);
@@ -265,6 +360,25 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
     }
   }
   for (const e of lines) if (e.item && (e.event === "stop" || (e.event === "settled" && e.ended === "cap_stop") || (e.event === "refuse" && e.code === "CAP_STOP"))) noteStop(e.item, { at: e.at ?? "an unrecorded time", scope: e.scope ?? "" });
+  const halts = new Map<string, { item: string; at: string; journal: string; cause?: string }>();
+  for (const e of lines) {
+    if (e.event === "halt" && e.id && e.item) halts.set(e.id, { item: e.item, at: e.at ?? "an unrecorded time", journal: e.journal ?? "(no journal path)", ...(e.cause ? { cause: e.cause } : {}) });
+    if (e.event === "lift" && e.id) halts.delete(e.id);
+  }
+  const lifts = [...new Set(o.lift_halts ?? [])];
+  const unknownLift = lifts.find((id) => !halts.has(id));
+  if (unknownLift) fail("E_USAGE", "--lift-halt " + unknownLift + " names no halt still standing in run " + o.run_id + "'s " + sessionsFile + "; nothing was recovered or opened");
+  const smOpens = new Map(lines.flatMap((e) => (e.event === "open" && e.id && e.model !== undefined ? [[e.id, e] as const] : [])));
+  const closedIds = new Set(lines.flatMap((e) => (e.event === "close" && e.id ? [e.id] : [])));
+  const haltedIds = new Set(lines.flatMap((e) => (e.event === "halt" && e.id ? [e.id] : [])));
+  const haltUnfinalized = (e: { id?: string; item?: string; lease_id?: string; meter_id?: string }, cause: string) => {
+    const halt = { item: e.item!, at: new Date(now()).toISOString(), journal: join(dir, e.lease_id + ".journal.ndjson"), cause };
+    record({ event: "halt", item: halt.item, id: e.id, lease_id: e.lease_id, meter_id: e.meter_id, journal: halt.journal, cause }, true);
+    halts.set(e.id!, halt);
+    haltedIds.add(e.id!);
+    log("E_SM_FINALIZE_HALT outcome driver: session " + e.id + " on line item " + halt.item + " was closed as " + cause + ", never by the driver's own close, so its proxy finalize never ran and its allowance stops are unknown; the item opens no more sessions or leases until the Captain rules on the proxy journal " + halt.journal + " and a relaunch lifts the halt with --lift-halt " + e.id);
+  };
+  for (const e of lines) if (e.event === "close" && e.id && smOpens.has(e.id) && e.finalized !== true && !haltedIds.has(e.id)) haltUnfinalized(smOpens.get(e.id)!, e.reason ?? "unknown");
 
   const failures: string[] = [];
   for (const item of listItems(o.record)) {
@@ -276,6 +390,7 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
         const rec = await reconcileJournal(journal, o.local);
         for (const r of rec.refused) warn(r.code as ReasonCode, "recovering lease " + lease.lease_id + ": " + r.message);
       } else warn("JOURNAL_MISSING", "lease " + lease.lease_id + " on line item " + item + " has no proxy journal at " + journal + ", so its settle charges every unanswered call at its full reservation");
+      for (const [id, e] of smOpens) if (e.lease_id === lease.lease_id && !closedIds.has(id) && !haltedIds.has(id)) haltUnfinalized(e, "recovered");
       closeOpenSessions(lease, "recovered", meterFigures(o.local, lease.lease_id), new Date(now()));
       const stop = capped.get("") ?? capped.get(item);
       const close = settleLease(o.record, o.local, lease.lease_id, warn, stop ? stop.scope || "cap_stop" : undefined);
@@ -286,6 +401,10 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
   }
   if (failures.length) fail("E_LEASE_UNSETTLED", "recovery could not settle " + failures.join("; ") + "; nothing new was opened. Settle each with gstack-evals ledger settle --lease <id> on this machine, then launch the driver again");
 
+  for (const id of lifts) {
+    record({ event: "lift", id, item: halts.get(id)!.item });
+    halts.delete(id);
+  }
   const at = new Date(now());
   const plans = o.stages.map((st) => {
     const s = readItem(o.record, st.item);
@@ -293,10 +412,13 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
     if (unheld.length) fail("E_USAGE", "line item " + st.item + " holds run " + o.run_id + "'s leases " + unheld.map((l) => l.lease_id).join(", ") + ", which name no holder, so no run directory's sessions.jsonl counts their sessions and the driver can't serve the item for this run; nothing was opened");
     const stop = capped.get("") ?? capped.get(st.item);
     if (stop) fail("CAP_STOP", (capped.has("") ? "the none stage cap-stopped in run " + o.run_id + " at " + stop.at + " (scope " + stop.scope + "), which ends both skills incomplete" : "stage " + st.item + " cap-stopped in run " + o.run_id + " at " + stop.at + " (scope " + stop.scope + "), which ends its skill incomplete") + "; a cap stop is not retried (plan section 6); nothing was opened");
+    const halt = [...halts].find(([, h]) => h.item === st.item);
+    if (halt) fail("E_SM_FINALIZE_HALT", "line item " + st.item + " halted in run " + o.run_id + " at " + halt[1].at + ": session " + halt[0] + (halt[1].cause ? " was closed as " + halt[1].cause + ", never by the driver's own close, so its proxy finalize never ran" : " closed with its proxy finalize failed") + ", so its allowance stops are unknown and its retry waits for the Captain's ruling on the proxy journal " + halt[1].journal + "; once the Captain rules, relaunch with --lift-halt " + halt[0] + "; nothing was opened");
     if (s.cap_micros === null) return fail("E_LEDGER_MISSING", "no approved cap is on record for line item " + st.item + "; nothing was opened");
     if (s.program === null) return fail("E_USAGE", "line item " + st.item + " is in no program; a G stage is admitted by O6's envelope, so its item joins the program with --program at init; nothing was opened");
-    const arm = reg.arms[st.arm]!;
-    const want = arm.kind === "told" ? [arm.skill!] : [...new Set(Object.values(reg.arms).flatMap((a) => (a.kind === "told" && a.skill ? [a.skill] : [])))];
+    const arm = pfStage(st) ? null : smStage(st) ? smArm(reg, st.arms![0]!) : reg.arms[st.arm]!;
+    const told = [...new Set(Object.values(reg.arms).flatMap((a) => (a.kind === "told" && a.skill ? [a.skill] : [])))];
+    const want = !arm ? ["pf"] : smStage(st) ? [arm.kind === "told" ? arm.skill! : "sm"] : arm.kind === "told" ? [arm.skill!] : told.length ? told : st.skills ?? [];
     if (s.skills.length !== want.length || want.some((k) => !s.skills.includes(k))) fail("E_USAGE", "line item " + st.item + " splits its spend across " + (s.skills.join(", ") || "no skill") + ", but arm " + st.arm + " spends for " + want.join(", ") + "; a stage's item carries its own arm's skills, so the envelope charges the skill that spends; nothing was opened");
     if (s.run_id !== null && s.run_id !== o.run_id) fail("E_ITEM_BOUND", "line item " + st.item + " is bound to run " + s.run_id + ", so run " + o.run_id + " cannot spend from it; nothing was opened");
     if (s.open) fail("E_LEASE_UNSETTLED", "lease " + s.open.lease_id + " on line item " + st.item + " (machine " + s.open.machine_id + ", run " + s.open.run_id + ") is still open; settle it on that machine, then launch the driver again; nothing was opened");
@@ -356,6 +478,18 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
             return Response.json(await closeSession(sess, reason));
           }
           if (req.method === "POST" && path === "/stop") {
+            const b = (await req.json().catch(() => null)) as { code?: unknown; session?: unknown } | null;
+            if (b?.code === "E_PF_FINALIZE_HALT") {
+              const session = typeof b.session === "string" && b.session ? b.session : "(not named)";
+              record({ event: "halt_stop", code: b.code, session }, true);
+              warn("E_PF_FINALIZE_HALT", "outcome driver: pf-run halted session " + session + " and stopped the driver; every stage still serving settles as failed, never completed, and the driver exits 2; the next launch of the run waits for the Captain's ruling on that session");
+              for (const s of stages) {
+                if (s.state === "stopped") continue;
+                s.halted = true;
+                s.ended ??= "failed";
+                s.scope ??= "halt stop: session " + session;
+              }
+            }
             setTimeout(() => void stop(), 0);
             return Response.json({ stopping: true });
           }
@@ -392,11 +526,13 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
   record({ event: "launch", nonce: holder.nonce });
   for (const [i, { st }] of plans.entries()) {
     try {
-      const lease = openLease(o.record, o.local, { item: st.item, run_id: o.run_id, machine_id: machine, holder, ttl_ms: ttl, warn, requireAdmission: o.requireAdmission, ...(o.now ? { now: new Date(now()) } : {}) });
+      const lease = openLease(o.record, o.local, { item: st.item, run_id: o.run_id, machine_id: machine, holder, ttl_ms: ttl, amount_micros: o.amount_micros, warn, requireAdmission: o.requireAdmission, ...(o.now ? { now: new Date(now()) } : {}) });
       opened.push(lease.lease_id);
       const journal = join(dir, lease.lease_id + ".journal.ndjson");
-      const proxy = new MeteringProxy({ ledger: o.local, leaseId: lease.lease_id, host: o.host, managementSocket: join(dir, "p" + i + ".sock"), managementToken: randomBytes(24).toString("hex"), journal, retry: o.retry ?? DEFAULT_RETRY, env: o.env, fetch: o.fetch });
-      const stage: Stage = { item: st.item, arm: st.arm, kind: reg.arms[st.arm]!.kind, lease_id: lease.lease_id, reserved: lease.reserved_micros, expires: Date.parse(lease.expires_at), proxy, journal, state: "serving", ended: null, scope: null, live: new Map(), opens: 0, reruns: 0, finished: 0, settling: null, close: null };
+      const sm = smStage(st);
+      const pf = pfStage(st);
+      const proxy = new MeteringProxy({ ledger: o.local, leaseId: lease.lease_id, host: o.host, managementSocket: join(dir, "p" + i + ".sock"), managementToken: randomBytes(24).toString("hex"), journal, retry: o.retry ?? DEFAULT_RETRY, env: o.env, fetch: o.fetch, ...(sm || pf ? { refuseServerTools: true } : {}), ...(pf ? { firstRequestFields: [...EFFORT_KEYS] } : {}) });
+      const stage: Stage = { item: st.item, arm: st.arm, kind: pf ? "prompt" : sm ? smArm(reg, st.arms![0]!).kind : reg.arms[st.arm]!.kind, arms: pf ? [...(st.arms ?? [st.arm])] : sm ? [...st.arms!] : [st.arm], ...(sm ? { model: st.model } : {}), ...(pf ? { models: PF_STAGES[st.item]!.models } : {}), pf, lease_id: lease.lease_id, reserved: lease.reserved_micros, expires: Date.parse(lease.expires_at), proxy, journal, state: "serving", ended: null, halted: false, scope: null, live: new Map(), opens: 0, reruns: 0, finished: 0, settling: null, close: null };
       stages.push(stage);
       proxy.start();
     } catch (error) {
@@ -405,17 +541,24 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
   }
 
   const triples = new Map<string, number>();
+  const wraps = new Map<string, number>();
+  const holds = new Map<string, { stage: Stage; micros: number; task: string; until: number | null }>();
   if (existsSync(sessionsFile)) {
     for (const line of readFileSync(sessionsFile, "utf8").split("\n")) {
-      let e: { run_id?: string; event?: string; arm?: string; task?: string; trial_n?: number; rerun?: string };
+      let e: { run_id?: string; event?: string; arm?: string; model?: string; task?: string; trial_n?: number; rerun?: string; phase?: string };
       try {
         e = JSON.parse(line);
       } catch {
         continue;
       }
-      const stage = stages.find((s) => s.arm === e.arm);
+      const stage = stages.find((s) => s.arms.includes(e.arm!) && (s.models ? s.models.includes(e.model!) : s.model === e.model));
       if (e.run_id !== o.run_id || e.event !== "open" || !stage) continue;
-      const key = e.arm + "|" + e.task + "|" + e.trial_n;
+      const key = e.arm + "|" + (stage.pf ? e.model : (stage.model ?? "")) + "|" + e.task + "|" + e.trial_n;
+      if (stage.pf && e.phase === "wrapup") {
+        wraps.set(key, (wraps.get(key) ?? 0) + 1);
+        continue;
+      }
+      if (stage.pf) wraps.set(key, 0);
       triples.set(key, (triples.get(key) ?? 0) + 1);
       stage.opens++;
       if (e.rerun) stage.reruns++;
@@ -427,6 +570,7 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
   const done = new Promise<number>((r) => (resolveDone = r));
   let finishing: Promise<number> | null = null;
   let failed = false;
+  const grace = o.deadline_grace_ms ?? DEADLINE_GRACE_MS;
 
   const closeSession = (sess: Session, reason: string): Promise<CloseAnswer> => {
     sess.closing ??= (async () => {
@@ -450,17 +594,37 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
         unknown_micros: m?.unknown_micros ?? 0,
         unknown_calls: m?.unknown_calls ?? 0,
         usage: { input_tokens: u.input, output_tokens: u.output + u.reasoning, cache_read_input_tokens: u.cache_read, cache_creation_input_tokens: u.cache_write },
-        requests: meter?.requests ?? 0,
-        ok_responses: Object.entries(meter?.upstream.statuses ?? {}).reduce((n, [code, k]) => n + (code.startsWith("2") ? k : 0), 0),
-        refused: meter?.refused ?? 0,
-        unknown: meter?.unknown ?? 0,
-        undrained: meter?.undrained ?? 0,
-        unsettled: meter?.unsettled ?? 0,
+        finalized: meter !== null,
+        requests: meter ? meter.requests : null,
+        ok_responses: meter ? Object.entries(meter.upstream.statuses).reduce((n, [code, k]) => n + (code.startsWith("2") ? k : 0), 0) : null,
+        refused: meter ? meter.refused : null,
+        refusals: meter ? [...meter.refusals] : null,
+        allowance_stops: meter ? meter.allowance_stops : null,
+        unknown: meter ? meter.unknown : null,
+        undrained: meter ? meter.undrained : null,
+        unsettled: meter ? meter.unsettled : null,
+        ...(s.pf ? pfClose(s.journal, sess.meter_id, sess.allowance, meter?.first_request ?? null) : {}),
       };
       sess.closed = answer;
+      const hold = sess.key ? holds.get(sess.key) : undefined;
+      if (hold?.task === sess.id) hold.until = now() + grace;
       s.live.delete(sess.id);
       s.finished++;
+      const halt = !meter && s.model !== undefined;
+      const pfHalt = s.pf && !meter;
+      if (halt || pfHalt) record({ event: "halt", item: s.item, id: sess.id, lease_id: s.lease_id, meter_id: sess.meter_id, journal: s.journal }, true);
       record({ event: "close", item: s.item, ...answer });
+      if (pfHalt) {
+        s.halted = true;
+        warn("E_PF_FINALIZE_HALT", "PF session " + sess.id + " on stage " + s.item + " (lease " + s.lease_id + "): the proxy's finalize failed, so its counts are unknown; the stage takes no more opens, and the Captain rules on a retry after reading the journal " + s.journal);
+        drain(s, "failed", "finalize halt: session " + sess.id);
+      }
+      if (halt) {
+        s.halted = true;
+        log("E_SM_FINALIZE_HALT outcome driver: session " + sess.id + " on line item " + s.item + " closed with its proxy finalize failed, so its allowance stops are unknown; the item opens no more sessions or leases until the Captain rules on the proxy journal " + s.journal + " and a relaunch lifts the halt with --lift-halt " + sess.id);
+        drain(s, "halted", null);
+        if (s.ended !== "cap_stop") s.ended = "halted";
+      }
       if (s.state === "draining" && s.live.size === 0) void settleStage(s);
       return answer;
     })();
@@ -524,7 +688,7 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
       await control.stop();
       const open = ledgerStatus(o.record).filter((i) => stages.some((s) => s.item === i.item) && i.open_lease);
       if (open.length) log("E_LEASE_UNSETTLED outcome driver: still open: " + open.map((i) => i.open_lease!.lease_id).join(", ") + "; settle each with gstack-evals ledger settle --lease <id> on this machine");
-      const code = failed || open.length || stages.some((s) => s.ended === "failed") ? 2 : 0;
+      const code = failed || open.length || stages.some((s) => s.ended === "failed" || s.ended === "halted" || s.halted) ? 2 : 0;
       if (held.lock) rmSync(held.lock, { force: true });
       held.run?.close();
       resolveDone(code);
@@ -561,30 +725,40 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
       return Response.json(sess.answer);
     }
     const meta = (b.meta ?? {}) as Record<string, any>;
-    Object.assign(ctx, { open_key: b.open_key, trial: b.trial, arm: meta.arm, task: meta.task, trial_n: meta.trial_n, ...(meta.rerun ? { rerun: meta.rerun } : {}) });
+    Object.assign(ctx, { open_key: b.open_key, trial: b.trial, arm: meta.arm, task: meta.task, trial_n: meta.trial_n, ...(meta.phase !== undefined ? { phase: meta.phase } : {}), ...(meta.rerun ? { rerun: meta.rerun } : {}) });
     if (b.ledger !== "u4") return refusal("E_USAGE", 400, "this driver serves only U4 opens (ledger \"u4\"), not " + JSON.stringify(b.ledger ?? null) + "; G sessions spend only through a U4 lease (G prereg section 10 item 4)");
-    const stage = stages.find((s) => s.arm === meta.arm);
-    if (!stage) return refusal("E_USAGE", 400, "arm " + JSON.stringify(meta.arm ?? null) + " is not in this batch; it serves " + stages.map((s) => s.arm).join(", "));
-    const limits = reg.arms[stage.arm]!.limits;
-    if (b.model !== reg.pins.model) return refusal("E_USAGE", 400, "model " + JSON.stringify(b.model ?? null) + " is not the registry's pinned " + reg.pins.model);
-    if (b.cap_usd !== limits.session_cap_usd) return refusal("E_USAGE", 400, "cap_usd " + JSON.stringify(b.cap_usd ?? null) + " is not arm " + stage.arm + "'s session_cap_usd of " + limits.session_cap_usd);
+    const stage = stages.find((s) => s.arms.includes(meta.arm) && (s.models ? s.models.includes(b.model) : s.model === undefined || s.model === b.model));
+    if (!stage) return refusal("E_USAGE", 400, "arm " + JSON.stringify(meta.arm ?? null) + " is not in this batch; it serves " + stages.map((s) => s.arm).join(", ") + (stages.some((s) => s.pf) ? " (a PF arm on its item's models only)" : ""));
+    const pf = stage.pf;
+    const phase: "task" | "wrapup" | undefined = meta.phase;
+    if (!pf && phase !== undefined) return refusal("E_USAGE", 400, "meta.phase is for PF sessions only; arm " + meta.arm + " opens one slot per session");
+    if (pf && phase !== "task" && phase !== "wrapup") return refusal("E_USAGE", 400, "a PF open names meta.phase \"task\" or \"wrapup\", not " + JSON.stringify(phase ?? null));
+    const turns = pf ? sessionLimits((meta.arm as string).slice(3) as PfArm, b.model, pfAllowance) : null;
+    const limits = turns ? { session_cap_usd: turns[phase!].allowance_usd, wall_limit_sec: turns[phase!].wall_limit_sec } : stage.model === undefined ? reg.arms[stage.arm]!.limits : smLimits(reg, meta.arm, stage.model);
+    if (!pf && stage.model === undefined && b.model !== reg.pins.model) return refusal("E_USAGE", 400, "model " + JSON.stringify(b.model ?? null) + " is not the registry's pinned " + reg.pins.model);
+    if (b.cap_usd !== limits.session_cap_usd) return refusal("E_USAGE", 400, "cap_usd " + JSON.stringify(b.cap_usd ?? null) + " is not arm " + (pf ? meta.arm + "'s " + phase + " allowance_usd on " + b.model : stage.arm + "'s session_cap_usd") + " of " + limits.session_cap_usd);
     if (typeof b.trial !== "string" || !b.trial || typeof meta.task !== "string" || !meta.task || !Number.isSafeInteger(meta.trial_n) || meta.trial_n < 1) return refusal("E_USAGE", 400, "an open needs trial, meta.task and meta.trial_n (a whole number from 1)");
     if (meta.rerun !== undefined && (typeof meta.rerun !== "string" || !meta.rerun)) return refusal("E_USAGE", 400, "meta.rerun, when given, names the repair the rerun follows");
     if (stage.state !== "serving") {
+      if (stage.ended === "halted") return refusal("E_SM_FINALIZE_HALT", 423, "stage " + stage.item + " (" + stage.arm + ") is halted: a session closed with its proxy finalize failed, so its allowance stops are unknown; nothing more opens on the item until the Captain rules on the proxy journal and a relaunch lifts the halt", { item: stage.item });
       if (stage.ended === "cap_stop") return refusal("CAP_STOP", 409, "stage " + stage.item + " (" + stage.arm + ") is cap-stopped, scope " + stage.scope + "; do not retry: the stage ends incomplete", { item: stage.item, scope: stage.scope });
       return refusal("E_LEASE_CLOSED", 503, "stage " + stage.item + " (" + stage.arm + ") is " + stage.state + " (" + (stage.ended ?? "stopping") + "); retry after the driver is launched again for run " + o.run_id, { item: stage.item });
     }
-    const key = stage.arm + "|" + meta.task + "|" + meta.trial_n;
+    const key = meta.arm + "|" + (pf ? b.model : (stage.model ?? "")) + "|" + meta.task + "|" + meta.trial_n;
     const seen = triples.get(key) ?? 0;
-    if (seen >= 2) return refusal("E_USAGE", 422, "arm " + stage.arm + " task " + meta.task + " trial " + meta.trial_n + " was already opened " + seen + " times; a trial gets one rerun at most");
-    if (seen === 1 && !meta.rerun) return refusal("E_USAGE", 422, "arm " + stage.arm + " task " + meta.task + " trial " + meta.trial_n + " was already opened; a second open is a rerun and names its repair in meta.rerun");
-    if (stage.opens >= planned + reruns) return refusal("E_USAGE", 422, "stage " + stage.item + " has opened " + stage.opens + " sessions, its " + planned + " planned plus " + reruns + " reruns");
-    if (!meta.rerun && stage.opens - stage.reruns >= planned) return refusal("E_USAGE", 422, "stage " + stage.item + " has opened its " + planned + " planned sessions; a further open is a rerun and names its repair in meta.rerun");
-    if (meta.rerun && stage.reruns >= reruns) return refusal("E_USAGE", 422, "stage " + stage.item + " has used its " + reruns + " reruns");
+    const wrapped = wraps.get(key) ?? 0;
+    if (phase === "wrapup") {
+      if (seen === 0) return refusal("E_USAGE", 422, "arm " + meta.arm + " task " + meta.task + " trial " + meta.trial_n + " on " + b.model + " has no task open yet; the wrap-up turn follows its session's task turn");
+      if (wrapped >= 2) return refusal("E_USAGE", 422, "arm " + meta.arm + " task " + meta.task + " trial " + meta.trial_n + " already opened its wrap-up twice in task attempt " + seen + "; a wrap-up gets one rerun at most");
+      if (wrapped === 1 && !meta.rerun) return refusal("E_USAGE", 422, "arm " + meta.arm + " task " + meta.task + " trial " + meta.trial_n + " already opened its wrap-up in task attempt " + seen + "; a second wrap-up open is its rerun and names its repair in meta.rerun");
+    } else if (seen >= 2) return refusal("E_USAGE", 422, "arm " + meta.arm + " task " + meta.task + " trial " + meta.trial_n + " was already opened " + seen + " times; a trial gets one rerun at most");
+    if (phase !== "wrapup" && seen === 1 && !meta.rerun) return refusal("E_USAGE", 422, "arm " + meta.arm + " task " + meta.task + " trial " + meta.trial_n + " was already opened; a second open is a rerun and names its repair in meta.rerun");
+    if (phase !== "wrapup" && stage.opens >= planned + reruns) return refusal("E_USAGE", 422, "stage " + stage.item + " has opened " + stage.opens + " sessions, its " + planned + " planned plus " + reruns + " reruns");
+    if (phase !== "wrapup" && !meta.rerun && stage.opens - stage.reruns >= planned) return refusal("E_USAGE", 422, "stage " + stage.item + " has opened its " + planned + " planned sessions; a further open is a rerun and names its repair in meta.rerun");
+    if (phase !== "wrapup" && meta.rerun && stage.reruns >= reruns) return refusal("E_USAGE", 422, "stage " + stage.item + " has used its " + reruns + " reruns");
     const t = now();
-    const grace = o.deadline_grace_ms ?? DEADLINE_GRACE_MS;
     const wall = limits.wall_limit_sec * 1000 + grace;
-    if (stage.expires < t + wall) {
+    if (stage.expires < t + wall + (phase === "task" ? turns!.wrapup.wall_limit_sec * 1000 : 0)) {
       drain(stage, "lease_expired", null);
       return refusal("E_LEASE_CLOSED", 503, "stage " + stage.item + "'s lease " + stage.lease_id + " expires at " + new Date(stage.expires).toISOString() + ", before a session opened now could end (wall limit " + limits.wall_limit_sec + " s plus " + grace / 1000 + " s); the stage drains and settles, and a driver relaunch for run " + o.run_id + " reopens it on what the item has left", { item: stage.item });
     }
@@ -592,24 +766,39 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
     const meters = o.local.meters(stage.lease_id);
     let pending = 0;
     for (const s of stage.live.values()) pending += Math.max(0, s.allowance - (meters.get(s.meter_id)?.held_micros ?? 0));
+    // A PF task open needs room for its task allowance plus its session's wrap-up allowance, and that wrap-up allowance stays
+    // pending on the lease until the wrap-up slot opens, a new task attempt replaces it, or the task slot has been closed
+    // for the deadline grace, so a wrap-up open in time always finds its room.
+    for (const [k, h] of holds) if (h.stage === stage && k !== key && (h.until === null || t < h.until)) pending += h.micros;
+    const wrapAllowance = phase === "task" ? Math.round(turns!.wrapup.allowance_usd * 1e6) : 0;
     const held = o.local.held(stage.lease_id);
     const room = stage.reserved - held - pending;
-    if (room < allowance) {
+    if (room < allowance + wrapAllowance) {
       capStop(stage);
-      return refusal("CAP_STOP", 409, "stage " + stage.item + " (" + stage.arm + ") has " + usd(Math.max(room, 0)) + " of room on lease " + stage.lease_id + " (" + usd(stage.reserved) + " reserved, " + usd(held) + " held, " + usd(pending) + " still allowed to live sessions); a session needs " + usd(allowance) + ". Do not retry: the stage ends incomplete, scope " + stage.scope, { item: stage.item, scope: stage.scope, room_micros: room, allowance_micros: allowance });
+      return refusal("CAP_STOP", 409, "stage " + stage.item + " (" + stage.arm + ") has " + usd(Math.max(room, 0)) + " of room on lease " + stage.lease_id + " (" + usd(stage.reserved) + " reserved, " + usd(held) + " held, " + usd(pending) + " still allowed to live sessions); a session needs " + usd(allowance) + (wrapAllowance ? " plus " + usd(wrapAllowance) + " for its wrap-up turn" : "") + ". Do not retry: the stage ends incomplete, scope " + stage.scope, { item: stage.item, scope: stage.scope, room_micros: room, allowance_micros: allowance });
     }
-    const binding = stage.proxy.bind({ cell: { run_id: o.run_id, arm: stage.arm, task: meta.task, model: b.model, trial: meta.trial_n, attempt: seen + 1 }, models: ["anthropic:" + b.model], allowance_micros: allowance });
+    const provider = pf ? smProvider(reg, b.model) : stage.model === undefined ? "anthropic" : smProvider(reg, stage.model);
+    const binding = stage.proxy.bind({ cell: { run_id: o.run_id, arm: meta.arm, task: meta.task, model: b.model, trial: meta.trial_n, attempt: phase === "wrapup" ? seen : seen + 1 }, models: [provider + ":" + b.model], allowance_micros: allowance });
     const id = "ses_" + randomBytes(9).toString("hex");
-    const answer: OpenAnswer = { id, token: binding.token, base_url: "http://" + urlHost(o.host) + ":" + stage.proxy.port + "/" + binding.slot + "/anthropic", ledger: "u4", item: stage.item, lease_id: stage.lease_id, meter_id: binding.meter_id, allowance_micros: allowance };
-    const sess: Session = { id, stage, slot: binding.slot, meter_id: binding.meter_id, allowance, answer, timer: setTimeout(() => void closeSession(sess, "deadline"), wall), closing: null, closed: null };
+    const answer: OpenAnswer = { id, token: binding.token, base_url: "http://" + urlHost(o.host) + ":" + stage.proxy.port + "/" + binding.slot + "/" + provider, ledger: "u4", item: stage.item, lease_id: stage.lease_id, meter_id: binding.meter_id, allowance_micros: allowance };
+    const sess: Session = { id, stage, slot: binding.slot, meter_id: binding.meter_id, allowance, answer, timer: setTimeout(() => void closeSession(sess, "deadline"), wall), closing: null, closed: null, ...(pf ? { key } : {}) };
     sess.timer.unref?.();
     sessions.set(id, sess);
     keys.set(b.open_key, { body, id });
     stage.live.set(id, sess);
-    stage.opens++;
-    if (meta.rerun) stage.reruns++;
-    triples.set(key, seen + 1);
-    record({ event: "open", id, item: stage.item, arm: stage.arm, task: meta.task, trial_n: meta.trial_n, ...(meta.rerun ? { rerun: meta.rerun } : {}), trial: b.trial, lease_id: stage.lease_id, meter_id: binding.meter_id, allowance_micros: allowance });
+    if (phase === "wrapup") {
+      wraps.set(key, wrapped + 1);
+      holds.delete(key);
+    } else {
+      stage.opens++;
+      if (meta.rerun) stage.reruns++;
+      triples.set(key, seen + 1);
+      if (pf) {
+        wraps.set(key, 0);
+        holds.set(key, { stage, micros: wrapAllowance, task: id, until: null });
+      }
+    }
+    record({ event: "open", id, item: stage.item, arm: meta.arm, ...(pf ? { model: b.model, phase } : stage.model === undefined ? {} : { model: stage.model }), task: meta.task, trial_n: meta.trial_n, ...(meta.rerun ? { rerun: meta.rerun } : {}), trial: b.trial, lease_id: stage.lease_id, meter_id: binding.meter_id, allowance_micros: allowance });
     return Response.json(answer);
   };
 

@@ -211,6 +211,77 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_PV_LEAK_EXPOSED](#e_pv_leak_exposed) | warning | U20 |
 | [E_PV_PROVIDER_DRIFT](#e_pv_provider_drift) | 2 | U20 |
 | [E_PV_SUPPLY_SHORT](#e_pv_supply_short) | 2 | U20 |
+| [E_SM_UNIT](#e_sm_unit) | 2 | U20 |
+| [E_SM_SOURCE](#e_sm_source) | 2 | U20 |
+| [E_SM_INELIGIBLE](#e_sm_ineligible) | 1 | U20 |
+| [E_SM_MIXED_TEST_HUNK](#e_sm_mixed_test_hunk) | 1 | U20 |
+| [E_SM_LEAKED](#e_sm_leaked) | 1 | U20 |
+| [E_SM_HISTORY](#e_sm_history) | 1 | U20 |
+| [E_SM_AMBIGUOUS_TEST](#e_sm_ambiguous_test) | 1 | U20 |
+| [E_SM_TEST_SCAN](#e_sm_test_scan) | 1 | U20 |
+| [E_SM_ORACLE_UNSTABLE](#e_sm_oracle_unstable) | 1 | U20 |
+| [E_SM_SLOW_TEST](#e_sm_slow_test) | 1 | U20 |
+| [E_SM_SMOKE](#e_sm_smoke) | 1 | U20 |
+| [E_SM_PULL](#e_sm_pull) | 1 | U20 |
+| [E_SM_PARSER](#e_sm_parser) | 1 | U20 |
+| [E_SM_SEED](#e_sm_seed) | 2 | U20 |
+| [E_SM_CELL_INCOMPLETE](#e_sm_cell_incomplete) | 1 | U20 |
+| [E_SM_ANALYSIS](#e_sm_analysis) | 2 | U20 |
+| [E_SM_ARM](#e_sm_arm) | 2 | U20 |
+| [E_SM_STRIP](#e_sm_strip) | 2 | U20 |
+| [E_SM_UPSTREAM_GAP](#e_sm_upstream_gap) | 2 | U20 |
+| [E_SM_INFRA_GAP](#e_sm_infra_gap) | 2 | U20 |
+| [E_SM_FINALIZE_HALT](#e_sm_finalize_halt) | 2 | U20 |
+| [E_SM_CONTAIN](#e_sm_contain) | 2 | U20 |
+| [E_SM_APPLY_FAILED](#e_sm_apply_failed) | 1 | U20 |
+| [E_SM_TEST_PATCH_CONFLICT](#e_sm_test_patch_conflict) | 2 | U20 |
+| [E_SM_PACKET](#e_sm_packet) | 2 | U20 |
+| [E_SM_JUDGE_ANSWER](#e_sm_judge_answer) | 1 | U20 |
+| [E_SM_SECONDARY](#e_sm_secondary) | 2 | U20 |
+| [E_SM_USAGE_HALT](#e_sm_usage_halt) | 2 | U20 |
+| [E_PROXY_SERVER_TOOL](#e_proxy_server_tool) | 2 | U20 |
+| [E_PF_SEED](#e_pf_seed) | 2 | U20 |
+| [E_PF_INPUT](#e_pf_input) | 2 | U20 |
+| [E_PF_PENDING](#e_pf_pending) | 2 | U20 |
+| [E_PF_LABELS](#e_pf_labels) | 1 | U20 |
+| [E_PF_ORACLE](#e_pf_oracle) | 1 | U20 |
+| [E_PF_TOLD](#e_pf_told) | 1 | U20 |
+| [E_PF_NEUTRAL_INVALID](#e_pf_neutral_invalid) | 1 | U20 |
+| [E_PF_FIX_CONFLICT](#e_pf_fix_conflict) | 2 | U20 |
+| [E_PF_REBUILD_FIX](#e_pf_rebuild_fix) | 2 | U20 |
+| [E_PF_NO_MANIFEST](#e_pf_no_manifest) | 1 | U20 |
+| [E_PF_UPSTREAM_GAP](#e_pf_upstream_gap) | 2 | U20 |
+| [E_PF_INFRA_GAP](#e_pf_infra_gap) | 2 | U20 |
+| [E_PF_WRAPUP_ALLOWANCE](#e_pf_wrapup_allowance) | 2 | U20 |
+| [E_PF_FINALIZE_HALT](#e_pf_finalize_halt) | 2 | U20 |
+| [E_PF_CONTAINMENT](#e_pf_containment) | 1 | U20 |
+| [E_PF_CELL_INCOMPLETE](#e_pf_cell_incomplete) | 1 | U20 |
+| [E_PF_CAPTURE](#e_pf_capture) | 2 | U20 |
+| [E_PF_ARM](#e_pf_arm) | 2 | U20 |
+| [E_PF_TOOLS](#e_pf_tools) | 2 | U20 |
+| [E_PF_PLUGIN](#e_pf_plugin) | 2 | U20 |
+| [E_PF_DRYRUN](#e_pf_dryrun) | 1 | U20 |
+| [E_PF_TREE_STATE](#e_pf_tree_state) | 2 | U20 |
+| [E_ER_PROVIDER_DRIFT](#e_er_provider_drift) | 2 | U20 |
+| [E_ER_SUPPLY_SHORT](#e_er_supply_short) | 2 | U20 |
+| [E_EB_NOT_BUILT](#e_eb_not_built) | 2 | U20 |
+| [E_EB_NO_RECIPE](#e_eb_no_recipe) | warning | U20 |
+| [E_EB_IMAGE](#e_eb_image) | warning | U20 |
+| [E_EB_NO_AFTERMATH](#e_eb_no_aftermath) | warning | U20 |
+| [E_EB_TRANSPLANT](#e_eb_transplant) | warning | U20 |
+| [E_EB_PRODUCT_HASH](#e_eb_product_hash) | 2 | U20 |
+| [E_EB_LEAK](#e_eb_leak) | 2 | U20 |
+| [E_EB_FEW_UNITS](#e_eb_few_units) | 2 | U20 |
+| [E_EB_REACH](#e_eb_reach) | 2 | U20 |
+| [E_EB_FLOOR](#e_eb_floor) | 2 | U20 |
+| [E_EB_CEILING](#e_eb_ceiling) | 2 | U20 |
+| [E_EB_EXPOSURE_GATE](#e_eb_exposure_gate) | 2 | U20 |
+| [E_EB_EXPOSURE_STOP](#e_eb_exposure_stop) | 2 | U20 |
+| [E_EB_GAP](#e_eb_gap) | warning | U20 |
+| [E_EB_CELL_INCOMPLETE](#e_eb_cell_incomplete) | 2 | U20 |
+| [E_EB_CACHE_STALE](#e_eb_cache_stale) | 2 | U20 |
+| [E_EB_REPROJECT](#e_eb_reproject) | 2 | U20 |
+| [E_EB_DRYRUN_FAIL](#e_eb_dryrun_fail) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -293,6 +364,182 @@ Decision routing (D7): a task's session image still reaches past the task's base
 Fix: Run no session on that task. Read the HISTORY line's counts (and, on the runner only, the task's hits file under --work) for the part that failed, fix the strip in lanes/decision-routing/host/history.sh test-first, and bring anything that changes a score, a cap or a stop to the Captain before it is applied.
 
 Exit 1. Side effects: None: the check builds and removes a throwaway image and leases nothing. Retry safe: yes. Resumable: yes. Owner: U6.
+
+### E_SM_INELIGIBLE
+
+A candidate failed the keyless eligibility screen (post section 3); the record names the rule: image_digest (no linux/amd64 digest), fail_to_pass or pass_to_pass (no test), fix_source_files_1_to_6, or feature_request_screen (the frozen keyword screen on the issue's first 800 code points).
+
+Fix: Nothing to fix: the unit is not drawn. The drop counts by rule go in the results.
+
+Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_SM_MIXED_TEST_HUNK
+
+A state machines unit's fix patch has a hunk that the frozen in-source test-module detector (Rust #[cfg(test)] modules) places partly inside and partly outside a test module, so it is neither the fix's tests nor the fix (preregistration sections 3 and 7). The record names each such file and hunk.
+
+Fix: Nothing to fix: the unit drops. These drops are counted per language in the results; the detector is not changed for them.
+
+Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_SM_LEAKED
+
+The leak scan (post section 4) found a line of 30 characters or more that the fix adds, and that no base file holds, somewhere in the unit's container filesystem, or the scan did not finish. The record names each path and the needle's sha256, never the line. The unit drops before any model call.
+
+Fix: Nothing to fix: the unit drops as leaked. A scan that did not finish fails closed; rerun prep only to recover an infrastructure failure.
+
+Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_SM_HISTORY
+
+The commit-count preflight or the history rewrite refused (post section 4): the image's tree was not at base_commit or its tracked files differed, the rewrite failed, or the tree does not hold exactly one commit on a base tree (two on a follow-on tree) on main alone with no remote, stash, reflog or loose object.
+
+Fix: The unit or tree drops before any model call. Read the PREFLIGHT line in the message.
+
+Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_SM_AMBIGUOUS_TEST
+
+The oracle preflight (post section 3) dropped a Go unit: every dataset fail-to-pass id is a bare test name (no package path before it) whose top-level test func more than one package dir defines, so the dataset parser's result for that name can be another package's. The record lists the ids.
+
+Fix: Nothing to fix: the unit drops and the next unit in draw order is tried.
+
+Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_SM_TEST_SCAN
+
+The oracle preflight (post section 3) dropped a Go unit, fail closed: the scan for its top-level test funcs ran in the unit's image and failed (grep missing or erroring), so the bare test ids that more than one package defines cannot be found. A scan that never finishes is an infra error instead (E_SM_INFRA_GAP).
+
+Fix: Nothing to fix per run: the image lacks a working grep, which is fixed per image, not by a rerun. The unit drops and the next unit in draw order is tried.
+
+Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_SM_ORACLE_UNSTABLE
+
+The oracle preflight (post section 3) dropped the unit: a fail-to-pass test passed in a base run or did not pass in a fixed run across the three base and three fixed runs, or no test passed in all six runs (no stable test). The record lists the failing ids.
+
+Fix: Nothing to fix: the unit drops and the next unit in draw order is tried.
+
+Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_SM_SLOW_TEST
+
+A unit's test command took over 15 minutes: one oracle run of the rebuild, test and print commands passed 900 seconds of wall time and was stopped. The record gives the wall ms.
+
+Fix: Nothing to fix: the unit drops (post section 3).
+
+Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_SM_SMOKE
+
+The runtime smoke failed in the unit's image: the runtime layer did not build, claude --version did not print the pinned 2.1.312, node did not run, or the egress probe opened a denied target.
+
+Fix: Nothing to fix for a unit: it drops. If every image fails, the runtime layer is broken; fix it before the oracle continues.
+
+Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_SM_PULL
+
+The unit's image could not be pulled by digest after the pacing rules: a refusal that was not Docker Hub's rate limit, twice. A rate-limit refusal waits for the window and is not counted.
+
+Fix: Check the registry and the network, then rerun the oracle; it resumes at the unit.
+
+Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_SM_PARSER
+
+The dataset's log parser, run in its sandbox (pinned python image, no network, no mount but its input, uid 10001), crashed, timed out or printed no dict of test id to status. On the oracle this is infrastructure; in scoring it is a gap.
+
+Fix: Read the parser's stderr in the message. Never edit a dataset parser; a unit whose parser fails drops.
+
+Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_SM_CELL_INCOMPLETE
+
+A state machines analysis cell (one model and one arm, or one model and one follow-on tree) has gaps on more than 10% of its units, so every contrast that uses it gets no verdict (post section 6). The analysis still writes every number, the gap worst case included, and then exits 1.
+
+Fix: Nothing to fix in the analysis: report the cell as incomplete. Gaps are never rerun to change a verdict; a harness fault goes to the Captain.
+
+Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_SM_APPLY_FAILED
+
+A state machines session's change did not apply to a fresh copy of the unit's base tree in the scoring container (or names an unsafe path), first and after one more extraction, so the session scores no fix and is listed (preregistration section 7, step 8).
+
+Fix: Nothing to fix in the session: it counts as no fix and is listed per arm. If many sessions hit it, check the snapshot patch and the scorer's readings for a harness fault.
+
+Exit 1. Side effects: None: scoring spends nothing. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_SM_JUDGE_ANSWER
+
+A labeller or judge reply is not one bare JSON object with exactly the frozen fields and values (preregistration sections 3 and 10). The reader fails closed: the answer counts as missing, a unit with a missing label is not eligible, and a missing stock-diff answer counts as scored above 0.
+
+Fix: Nothing to fix in the reply. Report it as malformed; the counts print beside every judged number.
+
+Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_PF_LABELS
+
+A candidate dropped at the labels: the two labellers did not both say defect and state-shaped (not_defect, not_state_shaped, unclear), or an answer was malformed.
+
+Fix: Nothing to fix: the unit is not drawn and uses no repository slot. Drops are counted per reason.
+
+Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_PF_ORACLE
+
+A candidate dropped at the state machines oracle: its oracle record's verdict is not kept (the reason is the oracle's own code, for example E_SM_ORACLE_UNSTABLE).
+
+Fix: Nothing to fix: the oracle's drop rules apply as written and the unit uses no repository slot.
+
+Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_PF_TOLD
+
+A candidate failed the told-mode screen: the issue is missing or under 200 characters, holds a line starting with @@, +++ or ---, or holds two or more lines of 30 characters or more that the fix adds.
+
+Fix: Nothing to fix: the unit is not drawn and uses no repository slot.
+
+Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_PF_NEUTRAL_INVALID
+
+A unit's neutral edit failed validation: with the comment lines at the top and end, and then with the end line alone, a fail-to-pass test passed or a stable test failed in one of three runs with the fix's tests applied.
+
+Fix: Nothing to fix: the unit drops before any model run and uses no repository slot.
+
+Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_PF_NO_MANIFEST
+
+A session left no usable CHECKS.json (absent, not JSON, not an array, an element that is not an object, or the wrap-up turn reached a limit). It is the arm's own output: the session scores 0 and is counted per arm.
+
+Fix: Nothing to fix: the count is reported per arm.
+
+Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_PF_CONTAINMENT
+
+The containment check found something from the fix commit or after in a pstack-checks session workspace: a ref, reflog entry or commit object that is not the base commit or an ancestor, an alternates file, gitfile, submodule store or nested .git, tracked files that differ from the base commit, a blob of the fix's or the test patch's files as they read after the patch in the session repository, another git directory holding the dataset's base commit, such a blob, or a commit id after the base that the unit's own image holds, or a hidden marker (a line the fix or the test patch adds, or a hidden test's name) in a file outside the repository or untracked inside it.
+
+Fix: The unit halts before any session and is not dropped. Bring it to the Captain with the unit's pf-contain.json record (each finding names a path, a needle's sha256 or an object id, and every other git directory is listed with its commit count). After the Captain rules, fix the unit's image or tree preparation test-first, rebuild the tree and run outcome pf contain again. No paid session runs on the unit until it passes.
+
+Exit 1. Side effects: Writes the check's record to the unit dir's pf-contain.json; the check itself reads containers of the runtime and session images and changes neither. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_PF_CELL_INCOMPLETE
+
+A pstack-checks analysis cell (one model and one arm) has gaps on more than 10% of its units, so every verdict that uses it reads INCOMPLETE. The analysis still writes every number, the gap worst case included, then exits 1.
+
+Fix: Nothing to fix in the analysis: report the cell as incomplete.
+
+Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_PF_DRYRUN
+
+A pstack-checks dry-run fixture printed FAIL: a frozen rule did not hold on the stub session or the scoring path.
+
+Fix: Read the FAIL line, fix the rule's code, and run the dry run again before any spend.
+
+Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
 
 ## Exit 2: no verdict (INCOMPLETE)
 
@@ -1440,6 +1687,358 @@ Fix: Stop authoring, report the counts per type and source, and wait for the Cap
 
 Exit 2. Side effects: None beyond the authoring spend already settled. Retry safe: no. Resumable: no. Owner: U20.
 
+### E_SM_UNIT
+
+A state machines unit (sm-unit.v1, lanes/outcome-skills/statemachines/unit.ts) is refused: a dataset row with an empty or unparseable FAIL_TO_PASS or PASS_TO_PASS list, a base commit that is not 40 hex, an image with no pinned digest, a patch that is not a git diff, a parser with no parser(), no test command, or a unit dir whose files differ from unit.json's digests.
+
+Fix: Convert the unit again from the pinned cache with gstack-evals outcome sm convert. Never hand-edit a unit dir.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_SM_SOURCE
+
+The state machines family's source does not match its pins: a SWE-bench-Live MultiLang parquet file whose sha256 is not the one source.ts pins for revision eb09c2e5, a download that failed, a parquet read that failed, or a preregistration JSON that pins another revision.
+
+Fix: Run gstack-evals outcome sm source fetch again on a clean cache dir. A changed file at the pinned revision is a new source and needs a new preregistration.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_SM_SEED
+
+The state machines draw found no seed: the preregistration's JSON (prereg.json in the post bundle) is missing, is not sm-prereg.v1, or lacks an unsigned 32-bit integer draw_seed, bootstrap_seed or order_seed.
+
+Fix: Add the seeds through the preregistration's own pull request. The draw never runs on a seed chosen anywhere else.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_SM_ANALYSIS
+
+The state machines analysis, admission readings or packet reader refused its input: the analysis input is not sm-analysis-input.v1, a record lacks its model, a row repeats or names an unknown unit, model, arm or tree, a number is outside its frozen form, or a judge or labeller answer file does not parse.
+
+Fix: Rebuild the input from the scorer's records with gstack-evals outcome sm analyse, or fix the answer file the message names. Frozen numbers (draws 10000, replicates 3, the bootstrap seed) come from the preregistration only.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_SM_ARM
+
+A state machines arm (family SM in lanes/outcome-skills/arms/registry.json) is refused: an SM arm whose name, kind, install, clean room, turns or per-model limits break the family's shape, an arm text that is not the preregistration's, a scope that is empty or multi-line, a qa:told run while the /qa pin is not recorded, or an A3 home the image build refuses (image.ts qaHomeCopy): a link that leaves the home, a file that names the host dir the home was copied from, or a binary that names gstack's checkout under a home other than /root.
+
+Fix: Restore registry.json's family SM arms from the preregistration (tests/outcome-skills/sm-arms.test.ts pins every text by sha256), record the /qa pin at freeze, and pass the unit's scope as one line. For an A3 home, install it again into an empty dir with lanes/outcome-skills/arms/qa-install.sh, which runs gstack's setup in a container with that dir at /root.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_SM_STRIP
+
+A state machines session saw instructions the strip rule removes: a CLAUDE.md, CLAUDE.local.md or AGENTS.md, or a file under .claude/, inside the repository, in the session's tree or its loaded memory; or an A3 (qa:told) session whose loaded memory lacks gstack's installed instructions. The session is not scored.
+
+Fix: Prepare the unit's base tree again with the strip (gstack-evals outcome sm convert), check nothing in the arm setup writes into the repository, and for A3 check the install went into the container's home after the strip.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_SM_UPSTREAM_GAP
+
+A state machines session ended on a provider or proxy error twice, the first try and its one retry from a fresh container, so the session is a gap (preregistration section 6), not a miss.
+
+Fix: Nothing to fix in the session: report the gap per arm and cell. Check the provider's status and the proxy journal if gaps cluster.
+
+Exit 2. Side effects: The two tries spent what the proxy metered for them. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_SM_INFRA_GAP
+
+A state machines session failed outside the model twice (container, pull, Harbor or agent setup), the first try and its one rerun, so the session is a gap (preregistration section 6), not a miss.
+
+Fix: Read the session's agent log for the failure, fix the harness, and report the gap per arm and cell; a gap is never rerun a third time.
+
+Exit 2. Side effects: The two tries spent what the proxy metered for them. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_SM_FINALIZE_HALT
+
+A state machines session closed with its metering proxy's finalize failed (the close answer's finalized is false), so its refusal and allowance-stop counts are unknown (allowance_stops is null). The driver halts that line item: it writes a halt line naming the session and its proxy journal to the run's sessions.jsonl, opens no more sessions on the item (HTTP 423), settles its lease, exits 2, and refuses to open a lease on the item at the next launch. A real allowance stop is never retried, and the session's one retry (preregistration section 6) waits for the Captain's ruling. A session the driver never closed itself halts its item the same way, its halt line naming the cause: one the driver's crash recovery closes (recovered), or one ledger settle or reconcile closed (settled, reconciled). A halt line the driver writes itself, at its own close or in its crash recovery, is on disk before the close line; a session ledger settle or reconcile closed gets its halt line at the next launch.
+
+Fix: Bring the session id and the proxy journal the halt line names to the Captain, who reads the journal and rules. Then relaunch the driver for the same run with --lift-halt &lt;session id>; the launch records the lift and serves the item again.
+
+Exit 2. Side effects: The session spent what its lease's ledger meter holds; the halted stage's lease is settled. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_SM_CONTAIN
+
+A state machines session image fails the containment check that runs before any session (statemachines/contain.ts, sh/contain.sh): a ref, pseudo-ref or packed-refs line names a commit past the base, a commit object in the store is not the base or one of its ancestors, the repo has alternates, a .gitmodules or a nested .git, another git object store exists on the image's filesystem, with or without a HEAD file (A3's gstack checkout at the /qa pin is the one exception), a file outside the repo or a file in the repo that the base commit does not hold byte for byte (untracked, ignored, staged but never committed, or tracked with a working copy that differs from the base commit's) holds a hidden test name or a test-side marker, or a git listing, find or grep inside the check failed (an error finding). Findings name refs, commits, paths and sha256s, never the test text. A file or dir the check can't read is listed, never failed.
+
+Fix: Bring the unit and the failed checks to the Captain. The unit halts and is not dropped. Fix the image or the setup step (strip every ref and object past the base, as GEVA-503's D7 does) test-first, and repin only between parts; then rerun sm contain on the unit.
+
+Exit 2. Side effects: No session opened and no lease was taken for the unit; the session image the check read stays built (sm contain removes its own). Retry safe: no. Resumable: no. Owner: U20.
+
+### E_SM_TEST_PATCH_CONFLICT
+
+A hunk of the fix's tests (test.patch, or the fix patch's in-source test hunks) still conflicts after git apply --3way over an arm's scored tree, so that reading is a scoring gap (preregistration section 7, step 3), counted per arm, never a miss.
+
+Fix: Nothing to fix in the session: report the gap per arm and reading. The record names the hunk and the unmerged files.
+
+Exit 2. Side effects: None: scoring spends nothing. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_SM_PACKET
+
+A labeller or judge packet (preregistration sections 3 and 10) could not be built: the unit dir lacks a file, the session model has no frozen judge, a stock copy could not be diffed or its JavaScript or TypeScript rename check could not run, or the packet text names the session's model, cell or id, which packets must never show.
+
+Fix: Check the unit dir and the session record. A packet that names its session is never sent; report it and leave that diff unjudged.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_SM_SECONDARY
+
+A keyless secondary (preregistration section 10) could not read the local clone it needs: the base commit or a candidate commit is missing, or git failed.
+
+Fix: Clone the public repository with full history (git clone --filter=blob:none) and fetch refs/pull/&lt;n>/head into refs/sm/pull-&lt;n>, then rerun. Never read history from a paid or keyed API.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_SM_USAGE_HALT
+
+A paid label or judge call (sm packets send) reported usage past the preregistration's per-call bound of 20,000 input or 1,500 output tokens. The item halted before its next send, and the halt line in the send's replies.jsonl names the call's meter, the packet, the reader and the usage. A call whose reply and halt a crash lost halts the same way at the next send, once its settled usage shows it past the bound. A call sent on a lease the owner reconciled (its ledger lost) and never answered halts the same way as usage unknown, and its halt line names the lease's proxy journal and the provider export the reconcile cites. So does a call never answered on a lease the send's ledger holds, when its meter shows the call unknown; its halt line names the lease and its proxy journal. Every later send on that --out is refused until the halt is lifted.
+
+Fix: Bring the halt line to the Captain, with the proxy journal lines and the provider export it names when its usage is unknown. Once the Captain rules, record the ruling in the run record and send again with --lift-halt &lt;meter>. The halted call is never sent again.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_PROXY_SERVER_TOOL
+
+The metering proxy refused a request whose tools list carries a provider-side tool (a typed tool such as web_search or web_fetch), or whose body asks for mcp_servers, plugins or web_search_options at the top level, before pricing it, because its lease runs with refuseServerTools on (the state machines family's stages).
+
+Fix: Disallow the tool in the agent (Claude Code's WebSearch and WebFetch are disallowed in every SM arm). Never turn the option off for an SM stage.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_PF_SEED
+
+The pstack-checks draw or analysis found no seed: the preregistration's prereg.json is missing, is not pf-prereg.v1, lacks an unsigned 32-bit integer draw_seed, order_seed or bootstrap_seed, or pins another MultiLang revision.
+
+Fix: Add the seeds through the preregistration's own pull request. Nothing runs on a seed chosen anywhere else.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_PF_INPUT
+
+A pstack-checks command could not read an input it needs: a file that is not the JSON or schema it expects, a git step on the scoring repo that failed, or a session tree whose history does not sit on the unit's one-commit base.
+
+Fix: Fix the named input and rerun. Scoring reads its inputs and changes none of them.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_PF_PENDING
+
+The pstack-checks draw stopped at a candidate whose gate input does not exist yet (its label record, its oracle record or its neutral record). The draw is lazy: it names the one candidate it waits on.
+
+Fix: Produce the named record (labels under pf-labels, the state machines oracle, or gstack-evals outcome pf neutral) and run the draw again. The order never changes.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_PF_FIX_CONFLICT
+
+The real fix did not apply to a session's transplanted tree with git apply --3way, so the fix tree does not exist. It is a scoring gap for that session, counted per arm; every verdict also prints the reading that scores it as a miss.
+
+Fix: Nothing to rerun: report the gap. A harness cause goes to the Captain.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_PF_REBUILD_FIX
+
+The unit's rebuild command exited non-zero on the fix tree for an entry and no entry of the session caught, so the session's score is a gap; every verdict also prints the reading that scores it as a miss.
+
+Fix: Nothing to rerun: report the gap. A rebuild-exempt unit never gets this code.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_PF_UPSTREAM_GAP
+
+A pstack-checks session ended on a provider or proxy error twice (the task turn's one whole-session retry, or the wrap-up turn's one rerun), so it is a gap.
+
+Fix: Report the gap. Gaps are never rerun to change a verdict.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_PF_INFRA_GAP
+
+The harness failed outside the model twice for a pstack-checks session or a scoring run (a container, a volume or a mount), so it is a gap.
+
+Fix: Report the gap and take the harness fault to the Captain. Nothing is rerun to change an outcome.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_PF_WRAPUP_ALLOWANCE
+
+A pstack-checks session's wrap-up turn was refused for its allowance: the metering proxy stopped a wrap-up request at the wrap-up allowance, or the driver refused the wrap-up slot's open for lack of room. The session is a gap with no rerun of the wrap-up turn and no retry of the session, and because it can depend on the arm it is counted per arm and model.
+
+Fix: Report the gap count per arm and model beside every verdict. Nothing is rerun, and the frozen wrap-up allowances in lanes/outcome-skills/pfchecks/arms.ts do not change.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_PF_FINALIZE_HALT
+
+A pstack-checks slot closed after its metering proxy's finalize failed (finalized false), so the driver could not read the slot's counts and cannot tell an allowance stop from any other end. The session halts before any retry or wrap-up rerun and writes no session record, and the driver's stage for the item takes no more opens.
+
+Fix: Take the session id and the lease's journal path from the driver's E_PF_FINALIZE_HALT line to the Captain, who rules on the retry after reading the journal. Open no new lease on the item until then.
+
+Exit 2. Side effects: Partial: the halted session's calls stay in the lease's journal and the ledger; nothing more opens on the item. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_PF_CAPTURE
+
+A post-turn step (the session-end capture sh/capture.sh, a wrap-up reset or keep, or the S bundle) failed or timed out after the task turn, or the capture printed no PF_CAPTURE line, and sh/state.sh found no cause in what the agent wrote. The session record is gap E_PF_INFRA_GAP.
+
+Fix: Fix the step in the session runner. The session takes no retry; the gap stays in the run's record.
+
+Exit 2. Side effects: The task turn, and the wrap-up turn when it ran, have spent through the driver's proxy, and the session record is written. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_PF_ARM
+
+A pstack-checks arm, turn or session record broke plan sections 3 to 6. As a refusal before any spend: an unknown arm or model, an empty bug report, a blind scope that is not one line, a missing allowance, a plugin on an arm other than P, a run dir that exists, or a record without S. As a session gap, named by the record's gap_reason: tree_check (the tree or home check refused before any slot opened), post_turn (a post-turn step failed on what the agent wrote), head_mismatch (the S bundle's HEAD is not the head the capture committed) or base_mismatch (S does not sit on the unit's base commit at scoring).
+
+Fix: For a refusal, fix the session input or the runner; the arm texts and limits in lanes/outcome-skills/pfchecks/arms.ts are frozen. A session gap is the arm's result: the session takes no retry, and the arm_refusal reading scores it as a miss.
+
+Exit 2. Side effects: None for a refusal before any spend. A post_turn, head_mismatch or base_mismatch gap comes after the task turn, and the wrap-up turn when it ran, have spent through the driver's proxy, and the session record is written. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_PF_TOOLS
+
+The pstack-checks tools volume could not be built or checked: tla2tools.jar does not match prereg.json's sha256, a pinned image is missing, or a build step failed.
+
+Fix: Pull the pinned images by digest, fetch the pinned jar, then build the volume again (outcome pf tools).
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_PF_PLUGIN
+
+The pstack plugin for arm P could not be installed: prereg.json's pin differs from src/arms/stacks.ts, the extracted tree is not the pinned tree, or pstack's installer failed in the builder.
+
+Fix: Fetch the pinned cursor/plugins commit into a local clone and build the plugin volume again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_PF_TREE_STATE
+
+A pstack-checks scoring tree, built from a copy of the prepared tree volume with the tree commit checked out over it, is not exact: the prepared tree holds an untracked file that isn't ignored, or after the checkout HEAD, the working tree or the index differs from the commit. Scoring stops, because such a file would be leftover state the oracle did not run with.
+
+Fix: Read the files the line names and take the count per language to the Captain before any scoring continues. Never force a checkout over an untracked file.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_ER_PROVIDER_DRIFT
+
+Plan-eng-review intentions eval (section 16, rule 6): a call through OpenRouter was served by a provider other than the one its route pins (OpenAI for GPT-6.1 Sol, the recorded serving provider for particle-1 and Gemini), or the provider's recorded terms changed. That model's items stop for the Captain.
+
+Fix: Stop leasing the model's items, keep the journal line that shows the provider, and send the question to the Captain. Never retry on another provider.
+
+Exit 2. Side effects: Calls already sent on the lease stay on its journal and its spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_ER_SUPPLY_SHORT
+
+Plan-eng-review intentions eval (section 16, rule 9): a named project type has fewer than 6 eligible units from the frame and transposition can't fill it to 10, or the pooled count of passing comparison units is under 48. Authoring stops and the question goes to the Captain.
+
+Fix: Stop authoring, report the counts per type, with and without copyleft, and wait for the Captain's ruling before any more authoring spend.
+
+Exit 2. Side effects: None beyond the authoring spend already settled. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_EB_NOT_BUILT
+
+An eng-review build read command or function is declared but not built yet (lanes/eng-build). Nothing ran.
+
+Fix: Use a build of gstack-evals that has it, or build the unit that owns it.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_EB_PRODUCT_HASH
+
+Before a graded run, the product files of a build-read tree did not match the hashes recorded for it, so a test move or a rebuild changed product code. Nothing was scored for that tree.
+
+Fix: Read the files the line names, fix the transplant or rebuild step, and grade the tree again from its sealed copy.
+
+Exit 2. Side effects: None for spend: the build session is already settled; no score was written for the tree. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_EB_LEAK
+
+The leak check found a later fix's added product lines, or the merge's lines, in the image a build-read builder would use, so the builder could read the answer. No session started on that image.
+
+Fix: Rebuild the unit's image without the leaking dependency or cache, or drop the unit, and take the count to the Captain.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_EB_FEW_UNITS
+
+After the recount in the verifier's own sandbox, fewer than 16 clean build-read units qualify, so the pilot cannot run at its frozen size. No lease was opened.
+
+Fix: Take the clean count to the Captain, who decides whether the pilot runs on the units that exist.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_EB_REACH
+
+The build-read pilot's reach is under 0.60: later-fix tests mostly give no assertion-level result against independently built code, so the instrument can't read the primary. The attempt ends as FIX-METHOD on the instrument.
+
+Fix: Bring the reading to the Captain. Do not --resume.
+
+Exit 2. Side effects: The pilot's builds and their spend are settled in the ledger, open leases are settled and the run record is sealed. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_EB_FLOOR
+
+The build-read pilot's plain-review later-fix pass share is under 0.10. With plain functional solved at 0.50 or more the attempt ends as FIX-METHOD on task fit; under 0.50 it ends as FIX-METHOD on the build setup. The line prints both readings.
+
+Fix: Bring the reading to the Captain. Do not --resume.
+
+Exit 2. Side effects: The pilot's builds and their spend are settled in the ledger, open leases are settled and the run record is sealed. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_EB_CEILING
+
+The build-read pilot's plain-review later-fix pass share is above 0.85, or its 95% lower bound is above 0.75: plain-review builds already pass nearly all of them. The attempt ends as FIX-METHOD on saturation.
+
+Fix: Bring the reading to the Captain. Do not --resume.
+
+Exit 2. Side effects: The pilot's builds and their spend are settled in the ledger, open leases are settled and the run record is sealed. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_EB_EXPOSURE_GATE
+
+A build-read skill arm failed its exposure gate (under 5 of 6 Opus sessions, or under 2 of 3 Sol or particle-1 sessions, ran the procedure). That arm reads untested and its cap is released; with fewer than two Opus arms through the gate the comparison does not start.
+
+Fix: Bring the gate's counts to the Captain. With at least two Opus arms through, --resume continues to new-unit authoring.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_EB_EXPOSURE_STOP
+
+A build-read skill arm's exposure is under 0.70 after its first 24 comparison sessions, so that arm stops, its leases settle and the pooled primary reads untested. The other arms go on.
+
+Fix: None for the stopped arm. --resume continues the other arms.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_EB_CELL_INCOMPLETE
+
+A build-read batch ended with cells neither scored nor recorded as gaps, so no reading is printed for that stage.
+
+Fix: --resume runs only the open cells; completed cells and their spend are kept.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_EB_CACHE_STALE
+
+A build-read cache entry's recorded digest does not match what is on disk, so the cached result could be stale. Nothing was scored from it; the line prints the cache key and both digests.
+
+Fix: Rebuild the cache entry from its sealed source, then --resume.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_EB_REPROJECT
+
+The build-read re-projection after the pilot, on measured costs and the refitted power model, no longer fits the recorded caps after the frozen cuts, or the cuts would take the pooled MDD past 0.12. Nothing further spends.
+
+Fix: Bring the projection, caps and MDD the line prints to the Captain.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_EB_DRYRUN_FAIL
+
+An eng-review build read dry-run fixture printed FAIL: a frozen rule did not hold on the fixture units or the scoring path. The line names the case.
+
+Fix: Read the FAIL line, fix the rule's code, and run the dry run again before any spend.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
 ## Exit 3: calibration failed (INCOMPLETE)
 
 ### CALIBRATION_SKILL
@@ -1793,5 +2392,45 @@ Warning. Owner: U20.
 Product-value eval (section 11): a model's stated training cutoff falls after a unit's plan date, so that unit's cells are descriptive and out of the model's primaries. When more than a quarter of a model's units are leak-exposed, the model's primaries read untested (leak).
 
 Fix: Nothing to rerun. Check the cutoff the build recorded from the provider's published documentation and the unit's plan date, and report the count per model.
+
+Warning. Owner: U20.
+
+### E_EB_NO_RECIPE
+
+A build-read unit's ecosystem has no frozen recipe (only Go, Node, Python and Rust have one), so the unit drops with this reason. Nothing is paid.
+
+Fix: None: the drop is recorded in the unit accounting. A new recipe needs a new preregistration.
+
+Warning. Owner: U20.
+
+### E_EB_IMAGE
+
+A build-read unit's image did not build, or its install or per-case test run failed at base or at the merge under the frozen recipe, so the unit drops with this reason.
+
+Fix: None: the drop is recorded with its step and failure class.
+
+Warning. Owner: U20.
+
+### E_EB_NO_AFTERMATH
+
+No later-fix case of a build-read unit passed the frozen rule (an assertion failure on the merged tree and on the fix's parent, a pass on the fix, in every run, and a fix that touches lines the merge changed), so the unit drops.
+
+Fix: None: the drop is recorded with the count of cases each step removed.
+
+Warning. Owner: U20.
+
+### E_EB_TRANSPLANT
+
+A fix's test file holds product code and test code in a way the test-region rule cannot split, so its cases drop rather than move product code into a graded tree.
+
+Fix: None: the cases are recorded as dropped with the file's class.
+
+Warning. Owner: U20.
+
+### E_EB_GAP
+
+A build-read session ended in a second upstream error or a second infrastructure failure, so its cell is a recorded gap. Every verdict also prints the reading that scores gaps as 0.
+
+Fix: None: the gap is recorded under the frozen session rule.
 
 Warning. Owner: U20.

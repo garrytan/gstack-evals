@@ -85,7 +85,7 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Fetch gstack at the pinned commit
         env:
-          GSTACK_SHA: 68410828fd85611caea2c8429846f683849f425a # gstack v1.93.17.0
+          GSTACK_SHA: 9ab50347ac3728b7bdf03735b4ccceca88b6d958 # gstack v1.99.0.0
         run: |
           git init -q "$RUNNER_TEMP/gstack"
           git -C "$RUNNER_TEMP/gstack" fetch -q --depth 1 https://github.com/garrytan/gstack.git "$GSTACK_SHA"
@@ -96,8 +96,35 @@ jobs:
         run: |
           bun run typecheck
           echo 'bun run typecheck' >> "$RUNNER_TEMP/checks-passed.txt"
-      - name: Install age (the autoplan audit dry run's custody clause)
-        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends age
+      - name: Install age (the autoplan audit dry run's custody clause) from the release tarball, checked against a pinned SHA-256, or from apt if GitHub's download keeps failing
+        # The custody clause seals and opens a fixture with age and age-keygen. Four tries at the release tarball, with waits of 15,
+        # 30 and 60 seconds between them, then Ubuntu's age package. apt was the only source until 2026-11-11, when the runners could
+        # not resolve Ubuntu's mirrors and every run failed here. The four tries and their waits take under four minutes when each
+        # stalls to its 30-second limit, well inside the job's 45. The tarball must match its pinned digest before it is unpacked,
+        # and the step fails unless the unpacked age reports AGE_VERSION and both age and age-keygen are on PATH.
+        env:
+          AGE_VERSION: 1.3.2
+          AGE_SHA256: cbe24006683f8eb669266162894b9a522a1af52f2665fbc63a4bb032ed26ac10 # age-v1.3.2-linux-amd64.tar.gz: the digest GitHub publishes for the release asset, which two downloads and the release's Sigsum proof (sigsum-verify v0.13.1, with the keys in age's SIGSUM.md) matched on 2026-11-11
+        run: |
+          for delay in 15 30 60 end; do
+            curl -fsSL --connect-timeout 10 --max-time 30 -o "$RUNNER_TEMP/age.tar.gz" "https://github.com/FiloSottile/age/releases/download/v$AGE_VERSION/age-v$AGE_VERSION-linux-amd64.tar.gz" && break
+            rm -f "$RUNNER_TEMP/age.tar.gz"
+            [ "$delay" = end ] && break
+            echo "::warning::The age release download failed; trying again in ${delay}s"
+            sleep "$delay"
+          done
+          if [ -f "$RUNNER_TEMP/age.tar.gz" ]; then
+            printf '%s  %s\n' "$AGE_SHA256" "$RUNNER_TEMP/age.tar.gz" | sha256sum -c --strict -
+            tar -xzf "$RUNNER_TEMP/age.tar.gz" -C "$RUNNER_TEMP" age/age age/age-keygen
+            test "$("$RUNNER_TEMP/age/age" --version)" = "v$AGE_VERSION"
+            printf '%s\n' "$RUNNER_TEMP/age" >> "$GITHUB_PATH"
+            export PATH="$RUNNER_TEMP/age:$PATH"
+          else
+            echo "::warning::The age release download failed 4 times, so this job installs Ubuntu's age package with apt"
+            sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends age
+          fi
+          command -v age age-keygen
+          age --version
       - name: Tests
         if: steps.scope.outputs.docs_only != 'true'
         run: bun test --reporter=junit --reporter-outfile="$RUNNER_TEMP/junit.xml"

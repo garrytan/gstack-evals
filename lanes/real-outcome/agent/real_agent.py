@@ -56,6 +56,7 @@ import egress
 import laneb_agent as lb
 from ship_steps import ship_steps
 from ship_user import ShipUser
+from sm_user import NoAnswer, sm_turn
 
 HERE = Path(__file__).resolve().parent
 ARMS_FILE = HERE.parent / "arms" / "arms.json"
@@ -105,6 +106,33 @@ def mark_keyless(parse):
 sdk_parser.parse_message = mark_keyless(sdk_parser.parse_message)
 sdk_query_client.parse_message = mark_keyless(sdk_query_client.parse_message)
 STATEMENT = "{statement}"
+# Family SM's session check (the implicit state machines prereg, sections 4 and 5): the tree's commit count and head, any
+# file the strip rule removes, and the home paths that would carry gstack or a drive into a no-gstack arm.
+# The home paths A3's /qa install wrote, as the session image build listed them in task.json's qa_home (image.ts
+# qaHomeCopy); a task that lists none gets QA_HOME, its skills dir and the ~/.gstack state gstack's setup creates. A drive
+# path (/root/.capy) and the user memory Claude Code loads in every session (/root/.claude/CLAUDE.md) pass in no arm,
+# even when the build listed them.
+QA_HOME = ("/root/.claude/skills", "/root/.gstack")
+DRIVE_HOME = "/root/.capy"
+MEMORY_HOME = "/root/.claude/CLAUDE.md"
+# The close answer's fields real-summary.json's proxy block keeps: run.ts reads refusals, allowance_stops, unknown_micros and
+# finalized (false when the proxy's finalize failed, so its counts are unknown) for the session record.
+PROXY_KEYS = ("spent_micros", "requests", "ok_responses", "refused", "refusals", "allowance_stops", "unknown_micros", "unknown_calls", "finalized")
+
+
+def proxy_summary(closed) -> dict:
+    """real-summary.json's proxy block: the driver's close answer's fields, each None when no close answer arrived."""
+    return {k: (closed or {}).get(k) for k in PROXY_KEYS}
+
+
+SM_CHECK = r"""cd {repo} || exit 3
+echo "COMMITS $(git rev-list --all --count)"
+echo "HEAD $(git rev-parse HEAD)"
+find . -name .git -prune -o \( -name CLAUDE.md -o -name CLAUDE.local.md -o -name AGENTS.md -o -name .claude \) -print | sed 's/^/INSTR /'
+for p in /root/.claude/skills /root/.claude/CLAUDE.md /root/.local/share/gstack /root/.capy /root/.gstack; do [ -e "$p" ] && echo "HOME $p"; done
+[ -d /root/.claude/skills/gstack ] && echo "GSTACK $(git -C /root/.claude/skills/gstack rev-parse HEAD 2>/dev/null || echo none)"
+exit 0
+"""
 
 
 class SandboxSetupError(RuntimeError):
@@ -192,10 +220,20 @@ mkdir -p "$d/objects"
 if [ -f "$gitdir/index" ]; then cp "$gitdir/index" "$d/index"; else GIT_INDEX_FILE="$d/index" git read-tree HEAD; fi
 export GIT_INDEX_FILE="$d/index" GIT_OBJECT_DIRECTORY="$d/objects" GIT_ALTERNATE_OBJECT_DIRECTORIES="$gitdir/objects"
 git add -A >/dev/null 2>&1
-tree=$(git write-tree)
+{exclude}tree=$(git write-tree)
 echo "TREE $tree $(git rev-parse HEAD) $(git symbolic-ref -q --short HEAD || echo DETACHED)"
 git diff --binary {base} "$tree"
 """
+
+
+def snapshot_exclude(task: dict) -> str:
+    """The SNAPSHOT line that drops the task's excluded paths (in-project dependency folders the build stage mounts into
+    the tree) from the temporary index, matched literally, so a folder or a symlink by that name never reaches the
+    patch whatever .gitignore says. A task with no exclude list adds nothing."""
+    paths = task.get("exclude") or []
+    if not paths:
+        return ""
+    return "git rm -r -q --cached --ignore-unmatch -- " + " ".join(shlex.quote(":(literal)" + p) for p in paths) + " >/dev/null\n"
 
 
 class RealAgent(lb.LanebAgent):
@@ -295,10 +333,36 @@ class RealAgent(lb.LanebAgent):
                 pass
             raise
 
+    def _open_sm(self, container: str, trial: str, task: dict, base_url: str, told: bool, log) -> dict:
+        """Family SM: no sidecar, no origin, no gh stub, so the tree keeps its one-commit (or two-commit) history. Egress
+        allows only the proxy. Before any session opens, the tree must hold the commit count the session plan names and none
+        of the files the strip rule removes, and the home must hold no gstack and no drive, except A3's install at its pin."""
+        allow = [egress.endpoint(base_url)]
+        log(egress.apply(container, allow))
+        if self.options.probe_node:
+            log(egress.probe(self._exec, container, allow, self.options.probe_node))
+        res = self._exec(container, "sh -s", stdin=SM_CHECK.format(repo=shlex.quote(task["repo_dir"])).encode(), timeout=300)
+        lines = res.stdout.decode(errors="replace").splitlines()
+        got = {k: [l.split(" ", 1)[1] for l in lines if l.startswith(k + " ")] for k in ("COMMITS", "HEAD", "INSTR", "HOME", "GSTACK")}
+        check = {"event": "sm_check", "commits": got["COMMITS"], "head": got["HEAD"], "instructions": got["INSTR"], "home": got["HOME"], "gstack": got["GSTACK"]}
+        log(check)
+        if res.returncode != 0 or got["COMMITS"] != [str(task["commits"])] or got["HEAD"] != [task["base_commit"]]:
+            raise SandboxSetupError(f"E_SM_HISTORY the session tree has commits {got['COMMITS']} at {got['HEAD']}, not {task['commits']} at {task['base_commit']}; nothing was opened")
+        if got["INSTR"]:
+            raise SandboxSetupError(f"E_SM_STRIP the session tree holds files the strip rule removes: {got['INSTR'][:10]}; nothing was opened")
+        if told and got["GSTACK"] != [task.get("qa_sha")]:
+            raise SandboxSetupError(f"E_SM_STRIP A3's gstack install is at {got['GSTACK']}, not the /qa pin {task.get('qa_sha')}; nothing was opened")
+        if not told and got["HOME"]:
+            raise SandboxSetupError(f"E_SM_STRIP a no-gstack arm's home holds {got['HOME']}; nothing was opened")
+        qa_home = [p for p in (task["qa_home"] if isinstance(task.get("qa_home"), list) else QA_HOME) if p not in (DRIVE_HOME, MEMORY_HOME)]
+        if told and [p for p in got["HOME"] if p not in qa_home]:
+            raise SandboxSetupError(f"E_SM_STRIP A3's home holds {[p for p in got['HOME'] if p not in qa_home]}, outside the /qa install's own {qa_home}; nothing was opened")
+        return {"trial": trial, "branch": None, "head": got["HEAD"][0], "project_docs": [], "check": check}
+
     def _snapshot(self, container: str, task: dict, name: str) -> dict:
         """The working tree against base, written to evaluator/<name>.patch, without touching the agent's index or objects.
         The temporary index starts as a copy of the agent's, so a tracked file that matches .gitignore stays in the tree."""
-        res = self._exec(container, SNAPSHOT.format(repo=shlex.quote(task["repo_dir"]), base=task["base_commit"]), timeout=300)
+        res = self._exec(container, SNAPSHOT.format(repo=shlex.quote(task["repo_dir"]), base=task["base_commit"], exclude=snapshot_exclude(task)), timeout=300)
         out = res.stdout
         head, _, patch = out.partition(b"\n")
         parts = head.decode(errors="replace").split()
@@ -411,13 +475,15 @@ class RealAgent(lb.LanebAgent):
     async def run(self, instruction: str, environment, context) -> None:
         evdir = self._evaluator_dir()
         evdir.mkdir(parents=True, exist_ok=True)
-        user = ShipUser(json.loads(Path(self.options.persona_path).read_text()), evdir / "usersim-events.jsonl")
+        task = json.loads(Path(self.options.task_json).read_text())
+        arms = json.loads(Path(self.options.arms_path).read_text())
+        sm_spec = (arms.get("sm") or {}).get("arms", {}).get(self.options.arm) if "families" in arms else None
+        self.sm = sm_spec is not None
+        user = NoAnswer(arms["sm"]["no_answer"], evdir / "usersim-events.jsonl") if self.sm else ShipUser(json.loads(Path(self.options.persona_path).read_text()), evdir / "usersim-events.jsonl")
         log = user.log
         container = await asyncio.to_thread(self._container_id, environment)
         log(self._arm_info)
-        task = json.loads(Path(self.options.task_json).read_text())
-        arms = json.loads(Path(self.options.arms_path).read_text())
-        if self.options.arm not in arms["arms"]:
+        if self.options.arm not in arms["arms"] and not self.sm:
             raise SandboxSetupError(f"E_REAL_SANDBOX_SETUP unknown arm {self.options.arm}")
         if "families" in arms and self.options.ledger != "u4":
             raise SandboxSetupError("E_REAL_SANDBOX_SETUP the arms file is the outcome-skills registry, whose arms spend only through a U4 lease (G prereg section 10 item 4); run them with ledger u4 on the session driver")
@@ -425,17 +491,27 @@ class RealAgent(lb.LanebAgent):
             raise SandboxSetupError("E_REAL_SANDBOX_SETUP a U4 session names its task and trial: set task_label and trial_n (from 1)")
         if self.options.ledger == "u4":
             await asyncio.to_thread(self._check_image, container, log)
-        self.limits = arms["arms"][self.options.arm]["limits"]
-        phases = phase_texts(task, arms, self.options.arm, instruction)
+        if self.sm:
+            caps = sm_spec["limits"]["session_cap_usd"]
+            if self.options.upstream_model not in caps:
+                raise SandboxSetupError(f"E_SM_ARM arm {self.options.arm} has no allowance for model {self.options.upstream_model}; family SM runs {sorted(caps)}")
+            self.limits = {**sm_spec["limits"], "session_cap_usd": caps[self.options.upstream_model]}
+            try:
+                phases = [("t1", sm_turn(sm_spec, task, instruction, js_trim_end, ((arms.get("sm") or {}).get("pins") or {}).get("qa")))]
+            except ValueError as e:
+                raise SandboxSetupError(f"E_SM_ARM arm {self.options.arm}: {e}") from None
+        else:
+            self.limits = arms["arms"][self.options.arm]["limits"]
+            phases = phase_texts(task, arms, self.options.arm, instruction)
         self.registry = "families" in arms
-        if self.registry:
+        if self.registry and not self.sm:
             user.per_turn([p for p, _ in phases], plan_turns(arms, self.options.arm))
         log({"event": "turns", "arm": self.options.arm, "kind": task["kind"], "phases": [p for p, _ in phases], "sha256": [hashlib.sha256(t.encode()).hexdigest() for _, t in phases], "limits": self.limits, "frozen_env": FROZEN_ENV})
         base_url = self._resolve_auth_env().get("ANTHROPIC_BASE_URL")
         if not base_url:
             raise RuntimeError("the real-outcome agent needs --base-url pointing at the metering proxy")
         trial = TRIAL_CHARS.sub("-", environment.session_id)[:100] + "-" + uuid.uuid4().hex[:8]
-        opening = asyncio.ensure_future(asyncio.to_thread(self._open_sandbox, container, trial, task, base_url, log))
+        opening = asyncio.ensure_future(asyncio.to_thread(self._open_sm, container, trial, task, base_url, sm_spec["kind"] == "told", log) if self.sm else asyncio.to_thread(self._open_sandbox, container, trial, task, base_url, log))
         try:
             sandbox = await asyncio.shield(opening)
         except (asyncio.CancelledError, KeyboardInterrupt):
@@ -444,7 +520,8 @@ class RealAgent(lb.LanebAgent):
         try:
             session = await asyncio.to_thread(self._open_session, trial, self.options.upstream_model, float(self.limits["session_cap_usd"]), log)
         except (Exception, asyncio.CancelledError, KeyboardInterrupt) as e:
-            await asyncio.shield(asyncio.to_thread(self._close_sandbox, trial, "session_open_failed" if isinstance(e, Exception) else "cancelled", log))
+            if not self.sm:
+                await asyncio.shield(asyncio.to_thread(self._close_sandbox, trial, "session_open_failed" if isinstance(e, Exception) else "cancelled", log))
             raise
         log({"event": "session_open", "session": session["id"], "cap_usd": self.limits["session_cap_usd"]})
 
@@ -567,7 +644,7 @@ class RealAgent(lb.LanebAgent):
                 await asyncio.shield(opening)
             except BaseException:
                 pass
-        if opening.exception() is None:
+        if opening.exception() is None and not getattr(self, "sm", False):
             try:
                 await asyncio.shield(asyncio.to_thread(self._close_sandbox, trial, "cancelled", log))
             except BaseException:
@@ -599,9 +676,16 @@ class RealAgent(lb.LanebAgent):
         errors = {}
         shipment = None
         try:
-            shipment = self._close_sandbox(trial, outcome["termination"] or "error", log)
+            if not getattr(self, "sm", False):
+                shipment = self._close_sandbox(trial, outcome["termination"] or "error", log)
         except Exception as e:
             errors["sandbox_close"] = f"{type(e).__name__}: {e}"[:500]
+        if getattr(self, "sm", False):
+            try:
+                res = self._exec(container, "tar -C /root/.claude -cf - projects", timeout=300)
+                (self._evaluator_dir() / "claude-projects.tar").write_bytes(res.stdout)
+            except Exception as e:
+                errors["claude_projects"] = f"{type(e).__name__}: {e}"[:300]
         summary = self._teardown(container, session_id, log, base)
         try:
             final = self._snapshot(container, task, "final")
@@ -613,7 +697,7 @@ class RealAgent(lb.LanebAgent):
             "trial": trial, "arm": self.options.arm, "kind": task["kind"], "termination": outcome["termination"], "phases": outcome["phases"],
             "limits": self.limits, "frozen_env": FROZEN_ENV, "sandbox": sandbox, "shipment": shipment, "turn1": outcome["turn1"], "final": final,
             "persona": user.counts, "ship_steps": ship_phase["steps"], "skill_calls": {p: ship_steps(by_phase.get(p, []))["skill_calls"] for p in (by_phase if self.registry else ("build", "ship"))},
-            "tool_calls": steps["tool_calls"], "proxy": {k: (summary["session"] or {}).get(k) for k in ("spent_micros", "requests", "ok_responses", "refused")}, "errors": errors,
+            "tool_calls": steps["tool_calls"], "proxy": proxy_summary(summary["session"]), "errors": errors,
         }
         (self._evaluator_dir() / "real-summary.json").write_text(json.dumps(real, indent=2, default=str))
         summary["real"] = real

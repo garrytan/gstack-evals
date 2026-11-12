@@ -1,0 +1,30 @@
+trial	task	block	tool	pattern	path_prefix	count
+h1-none-th22febd06e1-t1	th22febd06e1	call	Bash	.claude/skills	repo-relative	3
+h1-none-th22febd06e1-t1	th22febd06e1	result	-	.agents/skills	repo-relative	22
+h1-none-th22febd06e1-t1	th22febd06e1	result	-	.agents/skills	~/ (text)	2
+h1-none-th22febd06e1-t1	th22febd06e1	result	-	.claude/plugins	repo-relative	1
+h1-none-th22febd06e1-t1	th22febd06e1	result	-	.claude/skills	bare	2
+h1-none-th22febd06e1-t1	th22febd06e1	result	-	.claude/skills	repo-relative	5
+h1-none-th22febd06e1-t1	th22febd06e1	result	-	.claude/skills	~/ (text)	2
+h1-none-th22febd06e1-t1	th22febd06e1	result	-	.codex/skills	repo-relative	2
+h1-none-th22febd06e1-t2	th22febd06e1	call	Edit	.claude/skills	repo-relative	2
+h1-none-th22febd06e1-t2	th22febd06e1	result	-	.agents/skills	bare	1
+h1-none-th22febd06e1-t2	th22febd06e1	result	-	.agents/skills	repo-relative	2
+h1-none-th22febd06e1-t2	th22febd06e1	result	-	.agents/skills	~/ (text)	1
+h1-none-th22febd06e1-t2	th22febd06e1	result	-	.claude/skills	repo-relative	2
+h1-none-th22febd06e1-t2	th22febd06e1	result	-	.claude/skills	~/ (text)	3
+h1-none-th22febd06e1-t2	th22febd06e1	result	-	.codex/skills	repo-relative	1
+h1-none-th22febd06e1-t3	th22febd06e1	call	Edit	.claude/skills	repo-relative	3
+h1-none-th22febd06e1-t3	th22febd06e1	result	-	.agents/skills	repo-relative	2
+h1-none-th22febd06e1-t3	th22febd06e1	result	-	.claude/skills	bare	4
+h1-none-th22febd06e1-t3	th22febd06e1	result	-	.claude/skills	repo-relative	2
+h1-none-th22febd06e1-t3	th22febd06e1	result	-	.claude/skills	~/ (text)	1
+h1-none-th2ff942c332-t1	th2ff942c332	result	-	.claude/skills	bare	2
+h1-none-th2ff942c332-t2	th2ff942c332	result	-	.agents/skills	repo-relative	3
+h1-none-th2ff942c332-t2	th2ff942c332	result	-	.claude/skills	bare	1
+h1-none-th2ff942c332-t3	th2ff942c332	result	-	.claude/skills	bare	1
+h1-none-thac0edfecd9-t1	thac0edfecd9	call	Bash	.agents/skills	bare	1
+h1-none-thac0edfecd9-t1	thac0edfecd9	call	Read	.agents/skills	absolute /testbed	1
+h1-none-thac0edfecd9-t2	thac0edfecd9	call	Bash	.agents/skills	bare	2
+h1-none-thac0edfecd9-t3	thac0edfecd9	call	Bash	.agents/skills	bare	2
+h1-none-thafc1efccdd-t2	thafc1efccdd	result	-	.claude/skills	repo-relative	1

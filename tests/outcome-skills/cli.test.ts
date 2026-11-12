@@ -3,7 +3,10 @@
 // fails_when=flag parsing accepts an unknown flag, a malformed --stage or a missing required flag, or exits 0;
 // why_new=no test ran lanes/outcome-skills/cli.ts; seam=none; no_claim=serve itself (driver.test.ts covers serveStages)
 import { describe, expect, test } from "bun:test";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { machineId } from "../../src/runner/ledger/ledger.ts";
 
 const bin = join(import.meta.dir, "..", "..", "bin", "gstack-evals");
 const run = (...args: string[]) => {
@@ -33,5 +36,35 @@ describe("gstack-evals outcome", () => {
     expect(r.code).toBe(2);
     expect(r.err.startsWith("E_USAGE ")).toBe(true);
     expect(r.err).toContain(msg as string);
+  });
+});
+
+describe("gstack-evals outcome serve --registry", () => {
+  test("hands the named arms file to the driver, which checks each stage's arm against it", () => {
+    const dir = mkdtempSync(join(tmpdir(), "outcome-cli-registry-"));
+    const reg = JSON.parse(readFileSync(join(import.meta.dir, "..", "..", "lanes", "outcome-skills", "arms", "registry.json"), "utf8"));
+    reg.families.G.skills = ["plan-eng-review"];
+    delete reg.arms["autoplan:told"];
+    const fixture = join(dir, "no-autoplan.json");
+    writeFileSync(fixture, JSON.stringify(reg));
+    const args = ["serve", "--run", "r1", "--envelope-host", machineId(), "--stage", "a=autoplan:told", "--host", "127.0.0.1", "--dir", join(dir, "run"), "--ledger", join(dir, "ledger.sqlite"), "--ledger-record", join(dir, "no-record")];
+    const named = run(...args, "--registry", fixture);
+    expect(named.code).toBe(2);
+    expect(named.err.startsWith("E_USAGE ")).toBe(true);
+    expect(named.err).toContain("stage a names arm autoplan:told, which the registry does not hold; it holds none, plan-eng-review:told");
+    const plain = run(...args);
+    expect(plain.code).toBe(2);
+    expect(plain.err).not.toContain("which the registry does not hold");
+    expect(plain.err.startsWith("E_LEDGER_MISSING ")).toBe(true);
+  });
+
+  test("a --registry file that is not a registry exits 2 with E_OUTCOME_ARM before any ledger opens", () => {
+    const dir = mkdtempSync(join(tmpdir(), "outcome-cli-registry-"));
+    const bad = join(dir, "bad.json");
+    writeFileSync(bad, JSON.stringify({ schema: 1 }));
+    const r = run("serve", ...base, "--stage", "a=none", "--ledger", join(dir, "ledger.sqlite"), "--registry", bad);
+    expect(r.code).toBe(2);
+    expect(r.err.startsWith("E_OUTCOME_ARM ")).toBe(true);
+    expect(existsSync(join(dir, "ledger.sqlite"))).toBe(false);
   });
 });
