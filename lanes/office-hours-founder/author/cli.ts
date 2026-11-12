@@ -5,7 +5,8 @@
 // digests only; every unit, note, page, Names line, reply and journal stays under --units, outside the repository.
 // - of author: the constructed pipeline. --pilot runs the 4-unit pilot and prints its supply projection; without it the
 //   run goes on to the quotas or the cap, the pilot's units joining. A pilot on its own ledger item leases --spend-cap
-//   and projects against --authoring-cap, the full run's cap. --ceiling is R61's harder redraw.
+//   and projects against --authoring-cap, the full run's cap. --ceiling is R61's harder redraw. --twins (with --resume)
+//   rebuilds a finished run from its sealed outcome log and makes only the second-skin calls the twin rule still owes.
 // - of real: the real stratum from a frame file that maps each of the 40 frozen queries to its first 10 result URLs,
 //   through the two-check terms gate and the serial miner (plain GETs, one at a time, user agent gstack-evals).
 // --gstack must be a checkout at the pin: HEAD b6155921a564ba9ec2470fd2cb3894c05e2c2d13, VERSION 1.98.0.0 and the
@@ -26,10 +27,11 @@ import { PASSES } from "../read/stage2.ts";
 import { labeller } from "../score/judge.ts";
 import { VERTEX } from "../sim/founder.ts";
 import type { Deps } from "./checks.ts";
+import type { Outcome } from "./constructed.ts";
 import { AuthorError, openSink, type Caller } from "./files.ts";
 import { QUERIES, RESULTS_PER_QUERY } from "./prompts.ts";
 import { AGENT, authorReal, type Fetch } from "./real.ts";
-import { authorConstructed, writeConstructed, writeReal } from "./run.ts";
+import { authorConstructed, topUpTwins, writeConstructed, writeReal } from "./run.ts";
 import { loadForcingQuestions, vocabulary } from "./screens.ts";
 
 interface Io {
@@ -47,7 +49,7 @@ export interface Wire {
   today?: string;
 }
 
-const AUTHOR_USAGE = "gstack-evals of author --units <dir> --gstack <checkout> --item <ledger item> --spend-cap <usd> [--pilot [--authoring-cap <usd>]] [--ceiling] [--resume] [--concurrency <n>] [--record <dir>] [--ledger <path>]";
+const AUTHOR_USAGE = "gstack-evals of author --units <dir> --gstack <checkout> --item <ledger item> --spend-cap <usd> [--pilot [--authoring-cap <usd>]] [--ceiling] [--resume [--twins]] [--concurrency <n>] [--record <dir>] [--ledger <path>]";
 const REAL_USAGE = "gstack-evals of real --units <dir> --frame <json> --gstack <checkout> --item <ledger item> --spend-cap <usd> [--resume] [--record <dir>] [--ledger <path>]";
 
 /** The planning design for the supply stop's MDD: Opus at its passes, control rate 0.25, ICC 0.5, shuffled-key credit 0.05 (section 12, part F). */
@@ -162,9 +164,10 @@ const tally = (o: Record<string, number>) => Object.entries(o).map(([k, n]) => k
 
 /** gstack-evals of author. */
 export async function authorCommand(argv: string[], io: Io, env: Env, wire: Wire = {}): Promise<number> {
-  const a = parseArgs(argv, { units: "one", gstack: "one", item: "one", "spend-cap": "one", "authoring-cap": "one", pilot: "flag", ceiling: "flag", resume: "flag", concurrency: "one", record: "one", ledger: "one" }, AUTHOR_USAGE);
+  const a = parseArgs(argv, { units: "one", gstack: "one", item: "one", "spend-cap": "one", "authoring-cap": "one", pilot: "flag", ceiling: "flag", resume: "flag", twins: "flag", concurrency: "one", record: "one", ledger: "one" }, AUTHOR_USAGE);
   need(a, ["units", "gstack", "item", "spend-cap"], AUTHOR_USAGE);
   if (a.flag.has("pilot") && a.flag.has("ceiling")) throw new AuthorError("E_USAGE", "the CEILING redraw runs no pilot; pass --pilot or --ceiling, not both");
+  if (a.flag.has("twins") && (!a.flag.has("resume") || a.flag.has("pilot"))) throw new AuthorError("E_USAGE", "--twins tops up a finished run's second skins, so it needs --resume and takes no --pilot");
   if (a.one["authoring-cap"] !== undefined && !a.flag.has("pilot")) throw new AuthorError("E_USAGE", "--authoring-cap is the cap a pilot on its own ledger item projects against; the full run's authoring cap is its --spend-cap");
   const cap = dollars(a.one["spend-cap"]!);
   const authoring = a.one["authoring-cap"] === undefined ? cap : dollars(a.one["authoring-cap"]);
@@ -172,10 +175,14 @@ export async function authorCommand(argv: string[], io: Io, env: Env, wire: Wire
   if (!Number.isSafeInteger(concurrency) || concurrency < 1) throw new AuthorError("E_USAGE", "--concurrency is a whole number of at least 1");
   const asks = (wire.gstack ?? checkGstack)(a.one.gstack!);
   const units = unitsDir(a.one.units!, a.flag.has("resume"));
+  const dir = join(units, a.flag.has("ceiling") ? "ceiling" : "constructed");
+  const logged = a.flag.has("twins") ? { log: readFileSync(join(dir, "outcomes.jsonl"), "utf8").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l) as Outcome), summary: JSON.parse(readFileSync(join(dir, "summary.json"), "utf8")) as ReturnType<typeof writeConstructed> } : null;
   const w = await openWire({ units, item: a.one.item!, cap, record: a.one.record, ledger: a.one.ledger, env, io, upstream: wire.upstream, label: "of-author" });
   let run;
   try {
-    run = await authorConstructed({ ...depsOf(w, asks), spent: w.spent }, { cap: authoring / 1e6, concurrency, mdd: mddAt(wire.python ?? python3), ceiling: a.flag.has("ceiling"), pilotOnly: a.flag.has("pilot") });
+    run = logged
+      ? await topUpTwins(logged.log, depsOf(w, asks), { ceiling: a.flag.has("ceiling"), projection: logged.summary.projection, digest: logged.summary.comparison.digest })
+      : await authorConstructed({ ...depsOf(w, asks), spent: w.spent }, { cap: authoring / 1e6, concurrency, mdd: mddAt(wire.python ?? python3), ceiling: a.flag.has("ceiling"), pilotOnly: a.flag.has("pilot") });
   } finally {
     await w.close("of author");
   }

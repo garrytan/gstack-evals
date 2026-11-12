@@ -35,9 +35,11 @@ and Names lines are written only to a custody directory outside the repository.
 ## Commands
 
 `gstack-evals of author --units <dir> --gstack <checkout> --item <ledger item> --spend-cap <usd> [--pilot
-[--authoring-cap <usd>]] [--ceiling] [--resume] [--concurrency <n>] [--record <dir>] [--ledger <path>]` runs the
+[--authoring-cap <usd>]] [--ceiling] [--resume [--twins]] [--concurrency <n>] [--record <dir>] [--ledger <path>]` runs the
 constructed pipeline. `--pilot` runs the 4-unit pilot and prints its supply projection; without it the run goes on to the quotas or the cap. `--ceiling` is the
-CEILING redraw. `--gstack` must be a checkout at the pin (HEAD, VERSION and the phase-2a file are all checked).
+CEILING redraw. `--resume --twins` rebuilds a finished run from its sealed outcome log and makes only the second-skin calls
+the twin rule still owes (build-time choice 22), refusing before any call if the log rebuilds unfilled sets or another
+comparison digest. `--gstack` must be a checkout at the pin (HEAD, VERSION and the phase-2a file are all checked).
 
 `gstack-evals of real --units <dir> --frame <json> --gstack <checkout> --item <ledger item> --spend-cap <usd> [--resume]
 [--record <dir>] [--ledger <path>]` runs the real stratum.
@@ -70,8 +72,8 @@ Who produces that file, and with which search tool, is for the Captain to decide
    <industry>", which is how the prereg sets a developer tool among its industry.
 3. **CEILING line.** It is appended to the author prompt after one space. The CEILING redraw uses the same schedule with ids
    starting `h`, runs no pilot, and redraws only the calibration and comparison sets (no reserves), as the band's
-   wording names only those two. The first 8 new calibration units get second skins, because stage 1 reruns on them with
-   its twin check.
+   wording names only those two. Its new calibration units get second skins under choice 22, because stage 1 reruns on
+   them with its twin check.
 4. **Pilot.** The pilot is the first draw position of each named type. Pilot units that pass join the sets in draw order like
    any other unit, so no passing unit is thrown away.
 5. **Supply projection.** `needed` is the sum of the quotas (94). The projection is the spend so far plus the units still
@@ -122,7 +124,10 @@ Who produces that file, and with which search tool, is for the Captain to decide
     call, from the opening and the persona only. Argon settles either field when they differ. A unit left with no type drops;
     a missing stage stays null.
 22. **Second skins.** The translation must keep the first skin's fact ids and key facts. It then passes steps 2 to 6 with no
-    rewrite, and a skin that fails leaves its pair out of the twin check.
+    rewrite, and a skin that fails leaves its pair out of the twin check. Calibration units get skins in draw order until 8
+    pass, so a failed skin passes its place to the next calibration unit; if fewer than 8 pass among all 16, the run ends
+    short and names every failed pair. This replaces the prereg's "first 8 calibration units" by the Captain's pre-data
+    ruling of 2026-11-12, made after 3 of the first 8 skins failed.
 23. **Sets.** Quotas fill in draw order from passing first skins, by their labelled type. A unit joins a set only while the
     set's minimums can still fill in its remaining places; a unit held back moves on to the next set. Reserves take the rest in
     draw order. Passing units outside every set are not written as units; the sealed outcome log keeps them.

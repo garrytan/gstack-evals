@@ -7,12 +7,14 @@ import type { Seam } from "../types.ts";
 import { probe, type Deps } from "./checks.ts";
 import { runConstructed, type Outcome } from "./constructed.ts";
 import { schedule } from "./draws.ts";
+import { AuthorError } from "./files.ts";
 import type { UnitFiles } from "./files.ts";
 import { FIXTURE, FIXTURE_ASKS, REAL_FILES, REAL_PAGE, REAL_NOTES, blockReply, happy, stubCaller, wordLabeller } from "./fixtures.ts";
 import { NAMED_TERMS, PROBE_REWRITE } from "./prompts.ts";
 import { readNotes, runReal, termsGate, type Fetch, type Notes, type Page } from "./real.ts";
 import { copyCheck, namesIn, screenVocabulary, vocabulary } from "./screens.ts";
-import { projectSupply } from "./sets.ts";
+import { MAX_DRAWS, authorConstructed, topUpTwins, type ConstructedRun } from "./run.ts";
+import { comparisonRecord, projectSupply } from "./sets.ts";
 
 type Route = (req: CallRequest) => string | null | undefined;
 const screen = vocabulary(FIXTURE_ASKS);
@@ -36,6 +38,25 @@ const NOTES = readNotes(REAL_NOTES) as Notes;
 const PAGES: Page[] = [{ url: "https://fixture.invalid/story", date: "2026-11-12", status: 200, sha256: "", html: REAL_PAGE, text: REAL_PAGE, founder_account: true }];
 const realDeps = (over: Route = () => undefined) => deps(REAL_FILES, over, wordLabeller(), true);
 const siteFetch = (pages: Record<string, { status: number; text: string }>): Fetch => async (url) => pages[new URL(url).pathname] ?? { status: 404, text: "" };
+
+const DRAWS = schedule(MAX_DRAWS);
+const FULL = { cap: 100, concurrency: 8, mdd: () => 0.12, ceiling: false };
+/** A whole constructed run's deps: each draw's own type label, so the quotas fill, and Astra failing the unanimous key on the second skins of the named first units. */
+function fullRun(fail: ReadonlySet<string> = new Set()) {
+  const route = happy(FIXTURE);
+  const call = stubCaller((req) => {
+    const m = /^[ch](\d+)t?:type:/.exec(req.label);
+    return m ? JSON.stringify({ type: DRAWS[Number(m[1]) - 1]!.type, stage: "pre-product" }) : route(req);
+  });
+  const label = wordLabeller((judge, _, l) => {
+    const id = l.split(":")[0]!;
+    return judge === "astra" && /:unanimous:/.test(l) && id.endsWith("t") && fail.has(id.slice(0, -1)) ? { customer: false } : undefined;
+  });
+  return { call, label, screen, spent: () => 1 };
+}
+const skins = (run: ConstructedRun) => ({ skinned: run.twins.map((t) => t.id.slice(0, -1)).sort(), passed: run.twins.filter((t) => t.status === "pass").length, failed: run.twins.filter((t) => t.status === "drop").map((t) => t.id.slice(0, -1)).sort() });
+const calibrationOrder = async () => (await authorConstructed(fullRun(), FULL)).sets.calibration.map((m) => m.id);
+const same = (a: readonly string[], b: readonly string[]) => JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
 
 export const seams: Seam[] = [
   {
@@ -293,6 +314,52 @@ export const seams: Seam[] = [
       const u = withKey({ mentioned: ["customer"] });
       const o = await constructed(deps(u, (req) => (/:unanimous:/.test(req.label) ? blockReply("Sell " + u.key.wedge + " first.") : undefined)));
       return say(o.status === "pass" && o.meta?.primary.join() === "wedge", o);
+    },
+  },
+  {
+    name: "second skins: a failed skin passes its place to the next calibration unit in draw order, and skins stop at the 8th passing pair",
+    run: async () => {
+      const cal = await calibrationOrder();
+      const fail = [cal[1]!, cal[3]!, cal[4]!];
+      const s = skins(await authorConstructed(fullRun(new Set(fail)), FULL));
+      return say(s.passed === 8 && same(s.skinned, cal.slice(0, 11)) && same(s.failed, fail), "skinned " + s.skinned.length + ", passed " + s.passed + ", failed " + s.failed.length);
+    },
+  },
+  {
+    name: "second skins: fewer than 8 passing among the 16 calibration units ends the run with every unit skinned and every failed pair named",
+    run: async () => {
+      const cal = await calibrationOrder();
+      const fail = cal.slice(0, 9);
+      const run = await authorConstructed(fullRun(new Set(fail)), FULL);
+      const s = skins(run);
+      return say(run.stopped === "quotas" && s.passed === 7 && same(s.skinned, cal) && same(s.failed, fail), "stopped " + run.stopped + ", skinned " + s.skinned.length + ", passed " + s.passed + ", failed " + s.failed.length);
+    },
+  },
+  {
+    name: "--twins: a finished run rebuilt from its outcome log gets only the second skins it still owes, and no other call",
+    run: async () => {
+      const cal = await calibrationOrder();
+      const fail = new Set([cal[1]!, cal[3]!, cal[4]!]);
+      const done = await authorConstructed(fullRun(fail), FULL);
+      const log = [...done.outcomes, ...done.twins.filter((t) => cal.slice(0, 8).includes(t.id.slice(0, -1)))];
+      const d = fullRun(fail);
+      const run = await topUpTwins(log, d, { ceiling: false, projection: done.projection, digest: comparisonRecord(done.sets.comparison).digest });
+      const ids = new Set([...d.call.calls.map((c) => c.label), ...d.label.calls.map((c) => c.label)].map((l) => l.split(":")[0]!));
+      const s = skins(run);
+      return say(s.passed === 8 && same(s.skinned, cal.slice(0, 11)) && same([...ids], cal.slice(8, 11).map((id) => id + "t")), "skinned " + s.skinned.length + ", passed " + s.passed + ", called for " + [...ids].sort().join(" "));
+    },
+  },
+  {
+    name: "--twins: an outcome log that rebuilds another comparison set is refused before any call",
+    run: async () => {
+      const done = await authorConstructed(fullRun(), FULL);
+      const d = fullRun();
+      try {
+        await topUpTwins([...done.outcomes, ...done.twins], d, { ceiling: false, projection: done.projection, digest: "0".repeat(64) });
+        return say(false, "no refusal");
+      } catch (e) {
+        return say(e instanceof AuthorError && e.code === "E_USAGE" && d.call.calls.length === 0 && d.label.calls.length === 0, (e as Error).message);
+      }
     },
   },
   {

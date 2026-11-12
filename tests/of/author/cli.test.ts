@@ -136,6 +136,22 @@ describe("of author through the metered client", () => {
   });
 });
 
+describe("of author --twins", () => {
+  test("needs --resume, takes no --pilot, and refuses a run whose outcome log rebuilds unfilled sets before any call", async () => {
+    const s = setup("of-auth");
+    const base = ["--units", s.units, "--gstack", "g", "--item", "of-auth", "--spend-cap", "20", "--record", s.record, "--ledger", s.ledger];
+    await expect(authorCommand([...base, "--twins"], capture().io, ENV, wire())).rejects.toThrow(/^E_USAGE --twins .*needs --resume/);
+    await expect(authorCommand([...base, "--twins", "--resume", "--pilot"], capture().io, ENV, wire())).rejects.toThrow(/^E_USAGE --twins .*no --pilot/);
+    expect(existsSync(s.units)).toBe(false);
+    expect(await authorCommand([...base, "--pilot"], capture().io, ENV, wire())).toBe(0);
+    const seen: string[] = [];
+    const c = capture();
+    await expect(authorCommand([...base, "--resume", "--twins"], c.io, ENV, wire({ upstream: upstream("Google", seen) }))).rejects.toThrow(/^E_USAGE --twins needs a run that stopped at its quotas/);
+    expect(seen).toHaveLength(0);
+    expect(c.out.join("\n")).toMatch(/settled 0\.0000 dollars on of-auth/);
+  });
+});
+
 describe("of real through the metered client", () => {
   test("mines the frame through the gate, one GET at a time, and writes names.txt per unit", async () => {
     const s = setup("of-real");

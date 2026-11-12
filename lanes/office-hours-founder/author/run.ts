@@ -3,10 +3,12 @@
 // section 15): the constructed pass from its pilot to the quotas, and the custody writes for both strata.
 // authorConstructed runs the 4-unit pilot, projects supply from its measured spend (E_OF_SUPPLY_SHORT stops authoring
 // there), then authors draw positions in order, a batch at a time, refilling the sets from every passing unit whose
-// earlier positions have all settled, until the quotas fill, the spend reaches the cap or the schedule runs out. Each of
-// the first 8 calibration units gets its second skin as soon as it is placed. The CEILING variant (section 10) redraws
-// only the calibration and comparison sets, from new units under the harder prompt, with no pilot or reserve; the first
-// 8 new calibration units get their second skins, because stage 1 reruns on them with its twin check.
+// earlier positions have all settled, until the quotas fill, the spend reaches the cap or the schedule runs out.
+// Calibration units get second skins in draw order as they are placed, until 8 pass: a skin that fails leaves its pair
+// out of the twin check and passes its place to the next calibration unit (the Captain's pre-data ruling, 2026-11-12).
+// The CEILING variant (section 10) redraws only the calibration and comparison sets, from new units under the harder
+// prompt, with no pilot or reserve; its new calibration units get second skins the same way, because stage 1 reruns on
+// them with its twin check. topUpTwins applies the same rule to a finished run, rebuilt from its sealed outcome log.
 // The write functions put every file under an open custody sink and return counts and digests only, safe to print.
 import { join } from "node:path";
 import { QUOTA } from "../frozen.ts";
@@ -31,6 +33,27 @@ export interface ConstructedRun {
   stopped: "quotas" | "cap" | "schedule" | "pilot" | "supply";
 }
 
+/** The passing units whose earlier draw positions have all settled, in draw order: the units the sets may take. */
+function membersOf(draws: readonly Draw[], done: ReadonlyMap<number, Outcome>): Member[] {
+  const out: Member[] = [];
+  for (const d of draws) {
+    const r = done.get(d.draw);
+    if (!r) break;
+    if (r.meta) out.push({ id: r.id, draw: d.draw, type: r.meta.type, shape: d.shape, author: d.author, digest: r.meta.digest });
+  }
+  return out;
+}
+
+/** Second skins for the calibration units in draw order until want pass or every placed unit has one; each batch is the shortfall, so no skin goes past the 8th pass. */
+async function skinTwins(calibration: readonly Member[], first: (m: Member) => Outcome, twins: Map<string, Outcome>, deps: Deps, want: number): Promise<void> {
+  for (;;) {
+    const passed = [...twins.values()].filter((t) => t.status === "pass").length;
+    const owed = calibration.filter((m) => !twins.has(m.id)).slice(0, Math.max(0, want - passed));
+    if (!owed.length) return;
+    (await Promise.all(owed.map((m) => runTwin(first(m), deps)))).forEach((t, k) => twins.set(owed[k]!.id, t));
+  }
+}
+
 /** The constructed pass. spent reads the authoring lease's metered spend so far, in the cap's unit. */
 export async function authorConstructed(deps: Deps & { spent: () => number }, o: { cap: number; concurrency: number; mdd: (comparisonUnits: number) => number | null; ceiling: boolean; pilotOnly?: boolean }): Promise<ConstructedRun> {
   const quota: Quota = o.ceiling ? { ...QUOTA, reserve: 0 } : QUOTA;
@@ -38,15 +61,6 @@ export async function authorConstructed(deps: Deps & { spent: () => number }, o:
   const done = new Map<number, Outcome>();
   const twins = new Map<string, Outcome>();
   const runBatch = async (ds: readonly Draw[]) => (await Promise.all(ds.map((d) => runConstructed(d, deps, { ceiling: o.ceiling })))).forEach((out, k) => done.set(ds[k]!.draw, out));
-  const members = (): Member[] => {
-    const out: Member[] = [];
-    for (const d of draws) {
-      const r = done.get(d.draw);
-      if (!r) break;
-      if (r.meta) out.push({ id: r.id, draw: d.draw, type: r.meta.type, shape: d.shape, author: d.author, digest: r.meta.digest });
-    }
-    return out;
-  };
   let projection: Projection | null = null;
   const finish = (sets: Sets, stopped: ConstructedRun["stopped"]): ConstructedRun => ({ ceiling: o.ceiling, projection, outcomes: [...done.entries()].sort(([a], [b]) => a - b).map(([, x]) => x), twins: [...twins.values()], sets, stopped });
   if (!o.ceiling) {
@@ -62,9 +76,8 @@ export async function authorConstructed(deps: Deps & { spent: () => number }, o:
     if (o.pilotOnly) return finish(fillSets([], quota), "pilot");
   }
   for (let next = 0; ; ) {
-    const sets = fillSets(members(), quota);
-    const owed = sets.calibration.slice(0, quota.twins).filter((m) => !twins.has(m.id));
-    (await Promise.all(owed.map((m) => runTwin(done.get(m.draw)!, deps)))).forEach((t, k) => twins.set(owed[k]!.id, t));
+    const sets = fillSets(membersOf(draws, done), quota);
+    await skinTwins(sets.calibration, (m) => done.get(m.draw)!, twins, deps, quota.twins);
     if (setsFull(sets, quota)) return finish(sets, "quotas");
     if (deps.spent() >= o.cap) return finish(sets, "cap");
     const batch: Draw[] = [];
@@ -72,6 +85,25 @@ export async function authorConstructed(deps: Deps & { spent: () => number }, o:
     if (!batch.length) return finish(sets, "schedule");
     await runBatch(batch);
   }
+}
+
+/**
+ * --twins: a finished constructed run rebuilt from its sealed outcome log, with second skins given under the same rule and
+ * no other call. The rebuilt sets must be full and give the logged comparison digest, and the logged skins must be the
+ * first of the rebuilt calibration set, or it refuses before any call.
+ */
+export async function topUpTwins(log: readonly Outcome[], deps: Deps, o: { ceiling: boolean; projection: Projection | null; digest: string }): Promise<ConstructedRun> {
+  const quota: Quota = o.ceiling ? { ...QUOTA, reserve: 0 } : QUOTA;
+  const firsts = log.filter((x) => !x.id.endsWith("t"));
+  const done = new Map(firsts.map((x) => [Number(x.id.slice(1)), x]));
+  const twins = new Map(log.filter((x) => x.id.endsWith("t")).map((t) => [t.id.slice(0, -1), t]));
+  const sets = fillSets(membersOf(schedule(MAX_DRAWS), done), quota);
+  if (!setsFull(sets, quota)) throw new AuthorError("E_USAGE", "--twins needs a run that stopped at its quotas, and the outcome log rebuilds unfilled sets");
+  if (comparisonRecord(sets.comparison).digest !== o.digest) throw new AuthorError("E_USAGE", "--twins: the outcome log rebuilds a comparison set whose digest is not the summary's");
+  const skinned = sets.calibration.slice(0, twins.size).map((m) => m.id);
+  if (skinned.length !== twins.size || !skinned.every((id) => twins.has(id))) throw new AuthorError("E_USAGE", "--twins: the logged second skins are not the first calibration units in draw order");
+  await skinTwins(sets.calibration, (m) => done.get(m.draw)!, twins, deps, quota.twins);
+  return { ceiling: o.ceiling, projection: o.projection, outcomes: [...done.entries()].sort(([a], [b]) => a - b).map(([, x]) => x), twins: [...twins.values()], sets, stopped: "quotas" };
 }
 
 const countBy = (xs: readonly Outcome[], key: (o: Outcome) => string) => Object.fromEntries([...new Set(xs.map(key))].sort().map((k) => [k, xs.filter((x) => key(x) === k).length]));
