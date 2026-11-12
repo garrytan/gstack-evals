@@ -40,7 +40,7 @@ export const TYPE_PHRASE: Readonly<Record<NamedType, string>> = {
 /** The industries in their frozen order; a twin moves to the next one. */
 export const INDUSTRIES: readonly string[] = ["dental practices", "freight trucking", "K-12 schools", "restaurants", "home building", "insurance brokerage", "veterinary clinics", "property management", "small law firms", "farming", "fitness studios", "event venues", "home care agencies", "accounting firms", "contract manufacturing", "independent pharmacies", "hotels", "nonprofits", "warehousing", "auto repair", "recruiting agencies", "museums", "city governments", "film production"];
 
-export const AUTHOR_PROMPT = "Invent a startup founder for a test of business advisors. Story shape: <shape>. The founder pitches <type>. Industry: <industry>. Write three files. opening.md: the founder's first message to an advisor, in the first person, 150 to 300 words, saying what they want to build and why, the way a founder who believes in their plan would say it. sheet.json: {\"persona\": one line of at most 30 words on who the founder is, \"facts\": [{\"id\": \"F1\", \"text\": one fact the founder knows, in the first person, at most 40 words, \"reveal_when\": the kind of question that would draw it out, in plain words, at most 20 words, \"kind\": one of demand, payment, user, status-quo, attempt, reaction, channel, constraint, other}]}, with 10 to 16 facts: 4 to 6 that together point to one specific kind of customer and one specific offering they would pay for first, as the story shape says; 2 to 4 that point toward a plausible but weaker alternative; and the rest neutral. No fact may state the answer outright or recommend anything, and opening.md must not reveal what the 4 to 6 facts show. key.json: {\"customer\": the kind of person or organization the facts show would pay first, at most 25 words; \"wedge\": the specific offering they would pay for first, at most 25 words; \"first_move\": the concrete first step the facts support toward that first sale, at most 30 words; \"pivot\": the part of the opening plan the facts contradict and the direction they point, at most 30 words, or \"none\"; \"key_facts\": the ids of the facts that point to the customer or the offering; \"mentioned\": the names of any of customer and wedge that opening.md already names as part of the plan; \"alternative\": {\"customer\": the customer the 2 to 4 alternative facts point toward, a different kind of customer from the key's, at most 25 words, \"wedge\": the offering they point toward, a different offering from the key's, at most 25 words}}. Invent the company, names, places and nu... (line truncated to 2000 chars)
+export const AUTHOR_PROMPT = "Invent a startup founder for a test of business advisors. Story shape: <shape>. The founder pitches <type>. Industry: <industry>. Write three files. opening.md: the founder's first message to an advisor, in the first person, 150 to 300 words, saying what they want to build and why, the way a founder who believes in their plan would say it. sheet.json: {\"persona\": one line of at most 30 words on who the founder is, \"facts\": [{\"id\": \"F1\", \"text\": one fact the founder knows, in the first person, at most 40 words, \"reveal_when\": the kind of question that would draw it out, in plain words, at most 20 words, \"kind\": one of demand, payment, user, status-quo, attempt, reaction, channel, constraint, other}]}, with 10 to 16 facts: 4 to 6 that together point to one specific kind of customer and one specific offering they would pay for first, as the story shape says; 2 to 4 that point toward a plausible but weaker alternative; and the rest neutral. No fact may state the answer outright or recommend anything, and opening.md must not reveal what the 4 to 6 facts show. key.json: {\"customer\": the kind of person or organization the facts show would pay first, at most 25 words; \"wedge\": the specific offering they would pay for first, at most 25 words; \"first_move\": the concrete first step the facts support toward that first sale, at most 30 words; \"pivot\": the part of the opening plan the facts contradict and the direction they point, at most 30 words, or \"none\"; \"key_facts\": the ids of the facts that point to the customer or the offering; \"mentioned\": the names of any of customer and wedge that opening.md already names as part of the plan; \"alternative\": {\"customer\": the customer the 2 to 4 alternative facts point toward, a different kind of customer from the key's, at most 25 words, \"wedge\": the offering they point toward, a different offering from the key's, at most 25 words}}. Invent the company, names, places and numbers, and don't base the story on any real company you know of. State nothing that happens after the founder sends the opening message.";
 
 export const NOTES_PROMPT = "Below are public accounts of one company's early history. Write two notes in your own words, copying no sentence. Note A, before the turn: what the founders set out to build first, as they described it then, and every fact they knew before the first sale of the offering that later worked: who used what and how often, who paid or offered to pay and for what, what those people did before, what the founders tried and what happened, what people said when shown it, and any numbers, each as one line with the date or stage it belongs to. Note B, the turn and after: who paid first (a specific kind of customer) and what they paid for, the offering that first got traction, whether and how the founders changed course from the opening plan, and the concrete action that led to the first sale, each as one line with its date. Put a fact in Note A only if the accounts show the founders knew it before that first sale. Leave out every person's name. On a last line headed \"Names\", list the company's names, its products' names and its founders' names. If the accounts can't support Note B's customer and offering, or Note A has fewer than 4 facts or fewer than 2 that point toward that customer or offering, write only \"INELIGIBLE\" and the reason.";
 
@@ -62,7 +62,48 @@ export const PROBE_REWRITE = "Choose an industry and a story different from this
 export const NAMED_TERMS: readonly string[] = ["demand reality", "status quo", "desperate specificity", "narrowest wedge", "observation and surprise", "future-fit"];
 
 /** The real stratum's frame: 40 queries, the first 10 results of each, and the hosts left out. */
-export const QUERIES: readonly string[] = QUERIES_JSON;
+export const QUERIES: readonly string[] = [
+  "\"how we got our first paying customer\" founder blog",
+  "\"we originally set out to build\" startup pivot",
+  "\"our first ten customers\" founder",
+  "\"how we found product market fit\" founder story",
+  "\"how we got our first customers\" SaaS founder blog post",
+  "\"the story of how we started\" startup founder blog first customer",
+  "\"we pivoted\" \"first paying customer\" founder blog",
+  "\"before we wrote a line of code\" customer interviews founder blog",
+  "\"how we got our first 100 customers\" founder blog",
+  "\"our first customer\" startup founder blog",
+  "\"the early days\" startup founder \"first paying customers\"",
+  "\"we thought our customers would be\" startup founder",
+  "\"turned out our real customers\" startup founder blog",
+  "\"nobody wanted\" \"so we pivoted\" founder blog",
+  "\"our first sale\" startup founder story",
+  "\"how I got my first customer\" SaaS founder",
+  "\"our pivot\" startup founder blog customers",
+  "\"we started as\" startup founder story first customers",
+  "\"finding our first customers\" B2B startup founder blog",
+  "\"how we found our niche\" startup founder blog",
+  "\"first paying user\" founder story",
+  "\"what we learned from our first customers\" founder blog",
+  "\"origin story\" startup founder blog \"first customers\"",
+  "\"how we validated\" startup idea \"first customer\" founder",
+  "\"chicken and egg\" marketplace \"first customers\" founder blog",
+  "\"developer tool\" \"first paying customers\" founder blog",
+  "\"consumer app\" \"first users\" founder story blog",
+  "\"we almost shut down\" startup founder first customer",
+  "\"the idea changed\" startup founder blog customers",
+  "\"first enterprise customer\" startup founder story blog",
+  "\"how we landed our first client\" startup founder blog",
+  "\"zero to first revenue\" startup founder blog",
+  "\"first $1,000\" startup founder story customers",
+  "\"lessons from our first year\" startup founder \"first customers\"",
+  "\"our original idea was\" startup founder blog",
+  "\"we were wrong about\" customers startup founder blog",
+  "\"how our first customer found us\" startup blog",
+  "\"the customer who changed our direction\" startup blog",
+  "\"we narrowed our focus\" startup founder blog customers",
+  "\"early customers taught us\" startup founder blog",
+];
 export const EXCLUDED_HOSTS: readonly string[] = ["linkedin.com", "medium.com", "substack.com", "indiehackers.com", "hackernoon.com", "reddit.com", "ycombinator.com", "firstround.com", "starterstory.com", "techcrunch.com", "quora.com", "youtube.com", "x.com", "twitter.com", "facebook.com", "wikipedia.org"];
 export const RESULTS_PER_QUERY = 10;
 export const PAGES_PER_SOURCE = 3;
@@ -116,7 +157,7 @@ export const KEY_TRACE_CHECKS: readonly TraceCheck[] = ["t2", "t3"];
 
 export const tracePrompt = (noteA: string, noteB: string, files: string): string =>
   "Below are two notes on a real startup's early history and an invented startup re-skinned from it. Check each of these and mark it pass or fail:\n" + checkList(TRACE_CHECKS) +
-  '\n\nReply with a JSON object only: {"t1": "pass" or "fail", "t2": ..., "t3": ..., "t4": ..., "t5": ..., "pointing": the ids of the key facts that point toward the customer or the wedge, "opening_date": the date or stage of the opening plan in the notes, "first_sale_date": the date of the first sale in the notes, "industry": the invented startup's industry in a few words, "why": one line per failed check}.\n\n' +
+  '\n\nReply with a JSON object only: {"t1": "pass" or "fail", "t2": ..., "t3": ..., "t4": ..., "t5": ..., "pointing": the ids of the key facts that point toward the customer or the wedge, "opening_date": the date or stage of the opening plan in the notes, "first_sale_date": the date of the first sale in the notes, "industry": the industry of the invented startup, in a few words, "why": one line per failed check}.\n\n' +
   fence("Note A", noteA) + "\n\n" + fence("Note B", noteB) + "\n\n" + files;
 
 /** Section 3 step 7 (real stratum): the audit, without the notes, with section 2's foreseeable rating. */

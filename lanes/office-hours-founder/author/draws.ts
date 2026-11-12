@@ -25,7 +25,7 @@ export interface Draw {
 export const authorOf = (draw: number): AuthorFamily => (draw % 2 === 1 ? "sol" : "argon");
 export const otherFamily = (f: AuthorFamily): AuthorFamily => (f === "sol" ? "argon" : "sol");
 /** The meter's model key for an author family. */
-export const modelOf = (f: AuthorFamily) => (f === "sol" ? "sol" : "gemini") as const;
+export const modelOf = (f: AuthorFamily): "sol" | "gemini" => (f === "sol" ? "sol" : "gemini");
 
 /** The first n draw positions. */
 export function schedule(n: number): Draw[] {

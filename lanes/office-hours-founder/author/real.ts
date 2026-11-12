@@ -300,15 +300,16 @@ export async function runReal(id: string, draw: number, pages: readonly Page[], 
     const s = await ask(deps.call, { model: modelOf(t1), prompt, maxTokens: 16000, effort: "high", label: label + ":t1" }, (t) => unitFrom(t, { constructed: false, names: ["opening.md", "sheet.json"] }));
     return typeof s === "string" ? s : writeT2(s, t2Prompt(s), label + ":t2");
   };
-  let u = await fromT1(t1Prompt, id);
-  if (typeof u === "string") return drop("writer", u, null);
+  const first = await fromT1(t1Prompt, id);
+  if (typeof first === "string") return drop("writer", first, null);
+  let u: UnitFiles = first;
   for (;;) {
     const v = await checkReal(id, u, n, pages.map((p) => p.text), t1, deps, checks);
     if (v.ok) return { id, status: "pass", step: null, reason: "passed", files: u, meta: { id, stratum: "real", draw, author: t1, shape: null, ...v.meta }, record: v.record, checks, rewrites, notes };
     if (!v.note || rewrites) return drop(v.step, v.reason, u);
     rewrites = 1;
     for (const c of checks) c.void = true;
-    const again = v.from === "t2" ? await writeT2(u, rewritePrompt(t2Prompt(u), fence("key.json", keyJson(u.key).trim()), v.note), id + ":rewrite:t2") : await fromT1(rewritePrompt(t1Prompt, unitText(u.opening, u.sheet), v.note), id + ":rewrite");
+    const again: UnitFiles | string = v.from === "t2" ? await writeT2(u, rewritePrompt(t2Prompt(u), fence("key.json", keyJson(u.key).trim()), v.note), id + ":rewrite:t2") : await fromT1(rewritePrompt(t1Prompt, unitText(u.opening, u.sheet), v.note), id + ":rewrite");
     if (typeof again === "string") return drop("writer", again, u);
     u = again;
   }
