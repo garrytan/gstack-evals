@@ -163,6 +163,8 @@ export async function runAnswer(o: AnswerOptions): Promise<AnswerResult> {
   let leaseId: string | null = null;
   let capStopped = false;
   const scratch = mkdtempSync(join(tmpdir(), "dr-answer-"));
+  let checkStops: (() => AnswerResult["stop"]) | null = null;
+  let thrown: Error | null = null;
   try {
     if (existsSync(journal)) {
       const rec = await reconcileJournal(journal, local);
@@ -189,7 +191,7 @@ export async function runAnswer(o: AnswerOptions): Promise<AnswerResult> {
       await awaitLeaseConfirmed(out, [leaseId], o.leaseConfirmMs ?? LEASE_CONFIRM_MS, 5000, () => existsSync(stopFile));
     }
 
-    const checkStops = (): AnswerResult["stop"] => {
+    checkStops = (): AnswerResult["stop"] => {
       if (existsSync(stopFile)) return { code: "E_DR_STOPPED", message: "the stop file " + stopFile + " appeared" };
       const lines = readLines(journal);
       const hit = lines.find((l) => l.kind === "refusal" && l.code === "DR_CUSTODY_HIT");
@@ -255,10 +257,14 @@ export async function runAnswer(o: AnswerOptions): Promise<AnswerResult> {
       }
     }
     result.stop ??= checkStops();
+  } catch (e) {
+    thrown = e as Error;
+    throw e;
   } finally {
     proxy?.stop();
     if (leaseId) {
       try {
+        if (thrown && checkStops) result.stop ??= checkStops();
         const rec = await reconcileJournal(journal, local);
         for (const x of rec.refused) warn(x.code as ReasonCode, "settling reservation " + (x.reservation_id ?? "(a lost reserve)") + " was refused: " + x.message);
         const close = settleLease(record, local, leaseId, warn, capStopped ? "answer " + o.runId : undefined);
@@ -269,8 +275,8 @@ export async function runAnswer(o: AnswerOptions): Promise<AnswerResult> {
     }
     local.close();
     rmSync(scratch, { recursive: true, force: true });
+    if (leaseId) writeFileSync(join(out, "answer.json"), JSON.stringify({ run_id: o.runId, item: o.item, mode: o.mode, temp: !!o.temp, record, ...result, sessions, ...(thrown ? { error: thrown.message } : {}) }, null, 2) + "\n");
   }
-  if (leaseId) writeFileSync(join(out, "answer.json"), JSON.stringify({ run_id: o.runId, item: o.item, mode: o.mode, temp: !!o.temp, record, ...result, sessions }, null, 2) + "\n");
   return result;
 }
 

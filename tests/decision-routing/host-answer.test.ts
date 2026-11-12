@@ -309,6 +309,15 @@ test("a child that exits non-zero counts as failed, not answered, is never start
   expect(await main([...args, "--out", join(dir, "cli-ok")])).toBe(0);
 });
 
+test("a throw after the lease opens still settles the lease and writes answer.json with the error", async () => {
+  const { opts, list } = world(1);
+  await expect(runAnswer({ ...opts, python: [join(opts.out, "no-such-python")] })).rejects.toThrow();
+  const answer = JSON.parse(readFileSync(join(opts.out, "answer.json"), "utf8"));
+  expect(answer.error).toBeTruthy();
+  expect(answer.lease.lease_id).toBeTruthy();
+  expect(answer.sessions.map((s: { session: string }) => s.session)).toEqual([list[0]!.session]);
+});
+
 test("on a relaunch a session whose record has no exit code (a crash mid-session) counts as failed and is never started again", async () => {
   const { opts, list } = world(2);
   mkdirSync(join(opts.out, "answers"), { recursive: true });
