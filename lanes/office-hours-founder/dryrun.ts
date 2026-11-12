@@ -21,16 +21,17 @@ interface Io {
 export const AREAS = ["seams.ts", "sim/seams.ts", "author/seams.ts", "run/seams.ts", "score/seams.ts", "read/seams.ts"] as const;
 
 /**
- * The eval's ledger items, one per frozen run (an item serves one run). The cells are run.ts's launches; labels, the
- * judge check and the audits are judge runs; hosts holds the runner VMs; probe is the one-time route check.
+ * The eval's ledger items, one per frozen run (an item serves one run). The author items hold the pilot, the constructed
+ * run and the real stratum; runs and sim items are run.ts's launches; labels, the judge check, the audits and the
+ * arm-guess probe are judge runs; hosts holds the runner VMs.
  */
 export const ITEMS = [
-  "of-author-pilot", "of-author",
+  "of-author-pilot", "of-author", "of-real-author",
   "of-s1-runs", "of-s1-sim", "of-smoke-runs", "of-smoke-sim", "of-s1-labels", "of-s1-check", "of-s1-audit",
   "of-s2-runs", "of-s2-sim", "of-s2-labels", "of-s2-audit",
   "of-real-runs", "of-real-sim", "of-real-labels",
   "of-pitch-runs", "of-pitch-labels",
-  "of-probe", "of-hosts",
+  "of-arm-guess", "of-hosts",
 ] as const;
 
 export interface Line {

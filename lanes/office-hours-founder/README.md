@@ -21,6 +21,7 @@ This folder is the build that preregistration describes. Every paid run pins one
 | run/ | The arm sessions: manifests, the session loop, containment, rows and the end to end |
 | score/ | Label packets, the judges, the exposure detector, the counters and the scorer |
 | read/ | The frozen readings for stage 1 and stage 2, the projection and the headline |
+| audit.ts | The fidelity audit of the simulated founder and the arm-guess probe, the two judge runs over finished sessions |
 | wire.ts, cli.ts | How the areas connect, and the `gstack-evals of` commands |
 | dryrun.ts, e2e-score.ts | The keyless dry run, and the scoring half of the end to end |
 

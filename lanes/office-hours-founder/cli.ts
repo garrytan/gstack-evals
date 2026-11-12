@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { CODES, docAnchor, isReasonCode, type ReasonCode } from "../../src/errors/codes.ts";
 import { scoreE2e } from "./e2e-score.ts";
+import { commands as auditCommands } from "./audit.ts";
 import { commands as authorCommands } from "./author/cli.ts";
 import { commands as readCommands } from "./read/cli.ts";
 import { e2eCommand, rowsCommand, runCommand } from "./run/cli.ts";
@@ -35,6 +36,7 @@ export const SUBCOMMANDS: Record<string, { summary: string; run: Run }> = {
   run: { summary: "one cell's sessions on the Docker rig with the simulated founder (stage1, smoke, stage2, pitch, real)", run: runWithSimulator },
   rows: { summary: "a launch's rows against its frozen manifest, with the end-state counts", run: (argv, io) => rowsCommand(argv, io) },
   ...scoreCommands,
+  ...auditCommands,
   ...readCommands,
   e2e: { summary: "the keyless end to end: fixture founders through the real rig, proxy, ledger, simulator, packets and scorer", run: (argv, io, env) => e2eCommand(argv, io, env, { founder: simFounder(), after: scoreE2e }) },
   dryrun: { summary: "the keyless dry run that drives every frozen rule (start rule 7)", run: async (argv, io) => (await import("./dryrun.ts")).run(argv, io) },
