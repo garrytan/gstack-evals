@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { CODES, docAnchor, isReasonCode, type ReasonCode } from "../../src/errors/codes.ts";
 import { scoreE2e } from "./e2e-score.ts";
+import { commands as authorCommands } from "./author/cli.ts";
 import { e2eCommand, rowsCommand, runCommand } from "./run/cli.ts";
 import { commands as scoreCommands } from "./score/cli.ts";
 import { simFounder } from "./wire.ts";
@@ -29,6 +30,7 @@ function runWithSimulator(argv: string[], io: Io, env: Env): Promise<number> {
 }
 
 export const SUBCOMMANDS: Record<string, { summary: string; run: Run }> = {
+  ...authorCommands,
   run: { summary: "one cell's sessions on the Docker rig with the simulated founder (stage1, smoke, stage2, pitch, real)", run: runWithSimulator },
   rows: { summary: "a launch's rows against its frozen manifest, with the end-state counts", run: (argv, io) => rowsCommand(argv, io) },
   ...scoreCommands,
