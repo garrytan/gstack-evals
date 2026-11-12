@@ -16,6 +16,12 @@ describe("headlines", () => {
       expect(x).toEndWith(POPULATION);
     }
   });
+  test("helps with an incomplete pitch-only cell says the check didn't complete, with the count, on that model only", () => {
+    const i = stage2Fixture({ w: (e) => (e.arm === "office-hours" ? 1 : 0) });
+    const h = headlines(readStage2({ ...i, sessions: i.sessions.filter((s) => !(s.kind === "pitch" && s.model === "sol" && s.unit === "u01")) }), {});
+    expect(h.find((x) => x.includes("on Sol"))).toContain("but the pitch-only check didn't complete (" + (i.pitch_manifest.filter((e) => e.model === "sol").length - 3) + " of " + i.pitch_manifest.filter((e) => e.model === "sol").length + " sessions scored)");
+    expect(h.find((x) => x.includes("on Opus"))).toContain("asking a founder for the evidence before advising");
+  });
   test("hurts states the move away plainly, and every repair that ran is named", () => {
     const i = stage2Fixture({ w: (e) => (e.arm === "none" ? 1 : 0) });
     const h = headlines(readStage2({ ...i, stage1: { ...i.stage1, repairs: ["forced sentence"] } }), {});

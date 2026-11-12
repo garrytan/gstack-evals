@@ -34,9 +34,9 @@ and Names lines are written only to a custody directory outside the repository.
 
 ## Commands
 
-`gstack-evals of author --units <dir> --gstack <checkout> --item <ledger item> --spend-cap <usd> [--pilot] [--ceiling]
-[--resume] [--concurrency <n>] [--record <dir>] [--ledger <path>]` runs the constructed pipeline. `--pilot` runs the
-4-unit pilot and prints its supply projection; without it the run goes on to the quotas or the cap. `--ceiling` is the
+`gstack-evals of author --units <dir> --gstack <checkout> --item <ledger item> --spend-cap <usd> [--pilot
+[--authoring-cap <usd>]] [--ceiling] [--resume] [--concurrency <n>] [--record <dir>] [--ledger <path>]` runs the
+constructed pipeline. `--pilot` runs the 4-unit pilot and prints its supply projection; without it the run goes on to the quotas or the cap. `--ceiling` is the
 CEILING redraw. `--gstack` must be a checkout at the pin (HEAD, VERSION and the phase-2a file are all checked).
 
 `gstack-evals of real --units <dir> --frame <json> --gstack <checkout> --item <ledger item> --spend-cap <usd> [--resume]
@@ -162,7 +162,8 @@ Who produces that file, and with which search tool, is for the Captain to decide
     drift the meter catches on Sol or particle-1 is re-raised as E_OF_PROVIDER_DRIFT. Either stops the command; the lease
     settles first.
 40. **One cap.** `--spend-cap` is both the lease's amount and the authoring cap that the pilot projection and the cap stop
-    read.
+    read. A pilot on its own ledger item leases its `--spend-cap` and projects against `--authoring-cap`, the full run's
+    cap; only `--pilot` takes that flag.
 41. **Resume.** `--resume` reuses `--units`, its run id and its reply cache, so settled calls replay at no cost. The spend
     of earlier launches is kept in `run.json` and counts toward `spent()`.
 42. **The supply stop's MDD.** It is power.py's guard-rule MDD for Opus at its 2 passes, at the planning design of section

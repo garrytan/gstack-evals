@@ -339,6 +339,7 @@ function stage2Command(f: Flags, io: Io, python: Python): number {
     gold: goldInputs(f.many("--map").map((p) => json<PacketMap>(p, "--map")), labelsFrom(f.many("--labels"), "--labels")),
     voided: audit.read !== "pass",
     stopped: launches.some((l) => l.m.cell === "stage2" && l.stopped),
+    pitch_stopped: launches.some((l) => l.m.cell === "pitch" && l.stopped),
     arm_guess: { correct: correct!, total: total! },
     mdd: (model, n, passes) => powerMdd([{ p0: est[model].p0, rho: est[model].rho, s: est[model].s, n, passes }], python)[0]!.w,
   });

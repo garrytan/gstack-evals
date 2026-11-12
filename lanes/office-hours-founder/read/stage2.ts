@@ -281,17 +281,23 @@ export interface PitchRead {
   part: Comparison | null;
   /** AN-1's headline condition: the model reads helps and the pitch estimate is at least half the W estimate. */
   condition: boolean;
+  /** The model's scheduled pitch-only sessions, and those that scored a W. */
+  scheduled: number;
+  scored: number;
+  /** The Captain's pre-data completion rule: every scheduled session scored and the cell's launch did not stop. */
+  complete: boolean;
 }
 
 /** AN-1: W_pitch per arm, office-hours minus none on it, and the conversation's part, on the pitch cell's own sessions. */
-export function readPitch(pitch: readonly ScoredSession[], primary: Pick<ContrastRead, "verdict" | "w">, wUnits: ReadonlyMap<string, number>): PitchRead {
+export function readPitch(pitch: readonly ScoredSession[], primary: Pick<ContrastRead, "verdict" | "w">, wUnits: ReadonlyMap<string, number>, cell: { scheduled: number; stopped: boolean }): PitchRead {
   const arm = (x: ArmId) => pitch.filter((s) => s.arm === x);
   const W_pitch = Object.fromEntries(ARMS.map((x) => [x, unitMean(arm(x), W)])) as PitchRead["W_pitch"];
   const pm = matchUnits(arm("none"), arm("office-hours"), W).units;
   const diff = compare(pm);
   const part = compare(pm.filter((u) => wUnits.has(u.unit)).map((u) => ({ unit: u.unit, a: u.b - u.a, b: wUnits.get(u.unit)!, passes: 1 })));
   const condition = primary.verdict === "helps" && primary.w !== null && diff !== null && r4(diff.delta) >= r4(primary.w.delta / 2);
-  return { W_pitch, diff, part, condition };
+  const scored = pitch.filter((s) => s.W !== null).length;
+  return { W_pitch, diff, part, condition, scheduled: cell.scheduled, scored, complete: !cell.stopped && cell.scheduled > 0 && scored === cell.scheduled };
 }
 
 export interface ModelRead {
@@ -324,6 +330,8 @@ export interface Stage2Input {
   voided: boolean;
   /** The stage stopped (a cap stop or any stopping code). */
   stopped: boolean;
+  /** The pitch-only cell's launch stopped. */
+  pitch_stopped: boolean;
   arm_guess: { correct: number; total: number };
   /** power.py's W MDD at a design (projection.ts), recomputed at the effective units. */
   mdd: (model: ModelId, units: number, passes: number) => number | null;
@@ -406,7 +414,7 @@ export function readStage2(i: Stage2Input): Stage2Reading {
             N: realCmp((s) => s.N),
             by_fame: [1, 2, 3].map((t) => ({ tercile: t, cmp: realCmp(W, (s) => metas.get(s.unit)?.fame_tercile === t) })),
           },
-          pitch: readPitch(pitchRows.filter((r) => r.entry.model === model && r.session).map((r) => r.session!), primary, wUnits),
+          pitch: readPitch(pitchRows.filter((r) => r.entry.model === model && r.session).map((r) => r.session!), primary, wUnits, { scheduled: pitchRows.filter((r) => r.entry.model === model).length, stopped: i.pitch_stopped }),
         },
       ];
     }),

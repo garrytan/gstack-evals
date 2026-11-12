@@ -127,6 +127,13 @@ describe("of author through the metered client", () => {
     await expect(authorCommand(["--units", s.units, "--gstack", "g", "--item", "of-auth", "--spend-cap", "0.001", "--pilot", "--record", s.record, "--ledger", s.ledger], c.io, ENV, wire())).rejects.toThrow(/^E_OF_SUPPLY_SHORT /);
     expect(c.out.join("\n")).toMatch(/does not fit/);
   });
+  test("a pilot on its own item leases --spend-cap and projects against --authoring-cap, which only a pilot takes", async () => {
+    const s = setup("of-auth");
+    const c = capture();
+    await expect(authorCommand(["--units", s.units, "--gstack", "g", "--item", "of-auth", "--spend-cap", "20", "--pilot", "--authoring-cap", "0.001", "--record", s.record, "--ledger", s.ledger], c.io, ENV, wire())).rejects.toThrow(/^E_OF_SUPPLY_SHORT /);
+    expect(c.out.join("\n")).toMatch(/against a cap of 0\.001 \(does not fit/);
+    await expect(authorCommand(["--units", setup("of-auth2").units, "--gstack", "g", "--item", "of-auth2", "--spend-cap", "20", "--authoring-cap", "330"], capture().io, ENV, wire())).rejects.toThrow(/^E_USAGE .*--authoring-cap/);
+  });
 });
 
 describe("of real through the metered client", () => {

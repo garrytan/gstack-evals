@@ -87,10 +87,11 @@ const twinW = (i: Stage1Input, a: (k: number) => 0 | 1, b: (k: number) => 0 | 1)
 
 export const COMPARISON = ids("u", 10);
 /**
- * Stage 2 on 10 invented units: every scheduled session scored with W from w, shuffled-key W 0, office-hours exposed,
+ * Stage 2 on 10 invented units: every scheduled session scored with W from w, every pitch-only session at W 0 unless
+ * extra replaces it, shuffled-key W 0, office-hours exposed,
  * clean stage 1, perfect gold re-check, and power.py's MDD stubbed at 0.13. edit may change a session or unrun it (null).
  */
-export function stage2Fixture(o: { w: (e: ManifestEntry) => 0 | 1; edit?: (s: ScoredSession) => ScoredSession | null; extra?: readonly ScoredSession[]; real?: readonly string[]; stopped?: boolean }): Stage2Input {
+export function stage2Fixture(o: { w: (e: ManifestEntry) => 0 | 1; edit?: (s: ScoredSession) => ScoredSession | null; extra?: readonly ScoredSession[]; real?: readonly string[]; stopped?: boolean; pitch_stopped?: boolean }): Stage2Input {
   const man = manifest(COMPARISON, { kind: "arm", real: false, cuts: [] });
   const sessions = man.flatMap((e) => {
     const s = session({ ...e, W: o.w(e), exposed: e.arm === "office-hours" ? true : null });
@@ -98,17 +99,19 @@ export function stage2Fixture(o: { w: (e: ManifestEntry) => 0 | 1; edit?: (s: Sc
     return t ? [t] : [];
   });
   const gold = Array.from({ length: 40 }, (_, k) => ({ gold: k < 20, judged: k < 20 }));
+  const pitchManifest = manifest(COMPARISON, { kind: "pitch", real: false, cuts: [] });
   return {
     manifest: man,
     real_manifest: manifest(o.real ?? [], { kind: "arm", real: true, cuts: [] }),
-    pitch_manifest: manifest(COMPARISON, { kind: "pitch", real: false, cuts: [] }),
-    sessions: [...sessions, ...(o.extra ?? [])],
+    pitch_manifest: pitchManifest,
+    sessions: [...sessions, ...pitchManifest.map((e) => session({ ...e, W: 0 })), ...(o.extra ?? [])],
     units: COMPARISON.map((id) => unitMeta(id)),
     stage1: { band: bandDecide(0.375, 0.8125, false), untested: { opus: [], sol: [], particle: [] }, smoke_drop: { opus: false, sol: false, particle: false }, repairs: [] },
     stock: [],
     gold: { opus: gold, sol: gold, particle: gold },
     voided: false,
     stopped: o.stopped ?? false,
+    pitch_stopped: o.pitch_stopped ?? false,
     arm_guess: { correct: 15, total: 30 },
     mdd: () => 0.13,
   };
@@ -331,7 +334,7 @@ const readingSeams: Seam[] = [
 const pitchSeams: Seam[] = [0.2, 0.2002].map((wDelta) =>
   seam("AN-1: a pitch-only difference of 0.1 against a W difference of " + wDelta + (wDelta === 0.2 ? " (exactly half) meets" : " (just under half) misses") + " the headline condition", () => {
     const pitch = COMPARISON.flatMap((unit, k) => [session({ kind: "pitch", unit, arm: "none", W: 0 }), session({ kind: "pitch", unit, arm: "office-hours", W: k === 0 ? 1 : 0 })]);
-    const p = readPitch(pitch, { verdict: "helps", w: { units: 10, mean_a: 0.3, mean_b: 0.5, delta: wDelta, ci95: [0.1, 0.3], p: 0.01, worse: 0 } }, new Map(COMPARISON.map((u) => [u, wDelta])));
+    const p = readPitch(pitch, { verdict: "helps", w: { units: 10, mean_a: 0.3, mean_b: 0.5, delta: wDelta, ci95: [0.1, 0.3], p: 0.01, worse: 0 } }, new Map(COMPARISON.map((u) => [u, wDelta])), { scheduled: pitch.length, stopped: false });
     return { ok: p.condition === (wDelta === 0.2) && p.diff?.delta === 0.1 && p.part?.delta === r4(wDelta - 0.1), detail: "pitch " + p.diff?.delta + ", part " + p.part?.delta };
   }),
 );
@@ -340,6 +343,18 @@ pitchSeams.push(seam("AN-1: when the condition holds the helps headline says the
   const h = headlines(readStage2(stage2Fixture({ w: helps, extra: pitch })), {}).find((x) => x.includes("on Opus"))!;
   return { ok: h.startsWith("helps on Opus") && h.includes("reveals nothing") && !h.includes("asking a founder"), detail: h.slice(0, 160) };
 }));
+pitchSeams.push(
+  ...([["one Opus pitch-only session missing", false], ["the pitch-only launch stopped", true]] as const).map(([what, stopped]) =>
+    seam("AN-1 completion: with " + what + ", the helps headline says the pitch-only check didn't complete and credits neither reading", () => {
+      const pitch = manifest(COMPARISON, { kind: "pitch", real: false, cuts: [] }).map((e) => session({ ...e, W: e.arm === "office-hours" ? 1 : 0 }));
+      const gone = pitch.find((s) => s.model === "opus")!;
+      const i = stage2Fixture({ w: helps, extra: pitch, pitch_stopped: stopped });
+      const r = readStage2({ ...i, sessions: stopped ? i.sessions : i.sessions.filter((s) => !(s.kind === "pitch" && s.model === gone.model && s.unit === gone.unit && s.arm === gone.arm)) });
+      const h = headlines(r, {}).find((x) => x.includes("on Opus"))!;
+      return { ok: !r.models.opus.pitch.complete && h.startsWith("helps on Opus") && h.includes("the pitch-only check didn't complete") && !h.includes("reveals nothing") && !h.includes("asking a founder"), detail: h.slice(0, 200) };
+    }),
+  ),
+);
 
 const fakePower = (guard: number): Python => () => JSON.stringify(MODELS.map(() => ({ w: 0.13, guard })));
 const projectionSeams: Seam[] = ([[0.15, true], [0.16, false]] as const).map(([g, ok]) =>

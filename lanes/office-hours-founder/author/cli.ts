@@ -4,7 +4,8 @@
 // production labeller runs through the same meter as the writers, validators, auditors and probes) and print counts and
 // digests only; every unit, note, page, Names line, reply and journal stays under --units, outside the repository.
 // - of author: the constructed pipeline. --pilot runs the 4-unit pilot and prints its supply projection; without it the
-//   run goes on to the quotas or the cap, the pilot's units joining. --ceiling is R61's harder redraw.
+//   run goes on to the quotas or the cap, the pilot's units joining. A pilot on its own ledger item leases --spend-cap
+//   and projects against --authoring-cap, the full run's cap. --ceiling is R61's harder redraw.
 // - of real: the real stratum from a frame file that maps each of the 40 frozen queries to its first 10 result URLs,
 //   through the two-check terms gate and the serial miner (plain GETs, one at a time, user agent gstack-evals).
 // --gstack must be a checkout at the pin: HEAD b6155921a564ba9ec2470fd2cb3894c05e2c2d13, VERSION 1.98.0.0 and the
@@ -46,7 +47,7 @@ export interface Wire {
   today?: string;
 }
 
-const AUTHOR_USAGE = "gstack-evals of author --units <dir> --gstack <checkout> --item <ledger item> --spend-cap <usd> [--pilot] [--ceiling] [--resume] [--concurrency <n>] [--record <dir>] [--ledger <path>]";
+const AUTHOR_USAGE = "gstack-evals of author --units <dir> --gstack <checkout> --item <ledger item> --spend-cap <usd> [--pilot [--authoring-cap <usd>]] [--ceiling] [--resume] [--concurrency <n>] [--record <dir>] [--ledger <path>]";
 const REAL_USAGE = "gstack-evals of real --units <dir> --frame <json> --gstack <checkout> --item <ledger item> --spend-cap <usd> [--resume] [--record <dir>] [--ledger <path>]";
 
 /** The planning design for the supply stop's MDD: Opus at its passes, control rate 0.25, ICC 0.5, shuffled-key credit 0.05 (section 12, part F). */
@@ -161,10 +162,12 @@ const tally = (o: Record<string, number>) => Object.entries(o).map(([k, n]) => k
 
 /** gstack-evals of author. */
 export async function authorCommand(argv: string[], io: Io, env: Env, wire: Wire = {}): Promise<number> {
-  const a = parseArgs(argv, { units: "one", gstack: "one", item: "one", "spend-cap": "one", pilot: "flag", ceiling: "flag", resume: "flag", concurrency: "one", record: "one", ledger: "one" }, AUTHOR_USAGE);
+  const a = parseArgs(argv, { units: "one", gstack: "one", item: "one", "spend-cap": "one", "authoring-cap": "one", pilot: "flag", ceiling: "flag", resume: "flag", concurrency: "one", record: "one", ledger: "one" }, AUTHOR_USAGE);
   need(a, ["units", "gstack", "item", "spend-cap"], AUTHOR_USAGE);
   if (a.flag.has("pilot") && a.flag.has("ceiling")) throw new AuthorError("E_USAGE", "the CEILING redraw runs no pilot; pass --pilot or --ceiling, not both");
+  if (a.one["authoring-cap"] !== undefined && !a.flag.has("pilot")) throw new AuthorError("E_USAGE", "--authoring-cap is the cap a pilot on its own ledger item projects against; the full run's authoring cap is its --spend-cap");
   const cap = dollars(a.one["spend-cap"]!);
+  const authoring = a.one["authoring-cap"] === undefined ? cap : dollars(a.one["authoring-cap"]);
   const concurrency = Number(a.one.concurrency ?? "4");
   if (!Number.isSafeInteger(concurrency) || concurrency < 1) throw new AuthorError("E_USAGE", "--concurrency is a whole number of at least 1");
   const asks = (wire.gstack ?? checkGstack)(a.one.gstack!);
@@ -172,7 +175,7 @@ export async function authorCommand(argv: string[], io: Io, env: Env, wire: Wire
   const w = await openWire({ units, item: a.one.item!, cap, record: a.one.record, ledger: a.one.ledger, env, io, upstream: wire.upstream, label: "of-author" });
   let run;
   try {
-    run = await authorConstructed({ ...depsOf(w, asks), spent: w.spent }, { cap: cap / 1e6, concurrency, mdd: mddAt(wire.python ?? python3), ceiling: a.flag.has("ceiling"), pilotOnly: a.flag.has("pilot") });
+    run = await authorConstructed({ ...depsOf(w, asks), spent: w.spent }, { cap: authoring / 1e6, concurrency, mdd: mddAt(wire.python ?? python3), ceiling: a.flag.has("ceiling"), pilotOnly: a.flag.has("pilot") });
   } finally {
     await w.close("of author");
   }

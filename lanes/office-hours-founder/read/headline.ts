@@ -2,7 +2,9 @@
 // Section 16's opening bullets for the office-hours founder eval (prereg
 // wiki/plans/2026-11-09-geva-418-office-hours-founder-evidence-prereg). Each bullet's shape is fixed by its model's
 // verdict, so the reading can't pick its story: helps (with the Captain's AN-1 condition, when the gain also appears
-// in the pitch-only cell), no measurable difference, hurts, and untested or not shown. Every bullet names its
+// in the pitch-only cell, and the Captain's pre-data completion rule: when the model's pitch-only cell ended incomplete,
+// the bullet says the check didn't complete and credits neither reading), no measurable difference, hurts, and untested
+// or not shown. Every bullet names its
 // population and the repairs that ran; helps prints the specificity interval and says the guard is the weaker rule;
 // Opus's bullet says so when the real stratum's sign is opposite the primary's.
 import { MODELS } from "../frozen.ts";
@@ -28,7 +30,9 @@ export function headlines(r: Stage2Reading, next: Readonly<Partial<Record<ModelI
     let text: string;
     if (p.verdict === "helps") {
       const tail = " by " + points(w!.delta) + " points (" + ci(w) + ", p " + w!.p + "); the real stratum then says whether the same held where the outcome is known (office-hours minus none there " + said(read.real.W) + "). The specificity interval is " + (p.specificity?.ci95 ? p.specificity.ci95.join(" to ") : "n/a") + "; the helps rule's specificity part is a guard, weaker than requiring that interval to exclude zero.";
-      text = read.pitch.condition
+      text = !read.pitch.complete
+        ? "helps on " + name + ": office-hours moved " + name + "'s first-move advice toward the customer or offering the founder's own evidence supported, but the pitch-only check didn't complete (" + read.pitch.scored + " of " + read.pitch.scheduled + " sessions scored), so this eval does not credit the gain to drawing out evidence;" + tail
+        : read.pitch.condition
         ? "helps on " + name + ": office-hours moved " + name + "'s first-move advice toward the customer or offering the founder's own evidence supported, and the gain also appears when the founder reveals nothing (pitch-only office-hours minus none " + said(read.pitch.diff) + "), so this eval does not credit it to drawing out evidence;" + tail
         : "helps on " + name + ": asking a founder for the evidence before advising (who uses it, who paid, what they did before) moved " + name + "'s first-move advice toward the customer or offering the founder's own evidence supported, so an advisor agent should draw that evidence out before it recommends;" + tail;
     } else if (p.verdict === "no measurable difference") {

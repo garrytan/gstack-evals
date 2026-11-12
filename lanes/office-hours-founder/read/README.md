@@ -28,8 +28,9 @@ side produces. The only subprocess is power.py's rerun, and that runner is injec
   reruns power.py at the final size for the W MDD and the guard-rule MDD, and checks the Opus guard-rule MDD against
   0.15. It also sets the allowances after the smoke, admits rounds, and projects money per item with the net-envelope
   cuts. The pitch-only cell has its own runs item and its own labels item.
-- headline.ts: section 16's opening bullets, one fixed shape per verdict, with AN-1's condition, the repairs that ran
-  and the population sentence.
+- headline.ts: section 16's opening bullets, one fixed shape per verdict, with AN-1's condition and the Captain's
+  pre-data completion rule (a helps model whose pitch-only cell ended incomplete says the check didn't complete), the
+  repairs that ran and the population sentence.
 - cli.ts: `export const commands`, the rows the lane's cli.ts merges into its table: `of stage1`, `of projection`,
   `of stage2` and `of headline`, described below. None makes a model call or spends.
 - seams.ts: `export const seams: Seam[]`, one seam per side of every start rule 7 edge this area owns, on invented
@@ -145,3 +146,7 @@ reason code. The commands print counts, readings and the sha256 of what they wro
     with projection.json's estimates.
 32. The reading commands exit 0 once they write their reading, whatever it says. A reason code the reading carries goes
     to stderr as an information line, and the stdout lines say whether stage 2 may start.
+33. The AN-1 completion rule (the Captain's pre-data addition): a model's pitch-only cell is complete when every one of
+    its scheduled sessions scored a W and the cell's launch did not stop. A session that never ran, or scored no W, is
+    missing. When a helps model's cell is incomplete, its bullet gives the scored count and credits neither the
+    drawing-out reading nor the reveals-nothing one.
