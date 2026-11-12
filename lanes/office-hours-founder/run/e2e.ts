@@ -154,7 +154,7 @@ export async function runE2e(o: E2eOptions = {}): Promise<{ checks: Check[]; dir
   const ledger = join(W, "ledger.sqlite");
   const quote = { words: "keyless end-to-end run on a temporary ledger, not an approval", by: "of e2e", source: "lanes/office-hours-founder/run/e2e.ts" };
   const items = { runs: "of-e2e-runs", sim: "of-e2e-sim" };
-  for (const item of Object.values(items)) recordApproval(record, { action: "init", item, cap_micros: 50 * D, quotes: [quote], admission: "warn" });
+  for (const item of Object.values(items)) recordApproval(record, { action: "init", item, cap_micros: 120 * D, quotes: [quote], admission: "warn" });
   const env: Record<string, string | undefined> = { ...process.env, ANTHROPIC_API_KEY: "stub-not-a-key" };
   const policy = loadPolicy(DEFAULT_POLICY) as LoadedPolicy;
   const runId = "of-e2e-" + randomBytes(4).toString("hex");
@@ -164,13 +164,13 @@ export async function runE2e(o: E2eOptions = {}): Promise<{ checks: Check[]; dir
   const stack = parseStackRef(GSTACK.repo + "@" + GSTACK.sha);
   if (typeof stack === "string") throw new Error("E_INTERNAL " + stack);
   const arms: ArmSpec[] = [{ name: "none", kind: "bare" }, { name: "lens", kind: "bare" }, { name: "office-hours", kind: "stack", stack, install: { ...stackKind(stack)?.install } }];
-  const meter = await openMeter({ item: items.sim, runId, out: join(W, "sim-meter"), cacheDir: join(W, "sim-cache"), maxOutputTokens: 1200, amountMicros: 10 * D, record, ledger, env: { OPENROUTER_API_KEY: "stub-not-a-key" }, fetch: ((url: string | URL | Request, init?: RequestInit) => fetch(String(url).replace(/^https:\/\/openrouter\.ai\/api/, "http://127.0.0.1:" + stub.port), init)) as typeof fetch });
+  const meter = await openMeter({ item: items.sim, runId, out: join(W, "sim-meter"), cacheDir: join(W, "sim-cache"), maxOutputTokens: 1200, amountMicros: 20 * D, record, ledger, env: { OPENROUTER_API_KEY: "stub-not-a-key" }, fetch: ((url: string | URL | Request, init?: RequestInit) => fetch(String(url).replace(/^https:\/\/openrouter\.ai\/api/, "http://127.0.0.1:" + stub.port), init)) as typeof fetch });
   const rigSeen: { egress: { open: boolean; detail: string } | null; journal: string } = { egress: null, journal: "" };
   let run: RunResult | null = null;
   try {
-    run = await runSchedule({ cell: "smoke", unitsDir, out, runId, models: ["opus"], arms: ["none", "lens", "office-hours"], repairs: [], allowances: PRE_SMOKE, cap: 40 * D, simCap: 10 * D, parallel: 1, policy, ledger, docker: env.GSTACK_EVALS_DOCKER_BIN || "docker", log, entries }, {
+    run = await runSchedule({ cell: "smoke", unitsDir, out, runId, models: ["opus"], arms: ["none", "lens", "office-hours"], repairs: [], allowances: PRE_SMOKE, cap: 100 * D, simCap: 20 * D, parallel: 1, policy, ledger, docker: env.GSTACK_EVALS_DOCKER_BIN || "docker", log, entries }, {
       openRig: (): HostRig => {
-        const rig = dockerRig({ host: "claude", arms: { arms, base: null, skill: null, notes: [] }, tasks: join(W, "fixtures", "tasks.json"), out: { path: out, rule: "--out" }, ledger: ledgerPath(ledger, {}), record: recordPath(record, {}), item: items.runs, runId, models: [MODEL_KEYS.opus], policy }, { env, skill: null, skills: { "office-hours": "office-hours" }, nonce: randomBytes(6).toString("hex"), cap: 40 * D, voice: false, upstream: "http://host.docker.internal:" + stub.port });
+        const rig = dockerRig({ host: "claude", arms: { arms, base: null, skill: null, notes: [] }, tasks: join(W, "fixtures", "tasks.json"), out: { path: out, rule: "--out" }, ledger: ledgerPath(ledger, {}), record: recordPath(record, {}), item: items.runs, runId, models: [MODEL_KEYS.opus], policy }, { env, skill: null, skills: { "office-hours": "office-hours" }, nonce: randomBytes(6).toString("hex"), cap: 100 * D, voice: false, upstream: "http://host.docker.internal:" + stub.port });
         const install = rig.arms["office-hours"]!;
         phase2a = posix.join(rig.sandbox("office-hours", false, MODEL_KEYS.opus).homePath(""), posix.dirname(posix.dirname(install.gstack ?? "")), PHASE_2A);
         rigSeen.egress = rig.egress();
