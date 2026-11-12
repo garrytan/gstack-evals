@@ -10,7 +10,7 @@ import { commands as authorCommands } from "./author/cli.ts";
 import { commands as readCommands } from "./read/cli.ts";
 import { e2eCommand, rowsCommand, runCommand } from "./run/cli.ts";
 import { commands as scoreCommands } from "./score/cli.ts";
-import { simFounder } from "./wire.ts";
+import { rowExposed, simFounder } from "./wire.ts";
 
 interface Io {
   out: (text: string) => void;
@@ -28,7 +28,7 @@ function runWithSimulator(argv: string[], io: Io, env: Env): Promise<number> {
   const rules = at >= 0 ? readFileSync(argv[at + 1]!, "utf8") : undefined;
   if (rules !== undefined) io.err("of run: simulator prompt repaired, sha256 " + createHash("sha256").update(rules).digest("hex"));
   const rest = at >= 0 ? [...argv.slice(0, at), ...argv.slice(at + 2)] : argv;
-  return runCommand(rest, io, env, { founderTurn: simFounder(rules) });
+  return runCommand(rest, io, env, { founderTurn: simFounder(rules), exposed: rowExposed });
 }
 
 export const SUBCOMMANDS: Record<string, { summary: string; run: Run }> = {
@@ -38,7 +38,7 @@ export const SUBCOMMANDS: Record<string, { summary: string; run: Run }> = {
   ...scoreCommands,
   ...auditCommands,
   ...readCommands,
-  e2e: { summary: "the keyless end to end: fixture founders through the real rig, proxy, ledger, simulator, packets and scorer", run: (argv, io, env) => e2eCommand(argv, io, env, { founder: simFounder(), after: scoreE2e }) },
+  e2e: { summary: "the keyless end to end: fixture founders through the real rig, proxy, ledger, simulator, packets and scorer", run: (argv, io, env) => e2eCommand(argv, io, env, { founder: simFounder(), exposed: rowExposed, after: scoreE2e }) },
   dryrun: { summary: "the keyless dry run that drives every frozen rule (start rule 7)", run: async (argv, io) => (await import("./dryrun.ts")).run(argv, io) },
 };
 

@@ -1,6 +1,6 @@
 // Value: protects=the constructed run from the pilot to the quotas and the cap, the real run end to end, and what both write under custody.
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readdirSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { schedule } from "../../../lanes/office-hours-founder/author/draws.ts";
@@ -60,11 +60,11 @@ describe("authorConstructed", () => {
     expect(run).toMatchObject({ stopped: "pilot", projection: { fits: true } });
     expect(run.outcomes).toHaveLength(4);
   });
-  test("the CEILING variant redraws calibration and comparison only, with no pilot", async () => {
+  test("the CEILING variant redraws calibration and comparison only, with no pilot or reserve, and skins the first 8 new calibration units", async () => {
     const call = typed();
     const run = await authorConstructed({ call, label: wordLabeller(), screen, spent: () => 0 }, { cap: 100, concurrency: 8, mdd: () => 0.12, ceiling: true });
     expect(run.projection).toBeNull();
-    expect(run.twins).toHaveLength(0);
+    expect(run.twins.map((t) => t.id)).toEqual(run.sets.calibration.slice(0, 8).map((m) => m.id + "t"));
     expect(run.sets.reserve).toHaveLength(0);
     expect(run.sets.comparison).toHaveLength(64);
     expect(call.calls[0]!.label.startsWith("h")).toBe(true);
@@ -102,5 +102,6 @@ describe("authorReal", () => {
     const id = passed[0]!.id;
     for (const f of ["note-a.md", "note-b.md", "names.txt", "pages.json", "pages/1.html"]) expect(existsSync(join(s, "real", id, f))).toBe(true);
     expect(existsSync(join(s, "units", id, "unit.json"))).toBe(true);
+    expect(readFileSync(join(s, "units", id, "names.txt"), "utf8")).toBe(passed[0]!.notes!.names.join("\n") + "\n");
   });
 });

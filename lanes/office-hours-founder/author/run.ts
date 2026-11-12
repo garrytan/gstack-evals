@@ -5,7 +5,8 @@
 // there), then authors draw positions in order, a batch at a time, refilling the sets from every passing unit whose
 // earlier positions have all settled, until the quotas fill, the spend reaches the cap or the schedule runs out. Each of
 // the first 8 calibration units gets its second skin as soon as it is placed. The CEILING variant (section 10) redraws
-// only the calibration and comparison sets, from new units under the harder prompt, with no pilot, twins or reserves.
+// only the calibration and comparison sets, from new units under the harder prompt, with no pilot or reserve; the first
+// 8 new calibration units get their second skins, because stage 1 reruns on them with its twin check.
 // The write functions put every file under an open custody sink and return counts and digests only, safe to print.
 import { join } from "node:path";
 import { QUOTA } from "../frozen.ts";
@@ -32,7 +33,7 @@ export interface ConstructedRun {
 
 /** The constructed pass. spent reads the authoring lease's metered spend so far, in the cap's unit. */
 export async function authorConstructed(deps: Deps & { spent: () => number }, o: { cap: number; concurrency: number; mdd: (comparisonUnits: number) => number | null; ceiling: boolean; pilotOnly?: boolean }): Promise<ConstructedRun> {
-  const quota: Quota = o.ceiling ? { ...QUOTA, twins: 0, reserve: 0 } : QUOTA;
+  const quota: Quota = o.ceiling ? { ...QUOTA, reserve: 0 } : QUOTA;
   const draws = schedule(MAX_DRAWS);
   const done = new Map<number, Outcome>();
   const twins = new Map<string, Outcome>();
@@ -115,7 +116,9 @@ export function writeReal(sink: string, run: RealRun) {
       writeSealed(sink, join("real", x.id, "note-b.md"), x.notes.b + "\n");
       writeSealed(sink, join("real", x.id, "names.txt"), x.notes.names.join("\n") + "\n");
     }
-    if (x.status === "pass") writeUnit(sink, x.files!, { ...x.meta!, set: "real" }, { ...x.record, cutoffs: run.cutoffs[x.id] });
+    if (x.status !== "pass") continue;
+    writeUnit(sink, x.files!, { ...x.meta!, set: "real" }, { ...x.record, cutoffs: run.cutoffs[x.id] });
+    writeSealed(sink, join("units", x.id, "names.txt"), x.notes!.names.join("\n") + "\n");
   }
   writeSealed(sink, "real/outcomes.jsonl", run.outcomes.map(({ notes, ...rest }) => JSON.stringify(rest)).join("\n") + "\n");
   const dropped = run.outcomes.filter((x) => x.status === "drop");

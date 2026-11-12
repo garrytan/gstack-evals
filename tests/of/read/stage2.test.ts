@@ -100,3 +100,13 @@ describe("readStage2", () => {
     expect(r.models.opus.cells.every((c) => c.scheduled === 20)).toBe(true);
   });
 });
+
+describe("real stratum", () => {
+  test("a unit whose session named the source leaves that model's real readout in every arm", () => {
+    const real = ["r01", "r02", "r03"];
+    const extra = manifest(real, { kind: "arm", real: true, cuts: [] }).map((e) => session({ ...e, stratum: "real", set: "real", W: e.arm === "none" ? 1 : 0, named_source: e.unit === "r01" && e.model === "opus" && e.arm === "office-hours" && e.pass === 1 }));
+    const r = readStage2(stage2Fixture({ w: helps, extra, real }));
+    expect(r.models.opus.real.W).toMatchObject({ units: 2, delta: -1 });
+    expect(r.models.sol.real.W).toMatchObject({ units: 3, delta: -1 });
+  });
+});

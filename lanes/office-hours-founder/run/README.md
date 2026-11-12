@@ -21,8 +21,9 @@ founder comes in as an injected function, and every model call goes through the 
 - rows.ts: the row each ended session writes to rows.ndjson, its consistency checks and the report the rows command
   prints.
 - run.ts: the launch loop. It freezes the manifest, opens the Docker rig, runs round by round inside the cap, retries
-  once, reconciles a crashed attempt on resume, and writes rows.ndjson and stops.json.
-- cli.ts: the run, rows and e2e commands. The lane's cli.ts assembles them and wires in the simulator's founderTurn.
+  once, applies stage 2's interim stop, reconciles a crashed attempt on resume, and writes rows.ndjson and stops.json.
+- cli.ts: the run, rows and e2e commands. The lane's cli.ts assembles them and wires in the simulator's founderTurn
+  and the scorer's exposure read.
 - e2e.ts: the keyless end to end. It runs two fixture units through the real Docker rig against a stub model and
   checks containment, the ledger, the journal, every end and the rows.
 - seams.ts: the dry-run seams for start rule 7. Pure seams drive the real loop with a scripted launch. The tool seams
@@ -48,7 +49,9 @@ that can sleep.
    `setsid -f bin/gstack-evals of run --cell stage1 --units-dir <units> --out <out> --item <item> --spend-cap <usd>
    --sim-item <sim item> --sim-spend-cap <usd> > <log> 2>&1`, and poll its log on a timer.
 7. After a crash or a VM loss, relaunch on the same out dir with --resume. Sessions with a row are skipped, and an
-   attempt with a marker and no row is reconciled first and counts as an infrastructure failure.
+   attempt with a marker and no row is reconciled first and counts as an infrastructure failure. A relaunch on an out
+   dir whose stops.json holds a cap stop is refused, because a cap stop is an incomplete run and is never resumed.
+   After a halt, the relaunch keeps the earlier stops in stops.json under earlier.
 8. Check the rows with `bin/gstack-evals of rows --out <out>`, copy the out dir and the receipts off the VM, and
    destroy every VM at the end of its stage.
 
@@ -58,7 +61,8 @@ This area creates no VM itself.
 
 The preregistration left these rules open, so the build chose them. Each one is open to review.
 
-1. A cap-stopped session, and one the launch never started, gets no row. stops.json lists it as stopped or unstarted.
+1. A cap-stopped session, and one the launch never started, gets no row. stops.json lists it as stopped, unstarted or
+   interim.
 2. The reference cell uses the none arm's allowance and a founder-reply limit of 0, so the closing message goes once,
    after the first reply.
 3. The reference's fact order is a shuffle seeded by the prereg seed and the unit id, the same on every model and pass.
@@ -73,11 +77,15 @@ The preregistration left these rules open, so the build chose them. Each one is 
 10. Every result the CLI returns counts as one reply, including turns a background task started.
 11. The simulator's transcript has one assistant line per reply, with that reply's texts joined by blank lines.
 12. The person sheet the simulator gets is sheet.json plus the opening message.
-13. The simulator's allowance is per attempt. meterSlot refuses a call the allowance cannot cover with the proxy's
-    E_ALLOWANCE code.
+13. The simulator's allowance is per attempt. meterSlot prices each call's worst case on the whole routed chat, as the
+    proxy reserves it, and refuses a call the allowance cannot cover with the proxy's E_ALLOWANCE code.
 14. Every cell's manifest is frozen, not only stage 2's.
 15. --models and --arms filter the cell before the manifest freezes, so the frozen manifest holds only what runs.
 16. The office-hours arm's state root keeps the trial seed's onboarding markers and has no preferences file.
+17. Stage 2's interim stop counts Opus office-hours sessions in round order and decides only once every earlier one has
+    ended, so a parallel round can't change which 24 it reads; the read side counts the same 24. A session whose
+    exposure the scorer can't read doesn't count. The stop leaves that arm's later sessions unrun as interim, and
+    stops.json records the read under interim rather than as a stop, so the launch still exits 0.
 17. The pinned CLI counts maxTurns per user message in streaming input, so the SDK's cap of 60 is the per-reply cap
     and nothing else enforces it. tests/of/run/driver-sdk.test.ts checks this.
 18. The context-overflow check reuses the product-value eval's pvOutcome reading.

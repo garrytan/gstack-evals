@@ -27,7 +27,7 @@ import type { ArmId, ModelId } from "../types.ts";
 import { runE2e, type E2eOptions } from "./e2e.ts";
 import { CELLS, readManifest, type Cell } from "./manifest.ts";
 import { readRows, rowsReport } from "./rows.ts";
-import { meterSlot, PRE_SMOKE, runCells, type Allowances, type RunInput } from "./run.ts";
+import { meterSlot, PRE_SMOKE, runCells, type Allowances, type RunDeps, type RunInput } from "./run.ts";
 import { REPAIRS, type FounderTurnFn, type PersonSheet, type Repair } from "./session.ts";
 
 type Env = Record<string, string | undefined>;
@@ -129,7 +129,7 @@ export function planRun(argv: readonly string[], env: Env): RunPlan {
 }
 
 /** gstack-evals of run: one cell's launch, with the simulator the parent wires in. */
-export async function runCommand(argv: string[], io: Io, env: Env, wire: { founderTurn: FounderTurnFn<PersonSheet, Call> }): Promise<number> {
+export async function runCommand(argv: string[], io: Io, env: Env, wire: { founderTurn: FounderTurnFn<PersonSheet, Call>; exposed: RunDeps<Call>["exposed"] }): Promise<number> {
   if (argv.includes("--help")) {
     io.out(RUN_HELP);
     return 0;
@@ -139,7 +139,7 @@ export async function runCommand(argv: string[], io: Io, env: Env, wire: { found
     plan = planRun(argv, env);
   } catch (e) {
     if (!(e instanceof Usage)) throw e;
-    io.err("E_USAGE of run: " + e.message + "\n  fix: see gstack-evals of run --help");
+    io.err("E_USAGE of run: " + e.message + "\nE_USAGE fix: see gstack-evals of run --help");
     return 2;
   }
   const policy = loadPolicy(plan.policy);
@@ -173,6 +173,7 @@ export async function runCommand(argv: string[], io: Io, env: Env, wire: { found
       },
       simSlot: meterSlot(meter),
       founderTurn: wire.founderTurn,
+      exposed: wire.exposed,
     });
     io.out("cell " + plan.input.cell + ": manifest " + run.manifest_sha256 + ", " + run.rows.length + " sessions ended, " + run.unrun.length + " unrun, arm spend $" + (run.spent_micros / 1e6).toFixed(2) + ", simulator $" + (run.sim_micros / 1e6).toFixed(2));
     for (const s of run.stops) io.err(s.code + " of run: " + s.message);

@@ -69,8 +69,9 @@ Who produces that file, and with which search tool, is for the Captain to decide
    phrase, and `<industry>` the industry. For a developer tool the industry slot reads "teams that build software for
    <industry>", which is how the prereg sets a developer tool among its industry.
 3. **CEILING line.** It is appended to the author prompt after one space. The CEILING redraw uses the same schedule with ids
-   starting `h`, runs no pilot, and redraws only the calibration and comparison sets (no twins, no reserves), as the band's
-   wording names only those two.
+   starting `h`, runs no pilot, and redraws only the calibration and comparison sets (no reserves), as the band's
+   wording names only those two. The first 8 new calibration units get second skins, because stage 1 reruns on them with
+   its twin check.
 4. **Pilot.** The pilot is the first draw position of each named type. Pilot units that pass join the sets in draw order like
    any other unit, so no passing unit is thrown away.
 5. **Supply projection.** `needed` is the sum of the quotas (94). The projection is the spend so far plus the units still

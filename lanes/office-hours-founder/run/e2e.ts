@@ -29,7 +29,7 @@ import type { ArmSpec } from "../../../src/types.ts";
 import { openMeter, type CallRequest, type CallResult } from "../../product-value/meter.ts";
 import { CLOSING, DENIED_TOOLS, FIRST_LINE, GSTACK, MODEL_KEYS } from "../frozen.ts";
 import type { ManifestEntry, Sheet, UnitMeta } from "../types.ts";
-import { meterSlot, PRE_SMOKE, runSchedule, type RunResult } from "./run.ts";
+import { meterSlot, PRE_SMOKE, runSchedule, type RunDeps, type RunResult } from "./run.ts";
 import { readRows, rowProblems } from "./rows.ts";
 import type { FounderTurnFn, PersonSheet } from "./session.ts";
 
@@ -45,6 +45,8 @@ export interface E2eOptions {
   keep?: boolean;
   /** The simulator; the stub-backed founder below unless the parent wires the real one. */
   founder?: FounderTurnFn<PersonSheet, Call>;
+  /** The scorer's exposure read. The end to end runs the smoke cell, which has no interim stop. */
+  exposed?: RunDeps<Call>["exposed"];
   /** Post-row steps (packets, scoring) with their own checks. */
   after?: (o: { run: RunResult; out: string; unitsDir: string }) => Promise<Check[]>;
   log?: (line: string) => void;
@@ -185,6 +187,7 @@ export async function runE2e(o: E2eOptions = {}): Promise<{ checks: Check[]; dir
       },
       simSlot: meterSlot(meter),
       founderTurn: founder,
+      exposed: o.exposed ?? (() => null),
     });
   } finally {
     await meter.close();

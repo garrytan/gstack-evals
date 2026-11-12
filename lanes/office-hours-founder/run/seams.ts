@@ -20,7 +20,7 @@ import type { Termination } from "../../../src/types.ts";
 import { CLOSING, DENIED_TOOLS, FOUNDER_REPLIES } from "../frozen.ts";
 import type { ManifestEntry, Seam, UnitMeta } from "../types.ts";
 import { departures, probe } from "./contain.ts";
-import { cellEntries, freezeManifest } from "./manifest.ts";
+import { cellEntries, freezeManifest, type Cell } from "./manifest.ts";
 import { PRE_SMOKE, runSchedule, type Launch, type RunResult } from "./run.ts";
 import { founderLimit, founderLoop, type FounderResult } from "./session.ts";
 
@@ -74,17 +74,18 @@ export function fixtureUnits(dir: string, n: number, set: UnitMeta["set"] = "cal
 export const fixtureFounder = (fail?: FounderResult) => async (): Promise<FounderResult> => fail ?? { kind: "reply", reply: "Six members asked for it.", revealed: ["f1"], rules: [3], attempts: 1 };
 
 /** runSchedule on fixture units with a scripted launch, a stand-in rig and the stand-in simulator. */
-export async function scriptedRun(o: { entries: (ids: string[]) => ManifestEntry[]; scripts: Map<string, ScriptedAttempt[]>; units?: number; founder?: FounderResult; cap?: number; openRig?: (out: string) => void; out?: string }): Promise<{ run: RunResult; calls: string[]; out: string; ids: string[] }> {
+export async function scriptedRun(o: { entries: (ids: string[]) => ManifestEntry[]; scripts: Map<string, ScriptedAttempt[]>; units?: number; founder?: FounderResult; cap?: number; openRig?: (out: string) => void; out?: string; cell?: Cell; exposed?: (id: string) => boolean | null }): Promise<{ run: RunResult; calls: string[]; out: string; ids: string[] }> {
   const root = mkdtempSync(join(tmpdir(), "of-run-seam-"));
   const ids = fixtureUnits(join(root, "units"), o.units ?? 2);
   const out = o.out ?? join(root, "out");
   const calls: string[] = [];
   const rig = { recovery: null, close: async () => ({ committed: 0, unknown: 0, lease_id: null }) } as unknown as HostRig;
-  const run = await runSchedule({ cell: "stage1", unitsDir: join(root, "units"), out, runId: "seam", models: ["opus"], arms: ["none", "lens", "office-hours"], repairs: [], allowances: PRE_SMOKE, cap: o.cap ?? 1000 * D, simCap: 1000 * D, parallel: 1, policy: loadPolicy(DEFAULT_POLICY) as LoadedPolicy, ledger: null, docker: "docker", log: () => {}, entries: o.entries(ids) }, {
+  const run = await runSchedule({ cell: o.cell ?? "stage1", unitsDir: join(root, "units"), out, runId: "seam", models: ["opus"], arms: ["none", "lens", "office-hours"], repairs: [], allowances: PRE_SMOKE, cap: o.cap ?? 1000 * D, simCap: 1000 * D, parallel: 1, policy: loadPolicy(DEFAULT_POLICY) as LoadedPolicy, ledger: null, docker: "docker", log: () => {}, entries: o.entries(ids) }, {
     openRig: () => (o.openRig?.(out), rig),
     simSlot: () => ({ call: null, spent: () => 0 }),
     founderTurn: fixtureFounder(o.founder),
     launch: scriptedLaunch(o.scripts, calls),
+    exposed: (line) => o.exposed?.(line.id) ?? null,
   });
   return { run, calls, out, ids };
 }
@@ -145,6 +146,30 @@ const pure: Seam[] = [
       return { ok, detail: run.rows.length + " rows, " + calls.length + " launches, stops " + run.stops.map((s) => s.code).join(", ") + ", " + run.unrun.length + " unrun" };
     },
   },
+  {
+    name: "C1 cap stop: a relaunch on the cap-stopped out dir is refused, so nothing is retried",
+    run: async () => {
+      const first = await scriptedRun({ entries: one(), scripts: new Map([["fixture-calibration-1/none", [{ termination: { kind: "cap_stop" } }]]]) });
+      const again = await scriptedRun({ entries: one(), scripts: new Map(), out: first.out }).then(() => null, (e: Error) => e.message);
+      return { ok: again !== null && again.startsWith("E_USAGE") && again.includes("cap stop"), detail: again ?? "the relaunch ran" };
+    },
+  },
+  ...([[16, true], [17, false]] as const).map(([n, stop]): Seam => ({
+    name: "interim stop in the run loop: " + n + " of the first 24 Opus office-hours sessions exposed " + (stop ? "stops that arm and the none arm runs on" : "lets the arm go on"),
+    run: async () => {
+      const order: string[] = [];
+      const { run } = await scriptedRun({
+        cell: "stage2",
+        units: 30,
+        scripts: new Map(),
+        entries: (ids) => ids.flatMap((unit) => (["none", "office-hours"] as const).map((arm) => ({ stage: 2 as const, kind: "arm" as const, unit, model: "opus" as const, arm, pass: 1 }))),
+        exposed: (id) => (id.includes("/office-hours/") ? (order.push(id), order.length <= n) : null),
+      });
+      const oh = run.rows.filter((r) => r.row.arm === "office-hours").length;
+      const ok = run.interim?.sessions === 24 && run.interim.exposed === n && run.interim.stop === stop && oh === (stop ? 24 : 30) && run.rows.length - oh === 30 && run.unrun.length === (stop ? 6 : 0);
+      return { ok, detail: (run.interim ? run.interim.exposed + " of " + run.interim.sessions : "no read") + ", " + oh + " office-hours rows, " + run.unrun.length + " unrun" };
+    },
+  })),
   ...[0, 1].map((short): Seam => ({
     name: short ? "admission: a round whose worst case is one micro-dollar over what is left starts no session" : "admission: a round whose worst case exactly fits what is left runs",
     run: async () => {

@@ -4,7 +4,8 @@
 //   The run area's simulator slot enforces the attempt's allowance and refuses with the proxy's E_ALLOWANCE code, which
 //   founderCall reads as an allowance refusal; founderCall still checks that Google Vertex served every reply.
 // - completeRow: the scoring area's reads on a run row: exposure on office-hours sessions, the counters on every
-//   session, and, on the real stratum, whether the assistant's text named the source.
+//   session, and, on the real stratum, whether the assistant's text named the source. rowExposed is the same exposure
+//   read alone, for the run loop's stage 2 interim stop.
 import { existsSync, readFileSync } from "node:fs";
 import { personTurn } from "../../src/persona-sim/sim.ts";
 import type { CallRequest, CallResult } from "../product-value/meter.ts";
@@ -33,15 +34,21 @@ export function simFounder(rules: string = FOUNDER_RULES): FounderTurnFn<PersonS
   };
 }
 
+const transcriptOf = (line: RowLine): string => (line.transcript && existsSync(line.transcript) ? readFileSync(line.transcript, "utf8") : "");
+const armExposure = (line: RowLine, meta: UnitMeta, transcript: string): SessionRow["exposure"] => (line.row.arm === "office-hours" && transcript ? exposure(transcript, line.state_root, meta.founder_stage) : null);
+
+/** Whether an office-hours row's session was exposed, as completeRow reads it; null on other arms and with no transcript. */
+export const rowExposed = (line: RowLine, meta: UnitMeta): boolean | null => armExposure(line, meta, transcriptOf(line))?.exposed ?? null;
+
 /** A run row with the scoring area's reads filled in. names is the real unit's Names line; constructed units have none. */
 export function completeRow(line: RowLine, meta: UnitMeta, names: readonly string[] = []): SessionRow {
-  const transcript = line.transcript && existsSync(line.transcript) ? readFileSync(line.transcript, "utf8") : "";
+  const transcript = transcriptOf(line);
   const c = counters(transcript);
   const text = replies(transcript).flat().join("\n\n");
   if (meta.stratum === "real" && !names.length) throw new Error("E_USAGE completeRow: real unit " + meta.id + " needs its Names line to read named_source");
   return {
     ...line.row,
-    exposure: line.row.arm === "office-hours" && transcript ? exposure(transcript, line.state_root, meta.founder_stage) : null,
+    exposure: armExposure(line, meta, transcript),
     questions: c.questions,
     pushes: c.pushes,
     first_recommendation_reply: c.first_recommendation_reply,

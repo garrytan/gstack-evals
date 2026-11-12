@@ -7,7 +7,11 @@
 // - A round starts only when its worst case fits what the launch may still spend: twice each session's arm allowance on
 //   the runs item and twice the simulator's allowance for each simulated session on the simulator item (one retry each).
 //   A round that does not fit is a cap stop (CAP_STOP): the launch ends incomplete, nothing is retried, and stops.json
-//   lists every session left unrun. So does a ledger cap stop inside a session.
+//   lists every session left unrun. So does a ledger cap stop inside a session. A later launch on an out dir whose
+//   stops.json holds a cap stop is refused; after any other stop it runs, and stops.json keeps the earlier stops.
+// - Stage 2's interim stop (section 11): once the first 24 Opus office-hours sessions in run order whose exposure the
+//   scorer reads have ended, exposure under 0.70 stops that arm; its remaining sessions stay unrun (how "interim"), the
+//   other arms go on, and stops.json records the read under interim. A resumed launch reads it again from the rows.
 // - Each session takes at most two attempts (J1). attemptOutcome reads one attempt under C1 and settle applies the retry
 //   rule. An attempt's marker (attempt.json) is written before its launch, so a later launch that finds a marker with no
 //   row reconciles that attempt first, against the ledger's meter for it, the proxy journal's lines for it and its
@@ -25,7 +29,7 @@ import { join, posix } from "node:path";
 import { claudeCodeDriver, type ClaudeProvider, type NextUser } from "../../../src/adapters/claude-code/driver.ts";
 import type { ReasonCode } from "../../../src/errors/codes.ts";
 import { openLocalLedger } from "../../../src/runner/ledger/local.ts";
-import { priceRequest, reservationMicros } from "../../../src/runner/pricing/prices.ts";
+import { chatPrice, openRouterRouting, priceRequest, reservationMicros } from "../../../src/runner/pricing/prices.ts";
 import { armNamespaces, slotModels, type HostRig } from "../../../src/skill-eval/cli/run-host.ts";
 import { providerOf, type LoadedPolicy } from "../../../src/skill-eval/cli/policy.ts";
 import { readJournalLines } from "../../../src/trial/review/cost.ts";
@@ -34,6 +38,7 @@ import { runTrial } from "../../../src/trial/trial.ts";
 import type { Termination } from "../../../src/types.ts";
 import { MODELS as METER_MODELS, pool, requestBody, type CallRequest, type CallResult, type Meter } from "../../product-value/meter.ts";
 import { pvOutcome, webUses } from "../../product-value/parse.ts";
+import { INTERIM, interimStops } from "../read/stage2.ts";
 import { AGENT_TURNS_PER_REPLY, MODEL_KEYS, PRE_SMOKE_ALLOWANCE, PRE_SMOKE_SIM_ALLOWANCE, SESSION_MINUTES, SYSTEM_PROMPT } from "../frozen.ts";
 import type { ArmId, ManifestEntry, ModelId, Sheet, UnitMeta } from "../types.ts";
 import { departures, gstackReads, probed, TASK, workRepo, type Probe } from "./contain.ts";
@@ -102,13 +107,17 @@ export interface RunDeps<C> {
   founderTurn: FounderTurnFn<PersonSheet, C>;
   /** One attempt; dockerLaunch unless a test stands one in. */
   launch?: Launch;
+  /** Exposure on an ended row as the scorer reads it (wire.ts rowExposed); the stage 2 interim stop counts it. */
+  exposed: (line: RowLine, meta: UnitMeta) => boolean | null;
 }
 
 export interface RunResult {
   manifest_sha256: string;
   rows: RowLine[];
   stops: { code: ReasonCode; message: string }[];
-  unrun: { id: string; how: "stopped" | "unstarted" }[];
+  unrun: { id: string; how: "stopped" | "unstarted" | "interim" }[];
+  /** Stage 2's interim read, once the first 24 Opus office-hours sessions in run order with a read exposure have ended. */
+  interim: { sessions: number; exposed: number; stop: boolean } | null;
   spent_micros: number;
   sim_micros: number;
   closed: { committed: number; unknown: number; lease_id: string | null } | null;
@@ -121,7 +130,9 @@ export const meterSlot = (meter: Meter) => (label: string, allowanceMicros: numb
     spent: () => spent,
     async call(req) {
       const m = METER_MODELS[req.model];
-      const worst = reservationMicros(priceRequest(m.provider, requestBody(m, req.prompt, req.maxTokens, req.effort), req.maxTokens));
+      const body = requestBody(m, req.prompt, req.maxTokens, req.effort, req);
+      const routed = m.provider === "openrouter" ? { ...body, provider: openRouterRouting(chatPrice("openrouter:" + m.id)!) } : body;
+      const worst = reservationMicros(priceRequest(m.provider, routed, req.maxTokens));
       if (spent + worst > allowanceMicros) return { text: null, status: 402, micros: 0, cached: false, served_by: null, problem: "E_ALLOWANCE: " + label + ": the session's simulator allowance of $" + (allowanceMicros / D).toFixed(2) + " cannot hold this call's worst case of $" + (worst / D).toFixed(4) + " ($" + (spent / D).toFixed(4) + " already spent)" };
       const r = await meter.call({ ...req, label });
       spent += r.micros ?? worst;
@@ -206,10 +217,39 @@ export async function runSchedule<C>(o: RunInput & { entries: ManifestEntry[] },
   const meta = new Map<string, UnitMeta>(loadUnits(o.unitsDir).map((u) => [u.id, u]));
   const manifest: Manifest = { schema: 1, cell: o.cell, models: [...o.models], arms: [...o.arms], repairs: [...o.repairs], units: Object.fromEntries([...new Set(entries.map((e) => e.unit))].sort().map((id) => [id, meta.get(id)!.digest])), entries };
   mkdirSync(o.out, { recursive: true });
+  const stopsFile = join(o.out, "stops.json");
+  const before = existsSync(stopsFile) ? (JSON.parse(readFileSync(stopsFile, "utf8")) as { stops: RunResult["stops"]; earlier?: RunResult["stops"] }) : null;
+  if (before?.stops.some((s) => s.code === "CAP_STOP")) throw new Error("E_USAGE " + o.out + " ended in a cap stop, an incomplete run that is never resumed; its stops.json stands");
+  const earlier = [...(before?.earlier ?? []), ...(before?.stops ?? [])];
   const frozen = freezeManifest(join(o.out, "manifest.json"), manifest);
   if ("problem" in frozen) throw new Error("E_USAGE " + frozen.problem);
   const done = readRows(o.out);
-  const result: RunResult = { manifest_sha256: frozen.sha256, rows: [], stops: [], unrun: [], spent_micros: 0, sim_micros: 0, closed: null };
+  const result: RunResult = { manifest_sha256: frozen.sha256, rows: [], stops: [], unrun: [], interim: null, spent_micros: 0, sim_micros: 0, closed: null };
+  const interimIds = o.cell === "stage2" ? cellRounds(o.cell, entries).flat().filter((e) => e.model === "opus" && e.arm === "office-hours").map(entryId) : [];
+  const exposedBy = new Map<string, boolean | null>();
+  const readInterim = () => {
+    if (result.interim) return;
+    let sessions = 0;
+    let exposed = 0;
+    for (const id of interimIds) {
+      if (sessions === INTERIM.sessions) break;
+      if (!exposedBy.has(id)) return;
+      const x = exposedBy.get(id);
+      if (x === null) continue;
+      sessions++;
+      if (x) exposed++;
+    }
+    if (sessions < INTERIM.sessions) return;
+    result.interim = { sessions, exposed, stop: interimStops(exposed / sessions) };
+    o.log("interim: " + exposed + " of the first " + sessions + " Opus office-hours sessions exposed" + (result.interim.stop ? ", under 0.70, so the arm stops and its remaining sessions stay unrun" : ", so the arm goes on"));
+  };
+  const counted = (line: RowLine) => {
+    if (!interimIds.includes(line.id)) return;
+    exposedBy.set(line.id, deps.exposed(line, meta.get(line.row.unit)!));
+    readInterim();
+  };
+  for (const line of done.values()) counted(line);
+  const interimSkip = (e: ManifestEntry) => result.interim?.stop === true && e.model === "opus" && e.arm === "office-hours";
   const launch = deps.launch ?? dockerLaunch;
   const rig = await deps.openRig();
   if (rig.recovery) writeFileSync(join(o.out, "rig.json"), JSON.stringify(rig.recovery, null, 2) + "\n");
@@ -217,6 +257,10 @@ export async function runSchedule<C>(o: RunInput & { entries: ManifestEntry[] },
   const session = async (e: ManifestEntry): Promise<void> => {
     const id = entryId(e);
     if (halted) return;
+    if (interimSkip(e)) {
+      result.unrun.push({ id, how: "interim" });
+      return;
+    }
     const unitDir = join(o.unitsDir, e.unit);
     const opening = readFileSync(join(unitDir, "opening.md"), "utf8");
     const sheet = JSON.parse(readFileSync(join(unitDir, "sheet.json"), "utf8")) as Sheet;
@@ -259,6 +303,7 @@ export async function runSchedule<C>(o: RunInput & { entries: ManifestEntry[] },
     const line: RowLine = { id, cell: o.cell, row: sessionRow({ entry: e, end: scored, attempts, repairs: o.repairs }), why: end!.why, transcript: join(last, "transcript.ndjson"), state_root: oh ? join(last, "gstack-state") : null, attempts: records };
     appendFileSync(join(o.out, "rows.ndjson"), JSON.stringify(line) + "\n");
     result.rows.push(line);
+    counted(line);
     o.log(id + ": " + scored.state + (scored.code ? " " + scored.code : "") + " (" + end!.why + "), " + attempts.length + " attempt" + (attempts.length === 1 ? "" : "s") + ", " + usd(line.row.usd * D) + " arm, " + usd(line.row.sim_usd * D) + " simulator");
     halted ||= halt;
     if (halt) result.stops.push({ code: (end as { code: ReasonCode }).code, message: id + ": " + end!.why + "; the launch stops for the Captain" });
@@ -266,7 +311,8 @@ export async function runSchedule<C>(o: RunInput & { entries: ManifestEntry[] },
   try {
     const rounds = cellRounds(o.cell, entries).map((r) => r.filter((e) => !done.has(entryId(e))));
     for (let i = 0; i < rounds.length && !halted; i++) {
-      const round = rounds[i]!;
+      result.unrun.push(...rounds[i]!.filter(interimSkip).map((e) => ({ id: entryId(e), how: "interim" as const })));
+      const round = rounds[i]!.filter((e) => !interimSkip(e));
       if (!round.length) continue;
       const worst = round.reduce((s, e) => s + 2 * armMicros(o.allowances, e), 0);
       const simWorst = round.reduce((s, e) => s + 2 * simMicros(o.allowances, e), 0);
@@ -280,7 +326,7 @@ export async function runSchedule<C>(o: RunInput & { entries: ManifestEntry[] },
     result.unrun.push(...entries.map(entryId).filter((id) => !ran.has(id)).map((id) => ({ id, how: "unstarted" as const })));
   } finally {
     result.closed = await rig.close();
-    writeFileSync(join(o.out, "stops.json"), JSON.stringify({ stops: result.stops, unrun: result.unrun }, null, 2) + "\n");
+    writeFileSync(stopsFile, JSON.stringify({ stops: result.stops, unrun: result.unrun, ...(earlier.length ? { earlier } : {}), ...(o.cell === "stage2" ? { interim: result.interim } : {}) }, null, 2) + "\n");
   }
   return result;
 }

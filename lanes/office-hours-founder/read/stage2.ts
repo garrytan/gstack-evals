@@ -8,6 +8,7 @@
 // pitch-only cell have manifests of their own and never count toward the primary one or its coverage.
 import { ARMS, MODELS, SEED } from "../frozen.ts";
 import type { ArmId, ManifestEntry, ModelId, ScoredSession, SessionKind, StockCredit, UnitMeta } from "../types.ts";
+import { realReadout } from "../score/score.ts";
 import { stockCheck, type Stage1Reading } from "./stage1.ts";
 import { compare, contrast, excludesZero, kappa, lengthAdjusted, matchUnits, r4, seededRandom, shuffle, unitMean, W, type Comparison, type Metric } from "./stats.ts";
 
@@ -341,7 +342,9 @@ export interface Stage2Reading {
 
 export function readStage2(i: Stage2Input): Stage2Reading {
   const rows = onManifest(i.manifest, i.sessions);
-  const realRows = onManifest(i.real_manifest, i.sessions);
+  const real = new Set(realReadout(i.sessions));
+  const named = new Set(i.sessions.filter((s) => s.stratum === "real" && !real.has(s)).map((s) => s.model + "|" + s.unit));
+  const realRows = onManifest(i.real_manifest.filter((e) => !named.has(e.model + "|" + e.unit)), [...real]);
   const pitchRows = onManifest(i.pitch_manifest, i.sessions);
   const stock = stockCheck(i.stock, 2, [...new Set(i.manifest.map((e) => e.unit))]);
   const interim = interimStop(rows);
