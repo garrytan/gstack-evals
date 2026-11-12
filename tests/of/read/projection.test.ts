@@ -6,7 +6,7 @@ import { admitRound, allowances, CAPTAIN_STOP, estimate, moneyProjection, POWER_
 import { session } from "../../../lanes/office-hours-founder/read/seams.ts";
 import { CUTS, manifest } from "../../../lanes/office-hours-founder/read/stage2.ts";
 
-const none = (unit: string, Ws: number[], model: "opus" | "sol" = "opus") => Ws.map((W, k) => session({ stage: 1, model, unit, pass: k + 1, W, W_shuffled: k === 0 ? 1 : 0 }));
+const none = (unit: string, Ws: Array<0 | 1>) => Ws.map((W, k) => session({ stage: 1, unit, pass: k + 1, W, W_shuffled: k === 0 ? 1 : 0 }));
 
 describe("estimate", () => {
   test("the control rate, the one-way ANOVA ICC and the shuffled-key credit", () => {

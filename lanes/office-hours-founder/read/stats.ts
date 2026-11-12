@@ -6,11 +6,11 @@
 // and flips, seed 20261109). The bootstrap and the sign flips are src/runner/stats/paired.ts's, the rest is the
 // product-value eval's stats.ts. Every comparison is rounded to four decimal places.
 import { clusteredPairedDelta } from "../../../src/runner/stats/paired.ts";
-import { bootstrapMeans, clusterBootstrap, kappa, mean, ols, percentileInterval, r4, resplitDraws, seededRandom, shuffle } from "../../product-value/stats.ts";
+import { clusterBootstrap, kappa, mean, ols, percentileInterval, r4, seededRandom, shuffle } from "../../product-value/stats.ts";
 import { DRAWS, SEED } from "../frozen.ts";
 import type { ScoredSession } from "../types.ts";
 
-export { bootstrapMeans, clusterBootstrap, kappa, mean, ols, percentileInterval, r4, resplitDraws, seededRandom, shuffle };
+export { kappa, mean, r4, seededRandom, shuffle };
 export const STAT = { seed: SEED, draws: DRAWS };
 
 /** A per-session number; null leaves the session out of that metric. */
