@@ -77,6 +77,8 @@ const KEY_VAR = /(^|_)(API_)?KEY$|_TOKEN$|SECRET|PASSWORD/;
 
 /** Founder replies the stub simulator sent, by reply text, with the ids it said it revealed. */
 const SIM_REPLY = /FOUNDER-REPLY (\d+)/g;
+/** Where the real simulator's system text puts the sheet (src/persona-sim/sim.ts renderSystem). */
+const SHEET = "The sheet:\n";
 
 export async function runE2e(o: E2eOptions = {}): Promise<{ checks: Check[]; dir: string }> {
   const log = o.log ?? ((l: string) => console.error(l));
@@ -128,9 +130,13 @@ export async function runE2e(o: E2eOptions = {}): Promise<{ checks: Check[]; dir
       const body = (await req.json()) as any;
       if (path.endsWith("/count_tokens")) return Response.json({ input_tokens: 10 });
       if (path.endsWith("/chat/completions")) {
-        const asked = JSON.parse(body.messages[0].content) as { sheet: PersonSheet; transcript: unknown[] };
-        const n = asked.transcript.filter((l: any) => l.role === "person").length + 1;
-        const fact = asked.sheet.facts[n % asked.sheet.facts.length]!;
+        const system = body.messages[0]?.role === "system" ? String(body.messages[0].content) : null;
+        const sheetText = system ? system.slice(system.indexOf(SHEET) + SHEET.length, system.lastIndexOf("}") + 1) : "";
+        const asked = system
+          ? { facts: (JSON.parse(sheetText) as { facts: { id: string; text: string }[] }).facts, n: body.messages.filter((m: any) => m.role === "assistant").length + 1 }
+          : ((a: { sheet: PersonSheet; transcript: { role: string }[] }) => ({ facts: a.sheet.facts, n: a.transcript.filter((l) => l.role === "person").length + 1 }))(JSON.parse(body.messages[0].content));
+        const n = asked.n;
+        const fact = asked.facts[n % asked.facts.length]!;
         const reply = "FOUNDER-REPLY " + n + ": " + fact.text;
         revealedBy.set(reply, [fact.id]);
         return Response.json({ id: "gen-of-e2e", provider: "google-vertex", model: body.model, choices: [{ index: 0, message: { role: "assistant", content: JSON.stringify({ reply, revealed: [fact.id], rules: [3] }) }, finish_reason: "stop" }], usage: { prompt_tokens: 40, completion_tokens: 30, total_tokens: 70 } });
