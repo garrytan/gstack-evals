@@ -50,9 +50,15 @@ describe("authorConstructed", () => {
     expect(run.stopped).toBe("cap");
     expect(run.sets.comparison.length).toBeLessThan(64);
   });
-  test("a pilot whose projection passes the cap stops authoring with E_OF_SUPPLY_SHORT", async () => {
-    const run = authorConstructed({ call: typed(), label: wordLabeller(), screen, spent: () => 4 }, { cap: 50, concurrency: 4, mdd: () => 0.2, ceiling: false });
-    await expect(run).rejects.toThrow(/E_OF_SUPPLY_SHORT/);
+  test("a pilot whose projection passes the cap stops authoring at the pilot, keeping the pilot's outcomes", async () => {
+    const run = await authorConstructed({ call: typed(), label: wordLabeller(), screen, spent: () => 4 }, { cap: 50, concurrency: 4, mdd: () => null, ceiling: false });
+    expect(run).toMatchObject({ stopped: "supply", projection: { fits: false, passing: 4, mdd: null } });
+    expect(run.outcomes).toHaveLength(4);
+  });
+  test("--pilot stops after the pilot's projection", async () => {
+    const run = await authorConstructed({ call: typed(), label: wordLabeller(), screen, spent: () => 1 }, { cap: 50, concurrency: 4, mdd: () => 0.2, ceiling: false, pilotOnly: true });
+    expect(run).toMatchObject({ stopped: "pilot", projection: { fits: true } });
+    expect(run.outcomes).toHaveLength(4);
   });
   test("the CEILING variant redraws calibration and comparison only, with no pilot", async () => {
     const call = typed();

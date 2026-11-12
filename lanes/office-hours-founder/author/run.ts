@@ -13,7 +13,7 @@ import type { UnitMeta } from "../types.ts";
 import type { Deps } from "./checks.ts";
 import { runConstructed, runTwin, type Outcome } from "./constructed.ts";
 import { pilot, schedule, type Draw } from "./draws.ts";
-import { keyJson, writeSealed, writeUnit } from "./files.ts";
+import { AuthorError, keyJson, writeSealed, writeUnit } from "./files.ts";
 import type { RealRun } from "./real.ts";
 import { comparisonRecord, fillSets, projectSupply, setsFull, type Member, type Projection, type Quota, type Sets } from "./sets.ts";
 
@@ -26,11 +26,12 @@ export interface ConstructedRun {
   outcomes: Outcome[];
   twins: Outcome[];
   sets: Sets;
-  stopped: "quotas" | "cap" | "schedule";
+  /** pilot: --pilot asked for the pilot alone; supply: the pilot's projection did not fit (E_OF_SUPPLY_SHORT). */
+  stopped: "quotas" | "cap" | "schedule" | "pilot" | "supply";
 }
 
 /** The constructed pass. spent reads the authoring lease's metered spend so far, in the cap's unit. */
-export async function authorConstructed(deps: Deps & { spent: () => number }, o: { cap: number; concurrency: number; mdd: (comparisonUnits: number) => number; ceiling: boolean }): Promise<ConstructedRun> {
+export async function authorConstructed(deps: Deps & { spent: () => number }, o: { cap: number; concurrency: number; mdd: (comparisonUnits: number) => number | null; ceiling: boolean; pilotOnly?: boolean }): Promise<ConstructedRun> {
   const quota: Quota = o.ceiling ? { ...QUOTA, twins: 0, reserve: 0 } : QUOTA;
   const draws = schedule(MAX_DRAWS);
   const done = new Map<number, Outcome>();
@@ -46,12 +47,19 @@ export async function authorConstructed(deps: Deps & { spent: () => number }, o:
     return out;
   };
   let projection: Projection | null = null;
+  const finish = (sets: Sets, stopped: ConstructedRun["stopped"]): ConstructedRun => ({ ceiling: o.ceiling, projection, outcomes: [...done.entries()].sort(([a], [b]) => a - b).map(([, x]) => x), twins: [...twins.values()], sets, stopped });
   if (!o.ceiling) {
     const p = pilot(draws);
     await runBatch(p);
-    projection = projectSupply({ spent: deps.spent(), passing: p.filter((d) => done.get(d.draw)!.status === "pass").length, cap: o.cap, mdd: o.mdd });
+    try {
+      projection = projectSupply({ spent: deps.spent(), passing: p.filter((d) => done.get(d.draw)!.status === "pass").length, cap: o.cap, mdd: o.mdd });
+    } catch (e) {
+      if (!(e instanceof AuthorError && e.code === "E_OF_SUPPLY_SHORT")) throw e;
+      projection = (e as AuthorError & { projection: Projection }).projection;
+      return finish(fillSets([], quota), "supply");
+    }
+    if (o.pilotOnly) return finish(fillSets([], quota), "pilot");
   }
-  const finish = (sets: Sets, stopped: ConstructedRun["stopped"]): ConstructedRun => ({ ceiling: o.ceiling, projection, outcomes: [...done.entries()].sort(([a], [b]) => a - b).map(([, x]) => x), twins: [...twins.values()], sets, stopped });
   for (let next = 0; ; ) {
     const sets = fillSets(members(), quota);
     const owed = sets.calibration.slice(0, quota.twins).filter((m) => !twins.has(m.id));

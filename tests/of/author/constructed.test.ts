@@ -28,7 +28,8 @@ describe("runConstructed", () => {
     const validators = d.call.calls.filter((c) => /:unanimous:/.test(c.label));
     expect(validators.map((c) => c.model).sort()).toEqual(["astra", "opus", "sol"]);
     expect(validators.every((c) => c.effort === "medium" && c.prompt.includes("Here is everything else I know:"))).toBe(true);
-    expect(d.label.calls.filter((c) => /:unanimous:/.test(c.label)).map((c) => c.judge + "<" + c.blocks[0]!.id).sort()).toEqual(["astra<opus", "opus<astra", "opus<sol"]);
+    expect(d.label.calls.filter((c) => /:unanimous:/.test(c.label)).map((c) => c.judge + "<" + c.label.split(":")[2]).sort()).toEqual(["astra<opus", "opus<astra", "opus<sol"]);
+    expect(d.label.calls.every((c) => c.blocks.every((x) => /^b\d$/.test(x.id)))).toBe(true);
     expect(d.call.calls.filter((c) => /:probe:[a-z]+:(opening|full):\d$/.test(c.label))).toHaveLength(10);
   });
   test("an author reply without the three files is asked once more, then the draw drops", async () => {
@@ -43,7 +44,7 @@ describe("runConstructed", () => {
   });
   test("an unlabelled W cell is retried with a fresh validator call", async () => {
     let n = 0;
-    const label = wordLabeller((judge, id) => (id === "sol" && n++ === 0 ? { wedge: null } : undefined));
+    const label = wordLabeller((_, __, l) => (/:unanimous:sol:/.test(l) && n++ === 0 ? { wedge: null } : undefined));
     const o = await runConstructed(DRAW, deps(undefined, label), { ceiling: false });
     expect(o.status).toBe("pass");
     expect(label.calls.filter((c) => /:unanimous:sol:/.test(c.label))).toHaveLength(2);

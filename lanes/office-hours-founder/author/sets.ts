@@ -69,9 +69,9 @@ export interface Projection {
   projected: number;
   cap: number;
   fits: boolean;
-  /** Comparison units the cap can fill after calibration, twins and reserves, and the MDD at that count. */
+  /** Comparison units the cap can fill after calibration, twins and reserves, and the MDD at that count (null: above 0.50). */
   comparison_fillable: number;
-  mdd: number;
+  mdd: number | null;
 }
 
 /**
@@ -79,14 +79,14 @@ export interface Projection {
  * units count toward them. The projection fits when the spend so far plus the units still needed at the pilot's cost per
  * passing unit stays within the cap.
  */
-export function projectSupply(p: { spent: number; passing: number; cap: number; mdd: (comparisonUnits: number) => number }): Projection {
+export function projectSupply(p: { spent: number; passing: number; cap: number; mdd: (comparisonUnits: number) => number | null }): Projection {
   const needed = QUOTA.calibration + QUOTA.twins + QUOTA.comparison + QUOTA.reserve;
   const per = p.passing ? p.spent / p.passing : Infinity;
   const projected = p.spent + Math.max(0, needed - p.passing) * per;
   const fillable = p.passing + (Number.isFinite(per) ? Math.floor((p.cap - p.spent) / per) : 0);
   const comparison_fillable = Math.min(QUOTA.comparison, Math.max(0, fillable - QUOTA.calibration - QUOTA.twins - QUOTA.reserve));
   const out = { spent: p.spent, passing: p.passing, per_passing: per, needed, projected, cap: p.cap, fits: projected <= p.cap, comparison_fillable, mdd: p.mdd(comparison_fillable) };
-  if (!out.fits) throw Object.assign(new AuthorError("E_OF_SUPPLY_SHORT", "the pilot's " + p.passing + " passing units project " + projected + " for " + needed + " quota units, past the authoring cap of " + p.cap + "; " + comparison_fillable + " comparison units can fill, MDD " + out.mdd + " there"), { projection: out });
+  if (!out.fits) throw Object.assign(new AuthorError("E_OF_SUPPLY_SHORT", "the pilot's " + p.passing + " passing units project " + projected + " for " + needed + " quota units, past the authoring cap of " + p.cap + "; " + comparison_fillable + " comparison units can fill, MDD " + (out.mdd ?? "above 0.50") + " there"), { projection: out });
   return out;
 }
 

@@ -66,7 +66,7 @@ export async function validate(id: string, u: UnitFiles, kind: "unanimous" | "gi
       const res = await deps.call({ model: v.model, prompt, maxTokens: 8000 * 2 ** attempt, effort: "medium", label });
       const p = parseFirstMove([res.text ?? ""]);
       if (p.kind !== "block") continue;
-      const cells = (await deps.label({ judge: v.judge, unit: id, items: keyItems(u), blocks: [{ id: v.model, block: normalizeBlock(p.block) }], effort: "medium", label })).get(v.model) ?? null;
+      const cells = (await deps.label({ judge: v.judge, unit: id, items: keyItems(u), blocks: [{ id: "b1", block: normalizeBlock(p.block) }], effort: "medium", label })).get("b1") ?? null;
       if (cells && cells.multi_target !== null && items.every((i) => cells[i] !== null)) return cells;
     }
     return null;
@@ -141,7 +141,7 @@ export async function probe(id: string, u: UnitFiles, names: readonly string[] |
 
 /** Section 2's generic screen: an item either judge credits on stock row 1 or 2, as if the rows were sessions, becomes generic. An unlabelled cell is no credit and is counted. */
 export async function genericScreen(id: string, u: UnitFiles, deps: Deps): Promise<{ generic: WItem[]; unlabelled: number }> {
-  const blocks = STOCK_ROWS.filter((r) => r.row !== 3).map((r) => ({ id: "row" + r.row, block: normalizeBlock(r.block) }));
+  const blocks = STOCK_ROWS.filter((r) => r.row !== 3).map((r) => ({ id: "b" + r.row, block: normalizeBlock(r.block) }));
   const generic = new Set<WItem>();
   let unlabelled = 0;
   for (const judge of ["astra", "opus"] as const) {

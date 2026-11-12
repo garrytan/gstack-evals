@@ -87,7 +87,7 @@ export const seams: Seam[] = [
   {
     name: "unanimous key: 2 of 3 credited drops the unit as not unanimous",
     run: async () => {
-      const o = await constructed(deps(FIXTURE, undefined, wordLabeller((judge, id) => (judge === "astra" && id === "opus" ? { customer: false } : undefined))));
+      const o = await constructed(deps(FIXTURE, undefined, wordLabeller((judge, _, label) => (judge === "astra" && /:unanimous:/.test(label) ? { customer: false } : undefined))));
       return say(o.status === "drop" && o.reason === "not unanimous", o);
     },
   },
@@ -283,7 +283,7 @@ export const seams: Seam[] = [
     name: "mentioned flag: the mentioned customer and a generic wedge leave no primary item",
     run: async () => {
       const u = withKey({ mentioned: ["customer"] });
-      const o = await constructed(deps(u, (req) => (/:unanimous:/.test(req.label) ? blockReply("Sell " + u.key.wedge + " first.") : undefined), wordLabeller((_, id) => (id === "row2" ? { wedge: true } : undefined))));
+      const o = await constructed(deps(u, (req) => (/:unanimous:/.test(req.label) ? blockReply("Sell " + u.key.wedge + " first.") : undefined), wordLabeller((_, id, label) => (/:generic:/.test(label) && id === "b2" ? { wedge: true } : undefined))));
       return say(o.status === "drop" && o.step === "primary", o);
     },
   },

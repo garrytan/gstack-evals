@@ -101,14 +101,14 @@ export function happy(u: UnitFiles, real = false): (req: CallRequest) => string 
 }
 
 /** Credits a W item when the block's first move holds the key item's words; multi-target never. */
-export function wordLabeller(over?: (judge: string, blockId: string) => Partial<Cells> | null | undefined): Labeller & { calls: Parameters<Labeller>[0][] } {
+export function wordLabeller(over?: (judge: string, blockId: string, label: string) => Partial<Cells> | null | undefined): Labeller & { calls: Parameters<Labeller>[0][] } {
   const calls: Parameters<Labeller>[0][] = [];
   const label: Labeller = async (req) => {
     calls.push(req);
     return new Map(req.blocks.map((b) => {
       const fm = b.block.block.first_move.toLowerCase();
       const base: Cells = { judge: req.judge, model_version: null, effort: req.effort, customer: fm.includes(req.items.customer.toLowerCase()), wedge: fm.includes(req.items.wedge.toLowerCase()), multi_target: false, next: null, alt: null, doubt: null };
-      const o = over?.(req.judge, b.id);
+      const o = over?.(req.judge, b.id, req.label);
       return [b.id, o === null ? null : { ...base, ...o }];
     }));
   };
