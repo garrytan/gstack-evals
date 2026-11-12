@@ -24,6 +24,7 @@ own: every judge call goes through an injected `Caller`, the product-value eval'
 - `score.ts` joins session rows, the production judge's labels, the packet maps and each unit's key, meta and sheet into
   `ScoredSession` rows. It also gives the stock credits, the reference's credit rates per item (the AN-2 print), W_pitch
   per arm (the AN-1 print), the constructed-only filter for primary numbers and the real stratum's readout.
+- `cli.ts` exports this area's commands for `gstack-evals of`: `packets`, `check-packets`, `judge` and `score` (below).
 - `seams.ts` exports this area's dry-run seams; `fixtures.ts` holds the invented units, rows, transcripts and the stub
   judge the seams and tests use.
 
@@ -90,3 +91,40 @@ stage 2's `buildLabelPackets` takes the check's map, packets and labels for its 
     source.
 22. The AN-2 credit rate per item is the unit mean of W_customer and of W_wedge on reference sessions, constructed units
     only. W_pitch is the unit mean of W on pitch sessions per model and arm, constructed units only.
+
+## Commands
+
+- `packets --stage 1|2 --launch <dir> [--launch <dir>] --units <dir> --out <packets dir> --map <map.json>`, and for stage
+  2 also `--check-map --check-packets --check-labels` from stage 1's judge check. Stage 1 takes the stage1 and smoke
+  launches; stage 2 takes the stage2 launch, and the pitch and real launches each build their own packets.
+- `check-packets --launch <dir> [--launch <dir>] --units <dir> --out <packets dir> --map <map.json>`.
+- `judge --packets <dir> --map <map.json> --item <ledger item> --spend-cap <usd> --out <labels.ndjson> --effort medium|max
+  --cache <dir> [--concurrency n] [--record <dir>] [--ledger <path>]`.
+- `score --launch <dir> [...] --units <dir> --map <map.json> [...] --labels <labels.ndjson> [...] --out <scored.ndjson>`.
+
+Every path flag must sit outside the repo. The commands print counts and sha256 digests, never unit text.
+
+## Command choices
+
+23. Rows come from each launch's rows.ndjson through `wire.ts` `completeRow`. A session id may appear in one launch
+    only, and every row must be of the stage `--stage` names. A real unit's Names line is its `names.txt`, one name a
+    line; a real unit without it is refused.
+24. `packets` and `check-packets` refuse an `--out` or `--map` that already exists, so a build never mixes with an
+    older one.
+25. Every stage 2 build carries its own gold cells, so the pitch and real builds need the judge check's inputs too and
+    insert 40 gold cells per production judge of their own.
+26. `--effort` must match the map: max for a check map, medium for every other map. `judgePackets` sets the effort from
+    the map's kind; the flag makes the operator say which pass is running.
+27. `judge` opens one lease on `--item` with `--spend-cap` as its reservation, through the product-value meter, and
+    keeps its run id in `<out>.run.json` so a rerun settles its own stale lease and reads the reply cache. The meter's
+    journal goes to `<out>.meter` and the call log to `<out>.calls.ndjson`.
+28. The version a provider reported comes from a tap on the upstream fetch, as the product-value judge client records it.
+    Gemini's tie vote must name Google Vertex as its server (`sim/founder.ts` `VERTEX`, now exported), cached replies
+    included; any other name, or the meter's own pin failing on any OpenRouter route, stops the command with
+    E_OF_PROVIDER_DRIFT after the lease settles. Labels already answered stay in the cache, and no labels file is written.
+29. Unlabelled cells count the production label (Astra on Opus blocks, Opus on Sol blocks, the panel on particle-1 blocks)
+    or, on a check map, both check judges, on every cell the packet asks for. When any remain, `judge` prints one
+    E_OF_LABEL_MISSING line with the count and still exits 0, because missing labels count against coverage and stop
+    nothing.
+30. `score` writes stock.ndjson beside `--out` and prints, per stage, kind, stratum, model and arm, how many sessions
+    scored W=1, W=0 and unscored.

@@ -45,7 +45,7 @@ export const FOUNDER_RULES = [
 export const SIM_CALL = { model: "gemini", effort: "medium", temperature: 0, seed: SEED, maxTokens: 1200 } as const;
 
 /** Names OpenRouter gives Google's Vertex endpoint; Google AI Studio is not one. */
-const VERTEX = /^(google|google vertex|google-vertex)$/i;
+export const VERTEX = /^(google|google vertex|google-vertex)$/i;
 
 export function loadFounder(dir: string, rules: string = FOUNDER_RULES): PersonSheet {
   const sheet = JSON.parse(readFileSync(join(dir, "sheet.json"), "utf8")) as Sheet;
