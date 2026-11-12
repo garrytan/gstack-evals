@@ -19,6 +19,11 @@ export const RUN_UID = "10001:10001";
 /** Each run's /out is a tmpfs volume this size, with this many inodes, so nothing a run writes there reaches the host
  * disk. A run that leaves it full fails. */
 export const OUT_MIB = 256;
+
+/** Exploratory re-screen only, outside the prereg: /tmp for runs and the cold build, and the memory limit raised so a
+ * full /tmp tmpfs (charged to the container's memory) still leaves room for the toolchain. */
+export const EXPLORE_TMP = "8g";
+export const EXPLORE_MEMORY = "12g";
 export const OUT_INODES = 1024;
 
 /** The line each run's sh entrypoint prints on stdout before it execs python or go test, so it comes out before any
@@ -209,6 +214,7 @@ export function verifyTree(o: VerifyOptions): TreeResult {
   chmodSync(join(dir, "status"), 0o777);
   writeFileSync(join(dir, "input/tree.patch"), o.patch);
   const volume = "real-verify-" + randomBytes(6).toString("hex");
+  const runVolume = (i: number) => volume + "-run" + i;
   const tests = o.testsDir ?? join(o.taskDir, "tests");
   const limits = o.task.limits;
   try {
@@ -243,7 +249,11 @@ export function verifyTree(o: VerifyOptions): TreeResult {
         const order = shuffled(targets(o.task, o.ids), seed);
         const put = docker(["exec", "-i", out, "sh", "-c", "cat > /out/targets.txt"], { input: order.join("\n") + "\n", timeoutMs: 120000 });
         if (put.status !== 0) throw noVerdict("the targets were not written to /out", put);
-        const base = ["--rm", "--network", "none", "--user", RUN_UID, "--read-only", "--tmpfs", "/tmp:rw,exec,size=2g", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--cpus", String(o.cpus ?? limits.cpus), "--memory", limits.memory, "--pids-limit", "2048", "-e", "HOME=/tmp", "-v", volume + ":/testbed:ro", "-v", tests + ":/verifier:ro", "-v", out + ":/out", "--workdir", "/testbed"];
+        const copy = docker(["volume", "create", runVolume(i)]);
+        if (copy.status !== 0) throw noVerdict("the per-run copy of the tree was not created", copy);
+        const filled = dockerRun("real-copy-" + randomBytes(6).toString("hex"), ["--rm", "--network", "none", "--user", "0:0", "--entrypoint", "sh", "-v", volume + ":/src:ro", "-v", runVolume(i) + ":/dst", o.image, "-c", "cp -a /src/. /dst/ && chown -R 10001:10001 /dst"], { timeoutMs: 1800000 });
+        if (filled.status !== 0) throw noVerdict("the per-run copy of the tree was not filled", filled);
+        const base = ["--rm", "--network", "none", "--user", RUN_UID, "--read-only", "--tmpfs", "/tmp:rw,exec,size=" + EXPLORE_TMP, "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--cpus", String(o.cpus ?? limits.cpus), "--memory", EXPLORE_MEMORY, "--pids-limit", "2048", "-e", "HOME=/tmp", "-v", runVolume(i) + ":/testbed", "-v", tests + ":/verifier:ro", "-v", out + ":/out", "--workdir", "/testbed"];
         const r = o.task.runner;
         const other = r.kind !== "pytest" && r.kind !== "go" ? runArgs(r, order) : null;
         const cmd =
@@ -270,6 +280,7 @@ export function verifyTree(o: VerifyOptions): TreeResult {
       } finally {
         docker(["rm", "-f", out]);
         docker(["volume", "rm", "-f", out]);
+        docker(["volume", "rm", "-f", runVolume(i)]);
       }
     }
     return { label: o.label, prepare: prepared, runs };
@@ -316,7 +327,7 @@ function coldRebuild(o: VerifyOptions, volume: string, tests: string, status: st
   let state: ColdRecord["build"] = "none";
   if (build) {
     const limits = o.task.limits;
-    const res = dockerRun("real-build-" + randomBytes(6).toString("hex"), ["--rm", "--network", "none", "--user", RUN_UID, "--read-only", "--tmpfs", "/tmp:rw,exec,size=2g", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--cpus", String(o.cpus ?? limits.cpus), "--memory", limits.memory, "--pids-limit", "2048", "-e", "HOME=/tmp", "-e", "CI=true", "-e", "npm_config_cache=/tmp/npm", "-e", "XDG_CACHE_HOME=/tmp/cache", "-e", "NODE_OPTIONS=", "-v", volume + ":/testbed", "--workdir", inRepo(root), "--entrypoint", "sh", o.image, "-c", build], { timeoutMs: limits.verifier_sec * 1000 });
+    const res = dockerRun("real-build-" + randomBytes(6).toString("hex"), ["--rm", "--network", "none", "--user", RUN_UID, "--read-only", "--tmpfs", "/tmp:rw,exec,size=" + EXPLORE_TMP, "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--cpus", String(o.cpus ?? limits.cpus), "--memory", EXPLORE_MEMORY, "--pids-limit", "2048", "-e", "HOME=/tmp", "-e", "CI=true", "-e", "npm_config_cache=/tmp/npm", "-e", "XDG_CACHE_HOME=/tmp/cache", "-e", "NODE_OPTIONS=", "-v", volume + ":/testbed", "--workdir", inRepo(root), "--entrypoint", "sh", o.image, "-c", build], { timeoutMs: limits.verifier_sec * 1000 });
     state = res.timed_out ? "timeout" : res.status === 0 ? "ok" : "failed";
   }
   step("seal");
