@@ -12,8 +12,8 @@
 //   rule. An attempt's marker (attempt.json) is written before its launch, so a later launch that finds a marker with no
 //   row reconciles that attempt first, against the ledger's meter for it, the proxy journal's lines for it and its
 //   session log, writes reconcile.json, and counts it as an infrastructure failure on that attempt.
-// - A halt (a provider drift, a containment departure, rejected credentials) writes the session's row as missing, lets the
-//   round's other sessions finish and stops the launch for the Captain.
+// - A halt (a provider drift, a containment departure, rejected credentials) writes the session's row as missing and
+//   stops the launch for the Captain; a halt or a cap stop lets sessions already running finish and starts no other.
 // - dockerLaunch is one attempt on the rig: a proxy slot at the session's allowance, the arm's sandbox wrapped by the
 //   containment probe, a fresh work repository, the driver with the claude-code-preset system prompt, 60 agent turns per
 //   reply (the pinned CLI counts maxTurns per user message in streaming input, so the SDK's cap is the per-reply cap),
@@ -214,8 +214,9 @@ export async function runSchedule<C>(o: RunInput & { entries: ManifestEntry[] },
   const rig = await deps.openRig();
   if (rig.recovery) writeFileSync(join(o.out, "rig.json"), JSON.stringify(rig.recovery, null, 2) + "\n");
   let halted = false;
-  const session = async (e: ManifestEntry): Promise<"cap" | "halt" | "done"> => {
+  const session = async (e: ManifestEntry): Promise<void> => {
     const id = entryId(e);
+    if (halted) return;
     const unitDir = join(o.unitsDir, e.unit);
     const opening = readFileSync(join(unitDir, "opening.md"), "utf8");
     const sheet = JSON.parse(readFileSync(join(unitDir, "sheet.json"), "utf8")) as Sheet;
@@ -243,9 +244,10 @@ export async function runSchedule<C>(o: RunInput & { entries: ManifestEntry[] },
       const outcome = settle(attemptOutcome(read, e.arm), attempt);
       records.push({ attempt, outcome: outcome.state, why: outcome.why, usd: read.micros / D, sim_usd: read.sim_micros / D, contained: read.contained });
       if (outcome.state === "cap") {
+        halted = true;
         result.stops.push({ code: "CAP_STOP", message: id + ": " + outcome.why });
         result.unrun.push({ id, how: "stopped" });
-        return "cap";
+        return;
       }
       if (outcome.state !== "retry") end = outcome;
       else o.log(id + ": attempt " + attempt + ": " + outcome.why + "; its one retry runs under that reason");
@@ -258,8 +260,8 @@ export async function runSchedule<C>(o: RunInput & { entries: ManifestEntry[] },
     appendFileSync(join(o.out, "rows.ndjson"), JSON.stringify(line) + "\n");
     result.rows.push(line);
     o.log(id + ": " + scored.state + (scored.code ? " " + scored.code : "") + " (" + end!.why + "), " + attempts.length + " attempt" + (attempts.length === 1 ? "" : "s") + ", " + usd(line.row.usd * D) + " arm, " + usd(line.row.sim_usd * D) + " simulator");
+    halted ||= halt;
     if (halt) result.stops.push({ code: (end as { code: ReasonCode }).code, message: id + ": " + end!.why + "; the launch stops for the Captain" });
-    return halt ? "halt" : "done";
   };
   try {
     const rounds = cellRounds(o.cell, entries).map((r) => r.filter((e) => !done.has(entryId(e))));
@@ -272,8 +274,7 @@ export async function runSchedule<C>(o: RunInput & { entries: ManifestEntry[] },
         result.stops.push({ code: "CAP_STOP", message: "round " + (i + 1) + "'s worst case (" + usd(worst) + " runs, " + usd(simWorst) + " simulator) does not fit what this launch may still spend (" + usd(o.cap - result.spent_micros) + " and " + usd(o.simCap - result.sim_micros) + ")" });
         break;
       }
-      const ends = await pool(o.parallel, round.map((e) => () => session(e)));
-      if (ends.includes("cap") || ends.includes("halt")) halted = true;
+      await pool(o.parallel, round.map((e) => () => session(e)));
     }
     const ran = new Set([...done.keys(), ...result.rows.map((r) => r.id), ...result.unrun.map((u) => u.id)]);
     result.unrun.push(...entries.map(entryId).filter((id) => !ran.has(id)).map((id) => ({ id, how: "unstarted" as const })));
