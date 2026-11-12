@@ -77,12 +77,14 @@ export interface ProxyHandle {
 
 /**
  * Starts the proxy container on the trial network and connects it to the egress network. dir is the evaluator-side
- * directory for its config, journal and management socket; the ledger's directory is mounted at its own path.
+ * directory for its config, journal and management socket; the ledger's directory is mounted at its own path. upstream,
+ * for keyless end-to-end checks only, sends every upstream call to that base URL, with host.docker.internal resolving to
+ * the host, so a stub model server on the host answers in place of the providers.
  */
-export function startProxyContainer(opts: { image: string; net: TrialNetwork; dir: string; ledger: string; leaseId: string; managementToken: string; retry: RetryBudget; providerKeys?: Record<string, string>; docker?: string; timeoutMs?: number }): ProxyHandle {
+export function startProxyContainer(opts: { image: string; net: TrialNetwork; dir: string; ledger: string; leaseId: string; managementToken: string; retry: RetryBudget; providerKeys?: Record<string, string>; docker?: string; timeoutMs?: number; upstream?: string }): ProxyHandle {
   const bin = opts.docker ?? "docker";
   mkdirSync(opts.dir, { recursive: true });
-  const config: ProxyConfig = { lease_id: opts.leaseId, ledger: opts.ledger, journal: join(opts.dir, "journal.ndjson"), socket: join(opts.dir, "management.sock"), host: opts.net.proxyIp, port: PROXY_PORT, retry: opts.retry };
+  const config: ProxyConfig = { lease_id: opts.leaseId, ledger: opts.ledger, journal: join(opts.dir, "journal.ndjson"), socket: join(opts.dir, "management.sock"), host: opts.net.proxyIp, port: PROXY_PORT, retry: opts.retry, ...(opts.upstream ? { upstream: opts.upstream } : {}) };
   writeFileSync(join(opts.dir, "config.json"), JSON.stringify(config, null, 2) + "\n");
   rmSync(config.socket, { force: true });
   const env = trialEnv("proxy", { PATH: "/usr/local/bin:/usr/bin:/bin", HOME: "/tmp", LANG: "C.UTF-8", GSTACK_EVALS_PROXY_TOKEN: opts.managementToken, ...opts.providerKeys });
@@ -90,7 +92,7 @@ export function startProxyContainer(opts: { image: string; net: TrialNetwork; di
   const name = "gse-proxy-" + randomBytes(5).toString("hex");
   const user = (process.getuid?.() ?? 1000) + ":" + (process.getgid?.() ?? 1000);
   const ledgerDir = dirname(opts.ledger);
-  const r = docker(bin, ["run", "-d", "--name", name, "--network", opts.net.name, "--ip", opts.net.proxyIp, "--user", user, "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--read-only", "--tmpfs", "/tmp",
+  const r = docker(bin, ["run", "-d", "--name", name, "--network", opts.net.name, "--ip", opts.net.proxyIp, "--user", user, "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--read-only", "--tmpfs", "/tmp", ...(opts.upstream ? ["--add-host", "host.docker.internal:host-gateway"] : []),
     "-v", opts.dir + ":" + opts.dir, "-v", ledgerDir + ":" + ledgerDir, "-v", SRC + ":/opt/gstack-evals/src:ro", ...envArgs, "--entrypoint", "bun", opts.image, "/opt/gstack-evals/src/trial/proxy-entry.ts", join(opts.dir, "config.json")],
     { ...Object.fromEntries(["PATH", "HOME", "DOCKER_HOST", "DOCKER_CONFIG", "DOCKER_CONTEXT", "XDG_RUNTIME_DIR"].flatMap((k) => (process.env[k] ? [[k, process.env[k]!]] : []))), ...clientEnv });
   let stopped = false;
