@@ -49,12 +49,10 @@ attachments:
   - 3d7ba43be4f20032efffbdb42e65b14b5c36f82b7db8c50f0b5c8c8dd2390849  s7.txt
   - 4305a46dd20dd685cda304483bdc675a7188dd4fffcd472d726d42e654e3a4f1  s9.ts.txt
   - bdc63566e042da1cfd8ed919c22563d7d254a779cace2e53cbbe4fc3b7aaaa5a  s9.txt
-  - 0d9de0a83354aa31710e20617cf139a205e619449310f49605a96978ca6cad42  score-labels.json
   - 98584c5cbd769d63fac13ec5963eef36d5aac9b12c8b04c4bdcd44efca3eb02b  score-labels.txt
   - f0f114585be65bbef844362a4ed864ad20cae81c5c4f5274252313c6d662b6cf  score-no1c.txt
   - 04f956511f27c0c2d29ad024e4bbd19e086de5425b629e5db2070a3e30810e25  score-sens27.txt
   - 0d6f4872f1be08c439b89ec65df284fc530ecc707f2095e328304f1ee3618d97  score-sens404.txt
-  - 8dba0cd04d1e4cb33ad97bbecffec6418e62ed7ccafa36f4240631385fca195e  score.json
   - 5996dcf44e93d289b3a3d2f79940265f5653ee8134c558c8841ff2e6d3b061af  score.txt
   - 4781f3b44d4fda9a4dcf9ce7548f552a7c1d63587126a1c13bc30dfdd5bda373  sens.log.txt
   - 023c16ad90ae9476dbade19ae71e8714b7cd89d57105d2cddd0967989d0c8410  sens.sh.txt
@@ -279,7 +277,7 @@ Every reading and every script that produced a number above is attached, the scr
    Expected output: score.txt byte for byte, and score-labels.txt with --labels added.
 2. The secondaries come from lib.ts.txt, contrasts.ts.txt, s3.ts.txt, s5.ts.txt, s6.ts.txt and s9.ts.txt (outputs contrasts.txt, s3.txt, s5.txt, s6.txt, s9.txt); their session set reproduces score.txt's primary lines exactly. S4 comes from join.sh.txt and s4.py.txt, the replays from replay-read.ts.txt, the control rates from rates.py.txt and task fit from fit.py.txt. The label pass ran labelpass.sh.txt and labelpass2.sh.txt through lbl-all.sh.txt, lbl-vm6.sh.txt, lbl-vm7.sh.txt, lbl-retry.sh.txt, retry-vm6.sh.txt and retry-vm7.sh.txt; the replays ran replay.sh.txt with session lists from mksessions.py.txt; p404.py.txt counted the 404s.
 
-This record leaves out the trial directories, proxy journals, grounded labels and replay answers, because they hold task code, agent transcripts and text derived from hidden tests, and it leaves out the setup and paid-batch host scripts. So an outsider can check every printed line here against the scripts, but can't rerun the analysis yet. A paid rerun of one setup needs this repo's metering proxy and ledger; there is no direct-key path yet.
+This record leaves out the trial directories, proxy journals, grounded labels and replay answers, because they hold task code, agent transcripts and text derived from hidden tests, and it leaves out the setup and paid-batch host scripts. It also leaves out the scorer's JSON output (score.json and score-labels.json), because the repository's secret scan reads one of its keys as a credential; the post cites only their printed versions, score.txt and score-labels.txt, which stay attached. So an outsider can check every printed line here against the scripts, but can't rerun the analysis yet. A paid rerun of one setup needs this repo's metering proxy and ledger; there is no direct-key path yet.
 
 ## What is held out, and why
 
