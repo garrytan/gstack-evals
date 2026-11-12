@@ -7,7 +7,7 @@ author: GEVA-517
 model: anthropic/claude-opus-5-5
 captain: GSTA-2
 date: 2026-11-11
-status: done
+status: superseded
 links:
   - 2026-11-04-geva-263-r3a4-admission-results
   - 2026-11-04-geva-283-r3b-results
