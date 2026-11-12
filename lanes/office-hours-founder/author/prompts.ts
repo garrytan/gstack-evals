@@ -116,7 +116,7 @@ export const KEY_TRACE_CHECKS: readonly TraceCheck[] = ["t2", "t3"];
 
 export const tracePrompt = (noteA: string, noteB: string, files: string): string =>
   "Below are two notes on a real startup's early history and an invented startup re-skinned from it. Check each of these and mark it pass or fail:\n" + checkList(TRACE_CHECKS) +
-  '\n\nReply with a JSON object only: {"t1": "pass" or "fail", "t2": ..., "t3": ..., "t4": ..., "t5": ..., "pointing": the ids of the key facts that point toward the customer or the wedge, "opening_date": the date or stage of the opening plan in the notes, "first_sale_date": the date of the first sale in the notes, "why": one line per failed check}.\n\n' +
+  '\n\nReply with a JSON object only: {"t1": "pass" or "fail", "t2": ..., "t3": ..., "t4": ..., "t5": ..., "pointing": the ids of the key facts that point toward the customer or the wedge, "opening_date": the date or stage of the opening plan in the notes, "first_sale_date": the date of the first sale in the notes, "industry": the invented startup's industry in a few words, "why": one line per failed check}.\n\n' +
   fence("Note A", noteA) + "\n\n" + fence("Note B", noteB) + "\n\n" + files;
 
 /** Section 3 step 7 (real stratum): the audit, without the notes, with section 2's foreseeable rating. */
