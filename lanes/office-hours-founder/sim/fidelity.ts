@@ -83,10 +83,14 @@ export function drawAudit(stage: 1 | 2, all: readonly AuditSession[]): Draw {
     });
   const order = shuffle(turns, seededRandom(SEED));
   const base = { stage, sessions: sessions.length, zero_turn_sessions: sessions.filter((s) => !s.founder_turns.length).length, turns: order.length };
-  const summary = (drawn: DrawnTurn[]): Draw => ({ ...base, read: "audit", every: drawn.length === order.length, drawn, by_arm: { none: 0, lens: 0, "office-hours": 0, ...Object.fromEntries(Object.entries(Object.groupBy(drawn, (t) => t.session.arm)).map(([a, ts]) => [a, ts!.length])) }, revealing: drawn.filter((t) => t.revealed.length).length });
+  const summary = (read: Draw["read"], every: boolean, drawn: DrawnTurn[]): Draw => {
+    const by_arm: Record<ArmId, number> = { none: 0, lens: 0, "office-hours": 0 };
+    for (const t of drawn) by_arm[t.session.arm]++;
+    return { ...base, read, every, drawn, by_arm, revealing: drawn.filter((t) => t.revealed.length).length };
+  };
   const strip = ({ session, turn, revealed }: (typeof order)[number]): DrawnTurn => ({ session, turn, revealed });
-  if (order.length < MIN_TURNS) return { ...summary([]), read: "no-read", every: false };
-  if (order.length < SAMPLE) return summary(order.map(strip));
+  if (order.length < MIN_TURNS) return summary("no-read", false, []);
+  if (order.length < SAMPLE) return summary("audit", true, order.map(strip));
   const cap = (a: ArmId) => sessions.filter((s) => s.arm === a).reduce((n, s) => n + Math.min(PER_SESSION, s.founder_turns.length), 0);
   const target = Object.fromEntries(SHORTFALL_ORDER.map((a) => [a, Math.min(QUOTAS[stage][a], cap(a))])) as Record<ArmId, number>;
   let short = SAMPLE - SHORTFALL_ORDER.reduce((n, a) => n + target[a], 0);
@@ -112,7 +116,7 @@ export function drawAudit(stage: 1 | 2, all: readonly AuditSession[]): Draw {
   walk((t) => t.revealed.length > 0, MIN_EACH);
   walk((t) => t.revealed.length === 0, MIN_EACH);
   walk(() => true, SAMPLE);
-  return { ...summary([...taken].sort((a, b) => a - b).map((i) => strip(order[i]!))), every: false };
+  return summary("audit", false, [...taken].sort((a, b) => a - b).map((i) => strip(order[i]!)));
 }
 
 export interface AuditedTurn {
