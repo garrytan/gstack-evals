@@ -95,6 +95,12 @@ export function exposure(rows: ReturnType<typeof onManifest>, model: ModelId): {
   return { sessions: read.length, exposed, rate: read.length ? r4(exposed / read.length) : null };
 }
 
+/** The arm-guess probe (section 7): the post flags it when Astra guesses above 70% of blocks correctly. */
+export const armGuess = (correct: number, total: number): { rate: number; flag: boolean } => {
+  const rate = total ? r4(correct / total) : 0;
+  return { rate, flag: rate > LIMIT.guess };
+};
+
 /** The interim stop reads exposure under 0.70. */
 export const interimStops = (rate: number): boolean => r4(rate) < INTERIM.bar;
 
@@ -199,7 +205,8 @@ export function readContrast(name: ContrastName, rows: ReturnType<typeof onManif
   const w = contrast(scored(a), scored(b), W);
   const specificity = contrast(scored(a), scored(b), specMetric).cmp;
   const w_complete = contrast(scored(a), scored(b), wOnComplete).cmp;
-  const itt = contrast(arm(a), arm(b), (r) => r.session?.W ?? 0).cmp;
+  const itt0 = (x: ArmId) => arm(x).map((r) => ({ unit: r.entry.unit, pass: r.entry.pass, W: r.session?.W ?? 0 }));
+  const itt = contrast(itt0(a), itt0(b), (r) => r.W).cmp;
   const untested = untestedReasons(model, [a, b], u);
   const spec_coverage = u.cells.filter((c) => c.arm === a || c.arm === b).every((c) => c.specificity_rate >= LIMIT.specificity);
   const v = verdict({ untested, w: w.cmp, guard: specificity && w_complete ? { spec: specificity.delta, w: w_complete.delta } : null, spec_coverage });
@@ -403,12 +410,11 @@ export function readStage2(i: Stage2Input): Stage2Reading {
   ) as Record<ModelId, ModelRead>;
   const p = models.opus.contrasts["office-hours-none"].w?.delta ?? 0;
   const q = models.opus.real.W?.delta ?? 0;
-  const rate = i.arm_guess.total ? r4(i.arm_guess.correct / i.arm_guess.total) : 0;
   return {
     models,
     stock,
     gold_kappa,
-    arm_guess: { rate, flag: rate > LIMIT.guess },
+    arm_guess: armGuess(i.arm_guess.correct, i.arm_guess.total),
     real_opposite: p !== 0 && q !== 0 && Math.sign(p) !== Math.sign(q),
     repairs: i.stage1.repairs,
     codes: [...new Set(codes)],

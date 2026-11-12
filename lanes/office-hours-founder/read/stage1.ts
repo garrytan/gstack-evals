@@ -67,7 +67,7 @@ export interface JudgeInput {
   unlabelled: number;
   near_miss: readonly NearMissCell[];
 }
-export interface JudgeCheck extends JudgeReading {
+export interface JudgeCheck extends Omit<JudgeReading, "reading"> {
   near_miss: number | null;
   reading: "pass" | "fail" | "NO READ (judge)";
 }
