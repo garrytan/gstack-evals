@@ -120,10 +120,9 @@ export interface ProbeRecord {
  * counted guess by a model other than Astra.
  */
 export async function probe(id: string, u: UnitFiles, names: readonly string[] | null, deps: Deps): Promise<{ hit: boolean; records: ProbeRecord[] }> {
-  const text = (t: string) => (t.trim() ? t : "an empty reply");
   const one = async (model: ProbeRecord["model"], prompt: ProbeRecord["prompt"]): Promise<ProbeRecord> => {
     const base = id + ":probe:" + model + ":" + prompt;
-    const reply = await ask(deps.call, { model, prompt: prompt === "opening" ? probePrompt(u.opening) : probePrompt(u.opening, u.sheet, u.key), maxTokens: 2000, effort: null, label: base }, (t) => (t.trim() ? { reply: t } : text(t)));
+    const reply = await ask(deps.call, { model, prompt: prompt === "opening" ? probePrompt(u.opening) : probePrompt(u.opening, u.sheet, u.key), maxTokens: 2000, effort: null, label: base }, (t) => (t.trim() ? { reply: t } : "an empty reply"));
     if (typeof reply === "string") return { model, prompt, answered: false, counted: false, by: null };
     if (names && namesIn(reply.reply, names).length) return { model, prompt, answered: true, counted: true, by: "name" };
     const judged = await Promise.all((["opus", "astra"] as const).map((judge) =>
