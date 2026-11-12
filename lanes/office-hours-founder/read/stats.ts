@@ -14,8 +14,10 @@ export { bootstrapMeans, clusterBootstrap, kappa, mean, ols, percentileInterval,
 export const STAT = { seed: SEED, draws: DRAWS };
 
 /** A per-session number; null leaves the session out of that metric. */
-export type Metric = (s: ScoredSession) => number | null;
+export type Metric<T = ScoredSession> = (s: T) => number | null;
 export const W: Metric = (s) => s.W;
+/** Anything that names a unit and a pass: a session or a manifest entry. */
+export type Pass = { unit: string; pass: number };
 
 /** One unit's arm scores over its matched passes. */
 export interface UnitPair {
@@ -36,10 +38,10 @@ export interface Comparison {
   worse: number;
 }
 
-const passKey = (s: ScoredSession) => s.unit + "#" + s.pass;
+const passKey = (s: Pass) => s.unit + "#" + s.pass;
 
 /** A unit's arm score on a metric: the mean of its scored passes. Then the mean over units, so units weigh equally. */
-export function unitMean(sessions: readonly ScoredSession[], metric: Metric): { units: number; mean: number } | null {
+export function unitMean<T extends Pass>(sessions: readonly T[], metric: Metric<T>): { units: number; mean: number } | null {
   const by = new Map<string, number[]>();
   for (const s of sessions) {
     const v = metric(s);
@@ -52,8 +54,8 @@ export function unitMean(sessions: readonly ScoredSession[], metric: Metric): { 
  * A pass counts only when both arms scored it on the metric; a unit's arm score is the mean of its matched passes and a
  * unit with no matched pass leaves. one_side counts passes scored on one arm only.
  */
-export function matchUnits(a: readonly ScoredSession[], b: readonly ScoredSession[], metric: Metric): { units: UnitPair[]; one_side: number } {
-  const side = (xs: readonly ScoredSession[]) => new Map(xs.flatMap((s) => (metric(s) === null ? [] : [[passKey(s), s] as const])));
+export function matchUnits<T extends Pass>(a: readonly T[], b: readonly T[], metric: Metric<T>): { units: UnitPair[]; one_side: number } {
+  const side = (xs: readonly T[]) => new Map(xs.flatMap((s) => (metric(s) === null ? [] : [[passKey(s), s] as const])));
   const A = side(a), B = side(b);
   const by = new Map<string, { a: number[]; b: number[] }>();
   for (const [k, sb] of B) {
@@ -87,7 +89,7 @@ export function compare(units: readonly UnitPair[]): Comparison | null {
 }
 
 /** The paired comparison of arm b minus arm a on a metric, with the count of passes one arm alone scored. */
-export function contrast(a: readonly ScoredSession[], b: readonly ScoredSession[], metric: Metric): { cmp: Comparison | null; one_side: number } {
+export function contrast<T extends Pass>(a: readonly T[], b: readonly T[], metric: Metric<T>): { cmp: Comparison | null; one_side: number } {
   const m = matchUnits(a, b, metric);
   return { cmp: compare(m.units), one_side: m.one_side };
 }
