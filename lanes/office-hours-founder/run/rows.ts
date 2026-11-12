@@ -26,7 +26,8 @@ export interface RowLine {
   /** The scored attempt's transcript and the office-hours arm's copied state root. */
   transcript: string | null;
   state_root: string | null;
-  attempts: { attempt: number; outcome: Outcome["state"]; why: string; usd: number; sim_usd: number }[];
+  /** Every attempt's outcome, its metered dollars and its containment probe's departures (null when the probe could not run). */
+  attempts: { attempt: number; outcome: Outcome["state"]; why: string; usd: number; sim_usd: number; contained: string[] | null }[];
 }
 
 export const END_STATES: readonly EndState[] = ["block", "no-block", "arm-stop", "missing", "contaminated", "gstack-read"];

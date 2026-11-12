@@ -192,13 +192,18 @@ function reconcile(dir: string, ledger: string | null): AttemptRead {
 
 const usd = (m: number) => "$" + (m / D).toFixed(2);
 
-/** Runs one cell: freezes its manifest, opens the rig, then runs round by round until the schedule ends or a stop. */
+/** Runs one cell: its sessions as manifest.ts schedules them, kept to the launch's models and arms. */
 export async function runCells<C>(o: RunInput, deps: RunDeps<C>): Promise<RunResult> {
   const units = loadUnits(o.unitsDir);
   const problem = cellProblem(o.cell, units);
   if (problem) throw new Error("E_USAGE " + problem);
-  const entries = cellEntries(o.cell, units).filter((e) => o.models.includes(e.model) && o.arms.includes(e.arm));
-  const meta = new Map<string, UnitMeta>(units.map((u) => [u.id, u]));
+  return runSchedule({ ...o, entries: cellEntries(o.cell, units).filter((e) => o.models.includes(e.model) && o.arms.includes(e.arm)) }, deps);
+}
+
+/** Freezes the schedule's manifest, opens the rig, then runs round by round until the schedule ends or a stop. e2e.ts hands it a fixture schedule. */
+export async function runSchedule<C>(o: RunInput & { entries: ManifestEntry[] }, deps: RunDeps<C>): Promise<RunResult> {
+  const entries = o.entries;
+  const meta = new Map<string, UnitMeta>(loadUnits(o.unitsDir).map((u) => [u.id, u]));
   const manifest: Manifest = { schema: 1, cell: o.cell, models: [...o.models], arms: [...o.arms], repairs: [...o.repairs], units: Object.fromEntries([...new Set(entries.map((e) => e.unit))].sort().map((id) => [id, meta.get(id)!.digest])), entries };
   mkdirSync(o.out, { recursive: true });
   const frozen = freezeManifest(join(o.out, "manifest.json"), manifest);
@@ -236,7 +241,7 @@ export async function runCells<C>(o: RunInput, deps: RunDeps<C>): Promise<RunRes
       result.sim_micros += read.sim_micros;
       attempts.push(read);
       const outcome = settle(attemptOutcome(read, e.arm), attempt);
-      records.push({ attempt, outcome: outcome.state, why: outcome.why, usd: read.micros / D, sim_usd: read.sim_micros / D });
+      records.push({ attempt, outcome: outcome.state, why: outcome.why, usd: read.micros / D, sim_usd: read.sim_micros / D, contained: read.contained });
       if (outcome.state === "cap") {
         result.stops.push({ code: "CAP_STOP", message: id + ": " + outcome.why });
         result.unrun.push({ id, how: "stopped" });
