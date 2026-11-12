@@ -1,0 +1,19 @@
+#!/bin/bash
+# GEVA-501: retry every trial of batch K whose label file is still missing after its label pass. The batch 5 misses were
+# DR_LABEL_MISSING "verifier image did not build" while parallel jobs built the same dr-verify tag; the same build passes
+# alone. Pull the task image if it is gone, then label one trial at a time.
+# usage: lbl-retry.sh <K>   (reads ~/lbl/logs/todo-K.txt)
+set -uo pipefail
+U=$VM_HOME; export PATH=$U/.local/bin:$U/.bun/bin:$PATH
+R=$U/work/repo-r3; L=$U/lbl; K=$1; cd $R
+PH=$(ip -4 -o addr show docker0 | awk '{print $4}' | cut -d/ -f1)
+n=0; ok=0
+while read -r trial task session; do
+  out=$L/labels/$session.$(basename "$trial").jsonl; [ -s "$out" ] && continue
+  n=$((n+1))
+  img=$(awk '/^FROM/{print $2; exit}' $U/tasks/$task/tests/Dockerfile)
+  docker image inspect "$img" > /dev/null 2>&1 || docker pull -q "$img" > /dev/null
+  log=$L/logs/$session.$(basename "$trial").retry.log
+  if bun bin/gstack-evals decision-routing labels trial "$trial" --task "$U/tasks/$task" --proxy-host "$PH" --out "$out.part" > "$log" 2>&1 < /dev/null; then mv "$out.part" "$out"; ok=$((ok+1)); else echo "RETRY FAILED $session $(tail -1 "$log" | cut -c1-200)"; fi
+done < $L/logs/todo-$K.txt
+echo "batch $K: retried $n, labelled $ok"

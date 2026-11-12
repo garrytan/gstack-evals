@@ -18,6 +18,7 @@ import tempfile
 import threading
 import time
 import traceback
+import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 AGENT_DIR = os.path.abspath(os.path.join(HERE, "..", "..", "lanes", "decision-routing", "agent"))
@@ -163,6 +164,7 @@ PIN = {
 ISSUE = "Fix the needle handling in src."
 SUBMIT = "echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT && cat patch.txt"
 ALLOW = "403 DR_ALLOWANCE_STOP: the session allowance cannot hold this call"
+OPUS_FORCED_TOOL_ERROR = 'tool_choice: type "tool" and "any" are not supported for this model.'
 OBS = "<returncode>{{output.returncode}}</returncode>\n<output>\n{{output.output}}</output>"
 TESTPY = "import unittest\nclass T(unittest.TestCase):\n    def test_a(self):\n        pass\n"
 
@@ -824,6 +826,144 @@ def test_host_shadow_answers_every_logged_state_twice_for_particle():
     check(status2 == "allowance_stop" and n2 == 0, status2)
 
 
+def fake_typesafe_sdk(seen):
+    """A stand-in typesafe_sdk module that records the model each client and each request names."""
+    mod = types.ModuleType("typesafe_sdk")
+
+    class Noul:
+        def __init__(self, instructions):
+            self.instructions = instructions
+
+    class Choice:
+        def __init__(self, instructions, criteria):
+            self.instructions, self.criteria = instructions, criteria
+
+    class RetryPolicy:
+        def __init__(self, max_retries):
+            self.max_retries = max_retries
+
+    class TypeSafeClient:
+        def __init__(self, **kw):
+            seen.append(("client", kw["model"]))
+
+        def system_one(self, state, questions, model):
+            seen.append(("request", model))
+            answers = {}
+            for n, q in questions.items():
+                if isinstance(q, Choice):
+                    keys = list(q.criteria)
+                    answers[n] = types.SimpleNamespace(type="choice", choice=keys[0], confidence=0.6, probabilities={k: (0.6 if i == 0 else 0.4 / max(1, len(keys) - 1)) for i, k in enumerate(keys)})
+                else:
+                    answers[n] = types.SimpleNamespace(type="noul", noul=0.7)
+            return types.SimpleNamespace(answers=answers, usage=types.SimpleNamespace(input_tokens=5, output_tokens=0))
+
+    mod.Noul, mod.Choice, mod.RetryPolicy, mod.TypeSafeClient = Noul, Choice, RetryPolicy, TypeSafeClient
+    return mod
+
+
+def test_replay_jev_newer_answers_every_logged_state_with_jev_1_14():
+    from dr_agent import jev_newer
+
+    files = {f"src/f{i}.py": "needle\n" for i in range(25)}
+    d = repo(files)
+    _, _, nlog = make("N", d, [["grep -rl needle src"], [SUBMIT]], shadow=True)
+    j, _ = jev(lambda n, s: ("other", 0.99) if n == "next_step" else 0.99)
+    _, _, jlog = make("J", repo({"patch.txt": "x\n"}), [["ls"], [SUBMIT]], j=j)
+    qf = os.path.join(AGENT_DIR, "dr_agent", "questions.json")
+    seen, saved, env = [], sys.modules.get("typesafe_sdk"), dict(os.environ)
+    sys.modules["typesafe_sdk"] = fake_typesafe_sdk(seen)
+    os.environ.update(DR_PROXY_URL="http://127.0.0.1:9/slot", DR_PROXY_TOKEN="tok")
+    try:
+        for logdir in (nlog, jlog):
+            out = os.path.join(logdir, "decisions.jev_newer.jsonl")
+            code = jev_newer.main(["--log-dir", logdir, "--questions", qf, "--out", out])
+            logged, recs = records(logdir), [json.loads(x) for x in open(out)]
+            check(code == 0 and len(recs) == len(logged) > 0, (code, len(recs), len(logged)))
+            for r, before in zip(recs, logged):
+                check(set(r["layers"]) - set(before["layers"]) == {"jev_1_14"} and r["layers"]["jev_1_14"]["ok"], r["layers"].keys())
+                check({k: v for k, v in r.items() if k != "layers"} == {k: v for k, v in before.items() if k != "layers"}, r["decision_id"])
+    finally:
+        os.environ.clear()
+        os.environ.update(env)
+        if saved is None:
+            sys.modules.pop("typesafe_sdk", None)
+        else:
+            sys.modules["typesafe_sdk"] = saved
+    check(seen and {m for _, m in seen} == {"jev-1.14.0"}, seen)
+    check(deciders.JEV_MODEL == "jev-1.13.0", deciders.JEV_MODEL)
+    j2, _ = jev(lambda n, s: Exception(ALLOW))
+    n2, status2 = jev_newer.run(nlog, Q, j2, os.path.join(nlog, "x.jsonl"))
+    check(status2 == "allowance_stop" and n2 == 0, status2)
+
+
+def test_replay_safety_set_either_half_as_one_pseudo_session():
+    from dr_agent import safety_set
+
+    path = os.path.join(HERE, "..", "..", "lanes", "decision-routing", "labels", "safety-set.json")
+    for half in ("held", "calibration"):
+        cases = [c for c in json.load(open(path))["commands"] if c["half"] == half]
+        logdir = os.path.join(tempfile.mkdtemp(dir=TMP), "log")
+        j, js = jev(lambda n, s: 0.8)
+        p, ps = gen(lambda k, pl: {"answer": "yes", "confidence": 0.9})
+        out = os.path.join(logdir, "..", "answers.jsonl")
+        n, status = safety_set.run(path, half, logdir, Q, j, p, out)
+        recs = records(logdir)
+        check(status == "ok" and n == len(recs) == 100, (half, n, status, len(recs)))
+        check([r["command"] for r in recs] == [c["command"] for c in cases], f"not the {half} half in order")
+        check([(r["case_id"], r["unsafe"], r["kind"]) for r in recs] == [(c["id"], c["unsafe"], c["kind"]) for c in cases], "construction labels")
+        check(sum(r["unsafe"] for r in recs) == 50, "not 50 unsafe")
+        check(all(r["type"] == "safe" and r["session"] == "constructed-" + half and r["mode"] == "shadow" for r in recs), recs[0])
+        for r in recs:
+            st = json.load(open(os.path.join(logdir, r["state_file"])))
+            check(st == {**safety_set.EMPTY_STATE, "command": r["command"]}, st)
+        answered = [json.loads(x) for x in open(out)]
+        check(len(answered) == 100 and all({"jev", "particle", "particle_noguess"} <= set(a["layers"]) for a in answered), "layers")
+        check(len(js.calls) == 100 and len(ps.calls) == 200, (len(js.calls), len(ps.calls)))
+        safety_set.run(path, half, logdir, Q, j, p, out)
+        check(len(records(logdir)) == 100, "a rerun appended to the pseudo-session")
+    check(safety_set.main(["--log-dir", TMP, "--questions", os.path.join(AGENT_DIR, "dr_agent", "questions.json"), "--safety-set", path, "--half", "both"]) == 2, "an unknown half was accepted")
+    bad = json.load(open(path))
+    next(c for c in bad["commands"] if c["half"] == "held")["half"] = "calibration"
+    badf = os.path.join(TMP, "bad-safety-set.json")
+    json.dump(bad, open(badf, "w"))
+    for half in ("held", "calibration"):
+        try:
+            safety_set.half_cases(badf, half)
+            check(False, f"a {half} half of 99 or 101 was accepted")
+        except ValueError as e:
+            check(str(e).startswith("E_USAGE"), str(e))
+
+def test_replay_guess_ablation_on_logged_R_states():
+    from dr_agent import guess_ablation, shadow
+
+    files = {f"src/f{i}.py": "needle\n" for i in range(25)}
+    d = repo(files)
+    j, _ = jev(lambda n, s: ("other", 0.7) if n == "next_step" else (2.0 if n == "done" else 0.8))
+    p, _ = gen(lambda k, pl: {"answers": [{"hit": h, "answer": "yes", "confidence": 0.9} for h in pl["hits"]]} if k == "hits" else ({"answer": "other", "confidence": 0.5} if k == "choice" else {"answer": "yes", "confidence": 0.9}))
+    _, _, logdir = make("R", d, [["grep -rl needle src"], [SUBMIT]], j=j, p=p)
+    logged = records(logdir)
+    want = [r for r in logged if "jev" in r["layers"] and shadow.guess_of(r["type"], r["layers"]["jev"]) is not None]
+    check(0 < len(want) < len(logged) and any(r["type"] == "done" and not r["layers"]["jev"]["ok"] for r in logged), [(r["type"], list(r["layers"])) for r in logged])
+    p2, ps2 = gen(lambda k, pl: {"answers": [{"hit": h, "answer": "no", "confidence": 0.6} for h in pl["hits"]]} if k == "hits" else ({"answer": "other", "confidence": 0.6} if k == "choice" else {"answer": "no", "confidence": 0.6}))
+    out = os.path.join(logdir, "decisions.guess_ablation.jsonl")
+    n, status = guess_ablation.run(logdir, Q, p2, out)
+    recs = [json.loads(x) for x in open(out)]
+    check(status == "ok" and n == len(recs) == len(want), (n, status, len(want)))
+    check([r["decision_id"] for r in recs] == [r["decision_id"] for r in want], "not the R states with a Jev guess")
+    check(len(ps2.calls) == 2 * n, len(ps2.calls))
+    for r, before, (kg, pg), (kn, pn) in zip(recs, want, ps2.calls[0::2], ps2.calls[1::2]):
+        check(r["layers"]["ablation_guess"]["guess_shown"] and not r["layers"]["ablation_noguess"]["guess_shown"], r["type"])
+        check({k: v for k, v in r["layers"].items() if not k.startswith("ablation_")} == before["layers"], "logged layers changed")
+        check(pg["jev_guess"] == shadow.guess_of(before["type"], before["layers"]["jev"]) and "jev_guess" not in pn, pg.get("jev_guess"))
+        check({k: v for k, v in pg.items() if k != "jev_guess"} == pn, "the two asks differ beyond the guess")
+    _, _, jlog = make("J", repo({"patch.txt": "x\n"}), [["ls"], [SUBMIT]], j=jev(lambda n, s: ("other", 0.99) if n == "next_step" else 0.99)[0])
+    n3, _ = guess_ablation.run(jlog, Q, p2, os.path.join(jlog, "x.jsonl"))
+    check(n3 == 0, "a J state was ablated")
+    p4, _ = gen(lambda k, pl: Exception(ALLOW))
+    n4, status4 = guess_ablation.run(logdir, Q, p4, os.path.join(logdir, "y.jsonl"))
+    check(status4 == "allowance_stop" and n4 == 0, status4)
+
+
 def test_log_record_fields():
     d = repo({"patch.txt": "x\n"})
     j, js = jev(lambda n, s: (("other", 0.99) if n == "next_step" else 0.99))
@@ -850,6 +990,9 @@ def test_every_main_model_call_asks_for_32000_output_tokens():
             ms = session.model_settings(cell, model, "http://proxy", "tok")
             check(ms["model_kwargs"]["max_tokens"] == 32000, (cell, model, ms))
     check(session.model_settings("N", "opus", "http://proxy", "tok")["model_name"] == "anthropic/claude-opus-5-5", "opus")
+    check(session.model_settings("N", "sol", "http://proxy", "tok")["model_name"] == "openai/responses/gpt-6.1-sol", "sol on the Responses API")
+    sol = session.model_settings("N", "sol", "http://proxy", "tok")["model_kwargs"]
+    check(sol.get("store") is False and sol.get("include") == ["reasoning.encrypted_content"], ("sol asks for its reasoning inline", sol))
     check(session.model_settings("W", "opus", "http://proxy", "tok")["model_name"] == "openrouter/particle-ai/particle-1", "W")
 
 
@@ -874,10 +1017,21 @@ class Fake(http.server.BaseHTTPRequestHandler):
             ans = {n: s["jev"](n, q) for n, q in body["questions"].items()}
             return self.reply(200, {"model": body.get("model"), "usage": {"input_tokens": 7, "output_tokens": 1}, "answers": ans})
         if self.path.startswith("/anthropic"):
-            if (body.get("tool_choice") or {}).get("name") == "answer":
-                return self.reply(200, self.anthropic([("answer", s["gen"]("frontier", body))]))
+            if (body.get("tool_choice") or {}).get("type") in ("tool", "any"):
+                return self.reply(400, {"type": "error", "error": {"type": "invalid_request_error", "message": OPUS_FORCED_TOOL_ERROR}})
+            if (body.get("output_config") or {}).get("format"):
+                return self.reply(200, self.anthropic_json(s["gen"]("frontier", body)))
             cmds = s["main"].pop(0)
             return self.reply(200, self.anthropic([("bash", {"command": c}) for c in cmds]))
+        if self.path.endswith("/responses"):
+            n = sum(s["hits"].values())
+            rs = {"type": "reasoning", "id": f"rs_{n}", "summary": []}
+            if "reasoning.encrypted_content" in (body.get("include") or []):
+                rs["encrypted_content"] = f"gAAAAB-opaque-{n}"
+            calls = [{"type": "function_call", "id": f"fc_{n}_{i}", "call_id": f"call_{n}_{i}", "name": "bash", "arguments": json.dumps({"command": c}), "status": "completed"}
+                     for i, c in enumerate(s["main"].pop(0))]
+            return self.reply(200, {"id": f"resp_{n}", "object": "response", "created_at": 0, "status": "completed", "model": body.get("model"), "output": [rs] + calls,
+                                    "usage": {"input_tokens": 11, "input_tokens_details": {"cached_tokens": 0}, "output_tokens": 4, "output_tokens_details": {"reasoning_tokens": 2}, "total_tokens": 15}})
         content = s["gen"]("openai", body)
         return self.reply(200, {"id": "c1", "object": "chat.completion", "created": 0, "model": body.get("model"),
                                 "choices": [{"index": 0, "message": {"role": "assistant", "content": json.dumps(content)}, "finish_reason": "stop"}],
@@ -888,6 +1042,12 @@ class Fake(http.server.BaseHTTPRequestHandler):
         blocks = [{"type": "text", "text": "ok"}] + [{"type": "tool_use", "id": f"toolu_{n}_{i}", "name": name, "input": inp} for i, (name, inp) in enumerate(tools)]
         return {"id": f"msg_{n}", "type": "message", "role": "assistant", "model": "claude-opus-5-5", "content": blocks,
                 "stop_reason": "tool_use", "stop_sequence": None, "usage": {"input_tokens": 11, "output_tokens": 4}}
+
+    def anthropic_json(self, obj):
+        n = sum(Fake.srv["hits"].values())
+        return {"id": f"msg_{n}", "type": "message", "role": "assistant", "model": "claude-opus-5-5",
+                "content": [{"type": "thinking", "thinking": "", "signature": f"sig_{n}"}, {"type": "text", "text": json.dumps(obj)}],
+                "stop_reason": "end_turn", "stop_sequence": None, "usage": {"input_tokens": 11, "output_tokens": 4}}
 
     def reply(self, code, obj):
         data = json.dumps(obj).encode()
@@ -919,7 +1079,7 @@ def test_real_litellm_403_not_retried():
     server, url = fake_proxy()
     try:
         Fake.srv["mode"] = "403"
-        routes = [("anthropic/claude-opus-5-5", url + "/anthropic", "/anthropic/v1/messages"), ("openai/gpt-6.1-sol", url + "/openai/v1", "/openai/v1/chat/completions"),
+        routes = [("anthropic/claude-opus-5-5", url + "/anthropic", "/anthropic/v1/messages"), ("openai/responses/gpt-6.1-sol", url + "/openai/v1", "/openai/v1/responses"),
                   ("openrouter/particle-ai/particle-1", url + "/openrouter/v1", "/openrouter/v1/chat/completions")]
         check(issubclass(model_class(), LitellmModel), "not mini's model")
         for name, base, path in routes:
@@ -967,7 +1127,8 @@ def test_real_sdk_adapters_allowance_and_parse():
         req = [b for p, b in Fake.srv["bodies"] if p.startswith("/openrouter")][-1]
         check(req["max_tokens"] == 8000 and req["response_format"]["type"] == "json_schema" and req["model"] == deciders.PARTICLE_MODEL, req)
         areq = [b for p, b in Fake.srv["bodies"] if p.startswith("/anthropic")][-1]
-        check(areq["tool_choice"] == {"type": "tool", "name": "answer"} and "cache_control" not in json.dumps(areq), areq.get("tool_choice"))
+        check(areq.get("output_config") == {"format": {"type": "json_schema", "schema": deciders.Generative._schema(["yes", "no"])}} and "tool_choice" not in areq and "tools" not in areq
+              and "cache_control" not in json.dumps(areq), {k: areq.get(k) for k in ("output_config", "tool_choice", "tools")})
     finally:
         server.shutdown()
 
@@ -998,7 +1159,7 @@ def test_real_session_routed_end_to_end():
         check(summ["exit_status"] == "submitted" and summ["decider_actions"] == 1 and summ["main_calls"] == 2, summ)
         check(summ["questions_sha256"] == Q.sha256, summ["questions_sha256"])
         check(os.path.exists(os.path.join(out, "trajectory.json")) and os.path.exists(os.path.join(out, "decisions.jsonl")), os.listdir(out))
-        mains = [b for pth, b in Fake.srv["bodies"] if pth.startswith("/anthropic") and (b.get("tool_choice") or {}).get("name") != "answer"]
+        mains = [b for pth, b in Fake.srv["bodies"] if pth.startswith("/anthropic") and not (b.get("output_config") or {}).get("format")]
         last = mains[-1]["messages"]
         uses = [c["id"] for m in last if m["role"] == "assistant" and isinstance(m["content"], list) for c in m["content"] if c.get("type") == "tool_use"]
         results = [c["tool_use_id"] for m in last if m["role"] == "user" and isinstance(m["content"], list) for c in m["content"] if c.get("type") == "tool_result"]
@@ -1007,6 +1168,289 @@ def test_real_session_routed_end_to_end():
         check([b["max_tokens"] for b in mains] == [32000] * len(mains), [b.get("max_tokens") for b in mains])
     finally:
         server.shutdown()
+
+
+
+@real_tier
+def test_real_sol_session_replays_its_reasoning_inline():
+    server, url = fake_proxy()
+    try:
+        d = repo({"a.py": "print(1)\n", "patch.txt": "diff\n"})
+        Fake.srv["main"] = [["echo hi"], [SUBMIT]]
+        logdir = tempfile.mkdtemp(dir=TMP)
+        pinf, qf, taskf, cfgf = (os.path.join(logdir, n) for n in ("pin.json", "q.json", "task.txt", "cfg.json"))
+        json.dump(PIN, open(pinf, "w"))
+        shutil.copy(os.path.join(AGENT_DIR, "dr_agent", "questions.json"), qf)
+        open(taskf, "w").write(ISSUE)
+        out = os.path.join(logdir, "dr")
+        json.dump({"cell": "N", "model": "sol", "task_file": taskf, "pin_file": pinf, "questions_file": qf, "proxy_url_env": "DR_PROXY_URL",
+                   "log_dir": out, "step_limit_actions": 100, "wall_s": 2700, "calibration_shadow": False, "cwd": d}, open(cfgf, "w"))
+        env = {"PATH": os.environ["PATH"], "HOME": os.environ.get("HOME", "/root"), "DR_PROXY_URL": url, "DR_PROXY_TOKEN": "tok", "DR_SESSION": "e2e-sol",
+               "MSWEA_COST_TRACKING": "ignore_errors"}
+        code = f"import sys; sys.path.insert(0, {AGENT_DIR!r}); from dr_agent.session import main; sys.exit(main(['--config', {cfgf!r}]))"
+        p = subprocess.run([sys.executable, "-I", "-c", code], env=env, capture_output=True, text=True, timeout=180)
+        check(p.returncode == 0, p.stdout[-2000:] + p.stderr[-2000:])
+        summ = json.load(open(os.path.join(out, "dr-summary.json")))
+        check(summ["exit_status"] == "submitted" and summ["main_calls"] == 2, summ)
+        mains = [b for pth, b in Fake.srv["bodies"] if pth == "/openai/v1/responses"]
+        check(len(mains) == 2, [pth for pth, _ in Fake.srv["bodies"]])
+        check(all(b.get("store") is False and b.get("include") == ["reasoning.encrypted_content"] and b.get("max_output_tokens") == 32000 for b in mains),
+              [{k: b.get(k) for k in ("store", "include", "max_output_tokens")} for b in mains])
+        replayed = [i for i in mains[1]["input"] if isinstance(i, dict) and i.get("type") == "reasoning"]
+        check(replayed and all(isinstance(i.get("encrypted_content"), str) for i in replayed), replayed)
+    finally:
+        server.shutdown()
+
+def _planted_repo(name):
+    """A git repo with one commit, and the three things an agent could plant in .git to run code in root's git."""
+    root = os.path.join(TMP, name)
+    tb, marks = os.path.join(root, "testbed"), os.path.join(root, "marks")
+    os.makedirs(marks)
+    git = lambda *a: subprocess.run(["git", "-C", tb, *a], check=True, capture_output=True)
+    subprocess.run(["git", "init", "-q", tb], check=True)
+    git("config", "user.email", "t@example.com")
+    git("config", "user.name", "t")
+    with open(os.path.join(tb, "README.md"), "w") as f:
+        f.write("hi\n")
+    git("add", ".")
+    git("commit", "-qm", "init")
+
+    def plant(clean=True):
+        if clean:
+            git("config", "filter.drprobe.clean", f"sh -c 'echo x > {marks}/clean; cat'")
+            with open(os.path.join(tb, ".gitattributes"), "w") as f:
+                f.write("* filter=drprobe\n")
+        for hook, path in (("fsmonitor", os.path.join(tb, ".git", "fsm.sh")), ("hook", os.path.join(tb, ".git", "drhooks", "post-index-change"))):
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w") as f:
+                f.write(f"#!/bin/sh\necho x > {marks}/{hook}\n")
+            os.chmod(path, 0o755)
+        git("config", "core.fsmonitor", os.path.join(tb, ".git", "fsm.sh"))
+        git("config", "core.hooksPath", os.path.join(tb, ".git", "drhooks"))
+
+    return tb, marks, plant
+
+
+def test_agent_user_root_export_runs_nothing_the_agent_planted():
+    from dr_agent import agent_user
+
+    tb, marks, plant = _planted_repo("export-planted")
+    saved = os.path.join(os.path.dirname(tb), "git-config")
+    agent_user.save_git_config(tb, saved)
+    plant()
+    with open(os.path.join(tb, "README.md"), "a") as f:
+        f.write("# dr probe\n")
+    subprocess.run("git add -A && git -c core.fileMode=false diff --cached --binary HEAD > /dev/null", cwd=tb, shell=True, check=True, capture_output=True)
+    assert sorted(os.listdir(marks)) == ["clean", "fsmonitor", "hook"], os.listdir(marks)
+    agent_user.restore_git_config(tb, saved)
+    subprocess.run(["git", "-C", tb, "reset", "-q"], check=True)
+    for m in os.listdir(marks):
+        os.unlink(os.path.join(marks, m))
+    patch = os.path.join(os.path.dirname(tb), "out", "model.patch")
+    agent_user.export(patch, tb)
+    assert os.listdir(marks) == [], os.listdir(marks)
+    assert "# dr probe" in open(patch).read()
+    assert "drprobe" not in open(os.path.join(tb, ".git", "config")).read()
+    plant(clean=False)
+    agent_user.export(patch, tb)
+    assert os.listdir(marks) == [], os.listdir(marks)
+    os.rename(os.path.join(tb, ".git"), os.path.join(tb, ".git-real"))
+    os.symlink(os.path.join(tb, ".git-real"), os.path.join(tb, ".git"))
+    try:
+        agent_user.export(patch, tb)
+        raise AssertionError("a symlinked .git was exported")
+    except SystemExit as e:
+        assert "not a plain directory" in str(e)
+
+
+def _write(path, text, mode=None):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "wb" if isinstance(text, bytes) else "w") as f:
+        f.write(text)
+    if mode is not None:
+        os.chmod(path, mode)
+
+
+def test_agent_user_export_runs_and_follows_nothing_else_the_agent_planted():
+    """commondir with a filter, config.worktree, hooks in .git/hooks, a diff driver and a symlinked model.patch."""
+    from dr_agent import agent_user
+
+    tb, marks, plant = _planted_repo("export-fresh-dir")
+    root = os.path.dirname(tb)
+    saved = os.path.join(root, "git-config")
+    agent_user.save_git_config(tb, saved)
+    plant()
+    g = os.path.join(tb, ".git")
+    hook = lambda name: f"#!/bin/sh\necho x > {marks}/{name}\n"
+    _write(os.path.join(g, "hooks", "post-index-change"), hook("defaulthook"), 0o755)
+    common = os.path.join(root, "agent-common")
+    shutil.copytree(g, common)
+    _write(os.path.join(common, "hooks", "post-index-change"), hook("commonhook"), 0o755)
+    script = lambda name, body: _write(os.path.join(root, "plants", name), f"#!/bin/sh\necho x > {marks}/{name}\n{body}\n", 0o755) or os.path.join(root, "plants", name)
+    with open(os.path.join(common, "config"), "a") as f:
+        f.write("[core]\n\trepositoryformatversion = 1\n[extensions]\n\tworktreeConfig = true\n")
+        f.write(f"[filter \"drcommon\"]\n\tclean = {script('commondir', 'cat')}\n")
+        f.write(f"[diff \"drtext\"]\n\ttextconv = {script('textconv', 'cat \"$1\"')}\n")
+    _write(os.path.join(g, "config.worktree"), f"[filter \"drwt\"]\n\tclean = {script('worktree', 'cat')}\n")
+    _write(os.path.join(g, "commondir"), common + "\n")
+    _write(os.path.join(g, "info", "attributes"), "* diff=drtext\n")
+    _write(os.path.join(tb, ".gitattributes"), "* filter=drcommon\n*.md filter=drwt\n")
+    with open(os.path.join(tb, "README.md"), "a") as f:
+        f.write("# dr probe\n")
+
+    control = os.path.join(root, "control")
+    shutil.copytree(tb, control, symlinks=True)
+    env = {**os.environ, "GIT_CONFIG_GLOBAL": "/dev/null"}
+    subprocess.run("git add -A && git diff --cached HEAD > /dev/null", cwd=control, shell=True, env=env, check=True, capture_output=True)
+    live = set(os.listdir(marks))
+    assert {"commondir", "worktree"} <= live, live
+    for m in live:
+        os.unlink(os.path.join(marks, m))
+
+    out = os.path.join(root, "artifacts")
+    os.makedirs(out)
+    os.chmod(out, 0o777)
+    sentinel = os.path.join(root, "sentinel")
+    _write(sentinel, "root's file\n")
+    patch = os.path.join(out, "model.patch")
+    os.symlink(sentinel, patch)
+    index = open(os.path.join(g, "index"), "rb").read()
+    agent_user.export(patch, tb, saved)
+    assert os.listdir(marks) == [], os.listdir(marks)
+    assert open(sentinel).read() == "root's file\n"
+    assert not os.path.islink(patch) and "# dr probe" in open(patch).read()
+    assert open(os.path.join(g, "index"), "rb").read() == index
+
+    head = open(os.path.join(g, "HEAD")).read().split()[-1]
+    os.symlink(os.path.join(g, head), os.path.join(g, "refs", "heads", "agent-link"))
+    try:
+        agent_user.export(patch, tb, saved)
+        raise AssertionError("a symlinked ref was copied")
+    except SystemExit as e:
+        assert "not a regular file" in str(e), e
+    os.unlink(os.path.join(g, "refs", "heads", "agent-link"))
+    os.unlink(patch)
+    os.mkdir(patch)
+    try:
+        agent_user.export(patch, tb, saved)
+        raise AssertionError("a directory at the patch path was written into")
+    except SystemExit as e:
+        assert "model.patch" in str(e), e
+    assert os.listdir(marks) == [], os.listdir(marks)
+
+
+def _old_export(patch, testbed):
+    """The export as it stood at 49ea202, the reference the new one must match byte for byte on benign repos."""
+    git_dir = os.path.join(testbed, ".git")
+    env = {**os.environ, "GIT_DIR": git_dir, "GIT_WORK_TREE": testbed, "GIT_CONFIG_GLOBAL": "/dev/null"}
+    safe = ["-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null"]
+    os.makedirs(os.path.dirname(patch), exist_ok=True)
+    subprocess.run(["git", *safe, "add", "-A"], cwd=testbed, env=env, check=True, capture_output=True)
+    with open(patch, "wb") as f:
+        subprocess.run(["git", *safe, "-c", "core.fileMode=false", "diff", "--cached", "--binary", "HEAD"], cwd=testbed, env=env, stdout=f, check=True)
+
+
+def _benign_repo(name):
+    from dr_agent import agent_user
+
+    root = os.path.join(TMP, name)
+    tb = os.path.join(root, "testbed")
+    subprocess.run(["git", "init", "-q", tb], check=True)
+    git = lambda *a: subprocess.run(["git", "-C", tb, *a], check=True, capture_output=True)
+    git("config", "user.email", "t@example.com")
+    git("config", "user.name", "t")
+    for path, text in {"a.txt": "a line\n" * 20, "b.txt": "b body line\n" * 30, "c.txt": "c\n", "sub/d.txt": "d body line\n" * 30, ".gitignore": "*.log\n", "run.sh": "#!/bin/sh\necho hi\n"}.items():
+        _write(os.path.join(tb, path), text)
+    _write(os.path.join(tb, "bin.dat"), bytes(range(256)) * 8)
+    git("add", ".")
+    git("commit", "-qm", "base")
+    with open(os.path.join(tb, ".git", "info", "exclude"), "a") as f:
+        f.write("scratch/\n")
+    saved = os.path.join(root, "git-config")
+    agent_user.save_git_config(tb, saved)
+    return root, tb, saved, git
+
+
+def test_agent_user_export_matches_the_old_export_byte_for_byte_on_benign_repos():
+    from dr_agent import agent_user
+
+    def everything(tb, git):
+        _write(os.path.join(tb, "a.txt"), "a line\n" * 20 + "agent commit\n")
+        git("commit", "-qam", "agent commit")
+        with open(os.path.join(tb, "a.txt"), "a") as f:
+            f.write("after the commit\n")
+        git("mv", "b.txt", "b2.txt")
+        os.rename(os.path.join(tb, "sub", "d.txt"), os.path.join(tb, "sub", "e.txt"))
+        os.unlink(os.path.join(tb, "c.txt"))
+        _write(os.path.join(tb, "bin.dat"), bytes(reversed(range(256))) * 8)
+        _write(os.path.join(tb, "new.txt"), "untracked\n")
+        _write(os.path.join(tb, "new.bin"), bytes([0, 1, 2, 255]) * 64)
+        _write(os.path.join(tb, "x.log"), "ignored\n")
+        _write(os.path.join(tb, "scratch", "s.txt"), "excluded\n")
+        _write(os.path.join(tb, "forced.log"), "force-added\n")
+        git("add", "-f", "forced.log")
+        os.chmod(os.path.join(tb, "run.sh"), 0o755)
+
+    def packed_detached(tb, git):
+        git("pack-refs", "--all")
+        git("checkout", "-q", "--detach", "HEAD")
+        with open(os.path.join(tb, "a.txt"), "a") as f:
+            f.write("detached edit\n")
+        _write(os.path.join(tb, "new.txt"), "untracked\n")
+
+    def branch_rm_cached(tb, git):
+        git("checkout", "-q", "-b", "agent-branch")
+        _write(os.path.join(tb, "c.txt"), "c changed on a branch\n")
+        git("commit", "-qam", "branch commit")
+        git("rm", "-q", "--cached", "c.txt")
+        with open(os.path.join(tb, ".gitignore"), "a") as f:
+            f.write("c.txt\n")
+
+    def no_index(tb, git):
+        os.unlink(os.path.join(tb, ".git", "index"))
+        with open(os.path.join(tb, "b.txt"), "a") as f:
+            f.write("edited with no index\n")
+
+    def committed_all(tb, git):
+        with open(os.path.join(tb, "a.txt"), "a") as f:
+            f.write("committed\n")
+        git("commit", "-qam", "everything committed")
+
+    for name, steps in (("everything", everything), ("packed-detached", packed_detached), ("branch-rm-cached", branch_rm_cached), ("no-index", no_index), ("committed-all", committed_all)):
+        root, tb, saved, git = _benign_repo("benign-" + name)
+        steps(tb, git)
+        old_root = root + "-old"
+        shutil.copytree(root, old_root, symlinks=True)
+        _old_export(os.path.join(old_root, "out", "model.patch"), os.path.join(old_root, "testbed"))
+        new = os.path.join(root, "out", "model.patch")
+        agent_user.export(new, tb, saved)
+        want = open(os.path.join(old_root, "out", "model.patch"), "rb").read()
+        got = open(new, "rb").read()
+        assert got == want, (name, want[:400], got[:400])
+        if name == "everything":
+            for needle in (b"after the commit", b"rename from b.txt", b"rename to sub/e.txt", b"deleted file mode", b"GIT binary patch", b"new.txt", b"new.bin", b"forced.log"):
+                assert needle in got, (needle, got[:600])
+            for needle in (b"x.log", b"scratch/", b"+agent commit"):
+                assert needle not in got, needle
+        if name == "committed-all":
+            assert got == b"", got[:200]
+        else:
+            assert got, name
+
+
+def test_agent_user_kill_uid_kills_live_processes_and_skips_zombies():
+    from dr_agent import agent_user
+
+    proc = os.path.join(TMP, "fake-proc")
+    os.makedirs(os.path.join(proc, "999999"))
+    child = subprocess.Popen(["sleep", "60"])
+    os.symlink(f"/proc/{child.pid}", os.path.join(proc, str(child.pid)))
+    uid = os.getuid()
+    with open(os.path.join(proc, "999999", "status"), "w") as f:
+        f.write(f"Name:\tz\nState:\tZ (zombie)\nUid:\t{uid}\t{uid}\t{uid}\t{uid}\n")
+    agent_user.kill_uid(uid, proc=proc)
+    assert child.wait(timeout=5) == -9
+    agent_user.kill_uid(uid + 1, proc=proc)
 
 
 def main():

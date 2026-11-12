@@ -1,0 +1,10 @@
+F opus 72 of 99, 72.7%
+J opus 68 of 99, 68.7%
+J sol 61 of 99, 61.6%
+N opus 175 of 279, 62.7%
+N sol 158 of 279, 56.6%
+P opus 177 of 279, 63.4%
+P sol 167 of 279, 59.9%
+R opus 178 of 279, 63.8%
+R sol 161 of 279, 57.7%
+W particle 62 of 95, 65.3%

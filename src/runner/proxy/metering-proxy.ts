@@ -51,6 +51,9 @@
 //   settles from the token usage OpenRouter reports, priced at the row, as for the other providers. On the Messages route
 //   (/v1/messages, which Claude Code arms use for OpenRouter models) usage comes in Anthropic's shape, with cache reads and
 //   writes beside input_tokens, and is read that way.
+// - OpenRouter chat completions ask for usage accounting (usage.include) unless the caller set usage, and every OpenRouter
+//   outcome line carries billed_micros, OpenRouter's reported usage.cost in micros, or null when the reply had none.
+//   It is recorded only: settlement still takes max(row price, cost).
 // - Claude Code's token counts on OpenRouter's Messages route (/v1/messages/count_tokens) are answered by the proxy, at one
 //   token per four bytes of the request, and sent nowhere, as Lane B's proxy answers them (quick/laneb/config/proxy.json,
 //   count_tokens estimate). Refused, they counted toward review-units' 2% degraded share (GEVA-89: all 106 of particle-1's
@@ -81,7 +84,7 @@ import { zstdDecompressSync } from "node:zlib";
 import { docAnchor, type ReasonCode } from "../../errors/codes.ts";
 import type { CallOutcome, CellAttempt, LedgerReply, ReservationLedger, TokenUsage } from "../../types.ts";
 import { countedInputTokens, countPlan } from "../pricing/input-count.ts";
-import { chatPrice, maskMarkers, openRouterRouting, PriceError, priceRequest, quoteClientValue, refuseRequestShape, reservationMicros, sseUsage, UNQUOTED, usageCost, type MeteredProvider, type RequestPrice } from "../pricing/prices.ts";
+import { chatPrice, maskMarkers, openRouterBilledMicros, openRouterRouting, PriceError, priceRequest, quoteClientValue, refuseRequestShape, reservationMicros, sseUsage, UNQUOTED, usageCost, type MeteredProvider, type RequestPrice } from "../pricing/prices.ts";
 import { findLeaks } from "./sanitize.ts";
 
 export const UPSTREAM: Record<MeteredProvider, string> = { anthropic: "https://api.anthropic.com", openai: "https://api.openai.com", openrouter: "https://openrouter.ai/api", typesafe: "https://api.typesafe.ai" };
@@ -819,6 +822,7 @@ export class MeteringProxy {
     if (stated.some(v => v > cap)) return this.refuse(ctx, "E_ALLOWANCE", 400, `the request asks for ${maskMarkers(String(Math.max(...stated)), ctx.marked)} output tokens, above this cell's cap of ${cap}`);
     if (!stated.length && fields.length) body[fields[0]!] = cap;
     if (provider === "openrouter" && route === "/v1/chat/completions") body.max_tokens ??= body.max_completion_tokens;
+    if (provider === "openrouter" && route === "/v1/chat/completions" && body.usage === undefined) body.usage = { include: true };
     const outBody = JSON.stringify(body);
     let price: ReturnType<typeof priceRequest>;
     try {
@@ -910,8 +914,9 @@ export class MeteringProxy {
           .text()
           .then(
             text => {
-              const cost = usageCost(price, sseUsage(text));
-              return this.settle(ctx, rid, maxMicros, cost ? { kind: "spent", spent_micros: cost.micros, usage: cost.usage } : { kind: "unknown" }, res.status, cost ? undefined : "the stream ended without usage");
+              const usage = sseUsage(text);
+              const cost = usageCost(price, usage);
+              return this.settle(ctx, rid, maxMicros, cost ? { kind: "spent", spent_micros: cost.micros, usage: cost.usage } : { kind: "unknown" }, res.status, cost ? undefined : "the stream ended without usage", undefined, undefined, openRouterBilledMicros(usage));
             },
             e => this.settle(ctx, rid, maxMicros, { kind: "unknown" }, res.status, `the stream broke: ${scrubbedCause(e, ctx.secrets)}`),
           )
@@ -954,7 +959,7 @@ export class MeteringProxy {
       else if (res.status >= 500) outcome = { kind: "spent", spent_micros: freeFiveXx ? 0 : maxMicros, usage: NO_TOKENS };
       else outcome = { kind: "unknown" };
       const reason = freeFiveXx ? NO_USAGE_5XX_REASON : res.status >= 500 && !cost ? "a 5xx without usage is charged at its reservation" : undefined;
-      await this.settle(ctx, rid, maxMicros, outcome, res.status, reason, res.ok ? undefined : upstreamBody(text, body, ctx.secrets), freeFiveXx ? { no_usage_5xx: true, shadow_micros: maxMicros } : undefined);
+      await this.settle(ctx, rid, maxMicros, outcome, res.status, reason, res.ok ? undefined : upstreamBody(text, body, ctx.secrets), freeFiveXx ? { no_usage_5xx: true, shadow_micros: maxMicros } : undefined, openRouterBilledMicros(reported));
       if (res.status === 401 || res.status === 403) return problem("E_KEY_REJECTED", 502, `${provider} answered ${res.status} to the proxy's key`);
       if (!retryable) return new Response(text, { status: res.status, headers: strip(res) });
       const delay = retryDelayMs(res, attempt);
@@ -1011,12 +1016,12 @@ export class MeteringProxy {
    * Journal the outcome first, so a lost ledger acknowledgement is repaired by reconcileJournal, then settle and meter.
    * A journal write that fails is reported on stderr and counted as unsettled; the call is still metered and settled.
    */
-  private async settle(ctx: CallContext, rid: string, maxMicros: number, outcome: CallOutcome, status: number | null, reason?: string, upstream?: string, mark?: { no_usage_5xx: true; shadow_micros: number }): Promise<void> {
+  private async settle(ctx: CallContext, rid: string, maxMicros: number, outcome: CallOutcome, status: number | null, reason?: string, upstream?: string, mark?: { no_usage_5xx: true; shadow_micros: number }, billed: number | null = null): Promise<void> {
     const meter = this.meter(ctx.slot);
     const micros = outcome.kind === "spent" ? outcome.spent_micros : maxMicros;
     let journaled = true;
     try {
-      this.journal({ kind: "outcome", reservation_id: rid, meter_id: ctx.slot.cell.meter_id, status, outcome, latency_ms: ctx.sentAt === undefined ? null : Date.now() - ctx.sentAt, ...(reason ? { reason } : {}), ...(upstream !== undefined ? { upstream_body: upstream } : {}), ...mark });
+      this.journal({ kind: "outcome", reservation_id: rid, meter_id: ctx.slot.cell.meter_id, status, outcome, ...(ctx.provider === "openrouter" ? { billed_micros: billed } : {}), latency_ms: ctx.sentAt === undefined ? null : Date.now() - ctx.sentAt, ...(reason ? { reason } : {}), ...(upstream !== undefined ? { upstream_body: upstream } : {}), ...mark });
     } catch (e) {
       journaled = false;
       console.error(`E_INTERNAL: metering proxy: the outcome of reservation ${rid} was not journaled: ${scrubbedCause(e, ctx.secrets)}`);

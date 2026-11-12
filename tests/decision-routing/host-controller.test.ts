@@ -8,7 +8,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readItem } from "../../src/runner/ledger/record.ts";
-import { ControllerError, fakeFetch, harborEnv, harborJob, HARBOR_RETRY, meterSpend, nextRunnable, parsePlan, prng, runBatch, seededShuffle, sessionId, type BatchOptions, type PlanRow } from "../../lanes/decision-routing/host/controller.ts";
+import { ControllerError, fakeFetch, harborEnv, harborJob, HARBOR_RETRY, meterSpend, proxyPort, PROXY_PORT_COUNT, PROXY_PORT_FIRST, nextRunnable, parsePlan, prng, runBatch, seededShuffle, sessionId, type BatchOptions, type PlanRow } from "../../lanes/decision-routing/host/controller.ts";
 
 const CONTROLLER = join(import.meta.dir, "../../lanes/decision-routing/host/controller.ts");
 const FAKE_HARBOR = "import { appendFileSync, readFileSync, writeFileSync } from \"node:fs\";\nconst env = process.env;\nconst job = JSON.parse(readFileSync(process.argv[process.argv.indexOf(\"-c\") + 1], \"utf8\"));\nconst kw = job.agents[0].kwargs;\nconst task = job.tasks[0].path.split(\"/\").pop();\nconst ev = (e) => appendFileSync(env.DR_TEST_EVENTS, JSON.stringify({ ...e, task, cell: kw.cell, t: performance.timeOrigin + performance.now() }) + \"\\n\");\nev({ ev: \"start\", keys_seen: Object.keys(env).filter((k) => /_API_KEY$/.test(k)), telemetry: env.HARBOR_TELEMETRY, mgmt: !!env.DR_MGMT_SOCKET && !!env.DR_MGMT_TOKEN, base: env.DR_PROXY_BASE, pythonpath: env.PYTHONPATH });\nconst mgmt = (path, body) => fetch(\"http://localhost\" + path, { unix: env.DR_MGMT_SOCKET, method: \"POST\", headers: { \"content-type\": \"application/json\", \"x-gstack-evals-management\": env.DR_MGMT_TOKEN }, body: JSON.stringify(body) }).then((r) => r.json());\nconst b = await mgmt(\"/bind\", { cell: { run_id: \"dr-test\", arm: kw.cell, task, model: kw.model, trial: 1, attempt: 1 }, models: [\"anthropic:claude-opus-5-5\"], allowance_micros: 5000000 });\nconst res = await fetch(env.DR_PROXY_BASE + \"/\" + b.slot + \"/anthropic/v1/messages\", { method: \"POST\", headers: { \"content-type\": \"application/json\", \"x-api-key\": b.token }, body: JSON.stringify({ model: \"claude-opus-5-5\", max_tokens: 100, messages: [{ role: \"user\", content: \"hi\" }] }) });\nconst answer = await res.json();\nawait Bun.sleep(Number(env.DR_TEST_SLEEP_MS ?? 150));\nawait mgmt(\"/unbind\", { slot: b.slot });\nawait mgmt(\"/finalize\", { meter_id: b.meter_id });\nif (env.DR_TEST_TOUCH_STOP) writeFileSync(env.DR_TEST_TOUCH_STOP, \"stop\\n\");\nev({ ev: \"end\", status: res.status, code: answer.code ?? null });\n";
@@ -95,7 +95,7 @@ describe("plan, job and env", () => {
     }
   });
 
-  test("a Harbor job runs the decision-routing agent once, in docker with delete, with the proxy host allowlisted", () => {
+  test("a Harbor job runs the decision-routing agent once, in docker with delete and the rig's egress sidecar, with the proxy host allowlisted for the agent's run only", () => {
     const row: PlanRow = { task: "django-1", cell: "R", model: "sol", item: "dr-pilot-rp" };
     expect(harborJob(row, { out: "/o", tasksDir: "/tasks", proxyHost: "172.17.0.1", runtimeTarball: "/rt.tgz", runtimeSha256: "ab", pinFile: "/pin.json" })).toEqual({
       job_name: "django-1__R__sol",
@@ -104,11 +104,19 @@ describe("plan, job and env", () => {
       n_concurrent_trials: 1,
       quiet: true,
       retry: { max_retries: 1, include_exceptions: ["DrInfraError", "EnvironmentStartTimeoutError", "AgentSetupTimeoutError"] },
-      environment: { type: "docker", delete: true, extra_allowed_hosts: ["172.17.0.1"] },
-      agents: [{ import_path: "dr_harbor:DecisionRoutingAgent", kwargs: { cell: "R", model: "sol", runtime_tarball: "/rt.tgz", runtime_sha256: "ab", pin_file: "/pin.json", item: "dr-pilot-rp" } }],
+      environment: { type: "docker", import_path: "dr_sidecar:DrDockerEnvironment", delete: true },
+      agents: [{ import_path: "dr_harbor:DecisionRoutingAgent", extra_allowed_hosts: ["172.17.0.1"], kwargs: { cell: "R", model: "sol", runtime_tarball: "/rt.tgz", runtime_sha256: "ab", pin_file: "/pin.json", item: "dr-pilot-rp" } }],
       tasks: [{ path: "/tasks/django-1" }],
     });
     expect(HARBOR_RETRY.include_exceptions).not.toContain("AllowanceStop");
+  });
+
+  test("a proxy on a loopback host takes any free port, and on a runner's bridge address item k takes the k-th fixed port the runner's firewall opens", () => {
+    expect(proxyPort("127.0.0.1", 0)).toBeUndefined();
+    expect(proxyPort("::1", 3)).toBeUndefined();
+    expect(proxyPort("172.17.0.1", 0)).toBe(PROXY_PORT_FIRST);
+    expect(proxyPort("172.17.0.1", PROXY_PORT_COUNT - 1)).toBe(PROXY_PORT_FIRST + PROXY_PORT_COUNT - 1);
+    expect(() => proxyPort("172.17.0.1", PROXY_PORT_COUNT)).toThrow(ControllerError);
   });
 
   test("Harbor's env holds no provider or cloud key, has telemetry off and the management socket and token", () => {
@@ -187,14 +195,14 @@ describe("runBatch", () => {
   }, 30_000);
 
   test("a CAP_STOP from the ledger stops the batch: nothing more launches, nothing retries, the lease closes with its stop", async () => {
-    const w = world({ items: [{ item: "dr-pilot-rp", cap_micros: 2_000 }] });
+    const w = world({ items: [{ item: "dr-pilot-rp", cap_micros: 30_000_000 }], usage: { input_tokens: 10_000_000, output_tokens: 0 } });
     const result = await runBatch(w.opts(plan(1, ["N", "R", "P"])));
     expect(result.exit).toBe(2);
     expect(result.stop?.code).toBe("CAP_STOP");
-    expect(result.launched).toHaveLength(1);
-    expect(result.not_launched).toHaveLength(2);
-    expect(w.sent).toHaveLength(0);
-    expect(w.read().find((e) => e.ev === "end").code).toBe("CAP_STOP");
+    expect(result.launched).toHaveLength(2);
+    expect(result.not_launched).toHaveLength(1);
+    expect(w.sent).toHaveLength(1);
+    expect(w.read().filter((e) => e.ev === "end").map((e) => e.code)).toEqual([null, "CAP_STOP"]);
     expect(result.leases[0]!.cap_stop).toBe("batch dr-test-run");
   }, 30_000);
 

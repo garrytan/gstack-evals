@@ -3,7 +3,14 @@
 // {task, cell, model, item}, it:
 // - verifies the runtime tarball and the pin file by sha256 (E_DR_RUNTIME, E_DR_PIN) and refuses while the STOP file exists;
 // - per ledger item in the plan, reconciles the item's journal from any earlier launch (reconcileJournal), settles this
-//   run's open lease, opens one lease (openLease) and starts one MeteringProxy on it with allowanceCode DR_ALLOWANCE_STOP;
+//   run's open lease, then, before any lease, checks every item's cap holds what is committed on it plus the reserve
+//   (reserveMicros: CONCURRENCY sessions at cells.json's allowance), else stops with DR_RESERVE_STOP having leased and
+//   launched nothing; then opens one lease per item (openLease) and starts one MeteringProxy on it with allowanceCode
+//   DR_ALLOWANCE_STOP; before the leases and again once its proxies listen, it stops with DR_PROXY_PORT_BUSY unless its
+//   own proxies are the only listeners on the proxy port range the container firewall opens and, when the proxy host is
+//   off loopback, the kernel holds that range back from ephemeral ports (checkProxyListeners, reservedPorts);
+//   on a real record it launches nothing until vm.sh record-out --confirm shows its leases open in the drive copy of
+//   the record (awaitLeaseConfirmed, DR_LEASE_UNRECORDED);
 // - orders the sessions by a seeded shuffle (seed 20261110) and runs at most 6 at once, never two cells of one task at the
 //   same time, each as one Harbor job (harbor run -c <job.json>) whose process env holds the management socket and token
 //   and no provider key;
@@ -43,6 +50,13 @@ export const MAX_OUTPUT_TOKENS = 32_000;
 export const PILOT_SESSION_STOP_MICROS = 2_500_000;
 export const HARBOR_RETRY = { max_retries: 1, include_exceptions: ["DrInfraError", "EnvironmentStartTimeoutError", "AgentSetupTimeoutError"] };
 export const AGENT_IMPORT_PATH = "dr_harbor:DecisionRoutingAgent";
+/** Harbor's docker environment with the rig's egress sidecar build context (agent/dr_sidecar.py, agent/egress-sidecar). */
+export const ENVIRONMENT_IMPORT_PATH = "dr_sidecar:DrDockerEnvironment";
+/** The runner's container firewall (host/post-boot.sh) lets containers reach the host only on these ports, one per leased item. */
+export const PROXY_PORT_FIRST = 47100;
+export const PROXY_PORT_COUNT = 8;
+/** How long a lease on a real record waits for record-out --confirm (vm.sh) before DR_LEASE_UNRECORDED. */
+export const LEASE_CONFIRM_MS = 30 * 60_000;
 const LANE = resolve(import.meta.dir, "..");
 const PROVIDER_KEYS = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "TYPESAFE_API_KEY", "UBICLOUD_API_KEY"];
 
@@ -121,7 +135,86 @@ export interface JobInputs {
   pinFile: string;
 }
 
-/** One Harbor job with one trial: the decision-routing agent, docker with delete, the proxy host on the network allowlist. */
+/** Item k's proxy port: any free port on a loopback host, else the k-th port the runner's container firewall opens. */
+export function proxyPort(host: string, index: number): number | undefined {
+  const h = host.trim().replace(/^\[(.*)\]$/, "$1");
+  if (h === "::1" || h.startsWith("127.")) return undefined;
+  if (index >= PROXY_PORT_COUNT) throw new ControllerError("E_USAGE", "a batch whose proxy listens on " + host + " can hold at most " + PROXY_PORT_COUNT + " ledger items, one per port the runner's container firewall opens; nothing was leased or launched");
+  return PROXY_PORT_FIRST + index;
+}
+
+/**
+ * Lease custody: a lease opened on the VM's copy of the record must reach the drive before anything spends on it, so a
+ * VM that dies mid-segment leaves the lease open where the next segment and the Captain see it. Waits until
+ * <out>/lease-confirmed.json, which vm.sh record-out --confirm writes only after the drive copy reads back with those
+ * leases open, lists every one of leaseIds; else DR_LEASE_UNRECORDED once timeoutMs passes or stopped() turns true.
+ */
+export async function awaitLeaseConfirmed(out: string, leaseIds: readonly string[], timeoutMs: number, pollMs: number, stopped: () => boolean = () => false): Promise<void> {
+  const file = join(out, "lease-confirmed.json");
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    let listed: unknown = [];
+    try {
+      listed = (JSON.parse(readFileSync(file, "utf8")) as { leases?: unknown }).leases;
+    } catch {}
+    const missing = leaseIds.filter((id) => !(Array.isArray(listed) && listed.includes(id)));
+    if (!missing.length) return;
+    if (stopped() || Date.now() >= deadline) throw new ControllerError("DR_LEASE_UNRECORDED", "the drive copy of the record was never confirmed to hold lease " + missing.join(", ") + " open (" + file + "; run vm.sh record-out <name> <record> --confirm " + out + "); nothing was launched and the lease settles at what it spent, zero");
+    await Bun.sleep(Math.min(pollMs, 1000));
+  }
+}
+
+/** TCP ports in LISTEN on this host, from /proc/net/tcp and /proc/net/tcp6 (state 0A); a file that is missing adds none. */
+export function listeningPorts(files: readonly string[] = ["/proc/net/tcp", "/proc/net/tcp6"]): number[] {
+  const ports = new Set<number>();
+  for (const f of files) {
+    if (!existsSync(f)) continue;
+    for (const line of readFileSync(f, "utf8").split("\n").slice(1)) {
+      const cols = line.trim().split(/\s+/);
+      if (cols[3] === "0A" && cols[1]?.includes(":")) ports.add(parseInt(cols[1].split(":").pop()!, 16));
+    }
+  }
+  return [...ports];
+}
+
+/**
+ * The runner's container firewall lets containers reach the host on the proxy port range only, so at batch start the
+ * batch's own proxies must be the only listeners there and each own proxy on the range must be seen listening (the
+ * Captain's condition on the firewall), else DR_PROXY_PORT_BUSY.
+ */
+export function checkProxyListeners(own: readonly number[], listening: readonly number[] = listeningPorts(), reserved: readonly number[] | null = null): void {
+  const onRange = (p: number) => p >= PROXY_PORT_FIRST && p < PROXY_PORT_FIRST + PROXY_PORT_COUNT;
+  const others = [...new Set(listening.filter((p) => onRange(p) && !own.includes(p)))].sort((a, b) => a - b);
+  const unseen = own.filter((p) => onRange(p) && !listening.includes(p));
+  const unreserved = reserved ? Array.from({ length: PROXY_PORT_COUNT }, (_, i) => PROXY_PORT_FIRST + i).filter((p) => !reserved.includes(p)) : [];
+  if (!others.length && !unseen.length && !unreserved.length) return;
+  throw new ControllerError(
+    "DR_PROXY_PORT_BUSY",
+    "TCP " + PROXY_PORT_FIRST + "-" + (PROXY_PORT_FIRST + PROXY_PORT_COUNT - 1) + ", which the container firewall opens to the agents, must hold only this batch's proxies" +
+      (others.length ? "; something else listens on " + others.join(", ") : "") +
+      (unseen.length ? "; this batch's proxy on " + unseen.join(", ") + " is not seen listening" : "") +
+      (unreserved.length ? "; the kernel can still hand " + unreserved.join(", ") + " to any program as an ephemeral port (net.ipv4.ip_local_reserved_ports; post-boot.sh reserves the range)" : "") +
+      "; nothing new is launched",
+  );
+}
+
+/** Ports the kernel keeps out of its automatic (ephemeral) assignment, from net.ipv4.ip_local_reserved_ports; a missing file reserves none. */
+export function reservedPorts(file = "/proc/sys/net/ipv4/ip_local_reserved_ports"): number[] {
+  if (!existsSync(file)) return [];
+  const ports: number[] = [];
+  for (const part of readFileSync(file, "utf8").trim().split(",").filter(Boolean)) {
+    const [first, last = first] = part.split("-").map((n) => parseInt(n, 10));
+    for (let p = first!; p <= last!; p++) ports.push(p);
+  }
+  return ports;
+}
+
+/**
+ * One Harbor job with one trial: the decision-routing agent, docker with delete and the rig's egress sidecar, the proxy
+ * host on the agent's allowlist.
+ * The task's [agent] network_mode is allowlist with no host, and Harbor merges only the agent's extra_allowed_hosts into
+ * it; environment.extra_allowed_hosts reaches the setup baseline alone, so the agent's run would reach no proxy.
+ */
 export function harborJob(row: PlanRow, o: JobInputs, markersFile?: string) {
   return {
     job_name: sessionId(row),
@@ -130,8 +223,8 @@ export function harborJob(row: PlanRow, o: JobInputs, markersFile?: string) {
     n_concurrent_trials: 1,
     quiet: true,
     retry: HARBOR_RETRY,
-    environment: { type: "docker", delete: true, extra_allowed_hosts: [o.proxyHost] },
-    agents: [{ import_path: AGENT_IMPORT_PATH, kwargs: { cell: row.cell, model: row.model, runtime_tarball: o.runtimeTarball, runtime_sha256: o.runtimeSha256, pin_file: o.pinFile, item: row.item, ...(markersFile ? { markers_file: markersFile } : {}) } }],
+    environment: { type: "docker", import_path: ENVIRONMENT_IMPORT_PATH, delete: true },
+    agents: [{ import_path: AGENT_IMPORT_PATH, extra_allowed_hosts: [o.proxyHost], kwargs: { cell: row.cell, model: row.model, runtime_tarball: o.runtimeTarball, runtime_sha256: o.runtimeSha256, pin_file: o.pinFile, item: row.item, ...(markersFile ? { markers_file: markersFile } : {}) } }],
     tasks: [{ path: join(o.tasksDir, row.task) }],
   };
 }
@@ -201,6 +294,8 @@ export interface BatchOptions extends JobInputs {
   concurrency?: number;
   seed?: number;
   pollMs?: number;
+  /** How long a real record's leases wait for record-out --confirm; LEASE_CONFIRM_MS when left out. */
+  leaseConfirmMs?: number;
   env?: Record<string, string | undefined>;
   fetch?: (input: string, init: RequestInit) => Promise<Response>;
   log?: (line: string) => void;
@@ -227,7 +322,7 @@ interface ItemRun {
 }
 
 /** Initialises a temporary record with the items the plan uses, from the items file, for a dry run. */
-function tempRecord(dir: string, itemsFile: string, used: Set<string>): { record: string; local: LocalLedger } {
+export function tempRecord(dir: string, itemsFile: string, used: Set<string>): { record: string; local: LocalLedger } {
   const record = join(dir, "record");
   const items = (JSON.parse(readFileSync(itemsFile, "utf8")) as { items: Array<{ item: string; cap_micros: number }> }).items;
   for (const item of used) {
@@ -236,6 +331,29 @@ function tempRecord(dir: string, itemsFile: string, used: Set<string>): { record
     recordApproval(record, { action: "init", item, cap_micros: row.cap_micros, admission: "warn", quotes: [{ words: "dry run on a temporary ledger", by: "decision-routing controller --temp", source: "lanes/decision-routing/host/controller.ts" }] });
   }
   return { record, local: LocalLedger.open(join(dir, "ledger.sqlite")) };
+}
+
+/** A plan or an answering step naming an item that items.json marks closed is refused before anything is written or leased. */
+export function refuseClosedItems(itemsFile: string, items: readonly string[], what: string): void {
+  const rows = (JSON.parse(readFileSync(itemsFile, "utf8")) as { items: Array<{ item: string; closed?: string }> }).items;
+  const closed = rows.find((r) => r.closed && items.includes(r.item));
+  if (closed) throw new ControllerError("DR_ITEM_CLOSED", "line item " + closed.item + " is closed: " + closed.closed + "; nothing was " + what);
+}
+
+/** What a new lease must leave room for: its sessions in flight (CONCURRENCY for a batch), each at its worst case, the per-session allowance. */
+export function reserveMicros(sessions = CONCURRENCY): number {
+  return sessions * (JSON.parse(readFileSync(join(LANE, "config", "cells.json"), "utf8")) as { limits: { allowance_micros: number } }).limits.allowance_micros;
+}
+
+/** The pre-lease reserve check: every item's cap must hold what is committed on it plus reserveMicros(sessions), else DR_RESERVE_STOP. */
+export function checkReserve(record: string, items: readonly string[], sessions = CONCURRENCY): void {
+  const reserve = reserveMicros(sessions);
+  for (const item of items) {
+    const state = readItem(record, item);
+    if (state.cap_micros !== null && state.cap_micros - state.committed_micros < reserve) {
+      throw new ControllerError("DR_RESERVE_STOP", "line item " + item + " has " + usd(Math.max(state.cap_micros - state.committed_micros, 0)) + " left of its " + usd(state.cap_micros) + " cap (" + usd(state.committed_micros) + " committed), under the " + usd(reserve) + " reserve for " + sessions + (sessions === 1 ? " session" : " sessions") + " in flight; nothing was leased or launched, and the projection comes to the Captain");
+    }
+  }
 }
 
 export async function runBatch(o: BatchOptions): Promise<BatchResult> {
@@ -248,6 +366,7 @@ export async function runBatch(o: BatchOptions): Promise<BatchResult> {
   const warn = (code: ReasonCode, message: string) => warnings.push(code + ": " + message);
   if (!isTrialNetworkHost(o.proxyHost)) throw new ControllerError("E_USAGE", "the proxy host " + o.proxyHost + " is not a loopback or private IP literal");
   if (!o.temp && !o.custody) throw new ControllerError("E_USAGE", "a live run (no --temp) needs --pristine-dir and --label-store for the leak scan; nothing was leased or launched");
+  refuseClosedItems(o.items ?? join(LANE, "config", "items.json"), o.plan.map((r) => r.item), "leased or launched");
   if (existsSync(stopFile)) throw new ControllerError("E_DR_STOPPED", "the stop file " + stopFile + " exists (" + (readFileSync(stopFile, "utf8").trim().split("\n")[0]!.slice(0, 500) || "empty") + "), so nothing was leased or launched; remove it to start the batch");
   const journals = join(out, "journals");
   for (const item of new Set(o.plan.map((r) => r.item))) {
@@ -269,6 +388,7 @@ export async function runBatch(o: BatchOptions): Promise<BatchResult> {
 
   const order = seededShuffle(o.plan, o.seed ?? SEED);
   const itemNames = [...new Set(order.map((r) => r.item))];
+  proxyPort(o.proxyHost, itemNames.length - 1);
   for (const d of ["journals", "jobs", "sessions"]) mkdirSync(join(out, d), { recursive: true });
   if (o.custody) mkdirSync(join(out, "markers"), { recursive: true, mode: 0o700 });
   const scratch = mkdtempSync(join(tmpdir(), "dr-ctl-"));
@@ -294,10 +414,16 @@ export async function runBatch(o: BatchOptions): Promise<BatchResult> {
       }
       const open = readItem(record, item).open;
       if (open && open.run_id === o.runId && local.getLease(open.lease_id)) settleLease(record, local, open.lease_id, warn);
+    }
+    checkReserve(record, itemNames);
+    const reserved = o.proxyHost === "localhost" || o.proxyHost === "::1" || o.proxyHost.startsWith("127.") ? null : reservedPorts();
+    checkProxyListeners([], listeningPorts(), reserved);
+    for (const item of itemNames) {
+      const journal = join(out, "journals", item + ".ndjson");
       const lease = openLease(record, local, { item, run_id: o.runId, warn, ...(o.temp ? { requireAdmission: () => null } : {}) });
       const socket = join(scratch, runs.length + ".sock");
       const token = randomBytes(24).toString("hex");
-      const proxy = new MeteringProxy({ ledger: local, leaseId: lease.lease_id, host: o.proxyHost, managementSocket: socket, managementToken: token, journal, retry: RETRY, env, fetch: o.fetch, maxOutputTokens: MAX_OUTPUT_TOKENS, allowanceCode: "DR_ALLOWANCE_STOP" });
+      const proxy = new MeteringProxy({ ledger: local, leaseId: lease.lease_id, host: o.proxyHost, port: proxyPort(o.proxyHost, runs.length), managementSocket: socket, managementToken: token, journal, retry: RETRY, env, fetch: o.fetch, maxOutputTokens: MAX_OUTPUT_TOKENS, allowanceCode: "DR_ALLOWANCE_STOP" });
       try {
         proxy.start();
       } catch (e) {
@@ -307,6 +433,11 @@ export async function runBatch(o: BatchOptions): Promise<BatchResult> {
       const base = "http://" + (o.proxyHost.includes(":") ? "[" + o.proxyHost + "]" : o.proxyHost) + ":" + proxy.port;
       runs.push({ item, lease_id: lease.lease_id, journal, proxy, socket, token, base });
       log("lease " + lease.lease_id + " on " + item + ": " + usd(lease.reserved_micros) + ", proxy " + base);
+    }
+    checkProxyListeners(runs.map((r) => r.proxy.port), listeningPorts(), reserved);
+    if (!o.temp) {
+      log("waiting for vm.sh record-out --confirm " + out + " to show lease " + runs.map((r) => r.lease_id).join(", ") + " open in the drive");
+      await awaitLeaseConfirmed(out, runs.map((r) => r.lease_id), o.leaseConfirmMs ?? LEASE_CONFIRM_MS, o.pollMs ?? 5000, () => stop !== null);
     }
 
     const launchedBefore = (r: PlanRow) => existsSync(join(out, "jobs", sessionId(r) + ".json"));

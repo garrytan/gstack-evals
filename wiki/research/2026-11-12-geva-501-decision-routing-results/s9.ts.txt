@@ -1,0 +1,156 @@
+// S9 where it breaks (prereg section 11): for every task where one cell passed and the other failed (R against N and R
+// against P, per creative model), the rule-based kind of the last decision before the paths parted. Counts per kind, no
+// judge. The rule below was written before any count was read.
+//
+// THE RULE
+// 1. Pairs: per creative model, every task graded in both cells (pairOnTasks, the scorer's pairing) whose successes differ.
+// 2. Paths: each session's main-model turns in trajectory order (assistant messages without extra.dr_controller), each
+//    turn's commands joined by a newline and trimmed. The paths part at turn k, the first index where the two command
+//    sequences differ; if one is a prefix of the other, k is the shorter length; if they are identical, the pair is
+//    NEVER PARTED.
+// 3. Window: in each routed session, the decisions logged after main turn k-1's response and before main turn k's response
+//    (decision t_ms against assistant extra.timestamp, both on the session clock t0 = end_ts - session_ms; a session with
+//    no turn k closes the window at its end). These are the decisions on turn k-1's commands and before query k, so the
+//    last decisions before the paths parted. k = 0 gives an empty window: FIRST TURN.
+// 4. The window's kind is that of its last decision (by seq) that changed what the agent saw or did:
+//      done acted "done"                       SUBMIT LET THROUGH (the done check let the submit stand)
+//      done acted "third_submit_stands"        THIRD SUBMIT STANDS
+//      done acted "not_done"                   SUBMIT BLOCKED
+//      relevant, a dropped hit the real fix edits (grounded label)   DROPPED HIT IN THE REAL FIX
+//      relevant, other dropped hits            DROPPED HIT OUTSIDE THE FIX
+//      safe acted "blocked"                    BLOCKED COMMAND
+//      next_step with a guard                  LOOP GUARD
+//      next_step acted (a decider-run action)  DECIDER ACTION
+//    A window where no decision intervened is EXIT: the next-step layer handed the turn to the main model and nothing a
+//    decider did changed what it saw (the exit-storm kind; the main model's own turn). Detail: whether the window's
+//    next_step deciders all picked the exit, or one picked an action that no acting band let act.
+// 5. Pair kind: R against N reads R's window (N logs no decisions). R against P reads both windows; the pair kind is the
+//    side that intervened, both named (R first) when both did, EXIT when neither did.
+// 6. Beside it, a second trace that is not about the parting point: the last intervening decision anywhere in the failing
+//    routed session (R in R against N; whichever of R and P failed in R against P), same table, with its grounded label.
+import { readFileSync } from "node:fs";
+import { load, graded, cellOf, pairOnTasks, planned, decisionsOf, summaryOf, trajectoryOf, jsonl, G, save, type SessionOutcome } from "./lib.ts";
+
+const L = load();
+const labels = new Map<string, unknown>(jsonl(G + "/reading-scored/labels-all.jsonl").map((r: any) => [r.decision_id, r.label]));
+
+interface Turn { cmd: string; ms: number }
+function turns(s: SessionOutcome): { turns: Turn[]; t0: number; end_ms: number } {
+  const sum = summaryOf(s), traj = trajectoryOf(s);
+  const t0 = sum.end_ts - sum.session_ms / 1000;
+  const ts = (traj.messages as any[]).filter((m) => m.role === "assistant" && !m.extra?.dr_controller)
+    .map((m) => ({ cmd: (m.extra?.actions ?? []).map((a: any) => (a.command ?? "").trim()).join("\n").trim(), ms: ((m.extra?.timestamp ?? t0) - t0) * 1000 }));
+  return { turns: ts, t0, end_ms: sum.session_ms };
+}
+
+function kindOf(d: any): string | null {
+  if (d.type === "done") return d.acted === "done" ? "SUBMIT LET THROUGH" : d.acted === "third_submit_stands" ? "THIRD SUBMIT STANDS" : d.acted === "not_done" ? "SUBMIT BLOCKED" : null;
+  if (d.type === "relevant" && Array.isArray(d.acted) && d.acted.length) { const lab = labels.get(d.decision_id); return Array.isArray(lab) && d.acted.some((h: string) => lab.includes(h)) ? "DROPPED HIT IN THE REAL FIX" : "DROPPED HIT OUTSIDE THE FIX"; }
+  if (d.type === "safe" && d.acted === "blocked") return "BLOCKED COMMAND";
+  if (d.type === "next_step" && d.guard) return "LOOP GUARD";
+  if (d.type === "next_step" && d.acted) return "DECIDER ACTION";
+  return null;
+}
+function detail(d: any): Record<string, unknown> {
+  const lab = labels.get(d.decision_id);
+  return { type: d.type, acted: d.acted, acting_layer: d.acting_layer, label: lab === undefined ? "none" : lab, ...(d.type === "safe" ? { false_block_by_rule: lab === false } : {}), ...(d.type === "done" ? { snapshot_passes_hidden_tests: lab } : {}) };
+}
+
+function windowKind(s: SessionOutcome, k: number) {
+  const { turns: t, end_ms } = turns(s);
+  if (k === 0) return { kind: "FIRST TURN", detail: null };
+  const lo = t[k - 1]!.ms, hi = k < t.length ? t[k]!.ms : end_ms + 1;
+  const decs = decisionsOf(s).filter((d) => d.t_ms > lo && d.t_ms < hi).sort((a, b) => a.seq - b.seq);
+  const hits = decs.filter((d) => kindOf(d) !== null);
+  if (hits.length) { const d = hits[hits.length - 1]!; return { kind: kindOf(d)!, detail: detail(d) }; }
+  const ns = decs.filter((d) => d.type === "next_step");
+  const picks = ns.flatMap((d) => Object.entries(d.layers ?? {}).filter(([name]) => name === "jev" || name === "particle").map(([, l]: [string, any]) => l.answer));
+  return { kind: "EXIT", detail: { next_step_decisions: ns.length, deciders_picked: picks.every((p) => p === "other" || p === null) ? "all exit" : "an action no band let act" } };
+}
+
+function lastIntervention(s: SessionOutcome) {
+  const decs = decisionsOf(s).sort((a, b) => a.seq - b.seq).filter((d) => kindOf(d) !== null);
+  if (!decs.length) return { kind: s.cell === "N" ? "(no decision layer)" : "NONE", detail: null };
+  const d = decs[decs.length - 1]!;
+  return { kind: kindOf(d)!, detail: detail(d) };
+}
+
+const pairs: any[] = [];
+const base: Record<string, any> = {};
+for (const model of ["opus", "sol"]) {
+  for (const other of ["N", "P"]) {
+    const R = cellOf(L.sessions, "R", model, planned), O = cellOf(L.sessions, other, model, planned);
+    const all = pairOnTasks(O, R);
+    const kAll = all.map((p) => { const a = turns(p.b).turns.map((x) => x.cmd), b = turns(p.a).turns.map((x) => x.cmd); let k = 0; while (k < a.length && k < b.length && a[k] === b[k]) k++; return k === a.length && k === b.length ? "never" : k === 0 ? "0" : k <= 2 ? "1 to 2" : "3 or more"; });
+    base[model + " R vs " + other] = { pairs: all.length, ...Object.fromEntries(["0", "1 to 2", "3 or more", "never"].map((b) => [b, kAll.filter((x) => x === b).length])) };
+    for (const p of all) {
+      if (p.a.success === p.b.success) continue;
+      const tr = turns(p.b).turns.map((x) => x.cmd), to = turns(p.a).turns.map((x) => x.cmd);
+      let k = 0;
+      while (k < tr.length && k < to.length && tr[k] === to[k]) k++;
+      const never = k === tr.length && k === to.length;
+      const rw = never ? { kind: "NEVER PARTED", detail: null } : windowKind(p.b, k);
+      const ow = other === "P" && !never ? windowKind(p.a, k) : null;
+      const intervened = (w: any) => w && !["EXIT", "FIRST TURN", "NEVER PARTED"].includes(w.kind);
+      let pairKind: string;
+      if (never) pairKind = "NEVER PARTED";
+      else if (other === "N") pairKind = rw.kind;
+      else if (intervened(rw) && intervened(ow)) pairKind = "R: " + rw.kind + " / P: " + ow!.kind;
+      else if (intervened(rw)) pairKind = "R: " + rw.kind;
+      else if (intervened(ow)) pairKind = "P: " + ow!.kind;
+      else pairKind = k === 0 ? "FIRST TURN" : "EXIT";
+      const failing = p.b.success === 0 ? p.b : p.a;
+      pairs.push({
+        model, contrast: "R vs " + other, task: p.task, r_passed: p.b.success === 1, parting_turn: never ? null : k, r_turns: tr.length, other_turns: to.length,
+        pair_kind: pairKind, r_window: rw, other_window: ow, failing_cell: failing.cell, failing_last_intervention: lastIntervention(failing),
+      });
+    }
+  }
+}
+
+const lines: string[] = ["## S9 rule", "", ...readFileSync(import.meta.path, "utf8").split("\n").filter((l) => l.startsWith("// ")).slice(3, 34).map((l) => l.slice(3)), ""];
+const data: Record<string, any> = { pairs, parting_turn_all_pairs: base };
+lines.push("## context: the parting turn over every paired task (concordant and discordant), by turn index", "", "| contrast | paired tasks | parted at turn 0 | at turn 1 to 2 | at turn 3 or later | never parted |", "|---|---|---|---|---|---|", ...Object.entries(base).map(([k, v]) => "| " + k + " | " + v.pairs + " | " + v["0"] + " | " + v["1 to 2"] + " | " + v["3 or more"] + " | " + v.never + " |"), "");
+for (const model of ["opus", "sol"]) for (const other of ["N", "P"]) {
+  const ps = pairs.filter((x) => x.model === model && x.contrast === "R vs " + other);
+  const tally = new Map<string, { better: string[]; worse: string[] }>();
+  for (const x of ps) { const t = tally.get(x.pair_kind) ?? { better: [], worse: [] }; (x.r_passed ? t.better : t.worse).push(x.task); tally.set(x.pair_kind, t); }
+  const ks = ps.filter((x) => x.parting_turn !== null).map((x) => x.parting_turn as number).sort((a, b) => a - b);
+  lines.push("## " + model + " R vs " + other + ": " + ps.length + " discordant tasks (R passed " + ps.filter((x) => x.r_passed).length + ", R failed " + ps.filter((x) => !x.r_passed).length + "); parting turn median " + (ks.length ? ks[Math.floor((ks.length - 1) / 2)] : "none") + ", range " + (ks.length ? ks[0] + " to " + ks[ks.length - 1] : "none"), "");
+  lines.push("| kind of the last decision before the paths parted | tasks | R passed (better) | R failed (worse) |", "|---|---|---|---|");
+  for (const [k, t] of [...tally.entries()].sort((a, b) => (b[1].better.length + b[1].worse.length) - (a[1].better.length + a[1].worse.length))) lines.push("| " + k + " | " + (t.better.length + t.worse.length) + " | " + (t.better.join(", ") || "none") + " | " + (t.worse.join(", ") || "none") + " |");
+  const f = new Map<string, string[]>();
+  for (const x of ps) { const lab = x.failing_last_intervention; const key = x.failing_cell + " " + lab.kind + (lab.detail?.type === "done" ? " (snapshot passes hidden tests: " + lab.detail.snapshot_passes_hidden_tests + ")" : lab.detail?.type === "safe" ? " (false block by the pattern rule: " + lab.detail.false_block_by_rule + ")" : ""); f.set(key, [...(f.get(key) ?? []), x.task]); }
+  lines.push("", "second trace, the failing routed session's last intervening decision anywhere:", ...[...f.entries()].sort((a, b) => b[1].length - a[1].length).map(([k, v]) => "  " + k + ": " + v.length + " (" + v.join(", ") + ")"), "");
+  const ex = ps.filter((x) => x.pair_kind === "EXIT").map((x) => x.r_window?.detail?.deciders_picked);
+  if (ex.length) lines.push("EXIT detail (R window): " + [...new Set(ex)].map((v) => v + " " + ex.filter((e) => e === v).length).join(", "), "");
+  const blk = ps.filter((x) => String(x.pair_kind).includes("BLOCKED COMMAND"));
+  if (blk.length) lines.push("BLOCKED COMMAND detail: " + blk.map((x) => { const w = x.pair_kind.startsWith("P:") ? x.other_window : x.r_window; return x.task + " (" + w.detail.acting_layer + ", false block by the pattern rule " + w.detail.false_block_by_rule + ")"; }).join("; "), "");
+}
+// POST HOC, added after the counts above were read: (a) the same parting rule with every digit run masked, because a
+// spot check (vyperlang__vyper-4801, opus R vs N) parted at turn 0 on "head -30" against "head -40" and then matched;
+// (b) exposure: how many routed sessions in discordant pairs had each intervention kind anywhere, against all routed
+// sessions on paired tasks. Neither changes the rule or the counts above.
+const mask = (x: string) => x.replace(/[0-9]+/g, "N");
+const post: Record<string, any> = {};
+for (const model of ["opus", "sol"]) for (const other of ["N", "P"]) {
+  const R = cellOf(L.sessions, "R", model, planned), O = cellOf(L.sessions, other, model, planned);
+  const all = pairOnTasks(O, R);
+  const disc = all.filter((p) => p.a.success !== p.b.success);
+  const masked = disc.map((p) => { const a = turns(p.b).turns.map((x) => mask(x.cmd)), b = turns(p.a).turns.map((x) => mask(x.cmd)); let k = 0; while (k < a.length && k < b.length && a[k] === b[k]) k++; const never = k === a.length && k === b.length; const rw = never ? { kind: "NEVER PARTED" } : windowKind(p.b, k); const ow = other === "P" && !never ? windowKind(p.a, k) : null; return { task: p.task, k: never ? null : k, r: rw.kind, o: ow?.kind ?? null }; });
+  const anyKinds = (sess: SessionOutcome) => new Set(decisionsOf(sess).map(kindOf).filter((x): x is string => x !== null));
+  const KINDS = ["BLOCKED COMMAND", "SUBMIT BLOCKED", "DROPPED HIT IN THE REAL FIX", "DROPPED HIT OUTSIDE THE FIX", "LOOP GUARD", "DECIDER ACTION"];
+  const routed = (ps: typeof all) => ps.flatMap((p) => (other === "P" ? [p.b, p.a] : [p.b]));
+  const rate = (sessions: SessionOutcome[]) => { const sets = sessions.map(anyKinds); return Object.fromEntries(KINDS.map((k) => [k, sets.filter((x) => x.has(k)).length + " of " + sessions.length])); };
+  post[model + " R vs " + other] = { masked, exposure_discordant: rate(routed(disc)), exposure_all: rate(routed(all)) };
+}
+lines.push("## post hoc (added after the counts above were read)", "");
+for (const [k, v] of Object.entries(post)) {
+  const ks = new Map<string, number>();
+  for (const m of v.masked) { const key = "k=" + (m.k === null ? "never" : m.k) + " " + m.r + (m.o ? " / P " + m.o : ""); ks.set(key, (ks.get(key) ?? 0) + 1); }
+  lines.push(k + ", digits masked: " + [...ks.entries()].sort().map(([a, b]) => a + ": " + b).join("; "));
+  lines.push(k + ", routed sessions with at least one of each intervention, discordant pairs against all paired tasks: " + Object.keys(v.exposure_all).map((kind) => kind + " " + v.exposure_discordant[kind] + " against " + v.exposure_all[kind]).join("; "), "");
+}
+data.post_hoc = post;
+save("s9", lines.join("\n"), data);
+console.log(lines.join("\n"));

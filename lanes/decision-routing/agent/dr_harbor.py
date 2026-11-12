@@ -19,6 +19,10 @@ rather than against mini-swe-agent's schema:
   attempt 2, and a rerun that fails the same way ends missing.
 
 The bearer reaches the container only through the exec's env and is never written to a file, a command line or a log.
+The session runs as root, so its initial environment is readable only by root, and every command the agent runs, the
+main model's and the deciders' alike, runs as AGENT_USER: run prepares that user before the session (python -I -m
+dr_agent.agent_user setup: the user, /root readable for BASH_ENV, /testbed owned by the user) and gives /testbed back
+to root after it (restore), before the patch export.
 """
 
 import asyncio
@@ -53,11 +57,11 @@ MANAGEMENT_TIMEOUT_SEC = 120
 WALL_GRACE_SEC = 300
 CLEAN_STOPS = ("allowance_stop", "custody_hit")
 INFRA_ATTEMPTS = "dr-infra-attempts"
-CALIBRATION_ITEM = "dr-calibration"
-EXPORT_PATCH = (
-    f"mkdir -p {EnvironmentPaths.artifacts_dir} && cd /testbed && git add -A && "
-    f"git -c core.fileMode=false diff --cached --binary HEAD > {PATCH_PATH}"
-)
+CALIBRATION_ITEM = "dr-calibration-r3"
+AGENT_USER = "agent"
+AGENT_SETUP = f"{RUNTIME_PYTHON} -I -m dr_agent.agent_user setup"
+AGENT_RESTORE = f"{RUNTIME_PYTHON} -I -m dr_agent.agent_user restore"
+EXPORT_PATCH = f"{RUNTIME_PYTHON} -I -m dr_agent.agent_user export {PATCH_PATH}"
 
 
 class DrInfraError(RuntimeError):
@@ -234,6 +238,7 @@ class DecisionRoutingAgent(MiniSweAgent):
             "call_limit": CALL_BACKSTOP,
             "wall_s": self._limits["wall_s"],
             "cwd": "/testbed",
+            "agent_user": AGENT_USER,
             "calibration_shadow": self._cell == "N" and self._item == CALIBRATION_ITEM,
         }
 
@@ -250,6 +255,7 @@ class DecisionRoutingAgent(MiniSweAgent):
             task.write_text(instruction)
             await environment.upload_file(task, str(RUN_DIR / "task.md"))
         await environment.upload_file(self._pin_file, str(RUN_DIR / "pin.json"))
+        await self.exec_as_root(environment, command=AGENT_SETUP)
         path = (await self.exec_as_root(environment, command='printf %s "$PATH"')).stdout or "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
         cell_attempt = {"run_id": self._item, "arm": self._cell, "task": self.logs_dir.parent.parent.name, "model": self._model, "trial": 1, "attempt": 2 if attempt_dir(self.logs_dir.parent).exists() else 1}
@@ -300,6 +306,7 @@ class DecisionRoutingAgent(MiniSweAgent):
             await asyncio.to_thread(manage, "/unbind", {"slot": binding["slot"]})
             self._meter = await asyncio.to_thread(manage, "/finalize", {"meter_id": binding["meter_id"]})
             await self._upload_json(environment, self._meter, DR_LOG_DIR / "meter.json")
+        await self.exec_as_root(environment, command=AGENT_RESTORE)
         await self.exec_as_root(environment, command=EXPORT_PATCH)
         if failure is not None:
             raise failure

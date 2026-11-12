@@ -4,9 +4,9 @@
     "type": "choice",
     "instructions": "Pick the next step for a coding agent fixing the issue in `task`. Pick a listed action only when `last_output` and `recent_steps` make it clearly the right next step.",
     "criteria": {
-      "run_tests": "The last step in `recent_steps` changed code and no test has run since.",
+      "run_tests": "The last step in `recent_steps` edited a source file of the repository (not patch.txt or a script the agent wrote), and no test has run since, so rerunning the agent's last test command unchanged is the next check.",
       "show_k": "`candidates[k]` has not been printed, and `last_output` names it as where the failure happens or where the code the issue describes lives.",
-      "submit": "`diff` changes code for the issue and `last_test` is passed.",
+      "submit": "The last step in `recent_steps` inspected patch.txt after it was written, `diff` makes the change the issue in `task` asks for, and `last_test` is not failed.",
       "other": "None of the above clearly applies, or the next step needs new code, a new search or a new command."
     }
   },
@@ -24,6 +24,6 @@
   },
   "done": {
     "type": "noul",
-    "instructions": "Is the task in `task` done: `diff` makes the change the issue asks for, and `last_test` is passed?"
+    "instructions": "Is the task in `task` done: does `diff` make the change the issue asks for, so that tests of that change would pass?"
   }
 }

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { SUBCOMMANDS, main } from "../../lanes/decision-routing/cli.ts";
 
 describe("decision-routing lane CLI", () => {
-  test("names every subcommand once", () => expect(SUBCOMMANDS.map((s) => s.name)).toEqual(["score", "admit", "pilot", "tune", "pin", "labels", "dry-run", "run"]));
+  test("names every subcommand once", () => expect(SUBCOMMANDS.map((s) => s.name)).toEqual(["score", "admit", "pilot", "tune", "pin", "labels", "dry-run", "answer", "plans", "run", "history"]));
   test("every subcommand's module exists, so none is reported as not built yet", () => {
     expect(SUBCOMMANDS.filter((s) => !existsSync(join(import.meta.dir, "../../lanes/decision-routing", s.module))).map((s) => s.module)).toEqual([]);
   });
