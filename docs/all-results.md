@@ -102,7 +102,7 @@ These results have no numbers here, because they haven't yet had both checks the
 
 **Getting agents to open skills**
 
-- **Helps (opens only), waiting on a recount**, particle-1: gstack's routing overhaul got particle-1 to open /investigate on its own more often, only where the new hook named the skill, and no setup with the hooks switched off ran on particle-1. The result rests on a blind check by readers whose records were lost. Without those records the run's own analysis can't confirm it, so it waits until that check can be redone. [Overhaul on Sol and particle-1](../wiki/board/2026-11-08-geva-353-l1-sol-particle-results/README.md), [claim check](../wiki/board/2026-11-09-geva-431-claim-check-corrections.md#l1-gstacks-overhaul-before-and-after-opus-55-gpt-61-sol-particle-1)
+- **Helps (opens only), waiting on a recount**, particle-1: gstack's routing overhaul got particle-1 to open /investigate on its own more often, only where the new hook named the skill, and no setup with the hooks switched off ran on particle-1. The result rests on a blind check by readers whose records were lost. Without those records the run's own analysis can't confirm it, so it waits until that check can be redone. A later note on task images that kept the answer in their git history corrects the published leak counts and moves no verdict. [Overhaul on Sol and particle-1](../wiki/board/2026-11-08-geva-353-l1-sol-particle-results/README.md), [claim check](../wiki/board/2026-11-09-geva-431-claim-check-corrections.md#l1-gstacks-overhaul-before-and-after-opus-55-gpt-61-sol-particle-1), [containment note, corrected](../wiki/board/2026-11-12-geva-529-containment-note-correction.md)
 
 **plan-ceo-review**
 
@@ -128,6 +128,11 @@ These results have no numbers here, because they haven't yet had both checks the
 
 - **Nothing to cut**, archived benchmark sessions: we looked for wasted tool calls in gstack sessions and found almost none. [Waste floor](../wiki/board/2026-11-03-geva-220-waste-floor.md)
 - **Couldn't show a case**, the team's own sessions: re-running gstack's pre-merge checks on code already pushed took a tiny share of check time, but the case for dropping that rerun could not be shown. [Waste baseline](../wiki/board/2026-11-03-geva-236-waste-baseline.md)
+
+**Sending a coding agent's small decisions to cheaper models**
+
+- **NO SAVING**, Opus 5.5 and GPT-6.1 Sol: on 279 real GitHub issues, routing a coding agent's small decisions to Jev, a small calibrated model, then to particle-1 for the ones Jev was unsure of, cost 29.7% more than the plain agent on Opus 5.5 (95% range 19.8% to 40.4% more) and 18.8% more on GPT-6.1 Sol (9.2% to 28.9% more). Task success moved +1.1 points on each model (Opus -2.2 to +4.3, Sol -1.1 to +3.3), no difference we could measure. [Results](../wiki/research/2026-11-12-geva-501-decision-routing-results/README.md)
+- **PARTICLE-1 ALONE IS ENOUGH**, Opus 5.5 and GPT-6.1 Sol: sending every one of those decisions to particle-1, with no Jev step, did as well as the router. Against particle-1 alone, the router's success moved +0.4 points on Opus (-2.5 to +3.3) and -2.2 on Sol (-4.6 to +0.4), and its bill ratio was 0.966 on Opus (0.885 to 1.046) and 0.992 on Sol (0.919 to 1.066), so it was neither cheaper nor, by the rule fixed in advance, faster. [Results](../wiki/research/2026-11-12-geva-501-decision-routing-results/README.md)
 
 ## Corrections
 
