@@ -1,0 +1,1040 @@
+{
+  "decider_failures": [
+    {
+      "model": "opus",
+      "cell": "F",
+      "decisions": 3136,
+      "failed": 0,
+      "share": 0,
+      "degraded": false
+    },
+    {
+      "model": "opus",
+      "cell": "J",
+      "decisions": 3119,
+      "failed": 0,
+      "share": 0,
+      "degraded": false
+    },
+    {
+      "model": "opus",
+      "cell": "P",
+      "decisions": 9746,
+      "failed": 14,
+      "share": 0.0014364867638005335,
+      "degraded": false
+    },
+    {
+      "model": "opus",
+      "cell": "R",
+      "decisions": 9464,
+      "failed": 17,
+      "share": 0.0017962806424344886,
+      "degraded": false
+    },
+    {
+      "model": "sol",
+      "cell": "J",
+      "decisions": 3175,
+      "failed": 0,
+      "share": 0,
+      "degraded": false
+    },
+    {
+      "model": "sol",
+      "cell": "P",
+      "decisions": 8471,
+      "failed": 40,
+      "share": 0.004721992680911344,
+      "degraded": false
+    },
+    {
+      "model": "sol",
+      "cell": "R",
+      "decisions": 8473,
+      "failed": 10,
+      "share": 0.0011802195208308745,
+      "degraded": false
+    }
+  ],
+  "opus": {
+    "primary_a": {
+      "model": "opus",
+      "admitted": true,
+      "n_pairs": 279,
+      "cut": -0.2971803200590015,
+      "cut_ci": [
+        -0.40431624447925585,
+        -0.19817323659836972
+      ],
+      "median_ratio": 1.1057120545047596,
+      "success": {
+        "delta": 1.0752688172043012,
+        "ci": [
+          -2.2058823529411766,
+          4.285714285714286
+        ],
+        "worse": 9,
+        "better": 12,
+        "n": 279
+      },
+      "time_ratio": 1.8217151476163458,
+      "time_ci": [
+        1.6290836595797455,
+        2.052612577013971
+      ],
+      "verdict": {
+        "verdict": "NO SAVING",
+        "rule": 1,
+        "legs": []
+      }
+    },
+    "primary_b": {
+      "model": "opus",
+      "admitted": true,
+      "n_pairs": 279,
+      "bill_ratio": 0.9661030279901458,
+      "bill_ci": [
+        0.8851513862788661,
+        1.046011701398852
+      ],
+      "success": {
+        "delta": 0.35842293906810035,
+        "ci": [
+          -2.527075812274368,
+          3.296703296703297
+        ],
+        "worse": 9,
+        "better": 10,
+        "n": 279
+      },
+      "time_ratio": 0.8996767639308428,
+      "time_ci": [
+        0.8294301662635232,
+        0.9811334064543441
+      ],
+      "verdict": {
+        "verdict": "PARTICLE-1 ALONE IS ENOUGH",
+        "rule": 5,
+        "legs": []
+      }
+    },
+    "p_vs_n": {
+      "model": "opus",
+      "admitted": false,
+      "n_pairs": 279,
+      "cut": -0.34269356629346226,
+      "cut_ci": [
+        -0.4596126968385139,
+        -0.23132046998558642
+      ],
+      "median_ratio": 1.1597237011415553,
+      "success": {
+        "delta": 0.7168458781362007,
+        "ci": [
+          -1.7421602787456445,
+          3.180212014134275
+        ],
+        "worse": 5,
+        "better": 7,
+        "n": 279
+      },
+      "time_ratio": 2.024855170936013,
+      "time_ci": [
+        1.762458707459575,
+        2.307908530665747
+      ],
+      "verdict": null
+    },
+    "degraded": {
+      "R-N": [],
+      "R-P": []
+    }
+  },
+  "sol": {
+    "primary_a": {
+      "model": "sol",
+      "admitted": true,
+      "n_pairs": 279,
+      "cut": -0.18812310400347143,
+      "cut_ci": [
+        -0.2893615227905981,
+        -0.09225019721795835
+      ],
+      "median_ratio": 1.1607133216056296,
+      "success": {
+        "delta": 1.0752688172043012,
+        "ci": [
+          -1.056338028169014,
+          3.272727272727273
+        ],
+        "worse": 3,
+        "better": 6,
+        "n": 279
+      },
+      "time_ratio": 2.0382495324893855,
+      "time_ci": [
+        1.8873608708236103,
+        2.2027453362950387
+      ],
+      "verdict": {
+        "verdict": "NO SAVING",
+        "rule": 1,
+        "legs": []
+      }
+    },
+    "primary_b": {
+      "model": "sol",
+      "admitted": true,
+      "n_pairs": 279,
+      "bill_ratio": 0.9917916485353124,
+      "bill_ci": [
+        0.9191897547604045,
+        1.065893386018877
+      ],
+      "success": {
+        "delta": -2.1505376344086025,
+        "ci": [
+          -4.562737642585551,
+          0.3558718861209964
+        ],
+        "worse": 8,
+        "better": 2,
+        "n": 279
+      },
+      "time_ratio": 0.924431851911235,
+      "time_ci": [
+        0.8614034964767381,
+        0.9967471608114467
+      ],
+      "verdict": {
+        "verdict": "PARTICLE-1 ALONE IS ENOUGH",
+        "rule": 5,
+        "legs": []
+      }
+    },
+    "p_vs_n": {
+      "model": "sol",
+      "admitted": false,
+      "n_pairs": 279,
+      "cut": -0.19795635076994578,
+      "cut_ci": [
+        -0.3121989665887803,
+        -0.08952659092952264
+      ],
+      "median_ratio": 1.1584784148503189,
+      "success": {
+        "delta": 3.225806451612903,
+        "ci": [
+          0.7272727272727273,
+          5.825242718446602
+        ],
+        "worse": 2,
+        "better": 11,
+        "n": 279
+      },
+      "time_ratio": 2.2048672687720203,
+      "time_ci": [
+        2.04976913316362,
+        2.360268063982966
+      ],
+      "verdict": null
+    },
+    "degraded": {
+      "R-N": [],
+      "R-P": []
+    }
+  },
+  "marker_hits": {
+    "per_arm": {
+      "particle W": 49,
+      "opus P": 9,
+      "opus R": 20,
+      "sol P": 11,
+      "sol R": 66,
+      "sol N": 19
+    },
+    "per_session": {
+      "basicmachines-co__basic-memory-334__W__particle particle W trial 1 attempt 1": 7,
+      "vprusso__toqito-1484_interface__P__opus opus P trial 1 attempt 1": 9,
+      "vprusso__toqito-1484_interface__R__opus opus R trial 1 attempt 1": 13,
+      "unit8co__darts-2985__W__particle particle W trial 1 attempt 1": 27,
+      "packit__packit-2684__R__opus opus R trial 1 attempt 1": 7,
+      "geopython__pygeoapi-2338__P__sol sol P trial 1 attempt 1": 11,
+      "geopython__pygeoapi-2338__R__sol sol R trial 1 attempt 1": 35,
+      "geopython__pygeoapi-2338__W__particle particle W trial 1 attempt 1": 7,
+      "packit__packit-2684__W__particle particle W trial 1 attempt 1": 4,
+      "avaiga__taipy-2797__R__sol sol R trial 1 attempt 1": 12,
+      "vyperlang__vyper-4801__R__sol sol R trial 1 attempt 1": 19,
+      "vyperlang__vyper-4801__N__sol sol N trial 1 attempt 1": 19,
+      "meltano__meltano-9929__W__particle particle W trial 1 attempt 1": 4
+    }
+  },
+  "reruns": [
+    {
+      "model": "opus",
+      "cell": "F",
+      "reruns": 5,
+      "rerun_graded": 0,
+      "rerun_missing": 5,
+      "missing": 5
+    },
+    {
+      "model": "opus",
+      "cell": "J",
+      "reruns": 3,
+      "rerun_graded": 0,
+      "rerun_missing": 3,
+      "missing": 3
+    },
+    {
+      "model": "opus",
+      "cell": "N",
+      "reruns": 4,
+      "rerun_graded": 0,
+      "rerun_missing": 4,
+      "missing": 4
+    },
+    {
+      "model": "opus",
+      "cell": "P",
+      "reruns": 6,
+      "rerun_graded": 0,
+      "rerun_missing": 6,
+      "missing": 6
+    },
+    {
+      "model": "opus",
+      "cell": "R",
+      "reruns": 7,
+      "rerun_graded": 0,
+      "rerun_missing": 7,
+      "missing": 7
+    },
+    {
+      "model": "particle",
+      "cell": "W",
+      "reruns": 8,
+      "rerun_graded": 0,
+      "rerun_missing": 8,
+      "missing": 8
+    },
+    {
+      "model": "sol",
+      "cell": "J",
+      "reruns": 2,
+      "rerun_graded": 0,
+      "rerun_missing": 2,
+      "missing": 2
+    },
+    {
+      "model": "sol",
+      "cell": "N",
+      "reruns": 8,
+      "rerun_graded": 0,
+      "rerun_missing": 8,
+      "missing": 8
+    },
+    {
+      "model": "sol",
+      "cell": "P",
+      "reruns": 9,
+      "rerun_graded": 0,
+      "rerun_missing": 9,
+      "missing": 9
+    },
+    {
+      "model": "sol",
+      "cell": "R",
+      "reruns": 6,
+      "rerun_graded": 0,
+      "rerun_missing": 6,
+      "missing": 6
+    }
+  ],
+  "unknown_calls": {
+    "opus P": {
+      "count": 1,
+      "reserved_micros": 1599580
+    },
+    "sol P": {
+      "count": 1,
+      "reserved_micros": 9218
+    }
+  },
+  "booked_no_usage_calls": {},
+  "no_usage_5xx": {
+    "sol R": {
+      "count": 3,
+      "shadow_micros": 1587601
+    },
+    "opus R": {
+      "count": 2,
+      "shadow_micros": 9051
+    },
+    "sol P": {
+      "count": 3,
+      "shadow_micros": 1224791
+    },
+    "sol J": {
+      "count": 1,
+      "shadow_micros": 384628
+    },
+    "opus P": {
+      "count": 1,
+      "shadow_micros": 8809
+    }
+  },
+  "base_env": {
+    "opus N": {
+      "sessions": 283,
+      "hit": 139
+    },
+    "sol N": {
+      "sessions": 287,
+      "hit": 132
+    },
+    "opus J": {
+      "sessions": 102,
+      "hit": 53
+    },
+    "opus R": {
+      "sessions": 286,
+      "hit": 136
+    },
+    "particle W": {
+      "sessions": 103,
+      "hit": 62
+    },
+    "sol P": {
+      "sessions": 288,
+      "hit": 131
+    },
+    "sol R": {
+      "sessions": 285,
+      "hit": 127
+    },
+    "opus P": {
+      "sessions": 285,
+      "hit": 140
+    },
+    "opus F": {
+      "sessions": 104,
+      "hit": 55
+    },
+    "sol J": {
+      "sessions": 101,
+      "hit": 49
+    }
+  },
+  "nonroot": {
+    "rows": [
+      {
+        "model": "opus",
+        "cell": "F",
+        "sessions": 104,
+        "pip_install": 12,
+        "cache_write": 7,
+        "git_global": 0,
+        "sudo": 0
+      },
+      {
+        "model": "opus",
+        "cell": "J",
+        "sessions": 102,
+        "pip_install": 8,
+        "cache_write": 8,
+        "git_global": 0,
+        "sudo": 0
+      },
+      {
+        "model": "opus",
+        "cell": "N",
+        "sessions": 283,
+        "pip_install": 6,
+        "cache_write": 28,
+        "git_global": 1,
+        "sudo": 1
+      },
+      {
+        "model": "opus",
+        "cell": "P",
+        "sessions": 285,
+        "pip_install": 19,
+        "cache_write": 23,
+        "git_global": 1,
+        "sudo": 1
+      },
+      {
+        "model": "opus",
+        "cell": "R",
+        "sessions": 286,
+        "pip_install": 22,
+        "cache_write": 22,
+        "git_global": 0,
+        "sudo": 0
+      },
+      {
+        "model": "particle",
+        "cell": "W",
+        "sessions": 103,
+        "pip_install": 7,
+        "cache_write": 28,
+        "git_global": 0,
+        "sudo": 1
+      },
+      {
+        "model": "sol",
+        "cell": "J",
+        "sessions": 101,
+        "pip_install": 24,
+        "cache_write": 11,
+        "git_global": 0,
+        "sudo": 0
+      },
+      {
+        "model": "sol",
+        "cell": "N",
+        "sessions": 287,
+        "pip_install": 52,
+        "cache_write": 86,
+        "git_global": 0,
+        "sudo": 1
+      },
+      {
+        "model": "sol",
+        "cell": "P",
+        "sessions": 288,
+        "pip_install": 70,
+        "cache_write": 26,
+        "git_global": 0,
+        "sudo": 1
+      },
+      {
+        "model": "sol",
+        "cell": "R",
+        "sessions": 285,
+        "pip_install": 65,
+        "cache_write": 30,
+        "git_global": 0,
+        "sudo": 1
+      }
+    ],
+    "over_10pct": [
+      {
+        "model": "opus",
+        "cell": "F",
+        "kind": "pip_install",
+        "rate": 0.115385
+      },
+      {
+        "model": "particle",
+        "cell": "W",
+        "kind": "cache_write",
+        "rate": 0.271845
+      },
+      {
+        "model": "sol",
+        "cell": "J",
+        "kind": "pip_install",
+        "rate": 0.237624
+      },
+      {
+        "model": "sol",
+        "cell": "J",
+        "kind": "cache_write",
+        "rate": 0.108911
+      },
+      {
+        "model": "sol",
+        "cell": "N",
+        "kind": "pip_install",
+        "rate": 0.181185
+      },
+      {
+        "model": "sol",
+        "cell": "N",
+        "kind": "cache_write",
+        "rate": 0.299652
+      },
+      {
+        "model": "sol",
+        "cell": "P",
+        "kind": "pip_install",
+        "rate": 0.243056
+      },
+      {
+        "model": "sol",
+        "cell": "R",
+        "kind": "pip_install",
+        "rate": 0.22807
+      },
+      {
+        "model": "sol",
+        "cell": "R",
+        "kind": "cache_write",
+        "rate": 0.105263
+      }
+    ],
+    "gaps": [
+      {
+        "model": "opus",
+        "kind": "pip_install",
+        "gap": 0.094183,
+        "high": "F",
+        "low": "N"
+      },
+      {
+        "model": "opus",
+        "kind": "cache_write",
+        "gap": 0.031632,
+        "high": "N",
+        "low": "F"
+      },
+      {
+        "model": "opus",
+        "kind": "git_global",
+        "gap": 0.003534,
+        "high": "N",
+        "low": "F"
+      },
+      {
+        "model": "opus",
+        "kind": "sudo",
+        "gap": 0.003534,
+        "high": "N",
+        "low": "F"
+      },
+      {
+        "model": "sol",
+        "kind": "pip_install",
+        "gap": 0.061871,
+        "high": "P",
+        "low": "N"
+      },
+      {
+        "model": "sol",
+        "kind": "cache_write",
+        "gap": 0.209374,
+        "high": "N",
+        "low": "P"
+      },
+      {
+        "model": "sol",
+        "kind": "git_global",
+        "gap": 0,
+        "high": "J",
+        "low": "J"
+      },
+      {
+        "model": "sol",
+        "kind": "sudo",
+        "gap": 0.003509,
+        "high": "R",
+        "low": "J"
+      }
+    ]
+  },
+  "label_drops_not_bare_runner": {
+    "opus P particle": 441,
+    "sol P particle": 540,
+    "opus R particle": 450,
+    "sol R particle": 571,
+    "opus J jev": 120,
+    "opus F frontier": 162,
+    "sol J jev": 112,
+    "sol J frontier": 50,
+    "opus J frontier": 37,
+    "opus R frontier": 1,
+    "sol P frontier": 1
+  },
+  "acting": {
+    "rows": [
+      {
+        "cell": "P",
+        "type": "safe",
+        "n": 8509,
+        "by_layer": {
+          "particle": 0.9996474321306852,
+          "frontier": 0.0003525678693148431
+        },
+        "no_answers": 3,
+        "retries": 28,
+        "wrong_acts": 686,
+        "labelled_acts": 8506,
+        "unknown_acts": 0,
+        "fix_hits": 0,
+        "fix_dropped": 0
+      },
+      {
+        "cell": "P",
+        "type": "next_step",
+        "n": 7756,
+        "by_layer": {
+          "main_turn": 1
+        },
+        "no_answers": 5,
+        "retries": 36,
+        "wrong_acts": 0,
+        "labelled_acts": 0,
+        "unknown_acts": 0,
+        "fix_hits": 0,
+        "fix_dropped": 0
+      },
+      {
+        "cell": "P",
+        "type": "tests_passed",
+        "n": 1201,
+        "by_layer": {
+          "particle": 0.9866777685262281,
+          "rule": 0.012489592006661115,
+          "frontier": 0.0008326394671107411
+        },
+        "no_answers": 1,
+        "retries": 5,
+        "wrong_acts": 1,
+        "labelled_acts": 7,
+        "unknown_acts": 0,
+        "fix_hits": 0,
+        "fix_dropped": 0
+      },
+      {
+        "cell": "P",
+        "type": "done",
+        "n": 652,
+        "by_layer": {
+          "particle": 0.9309815950920245,
+          "rule": 0.03987730061349693,
+          "frontier": 0.029141104294478526
+        },
+        "no_answers": 19,
+        "retries": 51,
+        "wrong_acts": 252,
+        "labelled_acts": 607,
+        "unknown_acts": 0,
+        "fix_hits": 0,
+        "fix_dropped": 0
+      },
+      {
+        "cell": "P",
+        "type": "relevant",
+        "n": 99,
+        "by_layer": {
+          "keep": 1
+        },
+        "no_answers": 26,
+        "retries": 46,
+        "wrong_acts": 0,
+        "labelled_acts": 0,
+        "unknown_acts": 0,
+        "fix_hits": 137,
+        "fix_dropped": 0
+      },
+      {
+        "cell": "R",
+        "type": "safe",
+        "n": 8330,
+        "by_layer": {
+          "jev": 0.9983193277310924,
+          "particle": 0.0016806722689075631
+        },
+        "no_answers": 14,
+        "retries": 0,
+        "wrong_acts": 797,
+        "labelled_acts": 8330,
+        "unknown_acts": 0,
+        "fix_hits": 0,
+        "fix_dropped": 0
+      },
+      {
+        "cell": "R",
+        "type": "next_step",
+        "n": 7597,
+        "by_layer": {
+          "main_turn": 1
+        },
+        "no_answers": 14,
+        "retries": 38,
+        "wrong_acts": 0,
+        "labelled_acts": 0,
+        "unknown_acts": 0,
+        "fix_hits": 0,
+        "fix_dropped": 0
+      },
+      {
+        "cell": "R",
+        "type": "tests_passed",
+        "n": 1235,
+        "by_layer": {
+          "particle": 0.9821862348178138,
+          "rule": 0.01700404858299595,
+          "frontier": 0.0008097165991902834
+        },
+        "no_answers": 1,
+        "retries": 10,
+        "wrong_acts": 1,
+        "labelled_acts": 4,
+        "unknown_acts": 0,
+        "fix_hits": 0,
+        "fix_dropped": 0
+      },
+      {
+        "cell": "R",
+        "type": "done",
+        "n": 665,
+        "by_layer": {
+          "particle": 0.924812030075188,
+          "rule": 0.04962406015037594,
+          "frontier": 0.02556390977443609
+        },
+        "no_answers": 17,
+        "retries": 54,
+        "wrong_acts": 262,
+        "labelled_acts": 615,
+        "unknown_acts": 0,
+        "fix_hits": 0,
+        "fix_dropped": 0
+      },
+      {
+        "cell": "R",
+        "type": "relevant",
+        "n": 110,
+        "by_layer": {
+          "keep": 0.5272727272727272,
+          "particle": 0.4727272727272727
+        },
+        "no_answers": 0,
+        "retries": 2,
+        "wrong_acts": 10,
+        "labelled_acts": 52,
+        "unknown_acts": 0,
+        "fix_hits": 149,
+        "fix_dropped": 10
+      },
+      {
+        "cell": "F",
+        "type": "safe",
+        "n": 1405,
+        "by_layer": {
+          "frontier": 1
+        },
+        "no_answers": 0,
+        "retries": 0,
+        "wrong_acts": 0,
+        "labelled_acts": 0,
+        "unknown_acts": 0,
+        "fix_hits": 0,
+        "fix_dropped": 0
+      },
+      {
+        "cell": "F",
+        "type": "next_step",
+        "n": 1383,
+        "by_layer": {
+          "main_turn": 0.9045553145336226,
+          "frontier": 0.09544468546637744
+        },
+        "no_answers": 0,
+        "retries": 0,
+        "wrong_acts": 0,
+        "labelled_acts": 0,
+        "unknown_acts": 0,
+        "fix_hits": 0,
+        "fix_dropped": 0
+      },
+      {
+        "cell": "F",
+        "type": "done",
+        "n": 122,
+        "by_layer": {
+          "frontier": 0.9344262295081968,
+          "rule": 0.06557377049180328
+        },
+        "no_answers": 0,
+        "retries": 0,
+        "wrong_acts": 0,
+        "labelled_acts": 0,
+        "unknown_acts": 0,
+        "fix_hits": 0,
+        "fix_dropped": 0
+      },
+      {
+        "cell": "J",
+        "type": "safe",
+        "n": 2903,
+        "by_layer": {
+          "jev": 0.6958318980365139,
+          "frontier": 0.30416810196348604
+        },
+        "no_answers": 0,
+        "retries": 0,
+        "wrong_acts": 22,
+        "labelled_acts": 2020,
+        "unknown_acts": 0,
+        "fix_hits": 0,
+        "fix_dropped": 0
+      },
+      {
+        "cell": "J",
+        "type": "next_step",
+        "n": 2707,
+        "by_layer": {
+          "main_turn": 0.9763575914296269,
+          "jev": 0.023642408570373107
+        },
+        "no_answers": 0,
+        "retries": 0,
+        "wrong_acts": 0,
+        "labelled_acts": 0,
+        "unknown_acts": 0,
+        "fix_hits": 0,
+        "fix_dropped": 0
+      },
+      {
+        "cell": "J",
+        "type": "tests_passed",
+        "n": 412,
+        "by_layer": {
+          "jev": 0.6820388349514563,
+          "frontier": 0.2354368932038835,
+          "rule": 0.0825242718446602
+        },
+        "no_answers": 0,
+        "retries": 0,
+        "wrong_acts": 0,
+        "labelled_acts": 1,
+        "unknown_acts": 0,
+        "fix_hits": 0,
+        "fix_dropped": 0
+      },
+      {
+        "cell": "J",
+        "type": "done",
+        "n": 238,
+        "by_layer": {
+          "frontier": 0.9117647058823529,
+          "rule": 0.07142857142857142,
+          "jev": 0.01680672268907563
+        },
+        "no_answers": 0,
+        "retries": 0,
+        "wrong_acts": 1,
+        "labelled_acts": 4,
+        "unknown_acts": 0,
+        "fix_hits": 0,
+        "fix_dropped": 0
+      },
+      {
+        "cell": "F",
+        "type": "tests_passed",
+        "n": 224,
+        "by_layer": {
+          "frontier": 1
+        },
+        "no_answers": 0,
+        "retries": 0,
+        "wrong_acts": 0,
+        "labelled_acts": 0,
+        "unknown_acts": 0,
+        "fix_hits": 0,
+        "fix_dropped": 0
+      },
+      {
+        "cell": "J",
+        "type": "relevant",
+        "n": 34,
+        "by_layer": {
+          "keep": 0.38235294117647056,
+          "jev": 0.6176470588235294
+        },
+        "no_answers": 0,
+        "retries": 0,
+        "wrong_acts": 5,
+        "labelled_acts": 21,
+        "unknown_acts": 0,
+        "fix_hits": 26,
+        "fix_dropped": 5
+      },
+      {
+        "cell": "F",
+        "type": "relevant",
+        "n": 2,
+        "by_layer": {
+          "frontier": 1
+        },
+        "no_answers": 0,
+        "retries": 0,
+        "wrong_acts": 0,
+        "labelled_acts": 0,
+        "unknown_acts": 0,
+        "fix_hits": 1,
+        "fix_dropped": 0
+      }
+    ],
+    "cells": [
+      {
+        "cell": "N",
+        "sessions": 570,
+        "decider_questions_per_session": 0,
+        "blocked_commands": 0,
+        "stops": {
+          "infra_error": 12,
+          "submitted": 558
+        }
+      },
+      {
+        "cell": "J",
+        "sessions": 203,
+        "decider_questions_per_session": 30.753694581280786,
+        "blocked_commands": 205,
+        "stops": {
+          "infra_error": 5,
+          "submitted": 198
+        }
+      },
+      {
+        "cell": "R",
+        "sessions": 571,
+        "decider_questions_per_session": 31.318739054290717,
+        "blocked_commands": 304,
+        "stops": {
+          "infra_error": 13,
+          "submitted": 558
+        }
+      },
+      {
+        "cell": "W",
+        "sessions": 103,
+        "decider_questions_per_session": 0,
+        "blocked_commands": 0,
+        "stops": {
+          "infra_error": 8,
+          "submitted": 93,
+          "step_stop": 2
+        }
+      },
+      {
+        "cell": "P",
+        "sessions": 573,
+        "decider_questions_per_session": 31.720767888307154,
+        "blocked_commands": 431,
+        "stops": {
+          "infra_error": 15,
+          "submitted": 557,
+          "wall_stop": 1
+        }
+      },
+      {
+        "cell": "F",
+        "sessions": 104,
+        "decider_questions_per_session": 0,
+        "blocked_commands": 45,
+        "stops": {
+          "infra_error": 5,
+          "submitted": 96,
+          "allowance_stop": 3
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,12 @@
+import json,glob,collections
+c=collections.defaultdict(lambda:[0,0])
+for f in glob.glob("$VM_HOME/scored/batch4/journals/*.ndjson"):
+  last={}
+  for l in open(f):
+    j=json.loads(l)
+    if j["kind"]=="request": last[j.get("reservation_id")]=j.get("model")
+    if j["kind"]!="outcome": continue
+    if "particle" not in str(last.get(j.get("reservation_id"))): continue
+    h=j["at"][11:15]+"0"
+    c[h][0]+=1; c[h][1]+= j["status"]==404
+for h in sorted(c): print(h, c[h][0], c[h][1], "%.1f%%" % (100*c[h][1]/c[h][0]))

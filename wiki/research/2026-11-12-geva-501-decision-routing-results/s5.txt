@@ -1,0 +1,82 @@
+## S5 per decision call latency (ms, from decisions.jsonl layers)
+
+| cell | decider | calls | p50 | p90 | mean | failed calls | by type (n, p50, p90) |
+|---|---|---|---|---|---|---|---|
+| opus F | frontier | 3128 | 1991 | 3943 | 2563 | 0 | done 114, 8125, 14456; next_step 1383, 1996, 3418; relevant 2, 9550, 13683; safe 1405, 1970, 3224; tests_passed 224, 1899, 2665 |
+| opus J | jev | 3087 | 180 | 230 | 190 | 0 | done 97, 187, 242; next_step 1321, 179, 219; relevant 7, 172, 205; safe 1446, 181, 237; tests_passed 216, 183, 241 |
+| opus J | frontier | 627 | 2623 | 8077 | 3941 | 0 | done 113, 8212, 13957; safe 467, 2176, 4827; tests_passed 47, 2024, 5096 |
+| opus P | particle | 9729 | 1628 | 4653 | 2839 | 14 | done 326, 10216, 43232; next_step 4129, 2202, 5458; relevant 22, 28620, 71363; safe 4607, 1235, 2880; tests_passed 645, 1151, 2615 |
+| opus P | frontier | 9 | 11011 | 14874 | 10929 | 0 | done 8, 11011, 14874; safe 1, 3203, 3203 |
+| opus R | jev | 9422 | 181 | 231 | 196 | 0 | done 327, 181, 226; next_step 3993, 181, 226; relevant 27, 189, 240; safe 4433, 182, 234; tests_passed 642, 182, 226 |
+| opus R | particle | 5008 | 2046 | 6979 | 3941 | 17 | done 327, 9081, 44338; next_step 3998, 2098, 5721; relevant 27, 13320, 28572; safe 14, 1591, 2301; tests_passed 642, 1158, 2395 |
+| opus R | frontier | 11 | 10435 | 14225 | 11007 | 0 | done 10, 10435, 14225; tests_passed 1, 8866, 8866 |
+| sol J | jev | 3118 | 181 | 229 | 191 | 0 | done 86, 181, 215; next_step 1386, 180, 226; relevant 27, 193, 235; safe 1457, 182, 231; tests_passed 162, 189, 299 |
+| sol J | frontier | 570 | 2489 | 5453 | 3333 | 0 | done 104, 4333, 11487; safe 416, 2351, 4053; tests_passed 50, 2003, 3676 |
+| sol P | particle | 8447 | 1656 | 5203 | 3199 | 40 | done 300, 8031, 46165; next_step 3627, 2260, 6232; relevant 77, 27516, 81288; safe 3902, 1286, 2658; tests_passed 541, 1380, 3039 |
+| sol P | frontier | 14 | 5196 | 8459 | 6130 | 0 | done 11, 6535, 8459; safe 2, 3944, 5196; tests_passed 1, 2351, 2351 |
+| sol R | jev | 8442 | 184 | 232 | 198 | 0 | done 305, 182, 217; next_step 3599, 183, 228; relevant 83, 198, 236; safe 3883, 184, 236; tests_passed 572, 187, 238 |
+| sol R | particle | 4559 | 2292 | 8135 | 4264 | 10 | done 305, 7677, 45507; next_step 3599, 2292, 6366; relevant 83, 13144, 27020; tests_passed 572, 1413, 2963 |
+| sol R | frontier | 7 | 7557 | 9568 | 7178 | 0 | done 7, 7557, 9568 |
+
+pooled over every routed cell:
+  jev: n 24069, p50 182 ms, p90 231 ms, mean 195 ms
+  jev opus: n 12509, p50 181 ms, p90 231 ms, mean 194 ms
+  jev sol: n 11560, p50 183 ms, p90 231 ms, mean 196 ms
+  particle: n 27743, p50 1803 ms, p90 5723 ms, mean 3382 ms
+  particle opus: n 14737, p50 1765 ms, p90 5336 ms, mean 3213 ms
+  particle sol: n 13006, p50 1845 ms, p90 6159 ms, mean 3572 ms
+  frontier: n 4366, p50 2057 ms, p90 5052 ms, mean 2919 ms
+  frontier opus: n 3775, p50 2025 ms, p90 4860 ms, mean 2836 ms
+  frontier sol: n 591, p50 2535 ms, p90 5964 ms, mean 3445 ms
+
+proxy journal cross-check (latency_ms at the metering proxy, every call in graded sessions):
+  opus J typesafe jev: n 3087, p50 158 ms, p90 192 ms
+  opus P particle-1: n 9789, p50 1590 ms, p90 4708 ms
+  opus R typesafe jev: n 9423, p50 158 ms, p90 190 ms
+  opus R particle-1: n 5079, p50 2006 ms, p90 7044 ms
+  sol J typesafe jev: n 3118, p50 160 ms, p90 193 ms
+  sol P particle-1: n 8567, p50 1621 ms, p90 5395 ms
+  sol R typesafe jev: n 8442, p50 160 ms, p90 195 ms
+  sol R particle-1: n 4616, p50 2254 ms, p90 8201 ms
+  opus N main-model call (reference: a decision made inside the agent's own turn): n 3620, p50 2614 ms, p90 6818 ms
+  sol N main-model call (reference: a decision made inside the agent's own turn): n 3494, p50 3679 ms, p90 9346 ms
+  particle W main-model call (reference: a decision made inside the agent's own turn): n 3028, p50 2071 ms, p90 6873 ms
+
+## S5 where session time goes (mean seconds a session)
+
+| cell | sessions | session | main model | Jev | particle-1 | frontier decider | rest | main calls | main ms a call | decider calls | deciders' share of session time (95% interval) | main model's share |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| opus F | 99 | 229.6 | 53.3 | 0.0 | 0.0 | 81.0 | 95.4 | 13.6 | 3905 | 31.6 | 35.3% (30.7 to 40.4) | 23.2% (20.2 to 26.6) |
+| opus J | 99 | 179.6 | 54.9 | 5.9 | 0.0 | 25.0 | 93.8 | 14.0 | 3923 | 37.5 | 17.2% (14.5 to 20.3) | 30.6% (25.4 to 36.6) |
+| opus N | 279 | 137.7 | 47.6 | 0.0 | 0.0 | 0.0 | 90.1 | 13.0 | 3671 | 0.0 | 0.0% (0.0 to 0.0) | 34.6% (29.8 to 40.5) |
+| opus P | 279 | 278.8 | 60.7 | 0.0 | 99.0 | 0.4 | 118.7 | 15.8 | 3844 | 34.9 | 35.6% (31.9 to 40.0) | 21.8% (19.8 to 24.1) |
+| opus R | 279 | 250.8 | 60.6 | 6.6 | 70.7 | 0.4 | 112.5 | 15.3 | 3951 | 51.8 | 31.0% (27.7 to 34.6) | 24.1% (21.8 to 26.7) |
+| particle W | 95 | 175.2 | 102.9 | 0.0 | 0.0 | 0.0 | 72.2 | 31.9 | 3230 | 0.0 | 0.0% (0.0 to 0.0) | 58.8% (53.2 to 65.2) |
+| sol J | 99 | 149.1 | 77.1 | 6.0 | 0.0 | 19.2 | 46.8 | 14.7 | 5244 | 37.3 | 16.9% (15.0 to 19.0) | 51.7% (48.2 to 55.3) |
+| sol N | 279 | 96.6 | 65.5 | 0.0 | 0.0 | 0.0 | 31.1 | 12.5 | 5232 | 0.0 | 0.0% (0.0 to 0.0) | 67.8% (64.3 to 71.3) |
+| sol P | 279 | 213.0 | 71.7 | 0.0 | 96.9 | 0.3 | 44.1 | 14.0 | 5120 | 30.3 | 45.6% (43.5 to 47.7) | 33.7% (32.0 to 35.5) |
+| sol R | 279 | 196.9 | 72.1 | 6.0 | 69.7 | 0.2 | 48.9 | 13.9 | 5188 | 46.6 | 38.5% (36.5 to 40.6) | 36.6% (35.0 to 38.3) |
+
+decider seconds a session by decider and decision type:
+  opus F: frontier next_step 32.6, frontier safe 32.5, frontier done 10.9, frontier tests_passed 4.8, frontier relevant 0.2
+  opus J: frontier safe 13.5, frontier done 10.2, jev safe 2.8, jev next_step 2.5, frontier tests_passed 1.3, jev tests_passed 0.4, jev done 0.2, jev relevant 0.0
+  opus P: particle next_step 44.3, particle safe 27.2, particle done 21.3, particle tests_passed 3.4, particle relevant 2.8, frontier done 0.3, frontier safe 0.0
+  opus R: particle next_step 43.3, particle done 22.3, particle tests_passed 3.6, jev safe 3.2, jev next_step 2.7, particle relevant 1.5, jev tests_passed 0.4, frontier done 0.4, jev done 0.2, particle safe 0.1, frontier tests_passed 0.0, jev relevant 0.0
+  sol J: frontier safe 12.0, frontier done 6.0, jev safe 2.8, jev next_step 2.6, frontier tests_passed 1.2, jev tests_passed 0.3, jev done 0.2, jev relevant 0.1
+  sol P: particle next_step 42.2, particle safe 22.4, particle done 19.0, particle relevant 9.9, particle tests_passed 3.4, frontier done 0.3, frontier safe 0.0, frontier tests_passed 0.0
+  sol R: particle next_step 43.3, particle done 18.2, particle relevant 4.6, particle tests_passed 3.6, jev safe 2.8, jev next_step 2.5, jev tests_passed 0.4, jev done 0.2, frontier done 0.2, jev relevant 0.1
+
+speed ratios from the pooled per-call latencies: frontier decider over Jev 11.3x at p50, 21.9x at p90; particle-1 over Jev 9.9x at p50, 24.8x at p90; per model, frontier over Jev: opus 11.2x at p50, 21.0x at p90, sol 13.9x at p50, 25.8x at p90
+
+Jev layers skipped as fan-out siblings and layers skipped as state_over_limit, per cell: opus F 0/0, opus J 19/0, opus N 0/0, opus P 0/0, opus R 0/19, particle W 0/0, sol J 19/0, sol N 0/0, sol P 0/0, sol R 0/0
+
+## S5 paired: the time difference per task, treatment minus control (mean seconds a paired task)
+
+| contrast | pairs | session | main model | Jev | particle-1 | frontier decider | rest | main calls |
+|---|---|---|---|---|---|---|---|---|
+| opus R minus N | 279 | 113.1 | 12.9 | 6.6 | 70.7 | 0.4 | 22.4 | 2.4 |
+| opus P minus N | 279 | 141.1 | 13.1 | 0.0 | 99.0 | 0.4 | 28.7 | 2.8 |
+| opus R minus P | 279 | -28.0 | -0.2 | 6.6 | -28.2 | 0.1 | -6.3 | -0.5 |
+| sol R minus N | 279 | 100.3 | 6.6 | 6.0 | 69.7 | 0.2 | 17.8 | 1.4 |
+| sol P minus N | 279 | 116.4 | 6.2 | 0.0 | 96.9 | 0.3 | 13.0 | 1.5 |
+| sol R minus P | 279 | -16.1 | 0.4 | 6.0 | -27.2 | -0.1 | 4.8 | -0.1 |

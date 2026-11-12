@@ -1,0 +1,13 @@
+#!/bin/bash
+# GEVA-501 S4 input: join each scored trial's logged decisions with its grounded labels (labels join), offline and keyless.
+set -uo pipefail
+G=$WORK; R=$G/runs/dr-scored@906185467619; O=$G/reading-scored/joined; mkdir -p $O; cd $G/wt
+n=0; bad=0
+for f in $G/labels-vm6/lbl/labels/*.jsonl $G/labels-vm7/lbl/labels/*.jsonl; do
+  b=$(basename $f .jsonl); session=${b%%.*}; trial=${b#*.}
+  d=$(ls -d $R/batch*/harbor/$session/$trial 2>/dev/null | head -1)
+  [ -n "$d" ] && [ -s "$d/agent/dr/decisions.jsonl" ] || { echo "NO TRIAL $b"; bad=$((bad+1)); continue; }
+  bun bin/gstack-evals decision-routing labels join --decisions "$d/agent/dr/decisions.jsonl" --labels "$f" --out "$O/$b.jsonl" > /dev/null 2>> $G/reading-scored/join.err || { echo "JOIN FAILED $b"; bad=$((bad+1)); }
+  n=$((n+1))
+done
+echo "joined $n, problems $bad, rows $(cat $O/*.jsonl | wc -l)"
