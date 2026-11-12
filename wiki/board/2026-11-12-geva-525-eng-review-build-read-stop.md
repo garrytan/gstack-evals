@@ -52,7 +52,7 @@ The 51 candidates are real changes from public repositories, mined for the earli
 
 The missing runners: bun test 3, PHP 3, JVM 3, Ruby 2, Dart 1, a Node project tested from Python 1, and Python in a subdirectory 1. Both qualified units are Go developer tools.
 
-The probe split its 21 qualifiers as 16 of 38 comparison, 2 of 4 reserve and 3 of 9 calibration. Its list of qualifier ids was not kept, so this recount ran every candidate through the harness rather than the probe's 21. The set sizes here (5 reserve, 8 calibration) differ from the probe's by one unit each way.
+The probe split its 21 qualifiers as 16 of 38 comparison, 2 of 4 reserve and 3 of 9 calibration. Its list of qualifier ids was not kept, so this recount ran every candidate through the harness rather than the probe's 21. The harness takes each unit's set from its unit record and split the 51 candidates as 38 comparison, 5 reserve and 8 calibration, against the probe's 38, 4 and 9. So one unit differs between reserve and calibration, either in its set label or in whether the two counts found a test-changing later fix for it, and this record does not show which. No reserve or calibration unit qualified in the frozen build or in the re-screen below, so no count here depends on it. Calibration units were shown to the earlier stage's arms, so a next attempt should check its reserve units against that stage's run list before it counts them as clean.
 
 ### Why the functional check failed
 
@@ -103,12 +103,12 @@ The unit whose gate crashed in the frozen build ran its gate here, with the fixe
 
 Installing the merged tree's dependencies conflicts with containment. The leak scan looks for lines that only the merge or a later fix adds, and a merged dependency install can put such lines into the image. One of the two units this change helped then failed the leak scan. The record does not show whether the dependency install caused that hit.
 
-**Units with no test runner, counted only, nothing built.** Of the 11 units dropped for having no bun test, PHP, JVM or Ruby runner, 8 have what a recipe would need at a first look: all 3 bun units have a bun lockfile and bun test files, all 3 JVM units have a build wrapper and test changes under src/test, and both Ruby units have a Gemfile.lock naming rspec or minitest. The 3 PHP units have phpunit and its config but no committed composer.lock, so an image would install floating versions. A runner only makes a unit testable. It still has to pass the functional, later-fix and leak checks, which 2 of the 36 units that had a runner passed in the frozen build.
+**Units with no test runner, counted only, nothing built.** Of the 11 units dropped for having no bun test, PHP, JVM or Ruby runner, 8 have what a recipe would need at a first look: all 3 bun units have a bun lockfile and bun test files, all 3 JVM units have a build wrapper and test changes under src/test, and both Ruby units have a Gemfile.lock naming rspec or minitest. The 3 PHP units have phpunit and its config but no committed composer.lock, so an image would install floating versions. A runner only makes a unit testable. It still has to pass the functional, later-fix and leak checks. In the frozen build, 27 units got an image with a working test runner, and 2 of them passed all three.
 
 ## What a next attempt needs
 
 - A supply screen run inside the frozen grading sandbox, from the start, before any sample size is fixed.
-- A decision, made before the freeze, on whether tests may write to a scratch copy of the repository and how much /tmp a run gets. On these 51 changes the writable copy and the bigger /tmp moved 4 units past the functional check, and 1 of them qualified.
+- A decision, made before the freeze, on whether tests may write to a scratch copy of the repository and how much /tmp a run gets. On these 51 changes, going by the frozen error each unit showed, the writable copy and the bigger /tmp moved 4 units past the functional check, and 1 of them qualified. The three changes ran together, so this reads error output and does not measure each change on its own.
 - A rule for dependencies the merge adds that keeps the leak scan meaningful, if the next attempt installs them at all.
 - Runners for the ecosystems the miner keeps finding, if the units are worth keeping.
 - Its own plan and its own preregistration.
