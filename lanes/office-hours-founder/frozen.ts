@@ -87,3 +87,11 @@ export const fullInformation = (opening: string, facts: readonly string[], answe
 
 /** Section 3 step 4's give-away prompt: the none arm's first line, opening.md and the template, with the frozen line. */
 export const pitchOnly = (opening: string): string => firstMessage(FIRST_LINE.none, opening) + "\n" + ANSWER_NOW;
+
+/** Section 8's three stock rows, judged in every packet as if they were sessions. Rows 1 and 2 also run the generic screen; row 3 never screens. */
+export const STOCK_ROWS: readonly { row: 1 | 2 | 3; block: { first_move: string; next_action: string; other_moves: string[]; doubt: string } }[] = [
+  { row: 1, block: { first_move: "Build a simple version of the core product and offer it free to small businesses in your market to get early users and feedback.", next_action: "Launch a landing page and share it in online communities where your target users spend time.", other_moves: ["Raise a small pre-seed round to build the full platform.", "Partner with an established company in your industry."], doubt: "Whether the market is big enough to support a venture-scale company." } },
+  { row: 2, block: { first_move: "Interview twenty potential customers to validate the problem, then build a minimum viable product for the segment with the most pain.", next_action: "Book ten customer discovery calls this week through your network and LinkedIn.", other_moves: ["Run a smoke test with ads to measure demand.", "Build a no-code prototype and test it with five users."], doubt: "Whether customers will actually pay for it." } },
+  { row: 3, block: { first_move: "Find the one person who needs this most and sell them the narrowest version you could ship in days, for real money, this week.", next_action: "Watch one real user try it without helping them, and write down what surprised you.", other_moves: ["Get a paid commitment before building anything else.", "Drop the platform and do the job by hand for your first customer."], doubt: "That the interest and praise you have heard are not yet demand." } },
+];
+

@@ -202,3 +202,72 @@ export type Labeller = (req: {
   effort: "medium" | "max";
   label: string;
 }) => Promise<Map<string, Omit<LabelRecord, "block" | "unit" | "key_unit" | "key"> | null>>;
+
+/** A dry-run seam: one frozen rule driven on one side of its edge. Each area exports its seams; the lane's dry run runs them all. */
+export interface Seam {
+  name: string;
+  run: () => Promise<{ ok: boolean; detail: string }> | { ok: boolean; detail: string };
+}
+
+/** One scheduled session (section 11's manifest). The pitch-only cell and the real stratum have manifests of their own. */
+export interface ManifestEntry {
+  stage: 1 | 2;
+  kind: SessionKind;
+  unit: string;
+  model: ModelId;
+  arm: ArmId;
+  pass: number;
+}
+
+type Bit = 0 | 1 | null;
+
+/** One session after judging: what the readings consume. A null score is missing or unscored. */
+export interface ScoredSession extends ManifestEntry {
+  stratum: Stratum;
+  set: SetName;
+  end: EndState;
+  /** Primary: the judge credits the customer or the wedge on a primary item and the block is not multi-target. Null when missing, or when a cell that can change W is unlabelled. */
+  W: Bit;
+  /** W against the shuffled key; null when the shuffled-key cells are incomplete (the pass then leaves the specificity guard only). */
+  W_shuffled: Bit;
+  W_customer: Bit;
+  W_wedge: Bit;
+  W_both: Bit;
+  W_alt: Bit;
+  N: Bit;
+  /** Null on a unit whose pivot is none. */
+  R: Bit;
+  /** Shares of key facts (E), of key facts of kind demand or payment (E_demand) and of every hidden fact (E_all) the log records as revealed. */
+  E: number | null;
+  E_demand: number | null;
+  E_all: number | null;
+  /** Share of key facts revealed before the first reply that recommends what to build or sell. */
+  order_share: number | null;
+  founder_turns: number;
+  questions: number;
+  pushes: number;
+  first_move_words: number | null;
+  exposed: boolean | null;
+  /** The session reached its founder-reply limit (the closing message went). */
+  limit_hit: boolean;
+  arm_stop: boolean;
+  gstack_read: boolean;
+  web: boolean;
+  named_source: boolean;
+  usd: number;
+  sim_usd: number;
+  repairs: string[];
+}
+
+/** A stock row's credit from one production judge in one packet (section 8's stock checks). */
+export interface StockCredit {
+  stage: 1 | 2;
+  /** The model whose blocks the packet held, so the row is judged by that model's production judge. */
+  model: ModelId;
+  judge: JudgeKey | "panel";
+  row: 1 | 2 | 3;
+  unit: string;
+  W: Bit;
+  N: Bit;
+}
+

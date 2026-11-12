@@ -1,7 +1,7 @@
 // Value: protects=section 6's parser, its one lenient parse and the normalizer, which decide W's no-block rows and what every judge reads.
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { ANSWER_NOW, CLOSING, EVERYTHING_ELSE, FIRST_LINE, FORCED_LINE, PREREG, TEMPLATE, firstMessage, fullInformation } from "../../lanes/office-hours-founder/frozen.ts";
+import { ANSWER_NOW, CLOSING, EVERYTHING_ELSE, FIRST_LINE, FORCED_LINE, PREREG, STOCK_ROWS, TEMPLATE, firstMessage, fullInformation } from "../../lanes/office-hours-founder/frozen.ts";
 import { normalizeBlock, parseFirstMove, renderBlock, replies, sessionParse } from "../../lanes/office-hours-founder/parse.ts";
 
 const fence = (label: string, body: string) => "Advice.\n\n```" + label + "\n" + body + "\n```\n";
@@ -10,7 +10,7 @@ const full = { first_move: "Sell missed-call text reminders to office managers a
 describe("frozen strings", () => {
   test("every cross-cutting frozen string appears in the prereg byte for byte", () => {
     const prereg = readFileSync(PREREG, "utf8");
-    for (const s of [TEMPLATE, CLOSING, ANSWER_NOW, FORCED_LINE, EVERYTHING_ELSE, ...Object.values(FIRST_LINE)]) expect(prereg.includes(s)).toBe(true);
+    for (const s of [TEMPLATE, CLOSING, ANSWER_NOW, FORCED_LINE, EVERYTHING_ELSE, ...Object.values(FIRST_LINE), ...STOCK_ROWS.flatMap((r) => [r.block.first_move, r.block.next_action, r.block.doubt, ...r.block.other_moves].map((t) => JSON.stringify(t)))]) expect(prereg.includes(s)).toBe(true);
   });
   test("the first message and the full-information prompt keep their order", () => {
     expect(firstMessage(FIRST_LINE.lens, " pitch \n")).toBe(FIRST_LINE.lens + "\n\npitch\n\n" + TEMPLATE);
