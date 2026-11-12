@@ -30,6 +30,25 @@ and Names lines are written only to a custody directory outside the repository.
   strata under custody, returning counts and digests only.
 - `fixtures.ts` holds invented, neutral fixtures and the scripted caller and labeller the tests and seams use.
 - `seams.ts` exports the dry-run seams for every start rule 7 edge this area owns, both sides.
+- `cli.ts` exports the area's paid commands, `of author` and `of real`, for the lane's command table.
+
+## Commands
+
+`gstack-evals of author --units <dir> --gstack <checkout> --item <ledger item> --spend-cap <usd> [--pilot] [--ceiling]
+[--resume] [--concurrency <n>] [--record <dir>] [--ledger <path>]` runs the constructed pipeline. `--pilot` runs the
+4-unit pilot and prints its supply projection; without it the run goes on to the quotas or the cap. `--ceiling` is the
+CEILING redraw. `--gstack` must be a checkout at the pin (HEAD, VERSION and the phase-2a file are all checked).
+
+`gstack-evals of real --units <dir> --frame <json> --gstack <checkout> --item <ledger item> --spend-cap <usd> [--resume]
+[--record <dir>] [--ledger <path>]` runs the real stratum.
+
+Both refuse `--units` and `--frame` inside the repository, open one metered client on `--item`, and print counts and
+digests only.
+
+**The frame file is a Captain decision.** The prereg runs the 40 queries through "one web search tool" without naming
+one, and no search key is configured. So `of real` reads the frame from `--frame`: a JSON object mapping each of the 40
+frozen queries to its first 10 result URLs. It refuses a missing or unknown query and a query with more than 10 results.
+Who produces that file, and with which search tool, is for the Captain to decide.
 
 ## What another area must provide
 
@@ -135,6 +154,27 @@ and Names lines are written only to a custody directory outside the repository.
     sale stated as a year alone reads as that year's December; with no year, or no published cutoff, the mark is unknown.
 37. **Efforts not stated in the prereg.** Traceability runs at high effort like the audits. The probe judges run at medium,
     like production labels. The type labels and the founder-page test run at default effort.
+38. **One meter per command.** The ledger keeps one open lease per item, so a second meter on the same item is refused.
+    The production labeller (score/judge.ts) therefore runs through the same meter as every other call, with the product
+    value eval's version tap recording each judge reply's model version.
+39. **Provider checks.** Every Argon reply, cached or not, must name Google Vertex, as the simulator's check does. A pin
+    drift the meter catches on Sol or particle-1 is re-raised as E_OF_PROVIDER_DRIFT. Either stops the command; the lease
+    settles first.
+40. **One cap.** `--spend-cap` is both the lease's amount and the authoring cap that the pilot projection and the cap stop
+    read.
+41. **Resume.** `--resume` reuses `--units`, its run id and its reply cache, so settled calls replay at no cost. The spend
+    of earlier launches is kept in `run.json` and counts toward `spent()`.
+42. **The supply stop's MDD.** It is power.py's guard-rule MDD for Opus at its 2 passes, at the planning design of section
+    12's part F: control rate 0.25, ICC 0.5, shuffled-key credit 0.05. Under 2 units it reads as none.
+43. **Supply stop output.** When the pilot does not fit, the pilot's outcomes are written and the projection printed, and
+    only then does the command raise E_OF_SUPPLY_SHORT.
+44. **`--pilot` writes no units.** Sets fill only in the full run, which replays the pilot from the cache. The pilot writes
+    its outcomes and summary.
+45. **Fetching.** The miner GETs each URL as the frame wrote it (http or https), follows redirects, waits at most 30
+    seconds, and sends the user agent `gstack-evals`. A network failure reads as status 0, which the gate counts as
+    unreadable. Wikipedia's pageviews go through the same serial fetch.
+46. **Neutral packet ids.** The blocks in authoring label packets are `b1` and `b2`, so a judge never sees a validator's
+    name or which stock row it reads.
 
 ## Rules that may be wrong (built as written)
 
