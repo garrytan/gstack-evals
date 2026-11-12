@@ -6,6 +6,7 @@ import { createHash } from "node:crypto";
 import { CODES, docAnchor, isReasonCode, type ReasonCode } from "../../src/errors/codes.ts";
 import { scoreE2e } from "./e2e-score.ts";
 import { e2eCommand, rowsCommand, runCommand } from "./run/cli.ts";
+import { commands as scoreCommands } from "./score/cli.ts";
 import { simFounder } from "./wire.ts";
 
 interface Io {
@@ -30,6 +31,7 @@ function runWithSimulator(argv: string[], io: Io, env: Env): Promise<number> {
 export const SUBCOMMANDS: Record<string, { summary: string; run: Run }> = {
   run: { summary: "one cell's sessions on the Docker rig with the simulated founder (stage1, smoke, stage2, pitch, real)", run: runWithSimulator },
   rows: { summary: "a launch's rows against its frozen manifest, with the end-state counts", run: (argv, io) => rowsCommand(argv, io) },
+  ...scoreCommands,
   e2e: { summary: "the keyless end to end: fixture founders through the real rig, proxy, ledger, simulator, packets and scorer", run: (argv, io, env) => e2eCommand(argv, io, env, { founder: simFounder(), after: scoreE2e }) },
   dryrun: { summary: "the keyless dry run that drives every frozen rule (start rule 7)", run: async (argv, io) => (await import("./dryrun.ts")).run(argv, io) },
 };
@@ -39,7 +41,7 @@ const lines = (code: ReasonCode, message: string) => [message, "fix: " + CODES[c
 export async function main(argv: string[], io: Io = { out: (t) => console.log(t), err: (t) => console.error(t) }, env: Env = process.env): Promise<number> {
   const [sub, ...rest] = argv;
   if (!sub || sub === "--help" || sub === "-h") {
-    io.out(["gstack-evals of <command>", "", ...Object.entries(SUBCOMMANDS).map(([k, v]) => "  " + k.padEnd(8) + v.summary)].join("\n"));
+    io.out(["gstack-evals of <command>", "", ...Object.entries(SUBCOMMANDS).map(([k, v]) => "  " + k.padEnd(14) + v.summary)].join("\n"));
     return sub ? 0 : 2;
   }
   const entry = SUBCOMMANDS[sub];
