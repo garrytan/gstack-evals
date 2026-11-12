@@ -12,6 +12,27 @@
     }
   ],
   "dependencies": {
+    "wiki/plans/2026-11-09-geva-418-office-hours-founder-evidence-prereg/**": [
+      "tests/of/parse.test.ts",
+      "tests/of/author/prompts.test.ts",
+      "tests/of/author/cli.test.ts",
+      "tests/of/sim/founder.test.ts",
+      "tests/of/sim/fidelity.test.ts",
+      "tests/of/score/judge.test.ts",
+      "tests/of/read/projection.test.ts",
+      "tests/of/read/cli.test.ts"
+    ],
+    "lanes/office-hours-founder/score/prompts/**": [
+      "tests/of/score/judge.test.ts",
+      "tests/of/score/seams.test.ts",
+      "tests/of/score/cli.test.ts"
+    ],
+    "lanes/product-value/cutoffs.json": [
+      "tests/of/author/real.test.ts"
+    ],
+    "tests/of/run/driver-sdk.ts": [
+      "tests/of/run/driver-sdk.test.ts"
+    ],
     "lanes/autoplan-audit/crashchild.ts": [
       "tests/autoplan-audit/dryrun.test.ts"
     ],
