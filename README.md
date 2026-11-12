@@ -81,13 +81,14 @@ To rerun a paid experiment, follow the "Replicate it" section of its post, with 
 
 - **Plan reviews judged by what happened after release.** Does gstack's developer-experience plan review make a new developer feature easier to adopt, judged by the install, error, docs and upgrade trouble real developers hit later? [Plan](wiki/plans/2026-11-09-geva-417-devex-review-intentions-prereg/README.md), and [what the planning skills are meant to do](wiki/research/2026-11-09-geva-412-plan-mode-intentions/README.md).
 - **A rule as a hook against the same rule as text.** Is "run a test after your last edit before you stop" followed more often when a gstack hook enforces it than when it sits in a skill's text? [Plan](wiki/plans/2026-11-09-geva-448-harness-mechanics-prereg/README.md).
-- **Small decisions sent to cheaper models.** If a small, fast model answers a coding agent's simple either-or decisions when it's sure, and passes the rest to a cheaper general model, does the bill fall without losing task success? [Plan](wiki/plans/2026-11-09-geva-411-decision-routing-prereg/README.md).
 - **A widely shared prompt about hidden state.** Does asking an agent to find the implicit state machines in a codebase, the hidden states a program moves between, turn up real bugs? [Pilot](wiki/board/2026-11-09-geva-492-state-machine-prompt-pilots.md).
 - **pstack's checked models of that state.** Does a second step that writes those states down as a precise model and has a tool check every path, as Lauren Tan's pstack skills do, turn the prompt into a bug finder? [Pilot](wiki/board/2026-11-09-geva-492-state-machine-prompt-pilots.md).
 
 ## Other research
 
 We also replayed a claim that an agent's small decisions can go to Jev (jev-1.13.0), a fast decision model, with particle-1 taking the ones Jev was unsure of. On all 8 decision points we replayed from gstack, gbrain (Garry Tan's memory system for agents) and a private game, that routing cost 0.2% to 6.8% of what the model each project uses today costs. But particle-1 alone matched or beat that routing on 7 and measurably beat today's model on 4, and the routing lost accuracy on gstack's grading calls, where a model scores work against a checklist (-9.9 points [-18.5, -1.2]). This was an exploratory replay with 39 to 296 held-back items per decision point, not a test planned in advance. [Report](wiki/research/2026-11-09-geva-421-jev-decision-routing/README.md).
+
+We then tested that claim on a coding agent, in a test planned in advance. Routing a coding agent's small decisions to Jev, then particle-1, made it cost more, not less, on both Opus 5.5 and GPT-6.1 Sol, with no measurable change in task success, and particle-1 alone matched the router. The agent was mini-swe-agent, an open-source coding agent, working on 279 real GitHub issues. This result hasn't had its independent checks yet, so its numbers stay in the post. [Results](wiki/research/2026-11-12-geva-501-decision-routing-results/README.md), [plan](wiki/plans/2026-11-09-geva-411-decision-routing-prereg/README.md).
 
 ## More
 
