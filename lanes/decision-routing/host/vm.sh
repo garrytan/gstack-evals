@@ -120,11 +120,25 @@ case $cmd in
       if [ ! -e "$2/$rel" ]; then new+=("$rel"); elif ! cmp -s "$f" "$2/$rel"; then differ+=("$rel"); fi
     done < <(find "$tmp/dr-record" -type f -print0)
     [ ${#differ[@]} -eq 0 ] || die "E_DR_RUNNER: these record files exist in $2 and differ on $1: ${differ[*]}; nothing was copied"
+    copied=0
     for rel in "${new[@]}"; do
-      mkdir -p "$(dirname "$2/$rel")"
-      cp -p "$tmp/dr-record/$rel" "$2/$rel"
+      dest="$2/$rel"
+      mkdir -p "$(dirname "$dest")"
+      part=$(mktemp "$(dirname "$dest")/.$(basename "$dest").XXXXXX")
+      cp -p "$tmp/dr-record/$rel" "$part"
+      mv --no-clobber "$part" "$dest" 2> /dev/null || true
+      if [ ! -e "$part" ]; then
+        copied=$((copied + 1))
+        continue
+      fi
+      if [ -f "$dest" ] && [ -r "$dest" ] && cmp -s "$part" "$dest"; then
+        rm -f "$part"
+        continue
+      fi
+      rm -f "$part"
+      die "E_DR_RUNNER: $rel could not be published to $2: another copy took the slot with different or unreadable content, or the move left it empty; $copied files were copied before it and nothing after"
     done
-    echo "record: ${#new[@]} new files copied back from $1 to $2"
+    echo "record: $copied new files copied back from $1 to $2"
     if [ -n "$confirm" ]; then
       open_leases() {
         DR_RECORD=$1 bun -e 'import { readdirSync } from "node:fs"; import { readItem } from "'"$here"'/../../../src/runner/ledger/record.ts"; const r = process.env.DR_RECORD!; for (const item of readdirSync(r + "/items").sort()) { const o = readItem(r, item).open; if (o) console.log(o.lease_id); }'

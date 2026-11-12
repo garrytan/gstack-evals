@@ -321,6 +321,7 @@ A viral post says routing your coding agent's small decisions to a tiny calibrat
 
 - Records. The preregistration merged as #279 and the keyless build as #292; the run thread and its subagents ran calibration, the pilot, the scored stage, the label pass and the replays, and wrote this post. Run ids: calibration dr-calibration-r3@7875f7a2b7df (after dr-calibration@c6998ad6324f and dr-calibration-r2@8e65098317a0, partial and never pooled), pilot dr-pilot@cc1b24e015de, scored dr-scored@906185467619 (head 9061854 for batch 1, 1cca006 for batches 2 to 6), replays on the dr-replay item.
 - Captain rulings this post reports (recorded verbatim in the run record): the line raise to $2,140 and six seeded batches (2026-11-10); the batch-1c rerun and the 404 sensitivity read (2026-11-11); the taipy-2797 exception (b) and the unyt-628 drop (a); the third-party check accepted "not as a precedent"; memory hits reported per arm and model, not counted as leaks.
+- Review of this post's pull request found a race in the record export (`record-out` in lanes/decision-routing/host/vm.sh): two exports that overlapped could both pass the check that a record file is new, and the second would overwrite the first's lease file. The race existed in 1cca006, the code that ran. The run never overlapped record-outs, so no lease or reading is affected. The same pull request fixes it.
 - Paid model calls, from the ledger record's close files (spent plus unknown-outcome charges):
 
   | Stage | Items | Charged | Cap |
