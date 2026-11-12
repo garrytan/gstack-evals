@@ -60,7 +60,8 @@ export async function scoreE2e(o: { run: RunResult; out: string; unitsDir: strin
   check("the exposure detector saw the office-hours session read phase-2a and ask two questions", oh?.exposure?.load === true && oh.questions === 2, oh ? JSON.stringify(oh.exposure) : "no row");
   const built = buildLabelPackets({ stage: 1, seed: SEED, units, rows });
   const roles = Object.values(built.map.packets).map((p) => p.role);
-  check("stage 1 packets: one label packet with both blocks, a shuffled-key packet and the anchor packets, each with the stock rows", roles.filter((r) => r === "label").length === 1 && roles.includes("shuffled") && roles.includes("anchor") && built.packets.every((p) => p.blocks.length >= 3), roles.join(", "));
+  const label = built.packets.find((p) => built.map.packets[p.id]!.role === "label");
+  check("stage 1 packets: one label packet with both fx-answer blocks and the 3 stock rows, an anchor packet per calibration unit, and no shuffled-key packet, since only one unit holds a block and a derangement needs two", roles.filter((r) => r === "label").length === 1 && label?.blocks.length === 5 && roles.filter((r) => r === "anchor").length === 2 && !roles.includes("shuffled"), roles.join(", "));
   const W = mkdtempSync(join(homedir(), ".capy", "work", "of-e2e-labels-"));
   try {
     const record = join(W, "record");
