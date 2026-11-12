@@ -39,11 +39,11 @@ describe("founderCall through the metered client", () => {
       if (status !== 200) return Response.json({ error: { message: "down" } }, { status });
       return Response.json({ id: "gen-1", model: "google/gemini-4-argon-20261013", provider, choices: [{ message: { role: "assistant", content: answer("Two services pay me.") } }], usage: { prompt_tokens: 1000, completion_tokens: 200 } });
     }) as typeof fetch;
-  const meterWith = async (fetch: typeof fetch) => {
+  const meterWith = async (send: typeof globalThis.fetch) => {
     const dir = tmp();
     mkdirSync(join(dir, "out"));
     const { record, ledger } = ledgerWith(dir, ["of-sim"]);
-    return openMeter({ item: "of-sim", runId: "r1", out: join(dir, "out"), cacheDir: join(dir, "cache"), maxOutputTokens: 1200, record, ledger, env: ENV, fetch });
+    return openMeter({ item: "of-sim", runId: "r1", out: join(dir, "out"), cacheDir: join(dir, "cache"), maxOutputTokens: 1200, record, ledger, env: ENV, fetch: send });
   };
 
   test("sends section 4's settings, caches by request digest and counts the session's spend", async () => {
