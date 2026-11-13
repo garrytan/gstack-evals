@@ -55,6 +55,10 @@ export const HM_PROFILE: Profile = {
   seed: HM.seed,
   concurrent: HM.concurrent,
   taskSetup: TASK_SETUP,
+  // A judge-bearing item's host ships the judge proxy's keys (jev's TYPESAFE, particle-1's OPENROUTER) beside its own route
+  // key, through host-up's same route-key filter, and only when the plan carries a judge arm. A non-judge item ships none,
+  // so its part VMs carry only the item model's route key.
+  proxyKeys: (plan) => (plan.parts.some((p) => p.rects.some((r) => r.arms.some((a) => (JUDGE as string[]).includes(a)))) ? ["TYPESAFE_API_KEY", "OPENROUTER_API_KEY"] : []),
   // Section 13's attempt 2 (l1.ts rerun). stage1-opus-r2 is itself the one attempt for its cells (D3).
   attempt2: {
     skip: (name) => (name === "stage1-opus-r2" ? "stage1-opus-r2 is section 13's one attempt for Stage 1 Opus's 92 unstarted cells (D3), so it takes no attempt 2 of its own" : null),

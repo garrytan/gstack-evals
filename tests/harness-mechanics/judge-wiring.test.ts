@@ -7,8 +7,9 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, wri
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ARMS, FOUR, JUDGE } from "../../lanes/harness-mechanics/pins.ts";
+import { HM_PROFILE, itemPlan } from "../../lanes/harness-mechanics/plans.ts";
 import { armSpec, jobConfig } from "../../quick/laneb/runner/grid.ts";
-import { ARM_SPECS as L1_ARMS } from "../../quick/laneb/l1/l1.ts";
+import { ARM_SPECS as L1_ARMS, hostSecretKeys, type Plan } from "../../quick/laneb/l1/l1.ts";
 import { HttpReservations } from "../../lanes/harness-mechanics/judge/judge-proxy.ts";
 import { judgeRunCheck, readJudgeSessions } from "../../lanes/harness-mechanics/judge-check.ts";
 import { JEV_MODEL, type HookSession } from "../../lanes/harness-mechanics/judge.ts";
@@ -329,5 +330,40 @@ describe("judge custody through the metering proxy (pieces 1, 2 and 3)", () => {
     expect(w.sent).toHaveLength(1);
     const c = judgeRunCheck(w.journalPath, [cleanSession(w.journalPath)]);
     expect([c.pass, c.custody_hits, c.marker_hits]).toEqual([true, 0, 0]);
+  });
+});
+
+describe("a judge-bearing host ships the judge proxy keys, a non-judge host does not (Amendment E)", () => {
+  // Real plans from the frozen splits: stage3-pilot and stage4 carry judge arms, stage1 does not. proxyKeys reads the plan's
+  // arms, so it ships the judge keys exactly for the items whose part VMs run a judge metering proxy.
+  const scored = Array.from({ length: 5 }, (_, i) => "scored-" + i);
+  const calibration = Array.from({ length: 12 }, (_, i) => "calib-" + i);
+  const planFor = (name: string): Plan => ({ parts: itemPlan(name, { scored, calibration }).parts } as unknown as Plan);
+  const keys = (name: string) => HM_PROFILE.proxyKeys!(planFor(name));
+
+  test("a judge item's plan carries a judge arm and ships TYPESAFE and OPENROUTER for the judge proxy", () => {
+    for (const name of ["stage3-pilot", "stage4-opus", "stage4-sol", "stage4-p1"]) {
+      const hasJudge = planFor(name).parts.some((p) => p.rects.some((r) => r.arms.some((a) => (JUDGE as string[]).includes(a))));
+      expect([name, hasJudge]).toEqual([name, true]);
+      expect([name, keys(name)]).toEqual([name, ["TYPESAFE_API_KEY", "OPENROUTER_API_KEY"]]);
+    }
+  });
+
+  test("a non-judge item's plan carries no judge arm and ships no proxy key", () => {
+    for (const name of ["stage1-opus", "stage1-sol", "stage1-p1"]) {
+      const hasJudge = planFor(name).parts.some((p) => p.rects.some((r) => r.arms.some((a) => (JUDGE as string[]).includes(a))));
+      expect([name, hasJudge]).toEqual([name, false]);
+      expect([name, keys(name)]).toEqual([name, []]);
+    }
+  });
+
+  test("hostSecretKeys ships the route key plus any judge keys plus UBICLOUD, deduped, both directions", () => {
+    // A non-judge host: exactly the item model's route key and UBICLOUD (the frozen Amendment E list).
+    expect(hostSecretKeys("OPENROUTER_API_KEY", [])).toEqual(["OPENROUTER_API_KEY", "UBICLOUD_API_KEY"]);
+    expect(hostSecretKeys("ANTHROPIC_API_KEY", [])).toEqual(["ANTHROPIC_API_KEY", "UBICLOUD_API_KEY"]);
+    // A judge Opus host (stage3-pilot): its route key, then the judge keys, then UBICLOUD.
+    expect(hostSecretKeys("ANTHROPIC_API_KEY", ["TYPESAFE_API_KEY", "OPENROUTER_API_KEY"])).toEqual(["ANTHROPIC_API_KEY", "TYPESAFE_API_KEY", "OPENROUTER_API_KEY", "UBICLOUD_API_KEY"]);
+    // A judge particle-1 host (stage4-p1): OPENROUTER is both the route key and a judge key, so it appears once.
+    expect(hostSecretKeys("OPENROUTER_API_KEY", ["TYPESAFE_API_KEY", "OPENROUTER_API_KEY"])).toEqual(["OPENROUTER_API_KEY", "TYPESAFE_API_KEY", "UBICLOUD_API_KEY"]);
   });
 });

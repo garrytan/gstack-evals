@@ -209,6 +209,10 @@ export type Profile = {
     skip: (item: string) => string | null;
     owed: (runs: { part: string; dir: string }[]) => { owed: { task: string; arm: string; reason: string }[]; rects: Rect[] };
   };
+  /** Extra provider key env names a host ships to its part VMs, beyond the item model's own route key, when the plan carries
+   * a part that needs a second metering proxy (harness mechanics' judge proxy). The host refuses if one is unset, exactly as
+   * it does for the route key, and each ships through the same route-key filter. L1 declares none. */
+  proxyKeys?: (plan: Plan) => string[];
 };
 function l1Parts(item: string, frozen: (f: { file: string; sha256: string }) => string, inputs: Record<string, string>): PartPlan[] {
   let tb2Parts: string | undefined;
@@ -224,6 +228,11 @@ function l1Parts(item: string, frozen: (f: { file: string; sha256: string }) => 
 }
 export const L1_PROFILE: Profile = { items: ITEMS, armSpecs: ARM_SPECS, tars: ["none", "before", "after", "off"], armManifests: L1.armManifests, hostRoot: L1.host.root, ledgerPort: L1.host.ledgerPort, seed: L1.seed, concurrent: L1.concurrent, parts: l1Parts };
 let P = L1_PROFILE;
+
+// The provider key env names a host ships to its part VMs: the item model's own route key first, then any extra proxy keys
+// the profile declares for this plan (harness mechanics' judge proxy), then UBICLOUD, deduped in that order. A non-judge
+// plan declares no extra key, so its secrets stay exactly the route key and UBICLOUD.
+export const hostSecretKeys = (routeKeyEnv: string, extraKeys: string[]): string[] => [...new Set([routeKeyEnv, ...extraKeys, "UBICLOUD_API_KEY"])];
 
 // --- Evidence: which cells started, and why a part ended -------------------------------------------------------------
 
@@ -760,6 +769,8 @@ function hostUp(work: string) {
   const keyEnv: string | undefined = proxy.routes?.[proxy.models?.[plan.model]?.route]?.key_env;
   if (!keyEnv) refuse("config/proxy.json has no route for " + plan.model);
   if (!process.env[keyEnv!]) usage("set " + keyEnv + ", the key for " + plan.model + "'s route in config/proxy.json; the host passes it to each part VM's metering proxy");
+  const extraKeys = P.proxyKeys?.(plan) ?? [];
+  for (const k of extraKeys) if (!process.env[k]) usage("set " + k + ", a proxy key " + plan.item + " needs for its judge parts; the host passes it to each part VM's judge metering proxy");
   if (process.env.UBI_RECOVERY_KEY) refuse("UBI_RECOVERY_KEY is set, but the host seals part-VM recovery bundles with UBICLOUD_API_KEY, so recover could not open them; unset it");
   runner();
   const n = new Set(hosts(work).map((r) => r.n)).size + 1;
@@ -789,7 +800,7 @@ function hostUp(work: string) {
     rmSync(bin, { recursive: true, force: true });
     const shaOut = must(remoteL1(name, "bash " + H + "/laneb/l1/host-bootstrap.sh >&2 && chmod +x " + H + "/bin/ubi-runner.sh && sha256sum " + H + "/bin/ubi-runner.sh"), "bootstrapping the host");
     if (!shaOut.includes(process.env.UBI_RUNNER_SHA256!)) throw new Error("the host's ubi-runner copy does not hash to UBI_RUNNER_SHA256");
-    const secrets = [keyEnv!, "UBICLOUD_API_KEY"].map((k) => k + "=" + (process.env[k] ?? (k === "UBICLOUD_API_KEY" ? process.env.UBICLOUD_API_TOKEN ?? "" : ""))).join("\n") + "\n";
+    const secrets = hostSecretKeys(keyEnv!, extraKeys).map((k) => k + "=" + (process.env[k] ?? (k === "UBICLOUD_API_KEY" ? process.env.UBICLOUD_API_TOKEN ?? "" : ""))).join("\n") + "\n";
     must(ubi(["ssh", name, "umask 077; cat > ~/.l1-secrets"], { input: secrets }), "writing the host's secrets file");
     must(ubi(["ssh", name, "mkdir -p " + H + "/work " + H + "/recovery " + H + "/ubi-state && cat > " + H + "/host.env.in && sed \"s#\\$HOME#$HOME#\" " + H + "/host.env.in > " + H + "/host.env"], { input: hostEnvText(plan.item, plan.cap_usd, process.env.UBI_OWNER ?? "") }), "writing host.env");
     const stage = mkdtempSync(join(tmpdir(), "l1-ledger-"));
