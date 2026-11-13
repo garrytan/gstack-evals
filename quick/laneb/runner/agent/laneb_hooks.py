@@ -547,9 +547,10 @@ class LanebHooksAgent(LanebAgent):
     def _judge_stop_on_jev_changes(self, container: str, log, session_id: str) -> list[dict]:
         """Read the judge session's hook log, copy it out for the analysis, and on a jevChanges line write the batch STOP
         file ($run/STOP, which vm-run.sh watches, by HM_JUDGE_STOP_FILE) so no further judge session starts. Returns the
-        jevChanges lines. A docker exec that fails raises and writes no judge-hooks.jsonl, so an empty copy never stands
-        in for a log that was not read; the caller records the failure in laneb-summary.json's teardown_errors."""
-        res = self._exec(container, f"cat {JUDGE_HOOK_LOG} 2>/dev/null || true", timeout=PROBE_TIMEOUT_S)
+        jevChanges lines. A docker exec that fails, a hook log the hook never wrote included, raises and writes no
+        judge-hooks.jsonl, so an empty copy never stands in for a log that was not read; the caller records the failure in
+        laneb-summary.json's teardown_errors."""
+        res = self._exec(container, f"cat {JUDGE_HOOK_LOG}", timeout=PROBE_TIMEOUT_S)
         if res.returncode != 0:
             raise RuntimeError(f"judge hook log copy failed: docker exec exited {res.returncode}: {res.stderr[-300:]!r}")
         text = res.stdout.decode(errors="replace")

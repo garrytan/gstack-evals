@@ -508,6 +508,19 @@ describe("judge-check per part: fail closed, judge spend and the smoke part (D1,
     expect(judgeRunCheck(journal, [s(hookLine + "\n")]).pass).toBe(true);
   });
 
+  test("judgeRunCheck: a judge session's hook log with lines passes, and an empty one fails like a missing one", () => {
+    const d = tempDir("hm-jce-"), journal = join(d, "j.ndjson");
+    writeFileSync(journal, "");
+    const s = (log: string | null): HookSession => ({ arm: "judge-p1", model: "claude-opus-5-5", task: "t1", trial: "1", log, journal, meter_id: "m1" });
+    for (const log of ["", "\n", " \n\n"]) {
+      const c = judgeRunCheck(journal, [s(log)]);
+      expect([c.pass, c.missing_logs, c.detail]).toEqual([false, 1, expect.stringContaining("1 judge session(s) with no readable hook log")]);
+    }
+    expect(judgeRunCheck(journal, [s(null)]).pass).toBe(false);
+    const lines = judgeRunCheck(journal, [s(hookLine + "\n")]);
+    expect([lines.pass, lines.missing_logs]).toEqual([true, 0]);
+  });
+
   test("per part: the smoke part is checked and named apart from section 11's inputs, an unlaunched part is listed, and each part reports its judge spend", () => {
     const work = workDir();
     part(work, SMOKE_PART);

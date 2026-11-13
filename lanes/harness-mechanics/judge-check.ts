@@ -79,7 +79,7 @@ export function journalSpend(path: string): JudgeSpend {
 
 /** The post-run check over one part's journal and judge sessions: journalCheck (custody_hits must be 0, marker_hits
  * counted), any jevChanges line across the sessions' hook logs, and the journal's spend. pass is false on a custody hit, a
- * missing journal, any jevChanges line, no judge session, or a judge session with no readable hook log. */
+ * missing journal, any jevChanges line, no judge session, or a judge session whose hook log is missing, unreadable or empty. */
 export function judgeRunCheck(journalPath: string, sessions: HookSession[]): JudgeRunCheck {
   const custody = journalCheck(journalPath);
   const jev_changes: JevChange[] = [];
@@ -87,12 +87,12 @@ export function judgeRunCheck(journalPath: string, sessions: HookSession[]): Jud
   for (const s of sessions) {
     if (!s.arm.startsWith("judge")) continue;
     const log = readHookLog(s.log);
-    if (!log.ok) missing_logs++;
+    if (!log.ok || !log.lines.length) missing_logs++;
     const changed = jevChanges(log.lines);
     if (changed.length) jev_changes.push({ arm: s.arm, model: s.model, task: s.task, trial: s.trial, lines: changed });
   }
   const judged = sessions.filter((s) => s.arm.startsWith("judge")).length;
-  const why = [...(judged ? [] : ["no judge session"]), ...(missing_logs ? [missing_logs + " judge session(s) with no readable hook log (evaluator/judge-hooks.jsonl)"] : [])];
+  const why = [...(judged ? [] : ["no judge session"]), ...(missing_logs ? [missing_logs + " judge session(s) with no readable hook log (evaluator/judge-hooks.jsonl missing, unreadable or empty)"] : [])];
   const pass = custody.pass && jev_changes.length === 0 && !why.length;
   const detail =
     custody.detail +

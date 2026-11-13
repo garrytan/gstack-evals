@@ -766,7 +766,7 @@ def _judge_agent(tmp, fake, backend, markers_file=None, markers_dir=None, task="
     return a
 
 
-def _run_judge(tmp, fake, backend, markers_file=None, hook_log="", stop_file=None, markers_dir=None, task="task-a", harbor_layout=False, config=True, journal="", hook_rc=0):
+def _run_judge(tmp, fake, backend, markers_file=None, hook_log="", stop_file=None, markers_dir=None, task="task-a", harbor_layout=False, config=True, journal="", hook_rc=0, hook_file=None):
     calls = []
 
     def fake_manage(route, body):
@@ -784,6 +784,8 @@ def _run_judge(tmp, fake, backend, markers_file=None, hook_log="", stop_file=Non
     base_exec = a._exec
 
     def exec_(container, script, stdin=None, timeout=300):
+        if hook_file is not None and lh.JUDGE_HOOK_LOG in script:
+            return subprocess.run(["sh", "-c", script.replace(lh.JUDGE_HOOK_LOG, str(hook_file))], capture_output=True)
         if script.startswith("cat " + lh.JUDGE_HOOK_LOG):
             return subprocess.CompletedProcess(script, hook_rc, b"" if hook_rc else hook_log.encode(), b"Error response from daemon: container is not running" if hook_rc else b"")
         return base_exec(container, script, stdin, timeout)
@@ -1008,6 +1010,22 @@ def test_a_failed_hook_log_copy_is_recorded_in_teardown_errors_and_writes_no_hoo
     assert not (evdir / "judge-hooks.jsonl").exists(), "an unread hook log was written as an empty copy"
     errors = _summary(evdir)["teardown_errors"]
     assert "judge hook log copy failed: docker exec exited 1" in errors["judge_hook_log"], errors
+
+
+def test_a_hook_log_the_hook_never_wrote_fails_the_copy_in_a_real_shell_and_writes_no_hook_log(tmp):
+    _run_judge(tmp, Fake(tmp), "jev", hook_file=tmp / "never-written.jsonl")
+    evdir = tmp / "trial" / "evaluator"
+    assert not (evdir / "judge-hooks.jsonl").exists(), "a hook log the hook never wrote was copied out as an empty log"
+    errors = _summary(evdir)["teardown_errors"]
+    assert "judge hook log copy failed: docker exec exited 1" in errors["judge_hook_log"], errors
+
+
+def test_a_hook_log_with_lines_copies_out_in_a_real_shell_and_records_no_teardown_error(tmp):
+    (tmp / "hooks.jsonl").write_text(_CLEAN_HOOK_LOG)
+    _run_judge(tmp, Fake(tmp), "jev", hook_file=tmp / "hooks.jsonl")
+    evdir = tmp / "trial" / "evaluator"
+    assert (evdir / "judge-hooks.jsonl").read_text() == _CLEAN_HOOK_LOG
+    assert not [k for k in _summary(evdir)["teardown_errors"] if k.startswith("judge_")]
 
 
 def test_a_hook_log_copy_that_succeeds_is_written_and_records_no_teardown_error(tmp):
