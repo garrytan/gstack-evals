@@ -114,6 +114,20 @@ pull() {
 }
 mkdir -p "$run/out/pull.d"
 side=$(find "$HOME/.local/share/uv/tools/harbor" -path '*harbor-docker-egress-control-sidecar/Dockerfile' 2>/dev/null | head -1 || true)
+# The sidecar's read timeout (D12, lanes/harness-mechanics/README.md). Harbor's gost.yaml turns HTTP sniffing on and sets no
+# readTimeout, and gost's sniffer then gives up on a response whose headers have not come back within 15 s. A non-streaming
+# answer slower than that (every judge call, and Claude Code's non-streaming fallback) was cut, paid and never read. This
+# sets the handler's readTimeout to 900 s in the installed gost.yaml before anything builds the sidecar: the judge proxy's
+# own upstream deadline (src/runner/proxy/metering-proxy.ts UPSTREAM_DEADLINE_MS), and the value lanes/decision-routing's
+# vendored sidecar uses (agent/dr_sidecar.py). sed -i writes a new file, so uv's cached copy stays as published, and Harbor
+# names the sidecar image by a hash of its build context, so a changed file builds a new image. A gost.yaml that doesn't
+# end up with exactly that one line exits 8 before any trial.
+if [ -n "$side" ]; then
+  gost_yaml="$(dirname "$side")/gost.yaml"
+  grep -q '^ *readTimeout:' "$gost_yaml" 2>/dev/null || sed -i 's/^        sniffing: true$/&\n        readTimeout: 900s/' "$gost_yaml" 2>/dev/null || true
+  [ "$(grep -c '^ *readTimeout:' "$gost_yaml" 2>/dev/null)" = 1 ] && grep -q '^        readTimeout: 900s$' "$gost_yaml" \
+    || { echo "could not set readTimeout: 900s in Harbor's egress sidecar ($gost_yaml); no paid trial started" >&2; exit 8; }
+fi
 for f in "$run"/tasks/*/environment/Dockerfile $side; do
   if [ -f "$f" ]; then awk 'toupper($1) == "FROM" { print $2 }' "$f"; fi
 done | sort -u > "$run/out/images.txt"

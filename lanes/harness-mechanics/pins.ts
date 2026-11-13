@@ -34,8 +34,12 @@ export const HM = {
 // ruling B, 2026-11-13, made before any Stage 3 spend): stage3-pilot's cap is $95, not section 22's $90, so the caps sum
 // to 2,485. Deviation D11 (the Captain's ruling B, 2026-11-13): stage3-pilot closed done at $0.612939 after its smoke part,
 // when one judgment failed open on particle-1's 429s, and stage3-pilot-2, approved at $95, runs the same smoke and pilot on
-// the judge proxy's five-attempt retry budget, so the caps sum to 2,580.
-export const CAPS_USD = { "stage1-opus": 150, "stage1-opus-r2": 121.685384, "stage1-sol": 180, "stage1-sol-run": 179.96147, "stage1-p1": 70, "stage2-replay": 90, "stage2-replay-2": 88.088418, "stage2-replay-3": 79.029935, "stage3-pilot": 95, "stage3-pilot-2": 95, "stage4-opus": 660, "stage4-sol": 800, "stage4-p1": 280, vms: 160 } as const;
+// the judge proxy's five-attempt retry budget, so the caps sum to 2,580. Deviation D12 (the Captain's rulings, 2026-11-13):
+// stage3-pilot-2 stopped after pilot-opus, when Harbor's egress sidecar cut particle-1 judge answers slower than 15 s and 26
+// of 378 judgment calls failed open, and closed done at $11.98629. vm-run.sh now sets the sidecar's readTimeout to 900 s, and
+// stage3-pilot-3 runs the same smoke and pilot, all four parts, on that setup. Its cap is the rest of stage3-pilot's $95 and
+// sits inside it (CARVED), so the caps still sum to 2,580.
+export const CAPS_USD = { "stage1-opus": 150, "stage1-opus-r2": 121.685384, "stage1-sol": 180, "stage1-sol-run": 179.96147, "stage1-p1": 70, "stage2-replay": 90, "stage2-replay-2": 88.088418, "stage2-replay-3": 79.029935, "stage3-pilot": 95, "stage3-pilot-2": 95, "stage3-pilot-3": 94.387061, "stage4-opus": 660, "stage4-sol": 800, "stage4-p1": 280, vms: 160 } as const;
 // Deviation D3 (ruling A on Stage 1's WORKDIR defect): at 6aeabc2 the image build failed before any model call for every
 // arm of these 23 calibration tasks, in stage1-opus's two parts. stage1-opus's ledger is bound to that run, so it closed
 // at $28.314616 settled, and the 92 cells rerun on stage1-opus-r2, whose cap is the rest of stage1-opus's $150 and sits
@@ -63,7 +67,7 @@ export const STAGE1_OPUS_R2_TASKS = [
 // to output_config (the judge tar is unchanged). stage2-replay-2 closed at $9.058483 settled and is never reopened; the replay
 // reruns on stage2-replay-3, whose cap is the rest of stage2-replay-2's $88.088418 and sits inside it (CARVED), so the three
 // stage2-replay items total $90 (1.911582 + 9.058483 + 79.029935) and the caps still sum to 2,480.
-export const CARVED: Partial<Record<keyof typeof CAPS_USD, keyof typeof CAPS_USD>> = { "stage1-opus-r2": "stage1-opus", "stage1-sol-run": "stage1-sol", "stage2-replay-2": "stage2-replay", "stage2-replay-3": "stage2-replay-2" };
+export const CARVED: Partial<Record<keyof typeof CAPS_USD, keyof typeof CAPS_USD>> = { "stage1-opus-r2": "stage1-opus", "stage1-sol-run": "stage1-sol", "stage2-replay-2": "stage2-replay", "stage2-replay-3": "stage2-replay-2", "stage3-pilot-3": "stage3-pilot" };
 export const ledgerCapsUsd = () => Object.entries(CAPS_USD).filter(([k]) => !Object.hasOwn(CARVED, k)).reduce((a, [, b]) => a + b, 0);
 // The ledger items' caps plus the crew's: 2,980 inside the 3,000 line (2,880 before D10, 2,885 before D11).
 export const capsTotalUsd = () => ledgerCapsUsd() + HM.crewCapUsd;

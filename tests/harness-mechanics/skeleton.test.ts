@@ -92,6 +92,13 @@ describe("plans", () => {
     expect(b.parts.map((x) => x.prefix)).toEqual(["stage3-pilot-2/smoke-opus/", "stage3-pilot-2/pilot-opus/", "stage3-pilot-2/pilot-sol/", "stage3-pilot-2/pilot-p1/"]);
   });
 
+  test("stage3-pilot-3 (D12) has stage3-pilot's plan under its own ledger prefix: the smoke part first, then all three pilot parts", () => {
+    const a = plan("stage3-pilot"), c = plan("stage3-pilot-3");
+    expect([c.sessions, c.picker_calls]).toEqual([74, 0]);
+    expect(c.parts.map((x) => [x.name, x.model, x.cells, x.rects])).toEqual(a.parts.map((x) => [x.name, x.model, x.cells, x.rects]));
+    expect(c.parts.map((x) => x.prefix)).toEqual(["stage3-pilot-3/smoke-opus/", "stage3-pilot-3/pilot-opus/", "stage3-pilot-3/pilot-sol/", "stage3-pilot-3/pilot-p1/"]);
+  });
+
   test("Stage 4: 920 sessions and 200 picker calls per model, 2,760 in all; the judge arms only on the first 60 scored tasks", () => {
     const s4 = ["stage4-opus", "stage4-sol", "stage4-p1"].map(plan);
     for (const p of s4) {

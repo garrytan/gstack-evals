@@ -242,7 +242,7 @@ describe("vm-run.sh's image pulls before the oracle gate (R3 amendment 3, rule 3
   }
   // A run whose tasks' environment Dockerfiles are the test's, against the fake hub, with fake curl, sleep and sg (whose
   // docker pull asks the hub). The oracle trials pass and the proxy never turns healthy, so a run past the gate exits 8.
-  async function pulls(fake: ReturnType<typeof hub>, tasks: Record<string, string>, opts: { side?: string; stopOnSleep?: boolean; stopOnPull?: boolean; hangPull?: boolean; env?: Record<string, string>; killAfterMs?: number } = {}) {
+  async function pulls(fake: ReturnType<typeof hub>, tasks: Record<string, string>, opts: { side?: string; gost?: string | null; stopOnSleep?: boolean; stopOnPull?: boolean; hangPull?: boolean; env?: Record<string, string>; killAfterMs?: number } = {}) {
     const s = setup(Object.fromEntries(Object.keys(tasks).map((t) => [t, "1"])));
     const root = join(s.run, "..");
     const url = fake.h.url;
@@ -254,6 +254,7 @@ describe("vm-run.sh's image pulls before the oracle gate (R3 amendment 3, rule 3
       const d = join(root, "home/.local/share/uv/tools/harbor/lib/python3.12/site-packages/harbor/environments/harbor-docker-egress-control-sidecar");
       mkdirSync(d, { recursive: true });
       writeFileSync(join(d, "Dockerfile"), opts.side);
+      if (opts.gost !== null) writeFileSync(join(d, "gost.yaml"), opts.gost ?? GOST);
     }
     fake.h.sleepLog = join(root, "sleeps.log");
     const bin = (name: string, body: string) => { writeFileSync(join(root, "bin", name), "#!/usr/bin/env bash\n" + body); chmodSync(join(root, "bin", name), 0o755); };
@@ -270,6 +271,8 @@ describe("vm-run.sh's image pulls before the oracle gate (R3 amendment 3, rule 3
     return { ...s, code, stdout, stderr, log: s.sg(), out, waited: fake.sleeps().filter((x) => x >= 1).reduce((a, x) => a + x, 0), pulls: fake.h.pulls };
   }
   const HEAD = "status\ttries\trate_limit_wait_s\timage\n";
+  const GOST = "services:\n  - name: transparent-egress\n    addr: \":12345\"\n    handler:\n      type: red\n      metadata:\n        sniffing: true\n        sniffing.timeout: 5s\n        sniffing.fallback: true\n    listener:\n      type: red\n";
+  const SIDE_DIR = "home/.local/share/uv/tools/harbor/lib/python3.12/site-packages/harbor/environments/harbor-docker-egress-control-sidecar";
 
   test("a pull refused at the rate limit waits out the window the registry gives and pulls again: no try spent, the task stays in", async () => {
     const r = await pulls(hub({ limitedUntil: 120, reset: true }), { a: "FROM img-a\n" });
@@ -319,6 +322,46 @@ describe("vm-run.sh's image pulls before the oracle gate (R3 amendment 3, rule 3
     expect(r.log.lastIndexOf("docker pull")).toBeLessThan(r.log.indexOf("oracle.json"));
     expect(r.code).toBe(8);
   }, 60_000);
+
+  test("D12: the sidecar's gost.yaml gets readTimeout: 900s under sniffing before the pulls, and the run goes on", async () => {
+    const fake = hub();
+    const r = await pulls(fake, { a: "FROM img-a\n" }, { side: "FROM alpine:3.20\n" });
+    const gost = readFileSync(join(r.run, "..", SIDE_DIR, "gost.yaml"), "utf8");
+    expect(gost).toBe(GOST.replace("        sniffing: true\n", "        sniffing: true\n        readTimeout: 900s\n"));
+    expect(r.pulls).toEqual({ "alpine:3.20": 1, "img-a": 1 });
+    expect(r.code).toBe(8);
+    expect(r.stderr).toContain("metering proxy not healthy");
+  }, 60_000);
+
+  test("D12: sed writes a new file, so uv's hard-linked cache copy of gost.yaml is left as published", async () => {
+    const root = mkdtempSync(join(tmpdir(), "laneb-gost-"));
+    const f = join(root, "gost.yaml"), cache = join(root, "cache.yaml");
+    writeFileSync(f, GOST);
+    Bun.spawnSync(["ln", f, cache]);
+    const step = readFileSync(join(import.meta.dir, "../runner/vm-run.sh"), "utf8").split("\n").find((l) => l.includes("sed -i 's/") && l.includes("readTimeout"))!.trim();
+    expect(Bun.spawnSync(["bash", "-c", "set -euo pipefail; gost_yaml=" + f + "; " + step]).exitCode).toBe(0);
+    expect(readFileSync(cache, "utf8")).toBe(GOST);
+    expect(readFileSync(f, "utf8")).toContain("        sniffing: true\n        readTimeout: 900s\n");
+  });
+
+  test("D12: a gost.yaml already at readTimeout: 900s is left alone and the run goes on", async () => {
+    const done = GOST.replace("        sniffing: true\n", "        sniffing: true\n        readTimeout: 900s\n");
+    const r = await pulls(hub(), { a: "FROM img-a\n" }, { side: "FROM alpine:3.20\n", gost: done });
+    expect(readFileSync(join(r.run, "..", SIDE_DIR, "gost.yaml"), "utf8")).toBe(done);
+    expect(r.pulls).toEqual({ "alpine:3.20": 1, "img-a": 1 });
+    expect(r.code).toBe(8);
+    expect(r.stderr).toContain("metering proxy not healthy");
+  }, 60_000);
+
+  for (const [what, gost] of [["its own readTimeout of 30s", GOST.replace("        sniffing: true\n", "        sniffing: true\n        readTimeout: 30s\n")], ["no sniffing line to set it under", GOST.replace("        sniffing: true\n", "")], ["no gost.yaml at all", null]] as const) {
+    test("D12: a sidecar with " + what + " exits 8 before any pull, and no paid trial starts", async () => {
+      const r = await pulls(hub(), { a: "FROM img-a\n" }, { side: "FROM alpine:3.20\n", gost });
+      expect(r.code).toBe(8);
+      expect(r.stderr).toContain("could not set readTimeout: 900s in Harbor's egress sidecar");
+      expect(r.pulls).toEqual({});
+      expect(r.log).not.toContain("harbor run");
+    }, 60_000);
+  }
 
   test("a STOP file during a wait at the rate limit ends the pulls before the oracle gate (exit 130)", async () => {
     const r = await pulls(hub({ limitedUntil: Infinity }), { a: "FROM img-a\n", b: "FROM img-b\n" }, { stopOnSleep: true });

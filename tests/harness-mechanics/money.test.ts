@@ -21,7 +21,7 @@ const run = (args: string[], env: Record<string, string> = {}) => Bun.spawnSync(
 
 describe("approvals", () => {
   test("each item's ledger takes its approval row at its recorded cap, and the row passes L1's item check", () => {
-    expect(CAPS_USD).toEqual({ "stage1-opus": 150, "stage1-opus-r2": 121.685384, "stage1-sol": 180, "stage1-sol-run": 179.96147, "stage1-p1": 70, "stage2-replay": 90, "stage2-replay-2": 88.088418, "stage2-replay-3": 79.029935, "stage3-pilot": 95, "stage3-pilot-2": 95, "stage4-opus": 660, "stage4-sol": 800, "stage4-p1": 280, vms: 160 });
+    expect(CAPS_USD).toEqual({ "stage1-opus": 150, "stage1-opus-r2": 121.685384, "stage1-sol": 180, "stage1-sol-run": 179.96147, "stage1-p1": 70, "stage2-replay": 90, "stage2-replay-2": 88.088418, "stage2-replay-3": 79.029935, "stage3-pilot": 95, "stage3-pilot-2": 95, "stage3-pilot-3": 94.387061, "stage4-opus": 660, "stage4-sol": 800, "stage4-p1": 280, vms: 160 });
     const d = tmp();
     for (const i of items) {
       const p = join(d, i + ".jsonl");
@@ -86,7 +86,8 @@ describe("reserve mechanics", () => {
     expect(txt).not.toContain("BAD");
     expect(txt).toContain("RESERVE stage1-sol-run: cap $179.96147, reserve per launch $36.00 (6 x $6), room for settled spend $143.96; C1 projection $144.64 fits");
     expect(txt).toContain("RESERVE stage3-pilot-2: cap $95, reserve per launch $30.00 (6 x $5), room for settled spend $65.00; C1 projection $84.90 fits");
-    expect(txt.split("\n").filter((x) => x.startsWith("RESERVE")).length).toBe(14);
+    expect(txt).toContain("RESERVE stage3-pilot-3: cap $94.387061, reserve per launch $30.00 (6 x $5), room for settled spend $64.39; C1 projection $84.90 fits");
+    expect(txt.split("\n").filter((x) => x.startsWith("RESERVE")).length).toBe(15);
   }, 60_000);
 });
 
@@ -178,6 +179,24 @@ describe("launch guard", () => {
     expect(launchGuard("stage1-sol-run", { ...out, "stage1-sol": gate(0.5, true) }, crew(0), run.parts, []).why).toEqual(["stage1-sol-run's cap $179.96 is not stage1-sol's cap less its settled $0.50"]);
     expect(launchGuard("stage1-sol-run", { ...out, "stage1-sol": gate(0.03853, true) }, crew(0), run.parts, []).ok).toBe(true);
   });
+  test("D12: stage3-pilot-3's cap sits inside stage3-pilot's, and it launches only once stage3-pilot is done at its smoke's settled $0.612939", () => {
+    expect(toMicros(CAPS_USD["stage3-pilot"]) - toMicros(0.612939)).toBe(toMicros(CAPS_USD["stage3-pilot-3"]));
+    expect(ITEMS["stage3-pilot-3"]).toEqual({ ...ITEMS["stage3-pilot"]!, capUsd: 94.387061 });
+    const { out } = approved(), parts = itemPlan("stage3-pilot-3", lists).parts;
+    const smoke = (settled: number, done: boolean) => {
+      const p = join(tmp(), "p.jsonl");
+      approve(p, "stage3-pilot", 95, "t");
+      const l = new Ledger(p, "stage3-pilot");
+      l.reserve("stage3-pilot/smoke-opus/a", toMicros(5)); l.settle("stage3-pilot/smoke-opus/a", toMicros(settled));
+      if (done) markDone(p, "stage3-pilot");
+      return readRows(p);
+    };
+    expect(lineCheck({ ...out, "stage3-pilot": smoke(0.612939, false) }, crew(400_000)).total).toBe(toMicros(2980));
+    expect(lineCheck({ ...out, "stage3-pilot": smoke(0.612939, true) }, crew(400_000)).total).toBe(toMicros(2980));
+    expect(launchGuard("stage3-pilot-3", { ...out, "stage3-pilot": smoke(0.612939, false) }, crew(0), parts, []).why).toEqual(["stage3-pilot-3's cap sits inside stage3-pilot's, so it launches only once stage3-pilot is marked done"]);
+    expect(launchGuard("stage3-pilot-3", { ...out, "stage3-pilot": smoke(1, true) }, crew(0), parts, []).why).toEqual(["stage3-pilot-3's cap $94.39 is not stage3-pilot's cap less its settled $1.00"]);
+    expect(launchGuard("stage3-pilot-3", { ...out, "stage3-pilot": smoke(0.612939, true) }, crew(0), parts, []).ok).toBe(true);
+  });
   test("C1: every session item fits fresh, and VM rows that would push the projection past the cap refuse", () => {
     for (const i of Object.keys(ITEMS) as Item[]) expect(c1Guard(i, [], itemPlan(i, lists).parts, []).fits).toBe(true);
     const parts = itemPlan("stage1-opus", lists).parts, fresh = c1Guard("stage1-opus", [], parts, []);
@@ -205,6 +224,9 @@ describe("launch guard", () => {
     // stage3-pilot-2 (D11) runs the same four parts under the same $95 cap, so its C1 projection is the same.
     const again = c1Guard("stage3-pilot-2", [], itemPlan("stage3-pilot-2", lists).parts, []);
     expect([again.fits, again.cap, again.total]).toEqual([true, toMicros(95), toMicros(84.9)]);
+    // stage3-pilot-3 (D12) runs the same four parts under the rest of stage3-pilot's $95, and its projection still fits.
+    const third = c1Guard("stage3-pilot-3", [], itemPlan("stage3-pilot-3", lists).parts, []);
+    expect([third.fits, third.cap, third.total]).toEqual([true, toMicros(94.387061), toMicros(84.9)]);
   });
   test("hm launch runs the guard first: a refusal exits 2 with E_HM_LAUNCH and starts nothing; a pass reaches L1", () => {
     const { d } = approved(), work = tmp();
