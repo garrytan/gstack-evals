@@ -251,7 +251,8 @@ export function replayReport(out: string): ReplayReport {
 }
 
 export type RunOpts = { items: ReplayItem[]; itemsSha256: string; clients: ReplayClients; out: string; start: string; ledger: string; counts?: Counts };
-const ITEM = "stage2-replay";
+// stage2-replay-2 after the stage2-replay reservation-only stop (pins.ts deviation D5); stage2-replay is consumed and closed.
+const ITEM = "stage2-replay-2";
 export type Spend = { spent: number; inflightMicros: number; settled: number; worst: number; lease: number };
 
 // Section 22 gives the replay's expected $60 and no per-call figure, so the plan's per-call estimate is $60 over the

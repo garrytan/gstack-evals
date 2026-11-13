@@ -21,7 +21,7 @@ const run = (args: string[], env: Record<string, string> = {}) => Bun.spawnSync(
 
 describe("approvals", () => {
   test("each item's ledger takes its approval row at its recorded cap, and the row passes L1's item check", () => {
-    expect(CAPS_USD).toEqual({ "stage1-opus": 150, "stage1-opus-r2": 121.685384, "stage1-sol": 180, "stage1-sol-run": 179.96147, "stage1-p1": 70, "stage2-replay": 90, "stage3-pilot": 90, "stage4-opus": 660, "stage4-sol": 800, "stage4-p1": 280, vms: 160 });
+    expect(CAPS_USD).toEqual({ "stage1-opus": 150, "stage1-opus-r2": 121.685384, "stage1-sol": 180, "stage1-sol-run": 179.96147, "stage1-p1": 70, "stage2-replay": 90, "stage2-replay-2": 88.088418, "stage3-pilot": 90, "stage4-opus": 660, "stage4-sol": 800, "stage4-p1": 280, vms: 160 });
     const d = tmp();
     for (const i of items) {
       const p = join(d, i + ".jsonl");
@@ -85,7 +85,7 @@ describe("reserve mechanics", () => {
     expect(txt).toContain("RESERVE stage4-p1: cap $280, reserve per launch $12.00 (6 x $2), room for settled spend $268.00");
     expect(txt).not.toContain("BAD");
     expect(txt).toContain("RESERVE stage1-sol-run: cap $179.96147, reserve per launch $30.00 (6 x $5), room for settled spend $149.96; C1 projection $138.64 fits");
-    expect(txt.split("\n").filter((x) => x.startsWith("RESERVE")).length).toBe(11);
+    expect(txt.split("\n").filter((x) => x.startsWith("RESERVE")).length).toBe(12);
   }, 60_000);
 });
 
@@ -253,7 +253,7 @@ describe("D6: done needs the item's pick records", () => {
   });
 
   test("vms and stage2-replay, which plan no sessions, are done with no work dir", () => {
-    for (const item of ["vms", "stage2-replay"] as Item[]) {
+    for (const item of ["vms", "stage2-replay", "stage2-replay-2"] as Item[]) {
       const p = ledger(item);
       expect(run(["done", "--ledger", p, "--item", item]).exitCode).toBe(0);
       expect(done(p)).toBe(true);

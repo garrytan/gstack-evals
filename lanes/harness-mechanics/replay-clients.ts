@@ -25,8 +25,10 @@ export type Bridge = { ask: (r: BridgeRequest) => Promise<BridgeAnswer>; close: 
 // The model each paid client's slot may call, as provider:model.
 export const PAID: Record<Exclude<Who, "det">, string> = { astra: "openai:gpt-6-astra", opus: "anthropic:claude-opus-5-5", jev: "typesafe:" + JEV_MODEL, p1: "openrouter:particle-ai/particle-1" };
 export const KEYS = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "TYPESAFE_API_KEY"] as const;
-// One call's slot allowance. The run's lease and its batch stop bound the replay's spend; this bounds one call.
-const CALL_ALLOWANCE_MICROS = 1_000_000;
+// One call's slot allowance. The run's lease and its batch stop bound the replay's spend; this bounds one call. $1.50
+// covers the longest route item's astra worst-case reservation (about $1.04 for a ~48k-char issue); at $1.00 two such
+// items refused on the worst case alone (a reservation over-estimate, not real spend) and stopped the run.
+const CALL_ALLOWANCE_MICROS = 1_500_000;
 
 /** The five clients over a bridge and a started proxy. A bridge that throws becomes a stop that still carries the call's metered cost. */
 export function clientsOver(bridge: Bridge, proxy: MeteringProxy, close: () => Promise<void>): ReplayClients {

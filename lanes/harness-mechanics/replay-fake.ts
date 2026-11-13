@@ -76,7 +76,7 @@ const jsonl = (p: string) => readFileSync(p, "utf8").split("\n").filter(Boolean)
 // temporary stage2-replay ledger (another amount refused at approval, settled at the fakes' metered spend, no second run),
 // the band frozen from dev alone, each scenario's admission, and analyze.ts's report reading it as h3_admission.
 export function stepReplay(out: string): StepResult {
-  const dir = join(out, "10-replay"), items = fixtureItems(), text = fixtureText(), bad: string[] = [], notes: string[] = [], item = "stage2-replay", cap = CAPS_USD[item];
+  const dir = join(out, "10-replay"), items = fixtureItems(), text = fixtureText(), bad: string[] = [], notes: string[] = [], item = "stage2-replay-2", cap = CAPS_USD[item];
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, "items.jsonl"), text);
   if (sizes(items.filter((i) => i.point === "route"), (i) => i.source) !== 1 || sizes(items.filter((i) => i.origin === "sampled"), (i) => i.model) !== 1) bad.push("a stratified draw is uneven");

@@ -39,6 +39,10 @@ export const CASES: Case[] = [
     check: (r) => { const b = r.find((x) => x.provider === "openai")?.body; return b?.model === "gpt-6-astra" && b?.response_format?.json_schema?.strict === true && b?.reasoning_effort === undefined ? null : "the OpenAI body is " + JSON.stringify(b).slice(0, 160); } },
   { name: "route-opus", who: "opus", point: "route", text: "make the tests pass", script: { anthropic: [opusAnswer("/verify", 0.9)] }, want: { label: "/verify", score: 0.9 }, paid: true,
     check: (r) => (r.find((x) => x.provider === "anthropic")?.body?.tool_choice?.name === "answer" ? null : "the Anthropic body forces no answer tool") },
+  // A ~48k-char route item (the length that stopped the first paid replay against the old $1.00 per-call slot): astra's worst
+  // case now fits the $1.50 slot, so it is admitted and metered like any paid call. The body carries the whole long text.
+  { name: "route-astra-long", who: "astra", point: "route", text: "make the failing tox tests pass. ".repeat(1450), want: { label: "/review" }, paid: true,
+    check: (r) => { const b = r.find((x) => x.provider === "openai"); return b && JSON.stringify(b.body).length >= 45_000 ? null : "the long astra route request body is " + (b ? JSON.stringify(b.body).length + " chars" : "missing"); } },
   { name: "done-jev-rule", who: "jev", point: "done", text: JSON.stringify({ ...FAILING, claims_done: false }), want: { label: "allow", rule: "status_not_done", cost_usd: 0 }, paid: false },
   { name: "done-jev-no", who: "jev", point: "done", text: JSON.stringify(FAILING), script: { typesafe: [noul(0.2)] }, want: { label: "block", shown: { answer: "no", p_yes: 0.2 } }, paid: true,
     check: (r) => { const b = r.find((x) => x.provider === "typesafe")?.body; return b?.model === JEV_MODEL && b?.state?.last_check_output === FAILING.check.output ? null : "the TypeSafe body is " + JSON.stringify(b).slice(0, 160); } },

@@ -7,7 +7,7 @@ import { spawnSync } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { FakeUpstreams, openrouterJson } from "../../lanes/decision-routing/fake/upstreams.ts";
+import { FakeUpstreams, openaiResponsesText, openrouterJson } from "../../lanes/decision-routing/fake/upstreams.ts";
 import { fakeFetch } from "../../lanes/decision-routing/host/controller.ts";
 import { MeteringProxy } from "../../src/runner/proxy/metering-proxy.ts";
 import { MemLedger } from "../../lanes/harness-mechanics/leak.ts";
@@ -187,6 +187,50 @@ describe("the clients", () => {
       proxy.stop();
       fakes.stop();
     }
+  });
+  // One astra label call through the real metering proxy and clientsOver's $1.50 per-call slot: the bridge posts an OpenAI
+  // Responses request with inputChars of input and maxOut output budget, and we read the call's status, metered cost and the
+  // journal's worst-case reservation (max_micros on the request line, or a DR_ALLOWANCE_STOP refusal).
+  const astraSlotCall = async (inputChars: number, maxOut: number) => {
+    const work = mkdtempSync(join(tmpdir(), "hm-replay-allow-")), journal = join(work, "journal.ndjson"), fakes = FakeUpstreams.start();
+    const proxy = new MeteringProxy({ ledger: new MemLedger(), leaseId: "hm-replay-allow", host: "127.0.0.1", managementSocket: join(work, "m.sock"), managementToken: "hm-test-allow-token", journal,
+      retry: { attempts: 1, elapsed_ms: 60_000 }, env: { OPENAI_API_KEY: "sk-hm-test" }, fetch: fakeFetch(fakes.urls), allowanceCode: "DR_ALLOWANCE_STOP" });
+    proxy.start();
+    let status = 0;
+    const bridge: Bridge = {
+      ask: async (r) => {
+        fakes.push("openai", openaiResponsesText("/review", { input: 10, output: 5 }, "gpt-6-astra"));
+        const res = await fetch(r.proxy! + "/openai/v1/responses", { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer " + r.token }, body: JSON.stringify({ model: "gpt-6-astra", max_output_tokens: maxOut, input: "x".repeat(inputChars) }) });
+        status = res.status;
+        await res.text();
+        return { label: "/review", tokens: 10, latency_ms: 1 };
+      },
+      close: async () => {},
+    };
+    const c = clientsOver(bridge, proxy, async () => {});
+    try {
+      const a = await c.astra(req("astra", "route", "x".repeat(inputChars)) as any);
+      const lines = readFileSync(journal, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+      return { status, cost: a.cost_usd, maxMicros: lines.find((e) => e.kind === "request")?.max_micros as number | undefined,
+        refused: lines.some((e) => e.kind === "refusal" && e.code === "DR_ALLOWANCE_STOP") };
+    } finally {
+      await c.close!();
+      proxy.stop();
+      fakes.stop();
+    }
+  };
+  test("a ~48k-char route item's astra worst case fits the raised $1.50 per-call slot, where the old $1.00 slot refused it", async () => {
+    const r = await astraSlotCall(48_000, 15_000);
+    expect(r.status).toBe(200);
+    expect(r.cost).toBeGreaterThan(0);
+    expect(r.maxMicros!).toBeGreaterThan(1_000_000);
+    expect(r.maxMicros!).toBeLessThanOrEqual(1_500_000);
+  });
+  test("an astra call whose worst case passes the $1.50 per-call slot is still refused", async () => {
+    const r = await astraSlotCall(200, 31_000);
+    expect(r.status).toBe(403);
+    expect(r.refused).toBe(true);
+    expect(r.cost).toBe(0);
   });
   test("replayClients refuses before it starts anything when HM_REPLAY_WORK or a provider key is missing", () => {
     expect(() => replayClients({})).toThrow(/^E_USAGE .*HM_REPLAY_WORK/);
