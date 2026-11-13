@@ -687,16 +687,18 @@ counts sessions.
   dir, outside any repository, and hashes every file they add or change. The lookup is git cat-file --batch-check on the
   store (through a probe repo in the temp dir for a bare object dir), and a hit through the store's own alternates
   counts. Before the lookup, every object the store holds, loose or packed, streams through git cat-file
-  --batch-all-objects into the names grep (whole words, no markers). It fails closed: a store that holds one id or a
-  hidden name, uses another object format, has a pack without its index, keeps any other file in its pack dir or a loose
-  object dir (anything but packs and their index, reverse index, bitmap, keep, promisor and mtimes files, the multi-pack
-  index and object files), reads its objects from another dir (a commondir) or whose lookup errors prints the same STORE
-  line as before, and so does every store when a patch does not apply or the patches make no blob (an error finding), or
-  when the input lists no patches (an empty list included). A .gitmodules under the repo now passes when want tracks it
-  as a regular file, its working copy hashes to that blob, $gd/modules does not exist and no .git sits anywhere under
-  its dir. The base filter now streams want's regular-file blobs once through git cat-file --batch, with an empty line
-  between blobs, into GNU grep under LC_ALL=C with the same flags as before; the steps after it are unchanged. Nothing
-  else in the check changes.
+  --batch-all-objects into the names grep (whole words, no markers), using only the names want's tree does not already
+  hold as whole words: the set check (d) derives, worked out again by its own pass in check (c) the first time a store
+  needs it, and an error there fails every store that needs it. It fails closed: a store that holds one id or a hidden
+  name, uses another object format, has a pack without its index, keeps any other file in its pack dir or a loose object
+  dir (anything but packs and their index, reverse index, bitmap, keep, promisor and mtimes files, the multi-pack index
+  and object files), reads its objects from another dir (a commondir) or whose lookup errors prints the same STORE line
+  as before, and so does every store when a patch does not apply or the patches make no blob (an error finding), or when
+  the input lists no patches (an empty list included). The base-held names filter in check (c) adds an error finding
+  when it fails. A .gitmodules under the repo now passes when want tracks it as a regular file, its working copy hashes
+  to that blob, $gd/modules does not exist and no .git sits anywhere under its dir. The base filter now streams want's
+  regular-file blobs once through git cat-file --batch, with an empty line between blobs, into GNU grep under LC_ALL=C
+  with the same flags as before; the steps after it are unchanged. Nothing else in the check changes.
 - A finalize halt is on disk before its close (pre-data build change, 2026-11-11, driver/stage.ts; the Captain's pre-run
   list item 4, GSTA-2, from #318's deferred findings): the driver writes and fsyncs the halt line before the close line,
   so a crash between them leaves a standing halt, never a close with no halt.

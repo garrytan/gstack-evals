@@ -1434,6 +1434,28 @@ describe("the containment check before any session (E_SM_CONTAIN)", () => {
       expect(run(u)).toEqual({ ok: true, checks: clean, archives: [] });
     }, 120_000);
 
+    test("an outside store whose only names are ones want's tree already holds passes, a truly hidden name in it still fails, and a base filter that errors fails it", () => {
+      const BASE = "test_base_held";
+      const t = commitAll(unitTree("stores-base-names"), { "tests/test_old.py": "def " + BASE + "():\n    pass\n" });
+      const go = () => contain({ kind: "host", root: t.root, repo: t.w }, { want: t.base, names: [NAME, BASE], markers: [MARK], patches: patches() });
+      const zsh = repoAt(t.root, "root/.oh-my-zsh", { "lib/t.sh": "# " + BASE + " runs here\n" });
+      rmSync(join(zsh, "lib"), { recursive: true });
+      rmSync(join(zsh, ".git/COMMIT_EDITMSG"), { force: true });
+      expect(go()).toEqual({ ok: true, checks: clean, archives: [] });
+      const up = repoAt(t.root, "opt/upstream", { "tests/test_m.py": "def " + BASE + "():\n    pass\n\n\ndef " + NAME + "():\n    pass\n" });
+      rmSync(join(up, "tests"), { recursive: true });
+      rmSync(join(up, ".git/COMMIT_EDITMSG"), { force: true });
+      const r = go();
+      expect(r.checks.stores).toEqual({ ok: false, findings: ["store /opt/upstream/.git"] });
+      expect([r.checks.refs.ok, r.checks.objects.ok, r.checks.scan.ok]).toEqual([true, true, true]);
+      const e = commitAll(unitTree("stores-base-names-error"), { "extra.txt": "extra\n" });
+      const id = git(e.w, "rev-parse", "HEAD:extra.txt");
+      rmSync(join(e.w, ".git/objects", id.slice(0, 2), id.slice(2)));
+      repoAt(e.root, "opt/other", { "README.md": "other\n" });
+      const x = contain({ kind: "host", root: e.root, repo: e.w }, { want: e.base, names: [NAME], markers: [MARK], patches: patches() });
+      expect(x.checks.stores).toEqual({ ok: false, findings: ["error base-held names", "store /opt/other/.git"] });
+    }, 120_000);
+
     test("the patches are the ones the oracle's fixed run applies, in its order", () => {
       const dir = unitDir(scratch("contain-fixed"));
       const rd = (n: string) => readFileSync(join(dir, n), "utf8");

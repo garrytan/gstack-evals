@@ -11,7 +11,7 @@
 #       objects is a store), except A3's gstack checkout when its HEAD is the /qa pin and, when patches is given, a store
 #       outside the repo that holds none of the post-base blob ids (the blobs each patch alone, and all of them in order,
 #       make over want's root commit, hashed in $tmp) by a lookup that can be trusted, and none of whose objects holds a
-#       hidden test name as a whole word.
+#       hidden test name want's tree does not hold as a whole word (that filter is its own pass in (c), apart from (d)'s).
 #   (d) scan: no file outside the repo, and no file in the repo that want does not hold byte for byte (untracked,
 #       ignored, staged but never committed, or tracked with a working copy that differs from want's blob), holds a
 #       hidden test name (a whole word) or a marker (anywhere in a line), read raw as scan.sh reads (binary included,
@@ -102,6 +102,21 @@ postbase() {
   [ ! -s "$in/patches" ] || variant "$in/patches" < /dev/null || return 1
   LC_ALL=C sort -u -o "$tmp/ids" "$tmp/ids" && [ -s "$tmp/ids" ]
 }
+hidden() {
+  local e s
+  git ls-tree -r -z "$want" > "$tmp/c-tree" || return 1
+  while IFS= read -r -d '' e; do e=${e%%$'\t'*}; case "$e" in "100644 blob "* | "100755 blob "*) printf '%s\n' "${e##* }" ;; esac; done < "$tmp/c-tree" | LC_ALL=C sort -u > "$tmp/c-ids" || return 1
+  git cat-file --batch-check='%(objecttype)' < "$tmp/c-ids" > "$tmp/c-types" 2> "$tmp/c-base.err" && [ ! -s "$tmp/c-base.err" ] || return 1
+  [ "$(wc -l < "$tmp/c-types")" -eq "$(wc -l < "$tmp/c-ids")" ] && [ "$(g -c -v -x -F blob "$tmp/c-types")" = 0 ] || return 1
+  git cat-file --batch= < "$tmp/c-ids" 2> "$tmp/c-base.err" | LC_ALL=C grep -a -o -F -w -f "$in/names" > "$tmp/c-in-base"; s="${PIPESTATUS[*]}"
+  case "$s" in "0 0" | "0 1") ;; *) return 1 ;; esac
+  [ ! -s "$tmp/c-base.err" ] && g -v -x -F -f "$tmp/c-in-base" "$in/names" | g . > "$tmp/c-names"
+}
+hn=0
+hiddenok() {
+  if [ $hn = 0 ]; then if hidden; then hn=1; else hn=2; err stores "base-held names"; fi; fi
+  [ $hn = 1 ]
+}
 ids=0; nv=0; prepo=$(pwd -P)
 outside() { case "$1" in "$repo" | "$repo"/* | "$prepo" | "$prepo"/*) return 1 ;; esac; }
 idsok() {
@@ -115,7 +130,8 @@ foreign() {
   x=$(cd "$o" && find . -mindepth 2 -maxdepth 2 -regextype posix-extended -regex "$other" -print -quit) && [ -z "$x" ] || return 1
   x=$(cd "$o" && find . -mindepth 2 -maxdepth 2 -regextype posix-extended \( -path './pack/*' -o -regex '\./[0-9a-f]{2}/.*' \) ! -regex "$own" -print -quit) && [ -z "$x" ] || return 1
   for p in "$o"/pack/pack-*.pack; do [ ! -e "$p" ] || [ -f "${p%.pack}.idx" ] || return 1; done
-  [ ! -s "$in/names" ] || { gx "${@:2}" cat-file --batch-all-objects --batch= 2> "$tmp/all.err" | LC_ALL=C grep -a -q -F -w -f "$in/names"; [ "${PIPESTATUS[*]}" = "0 1" ] && [ ! -s "$tmp/all.err" ]; } || return 1
+  [ ! -s "$in/names" ] || hiddenok || return 1
+  [ ! -s "$tmp/c-names" ] || { gx "${@:2}" cat-file --batch-all-objects --batch= 2> "$tmp/all.err" | LC_ALL=C grep -a -q -F -w -f "$tmp/c-names"; [ "${PIPESTATUS[*]}" = "0 1" ] && [ ! -s "$tmp/all.err" ]; } || return 1
   gx "${@:2}" cat-file --batch-check < "$tmp/ids" > "$tmp/look" 2> "$tmp/look.err" && [ ! -s "$tmp/look.err" ] && [ "$(sed 's/$/ missing/' "$tmp/ids")" = "$(cat "$tmp/look")" ]
 }
 modok() {
