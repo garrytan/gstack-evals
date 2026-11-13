@@ -37,9 +37,9 @@ describe("pins", () => {
     expect(lists.judgePilot).toEqual(lists.calibration.slice(0, 12));
   });
 
-  test("the caps sum to 2,880 inside the 3,000 line, and each model's allowance is section 22's", () => {
-    expect(ledgerCapsUsd()).toBe(2480);
-    expect(capsTotalUsd()).toBe(2880);
+  test("the caps sum to 2,885 inside the 3,000 line (2,880 before D10's $5 on stage3-pilot), and each model's allowance is section 22's", () => {
+    expect(ledgerCapsUsd()).toBe(2485);
+    expect(capsTotalUsd()).toBe(2885);
     expect(capsTotalUsd()).toBeLessThan(HM.lineUsd);
     expect([MODELS.opus.allowanceUsd, MODELS.sol.allowanceUsd, MODELS.p1.allowanceUsd]).toEqual([5, 6, 2]);
     for (const m of Object.values(MODELS)) {

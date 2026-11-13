@@ -30,11 +30,11 @@ function skeleton(): StepResult {
   const want: Record<string, [number, number]> = { stage1: [160, 40], "stage1-opus-r2": [92, 23], stage3: [74, 0], stage4: [920, 200] };
   const bad = counts.find(([i, p]) => { const w = want[i] ?? want[i.split("-")[0]!]!; return p.sessions !== w[0] || p.picker_calls !== w[1]; });
   if (bad) return { pass: false, detail: bad[0] + " plans " + bad[1].sessions + " sessions and " + bad[1].picker_calls + " picker calls" };
-  if (capsTotalUsd() !== 2880) return { pass: false, detail: "caps sum to " + capsTotalUsd() };
+  if (capsTotalUsd() !== 2885) return { pass: false, detail: "caps sum to " + capsTotalUsd() };
   for (const a of Object.values(ARMS)) armSpec(a.spec);
   const py = readFileSync(join(REPO, "quick/laneb/runner/agent/prompt_builder.py"), "utf8");
   if ((CLOSING_LINES as Record<string, string>)[CLOSING.key] !== CLOSING.text || !py.includes(JSON.stringify(CLOSING.key) + ": " + JSON.stringify(CLOSING.text))) return { pass: false, detail: "the closing line differs between pins.ts, grid.ts and prompt_builder.py" };
-  return { pass: true, detail: b.digests.size + " attachments at their digests; caps 2880; " + counts.map(([i, p]) => i + " " + p.sessions).join(", ") + "; seed " + HM.seed };
+  return { pass: true, detail: b.digests.size + " attachments at their digests; caps 2885; " + counts.map(([i, p]) => i + " " + p.sessions).join(", ") + "; seed " + HM.seed };
 }
 
 export const STEPS: Step[] = [

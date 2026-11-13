@@ -30,8 +30,10 @@ export const HM = {
   armManifests: "arms/manifests/hm",
 } as const;
 
-// Ledger items and their caps in USD (section 22). The crew's 400 is not a ledger item.
-export const CAPS_USD = { "stage1-opus": 150, "stage1-opus-r2": 121.685384, "stage1-sol": 180, "stage1-sol-run": 179.96147, "stage1-p1": 70, "stage2-replay": 90, "stage2-replay-2": 88.088418, "stage2-replay-3": 79.029935, "stage3-pilot": 90, "stage4-opus": 660, "stage4-sol": 800, "stage4-p1": 280, vms: 160 } as const;
+// Ledger items and their caps in USD (section 22). The crew's 400 is not a ledger item. Deviation D10 (the Captain's
+// ruling B, 2026-11-13, made before any Stage 3 spend): stage3-pilot's cap is $95, not section 22's $90, so the caps sum
+// to 2,485.
+export const CAPS_USD = { "stage1-opus": 150, "stage1-opus-r2": 121.685384, "stage1-sol": 180, "stage1-sol-run": 179.96147, "stage1-p1": 70, "stage2-replay": 90, "stage2-replay-2": 88.088418, "stage2-replay-3": 79.029935, "stage3-pilot": 95, "stage4-opus": 660, "stage4-sol": 800, "stage4-p1": 280, vms: 160 } as const;
 // Deviation D3 (ruling A on Stage 1's WORKDIR defect): at 6aeabc2 the image build failed before any model call for every
 // arm of these 23 calibration tasks, in stage1-opus's two parts. stage1-opus's ledger is bound to that run, so it closed
 // at $28.314616 settled, and the 92 cells rerun on stage1-opus-r2, whose cap is the rest of stage1-opus's $150 and sits
@@ -61,7 +63,7 @@ export const STAGE1_OPUS_R2_TASKS = [
 // stage2-replay items total $90 (1.911582 + 9.058483 + 79.029935) and the caps still sum to 2,480.
 export const CARVED: Partial<Record<keyof typeof CAPS_USD, keyof typeof CAPS_USD>> = { "stage1-opus-r2": "stage1-opus", "stage1-sol-run": "stage1-sol", "stage2-replay-2": "stage2-replay", "stage2-replay-3": "stage2-replay-2" };
 export const ledgerCapsUsd = () => Object.entries(CAPS_USD).filter(([k]) => !Object.hasOwn(CARVED, k)).reduce((a, [, b]) => a + b, 0);
-// The ledger items' caps plus the crew's: 2,880 inside the 3,000 line.
+// The ledger items' caps plus the crew's: 2,885 inside the 3,000 line (2,880 before D10).
 export const capsTotalUsd = () => ledgerCapsUsd() + HM.crewCapUsd;
 // Section 10's replay: the item counts, the route sources, the kappa bar, the tuning tolerance (1 point of balanced
 // accuracy) and its band grid, the admission's false-block or false-deny bar, the calibration bins, and section 22's

@@ -21,7 +21,7 @@ const run = (args: string[], env: Record<string, string> = {}) => Bun.spawnSync(
 
 describe("approvals", () => {
   test("each item's ledger takes its approval row at its recorded cap, and the row passes L1's item check", () => {
-    expect(CAPS_USD).toEqual({ "stage1-opus": 150, "stage1-opus-r2": 121.685384, "stage1-sol": 180, "stage1-sol-run": 179.96147, "stage1-p1": 70, "stage2-replay": 90, "stage2-replay-2": 88.088418, "stage2-replay-3": 79.029935, "stage3-pilot": 90, "stage4-opus": 660, "stage4-sol": 800, "stage4-p1": 280, vms: 160 });
+    expect(CAPS_USD).toEqual({ "stage1-opus": 150, "stage1-opus-r2": 121.685384, "stage1-sol": 180, "stage1-sol-run": 179.96147, "stage1-p1": 70, "stage2-replay": 90, "stage2-replay-2": 88.088418, "stage2-replay-3": 79.029935, "stage3-pilot": 95, "stage4-opus": 660, "stage4-sol": 800, "stage4-p1": 280, vms: 160 });
     const d = tmp();
     for (const i of items) {
       const p = join(d, i + ".jsonl");
@@ -112,15 +112,15 @@ describe("launch guard", () => {
   const approved = () => { const d = tmp(); const out: Partial<Record<Item, any[]>> = {}; for (const i of items) { approve(join(d, i + ".jsonl"), i, CAPS_USD[i], "t"); out[i] = readRows(join(d, i + ".jsonl")); } return { d, out }; };
   test("the line: items not done at their caps plus the crew, inside 3,000 and past it", () => {
     const { out } = approved();
-    expect(lineCheck(out, crew(400_000)).total).toBe(toMicros(2880));
-    expect(lineCheck(out, crew(520_000)).fits).toBe(true);
-    expect(lineCheck(out, crew(520_010)).fits).toBe(false);
+    expect(lineCheck(out, crew(400_000)).total).toBe(toMicros(2885));
+    expect(lineCheck(out, crew(515_000)).fits).toBe(true);
+    expect(lineCheck(out, crew(515_010)).fits).toBe(false);
     const p = join(tmp(), "d.jsonl");
     approve(p, "stage1-p1", 70, "t");
     const l = new Ledger(p, "stage1-p1");
     l.reserve("x", toMicros(10)); l.settle("x", toMicros(9));
     markDone(p, "stage1-p1");
-    expect(lineCheck({ ...out, "stage1-p1": readRows(p) }, crew(0)).total).toBe(toMicros(2480 - 70 + 9));
+    expect(lineCheck({ ...out, "stage1-p1": readRows(p) }, crew(0)).total).toBe(toMicros(2485 - 70 + 9));
   });
   test("D3: stage1-opus-r2's cap sits inside stage1-opus's, and it launches only once stage1-opus is done at the settled amount its cap leaves", () => {
     expect(toMicros(CAPS_USD["stage1-opus"]) - toMicros(28.314616)).toBe(toMicros(CAPS_USD["stage1-opus-r2"]));
@@ -136,8 +136,8 @@ describe("launch guard", () => {
       if (done) markDone(p, "stage1-opus");
       return readRows(p);
     };
-    expect(lineCheck({ ...out, "stage1-opus": opus(28.314616, false) }, crew(400_000)).total).toBe(toMicros(2880));
-    expect(lineCheck({ ...out, "stage1-opus": opus(28.314616, true) }, crew(400_000)).total).toBe(toMicros(2880));
+    expect(lineCheck({ ...out, "stage1-opus": opus(28.314616, false) }, crew(400_000)).total).toBe(toMicros(2885));
+    expect(lineCheck({ ...out, "stage1-opus": opus(28.314616, true) }, crew(400_000)).total).toBe(toMicros(2885));
     expect(launchGuard("stage1-opus-r2", { ...out, "stage1-opus": opus(28.314616, false) }, crew(0), parts, []).why).toEqual(["stage1-opus-r2's cap sits inside stage1-opus's, so it launches only once stage1-opus is marked done"]);
     expect(launchGuard("stage1-opus-r2", { ...out, "stage1-opus": opus(30, true) }, crew(0), parts, []).why).toEqual(["stage1-opus-r2's cap $121.69 is not stage1-opus's cap less its settled $30.00"]);
     expect(launchGuard("stage1-opus-r2", { ...out, "stage1-opus": opus(28.314616, true) }, crew(0), parts, []).ok).toBe(true);
@@ -171,8 +171,8 @@ describe("launch guard", () => {
     const fresh = join(tmp(), "r.jsonl");
     approve(fresh, "stage1-sol-run", CAPS_USD["stage1-sol-run"], "t");
     expect(() => itemCheck(readRows(fresh), "stage1-sol-run", CAPS_USD["stage1-sol-run"])).not.toThrow();
-    expect(lineCheck({ ...out, "stage1-sol": gate(0.03853, false) }, crew(400_000)).total).toBe(toMicros(2880));
-    expect(lineCheck({ ...out, "stage1-sol": gate(0.03853, true) }, crew(400_000)).total).toBe(toMicros(2880));
+    expect(lineCheck({ ...out, "stage1-sol": gate(0.03853, false) }, crew(400_000)).total).toBe(toMicros(2885));
+    expect(lineCheck({ ...out, "stage1-sol": gate(0.03853, true) }, crew(400_000)).total).toBe(toMicros(2885));
     expect(launchGuard("stage1-sol-run", { ...out, "stage1-sol": gate(0.03853, false) }, crew(0), run.parts, []).why).toEqual(["stage1-sol-run's cap sits inside stage1-sol's, so it launches only once stage1-sol is marked done"]);
     expect(launchGuard("stage1-sol-run", { ...out, "stage1-sol": gate(0.5, true) }, crew(0), run.parts, []).why).toEqual(["stage1-sol-run's cap $179.96 is not stage1-sol's cap less its settled $0.50"]);
     expect(launchGuard("stage1-sol-run", { ...out, "stage1-sol": gate(0.03853, true) }, crew(0), run.parts, []).ok).toBe(true);
@@ -193,12 +193,12 @@ describe("launch guard", () => {
     expect(g.why[0]).toStartWith("C1: stage1-opus's projection");
     expect(launchGuard("stage1-opus", { "stage1-opus": readRows(p) }, crew(0), parts, ["s1-1"]).ok).toBe(true);
   });
-  test("stage3-pilot with its smoke part (S1): four parts, the host's TTL at 114 h (96 h for three), and a C1 projection of $84.90 that fits its $90 cap", () => {
+  test("stage3-pilot with its smoke part (S1): four parts, the host's TTL at 114 h (96 h for three), and a C1 projection of $84.90 that fits its $95 cap (D10)", () => {
     const parts = itemPlan("stage3-pilot", lists).parts;
     expect(parts.map((p) => p.name)).toEqual(["smoke-opus", "pilot-opus", "pilot-sol", "pilot-p1"]);
     expect([hostTtlHours(parts.length), hostTtlHours(parts.length - 1)]).toEqual([114, 96]);
     const g = c1Guard("stage3-pilot", [], parts, []);
-    expect([g.fits, g.cap, g.host, g.total]).toEqual([true, toMicros(90), toMicros(114 * 0.08), toMicros(84.9)]);
+    expect([g.fits, g.cap, g.host, g.total]).toEqual([true, toMicros(95), toMicros(114 * 0.08), toMicros(84.9)]);
     // Once smoke-opus has finished, the pilot parts' projection counts its spend as settled and its part as done.
     expect(c1Guard("stage3-pilot", [], parts, ["smoke-opus"]).fits).toBe(true);
   });
@@ -210,7 +210,7 @@ describe("launch guard", () => {
     const env = { HM_LEDGERS: d, HM_CREW: c, LEDGER: join(d, "stage1-opus.jsonl") };
     const bad = run(["launch", work, "--part", "s1-1"], env);
     expect(bad.exitCode).toBe(2);
-    expect(bad.stderr.toString()).toStartWith("E_HM_LAUNCH stage1-opus: the line: all-in $3080.00");
+    expect(bad.stderr.toString()).toStartWith("E_HM_LAUNCH stage1-opus: the line: all-in $3085.00");
     writeFileSync(c, JSON.stringify(crew(100_000)));
     const ok = run(["launch", work, "--part", "s1-1"], env);
     expect(ok.stdout.toString()).toStartWith("HM_LAUNCH PASS stage1-opus");
