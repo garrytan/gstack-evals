@@ -181,18 +181,23 @@ export function basePatches(dir: string, fixTests = true): [string, string][] {
   return out;
 }
 
+/** The patches a fixed run applies over a tree, in order: test.patch, then the fix's source hunks (fix-source.patch when
+ *  the fix was split, else fix.patch), then fix-tests.patch when the fix was split and the file is not empty. The
+ *  oracle's fixed runs and the containment check's post-base blob ids (contain.ts) both use this. */
+export function fixedPatches(dir: string): [string, string][] {
+  const split = existsSync(join(dir, "fix-source.patch"));
+  const out: [string, string][] = [["test.patch", rf(join(dir, "test.patch"), "utf8")], ["fix-source.patch", rf(join(dir, split ? "fix-source.patch" : "fix.patch"), "utf8")]];
+  const t = split ? rf(join(dir, "fix-tests.patch"), "utf8") : "";
+  if (t) out.push(["fix-tests.patch", t]);
+  return out;
+}
+
 /** One oracle run on a fresh copy of the tree volume. baseFixTests false leaves fix-tests.patch off a base run (hidden.ts only). */
 export function oneRun(dir: string, u: SmUnit, volume: string, image: string, tree: "base" | "fixed", n: number, mode: Mode, limitMs = LIMIT_MS, baseFixTests = true): RunResult {
   const copy = volume + "-" + tree + n + "-" + process.pid;
   copyVolume(image, volume, copy, mode);
   try {
-    const patches: [string, string][] = tree === "base" ? basePatches(dir, baseFixTests) : [["test.patch", rf(join(dir, "test.patch"), "utf8")]];
-    if (tree === "fixed") {
-      const split = existsSync(join(dir, "fix-source.patch"));
-      patches.push(["fix-source.patch", rf(join(dir, split ? "fix-source.patch" : "fix.patch"), "utf8")]);
-      const t = split ? rf(join(dir, "fix-tests.patch"), "utf8") : "";
-      if (t) patches.push(["fix-tests.patch", t]);
-    }
+    const patches = tree === "base" ? basePatches(dir, baseFixTests) : fixedPatches(dir);
     const bad = applyPatches(image, copy, u.repo_dir, patches, mode);
     if (bad) return { run: { tree, n, wall_ms: 0, exit: -1, parsed_sha256: null, stopped: false, exits: [] }, parsed: null, log: "" };
     const rule: RebuildRule = u.oracle?.rebuild_rule?.applies ? "applies" : "exempt";
