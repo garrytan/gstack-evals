@@ -7,12 +7,13 @@
 // and launch --part pilot-opus still works on the same bound run. A host lost while a judge part runs makes recover refuse
 // and destroy nothing (E1).
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Ledger, readRows } from "../../quick/laneb/runner/ledger.ts";
 import { sha256 } from "../../quick/laneb/l1/l1.ts";
 import { bundleLists, CAPS_USD, HM, REPO, SMOKE_PART, unscreenedText } from "../../lanes/harness-mechanics/pins.ts";
+import { judgeTarFixture } from "./judge-tar-fixture.ts";
 
 const FIX = join(REPO, "quick/laneb/tests/fixtures/l1");
 const CLI = join(REPO, "lanes/harness-mechanics/cli.ts");
@@ -25,7 +26,7 @@ function freePort() {
   return port;
 }
 
-type Rig = { root: string; fake: string; work: string; ledger: string; env: Record<string, string> };
+type Rig = { root: string; fake: string; work: string; ledger: string; env: Record<string, string>; judgeTar: string };
 const rigs: Rig[] = [];
 function rig(): Rig {
   const root = mkdtempSync(join(tmpdir(), "hm-hold-"));
@@ -33,17 +34,17 @@ function rig(): Rig {
   for (const d of [fake, recovery, state, arms, ledgers]) mkdirSync(d, { recursive: true });
   const ledger = join(ledgers, ITEM + ".jsonl");
   new Ledger(ledger, ITEM).approve(CAPS_USD[ITEM], { quotes: ["test approval"] });
-  const screened = join(root, "screened.txt"), crew = join(root, "crew.json");
+  const screened = join(root, "screened.txt"), crew = join(root, "crew.json"), judge = judgeTarFixture();
   writeFileSync(screened, unscreenedText(bundleLists()));
   writeFileSync(crew, JSON.stringify({ as_of: "2026-11-13", threads: [] }));
   const env: Record<string, string> = {
     PATH: FIX + ":" + process.env.PATH, HOME: process.env.HOME ?? root,
     UBI_FAKE: fake, UBI_RUNNER: join(FIX, "ubi"), UBI_RUNNER_SHA256: sha256(readFileSync(join(FIX, "ubi"))), UBI_RUNNER_STATE: state, UBI_RECOVERY_DIR: recovery, UBI_OWNER: "GEVA-503",
-    LEDGER: ledger, ARMS: arms, HM_LEDGERS: ledgers, HM_CREW: crew, HM_SCREENED: screened, HM_SCREENED_SHA256: sha256(readFileSync(screened)),
+    LEDGER: ledger, ARMS: arms, HM_LEDGERS: ledgers, HM_CREW: crew, HM_JUDGE_MANIFEST: judge.manifest, HM_SCREENED: screened, HM_SCREENED_SHA256: sha256(readFileSync(screened)),
     L1_PREPARE_RUN: join(FIX, "fake-prepare-run.ts"), L1_HOST_LEDGER_PORT: String(freePort()), L1_BUNDLE_WAIT_SEC: "30", L1_POLL_SEC: "0.2", L1_SALVAGE_WAIT_SEC: "30", PULL_RETRY_SEC: "0",
     ANTHROPIC_API_KEY: "test-not-a-key", OPENROUTER_API_KEY: "test-not-a-key", TYPESAFE_API_KEY: "test-not-a-key", UBICLOUD_API_KEY: "test-not-a-key",
   };
-  const r = { root, fake, work: join(root, "work"), ledger, env };
+  const r = { root, fake, work: join(root, "work"), ledger, env, judgeTar: judge.tarGz };
   rigs.push(r);
   return r;
 }
@@ -86,6 +87,9 @@ async function attachUntil(r: Rig, want: RegExp) {
   throw new Error("attach never printed " + want + "; last: " + last);
 }
 const plan = (r: Rig) => JSON.parse(readFileSync(join(r.work, "plan.json"), "utf8"));
+// The fake prepare-run stages no tars, so each prepared part takes the fixture's judge tar.gz, which the launcher check
+// (D14) passes against HM_JUDGE_MANIFEST.
+const stageJudgeTars = (r: Rig, tar = r.judgeTar, parts: string[] = plan(r).parts.map((x: any) => x.name)) => { for (const p of parts) copyFileSync(tar, join(r.work, p, "arms/judge.tar.gz")); };
 const mirror = (r: Rig) => readRows(join(r.work, "host/ledger.jsonl"));
 const events = (r: Rig) => (existsSync(join(r.fake, "events.log")) ? readFileSync(join(r.fake, "events.log"), "utf8") : "");
 // host-status over the fake runner's ssh, the way l1.ts status() reads it.
@@ -97,6 +101,7 @@ const hostStatus = (r: Rig) => {
 function smokeLaunched(r: Rig, extra: Record<string, string> = {}) {
   const p = hm(r, ["prepare", r.work, "--item", ITEM]);
   expect([p.code, p.err]).toEqual([0, ""]);
+  stageJudgeTars(r);
   expect(plan(r).parts.map((x: any) => x.name)).toEqual([SMOKE_PART, ...PILOTS]);
   expect(plan(r).host_ttl_hours).toBe(114);
   expect(hm(r, ["host-up", r.work]).code).toBe(0);
@@ -109,6 +114,7 @@ describe("stage3-pilot holds after its smoke part (S1) on the real launcher", ()
     const r = rig();
     const early = hm(r, ["prepare", r.work, "--item", ITEM]);
     expect(early.code).toBe(0);
+    stageJudgeTars(r);
     expect(hm(r, ["host-up", r.work]).code).toBe(0);
     const outOfOrder = hm(r, ["launch", r.work, "--part", "pilot-opus"]);
     expect([outOfOrder.code, outOfOrder.err]).toEqual([3, expect.stringContaining(SMOKE_PART + " has not finished; parts run one after another")]);
@@ -151,6 +157,27 @@ describe("stage3-pilot holds after its smoke part (S1) on the real launcher", ()
     expect(sessionRows(mirror(r), "pilot-opus")).toHaveLength(24);
     for (const p of ["pilot-sol", "pilot-p1"]) expect([p, existsSync(join(r.work, p + ".launch.json"))]).toEqual([p, false]);
   }, 240_000);
+
+  test("host-up, launch and relaunch refuse a judge part whose tar fails the launcher check, and start nothing (D14)", () => {
+    const r = rig(), placeholder = judgeTarFixture({ placeholder: true }).tarGz;
+    expect(hm(r, ["prepare", r.work, "--item", ITEM]).code).toBe(0);
+    stageJudgeTars(r);
+    stageJudgeTars(r, placeholder, ["pilot-p1"]);
+    const up = hm(r, ["host-up", r.work]);
+    expect([up.code, up.err]).toEqual([2, expect.stringContaining("E_HM_JUDGE_BUILD " + ITEM + ": the judge tar " + join(r.work, "pilot-p1/arms/judge.tar.gz") + " fails the launcher check (the tar.gz is sha256 ")]);
+    expect(up.out.split("\n").filter((l) => l.startsWith("HM_JUDGE_TAR PASS"))).toHaveLength(3);
+    expect(events(r)).not.toMatch(/ up /);
+    stageJudgeTars(r, r.judgeTar, ["pilot-p1"]);
+    const up2 = hm(r, ["host-up", r.work]);
+    expect(up2.code).toBe(0);
+    expect(up2.out.split("\n").filter((l) => l.startsWith("HM_JUDGE_TAR PASS"))).toHaveLength(4);
+    stageJudgeTars(r, placeholder, [SMOKE_PART]);
+    const la = hm(r, ["launch", r.work, "--part", SMOKE_PART]);
+    expect([la.code, la.err]).toEqual([2, expect.stringContaining("E_HM_JUDGE_BUILD " + ITEM + ": the judge tar " + join(r.work, SMOKE_PART, "arms/judge.tar.gz") + " fails the launcher check")]);
+    expect(existsSync(join(r.work, SMOKE_PART + ".launch.json"))).toBe(false);
+    const re = hm(r, ["relaunch", r.work, "--part", SMOKE_PART]);
+    expect([re.code, re.err]).toEqual([2, expect.stringContaining("E_HM_JUDGE_BUILD " + ITEM + ": the judge tar " + join(r.env.ARMS!, "judge.tar.gz") + " fails the launcher check (no judge tar at ")]);
+  }, 120_000);
 
   test("a host lost while the smoke part runs: recover refuses because the part has judge arms, and destroys nothing (E1)", async () => {
     const r = rig();

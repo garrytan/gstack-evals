@@ -11,7 +11,7 @@ const item = (m: ModelKey, capUsd: number): ItemDef => ({ capUsd, taskSet: "swer
 // one run, and a part runs one model's cells. Nothing launches the next part on its own, so the pilot parts wait, unlaunched,
 // until someone runs launch --part pilot-opus on the same bound run. stage3-pilot-2 (D11) runs the same plan under its own
 // ledger prefix, after stage3-pilot closed at its smoke, and so does stage3-pilot-3 (D12), after stage3-pilot-2 stopped at
-// the sidecar's 15 s cut. The item's
+// the sidecar's 15 s cut, and so does stage3-pilot-4 (D14), on the judge tar rebuilt from the replay's outputs. The item's
 // allowance for L1's cap-stop check is the largest of the three models', which can only make a stop more likely.
 export const ITEMS: Record<string, ItemDef> = {
   "stage1-opus": item("opus", CAPS_USD["stage1-opus"]),
@@ -22,6 +22,7 @@ export const ITEMS: Record<string, ItemDef> = {
   "stage3-pilot": item("opus", CAPS_USD["stage3-pilot"]),
   "stage3-pilot-2": item("opus", CAPS_USD["stage3-pilot-2"]),
   "stage3-pilot-3": item("opus", CAPS_USD["stage3-pilot-3"]),
+  "stage3-pilot-4": item("opus", CAPS_USD["stage3-pilot-4"]),
   "stage4-opus": item("opus", CAPS_USD["stage4-opus"]),
   "stage4-sol": item("sol", CAPS_USD["stage4-sol"]),
   "stage4-p1": item("p1", CAPS_USD["stage4-p1"]),
@@ -35,7 +36,7 @@ export function itemPlan(name: string, s: { scored: string[]; calibration: strin
   let parts: PartPlan[];
   if (/^stage1-(opus|sol|sol-run|p1)$/.test(name)) parts = chunks(s.calibration, HM.partTasks).map((tasks, i) => part("s1-" + (i + 1), [{ tasks, arms: FOUR, attempts: 1 }]));
   else if (name === "stage1-opus-r2") parts = [part("r2-1", [{ tasks: STAGE1_OPUS_R2_TASKS, arms: FOUR, attempts: 1 }])];
-  else if (name === "stage3-pilot" || name === "stage3-pilot-2" || name === "stage3-pilot-3") {
+  else if (/^stage3-pilot(-[234])?$/.test(name)) {
     const pilot = s.calibration.slice(0, HM.splits.judgePilot), smoke = s.calibration[HM.splits.judgePilot];
     if (!smoke || pilot.includes(smoke)) throw new Error("E_HM_INPUT stage3-pilot's smoke task must be calibration task " + (HM.splits.judgePilot + 1) + ", outside judge-pilot's " + HM.splits.judgePilot);
     parts = [

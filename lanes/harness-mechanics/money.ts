@@ -102,6 +102,13 @@ export function lineCheck(ledgers: Partial<Record<Item, Row[]>>, crew: HmCrew) {
   return { items, crew: crewSpent, total, line: toMicros(HM.lineUsd), fits: total <= toMicros(HM.lineUsd) };
 }
 
+// The skeleton's planning sum (D14): the line's count of the items, so a done item counts at its settled once its done row is
+// in its ledger and every other item at its cap, plus the crew's cap in place of its spend.
+export function plannedLine(ledgers: Partial<Record<Item, Row[]>>) {
+  const l = lineCheck(ledgers, { as_of: "plan", threads: [] }), total = l.total + toMicros(HM.crewCapUsd);
+  return { items: l.items, total, line: l.line, fits: total <= l.line };
+}
+
 const modelKey = (id: string) => (Object.keys(MODELS) as ModelKey[]).find((k) => MODELS[k].id === id) ?? refuse("no planning rate for model " + id);
 export const armRate = (arm: string, m: ModelKey) => (NO_GSTACK.includes(arm as HmArm) ? RATES_USD.none : JUDGE.includes(arm as HmArm) ? RATES_USD.judge : RATES_USD.told)[m];
 // A part's planned model spend (sessions at section 22's planning rates, and a picker call for each task with none and

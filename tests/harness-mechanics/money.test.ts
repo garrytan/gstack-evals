@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { hostTtlHours, itemCheck, plannedCells } from "../../quick/laneb/l1/l1.ts";
 import { Ledger, readRows, toMicros } from "../../quick/laneb/runner/ledger.ts";
 import { approve, c1Guard, infraRerun, launchGuard, lineCheck, markDone, needsRerun, runSessions, stepLeases, stepLedger, stepReserve, type Item } from "../../lanes/harness-mechanics/money.ts";
-import { bundleLists, CAPS_USD, MODELS, REPO, sha256, STAGE1_OPUS_R2_TASKS, unscreenedText } from "../../lanes/harness-mechanics/pins.ts";
+import { bundleLists, CAPS_USD, CARVED, MODELS, REPO, sha256, STAGE1_OPUS_R2_TASKS, unscreenedText } from "../../lanes/harness-mechanics/pins.ts";
 import { HM_PROFILE, itemPlan, ITEMS } from "../../lanes/harness-mechanics/plans.ts";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "hm-money-"));
@@ -21,7 +21,7 @@ const run = (args: string[], env: Record<string, string> = {}) => Bun.spawnSync(
 
 describe("approvals", () => {
   test("each item's ledger takes its approval row at its recorded cap, and the row passes L1's item check", () => {
-    expect(CAPS_USD).toEqual({ "stage1-opus": 150, "stage1-opus-r2": 121.685384, "stage1-sol": 180, "stage1-sol-run": 179.96147, "stage1-p1": 70, "stage2-replay": 90, "stage2-replay-2": 88.088418, "stage2-replay-3": 79.029935, "stage3-pilot": 95, "stage3-pilot-2": 95, "stage3-pilot-3": 94.387061, "stage4-opus": 660, "stage4-sol": 800, "stage4-p1": 280, vms: 160 });
+    expect(CAPS_USD).toEqual({ "stage1-opus": 150, "stage1-opus-r2": 121.685384, "stage1-sol": 180, "stage1-sol-run": 179.96147, "stage1-p1": 70, "stage2-replay": 90, "stage2-replay-2": 88.088418, "stage2-replay-3": 79.029935, "stage3-pilot": 95, "stage3-pilot-2": 95, "stage3-pilot-3": 94.387061, "stage3-pilot-4": 94.387061, "stage4-opus": 660, "stage4-sol": 800, "stage4-p1": 280, vms: 160 });
     const d = tmp();
     for (const i of items) {
       const p = join(d, i + ".jsonl");
@@ -87,7 +87,8 @@ describe("reserve mechanics", () => {
     expect(txt).toContain("RESERVE stage1-sol-run: cap $179.96147, reserve per launch $36.00 (6 x $6), room for settled spend $143.96; C1 projection $144.64 fits");
     expect(txt).toContain("RESERVE stage3-pilot-2: cap $95, reserve per launch $30.00 (6 x $5), room for settled spend $65.00; C1 projection $84.90 fits");
     expect(txt).toContain("RESERVE stage3-pilot-3: cap $94.387061, reserve per launch $30.00 (6 x $5), room for settled spend $64.39; C1 projection $84.90 fits");
-    expect(txt.split("\n").filter((x) => x.startsWith("RESERVE")).length).toBe(15);
+    expect(txt).toContain("RESERVE stage3-pilot-4: cap $94.387061, reserve per launch $30.00 (6 x $5), room for settled spend $64.39; C1 projection $84.90 fits");
+    expect(txt.split("\n").filter((x) => x.startsWith("RESERVE")).length).toBe(16);
   }, 60_000);
 });
 
@@ -114,15 +115,15 @@ describe("launch guard", () => {
   const approved = () => { const d = tmp(); const out: Partial<Record<Item, any[]>> = {}; for (const i of items) { approve(join(d, i + ".jsonl"), i, CAPS_USD[i], "t"); out[i] = readRows(join(d, i + ".jsonl")); } return { d, out }; };
   test("the line: items not done at their caps plus the crew, inside 3,000 and past it", () => {
     const { out } = approved();
-    expect(lineCheck(out, crew(400_000)).total).toBe(toMicros(2980));
-    expect(lineCheck(out, crew(420_000)).fits).toBe(true);
-    expect(lineCheck(out, crew(420_010)).fits).toBe(false);
+    expect(lineCheck(out, crew(400_000)).total).toBe(toMicros(3074.387061));
+    expect(lineCheck(out, crew(325_612)).fits).toBe(true);
+    expect(lineCheck(out, crew(325_620)).fits).toBe(false);
     const p = join(tmp(), "d.jsonl");
     approve(p, "stage1-p1", 70, "t");
     const l = new Ledger(p, "stage1-p1");
     l.reserve("x", toMicros(10)); l.settle("x", toMicros(9));
     markDone(p, "stage1-p1");
-    expect(lineCheck({ ...out, "stage1-p1": readRows(p) }, crew(0)).total).toBe(toMicros(2580 - 70 + 9));
+    expect(lineCheck({ ...out, "stage1-p1": readRows(p) }, crew(0)).total).toBe(toMicros(2674.387061 - 70 + 9));
   });
   test("D3: stage1-opus-r2's cap sits inside stage1-opus's, and it launches only once stage1-opus is done at the settled amount its cap leaves", () => {
     expect(toMicros(CAPS_USD["stage1-opus"]) - toMicros(28.314616)).toBe(toMicros(CAPS_USD["stage1-opus-r2"]));
@@ -138,8 +139,8 @@ describe("launch guard", () => {
       if (done) markDone(p, "stage1-opus");
       return readRows(p);
     };
-    expect(lineCheck({ ...out, "stage1-opus": opus(28.314616, false) }, crew(400_000)).total).toBe(toMicros(2980));
-    expect(lineCheck({ ...out, "stage1-opus": opus(28.314616, true) }, crew(400_000)).total).toBe(toMicros(2980));
+    expect(lineCheck({ ...out, "stage1-opus": opus(28.314616, false) }, crew(400_000)).total).toBe(toMicros(3074.387061));
+    expect(lineCheck({ ...out, "stage1-opus": opus(28.314616, true) }, crew(400_000)).total).toBe(toMicros(3074.387061));
     expect(launchGuard("stage1-opus-r2", { ...out, "stage1-opus": opus(28.314616, false) }, crew(0), parts, []).why).toEqual(["stage1-opus-r2's cap sits inside stage1-opus's, so it launches only once stage1-opus is marked done"]);
     expect(launchGuard("stage1-opus-r2", { ...out, "stage1-opus": opus(30, true) }, crew(0), parts, []).why).toEqual(["stage1-opus-r2's cap $121.69 is not stage1-opus's cap less its settled $30.00"]);
     expect(launchGuard("stage1-opus-r2", { ...out, "stage1-opus": opus(28.314616, true) }, crew(0), parts, []).ok).toBe(true);
@@ -173,8 +174,8 @@ describe("launch guard", () => {
     const fresh = join(tmp(), "r.jsonl");
     approve(fresh, "stage1-sol-run", CAPS_USD["stage1-sol-run"], "t");
     expect(() => itemCheck(readRows(fresh), "stage1-sol-run", CAPS_USD["stage1-sol-run"])).not.toThrow();
-    expect(lineCheck({ ...out, "stage1-sol": gate(0.03853, false) }, crew(400_000)).total).toBe(toMicros(2980));
-    expect(lineCheck({ ...out, "stage1-sol": gate(0.03853, true) }, crew(400_000)).total).toBe(toMicros(2980));
+    expect(lineCheck({ ...out, "stage1-sol": gate(0.03853, false) }, crew(400_000)).total).toBe(toMicros(3074.387061));
+    expect(lineCheck({ ...out, "stage1-sol": gate(0.03853, true) }, crew(400_000)).total).toBe(toMicros(3074.387061));
     expect(launchGuard("stage1-sol-run", { ...out, "stage1-sol": gate(0.03853, false) }, crew(0), run.parts, []).why).toEqual(["stage1-sol-run's cap sits inside stage1-sol's, so it launches only once stage1-sol is marked done"]);
     expect(launchGuard("stage1-sol-run", { ...out, "stage1-sol": gate(0.5, true) }, crew(0), run.parts, []).why).toEqual(["stage1-sol-run's cap $179.96 is not stage1-sol's cap less its settled $0.50"]);
     expect(launchGuard("stage1-sol-run", { ...out, "stage1-sol": gate(0.03853, true) }, crew(0), run.parts, []).ok).toBe(true);
@@ -191,11 +192,30 @@ describe("launch guard", () => {
       if (done) markDone(p, "stage3-pilot");
       return readRows(p);
     };
-    expect(lineCheck({ ...out, "stage3-pilot": smoke(0.612939, false) }, crew(400_000)).total).toBe(toMicros(2980));
-    expect(lineCheck({ ...out, "stage3-pilot": smoke(0.612939, true) }, crew(400_000)).total).toBe(toMicros(2980));
+    expect(lineCheck({ ...out, "stage3-pilot": smoke(0.612939, false) }, crew(400_000)).total).toBe(toMicros(3074.387061));
+    expect(lineCheck({ ...out, "stage3-pilot": smoke(0.612939, true) }, crew(400_000)).total).toBe(toMicros(3074.387061));
     expect(launchGuard("stage3-pilot-3", { ...out, "stage3-pilot": smoke(0.612939, false) }, crew(0), parts, []).why).toEqual(["stage3-pilot-3's cap sits inside stage3-pilot's, so it launches only once stage3-pilot is marked done"]);
     expect(launchGuard("stage3-pilot-3", { ...out, "stage3-pilot": smoke(1, true) }, crew(0), parts, []).why).toEqual(["stage3-pilot-3's cap $94.39 is not stage3-pilot's cap less its settled $1.00"]);
     expect(launchGuard("stage3-pilot-3", { ...out, "stage3-pilot": smoke(0.612939, true) }, crew(0), parts, []).ok).toBe(true);
+  });
+  test("D14: stage3-pilot-4 is its own item at $94.387061, carved from nothing, and its guard binds on the line with stage3-pilot-3 done at $26.910177", () => {
+    expect(CARVED["stage3-pilot-4"]).toBeUndefined();
+    expect(ITEMS["stage3-pilot-4"]).toEqual({ ...ITEMS["stage3-pilot"]!, capUsd: 94.387061 });
+    const { out } = approved(), parts = itemPlan("stage3-pilot-4", lists).parts;
+    const closed = (item: Item, settled: number) => {
+      const p = join(tmp(), item + ".jsonl");
+      approve(p, item, CAPS_USD[item], "t");
+      const l = new Ledger(p, item);
+      l.reserve(item + "/p/a", toMicros(settled)); l.settle(item + "/p/a", toMicros(settled));
+      markDone(p, item);
+      return readRows(p);
+    };
+    const pilots = { ...out, "stage3-pilot": closed("stage3-pilot", 0.612939), "stage3-pilot-2": closed("stage3-pilot-2", 11.98629), "stage3-pilot-3": closed("stage3-pilot-3", 26.910177) };
+    expect(lineCheck(pilots, crew(0)).total).toBe(toMicros(2523.896467));
+    expect(launchGuard("stage3-pilot-4", pilots, crew(476_103), parts, []).ok).toBe(true);
+    const over = launchGuard("stage3-pilot-4", pilots, crew(476_110), parts, []);
+    expect(over.ok).toBe(false);
+    expect(over.why[0]).toStartWith("the line: all-in $3000.01");
   });
   test("C1: every session item fits fresh, and VM rows that would push the projection past the cap refuse", () => {
     for (const i of Object.keys(ITEMS) as Item[]) expect(c1Guard(i, [], itemPlan(i, lists).parts, []).fits).toBe(true);
@@ -236,7 +256,7 @@ describe("launch guard", () => {
     const env = { HM_LEDGERS: d, HM_CREW: c, LEDGER: join(d, "stage1-opus.jsonl") };
     const bad = run(["launch", work, "--part", "s1-1"], env);
     expect(bad.exitCode).toBe(2);
-    expect(bad.stderr.toString()).toStartWith("E_HM_LAUNCH stage1-opus: the line: all-in $3180.00");
+    expect(bad.stderr.toString()).toStartWith("E_HM_LAUNCH stage1-opus: the line: all-in $3274.39");
     writeFileSync(c, JSON.stringify(crew(100_000)));
     const ok = run(["launch", work, "--part", "s1-1"], env);
     expect(ok.stdout.toString()).toStartWith("HM_LAUNCH PASS stage1-opus");

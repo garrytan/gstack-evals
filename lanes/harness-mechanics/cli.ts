@@ -7,8 +7,8 @@ import { dirname, join, resolve } from "node:path";
 import { l1Main } from "../../quick/laneb/l1/l1.ts";
 import { admission, readFitRows, report, type HmRowIn, type ReportConfig } from "./analyze.ts";
 import { dryrun } from "./dryrun.ts";
-import { harborEnvRecord } from "./arms.ts";
-import { CLOSING, REPO, section11Excluded, sha256, SMOKE_PART } from "./pins.ts";
+import { harborEnvRecord, judgeTarCheck, manifestOf } from "./arms.ts";
+import { CLOSING, JUDGE, REPO, section11Excluded, sha256, SMOKE_PART } from "./pins.ts";
 import { HM_PROFILE } from "./plans.ts";
 import { patternsCommand } from "./score.ts";
 import { approve, doneCheck, isItem, launchGuard, markDone, type HmCrew, type Item } from "./money.ts";
@@ -19,7 +19,7 @@ import { screenCommand, screenVm } from "./screen.ts";
 import { buildHmTable } from "./table.ts";
 import { countProblems, itemsFromEnv, replayReport, runReplay } from "./replay.ts";
 
-const USAGE = "E_USAGE usage: hm dryrun --out <dir> | prepare <work> --item <item> | host-up|attach|recover|host-down <work> | launch|relaunch|rerun <work> --part <part> | approve --ledger <jsonl> --item <item> --usd <cap> --approved-by <who> | done --ledger <jsonl> --item <item> [--work <work>] | guard <work> | screen --out <dir> | fit --out <dir> [--only <task>] | build-check --out <dir> [--list calibration|scored] [--shard k/n] | fit-vm start|status|finish <work> | screen-vm start|finish <work> | table <config.json> <out.jsonl> | patterns <job dir>... | judge-custody <work> | judge-check <work> | admission <stage1 table.jsonl> [--fit <fit rows.jsonl> --fit-sha256 <sha256>] [--out <dir>] | report <table.jsonl> <config.json> <out dir> | replay items | replay build --config <json> --out <file> | replay run --clients <module.ts> --start <file> --ledger <jsonl> --out <dir> | replay report <out dir>";
+const USAGE = "E_USAGE usage: hm dryrun --out <dir> | prepare <work> --item <item> | host-up|attach|recover|host-down <work> | launch|relaunch|rerun <work> --part <part> | approve --ledger <jsonl> --item <item> --usd <cap> --approved-by <who> | done --ledger <jsonl> --item <item> [--work <work>] | guard <work> | judge-tar <judge.tar.gz> [--manifest <json>] | screen --out <dir> | fit --out <dir> [--only <task>] | build-check --out <dir> [--list calibration|scored] [--shard k/n] | fit-vm start|status|finish <work> | screen-vm start|finish <work> | table <config.json> <out.jsonl> | patterns <job dir>... | judge-custody <work> | judge-check <work> | admission <stage1 table.jsonl> [--fit <fit rows.jsonl> --fit-sha256 <sha256>] [--out <dir>] | report <table.jsonl> <config.json> <out dir> | replay items | replay build --config <json> --out <file> | replay run --clients <module.ts> --start <file> --ledger <jsonl> --out <dir> | replay report <out dir>";
 const readTable = (p: string) => readFileSync(p, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as HmRowIn);
 // HM_SIMS cuts power.py's Monte Carlo for keyless tests; the report runs power.py's own 2,000 without it.
 const sims = () => (process.env.HM_SIMS ? Number(process.env.HM_SIMS) : undefined);
@@ -39,6 +39,22 @@ function guard(work: string) {
   const g = launchGuard(plan.item, ledgers, JSON.parse(readFileSync(crewPath, "utf8")) as HmCrew, parts, finished);
   for (const l of g.lines) console.log(l);
   if (!g.ok) throw new Error("E_HM_LAUNCH " + plan.item + ": " + g.why.join("; ") + "; take it to the Captain before launching");
+}
+// D14 (item 14): host-up, launch and relaunch refuse a judge part whose judge tar.gz fails the launcher check (arms.ts
+// judgeTarCheck, against the committed judge manifest, or HM_JUDGE_MANIFEST in keyless tests). host-up checks every
+// planned judge part's own copy, launch the named part's, and relaunch the ARMS copy its relaunch part is prepared from.
+function judgeTars(cmd: string, work: string, part: string | undefined) {
+  const plan = JSON.parse(readFileSync(join(work, "plan.json"), "utf8"));
+  const rectsOf = (name: string) => { const own = join(work, name, "l1-part.json"); return (existsSync(own) ? JSON.parse(readFileSync(own, "utf8")) : plan.parts.find((x: any) => x.name === name))?.rects ?? []; };
+  const judged = (name: string) => rectsOf(name).some((r: any) => r.arms.some((a: string) => (JUDGE as string[]).includes(a)));
+  const names: string[] = cmd === "host-up" ? plan.parts.map((x: any) => x.name) : part ? [part] : [];
+  const arms = () => process.env.ARMS ?? (() => { throw new Error("E_USAGE hm relaunch: set ARMS to the arm tar directory"); })();
+  const tars = new Set(names.filter(judged).map((n) => (cmd === "relaunch" ? join(arms(), "judge.tar.gz") : join(work, n, "arms/judge.tar.gz"))));
+  for (const t of tars) {
+    const c = judgeTarCheck(t, process.env.HM_JUDGE_MANIFEST || manifestOf("judge"));
+    console.log(c.line);
+    if (!c.pass) throw new Error("E_HM_JUDGE_BUILD " + plan.item + ": the judge tar " + t + " fails the launcher check (" + c.problems.join("; ") + "); rebuild the judge tar with build.sh hm-judge and prepare again");
+  }
 }
 const GUARDED = ["host-up", "launch", "relaunch"];
 const LAUNCHER = ["prepare", "host-up", "launch", "attach", "relaunch", "rerun", "recover", "host-down"];
@@ -63,6 +79,13 @@ export async function main(argv: string[]): Promise<number> {
       return 0;
     }
     if (cmd === "guard") { if (!rest[0]) throw new Error(USAGE); guard(resolve(rest[0])); return 0; }
+    if (cmd === "judge-tar") {
+      if (!rest[0] || rest[0].startsWith("--")) throw new Error(USAGE);
+      const c = judgeTarCheck(resolve(rest[0]), resolve(opt("manifest") ?? manifestOf("judge")));
+      console.log(c.line);
+      if (!c.pass) console.error("E_HM_JUDGE_BUILD hm judge-tar: " + c.problems.join("; "));
+      return c.pass ? 0 : 2;
+    }
     if (cmd === "screen") { const out = opt("out"); if (!out) throw new Error(USAGE); for (const l of screenCommand(resolve(out), () => {}).lines) console.log(l); return 0; }
     if (cmd === "fit") { const out = opt("out"); if (!out) throw new Error(USAGE); const rows = fit(resolve(out), fitTasks(opt("only"))); console.log("fit " + rows.length + " rows in " + join(resolve(out), "fit.jsonl") + ", summary in fit.md"); return 0; }
     if (cmd === "build-check") {
@@ -73,7 +96,7 @@ export async function main(argv: string[]): Promise<number> {
     if (cmd === "fit-vm") { if (!rest[0] || !rest[1]) throw new Error(USAGE); return fitVm(rest[0], resolve(rest[1])); }
     if (cmd === "screen-vm") { if (!rest[0] || !rest[1]) throw new Error(USAGE); return screenVm(rest[0], resolve(rest[1])); }
     if (cmd && LAUNCHER.includes(cmd)) {
-      if (GUARDED.includes(cmd)) { if (!rest[0]) throw new Error(USAGE); guard(resolve(rest[0])); }
+      if (GUARDED.includes(cmd)) { if (!rest[0]) throw new Error(USAGE); guard(resolve(rest[0])); judgeTars(cmd, resolve(rest[0]), opt("part")); }
       l1Main(argv, HM_PROFILE);
       if (cmd === "prepare") {
         const work = resolve(rest[0]!), plan = JSON.parse(readFileSync(join(work, "plan.json"), "utf8"));

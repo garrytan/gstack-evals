@@ -8,13 +8,29 @@ import { join } from "node:path";
 import { appendRow, toMicros } from "../../quick/laneb/runner/ledger.ts";
 import { armSpec, CLOSING_LINES } from "../../quick/laneb/runner/grid.ts";
 import { plannedCells, seeded } from "../../quick/laneb/l1/l1.ts";
-import { ARMS, BUNDLE, bundleLists, capsTotalUsd, CLOSING, ledgerCapsUsd, frontMatterDigests, HM, loadBundle, MODELS, readScreened, REPO, sha256, unscreenedText } from "../../lanes/harness-mechanics/pins.ts";
+import { ARMS, BUNDLE, bundleLists, CAPS_USD, capsTotalUsd, CLOSING, ledgerCapsUsd, frontMatterDigests, HM, loadBundle, MODELS, readScreened, REPO, sha256, unscreenedText } from "../../lanes/harness-mechanics/pins.ts";
 import { itemPlan, ITEMS } from "../../lanes/harness-mechanics/plans.ts";
 import { STEPS } from "../../lanes/harness-mechanics/dryrun.ts";
+import { approve, markDone, plannedLine, type Item } from "../../lanes/harness-mechanics/money.ts";
+import { Ledger, readRows } from "../../quick/laneb/runner/ledger.ts";
 
 const CLI = join(REPO, "lanes/harness-mechanics/cli.ts");
 const lists = bundleLists();
 const run = (args: string[], env: Record<string, string> = {}) => Bun.spawnSync([process.execPath, CLI, ...args], { env: { ...process.env, ...env }, cwd: REPO });
+// Item ledgers holding the Stage 3 pilots' settled spend, each with its done row unless named in open.
+const SETTLED: [Item, number][] = [["stage3-pilot", 0.612939], ["stage3-pilot-2", 11.98629], ["stage3-pilot-3", 26.910177]];
+function pilotLedgers(open: Item[] = []) {
+  const d = mkdtempSync(join(tmpdir(), "hm-ledgers-"));
+  for (const [i, usd] of SETTLED) {
+    const path = join(d, i + ".jsonl");
+    approve(path, i, CAPS_USD[i], "the Captain");
+    const l = new Ledger(path, i);
+    l.reserve(i + "/p/s", toMicros(usd)); l.settle(i + "/p/s", toMicros(usd));
+    if (!open.includes(i)) markDone(path, i);
+  }
+  return d;
+}
+const readLedgers = (d: string) => Object.fromEntries(SETTLED.map(([i]) => [i, readRows(join(d, i + ".jsonl"))]));
 
 describe("pins", () => {
   test("every attachment loads at its front-matter sha256, and a changed byte is refused", () => {
@@ -37,16 +53,30 @@ describe("pins", () => {
     expect(lists.judgePilot).toEqual(lists.calibration.slice(0, 12));
   });
 
-  test("the caps sum to 2,980 inside the 3,000 line (2,880 before D10's $5 on stage3-pilot, 2,885 before D11's stage3-pilot-2), and each model's allowance is section 22's", () => {
-    expect(ledgerCapsUsd()).toBe(2580);
-    expect(capsTotalUsd()).toBe(2980);
-    expect(capsTotalUsd()).toBeLessThan(HM.lineUsd);
+  test("the caps sum to 3,074.387061 with D14's stage3-pilot-4 (2,980 before it), the planned line counts the done pilots at their settled and fits under 3,000, and each model's allowance is section 22's", () => {
+    expect(ledgerCapsUsd()).toBe(2674.387061);
+    expect(capsTotalUsd()).toBe(3074.387061);
+    const p = plannedLine(readLedgers(pilotLedgers()));
+    expect(p.items.filter((i) => i.done).map((i) => [i.item, i.counted])).toEqual(SETTLED.map(([i, usd]) => [i, toMicros(usd)]));
+    expect(p.total).toBe(toMicros(2923.896467));
+    expect(p.total).toBeLessThan(toMicros(HM.lineUsd));
+    expect(p.fits).toBe(true);
     expect([MODELS.opus.allowanceUsd, MODELS.sol.allowanceUsd, MODELS.p1.allowanceUsd]).toEqual([5, 6, 2]);
     for (const m of Object.values(MODELS)) {
       const c = JSON.parse(readFileSync(join(REPO, "quick/laneb/config", m.cells), "utf8"));
       expect(c.models).toEqual([expect.objectContaining({ id: m.id, session_cap_usd: m.allowanceUsd })]);
       expect(c.sdk_max_turns).toBe(HM.turns);
     }
+  });
+
+  test("an open item counts at its cap in the planned line: stage3-pilot-3 before its done row, and stage3-pilot-4 with no ledger", () => {
+    const counted = (open: Item[]) => Object.fromEntries(plannedLine(readLedgers(pilotLedgers(open))).items.map((i) => [i.item, i.counted]));
+    expect(counted(["stage3-pilot-3"])["stage3-pilot-3"]).toBe(toMicros(94.387061));
+    expect(counted([])["stage3-pilot-3"]).toBe(toMicros(26.910177));
+    expect(counted([])["stage3-pilot-4"]).toBe(toMicros(94.387061));
+    expect(plannedLine(readLedgers(pilotLedgers(["stage3-pilot-3"]))).total).toBe(toMicros(2991.373351));
+    const none = plannedLine({});
+    expect([none.total, none.fits]).toEqual([toMicros(3074.387061), false]);
   });
 
   test("the screened lists are checked by sha256 and must come from their split or the spares", () => {
@@ -97,6 +127,13 @@ describe("plans", () => {
     expect([c.sessions, c.picker_calls]).toEqual([74, 0]);
     expect(c.parts.map((x) => [x.name, x.model, x.cells, x.rects])).toEqual(a.parts.map((x) => [x.name, x.model, x.cells, x.rects]));
     expect(c.parts.map((x) => x.prefix)).toEqual(["stage3-pilot-3/smoke-opus/", "stage3-pilot-3/pilot-opus/", "stage3-pilot-3/pilot-sol/", "stage3-pilot-3/pilot-p1/"]);
+  });
+
+  test("stage3-pilot-4 (D14) has stage3-pilot's plan under its own ledger prefix: the smoke part first, then all three pilot parts", () => {
+    const a = plan("stage3-pilot"), d = plan("stage3-pilot-4");
+    expect([d.sessions, d.picker_calls]).toEqual([74, 0]);
+    expect(d.parts.map((x) => [x.name, x.model, x.cells, x.rects])).toEqual(a.parts.map((x) => [x.name, x.model, x.cells, x.rects]));
+    expect(d.parts.map((x) => x.prefix)).toEqual(["stage3-pilot-4/smoke-opus/", "stage3-pilot-4/pilot-opus/", "stage3-pilot-4/pilot-sol/", "stage3-pilot-4/pilot-p1/"]);
   });
 
   test("Stage 4: 920 sessions and 200 picker calls per model, 2,760 in all; the judge arms only on the first 60 scored tasks", () => {
@@ -184,7 +221,7 @@ describe("cli", () => {
     const out = mkdtempSync(join(tmpdir(), "hm-dry-"));
     const bin = mkdtempSync(join(tmpdir(), "hm-nodocker-"));
     writeFileSync(join(bin, "docker"), "#!/bin/sh\nexit 1\n", { mode: 0o755 });
-    const r = run(["dryrun", "--out", out], { HM_GSTACK: "", PATH: bin + ":" + process.env.PATH });
+    const r = run(["dryrun", "--out", out], { HM_GSTACK: "", HM_LEDGERS: pilotLedgers(), PATH: bin + ":" + process.env.PATH });
     const lines = r.stdout.toString().trim().split("\n");
     expect(lines.map((l) => l.split(" ")[1])).toEqual([...STEPS.map((s) => s.name), "FAIL"]);
     for (const n of ["1-arm-tars", "2-verify-hook"]) expect(lines.some((l) => l.startsWith("DRYRUN " + n + " FAIL "))).toBe(true);
@@ -194,12 +231,27 @@ describe("cli", () => {
     for (const n of ["6-ledger", "leases-per-item", "reserve-mechanics"]) expect(lines.some((l) => l.startsWith("DRYRUN " + n + " PASS "))).toBe(true);
     for (const n of ["3-matcher-probes", "stop-hook-loadline", "matcher-72", "probes-189"]) expect(lines.some((l) => l.startsWith("DRYRUN " + n + " FAIL E_HM_PIN set HM_GSTACK"))).toBe(true);
     expect(lines[0]).toStartWith("DRYRUN skeleton PASS");
+    expect(lines[0]).toContain("planned 2923.896467 under the 3000 line");
     expect(lines[0]).toContain("stage1-sol 160, stage1-sol-run 160, stage1-p1 160");
     expect(lines.at(-1)).toBe("DRYRUN: FAIL");
     expect(r.exitCode).toBe(1);
     expect(readFileSync(join(out, "dryrun.txt"), "utf8").trim().split("\n")).toEqual(lines);
     for (const n of ["8-analysis", "verdict-tables", "h1-amendment"]) expect(lines.some((l) => l.startsWith("DRYRUN " + n + " PASS "))).toBe(true);
   }, 300_000);
+
+  test("the skeleton step reads HM_LEDGERS and fails when the planned line passes 3,000", () => {
+    const step = STEPS.find((s) => s.name === "skeleton")!, was = process.env.HM_LEDGERS;
+    try {
+      delete process.env.HM_LEDGERS;
+      expect(step.run!("")).toEqual({ pass: false, detail: "planned 3074.387061 is over the 3000 line; set HM_LEDGERS to the folder of item ledgers (<item>.jsonl)" });
+      process.env.HM_LEDGERS = pilotLedgers(["stage3-pilot-3"]);
+      const r = step.run!("");
+      expect(r.pass).toBe(true);
+      expect(r.detail).toContain("planned 2991.373351 under the 3000 line");
+    } finally {
+      if (was === undefined) delete process.env.HM_LEDGERS; else process.env.HM_LEDGERS = was;
+    }
+  });
 
   test("report needs a table, a config and an out dir", () => {
     const d = mkdtempSync(join(tmpdir(), "hm-rep-"));

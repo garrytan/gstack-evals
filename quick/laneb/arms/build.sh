@@ -6,6 +6,8 @@
 #   quick/laneb/arms/build.sh l1 [out-dir]   default out-dir: ~/.capy/work/laneb-arms-l1
 #   quick/laneb/arms/build.sh hm [out-dir]   default out-dir: ~/.capy/work/hm/arms; the harness mechanics arms
 #                                            (none, prose, hook), manifests in manifests/hm/
+#   quick/laneb/arms/build.sh hm-judge [out-dir]   the judge tar alone, from the hook.tar and decision-routing runtime
+#                                            already in <out> at their committed sha256s; only judge.json is rewritten
 #
 # l1 output, outside git: <out>/{none,before,after,off}.tar and .tar.gz, their
 # file inventories (<arm>.files.tsv), the pins' checkouts and fetch records, and
@@ -42,6 +44,7 @@ DEFAULT_OUT=$HOME/.capy/work/laneb-arms
 MODE=default
 if [ "${1:-}" = l1 ]; then MODE=l1; DEFAULT_OUT=$HOME/.capy/work/laneb-arms-l1; shift; fi
 if [ "${1:-}" = hm ]; then MODE=hm; DEFAULT_OUT=$HOME/.capy/work/hm/arms; shift; fi
+if [ "${1:-}" = hm-judge ]; then MODE=hm-judge; DEFAULT_OUT=$HOME/.capy/work/hm/arms; shift; fi
 OUT=$(mkdir -p "${1:-$DEFAULT_OUT}" && cd "${1:-$DEFAULT_OUT}" && pwd)
 BUILDER=$(sed -n 's/^ARG BUILDER_IMAGE=//p' "$HERE/Dockerfile")
 in_builder() { docker run --rm --network none -u "$(id -u):$(id -g)" -v "$OUT:/out" -w /out "$BUILDER" "$@"; }
@@ -123,15 +126,19 @@ if [ "$MODE" = l1 ]; then build_l1; exit 0; fi
 build_judge() {
   local t=$OUT/trees/judge j=$OUT/trees/judge/.hm/judge root=$LANEB/../.. arm
   echo "== judge tar: the hook tree plus the decision-routing runtime (its own build.sh at /root/.hm/dr) and hm_judge.py"
-  rm -rf "$t" "$OUT/dr-out"
-  mkdir -p "$t" "$OUT/dr-out"
+  rm -rf "$t"
+  mkdir -p "$t"
   tar -xpf "$OUT/hook.tar" -C "$t"
-  docker run --rm -v "$(command -v uv)":/usr/local/bin/uv:ro -v "$root":/repo:ro -v "$OUT/dr-out":/out debian:bookworm-slim \
-    bash /repo/lanes/decision-routing/agent/runtime/build.sh /out /root/.hm/dr > "$OUT/build-dr.log" 2>&1 || { tail -40 "$OUT/build-dr.log"; exit 1; }
+  if [ "${1:-}" != pinned-dr ]; then
+    rm -rf "$OUT/dr-out"
+    mkdir -p "$OUT/dr-out"
+    docker run --rm -v "$(command -v uv)":/usr/local/bin/uv:ro -v "$root":/repo:ro -v "$OUT/dr-out":/out debian:bookworm-slim \
+      bash /repo/lanes/decision-routing/agent/runtime/build.sh /out /root/.hm/dr > "$OUT/build-dr.log" 2>&1 || { tail -40 "$OUT/build-dr.log"; exit 1; }
+  fi
   mkdir -p "$t/.hm/dr" "$j"
   tar -xzf "$OUT/dr-out/dr-runtime.tar.gz" -C "$t/.hm/dr"
   cp "$root/lanes/harness-mechanics/judge/hm_judge.py" "$j/hm_judge.py"
-  cp "${HM_BAND:-$root/lanes/harness-mechanics/judge/band.json}" "$j/band.json"
+  (cd "$root" && bun lanes/harness-mechanics/arms.ts judge-inputs --band lanes/harness-mechanics/judge/replay/band.json --admission lanes/harness-mechanics/judge/replay/admission.json --out "$j")
   (cd "$root" && bun build lanes/harness-mechanics/judge.ts --target=bun --outfile "$j/facts.js" > "$OUT/build-facts.log" 2>&1) || { cat "$OUT/build-facts.log"; exit 1; }
   (cd "$root" && bun -e 'import { loadMatcher } from "./lanes/harness-mechanics/match.ts"; process.stdout.write(loadMatcher().match.regex)') > "$j/match.re"
   for arm in stop risky; do
@@ -139,7 +146,7 @@ build_judge() {
     chmod 755 "$j/$arm"
   done
   for arm in jev p1; do
-    printf '{"backend":"%s","band":"/root/.hm/judge/band.json","log":"/root/.hm/log/hooks.jsonl","state_dir":"/root/.hm/state","particle_max_tokens":8000,"contract_hook":"/root/.claude/skills/gstack/hosts/claude/hooks/skill-contract-stop-hook","careful":"/root/.claude/skills/gstack/careful/bin/check-careful.sh","done_facts":["/opt/laneb/bin/bun","/root/.hm/judge/facts.js","facts","{transcript}","--regex","/root/.hm/judge/match.re"]}\n' "$arm" > "$j/judge-$arm.json"
+    printf '{"backend":"%s","band":"/root/.hm/judge/band.json","admission":"/root/.hm/judge/admission.json","log":"/root/.hm/log/hooks.jsonl","state_dir":"/root/.hm/state","particle_max_tokens":8000,"contract_hook":"/root/.claude/skills/gstack/hosts/claude/hooks/skill-contract-stop-hook","careful":"/root/.claude/skills/gstack/careful/bin/check-careful.sh","done_facts":["/opt/laneb/bin/bun","/root/.hm/judge/facts.js","facts","{transcript}","--regex","/root/.hm/judge/match.re"]}\n' "$arm" > "$j/judge-$arm.json"
   done
   python3 - "$t/.claude/settings.json" <<'PY'
 import json, sys
@@ -203,7 +210,11 @@ build_hm() {
   fi
   echo "== manifests"
   cd "$root"
-  for arm in $HM_ARMS; do
+  for arm in $HM_ARMS; do hm_manifest "$arm"; done
+  ls -l "$OUT"/*.tar "$OUT"/*.tar.gz
+}
+hm_manifest() {
+  local arm=$1 man=$HERE/manifests/hm meta
     meta=(--meta claude_code="$CLAUDE_CODE_VERSION" --meta tar_gz_sha256="$(sha256sum "$OUT/$arm.tar.gz" | cut -d' ' -f1)")
     if [ "$arm" != none ]; then
       meta+=(--meta gstack_sha="$HM_SHA" --meta update_check=false --meta onboarding_markers="$(markers "$OUT/trees/$arm")"
@@ -211,13 +222,31 @@ build_hm() {
     fi
     if [ "$arm" = judge ]; then
       meta+=(--meta dr_runtime_sha256="$(cat "$OUT/dr-out/dr-runtime.tar.gz.sha256")" --meta band_sha256="$(sha256sum "$OUT/trees/judge/.hm/judge/band.json" | cut -d' ' -f1)"
+        --meta admission_sha256="$(sha256sum "$OUT/trees/judge/.hm/judge/admission.json" | cut -d' ' -f1)" --meta admitted_points="$(python3 -c 'import json, sys; print(",".join(p["point"] for p in json.load(open(sys.argv[1]))["points"] if p.get("result") == "admitted"))' "$OUT/trees/judge/.hm/judge/admission.json")"
         --meta hm_judge_sha256="$(sha256sum "$OUT/trees/judge/.hm/judge/hm_judge.py" | cut -d' ' -f1)" --meta facts_sha256="$(sha256sum "$OUT/trees/judge/.hm/judge/facts.js" | cut -d' ' -f1)")
     fi
     bun lanes/harness-mechanics/arms.ts manifest --arm "$arm" --tree "$OUT/trees/$arm" --tar "$OUT/$arm.tar" --out "$man" "${meta[@]}"
-  done
-  ls -l "$OUT"/*.tar "$OUT"/*.tar.gz
+}
+# D14: the judge tar alone. gstack's setup no longer rebuilds prose and hook byte for byte, so the judge tar is built from
+# the hook.tar and decision-routing runtime already in <out>, each refused unless it is at its committed sha256, with this
+# checkout's judge files. none, prose and hook and their manifests are left as they are.
+build_hm_judge() {
+  local man=$HERE/manifests/hm root=$LANEB/../.. want
+  want=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["tar"]["sha256"])' "$man/hook.json")
+  test "$(sha256sum "$OUT/hook.tar" | cut -d' ' -f1)" = "$want" || { echo "E_HM_JUDGE_BUILD $OUT/hook.tar is not hook.json's tar sha256 $want" >&2; exit 1; }
+  want=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["dr_runtime_sha256"])' "$man/judge.json")
+  test "$(sha256sum "$OUT/dr-out/dr-runtime.tar.gz" | cut -d' ' -f1)" = "$want" && test "$(cat "$OUT/dr-out/dr-runtime.tar.gz.sha256")" = "$want" \
+    || { echo "E_HM_JUDGE_BUILD $OUT/dr-out/dr-runtime.tar.gz is not judge.json's dr_runtime_sha256 $want" >&2; exit 1; }
+  build_judge pinned-dr
+  echo "== tar"
+  in_builder sh -c "gzip -n -6 -c judge.tar > judge.tar.gz"
+  echo "== manifest"
+  cd "$root"
+  hm_manifest judge
+  ls -l "$OUT"/judge.tar "$OUT"/judge.tar.gz
 }
 if [ "$MODE" = hm ]; then build_hm; exit 0; fi
+if [ "$MODE" = hm-judge ]; then build_hm_judge; exit 0; fi
 
 echo "== gstack checkout at $GSTACK_SHA"
 rm -rf "$OUT/gstack-src"

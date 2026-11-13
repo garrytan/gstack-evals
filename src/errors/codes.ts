@@ -1187,6 +1187,15 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_HM_JUDGE_BUILD: {
+    exit: 2,
+    meaning: "A harness mechanics judge tar does not carry the replay's outputs (lanes/harness-mechanics/arms.ts, deviation D14): build.sh was given a band.json or admission.json that is not the replay's file at pins.ts REPLAY_JUDGE's sha256, build.sh hm-judge found a hook.tar or decision-routing runtime that is not at its committed sha256, or the launcher found a judge part's tar.gz that is not the committed manifest's, or a manifest or tar that names another band, another admission or other admitted points.",
+    fix: "Rebuild the judge tar with build.sh hm-judge from the pinned hook.tar and runtime and the replay's files under lanes/harness-mechanics/judge/replay, re-pin its manifest, and prepare the item again. Never edit a band, an admission or a manifest to make them match.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
+  },
   E_HM_PICKER: {
     exit: 2,
     meaning: "The harness mechanics bo2 picker (lanes/harness-mechanics/picker.ts, hm pick) refused or stopped: its config names an unknown item or model, a picker call failed at the metering proxy, or a reserve on the item's ledger was refused.",

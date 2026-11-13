@@ -148,6 +148,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_HM_FIT](#e_hm_fit) | 2 | U20 |
 | [E_HM_REPLAY](#e_hm_replay) | 2 | U20 |
 | [E_HM_JEV_VERSION](#e_hm_jev_version) | 2 | U20 |
+| [E_HM_JUDGE_BUILD](#e_hm_judge_build) | 2 | U20 |
 | [E_HM_PICKER](#e_hm_picker) | 2 | U20 |
 | [E_HM_CUSTODY](#e_hm_custody) | 2 | U20 |
 | [E_HM_PIN](#e_hm_pin) | 2 | U20 |
@@ -1344,6 +1345,14 @@ A harness mechanics judgment hook (lanes/harness-mechanics/judge/hm_judge.py) st
 Fix: Stop the judge arms (judge.ts jevChanges counts the line). Read the real model field of a TypeSafe response, which Stage 2's smoke checks first, and take it to the Captain before any judge session runs again.
 
 Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_HM_JUDGE_BUILD
+
+A harness mechanics judge tar does not carry the replay's outputs (lanes/harness-mechanics/arms.ts, deviation D14): build.sh was given a band.json or admission.json that is not the replay's file at pins.ts REPLAY_JUDGE's sha256, build.sh hm-judge found a hook.tar or decision-routing runtime that is not at its committed sha256, or the launcher found a judge part's tar.gz that is not the committed manifest's, or a manifest or tar that names another band, another admission or other admitted points.
+
+Fix: Rebuild the judge tar with build.sh hm-judge from the pinned hook.tar and runtime and the replay's files under lanes/harness-mechanics/judge/replay, re-pin its manifest, and prepare the item again. Never edit a band, an admission or a manifest to make them match.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 
 ### E_HM_PICKER
 

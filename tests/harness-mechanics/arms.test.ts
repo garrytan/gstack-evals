@@ -5,9 +5,10 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { applyVerifyPatch, CONFIG, configProblems, contractOf, envProblems, gitBlob, hookProblems, JUDGE_RISKY, JUDGE_STOP, judgeTarProblems, keyHits, patchedProblems, RISKY_SOURCE, stripSnapshot, vendoredVerify } from "../../lanes/harness-mechanics/arms.ts";
+import { applyVerifyPatch, CONFIG, configProblems, contractOf, envProblems, gitBlob, hookProblems, JUDGE_RISKY, JUDGE_STOP, judgeInputs, judgeTarCheck, judgeTarProblems, keyHits, patchedProblems, RISKY_SOURCE, stripSnapshot, vendoredVerify } from "../../lanes/harness-mechanics/arms.ts";
 import { session } from "../../lanes/harness-mechanics/match.ts";
-import { REPO, VERIFY_PATCH } from "../../lanes/harness-mechanics/pins.ts";
+import { REPLAY_JUDGE, REPO, VERIFY_PATCH } from "../../lanes/harness-mechanics/pins.ts";
+import { judgeTarFixture, PLACEHOLDER_BAND, sha } from "./judge-tar-fixture.ts";
 import { checkContract, parseTranscript } from "../../lanes/harness-mechanics/vendor/gstack/lib/skill-contract.ts";
 
 describe("verify-hook patch", () => {
@@ -88,10 +89,12 @@ describe("judge tar", () => {
     writeFileSync(join(d, ".hm/dr/venv/bin/python"), "");
     const py = readFileSync(join(REPO, "lanes/harness-mechanics/judge/hm_judge.py"), "utf8");
     writeFileSync(join(d, ".hm/judge/hm_judge.py"), py);
-    writeFileSync(join(d, ".hm/judge/band.json"), "{}");
+    const band = readFileSync(join(REPO, REPLAY_JUDGE.band.file), "utf8"), admission = readFileSync(join(REPO, REPLAY_JUDGE.admission.file), "utf8");
+    writeFileSync(join(d, ".hm/judge/band.json"), band);
+    writeFileSync(join(d, ".hm/judge/admission.json"), admission);
     writeFileSync(join(d, ".hm/judge/facts.js"), "f");
-    for (const b of ["jev", "p1"]) writeFileSync(join(d, ".hm/judge/judge-" + b + ".json"), JSON.stringify({ backend: b }));
-    const m = { band_sha256: sha("{}"), hm_judge_sha256: sha(py), facts_sha256: sha("f"), dr_runtime_sha256: "c".repeat(64),
+    for (const b of ["jev", "p1"]) writeFileSync(join(d, ".hm/judge/judge-" + b + ".json"), JSON.stringify({ backend: b, band: "/root/.hm/judge/band.json", admission: "/root/.hm/judge/admission.json" }));
+    const m = { band_sha256: sha(band), admission_sha256: sha(admission), admitted_points: "risky", hm_judge_sha256: sha(py), facts_sha256: sha("f"), dr_runtime_sha256: "c".repeat(64),
       settings: { hooks: [{ event: "PreToolUse", matcher: "Bash", command: "/root/.hm/judge/risky" }] } };
     const tarf = join(d, "t.tar");
     writeFileSync(tarf, "tar");
@@ -106,6 +109,66 @@ describe("judge tar", () => {
     expect(judgeTarProblems(d, m, keyed, [["OPENROUTER_API_KEY", "stub-openrouter-key-0123456789"]])).toEqual(["judge: the tar holds OPENROUTER_API_KEY"]);
     writeFileSync(join(d, ".hm/judge/hm_judge.py"), py + "#");
     expect(judgeTarProblems(d, { ...m, hm_judge_sha256: sha(py + "#") }, tarf, [])).toEqual(["judge: hm_judge.py differs from the committed file"]);
+  });
+});
+
+describe("the judge arms take the replay's band and admission (D14)", () => {
+  const replay = { band: join(REPO, REPLAY_JUDGE.band.file), admission: join(REPO, REPLAY_JUDGE.admission.file) };
+  const placeholderLines = (bandSha: string) => [
+    "judge: the manifest's band_sha256 is " + bandSha + ", not the replay's band.json " + REPLAY_JUDGE.band.sha256,
+    "judge: the tar's .hm/judge/band.json is sha256 " + bandSha + ", not the replay's " + REPLAY_JUDGE.band.sha256,
+    "judge: the manifest's admission_sha256 is missing, not the replay's admission.json " + REPLAY_JUDGE.admission.sha256,
+    "judge: the tar's .hm/judge/admission.json is missing, not the replay's " + REPLAY_JUDGE.admission.sha256,
+    "judge: the manifest admits no points, not the replay's risky",
+    "judge: judge-jev.json does not point at /root/.hm/judge/band.json and /root/.hm/judge/admission.json",
+    "judge: judge-p1.json does not point at /root/.hm/judge/band.json and /root/.hm/judge/admission.json",
+  ];
+
+  test("judgeInputs copies the replay's band.json and admission.json at their sha256s, and refuses any other file before copying", () => {
+    const out = mkdtempSync(join(tmpdir(), "hm-judge-in-"));
+    expect(judgeInputs(replay.band, replay.admission, out)).toEqual(["band.json " + REPLAY_JUDGE.band.sha256, "admission.json " + REPLAY_JUDGE.admission.sha256]);
+    expect([sha(readFileSync(join(out, "band.json"))), sha(readFileSync(join(out, "admission.json")))]).toEqual([REPLAY_JUDGE.band.sha256, REPLAY_JUDGE.admission.sha256]);
+    const d = mkdtempSync(join(tmpdir(), "hm-judge-in-")), placeholder = join(d, "band.json"), both = join(d, "admission.json"), none = join(d, "out");
+    writeFileSync(placeholder, PLACEHOLDER_BAND);
+    writeFileSync(both, JSON.stringify({ points: [{ point: "done", result: "admitted" }, { point: "risky", result: "admitted" }] }));
+    expect(() => judgeInputs(placeholder, replay.admission, none)).toThrow("E_HM_JUDGE_BUILD judge inputs: " + placeholder + " is sha256 " + sha(PLACEHOLDER_BAND) + ", not the replay's band.json " + REPLAY_JUDGE.band.sha256);
+    expect(() => judgeInputs(replay.band, both, none)).toThrow("E_HM_JUDGE_BUILD judge inputs: " + both + " is sha256 ");
+    expect(() => judgeInputs(replay.band, join(d, "missing.json"), none)).toThrow("E_HM_JUDGE_BUILD judge inputs: no admission.json at ");
+    expect(existsSync(none)).toBe(false);
+    const cli = spawnSync(process.execPath, [join(REPO, "lanes/harness-mechanics/arms.ts"), "judge-inputs", "--band", placeholder, "--admission", replay.admission, "--out", none], { encoding: "utf8" });
+    expect([cli.status, cli.stderr.split(" ")[0]]).toEqual([2, "E_HM_JUDGE_BUILD"]);
+  });
+
+  test("dry-run step 1 refuses a judge tree with the placeholder band and no admission, the way stage3-pilot-3's tar was built", () => {
+    const f = judgeTarFixture({ placeholder: true });
+    const m = { ...f.m, settings: { hooks: [{ event: "PreToolUse", matcher: "Bash", command: "/root/.hm/judge/risky" }] } };
+    const p = judgeTarProblems(f.tree, m, f.tarGz, []);
+    for (const l of placeholderLines(sha(PLACEHOLDER_BAND))) expect(p).toContain(l);
+  });
+
+  test("the launcher check passes the replay's tar at its manifest, and refuses the placeholder build, a tar the manifest doesn't name and other admitted points", () => {
+    const good = judgeTarFixture();
+    const c = judgeTarCheck(good.tarGz, good.manifest);
+    expect(c.problems).toEqual([]);
+    expect(c.line).toStartWith("HM_JUDGE_TAR PASS " + good.tarGz + ": tar.gz " + good.m.tar_gz_sha256 + " at ");
+    expect(c.line).toEndWith("'s tar_gz_sha256, band " + REPLAY_JUDGE.band.sha256 + ", admission " + REPLAY_JUDGE.admission.sha256 + ", admitted risky");
+    const bad = judgeTarFixture({ placeholder: true });
+    const b = judgeTarCheck(bad.tarGz, bad.manifest);
+    expect([b.pass, b.problems]).toEqual([false, placeholderLines(sha(PLACEHOLDER_BAND))]);
+    expect(b.line).toStartWith("HM_JUDGE_TAR FAIL " + bad.tarGz + ": ");
+    expect(judgeTarCheck(bad.tarGz, good.manifest).problems[0]).toBe("the tar.gz is sha256 " + bad.m.tar_gz_sha256 + ", not the manifest's tar_gz_sha256 " + good.m.tar_gz_sha256);
+    const two = judgeTarFixture({ points: "done,risky" });
+    expect(judgeTarCheck(two.tarGz, two.manifest).problems).toEqual(["judge: the manifest admits done,risky, not the replay's risky"]);
+    expect(judgeTarCheck(join(good.dir, "missing.tar.gz"), good.manifest).pass).toBe(false);
+  });
+
+  test("hm judge-tar prints the check's line: exit 0 on the replay's tar, exit 2 with E_HM_JUDGE_BUILD on the placeholder build", () => {
+    const hm = (args: string[]) => spawnSync(process.execPath, [join(REPO, "lanes/harness-mechanics/cli.ts"), "judge-tar", ...args], { encoding: "utf8" });
+    const good = judgeTarFixture(), bad = judgeTarFixture({ placeholder: true });
+    const ok = hm([good.tarGz, "--manifest", good.manifest]);
+    expect([ok.status, ok.stdout.split(" ").slice(0, 2).join(" ")]).toEqual([0, "HM_JUDGE_TAR PASS"]);
+    const no = hm([bad.tarGz, "--manifest", bad.manifest]);
+    expect([no.status, no.stdout.split(" ").slice(0, 2).join(" "), no.stderr.split(" ")[0]]).toEqual([2, "HM_JUDGE_TAR FAIL", "E_HM_JUDGE_BUILD"]);
   });
 });
 

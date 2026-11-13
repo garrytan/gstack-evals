@@ -510,7 +510,7 @@ describe("a judge-bearing host ships the judge proxy keys, a non-judge host does
   const keys = (name: string) => HM_PROFILE.proxyKeys!(planFor(name));
 
   test("a judge item's plan carries a judge arm and ships TYPESAFE and OPENROUTER for the judge proxy", () => {
-    for (const name of ["stage3-pilot", "stage3-pilot-2", "stage3-pilot-3", "stage4-opus", "stage4-sol", "stage4-p1"]) {
+    for (const name of ["stage3-pilot", "stage3-pilot-2", "stage3-pilot-3", "stage3-pilot-4", "stage4-opus", "stage4-sol", "stage4-p1"]) {
       const hasJudge = planFor(name).parts.some((p) => p.rects.some((r) => r.arms.some((a) => (JUDGE as string[]).includes(a))));
       expect([name, hasJudge]).toEqual([name, true]);
       expect([name, keys(name)]).toEqual([name, ["TYPESAFE_API_KEY", "OPENROUTER_API_KEY"]]);

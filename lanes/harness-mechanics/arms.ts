@@ -6,14 +6,14 @@
 //   bun lanes/harness-mechanics/arms.ts manifest --arm <none|prose|hook|judge> --tree <dir> --tar <file> --out <dir> [--fetch <json> --config <tsv> --lock <json>] [--meta k=v ...]
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { closeSync, existsSync, lstatSync, mkdtempSync, openSync, readdirSync, readFileSync, readSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, readSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { manifest } from "../../quick/laneb/arms/tree.ts";
 import { checkNone, hookEntries, liteLock, normalize, normTree, type Hook } from "../../quick/laneb/arms/l1.ts";
 import type { StepResult } from "./dryrun.ts";
 import { loadMatcher } from "./match.ts";
-import { GSTACK_VENDOR, HM, REPO, VERIFY_PATCH } from "./pins.ts";
+import { GSTACK_VENDOR, HM, REPLAY_JUDGE, REPO, VERIFY_PATCH } from "./pins.ts";
 import { parseContract, type Contract } from "./vendor/gstack/lib/skill-contract.ts";
 
 export const HM_TARS = ["none", "prose", "hook", "judge"] as const;
@@ -30,7 +30,7 @@ export const CONTRACT_SOURCE = "gstack-skill-contract";
 export const RISKY_SOURCE = "hm-judge-risky";
 export const JUDGE_STOP = "<HOME>/.hm/judge/stop";
 export const JUDGE_RISKY = "<HOME>/.hm/judge/risky";
-export const JUDGE_FILES = { band_sha256: ".hm/judge/band.json", hm_judge_sha256: ".hm/judge/hm_judge.py", facts_sha256: ".hm/judge/facts.js" } as const;
+export const JUDGE_FILES = { band_sha256: ".hm/judge/band.json", admission_sha256: ".hm/judge/admission.json", hm_judge_sha256: ".hm/judge/hm_judge.py", facts_sha256: ".hm/judge/facts.js" } as const;
 export const SECRET_ENV = ["OPENROUTER_API_KEY", "TYPESAFE_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"];
 const KEY_SHAPES: [string, RegExp][] = [["an OpenRouter key", /sk-or-v1-[0-9a-f]{32,}/], ["an Anthropic key", /sk-ant-api\d\d-[\w-]{20,}/], ["an OpenAI key", /sk-proj-[\w-]{20,}/]];
 
@@ -130,10 +130,62 @@ export function judgeTarProblems(tree: string, m: Record<string, any>, tar: stri
     const f = join(tree, ".hm/judge/judge-" + b + ".json");
     if (!existsSync(f) || JSON.parse(readFileSync(f, "utf8")).backend !== b) p.push("judge: judge-" + b + ".json is missing or not backend " + b);
   }
+  p.push(...replayProblems(tree, m));
   const judgeDir = join(tree, ".hm/judge");
   const hits = [...keyHitsFile(tar, secrets, false), ...(existsSync(judgeDir) ? readdirSync(judgeDir).flatMap((f) => keyHits(readFileSync(join(judgeDir, f)), [])) : [])];
   if (hits.length) p.push("judge: the tar holds " + hits.join(", "));
   return p;
+}
+
+// D14: the judge arms take the replay's outputs and nothing else. judgeInputs copies the replay's band.json and
+// admission.json into the judge tree (build.sh), refusing any file that is not at REPLAY_JUDGE's sha256.
+export function judgeInputs(band: string, admission: string, outDir: string) {
+  const sha = (b: Buffer) => createHash("sha256").update(b).digest("hex");
+  const inputs = [[band, REPLAY_JUDGE.band.sha256, "band.json"], [admission, REPLAY_JUDGE.admission.sha256, "admission.json"]] as const;
+  for (const [f, want, name] of inputs) {
+    if (!existsSync(f)) throw new Error("E_HM_JUDGE_BUILD judge inputs: no " + name + " at " + f);
+    const got = sha(readFileSync(f));
+    if (got !== want) throw new Error("E_HM_JUDGE_BUILD judge inputs: " + f + " is sha256 " + got + ", not the replay's " + name + " " + want + "; the judge tar takes only the replay's files");
+  }
+  mkdirSync(outDir, { recursive: true });
+  for (const [f, , name] of inputs) copyFileSync(f, join(outDir, name));
+  return inputs.map(([, want, name]) => name + " " + want);
+}
+
+// The replay's band and admission in an unpacked judge tree and its manifest: the manifest names their sha256s and the
+// admitted points, the tree holds those files, and both backend configs point the hooks at them.
+export function replayProblems(tree: string, m: Record<string, any>): string[] {
+  const p: string[] = [];
+  const sha = (f: string) => (existsSync(f) ? createHash("sha256").update(readFileSync(f)).digest("hex") : "missing");
+  for (const [k, want, f] of [["band_sha256", REPLAY_JUDGE.band.sha256, "band.json"], ["admission_sha256", REPLAY_JUDGE.admission.sha256, "admission.json"]] as const) {
+    if (m[k] !== want) p.push("judge: the manifest's " + k + " is " + (m[k] ?? "missing") + ", not the replay's " + f + " " + want);
+    const got = sha(join(tree, ".hm/judge", f));
+    if (got !== want) p.push("judge: the tar's .hm/judge/" + f + " is " + (got === "missing" ? "missing" : "sha256 " + got) + ", not the replay's " + want);
+  }
+  if (m.admitted_points !== REPLAY_JUDGE.points.join(",")) p.push("judge: the manifest admits " + (m.admitted_points ?? "no points") + ", not the replay's " + REPLAY_JUDGE.points.join(","));
+  for (const b of ["jev", "p1"]) {
+    const f = join(tree, ".hm/judge/judge-" + b + ".json");
+    const c = existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : {};
+    if (c.band !== "/root/.hm/judge/band.json" || c.admission !== "/root/.hm/judge/admission.json") p.push("judge: judge-" + b + ".json does not point at /root/.hm/judge/band.json and /root/.hm/judge/admission.json");
+  }
+  return p;
+}
+
+// The launcher's check on a judge part's tar.gz (D14, item 14): its sha256 is the committed manifest's tar_gz_sha256, and
+// replayProblems passes on the manifest and on the band, admission and backend configs inside the tar.
+export function judgeTarCheck(tarGz: string, manifestPath = manifestOf("judge")) {
+  if (!existsSync(tarGz)) return { pass: false, problems: ["no judge tar at " + tarGz], line: "HM_JUDGE_TAR FAIL " + tarGz + ": no judge tar" };
+  const m = JSON.parse(readFileSync(manifestPath, "utf8"));
+  const problems: string[] = [];
+  const s = spawnSync("sha256sum", [tarGz], { encoding: "utf8" }), got = s.stdout.split(" ")[0] ?? "";
+  if (got !== m.tar_gz_sha256) problems.push("the tar.gz is sha256 " + got + ", not the manifest's tar_gz_sha256 " + m.tar_gz_sha256);
+  const d = mkdtempSync(join(tmpdir(), "hm-judge-tar-"));
+  try {
+    spawnSync("tar", ["-xzf", tarGz, "-C", d, ...["band.json", "admission.json", "judge-jev.json", "judge-p1.json"].map((f) => ".hm/judge/" + f)], { encoding: "utf8" });
+    problems.push(...replayProblems(d, m));
+  } finally { rmSync(d, { recursive: true, force: true }); }
+  const what = "tar.gz " + got + " at " + relative(REPO, resolve(manifestPath)) + "'s tar_gz_sha256, band " + REPLAY_JUDGE.band.sha256 + ", admission " + REPLAY_JUDGE.admission.sha256 + ", admitted " + REPLAY_JUDGE.points.join(",");
+  return { pass: !problems.length, problems, line: problems.length ? "HM_JUDGE_TAR FAIL " + tarGz + ": " + problems.join("; ") : "HM_JUDGE_TAR PASS " + tarGz + ": " + what };
 }
 
 // Section 3's snapshot strip: auto-loaded instruction files at any depth, and the files a CLAUDE.md imports with @path
@@ -234,7 +286,7 @@ export function stepArmTars(out: string): StepResult {
       if (x.status !== 0) { problems.push("judge: the tar does not unpack: " + x.stderr.trim().slice(0, 120)); continue; }
       const jp = judgeTarProblems(tree, m, tar, envSecrets(), join(ARMS_DIR(), "dr-out/dr-runtime.tar.gz"));
       problems.push(...jp);
-      if (!jp.length) parts.push("judge: contract Stop once and PreToolUse Bash once, runtime " + m.dr_runtime_sha256.slice(0, 12) + ", band " + m.band_sha256.slice(0, 12) + ", hm_judge " + m.hm_judge_sha256.slice(0, 12) + ", facts " + m.facts_sha256.slice(0, 12) + ", no key in the tar");
+      if (!jp.length) parts.push("judge: contract Stop once and PreToolUse Bash once, runtime " + m.dr_runtime_sha256.slice(0, 12) + ", band " + m.band_sha256.slice(0, 12) + ", admission " + m.admission_sha256.slice(0, 12) + " admitting " + m.admitted_points + ", hm_judge " + m.hm_judge_sha256.slice(0, 12) + ", facts " + m.facts_sha256.slice(0, 12) + ", no key in the tar");
     }
   }
   if (docker) {
@@ -296,6 +348,11 @@ export function stepEnv(out: string): StepResult {
 if (import.meta.main) {
   const args = process.argv.slice(2);
   const flag = (n: string) => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] : undefined; };
+  if (args[0] === "judge-inputs") {
+    const [band, admission, out] = [flag("--band"), flag("--admission"), flag("--out")];
+    if (!band || !admission || !out) { console.error("E_USAGE usage: arms.ts judge-inputs --band <band.json> --admission <admission.json> --out <judge dir>"); process.exit(2); }
+    try { console.log("judge inputs: " + judgeInputs(band, admission, out).join(", ")); process.exit(0); } catch (x) { console.error((x as Error).message); process.exit(2); }
+  }
   const arm = flag("--arm") as HmTar | undefined;
   const [tree, tar, outDir] = [flag("--tree"), flag("--tar"), flag("--out")];
   if (args[0] !== "manifest" || !arm || !HM_TARS.includes(arm) || !tree || !tar || !outDir) {

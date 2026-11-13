@@ -38,8 +38,12 @@ export const HM = {
 // stage3-pilot-2 stopped after pilot-opus, when Harbor's egress sidecar cut particle-1 judge answers slower than 15 s and 26
 // of 378 judgment calls failed open, and closed done at $11.98629. vm-run.sh now sets the sidecar's readTimeout to 900 s, and
 // stage3-pilot-3 runs the same smoke and pilot, all four parts, on that setup. Its cap is the rest of stage3-pilot's $95 and
-// sits inside it (CARVED), so the caps still sum to 2,580.
-export const CAPS_USD = { "stage1-opus": 150, "stage1-opus-r2": 121.685384, "stage1-sol": 180, "stage1-sol-run": 179.96147, "stage1-p1": 70, "stage2-replay": 90, "stage2-replay-2": 88.088418, "stage2-replay-3": 79.029935, "stage3-pilot": 95, "stage3-pilot-2": 95, "stage3-pilot-3": 94.387061, "stage4-opus": 660, "stage4-sol": 800, "stage4-p1": 280, vms: 160 } as const;
+// sits inside it (CARVED), so the caps still sum to 2,580. Deviation D14 (the Captain's rulings, 2026-11-13): stage3-pilot-3
+// ran a judge tar built before the replay, with the done point live and a placeholder band, and closed done at $26.910177.
+// stage3-pilot-4 runs the same smoke and pilot on the rebuilt judge tar. A carve from stage3-pilot-3 ($67.476884) or
+// stage3-pilot-2 ($83.01371) is under the $84.90 C1 projection for those four parts, so stage3-pilot-4 is its own item at
+// $94.387061 and the caps sum to 2,674.387061. The skeleton check counts a done item at its settled (money.ts plannedLine).
+export const CAPS_USD = { "stage1-opus": 150, "stage1-opus-r2": 121.685384, "stage1-sol": 180, "stage1-sol-run": 179.96147, "stage1-p1": 70, "stage2-replay": 90, "stage2-replay-2": 88.088418, "stage2-replay-3": 79.029935, "stage3-pilot": 95, "stage3-pilot-2": 95, "stage3-pilot-3": 94.387061, "stage3-pilot-4": 94.387061, "stage4-opus": 660, "stage4-sol": 800, "stage4-p1": 280, vms: 160 } as const;
 // Deviation D3 (ruling A on Stage 1's WORKDIR defect): at 6aeabc2 the image build failed before any model call for every
 // arm of these 23 calibration tasks, in stage1-opus's two parts. stage1-opus's ledger is bound to that run, so it closed
 // at $28.314616 settled, and the 92 cells rerun on stage1-opus-r2, whose cap is the rest of stage1-opus's $150 and sits
@@ -69,8 +73,17 @@ export const STAGE1_OPUS_R2_TASKS = [
 // stage2-replay items total $90 (1.911582 + 9.058483 + 79.029935) and the caps still sum to 2,480.
 export const CARVED: Partial<Record<keyof typeof CAPS_USD, keyof typeof CAPS_USD>> = { "stage1-opus-r2": "stage1-opus", "stage1-sol-run": "stage1-sol", "stage2-replay-2": "stage2-replay", "stage2-replay-3": "stage2-replay-2", "stage3-pilot-3": "stage3-pilot" };
 export const ledgerCapsUsd = () => Object.entries(CAPS_USD).filter(([k]) => !Object.hasOwn(CARVED, k)).reduce((a, [, b]) => a + b, 0);
-// The ledger items' caps plus the crew's: 2,980 inside the 3,000 line (2,880 before D10, 2,885 before D11).
+// The ledger items' caps plus the crew's: 3,074.387061 (2,880 before D10, 2,885 before D11, 2,980 before D14). Counted with
+// each done item at its settled, as the line is (money.ts plannedLine), it sits inside the 3,000 line.
 export const capsTotalUsd = () => ledgerCapsUsd() + HM.crewCapUsd;
+// The replay's outputs the judge arms take (sections 8 and 10; D14): stage2-replay-3's admission.json and band.json, copied
+// byte for byte from its out dir. build.sh refuses any other file (arms.ts judgeInputs), and the launcher refuses a judge
+// part whose tar or manifest names other files or other admitted points (arms.ts judgeTarCheck).
+export const REPLAY_JUDGE = {
+  band: { file: "lanes/harness-mechanics/judge/replay/band.json", sha256: "ae18c66808c99b6690b83527dc8801376ca1e84b92799a56a1f1fe4bdb0e0472" },
+  admission: { file: "lanes/harness-mechanics/judge/replay/admission.json", sha256: "d3f8ab05d6917d5b08ccb84b3a0124351703cd668e86d3a5789885ec257663dc" },
+  points: ["risky"],
+} as const;
 // Section 10's replay: the item counts, the route sources, the kappa bar, the tuning tolerance (1 point of balanced
 // accuracy) and its band grid, the admission's false-block or false-deny bar, the calibration bins, and section 22's
 // expected spend and margin, whose product is the replay's one lease (money.ts leaseUsd).

@@ -5,8 +5,9 @@
 section 8's exact rules run, then the typed yes or no question. "hm_judge.py bash" runs on PreToolUse for Bash: the frozen
 read-only and test list, then check-careful.sh at the pin, then the risky question. Both call dr_agent.deciders unchanged
 through the metering proxy with the session's own token (HM_JUDGE_PROXY, HM_JUDGE_TOKEN), fail open past 2 s for Jev and
-30 s for particle-1 (each limit covers the decider's whole answer, its own retry included), read the acting band from the
-config's band file at hook start, check every Jev response's version, and append one JSON line per decision to the log. A
+30 s for particle-1 (each limit covers the decider's whole answer, its own retry included), read the admitted points and each
+one's acting band from the replay's admission.json and band.json at hook start (a point the replay did not admit logs
+not_admitted and asks nothing), check every Jev response's version, and append one JSON line per decision to the log. A
 Jev answer whose TypeSafe response has no model attribute, or one that is not a Jev version, stops the session with
 E_HM_JEV_VERSION (the Captain's ruling E1) instead of acting or failing open.
 """
@@ -348,8 +349,36 @@ def jev_check(seen, err):
     return None, (bad or seen or [None])[-1], ("jev version " + bad[-1] + " is not the pinned " + JEV_MODEL) if bad else None
 
 
+def load_points(band_path, admission_path):
+    """The points the replay admitted (admission.json) with each one's acting band (band.json, one entry per point): a dict of
+    point to {"lo", "hi"}, or to None where the replay chose no band, so Jev's answer always acts. Any other shape raises."""
+    with open(admission_path) as f:
+        admission = json.load(f)
+    with open(band_path) as f:
+        bands = json.load(f)
+    points = {}
+    for p in admission["points"]:
+        if p.get("result") != "admitted":
+            continue
+        name = p.get("point")
+        if name not in ("done", "risky"):
+            raise ValueError("the admission names a point the hooks don't have: " + repr(name)[:80])
+        entry = bands.get(name) if isinstance(bands, dict) else None
+        if not isinstance(entry, dict) or "band" not in entry:
+            raise ValueError("the band file has no band for admitted point " + name)
+        b = entry["band"]
+        if b is None:
+            points[name] = None
+        elif isinstance(b, list) and len(b) == 2 and all(isinstance(x, (int, float)) for x in b) and 0 <= b[0] <= b[1] <= 1:
+            points[name] = {"lo": b[0], "hi": b[1]}
+        else:
+            raise ValueError("the band for " + name + " is not null or [lo, hi] inside 0 to 1: " + repr(b)[:80])
+    return points
+
+
 def judge(state, question, backend, band, jev, particle):
-    """One judgment call: Jev outside the band acts; inside it particle-1 answers, shown Jev's guess. judge-p1 asks particle-1 only."""
+    """One judgment call: Jev outside the band, or at any probability when the point has no band, acts; inside it particle-1
+    answers, shown Jev's guess. judge-p1 asks particle-1 only."""
     out = {"backend": backend, "p_jev": None, "escalated": False, "answer": None, "fail_open": False, "error": None,
            "latency_ms": 0, "calls": 0, "jev_version": None, "stopped": False}
 
@@ -375,7 +404,7 @@ def judge(state, question, backend, band, jev, particle):
             out.update(fail_open=True, error="jev: " + err)
             return out
         out["p_jev"] = rec["p_yes"]
-        if not band["lo"] <= rec["p_yes"] <= band["hi"]:
+        if band is None or not band["lo"] <= rec["p_yes"] <= band["hi"]:
             out["answer"] = rec["answer"]
             return out
         out["escalated"] = True
@@ -504,18 +533,22 @@ def main(argv):
             sys.stderr.write(blocked.stderr.decode(errors="replace"))
             out, code, rec = blocked.stdout.decode(errors="replace"), (2 if blocked.returncode == 2 else 0), line("done", "contract_block")
         else:
-            band = json.load(open(cfg["band"]))
-            url, token = os.environ["HM_JUDGE_PROXY"], os.environ["HM_JUDGE_TOKEN"]
-            jev = PinnedJev(url + "/typesafe", token) if cfg["backend"] == "jev" else None
-            particle = PinnedParticle("openai", url + "/openrouter/v1", token, PARTICLE_MODEL, int(cfg["particle_max_tokens"]))
-            if point == "stop":
-                facts = json.loads(subprocess.run([a.replace("{transcript}", payload["transcript_path"]) for a in cfg["done_facts"]], capture_output=True, timeout=60, check=True).stdout)
-                hook, rec = done(facts, cfg, band, jev, particle)
-            elif point == "bash":
-                hook, rec = risky(payload, cfg, band, jev, particle)
-            else:
+            name = {"stop": "done", "bash": "risky"}.get(point)
+            if name is None:
                 raise ValueError("unknown hook point " + point)
-            out = json.dumps(hook) if hook else None
+            points = load_points(cfg["band"], cfg["admission"])
+            if name not in points:
+                rec = line(name, "not_admitted")
+            else:
+                url, token = os.environ["HM_JUDGE_PROXY"], os.environ["HM_JUDGE_TOKEN"]
+                jev = PinnedJev(url + "/typesafe", token) if cfg["backend"] == "jev" else None
+                particle = PinnedParticle("openai", url + "/openrouter/v1", token, PARTICLE_MODEL, int(cfg["particle_max_tokens"]))
+                if name == "done":
+                    facts = json.loads(subprocess.run([a.replace("{transcript}", payload["transcript_path"]) for a in cfg["done_facts"]], capture_output=True, timeout=60, check=True).stdout)
+                    hook, rec = done(facts, cfg, points["done"], jev, particle)
+                else:
+                    hook, rec = risky(payload, cfg, points["risky"], jev, particle)
+                out = json.dumps(hook) if hook else None
     except Exception as e:
         out, code = None, 0
         rec = line("done" if point == "stop" else "risky", "hook_error", fail_open=True, error=f"{type(e).__name__}: {str(e)[:200]}")
