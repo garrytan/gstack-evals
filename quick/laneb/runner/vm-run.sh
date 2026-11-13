@@ -169,7 +169,8 @@ curl -fsS 127.0.0.1:$control_port/healthz >/dev/null 2>&1 || { echo "metering pr
 # the judge deciders against the item's cap on the shared ledger under "judge:" plus this part's ledger prefix, beside the
 # session proxy, so each part's judge rows are its own; its journal (HM_JUDGE_JOURNAL) is what the agent checks. When
 # jev's judge changes the repo in a forbidden way, the agent writes the STOP file named by HM_JUDGE_STOP_FILE, which the
-# watcher below already treats as a stop.
+# watcher below already treats as a stop. A judge call gets five attempts (D11): particle-1's 429s back off 1, 2, 4 and
+# 8 s, inside the hook's 30 s particle-1 limit, and a Retry-After the provider sends still sets the wait.
 judge_proxy=""
 judge_arms=false
 for f in "$run"/job.json "$run"/job-*.json; do
@@ -188,7 +189,7 @@ if [ "$judge_arms" = true ]; then
   (
     set -a; . "$HOME/.laneb-keys"; set +a
     exec bun "$run/judge-proxy.js" --data-host "$gw" --data-port "$judge_data_port" --management-socket "$judge_mgmt_socket" \
-      --journal "$HM_JUDGE_JOURNAL" --ledger-url http://127.0.0.1:$ledger_port --ledger-prefix "judge:$prefix"
+      --journal "$HM_JUDGE_JOURNAL" --ledger-url http://127.0.0.1:$ledger_port --ledger-prefix "judge:$prefix" --retry-attempts 5
   ) > "$run/out/judge-proxy.log" 2>&1 &
   judge_proxy=$!
   trap 'rc=$?; curl -fsS -X POST 127.0.0.1:$control_port/close-all >/dev/null 2>&1 || true; kill $proxy 2>/dev/null || true; [ -n "$judge_proxy" ] && kill $judge_proxy 2>/dev/null; echo $rc > "$run/out/vm-run.exit"' EXIT

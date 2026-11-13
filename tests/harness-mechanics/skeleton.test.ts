@@ -37,9 +37,9 @@ describe("pins", () => {
     expect(lists.judgePilot).toEqual(lists.calibration.slice(0, 12));
   });
 
-  test("the caps sum to 2,885 inside the 3,000 line (2,880 before D10's $5 on stage3-pilot), and each model's allowance is section 22's", () => {
-    expect(ledgerCapsUsd()).toBe(2485);
-    expect(capsTotalUsd()).toBe(2885);
+  test("the caps sum to 2,980 inside the 3,000 line (2,880 before D10's $5 on stage3-pilot, 2,885 before D11's stage3-pilot-2), and each model's allowance is section 22's", () => {
+    expect(ledgerCapsUsd()).toBe(2580);
+    expect(capsTotalUsd()).toBe(2980);
     expect(capsTotalUsd()).toBeLessThan(HM.lineUsd);
     expect([MODELS.opus.allowanceUsd, MODELS.sol.allowanceUsd, MODELS.p1.allowanceUsd]).toEqual([5, 6, 2]);
     for (const m of Object.values(MODELS)) {
@@ -83,6 +83,13 @@ describe("plans", () => {
     for (const x of pilots) expect(new Set(x.rects.flatMap((r) => r.tasks))).toEqual(new Set(lists.judgePilot));
     const bad = { ...lists, calibration: [...lists.calibration.slice(0, 12), lists.calibration[0]!, ...lists.calibration.slice(13)] };
     expect(() => itemPlan("stage3-pilot", bad)).toThrow("E_HM_INPUT stage3-pilot's smoke task must be calibration task 13");
+  });
+
+  test("stage3-pilot-2 (D11) has stage3-pilot's plan under its own ledger prefix: the same parts, tasks and arms", () => {
+    const a = plan("stage3-pilot"), b = plan("stage3-pilot-2");
+    expect([b.sessions, b.picker_calls]).toEqual([74, 0]);
+    expect(b.parts.map((x) => [x.name, x.model, x.cells, x.rects])).toEqual(a.parts.map((x) => [x.name, x.model, x.cells, x.rects]));
+    expect(b.parts.map((x) => x.prefix)).toEqual(["stage3-pilot-2/smoke-opus/", "stage3-pilot-2/pilot-opus/", "stage3-pilot-2/pilot-sol/", "stage3-pilot-2/pilot-p1/"]);
   });
 
   test("Stage 4: 920 sessions and 200 picker calls per model, 2,760 in all; the judge arms only on the first 60 scored tasks", () => {

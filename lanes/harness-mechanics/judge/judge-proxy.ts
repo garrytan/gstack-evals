@@ -12,7 +12,8 @@ import type { CallOutcome, CellAttempt, LedgerReply, Reservation, ReservationLed
 /**
  * The judge proxy's ReservationLedger over the ledger service's HTTP (the same POST /reserve and /settle the Lane B
  * session proxy uses, quick/laneb/runner/proxy.ts). It mirrors picker.ts LaneBReservations, async over HTTP: a reserve
- * holds the call's worst case under the item's cap (409 is a CAP_STOP), a spent outcome settles it at its metered cost, and
+ * holds the call's worst case under the item's cap (every 409 is a CAP_STOP, and its message carries the ledger's own reason,
+ * so a reused id can be told from the cap in the journal; D11), a spent outcome settles it at its metered cost, and
  * an unknown outcome settles it at its reserved maximum marked unknown (meta unknown: true; D1, the Captain's ruling), so
  * the ledger never holds a judge call open and a report can count the unknowns apart. Reserves are idempotent by id, so a
  * repeat returns the first reservation and never double-books. The id is the prefix plus the metering proxy's idempotency
@@ -40,7 +41,7 @@ export class HttpReservations implements ReservationLedger {
     const id = this.prefix + r.idempotency_key, prior = this.held.get(id);
     if (prior) return { ok: true, reservation: prior };
     const { status, json } = await this.call("/reserve", { id, usd_micros: r.max_micros, meta: { cell: r.cell, lease_id: r.lease_id } });
-    if (status === 409 || json?.reason === "cap") return { ok: false, code: "CAP_STOP", message: "judge reserve " + id + ": the item cap cannot hold the reserve" };
+    if (status === 409 || json?.reason === "cap") return { ok: false, code: "CAP_STOP", message: "judge reserve " + id + ": the ledger refused it (HTTP " + status + ", the ledger's reason: " + (json?.reason ?? "none given") + ")" };
     if (status !== 200 || json?.ok === false) return { ok: false, code: "E_RESERVE_CONFLICT", message: "judge reserve " + id + ": " + (json?.reason ?? "HTTP " + status) };
     const reservation: Reservation = { reservation_id: id, ...r, state: "reserved", spent_micros: null, usage: null };
     this.held.set(id, reservation);

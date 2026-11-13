@@ -170,6 +170,101 @@ describe("judge proxy ReservationLedger over the ledger service (piece 1 ledger)
   });
 });
 
+const D11_CANARY = "hm-d11-canary-0123456789abcdef0123456789abcdef";
+describe("D11: the judge proxy writes the ledger's own 409 reason into its journal, and still maps every 409 to CAP_STOP", () => {
+  test("a 409 for a reused id and a 409 at the cap are both CAP_STOP, each journaled with the ledger's reason", async () => {
+    const srv = Bun.serve({
+      port: 0,
+      async fetch(req) {
+        const body = (await req.json()) as any;
+        if (new URL(req.url).pathname !== "/reserve") return Response.json({ ok: true });
+        return Response.json({ ok: false, reason: body.id.endsWith("m1:1:1") ? "reserve id reused with a different amount" : "cap" }, { status: 409 });
+      },
+    });
+    try {
+      const prefix = "judge:stage3-pilot-2/smoke-opus/", ledger = new HttpReservations("http://127.0.0.1:" + srv.port, prefix);
+      const cell = { run_id: "r", arm: "judge-p1", task: "t", model: "m", trial: 1, attempt: 1, meter_id: "m1" };
+      const reused = await ledger.reserve({ idempotency_key: "m1:1:1", lease_id: "L", cell, max_micros: 300_000 });
+      const capped = await ledger.reserve({ idempotency_key: "m1:2:1", lease_id: "L", cell, max_micros: 300_000 });
+      expect([!reused.ok && reused.code, !capped.ok && capped.code]).toEqual(["CAP_STOP", "CAP_STOP"]);
+      expect(!reused.ok && reused.message).toContain("the ledger's reason: reserve id reused with a different amount");
+      expect(!capped.ok && capped.message).toContain("the ledger's reason: cap");
+      const dir = tempDir("hm-judge-409-");
+      const proxy = new MeteringProxy({
+        ledger, leaseId: "hm-judge-409.0001.abcdef", host: "127.0.0.1", managementSocket: join(dir, "m.sock"), managementToken: "management-token-0123456789",
+        journal: join(dir, "judge-journal.ndjson"), retry: { attempts: 5, elapsed_ms: 300_000 }, env: { OPENROUTER_API_KEY: "sk-or-hm-0123456789" },
+        maxOutputTokens: 32_000, sleep: async () => {}, fetch: async () => Response.json({ id: "x", choices: [], usage: { prompt_tokens: 1, completion_tokens: 1 } }), allowanceCode: "DR_ALLOWANCE_STOP",
+      });
+      proxy.start();
+      cleanup.push(() => proxy.stop());
+      const b = proxy.bind({ cell: { run_id: "hm", arm: "judge-p1", task: "t1", model: "particle-ai/particle-1", trial: 1, attempt: 1 }, models: JUDGE_DECIDERS, deciders: JUDGE_DECIDERS, allowance_micros: 2_000_000, forbidden_markers: [D11_CANARY], canary: D11_CANARY });
+      const res = await fetch("http://127.0.0.1:" + proxy.port + "/" + b.slot + "/openrouter/v1/chat/completions", { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer " + b.token }, body: JSON.stringify({ model: "particle-ai/particle-1", max_tokens: 100, messages: [{ role: "user", content: "was the change made?" }] }) });
+      expect(res.status).toBe(402);
+      const refusal = readFileSync(join(dir, "judge-journal.ndjson"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)).find((l) => l.kind === "refusal");
+      expect([refusal.code, refusal.reason]).toEqual(["CAP_STOP", expect.stringContaining("the ledger's reason: cap")]);
+    } finally {
+      srv.stop(true);
+    }
+  });
+});
+
+describe("D11: particle-1 429s under the judge proxy's retry budget (vm-run.sh passes --retry-attempts 5)", () => {
+  // OpenRouter's 429s for particle-1 in stage3-pilot's smoke came from provider "Particle AI" with no Retry-After header,
+  // so the proxy backed off 1 s, 2 s, 4 s and 8 s between attempts. The hook gives a particle-1 answer 30 s, its own retry
+  // included, so five attempts' backoff (15 s) still ends in the proxy's 502 inside that limit and the hook fails open on it.
+  function world(attempts: number, answers: Array<{ status: number; headers?: Record<string, string> }>) {
+    const dir = tempDir("hm-judge-429-");
+    const waits: number[] = [];
+    let sent = 0;
+    const proxy = new MeteringProxy({
+      ledger: new InMemoryLedger(), leaseId: "hm-judge-429.0001.abcdef", host: "127.0.0.1",
+      managementSocket: join(dir, "m.sock"), managementToken: "management-token-0123456789",
+      journal: join(dir, "judge-journal.ndjson"), retry: { attempts, elapsed_ms: 300_000 },
+      env: { OPENROUTER_API_KEY: "sk-or-hm-0123456789", TYPESAFE_API_KEY: "ts-hm-key-0123456789" },
+      maxOutputTokens: 32_000, sleep: async (ms: number) => { waits.push(ms); },
+      fetch: async () => {
+        const a = answers[Math.min(sent++, answers.length - 1)]!;
+        if (a.status === 200) return Response.json({ id: "x", choices: [], usage: { prompt_tokens: 100, completion_tokens: 20 } });
+        return Response.json({ error: { code: a.status, message: "Rate limit exceeded", metadata: { provider_name: "Particle AI" } } }, { status: a.status, headers: a.headers });
+      },
+      allowanceCode: "DR_ALLOWANCE_STOP",
+    });
+    proxy.start();
+    cleanup.push(() => proxy.stop());
+    const b = proxy.bind({ cell: { run_id: "hm", arm: "judge-p1", task: "t1", model: "particle-ai/particle-1", trial: 1, attempt: 1 }, models: JUDGE_DECIDERS, deciders: JUDGE_DECIDERS, allowance_micros: 2_000_000, forbidden_markers: [D11_CANARY], canary: D11_CANARY });
+    const ask = () => fetch("http://127.0.0.1:" + proxy.port + "/" + b.slot + "/openrouter/v1/chat/completions", { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer " + b.token }, body: JSON.stringify({ model: "particle-ai/particle-1", max_tokens: 100, messages: [{ role: "user", content: "was the change made?" }] }) });
+    return { ask, waits, sent: () => sent };
+  }
+  const near = (waits: number[], want: number[]) => waits.length === want.length && waits.every((w, i) => w <= want[i]! && w > want[i]! - 500);
+  const r429 = { status: 429 }, ok = { status: 200 };
+
+  test("four 429s then a 200 is answered with five attempts, after 1, 2, 4 and 8 s of backoff; three attempts, the old default, fail it", async () => {
+    const five = world(5, [r429, r429, r429, r429, ok]);
+    expect((await five.ask()).status).toBe(200);
+    expect(five.sent()).toBe(5);
+    expect(near(five.waits, [1000, 2000, 4000, 8000])).toBe(true);
+    const three = world(3, [r429, r429, r429, r429, ok]);
+    expect((await three.ask()).status).toBe(502);
+    expect(three.sent()).toBe(3);
+  });
+
+  test("five 429s still end in the proxy's 502 after 5 attempts, with under 30 s of backoff, so the hook fails open inside its particle-1 limit", async () => {
+    const w = world(5, [r429, r429, r429, r429, r429, ok]);
+    const res = await w.ask();
+    expect(res.status).toBe(502);
+    expect(((await res.json()) as { code: string }).code).toBe("UPSTREAM");
+    expect(w.sent()).toBe(5);
+    expect(near(w.waits, [1000, 2000, 4000, 8000])).toBe(true);
+    expect(w.waits.reduce((a, b) => a + b, 0)).toBeLessThan(30_000);
+  });
+
+  test("a Retry-After the provider sends still sets the wait", async () => {
+    const w = world(5, [{ status: 429, headers: { "retry-after-ms": "2500" } }, ok]);
+    expect((await w.ask()).status).toBe(200);
+    expect(near(w.waits, [2500])).toBe(true);
+  });
+});
+
 describe("the launcher's judge constants stay in lockstep with the judge tar", () => {
   test("laneb_hooks.py JEV_MODEL equals judge.ts JEV_MODEL, and the judge deciders are the two backends' ids", () => {
     const hooks = readFileSync(join(import.meta.dir, "../../quick/laneb/runner/agent/laneb_hooks.py"), "utf8");
@@ -350,7 +445,7 @@ describe("a judge-bearing host ships the judge proxy keys, a non-judge host does
   const keys = (name: string) => HM_PROFILE.proxyKeys!(planFor(name));
 
   test("a judge item's plan carries a judge arm and ships TYPESAFE and OPENROUTER for the judge proxy", () => {
-    for (const name of ["stage3-pilot", "stage4-opus", "stage4-sol", "stage4-p1"]) {
+    for (const name of ["stage3-pilot", "stage3-pilot-2", "stage4-opus", "stage4-sol", "stage4-p1"]) {
       const hasJudge = planFor(name).parts.some((p) => p.rects.some((r) => r.arms.some((a) => (JUDGE as string[]).includes(a))));
       expect([name, hasJudge]).toEqual([name, true]);
       expect([name, keys(name)]).toEqual([name, ["TYPESAFE_API_KEY", "OPENROUTER_API_KEY"]]);
