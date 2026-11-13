@@ -84,7 +84,7 @@ describe("reserve mechanics", () => {
     expect(txt).toContain("RESERVE stage1-opus: cap $150, reserve per launch $30.00 (6 x $5), room for settled spend $120.00");
     expect(txt).toContain("RESERVE stage4-p1: cap $280, reserve per launch $12.00 (6 x $2), room for settled spend $268.00");
     expect(txt).not.toContain("BAD");
-    expect(txt).toContain("RESERVE stage1-sol-run: cap $179.96147, reserve per launch $30.00 (6 x $5), room for settled spend $149.96; C1 projection $138.64 fits");
+    expect(txt).toContain("RESERVE stage1-sol-run: cap $179.96147, reserve per launch $36.00 (6 x $6), room for settled spend $143.96; C1 projection $144.64 fits");
     expect(txt.split("\n").filter((x) => x.startsWith("RESERVE")).length).toBe(13);
   }, 60_000);
 });

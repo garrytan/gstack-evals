@@ -88,9 +88,18 @@ export const CLOSING = { key: "hm-status", text: "When you finish, end your fina
 
 // Models under test as L1 ran them in Claude Code, with section 22's per-session allowance. cells.l1-p1.json allows $5, so
 // particle-1 reads its own cells file at $2.
+// Deviation D8 (the Captain's ruling, pre-data, before Stage 3): Sol's per-session allowance goes from $5 to $6. Sol runs on
+// Lane B's byte-based session proxy (count_tokens "estimate", because OpenRouter has no count endpoint), which over-reserves
+// input against the real token count by a median 2.03x, p90 3.53x and max 6.44x (measured on the 4,700 settled Sol calls of
+// Stage 1). Six concurrent worst-case holds then tripped the $5 per-session cap though real spend was ~$1-2, giving 44
+// reservation-driven refusals in Stage 1 (32 of them stacking-only; none scored a session 0). At $6 all 44 clear (the largest
+// spent + inflight + worst was $5.678), every Sol item's reserve still fits its frozen cap and the $2,480 total is unchanged.
+// Opus is untouched: its Lane B route is count_tokens "forward", so it already reserves at Anthropic's real count. #322's live
+// counter is the wrong tool for Sol (it would call OpenAI's counter, with an OpenAI key, inside every VM session), and the
+// forward-safe concurrency x p90 size ($11.34) does not fit stage3-pilot's $90 cap, so it is not taken.
 export const MODELS = {
   opus: { id: "claude-opus-5-5", cells: "cells.l1.json", allowanceUsd: 5 },
-  sol: { id: "gpt-6.1-sol", cells: "cells.l1-sol.json", allowanceUsd: 5 },
+  sol: { id: "gpt-6.1-sol", cells: "cells.l1-sol.json", allowanceUsd: 6 },
   p1: { id: "particle-1", cells: "cells.hm-p1.json", allowanceUsd: 2 },
 } as const;
 export type ModelKey = keyof typeof MODELS;
