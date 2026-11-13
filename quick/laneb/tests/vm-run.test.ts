@@ -514,8 +514,8 @@ describe("vm-run.sh's judge launch block (judge arms only)", () => {
       const args = readFileSync(join(s.run, "out", "judge-proxy-args.txt"), "utf8");
       expect(args).toContain(`--journal ${s.run}/out/judge-journal.ndjson `);
       expect(args).toContain("--ledger-prefix judge:p-");
-      // D11: five attempts for a judge call, so particle-1's 429s get 1, 2, 4 and 8 s of backoff before the proxy gives up.
-      expect(args).toContain("--retry-attempts 5");
+      // D11: four attempts for a judge call, so with the decider's one retry a judgment gets 8 attempts inside the hook's 30 s.
+      expect(args).toContain("--retry-attempts 4");
       expect(args).not.toContain("--ledger-prefix judge ");
       expect(readFileSync(join(s.run, "out", "harbor-env.txt"), "utf8").split("\n")).toContain(`HM_JUDGE_JOURNAL=${s.run}/out/judge-journal.ndjson`);
       writeFileSync(join(s.run, "HARBOR_DONE"), "");

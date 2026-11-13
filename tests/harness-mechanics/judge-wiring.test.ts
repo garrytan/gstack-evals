@@ -208,10 +208,95 @@ describe("D11: the judge proxy writes the ledger's own 409 reason into its journ
   });
 });
 
-describe("D11: particle-1 429s under the judge proxy's retry budget (vm-run.sh passes --retry-attempts 5)", () => {
-  // OpenRouter's 429s for particle-1 in stage3-pilot's smoke came from provider "Particle AI" with no Retry-After header,
-  // so the proxy backed off 1 s, 2 s, 4 s and 8 s between attempts. The hook gives a particle-1 answer 30 s, its own retry
-  // included, so five attempts' backoff (15 s) still ends in the proxy's 502 inside that limit and the hook fails open on it.
+// The hook's own particle-1 path in Python: hm_judge.judge over dr_agent.deciders' one retry, unchanged. Only the SDK's HTTP
+// call is a stand-in, the same request the pinned openai SDK makes with max_retries 0, raising on an error status as it does.
+const D11_DRIVER = [
+  "import json, os, sys, types, urllib.request, urllib.error",
+  "sys.path[:0] = sys.argv[1:3]",
+  "try:",
+  "    import minisweagent.exceptions",
+  "except ImportError:",
+  "    m, e = types.ModuleType('minisweagent'), types.ModuleType('minisweagent.exceptions')",
+  "    for n in ('InterruptAgentFlow', 'LimitsExceeded', 'Submitted'): setattr(e, n, type(n, (Exception,), {}))",
+  "    m.exceptions = e",
+  "    sys.modules.update({'minisweagent': m, 'minisweagent.exceptions': e})",
+  "import hm_judge as H",
+  "spec = json.load(sys.stdin)",
+  "def post(system, user, schema):",
+  "    body = {'model': H.PARTICLE_MODEL, 'messages': [{'role': 'system', 'content': system}, {'role': 'user', 'content': user}],",
+  "            'response_format': {'type': 'json_schema', 'json_schema': {'name': 'answer', 'strict': True, 'schema': schema}},",
+  "            'max_tokens': spec['max_tokens'], 'provider': H.PROVIDER}",
+  "    req = urllib.request.Request(spec['base'] + '/chat/completions', data=json.dumps(body).encode(), method='POST',",
+  "                                 headers={'content-type': 'application/json', 'authorization': 'Bearer ' + spec['token']})",
+  "    try:",
+  "        r = json.load(urllib.request.urlopen(req, timeout=600))",
+  "    except urllib.error.HTTPError as e:",
+  "        raise RuntimeError('Error code: %d - %s' % (e.code, e.read().decode(errors='replace')[:300])) from None",
+  "    ch, u = r['choices'][0], r.get('usage') or {}",
+  "    return {'content': ch['message']['content'], 'truncated': ch.get('finish_reason') == 'length', 'usage': {'input': u.get('prompt_tokens', 0), 'output': u.get('completion_tokens', 0)}}",
+  "particle = H.PinnedParticle('openai', spec['base'], spec['token'], H.PARTICLE_MODEL, spec['max_tokens'], call=post)",
+  "out = H.judge({'command': 'cat calc.py > b.py'}, H.RISKY_Q, 'p1', {'lo': 0.3, 'hi': 0.7}, None, particle)",
+  "sys.stdout.write(json.dumps(out)); sys.stdout.flush(); os._exit(0)",
+].join("\n");
+
+describe("D11: particle-1 429s end to end, through the hook's 30 s limit, the decider's one retry and the judge proxy's provider pause", () => {
+  // OpenRouter's 429s for particle-1 in stage3-pilot's smoke came from provider "Particle AI" with no Retry-After header.
+  // The proxy backs off 1, 2, 4, 8 s between a call's attempts and, after the call's last 429, pauses the provider for the
+  // next step; the decider then retries the call once, at once, and that retry waits out the pause. At vm-run.sh's
+  // --retry-attempts 4 a judgment gets 8 attempts by about 22 s (0, 1, 3, 7, then 15, 16, 18, 22); at 5 the retry could
+  // only start at 31 s, past the hook's 30 s, so its answer would be paid and never read.
+  const ATTEMPTS = Number(/--retry-attempts (\d+)/.exec(readFileSync(join(import.meta.dir, "../../quick/laneb/runner/vm-run.sh"), "utf8"))?.[1]);
+  async function judgment(n429: number) {
+    const dir = tempDir("hm-judge-e2e-");
+    const sent: { at: number; status: number }[] = [];
+    const t0 = Date.now();
+    const proxy = new MeteringProxy({
+      ledger: new InMemoryLedger(), leaseId: "hm-judge-e2e.0001.abcdef", host: "127.0.0.1",
+      managementSocket: join(dir, "m.sock"), managementToken: "management-token-0123456789",
+      journal: join(dir, "judge-journal.ndjson"), retry: { attempts: ATTEMPTS, elapsed_ms: 300_000 },
+      env: { OPENROUTER_API_KEY: "sk-or-hm-0123456789", TYPESAFE_API_KEY: "ts-hm-key-0123456789" }, maxOutputTokens: 32_000,
+      fetch: async () => {
+        const status = sent.length < n429 ? 429 : 200;
+        sent.push({ at: Date.now() - t0, status });
+        if (status === 429) return Response.json({ error: { code: 429, message: "Rate limit exceeded", metadata: { provider_name: "Particle AI" } } }, { status: 429 });
+        return Response.json({ id: "gen-1", object: "chat.completion", choices: [{ index: 0, finish_reason: "stop", message: { role: "assistant", content: JSON.stringify({ answer: "no", confidence: 0.8 }) } }], usage: { prompt_tokens: 100, completion_tokens: 20 } });
+      },
+      allowanceCode: "DR_ALLOWANCE_STOP",
+    });
+    proxy.start();
+    cleanup.push(() => proxy.stop());
+    const b = proxy.bind({ cell: { run_id: "hm", arm: "judge-p1", task: "t1", model: "claude-opus-5-5", trial: 1, attempt: 1 }, models: JUDGE_DECIDERS, deciders: JUDGE_DECIDERS, allowance_micros: 2_000_000, forbidden_markers: [D11_CANARY], canary: D11_CANARY });
+    const py = Bun.spawn(["python3", "-c", D11_DRIVER, join(import.meta.dir, "../../lanes/decision-routing/agent"), join(import.meta.dir, "../../lanes/harness-mechanics/judge")], { stdin: "pipe", stdout: "pipe", stderr: "pipe" });
+    py.stdin.write(JSON.stringify({ base: "http://127.0.0.1:" + proxy.port + "/" + b.slot + "/openrouter/v1", token: b.token, max_tokens: 100 }));
+    py.stdin.end();
+    const text = await new Response(py.stdout).text();
+    await py.exited;
+    const out = (() => { try { return JSON.parse(text); } catch { return { driver_error: text.slice(-500) }; } })();
+    return { out, sent, t0 };
+  }
+  const late = (at: number[], want: number[]) => at.length === want.length && at.every((t, i) => t >= want[i]! * 1000 - 200 && t <= want[i]! * 1000 + 2500);
+
+  test("runs of 4, 5 and 7 429s are answered inside 30 s; a run of 8 fails open on the proxy's 502 inside 30 s, and no answer is paid after the hook stops", async () => {
+    const runs = await Promise.all([4, 5, 7, 8].map(judgment));
+    // A retry the proxy holds past the hook's limit is sent when the pause ends (31 s at five attempts), so wait past that before counting what was paid.
+    const settle = Math.max(...runs.map((r) => r.t0)) + 34_000 - Date.now();
+    if (settle > 0) await Bun.sleep(settle);
+    const [four, five, seven, eight] = runs.map((r) => ({ ...r.out, sends: r.sent.length, paid: r.sent.filter((s) => s.status === 200).length, at: r.sent.map((s) => s.at) }));
+    // Each answered run spends the decider's retry: the first call ends in the proxy's 502 after four 429s.
+    for (const [r, sends] of [[four, 5], [five, 6], [seven, 8]] as const) {
+      expect([r.fail_open, r.error, r.answer, r.calls]).toEqual([false, null, "no", 2]);
+      expect(r.latency_ms).toBeLessThan(30_000);
+      expect([r.sends, r.paid]).toEqual([sends, 1]);
+    }
+    expect(eight.fail_open).toBe(true);
+    expect(eight.error).toStartWith("particle-1: RuntimeError: Error code: 502 - ");
+    expect(eight.error).toContain("UPSTREAM");
+    expect(eight.calls).toBe(2);
+    expect(eight.latency_ms).toBeLessThan(30_000);
+    expect([eight.sends, eight.paid]).toEqual([8, 0]);
+    expect(late(eight.at, [0, 1, 3, 7, 15, 16, 18, 22])).toBe(true);
+  }, 90_000);
+
   function world(attempts: number, answers: Array<{ status: number; headers?: Record<string, string> }>) {
     const dir = tempDir("hm-judge-429-");
     const waits: number[] = [];
@@ -236,30 +321,10 @@ describe("D11: particle-1 429s under the judge proxy's retry budget (vm-run.sh p
     return { ask, waits, sent: () => sent };
   }
   const near = (waits: number[], want: number[]) => waits.length === want.length && waits.every((w, i) => w <= want[i]! && w > want[i]! - 500);
-  const r429 = { status: 429 }, ok = { status: 200 };
-
-  test("four 429s then a 200 is answered with five attempts, after 1, 2, 4 and 8 s of backoff; three attempts, the old default, fail it", async () => {
-    const five = world(5, [r429, r429, r429, r429, ok]);
-    expect((await five.ask()).status).toBe(200);
-    expect(five.sent()).toBe(5);
-    expect(near(five.waits, [1000, 2000, 4000, 8000])).toBe(true);
-    const three = world(3, [r429, r429, r429, r429, ok]);
-    expect((await three.ask()).status).toBe(502);
-    expect(three.sent()).toBe(3);
-  });
-
-  test("five 429s still end in the proxy's 502 after 5 attempts, with under 30 s of backoff, so the hook fails open inside its particle-1 limit", async () => {
-    const w = world(5, [r429, r429, r429, r429, r429, ok]);
-    const res = await w.ask();
-    expect(res.status).toBe(502);
-    expect(((await res.json()) as { code: string }).code).toBe("UPSTREAM");
-    expect(w.sent()).toBe(5);
-    expect(near(w.waits, [1000, 2000, 4000, 8000])).toBe(true);
-    expect(w.waits.reduce((a, b) => a + b, 0)).toBeLessThan(30_000);
-  });
+  const ok = { status: 200 };
 
   test("a Retry-After the provider sends still sets the wait", async () => {
-    const w = world(5, [{ status: 429, headers: { "retry-after-ms": "2500" } }, ok]);
+    const w = world(ATTEMPTS, [{ status: 429, headers: { "retry-after-ms": "2500" } }, ok]);
     expect((await w.ask()).status).toBe(200);
     expect(near(w.waits, [2500])).toBe(true);
   });
