@@ -675,22 +675,26 @@ counts sessions.
   want's blob. The tracked list and the base names and markers come from want's tree, never from the index or the
   working tree. Files equal to want's blobs and the repo's .git dir are not scanned, and only archives outside the repo
   are listed.
-- Stores of other projects and tracked .gitmodules files no longer fail the containment check, and its base filter
-  reads want's blobs once (pre-data build change, 2026-11-13, before any outcome data; sh/contain.sh, contain.ts,
-  oracle.ts; the Captain's ruling, GSTA-2). `sm contain` on the 100 kept units passed refs and objects everywhere, but
-  20 units failed only the stores check, on git stores of other projects outside the repo (shell plugins, package
-  caches, test temp repos) and on .gitmodules files the base tree tracks. One unit with 1,661 hidden test names never
-  finished, because the base filter's git grep ran past the 30-minute docker limit on a large C++ tree. A git dir or a
-  bare object dir outside the repo now passes when it holds none of the unit's post-base blob ids. contain.ts writes the
-  patches the oracle's fixed run applies (oracle.ts fixedPatches: the same files in the same order) into the input dir,
-  and the check applies each patch alone, and all of them in order, to copies of the base blobs (want's root commit) in
-  its temp dir, outside any repository, and hashes every file they add or change. The lookup is git cat-file
-  --batch-check on the store (through a probe repo in the temp dir for a bare object dir), and a hit through the store's
-  own alternates counts. It fails closed: a store that holds one id, uses another object format, has a pack without its
-  index or whose lookup errors prints the same STORE line as before, and so does every store when a patch does not apply
-  (an error finding) or the input lists no patches. A .gitmodules under the repo now passes when want tracks it as a
-  regular file, its working copy hashes to that blob, $gd/modules does not exist and no .git sits anywhere under its
-  dir. The base filter now streams want's regular-file blobs once through git cat-file --batch, with an empty line
+- Stores of other projects and tracked .gitmodules files no longer fail the containment check, and its base filter reads
+  want's blobs once (pre-data build change, 2026-11-13, before any outcome data; sh/contain.sh, contain.ts, oracle.ts;
+  the Captain's ruling, GSTA-2). `sm contain` on the 100 kept units passed refs and objects everywhere, but 20 units
+  failed only the stores check, on git stores of other projects outside the repo (shell plugins, package caches, test
+  temp repos) and on .gitmodules files the base tree tracks. One unit with 1,661 hidden test names never finished,
+  because the base filter's git grep ran past the 30-minute docker limit on a large C++ tree. A git dir or a bare object
+  dir outside the repo now passes when it holds none of the unit's post-base blob ids. contain.ts writes the patches the
+  oracle's fixed run applies (oracle.ts fixedPatches: the same files in the same order) into the input dir, and the
+  check applies each patch alone, and all of them in order, to copies of the base blobs (want's root commit) in its temp
+  dir, outside any repository, and hashes every file they add or change. The lookup is git cat-file --batch-check on the
+  store (through a probe repo in the temp dir for a bare object dir), and a hit through the store's own alternates
+  counts. Before the lookup, every object the store holds, loose or packed, streams through git cat-file
+  --batch-all-objects into the names grep (whole words, no markers). It fails closed: a store that holds one id or a
+  hidden name, uses another object format, has a pack without its index, keeps any other file in its pack dir or a loose
+  object dir (anything but packs and their index, reverse index, bitmap, keep, promisor and mtimes files, the multi-pack
+  index and object files), reads its objects from another dir (a commondir) or whose lookup errors prints the same STORE
+  line as before, and so does every store when a patch does not apply or the patches make no blob (an error finding), or
+  when the input lists no patches (an empty list included). A .gitmodules under the repo now passes when want tracks it
+  as a regular file, its working copy hashes to that blob, $gd/modules does not exist and no .git sits anywhere under
+  its dir. The base filter now streams want's regular-file blobs once through git cat-file --batch, with an empty line
   between blobs, into GNU grep under LC_ALL=C with the same flags as before; the steps after it are unchanged. Nothing
   else in the check changes.
 - A finalize halt is on disk before its close (pre-data build change, 2026-11-11, driver/stage.ts; the Captain's pre-run

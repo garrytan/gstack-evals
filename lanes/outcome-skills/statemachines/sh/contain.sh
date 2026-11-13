@@ -10,7 +10,8 @@
 #       its dir), and no other git object store anywhere but proc and sys, with or without a HEAD file (a pack or loose
 #       objects is a store), except A3's gstack checkout when its HEAD is the /qa pin and, when patches is given, a store
 #       outside the repo that holds none of the post-base blob ids (the blobs each patch alone, and all of them in order,
-#       make over want's root commit, hashed in $tmp) by a lookup that can be trusted.
+#       make over want's root commit, hashed in $tmp) by a lookup that can be trusted, and none of whose objects holds a
+#       hidden test name as a whole word.
 #   (d) scan: no file outside the repo, and no file in the repo that want does not hold byte for byte (untracked,
 #       ignored, staged but never committed, or tracked with a working copy that differs from want's blob), holds a
 #       hidden test name (a whole word) or a marker (anywhere in a line), read raw as scan.sh reads (binary included,
@@ -91,15 +92,15 @@ postbase() {
   w=$(git rev-parse --verify -q "$want^{commit}") && root=$(git rev-list --max-parents=0 "$w") && [ -n "$root" ] || return 1
   case "$root" in *$'\n'*) return 1 ;; esac
   case ${#w} in
-    40) other='\./([0-9a-f]{2}/[0-9a-f]{62}|pack/pack-[0-9a-f]{64}\.(idx|pack))'; p=sha1 ;;
-    64) other='\./([0-9a-f]{2}/[0-9a-f]{38}|pack/pack-[0-9a-f]{40}\.(idx|pack))'; p=sha256 ;;
+    40) other='\./([0-9a-f]{2}/[0-9a-f]{62}|pack/pack-[0-9a-f]{64}\.(idx|pack))'; own='\./([0-9a-f]{2}/[0-9a-f]{38}|pack/(pack-[0-9a-f]{40}\.(pack|idx|rev|bitmap|keep|promisor|mtimes)|multi-pack-index(-[0-9a-f]{40}\.(bitmap|rev))?))'; p=sha1 ;;
+    64) other='\./([0-9a-f]{2}/[0-9a-f]{38}|pack/pack-[0-9a-f]{40}\.(idx|pack))'; own='\./([0-9a-f]{2}/[0-9a-f]{62}|pack/(pack-[0-9a-f]{64}\.(pack|idx|rev|bitmap|keep|promisor|mtimes)|multi-pack-index(-[0-9a-f]{64}\.(bitmap|rev))?))'; p=sha256 ;;
     *) return 1 ;;
   esac
   { gx git init -q --bare --object-format="$p" "$tmp/probe" 2> /dev/null || { [ "$p" = sha1 ] && gx git init -q --bare "$tmp/probe"; }; } || return 1
   empty=$(gx git --git-dir="$tmp/probe" hash-object --stdin < /dev/null) && [ ${#empty} -eq ${#w} ] && : > "$tmp/ids" || return 1
   while IFS= read -r p || [ -n "$p" ]; do printf '%s\n' "$p" > "$tmp/one" && variant "$tmp/one" < /dev/null || return 1; done < "$in/patches"
   [ ! -s "$in/patches" ] || variant "$in/patches" < /dev/null || return 1
-  LC_ALL=C sort -u -o "$tmp/ids" "$tmp/ids"
+  LC_ALL=C sort -u -o "$tmp/ids" "$tmp/ids" && [ -s "$tmp/ids" ]
 }
 ids=0; nv=0; prepo=$(pwd -P)
 outside() { case "$1" in "$repo" | "$repo"/* | "$prepo" | "$prepo"/*) return 1 ;; esac; }
@@ -109,9 +110,12 @@ idsok() {
 }
 foreign() {
   local o x p
-  [ -f "$in/patches" ] && outside "$1" && idsok && o=$(gx "${@:2}" rev-parse --git-path objects) && [ -n "$o" ] && [ "$(gx "${@:2}" hash-object --stdin < /dev/null)" = "$empty" ] || return 1
+  [ -s "$in/patches" ] && outside "$1" && idsok && o=$(gx "${@:2}" rev-parse --git-path objects) && [ -n "$o" ] && [ "$(gx "${@:2}" hash-object --stdin < /dev/null)" = "$empty" ] || return 1
+  x=$(cd "$o" && pwd -P) && [ -n "$x" ] && [ "$x" = "$(cd "$1" && pwd -P)" ] || return 1
   x=$(cd "$o" && find . -mindepth 2 -maxdepth 2 -regextype posix-extended -regex "$other" -print -quit) && [ -z "$x" ] || return 1
+  x=$(cd "$o" && find . -mindepth 2 -maxdepth 2 -regextype posix-extended \( -path './pack/*' -o -regex '\./[0-9a-f]{2}/.*' \) ! -regex "$own" -print -quit) && [ -z "$x" ] || return 1
   for p in "$o"/pack/pack-*.pack; do [ ! -e "$p" ] || [ -f "${p%.pack}.idx" ] || return 1; done
+  [ ! -s "$in/names" ] || { gx "${@:2}" cat-file --batch-all-objects --batch= 2> "$tmp/all.err" | LC_ALL=C grep -a -q -F -w -f "$in/names"; [ "${PIPESTATUS[*]}" = "0 1" ] && [ ! -s "$tmp/all.err" ]; } || return 1
   gx "${@:2}" cat-file --batch-check < "$tmp/ids" > "$tmp/look" 2> "$tmp/look.err" && [ ! -s "$tmp/look.err" ] && [ "$(sed 's/$/ missing/' "$tmp/ids")" = "$(cat "$tmp/look")" ]
 }
 modok() {
@@ -147,7 +151,7 @@ while IFS= read -r -d '' h; do
   isgit "$d" || continue
   [ "$d" = "$gd" ] && continue
   if [ "$d" = "$gs" ] && [ -s "$in/qa_pin" ] && [ "$(git --git-dir="$d" rev-parse --verify -q HEAD 2>/dev/null)" = "$(cat "$in/qa_pin")" ]; then continue; fi
-  foreign "$d" git --git-dir="$d" && continue
+  foreign "$d/objects" git --git-dir="$d" && continue
   store store "$d"
 done < "$tmp/heads"
 LC_ALL=C sort -z -u "$tmp/objdirs" > "$tmp/objdirs.u" || err stores "sort"

@@ -1301,7 +1301,7 @@ describe("the containment check before any session (E_SM_CONTAIN)", () => {
       cpSync(packOf({ "dep.rs": "fn dep() {}\n" }), join(t.root, "usr/local/cache/objects/pack"), { recursive: true });
       loose(join(t.root, "srv/objects"), "unrelated\n");
       expect(run(t)).toEqual({ ok: true, checks: clean, archives: [] });
-      expect(run(t, [])).toEqual({ ok: true, checks: clean, archives: [] });
+      expect(run(t, []).checks.stores).toEqual({ ok: false, findings: ["objects /srv/objects", "objects /usr/local/cache/objects", "store /root/.oh-my-zsh/.git"] });
       expect(run(t, null).checks.stores).toEqual({ ok: false, findings: ["objects /srv/objects", "objects /usr/local/cache/objects", "store /root/.oh-my-zsh/.git"] });
     }, 120_000);
 
@@ -1358,6 +1358,80 @@ describe("the containment check before any session (E_SM_CONTAIN)", () => {
       const r = run(t, [patches()[0]!, ["fix-source.patch", diff("m.py", "def f():\n    return 9\n", FIX)]]);
       expect(r.checks.stores).toEqual({ ok: false, findings: ["error post-base blob ids", "store /opt/other/.git"] });
       expect([r.ok, r.checks.refs.ok, r.checks.objects.ok, r.checks.scan.ok]).toEqual([false, true, true, true]);
+    }, 120_000);
+
+    test("an empty patch list, or patches that make no blob over the base, never pass a store outside the repo", () => {
+      const t = unitTree("stores-empty");
+      repoAt(t.root, "opt/upstream", { "README.md": "upstream\n", "src/m.py": FIX });
+      expect(run(t, []).checks.stores).toEqual({ ok: false, findings: ["store /opt/upstream/.git"] });
+      const n = unitTree("stores-noids");
+      repoAt(n.root, "opt/other", { "README.md": "other\n" });
+      const d = scratch("contain-delete");
+      git(d, "init", "-q");
+      writeFileSync(join(d, "m.py"), M);
+      git(d, "add", "-A");
+      git(d, "commit", "-qm", "from");
+      git(d, "rm", "-q", "m.py");
+      const r = run(n, [["test.patch", spawnSync("git", ["-C", d, "diff", "--cached"], { encoding: "utf8" }).stdout]]);
+      expect(r.checks.stores).toEqual({ ok: false, findings: ["error post-base blob ids", "store /opt/other/.git"] });
+      expect([r.checks.refs.ok, r.checks.objects.ok, r.checks.scan.ok]).toEqual([true, true, true]);
+    }, 120_000);
+
+    test("a store outside the repo holding a file its lookup skips, in its pack dir or a loose object dir, fails with today's line, and one holding only git's own pack files passes", () => {
+      const k = unitTree("stores-pack-files");
+      const other = repoAt(k.root, "opt/other", { "README.md": "other\n" });
+      git(other, "repack", "-a", "-d", "-q", "-b", "--write-midx");
+      const own = join(other, ".git/objects/pack");
+      writeFileSync(join(own, readdirSync(own).find((x) => x.endsWith(".pack"))!.replace(/\.pack$/, ".keep")), "");
+      expect(run(k)).toEqual({ ok: true, checks: clean, archives: [] });
+      const t = unitTree("stores-tmp-pack");
+      const up = repoAt(t.root, "opt/upstream", { "src/m.py": FIX });
+      git(up, "repack", "-a", "-d", "-q");
+      const pd = join(up, ".git/objects/pack");
+      for (const x of readdirSync(pd)) {
+        if (x.endsWith(".pack")) cpSync(join(pd, x), join(pd, "tmp_pack_abc"));
+        rmSync(join(pd, x));
+      }
+      expect(run(t).checks.stores).toEqual({ ok: false, findings: ["store /opt/upstream/.git"] });
+      const l = unitTree("stores-tmp-obj");
+      const o = join(l.root, "srv/objects");
+      loose(o, FIX);
+      const id = spawnSync("git", ["hash-object", "--stdin"], { input: FIX, encoding: "utf8" }).stdout.trim();
+      cpSync(join(o, id.slice(0, 2), id.slice(2)), join(o, id.slice(0, 2), "tmp_obj_abc"));
+      rmSync(join(o, id.slice(0, 2), id.slice(2)));
+      loose(o, "unrelated\n");
+      expect(run(l).checks.stores).toEqual({ ok: false, findings: ["objects /srv/objects"] });
+    }, 120_000);
+
+    test("a store outside the repo whose commondir sends its lookup to another objects dir fails with today's line", () => {
+      const t = unitTree("stores-commondir");
+      const up = repoAt(t.root, "opt/upstream", { "src/m.py": FIX });
+      const empty = repoAt(t.root, "opt/empty", { "README.md": "empty\n" });
+      writeFileSync(join(up, ".git/commondir"), join(empty, ".git") + "\n");
+      expect(run(t).checks.stores).toEqual({ ok: false, findings: ["store /opt/upstream/.git"] });
+    }, 120_000);
+
+    test("a store outside the repo that holds none of the ids fails with today's line when any object in it, loose or packed, holds a hidden test name as a whole word, and an unrelated project's store passes", () => {
+      const t = unitTree("stores-names");
+      const up = repoAt(t.root, "opt/upstream", { "tests/test_m.py": TESTS + "\n\ndef " + NAME + "():\n    assert f() == 2\n" });
+      rmSync(join(up, "tests"), { recursive: true });
+      rmSync(join(up, ".git/COMMIT_EDITMSG"), { force: true });
+      const r = run(t);
+      expect(r.checks.stores).toEqual({ ok: false, findings: ["store /opt/upstream/.git"] });
+      expect([r.checks.refs.ok, r.checks.objects.ok, r.checks.scan.ok]).toEqual([true, true, true]);
+      const p = unitTree("stores-names-packed");
+      const s = repoAt(p.root, "opt/upstream", { "README.md": "upstream\n", "tests/t.py": "def " + NAME + "():\n    pass\n" });
+      rmSync(join(s, "tests"), { recursive: true });
+      rmSync(join(s, ".git/COMMIT_EDITMSG"), { force: true });
+      git(s, "repack", "-a", "-d", "-q");
+      expect(readdirSync(join(s, ".git/objects")).filter((x) => /^[0-9a-f]{2}$/.test(x))).toEqual([]);
+      expect(run(p).checks.stores).toEqual({ ok: false, findings: ["store /opt/upstream/.git"] });
+      cpSync(packOf({ "t.py": "def " + NAME + "():\n    pass\n" }), join(p.root, "usr/cache/objects/pack"), { recursive: true });
+      expect(run(p).checks.stores).toEqual({ ok: false, findings: ["objects /usr/cache/objects", "store /opt/upstream/.git"] });
+      const u = unitTree("stores-names-none");
+      const o = repoAt(u.root, "root/.oh-my-zsh", { "README.md": "zsh\n", "notes.txt": "x" + NAME + "y\n" });
+      rmSync(join(o, "notes.txt"));
+      expect(run(u)).toEqual({ ok: true, checks: clean, archives: [] });
     }, 120_000);
 
     test("the patches are the ones the oracle's fixed run applies, in its order", () => {
