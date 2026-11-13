@@ -161,6 +161,38 @@ proxy=$!
 trap 'rc=$?; curl -fsS -X POST 127.0.0.1:$control_port/close-all >/dev/null 2>&1 || true; kill $proxy 2>/dev/null || true; echo $rc > "$run/out/vm-run.exit"' EXIT
 for _ in $(seq 1 40); do curl -fsS 127.0.0.1:$control_port/healthz >/dev/null 2>&1 && break; sleep 0.5; done
 curl -fsS 127.0.0.1:$control_port/healthz >/dev/null 2>&1 || { echo "metering proxy not healthy; see out/proxy.log" >&2; exit 8; }
+# Judge wiring (harness-mechanics Stage 3, lanes/harness-mechanics/README.md): started only when this batch has a judge
+# arm, so a non-judge or L1 batch starts nothing here and no HM_JUDGE_* ever reaches Harbor. A judge arm sets
+# agents[].kwargs.judge_backend in job.json (grid.ts), which the host-side agent (runner/agent/laneb_hooks.py) reads to
+# bind a per-session slot over the management socket and forward the slot's proxy URL into the task container. The judge
+# proxy is a self-contained bundle prepare-run.ts dropped in the run dir; it holds the keys from ~/.laneb-keys and meters
+# the judge deciders against the item's cap on the shared ledger under the "judge" prefix, beside the session proxy. When
+# jev's judge changes the repo in a forbidden way, the agent writes the STOP file named by HM_JUDGE_STOP_FILE, which the
+# watcher below already treats as a stop.
+judge_proxy=""
+judge_arms=false
+for f in "$run"/job.json "$run"/job-*.json; do
+  [ -e "$f" ] || continue
+  if jq -e 'any((.agents // [])[]; (.kwargs.judge_backend // "") != "")' "$f" >/dev/null 2>&1; then judge_arms=true; break; fi
+done
+if [ "$judge_arms" = true ]; then
+  [ -f "$run/judge-proxy.js" ] || { echo "judge arm present but $run/judge-proxy.js is missing (prepare-run.ts bundles it)" >&2; exit 8; }
+  judge_data_port=${JUDGE_PROXY_DATA_PORT:-8790}
+  judge_mgmt_socket="$run/out/judge-mgmt.sock"
+  export HM_JUDGE_MGMT_SOCKET="$judge_mgmt_socket"
+  export HM_JUDGE_MGMT_TOKEN="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+  export HM_JUDGE_PROXY_BASE="http://$gw:$judge_data_port"
+  export HM_JUDGE_STOP_FILE="$run/STOP"
+  (
+    set -a; . "$HOME/.laneb-keys"; set +a
+    exec bun "$run/judge-proxy.js" --data-host "$gw" --data-port "$judge_data_port" --management-socket "$judge_mgmt_socket" \
+      --journal "$run/out/judge-journal.ndjson" --ledger-url http://127.0.0.1:$ledger_port --ledger-prefix judge
+  ) > "$run/out/judge-proxy.log" 2>&1 &
+  judge_proxy=$!
+  trap 'rc=$?; curl -fsS -X POST 127.0.0.1:$control_port/close-all >/dev/null 2>&1 || true; kill $proxy 2>/dev/null || true; [ -n "$judge_proxy" ] && kill $judge_proxy 2>/dev/null; echo $rc > "$run/out/vm-run.exit"' EXIT
+  for _ in $(seq 1 40); do [ -S "$judge_mgmt_socket" ] && break; sleep 0.5; done
+  [ -S "$judge_mgmt_socket" ] || { echo "judge proxy management socket never appeared; see out/judge-proxy.log" >&2; exit 8; }
+fi
 # proxy_status: the proxy's state, read from its control route GET /totals (proxy.ts serves no /status), as one JSON line
 # that keeps /totals' fields one to one: sessions (every session opened this run), open_sessions, unsettled_sessions,
 # cap_stop (the latched reason, or null) and global_spent_micros. It prints nothing and fails unless the answer has

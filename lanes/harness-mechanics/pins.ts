@@ -107,7 +107,9 @@ export const MODELS = {
 export type ModelKey = keyof typeof MODELS;
 
 // The six run arms as Lane B arm specs (grid.ts armSpec). bo2 has no session: none plus plain-2 plus one picker call.
-// The judge backend is not an agent option yet; the judgment hooks' build adds it.
+// The judge backend is now an agent option (grid.ts backend -> judge_backend kwarg): a judge arm's spec carries its
+// backend, so the launcher picks HM_JUDGE_CONFIG = /root/.hm/judge/judge-<backend>.json and wires the judge proxy. Only
+// the judge specs carry it, so the four non-judge arms and every L1 arm stay byte-identical.
 const TAIL = ":system_prompt=claude-code-preset:gstack_hooks=copy:strip_snapshot=true:closing_line=" + CLOSING.key;
 // D1: every arm whose tar holds gstack runs gstack-checks trust before the session; none and plain-2 never do.
 const TRUST = ":checks_trust=true";
@@ -116,8 +118,8 @@ export const ARMS: Record<HmArm, { spec: string; tar: string; backend?: "jev" | 
   "plain-2": { spec: "plain-2:tar=none" + TAIL, tar: "none" },
   "verify-prose": { spec: "verify-prose:tar=prose:told=verify" + TRUST + TAIL, tar: "prose" },
   "verify-hook": { spec: "verify-hook:tar=hook:told=verify" + TRUST + TAIL, tar: "hook" },
-  "judge-jev": { spec: "judge-jev:tar=judge:told=verify" + TRUST + TAIL, tar: "judge", backend: "jev" },
-  "judge-p1": { spec: "judge-p1:tar=judge:told=verify" + TRUST + TAIL, tar: "judge", backend: "p1" },
+  "judge-jev": { spec: "judge-jev:tar=judge:told=verify" + TRUST + TAIL + ":backend=jev", tar: "judge", backend: "jev" },
+  "judge-p1": { spec: "judge-p1:tar=judge:told=verify" + TRUST + TAIL + ":backend=p1", tar: "judge", backend: "p1" },
 };
 export const FOUR: HmArm[] = ["none", "plain-2", "verify-prose", "verify-hook"];
 export const JUDGE: HmArm[] = ["judge-jev", "judge-p1"];

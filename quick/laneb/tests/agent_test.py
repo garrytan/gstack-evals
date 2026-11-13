@@ -735,6 +735,133 @@ def test_a_tree_that_grows_between_the_measure_and_the_send_still_sends_at_most_
     assert res.returncode == 3 and b"grew past the 1024-byte cap" in res.stderr, (res.returncode, res.stderr)
 
 
+# Harness mechanics live judge wiring (lanes/harness-mechanics/README.md "Not built"): LanebHooksAgent.run binds a judge
+# metering-proxy slot per judge session, injects HM_JUDGE_PROXY / HM_JUDGE_TOKEN / HM_JUDGE_CONFIG into the session's env
+# and the claude wrapper's docker exec forward, and stops the batch on a jevChanges line. A non-judge arm takes the pinned
+# super().run byte for byte. manage() and query() are stubbed, as Harbor and the SDK are elsewhere in this file.
+_REAL_MANAGE = lh.manage
+_JUDGE_ENV = ("HM_JUDGE_PROXY_BASE", "HM_JUDGE_MGMT_SOCKET", "HM_JUDGE_MGMT_TOKEN", "HM_JUDGE_STOP_FILE")
+
+
+def _judge_agent(tmp, fake, backend, markers_file=None):
+    a = hooks_agent(tmp, fake)
+    a.options.judge_backend = backend
+    a.options.markers_file = str(markers_file) if markers_file else None
+    a.options.judge_allowance_micros = 2_000_000
+    return a
+
+
+def _run_judge(tmp, fake, backend, markers_file=None, hook_log="", stop_file=None):
+    calls = []
+
+    def fake_manage(route, body):
+        calls.append((route, body))
+        return {"slot": "sJUDGE", "token": "gse_jtok", "meter_id": "mJUDGE"} if route == "/bind" else {"meter_id": "mJUDGE", "micros": 0}
+
+    captured = {}
+
+    async def cap_query(prompt, options):
+        captured["options"] = options
+        for m in ():
+            yield m
+
+    a = _judge_agent(tmp, fake, backend, markers_file)
+    base_exec = a._exec
+
+    def exec_(container, script, stdin=None, timeout=300):
+        if script.startswith("cat " + lh.JUDGE_HOOK_LOG):
+            return subprocess.CompletedProcess(script, 0, hook_log.encode(), b"")
+        return base_exec(container, script, stdin, timeout)
+
+    a._exec = exec_
+    lh.manage = fake_manage
+    la.query = cap_query
+    os.environ["HM_JUDGE_PROXY_BASE"] = "http://172.17.0.1:8790"
+    os.environ["HM_JUDGE_MGMT_SOCKET"] = str(tmp / "m.sock")
+    os.environ["HM_JUDGE_MGMT_TOKEN"] = "x" * 32
+    os.environ.pop("HM_JUDGE_STOP_FILE", None)
+    if stop_file is not None:
+        os.environ["HM_JUDGE_STOP_FILE"] = str(stop_file)
+    try:
+        run(a)
+    finally:
+        lh.manage = _REAL_MANAGE
+        for k in _JUDGE_ENV:
+            os.environ.pop(k, None)
+    return calls, captured
+
+
+def test_a_non_judge_hooks_arm_takes_the_pinned_super_run_and_sets_no_judge_env(tmp):
+    fake = Fake(tmp)
+    calls = []
+    lh.manage = lambda route, body: calls.append((route, body))
+    captured = {}
+
+    async def cap_query(prompt, options):
+        captured["options"] = options
+        for m in ():
+            yield m
+
+    a = hooks_agent(tmp, fake)  # the default options carry no judge_backend
+    la.query = cap_query
+    try:
+        run(a)
+    finally:
+        lh.manage = _REAL_MANAGE
+    assert calls == [], "a non-judge arm bound a judge slot"
+    env = captured["options"]["env"]
+    assert not [k for k in env if k.startswith("HM_JUDGE")], env
+    assert (tmp / "trial" / "evaluator" / "laneb-summary.json").exists()
+
+
+def test_the_judge_path_binds_a_slot_with_custody_and_sets_the_three_env_vars_in_env_and_forward(tmp):
+    fake = Fake(tmp)
+    canary = "DRCANARY-" + "0123456789abcdef" * 2
+    markers = tmp / "markers.json"
+    markers.write_text(json.dumps([canary, "test_hidden_regression_case"]))
+    calls, captured = _run_judge(tmp, fake, "jev", markers_file=markers)
+    assert [r for r, _ in calls] == ["/bind", "/unbind", "/finalize"], calls
+    bind = next(b for r, b in calls if r == "/bind")
+    assert bind["forbidden_markers"] == [canary, "test_hidden_regression_case"]
+    assert bind["canary"] == canary
+    assert bind["models"] == lh.JUDGE_DECIDERS and bind["deciders"] == lh.JUDGE_DECIDERS
+    assert bind["allowance_micros"] == 2_000_000
+    env = captured["options"]["env"]
+    assert env["HM_JUDGE_PROXY"] == "http://172.17.0.1:8790/sJUDGE"
+    assert env["HM_JUDGE_TOKEN"] == "gse_jtok"
+    assert env["HM_JUDGE_CONFIG"] == "/root/.hm/judge/judge-jev.json"
+    wrapper = Path(captured["options"]["cli_path"]).read_text()
+    for name in ("HM_JUDGE_PROXY", "HM_JUDGE_TOKEN", "HM_JUDGE_CONFIG"):
+        assert ("-e " + name) in wrapper, wrapper
+
+
+def test_judge_p1_uses_the_p1_config_and_binds_markerless_without_a_markers_file(tmp):
+    fake = Fake(tmp)
+    calls, captured = _run_judge(tmp, fake, "p1", markers_file=None)
+    assert captured["options"]["env"]["HM_JUDGE_CONFIG"] == "/root/.hm/judge/judge-p1.json"
+    bind = next(b for r, b in calls if r == "/bind")
+    assert "forbidden_markers" not in bind and "canary" not in bind, bind
+
+
+def test_a_jev_changes_line_in_the_hook_log_stops_the_batch_by_writing_the_stop_file(tmp):
+    fake = Fake(tmp)
+    stop = tmp / "STOP"
+    log = json.dumps({"point": "done", "backend": "jev", "jev_version": "jev-9.9.9", "stopped": False}) + "\n"
+    _run_judge(tmp, fake, "jev", hook_log=log, stop_file=stop)
+    assert stop.exists(), "a jevChanges line wrote no STOP file"
+    rec = json.loads(stop.read_text().strip())
+    assert rec["reason"] == "jevChanges" and rec["arm"] == "none"
+    assert (tmp / "trial" / "evaluator" / "judge-jevchanges.json").exists()
+
+
+def test_a_clean_judge_hook_log_writes_no_stop_file(tmp):
+    fake = Fake(tmp)
+    stop = tmp / "STOP"
+    log = json.dumps({"point": "done", "backend": "jev", "jev_version": lh.JEV_MODEL, "stopped": False}) + "\n"
+    _run_judge(tmp, fake, "jev", hook_log=log, stop_file=stop)
+    assert not stop.exists(), "a clean hook log wrote a STOP file"
+
+
 if __name__ == "__main__":
     failed = 0
     for name, fn in sorted((k, v) for k, v in globals().items() if k.startswith("test_")):

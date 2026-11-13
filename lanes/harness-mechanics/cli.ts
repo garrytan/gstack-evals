@@ -19,7 +19,7 @@ import { screenCommand, screenVm } from "./screen.ts";
 import { buildHmTable } from "./table.ts";
 import { countProblems, itemsFromEnv, replayReport, runReplay } from "./replay.ts";
 
-const USAGE = "E_USAGE usage: hm dryrun --out <dir> | prepare <work> --item <item> | host-up|attach|recover|host-down <work> | launch|relaunch|rerun <work> --part <part> | approve --ledger <jsonl> --item <item> --usd <cap> --approved-by <who> | done --ledger <jsonl> --item <item> [--work <work>] | guard <work> | screen --out <dir> | fit --out <dir> [--only <task>] | build-check --out <dir> [--list calibration|scored] [--shard k/n] | fit-vm start|status|finish <work> | screen-vm start|finish <work> | table <config.json> <out.jsonl> | patterns <job dir>... | admission <stage1 table.jsonl> [--fit <fit rows.jsonl> --fit-sha256 <sha256>] [--out <dir>] | report <table.jsonl> <config.json> <out dir> | replay items | replay build --config <json> --out <file> | replay run --clients <module.ts> --start <file> --ledger <jsonl> --out <dir> | replay report <out dir>";
+const USAGE = "E_USAGE usage: hm dryrun --out <dir> | prepare <work> --item <item> | host-up|attach|recover|host-down <work> | launch|relaunch|rerun <work> --part <part> | approve --ledger <jsonl> --item <item> --usd <cap> --approved-by <who> | done --ledger <jsonl> --item <item> [--work <work>] | guard <work> | screen --out <dir> | fit --out <dir> [--only <task>] | build-check --out <dir> [--list calibration|scored] [--shard k/n] | fit-vm start|status|finish <work> | screen-vm start|finish <work> | table <config.json> <out.jsonl> | patterns <job dir>... | judge-check <judge-journal.ndjson> <job dir>... | admission <stage1 table.jsonl> [--fit <fit rows.jsonl> --fit-sha256 <sha256>] [--out <dir>] | report <table.jsonl> <config.json> <out dir> | replay items | replay build --config <json> --out <file> | replay run --clients <module.ts> --start <file> --ledger <jsonl> --out <dir> | replay report <out dir>";
 const readTable = (p: string) => readFileSync(p, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as HmRowIn);
 // HM_SIMS cuts power.py's Monte Carlo for keyless tests; the report runs power.py's own 2,000 without it.
 const sims = () => (process.env.HM_SIMS ? Number(process.env.HM_SIMS) : undefined);
@@ -128,6 +128,18 @@ export async function main(argv: string[]): Promise<number> {
     if (cmd === "patterns") {
       for (const l of patternsCommand(rest)) console.log(l);
       return 0;
+    }
+    if (cmd === "judge-check") {
+      // The judge run's leak and version checks (README "Not built", pieces 3 and 4): journalCheck over the judge metering
+      // proxy's journal (out/judge-journal.ndjson) and jevChanges across every judge session's hook log.
+      const [journal, ...jobs] = rest.filter((x) => !x.startsWith("--"));
+      if (!journal || !jobs.length) throw new Error(USAGE);
+      const { judgeRunCheck, readJudgeSessions } = await import("./judge-check.ts");
+      const jp = resolve(journal);
+      const c = judgeRunCheck(jp, readJudgeSessions(jobs.map((j) => resolve(j)), jp));
+      console.log("JUDGE CHECK " + (c.pass ? "pass" : "FAIL") + ": custody_hits " + c.custody_hits + " (must be 0), marker_hits " + c.marker_hits + ", jevChanges in " + c.jev_changes.length + " of " + c.sessions + " judge session(s); " + c.detail);
+      if (c.jev_changes.length) console.error("E_HM_JEV_VERSION judge-check: a judge session's hook log carried a jevChanges line; the judge arms are stopped");
+      return c.pass ? 0 : 2;
     }
     if (cmd === "admission") {
       if (!rest[0] || rest[0].startsWith("--")) throw new Error(USAGE);

@@ -126,6 +126,15 @@ if (import.meta.main) {
     ...(taskSet === "swebv-r3" || taskSet === "swerebench-r3a4" ? { repo_dir: "/testbed" } : {}),
   });
   writeFileSync(join(run, "job.json"), JSON.stringify(job, null, 2) + "\n");
+  // When this batch has a judge arm (grid.ts sets backend, so jobConfig emits agents[].kwargs.judge_backend), bundle the
+  // judge metering proxy into the run dir as one self-contained script. It rides the run-dir sync launch.sh already does,
+  // so the VM needs no src/ checkout to run it; vm-run.sh starts it only for a judge batch. A batch with no judge arm
+  // writes no extra file, so a non-judge or L1 run dir stays byte-identical to before.
+  if (arms.some((a) => (a.options as { backend?: string }).backend)) {
+    const src = resolve(here, "../../../lanes/harness-mechanics/judge/judge-proxy.ts");
+    const built = Bun.spawnSync(["bun", "build", src, "--target=bun", "--outfile", join(run, "judge-proxy.js")]);
+    if (built.exitCode !== 0) throw new Error(`judge-proxy bundle failed: ${built.stderr.toString().trim()}`);
+  }
   if (process.env.ORACLE === "1") {
     const oracle = { ...job, job_name: `${jobName}-oracle`, n_attempts: 1, agents: [{ name: "oracle" }] };
     writeFileSync(join(run, "oracle.json"), JSON.stringify(oracle, null, 2) + "\n");

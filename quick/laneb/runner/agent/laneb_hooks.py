@@ -23,18 +23,101 @@ laneb-summary.json's teardown_errors and never raises, and each runs only after 
 Code, exported the patch and closed the session. An arm with no gstack state copies no hook state.
 """
 
+import asyncio
+import hashlib
+import http.client
 import io
 import json
+import os
 import re
 import shutil
+import socket
 import subprocess
 import tarfile
+import tempfile
+import time
+import uuid
 from datetime import datetime
 from pathlib import Path
 
 from pydantic import Field
 
+import laneb_agent
 from laneb_agent import PROBE_TIMEOUT_S, LanebAgent, LanebInfraError, LanebOptions
+
+# Harness mechanics live judge wiring (lanes/harness-mechanics/README.md "Not built"). The judge arms run their judgment
+# hooks (lanes/harness-mechanics/judge/hm_judge.py) against a judge metering proxy on the VM (src/runner/proxy/metering-proxy.ts,
+# started by quick/laneb/runner/vm-run.sh). The slot lifecycle mirrors lanes/decision-routing/agent/dr_harbor.py: bind over a
+# management unix socket, inject the per-session env, unbind and finalize in the finally.
+MANAGEMENT_HEADER = "x-gstack-evals-management"
+MANAGEMENT_TIMEOUT_SEC = 120
+# The judge slot's deciders, the same for both backends: jev (and its particle-1 escalation) for judge-jev, particle-1 for
+# judge-p1. hm_judge.py always builds the particle-1 client, and judge-jev may escalate, so both ids are allowed on the slot
+# (as in lanes/harness-mechanics/judge-dryrun.ts).
+JUDGE_DECIDERS = ["typesafe:jev-1.13.0", "openrouter:particle-ai/particle-1"]
+# Must equal lanes/harness-mechanics/judge.ts JEV_MODEL and dr_agent.deciders.JEV_MODEL (a keyless test checks). A judge
+# session's hook log line whose Jev version is not this, or whose session the E1 ruling stopped, is a jevChanges line that
+# stops the batch.
+JEV_MODEL = "jev-1.13.0"
+CANARY = re.compile(r"DRCANARY-[0-9a-f]{32}")
+# The judge hook log and per-backend config inside the container (quick/laneb/arms/build.sh judge tar).
+JUDGE_HOOK_LOG = "/root/.hm/log/hooks.jsonl"
+JUDGE_CONFIG = "/root/.hm/judge/judge-{backend}.json"
+
+
+class JudgeManagementError(RuntimeError):
+    """The judge metering proxy's management socket refused or failed a bind, unbind or finalize."""
+
+
+class _UnixHTTPConnection(http.client.HTTPConnection):
+    def __init__(self, path: str, timeout: float):
+        super().__init__("localhost", timeout=timeout)
+        self._socket_path = path
+
+    def connect(self) -> None:
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.settimeout(self.timeout)
+        sock.connect(self._socket_path)
+        self.sock = sock
+
+
+def manage(route: str, body: dict) -> dict:
+    """POST one management request to the judge metering proxy and return its JSON answer (mirrors dr_harbor.manage)."""
+    socket_path, token = os.environ.get("HM_JUDGE_MGMT_SOCKET"), os.environ.get("HM_JUDGE_MGMT_TOKEN")
+    if not socket_path or not token:
+        raise JudgeManagementError("HM_JUDGE_MGMT_SOCKET and HM_JUDGE_MGMT_TOKEN must be set in the Harbor process")
+    conn = _UnixHTTPConnection(socket_path, MANAGEMENT_TIMEOUT_SEC)
+    try:
+        conn.request("POST", route, json.dumps(body), {"content-type": "application/json", MANAGEMENT_HEADER: token})
+        res = conn.getresponse()
+        raw = res.read()
+    finally:
+        conn.close()
+    try:
+        answer = json.loads(raw)
+    except ValueError:
+        answer = {}
+    if res.status != 200:
+        raise JudgeManagementError(answer.get("detail") or f"judge management {route}: HTTP {res.status}")
+    return answer
+
+
+def judge_custody(markers_file: str | None) -> tuple[list[str] | None, str | None]:
+    """The task's custody from its markers file (mirrors dr_harbor): the full marker list and its one DRCANARY- canary, or
+    (None, None) when no markers file is set, so the slot binds without custody."""
+    if not markers_file:
+        return None, None
+    markers = json.loads(Path(markers_file).read_text())
+    canaries = [m for m in markers if CANARY.fullmatch(m)]
+    if len(canaries) != 1:
+        raise JudgeManagementError(f"the markers file {markers_file} must hold exactly one DRCANARY- canary")
+    return markers, canaries[0]
+
+
+def jev_changed(line: dict) -> bool:
+    """judge.ts jevChanges: a hook log line whose session the E1 ruling stopped, or whose Jev version is not the pin."""
+    version = line.get("jev_version")
+    return line.get("stopped") is True or (version is not None and version != JEV_MODEL)
 
 # Each copy measures its tar inside the container first and refuses one past the cap. It then sends the tar through head, so
 # a tree that a process the model left running grows between the two passes still sends at most the cap plus one byte: a
@@ -152,10 +235,252 @@ CHECKS_TRUST = "/root/.claude/skills/gstack/bin/gstack-checks trust"
 class LanebHooksOptions(LanebOptions):
     strip_snapshot: bool = Field(default=False, description="Strip auto-loaded instruction files from the snapshot before the arm is extracted (harness mechanics).")
     checks_trust: bool = Field(default=False, description="Run gstack-checks trust at the workdir after the arm is extracted (harness mechanics D1, gstack arms only).")
+    judge_backend: str | None = Field(default=None, description="A harness mechanics judge arm's judgment-hook backend, jev or p1. Set means the judge path: bind a slot on the judge metering proxy, inject HM_JUDGE_PROXY/HM_JUDGE_TOKEN/HM_JUDGE_CONFIG (/root/.hm/judge/judge-<backend>.json), and stop the batch on a jevChanges line. Unset means run() delegates to the pinned LanebAgent.run byte for byte.")
+    markers_file: str | None = Field(default=None, description="A JSON list of the judge session's runner-only markers (one DRCANARY- canary), sent to the judge slot's bind as forbidden_markers and canary (harness mechanics custody; mirrors dr_harbor). Unset binds the slot without custody.")
+    judge_allowance_micros: int = Field(default=2_000_000, description="The judge slot's allowance in integer micro-dollars: the decider spend the metering proxy lets one judge session run before DR_ALLOWANCE_STOP.")
 
 
 class LanebHooksAgent(LanebAgent):
     options_model = LanebHooksOptions
+
+    async def run(self, instruction: str, environment, context) -> None:
+        # A non-judge arm takes the pinned path with no duplication, so its launch spec and job.json env stay byte-identical.
+        if not getattr(self.options, "judge_backend", None):
+            return await super().run(instruction, environment, context)
+        # The judge path is a faithful copy of laneb_agent.LanebAgent.run at sha
+        # 09cdba851d46a35bf8ade440003ccf79231753ed210e76c4d3c818b983f32a79 plus the live judge additions: a judge-proxy slot
+        # bound with the task's custody, HM_JUDGE_PROXY / HM_JUDGE_TOKEN / HM_JUDGE_CONFIG injected into both the session's
+        # env dict and the claude wrapper's docker exec -e forward (the frozen judge tar's hooks read them from the
+        # container env only), the slot unbound and finalized in the finally, and a jevChanges stop after the session
+        # closes. Names laneb_agent owns or a test monkeypatches (query, post_json, the SDK types, the env tuples, the
+        # prompt builder, the option tables) are reached through the laneb_agent module so the copy tracks the pin and the
+        # test's stubs apply. agent_test.py guards that this path sets the three env vars and binds/unbinds and that the
+        # non-judge path takes super().run.
+        backend = self.options.judge_backend
+        if backend not in ("jev", "p1"):
+            raise ValueError(f"judge_backend {backend!r} is not one of ('jev', 'p1')")
+        if self.options.system_prompt not in laneb_agent.SYSTEM_PROMPTS:
+            raise ValueError(f"system_prompt {self.options.system_prompt!r} is not one of {sorted(laneb_agent.SYSTEM_PROMPTS)}")
+        if self.options.session_kind not in laneb_agent.SESSION_KINDS:
+            raise ValueError(f"session_kind {self.options.session_kind!r} is not one of {list(laneb_agent.SESSION_KINDS)}")
+        if self.options.procedure_line and (self.options.procedure_line not in laneb_agent.PROCEDURE_LINES or not self.options.told_skill):
+            raise ValueError(f"procedure_line {self.options.procedure_line!r} is not one of {sorted(laneb_agent.PROCEDURE_LINES)} on a told arm")
+        if self.options.closing_line and self.options.closing_line not in laneb_agent.CLOSING_LINES:
+            raise ValueError(f"closing_line {self.options.closing_line!r} is not one of {sorted(laneb_agent.CLOSING_LINES)}")
+        agent_options = {"system_prompt": self.options.system_prompt, "session_kind": self.options.session_kind, **({"told_skill": self.options.told_skill} if self.options.told_skill else {}),
+                         **({"procedure_line": self.options.procedure_line} if self.options.procedure_line else {}),
+                         **({"closing_line": self.options.closing_line} if self.options.closing_line else {}), "judge_backend": backend}
+        evdir = self._evaluator_dir()
+        evdir.mkdir(parents=True, exist_ok=True)
+        persona = json.loads(Path(self.options.persona_path).read_text())
+        sim = laneb_agent.Simulator(persona, evdir / "usersim-events.jsonl")
+        log = sim.log
+
+        container = await asyncio.to_thread(self._container_id, environment)
+        arm_info = self._arm_info
+        log(arm_info)
+
+        auth = self._resolve_auth_env()
+        base_url = auth.get("ANTHROPIC_BASE_URL")
+        if not base_url:
+            raise RuntimeError("laneb agent needs --base-url pointing at the metering proxy")
+        proxy_base = os.environ.get("HM_JUDGE_PROXY_BASE")
+        if not proxy_base:
+            raise JudgeManagementError("HM_JUDGE_PROXY_BASE must be set in the Harbor process for a judge arm")
+
+        open_body = {"trial": environment.session_id, "model": self.options.upstream_model, "cap_usd": self.options.session_cap_usd,
+                     "meta": {"arm": self.options.arm, "arm_tar_sha256": arm_info["tar_sha256"], **agent_options}, "open_key": uuid.uuid4().hex}
+        for attempt in range(1, laneb_agent.OPEN_ATTEMPTS + 1):
+            try:
+                session = await asyncio.to_thread(laneb_agent.post_json, self.options.control_url + "/sessions", open_body)
+                break
+            except laneb_agent.HttpStatusError as e:
+                if e.code == 409:
+                    log({"event": "ledger_cap_stop", "message": str(e)[:300]})
+                    raise laneb_agent.LedgerCapStop(str(e)) from None
+                if e.code < 500 or attempt == laneb_agent.OPEN_ATTEMPTS:
+                    raise LanebInfraError(f"session open failed: {e}") from None
+                log({"event": "session_open_retry", "attempt": attempt, "message": str(e)[:300]})
+                await asyncio.sleep(laneb_agent.OPEN_RETRY_S)
+            except Exception as e:
+                if attempt == laneb_agent.OPEN_ATTEMPTS:
+                    raise LanebInfraError(f"session open failed after {attempt} attempts: {type(e).__name__}: {e}") from None
+                log({"event": "session_open_retry", "attempt": attempt, "message": f"{type(e).__name__}: {e}"[:300]})
+                await asyncio.sleep(laneb_agent.OPEN_RETRY_S)
+        log({"event": "session_open", "session": session["id"], "model": self.options.upstream_model, "cap_usd": self.options.session_cap_usd})
+
+        started = time.time()
+        result = {}
+        error = None
+        summary = None
+        binding = None
+        try:
+            model = self._resolved_model_name() or self.options.upstream_model
+            # Judge addition: bind a metering-proxy slot per judge session, with the task's custody (mirrors dr_harbor).
+            markers, canary = judge_custody(getattr(self.options, "markers_file", None))
+            cell = {"run_id": environment.session_id, "arm": self.options.arm, "task": self.logs_dir.parent.parent.name,
+                    "model": self.options.upstream_model, "trial": 1, "attempt": 1}
+            bind_body = {"cell": cell, "models": JUDGE_DECIDERS, "deciders": JUDGE_DECIDERS,
+                         "allowance_micros": int(getattr(self.options, "judge_allowance_micros", 2_000_000)),
+                         **({"forbidden_markers": markers, "canary": canary} if markers is not None else {})}
+            binding = await asyncio.to_thread(manage, "/bind", bind_body)
+            judge_proxy = f"{proxy_base.rstrip('/')}/{binding['slot']}"
+            judge_config = JUDGE_CONFIG.format(backend=backend)
+            log({"event": "judge_bind", "slot": binding["slot"], "meter_id": binding["meter_id"], "backend": backend, "config": judge_config, "custody": markers is not None})
+            env = {
+                "ANTHROPIC_API_KEY": session["token"],
+                "ANTHROPIC_BASE_URL": base_url,
+                "ANTHROPIC_MODEL": model,
+                **{k: model for k in laneb_agent.ALIAS_ENV},
+                "CLAUDE_CONFIG_DIR": "/root/.claude",
+                "HOME": "/root",
+                "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+                "CLAUDE_CODE_DISABLE_BUNDLED_SKILLS": "1",
+                "CLAUDE_CODE_MAX_OUTPUT_TOKENS": str(self.options.max_output_tokens),
+                "DISABLE_AUTOUPDATER": "1",
+                "DISABLE_TELEMETRY": "1",
+                "DISABLE_ERROR_REPORTING": "1",
+                "IS_SANDBOX": "1",
+            }
+            forwarded = laneb_agent.FORWARDED_ENV
+            if self.options.session_kind:
+                env["GSTACK_SESSION_KIND"] = self.options.session_kind
+                forwarded += ("GSTACK_SESSION_KIND",)
+            # Judge addition: the three judge env vars ride both the SDK subprocess env and the docker exec -e forward,
+            # since the judge tar's hooks read HM_JUDGE_CONFIG / HM_JUDGE_PROXY / HM_JUDGE_TOKEN from the container env only.
+            env["HM_JUDGE_PROXY"] = judge_proxy
+            env["HM_JUDGE_TOKEN"] = binding["token"]
+            env["HM_JUDGE_CONFIG"] = judge_config
+            forwarded += ("HM_JUDGE_PROXY", "HM_JUDGE_TOKEN", "HM_JUDGE_CONFIG")
+
+            wrapper_text = Path(self.options.wrapper_path).read_text()
+            told = self.options.told_skill
+            line = self.options.procedure_line
+            closing = self.options.closing_line
+            prompt_text = laneb_agent.build_prompt(wrapper_text, instruction, bool(told), told, procedure_line=line, closing_line=closing)
+            log({"event": "prompt", "wrapper_sha256": hashlib.sha256(wrapper_text.encode()).hexdigest(), "instruction_sha256": hashlib.sha256(instruction.encode()).hexdigest(), "told_skill": told,
+                 **({"procedure_line": line, "procedure_line_sha256": hashlib.sha256(laneb_agent.PROCEDURE_LINES[line].encode()).hexdigest()} if line else {}),
+                 **({"closing_line": closing, "closing_line_sha256": hashlib.sha256(laneb_agent.CLOSING_LINES[closing].encode()).hexdigest()} if closing else {})})
+
+            host_dir = Path(tempfile.mkdtemp(prefix="laneb-agent-"))
+            wrapper = host_dir / "claude-in-container"
+            forward = " ".join(f"-e {name}" for name in forwarded)
+            workdir = f"-w {self.options.workdir} " if self.options.workdir else ""
+            wrapper.write_text(f"#!/bin/sh\nexec docker exec -i {workdir}{forward} {container} claude \"$@\"\n")
+            wrapper.chmod(0o755)
+
+            async def can_use_tool(tool_name, tool_input, ctx):
+                if tool_name == "AskUserQuestion":
+                    answers = sim.answer(tool_input.get("questions", []))
+                    return laneb_agent.PermissionResultAllow(updated_input={**tool_input, "answers": answers})
+                return laneb_agent.PermissionResultAllow(updated_input=tool_input)
+
+            async def keep_open(input_data, tool_use_id, ctx):
+                return {"continue_": True}
+
+            async def prompt():
+                yield {"type": "user", "message": {"role": "user", "content": prompt_text}}
+
+            disallowed = ["WebSearch", "WebFetch"]
+            options = laneb_agent.ClaudeAgentOptions(
+                cli_path=str(wrapper),
+                cwd=str(host_dir),
+                env=env,
+                can_use_tool=can_use_tool,
+                hooks={"PreToolUse": [laneb_agent.HookMatcher(matcher=None, hooks=[keep_open])]},
+                permission_mode="default",
+                model=model,
+                setting_sources=["user", "project"],
+                max_turns=self.options.sdk_max_turns,
+                disallowed_tools=disallowed,
+                **laneb_agent.SYSTEM_PROMPTS[self.options.system_prompt],
+            )
+            log({"event": "disallowed_tools", "tools": disallowed})
+            with (evdir / "sdk-messages.jsonl").open("a") as out:
+                async for message in laneb_agent.query(prompt=prompt(), options=options):
+                    record = {"type": type(message).__name__, "t": round(time.time() - started, 2)}
+                    data = getattr(message, "data", None)
+                    if isinstance(data, dict) and data.get("subtype") == "init":
+                        record["init"] = {k: data.get(k) for k in ("tools", "skills", "slash_commands", "model", "permissionMode", "cwd", "claude_code_version", "apiKeySource")} | agent_options
+                    for attr in ("content", "parent_tool_use_id", "subtype", "result", "usage", "total_cost_usd", "num_turns", "is_error", "stop_reason"):
+                        if hasattr(message, attr):
+                            record[attr] = getattr(message, attr)
+                    if type(message).__name__ == "ResultMessage":
+                        result = {k: record.get(k) for k in ("subtype", "num_turns", "is_error", "total_cost_usd", "stop_reason")}
+                    out.write(json.dumps(record, default=lambda o: getattr(o, "__dict__", str(o))) + "\n")
+        except Exception as e:
+            error = e
+            log({"event": "agent_error", "type": type(e).__name__, "message": str(e)[:500]})
+        finally:
+            # Run in a thread and awaited to the end even if this task is cancelled again, so Harbor never moves on to the
+            # verifier before the teardown, close and summary finish.
+            base = {"result": result, "error": None if error is None else {"type": type(error).__name__, "message": str(error)[:500]}, "arm": arm_info, **agent_options, "wall_s": round(time.time() - started, 1)}
+            teardown = asyncio.ensure_future(asyncio.to_thread(self._teardown, container, session["id"], log, base))
+            cancelled = None
+            while not teardown.done():
+                try:
+                    await asyncio.shield(teardown)
+                except asyncio.CancelledError as e:
+                    cancelled = e
+            summary = teardown.result()
+            closed = summary["session"] or {}
+            usage = closed.get("usage", {})
+            cached = usage.get("cache_read_input_tokens", 0)
+            context.n_input_tokens = usage.get("input_tokens", 0) + usage.get("cache_creation_input_tokens", 0) + usage.get("cache_creation_1h_input_tokens", 0) + cached
+            context.n_cache_tokens = cached
+            context.n_output_tokens = usage.get("output_tokens", 0)
+            context.cost_usd = closed["spent_micros"] / 1_000_000 if "spent_micros" in closed else None
+            context.metadata = {"laneb": {"arm": self.options.arm, "session": session["id"], "refused": closed.get("refused"), "requests": closed.get("requests"), "ok_responses": closed.get("ok_responses"), "close_error": summary["close_error"], "result": result,
+                                          "judge_backend": backend, "judge_slot": binding["slot"] if binding else None}}
+            # Judge addition: unbind and finalize the slot, then read the session's hook log and stop the batch on a
+            # jevChanges line. Each step records its own failure and never masks the session's outcome.
+            if binding is not None:
+                try:
+                    await asyncio.to_thread(manage, "/unbind", {"slot": binding["slot"]})
+                except Exception as e:
+                    log({"event": "judge_unbind_error", "message": f"{type(e).__name__}: {e}"[:300]})
+                try:
+                    meter = await asyncio.to_thread(manage, "/finalize", {"meter_id": binding["meter_id"]})
+                    (evdir / "judge-meter.json").write_text(json.dumps(meter, indent=2))
+                except Exception as e:
+                    log({"event": "judge_finalize_error", "message": f"{type(e).__name__}: {e}"[:300]})
+                try:
+                    self._judge_stop_on_jev_changes(container, log, environment.session_id)
+                except Exception as e:
+                    log({"event": "judge_post_session_error", "message": f"{type(e).__name__}: {e}"[:300]})
+            if cancelled is not None:
+                raise cancelled
+        if summary["session"] is not None and not summary["session"].get("ok_responses"):
+            raise LanebInfraError(f"no model response reached the agent, so this is an infrastructure failure: {error or result}") from error
+
+    def _judge_stop_on_jev_changes(self, container: str, log, session_id: str) -> list[dict]:
+        """Read the judge session's hook log, copy it out for the analysis, and on a jevChanges line write the batch STOP
+        file ($run/STOP, which vm-run.sh watches, by HM_JUDGE_STOP_FILE) so no further judge session starts. Returns the
+        jevChanges lines."""
+        res = self._exec(container, f"cat {JUDGE_HOOK_LOG} 2>/dev/null || true", timeout=PROBE_TIMEOUT_S)
+        text = res.stdout.decode(errors="replace")
+        evdir = self._evaluator_dir()
+        (evdir / "judge-hooks.jsonl").write_text(text)
+        lines = []
+        for entry in text.split("\n"):
+            if not entry.strip():
+                continue
+            try:
+                lines.append(json.loads(entry))
+            except ValueError:
+                pass
+        changed = [entry for entry in lines if jev_changed(entry)]
+        log({"event": "judge_hook_log", "lines": len(lines), "jev_changes": len(changed)})
+        if not changed:
+            return []
+        (evdir / "judge-jevchanges.json").write_text(json.dumps(changed) + "\n")
+        stop_file = os.environ.get("HM_JUDGE_STOP_FILE")
+        record = {"reason": "jevChanges", "arm": self.options.arm, "session": session_id, "jev_changes": changed[:5], "stop_file": stop_file}
+        log({"event": "jev_changes_stop", **record})
+        if stop_file:
+            with open(stop_file, "a") as f:
+                f.write(json.dumps(record) + "\n")
+        return changed
 
     def _strip_snapshot(self, container: str) -> list[str]:
         root = self.options.workdir or "."

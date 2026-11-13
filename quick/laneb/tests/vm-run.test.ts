@@ -447,3 +447,69 @@ describe("task-hooks.sh (L1 Amendment C): which task images register their own U
     expect(s.sg().indexOf("run --rm --pull never")).toBeLessThan(s.sg().indexOf("harbor run -y -c"));
   });
 });
+
+// The judge launch block (harness-mechanics Stage 3): with a judge arm in job.json, vm-run.sh starts the judge metering
+// proxy (the self-contained bundle prepare-run.ts drops in the run dir, built here by the same `bun build` command) and
+// exports HM_JUDGE_MGMT_SOCKET/HM_JUDGE_PROXY_BASE/HM_JUDGE_STOP_FILE into Harbor's env so the host-side agent can bind a
+// slot and forward the per-slot proxy URL. The real judge proxy runs (loopback gateway, no provider keys needed to start);
+// only the Lane B proxy and Harbor are faked. The skip path (no judge arm) is covered by the rest of this file, which runs
+// vm-run.sh with job.json "{}" and never starts a judge proxy.
+describe("vm-run.sh's judge launch block (judge arms only)", () => {
+  const freePort = () => {
+    const s = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response() });
+    const p = s.port;
+    s.stop(true);
+    return p;
+  };
+  function judgeSetup() {
+    const [dataPort, controlPort, ledgerPort, judgePort] = [freePort(), freePort(), freePort(), freePort()];
+    const root = mkdtempSync(join(tmpdir(), "laneb-vmrun-judge-"));
+    const bin = join(root, "bin"), run = join(root, "run"), home = join(root, "home"), log = join(root, "sg.log");
+    for (const d of [bin, run, home]) mkdirSync(d, { recursive: true });
+    writeFileSync(join(home, ".laneb-keys"), "");
+    const built = Bun.spawnSync([process.execPath, "build", join(import.meta.dir, "../../../lanes/harness-mechanics/judge/judge-proxy.ts"), "--target=bun", "--outfile", join(run, "judge-proxy.js")]);
+    if (built.exitCode !== 0) throw new Error("judge-proxy bundle failed: " + built.stderr.toString());
+    const fakes: Record<string, string> = {
+      // The judge proxy binds the gateway the way the Lane B proxy does, so a loopback gateway keeps the bind bindable.
+      sg: `#!/usr/bin/env bash\necho "$3" >> "${log}"\ncase "$3" in *"network inspect"*) echo 127.0.0.1 ;; *"harbor run"*job.resolved.json*) eval "$3" ;; esac\n`,
+      curl: `#!/usr/bin/env bash\necho "curl $*" >> "${log}"\necho '{}'\n`,
+      // Only the judge proxy is a real bun; the Lane B proxy (bun proxy.ts) exits, and the faked curl reports it healthy.
+      bun: `#!/usr/bin/env bash\ncase "$*" in *judge-proxy.js*) exec "${process.execPath}" "$@" ;; *) exit 1 ;; esac\n`,
+      sleep: "#!/usr/bin/env bash\nPATH=/usr/bin:/bin exec sleep 0.05\n",
+      // The token is never echoed; the three forwarded-slot env vars are, to prove they reach Harbor's process.
+      harbor: `#!/usr/bin/env bash\ntrap 'echo "harbor got INT" >> "${log}"; exit 130' INT\necho "JUDGEENV mgmt=$HM_JUDGE_MGMT_SOCKET base=$HM_JUDGE_PROXY_BASE stop=$HM_JUDGE_STOP_FILE" >> "${log}"\necho "harbor running" >> "${log}"\nfor _ in $(seq 1 600); do [ -e "${run}/HARBOR_DONE" ] && break; PATH=/usr/bin:/bin sleep 0.1; done\necho "harbor finished" >> "${log}"\n`,
+      pkill: `#!/usr/bin/env bash\necho "pkill $*" >> "${log}"\nexec /usr/bin/pkill "\${@:1:$#-1}" "${bin}/harbor run"\n`,
+    };
+    for (const [name, body] of Object.entries(fakes)) {
+      writeFileSync(join(bin, name), body);
+      chmodSync(join(bin, name), 0o755);
+    }
+    writeFileSync(join(run, "manifest.json"), JSON.stringify({ arms: [] }));
+    writeFileSync(join(run, "job.json"), JSON.stringify({ agents: [{ name: "laneb-claude-code", kwargs: { judge_backend: "p1" } }] }));
+    return {
+      run, judgePort,
+      cmd: ["bash", join(import.meta.dir, "../runner/vm-run.sh"), run, "p-", "5"],
+      env: { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH}`, PROXY_DATA_PORT: String(dataPort), PROXY_CONTROL_PORT: String(controlPort), LEDGER_TUNNEL_PORT: String(ledgerPort), JUDGE_PROXY_DATA_PORT: String(judgePort) },
+      sg: () => (existsSync(log) ? readFileSync(log, "utf8") : ""),
+    };
+  }
+
+  test("starts the judge proxy from the run-dir bundle and hands HM_JUDGE_* to Harbor before the paid batch", async () => {
+    const s = judgeSetup();
+    const proc = Bun.spawn(s.cmd, { env: s.env, stdout: "pipe", stderr: "pipe" });
+    try {
+      for (let i = 0; i < 300 && !s.sg().includes("harbor running"); i++) await Bun.sleep(50);
+      expect(s.sg()).toContain("harbor running");
+      expect(readFileSync(join(s.run, "out", "judge-proxy.log"), "utf8")).toContain("HM_JUDGE_PROXY_READY");
+      expect(s.sg()).toContain(`base=http://127.0.0.1:${s.judgePort}`);
+      expect(s.sg()).toContain(`mgmt=${s.run}/out/judge-mgmt.sock`);
+      expect(s.sg()).toContain(`stop=${s.run}/STOP`);
+      writeFileSync(join(s.run, "HARBOR_DONE"), "");
+      const timer = setTimeout(() => proc.kill("SIGKILL"), 20_000);
+      await proc.exited;
+      clearTimeout(timer);
+    } finally {
+      proc.kill("SIGKILL");
+    }
+  }, 60_000);
+});
