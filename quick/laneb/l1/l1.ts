@@ -317,7 +317,10 @@ const readJsonl = (p: string) => (existsSync(p) ? readFileSync(p, "utf8").split(
 // Why a launch ended. A cap stop (a refused reserve, the batch cap, a refused VM block) ends the item incomplete and is
 // never relaunched. A loss is the prereg's section 6 case: the part VM died or was reaped (its results could not be
 // pulled), the controller was lost, or the ledger service was (a reserve that failed rather than being refused, or the
-// tunnel dropping under vm-run.sh). Anything else that leaves cells unstarted is not a loss, and those cells are infra.
+// tunnel dropping under vm-run.sh). So is a part VM that never reached running (ubi-runner's wait in the controller log,
+// launch.sh exit 1) with no session or judge row for the part on the item's ledger (the Captain's ruling A, 2026-11-13): no
+// trial started, so its one relaunch runs every cell; a relaunch's or an attempt 2's own such failure is not. Anything else
+// that leaves cells unstarted is not a loss, and those cells are infra.
 // vm-run.sh's exit 4 (the ledger service unreachable through the tunnel before any pull or trial) is section 6's lost ledger
 // service (Amendment C), fail-closed: with no session record of the part on the item's ledger no trial started, so it is a
 // loss whose one relaunch runs every cell; with one, it is read as a part whose records were lost, with the ledger check
@@ -327,6 +330,7 @@ const readJsonl = (p: string) => (existsSync(p) ? readFileSync(p, "utf8").split(
 // refused VM block (vm-cap-stop) lived on the host; a VM block ($2.40) is under each item's session cap, so the check covers it.
 // After a lost host, recover's check counts every rebuilt reserve (sessions, VM block, host) as open before any rebuilt
 // settle, since rebuilt rows carry no times, and overstating the overlap can only turn a relaunch into a cap stop, never the reverse.
+export const NEVER_RAN_LOSS = "the part VM never reached running";
 export const EXIT4_LOSS = "vm-run.sh exited 4: the ledger service did not answer through the tunnel before any trial";
 export function classify(dir: string, launchExit: number | null, extra: { controllerLost?: boolean; hostLost?: boolean; ledger?: { rows: Row[]; since: string; sessionCapUsd: number; prefix?: string } } = {}) {
   const out = join(dir, "pulled/out");
@@ -350,6 +354,12 @@ export function classify(dir: string, launchExit: number | null, extra: { contro
   if (extra.hostLost) loss.push("the awake host was lost");
   const pulled = existsSync(join(out, "vm-run.exit")) && existsSync(join(dir, "pulled/jobs"));
   if ((!pulled || extra.hostLost) && extra.ledger && capStopPossible(extra.ledger.rows, extra.ledger.since, toMicros(extra.ledger.sessionCapUsd))) capStop.push((pulled ? "the awake host was lost with launch.sh's record of any refused VM block" : "the part's results were not pulled") + ", and the item's ledger came within one session cap ($" + extra.ledger.sessionCapUsd + ") of its cap while the part ran, so a cap stop can't be ruled out");
+  const neverRan = existsSync(join(dir, "vm-never-running")) ? readFileSync(join(dir, "vm-never-running"), "utf8").trim() : null;
+  const own = existsSync(join(dir, "l1-part.json")) ? readJson(join(dir, "l1-part.json")) : null;
+  const led = extra.ledger;
+  if (neverRan && launchExit === 1 && !pulled && !own?.relaunch_of && !own?.attempt_of && !capStop.length && led?.prefix
+    && !led.rows.some((r) => (r.id.startsWith(led.prefix!) && !/^vm(-\d+)?$/.test(r.id.slice(led.prefix!.length))) || r.id.startsWith("judge:" + led.prefix)))
+    loss.push(NEVER_RAN_LOSS + " (" + neverRan + "), and the item's ledger holds no session or judge row for this part, so no trial started");
   const unclassified: string[] = [];
   if (vmExit === "4" && !existsSync(join(out, "harbor.log"))) {
     const l = extra.ledger;
@@ -512,7 +522,7 @@ export function hostStatus(root: string) {
     const launchExit = existsSync(exitFile) ? Number(readFileSync(exitFile, "utf8").trim()) : null;
     const lock = join(work, part + ".salvage.lock"), failed = join(work, part + ".salvage-failed.json");
     parts[part] = { pid: c.pid, started_at: c.started_at, alive: launchExit === null && controllerAlive(c.pid, part), launch_exit: launchExit,
-      vm: /^vm: (\S+)$/m.exec(log)?.[1] ?? null, pulled: existsSync(join(work, part, "pulled/out/vm-run.exit")), salvage: existsSync(join(work, part + ".salvage.json")) ? readJson(join(work, part + ".salvage.json")) : null,
+      vm: /^vm: (\S+)$/m.exec(log)?.[1] ?? null, vm_never_running: /^ubi-runner: (VM did not reach running .*)$/m.exec(log)?.[1] ?? null, pulled: existsSync(join(work, part, "pulled/out/vm-run.exit")), salvage: existsSync(join(work, part + ".salvage.json")) ? readJson(join(work, part + ".salvage.json")) : null,
       salvage_failed: existsSync(failed) ? readJson(failed) : null, salvaging: existsSync(lock) && alive(Number(readFileSync(lock, "utf8").trim()), "host-salvage "),
       vm_cap_stop: existsSync(join(work, part, "vm-cap-stop")) ? readFileSync(join(work, part, "vm-cap-stop"), "utf8").trim() : null };
   }
@@ -925,6 +935,7 @@ function finishPart(work: string, host: any, st: any, name: string, plan: Plan) 
   const dir = join(work, name);
   if (s.pulled) must(ubi(["pull", host.name, H + "/work/" + name + "/pulled", dir]), "pulling " + name + "'s results");
   if (s.vm_cap_stop) { mkdirSync(dir, { recursive: true }); writeFileSync(join(dir, "vm-cap-stop"), s.vm_cap_stop + "\n"); }
+  if (s.vm_never_running) { mkdirSync(dir, { recursive: true }); writeFileSync(join(dir, "vm-never-running"), s.vm_never_running + "\n"); }
   const launched = readJson(join(work, name + ".launch.json"));
   const ledger = s.launch_exit === 7 && !s.salvage ? undefined : { rows: readRows(mirrorPath(work)), since: launched.at, sessionCapUsd: P.items[plan.item]!.allowanceUsd, prefix: launched.prefix };
   const result = { ...classify(dir, s.launch_exit, { controllerLost: s.launch_exit === null, ledger }), salvage: s.salvage, at: new Date().toISOString() };

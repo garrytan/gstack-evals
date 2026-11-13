@@ -3,7 +3,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFile
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { Ledger, readRows, toMicros } from "../runner/ledger.ts";
-import { cellKey, classify, EXIT4_LOSS, ITEMS, L1_ROUTE, plannedCells, sha256, trialName, trialTasksFrom } from "../l1/l1.ts";
+import { cellKey, classify, EXIT4_LOSS, ITEMS, L1_ROUTE, NEVER_RAN_LOSS, plannedCells, sha256, trialName, trialTasksFrom } from "../l1/l1.ts";
 
 // l1.ts end to end on a fake awake host. fixtures/l1/ubi plays ubi-runner: each VM is a directory under UBI_FAKE, and ssh
 // runs a command in it with HOME set to it, so the host runs the real host.sh, launch.sh and ledger service. fixtures/l1/ssh
@@ -1263,3 +1263,70 @@ describe("section 13's attempt 2 on the launcher, under a profile that has one (
   }, 240_000);
 });
 
+describe("a part VM that never reaches running (the Captain's ruling A, 2026-11-13)", () => {
+  // Value: protects=a part whose VM waited for capacity and never ran gets its one relaunch of every cell; fails_when=that part's cells are left as infra, or an exit 1 with a session or judge row, a cap stop or a relaunch's own capacity failure becomes a loss; why_new=GEVA-503 stage3-pilot-3 pilot-sol; seam=l1.ts classify, hostStatus and finishPart; no_claim=the real runner's capacity wait, which fixtures/l1/ubi plays with its message
+  const prefix = "run-1/pilot/";
+  const NEVER = "VM did not reach running in 10 minutes (last state: waiting for capacity)";
+  const part = (o: { exit: number; ids?: string[]; evidence?: boolean; relaunchOf?: string; capUsd?: number }) => {
+    const root = mkdtempSync(join(tmpdir(), "l1-never-"));
+    const dir = join(root, "part");
+    mkdirSync(dir, { recursive: true });
+    if (o.evidence !== false) writeFileSync(join(dir, "vm-never-running"), NEVER + "\n");
+    if (o.relaunchOf) writeFileSync(join(dir, "l1-part.json"), JSON.stringify({ name: o.relaunchOf + "-relaunch", prefix, rects: [], relaunch_of: o.relaunchOf }));
+    const ledger = join(root, "pilot-opus.jsonl");
+    const l = new Ledger(ledger, "pilot-opus");
+    l.approve(o.capUsd ?? 680, { quotes: ["test approval"] });
+    for (const id of o.ids ?? ["vm"]) l.reserve(id.startsWith("judge:") ? id : prefix + id, toMicros(0.01));
+    return classify(dir, o.exit, { ledger: { rows: readRows(ledger), since: "2026-01-01T00:00:00.000Z", sessionCapUsd: 5, prefix } });
+  };
+  const loss = NEVER_RAN_LOSS + " (" + NEVER + "), and the item's ledger holds no session or judge row for this part, so no trial started";
+  test("exit 1 after ubi-runner's capacity wait, with only the part's VM blocks on the ledger, is a loss", () => {
+    for (const ids of [["vm"], ["vm", "vm-2"]]) {
+      const c = part({ exit: 1, ids });
+      expect([c.loss, c.cap_stop, c.unclassified]).toEqual([[loss], [], []]);
+    }
+  });
+  test("exit 1 with a session row or a judge row for the part stays as it is today: no loss and no cap stop", () => {
+    for (const ids of [["vm", "trial-a/session-1"], ["vm", "judge:" + prefix + "m_1:1:1"], ["vm", "vm-2x"]]) {
+      const c = part({ exit: 1, ids });
+      expect([c.loss, c.cap_stop, c.unclassified]).toEqual([[], [], []]);
+    }
+  });
+  test("without ubi-runner's never-running line in the controller log, exit 1 stays as it is today", () => {
+    const c = part({ exit: 1, evidence: false });
+    expect([c.loss, c.cap_stop, c.unclassified]).toEqual([[], [], []]);
+  });
+  test("a cap stop stays a cap stop: the ledger refusing the first VM block, and a ledger within one session cap of its cap", () => {
+    const refused = part({ exit: 9 });
+    expect([refused.loss, refused.cap_stop]).toEqual([[], ["the ledger refused the part VM's first block"]]);
+    const near = part({ exit: 1, capUsd: 5 });
+    expect(near.loss).toEqual([]);
+    expect(near.cap_stop).toEqual([expect.stringContaining("the part's results were not pulled")]);
+  });
+  test("a relaunch's own capacity failure makes no loss", () => {
+    const c = part({ exit: 1, relaunchOf: "pilot" });
+    expect([c.loss, c.cap_stop, c.unclassified]).toEqual([[], [], []]);
+  });
+  test("end to end on the fake host: the capacity-wait part relaunches every planned cell, and a second capacity failure on the relaunch makes no loss", async () => {
+    const r = rig("pilot-opus");
+    expect(l1(r, ["prepare", r.work, "--item", "pilot-opus"]).code).toBe(0);
+    expect(l1(r, ["host-up", r.work]).code).toBe(0);
+    expect(l1(r, ["launch", r.work, "--part", "pilot"], { UP_NEVER_RUNNING: "1" }).code).toBe(0);
+    const a = await attachUntil(r, /pilot: finished, launch exit 1/);
+    expect(a.out).toContain("pilot: finished, launch exit 1; LOSS: " + NEVER_RAN_LOSS + " (" + NEVER + ")");
+    expect(a.out).toContain("NEXT: relaunch --part pilot");
+    expect(JSON.parse(readFileSync(join(r.work, "pilot.result.json"), "utf8"))).toMatchObject({ pulled: false, cap_stop: [], unclassified: [] });
+    const re = l1(r, ["relaunch", r.work, "--part", "pilot"], { UP_NEVER_RUNNING: "1" });
+    expect([re.code, re.out]).toEqual([0, expect.stringContaining("pilot-relaunch: controller started on host-1")]);
+    const rel = JSON.parse(readFileSync(join(r.work, "pilot.relaunch.json"), "utf8"));
+    expect(rel.never_started.reduce((s: number, c: any) => s + c.replicates, 0)).toBe(32);
+    const b = await attachUntil(r, /pilot-relaunch: finished, launch exit 1/);
+    expect(b.out).not.toContain("LOSS");
+    expect(JSON.parse(readFileSync(join(r.work, "pilot-relaunch.result.json"), "utf8"))).toMatchObject({ pulled: false, loss: [], cap_stop: [], unclassified: [] });
+    expect(l1(r, ["relaunch", r.work, "--part", "pilot"]).err).toContain("relaunched already");
+    expect(l1(r, ["relaunch", r.work, "--part", "pilot-relaunch"]).code).toBe(2);
+    expect(events(r).match(/ up -s standard-16 /g)).toHaveLength(2);
+    expect(l1(r, ["host-down", r.work]).code).toBe(0);
+    expect(openIds(r, "pilot-opus")).toEqual([]);
+  }, 300_000);
+});
