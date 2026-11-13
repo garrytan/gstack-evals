@@ -34,7 +34,7 @@ The build of the preregistration [2026-11-09-geva-448-harness-mechanics-prereg](
 
 A part is one launch. Each task's arms run in one part, in the order L1's seeded() gives at seed 20261148. A part of 120 sessions is under the 140 of L1's largest part, which fit its 16-hour part VM TTL. stage3-pilot is one ledger item with one part per model, because one ledger item binds one run and a part runs one model's cells file. Picker calls are not sessions; the picker's build runs them after a task's none and plain-2 sessions.
 
-Models read cells.l1.json (Opus) and cells.l1-sol.json (Sol) as L1 ran them, with a $5 allowance and 100 turns. particle-1 reads cells.hm-p1.json, which differs from cells.l1-p1.json only in its $2 allowance.
+Models read cells.l1.json (Opus) as L1 ran them, with a $5 allowance and 100 turns. Sol reads cells.hm-sol.json, which differs from cells.l1-sol.json only in its $6 allowance (deviation D8, raised before Stage 3 so Sol's byte-based reservations stop refusing valid calls). particle-1 reads cells.hm-p1.json, which differs from cells.l1-p1.json only in its $2 allowance.
 
 ## Commands
 

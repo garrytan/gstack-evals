@@ -41,7 +41,7 @@ describe("pins", () => {
     expect(ledgerCapsUsd()).toBe(2480);
     expect(capsTotalUsd()).toBe(2880);
     expect(capsTotalUsd()).toBeLessThan(HM.lineUsd);
-    expect([MODELS.opus.allowanceUsd, MODELS.sol.allowanceUsd, MODELS.p1.allowanceUsd]).toEqual([5, 5, 2]);
+    expect([MODELS.opus.allowanceUsd, MODELS.sol.allowanceUsd, MODELS.p1.allowanceUsd]).toEqual([5, 6, 2]);
     for (const m of Object.values(MODELS)) {
       const c = JSON.parse(readFileSync(join(REPO, "quick/laneb/config", m.cells), "utf8"));
       expect(c.models).toEqual([expect.objectContaining({ id: m.id, session_cap_usd: m.allowanceUsd })]);
@@ -75,7 +75,7 @@ describe("plans", () => {
   test("Stage 3: 72 pilot sessions, one part per model on the 12 pilot tasks and the two judge arms", () => {
     const p = plan("stage3-pilot");
     expect(p.sessions).toBe(72);
-    expect(p.parts.map((x) => [x.name, x.model, x.cells])).toEqual([["pilot-opus", "claude-opus-5-5", "cells.l1.json"], ["pilot-sol", "gpt-6.1-sol", "cells.l1-sol.json"], ["pilot-p1", "particle-1", "cells.hm-p1.json"]]);
+    expect(p.parts.map((x) => [x.name, x.model, x.cells])).toEqual([["pilot-opus", "claude-opus-5-5", "cells.l1.json"], ["pilot-sol", "gpt-6.1-sol", "cells.hm-sol.json"], ["pilot-p1", "particle-1", "cells.hm-p1.json"]]);
     for (const x of p.parts) expect(new Set(x.rects.flatMap((r) => r.tasks))).toEqual(new Set(lists.judgePilot));
   });
 
