@@ -46,7 +46,7 @@ export function markDone(path: string, item: Item) {
 // item. So hm done now reads the work dir prepare wrote: an item whose hm.json plans picker calls is done only once
 // <work>/pick/picks.jsonl holds a pick for every task its plan.json runs in both none and plain-2. vms and stage2-replay
 // plan no sessions and need no work dir.
-const NO_WORK: Item[] = ["vms", "stage2-replay", "stage2-replay-2"];
+const NO_WORK: Item[] = ["vms", "stage2-replay", "stage2-replay-2", "stage2-replay-3"];
 export function doneCheck(item: Item, work: string | undefined) {
   if (NO_WORK.includes(item)) return;
   if (!work) return refuse("hm done needs --work <work> for " + item + ", so it can check the item's pick records (D6)");
@@ -203,7 +203,7 @@ export function attempt2Owed(runs: { part: string; dir: string }[]) {
 
 // The reserve per launch: a session item's parallel allowances; vms leases one part-VM block; the replay, which runs no
 // sessions, leases its expected spend times section 22's margin for its one run (replay.ts runReplay).
-export const leaseUsd = (item: Item) => (ITEMS[item] ? HM.concurrent * ITEMS[item]!.allowanceUsd : item === "vms" ? blockUsd : item === "stage2-replay" ? REPLAY.m * REPLAY.expectedUsd : item === "stage2-replay-2" ? CAPS_USD[item] : null);
+export const leaseUsd = (item: Item) => (ITEMS[item] ? HM.concurrent * ITEMS[item]!.allowanceUsd : item === "vms" ? blockUsd : item === "stage2-replay" ? REPLAY.m * REPLAY.expectedUsd : item === "stage2-replay-2" || item === "stage2-replay-3" ? CAPS_USD[item] : null);
 
 type StepResult = { pass: boolean; detail: string };
 const tmpLedgers = (out: string) => { const d = mkdtempSync(join(tmpdir(), "hm-ledger-")); mkdirSync(out, { recursive: true }); return d; };

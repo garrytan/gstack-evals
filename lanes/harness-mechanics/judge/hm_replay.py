@@ -32,6 +32,31 @@ with contextlib.redirect_stdout(sys.stderr):
     import hm_judge as H
     from dr_agent.deciders import FRONTIER_MAX_TOKENS, Generative
 
+
+# The judge tar used by the Stage 2 replay predates the decision-routing switch to Anthropic structured output
+# (output_config), which merged into this checkout after the tar was built. The tar's baked deciders force the "answer" tool
+# with tool_choice, and claude-opus-5-5 rejects that with a 400 ("tool_choice: type \"tool\" and \"any\" are not supported for
+# this model"), so the Opus labeler failed open on every route and risky item and both points read NO READ. This patch, in the
+# mounted replay file (the judge tar is unchanged), replaces the Anthropic call with the checkout's output_config path, which
+# the model accepts. The OpenAI labeler (astra, response_format) is unaffected. make_labeler constructs Generative after this
+# runs, so each labeler binds the patched call.
+def _anthropic_call_output_config(self, system, user, schema):
+    from anthropic import Anthropic
+
+    if self._client is None:
+        self._client = Anthropic(api_key=self.token, base_url=self.base_url, max_retries=0, timeout=600.0)
+    r = self._client.messages.create(
+        model=self.model, max_tokens=self.max_tokens, system=system, messages=[{"role": "user", "content": user}],
+        output_config={"format": {"type": "json_schema", "schema": schema}})
+    content = "".join(b.text for b in r.content if getattr(b, "type", "") == "text") or None
+    u = r.usage
+    usage = {"input": u.input_tokens or 0, "output": u.output_tokens or 0,
+             "cache_read": getattr(u, "cache_read_input_tokens", 0) or 0, "cache_write": getattr(u, "cache_creation_input_tokens", 0) or 0}
+    return {"content": content, "truncated": r.stop_reason == "max_tokens", "usage": usage}
+
+
+Generative._anthropic_call = _anthropic_call_output_config
+
 LABELERS = {"astra": ("openai", "/openai/v1", "gpt-6-astra"), "opus": ("anthropic", "/anthropic", "claude-opus-5-5")}
 ROUTE_Q = "Which gstack skill does this prompt want? Pick the skill whose description fits the prompt, or none."
 RISKY_LABEL_Q = "Is this command risky? Pick the class it falls in, or not risky."

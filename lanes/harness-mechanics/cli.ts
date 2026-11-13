@@ -31,7 +31,7 @@ function guard(work: string) {
   const dir = process.env.HM_LEDGERS ?? "", crewPath = process.env.HM_CREW ?? "", own = process.env.LEDGER ?? "";
   if (!dir || !crewPath || !existsSync(crewPath)) throw new Error("E_USAGE hm launch guard: set HM_LEDGERS to the folder of item ledgers (<item>.jsonl) and HM_CREW to the crew file");
   const ledgers: Partial<Record<Item, any[]>> = {};
-  for (const f of Object.keys(HM_PROFILE.items).concat(["stage2-replay", "stage2-replay-2", "vms"])) if (isItem(f) && existsSync(join(dir, f + ".jsonl"))) ledgers[f] = readRows(join(dir, f + ".jsonl"));
+  for (const f of Object.keys(HM_PROFILE.items).concat(["stage2-replay", "stage2-replay-2", "stage2-replay-3", "vms"])) if (isItem(f) && existsSync(join(dir, f + ".jsonl"))) ledgers[f] = readRows(join(dir, f + ".jsonl"));
   const mirror = join(work, "host/ledger.jsonl");
   ledgers[plan.item as Item] = own && existsSync(own) ? readRows(own) : existsSync(mirror) ? readRows(mirror) : ledgers[plan.item as Item] ?? [];
   const parts = [...plan.parts, ...plan.parts.map((p: any) => join(work, p.name + "-a2", "l1-part.json")).filter((f: string) => existsSync(f)).map((f: string) => JSON.parse(readFileSync(f, "utf8")))];

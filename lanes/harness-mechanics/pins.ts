@@ -31,7 +31,7 @@ export const HM = {
 } as const;
 
 // Ledger items and their caps in USD (section 22). The crew's 400 is not a ledger item.
-export const CAPS_USD = { "stage1-opus": 150, "stage1-opus-r2": 121.685384, "stage1-sol": 180, "stage1-sol-run": 179.96147, "stage1-p1": 70, "stage2-replay": 90, "stage2-replay-2": 88.088418, "stage3-pilot": 90, "stage4-opus": 660, "stage4-sol": 800, "stage4-p1": 280, vms: 160 } as const;
+export const CAPS_USD = { "stage1-opus": 150, "stage1-opus-r2": 121.685384, "stage1-sol": 180, "stage1-sol-run": 179.96147, "stage1-p1": 70, "stage2-replay": 90, "stage2-replay-2": 88.088418, "stage2-replay-3": 79.029935, "stage3-pilot": 90, "stage4-opus": 660, "stage4-sol": 800, "stage4-p1": 280, vms: 160 } as const;
 // Deviation D3 (ruling A on Stage 1's WORKDIR defect): at 6aeabc2 the image build failed before any model call for every
 // arm of these 23 calibration tasks, in stage1-opus's two parts. stage1-opus's ledger is bound to that run, so it closed
 // at $28.314616 settled, and the 92 cells rerun on stage1-opus-r2, whose cap is the rest of stage1-opus's $150 and sits
@@ -52,7 +52,14 @@ export const STAGE1_OPUS_R2_TASKS = [
 // stage2-replay-2, whose cap is the rest of stage2-replay's $90 and sits inside it (CARVED), so the caps still sum to 2,480.
 // The per-call slot allowance is raised to $1.50 (replay-clients.ts), above the ~$1.04 longest-item worst case; the frozen
 // route texts are unchanged.
-export const CARVED: Partial<Record<keyof typeof CAPS_USD, keyof typeof CAPS_USD>> = { "stage1-opus-r2": "stage1-opus", "stage1-sol-run": "stage1-sol", "stage2-replay-2": "stage2-replay" };
+// Deviation D6 (the Captain's pick A): the stage2-replay-2 run completed but read done NOT BEATEN and risky/route NO READ,
+// the NO READ caused by a defect, not disagreement: the judge tar predates the decision-routing switch to Anthropic
+// output_config structured output, so its baked deciders force the answer tool with tool_choice, which claude-opus-5-5
+// rejects with a 400, and the Opus labeler failed open on every route and risky item. hm_replay.py now patches the Opus call
+// to output_config (the judge tar is unchanged). stage2-replay-2 closed at $9.058483 settled and is never reopened; the replay
+// reruns on stage2-replay-3, whose cap is the rest of stage2-replay-2's $88.088418 and sits inside it (CARVED), so the three
+// stage2-replay items total $90 (1.911582 + 9.058483 + 79.029935) and the caps still sum to 2,480.
+export const CARVED: Partial<Record<keyof typeof CAPS_USD, keyof typeof CAPS_USD>> = { "stage1-opus-r2": "stage1-opus", "stage1-sol-run": "stage1-sol", "stage2-replay-2": "stage2-replay", "stage2-replay-3": "stage2-replay-2" };
 export const ledgerCapsUsd = () => Object.entries(CAPS_USD).filter(([k]) => !Object.hasOwn(CARVED, k)).reduce((a, [, b]) => a + b, 0);
 // The ledger items' caps plus the crew's: 2,880 inside the 3,000 line.
 export const capsTotalUsd = () => ledgerCapsUsd() + HM.crewCapUsd;

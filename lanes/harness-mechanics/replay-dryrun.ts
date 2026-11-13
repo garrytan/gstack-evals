@@ -25,7 +25,11 @@ const FAILING = { claims_done: true, claim: "FIXED", final_text: "Fixed the sign
 const risky = (command: string) => JSON.stringify({ command, cwd: "/testbed", root: "/testbed" });
 const noul = (p: number): FakeReply => typesafeAnswers({ q: { type: "noul", noul: p } });
 const user = (r: FakeRequest | undefined) => { try { return JSON.parse(r?.body?.messages?.find((m: any) => m?.role === "user")?.content); } catch { return null; } };
-const opusAnswer = (answer: string, confidence: number): FakeReply => ({ json: { id: "msg_hm", type: "message", role: "assistant", model: "claude-opus-5-5", content: [{ type: "tool_use", id: "toolu_hm", name: "answer", input: { answer, confidence } }], stop_reason: "tool_use", stop_sequence: null, usage: anthropicUsage({ input: 900, output: 30 }) } });
+// The Opus labeler now uses output_config structured output (hm_replay.py patches the judge tar's tool_choice path, which
+// claude-opus-5-5 rejects): the model returns the answer as JSON in a text block, so the fake replies with one.
+const opusAnswer = (answer: string, confidence: number): FakeReply => ({ json: { id: "msg_hm", type: "message", role: "assistant", model: "claude-opus-5-5", content: [{ type: "text", text: JSON.stringify({ answer, confidence }) }], stop_reason: "end_turn", stop_sequence: null, usage: anthropicUsage({ input: 900, output: 30 }) } });
+// A reply with no usable answer (no text block): the labeler leaves the label empty and fails open, dropping the item.
+const opusNoText = (): FakeReply => ({ json: { id: "msg_hm", type: "message", role: "assistant", model: "claude-opus-5-5", content: [], stop_reason: "end_turn", stop_sequence: null, usage: anthropicUsage({ input: 900, output: 0 }) } });
 const ROUTE_KEYS = JSON.stringify([...LABELS.route]);
 
 export const CASES: Case[] = [
@@ -38,7 +42,11 @@ export const CASES: Case[] = [
   { name: "route-astra", who: "astra", point: "route", text: "make the tests pass", want: { label: "/review" }, paid: true,
     check: (r) => { const b = r.find((x) => x.provider === "openai")?.body; return b?.model === "gpt-6-astra" && b?.response_format?.json_schema?.strict === true && b?.reasoning_effort === undefined ? null : "the OpenAI body is " + JSON.stringify(b).slice(0, 160); } },
   { name: "route-opus", who: "opus", point: "route", text: "make the tests pass", script: { anthropic: [opusAnswer("/verify", 0.9)] }, want: { label: "/verify", score: 0.9 }, paid: true,
-    check: (r) => (r.find((x) => x.provider === "anthropic")?.body?.tool_choice?.name === "answer" ? null : "the Anthropic body forces no answer tool") },
+    check: (r) => { const b = r.find((x) => x.provider === "anthropic")?.body; return b?.output_config?.format?.type === "json_schema" && b?.tool_choice === undefined && b?.tools === undefined ? null : "the Anthropic body is " + JSON.stringify({ output_config: b?.output_config?.format?.type, tool_choice: b?.tool_choice }).slice(0, 160); } },
+  // The other direction: a labeler reply with no usable answer leaves the label empty and fails open (the item drops). Two
+  // replies cover the decider's one retry.
+  { name: "risky-opus-failopen", who: "opus", point: "risky", text: risky("ls -la"), script: { anthropic: [opusNoText(), opusNoText()] }, want: { label: "", fail_open: true }, paid: true,
+    check: (r) => (r.find((x) => x.provider === "anthropic")?.body?.output_config?.format?.type === "json_schema" ? null : "the Anthropic body does not use output_config") },
   // A ~48k-char route item (the length that stopped the first paid replay against the old $1.00 per-call slot): astra's worst
   // case now fits the $1.50 slot, so it is admitted and metered like any paid call. The body carries the whole long text.
   { name: "route-astra-long", who: "astra", point: "route", text: "make the failing tox tests pass. ".repeat(1450), want: { label: "/review" }, paid: true,

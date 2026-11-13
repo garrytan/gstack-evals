@@ -126,7 +126,7 @@ describe("tuning and the report", () => {
 describe("the run", () => {
   const setup = (clients: ReplayClients = fakeClients("clean")) => {
     const d = tmp(), ledger = join(d, "ledger.jsonl"), start = join(d, "start.md");
-    approve(ledger, "stage2-replay-2", CAPS_USD["stage2-replay-2"], "test");
+    approve(ledger, "stage2-replay-3", CAPS_USD["stage2-replay-3"], "test");
     writeFileSync(start, "stand-in for the decision-routing results post\n");
     return { d, ledger, o: { items: fixtureItems(), itemsSha256: sha256(fixtureText()), clients, out: join(d, "out"), start, ledger, counts: FIXTURE_COUNTS } };
   };
@@ -139,7 +139,7 @@ describe("the run", () => {
     expect(seen.some((s) => s.point === "done" && (s.who === "astra" || s.who === "opus"))).toBe(false);
     expect(seen.find((s) => s.who === "opus" && s.point === "risky")!.answers).toEqual(LABELS.risky);
     expect(seen.find((s) => s.who === "p1" && s.point === "risky")!.answers).toEqual(DECISIONS.risky);
-    const t = itemTotals(readRows(ledger), "stage2-replay-2");
+    const t = itemTotals(readRows(ledger), "stage2-replay-3");
     expect(t.open).toBe(0);
     expect(t.settled).toBeGreaterThan(0);
     await expect(runReplay({ ...o, out: o.out + "-2" })).rejects.toThrow(/serves one run/);
@@ -170,12 +170,12 @@ describe("the run", () => {
     for (const id of seen) per.set(id, (per.get(id) ?? 0) + 1);
     expect(per.size).toBe(HM.concurrent);
     for (const [id, n] of per) expect(n).toBe(point.get(id) === "done" ? 4 : 6);
-    expect(itemTotals(readRows(ledger), "stage2-replay-2").settled).toBe(toMicros(3 * seen.length));
+    expect(itemTotals(readRows(ledger), "stage2-replay-3").settled).toBe(toMicros(3 * seen.length));
   });
   test("a cap stop ends the run incomplete inside the lease, and a client that reports no cost stops it", async () => {
     const { ledger, o } = setup(wrap((_, c) => async (req) => ({ ...(await c(req)), cost_usd: 1 })));
     await expect(runReplay(o)).rejects.toThrow(/^E_HM_REPLAY cap stop/);
-    const t = itemTotals(readRows(ledger), "stage2-replay-2");
+    const t = itemTotals(readRows(ledger), "stage2-replay-3");
     expect(t.open).toBe(0);
     expect(t.settled).toBeLessThanOrEqual(t.cap);
     await expect(runReplay(setup(wrap((who, c) => (who === "det" ? async () => ({ label: "allow", tokens: 0 }) as any : c))).o)).rejects.toThrow(/^E_HM_REPLAY .*cost_usd/);
@@ -210,7 +210,7 @@ describe("the run", () => {
     const { ledger, o } = setup(stop);
     await expect(runReplay(o)).rejects.toThrow(/^E_HM_REPLAY jev stopped the run on .*E_HM_JEV_VERSION/);
     const jevSpent = 0.0001 * (calls - 1) + 0.5;
-    expect(Math.abs(itemTotals(readRows(ledger), "stage2-replay-2").settled - toMicros(jevSpent + counted.reduce((a, b) => a + b, 0)))).toBeLessThanOrEqual(2);
+    expect(Math.abs(itemTotals(readRows(ledger), "stage2-replay-3").settled - toMicros(jevSpent + counted.reduce((a, b) => a + b, 0)))).toBeLessThanOrEqual(2);
     expect(closed).toBe(1);
   });
   test("hm replay run refuses the fixture's counts with E_HM_REPLAY and exit 2", () => {
