@@ -19,7 +19,7 @@ import { screenCommand, screenVm } from "./screen.ts";
 import { buildHmTable } from "./table.ts";
 import { countProblems, itemsFromEnv, replayReport, runReplay } from "./replay.ts";
 
-const USAGE = "E_USAGE usage: hm dryrun --out <dir> | prepare <work> --item <item> | host-up|attach|recover|host-down <work> | launch|relaunch|rerun <work> --part <part> | approve --ledger <jsonl> --item <item> --usd <cap> --approved-by <who> | done --ledger <jsonl> --item <item> [--work <work>] | guard <work> | screen --out <dir> | fit --out <dir> [--only <task>] | build-check --out <dir> [--list calibration|scored] [--shard k/n] | fit-vm start|status|finish <work> | screen-vm start|finish <work> | table <config.json> <out.jsonl> | patterns <job dir>... | judge-check <judge-journal.ndjson> <job dir>... | admission <stage1 table.jsonl> [--fit <fit rows.jsonl> --fit-sha256 <sha256>] [--out <dir>] | report <table.jsonl> <config.json> <out dir> | replay items | replay build --config <json> --out <file> | replay run --clients <module.ts> --start <file> --ledger <jsonl> --out <dir> | replay report <out dir>";
+const USAGE = "E_USAGE usage: hm dryrun --out <dir> | prepare <work> --item <item> | host-up|attach|recover|host-down <work> | launch|relaunch|rerun <work> --part <part> | approve --ledger <jsonl> --item <item> --usd <cap> --approved-by <who> | done --ledger <jsonl> --item <item> [--work <work>] | guard <work> | screen --out <dir> | fit --out <dir> [--only <task>] | build-check --out <dir> [--list calibration|scored] [--shard k/n] | fit-vm start|status|finish <work> | screen-vm start|finish <work> | table <config.json> <out.jsonl> | patterns <job dir>... | judge-custody <work> [--tasks-dir <dir>] [--label-store <dir>] | judge-check <judge-journal.ndjson> <job dir>... | admission <stage1 table.jsonl> [--fit <fit rows.jsonl> --fit-sha256 <sha256>] [--out <dir>] | report <table.jsonl> <config.json> <out dir> | replay items | replay build --config <json> --out <file> | replay run --clients <module.ts> --start <file> --ledger <jsonl> --out <dir> | replay report <out dir>";
 const readTable = (p: string) => readFileSync(p, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as HmRowIn);
 // HM_SIMS cuts power.py's Monte Carlo for keyless tests; the report runs power.py's own 2,000 without it.
 const sims = () => (process.env.HM_SIMS ? Number(process.env.HM_SIMS) : undefined);
@@ -128,6 +128,23 @@ export async function main(argv: string[]): Promise<number> {
     if (cmd === "patterns") {
       for (const l of patternsCommand(rest)) console.log(l);
       return 0;
+    }
+    if (cmd === "judge-custody") {
+      // The host-side custody producer (README "Not built"): build each judge part's per-task runner-only markers before
+      // launch, so a custody failure stops here and never costs a VM (mirrors the decision-routing controller). Run it after
+      // prepare and before host-up; launch.sh then syncs the markers to the VM, where the judge agent reads them per task.
+      const work = rest[0];
+      if (!work || work.startsWith("--")) throw new Error(USAGE);
+      const tasksDir = opt("tasks-dir") ?? process.env.SWEREBENCH ?? join(process.env.HOME ?? "", ".capy/work/ref/swe-rebench-leaderboard");
+      const { buildJudgeMarkers } = await import("./judge-custody.ts");
+      try {
+        const r = await buildJudgeMarkers(resolve(work), { tasksDir: resolve(tasksDir), labelStore: opt("label-store") ? resolve(opt("label-store")!) : undefined, log: (l) => console.log(l) });
+        console.log("judge-custody: custody for " + r.tasks.length + " task(s) across " + r.parts.length + " judge part(s)" + (r.parts.length ? " (" + r.parts.join(", ") + ")" : "; no judge parts, nothing written"));
+        return 0;
+      } catch (e) {
+        console.error((e as Error).message);
+        return 1;
+      }
     }
     if (cmd === "judge-check") {
       // The judge run's leak and version checks (README "Not built", pieces 3 and 4): journalCheck over the judge metering

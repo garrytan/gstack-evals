@@ -156,9 +156,6 @@ not_stopping
 {
   printf 'ANTHROPIC_API_KEY=%s\n' "${ANTHROPIC_API_KEY:-}"
   printf 'OPENROUTER_API_KEY=%s\n' "${OPENROUTER_API_KEY:-}"
-  # TYPESAFE_API_KEY lets the judge metering proxy (vm-run.sh, judge arms only) call the jev decider (typesafe:jev-1.13.0);
-  # the p1 judge decider rides OPENROUTER above. Only the proxy reads these; Harbor and the task containers never see them.
-  printf 'TYPESAFE_API_KEY=%s\n' "${TYPESAFE_API_KEY:-}"
 } | "$S" ssh "$name" 'umask 077; cat > ~/.laneb-keys'
 # shellcheck disable=SC1090
 . "$state_root/$name/env"

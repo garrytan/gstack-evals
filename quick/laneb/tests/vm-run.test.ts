@@ -108,6 +108,9 @@ describe("vm-run.sh during the paid batch", () => {
       const line = s.sg().split("\n").find((l) => l.includes("job.resolved.json"))!;
       if (ordered) expect(line).toContain(`LANEB_TRIAL_ORDER='${s.run}/order.json' harbor run -y -c`);
       else expect(line).not.toContain("LANEB_TRIAL_ORDER");
+      // The judge proxy's key is unset for Harbor, so a judge-bearing host's TYPESAFE never reaches Harbor or the task
+      // containers; only the metering proxies (which source ~/.laneb-keys in their own subshells) ever read it.
+      expect(line).toContain("-u TYPESAFE_API_KEY");
       expect(s.sg()).toContain("pkill -INT -f /bin/harbor run");
     }
   }, 90_000);
@@ -461,23 +464,25 @@ describe("vm-run.sh's judge launch block (judge arms only)", () => {
     s.stop(true);
     return p;
   };
-  function judgeSetup() {
+  function judgeSetup(opts: { keys?: string; job?: string } = {}) {
     const [dataPort, controlPort, ledgerPort, judgePort] = [freePort(), freePort(), freePort(), freePort()];
     const root = mkdtempSync(join(tmpdir(), "laneb-vmrun-judge-"));
     const bin = join(root, "bin"), run = join(root, "run"), home = join(root, "home"), log = join(root, "sg.log");
     for (const d of [bin, run, home]) mkdirSync(d, { recursive: true });
-    writeFileSync(join(home, ".laneb-keys"), "");
+    writeFileSync(join(home, ".laneb-keys"), opts.keys ?? "");
     const built = Bun.spawnSync([process.execPath, "build", join(import.meta.dir, "../../../lanes/harness-mechanics/judge/judge-proxy.ts"), "--target=bun", "--outfile", join(run, "judge-proxy.js")]);
     if (built.exitCode !== 0) throw new Error("judge-proxy bundle failed: " + built.stderr.toString());
     const fakes: Record<string, string> = {
       // The judge proxy binds the gateway the way the Lane B proxy does, so a loopback gateway keeps the bind bindable.
       sg: `#!/usr/bin/env bash\necho "$3" >> "${log}"\ncase "$3" in *"network inspect"*) echo 127.0.0.1 ;; *"harbor run"*job.resolved.json*) eval "$3" ;; esac\n`,
       curl: `#!/usr/bin/env bash\necho "curl $*" >> "${log}"\necho '{}'\n`,
-      // Only the judge proxy is a real bun; the Lane B proxy (bun proxy.ts) exits, and the faked curl reports it healthy.
-      bun: `#!/usr/bin/env bash\ncase "$*" in *judge-proxy.js*) exec "${process.execPath}" "$@" ;; *) exit 1 ;; esac\n`,
+      // Only the judge proxy is a real bun; the Lane B proxy (bun proxy.ts) exits, and the faked curl reports it healthy. The
+      // judge proxy's launch env (it sourced ~/.laneb-keys in its own subshell) is dumped so a test can read what keys it got.
+      bun: `#!/usr/bin/env bash\ncase "$*" in *judge-proxy.js*) env > "${run}/out/judge-proxy-env.txt"; exec "${process.execPath}" "$@" ;; *) exit 1 ;; esac\n`,
       sleep: "#!/usr/bin/env bash\nPATH=/usr/bin:/bin exec sleep 0.05\n",
-      // The token is never echoed; the three forwarded-slot env vars are, to prove they reach Harbor's process.
-      harbor: `#!/usr/bin/env bash\ntrap 'echo "harbor got INT" >> "${log}"; exit 130' INT\necho "JUDGEENV mgmt=$HM_JUDGE_MGMT_SOCKET base=$HM_JUDGE_PROXY_BASE stop=$HM_JUDGE_STOP_FILE" >> "${log}"\necho "harbor running" >> "${log}"\nfor _ in $(seq 1 600); do [ -e "${run}/HARBOR_DONE" ] && break; PATH=/usr/bin:/bin sleep 0.1; done\necho "harbor finished" >> "${log}"\n`,
+      // The token is never echoed; the three forwarded-slot env vars are, to prove they reach Harbor's process. Harbor's full
+      // env is dumped so a test can prove no provider key value from ~/.laneb-keys reaches it or the task containers.
+      harbor: `#!/usr/bin/env bash\ntrap 'echo "harbor got INT" >> "${log}"; exit 130' INT\nenv > "${run}/out/harbor-env.txt"\necho "JUDGEENV mgmt=$HM_JUDGE_MGMT_SOCKET base=$HM_JUDGE_PROXY_BASE stop=$HM_JUDGE_STOP_FILE" >> "${log}"\necho "harbor running" >> "${log}"\nfor _ in $(seq 1 600); do [ -e "${run}/HARBOR_DONE" ] && break; PATH=/usr/bin:/bin sleep 0.1; done\necho "harbor finished" >> "${log}"\n`,
       pkill: `#!/usr/bin/env bash\necho "pkill $*" >> "${log}"\nexec /usr/bin/pkill "\${@:1:$#-1}" "${bin}/harbor run"\n`,
     };
     for (const [name, body] of Object.entries(fakes)) {
@@ -485,7 +490,7 @@ describe("vm-run.sh's judge launch block (judge arms only)", () => {
       chmodSync(join(bin, name), 0o755);
     }
     writeFileSync(join(run, "manifest.json"), JSON.stringify({ arms: [] }));
-    writeFileSync(join(run, "job.json"), JSON.stringify({ agents: [{ name: "laneb-claude-code", kwargs: { judge_backend: "p1" } }] }));
+    writeFileSync(join(run, "job.json"), opts.job ?? JSON.stringify({ agents: [{ name: "laneb-claude-code", kwargs: { judge_backend: "p1" } }] }));
     return {
       run, judgePort,
       cmd: ["bash", join(import.meta.dir, "../runner/vm-run.sh"), run, "p-", "5"],
@@ -512,4 +517,38 @@ describe("vm-run.sh's judge launch block (judge arms only)", () => {
       proc.kill("SIGKILL");
     }
   }, 60_000);
+
+  test("a part VM's provider keys reach the judge proxy but never Harbor or the task containers, judge batch or not", async () => {
+    // Plant real-looking provider keys in ~/.laneb-keys (what a judge host ships). The proxies source it in their own
+    // subshells, so the judge proxy's process holds every key; Harbor runs under env -u for each, so its process holds none
+    // of the planted values and neither does the task container it starts. This holds whether or not the batch has a judge
+    // arm, which is why the host may ship the judge keys without them ever reaching a scored session's container.
+    const stubs = { ANTHROPIC_API_KEY: "sk-ant-STUB-not-a-key", OPENROUTER_API_KEY: "sk-or-STUB-not-a-key", TYPESAFE_API_KEY: "ts-STUB-not-a-key" };
+    const keys = Object.entries(stubs).map(([k, v]) => `${k}=${v}\n`).join("");
+    const stubValues = Object.values(stubs);
+    const runBatch = async (job: string | undefined, judge: boolean) => {
+      const s = judgeSetup({ keys, job });
+      const proc = Bun.spawn(s.cmd, { env: s.env, stdout: "pipe", stderr: "pipe" });
+      try {
+        for (let i = 0; i < 300 && !s.sg().includes("harbor running"); i++) await Bun.sleep(50);
+        expect(s.sg()).toContain("harbor running");
+        const harborEnv = readFileSync(join(s.run, "out", "harbor-env.txt"), "utf8");
+        for (const v of stubValues) expect(harborEnv).not.toContain(v);
+        if (judge) {
+          const proxyEnv = readFileSync(join(s.run, "out", "judge-proxy-env.txt"), "utf8");
+          for (const v of stubValues) expect(proxyEnv).toContain(v);
+        } else {
+          expect(existsSync(join(s.run, "out", "judge-proxy-env.txt"))).toBe(false);
+        }
+        writeFileSync(join(s.run, "HARBOR_DONE"), "");
+        const timer = setTimeout(() => proc.kill("SIGKILL"), 20_000);
+        await proc.exited;
+        clearTimeout(timer);
+      } finally {
+        proc.kill("SIGKILL");
+      }
+    };
+    await runBatch(undefined, true); // judge batch (job.json carries judge_backend)
+    await runBatch("{}", false); // non-judge batch (no judge arm, no judge proxy)
+  }, 120_000);
 });

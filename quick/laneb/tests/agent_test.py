@@ -743,15 +743,20 @@ _REAL_MANAGE = lh.manage
 _JUDGE_ENV = ("HM_JUDGE_PROXY_BASE", "HM_JUDGE_MGMT_SOCKET", "HM_JUDGE_MGMT_TOKEN", "HM_JUDGE_STOP_FILE")
 
 
-def _judge_agent(tmp, fake, backend, markers_file=None):
+def _judge_agent(tmp, fake, backend, markers_file=None, markers_dir=None, task=None):
     a = hooks_agent(tmp, fake)
     a.options.judge_backend = backend
     a.options.markers_file = str(markers_file) if markers_file else None
+    a.options.markers_dir = str(markers_dir) if markers_dir else None
     a.options.judge_allowance_micros = 2_000_000
+    # The judge path derives the task from logs_dir.parent.parent.name; naming it lets a test place <markers_dir>/<task>.json.
+    if task:
+        a.logs_dir = tmp / task / "trial" / "agent"
+        a.logs_dir.mkdir(parents=True, exist_ok=True)
     return a
 
 
-def _run_judge(tmp, fake, backend, markers_file=None, hook_log="", stop_file=None):
+def _run_judge(tmp, fake, backend, markers_file=None, hook_log="", stop_file=None, markers_dir=None, task=None):
     calls = []
 
     def fake_manage(route, body):
@@ -765,7 +770,7 @@ def _run_judge(tmp, fake, backend, markers_file=None, hook_log="", stop_file=Non
         for m in ():
             yield m
 
-    a = _judge_agent(tmp, fake, backend, markers_file)
+    a = _judge_agent(tmp, fake, backend, markers_file, markers_dir=markers_dir, task=task)
     base_exec = a._exec
 
     def exec_(container, script, stdin=None, timeout=300):
@@ -835,6 +840,44 @@ def test_the_judge_path_binds_a_slot_with_custody_and_sets_the_three_env_vars_in
         assert ("-e " + name) in wrapper, wrapper
 
 
+def test_judge_markers_file_resolves_per_task_from_markers_dir_and_requires_the_file(tmp):
+    # One agent config serves every task in a judge rectangle, so custody is resolved per task from <markers_dir>/<task>.json.
+    mdir = tmp / "judge-markers"
+    mdir.mkdir()
+    ca, cb = "DRCANARY-" + "a" * 32, "DRCANARY-" + "b" * 32
+    (mdir / "task-a.json").write_text(json.dumps([ca, "test_alpha_regression"]))
+    (mdir / "task-b.json").write_text(json.dumps([cb, "test_beta_regression"]))
+    opt = types.SimpleNamespace(markers_dir=str(mdir), markers_file=None)
+    ma, cana = lh.judge_custody(lh.judge_markers_file(opt, "task-a"))
+    mb, canb = lh.judge_custody(lh.judge_markers_file(opt, "task-b"))
+    assert cana == ca and canb == cb and cana != canb, (cana, canb)
+    assert ma == [ca, "test_alpha_regression"] and mb == [cb, "test_beta_regression"]
+    # A markers_dir with no file for this task is a hard error, never a markerless bind.
+    try:
+        lh.judge_markers_file(opt, "task-c")
+        raise AssertionError("a missing per-task markers file did not raise")
+    except lh.JudgeManagementError:
+        pass
+    # markers_dir takes precedence; without it the single markers_file is used, and with neither the bind is markerless.
+    single = tmp / "single.json"
+    single.write_text(json.dumps([ca]))
+    assert lh.judge_markers_file(types.SimpleNamespace(markers_dir=None, markers_file=str(single)), "task-a") == str(single)
+    assert lh.judge_markers_file(types.SimpleNamespace(markers_dir=None, markers_file=None), "task-a") is None
+
+
+def test_the_judge_path_resolves_the_tasks_markers_from_markers_dir_at_runtime(tmp):
+    fake = Fake(tmp)
+    mdir = tmp / "judge-markers"
+    mdir.mkdir()
+    canary = "DRCANARY-" + "c" * 32
+    (mdir / "task-a.json").write_text(json.dumps([canary, "test_hidden_alpha"]))
+    calls, captured = _run_judge(tmp, fake, "jev", markers_dir=mdir, task="task-a")
+    bind = next(b for r, b in calls if r == "/bind")
+    assert bind["cell"]["task"] == "task-a", bind["cell"]
+    assert bind["forbidden_markers"] == [canary, "test_hidden_alpha"]
+    assert bind["canary"] == canary
+
+
 def test_judge_p1_uses_the_p1_config_and_binds_markerless_without_a_markers_file(tmp):
     fake = Fake(tmp)
     calls, captured = _run_judge(tmp, fake, "p1", markers_file=None)
@@ -860,6 +903,64 @@ def test_a_clean_judge_hook_log_writes_no_stop_file(tmp):
     log = json.dumps({"point": "done", "backend": "jev", "jev_version": lh.JEV_MODEL, "stopped": False}) + "\n"
     _run_judge(tmp, fake, "jev", hook_log=log, stop_file=stop)
     assert not stop.exists(), "a clean hook log wrote a STOP file"
+
+
+def _assert_no_provider_key(env, wrapper, stubs):
+    # The one credential a session carries is ANTHROPIC_API_KEY, and it is the Lane B proxy's session token ("laneb-token"
+    # in these fakes), never a real provider key. No other provider key name is in the env or the docker exec -e forward,
+    # and no planted key value appears in either, so the task container the wrapper exec's into never receives one.
+    assert env["ANTHROPIC_API_KEY"] == "laneb-token", env["ANTHROPIC_API_KEY"]
+    assert "-e ANTHROPIC_API_KEY" in wrapper, wrapper
+    for name in ("OPENROUTER_API_KEY", "TYPESAFE_API_KEY", "OPENAI_API_KEY"):
+        assert name not in env, name
+        assert ("-e " + name) not in wrapper, (name, wrapper)
+    for value in stubs.values():
+        assert value not in env.values(), value
+        assert value not in wrapper, (value, wrapper)
+
+
+def test_no_provider_key_reaches_a_session_env_or_the_docker_exec_forward(tmp):
+    # Even with real-looking provider keys in the process env, a session (judge arm or not) runs with only
+    # ANTHROPIC_API_KEY set to the Lane B proxy's session token, plus HM_JUDGE_TOKEN set to the slot token on the judge
+    # path. This holds with or without the host shipping the judge proxy's keys to the part VM, because the session env is
+    # built fresh rather than inherited.
+    stubs = {"ANTHROPIC_API_KEY": "sk-ant-STUB-not-a-key", "OPENROUTER_API_KEY": "sk-or-STUB-not-a-key",
+             "TYPESAFE_API_KEY": "ts-STUB-not-a-key", "OPENAI_API_KEY": "sk-STUB-not-a-key"}
+    saved = {k: os.environ.get(k) for k in stubs}
+    os.environ.update(stubs)
+    try:
+        canary = "DRCANARY-" + "0123456789abcdef" * 2
+        markers = tmp / "markers.json"
+        markers.write_text(json.dumps([canary, "test_hidden_regression_case"]))
+        _, jcap = _run_judge(tmp, Fake(tmp), "p1", markers_file=markers)
+        jenv = jcap["options"]["env"]
+        jwrap = Path(jcap["options"]["cli_path"]).read_text()
+        assert jenv["HM_JUDGE_TOKEN"] == "gse_jtok", jenv
+        _assert_no_provider_key(jenv, jwrap, stubs)
+
+        ncap = {}
+
+        async def cap_query(prompt, options):
+            ncap["options"] = options
+            for _m in ():
+                yield _m
+
+        a = hooks_agent(tmp, Fake(tmp))  # default options carry no judge_backend: the pinned super().run path
+        la.query = cap_query
+        try:
+            run(a)
+        finally:
+            lh.manage = _REAL_MANAGE
+        nenv = ncap["options"]["env"]
+        nwrap = Path(ncap["options"]["cli_path"]).read_text()
+        assert not [k for k in nenv if k.startswith("HM_JUDGE")], nenv
+        _assert_no_provider_key(nenv, nwrap, stubs)
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
 
 
 if __name__ == "__main__":

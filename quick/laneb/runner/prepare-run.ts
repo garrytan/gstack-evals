@@ -15,7 +15,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from
 import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { loadR3Drops, loadRebenchPool, loadSwebvTasks, materializeRebench, materializeSwebv, materializeTb2, R3_BAND_SHA256, R3_DROP_FILE, R3_DROP_SHA256, R3A4_POOL_FILE, R3A4_POOL_SHA256 } from "./materialize.ts";
-import { armSpec, CLOSING_LINES, jobConfig, PROCEDURE_LINES } from "./grid.ts";
+import { armSpec, CLOSING_LINES, jobConfig, PROCEDURE_LINES, type AgentOptions } from "./grid.ts";
 
 const sha256 = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
 
@@ -118,19 +118,26 @@ if (import.meta.main) {
     return m;
   });
   copyFileSync(join(root, "config/proxy.json"), join(run, "proxy.json"));
+  // A judge arm sets backend (grid.ts), so jobConfig emits judge_backend; on such a batch the judge agent resolves each
+  // task's custody at runtime from <markers_dir>/<task>.json. One agent config serves every task in a judge rectangle, so
+  // custody cannot be a static per-task kwarg; prepare-run points every judge arm at the run dir's judge-markers folder
+  // (hm judge-custody populates it before launch, and launch.sh syncs the run dir to the VM). A non-judge or L1 arm gets
+  // no markers_dir, so its kwargs and job.json stay byte-identical.
+  const hasJudge = arms.some((a) => (a.options as AgentOptions).backend);
+  const judgeMarkersDir = `${vm}/run/judge-markers`;
   const job = jobConfig({
-    job_name: jobName, tasks_dir: `${vm}/run/tasks`, tasks: final, models, arms: arms.map(({ name, tar, sha256, options }) => ({ name, tar, sha256, ...options })),
+    job_name: jobName, tasks_dir: `${vm}/run/tasks`, tasks: final, models,
+    arms: arms.map(({ name, tar, sha256, options }) => ({ name, tar, sha256, ...options, ...((options as AgentOptions).backend ? { markers_dir: judgeMarkersDir } : {}) })),
     ...(cells.sdk_max_turns ? { sdk_max_turns: cells.sdk_max_turns } : {}),
     attempts: Number(attempts), n_concurrent: Number(concurrent), agent_dir: `${vm}/runner/agent`, runner_dir: `${vm}/runner`,
     base_url: "http://__GATEWAY__:8787", max_output_tokens: cells.max_output_tokens, verifier_timeout_multiplier: cells.verifier_timeout_multiplier,
     ...(taskSet === "swebv-r3" || taskSet === "swerebench-r3a4" ? { repo_dir: "/testbed" } : {}),
   });
   writeFileSync(join(run, "job.json"), JSON.stringify(job, null, 2) + "\n");
-  // When this batch has a judge arm (grid.ts sets backend, so jobConfig emits agents[].kwargs.judge_backend), bundle the
-  // judge metering proxy into the run dir as one self-contained script. It rides the run-dir sync launch.sh already does,
-  // so the VM needs no src/ checkout to run it; vm-run.sh starts it only for a judge batch. A batch with no judge arm
-  // writes no extra file, so a non-judge or L1 run dir stays byte-identical to before.
-  if (arms.some((a) => (a.options as { backend?: string }).backend)) {
+  // When this batch has a judge arm, bundle the judge metering proxy into the run dir as one self-contained script. It
+  // rides the run-dir sync launch.sh already does, so the VM needs no src/ checkout to run it; vm-run.sh starts it only
+  // for a judge batch. A batch with no judge arm writes no extra file, so a non-judge or L1 run dir stays byte-identical.
+  if (hasJudge) {
     const src = resolve(here, "../../../lanes/harness-mechanics/judge/judge-proxy.ts");
     const built = Bun.spawnSync(["bun", "build", src, "--target=bun", "--outfile", join(run, "judge-proxy.js")]);
     if (built.exitCode !== 0) throw new Error(`judge-proxy bundle failed: ${built.stderr.toString().trim()}`);

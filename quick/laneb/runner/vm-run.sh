@@ -241,7 +241,7 @@ rc=0
 for j in "${jobs[@]}"; do
   if [ -e "$run/STOP" ] || [ -e "$run/out/cap-stop.json" ]; then [ "$rc" -ne 0 ] || rc=130; break; fi
   log=harbor.log; [ "$j" = job ] || log="harbor-${j#job-}.log"
-  sg docker -c "env -u ANTHROPIC_API_KEY -u OPENROUTER_API_KEY -u OPENAI_API_KEY ANTHROPIC_API_KEY=placeholder-not-a-key PYTHONPATH='$runner/agent' HARBOR_TELEMETRY=0 ${order}harbor run -y -c '$run/out/$j.resolved.json'" > "$run/out/$log" 2>&1
+  sg docker -c "env -u ANTHROPIC_API_KEY -u OPENROUTER_API_KEY -u OPENAI_API_KEY -u TYPESAFE_API_KEY ANTHROPIC_API_KEY=placeholder-not-a-key PYTHONPATH='$runner/agent' HARBOR_TELEMETRY=0 ${order}harbor run -y -c '$run/out/$j.resolved.json'" > "$run/out/$log" 2>&1
   r=$?
   [ "$rc" -ne 0 ] || rc=$r
 done

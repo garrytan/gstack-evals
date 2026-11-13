@@ -41,7 +41,9 @@ export const CLOSING_LINES = { "r3c-root-cause-files": "When you are done, end y
 // (laneb_hooks.LanebHooksOptions), which picks HM_JUDGE_CONFIG = /root/.hm/judge/judge-<backend>.json, and is emitted only
 // when set, so a non-judge arm's kwargs and job.json stay byte-identical.
 export const AGENT_OPTIONS = { system_prompt: ["sdk-default", "claude-code-preset"], session_kind: ["unattended"], procedure_line: Object.keys(PROCEDURE_LINES), closing_line: Object.keys(CLOSING_LINES), gstack_hooks: ["copy"], strip_snapshot: ["true"], checks_trust: ["true"], backend: ["jev", "p1"] };
-export type AgentOptions = { system_prompt?: string; session_kind?: string; told?: string; procedure_line?: string; closing_line?: string; gstack_hooks?: string; strip_snapshot?: string; checks_trust?: string; tar_name?: string; backend?: string };
+// markers_dir is not a grid dimension or a spec option (it never comes from an arms csv entry); prepare-run.ts injects it
+// onto a judge arm so jobConfig can emit the markers_dir kwarg. It is left out of AGENT_OPTIONS so a spec cannot set it.
+export type AgentOptions = { system_prompt?: string; session_kind?: string; told?: string; procedure_line?: string; closing_line?: string; gstack_hooks?: string; strip_snapshot?: string; checks_trust?: string; tar_name?: string; backend?: string; markers_dir?: string };
 const SKILL_NAME = /^[a-z0-9][a-z0-9_-]*$/;
 
 // One entry of prepare-run's arms list: <arm>[:<option>=<value>]..., for example
@@ -100,6 +102,7 @@ export function jobConfig(b: BatchSpec) {
         ...(a.strip_snapshot === "true" ? { strip_snapshot: true } : {}),
         ...(a.checks_trust === "true" ? { checks_trust: true } : {}),
         ...(a.backend ? { judge_backend: a.backend } : {}),
+        ...(a.markers_dir ? { markers_dir: a.markers_dir } : {}),
         ...(b.repo_dir ? { repo_dir: b.repo_dir } : {}),
         ...(b.sdk_max_turns ? { sdk_max_turns: b.sdk_max_turns } : {}),
       },

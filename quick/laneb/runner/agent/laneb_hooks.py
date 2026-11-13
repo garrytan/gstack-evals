@@ -102,6 +102,20 @@ def manage(route: str, body: dict) -> dict:
     return answer
 
 
+def judge_markers_file(options, task: str) -> str | None:
+    """The task's markers file: <markers_dir>/<task>.json for the live per-task custody (one agent config serves every task
+    in a judge rectangle, so custody is resolved per task at runtime, not as a static kwarg), else the single markers_file
+    the keyless tests set, else None for a markerless bind. A markers_dir with no file for this task is a hard error, so a
+    custody producer that skipped a task fails the session instead of binding markerless."""
+    markers_dir = getattr(options, "markers_dir", None)
+    if markers_dir:
+        path = os.path.join(markers_dir, task + ".json")
+        if not os.path.exists(path):
+            raise JudgeManagementError(f"markers_dir {markers_dir} has no markers for task {task!r}; hm judge-custody must write one per judge task before launch")
+        return path
+    return getattr(options, "markers_file", None)
+
+
 def judge_custody(markers_file: str | None) -> tuple[list[str] | None, str | None]:
     """The task's custody from its markers file (mirrors dr_harbor): the full marker list and its one DRCANARY- canary, or
     (None, None) when no markers file is set, so the slot binds without custody."""
@@ -236,7 +250,8 @@ class LanebHooksOptions(LanebOptions):
     strip_snapshot: bool = Field(default=False, description="Strip auto-loaded instruction files from the snapshot before the arm is extracted (harness mechanics).")
     checks_trust: bool = Field(default=False, description="Run gstack-checks trust at the workdir after the arm is extracted (harness mechanics D1, gstack arms only).")
     judge_backend: str | None = Field(default=None, description="A harness mechanics judge arm's judgment-hook backend, jev or p1. Set means the judge path: bind a slot on the judge metering proxy, inject HM_JUDGE_PROXY/HM_JUDGE_TOKEN/HM_JUDGE_CONFIG (/root/.hm/judge/judge-<backend>.json), and stop the batch on a jevChanges line. Unset means run() delegates to the pinned LanebAgent.run byte for byte.")
-    markers_file: str | None = Field(default=None, description="A JSON list of the judge session's runner-only markers (one DRCANARY- canary), sent to the judge slot's bind as forbidden_markers and canary (harness mechanics custody; mirrors dr_harbor). Unset binds the slot without custody.")
+    markers_dir: str | None = Field(default=None, description="A directory of per-task markers files; the judge session reads <markers_dir>/<task>.json for the task it runs (self.logs_dir.parent.parent.name). The live judge path uses this, because one agent config serves every task in a judge rectangle, so custody cannot be a static per-task kwarg (hm judge-custody writes the files before launch). A missing file is a hard error, never a markerless bind.")
+    markers_file: str | None = Field(default=None, description="A single JSON list of the judge session's runner-only markers (one DRCANARY- canary), sent to the judge slot's bind as forbidden_markers and canary (harness mechanics custody; mirrors dr_harbor). Used by the keyless tests; markers_dir takes precedence. Unset (and no markers_dir) binds the slot without custody.")
     judge_allowance_micros: int = Field(default=2_000_000, description="The judge slot's allowance in integer micro-dollars: the decider spend the metering proxy lets one judge session run before DR_ALLOWANCE_STOP.")
 
 
@@ -317,8 +332,11 @@ class LanebHooksAgent(LanebAgent):
         try:
             model = self._resolved_model_name() or self.options.upstream_model
             # Judge addition: bind a metering-proxy slot per judge session, with the task's custody (mirrors dr_harbor).
-            markers, canary = judge_custody(getattr(self.options, "markers_file", None))
-            cell = {"run_id": environment.session_id, "arm": self.options.arm, "task": self.logs_dir.parent.parent.name,
+            # One agent config serves every task in a judge rectangle, so custody is resolved per task here, from the task
+            # the cell already names, not from a static kwarg.
+            task = self.logs_dir.parent.parent.name
+            markers, canary = judge_custody(judge_markers_file(self.options, task))
+            cell = {"run_id": environment.session_id, "arm": self.options.arm, "task": task,
                     "model": self.options.upstream_model, "trial": 1, "attempt": 1}
             bind_body = {"cell": cell, "models": JUDGE_DECIDERS, "deciders": JUDGE_DECIDERS,
                          "allowance_micros": int(getattr(self.options, "judge_allowance_micros", 2_000_000)),
