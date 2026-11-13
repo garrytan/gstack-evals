@@ -77,7 +77,7 @@ export function proxySend(proxy: MeteringProxy, cell: BindRequest["cell"], allow
   };
 }
 
-/** The metering proxy's ReservationLedger on the item's Lane B ledger: a reserve holds the call's worst case under the item's cap (CAP_STOP past it), a spent outcome settles it, and an unknown one stays open at its full amount. */
+/** The metering proxy's ReservationLedger on the item's Lane B ledger: a reserve holds the call's worst case under the item's cap (CAP_STOP past it), a spent outcome settles it at its metered cost, and an unknown one settles it at its reserved maximum marked unknown (meta unknown: true; D1, the Captain's ruling). */
 export class LaneBReservations implements ReservationLedger {
   private held = new Map<string, Reservation>();
   constructor(private ledger: Ledger, private prefix: string) {}
@@ -93,9 +93,9 @@ export class LaneBReservations implements ReservationLedger {
   async settle(id: string, outcome: CallOutcome): Promise<LedgerReply> {
     const r = this.held.get(id);
     if (!r) return { ok: false, code: "E_INTERNAL", message: "picker settle: no reservation " + id };
-    if (outcome.kind === "unknown") return { ok: true, reservation: Object.assign(r, { state: "unknown" as const }) };
-    const s = this.ledger.settle(id, outcome.spent_micros, { usage: outcome.usage });
+    const s = outcome.kind === "unknown" ? this.ledger.settle(id, r.max_micros, { unknown: true }) : this.ledger.settle(id, outcome.spent_micros, { usage: outcome.usage });
     if (!s.ok && s.reason !== "already settled") return { ok: false, code: "E_SETTLE_CONFLICT", message: "picker settle " + id + ": " + s.reason };
+    if (outcome.kind === "unknown") return { ok: true, reservation: Object.assign(r, { state: "unknown" as const }) };
     return { ok: true, reservation: Object.assign(r, { state: "settled" as const, spent_micros: outcome.spent_micros, usage: outcome.usage }) };
   }
 }

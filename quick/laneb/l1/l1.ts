@@ -1111,6 +1111,11 @@ function recover(work: string) {
   // Every part whose VM may still run under the lost host: the running part, and each part launch.sh kept at exit 7 that no
   // salvage reached. Each one's VM is stopped, pulled and destroyed, and the part is classified again with the ledger check.
   const held = states.filter((s) => s === running || (s.launched && s.result?.launch_exit === 7 && !s.result.salvage));
+  // A judge part (an agent with judge_backend in its job files, the signal vm-run.sh starts the judge proxy on) also meters
+  // its hook calls on the judge proxy, under judge:<part prefix> on the host's ledger. Those rows after the last mirror are
+  // in no session record, so rebuilding from the records would drop judge spend: refuse before anything is destroyed.
+  const judged = held.find((s) => existsSync(join(work, s.part.name)) && readdirSync(join(work, s.part.name)).some((f) => /^job(-\d+)?\.json$/.test(f) && (readJson(join(work, s.part.name, f)).agents ?? []).some((a: any) => a?.kwargs?.judge_backend)));
+  if (judged) refuse(judged.part.name + " has judge arms: its judge:" + judged.part.prefix + " ledger rows after the last mirror lived only on the lost host and are in no session record, so recover can't rebuild them; nothing was destroyed. Settle it by hand: lanes/harness-mechanics/README.md, \"Live judge wiring\"");
   const claimed = new Set([...hosts(work).map((r) => r.name), ...states.filter((s) => s.launched).map((s) => readJson(join(work, s.part.name + ".launch.json")).vm), ...done.filter((d) => d.part).map((d) => d.vm)]);
   const parts = held.map((s) => {
     const l = readJson(join(work, s.part.name + ".launch.json"));

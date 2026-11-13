@@ -27,7 +27,7 @@ function skeleton(): StepResult {
   const b = loadBundle();
   const l = bundleLists(b);
   const counts = Object.keys(ITEMS).map((i) => [i, itemPlan(i, l)] as const);
-  const want: Record<string, [number, number]> = { stage1: [160, 40], "stage1-opus-r2": [92, 23], stage3: [72, 0], stage4: [920, 200] };
+  const want: Record<string, [number, number]> = { stage1: [160, 40], "stage1-opus-r2": [92, 23], stage3: [74, 0], stage4: [920, 200] };
   const bad = counts.find(([i, p]) => { const w = want[i] ?? want[i.split("-")[0]!]!; return p.sessions !== w[0] || p.picker_calls !== w[1]; });
   if (bad) return { pass: false, detail: bad[0] + " plans " + bad[1].sessions + " sessions and " + bad[1].picker_calls + " picker calls" };
   if (capsTotalUsd() !== 2880) return { pass: false, detail: "caps sum to " + capsTotalUsd() };

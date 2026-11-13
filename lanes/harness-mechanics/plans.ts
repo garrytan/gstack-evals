@@ -4,10 +4,12 @@
 import { plannedCells, prefixOf, seeded, type ItemDef, type PartPlan, type Profile, type Rect } from "../../quick/laneb/l1/l1.ts";
 import type { HmArm } from "../../src/types.ts";
 import { attempt2Owed } from "./money.ts";
-import { ARMS, bundleLists, CAPS_USD, FOUR, HM, JUDGE, loadBundle, MODELS, screenedFromEnv, STAGE1_OPUS_R2_TASKS, TARS, TASK_SETUP, type ModelKey } from "./pins.ts";
+import { ARMS, bundleLists, CAPS_USD, FOUR, HM, JUDGE, loadBundle, MODELS, screenedFromEnv, SMOKE_PART, STAGE1_OPUS_R2_TASKS, TARS, TASK_SETUP, type ModelKey } from "./pins.ts";
 
 const item = (m: ModelKey, capUsd: number): ItemDef => ({ capUsd, taskSet: "swerebench-r3a4", cells: MODELS[m].cells, allowanceUsd: MODELS[m].allowanceUsd, model: MODELS[m].id });
-// stage3-pilot is one item with one part per model: one ledger item binds one run, and a part runs one model's cells. Its
+// stage3-pilot is one item with one part per model, after the smoke part (S1, pins.ts SMOKE_PART): one ledger item binds
+// one run, and a part runs one model's cells. Nothing launches the next part on its own, so the pilot parts wait, unlaunched,
+// until someone runs launch --part pilot-opus on the same bound run. The item's
 // allowance for L1's cap-stop check is the largest of the three models', which can only make a stop more likely.
 export const ITEMS: Record<string, ItemDef> = {
   "stage1-opus": item("opus", CAPS_USD["stage1-opus"]),
@@ -30,8 +32,12 @@ export function itemPlan(name: string, s: { scored: string[]; calibration: strin
   if (/^stage1-(opus|sol|sol-run|p1)$/.test(name)) parts = chunks(s.calibration, HM.partTasks).map((tasks, i) => part("s1-" + (i + 1), [{ tasks, arms: FOUR, attempts: 1 }]));
   else if (name === "stage1-opus-r2") parts = [part("r2-1", [{ tasks: STAGE1_OPUS_R2_TASKS, arms: FOUR, attempts: 1 }])];
   else if (name === "stage3-pilot") {
-    const pilot = s.calibration.slice(0, HM.splits.judgePilot);
-    parts = (Object.keys(MODELS) as ModelKey[]).map((m) => part("pilot-" + m, [{ tasks: pilot, arms: JUDGE, attempts: 1 }], { model: MODELS[m].id, cells: MODELS[m].cells }));
+    const pilot = s.calibration.slice(0, HM.splits.judgePilot), smoke = s.calibration[HM.splits.judgePilot];
+    if (!smoke || pilot.includes(smoke)) throw new Error("E_HM_INPUT stage3-pilot's smoke task must be calibration task " + (HM.splits.judgePilot + 1) + ", outside judge-pilot's " + HM.splits.judgePilot);
+    parts = [
+      part(SMOKE_PART, [{ tasks: [smoke], arms: JUDGE, attempts: 1 }], { model: MODELS.opus.id, cells: MODELS.opus.cells }),
+      ...(Object.keys(MODELS) as ModelKey[]).map((m) => part("pilot-" + m, [{ tasks: pilot, arms: JUDGE, attempts: 1 }], { model: MODELS[m].id, cells: MODELS[m].cells })),
+    ];
   } else if (/^stage4-(opus|sol|p1)$/.test(name)) {
     const judged = new Set(s.scored.slice(0, HM.splits.judgeSubset));
     parts = chunks(s.scored, HM.partTasks).map((tasks, i) => part("s4-" + (i + 1), [

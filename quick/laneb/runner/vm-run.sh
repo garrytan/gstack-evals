@@ -166,7 +166,8 @@ curl -fsS 127.0.0.1:$control_port/healthz >/dev/null 2>&1 || { echo "metering pr
 # agents[].kwargs.judge_backend in job.json (grid.ts), which the host-side agent (runner/agent/laneb_hooks.py) reads to
 # bind a per-session slot over the management socket and forward the slot's proxy URL into the task container. The judge
 # proxy is a self-contained bundle prepare-run.ts dropped in the run dir; it holds the keys from ~/.laneb-keys and meters
-# the judge deciders against the item's cap on the shared ledger under the "judge" prefix, beside the session proxy. When
+# the judge deciders against the item's cap on the shared ledger under "judge:" plus this part's ledger prefix, beside the
+# session proxy, so each part's judge rows are its own; its journal (HM_JUDGE_JOURNAL) is what the agent checks. When
 # jev's judge changes the repo in a forbidden way, the agent writes the STOP file named by HM_JUDGE_STOP_FILE, which the
 # watcher below already treats as a stop.
 judge_proxy=""
@@ -183,10 +184,11 @@ if [ "$judge_arms" = true ]; then
   export HM_JUDGE_MGMT_TOKEN="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
   export HM_JUDGE_PROXY_BASE="http://$gw:$judge_data_port"
   export HM_JUDGE_STOP_FILE="$run/STOP"
+  export HM_JUDGE_JOURNAL="$run/out/judge-journal.ndjson"
   (
     set -a; . "$HOME/.laneb-keys"; set +a
     exec bun "$run/judge-proxy.js" --data-host "$gw" --data-port "$judge_data_port" --management-socket "$judge_mgmt_socket" \
-      --journal "$run/out/judge-journal.ndjson" --ledger-url http://127.0.0.1:$ledger_port --ledger-prefix judge
+      --journal "$HM_JUDGE_JOURNAL" --ledger-url http://127.0.0.1:$ledger_port --ledger-prefix "judge:$prefix"
   ) > "$run/out/judge-proxy.log" 2>&1 &
   judge_proxy=$!
   trap 'rc=$?; curl -fsS -X POST 127.0.0.1:$control_port/close-all >/dev/null 2>&1 || true; kill $proxy 2>/dev/null || true; [ -n "$judge_proxy" ] && kill $judge_proxy 2>/dev/null; echo $rc > "$run/out/vm-run.exit"' EXIT

@@ -8,7 +8,7 @@ import { l1Main } from "../../quick/laneb/l1/l1.ts";
 import { admission, readFitRows, report, type HmRowIn, type ReportConfig } from "./analyze.ts";
 import { dryrun } from "./dryrun.ts";
 import { harborEnvRecord } from "./arms.ts";
-import { CLOSING, REPO, sha256 } from "./pins.ts";
+import { CLOSING, REPO, section11Excluded, sha256, SMOKE_PART } from "./pins.ts";
 import { HM_PROFILE } from "./plans.ts";
 import { patternsCommand } from "./score.ts";
 import { approve, doneCheck, isItem, launchGuard, markDone, type HmCrew, type Item } from "./money.ts";
@@ -19,7 +19,7 @@ import { screenCommand, screenVm } from "./screen.ts";
 import { buildHmTable } from "./table.ts";
 import { countProblems, itemsFromEnv, replayReport, runReplay } from "./replay.ts";
 
-const USAGE = "E_USAGE usage: hm dryrun --out <dir> | prepare <work> --item <item> | host-up|attach|recover|host-down <work> | launch|relaunch|rerun <work> --part <part> | approve --ledger <jsonl> --item <item> --usd <cap> --approved-by <who> | done --ledger <jsonl> --item <item> [--work <work>] | guard <work> | screen --out <dir> | fit --out <dir> [--only <task>] | build-check --out <dir> [--list calibration|scored] [--shard k/n] | fit-vm start|status|finish <work> | screen-vm start|finish <work> | table <config.json> <out.jsonl> | patterns <job dir>... | judge-custody <work> [--tasks-dir <dir>] [--label-store <dir>] | judge-check <judge-journal.ndjson> <job dir>... | admission <stage1 table.jsonl> [--fit <fit rows.jsonl> --fit-sha256 <sha256>] [--out <dir>] | report <table.jsonl> <config.json> <out dir> | replay items | replay build --config <json> --out <file> | replay run --clients <module.ts> --start <file> --ledger <jsonl> --out <dir> | replay report <out dir>";
+const USAGE = "E_USAGE usage: hm dryrun --out <dir> | prepare <work> --item <item> | host-up|attach|recover|host-down <work> | launch|relaunch|rerun <work> --part <part> | approve --ledger <jsonl> --item <item> --usd <cap> --approved-by <who> | done --ledger <jsonl> --item <item> [--work <work>] | guard <work> | screen --out <dir> | fit --out <dir> [--only <task>] | build-check --out <dir> [--list calibration|scored] [--shard k/n] | fit-vm start|status|finish <work> | screen-vm start|finish <work> | table <config.json> <out.jsonl> | patterns <job dir>... | judge-custody <work> | judge-check <work> | admission <stage1 table.jsonl> [--fit <fit rows.jsonl> --fit-sha256 <sha256>] [--out <dir>] | report <table.jsonl> <config.json> <out dir> | replay items | replay build --config <json> --out <file> | replay run --clients <module.ts> --start <file> --ledger <jsonl> --out <dir> | replay report <out dir>";
 const readTable = (p: string) => readFileSync(p, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as HmRowIn);
 // HM_SIMS cuts power.py's Monte Carlo for keyless tests; the report runs power.py's own 2,000 without it.
 const sims = () => (process.env.HM_SIMS ? Number(process.env.HM_SIMS) : undefined);
@@ -120,9 +120,9 @@ export async function main(argv: string[]): Promise<number> {
     if (cmd === "table") {
       const [cfg, out] = rest;
       if (!cfg || !out) throw new Error(USAGE);
-      const rows = buildHmTable(JSON.parse(readFileSync(cfg, "utf8")));
+      const all = buildHmTable(JSON.parse(readFileSync(cfg, "utf8"))), rows = all.filter((r) => !section11Excluded(r.part)), smoke = all.length - rows.length;
       writeFileSync(out, rows.map((r) => JSON.stringify(r)).join("\n") + (rows.length ? "\n" : ""));
-      console.log("wrote " + rows.length + " rows to " + out);
+      console.log("wrote " + rows.length + " rows to " + out + (smoke ? "; left out " + smoke + " row(s) from the smoke part " + SMOKE_PART + ", which are not pilot cells and never a section 11 input" : ""));
       return 0;
     }
     if (cmd === "patterns") {
@@ -130,33 +130,34 @@ export async function main(argv: string[]): Promise<number> {
       return 0;
     }
     if (cmd === "judge-custody") {
-      // The host-side custody producer (README "Not built"): build each judge part's per-task runner-only markers before
-      // launch, so a custody failure stops here and never costs a VM (mirrors the decision-routing controller). Run it after
-      // prepare and before host-up; launch.sh then syncs the markers to the VM, where the judge agent reads them per task.
+      // The custody check (prepare-run.ts builds each judge batch's per-task markers on every prepare path): every prepared
+      // judge part, relaunch and attempt 2 in the work dir has each task's markers file, and its canary is the label
+      // store's. Docker-free; run it after prepare and before host-up.
       const work = rest[0];
       if (!work || work.startsWith("--")) throw new Error(USAGE);
-      const tasksDir = opt("tasks-dir") ?? process.env.SWEREBENCH ?? join(process.env.HOME ?? "", ".capy/work/ref/swe-rebench-leaderboard");
-      const { buildJudgeMarkers } = await import("./judge-custody.ts");
-      try {
-        const r = await buildJudgeMarkers(resolve(work), { tasksDir: resolve(tasksDir), labelStore: opt("label-store") ? resolve(opt("label-store")!) : undefined, log: (l) => console.log(l) });
-        console.log("judge-custody: custody for " + r.tasks.length + " task(s) across " + r.parts.length + " judge part(s)" + (r.parts.length ? " (" + r.parts.join(", ") + ")" : "; no judge parts, nothing written"));
-        return 0;
-      } catch (e) {
-        console.error((e as Error).message);
-        return 1;
-      }
+      const { checkJudgeCustody } = await import("./judge-custody.ts");
+      const c = checkJudgeCustody(resolve(work));
+      for (const p of c.problems) console.log("judge-custody problem: " + p);
+      console.log("judge-custody " + (c.pass ? "pass" : "FAIL") + ": " + c.tasks + " judge task(s) across " + c.parts.length + " prepared judge part(s)" + (c.parts.length ? " (" + c.parts.join(", ") + ")" : "") + (c.problems.length ? "; " + c.problems.length + " problem(s)" : ""));
+      if (!c.parts.length) console.error("E_HM_INPUT judge-custody: " + work + " holds no prepared judge part");
+      else if (!c.pass) console.error("E_HM_INPUT judge-custody: a judge task's custody is missing or does not match the label store; prepare the part again");
+      return c.pass && c.parts.length ? 0 : 2;
     }
     if (cmd === "judge-check") {
-      // The judge run's leak and version checks (README "Not built", pieces 3 and 4): journalCheck over the judge metering
-      // proxy's journal (out/judge-journal.ndjson) and jevChanges across every judge session's hook log.
-      const [journal, ...jobs] = rest.filter((x) => !x.startsWith("--"));
-      if (!journal || !jobs.length) throw new Error(USAGE);
-      const { judgeRunCheck, readJudgeSessions } = await import("./judge-check.ts");
-      const jp = resolve(journal);
-      const c = judgeRunCheck(jp, readJudgeSessions(jobs.map((j) => resolve(j)), jp));
-      console.log("JUDGE CHECK " + (c.pass ? "pass" : "FAIL") + ": custody_hits " + c.custody_hits + " (must be 0), marker_hits " + c.marker_hits + ", jevChanges in " + c.jev_changes.length + " of " + c.sessions + " judge session(s); " + c.detail);
-      if (c.jev_changes.length) console.error("E_HM_JEV_VERSION judge-check: a judge session's hook log carried a jevChanges line; the judge arms are stopped");
-      return c.pass ? 0 : 2;
+      // The judge run's leak and version checks, per launched judge part: journalCheck over the part's judge metering proxy
+      // journal (pulled/out/judge-journal.ndjson), jevChanges across its judge sessions' hook logs, and its judge spend.
+      const work = rest[0];
+      if (!work || work.startsWith("--")) throw new Error(USAGE);
+      const { judgePartsCheck } = await import("./judge-check.ts");
+      const r = judgePartsCheck(resolve(work));
+      const money = (x: number) => "$" + x.toFixed(2);
+      for (const c of r.parts) console.log("JUDGE CHECK " + c.part + " " + (c.pass ? "pass" : "FAIL") + ": custody_hits " + c.custody_hits + " (must be 0), marker_hits " + c.marker_hits + ", jevChanges in " + c.jev_changes.length + " of " + c.sessions + " judge session(s); judge spend measured " + money(c.measured_usd) + ", unknown " + c.unknown_count + " (" + money(c.unknown_usd) + " at their reserved maximum)" + (c.section11 ? "" : "; " + SMOKE_PART + " is the smoke part, never a section 11 input") + "; " + c.detail);
+      if (r.unlaunched.length) console.log("JUDGE CHECK not launched: " + r.unlaunched.join(", "));
+      const s11 = r.parts.filter((c) => c.section11).map((c) => c.part), out11 = r.parts.filter((c) => !c.section11).map((c) => c.part);
+      console.log("JUDGE CHECK section 11 inputs: " + (s11.join(", ") || "none yet") + (out11.length ? " (left out: " + out11.join(", ") + ")" : ""));
+      console.log("JUDGE CHECK: " + (r.pass ? "pass" : "FAIL") + (r.detail ? " (" + r.detail + ")" : ""));
+      if (r.parts.some((c) => c.jev_changes.length)) console.error("E_HM_JEV_VERSION judge-check: a judge session's hook log carried a jevChanges line; the judge arms are stopped");
+      return r.pass ? 0 : 2;
     }
     if (cmd === "admission") {
       if (!rest[0] || rest[0].startsWith("--")) throw new Error(USAGE);

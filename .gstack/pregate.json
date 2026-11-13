@@ -99,6 +99,10 @@
     "quick/laneb/runner/agent/laneb_hooks.py": [
       "tests/harness-mechanics/judge-wiring.test.ts"
     ],
+    "lanes/harness-mechanics/cli.ts": [
+      "tests/harness-mechanics/hold.test.ts",
+      "tests/harness-mechanics/judge-wiring.test.ts"
+    ],
     "src/errors/codes.ts": [
       "tests/errors.test.ts"
     ],
@@ -160,6 +164,7 @@
       "quick/laneb/tests/runner.test.ts",
       "quick/laneb/tests/stacks.test.ts",
       "quick/laneb/tests/vm-run.test.ts",
+      "tests/harness-mechanics/hold.test.ts",
       "tests/outcome-skills/sm-rebench.test.ts"
     ],
     "quick/lanea-quick/**": [

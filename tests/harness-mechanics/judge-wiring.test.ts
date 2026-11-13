@@ -6,14 +6,15 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ARMS, FOUR, JUDGE } from "../../lanes/harness-mechanics/pins.ts";
+import { ARMS, FOUR, JUDGE, REPO, SMOKE_PART } from "../../lanes/harness-mechanics/pins.ts";
 import { HM_PROFILE, itemPlan } from "../../lanes/harness-mechanics/plans.ts";
 import { armSpec, jobConfig } from "../../quick/laneb/runner/grid.ts";
-import { ARM_SPECS as L1_ARMS, hostSecretKeys, type Plan } from "../../quick/laneb/l1/l1.ts";
+import { ARM_SPECS as L1_ARMS, hostSecretKeys, jobFile, relaunchRects, splitJobs, type Plan, type Rect } from "../../quick/laneb/l1/l1.ts";
 import { HttpReservations } from "../../lanes/harness-mechanics/judge/judge-proxy.ts";
-import { judgeRunCheck, readJudgeSessions } from "../../lanes/harness-mechanics/judge-check.ts";
+import { journalSpend, judgePartsCheck, judgeRunCheck, readJudgeSessions } from "../../lanes/harness-mechanics/judge-check.ts";
 import { JEV_MODEL, type HookSession } from "../../lanes/harness-mechanics/judge.ts";
-import { buildRunMarkers, judgePartTasks } from "../../lanes/harness-mechanics/judge-custody.ts";
+import { buildRunMarkers, checkJudgeCustody, judgePartTasks, prepareJudgeCustody } from "../../lanes/harness-mechanics/judge-custody.ts";
+import { report, type HmRowIn, type ReportConfig } from "../../lanes/harness-mechanics/analyze.ts";
 import { MeteringProxy } from "../../src/runner/proxy/metering-proxy.ts";
 import type { CallOutcome, CellAttempt, LedgerReply, Reservation, ReservationLedger } from "../../src/types.ts";
 
@@ -32,11 +33,14 @@ function makeTaskSource(tasksDir: string, id: string) {
   writeFileSync(join(t, "tests", "patch.diff"), TEST_PATCH);
   writeFileSync(join(t, "instruction.md"), "fix the parser");
 }
-function makeJudgeRun(dir: string, tasks: string[], judge = true) {
-  const run = join(dir, "run");
+// An arm as prepare-run hands it to jobConfig: a judge arm gets the run dir's markers_dir.
+const jobArm = (name: keyof typeof ARMS) => ({ ...armSpec(ARMS[name].spec), ...(name.startsWith("judge") ? { markers_dir: "/vm/run/judge-markers" } : {}), tar: "/vm/run/arms/x.tar", sha256: "a" });
+// A run dir's job.json as prepare-run writes it (grid.ts jobConfig): each task a {path} under the VM's tasks dir, and a job
+// name that is no task's.
+function makeJudgeRun(dir: string, tasks: string[], judge = true, name = "run") {
+  const run = join(dir, name);
   mkdirSync(run, { recursive: true });
-  const kwargs = judge ? { arm: "judge-jev", judge_backend: "jev" } : { arm: "none" };
-  writeFileSync(join(run, "job.json"), JSON.stringify({ agents: [{ name: "laneb-claude-code", kwargs }], tasks }));
+  writeFileSync(join(run, "job.json"), JSON.stringify(jobConfig({ ...JOB_BASE, job_name: "pilot-opus", tasks, arms: [jobArm(judge ? "judge-jev" : "none")] })));
   return run;
 }
 
@@ -119,7 +123,7 @@ describe("byte-identical golden (piece 'additive, gated on backend')", () => {
 });
 
 describe("judge proxy ReservationLedger over the ledger service (piece 1 ledger)", () => {
-  test("a within-cap reserve is granted and settled; a reserve beyond the item cap is refused CAP_STOP; unknown keeps open; reserves are idempotent", async () => {
+  test("a within-cap reserve is granted under the part's judge prefix; a reserve beyond the item cap is refused CAP_STOP; reserves are idempotent; a spent call settles at its metered cost and an unknown one at its reserved maximum, marked unknown", async () => {
     let total = 0;
     const cap = 1_000_000;
     const reqs: { path: string; body: any }[] = [];
@@ -138,25 +142,28 @@ describe("judge proxy ReservationLedger over the ledger service (piece 1 ledger)
       },
     });
     try {
-      const ledger = new HttpReservations("http://127.0.0.1:" + srv.port, "judge");
+      // vm-run.sh passes --ledger-prefix "judge:$prefix", the part's ledger prefix (E1).
+      const prefix = "judge:stage3-pilot/smoke-opus/", ledger = new HttpReservations("http://127.0.0.1:" + srv.port, prefix);
       const cell = { run_id: "r", arm: "judge-jev", task: "t", model: "m", trial: 1, attempt: 1, meter_id: "m1" };
-      const within = await ledger.reserve({ idempotency_key: "k1", lease_id: "L", cell, max_micros: 600_000 });
-      expect(within.ok).toBe(true);
-      expect(within.ok && within.reservation.reservation_id).toBe("judge:k1");
-      const repeat = await ledger.reserve({ idempotency_key: "k1", lease_id: "L", cell, max_micros: 600_000 });
-      expect(repeat.ok && repeat.reservation.reservation_id).toBe("judge:k1");
+      const within = await ledger.reserve({ idempotency_key: "m1:0:1", lease_id: "L", cell, max_micros: 300_000 });
+      expect(within.ok && within.reservation.reservation_id).toBe(prefix + "m1:0:1");
+      const repeat = await ledger.reserve({ idempotency_key: "m1:0:1", lease_id: "L", cell, max_micros: 300_000 });
+      expect(repeat.ok && repeat.reservation.reservation_id).toBe(prefix + "m1:0:1");
       expect(reqs.filter((r) => r.path === "/reserve").length).toBe(1); // idempotent: no second /reserve
-      const beyond = await ledger.reserve({ idempotency_key: "k2", lease_id: "L", cell, max_micros: 600_000 });
-      expect(beyond.ok).toBe(false);
+      const lost = await ledger.reserve({ idempotency_key: "m1:1:1", lease_id: "L", cell, max_micros: 250_000 });
+      expect(lost.ok).toBe(true);
+      const beyond = await ledger.reserve({ idempotency_key: "m1:2:1", lease_id: "L", cell, max_micros: 600_000 });
       expect(!beyond.ok && beyond.code).toBe("CAP_STOP");
-      const settled = await ledger.settle("judge:k1", { kind: "spent", spent_micros: 100_000, usage });
-      expect(settled.ok).toBe(true);
-      const settles = reqs.filter((r) => r.path === "/settle").length;
-      const unknown = await ledger.settle("judge:k1", { kind: "unknown" });
-      expect(unknown.ok).toBe(true);
-      expect(reqs.filter((r) => r.path === "/settle").length).toBe(settles); // unknown posts nothing, stays open
-      expect(reqs.find((r) => r.path === "/reserve")!.body).toMatchObject({ id: "judge:k1", usd_micros: 600_000 });
-      expect(reqs.find((r) => r.path === "/settle")!.body).toMatchObject({ id: "judge:k1", usd_micros: 100_000 });
+      expect(reqs.find((r) => r.path === "/reserve")!.body).toEqual({ id: prefix + "m1:0:1", usd_micros: 300_000, meta: { cell, lease_id: "L" } });
+      // Spent: the metered cost, with its usage. Unknown: the reserved maximum, marked unknown (D1), so nothing stays open.
+      const settled = await ledger.settle(prefix + "m1:0:1", { kind: "spent", spent_micros: 100_000, usage });
+      expect(settled.ok && settled.reservation.state).toBe("settled");
+      const unknown = await ledger.settle(prefix + "m1:1:1", { kind: "unknown" });
+      expect(unknown.ok && unknown.reservation.state).toBe("unknown");
+      expect(reqs.filter((r) => r.path === "/settle").map((r) => r.body)).toEqual([
+        { id: prefix + "m1:0:1", usd_micros: 100_000, meta: { usage } },
+        { id: prefix + "m1:1:1", usd_micros: 250_000, meta: { unknown: true } },
+      ]);
     } finally {
       srv.stop(true);
     }
@@ -250,7 +257,8 @@ describe("the host-side custody producer (hm judge-custody)", () => {
     expect(a.slice(1)).toEqual(["test_hidden_regression_case", "tests/test_regression.py"]);
     expect(/^DRCANARY-[0-9a-f]{32}$/.test(a[0]!)).toBe(true);
     expect(a[0]).not.toBe(b[0]); // a distinct canary per task
-    // The reusable canary store sits beside the run dir (launch.sh syncs only the run dir), so no canary reaches the VM.
+    // The label store sits beside the run dir and is never synced; the canary reaches the host and the part VM only inside
+    // the markers file, which no task container mounts.
     expect(readFileSync(join(d, "judge-labels", "task-a", "canary.txt"), "utf8").trim()).toBe(a[0]);
     expect(statSync(join(run, "judge-markers", "task-a.json")).mode & 0o777).toBe(0o600);
   });
@@ -337,7 +345,7 @@ describe("a judge-bearing host ships the judge proxy keys, a non-judge host does
   // Real plans from the frozen splits: stage3-pilot and stage4 carry judge arms, stage1 does not. proxyKeys reads the plan's
   // arms, so it ships the judge keys exactly for the items whose part VMs run a judge metering proxy.
   const scored = Array.from({ length: 5 }, (_, i) => "scored-" + i);
-  const calibration = Array.from({ length: 12 }, (_, i) => "calib-" + i);
+  const calibration = Array.from({ length: 40 }, (_, i) => "calib-" + i);
   const planFor = (name: string): Plan => ({ parts: itemPlan(name, { scored, calibration }).parts } as unknown as Plan);
   const keys = (name: string) => HM_PROFILE.proxyKeys!(planFor(name));
 
@@ -367,3 +375,186 @@ describe("a judge-bearing host ships the judge proxy keys, a non-judge host does
     expect(hostSecretKeys("OPENROUTER_API_KEY", ["TYPESAFE_API_KEY", "OPENROUTER_API_KEY"])).toEqual(["OPENROUTER_API_KEY", "TYPESAFE_API_KEY", "UBICLOUD_API_KEY"]);
   });
 });
+
+const CLI = join(REPO, "lanes/harness-mechanics/cli.ts");
+const hm = (args: string[]) => {
+  const p = Bun.spawnSync([process.execPath, CLI, ...args], { env: { ...process.env }, cwd: REPO });
+  return { code: p.exitCode, out: p.stdout.toString(), err: p.stderr.toString() };
+};
+
+describe("judge custody on every prepare path (B and C1)", () => {
+  const isJudge = (r: Rect) => r.arms.some((a) => a.startsWith("judge"));
+  // A prepared part dir as the launcher leaves it: prepare-run writes the unsplit job.json and builds the judge custody
+  // (prepareJudgeCustody), then l1.ts preparePart splits the job into job.json and job-<n>.json and writes l1-part.json.
+  async function preparedPart(work: string, tasksDir: string, name: string, rects: Rect[], custody = true) {
+    const run = join(work, name);
+    mkdirSync(run, { recursive: true });
+    const tasks = [...new Set(rects.flatMap((r) => r.tasks))], arms = [...new Set(rects.flatMap((r) => r.arms))] as (keyof typeof ARMS)[];
+    writeFileSync(join(run, "job.json"), JSON.stringify(jobConfig({ ...JOB_BASE, job_name: name, tasks, arms: arms.map(jobArm) })));
+    if (custody) await prepareJudgeCustody(run, tasksDir, FAKE_LISTING as never);
+    splitJobs(JSON.parse(readFileSync(join(run, "job.json"), "utf8")), rects).forEach((j, i) => writeFileSync(join(run, jobFile(i)), JSON.stringify(j)));
+    writeFileSync(join(run, "l1-part.json"), JSON.stringify({ name, prefix: "stage3-pilot/" + name + "/", rects }));
+    return run;
+  }
+
+  test("judgePartTasks reads every job file splitJobs writes, each task by its {path} basename, wherever the judge rectangle lands", () => {
+    const rects = relaunchRects([
+      { task: "owner__alpha-1", arm: "none", replicates: 1 }, { task: "owner__alpha-1", arm: "plain-2", replicates: 1 },
+      { task: "owner__beta-2", arm: "judge-jev", replicates: 1 }, { task: "owner__gamma-3", arm: "judge-p1", replicates: 1 }, { task: "owner__gamma-3", arm: "judge-jev", replicates: 1 },
+    ]);
+    expect(rects.length).toBe(3);
+    const plainFirst = [...rects.filter((r) => !isJudge(r)), ...rects.filter(isJudge)];
+    for (const order of [plainFirst, [...plainFirst].reverse()]) {
+      const d = tempDir("hm-split-");
+      const tasks = [...new Set(order.flatMap((r) => r.tasks))], arms = [...new Set(order.flatMap((r) => r.arms))] as (keyof typeof ARMS)[];
+      splitJobs(jobConfig({ ...JOB_BASE, job_name: "s4-1-relaunch", tasks, arms: arms.map(jobArm) }), order).forEach((j, i) => writeFileSync(join(d, jobFile(i)), JSON.stringify(j)));
+      expect(judgePartTasks(d).sort()).toEqual(["owner__beta-2", "owner__gamma-3"]);
+    }
+    // With the plain rectangle first, job.json holds no judge agent, so a reader of job.json alone built no custody.
+    const d = tempDir("hm-split-");
+    splitJobs(jobConfig({ ...JOB_BASE, job_name: "x", tasks: ["owner__alpha-1", "owner__beta-2", "owner__gamma-3"], arms: (["none", "plain-2", "judge-jev", "judge-p1"] as const).map(jobArm) }), plainFirst).forEach((j, i) => writeFileSync(join(d, jobFile(i)), JSON.stringify(j)));
+    expect(JSON.parse(readFileSync(join(d, "job.json"), "utf8")).agents.some((a: any) => a.kwargs.judge_backend)).toBe(false);
+  });
+
+  test("a judge job's task with no path fails closed, so custody is never built for a guessed name", () => {
+    const d = tempDir("hm-nopath-");
+    const job = jobConfig({ ...JOB_BASE, tasks: ["t1"], arms: [jobArm("judge-jev")] });
+    writeFileSync(join(d, "job.json"), JSON.stringify({ ...job, tasks: [{ git_url: "x" }] }));
+    expect(() => judgePartTasks(d)).toThrow(/^E_HM_INPUT judge-custody: .*has a judge task with no path/);
+  });
+
+  test("a part, its <part>-relaunch and its <part>-a2 each bind with their task's custody, from one label store; hm judge-custody checks it without Docker", async () => {
+    const d = tempDir("hm-paths-"), tasksDir = join(d, "src"), work = join(d, "work");
+    mkdirSync(tasksDir, { recursive: true });
+    for (const t of ["owner__alpha-1", "owner__beta-2"]) makeTaskSource(tasksDir, t);
+    await preparedPart(work, tasksDir, "pilot-opus", [{ tasks: ["owner__alpha-1", "owner__beta-2"], arms: JUDGE, attempts: 1 }]);
+    await preparedPart(work, tasksDir, "pilot-opus-relaunch", relaunchRects([{ task: "owner__alpha-1", arm: "judge-p1", replicates: 1 }]));
+    await preparedPart(work, tasksDir, "pilot-opus-a2", relaunchRects([{ task: "owner__beta-2", arm: "judge-jev", replicates: 1 }, { task: "owner__beta-2", arm: "judge-p1", replicates: 1 }]));
+    const canary = (t: string) => readFileSync(join(work, "judge-labels", t, "canary.txt"), "utf8").trim();
+    for (const part of ["pilot-opus", "pilot-opus-relaunch", "pilot-opus-a2"]) {
+      // Each judge trial's task, as the agent reads it (config.json's task.path), finds its markers file under markers_dir.
+      for (const t of judgePartTasks(join(work, part))) {
+        const markers = JSON.parse(readFileSync(join(work, part, "judge-markers", t + ".json"), "utf8")) as string[];
+        expect([part, t, markers[0]]).toEqual([part, t, canary(t)]);
+      }
+    }
+    expect(canary("owner__alpha-1")).not.toBe(canary("owner__beta-2"));
+    expect(checkJudgeCustody(work)).toEqual({ pass: true, parts: ["pilot-opus", "pilot-opus-a2", "pilot-opus-relaunch"], tasks: 4, problems: [] });
+    const ok = hm(["judge-custody", work]);
+    expect([ok.code, ok.out]).toEqual([0, expect.stringContaining("judge-custody pass: 4 judge task(s) across 3 prepared judge part(s)")]);
+  });
+
+  test("hm judge-custody fails a relaunch prepared with no custody, and a markers file whose canary is not the label store's", async () => {
+    const d = tempDir("hm-paths-"), tasksDir = join(d, "src"), work = join(d, "work");
+    mkdirSync(tasksDir, { recursive: true });
+    makeTaskSource(tasksDir, "owner__alpha-1");
+    await preparedPart(work, tasksDir, "pilot-opus", [{ tasks: ["owner__alpha-1"], arms: JUDGE, attempts: 1 }]);
+    await preparedPart(work, tasksDir, "pilot-opus-relaunch", [{ tasks: ["owner__alpha-1"], arms: ["judge-p1"], attempts: 1 }], false);
+    const missing = checkJudgeCustody(work);
+    expect([missing.pass, missing.problems]).toEqual([false, [expect.stringMatching(/^pilot-opus-relaunch\/owner__alpha-1: no markers file /)]]);
+    const bad = hm(["judge-custody", work]);
+    expect([bad.code, bad.out, bad.err]).toEqual([2, expect.stringContaining("judge-custody FAIL"), expect.stringMatching(/^E_HM_INPUT judge-custody/)]);
+    rmSync(join(work, "pilot-opus-relaunch"), { recursive: true });
+    writeFileSync(join(work, "judge-labels", "owner__alpha-1", "canary.txt"), "DRCANARY-" + "0".repeat(32) + "\n");
+    expect(checkJudgeCustody(work).problems).toEqual(["pilot-opus/owner__alpha-1: the markers file's canary is not the label store's"]);
+  });
+});
+
+describe("judge-check per part: fail closed, judge spend and the smoke part (D1, E1, S1)", () => {
+  const hookLine = JSON.stringify({ point: "done", rule: null, backend: "jev", jev_version: "jev-1.13.0", stopped: false });
+  const rid = (part: string, n: number) => "judge:stage3-pilot/" + part + "/m1:" + n + ":1";
+  // A spent call ($0.12 of a $0.30 reserve), an unknown one ($0.25 reserved) and a request with no outcome ($0.20 reserved).
+  const spendJournal = (part: string) => [
+    { kind: "request", reservation_id: rid(part, 0), max_micros: 300_000 }, { kind: "outcome", reservation_id: rid(part, 0), meter_id: "m1", outcome: { kind: "spent", spent_micros: 120_000, usage } },
+    { kind: "request", reservation_id: rid(part, 1), max_micros: 250_000 }, { kind: "outcome", reservation_id: rid(part, 1), meter_id: "m1", outcome: { kind: "unknown" } },
+    { kind: "request", reservation_id: rid(part, 2), max_micros: 200_000 },
+  ].map((l) => JSON.stringify(l)).join("\n") + "\n";
+  function part(work: string, name: string, o: { launched?: boolean; jobs?: boolean; log?: string | null; journal?: string } = {}) {
+    const dir = join(work, name);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "l1-part.json"), JSON.stringify({ name, rects: [{ tasks: ["t1"], arms: JUDGE, attempts: 1 }] }));
+    if (o.launched === false) return;
+    writeFileSync(join(work, name + ".launch.json"), JSON.stringify({ part: name }));
+    if (o.jobs === false) return;
+    const trial = join(dir, "pulled/jobs", name, "t1__Ab3dE9x");
+    mkdirSync(join(trial, "evaluator"), { recursive: true });
+    writeFileSync(join(trial, "config.json"), JSON.stringify({ agent: { name: "laneb-claude-code", kwargs: { arm: "judge-jev", upstream_model: "claude-opus-5-5" } }, task: { path: "/vm/run/tasks/t1" } }));
+    if (o.log !== null) writeFileSync(join(trial, "evaluator/judge-hooks.jsonl"), (o.log ?? hookLine) + "\n");
+    mkdirSync(join(dir, "pulled/out"), { recursive: true });
+    writeFileSync(join(dir, "pulled/out/judge-journal.ndjson"), o.journal ?? spendJournal(name));
+  }
+  function workDir() {
+    const work = tempDir("hm-jcw-");
+    writeFileSync(join(work, "plan.json"), JSON.stringify({ item: "stage3-pilot", parts: [{ name: SMOKE_PART }, { name: "pilot-opus" }, { name: "pilot-sol" }] }));
+    return work;
+  }
+
+  test("journalSpend: spent outcomes are measured; unknown outcomes and unanswered requests count at their reserved maximum", () => {
+    const d = tempDir("hm-spend-");
+    writeFileSync(join(d, "j.ndjson"), spendJournal("pilot-opus") + "a torn line\n");
+    expect(journalSpend(join(d, "j.ndjson"))).toEqual({ measured_usd: 0.12, unknown_count: 2, unknown_usd: 0.45 });
+  });
+
+  test("judgeRunCheck fails closed with its reason: no judge session, or a judge session with a missing or unreadable hook log", () => {
+    const d = tempDir("hm-jcf-"), journal = join(d, "j.ndjson");
+    writeFileSync(journal, "");
+    const s = (log: string | null): HookSession => ({ arm: "judge-jev", model: "claude-opus-5-5", task: "t1", trial: "1", log, journal, meter_id: "m1" });
+    const none = judgeRunCheck(journal, []);
+    expect([none.pass, none.detail]).toEqual([false, expect.stringContaining("no judge session")]);
+    for (const log of [null, "not json\n"]) {
+      const c = judgeRunCheck(journal, [s(log)]);
+      expect([c.pass, c.missing_logs, c.detail]).toEqual([false, 1, expect.stringContaining("1 judge session(s) with no readable hook log")]);
+    }
+    expect(judgeRunCheck(journal, [s(hookLine + "\n")]).pass).toBe(true);
+  });
+
+  test("per part: the smoke part is checked and named apart from section 11's inputs, an unlaunched part is listed, and each part reports its judge spend", () => {
+    const work = workDir();
+    part(work, SMOKE_PART);
+    part(work, "pilot-opus");
+    part(work, "pilot-sol", { launched: false });
+    const r = judgePartsCheck(work);
+    expect([r.pass, r.unlaunched, r.parts.map((p) => [p.part, p.section11, p.sessions, p.measured_usd, p.unknown_count, p.unknown_usd])]).toEqual([true, ["pilot-sol"], [[SMOKE_PART, false, 1, 0.12, 2, 0.45], ["pilot-opus", true, 1, 0.12, 2, 0.45]]]);
+    const cli = hm(["judge-check", work]);
+    expect(cli.code).toBe(0);
+    expect(cli.out).toContain("JUDGE CHECK pilot-opus pass: custody_hits 0 (must be 0), marker_hits 0, jevChanges in 0 of 1 judge session(s); judge spend measured $0.12, unknown 2 ($0.45 at their reserved maximum); ");
+    expect(cli.out).toContain("JUDGE CHECK " + SMOKE_PART + " pass: ");
+    expect(cli.out).toContain(SMOKE_PART + " is the smoke part, never a section 11 input");
+    expect(cli.out).toContain("JUDGE CHECK not launched: pilot-sol\n");
+    expect(cli.out).toContain("JUDGE CHECK section 11 inputs: pilot-opus (left out: " + SMOKE_PART + ")\n");
+  });
+
+  test("per part it fails closed: a custody hit in the smoke part, a launched part with no pulled jobs dir, a missing hook log, or no launched judge part", () => {
+    const hit = workDir();
+    part(hit, SMOKE_PART, { journal: JSON.stringify({ kind: "refusal", code: "DR_CUSTODY_HIT", meter_id: "m1" }) + "\n" });
+    part(hit, "pilot-opus");
+    expect([judgePartsCheck(hit).pass, judgePartsCheck(hit).detail]).toEqual([false, SMOKE_PART + " failed"]);
+    const nojobs = workDir();
+    part(nojobs, SMOKE_PART, { jobs: false });
+    const r = judgePartsCheck(nojobs);
+    expect([r.pass, r.parts[0]!.detail]).toEqual([false, expect.stringMatching(/^no pulled jobs dir at /)]);
+    const nolog = workDir();
+    part(nolog, SMOKE_PART, { log: null });
+    expect(judgePartsCheck(nolog).pass).toBe(false);
+    const idle = workDir();
+    part(idle, SMOKE_PART, { launched: false });
+    expect(judgePartsCheck(idle)).toMatchObject({ pass: false, detail: "no launched judge part to check", unlaunched: [SMOKE_PART] });
+    const cli = hm(["judge-check", idle]);
+    expect([cli.code, cli.out]).toEqual([2, expect.stringContaining("JUDGE CHECK: FAIL (no launched judge part to check)")]);
+  });
+
+  test("hm table leaves the smoke part's rows out and says so; hm report refuses a table that holds one", () => {
+    const work = workDir();
+    part(work, SMOKE_PART);
+    part(work, "pilot-opus");
+    const cfg = join(work, "table.json"), out = join(work, "table.jsonl");
+    writeFileSync(cfg, JSON.stringify({ jobs: [{ dir: join(work, SMOKE_PART, "pulled/jobs", SMOKE_PART), part: SMOKE_PART }, { dir: join(work, "pilot-opus/pulled/jobs/pilot-opus"), part: "pilot-opus" }], sessions: [] }));
+    const t = hm(["table", cfg, out]);
+    expect([t.code, t.out.trim()]).toEqual([0, "wrote 1 rows to " + out + "; left out 1 row(s) from the smoke part " + SMOKE_PART + ", which are not pilot cells and never a section 11 input"]);
+    const rows = readFileSync(out, "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    expect(rows.map((x) => x.part)).toEqual(["pilot-opus"]);
+    for (const p of [SMOKE_PART, SMOKE_PART + "-relaunch", SMOKE_PART + "-a2"]) expect(() => report([{ ...rows[0], part: p } as HmRowIn], {} as ReportConfig)).toThrow("E_USAGE hm report: the table holds 1 row(s) from the smoke part " + SMOKE_PART);
+    expect(() => report(rows as HmRowIn[], {} as ReportConfig)).toThrow("the config needs stage1");
+  });
+});
+

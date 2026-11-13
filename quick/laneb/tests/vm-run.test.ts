@@ -453,7 +453,7 @@ describe("task-hooks.sh (L1 Amendment C): which task images register their own U
 
 // The judge launch block (harness-mechanics Stage 3): with a judge arm in job.json, vm-run.sh starts the judge metering
 // proxy (the self-contained bundle prepare-run.ts drops in the run dir, built here by the same `bun build` command) and
-// exports HM_JUDGE_MGMT_SOCKET/HM_JUDGE_PROXY_BASE/HM_JUDGE_STOP_FILE into Harbor's env so the host-side agent can bind a
+// exports HM_JUDGE_MGMT_SOCKET/HM_JUDGE_PROXY_BASE/HM_JUDGE_STOP_FILE/HM_JUDGE_JOURNAL into Harbor's env so the host-side agent can bind a
 // slot and forward the per-slot proxy URL. The real judge proxy runs (loopback gateway, no provider keys needed to start);
 // only the Lane B proxy and Harbor are faked. The skip path (no judge arm) is covered by the rest of this file, which runs
 // vm-run.sh with job.json "{}" and never starts a judge proxy.
@@ -478,7 +478,7 @@ describe("vm-run.sh's judge launch block (judge arms only)", () => {
       curl: `#!/usr/bin/env bash\necho "curl $*" >> "${log}"\necho '{}'\n`,
       // Only the judge proxy is a real bun; the Lane B proxy (bun proxy.ts) exits, and the faked curl reports it healthy. The
       // judge proxy's launch env (it sourced ~/.laneb-keys in its own subshell) is dumped so a test can read what keys it got.
-      bun: `#!/usr/bin/env bash\ncase "$*" in *judge-proxy.js*) env > "${run}/out/judge-proxy-env.txt"; exec "${process.execPath}" "$@" ;; *) exit 1 ;; esac\n`,
+      bun: `#!/usr/bin/env bash\ncase "$*" in *judge-proxy.js*) env > "${run}/out/judge-proxy-env.txt"; echo "$*" > "${run}/out/judge-proxy-args.txt"; exec "${process.execPath}" "$@" ;; *) exit 1 ;; esac\n`,
       sleep: "#!/usr/bin/env bash\nPATH=/usr/bin:/bin exec sleep 0.05\n",
       // The token is never echoed; the three forwarded-slot env vars are, to prove they reach Harbor's process. Harbor's full
       // env is dumped so a test can prove no provider key value from ~/.laneb-keys reaches it or the task containers.
@@ -509,6 +509,13 @@ describe("vm-run.sh's judge launch block (judge arms only)", () => {
       expect(s.sg()).toContain(`base=http://127.0.0.1:${s.judgePort}`);
       expect(s.sg()).toContain(`mgmt=${s.run}/out/judge-mgmt.sock`);
       expect(s.sg()).toContain(`stop=${s.run}/STOP`);
+      // E1: the judge proxy meters under "judge:" plus this part's ledger prefix (vm-run.sh's second argument, "p-"), and
+      // Harbor's env names the journal the agent checks after each session.
+      const args = readFileSync(join(s.run, "out", "judge-proxy-args.txt"), "utf8");
+      expect(args).toContain(`--journal ${s.run}/out/judge-journal.ndjson `);
+      expect(args).toContain("--ledger-prefix judge:p-");
+      expect(args).not.toContain("--ledger-prefix judge ");
+      expect(readFileSync(join(s.run, "out", "harbor-env.txt"), "utf8").split("\n")).toContain(`HM_JUDGE_JOURNAL=${s.run}/out/judge-journal.ndjson`);
       writeFileSync(join(s.run, "HARBOR_DONE"), "");
       const timer = setTimeout(() => proc.kill("SIGKILL"), 20_000);
       await proc.exited;

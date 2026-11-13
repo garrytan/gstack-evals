@@ -72,11 +72,17 @@ describe("plans", () => {
     expect(s1.reduce((a, p) => a + p.picker_calls, 0)).toBe(120);
   });
 
-  test("Stage 3: 72 pilot sessions, one part per model on the 12 pilot tasks and the two judge arms", () => {
+  test("Stage 3: the smoke part's 2 sessions on calibration task 13, then 72 pilot sessions, one part per model on the 12 pilot tasks and the two judge arms", () => {
     const p = plan("stage3-pilot");
-    expect(p.sessions).toBe(72);
-    expect(p.parts.map((x) => [x.name, x.model, x.cells])).toEqual([["pilot-opus", "claude-opus-5-5", "cells.l1.json"], ["pilot-sol", "gpt-6.1-sol", "cells.hm-sol.json"], ["pilot-p1", "particle-1", "cells.hm-p1.json"]]);
-    for (const x of p.parts) expect(new Set(x.rects.flatMap((r) => r.tasks))).toEqual(new Set(lists.judgePilot));
+    expect([p.sessions, p.picker_calls]).toEqual([74, 0]);
+    expect(p.parts.map((x) => [x.name, x.model, x.cells, x.prefix])).toEqual([["smoke-opus", "claude-opus-5-5", "cells.l1.json", "stage3-pilot/smoke-opus/"], ["pilot-opus", "claude-opus-5-5", "cells.l1.json", "stage3-pilot/pilot-opus/"], ["pilot-sol", "gpt-6.1-sol", "cells.hm-sol.json", "stage3-pilot/pilot-sol/"], ["pilot-p1", "particle-1", "cells.hm-p1.json", "stage3-pilot/pilot-p1/"]]);
+    const [smoke, ...pilots] = p.parts;
+    expect(smoke!.rects).toEqual([{ tasks: [lists.calibration[12]!], arms: expect.arrayContaining(["judge-jev", "judge-p1"]), attempts: 1 }]);
+    expect(lists.judgePilot).not.toContain(lists.calibration[12]);
+    expect([...plannedCells(smoke!).values()].reduce((a, b) => a + b, 0)).toBe(2);
+    for (const x of pilots) expect(new Set(x.rects.flatMap((r) => r.tasks))).toEqual(new Set(lists.judgePilot));
+    const bad = { ...lists, calibration: [...lists.calibration.slice(0, 12), lists.calibration[0]!, ...lists.calibration.slice(13)] };
+    expect(() => itemPlan("stage3-pilot", bad)).toThrow("E_HM_INPUT stage3-pilot's smoke task must be calibration task 13");
   });
 
   test("Stage 4: 920 sessions and 200 picker calls per model, 2,760 in all; the judge arms only on the first 60 scored tasks", () => {

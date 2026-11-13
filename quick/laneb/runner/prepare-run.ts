@@ -97,8 +97,8 @@ if (import.meta.main) {
   mkdirSync(join(run, "arms"), { recursive: true });
 
   const tasks: Record<string, unknown> = {};
+  const exportDir = process.env.SWEREBENCH ?? join(process.env.HOME ?? "", ".capy/work/ref/swe-rebench-leaderboard");
   if (taskSet === "swerebench-r3a4") {
-    const exportDir = process.env.SWEREBENCH ?? join(process.env.HOME ?? "", ".capy/work/ref/swe-rebench-leaderboard");
     for (const id of final) tasks[id] = materializeRebench(exportDir, rebench.find((t) => t.task_id === id)!, join(run, "tasks", id), { runtimeStages, runtimeCopy, network });
   } else if (taskSet === "swebv-r3") {
     const root = process.env.SWEBV ?? join(process.env.HOME ?? "", ".capy/work/ref/harbor-datasets");
@@ -120,9 +120,9 @@ if (import.meta.main) {
   copyFileSync(join(root, "config/proxy.json"), join(run, "proxy.json"));
   // A judge arm sets backend (grid.ts), so jobConfig emits judge_backend; on such a batch the judge agent resolves each
   // task's custody at runtime from <markers_dir>/<task>.json. One agent config serves every task in a judge rectangle, so
-  // custody cannot be a static per-task kwarg; prepare-run points every judge arm at the run dir's judge-markers folder
-  // (hm judge-custody populates it before launch, and launch.sh syncs the run dir to the VM). A non-judge or L1 arm gets
-  // no markers_dir, so its kwargs and job.json stay byte-identical.
+  // custody cannot be a static per-task kwarg; prepare-run points every judge arm at the run dir's judge-markers folder,
+  // fills it below (prepareJudgeCustody, on every prepare path: a part, its relaunch and its attempt 2), and launch.sh syncs
+  // the run dir to the VM. A non-judge or L1 arm gets no markers_dir, so its kwargs and job.json stay byte-identical.
   const hasJudge = arms.some((a) => (a.options as AgentOptions).backend);
   const judgeMarkersDir = `${vm}/run/judge-markers`;
   const job = jobConfig({
@@ -136,11 +136,16 @@ if (import.meta.main) {
   writeFileSync(join(run, "job.json"), JSON.stringify(job, null, 2) + "\n");
   // When this batch has a judge arm, bundle the judge metering proxy into the run dir as one self-contained script. It
   // rides the run-dir sync launch.sh already does, so the VM needs no src/ checkout to run it; vm-run.sh starts it only
-  // for a judge batch. A batch with no judge arm writes no extra file, so a non-judge or L1 run dir stays byte-identical.
+  // for a judge batch. It then builds the batch's per-task custody (judge-custody.ts) from the task sources in SWEREBENCH;
+  // a task whose image will not list stops the prepare. A batch with no judge arm writes no extra file, so a non-judge or
+  // L1 run dir stays byte-identical.
   if (hasJudge) {
     const src = resolve(here, "../../../lanes/harness-mechanics/judge/judge-proxy.ts");
     const built = Bun.spawnSync(["bun", "build", src, "--target=bun", "--outfile", join(run, "judge-proxy.js")]);
     if (built.exitCode !== 0) throw new Error(`judge-proxy bundle failed: ${built.stderr.toString().trim()}`);
+    if (taskSet !== "swerebench-r3a4") throw new Error(`E_USAGE a judge arm runs only on swerebench-r3a4, whose task sources its custody reads, not ${taskSet}`);
+    const { prepareJudgeCustody } = await import("../../../lanes/harness-mechanics/judge-custody.ts");
+    console.log(`${run}: judge custody for ${(await prepareJudgeCustody(run, exportDir)).length} task(s)`);
   }
   if (process.env.ORACLE === "1") {
     const oracle = { ...job, job_name: `${jobName}-oracle`, n_attempts: 1, agents: [{ name: "oracle" }] };

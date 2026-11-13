@@ -6,7 +6,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { itemCheck, plannedCells } from "../../quick/laneb/l1/l1.ts";
+import { hostTtlHours, itemCheck, plannedCells } from "../../quick/laneb/l1/l1.ts";
 import { Ledger, readRows, toMicros } from "../../quick/laneb/runner/ledger.ts";
 import { approve, c1Guard, infraRerun, launchGuard, lineCheck, markDone, needsRerun, runSessions, stepLeases, stepLedger, stepReserve, type Item } from "../../lanes/harness-mechanics/money.ts";
 import { bundleLists, CAPS_USD, MODELS, REPO, sha256, STAGE1_OPUS_R2_TASKS, unscreenedText } from "../../lanes/harness-mechanics/pins.ts";
@@ -192,6 +192,15 @@ describe("launch guard", () => {
     expect(g.ok).toBe(false);
     expect(g.why[0]).toStartWith("C1: stage1-opus's projection");
     expect(launchGuard("stage1-opus", { "stage1-opus": readRows(p) }, crew(0), parts, ["s1-1"]).ok).toBe(true);
+  });
+  test("stage3-pilot with its smoke part (S1): four parts, the host's TTL at 114 h (96 h for three), and a C1 projection of $84.90 that fits its $90 cap", () => {
+    const parts = itemPlan("stage3-pilot", lists).parts;
+    expect(parts.map((p) => p.name)).toEqual(["smoke-opus", "pilot-opus", "pilot-sol", "pilot-p1"]);
+    expect([hostTtlHours(parts.length), hostTtlHours(parts.length - 1)]).toEqual([114, 96]);
+    const g = c1Guard("stage3-pilot", [], parts, []);
+    expect([g.fits, g.cap, g.host, g.total]).toEqual([true, toMicros(90), toMicros(114 * 0.08), toMicros(84.9)]);
+    // Once smoke-opus has finished, the pilot parts' projection counts its spend as settled and its part as done.
+    expect(c1Guard("stage3-pilot", [], parts, ["smoke-opus"]).fits).toBe(true);
   });
   test("hm launch runs the guard first: a refusal exits 2 with E_HM_LAUNCH and starts nothing; a pass reaches L1", () => {
     const { d } = approved(), work = tmp();

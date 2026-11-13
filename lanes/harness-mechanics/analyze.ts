@@ -9,7 +9,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { clusteredPairedDelta, seededRandom, type PairedItem } from "../../src/runner/stats/paired.ts";
 import type { HmArm, HmSessionRow } from "../../src/types.ts";
-import { BUNDLE, HM, loadBundle, MODELS, REPO } from "./pins.ts";
+import { BUNDLE, HM, loadBundle, MODELS, REPO, section11Excluded, SMOKE_PART } from "./pins.ts";
 import { FIT_CLASSES, fitClass, type FitClass, type FitRow } from "./fit.ts";
 import { patternsPerArm } from "./score.ts";
 
@@ -340,6 +340,8 @@ export type ReportJson = { schema: "hm-report/1"; verdicts: Record<"H1" | "H2" |
 
 /** Stage 4's report: H1 to H3 with their end states, per-model tables (Opus first), exposure, patterns and the admission. */
 export function report(rows: HmRowIn[], cfg: ReportConfig, o: { out?: string; sims?: number } = {}): { lines: string[]; json: ReportJson } {
+  const smoke = rows.filter((r) => section11Excluded(r.part)).length;
+  if (smoke) throw new Error("E_USAGE hm report: the table holds " + smoke + " row(s) from the smoke part " + SMOKE_PART + ", which are not pilot or scored cells and never a section 11 input; hm table leaves them out");
   const s1 = cfg.stage1;
   if (!s1) throw new Error("E_USAGE hm report: the config needs stage1 or stage1_table (Stage 1's admission)");
   const ix = indexRows(rows), sims = o.sims ?? H2_PLAN.sims, mksAll = ix.mks;

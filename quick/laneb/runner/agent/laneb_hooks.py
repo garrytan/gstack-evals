@@ -133,6 +133,54 @@ def jev_changed(line: dict) -> bool:
     version = line.get("jev_version")
     return line.get("stopped") is True or (version is not None and version != JEV_MODEL)
 
+
+def judge_task(logs_dir) -> str:
+    """The task a trial runs: the basename of task.path in the trial's config.json, which Harbor writes into the trial dir
+    before the agent starts (Trial._init_result) and vm-run.sh's oracle gate reads the same way. Harbor's layout is
+    jobs/<job>/<trial>/agent, so logs_dir.parent.parent is the job, not the task, and the trial dir's name cuts long task
+    names to 32 characters. A config that can't be read is a hard error, never a guessed task."""
+    config = Path(logs_dir).parent / "config.json"
+    try:
+        task = str(json.loads(config.read_text())["task"]["path"]).rstrip("/").rsplit("/", 1)[-1]
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        raise JudgeManagementError(f"cannot read the trial's task from {config}: {type(e).__name__}: {e}") from None
+    if not task:
+        raise JudgeManagementError(f"{config} names no task path")
+    return task
+
+
+def judge_journal_hits(journal: str, meter_id: str) -> dict:
+    """One judge session's custody check (lanes/harness-mechanics/leak.ts journalCheck, cut to the session's own slot): the
+    judge proxy's journal lines that carry the slot's meter_id, counting DR_CUSTODY_HIT refusals, marker_hit lines and every
+    other refusal code."""
+    custody_hits = marker_hits = 0
+    refusals: dict[str, int] = {}
+    with open(journal) as f:
+        for raw in f:
+            try:
+                line = json.loads(raw)
+            except ValueError:
+                continue
+            if not isinstance(line, dict) or line.get("meter_id") != meter_id:
+                continue
+            if line.get("kind") == "marker_hit":
+                marker_hits += 1
+            elif line.get("kind") == "refusal":
+                code = str(line.get("code"))
+                if code == "DR_CUSTODY_HIT":
+                    custody_hits += 1
+                else:
+                    refusals[code] = refusals.get(code, 0) + 1
+    return {"meter_id": meter_id, "custody_hits": custody_hits, "marker_hits": marker_hits, "refusals": refusals}
+
+
+def write_judge_stop(record: dict) -> None:
+    """Append a stop record to the batch STOP file it names (HM_JUDGE_STOP_FILE, $run/STOP, which vm-run.sh watches), so
+    no further session starts."""
+    if record.get("stop_file"):
+        with open(record["stop_file"], "a") as f:
+            f.write(json.dumps(record) + "\n")
+
 # Each copy measures its tar inside the container first and refuses one past the cap. It then sends the tar through head, so
 # a tree that a process the model left running grows between the two passes still sends at most the cap plus one byte: a
 # send cut off there, or one whose tar fails, is refused in the container (exit 3), and the agent refuses a reply past the
@@ -302,6 +350,9 @@ class LanebHooksAgent(LanebAgent):
         proxy_base = os.environ.get("HM_JUDGE_PROXY_BASE")
         if not proxy_base:
             raise JudgeManagementError("HM_JUDGE_PROXY_BASE must be set in the Harbor process for a judge arm")
+        journal = os.environ.get("HM_JUDGE_JOURNAL")
+        if not journal:
+            raise JudgeManagementError("HM_JUDGE_JOURNAL must be set in the Harbor process for a judge arm")
 
         open_body = {"trial": environment.session_id, "model": self.options.upstream_model, "cap_usd": self.options.session_cap_usd,
                      "meta": {"arm": self.options.arm, "arm_tar_sha256": arm_info["tar_sha256"], **agent_options}, "open_key": uuid.uuid4().hex}
@@ -334,7 +385,7 @@ class LanebHooksAgent(LanebAgent):
             # Judge addition: bind a metering-proxy slot per judge session, with the task's custody (mirrors dr_harbor).
             # One agent config serves every task in a judge rectangle, so custody is resolved per task here, from the task
             # the cell already names, not from a static kwarg.
-            task = self.logs_dir.parent.parent.name
+            task = judge_task(self.logs_dir)
             markers, canary = judge_custody(judge_markers_file(self.options, task))
             cell = {"run_id": environment.session_id, "arm": self.options.arm, "task": task,
                     "model": self.options.upstream_model, "trial": 1, "attempt": 1}
@@ -450,22 +501,44 @@ class LanebHooksAgent(LanebAgent):
             context.cost_usd = closed["spent_micros"] / 1_000_000 if "spent_micros" in closed else None
             context.metadata = {"laneb": {"arm": self.options.arm, "session": session["id"], "refused": closed.get("refused"), "requests": closed.get("requests"), "ok_responses": closed.get("ok_responses"), "close_error": summary["close_error"], "result": result,
                                           "judge_backend": backend, "judge_slot": binding["slot"] if binding else None}}
-            # Judge addition: unbind and finalize the slot, then read the session's hook log and stop the batch on a
-            # jevChanges line. Each step records its own failure and never masks the session's outcome.
+            # Judge addition: unbind and finalize the slot, then check the judge journal for this slot's custody hits and the
+            # session's hook log for a jevChanges line, and stop the batch on either. Each step records its own failure and
+            # never masks the session's outcome.
             if binding is not None:
+                errors = summary["teardown_errors"]
+
+                def judge_error(key: str, event: str, e: Exception) -> None:
+                    errors[key] = f"{type(e).__name__}: {e}"[:300]
+                    log({"event": event, "message": errors[key]})
+
                 try:
                     await asyncio.to_thread(manage, "/unbind", {"slot": binding["slot"]})
                 except Exception as e:
-                    log({"event": "judge_unbind_error", "message": f"{type(e).__name__}: {e}"[:300]})
+                    judge_error("judge_unbind", "judge_unbind_error", e)
                 try:
                     meter = await asyncio.to_thread(manage, "/finalize", {"meter_id": binding["meter_id"]})
                     (evdir / "judge-meter.json").write_text(json.dumps(meter, indent=2))
                 except Exception as e:
-                    log({"event": "judge_finalize_error", "message": f"{type(e).__name__}: {e}"[:300]})
+                    judge_error("judge_finalize", "judge_finalize_error", e)
+                try:
+                    hits = judge_journal_hits(journal, binding["meter_id"])
+                    context.metadata["laneb"]["judge_hits"] = hits
+                    summary["judge_hits"] = hits
+                    log({"event": "judge_journal", **hits})
+                    if hits["custody_hits"]:
+                        record = {"reason": "custody_hit", "arm": self.options.arm, "session": environment.session_id, **hits, "stop_file": os.environ.get("HM_JUDGE_STOP_FILE")}
+                        log({"event": "custody_hit_stop", **record})
+                        write_judge_stop(record)
+                except Exception as e:
+                    judge_error("judge_journal", "judge_journal_error", e)
                 try:
                     self._judge_stop_on_jev_changes(container, log, environment.session_id)
                 except Exception as e:
-                    log({"event": "judge_post_session_error", "message": f"{type(e).__name__}: {e}"[:300]})
+                    judge_error("judge_hook_log", "judge_post_session_error", e)
+                try:
+                    (evdir / "laneb-summary.json").write_text(json.dumps(summary, indent=2, default=str))
+                except Exception:
+                    pass
             if cancelled is not None:
                 raise cancelled
         if summary["session"] is not None and not summary["session"].get("ok_responses"):
@@ -474,8 +547,11 @@ class LanebHooksAgent(LanebAgent):
     def _judge_stop_on_jev_changes(self, container: str, log, session_id: str) -> list[dict]:
         """Read the judge session's hook log, copy it out for the analysis, and on a jevChanges line write the batch STOP
         file ($run/STOP, which vm-run.sh watches, by HM_JUDGE_STOP_FILE) so no further judge session starts. Returns the
-        jevChanges lines."""
+        jevChanges lines. A docker exec that fails raises and writes no judge-hooks.jsonl, so an empty copy never stands
+        in for a log that was not read; the caller records the failure in laneb-summary.json's teardown_errors."""
         res = self._exec(container, f"cat {JUDGE_HOOK_LOG} 2>/dev/null || true", timeout=PROBE_TIMEOUT_S)
+        if res.returncode != 0:
+            raise RuntimeError(f"judge hook log copy failed: docker exec exited {res.returncode}: {res.stderr[-300:]!r}")
         text = res.stdout.decode(errors="replace")
         evdir = self._evaluator_dir()
         (evdir / "judge-hooks.jsonl").write_text(text)
@@ -492,12 +568,9 @@ class LanebHooksAgent(LanebAgent):
         if not changed:
             return []
         (evdir / "judge-jevchanges.json").write_text(json.dumps(changed) + "\n")
-        stop_file = os.environ.get("HM_JUDGE_STOP_FILE")
-        record = {"reason": "jevChanges", "arm": self.options.arm, "session": session_id, "jev_changes": changed[:5], "stop_file": stop_file}
+        record = {"reason": "jevChanges", "arm": self.options.arm, "session": session_id, "jev_changes": changed[:5], "stop_file": os.environ.get("HM_JUDGE_STOP_FILE")}
         log({"event": "jev_changes_stop", **record})
-        if stop_file:
-            with open(stop_file, "a") as f:
-                f.write(json.dumps(record) + "\n")
+        write_judge_stop(record)
         return changed
 
     def _strip_snapshot(self, container: str) -> list[str]:

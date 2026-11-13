@@ -740,23 +740,33 @@ def test_a_tree_that_grows_between_the_measure_and_the_send_still_sends_at_most_
 # and the claude wrapper's docker exec forward, and stops the batch on a jevChanges line. A non-judge arm takes the pinned
 # super().run byte for byte. manage() and query() are stubbed, as Harbor and the SDK are elsewhere in this file.
 _REAL_MANAGE = lh.manage
-_JUDGE_ENV = ("HM_JUDGE_PROXY_BASE", "HM_JUDGE_MGMT_SOCKET", "HM_JUDGE_MGMT_TOKEN", "HM_JUDGE_STOP_FILE")
+_JUDGE_ENV = ("HM_JUDGE_PROXY_BASE", "HM_JUDGE_MGMT_SOCKET", "HM_JUDGE_MGMT_TOKEN", "HM_JUDGE_STOP_FILE", "HM_JUDGE_JOURNAL")
+_HARBOR_JOB = "pilot-opus"
 
 
-def _judge_agent(tmp, fake, backend, markers_file=None, markers_dir=None, task=None):
+def _harbor_logs_dir(tmp, task):
+    # Harbor's layout at the pin (f3a5a923): jobs/<job>/<trial>/agent, the trial named for the task cut to 32 characters
+    # less trailing _ and -, plus "__" and 7 characters. The job dir names the job, never the task.
+    return tmp / "jobs" / _HARBOR_JOB / (task[:32].rstrip("_-") + "__Ab3dE9x") / "agent"
+
+
+def _judge_agent(tmp, fake, backend, markers_file=None, markers_dir=None, task="task-a", harbor_layout=False, config=True):
     a = hooks_agent(tmp, fake)
     a.options.judge_backend = backend
     a.options.markers_file = str(markers_file) if markers_file else None
     a.options.markers_dir = str(markers_dir) if markers_dir else None
     a.options.judge_allowance_micros = 2_000_000
-    # The judge path derives the task from logs_dir.parent.parent.name; naming it lets a test place <markers_dir>/<task>.json.
-    if task:
-        a.logs_dir = tmp / task / "trial" / "agent"
+    if harbor_layout:
+        a.logs_dir = _harbor_logs_dir(tmp, task)
         a.logs_dir.mkdir(parents=True, exist_ok=True)
+    # Harbor writes the trial's config.json into the trial dir before the agent starts (Trial._init_result); the judge path
+    # reads the task from its task.path.
+    if config:
+        (a.logs_dir.parent / "config.json").write_text(json.dumps({"task": {"path": "/work/run/tasks/" + task}, "trial_name": a.logs_dir.parent.name}))
     return a
 
 
-def _run_judge(tmp, fake, backend, markers_file=None, hook_log="", stop_file=None, markers_dir=None, task=None):
+def _run_judge(tmp, fake, backend, markers_file=None, hook_log="", stop_file=None, markers_dir=None, task="task-a", harbor_layout=False, config=True, journal="", hook_rc=0):
     calls = []
 
     def fake_manage(route, body):
@@ -770,12 +780,12 @@ def _run_judge(tmp, fake, backend, markers_file=None, hook_log="", stop_file=Non
         for m in ():
             yield m
 
-    a = _judge_agent(tmp, fake, backend, markers_file, markers_dir=markers_dir, task=task)
+    a = _judge_agent(tmp, fake, backend, markers_file, markers_dir=markers_dir, task=task, harbor_layout=harbor_layout, config=config)
     base_exec = a._exec
 
     def exec_(container, script, stdin=None, timeout=300):
         if script.startswith("cat " + lh.JUDGE_HOOK_LOG):
-            return subprocess.CompletedProcess(script, 0, hook_log.encode(), b"")
+            return subprocess.CompletedProcess(script, hook_rc, b"" if hook_rc else hook_log.encode(), b"Error response from daemon: container is not running" if hook_rc else b"")
         return base_exec(container, script, stdin, timeout)
 
     a._exec = exec_
@@ -787,6 +797,10 @@ def _run_judge(tmp, fake, backend, markers_file=None, hook_log="", stop_file=Non
     os.environ.pop("HM_JUDGE_STOP_FILE", None)
     if stop_file is not None:
         os.environ["HM_JUDGE_STOP_FILE"] = str(stop_file)
+    os.environ.pop("HM_JUDGE_JOURNAL", None)
+    if journal is not None:
+        (tmp / "judge-journal.ndjson").write_text(journal)
+        os.environ["HM_JUDGE_JOURNAL"] = str(tmp / "judge-journal.ndjson")
     try:
         run(a)
     finally:
@@ -903,6 +917,104 @@ def test_a_clean_judge_hook_log_writes_no_stop_file(tmp):
     log = json.dumps({"point": "done", "backend": "jev", "jev_version": lh.JEV_MODEL, "stopped": False}) + "\n"
     _run_judge(tmp, fake, "jev", hook_log=log, stop_file=stop)
     assert not stop.exists(), "a clean hook log wrote a STOP file"
+
+
+_CLEAN_HOOK_LOG = json.dumps({"point": "done", "backend": "jev", "jev_version": lh.JEV_MODEL, "stopped": False}) + "\n"
+
+
+def _summary(evdir):
+    return json.loads((evdir / "laneb-summary.json").read_text())
+
+
+def _events(evdir):
+    return [json.loads(x) for x in (evdir / "usersim-events.jsonl").read_text().splitlines() if x.strip()]
+
+
+def test_the_judge_task_comes_from_harbors_trial_config_in_harbors_layout_not_from_the_job_dir(tmp):
+    # The job dir names the job (pilot-opus), so the old reading, logs_dir.parent.parent.name, took the job for the task and
+    # looked up <markers_dir>/pilot-opus.json. The trial dir's name cuts a long task to 32 characters, so it is no task either.
+    fake = Fake(tmp)
+    task = "pydata__xarray-cutoff-name-past-32-chars-9876"
+    logs = _harbor_logs_dir(tmp, task)
+    assert logs.parent.parent.name == _HARBOR_JOB != task and logs.parent.name.split("__Ab3dE9x")[0] != task
+    mdir = tmp / "judge-markers"
+    mdir.mkdir()
+    canary = "DRCANARY-" + "d" * 32
+    (mdir / (task + ".json")).write_text(json.dumps([canary, "test_hidden_beta"]))
+    calls, _ = _run_judge(tmp, fake, "jev", markers_dir=mdir, task=task, harbor_layout=True, hook_log=_CLEAN_HOOK_LOG)
+    binds = [b for r, b in calls if r == "/bind"]
+    assert len(binds) == 1, calls
+    assert binds[0]["cell"]["task"] == task, binds[0]["cell"]
+    assert binds[0]["forbidden_markers"] == [canary, "test_hidden_beta"] and binds[0]["canary"] == canary
+    assert lh.judge_task(logs) == task
+
+
+def test_a_trial_with_no_readable_config_fails_closed_and_binds_no_slot(tmp):
+    fake = Fake(tmp)
+    calls, _ = _run_judge(tmp, fake, "jev", config=False, hook_log=_CLEAN_HOOK_LOG)
+    assert not [r for r, _ in calls if r == "/bind"], calls
+    errors = [e for e in _events(tmp / "trial" / "evaluator") if e.get("event") == "agent_error"]
+    assert errors and errors[0]["type"] == "JudgeManagementError" and "config.json" in errors[0]["message"], errors
+
+
+def test_a_judge_arm_with_no_judge_journal_set_fails_before_the_session_opens(tmp):
+    fake = Fake(tmp)
+    try:
+        _run_judge(tmp, fake, "jev", journal=None)
+    except lh.JudgeManagementError as e:
+        assert "HM_JUDGE_JOURNAL" in str(e)
+    else:
+        raise AssertionError("a judge arm ran with no HM_JUDGE_JOURNAL")
+    assert not fake.open_bodies, "a session opened with no judge journal to check"
+
+
+def _journal(*lines):
+    return "".join(json.dumps(x) + "\n" for x in lines)
+
+
+def test_a_custody_hit_on_this_sessions_meter_writes_the_stop_file_and_the_summary_records_it(tmp):
+    stop = tmp / "STOP"
+    journal = _journal(
+        {"kind": "refusal", "code": "DR_CUSTODY_HIT", "meter_id": "mJUDGE", "provider": "openrouter", "route": "openrouter", "model": "particle-ai/particle-1", "reason": "canary", "source": "proxy"},
+        {"kind": "marker_hit", "meter_id": "mJUDGE", "provider": "openrouter", "route": "openrouter", "model": "particle-ai/particle-1", "source": "proxy", "decider": "openrouter:particle-ai/particle-1", "cell": {}, "markers": []},
+        {"kind": "refusal", "code": "DR_CUSTODY_HIT", "meter_id": "mOTHER"},
+    )
+    _run_judge(tmp, Fake(tmp), "jev", stop_file=stop, journal=journal, hook_log=_CLEAN_HOOK_LOG)
+    assert stop.exists(), "a custody hit wrote no STOP file"
+    rec = json.loads(stop.read_text().strip())
+    assert rec["reason"] == "custody_hit" and rec["meter_id"] == "mJUDGE" and rec["custody_hits"] == 1 and rec["marker_hits"] == 1, rec
+    evdir = tmp / "trial" / "evaluator"
+    assert _summary(evdir)["judge_hits"] == {"meter_id": "mJUDGE", "custody_hits": 1, "marker_hits": 1, "refusals": {}}
+    assert [e for e in _events(evdir) if e.get("event") == "custody_hit_stop"]
+
+
+def test_with_no_custody_hit_the_journal_check_records_marker_hits_and_refusal_counts_and_writes_no_stop(tmp):
+    stop = tmp / "STOP"
+    journal = _journal(
+        {"kind": "marker_hit", "meter_id": "mJUDGE"},
+        {"kind": "refusal", "code": "CAP_STOP", "meter_id": "mJUDGE"},
+        {"kind": "refusal", "code": "DR_ALLOWANCE_STOP", "meter_id": "mJUDGE"},
+        {"kind": "refusal", "code": "DR_CUSTODY_HIT", "meter_id": "mOTHER"},
+    ) + "a torn line\n"
+    _run_judge(tmp, Fake(tmp), "jev", stop_file=stop, journal=journal, hook_log=_CLEAN_HOOK_LOG)
+    assert not stop.exists(), "another session's custody hit, or a refusal, wrote a STOP file"
+    evdir = tmp / "trial" / "evaluator"
+    assert _summary(evdir)["judge_hits"] == {"meter_id": "mJUDGE", "custody_hits": 0, "marker_hits": 1, "refusals": {"CAP_STOP": 1, "DR_ALLOWANCE_STOP": 1}}
+
+
+def test_a_failed_hook_log_copy_is_recorded_in_teardown_errors_and_writes_no_hook_log(tmp):
+    _run_judge(tmp, Fake(tmp), "jev", hook_rc=1)
+    evdir = tmp / "trial" / "evaluator"
+    assert not (evdir / "judge-hooks.jsonl").exists(), "an unread hook log was written as an empty copy"
+    errors = _summary(evdir)["teardown_errors"]
+    assert "judge hook log copy failed: docker exec exited 1" in errors["judge_hook_log"], errors
+
+
+def test_a_hook_log_copy_that_succeeds_is_written_and_records_no_teardown_error(tmp):
+    _run_judge(tmp, Fake(tmp), "jev", hook_log=_CLEAN_HOOK_LOG)
+    evdir = tmp / "trial" / "evaluator"
+    assert (evdir / "judge-hooks.jsonl").read_text() == _CLEAN_HOOK_LOG
+    assert not [k for k in _summary(evdir)["teardown_errors"] if k.startswith("judge_")]
 
 
 def _assert_no_provider_key(env, wrapper, stubs):

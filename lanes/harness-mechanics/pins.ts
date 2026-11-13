@@ -123,6 +123,12 @@ export const ARMS: Record<HmArm, { spec: string; tar: string; backend?: "jev" | 
 };
 export const FOUR: HmArm[] = ["none", "plain-2", "verify-prose", "verify-hook"];
 export const JUDGE: HmArm[] = ["judge-jev", "judge-p1"];
+// S1 (the Captain's ruling, 2026-11-13): stage3-pilot opens with smoke-opus, calibration task #13 (the first outside
+// judge-pilot's 12) on Opus's two judge arms, which checks the live judge wiring before any pilot part launches. Its two
+// sessions are not pilot cells, and section 11 never reads them: every place that gathers pilot sessions (hm judge-check,
+// hm table, hm report) keeps smoke-opus, its relaunch and its attempt 2 out by this test.
+export const SMOKE_PART = "smoke-opus";
+export const section11Excluded = (part: string | null | undefined) => !!part && (part === SMOKE_PART || part.startsWith(SMOKE_PART + "-"));
 export const TARS = ["none", "prose", "hook", "judge"];
 export const NO_GSTACK: HmArm[] = ["none", "plain-2"];
 

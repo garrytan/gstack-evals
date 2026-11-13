@@ -144,6 +144,20 @@ describe("LaneBReservations", () => {
     expect((await a.settle(id, { kind: "spent", spent_micros: 120_000, usage: { input: 1, output: 1, cache_read: 0, cache_write: 0, reasoning: 0 } as any })).ok).toBe(true);
     expect(readRows(path).filter((x) => x.kind === "settle").map((x) => x.usd_micros)).toEqual([120_000]);
   });
+  test("an unknown outcome settles at the reserved maximum marked unknown, and a spent one at its metered cost (D1); nothing stays open", async () => {
+    const path = join(temp(), "ledger.jsonl"), l = new Ledger(path, "stage1-opus");
+    l.approve(1, { by: "test" });
+    const a = new LaneBReservations(l, "picker-t1");
+    const lost = await a.reserve({ idempotency_key: "k1", lease_id: "lease", cell, max_micros: 400_000 });
+    const spent = await a.reserve({ idempotency_key: "k2", lease_id: "lease", cell, max_micros: 300_000 });
+    const lid = lost.ok ? lost.reservation.reservation_id : "", sid = spent.ok ? spent.reservation.reservation_id : "";
+    const u = await a.settle(lid, { kind: "unknown" });
+    expect(u.ok && u.reservation.state).toBe("unknown");
+    expect((await a.settle(sid, { kind: "spent", spent_micros: 90_000, usage: { input: 1, output: 1, cache_read: 0, cache_write: 0, reasoning: 0 } as any })).ok).toBe(true);
+    const settles = readRows(path).filter((x) => x.kind === "settle");
+    expect(settles.map((x) => [x.id, x.usd_micros, x.unknown ?? false, x.usage === undefined])).toEqual([["picker-t1:k1", 400_000, true, true], ["picker-t1:k2", 90_000, false, false]]);
+    expect(l.status().openIds).toEqual([]);
+  });
   test("a reserve past the cap is refused CAP_STOP", async () => {
     const path = join(temp(), "ledger.jsonl"), l = new Ledger(path, "stage1-opus");
     l.approve(0.1, { by: "test" });
