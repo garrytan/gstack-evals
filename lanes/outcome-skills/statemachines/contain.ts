@@ -16,13 +16,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { docker } from "../../real-outcome/task/docker.ts";
 import { sh } from "./history.ts";
+import { fixedPatches } from "./oracle.ts";
 import { runName } from "./testrun.ts";
 import { added30, readUnit, smFail, type SmUnit } from "./unit.ts";
 
 export const CONTAIN_SCRIPT = sh("contain.sh");
 export type ContainCheck = "refs" | "objects" | "stores" | "scan";
 export interface ContainResult { ok: boolean; checks: Record<ContainCheck, { ok: boolean; findings: string[] }>; archives: string[]; unreadable?: string[] }
-export interface ContainInput { want: string; names: string[]; markers: string[]; qaPin?: string }
+/** patches: the patches the oracle's fixed run applies, in its order (oracle.ts fixedPatches), as [name, body]. With them,
+ *  a store outside the repo that holds none of the blobs they make over the base passes; without them, none does. */
+export interface ContainInput { want: string; names: string[]; markers: string[]; qaPin?: string; patches?: [string, string][] }
 
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
 const b64 = (s: string) => Buffer.from(s, "base64").toString("utf8");
@@ -70,7 +73,7 @@ export function parseContain(stdout: string): ContainResult {
 export function contain(where: { kind: "host"; root: string; repo: string } | { kind: "docker"; image: string; repoDir: string }, i: ContainInput): ContainResult {
   const inDir = mkdtempSync(join(tmpdir(), "sm-contain-"));
   try {
-    const files: Record<string, string> = { want: i.want + "\n", names: i.names.join("\n") + (i.names.length ? "\n" : ""), markers: i.markers.join("\n") + (i.markers.length ? "\n" : ""), qa_pin: i.qaPin ?? "" };
+    const files: Record<string, string> = { ...(i.patches ? { ...Object.fromEntries(i.patches), patches: i.patches.map(([n]) => n + "\n").join("") } : {}), want: i.want + "\n", names: i.names.join("\n") + (i.names.length ? "\n" : ""), markers: i.markers.join("\n") + (i.markers.length ? "\n" : ""), qa_pin: i.qaPin ?? "" };
     for (const [n, body] of Object.entries(files)) writeFileSync(join(inDir, n), body);
     if (where.kind === "host") {
       const r = spawnSync("bash", ["-c", CONTAIN_SCRIPT, "bash", where.repo, inDir, where.root], { encoding: "utf8", maxBuffer: 256 * 1024 * 1024, timeout: 600_000 });
@@ -87,7 +90,7 @@ export function contain(where: { kind: "host"; root: string; repo: string } | { 
 
 /** The check on one built session image: want is the head the build recorded (the two-commit head on a follow-on). */
 export function containImage(image: { image_id: string; head: string }, u: SmUnit, unitDir: string, qaPin?: string): ContainResult {
-  return contain({ kind: "docker", image: image.image_id, repoDir: u.repo_dir }, { want: image.head, ...containInputs(unitDir), ...(qaPin ? { qaPin } : {}) });
+  return contain({ kind: "docker", image: image.image_id, repoDir: u.repo_dir }, { want: image.head, ...containInputs(unitDir), patches: fixedPatches(unitDir), ...(qaPin ? { qaPin } : {}) });
 }
 
 /** Halts the unit (E_SM_CONTAIN) when any check failed, naming each failed check and its findings (never test text). */
