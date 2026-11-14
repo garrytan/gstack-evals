@@ -91,8 +91,6 @@ export interface Stage2File {
   smoke: Record<GstackArm, { first: SmokeSession[]; resmoke?: SmokeSession[] }>;
   untested: Record<GstackArm, UntestedInputs>;
   mdd: number | null;
-  /** The lens minus none's verdict, read by the caller (see WIRING.md). */
-  lensNone: Verdict;
   pairwiseLosing: Record<GstackArm, boolean>;
   stage3Fewer: Record<GstackArm, boolean>;
 }
@@ -129,7 +127,10 @@ export const readRow: Row = (a, io) => {
     io.out(arm + " on " + f.model + ": " + v.verdict + " (step " + v.step + "): " + v.why);
     const ranLens = f.cells.some((c) => c.model === f.model && c.arm === "lens");
     const lens = p.contrast && ranLens ? contrast({ ...base, b: arm, a: "lens" }) : null;
-    const reading = readingRule({ arm, model: f.model, armNone: v, armNoneCi: p.contrast?.ci95 ?? null, armLensCi: lens?.ci95 ?? null, lensNone: f.lensNone, pairwiseLosing: f.pairwiseLosing[arm], stage3Fewer: f.stage3Fewer[arm] });
+    const lensNoneC = ranLens ? contrast({ ...base, b: "lens", a: "none" }) : null;
+    const lensNone: Verdict = lensNoneC?.ci95 ? verdict({ stage1: s1, incomplete: f.incomplete, smoke, untested: f.untested[arm], primary: { arm, contrast: lensNoneC, pIn: lensNoneC.p, holm: lensNoneC.p }, mdd: f.mdd }).verdict : "untested";
+    io.out("lens minus none on " + f.model + " at " + f.tier + " (beside " + arm + "): " + (lensNoneC ? f4(lensNoneC.delta) + " (95% " + (lensNoneC.ci95 ? f4(lensNoneC.ci95[0]) + " to " + f4(lensNoneC.ci95[1]) : "n/a") + "), unadjusted p " + f4(lensNoneC.p) : "the lens didn't run") + ": " + lensNone);
+    const reading = readingRule({ arm, model: f.model, armNone: v, armNoneCi: p.contrast?.ci95 ?? null, armLensCi: lens?.ci95 ?? null, lensNone, pairwiseLosing: f.pairwiseLosing[arm], stage3Fewer: f.stage3Fewer[arm] });
     for (const l of reading.lines) io.out(l);
   }
   return 0;
