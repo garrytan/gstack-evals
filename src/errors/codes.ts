@@ -2597,6 +2597,15 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_DCH_MIRROR_DOWN: {
+    exit: 2,
+    meaning: "Design plan review eval (controller host): a package mirror the controller host serves to the sandboxes did not answer its protocol-level check within the wait: verdaccio's /-/ping, devpi's /+api, apt-cacher-ng's report page or the Docker registry's /v2/ returned something other than HTTP 200, or the check's result did not read. The message names each such mirror, its unit's systemctl is-active state and its unit's last journal lines. The launch or recovery saved the host record and kept both VMs, and printed no ready line; no row was sent.",
+    fix: "Read the unit state and journal lines the message quotes and fix the controller host's mirror setup (stage3/ubicloud-real.ts mirrorSetup), then run dc host teardown on the saved record and launch again. Never send the preflight or a later row to a host whose mirrors failed the check.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
+  },
   E_DCW_INSTALL_DIGEST: {
     exit: 2,
     meaning: "Design plan review eval (prereg section 4, the gstack install): a gstack arm session's installed checkout, read inside its container after the install, has a digest other than the pinned commit's tree, so the session stopped before Claude Code launched. No model call was sent for it.",

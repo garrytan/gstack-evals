@@ -7,8 +7,9 @@
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { dirname } from "node:path";
-import { fail } from "../errors.ts";
-import { UbicloudBackend, type ExecOptions, type ExecResult, type Mirror, type MirrorName, type FileSource, type StreamRunner, type Vm } from "./sandbox.ts";
+import { DcError, fail } from "../errors.ts";
+import { NODE } from "./install.ts";
+import { MIRROR_NAMES, UbicloudBackend, type ExecOptions, type ExecResult, type Mirror, type MirrorName, type FileSource, type StreamRunner, type Vm } from "./sandbox.ts";
 
 export interface ProcessResult {
   exit: number;
@@ -279,19 +280,113 @@ export function controllerMirrors(ip: string, terms: Record<MirrorName, string>)
   });
 }
 
-/** The controller host's mirror servers, bound to its private IPv4 only, as root shell lines. */
-export function mirrorSetup(ip: string): string[] {
+/** BT: where the controller host unpacks its own copy of the pinned Node (stage3/node-pin.json) that runs verdaccio. */
+export const MIRROR_NODE_ROOT = "/opt/dc-mirror-node";
+/** BT: the npm prefix verdaccio installs into, with the pinned Node's own npm. */
+export const VERDACCIO_PREFIX = "/opt/dc-verdaccio";
+
+/**
+ * The controller host's mirror servers, bound to its private IPv4 only, as root shell lines. verdaccio 7.1.0 needs Node
+ * 24 or later, so it runs under the sandboxes' pinned Node: the controller fetches that build from nodejs.org, checks its
+ * sha256 against the pin, unpacks it at MIRROR_NODE_ROOT, installs verdaccio with that Node's npm into VERDACCIO_PREFIX
+ * and starts it with that node. Ubuntu's nodejs (Node 18 on noble) is not installed; nothing else on the host uses it.
+ */
+export function mirrorSetup(ip: string, node: { version: string; sha256: string } = NODE): string[] {
   if (!IPV4.test(ip)) fail("E_USAGE", "the mirrors bind to an IPv4 literal");
+  if (!/^\d+\.\d+\.\d+$/.test(node.version) || !/^[0-9a-f]{64}$/.test(node.sha256)) fail("E_USAGE", "the Node pin needs a version and a sha256");
   const unit = (name: string, exec: string) => "printf '%s\\n' '[Unit]' 'After=network-online.target' '[Service]' " + shq("ExecStart=" + exec) + " 'Restart=always' '[Install]' 'WantedBy=multi-user.target' > /etc/systemd/system/" + name + ".service";
+  const file = "node-v" + node.version + "-linux-x64.tar.xz";
+  const tarball = "/var/tmp/" + file;
+  const bin = MIRROR_NODE_ROOT + "/bin/";
   return [
-    "DEBIAN_FRONTEND=noninteractive apt-get install -y apt-cacher-ng docker-registry python3-venv nodejs npm -o DPkg::Lock::Timeout=600",
+    "DEBIAN_FRONTEND=noninteractive apt-get install -y apt-cacher-ng docker-registry python3-venv curl xz-utils -o DPkg::Lock::Timeout=600",
     "printf 'Port:%s\\nBindAddress: %s\\n' " + MIRROR_PORTS.apt + " " + ip + " > /etc/apt-cacher-ng/zz-dc.conf && systemctl restart apt-cacher-ng",
     "printf 'version: 0.1\\nstorage:\\n  filesystem:\\n    rootdirectory: /var/lib/docker-registry\\nhttp:\\n  addr: %s:%s\\nproxy:\\n  remoteurl: https://registry-1.docker.io\\n' " + ip + " " + MIRROR_PORTS.dockerhub + " > /etc/docker/registry/config.yml && systemctl restart docker-registry",
-    "npm install -g verdaccio@7.1.0",
+    "curl -fsSL --retry 3 -o " + tarball + " https://nodejs.org/dist/v" + node.version + "/" + file,
+    "test \"$(sha256sum " + tarball + " | cut -d ' ' -f 1)\" = " + node.sha256 + " || { echo 'the Node tarball is not the pinned build' >&2; exit 1; }",
+    "rm -rf " + MIRROR_NODE_ROOT + " && mkdir -p " + MIRROR_NODE_ROOT + " && tar -xJf " + tarball + " -C " + MIRROR_NODE_ROOT + " --strip-components=1 --no-same-owner && rm -f " + tarball,
+    "test \"$(" + bin + "node --version)\" = v" + node.version,
+    "PATH=" + MIRROR_NODE_ROOT + "/bin:$PATH " + bin + "npm install -g --prefix " + VERDACCIO_PREFIX + " verdaccio@7.1.0",
     "mkdir -p /etc/verdaccio && printf 'storage: /var/lib/verdaccio\\nuplinks:\\n  npmjs:\\n    url: https://registry.npmjs.org/\\npackages:\\n  \"**\":\\n    access: $all\\n    proxy: npmjs\\nlisten: %s:%s\\n' " + ip + " " + MIRROR_PORTS.npm + " > /etc/verdaccio/config.yaml",
-    unit("dc-verdaccio", "/usr/local/bin/verdaccio --config /etc/verdaccio/config.yaml"),
+    unit("dc-verdaccio", bin + "node " + VERDACCIO_PREFIX + "/lib/node_modules/verdaccio/bin/verdaccio --config /etc/verdaccio/config.yaml"),
     "python3 -m venv /opt/devpi && /opt/devpi/bin/pip install devpi-server==6.21.0 && /opt/devpi/bin/devpi-init --serverdir /var/lib/devpi",
     unit("dc-devpi", "/opt/devpi/bin/devpi-server --serverdir /var/lib/devpi --host " + ip + " --port " + MIRROR_PORTS.pypi),
     "systemctl daemon-reload && systemctl enable --now dc-verdaccio dc-devpi",
   ];
+}
+
+/** BT: each mirror's protocol-level readiness check on the controller host: the path that answers HTTP 200 while its server serves, and its systemd unit. */
+export const MIRROR_CHECKS: Record<MirrorName, { path: string; unit: string }> = {
+  npm: { path: "/-/ping", unit: "dc-verdaccio" },
+  pypi: { path: "/+api", unit: "dc-devpi" },
+  apt: { path: "/acng-report.html", unit: "apt-cacher-ng" },
+  dockerhub: { path: "/v2/", unit: "docker-registry" },
+};
+/** BT: how long the readiness check waits for every mirror to answer HTTP 200, in seconds. */
+export const MIRROR_WAIT_SECONDS = 180;
+/** BT: the most of a failing unit's journal a refusal quotes, in characters (its last lines, stack frames left out). */
+export const MIRROR_JOURNAL_CHARS = 400;
+export const MIRRORS_DONE = "DC-MIRRORS-DONE";
+
+/**
+ * The root shell command that checks every mirror on the controller host's private IPv4: each check path polled with
+ * curl until all four answer HTTP 200 or the wait ends, then one tab-separated line per mirror (its name, the last HTTP
+ * code, its unit's systemctl is-active state and, for a mirror that did not answer 200, its unit's last journal lines in
+ * base64), then MIRRORS_DONE.
+ */
+export function mirrorReadyCommand(ip: string, waitSeconds: number = MIRROR_WAIT_SECONDS): string {
+  if (!IPV4.test(ip)) fail("E_USAGE", "the mirror check needs an IPv4 literal");
+  const list = MIRROR_NAMES.map((n) => shq(n + " " + MIRROR_PORTS[n] + " " + MIRROR_CHECKS[n].path + " " + MIRROR_CHECKS[n].unit)).join(" ");
+  return [
+    "end=$((SECONDS + " + Math.round(waitSeconds) + "))",
+    "codes() { for m in " + list + "; do set -- $m; printf '%s %s\\n' \"$1\" \"$(curl -s -o /dev/null -m 5 -w '%{http_code}' http://" + ip + ":$2$3)\"; done; }",
+    "while got=$(codes); printf '%s\\n' \"$got\" | grep -qv ' 200$' && [ \"$SECONDS\" -lt \"$end\" ]; do sleep 3; done",
+    "for m in " + list + "; do set -- $m; code=$(printf '%s\\n' \"$got\" | awk -v n=\"$1\" '$1 == n { print $2 }'); log=''; [ \"$code\" = 200 ] || log=$(journalctl -u \"$4\" -n 40 --no-pager -o cat 2>/dev/null | grep -v '^[[:space:]]*at ' | tail -n 8 | base64 -w 0); printf '%s\\t%s\\t%s\\t%s\\n' \"$1\" \"$code\" \"$(systemctl is-active \"$4\")\" \"$log\"; done",
+    "echo " + MIRRORS_DONE,
+  ].join("\n");
+}
+
+export interface MirrorState {
+  name: MirrorName;
+  /** The last HTTP code its check path answered; 000 when no HTTP response came. */
+  code: string;
+  /** Its unit's systemctl is-active state. */
+  state: string;
+  /** Its unit's last journal lines, read only when it did not answer 200. */
+  journal: string;
+}
+
+/** Reads the check's lines: one per mirror, each named once. Null when the end marker is missing or a line does not read. */
+export function parseMirrorReady(text: string): MirrorState[] | null {
+  const lines = text.split("\n");
+  const done = lines.indexOf(MIRRORS_DONE);
+  if (done < 0) return null;
+  const rows: MirrorState[] = [];
+  for (const l of lines.slice(0, done).filter(Boolean)) {
+    const [name, code, state, log, ...rest] = l.split("\t");
+    if (rest.length || !MIRROR_NAMES.includes(name as MirrorName) || !/^\d{3}$/.test(code ?? "") || !state || rows.some((r) => r.name === name)) return null;
+    rows.push({ name: name as MirrorName, code: code!, state, journal: log ? Buffer.from(log, "base64").toString("utf8") : "" });
+  }
+  return rows.length === MIRROR_NAMES.length ? rows : null;
+}
+
+/** One line per mirror that did not answer HTTP 200: its name, check, unit state and journal tail, cut to MIRROR_JOURNAL_CHARS. */
+export function mirrorProblems(rows: MirrorState[], ip: string, waitSeconds: number = MIRROR_WAIT_SECONDS): string[] {
+  return rows
+    .filter((r) => r.code !== "200")
+    .map((r) => {
+      const c = MIRROR_CHECKS[r.name];
+      const log = r.journal.split("\n").map((l) => l.trim()).filter(Boolean).join(" | ");
+      const tail = log.length > MIRROR_JOURNAL_CHARS ? "..." + log.slice(-MIRROR_JOURNAL_CHARS) : log;
+      return "the " + r.name + " mirror (http://" + ip + ":" + MIRROR_PORTS[r.name] + c.path + ") answered " + (r.code === "000" ? "no HTTP response" : "HTTP " + r.code) + " within " + waitSeconds + " s; " + c.unit + " is " + r.state + (tail ? "; its journal ends: " + tail : "");
+    });
+}
+
+/** Refuses with E_DCH_MIRROR_DOWN unless every mirror on the controller host answers its readiness check within the wait. */
+export async function checkMirrors(exec: (command: string, o: ExecOptions) => Promise<ExecResult>, ip: string, waitSeconds: number = MIRROR_WAIT_SECONDS): Promise<void> {
+  const r = await exec(mirrorReadyCommand(ip, waitSeconds), { user: "root", timeoutMs: (waitSeconds + 90) * 1000 });
+  const rows = r.exit === 0 ? parseMirrorReady(r.stdout) : null;
+  if (!rows) throw new DcError("E_DCH_MIRROR_DOWN", "the controller host's mirror check returned no readable result (exit " + r.exit + "), so no mirror is known to serve");
+  const down = mirrorProblems(rows, ip, waitSeconds);
+  if (down.length) throw new DcError("E_DCH_MIRROR_DOWN", down.join("; "));
 }
