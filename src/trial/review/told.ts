@@ -62,9 +62,9 @@ export function toldPrompt(arm: ToldArm, base: string, prefix: string = TOLD_PRE
   return prefix ? prefix + " " + text : text;
 }
 
-/** Why a unit's pr.md text cannot go into the told prompt (empty, or a control character other than a line feed or tab), or null. */
+/** Why a unit's pr.md text cannot go into the told prompt (no title or description past a heading marker, or a control character other than a line feed or tab), or null. */
 export function prTextProblem(text: string): string | null {
-  if (!text.trim()) return "it is empty";
+  if (!text.replace(/^\s*#*/, "").trim()) return "it holds no title or description";
   const control = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u2028\u2029\ufeff]/.exec(text);
   return control ? "it has a control character (U+" + control[0].charCodeAt(0).toString(16).toUpperCase().padStart(4, "0") + ") at character " + (control.index + 1) + "; only line feeds and tabs may appear" : null;
 }

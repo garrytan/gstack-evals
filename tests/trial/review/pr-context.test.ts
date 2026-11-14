@@ -131,7 +131,7 @@ describe("PR context in the run loop (keyless)", () => {
   });
 });
 
-// Value: protects=--pr-context is all or none at the command: a selected unit with no pr.md, an empty one or one with a control character (a CR included) refuses the run before anything is built and lists each such unit, and a full set passes the dry run and names the template's sha256; fails_when=a run starts with some units missing their PR text, a CR reaches the prompt, or a full set is refused; why_new=the PR-context change (spec items 2 and 4); seam=main's --pr-context check; no_claim=build-unit.ts's own output, which harness-evals tests
+// Value: protects=--pr-context is all or none at the command: a selected unit with no pr.md, one with no title or description (build-unit.ts writes a bare heading marker when GitHub returns no PR) or one with a control character (a CR included) refuses the run before anything is built and lists each such unit, and a full set passes the dry run and names the template's sha256; fails_when=a run starts with some units missing their PR text, a CR reaches the prompt, or a full set is refused; why_new=the PR-context change (spec items 2 and 4); seam=main's --pr-context check; no_claim=build-unit.ts's own output, which harness-evals tests
 describe("review-units --pr-context (keyless)", () => {
   test("every selected unit needs a readable plain pr.md, or the run is refused", async () => {
     const root = mkdtempSync(join(REPO_ROOT, ".review-units-cli-"));
@@ -154,8 +154,8 @@ describe("review-units --pr-context (keyless)", () => {
     put(b, "# Title\r\n\r\nbody\r\n");
     const crlf = await run();
     expect([crlf.code, crlf.err.split("\n")[1]]).toEqual([2, "  " + b + ": " + join(dir, "garrytan_gstack_3596_0be7c3d44339", "pr.md") + ": it has a control character (U+000D) at character 8; only line feeds and tabs may appear"]);
-    put(a, " \n");
-    expect((await run()).err.split("\n").slice(0, 3)).toEqual(["E_USAGE review-units: --pr-context " + dir + " gives every selected unit its PR text or none, and 2 of 2 units cannot take it:", "  " + a + ": " + join(dir, "garrytan_gstack_3593_89156431975e", "pr.md") + ": it is empty", "  " + b + ": " + join(dir, "garrytan_gstack_3596_0be7c3d44339", "pr.md") + ": it has a control character (U+000D) at character 8; only line feeds and tabs may appear"]);
+    put(a, "# \n\n\n");
+    expect((await run()).err.split("\n").slice(0, 3)).toEqual(["E_USAGE review-units: --pr-context " + dir + " gives every selected unit its PR text or none, and 2 of 2 units cannot take it:", "  " + a + ": " + join(dir, "garrytan_gstack_3593_89156431975e", "pr.md") + ": it holds no title or description", "  " + b + ": " + join(dir, "garrytan_gstack_3596_0be7c3d44339", "pr.md") + ": it has a control character (U+000D) at character 8; only line feeds and tabs may appear"]);
     put(a, PR);
     put(b, "# Title\n\nbody with a\ttab\n");
     const ok = await run();

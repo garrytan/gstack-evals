@@ -116,8 +116,9 @@ Every default keeps a frozen preregistration's run as it was: same options, same
   `<dir>/<unit id with / # and @ as _>/pr.md`, the layout harness-evals' scripts/review-bugs/build-unit.ts writes, and
   the prompt becomes TOLD_PR_TEMPLATE (told.ts): TOLD_TEMPLATE with "The pull request's title and description, as its
   author first wrote them:" and the pr.md text after its first paragraph. Each arm's own prefix still comes first, so the
-  block is the same bytes for every arm. It is all or none: a selected unit with no readable pr.md, an empty one, or one
-  with a control character other than a line feed or tab refuses the run (E_USAGE) and lists every such unit. The session
+  block is the same bytes for every arm. It is all or none: a selected unit with no readable pr.md, one with no title or
+  description past its heading marker, or one with a control character other than a line feed or tab refuses the run
+  (E_USAGE) and lists every such unit. The session
   key's task carries TOLD_PR_SHA256 as told_sha256 and the pr.md's sha256 as pr_sha256; arm.json's told block and
   units.json record the template's sha256 and each unit's pr_sha256. Left out, every prompt, key and record is today's.
 
