@@ -13,6 +13,24 @@ import { runStage3 } from "./run.ts";
 import { mirrorConfig, preamble, sandboxed, specFor, specProblems } from "./sandbox.ts";
 import { controllerMirrors } from "./ubicloud-real.ts";
 import { accepted, countValidation, selectUnits } from "./units.ts";
+import { runVmAgent } from "./agent.ts";
+import { agentRig } from "./agent-fake.ts";
+import { BUILD_PROMPT, RECIPES, STAGE3 } from "../frozen.ts";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+async function agentCase(reply: string, o: { spentMicros?: number; unknownMicros?: number; build?: boolean }) {
+  const out = mkdtempSync(join(tmpdir(), "dc-dry-agent-"));
+  const r = agentRig({ reply: () => reply, out, ...o });
+  try {
+    const run = o.build ? await runVmAgent(r.deps, r.vm, { prompt: BUILD_PROMPT, limits: STAGE3.build, sub: { item: "dc-stage3-builds", id: "sub-b" }, env: { DC_ROUTE: "/r" } }) : await runVmAgent(r.deps, r.vm, { prompt: "write the recipe", limits: RECIPES.session, sub: { item: "dc-base-apps", id: "sub-r" } });
+    return { run, r };
+  } finally {
+    r.close();
+    rmSync(out, { recursive: true, force: true });
+  }
+}
 
 const eq = (got: unknown, want: unknown, what: string): string | null => (JSON.stringify(got) === JSON.stringify(want) ? null : what + ": got " + JSON.stringify(got) + ", want " + JSON.stringify(want));
 const first = (...xs: Array<string | null>) => xs.find((x) => x !== null) ?? null;
@@ -297,6 +315,22 @@ export function cases(): DryRunCase[] {
       check: () => {
         const rows = (wins: number, of: number): PairRow[] => Array.from({ length: of }, (_, i) => ({ unit: "u" + i, arm: "no-review", judge: "argon", armFirst: false, result: i < wins ? "win" : "tie" }));
         return eq([instrument(rows(7, 10)).flagged, instrument(rows(69, 100)).flagged], [false, true], "flags");
+      },
+    },
+    {
+      rule: "WIRING-15",
+      name: "a recipe agent session runs the CLI on its slot under the controller's env file and ends completed at the proxy's spend",
+      check: async () => {
+        const { run, r } = await agentCase("recipe written", { spentMicros: 1_250_000 });
+        return first(eq(run, { end: "completed", spentUsd: 1.25 }, "run"), eq(r.upstream.map((u) => u.path + " " + u.auth), ["/slot1/anthropic/v1/messages Bearer run-token-1"], "upstream"), eq(r.ended, ["recipe session c001"], "ended"));
+      },
+    },
+    {
+      rule: "WIRING-15",
+      name: "a build agent session that hits its turn cap reads as its own limit, with unknown spend held as null",
+      check: async () => {
+        const { run, r } = await agentCase("LIMIT", { unknownMicros: 5, build: true });
+        return first(eq(run, { end: "own-limit", spentUsd: null }, "run"), eq(r.spawned[0]?.DC_ROUTE, "/r", "env"));
       },
     },
     {
