@@ -2164,7 +2164,7 @@ Exit 2. Side effects: The stopped stage's leases settle at the spend recorded so
 
 Design plan review eval (wiring): a paid row passed its start rules and its ledger admission, but the provider it needs (the ledger, the model caller, the review session box or the VM world) is not bound in this build. Nothing was called and nothing was spent.
 
-Fix: Bind the real provider in lanes/design-constructed/wire.ts (BOUND_PROVIDERS) once its unit lands, then launch again into a new sink directory.
+Fix: Build the missing piece and bind it in lanes/design-constructed/wire/real.ts (realProviders); lanes/design-constructed/WIRING.md lists what is still unbound. Then launch again into a new sink directory.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 

@@ -21,6 +21,10 @@ The code here does the whole pipeline: the frame search and recipes for the base
 | read/ | the twin check, the tier chain, smoke rules, contrasts, verdict precedence, the admission read and the projection rerun |
 | money/ | the 17 ledger items, admission and one lease per item and run id |
 | stage3/ | stage 3 authoring, oracle builds, the VM sandbox, builds, measures and the readout |
+| paid/ | the per-item proxies that hold every paid call: direct callers for authors and judges, session proxies, the provider watch, the pin record and the pins command |
+| wire.ts | the composition module: every area's seams built from four providers, built only after a row's start rules pass |
+| wire/ | the cli rows that spend, the start rules, the real providers on the controller host (real.ts), the host's stage module (host.ts) and the keyless fakes |
+| WIRING.md | the open items the binding left for the Captain |
 | prompts/ | the build-time prompts for author, score and recipes, each pinned by sha256 in its area |
 | <area>/dryrun-cases.ts | each area's dry-run cases, exported as cases() |
 

@@ -2483,7 +2483,7 @@ export const CODES = {
   E_DCW_NO_PROVIDER: {
     exit: 2,
     meaning: "Design plan review eval (wiring): a paid row passed its start rules and its ledger admission, but the provider it needs (the ledger, the model caller, the review session box or the VM world) is not bound in this build. Nothing was called and nothing was spent.",
-    fix: "Bind the real provider in lanes/design-constructed/wire.ts (BOUND_PROVIDERS) once its unit lands, then launch again into a new sink directory.",
+    fix: "Build the missing piece and bind it in lanes/design-constructed/wire/real.ts (realProviders); lanes/design-constructed/WIRING.md lists what is still unbound. Then launch again into a new sink directory.",
     side_effects: NO_SPEND,
     retry_safe: true,
     resumable: false,
