@@ -89,6 +89,11 @@ the file that carries it names the source path and commit in its header.
 19. The gate check runs one audit with no fix round, and every gate reads all five items of the planted unit, so each
     gate's verdict is read on its own. "Dropped by the audit" is a drop verdict from at least one auditor. A known-good
     unit's "kept" is keep from both auditors with no mentioned flag.
+20. The gate check reads only the sealed planted units: author/planted.json holds each unit's digestOf and the sha256 of
+    its files by role (plan.md, context/project.md, evidence/<n> in unit.json's order, key.json, unit.json), plus the
+    sealed tar's plaintext sha256, and nothing else. runGateCheck refuses, before any call, a unit whose digest, plan,
+    context or evidence differs (E_PLANTED_DIGEST). The planted units' base-app view takes designFiles as every file
+    the file check's designKind accepts and routeFiles as the view files the app's router imports.
 
 ## Open for the integrator
 

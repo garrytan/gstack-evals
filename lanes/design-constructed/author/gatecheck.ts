@@ -4,8 +4,10 @@
 // the unanimous key by three validators with labels and the give-away check by three with labels. Every unit runs every
 // gate over all its items, so each gate's verdict on each case is read. The expectations are data; a wrong verdict, or
 // a gate that returns none, stops authoring (E_DC_GATE_CHECK). The planted units are written and sealed by the
-// integrator; this file holds the runner, the expectation table and the keyless half (a unit obeying every authoring
-// rule passes every keyless gate).
+// integrator; this file holds the runner, the expectation table, the check against their committed digests
+// (planted.json) and the keyless half (a unit obeying every authoring rule passes every keyless gate).
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fail } from "../errors.ts";
 import { AUTHORING } from "../frozen.ts";
 import type { AnyModel, AuthorFamily, ItemClass, KeyItem } from "../types.ts";
@@ -14,6 +16,7 @@ import { otherFamily } from "./pipeline.ts";
 import { auditPrompt, validatorPrompt } from "./prompts.ts";
 import { screen2x, screenUnit } from "./screen.ts";
 import type { BaseAppView, Deps } from "./seams.ts";
+import { sha256 } from "./text.ts";
 import { digestOf, inheritIds, intake, type RawItem, type UnitFiles } from "./unit.ts";
 
 export type PlantedName = "G1" | "G2" | "B1" | "B2" | "B3" | "B4" | "B5" | "B6";
@@ -76,6 +79,49 @@ export interface GateResult {
   detail: string;
 }
 
+/** One planted unit's committed digests: digestOf and each file's sha256 by role (plan.md, context/project.md, evidence/<n>, key.json, unit.json). */
+export interface PlantedDigests {
+  digest: string;
+  files: Record<string, string>;
+}
+
+/** planted.json: the sealed planted units' digests, committed so the gate check reads only those units. */
+export interface PlantedTable {
+  sealed_tar_sha256: string;
+  units: Partial<Record<PlantedName, PlantedDigests>>;
+}
+
+export const loadPlantedTable = (): PlantedTable => JSON.parse(readFileSync(join(import.meta.dir, "planted.json"), "utf8"));
+
+/** The digests a unit's files give: digestOf, plan.md, context/project.md and each evidence file in order. */
+export function plantedDigests(files: UnitFiles): PlantedDigests {
+  const out: Record<string, string> = { "plan.md": sha256(files.plan), "context/project.md": sha256(files.context ?? "") };
+  files.evidence.forEach((e, i) => (out["evidence/" + (i + 1)] = sha256(e.text)));
+  return { digest: digestOf(files), files: out };
+}
+
+/** A table for the given units, as the tests and the dry run build one for invented units. */
+export const tableOf = (units: readonly PlantedUnit[]): PlantedTable => ({ sealed_tar_sha256: "", units: Object.fromEntries(units.map((u) => [u.name, plantedDigests(u.files)])) });
+
+/** Refuses (E_PLANTED_DIGEST) any planted unit whose digest, plan, context or evidence differs from the table. */
+export function checkPlantedDigests(units: readonly PlantedUnit[], table: PlantedTable): void {
+  const bad: string[] = [];
+  for (const u of units) {
+    const want = table.units[u.name];
+    if (!want) {
+      bad.push(u.name + ": not in the table");
+      continue;
+    }
+    const got = plantedDigests(u.files);
+    const evidence = (f: Record<string, string>) => Object.keys(f).filter((k) => k.startsWith("evidence/")).length;
+    const parts = Object.keys(got.files).filter((k) => want.files[k] !== got.files[k]);
+    if (evidence(want.files) !== evidence(got.files)) parts.push(evidence(got.files) + " evidence files, table " + evidence(want.files));
+    if (got.digest !== want.digest) parts.push("digest");
+    if (parts.length) bad.push(u.name + ": " + parts.join(", "));
+  }
+  if (bad.length) fail("E_PLANTED_DIGEST", "planted units differ from the committed table: " + bad.join("; "));
+}
+
 /** Runs every gate on one planted unit. */
 export async function readGates(p: PlantedUnit, deps: Deps): Promise<GateReading> {
   const items = p.files.key.items;
@@ -121,8 +167,11 @@ export function judge(r: GateReading, e: Expectation, plantedId: string | null):
   }
 }
 
-/** Runs every planted unit through every gate and checks each listed expectation. Other readings print and decide nothing. */
-export async function runGateCheck(units: readonly PlantedUnit[], deps: Deps): Promise<{ ok: boolean; readings: GateReading[]; results: GateResult[] }> {
+/**
+ * Runs every planted unit through every gate and checks each listed expectation. Other readings print and decide
+ * nothing. Units that differ from the committed digest table are refused before any call.
+ */
+export async function runGateCheck(units: readonly PlantedUnit[], deps: Deps, table: PlantedTable = loadPlantedTable()): Promise<{ ok: boolean; readings: GateReading[]; results: GateResult[] }> {
   const names = units.map((u) => u.name).sort();
   const all = (Object.keys(GATE_EXPECTATIONS) as PlantedName[]).sort();
   if (names.join(",") !== all.join(",")) fail("E_USAGE", "the gate check needs exactly the planted units " + all.join(", ") + ", got " + names.join(", "));
@@ -131,6 +180,7 @@ export async function runGateCheck(units: readonly PlantedUnit[], deps: Deps): P
     const fits = want === "unit" ? u.plantedClass === null : want === "named-by-unit" ? u.plantedClass !== null : u.plantedClass === want;
     if (!fits) fail("E_USAGE", u.name + " names planted class " + u.plantedClass + ", but its case is " + want);
   }
+  checkPlantedDigests(units, table);
   const readings: GateReading[] = [];
   const results: GateResult[] = [];
   for (const u of units) {
@@ -143,8 +193,8 @@ export async function runGateCheck(units: readonly PlantedUnit[], deps: Deps): P
 }
 
 /** The check that stops authoring: E_DC_GATE_CHECK names every wrong verdict. */
-export async function enforceGateCheck(units: readonly PlantedUnit[], deps: Deps): Promise<{ readings: GateReading[]; results: GateResult[] }> {
-  const r = await runGateCheck(units, deps);
+export async function enforceGateCheck(units: readonly PlantedUnit[], deps: Deps, table: PlantedTable = loadPlantedTable()): Promise<{ readings: GateReading[]; results: GateResult[] }> {
+  const r = await runGateCheck(units, deps, table);
   const wrong = r.results.filter((x) => !x.ok);
   if (wrong.length) fail("E_DC_GATE_CHECK", wrong.map((w) => w.name + " " + w.expectation.gate + " expected " + w.expectation.is + ": " + w.detail).join("; "));
   return r;

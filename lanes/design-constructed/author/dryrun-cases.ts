@@ -8,7 +8,7 @@ import { authorBundle, cutMarker, rankScreens } from "./bundle.ts";
 import { parseLabels } from "./checks.ts";
 import { draw, drawRuleProblems, kindOrder, pilotPositions } from "./draws.ts";
 import { appView, authorReply, CONTEXT, DECOY, EVIDENCE, EVIDENCE_2X, FIXTURE_APP, FIXTURE_APP_2, ITEMS, ITEMS_2X, PLAN, transformReply, WRONG_WAY } from "./fixture.ts";
-import { enforceGateCheck, keylessGates, runGateCheck, type PlantedName, type PlantedUnit } from "./gatecheck.ts";
+import { enforceGateCheck, keylessGates, runGateCheck, tableOf, type PlantedName, type PlantedUnit } from "./gatecheck.ts";
 import { checkPilot, pilotCost, reproject } from "./pilot.ts";
 import { runUnit, type UnitJob, type UnitOutcome } from "./pipeline.ts";
 import { runPilot, type PilotReport } from "./run.ts";
@@ -708,7 +708,7 @@ export function cases(): DryRunCase[] {
       name: "the runner reads every gate on all eight planted cases and passes when each listed expectation holds",
       check: async () => {
         const { units, deps } = planted();
-        const r = await runGateCheck(units, deps);
+        const r = await runGateCheck(units, deps, tableOf(units));
         const bad = r.results.filter((x) => !x.ok);
         return want(r.ok && r.results.length === 18 && r.readings.length === 8, bad.map((x) => x.name + " " + x.expectation.is + " " + x.detail).join("; "));
       },
@@ -719,7 +719,7 @@ export function cases(): DryRunCase[] {
       check: async () => {
         const { units, deps } = planted({ B4: {} });
         try {
-          await enforceGateCheck(units, deps);
+          await enforceGateCheck(units, deps, tableOf(units));
           return "no stop";
         } catch (e) {
           return want(e instanceof DcError && e.code === "E_DC_GATE_CHECK" && e.message.includes("B4 unanimous"), String(e));

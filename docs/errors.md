@@ -298,6 +298,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_DC_SUPPLY_SHORT](#e_dc_supply_short) | 2 | U20 |
 | [E_DC_AUTHOR_COST](#e_dc_author_cost) | 2 | U20 |
 | [E_DC_GATE_CHECK](#e_dc_gate_check) | 2 | U20 |
+| [E_PLANTED_DIGEST](#e_planted_digest) | 2 | U20 |
 | [E_DC_SANDBOX_AUDIT](#e_dc_sandbox_audit) | 2 | U20 |
 | [E_DC_BUILD_INSTRUMENT](#e_dc_build_instrument) | warning | U20 |
 | [E_BASE_APP_DROPPED](#e_base_app_dropped) | warning | U20 |
@@ -2140,6 +2141,14 @@ Design plan review eval (start rule 6): a model-judged gate gave the wrong verdi
 Fix: Bring the gate, the planted case and its verdict to the Captain; the fix lands as a recorded deviation before any pilot. Do not --resume.
 
 Exit 2. Side effects: The authoring and base-app leases settle at the spend recorded so far and the rest is released. Partial outputs stay sealed as an incomplete run. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_PLANTED_DIGEST
+
+Design plan review eval (start rule 6): a planted unit handed to the gate check is missing from, or differs from, the committed digest table lanes/design-constructed/author/planted.json (its digest, plan.md, context/project.md or an evidence file). The gate check refused before any model call.
+
+Fix: Decrypt the sealed planted units again and load them as sealed, evidence in unit.json's order. Never edit planted.json to match changed units; a changed unit is a new unit and goes to the Captain.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 
 ### E_DC_SANDBOX_AUDIT
 

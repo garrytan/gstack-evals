@@ -2450,6 +2450,15 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_PLANTED_DIGEST: {
+    exit: 2,
+    meaning: "Design plan review eval (start rule 6): a planted unit handed to the gate check is missing from, or differs from, the committed digest table lanes/design-constructed/author/planted.json (its digest, plan.md, context/project.md or an evidence file). The gate check refused before any model call.",
+    fix: "Decrypt the sealed planted units again and load them as sealed, evidence in unit.json's order. Never edit planted.json to match changed units; a changed unit is a new unit and goes to the Captain.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
+  },
   E_DC_SANDBOX_AUDIT: {
     exit: 2,
     meaning: "Design plan review eval (sections 3 and 11): a sandbox audit after a recipe or stage 3 VM run saw a key pattern, a drive path or egress outside the metering proxy and the named mirror endpoints, or could not collect its evidence (a non-zero exit, empty or cut output, or a missing process list, egress log or file list). Stage 3 stops, or the base-app screen when the hit is in a recipe VM.",

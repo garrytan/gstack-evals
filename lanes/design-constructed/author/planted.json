@@ -1,0 +1,128 @@
+{
+  "about": "Digests of the eight planted units of the gate check (prereg start rule 6, plan section 16). The units are sealed outside this repository. For each unit, digest is digestOf (author/unit.ts) over its files, and files maps each file's role to its sha256: plan.md, context/project.md, evidence/<n> in the unit's evidence order, key.json and unit.json. sealed_tar_sha256 is the sealed tar's plaintext sha256. gatecheck.ts refuses planted units that differ from this table.",
+  "sealed_tar_sha256": "16f7528a261415153794dfc9d96351aec9e83dabaf6619a1bdfa482db2bda7be",
+  "units": {
+    "G1": {
+      "digest": "e1fbb14f62dc09a5fd412e5488f36ba8b9a5e75b2b283b421404f08e06902d08",
+      "files": {
+        "plan.md": "d90e3691ef96ac28bedeb699986d4b47f3a90744a8fec2ec3f1d9bd636032959",
+        "context/project.md": "ff4f9c43b723568095a1861caba89bc9a9c6c399ab03ec48d7a75087042031d2",
+        "evidence/1": "2c26d51e786f6200e164811800ebbc13b8d91abc2ab9c16613d066cae22176ab",
+        "evidence/2": "b1aaf191fd5bede327ce9b68774857c3c8c5e5e830be43b7fe7191f7363701d9",
+        "evidence/3": "e86b40d624a7f456bee595d4534bb457b593b7958ac6141601c2464de882d5da",
+        "evidence/4": "d0dca957d68020ff0dc2c4099e4f1dd4bbe8a7c4583ad0f6b308b756dfd3db43",
+        "evidence/5": "9c8d93098dc46a2ed99252a9b7906701f717305b99053eb4a5252479800d0c0b",
+        "key.json": "c64dc400ad912117eb1add061f7a86fd3cb696b53a5afe3a3383c35b8b04352b",
+        "unit.json": "2d0ef962844393fd082cee9f1903946ae19a4ca77692265d028d0c180643648d"
+      }
+    },
+    "G2": {
+      "digest": "3c250ac5c21898eeedbc35ba01a5ab2ede0cb4fb47af90e1d8e2ec8dc1f445f6",
+      "files": {
+        "plan.md": "853d9bb323489f9fd0ca62ef96910d2753c0555db2b17c7ce5172a00f0597b3d",
+        "context/project.md": "deee3e03a62e7e6aa8171f0814d398f2980dc625505ac7355a70acf6f9cf30b0",
+        "evidence/1": "86c2494c1208c0c4412d43d053ba16d109d3e0c605fe947dbc3962bb20e153ab",
+        "evidence/2": "123d4b1e39be327da588e5f9ea959b9cf8706f4e87f7c66e76185545f9e1d24c",
+        "evidence/3": "1f07c54a2a1217cfec0b215fa2e1d3dffe9f8d7ffd076e2a5e252de24de3996f",
+        "evidence/4": "6d3a24f0e3864ba99bb60add087ef8c4c8ef1b044a86ef10bb4c3974666ecf58",
+        "evidence/5": "aa465f92668b42527adfa2691a39beed044429627375b88c4e06af0d1de23634",
+        "evidence/6": "d68a8291c507b6eb25cf7a70439dd204fad538355a0f72817b9f9f995e1e38c0",
+        "key.json": "6582ca2a9c98b33cf8bae92ab670cb6fef44c81b65edd6726109e76a78886843",
+        "unit.json": "b1684a78149368728a47f7d1fcb9bb389093a713af64a65205a45048f30a9f5e"
+      }
+    },
+    "B1": {
+      "digest": "06c7903e7f831e75bc93f82e51496b2caf52d8ebc65c3e69fc8e40bf8e4ffb21",
+      "files": {
+        "plan.md": "2b0e61e1cf012b74106267e6bffcc11506c16508ee2d959f23309f4116e415ca",
+        "context/project.md": "82210f50966f9799b531e9a3e08d18a7dd6bf24d59651fd350eb979342c543ac",
+        "evidence/1": "cb6720a4849ded2f289442d282bc6e5ea4ba39f76d9dab7f5e62c2e4a7dbce17",
+        "evidence/2": "f14dde48c6585d7c26cf22e3f8363ba2ec66c6df5a59c1720340167e40076151",
+        "evidence/3": "29f40a0d52d2e1082bf288b8cd715e35bd50fa741eda6dcaf82445d6fbe5da0a",
+        "evidence/4": "e588474f7ce2d580ff7e0f60e987777476711672d290d193f09e6a51d50956e3",
+        "evidence/5": "5c64667888fbcb47b02b827cb666d349896cf72a6ec045fa9e030999a3f85377",
+        "evidence/6": "60c14d41d2f740fb072df7dc7c1b30695abbe69bfde509798f4a0dd653decb10",
+        "key.json": "a751fee6fab12a89a4c5df9ea3ce54a16d730d1b30fdfe9f818340c30657317f",
+        "unit.json": "0c315d194bc4ac32396314764bfaa71265bc7f68cdfe37faf428a1afaea04fec"
+      }
+    },
+    "B2": {
+      "digest": "efe1865b12c1862b80dd1c1525e2fea6cdcaae12b66a0d9f29472c0e4deab1c8",
+      "files": {
+        "plan.md": "b590d08bce5d30eb238e48944fed3f8f258ad61257af23a00f975bf40ad70cff",
+        "context/project.md": "c9ba6c8d401d96846e926ec145b9c8be6b05b428087f7bbdd6d325fb1b96f19a",
+        "evidence/1": "2aa84baca84b069daa3ea8bb6bc3a64db7fb7a775ac880a076bbd4e56a468b7b",
+        "evidence/2": "0977e6d8fb26f823d6b11d66d098a6b76ce0cad8a17bce10178dfb3ca1c4be77",
+        "evidence/3": "36ee59be998d910bd9739632fecb5721fe707f3dbe914b4d477cc1e106515752",
+        "evidence/4": "18c57b9e9e48b1817c685c6dada3bf64a857ce1a563e65661f6ca337a406e539",
+        "evidence/5": "c275a96903aed9c0ff42040dace8bcb6e4f73fc9577a475d1149b65bcd2fa2c5",
+        "evidence/6": "1892160ac7bd68be0dca60803eb506330312b4d781da129f8665b7ec91ffd968",
+        "key.json": "b67641d056fd8a06a42190c3cfb204dbdca1a215b5b18b29fefb5bc88d71a4e4",
+        "unit.json": "bb874ec6cb588b9aec33185f9d2c68af26b5e51f629e07dbdb52f40de4d71e89"
+      }
+    },
+    "B3": {
+      "digest": "04afb6c2b985ff58109c67312d8f4980b0bb23d4227947ce8c6bb4d54fdca18f",
+      "files": {
+        "plan.md": "e8e30f9f3b5832f821baf4f3f584bb64ac242160071cc1607fca602d173495bc",
+        "context/project.md": "1d4e03cabb9b461fa70561f38b9e4daf02960816029f15b400998d7306f649d6",
+        "evidence/1": "072f6ba03f4d0e4b3518fb09c4955ade5cfe02acc6935fee025e83706ad9db79",
+        "evidence/2": "65b4655155204b6896b1a00f47605b9a6ae0186aaa5847a2e0ab3c6eaaff3bbc",
+        "evidence/3": "429553c9a000cc22920409046bb894be57fb8d09667cbb264e47bc5f3760adc2",
+        "evidence/4": "52d39fcc1b1b1a9b576f5310ed55ab63d928fcd4688a544f664917ae2e271386",
+        "evidence/5": "c6122559f7fb8ad961fc9b161084906204e2ad3b31b8ec1e8d9c7290d0acde5e",
+        "evidence/6": "355aabfafa419a1d01a864a88927b34ed16e13a08639b0976b82210b7ab6a18a",
+        "evidence/7": "364f7b58c00a0e1778be7365a5549a8d09e0f6494492bae1bedea15bb5480d7d",
+        "key.json": "8bfb9d204a3212a19e5737114cac30fbb89e6cfacc7b9939c24e2974ede41fe6",
+        "unit.json": "c61b64b37a7411ea1ecda1d9c007fd19de46db77d8ed4eff83109a619aad786e"
+      }
+    },
+    "B4": {
+      "digest": "472f253f72dd72e3ef3832a1d81d8ece452bd620c8a1d089192b25f63613dece",
+      "files": {
+        "plan.md": "6e15d57ce92419f1ccdfdb84399023ea8abf9b3f030dee45ea0a581f4dc2e44b",
+        "context/project.md": "5e21fb838c471c9f2468d1879e18b2961164c8acfaa7f496bccec092e0a06864",
+        "evidence/1": "f59db2c84cab315ac7d2cdeaa4a4f081f93efb06ad438a34886b0a3e50767175",
+        "evidence/2": "d1edba52e92bed9ab34387d2c66568eebd00dcde8ff0f17ab347961360cfc48e",
+        "evidence/3": "3df1a441dc76a84c11dc6b41744701ce478e3799292e81e38b2b1181d9b2a31c",
+        "evidence/4": "5e9ab7b94a677a1dcd10b8e1a82a0add7965bee23388a8c4e3bd4ddb3c21d367",
+        "evidence/5": "3686a4b9e00c5c388c99dda433d5d12a877d5adc6f9b7d621089c532cb0a3c15",
+        "evidence/6": "b9f481b866089dbe92be386276cbc666d66ae78ced7fc172d8d6f0611d5a4aa7",
+        "key.json": "fdef043e282dff5119a508105968cf2f046caf5d7bec6bc20a826ab4fefe25c3",
+        "unit.json": "950128936e338351464212fcc96f734b2cc53d1049f32a339ce4bb9ad9c891fd"
+      }
+    },
+    "B5": {
+      "digest": "81e290df262d2aa0dd74061f160ec19bd904459a2c32e4d326071b62312a5a39",
+      "files": {
+        "plan.md": "c99d4ce01ed1a24e0ea2cb868b0a0a4c5c4e621c9cd0bf22dc1faf2d3e417541",
+        "context/project.md": "8bac499443ad09186435dfcac64c1a60e6765c59b527abc0aa0863fdadd58d0c",
+        "evidence/1": "5712bd31676e0c27499c22868b54fc82bcd83a6f2477799019c5ef9881077cf3",
+        "evidence/2": "bc1754941dd4d57464489a9cc5daa072235e045654a36d270ac4ddb26e5f4172",
+        "evidence/3": "520c2d61c7816977fae58e13ad0827da4b74b49cc84b8b031dbd89a3b92111a1",
+        "evidence/4": "60d5b001d153afba5635bfe61bb54cc3654902216a880d3ba65569b8b9669eeb",
+        "evidence/5": "85ddc225e57fd3065861579a2870138e5fad1fdfce4222ec3bd9dece225426e8",
+        "evidence/6": "97c4abc6e10e69218a56ff3ea0f9f26fddc934a7db72b92f7d8e05a79b32ac11",
+        "evidence/7": "6031a8f5fa418708a5452a1a6acd891c22e2031a9539619980c7073263680dc8",
+        "key.json": "a28fb5c9a7ef86a1f47371a3831fa409132ff439d0e37163678c119e8993a2eb",
+        "unit.json": "80d6f93158faa897c44cbe0fcc99fde1ffdd9bb16194c615d9085564e4a0c42b"
+      }
+    },
+    "B6": {
+      "digest": "da45223227a28cac5bc515a40210b292e861960a7ebd6e8a2c4d3bb66bbc0a1f",
+      "files": {
+        "plan.md": "a48250bd9bb8ecb0ec5a82923bce0406b132ebce171277b9f99220c2bc03bf5e",
+        "context/project.md": "ff993973632e421240803261ad50c8aadd62a43875bbe884ee9944cf299e8fcb",
+        "evidence/1": "054243c558a287ebe3eac493f7bc5866034c1b64337b8dba7530022d8a09c193",
+        "evidence/2": "489f6d2df2678cc46e79c8a0e691450bbed476e5add38c0bd08b74ec65aa4460",
+        "evidence/3": "a1125cc8121c2ffa758e35b3a7ec5c663936813ae50811ea36e047086d1457b0",
+        "evidence/4": "9512ea56ea153dd22eb0b73b2dc133e4a9d71a0da323dedda8e8dd0c0049577d",
+        "evidence/5": "d5d3c4c0e7b1c409eca5dd544721113e9f0dc7eb5ede0c6938561e5d2a769617",
+        "evidence/6": "d55ea6b714128496e1e35b97c2679e3f417f8213df1f82da1f9f92c8f6414ca7",
+        "evidence/7": "cad69cd4e5e50b798b514c6d4beab7ae15dd898e818d0d1e1d9dc181a2b555da",
+        "key.json": "5c41d570ab25fb1357c164c0ec4f2d802298ad59031b5be5561a67d1c67817d1",
+        "unit.json": "57528231983bf33b877f37a4b70008155481ef3694f51a3e49818024db2eb70f"
+      }
+    }
+  }
+}
