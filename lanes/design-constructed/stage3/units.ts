@@ -9,6 +9,7 @@ import { MONEY, STAGE3 } from "../frozen.ts";
 import type { Recipe } from "../recipes/recipe.ts";
 import type { Unit } from "../types.ts";
 import { buildPrompt, checkBuild, runBuild, type BuildDeps, type CheckRun } from "./build.ts";
+import type { SandboxTally } from "./sandbox.ts";
 import { CapStopSignal, type Authored, type AuthoredAudit, type KeyCheck, type MoneySeam, type Scenario, type Stage3Authoring } from "./seams.ts";
 
 /** A comparison unit as stage 3 reads it. */
@@ -43,6 +44,8 @@ export interface Stage3Selection {
   /** Whether stage 3 runs: at least 8 qualifying units. */
   runs: boolean;
   capStop: { item: string; why: string } | null;
+  /** Every oracle build and check VM with its dropped connections, in the order they ran. */
+  sandboxes: SandboxTally[];
 }
 
 export interface SelectDeps {
@@ -85,7 +88,7 @@ async function oracleRuns(c: Stage3Candidate, acc: Validation["accepted"], d: Se
     }
     let spent: number | null = null;
     try {
-      const b = await runBuild({ label, tree: c.tree, plan: c.plan, prompt: buildPrompt(c.oracleBlock) }, d.builds, () => d.money.reconcile(adm.id));
+      const b = await runBuild({ label, tree: c.tree, plan: c.plan, prompt: buildPrompt(c.oracleBlock), sub: { item: AUTHORING, id: adm.id } }, d.builds, () => d.money.reconcile(adm.id));
       spent = b.spentUsd;
       out.push(
         b.tree
@@ -114,7 +117,8 @@ export async function validateUnit(c: Stage3Candidate, d: SelectDeps): Promise<{
  * than 8 qualifying: stage 3 doesn't run and the stage 3 items are released.
  */
 export async function selectUnits(candidates: readonly Stage3Candidate[], d: SelectDeps, maxUnits: number = STAGE3.maxUnits): Promise<Stage3Selection> {
-  const out: Stage3Selection = { units: [], tried: [], skippedBaseApp: [], runs: false, capStop: null };
+  const out: Stage3Selection = { units: [], tried: [], skippedBaseApp: [], runs: false, capStop: null, sandboxes: [] };
+  d = { ...d, builds: { ...d.builds, tally: out.sandboxes } };
   const apps = new Set<string>();
   for (const c of [...candidates].sort((a, b) => a.unit.position - b.unit.position)) {
     if (out.units.length >= maxUnits) break;

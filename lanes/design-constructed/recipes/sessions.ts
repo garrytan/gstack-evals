@@ -5,7 +5,7 @@
 // session; the first 20 that qualify under the strict reading are the base apps; fewer than 16 is E_DC_SUPPLY_SHORT.
 import { RECIPES } from "../frozen.ts";
 import { DcError, fail } from "../errors.ts";
-import { sandboxed, type SandboxDeps, type Vm, type VmSpec } from "../stage3/sandbox.ts";
+import { sandboxed, sandboxLine, SESSION_MARK, type SandboxDeps, type SandboxTally, type Vm, type VmSpec } from "../stage3/sandbox.ts";
 import { CapStopSignal, type AgentEnd, type AgentRun, type MoneySeam } from "../stage3/seams.ts";
 import { qualify, type QualifyDeps, type Qualification } from "./qualify.ts";
 import { parseRecipe, recipePrompt, type Recipe } from "./recipe.ts";
@@ -56,6 +56,8 @@ export interface Screen {
   funnel: Funnel;
   /** A cap stop on dc-base-apps or dc-hosts, else null. */
   capStop: { item: "dc-base-apps" | "dc-hosts"; why: string } | null;
+  /** Every recipe and qualification VM with its dropped connections, in the order they ran. */
+  sandboxes: SandboxTally[];
 }
 
 export interface ScreenDeps {
@@ -82,6 +84,7 @@ const ITEM = "dc-base-apps" as const;
 interface Tally {
   sessions: number;
   candidates: number;
+  sandboxes: SandboxTally[];
 }
 
 interface Attempt {
@@ -108,7 +111,9 @@ async function session(c: Candidate, label: string, d: ScreenDeps, tally: Tally)
         await b.write(vm, "/work/app.tar", await c.tree());
         const x = await b.exec(vm, "mkdir -p /work/app && tar -xf /work/app.tar -C /work/app && rm /work/app.tar && chown -R run /work", { user: "root" });
         if (x.exit !== 0) throw new Error("the clone did not unpack (exit " + x.exit + ")");
-        const agent = (seen.agent = await d.agent(vm, { prompt: recipePrompt(), limits: RECIPES.session }));
+        const marked = await b.exec(vm, "touch " + SESSION_MARK, { user: "root" });
+        if (marked.exit !== 0) throw new Error("the session's start marker failed (exit " + marked.exit + ")");
+        const agent = (seen.agent = await d.agent(vm, { prompt: recipePrompt(), limits: RECIPES.session, sub: { item: ITEM, id: adm.id } }));
         const has = await b.exec(vm, "test -f " + RECIPE_PATH, { user: "root" });
         return { end: agent.end, recipeText: has.exit === 0 ? new TextDecoder().decode(await b.read(vm, RECIPE_PATH)) : null };
       },
@@ -118,6 +123,7 @@ async function session(c: Candidate, label: string, d: ScreenDeps, tally: Tally)
     await d.money.settle(adm.id, seen.agent?.spentUsd ?? null);
     throw e;
   }
+  tally.sandboxes.push({ label, blocked: run.blocked });
   await d.money.settle(adm.id, seen.agent?.spentUsd ?? null);
   if (!run.audit.ok) fail("E_DC_SANDBOX_AUDIT", label + ": the recipe VM's audit " + (run.audit.kind === "breach" ? "found " : "could not collect its evidence: ") + run.audit.reasons.join("; ") + ". The base-app screen stops for the Captain");
   if (run.destroyError) d.log?.(label + ": the VM was not deleted (" + run.destroyError + "); the reaper deletes it past its time to live");
@@ -125,11 +131,12 @@ async function session(c: Candidate, label: string, d: ScreenDeps, tally: Tally)
 }
 
 /** One qualification, with one retry when the run fails outside the app (the VM, a preamble step, the browser). */
-async function qualified(c: Candidate, recipe: Recipe, d: ScreenDeps): Promise<Qualification | null> {
+async function qualified(c: Candidate, recipe: Recipe, d: ScreenDeps, tally: Tally): Promise<Qualification | null> {
   const qd: QualifyDeps = { sandbox: d.sandbox, spec: d.qualifySpec, browser: d.browser, match: d.match, seededLogin: d.seededLogin };
   for (let i = 1; i <= 2; i++) {
     const label = "qualify " + c.id + (i > 1 ? " retry" : "");
     const r = await qualify(c, recipe, qd, label);
+    tally.sandboxes.push({ label, blocked: r.blocked });
     if (!r.audit.ok) fail("E_DC_SANDBOX_AUDIT", label + ": the qualification VM's audit " + (r.audit.kind === "breach" ? "found " : "could not collect its evidence: ") + r.audit.reasons.join("; ") + ". The base-app screen stops for the Captain");
     if (r.value) return r.value;
   }
@@ -151,7 +158,7 @@ async function screenOne(c: Candidate, d: ScreenDeps, tally: Tally): Promise<Can
   if (attempt.recipeText === null) return rec("no-recipe", sessions, "the session wrote no " + RECIPE_PATH);
   const parsed = parseRecipe(attempt.recipeText, { seededLogin: d.seededLogin });
   if (!parsed.ok) return rec("bad-recipe", sessions, parsed.problems.join("; "));
-  const q = await qualified(c, parsed.recipe, d);
+  const q = await qualified(c, parsed.recipe, d, tally);
   if (!q) return rec("infra", sessions, "the qualification run failed outside the app, twice", parsed.recipe);
   return rec(q.strict ? "qualified" : "not-qualified", sessions, q.strict ? null : q.strictWhy, parsed.recipe, q);
 }
@@ -162,7 +169,7 @@ async function screenOne(c: Candidate, d: ScreenDeps, tally: Tally): Promise<Can
  */
 export async function runScreen(candidates: readonly Candidate[], d: ScreenDeps): Promise<Screen> {
   const records: CandidateRecord[] = [];
-  const tally: Tally = { sessions: 0, candidates: 0 };
+  const tally: Tally = { sessions: 0, candidates: 0, sandboxes: [] };
   let capStop: Screen["capStop"] = null;
   for (const c of candidates) {
     if (records.filter((r) => r.strict).length >= RECIPES.baseApps || tally.candidates >= RECIPES.maxSessions) break;
@@ -183,6 +190,7 @@ export async function runScreen(candidates: readonly Candidate[], d: ScreenDeps)
     baseApps: strict.slice(0, RECIPES.baseApps).map((r) => ({ id: r.id, pin: r.pin, recipe: r.recipe! })),
     funnel: { ...d.frame, candidates: tally.candidates, sessions: tally.sessions, qualifiedStrict: strict.length, qualifiedHttp200: records.filter((r) => r.http200).length },
     capStop,
+    sandboxes: tally.sandboxes,
   };
 }
 
@@ -199,7 +207,7 @@ export type SupplyRead = { status: "ok"; baseApps: Screen["baseApps"]; lines: st
  * and goes to the Captain whatever the count.
  */
 export function supply(s: Screen): SupplyRead {
-  const lines = [...s.records.map(recordLine), funnelLine(s.funnel)];
+  const lines = [...s.records.map(recordLine), ...(s.sandboxes ?? []).map(sandboxLine), funnelLine(s.funnel)];
   if (s.capStop?.item === "dc-hosts") return { status: "captain", baseApps: s.baseApps, lines, why: "a dc-hosts cap stop stops every stage: " + s.capStop.why };
   const n = s.funnel.qualifiedStrict;
   if (n < RECIPES.minBaseApps)

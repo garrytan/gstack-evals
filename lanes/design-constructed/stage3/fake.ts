@@ -3,7 +3,8 @@
 // ssh, so every audit runs through the real backend's commands and result parsing on invented fixtures. Nothing here
 // creates a VM, opens a socket or reads a key.
 // Adapted from lanes/devex/stage3/fake.ts at 5ee7f764232b196a1d0cec5b144a287b792f9c94 (branch build-devex-review-eval).
-import { AUDIT_COMMANDS, AUDIT_DIR, allowed, DROP_PREFIX, END_MARK, NET_PREFIX, secretHit, START_MARK, UbicloudBackend, type Connection, type ExecResult, type Mirror, type ProcessRow, type StatEntry, type VmSpec } from "./sandbox.ts";
+import { createHash } from "node:crypto";
+import { AUDIT_COMMANDS, AUDIT_DIR, allowed, DESCRIBE_DONE, WORK_DONE, DROP_PREFIX, END_MARK, NET_PREFIX, secretHit, START_MARK, UbicloudBackend, type Connection, type ExecResult, type Mirror, type ProcessRow, type StatEntry, type VmSpec } from "./sandbox.ts";
 import type { HostsSeam, MoneySeam } from "./seams.ts";
 import type { LedgerItemId } from "../types.ts";
 
@@ -20,6 +21,10 @@ export interface FakeVm {
   blocked: Connection[];
   /** Files written outside /work since the run started (stat rows). */
   written: StatEntry[];
+  /** Files the session wrote under /work after its start marker (the audit's /work list). */
+  work: string[];
+  /** Files the controller's install unpacked (one per tar, holding the tar's bytes), in order. */
+  installed: string[];
 }
 
 export interface FakeFaults {
@@ -81,6 +86,11 @@ function auditOutput(w: FakeWorld, vm: FakeVm, name: AuditCommand): ExecResult {
   if (name === "processes") out = vm.processes.map((p) => String(p.pid).padStart(6) + " " + p.user + " " + p.args).join("\n") + "\nDC-PS-DONE\n";
   if (name === "egress") out = ["kernel: boot", START_MARK, ...vm.egress.map((c) => netLine(NET_PREFIX, c)), ...vm.blocked.map((c) => netLine(DROP_PREFIX, c)), END_MARK].join("\n") + "\n";
   if (name === "files") out = [...vm.written, { path: AUDIT_DIR + "/end", size: 0, mode: 0o644, mtime: "2026-11-14T00:00:00", type: "f" }].map((r) => [r.path, r.size, r.mode.toString(8), r.mtime, r.type].join("\t")).join("\n") + "\nDC-FIND-DONE\n";
+  if (name === "work") out = vm.work.map((p) => p + "\0").join("") + "\n" + WORK_DONE + "\n";
+  if (name === "controller") {
+    const list = dec.decode(vm.files.get(AUDIT_DIR + "/controller.now") ?? new Uint8Array()).split("\0").filter(Boolean);
+    out = [...list.map((p) => describeLine(vm, p)), DESCRIBE_DONE].join("\n") + "\n";
+  }
   if (name === "scan") {
     const list = dec.decode(vm.files.get(AUDIT_DIR + "/scan.list") ?? new Uint8Array()).split("\0").filter(Boolean);
     const rows: string[] = [];
@@ -94,6 +104,11 @@ function auditOutput(w: FakeWorld, vm: FakeVm, name: AuditCommand): ExecResult {
   if (f.cut?.includes(name)) out = out.slice(0, Math.floor(out.length / 2));
   return ok(out);
 }
+
+const describeLine = (vm: FakeVm, p: string) => {
+  const data = vm.files.get(p);
+  return data ? "f\t" + createHash("sha256").update(data).digest("hex") + "\t" + p : "x\t-\t" + p;
+};
 
 /** A world whose VMs are clean by default: init and the run user's shell, egress to the allowed endpoints only. */
 export function fakeWorld(o: Partial<Pick<FakeWorld, "faults" | "handler" | "plant" | "ssh" | "api">> = {}): FakeWorld {
@@ -115,7 +130,7 @@ export function fakeBackend(w: FakeWorld): UbicloudBackend {
     }
     if (init.method === "GET" && (!byName.has(name) || w.deleted.includes(name))) return new Response(null, { status: 404 });
     if (init.method === "POST") {
-      const vm: FakeVm = { id: name, ip: "10.1.0." + (w.vms.length + 10), spec: null, calls: [], files: new Map(), processes: [], egress: [], blocked: [], written: [] };
+      const vm: FakeVm = { id: name, ip: "10.1.0." + (w.vms.length + 10), spec: null, calls: [], files: new Map(), processes: [], egress: [], blocked: [], written: [], work: [], installed: [] };
       w.vms.push(vm);
       byName.set(name, vm);
       byIp.set(vm.ip, vm);
@@ -150,6 +165,16 @@ export function fakeBackend(w: FakeWorld): UbicloudBackend {
         const data = vm.files.get(read[1]!);
         return data ? { ...ok(dec.decode(data)), raw: data } : { exit: 1, stdout: "", stderr: "No such file" };
       }
+      const unpack = /^mkdir -p '([^']+)' && tar -xf '([^']+)' -C '[^']+' --no-same-owner/.exec(command);
+      if (unpack && !w.faults.preamble?.some((x) => command.includes(x))) {
+        const path = unpack[1]! + "/payload";
+        vm.files.set(path, vm.files.get(unpack[2]!) ?? new Uint8Array());
+        vm.files.delete(unpack[2]!);
+        vm.installed.push(path);
+        vm.written.push({ path, size: vm.files.get(path)!.length, mode: 0o755, mtime: "2026-11-14T00:00:00", type: "f" });
+        return ok();
+      }
+      if (command.includes("/controller.list") && command.includes(DESCRIBE_DONE)) return ok([...vm.installed.map((p) => describeLine(vm, p)), DESCRIBE_DONE].join("\n") + "\n");
       const test = /^test -f (\S+)$/.exec(command);
       if (test) return vm.files.has(test[1]!) ? ok() : { exit: 1, stdout: "", stderr: "" };
       for (const [name, cmd] of Object.entries(AUDIT_COMMANDS)) if (cmd === command) return auditOutput(w, vm, name as AuditCommand);
