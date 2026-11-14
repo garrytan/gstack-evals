@@ -7,12 +7,14 @@
 // asks for in next/row.json (controller-host.ts sendRow) once the last one has ended. state/rows.json records each
 // row's number, arguments, start, end, state and reason code, never its lines; each row's lines go to its own log in
 // the work folder's .rows/, which is on tmpfs with the inputs and sinks (PD-41). stage.json holds the last row's end.
+// Each row's log ends with the work folder's tmpfs use and the peak sampled on every tick while the row ran; rows.json
+// and stage.json record both, and dc host next reads them before it sends a row (controller-host.ts tmpfsGuard).
 // Keys reach this process only through its environment, read by name by the stage module; this file reads none.
 import { randomUUID } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { isReasonCode } from "../../../src/errors/codes.ts";
-import { rowLog } from "./controller-host.ts";
+import { rowLog, tmpfsLine, workUse, type TmpfsUse } from "./controller-host.ts";
 import { openLedgerService, type LedgerService, type ServiceConfig } from "./ledger-service.ts";
 import { localWalTransport, RemoteTarget, sshWalTransport } from "./offhost.ts";
 
@@ -53,6 +55,8 @@ export interface RowRecord {
   /** interrupted: the service stopped while the row ran. */
   state: "running" | "done" | "failed" | "interrupted";
   code: string | null;
+  /** The work folder's tmpfs at the row's end and its peak while the row ran; null while it runs. */
+  tmpfs?: TmpfsUse | null;
 }
 
 /** The launcher's request for the next row, written to next/row.json beside the service's own control folder. */
@@ -98,20 +102,25 @@ export async function main(argv: string[]): Promise<number> {
   for (const r of rows) if (r.state === "running") Object.assign(r, { state: "interrupted", endedAt: now() });
   writeJson(rowsFile, rows);
   let busy = false;
+  let peak = 0;
   const startRow = (stage: RowRequest["stage"], id: string) => {
     const n = rows.length + 1;
     const log = rowLog(cfg.work, n);
     mkdirSync(dirname(log), { recursive: true, mode: 0o700 });
     rmSync(join(cfg.stateDir, "stage.json"), { force: true });
-    const rec: RowRecord = { n, id, row: stage.args[1] ?? "", args: stage.args, startedAt: now(), endedAt: null, state: "running", code: null };
+    const rec: RowRecord = { n, id, row: stage.args[1] ?? "", args: stage.args, startedAt: now(), endedAt: null, state: "running", code: null, tmpfs: null };
     rows.push(rec);
     writeJson(rowsFile, rows);
     busy = true;
+    peak = workUse(cfg.work).usedBytes;
     const end = (code: string | null, why: string | null) => {
       if (why !== null) appendFileSync(log, why + "\n");
-      Object.assign(rec, { state: why === null ? "done" : "failed", endedAt: now(), code });
+      const use = workUse(cfg.work);
+      const tmpfs: TmpfsUse = { ...use, peakBytes: Math.max(peak, use.usedBytes) };
+      appendFileSync(log, "tmpfs: " + tmpfsLine(tmpfs) + "\n");
+      Object.assign(rec, { state: why === null ? "done" : "failed", endedAt: now(), code, tmpfs });
       writeJson(rowsFile, rows);
-      writeJson(join(cfg.stateDir, "stage.json"), { n, done: why === null, code, at: rec.endedAt });
+      writeJson(join(cfg.stateDir, "stage.json"), { n, done: why === null, code, at: rec.endedAt, tmpfs });
       busy = false;
     };
     import(resolve(stage.module))
@@ -146,6 +155,7 @@ export async function main(argv: string[]): Promise<number> {
     } catch (e) {
       process.stderr.write("tick failed: " + (e as Error).message + "\n");
     }
+    if (busy) peak = Math.max(peak, workUse(cfg.work).usedBytes);
     const teardown = done.find((d) => d === "teardown" || d === "teardown-force");
     if (teardown) {
       const r = await svc.teardown({ force: teardown === "teardown-force", drainMs: cfg.drainMs ?? 60_000 });

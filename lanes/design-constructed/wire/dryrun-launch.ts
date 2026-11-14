@@ -17,9 +17,10 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { join } from "node:path";
 import { tableOf, type PlantedUnit } from "../author/gatecheck.ts";
 import { STAND_IN_VOCABULARY } from "../author/scripted.ts";
+import { commitAll } from "../money/dryrun-fixture.ts";
 import { fetchAt } from "../frame/git.ts";
 import { AGE_HEADER, layout } from "../money/controller-host.ts";
-import type { HostStage } from "../money/host-main.ts";
+import type { HostStage, RowRecord } from "../money/host-main.ts";
 import { DIRECT_MODELS } from "../money/price.ts";
 import { endpointsFixture } from "../paid/dryrun-cases.ts";
 import { pinRecord, termsRecordsOf } from "../paid/pin.ts";
@@ -107,6 +108,7 @@ export async function launchScenario(): Promise<string[]> {
       mkdirSync(join(lane, "docker"), { recursive: true });
       writeFileSync(join(lane, "docker", "host-cli.json"), JSON.stringify({ claude: "9.9.9" }));
       writeFileSync(join(lane, "docker", "trial.Dockerfile"), "ADD --checksum=sha256:" + createHash("sha256").update(tgz).digest("hex") + " https://registry.npmjs.org/@anthropic-ai/claude-code-linux-x64/-/claude-code-linux-x64-9.9.9.tgz /opt/claude.tgz\n");
+      const laneCommit = commitAll(lane, dir);
       writeFileSync(join(work, "claude.tgz"), tgz);
       mkdirSync(join(work, "chromium", "chrome-linux"), { recursive: true });
       writeFileSync(join(work, "chromium", "chrome-linux", "chrome"), "invented browser\n", { mode: 0o755 });
@@ -128,12 +130,12 @@ export async function launchScenario(): Promise<string[]> {
       writeFileSync(join(work, SETTINGS), JSON.stringify({ src: fx.src, table: join(hostWorkOf(dir), "planted-table.json") }));
       writeFileSync(join(work, "planted-table.json"), table);
       const plan = { ...JSON.parse(readFileSync(f.planPath, "utf8")), ubicloud: { ...f.plan.ubicloud, location: "eu-central-h1" } };
-      const env = { ...rowEnv(), lane: () => ({ commit: "0".repeat(40), dirty: false, root: lane }) };
+      const env = { ...rowEnv(), lane: () => ({ commit: laneCommit, dirty: false, root: lane }) };
       const s = localSeams(dir, localWorld(), FAKE_KEYS, (p) => ({ ...p, stage: p.stage ? { ...p.stage, module: import.meta.path } : null }));
       const b = await s.backend!(plan, FAKE_KEYS);
       b.privateAddress = () => "127.0.0.1";
       const l = layout(plan.runId, join(dir, "host"), hostWorkOf(dir));
-      const rows = () => (existsSync(l.rows) ? (JSON.parse(readFileSync(l.rows, "utf8")) as Array<{ n: number; row: string; state: string; code: string | null }>) : []);
+      const rows = () => (existsSync(l.rows) ? (JSON.parse(readFileSync(l.rows, "utf8")) as RowRecord[]) : []);
       const ended = async (n: number) => {
         for (const until = Date.now() + 60_000; Date.now() < until; await Bun.sleep(100)) if (rows()[n - 1] && rows()[n - 1]!.state !== "running") return rows()[n - 1]!;
         return rows()[n - 1] ?? null;
@@ -168,6 +170,8 @@ export async function launchScenario(): Promise<string[]> {
       const status = await host("status", f, s, env);
       if (status.out.filter((x) => x.startsWith("row ")).length !== 7) problems.push("status does not name the seven rows: " + status.out.join(" | "));
       if (!status.out.some((x) => x.startsWith("log: E_DCW_REGION"))) problems.push("status printed no tail for the last modelprobe row: " + status.out.join(" | "));
+      if (status.out.filter((x) => /^tmpfs: row \d+: the work folder's tmpfs holds .* with a peak of /.test(x)).length !== 7) problems.push("status does not print each row's tmpfs use and peak: " + status.out.join(" | "));
+      if (!rows().every((r) => r.tmpfs && r.tmpfs.sizeBytes > 0 && r.tmpfs.peakBytes >= r.tmpfs.usedBytes)) problems.push("rows.json lacks a row's tmpfs use and peak: " + JSON.stringify(rows()));
       writeFileSync(f.planPath, JSON.stringify({ ...plan, stage: ["gatecheck"], inputs: null }));
       const quiet = JSON.parse(readFileSync(l.rows, "utf8"));
       writeFileSync(l.rows, JSON.stringify(quiet.slice(0, 5)));

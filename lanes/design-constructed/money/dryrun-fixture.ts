@@ -144,3 +144,10 @@ export function startProxy(r: Rig, item: LedgerItemId, upstream: Upstream, o: { 
   let stopped = false;
   return { proxy, journal, sent, stop: () => { if (!stopped) proxy.stop(); stopped = true; } };
 }
+
+/** Commits every file under repo as one fixture commit, with no user or system git config, and returns its sha. */
+export function commitAll(repo: string, home: string): string {
+  const g = (args: string[]) => Bun.spawnSync(["git", "-C", repo, ...args], { stdout: "pipe", env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: home, GIT_CONFIG_NOSYSTEM: "1", GIT_AUTHOR_NAME: "fixture", GIT_AUTHOR_EMAIL: "fixture@invalid", GIT_COMMITTER_NAME: "fixture", GIT_COMMITTER_EMAIL: "fixture@invalid" } });
+  for (const args of [["init", "-q"], ["add", "."], ["commit", "-qm", "fixture"]]) if (g(args).exitCode !== 0) throw new Error("git " + args[0] + " failed in the fixture repository " + repo);
+  return new TextDecoder().decode(g(["rev-parse", "HEAD"]).stdout).trim();
+}

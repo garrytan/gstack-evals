@@ -311,6 +311,8 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_DCH_NOT_TMPFS](#e_dch_not_tmpfs) | 2 | U20 |
 | [E_DCH_TMPFS_FULL](#e_dch_tmpfs_full) | 2 | U20 |
 | [E_DCH_ROW_RUNNING](#e_dch_row_running) | 2 | U20 |
+| [E_DCH_CHECKOUT](#e_dch_checkout) | 2 | U20 |
+| [E_DCH_TMPFS_HIGH](#e_dch_tmpfs_high) | 2 | U20 |
 | [E_DCH_SEAL](#e_dch_seal) | 2 | U20 |
 | [E_DCW_INSTALL_DIGEST](#e_dcw_install_digest) | 2 | U20 |
 | [E_DCW_MODEL_PROBE](#e_dcw_model_probe) | 2 | U20 |
@@ -2245,6 +2247,22 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 Design plan review eval (controller host): dc host next refused to send a row because the host's last row is still running. The host runs one row at a time on its one ledger, so nothing was uploaded or sent.
 
 Fix: Wait for the running row to end (dc host status prints its state and the last lines of its log), then send the next row again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_DCH_CHECKOUT
+
+Design plan review eval (controller host): the controller host's checkout is not a git repository whose HEAD is the launched commit and whose tree is that commit's tree, or a tracked file in it changed. The host's own keyless dry run reads git there (start rule 5), so no row may run on it. A launch or recovery deleted the VMs it made; a relaunch started nothing.
+
+Fix: Launch or recover from a clean checkout at the commit: the launcher ships the commit as a git bundle and checks it out on the host. A host whose checkout is not a git repository, such as one unpacked from an archive, takes a new launch or a recovery, never a relaunch.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_DCH_TMPFS_HIGH
+
+Design plan review eval (controller host custody, PD-41): dc host next refused to send a row because the controller host's work folder tmpfs holds more than 80% of its size now, or held more than that at the last row's peak, which rows.json records for each row. Nothing was uploaded or sent.
+
+Fix: Read the use and peak dc host status prints for each row and bring them to the Captain. Don't move the work folder to disk; freeing space in it or a larger controller size is the Captain's call.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 

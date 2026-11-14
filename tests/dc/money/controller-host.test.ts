@@ -7,9 +7,9 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { AGE_HEADER, controllerProvision, hostStatus, launch, layout, planProblems, recoverHost, relaunch, rowLog, sendRow, serviceEnv, teardown, type ControllerPlan, type HostRecord } from "../../../lanes/design-constructed/money/controller-host.ts";
+import { AGE_HEADER, controllerProvision, hostStatus, launch, layout, planProblems, recoverHost, relaunch, repoBundle, repoTree, rowLog, sendRow, serviceEnv, teardown, tmpfsLine, type ControllerPlan, type HostRecord } from "../../../lanes/design-constructed/money/controller-host.ts";
 import type { RowRecord } from "../../../lanes/design-constructed/money/host-main.ts";
-import { makeRecord } from "../../../lanes/design-constructed/money/dryrun-fixture.ts";
+import { commitAll, makeRecord } from "../../../lanes/design-constructed/money/dryrun-fixture.ts";
 import { recordTar } from "../../../lanes/design-constructed/money/ledger-service.ts";
 import { WALCTL_PY } from "../../../lanes/design-constructed/money/offhost.ts";
 import { fakeBackend, fakeWorld, type FakeWorld } from "../../../lanes/design-constructed/stage3/fake.ts";
@@ -52,7 +52,7 @@ function plan(over: Partial<ControllerPlan> = {}): ControllerPlan & { tmp: strin
   dirs.push(tmp);
   mkdirSync(join(tmp, "src", "repo"), { recursive: true });
   writeFileSync(join(tmp, "src", "repo", "README.md"), "fixture repository\n");
-  const repoTar = new Uint8Array(Bun.spawnSync(["tar", "-C", join(tmp, "src", "repo"), "-cf", "-", "."]).stdout);
+  const commit = commitAll(join(tmp, "src", "repo"), tmp);
   mkdirSync(join(tmp, "src", "approval"), { recursive: true });
   const record = makeRecord(join(tmp, "src", "approval"));
   const walRoot = join(tmp, "walhost");
@@ -72,8 +72,9 @@ function plan(over: Partial<ControllerPlan> = {}): ControllerPlan & { tmp: strin
     longestStageHours: 24,
     ttlHours: 30,
     priceMicrosPerHour: { controller: 60_000, wal: 20_000 },
-    commit: "0123456789abcdef0123456789abcdef01234567",
-    repoTar,
+    commit,
+    tree: repoTree(join(tmp, "src", "repo"), commit),
+    repoBundle: repoBundle(join(tmp, "src", "repo"), commit),
     recordTar: recordTar(record),
     root: join(tmp, "host"),
     wal: { dir: join(walRoot, "data"), script: join(walRoot, "walctl.py"), owner: null, authorizedKeys: join(walRoot, "authorized_keys") },
@@ -179,13 +180,18 @@ describe("the controller host launcher", () => {
     writeFileSync(
       path,
       [
-        'import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";',
+        'import { appendFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";',
         'import { join } from "node:path";',
         "export async function runOnHost(_svc: unknown, args: string[], row: { work: string; log: string }) {",
         "  const name = args[1]!;",
         '  appendFileSync(row.log, "row " + name + " starts\\n");',
         '  if (name === "fail") throw Object.assign(new Error("the row refused"), { code: "E_USAGE" });',
         '  while (name === "slow" && !existsSync(join(row.work, "release"))) await Bun.sleep(100);',
+        '  if (name === "big") {',
+        '    writeFileSync(join(row.work, "big.bin"), new Uint8Array(8 << 20));',
+        "    await Bun.sleep(1000);",
+        '    rmSync(join(row.work, "big.bin"));',
+        "  }",
         '  mkdirSync(join(row.work, "sinks", name), { recursive: true });',
         '  writeFileSync(join(row.work, "sinks", name, "out.txt"), "sink of " + name + "\\n");',
         '  appendFileSync(row.log, "row " + name + " wrote its sink\\n");',
@@ -256,6 +262,41 @@ describe("the controller host launcher", () => {
   }, 120_000);
 
   // Value: protects=PD-41's tmpfs work folder; fails_when=a launch unpacks inputs onto a disk folder or mounts without the memory sizing and linger; why_new=the work folder sat on the VM's disk; seam=placeWork; no_claim=a real mount, which needs root on a real VM
+  // Value: protects=the Captain's tmpfs guard on the controller host; fails_when=a row ends without its tmpfs use and peak in its log, rows.json and stage.json, a peak between the row's start and end is lost, or next sends a row while the tmpfs is above 80% now or at the last row's peak; why_new=the frame clones filled about a third of the work tmpfs before any authoring output landed, and nothing printed or checked it; seam=host-main's row end and tick, sendRow; no_claim=the real host's tmpfs size
+  test("each row ends with the work tmpfs use and its peak in its log, rows.json and stage.json, and next refuses just over 80% now or at the last peak but sends just under", async () => {
+    const say: Array<[string, string]> = [];
+    const w = world({ say });
+    const b = fakeBackend(w);
+    const p = plan();
+    const mod = stageModule(p.tmp);
+    const l = layout(p.runId, p.root, p.workDir);
+    const rec = await launch(b, { ...p, stage: { module: mod, args: ["wiring.json", "big"] } }, env());
+    pids.push(pidOf(p));
+    const t = (await rowsUntil(l.rows, (r) => r[0]?.state === "done"))[0]!.tmpfs!;
+    expect(t.sizeBytes).toBeGreaterThan(0);
+    expect(t.peakBytes - t.usedBytes).toBeGreaterThanOrEqual(4 << 20);
+    expect(JSON.parse(readFileSync(join(l.state, "stage.json"), "utf8")).tmpfs).toEqual(t);
+    expect(readFileSync(rowLog(l.work, 1), "utf8").trim().split("\n").at(-1)).toBe("tmpfs: " + tmpfsLine(t));
+    const size = 1_000_000;
+    const next = (name: string) => sendRow(b, { ...p, stage: { module: mod, args: ["wiring.json", name] } }, rec, null);
+    const lastPeak = (peakBytes: number) => {
+      const rows = JSON.parse(readFileSync(l.rows, "utf8")) as RowRecord[];
+      rows.at(-1)!.tmpfs = { usedBytes: 1, sizeBytes: size, peakBytes };
+      writeFileSync(l.rows, JSON.stringify(rows));
+    };
+    say.push(["df -B1 --output=size,used", size + " 800001"]);
+    await expect(next("first")).rejects.toMatchObject({ code: "E_DCH_TMPFS_HIGH" });
+    say[0] = ["df -B1 --output=size,used", size + " 799999"];
+    expect((await next("first")).kind).toBe("sent");
+    await rowsUntil(l.rows, (r) => r[1]?.state === "done");
+    lastPeak(800_001);
+    await expect(next("first")).rejects.toMatchObject({ code: "E_DCH_TMPFS_HIGH", message: expect.stringContaining("row 2 (first) peaked at") });
+    expect(existsSync(join(l.state, "next", "row.json"))).toBe(false);
+    lastPeak(799_999);
+    expect((await next("first")).kind).toBe("sent");
+    expect((await rowsUntil(l.rows, (r) => r[2]?.state === "done")).length).toBe(3);
+  }, 60_000);
+
   test("a launch mounts the work folder's tmpfs from the host's memory with the run user lingering, refuses a work folder that isn't tmpfs, and refuses inputs that don't fit", async () => {
     const mounted = world({ answer: ["mount -t tmpfs"] });
     const p = plan({ mountWork: true });

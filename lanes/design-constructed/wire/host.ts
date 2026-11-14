@@ -7,7 +7,8 @@
 // takes them. Relative paths in both resolve against the host's work folder, a tmpfs mount that holds the uploaded
 // inputs, the sinks, the wiring's session folders and the row's log (PD-41); a reply cache outside tmpfs refuses. A row
 // that exits non-zero throws with the reason code it printed, so host-main records it in rows.json and stage.json. The
-// checkout is the commit the host was launched at, unpacked from git archive under the host's root beside its commit file.
+// checkout is the commit the host was launched at, checked out from the launch's git bundle under the host's root beside
+// its commit file, a git repository at that commit (money/controller-host.ts repoCheckout).
 //
 // gstack-evals dc host launch|next|relaunch|recover|teardown|status --plan <host plan> --record <host record> [--archive
 // <new dir>] [--force] drives money/controller-host.ts from the attaching agent's machine. launch uploads the plan's
@@ -18,11 +19,11 @@
 // digest with its image tar and a gstack source that holds the pin. The row's own start rules run on the host. The
 // launcher builds every upload in memory from a tmpfs folder and refuses one on disk, and the teardown's archive holds
 // the work folder only as the age file the host sealed (PD-41).
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { DcError, fail } from "../errors.ts";
 import { GSTACK_PIN } from "../frozen.ts";
-import { AGE_HEADER, controllerProvision, gstackPack, hostStatus, HOST_GSTACK_SOURCE, launch, planProblems, recoverHost, relaunch, sendRow, serviceEnv, teardown, type ControllerPlan, type HostBackend, type HostRecord } from "../money/controller-host.ts";
+import { AGE_HEADER, controllerProvision, gstackPack, hostStatus, HOST_GSTACK_SOURCE, launch, planProblems, recoverHost, relaunch, repoBundle, repoTree, sendRow, serviceEnv, teardown, tmpfsLine, type ControllerPlan, type HostBackend, type HostRecord } from "../money/controller-host.ts";
 import type { HostRow, HostStage } from "../money/host-main.ts";
 import { recordTar, type LedgerService } from "../money/ledger-service.ts";
 import { ownerFromEnv } from "../stage3/sandbox.ts";
@@ -36,7 +37,7 @@ export const HOST_STAGE_MODULE = "lanes/design-constructed/wire/host.ts";
 /** The plan's stage field for one paid row (money/controller-host.ts ControllerPlan.stage). */
 export const hostStage = (wiring: string, row: readonly string[], module = HOST_STAGE_MODULE): { module: string; args: string[] } => ({ module, args: [wiring, ...row] });
 
-/** The host's checkout: the unpacked archive at the commit the launcher wrote; an archive has no working tree to dirty. */
+/** The host's checkout: the git checkout of the launch's bundle at the commit the launcher wrote, checked clean at launch. */
 export function hostLane(root: string): () => { commit: string; dirty: boolean; root: string } {
   return () => ({ commit: readFileSync(join(root, "commit"), "utf8").trim(), dirty: false, root: join(root, "repo") });
 }
@@ -163,8 +164,6 @@ export interface HostSeams {
   env?: Readonly<Record<string, string | undefined>>;
   /** The two hosts' backend, built after the start rules pass; keyedUbicloud with the token read by name when unset. */
   backend?: (plan: HostPlanFile, env: Readonly<Record<string, string | undefined>>) => Promise<HostBackend>;
-  /** The repository at the commit as a tar; git archive when unset. */
-  archive?: (root: string, commit: string) => Uint8Array;
   /** Changes to the launcher plan, for keyless runs on this machine (paths, the entry, the provisioning, the WAL target). */
   tune?: (p: ControllerPlan) => ControllerPlan;
 }
@@ -186,12 +185,6 @@ const USAGE = "host " + VERBS.join("|") + " --plan <host plan JSON> --record <ho
 const tarOf = (dir: string): Uint8Array => {
   const r = Bun.spawnSync(["tar", "-C", dir, "-cf", "-", "."], { stdout: "pipe", stderr: "pipe" });
   if (r.exitCode !== 0) fail("E_USAGE", "could not read " + dir + " as a tar");
-  return new Uint8Array(r.stdout);
-};
-
-const gitArchive = (root: string, commit: string): Uint8Array => {
-  const r = Bun.spawnSync(["git", "-C", root, "archive", "--format=tar", commit], { stdout: "pipe", stderr: "pipe" });
-  if (r.exitCode !== 0 || !r.stdout.length) fail("E_USAGE", "git archive of " + commit + " failed");
   return new Uint8Array(r.stdout);
 };
 
@@ -248,7 +241,8 @@ function controllerPlanOf(p: HostPlanFile, lane: { commit: string; root: string 
     location: p.ubicloud.location,
     priceMicrosPerHour: p.priceMicrosPerHour,
     commit: lane.commit,
-    repoTar: uploads ? (s.archive ?? gitArchive)(lane.root, lane.commit) : new Uint8Array([0]),
+    tree: repoTree(lane.root, lane.commit),
+    repoBundle: uploads ? repoBundle(lane.root, lane.commit) : new Uint8Array([0]),
     recordTar: uploads ? recordTar(resolve(p.record)) : new Uint8Array([0]),
     workTar: uploads ? (needTmpfs(p.work, "the plan's work folder"), tarOf(resolve(p.work))) : null,
     recipient: readFileSync(p.recipient, "utf8").trim(),
@@ -272,9 +266,11 @@ const saveRecord = (file: string, rec: HostRecord) => {
 /**
  * Writes the teardown archive into a new folder: the work folder only as the age file the host sealed, beside the books
  * that hold no sealed text (the off-host lines, the snapshot and rows.json), and puts the host's approval record back
- * in the Captain's place.
+ * in the Captain's place. The record is copied beside the Captain's record first, on its file system, so the renames
+ * that follow never cross file systems; the old record moves aside only then, and any failure puts it back. Returns
+ * false when the host's record is not in place.
  */
-function writeArchive(dir: string, p: HostPlanFile, a: Extract<Awaited<ReturnType<typeof teardown>>, { kind: "deleted" }>["archive"], io: Io, now: () => Date): void {
+export function writeArchive(dir: string, p: HostPlanFile, a: Extract<Awaited<ReturnType<typeof teardown>>, { kind: "deleted" }>["archive"], io: Io, now: () => Date, rename: (from: string, to: string) => void = renameSync): boolean {
   if (new TextDecoder().decode(a.sealed.subarray(0, AGE_HEADER.length)) !== AGE_HEADER) fail("E_DCH_SEAL", "the work archive is not an age file, so nothing of it is written here");
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   writeFileSync(join(dir, "work.tar.age"), a.sealed);
@@ -282,19 +278,39 @@ function writeArchive(dir: string, p: HostPlanFile, a: Extract<Awaited<ReturnTyp
   if (a.snapshot) writeFileSync(join(dir, a.snapshot.name + ".json"), a.snapshot.bytes);
   if (a.rows) writeFileSync(join(dir, "rows.json"), a.rows);
   io.out("archive: " + dir + " holds the host's work folder sealed to the run's recipient (work.tar.age), the off-host lines" + (a.snapshot ? ", " + a.snapshot.name : "") + (a.rows ? " and rows.json" : ""));
-  if (!a.record) return io.out("archive: the off-host copy held no approval record; the Captain's record at " + p.record + " is unchanged");
+  if (!a.record) return (io.out("archive: the off-host copy held no approval record; the Captain's record at " + p.record + " is unchanged"), true);
   writeFileSync(join(dir, "record.tar"), a.record);
   const unpack = join(dir, "record");
   mkdirSync(unpack);
-  if (Bun.spawnSync(["tar", "-C", unpack, "-xf", join(dir, "record.tar")]).exitCode !== 0) return io.err("E_DC_INFRA_MISSING the approval record did not unpack; record.tar holds it and " + p.record + " is unchanged");
+  if (Bun.spawnSync(["tar", "-C", unpack, "-xf", join(dir, "record.tar")]).exitCode !== 0) return (io.err("E_DC_INFRA_MISSING the approval record did not unpack; record.tar holds it and " + p.record + " is unchanged"), false);
   const record = resolve(p.record);
   const top = join(unpack, record.split("/").pop()!);
-  if (!existsSync(top)) return io.err("E_DC_INFRA_MISSING the archived approval record has no folder named like " + record + "; record.tar holds it");
-  const before = record + ".before-teardown-" + now().toISOString().replace(/[:.]/g, "-");
-  renameSync(record, before);
-  renameSync(top, record);
+  if (!existsSync(top)) return (io.err("E_DC_INFRA_MISSING the archived approval record has no folder named like " + record + "; record.tar holds it"), false);
+  const stamp = now().toISOString().replace(/[:.]/g, "-");
+  const before = record + ".before-teardown-" + stamp;
+  const staged = record + ".from-teardown-" + stamp;
+  const why = (e: unknown) => (e as Error).message;
+  try {
+    cpSync(top, staged, { recursive: true, errorOnExist: true, force: false });
+    rename(record, before);
+  } catch (e) {
+    rmSync(staged, { recursive: true, force: true });
+    return (io.err("E_DC_INFRA_MISSING the host's approval record could not be staged beside " + record + " (" + why(e) + "); record.tar holds it and " + record + " is unchanged"), false);
+  }
+  try {
+    rename(staged, record);
+  } catch (e) {
+    try {
+      rename(before, record);
+    } catch (back) {
+      return (io.err("E_DC_INFRA_MISSING the host's approval record could not be put in place (" + why(e) + ") and the old record could not be moved back (" + why(back) + "); the old record is at " + before + " and the host's at " + staged), false);
+    }
+    rmSync(staged, { recursive: true, force: true });
+    return (io.err("E_DC_INFRA_MISSING the host's approval record could not be put in place (" + why(e) + "); the record from before the run is back at " + record + " and record.tar holds the host's"), false);
+  }
   rmSync(unpack, { recursive: true, force: true });
   io.out("record: the host's approval record is written back to " + record + "; the record from before the run is kept at " + before);
+  return true;
 }
 
 /** The host row: launch, relaunch, recovery, teardown and status of the controller host for one host plan. */
@@ -330,7 +346,10 @@ export function hostRow(s: HostSeams = {}): Row {
       if (verb === "status") {
         const st = await hostStatus(b, plan, rec!, { tail: STATUS_TAIL, quiet: (row) => QUIET_ROWS.has(row) });
         io.out(st === null ? "host: the controller host " + rec!.controller.vm + " is gone; recover it" : "host: " + rec!.controller.vm + (st.running ? " runs" : " is up with no service running") + (st.status ? ", " + st.status.items.length + " open item(s), last snapshot " + (st.status.lastSnapshot ?? "none") + (st.status.captain ? ", Captain stop: " + st.status.captain.why : "") : ""));
-        for (const r of st?.rows ?? []) io.out("row " + r.n + " " + r.row + ": " + r.state + (r.state === "running" ? " since " + r.startedAt : ", " + r.startedAt + " to " + r.endedAt) + (r.code ? " (" + r.code + ")" : ""));
+        for (const r of st?.rows ?? []) {
+          io.out("row " + r.n + " " + r.row + ": " + r.state + (r.state === "running" ? " since " + r.startedAt : ", " + r.startedAt + " to " + r.endedAt) + (r.code ? " (" + r.code + ")" : ""));
+          if (r.tmpfs) io.out("tmpfs: row " + r.n + ": " + tmpfsLine(r.tmpfs));
+        }
         if (st && !st.rows.length) io.out("rows: none yet");
         const last = st?.rows.at(-1);
         if (last && !QUIET_ROWS.has(last.row)) io.out("log: row " + last.n + " holds " + st!.logLines + " lines; " + last.row + " can print unit or item text, so status prints none");
@@ -359,9 +378,9 @@ export function hostRow(s: HostSeams = {}): Row {
         io.out("host: teardown refused: " + t.why);
         return 3;
       }
-      writeArchive(resolve(archive!), p, t.archive, io, env.now);
+      const back = writeArchive(resolve(archive!), p, t.archive, io, env.now);
       io.out("host: torn down; both VMs are deleted");
-      return 0;
+      return back ? 0 : 3;
     } finally {
       saveRecord(recordPath, rec!);
     }

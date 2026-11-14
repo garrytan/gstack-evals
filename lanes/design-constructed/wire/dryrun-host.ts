@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { recipeHash, recipeInputs } from "../../../src/rig/recipe.ts";
 import { AGE_HEADER, controllerProvision, gstackPack, layout, rowLog, type ControllerPlan } from "../money/controller-host.ts";
-import { makeRecord } from "../money/dryrun-fixture.ts";
+import { commitAll, makeRecord } from "../money/dryrun-fixture.ts";
 import { WALCTL_PY } from "../money/offhost.ts";
 import { fakeBackend, fakeWorld, type FakeWorld } from "../stage3/fake.ts";
 import { runProcess } from "../stage3/ubicloud-real.ts";
@@ -87,10 +87,19 @@ export function watchedEnv(vars: Record<string, string>): { env: Record<string, 
   return { env, read };
 }
 
+let head: string | null = null;
+/** This checkout's HEAD, the commit a keyless launch ships as its bundle; it needs the checkout to be a git repository. */
+export function laneHead(): string {
+  if (head) return head;
+  const r = Bun.spawnSync(["git", "-C", REPO_ROOT, "rev-parse", "--verify", "HEAD"], { stdout: "pipe", stderr: "pipe" });
+  if (r.exitCode !== 0) throw new Error("the checkout " + REPO_ROOT + " is not a git repository with a HEAD, so a keyless launch has no commit to ship");
+  return (head = new TextDecoder().decode(r.stdout).trim());
+}
+
 export const rowEnv = (o: { dirty?: boolean; dryRun?: boolean } = {}): RowEnv => ({
   providers: BOUND_PROVIDERS(null),
   dryRun: async () => o.dryRun ?? true,
-  lane: () => ({ commit: "0".repeat(40), dirty: o.dirty ?? false, root: REPO_ROOT }),
+  lane: () => ({ commit: laneHead(), dirty: o.dirty ?? false, root: REPO_ROOT }),
   now: () => new Date("2026-11-20T00:00:00Z"),
   power: () => ({ code: 0, stdout: "", stderr: "" }),
   vocabulary: () => new Set(),
@@ -124,7 +133,6 @@ export function localSeams(dir: string, w: FakeWorld, env: Record<string, string
   return {
     env,
     backend: async () => b,
-    archive: () => new Uint8Array(Bun.spawnSync(["tar", "-C", walRoot, "-cf", "-", "walctl.py"]).stdout),
     tune: (p) =>
       over({
         ...p,
@@ -178,11 +186,7 @@ function pinRepo(dir: string): { repo: string; commit: string } {
   writeFileSync(join(repo, "setup"), "#!/bin/sh\necho installed\n");
   chmodSync(join(repo, "setup"), 0o755);
   writeFileSync(join(repo, "bin", "tool"), "tool\n");
-  const g = (args: string[]) => Bun.spawnSync(["git", "-C", repo, ...args], { stdout: "pipe", env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: dir, GIT_CONFIG_NOSYSTEM: "1", GIT_AUTHOR_NAME: "fixture", GIT_AUTHOR_EMAIL: "fixture@invalid", GIT_COMMITTER_NAME: "fixture", GIT_COMMITTER_EMAIL: "fixture@invalid" } });
-  g(["init", "-q"]);
-  g(["add", "."]);
-  g(["commit", "-qm", "pin"]);
-  return { repo, commit: new TextDecoder().decode(g(["rev-parse", "HEAD"]).stdout).trim() };
+  return { repo, commit: commitAll(repo, dir) };
 }
 
 export function hostRowCases(): DryRunCase[] {
@@ -283,6 +287,7 @@ export function hostRowCases(): DryRunCase[] {
           if (down.code !== 0) return "teardown: " + down.out.concat(down.err).join(" ");
           const recordBack = readdirSync(dir).filter((n) => n.startsWith("approval")).length;
           const grep = await runProcess(["grep", "-rl", "test-not-a-key", dir, shmOf(dir)]);
+          const keyFiles = new TextDecoder().decode(grep.stdout).split("\n").filter((file) => file && !file.startsWith(l.repo + "/"));
           const sealed = join(archive, "work.tar.age");
           const opened = existsSync(sealed) && readFileSync(sealed).subarray(0, AGE_HEADER.length).toString() === AGE_HEADER ? openSealed(sealed, f.identity, join(shmOf(dir), "opened")) : [];
           return all(
@@ -292,7 +297,7 @@ export function hostRowCases(): DryRunCase[] {
             existsSync(join(archive, "work")) || existsSync(join(archive, "work.tar")) ? "the archive holds the work folder in plaintext" : null,
             existsSync(l.work) && readdirSync(l.work).length ? "the host's work folder kept plaintext after the teardown" : null,
             down.out.some((x) => x.startsWith("record: ")) && readdirSync(join(dir, "approval")).some((n) => n.includes(".before-teardown-")) ? null : "the approval record was not written back: " + down.out.join(" | ") + " " + recordBack,
-            new TextDecoder().decode(grep.stdout).trim() === "" ? null : "a key reached a file: " + new TextDecoder().decode(grep.stdout),
+            keyFiles.length ? "a key reached a file: " + keyFiles.join(" ") : null,
           );
         }),
     },

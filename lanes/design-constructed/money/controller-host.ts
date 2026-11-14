@@ -18,7 +18,13 @@
 // Custody (PD-41): the work folder, which holds the uploaded inputs, every row's sink and log, the wiring's session
 // folders and the row's scratch, is a tmpfs mount sized from the host's memory; a launch refuses when it is not tmpfs.
 // Inputs reach it on the SSH session's stdin, never as a file on the host's disk.
+// The repository reaches the host as a git bundle of the commit with no history (repoBundle) and is checked out at the
+// layout's repo (repoCheckout), so the host's own dry run can read git there; a launch, a recovery and a relaunch each
+// check that checkout against the commit and its tree and refuse with E_DCH_CHECKOUT otherwise.
 // Every VM a call makes is deleted when that call fails partway, so no launch leaves a VM behind.
+import { mkdtempSync, rmSync, statfsSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { isReasonCode } from "../../../src/errors/codes.ts";
 import { DcError, fail } from "../errors.ts";
 import type { Vm, VmBackend, VmSpec } from "../stage3/sandbox.ts";
@@ -82,6 +88,37 @@ export interface Layout {
 /** Each row's log, in the work folder's .rows/ (host-main.ts writes it; a value here, since host-main is the entry). */
 export const rowLog = (work: string, n: number) => work + "/.rows/" + n + ".log";
 
+/** The work folder's tmpfs at a row's end and the most it held while the row ran, in bytes (rows.json and stage.json). */
+export interface TmpfsUse {
+  usedBytes: number;
+  sizeBytes: number;
+  peakBytes: number;
+}
+
+/** The work folder's use and size in bytes, as df reads them. */
+export function workUse(work: string): { usedBytes: number; sizeBytes: number } {
+  const s = statfsSync(work);
+  return { usedBytes: (s.blocks - s.bfree) * s.bsize, sizeBytes: s.blocks * s.bsize };
+}
+
+const share = (bytes: number, size: number) => ((100 * bytes) / size).toFixed(1) + "%";
+const gib = (bytes: number) => (bytes / 2 ** 30).toFixed(2) + " GiB";
+
+/** What a row's log ends with and dc host status prints for each row. */
+export const tmpfsLine = (t: TmpfsUse) => "the work folder's tmpfs holds " + gib(t.usedBytes) + " of " + gib(t.sizeBytes) + " (" + share(t.usedBytes, t.sizeBytes) + "), with a peak of " + gib(t.peakBytes) + " (" + share(t.peakBytes, t.sizeBytes) + ") during the row";
+
+/** dc host next refuses while the work folder's tmpfs, now or at the last row's peak, holds more than this share of its size. */
+export const TMPFS_GUARD_SHARE = 0.8;
+
+/** Why the next row may not start for the work folder's tmpfs use, or null. */
+export function tmpfsGuard(now: { usedBytes: number; sizeBytes: number }, last: RowRecord | undefined): string | null {
+  const over = (bytes: number, size: number) => bytes > TMPFS_GUARD_SHARE * size;
+  const guard = "the " + TMPFS_GUARD_SHARE * 100 + "% guard";
+  if (last?.tmpfs && over(last.tmpfs.peakBytes, last.tmpfs.sizeBytes)) return "row " + last.n + " (" + last.row + ") peaked at " + gib(last.tmpfs.peakBytes) + " of the work folder's " + gib(last.tmpfs.sizeBytes) + " tmpfs (" + share(last.tmpfs.peakBytes, last.tmpfs.sizeBytes) + "), above " + guard;
+  if (over(now.usedBytes, now.sizeBytes)) return "the work folder's tmpfs holds " + gib(now.usedBytes) + " of " + gib(now.sizeBytes) + " (" + share(now.usedBytes, now.sizeBytes) + "), above " + guard;
+  return null;
+}
+
 /** The host's fixed paths; the same absolute paths on a replacement host (R2-17). */
 export const layout = (runId: string, root = HOST_ROOT, work = root + "/work"): Layout => ({
   root,
@@ -124,8 +161,10 @@ export interface ControllerPlan {
   /** Ubicloud's list price per hour in micros for each host's size, read on the day. */
   priceMicrosPerHour: { controller: number; wal: number };
   commit: string;
-  /** git archive of the commit. */
-  repoTar: Uint8Array;
+  /** The commit's tree; the host's checkout must have it (repoTree). */
+  tree: string;
+  /** The commit as a git bundle with no history (repoBundle), checked out at the layout's repo. */
+  repoBundle: Uint8Array;
   /** The approval record directory as a tar with one top folder (ledger-service.ts recordTar). */
   recordTar: Uint8Array;
   root?: string;
@@ -201,7 +240,8 @@ export function planProblems(p: ControllerPlan): string[] {
     if (!fold.fits) out.push(fold.line + " does not fit");
   }
   if (!/^[0-9a-f]{40}$/.test(p.commit)) out.push("the commit is not a full sha");
-  if (!p.repoTar.length) out.push("the repository archive is empty");
+  if (!/^[0-9a-f]{40}$/.test(p.tree)) out.push("the commit's tree is not a full sha");
+  if (!p.repoBundle.length) out.push("the repository bundle is empty");
   if (!p.recordTar.length) out.push("the approval record archive is empty");
   if (!/^age1[0-9a-z]{58}$/.test(p.recipient)) out.push("the run's age recipient is not one age1 public key");
   return out;
@@ -265,15 +305,79 @@ export function controllerProvision(o: { bunVersion: string; mirrors: boolean; s
   };
 }
 
-/** The pinned commit, its tree and every blob, with no history, from a local repository that holds the commit. */
-export function gstackPack(source: string, commit: string): GstackPack {
-  const git = (args: string[], input?: Uint8Array) => Bun.spawnSync(["git", "-C", source, ...args], { stdin: input, stdout: "pipe", stderr: "pipe", env: { PATH: process.env.PATH ?? "/usr/bin:/bin", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" } });
-  const tree = git(["rev-parse", commit + "^{tree}"]);
-  if (tree.exitCode !== 0) fail("E_USAGE", "the gstack source " + source + " doesn't hold commit " + commit);
+const gitIn = (dir: string) => (args: string[], input?: Uint8Array) => Bun.spawnSync(["git", "-C", dir, ...args], { stdin: input, stdout: "pipe", stderr: "pipe", env: { PATH: process.env.PATH ?? "/usr/bin:/bin", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" } });
+
+/** The commit, its tree and every blob, with no history, from a local repository that holds the commit. */
+function commitPack(source: string, commit: string, what: string): GstackPack {
+  const git = gitIn(source);
+  const tree = git(["rev-parse", "--verify", commit + "^{tree}"]);
+  if (tree.exitCode !== 0) fail("E_USAGE", what + " " + source + " doesn't hold commit " + commit);
   const objects = git(["rev-list", "--objects", "--no-walk", commit]);
   const pack = objects.exitCode === 0 ? git(["pack-objects", "-q", "--stdout"], new Uint8Array(objects.stdout)) : objects;
-  if (pack.exitCode !== 0 || !pack.stdout.length) fail("E_DC_INFRA_MISSING", "could not pack the gstack pin from " + source);
+  if (pack.exitCode !== 0 || !pack.stdout.length) fail("E_DC_INFRA_MISSING", "could not pack " + what + " " + source + " at " + commit);
   return { commit, tree: new TextDecoder().decode(tree.stdout).trim(), pack: new Uint8Array(pack.stdout) };
+}
+
+/** The pinned commit, its tree and every blob, with no history, from a local repository that holds the commit. */
+export const gstackPack = (source: string, commit: string): GstackPack => commitPack(source, commit, "the gstack source");
+
+/** The commit's tree in a local checkout that holds the commit. */
+export function repoTree(source: string, commit: string): string {
+  const r = gitIn(source)(["rev-parse", "--verify", commit + "^{tree}"]);
+  if (r.exitCode !== 0) fail("E_USAGE", "the checkout " + source + " doesn't hold commit " + commit);
+  return new TextDecoder().decode(r.stdout).trim();
+}
+
+/** The ref the repository bundle carries. */
+const PIN_REF = "refs/dc/pin";
+
+/**
+ * The commit as a git bundle with no history: the commit, its tree and every blob under PIN_REF, bundled from a scratch
+ * repository that marks the commit shallow, so a shallow checkout can ship it too. The host checks it out (repoCheckout).
+ */
+export function repoBundle(source: string, commit: string): Uint8Array {
+  const { pack } = commitPack(source, commit, "the checkout");
+  const scratch = mkdtempSync(join(tmpdir(), "dc-bundle-"));
+  try {
+    const git = gitIn(scratch);
+    const made = git(["init", "-q", "--bare"]).exitCode === 0 && git(["index-pack", "--stdin"], pack).exitCode === 0;
+    writeFileSync(join(scratch, "shallow"), commit + "\n");
+    const bundle = made && git(["update-ref", PIN_REF, commit]).exitCode === 0 ? git(["bundle", "create", "-", PIN_REF]) : null;
+    if (!bundle || bundle.exitCode !== 0 || !bundle.stdout.length) fail("E_DC_INFRA_MISSING", "could not bundle " + commit + " from " + source);
+    return new Uint8Array(bundle!.stdout);
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+}
+
+/**
+ * The root shell lines that check the bundle at the layout's root out at its repo, as a git repository marked shallow at
+ * the commit, so HEAD is the commit and its tree hashes resolve; then the commit file the host's rows read (wire/host.ts).
+ */
+export const repoCheckout = (l: Layout, commit: string): string[] => {
+  const [repo, bundle] = [shq(l.repo), shq(l.root + "/repo.bundle")];
+  return [
+    "set -euo pipefail",
+    "command -v git > /dev/null || { apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y git; }",
+    "git init -q " + repo,
+    "printf '%s\\n' " + commit + " > " + repo + "/.git/shallow",
+    "git -C " + repo + " fetch -q --no-tags " + bundle + " " + PIN_REF + ":" + PIN_REF,
+    "git -C " + repo + " -c advice.detachedHead=false checkout -q --detach " + commit,
+    "rm -f " + bundle,
+    "printf '%s\\n' " + commit + " > " + shq(l.root + "/commit"),
+  ];
+};
+
+/** Reads the checkout back: HEAD, its tree, then one line per changed tracked file. */
+export const checkoutRead = (l: Layout) => "git -C " + shq(l.repo) + " rev-parse HEAD 'HEAD^{tree}' && git -C " + shq(l.repo) + " status --porcelain --untracked-files=no";
+
+/** Why the checkout read back (null when the read failed) is not the commit and its tree, or null when it is. */
+export function checkoutProblem(read: string | null, commit: string, tree: string): string | null {
+  if (read === null) return "is not a git repository whose HEAD and tree resolve";
+  const [head, got, ...changed] = read.trim().split("\n");
+  if (head !== commit) return "has HEAD " + head + ", not the launched commit " + commit;
+  if (got !== tree) return "has tree " + got + ", not the commit's tree " + tree;
+  return changed.length ? "has " + changed.length + " changed tracked file(s)" : null;
 }
 
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -315,8 +419,9 @@ async function setupWal(x: Ctx, wal: Vm): Promise<void> {
 async function prepareController(x: Ctx, ctl: Vm, wal: Vm, hosts: HostVm[], uploadRecord: boolean): Promise<{ image: string | null; tmpfs: { sizeBytes: number; memBytes: number } }> {
   const l = x.l;
   await x.run(ctl, "mkdir -p " + [l.state, l.journals, l.repo, l.holder, l.work, l.ledger.replace(/\/[^/]+$/, "")].map(shq).join(" ") + " && chmod 700 " + shq(l.root) + " " + shq(l.state), "making the host's folders");
-  await x.b.write(ctl, l.root + "/repo.tar", x.p.repoTar);
-  await x.run(ctl, "tar -xf " + shq(l.root + "/repo.tar") + " -C " + shq(l.repo) + " && printf '%s\\n' " + x.p.commit + " > " + shq(l.root + "/commit"), "unpacking the repository");
+  await x.b.write(ctl, l.root + "/repo.bundle", x.p.repoBundle);
+  await x.run(ctl, "bash -c " + shq(repoCheckout(l, x.p.commit).join("\n")), "checking out the repository");
+  await checkCheckout(x, ctl);
   if (x.p.gstack) await x.b.write(ctl, l.root + "/gstack.pack", x.p.gstack.pack);
   if (x.p.image?.tar) await x.b.write(ctl, l.root + "/image.tar", x.p.image.tar);
   const uploads: Uploads = { image: x.p.image ? (x.p.image.tar ? "load" : "build") : null, gstack: x.p.gstack ? { commit: x.p.gstack.commit, tree: x.p.gstack.tree } : null };
@@ -352,6 +457,13 @@ async function prepareController(x: Ctx, ctl: Vm, wal: Vm, hosts: HostVm[], uplo
 }
 
 const mib = (bytes: number) => (bytes / 2 ** 20).toFixed(1);
+
+/** Refuses unless the host's checkout is a git repository at the plan's commit and tree with no tracked change. */
+async function checkCheckout(x: Ctx, ctl: Vm): Promise<void> {
+  const r = await x.b.exec(ctl, checkoutRead(x.l), { user: "root" });
+  const why = checkoutProblem(r.exit === 0 ? r.stdout : null, x.p.commit, x.p.tree);
+  if (why) throw new DcError("E_DCH_CHECKOUT", "the controller host's checkout " + x.l.repo + " " + why + "; the host's own dry run reads git there, so no row runs on it");
+}
 
 /** Refuses unless the work folder is a tmpfs mount (PD-41). */
 async function checkWork(x: Ctx, ctl: Vm): Promise<void> {
@@ -510,6 +622,9 @@ export async function sendRow(b: HostBackend, p: ControllerPlan, rec: HostRecord
   if (last?.state === "running") return { kind: "busy", row: last };
   const ctl = (await b.attach(rec.controller.vm, hostSpec(p, "dc controller host " + p.runId)))!;
   await checkWork(x, ctl);
+  const [size, used] = (await x.run(ctl, "df -B1 --output=size,used " + shq(x.l.work) + " | tail -n 1", "reading the work folder's use")).trim().split(/\s+/).map(Number);
+  const high = tmpfsGuard({ usedBytes: used!, sizeBytes: size! }, last);
+  if (high) throw new DcError("E_DCH_TMPFS_HIGH", high + "; nothing was uploaded or sent");
   if (inputs) await upload(x, ctl, inputs, "the row's inputs");
   const id = randomUUID();
   const requests = x.l.state + "/next";
@@ -542,6 +657,7 @@ export async function relaunch(b: HostBackend, p: ControllerPlan, rec: HostRecor
   if (st.running) return { kind: "running" };
   const ctl = (await b.attach(rec.controller.vm, hostSpec(p, "dc controller host " + p.runId)))!;
   await checkWork(x, ctl);
+  await checkCheckout(x, ctl);
   if (inputs) await upload(x, ctl, inputs, "the row's inputs");
   if (p.stage !== undefined) {
     const cfg = JSON.parse(await x.run(ctl, "cat " + shq(x.l.config), "reading the host's config")) as HostConfig;
