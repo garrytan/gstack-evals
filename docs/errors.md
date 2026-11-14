@@ -2165,9 +2165,9 @@ Exit 2. Side effects: The stopped stage's leases settle at the spend recorded so
 
 ### E_DCW_NO_PROVIDER
 
-Design plan review eval (wiring): a paid row passed its start rules and its ledger admission, but the provider it needs (the ledger, the model caller, the review session box or the VM world) is not bound in this build. Nothing was called and nothing was spent.
+Design plan review eval (wiring): a paid row passed its start rules and its ledger admission, but the provider it needs (the ledger, the model caller, the review session box, the VM world or stage 3's pieces) is not bound in this build. Stage 3's pieces refuse until the Captain's go to start stage 3 (PD-31). Nothing was called and nothing was spent.
 
-Fix: Build the missing piece and bind it in lanes/design-constructed/wire/real.ts (realProviders); lanes/design-constructed/WIRING.md lists what is still unbound. Then launch again into a new sink directory.
+Fix: Build the missing piece and bind it in lanes/design-constructed/wire/real.ts (realProviders); lanes/design-constructed/WIRING.md lists what is still unbound. Stage 3's pieces are bound only after their prompts and reply formats are written as PD-31 rules and the Captain gives the go. Then launch again into a new sink directory.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 
