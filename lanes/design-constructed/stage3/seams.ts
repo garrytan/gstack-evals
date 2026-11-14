@@ -41,6 +41,12 @@ export class CapStopSignal extends Error {
 /** How an agent session inside a VM ended, as the harness reads it. */
 export type AgentEnd = "completed" | "own-limit" | "infra";
 
+/** The admitted sub-reservation an agent session runs on: its slot on the item's metering proxy is bound to it. */
+export interface SubRef {
+  item: LedgerItemId;
+  id: string;
+}
+
 export interface AgentRun {
   end: AgentEnd;
   /** Proxy-metered spend; null when unknown (held until reconciled). */
@@ -80,7 +86,7 @@ export interface AuthoredAudit {
 }
 
 /** Runs Opus 5.5 in Claude Code with no gstack inside the build VM under the build limits, through the metering proxy. */
-export type BuildAgent = (vm: Vm, o: { prompt: string; limits: typeof STAGE3.build; env: Readonly<Record<string, string>> }) => Promise<AgentRun>;
+export type BuildAgent = (vm: Vm, o: { prompt: string; limits: typeof STAGE3.build; env: Readonly<Record<string, string>>; sub: SubRef }) => Promise<AgentRun>;
 
 export type AstraState = "designed" | "blank" | "broken" | "raw-error" | "endless-spinner";
 

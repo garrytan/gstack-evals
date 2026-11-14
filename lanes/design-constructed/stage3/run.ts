@@ -7,7 +7,8 @@ import { LEDGER_ITEMS, STAGE3 } from "../frozen.ts";
 import type { Arm } from "../types.ts";
 import { armBlock, BUILD_ARMS, buildPrompt, checkBuild, runBuild, type BuildArm, type BuildDeps } from "./build.ts";
 import { fail } from "../errors.ts";
-import { buildValues, des4, des4Value, instrument, keepFlags, readout, RENDER_READS, uninformative, winRates, type BuildRecord, type Paired, type PairRow, type Values } from "./measures.ts";
+import { buildValues, des4, des4Value, missingScenarios, instrument, keepFlags, readout, RENDER_READS, uninformative, winRates, type BuildRecord, type Paired, type PairRow, type Values } from "./measures.ts";
+import { sandboxLine, type SandboxTally } from "./sandbox.ts";
 import { CapStopSignal, type MoneySeam, type PairwiseJudge } from "./seams.ts";
 import type { Stage3Selection } from "./units.ts";
 
@@ -29,6 +30,8 @@ export interface Stage3Result {
   keep: ReturnType<typeof keepFlags>;
   instrument: ReturnType<typeof instrument>;
   capStop: { item: string; why: string } | null;
+  /** Every build and check VM with its dropped connections, in the order they ran. */
+  sandboxes: SandboxTally[];
   lines: string[];
 }
 
@@ -42,6 +45,8 @@ const roundReserve = (): number => {
 /** Runs stage 3 on the selected units. Builds go in unit order then arm order, 2 at a time. */
 export async function runStage3(sel: Stage3Selection, d: Stage3Deps): Promise<Stage3Result> {
   const builds: BuildRecord[] = [];
+  const sandboxes: SandboxTally[] = [];
+  d = { ...d, builds: { ...d.builds, tally: sandboxes } };
   const jobs: Array<{ c: Stage3Selection["units"][number]; arm: BuildArm; block: string | null }> = [];
   for (const u of sel.units)
     for (const arm of BUILD_ARMS) {
@@ -65,7 +70,7 @@ export async function runStage3(sel: Stage3Selection, d: Stage3Deps): Promise<St
       round.map(async (j): Promise<BuildRecord> => {
         const c = j.c.candidate;
         const label = "build " + c.unit.id + " " + j.arm;
-        const b = await runBuild({ label, tree: c.tree, plan: c.plan, prompt: buildPrompt(j.block) }, d.builds, () => d.money.reconcile(adm.id));
+        const b = await runBuild({ label, tree: c.tree, plan: c.plan, prompt: buildPrompt(j.block), sub: { item: ITEM, id: adm.id } }, d.builds, () => d.money.reconcile(adm.id));
         spends.push(b.spentUsd);
         const base = { unit: c.unit.id, arm: j.arm, retried: b.retried, ownLimit: b.end === "own-limit" };
         if (!b.tree) return { ...base, state: "missing", serves: null, reads: null };
@@ -108,7 +113,7 @@ export async function runStage3(sel: Stage3Selection, d: Stage3Deps): Promise<St
   const paired = readout(values, d.baseAppOf);
   const keep = keepFlags(paired);
   const inst = instrument(pairs);
-  return { builds, pairs, values, paired, keep, instrument: inst, capStop, lines: printStage3(sel, builds, pairs, paired, keep, inst, capStop) };
+  return { builds, pairs, values, paired, keep, instrument: inst, capStop, sandboxes, lines: [...printStage3(sel, builds, pairs, paired, keep, inst, capStop), ...[...(sel.sandboxes ?? []), ...sandboxes].map(sandboxLine)] };
 }
 
 const fmt = (x: number | null) => (x === null ? "unavailable" : String(x));
@@ -124,6 +129,7 @@ export function printStage3(sel: Stage3Selection, builds: readonly BuildRecord[]
   }
   lines.push("render reads unavailable (the build never serves): " + count((b) => b.state === "measured" && b.serves === false) + " builds, " + RENDER_READS.join(", "));
   lines.push("forced states unavailable (the screen doesn't read the data source plan.md names): " + count((b) => b.state === "measured" && !!b.serves && !!b.reads && !b.reads.readsDataSource) + " builds");
+  lines.push("agent-user scenarios with no result, counted as not completed: " + builds.reduce((n, b) => n + missingScenarios(b), 0) + " over " + count((b) => b.state === "measured" && !!b.serves && !!b.reads) + " served builds");
   lines.push("builds retried after an own-limit stop " + count((b) => b.retried === "own-limit") + ", after a failure outside the agent " + count((b) => b.retried === "infra"));
   for (const u of sel.units) {
     const un = uninformative(u.validation.validated, builds.filter((b) => b.unit === u.candidate.unit.id));

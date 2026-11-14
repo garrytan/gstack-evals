@@ -2,7 +2,7 @@
 // The seams recipe sessions and qualification call through: the frame's discovered routes and route matcher (R2-19,
 // owned by the frame area), the recipe agent and the controller's browser. Integration wires the real ones.
 import type { RECIPES } from "../frozen.ts";
-import type { AgentRun } from "../stage3/seams.ts";
+import type { AgentRun, SubRef } from "../stage3/seams.ts";
 import type { Vm } from "../stage3/sandbox.ts";
 import type { RecipeLogin } from "./recipe.ts";
 
@@ -36,7 +36,7 @@ export interface Candidate {
 }
 
 /** Runs Opus 5.5 in Claude Code inside the recipe VM under the recipe session's limits, through the metering proxy. */
-export type RecipeAgent = (vm: Vm, o: { prompt: string; limits: typeof RECIPES.session }) => Promise<AgentRun>;
+export type RecipeAgent = (vm: Vm, o: { prompt: string; limits: typeof RECIPES.session; sub: SubRef }) => Promise<AgentRun>;
 
 /** What the controller's in-page probe reads (PAGE_PROBE_SCRIPT in qualify.ts). */
 export interface PageProbe {

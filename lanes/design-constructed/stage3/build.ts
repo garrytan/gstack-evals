@@ -8,8 +8,8 @@ import { fail } from "../errors.ts";
 import { routeUrl, setupSteps } from "../recipes/qualify.ts";
 import type { Recipe } from "../recipes/recipe.ts";
 import type { Arm } from "../types.ts";
-import { sandboxed, type ExecResult, type SandboxDeps, type Vm, type VmSpec } from "./sandbox.ts";
-import type { AgentRun, BuildAgent, BuildReader, BuildReads, ReadsContext } from "./seams.ts";
+import { AUDIT_DIR, sandboxed, SESSION_MARK, type ExecResult, type SandboxDeps, type SandboxTally, type Vm, type VmSpec } from "./sandbox.ts";
+import type { AgentRun, BuildAgent, BuildReader, BuildReads, ReadsContext, SubRef } from "./seams.ts";
 
 export type BuildArm = "no-review" | Arm | "generic-look";
 export const REVIEW_ARMS: readonly Arm[] = ["none", "lens", "plan-design-review", "autoplan"];
@@ -34,6 +34,8 @@ export function armBlock(arm: BuildArm, opusBlock: (arm: Arm) => string | null):
 
 export const WORK = "/work";
 export const REPO = WORK + "/repo";
+/** The packed tree, in the audit's own folder so the /work scan never reads it as the session's. */
+export const OUT_TAR = AUDIT_DIR + "/out.tar";
 
 export interface BuildInput {
   label: string;
@@ -41,6 +43,8 @@ export interface BuildInput {
   tree: () => Promise<Uint8Array>;
   plan: string;
   prompt: string;
+  /** The admitted sub-reservation the build's sessions run on (its round, or its oracle build). */
+  sub: SubRef;
 }
 
 export interface BuildDeps {
@@ -51,6 +55,8 @@ export interface BuildDeps {
   /** The check VM's spec: the named mirrors only. */
   checkSpec: (label: string) => VmSpec;
   reader: BuildReader;
+  /** Where each build and check VM's dropped connections are tallied; selectUnits and runStage3 set it. */
+  tally?: SandboxTally[];
 }
 
 const must = (r: ExecResult, what: string) => {
@@ -74,10 +80,12 @@ async function attempt(input: BuildInput, d: BuildDeps, label: string): Promise<
     await b.write(vm, WORK + "/repo.tar", await input.tree());
     must(await b.exec(vm, "mkdir -p " + REPO + " && tar -xf " + WORK + "/repo.tar -C " + REPO + " && rm " + WORK + "/repo.tar && chown -R run " + WORK, { user: "root" }), "unpacking the tree");
     await b.write(vm, WORK + "/plan.md", input.plan);
-    seen.agent = await d.agent(vm, { prompt: input.prompt, limits: STAGE3.build, env: BUILD_ENV });
-    must(await b.exec(vm, "tar -C " + REPO + " -cf " + WORK + "/out.tar .", { user: "root" }), "packing the tree");
-    return b.read(vm, WORK + "/out.tar");
+    must(await b.exec(vm, "touch " + SESSION_MARK, { user: "root" }), "the session's start marker");
+    seen.agent = await d.agent(vm, { prompt: input.prompt, limits: STAGE3.build, env: BUILD_ENV, sub: input.sub });
+    must(await b.exec(vm, "tar -C " + REPO + " -cf " + OUT_TAR + " .", { user: "root" }), "packing the tree");
+    return b.read(vm, OUT_TAR);
   });
+  d.tally?.push({ label, blocked: run.blocked });
   if (!run.audit.ok) auditStop(label, run.audit);
   return { agent: seen.agent, tree: run.value, error: run.error };
 }
@@ -140,6 +148,7 @@ async function checkOnce(tree: Uint8Array, recipe: Recipe, ctx: ReadsContext, d:
     if (st.exit !== 0 || !servesEvery(st.stdout, ctx.routes)) return { serves: false, failedStep: "routes", reads: null };
     return { serves: true, failedStep: null, reads: await d.reader(vm, ctx) };
   });
+  d.tally?.push({ label, blocked: run.blocked });
   if (!run.audit.ok) auditStop(label, run.audit);
   return run;
 }

@@ -76,6 +76,63 @@ export interface VmBackend {
   write(vm: Vm, path: string, data: Uint8Array | string): Promise<void>;
   read(vm: Vm, path: string): Promise<Uint8Array>;
   destroy(vm: Vm): Promise<void>;
+  /**
+   * The controller's own install after the preamble and before the job (stage3/install.ts: the browser build and, for
+   * an agent's VM, Claude Code), returning every file it wrote. Absent, nothing is installed.
+   */
+  prepare?(vm: Vm): Promise<ControllerEntry[]>;
+}
+
+/** One file the controller wrote: f with its sha256, l with its link target, d or o (another type) with "-". */
+export interface ControllerEntry {
+  type: "f" | "l" | "d" | "o";
+  digest: string;
+  path: string;
+}
+
+/** A path as describeCommand reads it; x is a path that is gone. */
+export interface Described {
+  type: ControllerEntry["type"] | "x";
+  digest: string;
+  path: string;
+}
+
+export const DESCRIBE_DONE = "DC-CTL-DONE";
+
+/**
+ * Describes every path in a NUL-separated list file, one line each: type, sha256 (read through stdin, so a name never
+ * changes sha256sum's output) or link target or "-", then the path. A gone path prints x. The done line is the
+ * sentinel; output without it was cut.
+ */
+export const describeCommand = (list: string) =>
+  "while IFS= read -r -d '' p; do if [ -L \"$p\" ]; then printf 'l\\t%s\\t%s\\n' \"$(readlink -- \"$p\")\" \"$p\"; elif [ -f \"$p\" ]; then printf 'f\\t%s\\t%s\\n' \"$(sha256sum < \"$p\" | cut -d' ' -f1)\" \"$p\"; elif [ -d \"$p\" ]; then printf 'd\\t-\\t%s\\n' \"$p\"; elif [ -e \"$p\" ]; then printf 'o\\t-\\t%s\\n' \"$p\"; else printf 'x\\t-\\t%s\\n' \"$p\"; fi; done < " +
+  "'" + list.replace(/'/g, "'\\''") + "'" +
+  " && echo " +
+  DESCRIBE_DONE;
+
+/** Reads describeCommand's lines. Null when a line is malformed or the done line is missing: the output was cut. */
+export function parseDescribe(text: string): Described[] | null {
+  const lines = text.split("\n").filter(Boolean);
+  if (lines.pop() !== DESCRIBE_DONE) return null;
+  const out: Described[] = [];
+  for (const l of lines) {
+    const m = /^([fldox])\t([^\t]*)\t(\/.*)$/.exec(l);
+    if (!m) return null;
+    if (m[1] === "f" && !/^[0-9a-f]{64}$/.test(m[2]!)) return null;
+    out.push({ type: m[1] as Described["type"], digest: m[2]!, path: m[3]! });
+  }
+  return out;
+}
+
+/** The paths that are still the controller's: in its manifest and matching it now (type, and digest or link target). */
+export function controllerOwned(manifest: readonly ControllerEntry[], now: readonly Described[]): Set<string> {
+  const was = new Map(manifest.map((m) => [m.path, m]));
+  const own = new Set<string>();
+  for (const r of now) {
+    const m = was.get(r.path);
+    if (m && m.type === r.type && m.digest === r.digest) own.add(r.path);
+  }
+  return own;
 }
 
 /** BT: provider key shapes. The run's own proxy token is lease-scoped and is not one of them. */
@@ -235,11 +292,21 @@ export interface AuditEvidence {
   files: StatEntry[];
   /** Scanned files that hold a key pattern or a drive path, by path only. */
   hits: string[];
+  /** Written files left out of files and the scan as the controller's own install, each still matching its manifest. */
+  controller: number;
+  /** Files the session wrote under /work after its start marker, vendored folders left out; scanned beside files. */
+  work: string[];
 }
 
 export type AuditResult =
   | { ok: true; evidence: AuditEvidence }
   | { ok: false; kind: "breach" | "uncollected"; reasons: string[]; evidence: Partial<AuditEvidence> };
+
+/** The marker the job touches right before its agent starts; files under /work newer than it are the session's. */
+export const SESSION_MARK = AUDIT_DIR + "/session-start";
+/** BT (the Captain's ruling on open item 2.26): the dependency folders whose files the /work scan leaves out as vendored. */
+export const VENDORED_DIRS: readonly string[] = ["node_modules", "bower_components", "vendor", ".venv", "venv", "site-packages", "dist-packages", ".pnpm-store", ".yarn"];
+export const WORK_DONE = "DC-WORK-DONE";
 
 export const AUDIT_COMMANDS = {
   ruleset: "nft list chain inet dc out",
@@ -247,6 +314,9 @@ export const AUDIT_COMMANDS = {
   egress: "echo " + END_MARK + " > /dev/kmsg && journalctl --sync && journalctl -k -o cat --no-pager",
   files:
     "touch " + AUDIT_DIR + "/end && find / -xdev \\( -path /proc -o -path /sys -o -path /dev -o -path /run -o -path /work \\) -prune -o -newer " + AUDIT_DIR + "/start -printf '%p\\t%s\\t%m\\t%TY-%Tm-%TdT%TT\\t%y\\n' && echo DC-FIND-DONE",
+  controller: describeCommand(AUDIT_DIR + "/controller.now"),
+  work:
+    "if [ -e " + SESSION_MARK + " ]; then find /work \\( " + VENDORED_DIRS.map((d) => "-name '" + d + "'").join(" -o ") + " \\) -prune -o -type f -newer " + SESSION_MARK + " -print0; fi && printf '\\n" + WORK_DONE + "\\n'",
   scan:
     "while IFS= read -r -d '' f; do grep -qIE -f " + AUDIT_DIR + "/patterns -- \"$f\"; s=$?; if [ $s -eq 0 ]; then printf 'HIT\\t%s\\n' \"$f\"; elif [ $s -gt 1 ]; then printf 'ERR\\t%s\\n' \"$f\"; fi; done < " + AUDIT_DIR + "/scan.list; echo DC-SCAN-DONE",
 } as const;
@@ -317,6 +387,14 @@ export function parseFiles(text: string): StatEntry[] | null {
   return rows;
 }
 
+/** Reads the /work list: NUL-separated paths under /work, then the done line. Null when the done line is missing. */
+export function parseWork(text: string): string[] | null {
+  const end = "\n" + WORK_DONE + "\n";
+  if (!text.endsWith(end)) return null;
+  const paths = text.slice(0, -end.length).split("\0").filter(Boolean);
+  return paths.every((p) => p.startsWith("/work/")) ? paths : null;
+}
+
 export function parseScan(text: string): { hits: string[]; errors: string[] } | null {
   const lines = text.split("\n").filter(Boolean);
   if (lines.at(-1) !== "DC-SCAN-DONE") return null;
@@ -337,7 +415,7 @@ export function parseScan(text: string): { hits: string[]; errors: string[] } | 
  * filter as set, egress to exactly the proxy and the named mirrors, and no key pattern or drive path in a process's
  * arguments or in a written file. Extra paths (a recipe.json, say) are scanned beside the written files.
  */
-export async function audit(backend: VmBackend, vm: Vm, o: { scanExtra?: readonly string[] } = {}): Promise<AuditResult> {
+export async function audit(backend: VmBackend, vm: Vm, o: { scanExtra?: readonly string[]; controller?: readonly ControllerEntry[] } = {}): Promise<AuditResult> {
   const spec = vm.spec;
   const evidence: Partial<AuditEvidence> = {};
   const uncollected = (why: string): AuditResult => ({ ok: false, kind: "uncollected", reasons: [why], evidence });
@@ -370,8 +448,33 @@ export async function audit(backend: VmBackend, vm: Vm, o: { scanExtra?: readonl
   if (typeof fl === "string") return uncollected(fl);
   const files = parseFiles(fl.stdout);
   if (!files) return uncollected("the written-file list is cut or empty");
-  evidence.files = files.filter((f) => !f.path.startsWith(AUDIT_DIR + "/"));
-  const scanList = [...evidence.files.filter((f) => f.type === "f").map((f) => f.path), ...(o.scanExtra ?? [])];
+  const written = files.filter((f) => !f.path.startsWith(AUDIT_DIR + "/"));
+  let own = new Set<string>();
+  const manifest = o.controller ?? [];
+  if (manifest.length) {
+    const mine = new Set(manifest.map((m) => m.path));
+    const listed = written.filter((f) => mine.has(f.path)).map((f) => f.path);
+    if (listed.length) {
+      try {
+        await backend.write(vm, AUDIT_DIR + "/controller.now", listed.map((p) => p + "\0").join(""));
+      } catch (e) {
+        return uncollected("could not write the controller's file list: " + (e as Error).message);
+      }
+      const cr = await run("controller");
+      if (typeof cr === "string") return uncollected(cr);
+      const now = parseDescribe(cr.stdout);
+      if (!now || now.length !== listed.length) return uncollected("the controller's file check is cut");
+      own = controllerOwned(manifest, now);
+    }
+  }
+  evidence.controller = own.size;
+  evidence.files = written.filter((f) => !own.has(f.path));
+  const wk = await run("work");
+  if (typeof wk === "string") return uncollected(wk);
+  const work = parseWork(wk.stdout);
+  if (!work) return uncollected("the /work list is cut");
+  evidence.work = work;
+  const scanList = [...new Set([...evidence.files.filter((f) => f.type === "f").map((f) => f.path), ...work, ...(o.scanExtra ?? [])])];
   try {
     await backend.write(vm, AUDIT_DIR + "/patterns", [...KEY_PATTERNS, ...DRIVE_PATTERNS].join("\n") + "\n");
     await backend.write(vm, AUDIT_DIR + "/scan.list", scanList.map((p) => p + "\0").join(""));
@@ -396,8 +499,18 @@ export async function audit(backend: VmBackend, vm: Vm, o: { scanExtra?: readonl
   return reasons.length ? { ok: false, kind: "breach", reasons, evidence } : { ok: true, evidence: evidence as AuditEvidence };
 }
 
+/** One sandbox's dropped connections, printed per sandbox (the Captain's ruling on open item X). */
+export interface SandboxTally {
+  label: string;
+  blocked: number;
+}
+
+export const sandboxLine = (t: SandboxTally) => "sandbox " + t.label + ": " + t.blocked + " blocked connection" + (t.blocked === 1 ? "" : "s");
+
 export interface SandboxRun<T> {
   value: T | null;
+  /** New connections the egress filter dropped in this VM, from the audit's log (0 when the log was never read). */
+  blocked: number;
   /** A preamble step or the job failed before it returned: a failure outside the agent. */
   error: string | null;
   audit: AuditResult;
@@ -431,7 +544,7 @@ export async function sandboxed<T>(d: SandboxDeps, spec: VmSpec, job: (vm: Vm) =
     vm = await d.backend.create(spec);
   } catch (e) {
     await d.hosts.settle(lease.id, (d.now() - started) / 3_600_000);
-    return { value: null, error: "the VM did not start: " + (e as Error).message, audit: { ok: false, kind: "uncollected", reasons: ["no VM"], evidence: {} }, destroyError: null };
+    return { value: null, blocked: 0, error: "the VM did not start: " + (e as Error).message, audit: { ok: false, kind: "uncollected", reasons: ["no VM"], evidence: {} }, destroyError: null };
   }
   let value: T | null = null;
   let error: string | null = null;
@@ -451,6 +564,14 @@ export async function sandboxed<T>(d: SandboxDeps, spec: VmSpec, job: (vm: Vm) =
         break;
       }
     }
+    let controller: ControllerEntry[] = [];
+    if (error === null && d.backend.prepare) {
+      try {
+        controller = await d.backend.prepare(vm);
+      } catch (e) {
+        error = "the controller's install failed: " + (e as Error).message;
+      }
+    }
     if (error === null) {
       try {
         value = await job(vm);
@@ -459,7 +580,7 @@ export async function sandboxed<T>(d: SandboxDeps, spec: VmSpec, job: (vm: Vm) =
         error = (e as Error).message;
       }
     }
-    result = await audit(d.backend, vm, { scanExtra: typeof o.scanExtra === "function" ? o.scanExtra(value) : o.scanExtra });
+    result = await audit(d.backend, vm, { scanExtra: typeof o.scanExtra === "function" ? o.scanExtra(value) : o.scanExtra, controller });
   } finally {
     try {
       await d.backend.destroy(vm);
@@ -469,7 +590,7 @@ export async function sandboxed<T>(d: SandboxDeps, spec: VmSpec, job: (vm: Vm) =
     await d.hosts.settle(lease.id, (d.now() - started) / 3_600_000);
   }
   if (rethrow && result.ok) throw rethrow;
-  return { value, error, audit: result, destroyError };
+  return { value, blocked: result.evidence.blocked?.length ?? 0, error, audit: result, destroyError };
 }
 
 export interface UbicloudOptions {

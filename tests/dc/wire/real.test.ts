@@ -61,6 +61,8 @@ async function host(o: { vm?: boolean } = {}): Promise<{ svc: LedgerService; ctx
   mkdirSync(join(root, "ssh"));
   writeFileSync(keyPath, "invented private key\n", { mode: 0o600 });
   writeFileSync(keyPath + ".pub", "ssh-ed25519 AAAAinvented dc-launch\n");
+  mkdirSync(join(root, "chromium", "chrome-linux"), { recursive: true });
+  writeFileSync(join(root, "chromium", "chrome-linux", "chrome"), "invented browser\n", { mode: 0o755 });
   const wiring = join(root, "wiring.json");
   writeFileSync(
     wiring,
@@ -70,7 +72,7 @@ async function host(o: { vm?: boolean } = {}): Promise<{ svc: LedgerService; ctx
       cacheDir: join(root, "cache"),
       scanMs: 50,
       sessions: { gstackSources: [], imageDigest: null },
-      vm: o.vm === false ? null : { project: "pj-test", location: "eu-central-h1", size: "standard-2", image: "ubuntu-noble", privateSubnet: "ps-test", keyPath, knownHosts: join(root, "ssh", "known_hosts"), chromium: "/opt/chromium/chrome", priceMicrosPerHour: 57_400, proxy: { host: "10.0.0.2", port: 8787 }, mirrors: [{ name: "npm", host: "10.0.0.2", port: 4873, url: "http://10.0.0.2:4873/", terms: "npm terms" }] },
+      vm: o.vm === false ? null : { project: "pj-test", location: "eu-central-h1", size: "standard-2", image: "ubuntu-noble", privateSubnet: "ps-test", keyPath, knownHosts: join(root, "ssh", "known_hosts"), chromiumBuild: { dir: join(root, "chromium"), bin: "chrome-linux/chrome" }, claudeTarball: join(root, "claude.tgz"), priceMicrosPerHour: 57_400, proxy: { host: "10.0.0.2", port: 8787 }, mirrors: [{ name: "npm", host: "10.0.0.2", port: 4873, url: "http://10.0.0.2:4873/", terms: "npm terms" }] },
     }),
   );
   const svc = opened.service;

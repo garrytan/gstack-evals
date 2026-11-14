@@ -5,7 +5,7 @@ import { describe, expect, test } from "bun:test";
 import { DcError } from "../../../lanes/design-constructed/errors.ts";
 import { armBlock, buildPrompt, servesEvery } from "../../../lanes/design-constructed/stage3/build.ts";
 import { armReads, authored, fixtureStage3, reads, unit } from "../../../lanes/design-constructed/stage3/fixtures.ts";
-import { armFirst, buildValues, instrument, keepFlags, readout, type BuildRecord, type PairRow, type Values } from "../../../lanes/design-constructed/stage3/measures.ts";
+import { armFirst, buildValues, missingScenarios, instrument, keepFlags, readout, type BuildRecord, type PairRow, type Values } from "../../../lanes/design-constructed/stage3/measures.ts";
 import { runStage3 } from "../../../lanes/design-constructed/stage3/run.ts";
 import { accepted, countValidation, selectUnits } from "../../../lanes/design-constructed/stage3/units.ts";
 import type { CheckRun } from "../../../lanes/design-constructed/stage3/build.ts";
@@ -177,9 +177,10 @@ describe("measures and readout", () => {
     expect([v.axe, v.axeNew]).toEqual([2, 1]);
     expect(buildValues(rec(), [], undefined).axeNew).toBeNull();
   });
-  test("a missing scenario or check leaves its denominator", () => {
-    const v = buildValues(rec({ reads: reads({ keyChecks: { k1: true, k2: null, k3: false }, agentUser: [{ scenario: "s1", completed: true, steps: 1, failedActions: 0, consoleErrors: 0, deadEnds: 0 }, { scenario: "s2", completed: null, steps: 0, failedActions: 0, consoleErrors: 0, deadEnds: 0 }] }) }), authored().keyChecks, undefined);
-    expect([v.keyCheckRecurrence, v.completion]).toEqual([0.5, 1]);
+  test("a missing check leaves its denominator; completion is completed scenarios over 3, so a missing scenario counts as not completed (ruling 2.31)", () => {
+    const b = rec({ reads: reads({ keyChecks: { k1: true, k2: null, k3: false }, agentUser: [{ scenario: "s1", completed: true, steps: 1, failedActions: 0, consoleErrors: 0, deadEnds: 0 }, { scenario: "s2", completed: null, steps: 0, failedActions: 0, consoleErrors: 0, deadEnds: 0 }] }) });
+    const v = buildValues(b, authored().keyChecks, undefined);
+    expect([v.keyCheckRecurrence, v.completion, v.agentSteps, missingScenarios(b)]).toEqual([0.5, 0.3333, 1, 2]);
   });
   test("the readout requires the base-app map and clusters on it", () => {
     const vals = new Map<string, Partial<Record<"none" | "lens", Values>>>([["u01", { none: { ...buildValues(rec(), [], undefined), des4: null }, lens: { ...buildValues(rec(), [], undefined), des4: null } }]]);

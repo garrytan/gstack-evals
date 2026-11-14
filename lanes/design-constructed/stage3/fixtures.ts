@@ -2,7 +2,7 @@
 // Invented fixtures for stage 3's tests and dry-run cases: scripted authoring, build agent, reader and DES-4 judge over a
 // fake Ubicloud. No real app, model or VM.
 import { fakeBackend, fakeHosts, fakeMirrors, fakeMoney, fakeSpec, fakeWorld, bytes } from "./fake.ts";
-import type { BuildDeps, BuildArm } from "./build.ts";
+import { OUT_TAR, type BuildDeps, type BuildArm } from "./build.ts";
 import type { Stage3Deps } from "./run.ts";
 import type { AgentEnd, Authored, AuthoredAudit, BuildReads, PairwiseJudge, Stage3Authoring } from "./seams.ts";
 import type { SelectDeps, Stage3Candidate } from "./units.ts";
@@ -59,7 +59,7 @@ export function fixtureStage3(s: Stage3Script = {}) {
   const tries = new Map<string, number>();
   const world = fakeWorld({
     handler: (vm, command) => {
-      if (command.startsWith("tar -C /work/repo -cf /work/out.tar")) vm.files.set("/work/out.tar", bytes("tree:" + vm.spec!.label.replace(/ retry$/, "")));
+      if (command.startsWith("tar -C /work/repo -cf " + OUT_TAR)) vm.files.set(OUT_TAR, bytes("tree:" + vm.spec!.label.replace(/ retry$/, "")));
       if (command.includes("curl -s -o /dev/null -m 30")) {
         const label = dec.decode(vm.files.get("/work/app.tar") ?? new Uint8Array()).slice(5);
         const n = (command.match(/curl /g) ?? []).length;

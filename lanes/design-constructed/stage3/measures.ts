@@ -44,8 +44,10 @@ const axeKeys = (r: BuildReads) => new Set(r.axe.flatMap((a) => a.violations.map
 /**
  * Measures 1 to 7 for one build (DES-4 joins from the pairwise). A build that never serves scores 0 on measure 1 and on
  * agent-user completion, and every render read is unavailable. Forced states are unavailable when the screen doesn't
- * read the data source plan.md names. A missing scenario or check leaves its denominator. The agent user's secondaries
- * (steps, failed actions, console errors, dead ends) are means over its scenarios with a result.
+ * read the data source plan.md names. A missing key check leaves its denominator. Agent-user completion is completed
+ * scenarios over 3, as frozen, so a scenario with no result counts as not completed (the Captain's ruling on open item
+ * 2.31; missingScenarios counts them for the readout). The agent user's secondaries (steps, failed actions, console
+ * errors, dead ends) are means over its scenarios with a result.
  */
 export function buildValues(b: BuildRecord, validated: readonly KeyCheck[], noReview: BuildRecord | undefined): Values {
   const v = none();
@@ -68,7 +70,7 @@ export function buildValues(b: BuildRecord, validated: readonly KeyCheck[], noRe
   const kc = validated.map((k) => r.keyChecks[k.id]).filter((x): x is boolean => x === true || x === false);
   v.keyCheckRecurrence = share(kc.filter(Boolean).length, kc.length);
   const au = r.agentUser.filter((a) => a.completed !== null);
-  v.completion = share(au.filter((a) => a.completed).length, au.length);
+  v.completion = share(au.filter((a) => a.completed).length, STAGE3.scenarios);
   const mean = (f: (a: (typeof au)[number]) => number) => (au.length ? r4(au.reduce((n, a) => n + f(a), 0) / au.length) : null);
   v.agentSteps = mean((a) => a.steps);
   v.agentFailedActions = mean((a) => a.failedActions);
@@ -77,6 +79,9 @@ export function buildValues(b: BuildRecord, validated: readonly KeyCheck[], noRe
   v.literals = r.literalsAdded;
   return v;
 }
+
+/** Agent-user scenarios with no result on a build that served: each counts as not completed. */
+export const missingScenarios = (b: BuildRecord): number => (b.state === "measured" && b.serves && b.reads ? Math.max(0, STAGE3.scenarios - b.reads.agentUser.filter((a) => a.completed !== null).length) : 0);
 
 /** Validated key checks that pass on every arm's build print as uninformative. */
 export function uninformative(validated: readonly KeyCheck[], builds: readonly BuildRecord[]): string[] {
