@@ -75,6 +75,9 @@
 //   names, since the frontier decider asks the main model's own id; every other such hit, on main-model and decider requests
 //   alike, is journaled as a marker_hit line and the call goes on as if there were no hit. Both carry the slot's cell and each marker's index and sha256 prefix, never its text. A proxy-wide marker, and
 //   every hit on other proxies, keeps E_TRIPWIRE byte for byte.
+// - Served provider (off by default, ProxyOptions.servedProvider): each OpenRouter outcome line also carries served_provider and
+//   generation_id, the provider name and id the reply names (a JSON body's top-level fields, or the first stream event that
+//   carries them), so the evaluator can check session traffic against its pinned provider. Nothing else changes.
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { dlopen, FFIType } from "bun:ffi";
@@ -227,6 +230,8 @@ export interface ProxyOptions {
   count?: Send;
   /** How long a count may take before the call reserves at its byte bound instead (COUNT_TIMEOUT_MS by default). */
   countTimeoutMs?: number;
+  /** Off by default. When true, each OpenRouter outcome line carries served_provider and generation_id as the reply names them (servedOf), null when it names none. */
+  servedProvider?: boolean;
 }
 
 export interface BindRequest {
@@ -316,6 +321,38 @@ interface CallContext {
   sentAt?: number;
   /** The input tokens a free count reserved for this call, and the counted route (provider and route) a short count stops. */
   counted?: { route: string; counter: "anthropic" | "openai"; tokens: number };
+  /** With ProxyOptions.servedProvider: the provider and generation id the attempt's reply named. */
+  served?: { provider: string | null; id: string | null };
+}
+
+/**
+ * The serving provider and generation id an OpenRouter reply names: a JSON body's top-level provider and id, or for a
+ * stream the first data event that carries each (top level, or the message of an Anthropic-shaped message_start). Null
+ * where the reply names none.
+ */
+export function servedOf(text: string): { provider: string | null; id: string | null } {
+  const out: { provider: string | null; id: string | null } = { provider: null, id: null };
+  const take = (v: unknown) => {
+    if (!v || typeof v !== "object") return;
+    for (const o of [v as Record<string, unknown>, (v as { message?: unknown }).message as Record<string, unknown> | undefined]) {
+      if (!o || typeof o !== "object") continue;
+      if (out.provider === null && typeof o.provider === "string" && o.provider) out.provider = o.provider;
+      if (out.id === null && typeof o.id === "string" && o.id) out.id = o.id;
+    }
+  };
+  try {
+    take(JSON.parse(text));
+    return out;
+  } catch {}
+  for (const line of text.split("\n")) {
+    const data = line.match(/^data:\s?(.*)$/)?.[1];
+    if (!data || data === "[DONE]") continue;
+    try {
+      take(JSON.parse(data));
+    } catch {}
+    if (out.provider !== null && out.id !== null) break;
+  }
+  return out;
 }
 
 const hash = (secret: string) => createHash("sha256").update(secret).digest();
@@ -841,6 +878,7 @@ export class MeteringProxy {
 
     for (let attempt = 1; ; attempt++) {
       ctx.sentAt = undefined;
+      ctx.served = undefined;
       for (let sleptUntil = 0; this.pausedUntil[provider] > Math.max(Date.now(), sleptUntil); ) {
         const until = this.pausedUntil[provider];
         const wait = until - Date.now();
@@ -915,6 +953,7 @@ export class MeteringProxy {
           .then(
             text => {
               const usage = sseUsage(text);
+              if (o.servedProvider && provider === "openrouter") ctx.served = servedOf(text);
               const cost = usageCost(price, usage);
               return this.settle(ctx, rid, maxMicros, cost ? { kind: "spent", spent_micros: cost.micros, usage: cost.usage } : { kind: "unknown" }, res.status, cost ? undefined : "the stream ended without usage", undefined, undefined, openRouterBilledMicros(usage));
             },
@@ -946,6 +985,7 @@ export class MeteringProxy {
         await this.settle(ctx, rid, maxMicros, { kind: "unknown" }, res.status, reason);
         return problem("UPSTREAM", 502, reason);
       }
+      if (o.servedProvider && provider === "openrouter") ctx.served = servedOf(text);
       let reported: unknown = null;
       try {
         reported = (JSON.parse(text) as { usage?: unknown })?.usage;
@@ -1021,7 +1061,7 @@ export class MeteringProxy {
     const micros = outcome.kind === "spent" ? outcome.spent_micros : maxMicros;
     let journaled = true;
     try {
-      this.journal({ kind: "outcome", reservation_id: rid, meter_id: ctx.slot.cell.meter_id, status, outcome, ...(ctx.provider === "openrouter" ? { billed_micros: billed } : {}), latency_ms: ctx.sentAt === undefined ? null : Date.now() - ctx.sentAt, ...(reason ? { reason } : {}), ...(upstream !== undefined ? { upstream_body: upstream } : {}), ...mark });
+      this.journal({ kind: "outcome", reservation_id: rid, meter_id: ctx.slot.cell.meter_id, status, outcome, ...(ctx.provider === "openrouter" ? { billed_micros: billed } : {}), ...(this.options.servedProvider && ctx.provider === "openrouter" ? { served_provider: ctx.served?.provider ?? null, generation_id: ctx.served?.id ?? null } : {}), latency_ms: ctx.sentAt === undefined ? null : Date.now() - ctx.sentAt, ...(reason ? { reason } : {}), ...(upstream !== undefined ? { upstream_body: upstream } : {}), ...mark });
     } catch (e) {
       journaled = false;
       console.error(`E_INTERNAL: metering proxy: the outcome of reservation ${rid} was not journaled: ${scrubbedCause(e, ctx.secrets)}`);

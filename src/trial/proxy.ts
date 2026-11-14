@@ -79,10 +79,11 @@ export interface ProxyHandle {
  * Starts the proxy container on the trial network and connects it to the egress network. dir is the evaluator-side
  * directory for its config, journal and management socket; the ledger's directory is mounted at its own path.
  */
-export function startProxyContainer(opts: { image: string; net: TrialNetwork; dir: string; ledger: string; leaseId: string; managementToken: string; retry: RetryBudget; providerKeys?: Record<string, string>; docker?: string; timeoutMs?: number }): ProxyHandle {
+export function startProxyContainer(opts: { image: string; net: TrialNetwork; dir: string; ledger: string; leaseId: string; managementToken: string; retry: RetryBudget; providerKeys?: Record<string, string>; docker?: string; timeoutMs?: number; writeAheadSocket?: string; servedProvider?: boolean }): ProxyHandle {
   const bin = opts.docker ?? "docker";
   mkdirSync(opts.dir, { recursive: true });
-  const config: ProxyConfig = { lease_id: opts.leaseId, ledger: opts.ledger, journal: join(opts.dir, "journal.ndjson"), socket: join(opts.dir, "management.sock"), host: opts.net.proxyIp, port: PROXY_PORT, retry: opts.retry };
+  if (opts.writeAheadSocket !== undefined && dirname(opts.writeAheadSocket) !== opts.dir) throw new TrialNetworkError("the write-ahead relay socket must sit in the proxy's mounted directory " + opts.dir);
+  const config: ProxyConfig = { lease_id: opts.leaseId, ledger: opts.ledger, journal: join(opts.dir, "journal.ndjson"), socket: join(opts.dir, "management.sock"), host: opts.net.proxyIp, port: PROXY_PORT, retry: opts.retry, ...(opts.writeAheadSocket !== undefined ? { write_ahead_socket: opts.writeAheadSocket } : {}), ...(opts.servedProvider ? { served_provider: true } : {}) };
   writeFileSync(join(opts.dir, "config.json"), JSON.stringify(config, null, 2) + "\n");
   rmSync(config.socket, { force: true });
   const env = trialEnv("proxy", { PATH: "/usr/local/bin:/usr/bin:/bin", HOME: "/tmp", LANG: "C.UTF-8", GSTACK_EVALS_PROXY_TOKEN: opts.managementToken, ...opts.providerKeys });
