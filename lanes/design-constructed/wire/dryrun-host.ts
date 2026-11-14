@@ -3,13 +3,14 @@
 // rule fails; the host's provisioning importing the gstack pin by tree hash and loading the trial image through a
 // stand-in docker binary, and a launch whose image digest differs from the sessions section refused with every VM
 // deleted; and the row driven end to end on stage3/fake.ts's simulated Ubicloud with every SSH command run on this
-// machine: launch with the plan's stage row, the row's lines in stage.log, a relaunch, a host loss and its recovery, and
-// the teardown's archive with the approval record written back. No key, no network, no VM.
+// machine: launch with the plan's stage row, the row's lines in its log on the work folder's tmpfs, a relaunch, a host
+// loss and its recovery, and the teardown's archive with the work folder sealed to the run's recipient and the approval
+// record written back. The launcher's and the host's work folders sit under /dev/shm. No key, no network, no VM.
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { recipeHash, recipeInputs } from "../../../src/rig/recipe.ts";
-import { controllerProvision, gstackPack, layout, type ControllerPlan } from "../money/controller-host.ts";
+import { AGE_HEADER, controllerProvision, gstackPack, layout, rowLog, type ControllerPlan } from "../money/controller-host.ts";
 import { makeRecord } from "../money/dryrun-fixture.ts";
 import { WALCTL_PY } from "../money/offhost.ts";
 import { fakeBackend, fakeWorld, type FakeWorld } from "../stage3/fake.ts";
@@ -25,8 +26,14 @@ const LANE = join(REPO_ROOT, "lanes", "design-constructed");
 export const FAKE_KEYS = { ANTHROPIC_API_KEY: "test-not-a-key-anthropic", OPENAI_API_KEY: "test-not-a-key-openai", OPENROUTER_API_KEY: "test-not-a-key-openrouter", UBICLOUD_API_KEY: "test-not-a-key-ubicloud", UBI_OWNER: "dry-owner" };
 const all = (...checks: (string | null)[]): string | null => checks.find((x) => x !== null) ?? null;
 
-async function withTemp(fn: (dir: string) => Promise<string | null>): Promise<string | null> {
+/** The tmpfs the custody rule needs on this machine (PD-41). */
+export const TMPFS = "/dev/shm";
+/** A scratch folder's tmpfs twin: the launcher's work folder and the host's work folder sit there. */
+export const shmOf = (dir: string) => join(TMPFS, basename(dir));
+
+export async function withTemp(fn: (dir: string) => Promise<string | null>): Promise<string | null> {
   const dir = mkdtempSync(join(tmpdir(), "dc-hostrow-"));
+  mkdirSync(shmOf(dir), { mode: 0o700 });
   try {
     return await fn(dir);
   } finally {
@@ -36,7 +43,27 @@ async function withTemp(fn: (dir: string) => Promise<string | null>): Promise<st
       } catch {}
     }
     rmSync(dir, { recursive: true, force: true });
+    rmSync(shmOf(dir), { recursive: true, force: true });
   }
+}
+
+/** A fresh age key pair in dir (on tmpfs): the identity, its recipient and a recipient file as the plan names it. */
+export function ageKeys(dir: string): { identity: string; recipient: string; recipientFile: string } {
+  const identity = join(dir, "identity.txt");
+  if (Bun.spawnSync(["age-keygen", "-o", identity], { stdout: "pipe", stderr: "pipe" }).exitCode !== 0) throw new Error("age-keygen failed; the custody cases need age and age-keygen on PATH");
+  const recipient = new TextDecoder().decode(Bun.spawnSync(["age-keygen", "-y", identity], { stdout: "pipe" }).stdout).trim();
+  const recipientFile = join(dir, "recipient.txt");
+  writeFileSync(recipientFile, recipient + "\n");
+  return { identity, recipient, recipientFile };
+}
+
+/** Opens an age file into a new tmpfs folder and returns its paths; the caller removes the folder. */
+export function openSealed(file: string, identity: string, into: string): string[] {
+  mkdirSync(into, { recursive: true, mode: 0o700 });
+  const plain = Bun.spawnSync(["age", "-d", "-i", identity, file], { stdout: "pipe", stderr: "pipe" });
+  if (plain.exitCode !== 0) throw new Error("the sealed archive did not open with the run's identity");
+  if (Bun.spawnSync(["tar", "-x", "-C", into, "-f", "-"], { stdin: plain.stdout }).exitCode !== 0) throw new Error("the sealed archive is not a tar");
+  return new TextDecoder().decode(Bun.spawnSync(["find", ".", "-type", "f"], { cwd: into, stdout: "pipe" }).stdout).split("\n").filter(Boolean).sort();
 }
 
 const pidsIn = (dir: string): number[] => {
@@ -69,19 +96,24 @@ export const rowEnv = (o: { dirty?: boolean; dryRun?: boolean } = {}): RowEnv =>
   vocabulary: () => new Set(),
 });
 
-/** A host plan on dir: a work folder with its wiring file, an approval record and the stage row. */
-export function hostFixture(dir: string, stage: string[] = ["items"]): { planPath: string; recordPath: string; plan: HostPlanFile } {
-  const work = join(dir, "work-in");
+/** A host plan on dir: a work folder on tmpfs with its wiring file, an approval record, an age recipient and the stage row. */
+export function hostFixture(dir: string, stage: string[] = ["items"]): { planPath: string; recordPath: string; plan: HostPlanFile; identity: string } {
+  const work = join(shmOf(dir), "work-in");
+  mkdirSync(shmOf(dir), { recursive: true, mode: 0o700 });
+  const keys = ageKeys(shmOf(dir));
   mkdirSync(join(work, "inputs"), { recursive: true });
   writeFileSync(join(work, "wiring.json"), JSON.stringify({ retry: { attempts: 3, elapsed_ms: 900_000 }, pinRecord: "inputs/pins.json", cacheDir: "cache", scanMs: 10_000, sessions: null, vm: null }) + "\n");
   writeFileSync(join(work, "inputs", "note.txt"), "an input the row reads\n");
   mkdirSync(join(dir, "approval"), { recursive: true });
   const record = makeRecord(join(dir, "approval"));
-  const plan: HostPlanFile = { runId: "dc-dryrun-hostrow", longestStageHours: 24, ttlHours: 30, priceMicrosPerHour: { controller: 60_000, wal: 20_000 }, bunVersion: "1.4.4", mirrors: false, ubicloud: { project: "dry", location: "dry", size: "standard-2", image: "dry", keyPath: join(dir, "key"), knownHosts: join(dir, "known") }, work, wiring: "wiring.json", record, stage };
+  const plan: HostPlanFile = { runId: "dc-dryrun-hostrow", longestStageHours: 24, ttlHours: 30, priceMicrosPerHour: { controller: 60_000, wal: 20_000 }, bunVersion: "1.4.4", mirrors: false, ubicloud: { project: "dry", location: "dry", size: "standard-2", image: "dry", keyPath: join(dir, "key"), knownHosts: join(dir, "known") }, work, wiring: "wiring.json", record, recipient: keys.recipientFile, stage };
   const planPath = join(dir, "host-plan.json");
   writeFileSync(planPath, JSON.stringify(plan) + "\n");
-  return { planPath, recordPath: join(dir, "host-record.json"), plan };
+  return { planPath, recordPath: join(dir, "host-record.json"), plan, identity: keys.identity };
 }
+
+/** The simulated host's work folder: a tmpfs folder, as the real host's mount is. */
+export const hostWorkOf = (dir: string) => join(shmOf(dir), "host-work");
 
 /** The row's seams for a launch on this machine: the simulated Ubicloud, the checkout's own entry and stage module. */
 export function localSeams(dir: string, w: FakeWorld, env: Record<string, string | undefined>, over: (p: ControllerPlan) => ControllerPlan = (p) => p): HostSeams {
@@ -97,6 +129,8 @@ export function localSeams(dir: string, w: FakeWorld, env: Record<string, string
       over({
         ...p,
         root: join(dir, "host"),
+        workDir: hostWorkOf(dir),
+        mountWork: false,
         wal: { dir: join(walRoot, "data"), script: join(walRoot, "walctl.py"), owner: null, authorizedKeys: join(walRoot, "authorized_keys") },
         target: () => ({ kind: "local", script: join(walRoot, "walctl.py"), dir: join(walRoot, "data") }),
         provision: controllerProvision({ bunVersion: "1.4.4", mirrors: false, system: false, bun: process.execPath, imageEntry: join(LANE, "money", "host-image.ts"), docker: join(dir, "docker") }),
@@ -188,6 +222,7 @@ export function hostRowCases(): DryRunCase[] {
           for (const [expect, refusal] of runs) {
             const w = localWorld();
             rmSync(join(dir, "host"), { recursive: true, force: true });
+            rmSync(hostWorkOf(dir), { recursive: true, force: true });
             rmSync(f.recordPath, { force: true });
             const s = localSeams(dir, w, FAKE_KEYS, (p) => ({ ...p, stage: null, gstack: pack, image: { tar: new Uint8Array(readFileSync(join(dir, "image.tar"))), expectDigest: expect } }));
             const r = await host("launch", f, s);
@@ -213,20 +248,20 @@ export function hostRowCases(): DryRunCase[] {
     },
     {
       rule: "W-host-row",
-      name: "the host row end to end on the simulated Ubicloud: launch runs the stage row, relaunch, a host loss and its recovery, then teardown archives the work and writes the record back",
+      name: "the host row end to end on the simulated Ubicloud: launch runs the stage row, relaunch, a host loss and its recovery, then teardown seals the work on the host, returns it only as age and writes the record back",
       check: () =>
         withTemp(async (dir) => {
           const w = localWorld();
           const f = hostFixture(dir);
           const s = localSeams(dir, w, FAKE_KEYS);
-          const l = layout("dc-dryrun-hostrow", join(dir, "host"));
+          const l = layout("dc-dryrun-hostrow", join(dir, "host"), hostWorkOf(dir));
           const stageDone = () => existsSync(join(l.state, "stage.json"));
           const launched = await host("launch", f, s);
           if (launched.code !== 0) return "launch: " + launched.err.join(" ");
           if (!(await until(stageDone))) return "the stage row never finished";
           const stage = JSON.parse(readFileSync(join(l.state, "stage.json"), "utf8"));
-          if (!stage.done) return "the stage row failed: " + stage.error;
-          const log = readFileSync(join(l.state, "stage.log"), "utf8");
+          if (!stage.done) return "the stage row failed: " + stage.code + " " + readFileSync(rowLog(l.work, 1), "utf8").slice(-400);
+          const log = readFileSync(rowLog(l.work, 1), "utf8");
           const first = all(log.includes("dc-authoring-1") ? null : "stage.log lacks the items row's lines", existsSync(join(l.work, "inputs", "note.txt")) ? null : "the inputs did not reach the host's work folder");
           if (first) return first;
           process.kill(pidsIn(dir)[0]!, "SIGTERM");
@@ -237,6 +272,7 @@ export function hostRowCases(): DryRunCase[] {
           const rec = JSON.parse(readFileSync(f.recordPath, "utf8"));
           process.kill(pidsIn(dir)[0]!, "SIGKILL");
           rmSync(join(dir, "host"), { recursive: true, force: true });
+          rmSync(l.work, { recursive: true, force: true });
           w.deleted.push(rec.controller.vm);
           const back = await host("recover", f, s);
           if (back.code !== 0 || !back.out.join(" ").includes("restored")) return "recover: " + back.out.concat(back.err).join(" ");
@@ -246,11 +282,15 @@ export function hostRowCases(): DryRunCase[] {
           const down = await host("teardown", f, s, rowEnv(), { "--archive": archive });
           if (down.code !== 0) return "teardown: " + down.out.concat(down.err).join(" ");
           const recordBack = readdirSync(dir).filter((n) => n.startsWith("approval")).length;
-          const grep = await runProcess(["grep", "-rl", "test-not-a-key", dir]);
+          const grep = await runProcess(["grep", "-rl", "test-not-a-key", dir, shmOf(dir)]);
+          const sealed = join(archive, "work.tar.age");
+          const opened = existsSync(sealed) && readFileSync(sealed).subarray(0, AGE_HEADER.length).toString() === AGE_HEADER ? openSealed(sealed, f.identity, join(shmOf(dir), "opened")) : [];
           return all(
             w.vms.every((v) => w.deleted.includes(v.id)) ? null : "a VM was left",
             existsSync(join(archive, "wal-lines.ndjson")) ? null : "no off-host lines in the archive",
-            existsSync(join(archive, "work", "inputs", "note.txt")) ? null : "the archive lacks the host's work folder",
+            opened.includes("./inputs/note.txt") ? null : "the sealed archive lacks the host's work folder: " + opened.join(", "),
+            existsSync(join(archive, "work")) || existsSync(join(archive, "work.tar")) ? "the archive holds the work folder in plaintext" : null,
+            existsSync(l.work) && readdirSync(l.work).length ? "the host's work folder kept plaintext after the teardown" : null,
             down.out.some((x) => x.startsWith("record: ")) && readdirSync(join(dir, "approval")).some((n) => n.includes(".before-teardown-")) ? null : "the approval record was not written back: " + down.out.join(" | ") + " " + recordBack,
             new TextDecoder().decode(grep.stdout).trim() === "" ? null : "a key reached a file: " + new TextDecoder().decode(grep.stdout),
           );

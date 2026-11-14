@@ -50,8 +50,11 @@ const COMMIT = "1".repeat(40);
 const noSleep = async () => {};
 
 /** A booted ledger service on a local off-host target, the host's commit file and a wiring file on a pinned record. */
-async function host(o: { vm?: boolean } = {}): Promise<{ svc: LedgerService; ctx: HostContext; wiring: string; root: string; pin: ReturnType<typeof pinRecord>; proxyPort: number }> {
+async function host(o: { vm?: boolean } = {}): Promise<{ svc: LedgerService; ctx: HostContext; wiring: string; root: string; work: string; pin: ReturnType<typeof pinRecord>; proxyPort: number }> {
   const root = temp("host");
+  const shm = mkdtempSync("/dev/shm/dc-real-work-");
+  dirs.push(shm);
+  const work = join(shm, "work");
   mkdirSync(join(root, "ledger"), { recursive: true });
   const record = makeRecord(join(root, "ledger"));
   const cfg: ServiceConfig = { runId: "dc-real-test", holder: join(root, "holders", "dc-real-test"), record, ledgerPath: join(root, "ledger", "ledger.sqlite"), journalDir: join(root, "journals"), stateDir: join(root, "state"), hosts: [] };
@@ -78,14 +81,14 @@ async function host(o: { vm?: boolean } = {}): Promise<{ svc: LedgerService; ctx
     JSON.stringify({
       retry: RULED_RETRY,
       pinRecord: join(root, "pins.json"),
-      cacheDir: join(root, "cache"),
+      cacheDir: join(work, "cache"),
       scanMs: 50,
       sessions: { gstackSources: [], imageDigest: null },
       vm: o.vm === false ? null : { project: "pj-test", location: "eu-central-h1", size: "standard-2", image: "ubuntu-noble", privateSubnet: "ps-test", keyPath, knownHosts: join(root, "ssh", "known_hosts"), chromiumBuild: { dir: join(root, "chromium"), bin: "chrome-linux/chrome" }, claudeTarball: join(root, "claude.tgz"), priceMicrosPerHour: 57_400, proxy: { host: "127.0.0.1", port: proxyPort }, mirrors: [{ name: "npm", host: "10.0.0.2", port: 4873, url: "http://10.0.0.2:4873/", terms: "npm terms" }] },
     }),
   );
   const svc = opened.service;
-  return { svc, ctx: hostContext(svc, wiring, ENV), wiring, root, pin, proxyPort };
+  return { svc, ctx: hostContext(svc, wiring, ENV, undefined, work), wiring, root, work, pin, proxyPort };
 }
 
 const rowEnv = (ctx: HostContext, seams: RealSeams): RowEnv => ({ ...fakeEnv(fakeKit()), providers: realProviders(ctx, seams), lane: () => ({ commit: COMMIT, dirty: false, root: REPO_ROOT }) });
@@ -353,14 +356,26 @@ describe("the real providers", () => {
 
   test("runOnHost runs one row in the service's process on the real providers and the host's commit; a row that fails throws for stage.json", async () => {
     const h = await host();
+    const row = { work: h.work, log: join(h.work, ".rows", "1.log") };
     expect(hostStage(h.wiring, ["items"])).toEqual({ module: "lanes/design-constructed/wire/host.ts", args: [h.wiring, "items"] });
     expect(h.ctx.lane()).toEqual({ commit: COMMIT, dirty: false, root: join(h.root, "repo") });
-    await runOnHost(h.svc, [h.wiring, "items"]);
-    const log = readFileSync(join(h.svc.cfg.stateDir, "stage.log"), "utf8").trim().split("\n");
+    await runOnHost(h.svc, [h.wiring, "items"], row);
+    const log = readFileSync(row.log, "utf8").trim().split("\n");
     expect(log).toHaveLength(18);
     expect(log.at(-1)).toStartWith("all-in cap $");
-    await expect(runOnHost(h.svc, [h.wiring, "sessions"])).rejects.toThrow("gstack-evals dc sessions exited 2");
-    await expect(runOnHost(h.svc, [h.wiring])).rejects.toThrow("runOnHost takes the wiring file");
+    await expect(runOnHost(h.svc, [h.wiring, "sessions"], row)).rejects.toThrow("gstack-evals dc sessions exited 2");
+    await expect(runOnHost(h.svc, [h.wiring], row)).rejects.toThrow("runOnHost takes the wiring file");
+    h.svc.close();
+  });
+
+  // Value: protects=PD-41's reply cache on tmpfs; fails_when=a row on the host writes model output to a reply cache on disk; why_new=the custody rule moved every sink and the cache onto tmpfs; seam=runOnHost; no_claim=the real host's mount
+  test("runOnHost refuses a wiring whose reply cache sits on disk, before the row runs", async () => {
+    const h = await host();
+    const disk = join(h.root, "wiring-disk.json");
+    writeFileSync(disk, JSON.stringify({ ...JSON.parse(readFileSync(h.wiring, "utf8")), cacheDir: join(h.root, "cache") }));
+    const row = { work: h.work, log: join(h.work, ".rows", "1.log") };
+    await expect(runOnHost(h.svc, [disk, "items"], row)).rejects.toThrow("not tmpfs");
+    expect(existsSync(row.log)).toBe(false);
     h.svc.close();
   });
 
@@ -368,9 +383,10 @@ describe("the real providers", () => {
   test("runOnHost leaves the process's working folder where it found it, after a row that passes and after one that fails", async () => {
     const h = await host();
     const before = process.cwd();
-    await runOnHost(h.svc, [h.wiring, "items"]);
+    const row = { work: h.work, log: join(h.work, ".rows", "1.log") };
+    await runOnHost(h.svc, [h.wiring, "items"], row);
     expect(process.cwd()).toBe(before);
-    await expect(runOnHost(h.svc, [h.wiring, "sessions"])).rejects.toThrow("gstack-evals dc sessions exited 2");
+    await expect(runOnHost(h.svc, [h.wiring, "sessions"], row)).rejects.toThrow("gstack-evals dc sessions exited 2");
     expect(process.cwd()).toBe(before);
     h.svc.close();
   });
@@ -379,9 +395,9 @@ describe("the real providers", () => {
     const h = await host();
     const bad = join(h.root, "bad.json");
     writeFileSync(bad, JSON.stringify({ retry: RETRY, pinRecord: "x", cacheDir: "y" }));
-    expect(() => hostContext(h.svc, bad, ENV)).toThrow("names no journal scan interval (scanMs)");
+    expect(() => hostContext(h.svc, bad, ENV, undefined, h.work)).toThrow("names no journal scan interval (scanMs)");
     writeFileSync(bad, JSON.stringify({ pinRecord: "x", cacheDir: "y", scanMs: 10 }));
-    expect(() => hostContext(h.svc, bad, ENV)).toThrow("names no retry budget");
+    expect(() => hostContext(h.svc, bad, ENV, undefined, h.work)).toThrow("names no retry budget");
     h.svc.close();
   });
 });

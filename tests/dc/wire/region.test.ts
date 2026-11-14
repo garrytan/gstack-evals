@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { BrowserSeam, BrowserSession } from "../../../lanes/design-constructed/recipes/seams.ts";
 import type { Vm } from "../../../lanes/design-constructed/stage3/sandbox.ts";
-import { host, hostFixture, localSeams, localWorld, watchedEnv, FAKE_KEYS } from "../../../lanes/design-constructed/wire/dryrun-host.ts";
+import { host, hostFixture, localSeams, localWorld, watchedEnv, FAKE_KEYS, shmOf } from "../../../lanes/design-constructed/wire/dryrun-host.ts";
 import { fakeEnv, fakeKit } from "../../../lanes/design-constructed/wire/fakes.ts";
 import { probe1D } from "../../../lanes/design-constructed/wire/recipes.ts";
 import { start, stageOf, type StartPlan } from "../../../lanes/design-constructed/wire/start.ts";
@@ -22,7 +22,7 @@ const temp = (tag: string) => {
   return d;
 };
 afterAll(() => {
-  for (const d of dirs) rmSync(d, { recursive: true, force: true });
+  for (const d of dirs) for (const p of [d, shmOf(d)]) rmSync(p, { recursive: true, force: true });
 });
 
 const plan = (row: string, sink: string, items: StartPlan["items"], record?: Record<string, unknown>): StartPlan => ({ row, sink, items, models: [], terms: [], ...(record ? { record } : {}) });

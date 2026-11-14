@@ -154,7 +154,7 @@ export function controllerHostCases(): DryRunCase[] {
           const sizes: Array<string | undefined> = [];
           backend.create = (spec, o) => (sizes.push(o?.size), create(spec, o));
           try {
-            await launch(backend, { runId: "dc-dryrun-host", owner: "dry-owner", longestStageHours: 24, ttlHours: 30, priceMicrosPerHour: { controller: 60_000, wal: 20_000 }, commit: "0".repeat(40), repoTar: recordTar(record), recordTar: recordTar(record), root: join(dir, "host"), wal: { dir: join(dir, "wal"), script: join(dir, "walctl.py"), owner: null, authorizedKeys: join(dir, "authorized_keys") }, provision: () => ["exit 9"], bun: process.execPath }, serviceEnv({ ANTHROPIC_API_KEY: "x", OPENAI_API_KEY: "x", OPENROUTER_API_KEY: "x", UBICLOUD_API_KEY: "x" }, "dry-owner"));
+            await launch(backend, { runId: "dc-dryrun-host", owner: "dry-owner", longestStageHours: 24, ttlHours: 30, priceMicrosPerHour: { controller: 60_000, wal: 20_000 }, commit: "0".repeat(40), repoTar: recordTar(record), recordTar: recordTar(record), root: join(dir, "host"), wal: { dir: join(dir, "wal"), script: join(dir, "walctl.py"), owner: null, authorizedKeys: join(dir, "authorized_keys") }, provision: () => ["exit 9"], bun: process.execPath, recipient: "age1" + "q".repeat(58) }, serviceEnv({ ANTHROPIC_API_KEY: "x", OPENAI_API_KEY: "x", OPENROUTER_API_KEY: "x", UBICLOUD_API_KEY: "x" }, "dry-owner"));
           } catch (err) {
             why = (err as Error).message;
           }

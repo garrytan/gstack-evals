@@ -308,6 +308,10 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_DCW_OFF_HOST](#e_dcw_off_host) | 2 | U20 |
 | [E_DCW_CONTAINMENT](#e_dcw_containment) | 2 | U20 |
 | [E_DCH_IMAGE_DIGEST](#e_dch_image_digest) | 2 | U20 |
+| [E_DCH_NOT_TMPFS](#e_dch_not_tmpfs) | 2 | U20 |
+| [E_DCH_TMPFS_FULL](#e_dch_tmpfs_full) | 2 | U20 |
+| [E_DCH_ROW_RUNNING](#e_dch_row_running) | 2 | U20 |
+| [E_DCH_SEAL](#e_dch_seal) | 2 | U20 |
 | [E_DCW_INSTALL_DIGEST](#e_dcw_install_digest) | 2 | U20 |
 | [E_DCW_MODEL_PROBE](#e_dcw_model_probe) | 2 | U20 |
 | [E_DCW_INSTALL_NETWORK](#e_dcw_install_network) | 2 | U20 |
@@ -2216,6 +2220,38 @@ Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing
 Design plan review eval (controller host): the trial image the controller host built or loaded has a digest other than the one the wiring file's sessions section records, so no review session may run on it. The launch or recovery deleted the VMs it made.
 
 Fix: Load the recorded image on the host (the plan's image tar, a docker save of the image the run recorded), or have the Captain record the new digest in the sessions section before any session runs. Never run sessions on a rebuilt image.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_DCH_NOT_TMPFS
+
+Design plan review eval (controller host custody, PD-41): a folder that holds plaintext sealed input or a row's sink is not on tmpfs. Either the controller host's work folder is not a tmpfs mount, the wiring's reply cache sits outside tmpfs, or the launcher's local work or inputs folder is on disk. Nothing was uploaded to that folder and no row ran there; a launch deleted the VMs it made.
+
+Fix: Put the folder on tmpfs: the launcher's work and inputs folders under /dev/shm, the reply cache inside the host's work folder. On the host, relaunch only while the work folder is still its tmpfs mount; after a reboot, recover instead.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_DCH_TMPFS_FULL
+
+Design plan review eval (controller host custody, PD-41): the inputs for the host's work folder are larger than the free space on its tmpfs mount, which is sized from the controller host's memory. The message prints both sizes. Nothing was unpacked; a launch deleted the VMs it made.
+
+Fix: Bring the sizes to the Captain. Don't move the work folder to disk; a larger controller size or a smaller upload is the Captain's call.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_DCH_ROW_RUNNING
+
+Design plan review eval (controller host): dc host next refused to send a row because the host's last row is still running. The host runs one row at a time on its one ledger, so nothing was uploaded or sent.
+
+Fix: Wait for the running row to end (dc host status prints its state and the last lines of its log), then send the next row again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_DCH_SEAL
+
+Design plan review eval (controller host custody, PD-41): the teardown could not seal the host's work folder with age to the run's recipient, or could not confirm the plaintext was deleted, or the archive it read back is not an age file. Both VMs are kept and nothing from the work folder was copied back.
+
+Fix: Read the message, fix the host (age installed, the recipient file in its state folder), then run dc host teardown again; it seals once and copies back only the sealed archive.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 

@@ -4,26 +4,29 @@
 // runOnHost (money/host-main.ts imports this file and calls it in the ledger service's own process) runs one paid row
 // on the real providers bound to that service, so its money, its proxies and its sessions live on the host that stays
 // awake, never on a Capy machine. Its arguments are the wiring file, then the row's own arguments as gstack-evals dc
-// takes them. Relative paths in both resolve against the host's work folder, which holds the row's uploaded inputs and
-// the sinks it writes. The row's lines go to stage.log in the service's state folder; a row that exits non-zero throws,
-// so host-main records it in stage.json. The checkout is the commit the host was launched at, unpacked from git archive
-// under the host's root beside its commit file.
+// takes them. Relative paths in both resolve against the host's work folder, a tmpfs mount that holds the uploaded
+// inputs, the sinks, the wiring's session folders and the row's log (PD-41); a reply cache outside tmpfs refuses. A row
+// that exits non-zero throws with the reason code it printed, so host-main records it in rows.json and stage.json. The
+// checkout is the commit the host was launched at, unpacked from git archive under the host's root beside its commit file.
 //
-// gstack-evals dc host launch|relaunch|recover|teardown|status --plan <host plan> --record <host record> [--archive
-// <new dir>] [--force] drives money/controller-host.ts from the attaching agent's machine. Every key is read by name,
+// gstack-evals dc host launch|next|relaunch|recover|teardown|status --plan <host plan> --record <host record> [--archive
+// <new dir>] [--force] drives money/controller-host.ts from the attaching agent's machine. launch uploads the plan's
+// work folder and runs its stage; next sends the plan's stage, with the plan's inputs folder, to the running host once
+// its last row has ended; status prints each row and the last lines of the last row's log. Every key is read by name,
 // only after the start rules the launch can check off the host pass: the commit pin and a clean checkout (rule 2), the
 // keyless dry run (rule 5), a complete wiring file, a plan the launcher accepts and, for a sessions row, a recorded image
-// digest with its image tar and a gstack source that holds the pin. The row's own start rules run on the host.
+// digest with its image tar and a gstack source that holds the pin. The row's own start rules run on the host. The
+// launcher builds every upload in memory from a tmpfs folder and refuses one on disk, and the teardown's archive holds
+// the work folder only as the age file the host sealed (PD-41).
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
-import { fail } from "../errors.ts";
+import { DcError, fail } from "../errors.ts";
 import { GSTACK_PIN } from "../frozen.ts";
-import { controllerProvision, gstackPack, hostStatus, HOST_GSTACK_SOURCE, launch, layout, planProblems, recoverHost, relaunch, serviceEnv, teardown, type ControllerPlan, type HostBackend, type HostRecord } from "../money/controller-host.ts";
-import type { HostStage } from "../money/host-main.ts";
+import { AGE_HEADER, controllerProvision, gstackPack, hostStatus, HOST_GSTACK_SOURCE, launch, planProblems, recoverHost, relaunch, sendRow, serviceEnv, teardown, type ControllerPlan, type HostBackend, type HostRecord } from "../money/controller-host.ts";
+import type { HostRow, HostStage } from "../money/host-main.ts";
 import { recordTar, type LedgerService } from "../money/ledger-service.ts";
 import { ownerFromEnv } from "../stage3/sandbox.ts";
 import { keyedUbicloud } from "../stage3/ubicloud-real.ts";
-import { DcError } from "../errors.ts";
 import { claudeTarball, hostAddresses, readControllerFacts, readWiring, type HostContext, type HostWiring } from "./real.ts";
 import { readJson } from "./json.ts";
 import { refuse, type Args, type Io, type Row, type RowEnv } from "./start.ts";
@@ -40,22 +43,22 @@ export function hostLane(root: string): () => { commit: string; dirty: boolean; 
 
 /**
  * The real providers' context on a service: the wiring file, the service's own environment, its host root, and the
- * launch's record of the host in the state folder (its region and private IPv4), read when a row needs it.
+ * launch's record of the host in the state folder (its region and private IPv4), read when a row needs it, and the
+ * work folder on tmpfs, which holds the wiring's own folder (PD-41).
  */
-export function hostContext(service: LedgerService, wiringPath: string, env: Readonly<Record<string, string | undefined>> = process.env, addresses: () => string[] = hostAddresses): HostContext {
+export function hostContext(service: LedgerService, wiringPath: string, env: Readonly<Record<string, string | undefined>> = process.env, addresses: () => string[] = hostAddresses, work = join(dirname(service.cfg.stateDir), "work")): HostContext {
   const root = dirname(service.cfg.stateDir);
   const w = readWiring(wiringPath);
-  const work = join(root, "work");
   const at = (p: string) => (typeof p === "string" ? resolve(work, p) : p);
   const vm = w.vm && { ...w.vm, ...(w.vm.chromiumBuild ? { chromiumBuild: { ...w.vm.chromiumBuild, dir: at(w.vm.chromiumBuild.dir) } } : {}), claudeTarball: at(w.vm.claudeTarball) };
-  return { service, wiring: { ...w, vm }, env, dir: join(root, "wire"), lane: hostLane(root), controller: () => readControllerFacts(join(service.cfg.stateDir, "controller.json")), addresses };
+  return { service, wiring: { ...w, vm }, env, dir: join(work, ".wire"), lane: hostLane(root), controller: () => readControllerFacts(join(service.cfg.stateDir, "controller.json")), addresses };
 }
 
 /** The region a row on this host runs in, from the launch's record, and the work folder's regions.json (PD-42). */
 export function hostRegion(h: HostContext): { region: string; record: string } {
   const region = h.controller?.()?.location;
   if (!region) throw new DcError("E_DCW_REGION", "the controller host holds no launch record of its Ubicloud region, so no paid row starts on it (PD-42)");
-  return { region, record: join(dirname(h.service.cfg.stateDir), "work", "regions.json") };
+  return { region, record: join(dirname(h.dir), "regions.json") };
 }
 
 /**
@@ -74,24 +77,52 @@ function vmFilesProblems(vm: NonNullable<HostWiring["vm"]>, work: string, root: 
   return null;
 }
 
-export const runOnHost: HostStage["runOnHost"] = async (service, args) => {
-  const [wiring, ...row] = args;
-  if (!wiring || !row.length) fail("E_USAGE", "runOnHost takes the wiring file, then one gstack-evals dc row and its arguments");
-  const work = join(dirname(service.cfg.stateDir), "work");
-  mkdirSync(work, { recursive: true, mode: 0o700 });
+/** The file system type of path, or of its nearest folder that exists (stat -f, as the host's own check reads it). */
+export function fsTypeOf(path: string): string {
+  let at = resolve(path);
+  while (!existsSync(at) && dirname(at) !== at) at = dirname(at);
+  const r = Bun.spawnSync(["stat", "-f", "-c", "%T", at], { stdout: "pipe", stderr: "pipe" });
+  return r.exitCode === 0 ? new TextDecoder().decode(r.stdout).trim() : "unknown";
+}
+
+/** Refuses unless path sits on tmpfs (PD-41). */
+export function needTmpfs(path: string, what: string): void {
+  const kind = fsTypeOf(path);
+  if (kind !== "tmpfs") throw new DcError("E_DCH_NOT_TMPFS", what + " " + path + " is on " + kind + ", not tmpfs; no plaintext sealed input or sink may sit on a disk (PD-41)");
+}
+
+/** The seams a keyless launch passes to a row on the host: the row's environment and how the row runs. */
+export interface RowSeams {
+  env?: (ctx: HostContext) => RowEnv;
+  run?: (argv: string[], io: Io, env: RowEnv) => Promise<number>;
+}
+
+export const runOnHost: HostStage["runOnHost"] = (service, args, row) => runRowOnHost(service, args, row);
+
+/** Runs one row in the work folder, its lines appended to the row's log; a non-zero exit throws with the code it printed. */
+export async function runRowOnHost(service: LedgerService, args: string[], row: HostRow, s: RowSeams = {}): Promise<void> {
+  const [wiring, ...argv] = args;
+  if (!wiring || !argv.length) fail("E_USAGE", "runOnHost takes the wiring file, then one gstack-evals dc row and its arguments");
+  mkdirSync(row.work, { recursive: true, mode: 0o700 });
+  mkdirSync(dirname(row.log), { recursive: true, mode: 0o700 });
   const before = process.cwd();
-  process.chdir(work);
+  process.chdir(row.work);
   try {
-    const ctx = hostContext(service, resolve(wiring!));
+    const ctx = hostContext(service, resolve(wiring!), undefined, undefined, row.work);
+    needTmpfs(ctx.wiring.cacheDir, "the wiring's reply cache, which holds model output,");
     const { main, realEnv } = await import("../cli.ts");
-    const log = join(service.cfg.stateDir, "stage.log");
-    const line = (t: string) => appendLine(log, t);
-    const code = await main(row, { out: line, err: line }, () => realEnv(ctx));
-    if (code !== 0) throw new Error("gstack-evals dc " + row[0] + " exited " + code + "; " + log + " holds its lines");
+    let code: string | null = null;
+    const out = (t: string) => appendLine(row.log, t);
+    const err = (t: string) => {
+      code = /^(E_[A-Z0-9_]+)\b/.exec(t)?.[1] ?? code;
+      appendLine(row.log, t);
+    };
+    const exit = await (s.run ?? ((a, io, e) => main(a, io, () => e)))(argv, { out, err }, (s.env ?? realEnv)(ctx));
+    if (exit !== 0) throw Object.assign(new Error("gstack-evals dc " + argv[0] + " exited " + exit + "; " + row.log + " holds its lines"), { code });
   } finally {
     process.chdir(before);
   }
-};
+}
 
 const appendLine = (file: string, t: string) => writeFileSync(file, t + "\n", { flag: "a" });
 
@@ -115,6 +146,10 @@ export interface HostPlanFile {
   wiring: string;
   /** The Captain's approval record folder. The teardown writes the host's copy back here, keeping the old one beside it. */
   record: string;
+  /** The run's age recipient file, one age1 public key; the launcher uploads it and the teardown seals the work folder to it. */
+  recipient: string;
+  /** A tmpfs folder of the next row's own inputs, unpacked into the host's work folder by next or relaunch; none when unset. */
+  inputs?: string | null;
   /** A sessions row's trial image as a docker save tar: the image whose digest the wiring's sessions section records. */
   imageTar?: string | null;
   /** A sessions row's local gstack repository holding the pinned commit. */
@@ -134,7 +169,10 @@ export interface HostSeams {
   tune?: (p: ControllerPlan) => ControllerPlan;
 }
 
-const VERBS = ["launch", "relaunch", "recover", "teardown", "status"] as const;
+const VERBS = ["launch", "next", "relaunch", "recover", "teardown", "status"] as const;
+/** How many of the last row's log lines dc host status prints. */
+const STATUS_TAIL = 10;
+const mib = (bytes: number) => (bytes / 2 ** 20).toFixed(1);
 type Verb = (typeof VERBS)[number];
 const USAGE = "host " + VERBS.join("|") + " --plan <host plan JSON> --record <host record JSON> [--archive <new folder>] [--force]";
 
@@ -165,6 +203,8 @@ export async function readHostPlan(path: string): Promise<HostPlanFile> {
   const rel = relative(resolve(p.work), wiring);
   if (rel.startsWith("..") || rel === "") no("names a wiring file outside its work folder");
   if (!existsSync(p.record)) no("names an approval record that doesn't exist: " + p.record);
+  if (typeof p.recipient !== "string" || !existsSync(p.recipient)) no("names no age recipient file");
+  if (p.inputs != null && (typeof p.inputs !== "string" || !existsSync(p.inputs))) no("names an inputs folder that doesn't exist: " + p.inputs);
   if (!p.ubicloud || typeof p.ubicloud.project !== "string") no("has no ubicloud section");
   return p;
 }
@@ -203,7 +243,8 @@ function controllerPlanOf(p: HostPlanFile, lane: { commit: string; root: string 
     commit: lane.commit,
     repoTar: uploads ? (s.archive ?? gitArchive)(lane.root, lane.commit) : new Uint8Array([0]),
     recordTar: uploads ? recordTar(resolve(p.record)) : new Uint8Array([0]),
-    workTar: uploads ? tarOf(resolve(p.work)) : null,
+    workTar: uploads ? (needTmpfs(p.work, "the plan's work folder"), tarOf(resolve(p.work))) : null,
+    recipient: readFileSync(p.recipient, "utf8").trim(),
     provision: controllerProvision({ bunVersion: p.bunVersion, mirrors: p.mirrors }),
     bun: "/opt/bun/bin/bun",
     stage: hostStage(p.wiring, p.stage),
@@ -221,17 +262,19 @@ const saveRecord = (file: string, rec: HostRecord) => {
   renameSync(file + ".tmp", file);
 };
 
-/** Writes the teardown archive into a new folder and puts the host's approval record back in the Captain's place. */
+/**
+ * Writes the teardown archive into a new folder: the work folder only as the age file the host sealed, beside the books
+ * that hold no sealed text (the off-host lines, the snapshot and rows.json), and puts the host's approval record back
+ * in the Captain's place.
+ */
 function writeArchive(dir: string, p: HostPlanFile, a: Extract<Awaited<ReturnType<typeof teardown>>, { kind: "deleted" }>["archive"], io: Io, now: () => Date): void {
+  if (new TextDecoder().decode(a.sealed.subarray(0, AGE_HEADER.length)) !== AGE_HEADER) fail("E_DCH_SEAL", "the work archive is not an age file, so nothing of it is written here");
   mkdirSync(dir, { recursive: true, mode: 0o700 });
+  writeFileSync(join(dir, "work.tar.age"), a.sealed);
   writeFileSync(join(dir, "wal-lines.ndjson"), a.lines);
   if (a.snapshot) writeFileSync(join(dir, a.snapshot.name + ".json"), a.snapshot.bytes);
-  if (a.work) {
-    writeFileSync(join(dir, "work.tar"), a.work);
-    mkdirSync(join(dir, "work"));
-    if (Bun.spawnSync(["tar", "-C", join(dir, "work"), "-xf", join(dir, "work.tar")]).exitCode !== 0) io.err("E_DC_INFRA_MISSING the work archive did not unpack; work.tar holds it");
-  }
-  io.out("archive: " + dir + " holds the off-host lines" + (a.snapshot ? ", " + a.snapshot.name : "") + (a.work ? ", the host's work folder" : ""));
+  if (a.rows) writeFileSync(join(dir, "rows.json"), a.rows);
+  io.out("archive: " + dir + " holds the host's work folder sealed to the run's recipient (work.tar.age), the off-host lines" + (a.snapshot ? ", " + a.snapshot.name : "") + (a.rows ? " and rows.json" : ""));
   if (!a.record) return io.out("archive: the off-host copy held no approval record; the Captain's record at " + p.record + " is unchanged");
   writeFileSync(join(dir, "record.tar"), a.record);
   const unpack = join(dir, "record");
@@ -261,9 +304,10 @@ export function hostRow(s: HostSeams = {}): Row {
     const archive = a.flags.get("--archive");
     if (verb === "teardown" && (!archive || existsSync(archive))) fail("E_USAGE", "teardown needs --archive <a folder that doesn't exist yet>");
     const keyed = verb === "launch" || verb === "relaunch" || verb === "recover";
-    const lane = keyed ? await hostRules(p, env) : { commit: env.lane().commit, root: env.lane().root };
+    const lane = keyed || verb === "next" ? await hostRules(p, env) : { commit: env.lane().commit, root: env.lane().root };
     const owner = ownerFromEnv(vars);
     const plan = controllerPlanOf(p, lane, owner, s, verb === "launch" || verb === "recover");
+    const inputs = (verb === "next" || verb === "relaunch") && p.inputs ? (needTmpfs(p.inputs, "the plan's inputs folder"), tarOf(resolve(p.inputs))) : null;
     const keys = keyed ? serviceEnv(vars, owner) : null;
     const b = await (s.backend ?? realBackend)(p, vars);
     const rec: HostRecord | null = verb === "launch" ? null : readJson<HostRecord>(recordPath, "--record");
@@ -272,16 +316,27 @@ export function hostRow(s: HostSeams = {}): Row {
       const made = await launch(b, plan, keys!);
       saveRecord(recordPath, made);
       io.out("host: launched " + made.controller.vm + " with WAL host " + made.wal.vm + " in Ubicloud " + p.ubicloud.location + " at " + made.commit + (made.image ? " on trial image " + made.image : "") + "; stage " + p.stage.join(" "));
+      if (made.tmpfs) io.out("host: the work folder is a tmpfs of " + mib(made.tmpfs.sizeBytes) + " MiB, sized from the controller host's " + mib(made.tmpfs.memBytes) + " MiB of memory");
       return 0;
     }
     try {
       if (verb === "status") {
-        const st = await hostStatus(b, plan, rec!);
+        const st = await hostStatus(b, plan, rec!, { tail: STATUS_TAIL });
         io.out(st === null ? "host: the controller host " + rec!.controller.vm + " is gone; recover it" : "host: " + rec!.controller.vm + (st.running ? " runs" : " is up with no service running") + (st.status ? ", " + st.status.items.length + " open item(s), last snapshot " + (st.status.lastSnapshot ?? "none") + (st.status.captain ? ", Captain stop: " + st.status.captain.why : "") : ""));
+        for (const r of st?.rows ?? []) io.out("row " + r.n + " " + r.row + ": " + r.state + (r.state === "running" ? " since " + r.startedAt : ", " + r.startedAt + " to " + r.endedAt) + (r.code ? " (" + r.code + ")" : ""));
+        if (st && !st.rows.length) io.out("rows: none yet");
+        for (const t of st?.tail ?? []) io.out("log: " + t);
         return 0;
       }
+      if (verb === "next") {
+        if (lane.commit !== rec!.commit) refuse("2", "the host runs " + rec!.commit + " and this checkout is at " + lane.commit + "; check out the host's commit to send it a row");
+        const r = await sendRow(b, plan, rec!, inputs);
+        if (r.kind === "busy") throw new DcError("E_DCH_ROW_RUNNING", "row " + r.row.n + " (" + r.row.row + ") still runs on " + rec!.controller.vm + " since " + r.row.startedAt + "; nothing was uploaded or sent");
+        io.out("host: " + (r.kind === "sent" ? "row " + r.row.n + " started: " + p.stage.join(" ") : r.kind === "lost" ? "the controller host is gone; recover it" : r.kind === "down" ? "the service isn't running; relaunch it with this stage" : "the service refused the row: " + r.why));
+        return r.kind === "sent" ? 0 : 3;
+      }
       if (verb === "relaunch") {
-        const r = await relaunch(b, plan, rec!, keys!);
+        const r = await relaunch(b, plan, rec!, keys!, inputs);
         io.out("host: " + (r.kind === "relaunched" ? "relaunched (" + r.status.boot + ")" : r.kind === "captain" ? "stopped for the Captain: " + r.why : r.kind === "lost" ? "the controller host is gone; recover it" : "the service still runs; nothing to relaunch"));
         return r.kind === "relaunched" || r.kind === "running" ? 0 : 3;
       }

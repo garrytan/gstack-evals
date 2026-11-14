@@ -1,17 +1,20 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // The controller host's launcher on stage3/fake.ts's simulated Ubicloud, with every SSH command run locally (a local SSH
-// stand-in): launch with the real service started detached by setsid, relaunch on the same host, a lost host
-// recovered from the off-host copy, teardown, and VM cleanup on every failure path. No key, no network, no VM.
+// stand-in): launch with the real service started detached by setsid, rows sent in sequence to the running service,
+// relaunch on the same host, a lost host recovered from the off-host copy, teardown that seals the work folder with
+// age, the work folder's tmpfs custody (PD-41), and VM cleanup on every failure path. No key, no network, no VM.
 import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { controllerProvision, launch, layout, planProblems, recoverHost, relaunch, serviceEnv, teardown, type ControllerPlan, type HostRecord } from "../../../lanes/design-constructed/money/controller-host.ts";
+import { AGE_HEADER, controllerProvision, hostStatus, launch, layout, planProblems, recoverHost, relaunch, rowLog, sendRow, serviceEnv, teardown, type ControllerPlan, type HostRecord } from "../../../lanes/design-constructed/money/controller-host.ts";
+import type { RowRecord } from "../../../lanes/design-constructed/money/host-main.ts";
 import { makeRecord } from "../../../lanes/design-constructed/money/dryrun-fixture.ts";
 import { recordTar } from "../../../lanes/design-constructed/money/ledger-service.ts";
 import { WALCTL_PY } from "../../../lanes/design-constructed/money/offhost.ts";
 import { fakeBackend, fakeWorld, type FakeWorld } from "../../../lanes/design-constructed/stage3/fake.ts";
 import { runProcess } from "../../../lanes/design-constructed/stage3/ubicloud-real.ts";
+import { ageKeys, openSealed } from "../../../lanes/design-constructed/wire/dryrun-host.ts";
 
 const ENTRY = join(import.meta.dir, "../../../lanes/design-constructed/money/host-main.ts");
 const FAKE_KEYS = { ANTHROPIC_API_KEY: "test-not-a-key-anthropic", OPENAI_API_KEY: "test-not-a-key-openai", OPENROUTER_API_KEY: "test-not-a-key-openrouter", UBICLOUD_API_KEY: "test-not-a-key-ubicloud" };
@@ -27,19 +30,24 @@ afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 
-/** Every SSH command runs on this machine; failOn names commands (by substring) that exit 1 instead. */
-function world(o: { failOn?: string[]; api?: FakeWorld["api"] } = {}): FakeWorld {
-  return fakeWorld({
+/** Every SSH command runs on this machine; failOn names commands (by substring) that exit 1 instead, answer ones answered with exit 0. */
+function world(o: { failOn?: string[]; answer?: string[]; say?: Array<[string, string]>; api?: FakeWorld["api"] } = {}): FakeWorld & { answered: string[] } {
+  const answered: string[] = [];
+  const w = fakeWorld({
     api: o.api,
     ssh: async (_vm, command, input) => {
       if (o.failOn?.some((s) => command.includes(s))) return { exit: 1, stdout: "", stderr: "stand-in failure" };
+      if (o.answer?.some((s) => command.includes(s))) return (answered.push(command), { exit: 0, stdout: "", stderr: "" });
+      const said = o.say?.find(([s]) => command.includes(s));
+      if (said) return { exit: 0, stdout: said[1] + "\n", stderr: "" };
       const r = await runProcess(["bash", "-c", command], { input, timeoutMs: 60_000 });
       return { exit: r.exit, stdout: new TextDecoder().decode(r.stdout), stderr: r.stderr, raw: r.stdout };
     },
   });
+  return Object.assign(w, { answered });
 }
 
-function plan(over: Partial<ControllerPlan> = {}): ControllerPlan & { tmp: string } {
+function plan(over: Partial<ControllerPlan> = {}): ControllerPlan & { tmp: string; shm: string; identity: string } {
   const tmp = mkdtempSync(join(tmpdir(), "dc-ctl-"));
   dirs.push(tmp);
   mkdirSync(join(tmp, "src", "repo"), { recursive: true });
@@ -49,8 +57,16 @@ function plan(over: Partial<ControllerPlan> = {}): ControllerPlan & { tmp: strin
   const record = makeRecord(join(tmp, "src", "approval"));
   const walRoot = join(tmp, "walhost");
   mkdirSync(walRoot, { recursive: true });
+  const shm = mkdtempSync("/dev/shm/dc-ctl-");
+  dirs.push(shm);
+  const keys = ageKeys(shm);
   return {
     tmp,
+    shm,
+    identity: keys.identity,
+    recipient: keys.recipient,
+    workDir: join(shm, "work"),
+    mountWork: false,
     runId: "dc-host-test",
     owner: "test-owner",
     longestStageHours: 24,
@@ -95,7 +111,7 @@ describe("the controller host launcher", () => {
     const w = world();
     const b = fakeBackend(w);
     const p = plan();
-    const l = layout(p.runId, p.root);
+    const l = layout(p.runId, p.root, p.workDir);
     const rec: HostRecord = await launch(b, p, env());
     pids.push(pidOf(p));
     expect(w.vms.map((v) => v.id.split("-")[0])).toEqual(["dcwal", "dcctl"]);
@@ -131,7 +147,9 @@ describe("the controller host launcher", () => {
       expect(new TextDecoder().decode(t.archive.lines).split("\n").filter(Boolean).length).toBeGreaterThan(3);
       expect(t.archive.snapshot?.name).toMatch(/^snap-\d{10}$/);
       expect(t.archive.record?.length).toBeGreaterThan(0);
+      expect(new TextDecoder().decode(t.archive.sealed.subarray(0, AGE_HEADER.length))).toBe(AGE_HEADER);
     }
+    expect(readdirSync(l.work)).toEqual([]);
     expect(allDeleted(w)).toBe(true);
     expect(await gone(l.pid)).toBe(true);
     expect(await grepKeys(p.tmp)).toBe("");
@@ -154,6 +172,111 @@ describe("the controller host launcher", () => {
     await expect(recoverHost(b, { ...p, location: "us-east-a2" }, rec, env())).rejects.toThrow("a recovery never moves a stage to another region");
     expect(w.vms.length).toBe(made);
   }, 60_000);
+
+  /** A stage module standing in for wire/host.ts: it logs, waits on a release file for "slow", throws for "fail", writes a sink. */
+  const stageModule = (dir: string) => {
+    const path = join(dir, "stage-module.ts");
+    writeFileSync(
+      path,
+      [
+        'import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";',
+        'import { join } from "node:path";',
+        "export async function runOnHost(_svc: unknown, args: string[], row: { work: string; log: string }) {",
+        "  const name = args[1]!;",
+        '  appendFileSync(row.log, "row " + name + " starts\\n");',
+        '  if (name === "fail") throw Object.assign(new Error("the row refused"), { code: "E_USAGE" });',
+        '  while (name === "slow" && !existsSync(join(row.work, "release"))) await Bun.sleep(100);',
+        '  mkdirSync(join(row.work, "sinks", name), { recursive: true });',
+        '  writeFileSync(join(row.work, "sinks", name, "out.txt"), "sink of " + name + "\\n");',
+        '  appendFileSync(row.log, "row " + name + " wrote its sink\\n");',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    return path;
+  };
+  const tarOfFiles = (dir: string, files: Record<string, string>) => {
+    for (const [name, text] of Object.entries(files)) {
+      mkdirSync(join(dir, name, ".."), { recursive: true });
+      writeFileSync(join(dir, name), text);
+    }
+    return new Uint8Array(Bun.spawnSync(["tar", "-C", dir, "-cf", "-", "."]).stdout);
+  };
+  async function rowsUntil(file: string, done: (rows: RowRecord[]) => boolean, ms = 20_000): Promise<RowRecord[]> {
+    let rows: RowRecord[] = [];
+    for (const until = Date.now() + ms; Date.now() < until; await Bun.sleep(100)) {
+      rows = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : [];
+      if (done(rows)) break;
+    }
+    return rows;
+  }
+
+  // Value: protects=runbook gap 2 and gap 9; fails_when=a second row can't reach the running host, a row starts while another runs, a row's inputs replace a file, or status can't name the row; why_new=host-main ran one row and then only ticked; seam=sendRow and host-main's row loop; no_claim=the real Ubicloud host
+  test("rows run one at a time on one service: launch's stage is row 1, the next row brings its own inputs, a busy host refuses, and status names each row with the last log lines", async () => {
+    const w = world();
+    const b = fakeBackend(w);
+    const p = plan();
+    const mod = stageModule(p.tmp);
+    const l = layout(p.runId, p.root, p.workDir);
+    const first = { ...p, stage: { module: mod, args: ["wiring.json", "first"] }, workTar: tarOfFiles(join(p.shm, "in1"), { "inputs/a.txt": "input one\n" }) };
+    const rec = await launch(b, first, env());
+    pids.push(pidOf(p));
+    const pid = pidOf(p);
+    expect((await rowsUntil(l.rows, (r) => r[0]?.state === "done"))[0]).toMatchObject({ n: 1, row: "first", state: "done", code: null });
+    expect(readFileSync(join(l.work, "inputs", "a.txt"), "utf8")).toBe("input one\n");
+    const slow = { ...p, stage: { module: mod, args: ["wiring.json", "slow"] } };
+    const sent = await sendRow(b, slow, rec, tarOfFiles(join(p.shm, "in2"), { "inputs/b.txt": "input two\n" }));
+    expect(sent.kind === "sent" && sent.row.n).toBe(2);
+    expect(readFileSync(join(l.work, "inputs", "b.txt"), "utf8")).toBe("input two\n");
+    expect((await sendRow(b, { ...p, stage: { module: mod, args: ["wiring.json", "third"] } }, rec, null)).kind).toBe("busy");
+    const st = await hostStatus(b, p, rec, { tail: 5 });
+    expect(st?.rows.map((r) => r.state)).toEqual(["done", "running"]);
+    expect(st?.tail).toEqual(["row slow starts"]);
+    writeFileSync(join(l.work, "release"), "");
+    expect((await rowsUntil(l.rows, (r) => r[1]?.state === "done"))[1]?.state).toBe("done");
+    await expect(sendRow(b, { ...p, stage: { module: mod, args: ["wiring.json", "third"] } }, rec, tarOfFiles(join(p.shm, "in3"), { "inputs/b.txt": "again\n" }))).rejects.toThrow("which the host's work folder has already");
+    expect(readFileSync(join(l.work, "inputs", "b.txt"), "utf8")).toBe("input two\n");
+    expect((await sendRow(b, { ...p, stage: { module: mod, args: ["wiring.json", "fail"] } }, rec, null)).kind).toBe("sent");
+    const rows = await rowsUntil(l.rows, (r) => r[2]?.state === "failed");
+    expect(rows.map((r) => [r.n, r.row, r.state, r.code])).toEqual([[1, "first", "done", null], [2, "slow", "done", null], [3, "fail", "failed", "E_USAGE"]]);
+    expect(readFileSync(rowLog(l.work, 3), "utf8")).toContain("row 3 failed: the row refused");
+    expect(JSON.parse(readFileSync(join(l.state, "stage.json"), "utf8"))).toMatchObject({ n: 3, done: false, code: "E_USAGE" });
+    expect(readFileSync(l.rows, "utf8")).not.toContain("the row refused");
+    expect(pidOf(p)).toBe(pid);
+    expect(JSON.parse(readFileSync(l.status, "utf8")).boot).toBe("fresh");
+    const t = await teardown(b, p, rec, { waitMs: 30_000 });
+    expect(t.kind).toBe("deleted");
+    if (t.kind !== "deleted") return;
+    expect(JSON.parse(new TextDecoder().decode(t.archive.rows!)).length).toBe(3);
+    writeFileSync(join(p.shm, "sealed.age"), t.archive.sealed);
+    const files = openSealed(join(p.shm, "sealed.age"), p.identity, join(p.shm, "opened"));
+    for (const f of ["./inputs/a.txt", "./inputs/b.txt", "./sinks/first/out.txt", "./sinks/slow/out.txt", "./.rows/1.log", "./.rows/3.log"]) expect(files).toContain(f);
+    expect(readdirSync(l.work)).toEqual([]);
+    expect(allDeleted(w)).toBe(true);
+  }, 120_000);
+
+  // Value: protects=PD-41's tmpfs work folder; fails_when=a launch unpacks inputs onto a disk folder or mounts without the memory sizing and linger; why_new=the work folder sat on the VM's disk; seam=placeWork; no_claim=a real mount, which needs root on a real VM
+  test("a launch mounts the work folder's tmpfs from the host's memory with the run user lingering, refuses a work folder that isn't tmpfs, and refuses inputs that don't fit", async () => {
+    const mounted = world({ answer: ["mount -t tmpfs"] });
+    const p = plan({ mountWork: true });
+    const rec = await launch(fakeBackend(mounted), p, env());
+    pids.push(pidOf(p));
+    expect(mounted.answered.join("\n")).toContain("mount -t tmpfs -o size=$(( $(awk '/^MemTotal:/ {print $2}' /proc/meminfo) * 512 )),mode=0700,nosuid,nodev tmpfs '" + p.workDir + "'");
+    expect(mounted.answered.join("\n")).toContain("loginctl enable-linger run");
+    expect(rec.tmpfs!.memBytes).toBeGreaterThan(0);
+    expect(rec.tmpfs!.sizeBytes).toBeGreaterThan(0);
+    const disk = world();
+    const q = plan({ workDir: join(mkdtempSync(join(tmpdir(), "dc-ctl-disk-")), "work") });
+    dirs.push(join(q.workDir!, ".."));
+    await expect(launch(fakeBackend(disk), q, env())).rejects.toThrow("not tmpfs");
+    expect(disk.vms.length).toBe(2);
+    expect(allDeleted(disk)).toBe(true);
+    const small = world({ say: [["--output=avail", "100"]] });
+    const r = plan();
+    await expect(launch(fakeBackend(small), { ...r, workTar: tarOfFiles(join(r.shm, "big"), { "inputs/a.txt": "x".repeat(4096) }) }, env())).rejects.toThrow("MiB free; nothing was unpacked");
+    expect(allDeleted(small)).toBe(true);
+    expect(existsSync(join(r.workDir!, "inputs"))).toBe(false);
+  }, 90_000);
 
   test("a recovery refuses while the host runs, and stops for the Captain when the WAL host is gone", async () => {
     const w = world();

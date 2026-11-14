@@ -7,17 +7,25 @@
 //               the SSH session's stdin, read by name here and exported inside the remote shell, never written to disk
 //               or put on a command line.
 //   relaunch    starts the service again on the same host; the ledger file stays where it is.
+//   sendRow     sends the next row, with its own inputs, to the running service once the last row has ended; the
+//               service runs it on the same ledger, leases and journals, and refuses while a row still runs.
 //   recoverHost replaces a lost controller host; the new host restores the ledger and the approval record from the
 //               newest verified snapshot and the chain after it (money/durability.ts).
-//   teardown    settles every item and the hosts' measured hours on the host, archives the off-host copy and deletes
-//               both VMs.
+//   teardown    settles every item and the hosts' measured hours on the host, seals the work folder there with age to
+//               the run's recipient and deletes its plaintext, then copies back only the sealed archive and the books
+//               that hold no sealed text (the off-host lines, the snapshot, the approval record and rows.json), and
+//               deletes both VMs.
+// Custody (PD-41): the work folder, which holds the uploaded inputs, every row's sink and log, the wiring's session
+// folders and the row's scratch, is a tmpfs mount sized from the host's memory; a launch refuses when it is not tmpfs.
+// Inputs reach it on the SSH session's stdin, never as a file on the host's disk.
 // Every VM a call makes is deleted when that call fails partway, so no launch leaves a VM behind.
 import { isReasonCode } from "../../../src/errors/codes.ts";
 import { DcError, fail } from "../errors.ts";
 import type { Vm, VmBackend, VmSpec } from "../stage3/sandbox.ts";
 import { TTL_MARGIN_MINUTES } from "../stage3/sandbox.ts";
 import { mirrorSetup, shq } from "../stage3/ubicloud-real.ts";
-import type { HostConfig, TargetConfig } from "./host-main.ts";
+import { randomUUID } from "node:crypto";
+import type { HostConfig, RowRecord, RowRequest, TargetConfig } from "./host-main.ts";
 import { WAL_HOST_SIZE, walFoldProjection } from "./hosts.ts";
 import type { HostVm, ServiceStatus } from "./ledger-service.ts";
 import { walAuthorizedKey, WALCTL_PATH, WALCTL_PY, WAL_DIR } from "./offhost.ts";
@@ -34,8 +42,12 @@ export interface HostBackend extends VmBackend {
 export const HOST_ROOT = "/var/lib/dc";
 /** The bare repository on the controller host that holds the gstack pin's commit and tree, for the sessions section's gstackSources. */
 export const HOST_GSTACK_SOURCE = HOST_ROOT + "/gstack-src";
-/** The host's work folder: the row's uploaded inputs and the sinks it writes; the teardown archive returns it. */
+/** The host's work folder, a tmpfs mount: the rows' uploaded inputs, their sinks and logs; the teardown seals it. */
 export const HOST_WORK = HOST_ROOT + "/work";
+/** BT (PD-41): the work folder's tmpfs takes this share of the controller host's memory, the kernel's default for tmpfs. */
+export const WORK_TMPFS_SHARE = 0.5;
+/** The first line of every age file. */
+export const AGE_HEADER = "age-encryption.org/v1\n";
 
 export interface Layout {
   root: string;
@@ -59,10 +71,19 @@ export interface Layout {
   image: string;
   /** The launch's record of this host: its VM, its Ubicloud region and its private IPv4 (ControllerFacts). */
   controller: string;
+  /** Each row's number, arguments, start, end, state and code (host-main.ts RowRecord). */
+  rows: string;
+  /** The run's age recipient, the public half only. */
+  recipient: string;
+  /** The teardown's sealed work archive, on disk because it is ciphertext. */
+  sealed: string;
 }
 
+/** Each row's log, in the work folder's .rows/ (host-main.ts writes it; a value here, since host-main is the entry). */
+export const rowLog = (work: string, n: number) => work + "/.rows/" + n + ".log";
+
 /** The host's fixed paths; the same absolute paths on a replacement host (R2-17). */
-export const layout = (runId: string, root = HOST_ROOT): Layout => ({
+export const layout = (runId: string, root = HOST_ROOT, work = root + "/work"): Layout => ({
   root,
   repo: root + "/repo",
   ledger: root + "/ledger/ledger.sqlite",
@@ -78,9 +99,12 @@ export const layout = (runId: string, root = HOST_ROOT): Layout => ({
   knownHosts: root + "/state/known_hosts",
   xdg: root + "/xdg",
   gstack: root + "/gstack-src",
-  work: root + "/work",
+  work,
   image: root + "/state/image.json",
   controller: root + "/state/controller.json",
+  rows: root + "/state/rows.json",
+  recipient: root + "/state/recipient.txt",
+  sealed: root + "/work.tar.age",
 });
 
 /** The names the paid launcher passes to the service, read by name from its own environment. */
@@ -114,6 +138,12 @@ export interface ControllerPlan {
   gstack?: GstackPack | null;
   /** The row's inputs as a tar, unpacked into the host's work folder. */
   workTar?: Uint8Array | null;
+  /** The work folder; the layout's root/work when unset. */
+  workDir?: string;
+  /** Whether the launch mounts the work folder's tmpfs; false only checks it is tmpfs (keyless runs on this machine). */
+  mountWork?: boolean;
+  /** The run's age recipient (age1...), the public half only; the teardown seals the work folder to it. */
+  recipient: string;
   /** The bun binary on the controller host. */
   bun: string;
   entry?: string;
@@ -153,6 +183,8 @@ export interface HostRecord {
   location?: string | null;
   /** A Captain stop the launcher read from the host; recovery refuses while it stands. */
   captain: string | null;
+  /** The work folder's tmpfs size and the controller host's memory, in bytes, read at launch or recovery. */
+  tmpfs?: { sizeBytes: number; memBytes: number } | null;
   events: Array<{ at: string; what: string }>;
 }
 
@@ -171,11 +203,13 @@ export function planProblems(p: ControllerPlan): string[] {
   if (!/^[0-9a-f]{40}$/.test(p.commit)) out.push("the commit is not a full sha");
   if (!p.repoTar.length) out.push("the repository archive is empty");
   if (!p.recordTar.length) out.push("the approval record archive is empty");
+  if (!/^age1[0-9a-z]{58}$/.test(p.recipient)) out.push("the run's age recipient is not one age1 public key");
   return out;
 }
 
 /** A host VM's spec: no mirrors or proxy of its own (it serves them), UBI_OWNER and a time to live past the longest stage. */
-const hostSpec = (p: ControllerPlan, label: string): VmSpec => ({ label, owner: p.owner, ttlMinutes: p.ttlHours * 60, runMinutes: p.longestStageHours * 60, runUser: "run", proxy: null, mirrors: [], mounts: [], env: {} });
+const hostSpec = (p: ControllerPlan, label: string): VmSpec => ({ label, owner: p.owner, ttlMinutes: p.ttlHours * 60, runMinutes: p.longestStageHours * 60, runUser: HOST_RUN_USER, proxy: null, mirrors: [], mounts: [], env: {} });
+const HOST_RUN_USER = "run";
 
 /** Reads the service's keys by name and UBI_OWNER, as stdin lines; values are checked, never printed. */
 export function serviceEnv(env: Readonly<Record<string, string | undefined>>, owner: string, names: readonly string[] = SERVICE_KEYS): Uint8Array {
@@ -208,7 +242,7 @@ export function controllerProvision(o: { bunVersion: string; mirrors: boolean; s
     const system = o.system === false ? [] : [
       "export DEBIAN_FRONTEND=noninteractive",
       "apt-get update",
-      "apt-get install -y python3 openssh-client curl unzip tar git docker.io",
+      "apt-get install -y python3 openssh-client curl unzip tar git docker.io age",
       "systemctl enable --now docker",
       "test -x " + shq(bun) + " || (curl -fsSL https://bun.sh/install | BUN_INSTALL=/opt/bun bash -s bun-v" + o.bunVersion + ")",
       "cd " + shq(l.repo) + " && " + shq(bun) + " install --frozen-lockfile",
@@ -252,7 +286,7 @@ class Ctx {
     readonly b: HostBackend,
     readonly p: ControllerPlan,
   ) {
-    this.l = layout(p.runId, p.root);
+    this.l = layout(p.runId, p.root, p.workDir);
     this.sleep = p.sleep ?? ((ms) => Bun.sleep(ms));
     this.now = p.now ?? (() => Date.now());
   }
@@ -278,15 +312,11 @@ async function setupWal(x: Ctx, wal: Vm): Promise<void> {
 }
 
 /** Provisions the controller host, puts the record in place once, and pins its WAL key on the WAL host. */
-async function prepareController(x: Ctx, ctl: Vm, wal: Vm, hosts: HostVm[], uploadRecord: boolean): Promise<string | null> {
+async function prepareController(x: Ctx, ctl: Vm, wal: Vm, hosts: HostVm[], uploadRecord: boolean): Promise<{ image: string | null; tmpfs: { sizeBytes: number; memBytes: number } }> {
   const l = x.l;
   await x.run(ctl, "mkdir -p " + [l.state, l.journals, l.repo, l.holder, l.work, l.ledger.replace(/\/[^/]+$/, "")].map(shq).join(" ") + " && chmod 700 " + shq(l.root) + " " + shq(l.state), "making the host's folders");
   await x.b.write(ctl, l.root + "/repo.tar", x.p.repoTar);
   await x.run(ctl, "tar -xf " + shq(l.root + "/repo.tar") + " -C " + shq(l.repo) + " && printf '%s\\n' " + x.p.commit + " > " + shq(l.root + "/commit"), "unpacking the repository");
-  if (x.p.workTar?.length) {
-    await x.b.write(ctl, l.root + "/work.tar", x.p.workTar);
-    await x.run(ctl, "tar -xf " + shq(l.root + "/work.tar") + " -C " + shq(l.work) + " && rm -f " + shq(l.root + "/work.tar"), "unpacking the row's inputs");
-  }
   if (x.p.gstack) await x.b.write(ctl, l.root + "/gstack.pack", x.p.gstack.pack);
   if (x.p.image?.tar) await x.b.write(ctl, l.root + "/image.tar", x.p.image.tar);
   const uploads: Uploads = { image: x.p.image ? (x.p.image.tar ? "load" : "build") : null, gstack: x.p.gstack ? { commit: x.p.gstack.commit, tree: x.p.gstack.tree } : null };
@@ -302,6 +332,9 @@ async function prepareController(x: Ctx, ctl: Vm, wal: Vm, hosts: HostVm[], uplo
     const want = x.p.image.expectDigest;
     if (want && want !== image) throw new DcError("E_DCH_IMAGE_DIGEST", "the controller host's trial image is " + image + ", but the wiring's sessions section expects " + want + "; no session runs on another image");
   }
+  const tmpfs = await placeWork(x, ctl);
+  if (x.p.workTar?.length) await upload(x, ctl, x.p.workTar, "the launch's work folder");
+  await x.b.write(ctl, l.recipient, x.p.recipient + "\n");
   if (uploadRecord && (await x.b.exec(ctl, "test -e " + shq(l.record), { user: "root" })).exit !== 0) {
     const unpack = l.root + "/record-unpack";
     await x.b.write(ctl, l.root + "/record.tar", x.p.recordTar);
@@ -313,9 +346,54 @@ async function prepareController(x: Ctx, ctl: Vm, wal: Vm, hosts: HostVm[], uplo
   const line = walAuthorizedKey(pub, { script: x.walScript, dir: x.walDir });
   await x.run(wal, "grep -qxF " + shq(line) + " " + shq(keys) + " 2>/dev/null || printf '%s\\n' " + shq(line) + " >> " + shq(keys), "pinning the controller's key on the WAL host");
   const target: TargetConfig = x.p.target?.(wal, x.b, l) ?? { kind: "ssh", host: x.b.privateAddress(wal) ?? x.b.address(wal), keyPath: l.walKey, knownHosts: l.knownHosts, login: x.p.wal?.login ?? "ubi" };
-  const cfg: HostConfig = { runId: x.p.runId, holder: l.holder, record: l.record, ledgerPath: l.ledger, journalDir: l.journals, stateDir: l.state, hosts, target, tickMs: x.p.tickMs, drainMs: x.p.drainMs, stage: x.p.stage ?? null };
+  const cfg: HostConfig = { runId: x.p.runId, holder: l.holder, record: l.record, ledgerPath: l.ledger, journalDir: l.journals, stateDir: l.state, hosts, target, tickMs: x.p.tickMs, drainMs: x.p.drainMs, work: l.work, stage: x.p.stage ?? null };
   await x.b.write(ctl, l.config, JSON.stringify(cfg, null, 2) + "\n");
-  return image;
+  return { image, tmpfs };
+}
+
+const mib = (bytes: number) => (bytes / 2 ** 20).toFixed(1);
+
+/** Refuses unless the work folder is a tmpfs mount (PD-41). */
+async function checkWork(x: Ctx, ctl: Vm): Promise<void> {
+  const r = await x.b.exec(ctl, "stat -f -c %T " + shq(x.l.work), { user: "root" });
+  const kind = r.exit === 0 ? r.stdout.trim() : "missing";
+  if (kind !== "tmpfs") throw new DcError("E_DCH_NOT_TMPFS", "the controller host's work folder " + x.l.work + " is " + kind + ", not tmpfs; no plaintext input or sink may sit on its disk (PD-41)");
+}
+
+/** Mounts the work folder's tmpfs at WORK_TMPFS_SHARE of the host's memory, keeps the run user lingering, and checks it. */
+async function placeWork(x: Ctx, ctl: Vm): Promise<{ sizeBytes: number; memBytes: number }> {
+  const w = shq(x.l.work);
+  if (x.p.mountWork !== false) {
+    const lines = [
+      "set -e",
+      "mountpoint -q " + w + " || mount -t tmpfs -o size=$(( $(awk '/^MemTotal:/ {print $2}' /proc/meminfo) * " + 1024 * WORK_TMPFS_SHARE + " )),mode=0700,nosuid,nodev tmpfs " + w,
+      "id -u " + HOST_RUN_USER + " > /dev/null 2>&1 || useradd -m -s /bin/bash " + HOST_RUN_USER,
+      "loginctl enable-linger " + HOST_RUN_USER,
+    ];
+    await x.run(ctl, lines.join("\n"), "mounting the work folder's tmpfs");
+  }
+  await checkWork(x, ctl);
+  const [memKb, size] = (await x.run(ctl, "awk '/^MemTotal:/ {print $2}' /proc/meminfo && df -B1 --output=size " + w + " | tail -n 1", "reading the work folder's size")).trim().split(/\s+/).map(Number);
+  return { sizeBytes: size!, memBytes: memKb! * 1024 };
+}
+
+/** Unpacks a tar into the work folder from the SSH session's stdin; refuses one that doesn't fit or would replace a file. */
+async function upload(x: Ctx, ctl: Vm, tar: Uint8Array, what: string): Promise<void> {
+  const w = shq(x.l.work);
+  const list = Bun.spawnSync(["tar", "-tf", "-"], { stdin: tar, stdout: "pipe", stderr: "pipe" });
+  if (list.exitCode !== 0) fail("E_USAGE", what + " is not a tar");
+  const free = Number((await x.run(ctl, "df -B1 --output=avail " + w + " | tail -n 1", "reading the work folder's free space")).trim());
+  if (tar.length > free) throw new DcError("E_DCH_TMPFS_FULL", what + " is " + mib(tar.length) + " MiB, and the work folder's tmpfs has " + mib(free) + " MiB free; nothing was unpacked");
+  const files = new TextDecoder().decode(list.stdout).split("\n").filter((f) => f && !f.endsWith("/"));
+  const clash = await x.b.exec(ctl, "cd " + w + " && while IFS= read -r f; do if [ -e \"$f\" ] || [ -L \"$f\" ]; then printf '%s\\n' \"$f\"; exit 3; fi; done", { user: "root", input: new TextEncoder().encode(files.join("\n") + "\n") });
+  if (clash.exit === 3) fail("E_USAGE", what + " holds " + clash.stdout.trim() + ", which the host's work folder has already; inputs never replace a file there");
+  if (clash.exit !== 0) fail("E_DC_INFRA_MISSING", "checking " + what + " against the work folder failed (exit " + clash.exit + ")");
+  await x.run(ctl, "tar -xf - -C " + w + " --no-same-owner", "unpacking " + what, tar);
+}
+
+async function readRows(x: Ctx, ctl: Vm): Promise<RowRecord[]> {
+  const r = await x.b.exec(ctl, "cat " + shq(x.l.rows) + " 2>/dev/null", { user: "root" });
+  return r.exit === 0 && r.stdout.trim() ? (JSON.parse(r.stdout) as RowRecord[]) : [];
 }
 
 export type StartResult = { ok: true; status: ServiceStatus } | { ok: false; captain: string } | { ok: false; down: string };
@@ -380,15 +458,24 @@ export async function launch(b: HostBackend, p: ControllerPlan, env: Uint8Array)
       { vm: wal.id, role: "wal", ttlHours: p.ttlHours, priceMicrosPerHour: p.priceMicrosPerHour.wal, createdAt: walAt },
       { vm: ctl.id, role: "controller", ttlHours: p.ttlHours, priceMicrosPerHour: p.priceMicrosPerHour.controller, createdAt: ctlAt },
     ];
-    const image = await prepareController(x, ctl, wal, hosts, true);
+    const { image, tmpfs } = await prepareController(x, ctl, wal, hosts, true);
     const s = await start(x, ctl, env);
     if (!s.ok) throw new Error("captain" in s ? "the ledger service stopped for the Captain at its first boot: " + s.captain : s.down);
-    return { runId: p.runId, owner: p.owner, commit: p.commit, root: x.l.root, controller: { vm: ctl.id, createdAt: ctlAt }, wal: { vm: wal.id, createdAt: walAt }, image, location: p.location ?? null, captain: s.status.captain?.why ?? null, events: [{ at: iso(x.now()), what: "launched (" + s.status.boot + ")" + (image ? " on image " + image : "") }] };
+    return { runId: p.runId, owner: p.owner, commit: p.commit, root: x.l.root, controller: { vm: ctl.id, createdAt: ctlAt }, wal: { vm: wal.id, createdAt: walAt }, image, location: p.location ?? null, captain: s.status.captain?.why ?? null, tmpfs, events: [{ at: iso(x.now()), what: "launched (" + s.status.boot + ")" + (image ? " on image " + image : "") }] };
   });
 }
 
-/** Whether the service on the controller host is running; null when the host is gone. */
-export async function hostStatus(b: HostBackend, p: ControllerPlan, rec: HostRecord): Promise<{ running: boolean; status: ServiceStatus | null } | null> {
+export interface HostState {
+  running: boolean;
+  status: ServiceStatus | null;
+  /** Every row the service ran on this host, in order (host-main.ts RowRecord). */
+  rows: RowRecord[];
+  /** The last lines of the last row's log, when asked for. */
+  tail: string[];
+}
+
+/** Whether the service on the controller host is running, its rows and the last row's log tail; null when the host is gone. */
+export async function hostStatus(b: HostBackend, p: ControllerPlan, rec: HostRecord, o: { tail?: number } = {}): Promise<HostState | null> {
   const x = new Ctx(b, p);
   const ctl = await b.attach(rec.controller.vm, hostSpec(p, "dc controller host " + p.runId));
   if (!ctl) return null;
@@ -396,18 +483,62 @@ export async function hostStatus(b: HostBackend, p: ControllerPlan, rec: HostRec
   const st = await b.exec(ctl, "cat " + shq(x.l.status) + " 2>/dev/null", { user: "root" });
   const status = st.exit === 0 && st.stdout.trim() ? (JSON.parse(st.stdout) as ServiceStatus) : null;
   if (status?.captain) rec.captain = status.captain.why;
-  return { running: alive.exit === 0, status };
+  const rows = await readRows(x, ctl);
+  const last = rows.at(-1);
+  const tail = last && o.tail ? (await b.exec(ctl, "tail -n " + o.tail + " " + shq(rowLog(x.l.work, last.n)) + " 2>/dev/null", { user: "root" })).stdout.split("\n").filter(Boolean) : [];
+  return { running: alive.exit === 0, status, rows, tail };
+}
+
+export type Sent = { kind: "sent"; row: RowRecord } | { kind: "busy"; row: RowRecord } | { kind: "down" } | { kind: "lost" } | { kind: "refused"; why: string };
+
+/**
+ * Sends the plan's stage to the running service as the next row, after unpacking the row's own inputs into the work
+ * folder. The row runs on the same ledger service, leases and journals. Refuses while the last row still runs, and
+ * returns once the service records the row as started.
+ */
+export async function sendRow(b: HostBackend, p: ControllerPlan, rec: HostRecord, inputs: Uint8Array | null, o: { waitMs?: number } = {}): Promise<Sent> {
+  const stage = p.stage ?? fail("E_USAGE", "the host plan names no row to send");
+  const x = new Ctx(b, p);
+  const st = await hostStatus(b, p, rec);
+  if (!st) return { kind: "lost" };
+  if (!st.running) return { kind: "down" };
+  const last = st.rows.at(-1);
+  if (last?.state === "running") return { kind: "busy", row: last };
+  const ctl = (await b.attach(rec.controller.vm, hostSpec(p, "dc controller host " + p.runId)))!;
+  await checkWork(x, ctl);
+  if (inputs) await upload(x, ctl, inputs, "the row's inputs");
+  const id = randomUUID();
+  const requests = x.l.state + "/next";
+  await x.run(ctl, "mkdir -p " + shq(requests), "making the row request folder");
+  await b.write(ctl, requests + "/row.json.tmp", JSON.stringify({ id, stage } satisfies RowRequest) + "\n");
+  await x.run(ctl, "mv " + shq(requests + "/row.json.tmp") + " " + shq(requests + "/row.json"), "asking for the next row");
+  const waitMs = o.waitMs ?? 120_000;
+  for (const until = x.now() + waitMs; x.now() < until; await x.sleep(500)) {
+    const row = (await readRows(x, ctl)).find((r) => r.id === id);
+    if (row) {
+      rec.events.push({ at: iso(x.now()), what: "row " + row.n + " sent: " + row.row });
+      return { kind: "sent", row };
+    }
+    const refused = await b.exec(ctl, "cat " + shq(requests + "/row-refused-" + id + ".json") + " 2>/dev/null", { user: "root" });
+    if (refused.exit === 0 && refused.stdout.trim()) return { kind: "refused", why: (JSON.parse(refused.stdout) as { why: string }).why };
+  }
+  return { kind: "refused", why: "the service did not take the row within " + Math.round(waitMs / 1000) + " s" };
 }
 
 export type Relaunch = { kind: "running" } | { kind: "relaunched"; status: ServiceStatus } | { kind: "lost" } | { kind: "captain"; why: string };
 
-/** Starts the service again on the same host. The ledger file, the record and the WAL key stay as they are. */
-export async function relaunch(b: HostBackend, p: ControllerPlan, rec: HostRecord, env: Uint8Array): Promise<Relaunch> {
+/**
+ * Starts the service again on the same host, with the row's own inputs unpacked into the work folder first. The ledger
+ * file, the record, the WAL key and the work folder stay as they are; a work folder that is no longer tmpfs refuses.
+ */
+export async function relaunch(b: HostBackend, p: ControllerPlan, rec: HostRecord, env: Uint8Array, inputs: Uint8Array | null = null): Promise<Relaunch> {
   const x = new Ctx(b, p);
   const st = await hostStatus(b, p, rec);
   if (!st) return { kind: "lost" };
   if (st.running) return { kind: "running" };
   const ctl = (await b.attach(rec.controller.vm, hostSpec(p, "dc controller host " + p.runId)))!;
+  await checkWork(x, ctl);
+  if (inputs) await upload(x, ctl, inputs, "the row's inputs");
   if (p.stage !== undefined) {
     const cfg = JSON.parse(await x.run(ctl, "cat " + shq(x.l.config), "reading the host's config")) as HostConfig;
     await b.write(ctl, x.l.config, JSON.stringify({ ...cfg, stage: p.stage ?? null }, null, 2) + "\n");
@@ -443,9 +574,10 @@ export async function recoverHost(b: HostBackend, p: ControllerPlan, rec: HostRe
       { vm: rec.wal.vm, role: "wal", ttlHours: p.ttlHours, priceMicrosPerHour: p.priceMicrosPerHour.wal, createdAt: rec.wal.createdAt },
       { vm: ctl.id, role: "controller", ttlHours: p.ttlHours, priceMicrosPerHour: p.priceMicrosPerHour.controller, createdAt: ctlAt },
     ];
-    const image = await prepareController(x, ctl, wal, hosts, false);
+    const { image, tmpfs } = await prepareController(x, ctl, wal, hosts, false);
     if (rec.image && image && image !== rec.image) throw new DcError("E_DCH_IMAGE_DIGEST", "the replacement host's trial image is " + image + ", not the run's " + rec.image);
     rec.image = image ?? rec.image ?? null;
+    rec.tmpfs = tmpfs;
     const s = await start(x, ctl, env);
     if (!s.ok && "captain" in s) {
       rec.captain = s.captain;
@@ -460,12 +592,34 @@ export async function recoverHost(b: HostBackend, p: ControllerPlan, rec: HostRe
   });
 }
 
-export type Teardown = { kind: "deleted"; archive: { lines: Uint8Array; snapshot: { name: string; bytes: Uint8Array } | null; record: Uint8Array | null; work: Uint8Array | null } } | { kind: "refused"; why: string };
+export type Teardown = { kind: "deleted"; archive: { lines: Uint8Array; snapshot: { name: string; bytes: Uint8Array } | null; record: Uint8Array | null; sealed: Uint8Array; rows: Uint8Array | null } } | { kind: "refused"; why: string };
+
+/**
+ * Seals the work folder on the host (PD-41): tar piped into age to the run's recipient, so no plaintext archive is
+ * written, then every plaintext file in the work folder is deleted and the folder checked empty. A sealed archive
+ * already there (a teardown run again after a later step failed) is kept, and the work folder must already be empty.
+ */
+async function seal(x: Ctx, ctl: Vm): Promise<void> {
+  const [w, a, r] = [shq(x.l.work), shq(x.l.sealed), shq(x.l.recipient)];
+  const script = [
+    "set -euo pipefail",
+    "if [ -e " + a + " ]; then test -z \"$(ls -A " + w + ")\"; exit 0; fi",
+    'test "$(stat -f -c %T ' + w + ')" = tmpfs',
+    "command -v age > /dev/null",
+    "tar -C " + w + " -cf - . | age -R " + r + " -o " + shq(x.l.sealed + ".tmp"),
+    "mv " + shq(x.l.sealed + ".tmp") + " " + a,
+    "find " + w + " -mindepth 1 -delete",
+    'test -z "$(ls -A ' + w + ')"',
+  ].join("\n");
+  const out = await x.b.exec(ctl, "bash -c " + shq(script), { user: "root" });
+  if (out.exit !== 0) throw new DcError("E_DCH_SEAL", "sealing the work folder on " + ctl.id + " failed (exit " + out.exit + "); both VMs are kept and nothing was copied back");
+}
 
 /**
  * Ends the run: the service settles every item and the hosts' measured hours and takes a final verified snapshot, the
- * off-host copy is read back as the archive, then both VMs are deleted. force holds in-flight work as unknown instead
- * of waiting for it (the Captain's choice, off by default).
+ * work folder is sealed on the host and its plaintext deleted, then the sealed archive and the books that hold no sealed
+ * text are read back and both VMs are deleted. force holds in-flight work as unknown instead of waiting for it (the
+ * Captain's choice, off by default). A teardown whose service already finished its own teardown goes straight to the seal.
  */
 export async function teardown(b: HostBackend, p: ControllerPlan, rec: HostRecord, o: { force?: boolean; waitMs?: number } = {}): Promise<Teardown> {
   const x = new Ctx(b, p);
@@ -474,31 +628,37 @@ export async function teardown(b: HostBackend, p: ControllerPlan, rec: HostRecor
   if (!ctl) return { kind: "refused", why: "the controller host is gone; recover it first so its money settles" };
   const wal = await b.attach(rec.wal.vm, spec("dc wal host"));
   if (!wal) return { kind: "refused", why: "the WAL host is gone, so the off-host copy can't be archived" };
-  await x.run(ctl, "rm -f " + shq(x.l.state + "/teardown.json") + " && mkdir -p " + shq(x.l.state + "/control") + " && touch " + shq(x.l.state + "/control/" + (o.force ? "teardown-force" : "teardown")), "asking the service to tear down");
   const until = x.now() + (o.waitMs ?? 15 * 60_000);
-  let result: { ok: boolean; why?: string } | null = null;
-  while (x.now() < until && !result) {
+  const readResult = async () => {
     const r = await b.exec(ctl, "cat " + shq(x.l.state + "/teardown.json") + " 2>/dev/null", { user: "root" });
-    if (r.exit === 0 && r.stdout.trim()) result = JSON.parse(r.stdout);
-    else await x.sleep(500);
+    return r.exit === 0 && r.stdout.trim() ? (JSON.parse(r.stdout) as { ok: boolean; why?: string }) : null;
+  };
+  let result: { ok: boolean; why?: string } | null = null;
+  const alive = (await b.exec(ctl, "test -f " + shq(x.l.pid) + " && kill -0 \"$(cat " + shq(x.l.pid) + ")\"", { user: "root" })).exit === 0;
+  if (alive) {
+    await x.run(ctl, "rm -f " + shq(x.l.state + "/teardown.json") + " && mkdir -p " + shq(x.l.state + "/control") + " && touch " + shq(x.l.state + "/control/" + (o.force ? "teardown-force" : "teardown")), "asking the service to tear down");
+    while (x.now() < until && !(result = await readResult())) await x.sleep(500);
+    if (!result) return { kind: "refused", why: "the service did not answer the teardown in time" };
+  } else {
+    result = await readResult();
+    if (!result) return { kind: "refused", why: "the service isn't running and recorded no finished teardown; relaunch it so its money settles" };
   }
-  if (!result) return { kind: "refused", why: "the service did not answer the teardown in time" };
   if (!result.ok) return { kind: "refused", why: result.why ?? "the service refused the teardown" };
   while (x.now() < until && (await b.exec(ctl, "test -f " + shq(x.l.pid), { user: "root" })).exit === 0) await x.sleep(500);
+  await seal(x, ctl);
+  const bytesOf = (r: { exit: number; stdout: string; raw?: Uint8Array }) => (r.exit === 0 ? (r.raw ?? new TextEncoder().encode(r.stdout)) : null);
   const walctl = (args: string) => b.exec(wal, "python3 " + shq(x.walScript) + " " + shq(x.walDir) + " " + args, { user: "root" });
-  const raw = async (args: string) => {
-    const r = (await walctl(args)) as { exit: number; stdout: string; raw?: Uint8Array };
-    return r.exit === 0 ? (r.raw ?? new TextEncoder().encode(r.stdout)) : null;
-  };
+  const raw = async (args: string) => bytesOf(await walctl(args));
   const lines = await raw("lines");
   if (!lines) return { kind: "refused", why: "the off-host lines could not be read for the archive" };
   const name = (await walctl("latest")).stdout.trim();
   const snapshot = name ? { name, bytes: (await raw("get " + name)) ?? new Uint8Array() } : null;
   const record = name ? await raw("get-record " + name) : null;
-  const packed = (await b.exec(ctl, "test -d " + shq(x.l.work) + " && tar -C " + shq(x.l.work) + " -cf - .", { user: "root" })) as { exit: number; stdout: string; raw?: Uint8Array };
-  const work = packed.exit === 0 ? (packed.raw ?? new TextEncoder().encode(packed.stdout)) : null;
+  const sealed = bytesOf(await b.exec(ctl, "cat " + shq(x.l.sealed), { user: "root" }));
+  if (!sealed || new TextDecoder().decode(sealed.subarray(0, AGE_HEADER.length)) !== AGE_HEADER) throw new DcError("E_DCH_SEAL", "the sealed work archive read back from " + ctl.id + " is not an age file; both VMs are kept and nothing was copied back");
+  const rows = bytesOf(await b.exec(ctl, "cat " + shq(x.l.rows), { user: "root" }));
   const left = await destroyAll(x, [wal, ctl]);
   if (left.length) fail("E_DC_INFRA_MISSING", "could not delete " + left.join(", "));
   rec.events.push({ at: iso(x.now()), what: "torn down" });
-  return { kind: "deleted", archive: { lines, snapshot, record, work } };
+  return { kind: "deleted", archive: { lines, snapshot, record, sealed, rows } };
 }
