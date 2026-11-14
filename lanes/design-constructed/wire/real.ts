@@ -26,7 +26,7 @@ import { DIRECT_MODELS } from "../money/price.ts";
 import { ProviderWatch, routingOf } from "../money/served.ts";
 import { DirectCallers } from "../paid/direct.ts";
 import { datedTermsOf, type PinRecord } from "../paid/pin.ts";
-import { containerLauncher, SessionProxies, type SessionBinding, type SessionLauncher } from "../paid/sessions.ts";
+import { containerLauncher, generationResolver, SessionProxies, type SessionBinding, type SessionLauncher } from "../paid/sessions.ts";
 import { playwrightBrowser } from "../recipes/browser.ts";
 import type { RecipeAgent } from "../recipes/seams.ts";
 import type { SessionSetup } from "../run/arms.ts";
@@ -155,13 +155,11 @@ const once = <T>(f: () => T): (() => T) => {
 export function realProviders(h: HostContext, s: RealSeams = {}): Providers {
   const svc = h.service;
   const watch = once(() => new ProviderWatch({ controller: svc.controller, out: join(h.dir, "watch"), datedTerms: datedTermsOf(readJson<PinRecord>(h.wiring.pinRecord, "the pin record")) }));
+  const callers = once(() => new DirectCallers({ controller: svc.controller, local: svc.local, wal: svc.wal, watch: watch(), dir: join(svc.cfg.journalDir, "direct"), cacheDir: h.wiring.cacheDir, retry: h.wiring.retry, env: h.env, fetch: s.fetch, sleep: s.sleep }));
   return {
     ledger: (): LedgerProvider => ({ controller: svc.controller, recordedCapMicros: (item) => ledgerStatus(svc.cfg.record, item)[0]?.cap_micros ?? null, reconcile: async () => null }),
-    model: () => {
-      const callers = new DirectCallers({ controller: svc.controller, local: svc.local, wal: svc.wal, watch: watch(), dir: join(svc.cfg.journalDir, "direct"), cacheDir: h.wiring.cacheDir, retry: h.wiring.retry, env: h.env, fetch: s.fetch, sleep: s.sleep });
-      return meterModels((item) => callers.meter(item), (model) => routingDigest(routingOf(model)), async () => callers.stopAll());
-    },
-    session: () => realSessions(h, watch(), s),
+    model: () => meterModels((item) => callers().meter(item), (model) => routingDigest(routingOf(model)), async () => callers().stopAll()),
+    session: () => realSessions(h, watch(), s, callers()),
     vm: () => realVm(h, s),
   };
 }
@@ -170,7 +168,7 @@ const problemsOf = (p: PreparedSession): string[] => [...p.c3, ...p.c2, ...(p.c2
 const safe = (s: string) => s.replace(/[^A-Za-z0-9._-]/g, "_");
 
 /** The review sessions: one container per attempt on its round's sub-reservation, through the item's session proxy. */
-export function realSessions(h: HostContext, watch: ProviderWatch, s: RealSeams = {}): SessionProvider {
+export function realSessions(h: HostContext, watch: ProviderWatch, s: RealSeams = {}, callers: DirectCallers | null = null): SessionProvider {
   const w = h.wiring.sessions ?? fail("E_USAGE", "the wiring file has no sessions section (gstack sources and the image digest); the Captain sets it (lanes/design-constructed/WIRING.md)");
   const svc = h.service;
   const c = svc.controller;
@@ -186,7 +184,8 @@ export function realSessions(h: HostContext, watch: ProviderWatch, s: RealSeams 
     s.prepare ??
     ((o: { setup: SessionSetup; unit: UnitFiles; expect: C2Expect; dir: string }) =>
       prepareSession({ ...o, image: image(), network: trialNet().name, docker, install: o.setup.container.gstack ? { sources: w.gstackSources, network: (installNet ??= createInstallNetwork(docker)), scratch: join(h.dir, "scratch") } : null }));
-  const proxies = new SessionProxies({ controller: c, local: svc.local, wal: svc.wal, watch, dir: join(svc.cfg.journalDir, "sessions"), launcher });
+  const resolve = callers ? (id: string, item: LedgerItemId) => generationResolver(callers.freeProxy(item), c.runId)(id) : undefined;
+  const proxies = new SessionProxies({ controller: c, local: svc.local, wal: svc.wal, watch, dir: join(svc.cfg.journalDir, "sessions"), launcher, resolve });
   const bindings = new Map<string, SessionBinding>();
   const items = new Set<LedgerItemId>();
   let scanError: unknown = null;

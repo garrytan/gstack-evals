@@ -80,6 +80,10 @@ export interface MeterOptions {
   datedTerms?: Partial<Record<AnyModel, string>>;
   /** The run's one served-provider watch, shared with session traffic; without it the meter keeps its own on out. */
   watch?: ProviderWatch;
+  /** Records which sub-reservation a bound meter spends on, before anything is sent (money/journals.ts appendLink). */
+  link?: (meterId: string, subId: string) => void;
+  /** Looks up the provider OpenRouter's generation record names, for a reply that names none (the Captain's ruling 1A). */
+  resolve?: (generationId: string) => Promise<string | null>;
   fetch?: typeof fetch;
   now?: () => Date;
 }
@@ -121,6 +125,7 @@ export function openMeter(o: MeterOptions): Meter {
       let status = 0;
       let text = "";
       try {
+        o.link?.(b.meter_id, sub.id);
         const res = await send("http://127.0.0.1:" + p.port + "/" + b.slot + "/" + m.provider + ROUTE[m.provider], { method: "POST", headers: { authorization: "Bearer " + b.token, "content-type": "application/json", "anthropic-version": "2023-06-01" }, body: JSON.stringify(body) });
         status = res.status;
         text = await res.text();
@@ -136,7 +141,8 @@ export function openMeter(o: MeterOptions): Meter {
         parsed = JSON.parse(text);
       } catch {}
       if (status !== 200) return { text: null, status, micros, cached: false, problem: typeof parsed?.code === "string" ? parsed.code + ": " + (parsed.detail ?? "") : "HTTP " + status, servedBy: null, version: null, refused: null };
-      const servedBy = m.provider === "openrouter" ? (typeof parsed?.provider === "string" ? parsed.provider : null) : m.provider;
+      let servedBy = m.provider === "openrouter" ? (typeof parsed?.provider === "string" ? parsed.provider : null) : m.provider;
+      if (servedBy === null && m.provider === "openrouter" && typeof parsed?.id === "string" && o.resolve) servedBy = await o.resolve(parsed.id);
       await watch.check({ model: req.model, servedBy, via: "direct", label: req.label });
       const result: CallResult = { text: parsed ? judgeAnswer(m.provider, parsed) : null, status, micros, cached: false, problem: parsed ? null : "the reply is not JSON", servedBy, version: typeof parsed?.model === "string" ? parsed.model : null, refused: null };
       if (result.text !== null) {
