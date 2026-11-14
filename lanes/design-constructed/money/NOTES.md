@@ -12,6 +12,7 @@ The money area holds the 17 ledger items' admission, one controller-held lease p
 | price.ts | L1's worst case from main's src/runner/pricing, the lane's direct model routes and the output caps |
 | stops.ts | L5's table (STOP_SCOPES and CAP_STOP_SCOPE in frozen.ts) turned into scope stops, released sessions and settled leases |
 | meter.ts | the metered client, adapted from the devex branch's aftermath meter |
+| served.ts | ProviderWatch: the served-provider check direct calls and session traffic share (PD-9) |
 | wal.ts | the hash-chained write-ahead copy and its completeness check |
 | durability.ts | snapshots, the proxy ledger wrapper, recovery, ledger restore, reserve replay through reconcileJournal, the owner's reconcile |
 | hosts.ts | dc-hosts: VM sub-reservations, measured settlement, the stage projection, idle deletion of the controller host |
@@ -50,8 +51,8 @@ Read as patterns, not copied: lanes/devex/leases.ts at the same devex commit, an
 
 1. **Unknown charges and the cap stop.** Settled by the Captain on 2026-11-14 (PD-18): an unknown charge counts as in flight until reconciled, so a refusal waits on it.
 2. **Recipe retries and "at most 30".** The money area admits a J1 retry on money alone. Whether a retry counts toward the 30 recipe sessions is the frame area's count, and the frozen text doesn't say.
-3. **Write-ahead copy for session proxies.** The proxy container (src/trial/proxy-entry.ts) opens its own local ledger, so its reserves are not copied off host. It needs an additive, off-by-default option that wraps its ledger with writeAheadLedger and a WriteAhead whose target the container can reach (for example a unix socket in its mounted directory, served by the controller). Not done here, to stay clear of the run area's edits to that file.
-4. **Session-side drift.** The meter checks the served provider on direct calls. Sol and particle-1 sessions go through the proxy container; the run area needs to read the served provider there and call `applyStop(controller, stopPlan("E_DC_PROVIDER_DRIFT", { model }))`.
+3. **Done in paid/ (see paid/NOTES.md): the session proxies copy their reserves through a write-ahead relay.** Write-ahead copy for session proxies. The proxy container (src/trial/proxy-entry.ts) opens its own local ledger, so its reserves are not copied off host. It needs an additive, off-by-default option that wraps its ledger with writeAheadLedger and a WriteAhead whose target the container can reach (for example a unix socket in its mounted directory, served by the controller). Not done here, to stay clear of the run area's edits to that file.
+4. **Done in paid/ (see paid/NOTES.md): session traffic runs through the same ProviderWatch as direct calls.** Session-side drift. The meter checks the served provider on direct calls. Sol and particle-1 sessions go through the proxy container; the run area needs to read the served provider there and call `applyStop(controller, stopPlan("E_DC_PROVIDER_DRIFT", { model }))`.
 5. **Captain stops with no frozen code.** The first packet's re-projection past $520, a refused dc-hosts stage, an unproven ledger copy and a projection past $5,000 return a `captain` outcome with no reason code, because codes.ts gains only the 18 E_DC codes.
 6. **The items command.** Wire the `items` row in cli.ts to `itemsCommand` in money/cli.ts.
 7. **Eval-ending stops.** They drain in-flight work before settling. If the Captain wants an immediate settle (in-flight work then held as unknown at full reservation), settleItem needs a force option.
