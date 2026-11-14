@@ -10,7 +10,7 @@ import { draw, drawRuleProblems, kindOrder, pilotPositions } from "./draws.ts";
 import { appView, authorReply, CONTEXT, DECOY, EVIDENCE, EVIDENCE_2X, FIXTURE_APP, FIXTURE_APP_2, ITEMS, ITEMS_2X, PLAN, transformReply, WRONG_WAY } from "./fixture.ts";
 import { enforceGateCheck, keylessGates, runGateCheck, tableOf, type PlantedName, type PlantedUnit } from "./gatecheck.ts";
 import { checkPilot, pilotCost, reproject } from "./pilot.ts";
-import { runUnit, type UnitJob, type UnitOutcome } from "./pipeline.ts";
+import { runUnit, wrongWayShort, type UnitJob, type UnitOutcome } from "./pipeline.ts";
 import { runPilot, type PilotReport } from "./run.ts";
 import { authorPrompt } from "./prompts.ts";
 import { scripted, defaultBlock, STAND_IN_VOCABULARY, type Script } from "./scripted.ts";
@@ -838,6 +838,32 @@ export function cases(): DryRunCase[] {
         const fx = r.readings.find((x) => x.name === "B2")!.fix;
         const stopped = await gateStop(planted({ B2: fixThenKeep("S", long, SUPPORTED) }));
         return want(fx?.screen?.pass === false && fx.audit2 === null && fx.defect?.after === null && stopped.includes("fails step 3: statement-words"), stopped);
+      },
+    },
+    // ---- section 2 items PD-29 accepted with code
+    {
+      rule: "PD-29",
+      name: "section 2 item 7: a passing unit whose key.json holds fewer than two wrong-way facts says so in its reason and is counted; the fixture's two facts print nothing",
+      check: async () => {
+        const one = "Here is the case.\n\n" + JSON.stringify({ plan: PLAN, evidence: EVIDENCE, key: { items: ITEMS, mentioned: [], wrong_way: WRONG_WAY.slice(0, 1) } });
+        const { o: short } = await unit({ author: () => one });
+        const { o: full } = await unit({});
+        return want(short.status === "pass" && short.reason.endsWith("key.json holds 1 wrong-way facts, fewer than two") && wrongWayShort([short, full]).join() === "u1" && full.status === "pass" && !full.reason.includes("wrong-way"), brief(short) + " | " + brief(full));
+      },
+    },
+    {
+      rule: "PD-29",
+      name: "section 2 item 8: each 2x outcome prints its renamed paths and the evidence's change in words, naming a file past 10%; the fixture's transform keeps every path and grows its support summary past 10%",
+      check: async () => {
+        const support = EVIDENCE_2X.find((e) => e.path.includes("support"))!.path;
+        const releases = EVIDENCE_2X.find((e) => e.path.includes("releases"))!.path;
+        const evidence = EVIDENCE_2X.map((e) => (e.path === support ? { ...e, path: "docs/support/payments-tickets.md" } : e.path === releases ? { ...e, text: e.text + "\n" + Array.from({ length: 60 }, () => "filler").join(" ") + "\n" } : e));
+        const moved = await x2({ transform: () => transformReply({ evidence }) });
+        const kept = await x2({});
+        const out: string[] = [];
+        if (!moved.o.reason.includes("renamed paths: gone " + support + "; new docs/support/payments-tickets.md") || !moved.o.reason.includes("files past 10%: " + releases + " +")) out.push("moved: " + moved.o.reason);
+        if (!kept.o.reason.includes("every evidence path kept; evidence words ") || !kept.o.reason.endsWith("files past 10%: " + support + " +14.8%")) out.push("kept: " + kept.o.reason);
+        return want(out.length === 0, out.join("; "));
       },
     },
   ];

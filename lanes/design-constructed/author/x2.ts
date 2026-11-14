@@ -6,7 +6,9 @@
 // details stay byte for byte (R2-16), and the unanimous key on the 2x evidence over the base unit's primary items. The
 // give-away result and the generic screen carry over. A 2x version failing its screen or audit is rewritten once from
 // the transform; a second failure drops the 2x version, never the base unit. An item's detail is keyed for the 10x
-// read when all three 2x unanimous blocks carry it (M10).
+// read when all three 2x unanimous blocks carry it (M10). The 2x screen doesn't check the transform's "keep every
+// file's path" and "within 10%" rules (as built, section 2 item 8); each outcome's reason prints the renamed paths and
+// the evidence's change in words, naming any file past 10%.
 import { AUTHORING, MONEY } from "../frozen.ts";
 import type { AnyModel, AuthorFamily, KeyItem } from "../types.ts";
 import { ask, readAudits, runAudits, validatorStep, type AuditReading, type StepReading } from "./checks.ts";
@@ -14,6 +16,7 @@ import { otherFamily } from "./pipeline.ts";
 import { auditPrompt, rewritePrompt, transformPrompt, validatorPrompt } from "./prompts.ts";
 import { screen2x, type Failure } from "./screen.ts";
 import type { BaseAppView, Deps } from "./seams.ts";
+import { wordCount } from "./text.ts";
 import { digestOf, inheritIds, parseUnitReply, type CheckEntry, type UnitFiles } from "./unit.ts";
 
 export interface X2Job {
@@ -40,6 +43,20 @@ export interface X2Outcome {
   record: { audit: AuditReading | null; unanimous: StepReading | null };
 }
 
+/** The transform's path and length rules as printed, not screened: renamed paths, then the evidence's change in words with any file past the tolerance. */
+export function transformDrift(base: UnitFiles, x2: UnitFiles): string {
+  const was = new Map(base.evidence.map((e) => [e.path, wordCount(e.text)]));
+  const now = new Map(x2.evidence.map((e) => [e.path, wordCount(e.text)]));
+  const gone = [...was.keys()].filter((p) => !now.has(p));
+  const added = [...now.keys()].filter((p) => !was.has(p));
+  const change = (a: number, b: number) => (a ? (b - a) / a : b ? Infinity : 0);
+  const pct = (x: number) => (x >= 0 ? "+" : "") + (x * 100).toFixed(1) + "%";
+  const sum = (m: Map<string, number>) => [...m.values()].reduce((s, n) => s + n, 0);
+  const tol = AUTHORING.transform2x.lengthTolerance;
+  const past = [...now].filter(([p, n]) => was.has(p) && Math.abs(change(was.get(p)!, n)) > tol).map(([p, n]) => p + " " + pct(change(was.get(p)!, n)));
+  return (gone.length || added.length ? "renamed paths: gone " + (gone.join(", ") || "none") + "; new " + (added.join(", ") || "none") : "every evidence path kept") + "; evidence words " + sum(was) + " to " + sum(now) + " (" + pct(change(sum(was), sum(now))) + ")" + (past.length ? ", files past " + tol * 100 + "%: " + past.join(", ") : "");
+}
+
 /** The transform reply as 2x files, or the screen failure that refuses it. */
 function from2xReply(base: UnitFiles, reply: string): UnitFiles | { failure: Failure } | string {
   const p = parseUnitReply(reply, { needPlan: false });
@@ -57,7 +74,7 @@ export async function run2x(job: X2Job, deps: Deps): Promise<X2Outcome> {
   let rewrites = 0;
   let u: UnitFiles | null = null;
   const first = transformPrompt(job.base);
-  const out = (status: X2Outcome["status"], step: X2Outcome["step"], reason: string, key: KeyItem[] = []): X2Outcome => ({ unitId: job.unitId, status, step, reason, files: u, key, rewrites, log, record });
+  const out = (status: X2Outcome["status"], step: X2Outcome["step"], reason: string, key: KeyItem[] = []): X2Outcome => ({ unitId: job.unitId, status, step, reason: reason + (u ? "; " + transformDrift(job.base, u) : ""), files: u, key, rewrites, log, record });
   const entry = (step: string, ok: boolean, detail: string) => log.push({ step, digest: u ? digestOf(u) : "", ok, detail, void: false, carried: false });
 
   let previous = "";

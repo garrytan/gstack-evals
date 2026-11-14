@@ -242,9 +242,12 @@ export async function runUnit(job: UnitJob, depsIn: Deps): Promise<UnitOutcome> 
     row("floor", candidates(u.key), []);
     const stale = log.filter((e) => !e.void && !standing(log, digestOf(u!)).includes(e));
     if (stale.length) return out("drop", "floor", "a result binds another digest: " + stale.map((e) => e.step).join(","));
-    return out("pass", null, "passed with " + primary.length + " primary items", primary);
+    return out("pass", null, "passed with " + primary.length + " primary items" + (u.key.wrongWay.length < 2 ? "; key.json holds " + u.key.wrongWay.length + " wrong-way facts, fewer than two" : ""), primary);
   }
 }
+
+/** Section 2 item 7 (as built: step 3 doesn't check it): the passing units whose key.json holds fewer than two wrong-way facts. */
+export const wrongWayShort = (outcomes: readonly UnitOutcome[]): string[] => outcomes.filter((o) => o.status === "pass" && o.files && o.files.key.wrongWay.length < 2).map((o) => o.unitId);
 
 /** The pass rate per step and the removal rate per class at each step, over the units and items that reached it (BT). */
 export function funnelTable(outcomes: readonly UnitOutcome[]): { step: Step; units: number; passed: number; byClass: Record<ItemClass, { reached: number; removed: number; tieDecided: number }> }[] {
