@@ -26,7 +26,7 @@ import { BOUND_PROVIDERS, build } from "../../../lanes/design-constructed/wire.t
 import { fakeEnv, fakeKit, REPO_ROOT } from "../../../lanes/design-constructed/wire/fakes.ts";
 import { fakeTerms, runRow, sessionsFixture } from "../../../lanes/design-constructed/wire/fixtures.ts";
 import { hostContext, hostStage, runOnHost } from "../../../lanes/design-constructed/wire/host.ts";
-import { realProviders, type HostContext, type RealSeams } from "../../../lanes/design-constructed/wire/real.ts";
+import { realProviders, RULED_RETRY, type HostContext, type RealSeams } from "../../../lanes/design-constructed/wire/real.ts";
 import type { RowEnv } from "../../../lanes/design-constructed/wire/start.ts";
 import { CLAUDE_CLI, HAS_CLAUDE_CLI, KEYS, messagesResponse } from "../../adapters/harness.ts";
 
@@ -67,7 +67,7 @@ async function host(o: { vm?: boolean } = {}): Promise<{ svc: LedgerService; ctx
   writeFileSync(
     wiring,
     JSON.stringify({
-      retry: RETRY,
+      retry: RULED_RETRY,
       pinRecord: join(root, "pins.json"),
       cacheDir: join(root, "cache"),
       scanMs: 50,

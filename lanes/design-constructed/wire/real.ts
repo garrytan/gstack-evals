@@ -86,6 +86,9 @@ export interface HostWiring {
 const posInt = (v: unknown) => Number.isSafeInteger(v) && (v as number) > 0;
 
 /** Reads the wiring file; a missing choice refuses with E_USAGE naming it, since the Captain makes it (WIRING.md). */
+/** The proxies' retry budget, the wiring file's retry value (the Captain's ruling 1N): 3 attempts within 15 minutes. */
+export const RULED_RETRY: RetryBudget = { attempts: 3, elapsed_ms: 900_000 };
+
 export function readWiring(path: string): HostWiring {
   const w = readJson<HostWiring>(path, "the wiring file");
   const no = (what: string): never => fail("E_USAGE", "the wiring file " + path + " " + what + "; the Captain sets it (lanes/design-constructed/WIRING.md)");
@@ -93,6 +96,7 @@ export function readWiring(path: string): HostWiring {
   if (typeof w.pinRecord !== "string" || !w.pinRecord) no("names no pin record");
   if (typeof w.cacheDir !== "string" || !w.cacheDir) no("names no reply cache folder");
   if (!posInt(w.scanMs)) no("names no journal scan interval (scanMs)");
+  if (w.retry.attempts !== RULED_RETRY.attempts || w.retry.elapsed_ms !== RULED_RETRY.elapsed_ms) no("sets a retry budget of " + w.retry.attempts + " attempts in " + w.retry.elapsed_ms + " ms, not the ruled " + RULED_RETRY.attempts + " attempts within 15 minutes (" + RULED_RETRY.elapsed_ms + " ms)");
   return { ...w, sessions: w.sessions ?? null, vm: w.vm ?? null };
 }
 

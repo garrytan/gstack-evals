@@ -8,7 +8,7 @@ The items below are choices the binding could not make without moving a scored o
 
 A host run reads one wiring file (wire/real.ts readWiring). A missing choice refuses with E_USAGE naming it.
 
-1. **Retry budget.** The proxies' retry budget (paid item 1) is the file's `retry`. The binding sets no default.
+1. **Retry budget.** The proxies' retry budget (paid item 1) is the file's `retry`. The Captain ruled it at 3 attempts within 15 minutes (wire/real.ts RULED_RETRY); a file that names another budget refuses with E_USAGE.
 2. **Drift scan interval.** How often a session proxy's journal is read for drift (paid item 5) is the file's `scanMs`.
 3. **Sessions section.** The gstack pin sources and the expected image digest come from the file's `sessions` section.
 4. **VM section.** Ubicloud's project, location, VM size and image, the private subnet, the SSH key, the browser path, the price per hour, the VM proxy endpoint and the mirrors come from the file's `vm` section.

@@ -18,6 +18,7 @@ import type { DryRunCase } from "../types.ts";
 import { BOUND_PROVIDERS } from "../wire.ts";
 import { REPO_ROOT } from "./fakes.ts";
 import { hostRow, type HostPlanFile, type HostSeams } from "./host.ts";
+import { readWiring, RULED_RETRY } from "./real.ts";
 import type { RowEnv } from "./start.ts";
 
 const LANE = join(REPO_ROOT, "lanes", "design-constructed");
@@ -254,6 +255,29 @@ export function hostRowCases(): DryRunCase[] {
             new TextDecoder().decode(grep.stdout).trim() === "" ? null : "a key reached a file: " + new TextDecoder().decode(grep.stdout),
           );
         }),
+    },
+    {
+      rule: "W-host-row",
+      name: "the wiring file's retry value is the ruled 3 attempts within 15 minutes, and any other budget refuses with E_USAGE",
+      check: () => {
+        const dir = mkdtempSync(join(tmpdir(), "dc-retry-"));
+        try {
+          const file = join(dir, "wiring.json");
+          const base = { pinRecord: "p", cacheDir: "c", scanMs: 10_000 };
+          writeFileSync(file, JSON.stringify({ ...base, retry: RULED_RETRY }));
+          const ok = readWiring(file).retry;
+          writeFileSync(file, JSON.stringify({ ...base, retry: { attempts: 2, elapsed_ms: 60_000 } }));
+          let why = "";
+          try {
+            readWiring(file);
+          } catch (e) {
+            why = (e as Error).message;
+          }
+          return ok.attempts === 3 && ok.elapsed_ms === 900_000 && why.includes("not the ruled 3 attempts") ? null : "read " + JSON.stringify(ok) + ", refused '" + why + "'";
+        } finally {
+          rmSync(dir, { recursive: true, force: true });
+        }
+      },
     },
   ];
 }
