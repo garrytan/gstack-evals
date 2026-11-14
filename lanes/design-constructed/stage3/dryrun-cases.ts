@@ -14,11 +14,21 @@ import { mirrorConfig, preamble, sandboxed, specFor, specProblems } from "./sand
 import { controllerMirrors } from "./ubicloud-real.ts";
 import { accepted, countValidation, selectUnits } from "./units.ts";
 import { runVmAgent } from "./agent.ts";
+import { BROWSER_ROOT, controllerBackend, type ControllerFiles } from "./install.ts";
 import { agentRig } from "./agent-fake.ts";
 import { BUILD_PROMPT, RECIPES, STAGE3 } from "../frozen.ts";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+async function installCase(change: boolean) {
+  const w = fakeWorld();
+  const inner = fakeBackend(w);
+  const browser: ControllerFiles = { name: "browser", root: BROWSER_ROOT, tar: async () => bytes("browser build"), apt: ["libnss3"], check: "true" };
+  const backend = controllerBackend(inner, { browser, agent: null });
+  const r = await sandboxed({ backend, hosts: fakeHosts(), now: () => 0 }, fakeSpec({ proxy: null }), async (vm) => (change ? await backend.write(vm, BROWSER_ROOT + "/payload", "changed in the session") : undefined, 1));
+  return { r, calls: w.vms[0]!.calls.map((c) => c.command) };
+}
 
 async function agentCase(reply: string, o: { spentMicros?: number; unknownMicros?: number; build?: boolean }) {
   const out = mkdtempSync(join(tmpdir(), "dc-dry-agent-"));
@@ -315,6 +325,24 @@ export function cases(): DryRunCase[] {
       check: () => {
         const rows = (wins: number, of: number): PairRow[] => Array.from({ length: of }, (_, i) => ({ unit: "u" + i, arm: "no-review", judge: "argon", armFirst: false, result: i < wins ? "win" : "tie" }));
         return eq([instrument(rows(7, 10)).flagged, instrument(rows(69, 100)).flagged], [false, true], "flags");
+      },
+    },
+    {
+      rule: "1D",
+      name: "the controller's browser install runs from the apt mirror before the job, and the audit counts its files as the controller's",
+      check: async () => {
+        const { r, calls } = await installCase(false);
+        if (!r.audit.ok) return "audit: " + r.audit.reasons.join("; ");
+        return first(eq([r.audit.evidence.controller, r.audit.evidence.files.some((f) => f.path === BROWSER_ROOT + "/payload")], [1, false], "controller files"), calls.some((c) => c.includes("apt-get install -y -q --no-install-recommends libnss3")) ? null : "no apt install");
+      },
+    },
+    {
+      rule: "1D",
+      name: "a controller file the session changes reads as the session's again",
+      check: async () => {
+        const { r } = await installCase(true);
+        if (!r.audit.ok) return "audit: " + r.audit.reasons.join("; ");
+        return eq([r.audit.evidence.controller, r.audit.evidence.files.some((f) => f.path === BROWSER_ROOT + "/payload")], [0, true], "controller files");
       },
     },
     {

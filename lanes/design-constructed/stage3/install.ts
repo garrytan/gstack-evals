@@ -98,7 +98,7 @@ const must = (r: ExecResult, what: string, vm: Vm): void => {
 
 /**
  * Installs each item as root, in order: the start marker, the apt packages from the mirror in one install, each tar
- * unpacked into its root (owned by root, readable by all), each check as the run user, then the manifest of every file
+ * unpacked into its root (owned by root, readable by all, with fresh times so the audit's written-file list sees it), each check as the run user, then the manifest of every file
  * written since the marker. Any step that fails throws E_DC_INFRA_MISSING: a failure outside the agent.
  */
 export async function installControllerFiles(backend: VmBackend, vm: Vm, items: readonly ControllerFiles[], o: InstallOptions = {}): Promise<ControllerEntry[]> {
@@ -115,7 +115,7 @@ export async function installControllerFiles(backend: VmBackend, vm: Vm, items: 
   for (const it of items) {
     const tar = audit + "/" + it.name + ".tar";
     await backend.write(vm, tar, await it.tar());
-    must(await backend.exec(vm, "mkdir -p " + q(it.root) + " && tar -xf " + q(tar) + " -C " + q(it.root) + " --no-same-owner && rm -f " + q(tar) + " && chmod -R a+rX,go-w " + q(it.root), { user: "root", timeoutMs: 300_000 }), it.name + "'s unpack", vm);
+    must(await backend.exec(vm, "mkdir -p " + q(it.root) + " && tar -xf " + q(tar) + " -C " + q(it.root) + " --no-same-owner --touch && rm -f " + q(tar) + " && chmod -R a+rX,go-w " + q(it.root), { user: "root", timeoutMs: 300_000 }), it.name + "'s unpack", vm);
   }
   for (const it of items) must(await backend.exec(vm, it.check, { user: "run" }), it.name + "'s check", vm);
   const listed = await backend.exec(vm, manifestFind({ scanRoot, auditDir: audit }) + " && " + describeCommand(audit + "/controller.list"), { user: "root", timeoutMs: 300_000 });
