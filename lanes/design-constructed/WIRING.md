@@ -41,7 +41,7 @@ A host run reads one wiring file (wire/real.ts readWiring). A missing choice ref
 ## Earlier wiring
 
 17. **Validators' blocks.** wire.ts blockParser gives the author area's steps 5 and 6 the frozen lenient parse written for sessions (author item 8). The Captain may rule the strict parse for validators instead.
-18. **lens minus none.** The verdict row (wire/keyless.ts) reads the lens minus none verdict from its input file. No row computes it from the contrast yet.
+18. **lens minus none.** The verdict row (wire/keyless.ts readRow) computes lens minus none from the contrast on the same cells, passes its unadjusted p as holm (the prereg names Holm only for the two primaries) and prints it labelled unadjusted. It reads the verdict through verdict() with the arm's own smoke and untested inputs, as read/dryrun-cases.ts's S10-reading case does, and reads "untested" when the lens didn't run or its contrast has no interval.
 
 ## Phase 1b open items
 
@@ -54,7 +54,10 @@ Each piece below is a choice the binding could not make without moving a scored 
 23. **errorSeen's window.** errorSeen reads every error in the attempt's journal, as ruled ("inside the attempt"), so an upstream error the proxy retried and recovered from early in a session still makes a later malformed tool call outside the agent. wire.ts's SessionDrive comment says "the session's last exchange". The Captain may narrow it.
 24. **The rejected-call marker.** run/stream.ts matches Claude Code's tool_use_error text for an input validation failure or an unknown tool. It is checked against hand-written stream lines only, not a real CLI session at the pinned Claude Code version.
 25. **The model probe's ledger item.** paid/pin.ts modelProbePlan lists one short call per model (16 output tokens) to run first after the go (ruling 1A). Which ledger item those five calls charge is not ruled, so runModelProbe takes the call from its caller and no row runs it yet.
-26. **Start rule 9's provider compare.** read/start.ts still compares a first call's provider with the terms record's raw string. Ruling 1B's fold (money/served.ts foldProvider) applies to the drift watch here; the read area applies it to start rule 9.
+26. **Start rule 9's provider compare.** Resolved: read/start.ts startRule9 compares with money/served.ts foldProvider (PD-20) and prints both raw names when only the spelling differs.
+27. **The gate check's fix step (PD-21).** A planted drop item marked fix gets one fix call from its author and a second audit by both auditors on the fixed unit. The gate check skips step 3's re-screen of the fixed unit, and it counts a second-audit fix or drop on the item as a catch only through PD-2 (the item then never reaches the key); author/gatecheck.ts records it as not caught. "The planted defect gone" is read as the statement or detail changed and the second audit keeping it. The Captain may rule a stricter read.
+28. **Applying the re-priced caps (PD-30).** read/admission.ts projectionRerun returns each re-priced cap and prints it as a deviation. No row writes those caps into the ledger yet, and only items whose measured need passes their cap are re-priced; caps are never lowered.
+29. **What counts as a session a drift stop cut (PD-25).** wire/sessions.ts reads an attempt as a drift stop when it ended other than completed and a provider drift stop covers its model and arm when it ends. A session that completed before the stop is read as completed.
 
 ## Carried from the area notes
 

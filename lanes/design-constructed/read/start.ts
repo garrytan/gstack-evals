@@ -3,6 +3,7 @@
 // office-hours' twin reading, and each OpenRouter model's first call is checked against the dated terms record.
 import { STOP_SCOPES } from "../frozen.ts";
 import { fail } from "../errors.ts";
+import { foldProvider } from "../money/served.ts";
 import type { AnyModel, StopScope } from "../types.ts";
 import type { ReasonCode } from "../../../src/errors/codes.ts";
 
@@ -86,12 +87,14 @@ export const DRIFT_ROLES = ["author", "auditor", "validator", "labeller", "panel
 
 /**
  * Rule 9: a model's first call must be served by the recorded provider, with fallbacks off and data collection denied,
- * under the recorded terms. Any difference stops that model (E_DC_PROVIDER_DRIFT) for the Captain.
+ * under the recorded terms. Any difference stops that model (E_DC_PROVIDER_DRIFT) for the Captain. Provider names
+ * compare after folding case, spaces and punctuation, as money/served.ts's drift watch does (PD-20), and a spelling
+ * that differs only there prints both raw names.
  */
 export function startRule9(record: TermsRecord, call: FirstCall): { ok: boolean; code: ReasonCode | null; mismatches: string[]; scope: StopScope | null; roles: readonly string[]; line: string } {
   if (record.model !== call.model) fail("E_USAGE", "the terms record is for " + record.model + ", the call for " + call.model);
   const mismatches: string[] = [];
-  if (call.provider !== record.provider) mismatches.push("provider " + call.provider + ", recorded " + record.provider);
+  if (foldProvider(call.provider) !== foldProvider(record.provider)) mismatches.push("provider " + call.provider + ", recorded " + record.provider);
   if (call.fallbacks) mismatches.push("fallbacks on");
   if (call.dataCollection !== record.dataCollection) mismatches.push("data collection " + call.dataCollection + ", recorded " + record.dataCollection);
   if (call.termsDigest !== record.termsDigest) mismatches.push("data terms differ from the record dated " + record.dated);
@@ -102,6 +105,6 @@ export function startRule9(record: TermsRecord, call: FirstCall): { ok: boolean;
     mismatches,
     scope: ok ? null : STOP_SCOPES.E_DC_PROVIDER_DRIFT,
     roles: ok ? [] : DRIFT_ROLES,
-    line: ok ? "start rule 9: " + call.model + " served by " + call.provider + " under the recorded terms" : "start rule 9: " + call.model + " drifted (" + mismatches.join("; ") + "): every call on it stops, in every role, for the Captain (E_DC_PROVIDER_DRIFT)",
+    line: ok ? "start rule 9: " + call.model + " served by " + call.provider + (call.provider !== record.provider ? " (recorded as " + record.provider + ", the same provider after folding)" : "") + " under the recorded terms" : "start rule 9: " + call.model + " drifted (" + mismatches.join("; ") + "): every call on it stops, in every role, for the Captain (E_DC_PROVIDER_DRIFT)",
   };
 }
