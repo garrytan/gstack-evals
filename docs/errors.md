@@ -320,6 +320,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_DCW_PLANTED_INPUTS](#e_dcw_planted_inputs) | 2 | U20 |
 | [E_DCW_BROWSER_LAUNCH](#e_dcw_browser_launch) | 2 | U20 |
 | [E_DCW_REGION](#e_dcw_region) | 2 | U20 |
+| [E_DCW_CONTAINER_LEFT](#e_dcw_container_left) | 2 | U20 |
 | [E_DCV_POWER_PY_PIN](#e_dcv_power_py_pin) | 2 | U20 |
 | [E_DCV_PROJECTION_STOP](#e_dcv_projection_stop) | warning | U20 |
 
@@ -2318,6 +2319,14 @@ Design plan review eval (PD-42): a paid row would run in a Ubicloud region other
 Fix: Bring the stage, both regions and the row to the Captain. A stage finishes in the region it started in; a move to the fallback region happens only at a stage boundary, and the run record names it.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_DCW_CONTAINER_LEFT
+
+Design plan review eval (PD-43 condition 1, the Captain's custody ruling on review containers): a review session's container was not confirmed removed after docker rm -f, because docker container inspect still listed it or failed without reporting no such container. The sessions row stops at that point and starts no later session; the message names the container.
+
+Fix: On the controller host, remove the named container (docker rm -f) and confirm docker container inspect reports no such container, find why the removal failed, and bring both to the Captain. Launch again into a new sink only on the Captain's word.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
 
 ### E_DCV_POWER_PY_PIN
 

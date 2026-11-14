@@ -7,8 +7,8 @@
 //   ledger   the service's money controller and its approval record; J1 figures stay held until the owner's reconcile.
 //   model    paid/direct.ts's callers: one in-process metering proxy per direct item, its ledger copied off host.
 //   session  paid/sessions.ts's proxies on the trial network, run/docker.ts's review container per attempt (C3, C2 and
-//            the gstack install, held for the Captain when a re-prepared container fails again), and the Claude Code
-//            driver with the row's gate and D1 stop handler.
+//            the gstack install, held for the Captain when a re-prepared container fails again; removed and checked
+//            gone after the attempt, PD-43), and the Claude Code driver with the row's gate and D1 stop handler.
 //   vm       stage3/ubicloud-real.ts's keyed backend, wrapped so every sandbox gets the controller's browser install first
 //            (stage3/install.ts: Playwright's Chromium build with its apt libraries, and the pinned Claude Code in a VM
 //            that reaches the proxy), recipes/browser.ts's Playwright over an SSH tunnel to that Chromium, and the recipe

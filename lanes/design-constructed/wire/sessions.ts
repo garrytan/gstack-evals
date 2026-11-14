@@ -10,6 +10,8 @@
 // Every session's driver waits up to the PD-32 background wait at a turn's result, and the launch prints, per arm, how
 // many sessions still had background work at their first result. A stage 2 launch refuses under start rule 7, before
 // any key read or admission, unless --stage1 records every stage 1 pass and --reprice holds the reprice row's record.
+// A session that throws (E_DCW_CONTAINER_LEFT when its container's removal fails, PD-43 condition 1) ends the row with
+// its code, and no worker starts another cell after it.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { mainAgentTexts } from "../../../src/trial/review/capped.ts";
@@ -199,11 +201,17 @@ export const sessionsRow: Row = async (a, io, env) => {
   try {
     const out: CellOutcome[] = new Array(order.length);
     let next = 0;
+    let failed = false;
     const worker = async () => {
-      while (next < order.length) {
+      while (next < order.length && !failed) {
         const i = next++;
-        out[i] = await runCell(order[i]!, seams);
-        await settleRound(roundOf.get(cellId(order[i]!))!);
+        try {
+          out[i] = await runCell(order[i]!, seams);
+          await settleRound(roundOf.get(cellId(order[i]!))!);
+        } catch (e) {
+          failed = true;
+          throw e;
+        }
       }
     };
     await Promise.all(Array.from({ length: Math.min(HARNESS.maxSessionsAtOnce, order.length) }, worker));

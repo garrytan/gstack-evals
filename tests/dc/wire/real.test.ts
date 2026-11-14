@@ -6,7 +6,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { $ } from "../../../lanes/design-constructed/money/book.ts";
@@ -19,7 +19,9 @@ import { pinRecord, termsRecordsOf } from "../../../lanes/design-constructed/pai
 import { scripted } from "../../../lanes/design-constructed/paid/scripted.ts";
 import { inProcessLauncher } from "../../../lanes/design-constructed/paid/sessions.ts";
 import { localRunBox } from "../../../lanes/design-constructed/run/box.ts";
-import { sessionFolder, type PreparedSession, type ReviewContainer } from "../../../lanes/design-constructed/run/docker.ts";
+import { DcError } from "../../../lanes/design-constructed/errors.ts";
+import { sessionSetup } from "../../../lanes/design-constructed/run/arms.ts";
+import { sessionFolder, startReviewContainer, type PreparedSession, type ReviewContainer } from "../../../lanes/design-constructed/run/docker.ts";
 import { BLOCK } from "../../../lanes/design-constructed/run/fixtures.ts";
 import { RECIPES } from "../../../lanes/design-constructed/frozen.ts";
 import { stubSession } from "../../../lanes/design-constructed/stage3/agent-fake.ts";
@@ -134,8 +136,27 @@ describe("the real providers", () => {
     }
   });
 
-  /** A local folder standing in for the review container: its exec and agent run on this machine in the session folder. */
-  const localPrepare = (o: { problems?: () => string[] } = {}): RealSeams["prepare"] & { dirs: string[] } => {
+  /**
+   * A stand-in docker binary for the review container's lifecycle: run records the container by name, rm -f removes it
+   * unless leave() is on, and container inspect reports no such container once it is gone. Every call is logged.
+   */
+  const standInDocker = (o: { leave?: boolean } = {}) => {
+    const dir = temp("docker");
+    mkdirSync(join(dir, "live"));
+    const path = join(dir, "docker");
+    writeFileSync(path, ["#!/bin/sh", 'd="$(dirname "$0")"', 'echo "$*" >> "$d/docker.log"', 'case "$1" in', '  run) while [ $# -gt 0 ]; do [ "$1" = --name ] && name="$2"; shift; done; : > "$d/live/$name"; echo c0ffee;;', '  rm) [ -e "$d/leave" ] || rm -f "$d/live/$3";;', '  container) if [ -e "$d/live/$3" ]; then echo "[{}]"; else echo "Error response from daemon: No such container: $3" >&2; exit 1; fi;;', "  *) exit 9;;", "esac", ""].join("\n"));
+    chmodSync(path, 0o755);
+    const leave = (on: boolean) => (on ? writeFileSync(join(dir, "leave"), "") : rmSync(join(dir, "leave"), { force: true }));
+    leave(o.leave ?? false);
+    const log = () => readFileSync(join(dir, "docker.log"), "utf8").trim().split("\n");
+    return { path, leave, live: () => readdirSync(join(dir, "live")), removals: () => log().filter((l) => /^(rm|container) /.test(l)) };
+  };
+
+  /**
+   * A local folder standing in for the review container: its exec and agent run on this machine in the session folder.
+   * With docker, the container's name and stop() are run/docker.ts's own, started and removed through that binary.
+   */
+  const localPrepare = (o: { problems?: () => string[]; docker?: string } = {}): RealSeams["prepare"] & { dirs: string[] } => {
     const seen: string[] = [];
     const prepare = async (p: Parameters<NonNullable<RealSeams["prepare"]>>[0]): Promise<PreparedSession> => {
       seen.push(p.dir);
@@ -163,7 +184,8 @@ describe("the real providers", () => {
         }),
         stop() {},
       };
-      return { container, c3: [], c2: o.problems?.() ?? [], install: null, c2AfterInstall: null, c3AfterInstall: null };
+      const removal = o.docker ? startReviewContainer({ image: container.image, setup: p.setup, folder, network: "dc-trial-test", docker: o.docker }) : null;
+      return { container: removal ? { ...container, name: removal.name, stop: removal.stop } : container, c3: [], c2: o.problems?.() ?? [], install: null, c2AfterInstall: null, c3AfterInstall: null };
     };
     return Object.assign(prepare, { dirs: seen });
   };
@@ -222,6 +244,99 @@ describe("the real providers", () => {
       expect(existsSync(join(h.svc.cfg.journalDir, "sessions"))).toBe(false);
     } finally {
       h.svc.close();
+    }
+  });
+
+  /** The SDK's side of one completed session with no CLI: the main agent's reply with a plan-changes block, then its result. */
+  const blockQuery = (() =>
+    (async function* () {
+      yield { type: "assistant", parent_tool_use_id: null, message: { role: "assistant", content: [{ type: "text", text: "Review.\n\n" + BLOCK }] } };
+      yield { type: "result", subtype: "success", num_turns: 1, usage: { input_tokens: 1, output_tokens: 1 } };
+    })()) as unknown as RealSeams["query"];
+
+  test("a review container's stop removes it with docker rm -f and checks docker container inspect reports no such container; a removal that leaves it throws E_DCW_CONTAINER_LEFT naming it, and a later call removes and checks again", () => {
+    // Value: protects=PD-43 condition 1 at run/docker.ts: every removal is checked, and a failed one is an error naming the container; fails_when=stop ignores rm's result, skips the inspect, reads any inspect failure as gone, or a second call after a failed removal passes silently; why_new=PD-43 (stop ran docker rm -f with its output ignored); seam=startReviewContainer's stop; no_claim=a real Docker daemon (tests/dc/run/docker.test.ts runs one where it answers)
+    const d = standInDocker({ leave: true });
+    const unit = temp("unit");
+    mkdirSync(join(unit, "repo"));
+    mkdirSync(join(unit, "context"));
+    writeFileSync(join(unit, "plan.md"), "# plan\n");
+    const c = startReviewContainer({ image: { tag: "dc-test", digest: "sha256:" + "a".repeat(64) }, setup: sessionSetup("none", "opus", []), folder: sessionFolder({ repo: join(unit, "repo"), plan: join(unit, "plan.md"), context: join(unit, "context") }, join(unit, "s1")), network: "dc-trial-test", docker: d.path });
+    expect(d.live()).toEqual([c.name]);
+    let left: unknown = null;
+    try {
+      c.stop();
+    } catch (e) {
+      left = e;
+    }
+    expect(left).toBeInstanceOf(DcError);
+    expect((left as DcError).code).toBe("E_DCW_CONTAINER_LEFT");
+    expect((left as DcError).message).toContain(c.name);
+    expect(d.live()).toEqual([c.name]);
+    d.leave(false);
+    c.stop();
+    c.stop();
+    expect(d.live()).toEqual([]);
+    expect(d.removals()).toEqual(["rm -f " + c.name, "container inspect " + c.name, "rm -f " + c.name, "container inspect " + c.name]);
+  });
+
+  test("the sessions row removes each review container right after its session and checks the removal (PD-43 condition 1); a docker whose rm leaves the container stops the row with E_DCW_CONTAINER_LEFT, never a cell's outcome", async () => {
+    // Value: protects=PD-43 condition 1 at the row: the session box's close removes the container and checks it, and a failed removal ends the sessions row with its own code; fails_when=close skips the stop, the error is caught into an infra outcome, or the row writes outcomes as if the cell ended; why_new=PD-43; seam=realSessions' open and close, the sessions row's worker loop, startReviewContainer's stop; no_claim=the CLI (a stand-in query ends the session) or a real Docker daemon
+    for (const leave of [false, true]) {
+      const h = await host();
+      const f = sessionsFixture({ model: "opus", stage: 2, cells: [{ unit: "u1", kind: "none" }] });
+      writeFileSync(join(f.dir, "exports", "u1", "c2.json"), "{}");
+      const d = standInDocker({ leave });
+      const up = scripted([{ kind: "ok", text: "never" }]);
+      const r = await runRow(f.argv, rowEnv(h.ctx, { prepare: localPrepare({ docker: d.path }), query: blockQuery, launcher: inProcessLauncher({ local: h.svc.local, retry: RETRY, env: ENV, fetch: up.fetch, sleep: noSleep }) }));
+      try {
+        const names = d.removals().filter((l) => l.startsWith("rm ")).map((l) => l.slice("rm -f ".length));
+        expect(names).toHaveLength(1);
+        expect(d.removals()).toEqual(["rm -f " + names[0], "container inspect " + names[0]]);
+        if (!leave) {
+          expect(r.err).toEqual([]);
+          expect(r.code).toBe(0);
+          expect(r.out).toContain("sessions opus stage 2: 1 cells, scored 1; 0 retried");
+          expect(d.live()).toEqual([]);
+          continue;
+        }
+        expect(r.code).toBe(2);
+        expect(r.err[0]).toStartWith("E_DCW_CONTAINER_LEFT ");
+        expect(r.err[0]).toContain(names[0]!);
+        expect(d.live()).toEqual(names);
+        expect(existsSync(join(f.sink, "outcomes.json"))).toBe(false);
+      } finally {
+        h.svc.close();
+      }
+    }
+  });
+
+  test("a removal that fails before a re-prepared container, or when a session fails its containment twice, stops the row with E_DCW_CONTAINER_LEFT", async () => {
+    // Value: protects=PD-43 condition 1 at the containment retry and its hold: the first container's removal is checked before a second is prepared, and the held session's removal before E_DCW_CONTAINMENT; fails_when=a re-prepare starts while the first container is still there, or the failed removal is swallowed behind the containment hold; why_new=PD-43; seam=realSessions' containPoint loop and its hold; no_claim=a real Docker daemon
+    for (const leaveAt of [1, 2]) {
+      const h = await host();
+      const f = sessionsFixture({ model: "opus", stage: 2, cells: [{ unit: "u1", kind: "none" }] });
+      writeFileSync(join(f.dir, "exports", "u1", "c2.json"), "{}");
+      const d = standInDocker({ leave: leaveAt === 1 });
+      let n = 0;
+      const prepare = localPrepare({
+        docker: d.path,
+        problems: () => {
+          if (++n === leaveAt) d.leave(true);
+          return ["a mount outside the three binds"];
+        },
+      });
+      const up = scripted([{ kind: "ok", text: "never" }]);
+      const r = await runRow(f.argv, rowEnv(h.ctx, { prepare, query: blockQuery, launcher: inProcessLauncher({ local: h.svc.local, retry: RETRY, env: ENV, fetch: up.fetch }) }));
+      try {
+        expect(r.code).toBe(2);
+        expect(r.err[0]).toStartWith("E_DCW_CONTAINER_LEFT ");
+        expect(prepare.dirs.map((x) => x.split("/").at(-1))).toEqual(leaveAt === 1 ? ["s1"] : ["s1", "s2"]);
+        expect(d.live()).toHaveLength(1);
+        expect(up.sent).toEqual([]);
+      } finally {
+        h.svc.close();
+      }
     }
   });
 

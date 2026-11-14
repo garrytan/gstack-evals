@@ -2642,6 +2642,15 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_DCW_CONTAINER_LEFT: {
+    exit: 2,
+    meaning: "Design plan review eval (PD-43 condition 1, the Captain's custody ruling on review containers): a review session's container was not confirmed removed after docker rm -f, because docker container inspect still listed it or failed without reporting no such container. The sessions row stops at that point and starts no later session; the message names the container.",
+    fix: "On the controller host, remove the named container (docker rm -f) and confirm docker container inspect reports no such container, find why the removal failed, and bring both to the Captain. Launch again into a new sink only on the Captain's word.",
+    side_effects: PARTIAL,
+    retry_safe: false,
+    resumable: false,
+    owner: "U20",
+  },
   E_DCV_POWER_PY_PIN: {
     exit: 2,
     meaning: "Design plan review eval (prereg section 12, the admission read): the power.py the read would run has a sha256 other than the one attached to the preregistration, so it did not run. The name sits outside E_DC_ because start rule 3 freezes exactly 18 E_DC_ codes.",

@@ -88,7 +88,11 @@ export interface ReviewContainer {
   box(): RunBox;
   /** The agent session the driver spawns the CLI through; env is the driver's agent env, checked on the agent allowlist. */
   agent(env: Record<string, string>): AgentSession;
-  /** Removes the container; safe to call twice. */
+  /**
+   * Removes the container and checks that it is gone (PD-43 condition 1): docker container inspect must report no such
+   * container, or this throws E_DCW_CONTAINER_LEFT naming it, which stops the row. Safe to call twice: once the
+   * removal is confirmed a later call does nothing, and until then each call removes and checks again.
+   */
   stop(): void;
 }
 
@@ -176,8 +180,15 @@ export function startReviewContainer(o: { image: ReviewImage; setup: SessionSetu
       };
     },
     stop() {
-      if (!stopped) spawnSync(docker, ["rm", "-f", name], { stdio: "ignore", env: clientEnv() });
-      stopped = true;
+      if (stopped) return;
+      const rm = spawnSync(docker, ["rm", "-f", name], { encoding: "utf8", timeout: 120_000, env: clientEnv() });
+      const left = spawnSync(docker, ["container", "inspect", name], { encoding: "utf8", timeout: 120_000, env: clientEnv() });
+      if (left.status !== 0 && /no such container/i.test(String(left.stderr))) {
+        stopped = true;
+        return;
+      }
+      const why = left.status === 0 ? "docker container inspect still lists it" : "docker container inspect exited " + left.status + " without reporting no such container: " + String(left.stderr ?? left.error ?? "").trim().split("\n").slice(-1)[0];
+      fail("E_DCW_CONTAINER_LEFT", "the review container " + name + " was not removed after its session (docker rm -f exited " + rm.status + "): " + why + "; the row stops (PD-43 condition 1)");
     },
   };
 }
