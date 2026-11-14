@@ -7,7 +7,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BROWSER_ROOT, CHROMIUM_APT, controllerBackend, DOCKER_APT, NODE, nodeFiles } from "../../../lanes/design-constructed/stage3/install.ts";
-import { AUDIT_COMMANDS, egressFilter, ownerFromEnv, parseEgress, preamble, sandboxed, secretHit, specFor, specProblems, termsRecord } from "../../../lanes/design-constructed/stage3/sandbox.ts";
+import { AUDIT_COMMANDS, egressCutWhy, egressFilter, ownerFromEnv, parseEgress, preamble, sandboxed, sandboxLine, secretHit, specFor, specProblems, termsRecord } from "../../../lanes/design-constructed/stage3/sandbox.ts";
 import { CapStopSignal } from "../../../lanes/design-constructed/stage3/seams.ts";
 
 const run = async (o: { faults?: FakeFaults; plant?: (vm: FakeVm) => void; scanExtra?: string[] } = {}) => {
@@ -246,5 +246,50 @@ describe("the egress filter as one nft transaction", () => {
     const good = await backend.create(spec);
     expect((await backend.exec(good, egressFilter(spec), { user: "root" })).exit).toBe(0);
     expect((await backend.exec(good, AUDIT_COMMANDS.ruleset, { user: "root" })).stdout).toContain('\t\toif "lo" accept\n\t\tct state established,related accept\n');
+  });
+});
+describe("ICMP lines in the egress log", () => {
+  // Value: protects=a sandbox audit that a ping or an ICMPv6 reply would void into an uncollected stop; fails_when=a dropped ICMP or ICMPv6 line voids the log again, is dropped from the blocked list, or the reading widens to lines that should still void it; why_new=a real noble VM's kernel log held DCDROP lines for ICMP and ICMPv6 with no DPT, and parseEgress returned null on them; seam=parseEgress, egressCutWhy; no_claim=which packets a real sandbox sends
+  const log = (...lines: string[]) => ["kernel: boot", "DCNET-START", ...lines, "DCNET-END", ""].join("\n");
+  const v4 = 'DCDROP IN= OUT=ens3 SRC=192.0.2.10 DST=198.51.100.1 LEN=84 TOS=0x00 PREC=0x00 TTL=64 ID=1 DF PROTO=ICMP TYPE=8 CODE=0 ID=7 SEQ=1';
+  const v6 = "DCDROP IN= OUT=ens3 SRC=2001:db8::10 DST=2001:db8:1::1 LEN=104 TC=0 HOPLIMIT=64 FLOWLBL=1 PROTO=ICMPv6 TYPE=128 CODE=0 ID=7 SEQ=1";
+  const tcp = "DCNET IN= OUT=ens3 SRC=192.0.2.10 DST=192.0.2.3 LEN=60 TOS=0x00 PREC=0x00 TTL=64 ID=2 DF PROTO=TCP SPT=40000 DPT=4873 WINDOW=64240 RES=0x00 SYN URGP=0";
+  test("dropped ICMP and ICMPv6 packets count as blocked at port 0, beside the TCP lines", () => {
+    expect(parseEgress(log(tcp, v4, v6))).toEqual({ egress: [{ host: "192.0.2.3", port: 4873 }], blocked: [{ host: "198.51.100.1", port: 0 }, { host: "2001:db8:1::1", port: 0 }] });
+  });
+  test("an accepted line with no port, or a dropped line of another protocol with no port, still voids the log, and the reason quotes it", () => {
+    const accepted = v4.replace("DCDROP", "DCNET");
+    const gre = v4.replace("PROTO=ICMP TYPE=8 CODE=0", "PROTO=47");
+    expect(parseEgress(log(accepted))).toBeNull();
+    expect(parseEgress(log(gre))).toBeNull();
+    expect(egressCutWhy(log(v4, gre))).toBe("a filter line holds no DST and DPT pair: " + gre.slice(0, 200));
+    const udpFragment = "DCDROP IN= OUT=ens3 SRC=192.0.2.10 DST=198.51.100.53 LEN=1500 TOS=0x00 PREC=0x00 TTL=64 ID=9 FRAG:185 PROTO=UDP";
+    expect(parseEgress(log(udpFragment))).toBeNull();
+  });
+  test("TCP and UDP lines parse exactly as the parser before this change read them", () => {
+    const before = (text: string) => {
+      const lines = text.split("\n");
+      const start = lines.findIndex((l) => l.includes("DCNET-START"));
+      const end = lines.findIndex((l, i) => i > start && l.includes("DCNET-END"));
+      if (start < 0 || end < 0) return null;
+      const egress: Array<{ host: string; port: number }> = [];
+      const blocked: Array<{ host: string; port: number }> = [];
+      for (const l of lines.slice(start + 1, end)) {
+        const m = /DST=(\S+).*?DPT=(\d+)/.exec(l);
+        if (l.includes("DCNET ") && m) egress.push({ host: m[1]!, port: Number(m[2]) });
+        else if (l.includes("DCDROP ") && m) blocked.push({ host: m[1]!, port: Number(m[2]) });
+        else if (l.includes("DCNET ") || l.includes("DCDROP ")) return null;
+      }
+      return { egress, blocked };
+    };
+    const udp = "DCDROP IN= OUT=ens3 SRC=192.0.2.10 DST=192.0.2.53 LEN=71 TOS=0x00 PREC=0x00 TTL=64 ID=3 DF PROTO=UDP SPT=51000 DPT=53 LEN=51";
+    const drop = tcp.replace("DCNET", "DCDROP").replace("DST=192.0.2.3", "DST=198.51.100.9").replace("DPT=4873", "DPT=443");
+    for (const text of [log(tcp), log(tcp, udp, drop), log(udp, tcp.replace("DPT=4873", "")), log(), "DCNET-START\n" + tcp + "\n"]) expect(parseEgress(text)).toEqual(before(text));
+    expect(parseEgress(log(tcp, udp, drop))).toEqual({ egress: [{ host: "192.0.2.3", port: 4873 }], blocked: [{ host: "192.0.2.53", port: 53 }, { host: "198.51.100.9", port: 443 }] });
+  });
+  test("a sandboxed run counts its dropped ICMP packets among its blocked ones, and the tally line prints them", async () => {
+    const { r } = await run({ plant: (vm) => vm.blocked.push({ host: "198.51.100.7", port: 443 }, { host: "198.51.100.8", port: 0 }) });
+    expect([r.audit.ok, r.blocked, r.icmp]).toEqual([true, 2, 1]);
+    expect(sandboxLine({ label: "recipe session c001", blocked: r.blocked, icmp: r.icmp })).toBe("sandbox recipe session c001: 2 blocked connections (1 ICMP or ICMPv6)");
   });
 });

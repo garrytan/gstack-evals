@@ -383,7 +383,14 @@ export function parseProcesses(text: string): ProcessRow[] | null {
   return rows;
 }
 
-/** Reads the kernel log's filter lines. Null when either marker is missing: the log was cut or never collected. */
+/** A dropped ICMP or ICMPv6 packet's filter line: it has a destination and no port. */
+const ICMP_DROP = /DST=(\S+) .*\bPROTO=ICMP(?:v6)? /;
+
+/**
+ * Reads the kernel log's filter lines. A dropped ICMP or ICMPv6 packet counts as blocked, at port 0. Null when either
+ * marker is missing, or a filter line has no destination port and is not a dropped ICMP packet: the log was cut or never
+ * collected.
+ */
 export function parseEgress(text: string): { egress: Connection[]; blocked: Connection[] } | null {
   const lines = text.split("\n");
   const start = lines.findIndex((l) => l.includes(START_MARK));
@@ -393,8 +400,10 @@ export function parseEgress(text: string): { egress: Connection[]; blocked: Conn
   const blocked: Connection[] = [];
   for (const l of lines.slice(start + 1, end)) {
     const m = /DST=(\S+).*?DPT=(\d+)/.exec(l);
+    const icmp = !m && l.includes(DROP_PREFIX) ? ICMP_DROP.exec(l) : null;
     if (l.includes(NET_PREFIX) && m) egress.push({ host: m[1]!, port: Number(m[2]) });
     else if (l.includes(DROP_PREFIX) && m) blocked.push({ host: m[1]!, port: Number(m[2]) });
+    else if (icmp) blocked.push({ host: icmp[1]!, port: 0 });
     else if (l.includes(NET_PREFIX) || l.includes(DROP_PREFIX)) return null;
   }
   return { egress, blocked };
@@ -410,7 +419,7 @@ export function egressCutWhy(text: string): string {
   if (start < 0) return "the start marker is missing";
   const end = lines.findIndex((l, i) => i > start && l.includes(END_MARK));
   if (end < 0) return "the end marker is missing";
-  const line = lines.slice(start + 1, end).find((l) => (l.includes(NET_PREFIX) || l.includes(DROP_PREFIX)) && !/DST=(\S+).*?DPT=(\d+)/.test(l)) ?? "";
+  const line = lines.slice(start + 1, end).find((l) => (l.includes(NET_PREFIX) || l.includes(DROP_PREFIX)) && !/DST=(\S+).*?DPT=(\d+)/.test(l) && !(l.includes(DROP_PREFIX) && ICMP_DROP.test(l))) ?? "";
   return "a filter line holds no DST and DPT pair: " + line.slice(0, 200);
 }
 
@@ -544,14 +553,18 @@ export async function audit(backend: VmBackend, vm: Vm, o: { scanExtra?: readonl
 export interface SandboxTally {
   label: string;
   blocked: number;
+  /** Of blocked, the dropped ICMP and ICMPv6 packets (port 0), printed descriptively. */
+  icmp: number;
 }
 
-export const sandboxLine = (t: SandboxTally) => "sandbox " + t.label + ": " + t.blocked + " blocked connection" + (t.blocked === 1 ? "" : "s");
+export const sandboxLine = (t: SandboxTally) => "sandbox " + t.label + ": " + t.blocked + " blocked connection" + (t.blocked === 1 ? "" : "s") + " (" + t.icmp + " ICMP or ICMPv6)";
 
 export interface SandboxRun<T> {
   value: T | null;
   /** New connections the egress filter dropped in this VM, from the audit's log (0 when the log was never read). */
   blocked: number;
+  /** Of blocked, the dropped ICMP and ICMPv6 packets, which parseEgress reads at port 0. */
+  icmp: number;
   /** A preamble step or the job failed before it returned: a failure outside the agent. */
   error: string | null;
   audit: AuditResult;
@@ -587,7 +600,7 @@ export async function sandboxed<T>(d: SandboxDeps, spec: VmSpec, job: (vm: Vm) =
     vm = await d.backend.create(spec);
   } catch (e) {
     await d.hosts.settle(lease.id, (d.now() - started) / 3_600_000);
-    return { value: null, blocked: 0, error: "the VM did not start: " + (e as Error).message, audit: { ok: false, kind: "uncollected", reasons: ["no VM"], evidence: {} }, destroyError: null };
+    return { value: null, blocked: 0, icmp: 0, error: "the VM did not start: " + (e as Error).message, audit: { ok: false, kind: "uncollected", reasons: ["no VM"], evidence: {} }, destroyError: null };
   }
   let value: T | null = null;
   let error: string | null = null;
@@ -635,7 +648,7 @@ export async function sandboxed<T>(d: SandboxDeps, spec: VmSpec, job: (vm: Vm) =
     await d.hosts.settle(lease.id, (d.now() - started) / 3_600_000);
   }
   if (rethrow && result.ok) throw rethrow;
-  return { value, blocked: result.evidence.blocked?.length ?? 0, error, audit: result, destroyError };
+  return { value, blocked: result.evidence.blocked?.length ?? 0, icmp: result.evidence.blocked?.filter((c) => c.port === 0).length ?? 0, error, audit: result, destroyError };
 }
 
 /** The Ubicloud API's CLI endpoint; ubi-runner.sh drives VMs through it too. */

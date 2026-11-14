@@ -111,7 +111,7 @@ export function rulesetText(spec: VmSpec): string {
   ].join("\n");
 }
 
-const netLine = (prefix: string, c: Connection) => prefix + "IN= OUT=ens3 SRC=10.1.0.9 DST=" + c.host + " LEN=60 PROTO=TCP SPT=40100 DPT=" + c.port + " SYN";
+const netLine = (prefix: string, c: Connection) => prefix + "IN= OUT=ens3 SRC=10.1.0.9 DST=" + c.host + (c.port === 0 ? " LEN=84 PROTO=ICMP TYPE=8 CODE=0 ID=1 SEQ=1" : " LEN=60 PROTO=TCP SPT=40100 DPT=" + c.port + " SYN");
 
 /** The listing nft gives for the chain a fake VM holds: lo quoted, priority 0 named filter, rules in their order. */
 const nftListing = (n: FakeVm["nft"]): string =>

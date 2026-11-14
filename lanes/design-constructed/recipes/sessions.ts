@@ -126,7 +126,7 @@ async function session(c: Candidate, label: string, d: ScreenDeps, tally: Tally)
     await d.money.settle(adm.id, seen.agent?.spentUsd ?? null);
     throw e;
   }
-  tally.sandboxes.push({ label, blocked: run.blocked });
+  tally.sandboxes.push({ label, blocked: run.blocked, icmp: run.icmp });
   await d.money.settle(adm.id, seen.agent?.spentUsd ?? null);
   if (!run.audit.ok) fail("E_DC_SANDBOX_AUDIT", label + ": the recipe VM's audit " + (run.audit.kind === "breach" ? "found " : "could not collect its evidence: ") + run.audit.reasons.join("; ") + ". The base-app screen stops for the Captain");
   if (run.destroyError) d.log?.(label + ": the VM was not deleted (" + run.destroyError + "); the reaper deletes it past its time to live");
@@ -139,7 +139,7 @@ async function qualified(c: Candidate, recipe: Recipe, d: ScreenDeps, tally: Tal
   for (let i = 1; i <= 2; i++) {
     const label = "qualify " + c.id + (i > 1 ? " retry" : "");
     const r = await qualify(c, recipe, qd, label);
-    tally.sandboxes.push({ label, blocked: r.blocked });
+    tally.sandboxes.push({ label, blocked: r.blocked, icmp: r.icmp });
     if (!r.audit.ok) fail("E_DC_SANDBOX_AUDIT", label + ": the qualification VM's audit " + (r.audit.kind === "breach" ? "found " : "could not collect its evidence: ") + r.audit.reasons.join("; ") + ". The base-app screen stops for the Captain");
     if (r.value) return r.value;
   }
