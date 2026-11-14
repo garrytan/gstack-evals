@@ -2543,6 +2543,15 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_DCW_MODEL_PROBE: {
+    exit: 2,
+    meaning: "Design plan review eval (PD-19 and PD-34): the model probe's one short call per model, charged to dc-gate-check, found a problem: a model gave no reply, its reply named no provider and OpenRouter's generation record resolved none, or its served provider or terms differ from the pin, which stops that model for the Captain. No stage may spend until the probe passes.",
+    fix: "Read the probe lines and problems the row printed and its probe.json, and bring them to the Captain. A drift stop stays until the Captain clears it. Run the probe again only into a new sink, on the Captain's word.",
+    side_effects: "The probe calls already sent stay on dc-gate-check's journal and spend. A drifted model's sub-reservations settle at the spend recorded so far.",
+    retry_safe: false,
+    resumable: false,
+    owner: "U20",
+  },
   E_DCW_INSTALL_NETWORK: {
     exit: 2,
     meaning: "Design plan review eval (prereg section 4, the gstack install): after the install, the session's container still listed a network other than the run's trial network, so the session stopped before Claude Code launched. No model call was sent for it.",

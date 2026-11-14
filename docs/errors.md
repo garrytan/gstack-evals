@@ -309,6 +309,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_DCW_CONTAINMENT](#e_dcw_containment) | 2 | U20 |
 | [E_DCH_IMAGE_DIGEST](#e_dch_image_digest) | 2 | U20 |
 | [E_DCW_INSTALL_DIGEST](#e_dcw_install_digest) | 2 | U20 |
+| [E_DCW_MODEL_PROBE](#e_dcw_model_probe) | 2 | U20 |
 | [E_DCW_INSTALL_NETWORK](#e_dcw_install_network) | 2 | U20 |
 | [E_DCV_POWER_PY_PIN](#e_dcv_power_py_pin) | 2 | U20 |
 | [E_DCV_PROJECTION_STOP](#e_dcv_projection_stop) | warning | U20 |
@@ -2220,6 +2221,14 @@ Design plan review eval (prereg section 4, the gstack install): a gstack arm ses
 Fix: Keep the session folder and the two digests the line prints and bring them to the Captain; the install changed files of the pinned tree. Launch again into a new sink only on the Captain's word.
 
 Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_DCW_MODEL_PROBE
+
+Design plan review eval (PD-19 and PD-34): the model probe's one short call per model, charged to dc-gate-check, found a problem: a model gave no reply, its reply named no provider and OpenRouter's generation record resolved none, or its served provider or terms differ from the pin, which stops that model for the Captain. No stage may spend until the probe passes.
+
+Fix: Read the probe lines and problems the row printed and its probe.json, and bring them to the Captain. A drift stop stays until the Captain clears it. Run the probe again only into a new sink, on the Captain's word.
+
+Exit 2. Side effects: The probe calls already sent stay on dc-gate-check's journal and spend. A drifted model's sub-reservations settle at the spend recorded so far. Retry safe: no. Resumable: no. Owner: U20.
 
 ### E_DCW_INSTALL_NETWORK
 

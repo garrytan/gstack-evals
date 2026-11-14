@@ -15,7 +15,7 @@ import { QUOTE, withRig, expectations, admitted, type Rig } from "../money/dryru
 import { mainLeases } from "../money/ledger-main.ts";
 import { DIRECT_MODELS, requestBody, worstCaseMicros } from "../money/price.ts";
 import { renew } from "../money/renewal.ts";
-import { ProviderWatch } from "../money/served.ts";
+import { ProviderWatch, routingOf } from "../money/served.ts";
 import type { OffHostTarget } from "../money/types.ts";
 import { startRule9 } from "../read/start.ts";
 import { CapStopSignal } from "../stage3/seams.ts";
@@ -24,6 +24,12 @@ import { DirectCallers, PaidCallFailed } from "./direct.ts";
 import { datedTermsOf, firstCallOf, MODEL_PROBE_PROMPT, modelProbePlan, pinRecord, probePlan, runModelProbe, termsRecordsOf } from "./pin.ts";
 import { scripted, type Reply, type Scripted } from "./scripted.ts";
 import { generationResolver, inProcessLauncher, SessionProxies, type SessionBinding } from "./sessions.ts";
+import { LEDGER_ITEMS } from "../frozen.ts";
+import { BOUND_PROVIDERS } from "../wire.ts";
+import { REPO_ROOT } from "../wire/fakes.ts";
+import { modelProbeRow } from "../wire/modelprobe.ts";
+import { meterModels, recordSeams, routingDigest } from "../wire/real.ts";
+import type { RowEnv } from "../wire/start.ts";
 
 export const FAKE_KEYS = { ANTHROPIC_API_KEY: "dry-run-not-a-key-anthropic", OPENAI_API_KEY: "dry-run-not-a-key-openai", OPENROUTER_API_KEY: "dry-run-not-a-key-openrouter" };
 const RETRY = { attempts: 2, elapsed_ms: 60_000 };
@@ -96,6 +102,36 @@ export function endpointsFixture(model: AnyModel, o: { extra?: Array<{ tag: stri
 
 const COMMIT = "0".repeat(40);
 const goodReads = () => ({ sol: endpointsFixture("sol"), particle: endpointsFixture("particle"), argon: endpointsFixture("argon") });
+
+/** The modelprobe row on the real callers: the rig's ledger, the real model provider over DirectCallers, the pinned terms. */
+async function probeRow(p: PaidRig, offHost = false): Promise<{ code: string; out: string[]; items: LedgerItemId[] }> {
+  const items: LedgerItemId[] = [];
+  const terms = join(p.r.dir, "terms.json");
+  writeFileSync(terms, JSON.stringify(termsRecordsOf(pinRecord({ runId: "dc-dryrun", commit: COMMIT, dated: "2026-11-14T00:00:00Z", reads: goodReads() }))));
+  const env: RowEnv = {
+    providers: offHost ? BOUND_PROVIDERS(null) : { ledger: () => ({ controller: p.r.c, ...recordSeams(p.r.record), reconcile: async () => null }), model: () => meterModels((item) => (items.push(item), p.direct.meter(item)), (model) => routingDigest(routingOf(model))), session: null, vm: null, stage3: null },
+    dryRun: async () => true,
+    lane: () => ({ commit: COMMIT, dirty: false, root: REPO_ROOT }),
+    now: () => new Date("2026-11-20T00:00:00Z"),
+    power: () => ({ code: 0, stdout: "", stderr: "" }),
+    vocabulary: () => new Set(),
+  };
+  const out: string[] = [];
+  try {
+    await modelProbeRow({ flags: new Map([["--terms", terms], ["--out", join(p.r.dir, "sink")]]), bools: new Set(), rest: [] }, { out: (t) => out.push(t), err: (t) => out.push(t) }, env);
+    return { code: "ok", out, items };
+  } catch (e) {
+    if (!(e instanceof DcError)) throw e;
+    return { code: e.code, out, items };
+  }
+}
+
+/** Every ledger item but one has nothing settled, in flight or unknown. */
+const onlySpent = (r: Rig, item: LedgerItemId): string[] =>
+  (Object.keys(LEDGER_ITEMS) as LedgerItemId[]).filter((i) => i !== item).filter((i) => {
+    const f = r.c.figures(i);
+    return f.settledMicros + f.inFlightMicros + f.unknownMicros > 0;
+  });
 
 export function cases(): DryRunCase[] {
   return [
@@ -278,6 +314,39 @@ export function cases(): DryRunCase[] {
           e.want(out.lines.includes("probe: sol served by OpenAI") && out.lines.includes("probe: particle served by Particle"), "the probe printed " + out.lines.join(" | "));
           const unnamed = await runModelProbe([{ model: "sol", prompt: "x", maxTokens: 16, label: "x" }], async () => ({ servedBy: null, problem: null }));
           e.want(unnamed.problems.length === 1, "an unresolved reply was not a problem");
+          return e.result();
+        }),
+    },
+    {
+      rule: "PD-34",
+      name: "the modelprobe row refuses off the controller host; on it, it sends one short call per model, every one charged to dc-gate-check and nothing else, and Sol's unnamed reply resolves through the generation record (PD-19)",
+      check: () =>
+        withPaid({ script: (_u, body) => ({ kind: "ok", provider: String(body?.model) === "openai/gpt-6.1-sol" ? null : (SERVED[String(body?.model)] ?? "OpenAI") }), generation: () => "OpenAI" }, async (p) => {
+          const e = expectations();
+          const off = await probeRow(p, true);
+          e.want(off.code === "E_DCW_OFF_HOST" && p.up.sent.length === 0, "off the host the row ended " + off.code + " after " + p.up.sent.length + " sends");
+          const run = await probeRow(p);
+          e.want(run.code === "ok", "the row ended " + run.code + ": " + run.out.slice(-3).join(" | "));
+          e.want(run.items.length === 5 && run.items.every((i) => i === "dc-gate-check"), "the calls went to " + run.items.join(", "));
+          e.want(["opus served by anthropic", "astra served by openai", "sol served by OpenAI", "particle served by Particle", "argon served by Google Vertex"].every((l) => run.out.includes("probe: " + l)), "the probe printed " + run.out.join(" | "));
+          e.want(p.up.sent.filter((s) => !s.url.includes("/generation?")).length === 5 && p.up.sent.filter((s) => s.url.includes("/generation?")).length === 1, "the upstream saw " + p.up.sent.map((s) => s.url).join(", "));
+          e.want(p.r.c.figures("dc-gate-check").settledMicros > 0, "dc-gate-check settled nothing");
+          e.want(onlySpent(p.r, "dc-gate-check").length === 0, "other items spent: " + onlySpent(p.r, "dc-gate-check").join(", "));
+          return e.result();
+        }),
+    },
+    {
+      rule: "PD-34",
+      name: "an unnamed reply the generation record can't resolve stops that model as a drift (PD-9), the other models still probe, and the row refuses with E_DCW_MODEL_PROBE",
+      check: () =>
+        withPaid({ script: (_u, body) => ({ kind: "ok", provider: String(body?.model) === "openai/gpt-6.1-sol" ? null : (SERVED[String(body?.model)] ?? "OpenAI") }), generation: () => null }, async (p) => {
+          const e = expectations();
+          const run = await probeRow(p);
+          e.want(run.code === "E_DCW_MODEL_PROBE", "the row ended " + run.code);
+          e.want(run.out.some((l) => l.startsWith("probe problem: sol: E_DC_PROVIDER_DRIFT ")), "no drift problem for sol in " + run.out.join(" | "));
+          e.want(run.out.filter((l) => l.startsWith("probe: ")).length === 5 && run.out.includes("probe: particle served by Particle"), "the probe printed " + run.out.join(" | "));
+          e.want(p.r.c.stopFor("dc-gate-check", { model: "sol", subject: null, stage: null }) !== null, "sol was not stopped");
+          e.want(onlySpent(p.r, "dc-gate-check").length === 0, "other items spent: " + onlySpent(p.r, "dc-gate-check").join(", "));
           return e.result();
         }),
     },

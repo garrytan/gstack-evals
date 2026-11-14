@@ -17,6 +17,7 @@ import { recipesRow } from "./wire/recipes.ts";
 import { clonesRow } from "./wire/clones.ts";
 import { authorRow, gatecheckRow } from "./wire/author.ts";
 import { labelsRow, probeRow } from "./wire/score.ts";
+import { modelProbeRow } from "./wire/modelprobe.ts";
 import { exportsRow, stage3InputsRow } from "./wire/exports.ts";
 import { hostCommand } from "./wire/host.ts";
 import type { HostContext } from "./wire/real.ts";
@@ -85,6 +86,7 @@ export const SUBCOMMANDS: Record<string, { area: Area | "lane"; run: Run; bools:
   power: { area: "read", run: powerRow, bools: [], usage: "--design <design.json> --out <new folder>", summary: "the admission read on design.json through power.py" },
   items: { area: "money", run: itemsRow, bools: [], usage: "", summary: "the 17 ledger items, their caps and admission rules" },
   stage3: { area: "stage3", run: stage3Row, bools: [], usage: "--candidates <stage3.json> --exports <folder> --rows <stage 2 rows.json> --terms <file> --out <new sink>", summary: "stage 3 authoring, oracle builds, builds and measures (paid: dc-stage3-*, dc-hosts)" },
+  modelprobe: { area: "paid", run: modelProbeRow, bools: [], usage: "--terms <file> --out <new sink>", summary: "the model probe, one short call per model first after the go (PD-19; paid: dc-gate-check)" },
   pins: { area: "paid", run: (a, io) => pinsCommand(a, io), bools: [], usage: "plan --dir <new dir> | record --dir <dir> --run <id> --commit <sha> [--dated <iso>] --out <file> | terms --pin <pin record> --out <terms.json>", summary: "the keyless probe plan, the run's model pin record (start rule 9) and the --terms file from it" },
   exports: { area: "run", run: (a, io, env) => exportsRow(a, io, env), bools: [], usage: "--in <exports.json> --out <new folder>", summary: "each unit's export folder: repo/, plan.md, context/ and c2.json (keyless)" },
   stage3inputs: { area: "stage3", run: (a, io, env) => stage3InputsRow(a, io, env), bools: [], usage: "--units <units.json> --recipes <recipes.json> --oracles <oracles.json> --routes <routes.json> --out <stage3.json>", summary: "the stage3 row's candidates file (keyless)" },
