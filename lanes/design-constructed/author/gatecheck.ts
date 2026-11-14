@@ -8,8 +8,12 @@
 // (planted.json) and the keyless half (a unit obeying every authoring rule passes every keyless gate).
 // A planted drop item (B2, B6) counts as caught only if it doesn't reach the key unchanged (the Captain's pre-data
 // ruling, PD-21): an auditor drops it, or an auditor marks it fix and, after the one fix step by the unit's author,
-// the second audit keeps it with its statement or detail changed (an auditor dropping it there also catches it). A fix
-// that leaves the item as planted, or a second audit that marks it fix again, is a miss. The detail names which way.
+// the second audit keeps it with the planted defect gone (an auditor dropping it there also catches it). PD-35 reads
+// "the defect gone": the fixed unit passes step 3's screen again before the second audit, and the fixed item passes
+// its case's keyless defect check (B2: a pointer lands on an evidence line that holds a word of the item's detail; B6:
+// every component the item names is in a base-app file it cites). A fix that leaves the item as planted or leaves the
+// defect, a fixed unit that fails the re-screen, or a second audit that marks it fix again, is a miss. The detail
+// names which way and prints the item's text before and after the fix.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fail } from "../errors.ts";
@@ -18,9 +22,9 @@ import type { AnyModel, AuthorFamily, ItemClass, KeyItem } from "../types.ts";
 import { ask, genericScreen, readAudits, runAudits, validatorStep, type AuditReading, type GenericReading, type StepReading } from "./checks.ts";
 import { fixReply, otherFamily } from "./pipeline.ts";
 import { auditPrompt, fixPrompt, validatorPrompt } from "./prompts.ts";
-import { screen2x, screenUnit } from "./screen.ts";
+import { needleOf, screen2x, screenUnit, type ScreenResult } from "./screen.ts";
 import type { BaseAppView, Deps } from "./seams.ts";
-import { sha256 } from "./text.ts";
+import { normWords, sha256 } from "./text.ts";
 import { digestOf, inheritIds, intake, type RawItem, type UnitFiles } from "./unit.ts";
 
 export type PlantedName = "G1" | "G2" | "B1" | "B2" | "B3" | "B4" | "B5" | "B6";
@@ -65,13 +69,73 @@ export interface PlantedUnit {
   plantedClass: ItemClass | null;
 }
 
-/** The planted drop item's one fix step and second audit, run only when the first audit marked it fix. */
+/** PD-35's keyless defect check per planted drop case: B2's item has no supporting evidence line, B6's misstates its component. */
+export type DefectCheck = "support" | "component";
+export const DEFECT_CHECKS: Partial<Record<PlantedName, DefectCheck>> = { B2: "support", B6: "component" };
+
+const CODE_FILE = /\.(tsx|jsx|ts|js|mjs|cjs|vue|svelte|astro)$/;
+const PATH_TOKEN = /\S*\/\S*|\b[\w-]+\.(?:tsx|jsx|ts|js|mjs|cjs|vue|svelte|astro|css|scss|less|md|json|html)\b/g;
+const PASCAL = /^[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]*)+$/;
+const wholeWord = (text: string, word: string): boolean => new RegExp("(?<![A-Za-z0-9_$])" + word + "(?![A-Za-z0-9_$])").test(text);
+
+/**
+ * B2's check: the item cites at least one line of a unit evidence file that holds a word of its detail's needle (the
+ * K7 needle: the detail's words after normalization, minus the 40 stop words). Null when it passes, else the problem.
+ */
+export function supportProblem(item: KeyItem, files: UnitFiles): string | null {
+  const needle = needleOf(item.detail);
+  if (!needle.length) return item.id + "'s detail has no needle word left";
+  const lines = item.evidence.flatMap((p) => {
+    const text = files.evidence.find((e) => e.path === p.file)?.text;
+    return text === undefined ? [] : [{ at: p.file + ":" + p.line, words: new Set(normWords(text.split("\n")[p.line - 1] ?? "")) }];
+  });
+  if (!lines.length) return item.id + " cites no evidence file line";
+  if (lines.some((l) => needle.some((n) => l.words.has(n)))) return null;
+  return item.id + "'s cited evidence lines (" + lines.map((l) => l.at).join(", ") + ") hold no word of its detail";
+}
+
+/**
+ * B6's check: the components the item names, with file paths stripped from its statement and detail, are the
+ * PascalCase names of two or more humps that name a code file in the base app (its stem, or its folder for an index
+ * file), and any PascalCase name a base-app file the item cites declares. It passes when it names at least one and each
+ * stands as a whole word in a base-app file the item cites. Null when it passes, else the problem.
+ */
+export function componentProblem(item: KeyItem, files: UnitFiles, app: BaseAppView): string | null {
+  const tree = new Set(app.tree);
+  const ours = new Set(files.evidence.map((e) => e.path));
+  const cited = [...new Set(item.evidence.map((p) => p.file))].filter((f) => tree.has(f) && !ours.has(f)).map((f) => ({ file: f, text: app.read(f) ?? "" }));
+  if (!cited.length) return item.id + " cites no base-app file";
+  const stems = new Set(
+    app.tree.filter((f) => CODE_FILE.test(f)).map((f) => {
+      const parts = f.split("/");
+      const stem = parts.at(-1)!.replace(CODE_FILE, "");
+      return stem === "index" && parts.length > 1 ? parts.at(-2)! : stem;
+    }),
+  );
+  const declared = new Set(cited.flatMap((c) => [...c.text.matchAll(/\b(?:function|class|const|let|var)\s+([A-Z][A-Za-z0-9_]*)/g)].map((m) => m[1]!)));
+  const words = (item.statement + " " + item.detail).replace(PATH_TOKEN, " ").match(/[A-Za-z_][A-Za-z0-9_]*/g) ?? [];
+  const named = [...new Set(words.filter((w) => (PASCAL.test(w) && stems.has(w)) || declared.has(w)))];
+  if (!named.length) return item.id + " names no component of the base app outside a file path";
+  const wrong = named.filter((n) => !cited.some((c) => wholeWord(c.text, n)));
+  return wrong.length ? item.id + " names " + wrong.join(", ") + ", which no cited base-app file (" + cited.map((c) => c.file).join(", ") + ") holds" : null;
+}
+
+export const defectProblem = (check: DefectCheck, item: KeyItem, files: UnitFiles, app: BaseAppView): string | null => (check === "support" ? supportProblem(item, files) : componentProblem(item, files, app));
+
+/** The planted drop item's one fix step, step 3 again on the fixed unit, and the second audit, run only when the first audit marked it fix. */
 export interface GateFix {
   plantedId: string;
+  /** The planted statement and detail. */
+  before: { statement: string; detail: string };
   /** The fixed statement and detail, or why the fix reply failed. */
   fixed: { statement: string; detail: string } | { failed: string };
   /** True when the fix left the planted statement and detail exactly as they were. */
   unchanged: boolean;
+  /** Step 3 on the fixed unit (PD-35); null when the fix reply failed. */
+  screen: ScreenResult | null;
+  /** The case's keyless defect check on the planted and the fixed item (null: it passes); null when the case has none or the fix reply failed. */
+  defect: { check: DefectCheck; before: string | null; after: string | null } | null;
+  /** The second audit; null when the fix reply failed, the fixed unit failed step 3, or an auditor returned no verdict. */
   audit2: AuditReading | null;
 }
 
@@ -146,17 +210,26 @@ export async function readGates(p: PlantedUnit, deps: Deps, dropId: string | nul
   const audit = a.audits ? readAudits(a.audits) : null;
   let fix: GateFix | null = null;
   if (audit && dropId !== null && audit.fix.includes(dropId)) {
-    const before = items.find((i) => i.id === dropId)!;
+    const planted = items.find((i) => i.id === dropId)!;
+    const before = { statement: planted.statement, detail: planted.detail };
+    const check = DEFECT_CHECKS[p.name] ?? null;
     const writer = p.author as AnyModel;
     const f = await ask(deps.call, { model: writer, effort: "high", maxTokens: MONEY.outputCaps.author, prompt: fixPrompt(p.files, [dropId], audit.notes), label: p.unitId + ":fix:" + writer }, (t) => fixReply(t, [dropId]));
-    if (!f.ok) fix = { plantedId: dropId, fixed: { failed: f.reason }, unchanged: true, audit2: null };
+    if (!f.ok) fix = { plantedId: dropId, before, fixed: { failed: f.reason }, unchanged: true, screen: null, defect: null, audit2: null };
     else {
       const fixed = f.value[dropId]!;
       const u: UnitFiles = structuredClone(p.files);
-      const live = u.key.items.filter((i) => !audit.drop.includes(i.id));
-      for (const i of live) if (i.id === dropId) Object.assign(i, fixed);
-      const a2 = await runAudits(deps, auditors, auditPrompt(p.bundle, u, live, false), live.map((i) => i.id), p.unitId + ":audit2-0", false);
-      fix = { plantedId: dropId, fixed, unchanged: fixed.statement === before.statement && fixed.detail === before.detail, audit2: a2.audits ? readAudits(a2.audits) : null };
+      const item = u.key.items.find((i) => i.id === dropId)!;
+      Object.assign(item, fixed);
+      const screen = screenUnit(u, p.app, { vocabulary: deps.vocabulary, today: deps.today });
+      const defect = check ? { check, before: defectProblem(check, planted, p.files, p.app), after: defectProblem(check, item, u, p.app) } : null;
+      let audit2: AuditReading | null = null;
+      if (screen.pass) {
+        const live = u.key.items.filter((i) => !audit.drop.includes(i.id));
+        const a2 = await runAudits(deps, auditors, auditPrompt(p.bundle, u, live, false), live.map((i) => i.id), p.unitId + ":audit2-0", false);
+        audit2 = a2.audits ? readAudits(a2.audits) : null;
+      }
+      fix = { plantedId: dropId, before, fixed, unchanged: fixed.statement === before.statement && fixed.detail === before.detail, screen, defect, audit2 };
     }
   }
   const generic = await genericScreen(deps.call, items, p.unitId + ":0");
@@ -183,11 +256,21 @@ export function judge(r: GateReading, e: Expectation, plantedId: string | null):
       if (e.is === "input-failure") return { ok: r.audit.inputFailures.length > 0, detail: "input failures: " + (r.audit.inputFailures.map((f) => f.auditor + " " + f.check).join(", ") || "none") };
       if (plantedId === null) return { ok: false, detail: "the case names no planted item" };
       if (r.audit.drop.includes(plantedId)) return { ok: true, detail: plantedId + " caught: dropped by the audit" };
-      const fx = r.fix;
-      if (fx && fx.plantedId === plantedId && fx.audit2?.drop.includes(plantedId)) return { ok: true, detail: plantedId + " caught: marked fix, then dropped by an auditor in the second audit" };
-      if (fx && fx.plantedId === plantedId && fx.audit2 && !fx.unchanged && fx.audit2.inputFailures.length === 0 && !fx.audit2.fix.includes(plantedId)) return { ok: true, detail: plantedId + " caught: marked fix, then kept changed by the second audit" };
-      const why = !fx ? "" : "failed" in fx.fixed ? "; the fix reply failed: " + fx.fixed.failed : fx.unchanged ? "; the fix left it as planted" : !fx.audit2 ? "; an auditor returned no second verdict" : "; the second audit: " + (fx.audit2.notes.filter((n) => n.id === plantedId).map((n) => n.auditor + " " + n.verdict).join(", ") || "no verdict") + (fx.audit2.inputFailures.length ? ", input failures " + fx.audit2.inputFailures.map((x) => x.check).join(",") : "");
-      return { ok: false, detail: plantedId + " not caught: " + r.audit.notes.filter((n) => n.id === plantedId).map((n) => n.auditor + " " + n.verdict).join(", ") + why };
+      const fx = r.fix && r.fix.plantedId === plantedId ? r.fix : null;
+      const first = r.audit.notes.filter((n) => n.id === plantedId).map((n) => n.auditor + " " + n.verdict).join(", ");
+      if (!fx) return { ok: false, detail: plantedId + " not caught: " + first };
+      if ("failed" in fx.fixed) return { ok: false, detail: plantedId + " not caught: " + first + "; the fix reply failed: " + fx.fixed.failed };
+      const text = (t: { statement: string; detail: string }) => JSON.stringify(t.statement) + " / " + JSON.stringify(t.detail);
+      const report = "; before the fix " + text(fx.before) + "; after the fix " + text(fx.fixed) + (fx.defect && fx.defect.before === null ? "; the " + fx.defect.check + " check passes the item as planted, so it reads nothing here" : "");
+      if (fx.audit2?.drop.includes(plantedId)) return { ok: true, detail: plantedId + " caught: marked fix, then dropped by an auditor in the second audit" + report };
+      const why: string[] = [];
+      if (fx.screen && !fx.screen.pass) why.push("the fixed unit fails step 3: " + fx.screen.failures.map((x) => x.check + " " + x.detail).join("; "));
+      if (fx.unchanged) why.push("the fix left it as planted");
+      if (fx.defect?.after) why.push("the fix left the planted defect: " + fx.defect.after);
+      if (fx.screen?.pass && !fx.audit2) why.push("an auditor returned no second verdict");
+      if (fx.audit2 && (fx.audit2.fix.includes(plantedId) || fx.audit2.inputFailures.length)) why.push("the second audit: " + (fx.audit2.notes.filter((n) => n.id === plantedId).map((n) => n.auditor + " " + n.verdict).join(", ") || "no verdict") + (fx.audit2.inputFailures.length ? ", input failures " + fx.audit2.inputFailures.map((x) => x.check).join(",") : ""));
+      if (!why.length) return { ok: true, detail: plantedId + " caught: marked fix, then kept by the second audit with the planted defect gone" + report };
+      return { ok: false, detail: plantedId + " not caught: " + first + "; " + why.join("; ") + report };
     }
     case "unanimous":
       if (r.unanimous.dropped) return { ok: false, detail: r.unanimous.dropped };

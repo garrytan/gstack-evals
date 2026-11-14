@@ -66,9 +66,44 @@ export const PLANTED: Record<PlantedName, { cls: ItemClass | null; script: Scrip
   B6: { cls: "Y", script: { audit: (_r, a) => (a !== "opus" ? { verdicts: { Y: "drop" } } : {}) } },
 };
 
+/** The fixture line that holds no word of the S item's detail, for B2's unsupported pointer. */
+const UNSUPPORTED = (() => {
+  const e = EVIDENCE.find((x) => x.path.includes("releases"))!;
+  return { file: e.path, line: e.text.split("\n").findIndex((l) => l.startsWith("- The dashboard shows cash")) + 1 };
+})();
+
+/** A detail the UNSUPPORTED line holds words of. */
+const SUPPORTED = "cash received this week shown as two numbers";
+
+/** The fixture unit with its planted defect: B2's item points only at UNSUPPORTED, and B6's Y item names StatusPill where DataTable.tsx holds DataTable. */
+function plantedFiles(name: PlantedName): UnitFiles {
+  const f = baseFiles("gate" + name);
+  for (const i of f.key.items) {
+    if (name === "B2" && i.class === PLANTED.B2.cls) i.evidence = [{ ...UNSUPPORTED }];
+    if (name === "B6" && i.class === PLANTED.B6.cls) i.statement = i.statement.replace("shared DataTable in", "shared StatusPill in");
+  }
+  return f;
+}
+
+/** The first audit marks the class's item fix (Opus), the fix returns the given text and the second audit keeps every item. */
+const fixThenKeep = (cls: ItemClass, statement: string, detail: string): Script => ({
+  audit: (round, a) => (round.startsWith("audit2") || a !== "opus" ? {} : { verdicts: { [cls]: "fix" } }),
+  fix: (ids) => JSON.stringify({ items: ids.map((id) => ({ id, statement, detail })) }),
+});
+
+/** The E_DC_GATE_CHECK message the gate check stops with, or why it didn't stop. */
+async function gateStop({ units, deps }: { units: PlantedUnit[]; deps: Deps }): Promise<string> {
+  try {
+    await enforceGateCheck(units, deps, tableOf(units));
+    return "no stop";
+  } catch (e) {
+    return e instanceof DcError && e.code === "E_DC_GATE_CHECK" ? e.message : "other error: " + String(e);
+  }
+}
+
 function planted(overrides: Partial<Record<PlantedName, Script>> = {}): { units: PlantedUnit[]; deps: Deps } {
   const names = Object.keys(PLANTED) as PlantedName[];
-  const units = names.map((name) => ({ name, unitId: "gate" + name, files: baseFiles("gate" + name), app: FIXTURE_APP, author: "sol" as AuthorFamily, bundle: BUNDLE, plantedClass: PLANTED[name].cls }));
+  const units = names.map((name) => ({ name, unitId: "gate" + name, files: plantedFiles(name), app: FIXTURE_APP, author: "sol" as AuthorFamily, bundle: BUNDLE, plantedClass: PLANTED[name].cls }));
   const worlds = Object.fromEntries(names.map((name) => ["gate" + name, scripted(overrides[name] ?? PLANTED[name].script).deps]));
   return { units, deps: routed(worlds) };
 }
@@ -730,7 +765,7 @@ export function cases(): DryRunCase[] {
       rule: "GATE",
       name: "PD-21: a planted drop item an auditor marks fix counts as caught when the second audit keeps it changed, and the reading records the fix",
       check: async () => {
-        const fixThenKeep: Script = { audit: (round, a) => (round.startsWith("audit2") || a !== "opus" ? {} : { verdicts: { S: "fix" } }), fix: (ids) => JSON.stringify({ items: ids.map((id) => ({ id, statement: "A rewritten statement for " + id, detail: "a rewritten detail" })) }) };
+        const fixThenKeep: Script = { audit: (round, a) => (round.startsWith("audit2") || a !== "opus" ? {} : { verdicts: { S: "fix" } }), fix: (ids) => JSON.stringify({ items: ids.map((id) => ({ id, statement: "A rewritten statement for " + id, detail: SUPPORTED })) }) };
         const { units, deps } = planted({ B2: fixThenKeep });
         const r = await runGateCheck(units, deps, tableOf(units));
         const b2 = r.results.find((x) => x.name === "B2")!;
@@ -757,6 +792,52 @@ export function cases(): DryRunCase[] {
           }
         }
         return want(out.length === 0, out.join("; "));
+      },
+    },
+    {
+      rule: "PD-35",
+      name: "B2-style: a fix that rewrites the item but leaves its cited evidence line holding no word of its detail is a miss with E_DC_GATE_CHECK; a fix whose detail the line supports is caught; the report prints the text before and after",
+      check: async () => {
+        const out: string[] = [];
+        const s = plantedFiles("B2").key.items.find((i) => i.class === PLANTED.B2.cls)!;
+        const stopped = await gateStop(planted({ B2: fixThenKeep("S", s.statement.replace("clerks reload", "clerks often reload"), s.detail) }));
+        if (!stopped.includes("B2 audit") || !stopped.includes("left the planted defect") || !stopped.includes("hold no word of its detail")) out.push("reworded: " + stopped);
+        if (!stopped.includes("before the fix " + JSON.stringify(s.statement)) || !stopped.includes("clerks often reload")) out.push("reworded, no before and after text: " + stopped);
+        const { units, deps } = planted({ B2: fixThenKeep("S", s.statement, SUPPORTED) });
+        const r = await runGateCheck(units, deps, tableOf(units));
+        const b2 = r.results.find((x) => x.name === "B2")!;
+        const fx = r.readings.find((x) => x.name === "B2")!.fix;
+        if (!(r.ok && b2.detail.includes("defect gone") && fx?.defect?.before !== null && fx?.defect?.after === null && fx?.screen?.pass)) out.push("real fix: " + b2.detail);
+        return want(out.length === 0, out.join("; "));
+      },
+    },
+    {
+      rule: "PD-35",
+      name: "B6-style: a fix that rewrites the Y item but still names a component its cited file doesn't hold is a miss with E_DC_GATE_CHECK; a fix naming the cited file's component is caught",
+      check: async () => {
+        const out: string[] = [];
+        const y = plantedFiles("B6").key.items.find((i) => i.class === PLANTED.B6.cls)!;
+        const stopped = await gateStop(planted({ B6: fixThenKeep("Y", y.statement.replace("needs sortable", "needs fully sortable"), y.detail) }));
+        if (!stopped.includes("B6 audit") || !stopped.includes("left the planted defect") || !stopped.includes("names StatusPill")) out.push("reworded: " + stopped);
+        const { units, deps } = planted({ B6: fixThenKeep("Y", y.statement.replace("shared StatusPill in", "shared DataTable in"), y.detail) });
+        const r = await runGateCheck(units, deps, tableOf(units));
+        const b6 = r.results.find((x) => x.name === "B6")!;
+        const fx = r.readings.find((x) => x.name === "B6")!.fix;
+        if (!(r.ok && b6.detail.includes("defect gone") && fx?.defect?.check === "component" && fx.defect.before !== null && fx.defect.after === null)) out.push("real fix: " + b6.detail);
+        return want(out.length === 0, out.join("; "));
+      },
+    },
+    {
+      rule: "PD-35",
+      name: "a fixed unit that fails step 3's re-screen is a miss with E_DC_GATE_CHECK, even with the defect gone, and its second audit never runs",
+      check: async () => {
+        const s = plantedFiles("B2").key.items.find((i) => i.class === PLANTED.B2.cls)!;
+        const long = s.statement + " " + Array.from({ length: 30 }, () => "today").join(" ");
+        const { units, deps } = planted({ B2: fixThenKeep("S", long, SUPPORTED) });
+        const r = await runGateCheck(units, deps, tableOf(units));
+        const fx = r.readings.find((x) => x.name === "B2")!.fix;
+        const stopped = await gateStop(planted({ B2: fixThenKeep("S", long, SUPPORTED) }));
+        return want(fx?.screen?.pass === false && fx.audit2 === null && fx.defect?.after === null && stopped.includes("fails step 3: statement-words"), stopped);
       },
     },
   ];
