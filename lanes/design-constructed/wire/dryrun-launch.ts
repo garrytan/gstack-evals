@@ -31,7 +31,6 @@ import { clonesRow } from "./clones.ts";
 import { cloneFixture } from "./dryrun-clones.ts";
 import { FAKE_KEYS, host, hostFixture, hostWorkOf, localSeams, localWorld, openSealed, rowEnv, shmOf, withTemp } from "./dryrun-host.ts";
 import { runRowOnHost } from "./host.ts";
-import { realEnv } from "../cli.ts";
 import { realProviders, type HostContext } from "./real.ts";
 import type { Args, RowEnv } from "./start.ts";
 
@@ -48,7 +47,8 @@ const argsOf = (argv: string[]): Args => {
 };
 
 /** The host's stage module for this run: the real row path with the upstream, clone seams and dry run faked. */
-export const runOnHost: HostStage["runOnHost"] = (service, args, row) => {
+export const runOnHost: HostStage["runOnHost"] = async (service, args, row) => {
+  const { realEnv } = await import("../cli.ts");
   const s = JSON.parse(readFileSync(join(row.work, SETTINGS), "utf8")) as { src: string; table: string };
   const served = Object.fromEntries((JSON.parse(readFileSync(join(row.work, "terms.json"), "utf8")) as Array<{ model: string; provider: string }>).map((t) => [t.model, t.provider]));
   const up = scripted((_url, body) => {
@@ -57,7 +57,7 @@ export const runOnHost: HostStage["runOnHost"] = (service, args, row) => {
   });
   const clone = (name: string, oid: string, dest: string) => fetchAt("file://" + join(s.src, name), oid, dest, ["file"]);
   return runRowOnHost(service, args, row, {
-    env: (ctx): RowEnv => ({ ...rowEnvOnHost(ctx), providers: realProviders(ctx, { fetch: up.fetch, sleep: async () => {} }) }),
+    env: (ctx): RowEnv => ({ ...realEnv(ctx), dryRun: async () => true, vocabulary: () => STAND_IN_VOCABULARY, providers: realProviders(ctx, { fetch: up.fetch, sleep: async () => {} }) }),
     run: async (argv, io, env) => {
       if (argv[0] === "clones") return clonesRow(clone)(argsOf(argv), io, env);
       if (argv[0] === "planted") return plantedRow({ clone, table: () => JSON.parse(readFileSync(s.table, "utf8")) })(argsOf(argv), io, env);
@@ -66,8 +66,6 @@ export const runOnHost: HostStage["runOnHost"] = (service, args, row) => {
     },
   });
 };
-
-const rowEnvOnHost = (ctx: HostContext): RowEnv => ({ ...realEnv(ctx), dryRun: async () => true, vocabulary: () => STAND_IN_VOCABULARY });
 
 const NAMES = ["G1", "G2", "B1", "B2", "B3", "B4", "B5", "B6"] as const;
 
