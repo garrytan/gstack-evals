@@ -282,6 +282,24 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_EB_CACHE_STALE](#e_eb_cache_stale) | 2 | U20 |
 | [E_EB_REPROJECT](#e_eb_reproject) | 2 | U20 |
 | [E_EB_DRYRUN_FAIL](#e_eb_dryrun_fail) | 2 | U20 |
+| [E_DC_NO_BLOCK](#e_dc_no_block) | warning | U20 |
+| [E_DC_ARM_STOP](#e_dc_arm_stop) | warning | U20 |
+| [E_DC_INFRA_MISSING](#e_dc_infra_missing) | warning | U20 |
+| [E_DC_WEB_CONTAMINATED](#e_dc_web_contaminated) | warning | U20 |
+| [E_DC_GSTACK_READ](#e_dc_gstack_read) | warning | U20 |
+| [E_DC_LABEL_MISSING](#e_dc_label_missing) | warning | U20 |
+| [E_DC_JUDGE_KAPPA](#e_dc_judge_kappa) | 2 | U20 |
+| [E_DC_STOCK_FAIL](#e_dc_stock_fail) | 2 | U20 |
+| [E_DC_NO_READ](#e_dc_no_read) | 2 | U20 |
+| [E_DC_TWIN](#e_dc_twin) | 2 | U20 |
+| [E_DC_SMOKE_DROP](#e_dc_smoke_drop) | 2 | U20 |
+| [E_DC_EXPOSURE_STOP](#e_dc_exposure_stop) | 2 | U20 |
+| [E_DC_PROVIDER_DRIFT](#e_dc_provider_drift) | 2 | U20 |
+| [E_DC_SUPPLY_SHORT](#e_dc_supply_short) | 2 | U20 |
+| [E_DC_AUTHOR_COST](#e_dc_author_cost) | 2 | U20 |
+| [E_DC_GATE_CHECK](#e_dc_gate_check) | 2 | U20 |
+| [E_DC_SANDBOX_AUDIT](#e_dc_sandbox_audit) | 2 | U20 |
+| [E_DC_BUILD_INSTRUMENT](#e_dc_build_instrument) | warning | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -2039,6 +2057,94 @@ Fix: Read the FAIL line, fix the rule's code, and run the dry run again before a
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
 
+### E_DC_JUDGE_KAPPA
+
+Design plan review eval (section 6, R78): a production judge or a particle-1 panel member has Cohen's kappa under 0.6, or is short of gold cells, on the anticipated label or the 10x detail label, in the judge check or the stage 2 re-check. That model's contrasts read untested (judge). On Opus lists in stage 1 the eval ends as NO READ (judge).
+
+Fix: Bring the judge's catch rate, false-fail rate and kappa to the Captain. Never re-judge to pass the check. Do not --resume.
+
+Exit 2. Side effects: That model's sub-reservations settle at the spend recorded so far and its unrun ones are released; the judge item stays open for the other models. Partial outputs stay sealed as an incomplete run. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_DC_STOCK_FAIL
+
+Design plan review eval (section 7): one stock row was credited with a primary item on more than 2 of the 16 calibration units in stage 1, or on more than one comparison unit in eight in stage 2, counted once a unit over its real-key packets on that model. On Opus lists in stage 1 the eval ends; otherwise that model's contrasts read untested (stock).
+
+Fix: Bring the per-row counts and any unlabelled stock cells that could flip the line to the Captain. Do not --resume.
+
+Exit 2. Side effects: That model's sub-reservations settle at the spend recorded so far and its unrun ones are released; the judge item stays open for the other models. Partial outputs stay sealed as an incomplete run. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_DC_NO_READ
+
+Design plan review eval (section 9): stage 1 can't make a reading. The Opus-list judge check failed or is short of gold, Astra's detail check on Opus lists failed at the 10x tier, stock failed on Opus lists, or under 95% of Opus none replies parse. The eval ends as R48 FIX-METHOD on the instrument.
+
+Fix: Bring the failed input and its counts to the Captain. Do not --resume.
+
+Exit 2. Side effects: Every open ledger lease is settled at the spend recorded so far and the rest released. Partial outputs stay sealed as an incomplete run. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_DC_TWIN
+
+Design plan review eval (section 9): the twin check reads NO READ (twin). The twins don't track by the paired interval or by the re-split test, or fewer than 6 pairs are left with 3 scored passes on each side. The eval ends as R48 FIX-METHOD on the instrument.
+
+Fix: Bring both tests' numbers and the named pairs to the Captain. Do not --resume.
+
+Exit 2. Side effects: Every open ledger lease is settled at the spend recorded so far and the rest released. Partial outputs stay sealed as an incomplete run. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_DC_SMOKE_DROP
+
+Design plan review eval (section 9, smoke rule 4): a gstack arm failed smoke rule 1 (parse) or 2 (exposure) on a model and failed again on its re-smoke with the repair hook on. The arm drops for that model: its stage 2 cells there don't run, its contrast reads untested (exposure or parse) and it enters Holm at p = 1.
+
+Fix: Bring the smoke and re-smoke counts and the detector lines to the Captain. The other arms on that model and every other model run on. Do not --resume that arm.
+
+Exit 2. Side effects: That arm's sub-reservations settle at the spend recorded so far and its unrun ones are released; the shared round and stage leases stay open. Partial outputs stay sealed. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_DC_EXPOSURE_STOP
+
+Design plan review eval (section 10): after the first 24 Opus sessions of a gstack arm in stage 2, the arm's exposure is under 0.70. The arm stops, its cells read untested and its remaining cap is released.
+
+Fix: Bring the exposure count and the detector lines behind it to the Captain. The other arms on that model and every other model run on. Do not --resume that arm.
+
+Exit 2. Side effects: That arm's sub-reservations settle at the spend recorded so far and its unrun ones are released; the shared round and stage leases stay open. Partial outputs stay sealed. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_DC_PROVIDER_DRIFT
+
+Design plan review eval (start rule 9): an OpenRouter call was served by a provider other than its pin (OpenAI for GPT-6.1 Sol, the pinned provider for Gemini 4 Argon and for particle-1), or the provider's data terms differ from the dated terms record. Every call on that model stops, in every role, for the Captain.
+
+Fix: Keep the journal line that shows the provider and send the question to the Captain. Never retry on another provider. Do not --resume.
+
+Exit 2. Side effects: Calls already sent stay on their journal and spend. That model's sub-reservations settle at the spend recorded so far and nothing on it resumes without the Captain. Partial outputs stay sealed. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_DC_SUPPLY_SHORT
+
+Design plan review eval (sections 3 and 14): supply is short. Fewer than 16 base apps qualify (the line gives the count under the strict and the HTTP 200 reading of renders), or a projection at the measured figures can't fill 48 comparison units within the authoring caps. Authoring stops for the Captain.
+
+Fix: Bring the funnel counts and the MDD at the count that can fill to the Captain. Do not --resume.
+
+Exit 2. Side effects: The authoring and base-app leases settle at the spend recorded so far and the rest is released. Partial outputs stay sealed as an incomplete run. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_DC_AUTHOR_COST
+
+Design plan review eval (section 3): the authoring pilot cost more than $10.00 per passing unit, failures included, with settled, in-flight and unknown charges counted. No passing unit reads as infinite. Authoring stops for the Captain.
+
+Fix: Bring the pilot's per-step pass rates and cost per passing unit to the Captain. Do not --resume.
+
+Exit 2. Side effects: The authoring and base-app leases settle at the spend recorded so far and the rest is released. Partial outputs stay sealed as an incomplete run. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_DC_GATE_CHECK
+
+Design plan review eval (start rule 6): a model-judged gate gave the wrong verdict on one of the eight planted units of the gate check. Authoring stops before the pilot.
+
+Fix: Bring the gate, the planted case and its verdict to the Captain; the fix lands as a recorded deviation before any pilot. Do not --resume.
+
+Exit 2. Side effects: The authoring and base-app leases settle at the spend recorded so far and the rest is released. Partial outputs stay sealed as an incomplete run. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_DC_SANDBOX_AUDIT
+
+Design plan review eval (sections 3 and 11): a sandbox audit after a recipe or stage 3 VM run saw a key pattern, a drive path or egress outside the metering proxy and the named mirror endpoints, or could not collect its evidence (a non-zero exit, empty or cut output, or a missing process list, egress log or file list). Stage 3 stops, or the base-app screen when the hit is in a recipe VM.
+
+Fix: Keep the audit output, delete the VM, and bring the hit to the Captain. Do not --resume.
+
+Exit 2. Side effects: The stopped stage's leases settle at the spend recorded so far and the rest is released. Partial outputs stay sealed as an incomplete run. Retry safe: no. Resumable: no. Owner: U20.
+
 ## Exit 3: calibration failed (INCOMPLETE)
 
 ### CALIBRATION_SKILL
@@ -2432,5 +2538,61 @@ Warning. Owner: U20.
 A build-read session ended in a second upstream error or a second infrastructure failure, so its cell is a recorded gap. Every verdict also prints the reading that scores gaps as 0.
 
 Fix: None: the gap is recorded under the frozen session rule.
+
+Warning. Owner: U20.
+
+### E_DC_NO_BLOCK
+
+Design plan review eval (prereg 2026-11-14 section 5, keeping the 2026-11-09 failure table): a completed reply holds no plan-changes block that the strict parse or the one frozen lenient parse can read. The cell scores 0 on every block score (no-block). It is not missing and gets no retry.
+
+Fix: Nothing to rerun: no-block is the arm's own outcome. The no-block rate prints per cell, and smoke rule 1 reads it for the gstack arms.
+
+Warning. Owner: U20.
+
+### E_DC_ARM_STOP
+
+Design plan review eval (section 5): a session ended on its own limit (context overflow, harness timeout, or the turn, minute or dollar limit), with or without a block. The cell gets one fresh retry, a new session from the start. A retry that stops again scores 0, and the first attempt is never judged.
+
+Fix: Nothing to rerun beyond the one retry. Arm stops print per cell beside the sensitivity read, with the count of stopped attempts that held a block.
+
+Warning. Owner: U20.
+
+### E_DC_INFRA_MISSING
+
+Design plan review eval (section 5 and start rule 4): a failure outside the agent (a provider or proxy error, a crash, a closed lease, a lost host), or a unit whose containment check failed before any session. After reconciliation the cell gets one retry when no block of it was judged; after that it is missing, counted against planned cells, never 0.
+
+Fix: Nothing to rerun beyond the one retry. If one cause repeats, read the session logs and the proxy journal the line names and report it before the next round is admitted.
+
+Warning. Owner: U20.
+
+### E_DC_WEB_CONTAMINATED
+
+Design plan review eval (section 5): a session's transcript holds a successful WebSearch or WebFetch result although both tools are denied. The cell is missing with no retry, whatever else happened in the session.
+
+Fix: Check that the arm's denied tools still name WebSearch and WebFetch and that the container reaches only the metering proxy, then report the count per arm.
+
+Warning. Owner: U20.
+
+### E_DC_GSTACK_READ
+
+Design plan review eval (section 5): a none, lens or full-information reference session read a gstack file. The cell is missing (contaminated) with no retry. Over 5% of a model's none sessions read this way makes that model's contrasts read untested (contamination).
+
+Fix: Check the clean-arm container (empty HOME, no skills folder, no gstack state, no drive mount) and report the count per arm.
+
+Warning. Owner: U20.
+
+### E_DC_LABEL_MISSING
+
+Design plan review eval (section 6): a primary (list, item) cell is still unlabelled after one whole-packet resend, a yes naming no change index included, or a Gemini tie-break failed twice. The review is unscored and counts as missing, never as not anticipated. A stock cell left unlabelled stays unlabelled, and its unit counts for that row only when another packet credits it.
+
+Fix: Nothing to resend: the frozen rule allows one resend per packet and one retry per tie-break. Read the judge's raw reply the line names; the coverage line reports the cell.
+
+Warning. Owner: U20.
+
+### E_DC_BUILD_INSTRUMENT
+
+Design plan review eval (section 11, measure 8): stage 3's DES-4 instrument check failed. The no-review build beat the generic-look control in under 70% of its pairs, so the DES-4 pairwise read is flagged (instrument). Stage 3 is descriptive and the flag changes no verdict.
+
+Fix: Nothing to rerun. Print both judges' win rates beside the flag.
 
 Warning. Owner: U20.
