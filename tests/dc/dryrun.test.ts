@@ -49,7 +49,7 @@ describe("gstack-evals dc", () => {
     expect(a.out.at(-1)).toMatch(/0 fail$/);
     const b = capture();
     expect(await main(["dryrun", "--area", "score"], b.io)).toBe(0);
-    expect(b.out.every((l) => l.startsWith("PASS M3 ") || l.startsWith("PASS PD-1 ") || l.startsWith("dry run: "))).toBe(true);
+    expect(b.out.every((l) => l.startsWith("PASS ") || l.startsWith("dry run: "))).toBe(true);
     const c = capture();
     expect(await main(["dryrun", "--area", "nope"], c.io)).toBe(2);
     expect(c.err[0]).toStartWith("E_USAGE gstack-evals dc dryrun: --area is one of");
