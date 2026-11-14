@@ -300,6 +300,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_DC_GATE_CHECK](#e_dc_gate_check) | 2 | U20 |
 | [E_DC_SANDBOX_AUDIT](#e_dc_sandbox_audit) | 2 | U20 |
 | [E_DC_BUILD_INSTRUMENT](#e_dc_build_instrument) | warning | U20 |
+| [E_BASE_APP_DROPPED](#e_base_app_dropped) | warning | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -2594,5 +2595,13 @@ Warning. Owner: U20.
 Design plan review eval (section 11, measure 8): stage 3's DES-4 instrument check failed. The no-review build beat the generic-look control in under 70% of its pairs, so the DES-4 pairwise read is flagged (instrument). Stage 3 is descriptive and the flag changes no verdict.
 
 Fix: Nothing to rerun. Print both judges' win rates beside the flag.
+
+Warning. Owner: U20.
+
+### E_BASE_APP_DROPPED
+
+Design plan review eval, export intake (the Captain's ruling on recorded base apps): the kept clone's or bundle's HEAD is not the base app's recorded commit, HEAD^{tree} is not its recorded tree, or the commit can no longer be fetched (a missing clone or bundle, a bundle with missing prerequisites or no HEAD, a commit or tree object that is gone). The base app drops with the printed reason and is never swapped for another app. The name sits outside E_DC_ because start rule 3 freezes exactly 18 E_DC_ codes.
+
+Fix: Nothing to rerun for that app. Report the dropped app and its reason with the supply counts; never point the export at another commit or another app.
 
 Warning. Owner: U20.

@@ -20,6 +20,9 @@ export function commitAll(dir: string, message = "fixture"): string {
   return c;
 }
 
+/** A clone's HEAD and HEAD^{tree}: the base-app record the export intake checks. */
+export const recordOf = (dir: string) => ({ commit: git(dir, ["rev-parse", "HEAD"]).stdout.trim(), tree: git(dir, ["rev-parse", "HEAD^{tree}"]).stdout.trim() });
+
 /** A small invented web app with files a strip removes and files it keeps. */
 export function baseApp(files: Record<string, string> = {}): { dir: string; pin: string } {
   const dir = mkdtempSync(join(tmpdir(), "dc-app-"));

@@ -22,7 +22,7 @@ import { D1_MESSAGE, gateHook, repairHook, stopHandler } from "../../../lanes/de
 import { replyOf } from "../../../lanes/design-constructed/run/transcript.ts";
 import type { SessionKind } from "../../../lanes/design-constructed/types.ts";
 import { HAS_CLAUDE_CLI, harness, type Harness, type Script } from "../../adapters/harness.ts";
-import { BLOCK, commitAll, EVIDENCE, parseStub, pinnedGstack } from "./helpers.ts";
+import { BLOCK, commitAll, EVIDENCE, parseStub, pinnedGstack, recordOf } from "./helpers.ts";
 
 let open: Harness[] = [];
 afterEach(() => {
@@ -88,7 +88,7 @@ describe.skipIf(!HAS_CLAUDE_CLI)("the hostile fixture on the pinned Claude Code 
   test("stripped arms see no marker, the gstack arms alone list gstack's skills, and both controls catch their files", async () => {
     const fx = hostileFixture();
     const work = join(fx.root, "export");
-    exportUnit({ clone: fx.repo, pin: fx.pin, evidence: EVIDENCE, out: work });
+    exportUnit({ source: { clone: fx.repo }, expect: recordOf(fx.repo), evidence: EVIDENCE, out: work });
     const install = (home: string) => {
       if ("skip" in PIN) return;
       for (const s of ["plan-design-review", "autoplan"]) cpSync(join(PIN.dir, s), join(home, ".claude", "skills", s), { recursive: true });

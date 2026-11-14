@@ -1,8 +1,9 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // C1, the export of one unit (plan section 7, R2-15): the base app at its pin, stripped, with the unit's evidence files,
-// as a fresh one-commit repository. The commit is built from the pinned tree object in the kept local clone, never a
-// fresh fetch: the tree is read into a fresh index, the strip paths leave the index, and the evidence files are added
-// with git add -f, so a file the upstream tracked but its own .gitignore matches stays in and no evidence path drops
+// as a fresh one-commit repository. The intake checks that the kept local clone's or kept bundle's HEAD is the base
+// app's recorded commit and tree, and drops the base app otherwise (E_BASE_APP_DROPPED). The commit is built from that
+// tree object, never a fresh fetch: the tree is read into a fresh index, the strip paths leave the index, and the
+// evidence files are added with git add -f, so a file the upstream tracked but its own .gitignore matches stays in and no evidence path drops
 // out. Each evidence path is then checked with git check-ignore and against every .ignore and .rgignore in the tree
 // (read as gitignore files in a scratch repository, the way ripgrep reads them); a hit fails the export. The tree is
 // compared with the expected tree (the pinned tree, less the strip, plus the evidence blobs hashed with no filters),
@@ -154,19 +155,68 @@ export function hostTreeDigest(dir: string): string {
   return sha256(r.stdout);
 }
 
+/** Where a base app's code comes from: the kept local clone, or a kept bundle of it. */
+export type ExportSource = { clone: string } | { bundle: string };
+/** The base app's recorded commit and tree (frame record); the source's HEAD must be exactly these. */
+export interface BaseRecord {
+  commit: string;
+  tree: string;
+}
+
+const dropped = (what: string, why: string): never => fail("E_BASE_APP_DROPPED", "export intake: " + what + ": " + why + "; the base app drops and is never swapped for another");
+
 /**
- * Exports one unit into out, which must not exist. clone is the kept local clone holding pin. Throws DcError
- * (E_DC_INFRA_MISSING) with the reason on any failure; a scratch repository is removed either way.
+ * The export's intake: the source's HEAD and HEAD^{tree}, read with no lazy fetch, checked against the recorded commit
+ * and tree. A bundle is unpacked into a scratch repository first (git bundle verify, then its HEAD); the caller removes
+ * scratch. A source whose HEAD can't be read (a missing clone or bundle, a bundle with missing prerequisites or no HEAD,
+ * a commit or tree object that is gone) or whose HEAD or tree differs from the record fails with E_BASE_APP_DROPPED. The
+ * bundle is read with git bundle unbundle, so no fetch transport is opened.
  */
-export function exportUnit(o: { clone: string; pin: string; evidence: readonly EvidenceFile[]; out: string }): ExportResult {
+export function intakeBase(source: ExportSource, expect: BaseRecord, scratch: string): { objects: string; commit: string; tree: string } {
+  const env = { GIT_NO_LAZY_FETCH: "1" };
+  const what = "clone" in source ? "clone " + source.clone : "bundle " + source.bundle;
+  let repo: string;
+  let head: string;
+  if ("clone" in source) {
+    if (!existsSync(source.clone)) dropped(what, "it does not exist");
+    repo = source.clone;
+    const r = git(repo, ["rev-parse", "-q", "--verify", "HEAD^{commit}"], { env, ok: [0, 1, 128] });
+    if (r.code !== 0) dropped(what, "its HEAD can no longer be read (" + (r.stderr.trim().split("\n").at(-1) || "no commit") + ")");
+    head = r.stdout.trim();
+  } else {
+    if (!existsSync(source.bundle)) dropped(what, "it does not exist");
+    repo = join(scratch, "bundle.git");
+    git(scratch, ["init", "-q", "--bare", "--template=", repo]);
+    const verify = git(repo, ["bundle", "verify", "-q", source.bundle], { env, ok: [0, 1, 128] });
+    if (verify.code !== 0) dropped(what, "git bundle verify failed (" + (verify.stderr.trim().split("\n").at(-1) || "exit " + verify.code) + ")");
+    const heads = git(repo, ["bundle", "list-heads", source.bundle], { env, ok: [0, 1, 128] }).stdout.split("\n").map((l) => l.split(" ")).filter((p) => p[1] === "HEAD");
+    if (heads.length !== 1) dropped(what, "the bundle names no HEAD");
+    head = heads[0]![0]!;
+    const unpacked = git(repo, ["bundle", "unbundle", source.bundle], { env, ok: [0, 1, 128] });
+    if (unpacked.code !== 0) dropped(what, "its HEAD can't be unpacked (" + (unpacked.stderr.trim().split("\n").at(-1) || "exit " + unpacked.code) + ")");
+  }
+  const commitOk = git(repo, ["cat-file", "-e", head + "^{commit}"], { env, ok: [0, 1, 128] }).code === 0;
+  if (!commitOk) dropped(what, "commit " + head + " can no longer be fetched");
+  const tree = git(repo, ["rev-parse", "-q", "--verify", head + "^{tree}"], { env, ok: [0, 1, 128] }).stdout.trim();
+  if (!tree || git(repo, ["cat-file", "-e", tree], { env, ok: [0, 1, 128] }).code !== 0) dropped(what, "the tree of " + head + " can no longer be fetched");
+  if (head !== expect.commit) dropped(what, "HEAD is " + head + ", not the recorded commit " + expect.commit);
+  if (tree !== expect.tree) dropped(what, "HEAD^{tree} is " + tree + ", not the recorded tree " + expect.tree);
+  return { objects: git(repo, ["rev-parse", "--path-format=absolute", "--git-path", "objects"]).stdout.trim(), commit: head, tree };
+}
+
+/**
+ * Exports one unit into out, which must not exist. source is the kept local clone or a kept bundle, whose HEAD must be
+ * the base app's recorded commit and tree (intakeBase: E_BASE_APP_DROPPED otherwise). Any other failure throws DcError
+ * (E_DC_INFRA_MISSING) with the reason; scratch repositories are removed either way.
+ */
+export function exportUnit(o: { source: ExportSource; expect: BaseRecord; evidence: readonly EvidenceFile[]; out: string }): ExportResult {
   if (existsSync(o.out)) fail("E_DC_INFRA_MISSING", "export: " + o.out + " exists already; every export writes a new folder");
   if (!o.evidence.length) fail("E_DC_INFRA_MISSING", "export: the unit has no evidence files");
-  const objects = git(o.clone, ["rev-parse", "--path-format=absolute", "--git-path", "objects"]).stdout.trim();
-  const pinCommit = git(o.clone, ["rev-parse", "--verify", o.pin + "^{commit}"]).stdout.trim();
-  const pinTree = git(o.clone, ["rev-parse", "--verify", pinCommit + "^{tree}"]).stdout.trim();
+  const intake = mkdtempSync(join(tmpdir(), "dc-intake-"));
   const s = mkdtempSync(join(tmpdir(), "dc-export-"));
-  const alt = { GIT_ALTERNATE_OBJECT_DIRECTORIES: objects };
   try {
+    const { objects, commit: pinCommit, tree: pinTree } = intakeBase(o.source, o.expect, intake);
+    const alt = { GIT_ALTERNATE_OBJECT_DIRECTORIES: objects };
     git(s, ["init", "-q", "--template="]);
     git(s, ["read-tree", pinTree], { env: alt });
     const entries = lsFiles(s, alt);
@@ -235,6 +285,7 @@ export function exportUnit(o: { clone: string; pin: string; evidence: readonly E
     throw e;
   } finally {
     rmSync(s, { recursive: true, force: true });
+    rmSync(intake, { recursive: true, force: true });
   }
 }
 

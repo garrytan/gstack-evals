@@ -9,6 +9,7 @@ import { appendFileSync, cpSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, wr
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { ARM_LEAD, CELL_STATES, COMMON_LINE, FORCED_SENTENCE, GATE_MESSAGE, HARNESS, REFERENCE_OPENING, SESSION_LIMITS, TEMPLATE } from "../frozen.ts";
+import { DcError } from "../errors.ts";
 import type { CellState, DryRunCase, SessionKind } from "../types.ts";
 import { armPrompt, containerProblems, HOME, sessionSetup } from "./arms.ts";
 import { c2Problems, containPoint, keyStatementHits, runC2, sha256Hex } from "./contain.ts";
@@ -64,6 +65,9 @@ function commitAll(dir: string): string {
   return c;
 }
 
+/** A clone's HEAD and HEAD^{tree}: the record the export intake checks. */
+const recordOf = (dir: string) => ({ commit: git(dir, ["rev-parse", "HEAD"]).stdout.trim(), tree: git(dir, ["rev-parse", "HEAD^{tree}"]).stdout.trim() });
+
 function baseApp(extra: Record<string, string> = {}): { dir: string; pin: string } {
   const dir = mkdtempSync(join(tmpdir(), "dc-dry-app-"));
   const files: Record<string, string> = {
@@ -100,7 +104,7 @@ function exported(): { work: string; repo: string; ex: ExportResult; mounts: str
   if (!pristine) {
     const app = baseApp();
     const work = mkdtempSync(join(tmpdir(), "dc-dry-pristine-"));
-    const ex = exportUnit({ clone: app.dir, pin: app.pin, evidence: EVIDENCE, out: join(work, "repo") });
+    const ex = exportUnit({ source: { clone: app.dir }, expect: recordOf(app.dir), evidence: EVIDENCE, out: join(work, "repo") });
     writeFileSync(join(work, "plan.md"), PLAN_BEFORE);
     mkdirSync(join(work, "context"));
     writeFileSync(join(work, "context", "project.md"), "A demo store app.\n");
@@ -162,7 +166,7 @@ function exportFails(evidence: typeof EVIDENCE, expected: RegExp): string | null
   const app = failingApp;
   const out = join(mkdtempSync(join(tmpdir(), "dc-dry-out-")), "repo");
   try {
-    exportUnit({ clone: app.dir, pin: app.pin, evidence, out });
+    exportUnit({ source: { clone: app.dir }, expect: recordOf(app.dir), evidence, out });
     return "the export passed";
   } catch (e) {
     return expected.test((e as Error).message) ? null : "the export failed for another reason: " + (e as Error).message;
@@ -326,7 +330,7 @@ export function cases(): DryRunCase[] {
   add("C1", "fixed metadata: two exports of one unit give one commit id, and its tree equals the expected tree", () => {
     const a = exported().ex;
     const app = pristine!.app;
-    const b = exportUnit({ clone: app.dir, pin: app.pin, evidence: [...EVIDENCE].reverse(), out: join(mkdtempSync(join(tmpdir(), "dc-dry-")), "r") });
+    const b = exportUnit({ source: { clone: app.dir }, expect: recordOf(app.dir), evidence: [...EVIDENCE].reverse(), out: join(mkdtempSync(join(tmpdir(), "dc-dry-")), "r") });
     const meta = g(a.repo, ["cat-file", "commit", "HEAD"]);
     return all(eq(a.manifest.commit, b.manifest.commit, "commit"), eq(a.manifest.tree, a.expectedTree, "tree"), meta.includes("author " + EXPORT_COMMIT.name + " <" + EXPORT_COMMIT.email + "> " + EXPORT_COMMIT.time) ? null : "metadata moved");
   });
@@ -336,10 +340,41 @@ export function cases(): DryRunCase[] {
     const listed = g(u.repo, ["rev-list", "--objects", "--all", "--no-object-names"]).split("\n").sort();
     return eq(stored, listed, "objects");
   });
+  add("C1", "the intake reads a kept bundle as it reads the clone, and drops a base app whose HEAD or tree is not the record or whose commit can't be fetched", () => {
+    const app = baseApp();
+    const rec = recordOf(app.dir);
+    const root = mkdtempSync(join(tmpdir(), "dc-dry-intake-"));
+    const bundle = join(root, "app.bundle");
+    git(app.dir, ["bundle", "create", "-q", bundle, "HEAD"]);
+    let n = 0;
+    const run = (source: { clone: string } | { bundle: string }, expect = rec): string => {
+      try {
+        return exportUnit({ source, expect, evidence: EVIDENCE, out: join(root, "out" + n++) }).manifest.commit;
+      } catch (e) {
+        return (e instanceof DcError ? e.code : "?") + " " + (e as Error).message;
+      }
+    };
+    const child = git(app.dir, ["hash-object", "-t", "commit", "-w", "--stdin"], { input: "tree " + rec.tree + "\nparent " + rec.commit + "\nauthor t <t@invalid> 2 +0000\ncommitter t <t@invalid> 2 +0000\n\nnext\n" }).stdout.trim();
+    git(app.dir, ["update-ref", "refs/heads/next", child]);
+    const thin = join(root, "thin.bundle");
+    git(app.dir, ["bundle", "create", "-q", thin, "refs/heads/next", "^" + rec.commit]);
+    const gone = baseApp();
+    const goneHead = recordOf(gone.dir);
+    rmSync(join(gone.dir, ".git", "objects", goneHead.commit.slice(0, 2), goneHead.commit.slice(2)));
+    const dropped = (r: string, why: RegExp, what: string) => (r.startsWith("E_BASE_APP_DROPPED ") && why.test(r) ? null : what + ": " + r);
+    return all(
+      eq(run({ bundle }), run({ clone: app.dir }), "bundle and clone export one commit"),
+      dropped(run({ clone: app.dir }, { commit: child, tree: rec.tree }), /HEAD is [0-9a-f]+, not the recorded commit/, "HEAD mismatch"),
+      dropped(run({ bundle }, { commit: rec.commit, tree: "1".repeat(40) }), /not the recorded tree/, "tree mismatch"),
+      dropped(run({ bundle: thin }, { commit: child, tree: rec.tree }), /bundle verify failed/, "bundle with a missing prerequisite"),
+      dropped(run({ clone: gone.dir }, goneHead), /can no longer be read/, "clone whose commit object is gone"),
+      dropped(run({ bundle: join(root, "missing.bundle") }), /does not exist/, "missing bundle"),
+    );
+  });
   add("C1", "an export into a folder that exists is refused", () => {
     const app = baseApp();
     try {
-      exportUnit({ clone: app.dir, pin: app.pin, evidence: EVIDENCE, out: app.dir });
+      exportUnit({ source: { clone: app.dir }, expect: recordOf(app.dir), evidence: EVIDENCE, out: app.dir });
       return "it wrote into an existing folder";
     } catch (e) {
       return /exists already/.test((e as Error).message) ? null : (e as Error).message;
@@ -455,8 +490,8 @@ export function cases(): DryRunCase[] {
     const repo = join(root, "src");
     mkdirSync(repo);
     writeHostile(repo, join(root, "fired.log"));
-    const pin = commitAll(repo);
-    const ex = exportUnit({ clone: repo, pin, evidence: EVIDENCE, out: join(root, "export") });
+    commitAll(repo);
+    const ex = exportUnit({ source: { clone: repo }, expect: recordOf(repo), evidence: EVIDENCE, out: join(root, "export") });
     const text = spawnSync("grep", ["-rl", "HOSTILE-", join(root, "export"), "--exclude-dir=.git"], { encoding: "utf8" }).stdout.trim();
     const kept = text.split("\n").map((f) => f.slice(join(root, "export").length + 1)).sort();
     return all(eq(kept, ["docs/imported.md", "shadow/rules/link.md", "shadow/settings.json"], "ordinary content that keeps a marker (an import target, a symlink's target folder)"), eq(ex.manifest.removed.map((r) => r.path).sort(), [".claude/AGENTS.md", ".claude/CLAUDE.md", ".claude/rules/hostile.md", ".claude/settings.json", ".claude/skills/hostile/SKILL.md", "AGENTS.md", "CLAUDE.local.md", "CLAUDE.md", "app/.claude", "etc-link", "lib/AGENTS.md", "pkg/sub/CLAUDE.md", "up-link"], "removed"), Object.keys(MARK).length === 13 ? null : "markers");

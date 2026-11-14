@@ -2465,6 +2465,12 @@ export const CODES = {
     fix: "Nothing to rerun. Print both judges' win rates beside the flag.",
     owner: "U20",
   },
+  E_BASE_APP_DROPPED: {
+    exit: null,
+    meaning: "Design plan review eval, export intake (the Captain's ruling on recorded base apps): the kept clone's or bundle's HEAD is not the base app's recorded commit, HEAD^{tree} is not its recorded tree, or the commit can no longer be fetched (a missing clone or bundle, a bundle with missing prerequisites or no HEAD, a commit or tree object that is gone). The base app drops with the printed reason and is never swapped for another app. The name sits outside E_DC_ because start rule 3 freezes exactly 18 E_DC_ codes.",
+    fix: "Nothing to rerun for that app. Report the dropped app and its reason with the supply counts; never point the export at another commit or another app.",
+    owner: "U20",
+  },
 } as const satisfies Record<string, CodeInfo>;
 
 export type ReasonCode = keyof typeof CODES;
