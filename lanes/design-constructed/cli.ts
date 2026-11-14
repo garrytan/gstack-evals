@@ -1,11 +1,17 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // gstack-evals dc: the design plan review eval on constructed units (prereg 2026-11-14). Every error line on stderr
-// starts with its reason code. Each area replaces its own rows' run when it lands; until then a row exits 2 with
-// E_USAGE "not built yet".
+// starts with its reason code. Keyless rows run for real; paid rows check their start rules and the ledger admission,
+// then build their providers (wire.ts), and refuse with E_DC_NO_PROVIDER while a provider is not bound.
 import { CODES, docAnchor, type ReasonCode } from "../../src/errors/codes.ts";
 import { AREAS, dryRun, type Area } from "./dryrun.ts";
 import { DcError, fail } from "./errors.ts";
 import { filecheckCommand, frameCommand } from "./frame/command.ts";
+import { realSeams } from "./frame/run.ts";
+import { uvPowerRunner } from "./read/seams.ts";
+import { BOUND_PROVIDERS } from "./wire.ts";
+import { itemsRow, powerRow, readRow, scopeRow, scoreRow } from "./wire/keyless.ts";
+import { recipesRow } from "./wire/recipes.ts";
+import type { Row, RowEnv } from "./wire/start.ts";
 
 export interface Io {
   out: (text: string) => void;
@@ -13,7 +19,16 @@ export interface Io {
 }
 
 type Args = { flags: Map<string, string>; bools: Set<string>; rest: string[] };
-type Run = (args: Args, io: Io) => Promise<number> | number;
+type Run = Row;
+
+/** The real environment: the bound providers (none yet), the whole keyless dry run, the lane's checkout, uv's power.py. */
+export const realEnv = (): RowEnv => ({
+  providers: BOUND_PROVIDERS,
+  dryRun: async () => (await dryRun()).ok,
+  lane: realSeams().lane,
+  now: () => new Date(),
+  power: uvPowerRunner,
+});
 
 function parse(argv: string[], bools: string[]): Args {
   const flags = new Map<string, string>();
@@ -45,24 +60,24 @@ const dryrun: Run = async (a, io) => {
 export const SUBCOMMANDS: Record<string, { area: Area | "lane"; run: Run; bools: string[]; usage: string; summary: string }> = {
   frame: { area: "frame", run: frameCommand, bools: [], usage: "--out <sealed dir outside the repo>", summary: "the one dated frame search, its entry filters and the frame order (keyless)" },
   filecheck: { area: "frame", run: filecheckCommand, bools: [], usage: "--repo <dir>", summary: "the keyless file check on each candidate's safe clone" },
-  recipes: { area: "frame", run: notBuilt("frame"), bools: [], usage: "", summary: "recipe sessions and qualification (paid: dc-base-apps)" },
+  recipes: { area: "frame", run: recipesRow, bools: [], usage: "--frame <the frame's sealed folder> --out <new sink folder>", summary: "recipe sessions and qualification (paid: dc-base-apps, dc-hosts)" },
   author: { area: "author", run: notBuilt("author"), bools: [], usage: "", summary: "authoring steps 1 to 7, the fix round, rewrites, 2x versions and twins (paid: dc-authoring-1 to -3)" },
   gatecheck: { area: "author", run: notBuilt("author"), bools: [], usage: "", summary: "the eight planted units through every model-judged gate (paid: dc-gate-check)" },
-  scope: { area: "run", run: notBuilt("run"), bools: [], usage: "", summary: "the keyless UI scope read on every plan.md" },
+  scope: { area: "run", run: scopeRow, bools: [], usage: "--units <folder of unit folders, each with plan.md>", summary: "the keyless UI scope read on every plan.md" },
   sessions: { area: "run", run: notBuilt("run"), bools: [], usage: "", summary: "review sessions for one stage, arm and model (paid: dc-stage1-*, dc-stage2-*)" },
   probe: { area: "score", run: notBuilt("score"), bools: [], usage: "", summary: "the live judge probe, one call down every judge route (paid: dc-judges)" },
   labels: { area: "score", run: notBuilt("score"), bools: [], usage: "", summary: "label packets, the judge check and the stage 2 re-check (paid: dc-judges)" },
-  score: { area: "score", run: notBuilt("score"), bools: [], usage: "", summary: "A, G, D and every secondary from final labels" },
-  read: { area: "read", run: notBuilt("read"), bools: [], usage: "", summary: "the twin check, the tier chain, the smoke rules, contrasts and verdicts" },
-  power: { area: "read", run: notBuilt("read"), bools: [], usage: "", summary: "the admission read on design.json through power.py" },
-  items: { area: "money", run: notBuilt("money"), bools: [], usage: "", summary: "the 17 ledger items, their caps and admission rules" },
+  score: { area: "score", run: scoreRow, bools: [], usage: "--in <folder: units.json rows.json packets.json labels.json> --read base|2x|10x --stage 1|2", summary: "A, G, D and every secondary from final labels" },
+  read: { area: "read", run: readRow, bools: [], usage: "--stage 1|2 --in <read input JSON>", summary: "the twin check, the tier chain, the smoke rules, contrasts and verdicts" },
+  power: { area: "read", run: powerRow, bools: [], usage: "--design <design.json> --out <new folder>", summary: "the admission read on design.json through power.py" },
+  items: { area: "money", run: itemsRow, bools: [], usage: "", summary: "the 17 ledger items, their caps and admission rules" },
   stage3: { area: "stage3", run: notBuilt("stage3"), bools: [], usage: "", summary: "stage 3 authoring, oracle builds, builds and measures (paid: dc-stage3-*)" },
   dryrun: { area: "lane", run: dryrun, bools: [], usage: "[--area " + AREAS.join("|") + "]", summary: "the keyless dry run: one PASS or FAIL line per case" },
 };
 
 const lines = (code: ReasonCode, message: string) => [message, "fix: " + CODES[code].fix, "docs: " + docAnchor(code)].flatMap((t) => t.split(/\r\n|\r|\n/)).map((l) => code + " " + l).join("\n");
 
-export async function main(argv: string[], io: Io = { out: (t) => console.log(t), err: (t) => console.error(t) }): Promise<number> {
+export async function main(argv: string[], io: Io = { out: (t) => console.log(t), err: (t) => console.error(t) }, env: () => RowEnv = realEnv): Promise<number> {
   const [sub, ...rest] = argv;
   if (!sub || sub === "--help" || sub === "-h") {
     io.out(["gstack-evals dc <command>", "", ...Object.entries(SUBCOMMANDS).map(([k, v]) => "  " + k.padEnd(10) + v.summary + (v.usage ? "\n" + " ".repeat(12) + v.usage : ""))].join("\n"));
@@ -74,7 +89,7 @@ export async function main(argv: string[], io: Io = { out: (t) => console.log(t)
     return 2;
   }
   try {
-    return await entry.run(parse(rest, entry.bools), io);
+    return await entry.run(parse(rest, entry.bools), io, env());
   } catch (e) {
     if (!(e instanceof DcError)) throw e;
     io.err(lines(e.code, "gstack-evals dc " + sub + ": " + e.message));

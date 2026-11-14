@@ -1,0 +1,177 @@
+// Copyright (c) 2026 Garry Tan. MIT License.
+// The keyless providers the dry run and the tests bind: the real money controller on main's ledger in a temporary
+// folder (money/dryrun-fixture.ts's rig), the real metered client on the real metering proxy whose upstream answers
+// from a script, and the areas' own scripted VM world, browser, agents and review boxes. Nothing here reads a key or
+// reaches a network; the proxy gets invented key strings.
+import { join, resolve } from "node:path";
+import { DIRECT_MODELS } from "../money/price.ts";
+import { fakeReply, rig, startProxy, type ProxyRig, type Rig } from "../money/dryrun-fixture.ts";
+import { ledgerFigures } from "../money/meter.ts";
+import type { PowerRunner } from "../read/seams.ts";
+import { fixtureBrowser, RECIPE, type FixtureApp } from "../recipes/fixtures.ts";
+import { fakeSpec, fakeMirrors } from "../stage3/fake.ts";
+import { fixtureStage3, type Stage3Script } from "../stage3/fixtures.ts";
+import type { AnyModel, LedgerItemId } from "../types.ts";
+import { meteredModels, recordedCaps, type LedgerProvider, type ModelCall, type ModelProvider, type ProviderName, type Providers, type SessionProvider, type VmProvider } from "../wire.ts";
+import type { RowEnv } from "./start.ts";
+
+export const REPO_ROOT = resolve(import.meta.dir, "..", "..", "..");
+/** The digest the fake terms reader returns for every serving provider. */
+export const FAKE_TERMS_DIGEST = "7".repeat(64);
+export const FAKE_COMMIT = "0".repeat(40);
+/** The provider each OpenRouter model's pin names, as OpenRouter returns it. */
+export const SERVED: Partial<Record<AnyModel, string>> = { sol: "OpenAI", particle: "Particle", argon: "Google" };
+
+export interface Kit {
+  providers: Providers;
+  /** The providers built, in order. */
+  built: ProviderName[];
+  /** The model calls that reached the scripted upstream, as "<model> <label>". */
+  calls: string[];
+  rig: () => Rig;
+}
+
+export interface KitOptions {
+  caps?: Partial<Record<LedgerItemId, number>>;
+  /** Items with no recorded cap (start rule 1). */
+  unrecorded?: LedgerItemId[];
+  /** The scripted reply to a model call; null sends no text. */
+  model?: (c: ModelCall) => string | null;
+  /** The serving provider each OpenRouter model's reply names. */
+  served?: Partial<Record<AnyModel, string>>;
+  vm?: (kit: Kit) => VmProvider;
+  session?: (kit: Kit) => SessionProvider;
+}
+
+/** The fake ledger, model caller, VM world and session box behind one kit; a provider left out stays unbound. */
+export function fakeKit(o: KitOptions = {}): Kit {
+  let r: Rig | null = null;
+  const built: ProviderName[] = [];
+  const calls: string[] = [];
+  const kit: Kit = { built, calls, rig: () => r ?? (r = rig({ caps: o.caps })), providers: { ledger: null, model: null, session: null, vm: null } };
+  kit.providers.ledger = () => {
+    built.push("ledger");
+    const x = kit.rig();
+    const caps = recordedCaps(x.record);
+    return { controller: x.c, recordedCapMicros: (item) => (o.unrecorded?.includes(item) ? null : caps(item)), reconcile: async () => 0, close: async () => x.cleanup() } satisfies LedgerProvider;
+  };
+  if (o.model) {
+    const script = o.model;
+    kit.providers.model = () => {
+      built.push("model");
+      return fakeModels(kit, script, { ...SERVED, ...o.served });
+    };
+  }
+  if (o.vm) {
+    const vm = o.vm;
+    kit.providers.vm = () => {
+      built.push("vm");
+      return vm(kit);
+    };
+  }
+  if (o.session) {
+    const session = o.session;
+    kit.providers.session = () => {
+      built.push("session");
+      return session(kit);
+    };
+  }
+  return kit;
+}
+
+const modelOfId = (id: unknown): AnyModel | null => (Object.entries(DIRECT_MODELS).find(([, m]) => m.id === id)?.[0] as AnyModel | undefined) ?? null;
+
+/** The real metered client on a real proxy per item, its upstream answering each call with the script's text. */
+export function fakeModels(kit: Kit, script: (c: ModelCall) => string | null, served: Partial<Record<AnyModel, string>>): ModelProvider {
+  const r = kit.rig();
+  const pending = new Map<string, Array<string | null>>();
+  const proxies = new Map<LedgerItemId, ProxyRig>();
+  const upstream = (url: string, body: any): Response => {
+    const model = modelOfId(body?.model);
+    const prompt = (body?.messages ?? body?.input)?.[0]?.content;
+    const queue = model && typeof prompt === "string" ? pending.get(model + "\n" + prompt) : undefined;
+    const text = queue?.length ? queue.shift()! : null;
+    if (text === null) return Response.json({ error: { message: "scripted: no reply" } }, { status: 400 });
+    return fakeReply({ text, provider: model ? served[model] : undefined })(url, body);
+  };
+  const inner = meteredModels({
+    controller: r.c,
+    runId: r.c.runId,
+    proxy: (item) => {
+      let p = proxies.get(item);
+      if (!p) proxies.set(item, (p = startProxy(r, item, upstream)));
+      return p.proxy;
+    },
+    figures: (item) => ledgerFigures(r.local, () => r.c.lease(item)?.leaseId ?? null),
+    cacheDir: join(r.dir, "reply-cache"),
+    out: join(r.dir, "meter"),
+    termsDigest: () => FAKE_TERMS_DIGEST,
+    close: async () => {
+      for (const p of proxies.values()) p.stop();
+    },
+  });
+  return {
+    async call(c) {
+      const k = c.model + "\n" + c.prompt;
+      pending.set(k, [...(pending.get(k) ?? []), script(c)]);
+      kit.calls.push(c.model + " " + c.label);
+      return inner.call(c);
+    },
+    close: inner.close,
+  };
+}
+
+/** The candidate id a VM's label names ("recipe session c007", "qualify c007 retry"). */
+const candidateOf = (label: string): string => /c\d{3}/.exec(label)?.[0] ?? "";
+
+/**
+ * A fake VM world: the recipes area's scripted recipe agent and browser, by candidate id, and stage 3's scripted build
+ * agent, reader, authoring and judge, all over one fake Ubicloud backend.
+ */
+export function fakeVm(o: { apps?: (candidate: string) => FixtureApp; stage3?: Stage3Script } = {}): (kit: Kit) => VmProvider {
+  return () => {
+    const s3 = fixtureStage3(o.stage3);
+    const b = s3.select.builds;
+    const appOf = (label: string) => o.apps?.(candidateOf(label)) ?? {};
+    const labelOfVm = (id: string) => s3.world.vms.find((v) => v.id === id)?.spec?.label ?? "";
+    const tries = new Map<string, number>();
+    const judge = s3.deps([]).judge;
+    return {
+      backend: b.sandbox.backend,
+      priceMicrosPerHour: 100_000,
+      now: () => 0,
+      spec: (kind, label) => (kind === "qualify" || kind === "check" ? fakeSpec({ label, proxy: null, mirrors: fakeMirrors() }) : fakeSpec({ label })),
+      browser: fixtureBrowser((vmId) => appOf(labelOfVm(vmId)).app ?? "content"),
+      recipeAgent: async (vm) => {
+        const id = candidateOf(vm.spec.label);
+        const app = appOf(vm.spec.label);
+        const n = (tries.get(id) ?? 0) + 1;
+        tries.set(id, n);
+        const end = app.end === "infra-once" ? (n === 1 ? "infra" : "completed") : (app.end ?? "completed");
+        const text = app.recipe === undefined ? RECIPE() : app.recipe;
+        if (end === "completed" && text !== null) await b.sandbox.backend.write(vm, "/work/recipe.json", text);
+        return { end, spentUsd: app.spentUsd ?? 3 };
+      },
+      buildAgent: b.agent,
+      buildReader: b.reader,
+      stage3Authoring: s3.select.authoring,
+      pairwise: judge,
+    };
+  };
+}
+
+/** power.py's runner in the dry run: it reads the written design and prints the ADMIT and MDD lines power.py prints. */
+export const fakePower =
+  (power: string): PowerRunner =>
+  () => ({ code: 0, stdout: "ADMIT design power " + power + " se 0.007 -> " + (Number(power) >= 0.8 ? "pass" : "fail") + "\nMDD design MDD 0.12\n", stderr: "" });
+
+/** A row environment on a kit: the dry run passes, a clean checkout at a fixed commit, a fixed clock. */
+export function fakeEnv(kit: Kit, o: { dryRun?: boolean; dirty?: boolean; power?: PowerRunner; now?: string } = {}): RowEnv {
+  return {
+    providers: kit.providers,
+    dryRun: async () => o.dryRun ?? true,
+    lane: () => ({ commit: FAKE_COMMIT, dirty: o.dirty ?? false, root: REPO_ROOT }),
+    now: () => new Date(o.now ?? "2026-11-20T00:00:00Z"),
+    power: o.power ?? fakePower("0.850"),
+  };
+}
