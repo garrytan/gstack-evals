@@ -2507,6 +2507,24 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_DCW_OFF_HOST: {
+    exit: 2,
+    meaning: "Design plan review eval (wiring): a paid row passed its start rules on a machine that is not the controller host. The real ledger, model, session and VM providers exist only inside the ledger service's process on the controller host, where money/host-main.ts runs each paid row through wire/host.ts. Nothing was admitted, called or spent.",
+    fix: "Launch the controller host with money/controller-host.ts, naming the row in the plan's stage (wire/host.ts hostStage), then read the host's stage.log. Never run a paid row on a machine that can sleep.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
+  },
+  E_DCW_CONTAINMENT: {
+    exit: 2,
+    meaning: "Design plan review eval (prereg section 4, C2 and C3 before a session): a review session's container failed its container checks, was prepared again from the unit's export into a new session folder, and failed again. The session is held for the Captain and the launch stops; no model call was sent for that session.",
+    fix: "Keep the session folder and the printed problems and bring them to the Captain, who decides whether the unit is held or dropped. Launch again into a new sink only on the Captain's word.",
+    side_effects: PARTIAL,
+    retry_safe: false,
+    resumable: false,
+    owner: "U20",
+  },
 } as const satisfies Record<string, CodeInfo>;
 
 export type ReasonCode = keyof typeof CODES;

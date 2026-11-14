@@ -18,7 +18,7 @@ import { run2x, type X2Outcome } from "../author/x2.ts";
 import { fail } from "../errors.ts";
 import { listFiles, readText } from "../frame/tree.ts";
 import type { AnyModel, AuthorFamily, ChangeKind, ItemClass, LedgerItemId } from "../types.ts";
-import { authorCaller, blockParser, build, spendReader, termsGuard } from "../wire.ts";
+import { authorCaller, blockParser, build, spendReader, termsGuard, type ModelProvider } from "../wire.ts";
 import { readJson, writeJson } from "./json.ts";
 import { closeAll, need, oneOf, start, termsFrom, underStops, type Args, type Io, type RowEnv, type Row } from "./start.ts";
 
@@ -49,7 +49,7 @@ export function appsFrom(a: Args, usage: string): BaseAppView[] {
 }
 
 /** A launch's author deps: the metered caller on the item, the frozen parse, the pinned vocabulary, the authoring date. */
-function deps(env: RowEnv, a: Args, item: LedgerItemId, models: ReturnType<typeof build<"model">>, controller: Parameters<typeof termsGuard>[0], log: (l: string) => void): Deps {
+function deps(env: RowEnv, a: Args, item: LedgerItemId, models: ModelProvider, controller: Parameters<typeof termsGuard>[0], log: (l: string) => void): Deps {
   return { call: authorCaller(models, item, termsGuard(controller, termsFrom(a), log)), parseBlock: blockParser, vocabulary: env.vocabulary(need(a, "--gstack", "... --gstack <gstack checkout at the pin>")), today: env.now().toISOString().slice(0, 10) };
 }
 
@@ -91,7 +91,7 @@ export const gatecheckRow: Row = async (a, io, env) => {
   });
   const launch = await start({ row: "gatecheck", sink, items: ["dc-gate-check"], models: AUTHOR_MODELS, terms: termsFrom(a), record: { planted: units.length } }, env);
   for (const l of launch.lines) io.out(l);
-  const models = build(env.providers, "model", "gatecheck");
+  const models = await build(env.providers, "model", "gatecheck");
   try {
     const d = deps(env, a, "dc-gate-check", models, launch.ledger.controller, io.out);
     const r = await underStops(launch.ledger, {}, () => enforceGateCheck(units, d), () => writeJson(join(launch.sink, "result.json"), { ok: false }));
@@ -133,7 +133,7 @@ export const authorRow: Row = async (a, io: Io, env) => {
   if (step !== "pilot") rules.push(recorded(a.flags.get("--pilot"), "pilot.json", (v) => v?.cost?.stop === false, "7", "authoring past the pilot follows a pilot under $10 a passing unit"));
   const launch = await start({ row: "author " + step, sink, items: [item], models: AUTHOR_MODELS, terms: termsFrom(a), rules, record: { step, item, range } }, env);
   for (const l of launch.lines) io.out(l);
-  const models = build(env.providers, "model", "author");
+  const models = await build(env.providers, "model", "author");
   try {
     const d = deps(env, a, item, models, launch.ledger.controller, io.out);
     const read = spendReader(launch.ledger.controller);

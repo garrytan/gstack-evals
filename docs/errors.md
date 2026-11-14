@@ -305,6 +305,8 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_DCW_NO_PROVIDER](#e_dcw_no_provider) | 2 | U20 |
 | [E_DCW_START_RULE](#e_dcw_start_rule) | 2 | U20 |
 | [E_DCW_LEDGER_REFUSED](#e_dcw_ledger_refused) | 2 | U20 |
+| [E_DCW_OFF_HOST](#e_dcw_off_host) | 2 | U20 |
+| [E_DCW_CONTAINMENT](#e_dcw_containment) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -2181,6 +2183,22 @@ Design plan review eval (prereg section 13 and start rule 1): a paid row's ledge
 Fix: Read the item the message names with gstack-evals dc items and the ledger status. A missing or different cap goes to the Captain; a closed item or a stop lifts only on the Captain's word.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_DCW_OFF_HOST
+
+Design plan review eval (wiring): a paid row passed its start rules on a machine that is not the controller host. The real ledger, model, session and VM providers exist only inside the ledger service's process on the controller host, where money/host-main.ts runs each paid row through wire/host.ts. Nothing was admitted, called or spent.
+
+Fix: Launch the controller host with money/controller-host.ts, naming the row in the plan's stage (wire/host.ts hostStage), then read the host's stage.log. Never run a paid row on a machine that can sleep.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_DCW_CONTAINMENT
+
+Design plan review eval (prereg section 4, C2 and C3 before a session): a review session's container failed its container checks, was prepared again from the unit's export into a new session folder, and failed again. The session is held for the Captain and the launch stops; no model call was sent for that session.
+
+Fix: Keep the session folder and the printed problems and bring them to the Captain, who decides whether the unit is held or dropped. Launch again into a new sink only on the Captain's word.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
 
 ## Exit 3: calibration failed (INCOMPLETE)
 

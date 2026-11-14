@@ -123,7 +123,7 @@ export async function start(plan: StartPlan, env: RowEnv): Promise<Launch> {
     if (t!.dataCollection !== "deny" || !t!.provider || !Number.isFinite(Date.parse(t!.dated)) || !/^[0-9a-f]{64}$/.test(t!.termsDigest)) refuse("9", m + "'s terms record needs a provider, a date, data collection denied and a sha256 of the terms");
   }
   if (!(await env.dryRun())) refuse("5", "the keyless dry run has a FAIL line; gstack-evals dc dryrun names it");
-  const ledger = build(env.providers, "ledger", plan.row);
+  const ledger = await build(env.providers, "ledger", plan.row);
   const lines = await admitItems(ledger, plan.items, plan.scope);
   mkdirSync(sink, { recursive: true });
   writeJson(sink + "/launch.json", { row: plan.row, commit: lane.commit, at: env.now().toISOString(), sink, items: plan.items, models: plan.models, terms: plan.terms.map((t) => ({ model: t.model, dated: t.dated, provider: t.provider })), ...plan.record });

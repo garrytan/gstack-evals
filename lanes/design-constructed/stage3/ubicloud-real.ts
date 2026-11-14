@@ -143,13 +143,15 @@ export interface RealUbicloudOptions {
   privateSubnet?: string;
   /** Where the token is read by name: the paid launcher's own process environment. */
   env?: Readonly<Record<string, string | undefined>>;
+  /** Ubicloud's API; the real fetch when unset. */
+  fetch?: typeof fetch;
 }
 
 /** The backend on Ubicloud's API with the real fetch, sleep and clock. The token is read by name and never logged. */
 export function realUbicloud(o: RealUbicloudOptions): UbicloudBackend {
   const token = (o.env ?? process.env).UBICLOUD_API_KEY ?? "";
   if (!token) fail("E_USAGE", "UBICLOUD_API_KEY is not set for the paid launcher");
-  return new UbicloudBackend({ project: o.project, location: o.location, token, size: o.size, image: o.image, publicKey: o.publicKey, fetch: globalThis.fetch.bind(globalThis), ssh: o.ssh, sleep: (ms) => Bun.sleep(ms), now: () => Date.now(), privateSubnet: o.privateSubnet });
+  return new UbicloudBackend({ project: o.project, location: o.location, token, size: o.size, image: o.image, publicKey: o.publicKey, fetch: o.fetch ?? globalThis.fetch.bind(globalThis), ssh: o.ssh, sleep: (ms) => Bun.sleep(ms), now: () => Date.now(), privateSubnet: o.privateSubnet });
 }
 
 /**
@@ -157,14 +159,14 @@ export function realUbicloud(o: RealUbicloudOptions): UbicloudBackend {
  * runner on it and Ubicloud with the token read by name. The launcher's key reaches the host VMs; the controller
  * host's own key reaches the sandboxes it creates.
  */
-export async function keyedUbicloud(o: Omit<RealUbicloudOptions, "ssh" | "publicKey"> & { keyPath: string; knownHosts: string; runUser?: string }): Promise<UbicloudBackend> {
+export async function keyedUbicloud(o: Omit<RealUbicloudOptions, "ssh" | "publicKey"> & { keyPath: string; knownHosts: string; runUser?: string; ssh?: SshRunner }): Promise<UbicloudBackend> {
   if (!existsSync(o.keyPath)) {
     mkdirSync(dirname(o.keyPath), { recursive: true, mode: 0o700 });
     const r = await runProcess(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", "dc-launch", "-f", o.keyPath]);
     if (r.exit !== 0) fail("E_DC_INFRA_MISSING", "could not make the launch's SSH key");
   }
   const publicKey = readFileSync(o.keyPath + ".pub", "utf8").trim();
-  return realUbicloud({ ...o, publicKey, ssh: sshRunner({ keyPath: o.keyPath, knownHosts: o.knownHosts, runUser: o.runUser }) });
+  return realUbicloud({ ...o, publicKey, ssh: o.ssh ?? sshRunner({ keyPath: o.keyPath, knownHosts: o.knownHosts, runUser: o.runUser }) });
 }
 
 /** BT: each named mirror's port on the controller host's private IPv4. */

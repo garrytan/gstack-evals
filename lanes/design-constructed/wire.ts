@@ -3,9 +3,9 @@
 // needs from outside the lane's own code: the ledger and its controller (money/), the model caller (money/meter.ts's
 // metered client), the review session box (a container's RunBox, its shell and its driver run) and the VM world
 // (Ubicloud, the controller's browser and the in-VM agents). Each is a factory, so nothing is built before a row's start
-// rules and its ledger admission pass (wire/start.ts). The real providers plug into these interfaces; until they land,
-// the lane binds none, and every paid row refuses with E_DCW_NO_PROVIDER after its checks. The dry run binds the keyless
-// fakes in wire/fakes.ts.
+// rules and its ledger admission pass (wire/start.ts). The real providers (wire/real.ts) exist only on the controller
+// host, inside the ledger service's process, where wire/host.ts runs each paid row; anywhere else every factory refuses
+// with E_DCW_OFF_HOST after the row's checks. The dry run binds the keyless fakes in wire/fakes.ts.
 import { ledgerStatus } from "../../src/runner/ledger/ledger.ts";
 import type { Termination } from "../../src/types.ts";
 import type { BlockParser, Caller, SpendReader } from "./author/seams.ts";
@@ -26,6 +26,7 @@ import type { JudgeCaller } from "./score/seams.ts";
 import type { VmBackend, VmSpec } from "./stage3/sandbox.ts";
 import type { Admission, BuildAgent, BuildReader, HostsSeam, MoneySeam, PairwiseJudge, Stage3Authoring } from "./stage3/seams.ts";
 import type { AnyModel, LedgerItemId, ListSource, Model } from "./types.ts";
+import { meterModels, realProviders, type HostContext } from "./wire/real.ts";
 
 // ---- The four providers
 
@@ -72,8 +73,8 @@ export interface LedgerProvider {
   controller: MoneyController;
   /** The cap the Captain recorded for the item in the approval record, in micros, or null when none is recorded. */
   recordedCapMicros(item: LedgerItemId): number | null;
-  /** J1: the provider figure for an unknown sub-reservation, from the proxy journal and the session log, in micros. */
-  reconcile(subId: string): Promise<number>;
+  /** J1: the provider figure for an unknown sub-reservation, in micros, or null when it stays held until the owner's reconcile (PD-18). */
+  reconcile(subId: string): Promise<number | null>;
   close?(): Promise<void>;
 }
 
@@ -90,6 +91,8 @@ export interface SessionDrive {
   spentUsd: number | null;
   /** The first served terms when the model runs through OpenRouter, else null. */
   served: ServedTerms | null;
+  /** The review image's digest the session ran on, or null when no image ran it. */
+  imageDigest: string | null;
 }
 
 /** One review container for one attempt: its run directory reads, its shell, and the driver run. */
@@ -130,15 +133,18 @@ export interface VmProvider {
   close?(): Promise<void>;
 }
 
+type Factory<T> = () => T | Promise<T>;
+
 /** The provider factories a row may build once its checks pass. Null is a provider not bound in this build. */
 export interface Providers {
-  ledger: (() => LedgerProvider) | null;
-  model: (() => ModelProvider) | null;
-  session: (() => SessionProvider) | null;
-  vm: (() => VmProvider) | null;
+  ledger: Factory<LedgerProvider> | null;
+  model: Factory<ModelProvider> | null;
+  session: Factory<SessionProvider> | null;
+  vm: Factory<VmProvider> | null;
 }
 
 export type ProviderName = keyof Providers;
+type Built<K extends ProviderName> = Awaited<ReturnType<NonNullable<Providers[K]>>>;
 
 /** The Captain's recorded cap per item, read from main's approval record (start rule 1). */
 export const recordedCaps =
@@ -146,14 +152,22 @@ export const recordedCaps =
   (item: LedgerItemId): number | null =>
     ledgerStatus(record, item)[0]?.cap_micros ?? null;
 
-/** The real providers are built by other units; until they land, this build binds none. */
-export const BOUND_PROVIDERS: Providers = { ledger: null, model: null, session: null, vm: null };
+const offHost = (name: ProviderName) => (): never => {
+  throw new DcError("E_DCW_OFF_HOST", "the " + name + " provider exists only on the controller host, where money/host-main.ts runs each paid row through wire/host.ts; this machine holds no ledger service, so nothing was admitted or called");
+};
+
+/**
+ * The providers a row builds: the real ones on the controller host (wire/real.ts, on the ledger service the host runs),
+ * and off it factories that refuse. Calling this builds nothing; each factory runs only when a row calls build().
+ */
+export const BOUND_PROVIDERS = (host: HostContext | null): Providers =>
+  host ? realProviders(host) : { ledger: offHost("ledger"), model: offHost("model"), session: offHost("session"), vm: offHost("vm") };
 
 /** Builds one named provider, or refuses with E_DCW_NO_PROVIDER. Each row builds only what it uses, after its checks. */
-export function build<K extends ProviderName>(p: Providers, name: K, row: string): ReturnType<NonNullable<Providers[K]>> {
+export async function build<K extends ProviderName>(p: Providers, name: K, row: string): Promise<Built<K>> {
   const f = p[name];
   if (!f) throw new DcError("E_DCW_NO_PROVIDER", row + " needs the " + name + " provider, and this build binds none; nothing was called");
-  return f() as ReturnType<NonNullable<Providers[K]>>;
+  return (await f()) as Built<K>;
 }
 
 // ---- Seams other areas take from the score and frame areas
@@ -249,17 +263,7 @@ export function meteredModels(o: {
     if (!m) meters.set(item, (m = openMeter({ controller: o.controller, item, runId: o.runId, proxy: () => o.proxy(item), figures: o.figures(item), cacheDir: o.cacheDir, out: o.out, datedTerms: o.datedTerms, fetch: o.fetch })));
     return m;
   };
-  return {
-    async call(c) {
-      const meter = meterOf(c.item);
-      const r = await meter.call({ model: c.model, prompt: c.prompt, maxTokens: c.maxTokens, effort: c.effort, label: c.label, subject: c.subject, tag: c.tag });
-      const id = DIRECT_MODELS[c.model];
-      const routing = meter.terms().find((t) => t.model === c.model)?.routing as { allow_fallbacks?: boolean; data_collection?: string } | null | undefined;
-      const served = id.provider === "openrouter" && r.servedBy ? { provider: r.servedBy, fallbacks: routing?.allow_fallbacks !== false, dataCollection: routing?.data_collection ?? "allow", termsDigest: o.termsDigest(c.model, r.servedBy) } : null;
-      return { text: r.text, modelId: id.id, version: null, problem: r.problem, served };
-    },
-    close: o.close,
-  };
+  return meterModels(meterOf, o.termsDigest, o.close);
 }
 
 // ---- Money seams for the recipe screen and stage 3
@@ -288,7 +292,9 @@ export function moneySeam(l: LedgerProvider): MoneySeam {
       else await c.settle(id, { spentMicros: $(spentUsd) });
     },
     async reconcile(id) {
-      if (c.sub(id)?.state === "unknown") await c.reconcile(id, await l.reconcile(id));
+      if (c.sub(id)?.state !== "unknown") return;
+      const figure = await l.reconcile(id);
+      if (figure !== null) await c.reconcile(id, figure);
     },
     async capStop(item, why) {
       if (!c.figures(item).closed) await c.capStop(item, why);

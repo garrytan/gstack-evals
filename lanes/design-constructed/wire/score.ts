@@ -48,7 +48,7 @@ export const probeRow: Row = async (a, io, env) => {
   const terms = termsFrom(a);
   const launch = await start({ row: "probe", sink, items: ["dc-judges"], models: JUDGES, terms, record: { routes: ROUTES.length } }, env);
   for (const l of launch.lines) io.out(l);
-  const models = build(env.providers, "model", "probe");
+  const models = await build(env.providers, "model", "probe");
   try {
     const r = await liveProbe(judgeCaller(models, "dc-judges", termsGuard(launch.ledger.controller, terms, io.out)));
     for (const x of r) io.out("probe " + x.route + ": " + (x.ok ? "ok" : "FAILED (" + x.problem + ")"));
@@ -98,7 +98,7 @@ export const labelsRow: Row = async (a, io, env) => {
   const launch = await start({ row: "labels", sink, items: ["dc-judges"], models: JUDGES, terms, record: { pass, read, stage, shuffled: partners !== null } }, env);
   for (const l of launch.lines) io.out(l);
   for (const f of ["units.json", "rows.json"]) copyFileSync(join(dir, f), join(launch.sink, f));
-  const models = build(env.providers, "model", "labels");
+  const models = await build(env.providers, "model", "labels");
   const c = launch.ledger.controller;
   const guard = termsGuard(c, terms, io.out);
   const caller = judgeCaller(models, "dc-judges", guard);

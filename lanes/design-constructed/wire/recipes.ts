@@ -51,7 +51,7 @@ export const recipesRow: Row = async (a, io, env) => {
   const { candidates, counts } = finished ? candidatesFromFrame(frame) : { candidates: [], counts: { cloneAttempts: 0, clones: 0, fileCheckPasses: 0 } };
   const launch = await start({ row: "recipes", sink, items: ["dc-base-apps", "dc-hosts"], models: ["opus"], terms: [], rules: [() => (finished ? null : ["7", "--frame holds no finished frame run (run.json); the base-app screen follows the frame and the file check"])], record: { candidates: candidates.length } }, env);
   for (const l of launch.lines) io.out(l);
-  const vm = build(env.providers, "vm", "recipes");
+  const vm = await build(env.providers, "vm", "recipes");
   try {
     const screen = await underStops(launch.ledger, { inRecipeVm: true }, () =>
       runScreen(candidates, {

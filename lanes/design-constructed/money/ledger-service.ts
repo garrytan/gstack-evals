@@ -118,7 +118,7 @@ export class LedgerService {
     readonly target: ServiceTarget,
     readonly controller: MoneyController,
     readonly wal: WriteAhead,
-    readonly local: LedgerLike,
+    readonly local: LocalLedger,
     readonly boot: Boot,
     readonly recovered: { held: number; uncertainMicros: number },
     private readonly now: () => Date,
@@ -279,8 +279,6 @@ export class LedgerService {
     this.local.close();
   }
 }
-
-type LedgerLike = { close(): void };
 
 export type Opened = { ok: true; service: LedgerService } | { ok: false; captain: string };
 

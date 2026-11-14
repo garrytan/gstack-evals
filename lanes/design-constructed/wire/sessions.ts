@@ -87,7 +87,7 @@ export const sessionsRow: Row = async (a, io, env) => {
     writeJson(join(launch.sink, "rule8.json"), { ...rule8, line: rule8Line });
   }
   mkdirSync(join(launch.sink, "transcripts"));
-  const sessions = build(env.providers, "session", "sessions");
+  const sessions = await build(env.providers, "session", "sessions");
   const c = launch.ledger.controller;
   const guard = termsGuard(c, terms, io.out);
   const parse = parseBlockFor("none");
@@ -164,7 +164,7 @@ export const sessionsRow: Row = async (a, io, env) => {
           judged: false,
           autoplan: cell.kind === "autoplan" ? { gateAnswered: (exposure as AutoplanReading).gateRec, approved: (exposure as AutoplanReading).approved } : null,
         };
-        attempts.push({ cell: id, attempt, end: rec.end, exposure, repairBlocks: d1?.blocks() ?? 0, gateAnswers: gate?.answered().length ?? 0, spentUsd: d.spentUsd });
+        attempts.push({ cell: id, attempt, end: rec.end, exposure, repairBlocks: d1?.blocks() ?? 0, gateAnswers: gate?.answered().length ?? 0, spentUsd: d.spentUsd, imageDigest: d.imageDigest });
         return rec;
       } finally {
         await sb.close();
@@ -179,7 +179,10 @@ export const sessionsRow: Row = async (a, io, env) => {
     const sub = c.sub(adm.sub.id)!;
     const spent = $(r.spentUsd);
     await c.settle(sub.id, r.unknown ? { spentMicros: spent, unknownMicros: Math.max(0, sub.reserveMicros - spent) } : { spentMicros: spent });
-    if (r.unknown) await c.reconcile(sub.id, await launch.ledger.reconcile(sub.id));
+    if (!r.unknown) return;
+    const figure = await launch.ledger.reconcile(sub.id);
+    if (figure !== null) await c.reconcile(sub.id, figure);
+    else io.out("held " + r.run + ": an unknown charge stays in flight until the owner's reconcile (PD-18)");
   };
 
   try {

@@ -1,20 +1,24 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // gstack-evals dc: the design plan review eval on constructed units (prereg 2026-11-14). Every error line on stderr
 // starts with its reason code. Keyless rows run for real; paid rows check their start rules and the ledger admission,
-// then build their providers (wire.ts), and refuse with E_DCW_NO_PROVIDER while a provider is not bound.
+// then build their providers (wire.ts). The real providers exist only on the controller host, where wire/host.ts runs
+// each paid row inside the ledger service; anywhere else a paid row refuses with E_DCW_OFF_HOST after its checks.
 import { CODES, docAnchor, type ReasonCode } from "../../src/errors/codes.ts";
 import { AREAS, dryRun, type Area } from "./dryrun.ts";
 import { DcError, fail } from "./errors.ts";
 import { filecheckCommand, frameCommand } from "./frame/command.ts";
 import { loadVocabulary } from "./author/screen.ts";
 import { realSeams } from "./frame/run.ts";
+import { pinsCommand } from "./paid/cli.ts";
 import { uvPowerRunner } from "./read/seams.ts";
 import { BOUND_PROVIDERS } from "./wire.ts";
 import { itemsRow, powerRow, readRow, scopeRow, scoreRow } from "./wire/keyless.ts";
 import { recipesRow } from "./wire/recipes.ts";
 import { authorRow, gatecheckRow } from "./wire/author.ts";
 import { labelsRow, probeRow } from "./wire/score.ts";
+import type { HostContext } from "./wire/real.ts";
 import { sessionsRow } from "./wire/sessions.ts";
+import { stage3Row } from "./wire/stage3.ts";
 import type { Row, RowEnv } from "./wire/start.ts";
 
 export interface Io {
@@ -25,11 +29,11 @@ export interface Io {
 type Args = { flags: Map<string, string>; bools: Set<string>; rest: string[] };
 type Run = Row;
 
-/** The real environment: the bound providers (none yet), the whole keyless dry run, the lane's checkout, uv's power.py. */
-export const realEnv = (): RowEnv => ({
-  providers: BOUND_PROVIDERS,
+/** The real environment: the providers bound for where it runs, the whole keyless dry run, the lane's checkout, uv's power.py. */
+export const realEnv = (host: HostContext | null = null): RowEnv => ({
+  providers: BOUND_PROVIDERS(host),
   dryRun: async () => (await dryRun()).ok,
-  lane: realSeams().lane,
+  lane: host ? host.lane : realSeams().lane,
   now: () => new Date(),
   power: uvPowerRunner,
   vocabulary: loadVocabulary,
@@ -51,8 +55,6 @@ function parse(argv: string[], bools: string[]): Args {
   }
   return { flags, bools: on, rest };
 }
-
-const notBuilt = (area: Area): Run => () => fail("E_USAGE", "not built yet (the " + area + " area owns it)");
 
 const dryrun: Run = async (a, io) => {
   const only = a.flags.get("--area");
@@ -76,13 +78,14 @@ export const SUBCOMMANDS: Record<string, { area: Area | "lane"; run: Run; bools:
   read: { area: "read", run: readRow, bools: [], usage: "--stage 1|2 --in <read input JSON>", summary: "the twin check, the tier chain, the smoke rules, contrasts and verdicts" },
   power: { area: "read", run: powerRow, bools: [], usage: "--design <design.json> --out <new folder>", summary: "the admission read on design.json through power.py" },
   items: { area: "money", run: itemsRow, bools: [], usage: "", summary: "the 17 ledger items, their caps and admission rules" },
-  stage3: { area: "stage3", run: notBuilt("stage3"), bools: [], usage: "", summary: "stage 3 authoring, oracle builds, builds and measures (paid: dc-stage3-*)" },
+  stage3: { area: "stage3", run: stage3Row, bools: [], usage: "--candidates <stage3.json> --exports <folder> --rows <stage 2 rows.json> --terms <file> --out <new sink>", summary: "stage 3 authoring, oracle builds, builds and measures (paid: dc-stage3-*, dc-hosts)" },
+  pins: { area: "paid", run: (a, io) => pinsCommand(a, io), bools: [], usage: "plan --dir <new dir> | record --dir <dir> --run <id> --commit <sha> [--dated <iso>] --out <file>", summary: "the keyless probe plan and the run's model pin record (start rule 9)" },
   dryrun: { area: "lane", run: dryrun, bools: [], usage: "[--area " + AREAS.join("|") + "]", summary: "the keyless dry run: one PASS or FAIL line per case" },
 };
 
 const lines = (code: ReasonCode, message: string) => [message, "fix: " + CODES[code].fix, "docs: " + docAnchor(code)].flatMap((t) => t.split(/\r\n|\r|\n/)).map((l) => code + " " + l).join("\n");
 
-export async function main(argv: string[], io: Io = { out: (t) => console.log(t), err: (t) => console.error(t) }, env: () => RowEnv = realEnv): Promise<number> {
+export async function main(argv: string[], io: Io = { out: (t) => console.log(t), err: (t) => console.error(t) }, env: () => RowEnv = () => realEnv()): Promise<number> {
   const [sub, ...rest] = argv;
   if (!sub || sub === "--help" || sub === "-h") {
     io.out(["gstack-evals dc <command>", "", ...Object.entries(SUBCOMMANDS).map(([k, v]) => "  " + k.padEnd(10) + v.summary + (v.usage ? "\n" + " ".repeat(12) + v.usage : ""))].join("\n"));
