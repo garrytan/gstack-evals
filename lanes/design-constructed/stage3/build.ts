@@ -85,7 +85,7 @@ async function attempt(input: BuildInput, d: BuildDeps, label: string): Promise<
     must(await b.exec(vm, "tar -C " + REPO + " -cf " + OUT_TAR + " .", { user: "root" }), "packing the tree");
     return b.read(vm, OUT_TAR);
   });
-  d.tally?.push({ label, blocked: run.blocked, icmp: run.icmp });
+  d.tally?.push({ label, blocked: run.blocked, portless: run.portless });
   if (!run.audit.ok) auditStop(label, run.audit);
   return { agent: seen.agent, tree: run.value, error: run.error };
 }
@@ -148,7 +148,7 @@ async function checkOnce(tree: Uint8Array, recipe: Recipe, ctx: ReadsContext, d:
     if (st.exit !== 0 || !servesEvery(st.stdout, ctx.routes)) return { serves: false, failedStep: "routes", reads: null };
     return { serves: true, failedStep: null, reads: await d.reader(vm, ctx) };
   });
-  d.tally?.push({ label, blocked: run.blocked, icmp: run.icmp });
+  d.tally?.push({ label, blocked: run.blocked, portless: run.portless });
   if (!run.audit.ok) auditStop(label, run.audit);
   return run;
 }

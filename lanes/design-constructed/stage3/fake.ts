@@ -111,7 +111,7 @@ export function rulesetText(spec: VmSpec): string {
   ].join("\n");
 }
 
-const netLine = (prefix: string, c: Connection) => prefix + "IN= OUT=ens3 SRC=10.1.0.9 DST=" + c.host + (c.port === 0 ? " LEN=84 PROTO=ICMP TYPE=8 CODE=0 ID=1 SEQ=1" : " LEN=60 PROTO=TCP SPT=40100 DPT=" + c.port + " SYN");
+const netLine = (prefix: string, c: Connection) => prefix + "IN= OUT=ens3 SRC=10.1.0.9 DST=" + c.host + (c.port === 0 ? (c.proto === "2" ? " LEN=40 TOS=0x00 PREC=0xC0 TTL=1 ID=0 DF PROTO=2" : " LEN=84 PROTO=" + (c.proto ?? "ICMP") + " TYPE=8 CODE=0 ID=1 SEQ=1") : " LEN=60 PROTO=TCP SPT=40100 DPT=" + c.port + " SYN");
 
 /** The listing nft gives for the chain a fake VM holds: lo quoted, priority 0 named filter, rules in their order. */
 const nftListing = (n: FakeVm["nft"]): string =>
@@ -205,6 +205,7 @@ function dockerAnswer(vm: FakeVm, command: string): ExecResult | undefined {
   if (/\bsystemctl (restart|start|enable --now) docker\b/.test(command) && !vm.docker) return { exit: 5, stdout: "", stderr: "Failed to start docker.service: Unit docker.service not found." };
   if (command.includes("apt-get install") && / docker\.io\b/.test(command)) {
     vm.docker = true;
+    vm.blocked.push({ host: "224.0.0.22", port: 0, proto: "2" });
     vm.files.set("/usr/bin/dockerd", enc.encode("fake dockerd"));
     vm.installed.push("/usr/bin/dockerd");
     vm.written.push({ path: "/usr/bin/dockerd", size: 12, mode: 0o755, mtime: "2026-11-14T00:00:00", type: "f" });

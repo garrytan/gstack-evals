@@ -292,6 +292,8 @@ export function preamble(spec: VmSpec): string[] {
 export interface Connection {
   host: string;
   port: number;
+  /** A portless drop's protocol as the kernel wrote it (ICMP, ICMPv6, 2 for IGMP); unset on a line with a port. */
+  proto?: string;
 }
 
 export interface ProcessRow {
@@ -383,13 +385,13 @@ export function parseProcesses(text: string): ProcessRow[] | null {
   return rows;
 }
 
-/** A dropped ICMP or ICMPv6 packet's filter line: it has a destination and no port. */
-const ICMP_DROP = /DST=(\S+) .*\bPROTO=ICMP(?:v6)? /;
+/** A dropped packet's filter line with a destination and no port, of any protocol. */
+const PORTLESS_DROP = /DST=(\S+)/;
 
 /**
- * Reads the kernel log's filter lines. A dropped ICMP or ICMPv6 packet counts as blocked, at port 0. Null when either
- * marker is missing, or a filter line has no destination port and is not a dropped ICMP packet: the log was cut or never
- * collected.
+ * Reads the kernel log's filter lines. A dropped line with a destination and no port, whatever its protocol, counts as
+ * blocked at port 0 with its protocol: the packet never left. Null when either marker is missing, an accepted line has
+ * no port, or a filter line has no destination: the log was cut or never collected.
  */
 export function parseEgress(text: string): { egress: Connection[]; blocked: Connection[] } | null {
   const lines = text.split("\n");
@@ -400,10 +402,10 @@ export function parseEgress(text: string): { egress: Connection[]; blocked: Conn
   const blocked: Connection[] = [];
   for (const l of lines.slice(start + 1, end)) {
     const m = /DST=(\S+).*?DPT=(\d+)/.exec(l);
-    const icmp = !m && l.includes(DROP_PREFIX) ? ICMP_DROP.exec(l) : null;
+    const portless = !m && l.includes(DROP_PREFIX) ? PORTLESS_DROP.exec(l) : null;
     if (l.includes(NET_PREFIX) && m) egress.push({ host: m[1]!, port: Number(m[2]) });
     else if (l.includes(DROP_PREFIX) && m) blocked.push({ host: m[1]!, port: Number(m[2]) });
-    else if (icmp) blocked.push({ host: icmp[1]!, port: 0 });
+    else if (portless) blocked.push({ host: portless[1]!, port: 0, proto: /PROTO=(\S+)/.exec(l)?.[1] ?? "unknown" });
     else if (l.includes(NET_PREFIX) || l.includes(DROP_PREFIX)) return null;
   }
   return { egress, blocked };
@@ -411,7 +413,8 @@ export function parseEgress(text: string): { egress: Connection[]; blocked: Conn
 
 /**
  * Why parseEgress could not read the log, for the audit's uncollected reason only: the start marker is missing, the end
- * marker is missing, or a filter line holds no DST and DPT pair (the first such line is quoted, cut to 200 characters).
+ * marker is missing, or an accepted line holds no port or a filter line no destination (the first such line is quoted,
+ * cut to 200 characters).
  */
 export function egressCutWhy(text: string): string {
   const lines = text.split("\n");
@@ -419,7 +422,7 @@ export function egressCutWhy(text: string): string {
   if (start < 0) return "the start marker is missing";
   const end = lines.findIndex((l, i) => i > start && l.includes(END_MARK));
   if (end < 0) return "the end marker is missing";
-  const line = lines.slice(start + 1, end).find((l) => (l.includes(NET_PREFIX) || l.includes(DROP_PREFIX)) && !/DST=(\S+).*?DPT=(\d+)/.test(l) && !(l.includes(DROP_PREFIX) && ICMP_DROP.test(l))) ?? "";
+  const line = lines.slice(start + 1, end).find((l) => (l.includes(NET_PREFIX) || l.includes(DROP_PREFIX)) && !/DST=(\S+).*?DPT=(\d+)/.test(l) && !(l.includes(DROP_PREFIX) && PORTLESS_DROP.test(l))) ?? "";
   return "a filter line holds no DST and DPT pair: " + line.slice(0, 200);
 }
 
@@ -553,18 +556,31 @@ export async function audit(backend: VmBackend, vm: Vm, o: { scanExtra?: readonl
 export interface SandboxTally {
   label: string;
   blocked: number;
-  /** Of blocked, the dropped ICMP and ICMPv6 packets (port 0), printed descriptively. */
-  icmp: number;
+  /** Of blocked, the portless drops by protocol (ICMP, ICMPv6, IGMP and any other), printed descriptively. */
+  portless: Record<string, number>;
 }
 
-export const sandboxLine = (t: SandboxTally) => "sandbox " + t.label + ": " + t.blocked + " blocked connection" + (t.blocked === 1 ? "" : "s") + " (" + t.icmp + " ICMP or ICMPv6)";
+/** The kernel writes IGMP's protocol as its number. */
+const PROTO_NAMES: Readonly<Record<string, string>> = { "2": "IGMP" };
+
+/** The portless drops in a blocked list, counted by protocol name. */
+export function portlessByProto(blocked: readonly Connection[] | undefined): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const c of blocked ?? []) if (c.port === 0) out[PROTO_NAMES[c.proto ?? ""] ?? c.proto ?? "unknown"] = (out[PROTO_NAMES[c.proto ?? ""] ?? c.proto ?? "unknown"] ?? 0) + 1;
+  return out;
+}
+
+export const sandboxLine = (t: SandboxTally) => {
+  const p = Object.entries(t.portless).sort(([a], [b]) => a.localeCompare(b));
+  return "sandbox " + t.label + ": " + t.blocked + " blocked connection" + (t.blocked === 1 ? "" : "s") + " (portless by protocol: " + (p.length ? p.map(([k, n]) => k + " " + n).join(", ") : "none") + ")";
+};
 
 export interface SandboxRun<T> {
   value: T | null;
   /** New connections the egress filter dropped in this VM, from the audit's log (0 when the log was never read). */
   blocked: number;
-  /** Of blocked, the dropped ICMP and ICMPv6 packets, which parseEgress reads at port 0. */
-  icmp: number;
+  /** Of blocked, the portless drops by protocol, which parseEgress reads at port 0. */
+  portless: Record<string, number>;
   /** A preamble step or the job failed before it returned: a failure outside the agent. */
   error: string | null;
   audit: AuditResult;
@@ -600,7 +616,7 @@ export async function sandboxed<T>(d: SandboxDeps, spec: VmSpec, job: (vm: Vm) =
     vm = await d.backend.create(spec);
   } catch (e) {
     await d.hosts.settle(lease.id, (d.now() - started) / 3_600_000);
-    return { value: null, blocked: 0, icmp: 0, error: "the VM did not start: " + (e as Error).message, audit: { ok: false, kind: "uncollected", reasons: ["no VM"], evidence: {} }, destroyError: null };
+    return { value: null, blocked: 0, portless: {}, error: "the VM did not start: " + (e as Error).message, audit: { ok: false, kind: "uncollected", reasons: ["no VM"], evidence: {} }, destroyError: null };
   }
   let value: T | null = null;
   let error: string | null = null;
@@ -648,7 +664,7 @@ export async function sandboxed<T>(d: SandboxDeps, spec: VmSpec, job: (vm: Vm) =
     await d.hosts.settle(lease.id, (d.now() - started) / 3_600_000);
   }
   if (rethrow && result.ok) throw rethrow;
-  return { value, blocked: result.evidence.blocked?.length ?? 0, icmp: result.evidence.blocked?.filter((c) => c.port === 0).length ?? 0, error, audit: result, destroyError };
+  return { value, blocked: result.evidence.blocked?.length ?? 0, portless: portlessByProto(result.evidence.blocked), error, audit: result, destroyError };
 }
 
 /** The Ubicloud API's CLI endpoint; ubi-runner.sh drives VMs through it too. */

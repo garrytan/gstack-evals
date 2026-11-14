@@ -41,7 +41,7 @@ const passed = [
   "qualify serve: ok",
   "page / at 375x812 in the pinned Chromium: HTTP 200",
   "audit: ok",
-  "egress: 1 accepted (1 to a mirror endpoint), 0 blocked",
+  "egress: 1 accepted (1 to a mirror endpoint), 1 blocked",
   "vm: <vm> deleted, 1.0 measured minutes",
 ];
 
@@ -73,7 +73,7 @@ describe("the no-model preflight", () => {
   test("a clean audit with no accepted connection fails the preflight", async () => {
     const w = fakeWorld({ plant: (vm) => void (vm.egress = []), ssh: async (_vm, command) => (command.includes("grep -c DCNET") ? { exit: 0, stdout: "2\n", stderr: "" } : undefined) });
     const r = await preflight({ world: w });
-    expect(r.lines.slice(-3)).toEqual(["audit: ok", "egress: 0 accepted (0 to a mirror endpoint), 0 blocked", "vm: <vm> deleted, 1.0 measured minutes"]);
+    expect(r.lines.slice(-3)).toEqual(["audit: ok", "egress: 0 accepted (0 to a mirror endpoint), 1 blocked", "vm: <vm> deleted, 1.0 measured minutes"]);
     expect(r.problems).toEqual(["the audit saw no accepted DCNET connection to a mirror endpoint"]);
   });
   test("a failed install step fails the preflight: the controller's apt step before the job, or qualification's pnpm install inside it", async () => {
@@ -81,7 +81,7 @@ describe("the no-model preflight", () => {
     expect(apt.lines.slice(0, 3)).toEqual(["preamble: ok", "install: the controller's install failed: the controller's install on <vm> failed at the apt packages (exit 1): fake preamble failure", "audit: ok"]);
     expect(apt.problems).toEqual(["the install failed"]);
     const pnpm = await preflight({ world: fakeWorld({ handler: (_vm, command) => (command.includes("pnpm install") ? { exit: 1, stderr: "ERR_PNPM_FETCH_404 escape-html" } : undefined) }) });
-    expect(pnpm.lines.slice(5, 8)).toEqual(["qualify install: failed (exit 1): ERR_PNPM_FETCH_404 escape-html", "audit: ok", "egress: 1 accepted (1 to a mirror endpoint), 0 blocked"]);
+    expect(pnpm.lines.slice(5, 8)).toEqual(["qualify install: failed (exit 1): ERR_PNPM_FETCH_404 escape-html", "audit: ok", "egress: 1 accepted (1 to a mirror endpoint), 1 blocked"]);
     expect(pnpm.problems).toEqual(["qualify install: failed (exit 1): ERR_PNPM_FETCH_404 escape-html"]);
     expect([apt.w.deleted.length, pnpm.w.deleted.length]).toEqual([1, 1]);
   });
