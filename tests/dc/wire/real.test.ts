@@ -342,13 +342,14 @@ describe("the real providers", () => {
 
   /** Ubicloud's API and SSH for the VM tests: every VM runs at once, each write kept by path, the manifest empty. */
   const fakeUbicloud = (o: { files?: Map<string, Uint8Array>; agent?: NonNullable<RealSeams["ubicloud"]>["agent"] } = {}) => {
-    const calls: Array<{ method: string; url: string; auth: string; body: any }> = [];
+    const calls: Array<{ url: string; auth: string; argv: string[] }> = [];
     const ssh: Array<{ host: string; command: string }> = [];
     const files = o.files ?? new Map<string, Uint8Array>();
-    const fetch = (async (url: string, init: { method: string; headers: Record<string, string>; body?: string }) => {
-      calls.push({ method: init.method, url, auth: init.headers.authorization ?? "", body: init.body ? JSON.parse(init.body) : null });
-      if (init.method === "GET") return Response.json({ state: "running", ip4: "203.0.113.7", private_ipv4: "10.0.0.9/32" });
-      return init.method === "POST" ? Response.json({}) : new Response(null, { status: 204 });
+    const fetch = (async (url: string, init: { headers: Record<string, string>; body?: string }) => {
+      const argv = (JSON.parse(init.body ?? "{}") as { argv: string[] }).argv;
+      calls.push({ url, auth: init.headers.authorization ?? "", argv });
+      if (argv[2] === "show") return new Response("state: running\nip4: 203.0.113.7\nprivate-ipv4: 10.0.0.9/32\n");
+      return new Response("ok");
     }) as unknown as typeof globalThis.fetch;
     const run = async (hostIp: string, command: string, eo: { input?: Uint8Array }) => {
       ssh.push({ host: hostIp, command });
@@ -375,8 +376,8 @@ describe("the real providers", () => {
       expect(vm.priceMicrosPerHour).toBe(57_400);
       const made: Vm = await vm.backend.create(recipe);
       expect(made.id).toStartWith("dc-dc-test-");
-      expect(u.calls[0]).toMatchObject({ method: "POST", auth: "Bearer " + ENV.UBICLOUD_API_KEY, body: { public_key: "ssh-ed25519 AAAAinvented dc-launch", size: "standard-2", boot_image: "ubuntu-noble", private_subnet_id: "ps-test" } });
-      expect(u.calls[0]!.url).toBe("https://api.ubicloud.com/project/pj-test/location/eu-central-h1/vm/" + made.id);
+      expect(u.calls[0]).toEqual({ url: "https://api.ubicloud.com/cli", auth: "Bearer " + ENV.UBICLOUD_API_KEY, argv: ["vm", "eu-central-h1/" + made.id, "create", "-s", "standard-2", "-b", "ubuntu-noble", "-p", "ps-test", "ssh-ed25519 AAAAinvented dc-launch"] });
+      expect(u.calls[1]!.argv).toEqual(["vm", "eu-central-h1/" + made.id, "show", "-f", "state,ip4,private-ipv4"]);
       await vm.backend.prepare!(made);
       expect([...files.keys()].filter((p) => p.endsWith(".tar")).map((p) => p.split("/").at(-1))).toEqual(["browser.tar", "claude-code.tar"]);
       await vm.backend.prepare!(await vm.backend.create(check));

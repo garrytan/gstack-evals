@@ -120,25 +120,27 @@ export function fakeBackend(w: FakeWorld): UbicloudBackend {
   const byIp = new Map<string, FakeVm>();
   const byName = new Map<string, FakeVm>();
   const calls: Record<string, number> = {};
-  const fetchFake = (async (url: string, init: { method: string; body?: string }) => {
-    const name = String(url).split("/").pop()!;
-    calls[init.method] = (calls[init.method] ?? 0) + 1;
-    const fault = w.api?.[init.method as "POST" | "GET" | "DELETE"];
-    if (fault && (fault.nth === undefined || fault.nth === calls[init.method])) {
+  const fetchFake = (async (_url: string, init: { body?: string }) => {
+    const argv = (JSON.parse(String(init.body ?? "{}")) as { argv: string[] }).argv;
+    const name = argv[1]!.split("/").pop()!;
+    const method = argv[2] === "create" ? "POST" : argv[2] === "show" ? "GET" : "DELETE";
+    calls[method] = (calls[method] ?? 0) + 1;
+    const fault = w.api?.[method];
+    if (fault && (fault.nth === undefined || fault.nth === calls[method])) {
       if (fault.throws) throw new Error(fault.throws);
-      if (fault.status) return new Response("{}", { status: fault.status });
+      if (fault.status) return new Response("! fault", { status: fault.status });
     }
-    if (init.method === "GET" && (!byName.has(name) || w.deleted.includes(name))) return new Response(null, { status: 404 });
-    if (init.method === "POST") {
+    if (method !== "POST" && (!byName.has(name) || w.deleted.includes(name))) return new Response("! Unexpected response status: 404", { status: 404 });
+    if (method === "POST") {
       const vm: FakeVm = { id: name, ip: "10.1.0." + (w.vms.length + 10), spec: null, calls: [], files: new Map(), processes: [], egress: [], blocked: [], written: [], work: [], installed: [] };
       w.vms.push(vm);
       byName.set(name, vm);
       byIp.set(vm.ip, vm);
-      return new Response(JSON.stringify({ name }), { status: 200 });
+      return new Response("VM created with id: " + name, { status: 200 });
     }
-    if (init.method === "GET") return new Response(JSON.stringify({ name, state: "running", ip4: byName.get(name)!.ip }), { status: 200 });
+    if (method === "GET") return new Response("state: running\nip4: " + byName.get(name)!.ip + "\nprivate-ipv4: \n", { status: 200 });
     w.deleted.push(name);
-    return new Response(null, { status: 204 });
+    return new Response("VM, if it exists, is now scheduled for destruction", { status: 200 });
   }) as unknown as typeof fetch;
   const backend = new UbicloudBackend({
     project: "pj-fake",
