@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // The office-hours founder eval's cells, rounds and frozen manifests (prereg sections 10, 11 and 13, and the Captain's AN-1
 // ruling). A cell is one launch's schedule:
-//   stage1  Opus none 3 passes on the 16 calibration units and the 8 twins; Sol and particle-1 none 2 passes on the 16;
+//   stage1  Opus none 3 passes on the 16 calibration units and the pinned twins; Sol and particle-1 none 2 passes on the 16;
 //           the full-information reference with Opus 3 passes and Sol and particle-1 2 passes on the 16.
 //   smoke   6 office-hours sessions per model on the first 6 calibration units in draw order, and 2 lens sessions on
 //           Opus, on the first 2 calibration units in draw order (the build's pick).
@@ -20,7 +20,7 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { seededRandom } from "../../../src/runner/stats/paired.ts";
 import { shuffle } from "../../product-value/stats.ts";
-import { ARMS, MODELS, QUOTA, SEED } from "../frozen.ts";
+import { ARMS, MODELS, QUOTA, SEED, TWINS } from "../frozen.ts";
 import type { ArmId, ManifestEntry, ModelId, SessionKind, UnitMeta } from "../types.ts";
 import type { Repair } from "./session.ts";
 
@@ -36,10 +36,16 @@ export function loadUnits(dir: string): UnitMeta[] {
 
 const inSet = (units: readonly UnitMeta[], set: UnitMeta["set"]): string[] => units.filter((u) => u.set === set).sort((a, b) => a.draw - b.draw).map((u) => u.id);
 
+/** The twin set's digest: sha256 over "id digest" lines in draw order, as the comparison set's. */
+export const twinDigest = (units: readonly UnitMeta[]): string =>
+  sha256(units.filter((u) => u.set === "twin").sort((a, b) => a.draw - b.draw).map((u) => u.id + " " + u.digest).join("\n") + "\n");
+
 /** Why the units cannot fill the cell's quotas, or null. */
-export function cellProblem(cell: Cell, units: readonly UnitMeta[]): string | null {
+export function cellProblem(cell: Cell, units: readonly UnitMeta[], twins: { min: number; max: number; digest: string } = TWINS): string | null {
   const count = (set: UnitMeta["set"]) => inSet(units, set).length;
-  if ((cell === "stage1" || cell === "smoke") && (count("calibration") !== QUOTA.calibration || (cell === "stage1" && count("twin") !== QUOTA.twins))) return cell + " needs " + QUOTA.calibration + " calibration units" + (cell === "stage1" ? " and " + QUOTA.twins + " twins" : "") + ", and the units dir holds " + count("calibration") + " and " + count("twin");
+  if ((cell === "stage1" || cell === "smoke") && count("calibration") !== QUOTA.calibration) return cell + " needs " + QUOTA.calibration + " calibration units, and the units dir holds " + count("calibration");
+  if (cell === "stage1" && (count("twin") < twins.min || count("twin") > twins.max)) return "stage1 needs " + twins.min + " to " + twins.max + " twins, and the units dir holds " + count("twin");
+  if (cell === "stage1" && twinDigest(units) !== twins.digest) return "stage1 takes only the pinned twins (digest " + twins.digest.slice(0, 12) + "), and the units dir's " + count("twin") + " twins have digest " + twinDigest(units).slice(0, 12);
   if ((cell === "stage2" || cell === "pitch") && count("comparison") !== QUOTA.comparison) return cell + " needs " + QUOTA.comparison + " comparison units, and the units dir holds " + count("comparison");
   if (cell === "real" && count("real") === 0) return "the real cell needs real-stratum units, and the units dir holds none";
   return null;

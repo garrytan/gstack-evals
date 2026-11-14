@@ -4,7 +4,8 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { cellEntries, cellProblem, cellRounds, entryId, freezeManifest, loadUnits, readManifest, type Cell, type Manifest } from "../../../lanes/office-hours-founder/run/manifest.ts";
+import { TWINS } from "../../../lanes/office-hours-founder/frozen.ts";
+import { cellEntries, cellProblem, cellRounds, entryId, freezeManifest, loadUnits, readManifest, twinDigest, type Cell, type Manifest } from "../../../lanes/office-hours-founder/run/manifest.ts";
 import { fixtureUnits } from "../../../lanes/office-hours-founder/run/seams.ts";
 
 const root = mkdtempSync(join(tmpdir(), "of-manifest-"));
@@ -35,8 +36,10 @@ describe("cells", () => {
   });
 
   test("a units dir short of a quota is refused", () => {
-    expect(cellProblem("stage1", units)).toBeNull();
-    expect(cellProblem("stage1", units.filter((u) => u.set !== "twin"))).toContain("8 twins");
+    const pin = { ...TWINS, digest: twinDigest(units) };
+    expect(cellProblem("stage1", units, pin)).toBeNull();
+    expect(cellProblem("stage1", units)).toContain("pinned twins");
+    expect(cellProblem("stage1", units.filter((u) => u.set !== "twin"), pin)).toContain("6 to 8 twins");
     expect(cellProblem("stage2", units.slice(0, 40))).toContain("64 comparison");
     expect(cellProblem("real", units)).toContain("real-stratum");
   });

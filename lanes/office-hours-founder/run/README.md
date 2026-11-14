@@ -93,3 +93,5 @@ The preregistration left these rules open, so the build chose them. Each one is 
 20. The launch's simulator reply cache sits in <out>/sim-cache.
 21. RunSessionRow widens questions, pushes and named_source to allow null. The scoring side fills them, and the run
     writes null.
+22. Stage 1 takes 6 to 8 twins, and only the list frozen.ts pins by digest (TWINS). This is a pre-data ruling, made
+    after 7 of the 16 calibration units got a passing second skin. The twin check's floor of 6 pairs is unchanged.

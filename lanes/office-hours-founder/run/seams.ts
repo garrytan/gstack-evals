@@ -2,8 +2,8 @@
 // The run area's dry-run seams (start rule 7). Each drives one frozen rule on one side of its edge through the area's real
 // code: section 6's C1 rows and the one-retry limit through runSchedule with a scripted launch, the closing message at the
 // founder-reply limit and the pitch-only cell's limit of 0 through founderLoop, an allowance refusal before and after
-// spend reaches the allowance, a refusal on the simulator's allowance, a session the ledger never admitted, and the
-// manifest frozen before the first stage 2 lease. The tool refusal runs the driver through the real pinned Agent SDK and
+// spend reaches the allowance, a refusal on the simulator's allowance, a session the ledger never admitted, the
+// manifest frozen before the first stage 2 lease, and stage 1's pinned twins at 5, 6, 7 and 8 and as a different list. The tool refusal runs the driver through the real pinned Agent SDK and
 // Claude Code CLI against a stub upstream (SKIP when the CLI is not installed). The container seams start real agent
 // containers on a real trial network and probe them, so they run only under GSTACK_EVALS_DOCKER=1 and return a SKIP
 // line otherwise, which the dry run counts as a failure, never a pass.
@@ -17,10 +17,10 @@ import { dockerSandbox } from "../../../src/trial/sandbox.ts";
 import { DEFAULT_POLICY, loadPolicy, type LoadedPolicy } from "../../../src/skill-eval/cli/policy.ts";
 import type { HostRig } from "../../../src/skill-eval/cli/run-host.ts";
 import type { Termination } from "../../../src/types.ts";
-import { CLOSING, DENIED_TOOLS, FOUNDER_REPLIES } from "../frozen.ts";
+import { CLOSING, DENIED_TOOLS, FOUNDER_REPLIES, TWINS } from "../frozen.ts";
 import type { ManifestEntry, Seam, UnitMeta } from "../types.ts";
 import { departures, probe } from "./contain.ts";
-import { cellEntries, freezeManifest, type Cell } from "./manifest.ts";
+import { cellEntries, cellProblem, freezeManifest, loadUnits, twinDigest, type Cell } from "./manifest.ts";
 import { PRE_SMOKE, runSchedule, type Launch, type RunResult } from "./run.ts";
 import { founderLimit, founderLoop, type FounderResult } from "./session.ts";
 
@@ -118,7 +118,35 @@ async function closingAt(limit: number, founderReplies: number): Promise<{ closi
   return { closing: "reply" in last && last.reply === CLOSING, simCalls };
 }
 
+/** Stage 1's twin rule on fixture units: n twins against a pin over the first n, or the next n when wrong. */
+function twinProblem(n: number, wrong = false): string | null {
+  const dir = mkdtempSync(join(tmpdir(), "of-twins-"));
+  try {
+    fixtureUnits(dir, 16, "calibration");
+    fixtureUnits(dir, 8, "twin");
+    const units = loadUnits(dir), cal = units.filter((u) => u.set !== "twin"), twins = units.filter((u) => u.set === "twin").sort((a, b) => a.draw - b.draw);
+    const from = wrong ? 1 : 0;
+    return cellProblem("stage1", [...cal, ...twins.slice(from, from + n)], { ...TWINS, digest: twinDigest([...cal, ...twins.slice(0, n)]) });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 const pure: Seam[] = [
+  {
+    name: "stage 1 twins: 5 pinned twins are refused, and 6, 7 and 8 are accepted (the twin check's floor of 6)",
+    run: async () => {
+      const got = [5, 6, 7, 8].map((n) => twinProblem(n));
+      return { ok: !!got[0]?.includes("6 to 8 twins") && got.slice(1).every((p) => p === null), detail: got.map((p, i) => i + 5 + ": " + (p ?? "accepted")).join("; ") };
+    },
+  },
+  {
+    name: "stage 1 twins: a list of 7 other than the pinned one is refused",
+    run: async () => {
+      const p = twinProblem(7, true);
+      return { ok: !!p?.includes("pinned twins"), detail: p ?? "accepted" };
+    },
+  },
   c1("C1 block: a reply that holds a block ends the session as block", [{ replies: [NO_BLOCK, [BLOCK_REPLY]] }], { end: "block", code: null, attempts: 1 }),
   c1("C1 no block: the reply to the closing message holds no block, scored no-block", [{ replies: Array.from({ length: FOUNDER_REPLIES + 2 }, () => NO_BLOCK) }], { end: "no-block", code: "E_OF_NO_BLOCK", attempts: 1 }),
   c1("C1 arm stop: the turn limit on the first attempt and on its retry scores arm-stop", [turnCap, turnCap], { end: "arm-stop", code: "E_OF_ARM_STOP", attempts: 2 }),
