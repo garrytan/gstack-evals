@@ -37,7 +37,7 @@ export type Row = (a: Args, io: Io, env: RowEnv) => Promise<number> | number;
 export const OPENROUTER: readonly AnyModel[] = ["sol", "particle", "argon"];
 
 export const refuse = (rule: string, why: string): never => {
-  throw new DcError("E_DC_START_RULE", "start rule " + rule + ": " + why);
+  throw new DcError("E_DCW_START_RULE", "start rule " + rule + ": " + why);
 };
 
 export function need(a: Args, flag: string, usage: string): string {
@@ -85,7 +85,7 @@ export async function admitItems(l: LedgerProvider, items: readonly LedgerItemId
   const c = l.controller;
   const lines: string[] = [];
   const no = (why: string): never => {
-    throw new DcError("E_DC_LEDGER_REFUSED", why);
+    throw new DcError("E_DCW_LEDGER_REFUSED", why);
   };
   for (const item of items) {
     const frozen = $(LEDGER_ITEMS[item].capUsd);

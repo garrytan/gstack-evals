@@ -2471,7 +2471,7 @@ export const CODES = {
     fix: "Nothing to rerun for that app. Report the dropped app and its reason with the supply counts; never point the export at another commit or another app.",
     owner: "U20",
   },
-  E_DC_NO_PROVIDER: {
+  E_DCW_NO_PROVIDER: {
     exit: 2,
     meaning: "Design plan review eval (wiring): a paid row passed its start rules and its ledger admission, but the provider it needs (the ledger, the model caller, the review session box or the VM world) is not bound in this build. Nothing was called and nothing was spent.",
     fix: "Bind the real provider in lanes/design-constructed/wire.ts (BOUND_PROVIDERS) once its unit lands, then launch again into a new sink directory.",
@@ -2480,7 +2480,7 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
-  E_DC_START_RULE: {
+  E_DCW_START_RULE: {
     exit: 2,
     meaning: "Design plan review eval (prereg section 14): a paid row refused before any provider was built because a start rule does not hold: the sink directory already exists (rule 10), the keyless dry run failed (rule 5), the gate check has not passed (rule 6), an earlier stage's record is missing (rule 7), stage 1 has no Captain go naming office-hours' twin reading (rule 8), or an OpenRouter model has no dated terms record (rule 9). The message names the rule.",
     fix: "Do what the named rule asks (record the Captain's go, the terms record or the earlier stage's result, or pick a new sink directory), then launch again.",
@@ -2489,7 +2489,7 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
-  E_DC_LEDGER_REFUSED: {
+  E_DCW_LEDGER_REFUSED: {
     exit: 2,
     meaning: "Design plan review eval (prereg section 13 and start rule 1): a paid row's ledger admission refused before any model, session or VM provider was built: an item it spends on has no cap the Captain recorded, a recorded cap other than the frozen one, a closed lease, a stop scope that covers the work, or no room left.",
     fix: "Read the item the message names with gstack-evals dc items and the ledger status. A missing or different cap goes to the Captain; a closed item or a stop lifts only on the Captain's word.",

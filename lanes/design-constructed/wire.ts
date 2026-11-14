@@ -4,7 +4,7 @@
 // metered client), the review session box (a container's RunBox, its shell and its driver run) and the VM world
 // (Ubicloud, the controller's browser and the in-VM agents). Each is a factory, so nothing is built before a row's start
 // rules and its ledger admission pass (wire/start.ts). The real providers plug into these interfaces; until they land,
-// the lane binds none, and every paid row refuses with E_DC_NO_PROVIDER after its checks. The dry run binds the keyless
+// the lane binds none, and every paid row refuses with E_DCW_NO_PROVIDER after its checks. The dry run binds the keyless
 // fakes in wire/fakes.ts.
 import { ledgerStatus } from "../../src/runner/ledger/ledger.ts";
 import type { Termination } from "../../src/types.ts";
@@ -149,10 +149,10 @@ export const recordedCaps =
 /** The real providers are built by other units; until they land, this build binds none. */
 export const BOUND_PROVIDERS: Providers = { ledger: null, model: null, session: null, vm: null };
 
-/** Builds one named provider, or refuses with E_DC_NO_PROVIDER. Each row builds only what it uses, after its checks. */
+/** Builds one named provider, or refuses with E_DCW_NO_PROVIDER. Each row builds only what it uses, after its checks. */
 export function build<K extends ProviderName>(p: Providers, name: K, row: string): ReturnType<NonNullable<Providers[K]>> {
   const f = p[name];
-  if (!f) throw new DcError("E_DC_NO_PROVIDER", row + " needs the " + name + " provider, and this build binds none; nothing was called");
+  if (!f) throw new DcError("E_DCW_NO_PROVIDER", row + " needs the " + name + " provider, and this build binds none; nothing was called");
   return f() as ReturnType<NonNullable<Providers[K]>>;
 }
 
@@ -187,7 +187,7 @@ export function termsGuard(controller: MoneyController, records: readonly TermsR
   return async (model: AnyModel, served: ServedTerms | null): Promise<void> => {
     if (served === null || seen.has(model)) return;
     const record = records.find((r) => r.model === model);
-    if (!record) throw new DcError("E_DC_START_RULE", "start rule 9: " + model + " was served by " + served.provider + " with no dated terms record; nothing more is sent on it");
+    if (!record) throw new DcError("E_DCW_START_RULE", "start rule 9: " + model + " was served by " + served.provider + " with no dated terms record; nothing more is sent on it");
     seen.add(model);
     const r = startRule9(record, { model: record.model, provider: served.provider, fallbacks: served.fallbacks, dataCollection: served.dataCollection, termsDigest: served.termsDigest });
     log(r.line);

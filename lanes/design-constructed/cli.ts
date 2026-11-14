@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // gstack-evals dc: the design plan review eval on constructed units (prereg 2026-11-14). Every error line on stderr
 // starts with its reason code. Keyless rows run for real; paid rows check their start rules and the ledger admission,
-// then build their providers (wire.ts), and refuse with E_DC_NO_PROVIDER while a provider is not bound.
+// then build their providers (wire.ts), and refuse with E_DCW_NO_PROVIDER while a provider is not bound.
 import { CODES, docAnchor, type ReasonCode } from "../../src/errors/codes.ts";
 import { AREAS, dryRun, type Area } from "./dryrun.ts";
 import { DcError, fail } from "./errors.ts";
