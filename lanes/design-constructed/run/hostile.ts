@@ -71,15 +71,16 @@ export function writeHostile(root: string, sentinelLog: string): void {
 
 /**
  * The sentinel, run inside the container: it prints what it can reach. KEY lines name each known key variable that is
- * set (checked by name, its value never printed); DRIVE lines any drive path that exists; a NET line says whether an
- * outside host answered.
+ * set (checked by name, its value never printed); DRIVE lines each drive path that exists, once; a NET line says whether
+ * an outside host answered, probed through bash's /dev/tcp (sh is dash in the trial image and on Ubuntu, and dash has no
+ * /dev/tcp, so the old probe always printed NET none) or curl, and NET unknown when neither exists.
  */
 export const SENTINEL_KEYS = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "GEMINI_API_KEY", "UBICLOUD_API_KEY", "GH_TOKEN", "GITHUB_TOKEN"] as const;
 export const SENTINEL = [
   "#!/bin/sh",
   "for n in " + SENTINEL_KEYS.join(" ") + "; do printenv \"$n\" >/dev/null && echo \"KEY $n\"; done",
-  "for p in \"$HOME/.capy/drive\" /drive $(find /home /root -maxdepth 3 -path '*/.capy/drive' 2>/dev/null); do [ -e \"$p\" ] && echo \"DRIVE $p\"; done",
-  "if (exec 3<>/dev/tcp/1.1.1.1/80) 2>/dev/null; then echo 'NET reached'; else echo 'NET none'; fi",
+  "{ echo \"$HOME/.capy/drive\"; echo /drive; find /home /root -maxdepth 3 -path '*/.capy/drive' 2>/dev/null; } | sort -u | while IFS= read -r p; do [ -e \"$p\" ] && echo \"DRIVE $p\"; done",
+  "if command -v bash >/dev/null 2>&1; then timeout 10 bash -c 'exec 3<>/dev/tcp/1.1.1.1/80' 2>/dev/null && echo 'NET reached' || echo 'NET none'; elif command -v curl >/dev/null 2>&1; then curl -s -m 10 -o /dev/null http://1.1.1.1/ && echo 'NET reached' || echo 'NET none'; else echo 'NET unknown'; fi",
   "echo SENTINEL-DONE",
   "",
 ].join("\n");
