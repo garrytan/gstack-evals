@@ -5,7 +5,8 @@
 // the item's lease before its first session, in run order, and settles at its sessions' metered spend once its last
 // cell is final. A session gets the frozen setup, a fresh box, the autoplan gate hook and, when the launch names a
 // failed smoke rule for its arm, the D1 repair hook. The launch writes every transcript, each attempt's exposure read
-// and rows.json for the label passes, and prints the counts.
+// and rows.json for the label passes, and prints the counts. Each unit's folder under --exports holds repo/ (the export,
+// its evidence files included), plan.md, context/ and c2.json (the export's C2 record), the three mounts and C2's input.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { mainAgentTexts } from "../../../src/trial/review/capped.ts";
@@ -138,7 +139,7 @@ export const sessionsRow: Row = async (a, io, env) => {
         c.startSession(subId, sessionId);
       }
       const unitDir = join(exports, cell.unit);
-      const evidence = units.get(cell.unit)!.evidence.map((p) => ({ path: p, text: readFileSync(join(unitDir, p), "utf8") }));
+      const evidence = cell.kind === "reference" ? units.get(cell.unit)!.evidence.map((p) => ({ path: p, text: readFileSync(join(unitDir, "repo", p), "utf8") })) : [];
       const setup = sessionSetup(cell.kind, model, evidence);
       const planBefore = readFileSync(join(unitDir, "plan.md"), "utf8");
       const planPath = setup.container.cwd + "/plan.md";
