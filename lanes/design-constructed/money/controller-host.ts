@@ -12,7 +12,8 @@
 //   teardown    settles every item and the hosts' measured hours on the host, archives the off-host copy and deletes
 //               both VMs.
 // Every VM a call makes is deleted when that call fails partway, so no launch leaves a VM behind.
-import { fail } from "../errors.ts";
+import { isReasonCode } from "../../../src/errors/codes.ts";
+import { DcError, fail } from "../errors.ts";
 import type { Vm, VmBackend, VmSpec } from "../stage3/sandbox.ts";
 import { TTL_MARGIN_MINUTES } from "../stage3/sandbox.ts";
 import { mirrorSetup, shq } from "../stage3/ubicloud-real.ts";
@@ -30,6 +31,10 @@ export interface HostBackend extends VmBackend {
 }
 
 export const HOST_ROOT = "/var/lib/dc";
+/** The bare repository on the controller host that holds the gstack pin's commit and tree, for the sessions section's gstackSources. */
+export const HOST_GSTACK_SOURCE = HOST_ROOT + "/gstack-src";
+/** The host's work folder: the row's uploaded inputs and the sinks it writes; the teardown archive returns it. */
+export const HOST_WORK = HOST_ROOT + "/work";
 
 export interface Layout {
   root: string;
@@ -45,6 +50,12 @@ export interface Layout {
   log: string;
   walKey: string;
   knownHosts: string;
+  /** XDG_STATE_HOME for the provisioning and the service, so the trial image's pin file sits under the host root. */
+  xdg: string;
+  gstack: string;
+  work: string;
+  /** The trial image the provisioning built or loaded: its digest, as host-image.ts writes it. */
+  image: string;
 }
 
 /** The host's fixed paths; the same absolute paths on a replacement host (R2-17). */
@@ -62,6 +73,10 @@ export const layout = (runId: string, root = HOST_ROOT): Layout => ({
   log: root + "/state/controller.log",
   walKey: root + "/state/wal_ed25519",
   knownHosts: root + "/state/known_hosts",
+  xdg: root + "/xdg",
+  gstack: root + "/gstack-src",
+  work: root + "/work",
+  image: root + "/state/image.json",
 });
 
 /** The names the paid launcher passes to the service, read by name from its own environment. */
@@ -86,7 +101,13 @@ export interface ControllerPlan {
   root?: string;
   wal?: { dir?: string; script?: string; owner?: string | null; authorizedKeys?: string; login?: string };
   /** Root shell lines that make the controller host ready, given its private IPv4 (controllerProvision for paid runs). */
-  provision: (host: { privateIp: string | null; layout: Layout }) => string[];
+  provision: (host: { privateIp: string | null; layout: Layout; uploads?: Uploads }) => string[];
+  /** The trial image for the review sessions: a docker save tar to load, else built on the host; null when the row runs no session. */
+  image?: { tar: Uint8Array | null; expectDigest: string | null } | null;
+  /** The gstack pin's commit and its tree as one pack (gstackPack), imported into HOST_GSTACK_SOURCE and checked by tree hash. */
+  gstack?: GstackPack | null;
+  /** The row's inputs as a tar, unpacked into the host's work folder. */
+  workTar?: Uint8Array | null;
   /** The bun binary on the controller host. */
   bun: string;
   entry?: string;
@@ -100,6 +121,19 @@ export interface ControllerPlan {
   now?: () => number;
 }
 
+/** The pinned commit's objects with no history: the commit, its tree and every blob, as git pack-objects writes them. */
+export interface GstackPack {
+  commit: string;
+  tree: string;
+  pack: Uint8Array;
+}
+
+/** What prepareController put on the host before the provisioning lines run. */
+export interface Uploads {
+  image: "load" | "build" | null;
+  gstack: { commit: string; tree: string } | null;
+}
+
 export interface HostRecord {
   runId: string;
   owner: string;
@@ -107,6 +141,8 @@ export interface HostRecord {
   root: string;
   controller: { vm: string; createdAt: string };
   wal: { vm: string; createdAt: string };
+  /** The trial image digest the provisioning recorded, or null when the host has no trial image. */
+  image?: string | null;
   /** A Captain stop the launcher read from the host; recovery refuses while it stands. */
   captain: string | null;
   events: Array<{ at: string; what: string }>;
@@ -141,20 +177,56 @@ export function serviceEnv(env: Readonly<Record<string, string | undefined>>, ow
   return new TextEncoder().encode(lines.join("\n") + "\n");
 }
 
-/** BT: the paid controller host's provisioning: bun at the repo's pinned version, the repo's own dependencies and the mirrors. */
-export function controllerProvision(o: { bunVersion: string; mirrors: boolean }): ControllerPlan["provision"] {
-  return ({ privateIp, layout: l }) => {
+/** The provisioning's own entry for the trial image (money/host-image.ts), relative to the repository. */
+export const HOST_IMAGE_ENTRY = "lanes/design-constructed/money/host-image.ts";
+
+/**
+ * BT: the paid controller host's provisioning: bun at the repo's pinned version, Docker, the repo's own dependencies,
+ * the mirrors, then the uploads: the gstack pin imported into HOST_GSTACK_SOURCE and checked by tree hash, and the trial
+ * image loaded from its tar or built from docker/trial.Dockerfile, its digest written to the layout's image file.
+ * system: false leaves out the package, Docker, bun and dependency installs (keyless tests run the rest on this machine).
+ */
+export function controllerProvision(o: { bunVersion: string; mirrors: boolean; system?: boolean; bun?: string; docker?: string; imageEntry?: string }): ControllerPlan["provision"] {
+  return ({ privateIp, layout: l, uploads }) => {
     if (o.mirrors && !privateIp) fail("E_DC_INFRA_MISSING", "the controller host has no private IPv4 for the mirrors");
-    return [
-      "set -euo pipefail",
+    const bun = o.bun ?? "/opt/bun/bin/bun";
+    const g = uploads?.gstack ?? null;
+    if (g && !(/^[0-9a-f]{40}$/.test(g.commit) && /^[0-9a-f]{40}$/.test(g.tree))) fail("E_USAGE", "the gstack pin's commit and tree must be full shas");
+    const system = o.system === false ? [] : [
       "export DEBIAN_FRONTEND=noninteractive",
       "apt-get update",
-      "apt-get install -y python3 openssh-client curl unzip tar",
-      "test -x /opt/bun/bin/bun || (curl -fsSL https://bun.sh/install | BUN_INSTALL=/opt/bun bash -s bun-v" + o.bunVersion + ")",
-      "cd " + shq(l.repo) + " && /opt/bun/bin/bun install --frozen-lockfile",
+      "apt-get install -y python3 openssh-client curl unzip tar git docker.io",
+      "systemctl enable --now docker",
+      "test -x " + shq(bun) + " || (curl -fsSL https://bun.sh/install | BUN_INSTALL=/opt/bun bash -s bun-v" + o.bunVersion + ")",
+      "cd " + shq(l.repo) + " && " + shq(bun) + " install --frozen-lockfile",
       ...(o.mirrors ? mirrorSetup(privateIp!) : []),
     ];
+    const gstack = g
+      ? [
+          "rm -rf " + shq(l.gstack) + " && git init -q --bare " + shq(l.gstack),
+          "git -C " + shq(l.gstack) + " index-pack --stdin < " + shq(l.root + "/gstack.pack") + " > /dev/null",
+          "git -C " + shq(l.gstack) + " update-ref refs/dc/pin " + g.commit,
+          "test \"$(git -C " + shq(l.gstack) + " rev-parse " + g.commit + "^{tree})\" = " + g.tree,
+          "git -C " + shq(l.gstack) + " archive --format=tar " + g.commit + " | tar -t > /dev/null",
+          "rm -f " + shq(l.root + "/gstack.pack"),
+        ]
+      : [];
+    const image = uploads?.image
+      ? ["mkdir -p " + shq(l.xdg) + " && cd " + shq(l.repo) + " && XDG_STATE_HOME=" + shq(l.xdg) + " " + shq(bun) + " " + shq(o.imageEntry ?? HOST_IMAGE_ENTRY) + " --out " + shq(l.image) + (o.docker ? " --docker " + shq(o.docker) : "") + (uploads.image === "load" ? " --load " + shq(l.root + "/image.tar") + " && rm -f " + shq(l.root + "/image.tar") : "")]
+      : [];
+    return ["set -euo pipefail", ...system, ...gstack, ...image];
   };
+}
+
+/** The pinned commit, its tree and every blob, with no history, from a local repository that holds the commit. */
+export function gstackPack(source: string, commit: string): GstackPack {
+  const git = (args: string[], input?: Uint8Array) => Bun.spawnSync(["git", "-C", source, ...args], { stdin: input, stdout: "pipe", stderr: "pipe", env: { PATH: process.env.PATH ?? "/usr/bin:/bin", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" } });
+  const tree = git(["rev-parse", commit + "^{tree}"]);
+  if (tree.exitCode !== 0) fail("E_USAGE", "the gstack source " + source + " doesn't hold commit " + commit);
+  const objects = git(["rev-list", "--objects", "--no-walk", commit]);
+  const pack = objects.exitCode === 0 ? git(["pack-objects", "-q", "--stdout"], new Uint8Array(objects.stdout)) : objects;
+  if (pack.exitCode !== 0 || !pack.stdout.length) fail("E_DC_INFRA_MISSING", "could not pack the gstack pin from " + source);
+  return { commit, tree: new TextDecoder().decode(tree.stdout).trim(), pack: new Uint8Array(pack.stdout) };
 }
 
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -193,13 +265,28 @@ async function setupWal(x: Ctx, wal: Vm): Promise<void> {
 }
 
 /** Provisions the controller host, puts the record in place once, and pins its WAL key on the WAL host. */
-async function prepareController(x: Ctx, ctl: Vm, wal: Vm, hosts: HostVm[], uploadRecord: boolean): Promise<void> {
+async function prepareController(x: Ctx, ctl: Vm, wal: Vm, hosts: HostVm[], uploadRecord: boolean): Promise<string | null> {
   const l = x.l;
-  await x.run(ctl, "mkdir -p " + [l.state, l.journals, l.repo, l.holder, l.ledger.replace(/\/[^/]+$/, "")].map(shq).join(" ") + " && chmod 700 " + shq(l.root) + " " + shq(l.state), "making the host's folders");
+  await x.run(ctl, "mkdir -p " + [l.state, l.journals, l.repo, l.holder, l.work, l.ledger.replace(/\/[^/]+$/, "")].map(shq).join(" ") + " && chmod 700 " + shq(l.root) + " " + shq(l.state), "making the host's folders");
   await x.b.write(ctl, l.root + "/repo.tar", x.p.repoTar);
   await x.run(ctl, "tar -xf " + shq(l.root + "/repo.tar") + " -C " + shq(l.repo) + " && printf '%s\\n' " + x.p.commit + " > " + shq(l.root + "/commit"), "unpacking the repository");
-  await x.b.write(ctl, l.root + "/provision.sh", x.p.provision({ privateIp: x.b.privateAddress(ctl), layout: l }).join("\n") + "\n");
+  if (x.p.workTar?.length) {
+    await x.b.write(ctl, l.root + "/work.tar", x.p.workTar);
+    await x.run(ctl, "tar -xf " + shq(l.root + "/work.tar") + " -C " + shq(l.work) + " && rm -f " + shq(l.root + "/work.tar"), "unpacking the row's inputs");
+  }
+  if (x.p.gstack) await x.b.write(ctl, l.root + "/gstack.pack", x.p.gstack.pack);
+  if (x.p.image?.tar) await x.b.write(ctl, l.root + "/image.tar", x.p.image.tar);
+  const uploads: Uploads = { image: x.p.image ? (x.p.image.tar ? "load" : "build") : null, gstack: x.p.gstack ? { commit: x.p.gstack.commit, tree: x.p.gstack.tree } : null };
+  await x.b.write(ctl, l.root + "/provision.sh", x.p.provision({ privateIp: x.b.privateAddress(ctl), layout: l, uploads }).join("\n") + "\n");
   await x.run(ctl, "bash " + shq(l.root + "/provision.sh") + " >> " + shq(l.state + "/provision.log") + " 2>&1", "provisioning the controller host");
+  let image: string | null = null;
+  if (x.p.image) {
+    const read = await x.b.exec(ctl, "cat " + shq(l.image), { user: "root" });
+    image = read.exit === 0 ? ((JSON.parse(read.stdout) as { digest?: unknown }).digest as string) ?? null : null;
+    if (typeof image !== "string" || !/^sha256:[0-9a-f]{64}$/.test(image)) fail("E_DC_INFRA_MISSING", "the provisioning recorded no trial image digest in " + l.image);
+    const want = x.p.image.expectDigest;
+    if (want && want !== image) throw new DcError("E_DCH_IMAGE_DIGEST", "the controller host's trial image is " + image + ", but the wiring's sessions section expects " + want + "; no session runs on another image");
+  }
   if (uploadRecord && (await x.b.exec(ctl, "test -e " + shq(l.record), { user: "root" })).exit !== 0) {
     const unpack = l.root + "/record-unpack";
     await x.b.write(ctl, l.root + "/record.tar", x.p.recordTar);
@@ -213,6 +300,7 @@ async function prepareController(x: Ctx, ctl: Vm, wal: Vm, hosts: HostVm[], uplo
   const target: TargetConfig = x.p.target?.(wal, x.b, l) ?? { kind: "ssh", host: x.b.privateAddress(wal) ?? x.b.address(wal), keyPath: l.walKey, knownHosts: l.knownHosts, login: x.p.wal?.login ?? "ubi" };
   const cfg: HostConfig = { runId: x.p.runId, holder: l.holder, record: l.record, ledgerPath: l.ledger, journalDir: l.journals, stateDir: l.state, hosts, target, tickMs: x.p.tickMs, drainMs: x.p.drainMs, stage: x.p.stage ?? null };
   await x.b.write(ctl, l.config, JSON.stringify(cfg, null, 2) + "\n");
+  return image;
 }
 
 export type StartResult = { ok: true; status: ServiceStatus } | { ok: false; captain: string } | { ok: false; down: string };
@@ -221,7 +309,7 @@ export type StartResult = { ok: true; status: ServiceStatus } | { ok: false; cap
 async function start(x: Ctx, ctl: Vm, env: Uint8Array): Promise<StartResult> {
   const l = x.l;
   await x.run(ctl, "rm -f " + shq(l.status) + " " + shq(l.state + "/captain-boot.json"), "clearing the last status");
-  const command = "while IFS= read -r line; do case \"$line\" in [A-Z_]*=*) export \"$line\";; esac; done; cd " + shq(l.repo) + " && setsid -f " + shq(x.p.bun) + " " + shq(x.p.entry ?? "lanes/design-constructed/money/host-main.ts") + " --config " + shq(l.config) + " < /dev/null >> " + shq(l.log) + " 2>&1";
+  const command = "while IFS= read -r line; do case \"$line\" in [A-Z_]*=*) export \"$line\";; esac; done; export XDG_STATE_HOME=" + shq(l.xdg) + "; cd " + shq(l.repo) + " && setsid -f " + shq(x.p.bun) + " " + shq(x.p.entry ?? "lanes/design-constructed/money/host-main.ts") + " --config " + shq(l.config) + " < /dev/null >> " + shq(l.log) + " 2>&1";
   await x.run(ctl, command, "starting the ledger service", env);
   const until = x.now() + (x.p.upWaitMs ?? 120_000);
   while (x.now() < until) {
@@ -254,7 +342,8 @@ async function guarded<T>(x: Ctx, made: Vm[], fn: () => Promise<T>): Promise<T> 
   } catch (e) {
     const left = await destroyAll(x, made);
     const msg = (e as Error).message + "; deleted " + (made.length - left.length) + " VM(s) this call made" + (left.length ? "; could not delete " + left.join(", ") : "");
-    throw Object.assign(new Error(msg), { code: (e as { code?: string }).code ?? "E_DC_INFRA_MISSING" });
+    const code = (e as { code?: string }).code;
+    throw new DcError(code && isReasonCode(code) ? code : "E_DC_INFRA_MISSING", msg);
   }
 }
 
@@ -276,10 +365,10 @@ export async function launch(b: HostBackend, p: ControllerPlan, env: Uint8Array)
       { vm: wal.id, role: "wal", ttlHours: p.ttlHours, priceMicrosPerHour: p.priceMicrosPerHour.wal, createdAt: walAt },
       { vm: ctl.id, role: "controller", ttlHours: p.ttlHours, priceMicrosPerHour: p.priceMicrosPerHour.controller, createdAt: ctlAt },
     ];
-    await prepareController(x, ctl, wal, hosts, true);
+    const image = await prepareController(x, ctl, wal, hosts, true);
     const s = await start(x, ctl, env);
     if (!s.ok) throw new Error("captain" in s ? "the ledger service stopped for the Captain at its first boot: " + s.captain : s.down);
-    return { runId: p.runId, owner: p.owner, commit: p.commit, root: x.l.root, controller: { vm: ctl.id, createdAt: ctlAt }, wal: { vm: wal.id, createdAt: walAt }, captain: s.status.captain?.why ?? null, events: [{ at: iso(x.now()), what: "launched (" + s.status.boot + ")" }] };
+    return { runId: p.runId, owner: p.owner, commit: p.commit, root: x.l.root, controller: { vm: ctl.id, createdAt: ctlAt }, wal: { vm: wal.id, createdAt: walAt }, image, captain: s.status.captain?.why ?? null, events: [{ at: iso(x.now()), what: "launched (" + s.status.boot + ")" + (image ? " on image " + image : "") }] };
   });
 }
 
@@ -304,6 +393,10 @@ export async function relaunch(b: HostBackend, p: ControllerPlan, rec: HostRecor
   if (!st) return { kind: "lost" };
   if (st.running) return { kind: "running" };
   const ctl = (await b.attach(rec.controller.vm, hostSpec(p, "dc controller host " + p.runId)))!;
+  if (p.stage !== undefined) {
+    const cfg = JSON.parse(await x.run(ctl, "cat " + shq(x.l.config), "reading the host's config")) as HostConfig;
+    await b.write(ctl, x.l.config, JSON.stringify({ ...cfg, stage: p.stage ?? null }, null, 2) + "\n");
+  }
   const s = await start(x, ctl, env);
   rec.events.push({ at: iso(x.now()), what: s.ok ? "relaunched (" + s.status.boot + ")" : "relaunch stopped" });
   if (!s.ok) return "captain" in s ? ((rec.captain = s.captain), { kind: "captain", why: s.captain }) : fail("E_DC_INFRA_MISSING", s.down);
@@ -334,7 +427,9 @@ export async function recoverHost(b: HostBackend, p: ControllerPlan, rec: HostRe
       { vm: rec.wal.vm, role: "wal", ttlHours: p.ttlHours, priceMicrosPerHour: p.priceMicrosPerHour.wal, createdAt: rec.wal.createdAt },
       { vm: ctl.id, role: "controller", ttlHours: p.ttlHours, priceMicrosPerHour: p.priceMicrosPerHour.controller, createdAt: ctlAt },
     ];
-    await prepareController(x, ctl, wal, hosts, false);
+    const image = await prepareController(x, ctl, wal, hosts, false);
+    if (rec.image && image && image !== rec.image) throw new DcError("E_DCH_IMAGE_DIGEST", "the replacement host's trial image is " + image + ", not the run's " + rec.image);
+    rec.image = image ?? rec.image ?? null;
     const s = await start(x, ctl, env);
     if (!s.ok && "captain" in s) {
       rec.captain = s.captain;
@@ -349,7 +444,7 @@ export async function recoverHost(b: HostBackend, p: ControllerPlan, rec: HostRe
   });
 }
 
-export type Teardown = { kind: "deleted"; archive: { lines: Uint8Array; snapshot: { name: string; bytes: Uint8Array } | null; record: Uint8Array | null } } | { kind: "refused"; why: string };
+export type Teardown = { kind: "deleted"; archive: { lines: Uint8Array; snapshot: { name: string; bytes: Uint8Array } | null; record: Uint8Array | null; work: Uint8Array | null } } | { kind: "refused"; why: string };
 
 /**
  * Ends the run: the service settles every item and the hosts' measured hours and takes a final verified snapshot, the
@@ -384,8 +479,10 @@ export async function teardown(b: HostBackend, p: ControllerPlan, rec: HostRecor
   const name = (await walctl("latest")).stdout.trim();
   const snapshot = name ? { name, bytes: (await raw("get " + name)) ?? new Uint8Array() } : null;
   const record = name ? await raw("get-record " + name) : null;
+  const packed = (await b.exec(ctl, "test -d " + shq(x.l.work) + " && tar -C " + shq(x.l.work) + " -cf - .", { user: "root" })) as { exit: number; stdout: string; raw?: Uint8Array };
+  const work = packed.exit === 0 ? (packed.raw ?? new TextEncoder().encode(packed.stdout)) : null;
   const left = await destroyAll(x, [wal, ctl]);
   if (left.length) fail("E_DC_INFRA_MISSING", "could not delete " + left.join(", "));
   rec.events.push({ at: iso(x.now()), what: "torn down" });
-  return { kind: "deleted", archive: { lines, snapshot, record } };
+  return { kind: "deleted", archive: { lines, snapshot, record, work } };
 }

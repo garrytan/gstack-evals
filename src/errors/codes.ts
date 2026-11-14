@@ -2525,6 +2525,33 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_DCH_IMAGE_DIGEST: {
+    exit: 2,
+    meaning: "Design plan review eval (controller host): the trial image the controller host built or loaded has a digest other than the one the wiring file's sessions section records, so no review session may run on it. The launch or recovery deleted the VMs it made.",
+    fix: "Load the recorded image on the host (the plan's image tar, a docker save of the image the run recorded), or have the Captain record the new digest in the sessions section before any session runs. Never run sessions on a rebuilt image.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
+  },
+  E_DCW_INSTALL_DIGEST: {
+    exit: 2,
+    meaning: "Design plan review eval (prereg section 4, the gstack install): a gstack arm session's installed checkout, read inside its container after the install, has a digest other than the pinned commit's tree, so the session stopped before Claude Code launched. No model call was sent for it.",
+    fix: "Keep the session folder and the two digests the line prints and bring them to the Captain; the install changed files of the pinned tree. Launch again into a new sink only on the Captain's word.",
+    side_effects: PARTIAL,
+    retry_safe: false,
+    resumable: false,
+    owner: "U20",
+  },
+  E_DCW_INSTALL_NETWORK: {
+    exit: 2,
+    meaning: "Design plan review eval (prereg section 4, the gstack install): after the install, the session's container still listed a network other than the run's trial network, so the session stopped before Claude Code launched. No model call was sent for it.",
+    fix: "Remove the container and its install network by hand (docker network disconnect, docker rm -f), and bring the printed networks to the Captain before launching again into a new sink.",
+    side_effects: PARTIAL,
+    retry_safe: false,
+    resumable: false,
+    owner: "U20",
+  },
 } as const satisfies Record<string, CodeInfo>;
 
 export type ReasonCode = keyof typeof CODES;

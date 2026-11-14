@@ -307,6 +307,9 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_DCW_LEDGER_REFUSED](#e_dcw_ledger_refused) | 2 | U20 |
 | [E_DCW_OFF_HOST](#e_dcw_off_host) | 2 | U20 |
 | [E_DCW_CONTAINMENT](#e_dcw_containment) | 2 | U20 |
+| [E_DCH_IMAGE_DIGEST](#e_dch_image_digest) | 2 | U20 |
+| [E_DCW_INSTALL_DIGEST](#e_dcw_install_digest) | 2 | U20 |
+| [E_DCW_INSTALL_NETWORK](#e_dcw_install_network) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -2197,6 +2200,30 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 Design plan review eval (prereg section 4, C2 and C3 before a session): a review session's container failed its container checks, was prepared again from the unit's export into a new session folder, and failed again. The session is held for the Captain and the launch stops; no model call was sent for that session.
 
 Fix: Keep the session folder and the printed problems and bring them to the Captain, who decides whether the unit is held or dropped. Launch again into a new sink only on the Captain's word.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_DCH_IMAGE_DIGEST
+
+Design plan review eval (controller host): the trial image the controller host built or loaded has a digest other than the one the wiring file's sessions section records, so no review session may run on it. The launch or recovery deleted the VMs it made.
+
+Fix: Load the recorded image on the host (the plan's image tar, a docker save of the image the run recorded), or have the Captain record the new digest in the sessions section before any session runs. Never run sessions on a rebuilt image.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_DCW_INSTALL_DIGEST
+
+Design plan review eval (prereg section 4, the gstack install): a gstack arm session's installed checkout, read inside its container after the install, has a digest other than the pinned commit's tree, so the session stopped before Claude Code launched. No model call was sent for it.
+
+Fix: Keep the session folder and the two digests the line prints and bring them to the Captain; the install changed files of the pinned tree. Launch again into a new sink only on the Captain's word.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_DCW_INSTALL_NETWORK
+
+Design plan review eval (prereg section 4, the gstack install): after the install, the session's container still listed a network other than the run's trial network, so the session stopped before Claude Code launched. No model call was sent for it.
+
+Fix: Remove the container and its install network by hand (docker network disconnect, docker rm -f), and bring the printed networks to the Captain before launching again into a new sink.
 
 Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
 
