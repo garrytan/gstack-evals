@@ -6,7 +6,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fail } from "../errors.ts";
-import { pinRecord, probePlan, probeScript, readProbe, writePinRecord, type ProbePlan } from "./pin.ts";
+import { pinRecord, probePlan, probeScript, readProbe, termsRecordsOf, writePinRecord, type PinRecord, type ProbePlan } from "./pin.ts";
 
 export interface PinsArgs {
   flags: Map<string, string>;
@@ -37,5 +37,15 @@ export function pinsCommand(a: PinsArgs, io: { out: (t: string) => void }, now: 
     io.out(rec.ok ? "pins: every route pinned" : "pins: STOP for the Captain, " + rec.routes.filter((r) => r.problems.length).length + " route(s) unpinned");
     return rec.ok ? 0 : 1;
   }
-  return fail("E_USAGE", "pins takes plan or record");
+  if (sub === "terms") {
+    const rec = JSON.parse(readFileSync(need(a, "--pin"), "utf8")) as PinRecord;
+    const out = need(a, "--out");
+    if (existsSync(out)) fail("E_USAGE", "pins terms writes a new file; " + out + " exists");
+    if (!rec.ok) fail("E_USAGE", "the pin record for run " + rec.runId + " has problems; no terms file is written until the Captain decides");
+    const terms = termsRecordsOf(rec);
+    writeFileSync(out, JSON.stringify(terms, null, 2) + "\n", { flag: "wx" });
+    for (const t of terms) io.out("terms: " + t.model + " served by " + t.provider + ", dated " + t.dated + ", terms " + t.termsDigest.slice(0, 12));
+    return 0;
+  }
+  return fail("E_USAGE", "pins takes plan, record or terms");
 }

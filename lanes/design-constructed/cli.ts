@@ -16,6 +16,7 @@ import { itemsRow, powerRow, readRow, scopeRow, scoreRow } from "./wire/keyless.
 import { recipesRow } from "./wire/recipes.ts";
 import { authorRow, gatecheckRow } from "./wire/author.ts";
 import { labelsRow, probeRow } from "./wire/score.ts";
+import { exportsRow, stage3InputsRow } from "./wire/exports.ts";
 import { hostCommand } from "./wire/host.ts";
 import type { HostContext } from "./wire/real.ts";
 import { sessionsRow } from "./wire/sessions.ts";
@@ -80,7 +81,9 @@ export const SUBCOMMANDS: Record<string, { area: Area | "lane"; run: Run; bools:
   power: { area: "read", run: powerRow, bools: [], usage: "--design <design.json> --out <new folder>", summary: "the admission read on design.json through power.py" },
   items: { area: "money", run: itemsRow, bools: [], usage: "", summary: "the 17 ledger items, their caps and admission rules" },
   stage3: { area: "stage3", run: stage3Row, bools: [], usage: "--candidates <stage3.json> --exports <folder> --rows <stage 2 rows.json> --terms <file> --out <new sink>", summary: "stage 3 authoring, oracle builds, builds and measures (paid: dc-stage3-*, dc-hosts)" },
-  pins: { area: "paid", run: (a, io) => pinsCommand(a, io), bools: [], usage: "plan --dir <new dir> | record --dir <dir> --run <id> --commit <sha> [--dated <iso>] --out <file>", summary: "the keyless probe plan and the run's model pin record (start rule 9)" },
+  pins: { area: "paid", run: (a, io) => pinsCommand(a, io), bools: [], usage: "plan --dir <new dir> | record --dir <dir> --run <id> --commit <sha> [--dated <iso>] --out <file> | terms --pin <pin record> --out <terms.json>", summary: "the keyless probe plan, the run's model pin record (start rule 9) and the --terms file from it" },
+  exports: { area: "run", run: (a, io, env) => exportsRow(a, io, env), bools: [], usage: "--in <exports.json> --out <new folder>", summary: "each unit's export folder: repo/, plan.md, context/ and c2.json (keyless)" },
+  stage3inputs: { area: "stage3", run: (a, io, env) => stage3InputsRow(a, io, env), bools: [], usage: "--units <units.json> --recipes <recipes.json> --oracles <oracles.json> --routes <routes.json> --out <stage3.json>", summary: "the stage3 row's candidates file (keyless)" },
   host: { area: "wire", run: (a, io, env) => hostCommand(a, io, env), bools: ["--force"], usage: "launch|relaunch|recover|teardown|status --plan <host plan JSON> --record <host record JSON> [--archive <new folder>] [--force]", summary: "the controller host: launch with the plan's stage row, relaunch, recovery from a host loss, teardown and status (paid: dc-hosts)" },
   dryrun: { area: "lane", run: dryrun, bools: [], usage: "[--area " + AREAS.join("|") + "]", summary: "the keyless dry run: one PASS or FAIL line per case" },
 };
