@@ -48,13 +48,18 @@ export const runOnHost: HostStage["runOnHost"] = async (service, args) => {
   if (!wiring || !row.length) fail("E_USAGE", "runOnHost takes the wiring file, then one gstack-evals dc row and its arguments");
   const work = join(dirname(service.cfg.stateDir), "work");
   mkdirSync(work, { recursive: true, mode: 0o700 });
-  process.chdir(work);
   const ctx = hostContext(service, resolve(wiring!));
-  const { main, realEnv } = await import("../cli.ts");
-  const log = join(service.cfg.stateDir, "stage.log");
-  const line = (t: string) => appendLine(log, t);
-  const code = await main(row, { out: line, err: line }, () => realEnv(ctx));
-  if (code !== 0) throw new Error("gstack-evals dc " + row[0] + " exited " + code + "; " + log + " holds its lines");
+  const before = process.cwd();
+  process.chdir(work);
+  try {
+    const { main, realEnv } = await import("../cli.ts");
+    const log = join(service.cfg.stateDir, "stage.log");
+    const line = (t: string) => appendLine(log, t);
+    const code = await main(row, { out: line, err: line }, () => realEnv(ctx));
+    if (code !== 0) throw new Error("gstack-evals dc " + row[0] + " exited " + code + "; " + log + " holds its lines");
+  } finally {
+    process.chdir(before);
+  }
 };
 
 const appendLine = (file: string, t: string) => writeFileSync(file, t + "\n", { flag: "a" });

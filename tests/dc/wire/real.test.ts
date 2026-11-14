@@ -334,6 +334,17 @@ describe("the real providers", () => {
     h.svc.close();
   });
 
+  // Value: protects=every later test file in the same bun process; fails_when=runOnHost leaves the process in the host's work folder, which a test's cleanup then removes, so later spawns and process.cwd() fail (CI's in-VM agent and unit repository tests did); why_new=CI was red at the phase 1b head; seam=runOnHost; no_claim=the real host, where host-main.ts exits after its row
+  test("runOnHost leaves the process's working folder where it found it, after a row that passes and after one that fails", async () => {
+    const h = await host();
+    const before = process.cwd();
+    await runOnHost(h.svc, [h.wiring, "items"]);
+    expect(process.cwd()).toBe(before);
+    await expect(runOnHost(h.svc, [h.wiring, "sessions"])).rejects.toThrow("gstack-evals dc sessions exited 2");
+    expect(process.cwd()).toBe(before);
+    h.svc.close();
+  });
+
   test("a wiring file that leaves an integrator's choice out refuses with E_USAGE naming it", async () => {
     const h = await host();
     const bad = join(h.root, "bad.json");
