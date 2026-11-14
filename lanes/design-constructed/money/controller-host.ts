@@ -57,6 +57,8 @@ export interface Layout {
   work: string;
   /** The trial image the provisioning built or loaded: its digest, as host-image.ts writes it. */
   image: string;
+  /** The launch's record of this host: its VM, its Ubicloud region and its private IPv4 (ControllerFacts). */
+  controller: string;
 }
 
 /** The host's fixed paths; the same absolute paths on a replacement host (R2-17). */
@@ -78,6 +80,7 @@ export const layout = (runId: string, root = HOST_ROOT): Layout => ({
   gstack: root + "/gstack-src",
   work: root + "/work",
   image: root + "/state/image.json",
+  controller: root + "/state/controller.json",
 });
 
 /** The names the paid launcher passes to the service, read by name from its own environment. */
@@ -92,6 +95,8 @@ export interface ControllerPlan {
   ttlHours: number;
   /** Each host's Ubicloud size; the backend's own size when unset. */
   sizes?: { controller?: string; wal?: string };
+  /** The Ubicloud region (location) both hosts run in, written into the host's controller record. */
+  location?: string;
   /** Ubicloud's list price per hour in micros for each host's size, read on the day. */
   priceMicrosPerHour: { controller: number; wal: number };
   commit: string;
@@ -144,6 +149,8 @@ export interface HostRecord {
   wal: { vm: string; createdAt: string };
   /** The trial image digest the provisioning recorded, or null when the host has no trial image. */
   image?: string | null;
+  /** The Ubicloud region the hosts were launched in; a recovery refuses another (PD-42). */
+  location?: string | null;
   /** A Captain stop the launcher read from the host; recovery refuses while it stands. */
   captain: string | null;
   events: Array<{ at: string; what: string }>;
@@ -283,7 +290,9 @@ async function prepareController(x: Ctx, ctl: Vm, wal: Vm, hosts: HostVm[], uplo
   if (x.p.gstack) await x.b.write(ctl, l.root + "/gstack.pack", x.p.gstack.pack);
   if (x.p.image?.tar) await x.b.write(ctl, l.root + "/image.tar", x.p.image.tar);
   const uploads: Uploads = { image: x.p.image ? (x.p.image.tar ? "load" : "build") : null, gstack: x.p.gstack ? { commit: x.p.gstack.commit, tree: x.p.gstack.tree } : null };
-  await x.b.write(ctl, l.root + "/provision.sh", x.p.provision({ privateIp: x.b.privateAddress(ctl), layout: l, uploads }).join("\n") + "\n");
+  const privateIp = x.b.privateAddress(ctl);
+  await x.b.write(ctl, l.controller, JSON.stringify({ vm: ctl.id, location: x.p.location ?? null, privateIp }, null, 2) + "\n");
+  await x.b.write(ctl, l.root + "/provision.sh", x.p.provision({ privateIp, layout: l, uploads }).join("\n") + "\n");
   await x.run(ctl, "bash " + shq(l.root + "/provision.sh") + " >> " + shq(l.state + "/provision.log") + " 2>&1", "provisioning the controller host");
   let image: string | null = null;
   if (x.p.image) {
@@ -374,7 +383,7 @@ export async function launch(b: HostBackend, p: ControllerPlan, env: Uint8Array)
     const image = await prepareController(x, ctl, wal, hosts, true);
     const s = await start(x, ctl, env);
     if (!s.ok) throw new Error("captain" in s ? "the ledger service stopped for the Captain at its first boot: " + s.captain : s.down);
-    return { runId: p.runId, owner: p.owner, commit: p.commit, root: x.l.root, controller: { vm: ctl.id, createdAt: ctlAt }, wal: { vm: wal.id, createdAt: walAt }, image, captain: s.status.captain?.why ?? null, events: [{ at: iso(x.now()), what: "launched (" + s.status.boot + ")" + (image ? " on image " + image : "") }] };
+    return { runId: p.runId, owner: p.owner, commit: p.commit, root: x.l.root, controller: { vm: ctl.id, createdAt: ctlAt }, wal: { vm: wal.id, createdAt: walAt }, image, location: p.location ?? null, captain: s.status.captain?.why ?? null, events: [{ at: iso(x.now()), what: "launched (" + s.status.boot + ")" + (image ? " on image " + image : "") }] };
   });
 }
 
@@ -420,6 +429,7 @@ export type Recovered = { kind: "recovered"; status: ServiceStatus } | { kind: "
 export async function recoverHost(b: HostBackend, p: ControllerPlan, rec: HostRecord, env: Uint8Array): Promise<Recovered> {
   const x = new Ctx(b, p);
   if (rec.captain) return { kind: "captain", why: "a Captain stop stands: " + rec.captain };
+  if (rec.location && p.location !== rec.location) throw new DcError("E_DCW_REGION", "the hosts run in " + rec.location + ", but the recovery plan names " + (p.location ?? "no region") + "; a recovery never moves a stage to another region (PD-42)");
   if (await b.attach(rec.controller.vm, hostSpec(p, "dc controller host " + p.runId))) fail("E_USAGE", "the controller host " + rec.controller.vm + " still runs; relaunch it instead");
   const wal = await b.attach(rec.wal.vm, hostSpec(p, "dc wal host " + p.runId));
   if (!wal) return { kind: "captain", why: "the WAL host " + rec.wal.vm + " is gone too, so the off-host copy is lost" };

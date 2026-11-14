@@ -311,6 +311,8 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_DCW_INSTALL_DIGEST](#e_dcw_install_digest) | 2 | U20 |
 | [E_DCW_MODEL_PROBE](#e_dcw_model_probe) | 2 | U20 |
 | [E_DCW_INSTALL_NETWORK](#e_dcw_install_network) | 2 | U20 |
+| [E_DCW_CONTROLLER_ADDRESS](#e_dcw_controller_address) | 2 | U20 |
+| [E_DCW_REGION](#e_dcw_region) | 2 | U20 |
 | [E_DCV_POWER_PY_PIN](#e_dcv_power_py_pin) | 2 | U20 |
 | [E_DCV_PROJECTION_STOP](#e_dcv_projection_stop) | warning | U20 |
 
@@ -2237,6 +2239,22 @@ Design plan review eval (prereg section 4, the gstack install): after the instal
 Fix: Remove the container and its install network by hand (docker network disconnect, docker rm -f), and bring the printed networks to the Captain before launching again into a new sink.
 
 Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_DCW_CONTROLLER_ADDRESS
+
+Design plan review eval (wiring): the wiring's vm section names the controller host for the VM proxy or the mirrors, but the host holds no launch record of its private IPv4, the record can't be read, or the recorded address is on none of the host's interfaces. No VM was made and no key was read.
+
+Fix: Launch the controller host with gstack-evals dc host launch, which writes the record into the host's state folder, or name a literal address in the wiring. Then launch the row again into a new sink.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_DCW_REGION
+
+Design plan review eval (PD-42): a paid row would run in a Ubicloud region other than the one its stage started in, the controller host has no launch record of its region, the wiring's vm section makes VMs outside the host's region, or a recovery plan names another region than the hosts run in. No VM was made and no model call was sent.
+
+Fix: Bring the stage, both regions and the row to the Captain. A stage finishes in the region it started in; a move to the fallback region happens only at a stage boundary, on the Captain's word.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 
 ### E_DCV_POWER_PY_PIN
 

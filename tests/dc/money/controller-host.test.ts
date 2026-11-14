@@ -137,6 +137,24 @@ describe("the controller host launcher", () => {
     expect(await grepKeys(p.tmp)).toBe("");
   }, 120_000);
 
+  test("a launch writes its record of the controller host (the VM, the region and the private IPv4) into the state folder, and a recovery plan in another region refuses before it makes a VM", async () => {
+    // Value: protects=the runbook's late-address gap and PD-42: the host learns its private IPv4 and region from the launch, and a recovery never moves the hosts' region; fails_when=no record is written, it holds another VM's address or no region, or a recovery in another region creates a VM; why_new=the address existed only on the launcher's side; seam=launch, prepareController, recoverHost; no_claim=a real Ubicloud private subnet
+    const w = world();
+    const b = fakeBackend(w);
+    const at = new Map<string, string>();
+    b.privateAddress = (vm) => at.get(vm.id) ?? (at.set(vm.id, "10.9.0." + (at.size + 5)), at.get(vm.id)!);
+    const p = plan({ location: "eu-central-h1" });
+    const rec = await launch(b, p, env());
+    pids.push(pidOf(p));
+    expect(JSON.parse(readFileSync(layout(p.runId, p.root).controller, "utf8"))).toEqual({ vm: rec.controller.vm, location: "eu-central-h1", privateIp: at.get(rec.controller.vm) });
+    expect(rec.location).toBe("eu-central-h1");
+    process.kill(pidOf(p), "SIGKILL");
+    w.deleted.push(rec.controller.vm);
+    const made = w.vms.length;
+    await expect(recoverHost(b, { ...p, location: "us-east-a2" }, rec, env())).rejects.toThrow("a recovery never moves a stage to another region");
+    expect(w.vms.length).toBe(made);
+  }, 60_000);
+
   test("a recovery refuses while the host runs, and stops for the Captain when the WAL host is gone", async () => {
     const w = world();
     const b = fakeBackend(w);

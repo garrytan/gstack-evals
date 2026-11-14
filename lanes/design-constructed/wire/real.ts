@@ -19,6 +19,7 @@
 // The choices the binding could not make without moving a scored outcome or the money sit in WIRING.md.
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { networkInterfaces } from "node:os";
 import { join } from "node:path";
 import { claudePin } from "../../eng-build/session-image.ts";
 import type { AgentSession } from "../../../src/trial/sandbox.ts";
@@ -44,8 +45,8 @@ import { toolCallEnd } from "../run/stream.ts";
 import { proxySessions, runVmAgent, sshAgentSession } from "../stage3/agent.ts";
 import { serveVmFront } from "../stage3/front.ts";
 import { browserFiles, BROWSER_ROOT, claudeFiles, controllerBackend, type ControllerFiles } from "../stage3/install.ts";
-import { specFor, type Endpoint, type Mirror, type Vm, type VmBackend } from "../stage3/sandbox.ts";
-import { keyedUbicloud, sshTunnel, type SshRunner, type Tunnel } from "../stage3/ubicloud-real.ts";
+import { MIRROR_NAMES, specFor, type Endpoint, type Mirror, type MirrorName, type Vm, type VmBackend } from "../stage3/sandbox.ts";
+import { controllerMirrors, keyedUbicloud, sshTunnel, type SshRunner, type Tunnel } from "../stage3/ubicloud-real.ts";
 import type { AnyModel, LedgerItemId } from "../types.ts";
 import type { LedgerProvider, ModelProvider, Providers, ServedTerms, SessionBox, SessionProvider, VmProvider } from "../wire.ts";
 import { readJson } from "./json.ts";
@@ -66,22 +67,68 @@ export interface HostWiring {
    * The sandbox VMs: Ubicloud's project and VM shape, the controller host's key for its sandboxes, the Playwright
    * Chromium build on this host (its folder and the binary's path inside it) and the pinned Claude Code npm tarball the
    * controller copies into each VM, the day's list price, and the VM proxy endpoint and mirrors on the controller
-   * host's private IPv4.
+   * host's private IPv4. The proxy's host and the mirrors may name the controller instead of an address: a host of
+   * "controller", and mirrors as { host: "controller", terms }, resolve on the host at run time (resolveVm).
    */
-  vm: {
-    project: string;
-    location: string;
-    size: string;
-    image: string;
-    privateSubnet: string | null;
-    keyPath: string;
-    knownHosts: string;
-    chromiumBuild: { dir: string; bin: string };
-    claudeTarball: string;
-    priceMicrosPerHour: number;
-    proxy: Endpoint;
-    mirrors: Mirror[];
-  } | null;
+  vm: VmWiring<Endpoint | ControllerEndpoint, Mirror[] | ControllerMirrors> | null;
+}
+
+/** The wiring's name for the controller host's private IPv4, resolved on the host from the launch's record. */
+export const CONTROLLER = "controller";
+export type ControllerEndpoint = { host: typeof CONTROLLER; port: number };
+/** The four controller mirrors (stage3/ubicloud-real.ts controllerMirrors), each with its terms record line. */
+export type ControllerMirrors = { host: typeof CONTROLLER; terms: Record<MirrorName, string> };
+
+export interface VmWiring<P = Endpoint, M = Mirror[]> {
+  project: string;
+  location: string;
+  size: string;
+  image: string;
+  privateSubnet: string | null;
+  keyPath: string;
+  knownHosts: string;
+  chromiumBuild: { dir: string; bin: string };
+  claudeTarball: string;
+  priceMicrosPerHour: number;
+  proxy: P;
+  mirrors: M;
+}
+
+/** What the launch recorded on the controller host (money/controller-host.ts, at provisioning): its VM, region and private IPv4. */
+export interface ControllerFacts {
+  vm: string;
+  location: string | null;
+  privateIp: string | null;
+}
+
+/** The launch's record on the host, or null when the folder holds none (a service not launched by controller-host.ts). */
+export function readControllerFacts(path: string): ControllerFacts | null {
+  if (!existsSync(path)) return null;
+  const f = readJson<ControllerFacts>(path, "the controller host's launch record");
+  if (typeof f.vm !== "string" || (f.location !== null && typeof f.location !== "string") || (f.privateIp !== null && typeof f.privateIp !== "string")) fail("E_DCW_CONTROLLER_ADDRESS", "the controller host's launch record " + path + " is not { vm, location, privateIp }");
+  return f;
+}
+
+/** This host's own IPv4 addresses, read from its interfaces. */
+export const hostAddresses = (): string[] => Object.values(networkInterfaces()).flatMap((l) => (l ?? []).filter((a) => a.family === "IPv4").map((a) => a.address));
+
+/**
+ * The vm section on this host: its location must be the region the launch recorded (PD-42), and a proxy or mirrors that
+ * name the controller take the launch's private IPv4, which must sit on one of this host's interfaces. Any doubt
+ * refuses before a VM is made.
+ */
+export function resolveVm(w: NonNullable<HostWiring["vm"]>, facts: ControllerFacts | null, addresses: () => string[] = hostAddresses): VmWiring {
+  if (facts && w.location !== facts.location) throw new DcError("E_DCW_REGION", "the wiring's vm section makes VMs in " + w.location + ", but the controller host runs in " + (facts.location ?? "no recorded region") + "; a row never makes VMs outside its host's region (PD-42)");
+  const relative = w.proxy.host === CONTROLLER || !Array.isArray(w.mirrors);
+  if (!relative) return w as VmWiring;
+  const no = (why: string): never => {
+    throw new DcError("E_DCW_CONTROLLER_ADDRESS", "the wiring's vm section names the controller, but " + why + "; no VM is made");
+  };
+  const ip = facts?.privateIp ?? no("this host holds no launch record of its private IPv4");
+  if (!addresses().includes(ip)) no("the recorded private IPv4 " + ip + " is not on any of this host's interfaces");
+  const proxy = w.proxy.host === CONTROLLER ? { host: ip, port: w.proxy.port } : (w.proxy as Endpoint);
+  const mirrors = Array.isArray(w.mirrors) ? w.mirrors : w.mirrors.host === CONTROLLER ? controllerMirrors(ip, w.mirrors.terms) : no("the mirrors name the host " + JSON.stringify(w.mirrors.host));
+  return { ...w, proxy, mirrors };
 }
 
 const posInt = (v: unknown) => Number.isSafeInteger(v) && (v as number) > 0;
@@ -97,6 +144,9 @@ export function readWiring(path: string): HostWiring {
   if (typeof w.pinRecord !== "string" || !w.pinRecord) no("names no pin record");
   if (typeof w.cacheDir !== "string" || !w.cacheDir) no("names no reply cache folder");
   if (!posInt(w.scanMs)) no("names no journal scan interval (scanMs)");
+  const vm = w.vm;
+  if (vm && !(vm.proxy && (vm.proxy.host === CONTROLLER || /^\d{1,3}(\.\d{1,3}){3}$/.test(vm.proxy.host)) && posInt(vm.proxy.port))) no("names a vm proxy that is neither an IPv4 address nor \"controller\", with a port");
+  if (vm && !Array.isArray(vm.mirrors) && !(vm.mirrors?.host === CONTROLLER && MIRROR_NAMES.every((n) => (vm.mirrors as ControllerMirrors).terms?.[n]?.trim()))) no("names mirrors that are neither a list nor { host: \"controller\", terms } with a terms line for each of " + MIRROR_NAMES.join(", "));
   if (w.retry.attempts !== RULED_RETRY.attempts || w.retry.elapsed_ms !== RULED_RETRY.elapsed_ms) no("sets a retry budget of " + w.retry.attempts + " attempts in " + w.retry.elapsed_ms + " ms, not the ruled " + RULED_RETRY.attempts + " attempts within 15 minutes (" + RULED_RETRY.elapsed_ms + " ms)");
   return { ...w, sessions: w.sessions ?? null, vm: w.vm ?? null };
 }
@@ -111,6 +161,10 @@ export interface HostContext {
   dir: string;
   /** The checkout the host runs: the commit it was launched at, from the repository archive. */
   lane: () => { commit: string; dirty: boolean; root: string };
+  /** The launch's record of this host; null when there is none. */
+  controller?: () => ControllerFacts | null;
+  /** This host's IPv4 addresses, for the controller's recorded private IPv4. */
+  addresses?: () => string[];
 }
 
 /** The lowest seams, for keyless tests: the proxies' upstream, the review container, Ubicloud's API and SSH. */
@@ -320,7 +374,7 @@ export function realSessions(h: HostContext, watch: ProviderWatch, s: RealSeams,
 const pinnedSha = (add: string): string => /--checksum=sha256:([0-9a-f]{64})/.exec(add)![1]!;
 
 /** The pinned Claude Code tarball's bytes, refused with E_USAGE unless its sha256 is the trial image's pinned checksum. */
-function claudeTarball(path: string, root: string): Uint8Array {
+export function claudeTarball(path: string, root: string): Uint8Array {
   const pin = claudePin(root);
   if (!existsSync(path)) fail("E_USAGE", "the wiring file's vm.claudeTarball " + path + " does not exist; it is Claude Code " + pin.version + "'s npm tarball for linux-x64");
   const bytes = new Uint8Array(readFileSync(path));
@@ -330,8 +384,7 @@ function claudeTarball(path: string, root: string): Uint8Array {
 }
 
 /** The recipe agent on the VM sessions: Claude Code from the pinned tarball, each session on its item's metering proxy through the VM proxy endpoint. */
-export function vmSessionAgents(h: HostContext, s: RealSeams, keyed: VmBackend & { address(vm: Vm): string }, watch: ProviderWatch): { recipeAgent: RecipeAgent; claude: ControllerFiles; close(): Promise<void> } {
-  const w = h.wiring.vm!;
+export function vmSessionAgents(h: HostContext, s: RealSeams, keyed: VmBackend & { address(vm: Vm): string }, watch: ProviderWatch, w: VmWiring): { recipeAgent: RecipeAgent; claude: ControllerFiles; close(): Promise<void> } {
   if (typeof w.claudeTarball !== "string") fail("E_USAGE", "the wiring file's vm section names no claudeTarball (Claude Code's pinned npm tarball for linux-x64)");
   const root = h.lane().root;
   claudeTarball(w.claudeTarball, root);
@@ -360,12 +413,13 @@ export function vmSessionAgents(h: HostContext, s: RealSeams, keyed: VmBackend &
  * browser over SSH to the installed Chromium; the recipe agent. Stage 3's pieces are not here (PD-31).
  */
 export async function realVm(h: HostContext, s: RealSeams, watch: ProviderWatch): Promise<VmProvider> {
-  const w = h.wiring.vm ?? fail("E_USAGE", "the wiring file has no vm section (Ubicloud's project, the VM shape, the key, the browser build, the Claude Code tarball, the price, the proxy and the mirrors); the Captain sets it (lanes/design-constructed/WIRING.md)");
+  const section = h.wiring.vm ?? fail("E_USAGE", "the wiring file has no vm section (Ubicloud's project, the VM shape, the key, the browser build, the Claude Code tarball, the price, the proxy and the mirrors); the Captain sets it (lanes/design-constructed/WIRING.md)");
+  const w = resolveVm(section, h.controller?.() ?? null, h.addresses);
   const cb = w.chromiumBuild;
   if (!cb || typeof cb.dir !== "string" || typeof cb.bin !== "string") fail("E_USAGE", "the wiring file's vm section names no chromiumBuild (the Playwright Chromium folder on this host and the binary's path inside it)");
   if (!existsSync(join(cb.dir, cb.bin)) || !statSync(join(cb.dir, cb.bin)).isFile()) fail("E_USAGE", "the wiring file's vm.chromiumBuild has no binary at " + join(cb.dir, cb.bin));
   const keyed = await keyedUbicloud({ project: w.project, location: w.location, size: w.size, image: w.image, privateSubnet: w.privateSubnet ?? undefined, env: h.env, keyPath: w.keyPath, knownHosts: w.knownHosts, ...(s.ubicloud ? { fetch: s.ubicloud.fetch, ssh: s.ubicloud.ssh } : {}) });
-  const agents = vmSessionAgents(h, s, keyed, watch);
+  const agents = vmSessionAgents(h, s, keyed, watch, w);
   const backend = controllerBackend(keyed, { browser: browserFiles(cb.dir, cb.bin), agent: agents.claude });
   return {
     backend,

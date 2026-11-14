@@ -24,7 +24,7 @@ import { BLOCK } from "../../../lanes/design-constructed/run/fixtures.ts";
 import { RECIPES } from "../../../lanes/design-constructed/frozen.ts";
 import { stubSession } from "../../../lanes/design-constructed/stage3/agent-fake.ts";
 import { DESCRIBE_DONE, type Vm } from "../../../lanes/design-constructed/stage3/sandbox.ts";
-import { freePort } from "../../../lanes/design-constructed/stage3/ubicloud-real.ts";
+import { controllerMirrors, freePort } from "../../../lanes/design-constructed/stage3/ubicloud-real.ts";
 import { watchedEnv } from "../../../lanes/design-constructed/wire/dryrun-host.ts";
 import { BOUND_PROVIDERS, build } from "../../../lanes/design-constructed/wire.ts";
 import { fakeEnv, fakeKit, REPO_ROOT } from "../../../lanes/design-constructed/wire/fakes.ts";
@@ -281,6 +281,36 @@ describe("the real providers", () => {
       h.svc.close();
     }
   }, 60_000);
+
+  test("a vm section that names the controller takes the launch's recorded private IPv4 for the VM proxy and the four mirrors; with no record, or an address on none of the host's interfaces, the VM provider refuses before Ubicloud is called", async () => {
+    // Value: protects=the runbook's late-address gap: the wiring names the VM proxy and the mirrors relative to the controller, and the host resolves them from the launch's record and its own interfaces; fails_when=a "controller" host reaches a spec unresolved, the mirrors differ from controllerMirrors on the recorded address, or a missing or foreign address makes a VM or reads the Ubicloud token; why_new=the address existed only after launch and no wiring could name it before; seam=hostContext, readControllerFacts, resolveVm, realVm; no_claim=a real Ubicloud private subnet
+    const h = await host();
+    const terms = { npm: "npm terms line", pypi: "PyPI terms line", apt: "Ubuntu archive terms line", dockerhub: "Docker Hub terms line" };
+    const w = JSON.parse(readFileSync(h.wiring, "utf8"));
+    writeFileSync(h.wiring, JSON.stringify({ ...w, vm: { ...w.vm, proxy: { host: "controller", port: h.proxyPort }, mirrors: { host: "controller", terms } } }));
+    const record = join(h.svc.cfg.stateDir, "controller.json");
+    const u = fakeUbicloud();
+    try {
+      await expect(build(realProviders(hostContext(h.svc, h.wiring, ENV), { ubicloud: u.ubicloud }), "vm", "recipes")).rejects.toThrow("holds no launch record of its private IPv4");
+      writeFileSync(record, JSON.stringify({ vm: "dcctl-test", location: "eu-central-h1", privateIp: "10.255.0.9" }));
+      await expect(build(realProviders(hostContext(h.svc, h.wiring, ENV, () => ["127.0.0.1"]), { ubicloud: u.ubicloud }), "vm", "recipes")).rejects.toThrow("is not on any of this host's interfaces");
+      expect([u.calls, u.ssh]).toEqual([[], []]);
+      writeFileSync(record, JSON.stringify({ vm: "dcctl-test", location: "eu-central-h1", privateIp: "127.0.0.1" }));
+      const vm = await build(realProviders(hostContext(h.svc, h.wiring, ENV), { ubicloud: u.ubicloud }), "vm", "recipes");
+      try {
+        const recipe = vm.spec("recipe", "recipe session c001");
+        expect(recipe.proxy).toEqual({ host: "127.0.0.1", port: h.proxyPort });
+        expect(recipe.mirrors).toEqual(controllerMirrors("127.0.0.1", terms));
+        expect(vm.spec("qualify", "qualify c001").mirrors.map((m) => m.url)).toEqual(["http://127.0.0.1:4873/", "http://127.0.0.1:3141/root/pypi/+simple/", "http://127.0.0.1:3142/archive.ubuntu.com/ubuntu", "http://127.0.0.1:5000"]);
+      } finally {
+        await vm.close?.();
+      }
+      writeFileSync(h.wiring, JSON.stringify({ ...w, vm: { ...w.vm, mirrors: { host: "controller", terms: { ...terms, apt: "" } } } }));
+      expect(() => hostContext(h.svc, h.wiring, ENV)).toThrow("with a terms line for each of npm, pypi, apt, dockerhub");
+    } finally {
+      h.svc.close();
+    }
+  });
 
   test("on the real providers the stage3 row refuses with E_DCW_NO_PROVIDER under PD-31 after its ledger admission, before any key is read or any VM is made", async () => {
     // Value: protects=PD-31: every stage 3 piece (the build agent, the build reader, stage 3 authoring and the DES-4 judges) refuses until the Captain's go; fails_when=the stage3 row builds the VM provider, reads any env name, calls Ubicloud or runs an SSH command; why_new=PD-31; seam=realProviders' stage3 factory, the stage3 row; no_claim=the stage 3 prompts themselves, which are not written yet

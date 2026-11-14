@@ -23,7 +23,7 @@ import type { HostStage } from "../money/host-main.ts";
 import { recordTar, type LedgerService } from "../money/ledger-service.ts";
 import { ownerFromEnv } from "../stage3/sandbox.ts";
 import { keyedUbicloud } from "../stage3/ubicloud-real.ts";
-import { readWiring, type HostContext } from "./real.ts";
+import { hostAddresses, readControllerFacts, readWiring, type HostContext } from "./real.ts";
 import { readJson } from "./json.ts";
 import { refuse, type Args, type Io, type Row, type RowEnv } from "./start.ts";
 
@@ -37,10 +37,13 @@ export function hostLane(root: string): () => { commit: string; dirty: boolean; 
   return () => ({ commit: readFileSync(join(root, "commit"), "utf8").trim(), dirty: false, root: join(root, "repo") });
 }
 
-/** The real providers' context on a service: the wiring file, the service's own environment and its host root. */
-export function hostContext(service: LedgerService, wiringPath: string, env: Readonly<Record<string, string | undefined>> = process.env): HostContext {
+/**
+ * The real providers' context on a service: the wiring file, the service's own environment, its host root, and the
+ * launch's record of the host in the state folder (its region and private IPv4), read when a row needs it.
+ */
+export function hostContext(service: LedgerService, wiringPath: string, env: Readonly<Record<string, string | undefined>> = process.env, addresses: () => string[] = hostAddresses): HostContext {
   const root = dirname(service.cfg.stateDir);
-  return { service, wiring: readWiring(wiringPath), env, dir: join(root, "wire"), lane: hostLane(root) };
+  return { service, wiring: readWiring(wiringPath), env, dir: join(root, "wire"), lane: hostLane(root), controller: () => readControllerFacts(join(service.cfg.stateDir, "controller.json")), addresses };
 }
 
 export const runOnHost: HostStage["runOnHost"] = async (service, args) => {
@@ -165,6 +168,7 @@ function controllerPlanOf(p: HostPlanFile, lane: { commit: string; root: string 
     longestStageHours: p.longestStageHours,
     ttlHours: p.ttlHours,
     sizes: p.sizes,
+    location: p.ubicloud.location,
     priceMicrosPerHour: p.priceMicrosPerHour,
     commit: lane.commit,
     repoTar: uploads ? (s.archive ?? gitArchive)(lane.root, lane.commit) : new Uint8Array([0]),
