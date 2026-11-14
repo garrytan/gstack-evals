@@ -185,15 +185,16 @@ export function localSandbox(install: (home: string) => void): Sandbox {
 
 /**
  * The main agent's requests carry Claude Code's tools; side requests (titles, summaries) carry none and get a plain text
- * answer, so the script only sees the session's own turns.
+ * answer, so the script only sees the session's own turns. host binds the proxy's trial listener on another address of
+ * this machine (a Docker bridge's gateway, so a container can reach it); unset, loopback.
  */
-export function harness(script: Script, opts: { capMicros?: number; env?: Record<string, string>; responses?: ResponsesScript; stop?: (turn: Turn) => string | undefined } = {}): Harness {
+export function harness(script: Script, opts: { capMicros?: number; env?: Record<string, string>; responses?: ResponsesScript; stop?: (turn: Turn) => string | undefined; host?: string } = {}): Harness {
   const dir = mkdtempSync(join(tmpdir(), "gse-adapter-"));
   const children: ChildProcess[] = [];
   const ledger = new MemoryLedger(opts.capMicros);
   const upstream: Upstream[] = [];
   const proxy = new MeteringProxy({
-    ledger, leaseId: "lease-test", host: "127.0.0.1", managementSocket: join(dir, "management.sock"), managementToken: MANAGEMENT,
+    ledger, leaseId: "lease-test", host: opts.host ?? "127.0.0.1", managementSocket: join(dir, "management.sock"), managementToken: MANAGEMENT,
     journal: join(dir, "journal.ndjson"), retry: { attempts: 1, elapsed_ms: 10_000 }, env: opts.env ?? KEYS,
     fetch: async (url, init) => {
       const body = JSON.parse(String(init.body ?? "{}"));
@@ -208,7 +209,7 @@ export function harness(script: Script, opts: { capMicros?: number; env?: Record
   proxy.start();
   return {
     dir, proxy, ledger, upstream,
-    baseUrl: "http://127.0.0.1:" + proxy.port,
+    baseUrl: "http://" + (opts.host ?? "127.0.0.1") + ":" + proxy.port,
     bind: (model, provider = "anthropic") => proxy.bind({ cell: { run_id: "run-test", arm: "after", task: "t", model, trial: 0, attempt: 1 }, models: [provider + ":" + model], allowance_micros: 50_000_000 }),
     session(work, home, driverEnv) {
       mkdirSync(work, { recursive: true });

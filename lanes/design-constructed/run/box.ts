@@ -1,16 +1,29 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // A RunBox over local folders: run directories found by walking the given roots (a session's /work and HOME as this
 // host sees them, or a sink copy), and the pinned gstack binaries run from a gstack checkout's bin folder. The Docker
-// rig's box, which runs the same reads inside the container, is the integrator's; the hooks and detectors take either.
+// rig's box (docker.ts) runs the same reads inside the container; the hooks and detectors take either.
 import { spawnSync } from "node:child_process";
 import { existsSync, lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { RunFiles } from "./detect.ts";
 import type { ExecResult, RunBox } from "./types.ts";
 
+/** The runs among found run.json files: written at or after sinceMs, JSON with a string status, newest updated_at first. */
+export function pickRuns(found: ReadonlyArray<{ dir: string; mtimeMs: number; text: string }>, sinceMs = 0): Array<{ dir: string; state: Record<string, unknown> }> {
+  const out: Array<{ dir: string; state: Record<string, unknown>; at: string }> = [];
+  for (const f of found) {
+    if (f.mtimeMs < sinceMs) continue;
+    try {
+      const state = JSON.parse(f.text);
+      if (state && typeof state === "object" && typeof state.status === "string") out.push({ dir: f.dir, state, at: String(state.updated_at ?? "") });
+    } catch {}
+  }
+  return out.sort((a, b) => b.at.localeCompare(a.at)).map(({ dir, state }) => ({ dir, state }));
+}
+
 /** Every run.json under the roots (at most depth folders down, symlinks not followed), newest updated_at first. */
 export function findRuns(roots: readonly string[], sinceMs = 0, depth = 10): Array<{ dir: string; state: Record<string, unknown> }> {
-  const out: Array<{ dir: string; state: Record<string, unknown>; at: string }> = [];
+  const found: Array<{ dir: string; mtimeMs: number; text: string }> = [];
   const walk = (dir: string, d: number) => {
     let names: string[];
     try {
@@ -29,14 +42,13 @@ export function findRuns(roots: readonly string[], sinceMs = 0, depth = 10): Arr
       if (st.isDirectory() && d > 0 && n !== ".git" && n !== "node_modules") walk(p, d - 1);
       else if (st.isFile() && n === "run.json" && st.mtimeMs >= sinceMs) {
         try {
-          const state = JSON.parse(readFileSync(p, "utf8"));
-          if (state && typeof state === "object" && typeof state.status === "string") out.push({ dir, state, at: String(state.updated_at ?? "") });
+          found.push({ dir, mtimeMs: st.mtimeMs, text: readFileSync(p, "utf8") });
         } catch {}
       }
     }
   };
   for (const r of roots) if (existsSync(r)) walk(r, depth);
-  return out.sort((a, b) => b.at.localeCompare(a.at)).map(({ dir, state }) => ({ dir, state }));
+  return pickRuns(found, sinceMs);
 }
 
 const readOrNull = (p: string): string | null => {
