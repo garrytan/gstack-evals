@@ -17,6 +17,7 @@ import { BOUND_PROVIDERS } from "../wire.ts";
 import { fakeEnv, fakeKit, fakeSessions, fakeVm, type FakeAttempt, type Kit, type KitOptions } from "./fakes.ts";
 import { runRow, scratch, sessionsFixture, stage3Fixture } from "./fixtures.ts";
 import { hostRowCases } from "./dryrun-host.ts";
+import { cloneCases } from "./dryrun-clones.ts";
 import { inputCases } from "./dryrun-inputs.ts";
 import type { Cell } from "../run/types.ts";
 
@@ -273,5 +274,6 @@ export function cases(): DryRunCase[] {
     },
     ...hostRowCases(),
     ...inputCases(),
+    ...cloneCases(),
   ];
 }

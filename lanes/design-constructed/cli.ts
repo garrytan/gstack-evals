@@ -14,6 +14,7 @@ import { uvPowerRunner } from "./read/seams.ts";
 import { BOUND_PROVIDERS } from "./wire.ts";
 import { itemsRow, powerRow, readRow, scopeRow, scoreRow } from "./wire/keyless.ts";
 import { recipesRow } from "./wire/recipes.ts";
+import { clonesRow } from "./wire/clones.ts";
 import { authorRow, gatecheckRow } from "./wire/author.ts";
 import { labelsRow, probeRow } from "./wire/score.ts";
 import { exportsRow, stage3InputsRow } from "./wire/exports.ts";
@@ -69,6 +70,7 @@ const dryrun: Run = async (a, io) => {
 export const SUBCOMMANDS: Record<string, { area: Area | "lane"; run: Run; bools: string[]; usage: string; summary: string }> = {
   frame: { area: "frame", run: frameCommand, bools: [], usage: "--out <sealed dir outside the repo>", summary: "the one dated frame search, its entry filters and the frame order (keyless)" },
   filecheck: { area: "frame", run: filecheckCommand, bools: [], usage: "--repo <dir>", summary: "the keyless file check on each candidate's safe clone" },
+  clones: { area: "frame", run: clonesRow(), bools: [], usage: "--record <sealed clone record JSON> --out <new sealed folder outside the repo>", summary: "PD-15: re-fetch each kept clone by its commit, check its tree and drop a mismatch, never swapped (keyless)" },
   recipes: { area: "frame", run: recipesRow, bools: [], usage: "--frame <the frame's sealed folder> --out <new sink folder>", summary: "recipe sessions and qualification (paid: dc-base-apps, dc-hosts)" },
   author: { area: "author", run: authorRow, bools: [], usage: "--step pilot|units|2x|twins --item <item> --apps <apps.json> --gstack <dir> --terms <file> --gate <gatecheck sink> [--pilot <sink>] [--from N --to M] [--units <author sink>] --out <new sink>", summary: "authoring steps 1 to 7, the fix round, rewrites, 2x versions and twins (paid: dc-authoring-1 to -3)" },
   gatecheck: { area: "author", run: gatecheckRow, bools: [], usage: "--units <planted.json> --apps <apps.json> --gstack <dir> --terms <file> --out <new sink>", summary: "the eight planted units through every model-judged gate (paid: dc-gate-check)" },
