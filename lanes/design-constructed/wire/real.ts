@@ -186,7 +186,7 @@ const problemsOf = (p: PreparedSession): string[] => [...p.c3, ...p.c2, ...(p.c2
 const safe = (s: string) => s.replace(/[^A-Za-z0-9._-]/g, "_");
 
 /** The review sessions: one container per attempt on its round's sub-reservation, through the item's session proxy. */
-export function realSessions(h: HostContext, watch: ProviderWatch, s: RealSeams = {}, callers: DirectCallers | null = null): SessionProvider {
+export function realSessions(h: HostContext, watch: ProviderWatch, s: RealSeams, callers: DirectCallers): SessionProvider {
   const w = h.wiring.sessions ?? fail("E_USAGE", "the wiring file has no sessions section (gstack sources and the image digest); the Captain sets it (lanes/design-constructed/WIRING.md)");
   const svc = h.service;
   const c = svc.controller;
@@ -202,7 +202,7 @@ export function realSessions(h: HostContext, watch: ProviderWatch, s: RealSeams 
     s.prepare ??
     ((o: { setup: SessionSetup; unit: UnitFiles; expect: C2Expect; dir: string }) =>
       prepareSession({ ...o, image: image(), network: trialNet().name, docker, install: o.setup.container.gstack ? { sources: w.gstackSources, network: (installNet ??= createInstallNetwork(docker)), scratch: join(h.dir, "scratch") } : null }));
-  const resolve = callers ? (id: string, item: LedgerItemId) => generationResolver(callers.freeProxy(item), c.runId)(id) : undefined;
+  const resolve = (id: string, item: LedgerItemId) => generationResolver(callers.freeProxy(item), c.runId)(id);
   const proxies = new SessionProxies({ controller: c, local: svc.local, wal: svc.wal, watch, dir: join(svc.cfg.journalDir, "sessions"), launcher, resolve });
   const bindings = new Map<string, SessionBinding>();
   const items = new Set<LedgerItemId>();

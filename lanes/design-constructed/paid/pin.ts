@@ -50,6 +50,38 @@ export function probePlan(dir: string): ProbePlan {
   };
 }
 
+/** One short call to a model, as the meter takes it. */
+export interface ModelProbe {
+  model: AnyModel;
+  prompt: string;
+  maxTokens: number;
+  label: string;
+}
+
+export const MODEL_PROBE_PROMPT = "Reply with the single word ok.";
+
+/**
+ * The Captain's ruling 1A: one short call per model, to run first after the go, so every route's reply is seen to name
+ * its provider or to resolve through OpenRouter's generation record before any real work. The plan holds no key and
+ * calls nothing; the ledger item each call charges is the caller's (WIRING.md, Phase 1b open items).
+ */
+export function modelProbePlan(): ModelProbe[] {
+  return (Object.keys(DIRECT_MODELS) as AnyModel[]).map((model) => ({ model, prompt: MODEL_PROBE_PROMPT, maxTokens: 16, label: "probe " + model }));
+}
+
+/** Runs the probe through a metered call and names each model's serving provider; a reply that names none is a problem. */
+export async function runModelProbe(plan: readonly ModelProbe[], call: (p: ModelProbe) => Promise<{ servedBy: string | null; problem: string | null }>): Promise<{ lines: string[]; problems: string[] }> {
+  const lines: string[] = [];
+  const problems: string[] = [];
+  for (const p of plan) {
+    const r = await call(p);
+    if (r.problem) problems.push(p.model + ": " + r.problem);
+    else if (r.servedBy === null) problems.push(p.model + ": the reply named no provider and the generation record resolved none");
+    lines.push("probe: " + p.model + " served by " + (r.servedBy ?? "an unnamed provider") + (r.problem ? " (" + r.problem + ")" : ""));
+  }
+  return { lines, problems };
+}
+
 const quote = (s: string) => (/^[\w@%+=:,./-]+$/.test(s) ? s : "'" + s.replace(/'/g, "'\\''") + "'");
 
 /** The plan as the shell lines the Captain runs. */

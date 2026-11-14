@@ -21,7 +21,7 @@ import { startRule9 } from "../read/start.ts";
 import { CapStopSignal } from "../stage3/seams.ts";
 import type { AnyModel, DryRunCase, LedgerItemId } from "../types.ts";
 import { DirectCallers, PaidCallFailed } from "./direct.ts";
-import { datedTermsOf, firstCallOf, pinRecord, probePlan, termsRecordsOf } from "./pin.ts";
+import { datedTermsOf, firstCallOf, MODEL_PROBE_PROMPT, modelProbePlan, pinRecord, probePlan, runModelProbe, termsRecordsOf } from "./pin.ts";
 import { scripted, type Reply, type Scripted } from "./scripted.ts";
 import { generationResolver, inProcessLauncher, SessionProxies, type SessionBinding } from "./sessions.ts";
 
@@ -261,6 +261,23 @@ export function cases(): DryRunCase[] {
           await sessionCall(b);
           const code = await codeOf(sessions.end(b));
           e.want(code === "E_DC_PROVIDER_DRIFT", "an Azure generation record read " + code);
+          return e.result();
+        }),
+    },
+    {
+      rule: "PD-9",
+      name: "the model probe plan holds one short call per model and no key; run through the meter, an unnamed OpenRouter reply resolves through the generation record (ruling 1A)",
+      check: () =>
+        withPaid({ script: (_u, body) => ({ kind: "ok", provider: String(body?.model ?? "").startsWith("particle") ? "Particle" : String(body?.model ?? "").startsWith("google") ? "Google AI Studio" : null }), generation: () => "OpenAI" }, async ({ r, direct }) => {
+          const e = expectations();
+          await r.c.openItem("dc-judges");
+          const plan = modelProbePlan();
+          e.want(plan.length === 5 && plan.every((p) => p.maxTokens === 16 && p.prompt === MODEL_PROBE_PROMPT) && !/api[_-]?key|Bearer|sk-/i.test(JSON.stringify(plan)), "the plan read " + JSON.stringify(plan));
+          const out = await runModelProbe(plan, (p) => direct.meter("dc-judges").call({ model: p.model, prompt: p.prompt, maxTokens: p.maxTokens, label: p.label }));
+          e.want(out.problems.length === 0, "the probe found " + out.problems.join("; "));
+          e.want(out.lines.includes("probe: sol served by OpenAI") && out.lines.includes("probe: particle served by Particle"), "the probe printed " + out.lines.join(" | "));
+          const unnamed = await runModelProbe([{ model: "sol", prompt: "x", maxTokens: 16, label: "x" }], async () => ({ servedBy: null, problem: null }));
+          e.want(unnamed.problems.length === 1, "an unresolved reply was not a problem");
           return e.result();
         }),
     },

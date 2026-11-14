@@ -66,6 +66,8 @@ Choices the binding could not make without moving a scored outcome or the money.
 1. **backgroundWaitMs.** The preregistration and the plan give no value for the driver's wait for background work at a turn's result. Unset, a session ends at its first result with background work still out, and the driver logs it. Other lanes use 3,600,000 ms (src/adapters/claude-code/driver.ts BACKGROUND_WAIT_MS).
 2. **errorSeen's window.** errorSeen reads every error in the attempt's journal, as ruled ("inside the attempt"), so an upstream error the proxy retried and recovered from early in a session still makes a later malformed tool call outside the agent. wire.ts's SessionDrive comment says "the session's last exchange". The Captain may narrow it.
 3. **The rejected-call marker.** run/stream.ts matches Claude Code's tool_use_error text for an input validation failure or an unknown tool. It is checked against hand-written stream lines only, not a real CLI session at the pinned Claude Code version.
+4. **The model probe's ledger item.** paid/pin.ts modelProbePlan lists one short call per model (16 output tokens) to run first after the go (ruling 1A). Which ledger item those five calls charge is not ruled, so runModelProbe takes the call from its caller and no row runs it yet.
+5. **Start rule 9's provider compare.** read/start.ts still compares a first call's provider with the terms record's raw string. Ruling 1B's fold (money/served.ts foldProvider) applies to the drift watch here; the read area applies it to start rule 9.
 
 ## Not verified here
 
