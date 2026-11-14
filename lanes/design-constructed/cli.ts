@@ -13,6 +13,7 @@ import { BOUND_PROVIDERS } from "./wire.ts";
 import { itemsRow, powerRow, readRow, scopeRow, scoreRow } from "./wire/keyless.ts";
 import { recipesRow } from "./wire/recipes.ts";
 import { authorRow, gatecheckRow } from "./wire/author.ts";
+import { labelsRow, probeRow } from "./wire/score.ts";
 import type { Row, RowEnv } from "./wire/start.ts";
 
 export interface Io {
@@ -68,8 +69,8 @@ export const SUBCOMMANDS: Record<string, { area: Area | "lane"; run: Run; bools:
   gatecheck: { area: "author", run: gatecheckRow, bools: [], usage: "--units <planted.json> --apps <apps.json> --gstack <dir> --terms <file> --out <new sink>", summary: "the eight planted units through every model-judged gate (paid: dc-gate-check)" },
   scope: { area: "run", run: scopeRow, bools: [], usage: "--units <folder of unit folders, each with plan.md>", summary: "the keyless UI scope read on every plan.md" },
   sessions: { area: "run", run: notBuilt("run"), bools: [], usage: "", summary: "review sessions for one stage, arm and model (paid: dc-stage1-*, dc-stage2-*)" },
-  probe: { area: "score", run: notBuilt("score"), bools: [], usage: "", summary: "the live judge probe, one call down every judge route (paid: dc-judges)" },
-  labels: { area: "score", run: notBuilt("score"), bools: [], usage: "", summary: "label packets, the judge check and the stage 2 re-check (paid: dc-judges)" },
+  probe: { area: "score", run: probeRow, bools: [], usage: "--terms <file> --out <new sink>", summary: "the live judge probe, one call down every judge route (paid: dc-judges)" },
+  labels: { area: "score", run: labelsRow, bools: ["--shuffled"], usage: "--pass production|check --in <folder: units.json rows.json> --read base|2x|10x --stage 1|2 --terms <file> [--shuffled] [--production <sink>] [--check <sink>] --out <new sink>", summary: "label packets, the judge check and the stage 2 re-check (paid: dc-judges)" },
   score: { area: "score", run: scoreRow, bools: [], usage: "--in <folder: units.json rows.json packets.json labels.json> --read base|2x|10x --stage 1|2", summary: "A, G, D and every secondary from final labels" },
   read: { area: "read", run: readRow, bools: [], usage: "--stage 1|2 --in <read input JSON>", summary: "the twin check, the tier chain, the smoke rules, contrasts and verdicts" },
   power: { area: "read", run: powerRow, bools: [], usage: "--design <design.json> --out <new folder>", summary: "the admission read on design.json through power.py" },

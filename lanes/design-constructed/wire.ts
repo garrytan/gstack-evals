@@ -209,10 +209,10 @@ export function authorCaller(models: ModelProvider, item: LedgerItemId, guard: T
   };
 }
 
-/** The score area's JudgeCaller on one item: judge to model, the call's cache identity as its tag. */
-export function judgeCaller(models: ModelProvider, item: LedgerItemId, guard: TermsGuard): JudgeCaller {
+/** The score area's JudgeCaller on one item: judge to model, the call's cache identity as its tag unless one is given. */
+export function judgeCaller(models: ModelProvider, item: LedgerItemId, guard: TermsGuard, tag?: string): JudgeCaller {
   return async (c) => {
-    const r = await models.call({ item, model: c.judge, prompt: c.prompt, maxTokens: c.maxTokens, effort: c.effort, label: c.label, subject: c.subject, tag: c.cacheKey });
+    const r = await models.call({ item, model: c.judge, prompt: c.prompt, maxTokens: c.maxTokens, effort: c.effort, label: c.label, subject: c.subject, tag: tag ?? c.cacheKey });
     await guard(c.judge, r.served);
     return { text: r.text, modelId: r.modelId, version: r.version, problem: r.problem };
   };

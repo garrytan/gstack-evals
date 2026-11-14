@@ -30,6 +30,8 @@ export interface Kit {
   /** The model calls that reached the scripted upstream, as "<model> <label>". */
   calls: string[];
   rig: () => Rig;
+  /** Removes the rig's temporary ledger; the ledger provider's close leaves it, so later launches on the kit see its state. */
+  dispose: () => void;
 }
 
 export interface KitOptions {
@@ -49,12 +51,12 @@ export function fakeKit(o: KitOptions = {}): Kit {
   let r: Rig | null = null;
   const built: ProviderName[] = [];
   const calls: string[] = [];
-  const kit: Kit = { built, calls, rig: () => r ?? (r = rig({ caps: o.caps })), providers: { ledger: null, model: null, session: null, vm: null } };
+  const kit: Kit = { built, calls, rig: () => r ?? (r = rig({ caps: o.caps })), dispose: () => r?.cleanup(), providers: { ledger: null, model: null, session: null, vm: null } };
   kit.providers.ledger = () => {
     built.push("ledger");
     const x = kit.rig();
     const caps = recordedCaps(x.record);
-    return { controller: x.c, recordedCapMicros: (item) => (o.unrecorded?.includes(item) ? null : caps(item)), reconcile: async () => 0, close: async () => x.cleanup() } satisfies LedgerProvider;
+    return { controller: x.c, recordedCapMicros: (item) => (o.unrecorded?.includes(item) ? null : caps(item)), reconcile: async () => 0, close: async () => {} } satisfies LedgerProvider;
   };
   if (o.model) {
     const script = o.model;
