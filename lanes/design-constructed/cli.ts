@@ -20,7 +20,7 @@ import { authorRow, gatecheckRow } from "./wire/author.ts";
 import { labelsRow, probeRow } from "./wire/score.ts";
 import { modelProbeRow } from "./wire/modelprobe.ts";
 import { exportsRow, stage3InputsRow } from "./wire/exports.ts";
-import { hostCommand } from "./wire/host.ts";
+import { hostCommand, hostRegion } from "./wire/host.ts";
 import type { HostContext } from "./wire/real.ts";
 import { repriceRow } from "./wire/reprice.ts";
 import { sessionsRow } from "./wire/sessions.ts";
@@ -43,6 +43,7 @@ export const realEnv = (host: HostContext | null = null): RowEnv => ({
   now: () => new Date(),
   power: uvPowerRunner,
   vocabulary: loadVocabulary,
+  ...(host ? { region: () => hostRegion(host) } : {}),
 });
 
 function parse(argv: string[], bools: string[]): Args {

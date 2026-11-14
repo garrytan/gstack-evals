@@ -6,12 +6,12 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { fail } from "../errors.ts";
+import { DcError, fail } from "../errors.ts";
 import type { FileCheck } from "../frame/filecheck.ts";
 import { SAFE_ENV, safeArgs } from "../frame/git.ts";
 import { routeKey } from "../frame/routes.ts";
 import type { CloneRecord } from "../frame/run.ts";
-import type { Candidate, DiscoveredRoute } from "../recipes/seams.ts";
+import type { BrowserSeam, Candidate, DiscoveredRoute } from "../recipes/seams.ts";
 import { runScreen, supply } from "../recipes/sessions.ts";
 import { build, hostsSeam, moneySeam, routeMatcher } from "../wire.ts";
 import { readJson, writeJson } from "./json.ts";
@@ -43,6 +43,29 @@ export function candidatesFromFrame(frame: string): { candidates: Candidate[]; c
   return { candidates, counts: { cloneAttempts: clones.length, clones: clones.filter((c) => c.fetched).length, fileCheckPasses: passes.length } };
 }
 
+/**
+ * Probe 1D (PD-42): stage 0's first qualification is the first time the VM's browser launches. When that launch fails
+ * (the browser itself, as opposed to an app that fails to render), the row stops with E_DCW_BROWSER_LAUNCH before any
+ * further recipe session; the sandbox still audits and deletes the VM first. Once one launch has passed, later launches
+ * fail the way a qualification run fails outside the app.
+ */
+export function probe1D(browser: BrowserSeam, log: (line: string) => void): BrowserSeam {
+  let launched = false;
+  return {
+    async open(vm, baseUrl) {
+      if (launched) return browser.open(vm, baseUrl);
+      try {
+        const session = await browser.open(vm, baseUrl);
+        launched = true;
+        log("probe 1D: the VM's browser launched in " + vm.spec.label);
+        return session;
+      } catch (e) {
+        throw new DcError("E_DCW_BROWSER_LAUNCH", "probe 1D: the VM's browser did not launch in " + vm.spec.label + ", the first qualification: " + (e as Error).message + "; the screen stops before any further recipe session");
+      }
+    },
+  };
+}
+
 export const recipesRow: Row = async (a, io, env) => {
   const usage = "recipes --frame <the frame's sealed folder> --out <new sink folder>";
   const frame = resolve(need(a, "--frame", usage));
@@ -58,7 +81,7 @@ export const recipesRow: Row = async (a, io, env) => {
         sandbox: { backend: vm.backend, hosts: hostsSeam(launch.ledger, vm.priceMicrosPerHour, "recipes"), now: vm.now },
         money: moneySeam(launch.ledger),
         agent: vm.recipeAgent,
-        browser: vm.browser,
+        browser: probe1D(vm.browser, io.out),
         match: routeMatcher,
         recipeSpec: (l) => vm.spec("recipe", l),
         qualifySpec: (l) => vm.spec("qualify", l),

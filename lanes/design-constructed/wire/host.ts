@@ -15,7 +15,7 @@
 // keyless dry run (rule 5), a complete wiring file, a plan the launcher accepts and, for a sessions row, a recorded image
 // digest with its image tar and a gstack source that holds the pin. The row's own start rules run on the host.
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fail } from "../errors.ts";
 import { GSTACK_PIN } from "../frozen.ts";
 import { controllerProvision, gstackPack, hostStatus, HOST_GSTACK_SOURCE, launch, layout, planProblems, recoverHost, relaunch, serviceEnv, teardown, type ControllerPlan, type HostBackend, type HostRecord } from "../money/controller-host.ts";
@@ -23,7 +23,8 @@ import type { HostStage } from "../money/host-main.ts";
 import { recordTar, type LedgerService } from "../money/ledger-service.ts";
 import { ownerFromEnv } from "../stage3/sandbox.ts";
 import { keyedUbicloud } from "../stage3/ubicloud-real.ts";
-import { hostAddresses, readControllerFacts, readWiring, type HostContext } from "./real.ts";
+import { DcError } from "../errors.ts";
+import { claudeTarball, hostAddresses, readControllerFacts, readWiring, type HostContext, type HostWiring } from "./real.ts";
 import { readJson } from "./json.ts";
 import { refuse, type Args, type Io, type Row, type RowEnv } from "./start.ts";
 
@@ -43,7 +44,34 @@ export function hostLane(root: string): () => { commit: string; dirty: boolean; 
  */
 export function hostContext(service: LedgerService, wiringPath: string, env: Readonly<Record<string, string | undefined>> = process.env, addresses: () => string[] = hostAddresses): HostContext {
   const root = dirname(service.cfg.stateDir);
-  return { service, wiring: readWiring(wiringPath), env, dir: join(root, "wire"), lane: hostLane(root), controller: () => readControllerFacts(join(service.cfg.stateDir, "controller.json")), addresses };
+  const w = readWiring(wiringPath);
+  const work = join(root, "work");
+  const at = (p: string) => (typeof p === "string" ? resolve(work, p) : p);
+  const vm = w.vm && { ...w.vm, ...(w.vm.chromiumBuild ? { chromiumBuild: { ...w.vm.chromiumBuild, dir: at(w.vm.chromiumBuild.dir) } } : {}), claudeTarball: at(w.vm.claudeTarball) };
+  return { service, wiring: { ...w, vm }, env, dir: join(root, "wire"), lane: hostLane(root), controller: () => readControllerFacts(join(service.cfg.stateDir, "controller.json")), addresses };
+}
+
+/** The region a row on this host runs in, from the launch's record, and the work folder's regions.json (PD-42). */
+export function hostRegion(h: HostContext): { region: string; record: string } {
+  const region = h.controller?.()?.location;
+  if (!region) throw new DcError("E_DCW_REGION", "the controller host holds no launch record of its Ubicloud region, so no paid row starts on it (PD-42)");
+  return { region, record: join(dirname(h.service.cfg.stateDir), "work", "regions.json") };
+}
+
+/**
+ * The vm section's browser build and Claude Code tarball ship in the work folder (relaunch uploads nothing), so the
+ * wiring names both relative to it; the launch checks they are there and that the tarball is the pinned one.
+ */
+function vmFilesProblems(vm: NonNullable<HostWiring["vm"]>, work: string, root: string): string | null {
+  const inside = (p: string) => typeof p === "string" && !isAbsolute(p) && !relative(work, resolve(work, p)).startsWith("..");
+  if (!inside(vm.chromiumBuild?.dir) || !inside(vm.claudeTarball)) return "the wiring's vm section must name chromiumBuild.dir and claudeTarball relative to the work folder, which ships them";
+  if (!existsSync(join(resolve(work, vm.chromiumBuild.dir), vm.chromiumBuild.bin))) return "the work folder holds no Chromium binary at the wiring's chromiumBuild";
+  try {
+    claudeTarball(resolve(work, vm.claudeTarball), root);
+  } catch (e) {
+    return (e as Error).message;
+  }
+  return null;
 }
 
 export const runOnHost: HostStage["runOnHost"] = async (service, args) => {
@@ -147,6 +175,8 @@ async function hostRules(p: HostPlanFile, env: RowEnv): Promise<{ commit: string
   if (!lane.commit) refuse("2", "the lane's commit can't be read, so the host can't be pinned to it");
   if (lane.dirty) refuse("2", "the checkout is dirty; the controller host runs an exact commit, so commit first");
   const wiring = readWiring(resolve(p.work, p.wiring));
+  const vmFiles = wiring.vm && vmFilesProblems(wiring.vm, resolve(p.work), lane.root);
+  if (vmFiles) fail("E_USAGE", vmFiles);
   if (p.stage[0] === "sessions") {
     const s = wiring.sessions;
     if (!s) refuse("sessions", "the wiring file has no sessions section");
@@ -241,7 +271,7 @@ export function hostRow(s: HostSeams = {}): Row {
     if (verb === "launch") {
       const made = await launch(b, plan, keys!);
       saveRecord(recordPath, made);
-      io.out("host: launched " + made.controller.vm + " with WAL host " + made.wal.vm + " at " + made.commit + (made.image ? " on trial image " + made.image : "") + "; stage " + p.stage.join(" "));
+      io.out("host: launched " + made.controller.vm + " with WAL host " + made.wal.vm + " in Ubicloud " + p.ubicloud.location + " at " + made.commit + (made.image ? " on trial image " + made.image : "") + "; stage " + p.stage.join(" "));
       return 0;
     }
     try {

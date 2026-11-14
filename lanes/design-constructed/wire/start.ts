@@ -4,7 +4,7 @@
 // each OpenRouter model it calls (rule 9), the keyless dry run (rule 5), and then the ledger admission: each item it
 // spends on carries the cap the Captain recorded (rule 1), equal to the frozen cap or to its PD-30 re-pricing (the
 // reprice row's raise, admitted against that cap), and is open, unstopped and has room; its one lease opens. Only the ledger is built for the admission; the model, session and VM providers come after.
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
 import { DcError, fail } from "../errors.ts";
 import { LEDGER_ITEMS } from "../frozen.ts";
@@ -30,6 +30,11 @@ export interface RowEnv {
   power: PowerRunner;
   /** The structure screen's barred word runs, from gstack's skill files at the pin (author/screen.ts loadVocabulary). */
   vocabulary: (gstackDir: string) => ReadonlySet<string>;
+  /**
+   * On the controller host: the Ubicloud region the row runs in, from the launch's record, and the work folder's record
+   * of the region each stage started in (PD-42). Absent off the host, where the ledger provider refuses anyway.
+   */
+  region?: () => { region: string; record: string };
 }
 
 export type Row = (a: Args, io: Io, env: RowEnv) => Promise<number> | number;
@@ -122,6 +127,29 @@ export async function admitItems(l: LedgerProvider, items: readonly LedgerItemId
   return lines;
 }
 
+/** The stage a paid row belongs to, in section 14 item 7's order, for PD-42's region rule. */
+export function stageOf(plan: Pick<StartPlan, "row" | "record">): string {
+  const row = plan.row.split(" ")[0]!;
+  const fixed: Record<string, string> = { modelprobe: "probes", recipes: "stage 0", gatecheck: "gate check", author: "authoring", probe: "judge probe", reprice: "admission", stage3: "stage 3" };
+  if (fixed[row]) return fixed[row]!;
+  if ((row === "sessions" || row === "labels") && (plan.record?.stage === 1 || plan.record?.stage === 2)) return "stage " + plan.record.stage;
+  return fail("E_INTERNAL", "the paid row " + plan.row + " names no stage for the region rule");
+}
+
+/**
+ * PD-42: a paid row runs in the region its stage started in. The first row of a stage records the region in the work
+ * folder's regions.json; a later row of that stage in another region refuses before any admission.
+ */
+function regionRule(env: RowEnv, plan: StartPlan): { stage: string; region: string; record: string; first: boolean } | null {
+  const here = env.region?.();
+  if (!here) return null;
+  const stage = stageOf(plan);
+  const seen = existsSync(here.record) ? readJson<Record<string, { region: string; row: string; at: string }>>(here.record, "the work folder's regions.json") : {};
+  const started = seen[stage];
+  if (started && started.region !== here.region) throw new DcError("E_DCW_REGION", plan.row + " would run in " + here.region + ", but " + stage + " started in " + started.region + " (" + started.row + ", " + started.at + "); a stage never switches region (PD-42)");
+  return { stage, region: here.region, record: here.record, first: !started };
+}
+
 /** Every check before any provider but the ledger is built; then the sink and its launch record. */
 export async function start(plan: StartPlan, env: RowEnv): Promise<Launch> {
   const lane = env.lane();
@@ -141,11 +169,18 @@ export async function start(plan: StartPlan, env: RowEnv): Promise<Launch> {
     if (t!.dataCollection !== "deny" || !t!.provider || !Number.isFinite(Date.parse(t!.dated)) || !/^[0-9a-f]{64}$/.test(t!.termsDigest)) refuse("9", m + "'s terms record needs a provider, a date, data collection denied and a sha256 of the terms");
   }
   if (!(await env.dryRun())) refuse("5", "the keyless dry run has a FAIL line; gstack-evals dc dryrun names it");
+  const region = regionRule(env, plan);
   const ledger = await build(env.providers, "ledger", plan.row);
   const lines = await admitItems(ledger, plan.items, plan.scope);
+  const at = env.now().toISOString();
+  if (region?.first) {
+    const seen = existsSync(region.record) ? readJson<Record<string, unknown>>(region.record, "the work folder's regions.json") : {};
+    writeFileSync(region.record, JSON.stringify({ ...seen, [region.stage]: { region: region.region, row: plan.row, at } }, null, 2) + "\n");
+  }
   mkdirSync(sink, { recursive: true });
-  writeJson(sink + "/launch.json", { row: plan.row, commit: lane.commit, at: env.now().toISOString(), sink, items: plan.items, models: plan.models, terms: plan.terms.map((t) => ({ model: t.model, dated: t.dated, provider: t.provider })), ...plan.record });
-  return { sink, commit: lane.commit, ledger, lines: ["launch: " + plan.row + " at " + lane.commit + " into a new sink", ...lines] };
+  writeJson(sink + "/launch.json", { row: plan.row, commit: lane.commit, at, sink, items: plan.items, models: plan.models, terms: plan.terms.map((t) => ({ model: t.model, dated: t.dated, provider: t.provider })), region: region?.region ?? null, regionStage: region?.stage ?? null, ...plan.record });
+  const regionLine = region ? ["region: " + plan.row + " runs in Ubicloud " + region.region + "; " + region.stage + (region.first ? " starts there" : " started there")] : [];
+  return { sink, commit: lane.commit, ledger, lines: ["launch: " + plan.row + " at " + lane.commit + " into a new sink", ...regionLine, ...lines] };
 }
 
 const STOP_CODES: readonly string[] = ["E_DC_JUDGE_KAPPA", "E_DC_STOCK_FAIL", "E_DC_NO_READ", "E_DC_TWIN", "E_DC_SMOKE_DROP", "E_DC_EXPOSURE_STOP", "E_DC_SUPPLY_SHORT", "E_DC_AUTHOR_COST", "E_DC_GATE_CHECK", "E_DC_SANDBOX_AUDIT"] satisfies DcStopCode[];

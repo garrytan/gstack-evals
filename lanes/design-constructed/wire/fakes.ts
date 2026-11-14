@@ -223,8 +223,9 @@ export const fakePower =
   () => ({ code: 0, stdout: "ADMIT design power " + power + " se 0.007 -> " + (Number(power) >= 0.8 ? "pass" : "fail") + "\nMDD design MDD 0.12\n", stderr: "" });
 
 /** A row environment on a kit: the dry run passes, a clean checkout at a fixed commit, a fixed clock. */
-export function fakeEnv(kit: Kit, o: { dryRun?: boolean; dirty?: boolean; power?: PowerRunner; now?: string } = {}): RowEnv {
+export function fakeEnv(kit: Kit, o: { dryRun?: boolean; dirty?: boolean; power?: PowerRunner; now?: string; region?: { region: string; record: string } } = {}): RowEnv {
   return {
+    ...(o.region ? { region: () => o.region! } : {}),
     providers: kit.providers,
     dryRun: async () => o.dryRun ?? true,
     lane: () => ({ commit: FAKE_COMMIT, dirty: o.dirty ?? false, root: REPO_ROOT }),

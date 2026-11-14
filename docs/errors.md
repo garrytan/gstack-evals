@@ -314,6 +314,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_DCW_CONTROLLER_ADDRESS](#e_dcw_controller_address) | 2 | U20 |
 | [E_DCW_APPS_VIEW](#e_dcw_apps_view) | 2 | U20 |
 | [E_DCW_PLANTED_INPUTS](#e_dcw_planted_inputs) | 2 | U20 |
+| [E_DCW_BROWSER_LAUNCH](#e_dcw_browser_launch) | 2 | U20 |
 | [E_DCW_REGION](#e_dcw_region) | 2 | U20 |
 | [E_DCV_POWER_PY_PIN](#e_dcv_power_py_pin) | 2 | U20 |
 | [E_DCV_PROJECTION_STOP](#e_dcv_projection_stop) | warning | U20 |
@@ -2266,11 +2267,19 @@ Fix: Open the sealed planted tar again into a new folder on tmpfs and rerun the 
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 
+### E_DCW_BROWSER_LAUNCH
+
+Design plan review eval (probe 1D, PD-42): stage 0's first qualification could not launch the VM's headless Chromium (it did not start, its DevTools port did not answer, or Playwright could not attach over the SSH tunnel). The recipes row stopped before any further recipe session; the VM was audited and deleted, and the one recipe session already run stays on dc-base-apps.
+
+Fix: Read the line the row printed and the controller's browser install (the work folder's Chromium build and its apt libraries from the mirror), and bring it to the Captain. Launch the recipes row again into a new sink only on the Captain's word.
+
+Exit 2. Side effects: The first candidate's recipe session and its two VMs stay on dc-base-apps and dc-hosts at their measured spend. Retry safe: no. Resumable: no. Owner: U20.
+
 ### E_DCW_REGION
 
 Design plan review eval (PD-42): a paid row would run in a Ubicloud region other than the one its stage started in, the controller host has no launch record of its region, the wiring's vm section makes VMs outside the host's region, or a recovery plan names another region than the hosts run in. No VM was made and no model call was sent.
 
-Fix: Bring the stage, both regions and the row to the Captain. A stage finishes in the region it started in; a move to the fallback region happens only at a stage boundary, on the Captain's word.
+Fix: Bring the stage, both regions and the row to the Captain. A stage finishes in the region it started in; a move to the fallback region happens only at a stage boundary, and the run record names it.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 
