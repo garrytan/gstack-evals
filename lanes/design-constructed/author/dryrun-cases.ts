@@ -10,7 +10,7 @@ import { draw, drawRuleProblems, kindOrder, pilotPositions } from "./draws.ts";
 import { appView, authorReply, CONTEXT, DECOY, EVIDENCE, EVIDENCE_2X, FIXTURE_APP, FIXTURE_APP_2, ITEMS, ITEMS_2X, PLAN, transformReply, WRONG_WAY } from "./fixture.ts";
 import { enforceGateCheck, keylessGates, runGateCheck, tableOf, type PlantedName, type PlantedUnit } from "./gatecheck.ts";
 import { checkPilot, pilotCost, reproject } from "./pilot.ts";
-import { runUnit, wrongWayShort, type UnitJob, type UnitOutcome } from "./pipeline.ts";
+import { runUnit, wrongWayLine, wrongWayShort, type UnitJob, type UnitOutcome } from "./pipeline.ts";
 import { runPilot, type PilotReport } from "./run.ts";
 import { authorPrompt } from "./prompts.ts";
 import { scripted, defaultBlock, STAND_IN_VOCABULARY, type Script } from "./scripted.ts";
@@ -849,6 +849,18 @@ export function cases(): DryRunCase[] {
         const { o: short } = await unit({ author: () => one });
         const { o: full } = await unit({});
         return want(short.status === "pass" && short.reason.endsWith("key.json holds 1 wrong-way facts, fewer than two") && wrongWayShort([short, full]).join() === "u1" && full.status === "pass" && !full.reason.includes("wrong-way"), brief(short) + " | " + brief(full));
+      },
+    },
+    {
+      rule: "PD-29",
+      name: "section 2 item 7: the author row's units step prints the total of passing units with fewer than two wrong-way facts, over the passing units only",
+      check: async () => {
+        const one = "Here is the case.\n\n" + JSON.stringify({ plan: PLAN, evidence: EVIDENCE, key: { items: ITEMS, mentioned: [], wrong_way: WRONG_WAY.slice(0, 1) } });
+        const { o: short } = await unit({ author: () => one });
+        const { o: full } = await unit({});
+        const dropped: UnitOutcome = { ...short, status: "drop" };
+        const line = wrongWayLine([short, full, dropped]);
+        return want(line === "wrong-way: 1 of 2 passing units hold fewer than two wrong-way facts", line);
       },
     },
     {

@@ -249,6 +249,9 @@ export async function runUnit(job: UnitJob, depsIn: Deps): Promise<UnitOutcome> 
 /** Section 2 item 7 (as built: step 3 doesn't check it): the passing units whose key.json holds fewer than two wrong-way facts. */
 export const wrongWayShort = (outcomes: readonly UnitOutcome[]): string[] => outcomes.filter((o) => o.status === "pass" && o.files && o.files.key.wrongWay.length < 2).map((o) => o.unitId);
 
+/** The author row's total for wrongWayShort over a launch's outcomes. */
+export const wrongWayLine = (outcomes: readonly UnitOutcome[]): string => "wrong-way: " + wrongWayShort(outcomes).length + " of " + outcomes.filter((o) => o.status === "pass").length + " passing units hold fewer than two wrong-way facts";
+
 /** The pass rate per step and the removal rate per class at each step, over the units and items that reached it (BT). */
 export function funnelTable(outcomes: readonly UnitOutcome[]): { step: Step; units: number; passed: number; byClass: Record<ItemClass, { reached: number; removed: number; tieDecided: number }> }[] {
   return STEPS.map((step) => {

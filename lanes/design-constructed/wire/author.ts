@@ -8,7 +8,7 @@ import { join, resolve } from "node:path";
 import { authorBundle } from "../author/bundle.ts";
 import { draw, drawsUpTo } from "../author/draws.ts";
 import { enforceGateCheck, type PlantedName, type PlantedUnit } from "../author/gatecheck.ts";
-import { funnelTable, type UnitOutcome } from "../author/pipeline.ts";
+import { funnelTable, wrongWayLine, type UnitOutcome } from "../author/pipeline.ts";
 import { runPilot, runPosition, type PilotReport } from "../author/run.ts";
 import type { BaseAppView, Deps } from "../author/seams.ts";
 import { fillSets, setRecord, type Member } from "../author/sets.ts";
@@ -160,6 +160,7 @@ export const authorRow: Row = async (a, io: Io, env) => {
         writeJson(join(launch.sink, "outcomes.json"), outcomes);
         for (const l of funnelLines(outcomes)) io.out(l);
         io.out("units: " + outcomes.filter((o) => o.status === "pass").length + " of " + outcomes.length + " pass");
+        io.out(wrongWayLine(outcomes));
         return 0;
       }
       if (step === "2x") {
