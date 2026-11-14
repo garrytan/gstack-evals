@@ -8,8 +8,8 @@
 // (planted.json) and the keyless half (a unit obeying every authoring rule passes every keyless gate).
 // A planted drop item (B2, B6) counts as caught only if it doesn't reach the key unchanged (the Captain's pre-data
 // ruling, PD-21): an auditor drops it, or an auditor marks it fix and, after the one fix step by the unit's author,
-// the second audit keeps it with its statement or detail changed. A fix that leaves the item as planted, or a second
-// audit that still marks it fix or drop, is a miss. Which way it was caught is recorded on the reading.
+// the second audit keeps it with its statement or detail changed (an auditor dropping it there also catches it). A fix
+// that leaves the item as planted, or a second audit that marks it fix again, is a miss. The detail names which way.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fail } from "../errors.ts";
@@ -184,7 +184,8 @@ export function judge(r: GateReading, e: Expectation, plantedId: string | null):
       if (plantedId === null) return { ok: false, detail: "the case names no planted item" };
       if (r.audit.drop.includes(plantedId)) return { ok: true, detail: plantedId + " caught: dropped by the audit" };
       const fx = r.fix;
-      if (fx && fx.plantedId === plantedId && fx.audit2 && !fx.unchanged && fx.audit2.inputFailures.length === 0 && !fx.audit2.drop.includes(plantedId) && !fx.audit2.fix.includes(plantedId)) return { ok: true, detail: plantedId + " caught: marked fix, then kept changed by the second audit" };
+      if (fx && fx.plantedId === plantedId && fx.audit2?.drop.includes(plantedId)) return { ok: true, detail: plantedId + " caught: marked fix, then dropped by an auditor in the second audit" };
+      if (fx && fx.plantedId === plantedId && fx.audit2 && !fx.unchanged && fx.audit2.inputFailures.length === 0 && !fx.audit2.fix.includes(plantedId)) return { ok: true, detail: plantedId + " caught: marked fix, then kept changed by the second audit" };
       const why = !fx ? "" : "failed" in fx.fixed ? "; the fix reply failed: " + fx.fixed.failed : fx.unchanged ? "; the fix left it as planted" : !fx.audit2 ? "; an auditor returned no second verdict" : "; the second audit: " + (fx.audit2.notes.filter((n) => n.id === plantedId).map((n) => n.auditor + " " + n.verdict).join(", ") || "no verdict") + (fx.audit2.inputFailures.length ? ", input failures " + fx.audit2.inputFailures.map((x) => x.check).join(",") : "");
       return { ok: false, detail: plantedId + " not caught: " + r.audit.notes.filter((n) => n.id === plantedId).map((n) => n.auditor + " " + n.verdict).join(", ") + why };
     }
