@@ -5,6 +5,7 @@
 import { join } from "node:path";
 import { openLease } from "../../../src/runner/ledger/ledger.ts";
 import { readItem } from "../../../src/runner/ledger/record.ts";
+import type { DcError } from "../errors.ts";
 import { LEDGER_ITEMS, MONEY, RECIPES } from "../frozen.ts";
 import type { DryRunCase, LedgerItemId, Model } from "../types.ts";
 import { $, MoneyController } from "./book.ts";
@@ -12,10 +13,12 @@ import { durableCases } from "./dryrun-durable.ts";
 import { controllerHostCases } from "./dryrun-hosts.ts";
 import { journalCases } from "./dryrun-journals.ts";
 import { admitted, expectations, withRig, type Rig } from "./dryrun-fixture.ts";
-import { admitStage, admitVm, extendVm, hostsProjection, settleVm } from "./hosts.ts";
+import { planProblems, type ControllerPlan } from "./controller-host.ts";
+import { admitStage, admitVm, extendVm, hostsProjection, settleVm, walFoldProjection } from "./hosts.ts";
 import { mainLeases } from "./ledger-main.ts";
 import { worstCaseMicros, requestBody, callWorstCase } from "./price.ts";
 import { afterFirstPacket, authoring3, baseAppsCapStop, envelope, FIRST_PACKET_TAG, holdForFirstPacket, moneyFigures } from "./projection.ts";
+import { ProviderWatch } from "./served.ts";
 import { applyStop, AUTHORING_ITEMS, LEASED_ITEMS, stopPlan, STAGE3_ITEMS } from "./stops.ts";
 import type { Sub } from "./types.ts";
 
@@ -532,6 +535,52 @@ const hostCases: DryRunCase[] = [
         const line = hostsProjection({ stage: "stage 3", controllerHours: 48, vms: [{ count: 96, hours: 2 }] }, PRICE).line;
         return fits.ok && !big.ok && /Captain/.test(big.captain) && line.includes("240 host-hours") ? null : JSON.stringify([fits, big, line]);
       }),
+  },
+  {
+    rule: "PD-9",
+    name: "provider names compare after folding case, spaces and punctuation, both raw names are recorded, and a real provider change still trips the drift watch",
+    check: () =>
+      withRig({}, async (r) => {
+        const e = expectations();
+        const watch = new ProviderWatch({ controller: r.c, out: join(r.dir, "watch-names"), datedTerms: { sol: "OpenAI" } });
+        await watch.check({ model: "sol", servedBy: "OpenAI", via: "direct", label: "first" });
+        let code = "no error";
+        for (const name of ["openai", "Open AI", "open-ai."]) {
+          try {
+            await watch.check({ model: "sol", servedBy: name, via: "session", label: name });
+          } catch (err) {
+            code = (err as DcError).code ?? String(err);
+          }
+        }
+        e.want(code === "no error", "a folded name read " + code);
+        const names = watch.names();
+        e.want(names.some((n) => n.servedBy === "Open AI" && n.against === "OpenAI" && n.source === "dated terms") && names.some((n) => n.servedBy === "open-ai." && n.source === "first call"), "names.ndjson read " + JSON.stringify(names));
+        try {
+          await watch.check({ model: "sol", servedBy: "Azure", via: "direct", label: "moved" });
+        } catch (err) {
+          code = (err as DcError).code ?? String(err);
+        }
+        e.want(code === "E_DC_PROVIDER_DRIFT", "a move to Azure read " + code);
+        return e.result();
+      }),
+  },
+  {
+    rule: "R2-3",
+    name: "the WAL host is folded into dc-hosts on burstable-1: the run projection reruns with it inside the $80 cap, a stage projection carries its hours, and a WAL host on another size is refused",
+    check: async () => {
+      const e = expectations();
+      const burstable1 = 14_300;
+      const fold = walFoldProjection(14 * 24, burstable1);
+      e.want(fold.fits && fold.micros === 70_000_000 + 336 * burstable1, fold.line);
+      e.want(!walFoldProjection(24 * 30 * 12, 20_000).fits, "a year of WAL host-hours fit the cap");
+      const stage = hostsProjection({ stage: "stage 1", controllerHours: 48, vms: [], wal: { hours: 48, priceMicrosPerHour: burstable1 } }, PRICE);
+      e.want(stage.micros === 48 * PRICE + 48 * burstable1 && stage.line.includes("WAL host's 48 hours"), stage.line);
+      const plan = { runId: "dc-dryrun", owner: "dry-owner", longestStageHours: 24, ttlHours: 30, priceMicrosPerHour: { controller: 60_000, wal: burstable1 }, commit: "0".repeat(40), repoTar: new Uint8Array(1), recordTar: new Uint8Array(1), root: "/x", wal: { dir: "/w", script: "/s", owner: null, authorizedKeys: "/k" } } as unknown as ControllerPlan;
+      e.want(planProblems(plan).length === 0, "the plan read " + planProblems(plan).join("; "));
+      e.want(planProblems({ ...plan, sizes: { wal: "standard-2" } }).some((p) => p.includes("burstable-1")), "a standard-2 WAL host was not refused");
+      e.want(planProblems({ ...plan, ttlHours: 24 * 365 * 2 }).some((p) => p.includes("does not fit")), "a WAL host past the cap was not refused");
+      return e.result();
+    },
   },
   {
     rule: "S15",

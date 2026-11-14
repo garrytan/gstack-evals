@@ -137,7 +137,7 @@ export function controllerHostCases(): DryRunCase[] {
     },
     {
       rule: "R2-3",
-      name: "a controller host launch that fails partway deletes every VM it made on the simulated Ubicloud",
+      name: "a controller host launch that fails partway deletes every VM it made on the simulated Ubicloud, the WAL host made on burstable-1",
       check: () =>
         withTemp(async (dir) => {
           const w = fakeWorld({
@@ -149,13 +149,17 @@ export function controllerHostCases(): DryRunCase[] {
           mkdirSync(join(dir, "approval"), { recursive: true });
           const record = makeRecord(join(dir, "approval"));
           let why = "";
+          const backend = fakeBackend(w);
+          const create = backend.create.bind(backend);
+          const sizes: Array<string | undefined> = [];
+          backend.create = (spec, o) => (sizes.push(o?.size), create(spec, o));
           try {
-            await launch(fakeBackend(w), { runId: "dc-dryrun-host", owner: "dry-owner", longestStageHours: 24, ttlHours: 30, priceMicrosPerHour: { controller: 60_000, wal: 20_000 }, commit: "0".repeat(40), repoTar: recordTar(record), recordTar: recordTar(record), root: join(dir, "host"), wal: { dir: join(dir, "wal"), script: join(dir, "walctl.py"), owner: null, authorizedKeys: join(dir, "authorized_keys") }, provision: () => ["exit 9"], bun: process.execPath }, serviceEnv({ ANTHROPIC_API_KEY: "x", OPENAI_API_KEY: "x", OPENROUTER_API_KEY: "x", UBICLOUD_API_KEY: "x" }, "dry-owner"));
+            await launch(backend, { runId: "dc-dryrun-host", owner: "dry-owner", longestStageHours: 24, ttlHours: 30, priceMicrosPerHour: { controller: 60_000, wal: 20_000 }, commit: "0".repeat(40), repoTar: recordTar(record), recordTar: recordTar(record), root: join(dir, "host"), wal: { dir: join(dir, "wal"), script: join(dir, "walctl.py"), owner: null, authorizedKeys: join(dir, "authorized_keys") }, provision: () => ["exit 9"], bun: process.execPath }, serviceEnv({ ANTHROPIC_API_KEY: "x", OPENAI_API_KEY: "x", OPENROUTER_API_KEY: "x", UBICLOUD_API_KEY: "x" }, "dry-owner"));
           } catch (err) {
             why = (err as Error).message;
           }
           const left = w.vms.filter((v) => !w.deleted.includes(v.id)).map((v) => v.id);
-          return why.includes("provisioning the controller host failed") && w.vms.length === 2 && left.length === 0 ? null : "launch read '" + why + "'; left " + left.join(", ");
+          return why.includes("provisioning the controller host failed") && w.vms.length === 2 && left.length === 0 && sizes[0] === "burstable-1" ? null : "launch read '" + why + "'; left " + left.join(", ") + "; the WAL host was made on " + sizes[0];
         }),
     },
   ];

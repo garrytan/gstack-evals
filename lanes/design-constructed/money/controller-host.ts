@@ -18,6 +18,7 @@ import type { Vm, VmBackend, VmSpec } from "../stage3/sandbox.ts";
 import { TTL_MARGIN_MINUTES } from "../stage3/sandbox.ts";
 import { mirrorSetup, shq } from "../stage3/ubicloud-real.ts";
 import type { HostConfig, TargetConfig } from "./host-main.ts";
+import { WAL_HOST_SIZE, walFoldProjection } from "./hosts.ts";
 import type { HostVm, ServiceStatus } from "./ledger-service.ts";
 import { walAuthorizedKey, WALCTL_PATH, WALCTL_PY, WAL_DIR } from "./offhost.ts";
 
@@ -155,6 +156,11 @@ export function planProblems(p: ControllerPlan): string[] {
   if (!(p.longestStageHours > 0)) out.push("the longest stage needs a positive length");
   if (!(p.ttlHours * 60 >= p.longestStageHours * 60 + TTL_MARGIN_MINUTES)) out.push("the time to live (" + p.ttlHours + " h) does not cover the longest stage (" + p.longestStageHours + " h) and the " + TTL_MARGIN_MINUTES + " minute margin");
   for (const [k, v] of Object.entries(p.priceMicrosPerHour)) if (!Number.isSafeInteger(v) || v <= 0) out.push("the " + k + " host's list price is not a positive whole number of micros an hour");
+  if (p.sizes?.wal !== undefined && p.sizes.wal !== WAL_HOST_SIZE) out.push("the WAL host runs on " + WAL_HOST_SIZE + ", folded into dc-hosts, not " + p.sizes.wal);
+  else if (Number.isSafeInteger(p.priceMicrosPerHour.wal) && p.priceMicrosPerHour.wal > 0) {
+    const fold = walFoldProjection(p.ttlHours, p.priceMicrosPerHour.wal);
+    if (!fold.fits) out.push(fold.line + " does not fit");
+  }
   if (!/^[0-9a-f]{40}$/.test(p.commit)) out.push("the commit is not a full sha");
   if (!p.repoTar.length) out.push("the repository archive is empty");
   if (!p.recordTar.length) out.push("the approval record archive is empty");
@@ -354,7 +360,7 @@ export async function launch(b: HostBackend, p: ControllerPlan, env: Uint8Array)
   const x = new Ctx(b, p);
   const made: Vm[] = [];
   return guarded(x, made, async () => {
-    const wal = await b.create(hostSpec(p, "dc wal host " + p.runId), { prefix: "dcwal", size: p.sizes?.wal });
+    const wal = await b.create(hostSpec(p, "dc wal host " + p.runId), { prefix: "dcwal", size: WAL_HOST_SIZE });
     made.push(wal);
     const walAt = iso(x.now());
     await setupWal(x, wal);

@@ -4,6 +4,7 @@
 // per stage, printed before each stage, with a stage refused for the Captain when it doesn't fit; and the controller
 // host's deletion during a wait over 12 hours with nothing in flight, after its leases settle and the off-host copy
 // verifies, with relaunch from that copy.
+import { LEDGER_ITEMS } from "../frozen.ts";
 import type { LedgerItemId } from "../types.ts";
 import { dollars, type MoneyController } from "./book.ts";
 import { takeSnapshot } from "./durability.ts";
@@ -51,13 +52,31 @@ export interface StagePlan {
   controllerHours: number;
   /** Throwaway VMs: how many, and each one's hours. */
   vms: Array<{ count: number; hours: number }>;
+  /** The WAL host's hours over the stage, at its own list price (burstable-1, the Captain's ruling 1E). */
+  wal?: { hours: number; priceMicrosPerHour: number };
 }
 
 /** The stage's host-hours projection at the list price, printed in the phase 1 report and before each stage. */
 export function hostsProjection(p: StagePlan, priceMicrosPerHour: number): { hours: number; micros: number; line: string } {
   const hours = p.controllerHours + p.vms.reduce((a, v) => a + v.count * v.hours, 0);
-  const micros = reserveOf(hours, priceMicrosPerHour);
-  return { hours, micros, line: "dc-hosts projection for " + p.stage + ": " + hours + " host-hours at " + dollars(priceMicrosPerHour) + " an hour, " + dollars(micros) };
+  const wal = p.wal ? reserveOf(p.wal.hours, p.wal.priceMicrosPerHour) : 0;
+  const micros = reserveOf(hours, priceMicrosPerHour) + wal;
+  return { hours, micros, line: "dc-hosts projection for " + p.stage + ": " + hours + " host-hours at " + dollars(priceMicrosPerHour) + " an hour" + (p.wal ? " and the WAL host's " + p.wal.hours + " hours at " + dollars(p.wal.priceMicrosPerHour) + " an hour" : "") + ", " + dollars(micros) };
+}
+
+/** The Ubicloud size the WAL host runs on: folded into dc-hosts on the smallest burstable VM (the Captain's ruling 1E). */
+export const WAL_HOST_SIZE = "burstable-1";
+
+/**
+ * dc-hosts' run projection rerun with the WAL host folded in (ruling 1E): the frozen projection plus the WAL host's hours
+ * at its list price read on the day. It must stay within dc-hosts' cap.
+ */
+export function walFoldProjection(walHours: number, walPriceMicrosPerHour: number): { micros: number; fits: boolean; line: string } {
+  const spec = LEDGER_ITEMS["dc-hosts"];
+  const wal = reserveOf(walHours, walPriceMicrosPerHour);
+  const micros = Math.round(spec.projectionUsd * 1e6) + wal;
+  const cap = Math.round(spec.capUsd * 1e6);
+  return { micros, fits: micros <= cap, line: "dc-hosts projection with the WAL host on " + WAL_HOST_SIZE + ": " + dollars(Math.round(spec.projectionUsd * 1e6)) + " plus " + walHours + " WAL host-hours at " + dollars(walPriceMicrosPerHour) + " an hour (" + dollars(wal) + "), " + dollars(micros) + " of the " + dollars(cap) + " cap" };
 }
 
 /** A stage starts only when its projection fits beside dc-hosts' settled, in-flight and unknown charges; else it goes to the Captain. */
