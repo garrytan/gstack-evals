@@ -48,10 +48,10 @@ export const runOnHost: HostStage["runOnHost"] = async (service, args) => {
   if (!wiring || !row.length) fail("E_USAGE", "runOnHost takes the wiring file, then one gstack-evals dc row and its arguments");
   const work = join(dirname(service.cfg.stateDir), "work");
   mkdirSync(work, { recursive: true, mode: 0o700 });
-  const ctx = hostContext(service, resolve(wiring!));
   const before = process.cwd();
   process.chdir(work);
   try {
+    const ctx = hostContext(service, resolve(wiring!));
     const { main, realEnv } = await import("../cli.ts");
     const log = join(service.cfg.stateDir, "stage.log");
     const line = (t: string) => appendLine(log, t);
