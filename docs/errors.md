@@ -312,6 +312,8 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_DCW_MODEL_PROBE](#e_dcw_model_probe) | 2 | U20 |
 | [E_DCW_INSTALL_NETWORK](#e_dcw_install_network) | 2 | U20 |
 | [E_DCW_CONTROLLER_ADDRESS](#e_dcw_controller_address) | 2 | U20 |
+| [E_DCW_APPS_VIEW](#e_dcw_apps_view) | 2 | U20 |
+| [E_DCW_PLANTED_INPUTS](#e_dcw_planted_inputs) | 2 | U20 |
 | [E_DCW_REGION](#e_dcw_region) | 2 | U20 |
 | [E_DCV_POWER_PY_PIN](#e_dcv_power_py_pin) | 2 | U20 |
 | [E_DCV_PROJECTION_STOP](#e_dcv_projection_stop) | warning | U20 |
@@ -2245,6 +2247,22 @@ Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing
 Design plan review eval (wiring): the wiring's vm section names the controller host for the VM proxy or the mirrors, but the host holds no launch record of its private IPv4, the record can't be read, or the recorded address is on none of the host's interfaces. No VM was made and no key was read.
 
 Fix: Launch the controller host with gstack-evals dc host launch, which writes the record into the host's state folder, or name a literal address in the wiring. Then launch the row again into a new sink.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_DCW_APPS_VIEW
+
+Design plan review eval (apps.json): a base app's checkout is not at its pin, holds changes or files outside the pin's tree, or its view (the design files and the screen files the router imports) differs from the pin record it is checked against. Nothing was written.
+
+Fix: Re-fetch the checkout with the clones row or the planted row into a new folder. When the view still differs from the pin record, bring the printed counts to the Captain, who decides which rule stands.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_DCW_PLANTED_INPUTS
+
+Design plan review eval (the gate check's inputs): the opened planted tar does not hold the eight planted units as pin.json lists them, a unit.json disagrees with pin.json or with its folder's evidence files, or the planted app's commit can't be fetched or its tree differs from pin.json's. Nothing was written for the gate check.
+
+Fix: Open the sealed planted tar again into a new folder on tmpfs and rerun the row into a new folder. A difference that stays goes to the Captain; never edit a planted unit.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 
