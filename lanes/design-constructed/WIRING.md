@@ -45,11 +45,16 @@ A host run reads one wiring file (wire/real.ts readWiring). A missing choice ref
 
 ## Phase 1b open items
 
-Each piece below needs text or a format that neither the preregistration nor frozen.ts fixes, and each choice could move a stage 3 read. None is built; each refuses until the Captain rules.
+Each piece below is a choice the binding could not make without moving a scored outcome or the money, and each waits for the Captain. Items 19 to 21 need text or a format that neither the preregistration nor frozen.ts fixes, and each could move a stage 3 read; none is built, and each refuses until the Captain rules.
 
 19. **The build reader.** Not frozen: Astra's blind forced-state read (its prompt, how the screenshot is sent, and how a reply maps to designed, blank, broken, raw-error or endless-spinner); the agent user's prompt for GPT-6.1 Sol, its action format, the form of the accessibility snapshot it gets each step, and which page state counts as seen before for a dead end; and the design-system literal read (which files are UI files, what counts as a colour or spacing literal, and when a project "has tokens"). The mechanical reads (axe-core at three widths, overflow at 375 and 768 pixels, targets under 44 pixels, the forced states' mechanical read and each key check) run on the key check bodies that stage 3 authoring defines, so they wait on item 20 too.
 20. **Stage 3 authoring.** Not frozen: Opus's prompt for the fixtures, key checks and scenarios, the JSON shape of a key check body and a scenario body (stage3/seams.ts keeps both opaque), Sol's audit prompt and its verdict format, and each call's output cap.
 21. **The DES-4 pairwise judge.** The question is frozen in prose (which screen looks designed for this product and its users rather than a generic template, or tie). Not frozen: the prompt text, how the two desktop and phone pairs are sent and in what order inside a pair, the reply format, and which reply is unparsable and so retried once before the read is missing.
+22. **backgroundWaitMs.** The preregistration and the plan give no value for the driver's wait for background work at a turn's result. Unset, a session ends at its first result with background work still out, and the driver logs it. Other lanes use 3,600,000 ms (src/adapters/claude-code/driver.ts BACKGROUND_WAIT_MS).
+23. **errorSeen's window.** errorSeen reads every error in the attempt's journal, as ruled ("inside the attempt"), so an upstream error the proxy retried and recovered from early in a session still makes a later malformed tool call outside the agent. wire.ts's SessionDrive comment says "the session's last exchange". The Captain may narrow it.
+24. **The rejected-call marker.** run/stream.ts matches Claude Code's tool_use_error text for an input validation failure or an unknown tool. It is checked against hand-written stream lines only, not a real CLI session at the pinned Claude Code version.
+25. **The model probe's ledger item.** paid/pin.ts modelProbePlan lists one short call per model (16 output tokens) to run first after the go (ruling 1A). Which ledger item those five calls charge is not ruled, so runModelProbe takes the call from its caller and no row runs it yet.
+26. **Start rule 9's provider compare.** read/start.ts still compares a first call's provider with the terms record's raw string. Ruling 1B's fold (money/served.ts foldProvider) applies to the drift watch here; the read area applies it to start rule 9.
 
 ## Carried from the area notes
 
@@ -59,16 +64,6 @@ These stay open as their own notes describe them:
 - stage3/NOTES.md items 1 to 16.
 - paid/NOTES.md items 2, 3, 4, 6 and 7.
 - run/NOTES.md items 11 to 14 and 16.
-
-## Phase 1b open items
-
-Choices the binding could not make without moving a scored outcome or the money. Each waits for the Captain.
-
-1. **backgroundWaitMs.** The preregistration and the plan give no value for the driver's wait for background work at a turn's result. Unset, a session ends at its first result with background work still out, and the driver logs it. Other lanes use 3,600,000 ms (src/adapters/claude-code/driver.ts BACKGROUND_WAIT_MS).
-2. **errorSeen's window.** errorSeen reads every error in the attempt's journal, as ruled ("inside the attempt"), so an upstream error the proxy retried and recovered from early in a session still makes a later malformed tool call outside the agent. wire.ts's SessionDrive comment says "the session's last exchange". The Captain may narrow it.
-3. **The rejected-call marker.** run/stream.ts matches Claude Code's tool_use_error text for an input validation failure or an unknown tool. It is checked against hand-written stream lines only, not a real CLI session at the pinned Claude Code version.
-4. **The model probe's ledger item.** paid/pin.ts modelProbePlan lists one short call per model (16 output tokens) to run first after the go (ruling 1A). Which ledger item those five calls charge is not ruled, so runModelProbe takes the call from its caller and no row runs it yet.
-5. **Start rule 9's provider compare.** read/start.ts still compares a first call's provider with the terms record's raw string. Ruling 1B's fold (money/served.ts foldProvider) applies to the drift watch here; the read area applies it to start rule 9.
 
 ## Not verified here
 
