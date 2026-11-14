@@ -3,7 +3,7 @@
 // rule against fake upstreams and prints one PASS or FAIL line per rule, then exits 1 when any rule failed.
 //   dry-run [--out <dir>] [--venv <runtime or dev venv>] [--keyless] [--concurrency <n>]
 // Legs:
-//  1 a temporary ledger record with one lease opened and settled for each item in config/items.json, the sessions'
+//  1 a temporary ledger record with one lease opened and settled for each open item in config/items.json, the sessions'
 //    spend landing on their items;
 //  2 the real MeteringProxy (allowanceCode DR_ALLOWANCE_STOP) in front of fake/upstreams.ts, and real dr_agent.session
 //    runs in a scratch git repo standing in for /testbed, for every cell on both main models: every outcome path of
@@ -14,7 +14,7 @@
 //  6 both verdict printers on a full grid, exactly one verdict per point;
 //  7 draw.py's counts against draw.txt and the split lists, byte for byte;
 //  8 the pilot re-cost, the drop order, the max_tokens fallback and the pilot session stop;
-//  9 the leak scan: a planted canary in a decider request stops the batch with DR_CUSTODY_HIT, a real-fix diff does not;
+//  9 the leak scan: a planted canary in any request on the slot (main model or decider) stops the batch with DR_CUSTODY_HIT, a real-fix diff does not;
 // 10 the scorer end to end on the dry-run sessions: labels with a fake docker runner, tuner, admission, Primary A and B;
 // 11 no gstack: no gstack path, skill, hook or drive in the runtime layer, and no cell's agent opens CLAUDE.md,
 //    AGENTS.md or .claude/ (the session runs under a sys.addaudithook wrapper that records every file it opens).
@@ -27,7 +27,8 @@ import { join, resolve } from "node:path";
 import { openLease, recordApproval, settleLease } from "../../src/runner/ledger/ledger.ts";
 import { LocalLedger } from "../../src/runner/ledger/local.ts";
 import { MeteringProxy, UPSTREAM, type Meter } from "../../src/runner/proxy/metering-proxy.ts";
-import { anthropicText, anthropicToolUse, anthropicUsage, errorReply, FakeUpstreams, openaiJson, openaiToolCalls, openrouterJson, SUBMIT_COMMAND, typesafeAnswers, type FakeProvider, type FakeReply, type FakeUsage } from "./fake/upstreams.ts";
+import { anthropicText, anthropicToolUse, anthropicUsage, asksInlineReasoning, errorReply, FakeUpstreams, openaiJson, openaiResponsesText, openaiResponsesToolCalls, openaiToolCalls, openrouterJson, SUBMIT_COMMAND, typesafeAnswers, type FakeProvider, type FakeReply, type FakeUsage } from "./fake/upstreams.ts";
+import { CALIBRATION_ITEM } from "./host/plans.ts";
 import { fakeFetch, HARBOR_RETRY, MAX_OUTPUT_TOKENS, PILOT_SESSION_STOP_MICROS, RETRY, runBatch, type BatchOptions } from "./host/controller.ts";
 import { joinLabels, labelTrial, main as labelsMain, type LabelRow } from "./labels/cli.ts";
 import type { DockerRunner } from "./labels/container.ts";
@@ -205,12 +206,12 @@ export interface Session {
   item: string;
 }
 
-const itemOf = (s: Spec) => (s.cell === "N" ? "dr-calibration" : s.cell === "R" || s.cell === "P" ? "dr-pilot-rp" : "dr-pilot-jfw");
+const itemOf = (s: Spec) => (s.cell === "N" ? CALIBRATION_ITEM : s.cell === "R" || s.cell === "P" ? "dr-pilot-rp" : "dr-pilot-jfw");
 const allowOf = (cell: string, model: string): string[] => [CELLS.models[model].allow, ...CELLS.cells[cell].deciders];
 
 function classify(provider: FakeProvider, body: any): string {
   if (provider === "typesafe") return "jev";
-  if (provider === "anthropic") return body?.tool_choice?.name === "answer" ? "frontier" : "main";
+  if (provider === "anthropic") return body?.output_config?.format ? "frontier" : "main";
   if (provider === "openai") return body?.response_format ? "frontier" : "main";
   return body?.response_format ? "particle" : "main";
 }
@@ -234,18 +235,22 @@ const DEFAULT = (a: Ask): Exclude<Answer, undefined | "fail"> => (a.type === "ne
 let replyIds = 0;
 function anthropicAnswer(input: unknown, usage?: FakeUsage): FakeReply {
   const n = ++replyIds;
-  return { json: { id: "msg_dr_" + n, type: "message", role: "assistant", model: "claude-opus-5-5", content: [{ type: "tool_use", id: "toolu_dr_" + n, name: "answer", input }], stop_reason: "tool_use", stop_sequence: null, usage: anthropicUsage(usage) } };
+  const content = [{ type: "thinking", thinking: "", signature: "sig_dr_" + n }, { type: "text", text: JSON.stringify(input) }];
+  return { json: { id: "msg_dr_" + n, type: "message", role: "assistant", model: "claude-opus-5-5", content, stop_reason: "end_turn", stop_sequence: null, usage: anthropicUsage(usage) } };
 }
 
 function replyFor(provider: FakeProvider, body: any, spec: Spec, st: Record<string, number>): FakeReply {
+  if (provider === "anthropic" && ["tool", "any"].includes(body?.tool_choice?.type)) return errorReply(400, 'tool_choice: type "tool" and "any" are not supported for this model.');
   const kind = classify(provider, body);
   if (kind === "main") {
     const m = spec.main[st.main++] ?? spec.after ?? [SUBMIT_COMMAND];
     if ("status" in m) return errorReply(m.status);
-    if ("text" in m) return provider === "anthropic" ? anthropicText(m.text) : openaiJson(m.text);
+    const responses = provider === "openai" && body?.input !== undefined;
+    if ("text" in m) return provider === "anthropic" ? anthropicText(m.text) : responses ? openaiResponsesText(m.text) : openaiJson(m.text);
     const commands = Array.isArray(m) ? m : m.commands;
     const usage = Array.isArray(m) ? undefined : m.usage;
     if (provider === "anthropic") return anthropicToolUse(commands, usage);
+    if (responses) return openaiResponsesToolCalls(commands, usage, undefined, asksInlineReasoning(body));
     return openaiToolCalls(commands, usage, provider === "openrouter" ? "particle-ai/particle-1" : "gpt-6.1-sol");
   }
   if (kind === "jev") {
@@ -354,6 +359,7 @@ export async function runSession(ctx: Ctx, spec: Spec): Promise<Session> {
     fakes.stop();
   }
   writeFileSync(join(trial, "result.json"), JSON.stringify({ task_name: task, trial_name: spec.name }) + "\n");
+  writeFileSync(join(trial, "config.json"), JSON.stringify({ agent: { kwargs: { cell: spec.cell, model: spec.model, item: itemOf(spec) } } }) + "\n");
   mkdirSync(join(trial, "artifacts"), { recursive: true });
   writeFileSync(join(trial, "artifacts", "model.patch"), Bun.spawnSync(["bash", "-c", "git add -A && git -c core.fileMode=false diff --cached --binary HEAD"], { cwd: repo }).stdout);
   mkdirSync(join(trial, "verifier"), { recursive: true });
@@ -531,10 +537,11 @@ function legDraw(r: Report, out: string) {
 
 function legPilot(r: Report) {
   const items = JSON.parse(readFileSync(ITEMS, "utf8")) as ItemsFile;
-  r.guard("pilot re-cost at planning rates reproduces every item cap in items.json and the $1,940 all-in", () => {
+  r.guard("pilot re-cost at planning rates reproduces every item cap in items.json (a closed item at what it settled) and their all-in", () => {
     const p = plan(PLANNING_RATE, FULL_SCOPE, items);
-    const off = items.items.filter((i) => p.items.find((x) => x.item === i.item)?.cap !== i.cap_micros / 1e6).map((i) => i.item);
-    return off.length ? "caps differ: " + off.join(", ") : p.all_in_cap === 1940 && recost({}).fits && recost({}).dropped.length === 0 ? true : "all-in " + p.all_in_cap;
+    const off = items.items.filter((i) => p.items.find((x) => x.item === i.item)?.cap !== (i.closed_micros ?? i.cap_micros) / 1e6).map((i) => i.item);
+    const sum = items.items.reduce((s, i) => s + (i.closed_micros ?? i.cap_micros), 0);
+    return off.length ? "caps differ: " + off.join(", ") : Math.round(p.all_in_cap * 1e6) === sum && recost({}).fits && recost({}).dropped.length === 0 ? true : "all-in " + p.all_in_cap;
   });
   r.guard("pilot re-cost: a rate is the higher of planning rate and pilot mean", () => {
     const x = recost({ "R:opus": 0.5, "P:sol": 0.1 });
@@ -609,7 +616,7 @@ async function legLeak(r: Report, out: string) {
   try {
     const hit = await runBatch(opts(TASKS[0]!, true, "canary"));
     const canary = readFileSync(join(dir, "labels", TASKS[0]!, "canary.txt"), "utf8").trim();
-    r.add("leak scan: a planted canary in a decider request stops the batch with DR_CUSTODY_HIT, nothing forwarded, the canary never logged", hit.stop?.code === "DR_CUSTODY_HIT" && sent.length === 0 && !JSON.stringify(hit).includes(canary) && !logs.join("\n").includes(canary) && logs.some((l) => l.startsWith("DR_CUSTODY_HIT: ")), "stop " + (hit.stop?.code ?? "none") + ", forwarded " + sent.length);
+    r.add("leak scan: a planted canary in a request on the slot (here a decider's) stops the batch with DR_CUSTODY_HIT, nothing forwarded, the canary never logged", hit.stop?.code === "DR_CUSTODY_HIT" && sent.length === 0 && !JSON.stringify(hit).includes(canary) && !logs.join("\n").includes(canary) && logs.some((l) => l.startsWith("DR_CUSTODY_HIT: ")), "stop " + (hit.stop?.code ?? "none") + ", forwarded " + sent.length);
     const fix = await runBatch(opts(TASKS[1]!, false, "realfix"));
     r.add("leak scan: an agent diff equal to the real-fix hunk does not stop the batch", fix.stop === null && sent.length === 1 && sent[0]!.includes("return a + b"), "stop " + (fix.stop?.code ?? "none") + ", forwarded " + sent.length);
   } catch (e) {
@@ -642,7 +649,7 @@ function legSessions(r: Report, all: Session[]) {
   const fe = by("format-errors-N-opus");
   r.add("three replies in a row with no tool call end the session as agent_error (mini's RepeatedFormatError at the pin), graded", fe.summary?.exit_status === "agent_error" && fe.summary.main_calls === 3 && existsSync(join(fe.trial, "verifier", "reward.txt")), JSON.stringify({ exit: fe.summary?.exit_status, calls: fe.summary?.main_calls }));
   const capField: Record<string, string> = { anthropic: "max_tokens", openai: "max_completion_tokens", openrouter: "max_tokens" };
-  const mains = all.flatMap((s) => s.requests.filter((q) => q.kind === "main").map((q) => ({ name: s.spec.name, asked: q.body?.[capField[q.provider]!] })));
+  const mains = all.flatMap((s) => s.requests.filter((q) => q.kind === "main").map((q) => ({ name: s.spec.name, asked: q.body?.[q.provider === "openai" && q.body?.input !== undefined ? "max_output_tokens" : capField[q.provider]!] })));
   const offCap = mains.filter((m) => m.asked !== MAX_OUTPUT_TOKENS);
   r.add("every main-model call in every cell asks for " + MAX_OUTPUT_TOKENS + " output tokens and passes the proxy's cap", mains.length > 0 && offCap.length === 0, mains.length + " main-model requests" + (offCap.length ? "; off the cap: " + offCap.slice(0, 4).map((m) => m.name + "=" + m.asked).join(", ") : ""));
   for (const name of ["wall-stop-N-sol", "wall-stop-R-opus"]) {
@@ -841,6 +848,15 @@ function findVenv(flagValue?: string): string | null {
 
 const flag = (argv: string[], name: string): string | undefined => { const i = argv.indexOf(name); return i < 0 ? undefined : argv[i + 1]; };
 
+/** Why the python legs cannot run here, or null. They need root: mini's BASH_ENV is /root/.bashrc, which only root can
+ * read, so as any other user every command's first output line is a permission error and no submit registers. */
+export function pythonLegsBlocked(keyless: boolean, venv: string | null, uid: number | undefined): string | null {
+  if (keyless) return "--keyless";
+  if (!venv) return "no runtime or dev venv (pass --venv)";
+  if (uid !== 0) return "the python legs need root (mini's BASH_ENV is /root/.bashrc, unreadable as uid " + uid + ", so no submit would register); rerun as root";
+  return null;
+}
+
 export async function main(argv: string[]): Promise<number> {
   const out = resolve(flag(argv, "--out") ?? mkdtempSync(join(tmpdir(), "dr-dryrun-")));
   mkdirSync(out, { recursive: true });
@@ -854,10 +870,11 @@ export async function main(argv: string[]): Promise<number> {
   legTables(r);
   await legLeak(r, out);
   const venv = keyless ? null : findVenv(flag(argv, "--venv"));
-  if (!venv) {
+  const blocked = pythonLegsBlocked(keyless, venv, process.getuid?.());
+  if (blocked || !venv) {
     for (const leg of ["ledger leases per item", "sessions and outcome paths", "shadow timing", "pin read back by the agent", "scorer end to end", "no-gstack audit"]) {
       if (keyless) r.skip(leg, "--keyless");
-      else r.add(leg, false, "no runtime or dev venv (pass --venv)");
+      else r.add(leg, false, blocked ?? "no runtime or dev venv (pass --venv)");
     }
   } else {
     const scratch = mkdtempSync(join(tmpdir(), "drd-"));
@@ -870,11 +887,12 @@ export async function main(argv: string[]): Promise<number> {
     const items = (JSON.parse(readFileSync(ITEMS, "utf8")) as ItemsFile).items;
     const leases = new Map<string, string>();
     const warnings: string[] = [];
-    for (const it of items) {
+    for (const it of items.filter((i) => !i.closed)) {
       recordApproval(record, { action: "init", item: it.item, cap_micros: it.cap_micros, admission: "warn", quotes: [{ words: "keyless dry run on a temporary ledger", by: "decision-routing dry-run", source: "lanes/decision-routing/dryrun.ts" }] });
       leases.set(it.item, openLease(record, ledger, { item: it.item, run_id: "dryrun", warn: (c: string, m: string) => warnings.push(c + " " + m), requireAdmission: () => null } as any).lease_id);
     }
-    r.add("one lease opened on a temporary ledger record for each of the " + items.length + " items in items.json", leases.size === items.length && items.length === 10);
+    const open = items.filter((i) => !i.closed);
+    r.add("one lease opened on a temporary ledger record for each of the " + open.length + " open items in items.json", leases.size === open.length && open.length === 10);
     const pin = join(out, "pin-ladder.json");
     writePin(pin, buildPin(ladderTuned(), pinMeta()));
     const ctx: Ctx = { out, python: join(venv, "bin", "python"), template, ledger, leases, pin, scratch };
@@ -892,7 +910,7 @@ export async function main(argv: string[]): Promise<number> {
     for (const s of all) {
       spent.set(s.item, (spent.get(s.item) ?? 0) + (s.meter?.micros ?? 0) + (readJson(join(s.trial, "shadow-meter.json"))?.micros ?? 0));
     }
-    const closes = items.map((it) => ({ item: it.item, close: settleLease(record, ledger, leases.get(it.item)!, (c: string, m: string) => warnings.push(c + " " + m)) }));
+    const closes = [...leases].map(([item, lease]) => ({ item, close: settleLease(record, ledger, lease, (c: string, m: string) => warnings.push(c + " " + m)) }));
     ledger.close();
     const off = closes.filter((c) => c.close.spent_micros !== (spent.get(c.item) ?? 0) || c.close.unknown_micros !== 0);
     r.add("every lease settled; each item's settled spend equals its sessions' meters (allowance stops included)", off.length === 0 && closes.length === 10, off.length ? off.map((c) => c.item + " settled " + c.close.spent_micros + " metered " + (spent.get(c.item) ?? 0)).join(", ") : [...spent.entries()].map(([k, v]) => k + " " + v).join(", "));

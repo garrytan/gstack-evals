@@ -26,7 +26,7 @@ import { qaHomeCopy } from "../../lanes/outcome-skills/statemachines/image.ts";
 import type { Lang } from "../../lanes/outcome-skills/statemachines/langs.ts";
 import { checkRename } from "../../lanes/outcome-skills/statemachines/bindcheck.ts";
 import { buildStock, stockDiffs, type StockKind } from "../../lanes/outcome-skills/statemachines/packets.ts";
-import { treeVolume } from "../../lanes/outcome-skills/statemachines/oracle.ts";
+import { fixedPatches, treeVolume } from "../../lanes/outcome-skills/statemachines/oracle.ts";
 import { runSession } from "../../lanes/outcome-skills/statemachines/run.ts";
 import { sessionEnd, type PlannedSession } from "../../lanes/outcome-skills/statemachines/session.ts";
 import { toCandidate } from "../../lanes/outcome-skills/statemachines/source.ts";
@@ -1232,6 +1232,358 @@ describe("the containment check before any session (E_SM_CONTAIN)", () => {
     const r = check(t, { names });
     expect(r.checks.scan).toEqual({ ok: false, findings: ["marker /w/a.py sha256=" + sha(MARK), "name /w/leak.py sha256=" + sha(NAME)] });
     expect([r.ok, r.checks.refs.ok, r.checks.objects.ok, r.checks.stores.ok]).toEqual([false, true, true, true]);
+  });
+
+
+  const commitAll = (t: { root: string; w: string; base: string }, files: Record<string, string>) => {
+    for (const p of Object.keys(files)) mkdirSync(dirname(join(t.w, p)), { recursive: true });
+    return commitBase(t, files);
+  };
+  const repoAt = (root: string, rel: string, files: Record<string, string>, ...init: string[]) => {
+    const d = join(root, rel);
+    mkdirSync(d, { recursive: true });
+    git(d, "init", "-q", ...init);
+    for (const [p, body] of Object.entries(files)) {
+      mkdirSync(dirname(join(d, p)), { recursive: true });
+      writeFileSync(join(d, p), body);
+    }
+    git(d, "add", "-A");
+    git(d, "commit", "-qm", "another project");
+    return d;
+  };
+
+  // Value: protects=the stores check's two narrowings (the Captain's ruling, GST-1959, 2026-11-13): a git store or a bare object dir outside the repo passes only when it holds none of the unit's post-base blob ids (each patch the oracle's fixed run applies, alone and all in its order, over the base), and a .gitmodules passes only when want tracks it unchanged and no submodule store exists; fails_when=a store outside the repo that holds one post-base blob (directly, packed, loose or through its own alternates) passes, a store whose lookup can't be trusted (another object format, a pack with no index, a lookup that errors) passes, a store holding none fails, an input with no patch list narrows anything, a .gitmodules with a modules dir, a .git under its dir, no tracking or a changed working copy passes, or a patch that does not apply leaves the check passing; why_new=sm contain on the 100 kept units failed 20 only on other projects' git stores and tracked .gitmodules files; seam=contain.ts contain with sh/contain.sh on a fixture root, oracle.ts fixedPatches; no_claim=what a real image's stores hold
+  describe("stores outside the repo and tracked .gitmodules (GST-1959)", () => {
+    const M = "def f():\n    return 1\n\n\n\n\n\ndef h():\n    return 3\n";
+    const FIX = M.replace("return 1", "return 2");
+    const INLINE = "\n\ndef test_inline_h():\n    assert h() == 3\n";
+    const TESTS = "from m import f\n\n\ndef test_f():\n    assert f() == 2\n";
+    const diff = (path: string, from: string | null, to: string) => {
+      const d = scratch("contain-diff");
+      git(d, "init", "-q");
+      mkdirSync(dirname(join(d, path)), { recursive: true });
+      if (from !== null) writeFileSync(join(d, path), from);
+      git(d, "add", "-A");
+      git(d, "commit", "-q", "--allow-empty", "-m", "from");
+      writeFileSync(join(d, path), to);
+      git(d, "add", "-A");
+      return spawnSync("git", ["-C", d, "diff", "--cached"], { encoding: "utf8" }).stdout;
+    };
+    let made: [string, string][] | undefined;
+    const patches = () => (made ??= [["test.patch", diff("tests/test_m.py", null, TESTS)], ["fix-source.patch", diff("m.py", M, FIX)], ["fix-tests.patch", diff("m.py", M, M + INLINE)]]);
+    const unitTree = (label: string) => {
+      const root = scratch("contain-" + label);
+      const w = join(root, "w");
+      mkdirSync(w, { recursive: true });
+      git(w, "init", "-q");
+      writeFileSync(join(w, "m.py"), M);
+      git(w, "add", "-A");
+      git(w, "commit", "-qm", "base");
+      return { root, w, base: git(w, "rev-parse", "HEAD") };
+    };
+    const run = (t: { root: string; w: string; base: string }, p: [string, string][] | null = patches()) =>
+      contain({ kind: "host", root: t.root, repo: t.w }, { want: t.base, names: [NAME], markers: [MARK], ...(p ? { patches: p } : {}) });
+    const packOf = (files: Record<string, string>) => {
+      const s = repoAt(scratch("contain-pack"), "s", files);
+      git(s, "repack", "-a", "-d", "-q");
+      return join(s, ".git/objects/pack");
+    };
+    const loose = (o: string, body: string) => {
+      mkdirSync(o, { recursive: true });
+      const s = scratch("contain-loose");
+      git(s, "init", "-q");
+      expect(spawnSync("git", ["-C", s, "hash-object", "-w", "--stdin"], { input: body, env: { ...process.env, GIT_OBJECT_DIRECTORY: o } }).status).toBe(0);
+    };
+
+    test("a git store or a bare object dir outside the repo that holds none of the post-base blob ids passes, and fails as today when the input lists no patches", () => {
+      const t = unitTree("stores-none");
+      repoAt(t.root, "root/.oh-my-zsh", { "README.md": "zsh\n", "lib/m.py": M + "# another project\n" });
+      cpSync(packOf({ "dep.rs": "fn dep() {}\n" }), join(t.root, "usr/local/cache/objects/pack"), { recursive: true });
+      loose(join(t.root, "srv/objects"), "unrelated\n");
+      expect(run(t)).toEqual({ ok: true, checks: clean, archives: [] });
+      expect(run(t, []).checks.stores).toEqual({ ok: false, findings: ["objects /srv/objects", "objects /usr/local/cache/objects", "store /root/.oh-my-zsh/.git"] });
+      expect(run(t, null).checks.stores).toEqual({ ok: false, findings: ["objects /srv/objects", "objects /usr/local/cache/objects", "store /root/.oh-my-zsh/.git"] });
+    }, 120_000);
+
+    test("a store outside the repo that holds one post-base blob id fails with today's line, whichever patch or variant made it", () => {
+      for (const [label, body] of [["fix", FIX], ["all", FIX + INLINE], ["tests", TESTS], ["inline", M + INLINE]]) {
+        const t = unitTree("stores-one-" + label);
+        repoAt(t.root, "opt/upstream", { "README.md": "upstream\n", "src/m.py": body! });
+        expect([label, run(t).checks.stores]).toEqual([label, { ok: false, findings: ["store /opt/upstream/.git"] }]);
+      }
+      const l = unitTree("stores-loose");
+      loose(join(l.root, "srv/objects"), FIX);
+      expect(run(l).checks.stores).toEqual({ ok: false, findings: ["objects /srv/objects"] });
+      const p = unitTree("stores-packed");
+      cpSync(packOf({ "m.py": TESTS }), join(p.root, "opt/cache/objects/pack"), { recursive: true });
+      expect(run(p).checks.stores).toEqual({ ok: false, findings: ["objects /opt/cache/objects"] });
+      const a = unitTree("stores-alternates");
+      const other = repoAt(a.root, "opt/other", { "README.md": "other\n" });
+      loose(join(a.w, ".git/objects"), FIX + INLINE);
+      writeFileSync(join(other, ".git/objects/info/alternates"), join(a.w, ".git/objects") + "\n");
+      const r = run(a);
+      expect(r.checks.stores).toEqual({ ok: false, findings: ["store /opt/other/.git"] });
+      expect([r.checks.refs.ok, r.checks.objects.ok, r.checks.scan.ok]).toEqual([true, true, true]);
+    }, 120_000);
+
+    test("on a follow-on tree the ids still come from the base, want's root commit, so a store holding the fix's blob over the base fails and one holding none passes", () => {
+      const t = unitTree("stores-followon");
+      writeFileSync(join(t.w, "m.py"), M.replace("return 1", "return 7"));
+      git(t.w, "commit", "-qam", "first stage");
+      const two = { ...t, base: git(t.w, "rev-parse", "HEAD") };
+      repoAt(t.root, "opt/other", { "README.md": "other\n" });
+      expect(run(two)).toEqual({ ok: true, checks: clean, archives: [] });
+      repoAt(t.root, "opt/upstream", { "src/m.py": FIX });
+      expect(run(two).checks.stores).toEqual({ ok: false, findings: ["store /opt/upstream/.git"] });
+    }, 120_000);
+
+    test("a store outside the repo whose lookup can't be trusted fails with today's line", () => {
+      const f = unitTree("stores-format");
+      repoAt(f.root, "opt/sha256", { "README.md": "other\n" }, "--object-format=sha256");
+      expect(run(f).checks.stores).toEqual({ ok: false, findings: ["store /opt/sha256/.git"] });
+      const n = unitTree("stores-noidx");
+      const pack = packOf({ "m.py": FIX });
+      mkdirSync(join(n.root, "opt/noidx/objects/pack"), { recursive: true });
+      for (const x of readdirSync(pack).filter((x) => x.endsWith(".pack"))) cpSync(join(pack, x), join(n.root, "opt/noidx/objects/pack", x));
+      expect(run(n).checks.stores).toEqual({ ok: false, findings: ["objects /opt/noidx/objects"] });
+      const e = unitTree("stores-lookup-error");
+      const other = repoAt(e.root, "opt/other", { "README.md": "other\n" });
+      writeFileSync(join(other, ".git/objects/info/alternates"), join(e.root, "nowhere/objects") + "\n");
+      expect(run(e).checks.stores).toEqual({ ok: false, findings: ["store /opt/other/.git"] });
+    }, 120_000);
+
+    test("a patch that does not apply gives an error line and fails the stores check, and the store that needed the ids fails as today", () => {
+      const t = unitTree("stores-noapply");
+      repoAt(t.root, "opt/other", { "README.md": "other\n" });
+      const r = run(t, [patches()[0]!, ["fix-source.patch", diff("m.py", "def f():\n    return 9\n", FIX)]]);
+      expect(r.checks.stores).toEqual({ ok: false, findings: ["error post-base blob ids", "store /opt/other/.git"] });
+      expect([r.ok, r.checks.refs.ok, r.checks.objects.ok, r.checks.scan.ok]).toEqual([false, true, true, true]);
+    }, 120_000);
+
+    test("an empty patch list, or patches that make no blob over the base, never pass a store outside the repo", () => {
+      const t = unitTree("stores-empty");
+      repoAt(t.root, "opt/upstream", { "README.md": "upstream\n", "src/m.py": FIX });
+      expect(run(t, []).checks.stores).toEqual({ ok: false, findings: ["store /opt/upstream/.git"] });
+      const n = unitTree("stores-noids");
+      repoAt(n.root, "opt/other", { "README.md": "other\n" });
+      const d = scratch("contain-delete");
+      git(d, "init", "-q");
+      writeFileSync(join(d, "m.py"), M);
+      git(d, "add", "-A");
+      git(d, "commit", "-qm", "from");
+      git(d, "rm", "-q", "m.py");
+      const r = run(n, [["test.patch", spawnSync("git", ["-C", d, "diff", "--cached"], { encoding: "utf8" }).stdout]]);
+      expect(r.checks.stores).toEqual({ ok: false, findings: ["error post-base blob ids", "store /opt/other/.git"] });
+      expect([r.checks.refs.ok, r.checks.objects.ok, r.checks.scan.ok]).toEqual([true, true, true]);
+    }, 120_000);
+
+    test("a store outside the repo holding a file its lookup skips, in its pack dir or a loose object dir, fails with today's line, and one holding only git's own pack files passes", () => {
+      const k = unitTree("stores-pack-files");
+      const other = repoAt(k.root, "opt/other", { "README.md": "other\n" });
+      git(other, "repack", "-a", "-d", "-q", "-b", "--write-midx");
+      const own = join(other, ".git/objects/pack");
+      writeFileSync(join(own, readdirSync(own).find((x) => x.endsWith(".pack"))!.replace(/\.pack$/, ".keep")), "");
+      expect(run(k)).toEqual({ ok: true, checks: clean, archives: [] });
+      const t = unitTree("stores-tmp-pack");
+      const up = repoAt(t.root, "opt/upstream", { "src/m.py": FIX });
+      git(up, "repack", "-a", "-d", "-q");
+      const pd = join(up, ".git/objects/pack");
+      for (const x of readdirSync(pd)) {
+        if (x.endsWith(".pack")) cpSync(join(pd, x), join(pd, "tmp_pack_abc"));
+        rmSync(join(pd, x));
+      }
+      expect(run(t).checks.stores).toEqual({ ok: false, findings: ["store /opt/upstream/.git"] });
+      const l = unitTree("stores-tmp-obj");
+      const o = join(l.root, "srv/objects");
+      loose(o, FIX);
+      const id = spawnSync("git", ["hash-object", "--stdin"], { input: FIX, encoding: "utf8" }).stdout.trim();
+      cpSync(join(o, id.slice(0, 2), id.slice(2)), join(o, id.slice(0, 2), "tmp_obj_abc"));
+      rmSync(join(o, id.slice(0, 2), id.slice(2)));
+      loose(o, "unrelated\n");
+      expect(run(l).checks.stores).toEqual({ ok: false, findings: ["objects /srv/objects"] });
+    }, 120_000);
+
+    test("a store outside the repo whose commondir sends its lookup to another objects dir fails with today's line", () => {
+      const t = unitTree("stores-commondir");
+      const up = repoAt(t.root, "opt/upstream", { "src/m.py": FIX });
+      const empty = repoAt(t.root, "opt/empty", { "README.md": "empty\n" });
+      writeFileSync(join(up, ".git/commondir"), join(empty, ".git") + "\n");
+      expect(run(t).checks.stores).toEqual({ ok: false, findings: ["store /opt/upstream/.git"] });
+    }, 120_000);
+
+    test("a store outside the repo that holds none of the ids fails with today's line when any object in it, loose or packed, holds a hidden test name as a whole word, and an unrelated project's store passes", () => {
+      const t = unitTree("stores-names");
+      const up = repoAt(t.root, "opt/upstream", { "tests/test_m.py": TESTS + "\n\ndef " + NAME + "():\n    assert f() == 2\n" });
+      rmSync(join(up, "tests"), { recursive: true });
+      rmSync(join(up, ".git/COMMIT_EDITMSG"), { force: true });
+      const r = run(t);
+      expect(r.checks.stores).toEqual({ ok: false, findings: ["store /opt/upstream/.git"] });
+      expect([r.checks.refs.ok, r.checks.objects.ok, r.checks.scan.ok]).toEqual([true, true, true]);
+      const p = unitTree("stores-names-packed");
+      const s = repoAt(p.root, "opt/upstream", { "README.md": "upstream\n", "tests/t.py": "def " + NAME + "():\n    pass\n" });
+      rmSync(join(s, "tests"), { recursive: true });
+      rmSync(join(s, ".git/COMMIT_EDITMSG"), { force: true });
+      git(s, "repack", "-a", "-d", "-q");
+      expect(readdirSync(join(s, ".git/objects")).filter((x) => /^[0-9a-f]{2}$/.test(x))).toEqual([]);
+      expect(run(p).checks.stores).toEqual({ ok: false, findings: ["store /opt/upstream/.git"] });
+      cpSync(packOf({ "t.py": "def " + NAME + "():\n    pass\n" }), join(p.root, "usr/cache/objects/pack"), { recursive: true });
+      expect(run(p).checks.stores).toEqual({ ok: false, findings: ["objects /usr/cache/objects", "store /opt/upstream/.git"] });
+      const u = unitTree("stores-names-none");
+      const o = repoAt(u.root, "root/.oh-my-zsh", { "README.md": "zsh\n", "notes.txt": "x" + NAME + "y\n" });
+      rmSync(join(o, "notes.txt"));
+      expect(run(u)).toEqual({ ok: true, checks: clean, archives: [] });
+    }, 120_000);
+
+    test("an outside store whose only names are ones want's tree already holds passes, a truly hidden name in it still fails, and a base filter that errors fails it", () => {
+      const BASE = "test_base_held";
+      const t = commitAll(unitTree("stores-base-names"), { "tests/test_old.py": "def " + BASE + "():\n    pass\n" });
+      const go = () => contain({ kind: "host", root: t.root, repo: t.w }, { want: t.base, names: [NAME, BASE], markers: [MARK], patches: patches() });
+      const zsh = repoAt(t.root, "root/.oh-my-zsh", { "lib/t.sh": "# " + BASE + " runs here\n" });
+      rmSync(join(zsh, "lib"), { recursive: true });
+      rmSync(join(zsh, ".git/COMMIT_EDITMSG"), { force: true });
+      expect(go()).toEqual({ ok: true, checks: clean, archives: [] });
+      const up = repoAt(t.root, "opt/upstream", { "tests/test_m.py": "def " + BASE + "():\n    pass\n\n\ndef " + NAME + "():\n    pass\n" });
+      rmSync(join(up, "tests"), { recursive: true });
+      rmSync(join(up, ".git/COMMIT_EDITMSG"), { force: true });
+      const r = go();
+      expect(r.checks.stores).toEqual({ ok: false, findings: ["store /opt/upstream/.git"] });
+      expect([r.checks.refs.ok, r.checks.objects.ok, r.checks.scan.ok]).toEqual([true, true, true]);
+      const e = commitAll(unitTree("stores-base-names-error"), { "extra.txt": "extra\n" });
+      const id = git(e.w, "rev-parse", "HEAD:extra.txt");
+      rmSync(join(e.w, ".git/objects", id.slice(0, 2), id.slice(2)));
+      repoAt(e.root, "opt/other", { "README.md": "other\n" });
+      const x = contain({ kind: "host", root: e.root, repo: e.w }, { want: e.base, names: [NAME], markers: [MARK], patches: patches() });
+      expect(x.checks.stores).toEqual({ ok: false, findings: ["error base-held names", "store /opt/other/.git"] });
+    }, 120_000);
+
+    test("the patches are the ones the oracle's fixed run applies, in its order", () => {
+      const dir = unitDir(scratch("contain-fixed"));
+      const rd = (n: string) => readFileSync(join(dir, n), "utf8");
+      expect(fixedPatches(dir)).toEqual([["test.patch", rd("test.patch")], ["fix-source.patch", rd("fix.patch")]]);
+      writeFileSync(join(dir, "fix-source.patch"), "source\n");
+      writeFileSync(join(dir, "fix-tests.patch"), "");
+      expect(fixedPatches(dir)).toEqual([["test.patch", rd("test.patch")], ["fix-source.patch", "source\n"]]);
+      writeFileSync(join(dir, "fix-tests.patch"), "tests\n");
+      expect(fixedPatches(dir)).toEqual([["test.patch", rd("test.patch")], ["fix-source.patch", "source\n"], ["fix-tests.patch", "tests\n"]]);
+    }, 120_000);
+
+    const GM = '[submodule "lib"]\n\tpath = lib\n\turl = https://example.invalid/lib.git\n';
+    test("a tracked, unchanged .gitmodules with no submodule store passes, at the repo root and nested", () => {
+      const t = commitAll(tree("gitmodules-ok"), { ".gitmodules": GM, "vendor/lib/.gitmodules": GM });
+      expect(check(t)).toEqual({ ok: true, checks: clean, archives: [] });
+      expect(run(t)).toEqual({ ok: true, checks: clean, archives: [] });
+    }, 120_000);
+
+    test("a .gitmodules fails as today with a submodule store, a .git under its dir, no tracking or a changed working copy", () => {
+      const t = commitAll(tree("gitmodules-bad"), { ".gitmodules": GM, "vendor/lib/.gitmodules": GM });
+      mkdirSync(join(t.w, ".git/modules/lib"), { recursive: true });
+      expect(check(t).checks.stores).toEqual({ ok: false, findings: ["gitmodules /w/.gitmodules", "gitmodules /w/vendor/lib/.gitmodules"] });
+      rmSync(join(t.w, ".git/modules"), { recursive: true });
+      mkdirSync(join(t.w, "vendor/lib/sub"), { recursive: true });
+      writeFileSync(join(t.w, "vendor/lib/sub/.git"), "gitdir: ../../../.git/modules/sub\n");
+      expect(check(t).checks.stores).toEqual({ ok: false, findings: ["gitmodules /w/.gitmodules", "gitmodules /w/vendor/lib/.gitmodules", "nested /w/vendor/lib/sub/.git"] });
+      rmSync(join(t.w, "vendor/lib/sub"), { recursive: true });
+      mkdirSync(join(t.w, "dep"), { recursive: true });
+      git(join(t.w, "dep"), "init", "-q");
+      expect(check(t).checks.stores).toEqual({ ok: false, findings: ["gitmodules /w/.gitmodules", "nested /w/dep/.git", "store /w/dep/.git"] });
+      rmSync(join(t.w, "dep"), { recursive: true });
+      expect(check(t)).toEqual({ ok: true, checks: clean, archives: [] });
+      mkdirSync(join(t.w, "other"), { recursive: true });
+      writeFileSync(join(t.w, "other/.gitmodules"), GM);
+      expect(check(t).checks.stores).toEqual({ ok: false, findings: ["gitmodules /w/other/.gitmodules"] });
+      rmSync(join(t.w, "other"), { recursive: true });
+      appendFileSync(join(t.w, "vendor/lib/.gitmodules"), "\n");
+      expect(check(t).checks.stores).toEqual({ ok: false, findings: ["gitmodules /w/vendor/lib/.gitmodules"] });
+    }, 120_000);
+  });
+
+  // Value: protects=check (d)'s base filter after its move to one pass over want's blobs (GST-1959): the names and markers want's tree holds stay exactly the sets today's two git grep calls give, so the scan reads the same names and markers and prints the same lines; fails_when=a name-in-base or mark-in-base set differs from git grep's on overlapping or prefix names, a last line with no newline, CRLF, NUL bytes, UTF-8 next to a name, a name of regex or non-word characters, a symlink, a gitlink or an executable file, or any contain line differs; why_new=sm contain on a unit with 1,661 hidden test names ran past the 30-minute docker limit inside git grep; seam=sh/contain.sh's base filter against today's git grep lines, kept here as the reference; no_claim=git and grep versions other than the ones the test runs on
+  describe("the base filter in one pass over want's blobs (GST-1959)", () => {
+    const OLD_FILTER = [
+      'inbase() { [ -s "$in/$1" ] || return 0; git grep -h -a "${@:2}" -f "$in/$1" "$want" --; [ $? -le 1 ]; }',
+      'inbase names -o -F -w > "$tmp/name-in-base" && g -v -x -F -f "$tmp/name-in-base" "$in/names" | g . > "$tmp/names" || err scan "grep base names"',
+      'inbase markers -F | g -x -F -f "$in/markers" > "$tmp/mark-in-base" && g -v -x -F -f "$tmp/mark-in-base" "$in/markers" | g . > "$tmp/markers" || err scan "grep base markers"',
+      "",
+    ].join("\n");
+    const at = CONTAIN_SCRIPT.indexOf("inbase() {");
+    const to = CONTAIN_SCRIPT.indexOf("hit() {");
+    const OLD_SCRIPT = CONTAIN_SCRIPT.slice(0, at) + OLD_FILTER + CONTAIN_SCRIPT.slice(to);
+    const SETS = 'printf "=SETS=\\n"; LC_ALL=C sort -u "$tmp/name-in-base"; printf "=SETS=\\n"; LC_ALL=C sort -u "$tmp/mark-in-base"\nexit 0\n';
+    const MARKS = [
+      "    assert whole_line_marker(1) == 1  # m0",
+      "    assert inner_marker_only(2) == 2  # m1",
+      "    assert crlf_line_marker(3) == 3   # m2",
+      "    assert eof_line_marker_ok(4) == 4  # m3",
+      "    assert absent_marker_line(5) == 5  # m4",
+      "    assert binary_line_marker(6) == 6  # m5",
+      "    assert binary_whole_marker(7) == 7 # m6",
+    ];
+    const NAMES = ["foo bar", "bar baz", "ab", "ab cd", "x", "x_y", "(a)", "-b", "a.b*c", "^$", "it works [1]", "test_crlf", "test_bin", "test_utf", "test_word", "test_exec", "test_sym", "test_absent", "tail_0", "tail_1", "tail_2", "tail_3", "tail_4", NAME];
+    const edgeTree = (label: string, extra: Record<string, string | Buffer> = {}) => {
+      const t = tree(label);
+      const files: Record<string, string | Buffer> = {
+        "o.txt": "foo bar baz\nab cd\nx_y x\n(a)(a) b-b\ncall a.b*c and ^$ here\nit works [1]\n",
+        "c.txt": "def test_crlf():\r\n" + MARKS[2] + "\r\n",
+        "b.bin": Buffer.concat([Buffer.from([0, 1, 32]), Buffer.from("test_bin"), Buffer.from([0, 255, 10]), Buffer.from(MARKS[6] + "\n"), Buffer.from([0])]),
+        "u.txt": "\u00e9test_utf\u00e9\n",
+        "w.txt": "xtest_word test_wordy\n",
+        "m.txt": MARKS[0] + "\nx" + MARKS[1] + "y\n",
+        "e5.txt": "z\n" + MARKS[3],
+        "empty.txt": "",
+        "run.sh": "echo test_exec\n",
+        ...Object.fromEntries([0, 1, 2, 3, 4].map((k) => ["e" + k + ".txt", "z start\nend tail_" + k])),
+        ...extra,
+      };
+      for (const [p, body] of Object.entries(files)) writeFileSync(join(t.w, p), body);
+      chmodSync(join(t.w, "run.sh"), 0o755);
+      symlinkSync("test_sym", join(t.w, "link"));
+      git(t.w, "add", "-A");
+      git(t.w, "update-index", "--add", "--cacheinfo", "160000," + t.base + ",mod");
+      git(t.w, "commit", "-qm", "edge cases");
+      return { ...t, base: git(t.w, "rev-parse", "HEAD") };
+    };
+    const runScript = (script: string, t: { root: string; w: string; base: string }, names: string[], markers: string[]) => {
+      const inDir = scratch("contain-filter-in");
+      const lines = (a: string[]) => a.join("\n") + (a.length ? "\n" : "");
+      for (const [n, body] of Object.entries({ want: t.base + "\n", names: lines(names), markers: lines(markers), qa_pin: "" })) writeFileSync(join(inDir, n), body);
+      const r = spawnSync("bash", ["-c", script, "bash", t.w, inDir, t.root], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+      expect(r.status).toBe(0);
+      return r.stdout;
+    };
+    const sets = (filter: string, t: { root: string; w: string; base: string }, names: string[], markers: string[]) => {
+      const [, n = "", m = ""] = runScript(CONTAIN_SCRIPT.slice(0, at) + filter + SETS, t, names, markers).split(/^=SETS=\n/m);
+      return { names: n, marks: m };
+    };
+
+    test("the one pass gives the name-in-base and mark-in-base sets today's git grep calls give, on every edge case", () => {
+      expect([at > 0, to > at, OLD_SCRIPT !== CONTAIN_SCRIPT]).toEqual([true, true, true]);
+      const t = edgeTree("filter-sets");
+      for (const [names, markers] of [[NAMES, MARKS], [NAMES, []], [[], MARKS], [[], []]] as [string[], string[]][]) {
+        const old = sets(OLD_FILTER, t, names, markers);
+        expect(sets(CONTAIN_SCRIPT.slice(at, to), t, names, markers)).toEqual(old);
+      }
+      const old = sets(OLD_FILTER, t, NAMES, MARKS);
+      const inBase = old.names.split("\n");
+      expect(inBase).toEqual(expect.arrayContaining(["foo bar", "test_crlf", "test_bin", "test_utf", "test_exec", "a.b*c", "^$", "it works [1]", "tail_0", "tail_1", "tail_2", "tail_3", "tail_4"]));
+      for (const n of ["test_word", "test_sym", "test_absent", NAME]) expect(inBase).not.toContain(n);
+      expect(old.marks.split("\n").filter(Boolean).sort()).toEqual([MARKS[0], MARKS[3], MARKS[6]].sort());
+      const nul = edgeTree("filter-sets-nul", { "n.bin": Buffer.concat([Buffer.from([0]), Buffer.from(MARKS[5] + "\n")]) });
+      const one = sets(CONTAIN_SCRIPT.slice(at, to), nul, NAMES, MARKS);
+      expect(one.names).toBe(sets(OLD_FILTER, nul, NAMES, MARKS).names);
+      expect(one.marks.split("\n").filter((m) => m && ![MARKS[0], MARKS[3], MARKS[6]].includes(m))).toEqual([]);
+    }, 120_000);
+
+    test("every contain line is the same under today's git grep filter and the one pass, on a tree with hits", () => {
+      const t = edgeTree("filter-hits");
+      mkdirSync(join(t.root, "opt/left"), { recursive: true });
+      writeFileSync(join(t.root, "opt/left/t.py"), "def test_absent():\n    foo bar\n" + MARKS[4] + "\n" + MARKS[0] + "\ntail_0 test_word\n");
+      writeFileSync(join(t.w, "notes.txt"), "test_sym and bar baz\n");
+      const old = runScript(OLD_SCRIPT, t, NAMES, MARKS);
+      expect(runScript(CONTAIN_SCRIPT, t, NAMES, MARKS)).toBe(old);
+      const findings = parseContain(old).checks.scan.findings;
+      expect(findings).toEqual(expect.arrayContaining(["marker /opt/left/t.py sha256=" + sha(MARKS[4]!), "name /opt/left/t.py sha256=" + sha("test_absent"), "name /opt/left/t.py sha256=" + sha("test_word"), "name /w/notes.txt sha256=" + sha("test_sym")]));
+      expect(findings.filter((f) => f.endsWith(sha("foo bar")) || f.endsWith(sha(MARKS[0]!)) || f.endsWith(sha("tail_0")))).toEqual([]);
+    }, 120_000);
   });
 });
 

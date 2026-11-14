@@ -61,6 +61,16 @@ export function validatePin(p: any): Pin {
   return p as Pin;
 }
 
+/** The calibration batch's pin, written before tuning: questions.json's sha256 under a key routed cells do not read (so a
+ * routed session refuses this file), the frozen rule digests, particle-1's starting max_tokens, and no bands. */
+export function writeCalibrationPin(path: string, questions: Buffer): string {
+  const text = JSON.stringify({ v: 1, stage: "calibration", calibration_questions_sha256: sha256(questions), ...ruleDigests(), safety_patterns: SAFETY_PATTERNS, particle_max_tokens: 8000, j_fixed: J_FIXED }, null, 2) + "\n";
+  const digest = sha256(text);
+  writeFileSync(path, text);
+  writeFileSync(path + ".sha256", digest + "\n");
+  return digest;
+}
+
 /** Writes pin.json and pin.json.sha256; returns the sha256 of the bytes written. */
 export function writePin(path: string, pin: Pin): string {
   const text = JSON.stringify(validatePin(pin), null, 2) + "\n";

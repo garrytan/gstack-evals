@@ -1,12 +1,15 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // gstack-evals decision-routing admit: room, transfer and the cut's ceiling from the calibration N sessions, and
-// per-contrast discordance from the pilot (R and P from the pilot, N from calibration, on the pilot's tasks and both models).
+// per-contrast discordance from the pilot (R and P from the pilot, N from calibration, on the pilot's tasks and both models),
+// and the non-root reading over both (score/nonroot.ts: counts per model and cell, no verdict).
 //   admit --calibration <dir> --pilot <dir> --journal <file>... --prices <prices.json> [--out <admission.json>]
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { discordance, roomCheck, s3Share, transferCheck, turnsOf, type Turn } from "./admission.ts";
 import { callUsd, loadPrices, pairOnTasks, readJournal, readTrial, type SessionOutcome } from "./session.ts";
 import { trialDirs } from "./cli.ts";
+import { nonrootReading, printNonroot } from "./nonroot.ts";
+import { CALIBRATION_ITEM } from "../host/plans.ts";
 
 const flag = (argv: string[], name: string): string | undefined => { const i = argv.indexOf(name); return i < 0 ? undefined : argv[i + 1]; };
 const flags = (argv: string[], name: string): string[] => argv.flatMap((a, i) => (a === name && argv[i + 1] !== undefined ? [argv[i + 1]!] : []));
@@ -16,6 +19,9 @@ export async function main(argv: string[]): Promise<number> {
   if (!calibration || !pilot || !journals.length || !prices) { console.error("E_USAGE admit --calibration <dir> --pilot <dir> --journal <file>... --prices <prices.json> [--out <admission.json>]"); return 2; }
   const gone = [calibration, pilot, ...journals, prices].find((p) => !existsSync(p));
   if (gone) { console.error("E_USAGE no such file or directory: " + gone); return 2; }
+  const itemOf = (d: string) => (existsSync(join(d, "config.json")) ? JSON.parse(readFileSync(join(d, "config.json"), "utf8"))?.agent?.kwargs?.item : undefined);
+  const strays = trialDirs(calibration).filter((d) => itemOf(d) !== CALIBRATION_ITEM);
+  if (strays.length) { console.error("E_USAGE admission reads only the " + CALIBRATION_ITEM + " run: " + strays.length + " calibration session(s) under " + calibration + " name another item or none in their config.json, first " + strays[0]); return 2; }
   const ctx = { calls: readJournal(journals), prices: loadPrices(prices) };
   const read = (root: string) => trialDirs(root).map((d) => readTrial(d, ctx));
   const cal = read(calibration), pil = read(pilot);
@@ -56,6 +62,8 @@ export async function main(argv: string[]): Promise<number> {
     out.contrasts[name] = d;
     lines.push(name + ": d " + d.d.toFixed(3) + " over " + d.n_pairs + " pairs on " + d.n_tasks + " tasks, 80% upper bound " + d.upper80.toFixed(3) + "; " + (d.admitted ? "non-inferiority admitted" : "above 0.20: no non-inferiority verdict; the Captain hears before the scored stage"));
   }
+  out.nonroot = nonrootReading([...trialDirs(calibration), ...trialDirs(pilot)]);
+  lines.push(...printNonroot(out.nonroot));
   console.log(lines.join("\n"));
   const file = flag(argv, "--out");
   if (file) writeFileSync(file, JSON.stringify(out, null, 2) + "\n");

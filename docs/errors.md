@@ -191,6 +191,13 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_DR_PIN](#e_dr_pin) | 2 | U6 |
 | [E_DR_RUNTIME](#e_dr_runtime) | 2 | U6 |
 | [E_DR_RUNNER](#e_dr_runner) | 2 | U6 |
+| [DR_ITEM_CLOSED](#dr_item_closed) | 2 | U6 |
+| [DR_RESERVE_STOP](#dr_reserve_stop) | 2 | U6 |
+| [DR_PROXY_PORT_BUSY](#dr_proxy_port_busy) | 2 | U6 |
+| [DR_LEASE_UNRECORDED](#dr_lease_unrecorded) | 2 | U6 |
+| [DR_ANSWER_CONCURRENCY](#dr_answer_concurrency) | 2 | U6 |
+| [DR_ANSWER_FAILED](#dr_answer_failed) | 2 | U6 |
+| [DR_HISTORY_LEAK](#dr_history_leak) | 1 | U6 |
 | [E_DR_STOPPED](#e_dr_stopped) | 2 | U6 |
 | [E_PV_NO_BLOCK](#e_pv_no_block) | warning | U20 |
 | [E_PV_INFRA_MISSING](#e_pv_infra_missing) | warning | U20 |
@@ -365,6 +372,14 @@ A review no-loss comparison found the variant worse than the reference: the non-
 Fix: Read the comparison's losses: the blockers the reference found and the variant missed. Restore what the variant dropped and score a new arm; never rerun the same arm to change a verdict.
 
 Exit 1. Side effects: None: noloss score reads ingested arms and writes nothing. Retry safe: yes. Resumable: no. Owner: U13.
+
+### DR_HISTORY_LEAK
+
+Decision routing (D7): a task's session image still reaches past the task's base commit, through a ref, a pseudo-ref such as ORIG_HEAD, a commit object, an alternate or another object store of the same repository, or carries one of the task's hidden test markers in a file outside /testbed or untracked in it. The image build fails at its history strip, or decision-routing history fails the task before the batch's first session.
+
+Fix: Run no session on that task. Read the HISTORY line's counts (and, on the runner only, the task's hits file under --work) for the part that failed, fix the strip in lanes/decision-routing/host/history.sh test-first, and bring anything that changes a score, a cap or a stop to the Captain before it is applied.
+
+Exit 1. Side effects: None: the check builds and removes a throwaway image and leases nothing. Retry safe: yes. Resumable: yes. Owner: U6.
 
 ### E_SM_INELIGIBLE
 
@@ -1615,6 +1630,54 @@ Decision routing: lanes/decision-routing/host/vm.sh was given an Ubicloud runner
 Fix: Point vm.sh at the pinned copy of ubi-runner.sh with its sha256, set UBI_OWNER to the thread code and UBI_TTL_HOURS to cover the longest batch, and rerun.
 
 Exit 2. Side effects: None: refused before any VM call. Retry safe: yes. Resumable: no. Owner: U6.
+
+### DR_ITEM_CLOSED
+
+Decision routing: a batch plan or an answering step named a line item that config/items.json marks closed. A closed item keeps its record and what it settled, and takes no new lease; its work continues on the item the closing note names.
+
+Fix: Run the stage on the item that replaced it (the plans name it); a closed item reopens only by a new Captain decision recorded in items.json.
+
+Exit 2. Side effects: None: nothing was written, leased, launched or answered. Retry safe: yes. Resumable: no. Owner: U6.
+
+### DR_RESERVE_STOP
+
+Decision routing: before opening a lease, the controller or the answering step found a line item whose cap cannot hold what is already committed on it plus the reserve for its sessions in flight at the per-session allowance (six for a batch, one for an answering step), so the projection passes the item's cap. It is not a CAP_STOP.
+
+Fix: Bring the item's projection to the Captain, who decides whether to raise the cap or end the item; relaunch only on that decision.
+
+Exit 2. Side effects: None: no lease was written, nothing was leased or launched, and nothing was recorded on the item. Retry safe: yes. Resumable: yes. Owner: U6.
+
+### DR_PROXY_PORT_BUSY
+
+Decision routing: at batch start, something other than the batch's own metering proxies listens on the proxy port range that the runner's container firewall opens to the agents (TCP 47100-47107), or one of the batch's proxies on that range is not seen listening, or, when the proxy host is off loopback, a port in that range is not reserved from the kernel's ephemeral ports (net.ipv4.ip_local_reserved_ports).
+
+Fix: Find and stop the other listener on the runner host (ss -ltnp), find why the proxy is not listening, or run post-boot.sh (which reserves the range) on the runner, then relaunch the batch.
+
+Exit 2. Side effects: Before the leases: none. After the proxies started: the batch's leases are settled with no session launched. Retry safe: yes. Resumable: yes. Owner: U6.
+
+### DR_LEASE_UNRECORDED
+
+Decision routing: a batch or answering step on a real record opened its lease on the runner VM's copy of the record, but no vm.sh record-out --confirm showed the drive copy holding that lease open before the wait ran out, so nothing was launched.
+
+Fix: Run vm.sh &lt;runner> &lt;sha256> record-out &lt;vm> &lt;record> --confirm &lt;out dir> while the step waits; if record-out refuses, resolve the record conflict it names, then relaunch.
+
+Exit 2. Side effects: The lease is settled on the VM's copy at what it spent (nothing, since no session ran); record-out at the segment end copies both lease and close to the drive. Retry safe: yes. Resumable: yes. Owner: U6.
+
+### DR_ANSWER_CONCURRENCY
+
+Decision routing: the answering step tried to start a second answering session while one was still in flight on its lease. An answering lease reserves one session, so it runs one at a time.
+
+Fix: A bug in the answering step: report it with the out dir's answer.json; do not relaunch until it is fixed.
+
+Exit 2. Side effects: The step stops; its lease is settled and answer.json is written with the sessions that ran. Retry safe: no. Resumable: no. Owner: U6.
+
+### DR_ANSWER_FAILED
+
+Decision routing: one or more answering children exited non-zero, so their sessions' answers are partial. They count as failed, not answered, and label-tune refuses them.
+
+Fix: Read each failed session's &lt;answers>.err and .log in the out dir and bring the count to the Captain; a failed session is never started again on the same out dir.
+
+Exit 2. Side effects: The lease is settled and answer.json lists the failed sessions; the other sessions' answers stand. Retry safe: no. Resumable: no. Owner: U6.
 
 ### E_DR_STOPPED
 

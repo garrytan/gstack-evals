@@ -1,0 +1,139 @@
+// S5 latency (prereg sections 10 and 11): per decision call, request to answer by decider (p50 and p90) for Jev,
+// particle-1 and the frontier, from the latency_ms the agent logged in each layer of decisions.jsonl; where the router's
+// time goes; and the deciders' share of session time per cell. Graded sessions only (the scorer's set; missing sessions
+// are infrastructure and never count), all cells and both creative models.
+// Rules fixed here:
+// - One latency per call: a layer that made no call (error state_over_limit) is skipped, and a Jev layer with no usage and
+//   no error is skipped as a fan-out sibling (a done record reusing the next_step request's answer, routed.py
+//   decide_next with ask_done). A layer that failed after its retry keeps its latency (request to final failure).
+//   latency_ms spans both tries when a retry happened. Relevance asks every hit of one command in one request, so it is
+//   one call per decision.
+// - Percentiles are nearest-rank: the value at index ceil(q n) - 1 of the sorted latencies.
+// - Session time split (mean seconds a session): main model = the proxy journal's latency_ms summed over the session's
+//   calls to its creative model, minus the frontier decider layers' logged latency (the frontier decider calls go to the
+//   same model and the journal can't tell them apart); deciders = the layers' logged latency; rest = session_ms minus
+//   both (command execution, state building, snapshot diffs, harness).
+// - Deciders' share of session time: sum of decider latency over sum of session_ms per cell, clusterRatio over
+//   repository clusters (seed 20261111, 10,000 draws).
+// - A cross-check from the proxy journal: latency_ms of every call to TypeSafe and to particle-1 in graded sessions.
+import { load, graded, decisionsOf, summaryOf, meterOf, clusterRatio, BOOT, pairOnTasks, planned, save, type SessionOutcome } from "./lib.ts";
+
+const L = load();
+const S = graded(L.sessions);
+const DECIDERS = ["jev", "particle", "frontier"] as const;
+const CREATIVE: Record<string, string> = { opus: "anthropic:claude-opus-5-5", sol: "openai:gpt-6.1-sol", particle: "openrouter:particle-ai/particle-1" };
+const pq = (xs: number[], q: number) => { if (!xs.length) return null; const s = [...xs].sort((a, b) => a - b); return s[Math.max(0, Math.ceil(q * s.length) - 1)]!; };
+const stats = (xs: number[]) => ({ n: xs.length, p50: pq(xs, 0.5), p90: pq(xs, 0.9), mean: xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null });
+
+interface Sess { s: SessionOutcome; key: string; session_ms: number; main_ms: number; main_calls: number; dec: Record<string, number>; lat: Array<{ decider: string; type: string; ms: number; ok: boolean }>; skipped: { fanout: number; over_limit: number } }
+const rows: Sess[] = [];
+for (const s of S) {
+  const sum = summaryOf(s);
+  const decs = decisionsOf(s);
+  const lat: Sess["lat"] = [];
+  const skipped = { fanout: 0, over_limit: 0 };
+  for (const d of decs) {
+    for (const name of DECIDERS) {
+      const l = d.layers?.[name];
+      if (!l) continue;
+      if (l.error === "state_over_limit") { skipped.over_limit++; continue; }
+      if (name === "jev" && !l.error && (l.usage?.input ?? 0) === 0) { skipped.fanout++; continue; }
+      lat.push({ decider: name, type: d.type, ms: l.latency_ms ?? 0, ok: l.ok === true });
+    }
+  }
+  const dec: Record<string, number> = { jev: 0, particle: 0, frontier: 0 };
+  for (const x of lat) dec[x.decider] += x.ms;
+  const calls = L.calls.get(meterOf(s)) ?? [];
+  const creative = calls.filter((c) => c.provider + ":" + c.model === CREATIVE[s.model]);
+  const main_ms = creative.reduce((a, c) => a + (c.latency_ms ?? 0), 0) - (s.cell === "W" ? 0 : dec.frontier);
+  rows.push({ s, key: s.model + " " + s.cell, session_ms: s.time_ms!, main_ms, main_calls: sum.main_calls ?? 0, dec, lat, skipped });
+}
+
+const keys = [...new Set(rows.map((r) => r.key))].sort();
+const perDecider: Record<string, any> = {};
+for (const k of keys) {
+  const rs = rows.filter((r) => r.key === k);
+  for (const name of DECIDERS) {
+    const all = rs.flatMap((r) => r.lat.filter((x) => x.decider === name));
+    if (!all.length) continue;
+    const byType: Record<string, any> = {};
+    for (const t of [...new Set(all.map((x) => x.type))].sort()) byType[t] = stats(all.filter((x) => x.type === t).map((x) => x.ms));
+    perDecider[k + " " + name] = { ...stats(all.map((x) => x.ms)), failed_calls: all.filter((x) => !x.ok).length, by_type: byType };
+  }
+}
+const pooled: Record<string, any> = {};
+for (const name of DECIDERS) {
+  const all = rows.flatMap((r) => r.lat.filter((x) => x.decider === name));
+  pooled[name] = stats(all.map((x) => x.ms));
+  for (const m of ["opus", "sol"]) { const xs = rows.filter((r) => r.s.model === m).flatMap((r) => r.lat.filter((x) => x.decider === name)).map((x) => x.ms); if (xs.length) pooled[name + " " + m] = stats(xs); }
+}
+
+const journal: Record<string, any> = {};
+for (const k of keys) {
+  const rs = rows.filter((r) => r.key === k);
+  for (const [label, pm] of [["typesafe jev", "typesafe:jev-1.13.0"], ["particle-1", "openrouter:particle-ai/particle-1"]] as const) {
+    if (k.endsWith(" W") && label === "particle-1") continue;
+    const xs = rs.flatMap((r) => (L.calls.get(meterOf(r.s)) ?? []).filter((c) => c.provider + ":" + c.model === pm && c.latency_ms !== null).map((c) => c.latency_ms!));
+    if (xs.length) journal[k + " " + label] = stats(xs);
+  }
+}
+
+for (const m of ["opus", "sol", "particle"]) {
+  const cell = m === "particle" ? "W" : "N";
+  const xs = rows.filter((r) => r.key === m + " " + cell).flatMap((r) => (L.calls.get(meterOf(r.s)) ?? []).filter((c) => c.provider + ":" + c.model === CREATIVE[m] && c.latency_ms !== null).map((c) => c.latency_ms!));
+  journal[m + " " + cell + " main-model call (reference: a decision made inside the agent's own turn)"] = stats(xs);
+}
+const split: Record<string, any> = {};
+for (const k of keys) {
+  const rs = rows.filter((r) => r.key === k);
+  const n = rs.length, mean = (f: (r: Sess) => number) => rs.reduce((a, r) => a + f(r), 0) / n / 1000;
+  const decMs = (r: Sess) => r.dec.jev + r.dec.particle + r.dec.frontier;
+  const share = clusterRatio(rs.map((r) => ({ cluster: r.s.repo, a: r.session_ms, b: decMs(r) })), BOOT);
+  const shareMain = clusterRatio(rs.map((r) => ({ cluster: r.s.repo, a: r.session_ms, b: Math.max(0, r.main_ms) })), BOOT);
+  split[k] = {
+    sessions: n, session_s: mean((r) => r.session_ms), main_s: mean((r) => r.main_ms), jev_s: mean((r) => r.dec.jev), particle_s: mean((r) => r.dec.particle), frontier_decider_s: mean((r) => r.dec.frontier),
+    rest_s: mean((r) => r.session_ms - r.main_ms - decMs(r)), main_calls: rs.reduce((a, r) => a + r.main_calls, 0) / n,
+    main_ms_per_call: rs.reduce((a, r) => a + r.main_ms, 0) / Math.max(1, rs.reduce((a, r) => a + r.main_calls, 0)),
+    decider_calls: rs.reduce((a, r) => a + r.lat.length, 0) / n,
+    decider_share: { share: share.ratio, ci: share.ci95 }, main_share: { share: shareMain.ratio, ci: shareMain.ci95 },
+    skipped: { fanout: rs.reduce((a, r) => a + r.skipped.fanout, 0), over_limit: rs.reduce((a, r) => a + r.skipped.over_limit, 0) },
+    decider_s_by_type: Object.fromEntries(rs.flatMap((r) => r.lat).reduce((m, x) => m.set(x.decider + " " + x.type, (m.get(x.decider + " " + x.type) ?? 0) + x.ms), new Map<string, number>()).entries().map(([k2, v]) => [k2, v / n / 1000])),
+  };
+}
+
+// Paired: where the extra time goes, treatment minus control, mean seconds a paired task.
+const paired: Record<string, any> = {};
+const byKey = (k: string) => rows.filter((r) => r.key === k);
+for (const m of ["opus", "sol"]) {
+  for (const [t, c] of [["R", "N"], ["P", "N"], ["R", "P"]]) {
+    const T = byKey(m + " " + t), C = byKey(m + " " + c);
+    const pairs = pairOnTasks(C.map((r) => r.s).filter((s) => planned.includes(s.task)), T.map((r) => r.s));
+    const get = (rs: Sess[], task: string) => rs.find((r) => r.s.task === task)!;
+    const comp = { session: 0, main: 0, jev: 0, particle: 0, frontier_decider: 0, rest: 0, main_calls: 0 };
+    for (const p of pairs) {
+      const a = get(C, p.task), b = get(T, p.task);
+      const parts = (r: Sess) => ({ session: r.session_ms, main: r.main_ms, jev: r.dec.jev, particle: r.dec.particle, frontier_decider: r.dec.frontier, rest: r.session_ms - r.main_ms - r.dec.jev - r.dec.particle - r.dec.frontier, main_calls: r.main_calls * 1000 });
+      const pa = parts(a), pb = parts(b);
+      for (const key of Object.keys(comp) as Array<keyof typeof comp>) comp[key] += (pb[key] - pa[key]) / 1000;
+    }
+    paired[m + " " + t + " minus " + c] = { n_pairs: pairs.length, ...Object.fromEntries(Object.entries(comp).map(([k2, v]) => [k2 === "main_calls" ? "main_calls" : k2 + "_s", v / pairs.length])) };
+  }
+}
+
+const fmt = (x: number | null) => (x === null ? "none" : String(Math.round(x)));
+const f1 = (x: number) => x.toFixed(1);
+const pc = (x: { share: number; ci: [number, number] | null }) => (100 * x.share).toFixed(1) + "% (" + (x.ci ? (100 * x.ci[0]).toFixed(1) + " to " + (100 * x.ci[1]).toFixed(1) : "none") + ")";
+const lines: string[] = ["## S5 per decision call latency (ms, from decisions.jsonl layers)", "", "| cell | decider | calls | p50 | p90 | mean | failed calls | by type (n, p50, p90) |", "|---|---|---|---|---|---|---|---|"];
+for (const [k, v] of Object.entries(perDecider)) lines.push("| " + k.split(" ").slice(0, 2).join(" ") + " | " + k.split(" ")[2] + " | " + v.n + " | " + fmt(v.p50) + " | " + fmt(v.p90) + " | " + fmt(v.mean) + " | " + v.failed_calls + " | " + Object.entries(v.by_type).map(([t, s]: [string, any]) => t + " " + s.n + ", " + fmt(s.p50) + ", " + fmt(s.p90)).join("; ") + " |");
+lines.push("", "pooled over every routed cell:", ...Object.entries(pooled).map(([k, v]) => "  " + k + ": n " + v.n + ", p50 " + fmt(v.p50) + " ms, p90 " + fmt(v.p90) + " ms, mean " + fmt(v.mean) + " ms"));
+lines.push("", "proxy journal cross-check (latency_ms at the metering proxy, every call in graded sessions):", ...Object.entries(journal).map(([k, v]) => "  " + k + ": n " + v.n + ", p50 " + fmt(v.p50) + " ms, p90 " + fmt(v.p90) + " ms"));
+lines.push("", "## S5 where session time goes (mean seconds a session)", "", "| cell | sessions | session | main model | Jev | particle-1 | frontier decider | rest | main calls | main ms a call | decider calls | deciders' share of session time (95% interval) | main model's share |", "|---|---|---|---|---|---|---|---|---|---|---|---|---|");
+for (const [k, v] of Object.entries(split)) lines.push("| " + k + " | " + v.sessions + " | " + f1(v.session_s) + " | " + f1(v.main_s) + " | " + f1(v.jev_s) + " | " + f1(v.particle_s) + " | " + f1(v.frontier_decider_s) + " | " + f1(v.rest_s) + " | " + f1(v.main_calls) + " | " + fmt(v.main_ms_per_call) + " | " + f1(v.decider_calls) + " | " + pc(v.decider_share) + " | " + pc(v.main_share) + " |");
+lines.push("", "decider seconds a session by decider and decision type:", ...Object.entries(split).filter(([, v]) => Object.keys(v.decider_s_by_type).length).map(([k, v]) => "  " + k + ": " + Object.entries(v.decider_s_by_type).sort((a: any, b: any) => b[1] - a[1]).map(([t, s]: [string, any]) => t + " " + s.toFixed(1)).join(", ")));
+const ratio = (a: any, b: any) => (a && b && a.p50 && b.p50 ? (a.p50 / b.p50).toFixed(1) + "x at p50, " + (a.p90 / b.p90).toFixed(1) + "x at p90" : "none");
+lines.push("", "speed ratios from the pooled per-call latencies: frontier decider over Jev " + ratio(pooled.frontier, pooled.jev) + "; particle-1 over Jev " + ratio(pooled.particle, pooled.jev) + "; per model, frontier over Jev: opus " + ratio(pooled["frontier opus"], pooled["jev opus"]) + ", sol " + ratio(pooled["frontier sol"], pooled["jev sol"]));
+lines.push("", "Jev layers skipped as fan-out siblings and layers skipped as state_over_limit, per cell: " + Object.entries(split).map(([k, v]) => k + " " + v.skipped.fanout + "/" + v.skipped.over_limit).join(", "));
+lines.push("", "## S5 paired: the time difference per task, treatment minus control (mean seconds a paired task)", "", "| contrast | pairs | session | main model | Jev | particle-1 | frontier decider | rest | main calls |", "|---|---|---|---|---|---|---|---|---|");
+for (const [k, v] of Object.entries(paired)) lines.push("| " + k + " | " + v.n_pairs + " | " + f1(v.session_s) + " | " + f1(v.main_s) + " | " + f1(v.jev_s) + " | " + f1(v.particle_s) + " | " + f1(v.frontier_decider_s) + " | " + f1(v.rest_s) + " | " + f1(v.main_calls) + " |");
+save("s5", lines.join("\n"), { per_decider: perDecider, pooled, journal, split, paired });
+console.log(lines.join("\n"));

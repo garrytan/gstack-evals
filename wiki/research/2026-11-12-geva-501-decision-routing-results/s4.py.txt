@@ -1,0 +1,31 @@
+#!/usr/bin/env python3
+# GEVA-501 S4 reading on the scored stage (offline, keyless): per decider and type, labelled n, accuracy (no-answers
+# counted wrong), no-answers; Jev's accuracy by confidence band (10 equal bins) and ECE over the same bins.
+# Input: reading-scored/joined/<session>.<trial>.jsonl from labels join. Rows with correct null (label missing) are left out.
+import json, glob, os, re, collections, sys
+O = sys.argv[1] if len(sys.argv) > 1 else "$WORK/reading-scored/joined"
+rows = []
+for f in glob.glob(os.path.join(O, "*.jsonl")):
+    m = re.match(r"^(.*)__([RPJF])__(opus|sol)\.", os.path.basename(f))
+    for l in open(f):
+        if not l.strip(): continue
+        r = json.loads(l); r["cell"], r["model"] = m.group(2), m.group(3); rows.append(r)
+lab = [r for r in rows if r["correct"] is not None]
+print("joined rows", len(rows), "labelled", len(lab))
+by = collections.defaultdict(list)
+for r in lab:
+    by[(r["decider"], r["type"])].append(r)
+    by[(r["decider"], r["type"], r["model"])].append(r)
+print("\nper decider and type (pooled over models, then per model): n labelled, accuracy, no-answers")
+for k in sorted(by):
+    v = by[k]; acc = sum(1 for r in v if r["correct"]) / len(v); na = sum(1 for r in v if not r["ok"])
+    print("  " + " ".join(k) + ": n %d, accuracy %.3f, no-answers %d" % (len(v), acc, na))
+print("\nJev accuracy by confidence band and ECE (10 equal bins over [0,1], answered rows only)")
+for t in ["safe", "done", "relevant", "tests_passed", "next_step"]:
+    v = [r for r in lab if r["decider"] == "jev" and r["type"] == t and r["ok"] and r["conf"] is not None]
+    if not v: print("  " + t + ": no labelled Jev answers"); continue
+    bins = collections.defaultdict(list)
+    for r in v: bins[min(int(r["conf"] * 10), 9)].append(r)
+    ece = sum(len(b) / len(v) * abs(sum(1 for r in b if r["correct"]) / len(b) - sum(r["conf"] for r in b) / len(b)) for b in bins.values())
+    bands = ", ".join("%.1f-%.1f n %d acc %.2f" % (i / 10, (i + 1) / 10, len(bins[i]), sum(1 for r in bins[i] if r["correct"]) / len(bins[i])) for i in sorted(bins))
+    print("  " + t + ": n %d, ECE %.3f; %s" % (len(v), ece, bands))

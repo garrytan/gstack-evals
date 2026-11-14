@@ -1,13 +1,28 @@
 {
   "v": 1,
   "approval_id": "a-e3673284bc5d",
-  "line_micros": 2000000000,
+  "line_micros": 2140000000,
+  "line_note": "Raised from $2,000 to $2,140 by the Captain on 2026-11-10, after the pilot and before any scored data, so the caps sum to $2,139.997749 with the crew item at $550 and no cell drops (preregistration line 328: a raised line needs the Captain). Recorded as a deviation.",
   "note": "One ledger line item per row, caps in integer micro-dollars (preregistration section 14). The Captain records each cap before its first lease. vms and crew are not leased by the controller; they are read from VM and thread counters.",
   "items": [
     {
       "item": "dr-calibration",
       "cap_micros": 90000000,
-      "what": "Calibration: N on both models, deciders in shadow after each session (80 sessions)"
+      "what": "Calibration, first batch: N on both models, deciders in shadow after each session; 11 of its 80 sessions launched before it stopped",
+      "closed_micros": 1144225,
+      "closed": "its first batch, run dr-calibration@c6998ad6324f, stopped on Sol's chat-completions refusals and settled $1.144225; the item takes no new lease, calibration runs on dr-calibration-r2, and this partial batch is reported beside it and never pooled"
+    },
+    {
+      "item": "dr-calibration-r2",
+      "cap_micros": 88860000,
+      "what": "Calibration, second batch: N on both models, deciders in shadow after each session; 13 of its 80 sessions launched before it stopped",
+      "closed_micros": 1923524,
+      "closed": "its batch, run dr-calibration-r2@8e65098317a0, stopped on a meter check and settled $1.923524; Harbor's egress sidecar cut 3 of its 152 model calls at 15 s, so the item takes no new lease, calibration runs on dr-calibration-r3 with the sidecar fixed, and this partial batch is reported beside it and never pooled"
+    },
+    {
+      "item": "dr-calibration-r3",
+      "cap_micros": 86930000,
+      "what": "Calibration with the egress sidecar's read timeout fixed: N on both models, deciders in shadow after each session (80 sessions)"
     },
     {
       "item": "dr-pilot-rp",
@@ -51,8 +66,9 @@
     },
     {
       "item": "dr-crew",
-      "cap_micros": 350000000,
-      "what": "Crew: every thread on this line, read from counters"
+      "cap_micros": 550000000,
+      "what": "Crew: every thread on this line, read from counters",
+      "raised": "Frozen at $350; the Captain raised it to $450 on 2026-11-09 and to $550 on 2026-11-10. This file kept $350 until the pilot re-cost and was corrected after it, before any scored data, as a recorded deviation."
     }
   ]
 }

@@ -6,7 +6,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { anthropicToolUse, errorReply, FakeUpstreams, sampleOf, SUBMIT_COMMAND, type FakeProvider, type FakeReply } from "../../lanes/decision-routing/fake/upstreams.ts";
+import { anthropicToolUse, errorReply, FakeUpstreams, openaiResponsesToolCalls, openaiToolCalls, sampleOf, SUBMIT_COMMAND, type FakeProvider, type FakeReply } from "../../lanes/decision-routing/fake/upstreams.ts";
 import { fakeFetch } from "../../lanes/decision-routing/host/controller.ts";
 import { MeteringProxy } from "../../src/runner/proxy/metering-proxy.ts";
 import type { CallOutcome, CellAttempt, LedgerReply, Reservation, ReservationLedger } from "../../src/types.ts";
@@ -67,6 +67,47 @@ describe("fake upstreams through the metering proxy", () => {
     expect(res.status).toBe(200);
     expect(JSON.parse(res.json.choices[0].message.tool_calls[0].function.arguments)).toEqual({ command: SUBMIT_COMMAND });
     expect(r.outcomes()[0].outcome.kind).toBe("spent");
+  });
+
+  test("OpenAI Responses: a scripted function call settles input, cached and reasoning tokens as the chat route does, then the default submits", async () => {
+    const usage = { input: 50, output: 30, cache_read: 400, reasoning: 20 };
+    const r = rig({ openai: [openaiResponsesToolCalls(["ls"], usage), openaiToolCalls(["ls"], usage)] });
+    const tools = [{ type: "function", name: "bash", parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] } }];
+    const body = { model: "gpt-6.1-sol", max_output_tokens: 1000, input: [{ role: "user", content: "go" }], tools };
+    const res = await r.call("/openai/v1/responses", body);
+    expect(res.status).toBe(200);
+    const call = res.json.output.find((o: any) => o.type === "function_call");
+    expect(call.name).toBe("bash");
+    expect(JSON.parse(call.arguments)).toEqual({ command: "ls" });
+    const chat = await r.call("/openai/v1/chat/completions", { model: "gpt-6.1-sol", max_completion_tokens: 1000, messages: [{ role: "user", content: "go" }] });
+    expect(chat.status).toBe(200);
+    const second = await r.call("/openai/v1/responses", body);
+    expect(JSON.parse(second.json.output.find((o: any) => o.type === "function_call").arguments)).toEqual({ command: SUBMIT_COMMAND });
+    expect(r.fakes.requests.map((q) => q.path)).toEqual(["/v1/responses", "/v1/chat/completions", "/v1/responses"]);
+    const [responses, completions] = r.outcomes();
+    expect(responses.outcome).toEqual({ kind: "spent", spent_micros: Math.ceil(50 * 2 + 400 * 0.1 + 50 * 10), usage: { input: 50, output: 30, reasoning: 20, cache_read: 400, cache_write: 0 } });
+    expect(responses.outcome).toEqual(completions.outcome);
+  });
+
+  test("OpenAI Responses: asked for its reasoning inline, the reply carries it; turn two replaying it inline is forwarded, while an id-only replay is reserved at the context bound and stops the slot", async () => {
+    const r = rig();
+    const tools = [{ type: "function", name: "bash", parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] } }];
+    const plain = await r.call("/openai/v1/responses", { model: "gpt-6.1-sol", max_output_tokens: 32_000, input: [{ role: "user", content: "go" }], tools });
+    expect(plain.json.output.find((o: any) => o.type === "reasoning").encrypted_content).toBeUndefined();
+    const ask = { model: "gpt-6.1-sol", max_output_tokens: 32_000, store: false, include: ["reasoning.encrypted_content"], tools };
+    const first = await r.call("/openai/v1/responses", { ...ask, input: [{ role: "user", content: "go" }] });
+    expect(first.status).toBe(200);
+    const reasoning = first.json.output.find((o: any) => o.type === "reasoning");
+    expect(typeof reasoning.encrypted_content).toBe("string");
+    const call = first.json.output.find((o: any) => o.type === "function_call");
+    const turn = (rs: unknown) => [{ role: "user", content: "go" }, rs, { type: "function_call", call_id: call.call_id, name: "bash", arguments: call.arguments }, { type: "function_call_output", call_id: call.call_id, output: "ok" }];
+    const inline = await r.call("/openai/v1/responses", { ...ask, input: turn(reasoning) });
+    expect(inline.status).toBe(200);
+    const { encrypted_content: _, ...byId } = reasoning;
+    const stored = await r.call("/openai/v1/responses", { ...ask, input: turn(byId) });
+    expect(stored.status).toBe(403);
+    expect(stored.json.code).toBe("DR_ALLOWANCE_STOP");
+    expect(r.fakes.requests.length).toBe(3);
   });
 
   test("OpenRouter: a json_schema request gets a schema-shaped answer, and the fake sees the Particle AI pin", async () => {

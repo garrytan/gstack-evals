@@ -4,6 +4,8 @@
 //   labels safety-set [--write]                      check (or rewrite) safety-set.json and its sha256
 //   labels trial <trial dir> --task <task dir> --proxy-host <host[:port]> [--verifier-image <tag>] [--out <labels.jsonl>]
 //   labels join --decisions <decisions.jsonl> --labels <labels.jsonl> [--out <labelled.jsonl>]
+//   labels constructed --decisions <answers.jsonl> [--out <labels.jsonl>]   labels by construction (the record's unsafe flag)
+//                                                     for a constructed safety-set pseudo-session's answers, read by join
 //   labels pristine --tasks-dir <dir> --tasks <id,id,...|file> --out <dir>   each task's pristine /testbed listing (<out>/<task>.json),
 //                                                     read from its pristine image with no network, for the controller's leak scan
 // A next_step label maps N's next action with the last test command logged before it (the latest tests_passed decision).
@@ -53,6 +55,14 @@ export async function labelTrial(trialDir: string, o: { taskDir: string; proxyHo
     row(null, "DR_LABEL_MISSING: unknown decision type " + d.type);
   }
   return out;
+}
+
+/** Labels by construction for a constructed pseudo-session's safe decisions: the label is the record's unsafe flag. */
+export function constructedLabels(decisions: Array<Record<string, any>>): LabelRow[] {
+  return decisions.map((d) => {
+    if (!String(d.session ?? "").startsWith("constructed") || d.type !== "safe" || typeof d.unsafe !== "boolean") throw new Error("E_USAGE decision " + d.decision_id + " is not a constructed safe decision with an unsafe flag");
+    return { decision_id: d.decision_id, type: "safe", label: d.unsafe, missing: null };
+  });
 }
 
 const DECIDERS: Record<string, LabelledDecision["decider"]> = { jev: "jev", particle: "particle_guess", particle_noguess: "particle_noguess" };
@@ -131,6 +141,18 @@ export async function main(argv: string[], docker: DockerRunner = dockerCli): Pr
     if (out) writeFileSync(out, text); else process.stdout.write(text);
     return 0;
   }
+  if (sub === "constructed") {
+    const decisions = flag(rest, "--decisions");
+    if (!decisions) return usage("labels constructed --decisions <answers.jsonl> [--out <file>]");
+    const gone = missing([decisions]);
+    if (gone !== null) return gone;
+    let rows: LabelRow[];
+    try { rows = constructedLabels(jsonl(decisions)); } catch (e) { console.error((e as Error).message); return 2; }
+    const text = rows.map((r) => JSON.stringify(r)).join("\n") + "\n";
+    const out = flag(rest, "--out");
+    if (out) writeFileSync(out, text); else process.stdout.write(text);
+    return 0;
+  }
   if (sub === "pristine") {
     const tasksDir = flag(rest, "--tasks-dir"), tasks = flag(rest, "--tasks"), out = flag(rest, "--out");
     if (!tasksDir || !tasks || !out) return usage("labels pristine --tasks-dir <dir> --tasks <id,id,...|file> --out <dir>");
@@ -149,5 +171,5 @@ export async function main(argv: string[], docker: DockerRunner = dockerCli): Pr
     console.log("pristine listings: " + ids.length + " tasks in " + out);
     return 0;
   }
-  return usage("labels <safety-set|trial|join|pristine>; see lanes/decision-routing/labels/cli.ts");
+  return usage("labels <safety-set|trial|join|constructed|pristine>; see lanes/decision-routing/labels/cli.ts");
 }

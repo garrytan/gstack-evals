@@ -1,0 +1,64 @@
+power.py, seed 20261109, 1000 simulated runs a point, 800 sign flips a run, item sd 0.8, tau 0.5, base-app tau 0.3; MDD at 80% power, two-sided, clustered on the base app; control calibrated to p0; true zero solved exactly
+Part A. MDD at alpha 0.05 and at alpha 0.025 (Holm step 1 of 2). columns: units n, base apps, items per unit m, control p0, passes (both arms), rho 0.5. Opus runs 2 passes; Sol and particle-1 run 1
+n 64  apps 16  m 3-5  p0 0.20  passes 2  MDD05 0.07  MDD025 0.08
+n 64  apps 16  m 3-5  p0 0.35  passes 2  MDD05 0.08  MDD025 0.09
+n 64  apps 16  m 3-5  p0 0.50  passes 2  MDD05 0.08  MDD025 0.09
+n 64  apps 16  m 3-5  p0 0.20  passes 1  MDD05 0.09  MDD025 0.10
+n 64  apps 16  m 3-5  p0 0.35  passes 1  MDD05 0.10  MDD025 0.11
+n 64  apps 16  m 3-5  p0 0.50  passes 1  MDD05 0.11  MDD025 0.12
+n 64  apps 20  m 3-5  p0 0.20  passes 2  MDD05 0.07  MDD025 0.07
+n 64  apps 20  m 3-5  p0 0.35  passes 2  MDD05 0.08  MDD025 0.08
+n 64  apps 20  m 3-5  p0 0.50  passes 2  MDD05 0.08  MDD025 0.09
+n 64  apps 20  m 3-5  p0 0.20  passes 1  MDD05 0.09  MDD025 0.10
+n 64  apps 20  m 3-5  p0 0.35  passes 1  MDD05 0.10  MDD025 0.12
+n 64  apps 20  m 3-5  p0 0.50  passes 1  MDD05 0.10  MDD025 0.12
+n 56  apps 14  m 3-5  p0 0.20  passes 2  MDD05 0.08  MDD025 0.08
+n 56  apps 14  m 3-5  p0 0.35  passes 2  MDD05 0.09  MDD025 0.10
+n 56  apps 14  m 3-5  p0 0.50  passes 2  MDD05 0.09  MDD025 0.10
+n 56  apps 14  m 3-5  p0 0.20  passes 1  MDD05 0.10  MDD025 0.11
+n 56  apps 14  m 3-5  p0 0.35  passes 1  MDD05 0.11  MDD025 0.13
+n 56  apps 14  m 3-5  p0 0.50  passes 1  MDD05 0.12  MDD025 0.13
+n 48  apps 12  m 3-5  p0 0.20  passes 2  MDD05 0.08  MDD025 0.10
+n 48  apps 12  m 3-5  p0 0.35  passes 2  MDD05 0.10  MDD025 0.11
+n 48  apps 12  m 3-5  p0 0.50  passes 2  MDD05 0.10  MDD025 0.11
+n 48  apps 12  m 3-5  p0 0.20  passes 1  MDD05 0.11  MDD025 0.13
+n 48  apps 12  m 3-5  p0 0.35  passes 1  MDD05 0.13  MDD025 0.14
+n 48  apps 12  m 3-5  p0 0.50  passes 1  MDD05 0.13  MDD025 0.15
+n 64  apps 16  m 3    p0 0.20  passes 2  MDD05 0.08  MDD025 0.09
+n 64  apps 16  m 3    p0 0.35  passes 2  MDD05 0.09  MDD025 0.10
+n 64  apps 16  m 3    p0 0.50  passes 2  MDD05 0.09  MDD025 0.10
+Part B. Base-app effect sensitivity: Opus, 2 passes, rho 0.5, 64 units on 16 apps, m 3-5
+base-app tau 0.0  p0 0.20  MDD05 0.06  MDD025 0.07
+base-app tau 0.0  p0 0.35  MDD05 0.07  MDD025 0.08
+base-app tau 0.0  p0 0.50  MDD05 0.08  MDD025 0.09
+base-app tau 0.3  p0 0.20  MDD05 0.07  MDD025 0.08
+base-app tau 0.3  p0 0.35  MDD05 0.08  MDD025 0.09
+base-app tau 0.3  p0 0.50  MDD05 0.08  MDD025 0.09
+base-app tau 0.6  p0 0.20  MDD05 0.08  MDD025 0.09
+base-app tau 0.6  p0 0.35  MDD05 0.09  MDD025 0.11
+base-app tau 0.6  p0 0.50  MDD05 0.09  MDD025 0.11
+Part C. Admission read: power at a lift of 0.12 at Holm's first step (alpha 0.025), 4000 runs with fixed seeds, m cycling 3, 4, 5 in draw order, Opus 2 passes in both arms
+n 64  apps 16  p0 0.20  power 0.995  se 0.001  pass
+n 64  apps 16  p0 0.35  power 0.982  se 0.002  pass
+n 64  apps 16  p0 0.50  power 0.975  se 0.002  pass
+n 64  apps 20  p0 0.20  power 0.997  se 0.001  pass
+n 64  apps 20  p0 0.35  power 0.987  se 0.002  pass
+n 64  apps 20  p0 0.50  power 0.981  se 0.002  pass
+n 64  apps 32  p0 0.20  power 0.998  se 0.001  pass
+n 64  apps 32  p0 0.35  power 0.992  se 0.001  pass
+n 64  apps 32  p0 0.50  power 0.991  se 0.002  pass
+n 64  apps  8  p0 0.20  power 0.942  se 0.004  pass
+n 64  apps  8  p0 0.35  power 0.859  se 0.006  pass
+n 64  apps  8  p0 0.50  power 0.829  se 0.006  pass
+n 56  apps 14  p0 0.20  power 0.985  se 0.002  pass
+n 56  apps 14  p0 0.35  power 0.953  se 0.003  pass
+n 56  apps 14  p0 0.50  power 0.952  se 0.003  pass
+n 48  apps 12  p0 0.20  power 0.957  se 0.003  pass
+n 48  apps 12  p0 0.35  power 0.913  se 0.004  pass
+n 48  apps 12  p0 0.50  power 0.907  se 0.005  pass
+Part D. Stage 1 headroom read: Opus none on 16 calibration units at 3 passes, m 3-5; 95% interval half-width of the unit-mean rate
+p0 0.10  n 16  passes 3  median half-width 0.095
+p0 0.20  n 16  passes 3  median half-width 0.141
+p0 0.35  n 16  passes 3  median half-width 0.169
+p0 0.50  n 16  passes 3  median half-width 0.175
+p0 0.65  n 16  passes 3  median half-width 0.168

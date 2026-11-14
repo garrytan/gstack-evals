@@ -1,0 +1,177 @@
+prices dated 2026-11-08; 2070 sessions, 58 missing
+
+== opus ==
+Primary A, R against N
+cut: -30.7% (95% interval -42.0% to -20.6%), median per-task ratio 1.106
+success: R minus N 1.5 points (95% interval -1.8 to 4.7), worse 8, better 12, 269 paired tasks: no measurable difference
+time ratio: 1.841 (95% interval 1.641 to 2.078)
+verdict: NO SAVING
+
+Primary B, R against P
+success: R minus P 0.4 points (95% interval -2.7 to 3.4), worse 9, better 10, 267 paired tasks: no measurable difference
+bill ratio R/P: 0.966 (95% interval 0.885 to 1.049)
+time ratio R/P: 0.901 (95% interval 0.830 to 0.985)
+verdict: PARTICLE-1 ALONE IS ENOUGH
+
+P against N (no verdict)
+cut: -35.0% (95% interval -47.0% to -23.8%), median per-task ratio 1.160
+success: P minus N 1.1 points (95% interval -1.2 to 3.5), worse 4, better 7, 271 paired tasks: no measurable difference; non-inferiority not admitted
+time ratio: 2.035 (95% interval 1.777 to 2.314)
+
+== sol ==
+Primary A, R against N
+cut: -21.4% (95% interval -31.1% to -11.7%), median per-task ratio 1.170
+success: R minus N 1.1 points (95% interval -1.1 to 3.4), worse 3, better 6, 266 paired tasks: no measurable difference
+time ratio: 2.072 (95% interval 1.911 to 2.242)
+verdict: NO SAVING
+
+Primary B, R against P
+success: R minus P -2.3 points (95% interval -4.8 to 0.4), worse 8, better 2, 264 paired tasks: no measurable difference
+bill ratio R/P: 0.988 (95% interval 0.917 to 1.055)
+time ratio R/P: 0.901 (95% interval 0.845 to 0.965)
+verdict: PARTICLE-1 ALONE IS ENOUGH
+
+P against N (no verdict)
+cut: -18.1% (95% interval -29.6% to -6.5%), median per-task ratio 1.154
+success: P minus N 3.4 points (95% interval 0.8 to 6.2), worse 2, better 11, 262 paired tasks: a measurable gain; non-inferiority not admitted
+time ratio: 2.209 (95% interval 2.043 to 2.369)
+
+stops and outcomes per cell:
+  opus F allowance_stop: 3
+  opus F missing: infrastructure (infra_error): 5
+  opus F submitted: 91
+  opus J missing: infrastructure (infra_error): 3
+  opus J submitted: 96
+  opus N missing: infrastructure (infra_error): 4
+  opus N submitted: 275
+  opus P missing: infrastructure (infra_error): 6
+  opus P submitted: 272
+  opus P wall_stop: 1
+  opus R missing: infrastructure (infra_error): 7
+  opus R submitted: 272
+  particle W missing: infrastructure (infra_error): 8
+  particle W step_stop: 2
+  particle W submitted: 89
+  sol J missing: infrastructure (infra_error): 2
+  sol J submitted: 97
+  sol N missing: infrastructure (infra_error): 8
+  sol N submitted: 271
+  sol P missing: infrastructure (infra_error): 9
+  sol P submitted: 270
+  sol R missing: infrastructure (infra_error): 6
+  sol R submitted: 273
+
+marker_hit lines (a runner-only marker other than the canary, logged and forwarded), per arm:
+  opus P: 9
+  opus R: 20
+  particle W: 49
+  sol N: 19
+  sol P: 11
+  sol R: 66
+
+marker_hit lines per session:
+  avaiga__taipy-2797__R__sol sol R trial 1 attempt 1: 12
+  basicmachines-co__basic-memory-334__W__particle particle W trial 1 attempt 1: 7
+  geopython__pygeoapi-2338__P__sol sol P trial 1 attempt 1: 11
+  geopython__pygeoapi-2338__R__sol sol R trial 1 attempt 1: 35
+  geopython__pygeoapi-2338__W__particle particle W trial 1 attempt 1: 7
+  meltano__meltano-9929__W__particle particle W trial 1 attempt 1: 4
+  packit__packit-2684__R__opus opus R trial 1 attempt 1: 7
+  packit__packit-2684__W__particle particle W trial 1 attempt 1: 4
+  unit8co__darts-2985__W__particle particle W trial 1 attempt 1: 27
+  vprusso__toqito-1484_interface__P__opus opus P trial 1 attempt 1: 9
+  vprusso__toqito-1484_interface__R__opus opus R trial 1 attempt 1: 13
+  vyperlang__vyper-4801__N__sol sol N trial 1 attempt 1: 19
+  vyperlang__vyper-4801__R__sol sol R trial 1 attempt 1: 19
+
+reruns and missing per cell (prereg line 206; a kept first attempt is never scored):
+  opus F: reruns 5 (rerun graded 0, rerun missing 5), missing 5
+  opus J: reruns 3 (rerun graded 0, rerun missing 3), missing 3
+  opus N: reruns 4 (rerun graded 0, rerun missing 4), missing 4
+  opus P: reruns 6 (rerun graded 0, rerun missing 6), missing 6
+  opus R: reruns 7 (rerun graded 0, rerun missing 7), missing 7
+  particle W: reruns 8 (rerun graded 0, rerun missing 8), missing 8
+  sol J: reruns 2 (rerun graded 0, rerun missing 2), missing 2
+  sol N: reruns 8 (rerun graded 0, rerun missing 8), missing 8
+  sol P: reruns 9 (rerun graded 0, rerun missing 9), missing 9
+  sol R: reruns 6 (rerun graded 0, rerun missing 6), missing 6
+
+decisions with a decider call that failed after its retry, per cell (prereg line 207; over 5% marks the cell DR_CELL_DEGRADED):
+  opus F: 0 of 3002 (0.0%)
+  opus J: 0 of 3022 (0.0%)
+  opus P: 14 of 9575 (0.1%)
+  opus R: 17 of 9275 (0.2%)
+  sol J: 0 of 3123 (0.0%)
+  sol P: 39 of 8267 (0.5%)
+  sol R: 10 of 8275 (0.1%)
+
+5xx calls without usage settled at $0 (shadow: the reservations they would have charged):
+  opus P: 1, shadow $0.01
+  opus R: 2, shadow $0.01
+  sol J: 1, shadow $0.38
+  sol P: 3, shadow $1.22
+  sol R: 3, shadow $1.59
+
+calls with an unknown outcome (no usage came back), charged at their full reservation:
+  opus P: 1, reserved $1.60
+  sol P: 1, reserved $0.01
+
+calls without usage that the proxy booked above $0, charged at that booked charge:
+  none
+
+sessions that hit the image's base env (No module named, or the agent ran conda activate testbed):
+  opus F: 52 of 99
+  opus J: 51 of 99
+  opus N: 136 of 279
+  opus P: 137 of 279
+  opus R: 134 of 279
+  particle W: 60 of 99
+  sol J: 48 of 99
+  sol N: 128 of 279
+  sol P: 131 of 279
+  sol R: 125 of 279
+
+commands the non-root agent user can make fail, sessions with at least one per model and cell (a reading for the Captain):
+  opus F: 99 sessions, pip install failed 12, ~/.cache write failed 7, git config --global failed 0, sudo 0
+  opus J: 99 sessions, pip install failed 7, ~/.cache write failed 8, git config --global failed 0, sudo 0
+  opus N: 279 sessions, pip install failed 6, ~/.cache write failed 28, git config --global failed 1, sudo 1
+  opus P: 279 sessions, pip install failed 19, ~/.cache write failed 23, git config --global failed 1, sudo 1
+  opus R: 279 sessions, pip install failed 22, ~/.cache write failed 22, git config --global failed 0, sudo 0
+  particle W: 99 sessions, pip install failed 7, ~/.cache write failed 27, git config --global failed 0, sudo 1
+  sol J: 99 sessions, pip install failed 24, ~/.cache write failed 11, git config --global failed 0, sudo 0
+  sol N: 279 sessions, pip install failed 52, ~/.cache write failed 84, git config --global failed 0, sudo 1
+  sol P: 279 sessions, pip install failed 70, ~/.cache write failed 25, git config --global failed 0, sudo 1
+  sol R: 279 sessions, pip install failed 65, ~/.cache write failed 30, git config --global failed 0, sudo 1
+  cells where more than 10% of sessions hit one kind: opus F pip_install 12.1%; opus N cache_write 10.0%; particle W cache_write 27.3%; sol J pip_install 24.2%; sol J cache_write 11.1%; sol N pip_install 18.6%; sol N cache_write 30.1%; sol P pip_install 25.1%; sol R pip_install 23.3%; sol R cache_write 10.8%
+  gap between cells (highest rate minus lowest, per model and kind): opus pip_install 10.0% (F over N); opus cache_write 3.0% (N over F); opus git_global 0.4% (N over F); opus sudo 0.4% (N over F); sol pip_install 6.5% (P over N); sol cache_write 21.1% (N over P); sol git_global 0.0%; sol sudo 0.4% (N over J)
+
+test-pass labels dropped because the command is not a bare runner (lanes/decision-routing/README.md), per model, cell and acting layer:
+  none
+
+S10 acting rates:
+  P safe: n 8334, layers {"particle":0.9996400287976962,"frontier":0.0003599712023038157}, no-answers 3, retries 28, wrong acts 0 of 0, unknown acts dropped 0
+  P next_step: n 7599, layers {"main_turn":1}, no-answers 5, retries 36, wrong acts 0 of 0, unknown acts dropped 0
+  P tests_passed: n 1176, layers {"particle":0.9863945578231292,"rule":0.012755102040816327,"frontier":0.0008503401360544217}, no-answers 1, retries 5, wrong acts 0 of 0, unknown acts dropped 0
+  P done: n 636, layers {"particle":0.9292452830188679,"rule":0.040880503144654086,"frontier":0.029874213836477988}, no-answers 19, retries 50, wrong acts 0 of 0, unknown acts dropped 0
+  P relevant: n 97, layers {"keep":1}, no-answers 25, retries 44, wrong acts 0 of 0, unknown acts dropped 0, fix files dropped 0 of 0
+  R safe: n 8153, layers {"jev":0.9982828406721452,"particle":0.0017171593278547774}, no-answers 14, retries 0, wrong acts 0 of 0, unknown acts dropped 0
+  R next_step: n 7436, layers {"main_turn":1}, no-answers 14, retries 38, wrong acts 0 of 0, unknown acts dropped 0
+  R tests_passed: n 1202, layers {"particle":0.9833610648918469,"rule":0.015806988352745424,"frontier":0.0008319467554076539}, no-answers 1, retries 10, wrong acts 0 of 0, unknown acts dropped 0
+  R done: n 650, layers {"particle":0.9246153846153846,"rule":0.04923076923076923,"frontier":0.026153846153846153}, no-answers 17, retries 53, wrong acts 0 of 0, unknown acts dropped 0
+  R relevant: n 109, layers {"keep":0.5321100917431193,"particle":0.46788990825688076}, no-answers 0, retries 2, wrong acts 0 of 0, unknown acts dropped 0, fix files dropped 0 of 0
+  F safe: n 1346, layers {"frontier":1}, no-answers 0, retries 0, wrong acts 0 of 0, unknown acts dropped 0
+  F next_step: n 1328, layers {"main_turn":0.9028614457831325,"frontier":0.09713855421686747}, no-answers 0, retries 0, wrong acts 0 of 0, unknown acts dropped 0
+  F done: n 115, layers {"frontier":0.9391304347826087,"rule":0.06086956521739131}, no-answers 0, retries 0, wrong acts 0 of 0, unknown acts dropped 0
+  J safe: n 2832, layers {"jev":0.6956214689265536,"frontier":0.3043785310734463}, no-answers 0, retries 0, wrong acts 0 of 0, unknown acts dropped 0
+  J next_step: n 2642, layers {"main_turn":0.9765329295987888,"jev":0.023467070401211203}, no-answers 0, retries 0, wrong acts 0 of 0, unknown acts dropped 0
+  J tests_passed: n 404, layers {"jev":0.6856435643564357,"frontier":0.23267326732673269,"rule":0.08168316831683169}, no-answers 0, retries 0, wrong acts 0 of 0, unknown acts dropped 0
+  J done: n 233, layers {"frontier":0.9098712446351931,"rule":0.07296137339055794,"jev":0.017167381974248927}, no-answers 0, retries 0, wrong acts 0 of 0, unknown acts dropped 0
+  F tests_passed: n 211, layers {"frontier":1}, no-answers 0, retries 0, wrong acts 0 of 0, unknown acts dropped 0
+  J relevant: n 34, layers {"keep":0.38235294117647056,"jev":0.6176470588235294}, no-answers 0, retries 0, wrong acts 0 of 0, unknown acts dropped 0, fix files dropped 0 of 0
+  F relevant: n 2, layers {"frontier":1}, no-answers 0, retries 0, wrong acts 0 of 0, unknown acts dropped 0, fix files dropped 0 of 0
+  N: 558 sessions, decider questions per session 0.00, blocked commands 0
+  J: 198 sessions, decider questions per session 30.78, blocked commands 203
+  R: 558 sessions, decider questions per session 31.36, blocked commands 302
+  W: 99 sessions, decider questions per session 0.00, blocked commands 0
+  P: 558 sessions, decider questions per session 31.90, blocked commands 423
+  F: 99 sessions, decider questions per session 0.00, blocked commands 44
