@@ -61,6 +61,8 @@ export interface ExecResult {
 export interface ExecOptions {
   user?: "root" | "run";
   timeoutMs?: number;
+  /** Bytes for the command's stdin, such as the controller service's environment, which never touches the disk. */
+  input?: Uint8Array;
 }
 
 export interface Vm {
@@ -189,6 +191,7 @@ export function preamble(spec: VmSpec): string[] {
     "systemctl disable apt-daily.timer apt-daily-upgrade.timer",
     "systemctl mask --now unattended-upgrades.service",
     "test \"$(systemctl is-enabled unattended-upgrades.service)\" = masked && ! systemctl is-active --quiet apt-daily.timer && ! systemctl is-active --quiet apt-daily-upgrade.timer",
+    "id -u " + spec.runUser + " > /dev/null 2>&1 || useradd -m -s /bin/bash " + spec.runUser,
     "loginctl enable-linger " + spec.runUser,
     "mkdir -p " + AUDIT_DIR + " && chmod 700 " + AUDIT_DIR + " && touch " + AUDIT_DIR + "/start",
     ...mirrorConfig(spec),
@@ -482,6 +485,8 @@ export interface UbicloudOptions {
   ssh: (host: string, command: string, o: ExecOptions & { input?: Uint8Array }) => Promise<ExecResult & { raw?: Uint8Array }>;
   sleep: (ms: number) => Promise<void>;
   now: () => number;
+  /** A private subnet every VM joins, so sandboxes reach the controller host's proxy and mirrors on its private IPv4. */
+  privateSubnet?: string;
 }
 
 /**
@@ -491,6 +496,7 @@ export interface UbicloudOptions {
  */
 export class UbicloudBackend implements VmBackend {
   private readonly hosts = new Map<string, string>();
+  private readonly privates = new Map<string, string>();
   constructor(private readonly o: UbicloudOptions) {
     if (!o.token) fail("E_USAGE", "the Ubicloud backend needs a token from the paid run's launcher");
   }
@@ -500,21 +506,47 @@ export class UbicloudBackend implements VmBackend {
     if (!res.ok && res.status !== 404) fail("E_DC_INFRA_MISSING", "Ubicloud " + method + " " + name + " returned " + res.status);
     return res.status === 204 || res.status === 404 ? null : res.json();
   }
-  async create(spec: VmSpec): Promise<Vm> {
+  async create(spec: VmSpec, o: { prefix?: string } = {}): Promise<Vm> {
     if (!spec.owner) fail("E_USAGE", "UBI_OWNER is not set");
     const expires = Math.floor(this.o.now() / 60_000) + spec.ttlMinutes;
-    const name = ("dc-" + spec.owner + "-" + expires + "-" + crypto.randomUUID().slice(0, 8)).toLowerCase();
-    await this.api("POST", name, { public_key: this.o.publicKey, size: this.o.size, boot_image: this.o.image, enable_ip4: true });
-    for (let i = 0; i < 120; i++) {
-      const v = await this.api("GET", name);
-      if (v?.state === "running" && v.ip4) {
-        this.hosts.set(name, v.ip4);
-        return { id: name, spec };
+    const name = ((o.prefix ?? "dc") + "-" + spec.owner + "-" + expires + "-" + crypto.randomUUID().slice(0, 8)).toLowerCase();
+    try {
+      await this.api("POST", name, { public_key: this.o.publicKey, size: this.o.size, boot_image: this.o.image, enable_ip4: true, ...(this.o.privateSubnet ? { private_subnet_id: this.o.privateSubnet } : {}) });
+      for (let i = 0; i < 120; i++) {
+        const v = await this.api("GET", name);
+        if (v?.state === "running" && v.ip4) {
+          this.hosts.set(name, v.ip4);
+          if (v.private_ipv4) this.privates.set(name, String(v.private_ipv4).replace(/\/\d+$/, ""));
+          return { id: name, spec };
+        }
+        await this.o.sleep(5_000);
       }
-      await this.o.sleep(5_000);
+    } catch (e) {
+      await this.api("DELETE", name).catch(() => {});
+      throw e;
     }
     await this.api("DELETE", name);
     return fail("E_DC_INFRA_MISSING", "Ubicloud VM " + name + " did not start");
+  }
+  /** Attaches to a VM an earlier launch made: its handle when it is running, else null (gone or not running). */
+  async attach(name: string, spec: VmSpec): Promise<Vm | null> {
+    const v = await this.api("GET", name);
+    if (v?.state !== "running" || !v.ip4) return null;
+    this.hosts.set(name, v.ip4);
+    if (v.private_ipv4) this.privates.set(name, String(v.private_ipv4).replace(/\/\d+$/, ""));
+    return { id: name, spec };
+  }
+  /** Whether Ubicloud still holds the VM, in any state. */
+  async exists(name: string): Promise<boolean> {
+    return (await this.api("GET", name)) !== null;
+  }
+  /** The VM's public IPv4, for an SSH tunnel. */
+  address(vm: Vm): string {
+    return this.host(vm);
+  }
+  /** The VM's private IPv4 on the run's subnet, or null when Ubicloud reported none. */
+  privateAddress(vm: Vm): string | null {
+    return this.privates.get(vm.id) ?? null;
   }
   private host(vm: Vm) {
     const h = this.hosts.get(vm.id);
@@ -536,5 +568,6 @@ export class UbicloudBackend implements VmBackend {
   async destroy(vm: Vm) {
     await this.api("DELETE", vm.id);
     this.hosts.delete(vm.id);
+    this.privates.delete(vm.id);
   }
 }

@@ -45,6 +45,10 @@ export interface FakeWorld {
   handler: FakeHandler;
   /** Called once per VM after create, to plant processes, egress, written files. */
   plant: (vm: FakeVm) => void;
+  /** Answers a VM's SSH commands before the simulated ones, input included, for a local SSH stand-in; undefined falls through. */
+  ssh?: (vm: FakeVm, command: string, input: Uint8Array | undefined, user: string) => Promise<(ExecResult & { raw?: Uint8Array }) | undefined>;
+  /** Faults on Ubicloud's API: a status or a thrown error per method, for the nth call of that method (1-based) or every call. */
+  api?: Partial<Record<"POST" | "GET" | "DELETE", { status?: number; throws?: string; nth?: number }>>;
 }
 
 const enc = new TextEncoder();
@@ -92,16 +96,24 @@ function auditOutput(w: FakeWorld, vm: FakeVm, name: AuditCommand): ExecResult {
 }
 
 /** A world whose VMs are clean by default: init and the run user's shell, egress to the allowed endpoints only. */
-export function fakeWorld(o: Partial<Pick<FakeWorld, "faults" | "handler" | "plant">> = {}): FakeWorld {
-  return { vms: [], deleted: [], faults: o.faults ?? {}, handler: o.handler ?? (() => undefined), plant: o.plant ?? (() => {}) };
+export function fakeWorld(o: Partial<Pick<FakeWorld, "faults" | "handler" | "plant" | "ssh" | "api">> = {}): FakeWorld {
+  return { vms: [], deleted: [], faults: o.faults ?? {}, handler: o.handler ?? (() => undefined), plant: o.plant ?? (() => {}), ssh: o.ssh, api: o.api };
 }
 
 /** The real backend on the world: fetch answers Ubicloud's VM calls, ssh answers the VM's commands. */
 export function fakeBackend(w: FakeWorld): UbicloudBackend {
   const byIp = new Map<string, FakeVm>();
   const byName = new Map<string, FakeVm>();
+  const calls: Record<string, number> = {};
   const fetchFake = (async (url: string, init: { method: string; body?: string }) => {
     const name = String(url).split("/").pop()!;
+    calls[init.method] = (calls[init.method] ?? 0) + 1;
+    const fault = w.api?.[init.method as "POST" | "GET" | "DELETE"];
+    if (fault && (fault.nth === undefined || fault.nth === calls[init.method])) {
+      if (fault.throws) throw new Error(fault.throws);
+      if (fault.status) return new Response("{}", { status: fault.status });
+    }
+    if (init.method === "GET" && (!byName.has(name) || w.deleted.includes(name))) return new Response(null, { status: 404 });
     if (init.method === "POST") {
       const vm: FakeVm = { id: name, ip: "10.1.0." + (w.vms.length + 10), spec: null, calls: [], files: new Map(), processes: [], egress: [], blocked: [], written: [] };
       w.vms.push(vm);
@@ -126,6 +138,8 @@ export function fakeBackend(w: FakeWorld): UbicloudBackend {
     ssh: async (host, command, so) => {
       const vm = byIp.get(host)!;
       vm.calls.push({ command, user: so.user ?? "run" });
+      const own = w.ssh ? await w.ssh(vm, command, so.input, so.user ?? "run") : undefined;
+      if (own) return own;
       const write = /^cat > '(.*)'$/.exec(command);
       if (write) {
         vm.files.set(write[1]!, so.input ?? new Uint8Array());
@@ -144,8 +158,8 @@ export function fakeBackend(w: FakeWorld): UbicloudBackend {
     },
   });
   const create = backend.create.bind(backend);
-  backend.create = async (spec) => {
-    const v = await create(spec);
+  backend.create = async (spec, co) => {
+    const v = await create(spec, co);
     const vm = byName.get(v.id)!;
     vm.spec = spec;
     vm.processes = [
