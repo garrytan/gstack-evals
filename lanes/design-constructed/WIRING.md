@@ -40,7 +40,7 @@ A host run reads one wiring file (wire/real.ts readWiring). A missing choice ref
 
 ## Earlier wiring
 
-17. **Validators' blocks.** wire.ts blockParser gives the author area's steps 5 and 6 the frozen lenient parse written for sessions (author item 8). The Captain may rule the strict parse for validators instead.
+17. **Validators' blocks.** wire.ts blockParser gives the author area's steps 5 and 6 the frozen lenient parse written for sessions (author item 8). The Captain kept it (PD-37).
 18. **lens minus none.** The verdict row (wire/keyless.ts readRow) computes lens minus none from the contrast on the same cells, passes its unadjusted p as holm (the prereg names Holm only for the two primaries) and prints it labelled unadjusted. It reads the verdict through verdict() with the arm's own smoke and untested inputs, as read/dryrun-cases.ts's S10-reading case does, and reads "untested" when the lens didn't run or its contrast has no interval.
 
 ## Phase 1b open items
@@ -57,7 +57,7 @@ Each piece below is a choice the binding could not make without moving a scored 
 26. **Start rule 9's provider compare.** Resolved: read/start.ts startRule9 compares with money/served.ts foldProvider (PD-20) and prints both raw names when only the spelling differs.
 27. **The gate check's fix step (PD-21).** A planted drop item marked fix gets one fix call from its author and a second audit by both auditors on the fixed unit. The gate check skips step 3's re-screen of the fixed unit. A drop verdict on the item in the second audit counts as caught (an auditor drops it), and a second fix verdict counts as a miss, although PD-2 would drop the item from a production key. "The planted defect gone" is read as the statement or detail changed and the second audit keeping it. The Captain may rule a stricter read.
 28. **Applying the re-priced caps (PD-30).** read/admission.ts projectionRerun returns each re-priced cap and prints it as a deviation. No row writes those caps into the ledger yet, and only items whose measured need passes their cap are re-priced; caps are never lowered.
-29. **What counts as a session a drift stop cut (PD-25).** wire/sessions.ts reads an attempt as a drift stop when it ended other than completed and a provider drift stop covers its model and arm when it ends. A session that completed before the stop is read as completed.
+29. **What counts as a session a drift stop cut (PD-25).** wire/sessions.ts reads an attempt as a drift stop when it ended other than completed and a provider drift stop covers its model and arm when it ends. A session that completed before the stop is read as completed. The Captain kept this reading (PD-36).
 
 ## Carried from the area notes
 
