@@ -82,7 +82,7 @@ describe.skipIf(!SSHD || !KEYGEN)("the controller's install over SSH against a l
     sshd = Bun.spawn([SSHD!, "-D", "-e", "-f", join(dir, "sshd_config")], { stdout: "ignore", stderr: "ignore" });
     await portOpen(port, 10_000);
     const ssh = sshRunner({ keyPath: join(dir, "client"), knownHosts: join(dir, "known_hosts"), login, extra: ["-p", String(port)], wrap: (c) => c });
-    const api = (async (_url: string, init: { method: string }) => (init.method === "GET" ? Response.json({ state: "running", ip4: "127.0.0.1", private_ipv4: "10.0.0.9/32" }) : init.method === "POST" ? Response.json({}) : new Response(null, { status: 204 }))) as unknown as typeof fetch;
+    const api = (async (_url: string, init: { body?: string }) => (JSON.parse(init.body ?? "{}").argv?.[2] === "show" ? new Response("state: running\nip4: 127.0.0.1\nprivate-ipv4: 10.0.0.9/32\n") : new Response("ok"))) as unknown as typeof fetch;
     const keyed = await keyedUbicloud({ project: "pj", location: "loc", size: "standard-2", image: "ubuntu-noble", env: { UBICLOUD_API_KEY: "invented" }, keyPath: join(dir, "client"), knownHosts: join(dir, "known_hosts"), fetch: api, ssh });
     backend = keyed;
     vm = await keyed.create(fakeSpec({ proxy: null }));
