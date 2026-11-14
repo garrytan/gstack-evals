@@ -84,7 +84,7 @@ export interface SessionDrive {
   /** The session's transcript.ndjson text. */
   transcript: string;
   termination: Termination;
-  /** The API, the provider or the harness returned an error in the session's last exchange (decides a malformed tool call only). */
+  /** The API, the provider or the harness returned an error inside the attempt (PD-33; decides a malformed tool call only). */
   errorSeen: boolean;
   /** The driver's session_end (PD-32): what held the session at its end and how long it sat idle on background work; null when the driver recorded none. */
   sessionEnd: SessionEnd | null;

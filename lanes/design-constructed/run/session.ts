@@ -19,7 +19,7 @@ import type { AttemptEnd, AttemptRecord, Cell, CellOutcome, EndRead, LoopSeams, 
 
 /**
  * The driver's termination as an attempt end (BT, and the Captain's 2026-11-14 ruling). errorSeen says the API, the
- * provider or the harness returned an error in the session's last exchange; it decides only a malformed tool call.
+ * provider or the harness returned an error inside the attempt (PD-33); it decides only a malformed tool call.
  */
 export function endOf(t: Termination, errorSeen = false): AttemptEnd {
   switch (t.kind) {
