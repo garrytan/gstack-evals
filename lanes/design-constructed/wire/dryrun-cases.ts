@@ -18,6 +18,7 @@ import { BOUND_PROVIDERS } from "../wire.ts";
 import { fakeEnv, fakeKit, fakeSessions, fakeVm, type FakeAttempt, type Kit, type KitOptions } from "./fakes.ts";
 import { runRow, scratch, sessionsFixture, stage3Fixture } from "./fixtures.ts";
 import { FAKE_KEYS, hostRowCases, watchedEnv } from "./dryrun-host.ts";
+import { launchCases } from "./dryrun-launch.ts";
 import { cloneCases } from "./dryrun-clones.ts";
 import { realProviders, RULED_RETRY } from "./real.ts";
 import type { LedgerService } from "../money/ledger-service.ts";
@@ -404,6 +405,7 @@ export function cases(): DryRunCase[] {
         }),
     },
     ...hostRowCases(),
+    ...launchCases(),
     ...inputCases(),
     ...cloneCases(),
   ];

@@ -172,6 +172,13 @@ export interface HostSeams {
 const VERBS = ["launch", "next", "relaunch", "recover", "teardown", "status"] as const;
 /** How many of the last row's log lines dc host status prints. */
 const STATUS_TAIL = 10;
+/**
+ * The rows whose lines carry only counts, digests, model and provider names and frame positions, so status may print
+ * their log tail. Every other row prints its line count only: the gate check prints item text before and after its fix
+ * (PD-35), the author steps print unit outcomes, and the session, label, read, recipe and stage 3 rows print per-unit
+ * readings (PD-41).
+ */
+export const QUIET_ROWS: ReadonlySet<string> = new Set(["items", "modelprobe", "probe", "clones", "apps", "planted", "reprice"]);
 const mib = (bytes: number) => (bytes / 2 ** 20).toFixed(1);
 type Verb = (typeof VERBS)[number];
 const USAGE = "host " + VERBS.join("|") + " --plan <host plan JSON> --record <host record JSON> [--archive <new folder>] [--force]";
@@ -321,10 +328,12 @@ export function hostRow(s: HostSeams = {}): Row {
     }
     try {
       if (verb === "status") {
-        const st = await hostStatus(b, plan, rec!, { tail: STATUS_TAIL });
+        const st = await hostStatus(b, plan, rec!, { tail: STATUS_TAIL, quiet: (row) => QUIET_ROWS.has(row) });
         io.out(st === null ? "host: the controller host " + rec!.controller.vm + " is gone; recover it" : "host: " + rec!.controller.vm + (st.running ? " runs" : " is up with no service running") + (st.status ? ", " + st.status.items.length + " open item(s), last snapshot " + (st.status.lastSnapshot ?? "none") + (st.status.captain ? ", Captain stop: " + st.status.captain.why : "") : ""));
         for (const r of st?.rows ?? []) io.out("row " + r.n + " " + r.row + ": " + r.state + (r.state === "running" ? " since " + r.startedAt : ", " + r.startedAt + " to " + r.endedAt) + (r.code ? " (" + r.code + ")" : ""));
         if (st && !st.rows.length) io.out("rows: none yet");
+        const last = st?.rows.at(-1);
+        if (last && !QUIET_ROWS.has(last.row)) io.out("log: row " + last.n + " holds " + st!.logLines + " lines; " + last.row + " can print unit or item text, so status prints none");
         for (const t of st?.tail ?? []) io.out("log: " + t);
         return 0;
       }

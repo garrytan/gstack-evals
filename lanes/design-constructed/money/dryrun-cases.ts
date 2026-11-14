@@ -575,7 +575,7 @@ const hostCases: DryRunCase[] = [
       e.want(!walFoldProjection(24 * 30 * 12, 20_000).fits, "a year of WAL host-hours fit the cap");
       const stage = hostsProjection({ stage: "stage 1", controllerHours: 48, vms: [], wal: { hours: 48, priceMicrosPerHour: burstable1 } }, PRICE);
       e.want(stage.micros === 48 * PRICE + 48 * burstable1 && stage.line.includes("WAL host's 48 hours"), stage.line);
-      const plan = { runId: "dc-dryrun", owner: "dry-owner", longestStageHours: 24, ttlHours: 30, priceMicrosPerHour: { controller: 60_000, wal: burstable1 }, commit: "0".repeat(40), repoTar: new Uint8Array(1), recordTar: new Uint8Array(1), root: "/x", wal: { dir: "/w", script: "/s", owner: null, authorizedKeys: "/k" } } as unknown as ControllerPlan;
+      const plan = { runId: "dc-dryrun", owner: "dry-owner", longestStageHours: 24, ttlHours: 30, priceMicrosPerHour: { controller: 60_000, wal: burstable1 }, commit: "0".repeat(40), repoTar: new Uint8Array(1), recordTar: new Uint8Array(1), root: "/x", wal: { dir: "/w", script: "/s", owner: null, authorizedKeys: "/k" }, recipient: "age1" + "q".repeat(58) } as unknown as ControllerPlan;
       e.want(planProblems(plan).length === 0, "the plan read " + planProblems(plan).join("; "));
       e.want(planProblems({ ...plan, sizes: { wal: "standard-2" } }).some((p) => p.includes("burstable-1")), "a standard-2 WAL host was not refused");
       e.want(planProblems({ ...plan, ttlHours: 24 * 365 * 2 }).some((p) => p.includes("does not fit")), "a WAL host past the cap was not refused");

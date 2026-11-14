@@ -31,7 +31,7 @@ A host run reads one wiring file (wire/real.ts readWiring). A missing choice ref
 ## Controller host
 
 13. **Provisioning.** The controller host provisions no Docker, no trial image and no gstack pin sources (money/controller-host.ts controllerProvision).
-14. **Launch.** No cli row launches the controller host. wire/host.ts hostStage gives the plan's `stage` field, and host-main.ts runs the row through runOnHost.
+14. **Launch.** Built: `gstack-evals dc host launch` (wire/host.ts) creates the WAL host and the controller host, unpacks the plan's work folder into the host's tmpfs work folder and runs the plan's stage as row 1 through money/host-main.ts and runOnHost. `dc host next` sends each later row, with its own inputs, to the same ledger service once the last row has ended, and `dc host status` prints each row and, for rows whose lines carry no unit text, the last lines of its log. The teardown seals the work folder on the host before anything is copied back (PD-41). tests/dc/wire/launch.test.ts and wire/dryrun-launch.ts's W-launch case drive the whole path keyless.
 
 ## VM world and stage 3
 

@@ -470,12 +470,14 @@ export interface HostState {
   status: ServiceStatus | null;
   /** Every row the service ran on this host, in order (host-main.ts RowRecord). */
   rows: RowRecord[];
-  /** The last lines of the last row's log, when asked for. */
+  /** The last lines of the last row's log, when asked for and its row prints no unit text. */
   tail: string[];
+  /** How many lines the last row's log holds. */
+  logLines: number;
 }
 
 /** Whether the service on the controller host is running, its rows and the last row's log tail; null when the host is gone. */
-export async function hostStatus(b: HostBackend, p: ControllerPlan, rec: HostRecord, o: { tail?: number } = {}): Promise<HostState | null> {
+export async function hostStatus(b: HostBackend, p: ControllerPlan, rec: HostRecord, o: { tail?: number; quiet?: (row: string) => boolean } = {}): Promise<HostState | null> {
   const x = new Ctx(b, p);
   const ctl = await b.attach(rec.controller.vm, hostSpec(p, "dc controller host " + p.runId));
   if (!ctl) return null;
@@ -485,8 +487,10 @@ export async function hostStatus(b: HostBackend, p: ControllerPlan, rec: HostRec
   if (status?.captain) rec.captain = status.captain.why;
   const rows = await readRows(x, ctl);
   const last = rows.at(-1);
-  const tail = last && o.tail ? (await b.exec(ctl, "tail -n " + o.tail + " " + shq(rowLog(x.l.work, last.n)) + " 2>/dev/null", { user: "root" })).stdout.split("\n").filter(Boolean) : [];
-  return { running: alive.exit === 0, status, rows, tail };
+  const log = last ? shq(rowLog(x.l.work, last.n)) : null;
+  const logLines = log ? Number((await b.exec(ctl, "cat " + log + " 2>/dev/null | wc -l", { user: "root" })).stdout.trim()) || 0 : 0;
+  const tail = log && o.tail && (o.quiet?.(last!.row) ?? true) ? (await b.exec(ctl, "tail -n " + o.tail + " " + log + " 2>/dev/null", { user: "root" })).stdout.split("\n").filter(Boolean) : [];
+  return { running: alive.exit === 0, status, rows, tail, logLines };
 }
 
 export type Sent = { kind: "sent"; row: RowRecord } | { kind: "busy"; row: RowRecord } | { kind: "down" } | { kind: "lost" } | { kind: "refused"; why: string };
