@@ -134,6 +134,7 @@ export function cases(): DryRunCase[] {
     auditCase("a missing process list stops like a breach", { faults: { empty: ["processes"] } }, "uncollected", "processes command returned nothing"),
     auditCase("a cut egress log stops like a breach", { faults: { cut: ["egress"] } }, "uncollected", "egress log is cut"),
     auditCase("a key pattern in a written file is a breach", { plant: (vm) => { vm.written.push({ path: "/tmp/x.log", size: 9, mode: 0o644, mtime: "t", type: "f" }); vm.files.set("/tmp/x.log", bytes("sk-ant-api03-" + "k".repeat(30))); } }, "breach", "/tmp/x.log"),
+    auditCase("a key pattern in a file the session wrote under /work is a breach", { plant: (vm) => { vm.work.push("/work/app/.env"); vm.files.set("/work/app/.env", bytes("sk-ant-api03-" + "k".repeat(30))); } }, "breach", "/work/app/.env"),
     auditCase("a key pattern in process arguments is a breach", { plant: (vm) => void vm.processes.push({ pid: 70, user: "run", args: "curl -H x:sk-proj-" + "k".repeat(40) }) }, "breach", "a key in the arguments of pid 70"),
     auditCase("a drive path in process arguments is a breach", { plant: (vm) => void vm.processes.push({ pid: 71, user: "run", args: "cat /root/.capy/drive/a" }) }, "breach", "a drive path in the arguments of pid 71"),
     auditCase("egress to an unnamed host is a breach", { plant: (vm) => void vm.egress.push({ host: "203.0.113.9", port: 443 }) }, "breach", "egress to 203.0.113.9:443"),
