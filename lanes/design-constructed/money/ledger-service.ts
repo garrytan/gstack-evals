@@ -3,8 +3,9 @@
 // file (R2-3, R2-4, L7). It boots from the off-host copy every time: on a fresh host with an empty copy it starts
 // clean; on a relaunch on the same host it keeps the ledger file and rebuilds the book from the newest verified
 // snapshot and the chained lines after it; on a replacement host it restores the ledger file from the snapshot and
-// puts the reserves after the watermark back through main's reconcileJournal (money/durability.ts). Every boot then
-// admits the run's own hosts on dc-hosts, takes a verified snapshot and writes status.json.
+// puts the reserves after the watermark back through main's reconcileJournal (money/durability.ts). Every boot carries
+// the earlier launches' spend from the launch's carry file into the book (money/carry.ts), then admits the run's own
+// hosts on dc-hosts, takes a verified snapshot and writes status.json.
 //
 // Captain stops (money open item 5): a broken write-ahead copy (an append that failed or lagged past its limit), a
 // recovery whose completeness can't be shown, a failed snapshot or a refused host admission stop the controller for
@@ -16,6 +17,7 @@ import { basename, dirname, join } from "node:path";
 import { LocalLedger } from "../../../src/runner/ledger/local.ts";
 import type { LedgerItemId } from "../types.ts";
 import type { MoneyController } from "./book.ts";
+import { carryInto, readCarryFile, type CarryFile } from "./carry.ts";
 import { latestSnapshot, recover, replayReserves, restoreLedgerFile, snapshotDue, takeSnapshot } from "./durability.ts";
 import { admitVm, idleDelete, vmSubs } from "./hosts.ts";
 import { settleFromJournals, writeScan } from "./journals.ts";
@@ -44,6 +46,8 @@ export interface ServiceConfig {
   journalDir: string;
   stateDir: string;
   hosts: HostVm[];
+  /** The launch's carry file in the work folder (money/carry.ts CARRY_FILE); absent, the launch carries nothing. */
+  carry?: string | null;
 }
 
 export type Boot = "fresh" | "same-host" | "restored";
@@ -66,6 +70,8 @@ export interface ServiceStatus {
   held: number;
   uncertainMicros: number;
   items: ItemFigures[];
+  /** The earlier launches' spend this launch carries, per item, and how many archives it came from; null without a carry file. */
+  carry: { archives: number; items: CarryFile["items"] } | null;
 }
 
 /** A target that also keeps the approval record's files beside each snapshot (RemoteTarget does). */
@@ -110,6 +116,8 @@ export async function settleHostVm(c: MoneyController, h: HostVm, nowMs: number)
 export class LedgerService {
   captain: CaptainStop | null = null;
   lastSnapshot: { name: string; at: Date } | null = null;
+  /** The carry this boot read; null when the config names none. */
+  carry: CarryFile | null = null;
   private settledSig = "";
   private priorPauses = new Map<LedgerItemId, { why: string; allowTag: string | null; captain: boolean } | null>();
   readonly startedAt: Date;
@@ -149,7 +157,13 @@ export class LedgerService {
     const c = this.controller;
     for (const h of this.cfg.hosts) {
       if (vmSubs(c, h.vm).some((s) => s.state === "in-flight" || s.state === "unknown")) continue;
-      if (!c.lease("dc-hosts")) await c.openItem("dc-hosts");
+      if (!c.lease("dc-hosts")) {
+        try {
+          await c.openItem("dc-hosts");
+        } catch (e) {
+          return this.stopForCaptain("dc-hosts' lease did not open: " + (e as Error).message);
+        }
+      }
       const a = await admitVm(c, { vm: h.vm, ttlHours: h.ttlHours, priceMicrosPerHour: h.priceMicrosPerHour, stage: "hosts", controller: true, run: h.role + " host " + h.vm });
       if (a.kind !== "admitted") return this.stopForCaptain("the " + h.role + " host " + h.vm + " was not admitted on dc-hosts: " + a.kind + ": " + a.why);
     }
@@ -269,6 +283,7 @@ export class LedgerService {
       held: this.recovered.held,
       uncertainMicros: this.recovered.uncertainMicros,
       items: c.openItems().map((i) => c.figures(i)),
+      carry: this.carry ? { archives: this.carry.archives.length, items: this.carry.items } : null,
     };
   }
 
@@ -315,6 +330,12 @@ export async function openLedgerService(cfg: ServiceConfig, target: ServiceTarge
   } catch (e) {
     return refuse("the off-host copy could not be read: " + (e as Error).message);
   }
+  let carry: CarryFile | null = null;
+  try {
+    carry = cfg.carry ? readCarryFile(cfg.carry, cfg.runId) : null;
+  } catch (e) {
+    return refuse("the launch's carry could not be read: " + (e as Error).message);
+  }
   const local = LocalLedger.open(cfg.ledgerPath, now);
   const leases = o.leases?.(local) ?? mainLeases({ record: cfg.record, local });
   let rec: Awaited<ReturnType<typeof recover>>;
@@ -339,6 +360,8 @@ export async function openLedgerService(cfg: ServiceConfig, target: ServiceTarge
     uncertainMicros -= rec.held.filter((s) => settled.has(s.id)).reduce((a, s) => a + s.reserveMicros, 0);
   }
   const svc = new LedgerService(cfg, target, rec.controller, rec.wal, local, boot, { held, uncertainMicros }, now);
+  svc.carry = carry;
+  if (carry) carryInto(svc.controller, carry);
   const standing = join(cfg.stateDir, "captain.json");
   if (existsSync(standing)) await svc.stopForCaptain((JSON.parse(readFileSync(standing, "utf8")) as CaptainStop).why);
   if (!svc.captain) {

@@ -18,11 +18,16 @@
 // keyless dry run (rule 5), a complete wiring file, a plan the launcher accepts and, for a sessions row, a recorded image
 // digest with its image tar and a gstack source that holds the pin. The row's own start rules run on the host. The
 // launcher builds every upload in memory from a tmpfs folder and refuses one on disk, and the teardown's archive holds
-// the work folder only as the age file the host sealed (PD-41).
+// the work folder only as the age file the host sealed (PD-41). A launch and a recovery first read the books of every
+// earlier launch the plan's archives name (money/carry.ts) and refuse when they can't be read or miss a lease the
+// approval record holds for the run; the host carries their spend into every lease, and launch and status print it.
 import { closeSync, cpSync, existsSync, mkdirSync, openSync, readFileSync, readSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { DcError, fail } from "../errors.ts";
 import { GSTACK_PIN } from "../frozen.ts";
+import { exact } from "../money/book.ts";
+import { leaseRoom, readCarry, type CarryFile } from "../money/carry.ts";
+import { carryText } from "../money/cli.ts";
 import { AGE_HEADER, controllerProvision, gstackPack, hostStatus, HOST_GSTACK_SOURCE, launch, planProblems, recoverHost, relaunch, repoBundle, repoTree, sendRow, serviceEnv, teardown, tmpfsLine, type ControllerPlan, type HostBackend, type HostRecord } from "../money/controller-host.ts";
 import type { HostRow, HostStage } from "../money/host-main.ts";
 import { recordTar, type LedgerService } from "../money/ledger-service.ts";
@@ -172,6 +177,8 @@ export interface HostPlanFile {
   wiring: string;
   /** The Captain's approval record folder. The teardown writes the host's copy back here, keeping the old one beside it. */
   record: string;
+  /** Every earlier launch's teardown archive folder (dc host teardown --archive) for this run id; their books carry each item's spend into this launch. */
+  archives?: string[] | null;
   /** The run's age recipient file, one age1 public key; the launcher uploads it and the teardown seals the work folder to it. */
   recipient: string;
   /** A tmpfs folder of the next row's own inputs, unpacked into the host's work folder by next or relaunch; none when unset. */
@@ -238,6 +245,7 @@ export async function readHostPlan(path: string): Promise<HostPlanFile> {
   if (!existsSync(p.record)) no("names an approval record that doesn't exist: " + p.record);
   if (typeof p.recipient !== "string" || !existsSync(p.recipient)) no("names no age recipient file");
   if (p.inputs != null && (typeof p.inputs !== "string" || !existsSync(p.inputs))) no("names an inputs folder that doesn't exist: " + p.inputs);
+  if (p.archives != null && (!Array.isArray(p.archives) || p.archives.some((a) => typeof a !== "string" || !a))) no("names archives that are not a list of folders");
   if (!p.ubicloud || typeof p.ubicloud.project !== "string") no("has no ubicloud section");
   return p;
 }
@@ -263,8 +271,27 @@ async function hostRules(p: HostPlanFile, env: RowEnv): Promise<{ commit: string
   return { commit: lane.commit, root: lane.root };
 }
 
+/**
+ * The earlier launches' spend this launch carries (money/carry.ts), read before any key or VM. A launch also refuses
+ * when dc-hosts' room after the carry can't hold the two hosts' time to live, which the service admits at its first boot.
+ */
+async function launchCarry(p: HostPlanFile, verb: Verb): Promise<CarryFile> {
+  const record = resolve(p.record);
+  const carry = await readCarry(p.archives ?? [], record, p.runId);
+  const room = verb === "launch" ? leaseRoom(record, carry, "dc-hosts") : null;
+  const need = Math.ceil(p.ttlHours * p.priceMicrosPerHour.wal) + Math.ceil(p.ttlHours * p.priceMicrosPerHour.controller);
+  if (room && need > room.roomMicros) throw new DcError("E_DCW_LEDGER_REFUSED", "dc-hosts has " + exact(Math.max(room.roomMicros, 0)) + " of room after the earlier launches' books (" + exact(room.carriedMicros) + " carried, " + exact(room.committedMicros) + " in the record, cap " + exact(room.capMicros) + "), and the two hosts' time to live of " + p.ttlHours + " hours reserves " + exact(need) + "; no VM was made");
+  return carry;
+}
+
+/** What a launch and dc host status print of the carry: the archives it came from and each item that carries spend. */
+export function carryLines(carry: { archives: number; items: CarryFile["items"] }): string[] {
+  const items = Object.entries(carry.items).map(([item, f]) => "carry: " + item + " " + carryText(f));
+  return ["carry: " + carry.archives + " earlier launch archive(s); " + (items.length ? "every other leased item carries " + exact(0) : "no item carries spend"), ...items];
+}
+
 /** The launcher's plan for this host plan; owner is UBI_OWNER, which is not a key. */
-function controllerPlanOf(p: HostPlanFile, lane: { commit: string; root: string }, owner: string, s: HostSeams, uploads: boolean): ControllerPlan {
+function controllerPlanOf(p: HostPlanFile, lane: { commit: string; root: string }, owner: string, s: HostSeams, uploads: boolean, carry: CarryFile | null = null): ControllerPlan {
   const sessions = p.stage[0] === "sessions";
   const plan: ControllerPlan = {
     runId: p.runId,
@@ -279,6 +306,7 @@ function controllerPlanOf(p: HostPlanFile, lane: { commit: string; root: string 
     repoBundle: uploads ? repoBundle(lane.root, lane.commit) : new Uint8Array([0]),
     recordTar: uploads ? recordTar(resolve(p.record)) : new Uint8Array([0]),
     workTar: uploads ? (needTmpfs(p.work, "the plan's work folder"), tarOf(resolve(p.work))) : null,
+    carry,
     recipient: readFileSync(p.recipient, "utf8").trim(),
     provision: controllerProvision({ bunVersion: p.bunVersion, mirrors: p.mirrors }),
     bun: "/opt/bun/bin/bun",
@@ -366,7 +394,8 @@ export function hostRow(s: HostSeams = {}): Row {
     const keyed = verb === "launch" || verb === "relaunch" || verb === "recover";
     const lane = keyed || verb === "next" ? await hostRules(p, env) : { commit: env.lane().commit, root: env.lane().root };
     const owner = ownerFromEnv(vars);
-    const plan = controllerPlanOf(p, lane, owner, s, verb === "launch" || verb === "recover");
+    const carry = verb === "launch" || verb === "recover" ? await launchCarry(p, verb) : null;
+    const plan = controllerPlanOf(p, lane, owner, s, verb === "launch" || verb === "recover", carry);
     const inputs = (verb === "next" || verb === "relaunch") && p.inputs ? (needTmpfs(p.inputs, "the plan's inputs folder"), tarOf(resolve(p.inputs))) : null;
     const keys = keyed ? serviceEnv(vars, owner) : null;
     const b = await (s.backend ?? realBackend)(p, vars);
@@ -377,12 +406,14 @@ export function hostRow(s: HostSeams = {}): Row {
       saveRecord(recordPath, made);
       io.out("host: launched " + made.controller.vm + " with WAL host " + made.wal.vm + " in Ubicloud " + p.ubicloud.location + " at " + made.commit + (made.image ? " on trial image " + made.image : "") + "; stage " + p.stage.join(" "));
       if (made.tmpfs) io.out("host: the work folder is a tmpfs of " + mib(made.tmpfs.sizeBytes) + " MiB, sized from the controller host's " + mib(made.tmpfs.memBytes) + " MiB of memory");
+      for (const l of carryLines({ archives: carry!.archives.length, items: carry!.items })) io.out(l);
       return 0;
     }
     try {
       if (verb === "status") {
         const st = await hostStatus(b, plan, rec!, { tail: STATUS_TAIL, quiet: (row) => QUIET_ROWS.has(row) });
         io.out(st === null ? "host: the controller host " + rec!.controller.vm + " is gone; recover it" : "host: " + rec!.controller.vm + (st.running ? " runs" : " is up with no service running") + (st.status ? ", " + st.status.items.length + " open item(s), last snapshot " + (st.status.lastSnapshot ?? "none") + (st.status.captain ? ", Captain stop: " + st.status.captain.why : "") : ""));
+        if (st?.status?.carry) for (const l of carryLines(st.status.carry)) io.out(l);
         for (const r of st?.rows ?? []) {
           io.out("row " + r.n + " " + r.row + ": " + r.state + (r.state === "running" ? " since " + r.startedAt : ", " + r.startedAt + " to " + r.endedAt) + (r.code ? " (" + r.code + ")" : ""));
           if (r.tmpfs) io.out("tmpfs: row " + r.n + ": " + tmpfsLine(r.tmpfs));

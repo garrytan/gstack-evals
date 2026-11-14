@@ -5,7 +5,8 @@
 //   launch      creates the WAL host and the controller host, provisions both, pins the controller's WAL key to walctl
 //               on the WAL host, and starts host-main.ts detached with setsid; keys and UBI_OWNER reach it only on
 //               the SSH session's stdin, read by name here and exported inside the remote shell, never written to disk
-//               or put on a command line.
+//               or put on a command line. It writes the earlier launches' carried spend into the work folder
+//               (money/carry.ts), which the service carries into the book and every lease; a recovery writes it again.
 //   relaunch    starts the service again on the same host; the ledger file stays where it is.
 //   sendRow     sends the next row, with its own inputs, to the running service once the last row has ended; the
 //               service runs it on the same ledger, leases and journals, and refuses while a row still runs.
@@ -33,6 +34,7 @@ import { mirrorSetup, shq } from "../stage3/ubicloud-real.ts";
 import { randomUUID } from "node:crypto";
 import type { HostConfig, RowRecord, RowRequest, TargetConfig } from "./host-main.ts";
 import { WAL_HOST_SIZE, walFoldProjection } from "./hosts.ts";
+import { CARRY_FILE, type CarryFile } from "./carry.ts";
 import type { HostVm, ServiceStatus } from "./ledger-service.ts";
 import { walAuthorizedKey, WALCTL_PATH, WALCTL_PY, WAL_DIR } from "./offhost.ts";
 
@@ -179,6 +181,8 @@ export interface ControllerPlan {
   gstack?: GstackPack | null;
   /** The row's inputs as a tar, unpacked into the host's work folder. */
   workTar?: Uint8Array | null;
+  /** The earlier launches' spend (money/carry.ts readCarry), written into the work folder as CARRY_FILE at a launch or a recovery; the service carries it into every boot. */
+  carry?: CarryFile | null;
   /** The work folder; the layout's root/work when unset. */
   workDir?: string;
   /** Whether the launch mounts the work folder's tmpfs; false only checks it is tmpfs (keyless runs on this machine). */
@@ -441,6 +445,8 @@ async function prepareController(x: Ctx, ctl: Vm, wal: Vm, hosts: HostVm[], uplo
   }
   const tmpfs = await placeWork(x, ctl);
   if (x.p.workTar?.length) await upload(x, ctl, x.p.workTar, "the launch's work folder");
+  const carry = x.p.carry ? l.work + "/" + CARRY_FILE : null;
+  if (carry) await x.b.write(ctl, carry, JSON.stringify(x.p.carry, null, 2) + "\n");
   await x.b.write(ctl, l.recipient, x.p.recipient + "\n");
   if (uploadRecord && (await x.b.exec(ctl, "test -e " + shq(l.record), { user: "root" })).exit !== 0) {
     const unpack = l.root + "/record-unpack";
@@ -453,7 +459,7 @@ async function prepareController(x: Ctx, ctl: Vm, wal: Vm, hosts: HostVm[], uplo
   const line = walAuthorizedKey(pub, { script: x.walScript, dir: x.walDir });
   await x.run(wal, "grep -qxF " + shq(line) + " " + shq(keys) + " 2>/dev/null || printf '%s\\n' " + shq(line) + " >> " + shq(keys), "pinning the controller's key on the WAL host");
   const target: TargetConfig = x.p.target?.(wal, x.b, l) ?? { kind: "ssh", host: x.b.privateAddress(wal) ?? x.b.address(wal), keyPath: l.walKey, knownHosts: l.knownHosts, login: x.p.wal?.login ?? "ubi" };
-  const cfg: HostConfig = { runId: x.p.runId, holder: l.holder, record: l.record, ledgerPath: l.ledger, journalDir: l.journals, stateDir: l.state, hosts, target, tickMs: x.p.tickMs, drainMs: x.p.drainMs, work: l.work, stage: x.p.stage ?? null };
+  const cfg: HostConfig = { runId: x.p.runId, holder: l.holder, record: l.record, ledgerPath: l.ledger, journalDir: l.journals, stateDir: l.state, hosts, target, tickMs: x.p.tickMs, drainMs: x.p.drainMs, work: l.work, stage: x.p.stage ?? null, carry };
   await x.b.write(ctl, l.config, JSON.stringify(cfg, null, 2) + "\n");
   return { image, tmpfs };
 }

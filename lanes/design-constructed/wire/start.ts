@@ -9,6 +9,7 @@ import { isAbsolute, relative, resolve } from "node:path";
 import { DcError, fail } from "../errors.ts";
 import { LEDGER_ITEMS } from "../frozen.ts";
 import { $, dollars } from "../money/book.ts";
+import type { CarryFile } from "../money/carry.ts";
 import { applyStop, stopPlan, type StopContext } from "../money/stops.ts";
 import { repricedLine } from "../read/admission.ts";
 import type { TermsRecord } from "../read/start.ts";
@@ -35,6 +36,8 @@ export interface RowEnv {
    * of the region each stage started in (PD-42). Absent off the host, where the ledger provider refuses anyway.
    */
   region?: () => { region: string; record: string };
+  /** On the controller host: the earlier launches' spend the ledger service carries (money/carry.ts). Absent off the host. */
+  carry?: () => CarryFile | null;
 }
 
 export type Row = (a: Args, io: Io, env: RowEnv) => Promise<number> | number;
@@ -119,10 +122,11 @@ export async function admitItems(l: LedgerProvider, items: readonly LedgerItemId
     if (f.closed) no(item + " is closed; it reopens only on the Captain's word");
     const stop = c.stopFor(item, { model: scope.model ?? null, subject: scope.subject ?? null, stage: scope.stage ?? null });
     if (stop) no(item + " is under the " + stop.code + " stop: " + stop.why);
-    const room = f.capMicros - f.settledMicros - f.inFlightMicros - f.unknownMicros;
-    if (room <= 0) no(item + " has no room: " + dollars(f.settledMicros) + " settled, " + dollars(f.inFlightMicros) + " in flight, " + dollars(f.unknownMicros) + " unknown, cap " + dollars(f.capMicros));
+    const room = f.capMicros - f.carriedMicros - f.settledMicros - f.inFlightMicros - f.unknownMicros;
+    const carried = f.carriedMicros ? dollars(f.carriedMicros) + " carried from earlier launches, " : "";
+    if (room <= 0) no(item + " has no room: " + carried + dollars(f.settledMicros) + " settled, " + dollars(f.inFlightMicros) + " in flight, " + dollars(f.unknownMicros) + " unknown, cap " + dollars(f.capMicros));
     const lease = await c.openItem(item);
-    lines.push("ledger: " + item + " admitted on lease " + lease.leaseId + ", room " + dollars(room) + " of " + dollars(f.capMicros));
+    lines.push("ledger: " + item + " admitted on lease " + lease.leaseId + ", room " + dollars(c.room(item)) + " of " + dollars(f.capMicros) + (f.carriedMicros ? " (" + dollars(f.carriedMicros) + " carried from earlier launches)" : ""));
   }
   return lines;
 }

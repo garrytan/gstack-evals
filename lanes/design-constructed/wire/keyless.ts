@@ -148,9 +148,9 @@ export const powerRow: Row = (a, io, env) => {
   return 0;
 };
 
-export const itemsRow: Row = (a, io) => {
+export const itemsRow: Row = (a, io, env) => {
   if (a.rest.length || a.flags.size) fail("E_USAGE", "usage: gstack-evals dc items [--planning]");
-  const lines = itemsLines();
+  const lines = itemsLines(env.carry?.() ?? null);
   const planning = a.bools.has("--planning") ? [...planningLines(), "measured input (the reprice row's --stage1): stage 1's passing records, " + Object.values(STAGE1_PASSES).join("; ")] : [];
   for (const l of [...lines.slice(0, -1), ...planning, lines.at(-1)!]) io.out(l);
   return 0;

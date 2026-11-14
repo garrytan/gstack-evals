@@ -314,6 +314,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_DCH_CHECKOUT](#e_dch_checkout) | 2 | U20 |
 | [E_DCH_TMPFS_HIGH](#e_dch_tmpfs_high) | 2 | U20 |
 | [E_DCH_SEAL](#e_dch_seal) | 2 | U20 |
+| [E_DCH_CARRY](#e_dch_carry) | 2 | U20 |
 | [E_DCW_INSTALL_DIGEST](#e_dcw_install_digest) | 2 | U20 |
 | [E_DCW_PREFLIGHT](#e_dcw_preflight) | 2 | U20 |
 | [E_DCW_MODEL_PROBE](#e_dcw_model_probe) | 2 | U20 |
@@ -2273,6 +2274,14 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 Design plan review eval (controller host custody, PD-41): the teardown could not seal the host's work folder with age to the run's recipient, or could not confirm the plaintext was deleted, or the archive it read back is not an age file or differs in size or sha256 from the host's. Both VMs are kept and nothing from the work folder was copied back.
 
 Fix: Read the message, fix the host (age installed, the recipient file in its state folder), then run dc host teardown again; it seals once and copies back only the sealed archive.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_DCH_CARRY
+
+Design plan review eval (controller host, the carry across launches): the launch could not carry the earlier launches' spend. An archive the host plan names can't be read or parsed, or its book can't be shown complete (a snapshot that does not parse, a broken chain, a reconcile line that names no unknown charge), two archives hold the same lease, or the approval record holds a lease for this run id that no supplied archive's book holds. Nothing was launched and no key was read.
+
+Fix: Name every earlier launch's teardown archive (dc host teardown --archive) once in the host plan's archives, each with its snap-*.json and wal-lines.ndjson as the teardown wrote them, fix or remove a bad reconcile.ndjson line, then launch again.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 

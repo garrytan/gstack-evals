@@ -10,6 +10,9 @@
 //   6 gatecheck reading them, which refuses the invented units at their planted-case check, before any key read
 //   7 author reading apps.json, which refuses at start rule 6 because the gate check did not pass
 //   8 a second modelprobe after the host's recorded region changes, which refuses (PD-42)
+// Then a second launch of the run carries the first launch's teardown archive (money/carry.ts): a launch that leaves the
+// archive out refuses before any VM, the carried launch's dc-hosts and dc-gate-check leases reserve the cap less the
+// larger of the record's committed spend and the first book's, and its items row and dc host status print the carry.
 // The wiring's vm section names "controller" for the proxy and the mirrors. Every returned file must be sealed or hold
 // no unit text, and no plaintext input or sink may land on this machine's disk outside its tmpfs twin (PD-41).
 // This file is also the host's stage module for the run: runOnHost runs each row through wire/host.ts runRowOnHost with
@@ -20,7 +23,11 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { dirname, join } from "node:path";
 import { tableOf, type PlantedUnit } from "../author/gatecheck.ts";
 import { STAND_IN_VOCABULARY } from "../author/scripted.ts";
+import { readItem } from "../../../src/runner/ledger/record.ts";
+import { exact } from "../money/book.ts";
+import { readCarry } from "../money/carry.ts";
 import { commitAll } from "../money/dryrun-fixture.ts";
+import { WALCTL_PY } from "../money/offhost.ts";
 import { fetchAt } from "../frame/git.ts";
 import { AGE_HEADER, layout } from "../money/controller-host.ts";
 import type { HostStage, RowRecord } from "../money/host-main.ts";
@@ -206,10 +213,78 @@ export async function launchScenario(): Promise<string[]> {
       if (existsSync(l.work) && readdirSync(l.work).length) problems.push("the host's work folder kept plaintext after the teardown");
       const keys = await runProcess(["grep", "-rl", "test-not-a-key", dir, shm]);
       if (new TextDecoder().decode(keys.stdout).trim()) problems.push("a key reached a file");
+      problems.push(...(await carriedLaunch({ dir, shm, planPath: f.planPath, plan, env, archive })));
       return null;
     });
   } finally {
     fx.dispose();
+  }
+  return problems;
+}
+
+/**
+ * The run's second launch, with the first launch's archive in its plan, on new hosts: the controller host at the same
+ * paths on a fresh disk, as a new VM has them (the run's holder directory is fixed, R2-17), and a new WAL copy. Returns its
+ * problems: the carry must reach the host, its leases must match the carry and the record, and its listings print it.
+ */
+async function carriedLaunch(o: { dir: string; shm: string; planPath: string; plan: Record<string, any>; env: RowEnv; archive: string }): Promise<string[]> {
+  const problems: string[] = [];
+  const record: string = o.plan.record;
+  const snap = readdirSync(o.archive).find((n) => /^snap-\d{10}\.json$/.test(n));
+  if (!snap) return ["the first launch's archive holds no snapshot"];
+  const book = JSON.parse(readFileSync(join(o.archive, snap), "utf8")).book as { subs: Array<{ item: string; spentMicros: number; unknownMicros: number }> };
+  const first = (item: string) => book.subs.filter((s) => s.item === item).reduce((a, s) => a + s.spentMicros + s.unknownMicros, 0);
+  const before = { hosts: readItem(record, "dc-hosts"), gate: readItem(record, "dc-gate-check") };
+  if (!(first("dc-hosts") > 0) || before.hosts.committed_micros !== 0) problems.push("the first launch's host hours should sit in its book (" + first("dc-hosts") + " micros) and not in the record (" + before.hosts.committed_micros + " micros)");
+  const world = localWorld();
+  writeFileSync(o.planPath, JSON.stringify({ ...o.plan, archives: [], stage: ["items"], inputs: null }));
+  const left = await host("launch", { planPath: o.planPath, recordPath: join(o.dir, "host-record-forgotten.json") }, localSeams(o.dir, world, FAKE_KEYS), o.env);
+  if (!left.err.join(" ").includes("E_DCH_CARRY") || world.vms.length || existsSync(join(o.dir, "host-record-forgotten.json"))) problems.push("a launch without the first launch's archive did not refuse with E_DCH_CARRY before any VM: " + left.out.concat(left.err).join(" | ").slice(0, 400));
+  rmSync(join(o.dir, "host"), { recursive: true, force: true });
+  rmSync(hostWorkOf(o.dir), { recursive: true, force: true });
+  const walRoot = join(o.dir, "walhost-2");
+  mkdirSync(walRoot, { recursive: true });
+  writeFileSync(join(walRoot, "walctl.py"), WALCTL_PY);
+  const s = localSeams(o.dir, localWorld(), FAKE_KEYS, (p) => ({ ...p, wal: { dir: join(walRoot, "data"), script: join(walRoot, "walctl.py"), owner: null, authorizedKeys: join(walRoot, "authorized_keys") }, target: () => ({ kind: "local", script: join(walRoot, "walctl.py"), dir: join(walRoot, "data") }), stage: p.stage ? { ...p.stage, module: import.meta.path } : null }));
+  (await s.backend!(o.plan as never, FAKE_KEYS)).privateAddress = () => "127.0.0.1";
+  const l = layout(o.plan.runId, join(o.dir, "host"), hostWorkOf(o.dir));
+  const f = { planPath: o.planPath, recordPath: join(o.dir, "host-record-2.json") };
+  const env: RowEnv = { ...o.env, now: () => new Date(o.env.now().getTime() + 86_400_000) };
+  const rows = () => (existsSync(l.rows) ? (JSON.parse(readFileSync(l.rows, "utf8")) as RowRecord[]) : []);
+  const ended = async (n: number) => {
+    for (const until = Date.now() + 60_000; Date.now() < until; await Bun.sleep(100)) if (rows()[n - 1] && rows()[n - 1]!.state !== "running") return rows()[n - 1]!;
+    return null;
+  };
+  try {
+    writeFileSync(o.planPath, JSON.stringify({ ...o.plan, archives: [o.archive], stage: ["modelprobe", "--terms", "terms.json", "--out", "sinks/modelprobe"], inputs: null }));
+    const up = await host("launch", f, s, env);
+    if (up.code !== 0) return [...problems, "the carried launch did not start: " + up.out.concat(up.err).join(" | ").slice(0, 600)];
+    const carriedLine = "carry: dc-hosts carried " + exact(first("dc-hosts"));
+    if (!up.out.includes("carry: 1 earlier launch archive(s); every other leased item carries $0.000000") || !up.out.some((x) => x.startsWith(carriedLine))) problems.push("the launch did not print the carry: " + up.out.join(" | "));
+    const probe = await ended(1);
+    if (probe?.state !== "done") problems.push("the carried launch's modelprobe ended " + JSON.stringify(probe));
+    const lease = (item: "dc-hosts" | "dc-gate-check") => readItem(l.record, item).leases.at(-1)!.lease;
+    const want = { hosts: before.hosts.cap_micros! - Math.max(before.hosts.committed_micros, first("dc-hosts")), gate: before.gate.cap_micros! - Math.max(before.gate.committed_micros, first("dc-gate-check")) };
+    const got = { hosts: lease("dc-hosts").reserved_micros, gate: lease("dc-gate-check").reserved_micros };
+    if (got.hosts !== want.hosts || got.gate !== want.gate || lease("dc-hosts").seq !== before.hosts.leases.length + 1) problems.push("the carried launch's leases reserve " + JSON.stringify(got) + ", not the cap less the larger of the record and the first book, " + JSON.stringify(want));
+    writeFileSync(o.planPath, JSON.stringify({ ...o.plan, archives: [o.archive], stage: ["items"], inputs: null }));
+    const sent = await host("next", f, s, env);
+    const items = (await ended(2))?.state === "done" ? readFileSync(join(l.work, ".rows", "2.log"), "utf8").split("\n") : [];
+    if (sent.code !== 0 || !items.some((x) => x.startsWith("dc-hosts") && x.endsWith(carriedLine.slice("carry: dc-hosts ".length) + " (" + exact(first("dc-hosts")) + " settled, $0.000000 unknown)")) || !items.some((x) => x.startsWith("carry: 1 earlier launch archive(s) of run " + o.plan.runId))) problems.push("the host's items listing does not show the carry: " + items.join(" | ").slice(0, 900));
+    const status = await host("status", f, s, env);
+    if (!status.out.some((x) => x.startsWith(carriedLine))) problems.push("dc host status does not print the carry: " + status.out.join(" | "));
+    const second = join(o.dir, "archive-2");
+    const down = await host("teardown", f, s, env, { "--archive": second });
+    if (down.code !== 0) return [...problems, "the carried launch's teardown: " + down.out.concat(down.err).join(" | ")];
+    const without = await readCarry([o.archive], record, o.plan.runId).then(() => "carried", (e: { code?: string }) => e.code);
+    const both = await readCarry([o.archive, second], record, o.plan.runId);
+    if (without !== "E_DCH_CARRY" || !((both.items["dc-hosts"]?.settledMicros ?? 0) > first("dc-hosts"))) problems.push("after the second teardown the first archive alone gave " + without + " and both gave " + JSON.stringify(both.items));
+  } finally {
+    if (existsSync(l.pid)) {
+      try {
+        process.kill(Number(readFileSync(l.pid, "utf8")), "SIGKILL");
+      } catch {}
+    }
   }
   return problems;
 }

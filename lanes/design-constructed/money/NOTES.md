@@ -15,6 +15,7 @@ The money area holds the 17 ledger items' admission, one controller-held lease p
 | served.ts | ProviderWatch: the served-provider check direct calls and session traffic share (PD-9) |
 | wal.ts | the hash-chained write-ahead copy and its completeness check |
 | durability.ts | snapshots, the proxy ledger wrapper, recovery, ledger restore, reserve replay through reconcileJournal, the owner's reconcile |
+| carry.ts | the carry across launches: every earlier launch's archived book read as recovery reads it, its reconciliation file, the completeness check against the approval record, and the carry file the host reads at boot |
 | hosts.ts | dc-hosts: VM sub-reservations, measured settlement, the stage projection, idle deletion of the controller host |
 | renewal.ts | lease renewal by draining, settling and opening the continuation with a new proxy |
 | projection.ts | the figures export for the read area, the first judge packet's re-projection, the envelope, dc-authoring-3's release, R2-7's base-app reading |

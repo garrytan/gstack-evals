@@ -79,10 +79,10 @@ export function walFoldProjection(walHours: number, walPriceMicrosPerHour: numbe
   return { micros, fits: micros <= cap, line: "dc-hosts projection with the WAL host on " + WAL_HOST_SIZE + ": " + dollars(Math.round(spec.projectionUsd * 1e6)) + " plus " + walHours + " WAL host-hours at " + dollars(walPriceMicrosPerHour) + " an hour (" + dollars(wal) + "), " + dollars(micros) + " of the " + dollars(cap) + " cap" };
 }
 
-/** A stage starts only when its projection fits beside dc-hosts' settled, in-flight and unknown charges; else it goes to the Captain. */
+/** A stage starts only when its projection fits beside dc-hosts' carried, settled, in-flight and unknown charges; else it goes to the Captain. */
 export function admitStage(f: ItemFigures, p: StagePlan, priceMicrosPerHour: number): { ok: true; line: string } | { ok: false; captain: string } {
   const proj = hostsProjection(p, priceMicrosPerHour);
-  const held = f.settledMicros + f.inFlightMicros + f.unknownMicros;
+  const held = f.carriedMicros + f.settledMicros + f.inFlightMicros + f.unknownMicros;
   if (held + proj.micros <= f.capMicros) return { ok: true, line: proj.line };
   return { ok: false, captain: proj.line + " does not fit: " + dollars(held) + " already held of the " + dollars(f.capMicros) + " cap, so the stage is refused and goes to the Captain" };
 }

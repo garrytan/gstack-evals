@@ -61,6 +61,8 @@ export interface ItemFigures {
   inFlightMicros: number;
   /** Unknown charges, each at its full reservation until reconciled. */
   unknownMicros: number;
+  /** The settled and unknown spend the earlier launches' books hold for the item (money/carry.ts), carried into this launch. */
+  carriedMicros: number;
   inFlightCount: number;
   leaseId: string | null;
   closed: boolean;
@@ -78,7 +80,12 @@ export interface LeaseInfo {
 
 /** The ledger seam. ledger-main.ts binds it to main's src/runner/ledger; a test may bind a fake. */
 export interface LeaseSeam {
-  open(req: { item: LedgerItemId; runId: string; holder: string; ttlMs: number; now: Date }): LeaseInfo;
+  /**
+   * Opens the item's lease. heldMicros is what the books already hold on the item: the earlier launches' carried spend
+   * plus this launch's settled, in-flight and unknown. The lease reserves the cap less the larger of that and the
+   * record's committed spend, so a model call that sits in both is counted once.
+   */
+  open(req: { item: LedgerItemId; runId: string; holder: string; ttlMs: number; now: Date; heldMicros: number }): LeaseInfo;
   /** Settles the lease from its local ledger. capStop marks a cap stop, which closes the item for good (R2-20). */
   settle(leaseId: string, capStop?: string): { spentMicros: number; unknownMicros: number };
   /** Records a cap stop in the record before anything answers the refused work. */

@@ -2588,6 +2588,15 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_DCH_CARRY: {
+    exit: 2,
+    meaning: "Design plan review eval (controller host, the carry across launches): the launch could not carry the earlier launches' spend. An archive the host plan names can't be read or parsed, or its book can't be shown complete (a snapshot that does not parse, a broken chain, a reconcile line that names no unknown charge), two archives hold the same lease, or the approval record holds a lease for this run id that no supplied archive's book holds. Nothing was launched and no key was read.",
+    fix: "Name every earlier launch's teardown archive (dc host teardown --archive) once in the host plan's archives, each with its snap-*.json and wal-lines.ndjson as the teardown wrote them, fix or remove a bad reconcile.ndjson line, then launch again.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
+  },
   E_DCW_INSTALL_DIGEST: {
     exit: 2,
     meaning: "Design plan review eval (prereg section 4, the gstack install): a gstack arm session's installed checkout, read inside its container after the install, has a digest other than the pinned commit's tree, so the session stopped before Claude Code launched. No model call was sent for it.",

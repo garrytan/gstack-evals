@@ -1,7 +1,8 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // The keyless launch end to end (lanes/design-constructed/wire/dryrun-launch.ts): dc host launch, rows in sequence
 // through dc host next on one controller host and one ledger, and teardown, on the simulated Ubicloud with every SSH
-// command run on this machine. No key, no network, no VM.
+// command run on this machine; then a second launch of the run that carries the first launch's archive. No key, no
+// network, no VM.
 import { describe, expect, test } from "bun:test";
 import { launchScenario } from "../../../lanes/design-constructed/wire/dryrun-launch.ts";
 

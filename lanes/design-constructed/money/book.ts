@@ -1,7 +1,8 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // The money controller (plan section 5, L1 to L3; R2-7, R2-8, R2-17, R2-20): one lease per item and run id, opened and
-// held here, and every frozen run a named sub-reservation inside it. Admission counts settled spend, every in-flight
-// reservation and every unknown charge at its full reservation, carried apart. A refusal waits while anything on its
+// held here, and every frozen run a named sub-reservation inside it. Admission counts the earlier launches' carried
+// spend (money/carry.ts), settled spend, every in-flight reservation and every unknown charge at its full reservation,
+// carried apart, and never passes what the item's open lease reserved. A refusal waits while anything on its
 // item is in flight or holds an unknown charge (an unknown charge counts as in flight until the owner's reconcile
 // settles it; Captain, 2026-11-14), and is a cap stop only when neither is left and it still doesn't fit. A recorded cap stop
 // closes its whole item. Every admission is copied off host and acknowledged before it is answered (R2-4).
@@ -13,6 +14,8 @@ import type { WriteAhead } from "./wal.ts";
 
 export const $ = (usd: number) => Math.round(usd * 1_000_000);
 export const dollars = (micros: number) => "$" + (micros / 1_000_000).toFixed(2);
+/** A figure to the micro, where cents would round a carried or leased amount away. */
+export const exact = (micros: number) => "$" + (micros / 1_000_000).toFixed(6);
 
 /** BT (L7): a lease's time to live covers its stage plus a day, within main's 7-day ceiling; one day by default. */
 export const DEFAULT_TTL_MS = 24 * 60 * 60 * 1000;
@@ -39,6 +42,8 @@ interface ItemState {
   settleWhenDrained: { capStop?: string } | null;
   /** PD-30: a re-priced cap above the frozen one, set by each launch's ledger check; unset, the frozen cap. */
   cap?: number;
+  /** The earlier launches' settled and unknown spend on the item (money/carry.ts), set at each boot; unset, none. */
+  carried?: number;
   waiters: Array<() => void>;
 }
 
@@ -130,7 +135,8 @@ export class MoneyController {
     const s = this.state(item);
     if (s.closed) throw new Error("line item " + item + " is closed: " + s.closed);
     if (s.lease) return s.lease;
-    const lease = this.o.leases.open({ item, runId: this.runId, holder: this.holder, ttlMs, now: this.now() });
+    const f = this.figures(item);
+    const lease = this.o.leases.open({ item, runId: this.runId, holder: this.holder, ttlMs, now: this.now(), heldMicros: f.carriedMicros + f.settledMicros + f.inFlightMicros + f.unknownMicros });
     s.lease = lease;
     s.leases.push(lease);
     await this.log({ kind: "lease", lease });
@@ -141,6 +147,12 @@ export class MoneyController {
   capTo(item: LedgerItemId, capMicros: number): void {
     if (capMicros < $(LEDGER_ITEMS[item].capUsd)) throw new Error("line item " + item + "'s cap is never lowered below the frozen " + dollars($(LEDGER_ITEMS[item].capUsd)));
     this.state(item).cap = capMicros;
+  }
+
+  /** Carries the earlier launches' settled and unknown spend on the item into this launch (money/carry.ts); set at each boot. */
+  carryIn(item: LedgerItemId, micros: number): void {
+    if (!Number.isSafeInteger(micros) || micros < 0) throw new Error("a carried figure is whole non-negative micros, not " + micros);
+    this.state(item).carried = micros;
   }
 
   lease(item: LedgerItemId): LeaseInfo | null {
@@ -157,7 +169,7 @@ export class MoneyController {
 
   figures(item: LedgerItemId): ItemFigures {
     const s = this.state(item);
-    const f: ItemFigures = { item, capMicros: s.cap ?? $(LEDGER_ITEMS[item].capUsd), settledMicros: 0, inFlightMicros: 0, unknownMicros: 0, inFlightCount: 0, leaseId: s.lease?.leaseId ?? null, closed: s.closed !== null, paused: s.paused?.why ?? null };
+    const f: ItemFigures = { item, capMicros: s.cap ?? $(LEDGER_ITEMS[item].capUsd), settledMicros: 0, inFlightMicros: 0, unknownMicros: 0, carriedMicros: s.carried ?? 0, inFlightCount: 0, leaseId: s.lease?.leaseId ?? null, closed: s.closed !== null, paused: s.paused?.why ?? null };
     for (const sub of this.subs.values()) {
       if (sub.item !== item) continue;
       if (sub.state === "in-flight") {
@@ -174,6 +186,14 @@ export class MoneyController {
     let held = 0;
     for (const sub of this.subs.values()) if (sub.item === item && sub.leaseId === leaseId) held += sub.spentMicros + sub.unknownMicros + (sub.state === "in-flight" ? sub.reserveMicros : 0);
     return held;
+  }
+
+  /** An admission's room on the item: the cap less the carried spend and this launch's charges, within what its open lease still holds. */
+  room(item: LedgerItemId): number {
+    const s = this.state(item);
+    const f = this.figures(item);
+    const byCap = f.capMicros - f.carriedMicros - f.settledMicros - f.inFlightMicros - f.unknownMicros;
+    return s.lease ? Math.min(byCap, s.lease.reservedMicros - this.leaseHeld(item, s.lease.leaseId)) : byCap;
   }
 
   /** The stop scope that covers a draft, if any. */
@@ -207,8 +227,8 @@ export class MoneyController {
     const busy = inFlight.filter((x) => lim.of.includes(x.kind)).length;
     if (busy >= lim.limit) return { kind: "wait", why: item + " already has " + busy + " " + d.kind + (busy === 1 ? "" : "s") + " in flight, its limit" };
     const f = this.figures(item);
-    const room = Math.min(f.capMicros - f.settledMicros - f.inFlightMicros - f.unknownMicros, s.lease.reservedMicros - this.leaseHeld(item, s.lease.leaseId));
-    const ask = item + " has " + dollars(room) + " of room (" + dollars(f.settledMicros) + " settled, " + dollars(f.inFlightMicros) + " in flight, " + dollars(f.unknownMicros) + " unknown, cap " + dollars(f.capMicros) + "); " + d.run + " needs " + dollars(d.reserveMicros);
+    const room = this.room(item);
+    const ask = item + " has " + dollars(room) + " of room (" + (f.carriedMicros ? dollars(f.carriedMicros) + " carried from earlier launches, " : "") + dollars(f.settledMicros) + " settled, " + dollars(f.inFlightMicros) + " in flight, " + dollars(f.unknownMicros) + " unknown, cap " + dollars(f.capMicros) + ", lease " + dollars(s.lease.reservedMicros) + "); " + d.run + " needs " + dollars(d.reserveMicros);
     if (d.reserveMicros > room) {
       const freeing = inFlight.filter((x) => !x.vm?.controller);
       if (freeing.length > 0) return { kind: "wait", why: ask + "; " + freeing.length + " in flight, so it waits" };

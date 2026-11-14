@@ -13,12 +13,12 @@ export const ITEM_IDS = Object.keys(LEDGER_ITEMS) as LedgerItemId[];
 /** Every item's figures; crew, which has no lease, carries the thread counters' reading passed in. */
 export function moneyFigures(c: MoneyController, crewMicros = 0): Record<LedgerItemId, ItemFigures> {
   const out = {} as Record<LedgerItemId, ItemFigures>;
-  for (const item of ITEM_IDS) out[item] = item === "crew" ? { item, capMicros: $(CREW_DEVIATION.capUsd), settledMicros: crewMicros, inFlightMicros: 0, unknownMicros: 0, inFlightCount: 0, leaseId: null, closed: false, paused: null } : c.figures(item);
+  for (const item of ITEM_IDS) out[item] = item === "crew" ? { item, capMicros: $(CREW_DEVIATION.capUsd), settledMicros: crewMicros, inFlightMicros: 0, unknownMicros: 0, carriedMicros: 0, inFlightCount: 0, leaseId: null, closed: false, paused: null } : c.figures(item);
   return out;
 }
 
-/** What a projection counts as already committed on an item: all three charges, never settled spend alone. */
-export const committedMicros = (f: ItemFigures) => f.settledMicros + f.inFlightMicros + f.unknownMicros;
+/** What a projection counts as already committed on an item: all three charges and the earlier launches' carried spend, never settled spend alone. */
+export const committedMicros = (f: ItemFigures) => f.carriedMicros + f.settledMicros + f.inFlightMicros + f.unknownMicros;
 
 export const FIRST_PACKET_TAG = "first-stage1-label-packet";
 

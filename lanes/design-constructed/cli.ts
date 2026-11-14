@@ -44,7 +44,7 @@ export const realEnv = (host: HostContext | null = null): RowEnv => ({
   now: () => new Date(),
   power: uvPowerRunner,
   vocabulary: loadVocabulary,
-  ...(host ? { region: () => hostRegion(host) } : {}),
+  ...(host ? { region: () => hostRegion(host), carry: () => host.service.carry } : {}),
 });
 
 function parse(argv: string[], bools: string[]): Args {
