@@ -55,10 +55,10 @@ describe("gstack-evals dc", () => {
     expect(c.err[0]).toStartWith("E_USAGE gstack-evals dc dryrun: --area is one of");
   }, 60_000);
 
-  test("an area's command exits 2 with E_USAGE not built yet until it lands; unknown commands exit 2", async () => {
+  test("every command is built: one with missing arguments exits 2 with its usage; unknown commands exit 2", async () => {
     const a = capture();
     expect(await main(["stage3"], a.io)).toBe(2);
-    expect(a.err.join("\n").split("\n")[0]).toBe("E_USAGE gstack-evals dc stage3: not built yet (the stage3 area owns it)");
+    expect(a.err.join("\n").split("\n")[0]).toStartWith("E_USAGE gstack-evals dc stage3: usage: gstack-evals dc stage3 --candidates");
     const w = capture();
     expect(await main(["recipes"], w.io)).toBe(2);
     expect(w.err[0]).toStartWith("E_USAGE gstack-evals dc recipes: usage: gstack-evals dc recipes --frame");

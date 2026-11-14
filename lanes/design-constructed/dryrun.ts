@@ -8,12 +8,13 @@ import { cases as read } from "./read/dryrun-cases.ts";
 import { cases as run } from "./run/dryrun-cases.ts";
 import { cases as score } from "./score/dryrun-cases.ts";
 import { cases as stage3 } from "./stage3/dryrun-cases.ts";
+import { cases as wire } from "./wire/dryrun-cases.ts";
 import type { DryRunCase } from "./types.ts";
 
-export const AREAS = ["frame", "author", "run", "score", "read", "money", "paid", "stage3"] as const;
+export const AREAS = ["frame", "author", "run", "score", "read", "money", "paid", "stage3", "wire"] as const;
 export type Area = (typeof AREAS)[number];
 
-export const REGISTRY: Record<Area, () => DryRunCase[]> = { frame, author, run, score, read, money, paid, stage3 };
+export const REGISTRY: Record<Area, () => DryRunCase[]> = { frame, author, run, score, read, money, paid, stage3, wire };
 
 export interface DryRunResult {
   ok: boolean;

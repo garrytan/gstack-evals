@@ -1,19 +1,23 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // The keyless providers the dry run and the tests bind: the real money controller on main's ledger in a temporary
 // folder (money/dryrun-fixture.ts's rig), the real metered client on the real metering proxy whose upstream answers
-// from a script, and the areas' own scripted VM world, browser, agents and review boxes. Nothing here reads a key or
-// reaches a network; the proxy gets invented key strings.
+// from a script, the areas' own scripted VM world, browser and agents, and scripted review sessions on the run area's
+// fake RunBox. Nothing here reads a key or reaches a network; the proxy gets invented key strings.
 import { join, resolve } from "node:path";
+import type { Termination } from "../../../src/types.ts";
 import { STAND_IN_VOCABULARY } from "../author/scripted.ts";
 import { DIRECT_MODELS } from "../money/price.ts";
 import { fakeReply, rig, startProxy, type ProxyRig, type Rig } from "../money/dryrun-fixture.ts";
 import { ledgerFigures } from "../money/meter.ts";
 import type { PowerRunner } from "../read/seams.ts";
+import { fakeBox, type FakeRun } from "../run/fixtures.ts";
+import { cellId } from "../run/session.ts";
+import type { Cell, Reconciled } from "../run/types.ts";
 import { fixtureBrowser, RECIPE, type FixtureApp } from "../recipes/fixtures.ts";
 import { fakeSpec, fakeMirrors } from "../stage3/fake.ts";
 import { fixtureStage3, type Stage3Script } from "../stage3/fixtures.ts";
 import type { AnyModel, LedgerItemId } from "../types.ts";
-import { meteredModels, recordedCaps, type LedgerProvider, type ModelCall, type ModelProvider, type ProviderName, type Providers, type SessionProvider, type VmProvider } from "../wire.ts";
+import { meteredModels, recordedCaps, type LedgerProvider, type ModelCall, type ModelProvider, type ProviderName, type Providers, type ServedTerms, type SessionProvider, type VmProvider } from "../wire.ts";
 import type { RowEnv } from "./start.ts";
 
 export const REPO_ROOT = resolve(import.meta.dir, "..", "..", "..");
@@ -38,6 +42,8 @@ export interface KitOptions {
   caps?: Partial<Record<LedgerItemId, number>>;
   /** Items with no recorded cap (start rule 1). */
   unrecorded?: LedgerItemId[];
+  /** J1 holds every unknown charge for the owner's reconcile (PD-18), as the real ledger provider does; else it reconciles at $0. */
+  held?: boolean;
   /** The scripted reply to a model call; null sends no text. */
   model?: (c: ModelCall) => string | null | Promise<string | null>;
   /** The serving provider each OpenRouter model's reply names. */
@@ -56,7 +62,7 @@ export function fakeKit(o: KitOptions = {}): Kit {
     built.push("ledger");
     const x = kit.rig();
     const caps = recordedCaps(x.record);
-    return { controller: x.c, recordedCapMicros: (item) => (o.unrecorded?.includes(item) ? null : caps(item)), reconcile: async () => 0, close: async () => {} } satisfies LedgerProvider;
+    return { controller: x.c, recordedCapMicros: (item) => (o.unrecorded?.includes(item) ? null : caps(item)), reconcile: async () => (o.held ? null : 0), close: async () => {} } satisfies LedgerProvider;
   };
   if (o.model) {
     const script = o.model;
@@ -162,6 +168,44 @@ export function fakeVm(o: { apps?: (candidate: string) => FixtureApp; stage3?: S
       pairwise: judge,
     };
   };
+}
+
+/** One scripted review attempt: its transcript, how it ended, its spend and the provider an OpenRouter model names. */
+export interface FakeAttempt {
+  transcript: string;
+  termination?: Termination;
+  errorSeen?: boolean;
+  /** Null is an unknown charge; $1.00 when unset. */
+  spentUsd?: number | null;
+  /** The serving provider an OpenRouter session's first call names; the pinned one when unset. */
+  served?: string;
+  /** The autoplan run directories the attempt's box holds. */
+  runs?: FakeRun[];
+  planAfter?: string | null;
+}
+
+/**
+ * A keyless SessionProvider: each attempt's box is the run area's fake RunBox over its scripted runs, and drive hands
+ * the row's stop handler the scripted transcript once (so the gate and D1 hooks run) and returns the scripted end.
+ */
+export function fakeSessions(script: (o: { cell: Cell; attempt: 1 | 2 }) => FakeAttempt, o: { reconcile?: (cell: Cell, attempt: 1 | 2) => Reconciled } = {}): (kit: Kit) => SessionProvider {
+  return (kit) => ({
+    async open({ cell, attempt, setup }) {
+      const s = script({ cell, attempt });
+      kit.calls.push("session " + cellId(cell) + " a" + attempt);
+      const served = (name?: string): ServedTerms | null => (DIRECT_MODELS[setup.model].provider === "openrouter" ? { provider: name ?? SERVED[setup.model]!, fallbacks: false, dataCollection: "deny", termsDigest: FAKE_TERMS_DIGEST } : null);
+      return {
+        box: fakeBox(s.runs ?? []),
+        exec: () => ({ code: 0, stdout: "", stderr: "" }),
+        async drive(stop) {
+          stop?.(s.transcript);
+          return { transcript: s.transcript, termination: s.termination ?? { kind: "completed" }, errorSeen: s.errorSeen ?? false, planAfter: s.planAfter ?? null, spentUsd: s.spentUsd === undefined ? 1 : s.spentUsd, served: served(s.served), imageDigest: null };
+        },
+        close: async () => {},
+      };
+    },
+    reconcile: async (cell, attempt) => o.reconcile?.(cell, attempt) ?? { ok: true, judged: false },
+  });
 }
 
 /** power.py's runner in the dry run: it reads the written design and prints the ADMIT and MDD lines power.py prints. */
