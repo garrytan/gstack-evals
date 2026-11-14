@@ -1,7 +1,8 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // The session loop and the end-state classifier (plan section 6 as PD-6 and R2-22 order it). A session's end is read
 // in this order, and the first step that applies decides: contamination (a successful web result, or a gstack file read
-// in a none, lens or reference session), then a cap stop (incomplete, whatever block it holds), then termination on
+// in a none, lens or reference session), then a cap stop or a session a drift stop cut (PD-25: incomplete, whatever
+// block it holds, never retried and never scored), then termination on
 // the session's own limit (an arm stop, even with a block, and even after the D1 hook held it), then a failure outside
 // the agent, then only a completed reply's last block is parsed, with the frozen autoplan row. A cell gets at most one
 // retry whatever the cause, J1 reconciliation runs before it, and the retry's outcome is final. No cell gets a third
@@ -53,6 +54,7 @@ export function readAttempt(kind: SessionKind, r: AttemptRecord, parse: ParseBlo
   if (r.webResult) return { state: "web-contaminated", list: null, why: "a successful web result" };
   if (r.gstackRead && !isGstackArm(kind)) return { state: "gstack-read", list: null, why: "a gstack file read in a " + kind + " session" };
   if (r.end.kind === "cap-stop") return { state: "incomplete", list: null, why: "a cap stop" };
+  if (r.end.kind === "drift-stop") return { state: "incomplete", list: null, why: "a drift stop, read as a cap stop reads (PD-25)" };
   if (r.end.kind === "own-limit") return { state: "arm-stop", list: null, why: (r.end.limit === "tool-call" ? "the harness ended the session on the model's own malformed tool call" : "the session's own " + r.end.limit + " limit") + (r.heldBlock ? ", with a block written before it stopped" : "") };
   if (r.end.kind === "outside") return { state: "infra-missing", list: null, why: "a failure outside the agent: " + r.end.reason };
   const list = parse(r.reply);

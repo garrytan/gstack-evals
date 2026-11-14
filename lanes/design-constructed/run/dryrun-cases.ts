@@ -204,6 +204,10 @@ export function cases(): DryRunCase[] {
     const r = await scripted("none", [attempt({ end: { kind: "cap-stop" } })]);
     return all(eq(r.o.state, "incomplete", "state"), eq(r.sessions, 1, "sessions"), eq(r.o.list, null, "list"));
   });
+  add("PD-25", "a session a drift stop cut reads as a cap stop reads: incomplete whatever block it holds, never retried, never scored", async () => {
+    const r = await scripted("none", [attempt({ end: { kind: "drift-stop" }, heldBlock: true })]);
+    return all(eq(r.o.state, "incomplete", "state"), eq(r.sessions, 1, "sessions"), eq(r.o.list, null, "list"), eq(read("lens", { gstackRead: true, end: { kind: "drift-stop" } }), "gstack-read", "contamination first"));
+  });
   add("R2-22", "a cap stop outranks the session's own limit", () => eq(read("none", { end: { kind: "cap-stop" }, heldBlock: true }), "incomplete", "state"));
   add("PD-6", "a block then an own-limit stop is an arm stop, retried in a fresh session", async () => {
     const r = await scripted("none", [attempt({ end: own, heldBlock: true }), attempt()]);

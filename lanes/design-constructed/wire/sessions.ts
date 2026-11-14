@@ -156,8 +156,9 @@ export const sessionsRow: Row = async (a, io, env) => {
         writeFileSync(join(launch.sink, "transcripts", id + ".a" + attempt + ".ndjson"), d.transcript);
         lastTranscript.set(id, d.transcript);
         const exposure: PdrReading | AutoplanReading | null = cell.kind === "autoplan" ? autoplanExposure(runFilesOf(sb.box)) : cell.kind === "plan-design-review" ? pdrExposure({ transcript: d.transcript, planBefore, planAfter: d.planAfter }) : null;
+        const cut = d.termination.kind !== "completed" && c.stopFor(item, { model, subject: model, arm: cell.kind, stage: null })?.code === "E_DC_PROVIDER_DRIFT";
         const rec: AttemptRecord = {
-          end: endOf(d.termination, d.errorSeen),
+          end: cut ? { kind: "drift-stop" } : endOf(d.termination, d.errorSeen),
           reply: replyOf(d.transcript),
           heldBlock: mainAgentTexts(d.transcript).some((t) => parse(t) !== null),
           webResult: webResult(d.transcript),

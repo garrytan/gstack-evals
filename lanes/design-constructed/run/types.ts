@@ -27,6 +27,8 @@ export type AttemptEnd =
   | { kind: "completed" }
   | { kind: "own-limit"; limit: "context" | "timeout" | "turns" | "dollars" | "tool-call" }
   | { kind: "cap-stop" }
+  /** A session a provider drift stop cut (PD-25): read as a cap stop reads. */
+  | { kind: "drift-stop" }
   | { kind: "outside"; reason: string };
 
 /** What the classifier reads from one finished attempt. */
