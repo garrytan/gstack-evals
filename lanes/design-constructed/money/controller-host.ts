@@ -22,12 +22,12 @@
 // layout's repo (repoCheckout), so the host's own dry run can read git there; a launch, a recovery and a relaunch each
 // check that checkout against the commit and its tree and refuse with E_DCH_CHECKOUT otherwise.
 // Every VM a call makes is deleted when that call fails partway, so no launch leaves a VM behind.
-import { mkdtempSync, rmSync, statfsSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, statfsSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { isReasonCode } from "../../../src/errors/codes.ts";
 import { DcError, fail } from "../errors.ts";
-import type { Vm, VmBackend, VmSpec } from "../stage3/sandbox.ts";
+import type { FileSource, Vm, VmBackend, VmSpec } from "../stage3/sandbox.ts";
 import { TTL_MARGIN_MINUTES } from "../stage3/sandbox.ts";
 import { mirrorSetup, shq } from "../stage3/ubicloud-real.ts";
 import { randomUUID } from "node:crypto";
@@ -43,6 +43,8 @@ export interface HostBackend extends VmBackend {
   exists(name: string): Promise<boolean>;
   address(vm: Vm): string;
   privateAddress(vm: Vm): string | null;
+  /** Runs a command with its stdout streamed into a local file at path, never held in memory. */
+  readTo(vm: Vm, command: string, path: string, o?: { user?: "root" | "run"; timeoutMs?: number }): Promise<{ exit: number; stderr: string }>;
 }
 
 export const HOST_ROOT = "/var/lib/dc";
@@ -172,7 +174,7 @@ export interface ControllerPlan {
   /** Root shell lines that make the controller host ready, given its private IPv4 (controllerProvision for paid runs). */
   provision: (host: { privateIp: string | null; layout: Layout; uploads?: Uploads }) => string[];
   /** The trial image for the review sessions: a docker save tar to load, else built on the host; null when the row runs no session. */
-  image?: { tar: Uint8Array | null; expectDigest: string | null } | null;
+  image?: { tar: Uint8Array | FileSource | null; expectDigest: string | null } | null;
   /** The gstack pin's commit and its tree as one pack (gstackPack), imported into HOST_GSTACK_SOURCE and checked by tree hash. */
   gstack?: GstackPack | null;
   /** The row's inputs as a tar, unpacked into the host's work folder. */
@@ -281,8 +283,8 @@ export function controllerProvision(o: { bunVersion: string; mirrors: boolean; s
     if (g && !(/^[0-9a-f]{40}$/.test(g.commit) && /^[0-9a-f]{40}$/.test(g.tree))) fail("E_USAGE", "the gstack pin's commit and tree must be full shas");
     const system = o.system === false ? [] : [
       "export DEBIAN_FRONTEND=noninteractive",
-      "apt-get update",
-      "apt-get install -y python3 openssh-client curl unzip tar git docker.io age",
+      "apt-get update -o DPkg::Lock::Timeout=600",
+      "apt-get install -y python3 openssh-client curl unzip tar git docker.io age -o DPkg::Lock::Timeout=600",
       "systemctl enable --now docker",
       "test -x " + shq(bun) + " || (curl -fsSL https://bun.sh/install | BUN_INSTALL=/opt/bun bash -s bun-v" + o.bunVersion + ")",
       "cd " + shq(l.repo) + " && " + shq(bun) + " install --frozen-lockfile",
@@ -358,7 +360,7 @@ export const repoCheckout = (l: Layout, commit: string): string[] => {
   const [repo, bundle] = [shq(l.repo), shq(l.root + "/repo.bundle")];
   return [
     "set -euo pipefail",
-    "command -v git > /dev/null || { apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y git; }",
+    "command -v git > /dev/null || { apt-get update -o DPkg::Lock::Timeout=600 && DEBIAN_FRONTEND=noninteractive apt-get install -y git -o DPkg::Lock::Timeout=600; }",
     "git init -q " + repo,
     "printf '%s\\n' " + commit + " > " + repo + "/.git/shallow",
     "git -C " + repo + " fetch -q --no-tags " + bundle + " " + PIN_REF + ":" + PIN_REF,
@@ -712,7 +714,8 @@ export async function recoverHost(b: HostBackend, p: ControllerPlan, rec: HostRe
   });
 }
 
-export type Teardown = { kind: "deleted"; archive: { lines: Uint8Array; snapshot: { name: string; bytes: Uint8Array } | null; record: Uint8Array | null; sealed: Uint8Array; rows: Uint8Array | null } } | { kind: "refused"; why: string };
+/** A deleted teardown's archive: the sealed archive, the off-host lines and the snapshot as files in the archive folder, the small books as bytes. */
+export type Teardown = { kind: "deleted"; archive: { lines: string; snapshot: { name: string; path: string } | null; record: Uint8Array | null; sealed: string; rows: Uint8Array | null } } | { kind: "refused"; why: string };
 
 /**
  * Seals the work folder on the host (PD-41): tar piped into age to the run's recipient, so no plaintext archive is
@@ -738,10 +741,13 @@ async function seal(x: Ctx, ctl: Vm): Promise<void> {
 /**
  * Ends the run: the service settles every item and the hosts' measured hours and takes a final verified snapshot, the
  * work folder is sealed on the host and its plaintext deleted, then the sealed archive and the books that hold no sealed
- * text are read back and both VMs are deleted. force holds in-flight work as unknown instead of waiting for it (the
- * Captain's choice, off by default). A teardown whose service already finished its own teardown goes straight to the seal.
+ * text are read back and both VMs are deleted. The sealed archive, the off-host lines and the snapshot stream into the
+ * folder into, never held in memory, and the archive's size and sha256 must match the host's (sha256sum on the host)
+ * before any VM is deleted; otherwise both VMs are kept. force holds in-flight work as unknown instead of waiting for it
+ * (the Captain's choice, off by default). A teardown whose service already finished its own teardown goes straight to
+ * the seal, which keeps an archive already sealed, so a teardown run again after a failed copy copies it again.
  */
-export async function teardown(b: HostBackend, p: ControllerPlan, rec: HostRecord, o: { force?: boolean; waitMs?: number } = {}): Promise<Teardown> {
+export async function teardown(b: HostBackend, p: ControllerPlan, rec: HostRecord, o: { force?: boolean; waitMs?: number; into: string }): Promise<Teardown> {
   const x = new Ctx(b, p);
   const spec = (label: string) => hostSpec(p, label + " " + p.runId);
   const ctl = await b.attach(rec.controller.vm, spec("dc controller host"));
@@ -766,19 +772,29 @@ export async function teardown(b: HostBackend, p: ControllerPlan, rec: HostRecor
   if (!result.ok) return { kind: "refused", why: result.why ?? "the service refused the teardown" };
   while (x.now() < until && (await b.exec(ctl, "test -f " + shq(x.l.pid), { user: "root" })).exit === 0) await x.sleep(500);
   await seal(x, ctl);
+  mkdirSync(o.into, { recursive: true, mode: 0o700 });
   const bytesOf = (r: { exit: number; stdout: string; raw?: Uint8Array }) => (r.exit === 0 ? (r.raw ?? new TextEncoder().encode(r.stdout)) : null);
-  const walctl = (args: string) => b.exec(wal, "python3 " + shq(x.walScript) + " " + shq(x.walDir) + " " + args, { user: "root" });
-  const raw = async (args: string) => bytesOf(await walctl(args));
-  const lines = await raw("lines");
-  if (!lines) return { kind: "refused", why: "the off-host lines could not be read for the archive" };
-  const name = (await walctl("latest")).stdout.trim();
-  const snapshot = name ? { name, bytes: (await raw("get " + name)) ?? new Uint8Array() } : null;
-  const record = name ? await raw("get-record " + name) : null;
-  const sealed = bytesOf(await b.exec(ctl, "cat " + shq(x.l.sealed), { user: "root" }));
-  if (!sealed || new TextDecoder().decode(sealed.subarray(0, AGE_HEADER.length)) !== AGE_HEADER) throw new DcError("E_DCH_SEAL", "the sealed work archive read back from " + ctl.id + " is not an age file; both VMs are kept and nothing was copied back");
+  const walctl = (args: string) => "python3 " + shq(x.walScript) + " " + shq(x.walDir) + " " + args;
+  const streamed = async (vm: Vm, command: string, file: string) => (await b.readTo(vm, command, join(o.into, file), { user: "root" })).exit === 0;
+  if (!(await streamed(wal, walctl("lines"), "wal-lines.ndjson"))) return { kind: "refused", why: "the off-host lines could not be read for the archive" };
+  const name = (await b.exec(wal, walctl("latest"), { user: "root" })).stdout.trim();
+  if (name && !(await streamed(wal, walctl("get " + name), name + ".json"))) writeFileSync(join(o.into, name + ".json"), "");
+  const record = name ? bytesOf(await b.exec(wal, walctl("get-record " + name), { user: "root" })) : null;
+  const sealed = join(o.into, "work.tar.age");
+  const kept = (why: string) => {
+    rmSync(sealed, { force: true });
+    return new DcError("E_DCH_SEAL", "the sealed work archive " + why + "; both VMs are kept and nothing was copied back");
+  };
+  if ((await b.exec(ctl, "head -c " + AGE_HEADER.length + " " + shq(x.l.sealed), { user: "root" })).stdout !== AGE_HEADER) throw kept("on " + ctl.id + " is not an age file");
+  if (!(await streamed(ctl, "cat " + shq(x.l.sealed), "work.tar.age")) || (await Bun.file(sealed).slice(0, AGE_HEADER.length).text()) !== AGE_HEADER) throw kept("read back from " + ctl.id + " is not an age file");
+  const [hostSize, hostSha] = (await x.run(ctl, "wc -c < " + shq(x.l.sealed) + " && sha256sum < " + shq(x.l.sealed), "reading the sealed archive's size and sha256")).trim().split(/\s+/);
+  const hasher = new Bun.CryptoHasher("sha256");
+  for await (const chunk of Bun.file(sealed).stream()) hasher.update(chunk);
+  const [size, sha] = [String(statSync(sealed).size), hasher.digest("hex")];
+  if (size !== hostSize || sha !== hostSha) throw kept("copied from " + ctl.id + " is " + size + " bytes with sha256 " + sha + ", but the host's is " + hostSize + " bytes with sha256 " + hostSha + "; a teardown run again copies it again");
   const rows = bytesOf(await b.exec(ctl, "cat " + shq(x.l.rows), { user: "root" }));
   const left = await destroyAll(x, [wal, ctl]);
   if (left.length) fail("E_DC_INFRA_MISSING", "could not delete " + left.join(", "));
   rec.events.push({ at: iso(x.now()), what: "torn down" });
-  return { kind: "deleted", archive: { lines, snapshot, record, sealed, rows } };
+  return { kind: "deleted", archive: { lines: join(o.into, "wal-lines.ndjson"), snapshot: name ? { name, path: join(o.into, name + ".json") } : null, record, sealed, rows } };
 }

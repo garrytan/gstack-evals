@@ -44,7 +44,18 @@ export function reviewImage(o: { state?: string; expectDigest?: string | null } 
 export const GSTACK_CHECKOUT = HOME + "/.claude/skills/gstack";
 const PATH = "/usr/local/bin:/usr/bin:/bin";
 const BUFFER = 256 * 1024 * 1024;
-const USER = () => (process.getuid?.() ?? 1000) + ":" + (process.getgid?.() ?? 1000);
+/** BT: the controller host's run user (money/controller-host.ts makes it); a root service runs its review containers as it. */
+export const HOST_RUN_USER = "run";
+/**
+ * The --user a review container runs as: this process's uid:gid, or the host run user's when this process is root (the
+ * ledger service on the controller host), since C3 refuses root. ids reads the run user's uid (-u) and gid (-g).
+ */
+export function containerUser(me = { uid: process.getuid?.() ?? 1000, gid: process.getgid?.() ?? 1000 }, ids: (flag: "-u" | "-g") => { status: number | null; stdout: string } = (flag) => spawnSync("id", [flag, HOST_RUN_USER], { encoding: "utf8" })): string {
+  if (me.uid !== 0) return me.uid + ":" + me.gid;
+  const [u, g] = [ids("-u"), ids("-g")];
+  if (u.status !== 0 || g.status !== 0) fail("E_DC_INFRA_MISSING", "the service runs as root and the host has no " + HOST_RUN_USER + " user for its review containers");
+  return u.stdout.trim() + ":" + g.stdout.trim();
+}
 const HARDENING = ["--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--pids-limit", "1024"];
 const clientEnv = (): Record<string, string> => Object.fromEntries(["PATH", "HOME", "DOCKER_HOST", "DOCKER_CONFIG", "DOCKER_CONTEXT", "XDG_RUNTIME_DIR"].flatMap((k) => (process.env[k] ? [[k, process.env[k]!]] : [])));
 const mountPath = (m: string) => m.replace(/\/+$/, "");
@@ -61,13 +72,17 @@ export interface UnitFiles {
   context: string;
 }
 
-/** Copies the unit into a new session folder (repo/, plan.md, context/), the bind sources of the three mounts. */
-export function sessionFolder(unit: UnitFiles, dir: string): string {
+/**
+ * Copies the unit into a new session folder (repo/, plan.md, context/), the bind sources of the three mounts, and gives
+ * it to owner (uid:gid): the container's user when this process is root, so the container can write its binds.
+ */
+export function sessionFolder(unit: UnitFiles, dir: string, owner: string | null = (process.getuid?.() ?? 1000) === 0 ? containerUser() : null): string {
   if (existsSync(dir)) fail("E_DC_INFRA_MISSING", "session folder " + dir + " exists already; every session gets a new one");
   mkdirSync(dir, { recursive: true });
   cpSync(unit.repo, join(dir, "repo"), { recursive: true, verbatimSymlinks: true });
   cpSync(unit.plan, join(dir, "plan.md"));
   cpSync(unit.context, join(dir, "context"), { recursive: true, verbatimSymlinks: true });
+  if (owner && spawnSync("chown", ["-R", owner, dir]).status !== 0) fail("E_DC_INFRA_MISSING", "could not give session folder " + dir + " to " + owner);
   return dir;
 }
 
@@ -106,7 +121,7 @@ export function startReviewContainer(o: { image: ReviewImage; setup: SessionSetu
   const binds: Array<[string, string]> = [[join(o.folder, "repo"), "/work/repo"], [join(o.folder, "plan.md"), "/work/plan.md"], [join(o.folder, "context"), "/work/context"]];
   if (JSON.stringify(binds.map((b) => b[1])) !== JSON.stringify(HARNESS.mounts.map(mountPath))) fail("E_DC_INFRA_MISSING", "the rig's mounts are not the frozen three");
   for (const [src] of binds) if (!existsSync(src)) fail("E_DC_INFRA_MISSING", "session folder is missing " + src);
-  const started = spawnSync(docker, ["run", "-d", "--name", name, "--network", o.network, "--user", USER(), ...HARDENING, ...binds.flatMap(([s, d]) => ["--mount", "type=bind,src=" + s + ",dst=" + d]), "-w", "/work", ...dockerEnvArgs(env).args, "--entrypoint", "sleep", o.image.digest, "infinity"], { encoding: "utf8", timeout: 120_000, env: clientEnv() });
+  const started = spawnSync(docker, ["run", "-d", "--name", name, "--network", o.network, "--user", containerUser(), ...HARDENING, ...binds.flatMap(([s, d]) => ["--mount", "type=bind,src=" + s + ",dst=" + d]), "-w", "/work", ...dockerEnvArgs(env).args, "--entrypoint", "sleep", o.image.digest, "infinity"], { encoding: "utf8", timeout: 120_000, env: clientEnv() });
   if (started.status !== 0) fail("E_DC_INFRA_MISSING", "could not start the review container: " + String(started.stderr ?? started.error ?? "").trim().split("\n").slice(-1)[0]);
   let stopped = false;
   const run = (command: string, timeoutMs = 600_000): ExecResult => {

@@ -29,7 +29,8 @@ function fixture() {
   const tar = Bun.spawnSync(["tar", "-C", join(shm, "host"), "-cf", "-", "record"], { stdout: "pipe" });
   const out: string[] = [];
   const err: string[] = [];
-  const archive = { lines: new Uint8Array(), snapshot: null, record: new Uint8Array(tar.stdout), sealed: new TextEncoder().encode(AGE_HEADER), rows: null };
+  writeFileSync(join(shm, "work.tar.age"), AGE_HEADER);
+  const archive = { lines: join(shm, "wal-lines.ndjson"), snapshot: null, record: new Uint8Array(tar.stdout), sealed: join(shm, "work.tar.age"), rows: null };
   const run = (rename?: (from: string, to: string) => void) => writeArchive(join(shm, "archive"), { record } as HostPlanFile, archive, { out: (t) => out.push(t), err: (t) => err.push(t) }, NOW, rename);
   return { disk, shm, record, run, out, err };
 }

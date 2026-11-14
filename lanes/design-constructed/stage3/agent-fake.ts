@@ -72,7 +72,7 @@ export function agentRig(o: { reply: () => string; out: string; spentMicros?: nu
       throw new Error("the rig makes no VM");
     },
     exec: async (_vm, command, eo) => (execs.push({ command, user: eo?.user ?? "run" }), { exit: 0, stdout: "", stderr: "" }),
-    write: async (_vm, path, data) => void files.set(path, typeof data === "string" ? data : new TextDecoder().decode(data)),
+    write: async (_vm, path, data) => void files.set(path, typeof data === "string" ? data : data instanceof Uint8Array ? new TextDecoder().decode(data) : JSON.stringify(data)),
     read: async (_vm, path) => new TextEncoder().encode(files.get(path) ?? ""),
     destroy: async () => {},
   };

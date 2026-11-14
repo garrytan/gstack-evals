@@ -44,7 +44,7 @@ import { cellId } from "../run/session.ts";
 import { toolCallEnd } from "../run/stream.ts";
 import { proxySessions, runVmAgent, sshAgentSession } from "../stage3/agent.ts";
 import { serveVmFront } from "../stage3/front.ts";
-import { browserFiles, BROWSER_ROOT, claudeFiles, controllerBackend, type ControllerFiles } from "../stage3/install.ts";
+import { browserFiles, BROWSER_ROOT, claudeFiles, controllerBackend, nodeFiles, type ControllerFiles } from "../stage3/install.ts";
 import { MIRROR_NAMES, specFor, type Endpoint, type Mirror, type MirrorName, type Vm, type VmBackend } from "../stage3/sandbox.ts";
 import { controllerMirrors, keyedUbicloud, sshTunnel, type SshRunner, type Tunnel } from "../stage3/ubicloud-real.ts";
 import type { AnyModel, LedgerItemId } from "../types.ts";
@@ -89,6 +89,8 @@ export interface VmWiring<P = Endpoint, M = Mirror[]> {
   knownHosts: string;
   chromiumBuild: { dir: string; bin: string };
   claudeTarball: string;
+  /** Node's pinned linux-x64 tar.xz (stage3/node-pin.json), which the controller unpacks on every sandbox VM. */
+  nodeTarball: string;
   priceMicrosPerHour: number;
   proxy: P;
   mirrors: M;
@@ -383,6 +385,14 @@ export function claudeTarball(path: string, root: string): Uint8Array {
   return bytes;
 }
 
+/** Refuses with E_USAGE unless the Node tarball is there and its sha256 is the pin's (stage3/node-pin.json under the lane root). */
+export function nodeTarball(path: string, root: string): void {
+  const pin = JSON.parse(readFileSync(join(root, "stage3", "node-pin.json"), "utf8")) as { version: string; sha256: string };
+  if (typeof path !== "string" || !existsSync(path)) fail("E_USAGE", "the wiring file's vm.nodeTarball " + path + " does not exist; it is Node " + pin.version + "'s linux-x64 tar.xz");
+  const sha = createHash("sha256").update(readFileSync(path)).digest("hex");
+  if (sha !== pin.sha256) fail("E_USAGE", "the wiring file's vm.nodeTarball is not Node " + pin.version + "'s pinned tarball (sha256 " + sha + ")");
+}
+
 /** The recipe agent on the VM sessions: Claude Code from the pinned tarball, each session on its item's metering proxy through the VM proxy endpoint. */
 export function vmSessionAgents(h: HostContext, s: RealSeams, keyed: VmBackend & { address(vm: Vm): string }, watch: ProviderWatch, w: VmWiring): { recipeAgent: RecipeAgent; claude: ControllerFiles; close(): Promise<void> } {
   if (typeof w.claudeTarball !== "string") fail("E_USAGE", "the wiring file's vm section names no claudeTarball (Claude Code's pinned npm tarball for linux-x64)");
@@ -418,9 +428,10 @@ export async function realVm(h: HostContext, s: RealSeams, watch: ProviderWatch)
   const cb = w.chromiumBuild;
   if (!cb || typeof cb.dir !== "string" || typeof cb.bin !== "string") fail("E_USAGE", "the wiring file's vm section names no chromiumBuild (the Playwright Chromium folder on this host and the binary's path inside it)");
   if (!existsSync(join(cb.dir, cb.bin)) || !statSync(join(cb.dir, cb.bin)).isFile()) fail("E_USAGE", "the wiring file's vm.chromiumBuild has no binary at " + join(cb.dir, cb.bin));
+  nodeTarball(w.nodeTarball, h.lane().root);
   const keyed = await keyedUbicloud({ project: w.project, location: w.location, size: w.size, image: w.image, privateSubnet: w.privateSubnet ?? undefined, env: h.env, keyPath: w.keyPath, knownHosts: w.knownHosts, ...(s.ubicloud ? { fetch: s.ubicloud.fetch, ssh: s.ubicloud.ssh } : {}) });
   const agents = vmSessionAgents(h, s, keyed, watch, w);
-  const backend = controllerBackend(keyed, { browser: browserFiles(cb.dir, cb.bin), agent: agents.claude });
+  const backend = controllerBackend(keyed, { browser: browserFiles(cb.dir, cb.bin), node: nodeFiles(w.nodeTarball), agent: agents.claude });
   return {
     backend,
     priceMicrosPerHour: w.priceMicrosPerHour,

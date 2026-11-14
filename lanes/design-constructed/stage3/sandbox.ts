@@ -70,10 +70,13 @@ export interface Vm {
   spec: VmSpec;
 }
 
+/** A local file, or a command's stdout, streamed into a write instead of held in memory. */
+export type FileSource = { file: string } | { argv: string[] };
+
 export interface VmBackend {
   create(spec: VmSpec): Promise<Vm>;
   exec(vm: Vm, command: string, o?: ExecOptions): Promise<ExecResult>;
-  write(vm: Vm, path: string, data: Uint8Array | string): Promise<void>;
+  write(vm: Vm, path: string, data: Uint8Array | string | FileSource): Promise<void>;
   read(vm: Vm, path: string): Promise<Uint8Array>;
   destroy(vm: Vm): Promise<void>;
   /**
@@ -157,6 +160,11 @@ export function secretHit(text: string): "key" | "drive path" | null {
   return null;
 }
 
+/** A failed step's stderr for an error line: each word holding a key pattern or drive path replaced, then cut to 400 characters. */
+export function stepStderr(text: string): string {
+  return text.split(/\s+/).filter(Boolean).map((w) => (secretHit(w) ? "[redacted]" : w)).join(" ").slice(0, 400);
+}
+
 /** UBI_OWNER from the environment, read by name only. */
 export function ownerFromEnv(env: Readonly<Record<string, string | undefined>> = process.env): string {
   const v = (env.UBI_OWNER ?? "").trim();
@@ -228,10 +236,10 @@ export const END_MARK = "DCNET-END";
 export function mirrorConfig(spec: VmSpec): string[] {
   const out: string[] = [];
   for (const m of spec.mirrors) {
-    if (m.name === "npm") out.push("printf 'registry=%s\\n' " + q(m.url) + " | tee /root/.npmrc /home/" + spec.runUser + "/.npmrc > /dev/null && chown " + spec.runUser + " /home/" + spec.runUser + "/.npmrc");
+    if (m.name === "npm") out.push("printf 'registry=%s\\n' " + q(m.url) + " | tee /root/.npmrc /home/" + spec.runUser + "/.npmrc > /dev/null && chown " + spec.runUser + " /home/" + spec.runUser + "/.npmrc && printf 'COREPACK_NPM_REGISTRY=%s\\nCOREPACK_ENABLE_DOWNLOAD_PROMPT=0\\n' " + q(m.url) + " >> /etc/environment");
     if (m.name === "pypi") out.push("printf '[global]\\nindex-url = %s\\n' " + q(m.url) + " > /etc/pip.conf");
     if (m.name === "apt") out.push("printf 'deb %s noble main universe\\ndeb %s noble-updates main universe\\ndeb %s noble-security main universe\\n' " + q(m.url) + " " + q(m.url) + " " + q(m.url) + " > /etc/apt/sources.list && rm -f /etc/apt/sources.list.d/*");
-    if (m.name === "dockerhub") out.push("mkdir -p /etc/docker && printf '{\"registry-mirrors\": [\"%s\"]}\\n' " + q(m.url) + " > /etc/docker/daemon.json && systemctl restart docker");
+    if (m.name === "dockerhub") out.push("mkdir -p /etc/docker && printf '{\"registry-mirrors\": [\"%s\"]}\\n' " + q(m.url) + " > /etc/docker/daemon.json");
   }
   return out;
 }
@@ -250,6 +258,7 @@ export function preamble(spec: VmSpec): string[] {
     "test \"$(systemctl is-enabled unattended-upgrades.service)\" = masked && ! systemctl is-active --quiet apt-daily.timer && ! systemctl is-active --quiet apt-daily-upgrade.timer",
     "id -u " + spec.runUser + " > /dev/null 2>&1 || useradd -m -s /bin/bash " + spec.runUser,
     "loginctl enable-linger " + spec.runUser,
+    "mkdir -p /work && chown " + spec.runUser + ": /work",
     "mkdir -p " + AUDIT_DIR + " && chmod 700 " + AUDIT_DIR + " && touch " + AUDIT_DIR + "/start",
     ...mirrorConfig(spec),
     "nft add table inet dc",
@@ -527,7 +536,9 @@ export interface SandboxDeps {
 
 /**
  * Runs job in a fresh VM: admit its time to live on dc-hosts, create, preamble, job, audit, delete, always, then settle
- * the VM at its measured hours. A preamble step that fails ends the run before the job; the audit still runs. A refused
+ * the VM at its measured hours. A preamble step that fails ends the run before the job; the audit still runs. A failed
+ * preamble or install step keeps its exit code and its stderr (stepStderr), and an audit that then fails names it as its
+ * last reason ("after ..."), so the stop names the step. A refused
  * dc-hosts admission throws CapStopSignal before any VM exists. A cap stop or a lane error inside the job is rethrown
  * after the audit, unless the audit failed, which the caller stops on first. A failure outside the agent (a thrown
  * E_DC_INFRA_MISSING or any other error) becomes the run's error. scanExtra names files beside the written ones for the
@@ -560,7 +571,7 @@ export async function sandboxed<T>(d: SandboxDeps, spec: VmSpec, job: (vm: Vm) =
         r = { exit: -1, stdout: "", stderr: (e as Error).message };
       }
       if (r.exit !== 0) {
-        error = "preamble step failed (exit " + r.exit + "): " + step;
+        error = "preamble step failed (exit " + r.exit + "): " + step + (r.stderr.trim() ? ": " + stepStderr(r.stderr) : "");
         break;
       }
     }
@@ -572,6 +583,7 @@ export async function sandboxed<T>(d: SandboxDeps, spec: VmSpec, job: (vm: Vm) =
         error = "the controller's install failed: " + (e as Error).message;
       }
     }
+    const setupError = error;
     if (error === null) {
       try {
         value = await job(vm);
@@ -581,6 +593,7 @@ export async function sandboxed<T>(d: SandboxDeps, spec: VmSpec, job: (vm: Vm) =
       }
     }
     result = await audit(d.backend, vm, { scanExtra: typeof o.scanExtra === "function" ? o.scanExtra(value) : o.scanExtra, controller });
+    if (!result.ok && setupError) result = { ...result, reasons: [...result.reasons, "after " + setupError] };
   } finally {
     try {
       await d.backend.destroy(vm);
@@ -612,7 +625,14 @@ export interface UbicloudOptions {
   now: () => number;
   /** A private subnet every VM joins, so sandboxes reach the controller host's proxy and mirrors on its private IPv4. */
   privateSubnet?: string;
+  /** Runs a command over SSH with its stdout streamed into a local file, never held in memory or decoded. */
+  sshTo?: StreamRunner;
+  /** Runs a command over SSH with its stdin streamed from a local file or another command, never held in memory. */
+  sshFrom?: (host: string, command: string, source: FileSource, o: ExecOptions) => Promise<{ exit: number; stderr: string }>;
 }
+
+/** An SSH command whose stdout goes to a local file at path; the exit and stderr come back. */
+export type StreamRunner = (host: string, command: string, path: string, o: ExecOptions) => Promise<{ exit: number; stderr: string }>;
 
 /**
  * The Ubicloud backend for paid runs. It names each VM for its owner and its expiry minute, so the runner's reaper can
@@ -693,7 +713,18 @@ export class UbicloudBackend implements VmBackend {
   exec(vm: Vm, command: string, o: ExecOptions = {}): Promise<ExecResult> {
     return this.o.ssh(this.host(vm), command, o);
   }
-  async write(vm: Vm, path: string, data: Uint8Array | string) {
+  /** Runs a command with its stdout streamed into a local file, for output too large to hold in memory. */
+  readTo(vm: Vm, command: string, path: string, o: ExecOptions = {}): Promise<{ exit: number; stderr: string }> {
+    if (!this.o.sshTo) fail("E_INTERNAL", "the backend has no streaming read");
+    return this.o.sshTo!(this.host(vm), command, path, o);
+  }
+  async write(vm: Vm, path: string, data: Uint8Array | string | FileSource) {
+    if (typeof data !== "string" && !(data instanceof Uint8Array)) {
+      if (!this.o.sshFrom) fail("E_INTERNAL", "the backend has no streaming write");
+      const s = await this.o.sshFrom!(this.host(vm), "cat > " + q(path), data, { user: "root" });
+      if (s.exit !== 0) fail("E_DC_INFRA_MISSING", "could not write " + path + " on " + vm.id + " (exit " + s.exit + ")");
+      return;
+    }
     const r = await this.o.ssh(this.host(vm), "cat > " + q(path), { user: "root", input: typeof data === "string" ? new TextEncoder().encode(data) : data });
     if (r.exit !== 0) fail("E_DC_INFRA_MISSING", "could not write " + path + " on " + vm.id + " (exit " + r.exit + ")");
   }

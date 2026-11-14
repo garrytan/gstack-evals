@@ -4,12 +4,13 @@
 // pinned WAL key, which reaches walctl and nothing else. Skipped when sshd or ssh-keygen is missing.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { createHash, randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RemoteTarget, sshWalTransport, walAuthorizedKey, WALCTL_PY } from "../../../lanes/design-constructed/money/offhost.ts";
 import { WriteAhead } from "../../../lanes/design-constructed/money/wal.ts";
 import type { Vm } from "../../../lanes/design-constructed/stage3/sandbox.ts";
-import { asUser, freePort, keyedUbicloud, portOpen, realUbicloud, runProcess, sshRunner, sshTunnel, type SshOptions } from "../../../lanes/design-constructed/stage3/ubicloud-real.ts";
+import { asUser, freePort, keyedUbicloud, portOpen, realUbicloud, runProcess, sshRunner, sshStreamer, sshTunnel, type SshOptions } from "../../../lanes/design-constructed/stage3/ubicloud-real.ts";
 
 const SSHD = ["/usr/sbin/sshd", "/usr/bin/sshd"].find((p) => existsSync(p));
 const KEYGEN = ["/usr/bin/ssh-keygen"].find((p) => existsSync(p));
@@ -54,6 +55,18 @@ describe.skipIf(!SSHD || !KEYGEN)("SSH against a local sshd", () => {
     expect((await run("127.0.0.1", "sleep 20", { timeoutMs: 500 })).exit).toBe(124);
     expect(asUser("id", "run", "run")).toBe("sudo -n -u run -H bash -c 'cd ~ && id'");
     expect(asUser("echo 'x'", "root")).toBe("sudo -n bash -c 'echo '\\''x'\\'''");
+  }, 30_000);
+
+  test("the streaming runner writes a command's raw stdout into a local file and keeps the exit code", async () => {
+    const stream = sshStreamer({ ...plain, wrap: (c) => c });
+    const src = join(dir, "big.bin");
+    writeFileSync(src, randomBytes(3 * 1024 * 1024));
+    const copy = join(dir, "copy.bin");
+    expect((await stream("127.0.0.1", "cat " + src, copy, {})).exit).toBe(0);
+    const sha = (f: string) => createHash("sha256").update(readFileSync(f)).digest("hex");
+    expect(sha(copy)).toBe(sha(src));
+    expect((await stream("127.0.0.1", "printf short; exit 7", copy, {})).exit).toBe(7);
+    expect(readFileSync(copy, "utf8")).toBe("short");
   }, 30_000);
 
   test("the tunnel forwards a local port to a loopback port behind SSH and closes", async () => {

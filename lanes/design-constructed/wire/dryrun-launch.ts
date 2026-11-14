@@ -102,12 +102,17 @@ export async function launchScenario(): Promise<string[]> {
     await withTemp(async (dir) => {
       const shm = shmOf(dir);
       const f = hostFixture(dir, ["modelprobe", "--terms", "terms.json", "--out", "sinks/modelprobe"]);
+      writeFileSync(f.planPath, JSON.stringify({ ...f.plan, mirrors: true }, null, 2) + "\n");
       const work = f.plan.work;
       const lane = join(dir, "lane");
       const tgz = new TextEncoder().encode("invented claude code tarball\n");
       mkdirSync(join(lane, "docker"), { recursive: true });
       writeFileSync(join(lane, "docker", "host-cli.json"), JSON.stringify({ claude: "9.9.9" }));
       writeFileSync(join(lane, "docker", "trial.Dockerfile"), "ADD --checksum=sha256:" + createHash("sha256").update(tgz).digest("hex") + " https://registry.npmjs.org/@anthropic-ai/claude-code-linux-x64/-/claude-code-linux-x64-9.9.9.tgz /opt/claude.tgz\n");
+      const nodeTar = new TextEncoder().encode("invented node build\n");
+      mkdirSync(join(lane, "stage3"), { recursive: true });
+      writeFileSync(join(lane, "stage3", "node-pin.json"), JSON.stringify({ version: "24.0.0", sha256: createHash("sha256").update(nodeTar).digest("hex") }));
+      writeFileSync(join(work, "node.tar.xz"), nodeTar);
       const laneCommit = commitAll(lane, dir);
       writeFileSync(join(work, "claude.tgz"), tgz);
       mkdirSync(join(work, "chromium", "chrome-linux"), { recursive: true });
@@ -116,7 +121,7 @@ export async function launchScenario(): Promise<string[]> {
       const pin = pinRecord({ runId: f.plan.runId, commit: "0".repeat(40), dated: "2026-11-13T00:00:00Z", reads: { sol: endpointsFixture("sol"), particle: endpointsFixture("particle"), argon: endpointsFixture("argon") } });
       writeFileSync(join(work, "pins.json"), JSON.stringify(pin));
       writeFileSync(join(work, "terms.json"), JSON.stringify(termsRecordsOf(pin)));
-      const vm = { project: "dry", location: "eu-central-h1", size: "standard-4", image: "ubuntu-noble", privateSubnet: null, keyPath: "ssh/id_ed25519", knownHosts: "ssh/known_hosts", chromiumBuild: { dir: "chromium", bin: "chrome-linux/chrome" }, claudeTarball: "claude.tgz", priceMicrosPerHour: 57_400, proxy: { host: "controller", port: 8790 }, mirrors: { host: "controller", terms: { npm: "npm terms", pypi: "pypi terms", apt: "apt terms", dockerhub: "dockerhub terms" } } };
+      const vm = { project: "dry", location: "eu-central-h1", size: "standard-4", image: "ubuntu-noble", privateSubnet: null, keyPath: "ssh/id_ed25519", knownHosts: "ssh/known_hosts", chromiumBuild: { dir: "chromium", bin: "chrome-linux/chrome" }, claudeTarball: "claude.tgz", nodeTarball: "node.tar.xz", priceMicrosPerHour: 57_400, proxy: { host: "controller", port: 8790 }, mirrors: { host: "controller", terms: { npm: "npm terms", pypi: "pypi terms", apt: "apt terms", dockerhub: "dockerhub terms" } } };
       writeFileSync(join(work, "wiring.json"), JSON.stringify({ retry: { attempts: 3, elapsed_ms: 900_000 }, pinRecord: "pins.json", cacheDir: "cache", scanMs: 10_000, sessions: null, vm }));
       const app = fx.repos.bait;
       const view = (() => {
@@ -163,8 +168,8 @@ export async function launchScenario(): Promise<string[]> {
       await step(3, ["apps", "--clones", "frame", "--base-apps", "inputs/base-apps.json", "--out", "apps.json"], { "inputs/base-apps.json": JSON.stringify([{ id: "c003", pin: fx.repos.match.second.oid }]) }, { state: "done" });
       const plantedIn = Object.fromEntries(filesOf(join(shm, "planted-in")).map((p) => [p, readFileSync(join(shm, "planted-in", p), "utf8")]));
       await step(4, ["planted", "--in", "planted-in", "--out", "planted"], plantedIn, { state: "done" });
-      await step(5, ["gatecheck", "--units", "planted/planted.json", "--apps", "planted/apps.json", "--gstack", "gstack", "--terms", "terms.json", "--out", "sinks/gatecheck"], null, { state: "failed", code: "E_USAGE" });
-      await step(6, ["author", "--step", "pilot", "--item", "dc-authoring-1", "--apps", "apps.json", "--gstack", "gstack", "--terms", "terms.json", "--gate", "sinks/gatecheck", "--out", "sinks/pilot"], null, { state: "failed", code: "E_DCW_START_RULE" });
+      await step(5, ["gatecheck", "--units", "planted/planted.json", "--apps", "planted/apps.json", "--gstack", "gstack", "--terms", "terms.json", "--screen", "inputs/screen", "--out", "sinks/gatecheck"], { "inputs/screen/node-drops.json": JSON.stringify({ pinned: "24.22.3", count: 0, labels: [] }) }, { state: "failed", code: "E_USAGE" });
+      await step(6, ["author", "--step", "pilot", "--item", "dc-authoring-1", "--apps", "apps.json", "--gstack", "gstack", "--terms", "terms.json", "--gate", "sinks/gatecheck", "--screen", "inputs/screen", "--out", "sinks/pilot"], null, { state: "failed", code: "E_DCW_START_RULE" });
       writeFileSync(l.controller, JSON.stringify({ ...facts, location: "us-east-a2" }));
       await step(7, ["modelprobe", "--terms", "terms.json", "--out", "sinks/modelprobe-2"], null, { state: "failed", code: "E_DCW_REGION" });
       const status = await host("status", f, s, env);

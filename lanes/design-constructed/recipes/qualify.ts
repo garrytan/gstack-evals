@@ -5,6 +5,7 @@
 // record, under the HTTP 200 reading too.
 import { RECIPES } from "../frozen.ts";
 import { sandboxed, type SandboxDeps, type Vm, type VmSpec } from "../stage3/sandbox.ts";
+import { engineMismatch } from "./node.ts";
 import { normalPath, type Recipe } from "./recipe.ts";
 import type { BrowserSeam, Candidate, DiscoveredRoute, PageLoad, PageProbe, RouteMatcher } from "./seams.ts";
 
@@ -134,6 +135,8 @@ export interface Qualification {
   http200: boolean;
   /** The first step that failed, before any route loaded. */
   failedStep: QualifyStep | null;
+  /** Whether the failed step's stderr shows an engine-mismatch error (node.ts); printed only, never read by the screen. */
+  engineError: boolean;
   strictWhy: string | null;
   http200Why: string | null;
   login: "none" | "ok" | "failed";
@@ -194,11 +197,11 @@ export interface QualifyDeps {
 
 async function qualifyJob(vm: Vm, c: Candidate, recipe: Recipe, d: QualifyDeps): Promise<Qualification> {
   const b = d.sandbox.backend;
-  const failed = (step: QualifyStep): Qualification => ({ strict: false, http200: false, failedStep: step, strictWhy: step + " failed", http200Why: step + " failed", login: "none", loads: [] });
+  const failed = (step: QualifyStep, stderr: string): Qualification => ({ strict: false, http200: false, failedStep: step, engineError: engineMismatch(stderr), strictWhy: step + " failed", http200Why: step + " failed", login: "none", loads: [] });
   await b.write(vm, "/work/app.tar", await c.tree());
   for (const s of setupSteps(recipe)) {
     const r = await b.exec(vm, s.command, { user: s.user, timeoutMs: s.minutes * 60_000 });
-    if (r.exit !== 0) return failed(s.step);
+    if (r.exit !== 0) return failed(s.step, r.stderr);
   }
   const paths = pickRoutes(recipe, c.routes, d.match);
   const session = await d.browser.open(vm, recipe.baseUrl);
@@ -215,7 +218,7 @@ async function qualifyJob(vm: Vm, c: Candidate, recipe: Recipe, d: QualifyDeps):
   } finally {
     await session.close();
   }
-  return { ...judge(paths, loads, recipe.baseUrl), failedStep: null, login, loads };
+  return { ...judge(paths, loads, recipe.baseUrl), failedStep: null, engineError: false, login, loads };
 }
 
 /** One qualification run in its own offline VM. The audit's result rides back for the caller to stop on. */

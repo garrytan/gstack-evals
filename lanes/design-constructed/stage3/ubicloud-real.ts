@@ -4,11 +4,11 @@
 // read by name, and the named package mirrors (npm, PyPI, Ubuntu apt and a Docker Hub pull-through cache) that the
 // controller host serves on its private IPv4. Only the paid launcher and the controller service on its host construct
 // realUbicloud; tests drive the same runner against local stand-ins.
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { dirname } from "node:path";
 import { fail } from "../errors.ts";
-import { UbicloudBackend, type ExecOptions, type ExecResult, type Mirror, type MirrorName, type Vm } from "./sandbox.ts";
+import { UbicloudBackend, type ExecOptions, type ExecResult, type Mirror, type MirrorName, type FileSource, type StreamRunner, type Vm } from "./sandbox.ts";
 
 export interface ProcessResult {
   exit: number;
@@ -36,6 +36,53 @@ export async function runProcess(argv: string[], o: { input?: Uint8Array; timeou
     return { exit: timedOut ? 124 : code, stdout: new Uint8Array(out), stderr: err, timedOut };
   } finally {
     if (timer) clearTimeout(timer);
+  }
+}
+
+/** Runs argv with its stdout written straight into a local file (created or emptied, mode 600), never held in memory. */
+export async function runProcessTo(argv: string[], path: string, o: { timeoutMs?: number } = {}): Promise<{ exit: number; stderr: string; timedOut: boolean }> {
+  const fd = openSync(path, "w", 0o600);
+  try {
+    const p = Bun.spawn(argv, { stdin: "ignore", stdout: fd, stderr: "pipe" });
+    let timedOut = false;
+    const timer = o.timeoutMs
+      ? setTimeout(() => {
+          timedOut = true;
+          p.kill("SIGKILL");
+        }, o.timeoutMs)
+      : null;
+    try {
+      const [err, code] = await Promise.all([new Response(p.stderr).text(), p.exited]);
+      return { exit: timedOut ? 124 : code, stderr: err, timedOut };
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/** Runs argv with its stdin streamed from a local file, or from another command's stdout through bash with pipefail. */
+export async function runProcessFrom(argv: string[], source: FileSource, o: { timeoutMs?: number } = {}): Promise<{ exit: number; stderr: string; timedOut: boolean }> {
+  const fd = "file" in source ? openSync(source.file, "r") : null;
+  try {
+    const cmd = "argv" in source ? ["bash", "-c", "set -o pipefail; " + source.argv.map(shq).join(" ") + " | " + argv.map(shq).join(" ")] : argv;
+    const p = Bun.spawn(cmd, { stdin: fd ?? "ignore", stdout: "ignore", stderr: "pipe" });
+    let timedOut = false;
+    const timer = o.timeoutMs
+      ? setTimeout(() => {
+          timedOut = true;
+          p.kill("SIGKILL");
+        }, o.timeoutMs)
+      : null;
+    try {
+      const [err, code] = await Promise.all([new Response(p.stderr).text(), p.exited]);
+      return { exit: timedOut ? 124 : code, stderr: err, timedOut };
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  } finally {
+    if (fd !== null) closeSync(fd);
   }
 }
 
@@ -84,6 +131,18 @@ export function sshRunner(o: SshOptions & { wrap?: (command: string, user: "root
     const r = await runProcess([...sshArgs(o, host), wrap(command, eo.user ?? "run")], { input: eo.input, timeoutMs: eo.timeoutMs });
     return { exit: r.exit, stdout: new TextDecoder().decode(r.stdout), stderr: r.stderr, raw: r.stdout };
   };
+}
+
+/** sshRunner's streaming twin: the command's stdout goes into a local file, never into memory and never decoded as text. */
+export function sshStreamer(o: SshOptions & { wrap?: (command: string, user: "root" | "run") => string }): StreamRunner {
+  const wrap = o.wrap ?? ((c: string, u: "root" | "run") => asUser(c, u, o.runUser));
+  return (host, command, path, eo) => runProcessTo([...sshArgs(o, host), wrap(command, eo.user ?? "run")], path, { timeoutMs: eo.timeoutMs });
+}
+
+/** sshRunner's streaming upload: the command's stdin comes from a local file or a local command, never from memory. */
+export function sshSender(o: SshOptions & { wrap?: (command: string, user: "root" | "run") => string }): (host: string, command: string, source: FileSource, eo: ExecOptions) => Promise<{ exit: number; stderr: string }> {
+  const wrap = o.wrap ?? ((c: string, u: "root" | "run") => asUser(c, u, o.runUser));
+  return (host, command, source, eo) => runProcessFrom([...sshArgs(o, host), wrap(command, eo.user ?? "run")], source, { timeoutMs: eo.timeoutMs });
 }
 
 /** A free local port on the loopback interface. */
@@ -140,6 +199,8 @@ export interface RealUbicloudOptions {
   image: string;
   publicKey: string;
   ssh: SshRunner;
+  sshTo?: StreamRunner;
+  sshFrom?: ReturnType<typeof sshSender>;
   privateSubnet?: string;
   /** Where the token is read by name: the paid launcher's own process environment. */
   env?: Readonly<Record<string, string | undefined>>;
@@ -151,7 +212,7 @@ export interface RealUbicloudOptions {
 export function realUbicloud(o: RealUbicloudOptions): UbicloudBackend {
   const token = (o.env ?? process.env).UBICLOUD_API_KEY ?? "";
   if (!token) fail("E_USAGE", "UBICLOUD_API_KEY is not set for the paid launcher");
-  return new UbicloudBackend({ project: o.project, location: o.location, token, size: o.size, image: o.image, publicKey: o.publicKey, fetch: o.fetch ?? globalThis.fetch.bind(globalThis), ssh: o.ssh, sleep: (ms) => Bun.sleep(ms), now: () => Date.now(), privateSubnet: o.privateSubnet });
+  return new UbicloudBackend({ project: o.project, location: o.location, token, size: o.size, image: o.image, publicKey: o.publicKey, fetch: o.fetch ?? globalThis.fetch.bind(globalThis), ssh: o.ssh, sshTo: o.sshTo, sshFrom: o.sshFrom, sleep: (ms) => Bun.sleep(ms), now: () => Date.now(), privateSubnet: o.privateSubnet });
 }
 
 /**
@@ -166,7 +227,28 @@ export async function keyedUbicloud(o: Omit<RealUbicloudOptions, "ssh" | "public
     if (r.exit !== 0) fail("E_DC_INFRA_MISSING", "could not make the launch's SSH key");
   }
   const publicKey = readFileSync(o.keyPath + ".pub", "utf8").trim();
-  return realUbicloud({ ...o, publicKey, ssh: o.ssh ?? sshRunner({ keyPath: o.keyPath, knownHosts: o.knownHosts, runUser: o.runUser }) });
+  const ssh = { keyPath: o.keyPath, knownHosts: o.knownHosts, runUser: o.runUser };
+  const injected = o.ssh;
+  if (!injected) return realUbicloud({ ...o, publicKey, ssh: sshRunner(ssh), sshTo: o.sshTo ?? sshStreamer(ssh), sshFrom: o.sshFrom ?? sshSender(ssh) });
+  return realUbicloud({
+    ...o,
+    publicKey,
+    ssh: injected,
+    sshTo:
+      o.sshTo ??
+      (async (host, command, path, eo) => {
+        const r = await injected(host, command, eo);
+        writeFileSync(path, r.raw ?? new TextEncoder().encode(r.stdout));
+        return { exit: r.exit, stderr: r.stderr };
+      }),
+    sshFrom:
+      o.sshFrom ??
+      (async (host, command, source, eo) => {
+        const input = "file" in source ? new Uint8Array(readFileSync(source.file)) : new Uint8Array(Bun.spawnSync(source.argv, { stdout: "pipe" }).stdout);
+        const r = await injected(host, command, { ...eo, input });
+        return { exit: r.exit, stderr: r.stderr };
+      }),
+  });
 }
 
 /** BT: each named mirror's port on the controller host's private IPv4. */
@@ -202,7 +284,7 @@ export function mirrorSetup(ip: string): string[] {
   if (!IPV4.test(ip)) fail("E_USAGE", "the mirrors bind to an IPv4 literal");
   const unit = (name: string, exec: string) => "printf '%s\\n' '[Unit]' 'After=network-online.target' '[Service]' " + shq("ExecStart=" + exec) + " 'Restart=always' '[Install]' 'WantedBy=multi-user.target' > /etc/systemd/system/" + name + ".service";
   return [
-    "DEBIAN_FRONTEND=noninteractive apt-get install -y apt-cacher-ng docker-registry python3-venv nodejs npm",
+    "DEBIAN_FRONTEND=noninteractive apt-get install -y apt-cacher-ng docker-registry python3-venv nodejs npm -o DPkg::Lock::Timeout=600",
     "printf 'Port:%s\\nBindAddress: %s\\n' " + MIRROR_PORTS.apt + " " + ip + " > /etc/apt-cacher-ng/zz-dc.conf && systemctl restart apt-cacher-ng",
     "printf 'version: 0.1\\nstorage:\\n  filesystem:\\n    rootdirectory: /var/lib/docker-registry\\nhttp:\\n  addr: %s:%s\\nproxy:\\n  remoteurl: https://registry-1.docker.io\\n' " + ip + " " + MIRROR_PORTS.dockerhub + " > /etc/docker/registry/config.yml && systemctl restart docker-registry",
     "npm install -g verdaccio@7.1.0",

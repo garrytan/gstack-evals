@@ -323,6 +323,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_DCW_BROWSER_LAUNCH](#e_dcw_browser_launch) | 2 | U20 |
 | [E_DCW_REGION](#e_dcw_region) | 2 | U20 |
 | [E_DCW_CONTAINER_LEFT](#e_dcw_container_left) | 2 | U20 |
+| [E_DCW_NODE_DROPS](#e_dcw_node_drops) | 2 | U20 |
 | [E_DCV_POWER_PY_PIN](#e_dcv_power_py_pin) | 2 | U20 |
 | [E_DCV_PROJECTION_STOP](#e_dcv_projection_stop) | warning | U20 |
 
@@ -2268,7 +2269,7 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 
 ### E_DCH_SEAL
 
-Design plan review eval (controller host custody, PD-41): the teardown could not seal the host's work folder with age to the run's recipient, or could not confirm the plaintext was deleted, or the archive it read back is not an age file. Both VMs are kept and nothing from the work folder was copied back.
+Design plan review eval (controller host custody, PD-41): the teardown could not seal the host's work folder with age to the run's recipient, or could not confirm the plaintext was deleted, or the archive it read back is not an age file or differs in size or sha256 from the host's. Both VMs are kept and nothing from the work folder was copied back.
 
 Fix: Read the message, fix the host (age installed, the recipient file in its state folder), then run dc host teardown again; it seals once and copies back only the sealed archive.
 
@@ -2345,6 +2346,14 @@ Design plan review eval (PD-43 condition 1, the Captain's custody ruling on revi
 Fix: On the controller host, remove the named container (docker rm -f) and confirm docker container inspect reports no such container, find why the removal failed, and bring both to the Captain. Launch again into a new sink only on the Captain's word.
 
 Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_DCW_NODE_DROPS
+
+Design plan review eval (the Captain's Node ruling): the recipes row's node-drops.json lists 3 or more stage 0 candidates that dropped for a Node-version cause (they did not qualify, and their declared Node range excludes the pinned Node or their failing qualification step printed an engine-mismatch error), so the gate check and every authoring row refuse before any provider is built. The message names the labels.
+
+Fix: Bring the labels and each one's node line from the recipes row's output to the Captain. A dropped app is never swapped. The rows run again only once the Captain clears that list: write node-cleared.json into the recipes sink holding {"labels": [...]} with exactly node-drops.json's labels (on the controller host, deliver it with the next row's inputs), then launch the row again into a new sink.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 
 ### E_DCV_POWER_PY_PIN
 

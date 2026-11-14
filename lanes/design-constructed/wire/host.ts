@@ -19,7 +19,7 @@
 // digest with its image tar and a gstack source that holds the pin. The row's own start rules run on the host. The
 // launcher builds every upload in memory from a tmpfs folder and refuses one on disk, and the teardown's archive holds
 // the work folder only as the age file the host sealed (PD-41).
-import { cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, cpSync, existsSync, mkdirSync, openSync, readFileSync, readSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { DcError, fail } from "../errors.ts";
 import { GSTACK_PIN } from "../frozen.ts";
@@ -28,7 +28,7 @@ import type { HostRow, HostStage } from "../money/host-main.ts";
 import { recordTar, type LedgerService } from "../money/ledger-service.ts";
 import { ownerFromEnv } from "../stage3/sandbox.ts";
 import { keyedUbicloud } from "../stage3/ubicloud-real.ts";
-import { claudeTarball, hostAddresses, readControllerFacts, readWiring, type HostContext, type HostWiring } from "./real.ts";
+import { claudeTarball, CONTROLLER, nodeTarball, hostAddresses, readControllerFacts, readWiring, type HostContext, type HostWiring } from "./real.ts";
 import { readJson } from "./json.ts";
 import { refuse, type Args, type Io, type Row, type RowEnv } from "./start.ts";
 
@@ -51,7 +51,7 @@ export function hostContext(service: LedgerService, wiringPath: string, env: Rea
   const root = dirname(service.cfg.stateDir);
   const w = readWiring(wiringPath);
   const at = (p: string) => (typeof p === "string" ? resolve(work, p) : p);
-  const vm = w.vm && { ...w.vm, ...(w.vm.chromiumBuild ? { chromiumBuild: { ...w.vm.chromiumBuild, dir: at(w.vm.chromiumBuild.dir) } } : {}), claudeTarball: at(w.vm.claudeTarball) };
+  const vm = w.vm && { ...w.vm, ...(w.vm.chromiumBuild ? { chromiumBuild: { ...w.vm.chromiumBuild, dir: at(w.vm.chromiumBuild.dir) } } : {}), claudeTarball: at(w.vm.claudeTarball), nodeTarball: at(w.vm.nodeTarball) };
   return { service, wiring: { ...w, vm }, env, dir: join(work, ".wire"), lane: hostLane(root), controller: () => readControllerFacts(join(service.cfg.stateDir, "controller.json")), addresses };
 }
 
@@ -68,10 +68,11 @@ export function hostRegion(h: HostContext): { region: string; record: string } {
  */
 function vmFilesProblems(vm: NonNullable<HostWiring["vm"]>, work: string, root: string): string | null {
   const inside = (p: string) => typeof p === "string" && !isAbsolute(p) && !relative(work, resolve(work, p)).startsWith("..");
-  if (!inside(vm.chromiumBuild?.dir) || !inside(vm.claudeTarball)) return "the wiring's vm section must name chromiumBuild.dir and claudeTarball relative to the work folder, which ships them";
+  if (!inside(vm.chromiumBuild?.dir) || !inside(vm.claudeTarball) || !inside(vm.nodeTarball)) return "the wiring's vm section must name chromiumBuild.dir, claudeTarball and nodeTarball relative to the work folder, which ships them";
   if (!existsSync(join(resolve(work, vm.chromiumBuild.dir), vm.chromiumBuild.bin))) return "the work folder holds no Chromium binary at the wiring's chromiumBuild";
   try {
     claudeTarball(resolve(work, vm.claudeTarball), root);
+    nodeTarball(resolve(work, vm.nodeTarball), root);
   } catch (e) {
     return (e as Error).message;
   }
@@ -217,6 +218,7 @@ async function hostRules(p: HostPlanFile, env: RowEnv): Promise<{ commit: string
   const wiring = readWiring(resolve(p.work, p.wiring));
   const vmFiles = wiring.vm && vmFilesProblems(wiring.vm, resolve(p.work), lane.root);
   if (vmFiles) fail("E_USAGE", vmFiles);
+  if (!p.mirrors && wiring.vm && !Array.isArray(wiring.vm.mirrors) && wiring.vm.mirrors.host === CONTROLLER) fail("E_USAGE", "the host plan sets mirrors off, but the wiring's vm section names the controller's mirrors, which only a host with mirrors on serves");
   if (p.stage[0] === "sessions") {
     const s = wiring.sessions;
     if (!s) refuse("sessions", "the wiring file has no sessions section");
@@ -249,7 +251,7 @@ function controllerPlanOf(p: HostPlanFile, lane: { commit: string; root: string 
     provision: controllerProvision({ bunVersion: p.bunVersion, mirrors: p.mirrors }),
     bun: "/opt/bun/bin/bun",
     stage: hostStage(p.wiring, p.stage),
-    image: sessions ? { tar: uploads ? new Uint8Array(readFileSync(p.imageTar!)) : null, expectDigest: readWiring(resolve(p.work, p.wiring)).sessions!.imageDigest } : null,
+    image: sessions ? { tar: uploads ? { file: resolve(p.imageTar!) } : null, expectDigest: readWiring(resolve(p.work, p.wiring)).sessions!.imageDigest } : null,
     gstack: sessions && uploads ? gstackPack(resolve(p.gstackSource!), GSTACK_PIN.commit) : null,
   };
   const tuned = s.tune ? s.tune(plan) : plan;
@@ -264,18 +266,19 @@ const saveRecord = (file: string, rec: HostRecord) => {
 };
 
 /**
- * Writes the teardown archive into a new folder: the work folder only as the age file the host sealed, beside the books
- * that hold no sealed text (the off-host lines, the snapshot and rows.json), and puts the host's approval record back
+ * Finishes the teardown archive in its new folder, where teardown streamed the work folder only as the age file the host
+ * sealed, the off-host lines and the snapshot: it checks the archive's age header, adds rows.json, and puts the host's approval record back
  * in the Captain's place. The record is copied beside the Captain's record first, on its file system, so the renames
  * that follow never cross file systems; the old record moves aside only then, and any failure puts it back. Returns
  * false when the host's record is not in place.
  */
 export function writeArchive(dir: string, p: HostPlanFile, a: Extract<Awaited<ReturnType<typeof teardown>>, { kind: "deleted" }>["archive"], io: Io, now: () => Date, rename: (from: string, to: string) => void = renameSync): boolean {
-  if (new TextDecoder().decode(a.sealed.subarray(0, AGE_HEADER.length)) !== AGE_HEADER) fail("E_DCH_SEAL", "the work archive is not an age file, so nothing of it is written here");
+  const head = Buffer.alloc(AGE_HEADER.length);
+  const fd = openSync(a.sealed, "r");
+  readSync(fd, head, 0, head.length, 0);
+  closeSync(fd);
+  if (head.toString() !== AGE_HEADER) fail("E_DCH_SEAL", "the work archive is not an age file, so nothing of it is written here");
   mkdirSync(dir, { recursive: true, mode: 0o700 });
-  writeFileSync(join(dir, "work.tar.age"), a.sealed);
-  writeFileSync(join(dir, "wal-lines.ndjson"), a.lines);
-  if (a.snapshot) writeFileSync(join(dir, a.snapshot.name + ".json"), a.snapshot.bytes);
   if (a.rows) writeFileSync(join(dir, "rows.json"), a.rows);
   io.out("archive: " + dir + " holds the host's work folder sealed to the run's recipient (work.tar.age), the off-host lines" + (a.snapshot ? ", " + a.snapshot.name : "") + (a.rows ? " and rows.json" : ""));
   if (!a.record) return (io.out("archive: the off-host copy held no approval record; the Captain's record at " + p.record + " is unchanged"), true);
@@ -373,7 +376,7 @@ export function hostRow(s: HostSeams = {}): Row {
         io.out("host: " + (r.kind === "recovered" ? "recovered on " + rec!.controller.vm + " (" + r.status.boot + ")" : "stopped for the Captain: " + r.why));
         return r.kind === "recovered" ? 0 : 3;
       }
-      const t = await teardown(b, plan, rec!, { force: a.bools.has("--force") });
+      const t = await teardown(b, plan, rec!, { force: a.bools.has("--force"), into: resolve(archive!) });
       if (t.kind === "refused") {
         io.out("host: teardown refused: " + t.why);
         return 3;

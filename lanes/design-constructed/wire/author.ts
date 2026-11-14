@@ -20,6 +20,7 @@ import { listFiles, readText } from "../frame/tree.ts";
 import type { AnyModel, AuthorFamily, ChangeKind, ItemClass, LedgerItemId } from "../types.ts";
 import { authorCaller, blockParser, build, spendReader, termsGuard, type ModelProvider } from "../wire.ts";
 import { readJson, writeJson } from "./json.ts";
+import { nodeDropRule } from "./recipes.ts";
 import { closeAll, need, oneOf, start, termsFrom, underStops, type Args, type Io, type RowEnv, type Row } from "./start.ts";
 
 /** One kept base app as apps.json gives it, in frame order: its checkout at the pin and the files the bundle shows. */
@@ -80,7 +81,7 @@ export interface PlantedEntry {
 }
 
 export const gatecheckRow: Row = async (a, io, env) => {
-  const usage = "gatecheck --units <planted.json> --apps <apps.json> --gstack <gstack checkout at the pin> --terms <terms.json> --out <new sink folder>";
+  const usage = "gatecheck --units <planted.json> --apps <apps.json> --gstack <gstack checkout at the pin> --terms <terms.json> --screen <recipes sink> --out <new sink folder>";
   const apps = appsFrom(a, usage);
   const planted = readJson<PlantedEntry[]>(resolve(need(a, "--units", usage)), "--units");
   const sink = need(a, "--out", usage);
@@ -89,7 +90,7 @@ export const gatecheckRow: Row = async (a, io, env) => {
     const app = apps[p.app] ?? fail("E_USAGE", "planted unit " + p.name + " names base app " + p.app + ", outside apps.json");
     return { name: p.name, unitId: p.unitId, files: p.files, app, author: p.author, bundle: authorBundle(app, p.kind).text, plantedClass: p.plantedClass };
   });
-  const launch = await start({ row: "gatecheck", sink, items: ["dc-gate-check"], models: AUTHOR_MODELS, terms: termsFrom(a), record: { planted: units.length } }, env);
+  const launch = await start({ row: "gatecheck", sink, items: ["dc-gate-check"], models: AUTHOR_MODELS, terms: termsFrom(a), rules: [nodeDropRule(a.flags.get("--screen"))], record: { planted: units.length } }, env);
   for (const l of launch.lines) io.out(l);
   const models = await build(env.providers, "model", "gatecheck");
   try {
@@ -120,7 +121,7 @@ const passed = (file: string, n: number) =>
     });
 
 export const authorRow: Row = async (a, io: Io, env) => {
-  const usage = "author --step pilot|units|2x|twins --item <ledger item> --apps <apps.json> --gstack <gstack checkout> --terms <terms.json> --gate <gatecheck sink> [--pilot <pilot sink>] [--from N --to M] [--units <author sink>] --out <new sink folder>";
+  const usage = "author --step pilot|units|2x|twins --item <ledger item> --apps <apps.json> --gstack <gstack checkout> --terms <terms.json> --gate <gatecheck sink> --screen <recipes sink> [--pilot <pilot sink>] [--from N --to M] [--units <author sink>] --out <new sink folder>";
   const step = oneOf(a, "--step", STEPS, usage);
   const item = oneOf(a, "--item", STEP_ITEMS[step], usage);
   const apps = appsFrom(a, usage);
@@ -131,6 +132,7 @@ export const authorRow: Row = async (a, io: Io, env) => {
   const prior = step === "2x" || step === "twins" ? passed(need(a, "--units", usage), apps.length) : [];
   const rules = [recorded(a.flags.get("--gate"), "result.json", (v) => v?.ok === true, "6", "authoring starts only after the gate check passed on every planted unit")];
   if (step !== "pilot") rules.push(recorded(a.flags.get("--pilot"), "pilot.json", (v) => v?.cost?.stop === false, "7", "authoring past the pilot follows a pilot under $10 a passing unit"));
+  rules.push(nodeDropRule(a.flags.get("--screen")));
   const launch = await start({ row: "author " + step, sink, items: [item], models: AUTHOR_MODELS, terms: termsFrom(a), rules, record: { step, item, range } }, env);
   for (const l of launch.lines) io.out(l);
   const models = await build(env.providers, "model", "author");

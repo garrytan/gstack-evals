@@ -4,6 +4,8 @@
 // creates a VM, opens a socket or reads a key.
 // Adapted from lanes/devex/stage3/fake.ts at 5ee7f764232b196a1d0cec5b144a287b792f9c94 (branch build-devex-review-eval).
 import { createHash } from "node:crypto";
+import { readFileSync, writeFileSync } from "node:fs";
+import { NODE_ROOT } from "./install.ts";
 import { AUDIT_COMMANDS, AUDIT_DIR, allowed, DESCRIBE_DONE, WORK_DONE, DROP_PREFIX, END_MARK, NET_PREFIX, secretHit, START_MARK, UbicloudBackend, type Connection, type ExecResult, type Mirror, type ProcessRow, type StatEntry, type VmSpec } from "./sandbox.ts";
 import type { HostsSeam, MoneySeam } from "./seams.ts";
 import type { LedgerItemId } from "../types.ts";
@@ -25,7 +27,22 @@ export interface FakeVm {
   work: string[];
   /** Files the controller's install unpacked (one per tar, holding the tar's bytes), in order. */
   installed: string[];
+  /** Whether Docker is installed. Like the real ubuntu-noble image, a VM has none until the controller's install. */
+  docker: boolean;
+  /** Whether Node is installed: none until the controller's install unpacks it. */
+  node: boolean;
+  /**
+   * Folders that exist: the image's own, the run user's home, and every mkdir -p a command ran. A write into any other
+   * folder fails, except into the audit folder, whose commands the fake simulates as collectable without the preamble.
+   */
+  dirs: Set<string>;
 }
+
+/** The folders a fresh ubuntu-noble VM has that the runs write into; /work is not one of them. */
+const IMAGE_DIRS = ["/", "/etc", "/opt", "/tmp", "/var", "/var/lib", "/usr", "/usr/bin", "/usr/local", "/usr/local/bin", "/root", "/home", "/run"];
+const addDir = (vm: FakeVm, path: string) => {
+  for (let p = path.replace(/\/+$/, ""); p; p = p.slice(0, p.lastIndexOf("/"))) vm.dirs.add(p);
+};
 
 export interface FakeFaults {
   /** Audit commands that exit with this status. */
@@ -52,6 +69,8 @@ export interface FakeWorld {
   plant: (vm: FakeVm) => void;
   /** Answers a VM's SSH commands before the simulated ones, input included, for a local SSH stand-in; undefined falls through. */
   ssh?: (vm: FakeVm, command: string, input: Uint8Array | undefined, user: string) => Promise<(ExecResult & { raw?: Uint8Array }) | undefined>;
+  /** Answers a VM's streamed reads (the stdout goes to path) before the simulated ones; undefined falls through to ssh. */
+  sshTo?: (vm: FakeVm, command: string, path: string, user: string) => Promise<{ exit: number; stderr: string } | undefined>;
   /** Faults on Ubicloud's API: a status or a thrown error per method, for the nth call of that method (1-based) or every call. */
   api?: Partial<Record<"POST" | "GET" | "DELETE", { status?: number; throws?: string; nth?: number }>>;
 }
@@ -105,14 +124,41 @@ function auditOutput(w: FakeWorld, vm: FakeVm, name: AuditCommand): ExecResult {
   return ok(out);
 }
 
+/**
+ * Node and the egress log's check on a fake VM (node --version and corepack fail until the install unpacks Node; the DCNET count
+ * reads the planted egress), and Docker: the daemon.json the preamble writes, no docker unit until apt installs docker.io (which writes
+ * /usr/bin/dockerd, a file the manifest lists like the rest), and docker info listing daemon.json's mirror with one
+ * trailing slash, as dockerd normalises it, for the install's grep. Undefined for every other command.
+ */
+function dockerAnswer(vm: FakeVm, command: string): ExecResult | undefined {
+  if (/node --version|corepack (enable|--version)/.test(command) && !vm.node) return { exit: 127, stdout: "", stderr: "node: command not found" };
+  if (command.includes("grep -c " + NET_PREFIX.trim())) return vm.egress.length ? ok() : { exit: 1, stdout: "", stderr: "" };
+  const daemon = /'([^']*)' > \/etc\/docker\/daemon\.json/.exec(command);
+  if (daemon) vm.files.set("/etc/docker/daemon.json", enc.encode(JSON.stringify({ "registry-mirrors": [daemon[1]] }) + "\n"));
+  if (/\bsystemctl (restart|start|enable --now) docker\b/.test(command) && !vm.docker) return { exit: 5, stdout: "", stderr: "Failed to start docker.service: Unit docker.service not found." };
+  if (command.includes("apt-get install") && / docker\.io\b/.test(command)) {
+    vm.docker = true;
+    vm.files.set("/usr/bin/dockerd", enc.encode("fake dockerd"));
+    vm.installed.push("/usr/bin/dockerd");
+    vm.written.push({ path: "/usr/bin/dockerd", size: 12, mode: 0o755, mtime: "2026-11-14T00:00:00", type: "f" });
+    return ok();
+  }
+  if (command.includes("docker info")) {
+    const mirrors = (JSON.parse(dec.decode(vm.files.get("/etc/docker/daemon.json") ?? enc.encode("{}")))["registry-mirrors"] ?? []) as string[];
+    const want = /grep -qxF '([^']*)'/.exec(command)?.[1];
+    return mirrors.some((m) => m.replace(/\/$/, "") + "/" === want) ? ok() : { exit: 1, stdout: "", stderr: "" };
+  }
+  return undefined;
+}
+
 const describeLine = (vm: FakeVm, p: string) => {
   const data = vm.files.get(p);
   return data ? "f\t" + createHash("sha256").update(data).digest("hex") + "\t" + p : "x\t-\t" + p;
 };
 
 /** A world whose VMs are clean by default: init and the run user's shell, egress to the allowed endpoints only. */
-export function fakeWorld(o: Partial<Pick<FakeWorld, "faults" | "handler" | "plant" | "ssh" | "api">> = {}): FakeWorld {
-  return { vms: [], deleted: [], faults: o.faults ?? {}, handler: o.handler ?? (() => undefined), plant: o.plant ?? (() => {}), ssh: o.ssh, api: o.api };
+export function fakeWorld(o: Partial<Pick<FakeWorld, "faults" | "handler" | "plant" | "ssh" | "sshTo" | "api">> = {}): FakeWorld {
+  return { vms: [], deleted: [], faults: o.faults ?? {}, handler: o.handler ?? (() => undefined), plant: o.plant ?? (() => {}), ssh: o.ssh, sshTo: o.sshTo, api: o.api };
 }
 
 /** The real backend on the world: fetch answers Ubicloud's VM calls, ssh answers the VM's commands. */
@@ -132,7 +178,7 @@ export function fakeBackend(w: FakeWorld): UbicloudBackend {
     }
     if (method !== "POST" && (!byName.has(name) || w.deleted.includes(name))) return new Response("! Unexpected response status: 404", { status: 404 });
     if (method === "POST") {
-      const vm: FakeVm = { id: name, ip: "10.1.0." + (w.vms.length + 10), spec: null, calls: [], files: new Map(), processes: [], egress: [], blocked: [], written: [], work: [], installed: [] };
+      const vm: FakeVm = { id: name, ip: "10.1.0." + (w.vms.length + 10), spec: null, calls: [], files: new Map(), processes: [], egress: [], blocked: [], written: [], work: [], installed: [], docker: false, node: false, dirs: new Set(IMAGE_DIRS) };
       w.vms.push(vm);
       byName.set(name, vm);
       byIp.set(vm.ip, vm);
@@ -152,12 +198,28 @@ export function fakeBackend(w: FakeWorld): UbicloudBackend {
     fetch: fetchFake,
     now: () => Date.UTC(2026, 10, 14),
     sleep: async () => {},
+    sshFrom: async (host, command, source, so) => {
+      const vm = byIp.get(host)!;
+      const input = "file" in source ? new Uint8Array(readFileSync(source.file)) : new Uint8Array(Bun.spawnSync(source.argv, { stdout: "pipe" }).stdout);
+      const r = await backend.exec({ id: vm.id, spec: vm.spec! }, command, { ...so, input });
+      return { exit: r.exit, stderr: r.stderr };
+    },
+    sshTo: async (host, command, path, so) => {
+      const vm = byIp.get(host)!;
+      const own = w.sshTo ? await w.sshTo(vm, command, path, so.user ?? "run") : undefined;
+      if (own) return own;
+      const r: ExecResult & { raw?: Uint8Array } = await backend.exec({ id: vm.id, spec: vm.spec! }, command, so);
+      writeFileSync(path, r.raw ?? enc.encode(r.stdout));
+      return { exit: r.exit, stderr: r.stderr };
+    },
     ssh: async (host, command, so) => {
       const vm = byIp.get(host)!;
       vm.calls.push({ command, user: so.user ?? "run" });
       const own = w.ssh ? await w.ssh(vm, command, so.input, so.user ?? "run") : undefined;
       if (own) return own;
+      for (const m of command.matchAll(/mkdir -p ((?:'[^']*'|[^\s;&|'])+)/g)) addDir(vm, m[1]!.replace(/^'|'$/g, ""));
       const write = /^cat > '(.*)'$/.exec(command);
+      if (write && !write[1]!.startsWith(AUDIT_DIR + "/") && !vm.dirs.has(write[1]!.slice(0, write[1]!.lastIndexOf("/")) || "/")) return { exit: 1, stdout: "", stderr: "cat: " + write[1] + ": No such file or directory" };
       if (write) {
         vm.files.set(write[1]!, so.input ?? new Uint8Array());
         return ok();
@@ -173,6 +235,7 @@ export function fakeBackend(w: FakeWorld): UbicloudBackend {
         vm.files.set(path, vm.files.get(unpack[2]!) ?? new Uint8Array());
         vm.files.delete(unpack[2]!);
         vm.installed.push(path);
+        if (unpack[1] === NODE_ROOT) vm.node = true;
         vm.written.push({ path, size: vm.files.get(path)!.length, mode: 0o755, mtime: "2026-11-14T00:00:00", type: "f" });
         return ok();
       }
@@ -181,7 +244,7 @@ export function fakeBackend(w: FakeWorld): UbicloudBackend {
       if (test) return vm.files.has(test[1]!) ? ok() : { exit: 1, stdout: "", stderr: "" };
       for (const [name, cmd] of Object.entries(AUDIT_COMMANDS)) if (cmd === command) return auditOutput(w, vm, name as AuditCommand);
       if (w.faults.preamble?.some((s) => command.includes(s))) return { exit: 1, stdout: "", stderr: "fake preamble failure" };
-      return { ...ok(), ...(w.handler(vm, command) ?? {}) };
+      return dockerAnswer(vm, command) ?? { ...ok(), ...(w.handler(vm, command) ?? {}) };
     },
   });
   const create = backend.create.bind(backend);
@@ -189,6 +252,7 @@ export function fakeBackend(w: FakeWorld): UbicloudBackend {
     const v = await create(spec, co);
     const vm = byName.get(v.id)!;
     vm.spec = spec;
+    vm.dirs.add("/home/" + spec.runUser);
     vm.processes = [
       { pid: 1, user: "root", args: "/sbin/init" },
       { pid: 812, user: spec.runUser, args: "-bash" },

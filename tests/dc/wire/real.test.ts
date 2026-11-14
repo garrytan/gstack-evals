@@ -66,6 +66,10 @@ async function host(o: { vm?: boolean } = {}): Promise<{ svc: LedgerService; ctx
   mkdirSync(join(root, "repo", "docker"), { recursive: true });
   const tgz = new TextEncoder().encode("invented claude code tarball\n");
   writeFileSync(join(root, "claude.tgz"), tgz);
+  const nodeTar = new TextEncoder().encode("invented node build\n");
+  writeFileSync(join(root, "node.tar.xz"), nodeTar);
+  mkdirSync(join(root, "repo", "stage3"), { recursive: true });
+  writeFileSync(join(root, "repo", "stage3", "node-pin.json"), JSON.stringify({ version: "24.0.0", sha256: createHash("sha256").update(nodeTar).digest("hex") }));
   writeFileSync(join(root, "repo", "docker", "host-cli.json"), JSON.stringify({ claude: "9.9.9" }));
   writeFileSync(join(root, "repo", "docker", "trial.Dockerfile"), "ADD --checksum=sha256:" + createHash("sha256").update(tgz).digest("hex") + " https://registry.npmjs.org/@anthropic-ai/claude-code-linux-x64/-/claude-code-linux-x64-9.9.9.tgz /opt/claude.tgz\n");
   const proxyPort = await freePort();
@@ -86,7 +90,7 @@ async function host(o: { vm?: boolean } = {}): Promise<{ svc: LedgerService; ctx
       cacheDir: join(work, "cache"),
       scanMs: 50,
       sessions: { gstackSources: [], imageDigest: null },
-      vm: o.vm === false ? null : { project: "pj-test", location: "eu-central-h1", size: "standard-2", image: "ubuntu-noble", privateSubnet: "ps-test", keyPath, knownHosts: join(root, "ssh", "known_hosts"), chromiumBuild: { dir: join(root, "chromium"), bin: "chrome-linux/chrome" }, claudeTarball: join(root, "claude.tgz"), priceMicrosPerHour: 57_400, proxy: { host: "127.0.0.1", port: proxyPort }, mirrors: [{ name: "npm", host: "10.0.0.2", port: 4873, url: "http://10.0.0.2:4873/", terms: "npm terms" }] },
+      vm: o.vm === false ? null : { project: "pj-test", location: "eu-central-h1", size: "standard-2", image: "ubuntu-noble", privateSubnet: "ps-test", keyPath, knownHosts: join(root, "ssh", "known_hosts"), chromiumBuild: { dir: join(root, "chromium"), bin: "chrome-linux/chrome" }, claudeTarball: join(root, "claude.tgz"), nodeTarball: join(root, "node.tar.xz"), priceMicrosPerHour: 57_400, proxy: { host: "127.0.0.1", port: proxyPort }, mirrors: [{ name: "npm", host: "10.0.0.2", port: 4873, url: "http://10.0.0.2:4873/", terms: "npm terms" }] },
     }),
   );
   const svc = opened.service;
@@ -379,9 +383,9 @@ describe("the real providers", () => {
       expect(u.calls[0]).toEqual({ url: "https://api.ubicloud.com/cli", auth: "Bearer " + ENV.UBICLOUD_API_KEY, argv: ["vm", "eu-central-h1/" + made.id, "create", "-s", "standard-2", "-b", "ubuntu-noble", "-p", "ps-test", "ssh-ed25519 AAAAinvented dc-launch"] });
       expect(u.calls[1]!.argv).toEqual(["vm", "eu-central-h1/" + made.id, "show", "-f", "state,ip4,private-ipv4"]);
       await vm.backend.prepare!(made);
-      expect([...files.keys()].filter((p) => p.endsWith(".tar")).map((p) => p.split("/").at(-1))).toEqual(["browser.tar", "claude-code.tar"]);
+      expect([...files.keys()].filter((p) => p.endsWith(".tar")).map((p) => p.split("/").at(-1))).toEqual(["browser.tar", "node.tar", "claude-code.tar"]);
       await vm.backend.prepare!(await vm.backend.create(check));
-      expect([...files.keys()].filter((p) => p.endsWith(".tar"))).toHaveLength(2);
+      expect([...files.keys()].filter((p) => p.endsWith(".tar"))).toHaveLength(3);
       expect(typeof vm.browser.open).toBe("function");
       await h.svc.controller.openItem("dc-base-apps");
       const a = await h.svc.controller.admitRecipe({ run: "recipe session c001" });

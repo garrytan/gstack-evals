@@ -4,7 +4,8 @@
 // relaunch on the same host, a lost host recovered from the off-host copy, teardown that seals the work folder with
 // age, the work folder's tmpfs custody (PD-41), and VM cleanup on every failure path. No key, no network, no VM.
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { createHash, randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AGE_HEADER, controllerProvision, hostStatus, launch, layout, planProblems, recoverHost, relaunch, repoBundle, repoTree, rowLog, sendRow, serviceEnv, teardown, tmpfsLine, type ControllerPlan, type HostRecord } from "../../../lanes/design-constructed/money/controller-host.ts";
@@ -13,7 +14,7 @@ import { commitAll, makeRecord } from "../../../lanes/design-constructed/money/d
 import { recordTar } from "../../../lanes/design-constructed/money/ledger-service.ts";
 import { WALCTL_PY } from "../../../lanes/design-constructed/money/offhost.ts";
 import { fakeBackend, fakeWorld, type FakeWorld } from "../../../lanes/design-constructed/stage3/fake.ts";
-import { runProcess } from "../../../lanes/design-constructed/stage3/ubicloud-real.ts";
+import { runProcess, runProcessTo } from "../../../lanes/design-constructed/stage3/ubicloud-real.ts";
 import { ageKeys, openSealed } from "../../../lanes/design-constructed/wire/dryrun-host.ts";
 
 const ENTRY = join(import.meta.dir, "../../../lanes/design-constructed/money/host-main.ts");
@@ -30,10 +31,26 @@ afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 
-/** Every SSH command runs on this machine; failOn names commands (by substring) that exit 1 instead, answer ones answered with exit 0. */
-function world(o: { failOn?: string[]; answer?: string[]; say?: Array<[string, string]>; api?: FakeWorld["api"] } = {}): FakeWorld & { answered: string[] } {
+/**
+ * Every SSH command runs on this machine; failOn names commands (by substring) that exit 1 instead, answer ones answered
+ * with exit 0. maxBuffer fails a held command whose stdout passes it, as the launcher's memory cap does; streamed reads
+ * write to their file instead, and corruptOnce adds a byte to the first streamed read whose command names it.
+ */
+function world(o: { failOn?: string[]; answer?: string[]; say?: Array<[string, string]>; api?: FakeWorld["api"]; maxBuffer?: number; corruptOnce?: string } = {}): FakeWorld & { answered: string[]; streamed: string[] } {
   const answered: string[] = [];
+  const streamed: string[] = [];
+  let corrupt = o.corruptOnce;
   const w = fakeWorld({
+    sshTo: async (_vm, command, path) => {
+      if (o.failOn?.some((s) => command.includes(s))) return { exit: 1, stderr: "stand-in failure" };
+      streamed.push(command);
+      const r = await runProcessTo(["bash", "-c", command], path, { timeoutMs: 60_000 });
+      if (corrupt && command.includes(corrupt)) {
+        appendFileSync(path, "x");
+        corrupt = undefined;
+      }
+      return { exit: r.exit, stderr: r.stderr };
+    },
     api: o.api,
     ssh: async (_vm, command, input) => {
       if (o.failOn?.some((s) => command.includes(s))) return { exit: 1, stdout: "", stderr: "stand-in failure" };
@@ -41,10 +58,11 @@ function world(o: { failOn?: string[]; answer?: string[]; say?: Array<[string, s
       const said = o.say?.find(([s]) => command.includes(s));
       if (said) return { exit: 0, stdout: said[1] + "\n", stderr: "" };
       const r = await runProcess(["bash", "-c", command], { input, timeoutMs: 60_000 });
+      if (o.maxBuffer !== undefined && r.stdout.length > o.maxBuffer) return { exit: 255, stdout: "", stderr: "the runner's buffer is full" };
       return { exit: r.exit, stdout: new TextDecoder().decode(r.stdout), stderr: r.stderr, raw: r.stdout };
     },
   });
-  return Object.assign(w, { answered });
+  return Object.assign(w, { answered, streamed });
 }
 
 function plan(over: Partial<ControllerPlan> = {}): ControllerPlan & { tmp: string; shm: string; identity: string } {
@@ -142,13 +160,13 @@ describe("the controller host launcher", () => {
     expect(JSON.parse(readFileSync(l.status, "utf8")).items[0].leaseId).toBe(lease);
     expect(existsSync(join(l.record, "items"))).toBe(true);
 
-    const t = await teardown(b, p, rec, { waitMs: 30_000 });
+    const t = await teardown(b, p, rec, { waitMs: 30_000, into: join(p.tmp, "archive") });
     expect(t.kind).toBe("deleted");
     if (t.kind === "deleted") {
-      expect(new TextDecoder().decode(t.archive.lines).split("\n").filter(Boolean).length).toBeGreaterThan(3);
+      expect(readFileSync(t.archive.lines, "utf8").split("\n").filter(Boolean).length).toBeGreaterThan(3);
       expect(t.archive.snapshot?.name).toMatch(/^snap-\d{10}$/);
       expect(t.archive.record?.length).toBeGreaterThan(0);
-      expect(new TextDecoder().decode(t.archive.sealed.subarray(0, AGE_HEADER.length))).toBe(AGE_HEADER);
+      expect(readFileSync(t.archive.sealed, "utf8").slice(0, AGE_HEADER.length)).toBe(AGE_HEADER);
     }
     expect(readdirSync(l.work)).toEqual([]);
     expect(allDeleted(w)).toBe(true);
@@ -250,11 +268,11 @@ describe("the controller host launcher", () => {
     expect(readFileSync(l.rows, "utf8")).not.toContain("the row refused");
     expect(pidOf(p)).toBe(pid);
     expect(JSON.parse(readFileSync(l.status, "utf8")).boot).toBe("fresh");
-    const t = await teardown(b, p, rec, { waitMs: 30_000 });
+    const t = await teardown(b, p, rec, { waitMs: 30_000, into: join(p.tmp, "archive") });
     expect(t.kind).toBe("deleted");
     if (t.kind !== "deleted") return;
     expect(JSON.parse(new TextDecoder().decode(t.archive.rows!)).length).toBe(3);
-    writeFileSync(join(p.shm, "sealed.age"), t.archive.sealed);
+    writeFileSync(join(p.shm, "sealed.age"), readFileSync(t.archive.sealed));
     const files = openSealed(join(p.shm, "sealed.age"), p.identity, join(p.shm, "opened"));
     for (const f of ["./inputs/a.txt", "./inputs/b.txt", "./sinks/first/out.txt", "./sinks/slow/out.txt", "./.rows/1.log", "./.rows/3.log"]) expect(files).toContain(f);
     expect(readdirSync(l.work)).toEqual([]);
@@ -263,6 +281,27 @@ describe("the controller host launcher", () => {
 
   // Value: protects=PD-41's tmpfs work folder; fails_when=a launch unpacks inputs onto a disk folder or mounts without the memory sizing and linger; why_new=the work folder sat on the VM's disk; seam=placeWork; no_claim=a real mount, which needs root on a real VM
   // Value: protects=the Captain's tmpfs guard on the controller host; fails_when=a row ends without its tmpfs use and peak in its log, rows.json and stage.json, a peak between the row's start and end is lost, or next sends a row while the tmpfs is above 80% now or at the last row's peak; why_new=the frame clones filled about a third of the work tmpfs before any authoring output landed, and nothing printed or checked it; seam=host-main's row end and tick, sendRow; no_claim=the real host's tmpfs size
+  test("the teardown streams a sealed archive larger than the runner's buffer into the archive folder, keeps both VMs when the copy's size or sha256 differs from the host's, and a teardown run again takes the kept archive", async () => {
+    const w = world({ maxBuffer: 256 * 1024, corruptOnce: "work.tar.age" });
+    const b = fakeBackend(w);
+    const p = plan();
+    const rec = await launch(b, p, env());
+    const l = layout(p.runId, p.root, p.workDir);
+    writeFileSync(join(l.work, "big.bin"), randomBytes(1024 * 1024));
+    const into = join(p.tmp, "archive");
+    await expect(teardown(b, p, rec, { waitMs: 30_000, into })).rejects.toThrow("but the host's is");
+    expect(w.deleted).toEqual([]);
+    expect(existsSync(join(into, "work.tar.age"))).toBe(false);
+    const t = await teardown(b, p, rec, { waitMs: 30_000, into });
+    expect(t.kind).toBe("deleted");
+    if (t.kind !== "deleted") return;
+    const sha = (f: string) => createHash("sha256").update(readFileSync(f)).digest("hex");
+    expect(statSync(t.archive.sealed).size).toBeGreaterThan(1024 * 1024);
+    expect(sha(t.archive.sealed)).toBe(sha(l.sealed));
+    expect(w.streamed.filter((c) => c === "cat '" + l.sealed + "'").length).toBe(2);
+    expect(openSealed(t.archive.sealed, p.identity, join(p.shm, "opened"))).toContain("./big.bin");
+    expect(allDeleted(w)).toBe(true);
+  }, 120_000);
   test("each row ends with the work tmpfs use and its peak in its log, rows.json and stage.json, and next refuses just over 80% now or at the last peak but sends just under", async () => {
     const say: Array<[string, string]> = [];
     const w = world({ say });

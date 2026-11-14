@@ -3,6 +3,10 @@
 import { describe, expect, test } from "bun:test";
 import { DcError } from "../../../lanes/design-constructed/errors.ts";
 import { bytes, fakeBackend, fakeHosts, fakeSpec, fakeWorld, type FakeFaults, type FakeVm } from "../../../lanes/design-constructed/stage3/fake.ts";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { BROWSER_ROOT, CHROMIUM_APT, controllerBackend, DOCKER_APT, NODE, nodeFiles } from "../../../lanes/design-constructed/stage3/install.ts";
 import { AUDIT_COMMANDS, ownerFromEnv, parseEgress, preamble, sandboxed, secretHit, specFor, specProblems, termsRecord } from "../../../lanes/design-constructed/stage3/sandbox.ts";
 import { CapStopSignal } from "../../../lanes/design-constructed/stage3/seams.ts";
 
@@ -133,6 +137,51 @@ describe("sandboxed run and audit", () => {
     expect(r.error).toContain("preamble step failed");
     expect(r.audit.ok).toBe(true);
     expect(w.vms[0]!.calls.some((c) => c.command === AUDIT_COMMANDS.processes)).toBe(true);
+  });
+  test("a VM with no Docker: the preamble restarts nothing, the install brings Docker up on the mirror, and the audit is ok", async () => {
+    const w = fakeWorld();
+    const inner = fakeBackend(w);
+    const bare = await inner.create(fakeSpec());
+    expect((await inner.exec(bare, "systemctl restart docker", { user: "root" })).exit).not.toBe(0);
+    expect(preamble(fakeSpec()).some((s) => /systemctl \S+ docker/.test(s))).toBe(false);
+    const browser = { name: "browser", root: BROWSER_ROOT, tar: async () => bytes("browser"), apt: CHROMIUM_APT, check: "true" };
+    const r = await sandboxed({ backend: controllerBackend(inner, { browser, agent: null }), hosts: fakeHosts(), now: () => 0 }, fakeSpec(), async () => "done");
+    expect(r.error).toBeNull();
+    expect(r.audit.ok).toBe(true);
+    const vm = w.vms[1]!;
+    expect(vm.docker).toBe(true);
+    const calls = vm.calls.map((c) => c.command);
+    const at = (s: string) => calls.findIndex((c) => c.includes(s));
+    expect(at("> /etc/docker/daemon.json")).toBeLessThan(at("nft add table inet dc"));
+    expect(at("nft add table inet dc")).toBeLessThan(at("--no-install-recommends " + DOCKER_APT.join(" ")));
+    expect(calls[at("docker info")]).toStartWith("systemctl enable --now docker && ");
+    expect(calls[at("docker info")]).toEndWith("grep -qxF 'http://10.0.0.3:4876/dockerhub/'");
+    expect(r.audit.ok && r.audit.evidence.controller).toBe(2);
+    expect(r.audit.ok && r.audit.evidence.files.some((f) => f.path === "/usr/bin/dockerd")).toBe(false);
+  });
+  test("a VM has no /work and no Node until the preamble and the install: the preamble makes /work for the run user, the install streams the pinned Node, links it on PATH and enables corepack", async () => {
+    const w = fakeWorld();
+    const inner = fakeBackend(w);
+    const bare = await inner.create(fakeSpec());
+    expect((await inner.exec(bare, "node --version", { user: "run" })).exit).not.toBe(0);
+    await expect(inner.write(bare, "/work/app.tar", "x")).rejects.toThrow("could not write /work/app.tar");
+    expect(preamble(fakeSpec())).toContain("mkdir -p /work && chown run: /work");
+    const tarball = join(mkdtempSync(join(tmpdir(), "dc-node-")), "node.tar.xz");
+    writeFileSync(tarball, "invented node build\n");
+    const browser = { name: "browser", root: BROWSER_ROOT, tar: async () => bytes("browser"), apt: CHROMIUM_APT, check: "true" };
+    const r = await sandboxed({ backend: controllerBackend(inner, { browser, node: nodeFiles(tarball), agent: null }), hosts: fakeHosts(), now: () => 0 }, fakeSpec(), async (vm) => {
+      await inner.write(vm, "/work/app.tar", "x");
+      return (await inner.exec(vm, "node --version", { user: "run" })).exit;
+    });
+    expect(r.error).toBeNull();
+    expect(r.value).toBe(0);
+    expect(r.audit.ok && r.audit.evidence.controller).toBe(3);
+    const vm = w.vms[1]!;
+    expect(new TextDecoder().decode(vm.files.get("/opt/dc-node/payload"))).toBe("invented node build\n");
+    const calls = vm.calls.map((c) => c.command);
+    expect(calls).toContain("ln -sf " + ["node", "npm", "npx", "corepack"].map((t) => "'/opt/dc-node/node-v" + NODE.version + "-linux-x64/bin/" + t + "'").join(" ") + " /usr/local/bin/ && corepack enable --install-directory /usr/local/bin");
+    expect(calls.some((c) => c.includes("COREPACK_NPM_REGISTRY=%s") && c.includes(">> /etc/environment"))).toBe(true);
+    expect(calls.some((c) => c.includes("grep -c DCNET"))).toBe(true);
   });
   test("a cap stop inside the job is rethrown after the audit; a failed read is the run's error", async () => {
     const w = fakeWorld();

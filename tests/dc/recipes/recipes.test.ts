@@ -5,7 +5,8 @@ import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { DcError } from "../../../lanes/design-constructed/errors.ts";
-import { fakeMoney } from "../../../lanes/design-constructed/stage3/fake.ts";
+import { fakeMoney, fakeWorld } from "../../../lanes/design-constructed/stage3/fake.ts";
+import { secretHit } from "../../../lanes/design-constructed/stage3/sandbox.ts";
 import { content, fixtureMatcher, fixtureScreen, LOGIN, page, RECIPE, ROUTES, type AppKind, type FixtureApp } from "../../../lanes/design-constructed/recipes/fixtures.ts";
 import { onRoute, pickRoutes, readLoad, routeUrl } from "../../../lanes/design-constructed/recipes/qualify.ts";
 import { parseRecipe, RECIPE_PROMPT_PATH, RECIPE_PROMPT_SHA256, recipePrompt, type Recipe } from "../../../lanes/design-constructed/recipes/recipe.ts";
@@ -160,6 +161,18 @@ describe("the recipe screen", () => {
     const f = fixtureScreen([{ app: "content" }], {});
     f.world.plant = (vm) => void vm.egress.push({ host: "203.0.113.5", port: 443 });
     await expect(runScreen(f.candidates, f.deps)).rejects.toMatchObject({ code: "E_DC_SANDBOX_AUDIT" });
+  });
+  test("a failed preamble step that leaves no egress chain: the E_DC_SANDBOX_AUDIT stop names the step and its exit code, with no key text", async () => {
+    const stderr = "Failed to mask unit: token sk-ant-" + "k".repeat(40) + " in /root/.capy/drive/x/y " + "z".repeat(600);
+    const world = fakeWorld({ faults: { exit: { ruleset: 1 } }, ssh: async (_vm, command) => (command.startsWith("systemctl mask") ? { exit: 1, stdout: "", stderr } : undefined) });
+    const f = fixtureScreen([{ app: "content" }], { world });
+    const e = (await runScreen(f.candidates, f.deps).catch((x) => x)) as DcError;
+    expect(e).toBeInstanceOf(DcError);
+    expect(e.code).toBe("E_DC_SANDBOX_AUDIT");
+    const step = "after preamble step failed (exit 1): systemctl mask --now unattended-upgrades.service: ";
+    expect(e.message).toContain("could not collect its evidence: the ruleset command exited 1; " + step + "Failed to mask unit: token [redacted] in [redacted] zzz");
+    expect(secretHit(e.message)).toBeNull();
+    expect(e.message.slice(e.message.indexOf(step) + step.length, e.message.indexOf(". The base-app screen stops")).length).toBe(400);
   });
   test("a key in the recipe written to /work is caught by the recipe VM's audit", async () => {
     const f = fixtureScreen([{ recipe: RECIPE({ seed: "x sk-ant-api03-" + "z".repeat(30) }) }]);

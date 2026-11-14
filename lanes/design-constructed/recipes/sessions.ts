@@ -7,6 +7,7 @@ import { RECIPES } from "../frozen.ts";
 import { DcError, fail } from "../errors.ts";
 import { sandboxed, sandboxLine, SESSION_MARK, type SandboxDeps, type SandboxTally, type Vm, type VmSpec } from "../stage3/sandbox.ts";
 import { CapStopSignal, type AgentEnd, type AgentRun, type MoneySeam } from "../stage3/seams.ts";
+import { nodeDeclared, nodeLine, type NodeDeclared } from "./node.ts";
 import { qualify, type QualifyDeps, type Qualification } from "./qualify.ts";
 import { parseRecipe, recipePrompt, type Recipe } from "./recipe.ts";
 import type { BrowserSeam, Candidate, RecipeAgent, RouteMatcher } from "./seams.ts";
@@ -34,6 +35,8 @@ export interface CandidateRecord {
   why: string | null;
   recipe: Recipe | null;
   qualification: Qualification | null;
+  /** The declared Node versions read from the candidate's tree (node.ts), printed only; null when the tree could not be read. */
+  node: NodeDeclared | null;
 }
 
 /** R2-1's funnel. Clone counts and file-check passes come from the frame area. */
@@ -144,7 +147,8 @@ async function qualified(c: Candidate, recipe: Recipe, d: ScreenDeps, tally: Tal
 }
 
 async function screenOne(c: Candidate, d: ScreenDeps, tally: Tally): Promise<CandidateRecord> {
-  const rec = (end: CandidateEnd, sessions: number, why: string | null, recipe: Recipe | null = null, q: Qualification | null = null): CandidateRecord => ({ id: c.id, pin: c.pin, end, sessions, strict: q?.strict ?? false, http200: q?.http200 ?? false, why, recipe, qualification: q });
+  const node = await c.tree().then(nodeDeclared, () => null);
+  const rec = (end: CandidateEnd, sessions: number, why: string | null, recipe: Recipe | null = null, q: Qualification | null = null): CandidateRecord => ({ id: c.id, pin: c.pin, end, sessions, strict: q?.strict ?? false, http200: q?.http200 ?? false, why, recipe, qualification: q, node });
   tally.candidates++;
   let { attempt, sub } = await session(c, "recipe session " + c.id, d, tally);
   let sessions = 1;
@@ -194,7 +198,7 @@ export async function runScreen(candidates: readonly Candidate[], d: ScreenDeps)
   };
 }
 
-export const recordLine = (r: CandidateRecord) => "candidate " + r.id + ": " + r.end + ", strict " + (r.strict ? "yes" : "no") + ", HTTP 200 " + (r.http200 ? "yes" : "no") + ", sessions " + r.sessions + (r.why ? " (" + r.why + ")" : "");
+export const recordLine = (r: CandidateRecord) => "candidate " + r.id + ": " + r.end + ", strict " + (r.strict ? "yes" : "no") + ", HTTP 200 " + (r.http200 ? "yes" : "no") + ", sessions " + r.sessions + (r.why ? " (" + r.why + ")" : "") + "; " + nodeLine(r.node ?? null, r.qualification?.engineError === true);
 
 export const funnelLine = (f: Funnel) =>
   "funnel: clone attempts " + f.cloneAttempts + ", clones " + f.clones + ", file-check passes " + f.fileCheckPasses + ", candidates with a recipe session " + f.candidates + ", recipe sessions " + f.sessions + ", qualified " + f.qualifiedStrict + " under the strict reading and " + f.qualifiedHttp200 + " under the HTTP 200 reading";

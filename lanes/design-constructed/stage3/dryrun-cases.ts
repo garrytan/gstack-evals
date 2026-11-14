@@ -334,7 +334,7 @@ export function cases(): DryRunCase[] {
       check: async () => {
         const { r, calls } = await installCase(false);
         if (!r.audit.ok) return "audit: " + r.audit.reasons.join("; ");
-        return first(eq([r.audit.evidence.controller, r.audit.evidence.files.some((f) => f.path === BROWSER_ROOT + "/payload")], [1, false], "controller files"), calls.some((c) => c.includes("apt-get install -y -q --no-install-recommends libnss3")) ? null : "no apt install");
+        return first(eq([r.audit.evidence.controller, r.audit.evidence.files.some((f) => f.path === BROWSER_ROOT + "/payload")], [2, false], "controller files"), calls.some((c) => c.includes("apt-get install -o DPkg::Lock::Timeout=600 -y -q --no-install-recommends libnss3")) ? null : "no apt install");
       },
     },
     {
@@ -343,7 +343,7 @@ export function cases(): DryRunCase[] {
       check: async () => {
         const { r } = await installCase(true);
         if (!r.audit.ok) return "audit: " + r.audit.reasons.join("; ");
-        return eq([r.audit.evidence.controller, r.audit.evidence.files.some((f) => f.path === BROWSER_ROOT + "/payload")], [0, true], "controller files");
+        return eq([r.audit.evidence.controller, r.audit.evidence.files.some((f) => f.path === BROWSER_ROOT + "/payload")], [1, true], "controller files");
       },
     },
     {
