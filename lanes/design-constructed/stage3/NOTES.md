@@ -9,6 +9,8 @@ This folder and lanes/design-constructed/recipes/ hold the VM sandbox with its f
 | stage3/seams.ts | the injected seams: money (admit, settle, reconcile, cap stop, release), dc-hosts, the build agent, the build reader, stage 3 authoring and audit, the DES-4 judge, and CapStopSignal |
 | stage3/sandbox.ts | the VM spec and its checks, specFor, the preamble, the mirror config, the audit's commands and parsers, sandboxed(), and UbicloudBackend |
 | stage3/fake.ts | a simulated Ubicloud: the real UbicloudBackend on a fake fetch and a fake ssh, plus fake dc-hosts and a ledger stand-in |
+| stage3/ubicloud-real.ts | the process and SSH runners, the SSH tunnel, realUbicloud and keyedUbicloud on the real fetch with the token read by name, and the controller host's mirrors |
+| recipes/browser.ts | the BrowserSeam: the controller's Playwright over the VM's SSH tunnel to a headless Chromium inside the VM |
 | stage3/build.ts | the six build arms, the build prompt, a build with its one retry, and the offline check run |
 | stage3/units.ts | Sol's audit filter, the key-check and scenario counting rules, oracle builds, unit selection |
 | stage3/measures.ts | measures 1 to 8, DES-4 and its instrument check, the paired readout, the KEEP flag |
@@ -90,3 +92,25 @@ None edited. Shared shapes used as they stand; the area's own types (BuildArm, B
 - nft: the build machine's kernel refused nft in a network namespace, so the filter rules and parseRuleset's reading of a real listing are untested.
 - Ubicloud's VM API shape (kept from D), journalctl's kernel-log line format for nft log prefixes, the mirror config on the VM image, and docker run of recipe services.
 - The real Playwright browser seam, login flow and storage state; the real reads (axe-core, overflow, forced states, agent user, DES-4 judges).
+
+## Real seams (controller host build)
+
+- **UbicloudBackend** now takes a name prefix and a size per create (dcctl- and dcwal- for the hosts), a private subnet every VM joins, attach, exists, address and privateAddress, and deletes a VM that fails partway through create. ExecOptions gains input (stdin). keyedUbicloud builds it with its own key and the real SSH runner; realUbicloud reads UBICLOUD_API_KEY by name and refuses without it.
+- **The SSH runner** runs root commands through sudo -n and run-user commands through sudo -n -u run; exit 255 is SSH's own failure and 124 a command past its limit. The preamble now creates the run user when the image lacks one (Ubicloud's image has only ubi), before linger.
+- **BrowserSeam** is playwrightBrowser in recipes/browser.ts: Chromium starts as the run user, detached, with DevTools on 127.0.0.1:9222 inside the VM; the controller connects over an SSH local forward. Each load counts uncaught page errors from the navigation's start to the end of the frozen 10 second window, then runs PAGE_PROBE_SCRIPT. close stops the browser by its pid file and removes its profile under /tmp/dc-browser before the audit lists written files.
+- **Mirrors.** controllerMirrors(privateIp, terms) gives the four named entries on the controller host's private IPv4 (npm 4873, PyPI 3141, apt 3142, Docker Hub 5000), and mirrorSetup(privateIp) the servers behind them, bound to that address only: verdaccio 7.1.0, devpi-server 6.21.0, apt-cacher-ng and the distribution registry in proxy mode, the last two from Ubuntu noble.
+- fake.ts gains an SSH hook (a local stand-in runs every command for real), API faults per method and call, and a 404 for a deleted VM.
+
+Tests: tests/dc/recipes/browser.test.ts (local Chromium through the seam, skipped without Chromium), tests/dc/stage3/ssh.test.ts (a local sshd).
+
+### Open for the integrator
+
+12. **Chromium inside the sandbox VMs.** Nothing installs it yet, and egress allows only the proxy and the mirrors. Ubuntu noble's chromium is a snap. Options: copy Playwright's headless Chromium build into the VM over SSH and its libraries from the apt mirror, or a VM image that carries it. Either adds files the audit lists.
+13. **Login success.** The login reads as signed in when the submit and the page load finish and no password field matching the recipe's selector is still visible. A different reading could change how many apps qualify.
+14. **Page errors before load.** PD-10 says no uncaught page error within 10 seconds; the seam counts errors from the navigation's start through load plus 10 seconds.
+15. **Mirrors are pinned by version, not digest.** The 2026-11-09 plan says the cache's configuration is pinned by digest. Docker's registry-mirrors may also need the http mirror listed as an insecure registry. The mirror servers' licences are not yet in NOTICE.md.
+16. **Network.** Sandboxes reach the controller host's mirrors and proxy on its private IPv4 only when both sit on one private subnet; the subnet's id and its firewall are not set up by this code.
+
+### Not verified (real seams)
+
+The SSH runner, tunnel and pinned WAL key ran against a local sshd, and the browser seam against a local Chromium. Not run: Chromium inside a Ubicloud VM, the tunnel over Ubicloud's network, the mirror servers, and any live Ubicloud call.

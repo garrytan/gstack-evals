@@ -20,6 +20,11 @@ The money area holds the 17 ledger items' admission, one controller-held lease p
 | projection.ts | the figures export for the read area, the first judge packet's re-projection, the envelope, dc-authoring-3's release, R2-7's base-app reading |
 | cli.ts | itemsCommand for `gstack-evals dc items` |
 | dryrun-cases.ts, dryrun-durable.ts, dryrun-fixture.ts | the area's 40 dry-run cases and their rig |
+| offhost.ts | the off-host write-ahead target: walctl on a second small VM, reached over SSH with a key pinned to it, and RemoteTarget |
+| ledger-service.ts | the ledger service on the controller host: boot from the off-host copy, host admission on dc-hosts, snapshots, Captain stops and resume, idle deletion, teardown |
+| host-main.ts | the controller host's entrypoint, started detached with setsid; runs the wiring's stage module in the same process |
+| controller-host.ts | the launcher: launch, relaunch, recovery of a lost host and teardown, deleting every VM it made on failure |
+| dryrun-hosts.ts | the controller host's 4 dry-run cases |
 
 The read area's input is `moneyFigures(controller, crewMicros)` in projection.ts: settled, in-flight and unknown micros per item, never settled spend alone.
 
@@ -60,3 +65,45 @@ Read as patterns, not copied: lanes/devex/leases.ts at the same devex commit, an
 9. **L6 against R2-7.** The plan's L6 says $3.20 admits 27 under the withdrawn $10 reserve; R2-7 and frozen.ts give 29 at one $5.00 allowance. The build follows R2-7.
 
 No shared file was edited. money/types.ts extends the shared SubReservation instead of changing types.ts.
+
+## Controller host, ledger service and off-host target (money open items 5, 7 and 8)
+
+The controller host is a Ubicloud VM (name prefix dcctl-) beside a second small VM (dcwal-) that holds the off-host copy. controller-host.ts runs on the attaching agent's machine; host-main.ts runs detached on the controller host and holds the money controller, the one local ledger file and the approval record at fixed paths under /var/lib/dc (the same paths on a replacement host). The wiring binds:
+
+- launch, relaunch, recoverHost, teardown and hostStatus from controller-host.ts, with a HostRecord the attaching agent keeps;
+- serviceEnv(process.env, owner) for the keys, read by name and handed over on the SSH session's stdin;
+- keyedUbicloud (stage3/ubicloud-real.ts) for the backend, with the token read by name;
+- controllerProvision({ bunVersion, mirrors: true }) for the host's setup;
+- a stage module exporting runOnHost(service, args), named in the plan's stage field, which runs the paid stages in the service's process and calls service.idleDelete for a long wait.
+
+Tests: tests/dc/money/hosts.test.ts (walctl and the service), tests/dc/money/controller-host.test.ts (the launcher on stage3/fake.ts's simulated Ubicloud with every SSH command run locally, the real service started with setsid), tests/dc/stage3/ssh.test.ts (the SSH runner, tunnel and pinned WAL key against a local sshd).
+
+### Build-time choices (BT)
+
+- **The off-host target (item 8).** An append-only file on a second small VM. walctl (offhost.ts) appends one line under an exclusive lock, fsyncs it (and the folder when the file is new) and answers ACK with the line's sha256; the append resolves only on that answer. The controller host's key is pinned on the WAL host to walctl on the WAL folder (command=..., restrict), so it can append and read but never delete. Sessions share one SSH connection (ControlMaster, 10 minutes).
+- **Lag.** An append or snapshot that takes over 30 s (WAL_TIMEOUT_MS) counts as unacknowledged.
+- **Captain stops (item 5).** A broken copy, a failed snapshot, a recovery that can't be shown complete or a refused host admission pause every open item for the Captain and write captain.json; no snapshot runs on its own while it stands. The Captain's resume is a control file (state/control/resume-captain): a verified snapshot restarts the chain and each item gets its earlier pause back.
+- **Approval record.** Uploaded once at launch, kept at a fixed path, and carried off host as a tar beside each snapshot; a replacement host restores it with the ledger file. The teardown archive returns it.
+- **Host hours.** Both hosts are admitted on dc-hosts as controller-type sub-reservations (never work that will free room) at their time to live and settle at measured hours from their creation, less hours already settled; an unknown one (after a relaunch) reconciles the same way.
+- **Idle deletion.** Deletes the controller host only; the WAL host keeps the copy and stays on dc-hosts.
+- **Teardown (item 7).** Waits for in-flight work to drain; force holds it as unknown at full reservation first. Off by default.
+- **Service loop.** A turn every 30 s; a snapshot after any settlement and at least every 10 minutes (L7).
+- **Keys on the host.** ANTHROPIC_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY and UBICLOUD_API_KEY plus UBI_OWNER reach the service's environment through stdin and an export inside the remote shell; nothing writes them to disk or a command line.
+
+### Open for the Captain
+
+10. **The WAL host adds a host the dc-hosts row doesn't name.** The prereg's row covers "the controller, ledger and review-container host, recipe sandboxes and stage 3 sandboxes". The code charges the WAL host to dc-hosts. Ubicloud's list prices read 2026-11-13: burstable-1 about $0.0143 an hour ($10.47 a month), standard-2 about $0.0574 an hour ($41.89 a month). Over 14 days that is about $4.81 or $19.28 against dc-hosts' $80 cap. Fold it into dc-hosts and rerun its projection, or open a ledger line.
+11. **Where the approval record lives.** The host holds a copy that gains lease files; the teardown archive returns it. Who writes it back to the Captain's record is open.
+12. **A same-host relaunch holds what was in flight as unknown**, the hosts' own sub-reservations included (recover()'s rule). The hosts reconcile at measured hours at teardown; other work waits for J1 or the owner's reconcile.
+13. **A lost controller host's own hours** stay unknown until the owner's reconcile against Ubicloud's bill; the new host is admitted fresh.
+14. **A Captain stop on a host that is then lost** survives only in the launcher's HostRecord, and recoverHost refuses while it stands; captain.json is not copied off host.
+15. **Unrecorded minutes.** A launch that fails before the service boots deletes both VMs; their minutes are not on dc-hosts. The minute between teardown's settlement and the deletion is not charged either.
+16. **Force teardown (item 7)** exists and is off; the Captain picks.
+
+### Shared-file edits
+
+package.json and bun.lock add playwright-core 1.65.1 (the browser seam); NOTICE.md gains its row. No file under src/ was edited.
+
+### Not verified
+
+Ubicloud's API on a live account (the private_subnet_id and private_ipv4 fields, the ubi login with passwordless sudo, a VM name of this shape), the controller host's provisioning (bun install, the mirrors, systemd units), walctl and the pinned key on a real VM over the private network, and setsid surviving the SSH session on Ubicloud's image. Everything else ran keyless on this machine.
