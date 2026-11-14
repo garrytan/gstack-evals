@@ -8,7 +8,7 @@
 // lowered: an item whose need fits its frozen cap keeps it, and a recorded re-pricing at or above the new need stays.
 // The launch's ledger check (wire/start.ts) then admits stage 2's items against the re-priced cap and refuses any
 // other recorded cap. No model is called.
-import { writeFileSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { LedgerError } from "../../../src/runner/ledger/record.ts";
 import { DcError } from "../errors.ts";
@@ -29,15 +29,32 @@ export interface Stage1Passes {
 
 export const STAGE1_PASSES: Record<keyof Stage1Passes, string> = { tierAdmitted: "stage 1 admits a tier", twinsTrack: "the twins track", judgeCheck: "the Opus judge check passes", smoke: "the smoke rules pass after at most one repair", admissionRead: "the admission read passes" };
 
+/** The stage 1 passes a record lacks, in words. */
+export const stage1Missing = (stage1: Partial<Stage1Passes>): string[] => (Object.keys(STAGE1_PASSES) as Array<keyof Stage1Passes>).filter((k) => stage1[k] !== true).map((k) => STAGE1_PASSES[k]);
+
+/**
+ * Start rule 7 for stage 2's sessions: the same stage 1 record the reprice row reads must pass, and the reprice row's
+ * record must exist in its sink. The reprice row writes it only after its own rule 7 passed, the re-priced projection
+ * within $5,000 included.
+ */
+export function stage2Rule7(stage1: Partial<Stage1Passes>, repriceSink: string): [string, string] | null {
+  const missing = stage1Missing(stage1);
+  if (missing.length) return ["7", "stage 2 starts only after stage 1 passes, and --stage1 records no pass for: " + missing.join("; ")];
+  const path = join(repriceSink, "repriced.json");
+  if (!existsSync(path)) return ["7", "stage 2 starts only after the reprice row, and --reprice holds no repriced.json"];
+  const outcome = readJson<{ outcome?: unknown }>(path, "--reprice's repriced.json").outcome;
+  return outcome === "fits" ? null : ["7", "the reprice row's record reads " + JSON.stringify(outcome ?? null) + ", not a re-priced projection within $5,000"];
+}
+
 export const repriceRow: Row = async (a, io, env) => {
   const usage = "reprice --stage1 <stage1.json> --projection <projection input JSON> --out <new sink folder>";
   const stage1 = readJson<Partial<Stage1Passes>>(resolve(need(a, "--stage1", usage)), "--stage1");
   const input = readJson<ProjectionInput>(resolve(need(a, "--projection", usage)), "--projection");
   const sink = need(a, "--out", usage);
   const rerun = projectionRerun(input);
-  const missing = (Object.keys(STAGE1_PASSES) as Array<keyof Stage1Passes>).filter((k) => stage1[k] !== true);
+  const missing = stage1Missing(stage1);
   const rule7 = (): [string, string] | null => {
-    if (missing.length) return ["7", "stage 2's caps are re-priced only after stage 1 passes, and --stage1 records no pass for: " + missing.map((k) => STAGE1_PASSES[k]).join("; ")];
+    if (missing.length) return ["7", "stage 2's caps are re-priced only after stage 1 passes, and --stage1 records no pass for: " + missing.join("; ")];
     if (rerun.outcome !== "fits") return ["7", "the re-priced all-in projection is $" + rerun.projection.allInUsd.toFixed(2) + ", past $5,000: stop for the Captain"];
     return null;
   };

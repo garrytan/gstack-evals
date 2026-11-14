@@ -55,7 +55,7 @@ function unitFolder(dir: string, id: string, evidence: readonly string[], git: b
 }
 
 /** A sessions launch's inputs: cells.json, units.json, the exports and terms.json, and the argv for the row. */
-export function sessionsFixture(o: { model: Model; stage: 1 | 2; cells: Array<{ unit: string; kind: SessionKind; pass?: number }>; rule8?: unknown; repair?: unknown }): { dir: string; sink: string; argv: string[] } {
+export function sessionsFixture(o: { model: Model; stage: 1 | 2; cells: Array<{ unit: string; kind: SessionKind; pass?: number }>; rule8?: unknown; repair?: unknown; stage1?: unknown; repriced?: unknown }): { dir: string; sink: string; argv: string[] } {
   const dir = scratch("sessions");
   const ids = [...new Set(o.cells.map((c) => c.unit))];
   const units = ids.map((id) => makeUnit(id, { set: o.stage === 1 ? "calibration" : "comparison" }));
@@ -72,6 +72,12 @@ export function sessionsFixture(o: { model: Model; stage: 1 | 2; cells: Array<{ 
   if (o.repair !== undefined) {
     writeFileSync(join(dir, "repair.json"), JSON.stringify(o.repair));
     extra.push("--repair", join(dir, "repair.json"));
+  }
+  if (o.stage === 2) {
+    writeFileSync(join(dir, "stage1.json"), JSON.stringify(o.stage1 ?? { tierAdmitted: true, twinsTrack: true, judgeCheck: true, smoke: true, admissionRead: true }));
+    mkdirSync(join(dir, "reprice"));
+    if (o.repriced !== null) writeFileSync(join(dir, "reprice", "repriced.json"), JSON.stringify(o.repriced ?? { outcome: "fits", repriced: [] }));
+    extra.push("--stage1", join(dir, "stage1.json"), "--reprice", join(dir, "reprice"));
   }
   const sink = join(dir, "sink");
   return { dir, sink, argv: ["sessions", "--stage", String(o.stage), "--model", o.model, "--cells", join(dir, "cells.json"), "--units", join(dir, "units.json"), "--exports", join(dir, "exports"), "--terms", join(dir, "terms.json"), ...extra, "--out", sink] };

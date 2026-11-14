@@ -139,6 +139,28 @@ export function cases(): DryRunCase[] {
         }),
     },
     {
+      rule: "W-start",
+      name: "start rule 7 holds stage 2's sessions, before any provider is built, unless --stage1 records every stage 1 pass and --reprice holds the reprice row's record; with both the launch runs",
+      check: () =>
+        withKit({ session: fakeSessions(plain) }, async (kit) => {
+          const held = async (o: { stage1?: unknown; repriced?: unknown }, part: string): Promise<string | null> => {
+            const f = sessionsFixture({ model: "opus", stage: 2, ...NONE_U1, ...o });
+            const r = await runRow(f.argv, fakeEnv(kit));
+            return all(refused(r, "E_DCW_START_RULE", "start rule 7: " + part), eq(kit.built, [], "built"), existsSync(f.sink) ? "the sink was made" : null);
+          };
+          const passed = { tierAdmitted: true, twinsTrack: true, judgeCheck: true, smoke: true, admissionRead: true };
+          const refusals = all(
+            await held({ stage1: { ...passed, smoke: false } }, "stage 2 starts only after stage 1 passes, and --stage1 records no pass for: the smoke rules pass after at most one repair"),
+            await held({ stage1: {} }, "stage 2 starts only after stage 1 passes, and --stage1 records no pass for: stage 1 admits a tier; the twins track"),
+            await held({ repriced: null }, "stage 2 starts only after the reprice row, and --reprice holds no repriced.json"),
+            await held({ repriced: { outcome: "captain" } }, "the reprice row's record reads \"captain\""),
+          );
+          if (refusals) return refusals;
+          const r = await runRow(sessionsFixture({ model: "opus", stage: 2, ...NONE_U1 }).argv, fakeEnv(kit));
+          return all(eq(r.code, 0, "exit " + r.err.join(" ")), eq(kit.built, ["ledger", "session"], "built"));
+        }),
+    },
+    {
       rule: "W-ledger",
       name: "an item with no recorded cap refuses with E_DCW_LEDGER_REFUSED (start rule 1) and builds nothing past the ledger",
       check: () =>

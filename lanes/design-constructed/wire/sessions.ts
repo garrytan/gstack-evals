@@ -8,7 +8,8 @@
 // and rows.json for the label passes, and prints the counts. Each unit's folder under --exports holds repo/ (the export,
 // its evidence files included), plan.md, context/ and c2.json (the export's C2 record), the three mounts and C2's input.
 // Every session's driver waits up to the PD-32 background wait at a turn's result, and the launch prints, per arm, how
-// many sessions still had background work at their first result.
+// many sessions still had background work at their first result. A stage 2 launch refuses under start rule 7, before
+// any key read or admission, unless --stage1 records every stage 1 pass and --reprice holds the reprice row's record.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { mainAgentTexts } from "../../../src/trial/review/capped.ts";
@@ -30,6 +31,7 @@ import type { SessionEnd } from "../../../src/types.ts";
 import type { GstackArm, LedgerItemId, Model, SessionKind } from "../types.ts";
 import { build, parseBlockFor, termsGuard } from "../wire.ts";
 import { readJson, writeJson } from "./json.ts";
+import { stage2Rule7, type Stage1Passes } from "./reprice.ts";
 import { closeAll, need, oneOf, start, termsFrom, type Row } from "./start.ts";
 
 const MODELS: readonly Model[] = ["opus", "sol", "particle"];
@@ -59,7 +61,7 @@ interface Round {
 const notRun = (kind: SessionKind): AttemptRecord => ({ end: { kind: "cap-stop" }, reply: "", heldBlock: false, webResult: false, gstackRead: false, judged: false, autoplan: kind === "autoplan" ? { gateAnswered: false, approved: false } : null });
 
 export const sessionsRow: Row = async (a, io, env) => {
-  const usage = "sessions --stage 1|2 --model opus|sol|particle --cells <cells.json> --units <units.json> --exports <folder of exported units> --terms <terms.json> [--rule8 <rule8.json>] [--repair <repair.json>] --out <new sink folder>";
+  const usage = "sessions --stage 1|2 --model opus|sol|particle --cells <cells.json> --units <units.json> --exports <folder of exported units> --terms <terms.json> [--rule8 <rule8.json>] [--stage1 <stage1.json> --reprice <reprice sink>] [--repair <repair.json>] --out <new sink folder>";
   const stage = Number(oneOf(a, "--stage", ["1", "2"] as const, usage)) as 1 | 2;
   const model = oneOf(a, "--model", MODELS, usage);
   const planned = readJson<PlannedCell[]>(resolve(need(a, "--cells", usage)), "--cells");
@@ -68,6 +70,8 @@ export const sessionsRow: Row = async (a, io, env) => {
   const sink = need(a, "--out", usage);
   const terms = termsFrom(a);
   const rule8 = stage === 1 ? readJson<Rule8Record>(resolve(need(a, "--rule8", usage)), "--rule8") : null;
+  const stage1 = stage === 2 ? readJson<Partial<Stage1Passes>>(resolve(need(a, "--stage1", usage)), "--stage1") : null;
+  const repriceSink = stage === 2 ? resolve(need(a, "--reprice", usage)) : null;
   const repair = a.flags.has("--repair") ? readJson<Partial<Record<GstackArm, 1 | 2>>>(resolve(a.flags.get("--repair")!), "--repair") : {};
   if (!planned.length) fail("E_USAGE", "--cells plans no cell");
   for (const c of planned) {
@@ -83,7 +87,7 @@ export const sessionsRow: Row = async (a, io, env) => {
     const d = startRule8({ ...rule8, now: env.now().toISOString() });
     rule8Line = d.line + (d.deviation ? " (deviation: " + d.deviation + ")" : "");
     return d.start ? null : ["8", d.line];
-  }] : [];
+  }] : [() => stage2Rule7(stage1!, repriceSink!)];
   const launch = await start({ row: "sessions", sink, items: [item], models: [model], terms, scope: { model, subject: model }, rules, record: { stage, model, cells: planned.length, repair } }, env);
   for (const l of launch.lines) io.out(l);
   if (rule8Line) {
