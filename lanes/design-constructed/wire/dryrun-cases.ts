@@ -23,6 +23,12 @@ import { realProviders, RULED_RETRY } from "./real.ts";
 import type { LedgerService } from "../money/ledger-service.ts";
 import { inputCases } from "./dryrun-inputs.ts";
 import type { Cell } from "../run/types.ts";
+import { ledgerStatus, recordApproval } from "../../../src/runner/ledger/ledger.ts";
+import { LEDGER_ITEMS } from "../frozen.ts";
+import { QUOTE } from "../money/dryrun-fixture.ts";
+import { projectionRerun, repricedLine, type ProjectionInput } from "../read/admission.ts";
+import { planningInputs } from "../read/dryrun-cases.ts";
+import type { Stage1Passes } from "./reprice.ts";
 
 type Ran = Awaited<ReturnType<typeof runRow>>;
 
@@ -57,6 +63,19 @@ function unitPass(o: { cell: Cell; attempt: 1 | 2 }): FakeAttempt {
   if (k === "autoplan" && o.attempt === 1) return { transcript: tx(say("Starting.")), termination: { kind: "arm_failure", failure: "malformed_tool_call" } };
   return plain();
 }
+
+const PASSED: Stage1Passes = { tierAdmitted: true, twinsTrack: true, judgeCheck: true, smoke: true, admissionRead: true };
+
+/** The reprice row's inputs: stage 1's passing records and a projection input, and the argv for the row. */
+function repriceFixture(input: ProjectionInput, stage1: Partial<Stage1Passes> = PASSED): { sink: string; argv: string[] } {
+  const dir = scratch("reprice");
+  writeFileSync(join(dir, "stage1.json"), JSON.stringify(stage1));
+  writeFileSync(join(dir, "projection.json"), JSON.stringify(input));
+  return { sink: join(dir, "sink"), argv: ["reprice", "--stage1", join(dir, "stage1.json"), "--projection", join(dir, "projection.json"), "--out", join(dir, "sink")] };
+}
+
+/** dc-stage2-opus's re-priced cap in dollars at an Opus gstack-arm session cost of usd. */
+const opusRepriced = (usd: number): number => projectionRerun(planningInputs(usd)).repriced.find((r) => r.item === "dc-stage2-opus")!.repricedCapUsd;
 
 const read1Cell = (unit: string, pass: number, a: number): ReadCell => ({ unit, arm: "none", pass, model: "opus", state: "scored", a, g: null, d: null, shuffledA: 0, shuffledG: null, words: 100, exposed: null });
 
@@ -135,6 +154,73 @@ export function cases(): DryRunCase[] {
         withKit({ session: fakeSessions(plain), caps: { "dc-stage2-opus": $(1) } }, async (kit) => {
           const r = await runRow(sessionsFixture({ model: "opus", stage: 2, ...NONE_U1 }).argv, fakeEnv(kit));
           return all(refused(r, "E_DCW_LEDGER_REFUSED", "is not the frozen"), eq(kit.calls, [], "sessions"));
+        }),
+    },
+    {
+      rule: "PD-30",
+      name: "the reprice row writes a re-priced cap into the ledger as a deviation, and stage 2's launch admits its item against that cap",
+      check: () =>
+        withKit({ session: fakeSessions(plain) }, async (kit) => {
+          const cap = opusRepriced(3);
+          const frozen = LEDGER_ITEMS["dc-stage2-opus"].capUsd;
+          const r = await runRow(repriceFixture(planningInputs(3)).argv, fakeEnv(kit));
+          const status = (item: string) => ledgerStatus(kit.rig().record, item)[0]!;
+          const s = await runRow(sessionsFixture({ model: "opus", stage: 2, ...NONE_U1 }).argv, fakeEnv(kit));
+          const again = await runRow(repriceFixture(planningInputs(3.5)).argv, fakeEnv(kit));
+          return all(
+            eq(r.code, 0, "reprice exit " + r.err.join(" ")),
+            has(r, "ledger: dc-stage2-opus cap recorded at $" + cap.toFixed(2) + " from $" + frozen.toFixed(2) + " as a pre-data deviation (PD-30)"),
+            eq([status("dc-stage2-opus").cap_micros, status("dc-stage2-opus").approval?.action, status("dc-stage2-opus").approval?.quotes[0]?.words], [$(cap), "raise", repricedLine("dc-stage2-opus", frozen, cap)], "the ledger's record"),
+            eq([status("dc-stage2-sol").approval?.action, status("dc-stage2-sol").cap_micros], ["init", $(LEDGER_ITEMS["dc-stage2-sol"].capUsd)], "an item whose need fits keeps its frozen cap"),
+            eq(s.code, 0, "sessions exit " + s.err.join(" ")),
+            has(s, "ledger: dc-stage2-opus admitted on its re-priced cap $" + cap.toFixed(2) + ", a pre-data deviation from the frozen $" + frozen.toFixed(2) + " (PD-30)"),
+            eq(kit.rig().c.figures("dc-stage2-opus").capMicros, $(cap), "the controller's cap"),
+            refused(again, "E_DCW_LEDGER_REFUSED", "is admitted already"),
+          );
+        }),
+    },
+    {
+      rule: "PD-30",
+      name: "a cap raised by hand refuses at the launch and at the reprice row, even at the re-priced figure, and opens no session",
+      check: () =>
+        withKit({ session: fakeSessions(plain) }, async (kit) => {
+          recordApproval(kit.rig().record, { action: "raise", item: "dc-stage2-opus", cap_micros: $(opusRepriced(3)), quotes: QUOTE });
+          const s = await runRow(sessionsFixture({ model: "opus", stage: 2, ...NONE_U1 }).argv, fakeEnv(kit));
+          const r = await runRow(repriceFixture(planningInputs(3.5)).argv, fakeEnv(kit));
+          return all(refused(s, "E_DCW_LEDGER_REFUSED", "is not the frozen"), eq(kit.calls, [], "sessions"), refused(r, "E_DCW_LEDGER_REFUSED", "neither the frozen"));
+        }),
+    },
+    {
+      rule: "PD-30",
+      name: "a lower cap is never written: a second reprice at a lower need keeps the recorded cap, and the controller refuses a cap below the frozen one",
+      check: () =>
+        withKit({}, async (kit) => {
+          const high = opusRepriced(3.5);
+          const first = await runRow(repriceFixture(planningInputs(3.5)).argv, fakeEnv(kit));
+          const second = await runRow(repriceFixture(planningInputs(3)).argv, fakeEnv(kit));
+          let lowered = "the controller took a cap below the frozen one";
+          try {
+            kit.rig().c.capTo("dc-stage2-opus", $(LEDGER_ITEMS["dc-stage2-opus"].capUsd) - 1);
+          } catch {
+            lowered = "";
+          }
+          return all(
+            eq([first.code, second.code], [0, 0], "exits " + [...first.err, ...second.err].join(" ")),
+            high > opusRepriced(3) ? null : "the fixture needs a higher first need",
+            has(second, "kept dc-stage2-opus at its recorded $" + high.toFixed(2) + ", at or above the measured need $" + opusRepriced(3).toFixed(2) + "; a cap is never lowered"),
+            eq(ledgerStatus(kit.rig().record, "dc-stage2-opus")[0]!.cap_micros, $(high), "the recorded cap"),
+            lowered || null,
+          );
+        }),
+    },
+    {
+      rule: "PD-30",
+      name: "start rule 7 holds the reprice row until stage 1's passing records and a re-priced projection within $5,000, before the ledger is built",
+      check: () =>
+        withKit({}, async (kit) => {
+          const smoke = await runRow(repriceFixture(planningInputs(3), { ...PASSED, smoke: false }).argv, fakeEnv(kit));
+          const over = await runRow(repriceFixture(planningInputs(2.5, 1700)).argv, fakeEnv(kit));
+          return all(refused(smoke, "E_DCW_START_RULE", "start rule 7: stage 2's caps are re-priced only after stage 1 passes, and --stage1 records no pass for: the smoke rules pass"), refused(over, "E_DCW_START_RULE", "past $5,000"), eq(kit.built, [], "built"));
         }),
     },
     {

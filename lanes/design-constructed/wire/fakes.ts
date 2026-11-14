@@ -17,7 +17,8 @@ import { fixtureBrowser, RECIPE, type FixtureApp } from "../recipes/fixtures.ts"
 import { fakeSpec, fakeMirrors } from "../stage3/fake.ts";
 import { fixtureStage3, type Stage3Script } from "../stage3/fixtures.ts";
 import type { AnyModel, LedgerItemId } from "../types.ts";
-import { meteredModels, recordedCaps, type LedgerProvider, type ModelCall, type ModelProvider, type ProviderName, type Providers, type ServedTerms, type SessionProvider, type Stage3Provider, type VmProvider } from "../wire.ts";
+import { meteredModels, type LedgerProvider, type ModelCall, type ModelProvider, type ProviderName, type Providers, type ServedTerms, type SessionProvider, type Stage3Provider, type VmProvider } from "../wire.ts";
+import { recordSeams } from "./real.ts";
 import type { RowEnv } from "./start.ts";
 
 export const REPO_ROOT = resolve(import.meta.dir, "..", "..", "..");
@@ -62,8 +63,8 @@ export function fakeKit(o: KitOptions = {}): Kit {
   kit.providers.ledger = () => {
     built.push("ledger");
     const x = kit.rig();
-    const caps = recordedCaps(x.record);
-    return { controller: x.c, recordedCapMicros: (item) => (o.unrecorded?.includes(item) ? null : caps(item)), reconcile: async () => (o.held ? null : 0), close: async () => {} } satisfies LedgerProvider;
+    const r = recordSeams(x.record);
+    return { controller: x.c, ...r, recordedCapMicros: (item) => (o.unrecorded?.includes(item) ? null : r.recordedCapMicros(item)), reconcile: async () => (o.held ? null : 0), close: async () => {} } satisfies LedgerProvider;
   };
   if (o.model) {
     const script = o.model;

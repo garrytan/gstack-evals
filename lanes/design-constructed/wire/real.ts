@@ -23,7 +23,7 @@ import { join } from "node:path";
 import { claudePin } from "../../eng-build/session-image.ts";
 import type { AgentSession } from "../../../src/trial/sandbox.ts";
 import { claudeCodeDriver, type ClaudeCodeOptions } from "../../../src/adapters/claude-code/driver.ts";
-import { ledgerStatus } from "../../../src/runner/ledger/ledger.ts";
+import { ledgerStatus, recordApproval } from "../../../src/runner/ledger/ledger.ts";
 import type { RetryBudget } from "../../../src/runner/proxy/metering-proxy.ts";
 import { createTrialNetwork, removeTrialNetwork, type TrialNetwork } from "../../../src/trial/proxy.ts";
 import { DcError, fail } from "../errors.ts";
@@ -160,13 +160,20 @@ const once = <T>(f: () => T): (() => T) => {
   return () => (v ??= { value: f() }).value;
 };
 
+/** The record's side of a ledger provider: each item's recorded cap and latest approval, and a raise (PD-30). */
+export const recordSeams = (record: string): Pick<LedgerProvider, "recordedCapMicros" | "approval" | "raise"> => ({
+  recordedCapMicros: (item) => ledgerStatus(record, item)[0]?.cap_micros ?? null,
+  approval: (item) => ledgerStatus(record, item)[0]?.approval ?? null,
+  raise: (item, capMicros, quote) => void recordApproval(record, { action: "raise", item, cap_micros: capMicros, quotes: [quote] }),
+});
+
 /** The real providers on the host's ledger service. Returns factories only; nothing starts until a row builds one. */
 export function realProviders(h: HostContext, s: RealSeams = {}): Providers {
   const svc = h.service;
   const watch = once(() => new ProviderWatch({ controller: svc.controller, out: join(h.dir, "watch"), datedTerms: datedTermsOf(readJson<PinRecord>(h.wiring.pinRecord, "the pin record")) }));
   const callers = once(() => new DirectCallers({ controller: svc.controller, local: svc.local, wal: svc.wal, watch: watch(), dir: join(svc.cfg.journalDir, "direct"), cacheDir: h.wiring.cacheDir, retry: h.wiring.retry, env: h.env, fetch: s.fetch, sleep: s.sleep }));
   return {
-    ledger: (): LedgerProvider => ({ controller: svc.controller, recordedCapMicros: (item) => ledgerStatus(svc.cfg.record, item)[0]?.cap_micros ?? null, reconcile: async () => null }),
+    ledger: (): LedgerProvider => ({ controller: svc.controller, ...recordSeams(svc.cfg.record), reconcile: async () => null }),
     model: () => meterModels((item) => callers().meter(item), (model) => routingDigest(routingOf(model)), async () => callers().stopAll()),
     session: () => realSessions(h, watch(), s, callers()),
     vm: () => realVm(h, s, watch()),

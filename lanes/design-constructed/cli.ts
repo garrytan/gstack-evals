@@ -20,6 +20,7 @@ import { labelsRow, probeRow } from "./wire/score.ts";
 import { exportsRow, stage3InputsRow } from "./wire/exports.ts";
 import { hostCommand } from "./wire/host.ts";
 import type { HostContext } from "./wire/real.ts";
+import { repriceRow } from "./wire/reprice.ts";
 import { sessionsRow } from "./wire/sessions.ts";
 import { stage3Row } from "./wire/stage3.ts";
 import type { Row, RowEnv } from "./wire/start.ts";
@@ -76,6 +77,7 @@ export const SUBCOMMANDS: Record<string, { area: Area | "lane"; run: Run; bools:
   gatecheck: { area: "author", run: gatecheckRow, bools: [], usage: "--units <planted.json> --apps <apps.json> --gstack <dir> --terms <file> --out <new sink>", summary: "the eight planted units through every model-judged gate (paid: dc-gate-check)" },
   scope: { area: "run", run: scopeRow, bools: [], usage: "--units <folder of unit folders, each with plan.md>", summary: "the keyless UI scope read on every plan.md" },
   sessions: { area: "run", run: sessionsRow, bools: [], usage: "--stage 1|2 --model opus|sol|particle --cells <cells.json> --units <units.json> --exports <folder> --terms <file> [--rule8 <file>] [--repair <file>] --out <new sink>", summary: "review sessions for one stage, arm and model (paid: dc-stage1-*, dc-stage2-*)" },
+  reprice: { area: "read", run: repriceRow, bools: [], usage: "--stage1 <stage1.json> --projection <projection input JSON> --out <new sink>", summary: "before stage 2, each cap stage 1's measured costs pass, written into the ledger as a PD-30 deviation (ledger only, no model call)" },
   probe: { area: "score", run: probeRow, bools: [], usage: "--terms <file> --out <new sink>", summary: "the live judge probe, one call down every judge route (paid: dc-judges)" },
   labels: { area: "score", run: labelsRow, bools: ["--shuffled"], usage: "--pass production|check --in <folder: units.json rows.json> --read base|2x|10x --stage 1|2 --terms <file> [--shuffled] [--production <sink>] [--check <sink>] --out <new sink>", summary: "label packets, the judge check and the stage 2 re-check (paid: dc-judges)" },
   score: { area: "score", run: scoreRow, bools: [], usage: "--in <folder: units.json rows.json packets.json labels.json> --read base|2x|10x --stage 1|2", summary: "A, G, D and every secondary from final labels" },

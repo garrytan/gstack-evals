@@ -7,7 +7,7 @@
 // before a row's start rules and its ledger admission pass (wire/start.ts). The real providers (wire/real.ts) exist only
 // on the controller host, inside the ledger service's process, where wire/host.ts runs each paid row; anywhere else
 // every factory refuses with E_DCW_OFF_HOST after the row's checks. The dry run binds the keyless fakes in wire/fakes.ts.
-import { ledgerStatus } from "../../src/runner/ledger/ledger.ts";
+import type { ApprovalFile, Quote } from "../../src/runner/ledger/record.ts";
 import type { SessionEnd, Termination } from "../../src/types.ts";
 import type { BlockParser, Caller, SpendReader } from "./author/seams.ts";
 import { DcError } from "./errors.ts";
@@ -74,6 +74,10 @@ export interface LedgerProvider {
   controller: MoneyController;
   /** The cap the Captain recorded for the item in the approval record, in micros, or null when none is recorded. */
   recordedCapMicros(item: LedgerItemId): number | null;
+  /** The item's latest approval in the record, or null when none is recorded. */
+  approval(item: LedgerItemId): ApprovalFile | null;
+  /** Records a higher cap for the item with its quote (main's ledger raise, which refuses a cap that isn't higher). */
+  raise(item: LedgerItemId, capMicros: number, quote: Quote): void;
   /** J1: the provider figure for an unknown sub-reservation, in micros, or null when it stays held until the owner's reconcile (PD-18). */
   reconcile(subId: string): Promise<number | null>;
   close?(): Promise<void>;
@@ -153,12 +157,6 @@ export interface Providers {
 
 export type ProviderName = keyof Providers;
 type Built<K extends ProviderName> = Awaited<ReturnType<NonNullable<Providers[K]>>>;
-
-/** The Captain's recorded cap per item, read from main's approval record (start rule 1). */
-export const recordedCaps =
-  (record: string) =>
-  (item: LedgerItemId): number | null =>
-    ledgerStatus(record, item)[0]?.cap_micros ?? null;
 
 const offHost = (name: ProviderName) => (): never => {
   throw new DcError("E_DCW_OFF_HOST", "the " + name + " provider exists only on the controller host, where money/host-main.ts runs each paid row through wire/host.ts; this machine holds no ledger service, so nothing was admitted or called");

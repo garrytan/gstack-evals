@@ -37,6 +37,8 @@ interface ItemState {
   paused: { why: string; allowTag: string | null; captain: boolean } | null;
   /** Settle the lease once nothing on the item is in flight; capStop marks a cap stop. */
   settleWhenDrained: { capStop?: string } | null;
+  /** PD-30: a re-priced cap above the frozen one, set by each launch's ledger check; unset, the frozen cap. */
+  cap?: number;
   waiters: Array<() => void>;
 }
 
@@ -135,6 +137,12 @@ export class MoneyController {
     return lease;
   }
 
+  /** PD-30: admits the item against a re-priced cap the launch's ledger check passed. A cap below the frozen one is refused. */
+  capTo(item: LedgerItemId, capMicros: number): void {
+    if (capMicros < $(LEDGER_ITEMS[item].capUsd)) throw new Error("line item " + item + "'s cap is never lowered below the frozen " + dollars($(LEDGER_ITEMS[item].capUsd)));
+    this.state(item).cap = capMicros;
+  }
+
   lease(item: LedgerItemId): LeaseInfo | null {
     return this.state(item).lease;
   }
@@ -149,7 +157,7 @@ export class MoneyController {
 
   figures(item: LedgerItemId): ItemFigures {
     const s = this.state(item);
-    const f: ItemFigures = { item, capMicros: $(LEDGER_ITEMS[item].capUsd), settledMicros: 0, inFlightMicros: 0, unknownMicros: 0, inFlightCount: 0, leaseId: s.lease?.leaseId ?? null, closed: s.closed !== null, paused: s.paused?.why ?? null };
+    const f: ItemFigures = { item, capMicros: s.cap ?? $(LEDGER_ITEMS[item].capUsd), settledMicros: 0, inFlightMicros: 0, unknownMicros: 0, inFlightCount: 0, leaseId: s.lease?.leaseId ?? null, closed: s.closed !== null, paused: s.paused?.why ?? null };
     for (const sub of this.subs.values()) {
       if (sub.item !== item) continue;
       if (sub.state === "in-flight") {

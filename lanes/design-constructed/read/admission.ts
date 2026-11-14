@@ -174,6 +174,9 @@ export type ProjectionOutcome =
   | { outcome: "fits"; design: Stage2Design; cuts: string[]; projection: Projection; repriced: Repricing[]; lines: string[] }
   | { outcome: "captain"; why: "envelope"; design: Stage2Design; cuts: string[]; projection: Projection; repriced: Repricing[]; lines: string[] };
 
+/** The deviation line for one re-priced cap: printed by the rerun and written word for word as the ledger raise's quote (PD-30). */
+export const repricedLine = (item: LedgerItemId, frozenCapUsd: number, repricedCapUsd: number): string => "re-priced before stage 2 (a pre-data deviation, PD-30): " + item + " cap $" + frozenCapUsd + " to $" + repricedCapUsd.toFixed(2) + " (measured need with its reserve)";
+
 /** PD-30: every item whose measured projection plus its round reserve passes its cap gets that need as its cap, to the cent. */
 export function reprice(p: Projection): Repricing[] {
   const out: Repricing[] = [];
@@ -198,7 +201,7 @@ export function projectionRerun(i: ProjectionInput, start: Stage2Design = planne
   const repriced = reprice(p);
   const lines = [
     "projection as planned: all-in $" + p.allInUsd.toFixed(2) + (above(p.allInUsd, MONEY.capAllInUsd) ? ", over the $" + MONEY.capAllInUsd + " line, which is a guideline: no cut (PD-30)" : ", within the $" + MONEY.capAllInUsd + " line"),
-    ...repriced.map((r) => "re-priced before stage 2 (a pre-data deviation, PD-30): " + r.item + " cap $" + r.frozenCapUsd + " to $" + r.repricedCapUsd.toFixed(2) + " (measured need with its reserve)"),
+    ...repriced.map((r) => repricedLine(r.item, r.frozenCapUsd, r.repricedCapUsd)),
   ];
   if (!above(p.allInUsd, MONEY.projectionStopUsd)) return { outcome: "fits", design: d, cuts: [], projection: p, repriced, lines: [...lines, "no cut; the re-priced design goes to the admission read before spending"] };
   lines.push("the re-priced projection is past $5,000: stop for the Captain; section 13's cut order follows for the Captain");

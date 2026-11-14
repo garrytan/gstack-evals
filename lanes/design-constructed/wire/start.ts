@@ -2,14 +2,15 @@
 // What every paid row checks before it builds a provider (prereg section 14): the commit pin (rule 2), a sink directory
 // that doesn't exist (rule 10), the row's own order rules (6, 7 and 8, passed in by the row), a dated terms record for
 // each OpenRouter model it calls (rule 9), the keyless dry run (rule 5), and then the ledger admission: each item it
-// spends on carries the cap the Captain recorded (rule 1), equal to the frozen cap, and is open, unstopped and has room;
-// its one lease opens. Only the ledger is built for the admission; the model, session and VM providers come after.
+// spends on carries the cap the Captain recorded (rule 1), equal to the frozen cap or to its PD-30 re-pricing (the
+// reprice row's raise, admitted against that cap), and is open, unstopped and has room; its one lease opens. Only the ledger is built for the admission; the model, session and VM providers come after.
 import { existsSync, mkdirSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
 import { DcError, fail } from "../errors.ts";
 import { LEDGER_ITEMS } from "../frozen.ts";
 import { $, dollars } from "../money/book.ts";
 import { applyStop, stopPlan, type StopContext } from "../money/stops.ts";
+import { repricedLine } from "../read/admission.ts";
 import type { TermsRecord } from "../read/start.ts";
 import type { AnyModel, DcStopCode, LedgerItemId, Model } from "../types.ts";
 import { build, type LedgerProvider, type Providers } from "../wire.ts";
@@ -80,7 +81,20 @@ export interface Launch {
   lines: string[];
 }
 
-/** The ledger admission: rule 1's recorded cap, the frozen cap, an open unstopped item with room; then its one lease. */
+/** Who the reprice row's ledger raise names as its quote's author (PD-30). */
+export const REPRICE_BY = "dc reprice (PD-30)";
+
+/**
+ * Whether a recorded cap is the item's PD-30 re-pricing: above the frozen cap, and the item's latest approval is a raise
+ * to exactly that cap whose quote is the reprice row's deviation line for it. A cap a person raised by hand isn't.
+ */
+export function repriced(l: LedgerProvider, item: LedgerItemId, capMicros: number): boolean {
+  const a = l.approval(item);
+  const words = repricedLine(item, LEDGER_ITEMS[item].capUsd, capMicros / 1_000_000);
+  return capMicros > $(LEDGER_ITEMS[item].capUsd) && a?.action === "raise" && a.cap_micros === capMicros && a.quotes.some((q) => q.by === REPRICE_BY && q.words === words);
+}
+
+/** The ledger admission: rule 1's recorded cap, the frozen cap or its PD-30 re-pricing, an open unstopped item with room; then its one lease. */
 export async function admitItems(l: LedgerProvider, items: readonly LedgerItemId[], scope: StartPlan["scope"] = {}): Promise<string[]> {
   const c = l.controller;
   const lines: string[] = [];
@@ -91,7 +105,11 @@ export async function admitItems(l: LedgerProvider, items: readonly LedgerItemId
     const frozen = $(LEDGER_ITEMS[item].capUsd);
     const cap = l.recordedCapMicros(item);
     if (cap === null) no("start rule 1: the Captain has recorded no cap for " + item + "; nothing is admitted on it");
-    if (cap !== frozen) no(item + "'s recorded cap " + dollars(cap!) + " is not the frozen " + dollars(frozen) + "; the difference goes to the Captain");
+    if (cap !== frozen && !repriced(l, item, cap!)) no(item + "'s recorded cap " + dollars(cap!) + " is not the frozen " + dollars(frozen) + " and no PD-30 re-pricing record covers it; the difference goes to the Captain");
+    if (cap !== frozen) {
+      c.capTo(item, cap!);
+      lines.push("ledger: " + item + " admitted on its re-priced cap " + dollars(cap!) + ", a pre-data deviation from the frozen " + dollars(frozen) + " (PD-30)");
+    }
     const f = c.figures(item);
     if (f.closed) no(item + " is closed; it reopens only on the Captain's word");
     const stop = c.stopFor(item, { model: scope.model ?? null, subject: scope.subject ?? null, stage: scope.stage ?? null });
