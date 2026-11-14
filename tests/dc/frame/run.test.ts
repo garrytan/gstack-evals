@@ -2,7 +2,7 @@
 // The frame command end to end on a fake gh and real local git, its refusals, the CLI rows and the area's dry run.
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { main } from "../../../lanes/design-constructed/cli.ts";
@@ -53,7 +53,7 @@ describe("hardened git", () => {
 describe("runFrame", () => {
   test("search, filters, order, clones by oid and file check, written to out with digests", () => {
     const good = repoOf(PASSING_APP);
-    const q = buildSearchQuery(FRAME.topics[2], FRAME.licenses[1]).variables.q;
+    const q = buildSearchQuery(FRAME.topics[2], FRAME.licenses[1]).q;
     const gh = fakeGh({ [q]: [node("plum/desk", { oid: good.oid }), node("plum/second", { oid: good.oid }), node("fern/kit", { stargazerCount: 10 }), node("moss/gone", { oid: "e".repeat(40) })] });
     const out = tmp();
     const seams: FrameSeams = {
@@ -86,13 +86,21 @@ describe("runFrame", () => {
     }
   });
 
-  test("a relaunch from another commit is refused", () => {
+  test("a relaunch keeps no earlier data and records each earlier launch, any commit, as failed with no data", () => {
     const out = tmp();
-    writeFileSync(join(out, "launches.jsonl"), JSON.stringify({ commit: "b".repeat(40), at: "2026-11-14T00:00:00Z" }) + "\n");
+    writeFileSync(join(out, "launches.jsonl"), [{ commit: "b".repeat(40), at: "2026-11-14T00:00:00.000Z" }, { commit: "b".repeat(40), at: "2026-11-14T00:01:00.000Z", stop: { search: "s", page: 2, error_class: "error that is not resendable" } }, { commit: "a".repeat(40), at: "2026-11-14T01:00:00.000Z" }].map((l) => JSON.stringify(l)).join("\n") + "\n");
+    writeTree({ "search-cache/old.json": "{}", "frame.json": "[]" }, out);
     const gh = fakeGh({});
     const seams: FrameSeams = { gh: gh.exec, sleep: gh.sleep, now: gh.now, clone: () => {}, lane: () => ({ commit: "a".repeat(40), dirty: false, root: "/nonexistent-lane-root" }), check: fileCheck };
     try {
-      expect(() => runFrame(out, seams)).toThrow("another commit");
+      runFrame(out, seams);
+      const run = JSON.parse(readFileSync(join(out, "run.json"), "utf8"));
+      expect(run.earlier_launches).toEqual([
+        { commit: "b".repeat(40), at: "2026-11-14T00:00:00.000Z", outcome: "failed, no data", stop: { search: "s", page: 2, error_class: "error that is not resendable" } },
+        { commit: "a".repeat(40), at: "2026-11-14T01:00:00.000Z", outcome: "failed, no data", stop: null },
+      ]);
+      expect(readdirSync(join(out, "search-cache"))).not.toContain("old.json");
+      expect(gh.log.filter((l) => l.kind === "graphql").length).toBe(50);
     } finally {
       rmSync(out, { recursive: true, force: true });
     }

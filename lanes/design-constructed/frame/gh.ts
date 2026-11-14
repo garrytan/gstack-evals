@@ -6,7 +6,12 @@
 // so a partial search page is never kept.
 import { spawnSync } from "node:child_process";
 
-export class GhError extends Error {}
+export class GhError extends Error {
+  /** The last failure matched the client's resend pattern (it failed on every try). */
+  transient = false;
+  /** Tries made. */
+  tries = 1;
+}
 
 /** The only hosts the frame may reach: the API and HTTPS clones. */
 export const GITHUB_HOSTS: readonly string[] = ["api.github.com", "github.com"];
@@ -49,6 +54,8 @@ export interface GitHubOptions {
   floor: number;
   /** Total tries for a call that failed with a transient error (1 means no retry). */
   tries: number;
+  /** The failures that may be resent; TRANSIENT when absent. */
+  transient?: RegExp;
   /** Milliseconds to wait before retry n. */
   backoffMs: (attempt: number) => number;
   /** Least milliseconds between the starts of two calls. */
@@ -99,11 +106,15 @@ export function openGitHub(o: GitHubOptions): GitHub {
       const r = exec(args, input);
       if (r.status === 0) return r.stdout;
       const err = (r.stderr || "") + (r.stdout || "");
-      if (attempt < o.tries && TRANSIENT.test(err)) {
+      const transient = (o.transient ?? TRANSIENT).test(err);
+      if (attempt < o.tries && transient) {
         sleep(o.backoffMs(attempt));
         continue;
       }
-      throw new GhError("gh " + args.slice(0, 2).join(" ") + " failed: " + err.trim().slice(0, 300));
+      const e = new GhError("gh " + args.slice(0, 2).join(" ") + " failed: " + err.trim().slice(0, 300));
+      e.transient = transient;
+      e.tries = attempt;
+      throw e;
     }
   };
   return {

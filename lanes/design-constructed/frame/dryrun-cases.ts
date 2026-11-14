@@ -2,7 +2,7 @@
 // The frame area's dry-run cases (build plan sections 8 and 15; addendum R2-1 and R2-19; Captain rulings A1 and C1):
 // the search's query and pacing, every entry-filter edge, the frame order, the owner dedupe, the clone limits, an
 // unfetchable oid, each file-check test both ways and the route matcher on every R2-19 case, all on invented fixtures.
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,12 +11,12 @@ import { DcError } from "../errors.ts";
 import type { DryRunCase } from "../types.ts";
 import { customProperties, designKind, fileCheck, type FileCheck } from "./filecheck.ts";
 import { buildFrame, firstFailed, frameKey, readmeTitle } from "./filters.ts";
-import { cssVars, failingApp, fakeGh, node, PASSING_APP, writeTree } from "./fixtures.ts";
+import { cssVars, failingApp, fakeGh, node, PASSING_APP, writeTree, type FakeFailure } from "./fixtures.ts";
 import { openGitHub } from "./gh.ts";
 import { fetchAt } from "./git.ts";
 import { discoverRoutes, distinctRoutes, matchingRoutes, matchRoute, type Router } from "./routes.ts";
-import { cloneLimits, runFrame, type FrameSeams } from "./run.ts";
-import { buildSearchQuery, readNode, runSearch, SEARCH_QUERY, searchQueries } from "./search.ts";
+import { cloneLimits, FrameStop, runFrame, type FrameSeams } from "./run.ts";
+import { buildPageQuery, buildSearchQuery, readNode, runSearch, SEARCH_PAGE_SIZE, SEARCH_QUERY, SEARCH_RESEND, SEARCH_TRIES, searchQueries } from "./search.ts";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "dc-frame-dry-"));
 const expect = (ok: boolean, why: string): string | null => (ok ? null : why);
@@ -70,8 +70,8 @@ const FILTER_EDGES: { name: string; o: Record<string, unknown>; in: boolean }[] 
 ];
 
 /** A fake frame run in a fresh out folder: invented search pages, clones written from trees, a clean lane. */
-function fakeRun(byQ: Record<string, unknown[]>, trees: (name: string) => Record<string, string> | null, o: { out?: string; dirty?: boolean; root?: string; bound?: "sessions" | "clones"; check?: (d: string) => FileCheck } = {}) {
-  const gh = fakeGh(byQ);
+function fakeRun(byQ: Record<string, unknown[]>, trees: (name: string) => Record<string, string> | null, o: { out?: string; dirty?: boolean; root?: string; bound?: "sessions" | "clones"; check?: (d: string) => FileCheck; failures?: FakeFailure[] } = {}) {
+  const gh = fakeGh(byQ, { failures: o.failures });
   const cloned: string[] = [];
   const seams: FrameSeams = {
     gh: gh.exec,
@@ -90,8 +90,11 @@ function fakeRun(byQ: Record<string, unknown[]>, trees: (name: string) => Record
   return { out, gh, cloned, run: () => runFrame(out, seams, o.bound) };
 }
 
-/** n invented frame repositories, all on the first query's page. */
-const manyRepos = (n: number) => ({ [buildSearchQuery(FRAME.topics[0], FRAME.licenses[0]).variables.q]: Array.from({ length: n }, (_, i) => node("owner" + i + "/desk" + i)) });
+/** n invented frame repositories, 100 to a search from the first search on. */
+const manyRepos = (n: number): Record<string, unknown[]> => {
+  const all = Array.from({ length: n }, (_, i) => node("owner" + i + "/desk" + i));
+  return Object.fromEntries(searchQueries().map((q, k) => [q.q, all.slice(k * 100, k * 100 + 100)]).filter(([, v]) => v.length));
+};
 
 const neverPass: FileCheck = { frontEnd: false, components: false, designSystem: false, routes: false, pass: false, frameworks: [], componentFolder: null, designSource: null, routeCount: 0, routeSets: [] };
 
@@ -171,76 +174,156 @@ export function cases(): DryRunCase[] {
   const out: DryRunCase[] = [];
 
   // ---- Search
+  const client = (gh: ReturnType<typeof fakeGh>, paceMs: number = FRAME.requestGapMs) => openGitHub({ floor: 1000, tries: SEARCH_TRIES, transient: SEARCH_RESEND, backoffMs: (n) => n * 5000, paceMs, exec: gh.exec, sleep: gh.sleep, now: gh.now });
+  const inDir = <T>(f: (dir: string) => T): T => {
+    const dir = tmp();
+    try {
+      return f(dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+  const allQs = searchQueries();
   out.push({
     rule: "S8-search",
-    name: "the query builder gives the frozen search string and the fields section 8 lists",
+    name: "the query builders are pure and give the frozen search string, $first and $after, pageInfo and the fields section 8 lists",
     check: () => {
       const q = buildSearchQuery("helpdesk", "bsd-2-clause");
-      const fields = ["first: 100", "nameWithOwner", "isPrivate", "isFork", "isArchived", "isTemplate", "stargazerCount", "pushedAt", "licenseInfo { spdxId }", "primaryLanguage { name }", "repositoryTopics(first: 20)", "defaultBranchRef { name target { oid } }", '"HEAD:README.md"', '"HEAD:readme.md"', '"HEAD:Readme.md"', '"HEAD:README"', "rateLimit { cost"];
-      return expect(q.variables.q === "topic:helpdesk license:bsd-2-clause sort:stars" && fields.every((f) => SEARCH_QUERY.includes(f)), "query " + q.variables.q);
+      const p1 = buildPageQuery(q.q, null), p2 = buildPageQuery(q.q, "cursor-x");
+      const fields = ["query($q: String!, $first: Int!, $after: String)", "first: $first, after: $after", "pageInfo { hasNextPage endCursor }", "nameWithOwner", "isPrivate", "isFork", "isArchived", "isTemplate", "stargazerCount", "pushedAt", "licenseInfo { spdxId }", "primaryLanguage { name }", "repositoryTopics(first: 20)", "defaultBranchRef { name target { oid } }", '"HEAD:README.md"', '"HEAD:readme.md"', '"HEAD:Readme.md"', '"HEAD:README"', "rateLimit { cost"];
+      const ok = q.q === "topic:helpdesk license:bsd-2-clause sort:stars" && JSON.stringify(p1.variables) === JSON.stringify({ q: q.q, first: 25, after: null }) && p2.variables.after === "cursor-x" && p1.digest !== p2.digest && JSON.stringify(buildPageQuery(q.q, null)) === JSON.stringify(p1) && SEARCH_PAGE_SIZE === 25 && FRAME.resultsPerQuery === 100;
+      return expect(ok && fields.every((f) => SEARCH_QUERY.includes(f)), "query " + JSON.stringify(p1.variables));
     },
   });
   out.push({
     rule: "S8-search",
-    name: "50 distinct queries, 10 topics times 5 licences",
-    check: () => {
-      const qs = searchQueries();
-      return expect(qs.length === 50 && new Set(qs.map((q) => q.variables.q)).size === 50 && new Set(qs.map((q) => q.digest)).size === 50, qs.length + " queries");
-    },
+    name: "50 distinct searches, 10 topics times 5 licences",
+    check: () => expect(allQs.length === 50 && new Set(allQs.map((q) => q.q)).size === 50, allQs.length + " searches"),
   });
   out.push({
     rule: "S8-search",
-    name: "concurrency 1 with at least 3 seconds between requests, each cost recorded, a rerun answered from the cache",
-    check: () => {
-      const dir = tmp();
-      try {
-        const gh = fakeGh(manyRepos(3));
-        const client = openGitHub({ floor: 1000, tries: 1, backoffMs: () => 0, paceMs: FRAME.requestGapMs, exec: gh.exec, sleep: gh.sleep, now: gh.now });
-        const first = runSearch(client, dir);
-        const starts = gh.log.map((l) => l.at);
-        const gaps = starts.slice(1).map((t, i) => t - starts[i]!);
-        const again = runSearch(client, dir);
-        if (gaps.some((g) => g < FRAME.requestGapMs)) return "a gap under 3 s: " + Math.min(...gaps);
-        if (first.queries.some((q) => q.cached || q.cost !== 1)) return "first run costs not recorded";
-        if (gh.log.length !== 50) return gh.log.length + " calls on the first run";
-        return expect(again.queries.every((q) => q.cached) && gh.log.length === 50 && JSON.stringify(again.repos) === JSON.stringify(first.repos), "the rerun called GitHub or read different repos");
-      } finally {
-        rmSync(dir, { recursive: true, force: true });
-      }
-    },
+    name: "200 page requests of 25, one at a time at least 3 s apart, cursors followed, the order one first-100 reply would give",
+    check: () =>
+      inDir((dir) => {
+        const byQ = Object.fromEntries(allQs.map((q, k) => [q.q, Array.from({ length: 130 }, (_, i) => node("o" + k + "x" + i + "/r"))]));
+        const gh = fakeGh(byQ);
+        const r = runSearch(client(gh), dir);
+        const calls = gh.log;
+        const gaps = calls.slice(1).map((c, i) => c.at - calls[i]!.at);
+        const chained = allQs.every((q) => JSON.stringify(calls.filter((c) => c.q === q.q).map((c) => c.after)) === JSON.stringify([null, "cursor:25", "cursor:50", "cursor:75"]));
+        const want = allQs.flatMap((q) => (byQ[q.q] as any[]).slice(0, 100).map((n) => n.nameWithOwner));
+        const perSearch = r.queries.every((q) => q.pages.length === 4 && q.returned === 100 && q.cost === 4 && q.pages.every((p) => p.nodes === 25));
+        return expect(calls.length === 200 && r.pages === 200 && calls.every((c) => c.first === 25) && Math.min(...gaps) >= 3000 && chained && perSearch && JSON.stringify(r.repos.map((x) => x.nameWithOwner)) === JSON.stringify(want), calls.length + " calls, min gap " + Math.min(...gaps) + ", chained " + chained + ", per search " + perSearch);
+      }),
   });
   out.push({
     rule: "S8-search",
-    name: "a reply carrying an error is refused and never cached",
-    check: () => {
-      const dir = tmp();
-      try {
-        const q0 = searchQueries()[0]!;
-        const gh = fakeGh({}, { failQ: [q0.variables.q] });
-        const client = openGitHub({ floor: 1000, tries: 1, backoffMs: () => 0, paceMs: 0, exec: gh.exec, sleep: gh.sleep, now: gh.now });
-        try {
-          runSearch(client, dir, [q0]);
-          return "the error reply was accepted";
-        } catch {
-          return expect(!existsSync(join(dir, q0.digest + ".json")), "the error reply was cached");
-        }
-      } finally {
-        rmSync(dir, { recursive: true, force: true });
-      }
-    },
+    name: "each page is cached by its own digest, cursor included, and a second read of the cache calls GitHub for none",
+    check: () =>
+      inDir((dir) => {
+        const qs = allQs.slice(0, 2);
+        const gh = fakeGh(Object.fromEntries(qs.map((q, k) => [q.q, Array.from({ length: 100 }, (_, i) => node("c" + k + "x" + i + "/r"))])));
+        const first = runSearch(client(gh, 0), dir, qs);
+        const files = readdirSync(dir).filter((f) => f.endsWith(".json"));
+        const again = runSearch(client(gh, 0), dir, qs);
+        return expect(files.length === 8 && gh.log.length === 8 && again.queries.every((q) => q.cached === 4) && JSON.stringify(again.repos) === JSON.stringify(first.repos), files.length + " cache files, " + gh.log.length + " calls");
+      }),
   });
+  const shortCases: [string, number, number[]][] = [
+    ["a short last page: 90 results read as pages of 25, 25, 25 and 15", 90, [25, 25, 25, 15]],
+    ["a search with 30 results stops after its second page", 30, [25, 5]],
+    ["a search with exactly 25 results is one page", 25, [25]],
+    ["a search with no results is one empty page", 0, [0]],
+  ];
+  for (const [name, n, pages] of shortCases) {
+    out.push({
+      rule: "S8-search",
+      name,
+      check: () =>
+        inDir((dir) => {
+          const q = allQs[3]!;
+          const gh = fakeGh({ [q.q]: Array.from({ length: n }, (_, i) => node("s" + i + "/r")) });
+          const r = runSearch(client(gh, 0), dir, [q]);
+          return expect(JSON.stringify(r.queries[0]!.pages.map((p) => p.nodes)) === JSON.stringify(pages) && r.queries[0]!.returned === n && gh.log.length === pages.length, JSON.stringify(r.queries[0]!.pages.map((p) => p.nodes)));
+        }),
+    });
+  }
   out.push({
     rule: "S8-search",
-    name: "a repository two queries return is kept once, read from the first",
-    check: () => {
-      const dir = tmp();
-      try {
-        const [a, b] = searchQueries();
-        const gh = fakeGh({ [a!.variables.q]: [node("acme/alpha", { stargazerCount: 300 })], [b!.variables.q]: [node("acme/alpha", { stargazerCount: 900 })] });
-        const r = runSearch(openGitHub({ floor: 0, tries: 1, backoffMs: () => 0, paceMs: 0, exec: gh.exec, sleep: gh.sleep, now: gh.now }), dir, [a!, b!]);
+    name: "a repository two searches return is kept once, read from the first",
+    check: () =>
+      inDir((dir) => {
+        const [a, b] = allQs;
+        const gh = fakeGh({ [a!.q]: [node("acme/alpha", { stargazerCount: 300 })], [b!.q]: [node("acme/alpha", { stargazerCount: 900 })] });
+        const r = runSearch(client(gh, 0), dir, [a!, b!]);
         return expect(r.returned === 2 && r.repos.length === 1 && r.repos[0]!.stars === 300, JSON.stringify(r.repos.map((x) => x.stars)));
+      }),
+  });
+  out.push({
+    rule: "S8-paging",
+    name: "a page that answers 502, timeout and 504 succeeds on its third resend, and the run goes on",
+    check: () => {
+      const q = allQs[7]!;
+      const f = fakeRun({ ...manyRepos(3), [q.q]: Array.from({ length: 100 }, (_, i) => node("p" + i + "/r")) }, () => PASSING_APP, { failures: [{ q: q.q, page: 3, kind: "502", times: 1 }, { q: q.q, page: 3, kind: "timeout", times: 1 }, { q: q.q, page: 3, kind: "504", times: 1 }] });
+      try {
+        const r = f.run();
+        const tries = f.gh.log.filter((c) => c.q === q.q && c.after === "cursor:50").length;
+        const line = r.lines.find((l) => l.startsWith("search " + q.topic + " " + q.licence + ":"));
+        return expect(tries === 4 && line === "search " + q.topic + " " + q.licence + ": pages 4, nodes 100, cost 4" && existsSync(join(f.out, "run.json")), tries + " tries; " + line);
       } finally {
-        rmSync(dir, { recursive: true, force: true });
+        rmSync(f.out, { recursive: true, force: true });
+      }
+    },
+  });
+  const stops: [string, FakeFailure["kind"], number, string][] = [
+    ["a page that fails all 4 tries stops the run and keeps no partial frame", "504", 4, "resendable error on all 4 tries"],
+    ["a non-resendable HTTP error stops the run at once", "401", 1, "error that is not resendable"],
+    ["a GraphQL error reply stops the run at once", "graphql-error", 1, "error that is not resendable"],
+  ];
+  for (const [name, kind, tries, errorClass] of stops) {
+    out.push({
+      rule: "S8-paging",
+      name,
+      check: () => {
+        const q = allQs[12]!;
+        const f = fakeRun({ ...manyRepos(3), [q.q]: Array.from({ length: 100 }, (_, i) => node("p" + i + "/r")) }, () => PASSING_APP, { failures: [{ q: q.q, page: 2, kind }] });
+        try {
+          try {
+            f.run();
+            return "it ran";
+          } catch (e) {
+            if (!(e instanceof FrameStop) || !/must go to the Captain before any relaunch/.test(e.message)) return "threw " + String(e);
+          }
+          const left = readdirSync(f.out);
+          const lines = readFileSync(join(f.out, "launches.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+          const stop = lines.at(-1).stop;
+          const made = f.gh.log.filter((c) => c.q === q.q && c.after === "cursor:25").length;
+          const later = f.gh.log.filter((c) => c.kind === "graphql" && allQs.findIndex((x) => x.q === c.q) > 12).length;
+          return expect(JSON.stringify(left) === JSON.stringify(["launches.jsonl"]) && lines.length === 2 && stop.search === q.q && stop.page === 2 && stop.error_class === errorClass && made === tries && later === 0 && f.cloned.length === 0, JSON.stringify({ left, stop, made, later }));
+        } finally {
+          rmSync(f.out, { recursive: true, force: true });
+        }
+      },
+    });
+  }
+  out.push({
+    rule: "S8-paging",
+    name: "a relaunch after a stop runs all 200 pages afresh and records the stopped launch as failed, no data",
+    check: () => {
+      const q = allQs[5]!;
+      const f = fakeRun(manyRepos(3), () => PASSING_APP, { failures: [{ q: q.q, page: 1, kind: "401" }] });
+      try {
+        try {
+          f.run();
+        } catch {}
+        const again = fakeRun(manyRepos(5000), () => PASSING_APP, { out: f.out });
+        const r = again.run();
+        const run = JSON.parse(readFileSync(join(f.out, "run.json"), "utf8"));
+        const pages = again.gh.log.filter((c) => c.kind === "graphql").length;
+        const e = run.earlier_launches;
+        return expect(pages === 200 && e.length === 1 && e[0].outcome === "failed, no data" && e[0].stop.page === 1 && r.lines.includes("earlier launches: 1 (failed, no data)") && typeof run.search_started_at === "string" && run.search_finished_at > run.search_started_at, JSON.stringify({ pages, e }));
+      } finally {
+        rmSync(f.out, { recursive: true, force: true });
       }
     },
   });
@@ -398,26 +481,6 @@ export function cases(): DryRunCase[] {
       }
     },
   });
-  out.push({
-    rule: "S8-clone",
-    name: "a relaunch reuses the cache, never retries a failed clone and keeps one commit",
-    check: () => {
-      const f = fakeRun(manyRepos(2), (name) => (name === "owner0/desk0" ? null : PASSING_APP));
-      try {
-        try {
-          f.run();
-        } catch {}
-        rmSync(join(f.out, "run.json"));
-        const again = fakeRun(manyRepos(2), () => PASSING_APP, { out: f.out });
-        const r = again.run();
-        const graphql = again.gh.log.filter((l) => l.kind === "graphql").length;
-        return expect(graphql === 0 && !again.cloned.includes("owner0/desk0") && r.lines.some((l) => l.startsWith("queries: 50 (50 from cache, 0 from GitHub)")), "graphql " + graphql + ", cloned " + again.cloned.join(","));
-      } finally {
-        rmSync(f.out, { recursive: true, force: true });
-      }
-    },
-  });
-
   // ---- File check
   const fc = (files: Record<string, string>) => {
     const dir = writeTree(files);

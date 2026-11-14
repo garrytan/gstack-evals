@@ -3,7 +3,7 @@
 import { existsSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { fail } from "../errors.ts";
-import { checkLines, realSeams, runFrame } from "./run.ts";
+import { checkLines, FrameStop, realSeams, runFrame } from "./run.ts";
 
 type Args = { flags: Map<string, string>; bools: Set<string>; rest: string[] };
 type Io = { out: (text: string) => void; err: (text: string) => void };
@@ -11,7 +11,13 @@ type Io = { out: (text: string) => void; err: (text: string) => void };
 export const frameCommand = (a: Args, io: Io): number => {
   const out = a.flags.get("--out");
   if (!out || a.rest.length) return fail("E_USAGE", "usage: gstack-evals dc frame --out <sealed dir outside the repo>");
-  for (const line of runFrame(resolve(out), realSeams()).lines) io.out(line);
+  try {
+    for (const line of runFrame(resolve(out), realSeams()).lines) io.out(line);
+  } catch (e) {
+    if (!(e instanceof FrameStop)) throw e;
+    io.err("frame stopped: " + e.message);
+    return 2;
+  }
   return 0;
 };
 

@@ -30,27 +30,46 @@ export function node(nameWithOwner: string, o: Record<string, unknown> = {}): Re
   return n;
 }
 
-/** A whole GraphQL search reply. */
-export const reply = (nodes: unknown[], cost = 1, remaining = 4990) => ({
-  data: { search: { repositoryCount: nodes.length, nodes }, rateLimit: { cost, remaining, resetAt: "2026-11-14T13:00:00Z" } },
+/** A whole GraphQL search page reply. */
+export const reply = (nodes: unknown[], cost = 1, remaining = 4990, next: string | null = null, total = nodes.length) => ({
+  data: { search: { repositoryCount: total, pageInfo: { hasNextPage: next !== null, endCursor: next }, nodes }, rateLimit: { cost, remaining, resetAt: "2026-11-14T13:00:00Z" } },
 });
 
 export interface FakeGh {
   exec: GhExec;
   sleep: (ms: number) => void;
   now: () => number;
-  /** Each call's start time on the fake clock and its kind. */
-  log: { at: number; kind: "graphql" | "rate_limit"; q?: string }[];
+  /** Each call's start time on the fake clock and its kind; graphql calls carry their search and cursor. */
+  log: { at: number; kind: "graphql" | "rate_limit"; q?: string; first?: number; after?: string | null }[];
 }
 
+/** A failure the fake answers for one page of one search, times times in a row (every time when absent). */
+export interface FakeFailure {
+  q: string;
+  /** 1-based page. */
+  page: number;
+  kind: "502" | "504" | "timeout" | "401" | "graphql-error";
+  times?: number;
+}
+
+const FAILURE: Record<FakeFailure["kind"], { status: number; stdout: string; stderr: string }> = {
+  "502": { status: 1, stdout: "", stderr: "gh: HTTP 502: Bad Gateway (https://api.github.com/graphql)" },
+  "504": { status: 1, stdout: "", stderr: "gh: HTTP 504: Gateway Timeout (https://api.github.com/graphql)" },
+  timeout: { status: 1, stdout: "", stderr: "Post \"https://api.github.com/graphql\": net/http: request canceled (Client.Timeout exceeded while awaiting headers): timed out" },
+  "401": { status: 1, stdout: "", stderr: "gh: HTTP 401: Bad credentials (https://api.github.com/graphql)" },
+  "graphql-error": { status: 0, stdout: JSON.stringify({ errors: [{ message: "Something went wrong" }], data: null }), stderr: "" },
+};
+
 /**
- * A fake gh: graphql answers from byQ (search string to nodes; missing ones answer an empty page), rate_limit counts
- * down one point per graphql call. Each call takes 400 ms on the fake clock. failQ names searches that answer an error.
+ * A fake gh: graphql pages through byQ (search string to nodes; missing ones answer an empty page) by its first and
+ * after variables, with opaque cursors; rate_limit counts down one point per answered page. Each call takes 400 ms on
+ * the fake clock. failures answer a page with an error instead, and spend no point.
  */
-export function fakeGh(byQ: Record<string, unknown[]> = {}, o: { failQ?: string[]; start?: number } = {}): FakeGh {
+export function fakeGh(byQ: Record<string, unknown[]> = {}, o: { failures?: FakeFailure[]; start?: number } = {}): FakeGh {
   let t = o.start ?? Date.parse("2026-11-14T12:00:00Z");
   let remaining = 5000;
   const log: FakeGh["log"] = [];
+  const used = new Map<FakeFailure, number>();
   const exec: GhExec = (args, input) => {
     if (args[0] === "api" && args[1] === "rate_limit") {
       log.push({ at: t, kind: "rate_limit" });
@@ -58,12 +77,21 @@ export function fakeGh(byQ: Record<string, unknown[]> = {}, o: { failQ?: string[
       return { status: 0, stdout: JSON.stringify({ resources: { graphql: { limit: 5000, remaining, used: 5000 - remaining, reset: 1794661200 } } }), stderr: "" };
     }
     if (args[0] === "api" && args[1] === "graphql") {
-      const q = JSON.parse(input ?? "{}").variables?.q as string;
-      log.push({ at: t, kind: "graphql", q });
+      const v = JSON.parse(input ?? "{}").variables ?? {};
+      const q = v.q as string, first = v.first as number, after = (v.after ?? null) as string | null;
+      log.push({ at: t, kind: "graphql", q, first, after });
       t += 400;
-      if (o.failQ?.includes(q)) return { status: 0, stdout: JSON.stringify({ errors: [{ message: "Something went wrong" }], data: null }), stderr: "" };
+      const offset = after === null ? 0 : Number(after.slice("cursor:".length));
+      const failure = o.failures?.find((x) => x.q === q && x.page === Math.floor(offset / first) + 1 && (x.times === undefined || (used.get(x) ?? 0) < x.times));
+      if (failure) {
+        used.set(failure, (used.get(failure) ?? 0) + 1);
+        return FAILURE[failure.kind];
+      }
       remaining -= 1;
-      return { status: 0, stdout: JSON.stringify(reply(byQ[q] ?? [], 1, remaining)), stderr: "" };
+      const all = byQ[q] ?? [];
+      const nodes = all.slice(offset, offset + first);
+      const next = offset + first < all.length ? "cursor:" + (offset + first) : null;
+      return { status: 0, stdout: JSON.stringify(reply(nodes, 1, remaining, next, all.length)), stderr: "" };
     }
     return { status: 1, stdout: "", stderr: "fake gh: unexpected call" };
   };

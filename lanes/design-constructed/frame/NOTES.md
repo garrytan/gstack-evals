@@ -10,7 +10,7 @@ and draw positions are not built here; the `recipes` command row still says "not
 |---|---|
 | gh.ts | the paced gh client with the GitHub egress allowlist (copied, see below) |
 | git.ts | hardened git and `fetchAt`, the fetch of one commit by oid at depth 1 (copied, see below) |
-| search.ts | the pure query builder, the 50 queries and the cached search run |
+| search.ts | the pure query builders, the 50 searches, cursor paging and the cached page run |
 | filters.ts | the entry filters, the README title reading, the frame order and the owner dedupe |
 | tree.ts | the clone listing (no .git, no node_modules, no symlinks) and package.json reading |
 | routes.ts | route discovery per router and R2-19's matcher, exported for the recipes area |
@@ -35,14 +35,24 @@ patterns name one route. PD-10's "three distinct routes the file check discovere
 
 ## Build-time choices (BT)
 
-- **BT-F1 Query.** One query text for all 50 searches, `$q` = `topic:<t> license:<l> sort:stars`, first 100, topics in
-  frozen order and each topic's licences in frozen order. The README is read by four aliased `object(expression:
-  "HEAD:<path>")` fields in the order README.md, readme.md, Readme.md, README; the first non-null text is the README.
-- **BT-F2 Cache.** Each reply is cached at `<out>/search-cache/<sha256 of query and variables>.json`, written only after
-  a reply with no error. A rerun reads the cache and spends nothing on a cached query.
-- **BT-F3 Pacing and quota.** At least 3,000 ms between the starts of any two gh calls, rate_limit reads included.
-  Transient errors (502, 503, 504, timeouts, secondary limits) get 3 tries, 5 s and 10 s apart. The frame never takes
-  the GraphQL quota under 1,000 points; under it, it waits for the reset.
+- **BT-F1 Query.** One query text for every page, with `$q` = `topic:<t> license:<l> sort:stars`, `$first` and
+  `$after`, and `pageInfo { hasNextPage endCursor }`. Searches run topic by topic in frozen order, each topic's
+  licences in frozen order. The README is read by four aliased `object(expression: "HEAD:<path>")` fields in the order
+  README.md, readme.md, Readme.md, README; the first non-null text is the README.
+- **BT-F1a Paging (Captain's approval, 2026-11-14).** Live GitHub answered HTTP 502 to a first-100 page carrying README
+  text (about 12 s, past GitHub's GraphQL time limit) while a first-25 page came back in about 4 s. So each search is
+  read as up to 4 cursor pages of 25 (`SEARCH_PAGE_SIZE`, BT), following endCursor until the search has given 100
+  node slots (`FRAME.resultsPerQuery`, unchanged) or GitHub says there is no next page. Pages are read in order and
+  concatenated, so the nodes come in the order one first-100 reply would give. Each search records its pages, its
+  summed cost and its nodes. A full frame is 200 page requests.
+- **BT-F2 Cache.** Each page reply is cached at `<out>/search-cache/<sha256 of query and variables, cursor
+  included>.json`, written only after a reply with no error, so the cache holds the record of every page the launch
+  read. The cache serves only its own launch: a relaunch starts clean (BT-F11).
+- **BT-F3 Pacing, resends and quota.** One request at a time, at least 3,000 ms between the starts of any two gh calls,
+  rate_limit reads included. A page that fails with HTTP 502, HTTP 504 or a request timeout (`SEARCH_RESEND`) is resent
+  up to 3 times, 4 tries in all, 5, 10 and 15 s apart: it is the same request and nothing came back. Any other error,
+  or a page that fails all 4 tries, stops the run at once (BT-F11). The frame never takes the GraphQL quota under 1,000
+  points; under it, it waits for the reset.
 - **BT-F4 Duplicates.** A repository two queries return is read from the first query, in query order.
 - **BT-F5 Filter order.** public, not a fork, not archived, not a template, stars, pushed, licence, language, topic
   words, README title. A repository leaves at the first it fails; counts print after each.
@@ -60,9 +70,13 @@ patterns name one route. PD-10's "three distinct routes the file check discovere
   at most 30 recipe sessions, so a 31st pass is never used). A repository whose search recorded no head oid counts as
   an unfetchable attempt with no network call. Under R2-1's other reading (`bound: "clones"`, code only, no flag) the
   walk stops at 30 attempts.
-- **BT-F11 Relaunch.** A crashed run relaunched into the same out folder reuses cached replies and finished clones,
-  never retries a clone that failed, retries one a crash interrupted, and refuses a launch from another commit. A
-  finished run (run.json present) is refused: the frame runs once (C1).
+- **BT-F11 Stops and relaunch (Captain's approval, 2026-11-14).** All 200 pages run in one sitting at the frozen pacing,
+  and run.json records the search's start and end times in UTC. When a page fails for good, the run deletes the
+  search cache and everything else it wrote, keeps only launches.jsonl with a stop line (commit, time, search, page,
+  error class), and exits 2 with "frame stopped: ... The frame must go to the Captain before any relaunch." A relaunch
+  into the same out folder keeps nothing from earlier launches (it clears everything but launches.jsonl), runs all
+  200 pages again, and records each earlier launch in run.json as "failed, no data" with its stop, if any. A finished
+  run (run.json present) is refused: the frame runs once (C1).
 - **BT-F12 What the file check walks.** Every regular file outside .git and node_modules, never through a symlink.
 - **BT-F13 Tests and stories.** A file with a .test., .spec., .stories. or .story. part in its name, or under a
   `__tests__` folder, is not a component file and is not read for routes.
@@ -85,7 +99,8 @@ patterns name one route. PD-10's "three distinct routes the file check discovere
   type, createWebHistory, basename, Angular's base href).
 - **BT-F17 Output.** `<out>` holds search.json, entry.json (each returned repository and the step it left at),
   frame.json, clones.json, filecheck.json, run.json, launches.jsonl, clone-attempts.jsonl, search-cache/ and clones/.
-  stdout prints counts, frame positions of unfetchable oids and sha256 digests only. `--out` must lie outside the
+  stdout prints counts (one line per search: topic, licence, pages, nodes, cost), frame positions of unfetchable
+  oids and sha256 digests only. `--out` must lie outside the
   repository, and a dirty tree is refused.
 
 ## Open for the integrator
@@ -94,13 +109,23 @@ patterns name one route. PD-10's "three distinct routes the file check discovere
    and only visible text counts (BT-F8). Frame fixtures cover both cases.
 2. **Repository-wide route count (BT-F15).** Settled by the Captain on 2026-11-14: the literal, repository-wide count.
 3. **No reason code for a search or clone failure.** No E_DC_ code covers a GitHub or git failure in the frame, and the
-   build adds none. A search reply with an error, or gh failing after its tries, throws a plain error and the command
-   exits non-zero with a stack; the rerun resumes from the cache. If a code is wanted, it is a codes.ts change.
-4. **Not checked live.** The query shape is checked against a recorded invented reply, not GitHub's schema, and no
+   build adds none. A search page that fails for good prints one stderr line starting "frame stopped:" and exits 2; a
+   rate_limit read or clone-loop failure throws a plain error. AGENTS.md wants every error line to start with its
+   code, so if the Captain wants one, it is a codes.ts change.
+4. **Not checked live.** The query shape is checked against four recorded invented pages, not GitHub's schema, and no
    real clone ran (no network here). Before the dated run, the integrator should run one live query by hand and one
    `git ls-remote https://github.com/<public repo>` under the same isolated config (`GIT_CONFIG_GLOBAL=/dev/null`),
    because hardened git ignores any proxy rewrite in the global git config. The prereg says "1-point queries"; the
-   run records each query's cost and prints the total but does not stop on a cost above 1.
+   run records each page's cost, sums it per search and prints it, but does not stop on a cost above 1.
 5. **Shared-file edits.** cli.ts: the frame and filecheck rows now call frame/command.ts (the row edit this area owns,
    plus one import line). tests/dc/dryrun.test.ts: its "not built yet" check used the frame row, which is now built, so
    it checks the recipes row instead.
+6. **Deviation for the Captain: 200 page requests.** Prereg section 15's terms paragraph says "the frame reads 50 search
+   pages through the API". With BT-F1a it makes up to 200 page requests of 25 (the same 50 searches and at most the
+   same 100 results each), plus resends under BT-F3. The results post should list this as a pre-data deviation.
+7. **What counts as a request timeout.** `SEARCH_RESEND` matches "HTTP 502", "HTTP 504" and "timeout" or "timed out"
+   anywhere in gh's output. GitHub's own GraphQL error "This may be the result of a timeout" therefore counts as a
+   timeout and is resent; any other GraphQL error stops the run. If the Captain reads "request timeout" as the client's
+   timeout only, the pattern narrows to that.
+8. **Clones across launches.** Because a relaunch keeps no data, a launch that died during the clone walk (not a search
+   stop) means a relaunch clones those repositories again. Each repository is still cloned at most once per launch.
