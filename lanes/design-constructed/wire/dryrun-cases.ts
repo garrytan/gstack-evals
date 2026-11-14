@@ -16,6 +16,7 @@ import type { DryRunCase } from "../types.ts";
 import { BOUND_PROVIDERS } from "../wire.ts";
 import { fakeEnv, fakeKit, fakeSessions, fakeVm, type FakeAttempt, type Kit, type KitOptions } from "./fakes.ts";
 import { runRow, scratch, sessionsFixture, stage3Fixture } from "./fixtures.ts";
+import { hostRowCases } from "./dryrun-host.ts";
 import type { Cell } from "../run/types.ts";
 
 type Ran = Awaited<ReturnType<typeof runRow>>;
@@ -269,5 +270,6 @@ export function cases(): DryRunCase[] {
           return all(eq(r.code, 0, "exit"), (r.out[0] ?? "").startsWith("admission read: 2 units on 2 base apps") ? null : "first line " + r.out[0], existsSync(join(dir, "out", "design.json")) ? null : "no design.json written");
         }),
     },
+    ...hostRowCases(),
   ];
 }
