@@ -317,6 +317,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_DCH_SEAL](#e_dch_seal) | 2 | U20 |
 | [E_DCH_CARRY](#e_dch_carry) | 2 | U20 |
 | [E_DCH_MIRROR_DOWN](#e_dch_mirror_down) | 2 | U20 |
+| [E_DCW_INSTALL_REACH](#e_dcw_install_reach) | 2 | U20 |
 | [E_DCW_INSTALL_DIGEST](#e_dcw_install_digest) | 2 | U20 |
 | [E_DCW_PREFLIGHT](#e_dcw_preflight) | 2 | U20 |
 | [E_DCW_MODEL_PROBE](#e_dcw_model_probe) | 2 | U20 |
@@ -2302,6 +2303,14 @@ Design plan review eval (controller host): a package mirror the controller host 
 Fix: Read the unit state and journal lines the message quotes and fix the controller host's mirror setup (stage3/ubicloud-real.ts mirrorSetup), then run dc host teardown on the saved record and launch again. Never send the preflight or a later row to a host whose mirrors failed the check.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_DCW_INSTALL_REACH
+
+Design plan review eval (prereg section 4, the gstack install): the check before ./setup found a host the install needs that does not resolve or gives no HTTPS answer from the install network, so ./setup did not run and the session or the preflight stopped there. No model call was sent for it.
+
+Fix: Read the host and curl's cause in the line, then check the controller host's DNS and its route out from a plain Docker bridge network. Launch again only after the host answers from there.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: no. Owner: U20.
 
 ### E_DCW_INSTALL_DIGEST
 

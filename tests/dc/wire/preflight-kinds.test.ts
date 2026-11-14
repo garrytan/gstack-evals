@@ -6,6 +6,7 @@ import { bytes, fakeBackend, fakeHosts, fakeSpec, fakeWorld, type FakeWorld } fr
 import { AGENT_CLAUDE, AGENT_ROOT, BROWSER_ROOT, controllerBackend } from "../../../lanes/design-constructed/stage3/install.ts";
 import { secretHit } from "../../../lanes/design-constructed/stage3/sandbox.ts";
 import { runRecipePreflight } from "../../../lanes/design-constructed/wire/preflight.ts";
+import { checkInstallReach } from "../../../lanes/design-constructed/run/docker.ts";
 import { containerPreflight, fakeContainerSeams } from "../../../lanes/design-constructed/wire/preflight-container.ts";
 
 // The preflight ran only a qualify VM, which has no proxy and installs no Claude Code, so it never exercised the recipe
@@ -71,6 +72,21 @@ describe("the preflight's review container", () => {
     expect(r.problems).toEqual(["the check stopped: E_DCW_INSTALL_DIGEST: the installed tree's digest differs from the pinned tree's"]);
     expect(s.stopped).toBe(1);
     expect(r.lines.at(-1)).toStartWith("removal: dc-review-fake removed");
+  });
+  test("an install that exits non-zero fails the preflight with its log's last lines, masked, in the line", async () => {
+    // Value: protects=the Captain's ruling that no cause is dropped (launch 9 printed only the exit code); fails_when=the line drops the install's log or carries a URL
+    const log = "bun install v1.4.4\nsee https://github.com/garrytan/gstack#install\nbin/gstack-host-renders.sh: line 54: .gstack-installed-hosts.tmp.29: Permission denied\n";
+    const s = { ...fakeContainerSeams(), install: () => ({ ...fakeContainerSeams().install(null as never), code: 1, log, install_digest: null }) };
+    const r = await containerPreflight(dir(), s);
+    expect(r.problems).toEqual(["gstack install: exited 1: bun install v1.4.4 / see [redacted] / bin/gstack-host-renders.sh: line 54: .gstack-installed-hosts.tmp.29: Permission denied"]);
+    expect(secretHit(r.problems[0]!)).toBeNull();
+  });
+  test("a needed host that gives no answer stops the install with E_DCW_INSTALL_REACH naming it, and the container is still removed", async () => {
+    // Value: protects=the check before ./setup reaching the preflight's line; fails_when=the preflight runs ./setup anyway or loses the host's name
+    const s = fakeContainerSeams();
+    const r = await containerPreflight(dir(), { ...s, install: () => (checkInstallReach({ run: () => ({ code: 0, stdout: "registry.npmjs.org\t\t\n", stderr: "" }) }, "dc-install-fake"), s.install(null as never)) });
+    expect(r.problems).toEqual(["the check stopped: E_DCW_INSTALL_REACH: gstack install: registry.npmjs.org does not resolve from the install network dc-install-fake, so ./setup did not run"]);
+    expect(s.stopped).toBe(1);
   });
   test("a C3 problem before the install fails the preflight and skips the install", async () => {
     let installs = 0;

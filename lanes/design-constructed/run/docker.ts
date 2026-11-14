@@ -21,6 +21,7 @@ import { checkImagePin, stateRoot, type Runner } from "../../../src/trial/image.
 import type { AgentSession, StepResult } from "../../../src/trial/sandbox.ts";
 import { fail } from "../errors.ts";
 import { GSTACK_PIN, HARNESS } from "../frozen.ts";
+import { causeText } from "../stage3/sandbox.ts";
 import { containerProblems, HOME, type SessionSetup } from "./arms.ts";
 import { pickRuns } from "./box.ts";
 import { CONTAINER_MOUNTS, runC2, sha256Hex, type C2Expect } from "./contain.ts";
@@ -254,6 +255,19 @@ export interface GstackInstall {
   networks_after: string[];
 }
 
+/** BT: how many of a failed install's last log lines its cause keeps. */
+export const INSTALL_CAUSE_LINES = 12;
+
+/**
+ * A failed install's cause for a printed line or a record (the Captain's ruling: no dropped causes): the log's last
+ * INSTALL_CAUSE_LINES non-empty lines, colour codes removed, each masked by causeText, joined with " / " and cut from
+ * the front to causeText's 400 characters, so the last lines, where ./setup names its failure, always survive.
+ */
+export function installCause(log: string): string {
+  const text = log.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "").split("\n").map((l) => causeText(l)).filter(Boolean).slice(-INSTALL_CAUSE_LINES).join(" / ");
+  return text.length > 400 ? "..." + text.slice(-397) : text || "the install printed nothing";
+}
+
 /** Each file under a checkout as "<sha256 or link:target>  ./path", .git left out: the install digest's lines. */
 export const CHECKOUT_LISTING = "find . -path ./.git -prune -o -type f -exec sha256sum {} + && find . -path ./.git -prune -o -type l -printf 'link:%l  %p\n'";
 
@@ -302,9 +316,40 @@ export function verifyInstall(c: Pick<ReviewContainer, "name" | "network" | "run
 }
 
 /**
+ * BT: the hosts ./setup --host claude at the pin needs from the install network to exit 0: its bun install of bun.lock's
+ * packages from the npm registry. The Playwright download hosts (cdn.playwright.dev, playwright.download.prss.microsoft.com,
+ * storage.googleapis.com) and Claude Code's own host (api.anthropic.com) it also contacts are best effort there: a
+ * failure to reach them leaves Chromium or a probe unavailable and ./setup goes on, so they are not checked.
+ */
+export const INSTALL_HOSTS = ["registry.npmjs.org"] as const;
+
+/** Inside the container: one line per host, its name, the first address getent finds (empty for none), then curl's error text, if any, and the HTTPS answer's status code (000 for none). */
+export const installReachCommand = (hosts: readonly string[]): string =>
+  "for h in " + hosts.join(" ") + "; do a=$(getent hosts \"$h\" | head -n 1 | cut -d ' ' -f 1); o=''; [ -z \"$a\" ] || o=$(curl -sS -o /dev/null -m 20 -w ' %{http_code}' \"https://$h/\" 2>&1 | tr '\\n\\t' '  '); printf '%s\\t%s\\t%s\\n' \"$h\" \"$a\" \"$o\"; done";
+
+/**
+ * The check before ./setup, from the container on the install network: each host resolves and answers HTTPS, or
+ * E_DCW_INSTALL_REACH names the first that doesn't with its cause (curl's masked error), and ./setup does not run.
+ */
+export function checkInstallReach(c: Pick<ReviewContainer, "run">, network: string, hosts: readonly string[] = INSTALL_HOSTS): void {
+  const r = c.run(installReachCommand(hosts), 120_000);
+  const seen = new Map(r.stdout.split("\n").map((l) => l.split("\t")).filter((p) => p.length === 3).map(([h, a, o]) => [h!, { address: a!, out: o!.trim() }]));
+  for (const h of hosts) {
+    const s = seen.get(h);
+    const stop = (why: string) => fail("E_DCW_INSTALL_REACH", "gstack install: " + h + " " + why + " from the install network " + network + ", so ./setup did not run");
+    if (!s) stop("could not be checked (the check exited " + r.code + (r.stderr.trim() ? ": " + causeText(r.stderr) : "") + ")");
+    else if (!s.address) stop("does not resolve");
+    else if (/(^|\s)000$/.test(s.out) || !/\d{3}$/.test(s.out)) stop("resolves to " + s.address + " but gives no HTTPS answer: " + (causeText(s.out.replace(/\s*\d{3}$/, "")) || "curl printed no error"));
+  }
+}
+
+/**
  * gstack's install at the pin, in a gstack arm's container: the pinned commit's tree, verified against its git tree, is
- * copied to GSTACK_CHECKOUT, and the frozen install command runs there with the install network joined. The network
- * leaves before this returns, whatever the install did. sources are local repositories that hold the pinned commit.
+ * copied to GSTACK_CHECKOUT, and the frozen install command runs there with the install network joined, once
+ * checkInstallReach has found every needed host. docker cp -a gives the copy to the container's user: a plain docker cp
+ * keeps this host's owners, so under the root service on the controller host the checkout was root's and ./setup could
+ * not write in it. The network leaves before this returns, whatever the install did. sources are local repositories
+ * that hold the pinned commit.
  */
 export function installGstack(c: ReviewContainer, o: { sources: readonly string[]; installNetwork: string; scratch: string; docker?: string; timeoutMs?: number }): GstackInstall {
   const docker = o.docker ?? "docker";
@@ -313,12 +358,13 @@ export function installGstack(c: ReviewContainer, o: { sources: readonly string[
   try {
     const mk = c.run('mkdir -p "$HOME/.claude/skills"', 60_000);
     if (mk.code !== 0) fail("E_DC_INFRA_MISSING", "gstack install: mkdir exited " + mk.code);
-    const cp = spawnSync(docker, ["cp", "-q", to + "/.", c.name + ":" + GSTACK_CHECKOUT], { encoding: "utf8", env: clientEnv() });
+    const cp = spawnSync(docker, ["cp", "-a", "-q", to + "/.", c.name + ":" + GSTACK_CHECKOUT], { encoding: "utf8", env: clientEnv() });
     if (cp.status !== 0) fail("E_DC_INFRA_MISSING", "gstack install: docker cp exited " + cp.status + ": " + String(cp.stderr).trim());
     const joined = spawnSync(docker, ["network", "connect", o.installNetwork, c.name], { encoding: "utf8", env: clientEnv() });
     if (joined.status !== 0) fail("E_DC_INFRA_MISSING", "gstack install: could not join the install network: " + String(joined.stderr).trim());
     let r: ExecResult;
     try {
+      checkInstallReach(c, o.installNetwork);
       r = c.run("cd " + GSTACK_CHECKOUT + " && " + GSTACK_PIN.install, o.timeoutMs ?? 1_800_000);
     } finally {
       const left = spawnSync(docker, ["network", "disconnect", "-f", o.installNetwork, c.name], { encoding: "utf8", env: clientEnv() });
@@ -357,7 +403,7 @@ export async function prepareSession(o: { image: ReviewImage; setup: SessionSetu
     if (!gstack || c3.length || c2.length) return { container, c3, c2, install: null, c2AfterInstall: null, c3AfterInstall: null };
     const install = installGstack(container, { ...o.install!, installNetwork: o.install!.network, docker: o.docker });
     const c2AfterInstall = await c2InContainer(container, o.expect);
-    const c3AfterInstall = [...(install.code === 0 ? [] : ["the gstack install exited " + install.code]), ...c3Problems(container, o.setup)];
+    const c3AfterInstall = [...(install.code === 0 ? [] : ["the gstack install exited " + install.code + ": " + installCause(install.log)]), ...c3Problems(container, o.setup)];
     return { container, c3, c2, install, c2AfterInstall, c3AfterInstall };
   } catch (e) {
     container.stop();

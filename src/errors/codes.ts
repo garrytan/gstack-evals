@@ -2615,6 +2615,15 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_DCW_INSTALL_REACH: {
+    exit: 2,
+    meaning: "Design plan review eval (prereg section 4, the gstack install): the check before ./setup found a host the install needs that does not resolve or gives no HTTPS answer from the install network, so ./setup did not run and the session or the preflight stopped there. No model call was sent for it.",
+    fix: "Read the host and curl's cause in the line, then check the controller host's DNS and its route out from a plain Docker bridge network. Launch again only after the host answers from there.",
+    side_effects: PARTIAL,
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
+  },
   E_DCW_INSTALL_DIGEST: {
     exit: 2,
     meaning: "Design plan review eval (prereg section 4, the gstack install): a gstack arm session's installed checkout, read inside its container after the install, has a digest other than the pinned commit's tree, so the session stopped before Claude Code launched. No model call was sent for it.",

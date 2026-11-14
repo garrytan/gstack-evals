@@ -354,7 +354,7 @@ export function realSessions(h: HostContext, watch: ProviderWatch, s: RealSeams,
         throw new DcError("E_DCW_CONTAINMENT", key + " failed its container checks twice and is held for the Captain: " + contained.problems.map((x) => x.join("; ")).join(" | then | "));
       }
       const container = p.container;
-      if (p.install) writeFileSync(join(base, "install.json"), JSON.stringify({ git_tree: p.install.git_tree, tree_sha256: p.install.tree_sha256, pinned_digest: p.install.pinned_digest, install_digest: p.install.install_digest, networks_after: p.install.networks_after }, null, 2) + "\n");
+      if (p.install) writeFileSync(join(base, "install.json"), JSON.stringify({ git_tree: p.install.git_tree, tree_sha256: p.install.tree_sha256, pinned_digest: p.install.pinned_digest, install_digest: p.install.install_digest, networks_after: p.install.networks_after, first_problems: contained.problems[0] ?? null }, null, 2) + "\n");
       let binding: SessionBinding;
       try {
         binding = await proxies.bind(sub.item, { sub, session: cellId(cell), attempt, arm: cell.kind });

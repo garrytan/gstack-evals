@@ -10,7 +10,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { DcError } from "../errors.ts";
 import { GSTACK_ARMS, sessionSetup, type SessionSetup } from "../run/arms.ts";
-import { c3Problems, type GstackInstall, type ReviewContainer } from "../run/docker.ts";
+import { c3Problems, installCause, type GstackInstall, type ReviewContainer } from "../run/docker.ts";
 import { causeText } from "../stage3/sandbox.ts";
 
 export interface ContainerSeams {
@@ -54,7 +54,7 @@ export async function containerPreflight(dir: string, s: ContainerSeams): Promis
     else {
       lines.push("C3 before the install: ok (a non-root user, the three frozen mounts, the pinned image, one network, no key variable)");
       const install = s.install(c);
-      if (install.code !== 0) bad("gstack install: exited " + install.code);
+      if (install.code !== 0) bad("gstack install: exited " + install.code + ": " + installCause(install.log));
       else lines.push("gstack install: ok, the install digest " + install.install_digest + " is the pinned tree's, networks after it " + install.networks_after.join(", "));
       const after = c3(c, setup, false);
       if (after.length) bad("C3 after the install: " + causeText(after.join("; ")));
