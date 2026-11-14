@@ -3,7 +3,7 @@
 // L4), the first judge packet's re-projection (a projection past dc-judges' cap stops for the Captain), the $5,000
 // envelope, and R2-7's reading of a dc-base-apps cap stop.
 import type { ReasonCode } from "../../../src/errors/codes.ts";
-import { LEDGER_ITEMS, MONEY, RECIPES } from "../frozen.ts";
+import { CREW_DEVIATION, LEDGER_ITEMS, MONEY, RECIPES } from "../frozen.ts";
 import type { LedgerItemId } from "../types.ts";
 import { $, dollars, type MoneyController } from "./book.ts";
 import type { ItemFigures } from "./types.ts";
@@ -13,7 +13,7 @@ export const ITEM_IDS = Object.keys(LEDGER_ITEMS) as LedgerItemId[];
 /** Every item's figures; crew, which has no lease, carries the thread counters' reading passed in. */
 export function moneyFigures(c: MoneyController, crewMicros = 0): Record<LedgerItemId, ItemFigures> {
   const out = {} as Record<LedgerItemId, ItemFigures>;
-  for (const item of ITEM_IDS) out[item] = item === "crew" ? { item, capMicros: $(LEDGER_ITEMS.crew.capUsd), settledMicros: crewMicros, inFlightMicros: 0, unknownMicros: 0, inFlightCount: 0, leaseId: null, closed: false, paused: null } : c.figures(item);
+  for (const item of ITEM_IDS) out[item] = item === "crew" ? { item, capMicros: $(CREW_DEVIATION.capUsd), settledMicros: crewMicros, inFlightMicros: 0, unknownMicros: 0, inFlightCount: 0, leaseId: null, closed: false, paused: null } : c.figures(item);
   return out;
 }
 

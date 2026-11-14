@@ -5,7 +5,7 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { AUTHORING, LEDGER_ITEMS, MONEY, PASSES, PREREG, READS, SETS, STAGE3 } from "../frozen.ts";
+import { AUTHORING, CREW_DEVIATION, LEDGER_ITEMS, MONEY, PASSES, PREREG, READS, SETS, STAGE3 } from "../frozen.ts";
 import { fail } from "../errors.ts";
 import type { Arm, LedgerItemId, Model } from "../types.ts";
 import { above, below, q4, show } from "./num.ts";
@@ -152,7 +152,8 @@ export function project(i: ProjectionInput, d: Stage2Design): Projection {
   add("dc-stage3-reads", d.stage3Units * i.stage3PerUnitUsd.reads);
   const allInUsd = Object.values(byItem).reduce((s, v) => s + (v ?? 0), 0);
   const misses: string[] = [];
-  if (above(allInUsd, MONEY.capAllInUsd)) misses.push("all-in $" + allInUsd.toFixed(2) + " is over the $" + MONEY.capAllInUsd + " line");
+  const crewOverUsd = Math.min(Math.max((byItem.crew ?? 0) - CREW_DEVIATION.frozenCapUsd, 0), CREW_DEVIATION.capUsd - CREW_DEVIATION.frozenCapUsd);
+  if (above(allInUsd - crewOverUsd, MONEY.capAllInUsd)) misses.push("all-in $" + allInUsd.toFixed(2) + (crewOverUsd > 0 ? " (less $" + crewOverUsd.toFixed(2) + " of crew spend under PD-14)" : "") + " is over the $" + MONEY.capAllInUsd + " line");
   for (const id of [...MODELS.map((m) => STAGE2_ITEM[m]), "dc-stage3-builds" as const]) {
     const need = (byItem[id] ?? 0) + reserveOf(id);
     if (above(need, LEDGER_ITEMS[id].capUsd)) misses.push(id + " needs $" + need.toFixed(2) + " with its reserve, over its $" + LEDGER_ITEMS[id].capUsd + " cap");

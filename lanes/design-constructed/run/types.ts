@@ -16,16 +16,18 @@ export type Exec = (command: string) => ExecResult | Promise<ExecResult>;
 export type ParseBlock = (reply: string) => ChangeList | null;
 
 /**
- * How one attempt ended, read off the driver's termination (BT, plan section 6). own-limit is the session's own limit:
- * context overflow, the harness timeout, or the turn, minute or dollar limit. outside is a failure outside the agent:
- * a provider or proxy error, a crash, a closed lease or a lost host. unmapped is an end no frozen row names.
+ * How one attempt ended, read off the driver's termination (BT, plan section 6, with the Captain's 2026-11-14 ruling).
+ * own-limit is the session's own limit: context overflow, the harness timeout, the turn, minute or dollar limit, or the
+ * harness ending the session on the model's own malformed tool call with no API, provider or harness error. outside is
+ * a failure outside the agent: a provider or proxy error, a crash, a closed lease or a lost host, or a malformed tool
+ * call that ended the session because one of those returned an error. A refusal, an empty reply or malformed output is
+ * a completed reply, which the frozen parse decides.
  */
 export type AttemptEnd =
   | { kind: "completed" }
-  | { kind: "own-limit"; limit: "context" | "timeout" | "turns" | "dollars" }
+  | { kind: "own-limit"; limit: "context" | "timeout" | "turns" | "dollars" | "tool-call" }
   | { kind: "cap-stop" }
-  | { kind: "outside"; reason: string }
-  | { kind: "unmapped"; reason: string };
+  | { kind: "outside"; reason: string };
 
 /** What the classifier reads from one finished attempt. */
 export interface AttemptRecord {
@@ -44,8 +46,8 @@ export interface AttemptRecord {
   autoplan: { gateAnswered: boolean; approved: boolean } | null;
 }
 
-/** A cell's read after an attempt: a frozen cell state, or held for the Captain when no frozen row names the end. */
-export type EndRead = { state: CellState; list: ChangeList | null; why: string } | { state: "held"; list: null; why: string };
+/** A cell's read after an attempt: a frozen cell state. */
+export type EndRead = { state: CellState; list: ChangeList | null; why: string };
 
 /** One planned review cell: a unit, an arm or the reference, a model and a pass. */
 export interface Cell {
@@ -71,9 +73,9 @@ export interface LoopSeams {
 /** A cell's final outcome: its state, the scored attempt's list, and every attempt's read. */
 export interface CellOutcome {
   cell: Cell;
-  state: CellState | "held";
+  state: CellState;
   list: ChangeList | null;
-  attempts: Array<{ attempt: 1 | 2; read: EndRead; heldBlock: boolean }>;
+  attempts: Array<{ attempt: 1 | 2; end: AttemptEnd; read: EndRead; heldBlock: boolean }>;
   why: string;
 }
 

@@ -16,8 +16,11 @@ import type { SessionKind } from "../types.ts";
 import { isGstackArm } from "./arms.ts";
 import type { AttemptEnd, AttemptRecord, Cell, CellOutcome, EndRead, LoopSeams, ParseBlock } from "./types.ts";
 
-/** The driver's termination as an attempt end (BT). An arm failure no frozen row names is unmapped and held. */
-export function endOf(t: Termination): AttemptEnd {
+/**
+ * The driver's termination as an attempt end (BT, and the Captain's 2026-11-14 ruling). errorSeen says the API, the
+ * provider or the harness returned an error in the session's last exchange; it decides only a malformed tool call.
+ */
+export function endOf(t: Termination, errorSeen = false): AttemptEnd {
   switch (t.kind) {
     case "completed":
       return { kind: "completed" };
@@ -32,7 +35,8 @@ export function endOf(t: Termination): AttemptEnd {
     case "arm_failure":
       if (t.failure === "context_overflow") return { kind: "own-limit", limit: "context" };
       if (t.failure === "harness_crash") return { kind: "outside", reason: "harness crash" };
-      return { kind: "unmapped", reason: "arm failure " + t.failure };
+      if (t.failure === "malformed_tool_call") return errorSeen ? { kind: "outside", reason: MALFORMED_OUTSIDE } : { kind: "own-limit", limit: "tool-call" };
+      return { kind: "completed" };
     case "missing":
       return { kind: "outside", reason: t.code };
     case "infra":
@@ -49,9 +53,8 @@ export function readAttempt(kind: SessionKind, r: AttemptRecord, parse: ParseBlo
   if (r.webResult) return { state: "web-contaminated", list: null, why: "a successful web result" };
   if (r.gstackRead && !isGstackArm(kind)) return { state: "gstack-read", list: null, why: "a gstack file read in a " + kind + " session" };
   if (r.end.kind === "cap-stop") return { state: "incomplete", list: null, why: "a cap stop" };
-  if (r.end.kind === "own-limit") return { state: "arm-stop", list: null, why: "the session's own " + r.end.limit + " limit" + (r.heldBlock ? ", with a block written before it stopped" : "") };
+  if (r.end.kind === "own-limit") return { state: "arm-stop", list: null, why: (r.end.limit === "tool-call" ? "the harness ended the session on the model's own malformed tool call" : "the session's own " + r.end.limit + " limit") + (r.heldBlock ? ", with a block written before it stopped" : "") };
   if (r.end.kind === "outside") return { state: "infra-missing", list: null, why: "a failure outside the agent: " + r.end.reason };
-  if (r.end.kind === "unmapped") return { state: "held", list: null, why: "no frozen row names this end: " + r.end.reason };
   const list = parse(r.reply);
   if (!list) return { state: "no-block", list: null, why: "a completed reply with no block that parses" };
   if (kind === "autoplan" && !(r.autoplan?.gateAnswered && r.autoplan.approved)) return { state: "scored-unexposed", list, why: "autoplan with a block but " + (r.autoplan?.gateAnswered ? "no APPROVED" : "no gate answered") };
@@ -66,9 +69,9 @@ export async function runCell(cell: Cell, seams: LoopSeams): Promise<CellOutcome
   const log = seams.log ?? (() => {});
   const first = await seams.session(cell, 1);
   const r1 = readAttempt(cell.kind, first, seams.parse);
-  const attempts: CellOutcome["attempts"] = [{ attempt: 1, read: r1, heldBlock: first.heldBlock }];
+  const attempts: CellOutcome["attempts"] = [{ attempt: 1, end: first.end, read: r1, heldBlock: first.heldBlock }];
   const done = (read: EndRead, why: string): CellOutcome => ({ cell, state: read.state, list: read.list, attempts, why });
-  if (r1.state === "held" || !RETRIES.has(CELL_STATES[r1.state].retry)) return done(r1, r1.why);
+  if (!RETRIES.has(CELL_STATES[r1.state].retry)) return done(r1, r1.why);
   const rec = await seams.reconcile(cell, 1);
   if (!rec.ok) {
     log("J1 " + cellId(cell) + ": reconciliation failed (" + rec.why + "); the cell is missing, never retried");
@@ -78,7 +81,7 @@ export async function runCell(cell: Cell, seams: LoopSeams): Promise<CellOutcome
   log("retry " + cellId(cell) + ": " + r1.why);
   const second = await seams.session(cell, 2);
   const r2 = readAttempt(cell.kind, second, seams.parse);
-  attempts.push({ attempt: 2, read: r2, heldBlock: second.heldBlock });
+  attempts.push({ attempt: 2, end: second.end, read: r2, heldBlock: second.heldBlock });
   return done(r2, "the retry is final: " + r2.why);
 }
 
@@ -133,6 +136,29 @@ export function armStopsWithBlock(outcomes: readonly CellOutcome[]): Array<{ kin
 }
 
 export const printArmStopsWithBlock = (outcomes: readonly CellOutcome[]): string[] => armStopsWithBlock(outcomes).map((r) => "arm stops that held a block: " + r.kind + " on " + r.model + " " + r.attempts + " (descriptive)");
+
+/** The reason an outside end carries when a malformed tool call ended the session after an API, provider or harness error. */
+export const MALFORMED_OUTSIDE = "a malformed tool call after an API, provider or harness error";
+
+/** Per arm and model, attempts a malformed tool call ended: read as an arm stop, and read as outside the agent (Captain, 2026-11-14). */
+export function malformedToolCalls(outcomes: readonly CellOutcome[]): Array<{ kind: SessionKind; model: string; armStop: number; outside: number }> {
+  const counts = new Map<string, { armStop: number; outside: number }>();
+  for (const o of outcomes)
+    for (const a of o.attempts) {
+      const arm = a.end.kind === "own-limit" && a.end.limit === "tool-call";
+      const out = a.end.kind === "outside" && a.end.reason === MALFORMED_OUTSIDE;
+      if (!arm && !out) continue;
+      const k = o.cell.kind + "	" + o.cell.model;
+      const c = counts.get(k) ?? { armStop: 0, outside: 0 };
+      if (arm) c.armStop++;
+      else c.outside++;
+      counts.set(k, c);
+    }
+  return [...counts].sort(([a], [b]) => (a < b ? -1 : 1)).map(([k, c]) => ({ kind: k.split("	")[0] as SessionKind, model: k.split("	")[1]!, ...c }));
+}
+
+export const printMalformedToolCalls = (outcomes: readonly CellOutcome[]): string[] =>
+  malformedToolCalls(outcomes).map((r) => "malformed tool calls: " + r.kind + " on " + r.model + " " + r.armStop + " read as arm stops, " + r.outside + " as outside the agent");
 
 /** A cell is final once its outcome exists; a label packet is built only from final cells (plan section 6). */
 export function packetReady(planned: readonly Cell[], outcomes: ReadonlyMap<string, CellOutcome>): boolean {

@@ -2,7 +2,8 @@
 // The money controller (plan section 5, L1 to L3; R2-7, R2-8, R2-17, R2-20): one lease per item and run id, opened and
 // held here, and every frozen run a named sub-reservation inside it. Admission counts settled spend, every in-flight
 // reservation and every unknown charge at its full reservation, carried apart. A refusal waits while anything on its
-// item is in flight and is a cap stop only when nothing is in flight and it still doesn't fit. A recorded cap stop
+// item is in flight or holds an unknown charge (an unknown charge counts as in flight until the owner's reconcile
+// settles it; Captain, 2026-11-14), and is a cap stop only when neither is left and it still doesn't fit. A recorded cap stop
 // closes its whole item. Every admission is copied off host and acknowledged before it is answered (R2-4).
 import { isAbsolute } from "node:path";
 import { LEDGER_ITEMS, MONEY, RECIPES } from "../frozen.ts";
@@ -203,6 +204,8 @@ export class MoneyController {
     if (d.reserveMicros > room) {
       const freeing = inFlight.filter((x) => !x.vm?.controller);
       if (freeing.length > 0) return { kind: "wait", why: ask + "; " + freeing.length + " in flight, so it waits" };
+      const unknown = this.subsOf(item).filter((x) => x.state === "unknown").length;
+      if (unknown > 0) return { kind: "wait", why: ask + "; " + unknown + " unknown charge" + (unknown === 1 ? "" : "s") + " not yet reconciled, so it waits" };
       await this.capStop(item, ask);
       return { kind: "cap-stop", why: ask + "; nothing in flight, so it is a cap stop" };
     }

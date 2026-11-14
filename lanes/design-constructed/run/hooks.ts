@@ -9,8 +9,9 @@
 // recorded as the harness's own words, and --rec-hash whenever gate.json carries rec_rev (BT: the hash is required
 // once rec_rev is above 0 and harmless at 0). The rec hash comes from the pinned binary's gate render ("Reply binds to
 // gate_rev=N rec_hash=H"), or else from the last recommended row for that gate_rev in the run's journal, never from a
-// gate.json field. After every gate revision it answers, it returns the frozen GATE_MESSAGE; a run's answers are
-// bounded by its max_rounds. A gate-hook block takes the Stop turn before the D1 hook.
+// gate.json field. It answers every gate revision, whatever the run's max_rounds (Captain, 2026-11-14), and after each
+// one it answers it returns the frozen GATE_MESSAGE. When the pin refuses an answer, the hook records the refusal and
+// doesn't block, so the session ends as the pin leaves it. A gate-hook block takes the Stop turn before the D1 hook.
 //
 // The D1 repair hook (2026-11-09-geva-420 smoke rule 4). Off by default; on only for a gstack arm on a model after
 // that arm failed smoke rule 1 or 2 there, for the re-smoke and that arm-model's stage 2 cells; never in none, lens or
@@ -54,12 +55,15 @@ export interface GateHook {
   onStop(): string | null;
   /** Every (run directory, gate revision) the hook answered, in order. */
   answered(): Array<{ dir: string; gateRev: number }>;
+  /** Every answer the pin refused, with its exit code, in order. */
+  refused(): Array<{ dir: string; gateRev: number; code: number }>;
   messages(): number;
 }
 
 export function gateHook(o: { box: RunBox; sinceMs: number; log?: (line: string) => void }): GateHook {
   const log = o.log ?? (() => {});
   const answered: Array<{ dir: string; gateRev: number }> = [];
+  const refused: Array<{ dir: string; gateRev: number; code: number }> = [];
   let messages = 0;
   return {
     onStop() {
@@ -84,12 +88,7 @@ export function gateHook(o: { box: RunBox; sinceMs: number; log?: (line: string)
           log("gate hook: " + dir + ": gate.json has no gate_rev; not answered");
           continue;
         }
-        if (answered.some((a) => a.dir === dir && a.gateRev === rev)) continue;
-        const bound = typeof state.max_rounds === "number" && state.max_rounds > 0 ? state.max_rounds : 1;
-        if (answered.filter((a) => a.dir === dir).length >= bound) {
-          log("gate hook: " + dir + ": gate_rev " + rev + " not answered; the run's max_rounds of " + bound + " is used");
-          continue;
-        }
+        if (answered.some((a) => a.dir === dir && a.gateRev === rev) || refused.some((a) => a.dir === dir && a.gateRev === rev)) continue;
         let hash: string | null = null;
         if (typeof gate.rec_rev === "number") {
           const h = recHashOf(o.box, dir, rev);
@@ -101,7 +100,8 @@ export function gateHook(o: { box: RunBox; sinceMs: number; log?: (line: string)
         }
         const r = o.box.gstack("gstack-autoplan", answerArgs(dir, rev, hash));
         if (r.code !== 0) {
-          log("gate hook: " + dir + ": answer at gate_rev " + rev + " exited " + r.code + ": " + (r.stderr || r.stdout).trim().split("\n")[0]);
+          refused.push({ dir, gateRev: rev, code: r.code });
+          log("gate hook: " + dir + ": the pin refused the answer at gate_rev " + rev + " (exit " + r.code + "): " + (r.stderr || r.stdout).trim().split("\n")[0]);
           continue;
         }
         answered.push({ dir, gateRev: rev });
@@ -113,6 +113,7 @@ export function gateHook(o: { box: RunBox; sinceMs: number; log?: (line: string)
       return GATE_MESSAGE;
     },
     answered: () => [...answered],
+    refused: () => [...refused],
     messages: () => messages,
   };
 }

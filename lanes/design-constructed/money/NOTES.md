@@ -48,7 +48,7 @@ Read as patterns, not copied: lanes/devex/leases.ts at the same devex commit, an
 
 ## Open for the integrator
 
-1. **Unknown charges and the cap stop.** L2 and R2-8 make a refusal a cap stop when nothing on the item is in flight. This build counts an unknown charge as not in flight, so a refusal caused only by an unknown charge that is waiting for reconciliation is a cap stop and closes the item. Waiting for reconciliation instead would change when an item closes, which can move an outcome, so it goes to the Captain.
+1. **Unknown charges and the cap stop.** Settled by the Captain on 2026-11-14 (PD-18): an unknown charge counts as in flight until reconciled, so a refusal waits on it.
 2. **Recipe retries and "at most 30".** The money area admits a J1 retry on money alone. Whether a retry counts toward the 30 recipe sessions is the frame area's count, and the frozen text doesn't say.
 3. **Write-ahead copy for session proxies.** The proxy container (src/trial/proxy-entry.ts) opens its own local ledger, so its reserves are not copied off host. It needs an additive, off-by-default option that wraps its ledger with writeAheadLedger and a WriteAhead whose target the container can reach (for example a unix socket in its mounted directory, served by the controller). Not done here, to stay clear of the run area's edits to that file.
 4. **Session-side drift.** The meter checks the served provider on direct calls. Sol and particle-1 sessions go through the proxy container; the run area needs to read the served provider there and call `applyStop(controller, stopPlan("E_DC_PROVIDER_DRIFT", { model }))`.

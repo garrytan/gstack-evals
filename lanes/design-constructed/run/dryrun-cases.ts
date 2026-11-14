@@ -18,7 +18,7 @@ import { attempt, autoplanRun, BLOCK, fakeBox, parseFixture, PDR_NO_UI_TRANSCRIP
 import { answerArgs, D1_MESSAGE, gateHook, repairHook, repairOn, stopHandler } from "./hooks.ts";
 import { MARK, writeHostile } from "./hostile.ts";
 import { scopeOf, scopeShare } from "./scope.ts";
-import { armStopsWithBlock, cellOrder, endOf, packetReady, readAttempt, runCell, runCells, cellId } from "./session.ts";
+import { armStopsWithBlock, cellOrder, endOf, malformedToolCalls, packetReady, printMalformedToolCalls, readAttempt, runCell, runCells, cellId } from "./session.ts";
 import type { AttemptRecord, Cell, CellOutcome, Exec, LoopSeams, Reconciled } from "./types.ts";
 
 const eq = (a: unknown, b: unknown, what: string): string | null => (JSON.stringify(a) === JSON.stringify(b) ? null : what + ": expected " + JSON.stringify(b) + ", got " + JSON.stringify(a));
@@ -237,9 +237,22 @@ export function cases(): DryRunCase[] {
     const r = await scripted("none", [attempt({ end: outside }), attempt()], { ok: false, why: "the proxy journal has no settle line" });
     return all(eq(r.sessions, 1, "sessions"), eq(r.o.state, "infra-missing", "state"));
   });
-  add("S6", "an end no frozen row names is held for the Captain, never scored or retried", async () => {
-    const r = await scripted("none", [attempt({ end: endOf({ kind: "arm_failure", failure: "refusal" }) })]);
-    return all(eq(r.o.state, "held", "state"), eq(r.sessions, 1, "sessions"));
+  add("S6", "a refusal, an empty reply or malformed output is a completed reply, and the frozen parse decides it", async () => {
+    const ends = (["refusal", "empty_response", "malformed_output"] as const).map((f) => endOf({ kind: "arm_failure", failure: f }));
+    const withBlock = await scripted("none", [attempt({ end: ends[0]! })]);
+    const without = await scripted("none", [attempt({ end: ends[1]!, reply: "", heldBlock: false })]);
+    return all(eq(ends.map((e) => e.kind), ["completed", "completed", "completed"], "ends"), eq([withBlock.o.state, withBlock.sessions], ["scored", 1], "with a block"), eq([without.o.state, without.sessions], ["no-block", 1], "with no block"));
+  });
+  add("S6", "a malformed tool call decides by mechanism: after an API, provider or harness error it is outside the agent, else an arm stop", async () => {
+    const t = { kind: "arm_failure", failure: "malformed_tool_call" } as const;
+    const err = await scripted("none", [attempt({ end: endOf(t, true) }), attempt({ end: endOf(t, true) })]);
+    const own2 = await scripted("lens", [attempt({ end: endOf(t) }), attempt({ end: endOf(t) })]);
+    const printed = printMalformedToolCalls([err.o, own2.o]);
+    return all(
+      eq([err.o.state, err.sessions, own2.o.state, own2.sessions], ["infra-missing", 2, "arm-stop", 2], "states"),
+      eq(malformedToolCalls([err.o, own2.o]), [{ kind: "lens", model: "opus", armStop: 2, outside: 0 }, { kind: "none", model: "opus", armStop: 0, outside: 2 }], "counts"),
+      eq(printed, ["malformed tool calls: lens on opus 2 read as arm stops, 0 as outside the agent", "malformed tool calls: none on opus 0 read as arm stops, 2 as outside the agent"], "print"),
+    );
   });
   add("S6", "the driver's terminations map to their ends", () =>
     eq(
@@ -470,14 +483,27 @@ export function cases(): DryRunCase[] {
     const second = h.onStop();
     return eq([first, again, second, h.answered().map((a) => a.gateRev), h.messages()], [GATE_MESSAGE, null, GATE_MESSAGE, [1, 2], 2], "answers");
   });
-  add("R2-6", "a run's answers are bounded by its max_rounds", () => {
+  add("R2-6", "every gate revision is answered, past the run's max_rounds", () => {
     const r = run1({ maxRounds: 1 });
-    const logs: string[] = [];
-    const h = gateHook({ box: fakeBox([r]), sinceMs: 0, log: (l) => logs.push(l) });
-    h.onStop();
+    const h = gateHook({ box: fakeBox([r]), sinceMs: 0 });
+    const first = h.onStop();
     r.status = "gate_pending";
     r.gateRev = 2;
-    return all(eq(h.onStop(), null, "the second revision"), logs.some((l) => /max_rounds/.test(l)) ? null : "no print");
+    const second = h.onStop();
+    r.status = "gate_pending";
+    r.gateRev = 3;
+    const third = h.onStop();
+    return eq([first, second, third, h.answered().map((a) => a.gateRev), h.messages()], [GATE_MESSAGE, GATE_MESSAGE, GATE_MESSAGE, [1, 2, 3], 3], "answers");
+  });
+  add("R2-6", "an answer the pin refuses is recorded once, sends no message and doesn't block the stop", () => {
+    const r = run1({ answerExit: 4 });
+    const logs: string[] = [];
+    const box = fakeBox([r]);
+    const h = gateHook({ box, sinceMs: 0, log: (l) => logs.push(l) });
+    const first = h.onStop();
+    const again = h.onStop();
+    const tries = box.calls.filter((c) => c[0] === "gstack-autoplan").length;
+    return all(eq([first, again, h.refused(), h.answered(), h.messages(), tries], [null, null, [{ dir: r.dir, gateRev: 1, code: 4 }], [], 0, 1], "refusal"), logs.some((l) => /the pin refused the answer at gate_rev 1 \(exit 4\)/.test(l)) ? null : "no print");
   });
   add("R2-11", "two run directories at gate_pending are each answered, with the count printed and one message", () => {
     const logs: string[] = [];

@@ -6,9 +6,9 @@ import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DcError } from "../errors.ts";
-import { ENFORCED_LABEL, KEEP_WORDING, LEDGER_ITEMS, MONEY, SATURATION_WORDING } from "../frozen.ts";
+import { CREW_DEVIATION, ENFORCED_LABEL, KEEP_WORDING, LEDGER_ITEMS, MONEY, SATURATION_WORDING } from "../frozen.ts";
 import type { Arm, CellState, DryRunCase, GstackArm, MatchItem, Model, SessionKind } from "../types.ts";
-import { admissionRead, buildDesign, cutAdmission, plannedDesign, POWER_PY, projectionRerun, resize, type DesignJson, type ProjectionInput } from "./admission.ts";
+import { admissionRead, buildDesign, cutAdmission, plannedDesign, POWER_PY, project, projectionRerun, resize, type DesignJson, type ProjectionInput } from "./admission.ts";
 import { above, atLeast, atMost, q4 } from "./num.ts";
 import { armStopsHeldBlock, pd1Effect, rendersOnSupplyStop, tieDecided } from "./prints.ts";
 import type { PowerRunner } from "./seams.ts";
@@ -253,6 +253,21 @@ export function cases(): DryRunCase[] {
     { rule: "S12-power", name: "the pinned power.py is the one beside the prereg", check: () => eq(createHash("sha256").update(readFileSync(POWER_PY)).digest("hex").slice(0, 12), "09636859375f", "sha256") },
 
     // Section 13: the projection rerun, the cut order and the $5,000 stop
+    {
+      rule: "PD-14",
+      name: "crew spend up to $700 never counts against the $3,999 line, and past $700 it does; the $5,000 stop reads every dollar",
+      check: () => {
+        const at = (crewUsd: number) => {
+          const i = planningInputs();
+          const nonCrew = project(i, plannedDesign()).allInUsd - (i.otherUsd.crew ?? 0);
+          i.otherUsd["dc-authoring-2"] = (i.otherUsd["dc-authoring-2"] ?? 0) + (MONEY.capAllInUsd - CREW_DEVIATION.frozenCapUsd) - nonCrew;
+          i.otherUsd.crew = crewUsd;
+          const p = project(i, plannedDesign());
+          return [p.fits, Math.round(p.allInUsd)];
+        };
+        return all(eq([at(470), at(699.99), at(700.5)], [[true, 3999], [true, 4229], [false, 4230]], "fits and all-in"), eq([CREW_DEVIATION.capUsd, LEDGER_ITEMS.crew.capUsd], [700, 470], "caps"));
+      },
+    },
     { rule: "S13-projection", name: "the planning figures fit with no cut", check: () => { const o = projectionRerun(planningInputs()); return all(eq([o.outcome, o.cuts.length], ["fits", 0], "outcome"), above(o.projection.allInUsd, 3300) && atMost(o.projection.allInUsd, 3400) ? null : "all-in " + o.projection.allInUsd); } },
     { rule: "S13-projection", name: "an Opus overrun cuts stage 3, then Sol's lens cells, then units down to the 55 that fit", check: () => { const o = projectionRerun(planningInputs(3)); return eq([o.outcome, o.cuts, o.design.stage3Units, o.design.passes.sol.lens, o.design.units, o.design.passes.particle.lens], ["fits", [MONEY.cutOrder[0], MONEY.cutOrder[1], MONEY.cutOrder[2] + " (55 units)"], 12, 0, 55, 1], "outcome"); } },
     { rule: "S13-projection", name: "when 48 units still don't fit, Opus's second gstack pass goes last", check: () => { const o = projectionRerun(planningInputs(4)); return eq([o.outcome, o.cuts.length, o.design.units, o.design.passes.opus["plan-design-review"], o.design.passes.opus.none], ["fits", 4, 48, 1, 2], "outcome"); } },

@@ -203,6 +203,23 @@ const itemCases: DryRunCase[] = [
       }),
   },
   {
+    rule: "L2",
+    name: "a refusal with only an unknown charge on its item waits; once reconciled, a refusal that still doesn't fit is a cap stop",
+    check: () =>
+      withRig({}, async (r) => {
+        const e = expectations();
+        await r.c.openItem("dc-gate-check");
+        const a = admitted(await r.c.admitCall("dc-gate-check", { run: "a", model: "opus", worstCaseMicros: $(20) }), "a");
+        await r.c.markUnknown(a.id);
+        const b1 = await r.c.admitCall("dc-gate-check", { run: "b", model: "opus", worstCaseMicros: $(10) });
+        e.want(b1.kind === "wait" && /1 unknown charge not yet reconciled/.test(b1.why), "b read " + b1.kind + ": " + ("why" in b1 ? b1.why : ""));
+        await r.c.reconcile(a.id, $(20));
+        const b2 = await r.c.admitCall("dc-gate-check", { run: "b", model: "opus", worstCaseMicros: $(10) });
+        e.want(b2.kind === "cap-stop", "b read " + b2.kind + " after reconciliation");
+        return e.result();
+      }),
+  },
+  {
     rule: "L1",
     name: "an unknown charge stays held at its full reservation in admission until reconciled",
     check: () =>

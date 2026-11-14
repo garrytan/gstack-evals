@@ -367,6 +367,13 @@ export const LEDGER_ITEMS: Record<LedgerItemId, LedgerItemSpec> = {
   crew: { capUsd: 470, projectionUsd: 450, leased: false, admission: { kind: "none" } },
 };
 
+/**
+ * PD-14 (Captain, 2026-11-14, before any outcome data): crew's cap rises from the frozen $470 to $700, under the rule
+ * that the lines are guidelines. Crew spend up to $700 never counts against the $3,999 line, so it triggers no stage 2
+ * cut; past $700 it counts as before. The pre-stage-2 projection rerun still runs, and the $5,000 stop reads every dollar.
+ */
+export const CREW_DEVIATION = { capUsd: 700, frozenCapUsd: 470, ruled: "2026-11-14" } as const;
+
 export const MONEY = {
   capAllInUsd: 3999,
   projectionStopUsd: 5000,

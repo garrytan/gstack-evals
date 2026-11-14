@@ -60,7 +60,7 @@ tests/dc/run/pinned.test.ts checks the four vendored scope sources against their
 - A gstack read is any tool input matching the GSTACK_PATH pattern. A web result is any client or server web tool result.
 - Cell order: units in the order given; each unit's cells are shuffled (Fisher-Yates) with a seed from the first 8 hex digits of sha256("20261114\n" + parts), through seededRandom in src/runner/stats/paired.ts.
 - A retry holds its cell's concurrency slot.
-- Gate hook: "written this session" means run.json's mtime is at or after the session start. --rec-hash goes on the answer whenever gate.json has a numeric rec_rev. Answers per run are bounded by max_rounds (1 when absent).
+- Gate hook: "written this session" means run.json's mtime is at or after the session start. --rec-hash goes on the answer whenever gate.json has a numeric rec_rev. It answers every gate revision, past the run's max_rounds (Captain, 2026-11-14), and records any answer the pin refuses.
 - The D1 message is "Do not stop yet. The procedure has not shown these required outputs: {missing}. Produce them, then end your reply with the plan-changes block."
 - plan-design-review detector: pass names count as the longest in-order run of first appearances, ignoring case and whitespace. The summary needs a Pass row with a score out of 10, or a GSTACK REVIEW REPORT with a "| Design Review |" row.
 - autoplan detector: the lean design lens means a lean run with scope.ui true and docs_only not true. Bound means exactly one submitted native attempt, no outside attempt, and a bound file whose first line is an INPUT receipt and that holds a gstack-findings fence. The gate counts when gate.reply is rec and answered_by is agent:harness. Approved means status complete, plan.md and review-record.md present, and gstack-artifact validate printing ARTIFACT_VALID.
@@ -76,9 +76,9 @@ tests/dc/run/pinned.test.ts checks the four vendored scope sources against their
 
 ## Open for the integrator
 
-1. Arm failures no frozen row names (malformed_output, malformed_tool_call, refusal, empty_response) are held, not scored or retried. The Captain decides their row.
+1. Settled by the Captain on 2026-11-14 (PD-17): a refusal, an empty reply or malformed output is a completed reply; a malformed tool call is outside the agent after an API, provider or harness error and an arm stop otherwise. endOf takes errorSeen from the session record; the wiring sets it.
 2. When J1 reconciliation fails before an arm-stop retry, the cell reads infra-missing rather than 0.
-3. The gate hook's max_rounds bound (1 in a lean run) conflicts with the plan's "answers every later gate revision": a gate_rev 2 after an answered rev 1 stays unanswered in a lean run. The real-driver test reaches gate_rev 2 before any answer, so it is answered.
+3. Settled by the Captain on 2026-11-14 (PD-16): the hook answers every gate revision and records any answer the pin refuses.
 4. The dry run has no case that uses the pinned gstack binaries, because CI has no pinned checkout. tests/dc/run/pinned.test.ts and sdk.test.ts cover them where DC_GSTACK_PIN_DIR is set.
 5. The hostile check runs at the repository root, not /work, and uses a stand-in install, not gstack's ./setup.
 6. The hostile sentinel's DRIVE and NET checks inside a Docker container are not verified here.

@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // gstack-evals dc items: the 17 ledger items with their caps, projections and admission rules (keyless). The lane's
 // cli.ts row for items calls itemsCommand once integration wires it.
-import { LEDGER_ITEMS, MONEY } from "../frozen.ts";
+import { CREW_DEVIATION, LEDGER_ITEMS, MONEY } from "../frozen.ts";
 import type { LedgerItemId } from "../types.ts";
 
 const admissionText = (item: LedgerItemId): string => {
@@ -15,7 +15,7 @@ const admissionText = (item: LedgerItemId): string => {
 
 export function itemsLines(): string[] {
   const ids = Object.keys(LEDGER_ITEMS) as LedgerItemId[];
-  const lines = ids.map((i) => i.padEnd(20) + ("$" + LEDGER_ITEMS[i].capUsd).padStart(6) + "  projection $" + LEDGER_ITEMS[i].projectionUsd + "  " + admissionText(i));
+  const lines = ids.map((i) => i.padEnd(20) + ("$" + (i === "crew" ? CREW_DEVIATION.capUsd : LEDGER_ITEMS[i].capUsd)).padStart(6) + "  projection $" + LEDGER_ITEMS[i].projectionUsd + "  " + admissionText(i) + (i === "crew" ? " (PD-14: raised from the frozen $" + CREW_DEVIATION.frozenCapUsd + "; crew spend up to $" + CREW_DEVIATION.capUsd + " triggers no stage 2 cut)" : ""));
   lines.push("all-in cap $" + MONEY.capAllInUsd + "; a projection past $" + MONEY.projectionStopUsd + " stops for the Captain");
   return lines;
 }
