@@ -107,6 +107,9 @@
 //   messages the transcript holds plus, when the hook input carries it, the last assistant text as one more assistant
 //   message (the CLI can fire the hook before the SDK yields that message). A string it returns blocks the stop with that
 //   reason; null lets the session stop.
+// - memoryLog (off unless set; the design plan review lane's hostile-fixture check) writes each instruction file the
+//   CLI loads, from the SDK's InstructionsLoaded hook, as one line of memory.ndjson in out: file_path, memory_type,
+//   load_reason and parent_file_path. A line it cannot write is skipped, never a failure.
 import type { ChildProcess } from "node:child_process";
 import { appendFileSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -177,6 +180,8 @@ export interface ClaudeCodeOptions {
   followUp?: { text: string; needed: (transcript: string) => boolean };
   /** An SDK-side Stop hook: given the transcript text so far, a reason blocks the stop, null releases it. */
   stopHook?: (transcript: string) => string | null;
+  /** Record each instruction file the CLI loads (the SDK's InstructionsLoaded hook) as a line of memory.ndjson: path, memory type and load reason. Unset, nothing is recorded. */
+  memoryLog?: boolean;
   /** Plugin roots in the agent's HOME, loaded for the session as plugin directories. */
   plugins?: string[];
   /** The cell's cross-family voice through the Codex CLI: the provider of the slot's route and the model Codex runs. */
@@ -532,6 +537,12 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
               ...(o.stopHook ? { Stop: [{ hooks: [async (input: { last_assistant_message?: unknown }) => {
                 const reason = o.stopHook!(stopTranscript(messages, input));
                 return reason === null ? {} : { decision: "block", reason };
+              }] }] } : {}),
+              ...(o.memoryLog ? { InstructionsLoaded: [{ hooks: [async (input: { file_path?: unknown; memory_type?: unknown; load_reason?: unknown; parent_file_path?: unknown }) => {
+                try {
+                  appendFileSync(join(o.out, "memory.ndjson"), JSON.stringify({ file_path: input.file_path, memory_type: input.memory_type, load_reason: input.load_reason, ...(input.parent_file_path ? { parent_file_path: input.parent_file_path } : {}) }) + "\n");
+                } catch {}
+                return {};
               }] }] } : {}),
             },
             spawnClaudeCodeProcess: (s: { args: string[]; env: Record<string, string | undefined> }) => {
