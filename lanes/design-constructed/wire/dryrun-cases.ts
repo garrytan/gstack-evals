@@ -1,8 +1,9 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // The wiring's dry-run cases: each refusal a paid row has before it spends (off the controller host, a provider not
 // bound, each start rule, the ledger admission, provider drift), the sessions row end to end on the keyless fake
-// session provider, from its arguments to the printed counts, the stage 3 row on the fake VM world, and each keyless
-// row (scope, score, read, power, items, pins). Every case runs the row through cli.ts as the command line would.
+// session provider, from its arguments to the printed counts, the stage 3 row on the fake VM world and its PD-31
+// refusal on the real providers, and each keyless row (scope, score, read, power, items, pins). Every case runs the
+// row through cli.ts as the command line would.
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { $ } from "../money/book.ts";
@@ -16,8 +17,10 @@ import type { DryRunCase } from "../types.ts";
 import { BOUND_PROVIDERS } from "../wire.ts";
 import { fakeEnv, fakeKit, fakeSessions, fakeVm, type FakeAttempt, type Kit, type KitOptions } from "./fakes.ts";
 import { runRow, scratch, sessionsFixture, stage3Fixture } from "./fixtures.ts";
-import { hostRowCases } from "./dryrun-host.ts";
+import { FAKE_KEYS, hostRowCases, watchedEnv } from "./dryrun-host.ts";
 import { cloneCases } from "./dryrun-clones.ts";
+import { realProviders, RULED_RETRY } from "./real.ts";
+import type { LedgerService } from "../money/ledger-service.ts";
 import { inputCases } from "./dryrun-inputs.ts";
 import type { Cell } from "../run/types.ts";
 
@@ -187,7 +190,7 @@ export function cases(): DryRunCase[] {
           const r = await runRow(f.argv, fakeEnv(kit));
           if (r.code !== 0) return "exit " + r.code + ": " + [...r.err, ...r.out.slice(-4)].join(" | ");
           const builds = JSON.parse(readFileSync(join(f.sink, "builds.json"), "utf8")) as unknown[];
-          return all(has(r, "stage 3 selection: 8 tried, 8 qualify, 0 skipped for a base app already used"), eq(builds.length, 48, "builds"), eq(kit.built, ["ledger", "vm"], "built"));
+          return all(has(r, "stage 3 selection: 8 tried, 8 qualify, 0 skipped for a base app already used"), eq(builds.length, 48, "builds"), eq(kit.built, ["ledger", "stage3", "vm"], "built"));
         }),
     },
     {
@@ -197,6 +200,26 @@ export function cases(): DryRunCase[] {
         withKit({ vm: fakeVm() }, async (kit) => {
           const r = await runRow(stage3Fixture(8, { pass1: false }).argv, fakeEnv(kit));
           return all(refused(r, "E_DCW_START_RULE", "start rule 7: stage 3 runs after stage 2's Opus pass 1"), eq(kit.built, [], "built"));
+        }),
+    },
+    {
+      rule: "PD-31",
+      name: "on the controller host stage 3's pieces refuse with E_DCW_NO_PROVIDER while their prompts are unfrozen: the stage3 row stops before the VM provider, any env read, any Ubicloud call or any ledger service read",
+      check: () =>
+        withKit({}, async (kit) => {
+          const w = watchedEnv(FAKE_KEYS);
+          const touched: string[] = [];
+          const service = new Proxy({}, { get: (_t, k) => (touched.push(String(k)), undefined) }) as unknown as LedgerService;
+          const reached: string[] = [];
+          const ubicloud = {
+            fetch: (async (url: string) => (reached.push(url), new Response(null, { status: 500 }))) as unknown as typeof fetch,
+            ssh: async (_host: string, command: string) => (reached.push(command), { exit: 1, stdout: "", stderr: "" }),
+            tunnel: async () => ({ port: 1, close: async () => {} }),
+          };
+          const wiring = { retry: RULED_RETRY, pinRecord: "none", cacheDir: "none", scanMs: 10_000, sessions: null, vm: null };
+          const real = realProviders({ service, wiring, env: w.env, dir: scratch("pd31"), lane: () => ({ commit: "0".repeat(40), dirty: false, root: "/nonexistent" }) }, { ubicloud });
+          const r = await runRow(stage3Fixture(8).argv, { ...fakeEnv(kit), providers: { ...kit.providers, stage3: real.stage3, vm: real.vm } });
+          return all(refused(r, "E_DCW_NO_PROVIDER", "PD-31"), eq([...w.read], [], "env names read"), eq(reached, [], "Ubicloud calls"), eq(touched, [], "ledger service reads"), eq(kit.built, ["ledger"], "built"));
         }),
     },
     {

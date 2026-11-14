@@ -34,6 +34,24 @@ export function envOfFile(text: string): Record<string, string> {
   return out;
 }
 
+/** A local agent session that runs the stand-in CLI under an env file's exports, in place of the CLI over SSH. */
+export function stubSession(envText: string, home: string, spawned: Array<Record<string, string>> = []): AgentSession {
+  const env = envOfFile(envText);
+  const base = { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: home, ...env };
+  return {
+    exec: () => ({ exitCode: 0, timedOut: false, stdout: "", stderr: "" }),
+    spawn(argv, extra = {}) {
+      const [bin, ...args] = argv;
+      if (bin === CLAUDE_BIN) {
+        spawned.push(env);
+        return spawn(process.execPath, [STUB_CLAUDE, ...args], { env: { ...base, ...extra }, stdio: ["pipe", "pipe", "pipe"] });
+      }
+      return spawn(bin!, args, { env: { ...base, ...extra }, stdio: ["pipe", "pipe", "pipe"] });
+    },
+    stop() {},
+  };
+}
+
 export function agentRig(o: { reply: () => string; out: string; spentMicros?: number; unknownMicros?: number; spec?: Partial<VmSpec> }): AgentRig {
   const files = new Map<string, string>();
   const execs: AgentRig["execs"] = [];
@@ -62,22 +80,7 @@ export function agentRig(o: { reply: () => string; out: string; spentMicros?: nu
     bind: async (sub, session) => ({ item: sub.item, sub: sub.id, session, baseUrl: "http://127.0.0.1:" + server.port, slot: "slot1", token: "run-token-1", model: "opus" }),
     end: async (b) => (ended.push(b.session), { spentMicros: o.spentMicros ?? 0, unknownMicros: o.unknownMicros ?? 0 }),
   };
-  const session = (_vm: Vm, envFile: string): AgentSession => {
-    const env = envOfFile(files.get(envFile) ?? "");
-    const base = { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: o.out, ...env };
-    return {
-      exec: () => ({ exitCode: 0, timedOut: false, stdout: "", stderr: "" }),
-      spawn(argv, extra = {}) {
-        const [bin, ...args] = argv;
-        if (bin === CLAUDE_BIN) {
-          spawned.push(env);
-          return spawn(process.execPath, [STUB_CLAUDE, ...args], { env: { ...base, ...extra }, stdio: ["pipe", "pipe", "pipe"] });
-        }
-        return spawn(bin!, args, { env: { ...base, ...extra }, stdio: ["pipe", "pipe", "pipe"] });
-      },
-      stop() {},
-    };
-  };
+  const session = (_vm: Vm, envFile: string): AgentSession => stubSession(files.get(envFile) ?? "", o.out, spawned);
   const vm = { id: "vm-rig", spec: { label: "recipe session c001", runUser: "run", ...o.spec } } as unknown as Vm;
   return { deps: { backend, sessions, session, out: o.out }, vm, files, execs, upstream, spawned, ended, close: () => void server.stop(true) };
 }

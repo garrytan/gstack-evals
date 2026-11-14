@@ -17,7 +17,7 @@ import { fixtureBrowser, RECIPE, type FixtureApp } from "../recipes/fixtures.ts"
 import { fakeSpec, fakeMirrors } from "../stage3/fake.ts";
 import { fixtureStage3, type Stage3Script } from "../stage3/fixtures.ts";
 import type { AnyModel, LedgerItemId } from "../types.ts";
-import { meteredModels, recordedCaps, type LedgerProvider, type ModelCall, type ModelProvider, type ProviderName, type Providers, type ServedTerms, type SessionProvider, type VmProvider } from "../wire.ts";
+import { meteredModels, recordedCaps, type LedgerProvider, type ModelCall, type ModelProvider, type ProviderName, type Providers, type ServedTerms, type SessionProvider, type Stage3Provider, type VmProvider } from "../wire.ts";
 import type { RowEnv } from "./start.ts";
 
 export const REPO_ROOT = resolve(import.meta.dir, "..", "..", "..");
@@ -48,7 +48,8 @@ export interface KitOptions {
   model?: (c: ModelCall) => string | null | Promise<string | null>;
   /** The serving provider each OpenRouter model's reply names. */
   served?: Partial<Record<AnyModel, string>>;
-  vm?: (kit: Kit) => VmProvider;
+  /** The VM world and stage 3's pieces, built once for both providers since they share one fake backend. */
+  vm?: (kit: Kit) => VmProvider & Stage3Provider;
   session?: (kit: Kit) => SessionProvider;
 }
 
@@ -57,7 +58,7 @@ export function fakeKit(o: KitOptions = {}): Kit {
   let r: Rig | null = null;
   const built: ProviderName[] = [];
   const calls: string[] = [];
-  const kit: Kit = { built, calls, rig: () => r ?? (r = rig({ caps: o.caps })), dispose: () => r?.cleanup(), providers: { ledger: null, model: null, session: null, vm: null } };
+  const kit: Kit = { built, calls, rig: () => r ?? (r = rig({ caps: o.caps })), dispose: () => r?.cleanup(), providers: { ledger: null, model: null, session: null, vm: null, stage3: null } };
   kit.providers.ledger = () => {
     built.push("ledger");
     const x = kit.rig();
@@ -72,10 +73,15 @@ export function fakeKit(o: KitOptions = {}): Kit {
     };
   }
   if (o.vm) {
-    const vm = o.vm;
+    const make = o.vm;
+    let world: (VmProvider & Stage3Provider) | null = null;
     kit.providers.vm = () => {
       built.push("vm");
-      return vm(kit);
+      return (world ??= make(kit));
+    };
+    kit.providers.stage3 = () => {
+      built.push("stage3");
+      return (world ??= make(kit));
     };
   }
   if (o.session) {
@@ -138,7 +144,7 @@ const candidateOf = (label: string): string => /c\d{3}/.exec(label)?.[0] ?? "";
  * A fake VM world: the recipes area's scripted recipe agent and browser, by candidate id, and stage 3's scripted build
  * agent, reader, authoring and judge, all over one fake Ubicloud backend.
  */
-export function fakeVm(o: { apps?: (candidate: string) => FixtureApp; stage3?: Stage3Script } = {}): (kit: Kit) => VmProvider {
+export function fakeVm(o: { apps?: (candidate: string) => FixtureApp; stage3?: Stage3Script } = {}): (kit: Kit) => VmProvider & Stage3Provider {
   return () => {
     const s3 = fixtureStage3(o.stage3);
     const b = s3.select.builds;

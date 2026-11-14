@@ -10,10 +10,12 @@
 //            the gstack install, held for the Captain when a re-prepared container fails again), and the Claude Code
 //            driver with the row's gate and D1 stop handler.
 //   vm       stage3/ubicloud-real.ts's keyed backend, wrapped so every sandbox gets the controller's browser install first
-//            (stage3/install.ts: Playwright's Chromium build with its apt libraries), and recipes/browser.ts's Playwright
-//            over an SSH tunnel to that Chromium. vmSessionAgents binds the recipe and build agents (stage3/agent.ts) on
-//            the VM proxy endpoint (stage3/front.ts). The build reader, stage 3 authoring and the DES-4 judges have no
-//            real implementation (WIRING.md, Phase 1b open items), so this provider refuses before it reads a key.
+//            (stage3/install.ts: Playwright's Chromium build with its apt libraries, and the pinned Claude Code in a VM
+//            that reaches the proxy), recipes/browser.ts's Playwright over an SSH tunnel to that Chromium, and the recipe
+//            agent (vmSessionAgents: stage3/agent.ts on the VM proxy endpoint, stage3/front.ts).
+//   stage3   the build agent, the build reader, stage 3 authoring and the DES-4 judges. Their prompts and reply formats
+//            are written before stage 3 starts and wait for the Captain's go (PD-31), so this provider refuses before it
+//            reads a key or makes a VM.
 // The choices the binding could not make without moving a scored outcome or the money sit in WIRING.md.
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
@@ -43,7 +45,6 @@ import { proxySessions, runVmAgent, sshAgentSession } from "../stage3/agent.ts";
 import { serveVmFront } from "../stage3/front.ts";
 import { browserFiles, BROWSER_ROOT, claudeFiles, controllerBackend, type ControllerFiles } from "../stage3/install.ts";
 import { specFor, type Endpoint, type Mirror, type Vm, type VmBackend } from "../stage3/sandbox.ts";
-import type { BuildAgent, BuildReader, PairwiseJudge, Stage3Authoring } from "../stage3/seams.ts";
 import { keyedUbicloud, sshTunnel, type SshRunner, type Tunnel } from "../stage3/ubicloud-real.ts";
 import type { AnyModel, LedgerItemId } from "../types.ts";
 import type { LedgerProvider, ModelProvider, Providers, ServedTerms, SessionBox, SessionProvider, VmProvider } from "../wire.ts";
@@ -112,15 +113,6 @@ export interface HostContext {
   lane: () => { commit: string; dirty: boolean; root: string };
 }
 
-/** The in-VM agents and readers: the real ones unless a test passes its own. */
-export interface VmAgents {
-  recipeAgent: RecipeAgent;
-  buildAgent: BuildAgent;
-  buildReader: BuildReader;
-  stage3Authoring: Stage3Authoring;
-  pairwise: PairwiseJudge;
-}
-
 /** The lowest seams, for keyless tests: the proxies' upstream, the review container, Ubicloud's API and SSH. */
 export interface RealSeams {
   fetch?: (url: string, init: RequestInit) => Promise<Response>;
@@ -133,7 +125,6 @@ export interface RealSeams {
   ubicloud?: { fetch: typeof fetch; ssh: SshRunner; tunnel: (vm: Vm, remotePort: number) => Promise<Tunnel>; agent?: (vm: Vm, envFile: string) => AgentSession };
   /** Where the VM agents' item proxies run; an in-process proxy on this host's loopback when unset. */
   vmLauncher?: SessionLauncher;
-  vmAgents?: VmAgents | null;
   docker?: string;
 }
 
@@ -178,7 +169,10 @@ export function realProviders(h: HostContext, s: RealSeams = {}): Providers {
     ledger: (): LedgerProvider => ({ controller: svc.controller, recordedCapMicros: (item) => ledgerStatus(svc.cfg.record, item)[0]?.cap_micros ?? null, reconcile: async () => null }),
     model: () => meterModels((item) => callers().meter(item), (model) => routingDigest(routingOf(model)), async () => callers().stopAll()),
     session: () => realSessions(h, watch(), s, callers()),
-    vm: () => realVm(h, s),
+    vm: () => realVm(h, s, watch()),
+    stage3: (): never => {
+      throw new DcError("E_DCW_NO_PROVIDER", "stage 3's pieces (the build agent, the build reader, stage 3 authoring and the DES-4 judges) wait for their pre-data prompts and reply formats and the Captain's go to start stage 3 (PD-31); no key was read and no VM was made");
+    },
   };
 }
 
@@ -326,8 +320,8 @@ function claudeTarball(path: string, root: string): Uint8Array {
   return bytes;
 }
 
-/** The recipe and build agents on the VM sessions: Claude Code from the pinned tarball, each session on its item's metering proxy through the VM proxy endpoint. */
-export function vmSessionAgents(h: HostContext, s: RealSeams, backend: VmBackend, keyed: { address(vm: Vm): string }, watch?: ProviderWatch): { agents: Pick<VmAgents, "recipeAgent" | "buildAgent">; claude: ControllerFiles; close(): Promise<void> } {
+/** The recipe agent on the VM sessions: Claude Code from the pinned tarball, each session on its item's metering proxy through the VM proxy endpoint. */
+export function vmSessionAgents(h: HostContext, s: RealSeams, keyed: VmBackend & { address(vm: Vm): string }, watch: ProviderWatch): { recipeAgent: RecipeAgent; claude: ControllerFiles; close(): Promise<void> } {
   const w = h.wiring.vm!;
   if (typeof w.claudeTarball !== "string") fail("E_USAGE", "the wiring file's vm section names no claudeTarball (Claude Code's pinned npm tarball for linux-x64)");
   const root = h.lane().root;
@@ -335,17 +329,14 @@ export function vmSessionAgents(h: HostContext, s: RealSeams, backend: VmBackend
   const svc = h.service;
   const front = serveVmFront({ host: w.proxy.host, port: w.proxy.port });
   const launcher = s.vmLauncher ?? inProcessLauncher({ local: svc.local, retry: h.wiring.retry, env: h.env, fetch: s.fetch, sleep: s.sleep });
-  const proxies = new SessionProxies({ controller: svc.controller, local: svc.local, wal: svc.wal, watch: watch ?? new ProviderWatch({ controller: svc.controller, out: join(h.dir, "watch"), datedTerms: datedTermsOf(readJson<PinRecord>(h.wiring.pinRecord, "the pin record")) }), dir: join(svc.cfg.journalDir, "sessions"), launcher });
+  const proxies = new SessionProxies({ controller: svc.controller, local: svc.local, wal: svc.wal, watch, dir: join(svc.cfg.journalDir, "sessions"), launcher });
   const sessions = proxySessions({ controller: svc.controller, proxies, front, scanMs: h.wiring.scanMs });
   const out = join(h.dir, "vm-agents");
   mkdirSync(out, { recursive: true, mode: 0o700 });
   const ssh = { keyPath: w.keyPath, knownHosts: w.knownHosts };
-  const deps = { backend, sessions, out, session: s.ubicloud?.agent ?? ((vm: Vm, envFile: string) => sshAgentSession(ssh, keyed.address(vm), envFile)), ...(s.query ? { query: s.query } : {}) };
+  const deps = { backend: keyed, sessions, out, session: s.ubicloud?.agent ?? ((vm: Vm, envFile: string) => sshAgentSession(ssh, keyed.address(vm), envFile)), ...(s.query ? { query: s.query } : {}) };
   return {
-    agents: {
-      recipeAgent: (vm, o) => runVmAgent(deps, vm, { prompt: o.prompt, limits: o.limits, sub: o.sub }),
-      buildAgent: (vm, o) => runVmAgent(deps, vm, { prompt: o.prompt, limits: o.limits, sub: o.sub, env: o.env }),
-    },
+    recipeAgent: (vm, o) => runVmAgent(deps, vm, { prompt: o.prompt, limits: o.limits, sub: o.sub }),
     claude: claudeFiles(async () => claudeTarball(w.claudeTarball, root)),
     async close() {
       await sessions.close();
@@ -355,26 +346,25 @@ export function vmSessionAgents(h: HostContext, s: RealSeams, backend: VmBackend
 }
 
 /**
- * The VM world: the keyed Ubicloud backend with the token read by name and the controller's browser install on every
- * sandbox; specs on the VM proxy endpoint and the mirrors; the browser over SSH to the installed Chromium. The build
- * reader, stage 3 authoring and the DES-4 judges have no real implementation (WIRING.md, Phase 1b open items), so
- * without a test's own agents this provider refuses before it reads a key or makes a VM.
+ * The VM world: the keyed Ubicloud backend with the token read by name and the controller's install on every sandbox
+ * (the browser, and Claude Code where the VM reaches the proxy); specs on the VM proxy endpoint and the mirrors; the
+ * browser over SSH to the installed Chromium; the recipe agent. Stage 3's pieces are not here (PD-31).
  */
-export async function realVm(h: HostContext, s: RealSeams = {}): Promise<VmProvider> {
-  const agents = s.vmAgents ?? null;
-  if (!agents) throw new DcError("E_DCW_NO_PROVIDER", "the VM provider's in-VM pieces (the build reader, stage 3 authoring and the DES-4 judges) have no real implementation in this build: their prompts and reply formats are not frozen (lanes/design-constructed/WIRING.md, Phase 1b open items); no key was read and no VM was made");
+export async function realVm(h: HostContext, s: RealSeams, watch: ProviderWatch): Promise<VmProvider> {
   const w = h.wiring.vm ?? fail("E_USAGE", "the wiring file has no vm section (Ubicloud's project, the VM shape, the key, the browser build, the Claude Code tarball, the price, the proxy and the mirrors); the Captain sets it (lanes/design-constructed/WIRING.md)");
   const cb = w.chromiumBuild;
   if (!cb || typeof cb.dir !== "string" || typeof cb.bin !== "string") fail("E_USAGE", "the wiring file's vm section names no chromiumBuild (the Playwright Chromium folder on this host and the binary's path inside it)");
   if (!existsSync(join(cb.dir, cb.bin)) || !statSync(join(cb.dir, cb.bin)).isFile()) fail("E_USAGE", "the wiring file's vm.chromiumBuild has no binary at " + join(cb.dir, cb.bin));
   const keyed = await keyedUbicloud({ project: w.project, location: w.location, size: w.size, image: w.image, privateSubnet: w.privateSubnet ?? undefined, env: h.env, keyPath: w.keyPath, knownHosts: w.knownHosts, ...(s.ubicloud ? { fetch: s.ubicloud.fetch, ssh: s.ubicloud.ssh } : {}) });
-  const backend = controllerBackend(keyed, { browser: browserFiles(cb.dir, cb.bin), agent: null });
+  const agents = vmSessionAgents(h, s, keyed, watch);
+  const backend = controllerBackend(keyed, { browser: browserFiles(cb.dir, cb.bin), agent: agents.claude });
   return {
     backend,
     priceMicrosPerHour: w.priceMicrosPerHour,
     now: () => Date.now(),
     spec: (kind, label) => specFor(kind, label, { proxy: w.proxy, mirrors: w.mirrors, env: h.env }),
     browser: playwrightBrowser({ backend, tunnel: s.ubicloud?.tunnel ?? sshTunnel({ keyPath: w.keyPath, knownHosts: w.knownHosts }, (vm) => keyed.address(vm)), chromium: BROWSER_ROOT + "/" + cb.bin }),
-    ...agents,
+    recipeAgent: agents.recipeAgent,
+    close: agents.close,
   };
 }

@@ -1,10 +1,11 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // The real providers (lanes/design-constructed/wire/real.ts) driven keyless, with fakes only at the lowest seams: the
 // proxies' upstream fetch, the review container (a local folder standing in for docker exec, with the bundled Claude
-// Code CLI as the agent), Ubicloud's API fetch and the SSH runner. The ledger is the real ledger service on a local
-// off-host target. No key is real and nothing reaches a network.
+// Code CLI as the agent), Ubicloud's API fetch, the SSH runner and the VM agent's session (the stand-in CLI). The
+// ledger is the real ledger service on a local off-host target. No key is real and nothing reaches a network.
 import { afterAll, describe, expect, test } from "bun:test";
 import { spawn, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -20,11 +21,14 @@ import { inProcessLauncher } from "../../../lanes/design-constructed/paid/sessio
 import { localRunBox } from "../../../lanes/design-constructed/run/box.ts";
 import { sessionFolder, type PreparedSession, type ReviewContainer } from "../../../lanes/design-constructed/run/docker.ts";
 import { BLOCK } from "../../../lanes/design-constructed/run/fixtures.ts";
-import { fixtureStage3 } from "../../../lanes/design-constructed/stage3/fixtures.ts";
-import type { Vm } from "../../../lanes/design-constructed/stage3/sandbox.ts";
+import { RECIPES } from "../../../lanes/design-constructed/frozen.ts";
+import { stubSession } from "../../../lanes/design-constructed/stage3/agent-fake.ts";
+import { DESCRIBE_DONE, type Vm } from "../../../lanes/design-constructed/stage3/sandbox.ts";
+import { freePort } from "../../../lanes/design-constructed/stage3/ubicloud-real.ts";
+import { watchedEnv } from "../../../lanes/design-constructed/wire/dryrun-host.ts";
 import { BOUND_PROVIDERS, build } from "../../../lanes/design-constructed/wire.ts";
 import { fakeEnv, fakeKit, REPO_ROOT } from "../../../lanes/design-constructed/wire/fakes.ts";
-import { fakeTerms, runRow, sessionsFixture } from "../../../lanes/design-constructed/wire/fixtures.ts";
+import { fakeTerms, frameFixture, runRow, sessionsFixture, stage3Fixture } from "../../../lanes/design-constructed/wire/fixtures.ts";
 import { hostContext, hostStage, runOnHost } from "../../../lanes/design-constructed/wire/host.ts";
 import { realProviders, RULED_RETRY, type HostContext, type RealSeams } from "../../../lanes/design-constructed/wire/real.ts";
 import type { RowEnv } from "../../../lanes/design-constructed/wire/start.ts";
@@ -46,7 +50,7 @@ const COMMIT = "1".repeat(40);
 const noSleep = async () => {};
 
 /** A booted ledger service on a local off-host target, the host's commit file and a wiring file on a pinned record. */
-async function host(o: { vm?: boolean } = {}): Promise<{ svc: LedgerService; ctx: HostContext; wiring: string; root: string; pin: ReturnType<typeof pinRecord> }> {
+async function host(o: { vm?: boolean } = {}): Promise<{ svc: LedgerService; ctx: HostContext; wiring: string; root: string; pin: ReturnType<typeof pinRecord>; proxyPort: number }> {
   const root = temp("host");
   mkdirSync(join(root, "ledger"), { recursive: true });
   const record = makeRecord(join(root, "ledger"));
@@ -54,7 +58,12 @@ async function host(o: { vm?: boolean } = {}): Promise<{ svc: LedgerService; ctx
   const opened = await openLedgerService(cfg, new DirTarget(join(root, "offhost")), { leases: (local) => mainLeases({ record, local, requireAdmission: () => null }) });
   if (!opened.ok) throw new Error("the service did not boot: " + opened.captain);
   writeFileSync(join(root, "commit"), COMMIT + "\n");
-  mkdirSync(join(root, "repo"));
+  mkdirSync(join(root, "repo", "docker"), { recursive: true });
+  const tgz = new TextEncoder().encode("invented claude code tarball\n");
+  writeFileSync(join(root, "claude.tgz"), tgz);
+  writeFileSync(join(root, "repo", "docker", "host-cli.json"), JSON.stringify({ claude: "9.9.9" }));
+  writeFileSync(join(root, "repo", "docker", "trial.Dockerfile"), "ADD --checksum=sha256:" + createHash("sha256").update(tgz).digest("hex") + " https://registry.npmjs.org/@anthropic-ai/claude-code-linux-x64/-/claude-code-linux-x64-9.9.9.tgz /opt/claude.tgz\n");
+  const proxyPort = await freePort();
   const pin = pinRecord({ runId: "dc-real-test", commit: COMMIT, dated: "2026-11-13T00:00:00Z", reads: { sol: endpointsFixture("sol"), particle: endpointsFixture("particle"), argon: endpointsFixture("argon") } });
   writeFileSync(join(root, "pins.json"), JSON.stringify(pin));
   const keyPath = join(root, "ssh", "id_ed25519");
@@ -72,11 +81,11 @@ async function host(o: { vm?: boolean } = {}): Promise<{ svc: LedgerService; ctx
       cacheDir: join(root, "cache"),
       scanMs: 50,
       sessions: { gstackSources: [], imageDigest: null },
-      vm: o.vm === false ? null : { project: "pj-test", location: "eu-central-h1", size: "standard-2", image: "ubuntu-noble", privateSubnet: "ps-test", keyPath, knownHosts: join(root, "ssh", "known_hosts"), chromiumBuild: { dir: join(root, "chromium"), bin: "chrome-linux/chrome" }, claudeTarball: join(root, "claude.tgz"), priceMicrosPerHour: 57_400, proxy: { host: "10.0.0.2", port: 8787 }, mirrors: [{ name: "npm", host: "10.0.0.2", port: 4873, url: "http://10.0.0.2:4873/", terms: "npm terms" }] },
+      vm: o.vm === false ? null : { project: "pj-test", location: "eu-central-h1", size: "standard-2", image: "ubuntu-noble", privateSubnet: "ps-test", keyPath, knownHosts: join(root, "ssh", "known_hosts"), chromiumBuild: { dir: join(root, "chromium"), bin: "chrome-linux/chrome" }, claudeTarball: join(root, "claude.tgz"), priceMicrosPerHour: 57_400, proxy: { host: "127.0.0.1", port: proxyPort }, mirrors: [{ name: "npm", host: "10.0.0.2", port: 4873, url: "http://10.0.0.2:4873/", terms: "npm terms" }] },
     }),
   );
   const svc = opened.service;
-  return { svc, ctx: hostContext(svc, wiring, ENV), wiring, root, pin };
+  return { svc, ctx: hostContext(svc, wiring, ENV), wiring, root, pin, proxyPort };
 }
 
 const rowEnv = (ctx: HostContext, seams: RealSeams): RowEnv => ({ ...fakeEnv(fakeKit()), providers: realProviders(ctx, seams), lane: () => ({ commit: COMMIT, dirty: false, root: REPO_ROOT }) });
@@ -84,7 +93,7 @@ const rowEnv = (ctx: HostContext, seams: RealSeams): RowEnv => ({ ...fakeEnv(fak
 describe("the real providers", () => {
   test("off the controller host every factory refuses with E_DCW_OFF_HOST, and on it nothing starts until a row builds a provider", async () => {
     const off = BOUND_PROVIDERS(null);
-    for (const name of ["ledger", "model", "session", "vm"] as const) await expect(build(off, name, "t")).rejects.toThrow("exists only on the controller host");
+    for (const name of ["ledger", "model", "session", "vm", "stage3"] as const) await expect(build(off, name, "t")).rejects.toThrow("exists only on the controller host");
     const h = await host();
     const up = scripted([{ kind: "ok", text: "never" }]);
     realProviders(h.ctx, { fetch: up.fetch });
@@ -212,34 +221,104 @@ describe("the real providers", () => {
     }
   });
 
-  test("the VM provider refuses before it reads a key or calls Ubicloud while the in-VM agents are unbuilt, and with them binds the keyed backend, the specs and the browser", async () => {
-    const h = await host();
+  /** Ubicloud's API and SSH for the VM tests: every VM runs at once, each write kept by path, the manifest empty. */
+  const fakeUbicloud = (o: { files?: Map<string, Uint8Array>; agent?: NonNullable<RealSeams["ubicloud"]>["agent"] } = {}) => {
     const calls: Array<{ method: string; url: string; auth: string; body: any }> = [];
-    const ubi = (async (url: string, init: { method: string; headers: Record<string, string>; body?: string }) => {
+    const ssh: Array<{ host: string; command: string }> = [];
+    const files = o.files ?? new Map<string, Uint8Array>();
+    const fetch = (async (url: string, init: { method: string; headers: Record<string, string>; body?: string }) => {
       calls.push({ method: init.method, url, auth: init.headers.authorization ?? "", body: init.body ? JSON.parse(init.body) : null });
       if (init.method === "GET") return Response.json({ state: "running", ip4: "203.0.113.7", private_ipv4: "10.0.0.9/32" });
       return init.method === "POST" ? Response.json({}) : new Response(null, { status: 204 });
-    }) as unknown as typeof fetch;
-    const ssh: Array<{ host: string; command: string }> = [];
-    const ubicloud = { fetch: ubi, ssh: async (hostIp: string, command: string) => (ssh.push({ host: hostIp, command }), { exit: 0, stdout: "", stderr: "" }), tunnel: async () => ({ port: 1, close: async () => {} }) };
-    await expect(build(realProviders(h.ctx, { ubicloud }), "vm", "t")).rejects.toThrow("no real implementation in this build");
-    expect(calls).toEqual([]);
-    const s3 = fixtureStage3();
-    const vm = await build(realProviders(h.ctx, { ubicloud, vmAgents: { recipeAgent: async () => ({ end: "completed", spentUsd: 0 }), buildAgent: s3.select.builds.agent, buildReader: s3.select.builds.reader, stage3Authoring: s3.select.authoring, pairwise: s3.deps([]).judge } }), "vm", "t");
-    const check = vm.spec("check", "check u01 none");
-    const recipe = vm.spec("recipe", "recipe session c001");
-    expect([check.owner, check.proxy, recipe.proxy]).toEqual(["dc-test", null, { host: "10.0.0.2", port: 8787 }]);
-    expect(recipe.mirrors.map((m) => m.name)).toEqual(["npm"]);
-    expect(vm.priceMicrosPerHour).toBe(57_400);
-    const made: Vm = await vm.backend.create(check);
-    expect(made.id).toStartWith("dc-dc-test-");
-    expect(calls[0]).toMatchObject({ method: "POST", auth: "Bearer " + ENV.UBICLOUD_API_KEY, body: { public_key: "ssh-ed25519 AAAAinvented dc-launch", size: "standard-2", boot_image: "ubuntu-noble", private_subnet_id: "ps-test" } });
-    expect(calls[0]!.url).toBe("https://api.ubicloud.com/project/pj-test/location/eu-central-h1/vm/" + made.id);
-    await vm.backend.exec(made, "true");
-    expect(ssh).toEqual([{ host: "203.0.113.7", command: "true" }]);
-    expect(typeof vm.browser.open).toBe("function");
-    h.svc.close();
+    }) as unknown as typeof globalThis.fetch;
+    const run = async (hostIp: string, command: string, eo: { input?: Uint8Array }) => {
+      ssh.push({ host: hostIp, command });
+      const path = /^cat > '([^']+)'$/.exec(command)?.[1];
+      if (path && eo.input) files.set(path, eo.input);
+      return { exit: 0, stdout: command.includes("controller.list") ? DESCRIBE_DONE + "\n" : "", stderr: "" };
+    };
+    return { calls, ssh, files, ubicloud: { fetch, ssh: run, tunnel: async () => ({ port: 1, close: async () => {} }), ...(o.agent ? { agent: o.agent } : {}) } };
+  };
+
+  test("the VM provider binds the keyed backend, the specs, the browser and the real recipe agent: a recipe VM gets the browser and Claude Code, and its session reaches the item's metering proxy through the VM proxy endpoint", async () => {
+    // Value: protects=PD-31's split: the VM provider binds the real recipe agent (vmSessionAgents on runVmAgent), Claude Code only in a VM that reaches the proxy, and the session's call on the admitted sub-reservation's item proxy with the key held there; fails_when=the recipe agent is a stand-in, the VM front or the item proxy is skipped, a check VM gets Claude Code, or a key name reaches the VM's env file; why_new=PD-31 (the VM provider refused as a whole); seam=realProviders, realVm, vmSessionAgents, runVmAgent, controllerBackend; no_claim=live Ubicloud, a real SSH session or the real CLI in a VM
+    const h = await host();
+    const files = new Map<string, Uint8Array>();
+    const spawned: Array<Record<string, string>> = [];
+    const u = fakeUbicloud({ files, agent: (_vm, envFile) => stubSession(new TextDecoder().decode(files.get(envFile) ?? new Uint8Array()), h.root, spawned) });
+    const up = scripted([{ kind: "ok", text: "recipe written" }]);
+    const vm = await build(realProviders(h.ctx, { ubicloud: u.ubicloud, fetch: up.fetch, sleep: noSleep }), "vm", "recipes");
+    try {
+      const check = vm.spec("check", "check u01 none");
+      const recipe = vm.spec("recipe", "recipe session c001");
+      expect([check.owner, check.proxy, recipe.proxy]).toEqual(["dc-test", null, { host: "127.0.0.1", port: h.proxyPort }]);
+      expect(recipe.mirrors.map((m) => m.name)).toEqual(["npm"]);
+      expect(vm.priceMicrosPerHour).toBe(57_400);
+      const made: Vm = await vm.backend.create(recipe);
+      expect(made.id).toStartWith("dc-dc-test-");
+      expect(u.calls[0]).toMatchObject({ method: "POST", auth: "Bearer " + ENV.UBICLOUD_API_KEY, body: { public_key: "ssh-ed25519 AAAAinvented dc-launch", size: "standard-2", boot_image: "ubuntu-noble", private_subnet_id: "ps-test" } });
+      expect(u.calls[0]!.url).toBe("https://api.ubicloud.com/project/pj-test/location/eu-central-h1/vm/" + made.id);
+      await vm.backend.prepare!(made);
+      expect([...files.keys()].filter((p) => p.endsWith(".tar")).map((p) => p.split("/").at(-1))).toEqual(["browser.tar", "claude-code.tar"]);
+      await vm.backend.prepare!(await vm.backend.create(check));
+      expect([...files.keys()].filter((p) => p.endsWith(".tar"))).toHaveLength(2);
+      expect(typeof vm.browser.open).toBe("function");
+      await h.svc.controller.openItem("dc-base-apps");
+      const a = await h.svc.controller.admitRecipe({ run: "recipe session c001" });
+      if (a.kind !== "admitted") throw new Error("the recipe session was not admitted: " + a.kind);
+      const run = await vm.recipeAgent(made, { prompt: "write the recipe", limits: RECIPES.session, sub: { item: "dc-base-apps", id: a.sub.id } });
+      expect(run.end).toBe("completed");
+      expect(run.spentUsd).toBeGreaterThan(0);
+      expect(up.sent).toHaveLength(1);
+      expect(up.sent[0]!.url).toBe("https://api.anthropic.com/v1/messages");
+      expect(up.sent[0]!.headers["x-api-key"]).toBe(KEYS.ANTHROPIC_API_KEY);
+      expect(spawned[0]!.ANTHROPIC_BASE_URL).toStartWith("http://127.0.0.1:" + h.proxyPort + "/");
+      expect(Object.keys(spawned[0]!).filter((k) => /API_KEY$/.test(k))).toEqual([]);
+      expect(readdirSync(join(h.svc.cfg.journalDir, "sessions"))).toHaveLength(1);
+    } finally {
+      await vm.close?.();
+      h.svc.close();
+    }
+  }, 60_000);
+
+  test("on the real providers the stage3 row refuses with E_DCW_NO_PROVIDER under PD-31 after its ledger admission, before any key is read or any VM is made", async () => {
+    // Value: protects=PD-31: every stage 3 piece (the build agent, the build reader, stage 3 authoring and the DES-4 judges) refuses until the Captain's go; fails_when=the stage3 row builds the VM provider, reads any env name, calls Ubicloud or runs an SSH command; why_new=PD-31; seam=realProviders' stage3 factory, the stage3 row; no_claim=the stage 3 prompts themselves, which are not written yet
+    const h = await host();
+    const u = fakeUbicloud();
+    const w = watchedEnv(ENV);
+    const f = stage3Fixture(8);
+    const r = await runRow(f.argv, rowEnv({ ...h.ctx, env: w.env }, { ubicloud: u.ubicloud }));
+    try {
+      expect(r.code).toBe(2);
+      expect(r.err[0]).toStartWith("E_DCW_NO_PROVIDER ");
+      expect(r.err[0]).toContain("PD-31");
+      expect([...w.read]).toEqual([]);
+      expect([u.calls, u.ssh]).toEqual([[], []]);
+      expect(existsSync(join(f.sink, "launch.json"))).toBe(true);
+    } finally {
+      h.svc.close();
+    }
   });
+
+  test("the recipes row runs its recipe session on the real recipe agent, whose one model call reaches the dc-base-apps proxy through the VM proxy endpoint; the fake VM gives the audit no evidence, so the screen stops for the Captain", async () => {
+    // Value: protects=PD-31's other half: the recipes row builds the real VM provider and its recipe session runs the real recipe agent, then the row closes the VM front; fails_when=the recipes row refuses, its session never reaches the item proxy, or the front stays open; why_new=PD-31; seam=the recipes row, realVm, runVmAgent; no_claim=a recipe that qualifies (the fake VM answers no audit command, so the screen stops at the audit)
+    const h = await host();
+    const files = new Map<string, Uint8Array>();
+    const u = fakeUbicloud({ files, agent: (_vm, envFile) => stubSession(new TextDecoder().decode(files.get(envFile) ?? new Uint8Array()), h.root) });
+    const up = scripted([{ kind: "ok", text: "recipe written" }]);
+    const sink = join(temp("recipes"), "sink");
+    const r = await runRow(["recipes", "--frame", frameFixture(0), "--out", sink], rowEnv(h.ctx, { ubicloud: u.ubicloud, fetch: up.fetch, sleep: noSleep }));
+    try {
+      expect(r.code).toBe(2);
+      expect(r.err[0]).toStartWith("E_DC_SANDBOX_AUDIT ");
+      expect(r.err[0]).toContain("recipe session c001");
+      expect(up.sent.map((x) => [x.url, x.headers["x-api-key"]])).toEqual([["https://api.anthropic.com/v1/messages", KEYS.ANTHROPIC_API_KEY]]);
+      expect(readdirSync(join(h.svc.cfg.journalDir, "sessions"))).toHaveLength(1);
+      expect(await fetch("http://127.0.0.1:" + h.proxyPort + "/x").then(() => "open", () => "closed")).toBe("closed");
+    } finally {
+      h.svc.close();
+    }
+  }, 120_000);
 
   test("runOnHost runs one row in the service's process on the real providers and the host's commit; a row that fails throws for stage.json", async () => {
     const h = await host();

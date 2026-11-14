@@ -1,11 +1,12 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
-// The lane's composition module: every area's seams built from four providers. A provider is the one thing a paid row
+// The lane's composition module: every area's seams built from five providers. A provider is the one thing a paid row
 // needs from outside the lane's own code: the ledger and its controller (money/), the model caller (money/meter.ts's
-// metered client), the review session box (a container's RunBox, its shell and its driver run) and the VM world
-// (Ubicloud, the controller's browser and the in-VM agents). Each is a factory, so nothing is built before a row's start
-// rules and its ledger admission pass (wire/start.ts). The real providers (wire/real.ts) exist only on the controller
-// host, inside the ledger service's process, where wire/host.ts runs each paid row; anywhere else every factory refuses
-// with E_DCW_OFF_HOST after the row's checks. The dry run binds the keyless fakes in wire/fakes.ts.
+// metered client), the review session box (a container's RunBox, its shell and its driver run), the VM world (Ubicloud,
+// the controller's browser and the recipe agent) and stage 3's pieces (the build agent, the build reader, stage 3
+// authoring and the DES-4 judges, which PD-31 holds until the Captain's go). Each is a factory, so nothing is built
+// before a row's start rules and its ledger admission pass (wire/start.ts). The real providers (wire/real.ts) exist only
+// on the controller host, inside the ledger service's process, where wire/host.ts runs each paid row; anywhere else
+// every factory refuses with E_DCW_OFF_HOST after the row's checks. The dry run binds the keyless fakes in wire/fakes.ts.
 import { ledgerStatus } from "../../src/runner/ledger/ledger.ts";
 import type { Termination } from "../../src/types.ts";
 import type { BlockParser, Caller, SpendReader } from "./author/seams.ts";
@@ -28,7 +29,7 @@ import type { Admission, BuildAgent, BuildReader, HostsSeam, MoneySeam, Pairwise
 import type { AnyModel, LedgerItemId, ListSource, Model } from "./types.ts";
 import { meterModels, realProviders, type HostContext } from "./wire/real.ts";
 
-// ---- The four providers
+// ---- The five providers
 
 /** Where an OpenRouter model's call was served, as start rule 9 reads it. Null for Anthropic and OpenAI calls. */
 export interface ServedTerms {
@@ -114,7 +115,7 @@ export interface SessionProvider {
 
 export type VmKind = "recipe" | "qualify" | "build" | "check";
 
-/** The VM world: Ubicloud, the controller's browser and the agents that run inside VMs. */
+/** The VM world: Ubicloud, the controller's browser and the recipe agent. */
 export interface VmProvider {
   backend: VmBackend;
   /** Ubicloud's list price for one VM hour, read on the day, in micros (dc-hosts). */
@@ -125,9 +126,13 @@ export interface VmProvider {
   spec(kind: VmKind, label: string): VmSpec;
   browser: BrowserSeam;
   recipeAgent: RecipeAgent;
+  close?(): Promise<void>;
+}
+
+/** Stage 3's pieces on the VM world: the build agent, the build reader, stage 3's Opus writer and Sol auditor, and the DES-4 judges. */
+export interface Stage3Provider {
   buildAgent: BuildAgent;
   buildReader: BuildReader;
-  /** Stage 3's Opus writer and Sol auditor, and the DES-4 judges, whose prompts are not in the lane yet. */
   stage3Authoring: Stage3Authoring;
   pairwise: PairwiseJudge;
   close?(): Promise<void>;
@@ -141,6 +146,7 @@ export interface Providers {
   model: Factory<ModelProvider> | null;
   session: Factory<SessionProvider> | null;
   vm: Factory<VmProvider> | null;
+  stage3: Factory<Stage3Provider> | null;
 }
 
 export type ProviderName = keyof Providers;
@@ -161,7 +167,7 @@ const offHost = (name: ProviderName) => (): never => {
  * and off it factories that refuse. Calling this builds nothing; each factory runs only when a row calls build().
  */
 export const BOUND_PROVIDERS = (host: HostContext | null): Providers =>
-  host ? realProviders(host) : { ledger: offHost("ledger"), model: offHost("model"), session: offHost("session"), vm: offHost("vm") };
+  host ? realProviders(host) : { ledger: offHost("ledger"), model: offHost("model"), session: offHost("session"), vm: offHost("vm"), stage3: offHost("stage3") };
 
 /** Builds one named provider, or refuses with E_DCW_NO_PROVIDER. Each row builds only what it uses, after its checks. */
 export async function build<K extends ProviderName>(p: Providers, name: K, row: string): Promise<Built<K>> {

@@ -3,8 +3,9 @@
 // their oracle blocks and their base apps' recipes; each unit's exported repository and plan.md sit under --exports,
 // and stage 2's rows give each review arm's Opus block (pass 1, or pass 2 when pass 1 has none). selectUnits runs the
 // authoring, the audit and the two oracle builds per unit; when 8 or more qualify, runStage3 runs the six build arms
-// 2 at a time, checks every tree in its own offline VM and runs DES-4. Everything runs on the VM provider and the
-// money and hosts seams, under the frozen stop scopes.
+// 2 at a time, checks every tree in its own offline VM and runs DES-4. Everything runs on stage 3's pieces, the VM
+// provider and the money and hosts seams, under the frozen stop scopes. Stage 3's pieces are built first, so on the
+// controller host the row refuses there (PD-31) before the VM provider reads a key.
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -75,19 +76,20 @@ export const stage3Row: Row = async (a, io, env) => {
     env,
   );
   for (const l of launch.lines) io.out(l);
+  const pieces = await build(env.providers, "stage3", "stage3");
   const vm = await build(env.providers, "vm", "stage3");
   try {
-    const builds: BuildDeps = { sandbox: { backend: vm.backend, hosts: hostsSeam(launch.ledger, vm.priceMicrosPerHour, "stage3"), now: vm.now }, agent: vm.buildAgent, buildSpec: (l) => vm.spec("build", l), checkSpec: (l) => vm.spec("check", l), reader: vm.buildReader };
+    const builds: BuildDeps = { sandbox: { backend: vm.backend, hosts: hostsSeam(launch.ledger, vm.priceMicrosPerHour, "stage3"), now: vm.now }, agent: pieces.buildAgent, buildSpec: (l) => vm.spec("build", l), checkSpec: (l) => vm.spec("check", l), reader: pieces.buildReader };
     const money = moneySeam(launch.ledger);
     const candidates: Stage3Candidate[] = inputs.map((c) => ({ unit: c.unit, plan: readFileSync(join(exports, c.unit.id, "plan.md"), "utf8"), oracleBlock: c.oracleBlock, recipe: c.recipe, routes: c.routes, tree: treeOf(join(exports, c.unit.id, "repo")) }));
-    const sel = await underStops(launch.ledger, { stage: 3 }, () => selectUnits(candidates, { builds, money, authoring: vm.stage3Authoring }));
+    const sel = await underStops(launch.ledger, { stage: 3 }, () => selectUnits(candidates, { builds, money, authoring: pieces.stage3Authoring }));
     writeJson(join(launch.sink, "selection.json"), { tried: sel.tried, units: sel.units.map((u) => ({ unit: u.candidate.unit.id, validation: u.validation, authored: u.authored })), skippedBaseApp: sel.skippedBaseApp, runs: sel.runs, capStop: sel.capStop });
     io.out("stage 3 selection: " + sel.tried.length + " tried, " + sel.units.length + " qualify, " + sel.skippedBaseApp.length + " skipped for a base app already used" + (sel.capStop ? "; cap stop on " + sel.capStop.item + ": " + sel.capStop.why : ""));
     if (!sel.runs) {
       io.out("stage 3: " + sel.units.length + " units qualify, under the minimum; stage 3 doesn't run");
       return sel.capStop ? 2 : 0;
     }
-    const r = await underStops(launch.ledger, { stage: 3 }, () => runStage3(sel, { builds, money, opusBlock: opusBlockOf(rows), judge: vm.pairwise, baseAppOf: Object.fromEntries(sel.units.map((u) => [u.candidate.unit.id, u.candidate.unit.baseApp])) }));
+    const r = await underStops(launch.ledger, { stage: 3 }, () => runStage3(sel, { builds, money, opusBlock: opusBlockOf(rows), judge: pieces.pairwise, baseAppOf: Object.fromEntries(sel.units.map((u) => [u.candidate.unit.id, u.candidate.unit.baseApp])) }));
     writeJson(join(launch.sink, "builds.json"), r.builds);
     writeJson(join(launch.sink, "pairs.json"), r.pairs);
     writeJson(join(launch.sink, "readout.json"), { paired: r.paired, keep: r.keep, instrument: r.instrument, capStop: r.capStop });
@@ -95,6 +97,6 @@ export const stage3Row: Row = async (a, io, env) => {
     for (const item of STAGE3_ITEMS) await launch.ledger.controller.settleItem(item);
     return r.capStop ? 2 : 0;
   } finally {
-    await closeAll(vm, launch.ledger);
+    await closeAll(vm, pieces, launch.ledger);
   }
 };
