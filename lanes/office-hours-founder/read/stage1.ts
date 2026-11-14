@@ -41,7 +41,7 @@ export interface TwinCheck {
 }
 
 /**
- * Opus none's W on each skin of the 8 pairs, 3 passes a side. A pair without 3 scored passes on each side drops and is
+ * Opus none's W on each skin of the pinned pairs (6 to 8), 3 passes a side. A pair without 3 scored passes on each side drops and is
  * named; with fewer than 6 pairs left, or twins that don't track on either test, the stage reads NO READ (twin).
  */
 export function twinCheck(sessions: readonly ScoredSession[], units: readonly UnitMeta[]): TwinCheck {

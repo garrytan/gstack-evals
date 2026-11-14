@@ -36,16 +36,30 @@ export function loadUnits(dir: string): UnitMeta[] {
 
 const inSet = (units: readonly UnitMeta[], set: UnitMeta["set"]): string[] => units.filter((u) => u.set === set).sort((a, b) => a.draw - b.draw).map((u) => u.id);
 
-/** The twin set's digest: sha256 over "id digest" lines in draw order, as the comparison set's. */
-export const twinDigest = (units: readonly UnitMeta[]): string =>
-  sha256(units.filter((u) => u.set === "twin").sort((a, b) => a.draw - b.draw).map((u) => u.id + " " + u.digest).join("\n") + "\n");
+/** The files a unit's content digest reads: what the sessions and the scorer read, and unit.json with twin_of. */
+const UNIT_FILES = ["opening.md", "sheet.json", "key.json", "unit.json"] as const;
 
-/** Why the units cannot fill the cell's quotas, or null. */
-export function cellProblem(cell: Cell, units: readonly UnitMeta[], twins: { min: number; max: number; digest: string } = TWINS): string | null {
+/** sha256 over a unit's files as they are on disk, so a changed opening, sheet, key or unit.json changes it. */
+export const contentDigest = (dir: string, id: string): string => sha256(UNIT_FILES.map((f) => readFileSync(join(dir, id, f), "utf8")).join("\0"));
+
+/** The twin set's digest: sha256 over "id twin_of content" lines in draw order, each content digest read from the unit's files. */
+export const twinDigest = (dir: string, units: readonly UnitMeta[]): string =>
+  sha256(units.filter((u) => u.set === "twin").sort((a, b) => a.draw - b.draw).map((u) => u.id + " " + u.twin_of + " " + contentDigest(dir, u.id)).join("\n") + "\n");
+
+/** Why the units under dir cannot fill the cell's quotas, or null. */
+export function cellProblem(cell: Cell, units: readonly UnitMeta[], dir: string, twins: { min: number; max: number; digest: string } = TWINS): string | null {
   const count = (set: UnitMeta["set"]) => inSet(units, set).length;
   if ((cell === "stage1" || cell === "smoke") && count("calibration") !== QUOTA.calibration) return cell + " needs " + QUOTA.calibration + " calibration units, and the units dir holds " + count("calibration");
   if (cell === "stage1" && (count("twin") < twins.min || count("twin") > twins.max)) return "stage1 needs " + twins.min + " to " + twins.max + " twins, and the units dir holds " + count("twin");
-  if (cell === "stage1" && twinDigest(units) !== twins.digest) return "stage1 takes only the pinned twins (digest " + twins.digest.slice(0, 12) + "), and the units dir's " + count("twin") + " twins have digest " + twinDigest(units).slice(0, 12);
+  if (cell === "stage1") {
+    let digest: string;
+    try {
+      digest = twinDigest(dir, units);
+    } catch (error) {
+      return "stage1 cannot read a twin's files: " + (error as Error).message;
+    }
+    if (digest !== twins.digest) return "stage1 takes only the pinned twins (digest " + twins.digest.slice(0, 12) + "), and the units dir's " + count("twin") + " twins have digest " + digest.slice(0, 12);
+  }
   if ((cell === "stage2" || cell === "pitch") && count("comparison") !== QUOTA.comparison) return cell + " needs " + QUOTA.comparison + " comparison units, and the units dir holds " + count("comparison");
   if (cell === "real" && count("real") === 0) return "the real cell needs real-stratum units, and the units dir holds none";
   return null;

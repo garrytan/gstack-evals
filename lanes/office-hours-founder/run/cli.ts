@@ -8,7 +8,7 @@
 // other than the prereg's pin, and a gstack tree whose VERSION is not the pin's once the rig installs it; any upstream
 // override; a model, arm, cell or repair the prereg does not name; an out dir that exists without --resume. The simulator
 // comes in through wire, so the run command holds no simulator of its own.
-import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
 import { stackKind } from "../../../src/arms/stacks.ts";
@@ -27,7 +27,7 @@ import type { ArmId, ModelId } from "../types.ts";
 import { runE2e, type E2eOptions } from "./e2e.ts";
 import { CELLS, readManifest, type Cell } from "./manifest.ts";
 import { readRows, rowsReport } from "./rows.ts";
-import { meterSlot, PRE_SMOKE, runCells, type Allowances, type RunDeps, type RunInput } from "./run.ts";
+import { meterSlot, PRE_SMOKE, receiptsAfter, runCells, type Allowances, type RunDeps, type RunInput } from "./run.ts";
 import { REPAIRS, type FounderTurnFn, type PersonSheet, type Repair } from "./session.ts";
 
 type Env = Record<string, string | undefined>;
@@ -160,6 +160,7 @@ export async function runCommand(argv: string[], io: Io, env: Env, wire: { found
   const ledger = ledgerPath(plan.ledger, env);
   const record = recordPath(plan.record, env);
   const meter = await openMeter({ item: plan.simItem, runId, out: join(out, "sim-meter"), cacheDir: join(out, "sim-cache"), maxOutputTokens: 1200, amountMicros: plan.input.simCap, record: record.path, ledger: ledger.path, env });
+  let failed = false;
   try {
     const run = await runCells({ ...plan.input, runId, policy: policy as LoadedPolicy, ledger: ledger.path, docker: env.GSTACK_EVALS_DOCKER_BIN || "docker", log: (l) => io.err(l) }, {
       openRig: async () => {
@@ -178,9 +179,12 @@ export async function runCommand(argv: string[], io: Io, env: Env, wire: { found
     io.out("cell " + plan.input.cell + ": manifest " + run.manifest_sha256 + ", " + run.rows.length + " sessions ended, " + run.unrun.length + " unrun, arm spend $" + (run.spent_micros / 1e6).toFixed(2) + ", simulator $" + (run.sim_micros / 1e6).toFixed(2));
     for (const s of run.stops) io.err(s.code + " of run: " + s.message);
     return run.stops.length ? 2 : 0;
+  } catch (error) {
+    failed = true;
+    throw error;
   } finally {
     await meter.close();
-    cpSync(out, plan.sink, { recursive: true });
+    receiptsAfter(out, plan.sink, failed, (line) => io.err(line));
   }
 }
 

@@ -94,4 +94,8 @@ The preregistration left these rules open, so the build chose them. Each one is 
 21. RunSessionRow widens questions, pushes and named_source to allow null. The scoring side fills them, and the run
     writes null.
 22. Stage 1 takes 6 to 8 twins, and only the list frozen.ts pins by digest (TWINS). This is a pre-data ruling, made
-    after 7 of the 16 calibration units got a passing second skin. The twin check's floor of 6 pairs is unchanged.
+    after 7 of the 16 calibration units got a passing second skin. The twin check's floor of 6 pairs is unchanged. The
+    digest reads each twin's opening.md, sheet.json, key.json and unit.json from disk, so it covers twin_of and never
+    trusts the digest a unit.json declares.
+23. At a launch's end the out dir is copied to the receipts sink without sockets (the proxy's management socket can't
+    be copied). If the launch already failed, a failed copy is printed as a warning and the launch's own error stands.

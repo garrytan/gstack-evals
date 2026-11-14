@@ -3,11 +3,13 @@
 // code: section 6's C1 rows and the one-retry limit through runSchedule with a scripted launch, the closing message at the
 // founder-reply limit and the pitch-only cell's limit of 0 through founderLoop, an allowance refusal before and after
 // spend reaches the allowance, a refusal on the simulator's allowance, a session the ledger never admitted, the
-// manifest frozen before the first stage 2 lease, and stage 1's pinned twins at 5, 6, 7 and 8 and as a different list. The tool refusal runs the driver through the real pinned Agent SDK and
+// manifest frozen before the first stage 2 lease, stage 1's pinned twins (at 5, 6, 7, 8 and 9, as a different list and
+// with changed files), and the receipts copy at a launch's end (a socket left out, the launch's own error kept). The tool refusal runs the driver through the real pinned Agent SDK and
 // Claude Code CLI against a stub upstream (SKIP when the CLI is not installed). The container seams start real agent
 // containers on a real trial network and probe them, so they run only under GSTACK_EVALS_DOCKER=1 and return a SKIP
 // line otherwise, which the dry run counts as a failure, never a pass.
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { claudeCodeDriver } from "../../../src/adapters/claude-code/driver.ts";
@@ -21,7 +23,7 @@ import { CLOSING, DENIED_TOOLS, FOUNDER_REPLIES, TWINS } from "../frozen.ts";
 import type { ManifestEntry, Seam, UnitMeta } from "../types.ts";
 import { departures, probe } from "./contain.ts";
 import { cellEntries, cellProblem, freezeManifest, loadUnits, twinDigest, type Cell } from "./manifest.ts";
-import { PRE_SMOKE, runSchedule, type Launch, type RunResult } from "./run.ts";
+import { copyReceipts, PRE_SMOKE, receiptsAfter, runSchedule, type Launch, type RunResult } from "./run.ts";
 import { founderLimit, founderLoop, type FounderResult } from "./session.ts";
 
 export const DOCKER_GATE = "GSTACK_EVALS_DOCKER=1";
@@ -118,19 +120,46 @@ async function closingAt(limit: number, founderReplies: number): Promise<{ closi
   return { closing: "reply" in last && last.reply === CLOSING, simCalls };
 }
 
-/** Stage 1's twin rule on fixture units: n twins against a pin over the first n, or the next n when wrong. */
-function twinProblem(n: number, wrong = false): string | null {
+/** Stage 1's twin rule on fixture units: n twins against a pin over the first n. wrong offers the next n instead, and change edits the first twin's files after the pin. */
+function twinProblem(n: number, o: { wrong?: boolean; change?: (unitDir: string) => void } = {}): string | null {
   const dir = mkdtempSync(join(tmpdir(), "of-twins-"));
   try {
     fixtureUnits(dir, 16, "calibration");
-    fixtureUnits(dir, 8, "twin");
+    for (const id of fixtureUnits(dir, 9, "twin")) writeFileSync(join(dir, id, "key.json"), "{}\n");
     const units = loadUnits(dir), cal = units.filter((u) => u.set !== "twin"), twins = units.filter((u) => u.set === "twin").sort((a, b) => a.draw - b.draw);
-    const from = wrong ? 1 : 0;
-    return cellProblem("stage1", [...cal, ...twins.slice(from, from + n)], { ...TWINS, digest: twinDigest([...cal, ...twins.slice(0, n)]) });
+    const pin = { ...TWINS, digest: twinDigest(dir, [...cal, ...twins.slice(0, n)]) };
+    o.change?.(join(dir, twins[0]!.id));
+    const from = o.wrong ? 1 : 0;
+    return cellProblem("stage1", [...cal, ...twins.slice(from, from + n)], dir, pin);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 }
+
+/** One launch's end as the run command has it: a failing or passing body, then the receipts copy. Returns the error that escapes, or "ok". */
+function launchEnd(fail: boolean, out: string, sink: string, warn: (line: string) => void): string {
+  let failed = false;
+  try {
+    try {
+      if (fail) throw new Error("E_USAGE the launch's own error");
+      return "ok";
+    } catch (error) {
+      failed = true;
+      throw error;
+    } finally {
+      receiptsAfter(out, sink, failed, warn);
+    }
+  } catch (error) {
+    return (error as Error).message;
+  }
+}
+
+const TWIN_EDITS: Record<string, (unitDir: string) => void> = {
+  opening: (d) => writeFileSync(join(d, "opening.md"), "A different opening.\n"),
+  sheet: (d) => writeFileSync(join(d, "sheet.json"), "{}\n"),
+  key: (d) => writeFileSync(join(d, "key.json"), "{\"primary\":[]}\n"),
+  twin_of: (d) => writeFileSync(join(d, "unit.json"), JSON.stringify({ ...JSON.parse(readFileSync(join(d, "unit.json"), "utf8")), twin_of: "elsewhere" })),
+};
 
 const pure: Seam[] = [
   {
@@ -141,10 +170,60 @@ const pure: Seam[] = [
     },
   },
   {
+    name: "stage 1 twins: 9 pinned twins are refused (more than 8)",
+    run: async () => {
+      const p = twinProblem(9);
+      return { ok: !!p?.includes("6 to 8 twins"), detail: p ?? "accepted" };
+    },
+  },
+  {
     name: "stage 1 twins: a list of 7 other than the pinned one is refused",
     run: async () => {
-      const p = twinProblem(7, true);
+      const p = twinProblem(7, { wrong: true });
       return { ok: !!p?.includes("pinned twins"), detail: p ?? "accepted" };
+    },
+  },
+  {
+    name: "stage 1 twins: the pinned ids with a changed opening, sheet, key or twin_of are refused",
+    run: async () => {
+      const got = Object.entries(TWIN_EDITS).map(([k, edit]) => [k, twinProblem(7, { change: edit })] as const);
+      return { ok: got.every(([, p]) => !!p?.includes("pinned twins")), detail: got.map(([k, p]) => k + ": " + (p ? "refused" : "accepted")).join("; ") };
+    },
+  },
+  {
+    name: "receipts: the copy at a launch's end leaves out the proxy's unix socket and copies the rest",
+    run: async () => {
+      const root = mkdtempSync(join(tmpdir(), "of-receipts-")), out = join(root, "out"), sink = join(root, "sink");
+      mkdirSync(join(out, "proxy"), { recursive: true });
+      writeFileSync(join(out, "rows.ndjson"), "{}\n");
+      const server = createServer();
+      await new Promise<void>((done) => server.listen(join(out, "proxy", "management.sock"), done));
+      try {
+        copyReceipts(out, sink);
+        const ok = existsSync(join(sink, "rows.ndjson")) && !existsSync(join(sink, "proxy", "management.sock"));
+        return { ok, detail: ok ? "rows.ndjson copied, the socket left out" : "the sink is missing rows.ndjson or holds the socket" };
+      } catch (error) {
+        return { ok: false, detail: (error as Error).message };
+      } finally {
+        server.close();
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  },
+  {
+    name: "receipts: a copy that fails after the launch failed never replaces the launch's error, and a launch that passed still fails on it",
+    run: async () => {
+      const root = mkdtempSync(join(tmpdir(), "of-receipts-")), out = join(root, "out"), sink = join(root, "sink");
+      mkdirSync(out);
+      writeFileSync(sink, "a file where the sink directory should be\n");
+      const warned: string[] = [];
+      try {
+        const bad = launchEnd(true, out, sink, (l) => warned.push(l)), good = launchEnd(false, out, sink, (l) => warned.push(l));
+        const ok = bad === "E_USAGE the launch's own error" && warned.length === 1 && warned[0]!.startsWith("E_INTERNAL") && good !== "ok";
+        return { ok, detail: "failed launch: " + bad + "; warnings " + warned.length + "; passing launch: " + good.slice(0, 100) };
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
     },
   },
   c1("C1 block: a reply that holds a block ends the session as block", [{ replies: [NO_BLOCK, [BLOCK_REPLY]] }], { end: "block", code: null, attempts: 1 }),

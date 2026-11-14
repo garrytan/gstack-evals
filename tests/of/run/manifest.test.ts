@@ -11,7 +11,7 @@ import { fixtureUnits } from "../../../lanes/office-hours-founder/run/seams.ts";
 const root = mkdtempSync(join(tmpdir(), "of-manifest-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 fixtureUnits(join(root, "units"), 16, "calibration");
-fixtureUnits(join(root, "units"), 8, "twin");
+for (const id of fixtureUnits(join(root, "units"), 8, "twin")) writeFileSync(join(root, "units", id, "key.json"), "{}\n");
 fixtureUnits(join(root, "units"), 64, "comparison");
 const units = loadUnits(join(root, "units"));
 const count = (cell: Cell, f: (e: ReturnType<typeof cellEntries>[number]) => boolean = () => true) => cellEntries(cell, units).filter(f).length;
@@ -36,12 +36,13 @@ describe("cells", () => {
   });
 
   test("a units dir short of a quota is refused", () => {
-    const pin = { ...TWINS, digest: twinDigest(units) };
-    expect(cellProblem("stage1", units, pin)).toBeNull();
-    expect(cellProblem("stage1", units)).toContain("pinned twins");
-    expect(cellProblem("stage1", units.filter((u) => u.set !== "twin"), pin)).toContain("6 to 8 twins");
-    expect(cellProblem("stage2", units.slice(0, 40))).toContain("64 comparison");
-    expect(cellProblem("real", units)).toContain("real-stratum");
+    const dir = join(root, "units");
+    const pin = { ...TWINS, digest: twinDigest(dir, units) };
+    expect(cellProblem("stage1", units, dir, pin)).toBeNull();
+    expect(cellProblem("stage1", units, dir)).toContain("pinned twins");
+    expect(cellProblem("stage1", units.filter((u) => u.set !== "twin"), dir, pin)).toContain("6 to 8 twins");
+    expect(cellProblem("stage2", units.slice(0, 40), dir)).toContain("64 comparison");
+    expect(cellProblem("real", units, dir)).toContain("real-stratum");
   });
 });
 

@@ -24,7 +24,7 @@
 //   CLAUDE_CODE_DISABLE_1M_CONTEXT=1, cap stops, AskUserQuestion denied beside WebSearch and WebFetch, the founder loop
 //   as nextUser and GSTACK_SESSION_KIND=interactive on the office-hours arm. None and lens get no state root; the
 //   office-hours arm gets a fresh one, copied out to host/gstack-state after the session.
-import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync } from "node:fs";
+import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync, appendFileSync } from "node:fs";
 import { join, posix } from "node:path";
 import { claudeCodeDriver, type ClaudeProvider, type NextUser } from "../../../src/adapters/claude-code/driver.ts";
 import type { ReasonCode } from "../../../src/errors/codes.ts";
@@ -203,10 +203,23 @@ function reconcile(dir: string, ledger: string | null): AttemptRead {
 
 const usd = (m: number) => "$" + (m / D).toFixed(2);
 
+/** Copies a launch's out dir to its receipts sink, leaving out sockets such as the proxy's management socket, which can't be copied. */
+export const copyReceipts = (out: string, sink: string): void => cpSync(out, sink, { recursive: true, filter: (src) => !lstatSync(src).isSocket() });
+
+/** Copies the receipts at a launch's end. After the launch failed, a failed copy goes to warn and never replaces the launch's error. */
+export function receiptsAfter(out: string, sink: string, failed: boolean, warn: (line: string) => void): void {
+  try {
+    copyReceipts(out, sink);
+  } catch (error) {
+    if (!failed) throw error;
+    warn("E_INTERNAL of run: the receipts copy to " + sink + " also failed: " + (error as Error).message);
+  }
+}
+
 /** Runs one cell: its sessions as manifest.ts schedules them, kept to the launch's models and arms. */
 export async function runCells<C>(o: RunInput, deps: RunDeps<C>): Promise<RunResult> {
   const units = loadUnits(o.unitsDir);
-  const problem = cellProblem(o.cell, units);
+  const problem = cellProblem(o.cell, units, o.unitsDir);
   if (problem) throw new Error("E_USAGE " + problem);
   return runSchedule({ ...o, entries: cellEntries(o.cell, units).filter((e) => o.models.includes(e.model) && o.arms.includes(e.arm)) }, deps);
 }

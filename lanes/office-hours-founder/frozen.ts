@@ -75,8 +75,8 @@ export const PRE_SMOKE_SIM_ALLOWANCE = 2;
 /** Section 3's quotas. */
 export const QUOTA = { calibration: 16, twins: 8, comparison: 64, reserve: 6, pilot: 4 } as const;
 
-/** Stage 1's twins, under the Captain's pre-data ruling after 7 of the 16 calibration units got a passing second skin: the pairs c1, c2, c5, c9, c14, c16 and c17, pinned by twinDigest. Stage 1 takes 6 to 8 twins, and only the pinned list. */
-export const TWINS = { min: 6, max: 8, digest: "6a0395aca968e07a1418a8e527a6cc577fcaa5e27b4935cf354571ffa367fd53" } as const;
+/** Stage 1's twins, under the Captain's pre-data ruling after 7 of the 16 calibration units got a passing second skin: the pairs c1, c2, c5, c9, c14, c16 and c17, pinned by twinDigest over each twin's files and twin_of. Stage 1 takes 6 to 8 twins, and only the pinned list. */
+export const TWINS = { min: 6, max: 8, digest: "5d172ce3ed6af1b04c10e9ee78b2be779d527b15015420ed9f29cb7b7d603250" } as const;
 
 /** The first user message of every arm session (section 5): the arm's first line, a blank line, opening.md, a blank line and the template. */
 export const firstMessage = (line: string, opening: string): string => line + "\n\n" + opening.trim() + "\n\n" + TEMPLATE;
