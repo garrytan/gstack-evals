@@ -17,7 +17,7 @@ import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, re
 import { join } from "node:path";
 import { stackTree } from "../../../src/arms/install.ts";
 import { dockerEnvArgs, PROVIDER_KEY_ENV, trialEnv } from "../../../src/trial/env.ts";
-import { checkImagePin, stateRoot } from "../../../src/trial/image.ts";
+import { checkImagePin, stateRoot, type Runner } from "../../../src/trial/image.ts";
 import type { AgentSession, StepResult } from "../../../src/trial/sandbox.ts";
 import { fail } from "../errors.ts";
 import { GSTACK_PIN, HARNESS } from "../frozen.ts";
@@ -34,8 +34,8 @@ export interface ReviewImage {
 }
 
 /** The pinned trial image for this checkout's recipe, equal to expectDigest when a run recorded one; else E_DC_INFRA_MISSING. */
-export function reviewImage(o: { state?: string; expectDigest?: string | null } = {}): ReviewImage {
-  const pin = checkImagePin({ state: o.state ?? stateRoot(), expectDigest: o.expectDigest ?? null });
+export function reviewImage(o: { state?: string; expectDigest?: string | null; run?: Runner } = {}): ReviewImage {
+  const pin = checkImagePin({ state: o.state ?? stateRoot(), expectDigest: o.expectDigest ?? null, run: o.run });
   if (!pin.ok) return fail("E_DC_INFRA_MISSING", "review image: " + pin.code + " " + pin.message);
   return { tag: pin.pin.tag, digest: pin.pin.digest };
 }

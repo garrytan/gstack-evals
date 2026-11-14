@@ -308,6 +308,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_DCW_OFF_HOST](#e_dcw_off_host) | 2 | U20 |
 | [E_DCW_CONTAINMENT](#e_dcw_containment) | 2 | U20 |
 | [E_DCH_IMAGE_DIGEST](#e_dch_image_digest) | 2 | U20 |
+| [E_DCH_IMAGE_TAR](#e_dch_image_tar) | 2 | U20 |
 | [E_DCH_NOT_TMPFS](#e_dch_not_tmpfs) | 2 | U20 |
 | [E_DCH_TMPFS_FULL](#e_dch_tmpfs_full) | 2 | U20 |
 | [E_DCH_ROW_RUNNING](#e_dch_row_running) | 2 | U20 |
@@ -2224,9 +2225,17 @@ Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing
 
 ### E_DCH_IMAGE_DIGEST
 
-Design plan review eval (controller host): the trial image the controller host built or loaded has a digest other than the one the wiring file's sessions section records, so no review session may run on it. The launch or recovery deleted the VMs it made.
+Design plan review eval (controller host): the trial image the controller host built or loaded has a digest other than the one the wiring file's sessions section records, or a launch's later row names another digest than the one the host loaded, so no review session may run on it. On the host, the provisioning's docker image inspect after the load read another image id, or no recipe label of this checkout, and the provisioning stopped before any row. The launch or recovery deleted the VMs it made.
 
 Fix: Load the recorded image on the host (the plan's image tar, a docker save of the image the run recorded), or have the Captain record the new digest in the sessions section before any session runs. Never run sessions on a rebuilt image.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_DCH_IMAGE_TAR
+
+Design plan review eval (controller host): the trial image tar is not the one the wiring file's sessions section records. Off the host, before any VM, the plan's tar hashes to another sha256 than imageTarSha256, or its index.json names another image than imageDigest; on the host, the uploaded tar hashed to another sha256 before docker load, and the provisioning stopped before any row. A launch on the host deleted the VMs it made.
+
+Fix: Point the host plan's imageTar at the docker save tar the Captain recorded (its sha256 and its index.json digest both match the sessions section), or have the Captain record the new tar and digest before the launch.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 

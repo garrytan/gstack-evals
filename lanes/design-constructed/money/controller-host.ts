@@ -175,8 +175,12 @@ export interface ControllerPlan {
   wal?: { dir?: string; script?: string; owner?: string | null; authorizedKeys?: string; login?: string };
   /** Root shell lines that make the controller host ready, given its private IPv4 (controllerProvision for paid runs). */
   provision: (host: { privateIp: string | null; layout: Layout; uploads?: Uploads }) => string[];
-  /** The trial image for the review sessions: a docker save tar to load, else built on the host; null when the row runs no session. */
-  image?: { tar: Uint8Array | FileSource | null; expectDigest: string | null } | null;
+  /**
+   * The trial image for the preflight's review container and the review sessions: a docker save tar to load, else built
+   * on the host. tarSha256 is the tar's recorded sha256, which the host checks before docker load; expectDigest the
+   * image id the host checks after it.
+   */
+  image?: { tar: Uint8Array | FileSource | null; expectDigest: string | null; tarSha256?: string | null } | null;
   /** The gstack pin's commit and its tree as one pack (gstackPack), imported into HOST_GSTACK_SOURCE and checked by tree hash. */
   gstack?: GstackPack | null;
   /** The row's inputs as a tar, unpacked into the host's work folder. */
@@ -213,6 +217,10 @@ export interface GstackPack {
 export interface Uploads {
   image: "load" | "build" | null;
   gstack: { commit: string; tree: string } | null;
+  /** The uploaded tar's recorded sha256, checked before docker load. */
+  tarSha256?: string | null;
+  /** The image id the load must give, checked before the image is tagged or pinned. */
+  expectDigest?: string | null;
 }
 
 export interface HostRecord {
@@ -250,6 +258,7 @@ export function planProblems(p: ControllerPlan): string[] {
   if (!p.repoBundle.length) out.push("the repository bundle is empty");
   if (!p.recordTar.length) out.push("the approval record archive is empty");
   if (!/^age1[0-9a-z]{58}$/.test(p.recipient)) out.push("the run's age recipient is not one age1 public key");
+  if (p.image?.tar && !/^[0-9a-f]{64}$/.test(p.image.tarSha256 ?? "")) out.push("the trial image tar has no recorded sha256 for the host to check before docker load");
   return out;
 }
 
@@ -273,10 +282,17 @@ export function serviceEnv(env: Readonly<Record<string, string | undefined>>, ow
 /** The provisioning's own entry for the trial image (money/host-image.ts), relative to the repository. */
 export const HOST_IMAGE_ENTRY = "lanes/design-constructed/money/host-image.ts";
 
+/** Sets features.containerd-snapshotter in Docker's daemon.json, keeping every key already written there. */
+export const DOCKER_DAEMON_FEATURES =
+  'import json, os; p = "/etc/docker/daemon.json"; d = json.load(open(p)) if os.path.exists(p) and os.path.getsize(p) else {}; d.setdefault("features", {})["containerd-snapshotter"] = True; os.makedirs("/etc/docker", exist_ok=True); open(p + ".tmp", "w").write(json.dumps(d, indent=2) + "\\n"); os.replace(p + ".tmp", p)';
+
 /**
- * BT: the paid controller host's provisioning: bun at the repo's pinned version, Docker, the repo's own dependencies,
- * the mirrors, then the uploads: the gstack pin imported into HOST_GSTACK_SOURCE and checked by tree hash, and the trial
- * image loaded from its tar or built from docker/trial.Dockerfile, its digest written to the layout's image file.
+ * BT: the paid controller host's provisioning: bun at the repo's pinned version, Docker on the containerd image store,
+ * the repo's own dependencies, the mirrors, then the uploads: the gstack pin imported into HOST_GSTACK_SOURCE and checked
+ * by tree hash, and the trial image loaded from its tar or built from docker/trial.Dockerfile, its digest written to the
+ * layout's image file. The containerd image store (DOCKER_DAEMON_FEATURES) is set before Docker loads or pulls anything:
+ * a docker save tar made there names the image by its index digest, which is the id the wiring records, and the classic
+ * store would load it under its config digest instead. The load checks the tar's sha256 first and the loaded id after.
  * system: false leaves out the package, Docker, bun and dependency installs (keyless tests run the rest on this machine).
  */
 export function controllerProvision(o: { bunVersion: string; mirrors: boolean; system?: boolean; bun?: string; docker?: string; imageEntry?: string }): ControllerPlan["provision"] {
@@ -285,11 +301,16 @@ export function controllerProvision(o: { bunVersion: string; mirrors: boolean; s
     const bun = o.bun ?? "/opt/bun/bin/bun";
     const g = uploads?.gstack ?? null;
     if (g && !(/^[0-9a-f]{40}$/.test(g.commit) && /^[0-9a-f]{40}$/.test(g.tree))) fail("E_USAGE", "the gstack pin's commit and tree must be full shas");
+    if (uploads?.tarSha256 && !/^[0-9a-f]{64}$/.test(uploads.tarSha256)) fail("E_USAGE", "the trial image tar's sha256 must be 64 hex digits");
+    if (uploads?.expectDigest && !/^sha256:[0-9a-f]{64}$/.test(uploads.expectDigest)) fail("E_USAGE", "the trial image's expected digest must be sha256:<64 hex digits>");
     const system = o.system === false ? [] : [
       "export DEBIAN_FRONTEND=noninteractive",
       "apt-get update -o DPkg::Lock::Timeout=600",
       "apt-get install -y python3 openssh-client curl unzip tar git docker.io age -o DPkg::Lock::Timeout=600",
+      "python3 -c " + shq(DOCKER_DAEMON_FEATURES),
       "systemctl enable --now docker",
+      "systemctl restart docker",
+      "docker info --format '{{json .DriverStatus}}' | grep -q io.containerd.snapshotter.v1 || { echo 'E_DC_INFRA_MISSING docker does not run on the containerd image store after its restart' >&2; exit 1; }",
       "test -x " + shq(bun) + " || (curl -fsSL https://bun.sh/install | BUN_INSTALL=/opt/bun bash -s bun-v" + o.bunVersion + ")",
       "cd " + shq(l.repo) + " && " + shq(bun) + " install --frozen-lockfile",
       ...(o.mirrors ? mirrorSetup(privateIp!) : []),
@@ -305,7 +326,7 @@ export function controllerProvision(o: { bunVersion: string; mirrors: boolean; s
         ]
       : [];
     const image = uploads?.image
-      ? ["mkdir -p " + shq(l.xdg) + " && cd " + shq(l.repo) + " && XDG_STATE_HOME=" + shq(l.xdg) + " " + shq(bun) + " " + shq(o.imageEntry ?? HOST_IMAGE_ENTRY) + " --out " + shq(l.image) + (o.docker ? " --docker " + shq(o.docker) : "") + (uploads.image === "load" ? " --load " + shq(l.root + "/image.tar") + " && rm -f " + shq(l.root + "/image.tar") : "")]
+      ? ["mkdir -p " + shq(l.xdg) + " && cd " + shq(l.repo) + " && XDG_STATE_HOME=" + shq(l.xdg) + " " + shq(bun) + " " + shq(o.imageEntry ?? HOST_IMAGE_ENTRY) + " --out " + shq(l.image) + (o.docker ? " --docker " + shq(o.docker) : "") + (uploads.expectDigest ? " --expect " + shq(uploads.expectDigest) : "") + (uploads.image === "load" ? (uploads.tarSha256 ? " --sha256 " + shq(uploads.tarSha256) : "") + " --load " + shq(l.root + "/image.tar") + " && rm -f " + shq(l.root + "/image.tar") : "")]
       : [];
     return ["set -euo pipefail", ...system, ...gstack, ...image];
   };
@@ -430,11 +451,17 @@ async function prepareController(x: Ctx, ctl: Vm, wal: Vm, hosts: HostVm[], uplo
   await checkCheckout(x, ctl);
   if (x.p.gstack) await x.b.write(ctl, l.root + "/gstack.pack", x.p.gstack.pack);
   if (x.p.image?.tar) await x.b.write(ctl, l.root + "/image.tar", x.p.image.tar);
-  const uploads: Uploads = { image: x.p.image ? (x.p.image.tar ? "load" : "build") : null, gstack: x.p.gstack ? { commit: x.p.gstack.commit, tree: x.p.gstack.tree } : null };
+  const uploads: Uploads = { image: x.p.image ? (x.p.image.tar ? "load" : "build") : null, gstack: x.p.gstack ? { commit: x.p.gstack.commit, tree: x.p.gstack.tree } : null, tarSha256: x.p.image?.tarSha256 ?? null, expectDigest: x.p.image?.expectDigest ?? null };
   const privateIp = x.b.privateAddress(ctl);
   await x.b.write(ctl, l.controller, JSON.stringify({ vm: ctl.id, location: x.p.location ?? null, privateIp }, null, 2) + "\n");
   await x.b.write(ctl, l.root + "/provision.sh", x.p.provision({ privateIp, layout: l, uploads }).join("\n") + "\n");
-  await x.run(ctl, "bash " + shq(l.root + "/provision.sh") + " >> " + shq(l.state + "/provision.log") + " 2>&1", "provisioning the controller host");
+  const provisioned = await x.b.exec(ctl, "bash " + shq(l.root + "/provision.sh") + " >> " + shq(l.state + "/provision.log") + " 2>&1", { user: "root" });
+  if (provisioned.exit !== 0) {
+    const tail = await x.b.exec(ctl, "tail -n 20 " + shq(l.state + "/provision.log"), { user: "root" });
+    const line = tail.stdout.split("\n").reverse().find((t) => /^E_DCH_IMAGE_(TAR|DIGEST) /.test(t));
+    if (line) throw new DcError(line.startsWith("E_DCH_IMAGE_TAR ") ? "E_DCH_IMAGE_TAR" : "E_DCH_IMAGE_DIGEST", line.slice(line.indexOf(" ") + 1) + "; the provisioning of " + ctl.id + " stopped there, so neither the preflight nor any row runs on it");
+    fail("E_DC_INFRA_MISSING", "provisioning the controller host failed on " + ctl.id + " (exit " + provisioned.exit + ")");
+  }
   let image: string | null = null;
   if (x.p.image) {
     const read = await x.b.exec(ctl, "cat " + shq(l.image), { user: "root" });

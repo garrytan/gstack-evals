@@ -4,7 +4,10 @@
 // stage3/fake.ts's simulated Ubicloud with every SSH command run on this machine, one controller host and one ledger:
 //   1 modelprobe on the launch, its region in launch.json and the work folder's regions.json (PD-42)
 //   2 preflight: one sandbox VM on a simulated Ubicloud through the preamble, the controller's install, the fixture
-//     app's qualification steps, one page in a scripted browser and the audit, with no model key in its environment
+//     app's qualification steps, one page in a scripted browser and the audit, with no model key in its environment,
+//     then the review container through wire/real.ts realReview's own checks (the sessions section, the trial image the
+//     launch's provisioning loaded and pinned under the host's state root, the gstack pin it imported), with only the
+//     docker steps faked: an inspect runner that reports the stand-in image, and fakeContainerSeams for the container
 //   3 clones from an invented sealed record over file://, 4 apps writing apps.json from the clones row's output
 //   5 planted writing planted.json and its apps.json from an invented opened tar
 //   6 gatecheck reading them, which refuses the invented units at their planted-case check, before any key read
@@ -42,10 +45,12 @@ import type { DryRunCase } from "../types.ts";
 import { plantedRow, viewAt } from "./apps.ts";
 import { clonesRow } from "./clones.ts";
 import { cloneFixture } from "./dryrun-clones.ts";
-import { FAKE_KEYS, host, hostFixture, hostWorkOf, localSeams, localWorld, openSealed, rowEnv, shmOf, withTemp } from "./dryrun-host.ts";
+import { recipeHash, recipeInputs } from "../../../src/rig/recipe.ts";
+import type { Runner } from "../../../src/trial/image.ts";
+import { FAKE_KEYS, FIXTURE_IMAGE_ID, host, hostFixture, hostWorkOf, localSeams, localWorld, openSealed, pinRepo, rowEnv, shmOf, withTemp } from "./dryrun-host.ts";
 import { runRowOnHost } from "./host.ts";
 import { nodePinPath, realProviders, type HostContext } from "./real.ts";
-import { containerPreflight, fakeContainerSeams } from "./preflight-container.ts";
+import { fakeContainerSeams } from "./preflight-container.ts";
 import type { Args, RowEnv } from "./start.ts";
 
 /** The text every scripted reply carries; it may sit only in the host's tmpfs and the sealed archive. */
@@ -63,7 +68,9 @@ const argsOf = (argv: string[]): Args => {
 /** The host's stage module for this run: the real row path with the upstream, clone seams and dry run faked. */
 export const runOnHost: HostStage["runOnHost"] = async (service, args, row) => {
   const { realEnv } = await import("../cli.ts");
-  const s = JSON.parse(readFileSync(join(row.work, SETTINGS), "utf8")) as { src: string; table: string };
+  const s = JSON.parse(readFileSync(join(row.work, SETTINGS), "utf8")) as { src: string; table: string; image: string; gstackCommit: string };
+  const recipe = recipeHash(recipeInputs());
+  const imageRun: Runner = (_docker, args) => (args[0] === "image" ? { status: 0, stdout: s.image + " " + recipe + "\n", stderr: "" } : { status: 9, stdout: "", stderr: "the keyless launch's docker runs only image inspect" });
   const served = Object.fromEntries((JSON.parse(readFileSync(join(row.work, "terms.json"), "utf8")) as Array<{ model: string; provider: string }>).map((t) => [t.model, t.provider]));
   const up = scripted((_url, body) => {
     const model = Object.entries(DIRECT_MODELS).find(([, d]) => d.id === body?.model)?.[0] ?? "";
@@ -71,7 +78,7 @@ export const runOnHost: HostStage["runOnHost"] = async (service, args, row) => {
   });
   const clone = (name: string, oid: string, dest: string) => fetchAt("file://" + join(s.src, name), oid, dest, ["file"]);
   return runRowOnHost(service, args, row, {
-    env: (ctx): RowEnv => ({ ...realEnv(ctx), dryRun: async () => true, vocabulary: () => STAND_IN_VOCABULARY, providers: realProviders(ctx, { fetch: up.fetch, sleep: async () => {}, vm: { backend: fakeBackend(fakeWorld()), browser: fixtureBrowser(() => "content") }, review: (dir) => containerPreflight(dir, fakeContainerSeams()) }) }),
+    env: (ctx): RowEnv => ({ ...realEnv(ctx), dryRun: async () => true, vocabulary: () => STAND_IN_VOCABULARY, providers: realProviders(ctx, { fetch: up.fetch, sleep: async () => {}, vm: { backend: fakeBackend(fakeWorld()), browser: fixtureBrowser(() => "content") }, imageRun, container: fakeContainerSeams(), gstackCommit: s.gstackCommit }) }),
     run: async (argv, io, env) => {
       if (argv[0] === "clones") return clonesRow(clone)(argsOf(argv), io, env);
       if (argv[0] === "planted") return plantedRow({ clone, table: () => JSON.parse(readFileSync(s.table, "utf8")) })(argsOf(argv), io, env);
@@ -135,7 +142,8 @@ export async function launchScenario(): Promise<string[]> {
       writeFileSync(join(work, "pins.json"), JSON.stringify(pin));
       writeFileSync(join(work, "terms.json"), JSON.stringify(termsRecordsOf(pin)));
       const vm = { project: "dry", location: "eu-central-h1", size: "standard-4", image: "ubuntu-noble", privateSubnet: null, keyPath: "ssh/id_ed25519", knownHosts: "ssh/known_hosts", chromiumBuild: { dir: "chromium", bin: "chrome-linux/chrome" }, claudeTarball: "claude.tgz", nodeTarball: "node.tar.xz", priceMicrosPerHour: 57_400, proxy: { host: "controller", port: 8790 }, mirrors: { host: "controller", terms: { npm: "npm terms", pypi: "pypi terms", apt: "apt terms", dockerhub: "dockerhub terms" } } };
-      writeFileSync(join(work, "wiring.json"), JSON.stringify({ retry: { attempts: 3, elapsed_ms: 900_000 }, pinRecord: "pins.json", cacheDir: "cache", scanMs: 10_000, sessions: null, vm }));
+      const sessions = JSON.parse(readFileSync(join(work, "wiring.json"), "utf8")).sessions;
+      writeFileSync(join(work, "wiring.json"), JSON.stringify({ retry: { attempts: 3, elapsed_ms: 900_000 }, pinRecord: "pins.json", cacheDir: "cache", scanMs: 10_000, sessions, vm }));
       const app = fx.repos.bait;
       const view = (() => {
         const probe = join(shm, "planted-view");
@@ -145,7 +153,7 @@ export async function launchScenario(): Promise<string[]> {
         return { designFiles: v.designFiles, routeFiles: v.routeFiles, files: v.files };
       })();
       const table = plantedTar(join(shm, "planted-in", "planted-in"), { name: app.name, oid: app.first.oid, tree: app.first.tree }, view);
-      writeFileSync(join(work, SETTINGS), JSON.stringify({ src: fx.src, table: join(hostWorkOf(dir), "planted-table.json") }));
+      writeFileSync(join(work, SETTINGS), JSON.stringify({ src: fx.src, table: join(hostWorkOf(dir), "planted-table.json"), image: FIXTURE_IMAGE_ID, gstackCommit: pinRepo(dir).commit }));
       writeFileSync(join(work, "planted-table.json"), table);
       const plan = { ...JSON.parse(readFileSync(f.planPath, "utf8")), ubicloud: { ...f.plan.ubicloud, location: "eu-central-h1" } };
       const env = { ...rowEnv(), lane: () => ({ commit: laneCommit, dirty: false, root: lane }) };
@@ -178,7 +186,7 @@ export async function launchScenario(): Promise<string[]> {
       const facts = existsSync(l.controller) ? JSON.parse(readFileSync(l.controller, "utf8")) : null;
       if (facts?.privateIp !== "127.0.0.1") problems.push("the launch recorded no private IPv4 for the controller: " + JSON.stringify(facts));
       const preflightLog = String(await step(2, ["preflight", "--out", "sinks/preflight"], null, { state: "done" }));
-      for (const want of ["preflight: preamble: ok", "preflight: install: ok", "preflight: page / at 375x812 in the pinned Chromium: HTTP 200", "preflight: audit: ok", "preflight: passed"]) if (!preflightLog.includes(want)) problems.push("the preflight row printed no " + JSON.stringify(want) + ": " + preflightLog.slice(-600));
+      for (const want of ["preflight: preamble: ok", "preflight: install: ok", "preflight: page / at 375x812 in the pinned Chromium: HTTP 200", "preflight: audit: ok", "preflight container: C3 after the install: ok", "preflight container: removal: dc-review-fake removed", "preflight: passed"]) if (!preflightLog.includes(want)) problems.push("the preflight row printed no " + JSON.stringify(want) + ": " + preflightLog.slice(-600));
       if (/API_KEY|test-not-a-key/.test(preflightLog)) problems.push("the preflight row printed a key name or key");
       await step(3, ["clones", "--record", "inputs/record.json", "--out", "frame"], { "inputs/record.json": rec }, { state: "done" });
       await step(4, ["apps", "--clones", "frame", "--base-apps", "inputs/base-apps.json", "--out", "apps.json"], { "inputs/base-apps.json": JSON.stringify([{ id: "c003", pin: fx.repos.match.second.oid }]) }, { state: "done" });

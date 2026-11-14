@@ -15,8 +15,10 @@
 // work folder and runs its stage; next sends the plan's stage, with the plan's inputs folder, to the running host once
 // its last row has ended; status prints each row and the last lines of the last row's log. Every key is read by name,
 // only after the start rules the launch can check off the host pass: the commit pin and a clean checkout (rule 2), the
-// keyless dry run (rule 5), a complete wiring file, a plan the launcher accepts and, for a sessions row, a recorded image
-// digest with its image tar and a gstack source that holds the pin. The row's own start rules run on the host. The
+// keyless dry run (rule 5), a complete wiring file, a plan the launcher accepts and, for every launch whatever its first
+// row (the preflight starts a review container), a sessions section with a recorded image digest and tar sha256, an
+// image tar that hashes to that sha256 and whose index.json names that digest, and a gstack source that holds the pin.
+// The row's own start rules run on the host. The
 // launcher builds every upload in memory from a tmpfs folder and refuses one on disk, and the teardown's archive holds
 // the work folder only as the age file the host sealed (PD-41). A launch and a recovery first read the books of every
 // earlier launch the plan's archives name (money/carry.ts) and refuse when they can't be read or miss a lease the
@@ -33,7 +35,8 @@ import type { HostRow, HostStage } from "../money/host-main.ts";
 import { recordTar, type LedgerService } from "../money/ledger-service.ts";
 import { ownerFromEnv } from "../stage3/sandbox.ts";
 import { checkMirrors, keyedUbicloud } from "../stage3/ubicloud-real.ts";
-import { claudeTarball, CONTROLLER, nodeTarball, hostAddresses, readControllerFacts, readWiring, type HostContext, type HostWiring } from "./real.ts";
+import { sha256File } from "../money/host-image.ts";
+import { claudeTarball, CONTROLLER, holdsCommit, hostAddresses, isImageId, nodeTarball, readControllerFacts, readWiring, type HostContext, type HostWiring } from "./real.ts";
 import { readJson } from "./json.ts";
 import { refuse, type Args, type Io, type Row, type RowEnv } from "./start.ts";
 
@@ -57,7 +60,8 @@ export function hostContext(service: LedgerService, wiringPath: string, env: Rea
   const w = readWiring(wiringPath);
   const at = (p: string) => (typeof p === "string" ? resolve(work, p) : p);
   const vm = w.vm && { ...w.vm, ...(w.vm.chromiumBuild ? { chromiumBuild: { ...w.vm.chromiumBuild, dir: at(w.vm.chromiumBuild.dir) } } : {}), claudeTarball: at(w.vm.claudeTarball), nodeTarball: at(w.vm.nodeTarball) };
-  return { service, wiring: { ...w, vm }, env, dir: join(work, ".wire"), lane: hostLane(root), controller: () => readControllerFacts(join(service.cfg.stateDir, "controller.json")), addresses };
+  const sessions = w.sessions && { ...w.sessions, gstackSources: w.sessions.gstackSources.map((g) => (g === HOST_GSTACK_SOURCE ? join(root, "gstack-src") : g)) };
+  return { service, wiring: { ...w, vm, sessions }, env, dir: join(work, ".wire"), lane: hostLane(root), controller: () => readControllerFacts(join(service.cfg.stateDir, "controller.json")), addresses };
 }
 
 /** The region a row on this host runs in, from the launch's record, and the work folder's regions.json (PD-42). */
@@ -183,9 +187,9 @@ export interface HostPlanFile {
   recipient: string;
   /** A tmpfs folder of the next row's own inputs, unpacked into the host's work folder by next or relaunch; none when unset. */
   inputs?: string | null;
-  /** A sessions row's trial image as a docker save tar: the image whose digest the wiring's sessions section records. */
+  /** The trial image as a docker save tar, which every launch and recovery uploads: the tar whose sha256 and index digest the wiring's sessions section records. */
   imageTar?: string | null;
-  /** A sessions row's local gstack repository holding the pinned commit. */
+  /** The local gstack repository holding the pinned commit, which every launch and recovery uploads to HOST_GSTACK_SOURCE. */
   gstackSource?: string | null;
   /** The row the host runs, as gstack-evals dc takes it. */
   stage: string[];
@@ -198,6 +202,8 @@ export interface HostSeams {
   backend?: (plan: HostPlanFile, env: Readonly<Record<string, string | undefined>>) => Promise<HostBackend>;
   /** Changes to the launcher plan, for keyless runs on this machine (paths, the entry, the provisioning, the WAL target). */
   tune?: (p: ControllerPlan) => ControllerPlan;
+  /** The gstack commit the plan's source must hold and the launch uploads; frozen.ts GSTACK_PIN's when unset (a keyless stand-in pin). */
+  gstackCommit?: string;
 }
 
 const VERBS = ["launch", "next", "relaunch", "recover", "teardown", "status"] as const;
@@ -228,7 +234,38 @@ export const tarOf = (dir: string, cap = TAR_CAP_BYTES): Uint8Array => {
   return new Uint8Array(r.stdout);
 };
 
-const isSha = (v: unknown) => typeof v === "string" && /^sha256:[0-9a-f]{64}$/.test(v);
+/** The image a docker save tar names: its index.json's first manifest digest, the image id under the containerd image store. */
+export function tarImageDigest(tar: string): string | null {
+  const r = Bun.spawnSync(["tar", "-xOf", tar, "index.json"], { stdout: "pipe", stderr: "pipe" });
+  if (r.exitCode !== 0) return null;
+  try {
+    const digest = (JSON.parse(new TextDecoder().decode(r.stdout)) as { manifests?: Array<{ digest?: unknown }> }).manifests?.[0]?.digest;
+    return isImageId(digest) ? digest : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The review container's start rules off the host, for every launch whatever its first row: the preflight starts a
+ * review container on the host, and every session row after it uses the same image and gstack pin. The wiring must
+ * name them; a launch or recovery, which uploads both, also needs the plan's tar to hash to the recorded sha256 and to
+ * name the recorded digest in its index.json, and the plan's gstack source to hold the pin's commit.
+ */
+function reviewRules(p: HostPlanFile, wiring: HostWiring, commit: string, uploads: boolean): void {
+  const no = (why: string): never => refuse("review container", why + "; every launch runs the preflight's review container, so no VM is made");
+  const s = wiring.sessions ?? no("the wiring file has no sessions section (gstack sources, the image digest and its tar's sha256)");
+  if (!isImageId(s.imageDigest)) no("the wiring's sessions section records no image digest; the host loads that image, so the Captain records it first");
+  if (!s.imageTarSha256) no("the wiring's sessions section records no imageTarSha256 for the image tar; the host checks the tar against it before docker load");
+  if (!s.gstackSources.includes(HOST_GSTACK_SOURCE)) no("the wiring's gstack sources don't name the host's pin source " + HOST_GSTACK_SOURCE);
+  if (!uploads) return;
+  if (!p.imageTar || !existsSync(p.imageTar)) no("the host plan names no image tar for the recorded digest");
+  const sum = sha256File(p.imageTar!);
+  if (sum !== s.imageTarSha256) throw new DcError("E_DCH_IMAGE_TAR", "the host plan's image tar " + p.imageTar + " hashes to sha256 " + sum + ", not the wiring's imageTarSha256 " + s.imageTarSha256 + "; no VM was made");
+  const named = tarImageDigest(p.imageTar!);
+  if (named !== s.imageDigest) throw new DcError("E_DCH_IMAGE_TAR", "the host plan's image tar " + p.imageTar + " names image " + (named ?? "none (no readable index.json)") + " in its index.json, not the wiring's imageDigest " + s.imageDigest + "; no VM was made");
+  if (!p.gstackSource || !holdsCommit(p.gstackSource, commit)) no("the host plan names no local gstack repository holding " + commit);
+}
 
 /** Reads and checks the host plan; the rules here read no key. */
 export async function readHostPlan(path: string): Promise<HostPlanFile> {
@@ -251,7 +288,7 @@ export async function readHostPlan(path: string): Promise<HostPlanFile> {
 }
 
 /** The start rules a launch checks off the host, before any key is read. */
-async function hostRules(p: HostPlanFile, env: RowEnv): Promise<{ commit: string; root: string }> {
+async function hostRules(p: HostPlanFile, env: RowEnv, gstackCommit: string, uploads: boolean): Promise<{ commit: string; root: string; imageDigest: string | null }> {
   const lane = env.lane();
   if (!lane.commit) refuse("2", "the lane's commit can't be read, so the host can't be pinned to it");
   if (lane.dirty) refuse("2", "the checkout is dirty; the controller host runs an exact commit, so commit first");
@@ -259,16 +296,9 @@ async function hostRules(p: HostPlanFile, env: RowEnv): Promise<{ commit: string
   const vmFiles = wiring.vm && vmFilesProblems(wiring.vm, resolve(p.work), lane.root);
   if (vmFiles) fail("E_USAGE", vmFiles);
   if (!p.mirrors && wiring.vm && !Array.isArray(wiring.vm.mirrors) && wiring.vm.mirrors.host === CONTROLLER) fail("E_USAGE", "the host plan sets mirrors off, but the wiring's vm section names the controller's mirrors, which only a host with mirrors on serves");
-  if (p.stage[0] === "sessions") {
-    const s = wiring.sessions;
-    if (!s) refuse("sessions", "the wiring file has no sessions section");
-    if (!isSha(s!.imageDigest)) refuse("sessions", "the wiring's sessions section records no image digest; the host loads that image, so the Captain records it first");
-    if (!s!.gstackSources.includes(HOST_GSTACK_SOURCE)) refuse("sessions", "the wiring's gstack sources don't name the host's pin source " + HOST_GSTACK_SOURCE);
-    if (!p.imageTar || !existsSync(p.imageTar)) refuse("sessions", "the host plan names no image tar for the recorded digest");
-    if (!p.gstackSource || !existsSync(p.gstackSource)) refuse("sessions", "the host plan names no local gstack repository holding " + GSTACK_PIN.commit);
-  }
+  reviewRules(p, wiring, gstackCommit, uploads);
   if (!(await env.dryRun())) refuse("5", "the keyless dry run has a FAIL line; gstack-evals dc dryrun names it");
-  return { commit: lane.commit, root: lane.root };
+  return { commit: lane.commit, root: lane.root, imageDigest: wiring.sessions!.imageDigest };
 }
 
 /**
@@ -292,7 +322,7 @@ export function carryLines(carry: { archives: number; items: CarryFile["items"] 
 
 /** The launcher's plan for this host plan; owner is UBI_OWNER, which is not a key. */
 function controllerPlanOf(p: HostPlanFile, lane: { commit: string; root: string }, owner: string, s: HostSeams, uploads: boolean, carry: CarryFile | null = null): ControllerPlan {
-  const sessions = p.stage[0] === "sessions";
+  const sessions = uploads ? readWiring(resolve(p.work, p.wiring)).sessions : null;
   const plan: ControllerPlan = {
     runId: p.runId,
     owner,
@@ -311,8 +341,8 @@ function controllerPlanOf(p: HostPlanFile, lane: { commit: string; root: string 
     provision: controllerProvision({ bunVersion: p.bunVersion, mirrors: p.mirrors }),
     bun: "/opt/bun/bin/bun",
     stage: hostStage(p.wiring, p.stage),
-    image: sessions ? { tar: uploads ? { file: resolve(p.imageTar!) } : null, expectDigest: readWiring(resolve(p.work, p.wiring)).sessions!.imageDigest } : null,
-    gstack: sessions && uploads ? gstackPack(resolve(p.gstackSource!), GSTACK_PIN.commit) : null,
+    image: uploads ? { tar: { file: resolve(p.imageTar!) }, expectDigest: sessions?.imageDigest ?? null, tarSha256: sessions?.imageTarSha256 ?? null } : null,
+    gstack: uploads ? gstackPack(resolve(p.gstackSource!), s.gstackCommit ?? GSTACK_PIN.commit) : null,
   };
   const tuned = s.tune ? s.tune(plan) : plan;
   const problems = planProblems(tuned);
@@ -412,15 +442,17 @@ export function hostRow(s: HostSeams = {}): Row {
     const archive = a.flags.get("--archive");
     if (verb === "teardown" && (!archive || existsSync(archive))) fail("E_USAGE", "teardown needs --archive <a folder that doesn't exist yet>");
     const keyed = verb === "launch" || verb === "relaunch" || verb === "recover";
-    const lane = keyed || verb === "next" ? await hostRules(p, env) : { commit: env.lane().commit, root: env.lane().root };
+    const uploads = verb === "launch" || verb === "recover";
+    const lane = keyed || verb === "next" ? await hostRules(p, env, s.gstackCommit ?? GSTACK_PIN.commit, uploads) : { commit: env.lane().commit, root: env.lane().root, imageDigest: null };
     const owner = ownerFromEnv(vars);
     const carry = verb === "launch" || verb === "recover" ? await launchCarry(p, verb) : null;
-    const plan = controllerPlanOf(p, lane, owner, s, verb === "launch" || verb === "recover", carry);
+    const plan = controllerPlanOf(p, lane, owner, s, uploads, carry);
     const inputs = (verb === "next" || verb === "relaunch") && p.inputs ? (needTmpfs(p.inputs, "the plan's inputs folder"), tarOf(resolve(p.inputs))) : null;
     const keys = keyed ? serviceEnv(vars, owner) : null;
     const b = await (s.backend ?? realBackend)(p, vars);
     const rec: HostRecord | null = verb === "launch" ? null : readJson<HostRecord>(recordPath, "--record");
     if (rec && rec.runId !== p.runId) fail("E_USAGE", "the host record is for run " + rec.runId + ", the plan for " + p.runId);
+    if (rec?.image && lane.imageDigest && lane.imageDigest !== rec.image) throw new DcError("E_DCH_IMAGE_DIGEST", "the host loaded trial image " + rec.image + " at launch, and the wiring's sessions section now records " + lane.imageDigest + "; every stage of the run uses the image it launched on, so nothing was sent");
     if (verb === "launch") {
       const made = await launch(b, plan, keys!);
       saveRecord(recordPath, made);

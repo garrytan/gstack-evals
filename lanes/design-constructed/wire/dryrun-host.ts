@@ -10,7 +10,8 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSyn
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { recipeHash, recipeInputs } from "../../../src/rig/recipe.ts";
-import { AGE_HEADER, controllerProvision, gstackPack, layout, rowLog, type ControllerPlan } from "../money/controller-host.ts";
+import { AGE_HEADER, controllerProvision, gstackPack, HOST_GSTACK_SOURCE, layout, rowLog, type ControllerPlan } from "../money/controller-host.ts";
+import { sha256File } from "../money/host-image.ts";
 import { commitAll, makeRecord } from "../money/dryrun-fixture.ts";
 import { WALCTL_PY } from "../money/offhost.ts";
 import { fakeBackend, fakeWorld, type FakeWorld } from "../stage3/fake.ts";
@@ -111,16 +112,41 @@ export const rowEnv = (o: { dirty?: boolean; dryRun?: boolean } = {}): RowEnv =>
 });
 
 /** A host plan on dir: a work folder on tmpfs with its wiring file, an approval record, an age recipient and the stage row. */
+/** The stand-in trial image's id: the fixture tar's index.json names it and the stand-in docker loads it. */
+export const FIXTURE_IMAGE_ID = "sha256:" + "ab".repeat(32);
+
+/** A stand-in docker save tar at path whose index.json names id, as docker save writes it on the containerd image store; returns its sha256. */
+export function imageTarFixture(path: string, id: string): string {
+  const d = mkdtempSync(join(tmpdir(), "dc-imagetar-"));
+  try {
+    writeFileSync(join(d, "oci-layout"), JSON.stringify({ imageLayoutVersion: "1.0.0" }));
+    writeFileSync(join(d, "index.json"), JSON.stringify({ schemaVersion: 2, mediaType: "application/vnd.oci.image.index.v1+json", manifests: [{ mediaType: "application/vnd.oci.image.index.v1+json", digest: id, size: 856 }] }));
+    if (Bun.spawnSync(["tar", "-C", d, "-cf", path, "oci-layout", "index.json"]).exitCode !== 0) throw new Error("could not write the stand-in image tar " + path);
+  } finally {
+    rmSync(d, { recursive: true, force: true });
+  }
+  return sha256File(path);
+}
+
+/**
+ * A host plan and its work folder on tmpfs for the launch row, with the review container's inputs every launch needs:
+ * a stand-in image tar and docker, a sessions section recording their digest and sha256, and a stand-in gstack pin
+ * repository (localSeams passes its commit as the pin).
+ */
 export function hostFixture(dir: string, stage: string[] = ["items"]): { planPath: string; recordPath: string; plan: HostPlanFile; identity: string } {
   const work = join(shmOf(dir), "work-in");
   mkdirSync(shmOf(dir), { recursive: true, mode: 0o700 });
   const keys = ageKeys(shmOf(dir));
   mkdirSync(join(work, "inputs"), { recursive: true });
-  writeFileSync(join(work, "wiring.json"), JSON.stringify({ retry: { attempts: 3, elapsed_ms: 900_000 }, pinRecord: "inputs/pins.json", cacheDir: "cache", scanMs: 10_000, sessions: null, vm: null }) + "\n");
+  const pin = pinRepo(dir);
+  fakeDocker(dir, FIXTURE_IMAGE_ID);
+  const imageTar = join(dir, "trial-image.tar");
+  const sessions = { gstackSources: [HOST_GSTACK_SOURCE], imageDigest: FIXTURE_IMAGE_ID, imageTarSha256: imageTarFixture(imageTar, FIXTURE_IMAGE_ID) };
+  writeFileSync(join(work, "wiring.json"), JSON.stringify({ retry: { attempts: 3, elapsed_ms: 900_000 }, pinRecord: "inputs/pins.json", cacheDir: "cache", scanMs: 10_000, sessions, vm: null }) + "\n");
   writeFileSync(join(work, "inputs", "note.txt"), "an input the row reads\n");
   mkdirSync(join(dir, "approval"), { recursive: true });
   const record = makeRecord(join(dir, "approval"));
-  const plan: HostPlanFile = { runId: "dc-dryrun-hostrow", longestStageHours: 24, ttlHours: 30, priceMicrosPerHour: { controller: 60_000, wal: 20_000 }, bunVersion: "1.4.4", mirrors: false, ubicloud: { project: "dry", location: "dry", size: "standard-2", image: "dry", keyPath: join(dir, "key"), knownHosts: join(dir, "known") }, work, wiring: "wiring.json", record, recipient: keys.recipientFile, stage };
+  const plan: HostPlanFile = { runId: "dc-dryrun-hostrow", longestStageHours: 24, ttlHours: 30, priceMicrosPerHour: { controller: 60_000, wal: 20_000 }, bunVersion: "1.4.4", mirrors: false, ubicloud: { project: "dry", location: "dry", size: "standard-2", image: "dry", keyPath: join(dir, "key"), knownHosts: join(dir, "known") }, work, wiring: "wiring.json", record, recipient: keys.recipientFile, imageTar, gstackSource: pin.repo, stage };
   const planPath = join(dir, "host-plan.json");
   writeFileSync(planPath, JSON.stringify(plan) + "\n");
   return { planPath, recordPath: join(dir, "host-record.json"), plan, identity: keys.identity };
@@ -137,6 +163,7 @@ export function localSeams(dir: string, w: FakeWorld, env: Record<string, string
   const b = fakeBackend(w);
   return {
     env,
+    gstackCommit: existsSync(join(dir, "pin-src")) ? pinRepo(dir).commit : undefined,
     backend: async () => b,
     tune: (p) =>
       over({
@@ -185,8 +212,9 @@ export function fakeDocker(dir: string, id: string): string {
 }
 
 /** A local repository whose one commit stands in for the gstack pin. */
-function pinRepo(dir: string): { repo: string; commit: string } {
+export function pinRepo(dir: string): { repo: string; commit: string } {
   const repo = join(dir, "pin-src");
+  if (existsSync(join(repo, ".git"))) return { repo, commit: new TextDecoder().decode(Bun.spawnSync(["git", "-C", repo, "rev-parse", "HEAD"], { stdout: "pipe" }).stdout).trim() };
   mkdirSync(join(repo, "bin"), { recursive: true });
   writeFileSync(join(repo, "setup"), "#!/bin/sh\necho installed\n");
   chmodSync(join(repo, "setup"), 0o755);
@@ -233,7 +261,7 @@ export function hostRowCases(): DryRunCase[] {
             rmSync(join(dir, "host"), { recursive: true, force: true });
             rmSync(hostWorkOf(dir), { recursive: true, force: true });
             rmSync(f.recordPath, { force: true });
-            const s = localSeams(dir, w, FAKE_KEYS, (p) => ({ ...p, stage: null, gstack: pack, image: { tar: new Uint8Array(readFileSync(join(dir, "image.tar"))), expectDigest: expect } }));
+            const s = localSeams(dir, w, FAKE_KEYS, (p) => ({ ...p, stage: null, gstack: pack, image: { tar: new Uint8Array(readFileSync(join(dir, "image.tar"))), expectDigest: expect, tarSha256: sha256File(join(dir, "image.tar")) } }));
             const r = await host("launch", f, s);
             for (const pid of pidsIn(dir)) process.kill(pid, "SIGKILL");
             const l = layout("dc-dryrun-hostrow", join(dir, "host"));

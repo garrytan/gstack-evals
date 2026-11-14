@@ -16,7 +16,9 @@
 // user and one request from the run user through the egress filter to the proxy endpoint for a slot nothing bound, which
 // the VM front answers 404 "no such slot" without reaching any proxy or model (stage3/front.ts). The audit must pass and
 // show an accepted connection to the proxy endpoint. Last, one stage 1 review container on this host runs the sessions
-// row's own steps with no model call (wire/preflight-container.ts). No model is called, and only dc-hosts admits anything.
+// row's own steps with no model call (wire/preflight-container.ts). Its provider is built first, so a wiring with no
+// sessions section, a trial image that is not the pinned and recorded one, or no gstack source holding the pin refuses
+// before any VM (wire/real.ts realReview). No model is called, and only dc-hosts admits anything.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fail } from "../errors.ts";
@@ -28,7 +30,7 @@ import { tarOf } from "../stage3/install.ts";
 import { AGENT_CLAUDE } from "../stage3/install.ts";
 import { causeText, NET_PREFIX, sandboxed, SESSION_MARK, stepStderr, type SandboxDeps, type VmSpec } from "../stage3/sandbox.ts";
 import { CapStopSignal } from "../stage3/seams.ts";
-import { build, hostsSeam } from "../wire.ts";
+import { build, hostsSeam, type ReviewProvider } from "../wire.ts";
 import { writeJson } from "./json.ts";
 import { closeAll, need, start, type Row } from "./start.ts";
 
@@ -205,8 +207,14 @@ export const preflightRow: Row = async (a, io, env) => {
   const recipe = preflightRecipe();
   const launch = await start({ row: "preflight", sink, items: ["dc-hosts"], models: [], terms: [], record: { fixture: "lanes/design-constructed/wire/preflight" } }, env);
   for (const l of launch.lines) io.out(l);
+  let review: ReviewProvider;
+  try {
+    review = await build(env.providers, "review", "preflight");
+  } catch (e) {
+    await closeAll(launch.ledger);
+    throw e;
+  }
   const vm = await build(env.providers, "vm", "preflight");
-  const review = await build(env.providers, "review", "preflight");
   try {
     const sandbox = { backend: vm.backend, hosts: hostsSeam(launch.ledger, vm.priceMicrosPerHour, "preflight"), now: vm.now };
     let r: Awaited<ReturnType<typeof runPreflight>>;

@@ -28,6 +28,8 @@ import { ledgerStatus, recordApproval } from "../../../src/runner/ledger/ledger.
 import type { RetryBudget } from "../../../src/runner/proxy/metering-proxy.ts";
 import { createTrialNetwork, removeTrialNetwork, type TrialNetwork } from "../../../src/trial/proxy.ts";
 import { DcError, fail } from "../errors.ts";
+import { GSTACK_PIN } from "../frozen.ts";
+import type { Runner } from "../../../src/trial/image.ts";
 import type { LedgerService } from "../money/ledger-service.ts";
 import type { Meter } from "../money/meter.ts";
 import { DIRECT_MODELS } from "../money/price.ts";
@@ -40,7 +42,7 @@ import type { BrowserSeam, RecipeAgent } from "../recipes/seams.ts";
 import type { SessionSetup } from "../run/arms.ts";
 import { containPoint, type C2Expect } from "../run/contain.ts";
 import { createInstallNetwork, installGstack, prepareSession, removeNetwork, reviewImage, startReviewContainer, type PreparedSession, type ReviewImage, type UnitFiles } from "../run/docker.ts";
-import { containerPreflight } from "./preflight-container.ts";
+import { containerPreflight, type ContainerSeams } from "./preflight-container.ts";
 import { cellId } from "../run/session.ts";
 import { toolCallEnd } from "../run/stream.ts";
 import { proxySessions, runVmAgent, sshAgentSession } from "../stage3/agent.ts";
@@ -62,8 +64,11 @@ export interface HostWiring {
   cacheDir: string;
   /** How often a session proxy's journal is read for drift while sessions run, in ms (paid open item 5). */
   scanMs: number;
-  /** The review sessions: local gstack repositories holding the pinned commit, and the image digest a run recorded. */
-  sessions: { gstackSources: string[]; imageDigest: string | null } | null;
+  /**
+   * The review container's inputs, which every launch needs (the preflight starts one): local gstack repositories holding
+   * the pinned commit, the image digest the run recorded, and the sha256 of the docker save tar of that image.
+   */
+  sessions: { gstackSources: string[]; imageDigest: string | null; imageTarSha256: string | null } | null;
   /**
    * The sandbox VMs: Ubicloud's project and VM shape, the controller host's key for its sandboxes, the Playwright
    * Chromium build on this host (its folder and the binary's path inside it) and the pinned Claude Code npm tarball the
@@ -150,9 +155,19 @@ export function readWiring(path: string): HostWiring {
   const vm = w.vm;
   if (vm && !(vm.proxy && (vm.proxy.host === CONTROLLER || /^\d{1,3}(\.\d{1,3}){3}$/.test(vm.proxy.host)) && posInt(vm.proxy.port))) no("names a vm proxy that is neither an IPv4 address nor \"controller\", with a port");
   if (vm && !Array.isArray(vm.mirrors) && !(vm.mirrors?.host === CONTROLLER && MIRROR_NAMES.every((n) => (vm.mirrors as ControllerMirrors).terms?.[n]?.trim()))) no("names mirrors that are neither a list nor { host: \"controller\", terms } with a terms line for each of " + MIRROR_NAMES.join(", "));
+  const s = w.sessions;
+  if (s && !(Array.isArray(s.gstackSources) && s.gstackSources.every((g) => typeof g === "string" && g))) no("names a sessions section whose gstackSources is not a list of folders");
+  if (s && s.imageDigest != null && !isImageId(s.imageDigest)) no("names a sessions imageDigest that is not sha256:<64 hex digits>");
+  if (s && s.imageTarSha256 != null && !/^[0-9a-f]{64}$/.test(s.imageTarSha256)) no("names a sessions imageTarSha256 that is not 64 hex digits");
   if (w.retry.attempts !== RULED_RETRY.attempts || w.retry.elapsed_ms !== RULED_RETRY.elapsed_ms) no("sets a retry budget of " + w.retry.attempts + " attempts in " + w.retry.elapsed_ms + " ms, not the ruled " + RULED_RETRY.attempts + " attempts within 15 minutes (" + RULED_RETRY.elapsed_ms + " ms)");
-  return { ...w, sessions: w.sessions ?? null, vm: w.vm ?? null };
+  return { ...w, sessions: s ? { gstackSources: s.gstackSources, imageDigest: s.imageDigest ?? null, imageTarSha256: s.imageTarSha256 ?? null } : null, vm: w.vm ?? null };
 }
+
+/** An image id as docker image inspect prints it, and as the wiring records it. */
+export const isImageId = (v: unknown): v is string => typeof v === "string" && /^sha256:[0-9a-f]{64}$/.test(v);
+
+/** Whether a local repository holds commit (git cat-file -e <commit>^{commit}), as the gstack install's stackTree looks for it. */
+export const holdsCommit = (repo: string, commit: string): boolean => existsSync(repo) && Bun.spawnSync(["git", "-C", repo, "cat-file", "-e", commit + "^{commit}"], { stdout: "ignore", stderr: "ignore", env: { PATH: process.env.PATH ?? "/usr/bin:/bin", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" } }).exitCode === 0;
 
 /** What the real providers run on: the host's ledger service, the wiring file and the service's own environment. */
 export interface HostContext {
@@ -185,8 +200,12 @@ export interface RealSeams {
   /** The sandbox VMs' backend and browser on stage3/fake.ts's simulated Ubicloud, for a keyless launch; the keyed backend and Playwright when unset. */
   vm?: { backend: UbicloudBackend; browser: BrowserSeam };
   docker?: string;
-  /** The preflight's review-container check; the sessions row's container on the trial network when unset. */
-  review?: (dir: string) => Promise<{ lines: string[]; problems: string[] }>;
+  /** The preflight review container's docker steps (start, install, C3, removal); run/docker.ts's on the trial network when unset. */
+  container?: ContainerSeams;
+  /** The docker runner the review image's pin check inspects the pinned tag with; src/trial/image.ts dockerRun when unset. */
+  imageRun?: Runner;
+  /** The gstack commit the review container installs; frozen.ts GSTACK_PIN's when unset (a keyless launch's stand-in pin). */
+  gstackCommit?: string;
 }
 
 /** sha256 of the routing and data terms the proxy sends for a model, the digest pin.ts records as its terms digest. */
@@ -245,19 +264,30 @@ export function realProviders(h: HostContext, s: RealSeams = {}): Providers {
   };
 }
 
-/** The preflight's review container: the sessions row's image, trial network, gstack sources and install network, with no proxy and no model. */
+/**
+ * The preflight's review container: the sessions row's image, trial network, gstack sources and install network, with
+ * no proxy and no model. Building it checks, before the preflight makes any VM, that the wiring has a sessions section
+ * with a recorded image digest, that this host's pinned trial image is that digest (src/trial/image.ts checkImagePin
+ * under stateRoot()), and that one of the wiring's gstack sources holds the pin's commit.
+ */
 export function realReview(h: HostContext, s: RealSeams): ReviewProvider {
-  if (s.review) return { check: s.review };
-  const w = h.wiring.sessions ?? fail("E_USAGE", "the wiring file has no sessions section (gstack sources and the image digest), so the preflight can't start a review container; the Captain sets it (lanes/design-constructed/WIRING.md)");
+  const w = h.wiring.sessions ?? fail("E_USAGE", "the wiring file has no sessions section (gstack sources, the image digest and its tar's sha256), so the preflight can't start a review container; the Captain sets it (lanes/design-constructed/WIRING.md)");
+  if (!isImageId(w.imageDigest)) fail("E_USAGE", "the wiring's sessions section records no image digest, so the preflight can't check the review container's image; the Captain records it (lanes/design-constructed/WIRING.md)");
+  const image = reviewImage({ expectDigest: w.imageDigest, run: s.imageRun });
+  const commit = s.gstackCommit ?? GSTACK_PIN.commit;
+  if (!w.gstackSources.some((g) => holdsCommit(g, commit))) fail("E_DC_INFRA_MISSING", "no gstack source the wiring names (" + (w.gstackSources.join(", ") || "none") + ") holds the pin's commit " + commit + ", so the preflight can't install gstack in its review container; no VM was made");
   const docker = s.docker ?? "docker";
   let net: TrialNetwork | null = null;
   let installNet: string | null = null;
   return {
     check: (dir) =>
-      containerPreflight(dir, {
-        start: (setup, folder) => startReviewContainer({ image: reviewImage({ expectDigest: w.imageDigest }), setup, folder, network: (net ??= createTrialNetwork(docker)).name, docker }),
-        install: (c) => installGstack(c, { sources: w.gstackSources, installNetwork: (installNet ??= createInstallNetwork(docker)), scratch: join(h.dir, "scratch"), docker }),
-      }),
+      containerPreflight(
+        dir,
+        s.container ?? {
+          start: (setup, folder) => startReviewContainer({ image, setup, folder, network: (net ??= createTrialNetwork(docker)).name, docker }),
+          install: (c) => installGstack(c, { sources: w.gstackSources, installNetwork: (installNet ??= createInstallNetwork(docker)), scratch: join(h.dir, "scratch"), docker }),
+        },
+      ),
     async close() {
       if (net) removeTrialNetwork(net, docker);
       if (installNet) removeNetwork(installNet, docker);
