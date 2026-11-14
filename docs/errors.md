@@ -282,6 +282,22 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_EB_CACHE_STALE](#e_eb_cache_stale) | 2 | U20 |
 | [E_EB_REPROJECT](#e_eb_reproject) | 2 | U20 |
 | [E_EB_DRYRUN_FAIL](#e_eb_dryrun_fail) | 2 | U20 |
+| [E_OF_NO_BLOCK](#e_of_no_block) | 2 | U20 |
+| [E_OF_ARM_STOP](#e_of_arm_stop) | 2 | U20 |
+| [E_OF_INFRA_MISSING](#e_of_infra_missing) | 2 | U20 |
+| [E_OF_WEB_CONTAMINATED](#e_of_web_contaminated) | 2 | U20 |
+| [E_OF_GSTACK_READ](#e_of_gstack_read) | 2 | U20 |
+| [E_OF_SIM_TURN](#e_of_sim_turn) | 2 | U20 |
+| [E_OF_SIM_AUDIT](#e_of_sim_audit) | 2 | U20 |
+| [E_OF_LABEL_MISSING](#e_of_label_missing) | 2 | U20 |
+| [E_OF_JUDGE_KAPPA](#e_of_judge_kappa) | 2 | U20 |
+| [E_OF_STOCK_FAIL](#e_of_stock_fail) | 2 | U20 |
+| [E_OF_NO_READ](#e_of_no_read) | 2 | U20 |
+| [E_OF_EXPOSURE_STOP](#e_of_exposure_stop) | 2 | U20 |
+| [E_OF_LEAK](#e_of_leak) | 2 | U20 |
+| [E_OF_PROVIDER_DRIFT](#e_of_provider_drift) | 2 | U20 |
+| [E_OF_SUPPLY_SHORT](#e_of_supply_short) | 2 | U20 |
+| [E_OF_DRYRUN_FAIL](#e_of_dryrun_fail) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -2034,6 +2050,134 @@ Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing
 ### E_EB_DRYRUN_FAIL
 
 An eng-review build read dry-run fixture printed FAIL: a frozen rule did not hold on the fixture units or the scoring path. The line names the case.
+
+Fix: Read the FAIL line, fix the rule's code, and run the dry run again before any spend.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_OF_NO_BLOCK
+
+Office-hours founder eval (section 6): the session ended with no first-move block, an unparsable block after the one lenient parse, or an empty first_move. It scores 0 on W and N; E reads from the simulator's log as it stands.
+
+Fix: Nothing to fix in the run: this is a scored outcome. Read the no-block rate per cell in the results.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_OF_ARM_STOP
+
+Office-hours founder eval (section 6): the arm stopped on its own limit (its turn limit, its 120 minutes, context overflow, or its session allowance) after one retry of the whole session under the named reason. It scores 0 on W and N.
+
+Fix: Nothing to fix in the run: this is a scored outcome. The arm-stop rate prints per cell.
+
+Exit 2. Side effects: The session's metered spend stays on its lease. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_OF_INFRA_MISSING
+
+Office-hours founder eval (sections 6 and 14, J1): a provider or infrastructure failure outside the agent and its allowance, after one retry, a session the ledger never admitted, or a refusal on the simulator's own allowance. The session is missing, never 0.
+
+Fix: Reconcile the session against its lease, the proxy log and the session log before anything else runs on that unit, arm and pass. Never retry it a second time.
+
+Exit 2. Side effects: The session's metered spend stays on its lease. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_OF_WEB_CONTAMINATED
+
+Office-hours founder eval (section 5): a session got a successful web tool result. It is missing and counts against coverage, reported per arm.
+
+Fix: Nothing to retry: report it per arm. A refused web call does not count.
+
+Exit 2. Side effects: The session's metered spend stays on its lease. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_OF_GSTACK_READ
+
+Office-hours founder eval (section 6): a no-gstack session (none or lens) read a gstack file. It is missing, and the arm reads untested when more than 5% of its sessions did.
+
+Fix: Find how the file reached the container; none and lens are clean by construction, so this is a containment bug to fix before more sessions run.
+
+Exit 2. Side effects: The session's metered spend stays on its lease. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_OF_SIM_TURN
+
+Office-hours founder eval (section 4): the simulated founder failed its per-turn checks (JSON shape, ids on the sheet, a reply of at most 150 words) twice on one turn. The session fails its fidelity check and is missing.
+
+Fix: Nothing to retry: the session is missing. A high rate goes to the Captain with the failing checks.
+
+Exit 2. Side effects: The simulator's metered spend stays on its lease. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_OF_SIM_AUDIT
+
+Office-hours founder eval (section 4): the 40-turn fidelity audit failed (more than 2 turns both auditors marked), or a stage had too few founder turns to audit (NO READ, simulator). A stage 1 failure gets one repair of the prompt's rule wording; a stage 2 failure voids stage 2.
+
+Fix: Stop for the Captain. In stage 1, the one recorded repair reruns every stage 1 session and a fresh audit must pass, or the eval ends as FIX-METHOD on the instrument.
+
+Exit 2. Side effects: Spend so far stays on its leases; the rest of each lease is released. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_OF_LABEL_MISSING
+
+Office-hours founder eval (section 7): a judge left a cell unlabelled after the one resend. A block with an unlabelled customer, wedge or multi-target cell is unscored and counts as missing.
+
+Fix: Nothing to retry past the one resend. The missing labels count against coverage.
+
+Exit 2. Side effects: The judge's metered spend stays on its lease. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_OF_JUDGE_KAPPA
+
+Office-hours founder eval (section 7): a production judge's kappa fell under 0.6 overall or on real blocks, or its near-miss accuracy under 0.8. Only the contrasts of the model it serves read untested (judge); on Opus blocks in stage 1 it ends the eval.
+
+Fix: Stop for the Captain. Never retune the judge to pass its check.
+
+Exit 2. Side effects: Spend so far stays on its leases; the rest of each lease is released. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_OF_STOCK_FAIL
+
+Office-hours founder eval (section 8): one stock row was credited W on more than one unit in eight for a production judge. On Opus blocks in stage 1 it ends the eval; otherwise that model's contrasts read untested (stock).
+
+Fix: Stop for the Captain with the stock credits per row and judge.
+
+Exit 2. Side effects: Spend so far stays on its leases; the rest of each lease is released. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_OF_NO_READ
+
+Office-hours founder eval (section 10): stage 1 could not be read: the twins do not track or fewer than 6 pairs remain, the Opus judge is short of gold cells, the parse rate is under 95%, or the simulator stage had fewer than 20 founder turns. The eval ends as FIX-METHOD on the instrument.
+
+Fix: Stop for the Captain with the reading. Never rerun stage 1 to change it.
+
+Exit 2. Side effects: Spend so far stays on its leases; the rest of each lease is released. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_OF_EXPOSURE_STOP
+
+Office-hours founder eval (section 11): after the first 24 Opus office-hours sessions of stage 2, exposure was under 0.70. The arm stops, its cells read untested and its remaining caps are released.
+
+Fix: Stop for the Captain. Only that arm stops.
+
+Exit 2. Side effects: Spend so far stays on its leases; the rest of each lease is released. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_OF_LEAK
+
+Office-hours founder eval (sections 3 and 15): a leak guard fired: a recognition-probe hit that survived its one rewrite, a session that named a real-history unit's source, a key or sheet reaching an arm, or the copy check finding source text in a unit.
+
+Fix: Drop or rewrite the unit as section 3 says, or remove the session from that model's real-stratum readout. A key or sheet reaching an arm is a containment incident for the Captain.
+
+Exit 2. Side effects: Spend so far stays on its leases. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_OF_PROVIDER_DRIFT
+
+Office-hours founder eval (section 14, start rule 9): a call through OpenRouter was served by a provider other than its route's pin (OpenAI for GPT-6.1 Sol, Particle AI for particle-1, google-vertex for Gemini 4 Argon), or the endpoint listing changed. That model's items, or the simulator's, stop for the Captain.
+
+Fix: Stop leasing that model's items, keep the journal line that shows the provider, and send the question to the Captain. Never retry on another provider.
+
+Exit 2. Side effects: Calls already sent stay on the lease's journal and its spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_OF_SUPPLY_SHORT
+
+Office-hours founder eval (section 14, start rule 12): the authoring pilot's yield and cost project that the constructed quotas (16 calibration, 8 twins, 64 comparison, 6 reserve, with their type and shape minimums) cannot fill within the authoring cap. Authoring stops.
+
+Fix: Stop for the Captain with the MDD at the count that can fill.
+
+Exit 2. Side effects: Spend so far stays on the authoring lease; the rest is released. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_OF_DRYRUN_FAIL
+
+An office-hours founder eval dry-run case printed FAIL: a frozen rule did not hold on its fixtures, or the end-to-end fixture founders failed on the real path. The line names the case.
 
 Fix: Read the FAIL line, fix the rule's code, and run the dry run again before any spend.
 
