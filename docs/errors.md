@@ -315,6 +315,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_DCH_TMPFS_HIGH](#e_dch_tmpfs_high) | 2 | U20 |
 | [E_DCH_SEAL](#e_dch_seal) | 2 | U20 |
 | [E_DCW_INSTALL_DIGEST](#e_dcw_install_digest) | 2 | U20 |
+| [E_DCW_PREFLIGHT](#e_dcw_preflight) | 2 | U20 |
 | [E_DCW_MODEL_PROBE](#e_dcw_model_probe) | 2 | U20 |
 | [E_DCW_INSTALL_NETWORK](#e_dcw_install_network) | 2 | U20 |
 | [E_DCW_CONTROLLER_ADDRESS](#e_dcw_controller_address) | 2 | U20 |
@@ -2282,6 +2283,14 @@ Design plan review eval (prereg section 4, the gstack install): a gstack arm ses
 Fix: Keep the session folder and the two digests the line prints and bring them to the Captain; the install changed files of the pinned tree. Launch again into a new sink only on the Captain's word.
 
 Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_DCW_PREFLIGHT
+
+Design plan review eval: the no-model preflight's sandbox VM failed a step stage 0 depends on: the preamble, the controller's install, a qualification step on the fixture app or its Docker service, the page's HTTP 200 in the pinned Chromium, the audit, an audit with no accepted connection to a mirror endpoint, or the VM's deletion. The host refuses the clones row and every later row until a preflight passes.
+
+Fix: Read the row's preflight lines: each names its step and exit code, and the audit's line names its reasons. Fix the host, the wiring or the mirrors, then send the preflight row again into a new sink.
+
+Exit 2. Side effects: The preflight VM is deleted, or left to the runner's reaper past its time to live when its deletion failed, and its measured time settles on dc-hosts. No model is called and nothing is scored. Retry safe: yes. Resumable: no. Owner: U20.
 
 ### E_DCW_MODEL_PROBE
 

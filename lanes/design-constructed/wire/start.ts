@@ -130,7 +130,7 @@ export async function admitItems(l: LedgerProvider, items: readonly LedgerItemId
 /** The stage a paid row belongs to, in section 14 item 7's order, for PD-42's region rule. */
 export function stageOf(plan: Pick<StartPlan, "row" | "record">): string {
   const row = plan.row.split(" ")[0]!;
-  const fixed: Record<string, string> = { modelprobe: "probes", recipes: "stage 0", gatecheck: "gate check", author: "authoring", probe: "judge probe", reprice: "admission", stage3: "stage 3" };
+  const fixed: Record<string, string> = { modelprobe: "probes", preflight: "preflight", recipes: "stage 0", gatecheck: "gate check", author: "authoring", probe: "judge probe", reprice: "admission", stage3: "stage 3" };
   if (fixed[row]) return fixed[row]!;
   if ((row === "sessions" || row === "labels") && (plan.record?.stage === 1 || plan.record?.stage === 2)) return "stage " + plan.record.stage;
   return fail("E_INTERNAL", "the paid row " + plan.row + " names no stage for the region rule");

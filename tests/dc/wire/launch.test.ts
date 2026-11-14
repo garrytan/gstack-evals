@@ -7,7 +7,7 @@ import { launchScenario } from "../../../lanes/design-constructed/wire/dryrun-la
 
 describe("the keyless launch", () => {
   // Value: protects=the launch path the dry run never drove, PD-41 and PD-42; fails_when=a row can't follow another on the same host and ledger, a row's inputs or sinks land on disk outside tmpfs, the archive returns plaintext, or a stage switches region; why_new=the dry run passed while nothing drove a launch; seam=dc host launch, next, status and teardown; no_claim=live Ubicloud, real models, the vm section's VMs
-  test("launch, seven rows in sequence through next, teardown: every returned file is sealed or free of unit text, and nothing plaintext lands outside tmpfs", async () => {
+  test("launch, eight rows in sequence, the preflight second, through next, teardown: every returned file is sealed or free of unit text, and nothing plaintext lands outside tmpfs", async () => {
     expect(await launchScenario()).toEqual([]);
   }, 300_000);
 });

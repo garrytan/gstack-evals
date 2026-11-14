@@ -7,7 +7,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BROWSER_ROOT, CHROMIUM_APT, controllerBackend, DOCKER_APT, NODE, nodeFiles } from "../../../lanes/design-constructed/stage3/install.ts";
-import { AUDIT_COMMANDS, ownerFromEnv, parseEgress, preamble, sandboxed, secretHit, specFor, specProblems, termsRecord } from "../../../lanes/design-constructed/stage3/sandbox.ts";
+import { AUDIT_COMMANDS, egressFilter, ownerFromEnv, parseEgress, preamble, sandboxed, secretHit, specFor, specProblems, termsRecord } from "../../../lanes/design-constructed/stage3/sandbox.ts";
 import { CapStopSignal } from "../../../lanes/design-constructed/stage3/seams.ts";
 
 const run = async (o: { faults?: FakeFaults; plant?: (vm: FakeVm) => void; scanExtra?: string[] } = {}) => {
@@ -58,7 +58,7 @@ describe("sandbox spec", () => {
     expect(p[2]).toContain("mask --now unattended-upgrades");
     expect(p[3]).toContain("is-enabled unattended-upgrades.service");
     expect(p.findIndex((s) => s.includes("policy drop"))).toBeGreaterThan(3);
-    expect(p.filter((s) => s.includes("DCNET \"")).length).toBe(5);
+    expect(p.join("\n").split("\n").filter((l) => l.includes("DCNET \"")).length).toBe(5);
     expect(p.at(-1)).toContain("DCNET-START");
   });
   test("key patterns and drive paths", () => {
@@ -152,8 +152,8 @@ describe("sandboxed run and audit", () => {
     expect(vm.docker).toBe(true);
     const calls = vm.calls.map((c) => c.command);
     const at = (s: string) => calls.findIndex((c) => c.includes(s));
-    expect(at("> /etc/docker/daemon.json")).toBeLessThan(at("nft add table inet dc"));
-    expect(at("nft add table inet dc")).toBeLessThan(at("--no-install-recommends " + DOCKER_APT.join(" ")));
+    expect(at("> /etc/docker/daemon.json")).toBeLessThan(at("nft -f -"));
+    expect(at("nft -f -")).toBeLessThan(at("--no-install-recommends " + DOCKER_APT.join(" ")));
     expect(calls[at("docker info")]).toStartWith("systemctl enable --now docker && ");
     expect(calls[at("docker info")]).toEndWith("grep -qxF 'http://10.0.0.3:4876/dockerhub/'");
     expect(r.audit.ok && r.audit.evidence.controller).toBe(2);
@@ -201,5 +201,50 @@ describe("sandboxed run and audit", () => {
   test("parseEgress needs both markers", () => {
     expect(parseEgress("DCNET-START\nDCNET DST=1.2.3.4 DPT=80\n")).toBeNull();
     expect(parseEgress("DCNET-START\nDCNET-END\n")).toEqual({ egress: [], blocked: [] });
+  });
+});
+
+describe("the egress filter as one nft transaction", () => {
+  // Value: protects=the live stop where the preamble's own SSH session lost its replies at the drop-policy chain step; fails_when=the filter goes back to one nft command per rule, the transaction loses the established accept, or what it writes no longer lists as parseRuleset expects; why_new=stage 0's first recipe VM stopped with E_DC_SANDBOX_AUDIT after the chain step exited 255; seam=preamble, egressFilter, the fake's nft model; no_claim=a real nft or kernel
+  test("the preamble writes the table, the drop chain, both accepts, each endpoint's logged accept and the logged drop in one nft -f step, and on the fake the VM keeps answering and the audit reads the chain it wrote", async () => {
+    const spec = fakeSpec();
+    const steps = preamble(spec);
+    expect(steps.filter((s) => s.startsWith("nft"))).toEqual([egressFilter(spec)]);
+    const lines = egressFilter(spec).split("\n");
+    expect(lines.slice(0, 6)).toEqual(["nft -f - <<'DCNFT'", "table inet dc {", "chain out {", "type filter hook output priority 0; policy drop;", "oif lo accept", "ct state established,related accept"]);
+    expect(lines.slice(6, -4)).toEqual(["10.0.0.2 8080", "10.0.0.3 4873", "10.0.0.3 4874", "10.0.0.3 4875", "10.0.0.3 4876"].map((e) => "ip daddr " + e.replace(" ", " tcp dport ") + ' ct state new log prefix "DCNET " accept'));
+    expect(lines.slice(-4)).toEqual(['log prefix "DCDROP " drop', "}", "}", "DCNFT"]);
+    const w = fakeWorld();
+    const r = await sandboxed({ backend: fakeBackend(w), hosts: fakeHosts(), now: () => 0 }, spec, async () => "done");
+    expect([r.error, r.value, r.audit.ok]).toEqual([null, "done", true]);
+    const vm = w.vms[0]!;
+    expect(vm.cut).toBe(false);
+    expect(vm.nft.chain).toEqual({ hook: "output", policy: "drop" });
+    expect(vm.nft.rules).toEqual(lines.slice(4, -3));
+  });
+  test("the old order, one nft command per rule, cuts the VM off at the chain step: that step and every later exec exit 255 with no output, the audit's listing included", async () => {
+    const w = fakeWorld();
+    const backend = fakeBackend(w);
+    const vm = await backend.create(fakeSpec());
+    const old = ["nft add table inet dc", "nft 'add chain inet dc out { type filter hook output priority 0; policy drop; }'", "nft add rule inet dc out oif lo accept", "nft add rule inet dc out ct state established,related accept", "nft add rule inet dc out log prefix '\"DCDROP \"' drop"];
+    const got: Array<[number, string]> = [];
+    for (const s of old) {
+      const r = await backend.exec(vm, s, { user: "root" });
+      got.push([r.exit, r.stdout]);
+    }
+    expect(got).toEqual([[0, ""], [255, ""], [255, ""], [255, ""], [255, ""]]);
+    expect((await backend.exec(vm, AUDIT_COMMANDS.ruleset, { user: "root" })).exit).toBe(255);
+    expect(w.vms[0]!.cut).toBe(true);
+  });
+  test("the fake parses the transaction: one without the established accept cuts the VM off, and one with it applies whole", async () => {
+    const spec = fakeSpec();
+    const w = fakeWorld();
+    const backend = fakeBackend(w);
+    const bad = await backend.create(spec);
+    expect((await backend.exec(bad, egressFilter(spec).replace("ct state established,related accept\n", ""), { user: "root" })).exit).toBe(255);
+    expect((await backend.exec(bad, "true", { user: "root" })).exit).toBe(255);
+    const good = await backend.create(spec);
+    expect((await backend.exec(good, egressFilter(spec), { user: "root" })).exit).toBe(0);
+    expect((await backend.exec(good, AUDIT_COMMANDS.ruleset, { user: "root" })).stdout).toContain('\t\toif "lo" accept\n\t\tct state established,related accept\n');
   });
 });

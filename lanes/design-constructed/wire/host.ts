@@ -110,7 +110,7 @@ export async function runRowOnHost(service: LedgerService, args: string[], row: 
   const before = process.cwd();
   process.chdir(row.work);
   try {
-    const ctx = hostContext(service, resolve(wiring!), undefined, undefined, row.work);
+    const ctx = hostContext(service, resolve(wiring!), rowKeys(argv[0]!, process.env), undefined, row.work);
     needTmpfs(ctx.wiring.cacheDir, "the wiring's reply cache, which holds model output,");
     const { main, realEnv } = await import("../cli.ts");
     let code: string | null = null;
@@ -127,6 +127,30 @@ export async function runRowOnHost(service: LedgerService, args: string[], row: 
 }
 
 const appendLine = (file: string, t: string) => writeFileSync(file, t + "\n", { flag: "a" });
+
+/** The names a row's providers may read on the host when that is narrower than the service's keys: the preflight makes one VM and calls no model. */
+export const ROW_KEYS: Readonly<Record<string, readonly string[]>> = { preflight: ["UBICLOUD_API_KEY", "UBI_OWNER"] };
+
+/** The environment a row's providers read by name: only the row's ROW_KEYS names when it has them, else the service's own. */
+export function rowKeys(row: string, env: Readonly<Record<string, string | undefined>>): Readonly<Record<string, string | undefined>> {
+  const names = ROW_KEYS[row];
+  return names ? Object.fromEntries(names.map((n) => [n, env[n]])) : env;
+}
+
+/** The rows a host may run before a preflight has passed on it: the model probe, the preflight itself and the ledger listing. */
+export const BEFORE_PREFLIGHT: ReadonlySet<string> = new Set(["modelprobe", "preflight", "items"]);
+
+/**
+ * The launch order's preflight rule (the Captain's order: model probe, preflight, clones, stage 0): the clones row and
+ * every later row run only when the host's latest preflight row ended done. Null when row may run; else why not.
+ */
+export function preflightRule(row: string, rows: ReadonlyArray<{ n: number; row: string; state: string; code: string | null }>): string | null {
+  if (BEFORE_PREFLIGHT.has(row)) return null;
+  const last = rows.filter((r) => r.row === "preflight").at(-1);
+  if (!last) return row + " follows a passed preflight, and no preflight has run on this host; send the preflight row first";
+  if (last.state === "done") return null;
+  return row + " follows a passed preflight, and the host's latest preflight, row " + last.n + ", " + (last.state === "running" ? "still runs" : "ended " + last.state + (last.code ? " with " + last.code : "")) + "; the launch stops here until a preflight passes";
+}
 
 // ---- The launcher row
 
@@ -178,7 +202,7 @@ const STATUS_TAIL = 10;
  * (PD-35), the author steps print unit outcomes, and the session, label, read, recipe and stage 3 rows print per-unit
  * readings (PD-41).
  */
-export const QUIET_ROWS: ReadonlySet<string> = new Set(["items", "modelprobe", "probe", "clones", "apps", "planted", "reprice"]);
+export const QUIET_ROWS: ReadonlySet<string> = new Set(["items", "modelprobe", "preflight", "probe", "clones", "apps", "planted", "reprice"]);
 const mib = (bytes: number) => (bytes / 2 ** 20).toFixed(1);
 type Verb = (typeof VERBS)[number];
 const USAGE = "host " + VERBS.join("|") + " --plan <host plan JSON> --record <host record JSON> [--archive <new folder>] [--force]";
@@ -332,6 +356,8 @@ export function hostRow(s: HostSeams = {}): Row {
     const planPath = a.flags.get("--plan") ?? fail("E_USAGE", "usage: gstack-evals dc " + USAGE);
     const recordPath = resolve(a.flags.get("--record") ?? fail("E_USAGE", "usage: gstack-evals dc " + USAGE));
     const p = await readHostPlan(planPath);
+    const first = verb === "launch" ? preflightRule(p.stage[0]!, []) : null;
+    if (first) refuse("preflight", first);
     const vars = s.env ?? process.env;
     if (verb === "launch" && existsSync(recordPath)) fail("E_USAGE", "the host record " + recordPath + " exists already; each launch writes a new one");
     if (verb !== "launch" && !existsSync(recordPath)) fail("E_USAGE", "no host record at " + recordPath + "; launch writes it");
@@ -369,12 +395,18 @@ export function hostRow(s: HostSeams = {}): Row {
       }
       if (verb === "next") {
         if (lane.commit !== rec!.commit) refuse("2", "the host runs " + rec!.commit + " and this checkout is at " + lane.commit + "; check out the host's commit to send it a row");
+        const ran = await hostStatus(b, plan, rec!);
+        const order = ran && preflightRule(p.stage[0]!, ran.rows);
+        if (order) refuse("preflight", order);
         const r = await sendRow(b, plan, rec!, inputs);
         if (r.kind === "busy") throw new DcError("E_DCH_ROW_RUNNING", "row " + r.row.n + " (" + r.row.row + ") still runs on " + rec!.controller.vm + " since " + r.row.startedAt + "; nothing was uploaded or sent");
         io.out("host: " + (r.kind === "sent" ? "row " + r.row.n + " started: " + p.stage.join(" ") : r.kind === "lost" ? "the controller host is gone; recover it" : r.kind === "down" ? "the service isn't running; relaunch it with this stage" : "the service refused the row: " + r.why));
         return r.kind === "sent" ? 0 : 3;
       }
       if (verb === "relaunch") {
+        const ran = await hostStatus(b, plan, rec!);
+        const order = ran && preflightRule(p.stage[0]!, ran.rows);
+        if (order) refuse("preflight", order);
         const r = await relaunch(b, plan, rec!, keys!, inputs);
         io.out("host: " + (r.kind === "relaunched" ? "relaunched (" + r.status.boot + ")" : r.kind === "captain" ? "stopped for the Captain: " + r.why : r.kind === "lost" ? "the controller host is gone; recover it" : "the service still runs; nothing to relaunch"));
         return r.kind === "relaunched" || r.kind === "running" ? 0 : 3;

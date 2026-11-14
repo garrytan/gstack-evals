@@ -36,7 +36,7 @@ import { DirectCallers } from "../paid/direct.ts";
 import { datedTermsOf, type PinRecord } from "../paid/pin.ts";
 import { containerLauncher, generationResolver, inProcessLauncher, SessionProxies, type SessionBinding, type SessionLauncher } from "../paid/sessions.ts";
 import { playwrightBrowser } from "../recipes/browser.ts";
-import type { RecipeAgent } from "../recipes/seams.ts";
+import type { BrowserSeam, RecipeAgent } from "../recipes/seams.ts";
 import type { SessionSetup } from "../run/arms.ts";
 import { containPoint, type C2Expect } from "../run/contain.ts";
 import { createInstallNetwork, prepareSession, removeNetwork, reviewImage, type PreparedSession, type ReviewImage, type UnitFiles } from "../run/docker.ts";
@@ -45,7 +45,7 @@ import { toolCallEnd } from "../run/stream.ts";
 import { proxySessions, runVmAgent, sshAgentSession } from "../stage3/agent.ts";
 import { serveVmFront } from "../stage3/front.ts";
 import { browserFiles, BROWSER_ROOT, claudeFiles, controllerBackend, nodeFiles, type ControllerFiles } from "../stage3/install.ts";
-import { MIRROR_NAMES, specFor, type Endpoint, type Mirror, type MirrorName, type Vm, type VmBackend } from "../stage3/sandbox.ts";
+import { MIRROR_NAMES, specFor, type Endpoint, type Mirror, type MirrorName, type UbicloudBackend, type Vm, type VmBackend } from "../stage3/sandbox.ts";
 import { controllerMirrors, keyedUbicloud, sshTunnel, type SshRunner, type Tunnel } from "../stage3/ubicloud-real.ts";
 import type { AnyModel, LedgerItemId } from "../types.ts";
 import type { LedgerProvider, ModelProvider, Providers, ServedTerms, SessionBox, SessionProvider, VmProvider } from "../wire.ts";
@@ -181,6 +181,8 @@ export interface RealSeams {
   ubicloud?: { fetch: typeof fetch; ssh: SshRunner; tunnel: (vm: Vm, remotePort: number) => Promise<Tunnel>; agent?: (vm: Vm, envFile: string) => AgentSession };
   /** Where the VM agents' item proxies run; an in-process proxy on this host's loopback when unset. */
   vmLauncher?: SessionLauncher;
+  /** The sandbox VMs' backend and browser on stage3/fake.ts's simulated Ubicloud, for a keyless launch; the keyed backend and Playwright when unset. */
+  vm?: { backend: UbicloudBackend; browser: BrowserSeam };
   docker?: string;
 }
 
@@ -432,7 +434,7 @@ export async function realVm(h: HostContext, s: RealSeams, watch: ProviderWatch)
   if (!cb || typeof cb.dir !== "string" || typeof cb.bin !== "string") fail("E_USAGE", "the wiring file's vm section names no chromiumBuild (the Playwright Chromium folder on this host and the binary's path inside it)");
   if (!existsSync(join(cb.dir, cb.bin)) || !statSync(join(cb.dir, cb.bin)).isFile()) fail("E_USAGE", "the wiring file's vm.chromiumBuild has no binary at " + join(cb.dir, cb.bin));
   nodeTarball(w.nodeTarball, h.lane().root);
-  const keyed = await keyedUbicloud({ project: w.project, location: w.location, size: w.size, image: w.image, privateSubnet: w.privateSubnet ?? undefined, env: h.env, keyPath: w.keyPath, knownHosts: w.knownHosts, ...(s.ubicloud ? { fetch: s.ubicloud.fetch, ssh: s.ubicloud.ssh } : {}) });
+  const keyed = s.vm?.backend ?? await keyedUbicloud({ project: w.project, location: w.location, size: w.size, image: w.image, privateSubnet: w.privateSubnet ?? undefined, env: h.env, keyPath: w.keyPath, knownHosts: w.knownHosts, ...(s.ubicloud ? { fetch: s.ubicloud.fetch, ssh: s.ubicloud.ssh } : {}) });
   const agents = vmSessionAgents(h, s, keyed, watch, w);
   const backend = controllerBackend(keyed, { browser: browserFiles(cb.dir, cb.bin), node: nodeFiles(w.nodeTarball), agent: agents.claude });
   return {
@@ -440,7 +442,7 @@ export async function realVm(h: HostContext, s: RealSeams, watch: ProviderWatch)
     priceMicrosPerHour: w.priceMicrosPerHour,
     now: () => Date.now(),
     spec: (kind, label) => specFor(kind, label, { proxy: w.proxy, mirrors: w.mirrors, env: h.env }),
-    browser: playwrightBrowser({ backend, tunnel: s.ubicloud?.tunnel ?? sshTunnel({ keyPath: w.keyPath, knownHosts: w.knownHosts }, (vm) => keyed.address(vm)), chromium: BROWSER_ROOT + "/" + cb.bin }),
+    browser: s.vm?.browser ?? playwrightBrowser({ backend, tunnel: s.ubicloud?.tunnel ?? sshTunnel({ keyPath: w.keyPath, knownHosts: w.knownHosts }, (vm) => keyed.address(vm)), chromium: BROWSER_ROOT + "/" + cb.bin }),
     recipeAgent: agents.recipeAgent,
     close: agents.close,
   };

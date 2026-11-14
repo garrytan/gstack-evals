@@ -2597,6 +2597,15 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_DCW_PREFLIGHT: {
+    exit: 2,
+    meaning: "Design plan review eval: the no-model preflight's sandbox VM failed a step stage 0 depends on: the preamble, the controller's install, a qualification step on the fixture app or its Docker service, the page's HTTP 200 in the pinned Chromium, the audit, an audit with no accepted connection to a mirror endpoint, or the VM's deletion. The host refuses the clones row and every later row until a preflight passes.",
+    fix: "Read the row's preflight lines: each names its step and exit code, and the audit's line names its reasons. Fix the host, the wiring or the mirrors, then send the preflight row again into a new sink.",
+    side_effects: "The preflight VM is deleted, or left to the runner's reaper past its time to live when its deletion failed, and its measured time settles on dc-hosts. No model is called and nothing is scored.",
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
+  },
   E_DCW_MODEL_PROBE: {
     exit: 2,
     meaning: "Design plan review eval (PD-19 and PD-34): the model probe's one short call per model, charged to dc-gate-check, found a problem: a model gave no reply, its reply named no provider and OpenRouter's generation record resolved none, or its served provider or terms differ from the pin, which stops that model for the Captain. No stage may spend until the probe passes.",

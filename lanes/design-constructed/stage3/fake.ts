@@ -31,6 +31,10 @@ export interface FakeVm {
   docker: boolean;
   /** Whether Node is installed: none until the controller's install unpacks it. */
   node: boolean;
+  /** The inet dc table's output chain as the preamble's nft commands left it (nftAnswer); chain is null until one makes it. */
+  nft: { table: boolean; chain: { hook: string; policy: string } | null; rules: string[] };
+  /** The VM drops its own SSH replies (a drop-policy output chain with no established accept): every exec exits 255. */
+  cut: boolean;
   /**
    * Folders that exist: the image's own, the run user's home, and every mkdir -p a command ran. A write into any other
    * folder fails, except into the audit folder, whose commands the fake simulates as collectable without the preamble.
@@ -96,12 +100,62 @@ export function rulesetText(spec: VmSpec): string {
 
 const netLine = (prefix: string, c: Connection) => prefix + "IN= OUT=ens3 SRC=10.1.0.9 DST=" + c.host + " LEN=60 PROTO=TCP SPT=40100 DPT=" + c.port + " SYN";
 
+/** The listing nft gives for the chain a fake VM holds: lo quoted, priority 0 named filter, rules in their order. */
+const nftListing = (n: FakeVm["nft"]): string =>
+  ["table inet dc {", "\tchain out {", "\t\ttype filter hook " + n.chain!.hook + " priority filter; policy " + n.chain!.policy + ";", ...n.rules.map((r) => "\t\t" + r.replace(/^oif (\w+) /, 'oif "$1" ')), "\t}", "}"].join("\n");
+
+const ESTABLISHED = /^ct state (established,related|related,established) accept$/;
+
+/**
+ * The egress filter's nft commands on a fake VM: one transaction from a here-document (stage3/sandbox.ts egressFilter),
+ * applied whole or not at all, or the steps one at a time (add table, add chain, add rule). Once the output chain's
+ * policy is drop and it holds no established accept, the VM drops its own SSH replies: that command and every later
+ * one exit 255 with no output, as SSH does. Undefined for every other command, the audit's listing included.
+ */
+function nftAnswer(w: FakeWorld, vm: FakeVm, command: string): ExecResult | undefined {
+  if (!/^nft (-f |add |'add )/.test(command)) return undefined;
+  if (w.faults.preamble?.some((s) => command.includes(s))) return { exit: 1, stdout: "", stderr: "fake preamble failure" };
+  const chainOf = (text: string) => {
+    const m = /^type filter hook (\w+) priority \S+; policy (\w+);$/.exec(text.trim());
+    return m ? { hook: m[1]!, policy: m[2]! } : null;
+  };
+  const no = (why: string): ExecResult => ({ exit: 1, stdout: "", stderr: "fake nft: " + why });
+  const draft = { table: vm.nft.table, chain: vm.nft.chain, rules: [...vm.nft.rules] };
+  const file = /^nft -f - <<'(\w+)'\n([\s\S]*)\n\1$/.exec(command);
+  if (file) {
+    const open: string[] = [];
+    for (const line of file[2]!.split("\n").map((l) => l.trim()).filter(Boolean)) {
+      if (line === "table inet dc {" && !open.length) (open.push("table"), (draft.table = true));
+      else if (line === "chain out {" && open.join() === "table") open.push("chain");
+      else if (line === "}" && open.length) open.pop();
+      else if (open.join() !== "table,chain") return no("unexpected line " + line);
+      else if (line.startsWith("type ")) {
+        draft.chain = chainOf(line);
+        if (!draft.chain) return no("bad chain line " + line);
+      } else if (!draft.chain) return no("a rule before the chain's type line");
+      else draft.rules.push(line);
+    }
+    if (open.length || !draft.chain) return no("the transaction is cut or makes no chain");
+  } else {
+    const plain = command.replace(/'([^']*)'/g, "$1");
+    const chain = /^nft add chain inet dc out \{ (.*) \}$/.exec(plain);
+    const rule = /^nft add rule inet dc out (.+)$/.exec(plain);
+    if (plain === "nft add table inet dc") draft.table = true;
+    else if (chain && draft.table && chainOf(chain[1]!)) draft.chain = chainOf(chain[1]!);
+    else if (rule && draft.chain) draft.rules.push(rule[1]!);
+    else return no(plain);
+  }
+  vm.nft = draft;
+  if (draft.chain?.hook === "output" && draft.chain.policy === "drop" && !draft.rules.some((r) => ESTABLISHED.test(r))) vm.cut = true;
+  return vm.cut ? { exit: 255, stdout: "", stderr: "" } : ok();
+}
+
 function auditOutput(w: FakeWorld, vm: FakeVm, name: AuditCommand): ExecResult {
   const f = w.faults;
   if (f.exit?.[name] !== undefined) return { exit: f.exit[name]!, stdout: "", stderr: "fake failure" };
   if (f.empty?.includes(name)) return ok("");
   let out = "";
-  if (name === "ruleset") out = f.ruleset ?? rulesetText(vm.spec!);
+  if (name === "ruleset") out = f.ruleset ?? (vm.nft.chain ? nftListing(vm.nft) : rulesetText(vm.spec!));
   if (name === "processes") out = vm.processes.map((p) => String(p.pid).padStart(6) + " " + p.user + " " + p.args).join("\n") + "\nDC-PS-DONE\n";
   if (name === "egress") out = ["kernel: boot", START_MARK, ...vm.egress.map((c) => netLine(NET_PREFIX, c)), ...vm.blocked.map((c) => netLine(DROP_PREFIX, c)), END_MARK].join("\n") + "\n";
   if (name === "files") out = [...vm.written, { path: AUDIT_DIR + "/end", size: 0, mode: 0o644, mtime: "2026-11-14T00:00:00", type: "f" }].map((r) => [r.path, r.size, r.mode.toString(8), r.mtime, r.type].join("\t")).join("\n") + "\nDC-FIND-DONE\n";
@@ -132,7 +186,7 @@ function auditOutput(w: FakeWorld, vm: FakeVm, name: AuditCommand): ExecResult {
  */
 function dockerAnswer(vm: FakeVm, command: string): ExecResult | undefined {
   if (/node --version|corepack (enable|--version)/.test(command) && !vm.node) return { exit: 127, stdout: "", stderr: "node: command not found" };
-  if (command.includes("grep -c " + NET_PREFIX.trim())) return vm.egress.length ? ok() : { exit: 1, stdout: "", stderr: "" };
+  if (command.includes("grep -c " + NET_PREFIX.trim())) return { exit: vm.egress.length ? 0 : 1, stdout: vm.egress.length + "\n", stderr: "" };
   const daemon = /'([^']*)' > \/etc\/docker\/daemon\.json/.exec(command);
   if (daemon) vm.files.set("/etc/docker/daemon.json", enc.encode(JSON.stringify({ "registry-mirrors": [daemon[1]] }) + "\n"));
   if (/\bsystemctl (restart|start|enable --now) docker\b/.test(command) && !vm.docker) return { exit: 5, stdout: "", stderr: "Failed to start docker.service: Unit docker.service not found." };
@@ -178,7 +232,7 @@ export function fakeBackend(w: FakeWorld): UbicloudBackend {
     }
     if (method !== "POST" && (!byName.has(name) || w.deleted.includes(name))) return new Response("! Unexpected response status: 404", { status: 404 });
     if (method === "POST") {
-      const vm: FakeVm = { id: name, ip: "10.1.0." + (w.vms.length + 10), spec: null, calls: [], files: new Map(), processes: [], egress: [], blocked: [], written: [], work: [], installed: [], docker: false, node: false, dirs: new Set(IMAGE_DIRS) };
+      const vm: FakeVm = { id: name, ip: "10.1.0." + (w.vms.length + 10), spec: null, calls: [], files: new Map(), processes: [], egress: [], blocked: [], written: [], work: [], installed: [], docker: false, node: false, nft: { table: false, chain: null, rules: [] }, cut: false, dirs: new Set(IMAGE_DIRS) };
       w.vms.push(vm);
       byName.set(name, vm);
       byIp.set(vm.ip, vm);
@@ -215,8 +269,11 @@ export function fakeBackend(w: FakeWorld): UbicloudBackend {
     ssh: async (host, command, so) => {
       const vm = byIp.get(host)!;
       vm.calls.push({ command, user: so.user ?? "run" });
+      if (vm.cut) return { exit: 255, stdout: "", stderr: "" };
       const own = w.ssh ? await w.ssh(vm, command, so.input, so.user ?? "run") : undefined;
       if (own) return own;
+      const nft = nftAnswer(w, vm, command);
+      if (nft) return nft;
       for (const m of command.matchAll(/mkdir -p ((?:'[^']*'|[^\s;&|'])+)/g)) addDir(vm, m[1]!.replace(/^'|'$/g, ""));
       const write = /^cat > '(.*)'$/.exec(command);
       if (write && !write[1]!.startsWith(AUDIT_DIR + "/") && !vm.dirs.has(write[1]!.slice(0, write[1]!.lastIndexOf("/")) || "/")) return { exit: 1, stdout: "", stderr: "cat: " + write[1] + ": No such file or directory" };

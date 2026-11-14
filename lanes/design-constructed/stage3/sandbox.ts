@@ -244,13 +244,36 @@ export function mirrorConfig(spec: VmSpec): string[] {
   return out;
 }
 
+/** The here-document delimiter of the egress filter's one nft transaction. */
+export const NFT_EOF = "DCNFT";
+
+/**
+ * The egress filter as one nft transaction read from a here-document: the table, the output chain with policy drop, the
+ * loopback and established accepts, each allowed endpoint's logged accept, then the logged drop. nft applies the file
+ * atomically, so the drop policy never stands without the established accept that carries the SSH session's replies.
+ */
+export function egressFilter(spec: VmSpec): string {
+  return [
+    "nft -f - <<'" + NFT_EOF + "'",
+    "table inet dc {",
+    "chain out {",
+    "type filter hook output priority 0; policy drop;",
+    "oif lo accept",
+    "ct state established,related accept",
+    ...allowed(spec).map((e) => "ip daddr " + e.host + " tcp dport " + e.port + ' ct state new log prefix "' + NET_PREFIX + '" accept'),
+    'log prefix "' + DROP_PREFIX + '" drop',
+    "}",
+    "}",
+    NFT_EOF,
+  ].join("\n");
+}
+
 /**
  * What runs as root before anything else, each step's exit checked: apt's timers stopped and unattended-upgrades masked
  * (and verified), the run user's linger set, the audit's start marker, the mirror config, and an egress filter that
- * accepts and logs only the proxy and the mirrors and logs and drops every other new connection.
+ * accepts and logs only the proxy and the mirrors and logs and drops every other new connection (egressFilter).
  */
 export function preamble(spec: VmSpec): string[] {
-  const allow = (e: Endpoint) => "nft add rule inet dc out ip daddr " + e.host + " tcp dport " + e.port + " ct state new log prefix " + q('"' + NET_PREFIX + '"') + " accept";
   return [
     "systemctl stop apt-daily.timer apt-daily-upgrade.timer",
     "systemctl disable apt-daily.timer apt-daily-upgrade.timer",
@@ -261,12 +284,7 @@ export function preamble(spec: VmSpec): string[] {
     "mkdir -p /work && chown " + spec.runUser + ": /work",
     "mkdir -p " + AUDIT_DIR + " && chmod 700 " + AUDIT_DIR + " && touch " + AUDIT_DIR + "/start",
     ...mirrorConfig(spec),
-    "nft add table inet dc",
-    "nft 'add chain inet dc out { type filter hook output priority 0; policy drop; }'",
-    "nft add rule inet dc out oif lo accept",
-    "nft add rule inet dc out ct state established,related accept",
-    ...allowed(spec).map(allow),
-    "nft add rule inet dc out log prefix " + q('"' + DROP_PREFIX + '"') + " drop",
+    egressFilter(spec),
     "echo " + START_MARK + " > /dev/kmsg",
   ];
 }

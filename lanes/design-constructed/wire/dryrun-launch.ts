@@ -3,15 +3,18 @@
 // the real launch path, gstack-evals dc host launch, then rows in sequence through dc host next, then teardown, on
 // stage3/fake.ts's simulated Ubicloud with every SSH command run on this machine, one controller host and one ledger:
 //   1 modelprobe on the launch, its region in launch.json and the work folder's regions.json (PD-42)
-//   2 clones from an invented sealed record over file://, 3 apps writing apps.json from the clones row's output
-//   4 planted writing planted.json and its apps.json from an invented opened tar
-//   5 gatecheck reading them, which refuses the invented units at their planted-case check, before any key read
-//   6 author reading apps.json, which refuses at start rule 6 because the gate check did not pass
-//   7 a second modelprobe after the host's recorded region changes, which refuses (PD-42)
+//   2 preflight: one sandbox VM on a simulated Ubicloud through the preamble, the controller's install, the fixture
+//     app's qualification steps, one page in a scripted browser and the audit, with no model key in its environment
+//   3 clones from an invented sealed record over file://, 4 apps writing apps.json from the clones row's output
+//   5 planted writing planted.json and its apps.json from an invented opened tar
+//   6 gatecheck reading them, which refuses the invented units at their planted-case check, before any key read
+//   7 author reading apps.json, which refuses at start rule 6 because the gate check did not pass
+//   8 a second modelprobe after the host's recorded region changes, which refuses (PD-42)
 // The wiring's vm section names "controller" for the proxy and the mirrors. Every returned file must be sealed or hold
 // no unit text, and no plaintext input or sink may land on this machine's disk outside its tmpfs twin (PD-41).
 // This file is also the host's stage module for the run: runOnHost runs each row through wire/host.ts runRowOnHost with
-// the lowest seams faked (the proxies' upstream, the frame's clone seam, the planted digests table, the dry run).
+// the lowest seams faked (the proxies' upstream, the frame's clone seam, the planted digests table, the dry run, and the
+// sandbox VMs' Ubicloud and browser).
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -25,6 +28,8 @@ import { DIRECT_MODELS } from "../money/price.ts";
 import { endpointsFixture } from "../paid/dryrun-cases.ts";
 import { pinRecord, termsRecordsOf } from "../paid/pin.ts";
 import { scripted } from "../paid/scripted.ts";
+import { fixtureBrowser } from "../recipes/fixtures.ts";
+import { fakeBackend, fakeWorld } from "../stage3/fake.ts";
 import { runProcess } from "../stage3/ubicloud-real.ts";
 import type { DryRunCase } from "../types.ts";
 import { plantedRow, viewAt } from "./apps.ts";
@@ -58,7 +63,7 @@ export const runOnHost: HostStage["runOnHost"] = async (service, args, row) => {
   });
   const clone = (name: string, oid: string, dest: string) => fetchAt("file://" + join(s.src, name), oid, dest, ["file"]);
   return runRowOnHost(service, args, row, {
-    env: (ctx): RowEnv => ({ ...realEnv(ctx), dryRun: async () => true, vocabulary: () => STAND_IN_VOCABULARY, providers: realProviders(ctx, { fetch: up.fetch, sleep: async () => {} }) }),
+    env: (ctx): RowEnv => ({ ...realEnv(ctx), dryRun: async () => true, vocabulary: () => STAND_IN_VOCABULARY, providers: realProviders(ctx, { fetch: up.fetch, sleep: async () => {}, vm: { backend: fakeBackend(fakeWorld()), browser: fixtureBrowser(() => "content") } }) }),
     run: async (argv, io, env) => {
       if (argv[0] === "clones") return clonesRow(clone)(argsOf(argv), io, env);
       if (argv[0] === "planted") return plantedRow({ clone, table: () => JSON.parse(readFileSync(s.table, "utf8")) })(argsOf(argv), io, env);
@@ -164,32 +169,35 @@ export async function launchScenario(): Promise<string[]> {
       if (!existsSync(join(l.work, "regions.json"))) problems.push("the work folder holds no regions.json");
       const facts = existsSync(l.controller) ? JSON.parse(readFileSync(l.controller, "utf8")) : null;
       if (facts?.privateIp !== "127.0.0.1") problems.push("the launch recorded no private IPv4 for the controller: " + JSON.stringify(facts));
-      await step(2, ["clones", "--record", "inputs/record.json", "--out", "frame"], { "inputs/record.json": rec }, { state: "done" });
-      await step(3, ["apps", "--clones", "frame", "--base-apps", "inputs/base-apps.json", "--out", "apps.json"], { "inputs/base-apps.json": JSON.stringify([{ id: "c003", pin: fx.repos.match.second.oid }]) }, { state: "done" });
+      const preflightLog = String(await step(2, ["preflight", "--out", "sinks/preflight"], null, { state: "done" }));
+      for (const want of ["preflight: preamble: ok", "preflight: install: ok", "preflight: page / at 375x812 in the pinned Chromium: HTTP 200", "preflight: audit: ok", "preflight: passed"]) if (!preflightLog.includes(want)) problems.push("the preflight row printed no " + JSON.stringify(want) + ": " + preflightLog.slice(-600));
+      if (/API_KEY|test-not-a-key/.test(preflightLog)) problems.push("the preflight row printed a key name or key");
+      await step(3, ["clones", "--record", "inputs/record.json", "--out", "frame"], { "inputs/record.json": rec }, { state: "done" });
+      await step(4, ["apps", "--clones", "frame", "--base-apps", "inputs/base-apps.json", "--out", "apps.json"], { "inputs/base-apps.json": JSON.stringify([{ id: "c003", pin: fx.repos.match.second.oid }]) }, { state: "done" });
       const plantedIn = Object.fromEntries(filesOf(join(shm, "planted-in")).map((p) => [p, readFileSync(join(shm, "planted-in", p), "utf8")]));
-      await step(4, ["planted", "--in", "planted-in", "--out", "planted"], plantedIn, { state: "done" });
-      await step(5, ["gatecheck", "--units", "planted/planted.json", "--apps", "planted/apps.json", "--gstack", "gstack", "--terms", "terms.json", "--screen", "inputs/screen", "--out", "sinks/gatecheck"], { "inputs/screen/node-drops.json": JSON.stringify({ pinned: "24.22.3", count: 0, labels: [] }) }, { state: "failed", code: "E_USAGE" });
-      await step(6, ["author", "--step", "pilot", "--item", "dc-authoring-1", "--apps", "apps.json", "--gstack", "gstack", "--terms", "terms.json", "--gate", "sinks/gatecheck", "--screen", "inputs/screen", "--out", "sinks/pilot"], null, { state: "failed", code: "E_DCW_START_RULE" });
+      await step(5, ["planted", "--in", "planted-in", "--out", "planted"], plantedIn, { state: "done" });
+      await step(6, ["gatecheck", "--units", "planted/planted.json", "--apps", "planted/apps.json", "--gstack", "gstack", "--terms", "terms.json", "--screen", "inputs/screen", "--out", "sinks/gatecheck"], { "inputs/screen/node-drops.json": JSON.stringify({ pinned: "24.22.3", count: 0, labels: [] }) }, { state: "failed", code: "E_USAGE" });
+      await step(7, ["author", "--step", "pilot", "--item", "dc-authoring-1", "--apps", "apps.json", "--gstack", "gstack", "--terms", "terms.json", "--gate", "sinks/gatecheck", "--screen", "inputs/screen", "--out", "sinks/pilot"], null, { state: "failed", code: "E_DCW_START_RULE" });
       writeFileSync(l.controller, JSON.stringify({ ...facts, location: "us-east-a2" }));
-      await step(7, ["modelprobe", "--terms", "terms.json", "--out", "sinks/modelprobe-2"], null, { state: "failed", code: "E_DCW_REGION" });
+      await step(8, ["modelprobe", "--terms", "terms.json", "--out", "sinks/modelprobe-2"], null, { state: "failed", code: "E_DCW_REGION" });
       const status = await host("status", f, s, env);
-      if (status.out.filter((x) => x.startsWith("row ")).length !== 7) problems.push("status does not name the seven rows: " + status.out.join(" | "));
+      if (status.out.filter((x) => x.startsWith("row ")).length !== 8) problems.push("status does not name the eight rows: " + status.out.join(" | "));
       if (!status.out.some((x) => x.startsWith("log: E_DCW_REGION"))) problems.push("status printed no tail for the last modelprobe row: " + status.out.join(" | "));
-      if (status.out.filter((x) => /^tmpfs: row \d+: the work folder's tmpfs holds .* with a peak of /.test(x)).length !== 7) problems.push("status does not print each row's tmpfs use and peak: " + status.out.join(" | "));
+      if (status.out.filter((x) => /^tmpfs: row \d+: the work folder's tmpfs holds .* with a peak of /.test(x)).length !== 8) problems.push("status does not print each row's tmpfs use and peak: " + status.out.join(" | "));
       if (!rows().every((r) => r.tmpfs && r.tmpfs.sizeBytes > 0 && r.tmpfs.peakBytes >= r.tmpfs.usedBytes)) problems.push("rows.json lacks a row's tmpfs use and peak: " + JSON.stringify(rows()));
       writeFileSync(f.planPath, JSON.stringify({ ...plan, stage: ["gatecheck"], inputs: null }));
       const quiet = JSON.parse(readFileSync(l.rows, "utf8"));
-      writeFileSync(l.rows, JSON.stringify(quiet.slice(0, 5)));
+      writeFileSync(l.rows, JSON.stringify(quiet.slice(0, 6)));
       const loud = await host("status", f, s, env);
       writeFileSync(l.rows, JSON.stringify(quiet));
-      if (!loud.out.some((x) => /^log: row 5 holds \d+ lines; gatecheck can print unit or item text/.test(x)) || loud.out.some((x) => x.includes(PLAN_MARK) || x.startsWith("log: gate "))) problems.push("status printed the gate check's lines: " + loud.out.join(" | "));
+      if (!loud.out.some((x) => /^log: row 6 holds \d+ lines; gatecheck can print unit or item text/.test(x)) || loud.out.some((x) => x.includes(PLAN_MARK) || x.startsWith("log: gate "))) problems.push("status printed the gate check's lines: " + loud.out.join(" | "));
       const archive = join(dir, "archive");
       const down = await host("teardown", f, s, env, { "--archive": archive });
       if (down.code !== 0) return (problems.push("teardown: " + down.out.concat(down.err).join(" | ")), null);
       const sealed = join(archive, "work.tar.age");
       if (!existsSync(sealed) || readFileSync(sealed).subarray(0, AGE_HEADER.length).toString() !== AGE_HEADER) problems.push("the archive's work folder is not an age file");
       const opened = existsSync(sealed) ? openSealed(sealed, f.identity, join(shm, "opened")) : [];
-      for (const want of ["./sinks/modelprobe/probe.json", "./sinks/modelprobe/launch.json", "./frame/clones.json", "./apps.json", "./planted/planted.json", "./planted/apps.json", "./regions.json", "./.rows/7.log", "./inputs/record.json"]) if (!opened.includes(want)) problems.push("the sealed archive lacks " + want);
+      for (const want of ["./sinks/modelprobe/probe.json", "./sinks/modelprobe/launch.json", "./frame/clones.json", "./apps.json", "./planted/planted.json", "./planted/apps.json", "./regions.json", "./sinks/preflight/preflight.json", "./.rows/8.log", "./inputs/record.json"]) if (!opened.includes(want)) problems.push("the sealed archive lacks " + want);
       const back = readdirSync(archive).filter((n) => n !== "work.tar.age");
       const marks = [REPLY_MARK, PLAN_MARK, "An invented app for the clone re-fetch fixture", ...fx.secrets];
       const grep = await runProcess(["grep", "-rlF", ...marks.flatMap((m) => ["-e", m]), dir]);
@@ -216,7 +224,7 @@ export function launchCases(): DryRunCase[] {
   return [
     {
       rule: "W-launch",
-      name: "the keyless launch end to end: launch, seven rows in sequence through dc host next on one host and one ledger, teardown; every returned file sealed or free of unit text, and no plaintext on disk outside tmpfs",
+      name: "the keyless launch end to end: launch, eight rows in sequence (the preflight second) through dc host next on one host and one ledger, teardown; every returned file sealed or free of unit text, and no plaintext on disk outside tmpfs",
       check: async () => {
         const p = await launchScenario();
         return p.length ? p.join("; ") : null;
