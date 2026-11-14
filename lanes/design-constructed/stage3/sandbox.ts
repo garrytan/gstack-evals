@@ -400,6 +400,20 @@ export function parseEgress(text: string): { egress: Connection[]; blocked: Conn
   return { egress, blocked };
 }
 
+/**
+ * Why parseEgress could not read the log, for the audit's uncollected reason only: the start marker is missing, the end
+ * marker is missing, or a filter line holds no DST and DPT pair (the first such line is quoted, cut to 200 characters).
+ */
+export function egressCutWhy(text: string): string {
+  const lines = text.split("\n");
+  const start = lines.findIndex((l) => l.includes(START_MARK));
+  if (start < 0) return "the start marker is missing";
+  const end = lines.findIndex((l, i) => i > start && l.includes(END_MARK));
+  if (end < 0) return "the end marker is missing";
+  const line = lines.slice(start + 1, end).find((l) => (l.includes(NET_PREFIX) || l.includes(DROP_PREFIX)) && !/DST=(\S+).*?DPT=(\d+)/.test(l)) ?? "";
+  return "a filter line holds no DST and DPT pair: " + line.slice(0, 200);
+}
+
 /** Reads find's rows. Null when a row is malformed or the end marker is missing: the list was cut or never collected. */
 export function parseFiles(text: string): StatEntry[] | null {
   const lines = text.split("\n").filter(Boolean);
@@ -468,7 +482,7 @@ export async function audit(backend: VmBackend, vm: Vm, o: { scanExtra?: readonl
   const net = await run("egress");
   if (typeof net === "string") return uncollected(net);
   const egress = parseEgress(net.stdout);
-  if (!egress) return uncollected("the egress log is cut: a start or end marker is missing");
+  if (!egress) return uncollected("the egress log is cut: " + egressCutWhy(net.stdout));
   evidence.egress = egress.egress;
   evidence.blocked = egress.blocked;
   const fl = await run("files");

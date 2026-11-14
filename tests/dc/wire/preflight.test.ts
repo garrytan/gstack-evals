@@ -85,6 +85,12 @@ describe("the no-model preflight", () => {
     expect(pnpm.problems).toEqual(["qualify install: failed (exit 1): ERR_PNPM_FETCH_404 escape-html"]);
     expect([apt.w.deleted.length, pnpm.w.deleted.length]).toEqual([1, 1]);
   });
+  test("the preflight fails at qualify install when the controller does not serve the npm mirror, as corepack did", async () => {
+    const r = await preflight({ world: fakeWorld({ mirrorsDown: ["npm"] }) });
+    expect(r.lines.slice(3, 6)).toEqual([passed[3], passed[4], "qualify install: failed (exit 1): Error: Error when performing the request to http://10.0.0.3:4873/npm/pnpm; for troubleshooting help, see https://github.com/nodejs/corepack#troubleshooting at fetch (corepack.cjs) cause: connect ECONNREFUSED 10.0.0.3:4873"]);
+    expect(r.problems).toEqual([r.lines[5]!]);
+    expect(r.w.deleted).toEqual([r.w.vms[0]!.id]);
+  });
 });
 
 describe("the preflight on the host", () => {

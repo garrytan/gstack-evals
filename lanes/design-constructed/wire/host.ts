@@ -27,7 +27,7 @@ import { AGE_HEADER, controllerProvision, gstackPack, hostStatus, HOST_GSTACK_SO
 import type { HostRow, HostStage } from "../money/host-main.ts";
 import { recordTar, type LedgerService } from "../money/ledger-service.ts";
 import { ownerFromEnv } from "../stage3/sandbox.ts";
-import { keyedUbicloud } from "../stage3/ubicloud-real.ts";
+import { checkMirrors, keyedUbicloud } from "../stage3/ubicloud-real.ts";
 import { claudeTarball, CONTROLLER, nodeTarball, hostAddresses, readControllerFacts, readWiring, type HostContext, type HostWiring } from "./real.ts";
 import { readJson } from "./json.ts";
 import { refuse, type Args, type Io, type Row, type RowEnv } from "./start.ts";
@@ -298,6 +298,26 @@ const saveRecord = (file: string, rec: HostRecord) => {
 };
 
 /**
+ * The ready step of a launch or a recovery with mirrors on: the controller host's four mirrors must answer their
+ * protocol-level checks within the wait (stage3/ubicloud-real.ts checkMirrors) before the host is reported ready. On a
+ * failure the record is saved with both VMs up, so dc host teardown settles and deletes them, and it refuses with
+ * E_DCH_MIRROR_DOWN naming each mirror, its unit's state and its journal's last lines.
+ */
+async function mirrorsReady(b: HostBackend, p: HostPlanFile, rec: HostRecord, recordPath: string, now: () => Date): Promise<void> {
+  const ctl = await b.attach(rec.controller.vm, { label: "dc controller host " + rec.runId, owner: rec.owner, ttlMinutes: p.ttlHours * 60, runMinutes: p.longestStageHours * 60, runUser: "run", proxy: null, mirrors: [], mounts: [], env: {} });
+  const ip = ctl ? b.privateAddress(ctl) : null;
+  try {
+    if (!ctl || !ip) throw new DcError("E_DCH_MIRROR_DOWN", "the controller host " + rec.controller.vm + " has no private IPv4 to check its mirrors on");
+    await checkMirrors((command, o) => b.exec(ctl, command, o), ip);
+  } catch (e) {
+    if (!(e instanceof DcError) || e.code !== "E_DCH_MIRROR_DOWN") throw e;
+    rec.events.push({ at: now().toISOString(), what: "mirrors not ready" });
+    saveRecord(recordPath, rec);
+    throw new DcError("E_DCH_MIRROR_DOWN", e.message + "; the host record " + recordPath + " is saved with both VMs up, and dc host teardown settles and deletes them");
+  }
+}
+
+/**
  * Finishes the teardown archive in its new folder, where teardown streamed the work folder only as the age file the host
  * sealed, the off-host lines and the snapshot: it checks the archive's age header, adds rows.json, and puts the host's approval record back
  * in the Captain's place. The record is copied beside the Captain's record first, on its file system, so the renames
@@ -375,6 +395,7 @@ export function hostRow(s: HostSeams = {}): Row {
     if (verb === "launch") {
       const made = await launch(b, plan, keys!);
       saveRecord(recordPath, made);
+      if (p.mirrors) await mirrorsReady(b, p, made, recordPath, env.now);
       io.out("host: launched " + made.controller.vm + " with WAL host " + made.wal.vm + " in Ubicloud " + p.ubicloud.location + " at " + made.commit + (made.image ? " on trial image " + made.image : "") + "; stage " + p.stage.join(" "));
       if (made.tmpfs) io.out("host: the work folder is a tmpfs of " + mib(made.tmpfs.sizeBytes) + " MiB, sized from the controller host's " + mib(made.tmpfs.memBytes) + " MiB of memory");
       return 0;
@@ -413,6 +434,7 @@ export function hostRow(s: HostSeams = {}): Row {
       }
       if (verb === "recover") {
         const r = await recoverHost(b, plan, rec!, keys!);
+        if (r.kind === "recovered" && p.mirrors) await mirrorsReady(b, p, rec!, recordPath, env.now);
         io.out("host: " + (r.kind === "recovered" ? "recovered on " + rec!.controller.vm + " (" + r.status.boot + ")" : "stopped for the Captain: " + r.why));
         return r.kind === "recovered" ? 0 : 3;
       }

@@ -14,7 +14,7 @@ import { AGE_HEADER, controllerProvision, gstackPack, layout, rowLog, type Contr
 import { commitAll, makeRecord } from "../money/dryrun-fixture.ts";
 import { WALCTL_PY } from "../money/offhost.ts";
 import { fakeBackend, fakeWorld, type FakeWorld } from "../stage3/fake.ts";
-import { runProcess } from "../stage3/ubicloud-real.ts";
+import { MIRRORS_DONE, runProcess } from "../stage3/ubicloud-real.ts";
 import type { DryRunCase } from "../types.ts";
 import { BOUND_PROVIDERS } from "../wire.ts";
 import { REPO_ROOT } from "./fakes.ts";
@@ -71,10 +71,15 @@ const pidsIn = (dir: string): number[] => {
   return existsSync(f) ? [Number(readFileSync(f, "utf8"))] : [];
 };
 
-/** Every SSH command runs on this machine. */
-export const localWorld = (): FakeWorld =>
+/**
+ * Every SSH command runs on this machine, except the mirror readiness check, which the fake's mirror model answers from
+ * the VM's units (stage3/fake.ts); plant can set them, since the keyless provisioning skips the mirror setup.
+ */
+export const localWorld = (plant?: FakeWorld["plant"]): FakeWorld =>
   fakeWorld({
+    plant,
     ssh: async (_vm, command, input) => {
+      if (command.includes(MIRRORS_DONE)) return undefined;
       const r = await runProcess(["bash", "-c", command], { input, timeoutMs: 60_000 });
       return { exit: r.exit, stdout: new TextDecoder().decode(r.stdout), stderr: r.stderr, raw: r.stdout };
     },

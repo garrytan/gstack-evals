@@ -314,6 +314,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_DCH_CHECKOUT](#e_dch_checkout) | 2 | U20 |
 | [E_DCH_TMPFS_HIGH](#e_dch_tmpfs_high) | 2 | U20 |
 | [E_DCH_SEAL](#e_dch_seal) | 2 | U20 |
+| [E_DCH_MIRROR_DOWN](#e_dch_mirror_down) | 2 | U20 |
 | [E_DCW_INSTALL_DIGEST](#e_dcw_install_digest) | 2 | U20 |
 | [E_DCW_PREFLIGHT](#e_dcw_preflight) | 2 | U20 |
 | [E_DCW_MODEL_PROBE](#e_dcw_model_probe) | 2 | U20 |
@@ -2273,6 +2274,14 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 Design plan review eval (controller host custody, PD-41): the teardown could not seal the host's work folder with age to the run's recipient, or could not confirm the plaintext was deleted, or the archive it read back is not an age file or differs in size or sha256 from the host's. Both VMs are kept and nothing from the work folder was copied back.
 
 Fix: Read the message, fix the host (age installed, the recipient file in its state folder), then run dc host teardown again; it seals once and copies back only the sealed archive.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_DCH_MIRROR_DOWN
+
+Design plan review eval (controller host): a package mirror the controller host serves to the sandboxes did not answer its protocol-level check within the wait: verdaccio's /-/ping, devpi's /+api, apt-cacher-ng's report page or the Docker registry's /v2/ returned something other than HTTP 200, or the check's result did not read. The message names each such mirror, its unit's systemctl is-active state and its unit's last journal lines. The launch or recovery saved the host record and kept both VMs, and printed no ready line; no row was sent.
+
+Fix: Read the unit state and journal lines the message quotes and fix the controller host's mirror setup (stage3/ubicloud-real.ts mirrorSetup), then run dc host teardown on the saved record and launch again. Never send the preflight or a later row to a host whose mirrors failed the check.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 

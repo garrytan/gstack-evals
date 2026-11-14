@@ -29,7 +29,7 @@ import { endpointsFixture } from "../paid/dryrun-cases.ts";
 import { pinRecord, termsRecordsOf } from "../paid/pin.ts";
 import { scripted } from "../paid/scripted.ts";
 import { fixtureBrowser } from "../recipes/fixtures.ts";
-import { fakeBackend, fakeWorld } from "../stage3/fake.ts";
+import { fakeBackend, fakeWorld, serveMirrors } from "../stage3/fake.ts";
 import { runProcess } from "../stage3/ubicloud-real.ts";
 import type { DryRunCase } from "../types.ts";
 import { plantedRow, viewAt } from "./apps.ts";
@@ -141,7 +141,7 @@ export async function launchScenario(): Promise<string[]> {
       writeFileSync(join(work, "planted-table.json"), table);
       const plan = { ...JSON.parse(readFileSync(f.planPath, "utf8")), ubicloud: { ...f.plan.ubicloud, location: "eu-central-h1" } };
       const env = { ...rowEnv(), lane: () => ({ commit: laneCommit, dirty: false, root: lane }) };
-      const s = localSeams(dir, localWorld(), FAKE_KEYS, (p) => ({ ...p, stage: p.stage ? { ...p.stage, module: import.meta.path } : null }));
+      const s = localSeams(dir, localWorld((vm) => vm.spec?.label.startsWith("dc controller host") && serveMirrors(vm)), FAKE_KEYS, (p) => ({ ...p, stage: p.stage ? { ...p.stage, module: import.meta.path } : null }));
       const b = await s.backend!(plan, FAKE_KEYS);
       b.privateAddress = () => "127.0.0.1";
       const l = layout(plan.runId, join(dir, "host"), hostWorkOf(dir));
