@@ -22,7 +22,7 @@ import { walAuthorizedKey, WALCTL_PATH, WALCTL_PY, WAL_DIR } from "./offhost.ts"
 
 /** What the launcher needs from a VM backend; UbicloudBackend has it, and so does stage3/fake.ts's simulated one. */
 export interface HostBackend extends VmBackend {
-  create(spec: VmSpec, o?: { prefix?: string }): Promise<Vm>;
+  create(spec: VmSpec, o?: { prefix?: string; size?: string }): Promise<Vm>;
   attach(name: string, spec: VmSpec): Promise<Vm | null>;
   exists(name: string): Promise<boolean>;
   address(vm: Vm): string;
@@ -74,6 +74,8 @@ export interface ControllerPlan {
   /** The longest stage the host serves without a relaunch; the time to live covers it plus the margin. */
   longestStageHours: number;
   ttlHours: number;
+  /** Each host's Ubicloud size; the backend's own size when unset. */
+  sizes?: { controller?: string; wal?: string };
   /** Ubicloud's list price per hour in micros for each host's size, read on the day. */
   priceMicrosPerHour: { controller: number; wal: number };
   commit: string;
@@ -263,11 +265,11 @@ export async function launch(b: HostBackend, p: ControllerPlan, env: Uint8Array)
   const x = new Ctx(b, p);
   const made: Vm[] = [];
   return guarded(x, made, async () => {
-    const wal = await b.create(hostSpec(p, "dc wal host " + p.runId), { prefix: "dcwal" });
+    const wal = await b.create(hostSpec(p, "dc wal host " + p.runId), { prefix: "dcwal", size: p.sizes?.wal });
     made.push(wal);
     const walAt = iso(x.now());
     await setupWal(x, wal);
-    const ctl = await b.create(hostSpec(p, "dc controller host " + p.runId), { prefix: "dcctl" });
+    const ctl = await b.create(hostSpec(p, "dc controller host " + p.runId), { prefix: "dcctl", size: p.sizes?.controller });
     made.push(ctl);
     const ctlAt = iso(x.now());
     const hosts: HostVm[] = [
@@ -325,7 +327,7 @@ export async function recoverHost(b: HostBackend, p: ControllerPlan, rec: HostRe
   if (await b.exists(rec.controller.vm)) await b.destroy({ id: rec.controller.vm, spec: hostSpec(p, "dc controller host " + p.runId) });
   const made: Vm[] = [];
   return guarded(x, made, async () => {
-    const ctl = await b.create(hostSpec(p, "dc controller host " + p.runId), { prefix: "dcctl" });
+    const ctl = await b.create(hostSpec(p, "dc controller host " + p.runId), { prefix: "dcctl", size: p.sizes?.controller });
     made.push(ctl);
     const ctlAt = iso(x.now());
     const hosts: HostVm[] = [

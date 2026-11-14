@@ -4,7 +4,9 @@
 // read by name, and the named package mirrors (npm, PyPI, Ubuntu apt and a Docker Hub pull-through cache) that the
 // controller host serves on its private IPv4. Only the paid launcher and the controller service on its host construct
 // realUbicloud; tests drive the same runner against local stand-ins.
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { createServer } from "node:net";
+import { dirname } from "node:path";
 import { fail } from "../errors.ts";
 import { UbicloudBackend, type ExecOptions, type ExecResult, type Mirror, type MirrorName, type Vm } from "./sandbox.ts";
 
@@ -148,6 +150,21 @@ export function realUbicloud(o: RealUbicloudOptions): UbicloudBackend {
   const token = (o.env ?? process.env).UBICLOUD_API_KEY ?? "";
   if (!token) fail("E_USAGE", "UBICLOUD_API_KEY is not set for the paid launcher");
   return new UbicloudBackend({ project: o.project, location: o.location, token, size: o.size, image: o.image, publicKey: o.publicKey, fetch: globalThis.fetch.bind(globalThis), ssh: o.ssh, sleep: (ms) => Bun.sleep(ms), now: () => Date.now(), privateSubnet: o.privateSubnet });
+}
+
+/**
+ * The backend a paid launcher or the controller service builds: its own ed25519 key (made once, mode 600), the SSH
+ * runner on it and Ubicloud with the token read by name. The launcher's key reaches the host VMs; the controller
+ * host's own key reaches the sandboxes it creates.
+ */
+export async function keyedUbicloud(o: Omit<RealUbicloudOptions, "ssh" | "publicKey"> & { keyPath: string; knownHosts: string; runUser?: string }): Promise<UbicloudBackend> {
+  if (!existsSync(o.keyPath)) {
+    mkdirSync(dirname(o.keyPath), { recursive: true, mode: 0o700 });
+    const r = await runProcess(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", "dc-launch", "-f", o.keyPath]);
+    if (r.exit !== 0) fail("E_DC_INFRA_MISSING", "could not make the launch's SSH key");
+  }
+  const publicKey = readFileSync(o.keyPath + ".pub", "utf8").trim();
+  return realUbicloud({ ...o, publicKey, ssh: sshRunner({ keyPath: o.keyPath, knownHosts: o.knownHosts, runUser: o.runUser }) });
 }
 
 /** BT: each named mirror's port on the controller host's private IPv4. */

@@ -506,12 +506,12 @@ export class UbicloudBackend implements VmBackend {
     if (!res.ok && res.status !== 404) fail("E_DC_INFRA_MISSING", "Ubicloud " + method + " " + name + " returned " + res.status);
     return res.status === 204 || res.status === 404 ? null : res.json();
   }
-  async create(spec: VmSpec, o: { prefix?: string } = {}): Promise<Vm> {
+  async create(spec: VmSpec, o: { prefix?: string; size?: string } = {}): Promise<Vm> {
     if (!spec.owner) fail("E_USAGE", "UBI_OWNER is not set");
     const expires = Math.floor(this.o.now() / 60_000) + spec.ttlMinutes;
     const name = ((o.prefix ?? "dc") + "-" + spec.owner + "-" + expires + "-" + crypto.randomUUID().slice(0, 8)).toLowerCase();
     try {
-      await this.api("POST", name, { public_key: this.o.publicKey, size: this.o.size, boot_image: this.o.image, enable_ip4: true, ...(this.o.privateSubnet ? { private_subnet_id: this.o.privateSubnet } : {}) });
+      await this.api("POST", name, { public_key: this.o.publicKey, size: o.size ?? this.o.size, boot_image: this.o.image, enable_ip4: true, ...(this.o.privateSubnet ? { private_subnet_id: this.o.privateSubnet } : {}) });
       for (let i = 0; i < 120; i++) {
         const v = await this.api("GET", name);
         if (v?.state === "running" && v.ip4) {

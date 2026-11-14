@@ -3,13 +3,13 @@
 // Ubicloud VM): stdin, raw output, exit codes and the time limit; a forward to a local page; and the controller's
 // pinned WAL key, which reaches walctl and nothing else. Skipped when sshd or ssh-keygen is missing.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RemoteTarget, sshWalTransport, walAuthorizedKey, WALCTL_PY } from "../../../lanes/design-constructed/money/offhost.ts";
 import { WriteAhead } from "../../../lanes/design-constructed/money/wal.ts";
 import type { Vm } from "../../../lanes/design-constructed/stage3/sandbox.ts";
-import { asUser, freePort, portOpen, runProcess, sshRunner, sshTunnel, type SshOptions } from "../../../lanes/design-constructed/stage3/ubicloud-real.ts";
+import { asUser, freePort, keyedUbicloud, portOpen, realUbicloud, runProcess, sshRunner, sshTunnel, type SshOptions } from "../../../lanes/design-constructed/stage3/ubicloud-real.ts";
 
 const SSHD = ["/usr/sbin/sshd", "/usr/bin/sshd"].find((p) => existsSync(p));
 const KEYGEN = ["/usr/bin/ssh-keygen"].find((p) => existsSync(p));
@@ -81,4 +81,21 @@ describe.skipIf(!SSHD || !KEYGEN)("SSH against a local sshd", () => {
     expect(escape.exit).toBe(2);
     expect(existsSync(join(dir, "wal", "wal.ndjson"))).toBe(true);
   }, 30_000);
+});
+
+describe.skipIf(!KEYGEN)("the paid backend's construction", () => {
+  test("it refuses with no Ubicloud token and, given one by name, makes its own key once", async () => {
+    const d = mkdtempSync(join(tmpdir(), "dc-key-"));
+    try {
+      const o = { project: "pj-test", location: "eu-central-h1", size: "standard-2", image: "ubuntu-noble", keyPath: join(d, "keys", "launch_ed25519"), knownHosts: join(d, "keys", "known_hosts") };
+      expect(() => realUbicloud({ ...o, publicKey: "ssh-ed25519 AAAA", ssh: async () => ({ exit: 0, stdout: "", stderr: "" }), env: {} })).toThrow("UBICLOUD_API_KEY is not set");
+      await keyedUbicloud({ ...o, env: { UBICLOUD_API_KEY: "test-not-a-token" } });
+      const first = readFileSync(o.keyPath, "utf8");
+      await keyedUbicloud({ ...o, env: { UBICLOUD_API_KEY: "test-not-a-token" } });
+      expect(readFileSync(o.keyPath, "utf8")).toBe(first);
+      expect(statSync(o.keyPath).mode & 0o777).toBe(0o600);
+    } finally {
+      rmSync(d, { recursive: true, force: true });
+    }
+  });
 });
