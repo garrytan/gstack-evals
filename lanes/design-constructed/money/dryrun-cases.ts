@@ -10,6 +10,7 @@ import type { DryRunCase, LedgerItemId, Model } from "../types.ts";
 import { $, MoneyController } from "./book.ts";
 import { durableCases } from "./dryrun-durable.ts";
 import { controllerHostCases } from "./dryrun-hosts.ts";
+import { journalCases } from "./dryrun-journals.ts";
 import { admitted, expectations, withRig, type Rig } from "./dryrun-fixture.ts";
 import { admitStage, admitVm, extendVm, hostsProjection, settleVm } from "./hosts.ts";
 import { mainLeases } from "./ledger-main.ts";
@@ -587,7 +588,7 @@ const hostCases: DryRunCase[] = [
 ];
 
 export function cases(): DryRunCase[] {
-  return [...itemCases, ...stopCases, ...hostCases, ...durableCases(), ...controllerHostCases()];
+  return [...itemCases, ...stopCases, ...hostCases, ...durableCases(), ...controllerHostCases(), ...journalCases()];
 }
 
 export type { Model };

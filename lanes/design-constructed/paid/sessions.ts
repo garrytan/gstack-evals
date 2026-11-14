@@ -19,6 +19,7 @@ import { DcError } from "../errors.ts";
 import { LEDGER_ITEMS, STAGE3 } from "../frozen.ts";
 import { $, type MoneyController } from "../money/book.ts";
 import { writeAheadLedger } from "../money/durability.ts";
+import { appendLink } from "../money/journals.ts";
 import { DIRECT_MODELS } from "../money/price.ts";
 import type { ProxyLife } from "../money/renewal.ts";
 import type { ProviderWatch } from "../money/served.ts";
@@ -117,7 +118,7 @@ export interface SessionOptions {
   dir: string;
   launcher: SessionLauncher;
   /** Looks up the provider OpenRouter's generation record names, for a reply that names none; unset, such a reply is unnamed. */
-  resolve?: (generationId: string) => Promise<string | null>;
+  resolve?: (generationId: string, item: LedgerItemId) => Promise<string | null>;
 }
 
 interface Live {
@@ -180,6 +181,7 @@ export class SessionProxies {
     const l = this.live.get(item)!;
     const m = DIRECT_MODELS[model as Model];
     const b = await l.proxy.control.bind({ cell: { run_id: this.o.controller.runId, arm: s.arm ?? s.sub.arm ?? "dc", task: s.session, model: m.id, trial: 1, attempt: s.attempt }, models: [m.provider + ":" + m.id], allowance_micros: sessionAllowance(item) });
+    appendLink(this.o.dir, { sub: s.sub.id, item, lease: l.leaseId, meter: b.meter_id, journal: l.proxy.journal });
     l.bound.set(s.sub.id, [...(l.bound.get(s.sub.id) ?? []), b.meter_id]);
     l.slots.add(b.slot);
     return { item, sub: s.sub.id, session: s.session, baseUrl: l.proxy.baseUrl.replace(/\/+$/, "") + "/" + b.slot + "/" + m.provider, token: b.token, slot: b.slot, meterId: b.meter_id, model: m.provider + ":" + m.id };
@@ -250,7 +252,7 @@ export class SessionProxies {
       let servedBy: string | null = provider;
       if (provider === "openrouter") {
         servedBy = typeof line.served_provider === "string" ? line.served_provider : null;
-        if (servedBy === null && typeof line.generation_id === "string" && this.o.resolve) servedBy = await this.o.resolve(line.generation_id);
+        if (servedBy === null && typeof line.generation_id === "string" && this.o.resolve) servedBy = await this.o.resolve(line.generation_id, item);
       }
       checked++;
       await this.o.watch.check({ model, servedBy, via: "session", label: String(line.meter_id ?? line.reservation_id) });

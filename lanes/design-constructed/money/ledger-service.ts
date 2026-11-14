@@ -18,6 +18,7 @@ import type { LedgerItemId } from "../types.ts";
 import type { MoneyController } from "./book.ts";
 import { latestSnapshot, recover, replayReserves, restoreLedgerFile, snapshotDue, takeSnapshot } from "./durability.ts";
 import { admitVm, idleDelete, vmSubs } from "./hosts.ts";
+import { settleFromJournals, writeScan } from "./journals.ts";
 import { mainLeases } from "./ledger-main.ts";
 import type { ItemFigures, LeaseSeam, OffHostTarget } from "./types.ts";
 import type { WriteAhead } from "./wal.ts";
@@ -328,7 +329,16 @@ export async function openLedgerService(cfg: ServiceConfig, target: ServiceTarge
     return refuse(rec.why);
   }
   if (boot === "restored" && rec.reserves.length) await replayReserves(local, rec.reserves, join(cfg.journalDir, "recovery-" + now().toISOString().replace(/[:.]/g, "-") + ".ndjson"));
-  const svc = new LedgerService(cfg, target, rec.controller, rec.wal, local, boot, { held: rec.held.length, uncertainMicros: rec.uncertainMicros }, now);
+  let held = rec.held.length;
+  let uncertainMicros = rec.uncertainMicros;
+  if (boot === "same-host" && rec.held.length) {
+    const scan = await settleFromJournals({ controller: rec.controller, local, wal: rec.wal, journalDir: cfg.journalDir, held: rec.held });
+    writeScan(cfg.stateDir, now(), scan);
+    const settled = new Set(scan.settled.map((s) => s.sub));
+    held -= settled.size;
+    uncertainMicros -= rec.held.filter((s) => settled.has(s.id)).reduce((a, s) => a + s.reserveMicros, 0);
+  }
+  const svc = new LedgerService(cfg, target, rec.controller, rec.wal, local, boot, { held, uncertainMicros }, now);
   const standing = join(cfg.stateDir, "captain.json");
   if (existsSync(standing)) await svc.stopForCaptain((JSON.parse(readFileSync(standing, "utf8")) as CaptainStop).why);
   if (!svc.captain) {

@@ -18,6 +18,7 @@ import { DcError } from "../errors.ts";
 import { LEDGER_ITEMS, MONEY } from "../frozen.ts";
 import type { MoneyController } from "../money/book.ts";
 import { writeAheadLedger } from "../money/durability.ts";
+import { appendLink } from "../money/journals.ts";
 import { ledgerFigures, openMeter, type CallResult, type Meter } from "../money/meter.ts";
 import { DIRECT_MODELS } from "../money/price.ts";
 import type { ProxyLife } from "../money/renewal.ts";
@@ -26,6 +27,7 @@ import type { Admission, LeaseInfo } from "../money/types.ts";
 import type { WriteAhead } from "../money/wal.ts";
 import type { JudgeCaller } from "../score/seams.ts";
 import { CapStopSignal } from "../stage3/seams.ts";
+import { generationResolver } from "./sessions.ts";
 import type { LedgerItemId } from "../types.ts";
 import type { ReasonCode } from "../../../src/errors/codes.ts";
 
@@ -139,6 +141,22 @@ export class DirectCallers {
     return l;
   }
 
+  /**
+   * An in-process proxy on any open item's lease, for OpenRouter's free generation record only (the Captain's ruling 1A):
+   * a session proxy's unnamed reply is resolved through it. Free routes are forwarded unreserved, so it spends nothing.
+   */
+  freeProxy(item: LedgerItemId): MeteringProxy {
+    if (LEDGER_ITEMS[item].admission.kind === "direct") return this.proxy(item);
+    const lease = this.o.controller.lease(item);
+    if (!lease) throw new DcError("E_USAGE", item + " has no open lease for its generation reads");
+    const key = ("free:" + item) as LedgerItemId;
+    const now = this.live.get(key);
+    if (now && now.leaseId === lease.leaseId) return now.proxy;
+    now?.proxy.stop();
+    const l = this.start(key, lease);
+    return l.proxy;
+  }
+
   /** The proxy journal of the item's running proxy, or null. */
   journal(item: LedgerItemId): string | null {
     return this.live.get(item)?.journal ?? null;
@@ -157,6 +175,8 @@ export class DirectCallers {
       cacheDir: this.o.cacheDir,
       out: this.o.watch.out,
       watch: this.o.watch,
+      link: (meter, sub) => appendLink(this.o.dir, { sub, item, lease: this.o.controller.lease(item)!.leaseId, meter, journal: this.journal(item)! }),
+      resolve: (id) => generationResolver(this.proxy(item), this.o.controller.runId)(id),
     });
     this.meters.set(item, m);
     return m;

@@ -259,6 +259,24 @@ export function cases(): DryRunCase[] {
         }),
     },
     {
+      rule: "PD-9",
+      name: "a direct OpenRouter reply that names no provider resolves through the generation record on its own proxy; a session's resolves on its item's free proxy (ruling 1A)",
+      check: () =>
+        withPaid({ script: () => ({ kind: "ok", provider: null }), generation: (id) => (id === "gen-1" ? "OpenAI" : "Azure") }, async ({ r, direct }) => {
+          const e = expectations();
+          await r.c.openItem("dc-judges");
+          const first = await direct.meter("dc-judges").call({ model: "sol", prompt: "label", maxTokens: 16, label: "j1" });
+          e.want(first.servedBy === "OpenAI" && first.text !== null, "the unnamed reply resolved to " + first.servedBy);
+          const code = await codeOf(direct.meter("dc-judges").call({ model: "sol", prompt: "label again", maxTokens: 16, label: "j2" }));
+          e.want(code === "E_DC_PROVIDER_DRIFT", "an Azure generation record read " + code);
+          await r.c.openItem("dc-stage1-sol");
+          const free = direct.freeProxy("dc-stage1-sol");
+          e.want(free === direct.freeProxy("dc-stage1-sol") && free !== direct.proxy("dc-judges"), "the session item's free proxy is not its own, once");
+          e.want((await generationResolver(free, r.c.runId)("gen-1")) === "OpenAI", "the free proxy did not read the generation record");
+          return e.result();
+        }),
+    },
+    {
       rule: "R2-4",
       name: "a session proxy's reserve is copied off host through its relay before the call is sent; an unacknowledged copy refuses the call unsent and main's reconciler releases it at $0",
       check: async () => {

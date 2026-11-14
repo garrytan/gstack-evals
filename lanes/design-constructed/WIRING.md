@@ -16,7 +16,7 @@ A host run reads one wiring file (wire/real.ts readWiring). A missing choice ref
 ## Money
 
 5. **J1 reconcile returns null.** The ledger provider's reconcile always returns null, so an unknown charge stays held until the owner's reconcile, as PD-18 rules. The sessions row prints a "held" line for it. The session-level reconcile is exact when the session proxy holds the attempt's meter, and `judged` is always false within one launch.
-6. **Proxy folders and recovery.** Proxy journals sit under the service's journalDir in `direct/` and `sessions/`. Recovery does not scan them yet, so a relaunch after a host loss does not read a proxy's journal.
+6. **Proxy folders and recovery.** Proxy journals sit under the service's journalDir in `direct/` and `sessions/`. Every slot a proxy binds is linked to its sub-reservation in `links/<folder>.ndjson` before anything is sent (money/journals.ts). On a same-host relaunch, recovery reads every journal with main's reconcileJournal and settles each held sub-reservation whose linked meters all show an outcome, at their spend. A sub-reservation with no link, a journal that could not be read, or a call with no outcome stays unknown under PD-18, and the scan is written to the state folder as `journals-<time>.json`. A relaunch on a new host has no journals to read, so everything in flight stays unknown.
 7. **Terms digest.** A reply's termsDigest is the sha256 of the pinned routing terms, matching paid/pin.ts termsRecordsOf. It is not a fresh endpoints read per call. No row writes the `--terms` file from the pin record yet.
 
 ## Sessions
