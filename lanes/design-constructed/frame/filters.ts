@@ -21,16 +21,25 @@ export function topicBarred(topic: string): boolean {
   return ws.some((w) => (FRAME.topicWords as readonly string[]).includes(w)) || FRAME.wordPairs.some((p) => hasPair(ws, p));
 }
 
-/** Markdown links and images become their text, HTML tags go, so a title's words are the words a reader sees. */
+/**
+ * A title's visible text: images go whole (alt text and URL), links keep only their text, HTML tags go with their
+ * attributes, and bare URLs go, so no badge, image or link target can put a word in the title.
+ */
 const plain = (s: string) =>
   s
-    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
+    .replace(/!\[[^\]]*\]\[[^\]]*\]/g, " ")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\[([^\]]*)\]\[[^\]]*\]/g, "$1")
     .replace(/<[^>]*>/g, " ")
+    .replace(/\bhttps?:\/\/\S+/gi, " ")
+    .replace(/\s+/g, " ")
     .trim();
 
 /**
- * The README title: its first Markdown heading (ATX, or setext under a paragraph), outside fenced code, else its first
- * non-empty line; null when there is no README or it has no non-empty line.
+ * The README title: its first heading outside fenced code, which is a Markdown heading (ATX, or setext under a
+ * paragraph) or an HTML <h1> element, whichever comes first; else its first non-empty line. Either way only the visible
+ * text counts (plain). Null when there is no README or it has no non-empty line.
  */
 export function readmeTitle(text: string | null): string | null {
   if (text === null) return null;
@@ -38,7 +47,8 @@ export function readmeTitle(text: string | null): string | null {
   let fence: { ch: string; len: number } | null = null;
   let para: string[] = [];
   let paraOk = false;
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
     const f = /^ {0,3}(`{3,}|~{3,})/.exec(line);
     if (fence) {
       if (f && f[1]![0] === fence.ch && f[1]!.length >= fence.len && /^ {0,3}[`~]+\s*$/.test(line)) fence = null;
@@ -48,6 +58,12 @@ export function readmeTitle(text: string | null): string | null {
       fence = { ch: f[1]![0]!, len: f[1]!.length };
       para = [];
       continue;
+    }
+    const h1 = /<h1(?:\s[^>]*)?>/i.exec(line);
+    if (h1) {
+      const rest = [line.slice(h1.index + h1[0].length), ...lines.slice(i + 1)].join("\n");
+      const end = /<\/h1\s*>/i.exec(rest);
+      return plain(end ? rest.slice(0, end.index) : rest.split("\n")[0]!);
     }
     const atx = /^ {0,3}#{1,6}(?:[ \t]+(.*?))?[ \t]*$/.exec(line);
     if (atx) return plain((atx[1] ?? "").replace(/[ \t]+#+$/, "").replace(/^#+$/, ""));

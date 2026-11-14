@@ -48,9 +48,11 @@ patterns name one route. PD-10's "three distinct routes the file check discovere
   words, README title. A repository leaves at the first it fails; counts print after each.
 - **BT-F6 Pushed.** pushedAt on or after 2026-06-01T00:00:00Z (UTC).
 - **BT-F7 Language.** GitHub's primary language name compared exactly with TypeScript, JavaScript, Vue, Svelte.
-- **BT-F8 README title words.** The first ATX heading, or a setext heading under a paragraph, outside fenced code;
-  else the first non-empty line. Markdown links and images become their text and HTML tags are removed before the
-  words are read. Words are runs of letters and digits, lowercased. No README leaves the title filter passed.
+- **BT-F8 README title words (the Captain's ruling, 2026-11-14).** The title is the first heading outside fenced code,
+  which is a Markdown heading (ATX, or setext under a paragraph) or an HTML `<h1>` element, whichever comes first; only
+  when there is no heading does it fall back to the first non-empty line. Either way only the visible text counts:
+  tags and attributes, link and image URLs, image alt text and bare URLs are removed before the whole-word check.
+  Words are runs of letters and digits, lowercased. No README leaves the title filter passed.
 - **BT-F9 Frame key.** sha256 of "20261114", a newline and nameWithOwner as GitHub returns it.
 - **BT-F10 Clone walk.** Down the frame order, each repository is cloned once, at the oid the search recorded, by
   `git fetch --depth 1 <url> <oid>` into a fresh repository with hardened git, then checked out detached. Clone
@@ -88,13 +90,9 @@ patterns name one route. PD-10's "three distinct routes the file check discovere
 
 ## Open for the integrator
 
-1. **HTML in the README title (BT-F8).** Many READMEs open with an HTML block (`<p align="center"><img ...>` or
-   `<h1>Name</h1>`). The frozen text says "first Markdown heading, else first non-empty line". This build does not
-   treat `<h1>` as a Markdown heading, and it removes tags and link targets before reading words, so an image URL
-   holding "template" doesn't leave a repository out. Reading the raw line instead would leave more out. This can move
-   frame membership and the frame runs once (C1), so the Captain should confirm the reading before the run.
-2. **Repository-wide route count (BT-F15).** Test 4 counts distinct routes across every app in a monorepo, which is the
-   literal reading. A per-app count would be stricter. Same C1 point.
+1. **HTML in the README title (BT-F8).** Settled by the Captain on 2026-11-14: the first heading may be an HTML `<h1>`,
+   and only visible text counts (BT-F8). Frame fixtures cover both cases.
+2. **Repository-wide route count (BT-F15).** Settled by the Captain on 2026-11-14: the literal, repository-wide count.
 3. **No reason code for a search or clone failure.** No E_DC_ code covers a GitHub or git failure in the frame, and the
    build adds none. A search reply with an error, or gh failing after its tries, throws a plain error and the command
    exits non-zero with a stack; the rerun resumes from the cache. If a code is wanted, it is a codes.ts change.

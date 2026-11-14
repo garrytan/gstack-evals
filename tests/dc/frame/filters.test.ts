@@ -30,6 +30,11 @@ describe("entry filters", () => {
     expect(readmeTitle("Orchard\n=======\n# Later\n")).toBe("Orchard");
     expect(readmeTitle("~~~\n# not\n~~~\nplain\n")).toBe("~~~");
     expect(readmeTitle("    # indented code\nplain\n")).toBe("# indented code");
+    expect(readmeTitle('<p align="center"><img src="logo.svg" alt="logo"></p>\n<h1 align="center">Orchard Template</h1>\n\n## Features\n')).toBe("Orchard Template");
+    expect(readmeTitle("<h1>\n  Orchard Boilerplate\n</h1>\n# Later\n")).toBe("Orchard Boilerplate");
+    expect(readmeTitle('<h1 align="center"><img src="https://cdn.example.invalid/template.svg" alt="starter template"> Orchard Desk</h1>')).toBe("Orchard Desk");
+    expect(readmeTitle("# ![starter template](https://cdn.example.invalid/template.png) Orchard Desk")).toBe("Orchard Desk");
+    expect(readmeTitle("[![build](https://ci.example.invalid/template/badge.svg)](https://ci.example.invalid)\n\nbody")).toBe("");
     expect(titleBarred("Orchard UI Kit")).toBe(true);
     expect(titleBarred("Orchard UIKit")).toBe(false);
     expect(titleBarred("A component library")).toBe(true);

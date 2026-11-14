@@ -58,6 +58,11 @@ const FILTER_EDGES: { name: string; o: Record<string, unknown>; in: boolean }[] 
   { name: "readme title uikit (not a title word) stays", o: readme("# Plum UIKit Desk\n"), in: true },
   { name: "readme.md is read when README.md is absent", o: { readmeMd: null, readmeLower: { text: "# Orchard Starter\n" } }, in: false },
   { name: "no readme stays", o: { readmeMd: null }, in: true },
+  { name: "a centred HTML h1 saying template is the title and leaves, over a later Markdown heading", o: readme('<p align="center"><img src="logo.svg" alt="logo"></p>\n<h1 align="center">Orchard Template</h1>\n\n## Features\n'), in: false },
+  { name: "an HTML h1 over several lines is read to its close", o: readme("<h1>\n  Orchard Boilerplate\n</h1>\n\n# Later\n"), in: false },
+  { name: "an image URL and alt text inside the HTML h1 don't count", o: readme('<h1 align="center"><img src="https://cdn.example.invalid/template.svg" alt="starter template"> Orchard Desk</h1>\n'), in: true },
+  { name: "a Markdown image's alt text and URL in the heading don't count", o: readme("# ![starter template](https://cdn.example.invalid/template.png) Orchard Desk\n"), in: true },
+  { name: "with no heading, a badge line as the first line is read the same way", o: readme("[![build](https://ci.example.invalid/template/badge.svg)](https://ci.example.invalid)\n\nOrchard desk for invented teams\n"), in: true },
   { name: "a fork leaves", o: { isFork: true }, in: false },
   { name: "an archive leaves", o: { isArchived: true }, in: false },
   { name: "a template leaves", o: { isTemplate: true }, in: false },
@@ -249,7 +254,7 @@ export function cases(): DryRunCase[] {
   }
   out.push({
     rule: "S8-filter",
-    name: "the README title is the first Markdown heading, else the first non-empty line",
+    name: "the README title is the first Markdown heading or HTML h1, else the first non-empty line, visible text only",
     check: () => {
       const cases: [string, string | null][] = [["# Plum Desk #\nbody", "Plum Desk"], ["intro\n\nPlum Desk\n---\n", "Plum Desk"], ["- item\n---\n\n## Real\n", "Real"], ["\n\n  first line  \nnext", "first line"], ["", null], ["#hashtag\n# [Plum](https://example.invalid/template) Desk", "Plum Desk"]];
       const bad = cases.filter(([t, want]) => readmeTitle(t) !== want);
