@@ -1,0 +1,182 @@
+[
+ {
+  "reply": "PATCH 1",
+  "order": [
+   "A",
+   "B"
+  ],
+  "position": 1,
+  "ships": "A"
+ },
+ {
+  "reply": "PATCH 2",
+  "order": [
+   "A",
+   "B"
+  ],
+  "position": 2,
+  "ships": "B"
+ },
+ {
+  "reply": "PATCH 1",
+  "order": [
+   "B",
+   "A"
+  ],
+  "position": 1,
+  "ships": "B"
+ },
+ {
+  "reply": "PATCH 2",
+  "order": [
+   "B",
+   "A"
+  ],
+  "position": 2,
+  "ships": "A"
+ },
+ {
+  "reply": "Patch 2 handles the empty case.\n\nPATCH 2",
+  "order": [
+   "A",
+   "B"
+  ],
+  "position": 2,
+  "ships": "B"
+ },
+ {
+  "reply": "PATCH 2\n",
+  "order": [
+   "B",
+   "A"
+  ],
+  "position": 2,
+  "ships": "A"
+ },
+ {
+  "reply": "  PATCH 1  ",
+  "order": [
+   "B",
+   "A"
+  ],
+  "position": 1,
+  "ships": "B"
+ },
+ {
+  "reply": "Both work.\nPATCH 1\r\n",
+  "order": [
+   "A",
+   "B"
+  ],
+  "position": 1,
+  "ships": "A"
+ },
+ {
+  "reply": "patch 2",
+  "order": [
+   "B",
+   "A"
+  ],
+  "position": null,
+  "ships": "A"
+ },
+ {
+  "reply": "PATCH 3",
+  "order": [
+   "B",
+   "A"
+  ],
+  "position": null,
+  "ships": "A"
+ },
+ {
+  "reply": "PATCH 2.",
+  "order": [
+   "B",
+   "A"
+  ],
+  "position": null,
+  "ships": "A"
+ },
+ {
+  "reply": "**PATCH 2**",
+  "order": [
+   "B",
+   "A"
+  ],
+  "position": null,
+  "ships": "A"
+ },
+ {
+  "reply": "PATCH 2\nThanks",
+  "order": [
+   "B",
+   "A"
+  ],
+  "position": null,
+  "ships": "A"
+ },
+ {
+  "reply": "",
+  "order": [
+   "B",
+   "A"
+  ],
+  "position": null,
+  "ships": "A"
+ },
+ {
+  "reply": "PATCH 1 or PATCH 2",
+  "order": [
+   "A",
+   "B"
+  ],
+  "position": null,
+  "ships": "A"
+ },
+ {
+  "reply": "I pick PATCH 2",
+  "order": [
+   "B",
+   "A"
+  ],
+  "position": null,
+  "ships": "A"
+ },
+ {
+  "reply": "PATCH  2",
+  "order": [
+   "B",
+   "A"
+  ],
+  "position": null,
+  "ships": "A"
+ },
+ {
+  "reply": "PATCH 2 because it is smaller",
+  "order": [
+   "B",
+   "A"
+  ],
+  "position": null,
+  "ships": "A"
+ },
+ {
+  "reply": "Neither patch is right.",
+  "order": [
+   "B",
+   "A"
+  ],
+  "position": null,
+  "ships": "A"
+ },
+ {
+  "reply": "PATCH 1\nPATCH 2",
+  "order": [
+   "A",
+   "B"
+  ],
+  "position": 2,
+  "ships": "B"
+ }
+]

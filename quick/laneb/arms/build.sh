@@ -4,6 +4,10 @@
 #
 #   quick/laneb/arms/build.sh [out-dir]      default out-dir: ~/.capy/work/laneb-arms
 #   quick/laneb/arms/build.sh l1 [out-dir]   default out-dir: ~/.capy/work/laneb-arms-l1
+#   quick/laneb/arms/build.sh hm [out-dir]   default out-dir: ~/.capy/work/hm/arms; the harness mechanics arms
+#                                            (none, prose, hook), manifests in manifests/hm/
+#   quick/laneb/arms/build.sh hm-judge [out-dir]   the judge tar alone, from the hook.tar and decision-routing runtime
+#                                            already in <out> at their committed sha256s; only judge.json is rewritten
 #
 # l1 output, outside git: <out>/{none,before,after,off}.tar and .tar.gz, their
 # file inventories (<arm>.files.tsv), the pins' checkouts and fetch records, and
@@ -30,12 +34,17 @@ SEED=${PLACEBO_SEED:-gstack-evals/laneb/placebo/v1}
 L1_BEFORE_SHA=82db89ab3ea3c64185538b8af33da2ffd1a18b57
 L1_AFTER_SHA=699a41cb6808e01240d02e82247693f9170d401a
 L1_LOADOUT=lite
+# The harness mechanics pin (lanes/harness-mechanics/pins.ts HM.gstackPin) and its arms; unit 7 adds judge.
+HM_SHA=ba2289e1cd9f2387d069b3b6c51b404d56c4a1e9
+HM_ARMS="none prose hook judge"
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 LANEB=$(cd "$HERE/.." && pwd)
 DEFAULT_OUT=$HOME/.capy/work/laneb-arms
 MODE=default
 if [ "${1:-}" = l1 ]; then MODE=l1; DEFAULT_OUT=$HOME/.capy/work/laneb-arms-l1; shift; fi
+if [ "${1:-}" = hm ]; then MODE=hm; DEFAULT_OUT=$HOME/.capy/work/hm/arms; shift; fi
+if [ "${1:-}" = hm-judge ]; then MODE=hm-judge; DEFAULT_OUT=$HOME/.capy/work/hm/arms; shift; fi
 OUT=$(mkdir -p "${1:-$DEFAULT_OUT}" && cd "${1:-$DEFAULT_OUT}" && pwd)
 BUILDER=$(sed -n 's/^ARG BUILDER_IMAGE=//p' "$HERE/Dockerfile")
 in_builder() { docker run --rm --network none -u "$(id -u):$(id -g)" -v "$OUT:/out" -w /out "$BUILDER" "$@"; }
@@ -108,6 +117,136 @@ build_l1() {
   ls -l "$OUT"/*.tar "$OUT"/*.tar.gz
 }
 if [ "$MODE" = l1 ]; then build_l1; exit 0; fi
+
+# The harness mechanics arms (wiki/plans/2026-11-09-geva-448-harness-mechanics-prereg, sections 5 and 6): none, prose
+# and hook at the pin, with L1's builder, Claude Code, setup run, seeded user and --loadout. prose is gstack as shipped
+# (routing and contracts at their defaults); hook is the pin with lanes/harness-mechanics/verify-hook.patch applied to
+# the checkout before setup and skill_contracts set on. The judge tar (hook plus the judgment hooks) is unit 7's: it
+# adds its arm to HM_ARMS and its build here. SKIP_BUILD=1 rewrites the manifests from the tars already in <out>.
+build_judge() {
+  local t=$OUT/trees/judge j=$OUT/trees/judge/.hm/judge root=$LANEB/../.. arm
+  echo "== judge tar: the hook tree plus the decision-routing runtime (its own build.sh at /root/.hm/dr) and hm_judge.py"
+  rm -rf "$t"
+  mkdir -p "$t"
+  tar -xpf "$OUT/hook.tar" -C "$t"
+  if [ "${1:-}" != pinned-dr ]; then
+    rm -rf "$OUT/dr-out"
+    mkdir -p "$OUT/dr-out"
+    docker run --rm -v "$(command -v uv)":/usr/local/bin/uv:ro -v "$root":/repo:ro -v "$OUT/dr-out":/out debian:bookworm-slim \
+      bash /repo/lanes/decision-routing/agent/runtime/build.sh /out /root/.hm/dr > "$OUT/build-dr.log" 2>&1 || { tail -40 "$OUT/build-dr.log"; exit 1; }
+  fi
+  mkdir -p "$t/.hm/dr" "$j"
+  tar -xzf "$OUT/dr-out/dr-runtime.tar.gz" -C "$t/.hm/dr"
+  cp "$root/lanes/harness-mechanics/judge/hm_judge.py" "$j/hm_judge.py"
+  (cd "$root" && bun lanes/harness-mechanics/arms.ts judge-inputs --band lanes/harness-mechanics/judge/replay/band.json --admission lanes/harness-mechanics/judge/replay/admission.json --out "$j")
+  (cd "$root" && bun build lanes/harness-mechanics/judge.ts --target=bun --outfile "$j/facts.js" > "$OUT/build-facts.log" 2>&1) || { cat "$OUT/build-facts.log"; exit 1; }
+  (cd "$root" && bun -e 'import { loadMatcher } from "./lanes/harness-mechanics/match.ts"; process.stdout.write(loadMatcher().match.regex)') > "$j/match.re"
+  for arm in stop risky; do
+    printf '#!/bin/sh\nexec /root/.hm/dr/venv/bin/python -I -B /root/.hm/judge/hm_judge.py %s\n' "$([ $arm = stop ] && echo stop || echo bash)" > "$j/$arm"
+    chmod 755 "$j/$arm"
+  done
+  for arm in jev p1; do
+    printf '{"backend":"%s","band":"/root/.hm/judge/band.json","admission":"/root/.hm/judge/admission.json","log":"/root/.hm/log/hooks.jsonl","state_dir":"/root/.hm/state","particle_max_tokens":8000,"contract_hook":"/root/.claude/skills/gstack/hosts/claude/hooks/skill-contract-stop-hook","careful":"/root/.claude/skills/gstack/careful/bin/check-careful.sh","done_facts":["/opt/laneb/bin/bun","/root/.hm/judge/facts.js","facts","{transcript}","--regex","/root/.hm/judge/match.re"]}\n' "$arm" > "$j/judge-$arm.json"
+  done
+  python3 - "$t/.claude/settings.json" <<'PY'
+import json, sys
+p = sys.argv[1]
+s = json.load(open(p))
+for e in s["hooks"]["Stop"]:
+    if e.get("_gstack_source") == "gstack-skill-contract":
+        e["hooks"] = [{"type": "command", "command": "/root/.hm/judge/stop", "timeout": 60}]
+s["hooks"].setdefault("PreToolUse", []).append({"matcher": "Bash", "_gstack_source": "hm-judge-risky", "hooks": [{"type": "command", "command": "/root/.hm/judge/risky", "timeout": 60}]})
+json.dump(s, open(p, "w"), indent=2)
+PY
+  cp "$OUT/hook.gstack-config.tsv" "$OUT/judge.gstack-config.tsv"
+  cp "$OUT/hook.loadout.lock.json" "$OUT/judge.loadout.lock.json"
+  canonical_tar -C trees/judge -cf judge.tar $(cd "$t" && ls -A)
+}
+build_hm() {
+  local man=$HERE/manifests/hm root=$LANEB/../.. arm head a1 a2 keys src flags b64
+  local patch=$root/lanes/harness-mechanics/verify-hook.patch
+  mkdir -p "$man"
+  if [ "${SKIP_BUILD:-0}" != 1 ]; then
+    echo "== gstack at $HM_SHA"
+    rm -rf "$OUT/src-pin" "$OUT/src-hook"
+    git init -q "$OUT/src-pin"
+    git -C "$OUT/src-pin" fetch -q --depth 1 "$GSTACK_REPO" "$HM_SHA"
+    git -C "$OUT/src-pin" checkout -q FETCH_HEAD
+    head=$(git -C "$OUT/src-pin" rev-parse HEAD)
+    test "$head" = "$HM_SHA"
+    a1=$(git -C "$OUT/src-pin" archive --format=tar "$HM_SHA" | sha256sum | cut -d' ' -f1)
+    a2=$(git -C "$OUT/src-pin" archive --format=tar "$HM_SHA" | sha256sum | cut -d' ' -f1)
+    test "$a1" = "$a2"
+    git -C "$OUT/src-pin" -c pack.threads=1 repack -a -d -F -q
+    printf '{"repo":"%s","sha":"%s","head":"%s","method":"git init; git fetch --depth 1 <repo> <sha>; git checkout FETCH_HEAD","git_archive_sha256":"%s"}\n' \
+      "$GSTACK_REPO" "$HM_SHA" "$head" "$a1" > "$OUT/fetch-pin.json"
+    git -C "$OUT/src-pin" apply --check "$patch"
+    rm -rf "$OUT/trees"
+    mkdir -p "$OUT/trees/none/.claude/skills"
+    for arm in prose hook ${HM_PLAIN:+plain}; do
+      flags=--skill-contracts; keys=""; b64=""
+      if [ "$arm" = prose ]; then keys="skill_contracts=off"; fi
+      if [ "$arm" = hook ]; then b64=$(base64 -w0 "$patch"); fi
+      if [ "$arm" = plain ]; then flags=""; fi
+      src=$OUT/src-pin
+      echo "== $arm arm: ./setup --host claude --no-browser --loadout $L1_LOADOUT $flags at $HM_SHA in docker (keys: ${keys:-none}; patch: ${b64:+after setup})"
+      rm -rf "$OUT/$arm-export"
+      docker buildx build --progress=plain --no-cache-filter gstack-l1-build --build-context gstack="$src" \
+        --build-arg GSTACK_LOADOUT="$L1_LOADOUT" --build-arg GSTACK_SETUP_FLAGS="$flags" --build-arg GSTACK_KEYS="$keys" --build-arg GSTACK_PATCH_B64="$b64" \
+        --target gstack-l1-tar --output type=local,dest="$OUT/$arm-export" "$HERE" > "$OUT/build-$arm.log" 2>&1 \
+        || { tail -40 "$OUT/build-$arm.log"; exit 1; }
+      mv "$OUT/$arm-export/arm.tar" "$OUT/$arm.tar"
+      mv "$OUT/$arm-export/gstack-config.tsv" "$OUT/$arm.gstack-config.tsv"
+      mv "$OUT/$arm-export/loadout.lock.json" "$OUT/$arm.loadout.lock.json"
+      rm -rf "$OUT/$arm-export"
+      mkdir -p "$OUT/trees/$arm"
+      tar -xpf "$OUT/$arm.tar" -C "$OUT/trees/$arm"
+    done
+    chmod 755 "$OUT/trees/none/.claude" "$OUT/trees/none/.claude/skills"
+    build_judge
+    echo "== tars"
+    canonical_tar -C trees/none -cf none.tar .claude
+    for arm in $HM_ARMS; do in_builder sh -c "gzip -n -6 -c $arm.tar > $arm.tar.gz"; done
+  fi
+  echo "== manifests"
+  cd "$root"
+  for arm in $HM_ARMS; do hm_manifest "$arm"; done
+  ls -l "$OUT"/*.tar "$OUT"/*.tar.gz
+}
+hm_manifest() {
+  local arm=$1 man=$HERE/manifests/hm meta
+    meta=(--meta claude_code="$CLAUDE_CODE_VERSION" --meta tar_gz_sha256="$(sha256sum "$OUT/$arm.tar.gz" | cut -d' ' -f1)")
+    if [ "$arm" != none ]; then
+      meta+=(--meta gstack_sha="$HM_SHA" --meta update_check=false --meta onboarding_markers="$(markers "$OUT/trees/$arm")"
+        --fetch "$OUT/fetch-pin.json" --config "$OUT/$arm.gstack-config.tsv" --lock "$OUT/$arm.loadout.lock.json")
+    fi
+    if [ "$arm" = judge ]; then
+      meta+=(--meta dr_runtime_sha256="$(cat "$OUT/dr-out/dr-runtime.tar.gz.sha256")" --meta band_sha256="$(sha256sum "$OUT/trees/judge/.hm/judge/band.json" | cut -d' ' -f1)"
+        --meta admission_sha256="$(sha256sum "$OUT/trees/judge/.hm/judge/admission.json" | cut -d' ' -f1)" --meta admitted_points="$(python3 -c 'import json, sys; print(",".join(p["point"] for p in json.load(open(sys.argv[1]))["points"] if p.get("result") == "admitted"))' "$OUT/trees/judge/.hm/judge/admission.json")"
+        --meta hm_judge_sha256="$(sha256sum "$OUT/trees/judge/.hm/judge/hm_judge.py" | cut -d' ' -f1)" --meta facts_sha256="$(sha256sum "$OUT/trees/judge/.hm/judge/facts.js" | cut -d' ' -f1)")
+    fi
+    bun lanes/harness-mechanics/arms.ts manifest --arm "$arm" --tree "$OUT/trees/$arm" --tar "$OUT/$arm.tar" --out "$man" "${meta[@]}"
+}
+# D14: the judge tar alone. gstack's setup no longer rebuilds prose and hook byte for byte, so the judge tar is built from
+# the hook.tar and decision-routing runtime already in <out>, each refused unless it is at its committed sha256, with this
+# checkout's judge files. none, prose and hook and their manifests are left as they are.
+build_hm_judge() {
+  local man=$HERE/manifests/hm root=$LANEB/../.. want
+  want=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["tar"]["sha256"])' "$man/hook.json")
+  test "$(sha256sum "$OUT/hook.tar" | cut -d' ' -f1)" = "$want" || { echo "E_HM_JUDGE_BUILD $OUT/hook.tar is not hook.json's tar sha256 $want" >&2; exit 1; }
+  want=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["dr_runtime_sha256"])' "$man/judge.json")
+  test "$(sha256sum "$OUT/dr-out/dr-runtime.tar.gz" | cut -d' ' -f1)" = "$want" && test "$(cat "$OUT/dr-out/dr-runtime.tar.gz.sha256")" = "$want" \
+    || { echo "E_HM_JUDGE_BUILD $OUT/dr-out/dr-runtime.tar.gz is not judge.json's dr_runtime_sha256 $want" >&2; exit 1; }
+  build_judge pinned-dr
+  echo "== tar"
+  in_builder sh -c "gzip -n -6 -c judge.tar > judge.tar.gz"
+  echo "== manifest"
+  cd "$root"
+  hm_manifest judge
+  ls -l "$OUT"/judge.tar "$OUT"/judge.tar.gz
+}
+if [ "$MODE" = hm ]; then build_hm; exit 0; fi
+if [ "$MODE" = hm-judge ]; then build_hm_judge; exit 0; fi
 
 echo "== gstack checkout at $GSTACK_SHA"
 rm -rf "$OUT/gstack-src"

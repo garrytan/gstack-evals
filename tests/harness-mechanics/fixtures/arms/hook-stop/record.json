@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "session_id": "b0e75736-9e7d-4cd5-959c-b65d03b0d55d",
+  "transcript_path": "/root/.claude/projects/-testbed/b0e75736-9e7d-4cd5-959c-b65d03b0d55d.jsonl",
+  "runs": {
+    "verify@3": {
+      "skill": "verify",
+      "load_line": 3,
+      "outcome": "miss",
+      "missing": [
+        "check-after-edit"
+      ],
+      "waived": [],
+      "blocked_at": "2026-11-09T13:56:00.117Z",
+      "updated_at": "2026-11-09T13:56:01.676Z"
+    }
+  }
+}

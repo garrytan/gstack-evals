@@ -1,0 +1,28 @@
+diff --git a/verify/SKILL.md b/verify/SKILL.md
+index 2c13cc1..5c72493 100644
+--- a/verify/SKILL.md
++++ b/verify/SKILL.md
+@@ -17,6 +17,13 @@ allowed-tools:
+   - Grep
+   - Glob
+   - AskUserQuestion
++contract:
++  version: 1
++  items:
++    - id: check-after-edit
++      kind: check_after_last_edit
++      fix: "run a full check after your last edit before you stop, and show its result"
++      match: '(?-i:(?:^|[;&|(\n])[^\S\n]*(?:(?:env|time|nice|command|exec)\s+|(?:uv|poetry|pipenv|pdm|hatch)\s+run\s+|timeout\s+\S+\s+|\w+=[^\s;&|(]*\s+)*(?:(?:""|\$\{?C\}?|[^\s;&|(]*gstack-checks)\s+run\b|(?:[^\s;&|(]*/)?(?:py\.test|pytest)\b(?![^;&|\n]*\s(?:--?(?:version|help|collect-only|co|fixtures|markers|setup-plan|setup-only)\b|(?:-h|-V)\b))|(?:[^\s;&|(]*/)?(?:tox\b(?!\s+(?:list|l|config|c)\b)|nox\b)(?![^;&|\n]*\s(?:--?(?:version|help|collect-only|co|fixtures|markers|setup-plan|setup-only|list[\w-]*|showconfig)\b|(?:-h|-V|-l|-a)\b))|(?:[^\s;&|(]*/)?python3?(?:\.\d+)?\s+(?:-m\s+(?:pytest|unittest)\b(?![^;&|\n]*\s(?:--?(?:version|help|collect-only|co|fixtures|markers|setup-plan|setup-only)\b|(?:-h|-V)\b))|(?!-)(?![^\s;&|]*setup\.py)[^\s;&|]+\.py\b)|bash\s+(?!-)[^\s;&|]+\.sh\b|make\s+(?:test|check)\b|(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?test\b|(?:go|cargo)\s+test\b))'
+ ---
+ <!-- AUTO-GENERATED from SKILL.md.tmpl — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+@@ -191,8 +198,7 @@ and a log path. Exit 0 is green; only `PASS` is green.
+   Report it with the log line; do not fix the environment or work around it.
+   A `FAIL` whose own error says a service, secret or env var is missing is
+   the same: report it, do not stub or skip it.
+-- Rerun one check with `"$C" run --only <name>` while fixing it, then a full
+-  `run` before you stop.
++- Rerun one check with `"$C" run --only <name>` while fixing it.
+ 
+ Never weaken, skip, delete or edit a test, a checker config or a package.json
+ script to get green.

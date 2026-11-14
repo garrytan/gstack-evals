@@ -44,6 +44,21 @@ describe("grid", () => {
     }
   });
 
+  test("a judge arm's backend maps to the judge_backend kwarg only when set, and non-judge job.json stays byte-identical", () => {
+    expect(armSpec("judge-jev:tar=judge:backend=jev")).toMatchObject({ name: "judge-jev", tar_name: "judge", backend: "jev" });
+    expect(armSpec("judge-p1:backend=p1")).toMatchObject({ name: "judge-p1", backend: "p1" });
+    for (const bad of ["x:backend=p2", "x:backend=", "x:backend=jev:backend=p1"]) expect(() => armSpec(bad)).toThrow("E_USAGE");
+    const judged = jobConfig({ ...spec, arms: [{ ...armSpec("judge-jev:backend=jev:gstack_hooks=copy"), tar: "/run/arms/judge.tar", sha256: "a" }] });
+    expect(judged.agents[0].kwargs).toMatchObject({ arm: "judge-jev", judge_backend: "jev" });
+    expect(judged.agents[0].import_path).toBe("laneb_hooks:LanebHooksAgent");
+    // A non-judge arm never carries backend/judge_backend, and setting backend=sdk-default is unknown, so its kwargs and
+    // the whole job.json are byte-identical to before the backend option existed.
+    const plain = jobConfig(spec);
+    expect(JSON.stringify(plain)).not.toContain("judge_backend");
+    expect(JSON.stringify(plain.agents[0].kwargs)).not.toContain("backend");
+    expect(JSON.stringify(plain)).toBe(JSON.stringify(jobConfig({ ...spec, arms: [{ ...spec.arms[0], ...armSpec("none") }] })));
+  });
+
   // Harbor f3a5a92 (trial/queue.py): with include_exceptions set, only those types are rerun, after the trial dir is deleted.
   test("Harbor reruns only failures that come before any model response", () => {
     const job = jobConfig(spec) as any;

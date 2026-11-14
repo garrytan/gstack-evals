@@ -114,6 +114,20 @@ pull() {
 }
 mkdir -p "$run/out/pull.d"
 side=$(find "$HOME/.local/share/uv/tools/harbor" -path '*harbor-docker-egress-control-sidecar/Dockerfile' 2>/dev/null | head -1 || true)
+# The sidecar's read timeout (D12, lanes/harness-mechanics/README.md). Harbor's gost.yaml turns HTTP sniffing on and sets no
+# readTimeout, and gost's sniffer then gives up on a response whose headers have not come back within 15 s. A non-streaming
+# answer slower than that (every judge call, and Claude Code's non-streaming fallback) was cut, paid and never read. This
+# sets the handler's readTimeout to 900 s in the installed gost.yaml before anything builds the sidecar: the judge proxy's
+# own upstream deadline (src/runner/proxy/metering-proxy.ts UPSTREAM_DEADLINE_MS), and the value lanes/decision-routing's
+# vendored sidecar uses (agent/dr_sidecar.py). sed -i writes a new file, so uv's cached copy stays as published, and Harbor
+# names the sidecar image by a hash of its build context, so a changed file builds a new image. A gost.yaml that doesn't
+# end up with exactly that one line exits 8 before any trial.
+if [ -n "$side" ]; then
+  gost_yaml="$(dirname "$side")/gost.yaml"
+  grep -q '^ *readTimeout:' "$gost_yaml" 2>/dev/null || sed -i 's/^        sniffing: true$/&\n        readTimeout: 900s/' "$gost_yaml" 2>/dev/null || true
+  [ "$(grep -c '^ *readTimeout:' "$gost_yaml" 2>/dev/null)" = 1 ] && grep -q '^        readTimeout: 900s$' "$gost_yaml" \
+    || { echo "could not set readTimeout: 900s in Harbor's egress sidecar ($gost_yaml); no paid trial started" >&2; exit 8; }
+fi
 for f in "$run"/tasks/*/environment/Dockerfile $side; do
   if [ -f "$f" ]; then awk 'toupper($1) == "FROM" { print $2 }' "$f"; fi
 done | sort -u > "$run/out/images.txt"
@@ -138,7 +152,7 @@ if [ -s "$run/out/pull-fails.txt" ]; then echo "an image did not pull (6 tries a
 bash "$runner/task-hooks.sh" "$run" > "$run/out/task-hooks.tsv" 2> "$run/out/task-hooks.log" || true
 echo "task hooks: $(awk -F'\t' 'NR > 1 && $4 == "yes"' "$run/out/task-hooks.tsv" | wc -l) of $(awk 'NR > 1' "$run/out/task-hooks.tsv" | wc -l) tasks name a UserPromptSubmit hook, $(awk -F'\t' 'NR > 1 && $4 == "unknown"' "$run/out/task-hooks.tsv" | wc -l) unknown"
 if [ -f "$run/oracle.json" ]; then
-  (cd "$run" && sg docker -c "harbor run -y -c '$run/oracle.json'") > "$run/out/oracle.log" 2>&1 || true
+  (cd "$run" && sg docker -c "HARBOR_TELEMETRY=0 harbor run -y -c '$run/oracle.json'") > "$run/out/oracle.log" 2>&1 || true
   # Every task in the oracle job needs a trial with reward 1; a task with no trial directory fails too.
   passed=$(for d in "$run"/jobs/*-oracle/*/; do
     [ -f "$d/config.json" ] || continue
@@ -161,6 +175,42 @@ proxy=$!
 trap 'rc=$?; curl -fsS -X POST 127.0.0.1:$control_port/close-all >/dev/null 2>&1 || true; kill $proxy 2>/dev/null || true; echo $rc > "$run/out/vm-run.exit"' EXIT
 for _ in $(seq 1 40); do curl -fsS 127.0.0.1:$control_port/healthz >/dev/null 2>&1 && break; sleep 0.5; done
 curl -fsS 127.0.0.1:$control_port/healthz >/dev/null 2>&1 || { echo "metering proxy not healthy; see out/proxy.log" >&2; exit 8; }
+# Judge wiring (harness-mechanics Stage 3, lanes/harness-mechanics/README.md): started only when this batch has a judge
+# arm, so a non-judge or L1 batch starts nothing here and no HM_JUDGE_* ever reaches Harbor. A judge arm sets
+# agents[].kwargs.judge_backend in job.json (grid.ts), which the host-side agent (runner/agent/laneb_hooks.py) reads to
+# bind a per-session slot over the management socket and forward the slot's proxy URL into the task container. The judge
+# proxy is a self-contained bundle prepare-run.ts dropped in the run dir; it holds the keys from ~/.laneb-keys and meters
+# the judge deciders against the item's cap on the shared ledger under "judge:" plus this part's ledger prefix, beside the
+# session proxy, so each part's judge rows are its own; its journal (HM_JUDGE_JOURNAL) is what the agent checks. When
+# jev's judge changes the repo in a forbidden way, the agent writes the STOP file named by HM_JUDGE_STOP_FILE, which the
+# watcher below already treats as a stop. A judge call gets four attempts (D11): particle-1's 429s back off 1, 2 and 4 s,
+# and after the call's last 429 the proxy pauses the provider 8 s, which the decider's one retry waits out, so a judgment
+# gets 8 attempts by about 22 s, inside the hook's 30 s particle-1 limit. A Retry-After the provider sends still sets the wait.
+judge_proxy=""
+judge_arms=false
+for f in "$run"/job.json "$run"/job-*.json; do
+  [ -e "$f" ] || continue
+  if jq -e 'any((.agents // [])[]; (.kwargs.judge_backend // "") != "")' "$f" >/dev/null 2>&1; then judge_arms=true; break; fi
+done
+if [ "$judge_arms" = true ]; then
+  [ -f "$run/judge-proxy.js" ] || { echo "judge arm present but $run/judge-proxy.js is missing (prepare-run.ts bundles it)" >&2; exit 8; }
+  judge_data_port=${JUDGE_PROXY_DATA_PORT:-8790}
+  judge_mgmt_socket="$run/out/judge-mgmt.sock"
+  export HM_JUDGE_MGMT_SOCKET="$judge_mgmt_socket"
+  export HM_JUDGE_MGMT_TOKEN="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+  export HM_JUDGE_PROXY_BASE="http://$gw:$judge_data_port"
+  export HM_JUDGE_STOP_FILE="$run/STOP"
+  export HM_JUDGE_JOURNAL="$run/out/judge-journal.ndjson"
+  (
+    set -a; . "$HOME/.laneb-keys"; set +a
+    exec bun "$run/judge-proxy.js" --data-host "$gw" --data-port "$judge_data_port" --management-socket "$judge_mgmt_socket" \
+      --journal "$HM_JUDGE_JOURNAL" --ledger-url http://127.0.0.1:$ledger_port --ledger-prefix "judge:$prefix" --retry-attempts 4
+  ) > "$run/out/judge-proxy.log" 2>&1 &
+  judge_proxy=$!
+  trap 'rc=$?; curl -fsS -X POST 127.0.0.1:$control_port/close-all >/dev/null 2>&1 || true; kill $proxy 2>/dev/null || true; [ -n "$judge_proxy" ] && kill $judge_proxy 2>/dev/null; echo $rc > "$run/out/vm-run.exit"' EXIT
+  for _ in $(seq 1 40); do [ -S "$judge_mgmt_socket" ] && break; sleep 0.5; done
+  [ -S "$judge_mgmt_socket" ] || { echo "judge proxy management socket never appeared; see out/judge-proxy.log" >&2; exit 8; }
+fi
 # proxy_status: the proxy's state, read from its control route GET /totals (proxy.ts serves no /status), as one JSON line
 # that keeps /totals' fields one to one: sessions (every session opened this run), open_sessions, unsettled_sessions,
 # cap_stop (the latched reason, or null) and global_spent_micros. It prints nothing and fails unless the answer has
@@ -209,7 +259,7 @@ rc=0
 for j in "${jobs[@]}"; do
   if [ -e "$run/STOP" ] || [ -e "$run/out/cap-stop.json" ]; then [ "$rc" -ne 0 ] || rc=130; break; fi
   log=harbor.log; [ "$j" = job ] || log="harbor-${j#job-}.log"
-  sg docker -c "env -u ANTHROPIC_API_KEY -u OPENROUTER_API_KEY -u OPENAI_API_KEY ANTHROPIC_API_KEY=placeholder-not-a-key PYTHONPATH='$runner/agent' ${order}harbor run -y -c '$run/out/$j.resolved.json'" > "$run/out/$log" 2>&1
+  sg docker -c "env -u ANTHROPIC_API_KEY -u OPENROUTER_API_KEY -u OPENAI_API_KEY -u TYPESAFE_API_KEY ANTHROPIC_API_KEY=placeholder-not-a-key PYTHONPATH='$runner/agent' HARBOR_TELEMETRY=0 ${order}harbor run -y -c '$run/out/$j.resolved.json'" > "$run/out/$log" 2>&1
   r=$?
   [ "$rc" -ne 0 ] || rc=$r
 done

@@ -1,0 +1,6 @@
+bun=1.4.4
+claude=2.1.312 (Claude Code)
+skills=0
+gstack_files=0
+drive=0
+local_share=0

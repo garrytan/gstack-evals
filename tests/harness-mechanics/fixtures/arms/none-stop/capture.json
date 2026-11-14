@@ -1,0 +1,15 @@
+{
+  "record_copied": false,
+  "records": 0,
+  "transcripts": 1,
+  "requests": 3,
+  "feedback": [],
+  "stripped": [
+    ".claude/",
+    "AGENTS.md",
+    "CLAUDE.local.md",
+    "CLAUDE.md",
+    "notes/imported.md",
+    "sub/AGENTS.md"
+  ]
+}

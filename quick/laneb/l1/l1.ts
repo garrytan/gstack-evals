@@ -14,6 +14,8 @@
 //   bun quick/laneb/l1/l1.ts launch <work> --part <part>     bind the run on the first launch, start the part's controller detached
 //   bun quick/laneb/l1/l1.ts attach <work>                   one look: mirror the ledger, pull finished parts, print NEXT
 //   bun quick/laneb/l1/l1.ts relaunch <work> --part <part>   once per part, after a loss: the cells that never started
+//   bun quick/laneb/l1/l1.ts rerun <work> --part <part>      under a profile with an attempt 2 only (L1's has none): once
+//                                                            per part after it finishes, prepare <part>-a2 for the cells it owes
 //   bun quick/laneb/l1/l1.ts recover <work>                  after the host is lost: rebuild the ledger from the mirror
 //   bun quick/laneb/l1/l1.ts host-down <work>                bring the ledger home, destroy the host, settle its hours
 // Host side (called over ssh by the commands above): host-status, host-bind, host-salvage, host-digest.
@@ -102,7 +104,8 @@ export const ITEMS: Record<string, ItemDef> = {
 };
 
 export type Rect = { tasks: string[]; arms: string[]; attempts: number };
-export type PartPlan = { name: string; prefix: string; rects: Rect[]; relaunch_of?: string };
+// model and cells: a part that runs another model than its item (a profile item with one part per model).
+export type PartPlan = { name: string; prefix: string; rects: Rect[]; relaunch_of?: string; attempt_of?: string; model?: string; cells?: string };
 export type Plan = { item: string; run_id: string; cap_usd: number; model: string; task_set: string; cells: string; seed: number; concurrent: number; parts: PartPlan[]; inputs: Record<string, string>; git_head: string; host_ttl_hours: number };
 
 class Refused extends Error {}
@@ -185,6 +188,51 @@ export function splitJobs(job: any, rects: Rect[]) {
   });
 }
 export const jobFile = (i: number) => (i === 0 ? "job.json" : "job-" + (i + 1) + ".json");
+
+// A launcher profile: the frozen values another lane fills to run its items on this host and part machinery
+// (lanes/harness-mechanics). parts returns an item's parts from its frozen inputs and records their digests in inputs.
+// L1's own profile is the default, so L1's commands behave as before.
+export type Profile = {
+  items: Record<string, ItemDef>;
+  armSpecs: Record<string, string>;
+  tars: string[];
+  armManifests: string;
+  hostRoot: string;
+  ledgerPort: string;
+  seed: number;
+  taskSetup?: { file: string; sha256: string };
+  concurrent: number;
+  parts: (item: string, frozen: (f: { file: string; sha256: string }) => string, inputs: Record<string, string>) => PartPlan[];
+  /** A lane's rerun of sessions that ended with no successful response (rerun): skip names why an item takes none, and owed
+   * reads a finished part's pulled results, and its relaunch's, for the cells that owe one, each with its reason. */
+  attempt2?: {
+    skip: (item: string) => string | null;
+    owed: (runs: { part: string; dir: string }[]) => { owed: { task: string; arm: string; reason: string }[]; rects: Rect[] };
+  };
+  /** Extra provider key env names a host ships to its part VMs, beyond the item model's own route key, when the plan carries
+   * a part that needs a second metering proxy (harness mechanics' judge proxy). The host refuses if one is unset, exactly as
+   * it does for the route key, and each ships through the same route-key filter. L1 declares none. */
+  proxyKeys?: (plan: Plan) => string[];
+};
+function l1Parts(item: string, frozen: (f: { file: string; sha256: string }) => string, inputs: Record<string, string>): PartPlan[] {
+  let tb2Parts: string | undefined;
+  if (item === "tb2-opus") {
+    const f = process.env.TB2_PARTS ?? "", want = process.env.TB2_PARTS_SHA256 ?? "";
+    if (!f || !/^[0-9a-f]{64}$/.test(want)) usage("set TB2_PARTS to the twin's split file and TB2_PARTS_SHA256 to the digest Amendment C pins for it");
+    if (want !== L1.tb2PartsSha256) usage("TB2_PARTS_SHA256 is not the digest Amendment C pins for the twin's split, " + L1.tb2PartsSha256);
+    tb2Parts = readFileSync(f, "utf8");
+    if (sha256(tb2Parts) !== want) usage(f + " does not hash to TB2_PARTS_SHA256");
+    inputs["tb2-parts"] = want;
+  }
+  return itemParts(item, { fParts: item.startsWith("f1-") ? frozen(L1.fParts) : undefined, pilot: item.startsWith("pilot-") ? frozen(L1.pilot) : undefined, tb2Parts });
+}
+export const L1_PROFILE: Profile = { items: ITEMS, armSpecs: ARM_SPECS, tars: ["none", "before", "after", "off"], armManifests: L1.armManifests, hostRoot: L1.host.root, ledgerPort: L1.host.ledgerPort, seed: L1.seed, concurrent: L1.concurrent, parts: l1Parts };
+let P = L1_PROFILE;
+
+// The provider key env names a host ships to its part VMs: the item model's own route key first, then any extra proxy keys
+// the profile declares for this plan (harness mechanics' judge proxy), then UBICLOUD, deduped in that order. A non-judge
+// plan declares no extra key, so its secrets stay exactly the route key and UBICLOUD.
+export const hostSecretKeys = (routeKeyEnv: string, extraKeys: string[]): string[] => [...new Set([routeKeyEnv, ...extraKeys, "UBICLOUD_API_KEY"])];
 
 // --- Evidence: which cells started, and why a part ended -------------------------------------------------------------
 
@@ -269,7 +317,10 @@ const readJsonl = (p: string) => (existsSync(p) ? readFileSync(p, "utf8").split(
 // Why a launch ended. A cap stop (a refused reserve, the batch cap, a refused VM block) ends the item incomplete and is
 // never relaunched. A loss is the prereg's section 6 case: the part VM died or was reaped (its results could not be
 // pulled), the controller was lost, or the ledger service was (a reserve that failed rather than being refused, or the
-// tunnel dropping under vm-run.sh). Anything else that leaves cells unstarted is not a loss, and those cells are infra.
+// tunnel dropping under vm-run.sh). So is a part VM that never reached running (ubi-runner's wait in the controller log,
+// launch.sh exit 1) with no session or judge row for the part on the item's ledger (the Captain's ruling A, 2026-11-13): no
+// trial started, so its one relaunch runs every cell; a relaunch's or an attempt 2's own such failure is not. Anything else
+// that leaves cells unstarted is not a loss, and those cells are infra.
 // vm-run.sh's exit 4 (the ledger service unreachable through the tunnel before any pull or trial) is section 6's lost ledger
 // service (Amendment C), fail-closed: with no session record of the part on the item's ledger no trial started, so it is a
 // loss whose one relaunch runs every cell; with one, it is read as a part whose records were lost, with the ledger check
@@ -279,6 +330,7 @@ const readJsonl = (p: string) => (existsSync(p) ? readFileSync(p, "utf8").split(
 // refused VM block (vm-cap-stop) lived on the host; a VM block ($2.40) is under each item's session cap, so the check covers it.
 // After a lost host, recover's check counts every rebuilt reserve (sessions, VM block, host) as open before any rebuilt
 // settle, since rebuilt rows carry no times, and overstating the overlap can only turn a relaunch into a cap stop, never the reverse.
+export const NEVER_RAN_LOSS = "the part VM never reached running";
 export const EXIT4_LOSS = "vm-run.sh exited 4: the ledger service did not answer through the tunnel before any trial";
 export function classify(dir: string, launchExit: number | null, extra: { controllerLost?: boolean; hostLost?: boolean; ledger?: { rows: Row[]; since: string; sessionCapUsd: number; prefix?: string } } = {}) {
   const out = join(dir, "pulled/out");
@@ -302,6 +354,12 @@ export function classify(dir: string, launchExit: number | null, extra: { contro
   if (extra.hostLost) loss.push("the awake host was lost");
   const pulled = existsSync(join(out, "vm-run.exit")) && existsSync(join(dir, "pulled/jobs"));
   if ((!pulled || extra.hostLost) && extra.ledger && capStopPossible(extra.ledger.rows, extra.ledger.since, toMicros(extra.ledger.sessionCapUsd))) capStop.push((pulled ? "the awake host was lost with launch.sh's record of any refused VM block" : "the part's results were not pulled") + ", and the item's ledger came within one session cap ($" + extra.ledger.sessionCapUsd + ") of its cap while the part ran, so a cap stop can't be ruled out");
+  const neverRan = existsSync(join(dir, "vm-never-running")) ? readFileSync(join(dir, "vm-never-running"), "utf8").trim() : null;
+  const own = existsSync(join(dir, "l1-part.json")) ? readJson(join(dir, "l1-part.json")) : null;
+  const led = extra.ledger;
+  if (neverRan && launchExit === 1 && !pulled && !own?.relaunch_of && !own?.attempt_of && !capStop.length && led?.prefix
+    && !led.rows.some((r) => (r.id.startsWith(led.prefix!) && !/^vm(-\d+)?$/.test(r.id.slice(led.prefix!.length))) || r.id.startsWith("judge:" + led.prefix)))
+    loss.push(NEVER_RAN_LOSS + " (" + neverRan + "), and the item's ledger holds no session or judge row for this part, so no trial started");
   const unclassified: string[] = [];
   if (vmExit === "4" && !existsSync(join(out, "harbor.log"))) {
     const l = extra.ledger;
@@ -396,10 +454,11 @@ function sessionRecords(out: string, prefix: string, mirror: Row[]) {
 
 // The item's ledger before its run binds: the approval row at the item's cap, and no reserve or settle rows but the
 // awake hosts' (host-<n>).
-export function itemCheck(rows: Row[], item: string) {
+export function itemCheck(rows: Row[], item: string, capUsd = P.items[item]?.capUsd) {
   const approval = rows.find((r) => r.kind === "approval");
   if (!approval || approval.item !== item) refuse("the ledger has no approval row for " + item);
-  if (approval!.usd_micros !== toMicros(ITEMS[item]!.capUsd)) refuse(item + "'s cap on the ledger is $" + fromMicros(approval!.usd_micros) + ", not the $" + ITEMS[item]!.capUsd + " approvals/ records");
+  if (capUsd === undefined) refuse(item + " is not an item of this launcher");
+  if (approval!.usd_micros !== toMicros(capUsd!)) refuse(item + "'s cap on the ledger is $" + fromMicros(approval!.usd_micros) + ", not the $" + capUsd + " approvals/ records");
   if (rows.filter((r) => r.kind === "approval").length > 1) refuse(item + " holds a cap raise; L1 has no raises (prereg section 9)");
   const used = rows.filter((r) => (r.kind === "reserve" || r.kind === "settle") && !/^host-\d+$/.test(r.id));
   if (used.length) refuse(item + " already holds " + used.length + " reserve or settle rows; an item serves one run");
@@ -463,7 +522,7 @@ export function hostStatus(root: string) {
     const launchExit = existsSync(exitFile) ? Number(readFileSync(exitFile, "utf8").trim()) : null;
     const lock = join(work, part + ".salvage.lock"), failed = join(work, part + ".salvage-failed.json");
     parts[part] = { pid: c.pid, started_at: c.started_at, alive: launchExit === null && controllerAlive(c.pid, part), launch_exit: launchExit,
-      vm: /^vm: (\S+)$/m.exec(log)?.[1] ?? null, pulled: existsSync(join(work, part, "pulled/out/vm-run.exit")), salvage: existsSync(join(work, part + ".salvage.json")) ? readJson(join(work, part + ".salvage.json")) : null,
+      vm: /^vm: (\S+)$/m.exec(log)?.[1] ?? null, vm_never_running: /^ubi-runner: (VM did not reach running .*)$/m.exec(log)?.[1] ?? null, pulled: existsSync(join(work, part, "pulled/out/vm-run.exit")), salvage: existsSync(join(work, part + ".salvage.json")) ? readJson(join(work, part + ".salvage.json")) : null,
       salvage_failed: existsSync(failed) ? readJson(failed) : null, salvaging: existsSync(lock) && alive(Number(readFileSync(lock, "utf8").trim()), "host-salvage "),
       vm_cap_stop: existsSync(join(work, part, "vm-cap-stop")) ? readFileSync(join(work, part, "vm-cap-stop"), "utf8").trim() : null };
   }
@@ -473,7 +532,7 @@ export function hostStatus(root: string) {
 
 function hostBind(root: string, runId: string, work: string) {
   const env = hostEnv(root);
-  itemCheck(readRows(env.LEDGER!), env.ITEM!);
+  itemCheck(readRows(env.LEDGER!), env.ITEM!, env.CAP_USD ? Number(env.CAP_USD) : undefined);
   try {
     writeFileSync(env.LEDGER + ".bound", JSON.stringify({ item: env.ITEM, run_id: runId, work, at: new Date().toISOString() }) + "\n", { flag: "wx" });
   } catch (e) {
@@ -577,7 +636,7 @@ function ubi(args: string[], o: { input?: string; env?: Record<string, string> }
   return { code: p.exitCode ?? 1, out: p.stdout.toString(), err: p.stderr.toString() };
 }
 const must = (r: { code: number; out: string; err: string }, what: string) => { if (r.code !== 0) throw new Error(what + " failed (exit " + r.code + "): " + r.err.trim().split("\n").slice(-3).join(" | ")); return r.out; };
-const H = L1.host.root;
+let H = L1.host.root;
 const remoteL1 = (host: string, cmd: string) => ubi(["ssh", host, "export PATH=\"$HOME/.bun/bin:$PATH\"; " + cmd]);
 
 const hostsFile = (work: string) => join(work, "host/hosts.jsonl");
@@ -598,7 +657,7 @@ function usableHost(work: string, missing: string) {
 const recordHost = (work: string, row: Record<string, unknown>) => { mkdirSync(join(work, "host"), { recursive: true }); appendFileSync(hostsFile(work), JSON.stringify({ ...row, ts: new Date().toISOString() }) + "\n"); };
 const readPlan = (work: string): Plan => { if (!existsSync(join(work, "plan.json"))) usage(work + " has no plan.json; run prepare first"); return readJson(join(work, "plan.json")); };
 // The environment host.sh sources before it runs launch.sh, so these values reach launch.sh and its ubi-runner calls.
-export const hostEnvText = (item: string, capUsd: number, owner: string) => ["ITEM=" + item, "LEDGER=$HOME/" + H + "/ledger/" + item + ".jsonl", "LEDGER_PORT=" + (process.env.L1_HOST_LEDGER_PORT ?? L1.host.ledgerPort), "CAP_USD=" + capUsd, "VM_USD_PER_HOUR=" + L1.vm.usdPerHour, "VM_RESERVE_HOURS=" + L1.vm.reserveHours, "UBI_TTL_HOURS=" + L1.vm.ttlHours, "UBI_STORAGE=" + L1.vm.storageGib, "UBI_OWNER=" + owner].join("\n") + "\n";
+export const hostEnvText = (item: string, capUsd: number, owner: string) => ["ITEM=" + item, "LEDGER=$HOME/" + H + "/ledger/" + item + ".jsonl", "LEDGER_PORT=" + (process.env.L1_HOST_LEDGER_PORT ?? P.ledgerPort), "CAP_USD=" + capUsd, "VM_USD_PER_HOUR=" + L1.vm.usdPerHour, "VM_RESERVE_HOURS=" + L1.vm.reserveHours, "UBI_TTL_HOURS=" + L1.vm.ttlHours, "UBI_STORAGE=" + L1.vm.storageGib, "UBI_OWNER=" + owner].join("\n") + "\n";
 const mirrorPath = (work: string) => join(work, "host/ledger.jsonl");
 const ownerTag = (owner = process.env.UBI_OWNER ?? "") => owner.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 12);
 const bundlePath = (vm: string) => join(process.env.UBI_RECOVERY_DIR ?? "", ownerTag(), vm + ".bundle");
@@ -607,6 +666,7 @@ const pointerPath = (ledger: string) => ledger + ".host.json";
 // part VM confirmed gone with the part's records not pulled, with the part's session reserves still open (they never settle
 // on their own), and each part's one relaunch.
 const evidencePath = (work: string) => join(work, "relaunch-evidence.jsonl");
+const rerunPath = (work: string, part: string) => join(work, part + ".rerun.json");
 function recordVmDeath(work: string, part: string, prefix: string, vm: string, how: string, openIds: string[]) {
   if (readJsonl(evidencePath(work)).some((e) => e.event === "vm_death" && e.part === part && e.vm === vm)) return;
   const open = openIds.filter((id) => id.startsWith(prefix) && !/^vm(-\d+)?$/.test(id.slice(prefix.length)));
@@ -621,7 +681,7 @@ function ledgerEnv() {
 }
 
 function prepare(work: string, item: string) {
-  const def = ITEMS[item] ?? usage("unknown item " + item);
+  const def = P.items[item] ?? usage("unknown item " + item);
   if (existsSync(join(work, "plan.json"))) refuse(work + " already holds a plan");
   const ledger = ledgerEnv();
   if (existsSync(pointerPath(ledger)) || existsSync(ledger + ".bound")) refuse(ledger + " is on a host or bound to a run already");
@@ -630,24 +690,15 @@ function prepare(work: string, item: string) {
     const route = process.env.ROUTE_LEDGER || usage("set ROUTE_LEDGER to " + def.route.item + "'s ledger; " + item + " prepares only after its route check passed there");
     try { bindCheck(resolve(route), def.route, [join(LANEB, "config/proxy.json")]); } catch (e) { refuse((e as Error).message); }
   }
-  const arms = process.env.ARMS ?? usage("set ARMS to the directory holding the none, before, after and off arm tars");
+  const arms = process.env.ARMS ?? usage("set ARMS to the directory holding the " + P.tars.join(", ") + " arm tars");
   const inputs: Record<string, string> = {};
   const frozen = (f: { file: string; sha256: string }) => { const text = readFileSync(join(REPO, f.file), "utf8"); if (sha256(text) !== f.sha256) usage(f.file + " does not hash to the prereg's " + f.sha256); inputs[basename(f.file)] = f.sha256; return text; };
-  let tb2Parts: string | undefined;
-  if (item === "tb2-opus") {
-    const f = process.env.TB2_PARTS ?? "", want = process.env.TB2_PARTS_SHA256 ?? "";
-    if (!f || !/^[0-9a-f]{64}$/.test(want)) usage("set TB2_PARTS to the twin's split file and TB2_PARTS_SHA256 to the digest Amendment C pins for it");
-    if (want !== L1.tb2PartsSha256) usage("TB2_PARTS_SHA256 is not the digest Amendment C pins for the twin's split, " + L1.tb2PartsSha256);
-    tb2Parts = readFileSync(f, "utf8");
-    if (sha256(tb2Parts) !== want) usage(f + " does not hash to TB2_PARTS_SHA256");
-    inputs["tb2-parts"] = want;
-  }
-  const parts = itemParts(item, { fParts: item.startsWith("f1-") ? frozen(L1.fParts) : undefined, pilot: item.startsWith("pilot-") ? frozen(L1.pilot) : undefined, tb2Parts });
+  const parts = P.parts(item, frozen, inputs);
   mkdirSync(work, { recursive: true });
   for (const p of parts) preparePart(work, p, def, arms);
-  for (const tar of ["none", "before", "after", "off"]) { const m = join(LANEB, L1.armManifests, tar + ".json"); if (existsSync(m)) inputs["arm:" + tar] = sha256File(m); }
+  for (const tar of P.tars) { const m = join(LANEB, P.armManifests, tar + ".json"); if (existsSync(m)) inputs["arm:" + tar] = sha256File(m); }
   const git = (args: string[]) => Bun.spawnSync(["git", "-C", REPO, ...args]).stdout.toString().trim();
-  const plan: Plan = { item, run_id: randomBytes(8).toString("hex"), cap_usd: def.capUsd, model: def.model, task_set: def.taskSet, cells: def.cells, seed: L1.seed, concurrent: L1.concurrent, parts, inputs, git_head: git(["rev-parse", "HEAD"]), host_ttl_hours: hostTtlHours(parts.length) };
+  const plan: Plan = { item, run_id: randomBytes(8).toString("hex"), cap_usd: def.capUsd, model: def.model, task_set: def.taskSet, cells: def.cells, seed: P.seed, concurrent: P.concurrent, parts, inputs, git_head: git(["rev-parse", "HEAD"]), host_ttl_hours: hostTtlHours(parts.length) };
   writeJson(join(work, "plan.json"), plan);
   console.log("prepared " + work + ": " + item + ", " + parts.map((p) => p.name + " (" + [...plannedCells(p).values()].reduce((a, b) => a + b, 0) + " sessions)").join(", ") + "; run " + plan.run_id + ", unbound");
 }
@@ -656,9 +707,9 @@ function preparePart(work: string, p: PartPlan, def: ItemDef, arms: string) {
   const dir = join(work, p.name);
   const tasks = [...new Set(p.rects.flatMap((x) => x.tasks))];
   const labels = [...new Set(p.rects.flatMap((x) => x.arms))];
-  const env = { ...process.env, TASK_SET: def.taskSet, CELLS: def.cells, ARM_MANIFESTS: L1.armManifests, TASKS: tasks.join(",") };
+  const env = { ...process.env, TASK_SET: def.taskSet, CELLS: p.cells ?? def.cells, ARM_MANIFESTS: P.armManifests, TASKS: tasks.join(","), ...(P.taskSetup ? { TASK_SETUP: P.taskSetup.file, TASK_SETUP_SHA256: P.taskSetup.sha256 } : {}) };
   const attempts = String(Math.max(...p.rects.map((x) => x.attempts)));
-  const r = Bun.spawnSync([process.execPath, process.env.L1_PREPARE_RUN ?? join(LANEB, "runner/prepare-run.ts"), dir, p.name.replace(/[^a-z0-9-]/g, "-"), def.model, labels.map((a) => ARM_SPECS[a]!).join(","), arms, attempts, String(L1.concurrent)], { env: env as Record<string, string>, stdout: "inherit", stderr: "inherit" });
+  const r = Bun.spawnSync([process.execPath, process.env.L1_PREPARE_RUN ?? join(LANEB, "runner/prepare-run.ts"), dir, p.name.replace(/[^a-z0-9-]/g, "-"), p.model ?? def.model, labels.map((a) => P.armSpecs[a]!).join(","), arms, attempts, String(P.concurrent)], { env: env as Record<string, string>, stdout: "inherit", stderr: "inherit" });
   if (r.exitCode !== 0) throw new Error("prepare-run for " + p.name + " exited " + r.exitCode);
   // The proxy can't tell the route hook's line from a copy in the task prompt (runner/proxy.ts routeMark), so a task whose
   // instruction holds it never runs. The work tree's CLAUDE.md and the rest of the context Claude Code loads by itself sit in
@@ -728,6 +779,8 @@ function hostUp(work: string) {
   const keyEnv: string | undefined = proxy.routes?.[proxy.models?.[plan.model]?.route]?.key_env;
   if (!keyEnv) refuse("config/proxy.json has no route for " + plan.model);
   if (!process.env[keyEnv!]) usage("set " + keyEnv + ", the key for " + plan.model + "'s route in config/proxy.json; the host passes it to each part VM's metering proxy");
+  const extraKeys = P.proxyKeys?.(plan) ?? [];
+  for (const k of extraKeys) if (!process.env[k]) usage("set " + k + ", a proxy key " + plan.item + " needs for its judge parts; the host passes it to each part VM's judge metering proxy");
   if (process.env.UBI_RECOVERY_KEY) refuse("UBI_RECOVERY_KEY is set, but the host seals part-VM recovery bundles with UBICLOUD_API_KEY, so recover could not open them; unset it");
   runner();
   const n = new Set(hosts(work).map((r) => r.n)).size + 1;
@@ -757,7 +810,7 @@ function hostUp(work: string) {
     rmSync(bin, { recursive: true, force: true });
     const shaOut = must(remoteL1(name, "bash " + H + "/laneb/l1/host-bootstrap.sh >&2 && chmod +x " + H + "/bin/ubi-runner.sh && sha256sum " + H + "/bin/ubi-runner.sh"), "bootstrapping the host");
     if (!shaOut.includes(process.env.UBI_RUNNER_SHA256!)) throw new Error("the host's ubi-runner copy does not hash to UBI_RUNNER_SHA256");
-    const secrets = [keyEnv!, "UBICLOUD_API_KEY"].map((k) => k + "=" + (process.env[k] ?? (k === "UBICLOUD_API_KEY" ? process.env.UBICLOUD_API_TOKEN ?? "" : ""))).join("\n") + "\n";
+    const secrets = hostSecretKeys(keyEnv!, extraKeys).map((k) => k + "=" + (process.env[k] ?? (k === "UBICLOUD_API_KEY" ? process.env.UBICLOUD_API_TOKEN ?? "" : ""))).join("\n") + "\n";
     must(ubi(["ssh", name, "umask 077; cat > ~/.l1-secrets"], { input: secrets }), "writing the host's secrets file");
     must(ubi(["ssh", name, "mkdir -p " + H + "/work " + H + "/recovery " + H + "/ubi-state && cat > " + H + "/host.env.in && sed \"s#\\$HOME#$HOME#\" " + H + "/host.env.in > " + H + "/host.env"], { input: hostEnvText(plan.item, plan.cap_usd, process.env.UBI_OWNER ?? "") }), "writing host.env");
     const stage = mkdtempSync(join(tmpdir(), "l1-ledger-"));
@@ -778,7 +831,8 @@ function hostUp(work: string) {
 
 // Every part in run order, each followed by its relaunch once one is prepared.
 function partState(work: string, plan: Plan) {
-  const all = plan.parts.flatMap((p) => [p, ...(existsSync(join(work, p.name + "-relaunch", "l1-part.json")) ? [readJson(join(work, p.name + "-relaunch", "l1-part.json")) as PartPlan] : [])]);
+  const after = (p: PartPlan) => [p.name + "-relaunch", p.name + "-a2"].filter((n) => existsSync(join(work, n, "l1-part.json"))).map((n) => readJson(join(work, n, "l1-part.json")) as PartPlan);
+  const all = plan.parts.flatMap((p) => [p, ...after(p)]);
   return all.map((p) => ({ part: p, launched: existsSync(join(work, p.name + ".launch.json")), result: existsSync(join(work, p.name + ".result.json")) ? readJson(join(work, p.name + ".result.json")) : null, relaunch: existsSync(join(work, p.name + ".relaunch.json")) ? readJson(join(work, p.name + ".relaunch.json")) : null }));
 }
 
@@ -800,6 +854,13 @@ function itemEnded(work: string, plan: Plan): string | null {
 function afterExit4(states: ReturnType<typeof partState>, s: ReturnType<typeof partState>[number]) {
   if (!s.part.relaunch_of || !s.result?.loss?.length) return false;
   return !!states.find((x) => x.part.name === s.part.relaunch_of)?.result?.loss?.some((l: string) => l.startsWith(EXIT4_LOSS));
+}
+// A part's attempt 2 check (rerun) is due once it has finished, and its relaunch after a loss, until rerun records it. A
+// relaunch or an attempt 2 owes none of its own, and neither does an item the profile skips. Callers check that s finished.
+function rerunDue(work: string, plan: Plan, s: ReturnType<typeof partState>[number]) {
+  if (!P.attempt2 || P.attempt2.skip(plan.item) !== null || s.part.attempt_of) return null;
+  const name = s.part.relaunch_of ?? (s.relaunch?.launched ? null : s.part.name);
+  return name && !existsSync(rerunPath(work, name)) ? name : null;
 }
 function refuseEnded(work: string, plan: Plan) {
   const ended = itemEnded(work, plan);
@@ -845,7 +906,7 @@ function launch(work: string, partName: string) {
   const host = usableHost(work, "no host is up; run host-up");
   let states = partState(work, plan);
   const i = states.findIndex((s) => s.part.name === partName);
-  if (i < 0) usage(partName + " is not a part of " + plan.item + " (" + plan.parts.map((p) => p.name).join(", ") + ") or a prepared relaunch");
+  if (i < 0) usage(partName + " is not a part of " + plan.item + " (" + plan.parts.map((p) => p.name).join(", ") + ") or a prepared relaunch or attempt 2");
   if (states[i]!.launched) refuse(partName + " was launched already");
   // An earlier part launch.sh kept at exit 7 (a relaunch has no relaunch of its own) still holds a VM with its results:
   // salvage it and finish it again from what the salvage pulled before the next part starts.
@@ -862,7 +923,9 @@ function launch(work: string, partName: string) {
   }
   for (const s of states.slice(0, i)) {
     if (!s.launched || !s.result) refuse(s.part.name + " has not finished; parts run one after another");
-    if (s.result.loss.length && !s.part.relaunch_of && !s.relaunch) refuse(s.part.name + " ended with a loss (" + s.result.loss[0] + "); run relaunch for it first");
+    if (s.result.loss.length && !s.part.relaunch_of && !s.part.attempt_of && !s.relaunch) refuse(s.part.name + " ended with a loss (" + s.result.loss[0] + "); run relaunch for it first");
+    const due = rerunDue(work, plan, s);
+    if (due) refuse(due + " has not had its attempt 2 check; run rerun --part " + due + " first");
   }
   launchDir(work, plan, host, states[i]!.part);
 }
@@ -872,8 +935,9 @@ function finishPart(work: string, host: any, st: any, name: string, plan: Plan) 
   const dir = join(work, name);
   if (s.pulled) must(ubi(["pull", host.name, H + "/work/" + name + "/pulled", dir]), "pulling " + name + "'s results");
   if (s.vm_cap_stop) { mkdirSync(dir, { recursive: true }); writeFileSync(join(dir, "vm-cap-stop"), s.vm_cap_stop + "\n"); }
+  if (s.vm_never_running) { mkdirSync(dir, { recursive: true }); writeFileSync(join(dir, "vm-never-running"), s.vm_never_running + "\n"); }
   const launched = readJson(join(work, name + ".launch.json"));
-  const ledger = s.launch_exit === 7 && !s.salvage ? undefined : { rows: readRows(mirrorPath(work)), since: launched.at, sessionCapUsd: ITEMS[plan.item]!.allowanceUsd, prefix: launched.prefix };
+  const ledger = s.launch_exit === 7 && !s.salvage ? undefined : { rows: readRows(mirrorPath(work)), since: launched.at, sessionCapUsd: P.items[plan.item]!.allowanceUsd, prefix: launched.prefix };
   const result = { ...classify(dir, s.launch_exit, { controllerLost: s.launch_exit === null, ledger }), salvage: s.salvage, at: new Date().toISOString() };
   writeJson(join(work, name + ".result.json"), result);
   if (s.salvage?.vm && s.salvage.vm_down && !s.salvage.pulled) recordVmDeath(work, name, readJson(join(work, name + ".launch.json")).prefix, s.salvage.vm, "ubi-runner down by the salvage on host " + host.name + ", which could not pull the part's records", totals(readRows(mirrorPath(work))).openIds);
@@ -938,7 +1002,9 @@ function next(work: string, plan: Plan): string {
     if (s.result.cap_stop.length) return "host-down: " + s.part.name + " ended at a cap stop, so " + plan.item + " ends incomplete and goes to the Captain";
     if (s.result.unclassified?.length) return "host-down: " + s.part.name + " ended in a way the prereg does not class, so " + plan.item + " stops and goes to the Captain";
     if (afterExit4(states, s)) return "host-down: " + s.part.name + " ended with a loss after " + s.part.relaunch_of + "'s one relaunch for vm-run.sh's exit 4, so " + plan.item + " ends incomplete and goes to the Captain";
-    if (s.result.loss.length && !s.part.relaunch_of && !s.relaunch) return "relaunch --part " + s.part.name;
+    if (s.result.loss.length && !s.part.relaunch_of && !s.part.attempt_of && !s.relaunch) return "relaunch --part " + s.part.name;
+    const due = rerunDue(work, plan, s);
+    if (due) return "rerun --part " + due + " (section 13's attempt 2)";
   }
   return "host-down (every part has finished)";
 }
@@ -960,8 +1026,9 @@ function salvageOnHost(host: any, partName: string, prefix: string, h: any, agai
 
 function relaunch(work: string, partName: string) {
   const plan = readPlan(work);
-  const part = plan.parts.find((p) => p.name === partName) ?? usage(partName + " is not a part of " + plan.item + "; a relaunch is never relaunched");
-  if (existsSync(join(work, partName + ".relaunch.json")) || readJsonl(evidencePath(work)).some((e) => e.event === "relaunch" && e.part === partName)) refuse(partName + " was relaunched already; the prereg allows one relaunch");
+  const part = plan.parts.find((p) => p.name === partName) ?? partState(work, plan).find((s) => s.part.attempt_of && s.part.name === partName)?.part ?? usage(partName + " is not a part of " + plan.item + "; a relaunch is never relaunched");
+  const a2 = !!part.attempt_of;
+  if (!a2 && (existsSync(join(work, partName + ".relaunch.json")) || readJsonl(evidencePath(work)).some((e) => e.event === "relaunch" && e.part === partName))) refuse(partName + " was relaunched already; the prereg allows one relaunch");
   refuseEnded(work, plan);
   const host = usableHost(work, "no host is up; run host-up (after recover, if the host was lost)");
   let st = status(host) ?? refuse("host " + host.name + " did not answer; run attach");
@@ -970,6 +1037,7 @@ function relaunch(work: string, partName: string) {
   const earlier = existsSync(join(work, partName + ".result.json")) ? readJson(join(work, partName + ".result.json")) : null;
   if (!h && earlier?.launch_exit === 7 && !earlier.salvage) refuse(noRecord(partName, host));
   const salvaged = h && (h.launch_exit === null || h.launch_exit === 7);
+  if (a2 && !salvaged) usage(partName + " is an attempt 2, and an attempt 2 is never relaunched; relaunch only salvages one whose controller was lost");
   if (salvaged && !h.salvage) st = salvageOnHost(host, partName, part.prefix, h, "relaunch");
   mirror(work, host);
   // A result written before the salvage is stale: what the salvage pulled may hold a cap stop the first pull missed.
@@ -979,6 +1047,7 @@ function relaunch(work: string, partName: string) {
     finishPart(work, host, st, partName, plan);
   }
   const result = readJson(join(work, partName + ".result.json"));
+  if (a2) { console.log(partName + ": salvaged and finished" + (result.loss.length ? " (LOSS: " + result.loss.join("; ") + ")" : "") + "; an attempt 2 is never relaunched, so its cells that never started are missing. NEXT: " + next(work, plan)); return; }
   if (result.cap_stop.length) refuse(partName + " ended at a cap stop (" + result.cap_stop[0] + "); a cap stop is never relaunched");
   if (result.unclassified?.length) refuse(partName + " ended in a way the prereg does not class (" + result.unclassified[0] + "); it is never relaunched");
   if (!result.loss.length) refuse(partName + " ended with no loss; its unstarted cells are infra, never relaunched");
@@ -989,11 +1058,38 @@ function relaunch(work: string, partName: string) {
   const record = { part: partName, loss: result.loss, never_started: cells.neverStarted, strays: cells.strays, rects, at: new Date().toISOString() };
   const evidence = JSON.stringify({ event: "relaunch", part: partName, relaunch: rects.length ? partName + "-relaunch" : null, host: host.name, loss: result.loss, vm_deaths: readJsonl(evidencePath(work)).filter((e) => e.event === "vm_death" && e.part === partName).map((e) => e.vm), replicates: cells.neverStarted.reduce((n, c) => n + c.replicates, 0), at: record.at }) + "\n";
   if (!rects.length) { writeJson(join(work, partName + ".relaunch.json"), { ...record, launched: false }); appendFileSync(evidencePath(work), evidence); console.log(partName + ": every planned cell started; nothing to relaunch"); return; }
-  const rp: PartPlan = { name: partName + "-relaunch", prefix: prefixOf(plan.item, partName + "-relaunch"), rects, relaunch_of: partName };
-  preparePart(work, rp, ITEMS[plan.item]!, process.env.ARMS ?? usage("set ARMS to the arm tar directory"));
+  const rp: PartPlan = { name: partName + "-relaunch", prefix: prefixOf(plan.item, partName + "-relaunch"), rects, relaunch_of: partName, ...(part.model ? { model: part.model, cells: part.cells } : {}) };
+  preparePart(work, rp, P.items[plan.item]!, process.env.ARMS ?? usage("set ARMS to the arm tar directory"));
   writeJson(join(work, partName + ".relaunch.json"), { ...record, launched: true });
   appendFileSync(evidencePath(work), evidence);
   launchDir(work, plan, host, rp);
+}
+
+// Section 13's attempt 2, for a lane whose profile has one. Once a part has finished, and its relaunch after a loss, the
+// profile reads their pulled results for the cells whose session ended with no successful response, and each runs once
+// more in <part>-a2: rerun prepares that part (no host, no spend) and records <part>.rerun.json, with nothing owed recorded
+// too, and launch --part <part>-a2 starts it before the next part. A relaunch or an attempt 2 is never rerun, an attempt 2
+// is never relaunched (relaunch only salvages it after a lost controller, and its cells that never started are missing),
+// and an item that has ended takes none.
+function rerun(work: string, partName: string) {
+  const plan = readPlan(work);
+  const a2 = P.attempt2 ?? usage("this lane has no attempt 2");
+  const skip = a2.skip(plan.item);
+  if (skip) usage(skip);
+  const part = plan.parts.find((p) => p.name === partName) ?? usage(partName + " is not a part of " + plan.item + "; a relaunch or an attempt 2 is never rerun");
+  if (existsSync(rerunPath(work, partName))) refuse(partName + " had its attempt 2 check already (" + partName + ".rerun.json); section 13 allows one attempt 2");
+  refuseEnded(work, plan);
+  const own = partState(work, plan).filter((s) => s.part.name === partName || s.part.relaunch_of === partName);
+  for (const s of own) if (!s.launched || !s.result) refuse(s.part.name + " has not finished; run attach");
+  if (own[0]!.result.loss.length && !own[0]!.relaunch) refuse(partName + " ended with a loss (" + own[0]!.result.loss[0] + "); run relaunch for it first");
+  const { owed, rects } = a2.owed(own.map((s) => ({ part: s.part.name, dir: join(work, s.part.name, "pulled") })));
+  const name = partName + "-a2", record = { part: partName, owed, rects, at: new Date().toISOString() };
+  if (!rects.length) { writeJson(rerunPath(work, partName), { ...record, prepared: null }); console.log(partName + ": no cell owes section 13's attempt 2. NEXT: " + next(work, plan)); return; }
+  if (existsSync(join(work, name + ".launch.json"))) refuse(name + " was launched already");
+  rmSync(join(work, name), { recursive: true, force: true });
+  preparePart(work, { name, prefix: prefixOf(plan.item, name), rects, attempt_of: partName, ...(part.model ? { model: part.model, cells: part.cells } : {}) }, P.items[plan.item]!, process.env.ARMS ?? usage("set ARMS to the arm tar directory"));
+  writeJson(rerunPath(work, partName), { ...record, prepared: name });
+  console.log(partName + ": " + owed.length + (owed.length === 1 ? " session owes" : " sessions owe") + " section 13's attempt 2 (" + owed.map((c) => c.task + " " + c.arm + ": " + c.reason).join("; ") + "); prepared " + name + ". NEXT: launch --part " + name);
 }
 
 function recover(work: string) {
@@ -1026,6 +1122,11 @@ function recover(work: string) {
   // Every part whose VM may still run under the lost host: the running part, and each part launch.sh kept at exit 7 that no
   // salvage reached. Each one's VM is stopped, pulled and destroyed, and the part is classified again with the ledger check.
   const held = states.filter((s) => s === running || (s.launched && s.result?.launch_exit === 7 && !s.result.salvage));
+  // A judge part (an agent with judge_backend in its job files, the signal vm-run.sh starts the judge proxy on) also meters
+  // its hook calls on the judge proxy, under judge:<part prefix> on the host's ledger. Those rows after the last mirror are
+  // in no session record, so rebuilding from the records would drop judge spend: refuse before anything is destroyed.
+  const judged = held.find((s) => existsSync(join(work, s.part.name)) && readdirSync(join(work, s.part.name)).some((f) => /^job(-\d+)?\.json$/.test(f) && (readJson(join(work, s.part.name, f)).agents ?? []).some((a: any) => a?.kwargs?.judge_backend)));
+  if (judged) refuse(judged.part.name + " has judge arms: its judge:" + judged.part.prefix + " ledger rows after the last mirror lived only on the lost host and are in no session record, so recover can't rebuild them; nothing was destroyed. Settle it by hand: lanes/harness-mechanics/README.md, \"Live judge wiring\"");
   const claimed = new Set([...hosts(work).map((r) => r.name), ...states.filter((s) => s.launched).map((s) => readJson(join(work, s.part.name + ".launch.json")).vm), ...done.filter((d) => d.part).map((d) => d.vm)]);
   const parts = held.map((s) => {
     const l = readJson(join(work, s.part.name + ".launch.json"));
@@ -1094,7 +1195,7 @@ function recover(work: string) {
   recordHost(work, { event: "lost", n: host.n, name: host.name, down_confirmed_at: goneAt, rows_added: add.length });
   const checked = [...rows, ...add.filter((x) => x.kind === "reserve"), ...add.filter((x) => x.kind !== "reserve")];
   for (const p of parts) {
-    const ledgerCheck = { rows: checked, since: p.l.at, sessionCapUsd: ITEMS[plan.item]!.allowanceUsd, prefix: p.l.prefix };
+    const ledgerCheck = { rows: checked, since: p.l.at, sessionCapUsd: P.items[plan.item]!.allowanceUsd, prefix: p.l.prefix };
     const salvage = p.s === running ? {} : { salvage: { by: "recover", vm: p.vm, vm_gone: p.how === "RECOVER_GONE", pulled: p.pulled, vm_down: !!p.vm, at } };
     writeJson(join(work, p.name + ".result.json"), { ...classify(join(work, p.name), p.s === running ? null : 7, { hostLost: true, ledger: ledgerCheck }), ...salvage, at });
   }
@@ -1168,8 +1269,11 @@ function hostDown(work: string) {
   console.log("host " + host.name + " is gone after " + hours.toFixed(2) + " h; the ledger is back at " + ledger);
 }
 
-if (import.meta.main) {
-  const [cmd, a, ...rest] = Bun.argv.slice(2);
+// The command line, under a profile: L1's by default, or another lane's (lanes/harness-mechanics/cli.ts).
+export function l1Main(argv: string[], profile: Profile = L1_PROFILE) {
+  P = profile;
+  H = profile.hostRoot;
+  const [cmd, a, ...rest] = argv;
   const opt = (k: string) => { const i = rest.indexOf("--" + k); return i >= 0 ? rest[i + 1] : undefined; };
   try {
     if (cmd === "host-status") console.log(JSON.stringify(hostStatus(resolve(a!))));
@@ -1177,13 +1281,14 @@ if (import.meta.main) {
     else if (cmd === "host-salvage") hostSalvageRecorded(resolve(a!), rest[0]!, rest[1]!);
     else if (cmd === "host-digest") console.log(JSON.stringify(treeDigest(join(resolve(a!), "work", rest[0]!, "pulled"))));
     else {
-      if (!a) usage("usage: l1.ts prepare|host-up|launch|attach|relaunch|recover|host-down <work> [--item <item>] [--part <part>]");
+      if (!a) usage("usage: l1.ts prepare|host-up|launch|attach|relaunch|rerun|recover|host-down <work> [--item <item>] [--part <part>]");
       const work = resolve(a!);
       if (cmd === "prepare") prepare(work, opt("item") ?? usage("prepare needs --item"));
       else if (cmd === "host-up") hostUp(work);
       else if (cmd === "launch") launch(work, opt("part") ?? usage("launch needs --part"));
       else if (cmd === "attach") attach(work);
       else if (cmd === "relaunch") relaunch(work, opt("part") ?? usage("relaunch needs --part"));
+      else if (cmd === "rerun") rerun(work, opt("part") ?? usage("rerun needs --part"));
       else if (cmd === "recover") recover(work);
       else if (cmd === "host-down") hostDown(work);
       else usage("unknown command " + cmd);
@@ -1191,9 +1296,11 @@ if (import.meta.main) {
   } catch (e) {
     const m = (e as Error).message;
     console.error(m.startsWith("E_") ? m : (e instanceof Refused ? "E_USAGE refused: " : "E_INTERNAL ") + m);
-    process.exit(m.startsWith("E_USAGE") ? 2 : e instanceof Refused ? 3 : 1);
+    process.exit(m.startsWith("E_USAGE") ? 2 : e instanceof Refused ? 3 : /^E_(?!INTERNAL)/.test(m) ? 2 : 1);
   }
 }
+
+if (import.meta.main) l1Main(Bun.argv.slice(2));
 
 // A move that also works across filesystems (a drive folder and ~/.capy/work).
 function moveFile(from: string, to: string) {

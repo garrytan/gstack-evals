@@ -3,7 +3,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFile
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { Ledger, readRows, toMicros } from "../runner/ledger.ts";
-import { cellKey, classify, EXIT4_LOSS, ITEMS, L1_ROUTE, plannedCells, sha256, trialTasksFrom } from "../l1/l1.ts";
+import { cellKey, classify, EXIT4_LOSS, ITEMS, L1_ROUTE, NEVER_RAN_LOSS, plannedCells, sha256, trialName, trialTasksFrom } from "../l1/l1.ts";
 
 // l1.ts end to end on a fake awake host. fixtures/l1/ubi plays ubi-runner: each VM is a directory under UBI_FAKE, and ssh
 // runs a command in it with HOME set to it, so the host runs the real host.sh, launch.sh and ledger service. fixtures/l1/ssh
@@ -21,9 +21,9 @@ function freePort() {
   return port;
 }
 
-type Rig = { root: string; fake: string; work: string; ledger: string; env: Record<string, string> };
+type Rig = { root: string; fake: string; work: string; ledger: string; env: Record<string, string>; entry: string };
 const rigs: Rig[] = [];
-function rig(item: string, o: { cap?: number; preReserve?: number } = {}): Rig {
+function rig(item: string, o: { cap?: number; preReserve?: number; entry?: string } = {}): Rig {
   const root = mkdtempSync(join(tmpdir(), "l1-host-"));
   const fake = join(root, "vms"), recovery = join(root, "recovery"), state = join(root, "agent-state"), arms = join(root, "arms");
   for (const d of [fake, recovery, state, arms, join(root, "ledgers")]) mkdirSync(d, { recursive: true });
@@ -40,7 +40,7 @@ function rig(item: string, o: { cap?: number; preReserve?: number } = {}): Rig {
     L1_PREPARE_RUN: join(FIX, "fake-prepare-run.ts"), L1_HOST_LEDGER_PORT: String(freePort()), L1_BUNDLE_WAIT_SEC: "30", L1_POLL_SEC: "0.2", L1_SALVAGE_WAIT_SEC: "30", PULL_RETRY_SEC: "0",
     ANTHROPIC_API_KEY: "test-not-a-key", OPENROUTER_API_KEY: "test-not-a-key", UBICLOUD_API_KEY: "test-not-a-key",
   };
-  const r = { root, fake, work: join(root, "work"), ledger, env };
+  const r = { root, fake, work: join(root, "work"), ledger, env, entry: o.entry ?? L1TS };
   rigs.push(r);
   return r;
 }
@@ -61,7 +61,7 @@ afterEach(() => {
 });
 
 function l1(r: Rig, args: string[], extra: Record<string, string> = {}) {
-  const p = Bun.spawnSync([process.execPath, L1TS, ...args], { env: { ...r.env, ...extra }, stdout: "pipe", stderr: "pipe" });
+  const p = Bun.spawnSync([process.execPath, r.entry, ...args], { env: { ...r.env, ...extra }, stdout: "pipe", stderr: "pipe" });
   return { code: p.exitCode, out: p.stdout.toString(), err: p.stderr.toString() };
 }
 async function until(f: () => boolean, ms = 60_000) {
@@ -1155,4 +1155,178 @@ describe("classify: exit 4's second guard names the part's VM blocks exactly (th
   test("an id that only starts like a VM block counts as a session record", () => {
     for (const id of ["vm-2x", "vmx"]) expect(exit4("vm", id).loss).toEqual([lostEvidence]);
   });
+});
+
+describe("section 13's attempt 2 on the launcher, under a profile that has one (fixtures/l1/l1-a2.ts)", () => {
+  const A2 = join(FIX, "l1-a2.ts");
+  const rerunJson = (r: Rig, part: string) => JSON.parse(readFileSync(join(r.work, part + ".rerun.json"), "utf8"));
+  // The cells of the sessions at these 0-based positions in a part's proxy-sessions.jsonl.
+  const cellsAt = (r: Rig, part: string, at: number[]) => {
+    const tasks = trialTasksFrom(join(r.work, part, "pulled/jobs"));
+    const s = readFileSync(join(r.work, part, "pulled/out/proxy-sessions.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    return at.map((i) => cellKey(tasks.get(trialName(s[i].trial))!, s[i].meta.arm));
+  };
+  const owedKeys = (r: Rig, part: string) => rerunJson(r, part).owed.map((c: any) => cellKey(c.task, c.arm)).sort();
+
+  test("the sessions that closed with no response rerun once as <part>-a2 after the part finishes; a second failure gets no third run, and an attempt 2 is never rerun or relaunched", async () => {
+    const r = rig("pilot-opus", { entry: A2 });
+    expect(l1(r, ["prepare", r.work, "--item", "pilot-opus"]).code).toBe(0);
+    const skip = l1(r, ["rerun", r.work, "--part", "pilot"], { A2_SKIP: "pilot-opus" });
+    expect([skip.code, skip.err]).toEqual([2, expect.stringContaining("pilot-opus takes no attempt 2 in this test")]);
+    const early = l1(r, ["rerun", r.work, "--part", "pilot"]);
+    expect([early.code, early.err]).toEqual([3, expect.stringContaining("pilot has not finished")]);
+    expect(l1(r, ["host-up", r.work]).code).toBe(0);
+    expect(l1(r, ["launch", r.work, "--part", "pilot"], { NO_RESPONSE_VM: "vm-2", NO_RESPONSE_AT: "3,10" }).code).toBe(0);
+    const a = await attachUntil(r, /NEXT: rerun --part pilot /);
+    expect(a.out).toContain("pilot: finished, launch exit 0\n");
+    const owed = cellsAt(r, "pilot", [3, 10]).sort();
+    const notYet = l1(r, ["launch", r.work, "--part", "pilot-a2"]);
+    expect([notYet.code, notYet.err]).toEqual([2, expect.stringContaining("not a part of pilot-opus")]);
+    const re = l1(r, ["rerun", r.work, "--part", "pilot"]);
+    expect([re.code, re.out]).toEqual([0, expect.stringContaining("pilot: 2 sessions owe section 13's attempt 2")]);
+    expect(re.out).toContain("NEXT: launch --part pilot-a2");
+    expect(rerunJson(r, "pilot")).toMatchObject({ part: "pilot", prepared: "pilot-a2" });
+    expect(owedKeys(r, "pilot")).toEqual(owed);
+    const twice = l1(r, ["rerun", r.work, "--part", "pilot"]);
+    expect([twice.code, twice.err]).toEqual([3, expect.stringContaining("section 13 allows one attempt 2")]);
+    expect(l1(r, ["attach", r.work]).out).toContain("NEXT: launch --part pilot-a2");
+    expect(l1(r, ["launch", r.work, "--part", "pilot-a2"], { NO_RESPONSE_AT: "0" }).code).toBe(0);
+    await attachUntil(r, /NEXT: host-down \(every part has finished\)/);
+    expect(ranCells(join(r.work, "pilot-a2")).sort()).toEqual(owed);
+    for (const cmd of ["rerun", "relaunch"]) {
+      const x = l1(r, [cmd, r.work, "--part", "pilot-a2"]);
+      expect([x.code, x.err]).toEqual([2, expect.stringContaining("an attempt 2 is never")]);
+    }
+    expect(l1(r, ["host-down", r.work]).code).toBe(0);
+    const rows = readRows(r.ledger);
+    expect(rows.filter((x) => x.kind === "reserve" && x.id.startsWith("pilot-opus/pilot-a2/s"))).toHaveLength(2);
+    expect(openIds(r, "pilot-opus")).toEqual([]);
+  }, 240_000);
+
+  test("the next part waits for the attempt 2 check and for <part>-a2 to finish; a part that owes none records that and moves on", async () => {
+    const r = rig("f1-opus", { entry: A2 });
+    expect(l1(r, ["prepare", r.work, "--item", "f1-opus"]).code).toBe(0);
+    expect(l1(r, ["host-up", r.work]).code).toBe(0);
+    expect(l1(r, ["launch", r.work, "--part", "f1-1"], { NO_RESPONSE_VM: "vm-2", NO_RESPONSE_AT: "5" }).code).toBe(0);
+    await attachUntil(r, /NEXT: rerun --part f1-1 /);
+    const before = l1(r, ["launch", r.work, "--part", "f1-2"]);
+    expect([before.code, before.err]).toEqual([3, expect.stringContaining("run rerun --part f1-1 first")]);
+    const re = l1(r, ["rerun", r.work, "--part", "f1-1"]);
+    expect([re.code, re.out]).toEqual([0, expect.stringContaining("f1-1: 1 session owes section 13's attempt 2")]);
+    expect(owedKeys(r, "f1-1")).toEqual(cellsAt(r, "f1-1", [5]));
+    const mid = l1(r, ["launch", r.work, "--part", "f1-2"]);
+    expect([mid.code, mid.err]).toEqual([3, expect.stringContaining("f1-1-a2 has not finished")]);
+    expect(l1(r, ["launch", r.work, "--part", "f1-1-a2"]).code).toBe(0);
+    await attachUntil(r, /NEXT: launch --part f1-2/);
+    expect(ranCells(join(r.work, "f1-1-a2"))).toEqual(cellsAt(r, "f1-1", [5]));
+    expect(l1(r, ["launch", r.work, "--part", "f1-2"]).code).toBe(0);
+    await attachUntil(r, /NEXT: rerun --part f1-2 /);
+    const none = l1(r, ["rerun", r.work, "--part", "f1-2"]);
+    expect([none.code, none.out]).toEqual([0, expect.stringContaining("f1-2: no cell owes section 13's attempt 2")]);
+    expect(rerunJson(r, "f1-2")).toMatchObject({ part: "f1-2", owed: [], prepared: null });
+    expect(existsSync(join(r.work, "f1-2-a2"))).toBe(false);
+    expect(l1(r, ["attach", r.work]).out).toContain("NEXT: launch --part f1-3");
+    expect(l1(r, ["host-down", r.work]).code).toBe(0);
+    expect(openIds(r, "f1-opus")).toEqual([]);
+  }, 240_000);
+
+  test("after a loss, attempt 2 waits for the relaunch and reads the part and its relaunch together; a lost attempt 2 is only salvaged", async () => {
+    const r = rig("pilot-opus", { entry: A2 });
+    expect(l1(r, ["prepare", r.work, "--item", "pilot-opus"]).code).toBe(0);
+    expect(l1(r, ["host-up", r.work]).code).toBe(0);
+    expect(l1(r, ["launch", r.work, "--part", "pilot"], { PAUSE_VM: "vm-2", PAUSE_AT: "5", NO_RESPONSE_VM: "vm-2", NO_RESPONSE_AT: "1" }).code).toBe(0);
+    await until(() => existsSync(join(r.fake, "vm-2/paused")));
+    killController(r, "host-1", "pilot");
+    await attachUntil(r, /pilot: CONTROLLER_LOST/);
+    const lost = l1(r, ["rerun", r.work, "--part", "pilot"]);
+    expect([lost.code, lost.err]).toEqual([3, expect.stringContaining("pilot has not finished")]);
+    expect(l1(r, ["relaunch", r.work, "--part", "pilot"], { NO_RESPONSE_VM: "vm-3", NO_RESPONSE_AT: "0" }).code).toBe(0);
+    const during = l1(r, ["rerun", r.work, "--part", "pilot"]);
+    expect([during.code, during.err]).toEqual([3, expect.stringContaining("pilot-relaunch has not finished")]);
+    await attachUntil(r, /NEXT: rerun --part pilot /);
+    const re = l1(r, ["rerun", r.work, "--part", "pilot"]);
+    expect([re.code, re.out]).toEqual([0, expect.stringContaining("pilot: 2 sessions owe section 13's attempt 2")]);
+    expect(owedKeys(r, "pilot")).toEqual([...cellsAt(r, "pilot", [1]), ...cellsAt(r, "pilot-relaunch", [0])].sort());
+    // The attempt 2 loses its controller after its first session: relaunch only salvages it, and the other cell is missing.
+    expect(l1(r, ["launch", r.work, "--part", "pilot-a2"], { PAUSE_VM: "vm-4", PAUSE_AT: "1" }).code).toBe(0);
+    await until(() => existsSync(join(r.fake, "vm-4/paused")));
+    killController(r, "host-1", "pilot-a2");
+    await attachUntil(r, /pilot-a2: CONTROLLER_LOST/);
+    const sal = l1(r, ["relaunch", r.work, "--part", "pilot-a2"]);
+    expect([sal.code, sal.out]).toEqual([0, expect.stringContaining("an attempt 2 is never relaunched, so its cells that never started are missing. NEXT: host-down (every part has finished)")]);
+    expect(JSON.parse(readFileSync(join(r.work, "pilot-a2.result.json"), "utf8")).loss).toEqual(["the controller was lost before it recorded an exit"]);
+    expect(ranCells(join(r.work, "pilot-a2"))).toHaveLength(1);
+    expect(existsSync(join(r.work, "pilot-a2-relaunch"))).toBe(false);
+    expect(l1(r, ["attach", r.work]).out).toContain("NEXT: host-down (every part has finished)");
+    expect(l1(r, ["host-down", r.work]).code).toBe(0);
+    expect(openIds(r, "pilot-opus")).toEqual([]);
+  }, 240_000);
+});
+
+describe("a part VM that never reaches running (the Captain's ruling A, 2026-11-13)", () => {
+  // Value: protects=a part whose VM waited for capacity and never ran gets its one relaunch of every cell; fails_when=that part's cells are left as infra, or an exit 1 with a session or judge row, a cap stop or a relaunch's own capacity failure becomes a loss; why_new=GEVA-503 stage3-pilot-3 pilot-sol; seam=l1.ts classify, hostStatus and finishPart; no_claim=the real runner's capacity wait, which fixtures/l1/ubi plays with its message
+  const prefix = "run-1/pilot/";
+  const NEVER = "VM did not reach running in 10 minutes (last state: waiting for capacity)";
+  const part = (o: { exit: number; ids?: string[]; evidence?: boolean; relaunchOf?: string; capUsd?: number }) => {
+    const root = mkdtempSync(join(tmpdir(), "l1-never-"));
+    const dir = join(root, "part");
+    mkdirSync(dir, { recursive: true });
+    if (o.evidence !== false) writeFileSync(join(dir, "vm-never-running"), NEVER + "\n");
+    if (o.relaunchOf) writeFileSync(join(dir, "l1-part.json"), JSON.stringify({ name: o.relaunchOf + "-relaunch", prefix, rects: [], relaunch_of: o.relaunchOf }));
+    const ledger = join(root, "pilot-opus.jsonl");
+    const l = new Ledger(ledger, "pilot-opus");
+    l.approve(o.capUsd ?? 680, { quotes: ["test approval"] });
+    for (const id of o.ids ?? ["vm"]) l.reserve(id.startsWith("judge:") ? id : prefix + id, toMicros(0.01));
+    return classify(dir, o.exit, { ledger: { rows: readRows(ledger), since: "2026-01-01T00:00:00.000Z", sessionCapUsd: 5, prefix } });
+  };
+  const loss = NEVER_RAN_LOSS + " (" + NEVER + "), and the item's ledger holds no session or judge row for this part, so no trial started";
+  test("exit 1 after ubi-runner's capacity wait, with only the part's VM blocks on the ledger, is a loss", () => {
+    for (const ids of [["vm"], ["vm", "vm-2"]]) {
+      const c = part({ exit: 1, ids });
+      expect([c.loss, c.cap_stop, c.unclassified]).toEqual([[loss], [], []]);
+    }
+  });
+  test("exit 1 with a session row or a judge row for the part stays as it is today: no loss and no cap stop", () => {
+    for (const ids of [["vm", "trial-a/session-1"], ["vm", "judge:" + prefix + "m_1:1:1"], ["vm", "vm-2x"]]) {
+      const c = part({ exit: 1, ids });
+      expect([c.loss, c.cap_stop, c.unclassified]).toEqual([[], [], []]);
+    }
+  });
+  test("without ubi-runner's never-running line in the controller log, exit 1 stays as it is today", () => {
+    const c = part({ exit: 1, evidence: false });
+    expect([c.loss, c.cap_stop, c.unclassified]).toEqual([[], [], []]);
+  });
+  test("a cap stop stays a cap stop: the ledger refusing the first VM block, and a ledger within one session cap of its cap", () => {
+    const refused = part({ exit: 9 });
+    expect([refused.loss, refused.cap_stop]).toEqual([[], ["the ledger refused the part VM's first block"]]);
+    const near = part({ exit: 1, capUsd: 5 });
+    expect(near.loss).toEqual([]);
+    expect(near.cap_stop).toEqual([expect.stringContaining("the part's results were not pulled")]);
+  });
+  test("a relaunch's own capacity failure makes no loss", () => {
+    const c = part({ exit: 1, relaunchOf: "pilot" });
+    expect([c.loss, c.cap_stop, c.unclassified]).toEqual([[], [], []]);
+  });
+  test("end to end on the fake host: the capacity-wait part relaunches every planned cell, and a second capacity failure on the relaunch makes no loss", async () => {
+    const r = rig("pilot-opus");
+    expect(l1(r, ["prepare", r.work, "--item", "pilot-opus"]).code).toBe(0);
+    expect(l1(r, ["host-up", r.work]).code).toBe(0);
+    expect(l1(r, ["launch", r.work, "--part", "pilot"], { UP_NEVER_RUNNING: "1" }).code).toBe(0);
+    const a = await attachUntil(r, /pilot: finished, launch exit 1/);
+    expect(a.out).toContain("pilot: finished, launch exit 1; LOSS: " + NEVER_RAN_LOSS + " (" + NEVER + ")");
+    expect(a.out).toContain("NEXT: relaunch --part pilot");
+    expect(JSON.parse(readFileSync(join(r.work, "pilot.result.json"), "utf8"))).toMatchObject({ pulled: false, cap_stop: [], unclassified: [] });
+    const re = l1(r, ["relaunch", r.work, "--part", "pilot"], { UP_NEVER_RUNNING: "1" });
+    expect([re.code, re.out]).toEqual([0, expect.stringContaining("pilot-relaunch: controller started on host-1")]);
+    const rel = JSON.parse(readFileSync(join(r.work, "pilot.relaunch.json"), "utf8"));
+    expect(rel.never_started.reduce((s: number, c: any) => s + c.replicates, 0)).toBe(32);
+    const b = await attachUntil(r, /pilot-relaunch: finished, launch exit 1/);
+    expect(b.out).not.toContain("LOSS");
+    expect(JSON.parse(readFileSync(join(r.work, "pilot-relaunch.result.json"), "utf8"))).toMatchObject({ pulled: false, loss: [], cap_stop: [], unclassified: [] });
+    expect(l1(r, ["relaunch", r.work, "--part", "pilot"]).err).toContain("relaunched already");
+    expect(l1(r, ["relaunch", r.work, "--part", "pilot-relaunch"]).code).toBe(2);
+    expect(events(r).match(/ up -s standard-16 /g)).toHaveLength(2);
+    expect(l1(r, ["host-down", r.work]).code).toBe(0);
+    expect(openIds(r, "pilot-opus")).toEqual([]);
+  }, 300_000);
 });

@@ -141,6 +141,17 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_OUTCOME_TOLD_INSTALL](#e_outcome_told_install) | 2 | U20 |
 | [E_OUTCOME_CLEAN_ROOM](#e_outcome_clean_room) | 2 | U20 |
 | [E_OUTCOME_IMAGE](#e_outcome_image) | 2 | U20 |
+| [E_HM_INPUT](#e_hm_input) | 2 | U20 |
+| [E_HM_NOT_BUILT](#e_hm_not_built) | 2 | U20 |
+| [E_HM_LAUNCH](#e_hm_launch) | 2 | U20 |
+| [E_HM_SCREEN](#e_hm_screen) | 2 | U20 |
+| [E_HM_FIT](#e_hm_fit) | 2 | U20 |
+| [E_HM_REPLAY](#e_hm_replay) | 2 | U20 |
+| [E_HM_JEV_VERSION](#e_hm_jev_version) | 2 | U20 |
+| [E_HM_JUDGE_BUILD](#e_hm_judge_build) | 2 | U20 |
+| [E_HM_PICKER](#e_hm_picker) | 2 | U20 |
+| [E_HM_CUSTODY](#e_hm_custody) | 2 | U20 |
+| [E_HM_PIN](#e_hm_pin) | 2 | U20 |
 | [E_TBV_NOT_BUILT](#e_tbv_not_built) | 2 | U20 |
 | [E_TBV_INPUT](#e_tbv_input) | 2 | U20 |
 | [E_TBV_HISTORY](#e_tbv_history) | 2 | U20 |
@@ -1276,6 +1287,94 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 T-G's image manifest or a trial's binding to it does not hold (lanes/outcome-skills/images/manifest.ts): the manifest is unreadable, has a row with no sha256 image id, digests or label of its own, or is not tg-images.v1 with home /root and work dir /testbed; or check found a manifest whose sha256 is not the --sha256 recorded for it; or bind found no manifest row for --label, a task dir path that is a symlink, an out path inside the task dir, a task dir whose task.json or environment digest (file bytes and executable bits) differs from its row, a task.json that is not JSON, a file that differs from task.json's file digests (edited, added or deleted), a symlink, a docker tag that failed, an image the manifest pins that is missing or whose local tag resolves to another id, an out dir that exists, or a task.toml with no [environment] section or a docker_image of its own; or pin's out file exists, before its builds or when its exclusive create finds one written meanwhile, quick/laneb's runtime layer did not build on a task image, or in that final image gold fails a required test (the message names it), gold's run stopped, or the empty change passes every required test.
 
 Fix: Pin on a keyless build host and move the images with docker save and docker load, which keep each id. Check with the sha256 the readiness post records for the manifest. Bind the task dir the manifest was pinned from, on the host whose Docker holds the pinned images (the envelope host), into a new out dir. When an image is gone or moved, rebuild it with pin into a new manifest and record that manifest's digests before any session. When pin finds gold failing or the empty change passing in the final image, the runtime layer changes a hidden test's result: repair the task with check and pin again. Nothing was spent and no lease is open.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_HM_INPUT
+
+A harness mechanics input does not hold (lanes/harness-mechanics): a prereg attachment is not at its front-matter sha256, a split list has the wrong length or names a task twice, the judge lists are not the first tasks of their splits, the task-fit screen's lists are not at HM_SCREENED_SHA256 or name a task outside their split and the spares, or the fit rows given to admission --fit are not at --fit-sha256 or name a task twice, or stage1-opus-r2 names a task outside the screened calibration list.
+
+Fix: Fix the named input and run the command again. Never edit a frozen file to make it match.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_HM_NOT_BUILT
+
+A harness mechanics command or function is declared but its unit is not built yet (lanes/harness-mechanics). Nothing ran.
+
+Fix: Use a build of gstack-evals that has it, or build the unit the message names.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_HM_LAUNCH
+
+A harness mechanics launch was refused before it started (lanes/harness-mechanics/money.ts launchGuard): the 3,000 line all-in (each item's settled and open spend, an item not done at its cap, and the crew file's credits) would pass, the item's C1 projection (its model spend so far, its parts still to run at section 22's planning rates and its parallel allowances, plus its host and part-VM reserves at L1's rates) would pass its cap, or the item is marked done. The message says what doesn't fit.
+
+Fix: Take the line to the Captain before launching. The Captain can move room from the vms item to the stage item, leaving the total unchanged; then record the raise on the item's ledger and run the launch again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_HM_SCREEN
+
+The harness mechanics task-fit screen could not decide (lanes/harness-mechanics/screen.ts): gstack-checks detect exited 3 for want of a pregate context (no origin/&lt;base> ref in the task's container), so every task would read the same and no screened lists were written.
+
+Fix: D1's origin step should make this impossible, so a hit means task-setup.Dockerfile's origin RUN or PATH did not reach the screen's container. Look at the docker run command in lanes/harness-mechanics/screen.ts dockerDetect, which runs that RUN and PATH before detect. Nothing was replaced.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_HM_FIT
+
+The harness mechanics task-fit probe (lanes/harness-mechanics/fit.ts, hm fit) could not start: Docker is missing or not running, or the arm tars it extracts are missing. A task that fails to pull or build is a row in fit.jsonl, not this error.
+
+Fix: Start Docker, or set ARMS to the directory holding prose.tar and none.tar, and run hm fit again with the same --out; it resumes from fit.jsonl. The probe spends nothing and changes no list.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_HM_REPLAY
+
+The harness mechanics Stage 2 replay (lanes/harness-mechanics/replay.ts) refused or stopped: its items are off the preregistered counts or their digest, the start rule's record is missing, a stratified draw ran short, a client answered without a metered cost, or the next batch of calls would pass the replay's lease (a cap stop).
+
+Fix: Read the text after the code. A count, digest or start refusal comes before any call: fix the input and run again. A cap stop or an unmetered answer leaves the replay incomplete with its lease settled at the spend so far; the item serves one run and the run is never retried, so take it to the Captain.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_HM_JEV_VERSION
+
+A harness mechanics judgment hook (lanes/harness-mechanics/judge/hm_judge.py) stopped its session: a TypeSafe response carried no model attribute, or one that is not a Jev version, so the pinned-version check could not run (the Captain's ruling E1).
+
+Fix: Stop the judge arms (judge.ts jevChanges counts the line). Read the real model field of a TypeSafe response, which Stage 2's smoke checks first, and take it to the Captain before any judge session runs again.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_HM_JUDGE_BUILD
+
+A harness mechanics judge tar does not carry the replay's outputs (lanes/harness-mechanics/arms.ts, deviation D14): build.sh was given a band.json or admission.json that is not the replay's file at pins.ts REPLAY_JUDGE's sha256, build.sh hm-judge found a hook.tar or decision-routing runtime that is not at its committed sha256, or the launcher found a judge part's tar.gz that is not the committed manifest's, or a manifest or tar that names another band, another admission or other admitted points.
+
+Fix: Rebuild the judge tar with build.sh hm-judge from the pinned hook.tar and runtime and the replay's files under lanes/harness-mechanics/judge/replay, re-pin its manifest, and prepare the item again. Never edit a band, an admission or a manifest to make them match.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_HM_PICKER
+
+The harness mechanics bo2 picker (lanes/harness-mechanics/picker.ts, hm pick) refused or stopped: its config names an unknown item or model, a picker call failed at the metering proxy, or a reserve on the item's ledger was refused.
+
+Fix: Read the text after the code. A config refusal comes before any call: fix the config and run again. picks.jsonl keeps every finished task, so a rerun skips them. A cap stop (CAP_STOP in the text) leaves the item's ledger settled at the spend so far; take it to the Captain.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_HM_CUSTODY
+
+The harness mechanics leak scan (lanes/harness-mechanics/leak.ts) refused a slot bind: the task's planted canary is not among its runner-only markers, so the proxy could not apply the decision-routing custody stop.
+
+Fix: Rebuild the task's custody with taskCustody, which plants the canary and puts it first among the markers, then bind again. No call was made.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_HM_PIN
+
+A harness mechanics gstack pin does not hold (lanes/harness-mechanics/match.ts): a file vendored under lanes/harness-mechanics/vendor/gstack is missing or is not the git blob pins.ts records, HM_GSTACK is unset, or the checkout it names lacks the pin or holds another blob there, or the vendored checker no longer has exactly one quote transform.
+
+Fix: Point HM_GSTACK at a gstack checkout that holds the pin, and restore the vendored file from that commit with git show. Never edit a vendored file or a pinned blob to make them match.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 

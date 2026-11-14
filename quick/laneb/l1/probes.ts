@@ -57,7 +57,7 @@ const blocks = (r: Rec): Block[] => (Array.isArray(r.content) ? r.content.filter
 export const resultText = (content: unknown): string =>
   typeof content === "string" ? content : Array.isArray(content) ? content.map((c: any) => (typeof c?.text === "string" ? c.text : "")).join("\n") : "";
 export const collapse = (s: string) => s.replace(/\s+/g, " ").trim();
-const stripReadNumbers = (s: string) => s.split("\n").map((l) => l.replace(/^\s*\d+(\t|\u2192)/, "")).join("\n");
+export const stripReadNumbers = (s: string) => s.split("\n").map((l) => l.replace(/^\s*\d+(\t|\u2192)/, "")).join("\n");
 
 // ---- shell lines -------------------------------------------------------------------------------------------------------
 
