@@ -12,6 +12,10 @@ export interface DiscoveredRoute {
   id: string;
   /** The route's own pattern, for example "/projects/[id]". */
   pattern: string;
+  /** The route set's hash router mode, from the frame's route discovery (R2-19); absent reads as false. */
+  hash?: boolean;
+  /** The route set's literal base path, from the frame's route discovery; absent or null strips the recipe's. */
+  basePath?: string | null;
 }
 
 /**
