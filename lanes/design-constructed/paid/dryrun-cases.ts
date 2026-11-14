@@ -66,6 +66,12 @@ export async function sessionCall(b: SessionBinding, o: { stream?: boolean; maxT
   return res;
 }
 
+async function sessionCallText(b: SessionBinding, text: string): Promise<number> {
+  const res = await fetch(b.baseUrl + "/v1/messages", { method: "POST", headers: { authorization: "Bearer " + b.token, "content-type": "application/json", "anthropic-version": "2023-06-01" }, body: JSON.stringify({ model: b.model.slice(b.model.indexOf(":") + 1), max_tokens: 4000, messages: [{ role: "user", content: text }] }) });
+  await res.text();
+  return res.status;
+}
+
 export const journalLines = (path: string | null) => (path && existsSync(path) ? readFileSync(path, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as Record<string, any>) : []);
 const codeOf = async (p: Promise<unknown>): Promise<string> => {
   try {
@@ -255,6 +261,27 @@ export function cases(): DryRunCase[] {
           await sessionCall(b);
           const code = await codeOf(sessions.end(b));
           e.want(code === "E_DC_PROVIDER_DRIFT", "an Azure generation record read " + code);
+          return e.result();
+        }),
+    },
+    {
+      rule: "PD-17",
+      name: "errorSeen comes from the session proxy's journal: a clean attempt reads false, an upstream 5xx inside the attempt reads true, another attempt's error does not count",
+      check: () =>
+        withPaid({ script: (_u, body) => (JSON.stringify(body).includes("fail upstream") ? { kind: "status", status: 503 } : { kind: "ok" }) }, async ({ r, sessions }) => {
+          const e = expectations();
+          const item: LedgerItemId = "dc-stage1-opus";
+          await r.c.openItem(item);
+          const sub = admitted(await r.c.admitRound(item, { run: "errors u1", model: "opus", arms: ["none", "lens"] }), "the round");
+          const clean = await sessions.bind(item, { sub, session: sub.sessions[0]!.id, attempt: 1, arm: "none" });
+          const failing = await sessions.bind(item, { sub, session: sub.sessions[1]!.id, attempt: 1, arm: "lens" });
+          await sessionCall(clean);
+          await sessionCallText(failing, "fail upstream");
+          await sessionCall(failing);
+          await sessions.end(clean);
+          await sessions.end(failing);
+          e.want(sessions.errorSeen(clean) === false, "the clean attempt read an error");
+          e.want(sessions.errorSeen(failing) === true, "the attempt with a 503 read no error");
           return e.result();
         }),
     },

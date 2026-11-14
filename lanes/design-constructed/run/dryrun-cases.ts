@@ -20,6 +20,7 @@ import { answerArgs, D1_MESSAGE, gateHook, repairHook, repairOn, stopHandler } f
 import { MARK, writeHostile } from "./hostile.ts";
 import { scopeOf, scopeShare } from "./scope.ts";
 import { armStopsWithBlock, cellOrder, endOf, malformedToolCalls, packetReady, printMalformedToolCalls, readAttempt, runCell, runCells, cellId } from "./session.ts";
+import { toolCallEnd } from "./stream.ts";
 import type { AttemptRecord, Cell, CellOutcome, Exec, LoopSeams, Reconciled } from "./types.ts";
 
 const eq = (a: unknown, b: unknown, what: string): string | null => (JSON.stringify(a) === JSON.stringify(b) ? null : what + ": expected " + JSON.stringify(b) + ", got " + JSON.stringify(a));
@@ -246,6 +247,28 @@ export function cases(): DryRunCase[] {
     const withBlock = await scripted("none", [attempt({ end: ends[0]! })]);
     const without = await scripted("none", [attempt({ end: ends[1]!, reply: "", heldBlock: false })]);
     return all(eq(ends.map((e) => e.kind), ["completed", "completed", "completed"], "ends"), eq([withBlock.o.state, withBlock.sessions], ["scored", 1], "with a block"), eq([without.o.state, without.sessions], ["no-block", 1], "with no block"));
+  });
+  add("S6", "a session the harness ended right after rejecting the model's tool call reads from its stream as a malformed tool call, then splits by errorSeen", async () => {
+    const crash = { kind: "arm_failure", failure: "harness_crash" } as const;
+    const say = { type: "assistant", parent_tool_use_id: null, message: { content: [{ type: "tool_use", id: "t1", name: "Read", input: {} }] } };
+    const rejected = (text: string) => ({ type: "user", parent_tool_use_id: null, message: { content: [{ type: "tool_result", tool_use_id: "t1", is_error: true, content: text }] } });
+    const result = (subtype: string) => ({ type: "result", subtype });
+    const tx = (...m: unknown[]) => m.map((x) => JSON.stringify(x)).join("\n") + "\n";
+    const invalid = "<tool_use_error>InputValidationError: Read failed: the required parameter file_path is missing</tool_use_error>";
+    const read = [
+      toolCallEnd(tx(say, rejected(invalid), result("error_during_execution")), crash),
+      toolCallEnd(tx(say, rejected("<tool_use_error>Error: No such tool available: Raed</tool_use_error>"), result("error_during_execution")), crash),
+      toolCallEnd(tx(say, rejected("<tool_use_error>File has not been read yet</tool_use_error>"), result("error_during_execution")), crash),
+      toolCallEnd(tx(say, rejected(invalid), say, result("error_during_execution")), crash),
+      toolCallEnd(tx(say, rejected(invalid), result("error_during_execution")), { kind: "missing", code: "UPSTREAM" }),
+    ].map((t) => (t.kind === "arm_failure" ? t.failure : t.kind));
+    const t = toolCallEnd(tx(say, rejected(invalid), result("error_during_execution")), crash);
+    const err = await scripted("none", [attempt({ end: endOf(t, true) }), attempt({ end: endOf(t, true) })]);
+    const own = await scripted("none", [attempt({ end: endOf(t, false) }), attempt({ end: endOf(t, false) })]);
+    return all(
+      eq(read, ["malformed_tool_call", "malformed_tool_call", "harness_crash", "harness_crash", "missing"], "stream reads"),
+      eq([err.o.state, err.sessions, err.o.attempts[0]!.read.state, own.o.state, own.sessions], ["infra-missing", 2, "infra-missing", "arm-stop", 2], "PD-17 split"),
+    );
   });
   add("S6", "a malformed tool call decides by mechanism: after an API, provider or harness error it is outside the agent, else an arm stop", async () => {
     const t = { kind: "arm_failure", failure: "malformed_tool_call" } as const;

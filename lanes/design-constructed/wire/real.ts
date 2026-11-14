@@ -38,6 +38,7 @@ import type { SessionSetup } from "../run/arms.ts";
 import { containPoint, type C2Expect } from "../run/contain.ts";
 import { createInstallNetwork, prepareSession, removeNetwork, reviewImage, type PreparedSession, type ReviewImage, type UnitFiles } from "../run/docker.ts";
 import { cellId } from "../run/session.ts";
+import { toolCallEnd } from "../run/stream.ts";
 import { proxySessions, runVmAgent, sshAgentSession } from "../stage3/agent.ts";
 import { serveVmFront } from "../stage3/front.ts";
 import { browserFiles, BROWSER_ROOT, claudeFiles, controllerBackend, type ControllerFiles } from "../stage3/install.ts";
@@ -271,10 +272,11 @@ export function realSessions(h: HostContext, watch: ProviderWatch, s: RealSeams 
           const f = await end();
           const transcript = join(out, "transcript.ndjson");
           const plan = join(container.folder, "plan.md");
+          const text = existsSync(transcript) ? readFileSync(transcript, "utf8") : "";
           return {
-            transcript: existsSync(transcript) ? readFileSync(transcript, "utf8") : "",
-            termination: outcome.termination,
-            errorSeen: false,
+            transcript: text,
+            termination: toolCallEnd(text, outcome.termination),
+            errorSeen: proxies.errorSeen(binding),
             planAfter: existsSync(plan) ? readFileSync(plan, "utf8") : null,
             spentUsd: f.unknownMicros > 0 ? null : f.spentMicros / 1e6,
             served: sessionServed(watch, setup.model),

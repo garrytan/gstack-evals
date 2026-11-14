@@ -22,8 +22,8 @@ A host run reads one wiring file (wire/real.ts readWiring). A missing choice ref
 ## Sessions
 
 8. **Containment retry.** When a container fails C2 or C3, the binding prepares a fresh session folder from the same export instead of exporting again. One combined containPoint runs: after-install for the gstack arms, before-session otherwise. A second failure throws E_DCW_CONTAINMENT and stops the launch, leaving the admitted round in flight for the Captain.
-9. **errorSeen.** PD-17 reads a malformed tool call by whether an API, provider or harness error was seen. The Claude Code driver never reports malformed_tool_call, so errorSeen is always false.
-10. **backgroundWaitMs.** The driver's wait for a background task at the first result is unset.
+9. **errorSeen.** The shared driver reports a non-success result after model output as harness_crash. run/stream.ts reads the session's stream: when the last top-level message before that result is Claude Code's rejection of the model's tool call (a tool_use_error naming an input validation failure or a tool that does not exist), the termination is malformed_tool_call. errorSeen comes from the attempt's session proxy journal (paid/sessions.ts errorSeen): a refusal, or an outcome that was an upstream error status, never sent or unknown, for the attempt's meter. A journal that cannot be read counts as an error seen. PD-17 then splits as run/session.ts endOf rules: errorSeen true is outside the agent (J1 retry, then infra-missing), false is an arm stop scored after its one fresh retry.
+10. **backgroundWaitMs.** Neither the preregistration nor the plan freezes a value, so the driver's wait stays unset. See Phase 1b open items.
 11. **Evidence for the reference arm.** The sessions row now reads evidence files only for the full-information reference cell. Before this fix every other arm crashed with E_USAGE, because armPrompt refuses evidence for them.
 12. **The exports layout.** Each unit's export folder holds `repo/` (with its evidence files), `plan.md`, `context/` and `c2.json`. No row writes `c2.json` or `stage3.json` yet.
 
@@ -58,6 +58,14 @@ These stay open as their own notes describe them:
 - stage3/NOTES.md items 1 to 16.
 - paid/NOTES.md items 2, 3, 4, 6 and 7.
 - run/NOTES.md items 11 to 14 and 16.
+
+## Phase 1b open items
+
+Choices the binding could not make without moving a scored outcome or the money. Each waits for the Captain.
+
+1. **backgroundWaitMs.** The preregistration and the plan give no value for the driver's wait for background work at a turn's result. Unset, a session ends at its first result with background work still out, and the driver logs it. Other lanes use 3,600,000 ms (src/adapters/claude-code/driver.ts BACKGROUND_WAIT_MS).
+2. **errorSeen's window.** errorSeen reads every error in the attempt's journal, as ruled ("inside the attempt"), so an upstream error the proxy retried and recovered from early in a session still makes a later malformed tool call outside the agent. wire.ts's SessionDrive comment says "the session's last exchange". The Captain may narrow it.
+3. **The rejected-call marker.** run/stream.ts matches Claude Code's tool_use_error text for an input validation failure or an unknown tool. It is checked against hand-written stream lines only, not a real CLI session at the pinned Claude Code version.
 
 ## Not verified here
 

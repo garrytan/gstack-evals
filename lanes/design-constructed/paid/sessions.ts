@@ -8,7 +8,7 @@
 // figures for its meters in the local ledger. Where the proxy runs is the launcher's: the trial-network container
 // (containerLauncher) or an in-process proxy on the same relay path (inProcessLauncher, for tests and host runs).
 import { randomBytes } from "node:crypto";
-import { closeSync, existsSync, fstatSync, mkdirSync, openSync, readSync } from "node:fs";
+import { closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync } from "node:fs";
 import { join } from "node:path";
 import type { LocalLedger } from "../../../src/runner/ledger/local.ts";
 import { MeteringProxy, ProxyControl, reconcileJournal, type BindRequest, type Binding, type RetryBudget } from "../../../src/runner/proxy/metering-proxy.ts";
@@ -138,6 +138,7 @@ export class SessionProxies {
   private readonly live = new Map<LedgerItemId, Live>();
   private readonly ledger: ReservationLedger;
   private readonly cutModels = new Set<AnyModel>();
+  private readonly journals = new Map<string, string>();
 
   constructor(private readonly o: SessionOptions) {
     this.ledger = writeAheadLedger(o.local, o.wal);
@@ -184,6 +185,7 @@ export class SessionProxies {
     appendLink(this.o.dir, { sub: s.sub.id, item, lease: l.leaseId, meter: b.meter_id, journal: l.proxy.journal });
     l.bound.set(s.sub.id, [...(l.bound.get(s.sub.id) ?? []), b.meter_id]);
     l.slots.add(b.slot);
+    this.journals.set(b.meter_id, l.proxy.journal);
     return { item, sub: s.sub.id, session: s.session, baseUrl: l.proxy.baseUrl.replace(/\/+$/, "") + "/" + b.slot + "/" + m.provider, token: b.token, slot: b.slot, meterId: b.meter_id, model: m.provider + ":" + m.id };
   }
 
@@ -296,6 +298,35 @@ export class SessionProxies {
 
   journal(item: LedgerItemId): string | null {
     return this.live.get(item)?.proxy.journal ?? null;
+  }
+
+  /**
+   * PD-17's errorSeen for one attempt, from its proxy journal (wiring item 9): the proxy refused one of the attempt's
+   * calls, or a call's outcome was an upstream error status, never sent, or unknown. A journal that cannot be read
+   * reads as an error seen, so a malformed tool call on it is never scored as the arm's own.
+   */
+  errorSeen(b: SessionBinding): boolean {
+    const journal = this.journals.get(b.meterId);
+    if (!journal || !existsSync(journal)) return true;
+    let text: string;
+    try {
+      text = readFileSync(journal, "utf8");
+    } catch {
+      return true;
+    }
+    for (const raw of text.split("\n")) {
+      if (!raw.trim()) continue;
+      let l: Record<string, any>;
+      try {
+        l = JSON.parse(raw);
+      } catch {
+        continue;
+      }
+      if (l.meter_id !== b.meterId && l.slot !== b.slot) continue;
+      if (l.kind === "refusal") return true;
+      if (l.kind === "outcome" && (typeof l.status !== "number" || l.status >= 400 || l.outcome?.kind === "unknown")) return true;
+    }
+    return false;
   }
 
   async stopAll(): Promise<void> {
