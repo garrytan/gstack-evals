@@ -82,6 +82,8 @@ export interface SessionDrive {
   /** The session's transcript.ndjson text. */
   transcript: string;
   termination: Termination;
+  /** The API, the provider or the harness returned an error in the session's last exchange (decides a malformed tool call only). */
+  errorSeen: boolean;
   /** plan.md after the session, or null when it is gone. */
   planAfter: string | null;
   /** Proxy-metered spend; null when unknown (held until reconciled). */

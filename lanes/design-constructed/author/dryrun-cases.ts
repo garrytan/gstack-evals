@@ -36,7 +36,7 @@ async function unit(script: Script, id = "u1") {
 }
 
 /** The fixture unit's files with ids and context, as a base unit that passed with all five items primary. */
-function baseFiles(unitId = "u1"): UnitFiles {
+export function baseFiles(unitId = "u1"): UnitFiles {
   return { plan: PLAN, context: CONTEXT, evidence: EVIDENCE.map((e) => ({ ...e })), key: { items: intake(unitId, ITEMS, []), wrongWay: [...WRONG_WAY], decoy: null } };
 }
 
@@ -55,7 +55,7 @@ function routed(worlds: Record<string, Deps>): Deps {
   return { ...any, call };
 }
 
-const PLANTED: Record<PlantedName, { cls: ItemClass | null; script: Script }> = {
+export const PLANTED: Record<PlantedName, { cls: ItemClass | null; script: Script }> = {
   G1: { cls: null, script: {} },
   G2: { cls: null, script: {} },
   B1: { cls: null, script: { audit: (_r, a) => (a === "opus" ? { inputFailures: ["plan-signposts"] } : {}) } },

@@ -27,6 +27,8 @@ export interface RowEnv {
   lane: () => { commit: string; dirty: boolean; root: string };
   now: () => Date;
   power: PowerRunner;
+  /** The structure screen's barred word runs, from gstack's skill files at the pin (author/screen.ts loadVocabulary). */
+  vocabulary: (gstackDir: string) => ReadonlySet<string>;
 }
 
 export type Row = (a: Args, io: Io, env: RowEnv) => Promise<number> | number;

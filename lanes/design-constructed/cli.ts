@@ -6,11 +6,13 @@ import { CODES, docAnchor, type ReasonCode } from "../../src/errors/codes.ts";
 import { AREAS, dryRun, type Area } from "./dryrun.ts";
 import { DcError, fail } from "./errors.ts";
 import { filecheckCommand, frameCommand } from "./frame/command.ts";
+import { loadVocabulary } from "./author/screen.ts";
 import { realSeams } from "./frame/run.ts";
 import { uvPowerRunner } from "./read/seams.ts";
 import { BOUND_PROVIDERS } from "./wire.ts";
 import { itemsRow, powerRow, readRow, scopeRow, scoreRow } from "./wire/keyless.ts";
 import { recipesRow } from "./wire/recipes.ts";
+import { authorRow, gatecheckRow } from "./wire/author.ts";
 import type { Row, RowEnv } from "./wire/start.ts";
 
 export interface Io {
@@ -28,6 +30,7 @@ export const realEnv = (): RowEnv => ({
   lane: realSeams().lane,
   now: () => new Date(),
   power: uvPowerRunner,
+  vocabulary: loadVocabulary,
 });
 
 function parse(argv: string[], bools: string[]): Args {
@@ -61,8 +64,8 @@ export const SUBCOMMANDS: Record<string, { area: Area | "lane"; run: Run; bools:
   frame: { area: "frame", run: frameCommand, bools: [], usage: "--out <sealed dir outside the repo>", summary: "the one dated frame search, its entry filters and the frame order (keyless)" },
   filecheck: { area: "frame", run: filecheckCommand, bools: [], usage: "--repo <dir>", summary: "the keyless file check on each candidate's safe clone" },
   recipes: { area: "frame", run: recipesRow, bools: [], usage: "--frame <the frame's sealed folder> --out <new sink folder>", summary: "recipe sessions and qualification (paid: dc-base-apps, dc-hosts)" },
-  author: { area: "author", run: notBuilt("author"), bools: [], usage: "", summary: "authoring steps 1 to 7, the fix round, rewrites, 2x versions and twins (paid: dc-authoring-1 to -3)" },
-  gatecheck: { area: "author", run: notBuilt("author"), bools: [], usage: "", summary: "the eight planted units through every model-judged gate (paid: dc-gate-check)" },
+  author: { area: "author", run: authorRow, bools: [], usage: "--step pilot|units|2x|twins --item <item> --apps <apps.json> --gstack <dir> --terms <file> --gate <gatecheck sink> [--pilot <sink>] [--from N --to M] [--units <author sink>] --out <new sink>", summary: "authoring steps 1 to 7, the fix round, rewrites, 2x versions and twins (paid: dc-authoring-1 to -3)" },
+  gatecheck: { area: "author", run: gatecheckRow, bools: [], usage: "--units <planted.json> --apps <apps.json> --gstack <dir> --terms <file> --out <new sink>", summary: "the eight planted units through every model-judged gate (paid: dc-gate-check)" },
   scope: { area: "run", run: scopeRow, bools: [], usage: "--units <folder of unit folders, each with plan.md>", summary: "the keyless UI scope read on every plan.md" },
   sessions: { area: "run", run: notBuilt("run"), bools: [], usage: "", summary: "review sessions for one stage, arm and model (paid: dc-stage1-*, dc-stage2-*)" },
   probe: { area: "score", run: notBuilt("score"), bools: [], usage: "", summary: "the live judge probe, one call down every judge route (paid: dc-judges)" },

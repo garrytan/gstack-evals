@@ -4,6 +4,7 @@
 // from a script, and the areas' own scripted VM world, browser, agents and review boxes. Nothing here reads a key or
 // reaches a network; the proxy gets invented key strings.
 import { join, resolve } from "node:path";
+import { STAND_IN_VOCABULARY } from "../author/scripted.ts";
 import { DIRECT_MODELS } from "../money/price.ts";
 import { fakeReply, rig, startProxy, type ProxyRig, type Rig } from "../money/dryrun-fixture.ts";
 import { ledgerFigures } from "../money/meter.ts";
@@ -36,7 +37,7 @@ export interface KitOptions {
   /** Items with no recorded cap (start rule 1). */
   unrecorded?: LedgerItemId[];
   /** The scripted reply to a model call; null sends no text. */
-  model?: (c: ModelCall) => string | null;
+  model?: (c: ModelCall) => string | null | Promise<string | null>;
   /** The serving provider each OpenRouter model's reply names. */
   served?: Partial<Record<AnyModel, string>>;
   vm?: (kit: Kit) => VmProvider;
@@ -82,7 +83,7 @@ export function fakeKit(o: KitOptions = {}): Kit {
 const modelOfId = (id: unknown): AnyModel | null => (Object.entries(DIRECT_MODELS).find(([, m]) => m.id === id)?.[0] as AnyModel | undefined) ?? null;
 
 /** The real metered client on a real proxy per item, its upstream answering each call with the script's text. */
-export function fakeModels(kit: Kit, script: (c: ModelCall) => string | null, served: Partial<Record<AnyModel, string>>): ModelProvider {
+export function fakeModels(kit: Kit, script: (c: ModelCall) => string | null | Promise<string | null>, served: Partial<Record<AnyModel, string>>): ModelProvider {
   const r = kit.rig();
   const pending = new Map<string, Array<string | null>>();
   const proxies = new Map<LedgerItemId, ProxyRig>();
@@ -113,7 +114,8 @@ export function fakeModels(kit: Kit, script: (c: ModelCall) => string | null, se
   return {
     async call(c) {
       const k = c.model + "\n" + c.prompt;
-      pending.set(k, [...(pending.get(k) ?? []), script(c)]);
+      const text = await script(c);
+      pending.set(k, [...(pending.get(k) ?? []), text]);
       kit.calls.push(c.model + " " + c.label);
       return inner.call(c);
     },
@@ -173,5 +175,6 @@ export function fakeEnv(kit: Kit, o: { dryRun?: boolean; dirty?: boolean; power?
     lane: () => ({ commit: FAKE_COMMIT, dirty: o.dirty ?? false, root: REPO_ROOT }),
     now: () => new Date(o.now ?? "2026-11-20T00:00:00Z"),
     power: o.power ?? fakePower("0.850"),
+    vocabulary: () => STAND_IN_VOCABULARY,
   };
 }
