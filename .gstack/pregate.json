@@ -33,6 +33,15 @@
     "tests/of/run/driver-sdk.ts": [
       "tests/of/run/driver-sdk.test.ts"
     ],
+    "lanes/office-hours-founder/cli.ts": [
+      "tests/cli.test.ts"
+    ],
+    "lanes/office-hours-founder/wire.ts": [
+      "tests/of/score/cli.test.ts"
+    ],
+    "lanes/office-hours-founder/e2e-score.ts": [
+      "tests/cli.test.ts"
+    ],
     "lanes/autoplan-audit/crashchild.ts": [
       "tests/autoplan-audit/dryrun.test.ts"
     ],
