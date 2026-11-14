@@ -245,7 +245,7 @@ async function carriedLaunch(o: { dir: string; shm: string; planPath: string; pl
   const walRoot = join(o.dir, "walhost-2");
   mkdirSync(walRoot, { recursive: true });
   writeFileSync(join(walRoot, "walctl.py"), WALCTL_PY);
-  const s = localSeams(o.dir, localWorld(), FAKE_KEYS, (p) => ({ ...p, wal: { dir: join(walRoot, "data"), script: join(walRoot, "walctl.py"), owner: null, authorizedKeys: join(walRoot, "authorized_keys") }, target: () => ({ kind: "local", script: join(walRoot, "walctl.py"), dir: join(walRoot, "data") }), stage: p.stage ? { ...p.stage, module: import.meta.path } : null }));
+  const s = localSeams(o.dir, localWorld((vm) => vm.spec?.label.startsWith("dc controller host") && serveMirrors(vm)), FAKE_KEYS, (p) => ({ ...p, wal: { dir: join(walRoot, "data"), script: join(walRoot, "walctl.py"), owner: null, authorizedKeys: join(walRoot, "authorized_keys") }, target: () => ({ kind: "local", script: join(walRoot, "walctl.py"), dir: join(walRoot, "data") }), stage: p.stage ? { ...p.stage, module: import.meta.path } : null }));
   (await s.backend!(o.plan as never, FAKE_KEYS)).privateAddress = () => "127.0.0.1";
   const l = layout(o.plan.runId, join(o.dir, "host"), hostWorkOf(o.dir));
   const f = { planPath: o.planPath, recordPath: join(o.dir, "host-record-2.json") };
