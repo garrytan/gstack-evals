@@ -5,7 +5,7 @@
 // session; the first 20 that qualify under the strict reading are the base apps; fewer than 16 is E_DC_SUPPLY_SHORT.
 import { RECIPES } from "../frozen.ts";
 import { DcError, fail } from "../errors.ts";
-import { sandboxed, sandboxLine, SESSION_MARK, type SandboxDeps, type SandboxTally, type Vm, type VmSpec } from "../stage3/sandbox.ts";
+import { causeText, sandboxed, sandboxLine, SESSION_MARK, type SandboxDeps, type SandboxTally, type Vm, type VmSpec } from "../stage3/sandbox.ts";
 import { CapStopSignal, type AgentEnd, type AgentRun, type MoneySeam } from "../stage3/seams.ts";
 import { nodeDeclared, nodeLine, type NodeDeclared } from "./node.ts";
 import { qualify, type QualifyDeps, type Qualification } from "./qualify.ts";
@@ -37,6 +37,8 @@ export interface CandidateRecord {
   qualification: Qualification | null;
   /** The declared Node versions read from the candidate's tree (node.ts), printed only; null when the tree could not be read. */
   node: NodeDeclared | null;
+  /** Each recipe session or qualification run that failed outside the agent or the app, by its label, with its cause (causeText). */
+  causes: string[];
 }
 
 /** R2-1's funnel. Clone counts and file-check passes come from the frame area. */
@@ -93,6 +95,8 @@ interface Tally {
 interface Attempt {
   end: AgentEnd;
   recipeText: string | null;
+  /** Why it ended outside the agent, masked (causeText); null otherwise. */
+  cause: string | null;
 }
 
 /** One recipe session: admitted on its own at one allowance, run in a fresh recipe VM, audited, settled. */
@@ -118,7 +122,7 @@ async function session(c: Candidate, label: string, d: ScreenDeps, tally: Tally)
         if (marked.exit !== 0) throw new Error("the session's start marker failed (exit " + marked.exit + ")");
         const agent = (seen.agent = await d.agent(vm, { prompt: recipePrompt(), limits: RECIPES.session, sub: { item: ITEM, id: adm.id } }));
         const has = await b.exec(vm, "test -f " + RECIPE_PATH, { user: "root" });
-        return { end: agent.end, recipeText: has.exit === 0 ? new TextDecoder().decode(await b.read(vm, RECIPE_PATH)) : null };
+        return { end: agent.end, recipeText: has.exit === 0 ? new TextDecoder().decode(await b.read(vm, RECIPE_PATH)) : null, cause: agent.end === "infra" ? causeText("the agent's session ended outside the agent" + (agent.why ? ": " + agent.why : "")) : null };
       },
       { scanExtra: (v) => (v?.recipeText !== null && v?.recipeText !== undefined ? [RECIPE_PATH] : []) },
     );
@@ -130,11 +134,13 @@ async function session(c: Candidate, label: string, d: ScreenDeps, tally: Tally)
   await d.money.settle(adm.id, seen.agent?.spentUsd ?? null);
   if (!run.audit.ok) fail("E_DC_SANDBOX_AUDIT", label + ": the recipe VM's audit " + (run.audit.kind === "breach" ? "found " : "could not collect its evidence: ") + run.audit.reasons.join("; ") + ". The base-app screen stops for the Captain");
   if (run.destroyError) d.log?.(label + ": the VM was not deleted (" + run.destroyError + "); the reaper deletes it past its time to live");
-  return { attempt: run.value ?? { end: "infra", recipeText: null }, sub: adm.id };
+  const attempt = run.value ?? { end: "infra", recipeText: null, cause: causeText(run.error ?? "the job returned nothing and recorded no error") };
+  if (attempt.cause) d.log?.(label + ": failed outside the agent: " + attempt.cause);
+  return { attempt, sub: adm.id };
 }
 
 /** One qualification, with one retry when the run fails outside the app (the VM, a preamble step, the browser). */
-async function qualified(c: Candidate, recipe: Recipe, d: ScreenDeps, tally: Tally): Promise<Qualification | null> {
+async function qualified(c: Candidate, recipe: Recipe, d: ScreenDeps, tally: Tally, causes: string[]): Promise<Qualification | null> {
   const qd: QualifyDeps = { sandbox: d.sandbox, spec: d.qualifySpec, browser: d.browser, match: d.match, seededLogin: d.seededLogin };
   for (let i = 1; i <= 2; i++) {
     const label = "qualify " + c.id + (i > 1 ? " retry" : "");
@@ -142,28 +148,36 @@ async function qualified(c: Candidate, recipe: Recipe, d: ScreenDeps, tally: Tal
     tally.sandboxes.push({ label, blocked: r.blocked, portless: r.portless });
     if (!r.audit.ok) fail("E_DC_SANDBOX_AUDIT", label + ": the qualification VM's audit " + (r.audit.kind === "breach" ? "found " : "could not collect its evidence: ") + r.audit.reasons.join("; ") + ". The base-app screen stops for the Captain");
     if (r.value) return r.value;
+    const cause = causeText(r.error ?? "the job returned nothing and recorded no error");
+    d.log?.(label + ": failed outside the app: " + cause);
+    causes.push(label + ": " + cause);
   }
   return null;
 }
 
 async function screenOne(c: Candidate, d: ScreenDeps, tally: Tally): Promise<CandidateRecord> {
   const node = await c.tree().then(nodeDeclared, () => null);
-  const rec = (end: CandidateEnd, sessions: number, why: string | null, recipe: Recipe | null = null, q: Qualification | null = null): CandidateRecord => ({ id: c.id, pin: c.pin, end, sessions, strict: q?.strict ?? false, http200: q?.http200 ?? false, why, recipe, qualification: q, node });
+  const causes: string[] = [];
+  const rec = (end: CandidateEnd, sessions: number, why: string | null, recipe: Recipe | null = null, q: Qualification | null = null): CandidateRecord => ({ id: c.id, pin: c.pin, end, sessions, strict: q?.strict ?? false, http200: q?.http200 ?? false, why, recipe, qualification: q, node, causes });
   tally.candidates++;
-  let { attempt, sub } = await session(c, "recipe session " + c.id, d, tally);
+  let label = "recipe session " + c.id;
+  let { attempt, sub } = await session(c, label, d, tally);
+  if (attempt.cause) causes.push(label + ": " + attempt.cause);
   let sessions = 1;
   if (attempt.end === "infra") {
     await d.money.reconcile(sub);
-    ({ attempt } = await session(c, "recipe session " + c.id + " retry", d, tally));
+    label = "recipe session " + c.id + " retry";
+    ({ attempt } = await session(c, label, d, tally));
+    if (attempt.cause) causes.push(label + ": " + attempt.cause);
     sessions = 2;
   }
   if (attempt.end === "own-limit") return rec("own-limit", sessions, "the session stopped on its own limit; no retry");
-  if (attempt.end === "infra") return rec("infra", sessions, "a failure outside the agent, twice");
+  if (attempt.end === "infra") return rec("infra", sessions, "a failure outside the agent, twice: " + causes.join("; "));
   if (attempt.recipeText === null) return rec("no-recipe", sessions, "the session wrote no " + RECIPE_PATH);
   const parsed = parseRecipe(attempt.recipeText, { seededLogin: d.seededLogin });
   if (!parsed.ok) return rec("bad-recipe", sessions, parsed.problems.join("; "));
-  const q = await qualified(c, parsed.recipe, d, tally);
-  if (!q) return rec("infra", sessions, "the qualification run failed outside the app, twice", parsed.recipe);
+  const q = await qualified(c, parsed.recipe, d, tally, causes);
+  if (!q) return rec("infra", sessions, "the qualification run failed outside the app, twice: " + causes.filter((x) => x.startsWith("qualify ")).join("; "), parsed.recipe);
   return rec(q.strict ? "qualified" : "not-qualified", sessions, q.strict ? null : q.strictWhy, parsed.recipe, q);
 }
 

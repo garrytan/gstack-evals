@@ -8,7 +8,7 @@ import { fail } from "../errors.ts";
 import { routeUrl, setupSteps } from "../recipes/qualify.ts";
 import type { Recipe } from "../recipes/recipe.ts";
 import type { Arm } from "../types.ts";
-import { AUDIT_DIR, sandboxed, SESSION_MARK, type ExecResult, type SandboxDeps, type SandboxTally, type Vm, type VmSpec } from "./sandbox.ts";
+import { AUDIT_DIR, causeText, sandboxed, SESSION_MARK, type ExecResult, type SandboxDeps, type SandboxTally, type Vm, type VmSpec } from "./sandbox.ts";
 import type { AgentRun, BuildAgent, BuildReader, BuildReads, ReadsContext, SubRef } from "./seams.ts";
 
 export type BuildArm = "no-review" | Arm | "generic-look";
@@ -99,9 +99,12 @@ export interface BuildRun {
   tree: Uint8Array | null;
   /** Spend over every attempt; null when any attempt's spend is unknown. */
   spentUsd: number | null;
+  /** Each attempt that failed outside the agent, by its label, with its cause (causeText). */
+  causes?: string[];
 }
 
 const infra = (a: Attempt) => a.error !== null || a.agent === null || a.agent.end === "infra" || a.tree === null;
+const causeOf = (a: Attempt, label: string): string[] => (infra(a) ? [label + ": " + causeText(a.error ?? (a.agent?.end === "infra" ? "the agent's session ended outside the agent" + (a.agent.why ? ": " + a.agent.why : "") : "the build left no tree"))] : []);
 
 /**
  * A build with its one retry: a build that stops on its own limit gets one fresh retry, measured as it stands; a failure
@@ -115,8 +118,9 @@ export async function runBuild(input: BuildInput, d: BuildDeps, reconcile: () =>
   if (why === "infra") await reconcile();
   const second = await attempt(input, d, input.label + " retry");
   const both = [first, second];
-  if (infra(second)) return { end: "missing", attempts: 2, retried: why, tree: null, spentUsd: spend(both) };
-  return { end: second.agent!.end === "completed" ? "completed" : "own-limit", attempts: 2, retried: why, tree: second.tree, spentUsd: spend(both) };
+  const causes = [...causeOf(first, input.label), ...causeOf(second, input.label + " retry")];
+  if (infra(second)) return { end: "missing", attempts: 2, retried: why, tree: null, spentUsd: spend(both), causes };
+  return { end: second.agent!.end === "completed" ? "completed" : "own-limit", attempts: 2, retried: why, tree: second.tree, spentUsd: spend(both), causes };
 }
 
 export interface CheckRun {
@@ -155,9 +159,11 @@ async function checkOnce(tree: Uint8Array, recipe: Recipe, ctx: ReadsContext, d:
 
 /** The check run, with one retry when it fails outside the build (the VM, a preamble step, a reader crash), then missing. */
 export async function checkBuild(tree: Uint8Array, recipe: Recipe, ctx: ReadsContext, d: BuildDeps, label: string): Promise<CheckRun> {
+  const causes: string[] = [];
   for (const l of [label, label + " retry"]) {
     const r = await checkOnce(tree, recipe, ctx, d, l);
     if (r.value) return r.value;
+    causes.push(l + ": " + causeText(r.error ?? "the job returned nothing and recorded no error"));
   }
-  return { serves: null, failedStep: "check run failed outside the build, twice", reads: null };
+  return { serves: null, failedStep: "check run failed outside the build, twice: " + causes.join("; "), reads: null };
 }

@@ -39,7 +39,8 @@ import { playwrightBrowser } from "../recipes/browser.ts";
 import type { BrowserSeam, RecipeAgent } from "../recipes/seams.ts";
 import type { SessionSetup } from "../run/arms.ts";
 import { containPoint, type C2Expect } from "../run/contain.ts";
-import { createInstallNetwork, prepareSession, removeNetwork, reviewImage, type PreparedSession, type ReviewImage, type UnitFiles } from "../run/docker.ts";
+import { createInstallNetwork, installGstack, prepareSession, removeNetwork, reviewImage, startReviewContainer, type PreparedSession, type ReviewImage, type UnitFiles } from "../run/docker.ts";
+import { containerPreflight } from "./preflight-container.ts";
 import { cellId } from "../run/session.ts";
 import { toolCallEnd } from "../run/stream.ts";
 import { proxySessions, runVmAgent, sshAgentSession } from "../stage3/agent.ts";
@@ -48,7 +49,7 @@ import { browserFiles, BROWSER_ROOT, claudeFiles, controllerBackend, nodeFiles, 
 import { MIRROR_NAMES, specFor, type Endpoint, type Mirror, type MirrorName, type UbicloudBackend, type Vm, type VmBackend } from "../stage3/sandbox.ts";
 import { controllerMirrors, keyedUbicloud, sshTunnel, type SshRunner, type Tunnel } from "../stage3/ubicloud-real.ts";
 import type { AnyModel, LedgerItemId } from "../types.ts";
-import type { LedgerProvider, ModelProvider, Providers, ServedTerms, SessionBox, SessionProvider, VmProvider } from "../wire.ts";
+import type { LedgerProvider, ModelProvider, Providers, ReviewProvider, ServedTerms, SessionBox, SessionProvider, VmProvider } from "../wire.ts";
 import { readJson } from "./json.ts";
 
 /** The Captain's wiring file for one host run: the choices the prereg and the areas leave to the integrator. */
@@ -184,6 +185,8 @@ export interface RealSeams {
   /** The sandbox VMs' backend and browser on stage3/fake.ts's simulated Ubicloud, for a keyless launch; the keyed backend and Playwright when unset. */
   vm?: { backend: UbicloudBackend; browser: BrowserSeam };
   docker?: string;
+  /** The preflight's review-container check; the sessions row's container on the trial network when unset. */
+  review?: (dir: string) => Promise<{ lines: string[]; problems: string[] }>;
 }
 
 /** sha256 of the routing and data terms the proxy sends for a model, the digest pin.ts records as its terms digest. */
@@ -237,6 +240,27 @@ export function realProviders(h: HostContext, s: RealSeams = {}): Providers {
     vm: () => realVm(h, s, watch()),
     stage3: (): never => {
       throw new DcError("E_DCW_NO_PROVIDER", "stage 3's pieces (the build agent, the build reader, stage 3 authoring and the DES-4 judges) wait for their pre-data prompts and reply formats and the Captain's go to start stage 3 (PD-31); no key was read and no VM was made");
+    },
+    review: () => realReview(h, s),
+  };
+}
+
+/** The preflight's review container: the sessions row's image, trial network, gstack sources and install network, with no proxy and no model. */
+export function realReview(h: HostContext, s: RealSeams): ReviewProvider {
+  if (s.review) return { check: s.review };
+  const w = h.wiring.sessions ?? fail("E_USAGE", "the wiring file has no sessions section (gstack sources and the image digest), so the preflight can't start a review container; the Captain sets it (lanes/design-constructed/WIRING.md)");
+  const docker = s.docker ?? "docker";
+  let net: TrialNetwork | null = null;
+  let installNet: string | null = null;
+  return {
+    check: (dir) =>
+      containerPreflight(dir, {
+        start: (setup, folder) => startReviewContainer({ image: reviewImage({ expectDigest: w.imageDigest }), setup, folder, network: (net ??= createTrialNetwork(docker)).name, docker }),
+        install: (c) => installGstack(c, { sources: w.gstackSources, installNetwork: (installNet ??= createInstallNetwork(docker)), scratch: join(h.dir, "scratch"), docker }),
+      }),
+    async close() {
+      if (net) removeTrialNetwork(net, docker);
+      if (installNet) removeNetwork(installNet, docker);
     },
   };
 }
@@ -399,7 +423,7 @@ export function nodeTarball(path: string, root: string): void {
 }
 
 /** The recipe agent on the VM sessions: Claude Code from the pinned tarball, each session on its item's metering proxy through the VM proxy endpoint. */
-export function vmSessionAgents(h: HostContext, s: RealSeams, keyed: VmBackend & { address(vm: Vm): string }, watch: ProviderWatch, w: VmWiring): { recipeAgent: RecipeAgent; claude: ControllerFiles; close(): Promise<void> } {
+export function vmSessionAgents(h: HostContext, s: RealSeams, keyed: VmBackend & { address(vm: Vm): string; knownHostsOf?(vm: Vm): string | undefined }, watch: ProviderWatch, w: VmWiring): { recipeAgent: RecipeAgent; claude: ControllerFiles; close(): Promise<void> } {
   if (typeof w.claudeTarball !== "string") fail("E_USAGE", "the wiring file's vm section names no claudeTarball (Claude Code's pinned npm tarball for linux-x64)");
   const root = h.lane().root;
   claudeTarball(w.claudeTarball, root);
@@ -411,7 +435,7 @@ export function vmSessionAgents(h: HostContext, s: RealSeams, keyed: VmBackend &
   const out = join(h.dir, "vm-agents");
   mkdirSync(out, { recursive: true, mode: 0o700 });
   const ssh = { keyPath: w.keyPath, knownHosts: w.knownHosts };
-  const deps = { backend: keyed, sessions, out, session: s.ubicloud?.agent ?? ((vm: Vm, envFile: string) => sshAgentSession(ssh, keyed.address(vm), envFile)), ...(s.query ? { query: s.query } : {}) };
+  const deps = { backend: keyed, sessions, out, session: s.ubicloud?.agent ?? ((vm: Vm, envFile: string) => sshAgentSession({ ...ssh, knownHosts: keyed.knownHostsOf?.(vm) ?? ssh.knownHosts }, keyed.address(vm), envFile)), ...(s.query ? { query: s.query } : {}) };
   return {
     recipeAgent: (vm, o) => runVmAgent(deps, vm, { prompt: o.prompt, limits: o.limits, sub: o.sub }),
     claude: claudeFiles(async () => claudeTarball(w.claudeTarball, root)),
@@ -442,7 +466,7 @@ export async function realVm(h: HostContext, s: RealSeams, watch: ProviderWatch)
     priceMicrosPerHour: w.priceMicrosPerHour,
     now: () => Date.now(),
     spec: (kind, label) => specFor(kind, label, { proxy: w.proxy, mirrors: w.mirrors, env: h.env }),
-    browser: s.vm?.browser ?? playwrightBrowser({ backend, tunnel: s.ubicloud?.tunnel ?? sshTunnel({ keyPath: w.keyPath, knownHosts: w.knownHosts }, (vm) => keyed.address(vm)), chromium: BROWSER_ROOT + "/" + cb.bin }),
+    browser: s.vm?.browser ?? playwrightBrowser({ backend, tunnel: s.ubicloud?.tunnel ?? sshTunnel({ keyPath: w.keyPath, knownHosts: w.knownHosts }, (vm) => keyed.address(vm), (vm) => keyed.knownHostsOf?.(vm)), chromium: BROWSER_ROOT + "/" + cb.bin }),
     recipeAgent: agents.recipeAgent,
     close: agents.close,
   };

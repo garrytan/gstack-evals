@@ -13,6 +13,8 @@
 //
 // UbicloudBackend is the real backend: Ubicloud's API through an injected fetch, commands through an injected ssh. Tests
 // drive it on invented fixtures; nothing in the keyless code creates a real VM.
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { DcError, fail } from "../errors.ts";
 import { CapStopSignal, type HostsSeam } from "./seams.ts";
 
@@ -163,6 +165,15 @@ export function secretHit(text: string): "key" | "drive path" | null {
 /** A failed step's stderr for an error line: each word holding a key pattern or drive path replaced, then cut to 400 characters. */
 export function stepStderr(text: string): string {
   return text.split(/\s+/).filter(Boolean).map((w) => (secretHit(w) ? "[redacted]" : w)).join(" ").slice(0, 400);
+}
+
+/**
+ * A failure's cause for a record or a printed line: stepStderr's masking, after every word holding a URL or a path in
+ * the app's tree (/work/app) is replaced, so the cause never carries an app's name, address or files, a repository's
+ * name inside a URL, a key or a drive path. Line breaks become spaces; the text is cut to 400 characters.
+ */
+export function causeText(text: string): string {
+  return stepStderr(text.split(/\s+/).filter(Boolean).map((w) => (/[a-z][a-z0-9+.-]*:\/\//i.test(w) || w.includes("/work/app") ? "[redacted]" : w)).join(" "));
 }
 
 /** UBI_OWNER from the environment, read by name only. */
@@ -680,8 +691,8 @@ export interface UbicloudOptions {
   image: string;
   publicKey: string;
   fetch: typeof fetch;
-  /** Runs a command over SSH as root or the run user on the VM's address; input feeds stdin. */
-  ssh: (host: string, command: string, o: ExecOptions & { input?: Uint8Array }) => Promise<ExecResult & { raw?: Uint8Array }>;
+  /** Runs a command over SSH as root or the run user on the VM's address; input feeds stdin; knownHosts names the VM's own file. */
+  ssh: (host: string, command: string, o: ExecOptions & { input?: Uint8Array; knownHosts?: string }) => Promise<ExecResult & { raw?: Uint8Array }>;
   sleep: (ms: number) => Promise<void>;
   now: () => number;
   /** A private subnet every VM joins, so sandboxes reach the controller host's proxy and mirrors on its private IPv4. */
@@ -689,11 +700,18 @@ export interface UbicloudOptions {
   /** Runs a command over SSH with its stdout streamed into a local file, never held in memory or decoded. */
   sshTo?: StreamRunner;
   /** Runs a command over SSH with its stdin streamed from a local file or another command, never held in memory. */
-  sshFrom?: (host: string, command: string, source: FileSource, o: ExecOptions) => Promise<{ exit: number; stderr: string }>;
+  sshFrom?: (host: string, command: string, source: FileSource, o: ExecOptions & { knownHosts?: string }) => Promise<{ exit: number; stderr: string }>;
+  /**
+   * A folder holding one known_hosts file per VM, named by the VM's id: made empty when the VM is created, kept when an
+   * attach finds it, removed when the VM is deleted, and named on every SSH call to that VM. Ubicloud reuses addresses, so
+   * one file shared by every VM meets an earlier VM's key on a new VM's address and ssh refuses it; a file per VM id can't
+   * collide. Host-key checking stays on: each VM's key is learnt on first contact and checked on every later call.
+   */
+  knownHostsDir?: string;
 }
 
 /** An SSH command whose stdout goes to a local file at path; the exit and stderr come back. */
-export type StreamRunner = (host: string, command: string, path: string, o: ExecOptions) => Promise<{ exit: number; stderr: string }>;
+export type StreamRunner = (host: string, command: string, path: string, o: ExecOptions & { knownHosts?: string }) => Promise<{ exit: number; stderr: string }>;
 
 /**
  * The Ubicloud backend for paid runs. It names each VM for its owner and its expiry minute, so the runner's reaper can
@@ -735,6 +753,7 @@ export class UbicloudBackend implements VmBackend {
         if (v?.state === "running" && v.ip4) {
           this.hosts.set(name, v.ip4);
           if (v["private-ipv4"]) this.privates.set(name, v["private-ipv4"].replace(/\/\d+$/, ""));
+          this.knownHostsFile(name, true);
           return { id: name, spec };
         }
         await this.o.sleep(5_000);
@@ -752,7 +771,20 @@ export class UbicloudBackend implements VmBackend {
     if (v?.state !== "running" || !v.ip4) return null;
     this.hosts.set(name, v.ip4);
     if (v["private-ipv4"]) this.privates.set(name, v["private-ipv4"].replace(/\/\d+$/, ""));
+    this.knownHostsFile(name, false);
     return { id: name, spec };
+  }
+  /** The VM's own known_hosts file (knownHostsDir), made empty when fresh, else kept; undefined without a folder. */
+  private knownHostsFile(name: string, fresh: boolean): string | undefined {
+    if (!this.o.knownHostsDir) return undefined;
+    const path = join(this.o.knownHostsDir, name);
+    mkdirSync(this.o.knownHostsDir, { recursive: true, mode: 0o700 });
+    if (fresh || !existsSync(path)) writeFileSync(path, "", { mode: 0o600 });
+    return path;
+  }
+  /** The known_hosts file every SSH call to this VM names; undefined when the backend keeps none per VM. */
+  knownHostsOf(vm: Vm): string | undefined {
+    return this.o.knownHostsDir ? join(this.o.knownHostsDir, vm.id) : undefined;
   }
   /** Whether Ubicloud still holds the VM, in any state. */
   async exists(name: string): Promise<boolean> {
@@ -772,25 +804,25 @@ export class UbicloudBackend implements VmBackend {
     return h!;
   }
   exec(vm: Vm, command: string, o: ExecOptions = {}): Promise<ExecResult> {
-    return this.o.ssh(this.host(vm), command, o);
+    return this.o.ssh(this.host(vm), command, { ...o, knownHosts: this.knownHostsOf(vm) });
   }
   /** Runs a command with its stdout streamed into a local file, for output too large to hold in memory. */
   readTo(vm: Vm, command: string, path: string, o: ExecOptions = {}): Promise<{ exit: number; stderr: string }> {
     if (!this.o.sshTo) fail("E_INTERNAL", "the backend has no streaming read");
-    return this.o.sshTo!(this.host(vm), command, path, o);
+    return this.o.sshTo!(this.host(vm), command, path, { ...o, knownHosts: this.knownHostsOf(vm) });
   }
   async write(vm: Vm, path: string, data: Uint8Array | string | FileSource) {
     if (typeof data !== "string" && !(data instanceof Uint8Array)) {
       if (!this.o.sshFrom) fail("E_INTERNAL", "the backend has no streaming write");
-      const s = await this.o.sshFrom!(this.host(vm), "cat > " + q(path), data, { user: "root" });
+      const s = await this.o.sshFrom!(this.host(vm), "cat > " + q(path), data, { user: "root", knownHosts: this.knownHostsOf(vm) });
       if (s.exit !== 0) fail("E_DC_INFRA_MISSING", "could not write " + path + " on " + vm.id + " (exit " + s.exit + ")");
       return;
     }
-    const r = await this.o.ssh(this.host(vm), "cat > " + q(path), { user: "root", input: typeof data === "string" ? new TextEncoder().encode(data) : data });
+    const r = await this.o.ssh(this.host(vm), "cat > " + q(path), { user: "root", input: typeof data === "string" ? new TextEncoder().encode(data) : data, knownHosts: this.knownHostsOf(vm) });
     if (r.exit !== 0) fail("E_DC_INFRA_MISSING", "could not write " + path + " on " + vm.id + " (exit " + r.exit + ")");
   }
   async read(vm: Vm, path: string) {
-    const r = await this.o.ssh(this.host(vm), "cat " + q(path), { user: "root" });
+    const r = await this.o.ssh(this.host(vm), "cat " + q(path), { user: "root", knownHosts: this.knownHostsOf(vm) });
     if (r.exit !== 0) fail("E_DC_INFRA_MISSING", "could not read " + path + " on " + vm.id + " (exit " + r.exit + ")");
     return r.raw ?? new TextEncoder().encode(r.stdout);
   }
@@ -798,5 +830,7 @@ export class UbicloudBackend implements VmBackend {
     await this.api("DELETE", vm.id);
     this.hosts.delete(vm.id);
     this.privates.delete(vm.id);
+    const kh = this.knownHostsOf(vm);
+    if (kh) rmSync(kh, { force: true });
   }
 }

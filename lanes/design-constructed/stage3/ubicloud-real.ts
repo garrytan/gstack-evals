@@ -92,7 +92,7 @@ export const shq = (s: string) => "'" + s.replace(/'/g, "'\\''") + "'";
 export interface SshOptions {
   /** The private key file (mode 600) the launch made for its VMs. */
   keyPath: string;
-  /** A known-hosts file of the launch's own; each VM's key is learnt on first contact. */
+  /** A known-hosts file of the launch's own; each VM's key is learnt on first contact. A call's own file (a VM's, UbicloudBackend knownHostsDir) replaces it. */
   knownHosts: string;
   /** The login user, Ubicloud's default unix user. */
   login?: string;
@@ -123,13 +123,16 @@ export const sshArgs = (o: SshOptions, host: string, extra: string[] = []): stri
 /** The remote command for a user: root through sudo, the run user through sudo -u from its home. */
 export const asUser = (command: string, user: "root" | "run", runUser = "run") => (user === "root" ? "sudo -n bash -c " + shq(command) : "sudo -n -u " + runUser + " -H bash -c " + shq("cd ~ && " + command));
 
-export type SshRunner = (host: string, command: string, o: ExecOptions & { input?: Uint8Array }) => Promise<ExecResult & { raw?: Uint8Array }>;
+export type SshRunner = (host: string, command: string, o: ExecOptions & { input?: Uint8Array; knownHosts?: string }) => Promise<ExecResult & { raw?: Uint8Array }>;
+
+/** The options with a call's own known_hosts file in place of the runner's, when the call names one. */
+const withKnownHosts = <O extends SshOptions>(o: O, knownHosts: string | undefined): O => (knownHosts ? { ...o, knownHosts } : o);
 
 /** Every VM command over SSH, as root or the run user; an SSH failure is exit 255, a command past its limit exit 124. */
 export function sshRunner(o: SshOptions & { wrap?: (command: string, user: "root" | "run") => string }): SshRunner {
   const wrap = o.wrap ?? ((c: string, u: "root" | "run") => asUser(c, u, o.runUser));
   return async (host, command, eo) => {
-    const r = await runProcess([...sshArgs(o, host), wrap(command, eo.user ?? "run")], { input: eo.input, timeoutMs: eo.timeoutMs });
+    const r = await runProcess([...sshArgs(withKnownHosts(o, eo.knownHosts), host), wrap(command, eo.user ?? "run")], { input: eo.input, timeoutMs: eo.timeoutMs });
     return { exit: r.exit, stdout: new TextDecoder().decode(r.stdout), stderr: r.stderr, raw: r.stdout };
   };
 }
@@ -137,13 +140,13 @@ export function sshRunner(o: SshOptions & { wrap?: (command: string, user: "root
 /** sshRunner's streaming twin: the command's stdout goes into a local file, never into memory and never decoded as text. */
 export function sshStreamer(o: SshOptions & { wrap?: (command: string, user: "root" | "run") => string }): StreamRunner {
   const wrap = o.wrap ?? ((c: string, u: "root" | "run") => asUser(c, u, o.runUser));
-  return (host, command, path, eo) => runProcessTo([...sshArgs(o, host), wrap(command, eo.user ?? "run")], path, { timeoutMs: eo.timeoutMs });
+  return (host, command, path, eo) => runProcessTo([...sshArgs(withKnownHosts(o, eo.knownHosts), host), wrap(command, eo.user ?? "run")], path, { timeoutMs: eo.timeoutMs });
 }
 
 /** sshRunner's streaming upload: the command's stdin comes from a local file or a local command, never from memory. */
-export function sshSender(o: SshOptions & { wrap?: (command: string, user: "root" | "run") => string }): (host: string, command: string, source: FileSource, eo: ExecOptions) => Promise<{ exit: number; stderr: string }> {
+export function sshSender(o: SshOptions & { wrap?: (command: string, user: "root" | "run") => string }): (host: string, command: string, source: FileSource, eo: ExecOptions & { knownHosts?: string }) => Promise<{ exit: number; stderr: string }> {
   const wrap = o.wrap ?? ((c: string, u: "root" | "run") => asUser(c, u, o.runUser));
-  return (host, command, source, eo) => runProcessFrom([...sshArgs(o, host), wrap(command, eo.user ?? "run")], source, { timeoutMs: eo.timeoutMs });
+  return (host, command, source, eo) => runProcessFrom([...sshArgs(withKnownHosts(o, eo.knownHosts), host), wrap(command, eo.user ?? "run")], source, { timeoutMs: eo.timeoutMs });
 }
 
 /** A free local port on the loopback interface. */
@@ -176,11 +179,11 @@ export interface Tunnel {
   close: () => Promise<void>;
 }
 
-/** An SSH local forward from a free loopback port to 127.0.0.1:remotePort inside the VM. */
-export function sshTunnel(o: SshOptions, address: (vm: Vm) => string): (vm: Vm, remotePort: number) => Promise<Tunnel> {
+/** An SSH local forward from a free loopback port to 127.0.0.1:remotePort inside the VM, on the VM's own known_hosts file when it has one. */
+export function sshTunnel(o: SshOptions, address: (vm: Vm) => string, knownHostsOf: (vm: Vm) => string | undefined = () => undefined): (vm: Vm, remotePort: number) => Promise<Tunnel> {
   return async (vm, remotePort) => {
     const port = await freePort();
-    const p = Bun.spawn(sshArgs(o, address(vm), ["-N", "-o", "ExitOnForwardFailure=yes", "-L", "127.0.0.1:" + port + ":127.0.0.1:" + remotePort]), { stdin: "ignore", stdout: "ignore", stderr: "ignore" });
+    const p = Bun.spawn(sshArgs(withKnownHosts(o, knownHostsOf(vm)), address(vm), ["-N", "-o", "ExitOnForwardFailure=yes", "-L", "127.0.0.1:" + port + ":127.0.0.1:" + remotePort]), { stdin: "ignore", stdout: "ignore", stderr: "ignore" });
     const close = async () => {
       p.kill("SIGTERM");
       await p.exited;
@@ -207,19 +210,22 @@ export interface RealUbicloudOptions {
   env?: Readonly<Record<string, string | undefined>>;
   /** Ubicloud's API; the real fetch when unset. */
   fetch?: typeof fetch;
+  /** One known_hosts file per VM in this folder (UbicloudBackend knownHostsDir). */
+  knownHostsDir?: string;
 }
 
 /** The backend on Ubicloud's API with the real fetch, sleep and clock. The token is read by name and never logged. */
 export function realUbicloud(o: RealUbicloudOptions): UbicloudBackend {
   const token = (o.env ?? process.env).UBICLOUD_API_KEY ?? "";
   if (!token) fail("E_USAGE", "UBICLOUD_API_KEY is not set for the paid launcher");
-  return new UbicloudBackend({ project: o.project, location: o.location, token, size: o.size, image: o.image, publicKey: o.publicKey, fetch: o.fetch ?? globalThis.fetch.bind(globalThis), ssh: o.ssh, sshTo: o.sshTo, sshFrom: o.sshFrom, sleep: (ms) => Bun.sleep(ms), now: () => Date.now(), privateSubnet: o.privateSubnet });
+  return new UbicloudBackend({ project: o.project, location: o.location, token, size: o.size, image: o.image, publicKey: o.publicKey, fetch: o.fetch ?? globalThis.fetch.bind(globalThis), ssh: o.ssh, sshTo: o.sshTo, sshFrom: o.sshFrom, sleep: (ms) => Bun.sleep(ms), now: () => Date.now(), privateSubnet: o.privateSubnet, knownHostsDir: o.knownHostsDir });
 }
 
 /**
  * The backend a paid launcher or the controller service builds: its own ed25519 key (made once, mode 600), the SSH
  * runner on it and Ubicloud with the token read by name. The launcher's key reaches the host VMs; the controller
- * host's own key reaches the sandboxes it creates.
+ * host's own key reaches the sandboxes it creates. Each VM gets its own known_hosts file in <knownHosts>.d, named by
+ * its id (UbicloudBackend knownHostsDir), so a VM on an address an earlier VM had never meets that VM's key.
  */
 export async function keyedUbicloud(o: Omit<RealUbicloudOptions, "ssh" | "publicKey"> & { keyPath: string; knownHosts: string; runUser?: string; ssh?: SshRunner }): Promise<UbicloudBackend> {
   if (!existsSync(o.keyPath)) {
@@ -230,10 +236,12 @@ export async function keyedUbicloud(o: Omit<RealUbicloudOptions, "ssh" | "public
   const publicKey = readFileSync(o.keyPath + ".pub", "utf8").trim();
   const ssh = { keyPath: o.keyPath, knownHosts: o.knownHosts, runUser: o.runUser };
   const injected = o.ssh;
-  if (!injected) return realUbicloud({ ...o, publicKey, ssh: sshRunner(ssh), sshTo: o.sshTo ?? sshStreamer(ssh), sshFrom: o.sshFrom ?? sshSender(ssh) });
+  const knownHostsDir = o.knownHosts + ".d";
+  if (!injected) return realUbicloud({ ...o, publicKey, knownHostsDir, ssh: sshRunner(ssh), sshTo: o.sshTo ?? sshStreamer(ssh), sshFrom: o.sshFrom ?? sshSender(ssh) });
   return realUbicloud({
     ...o,
     publicKey,
+    knownHostsDir,
     ssh: injected,
     sshTo:
       o.sshTo ??

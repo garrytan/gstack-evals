@@ -51,6 +51,8 @@ export interface AgentRun {
   end: AgentEnd;
   /** Proxy-metered spend; null when unknown (held until reconciled). */
   spentUsd: number | null;
+  /** For an infra end, the driver's termination, for the record's cause. */
+  why?: string;
 }
 
 // ---- Stage 3 (prereg section 11 and 2026-11-09 section 11)

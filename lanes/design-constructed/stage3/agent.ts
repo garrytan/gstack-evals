@@ -169,5 +169,6 @@ export async function runVmAgent(d: VmAgentDeps, vm: Vm, o: { prompt: string; li
   const spentUsd = figures.unknownMicros > 0 ? null : figures.spentMicros / 1e6;
   const end = endOf(outcome!.termination);
   if (end.kind === "cap-stop") throw new CapStopSignal(o.sub.item, label + ": the proxy refused a call on the item's cap");
-  return { end: end.kind === "completed" ? "completed" : end.kind === "own-limit" ? "own-limit" : "infra", spentUsd };
+  const kind = end.kind === "completed" ? "completed" : end.kind === "own-limit" ? "own-limit" : "infra";
+  return { end: kind, spentUsd, ...(kind === "infra" ? { why: "the session ended with " + outcome!.termination.kind } : {}) };
 }

@@ -4,7 +4,7 @@
 // creates a VM, opens a socket or reads a key.
 // Adapted from lanes/devex/stage3/fake.ts at 5ee7f764232b196a1d0cec5b144a287b792f9c94 (branch build-devex-review-eval).
 import { createHash } from "node:crypto";
-import { readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { NODE, NODE_ROOT } from "./install.ts";
 import { MIRROR_CHECKS, MIRRORS_DONE } from "./ubicloud-real.ts";
 import { AUDIT_COMMANDS, AUDIT_DIR, MIRROR_NAMES, type MirrorName, allowed, DESCRIBE_DONE, WORK_DONE, DROP_PREFIX, END_MARK, NET_PREFIX, secretHit, START_MARK, UbicloudBackend, type Connection, type ExecResult, type Mirror, type ProcessRow, type StatEntry, type VmSpec } from "./sandbox.ts";
@@ -45,6 +45,8 @@ export interface FakeVm {
   units: Map<string, FakeUnit>;
   /** Node builds by the path of their node binary, with their version: Ubuntu's nodejs, or an unpacked tarball. */
   nodes: Map<string, string>;
+  /** The VM's SSH host key, new for every VM, as a fresh Ubicloud VM's is. */
+  hostKey: string;
 }
 
 export interface FakeUnit {
@@ -90,6 +92,16 @@ export interface FakeWorld {
   api?: Partial<Record<"POST" | "GET" | "DELETE", { status?: number; throws?: string; nth?: number }>>;
   /** Mirrors the controller does not serve: a sandbox step that fetches through one fails as its package manager does. */
   mirrorsDown?: MirrorName[];
+  /** Ubicloud reuses addresses: a new VM takes the address of the VM deleted longest ago that no later VM took. */
+  reuseAddresses?: boolean;
+  /** The backend's known_hosts folder (UbicloudBackend knownHostsDir); unset, every call uses the runner's own file. */
+  knownHostsDir?: string;
+  /** The runner's own known_hosts file, one for every VM, as address to host key: what an SSH call naming no file of its own reads. */
+  runnerKnownHosts: Map<string, string>;
+  /** Addresses deleted VMs freed, oldest first, for reuseAddresses. */
+  freeIps: string[];
+  /** The VM proxy endpoint refuses connections: a curl to it fails as curl does when nothing listens. */
+  proxyDown?: boolean;
 }
 
 const enc = new TextEncoder();
@@ -341,8 +353,51 @@ const describeLine = (vm: FakeVm, p: string) => {
 };
 
 /** A world whose VMs are clean by default: init and the run user's shell, egress to the allowed endpoints only. */
-export function fakeWorld(o: Partial<Pick<FakeWorld, "faults" | "handler" | "plant" | "ssh" | "sshTo" | "api" | "mirrorsDown">> = {}): FakeWorld {
-  return { vms: [], deleted: [], faults: o.faults ?? {}, handler: o.handler ?? (() => undefined), plant: o.plant ?? (() => {}), ssh: o.ssh, sshTo: o.sshTo, api: o.api, mirrorsDown: o.mirrorsDown };
+export function fakeWorld(o: Partial<Pick<FakeWorld, "faults" | "handler" | "plant" | "ssh" | "sshTo" | "api" | "mirrorsDown" | "reuseAddresses" | "knownHostsDir" | "proxyDown">> = {}): FakeWorld {
+  return { vms: [], deleted: [], faults: o.faults ?? {}, handler: o.handler ?? (() => undefined), plant: o.plant ?? (() => {}), ssh: o.ssh, sshTo: o.sshTo, api: o.api, mirrorsDown: o.mirrorsDown, reuseAddresses: o.reuseAddresses, knownHostsDir: o.knownHostsDir, runnerKnownHosts: new Map(), freeIps: [], proxyDown: o.proxyDown };
+}
+
+/**
+ * A curl to the VM's proxy endpoint, as the VM front answers an unbound slot: 404 "no such slot", reaching no proxy and
+ * no model; the filter logs the accepted connection. With proxyDown, curl fails to connect (exit 7).
+ */
+function proxyAnswer(w: FakeWorld, vm: FakeVm, command: string): ExecResult | undefined {
+  const p = vm.spec?.proxy;
+  if (!p || !command.startsWith("curl ") || !command.includes("http://" + p.host + ":" + p.port + "/")) return undefined;
+  if (!vm.egress.some((c) => c.host === p.host && c.port === p.port)) vm.egress.push({ host: p.host, port: p.port });
+  if (w.proxyDown) return { exit: 7, stdout: "", stderr: "curl: (7) Failed to connect to " + p.host + " port " + p.port + " after 2 ms: Couldn't connect to server" };
+  return ok("no such slot\n404");
+}
+
+/**
+ * ssh's host-key check with StrictHostKeyChecking=accept-new, on the call's own known_hosts file (one line per address:
+ * the address and the key) or else the runner's shared one: an address the file lacks is learnt, a matching key passes,
+ * and a different key fails as ssh does, exit 255 with its warning, before any command runs.
+ */
+export function hostKeyCheck(w: FakeWorld, vm: FakeVm, host: string, file: string | undefined): ExecResult | null {
+  const known = file ? new Map((existsSync(file) ? readFileSync(file, "utf8") : "").split("\n").filter(Boolean).map((l) => l.split(" ") as [string, string]).map(([h, ...k]) => [h, k.join(" ")] as [string, string])) : w.runnerKnownHosts;
+  const seen = known.get(host);
+  if (seen === vm.hostKey) return null;
+  if (seen === undefined) {
+    if (file) appendFileSync(file, host + " " + vm.hostKey + "\n");
+    else w.runnerKnownHosts.set(host, vm.hostKey);
+    return null;
+  }
+  const line = [...known.keys()].indexOf(host) + 1;
+  return {
+    exit: 255,
+    stdout: "",
+    stderr: [
+      "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@",
+      "@    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @",
+      "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@",
+      "IT IS POSSIBLE THAT SOMEONE IS DOING SOMETHING NASTY!",
+      "Offending ED25519 key in " + (file ?? "the runner's known_hosts") + ":" + line,
+      "Host key for " + host + " has changed and you have requested strict checking.",
+      "Host key verification failed.",
+      "",
+    ].join("\n"),
+  };
 }
 
 /** The real backend on the world: fetch answers Ubicloud's VM calls, ssh answers the VM's commands. */
@@ -362,13 +417,15 @@ export function fakeBackend(w: FakeWorld): UbicloudBackend {
     }
     if (method !== "POST" && (!byName.has(name) || w.deleted.includes(name))) return new Response("! Unexpected response status: 404", { status: 404 });
     if (method === "POST") {
-      const vm: FakeVm = { id: name, ip: "10.1.0." + (w.vms.length + 10), spec: null, calls: [], files: new Map(), processes: [], egress: [], blocked: [], written: [], work: [], installed: [], docker: false, node: false, nft: { table: false, chain: null, rules: [] }, cut: false, dirs: new Set(IMAGE_DIRS), units: new Map(), nodes: new Map() };
+      const ip = (w.reuseAddresses ? w.freeIps.shift() : undefined) ?? "10.1.0." + (w.vms.length + 10);
+      const vm: FakeVm = { id: name, ip, hostKey: "ssh-ed25519 AAAAfakehost" + crypto.randomUUID().replace(/-/g, ""), spec: null, calls: [], files: new Map(), processes: [], egress: [], blocked: [], written: [], work: [], installed: [], docker: false, node: false, nft: { table: false, chain: null, rules: [] }, cut: false, dirs: new Set(IMAGE_DIRS), units: new Map(), nodes: new Map() };
       w.vms.push(vm);
       byName.set(name, vm);
       byIp.set(vm.ip, vm);
       return new Response("VM created with id: " + name, { status: 200 });
     }
     if (method === "GET") return new Response("state: running\nip4: " + byName.get(name)!.ip + "\nprivate-ipv4: \n", { status: 200 });
+    if (w.reuseAddresses && !w.deleted.includes(name)) w.freeIps.push(byName.get(name)!.ip);
     w.deleted.push(name);
     return new Response("VM, if it exists, is now scheduled for destruction", { status: 200 });
   }) as unknown as typeof fetch;
@@ -379,6 +436,7 @@ export function fakeBackend(w: FakeWorld): UbicloudBackend {
     size: "standard-4",
     image: "ubuntu-noble",
     publicKey: "ssh-ed25519 AAAAfake",
+    knownHostsDir: w.knownHostsDir,
     fetch: fetchFake,
     now: () => Date.UTC(2026, 10, 14),
     sleep: async () => {},
@@ -399,6 +457,8 @@ export function fakeBackend(w: FakeWorld): UbicloudBackend {
     ssh: async (host, command, so) => {
       const vm = byIp.get(host)!;
       vm.calls.push({ command, user: so.user ?? "run" });
+      const refused = hostKeyCheck(w, vm, host, so.knownHosts);
+      if (refused) return refused;
       if (vm.cut) return { exit: 255, stdout: "", stderr: "" };
       const own = w.ssh ? await w.ssh(vm, command, so.input, so.user ?? "run") : undefined;
       if (own) return own;
@@ -431,7 +491,7 @@ export function fakeBackend(w: FakeWorld): UbicloudBackend {
       if (test) return vm.files.has(test[1]!) ? ok() : { exit: 1, stdout: "", stderr: "" };
       for (const [name, cmd] of Object.entries(AUDIT_COMMANDS)) if (cmd === command) return auditOutput(w, vm, name as AuditCommand);
       if (w.faults.preamble?.some((s) => command.includes(s))) return { exit: 1, stdout: "", stderr: "fake preamble failure" };
-      return mirrorHostAnswer(vm, command) ?? mirrorDownAnswer(w, vm, command) ?? dockerAnswer(vm, command) ?? { ...ok(), ...(w.handler(vm, command) ?? {}) };
+      return mirrorHostAnswer(vm, command) ?? mirrorDownAnswer(w, vm, command) ?? dockerAnswer(vm, command) ?? proxyAnswer(w, vm, command) ?? { ...ok(), ...(w.handler(vm, command) ?? {}) };
     },
   });
   const create = backend.create.bind(backend);

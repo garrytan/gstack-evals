@@ -45,6 +45,7 @@ import { cloneFixture } from "./dryrun-clones.ts";
 import { FAKE_KEYS, host, hostFixture, hostWorkOf, localSeams, localWorld, openSealed, rowEnv, shmOf, withTemp } from "./dryrun-host.ts";
 import { runRowOnHost } from "./host.ts";
 import { nodePinPath, realProviders, type HostContext } from "./real.ts";
+import { containerPreflight, fakeContainerSeams } from "./preflight-container.ts";
 import type { Args, RowEnv } from "./start.ts";
 
 /** The text every scripted reply carries; it may sit only in the host's tmpfs and the sealed archive. */
@@ -70,7 +71,7 @@ export const runOnHost: HostStage["runOnHost"] = async (service, args, row) => {
   });
   const clone = (name: string, oid: string, dest: string) => fetchAt("file://" + join(s.src, name), oid, dest, ["file"]);
   return runRowOnHost(service, args, row, {
-    env: (ctx): RowEnv => ({ ...realEnv(ctx), dryRun: async () => true, vocabulary: () => STAND_IN_VOCABULARY, providers: realProviders(ctx, { fetch: up.fetch, sleep: async () => {}, vm: { backend: fakeBackend(fakeWorld()), browser: fixtureBrowser(() => "content") } }) }),
+    env: (ctx): RowEnv => ({ ...realEnv(ctx), dryRun: async () => true, vocabulary: () => STAND_IN_VOCABULARY, providers: realProviders(ctx, { fetch: up.fetch, sleep: async () => {}, vm: { backend: fakeBackend(fakeWorld()), browser: fixtureBrowser(() => "content") }, review: (dir) => containerPreflight(dir, fakeContainerSeams()) }) }),
     run: async (argv, io, env) => {
       if (argv[0] === "clones") return clonesRow(clone)(argsOf(argv), io, env);
       if (argv[0] === "planted") return plantedRow({ clone, table: () => JSON.parse(readFileSync(s.table, "utf8")) })(argsOf(argv), io, env);

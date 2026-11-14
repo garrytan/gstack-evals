@@ -144,6 +144,12 @@ export interface Stage3Provider {
   close?(): Promise<void>;
 }
 
+/** The preflight's review-container check: one container through the sessions row's own steps, with no model call. */
+export interface ReviewProvider {
+  check(dir: string): Promise<{ lines: string[]; problems: string[] }>;
+  close?(): Promise<void>;
+}
+
 type Factory<T> = () => T | Promise<T>;
 
 /** The provider factories a row may build once its checks pass. Null is a provider not bound in this build. */
@@ -153,6 +159,8 @@ export interface Providers {
   session: Factory<SessionProvider> | null;
   vm: Factory<VmProvider> | null;
   stage3: Factory<Stage3Provider> | null;
+  /** The preflight's review container; absent in a build that binds none. */
+  review?: Factory<ReviewProvider> | null;
 }
 
 export type ProviderName = keyof Providers;
@@ -167,7 +175,7 @@ const offHost = (name: ProviderName) => (): never => {
  * and off it factories that refuse. Calling this builds nothing; each factory runs only when a row calls build().
  */
 export const BOUND_PROVIDERS = (host: HostContext | null): Providers =>
-  host ? realProviders(host) : { ledger: offHost("ledger"), model: offHost("model"), session: offHost("session"), vm: offHost("vm"), stage3: offHost("stage3") };
+  host ? realProviders(host) : { ledger: offHost("ledger"), model: offHost("model"), session: offHost("session"), vm: offHost("vm"), stage3: offHost("stage3"), review: offHost("review") };
 
 /** Builds one named provider, or refuses with E_DCW_NO_PROVIDER. Each row builds only what it uses, after its checks. */
 export async function build<K extends ProviderName>(p: Providers, name: K, row: string): Promise<Built<K>> {
