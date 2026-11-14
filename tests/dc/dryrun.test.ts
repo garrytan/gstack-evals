@@ -39,7 +39,7 @@ describe("dc dry run", () => {
     expect(r.lines).toContain("FAIL T1 passes: another case has this rule and name");
     expect(r.lines).toContain("FAIL T 1 spaced: a rule is one word with no spaces");
     expect(r.lines).toContain("FAIL load money: cases() threw: no cases");
-  });
+  }, 60_000);
 });
 
 describe("gstack-evals dc", () => {

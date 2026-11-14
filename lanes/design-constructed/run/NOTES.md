@@ -84,6 +84,7 @@ tests/dc/run/pinned.test.ts checks the four vendored scope sources against their
 - src/adapters/claude-code/driver.ts: a `memoryLog?: boolean` option, off by default. When on, an InstructionsLoaded hook writes each loaded memory file to memory.ndjson, so the hostile check can see which instruction files the CLI loaded.
 - src/adapters/host.ts: the memoryLog field and its pass-through to the driver.
 - src/errors/codes.ts: E_BASE_APP_DROPPED, added (docs/errors.md regenerated).
+- tests/dc/dryrun.test.ts: the 60 s limit on the failing-case test, as on the file's other dry-run tests.
 - tests/adapters/harness.ts: a `host` option, off by default, so the fake upstream's proxy can listen on a Docker bridge's gateway that a container reaches.
 
 ## Open for the integrator
@@ -97,7 +98,7 @@ tests/dc/run/pinned.test.ts checks the four vendored scope sources against their
 7. docker.ts now has the container RunBox, the Docker C2 exec and prepareSession. Integration must still wire them into the session loop, the score area's parser for the ParseBlock seam, and the cli.ts `scope` and `sessions` rows, and record each session's image digest.
 8. C2 fails a unit whose base app holds any file named unit.json or key.json.
 9. Closed: exportUnit takes a kept clone or a kept bundle and checks its HEAD and tree against the base app's record.
-10. tests/dc/dryrun.test.ts runs every area's cases under bun's default 5 s test timeout. The run area's cases use real git and take about 3.5 to 4.8 s on a 4-core machine (the full test passed at 4.45 s here), so the shared test needs an explicit timeout before more areas add cases.
+10. tests/dc/dryrun.test.ts runs every area's cases under bun's default 5 s test timeout. The run area's cases use real git and take about 3.5 to 4.8 s on a 4-core machine (the full test passed at 4.45 s here), so the shared test needs an explicit timeout before more areas add cases. With the intake case added, the test that runs every area but frame and money took 6.4 s, so it now has the 60 s limit the file's other dry-run tests carry.
 11. Install-time egress. Section 4 gives the container no network but the proxy, while the frozen ./setup --host claude installs packages with bun and downloads Playwright Chromium. The rig joins a plain bridge network for the install only and leaves it before the second C2 and the session. The alternative is an offline install from a dependency set fetched outside the container. The Captain decides.
 12. Chromium. The frozen install downloads Chromium (about 700 MB in HOME/.cache) and leaves a bun cache (about 600 MB in HOME/.bun), so each gstack session's container carries about 1.3 GB, and its install took 15 to 25 s here. Chromium's launch check then fails in the trial image (no browser system libraries), so browse is unavailable in the gstack arms either way. Main's stack installs pass --no-browser; the frozen command doesn't, and the rig runs it as frozen.
 13. The installed checkout has no .git (the verified git archive tree, as main's installer copies it), where gstack's README clone would have one. setup then reports its update channel as not a git checkout of its own. Whether that changes anything in a session is not tested.
