@@ -310,6 +310,8 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_DCH_IMAGE_DIGEST](#e_dch_image_digest) | 2 | U20 |
 | [E_DCW_INSTALL_DIGEST](#e_dcw_install_digest) | 2 | U20 |
 | [E_DCW_INSTALL_NETWORK](#e_dcw_install_network) | 2 | U20 |
+| [E_DCV_POWER_PY_PIN](#e_dcv_power_py_pin) | 2 | U20 |
+| [E_DCV_PROJECTION_STOP](#e_dcv_projection_stop) | warning | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -2227,6 +2229,14 @@ Fix: Remove the container and its install network by hand (docker network discon
 
 Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
 
+### E_DCV_POWER_PY_PIN
+
+Design plan review eval (prereg section 12, the admission read): the power.py the read would run has a sha256 other than the one attached to the preregistration, so it did not run. The name sits outside E_DC_ because start rule 3 freezes exactly 18 E_DC_ codes.
+
+Fix: Run the read on power.py exactly as the preregistration attaches it (git show the frozen file from main), then read again. Never edit or replace the pinned script.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
 ## Exit 3: calibration failed (INCOMPLETE)
 
 ### CALIBRATION_SKILL
@@ -2684,5 +2694,13 @@ Warning. Owner: U20.
 Design plan review eval, export intake (the Captain's ruling on recorded base apps): the kept clone's or bundle's HEAD is not the base app's recorded commit, HEAD^{tree} is not its recorded tree, or the commit can no longer be fetched (a missing clone or bundle, a bundle with missing prerequisites or no HEAD, a commit or tree object that is gone). The base app drops with the printed reason and is never swapped for another app. The name sits outside E_DC_ because start rule 3 freezes exactly 18 E_DC_ codes.
 
 Fix: Nothing to rerun for that app. Report the dropped app and its reason with the supply counts; never point the export at another commit or another app.
+
+Warning. Owner: U20.
+
+### E_DCV_PROJECTION_STOP
+
+Design plan review eval (prereg section 13, PD-30): the all-in projection rerun before stage 2, on re-priced caps, is past $5,000. The projection line starts with this code, section 13's cuts print in the frozen order for the Captain, and nothing in stage 2 spends. The name sits outside E_DC_ because start rule 3 freezes exactly 18 E_DC_ codes.
+
+Fix: Bring the printed projection and cuts to the Captain. Stage 2 runs only on the Captain's word, at the design the Captain picks.
 
 Warning. Owner: U20.

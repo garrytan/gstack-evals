@@ -43,7 +43,7 @@ const at = (iso: string, what: string) => {
 export function startRule8(o: { go: CaptainGo | null; choice: CaptainChoice | null; pilotPassedAt: string | null; now: string }): Rule8Decision {
   if (o.go) {
     at(o.go.recordedAt, "the Captain's go");
-    if (o.go.officeHoursReading !== "tracks" && o.go.officeHoursReading !== "NO READ (twin)") fail("E_USAGE", "the Captain's go must name office-hours' stage 1 twin reading");
+    if (o.go.officeHoursReading !== "tracks" && o.go.officeHoursReading !== "NO READ (twin)") fail("E_DCW_START_RULE", "start rule 8: the Captain's go must name office-hours' stage 1 twin reading");
     return { start: true, deviation: null, line: "start rule 8: the Captain's go names office-hours' twin reading (" + o.go.officeHoursReading + ")" + (o.go.officeHoursReading === "NO READ (twin)" ? "; stage 1 starts on the Captain's decision after the pause" : "") };
   }
   if (!o.pilotPassedAt) return { start: false, deviation: null, line: "start rule 8: no Captain go and the pilot hasn't passed; stage 1 waits" };
@@ -56,10 +56,10 @@ export function startRule8(o: { go: CaptainGo | null; choice: CaptainChoice | nu
     : { start: false, deviation: null, line: "start rule 8: the Captain chose to keep waiting" };
 }
 
-/** Throws when rule 8 doesn't let stage 1 start. */
+/** Throws E_DCW_START_RULE when rule 8 doesn't let stage 1 start. */
 export function requireStartRule8(o: Parameters<typeof startRule8>[0]): Rule8Decision {
   const d = startRule8(o);
-  if (!d.start) fail("E_USAGE", "stage 1 refused: " + d.line);
+  if (!d.start) fail("E_DCW_START_RULE", "stage 1 refused: " + d.line);
   return d;
 }
 

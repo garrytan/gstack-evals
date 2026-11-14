@@ -2552,6 +2552,21 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_DCV_POWER_PY_PIN: {
+    exit: 2,
+    meaning: "Design plan review eval (prereg section 12, the admission read): the power.py the read would run has a sha256 other than the one attached to the preregistration, so it did not run. The name sits outside E_DC_ because start rule 3 freezes exactly 18 E_DC_ codes.",
+    fix: "Run the read on power.py exactly as the preregistration attaches it (git show the frozen file from main), then read again. Never edit or replace the pinned script.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
+  },
+  E_DCV_PROJECTION_STOP: {
+    exit: null,
+    meaning: "Design plan review eval (prereg section 13, PD-30): the all-in projection rerun before stage 2, on re-priced caps, is past $5,000. The projection line starts with this code, section 13's cuts print in the frozen order for the Captain, and nothing in stage 2 spends. The name sits outside E_DC_ because start rule 3 freezes exactly 18 E_DC_ codes.",
+    fix: "Bring the printed projection and cuts to the Captain. Stage 2 runs only on the Captain's word, at the design the Captain picks.",
+    owner: "U20",
+  },
 } as const satisfies Record<string, CodeInfo>;
 
 export type ReasonCode = keyof typeof CODES;

@@ -1,8 +1,9 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // The admission read and the projection rerun (prereg sections 9, 12 and 13, plan section 12): design.json from the
-// measured comparison set, power.py's design mode at its pinned bytes behind a wrapper that refuses a malformed design
-// with E_USAGE, the projection on measured figures with the re-pricing before stage 2 (PD-30), the $5,000 stop with
-// the frozen cut order put to the Captain, and the re-sizing.
+// measured comparison set, power.py's design mode at its pinned bytes (other bytes refuse with E_DCV_POWER_PY_PIN) behind
+// a wrapper that refuses a malformed design with E_USAGE, the projection on measured figures with the re-pricing before
+// stage 2 (PD-30), the $5,000 stop (its line starts E_DCV_PROJECTION_STOP) with the frozen cut order put to the Captain,
+// and the re-sizing.
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -68,7 +69,7 @@ export function admissionRead(design: DesignJson, o: { dir: string; run: PowerRu
   const d = validateDesign(design);
   const script = o.script ?? POWER_PY;
   const sha = createHash("sha256").update(readFileSync(script)).digest("hex");
-  if (sha !== POWER_PY_SHA256) fail("E_USAGE", script + " has sha256 " + sha + ", not the pinned " + POWER_PY_SHA256);
+  if (sha !== POWER_PY_SHA256) fail("E_DCV_POWER_PY_PIN", script + " has sha256 " + sha + ", not the pinned " + POWER_PY_SHA256);
   mkdirSync(o.dir, { recursive: true });
   const designPath = join(o.dir, "design.json");
   writeFileSync(designPath, JSON.stringify(d, null, 2) + "\n");
@@ -204,7 +205,7 @@ export function projectionRerun(i: ProjectionInput, start: Stage2Design = planne
     ...repriced.map((r) => repricedLine(r.item, r.frozenCapUsd, r.repricedCapUsd)),
   ];
   if (!above(p.allInUsd, MONEY.projectionStopUsd)) return { outcome: "fits", design: d, cuts: [], projection: p, repriced, lines: [...lines, "no cut; the re-priced design goes to the admission read before spending"] };
-  lines.push("the re-priced projection is past $5,000: stop for the Captain; section 13's cut order follows for the Captain");
+  lines.push("E_DCV_PROJECTION_STOP the re-priced projection is past $5,000: stop for the Captain; section 13's cut order follows for the Captain");
   const over = (x: Stage2Design) => above(project(i, x).allInUsd, MONEY.projectionStopUsd);
   const order: Array<() => void> = [
     () => (d.stage3Units = Math.min(d.stage3Units, STAGE3.cutUnits)),
