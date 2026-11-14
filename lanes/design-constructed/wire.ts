@@ -20,7 +20,7 @@ import type { Admission as MoneyAdmission } from "./money/types.ts";
 import { startRule9, type TermsRecord } from "./read/start.ts";
 import type { BrowserSeam, RecipeAgent, RouteMatcher } from "./recipes/seams.ts";
 import type { SessionSetup } from "./run/arms.ts";
-import type { Cell, Exec, ParseBlock, RunBox } from "./run/types.ts";
+import type { Cell, Exec, ParseBlock, Reconciled, RunBox } from "./run/types.ts";
 import { normalizeChanges, parseChanges } from "./score/parse.ts";
 import type { JudgeCaller } from "./score/seams.ts";
 import type { VmBackend, VmSpec } from "./stage3/sandbox.ts";
@@ -104,8 +104,8 @@ export interface SessionBox {
 /** The review session box: a fresh container per attempt, on the cell's round sub-reservation and its proxy. */
 export interface SessionProvider {
   open(o: { cell: Cell; attempt: 1 | 2; setup: SessionSetup; unitDir: string; subId: string }): Promise<SessionBox>;
-  /** Whether any judge has read a block of this attempt (J1), from the meter's cache. */
-  judged(cell: Cell, attempt: 1 | 2): Promise<boolean>;
+  /** J1: reconciles an attempt against its lease, the proxy's record and the session log, and says whether a judge read its block. */
+  reconcile(cell: Cell, attempt: 1 | 2): Promise<Reconciled>;
   close?(): Promise<void>;
 }
 

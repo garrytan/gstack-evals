@@ -57,8 +57,11 @@ describe("gstack-evals dc", () => {
 
   test("an area's command exits 2 with E_USAGE not built yet until it lands; unknown commands exit 2", async () => {
     const a = capture();
-    expect(await main(["recipes"], a.io)).toBe(2);
-    expect(a.err.join("\n").split("\n")[0]).toBe("E_USAGE gstack-evals dc recipes: not built yet (the frame area owns it)");
+    expect(await main(["stage3"], a.io)).toBe(2);
+    expect(a.err.join("\n").split("\n")[0]).toBe("E_USAGE gstack-evals dc stage3: not built yet (the stage3 area owns it)");
+    const w = capture();
+    expect(await main(["recipes"], w.io)).toBe(2);
+    expect(w.err[0]).toStartWith("E_USAGE gstack-evals dc recipes: usage: gstack-evals dc recipes --frame");
     expect(a.err.join("\n").split("\n").every((l) => l.startsWith("E_USAGE "))).toBe(true);
     const b = capture();
     expect(await main(["nope"], b.io)).toBe(2);
