@@ -61,8 +61,8 @@ describe("the vocabulary screen's sources", () => {
     }
   });
 
-  const pin = process.env.GSTACK_PIN_DIR;
-  test.skipIf(!pin)("with GSTACK_PIN_DIR at the gstack pin, the fixture unit passes step 3 on the real vocabulary", () => {
+  const pin = process.env.DC_GSTACK_PIN_DIR;
+  test.skipIf(!pin)("with DC_GSTACK_PIN_DIR at the gstack pin, the fixture unit passes step 3 on the real vocabulary", () => {
     const vocabulary = loadVocabulary(pin!);
     const u: UnitFiles = { plan: PLAN, context: CONTEXT, evidence: EVIDENCE, key: { items: intake("u1", ITEMS, []), wrongWay: WRONG_WAY, decoy: null } };
     expect(screenUnit(u, FIXTURE_APP, { vocabulary, today: "2026-11-01" }).failures).toEqual([]);

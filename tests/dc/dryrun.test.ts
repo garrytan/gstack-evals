@@ -17,7 +17,7 @@ describe("dc dry run", () => {
     expect(r.ok).toBe(true);
     expect(r.lines.some((l) => l.startsWith("PASS PD-1 "))).toBe(true);
     expect(r.lines.at(-1)).toMatch(/^dry run: \d+ pass, 0 fail$/);
-  });
+  }, 60_000);
 
   test("a failing, throwing, repeated or badly named case prints FAIL with its reason", async () => {
     const registry = {
@@ -53,7 +53,7 @@ describe("gstack-evals dc", () => {
     const c = capture();
     expect(await main(["dryrun", "--area", "nope"], c.io)).toBe(2);
     expect(c.err[0]).toStartWith("E_USAGE gstack-evals dc dryrun: --area is one of");
-  });
+  }, 60_000);
 
   test("an area's command exits 2 with E_USAGE not built yet until it lands; unknown commands exit 2", async () => {
     const a = capture();

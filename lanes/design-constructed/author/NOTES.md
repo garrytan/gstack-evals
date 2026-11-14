@@ -109,7 +109,7 @@ the file that carries it names the source path and commit in its header.
    20261114, Fisher-Yates from the last place). If frame/ computes it too, keep one.
 7. **The real vocabulary.** loadVocabulary reads plan-design-review/SKILL.md, sections/review-sections.md and
    sections/checklist.md from a gstack checkout at b6155921 and refuses any whose sha256 differs from screen.ts's pins.
-   CI's keyless half runs on a stand-in vocabulary (the lens line only). With GSTACK_PIN_DIR set, the test runs the
+   CI's keyless half runs on a stand-in vocabulary (the lens line only). With DC_GSTACK_PIN_DIR set, the test runs the
    fixture against the real vocabulary; I ran it and it passes. The planted units should be checked the same way.
 8. **Block parsing for validators.** Steps 5 and 6 take the block parser as a seam. Whether validators get the strict
    parse or the one lenient parse is for whoever wires it; the frozen lenient parse is written for sessions.
