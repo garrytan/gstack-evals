@@ -385,9 +385,12 @@ export function claudeTarball(path: string, root: string): Uint8Array {
   return bytes;
 }
 
-/** Refuses with E_USAGE unless the Node tarball is there and its sha256 is the pin's (stage3/node-pin.json under the lane root). */
+/** Where the Node pin sits under a repo root: the lane's stage3/node-pin.json, the file stage3/install.ts reads as NODE. */
+export const nodePinPath = (root: string) => join(root, "lanes", "design-constructed", "stage3", "node-pin.json");
+
+/** Refuses with E_USAGE unless the Node tarball is there and its sha256 is the pin's (nodePinPath under the repo root). */
 export function nodeTarball(path: string, root: string): void {
-  const pin = JSON.parse(readFileSync(join(root, "stage3", "node-pin.json"), "utf8")) as { version: string; sha256: string };
+  const pin = JSON.parse(readFileSync(nodePinPath(root), "utf8")) as { version: string; sha256: string };
   if (typeof path !== "string" || !existsSync(path)) fail("E_USAGE", "the wiring file's vm.nodeTarball " + path + " does not exist; it is Node " + pin.version + "'s linux-x64 tar.xz");
   const sha = createHash("sha256").update(readFileSync(path)).digest("hex");
   if (sha !== pin.sha256) fail("E_USAGE", "the wiring file's vm.nodeTarball is not Node " + pin.version + "'s pinned tarball (sha256 " + sha + ")");

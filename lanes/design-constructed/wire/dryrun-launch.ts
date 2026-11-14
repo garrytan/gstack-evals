@@ -14,7 +14,7 @@
 // the lowest seams faked (the proxies' upstream, the frame's clone seam, the planted digests table, the dry run).
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { tableOf, type PlantedUnit } from "../author/gatecheck.ts";
 import { STAND_IN_VOCABULARY } from "../author/scripted.ts";
 import { commitAll } from "../money/dryrun-fixture.ts";
@@ -32,7 +32,7 @@ import { clonesRow } from "./clones.ts";
 import { cloneFixture } from "./dryrun-clones.ts";
 import { FAKE_KEYS, host, hostFixture, hostWorkOf, localSeams, localWorld, openSealed, rowEnv, shmOf, withTemp } from "./dryrun-host.ts";
 import { runRowOnHost } from "./host.ts";
-import { realProviders, type HostContext } from "./real.ts";
+import { nodePinPath, realProviders, type HostContext } from "./real.ts";
 import type { Args, RowEnv } from "./start.ts";
 
 /** The text every scripted reply carries; it may sit only in the host's tmpfs and the sealed archive. */
@@ -110,8 +110,8 @@ export async function launchScenario(): Promise<string[]> {
       writeFileSync(join(lane, "docker", "host-cli.json"), JSON.stringify({ claude: "9.9.9" }));
       writeFileSync(join(lane, "docker", "trial.Dockerfile"), "ADD --checksum=sha256:" + createHash("sha256").update(tgz).digest("hex") + " https://registry.npmjs.org/@anthropic-ai/claude-code-linux-x64/-/claude-code-linux-x64-9.9.9.tgz /opt/claude.tgz\n");
       const nodeTar = new TextEncoder().encode("invented node build\n");
-      mkdirSync(join(lane, "stage3"), { recursive: true });
-      writeFileSync(join(lane, "stage3", "node-pin.json"), JSON.stringify({ version: "24.0.0", sha256: createHash("sha256").update(nodeTar).digest("hex") }));
+      mkdirSync(dirname(nodePinPath(lane)), { recursive: true });
+      writeFileSync(nodePinPath(lane), JSON.stringify({ version: "24.0.0", sha256: createHash("sha256").update(nodeTar).digest("hex") }));
       writeFileSync(join(work, "node.tar.xz"), nodeTar);
       const laneCommit = commitAll(lane, dir);
       writeFileSync(join(work, "claude.tgz"), tgz);

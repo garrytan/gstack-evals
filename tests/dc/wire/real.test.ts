@@ -8,7 +8,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { $ } from "../../../lanes/design-constructed/money/book.ts";
 import { makeRecord } from "../../../lanes/design-constructed/money/dryrun-fixture.ts";
 import { DirTarget } from "../../../lanes/design-constructed/money/durability.ts";
@@ -32,7 +32,7 @@ import { BOUND_PROVIDERS, build } from "../../../lanes/design-constructed/wire.t
 import { fakeEnv, fakeKit, REPO_ROOT } from "../../../lanes/design-constructed/wire/fakes.ts";
 import { fakeTerms, frameFixture, runRow, sessionsFixture, stage3Fixture } from "../../../lanes/design-constructed/wire/fixtures.ts";
 import { hostContext, hostStage, runOnHost } from "../../../lanes/design-constructed/wire/host.ts";
-import { realProviders, RULED_RETRY, type HostContext, type RealSeams } from "../../../lanes/design-constructed/wire/real.ts";
+import { nodePinPath, realProviders, RULED_RETRY, type HostContext, type RealSeams } from "../../../lanes/design-constructed/wire/real.ts";
 import type { RowEnv } from "../../../lanes/design-constructed/wire/start.ts";
 import { CLAUDE_CLI, HAS_CLAUDE_CLI, KEYS, messagesResponse } from "../../adapters/harness.ts";
 
@@ -68,8 +68,8 @@ async function host(o: { vm?: boolean } = {}): Promise<{ svc: LedgerService; ctx
   writeFileSync(join(root, "claude.tgz"), tgz);
   const nodeTar = new TextEncoder().encode("invented node build\n");
   writeFileSync(join(root, "node.tar.xz"), nodeTar);
-  mkdirSync(join(root, "repo", "stage3"), { recursive: true });
-  writeFileSync(join(root, "repo", "stage3", "node-pin.json"), JSON.stringify({ version: "24.0.0", sha256: createHash("sha256").update(nodeTar).digest("hex") }));
+  mkdirSync(dirname(nodePinPath(join(root, "repo"))), { recursive: true });
+  writeFileSync(nodePinPath(join(root, "repo")), JSON.stringify({ version: "24.0.0", sha256: createHash("sha256").update(nodeTar).digest("hex") }));
   writeFileSync(join(root, "repo", "docker", "host-cli.json"), JSON.stringify({ claude: "9.9.9" }));
   writeFileSync(join(root, "repo", "docker", "trial.Dockerfile"), "ADD --checksum=sha256:" + createHash("sha256").update(tgz).digest("hex") + " https://registry.npmjs.org/@anthropic-ai/claude-code-linux-x64/-/claude-code-linux-x64-9.9.9.tgz /opt/claude.tgz\n");
   const proxyPort = await freePort();
