@@ -34,13 +34,21 @@ A host run reads one wiring file (wire/real.ts readWiring). A missing choice ref
 
 ## VM world and stage 3
 
-15. **In-VM agents.** The VM provider refuses with E_DCW_NO_PROVIDER, before any key read or VM, because the recipe agent, the build agent, the build reader, stage 3 authoring and the pairwise judges have no real implementation.
+15. **In-VM agents.** The recipe and build agents exist (stage3/agent.ts runVmAgent, bound by wire/real.ts vmSessionAgents): Claude Code from the pinned tarball runs in the VM over SSH, its model calls reach the item's metering proxy through the VM proxy endpoint on a slot bound to the admitted sub-reservation, and the slot's bearer sits only in an env file under /run that the controller removes. The build reader, stage 3 authoring and the pairwise judges wait on the Phase 1b open items below, so the VM provider still refuses with E_DCW_NO_PROVIDER before it reads a key or makes a VM.
 16. **Stage 3's Opus block.** The stage3 row renders each candidate's Opus block with score/parse.ts renderList, from pass 1 and else pass 2, as frozen. Start rule 7 requires a stage 2 Opus pass 1 row for each candidate. The row settles the three stage 3 items at its end.
 
 ## Earlier wiring
 
 17. **Validators' blocks.** wire.ts blockParser gives the author area's steps 5 and 6 the frozen lenient parse written for sessions (author item 8). The Captain may rule the strict parse for validators instead.
 18. **lens minus none.** The verdict row (wire/keyless.ts) reads the lens minus none verdict from its input file. No row computes it from the contrast yet.
+
+## Phase 1b open items
+
+Each piece below needs text or a format that neither the preregistration nor frozen.ts fixes, and each choice could move a stage 3 read. None is built; each refuses until the Captain rules.
+
+19. **The build reader.** Not frozen: Astra's blind forced-state read (its prompt, how the screenshot is sent, and how a reply maps to designed, blank, broken, raw-error or endless-spinner); the agent user's prompt for GPT-6.1 Sol, its action format, the form of the accessibility snapshot it gets each step, and which page state counts as seen before for a dead end; and the design-system literal read (which files are UI files, what counts as a colour or spacing literal, and when a project "has tokens"). The mechanical reads (axe-core at three widths, overflow at 375 and 768 pixels, targets under 44 pixels, the forced states' mechanical read and each key check) run on the key check bodies that stage 3 authoring defines, so they wait on item 20 too.
+20. **Stage 3 authoring.** Not frozen: Opus's prompt for the fixtures, key checks and scenarios, the JSON shape of a key check body and a scenario body (stage3/seams.ts keeps both opaque), Sol's audit prompt and its verdict format, and each call's output cap.
+21. **The DES-4 pairwise judge.** The question is frozen in prose (which screen looks designed for this product and its users rather than a generic template, or tie). Not frozen: the prompt text, how the two desktop and phone pairs are sent and in what order inside a pair, the reply format, and which reply is unparsable and so retried once before the read is missing.
 
 ## Carried from the area notes
 
