@@ -8,7 +8,9 @@ import { join } from "node:path";
 import { DcError } from "../errors.ts";
 import { CREW_DEVIATION, ENFORCED_LABEL, KEEP_WORDING, LEDGER_ITEMS, MONEY, SATURATION_WORDING } from "../frozen.ts";
 import type { Arm, CellState, DryRunCase, GstackArm, MatchItem, Model, SessionKind } from "../types.ts";
-import { admissionRead, buildDesign, cutAdmission, plannedDesign, POWER_PY, project, projectionRerun, resize, type DesignJson, type ProjectionInput } from "./admission.ts";
+import { admissionRead, buildDesign, cutAdmission, planningInputs, planningLines, plannedDesign, POWER_PY, project, projectionRerun, resize, type DesignJson } from "./admission.ts";
+
+export { planningInputs };
 import { above, atLeast, atMost, q4 } from "./num.ts";
 import { armStopsHeldBlock, pd1Effect, rendersOnSupplyStop, tieDecided } from "./prints.ts";
 import type { PowerRunner } from "./seams.ts";
@@ -104,19 +106,6 @@ const withTemp = <T>(f: (dir: string) => T): T => {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
-};
-
-/** The section 13 planning figures as measured inputs; Opus's gstack arm cost can be raised to drive the cuts. */
-export const planningInputs = (gstackUsd = 2.5, extraCrewUsd = 0): ProjectionInput => {
-  const planned: Record<Arm, number> = { none: 0.4, lens: 0.45, "plan-design-review": 2.5, autoplan: 2.5 };
-  const opus: Record<Arm, number> = { ...planned, "plan-design-review": gstackUsd, autoplan: gstackUsd };
-  const scale = (f: number) => Object.fromEntries(Object.entries(planned).map(([k, v]) => [k, v * f])) as Record<Arm, number>;
-  const other = Object.fromEntries(
-    Object.entries(LEDGER_ITEMS)
-      .filter(([id]) => !id.startsWith("dc-stage2-") && !id.startsWith("dc-stage3-"))
-      .map(([id, s]) => [id, id === "dc-judges" ? s.projectionUsd - 213 : id === "crew" ? s.projectionUsd + extraCrewUsd : s.projectionUsd]),
-  );
-  return { otherUsd: other, sessionUsd: { opus, sol: scale(0.9), particle: scale(0.1) }, labelPacketUsd: { opus: 213 / 256, sol: 213 / 256, particle: 213 / 256 }, stage3PerUnitUsd: { authoring: 174 / 16, builds: 144 / 16, reads: 146 / 16 } };
 };
 
 const terms: TermsRecord = { model: "sol", dated: "2026-11-14", provider: "OpenAI", dataCollection: "deny", termsDigest: "t1" };
@@ -268,6 +257,7 @@ export function cases(): DryRunCase[] {
         return all(eq([at(470), at(699.99), at(700.5)], [[true, 3999], [true, 4229], [false, 4230]], "fits and all-in"), eq([CREW_DEVIATION.capUsd, LEDGER_ITEMS.crew.capUsd], [700, 470], "caps"));
       },
     },
+    { rule: "S13-projection", name: "the planning lines print the all-in at the planning figures, $3357.20, beside the frozen projections' $3357.00, and name only the three stage 2 runs items that differ", check: () => { const l = planningLines(); return all(l[0]!.startsWith("planning projection: all-in $3357.20 ") && l[0]!.endsWith(" sum to $3357.00") ? null : "line " + l[0], eq(l.filter((x) => / against its frozen /.test(x)).map((x) => x.split(" ")[2]), ["dc-stage2-opus", "dc-stage2-sol", "dc-stage2-particle"], "items")); } },
     { rule: "S13-projection", name: "the planning figures fit with no cut and no re-pricing", check: () => { const o = projectionRerun(planningInputs()); return all(eq([o.outcome, o.cuts.length, o.repriced.length], ["fits", 0, 0], "outcome"), above(o.projection.allInUsd, 3300) && atMost(o.projection.allInUsd, 3400) ? null : "all-in " + o.projection.allInUsd); } },
     { rule: "PD-30", name: "an Opus overrun past plan cuts nothing: dc-stage2-opus is re-priced to its measured need as a recorded deviation", check: () => { const o = projectionRerun(planningInputs(3)); const r = o.repriced[0]; return all(eq([o.outcome, o.cuts, o.design.stage3Units, o.design.passes.sol.lens, o.design.units, o.repriced.map((x) => x.item)], ["fits", [], 16, 1, 64, ["dc-stage2-opus"]], "outcome"), r && r.repricedCapUsd >= r.needUsd && r.needUsd > r.frozenCapUsd && o.lines.some((l) => l.includes("pre-data deviation")) ? null : "re-pricing " + JSON.stringify(o.repriced)); } },
     { rule: "PD-30", name: "an all-in projection over the $3,999 line and within $5,000 cuts nothing", check: () => { const o = projectionRerun(planningInputs(8)); return all(eq([o.outcome, o.cuts.length, o.design.units, o.design.passes.opus.autoplan], ["fits", 0, 64, 2], "outcome"), above(o.projection.allInUsd, 3999) ? null : "all-in " + o.projection.allInUsd); } },

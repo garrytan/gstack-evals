@@ -27,7 +27,7 @@ export interface Stage1Passes {
   admissionRead: boolean;
 }
 
-const PASSES: Record<keyof Stage1Passes, string> = { tierAdmitted: "stage 1 admits a tier", twinsTrack: "the twins track", judgeCheck: "the Opus judge check passes", smoke: "the smoke rules pass after at most one repair", admissionRead: "the admission read passes" };
+export const STAGE1_PASSES: Record<keyof Stage1Passes, string> = { tierAdmitted: "stage 1 admits a tier", twinsTrack: "the twins track", judgeCheck: "the Opus judge check passes", smoke: "the smoke rules pass after at most one repair", admissionRead: "the admission read passes" };
 
 export const repriceRow: Row = async (a, io, env) => {
   const usage = "reprice --stage1 <stage1.json> --projection <projection input JSON> --out <new sink folder>";
@@ -35,9 +35,9 @@ export const repriceRow: Row = async (a, io, env) => {
   const input = readJson<ProjectionInput>(resolve(need(a, "--projection", usage)), "--projection");
   const sink = need(a, "--out", usage);
   const rerun = projectionRerun(input);
-  const missing = (Object.keys(PASSES) as Array<keyof Stage1Passes>).filter((k) => stage1[k] !== true);
+  const missing = (Object.keys(STAGE1_PASSES) as Array<keyof Stage1Passes>).filter((k) => stage1[k] !== true);
   const rule7 = (): [string, string] | null => {
-    if (missing.length) return ["7", "stage 2's caps are re-priced only after stage 1 passes, and --stage1 records no pass for: " + missing.map((k) => PASSES[k]).join("; ")];
+    if (missing.length) return ["7", "stage 2's caps are re-priced only after stage 1 passes, and --stage1 records no pass for: " + missing.map((k) => STAGE1_PASSES[k]).join("; ")];
     if (rerun.outcome !== "fits") return ["7", "the re-priced all-in projection is $" + rerun.projection.allInUsd.toFixed(2) + ", past $5,000: stop for the Captain"];
     return null;
   };

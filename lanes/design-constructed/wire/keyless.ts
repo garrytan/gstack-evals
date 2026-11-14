@@ -5,9 +5,9 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fail } from "../errors.ts";
-import { itemsCommand } from "../money/cli.ts";
+import { itemsLines } from "../money/cli.ts";
 import { show } from "../read/num.ts";
-import { admissionRead, validateDesign } from "../read/admission.ts";
+import { admissionRead, planningLines, validateDesign } from "../read/admission.ts";
 import { smokeDecision, stage1Reading, twinCheck, type SmokeSession, type Stage1Inputs, type TwinPairInput } from "../read/stage1.ts";
 import { contrast, primaries, readingRule, unionSensitivity, verdict, type UntestedInputs, type Verdict } from "../read/stage2.ts";
 import type { ReadCell } from "../read/types.ts";
@@ -16,6 +16,7 @@ import { armSummary, scoreReviews, stockCounts, stockReading, type Review } from
 import type { PacketLabels, PacketMeta, ReviewRow, ScoreUnit, Stage } from "../score/types.ts";
 import type { GstackArm, Model, SessionKind, Tier, UnitSet } from "../types.ts";
 import { readJson } from "./json.ts";
+import { STAGE1_PASSES } from "./reprice.ts";
 import { need, oneOf, type Row } from "./start.ts";
 
 const TIERS: readonly Tier[] = ["base", "2x", "10x"];
@@ -148,6 +149,9 @@ export const powerRow: Row = (a, io, env) => {
 };
 
 export const itemsRow: Row = (a, io) => {
-  if (a.rest.length || a.flags.size) fail("E_USAGE", "usage: gstack-evals dc items");
-  return itemsCommand(io);
+  if (a.rest.length || a.flags.size) fail("E_USAGE", "usage: gstack-evals dc items [--planning]");
+  const lines = itemsLines();
+  const planning = a.bools.has("--planning") ? [...planningLines(), "measured input (the reprice row's --stage1): stage 1's passing records, " + Object.values(STAGE1_PASSES).join("; ")] : [];
+  for (const l of [...lines.slice(0, -1), ...planning, lines.at(-1)!]) io.out(l);
+  return 0;
 };

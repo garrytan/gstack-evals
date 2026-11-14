@@ -163,6 +163,36 @@ export function project(i: ProjectionInput, d: Stage2Design): Projection {
   return { allInUsd, byItem, fits: !misses.length, misses };
 }
 
+/** The section 13 planning figures as measured inputs; Opus's gstack arm cost can be raised to drive the cuts. */
+export const planningInputs = (gstackUsd = 2.5, extraCrewUsd = 0): ProjectionInput => {
+  const planned: Record<Arm, number> = { none: 0.4, lens: 0.45, "plan-design-review": 2.5, autoplan: 2.5 };
+  const opus: Record<Arm, number> = { ...planned, "plan-design-review": gstackUsd, autoplan: gstackUsd };
+  const scale = (f: number) => Object.fromEntries(Object.entries(planned).map(([k, v]) => [k, v * f])) as Record<Arm, number>;
+  const other = Object.fromEntries(
+    Object.entries(LEDGER_ITEMS)
+      .filter(([id]) => !id.startsWith("dc-stage2-") && !id.startsWith("dc-stage3-"))
+      .map(([id, s]) => [id, id === "dc-judges" ? s.projectionUsd - 213 : id === "crew" ? s.projectionUsd + extraCrewUsd : s.projectionUsd]),
+  );
+  return { otherUsd: other, sessionUsd: { opus, sol: scale(0.9), particle: scale(0.1) }, labelPacketUsd: { opus: 213 / 256, sol: 213 / 256, particle: 213 / 256 }, stage3PerUnitUsd: { authoring: 174 / 16, builds: 144 / 16, reads: 146 / 16 } };
+};
+
+/**
+ * The planning projection beside the frozen one: the all-in at the planning figures through project(), each item whose
+ * planning figure differs from its frozen projection, and the fields of the measured input projectionRerun takes.
+ */
+export function planningLines(): string[] {
+  const p = project(planningInputs(), plannedDesign());
+  const frozen = (Object.keys(LEDGER_ITEMS) as LedgerItemId[]).reduce((s, id) => s + LEDGER_ITEMS[id].projectionUsd, 0);
+  return [
+    "planning projection: all-in $" + p.allInUsd.toFixed(2) + " at section 13's planning figures (read/admission.ts planningInputs on the frozen design); the frozen projections sum to $" + frozen.toFixed(2),
+    ...(Object.keys(LEDGER_ITEMS) as LedgerItemId[]).filter((id) => Math.abs((p.byItem[id] ?? 0) - LEDGER_ITEMS[id].projectionUsd) > 0.005).map((id) => "planning projection: " + id + " $" + (p.byItem[id] ?? 0).toFixed(2) + " against its frozen $" + LEDGER_ITEMS[id].projectionUsd + ", priced per session at the planning figures"),
+    "measured input (projectionRerun, the reprice row's --projection): otherUsd, each item outside stage 2's runs and stage 3 at stage 1's measured figures: settled, in flight, unknown and the projected rest",
+    "measured input: sessionUsd, the mean cost of one session per model and arm: the smoke's for the gstack arms, stage 1's for none and lens",
+    "measured input: labelPacketUsd, the cost of one stage 2 label packet (one unit-pass) per model, charged to dc-judges",
+    "measured input: stage3PerUnitUsd, stage 3's cost per unit for authoring, builds and reads, at measured or planning figures",
+  ];
+}
+
 /** One item's cap re-priced before stage 2 (PD-30): the frozen cap, the measured need with its reserve and the new cap. */
 export interface Repricing {
   item: LedgerItemId;
