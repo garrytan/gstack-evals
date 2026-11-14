@@ -7,7 +7,7 @@ it gets the session cache key, resume, receipts and the rig's lease admission. N
 ## Modules
 
 - unit.ts: unit repositories and unit trees.
-- told.ts: the frozen told prompt and its sha256.
+- told.ts: the frozen told prompt and its sha256, and the PR-context template and its sha256.
 - plan.ts: plan units: the plan arms, prompt, rec user, parser and CEO mode (see Plan units).
 - findings.ts: the fixed findings parser and the render to arm contract v1. A finding that says whether it was confirmed gets reader `confirmed` or `unconfirmed`, so an arm's `severity_map.by_reader.unconfirmed` can map unconfirmed findings as informational, as the plan's primary map does for pstack.
 - cost.ts: cost.tsv and refusals.tsv from the metering proxy's journal, plus reader rows.
@@ -112,6 +112,14 @@ Every default keeps a frozen preregistration's run as it was: same options, same
 - `--cap-stops`, code units only: cap stops (below). Off by default.
 - `--reader-map <file>`, code units only: reader rows (below). Every gstack stack arm must run the map's gstack commit
   and be told /review, whose readers the map names.
+- `--pr-context <dir>`, code units only: every arm sees the PR's title and its first description. The run reads
+  `<dir>/<unit id with / # and @ as _>/pr.md`, the layout harness-evals' scripts/review-bugs/build-unit.ts writes, and
+  the prompt becomes TOLD_PR_TEMPLATE (told.ts): TOLD_TEMPLATE with "The pull request's title and description, as its
+  author first wrote them:" and the pr.md text after its first paragraph. Each arm's own prefix still comes first, so the
+  block is the same bytes for every arm. It is all or none: a selected unit with no readable pr.md, an empty one, or one
+  with a control character other than a line feed or tab refuses the run (E_USAGE) and lists every such unit. The session
+  key's task carries TOLD_PR_SHA256 as told_sha256 and the pr.md's sha256 as pr_sha256; arm.json's told block and
+  units.json record the template's sha256 and each unit's pr_sha256. Left out, every prompt, key and record is today's.
 
 run.json records max_turns and session_kind, and arm_session_kinds, allowance_usd and reader_map (its sha256 and gstack commit) when they
 are set. --resume with other values than run.json records is refused before anything runs, and run.json stays as it was

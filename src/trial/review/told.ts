@@ -6,6 +6,9 @@
 // TOLD_PREFIX's (review-units --told-prefix); the template, and so TOLD_SHA256, stays the same, and an arm without one
 // gets TOLD_PREFIX's. That prefix opens with one of the commands TOLD_COMMANDS declares for the arm: its own, and for gstack
 // also /ship, whose review panel R56-1 tests. The arm's target skill is the one its prefix's command names (toldSkill).
+// A run given the units' PR text (review-units --pr-context) uses TOLD_PR_TEMPLATE instead, frozen as TOLD_PR_SHA256:
+// TOLD_TEMPLATE with the pull request's title and description after its first paragraph, the same block for every arm
+// after its own prefix. With no PR text the prompt is TOLD_TEMPLATE's, byte for byte.
 import { createHash } from "node:crypto";
 import { stackKind, STACKS } from "../../arms/stacks.ts";
 import type { ArmSpec } from "../../types.ts";
@@ -30,6 +33,11 @@ export const TOLD_TEMPLATE = [
 
 export const TOLD_SHA256 = createHash("sha256").update(TOLD_TEMPLATE).digest("hex");
 
+/** TOLD_TEMPLATE with the PR block after its first paragraph; {pr} is replaced by the unit's pr.md text, trailing whitespace cut. */
+export const TOLD_PR_TEMPLATE = TOLD_TEMPLATE.replace("\n\n", "\n\nThe pull request's title and description, as its author first wrote them:\n\n{pr}\n\n");
+
+export const TOLD_PR_SHA256 = createHash("sha256").update(TOLD_PR_TEMPLATE).digest("hex");
+
 const stackTold = (name: string): string => STACKS.find((k) => k.name === name)!.told.review;
 
 /** The command each arm's told prompt opens with; none has none. */
@@ -48,9 +56,17 @@ export const TOLD_COMMANDS: Readonly<Record<ToldArm, readonly string[]>> = {
   tstack: [stackTold("tstack").split(" ")[0]!],
 };
 
-export function toldPrompt(arm: ToldArm, base: string, prefix: string = TOLD_PREFIX[arm]): string {
-  const text = TOLD_TEMPLATE.replaceAll("{base}", base);
+/** The arm's prompt; with pr, TOLD_PR_TEMPLATE's, whose {pr} is filled after {base} so the PR text is never rewritten. */
+export function toldPrompt(arm: ToldArm, base: string, prefix: string = TOLD_PREFIX[arm], pr?: string): string {
+  const text = pr === undefined ? TOLD_TEMPLATE.replaceAll("{base}", base) : TOLD_PR_TEMPLATE.replaceAll("{base}", base).replace("{pr}", () => pr.trimEnd());
   return prefix ? prefix + " " + text : text;
+}
+
+/** Why a unit's pr.md text cannot go into the told prompt (empty, or a control character other than a line feed or tab), or null. */
+export function prTextProblem(text: string): string | null {
+  if (!text.trim()) return "it is empty";
+  const control = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u2028\u2029\ufeff]/.exec(text);
+  return control ? "it has a control character (U+" + control[0].charCodeAt(0).toString(16).toUpperCase().padStart(4, "0") + ") at character " + (control.index + 1) + "; only line feeds and tabs may appear" : null;
 }
 
 /** The skill the arm's told command (or the given prefix's) names, such as review or interrogate; null for none. */
