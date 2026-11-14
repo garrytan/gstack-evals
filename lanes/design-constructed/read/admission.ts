@@ -1,7 +1,8 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // The admission read and the projection rerun (prereg sections 9, 12 and 13, plan section 12): design.json from the
 // measured comparison set, power.py's design mode at its pinned bytes behind a wrapper that refuses a malformed design
-// with E_USAGE, the projection on measured figures with the frozen cut order and the $5,000 stop, and the re-sizing.
+// with E_USAGE, the projection on measured figures with the re-pricing before stage 2 (PD-30), the $5,000 stop with
+// the frozen cut order put to the Captain, and the re-sizing.
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -161,32 +162,54 @@ export function project(i: ProjectionInput, d: Stage2Design): Projection {
   return { allInUsd, byItem, fits: !misses.length, misses };
 }
 
+/** One item's cap re-priced before stage 2 (PD-30): the frozen cap, the measured need with its reserve and the new cap. */
+export interface Repricing {
+  item: LedgerItemId;
+  frozenCapUsd: number;
+  needUsd: number;
+  repricedCapUsd: number;
+}
+
 export type ProjectionOutcome =
-  | { outcome: "fits"; design: Stage2Design; cuts: string[]; projection: Projection; lines: string[] }
-  | { outcome: "captain"; why: "envelope" | "no fit"; design: Stage2Design; cuts: string[]; projection: Projection; lines: string[] };
+  | { outcome: "fits"; design: Stage2Design; cuts: string[]; projection: Projection; repriced: Repricing[]; lines: string[] }
+  | { outcome: "captain"; why: "envelope"; design: Stage2Design; cuts: string[]; projection: Projection; repriced: Repricing[]; lines: string[] };
+
+/** PD-30: every item whose measured projection plus its round reserve passes its cap gets that need as its cap, to the cent. */
+export function reprice(p: Projection): Repricing[] {
+  const out: Repricing[] = [];
+  for (const id of Object.keys(p.byItem).sort() as LedgerItemId[]) {
+    const needUsd = (p.byItem[id] ?? 0) + reserveOf(id);
+    if (above(needUsd, LEDGER_ITEMS[id].capUsd)) out.push({ item: id, frozenCapUsd: LEDGER_ITEMS[id].capUsd, needUsd, repricedCapUsd: Math.ceil(needUsd * 100 - 1e-9) / 100 });
+  }
+  return out;
+}
 
 /**
- * The rerun: a projection past $5,000 stops for the Captain at once; otherwise, while it doesn't fit, the cuts go in the
- * frozen order: stage 3 down to 12 units, Sol's lens cells, comparison units down to 48 (to the most units that fit,
- * BT), then Opus's second pass on the gstack arms. particle-1 stays. If nothing fits, it goes to the Captain.
+ * The rerun under the Captain's standing rule on the stage 2 margin (PD-30). The lines are guidelines, so a measured
+ * cost over plan triggers no cut: before stage 2 each item's cap is re-priced from stage 1's measured costs and the
+ * pilot, and the re-pricing is recorded as a deviation. Section 13's cut order applies only when the re-priced all-in
+ * projection would pass $5,000, which stops for the Captain in any case; the cuts then print in the frozen order
+ * (stage 3 down to 12 units, Sol's lens cells, comparison units down to 48 to the most units under $5,000, then Opus's
+ * second pass on the gstack arms) as the design put to the Captain. particle-1 stays.
  */
 export function projectionRerun(i: ProjectionInput, start: Stage2Design = plannedDesign()): ProjectionOutcome {
-  let d = structuredClone(start);
-  const cuts: string[] = [];
-  const lines: string[] = [];
-  const step = (): ProjectionOutcome | null => {
-    const p = project(i, d);
-    lines.push("projection " + (cuts.length ? "after " + cuts.at(-1) : "as planned") + ": all-in $" + p.allInUsd.toFixed(2) + (p.fits ? ", fits" : ", doesn't fit (" + p.misses.join("; ") + ")"));
-    if (above(p.allInUsd, MONEY.projectionStopUsd)) return { outcome: "captain", why: "envelope", design: d, cuts, projection: p, lines: [...lines, "the projection is past $5,000: stop for the Captain"] };
-    return p.fits ? { outcome: "fits", design: d, cuts, projection: p, lines } : null;
-  };
+  const d = structuredClone(start);
+  const p = project(i, d);
+  const repriced = reprice(p);
+  const lines = [
+    "projection as planned: all-in $" + p.allInUsd.toFixed(2) + (above(p.allInUsd, MONEY.capAllInUsd) ? ", over the $" + MONEY.capAllInUsd + " line, which is a guideline: no cut (PD-30)" : ", within the $" + MONEY.capAllInUsd + " line"),
+    ...repriced.map((r) => "re-priced before stage 2 (a pre-data deviation, PD-30): " + r.item + " cap $" + r.frozenCapUsd + " to $" + r.repricedCapUsd.toFixed(2) + " (measured need with its reserve)"),
+  ];
+  if (!above(p.allInUsd, MONEY.projectionStopUsd)) return { outcome: "fits", design: d, cuts: [], projection: p, repriced, lines: [...lines, "no cut; the re-priced design goes to the admission read before spending"] };
+  lines.push("the re-priced projection is past $5,000: stop for the Captain; section 13's cut order follows for the Captain");
+  const over = (x: Stage2Design) => above(project(i, x).allInUsd, MONEY.projectionStopUsd);
   const order: Array<() => void> = [
     () => (d.stage3Units = Math.min(d.stage3Units, STAGE3.cutUnits)),
     () => (d.passes.sol.lens = 0),
     () => {
       const floor = SETS.comparisonFloor;
       let n = d.units;
-      while (n > floor && !project(i, { ...d, units: n }).fits) n--;
+      while (n > floor && over({ ...d, units: n })) n--;
       d.units = Math.min(d.units, Math.max(n, floor));
     },
     () => {
@@ -194,16 +217,14 @@ export function projectionRerun(i: ProjectionInput, start: Stage2Design = planne
       d.passes.opus.autoplan = Math.min(d.passes.opus.autoplan, 1);
     },
   ];
-  const first = step();
-  if (first) return first;
-  for (let k = 0; k < order.length; k++) {
+  const cuts: string[] = [];
+  for (let k = 0; k < order.length && over(d); k++) {
     order[k]!();
     cuts.push(MONEY.cutOrder[k]! + (k === 2 ? " (" + d.units + " units)" : ""));
-    const r = step();
-    if (r) return r.outcome === "fits" ? { ...r, lines: [...r.lines, "fits after " + cuts.length + " cut" + (cuts.length === 1 ? "" : "s") + "; the measured design goes to the admission read before spending"] } : r;
+    lines.push("after " + cuts.at(-1) + ": all-in $" + project(i, d).allInUsd.toFixed(2));
   }
-  const p = project(i, d);
-  return { outcome: "captain", why: "no fit", design: d, cuts, projection: p, lines: [...lines, "no cut in the frozen order makes the projection fit: go to the Captain"] };
+  if (over(d)) lines.push("no cut in the frozen order brings the projection to $5,000");
+  return { outcome: "captain", why: "envelope", design: d, cuts, projection: p, repriced: reprice(project(i, d)), lines };
 }
 
 /** A cut design whose measured design fails the admission read goes to the Captain instead of running. */
