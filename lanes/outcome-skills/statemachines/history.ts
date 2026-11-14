@@ -7,6 +7,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, posix } from "node:path";
 import { dockerRun } from "../../real-outcome/task/docker.ts";
+import { parsePatch as fileChanges } from "../mutation/diff.ts";
 import { smFail } from "./unit.ts";
 
 export type Where = { kind: "host"; dir: string } | { kind: "docker"; image: string; volume: string; repoDir: string; name: string; timeoutMs?: number };
@@ -76,8 +77,42 @@ export function stripPlan(listing: string, repoDir: string): StripPlan {
 export const REWRITE_SCRIPT = sh("rewrite.sh");
 
 /** Commit two of a follow-on tree: the first stage's full-tree patch, staged by git apply --index, so build output the tree
- *  holds untracked stays out. */
+ *  holds untracked stays out, less the paths followOnStrip names. */
 export const FOLLOWON_SCRIPT = sh("followon.sh");
+
+/** Section 4's strip rule on a first stage's full-tree patch, for the follow-on tree built on it: every CLAUDE.md,
+ *  CLAUDE.local.md and AGENTS.md the patch writes (so .claude/AGENTS.md too), the outermost .claude a written path sits
+ *  in, and each in-repository @import a written CLAUDE.md or CLAUDE.local.md names. The base tree was stripped already,
+ *  so anything the rule names in a follow-on tree came from the patch. */
+export function followOnStrip(treePatch: string, repoDir: string): string[] {
+  const remove = new Set<string>();
+  const texts = treePatch.split(/^(?=diff --git )/m).filter((s) => s.startsWith("diff --git "));
+  fileChanges(treePatch).forEach((c, i) => {
+    const p = c.newPath;
+    if (!p) return;
+    const parts = p.split("/");
+    const name = parts[parts.length - 1]!;
+    const at = parts.indexOf(".claude");
+    if (at >= 0) remove.add(parts.slice(0, at + 1).join("/"));
+    else if (name === "AGENTS.md" || name === "CLAUDE.md" || name === "CLAUDE.local.md") remove.add(p);
+    if ((name === "CLAUDE.md" || name === "CLAUDE.local.md") && !c.binary) {
+      const body = (texts[i] ?? "").split("\n");
+      const hunk = body.findIndex((l) => l.startsWith("@@"));
+      const text = hunk < 0 ? "" : body.slice(hunk).filter((l) => l.startsWith("+")).map((l) => l.slice(1)).join("\n");
+      for (const imp of importsOf(p, text, repoDir)) remove.add(imp);
+    }
+  });
+  return [...remove].sort();
+}
+
+/** The files sh/followon.sh reads beside itself: the first stage's patch and followOnStrip's paths, NUL-separated. The
+ *  session image and the follow-on scorer's start tree both build from these, so their trees match. */
+export function followOnFiles(treePatch: string, repoDir: string): Record<string, string> {
+  return { "tree.patch": treePatch, remove: followOnStrip(treePatch, repoDir).map((p) => p + "\0").join("") };
+}
+
+/** The paths followon.sh removed after the patch applied, from its output. */
+export const strippedPaths = (out: string): string[] => out.split("\n").filter((l) => l.startsWith("STRIPPED\t")).map((l) => b64(l.slice(9))).sort();
 
 export const PREFLIGHT_SCRIPT = sh("preflight.sh");
 
@@ -122,7 +157,7 @@ export function prepareBase(where: Where, base: string, repoDir: string, label: 
 
 /** A follow-on tree: commit two on top of a prepared base, then the preflight for two commits. */
 export function prepareFollowOn(where: Where, treePatch: string, label: string): string {
-  const w = runBash(where, FOLLOWON_SCRIPT, { "tree.patch": treePatch });
+  const w = runBash(where, FOLLOWON_SCRIPT, followOnFiles(treePatch, where.kind === "host" ? where.dir : where.repoDir));
   if (w.status !== 0) smFail("E_SM_HISTORY", label + ": the follow-on commit failed: " + w.stderr.slice(-300));
   return preflight(where, 2, label);
 }

@@ -11,7 +11,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { decideDrift, namedIds, occurrences } from "./drift.ts";
 import { readSession } from "./exposure.ts";
-import { runBash, sh } from "./history.ts";
+import { followOnFiles, runBash, sh, strippedPaths } from "./history.ts";
 import { basePatches, treeVolume } from "./oracle.ts";
 import { extractChange, fixTestHunks, mergeTests, readings, scoringRun, testHunks, type Exclusion, type Outcome, type OutcomeRecord, type Readings, type RunSummary, type RunView } from "./score.ts";
 import type { SessionRecord } from "./session.ts";
@@ -130,19 +130,22 @@ export function readCreated(records: Array<{ type: string; content?: unknown }>,
 // ---- Trees and start sets (Docker) ----
 
 /** A follow-on tree in volume dst, built as the session image builds it: a copy of the base tree volume, git clean, and
- *  for A1 and S2 the first stage's patch committed as commit two by sh/followon.sh. A volume the runtime image declares
- *  inside repo_dir is mounted in the container, so its mount point stays out of git clean, which cannot remove it. */
-export function startTree(u: SmUnit, image: string, baseVolume: string, tree: Tree, treePatch: string, dst: string): { commits: number; head: string } {
+ *  for A1 and S2 the first stage's patch committed as commit two by sh/followon.sh, less what section 4's strip removes
+ *  (returned as removed). A volume the runtime image declares inside repo_dir is mounted in the container, so its mount
+ *  point stays out of git clean, which cannot remove it. */
+export function startTree(u: SmUnit, image: string, baseVolume: string, tree: Tree, treePatch: string, dst: string): { commits: number; head: string; removed: string[] } {
   copyVolume(image, baseVolume, dst, "root");
   const script = 'cd "$1" && git config --global --add safe.directory "*" 2>/dev/null; ex=(); while read -r _ _ _ _ m _; do case "$m" in "$1"/*) ex+=(-e "/${m#"$1"/}/");; esac; done < /proc/self/mountinfo; git clean -fdq "${ex[@]}" && { [ "$3" = S0 ] || bash "$2/followon.sh" "$1" "$2" >&2; } && echo "COMMITS $(git rev-list --all --count)" && echo "HEAD $(git rev-parse HEAD)"';
-  const r = runBash({ kind: "docker", image, volume: dst, repoDir: u.repo_dir, name: runName("start-tree") }, script, { "tree.patch": treePatch, "followon.sh": sh("followon.sh") }, [tree]);
+  const r = runBash({ kind: "docker", image, volume: dst, repoDir: u.repo_dir, name: runName("start-tree") }, script, { ...followOnFiles(treePatch, u.repo_dir), "followon.sh": sh("followon.sh") }, [tree]);
   const commits = Number((r.stdout.match(/^COMMITS (\d+)$/m) ?? [])[1]), head = (r.stdout.match(/^HEAD ([0-9a-f]{40})$/m) ?? [])[1] ?? "";
   if (r.status !== 0 || commits !== (tree === "S0" ? 1 : 2) || !head) smFail("E_SM_HISTORY", u.id + ": the " + tree + " follow-on tree has " + (commits || "no") + " commits (exit " + r.status + ": " + r.stderr.trim().slice(-300) + ")");
-  return { commits, head };
+  return { commits, head, removed: strippedPaths(r.stderr) };
 }
 
 export interface StartSet {
   schema: "sm-start.v1"; unit: string; model: string | null; tree: Tree; tree_patch_sha256: string; head: string;
+  /** Paths section 4's strip removed from the first stage's tree before this start tree's commit two (absent on records from before the follow-on strip). */
+  removed?: string[];
   ids: string[]; ids_sha256: string; runs: RunSummary[]; merge: "clean" | "conflict" | null; conflict: string[]; gap: "E_SM_TEST_PATCH_CONFLICT" | null;
 }
 
@@ -158,7 +161,9 @@ export function computeStart(o: { unitDir: string; tree: Tree; treePatch: string
   const res: StartSet = { schema: "sm-start.v1", unit: u.id, model: o.model ?? null, tree: o.tree, tree_patch_sha256: sha(o.treePatch), head: "", ids: [], ids_sha256: "", runs: [], merge: null, conflict: [], gap: null };
   const st = runName("start").toLowerCase();
   try {
-    res.head = startTree(u, image, o.volume ?? treeVolume(u.id), o.tree, o.treePatch, st).head;
+    const t = startTree(u, image, o.volume ?? treeVolume(u.id), o.tree, o.treePatch, st);
+    res.head = t.head;
+    res.removed = t.removed;
     if (o.tree === "S0") res.ids = [...u.oracle!.stable].sort();
     else {
       const m = mergeTests(u, image, st, testHunks(...basePatches(o.unitDir).map(([, body]) => body)));
