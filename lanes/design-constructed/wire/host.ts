@@ -183,7 +183,15 @@ const mib = (bytes: number) => (bytes / 2 ** 20).toFixed(1);
 type Verb = (typeof VERBS)[number];
 const USAGE = "host " + VERBS.join("|") + " --plan <host plan JSON> --record <host record JSON> [--archive <new folder>] [--force]";
 
-const tarOf = (dir: string): Uint8Array => {
+/** The largest folder the launcher packs as a tar in memory (the work folder at launch, a row's inputs at next). */
+export const TAR_CAP_BYTES = 2 * 2 ** 30;
+
+/** Packs dir as a tar in memory, refusing first when the folder is over cap, so a large input fails before any upload. */
+export const tarOf = (dir: string, cap = TAR_CAP_BYTES): Uint8Array => {
+  const du = Bun.spawnSync(["du", "-sb", dir], { stdout: "pipe", stderr: "pipe" });
+  const size = Number(new TextDecoder().decode(du.stdout).split("\t")[0]);
+  if (du.exitCode !== 0 || !Number.isFinite(size)) fail("E_USAGE", "could not read the size of " + dir);
+  if (size > cap) fail("E_USAGE", dir + " holds " + mib(size) + " MiB, and the launcher packs it in memory, so it refuses a folder over " + mib(cap) + " MiB; run large inputs as a host row instead");
   const r = Bun.spawnSync(["tar", "-C", dir, "-cf", "-", "."], { stdout: "pipe", stderr: "pipe" });
   if (r.exitCode !== 0) fail("E_USAGE", "could not read " + dir + " as a tar");
   return new Uint8Array(r.stdout);
