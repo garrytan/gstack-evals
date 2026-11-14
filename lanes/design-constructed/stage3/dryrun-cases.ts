@@ -10,7 +10,8 @@ import { fakeBackend, fakeHosts, fakeMoney, fakeSpec, fakeWorld, bytes, type Fak
 import { armReads, authored, fixtureStage3, reads, unit } from "./fixtures.ts";
 import { instrument, type PairRow } from "./measures.ts";
 import { runStage3 } from "./run.ts";
-import { preamble, sandboxed } from "./sandbox.ts";
+import { mirrorConfig, preamble, sandboxed, specFor, specProblems } from "./sandbox.ts";
+import { controllerMirrors } from "./ubicloud-real.ts";
 import { accepted, countValidation, selectUnits } from "./units.ts";
 
 const eq = (got: unknown, want: unknown, what: string): string | null => (JSON.stringify(got) === JSON.stringify(want) ? null : what + ": got " + JSON.stringify(got) + ", want " + JSON.stringify(want));
@@ -75,6 +76,15 @@ const users = (done: string[]) => ["s1", "s2", "s3"].map((s) => ({ scenario: s, 
 
 export function cases(): DryRunCase[] {
   return [
+    {
+      rule: "B1",
+      name: "the controller host's mirrors name npm, PyPI, Ubuntu apt and the Docker Hub cache on its private IPv4, and a sandbox spec on them passes",
+      check: () => {
+        const mirrors = controllerMirrors("10.9.0.4", { npm: "npm terms (fixture)", pypi: "pypi terms (fixture)", apt: "apt terms (fixture)", dockerhub: "dockerhub terms (fixture)" });
+        const spec = specFor("build", "build u01 none", { proxy: { host: "10.9.0.4", port: 8080 }, mirrors, env: { UBI_OWNER: "dry-owner" } });
+        return first(eq(mirrors.map((m) => m.name + " " + m.host + ":" + m.port), ["npm 10.9.0.4:4873", "pypi 10.9.0.4:3141", "apt 10.9.0.4:3142", "dockerhub 10.9.0.4:5000"], "mirror endpoints"), eq(specProblems(spec), [], "spec problems"), eq(mirrorConfig(spec).length, 4, "mirror config lines"));
+      },
+    },
     {
       rule: "C5",
       name: "a clean VM run passes its audit and is deleted",
