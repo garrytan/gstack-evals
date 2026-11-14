@@ -1054,8 +1054,8 @@ def test_no_provider_key_reaches_a_session_env_or_the_docker_exec_forward(tmp):
     # ANTHROPIC_API_KEY set to the Lane B proxy's session token, plus HM_JUDGE_TOKEN set to the slot token on the judge
     # path. This holds with or without the host shipping the judge proxy's keys to the part VM, because the session env is
     # built fresh rather than inherited.
-    stubs = {"ANTHROPIC_API_KEY": "sk-ant-STUB-not-a-key", "OPENROUTER_API_KEY": "sk-or-STUB-not-a-key",
-             "TYPESAFE_API_KEY": "ts-STUB-not-a-key", "OPENAI_API_KEY": "sk-STUB-not-a-key"}
+    stubs = {"ANTHROPIC_API_KEY": "placeholder-anthropic", "OPENROUTER_API_KEY": "placeholder-openrouter",
+             "TYPESAFE_API_KEY": "placeholder-typesafe", "OPENAI_API_KEY": "placeholder-openai"}
     saved = {k: os.environ.get(k) for k in stubs}
     os.environ.update(stubs)
     try:
