@@ -16,7 +16,7 @@
 //            real implementation (WIRING.md, Phase 1b open items), so this provider refuses before it reads a key.
 // The choices the binding could not make without moving a scored outcome or the money sit in WIRING.md.
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { claudePin } from "../../eng-build/session-image.ts";
 import type { AgentSession } from "../../../src/trial/sandbox.ts";
@@ -241,6 +241,7 @@ export function realSessions(h: HostContext, watch: ProviderWatch, s: RealSeams,
         throw new DcError("E_DCW_CONTAINMENT", key + " failed its container checks twice and is held for the Captain: " + contained.problems.map((x) => x.join("; ")).join(" | then | "));
       }
       const container = p.container;
+      if (p.install) writeFileSync(join(base, "install.json"), JSON.stringify({ git_tree: p.install.git_tree, tree_sha256: p.install.tree_sha256, pinned_digest: p.install.pinned_digest, install_digest: p.install.install_digest, networks_after: p.install.networks_after }, null, 2) + "\n");
       let binding: SessionBinding;
       try {
         binding = await proxies.bind(sub.item, { sub, session: cellId(cell), attempt, arm: cell.kind });

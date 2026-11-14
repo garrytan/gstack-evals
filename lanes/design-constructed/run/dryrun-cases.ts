@@ -20,6 +20,7 @@ import { answerArgs, D1_MESSAGE, gateHook, repairHook, repairOn, stopHandler } f
 import { MARK, writeHostile } from "./hostile.ts";
 import { scopeOf, scopeShare } from "./scope.ts";
 import { armStopsWithBlock, cellOrder, endOf, malformedToolCalls, packetReady, printMalformedToolCalls, readAttempt, runCell, runCells, cellId } from "./session.ts";
+import { GSTACK_CHECKOUT, treeListing, verifyInstall } from "./docker.ts";
 import { toolCallEnd } from "./stream.ts";
 import type { AttemptRecord, Cell, CellOutcome, Exec, LoopSeams, Reconciled } from "./types.ts";
 
@@ -247,6 +248,30 @@ export function cases(): DryRunCase[] {
     const withBlock = await scripted("none", [attempt({ end: ends[0]! })]);
     const without = await scripted("none", [attempt({ end: ends[1]!, reply: "", heldBlock: false })]);
     return all(eq(ends.map((e) => e.kind), ["completed", "completed", "completed"], "ends"), eq([withBlock.o.state, withBlock.sessions], ["scored", 1], "with a block"), eq([without.o.state, without.sessions], ["no-block", 1], "with no block"));
+  });
+  add("C3", "after ./setup the install network is gone and the pinned tree's files read inside the container match the pinned digest; a changed pinned file or a network left attached stops the session before launch (ruling 1F)", async () => {
+    const tree = mkdtempSync(join(tmpdir(), "dc-install-"));
+    try {
+      mkdirSync(join(tree, "bin"));
+      writeFileSync(join(tree, "setup"), "#!/bin/sh\n");
+      writeFileSync(join(tree, "bin", "tool"), "tool\n");
+      symlinkSync("bin/tool", join(tree, "tool-link"));
+      const pinned = treeListing(tree);
+      const box = (networks: string[]) => ({ name: "dc-review-x", network: "dc-trial", inspect: () => ({ image: "", user: "", mounts: [], networks, env: [] }), run: (cmd: string) => { const r = spawnSync("bash", ["-c", cmd.replace(GSTACK_CHECKOUT, tree)], { encoding: "utf8" }); return { code: r.status ?? 1, stdout: r.stdout, stderr: r.stderr }; } });
+      const codeOf = (f: () => unknown) => { try { f(); return "ok"; } catch (e) { return e instanceof DcError ? e.code : String(e); } };
+      mkdirSync(join(tree, "node_modules"));
+      writeFileSync(join(tree, "node_modules", "built.js"), "built\n");
+      const clean = verifyInstall(box(["dc-trial"]), { installNetwork: "dc-install-1", pinned, code: 0 });
+      const left = codeOf(() => verifyInstall(box(["dc-install-1", "dc-trial"]), { installNetwork: "dc-install-1", pinned, code: 0 }));
+      writeFileSync(join(tree, "bin", "tool"), "changed by setup\n");
+      const changed = codeOf(() => verifyInstall(box(["dc-trial"]), { installNetwork: "dc-install-1", pinned, code: 0 }));
+      return all(
+        eq([pinned.size, clean.install_digest === clean.pinned_digest, clean.networks_after], [3, true, ["dc-trial"]], "the clean install"),
+        eq([left, changed], ["E_DCW_INSTALL_NETWORK", "E_DCW_INSTALL_DIGEST"], "the stops"),
+      );
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+    }
   });
   add("S6", "a session the harness ended right after rejecting the model's tool call reads from its stream as a malformed tool call, then splits by errorSeen", async () => {
     const crash = { kind: "arm_failure", failure: "harness_crash" } as const;

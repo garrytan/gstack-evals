@@ -12,8 +12,8 @@
 // network for its package downloads and leaves it before the second C2; clean arms get no install and no install
 // network. The RunBox and the agent session run their reads and the CLI inside the same container.
 import { spawn, spawnSync } from "node:child_process";
-import { randomBytes } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, rmSync } from "node:fs";
+import { createHash, randomBytes } from "node:crypto";
+import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { stackTree } from "../../../src/arms/install.ts";
 import { dockerEnvArgs, PROVIDER_KEY_ENV, trialEnv } from "../../../src/trial/env.ts";
@@ -23,7 +23,7 @@ import { fail } from "../errors.ts";
 import { GSTACK_PIN, HARNESS } from "../frozen.ts";
 import { containerProblems, HOME, type SessionSetup } from "./arms.ts";
 import { pickRuns } from "./box.ts";
-import { CONTAINER_MOUNTS, runC2, type C2Expect } from "./contain.ts";
+import { CONTAINER_MOUNTS, runC2, sha256Hex, type C2Expect } from "./contain.ts";
 import { SENTINEL_KEYS } from "./hostile.ts";
 import type { Exec, ExecResult, RunBox } from "./types.ts";
 
@@ -220,6 +220,59 @@ export interface GstackInstall {
   log: string;
   git_tree: string;
   tree_sha256: string;
+  /** The pinned tree's digest, file by file, read on this host from the verified tree (the Captain's ruling 1F). */
+  pinned_digest: string;
+  /** The same files read inside the container after ./setup; null when the install exited non-zero. */
+  install_digest: string | null;
+  /** The container's networks, read after the install network left. */
+  networks_after: string[];
+}
+
+/** Each file under a checkout as "<sha256 or link:target>  ./path", .git left out: the install digest's lines. */
+export const CHECKOUT_LISTING = "find . -path ./.git -prune -o -type f -exec sha256sum {} + && find . -path ./.git -prune -o -type l -printf 'link:%l  %p\n'";
+
+/** The digest of the pinned tree's files as one listing reads them; a pinned file missing from the listing reads as missing. */
+export function installDigest(pinned: ReadonlyMap<string, string>, listing: string): string {
+  const seen = new Map<string, string>();
+  for (const line of listing.split("\n")) {
+    const at = line.indexOf("  ");
+    if (at > 0) seen.set(line.slice(at + 2), line.slice(0, at));
+  }
+  return sha256Hex([...pinned.keys()].sort().map((p) => (seen.get(p) ?? "missing") + "  " + p).join("\n") + "\n");
+}
+
+/** The pinned tree's files, read on this host, keyed by "./path" as CHECKOUT_LISTING prints them. */
+export function treeListing(dir: string): Map<string, string> {
+  const out = new Map<string, string>();
+  const walk = (rel: string) => {
+    for (const name of readdirSync(join(dir, rel)).sort()) {
+      const r = rel ? rel + "/" + name : name;
+      if (r === ".git") continue;
+      const st = lstatSync(join(dir, r));
+      if (st.isSymbolicLink()) out.set("./" + r, "link:" + readlinkSync(join(dir, r)));
+      else if (st.isDirectory()) walk(r);
+      else if (st.isFile()) out.set("./" + r, createHash("sha256").update(readFileSync(join(dir, r))).digest("hex"));
+    }
+  };
+  walk("");
+  return out;
+}
+
+/**
+ * The checks between ./setup and Claude Code (the Captain's ruling 1F): the install network is gone and the container
+ * lists the run's trial network alone (E_DCW_INSTALL_NETWORK otherwise), and the pinned tree's files read inside the
+ * container hash to the pinned digest (E_DCW_INSTALL_DIGEST otherwise). Either stops the session before launch.
+ */
+export function verifyInstall(c: Pick<ReviewContainer, "name" | "network" | "run" | "inspect">, o: { installNetwork: string; pinned: ReadonlyMap<string, string>; code: number }): { pinned_digest: string; install_digest: string | null; networks_after: string[] } {
+  const networks = c.inspect().networks;
+  if (networks.includes(o.installNetwork) || JSON.stringify(networks) !== JSON.stringify([c.network])) fail("E_DCW_INSTALL_NETWORK", c.name + " lists networks " + (networks.join(", ") || "none") + " after the install, not " + c.network + " alone; the install network " + o.installNetwork + " must be gone before Claude Code launches");
+  const pinned_digest = installDigest(o.pinned, [...o.pinned].map(([p, v]) => v + "  " + p).join("\n"));
+  if (o.code !== 0) return { pinned_digest, install_digest: null, networks_after: networks };
+  const r = c.run("cd " + GSTACK_CHECKOUT + " && " + CHECKOUT_LISTING, 600_000);
+  if (r.code !== 0) fail("E_DC_INFRA_MISSING", "gstack install: reading the installed checkout exited " + r.code);
+  const install_digest = installDigest(o.pinned, r.stdout);
+  if (install_digest !== pinned_digest) fail("E_DCW_INSTALL_DIGEST", c.name + ": the installed checkout hashes to " + install_digest + ", not the pinned tree's " + pinned_digest + "; the session stops before Claude Code launches");
+  return { pinned_digest, install_digest, networks_after: networks };
 }
 
 /**
@@ -238,13 +291,15 @@ export function installGstack(c: ReviewContainer, o: { sources: readonly string[
     if (cp.status !== 0) fail("E_DC_INFRA_MISSING", "gstack install: docker cp exited " + cp.status + ": " + String(cp.stderr).trim());
     const joined = spawnSync(docker, ["network", "connect", o.installNetwork, c.name], { encoding: "utf8", env: clientEnv() });
     if (joined.status !== 0) fail("E_DC_INFRA_MISSING", "gstack install: could not join the install network: " + String(joined.stderr).trim());
+    let r: ExecResult;
     try {
-      const r = c.run("cd " + GSTACK_CHECKOUT + " && " + GSTACK_PIN.install, o.timeoutMs ?? 1_800_000);
-      return { code: r.code, log: r.stdout + r.stderr, git_tree: tree.git_tree, tree_sha256: tree.tree_sha256 };
+      r = c.run("cd " + GSTACK_CHECKOUT + " && " + GSTACK_PIN.install, o.timeoutMs ?? 1_800_000);
     } finally {
       const left = spawnSync(docker, ["network", "disconnect", "-f", o.installNetwork, c.name], { encoding: "utf8", env: clientEnv() });
       if (left.status !== 0) fail("E_DC_INFRA_MISSING", "gstack install: could not leave the install network: " + String(left.stderr).trim());
     }
+    const v = verifyInstall(c, { installNetwork: o.installNetwork, pinned: treeListing(to), code: r.code });
+    return { code: r.code, log: r.stdout + r.stderr, git_tree: tree.git_tree, tree_sha256: tree.tree_sha256, ...v };
   } finally {
     rmSync(to, { recursive: true, force: true });
   }
