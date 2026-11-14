@@ -71,7 +71,7 @@ const counting = (call: Caller, n: { calls: number }): Caller => async (req) => 
   return call(req);
 };
 
-const fixReply = (text: string, ids: readonly string[]): Record<string, { statement: string; detail: string }> | string => {
+export const fixReply = (text: string, ids: readonly string[]): Record<string, { statement: string; detail: string }> | string => {
   const j = lastJsonObject(text);
   if (!j || !Array.isArray(j.items)) return "no fix JSON with items";
   const out: Record<string, { statement: string; detail: string }> = {};

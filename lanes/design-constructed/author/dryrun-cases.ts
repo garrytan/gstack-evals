@@ -726,5 +726,38 @@ export function cases(): DryRunCase[] {
         }
       },
     },
+    {
+      rule: "GATE",
+      name: "PD-21: a planted drop item an auditor marks fix counts as caught when the second audit keeps it changed, and the reading records the fix",
+      check: async () => {
+        const fixThenKeep: Script = { audit: (round, a) => (round.startsWith("audit2") || a !== "opus" ? {} : { verdicts: { S: "fix" } }), fix: (ids) => JSON.stringify({ items: ids.map((id) => ({ id, statement: "A rewritten statement for " + id, detail: "a rewritten detail" })) }) };
+        const { units, deps } = planted({ B2: fixThenKeep });
+        const r = await runGateCheck(units, deps, tableOf(units));
+        const b2 = r.results.find((x) => x.name === "B2")!;
+        const fix = r.readings.find((x) => x.name === "B2")!.fix;
+        return want(r.ok && b2.ok && b2.detail.includes("caught: marked fix") && fix !== null && !fix.unchanged && fix.audit2 !== null, b2.detail);
+      },
+    },
+    {
+      rule: "GATE",
+      name: "PD-21: an auditor saying fix while the planted item survives unchanged, or marked fix again, is a miss and stops authoring with E_DC_GATE_CHECK",
+      check: async () => {
+        const base = planted();
+        const s = base.units.find((u) => u.name === "B2")!.files.key.items.find((i) => i.class === "S")!;
+        const same: Script = { audit: (round, a) => (round.startsWith("audit2") || a !== "opus" ? {} : { verdicts: { S: "fix" } }), fix: (ids) => JSON.stringify({ items: ids.map((id) => ({ id, statement: s.statement, detail: s.detail })) }) };
+        const again: Script = { audit: (_round, a) => (a !== "opus" ? {} : { verdicts: { S: "fix" } }) };
+        const out: string[] = [];
+        for (const [label, script, why] of [["unchanged", same, "left it as planted"], ["fix again", again, "the second audit: opus fix"]] as const) {
+          const { units, deps } = planted({ B2: script });
+          try {
+            await enforceGateCheck(units, deps, tableOf(units));
+            out.push(label + ": no stop");
+          } catch (e) {
+            if (!(e instanceof DcError && e.code === "E_DC_GATE_CHECK" && e.message.includes("B2 audit") && e.message.includes(why))) out.push(label + ": " + String(e));
+          }
+        }
+        return want(out.length === 0, out.join("; "));
+      },
+    },
   ];
 }

@@ -1,19 +1,23 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // The gate check of plan section 16 and prereg start rule 6: planted units run once through every model-judged gate at
-// frozen settings with no rewrite and no fix round: the audit by both auditors, the generic screen by both labellers,
+// frozen settings with no rewrite: the audit by both auditors, the generic screen by both labellers,
 // the unanimous key by three validators with labels and the give-away check by three with labels. Every unit runs every
 // gate over all its items, so each gate's verdict on each case is read. The expectations are data; a wrong verdict, or
 // a gate that returns none, stops authoring (E_DC_GATE_CHECK). The planted units are written and sealed by the
 // integrator; this file holds the runner, the expectation table, the check against their committed digests
 // (planted.json) and the keyless half (a unit obeying every authoring rule passes every keyless gate).
+// A planted drop item (B2, B6) counts as caught only if it doesn't reach the key unchanged (the Captain's pre-data
+// ruling, PD-21): an auditor drops it, or an auditor marks it fix and, after the one fix step by the unit's author,
+// the second audit keeps it with its statement or detail changed. A fix that leaves the item as planted, or a second
+// audit that still marks it fix or drop, is a miss. Which way it was caught is recorded on the reading.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fail } from "../errors.ts";
-import { AUTHORING } from "../frozen.ts";
+import { AUTHORING, MONEY } from "../frozen.ts";
 import type { AnyModel, AuthorFamily, ItemClass, KeyItem } from "../types.ts";
-import { genericScreen, readAudits, runAudits, validatorStep, type AuditReading, type GenericReading, type StepReading } from "./checks.ts";
-import { otherFamily } from "./pipeline.ts";
-import { auditPrompt, validatorPrompt } from "./prompts.ts";
+import { ask, genericScreen, readAudits, runAudits, validatorStep, type AuditReading, type GenericReading, type StepReading } from "./checks.ts";
+import { fixReply, otherFamily } from "./pipeline.ts";
+import { auditPrompt, fixPrompt, validatorPrompt } from "./prompts.ts";
 import { screen2x, screenUnit } from "./screen.ts";
 import type { BaseAppView, Deps } from "./seams.ts";
 import { sha256 } from "./text.ts";
@@ -61,10 +65,22 @@ export interface PlantedUnit {
   plantedClass: ItemClass | null;
 }
 
+/** The planted drop item's one fix step and second audit, run only when the first audit marked it fix. */
+export interface GateFix {
+  plantedId: string;
+  /** The fixed statement and detail, or why the fix reply failed. */
+  fixed: { statement: string; detail: string } | { failed: string };
+  /** True when the fix left the planted statement and detail exactly as they were. */
+  unchanged: boolean;
+  audit2: AuditReading | null;
+}
+
 export interface GateReading {
   name: PlantedName;
   digest: string;
   audit: AuditReading | null;
+  /** The fix step on the planted drop item, when the first audit marked it fix; null otherwise. */
+  fix: GateFix | null;
   generic: GenericReading;
   unanimous: StepReading;
   giveAway: StepReading;
@@ -122,12 +138,27 @@ export function checkPlantedDigests(units: readonly PlantedUnit[], table: Plante
   if (bad.length) fail("E_PLANTED_DIGEST", "planted units differ from the committed table: " + bad.join("; "));
 }
 
-/** Runs every gate on one planted unit. */
-export async function readGates(p: PlantedUnit, deps: Deps): Promise<GateReading> {
+/** Runs every gate on one planted unit. dropId names the planted drop item, for the fix step on it. */
+export async function readGates(p: PlantedUnit, deps: Deps, dropId: string | null = null): Promise<GateReading> {
   const items = p.files.key.items;
   const auditors: AnyModel[] = ["opus", otherFamily(p.author) as AnyModel];
   const a = await runAudits(deps, auditors, auditPrompt(p.bundle, p.files, items, false), items.map((i) => i.id), p.unitId + ":audit-0", false);
   const audit = a.audits ? readAudits(a.audits) : null;
+  let fix: GateFix | null = null;
+  if (audit && dropId !== null && audit.fix.includes(dropId)) {
+    const before = items.find((i) => i.id === dropId)!;
+    const writer = p.author as AnyModel;
+    const f = await ask(deps.call, { model: writer, effort: "high", maxTokens: MONEY.outputCaps.author, prompt: fixPrompt(p.files, [dropId], audit.notes), label: p.unitId + ":fix:" + writer }, (t) => fixReply(t, [dropId]));
+    if (!f.ok) fix = { plantedId: dropId, fixed: { failed: f.reason }, unchanged: true, audit2: null };
+    else {
+      const fixed = f.value[dropId]!;
+      const u: UnitFiles = structuredClone(p.files);
+      const live = u.key.items.filter((i) => !audit.drop.includes(i.id));
+      for (const i of live) if (i.id === dropId) Object.assign(i, fixed);
+      const a2 = await runAudits(deps, auditors, auditPrompt(p.bundle, u, live, false), live.map((i) => i.id), p.unitId + ":audit2-0", false);
+      fix = { plantedId: dropId, fixed, unchanged: fixed.statement === before.statement && fixed.detail === before.detail, audit2: a2.audits ? readAudits(a2.audits) : null };
+    }
+  }
   const generic = await genericScreen(deps.call, items, p.unitId + ":0");
   const cited = [...new Set(items.flatMap((i) => i.evidence.map((e) => e.file)))].filter((f) => p.app.tree.includes(f)).sort();
   const opts = { details: false, earlyExit: false, minPrimary: AUTHORING.minPrimaryItems };
@@ -135,7 +166,7 @@ export async function readGates(p: PlantedUnit, deps: Deps): Promise<GateReading
   const giveAway = await validatorStep(deps, "give-away", items, [], validatorPrompt("give-away", p.files, p.app, cited), { ...opts, label: p.unitId + ":give-away" });
   const keptByAudit = (i: KeyItem) => !!audit && audit.notes.filter((n) => n.id === i.id).every((n) => n.verdict === "keep") && !audit.mentioned.includes(i.id) && !i.mentioned;
   const primary = items.filter((i) => keptByAudit(i) && !generic.generic.includes(i.id) && unanimous.kept.includes(i.id) && giveAway.kept.includes(i.id)).map((i) => i.id);
-  return { name: p.name, digest: digestOf(p.files), audit, generic, unanimous, giveAway, primary };
+  return { name: p.name, digest: digestOf(p.files), audit, fix, generic, unanimous, giveAway, primary };
 }
 
 /** One expectation against one reading. */
@@ -150,7 +181,12 @@ export function judge(r: GateReading, e: Expectation, plantedId: string | null):
       }
       if (e.is === "no-input-failure") return { ok: r.audit.inputFailures.length === 0, detail: "input failures: " + (r.audit.inputFailures.map((f) => f.auditor + " " + f.check).join(", ") || "none") };
       if (e.is === "input-failure") return { ok: r.audit.inputFailures.length > 0, detail: "input failures: " + (r.audit.inputFailures.map((f) => f.auditor + " " + f.check).join(", ") || "none") };
-      return need(plantedId) ?? { ok: r.audit.drop.includes(plantedId!), detail: plantedId + (r.audit.drop.includes(plantedId!) ? " dropped by the audit" : " not dropped: " + r.audit.notes.filter((n) => n.id === plantedId).map((n) => n.auditor + " " + n.verdict).join(", ")) };
+      if (plantedId === null) return { ok: false, detail: "the case names no planted item" };
+      if (r.audit.drop.includes(plantedId)) return { ok: true, detail: plantedId + " caught: dropped by the audit" };
+      const fx = r.fix;
+      if (fx && fx.plantedId === plantedId && fx.audit2 && !fx.unchanged && fx.audit2.inputFailures.length === 0 && !fx.audit2.drop.includes(plantedId) && !fx.audit2.fix.includes(plantedId)) return { ok: true, detail: plantedId + " caught: marked fix, then kept changed by the second audit" };
+      const why = !fx ? "" : "failed" in fx.fixed ? "; the fix reply failed: " + fx.fixed.failed : fx.unchanged ? "; the fix left it as planted" : !fx.audit2 ? "; an auditor returned no second verdict" : "; the second audit: " + (fx.audit2.notes.filter((n) => n.id === plantedId).map((n) => n.auditor + " " + n.verdict).join(", ") || "no verdict") + (fx.audit2.inputFailures.length ? ", input failures " + fx.audit2.inputFailures.map((x) => x.check).join(",") : "");
+      return { ok: false, detail: plantedId + " not caught: " + r.audit.notes.filter((n) => n.id === plantedId).map((n) => n.auditor + " " + n.verdict).join(", ") + why };
     }
     case "unanimous":
       if (r.unanimous.dropped) return { ok: false, detail: r.unanimous.dropped };
@@ -184,9 +220,10 @@ export async function runGateCheck(units: readonly PlantedUnit[], deps: Deps, ta
   const readings: GateReading[] = [];
   const results: GateResult[] = [];
   for (const u of units) {
-    const r = await readGates(u, deps);
-    readings.push(r);
     const plantedId = u.plantedClass ? (u.files.key.items.find((i) => i.class === u.plantedClass)?.id ?? null) : null;
+    const dropCase = GATE_EXPECTATIONS[u.name].expect.some((e) => e.gate === "audit" && e.is === "planted-dropped");
+    const r = await readGates(u, deps, dropCase ? plantedId : null);
+    readings.push(r);
     for (const e of GATE_EXPECTATIONS[u.name].expect) results.push({ name: u.name, expectation: e, ...judge(r, e, plantedId) });
   }
   return { ok: results.every((r) => r.ok), readings, results };
