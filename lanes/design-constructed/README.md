@@ -315,10 +315,31 @@ Every file copied from another branch or lane keeps its copyright header and add
 
 ## C1 frame-run record
 
-The frame search and the file check run once, from the commit below. Their results and the clone list stay sealed outside this repository; this record holds counts and digests only.
+The frame search and the file check ran once, from the commit below. Their results and the clone list stay sealed outside this repository; this record holds counts and digests only. The frame and file-check code is frozen at that commit, and any later change to it goes to the Captain before it lands.
 
-- Commit: (not run yet)
-- Search queries and cached responses: (count, digest)
-- Frame after the entry filters and the one-per-owner rule: (count, digest)
-- Clone attempts, clones, file-check passes: (counts)
-- Recipe sessions; qualified under the strict and the HTTP 200 reading: (counts)
+- **Commit:** 5d4de8b5ee98b85eafd3cc9d25e0b9b6146446e7. Launched 2026-11-14 at 03:48:28 UTC and finished at 04:04:22 UTC in one sitting; run.json records the search start and end times.
+- **Earlier launches:** two, at 92dbb3b4b540d62da45d9e7dd28a6d0ee4542a52 (03:30:36 and 03:32:55 UTC). Each asked for 100 results in one request, died on its first request with HTTP 502 and kept no data. Neither counts as the dated run; run.json lists both as "failed, no data".
+- **Search:** 50 searches as 119 cursor page requests of up to 25 results (none from cache), 119 points. Each search reads its first 100 results; one (dashboard, bsd-3-clause) took a fifth request because GitHub returned a short page before the 100th result. The terms paragraph names 50 search pages, so the results post lists the paging the Captain ruled on 2026-11-14 as a pre-data deviation.
+- **Results:** 2,392 returned, 2,230 distinct repositories.
+- **Entry filters, repositories left after each:** public 2,230, not a fork 2,230, not archived 2,105, not a template 2,057, stars 623, pushed 426, licence 426, language 154, topic words 140, readme title 139.
+- **Frame:** 139 in frame order, 131 after the one-per-owner rule (the frame size).
+- **Clones:** 77 attempts (limit 100), 77 fetched at their recorded commit, 0 unfetchable. The walk stopped at 30 file-check passes, the most that can get a recipe session.
+- **File check:** test 1 (front end) 62, test 2 (components) 55, test 3 (design system) 67, test 4 (routes) 37, all four 30.
+- **Digests (sha256):** search.json 9f77a4992902f3c797cbdba973c0202b39c09c82ba1cf29f20a04007f93f947b; entry.json 7f4f3ef381e670470f60c7ef8e2a8f56b0663295ef577e2eb37c7a63d578a1a1; frame.json 1f819d650b72b1c6ef826dd307a32a1798597b354e14520a53bcbccbab8f5f89; clones.json 30f1aa87679b732eb7ac3367f30a2bc5ebfaaaaa2c0fbf4d8c604d41abd26a4a; filecheck.json 8d1c4189cf9998c38e25a910fcdec0e3acec52ac619ab22d9d07ee1ef8cee6fd; run.json 892a75506dde5c498aa859c16bafdab4381be8b5c1f06b34e3684a39e303f728.
+- **Sealed archives (plaintext sha256):** results 32b118cf77b0c61868980fe33440f0bb51c1f001624eec215136c4eeed3d622a; the 30 passing clones 4b8fc47cff59a51db904f930f553c1494f9be34de7464dea57feeae4b42fc4fb.
+- **Recipe sessions; qualified under the strict and the HTTP 200 reading:** not run yet.
+
+Nodes returned per search (topic by licence):
+
+| Topic | mit | apache-2.0 | bsd-3-clause | bsd-2-clause | isc |
+|---|---|---|---|---|---|
+| admin-dashboard | 100 | 100 | 11 | 1 | 3 |
+| admin-panel | 100 | 100 | 10 | 3 | 1 |
+| dashboard | 100 | 100 | 100 | 33 | 34 |
+| crm | 100 | 100 | 13 | 3 | 2 |
+| helpdesk | 100 | 45 | 5 | 3 | 0 |
+| inventory-management | 100 | 100 | 9 | 2 | 5 |
+| project-management | 100 | 100 | 20 | 1 | 13 |
+| booking-system | 100 | 31 | 3 | 1 | 4 |
+| invoicing | 100 | 62 | 1 | 1 | 3 |
+| self-hosted | 100 | 100 | 100 | 100 | 69 |
