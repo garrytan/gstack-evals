@@ -111,6 +111,18 @@ export function contrast(i: ContrastInput): Contrast {
   };
 }
 
+/**
+ * PD-26's sensitivity read: the same contrast with each cell's A and G under the old union rule, and the split cell
+ * count per arm. It prints beside particle-1's contrasts and decides nothing; null when no cell carries a union read.
+ */
+export function unionSensitivity(i: ContrastInput): { contrast: Contrast; split: { b: number; a: number } } | null {
+  const own = i.cells.filter((c) => c.model === i.model && (c.arm === i.a || c.arm === i.b));
+  if (!own.some((c) => c.unionA !== undefined || c.unionG !== undefined)) return null;
+  const cells = i.cells.map((c) => (c.model === i.model ? { ...c, a: c.unionA ?? c.a, g: c.unionG ?? c.g } : c));
+  const split = (arm: SessionKind) => own.filter((c) => c.arm === arm).reduce((s, c) => s + (c.split ?? 0), 0);
+  return { contrast: contrast({ ...i, cells }), split: { b: split(i.b), a: split(i.a) } };
+}
+
 export interface Primary {
   arm: GstackArm;
   contrast: Contrast | null;

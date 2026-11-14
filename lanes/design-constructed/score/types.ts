@@ -110,11 +110,18 @@ export interface RawCell {
   quotes?: string[];
 }
 
-/** How a panel cell's anticipated edges were chosen (M11, R2-18). */
-export type EdgeSource = "two-vote" | "gemini" | "others";
+/** How a panel cell's anticipated edges were chosen (M11, R2-18, PD-26: "split" is a yes no edge has two votes for). */
+export type EdgeSource = "two-vote" | "gemini" | "others" | "split";
 
-/** A cell as the reader gives it: one judge's own label, or the panel's. */
-export type ReaderCell = LabelCell & { via?: EdgeSource };
+/** The edges the old union rule would give a split cell, read only by PD-26's sensitivity read. */
+export interface UnionEdges {
+  anticipatedEdges: number[];
+  screenHitEdges: number[];
+  detailEdges: number[] | null;
+}
+
+/** A cell as the reader gives it: one judge's own label, or the panel's. split marks a PD-26 cell, union its old edges. */
+export type ReaderCell = LabelCell & { via?: EdgeSource; split?: boolean; union?: UnionEdges };
 
 /** One judge's answer for one packet after its one resend. */
 export interface JudgeLabels {

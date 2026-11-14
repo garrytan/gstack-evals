@@ -9,7 +9,7 @@ import { itemsCommand } from "../money/cli.ts";
 import { show } from "../read/num.ts";
 import { admissionRead, validateDesign } from "../read/admission.ts";
 import { smokeDecision, stage1Reading, twinCheck, type SmokeSession, type Stage1Inputs, type TwinPairInput } from "../read/stage1.ts";
-import { contrast, primaries, readingRule, verdict, type UntestedInputs, type Verdict } from "../read/stage2.ts";
+import { contrast, primaries, readingRule, unionSensitivity, verdict, type UntestedInputs, type Verdict } from "../read/stage2.ts";
 import type { ReadCell } from "../read/types.ts";
 import { printScopeShare, scopeOf, scopeShare } from "../run/scope.ts";
 import { armSummary, scoreReviews, stockCounts, stockReading, type Review } from "../score/score.ts";
@@ -49,7 +49,7 @@ export function readScoreInput(dir: string) {
 }
 
 export const summaryLine = (s: ReturnType<typeof armSummary>): string =>
-  "score " + s.model + " " + s.kind + " at " + s.read + ": " + s.units + " units, A " + f4(s.A) + ", G " + f4(s.G) + ", D " + f4(s.D) + ", precision " + f4(s.precision) + ", specificity " + f4(s.specificity) + ", label-missing " + s.labelMissing + " of " + s.planned + ", tie-decided " + s.tieDecided + ", via Gemini " + s.viaGemini + ", via others " + s.viaOthers;
+  "score " + s.model + " " + s.kind + " at " + s.read + ": " + s.units + " units, A " + f4(s.A) + ", G " + f4(s.G) + ", D " + f4(s.D) + ", precision " + f4(s.precision) + ", specificity " + f4(s.specificity) + ", label-missing " + s.labelMissing + " of " + s.planned + ", tie-decided " + s.tieDecided + ", via Gemini " + s.viaGemini + ", via others " + s.viaOthers + ", split cells " + s.splitCells + (s.splitCells ? " (sensitivity, decides nothing: union A " + f4(s.unionA) + ", G " + f4(s.unionG) + ")" : "");
 
 /** dc score --in <dir> --read <tier> --stage <1|2>: A, G, D and the secondaries per model and arm, then STOCK FAIL per model. */
 export const scoreRow: Row = (a, io) => {
@@ -123,6 +123,8 @@ export const readRow: Row = (a, io) => {
     const smoke = smokeDecision(arm, f.model, f.smoke[arm].first, f.smoke[arm].resmoke);
     for (const l of smoke.lines) io.out(l);
     if (p.contrast) io.out(arm + " minus none on " + f.model + " at " + f.tier + ": " + f4(p.contrast.delta) + " (95% " + (p.contrast.ci95 ? f4(p.contrast.ci95[0]) + " to " + f4(p.contrast.ci95[1]) : "n/a") + "), p " + f4(p.contrast.p) + ", Holm " + f4(p.holm) + ", " + p.contrast.units + " units on " + p.contrast.clusters + " base apps");
+    const sens = p.contrast ? unionSensitivity({ ...base, b: arm, a: "none" }) : null;
+    if (sens) io.out("sensitivity (PD-26, decides nothing): " + arm + " minus none on " + f.model + " with the union on split cells: " + f4(sens.contrast.delta) + " (95% " + (sens.contrast.ci95 ? f4(sens.contrast.ci95[0]) + " to " + f4(sens.contrast.ci95[1]) : "n/a") + "); split cells " + arm + " " + sens.split.b + ", none " + sens.split.a);
     const v = verdict({ stage1: s1, incomplete: f.incomplete, smoke, untested: f.untested[arm], primary: p, mdd: f.mdd });
     io.out(arm + " on " + f.model + ": " + v.verdict + " (step " + v.step + "): " + v.why);
     const ranLens = f.cells.some((c) => c.model === f.model && c.arm === "lens");

@@ -152,8 +152,14 @@ export function splits(a: RawCell, o: RawCell): boolean {
   return false;
 }
 
-type Vote = { yes: false } | { yes: true; edges: number[]; via: EdgeSource } | { yes: true; edges: null };
+type Vote = { yes: false } | { yes: true; edges: number[]; via: EdgeSource; union?: number[] } | { yes: true; edges: null };
 
+/**
+ * One panel vote. The edges are those with two votes; else Gemini's, when Gemini says yes and names one; else, when
+ * exactly one yes voter names edges and the other yes voters name no index, that voter's (R2-18). When two or more yes
+ * voters name edges and none has two votes, the yes can't be credited through a change (the Captain's pre-data
+ * ruling, PD-26): its edges are none, via "split", and the union of the named edges is kept for the sensitivity read.
+ */
 function vote(voters: readonly RawCell[], gemini: RawCell | null, yes: (c: RawCell) => boolean, edges: (c: RawCell) => number[]): Vote {
   const ys = voters.filter(yes);
   if (ys.length * 2 <= voters.length) return { yes: false };
@@ -162,8 +168,10 @@ function vote(voters: readonly RawCell[], gemini: RawCell | null, yes: (c: RawCe
   const two = [...count.keys()].filter((c) => count.get(c)! >= 2).sort((a, b) => a - b);
   if (two.length) return { yes: true, edges: two, via: "two-vote" };
   if (gemini && yes(gemini) && edges(gemini).length) return { yes: true, edges: edges(gemini), via: "gemini" };
-  const others = [...count.keys()].sort((a, b) => a - b);
-  return others.length ? { yes: true, edges: others, via: "others" } : { yes: true, edges: null };
+  const named = ys.filter((v) => edges(v).length);
+  if (named.length === 0) return { yes: true, edges: null };
+  if (named.length === 1) return { yes: true, edges: [...edges(named[0]!)].sort((a, b) => a - b), via: "others" };
+  return { yes: true, edges: [], via: "split", union: [...count.keys()].sort((a, b) => a - b) };
 }
 
 /**
@@ -180,8 +188,15 @@ export function panelCell(a: RawCell | null, o: RawCell | null, g: RawCell | nul
   const scr = vote(voters, gem, (c) => c.screenHit, (c) => c.screenEdges);
   if ((ant.yes && ant.edges === null) || (scr.yes && scr.edges === null)) return { kind: "unlabelled", why: "the panel's yes has no change index from any judge (R2-18)" };
   const anticipatedEdges = ant.yes ? ant.edges! : [];
-  const detailEdges = !tenX ? null : anticipatedEdges.filter((c) => voters.filter((v) => v.anticipated && v.edges.includes(c) && (v.detailEdges ?? []).includes(c)).length >= 2);
-  return { kind: "labelled", anticipated: ant.yes, screenHit: scr.yes, anticipatedEdges, screenHitEdges: scr.yes ? scr.edges! : [], detailEdges, ...(ant.yes ? { via: (ant as { via: EdgeSource }).via } : {}) };
+  const detailOf = (edges: readonly number[]) => (!tenX ? null : edges.filter((c) => voters.filter((v) => v.anticipated && v.edges.includes(c) && (v.detailEdges ?? []).includes(c)).length >= 2));
+  const detailEdges = detailOf(anticipatedEdges);
+  const split = (ant.yes && "via" in ant && ant.via === "split") || (scr.yes && "via" in scr && scr.via === "split");
+  const union = split ? { anticipatedEdges: ant.yes && "union" in ant && ant.union ? ant.union : anticipatedEdges, screenHitEdges: scr.yes && "union" in scr && scr.union ? scr.union : scr.yes ? scr.edges! : [] } : null;
+  return {
+    kind: "labelled", anticipated: ant.yes, screenHit: scr.yes, anticipatedEdges, screenHitEdges: scr.yes ? scr.edges! : [], detailEdges,
+    ...(ant.yes ? { via: (ant as { via: EdgeSource }).via } : {}),
+    ...(union ? { split: true, union: { ...union, detailEdges: detailOf(union.anticipatedEdges) } } : {}),
+  };
 }
 
 /**

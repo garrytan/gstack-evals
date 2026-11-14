@@ -410,6 +410,24 @@ function edgeCases(): DryRunCase[] {
       },
     },
     {
+      rule: "PD-26",
+      name: "in the panel two yes votes naming different edges with Gemini saying no credit no change, count as a split cell and keep the union only for the sensitivity read",
+      check: async () => {
+        const ov: Override = (c) => {
+          if (c.item.tag !== "ZQ1" || !c.list.changes[0]?.includes("ZQ1")) return undefined;
+          if (c.judge === "astra") return { ...defaultEntry(c), changes: [1], screen_changes: [1] };
+          if (c.judge === "opus") return { ...defaultEntry(c), changes: [3], screen_changes: [1] };
+          return { ...defaultEntry(c), anticipated: false, changes: [], detail_changes: [] };
+        };
+        const list = ["Skeleton rows ZQ1 DT1 on the orders table.", "Export ZQ2 in the header.", "Placeholder rows DT1 for orders ZQ1."];
+        const run = await pipeline({ read: "base", units: [makeUnit("u1")], rows: [particleRow("u1", list)], override: ov });
+        const r = run.reviews[0]!;
+        const s = armSummary(run.reviews, "particle", "none");
+        const ok = r.assigned?.["01"] === null && r.splitCells === 1 && s.splitCells === 1 && r.viaOthers === 0 && r.unionA !== null && r.A !== null && r.unionA > r.A;
+        return ok ? null : "split read " + JSON.stringify([r.assigned, r.splitCells, r.A, r.unionA, r.viaOthers]);
+      },
+    },
+    {
       rule: "PD-4",
       name: "an unlabelled stock cell that could flip STOCK FAIL sends the read to the Captain",
       check: async () => {

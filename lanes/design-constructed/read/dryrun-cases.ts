@@ -13,7 +13,7 @@ import { above, atLeast, atMost, q4 } from "./num.ts";
 import { armStopsHeldBlock, pd1Effect, rendersOnSupplyStop, tieDecided } from "./prints.ts";
 import type { PowerRunner } from "./seams.ts";
 import { armMean, kMultiple, lensParse, smokeDecision, stage1Reading, twinCheck, type SmokeSession, type Stage1Inputs, type Stage1Reading, type TwinPairInput, type TwinReading } from "./stage1.ts";
-import { contrast, interimStop, judgeOk, missingShare, primaries, readingRule, verdict, type Contrast, type Primary, type VerdictInput } from "./stage2.ts";
+import { contrast, interimStop, judgeOk, missingShare, primaries, readingRule, unionSensitivity, verdict, type Contrast, type Primary, type VerdictInput } from "./stage2.ts";
 import { requireStartRule8, startRule8, startRule9, type FirstCall, type TermsRecord } from "./start.ts";
 import type { ReadCell } from "./types.ts";
 
@@ -290,6 +290,15 @@ export function cases(): DryRunCase[] {
     { rule: "M14", name: "PD-1's effect counts a credit a tie-break decided, beside the funnel", check: () => { const it = (id: string, ch: number[]): MatchItem => ({ id, keyedDetail: false, edges: ch.map((change) => ({ change, detail: false })) }); const tied = [it("i1", [3]), it("i2", [3]), it("i3", [5])]; const lines = pd1Effect([{ step: "step 5", classOf: { i1: "S", i2: "H", i3: "A" }, items: tied }, { step: "base", classOf: { i1: "S" }, items: [it("i1", [1])] }], { "step 5": { H: 2 } }); return all(eq(tieDecided(tied), ["i1"], "tie-decided"), eq(lines.find((l) => l.startsWith("PD-1 effect, step 5, class S")), "PD-1 effect, step 5, class S: 1 credits, 1 decided by a tie-break; removed by the check: 0", "S line"), eq(lines.find((l) => l.startsWith("PD-1 effect, step 5, class H")), "PD-1 effect, step 5, class H: 0 credits, 0 decided by a tie-break; removed by the check: 2", "H line"), eq(lines.find((l) => l.startsWith("PD-1 effect, base, class S")), "PD-1 effect, base, class S: 1 credits, 0 decided by a tie-break; removed by the check: 0", "base line")); } },
     { rule: "S6-print", name: "the arm stops whose attempt held a block print per arm and model", check: () => eq(armStopsHeldBlock(() => [{ model: "opus", arm: "autoplan", armStops: 3, heldBlock: 2 }]), ["arm stops holding a block, opus autoplan: 2 of 3 (descriptive; decides nothing)"], "lines") },
     { rule: "PD-10-print", name: "a supply stop prints the qualified count under both readings of renders", check: () => eq(rendersOnSupplyStop({ strict: 14, http200: 17 }, 16), "supply stop: 14 base apps qualify under the strict reading of renders and 17 under the HTTP 200 reading; 16 are needed", "line") },
+    { rule: "PD-26", name: "the union sensitivity read swaps in each cell's union A, counts split cells per arm and leaves the primary contrast as it was", check: () => {
+      const cells = ["u1", "u2", "u3"].flatMap((u, k) => [{ ...cell(u, "autoplan", 1, 0.4), model: "particle" as const, split: 1, unionA: 0.6 }, { ...cell(u, "none", 1, 0.2 + k / 100), model: "particle" as const, split: 0, unionA: 0.2 + k / 100 }]);
+      const map = new Map(cells.map((c) => [c.unit, "app-" + c.unit]));
+      const i = { cells, model: "particle" as const, b: "autoplan" as const, a: "none" as const, tier: "base" as const, baseAppOf: map };
+      const s = unionSensitivity(i);
+      const plain = contrast(i);
+      const none = unionSensitivity({ ...i, cells: cells.map(({ split: _s, unionA: _u, ...c }) => c) });
+      return s && Math.abs(s.contrast.delta - (0.6 - 0.21)) < 1e-9 && Math.abs(plain.delta - (0.4 - 0.21)) < 1e-9 && s.split.b === 3 && s.split.a === 0 && none === null ? null : "sensitivity " + JSON.stringify([s?.contrast.delta, plain.delta, s?.split, none]);
+    } },
   ];
 }
 

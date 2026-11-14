@@ -22,6 +22,10 @@ export interface ReadCell {
   shuffledG: number | null;
   words: number | null;
   exposed: boolean | null;
+  /** PD-26, panel-read cells only: split cells in the review, and A and G under the old union rule. They decide nothing. */
+  split?: number;
+  unionA?: number | null;
+  unionG?: number | null;
 }
 
 /** A judge check's figures as the score area reports them: kappa (null when not estimable) and the gold shortfall. */

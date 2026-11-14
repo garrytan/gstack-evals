@@ -101,6 +101,11 @@ export interface Review {
   /** Credited items whose edges came from Gemini's fallback (M11), and from the other judges under R2-18. */
   viaGemini: number;
   viaOthers: number;
+  /** PD-26: primary items whose panel cell is a split yes, which no change can credit. */
+  splitCells: number;
+  /** PD-26's sensitivity read: A and G with the old union edges on split cells. It decides nothing. */
+  unionA: number | null;
+  unionG: number | null;
   tieDecided: string[];
   /** Why the review is label-missing, when it is. */
   unlabelled: string[];
@@ -133,14 +138,14 @@ export function scoreReviews(inp: ScoreInput): Review[] {
     const base: Review = {
       session: r.session, unit: r.unit, model: r.model, kind: r.kind, stage: r.stage, pass: r.pass, smoke: r.smoke, read: inp.read, state: r.state, count: CELL_STATES[r.state].count,
       items: prim.length, detailItems, A: null, G: null, D: null, credited: null, assigned: null, byClass: nullClasses(), withoutY: null, screenHit: null, precision: null, shuffled: null, specificity: null, mentioned: null, generic: null, decoyHit: null, wrongWayHit: null,
-      evidenceOpened: r.evidenceOpened === null ? null : r.evidenceOpened.length > 0, fileRead: null, words: r.words, viaGemini: 0, viaOthers: 0, tieDecided: [], unlabelled: [],
+      evidenceOpened: r.evidenceOpened === null ? null : r.evidenceOpened.length > 0, fileRead: null, words: r.words, viaGemini: 0, viaOthers: 0, splitCells: 0, unionA: null, unionG: null, tieDecided: [], unlabelled: [],
     };
     const ofClass = (items: readonly KeyItem[], c: ItemClass) => items.filter((i) => i.class === c);
     if (base.count === "missing" || base.count === "incomplete") return base;
     if (base.count === "zero") {
       const zero = (items: readonly KeyItem[]) => (items.length ? 0 : null);
       return {
-        ...base, A: 0, G: tenX ? 0 : null, D: tenX && detailItems ? 0 : null, credited: 0, byClass: Object.fromEntries(ITEM_CLASSES.map((c) => [c, zero(ofClass(prim, c))])) as Record<ItemClass, number | null>,
+        ...base, A: 0, G: tenX ? 0 : null, unionA: 0, unionG: tenX ? 0 : null, D: tenX && detailItems ? 0 : null, credited: 0, byClass: Object.fromEntries(ITEM_CLASSES.map((c) => [c, zero(ofClass(prim, c))])) as Record<ItemClass, number | null>,
         withoutY: zero(prim.filter((i) => i.class !== "Y")), screenHit: 0, shuffled: 0, specificity: 0, mentioned: zero(kept.filter((i) => i.mentioned)), generic: zero(kept.filter((i) => i.generic)),
         decoyHit: inp.read === "2x" ? false : null, wrongWayHit: inp.read === "2x" ? false : null, fileRead: 0,
       };
@@ -181,6 +186,9 @@ export function scoreReviews(inp: ScoreInput): Review[] {
       wrongWayHit = ww.some((v) => v === true) ? true : ww.every((v) => v === false) ? false : null;
     }
     const via = (v: string) => prim.filter((i) => m.assigned[i.id] !== null && (lc.cells.get(i.id) as { via?: string }).via === v).length;
+    const splitCells = prim.filter((i) => (lc.cells.get(i.id) as ReaderCell).split === true).length;
+    const unionCells: ListCells = { ...lc, cells: new Map([...lc.cells].map(([k, c]) => [k, c.kind === "labelled" && c.union ? { ...c, ...c.union } : c])) };
+    const um = splitCells ? fixedMatching(matchItems(prim, unionCells, inp.read)!) : m;
     return {
       ...base,
       A, G,
@@ -199,6 +207,9 @@ export function scoreReviews(inp: ScoreInput): Review[] {
       fileRead: prim.filter((i) => fileNamed(i, r.list!)).length / prim.length,
       viaGemini: via("gemini"),
       viaOthers: via("others"),
+      splitCells,
+      unionA: um.credited / prim.length,
+      unionG: tenX ? um.score / (2 * prim.length) : null,
       tieDecided: tieDecided(mi, m),
     };
   });
@@ -255,6 +266,10 @@ export interface ArmSummary {
   /** Counts that print beside G and the funnel. */
   viaGemini: number;
   viaOthers: number;
+  /** PD-26: split cells over the arm's primary items, and A and G under the old union, for the sensitivity read. */
+  splitCells: number;
+  unionA: number | null;
+  unionG: number | null;
   tieDecided: number;
   labelMissing: number;
   planned: number;
@@ -273,7 +288,7 @@ export function armSummary(reviews: readonly Review[], model: Model, kind: Sessi
     mentioned: m((r) => r.mentioned), generic: m((r) => r.generic),
     decoyHitRate: m((r) => asShare(r.decoyHit)), wrongWayHitRate: m((r) => asShare(r.wrongWayHit)),
     evidenceRead: m((r) => asShare(r.evidenceOpened)), fileRead: m((r) => r.fileRead), words: m((r) => (r.count === "score" || r.count === "zero" ? r.words : null)),
-    viaGemini: rs.reduce((s, r) => s + r.viaGemini, 0), viaOthers: rs.reduce((s, r) => s + r.viaOthers, 0), tieDecided: rs.reduce((s, r) => s + r.tieDecided.length, 0),
+    viaGemini: rs.reduce((s, r) => s + r.viaGemini, 0), viaOthers: rs.reduce((s, r) => s + r.viaOthers, 0), splitCells: rs.reduce((s, r) => s + r.splitCells, 0), unionA: m((r) => r.unionA), unionG: m((r) => r.unionG), tieDecided: rs.reduce((s, r) => s + r.tieDecided.length, 0),
     labelMissing: rs.filter((r) => r.state === "label-missing").length, planned: rs.length,
   };
 }
