@@ -5,6 +5,7 @@
 import { CODES, docAnchor, type ReasonCode } from "../../src/errors/codes.ts";
 import { AREAS, dryRun, type Area } from "./dryrun.ts";
 import { DcError, fail } from "./errors.ts";
+import { filecheckCommand, frameCommand } from "./frame/command.ts";
 
 export interface Io {
   out: (text: string) => void;
@@ -42,8 +43,8 @@ const dryrun: Run = async (a, io) => {
 };
 
 export const SUBCOMMANDS: Record<string, { area: Area | "lane"; run: Run; bools: string[]; usage: string; summary: string }> = {
-  frame: { area: "frame", run: notBuilt("frame"), bools: [], usage: "", summary: "the one dated frame search, its entry filters and the frame order (keyless)" },
-  filecheck: { area: "frame", run: notBuilt("frame"), bools: [], usage: "", summary: "the keyless file check on each candidate's safe clone" },
+  frame: { area: "frame", run: frameCommand, bools: [], usage: "--out <sealed dir outside the repo>", summary: "the one dated frame search, its entry filters and the frame order (keyless)" },
+  filecheck: { area: "frame", run: filecheckCommand, bools: [], usage: "--repo <dir>", summary: "the keyless file check on each candidate's safe clone" },
   recipes: { area: "frame", run: notBuilt("frame"), bools: [], usage: "", summary: "recipe sessions and qualification (paid: dc-base-apps)" },
   author: { area: "author", run: notBuilt("author"), bools: [], usage: "", summary: "authoring steps 1 to 7, the fix round, rewrites, 2x versions and twins (paid: dc-authoring-1 to -3)" },
   gatecheck: { area: "author", run: notBuilt("author"), bools: [], usage: "", summary: "the eight planted units through every model-judged gate (paid: dc-gate-check)" },

@@ -1,0 +1,98 @@
+{
+  "_note": "An invented GraphQL reply in the shape the frame's search query asks for. Every repository, owner and README is made up.",
+  "data": {
+    "search": {
+      "repositoryCount": 3,
+      "nodes": [
+        {
+          "nameWithOwner": "plumworks/orchard-desk",
+          "isPrivate": false,
+          "isFork": false,
+          "isArchived": false,
+          "isTemplate": false,
+          "stargazerCount": 2431,
+          "pushedAt": "2026-10-28T17:02:11Z",
+          "licenseInfo": {
+            "spdxId": "MIT"
+          },
+          "primaryLanguage": {
+            "name": "TypeScript"
+          },
+          "repositoryTopics": {
+            "nodes": [
+              {
+                "topic": {
+                  "name": "helpdesk"
+                }
+              },
+              {
+                "topic": {
+                  "name": "self-hosted"
+                }
+              }
+            ]
+          },
+          "defaultBranchRef": {
+            "name": "main",
+            "target": {
+              "oid": "3f1c2b7a9d0e4f5a6b7c8d9e0f1a2b3c4d5e6f70"
+            }
+          },
+          "readmeMd": {
+            "text": "<p align=\"center\"><img src=\"docs/logo.svg\" width=\"80\"></p>\n\n# Orchard Desk\n\nAn invented help desk for small teams.\n"
+          },
+          "readmeLower": null,
+          "readmeTitle": null,
+          "readmeBare": null
+        },
+        null,
+        {
+          "nameWithOwner": "quillfoundry/ledger-kit",
+          "isPrivate": false,
+          "isFork": false,
+          "isArchived": false,
+          "isTemplate": true,
+          "stargazerCount": 640,
+          "pushedAt": "2026-07-03T09:15:40Z",
+          "licenseInfo": {
+            "spdxId": "Apache-2.0"
+          },
+          "primaryLanguage": {
+            "name": "Vue"
+          },
+          "repositoryTopics": {
+            "nodes": [
+              {
+                "topic": {
+                  "name": "invoicing"
+                }
+              },
+              {
+                "topic": {
+                  "name": "vue-starter"
+                }
+              }
+            ]
+          },
+          "defaultBranchRef": {
+            "name": "develop",
+            "target": {
+              "oid": "9a8b7c6d5e4f30211234567890abcdef12345678"
+            }
+          },
+          "readmeMd": null,
+          "readmeLower": null,
+          "readmeTitle": {
+            "text": "Ledger Kit\n==========\n"
+          },
+          "readmeBare": null
+        }
+      ]
+    },
+    "rateLimit": {
+      "cost": 1,
+      "remaining": 4987,
+      "resetAt": "2026-11-14T13:00:00Z"
+    }
+  }
+}
