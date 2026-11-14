@@ -6,7 +6,7 @@
 // the same process so the stages and the money share one controller. Keys reach this process only through its
 // environment, read by name by the stage module; this file reads none.
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { openLedgerService, type LedgerService, type ServiceConfig } from "./ledger-service.ts";
 import { localWalTransport, RemoteTarget, sshWalTransport } from "./offhost.ts";
 
@@ -27,7 +27,7 @@ export interface HostStage {
   runOnHost(service: LedgerService, args: string[]): Promise<void>;
 }
 
-export const targetFor = (t: TargetConfig) => new RemoteTarget(t.kind === "ssh" ? sshWalTransport({ keyPath: t.keyPath, knownHosts: t.knownHosts, login: t.login }, t.host) : localWalTransport(t.script, t.dir, t.timeoutMs));
+export const targetFor = (t: TargetConfig) => new RemoteTarget(t.kind === "ssh" ? sshWalTransport({ keyPath: t.keyPath, knownHosts: t.knownHosts, login: t.login }, t.host, undefined, join(dirname(t.keyPath), "wal-mux-%C")) : localWalTransport(t.script, t.dir, t.timeoutMs));
 
 const writeJson = (path: string, v: unknown) => {
   writeFileSync(path + ".tmp", JSON.stringify(v) + "\n", { mode: 0o600 });
@@ -58,14 +58,19 @@ export async function main(argv: string[]): Promise<number> {
   const svc = opened.service;
   if (cfg.stage) {
     const stage = cfg.stage;
-    import(stage.module)
+    import(resolve(stage.module))
       .then((m: HostStage) => m.runOnHost(svc, stage.args))
       .then(() => writeJson(join(cfg.stateDir, "stage.json"), { done: true, at: new Date().toISOString() }))
       .catch((e: Error) => writeJson(join(cfg.stateDir, "stage.json"), { done: false, error: e.message, at: new Date().toISOString() }));
   }
   const tickMs = cfg.tickMs ?? 30_000;
   while (!stop) {
-    const done = await svc.tick();
+    let done: string[] = [];
+    try {
+      done = await svc.tick();
+    } catch (e) {
+      process.stderr.write("tick failed: " + (e as Error).message + "\n");
+    }
     const teardown = done.find((d) => d === "teardown" || d === "teardown-force");
     if (teardown) {
       const r = await svc.teardown({ force: teardown === "teardown-force", drainMs: cfg.drainMs ?? 60_000 });

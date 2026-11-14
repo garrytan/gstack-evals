@@ -2,8 +2,8 @@
 // The off-host write-ahead target (R2-4, money open item 8): an append-only file on a second small VM, reached over SSH
 // with a key the WAL host pins to one forced command. Each append is one line, written under an exclusive lock and
 // fsynced (and its directory fsynced when the file is new) before the WAL host answers "ACK <sha256 of the line>"; the
-// append resolves only on that answer with the right digest. Snapshots are written to a temporary file, fsynced,
-// renamed and the directory fsynced. The controller host's key can append and read, never delete or rewrite a line.
+// append resolves only on that answer with the right digest. Snapshots, and the approval record's files as a tar beside
+// each snapshot, are written to a temporary file, fsynced, renamed and the directory fsynced. The controller host's key can append and read, never delete or rewrite a line.
 // A call that fails, answers wrong or passes its time limit throws, so WriteAhead marks the log broken and the
 // controller stops for the Captain (ledger-service.ts).
 import { createHash } from "node:crypto";
@@ -93,8 +93,11 @@ export const WALCTL_PY = [
 /** Runs one walctl operation and returns its result; the transport owns the time limit. */
 export type WalTransport = (args: string[], input?: Uint8Array) => Promise<ProcessResult>;
 
+/** BT: walctl's SSH sessions share one connection (ControlMaster) that lingers 10 minutes, so an append costs no handshake. */
+export const muxOptions = (controlPath: string) => ["-o", "ControlMaster=auto", "-o", "ControlPath=" + controlPath, "-o", "ControlPersist=600"];
+
 /** walctl over SSH: the WAL host's forced command for this key reads the operation from the command line. */
-export const sshWalTransport = (o: SshOptions, host: string, timeoutMs = WAL_TIMEOUT_MS): WalTransport => (args, input) => runProcess([...sshArgs(o, host), args.join(" ")], { input, timeoutMs });
+export const sshWalTransport = (o: SshOptions, host: string, timeoutMs = WAL_TIMEOUT_MS, controlPath?: string): WalTransport => (args, input) => runProcess([...sshArgs(o, host, controlPath ? muxOptions(controlPath) : []), args.join(" ")], { input, timeoutMs });
 
 /** walctl run locally on a directory: the local SSH stand-in for tests and the dry run. */
 export const localWalTransport = (script: string, dir: string, timeoutMs = WAL_TIMEOUT_MS): WalTransport => (args, input) => runProcess(["python3", script, dir, ...args], { input, timeoutMs });

@@ -70,7 +70,7 @@ describe.skipIf(!SSHD || !KEYGEN)("SSH against a local sshd", () => {
   }, 30_000);
 
   test("the controller's pinned key reaches walctl only: appends acknowledge and anything else is refused", async () => {
-    const target = new RemoteTarget(sshWalTransport(pinned, "127.0.0.1", 10_000));
+    const target = new RemoteTarget(sshWalTransport(pinned, "127.0.0.1", 10_000, join(dir, "mux-%C")));
     const wal = new WriteAhead(target);
     await wal.append({ kind: "admit", n: 1 });
     await wal.append({ kind: "admit", n: 2 });
@@ -80,6 +80,7 @@ describe.skipIf(!SSHD || !KEYGEN)("SSH against a local sshd", () => {
     const escape = await runProcess(["ssh", "-i", pinned.keyPath, "-o", "BatchMode=yes", "-o", "UserKnownHostsFile=" + pinned.knownHosts, "-p", String(port), login + "@127.0.0.1", "rm -rf " + join(dir, "wal")]);
     expect(escape.exit).toBe(2);
     expect(existsSync(join(dir, "wal", "wal.ndjson"))).toBe(true);
+    await runProcess(["ssh", "-o", "ControlPath=" + join(dir, "mux-%C"), "-O", "exit", "-p", String(port), login + "@127.0.0.1"]);
   }, 30_000);
 });
 
