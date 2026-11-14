@@ -13,6 +13,7 @@ import { $ } from "../money/book.ts";
 import { DirTarget, latestSnapshot, ownerReconcile, recover, replayReserves, restoreLedgerFile, takeSnapshot } from "../money/durability.ts";
 import { QUOTE, withRig, expectations, admitted, type Rig } from "../money/dryrun-fixture.ts";
 import { mainLeases } from "../money/ledger-main.ts";
+import { storedContext } from "../../../src/runner/pricing/prices.ts";
 import { DIRECT_MODELS, requestBody, worstCaseMicros } from "../money/price.ts";
 import { renew } from "../money/renewal.ts";
 import { ProviderWatch, routingOf } from "../money/served.ts";
@@ -63,6 +64,9 @@ export async function withPaid(o: { script?: Parameters<typeof scripted>[0]; gen
     }
   });
 }
+
+/** Every key path in an upstream body that names server-side state: a previous_response_id, a conversation or a conversation id. */
+export const stateKeys = (v: unknown, at = ""): string[] => (v && typeof v === "object" ? Object.entries(v).flatMap(([k, x]) => [...(/^(previous_response_id|conversation|conversation_id)$/.test(k) ? [at + k] : []), ...stateKeys(x, at + k + ".")]) : []);
 
 /** One call as Claude Code makes it through its slot: Anthropic Messages on the provider the slot names. */
 export async function sessionCall(b: SessionBinding, o: { stream?: boolean; maxTokens?: number } = {}): Promise<Response> {
@@ -224,6 +228,38 @@ export function cases(): DryRunCase[] {
           e.want(judge === "no error", "an Argon judge call stopped too: " + judge);
           const t = watch.terms().filter((l) => l.model === "particle");
           e.want(t.length === 1 && t[0]!.servedBy === "Particle" && (t[0]!.routing as any)?.data_collection === "deny", "terms " + JSON.stringify(t));
+          return e.result();
+        }),
+    },
+    {
+      rule: "ZDR",
+      name: "no upstream body leans on stored state: a two-turn Sol session through its session proxy resends the whole history on OpenRouter's Messages route, a Sol judge call goes to chat completions and Astra's Responses call is single-shot with store false; no body carries previous_response_id or a conversation id",
+      check: () =>
+        withPaid({}, async ({ r, up, direct, sessions }) => {
+          const e = expectations();
+          const item: LedgerItemId = "dc-stage1-sol";
+          for (const i of [item, "dc-judges"] as LedgerItemId[]) await r.c.openItem(i);
+          const sub = admitted(await r.c.admitRound(item, { run: "zdr u1", model: "sol", arms: ["none"] }), "the round");
+          const b = await sessions.bind(item, { sub, session: sub.sessions[0]!.id, attempt: 1, arm: "none" });
+          const first = [{ role: "user", content: "Review /work/plan.md." }];
+          const history = [...first, { role: "assistant", content: [{ type: "tool_use", id: "toolu_zdr", name: "Read", input: { file_path: "/work/plan.md" } }] }, { role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_zdr", content: "# plan" }] }];
+          for (const messages of [first, history]) {
+            const res = await fetch(b.baseUrl + "/v1/messages", { method: "POST", headers: { authorization: "Bearer " + b.token, "content-type": "application/json", "anthropic-version": "2023-06-01" }, body: JSON.stringify({ model: b.model.slice(b.model.indexOf(":") + 1), max_tokens: 4000, stream: true, messages }) });
+            await res.text();
+            e.want(res.status === 200, "a session turn read " + res.status);
+          }
+          await sessions.end(b);
+          for (const model of ["sol", "astra"] as const) await direct.meter("dc-judges").call({ model, prompt: "label these lists", maxTokens: 16, label: "zdr " + model });
+          const bodies = up.sent.filter((s) => s.body !== null);
+          const turns = bodies.filter((s) => s.url.endsWith("/v1/messages"));
+          e.want(turns.length === 2 && turns.every((s) => s.url.startsWith("https://openrouter.ai/")), "the session turns reached " + turns.map((s) => s.url).join(", "));
+          e.want(JSON.stringify(turns[0]?.body.messages) === JSON.stringify(first) && JSON.stringify(turns[1]?.body.messages) === JSON.stringify(history), "the second turn did not carry the whole history: " + JSON.stringify(turns[1]?.body.messages));
+          const sol = bodies.filter((s) => s.url.endsWith("/v1/chat/completions"));
+          e.want(sol.length === 1 && sol[0]!.url.startsWith("https://openrouter.ai/") && sol[0]!.body.model === DIRECT_MODELS.sol.id && sol[0]!.body.messages?.length === 1, "the Sol judge call read " + JSON.stringify(sol.map((s) => [s.url, s.body?.messages?.length])));
+          const astra = bodies.filter((s) => s.url.endsWith("/v1/responses"));
+          const a = astra[0]?.body;
+          e.want(astra.length === 1 && astra[0]!.url === "https://api.openai.com/v1/responses" && a?.model === DIRECT_MODELS.astra.id && Array.isArray(a?.input) && a.input.length === 1 && a.input[0].role === "user" && a.store === false, "Astra's call read " + JSON.stringify(astra.map((s) => [s.url, s.body])));
+          for (const s of bodies) e.want(stateKeys(s.body).length === 0 && !storedContext(s.body), s.url + " carries stored state: " + (stateKeys(s.body).join(", ") || "an item reference"));
           return e.result();
         }),
     },
