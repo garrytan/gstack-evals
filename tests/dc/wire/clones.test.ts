@@ -85,6 +85,30 @@ describe("dc clones (PD-15)", () => {
       expect(leaked([...c.out, ...c.err, ...readdirSync(out), ...readdirSync(join(out, "clones"))], f.secrets)).toBeNull();
     }));
 
+  test("a record that marks kept fetches only its kept entries, counts the rest as not kept and drops none of them", () =>
+    withFixture((f) => {
+      // Value: protects=the sealed record holds every frame clone with a kept flag, and the re-fetch takes only the file-check passes: an entry with kept false is never fetched, never dropped and prints only as a count, and source is not read; a record with some flags missing or a flag that isn't true or false refuses; fails_when=a kept:false entry is fetched, written or counted as dropped, the not-kept count is missing, or a half-flagged record runs; why_new=the real record carries every frame clone, not only the passes; seam=refetchClones; no_claim=GitHub over HTTPS
+      const [gone, match, moved] = threeWay(f);
+      const entries = [
+        { ...gone, kept: false, source: "frame" },
+        { ...match, kept: true, source: "frame" },
+        { ...moved, kept: false, source: "frame" },
+      ];
+      const out = join(f.work, "out");
+      const r = refetchClones(f.record(entries), out, f.clone);
+      expect(r.lines.slice(1, 3)).toEqual(["clones: 1 records, 1 matched, 0 dropped", "not kept: 2 records the file check didn't keep; never fetched, never dropped"]);
+      expect(r.lines.some((l) => l.startsWith("dropped:"))).toBe(false);
+      expect(f.asked).toEqual([f.repos.match.name]);
+      expect(readdirSync(join(out, "clones"))).toEqual(["c003"]);
+      const clones = JSON.parse(readFileSync(join(out, "clones.json"), "utf8"));
+      expect(clones.map((x: any) => [x.position, x.fetched])).toEqual([[3, true]]);
+      expect(JSON.parse(readFileSync(join(out, "run.json"), "utf8")).counts).toEqual({ records: 1, not_kept: 2, matched: 1, dropped: [], filecheck_passes: 1 });
+      expect(leaked(r.lines, f.secrets)).toBeNull();
+      expect(thrown(() => refetchClones(f.record([{ ...match, kept: true }, moved]), join(f.work, "half"), f.clone))).toBe("E_USAGE --record entry 1 has no true or false kept flag, while other entries carry one");
+      expect(thrown(() => refetchClones(f.record([{ ...match, kept: "yes" }]), join(f.work, "word"), f.clone))).toContain("E_USAGE --record entry 0 has no true or false kept flag");
+      expect(f.asked).toEqual([f.repos.match.name]);
+    }));
+
   test("refusals name an entry's index only, never what the record holds", () =>
     withFixture((f) => {
       // Value: protects=the sealed record's custody: a malformed record, a repeated position, a used --out and an --out inside the repository refuse with E_USAGE, and no message carries a name, path, commit or tree from the record; fails_when=a refusal echoes record contents or the row writes into the repository; why_new=nothing re-fetched the kept clones; seam=refetchClones; no_claim=none
