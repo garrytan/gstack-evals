@@ -1,0 +1,13 @@
+{
+  "name": "dc-preflight-app",
+  "version": "1.0.0",
+  "private": true,
+  "packageManager": "pnpm@9.15.9",
+  "scripts": {
+    "build": "node --check server.js",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "escape-html": "1.0.3"
+  }
+}

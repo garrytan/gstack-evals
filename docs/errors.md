@@ -282,6 +282,52 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_EB_CACHE_STALE](#e_eb_cache_stale) | 2 | U20 |
 | [E_EB_REPROJECT](#e_eb_reproject) | 2 | U20 |
 | [E_EB_DRYRUN_FAIL](#e_eb_dryrun_fail) | 2 | U20 |
+| [E_DC_NO_BLOCK](#e_dc_no_block) | warning | U20 |
+| [E_DC_ARM_STOP](#e_dc_arm_stop) | warning | U20 |
+| [E_DC_INFRA_MISSING](#e_dc_infra_missing) | warning | U20 |
+| [E_DC_WEB_CONTAMINATED](#e_dc_web_contaminated) | warning | U20 |
+| [E_DC_GSTACK_READ](#e_dc_gstack_read) | warning | U20 |
+| [E_DC_LABEL_MISSING](#e_dc_label_missing) | warning | U20 |
+| [E_DC_JUDGE_KAPPA](#e_dc_judge_kappa) | 2 | U20 |
+| [E_DC_STOCK_FAIL](#e_dc_stock_fail) | 2 | U20 |
+| [E_DC_NO_READ](#e_dc_no_read) | 2 | U20 |
+| [E_DC_TWIN](#e_dc_twin) | 2 | U20 |
+| [E_DC_SMOKE_DROP](#e_dc_smoke_drop) | 2 | U20 |
+| [E_DC_EXPOSURE_STOP](#e_dc_exposure_stop) | 2 | U20 |
+| [E_DC_PROVIDER_DRIFT](#e_dc_provider_drift) | 2 | U20 |
+| [E_DC_SUPPLY_SHORT](#e_dc_supply_short) | 2 | U20 |
+| [E_DC_AUTHOR_COST](#e_dc_author_cost) | 2 | U20 |
+| [E_DC_GATE_CHECK](#e_dc_gate_check) | 2 | U20 |
+| [E_PLANTED_DIGEST](#e_planted_digest) | 2 | U20 |
+| [E_DC_SANDBOX_AUDIT](#e_dc_sandbox_audit) | 2 | U20 |
+| [E_DC_BUILD_INSTRUMENT](#e_dc_build_instrument) | warning | U20 |
+| [E_BASE_APP_DROPPED](#e_base_app_dropped) | warning | U20 |
+| [E_DCW_NO_PROVIDER](#e_dcw_no_provider) | 2 | U20 |
+| [E_DCW_START_RULE](#e_dcw_start_rule) | 2 | U20 |
+| [E_DCW_LEDGER_REFUSED](#e_dcw_ledger_refused) | 2 | U20 |
+| [E_DCW_OFF_HOST](#e_dcw_off_host) | 2 | U20 |
+| [E_DCW_CONTAINMENT](#e_dcw_containment) | 2 | U20 |
+| [E_DCH_IMAGE_DIGEST](#e_dch_image_digest) | 2 | U20 |
+| [E_DCH_NOT_TMPFS](#e_dch_not_tmpfs) | 2 | U20 |
+| [E_DCH_TMPFS_FULL](#e_dch_tmpfs_full) | 2 | U20 |
+| [E_DCH_ROW_RUNNING](#e_dch_row_running) | 2 | U20 |
+| [E_DCH_CHECKOUT](#e_dch_checkout) | 2 | U20 |
+| [E_DCH_TMPFS_HIGH](#e_dch_tmpfs_high) | 2 | U20 |
+| [E_DCH_SEAL](#e_dch_seal) | 2 | U20 |
+| [E_DCH_CARRY](#e_dch_carry) | 2 | U20 |
+| [E_DCW_INSTALL_DIGEST](#e_dcw_install_digest) | 2 | U20 |
+| [E_DCW_PREFLIGHT](#e_dcw_preflight) | 2 | U20 |
+| [E_DCW_MODEL_PROBE](#e_dcw_model_probe) | 2 | U20 |
+| [E_DCW_INSTALL_NETWORK](#e_dcw_install_network) | 2 | U20 |
+| [E_DCW_CONTROLLER_ADDRESS](#e_dcw_controller_address) | 2 | U20 |
+| [E_DCW_APPS_VIEW](#e_dcw_apps_view) | 2 | U20 |
+| [E_DCW_PLANTED_INPUTS](#e_dcw_planted_inputs) | 2 | U20 |
+| [E_DCW_BROWSER_LAUNCH](#e_dcw_browser_launch) | 2 | U20 |
+| [E_DCW_REGION](#e_dcw_region) | 2 | U20 |
+| [E_DCW_CONTAINER_LEFT](#e_dcw_container_left) | 2 | U20 |
+| [E_DCW_NODE_DROPS](#e_dcw_node_drops) | 2 | U20 |
+| [E_DCV_POWER_PY_PIN](#e_dcv_power_py_pin) | 2 | U20 |
+| [E_DCV_PROJECTION_STOP](#e_dcv_projection_stop) | warning | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -2039,6 +2085,302 @@ Fix: Read the FAIL line, fix the rule's code, and run the dry run again before a
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
 
+### E_DC_JUDGE_KAPPA
+
+Design plan review eval (section 6, R78): a production judge or a particle-1 panel member has Cohen's kappa under 0.6, or is short of gold cells, on the anticipated label or the 10x detail label, in the judge check or the stage 2 re-check. That model's contrasts read untested (judge). On Opus lists in stage 1 the eval ends as NO READ (judge).
+
+Fix: Bring the judge's catch rate, false-fail rate and kappa to the Captain. Never re-judge to pass the check. Do not --resume.
+
+Exit 2. Side effects: That model's sub-reservations settle at the spend recorded so far and its unrun ones are released; the judge item stays open for the other models. Partial outputs stay sealed as an incomplete run. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_DC_STOCK_FAIL
+
+Design plan review eval (section 7): one stock row was credited with a primary item on more than 2 of the 16 calibration units in stage 1, or on more than one comparison unit in eight in stage 2, counted once a unit over its real-key packets on that model. On Opus lists in stage 1 the eval ends; otherwise that model's contrasts read untested (stock).
+
+Fix: Bring the per-row counts and any unlabelled stock cells that could flip the line to the Captain. Do not --resume.
+
+Exit 2. Side effects: That model's sub-reservations settle at the spend recorded so far and its unrun ones are released; the judge item stays open for the other models. Partial outputs stay sealed as an incomplete run. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_DC_NO_READ
+
+Design plan review eval (section 9): stage 1 can't make a reading. The Opus-list judge check failed or is short of gold, Astra's detail check on Opus lists failed at the 10x tier, stock failed on Opus lists, or under 95% of Opus none replies parse. The eval ends as R48 FIX-METHOD on the instrument.
+
+Fix: Bring the failed input and its counts to the Captain. Do not --resume.
+
+Exit 2. Side effects: Every open ledger lease is settled at the spend recorded so far and the rest released. Partial outputs stay sealed as an incomplete run. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_DC_TWIN
+
+Design plan review eval (section 9): the twin check reads NO READ (twin). The twins don't track by the paired interval or by the re-split test, or fewer than 6 pairs are left with 3 scored passes on each side. The eval ends as R48 FIX-METHOD on the instrument.
+
+Fix: Bring both tests' numbers and the named pairs to the Captain. Do not --resume.
+
+Exit 2. Side effects: Every open ledger lease is settled at the spend recorded so far and the rest released. Partial outputs stay sealed as an incomplete run. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_DC_SMOKE_DROP
+
+Design plan review eval (section 9, smoke rule 4): a gstack arm failed smoke rule 1 (parse) or 2 (exposure) on a model and failed again on its re-smoke with the repair hook on. The arm drops for that model: its stage 2 cells there don't run, its contrast reads untested (exposure or parse) and it enters Holm at p = 1.
+
+Fix: Bring the smoke and re-smoke counts and the detector lines to the Captain. The other arms on that model and every other model run on. Do not --resume that arm.
+
+Exit 2. Side effects: That arm's sub-reservations settle at the spend recorded so far and its unrun ones are released; the shared round and stage leases stay open. Partial outputs stay sealed. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_DC_EXPOSURE_STOP
+
+Design plan review eval (section 10): after the first 24 Opus sessions of a gstack arm in stage 2, the arm's exposure is under 0.70. The arm stops, its cells read untested and its remaining cap is released.
+
+Fix: Bring the exposure count and the detector lines behind it to the Captain. The other arms on that model and every other model run on. Do not --resume that arm.
+
+Exit 2. Side effects: That arm's sub-reservations settle at the spend recorded so far and its unrun ones are released; the shared round and stage leases stay open. Partial outputs stay sealed. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_DC_PROVIDER_DRIFT
+
+Design plan review eval (start rule 9): an OpenRouter call was served by a provider other than its pin (OpenAI for GPT-6.1 Sol, the pinned provider for Gemini 4 Argon and for particle-1), or the provider's data terms differ from the dated terms record. Every call on that model stops, in every role, for the Captain.
+
+Fix: Keep the journal line that shows the provider and send the question to the Captain. Never retry on another provider. Do not --resume.
+
+Exit 2. Side effects: Calls already sent stay on their journal and spend. That model's sub-reservations settle at the spend recorded so far and nothing on it resumes without the Captain. Partial outputs stay sealed. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_DC_SUPPLY_SHORT
+
+Design plan review eval (sections 3 and 14): supply is short. Fewer than 16 base apps qualify (the line gives the count under the strict and the HTTP 200 reading of renders), or a projection at the measured figures can't fill 48 comparison units within the authoring caps. Authoring stops for the Captain.
+
+Fix: Bring the funnel counts and the MDD at the count that can fill to the Captain. Do not --resume.
+
+Exit 2. Side effects: The authoring and base-app leases settle at the spend recorded so far and the rest is released. Partial outputs stay sealed as an incomplete run. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_DC_AUTHOR_COST
+
+Design plan review eval (section 3): the authoring pilot cost more than $10.00 per passing unit, failures included, with settled, in-flight and unknown charges counted. No passing unit reads as infinite. Authoring stops for the Captain.
+
+Fix: Bring the pilot's per-step pass rates and cost per passing unit to the Captain. Do not --resume.
+
+Exit 2. Side effects: The authoring and base-app leases settle at the spend recorded so far and the rest is released. Partial outputs stay sealed as an incomplete run. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_DC_GATE_CHECK
+
+Design plan review eval (start rule 6): a model-judged gate gave the wrong verdict on one of the eight planted units of the gate check. Authoring stops before the pilot.
+
+Fix: Bring the gate, the planted case and its verdict to the Captain; the fix lands as a recorded deviation before any pilot. Do not --resume.
+
+Exit 2. Side effects: The authoring and base-app leases settle at the spend recorded so far and the rest is released. Partial outputs stay sealed as an incomplete run. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_PLANTED_DIGEST
+
+Design plan review eval (start rule 6): a planted unit handed to the gate check is missing from, or differs from, the committed digest table lanes/design-constructed/author/planted.json (its digest, plan.md, context/project.md or an evidence file). The gate check refused before any model call.
+
+Fix: Decrypt the sealed planted units again and load them as sealed, evidence in unit.json's order. Never edit planted.json to match changed units; a changed unit is a new unit and goes to the Captain.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_DC_SANDBOX_AUDIT
+
+Design plan review eval (sections 3 and 11): a sandbox audit after a recipe or stage 3 VM run saw a key pattern, a drive path or egress outside the metering proxy and the named mirror endpoints, or could not collect its evidence (a non-zero exit, empty or cut output, or a missing process list, egress log or file list). Stage 3 stops, or the base-app screen when the hit is in a recipe VM.
+
+Fix: Keep the audit output, delete the VM, and bring the hit to the Captain. Do not --resume.
+
+Exit 2. Side effects: The stopped stage's leases settle at the spend recorded so far and the rest is released. Partial outputs stay sealed as an incomplete run. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_DCW_NO_PROVIDER
+
+Design plan review eval (wiring): a paid row passed its start rules and its ledger admission, but the provider it needs (the ledger, the model caller, the review session box, the VM world or stage 3's pieces) is not bound in this build. Stage 3's pieces refuse until the Captain's go to start stage 3 (PD-31). Nothing was called and nothing was spent.
+
+Fix: Build the missing piece and bind it in lanes/design-constructed/wire/real.ts (realProviders); lanes/design-constructed/WIRING.md lists what is still unbound. Stage 3's pieces are bound only after their prompts and reply formats are written as PD-31 rules and the Captain gives the go. Then launch again into a new sink directory.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_DCW_START_RULE
+
+Design plan review eval (prereg section 14): a paid row refused before any provider was built because a start rule does not hold: the sink directory already exists (rule 10), the keyless dry run failed (rule 5), the gate check has not passed (rule 6), an earlier stage's record is missing (rule 7), stage 1 has no Captain go naming office-hours' twin reading (rule 8), or an OpenRouter model has no dated terms record (rule 9). The message names the rule.
+
+Fix: Do what the named rule asks (record the Captain's go, the terms record or the earlier stage's result, or pick a new sink directory), then launch again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_DCW_LEDGER_REFUSED
+
+Design plan review eval (prereg section 13 and start rule 1): a paid row's ledger admission refused before any model, session or VM provider was built: an item it spends on has no cap the Captain recorded, a recorded cap other than the frozen one, a closed lease, a stop scope that covers the work, or no room left.
+
+Fix: Read the item the message names with gstack-evals dc items and the ledger status. A missing or different cap goes to the Captain; a closed item or a stop lifts only on the Captain's word.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_DCW_OFF_HOST
+
+Design plan review eval (wiring): a paid row passed its start rules on a machine that is not the controller host. The real ledger, model, session and VM providers exist only inside the ledger service's process on the controller host, where money/host-main.ts runs each paid row through wire/host.ts. Nothing was admitted, called or spent.
+
+Fix: Launch the controller host with money/controller-host.ts, naming the row in the plan's stage (wire/host.ts hostStage), then read the host's stage.log. Never run a paid row on a machine that can sleep.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_DCW_CONTAINMENT
+
+Design plan review eval (prereg section 4, C2 and C3 before a session): a review session's container failed its container checks, was prepared again from the unit's export into a new session folder, and failed again. The session is held for the Captain and the launch stops; no model call was sent for that session.
+
+Fix: Keep the session folder and the printed problems and bring them to the Captain, who decides whether the unit is held or dropped. Launch again into a new sink only on the Captain's word.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_DCH_IMAGE_DIGEST
+
+Design plan review eval (controller host): the trial image the controller host built or loaded has a digest other than the one the wiring file's sessions section records, so no review session may run on it. The launch or recovery deleted the VMs it made.
+
+Fix: Load the recorded image on the host (the plan's image tar, a docker save of the image the run recorded), or have the Captain record the new digest in the sessions section before any session runs. Never run sessions on a rebuilt image.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_DCH_NOT_TMPFS
+
+Design plan review eval (controller host custody, PD-41): a folder that holds plaintext sealed input or a row's sink is not on tmpfs. Either the controller host's work folder is not a tmpfs mount, the wiring's reply cache sits outside tmpfs, or the launcher's local work or inputs folder is on disk. Nothing was uploaded to that folder and no row ran there; a launch deleted the VMs it made.
+
+Fix: Put the folder on tmpfs: the launcher's work and inputs folders under /dev/shm, the reply cache inside the host's work folder. On the host, relaunch only while the work folder is still its tmpfs mount; after a reboot, recover instead.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_DCH_TMPFS_FULL
+
+Design plan review eval (controller host custody, PD-41): the inputs for the host's work folder are larger than the free space on its tmpfs mount, which is sized from the controller host's memory. The message prints both sizes. Nothing was unpacked; a launch deleted the VMs it made.
+
+Fix: Bring the sizes to the Captain. Don't move the work folder to disk; a larger controller size or a smaller upload is the Captain's call.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_DCH_ROW_RUNNING
+
+Design plan review eval (controller host): dc host next refused to send a row because the host's last row is still running. The host runs one row at a time on its one ledger, so nothing was uploaded or sent.
+
+Fix: Wait for the running row to end (dc host status prints its state and the last lines of its log), then send the next row again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_DCH_CHECKOUT
+
+Design plan review eval (controller host): the controller host's checkout is not a git repository whose HEAD is the launched commit and whose tree is that commit's tree, or a tracked file in it changed. The host's own keyless dry run reads git there (start rule 5), so no row may run on it. A launch or recovery deleted the VMs it made; a relaunch started nothing.
+
+Fix: Launch or recover from a clean checkout at the commit: the launcher ships the commit as a git bundle and checks it out on the host. A host whose checkout is not a git repository, such as one unpacked from an archive, takes a new launch or a recovery, never a relaunch.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_DCH_TMPFS_HIGH
+
+Design plan review eval (controller host custody, PD-41): dc host next refused to send a row because the controller host's work folder tmpfs holds more than 80% of its size now, or held more than that at the last row's peak, which rows.json records for each row. Nothing was uploaded or sent.
+
+Fix: Read the use and peak dc host status prints for each row and bring them to the Captain. Don't move the work folder to disk; freeing space in it or a larger controller size is the Captain's call.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_DCH_SEAL
+
+Design plan review eval (controller host custody, PD-41): the teardown could not seal the host's work folder with age to the run's recipient, or could not confirm the plaintext was deleted, or the archive it read back is not an age file or differs in size or sha256 from the host's. Both VMs are kept and nothing from the work folder was copied back.
+
+Fix: Read the message, fix the host (age installed, the recipient file in its state folder), then run dc host teardown again; it seals once and copies back only the sealed archive.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_DCH_CARRY
+
+Design plan review eval (controller host, the carry across launches): the launch could not carry the earlier launches' spend. An archive the host plan names can't be read or parsed, or its book can't be shown complete (a snapshot that does not parse, a broken chain, a reconcile line that names no unknown charge), two archives hold the same lease, or the approval record holds a lease for this run id that no supplied archive's book holds. Nothing was launched and no key was read.
+
+Fix: Name every earlier launch's teardown archive (dc host teardown --archive) once in the host plan's archives, each with its snap-*.json and wal-lines.ndjson as the teardown wrote them, fix or remove a bad reconcile.ndjson line, then launch again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_DCW_INSTALL_DIGEST
+
+Design plan review eval (prereg section 4, the gstack install): a gstack arm session's installed checkout, read inside its container after the install, has a digest other than the pinned commit's tree, so the session stopped before Claude Code launched. No model call was sent for it.
+
+Fix: Keep the session folder and the two digests the line prints and bring them to the Captain; the install changed files of the pinned tree. Launch again into a new sink only on the Captain's word.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_DCW_PREFLIGHT
+
+Design plan review eval: the no-model preflight's sandbox VM failed a step stage 0 depends on: the preamble, the controller's install, a qualification step on the fixture app or its Docker service, the page's HTTP 200 in the pinned Chromium, the audit, an audit with no accepted connection to a mirror endpoint, or the VM's deletion. The host refuses the clones row and every later row until a preflight passes.
+
+Fix: Read the row's preflight lines: each names its step and exit code, and the audit's line names its reasons. Fix the host, the wiring or the mirrors, then send the preflight row again into a new sink.
+
+Exit 2. Side effects: The preflight VM is deleted, or left to the runner's reaper past its time to live when its deletion failed, and its measured time settles on dc-hosts. No model is called and nothing is scored. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_DCW_MODEL_PROBE
+
+Design plan review eval (PD-19 and PD-34): the model probe's one short call per model, charged to dc-gate-check, found a problem: a model gave no reply, its reply named no provider and OpenRouter's generation record resolved none, or its served provider or terms differ from the pin, which stops that model for the Captain. No stage may spend until the probe passes.
+
+Fix: Read the probe lines and problems the row printed and its probe.json, and bring them to the Captain. A drift stop stays until the Captain clears it. Run the probe again only into a new sink, on the Captain's word.
+
+Exit 2. Side effects: The probe calls already sent stay on dc-gate-check's journal and spend. A drifted model's sub-reservations settle at the spend recorded so far. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_DCW_INSTALL_NETWORK
+
+Design plan review eval (prereg section 4, the gstack install): after the install, the session's container still listed a network other than the run's trial network, so the session stopped before Claude Code launched. No model call was sent for it.
+
+Fix: Remove the container and its install network by hand (docker network disconnect, docker rm -f), and bring the printed networks to the Captain before launching again into a new sink.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_DCW_CONTROLLER_ADDRESS
+
+Design plan review eval (wiring): the wiring's vm section names the controller host for the VM proxy or the mirrors, but the host holds no launch record of its private IPv4, the record can't be read, or the recorded address is on none of the host's interfaces. No VM was made and no key was read.
+
+Fix: Launch the controller host with gstack-evals dc host launch, which writes the record into the host's state folder, or name a literal address in the wiring. Then launch the row again into a new sink.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_DCW_APPS_VIEW
+
+Design plan review eval (apps.json): a base app's checkout is not at its pin, holds changes or files outside the pin's tree, or its view (the design files and the screen files the router imports) differs from the pin record it is checked against. Nothing was written.
+
+Fix: Re-fetch the checkout with the clones row or the planted row into a new folder. When the view still differs from the pin record, bring the printed counts to the Captain, who decides which rule stands.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_DCW_PLANTED_INPUTS
+
+Design plan review eval (the gate check's inputs): the opened planted tar does not hold the eight planted units as pin.json lists them, a unit.json disagrees with pin.json or with its folder's evidence files, or the planted app's commit can't be fetched or its tree differs from pin.json's. Nothing was written for the gate check.
+
+Fix: Open the sealed planted tar again into a new folder on tmpfs and rerun the row into a new folder. A difference that stays goes to the Captain; never edit a planted unit.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_DCW_BROWSER_LAUNCH
+
+Design plan review eval (probe 1D, PD-42): stage 0's first qualification could not launch the VM's headless Chromium (it did not start, its DevTools port did not answer, or Playwright could not attach over the SSH tunnel). The recipes row stopped before any further recipe session; the VM was audited and deleted, and the one recipe session already run stays on dc-base-apps.
+
+Fix: Read the line the row printed and the controller's browser install (the work folder's Chromium build and its apt libraries from the mirror), and bring it to the Captain. Launch the recipes row again into a new sink only on the Captain's word.
+
+Exit 2. Side effects: The first candidate's recipe session and its two VMs stay on dc-base-apps and dc-hosts at their measured spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_DCW_REGION
+
+Design plan review eval (PD-42): a paid row would run in a Ubicloud region other than the one its stage started in, the controller host has no launch record of its region, the wiring's vm section makes VMs outside the host's region, or a recovery plan names another region than the hosts run in. No VM was made and no model call was sent.
+
+Fix: Bring the stage, both regions and the row to the Captain. A stage finishes in the region it started in; a move to the fallback region happens only at a stage boundary, and the run record names it.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_DCW_CONTAINER_LEFT
+
+Design plan review eval (PD-43 condition 1, the Captain's custody ruling on review containers): a review session's container was not confirmed removed after docker rm -f, because docker container inspect still listed it or failed without reporting no such container. The sessions row stops at that point and starts no later session; the message names the container.
+
+Fix: On the controller host, remove the named container (docker rm -f) and confirm docker container inspect reports no such container, find why the removal failed, and bring both to the Captain. Launch again into a new sink only on the Captain's word.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_DCW_NODE_DROPS
+
+Design plan review eval (the Captain's Node ruling): the recipes row's node-drops.json lists 3 or more stage 0 candidates that dropped for a Node-version cause (they did not qualify, and their declared Node range excludes the pinned Node or their failing qualification step printed an engine-mismatch error), so the gate check and every authoring row refuse before any provider is built. The message names the labels.
+
+Fix: Bring the labels and each one's node line from the recipes row's output to the Captain. A dropped app is never swapped. The rows run again only once the Captain clears that list: write node-cleared.json into the recipes sink holding {"labels": [...]} with exactly node-drops.json's labels (on the controller host, deliver it with the next row's inputs), then launch the row again into a new sink.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_DCV_POWER_PY_PIN
+
+Design plan review eval (prereg section 12, the admission read): the power.py the read would run has a sha256 other than the one attached to the preregistration, so it did not run. The name sits outside E_DC_ because start rule 3 freezes exactly 18 E_DC_ codes.
+
+Fix: Run the read on power.py exactly as the preregistration attaches it (git show the frozen file from main), then read again. Never edit or replace the pinned script.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
 ## Exit 3: calibration failed (INCOMPLETE)
 
 ### CALIBRATION_SKILL
@@ -2432,5 +2774,77 @@ Warning. Owner: U20.
 A build-read session ended in a second upstream error or a second infrastructure failure, so its cell is a recorded gap. Every verdict also prints the reading that scores gaps as 0.
 
 Fix: None: the gap is recorded under the frozen session rule.
+
+Warning. Owner: U20.
+
+### E_DC_NO_BLOCK
+
+Design plan review eval (prereg 2026-11-14 section 5, keeping the 2026-11-09 failure table): a completed reply holds no plan-changes block that the strict parse or the one frozen lenient parse can read. The cell scores 0 on every block score (no-block). It is not missing and gets no retry.
+
+Fix: Nothing to rerun: no-block is the arm's own outcome. The no-block rate prints per cell, and smoke rule 1 reads it for the gstack arms.
+
+Warning. Owner: U20.
+
+### E_DC_ARM_STOP
+
+Design plan review eval (section 5): a session ended on its own limit (context overflow, harness timeout, or the turn, minute or dollar limit), with or without a block. The cell gets one fresh retry, a new session from the start. A retry that stops again scores 0, and the first attempt is never judged.
+
+Fix: Nothing to rerun beyond the one retry. Arm stops print per cell beside the sensitivity read, with the count of stopped attempts that held a block.
+
+Warning. Owner: U20.
+
+### E_DC_INFRA_MISSING
+
+Design plan review eval (section 5 and start rule 4): a failure outside the agent (a provider or proxy error, a crash, a closed lease, a lost host), or a unit whose containment check failed before any session. After reconciliation the cell gets one retry when no block of it was judged; after that it is missing, counted against planned cells, never 0.
+
+Fix: Nothing to rerun beyond the one retry. If one cause repeats, read the session logs and the proxy journal the line names and report it before the next round is admitted.
+
+Warning. Owner: U20.
+
+### E_DC_WEB_CONTAMINATED
+
+Design plan review eval (section 5): a session's transcript holds a successful WebSearch or WebFetch result although both tools are denied. The cell is missing with no retry, whatever else happened in the session.
+
+Fix: Check that the arm's denied tools still name WebSearch and WebFetch and that the container reaches only the metering proxy, then report the count per arm.
+
+Warning. Owner: U20.
+
+### E_DC_GSTACK_READ
+
+Design plan review eval (section 5): a none, lens or full-information reference session read a gstack file. The cell is missing (contaminated) with no retry. Over 5% of a model's none sessions read this way makes that model's contrasts read untested (contamination).
+
+Fix: Check the clean-arm container (empty HOME, no skills folder, no gstack state, no drive mount) and report the count per arm.
+
+Warning. Owner: U20.
+
+### E_DC_LABEL_MISSING
+
+Design plan review eval (section 6): a primary (list, item) cell is still unlabelled after one whole-packet resend, a yes naming no change index included, or a Gemini tie-break failed twice. The review is unscored and counts as missing, never as not anticipated. A stock cell left unlabelled stays unlabelled, and its unit counts for that row only when another packet credits it.
+
+Fix: Nothing to resend: the frozen rule allows one resend per packet and one retry per tie-break. Read the judge's raw reply the line names; the coverage line reports the cell.
+
+Warning. Owner: U20.
+
+### E_DC_BUILD_INSTRUMENT
+
+Design plan review eval (section 11, measure 8): stage 3's DES-4 instrument check failed. The no-review build beat the generic-look control in under 70% of its pairs, so the DES-4 pairwise read is flagged (instrument). Stage 3 is descriptive and the flag changes no verdict.
+
+Fix: Nothing to rerun. Print both judges' win rates beside the flag.
+
+Warning. Owner: U20.
+
+### E_BASE_APP_DROPPED
+
+Design plan review eval, export intake (the Captain's ruling on recorded base apps): the kept clone's or bundle's HEAD is not the base app's recorded commit, HEAD^{tree} is not its recorded tree, or the commit can no longer be fetched (a missing clone or bundle, a bundle with missing prerequisites or no HEAD, a commit or tree object that is gone). The base app drops with the printed reason and is never swapped for another app. The name sits outside E_DC_ because start rule 3 freezes exactly 18 E_DC_ codes.
+
+Fix: Nothing to rerun for that app. Report the dropped app and its reason with the supply counts; never point the export at another commit or another app.
+
+Warning. Owner: U20.
+
+### E_DCV_PROJECTION_STOP
+
+Design plan review eval (prereg section 13, PD-30): the all-in projection rerun before stage 2, on re-priced caps, is past $5,000. The projection line starts with this code, section 13's cuts print in the frozen order for the Captain, and nothing in stage 2 spends. The name sits outside E_DC_ because start rule 3 freezes exactly 18 E_DC_ codes.
+
+Fix: Bring the printed projection and cuts to the Captain. Stage 2 runs only on the Captain's word, at the design the Captain picks.
 
 Warning. Owner: U20.

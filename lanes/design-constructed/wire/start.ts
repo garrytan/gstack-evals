@@ -1,0 +1,211 @@
+// Copyright (c) 2026 Garry Tan. MIT License.
+// What every paid row checks before it builds a provider (prereg section 14): the commit pin (rule 2), a sink directory
+// that doesn't exist (rule 10), the row's own order rules (6, 7 and 8, passed in by the row), a dated terms record for
+// each OpenRouter model it calls (rule 9), the keyless dry run (rule 5), and then the ledger admission: each item it
+// spends on carries the cap the Captain recorded (rule 1), equal to the frozen cap or to its PD-30 re-pricing (the
+// reprice row's raise, admitted against that cap), and is open, unstopped and has room; its one lease opens. Only the ledger is built for the admission; the model, session and VM providers come after.
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { isAbsolute, relative, resolve } from "node:path";
+import { DcError, fail } from "../errors.ts";
+import { LEDGER_ITEMS } from "../frozen.ts";
+import { $, dollars } from "../money/book.ts";
+import type { CarryFile } from "../money/carry.ts";
+import { applyStop, stopPlan, type StopContext } from "../money/stops.ts";
+import { repricedLine } from "../read/admission.ts";
+import type { TermsRecord } from "../read/start.ts";
+import type { AnyModel, DcStopCode, LedgerItemId, Model } from "../types.ts";
+import { build, type LedgerProvider, type Providers } from "../wire.ts";
+import type { PowerRunner } from "../read/seams.ts";
+import { readJson, writeJson } from "./json.ts";
+
+export type Args = { flags: Map<string, string>; bools: Set<string>; rest: string[] };
+export type Io = { out: (text: string) => void; err: (text: string) => void };
+
+/** What a row runs against: the providers, the dry run, the lane's checkout, a clock and power.py's runner. */
+export interface RowEnv {
+  providers: Providers;
+  /** Start rule 5: true when every keyless dry-run case passes. */
+  dryRun: () => Promise<boolean>;
+  lane: () => { commit: string; dirty: boolean; root: string };
+  now: () => Date;
+  power: PowerRunner;
+  /** The structure screen's barred word runs, from gstack's skill files at the pin (author/screen.ts loadVocabulary). */
+  vocabulary: (gstackDir: string) => ReadonlySet<string>;
+  /**
+   * On the controller host: the Ubicloud region the row runs in, from the launch's record, and the work folder's record
+   * of the region each stage started in (PD-42). Absent off the host, where the ledger provider refuses anyway.
+   */
+  region?: () => { region: string; record: string };
+  /** On the controller host: the earlier launches' spend the ledger service carries (money/carry.ts). Absent off the host. */
+  carry?: () => CarryFile | null;
+}
+
+export type Row = (a: Args, io: Io, env: RowEnv) => Promise<number> | number;
+
+/** The OpenRouter models start rule 9 covers. */
+export const OPENROUTER: readonly AnyModel[] = ["sol", "particle", "argon"];
+
+export const refuse = (rule: string, why: string): never => {
+  throw new DcError("E_DCW_START_RULE", "start rule " + rule + ": " + why);
+};
+
+export function need(a: Args, flag: string, usage: string): string {
+  const v = a.flags.get(flag);
+  if (v === undefined || a.rest.length) fail("E_USAGE", "usage: gstack-evals dc " + usage);
+  return v!;
+}
+
+export function oneOf<T extends string>(a: Args, flag: string, values: readonly T[], usage: string): T {
+  const v = need(a, flag, usage);
+  if (!(values as readonly string[]).includes(v)) fail("E_USAGE", flag + " is one of " + values.join(", "));
+  return v as T;
+}
+
+/** --terms: the dated terms records read from OpenRouter's endpoints API before the cap request (rule 9). */
+export function termsFrom(a: Args): TermsRecord[] {
+  const p = a.flags.get("--terms");
+  return p === undefined ? [] : readJson<TermsRecord[]>(resolve(p), "--terms");
+}
+
+export interface StartPlan {
+  row: string;
+  /** --out: the launch's sink directory. */
+  sink: string;
+  items: readonly LedgerItemId[];
+  models: readonly AnyModel[];
+  terms: readonly TermsRecord[];
+  /** The work's scope for stop scopes: a model's stop refuses only that model's rows. */
+  scope?: { model?: AnyModel; subject?: Model; stage?: string };
+  /** The row's own start rules (6, 7, 8): each returns null when it holds, or the refusal "<rule>: <why>". */
+  rules?: ReadonlyArray<() => [string, string] | null>;
+  /** The launch record's extra fields. */
+  record?: Record<string, unknown>;
+}
+
+export interface Launch {
+  sink: string;
+  commit: string;
+  ledger: LedgerProvider;
+  lines: string[];
+}
+
+/** Who the reprice row's ledger raise names as its quote's author (PD-30). */
+export const REPRICE_BY = "dc reprice (PD-30)";
+
+/**
+ * Whether a recorded cap is the item's PD-30 re-pricing: above the frozen cap, and the item's latest approval is a raise
+ * to exactly that cap whose quote is the reprice row's deviation line for it. A cap a person raised by hand isn't.
+ */
+export function repriced(l: LedgerProvider, item: LedgerItemId, capMicros: number): boolean {
+  const a = l.approval(item);
+  const words = repricedLine(item, LEDGER_ITEMS[item].capUsd, capMicros / 1_000_000);
+  return capMicros > $(LEDGER_ITEMS[item].capUsd) && a?.action === "raise" && a.cap_micros === capMicros && a.quotes.some((q) => q.by === REPRICE_BY && q.words === words);
+}
+
+/** The ledger admission: rule 1's recorded cap, the frozen cap or its PD-30 re-pricing, an open unstopped item with room; then its one lease. */
+export async function admitItems(l: LedgerProvider, items: readonly LedgerItemId[], scope: StartPlan["scope"] = {}): Promise<string[]> {
+  const c = l.controller;
+  const lines: string[] = [];
+  const no = (why: string): never => {
+    throw new DcError("E_DCW_LEDGER_REFUSED", why);
+  };
+  for (const item of items) {
+    const frozen = $(LEDGER_ITEMS[item].capUsd);
+    const cap = l.recordedCapMicros(item);
+    if (cap === null) no("start rule 1: the Captain has recorded no cap for " + item + "; nothing is admitted on it");
+    if (cap !== frozen && !repriced(l, item, cap!)) no(item + "'s recorded cap " + dollars(cap!) + " is not the frozen " + dollars(frozen) + " and no PD-30 re-pricing record covers it; the difference goes to the Captain");
+    if (cap !== frozen) {
+      c.capTo(item, cap!);
+      lines.push("ledger: " + item + " admitted on its re-priced cap " + dollars(cap!) + ", a pre-data deviation from the frozen " + dollars(frozen) + " (PD-30)");
+    }
+    const f = c.figures(item);
+    if (f.closed) no(item + " is closed; it reopens only on the Captain's word");
+    const stop = c.stopFor(item, { model: scope.model ?? null, subject: scope.subject ?? null, stage: scope.stage ?? null });
+    if (stop) no(item + " is under the " + stop.code + " stop: " + stop.why);
+    const room = f.capMicros - f.carriedMicros - f.settledMicros - f.inFlightMicros - f.unknownMicros;
+    const carried = f.carriedMicros ? dollars(f.carriedMicros) + " carried from earlier launches, " : "";
+    if (room <= 0) no(item + " has no room: " + carried + dollars(f.settledMicros) + " settled, " + dollars(f.inFlightMicros) + " in flight, " + dollars(f.unknownMicros) + " unknown, cap " + dollars(f.capMicros));
+    const lease = await c.openItem(item);
+    lines.push("ledger: " + item + " admitted on lease " + lease.leaseId + ", room " + dollars(c.room(item)) + " of " + dollars(f.capMicros) + (f.carriedMicros ? " (" + dollars(f.carriedMicros) + " carried from earlier launches)" : ""));
+  }
+  return lines;
+}
+
+/** The stage a paid row belongs to, in section 14 item 7's order, for PD-42's region rule. */
+export function stageOf(plan: Pick<StartPlan, "row" | "record">): string {
+  const row = plan.row.split(" ")[0]!;
+  const fixed: Record<string, string> = { modelprobe: "probes", preflight: "preflight", recipes: "stage 0", gatecheck: "gate check", author: "authoring", probe: "judge probe", reprice: "admission", stage3: "stage 3" };
+  if (fixed[row]) return fixed[row]!;
+  if ((row === "sessions" || row === "labels") && (plan.record?.stage === 1 || plan.record?.stage === 2)) return "stage " + plan.record.stage;
+  return fail("E_INTERNAL", "the paid row " + plan.row + " names no stage for the region rule");
+}
+
+/**
+ * PD-42: a paid row runs in the region its stage started in. The first row of a stage records the region in the work
+ * folder's regions.json; a later row of that stage in another region refuses before any admission.
+ */
+function regionRule(env: RowEnv, plan: StartPlan): { stage: string; region: string; record: string; first: boolean } | null {
+  const here = env.region?.();
+  if (!here) return null;
+  const stage = stageOf(plan);
+  const seen = existsSync(here.record) ? readJson<Record<string, { region: string; row: string; at: string }>>(here.record, "the work folder's regions.json") : {};
+  const started = seen[stage];
+  if (started && started.region !== here.region) throw new DcError("E_DCW_REGION", plan.row + " would run in " + here.region + ", but " + stage + " started in " + started.region + " (" + started.row + ", " + started.at + "); a stage never switches region (PD-42)");
+  return { stage, region: here.region, record: here.record, first: !started };
+}
+
+/** Every check before any provider but the ledger is built; then the sink and its launch record. */
+export async function start(plan: StartPlan, env: RowEnv): Promise<Launch> {
+  const lane = env.lane();
+  if (!lane.commit) refuse("2", "the lane's commit can't be read, so the run can't be pinned to it");
+  if (lane.dirty) refuse("2", "the checkout is dirty; a paid run is pinned to an exact commit, so commit first");
+  const sink = resolve(plan.sink);
+  const rel = relative(resolve(lane.root), sink);
+  if (rel === "" || (!rel.startsWith("..") && !isAbsolute(rel))) refuse("10", "--out must be a sealed folder outside the repository");
+  if (existsSync(sink)) refuse("10", "the sink " + sink + " exists already; every launch uses a sink directory that doesn't exist before it");
+  for (const rule of plan.rules ?? []) {
+    const r = rule();
+    if (r) refuse(r[0], r[1]);
+  }
+  for (const m of plan.models.filter((x) => OPENROUTER.includes(x))) {
+    const t = plan.terms.find((x) => x.model === m);
+    if (!t) refuse("9", m + " has no dated terms record (--terms); its provider and data terms are read before the cap request");
+    if (t!.dataCollection !== "deny" || !t!.provider || !Number.isFinite(Date.parse(t!.dated)) || !/^[0-9a-f]{64}$/.test(t!.termsDigest)) refuse("9", m + "'s terms record needs a provider, a date, data collection denied and a sha256 of the terms");
+  }
+  if (!(await env.dryRun())) refuse("5", "the keyless dry run has a FAIL line; gstack-evals dc dryrun names it");
+  const region = regionRule(env, plan);
+  const ledger = await build(env.providers, "ledger", plan.row);
+  const lines = await admitItems(ledger, plan.items, plan.scope);
+  const at = env.now().toISOString();
+  if (region?.first) {
+    const seen = existsSync(region.record) ? readJson<Record<string, unknown>>(region.record, "the work folder's regions.json") : {};
+    writeFileSync(region.record, JSON.stringify({ ...seen, [region.stage]: { region: region.region, row: plan.row, at } }, null, 2) + "\n");
+  }
+  mkdirSync(sink, { recursive: true });
+  writeJson(sink + "/launch.json", { row: plan.row, commit: lane.commit, at, sink, items: plan.items, models: plan.models, terms: plan.terms.map((t) => ({ model: t.model, dated: t.dated, provider: t.provider })), region: region?.region ?? null, regionStage: region?.stage ?? null, ...plan.record });
+  const regionLine = region ? ["region: " + plan.row + " runs in Ubicloud " + region.region + "; " + region.stage + (region.first ? " starts there" : " started there")] : [];
+  return { sink, commit: lane.commit, ledger, lines: ["launch: " + plan.row + " at " + lane.commit + " into a new sink", ...regionLine, ...lines] };
+}
+
+const STOP_CODES: readonly string[] = ["E_DC_JUDGE_KAPPA", "E_DC_STOCK_FAIL", "E_DC_NO_READ", "E_DC_TWIN", "E_DC_SMOKE_DROP", "E_DC_EXPOSURE_STOP", "E_DC_SUPPLY_SHORT", "E_DC_AUTHOR_COST", "E_DC_GATE_CHECK", "E_DC_SANDBOX_AUDIT"] satisfies DcStopCode[];
+
+/**
+ * Runs a row's work under rule 3: a stop code thrown from it applies its frozen stop scope (it settles the open leases
+ * it names and releases the rest) before it reaches the caller. A drift is applied where it is seen, so it passes.
+ */
+export async function underStops<T>(l: LedgerProvider, ctx: StopContext, work: () => Promise<T>, onStop: (code: string) => void = () => {}): Promise<T> {
+  try {
+    return await work();
+  } catch (e) {
+    if (e instanceof DcError && STOP_CODES.includes(e.code)) {
+      onStop(e.code);
+      await applyStop(l.controller, stopPlan(e.code as DcStopCode, ctx));
+    }
+    throw e;
+  }
+}
+
+/** Closes whatever a row built, the ledger last. */
+export async function closeAll(...ps: Array<{ close?: () => Promise<void> } | null | undefined>): Promise<void> {
+  for (const p of ps) await p?.close?.();
+}

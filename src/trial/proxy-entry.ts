@@ -5,6 +5,7 @@
 import { readFileSync } from "node:fs";
 import { openLocalLedger } from "../runner/ledger/local.ts";
 import { MeteringProxy, type RetryBudget } from "../runner/proxy/metering-proxy.ts";
+import { relayedLedger } from "./write-ahead.ts";
 
 export interface ProxyConfig {
   lease_id: string;
@@ -15,12 +16,17 @@ export interface ProxyConfig {
   host: string;
   port: number;
   retry: RetryBudget;
+  /** Off by default: the evaluator's write-ahead relay socket, in the mounted directory; every reserve waits for its acknowledgment (write-ahead.ts). */
+  write_ahead_socket?: string;
+  /** Off by default: OpenRouter outcome lines carry served_provider and generation_id (ProxyOptions.servedProvider). */
+  served_provider?: boolean;
 }
 
 if (import.meta.main) {
   const config = JSON.parse(readFileSync(process.argv[2]!, "utf8")) as ProxyConfig;
+  const local = openLocalLedger({ path: config.ledger, rule: "the run's local ledger" });
   const proxy = new MeteringProxy({
-    ledger: openLocalLedger({ path: config.ledger, rule: "the run's local ledger" }),
+    ledger: config.write_ahead_socket ? relayedLedger(local, config.write_ahead_socket) : local,
     leaseId: config.lease_id,
     host: config.host,
     port: config.port,
@@ -29,6 +35,7 @@ if (import.meta.main) {
     journal: config.journal,
     retry: config.retry,
     env: process.env,
+    ...(config.served_provider ? { servedProvider: true } : {}),
   });
   proxy.start();
   console.log("PROXY_READY " + config.host + ":" + proxy.port);
