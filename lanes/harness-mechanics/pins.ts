@@ -19,8 +19,8 @@ export const HM = {
   turns: 100,
   contextTokens: 200_000,
   lineUsd: 3000,
-  // The crew's spend is read from thread counters; it is not a ledger item.
-  crewCapUsd: 400,
+  // The crew's spend is read from thread counters; it is not a ledger item. Its cap is $1,050, not section 22's $400 (D15).
+  crewCapUsd: 1050,
   // Tasks per part: 20 tasks x 4 arms is 80 sessions, and with the judge arms 120, under the 140 of L1's largest part,
   // which fit the 16-hour part VM TTL.
   partTasks: 20,
@@ -43,7 +43,13 @@ export const HM = {
 // stage3-pilot-4 runs the same smoke and pilot on the rebuilt judge tar. A carve from stage3-pilot-3 ($67.476884) or
 // stage3-pilot-2 ($83.01371) is under the $84.90 C1 projection for those four parts, so stage3-pilot-4 is its own item at
 // $94.387061 and the caps sum to 2,674.387061. The skeleton check counts a done item at its settled (money.ts plannedLine).
-export const CAPS_USD = { "stage1-opus": 150, "stage1-opus-r2": 121.685384, "stage1-sol": 180, "stage1-sol-run": 179.96147, "stage1-p1": 70, "stage2-replay": 90, "stage2-replay-2": 88.088418, "stage2-replay-3": 79.029935, "stage3-pilot": 95, "stage3-pilot-2": 95, "stage3-pilot-3": 94.387061, "stage3-pilot-4": 94.387061, "stage4-opus": 660, "stage4-sol": 800, "stage4-p1": 280, vms: 160 } as const;
+// Deviation D15 (the Captain's rulings, 2026-11-14, after stage3-pilot-4 and before any Stage 4 spend): Stage 4's caps are
+// re-priced at the rates Stage 1 and stage3-pilot-4 measured, by section 22's formula with each item's VM share added,
+// ceil10(1.35 x expected + 6 x allowance + C1's VM share): stage4-opus $560 (expected $349.96), stage4-sol $690 ($425.02, at
+// Sol's $10 allowance below) and stage4-p1 $310 ($180.19). Each sits above the guard's C1 projection at RATES_USD ($539.36,
+// $678.56 and $254.16). The vms item closed done at $7.503203, because part VMs and hosts settle on their own items. So the
+// ledger caps sum to 2,494.387061.
+export const CAPS_USD = { "stage1-opus": 150, "stage1-opus-r2": 121.685384, "stage1-sol": 180, "stage1-sol-run": 179.96147, "stage1-p1": 70, "stage2-replay": 90, "stage2-replay-2": 88.088418, "stage2-replay-3": 79.029935, "stage3-pilot": 95, "stage3-pilot-2": 95, "stage3-pilot-3": 94.387061, "stage3-pilot-4": 94.387061, "stage4-opus": 560, "stage4-sol": 690, "stage4-p1": 310, vms: 160 } as const;
 // Deviation D3 (ruling A on Stage 1's WORKDIR defect): at 6aeabc2 the image build failed before any model call for every
 // arm of these 23 calibration tasks, in stage1-opus's two parts. stage1-opus's ledger is bound to that run, so it closed
 // at $28.314616 settled, and the 92 cells rerun on stage1-opus-r2, whose cap is the rest of stage1-opus's $150 and sits
@@ -73,8 +79,9 @@ export const STAGE1_OPUS_R2_TASKS = [
 // stage2-replay items total $90 (1.911582 + 9.058483 + 79.029935) and the caps still sum to 2,480.
 export const CARVED: Partial<Record<keyof typeof CAPS_USD, keyof typeof CAPS_USD>> = { "stage1-opus-r2": "stage1-opus", "stage1-sol-run": "stage1-sol", "stage2-replay-2": "stage2-replay", "stage2-replay-3": "stage2-replay-2", "stage3-pilot-3": "stage3-pilot" };
 export const ledgerCapsUsd = () => Object.entries(CAPS_USD).filter(([k]) => !Object.hasOwn(CARVED, k)).reduce((a, [, b]) => a + b, 0);
-// The ledger items' caps plus the crew's: 3,074.387061 (2,880 before D10, 2,885 before D11, 2,980 before D14). Counted with
-// each done item at its settled, as the line is (money.ts plannedLine), it sits inside the 3,000 line.
+// The ledger items' caps plus the crew's: 3,544.387061 (2,880 before D10, 2,885 before D11, 2,980 before D14, 3,074.387061
+// before D15). Counted with each done item at its settled, as the line is (money.ts plannedLine), it sits inside the 3,000
+// line once every item before Stage 4 is done: 2,881.932345.
 export const capsTotalUsd = () => ledgerCapsUsd() + HM.crewCapUsd;
 // The replay's outputs the judge arms take (sections 8 and 10; D14): stage2-replay-3's admission.json and band.json, copied
 // byte for byte from its out dir. build.sh refuses any other file (arms.ts judgeInputs), and the launcher refuses a judge
@@ -126,6 +133,15 @@ export const MODELS = {
   p1: { id: "particle-1", cells: "cells.hm-p1.json", allowanceUsd: 2 },
 } as const;
 export type ModelKey = keyof typeof MODELS;
+// Deviation D15 (the Captain's ruling C, 2026-11-14, before any Stage 4 outcome data): every Sol session in Stage 4, in every
+// arm, gets a $10 allowance, so stage4-sol reads cells.hm-sol-s4.json ($10) and reserves $10 a session (plans.ts ITEMS).
+// Stage 1's Sol sessions ran at $5 and Stage 3's at $6 (D8), and MODELS keeps the $6 that Stage 3's Sol part and the picker
+// for Opus's pairs read. Reason: in stage3-pilot-4 one Sol session was refused six times at $3.437 spent, each next call's
+// worst case $2.60 to $2.64 on an input bound of 424k to 432k tokens against the $6 cap. On its last answered call the
+// byte-based bound ran 6.3x over real context (415,476 tokens bounded, about 66k real). No pilot call passed 9,232 output
+// tokens, so a lower max_tokens bound was the other option, but it changes what every call may do and would have cut that
+// worst case by only $0.36. $10 clears the highest spent plus worst case seen in Stage 1 and the pilots ($6.079) with room.
+export const STAGE4_SOL = { cells: "cells.hm-sol-s4.json", allowanceUsd: 10 } as const;
 
 // The six run arms as Lane B arm specs (grid.ts armSpec). bo2 has no session: none plus plain-2 plus one picker call.
 // The judge backend is now an agent option (grid.ts backend -> judge_backend kwarg): a judge arm's spec carries its

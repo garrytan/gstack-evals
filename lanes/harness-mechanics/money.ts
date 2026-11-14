@@ -250,7 +250,7 @@ export function stepReserve(out: string): StepResult {
       if (!ledger.reserve("host-1", toMicros(hostTtlHours(parts.length) * L1.host.usdPerHour)).ok) { bad.push(item + " " + mode + ": host reserve refused"); continue; }
       let stop: string | null = null, ran = 0, planned = 0;
       for (const part of parts) {
-        const m = modelKey(part.model ?? ITEMS[item]!.model), allowance = MODELS[m].allowanceUsd, proj = partProjection(item, part);
+        const m = modelKey(part.model ?? ITEMS[item]!.model), allowance = part.model ? MODELS[m].allowanceUsd : ITEMS[item]!.allowanceUsd, proj = partProjection(item, part);
         const costs = [...plannedCells(part).entries()].flatMap(([key, n]) => Array.from({ length: n }, () => (k ? allowance : armRate(key.split("\t")[1]!, m))));
         planned += costs.length;
         if (stop) continue;

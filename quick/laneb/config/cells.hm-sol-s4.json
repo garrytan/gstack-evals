@@ -1,0 +1,13 @@
+{
+  "note": "Cells for the harness mechanics eval's Stage 4 Sol item, stage4-sol (lanes/harness-mechanics, prereg 2026-11-09 section 22): anthropic/gpt-6.1-sol through OpenRouter inside Claude Code as L1 ran it, reserved in the item's ledger before each session and enforced by the metering proxy, and 100 turns. Deviation D15 (Captain's ruling C, 2026-11-14, before any Stage 4 outcome data): the per-session allowance is $10. Sol's byte-based input bound ran 6.3x over real context in stage3-pilot-4 and refused one session at $3.44 spent under cells.hm-sol.json's $6, which Stage 3 ran and keeps. This file differs from cells.hm-sol.json only in its allowance.",
+  "models": [
+    {
+      "id": "gpt-6.1-sol",
+      "harbor_model": "anthropic/gpt-6.1-sol",
+      "session_cap_usd": 10
+    }
+  ],
+  "max_output_tokens": 32000,
+  "verifier_timeout_multiplier": 2,
+  "sdk_max_turns": 100
+}

@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { appendRow, toMicros } from "../../quick/laneb/runner/ledger.ts";
 import { armSpec, CLOSING_LINES } from "../../quick/laneb/runner/grid.ts";
 import { plannedCells, seeded } from "../../quick/laneb/l1/l1.ts";
-import { ARMS, BUNDLE, bundleLists, CAPS_USD, capsTotalUsd, CLOSING, ledgerCapsUsd, frontMatterDigests, HM, loadBundle, MODELS, readScreened, REPO, sha256, unscreenedText } from "../../lanes/harness-mechanics/pins.ts";
+import { ARMS, BUNDLE, bundleLists, CAPS_USD, capsTotalUsd, CLOSING, ledgerCapsUsd, frontMatterDigests, HM, loadBundle, MODELS, readScreened, REPO, sha256, STAGE4_SOL, unscreenedText } from "../../lanes/harness-mechanics/pins.ts";
 import { itemPlan, ITEMS } from "../../lanes/harness-mechanics/plans.ts";
 import { STEPS } from "../../lanes/harness-mechanics/dryrun.ts";
 import { approve, markDone, plannedLine, type Item } from "../../lanes/harness-mechanics/money.ts";
@@ -17,8 +17,13 @@ import { Ledger, readRows } from "../../quick/laneb/runner/ledger.ts";
 const CLI = join(REPO, "lanes/harness-mechanics/cli.ts");
 const lists = bundleLists();
 const run = (args: string[], env: Record<string, string> = {}) => Bun.spawnSync([process.execPath, CLI, ...args], { env: { ...process.env, ...env }, cwd: REPO });
-// Item ledgers holding the Stage 3 pilots' settled spend, each with its done row unless named in open.
-const SETTLED: [Item, number][] = [["stage3-pilot", 0.612939], ["stage3-pilot-2", 11.98629], ["stage3-pilot-3", 26.910177]];
+// Item ledgers holding the settled spend of every item before Stage 4, as their ledgers read after D15, each with its done
+// row unless named in open.
+const SETTLED: [Item, number][] = [
+  ["stage1-opus", 28.60473], ["stage1-opus-r2", 33.006068], ["stage1-sol", 0.03853], ["stage1-sol-run", 76.280659], ["stage1-p1", 35.314094],
+  ["stage2-replay", 1.911582], ["stage2-replay-2", 9.058483], ["stage2-replay-3", 13.818316],
+  ["stage3-pilot", 0.612939], ["stage3-pilot-2", 11.98629], ["stage3-pilot-3", 26.910177], ["stage3-pilot-4", 26.887274], ["vms", 7.503203],
+];
 function pilotLedgers(open: Item[] = []) {
   const d = mkdtempSync(join(tmpdir(), "hm-ledgers-"));
   for (const [i, usd] of SETTLED) {
@@ -53,30 +58,34 @@ describe("pins", () => {
     expect(lists.judgePilot).toEqual(lists.calibration.slice(0, 12));
   });
 
-  test("the caps sum to 3,074.387061 with D14's stage3-pilot-4 (2,980 before it), the planned line counts the done pilots at their settled and fits under 3,000, and each model's allowance is section 22's", () => {
-    expect(ledgerCapsUsd()).toBe(2674.387061);
-    expect(capsTotalUsd()).toBe(3074.387061);
+  test("the caps sum to 3,544.387061 with D15's Stage 4 caps and crew cap (3,074.387061 before it), the planned line counts every item before Stage 4 at its settled and fits under 3,000, and each model's allowance is section 22's or its deviation's", () => {
+    expect(ledgerCapsUsd()).toBe(2494.387061);
+    expect(capsTotalUsd()).toBe(3544.387061);
     const p = plannedLine(readLedgers(pilotLedgers()));
     expect(p.items.filter((i) => i.done).map((i) => [i.item, i.counted])).toEqual(SETTLED.map(([i, usd]) => [i, toMicros(usd)]));
-    expect(p.total).toBe(toMicros(2923.896467));
+    expect(p.total).toBe(toMicros(2881.932345));
     expect(p.total).toBeLessThan(toMicros(HM.lineUsd));
     expect(p.fits).toBe(true);
     expect([MODELS.opus.allowanceUsd, MODELS.sol.allowanceUsd, MODELS.p1.allowanceUsd]).toEqual([5, 6, 2]);
-    for (const m of Object.values(MODELS)) {
+    for (const m of [...Object.values(MODELS), { ...MODELS.sol, ...STAGE4_SOL }]) {
       const c = JSON.parse(readFileSync(join(REPO, "quick/laneb/config", m.cells), "utf8"));
       expect(c.models).toEqual([expect.objectContaining({ id: m.id, session_cap_usd: m.allowanceUsd })]);
       expect(c.sdk_max_turns).toBe(HM.turns);
     }
+    expect([ITEMS["stage4-sol"]!.cells, ITEMS["stage4-sol"]!.allowanceUsd]).toEqual(["cells.hm-sol-s4.json", 10]);
+    expect([ITEMS["stage3-pilot-4"]!.allowanceUsd, ITEMS["stage1-sol-run"]!.allowanceUsd, ITEMS["stage4-opus"]!.allowanceUsd]).toEqual([5, 6, 5]);
+    const read = (f: string) => { const c = JSON.parse(readFileSync(join(REPO, "quick/laneb/config", f), "utf8")); delete c.note; c.models[0].session_cap_usd = 0; return c; };
+    expect(read(STAGE4_SOL.cells)).toEqual(read(MODELS.sol.cells));
   });
 
-  test("an open item counts at its cap in the planned line: stage3-pilot-3 before its done row, and stage3-pilot-4 with no ledger", () => {
+  test("an open item counts at its cap in the planned line: stage3-pilot-3 before its done row, and stage4-sol with no ledger", () => {
     const counted = (open: Item[]) => Object.fromEntries(plannedLine(readLedgers(pilotLedgers(open))).items.map((i) => [i.item, i.counted]));
     expect(counted(["stage3-pilot-3"])["stage3-pilot-3"]).toBe(toMicros(94.387061));
     expect(counted([])["stage3-pilot-3"]).toBe(toMicros(26.910177));
-    expect(counted([])["stage3-pilot-4"]).toBe(toMicros(94.387061));
-    expect(plannedLine(readLedgers(pilotLedgers(["stage3-pilot-3"]))).total).toBe(toMicros(2991.373351));
+    expect(counted([])["stage4-sol"]).toBe(toMicros(690));
+    expect(plannedLine(readLedgers(pilotLedgers(["stage3-pilot-3"]))).total).toBe(toMicros(2949.409229));
     const none = plannedLine({});
-    expect([none.total, none.fits]).toEqual([toMicros(3074.387061), false]);
+    expect([none.total, none.fits]).toEqual([toMicros(3544.387061), false]);
   });
 
   test("the screened lists are checked by sha256 and must come from their split or the spares", () => {
@@ -231,7 +240,7 @@ describe("cli", () => {
     for (const n of ["6-ledger", "leases-per-item", "reserve-mechanics"]) expect(lines.some((l) => l.startsWith("DRYRUN " + n + " PASS "))).toBe(true);
     for (const n of ["3-matcher-probes", "stop-hook-loadline", "matcher-72", "probes-189"]) expect(lines.some((l) => l.startsWith("DRYRUN " + n + " FAIL E_HM_PIN set HM_GSTACK"))).toBe(true);
     expect(lines[0]).toStartWith("DRYRUN skeleton PASS");
-    expect(lines[0]).toContain("planned 2923.896467 under the 3000 line");
+    expect(lines[0]).toContain("planned 2881.932345 under the 3000 line");
     expect(lines[0]).toContain("stage1-sol 160, stage1-sol-run 160, stage1-p1 160");
     expect(lines.at(-1)).toBe("DRYRUN: FAIL");
     expect(r.exitCode).toBe(1);
@@ -243,11 +252,11 @@ describe("cli", () => {
     const step = STEPS.find((s) => s.name === "skeleton")!, was = process.env.HM_LEDGERS;
     try {
       delete process.env.HM_LEDGERS;
-      expect(step.run!("")).toEqual({ pass: false, detail: "planned 3074.387061 is over the 3000 line; set HM_LEDGERS to the folder of item ledgers (<item>.jsonl)" });
+      expect(step.run!("")).toEqual({ pass: false, detail: "planned 3544.387061 is over the 3000 line; set HM_LEDGERS to the folder of item ledgers (<item>.jsonl)" });
       process.env.HM_LEDGERS = pilotLedgers(["stage3-pilot-3"]);
       const r = step.run!("");
       expect(r.pass).toBe(true);
-      expect(r.detail).toContain("planned 2991.373351 under the 3000 line");
+      expect(r.detail).toContain("planned 2949.409229 under the 3000 line");
     } finally {
       if (was === undefined) delete process.env.HM_LEDGERS; else process.env.HM_LEDGERS = was;
     }

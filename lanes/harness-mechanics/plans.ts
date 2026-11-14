@@ -4,7 +4,7 @@
 import { plannedCells, prefixOf, seeded, type ItemDef, type PartPlan, type Profile, type Rect } from "../../quick/laneb/l1/l1.ts";
 import type { HmArm } from "../../src/types.ts";
 import { attempt2Owed } from "./money.ts";
-import { ARMS, bundleLists, CAPS_USD, FOUR, HM, JUDGE, loadBundle, MODELS, screenedFromEnv, SMOKE_PART, STAGE1_OPUS_R2_TASKS, TARS, TASK_SETUP, type ModelKey } from "./pins.ts";
+import { ARMS, bundleLists, CAPS_USD, FOUR, HM, JUDGE, loadBundle, MODELS, screenedFromEnv, SMOKE_PART, STAGE1_OPUS_R2_TASKS, STAGE4_SOL, TARS, TASK_SETUP, type ModelKey } from "./pins.ts";
 
 const item = (m: ModelKey, capUsd: number): ItemDef => ({ capUsd, taskSet: "swerebench-r3a4", cells: MODELS[m].cells, allowanceUsd: MODELS[m].allowanceUsd, model: MODELS[m].id });
 // stage3-pilot is one item with one part per model, after the smoke part (S1, pins.ts SMOKE_PART): one ledger item binds
@@ -24,7 +24,7 @@ export const ITEMS: Record<string, ItemDef> = {
   "stage3-pilot-3": item("opus", CAPS_USD["stage3-pilot-3"]),
   "stage3-pilot-4": item("opus", CAPS_USD["stage3-pilot-4"]),
   "stage4-opus": item("opus", CAPS_USD["stage4-opus"]),
-  "stage4-sol": item("sol", CAPS_USD["stage4-sol"]),
+  "stage4-sol": { ...item("sol", CAPS_USD["stage4-sol"]), ...STAGE4_SOL },
   "stage4-p1": item("p1", CAPS_USD["stage4-p1"]),
 };
 
