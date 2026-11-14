@@ -12,7 +12,7 @@
 import { createHash } from "node:crypto";
 import { seededRandom } from "../../../src/runner/stats/paired.ts";
 import { CELL_STATES, HARNESS, SEED } from "../frozen.ts";
-import type { Termination } from "../../../src/types.ts";
+import type { SessionEnd, Termination } from "../../../src/types.ts";
 import type { SessionKind } from "../types.ts";
 import { isGstackArm } from "./arms.ts";
 import type { AttemptEnd, AttemptRecord, Cell, CellOutcome, EndRead, LoopSeams, ParseBlock } from "./types.ts";
@@ -161,6 +161,32 @@ export function malformedToolCalls(outcomes: readonly CellOutcome[]): Array<{ ki
 
 export const printMalformedToolCalls = (outcomes: readonly CellOutcome[]): string[] =>
   malformedToolCalls(outcomes).map((r) => "malformed tool calls: " + r.kind + " on " + r.model + " " + r.armStop + " read as arm stops, " + r.outside + " as outside the agent");
+
+/**
+ * PD-32's print, per arm and model, from the driver's session_end of every attempt. A session with no simulator reply and
+ * no follow-up ends at its first result unless background work holds it there, so a session that sat idle (waited_ms
+ * above 0) still had background work at its first result. deadline counts the sessions that ended at the wait's end;
+ * pending counts those that ended another way with work still out; unrecorded counts sessions with no session_end.
+ */
+export function backgroundAtResult(sessions: ReadonlyArray<{ kind: SessionKind; model: string; sessionEnd: SessionEnd | null }>): Array<{ kind: SessionKind; model: string; sessions: number; held: number; deadline: number; pending: number; unrecorded: number }> {
+  const counts = new Map<string, { sessions: number; held: number; deadline: number; pending: number; unrecorded: number }>();
+  for (const s of sessions) {
+    const k = s.kind + "\t" + s.model;
+    const c = counts.get(k) ?? { sessions: 0, held: 0, deadline: 0, pending: 0, unrecorded: 0 };
+    c.sessions++;
+    if (!s.sessionEnd) c.unrecorded++;
+    else {
+      if (s.sessionEnd.waited_ms > 0) c.held++;
+      if (s.sessionEnd.cause === "deadline") c.deadline++;
+      if (s.sessionEnd.cause === "tasks_pending") c.pending++;
+    }
+    counts.set(k, c);
+  }
+  return [...counts].sort(([a], [b]) => (a < b ? -1 : 1)).map(([k, c]) => ({ kind: k.split("\t")[0] as SessionKind, model: k.split("\t")[1]!, ...c }));
+}
+
+export const printBackgroundAtResult = (sessions: Parameters<typeof backgroundAtResult>[0]): string[] =>
+  backgroundAtResult(sessions).map((r) => "background work at the first result (PD-32): " + r.kind + " on " + r.model + " " + r.held + " of " + r.sessions + " sessions, " + r.deadline + " ended at the wait's deadline, " + r.pending + " ended another way with work still out" + (r.unrecorded ? ", " + r.unrecorded + " with no driver record" : ""));
 
 /** A cell is final once its outcome exists; a label packet is built only from final cells (plan section 6). */
 export function packetReady(planned: readonly Cell[], outcomes: ReadonlyMap<string, CellOutcome>): boolean {

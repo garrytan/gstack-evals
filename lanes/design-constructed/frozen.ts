@@ -374,6 +374,13 @@ export const LEDGER_ITEMS: Record<LedgerItemId, LedgerItemSpec> = {
  */
 export const CREW_DEVIATION = { capUsd: 700, frozenCapUsd: 470, ruled: "2026-11-14" } as const;
 
+/**
+ * PD-32 (Captain, 2026-11-14, before any outcome data): the driver's wait for background work at a turn's result is
+ * 3,600,000 ms in every arm's review session. The preregistration and the plan give no value. Each session's own limits
+ * still bind.
+ */
+export const BACKGROUND_WAIT = { ms: 3_600_000, ruled: "2026-11-14" } as const;
+
 export const MONEY = {
   capAllInUsd: 3999,
   projectionStopUsd: 5000,

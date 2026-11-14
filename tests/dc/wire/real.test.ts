@@ -184,6 +184,7 @@ describe("the real providers", () => {
         expect(r.err).toEqual([]);
         expect(r.code).toBe(0);
         expect(r.out).toContain("sessions opus stage 2: 1 cells, scored 1; 0 retried");
+        expect(r.out).toContain("background work at the first result (PD-32): none on opus 0 of 1 sessions, 0 ended at the wait's deadline, 0 ended another way with work still out");
         const rows = JSON.parse(readFileSync(join(f.sink, "rows.json"), "utf8"));
         expect(rows[0].state).toBe("scored");
         expect(rows[0].list).toEqual(["Show an empty state on the orders screen with one action."]);

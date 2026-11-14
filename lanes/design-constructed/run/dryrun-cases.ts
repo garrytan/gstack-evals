@@ -8,7 +8,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { appendFileSync, cpSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { ARM_LEAD, CELL_STATES, COMMON_LINE, FORCED_SENTENCE, GATE_MESSAGE, HARNESS, REFERENCE_OPENING, SESSION_LIMITS, TEMPLATE } from "../frozen.ts";
+import { ARM_LEAD, BACKGROUND_WAIT, CELL_STATES, COMMON_LINE, FORCED_SENTENCE, GATE_MESSAGE, HARNESS, REFERENCE_OPENING, SESSION_LIMITS, TEMPLATE } from "../frozen.ts";
 import { DcError } from "../errors.ts";
 import type { CellState, DryRunCase, SessionKind } from "../types.ts";
 import { armPrompt, containerProblems, HOME, sessionSetup } from "./arms.ts";
@@ -19,7 +19,7 @@ import { attempt, autoplanRun, BLOCK, fakeBox, parseFixture, PDR_NO_UI_TRANSCRIP
 import { answerArgs, D1_MESSAGE, gateHook, repairHook, repairOn, stopHandler } from "./hooks.ts";
 import { MARK, writeHostile } from "./hostile.ts";
 import { scopeOf, scopeShare } from "./scope.ts";
-import { armStopsWithBlock, cellOrder, endOf, malformedToolCalls, packetReady, printMalformedToolCalls, readAttempt, runCell, runCells, cellId } from "./session.ts";
+import { armStopsWithBlock, backgroundAtResult, cellOrder, endOf, malformedToolCalls, packetReady, printMalformedToolCalls, readAttempt, runCell, runCells, cellId } from "./session.ts";
 import { GSTACK_CHECKOUT, treeListing, verifyInstall } from "./docker.ts";
 import { toolCallEnd } from "./stream.ts";
 import type { AttemptRecord, Cell, CellOutcome, Exec, LoopSeams, Reconciled } from "./types.ts";
@@ -530,6 +530,29 @@ export function cases(): DryRunCase[] {
       const gstack = k === "plan-design-review" || k === "autoplan";
       return eq([s.env.CLAUDE_CODE_DISABLE_BUNDLED_SKILLS, s.env.CLAUDE_CODE_DISABLE_1M_CONTEXT, s.env.GSTACK_SESSION_KIND ?? null, s.deniedTools, s.limits, s.container.gstack !== null, s.planTune], ["1", "1", gstack ? "unattended" : null, ["WebSearch", "WebFetch"], SESSION_LIMITS.sol, gstack, gstack ? "empty" : null], k);
     }));
+  });
+  add("PD-32", "every arm's session on every model waits 3,600,000 ms for background work, keeps its own limits, and prints per arm and model the sessions background work held at their first result", () => {
+    const kinds: SessionKind[] = ["none", "lens", "plan-design-review", "autoplan", "reference"];
+    const models = ["opus", "sol", "particle"] as const;
+    const setups = models.flatMap((m) => kinds.map((k) => sessionSetup(k, m, k === "reference" ? [{ path: "docs/a.md", text: "a" }] : [])));
+    const end = (cause: "clean" | "deadline" | "tasks_pending", waited_ms: number) => ({ cause, pending: cause === "clean" ? [] : ["Agent: audit"], waited_ms, released_wakeups: [] });
+    const counts = backgroundAtResult([
+      { kind: "none", model: "opus", sessionEnd: end("clean", 0) },
+      { kind: "none", model: "opus", sessionEnd: end("clean", 1) },
+      { kind: "autoplan", model: "opus", sessionEnd: end("deadline", BACKGROUND_WAIT.ms) },
+      { kind: "autoplan", model: "opus", sessionEnd: end("tasks_pending", 0) },
+      { kind: "autoplan", model: "opus", sessionEnd: null },
+      { kind: "autoplan", model: "sol", sessionEnd: end("clean", 0) },
+    ]);
+    return all(
+      eq([BACKGROUND_WAIT.ms, [...new Set(setups.map((s) => s.backgroundWaitMs))]], [3_600_000, [3_600_000]], "the wait"),
+      eq(setups.map((s) => s.limits), setups.map((s) => SESSION_LIMITS[s.model]), "limits"),
+      eq(counts, [
+        { kind: "autoplan", model: "opus", sessions: 3, held: 1, deadline: 1, pending: 1, unrecorded: 1 },
+        { kind: "autoplan", model: "sol", sessions: 1, held: 0, deadline: 0, pending: 0, unrecorded: 0 },
+        { kind: "none", model: "opus", sessions: 2, held: 1, deadline: 0, pending: 0, unrecorded: 0 },
+      ], "counts"),
+    );
   });
   add("C3", "a clean container has an empty HOME, no skills folder, no gstack state root and no drive mount", () => {
     const none = sessionSetup("none", "opus");

@@ -5,7 +5,7 @@
 // follows a blank line, as the frozen text asks; the reference copies each evidence file in path order under its path,
 // inside a fence longer than any backtick run in the file. GSTACK_SESSION_KIND=unattended and the empty plan-tune
 // state belong to the two gstack arms (HARNESS.gstackEnv); the two CLAUDE_CODE_ settings go to every session.
-import { ARM_LEAD, COMMON_LINE, FORCED_SENTENCE, GSTACK_PIN, HARNESS, REFERENCE_OPENING, SESSION_LIMITS, TEMPLATE } from "../frozen.ts";
+import { ARM_LEAD, BACKGROUND_WAIT, COMMON_LINE, FORCED_SENTENCE, GSTACK_PIN, HARNESS, REFERENCE_OPENING, SESSION_LIMITS, TEMPLATE } from "../frozen.ts";
 import type { Arm, GstackArm, Model, SessionKind } from "../types.ts";
 
 export const GSTACK_ARMS: readonly GstackArm[] = ["plan-design-review", "autoplan"];
@@ -63,6 +63,8 @@ export interface SessionSetup {
   env: Record<string, string>;
   deniedTools: readonly string[];
   limits: { usd: number; turns: number; minutes: number };
+  /** PD-32: the driver's wait for background work at a turn's result, the same in every arm. */
+  backgroundWaitMs: number;
   container: ContainerSpec;
   /** The gstack arms start with an empty plan-tune state (no PLAN_TUNE_FILES name under the state root). */
   planTune: "empty" | null;
@@ -83,6 +85,7 @@ export function sessionSetup(kind: SessionKind, model: Model, evidence: readonly
     env: { ...HARNESS.env, ...(gstack ? HARNESS.gstackEnv : {}) },
     deniedTools: HARNESS.deniedTools,
     limits: { ...SESSION_LIMITS[model] },
+    backgroundWaitMs: BACKGROUND_WAIT.ms,
     container: {
       cwd: "/work",
       mounts: HARNESS.mounts,

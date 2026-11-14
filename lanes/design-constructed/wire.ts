@@ -8,7 +8,7 @@
 // on the controller host, inside the ledger service's process, where wire/host.ts runs each paid row; anywhere else
 // every factory refuses with E_DCW_OFF_HOST after the row's checks. The dry run binds the keyless fakes in wire/fakes.ts.
 import { ledgerStatus } from "../../src/runner/ledger/ledger.ts";
-import type { Termination } from "../../src/types.ts";
+import type { SessionEnd, Termination } from "../../src/types.ts";
 import type { BlockParser, Caller, SpendReader } from "./author/seams.ts";
 import { DcError } from "./errors.ts";
 import { matchRoute } from "./frame/routes.ts";
@@ -86,6 +86,8 @@ export interface SessionDrive {
   termination: Termination;
   /** The API, the provider or the harness returned an error in the session's last exchange (decides a malformed tool call only). */
   errorSeen: boolean;
+  /** The driver's session_end (PD-32): what held the session at its end and how long it sat idle on background work; null when the driver recorded none. */
+  sessionEnd: SessionEnd | null;
   /** plan.md after the session, or null when it is gone. */
   planAfter: string | null;
   /** Proxy-metered spend; null when unknown (held until reconciled). */

@@ -7,6 +7,8 @@
 // failed smoke rule for its arm, the D1 repair hook. The launch writes every transcript, each attempt's exposure read
 // and rows.json for the label passes, and prints the counts. Each unit's folder under --exports holds repo/ (the export,
 // its evidence files included), plan.md, context/ and c2.json (the export's C2 record), the three mounts and C2's input.
+// Every session's driver waits up to the PD-32 background wait at a turn's result, and the launch prints, per arm, how
+// many sessions still had background work at their first result.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { mainAgentTexts } from "../../../src/trial/review/capped.ts";
@@ -19,11 +21,12 @@ import { isGstackArm, sessionSetup } from "../run/arms.ts";
 import { runFilesOf } from "../run/box.ts";
 import { autoplanExposure, pdrExposure, type AutoplanReading, type PdrReading } from "../run/detect.ts";
 import { gateHook, repairHook, repairOn, stopHandler } from "../run/hooks.ts";
-import { cellId, cellOrder, endOf, printArmStopsWithBlock, printMalformedToolCalls, runCell } from "../run/session.ts";
+import { cellId, cellOrder, endOf, printArmStopsWithBlock, printBackgroundAtResult, printMalformedToolCalls, runCell } from "../run/session.ts";
 import { gstackRead, replyOf, webResult } from "../run/transcript.ts";
 import type { AttemptRecord, Cell, CellOutcome, LoopSeams } from "../run/types.ts";
 import { evidenceOpened, normalizeChanges } from "../score/parse.ts";
 import type { ReviewRow, ScoreUnit } from "../score/types.ts";
+import type { SessionEnd } from "../../../src/types.ts";
 import type { GstackArm, LedgerItemId, Model, SessionKind } from "../types.ts";
 import { build, parseBlockFor, termsGuard } from "../wire.ts";
 import { readJson, writeJson } from "./json.ts";
@@ -115,6 +118,7 @@ export const sessionsRow: Row = async (a, io, env) => {
   };
 
   const attempts: Array<Record<string, unknown>> = [];
+  const ends: Array<{ kind: SessionKind; model: Model; sessionEnd: SessionEnd | null }> = [];
   const lastTranscript = new Map<string, string>();
   const seams: LoopSeams = {
     parse,
@@ -166,7 +170,8 @@ export const sessionsRow: Row = async (a, io, env) => {
           judged: false,
           autoplan: cell.kind === "autoplan" ? { gateAnswered: (exposure as AutoplanReading).gateRec, approved: (exposure as AutoplanReading).approved } : null,
         };
-        attempts.push({ cell: id, attempt, end: rec.end, exposure, repairBlocks: d1?.blocks() ?? 0, gateAnswers: gate?.answered().length ?? 0, spentUsd: d.spentUsd, imageDigest: d.imageDigest });
+        ends.push({ kind: cell.kind, model, sessionEnd: d.sessionEnd });
+        attempts.push({ cell: id, attempt, end: rec.end, sessionEnd: d.sessionEnd, exposure, repairBlocks: d1?.blocks() ?? 0, gateAnswers: gate?.answered().length ?? 0, spentUsd: d.spentUsd, imageDigest: d.imageDigest });
         return rec;
       } finally {
         await sb.close();
@@ -219,6 +224,7 @@ export const sessionsRow: Row = async (a, io, env) => {
     io.out("sessions " + model + " stage " + stage + ": " + out.length + " cells, " + [...states].sort().map(([s, n]) => s + " " + n).join(", ") + "; " + out.filter((o) => o.attempts.length === 2).length + " retried");
     for (const l of printArmStopsWithBlock(out)) io.out(l);
     for (const l of printMalformedToolCalls(out)) io.out(l);
+    for (const l of printBackgroundAtResult(ends)) io.out(l);
     return 0;
   } finally {
     await closeAll(sessions, launch.ledger);

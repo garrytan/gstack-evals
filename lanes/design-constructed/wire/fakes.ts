@@ -4,7 +4,7 @@
 // from a script, the areas' own scripted VM world, browser and agents, and scripted review sessions on the run area's
 // fake RunBox. Nothing here reads a key or reaches a network; the proxy gets invented key strings.
 import { join, resolve } from "node:path";
-import type { Termination } from "../../../src/types.ts";
+import type { SessionEnd, Termination } from "../../../src/types.ts";
 import { STAND_IN_VOCABULARY } from "../author/scripted.ts";
 import { DIRECT_MODELS } from "../money/price.ts";
 import { fakeReply, rig, startProxy, type ProxyRig, type Rig } from "../money/dryrun-fixture.ts";
@@ -181,6 +181,8 @@ export interface FakeAttempt {
   transcript: string;
   termination?: Termination;
   errorSeen?: boolean;
+  /** The driver's session_end; null when unset. */
+  sessionEnd?: SessionEnd;
   /** Null is an unknown charge; $1.00 when unset. */
   spentUsd?: number | null;
   /** The serving provider an OpenRouter session's first call names; the pinned one when unset. */
@@ -205,7 +207,7 @@ export function fakeSessions(script: (o: { cell: Cell; attempt: 1 | 2 }) => Fake
         exec: () => ({ code: 0, stdout: "", stderr: "" }),
         async drive(stop) {
           stop?.(s.transcript);
-          return { transcript: s.transcript, termination: s.termination ?? { kind: "completed" }, errorSeen: s.errorSeen ?? false, planAfter: s.planAfter ?? null, spentUsd: s.spentUsd === undefined ? 1 : s.spentUsd, served: served(s.served), imageDigest: null };
+          return { transcript: s.transcript, termination: s.termination ?? { kind: "completed" }, errorSeen: s.errorSeen ?? false, sessionEnd: s.sessionEnd ?? null, planAfter: s.planAfter ?? null, spentUsd: s.spentUsd === undefined ? 1 : s.spentUsd, served: served(s.served), imageDigest: null };
         },
         close: async () => {},
       };
