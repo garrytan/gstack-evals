@@ -19,12 +19,14 @@ describe("screen evidence", () => {
     process.env.EP_EVIDENCE = join(root, "ev");
     keepEvidence("u1", "drop.json", { step: "screen", reason: "merged:no_per_case_result" });
     keepEvidence("u1", "note.txt", "plain");
+    keepEvidence("u1", "recount-out/merged/run1-record.jsonl", "{}\n");
     keepEvidenceDir("u1", "screen-out", src);
     keepEvidenceDir("u1", "missing", join(root, "nope"));
     expect(JSON.parse(readFileSync(join(root, "ev/u1/drop.json"), "utf8"))).toEqual({ step: "screen", reason: "merged:no_per_case_result" });
     expect(readFileSync(join(root, "ev/u1/note.txt"), "utf8")).toBe("plain");
     expect(readFileSync(join(root, "ev/u1/screen-out/merged.log"), "utf8")).toBe("case a: no result\n");
     expect(existsSync(join(root, "ev/u1/missing"))).toBe(false);
+    expect(readFileSync(join(root, "ev/u1/recount-out/merged/run1-record.jsonl"), "utf8")).toBe("{}\n");
     rmSync(root, { recursive: true, force: true });
   });
 

@@ -133,7 +133,13 @@ export function qualify(o: { mirror: string; fix: MinedFix; unit: Constructed; o
 /** The 3-run recount of a qualified unit in the frozen sandbox, under the planted rules. */
 export function recount(res: Outcome, unitDir: string, work: string): Outcome {
   requireSandbox();
-  const row = recountUnit(unitDir, { work, planted: true, sandbox: SANDBOX, licences: FROZEN.frame.licences });
+  process.env.EP_EVIDENCE_TAG = "recount";
+  let row;
+  try {
+    row = recountUnit(unitDir, { work, planted: true, sandbox: SANDBOX, licences: FROZEN.frame.licences });
+  } finally {
+    delete process.env.EP_EVIDENCE_TAG;
+  }
   keepEvidence(res.id, "recount.json", row);
   return row.clean ? { ...res, step: "clean", reason: null } : { ...res, step: "recount", reason: row.reason };
 }

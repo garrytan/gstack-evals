@@ -2,7 +2,7 @@
 // evidence there (run output, per-case grids, leak hits), so a drop can be audited later. It never changes an
 // outcome: with EP_EVIDENCE unset it does nothing, and a failed write is reported on stdout, never thrown.
 import { cpSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 const dirFor = (id: string): string | null => {
   const root = process.env.EP_EVIDENCE;
@@ -18,7 +18,9 @@ const report = (id: string, name: string, error: unknown) => process.stdout.writ
 export function keepEvidence(id: string, name: string, data: unknown): void {
   try {
     const d = dirFor(id);
-    if (d) writeFileSync(join(d, name), typeof data === "string" ? data : JSON.stringify(data, null, 1) + "\n", { mode: 0o600 });
+    if (!d) return;
+    mkdirSync(dirname(join(d, name)), { recursive: true, mode: 0o700 });
+    writeFileSync(join(d, name), typeof data === "string" ? data : JSON.stringify(data, null, 1) + "\n", { mode: 0o600 });
   } catch (error) {
     report(id, name, error);
   }
