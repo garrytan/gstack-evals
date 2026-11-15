@@ -13,6 +13,7 @@ import { defaultRng } from "../../lanes/outcome-skills/h2h/analysis/rng.ts";
 import { clusteredMcNemar, logRatio, pairedTest, type Pair } from "../../lanes/outcome-skills/h2h/analysis/stats.ts";
 import { PREREG_PATH, readPrereg } from "../../lanes/outcome-skills/h2h/prereg.ts";
 import { planningPrice } from "../../lanes/outcome-skills/h2h/rerun.ts";
+import type { H2hSessionRecord } from "../../lanes/outcome-skills/h2h/sessions/session.ts";
 import type { H2hArm, H2hScore, H2hSession, H2hUnit, Stage, UnitKind } from "../../lanes/outcome-skills/h2h/types.ts";
 
 const p = readPrereg();
@@ -261,6 +262,15 @@ describe("h2h money", () => {
     const bigger = reprice(p, sess(2), { approved: cut.total_at_caps - 1 });
     expect(bigger.n_cut!.n_O + bigger.n_cut!.n_B).toBeLessThan(cut.n_O + cut.n_B);
     expect(reprice(p, sess(1)).above).toBe(false);
+  });
+
+  test("the doubling rule reads the scored attempt's cost, and pricing reads the sum across attempts", () => {
+    const allowance = p.limits.allowance_usd;
+    const retried = { arm: "none", end: "completed", cost_usd: allowance, scored_attempt_cost_usd: allowance / 4 } as H2hSessionRecord;
+    const r = reprice(p, [{ s: retried, cls: "O" as const }]);
+    expect([r.doubled, r.max_p95, r.costs.none?.O?.mean]).toEqual([false, { arm: "none", usd: allowance / 4 }, allowance]);
+    const single = { arm: "none", end: "completed", cost_usd: allowance } as H2hSession;
+    expect(reprice(p, [{ s: single, cls: "O" as const }]).doubled).toBe(true);
   });
 
   test("the ledger dry run opens and settles one lease per item and drives the COST rule", () => {

@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { CAP_FACTOR, ITEMS } from "../items.ts";
 import { h2hFail, PREREG_PATH, type H2hPrereg } from "../prereg.ts";
 import { planningPrice } from "../rerun.ts";
+import type { H2hSessionRecord } from "../sessions/session.ts";
 import { PIECE_G_ARMS, PRIMARY_ARMS, type H2hArm, type H2hSession, type UnitClass } from "../types.ts";
 import { mean, percentile } from "./stats.ts";
 
@@ -70,7 +71,7 @@ export function reprice(p: H2hPrereg, sessions: readonly { s: H2hSession; cls: U
   const approved = o.approved ?? post.total;
   const allowance0 = p.limits.allowance_usd;
   const byArm = new Map<string, number[]>();
-  for (const { s } of sessions) byArm.set(s.arm, [...(byArm.get(s.arm) ?? []), s.cost_usd]);
+  for (const { s } of sessions) byArm.set(s.arm, [...(byArm.get(s.arm) ?? []), (s as H2hSessionRecord).scored_attempt_cost_usd ?? s.cost_usd]);
   let max: Repricing["max_p95"] = null;
   for (const [arm, xs] of byArm) {
     const v = percentile(xs, 95)!;
