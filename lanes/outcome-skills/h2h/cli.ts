@@ -13,7 +13,7 @@ import { sessionRunner } from "./sessions/rerunner.ts";
 export type Command = (argv: string[]) => Promise<number>;
 
 /** Part modules, relative to this file. Add a part's "./<dir>/commands.ts" here to wire it. */
-export const COMMAND_MODULES = ["./ordinary/commands.ts", "./arms/commands.ts", "./sessions/commands.ts", "./score/commands.ts", "./analysis/commands.ts"];
+export const COMMAND_MODULES = ["./ordinary/commands.ts", "./arms/commands.ts", "./breadth/commands.ts", "./sessions/commands.ts", "./score/commands.ts", "./analysis/commands.ts"];
 /** Part S's session runner for rerun; null would make rerun refuse with E_H2H_RERUN_UNWIRED. */
 export const RERUN_RUNNER: RerunRunner | null = sessionRunner();
 
