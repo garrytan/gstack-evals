@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="Chromium_playwright_/wtr/w.test.js" id="0" tests="2" skipped="0" errors="1" failures="1" time="0">
+    <properties>
+      <property name="test.fileName" value="wtr/w.test.js"/>
+      <property name="browser.name" value="Chromium"/>
+      <property name="browser.launcher" value="playwright"/>
+    </properties>
+    <testcase name="wtr passes" time="0" classname="wtr suite" file="wtr/w.test.js"/>
+    <testcase name="wtr fails" time="0" classname="wtr suite" file="wtr/w.test.js" line="3">
+      <failure message="boom" type="Error"><![CDATA[Error: boom
+  at n.<anonymous> (wtr/w.test.js:3:33)]]></failure>
+    </testcase>
+  </testsuite>
+</testsuites>

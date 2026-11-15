@@ -75,6 +75,11 @@
 //   names, since the frontier decider asks the main model's own id; every other such hit, on main-model and decider requests
 //   alike, is journaled as a marker_hit line and the call goes on as if there were no hit. Both carry the slot's cell and each marker's index and sha256 prefix, never its text. A proxy-wide marker, and
 //   every hit on other proxies, keeps E_TRIPWIRE byte for byte.
+// - Reservation-bound refusals (the skill-pack head-to-head, post section 3): with ProxyOptions.reservationBoundRetry, a
+//   slot's allowance refusal that only the worst cases of its calls still in flight cause (the slot's settled and unknown
+//   spend plus this call's worst case fits its allowance) answers 429 E_H2H_RESERVATION_BOUND with retry-after, so the
+//   client retries it once a call settles. It is journaled as a refusal line with reservation_bound true and counted in
+//   Meter.reservation_bound, never in allowance_stops. Off by default, every allowance refusal stays as it was.
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { dlopen, FFIType } from "bun:ffi";
@@ -216,6 +221,8 @@ export interface ProxyOptions {
   refuseServerTools?: boolean;
   /** Copy these top-level fields of a slot's first paid request whose tools list is non-empty, as the client sent them (null for a field it left out), into the slot's meter as first_request. Off by default; the pstack-checks family turns it on for its stages to record each session's effort and thinking fields. */
   firstRequestFields?: string[];
+  /** Answer an allowance refusal that only in-flight reservations cause with a retryable 429 E_H2H_RESERVATION_BOUND, counted in Meter.reservation_bound and not in allowance_stops. Off by default; the head-to-head turns it on for its stages. */
+  reservationBoundRetry?: boolean;
   sleep?: (ms: number) => Promise<void>;
   /** The code a slot's allowance refusal carries: E_ALLOWANCE (402, the default) or DR_ALLOWANCE_STOP (403, decision routing). */
   allowanceCode?: "E_ALLOWANCE" | "DR_ALLOWANCE_STOP";
@@ -282,6 +289,8 @@ export interface Meter {
   cache_write: string[];
   /** With ProxyOptions.firstRequestFields only: those fields of the slot's first paid request with a non-empty tools list. Absent when it sent none. */
   first_request?: Record<string, unknown>;
+  /** With ProxyOptions.reservationBoundRetry only: allowance refusals that only the slot's calls still in flight caused, answered as retryable. Absent before the first. */
+  reservation_bound?: number;
 }
 
 interface Slot {
@@ -347,11 +356,14 @@ export function isTrialNetworkHost(host: string): boolean {
  * also carries an error object in the shape provider SDKs read ({type, code, message}), so the code reaches the caller's
  * exception message.
  */
-export function problem(code: ReasonCode, status: number, detail: string, errorType?: string): Response {
+export function problem(code: ReasonCode, status: number, detail: string, errorType?: string, headers: Record<string, string> = {}): Response {
   const text = `${code}: metering proxy: ${detail}`;
   const body = { type: `https://github.com/garrytan/gstack-evals/blob/main/${docAnchor(code)}`, title: code, status, code, detail: text, ...(errorType ? { error: { type: errorType, code, message: text } } : {}) };
-  return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/problem+json" } });
+  return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/problem+json", ...headers } });
 }
+
+/** The retry-after a reservation-bound refusal names, in seconds: long enough for a call in flight to settle. */
+export const RESERVATION_RETRY_AFTER_S = 20;
 
 /** An error's message with its nested causes, every secret replaced. */
 export function scrubbedCause(error: unknown, secrets: readonly string[]): string {
@@ -667,13 +679,13 @@ export class MeteringProxy {
     this.journal({ kind: "refusal", code, meter_id: ctx.slot.cell.meter_id, provider: ctx.provider, route: ctx.route, model: ctx.model || null, reason, source: ctx.source, ...extra });
   }
 
-  private refuse(ctx: CallContext, code: ReasonCode, status: number, reason: string, extra: Record<string, unknown> = {}): Response {
+  private refuse(ctx: CallContext, code: ReasonCode, status: number, reason: string, extra: Record<string, unknown> = {}, headers: Record<string, string> = {}): Response {
     ctx.model = maskMarkers(ctx.model, ctx.marked);
     const m = this.meter(ctx.slot);
     m.refused++;
     if (!m.refusals.includes(code)) m.refusals.push(code);
     this.refusalLine(ctx, code, reason, extra);
-    return problem(code, status, reason, code === "DR_ALLOWANCE_STOP" ? "allowance_stop" : undefined);
+    return problem(code, status, reason, code === "DR_ALLOWANCE_STOP" ? "allowance_stop" : code === "E_H2H_RESERVATION_BOUND" ? "rate_limit_error" : undefined, headers);
   }
 
   /** Route allowlist, key, tripwire, model allowlist, a free route's request shape, output cap, price, then per attempt: rate-limit pause, allowance, journal, reserve, journal, send, settle. */
@@ -855,6 +867,10 @@ export class MeteringProxy {
       }
       const maxMicros = reservationMicros(counted ? { ...price, inputTokens: counted.tokens } : price);
       if (slot.committedMicros + maxMicros > slot.allowanceMicros) {
+        if (o.reservationBoundRetry && slot.committedMicros - slot.inflightMicros + maxMicros <= slot.allowanceMicros) {
+          meter.reservation_bound = (meter.reservation_bound ?? 0) + 1;
+          return this.refuse(ctx, "E_H2H_RESERVATION_BOUND", 429, `only calls still in flight fill the slot's allowance of ${usd(slot.allowanceMicros)}: this call's worst case of ${usd(maxMicros)} fits beside the ${usd(slot.committedMicros - slot.inflightMicros)} settled, not beside the ${usd(slot.inflightMicros)} still reserved by ${slot.inflightCalls} call(s) in flight; retry once one settles`, { reservation_bound: true, inflight_micros: slot.inflightMicros, inflight_calls: slot.inflightCalls, max_micros: maxMicros }, { "retry-after": String(RESERVATION_RETRY_AFTER_S), "x-should-retry": "true" });
+        }
         const stop = o.allowanceCode === "DR_ALLOWANCE_STOP";
         meter.allowance_stops++;
         return this.refuse(ctx, stop ? "DR_ALLOWANCE_STOP" : "E_ALLOWANCE", stop ? 403 : 402, `the slot's allowance of ${usd(slot.allowanceMicros)} cannot hold this call's worst case of ${usd(maxMicros)} (${usd(slot.committedMicros)} already committed)`);
