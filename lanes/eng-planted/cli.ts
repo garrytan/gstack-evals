@@ -3,6 +3,7 @@
 // error line on stderr starts with its reason code. Each module plugs its subcommands into SUBCOMMANDS when it lands.
 import { CODES, docAnchor, type ReasonCode } from "../../src/errors/codes.ts";
 import { COMMANDS as CONSTRUCT } from "./construct/commands.ts";
+import { dryRun, PARTS } from "./dryrun.ts";
 import { EpError } from "./errors.ts";
 import { COMMANDS as READINGS } from "./readings/commands.ts";
 import { COMMANDS as STAGES } from "./stages/commands.ts";
@@ -39,7 +40,23 @@ export const lines = (code: ReasonCode, message: string): string =>
     .map((l) => code + " " + l)
     .join("\n");
 
-const SUBCOMMANDS: Record<string, Command> = {};
+const dryrun: Command = {
+  bools: [],
+  usage: "[--part construct|stages|readings]",
+  summary: "the keyless dry run of every frozen rule; Docker cases need GSTACK_EVALS_DOCKER=1, and a SKIP is never a pass",
+  run: async (a, io) => {
+    const part = a.flags.get("--part");
+    if (part !== undefined && !PARTS[part]) throw new EpError("E_USAGE", "--part is construct, stages or readings");
+    const r = await dryRun(part ? [part] : undefined);
+    for (const l of r.lines) io.out(l);
+    io.out("DRYRUN: passed=" + r.passed + " failed=" + r.failed + " skipped=" + r.skipped + (r.ok ? " ok" : " not ok"));
+    if (r.ok) return 0;
+    io.err(lines("E_EP_DRYRUN_FAIL", r.failed + " case(s) failed and " + r.skipped + " skipped"));
+    return 2;
+  },
+};
+
+const SUBCOMMANDS: Record<string, Command> = { dryrun };
 for (const table of [CONSTRUCT, STAGES, READINGS]) {
   for (const [name, command] of Object.entries(table)) {
     if (SUBCOMMANDS[name]) throw new Error("gstack-evals ep: two parts define the subcommand " + name);
