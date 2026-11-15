@@ -75,3 +75,30 @@ describe("test-command rules", () => {
     expect(candidateRunners("B2", "Go", f)).toEqual(["go"]);
   });
 });
+
+describe("browser environment in images", () => {
+  test("B1 images set every launcher variable after the wrapper, and B2 images set none", () => {
+    const b1 = dockerfile(recipe(chooseRecipe("B1", "npm", facts(["package.json", "package-lock.json"], { devDependencies: { "@web/test-runner": "1" } }))), "u", P40).split("\n");
+    const at = b1.findIndex((l) => l.startsWith("COPY chromium-wrapper.sh "));
+    expect(at).toBeGreaterThan(0);
+    for (const [k, v] of Object.entries(BROWSER.env)) {
+      expect(b1.findIndex((l) => l.startsWith("ENV ") && l.includes(k + "="))).toBeGreaterThan(at);
+      expect(b1.slice(at)).toContain("ENV " + Object.entries(BROWSER.env).map(([a, b]) => a + "=" + b).join(" "));
+      expect(v).toBe(BROWSER.wrapper_container_path);
+    }
+    expect(Object.keys(BROWSER.env)).toContain("CHROME_PATH");
+    const b2 = [
+      chooseRecipe("B2", "npm", facts(["package.json", "package-lock.json"], { devDependencies: { jest: "30" } })),
+      chooseRecipe("B2", "Go", facts(["go.mod", "go.sum"], undefined, { "go.mod": "module x\n" })),
+      chooseRecipe("B2", "crates.io", facts(["Cargo.toml", "Cargo.lock"])),
+    ].map(recipe);
+    for (const r of b2) {
+      expect(r.browser).toBe(false);
+      for (const k of [...Object.keys(BROWSER.env), "PLAYWRIGHT_BROWSERS_PATH", "PUPPETEER_SKIP_DOWNLOAD"]) {
+        expect(r.env).not.toHaveProperty(k);
+        expect(dockerfile(r, "u", P40)).not.toContain(k + "=");
+      }
+    }
+  });
+});
+
