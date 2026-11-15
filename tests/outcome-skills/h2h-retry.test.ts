@@ -90,7 +90,7 @@ describe("a retry is the whole session again, on a full allowance the cap above 
   test("the record sums every attempt's spend and tokens, keeps each attempt's own usage, and the doubling input reads the scored attempt", () => {
     const usage = [attemptUsage(1, summary(20, "error_result", "s1"), 25), attemptUsage(2, summary(10, "completed", "s2"), 25)];
     const r = sessionRecord(planned, summary(10, "completed", "s2"), { model: P.model, attempt: 2, exposure: null, wall_ms: 1, home_tree_sha256: null, usage });
-    expect(r).toMatchObject({ end: "completed", gap: null, attempts: 2, cost_usd: 30, scored_attempt_cost_usd: 10, tokens: { input: 2000, output: 200, cache_read: 20, cache_write: 10 } });
+    expect(r).toMatchObject({ end: "completed", gap: null, attempts: 2, cost_usd: 30, tokens: { input: 2000, output: 200, cache_read: 20, cache_write: 10 } });
     expect(r.attempt_usage!.map((a) => [a.slot, a.allowance_usd, a.spent_micros, a.end])).toEqual([["s1", 25, 20_000_000, "upstream"], ["s2", 25, 10_000_000, "completed"]]);
   });
 
@@ -107,7 +107,7 @@ describe("a retry is the whole session again, on a full allowance the cap above 
     const r = await viaRerun([{ usd: 20, end: "error_result" }, { usd: 10, end: "completed" }], "rr50", 50);
     expect(r.code).toBe(0);
     expect(r.calls.map((c) => [c.cap, c.rerun])).toEqual([[25, null], [25, "session_upstream_or_infra"]]);
-    expect(r.record).toMatchObject({ end: "completed", gap: null, attempts: 2, cost_usd: 30, scored_attempt_cost_usd: 10 });
+    expect(r.record).toMatchObject({ end: "completed", gap: null, attempts: 2, cost_usd: 30 });
     expect(r.summary).toMatchObject({ stop: null, spent_usd: 30, sessions: [{ unit: "u1", cost_usd: 30, attempts: 2 }] });
   });
 

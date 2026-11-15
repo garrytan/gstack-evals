@@ -6,9 +6,8 @@
 // E_H2H_INFRA_GAP). The retry is the whole session again, on a slot with the full allowance; it opens only when the money
 // cap above the session (rerun's spend cap, or the driver's item lease, which refuses the slot) covers one more full
 // allowance, and otherwise the session ends as a cap stop, never as a gap or on a smaller slot. Each attempt's own slot,
-// spend and tokens stay in the record: cost_usd and tokens are their sums (pricing and dollars per verified fix), and
-// scored_attempt_cost_usd is the last attempt's own spend (section 3's doubling rule, since the allowance binds one
-// attempt). A cap stop ends the part incomplete. A tree that could not leave the container is a gap (E_H2H_CAPTURE). A
+// spend and tokens stay in the record, and cost_usd and tokens are their sums: the session cost that pricing, dollars per
+// verified fix and section 3's doubling rule read. A cap stop ends the part incomplete. A tree that could not leave the container is a gap (E_H2H_CAPTURE). A
 // safety stop is its own end and is scored like any other.
 import { writeFileSync } from "node:fs";
 import { h2hFail } from "../prereg.ts";
@@ -54,7 +53,7 @@ export function gapOf(end: SessionEnd, attempt: 1 | 2, s: Summary | null): strin
 
 /** One attempt's own slot and usage. allowance_usd is the cap its slot opened with (null when not known). */
 export interface AttemptUsage { attempt: 1 | 2; end: SessionEnd; slot: string | null; allowance_usd: number | null; spent_micros: number; tokens: H2hSession["tokens"]; reservation_refusals: number }
-export type H2hSessionRecord = H2hSession & { attempt_usage?: AttemptUsage[]; scored_attempt_cost_usd?: number; retry_cap_stop?: string };
+export type H2hSessionRecord = H2hSession & { attempt_usage?: AttemptUsage[]; retry_cap_stop?: string };
 
 export function attemptUsage(attempt: 1 | 2, s: Summary | null, allowanceUsd: number | null): AttemptUsage {
   const close = closeOf(s);
@@ -88,7 +87,7 @@ export function sessionRecord(p: H2hPlanned, s: Summary | null, o: { model: stri
     tokens: { input: total("input"), output: total("output"), cache_read: total("cache_read"), cache_write: total("cache_write") }, wall_ms: o.wall_ms, exposure: o.exposure,
     transcript: "sdk-messages.jsonl", tree_bundle: "tree.tar", ...(head ? { base_head: head } : {}),
     attempts: o.attempt, allowance_stops: Number(close.allowance_stops ?? 0), home_tree_sha256: o.home_tree_sha256, claude_version: typeof s?.claude_version === "string" ? s.claude_version : null, refused: typeof s?.refused === "string" ? s.refused.slice(0, 600) : null,
-    ...(o.usage ? { attempt_usage: o.usage, scored_attempt_cost_usd: o.usage.at(-1)!.spent_micros / 1_000_000 } : {}), ...(o.retry_cap_stop !== undefined ? { retry_cap_stop: o.retry_cap_stop } : {}),
+    ...(o.usage ? { attempt_usage: o.usage } : {}), ...(o.retry_cap_stop !== undefined ? { retry_cap_stop: o.retry_cap_stop } : {}),
   };
 }
 

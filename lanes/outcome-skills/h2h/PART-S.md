@@ -77,9 +77,8 @@ ledger, and no test reads a provider key.
   writes lands in the session's history and part C reads the working tree as the agent left it.
 - Retry spend: a retry is the whole session again on a full allowance slot, and it opens only while the cap above the
   session (rerun's spend cap, or the driver's item lease) covers one more allowance; otherwise the session is a cap stop.
-  A retried session's cost_usd and tokens sum both attempts, which pricing and dollars per verified fix read, and
-  scored_attempt_cost_usd is the scored attempt's own spend, which section 3's doubling rule reads, since the allowance
-  binds one attempt.
+  A retried session's cost_usd and tokens sum both attempts. That sum is the session cost that pricing, dollars per
+  verified fix and section 3's doubling rule read, as the frozen rule words it (95th-percentile session cost).
 - rerun: records are stage2 sessions indexed in the order run, on the item H2H_RERUN_ITEM names (default plan.ts
   itemOf's stage 2 item); rerun's flags are frozen, so the driver, homes and unit dirs come from the environment.
 
