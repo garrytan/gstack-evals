@@ -2,7 +2,7 @@
 id: 2026-11-15-geva-539-ask-replay-results
 kind: finding
 title: "Ask replay results: an ask ledger cut needless asks on Claude Opus 5.5 and GPT-6.1 Sol, but on Opus it also held back needed asks, so gstack doesn't build it as tested"
-summary: "Ledger cut needless asks on Opus (-6.79 pts) and Sol (-4.32), but raised Opus's must-ask misses +4.76 [+0.48, +9.29], past the 5-pt guard. Row fix-method: not built as tested."
+summary: "Ledger cut needless asks on Opus (-6.79 pts) and Sol (-4.32), but raised Opus's must-ask misses +4.76 [+0.48, +9.29]; upper end passes 5 pts, so the guard fails. Row fix-method: not built as tested."
 author: GEVA-539
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
@@ -24,7 +24,7 @@ attachments:
 # Ask replay results: an ask ledger cut needless asks on both frontier models, but on Opus 5.5 it also held back needed asks
 
 - **We learned that showing a model the asks it already sent cuts needless asks on both frontier models we tested.** We replayed 346 real moments where a coordinating agent was about to ask its owner something, and scored the 302 that two model labellers classed the same way. Against gstack as it is today, gstack plus an ask ledger (a list of every earlier ask, open or answered) sent 6.79 points fewer needless asks on Claude Opus 5.5 (95% interval -10.22 to -4.03, from a base of 26.3% of samples) and 4.32 points fewer on GPT-6.1 Sol (-7.33 to -1.95, from a base of 17.9%). The model's own choices made most of that cut: the harness's send-time check made 6.1% of it on Opus and 9.2% on Sol. You should give an agent that asks its owner questions the list of asks it already sent, and measure the needed asks it holds back on each model you run.
-- **We learned that on Opus 5.5 the same ledger also held back needed asks.** Must-ask misses rose 4.76 points (+0.48 to +9.29), past the 5-point guard we froze before the run, while on Sol they fell 3.81 points (-6.90 to -0.71). The frozen decision row is fix-method: gstack doesn't build the ledger as tested, and its ask rules stay as they are. You should check a change like this on every model you ship it to, because here it helped one frontier model and hurt the other.
+- **We learned that on Opus 5.5 the same ledger also held back needed asks.** Must-ask misses rose 4.76 points (+0.48 to +9.29); the upper end passes the 5-point guard we froze before the run, so the guard fails. On Sol they fell 3.81 points (-6.90 to -0.71). The frozen decision row is fix-method: gstack doesn't build the ledger as tested, and its ask rules stay as they are. You should check a change like this on every model you ship it to, because here it helped one frontier model and hurt the other.
 - **We learned that the October labels for these asks failed our label audit.** Two labellers from different model families, Opus 5.5 and GPT-6 Astra, agreed with each other on 90 of 99 audited asks, but with the October labels on only 75 and 78, and kappa missed the 0.6 bar (0.49 and 0.55). Our reading is that the October labels are the weak side; that is a reading of this pattern, not a measured fact. You should audit model-made labels before a paid run and price a relabel in advance. This run did both, and the decision came out the same under the October labels, Opus's labels and Astra's labels.
 
 ## Status
