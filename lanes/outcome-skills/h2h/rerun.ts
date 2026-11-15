@@ -2,7 +2,9 @@
 // gstack-evals h2h rerun (plan section 12): runs any arm on any unit list under a spend cap. --dry-run prints the projected
 // cost at items.ts's planning prices (a no-skills O session, the arm's multiplier, B at 1.5 times O) and runs nothing. The
 // real path drives part S's session runner through RerunRunner, one session per unit in the file's order, and stops
-// before any session whose allowance would take the spend past the cap. Exits: 0 done, 2 usage, 3 a refused precondition,
+// before any session whose allowance would take the spend past the cap. A session's spend is the sum of its attempts; its
+// one retry runs on a full allowance only while the cap still covers it, else the session ends as a cap stop, whose spend
+// the summary still counts. Exits: 0 done, 2 usage, 3 a refused precondition,
 // 10 a cap stop, 12 a containment halt (cli.ts EXIT).
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -10,10 +12,12 @@ import { B_FACTOR, MULTIPLIER, NO_SKILLS_O_USD } from "./items.ts";
 import { h2hFail, readPrereg } from "./prereg.ts";
 import { ALL_ARMS, type H2hArm, type H2hScore, type H2hSession, type H2hUnit, type UnitClass } from "./types.ts";
 
-export interface RerunSession { arm: H2hArm; unit: H2hUnit; allowance_usd: number; out: string }
+/** cap_left_usd: what the spend cap has left when the session begins; a retry inside the session needs it to cover one
+ *  more full allowance. */
+export interface RerunSession { arm: H2hArm; unit: H2hUnit; allowance_usd: number; cap_left_usd: number; out: string }
 export type RerunOutcome =
   | { kind: "session"; session: H2hSession; score?: H2hScore | null }
-  | { kind: "cap_stop"; detail: string }
+  | { kind: "cap_stop"; detail: string; session?: H2hSession | null }
   | { kind: "containment"; detail: string }
   | { kind: "refused"; detail: string };
 /** What rerun calls on part S's session runner. preflight checks everything the real path needs before any paid call
@@ -83,15 +87,19 @@ export async function rerun(argv: string[], runner: RerunRunner | null): Promise
   const out = f.one("--out") ?? "h2h-rerun";
   mkdirSync(out, { recursive: true });
   let spent = 0;
-  const done: { unit: string; cost_usd: number; gap: string | null; verified: boolean | null }[] = [];
+  const done: { unit: string; cost_usd: number; attempts: number; gap: string | null; verified: boolean | null }[] = [];
   const summary = (stop: string | null) => writeFileSync(join(out, "rerun-summary.json"), JSON.stringify({ arm, units: units.length, spent_usd: spent, spend_cap_usd: cap, stop, sessions: done }, null, 1) + "\n");
   for (const unit of units) {
     if (spent + allowance > cap) {
       summary("cap_stop");
       h2hFail("E_H2H_RERUN_CAP_STOP", "spent $" + spent.toFixed(2) + " of $" + cap.toFixed(2) + "; the next session (" + unit.id + ") could spend its $" + allowance + " allowance; " + done.length + " of " + units.length + " sessions ran");
     }
-    const r = await runner!.run({ arm, unit, allowance_usd: allowance, out: join(out, unit.id) });
+    const r = await runner!.run({ arm, unit, allowance_usd: allowance, cap_left_usd: cap - spent, out: join(out, unit.id) });
     if (r.kind === "cap_stop") {
+      if (r.session) {
+        spent += r.session.cost_usd;
+        done.push({ unit: unit.id, cost_usd: r.session.cost_usd, attempts: r.session.attempts ?? 1, gap: r.session.gap, verified: null });
+      }
       summary("cap_stop");
       h2hFail("E_H2H_RERUN_CAP_STOP", unit.id + ": " + r.detail);
     }
@@ -105,7 +113,7 @@ export async function rerun(argv: string[], runner: RerunRunner | null): Promise
     }
     if (r.kind !== "session") continue;
     spent += r.session.cost_usd;
-    done.push({ unit: unit.id, cost_usd: r.session.cost_usd, gap: r.session.gap, verified: r.score ? r.score.verified : null });
+    done.push({ unit: unit.id, cost_usd: r.session.cost_usd, attempts: r.session.attempts ?? 1, gap: r.session.gap, verified: r.score ? r.score.verified : null });
   }
   summary(null);
   console.log("rerun done: " + done.length + " sessions, $" + spent.toFixed(2) + " spent of $" + cap.toFixed(2) + "; records in " + out);
