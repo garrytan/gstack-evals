@@ -7,6 +7,7 @@
 // and only gstack's arms (gstack, gstack-oneline, gstack-qa, gstack-pony) may hold gstack.
 import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { checkHome } from "../arms/layer.ts";
 import { h2hFail } from "../prereg.ts";
 import type { ArmInstall, H2hArm } from "../types.ts";
 
@@ -29,4 +30,10 @@ export function armHome(arm: H2hArm, o: { installs?: ArmInstall[]; homes?: strin
   const dir = o.homes ? join(o.homes, owner) : h2hFail("E_H2H_SESSION_INPUT", "arm " + arm + " needs the homes dir part A built");
   if (!existsSync(dir) || !statSync(dir).isDirectory()) h2hFail("E_H2H_SESSION_INPUT", "arm " + arm + "'s home " + dir + " is not a directory");
   return { arm, dir, home_rule: rule, home_tree_sha256: (o.installs?.find((a) => a.arm === owner) ?? rec).home_tree_sha256 };
+}
+
+/** Hashes a pinned home's installed bytes and refuses one that is not its pin (E_H2H_HOME_DRIFT). A home with no dir (none)
+ *  or no pin (a dir given for the arm) has nothing to check, and its record keeps a null hash. */
+export function checkArmHome(h: ArmHome): void {
+  if (h.dir && h.home_tree_sha256 !== null) checkHome(h.dir, { arm: h.arm, home_tree_sha256: h.home_tree_sha256 });
 }

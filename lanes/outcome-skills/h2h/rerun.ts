@@ -2,7 +2,8 @@
 // gstack-evals h2h rerun (plan section 12): runs any arm on any unit list under a spend cap. --dry-run prints the projected
 // cost at items.ts's planning prices (a no-skills O session, the arm's multiplier, B at 1.5 times O) and runs nothing. The
 // real path drives part S's session runner through RerunRunner, one session per unit in the file's order, and stops
-// before any session whose allowance would take the spend past the cap. Exits: 0 done, 2 usage, 3 a refused precondition,
+// before any session whose allowance would take the spend past the cap. A session's spend is the sum of its attempts,
+// which part S keeps within that one allowance, and the summary records each session's attempts. Exits: 0 done, 2 usage, 3 a refused precondition,
 // 10 a cap stop, 12 a containment halt (cli.ts EXIT).
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -83,7 +84,7 @@ export async function rerun(argv: string[], runner: RerunRunner | null): Promise
   const out = f.one("--out") ?? "h2h-rerun";
   mkdirSync(out, { recursive: true });
   let spent = 0;
-  const done: { unit: string; cost_usd: number; gap: string | null; verified: boolean | null }[] = [];
+  const done: { unit: string; cost_usd: number; attempts: number; gap: string | null; verified: boolean | null }[] = [];
   const summary = (stop: string | null) => writeFileSync(join(out, "rerun-summary.json"), JSON.stringify({ arm, units: units.length, spent_usd: spent, spend_cap_usd: cap, stop, sessions: done }, null, 1) + "\n");
   for (const unit of units) {
     if (spent + allowance > cap) {
@@ -105,7 +106,7 @@ export async function rerun(argv: string[], runner: RerunRunner | null): Promise
     }
     if (r.kind !== "session") continue;
     spent += r.session.cost_usd;
-    done.push({ unit: unit.id, cost_usd: r.session.cost_usd, gap: r.session.gap, verified: r.score ? r.score.verified : null });
+    done.push({ unit: unit.id, cost_usd: r.session.cost_usd, attempts: r.session.attempts ?? 1, gap: r.session.gap, verified: r.score ? r.score.verified : null });
   }
   summary(null);
   console.log("rerun done: " + done.length + " sessions, $" + spent.toFixed(2) + " spent of $" + cap.toFixed(2) + "; records in " + out);

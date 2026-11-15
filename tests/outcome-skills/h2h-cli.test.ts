@@ -105,6 +105,11 @@ describe("h2h rerun", () => {
     expect((await quiet(() => exitOf(["--arm", "gstack", "--units", units, "--spend-cap", "200", "--out", out2], halted))).value).toBe(12);
     expect(halted.ran).toEqual(["u0", "u1"]);
     expect(JSON.parse(readFileSync(join(out2, "rerun-summary.json"), "utf8")).stop).toBe("containment");
+    const retried = runner({ outcomes: [{ kind: "session", session: { cost_usd: 25, attempts: 2, gap: null } as H2hSession, score: null }] });
+    const out4 = temp("h2h-rr-");
+    expect((await quiet(() => exitOf(["--arm", "gstack", "--units", units, "--spend-cap", "25", "--out", out4], retried))).value).toBe(10);
+    expect(retried.ran).toEqual(["u0"]);
+    expect(JSON.parse(readFileSync(join(out4, "rerun-summary.json"), "utf8"))).toMatchObject({ stop: "cap_stop", spent_usd: 25, sessions: [{ unit: "u0", cost_usd: 25, attempts: 2 }] });
     const ok = runner();
     const out3 = temp("h2h-rr-");
     expect((await quiet(() => exitOf(["--arm", "gstack", "--units", units, "--spend-cap", "200", "--out", out3], ok))).value).toBe(0);

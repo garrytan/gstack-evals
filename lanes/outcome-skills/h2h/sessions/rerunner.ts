@@ -9,8 +9,9 @@
 //   H2H_UNITS       the prepared sm-unit dirs, one per unit id (the SM harness's prep and oracle)
 //   H2H_PINS        arms-pins.json; the post bundle's by default
 //   H2H_RERUN_ITEM  the item that stage serves; plan.ts itemOf's stage 2 item for the arm by default
-// Harbor runs from PATH (the venv that holds claude-agent-sdk). Records are stage2 sessions, indexed in the order run, and
-// each unit's session image is built once per runner.
+// Harbor runs from PATH (the venv that holds claude-agent-sdk). preflight checks the arm's home against its pin before
+// anything else that touches Docker or the driver, and runH2hSession checks it again before each session's slot opens.
+// Records are stage2 sessions, indexed in the order run, and each unit's session image is built once per runner.
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -19,14 +20,13 @@ import { treeVolume } from "../../statemachines/oracle.ts";
 import { runName } from "../../statemachines/testrun.ts";
 import { readUnit } from "../../statemachines/unit.ts";
 import { containHome } from "../arms/contain.ts";
-import { checkHome } from "../arms/layer.ts";
 import { ARMS_PINS_PATH } from "../arms/pins.ts";
 import { H2hError } from "../prereg.ts";
 import type { RerunOutcome, RerunRunner, RerunSession } from "../rerun.ts";
 import { scoreSession } from "../score/score.ts";
-import type { ArmInstall, H2hArm, H2hUnit } from "../types.ts";
+import type { H2hArm, H2hUnit } from "../types.ts";
 import { readInstalls } from "./exposure.ts";
-import { armHome } from "./home.ts";
+import { armHome, checkArmHome } from "./home.ts";
 import { itemOf } from "./plan.ts";
 import { runH2hSession } from "./run.ts";
 import { buildRuntimeVolume } from "./runtimes.ts";
@@ -40,23 +40,22 @@ export function sessionRunner(env: Record<string, string | undefined> = process.
   let runtime: { volume: string } | null = null;
   const images = new Map<string, SessionImage>();
   const unitDir = (id: string) => join(env.H2H_UNITS!, id);
-  const homeOf = (arm: H2hArm, list: ArmInstall[]) => {
-    const home = armHome(arm, { installs: list, homes: env.H2H_HOMES });
-    if (home.dir) checkHome(home.dir, { arm: list.find((a) => a.arm === arm)?.home_of ?? arm, home_tree_sha256: home.home_tree_sha256! });
-    return home;
-  };
   return {
     async preflight(arm: H2hArm, units: readonly H2hUnit[]): Promise<string | null> {
       const unset = ENV.filter((k) => !env[k]);
       if (unset.length) return unset.join(", ") + " not set; the real path reads the driver, the homes and the unit dirs from them";
       if (!existsSync(pins)) return "H2H_PINS " + pins + " does not exist";
+      try {
+        checkArmHome(armHome(arm, { installs: readInstalls(pins), homes: env.H2H_HOMES }));
+      } catch (e) {
+        return (e as Error).message;
+      }
       const d = spawnSync("docker", ["version", "--format", "{{.Server.Version}}"], { encoding: "utf8", timeout: 30_000 });
       if (d.status !== 0) return "docker does not answer: " + (d.stderr ?? "").trim().slice(-200);
       if (spawnSync("harbor", ["--version"], { encoding: "utf8", timeout: 60_000 }).status !== 0) return "harbor is not on PATH";
       const status = await fetch(env.H2H_CONTROL! + "/status", { signal: AbortSignal.timeout(10_000) }).then((r) => (r.ok ? null : "answered " + r.status), (e: Error) => e.message);
       if (status) return "the driver at H2H_CONTROL " + env.H2H_CONTROL + " " + status;
       try {
-        homeOf(arm, readInstalls(pins));
         for (const u of units) {
           const dir = unitDir(u.id);
           if (!existsSync(join(dir, "unit.json"))) return "unit " + u.id + " has no sm-unit dir at " + dir;
@@ -75,7 +74,7 @@ export function sessionRunner(env: Record<string, string | undefined> = process.
         const u = readUnit(dir);
         const image = images.get(u.id) ?? buildSessionImage(u, { volume: treeVolume(u.id), stage: "first" });
         images.set(u.id, image);
-        const home = homeOf(s.arm, list);
+        const home = armHome(s.arm, { installs: list, homes: env.H2H_HOMES });
         if (home.dir) {
           const c = containHome({ arm: s.arm, home: home.dir, unitDir: dir, where: { kind: "docker", image: image.tag, volume: image.volume, repoDir: u.repo_dir, name: runName("h2h-rerun-contain") } });
           if (!c.ok) return { kind: "containment", detail: c.confirmed + " confirmed answer-key hit(s) in arm " + s.arm + "'s home: " + c.hits.filter((h) => h.idiom === null).slice(0, 3).map((h) => h.needle + " " + h.path).join("; ") };
