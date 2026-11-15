@@ -9,6 +9,14 @@
       ],
       "pattern": "\\(str\\(path\\), st\\.st_size, st\\.st_mtime_ns\\)\\s*$",
       "reason": "a file-digest cache key tuple in sha256_file, not a credential"
+    },
+    {
+      "finding": "env.kv",
+      "paths": [
+        "wiki/board/2026-11-15-geva-503-harness-mechanics-results/counts.py.txt"
+      ],
+      "pattern": "\\(short\\.get\\(kw\\.get\\(\"upstream_model\"\\), kw\\.get\\(\"upstream_model\"\\)\\), arm\\)\\s*$",
+      "reason": "a dict key tuple in the published harness mechanics counting script, not a credential"
     }
   ],
   "dependencies": {
