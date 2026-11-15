@@ -141,7 +141,7 @@
     "admit_min_needless_sends": 5,
     "admit_max_must_ask_misses": 8,
     "k3_when_projected_mdd_above": 0.12,
-    "spread_formula": "W is the mean over needless items of the unbiased variance of (b)'s k samples; V is the unbiased variance across needless items of (b)'s item means; B2 = max(0, V - W/k_pilot); projected P1 spread S(k) = sqrt(2*B2 + 2*W/k); projected MDD(k) = 2.8 * S(k) / sqrt(proxy effective clusters on needless items)"
+    "spread_formula": "W is the mean over needless items of the unbiased variance of (b)'s k samples; V is the unbiased variance across needless items of (b)'s item means; B2 = max(0, V - W/k_pilot), the variance of (b)'s true item rates, stands for the variance of the true paired difference (the difference when the ledger arm holds back what (b) sends); projected P1 spread S(k) = sqrt(B2 + 2*W/k), with the treatment arm's within-item variance taken equal to (b)'s; projected MDD(k) = 2.8 * S(k) / sqrt(proxy effective clusters on needless items); k = 3 when MDD(2) > 0.12"
   },
   "label_audit": {
     "items": 99,

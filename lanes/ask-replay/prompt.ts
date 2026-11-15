@@ -54,8 +54,7 @@ export interface GstackText {
 }
 
 /** The three gstack files at the frozen commit, read with git show from a clone and checked by sha256. */
-export function loadGstack(clone: string): GstackText {
-  const g = FROZEN.gstack;
+export function loadGstack(clone: string, g: { commit: string; files: ReadonlyArray<{ path: string; sha256: string }> } = FROZEN.gstack): GstackText {
   const parts: string[] = [];
   for (const f of g.files) {
     const r = spawnSync("git", ["-C", clone, "show", g.commit + ":" + f.path], { encoding: "buffer", maxBuffer: 1 << 24 });

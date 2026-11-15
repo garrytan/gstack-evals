@@ -116,7 +116,7 @@ export function spreadProjection(b: ItemSamples, clusters: number, kPilot = 2): 
   const mu = meanOf(means);
   const V = means.length > 1 ? means.reduce((s, x) => s + (x - mu) ** 2, 0) / (means.length - 1) : 0;
   const B2 = Math.max(0, V - W / kPilot);
-  const spread = (k: number) => Math.sqrt(2 * B2 + (2 * W) / k);
+  const spread = (k: number) => Math.sqrt(B2 + (2 * W) / k);
   const mdd_k2 = mdd(spread(2), clusters);
   return { W: r4(W), V: r4(V), B2: r4(B2), spread_k2: r4(spread(2)), spread_k3: r4(spread(3)), mdd_k2: r4(mdd_k2), mdd_k3: r4(mdd(spread(3), clusters)), k: mdd_k2 > FROZEN.pilot.k3_when_projected_mdd_above ? FROZEN.replicates.k_after_pilot_rule : FROZEN.replicates.k };
 }
