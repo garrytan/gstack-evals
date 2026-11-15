@@ -1,0 +1,18 @@
+# H2 secondary lines printed by the report command at this post's head with recount.patch.txt applied.
+# The RECOUNT lines are new. Every other line of that report is identical to report-head.md.
+H2 secondary bo2 minus gstack pass: 0.5 points, 95% [-1.6, 2.8] (no measurable difference); MDD 3.1 at discordance 0.072; 600 pairs; worse 20, better 23; none passed 358 of 600; missing 0 of 600
+H2 secondary gstack minus none pass: 1.5 points, 95% [-0.7, 3.6] (no measurable difference); MDD 3.1 at discordance 0.075; 600 pairs; worse 18, better 27; none passed 358 of 600; missing 0 of 600
+H2 secondary bo2 minus none pass: 2.0 points, 95% [0.5, 3.7]; MDD 2.2 at discordance 0.037; 600 pairs; worse 5, better 17; none passed 358 of 600; missing 0 of 600
+H2 secondary bo2 minus verify-hook pass: 0.8 points, 95% [-1.3, 3.0] (no measurable difference); MDD 2.9 at discordance 0.065; 600 pairs; worse 17, better 22; none passed 358 of 600; missing 0 of 600
+H2 secondary RECOUNT bo2 minus plain-2 pass: -0.3 points, 95% [-1.6, 1.0] (no measurable difference); MDD 2.0 at discordance 0.030; 600 pairs; worse 10, better 8; none passed 358 of 600; missing 0 of 600
+H2 secondary RECOUNT gstack minus plain-2 pass: -0.8 points, 95% [-3.3, 1.5] (no measurable difference); MDD 3.3 at discordance 0.085; 600 pairs; worse 28, better 23; none passed 358 of 600; missing 0 of 600
+H2 secondary RECOUNT verify-hook minus plain-2 pass: -1.2 points, 95% [-3.6, 1.1] (no measurable difference); MDD 2.9 at discordance 0.065; 600 pairs; worse 23, better 16; none passed 358 of 600; missing 0 of 600
+H2 secondary RECOUNT opus bo2 minus none pass: 4.0 points, 95% [1.5, 6.9]; MDD 4.0 at discordance 0.040; 200 pairs; worse 0, better 8; none passed 121 of 200; missing 0 of 200
+H2 secondary RECOUNT opus bo2 minus plain-2 pass: -1.5 points, 95% [-4.1, 1.0] (no measurable difference); MDD 3.7 at discordance 0.035; 200 pairs; worse 5, better 2; none passed 121 of 200; missing 0 of 200
+H2 secondary RECOUNT opus plain-2 minus none pass: 5.5 points, 95% [1.9, 9.5]; MDD 5.4 at discordance 0.075; 200 pairs; worse 2, better 13; none passed 121 of 200; missing 0 of 200
+H2 secondary RECOUNT sol bo2 minus none pass: 1.5 points, 95% [0.0, 3.4] (no measurable difference); MDD 2.4 at discordance 0.015; 200 pairs; worse 0, better 3; none passed 115 of 200; missing 0 of 200
+H2 secondary RECOUNT sol bo2 minus plain-2 pass: -0.5 points, 95% [-2.3, 1.1] (no measurable difference); MDD 2.4 at discordance 0.015; 200 pairs; worse 2, better 1; none passed 115 of 200; missing 0 of 200
+H2 secondary RECOUNT sol plain-2 minus none pass: 2.0 points, 95% [0.0, 4.6] (no measurable difference); MDD 3.4 at discordance 0.030; 200 pairs; worse 1, better 5; none passed 115 of 200; missing 0 of 200
+H2 secondary RECOUNT p1 bo2 minus none pass: 0.5 points, 95% [-2.5, 3.5] (no measurable difference); MDD 4.6 at discordance 0.055; 200 pairs; worse 5, better 6; none passed 122 of 200; missing 0 of 200
+H2 secondary RECOUNT p1 bo2 minus plain-2 pass: 1.0 points, 95% [-1.4, 3.6] (no measurable difference); MDD 4.0 at discordance 0.040; 200 pairs; worse 3, better 5; none passed 122 of 200; missing 0 of 200
+H2 secondary RECOUNT p1 plain-2 minus none pass: -0.5 points, 95% [-4.5, 3.2] (no measurable difference); MDD 6.1 at discordance 0.095; 200 pairs; worse 10, better 9; none passed 122 of 200; missing 0 of 200

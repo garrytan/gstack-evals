@@ -1,0 +1,12 @@
+{
+  "points": [
+    {
+      "point": "done",
+      "result": "not beaten"
+    },
+    {
+      "point": "risky",
+      "result": "admitted"
+    }
+  ]
+}
