@@ -10,9 +10,10 @@ read-only.
 
 - Shared: prereg.ts (reads prereg.json; H2hError and h2hFail), types.ts (the records every part codes against) and
   items.ts (the ledger items at planning prices).
-- Part A, arms and sessions: the install recipes, pins check, browser runtimes, turns (entries, question reply,
-  continuation, DONE rule), the session driver, exposure detectors, the read audit, containment over arm homes and the
-  driven launch against a fake provider.
+- Part A, installs: the install recipes, the pins check, every pack's browser runtime, arms-pins.json and containment
+  over arm homes.
+- Part S, sessions: the turns (entries, question reply, continuation, DONE rule), the session driver and its stage on
+  the outcome driver, the exposure detectors, the read audit and the driven launch against a fake provider.
 - Part B, breadth units: the B2 advisory miner and B1 pull-request miner and their frozen frames, the per-ecosystem image
   recipes, test-command and report-parser rules, the image store by digest, the browser-engine check, the 5+5 browser
   oracle, the launcher wrapper and the label step.

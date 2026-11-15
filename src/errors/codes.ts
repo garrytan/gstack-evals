@@ -2478,7 +2478,8 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
-  // h2h, part A: arms, installs, turns, exposure and sessions.
+  // h2h, part A: installs, pins, browser runtimes, containment over arm homes.
+  // h2h, part S: turns, the session driver, exposure, the read audit and the driven launch.
   // h2h, part B: breadth units, image recipes, parsers and the browser oracle.
   // h2h, part C: O draw, scoring additions, analysis, items and the rerun command.
 } as const satisfies Record<string, CodeInfo>;

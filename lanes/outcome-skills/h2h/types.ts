@@ -101,3 +101,31 @@ export interface H2hScore {
 
 /** The frozen row states of section 9. */
 export type RowState = "ahead" | "behind" | "no_difference" | "incomplete" | "not_exercised" | "infeasible" | "run_as_published";
+
+/** One arm's install record in arms-pins.json (part A writes it; the read audit and containment read it). Paths are
+ *  relative to the session HOME. */
+export interface ArmInstall {
+  arm: H2hArm;
+  /** The arm whose home this arm reuses (gstack-oneline and gstack-qa reuse gstack's), or null. */
+  home_of: H2hArm | null;
+  pins: { repo: string; sha: string; version?: string }[];
+  /** The roots the pack installed under HOME, for the read audit and containment. */
+  roots: string[];
+  /** sha256 over the sorted (path, mode, content sha256) list of the installed home. */
+  home_tree_sha256: string;
+  /** Whether each pinned source's installed files matched its pin's git tree, and how it was checked. */
+  pin_checks: { repo: string; matched: boolean; how: string }[];
+  /** Newer versions seen on the freeze date; the pins do not move. */
+  newer_seen: { repo: string; sha: string; version?: string }[];
+  claude_code_version: string;
+}
+
+/** The browser conditions sessions, the oracle and scoring share on B1 units (sections 3 and 6). Part B owns the wrapper
+ *  script; part S mounts it in session containers. */
+export const BROWSER = {
+  wrapper_repo_path: "lanes/outcome-skills/h2h/breadth/chromium-wrapper.sh",
+  wrapper_container_path: "/opt/h2h/chromium",
+  shm_size: "2g",
+  env: { CHROME_BIN: "/opt/h2h/chromium", PUPPETEER_EXECUTABLE_PATH: "/opt/h2h/chromium" },
+  flags: ["--no-sandbox", "--disable-dev-shm-usage"],
+} as const;
