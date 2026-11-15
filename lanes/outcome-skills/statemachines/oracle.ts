@@ -16,7 +16,7 @@ import { needsBase, splitFix } from "./fixsplit.ts";
 import { goAmbiguous, goDefsIn } from "./goids.ts";
 import { runBash } from "./history.ts";
 import { scope } from "./scope.ts";
-import { applyPatches, copyVolume, dropVolume, LIMIT_MS, parseRun, passed, runName, runTests, type Mode, type RebuildRule } from "./testrun.ts";
+import { applyPatches, copyVolume, dropVolume, LIMIT_MS, parseRun, passed, runName, runTests, type Mode, type RebuildRule, type RunExtra } from "./testrun.ts";
 import { printReading } from "./reports.ts";
 import { addUnitFile, readUnit, saveUnit, smFail, type OracleRun, type SmUnit, type TargetReading } from "./unit.ts";
 import { join } from "node:path";
@@ -192,8 +192,9 @@ export function fixedPatches(dir: string): [string, string][] {
   return out;
 }
 
-/** One oracle run on a fresh copy of the tree volume. baseFixTests false leaves fix-tests.patch off a base run (hidden.ts only). */
-export function oneRun(dir: string, u: SmUnit, volume: string, image: string, tree: "base" | "fixed", n: number, mode: Mode, limitMs = LIMIT_MS, baseFixTests = true): RunResult {
+/** One oracle run on a fresh copy of the tree volume. baseFixTests false leaves fix-tests.patch off a base run (hidden.ts only).
+ *  extra adds the test container's optional arguments (testrun.ts RunExtra); absent, the run is as before. */
+export function oneRun(dir: string, u: SmUnit, volume: string, image: string, tree: "base" | "fixed", n: number, mode: Mode, limitMs = LIMIT_MS, baseFixTests = true, extra?: RunExtra): RunResult {
   const copy = volume + "-" + tree + n + "-" + process.pid;
   copyVolume(image, volume, copy, mode);
   try {
@@ -201,7 +202,7 @@ export function oneRun(dir: string, u: SmUnit, volume: string, image: string, tr
     const bad = applyPatches(image, copy, u.repo_dir, patches, mode);
     if (bad) return { run: { tree, n, wall_ms: 0, exit: -1, parsed_sha256: null, stopped: false, exits: [] }, parsed: null, log: "" };
     const rule: RebuildRule = u.oracle?.rebuild_rule?.applies ? "applies" : "exempt";
-    const t = runTests({ image, volume: copy, repoDir: u.repo_dir, workDir: u.work_dir, commands: u.commands, mode, limitMs, label: u.id + "-" + tree + n, rule });
+    const t = runTests({ image, volume: copy, repoDir: u.repo_dir, workDir: u.work_dir, commands: u.commands, mode, limitMs, label: u.id + "-" + tree + n, rule, extra });
     const log = t.log === t.stderr ? t.stderr : t.stderr + "\n" + t.log;
     const stale = { stale_deleted: t.reports?.deleted ?? 0, stale_refused: t.reports?.refused ?? 0, built_nothing: t.built_nothing, stale_fresh: t.reports ? t.reports.fresh : null, created_dirs: t.created_dirs, infra: t.infra };
     if (t.infra) return { run: { tree, n, wall_ms: t.wall_ms, exit: t.exit, parsed_sha256: null, stopped: false, exits: t.exits, ...stale }, parsed: null, log };
@@ -289,8 +290,9 @@ export function staleBinaryGuard(fixed: { run: OracleRun; parsed: Record<string,
   return null;
 }
 
-/** The whole oracle on one unit dir. Writes unit.json's oracle, image, strip and scope fields and returns the verdict. */
-export async function oracleUnit(dir: string, pacer: Pacer, opts: { mode?: Mode; limitMs?: number; runs?: number } = {}): Promise<{ id: string; verdict: string; detail: string }> {
+/** The whole oracle on one unit dir. Writes unit.json's oracle, image, strip and scope fields and returns the verdict.
+ *  opts.extra reaches every run as testrun.ts RunExtra (the head-to-head's browser conditions); absent, nothing changes. */
+export async function oracleUnit(dir: string, pacer: Pacer, opts: { mode?: Mode; limitMs?: number; runs?: number; extra?: RunExtra } = {}): Promise<{ id: string; verdict: string; detail: string }> {
   const u = readUnit(dir);
   const done = (verdict: string, detail: string) => {
     saveUnit(dir, u);
@@ -310,7 +312,7 @@ export async function oracleUnit(dir: string, pacer: Pacer, opts: { mode?: Mode;
     const logs = { base: [] as string[], fixed: [] as string[] };
     for (let n = 1; n <= (opts.runs ?? 3); n++) {
       for (const tree of ["base", "fixed"] as const) {
-        const r = oneRun(dir, u, p.volume, s.runtime_id, tree, n, opts.mode ?? "hardened", opts.limitMs);
+        const r = oneRun(dir, u, p.volume, s.runtime_id, tree, n, opts.mode ?? "hardened", opts.limitMs, true, opts.extra);
         u.oracle.runs.push(r.run);
         u.oracle.max_wall_ms = Math.max(u.oracle.max_wall_ms, r.run.wall_ms);
         const stop = runStop(r.run, opts.limitMs ?? LIMIT_MS);

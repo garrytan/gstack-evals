@@ -1,14 +1,22 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // The eng-review lens's spec (src/trial/review/eng-review.ts): prompts, order, admission, unit trees and the gstack pins.
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { erMain } from "../../src/trial/review/er-cli.ts";
 import { buildErTree, clonePinProblems, ER_COMMON, ER_FORCED, ER_LENS_LINE, ER_TEMPLATE, erAdmits, erOrder, erPrompt, erUnitProblems } from "../../src/trial/review/eng-review.ts";
 
 const git = (dir: string, ...args: string[]) => spawnSync("git", ["-c", "user.name=Test Writer", "-c", "user.email=test@example.invalid", "-C", dir, ...args], { encoding: "utf8" });
+const roots: string[] = [];
+afterAll(() => roots.forEach((r) => rmSync(r, { recursive: true, force: true })));
+function tempRoot(prefix: string): string {
+  const root = mkdtempSync(join(tmpdir(), prefix));
+  writeFileSync(join(root, ".gstack-test-fixture"), "");
+  roots.push(root);
+  return root;
+}
 function unit(root: string, id: string, extra?: (repo: string) => void): void {
   const repo = join(root, id, "repo");
   mkdirSync(repo, { recursive: true });
@@ -53,7 +61,7 @@ describe("eng-review order and admission", () => {
 
 describe("eng-review unit trees", () => {
   test("a tree is plan.md and repo/ at one commit; key.json never comes along", () => {
-    const root = mkdtempSync(join(tmpdir(), "er-units-"));
+    const root = tempRoot("er-units-");
     unit(root, "u1");
     expect(erUnitProblems(root, "u1")).toEqual([]);
     const tree = buildErTree(root, "u1", join(root, "out", "tree"));
@@ -61,7 +69,7 @@ describe("eng-review unit trees", () => {
     expect(existsSync(join(root, "out", "tree", "key.json"))).toBe(false);
   });
   test("later history, a remote, a reflog-only commit or a copied key.json is refused", () => {
-    const root = mkdtempSync(join(tmpdir(), "er-units-"));
+    const root = tempRoot("er-units-");
     unit(root, "two", (repo) => {
       writeFileSync(join(repo, "later.py"), "x = 1\n");
       git(repo, "add", ".");
@@ -94,7 +102,7 @@ describe("eng-review gstack pins", () => {
     expect(clonePinProblems(CLONE)).toEqual([]);
   });
   test("a clone without the pins is refused", () => {
-    const empty = mkdtempSync(join(tmpdir(), "er-clone-"));
+    const empty = tempRoot("er-clone-");
     git(empty, "init", "-q");
     expect(clonePinProblems(empty).length).toBe(5);
   });
@@ -106,7 +114,7 @@ describe("review-units --plan eng-review", () => {
     return { o, io: { out: (t: string) => o.out.push(t), err: (t: string) => o.err.push(t) } };
   };
   test("refuses a frozen setting, an --enforce arm the run lacks and a units dir inside the repo", async () => {
-    const root = mkdtempSync(join(tmpdir(), "er-cli-"));
+    const root = tempRoot("er-cli-");
     unit(root, "u1");
     const base = ["--plan", "eng-review", "--units-dir", root, "--units", "u1", "--models", "claude-opus-5-5", "--out", join(root, "out")];
     const a = io();
@@ -120,7 +128,7 @@ describe("review-units --plan eng-review", () => {
     expect(c.o.err.join("\n")).toMatch(/inside the repo/);
   });
   test.skipIf(!existsSync(CLONE))("a dry run renders each opening, asserts the mounts, prints each prompt's sha256 and the admission rule", async () => {
-    const root = mkdtempSync(join(tmpdir(), "er-cli-"));
+    const root = tempRoot("er-cli-");
     unit(root, "u1");
     const x = io();
     const code = await erMain(["--plan", "eng-review", "--units-dir", root, "--units", "u1", "--arms", "none", "lens", "precut", "engphase", "candidate", "--models", "claude-opus-5-5", "openai/gpt-6.1-sol", "particle-ai/particle-1", "--out", join(root, "out"), "--gstack", CLONE, "--parallel", "2", "--dry-run"], x.io, {});

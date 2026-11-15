@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TestRun id="5d7c2a52-0000-4000-8000-000000000001" name="runner 2026-11-15 04:30:00" runUser="runner" xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+  <Times creation="2026-11-15T04:30:00.0000000+00:00" queuing="2026-11-15T04:30:00.0000000+00:00" start="2026-11-15T04:30:00.0000000+00:00" finish="2026-11-15T04:30:01.0000000+00:00" />
+  <Results>
+    <UnitTestResult executionId="e1" testId="11111111-0000-4000-8000-000000000001" testName="Adds" computerName="runner" duration="00:00:00.0010000" startTime="2026-11-15T04:30:00.0000000+00:00" endTime="2026-11-15T04:30:00.0010000+00:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="e1" />
+    <UnitTestResult executionId="e2" testId="11111111-0000-4000-8000-000000000002" testName="Breaks" computerName="runner" duration="00:00:00.0020000" startTime="2026-11-15T04:30:00.0000000+00:00" endTime="2026-11-15T04:30:00.0020000+00:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Failed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="e2">
+      <Output>
+        <ErrorInfo>
+          <Message>Assert.Equal() Failure: Values differ</Message>
+          <StackTrace>   at Demo.Tests.CalcTests.Breaks() in /testbed/tests/Demo.Tests/CalcTests.cs:line 12</StackTrace>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="e3" testId="11111111-0000-4000-8000-000000000003" testName="Later" computerName="runner" duration="00:00:00" startTime="2026-11-15T04:30:00.0000000+00:00" endTime="2026-11-15T04:30:00.0000000+00:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="NotExecuted" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="e3" />
+    <UnitTestResult executionId="e4" testId="11111111-0000-4000-8000-000000000004" testName="Demo.Tests.CalcTests.Theory(x: 1)" computerName="runner" duration="00:00:00.0010000" startTime="2026-11-15T04:30:00.0000000+00:00" endTime="2026-11-15T04:30:00.0010000+00:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="e4" />
+  </Results>
+  <TestDefinitions>
+    <UnitTest name="Adds" storage="/testbed/tests/demo.tests/bin/debug/net8.0/demo.tests.dll" id="11111111-0000-4000-8000-000000000001">
+      <Execution id="e1" />
+      <TestMethod codeBase="/testbed/tests/Demo.Tests/bin/Debug/net8.0/Demo.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Demo.Tests.CalcTests" name="Adds" />
+    </UnitTest>
+    <UnitTest name="Breaks" storage="/testbed/tests/demo.tests/bin/debug/net8.0/demo.tests.dll" id="11111111-0000-4000-8000-000000000002">
+      <Execution id="e2" />
+      <TestMethod codeBase="/testbed/tests/Demo.Tests/bin/Debug/net8.0/Demo.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Demo.Tests.CalcTests" name="Breaks" />
+    </UnitTest>
+    <UnitTest name="Later" storage="/testbed/tests/demo.tests/bin/debug/net8.0/demo.tests.dll" id="11111111-0000-4000-8000-000000000003">
+      <Execution id="e3" />
+      <TestMethod codeBase="/testbed/tests/Demo.Tests/bin/Debug/net8.0/Demo.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Demo.Tests.CalcTests" name="Later" />
+    </UnitTest>
+    <UnitTest name="Demo.Tests.CalcTests.Theory(x: 1)" storage="/testbed/tests/demo.tests/bin/debug/net8.0/demo.tests.dll" id="11111111-0000-4000-8000-000000000004">
+      <Execution id="e4" />
+      <TestMethod codeBase="/testbed/tests/Demo.Tests/bin/Debug/net8.0/Demo.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Demo.Tests.CalcTests" name="Theory" />
+    </UnitTest>
+  </TestDefinitions>
+  <ResultSummary outcome="Failed">
+    <Counters total="4" executed="3" passed="2" failed="1" error="0" timeout="0" aborted="0" inconclusive="0" passedButRunAborted="0" notRunnable="0" notExecuted="1" disconnected="0" warning="0" completed="0" inProgress="0" pending="0" />
+  </ResultSummary>
+</TestRun>

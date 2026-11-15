@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://maven.apache.org/surefire/maven-surefire-plugin/xsd/surefire-test-report-3.0.xsd" version="3.0" name="com.example.CalcTest" time="0.052" tests="4" errors="1" skipped="1" failures="1">
+  <properties>
+    <property name="java.version" value="21.0.5"/>
+  </properties>
+  <testcase name="adds" classname="com.example.CalcTest" time="0.001"/>
+  <testcase name="breaks" classname="com.example.CalcTest" time="0.002">
+    <failure message="expected: &lt;2&gt; but was: &lt;1&gt;" type="org.opentest4j.AssertionFailedError"><![CDATA[org.opentest4j.AssertionFailedError: expected: <2> but was: <1>
+	at com.example.CalcTest.breaks(CalcTest.java:14)]]></failure>
+  </testcase>
+  <testcase name="throws" classname="com.example.CalcTest" time="0.001">
+    <error message="boom" type="java.lang.IllegalStateException"><![CDATA[java.lang.IllegalStateException: boom]]></error>
+  </testcase>
+  <testcase name="later" classname="com.example.CalcTest" time="0">
+    <skipped message="disabled"/>
+  </testcase>
+</testsuite>

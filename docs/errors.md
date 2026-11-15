@@ -298,6 +298,58 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_OF_PROVIDER_DRIFT](#e_of_provider_drift) | 2 | U20 |
 | [E_OF_SUPPLY_SHORT](#e_of_supply_short) | 2 | U20 |
 | [E_OF_DRYRUN_FAIL](#e_of_dryrun_fail) | 2 | U20 |
+| [E_H2H_PREREG](#e_h2h_prereg) | 2 | U20 |
+| [E_H2H_INSTALL](#e_h2h_install) | 2 | U20 |
+| [E_H2H_PIN](#e_h2h_pin) | 2 | U20 |
+| [E_H2H_HOME_DRIFT](#e_h2h_home_drift) | 2 | U20 |
+| [E_H2H_HOME_LEAK](#e_h2h_home_leak) | 2 | U20 |
+| [E_H2H_HOME_SCAN](#e_h2h_home_scan) | 2 | U20 |
+| [E_H2H_SESSION_INPUT](#e_h2h_session_input) | 2 | U20 |
+| [E_H2H_SESSION_ARM](#e_h2h_session_arm) | 2 | U20 |
+| [E_H2H_RESERVATION_BOUND](#e_h2h_reservation_bound) | 2 | U20 |
+| [E_H2H_UPSTREAM_GAP](#e_h2h_upstream_gap) | 2 | U20 |
+| [E_H2H_INFRA_GAP](#e_h2h_infra_gap) | 2 | U20 |
+| [E_H2H_FINALIZE_HALT](#e_h2h_finalize_halt) | 2 | U20 |
+| [E_H2H_CAPTURE](#e_h2h_capture) | 2 | U20 |
+| [E_H2H_EXPOSURE](#e_h2h_exposure) | 2 | U20 |
+| [E_H2H_DRYRUN_FAIL](#e_h2h_dryrun_fail) | 2 | U20 |
+| [E_H2H_RUNTIMES](#e_h2h_runtimes) | 2 | U20 |
+| [E_H2H_E2E_FAIL](#e_h2h_e2e_fail) | 2 | U20 |
+| [E_H2H_B_MINE](#e_h2h_b_mine) | 2 | U20 |
+| [E_H2H_B_TOLD](#e_h2h_b_told) | 2 | U20 |
+| [E_H2H_B_NO_LOCKFILE](#e_h2h_b_no_lockfile) | 2 | U20 |
+| [E_H2H_B_NO_RUNNER](#e_h2h_b_no_runner) | 2 | U20 |
+| [E_H2H_B_NO_REPORTER](#e_h2h_b_no_reporter) | 2 | U20 |
+| [E_H2H_B_RETRIES](#e_h2h_b_retries) | 2 | U20 |
+| [E_H2H_B_BUILD](#e_h2h_b_build) | 2 | U20 |
+| [E_H2H_B_NO_TESTS](#e_h2h_b_no_tests) | 2 | U20 |
+| [E_H2H_B_REPORT](#e_h2h_b_report) | 2 | U20 |
+| [E_H2H_B_STORE](#e_h2h_b_store) | 2 | U20 |
+| [E_H2H_B_BROWSER](#e_h2h_b_browser) | 2 | U20 |
+| [E_H2H_B_LABEL](#e_h2h_b_label) | 2 | U20 |
+| [E_H2H_B_INFEASIBLE](#e_h2h_b_infeasible) | 2 | U20 |
+| [E_H2H_O_SOURCE](#e_h2h_o_source) | 2 | U20 |
+| [E_H2H_O_LICENCE](#e_h2h_o_licence) | 2 | U20 |
+| [E_H2H_O_EXCLUDED](#e_h2h_o_excluded) | 2 | U20 |
+| [E_H2H_O_NOT_PERMISSIVE](#e_h2h_o_not_permissive) | 2 | U20 |
+| [E_H2H_O_TOLD](#e_h2h_o_told) | 2 | U20 |
+| [E_H2H_DRAW_INPUT](#e_h2h_draw_input) | 2 | U20 |
+| [E_H2H_DRAW_PENDING](#e_h2h_draw_pending) | 2 | U20 |
+| [E_H2H_DRAW_SHORT](#e_h2h_draw_short) | 2 | U20 |
+| [E_H2H_DRAW_ORACLE](#e_h2h_draw_oracle) | 2 | U20 |
+| [E_H2H_DRAW_CONTAINMENT](#e_h2h_draw_containment) | 2 | U20 |
+| [E_H2H_SCORE_INPUT](#e_h2h_score_input) | 2 | U20 |
+| [E_H2H_SCORE_CAPTURE](#e_h2h_score_capture) | 2 | U20 |
+| [E_H2H_SCORE_ARM_TEST_DROPPED](#e_h2h_score_arm_test_dropped) | warning | U20 |
+| [E_H2H_SCORE_NESTED_WORKTREE](#e_h2h_score_nested_worktree) | warning | U20 |
+| [E_H2H_ANALYSIS_INPUT](#e_h2h_analysis_input) | 2 | U20 |
+| [E_H2H_READOUT_KEY](#e_h2h_readout_key) | 2 | U20 |
+| [E_H2H_READOUT_OUT](#e_h2h_readout_out) | 2 | U20 |
+| [E_H2H_LEDGER_DRYRUN](#e_h2h_ledger_dryrun) | 2 | U20 |
+| [E_H2H_RERUN_PRECONDITION](#e_h2h_rerun_precondition) | 2 | U20 |
+| [E_H2H_RERUN_UNWIRED](#e_h2h_rerun_unwired) | 2 | U20 |
+| [E_H2H_RERUN_CAP_STOP](#e_h2h_rerun_cap_stop) | 2 | U20 |
+| [E_H2H_RERUN_CONTAINMENT](#e_h2h_rerun_containment) | 2 | U20 |
 | [E_ASK_PIN](#e_ask_pin) | 2 | U20 |
 | [E_ASK_CUSTODY](#e_ask_custody) | 2 | U20 |
 | [E_ASK_IDENTITY](#e_ask_identity) | 2 | U20 |
@@ -2213,6 +2265,406 @@ Fix: Read the FAIL line, fix the rule's code, and run the dry run again before a
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
 
+### E_H2H_PREREG
+
+The skill-pack head-to-head found no usable preregistration: its prereg.json is missing, is not h2h-prereg.v1, lacks an unsigned 32-bit integer draw_seed, order_seed or bootstrap_seed, lists other arms than the lane's, or lacks a text, entry, list or continuation cap.
+
+Fix: Change prereg.json only through the preregistration's own pull request. Nothing runs on values chosen anywhere else.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2H_INSTALL
+
+An arm's home install did not finish as its pack's README says: the install image did not build or runs another Claude Code version, the home directory was not empty, a recipe step exited non-zero in the install container (the record and log beside the home name the step), or the agent-skills marketplace entry no longer has the shape the post describes.
+
+Fix: Read the install log beside the home. Fix the harness side only (image, network, Docker Hub limit) and install again into a fresh home; a pack that cannot install as published is recorded with its failure, never patched.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_H2H_PIN
+
+A pinned source failed its check: the repository could not be cloned or holds no commit at the prereg.json pin, or an installed tree, npm package or marketplace clone did not match its pin (arms-pins.json pin_checks names which and how).
+
+Fix: Pins never move. Restore network or the clone and install again into a fresh home; a mismatch that persists goes to the Captain with the pin_checks row.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_H2H_HOME_DRIFT
+
+An arm's home on disk does not hash (home_tree_sha256, the frozen rule in arms/hash.ts) to the value arms-pins.json records for that arm, or is missing, so a session would run on bytes nobody checked.
+
+Fix: Install the home again with gstack-evals h2h install into a fresh directory and compare its hash; never edit a home by hand. A home that installs to a new hash goes to the Captain before any session.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_H2H_HOME_LEAK
+
+Containment over an arm's installed home (plan section 3) found a confirmed hit: a fix line, a test-side marker or a hidden test name of the unit, in a file, a git object or an archive (two levels) of the home, that the frozen idiom rule does not classify as an idiom. The unit drops for every arm, so pairing holds; the record names the arm, the path and the needle's sha256, never the text.
+
+Fix: None for the unit: it is dropped by rule and replaced from the reserves as the draw says. Report the hit per arm.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2H_HOME_SCAN
+
+Containment over an arm's home did not finish (a grep, git object stream or archive listing failed, or the unit's base tree could not be read), so the home is not known clean. It fails closed: the unit drops for every arm, as a confirmed hit would.
+
+Fix: Read the message, fix the harness side (disk, a missing unzip or tar, the unit's tree volume) and run contain-home again before any session; if it still fails, the unit stays dropped.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_H2H_SESSION_INPUT
+
+A head-to-head session input broke the post's sections 4 and 11 before any spend: an empty problem statement, an arm with no entry for the unit's kind (gstack /qa runs B1 units only), a unit drawn for another stage or listed twice, a plan that is not h2h-plan.v1 or whose order was edited, a session the plan does not hold, an allowance other than prereg.json's or twice it, a missing arm home, or a run directory that already exists.
+
+Fix: Fix the input named in the message and run the command again. Texts, entries, limits and seeds come only from prereg.json.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_H2H_SESSION_ARM
+
+The head-to-head session's tree or home check refused before any slot opened: the tree holds CLAUDE.md, CLAUDE.local.md, AGENTS.md or a .claude folder, its history is not the one base commit, the home holds a Capy drive path, the no-skills arm's home holds a pack, or a pack arm's home does not hold its own install. As a session gap it takes no retry.
+
+Fix: Rebuild the unit's tree or the arm's home (part A's install) and check it against its pin; the session is a gap until then and is never rerun to change a verdict.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_H2H_RESERVATION_BOUND
+
+The metering proxy refused a head-to-head call only because the worst cases of the slot's calls still in flight fill its allowance: the settled and unknown spend plus this call's worst case fits. The answer is a 429 with retry-after, counted per session in reservation_bound and never as an allowance stop (post section 3).
+
+Fix: Nothing: the client retries the call once a call in flight settles. The count is reported per arm.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_H2H_UPSTREAM_GAP
+
+A head-to-head session ended on a provider or proxy error twice (the first attempt and its one whole-session retry from a fresh container), so it is a gap (post section 7, step 6).
+
+Fix: Report the gap. A unit with a gap in either arm of a contrast leaves that contrast; gaps are never rerun to change a verdict.
+
+Exit 2. Side effects: Both attempts spent through the driver's proxy; the session record is written. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_H2H_INFRA_GAP
+
+The harness failed outside the model twice for a head-to-head session (a container, a volume, Harbor, the agent setup or a post-turn step), so it is a gap (post section 7, step 6).
+
+Fix: Report the gap and take the harness fault to the Captain as a named repair. Nothing is rerun to change an outcome.
+
+Exit 2. Side effects: Whatever the attempts spent through the driver's proxy; the session record is written. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_H2H_FINALIZE_HALT
+
+A head-to-head session's slot closed after its metering proxy's finalize failed, or an attempt that logged a slot open left no summary, so its counts are unknown and an allowance stop cannot be told from any other end. The session halts before any retry and writes no session record, and the driver's stage takes no more opens.
+
+Fix: Take the session id and the lease's journal path from the driver's halt line to the Captain, who rules on a retry after reading the journal; a relaunch lifts the halt with --lift-halt &lt;session>.
+
+Exit 2. Side effects: Partial: the halted session's calls stay in the lease's journal and the ledger; nothing more opens on the item. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2H_CAPTURE
+
+A head-to-head session's in-container step failed or timed out: the start inventory, the tree probe between turns (sh/treehash.sh), the session-end capture or the tree bundle. The session record is gap E_H2H_INFRA_GAP unless the step's cause lies in what the agent wrote.
+
+Fix: Fix the step in the session runner. The session takes no retry for a post-turn step; the gap stays in the run's record.
+
+Exit 2. Side effects: The turns before the step spent through the driver's proxy; the session record is written. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2H_EXPOSURE
+
+The head-to-head's exposure detectors or read audit could not run: an unknown arm, a transcript that is not JSON lines, a markers file whose pins differ from prereg.json, an install-roots file with no roots for an arm, or a session's tree.tar that tar cannot list.
+
+Fix: Pass a transcript the session runner wrote and the arms-pins.json part A wrote; regenerate markers.json only from clones at prereg.json's pins (bun lanes/outcome-skills/h2h/sessions/markers.ts). For a tree.tar that does not list, keep the run dir, list its tree.tar by hand to find the cause, and take it to the Captain; the session is not rerun to change an outcome.
+
+Exit 2. Side effects: The detectors spend nothing, but when the session runner raises this code the attempt has already spent through the driver's proxy, and no session record is written. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_H2H_DRYRUN_FAIL
+
+A line of the head-to-head's driven launch against a fake provider printed FAIL: a frozen rule (the DONE variants, the continuation cap, scripted turns outside the cap, the frozen question reply, reservation-bound refusals at 5 and 21 calls in flight, an allowance stop, a pack's home loading under the Agent SDK) did not hold on its fixture.
+
+Fix: Read the FAIL line, fix the rule's code test-first, and run the dry run again before any spend.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_H2H_RUNTIMES
+
+The head-to-head's runtime volume (post section 3: node, bun, python3 and gh at /opt/h2h-runtimes) could not be built or read: a release download answered an error or its sha256 is not the pin, a copy step failed, the volume did not read back its MANIFEST.json, or a runtime's version read from the volume is not its pin.
+
+Fix: Read the step named in the message, check Docker and the network, and build again; a pin that moved upstream stays pinned and the change goes to the Captain.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_H2H_E2E_FAIL
+
+A line of the head-to-head's keyless end-to-end run printed FAIL: on a real unit in Harbor containers against a fake provider, an arm's session did not end completed with DONE, its pack did not load, a runtime was not on PATH, it read another arm's install, its slot did not close finalized, part C's score did not run or read the wrong outcome, or the driver did not stop clean.
+
+Fix: Read the FAIL line and the session dir it names, fix the cause, and run the end-to-end run again before any spend.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_H2H_B_MINE
+
+A skill-pack head-to-head breadth miner refused: the advisory-database clone is not at the pinned commit, a GitHub GraphQL query failed or cost more than its budget, or a frozen frame or licence file is missing or not its schema.
+
+Fix: Check out the pinned advisory-database commit (mine-b2 --clone), check gh is signed in and under its rate limit, and run the miner again. Never move the pin after the freeze date.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_H2H_B_TOLD
+
+A breadth unit failed plan section 5's told-mode screen (problem statement under 200 characters, a diff block, or two lines of 30 characters or more that the fix adds). It drops before any draw.
+
+Fix: None: the drop is by rule. It is counted per frame and ecosystem.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2H_B_NO_LOCKFILE
+
+A breadth candidate's repository has no lockfile the frozen recipes install from (package-lock.json, npm-shrinkwrap.json, pnpm-lock.yaml or yarn.lock; go.sum or a go.mod with no requirements; Cargo.lock; a Maven pom.xml; a .NET project with packages.lock.json or a restore that needs none). It drops by rule.
+
+Fix: None: no recipe is written by hand or by a model. The drop is counted per ecosystem.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2H_B_NO_RUNNER
+
+A breadth candidate's tests run under no runner the frozen test-command rules know (for B1, no real-browser runner at the root), so its tests cannot be found by rule. It drops.
+
+Fix: None: the drop is by rule and counted per ecosystem.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2H_B_NO_REPORTER
+
+A breadth candidate's runner writes JUnit XML or JSON only through a reporter package that is not already in its lockfile (karma-junit-reporter, @web/test-runner-junit-reporter, jest-junit for a JUnit-only Jest setup). No reporter package is added, so it drops by rule.
+
+Fix: None: the drop is by rule and counted per ecosystem.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2H_B_RETRIES
+
+A breadth candidate's test retries cannot be switched off by the runner's own flag (jest.retryTimes or Mocha this.retries in the repository's code, or a Maven rerun setting the command cannot override). It drops, since retries hide the flakes the 5+5 oracle must see.
+
+Fix: None: the drop is by rule and counted per ecosystem.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2H_B_BUILD
+
+A breadth candidate's image did not build with its frozen recipe at the fix's parent (dependency install, toolchain or browser install failed, or the build passed its time limit). It drops with this code, counted per ecosystem.
+
+Fix: None for the unit: images are never repaired by hand. A builder-host failure (no Docker, a full disk) is an infra error; rerun the build on a fresh throwaway host.
+
+Exit 2. Side effects: Build cache on the throwaway builder host only. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_H2H_B_NO_TESTS
+
+A breadth candidate's test command ran but its report held none of the fix's test files' tests, or the report parser found no test at all, so its tests cannot be found by the frozen rules. It drops, counted per ecosystem.
+
+Fix: None: the drop is by rule.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2H_B_REPORT
+
+A breadth report parser could not read a report (malformed JUnit XML, TRX, go test -json, cargo test output, or Jest or Vitest JSON), or the report named no format the parser knows.
+
+Fix: Read the report. A run whose report does not parse builds nothing; when every run fails this way the unit drops at test discovery.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_H2H_B_STORE
+
+The breadth image store refused: the image is not stored by digest, the stored digest does not match the one recorded in the unit list, the push or pull failed, or a session or scoring run asked for an image by tag or by a digest the store does not hold.
+
+Fix: Push the built image to the store before its oracle run and record its digest. Sessions and scoring run only from a stored digest; an image is never rebuilt.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_H2H_B_BROWSER
+
+A B1 unit failed the keyless browser-engine check: a fail-to-pass test's report shows no real browser engine (no Playwright project or browserName, no Karma or Web Test Runner browser string, no Vitest browser provider with the report's project name), or the same test is also collected under jsdom or node.
+
+Fix: None: the unit drops by rule before any label call.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2H_B_LABEL
+
+The B1 label step refused: a packet holds something its readers may not see (an arm's output, a unit id), a packet no longer matches its digest, or a reader's answer is not one bare JSON object with the frozen keys and a yes or no. A malformed answer counts as missing and the unit is out.
+
+Fix: Rebuild the packet from the unit dir. A malformed answer is never asked again; the unit stays out.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_H2H_B_INFEASIBLE
+
+B1 ended under 20 usable units after section 6's fallbacks (the 2025-06-01 widening and the MultiLang rows that pass the browser checks). B1 is reported as infeasible at this scale and B is B2 alone; the rules are never loosened.
+
+Fix: None: this is the frozen outcome. Report it as the Infeasible row state.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2H_O_SOURCE
+
+The head-to-head's O frame could not read its source: SWE-bench-Live MultiLang's Hugging Face head is not the revision the state machines harness pins (eb09c2e5), the revision read failed, or a frozen input file (o-licences.json, the digest pins) is missing or malformed.
+
+Fix: If the dataset moved, the frame stays at the pinned revision and the move goes to the Captain; otherwise fetch the parquet files again (gstack-evals outcome sm source fetch) and rerun h2h o-frame.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_H2H_O_LICENCE
+
+The head-to-head's O licence read failed: GitHub's GraphQL answer was missing, malformed or partial, or a candidate's repository has no row in the frozen o-licences.json.
+
+Fix: Rerun h2h o-frame --read-licences once on the freeze date with an authenticated gh; never edit o-licences.json by hand.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_H2H_O_EXCLUDED
+
+An O candidate dropped before any draw: its repository matches the preregistration's exclusion list (a pack under test, its organization, or a repository tied to the project owner). The drop is counted per pattern.
+
+Fix: None; the exclusion list is frozen in prereg.json.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2H_O_NOT_PERMISSIVE
+
+An O candidate dropped: its repository's licence on the freeze date, as frozen in o-licences.json, is not on prereg.json's permissive list (no licence, NOASSERTION, MPL-2.0 or any other).
+
+Fix: None; the list and the licence read are frozen.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2H_O_TOLD
+
+An O candidate dropped at the pstack-checks eval's told-mode screen: the problem statement is missing or under 200 characters, holds a diff block line, or holds two or more of the 30-character lines the fix adds.
+
+Fix: None; the screen is frozen (pfchecks/told.ts).
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2H_DRAW_INPUT
+
+The head-to-head's draw could not read its frame: the file is not an h2h frame of the expected class, repeats an id, has a unit with no repository, month or entry tag, or the order file does not match the frame's digest.
+
+Fix: Rebuild the frame with its own command (h2h o-frame for O, part B's commands for B1 and B2) and draw again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_H2H_DRAW_PENDING
+
+The head-to-head's gate walk stopped at a unit whose gate input does not exist yet (no oracle record, no containment record, no image or label record). The line names the unit and the gate.
+
+Fix: Run that gate on the named unit (on the VMs) and run h2h draw again; the walk is deterministic and starts from the top.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_H2H_DRAW_SHORT
+
+The head-to-head's gate walk reached the end of a frame before it filled every stage position (stage 1, stage 2 to n, the reserves and stage 0). The draw lists what it filled.
+
+Fix: Follow the post's supply rule for that frame: O walks back to 2025-01-01 by its order; B widens to 2025-06-01 and B1 may end infeasible. Never loosen a gate.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2H_DRAW_ORACLE
+
+A head-to-head unit dropped at the oracle gate in the walk: its oracle verdict is not kept (unstable, slow, no stable test, leaked or an infra drop recorded by the oracle).
+
+Fix: None; the unit's oracle record decides. The walk takes the next unit in seeded order.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2H_DRAW_CONTAINMENT
+
+A head-to-head unit dropped at the containment gate: a confirmed containment hit in the unit image or any arm's installed home, so it leaves every arm and pairing holds.
+
+Fix: None; the hit is reported per arm. A unit that drops after its draw is replaced by the next reserve.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2H_SCORE_INPUT
+
+The head-to-head scorer could not read its inputs: the session record, the unit dir, the session tree, or its base commit is missing, malformed or does not match.
+
+Fix: Point h2h score at the session's record dir and the unit's sm-unit.v1 dir, then run it again; scoring never reaches back into a session container.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_H2H_SCORE_CAPTURE
+
+The head-to-head scorer could not extract the main checkout's change: the session tree's git directory is gone, broken or no longer holds the session's base commit. The session is a scoring gap counted for the arm that left the tree that way.
+
+Fix: None for the session; the gap stands and the cell's gap share counts it.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2H_ANALYSIS_INPUT
+
+The head-to-head analysis could not read its inputs: a units, sessions or scores file is malformed, repeats a unit and arm, names an unknown arm or unit, or a contrast has no pairs to analyse.
+
+Fix: Fix the named record and run h2h analyze again; nothing is estimated on partial input.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_H2H_READOUT_KEY
+
+The sealed stage 1 readout refused its key: the key path is missing, sits inside the repository, is readable by group or others, or does not hold 32 bytes (raw, or 64 hex characters).
+
+Fix: Mint the key in the sealed store outside the repository (32 random bytes, mode 0600) and pass its path with --key.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_H2H_READOUT_OUT
+
+The sealed stage 1 readout refused its output: the sealed file already exists, or a sealed file did not open or did not match its recorded sha256.
+
+Fix: Write a new sealed file to a new path; to open one, pass the exact file, its key and the sha256 the stage 1 run record holds.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_H2H_LEDGER_DRYRUN
+
+The head-to-head's ledger dry run failed a line: a lease on an items.ts item did not open or settle on the temporary ledger, or the COST re-pricing check did not hold on its fixtures.
+
+Fix: Read the FAIL line, fix the code, and run h2h ledger-dryrun again before any spend.
+
+Exit 2. Side effects: None: the temporary ledger is thrown away. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_H2H_RERUN_PRECONDITION
+
+h2h rerun refused a precondition (exit 3): the units file is missing or malformed, Docker does not answer, an arm's install record or a unit's image digest is missing, or the session runner refused before any paid call.
+
+Fix: Meet the named prerequisite (section 12: an Anthropic key, Docker, network for installs and image builds, room under Docker Hub's pull limit) and run again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_H2H_RERUN_UNWIRED
+
+h2h rerun has no session runner wired in yet (exit 3): part S's runner is built in parallel and the lead connects it in lanes/outcome-skills/h2h/cli.ts. --dry-run still prints the projection.
+
+Fix: Wire the session runner (RerunRunner in lanes/outcome-skills/h2h/rerun.ts) and run again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_H2H_RERUN_CAP_STOP
+
+h2h rerun stopped at its spend cap (exit 10): the spend recorded so far plus the next session's allowance would pass --spend-cap. The sessions already run keep their records.
+
+Fix: A cap stop ends the rerun incomplete; start a new rerun with a cap that fits the units left. Never rerun to change a verdict.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2H_RERUN_CONTAINMENT
+
+h2h rerun halted on a containment failure (exit 12): the session runner found a containment hit before or during a session.
+
+Fix: Read the runner's containment record; the unit drops for every arm by the frozen rule. Do not rerun the unit.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
 ### E_ASK_PIN
 
 Ask replay eval: a gstack file read for arms b and c has a sha256 that differs from frozen.json, or git show could not read it at the frozen commit. The line names the path, the expected and the actual digest.
@@ -2822,6 +3274,22 @@ Warning. Owner: U20.
 A build-read session ended in a second upstream error or a second infrastructure failure, so its cell is a recorded gap. Every verdict also prints the reading that scores gaps as 0.
 
 Fix: None: the gap is recorded under the frozen session rule.
+
+Warning. Owner: U20.
+
+### E_H2H_SCORE_ARM_TEST_DROPPED
+
+The head-to-head scorer dropped an arm file at a path where the fix adds a new test file, before the fix's tests applied (section 7 rule 3), so a test-first arm's own test never becomes an add/add conflict. Logged per arm.
+
+Fix: None; read the record's dropped_arm_tests.
+
+Warning. Owner: U20.
+
+### E_H2H_SCORE_NESTED_WORKTREE
+
+The head-to-head scorer left a nested worktree directory (a directory below the root holding a .git file or folder) out of the extracted change (section 7 rule 1). Whether a linked worktree or a branch beyond base passes is the worktree secondary.
+
+Fix: None; read the record's nested_left_out and worktree_pass.
 
 Warning. Owner: U20.
 
