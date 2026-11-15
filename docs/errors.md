@@ -299,6 +299,15 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_OF_SUPPLY_SHORT](#e_of_supply_short) | 2 | U20 |
 | [E_OF_DRYRUN_FAIL](#e_of_dryrun_fail) | 2 | U20 |
 | [E_H2H_PREREG](#e_h2h_prereg) | 2 | U20 |
+| [E_H2H_SESSION_INPUT](#e_h2h_session_input) | 2 | U20 |
+| [E_H2H_SESSION_ARM](#e_h2h_session_arm) | 2 | U20 |
+| [E_H2H_RESERVATION_BOUND](#e_h2h_reservation_bound) | 2 | U20 |
+| [E_H2H_UPSTREAM_GAP](#e_h2h_upstream_gap) | 2 | U20 |
+| [E_H2H_INFRA_GAP](#e_h2h_infra_gap) | 2 | U20 |
+| [E_H2H_FINALIZE_HALT](#e_h2h_finalize_halt) | 2 | U20 |
+| [E_H2H_CAPTURE](#e_h2h_capture) | 2 | U20 |
+| [E_H2H_EXPOSURE](#e_h2h_exposure) | 2 | U20 |
+| [E_H2H_DRYRUN_FAIL](#e_h2h_dryrun_fail) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -2191,6 +2200,78 @@ The skill-pack head-to-head found no usable preregistration: its prereg.json is 
 Fix: Change prereg.json only through the preregistration's own pull request. Nothing runs on values chosen anywhere else.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2H_SESSION_INPUT
+
+A head-to-head session input broke the post's sections 4 and 11 before any spend: an empty problem statement, an arm with no entry for the unit's kind (gstack /qa runs B1 units only), a unit drawn for another stage or listed twice, a plan that is not h2h-plan.v1 or whose order was edited, a session the plan does not hold, an allowance other than prereg.json's or twice it, a missing arm home, or a run directory that already exists.
+
+Fix: Fix the input named in the message and run the command again. Texts, entries, limits and seeds come only from prereg.json.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_H2H_SESSION_ARM
+
+The head-to-head session's tree or home check refused before any slot opened: the tree holds CLAUDE.md, CLAUDE.local.md, AGENTS.md or a .claude folder, its history is not the one base commit, the home holds a Capy drive path, the no-skills arm's home holds a pack, or a pack arm's home does not hold its own install. As a session gap it takes no retry.
+
+Fix: Rebuild the unit's tree or the arm's home (part A's install) and check it against its pin; the session is a gap until then and is never rerun to change a verdict.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_H2H_RESERVATION_BOUND
+
+The metering proxy refused a head-to-head call only because the worst cases of the slot's calls still in flight fill its allowance: the settled and unknown spend plus this call's worst case fits. The answer is a 429 with retry-after, counted per session in reservation_bound and never as an allowance stop (post section 3).
+
+Fix: Nothing: the client retries the call once a call in flight settles. The count is reported per arm.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_H2H_UPSTREAM_GAP
+
+A head-to-head session ended on a provider or proxy error twice (the first attempt and its one whole-session retry from a fresh container), so it is a gap (post section 7, step 6).
+
+Fix: Report the gap. A unit with a gap in either arm of a contrast leaves that contrast; gaps are never rerun to change a verdict.
+
+Exit 2. Side effects: Both attempts spent through the driver's proxy; the session record is written. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_H2H_INFRA_GAP
+
+The harness failed outside the model twice for a head-to-head session (a container, a volume, Harbor, the agent setup or a post-turn step), so it is a gap (post section 7, step 6).
+
+Fix: Report the gap and take the harness fault to the Captain as a named repair. Nothing is rerun to change an outcome.
+
+Exit 2. Side effects: Whatever the attempts spent through the driver's proxy; the session record is written. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_H2H_FINALIZE_HALT
+
+A head-to-head session's slot closed after its metering proxy's finalize failed, or an attempt that logged a slot open left no summary, so its counts are unknown and an allowance stop cannot be told from any other end. The session halts before any retry and writes no session record, and the driver's stage takes no more opens.
+
+Fix: Take the session id and the lease's journal path from the driver's halt line to the Captain, who rules on a retry after reading the journal; a relaunch lifts the halt with --lift-halt &lt;session>.
+
+Exit 2. Side effects: Partial: the halted session's calls stay in the lease's journal and the ledger; nothing more opens on the item. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2H_CAPTURE
+
+A head-to-head session's in-container step failed or timed out: the start inventory, the tree probe between turns (sh/treehash.sh), the session-end capture or the tree bundle. The session record is gap E_H2H_INFRA_GAP unless the step's cause lies in what the agent wrote.
+
+Fix: Fix the step in the session runner. The session takes no retry for a post-turn step; the gap stays in the run's record.
+
+Exit 2. Side effects: The turns before the step spent through the driver's proxy; the session record is written. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2H_EXPOSURE
+
+The head-to-head's exposure detectors or read audit could not run: an unknown arm, a transcript that is not JSON lines, a markers file whose pins differ from prereg.json, or an install-roots file with no roots for an arm.
+
+Fix: Pass a transcript the session runner wrote and the arms-pins.json part A wrote; regenerate markers.json only from clones at prereg.json's pins (bun lanes/outcome-skills/h2h/sessions/markers.ts).
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_H2H_DRYRUN_FAIL
+
+A line of the head-to-head's driven launch against a fake provider printed FAIL: a frozen rule (the DONE variants, the continuation cap, scripted turns outside the cap, the frozen question reply, reservation-bound refusals at 5 and 21 calls in flight, an allowance stop, a pack's home loading under the Agent SDK) did not hold on its fixture.
+
+Fix: Read the FAIL line, fix the rule's code test-first, and run the dry run again before any spend.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
 
 ## Exit 3: calibration failed (INCOMPLETE)
 
