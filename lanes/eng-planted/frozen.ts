@@ -2,13 +2,20 @@
 // Every number the planted-unit eng-review read freezes (prereg 2026-11-15-geva-537-eng-review-planted-units-prereg). The
 // comparison size is one parameter (SIZE); the MDD lines tied to it print from power.py.
 
-/** The gstack commit both skill arms run: GSTA-546's restore merge on gstack main. Empty until the prereg freezes on it;
- * every paid path refuses an empty pin, and tests pass their own fixture pin. */
+/** The gstack commit both skill arms run: the restore of the standalone /plan-eng-review merged on gstack main
+ * (garrytan/gstack#4375), with the sha256 of each file the arms and detectors read. */
 export const RESTORE_PIN: { repo: "garrytan/gstack"; sha: string; version: string; digests: Readonly<Record<string, string>> } = {
   repo: "garrytan/gstack",
-  sha: "",
-  version: "",
-  digests: {},
+  sha: "8837fda3998224fc09f46e6e90a549334fbc9b68",
+  version: "1.99.4.0",
+  digests: {
+    "plan-eng-review/SKILL.md": "58d96f6f3e296ccc2942e2e1a5732810b18f9f8bcd6ed9338115c99c91a88524",
+    "plan-eng-review/sections/review-sections.md": "3d04ce8807d0c1afbe8502b18edea88a62f78305d07bc4d1de4bd9b0772e195a",
+    "autoplan/SKILL.md": "2ec68c1217fa7fcb0cf392db160eb52ca852afa6f5dff9ae332d91e52949aaf0",
+    "autoplan/sections/eng-phase.md": "527e7ff9c629cbee410d292de179ea4477ecbb12b338e97952c1c6749411fb9e",
+    "autoplan/sections/unattended.md": "ef2485de42d109de85a803723220c98e6c89e21f7e9cd9efb285972e6ee9eda8",
+    "bin/gstack-autoplan-snapshot.ts": "f9a31c701d8a86af3b752ab0901661a12f54cd7cd73b512e33f0eea62e555e73",
+  },
 };
 
 export const SIZE = { units: 64, floor: 40, k: 3, kControl: 1, calibration: 6, reserve: 6, pilotUnits: 20, pilotK: 2 } as const;
