@@ -104,18 +104,20 @@ export interface ParsedRules {
   dated: number;
   placed: number;
   dropped: number;
+  /** Rows whose date text holds more than one distinct date: restated or amended after their first date. */
+  multi_dated: number;
 }
 
 /** Rule rows of the rules history: "| R<n> | rule text | owner's words | date text | scope | recorded at | status |". */
 export function parseRules(md: string): ParsedRules {
-  const raw: Array<{ n: number; text: string; date: string | null }> = [];
+  const raw: Array<{ n: number; text: string; date: string | null; dates: number }> = [];
   for (const line of md.split(/\r?\n/)) {
     const m = /^\s*\|\s*R(\d+)\s*\|(.*)\|\s*$/.exec(line);
     if (!m) continue;
     const cells = m[2]!.split(/(?<!\\)\|/).map((c) => c.trim().replace(/\\\|/g, "|"));
     if (cells.length < 6) fail("E_ASK_INPUT", "rule row R" + m[1] + " has " + (cells.length + 1) + " cells, not 7");
     const dates = (cells[2]!.match(/\d{4}-\d{2}-\d{2}/g) ?? []).sort();
-    raw.push({ n: Number(m[1]), text: cells[0]!, date: dates[0] ?? null });
+    raw.push({ n: Number(m[1]), text: cells[0]!, date: dates[0] ?? null, dates: new Set(dates).size });
   }
   const sorted = raw.map((r, i) => ({ ...r, i })).sort((a, b) => a.n - b.n || a.i - b.i);
   const rows: ParsedRules["rows"] = [];
@@ -125,7 +127,7 @@ export function parseRules(md: string): ParsedRules {
     if (date === null) dropped++;
     else rows.push({ n: r.n, id: "R" + r.n, date, placed: r.date === null, text: r.text });
   }
-  return { rows, total: raw.length, dated: raw.filter((r) => r.date !== null).length, placed: rows.filter((r) => r.placed).length, dropped };
+  return { rows, total: raw.length, dated: raw.filter((r) => r.date !== null).length, placed: rows.filter((r) => r.placed).length, dropped, multi_dated: raw.filter((r) => r.dates > 1).length };
 }
 
 export interface BuildInput {
@@ -147,7 +149,7 @@ export interface BuildCounts {
   per_thread: Record<string, Record<string, number>>;
   dropped: { unreadable: number; thread_missing: number };
   not_ask_rows: number;
-  rules: { total: number; dated: number; placed: number; dropped: number };
+  rules: { total: number; dated: number; placed: number; dropped: number; multi_dated: number };
   scan: ScanCount;
   tokens: { min: number; p25: number; median: number; p75: number; p90: number; max: number; mean: number } | null;
   multi_decision: number;
@@ -200,7 +202,7 @@ export function buildFrom(input: BuildInput): { items: AskItem[]; map: Record<st
   for (const r of asks) first.set(r.thread, Math.min(first.get(r.thread) ?? Infinity, Date.parse(r.at) || Infinity));
   const names = [...first.keys()].sort((a, b) => first.get(a)! - first.get(b)! || (a < b ? -1 : 1));
   const map = Object.fromEntries(names.map((n, i) => [n, prefix + (i + 1)]));
-  const counts: BuildCounts = { items: 0, per_class: Object.fromEntries(LABELS.map((l) => [l, 0])), per_thread: {}, dropped: { unreadable: 0, thread_missing: 0 }, not_ask_rows: input.audit.length - asks.length, rules: { total: rules.total, dated: rules.dated, placed: rules.placed, dropped: rules.dropped }, scan: emptyCount(), tokens: null, multi_decision: 0, cut: 0, crew_messages: 0 };
+  const counts: BuildCounts = { items: 0, per_class: Object.fromEntries(LABELS.map((l) => [l, 0])), per_thread: {}, dropped: { unreadable: 0, thread_missing: 0 }, not_ask_rows: input.audit.length - asks.length, rules: { total: rules.total, dated: rules.dated, placed: rules.placed, dropped: rules.dropped, multi_dated: rules.multi_dated }, scan: emptyCount(), tokens: null, multi_decision: 0, cut: 0, crew_messages: 0 };
   const memo = new Map<string, string>();
   const clean = (t: string) => {
     let v = memo.get(t);

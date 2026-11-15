@@ -3,7 +3,7 @@
 // stand-in gstack text for machines with no gstack clone, a tiny raw build input with planted secret shapes, and
 // interval fixtures for the decision rows.
 import type { Interval } from "./stats.ts";
-import type { ModelIntervals } from "./score.ts";
+import type { Decision, ModelIntervals } from "./score.ts";
 import type { CallKey } from "./run.ts";
 import type { BuildInput, TranscriptItem } from "./build.ts";
 import type { GstackText } from "./prompt.ts";
@@ -51,7 +51,7 @@ export const FIXTURE_GSTACK: GstackText = {
 const iv = (lo: number, hi: number, loto: [number, number] | null = [lo, hi]): Interval => ({ delta: (lo + hi) / 2, lo, hi, n_items: 100, n_clusters: 80, loto });
 
 /** Decision-row fixtures: per frontier model interval sets, by name. */
-export const DECISION_FIXTURES: Record<string, { opus: ModelIntervals; sol: ModelIntervals; row: string; cut_candidate: boolean }> = (() => {
+export const DECISION_FIXTURES: Record<string, { opus: ModelIntervals; sol: ModelIntervals; row: Decision["row"]; cut_candidate: boolean }> = (() => {
   const base = (o: Partial<ModelIntervals>): ModelIntervals => ({ inconclusive: false, cb_needless: iv(-0.3, -0.15), cb_must: iv(-0.02, 0.03), dc_needless: iv(-0.05, 0.06), dc_must: iv(-0.02, 0.03), ab_needless: iv(0.1, 0.3), ab_must: iv(-0.03, 0.02), ac_needless: iv(0.2, 0.4), ac_must: iv(-0.03, 0.02), ...o });
   return {
     build_and_trim: { opus: base({}), sol: base({}), row: "build and trim", cut_candidate: false },

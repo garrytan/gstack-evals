@@ -44,6 +44,7 @@ describe("the custody builder (section 2)", () => {
     const r = parseRules(buildFixture().rules);
     expect(r.rows.map((x) => [x.id, x.date, x.placed])).toEqual([["R1", "2026-10-10", false], ["R2", "2026-10-11", true], ["R3", "2026-10-11", false]]);
     expect(r.dropped).toBe(1);
+    expect(r.multi_dated).toBe(1);
     expect(b.items[0]!.rules.map((x) => x.id)).toEqual(["R1", "R2", "R3"]);
     expect(parseRules("| R2 | a \\| b | w | 2026-10-01 | s | r | live |").rows[0]!.text).toBe("a | b");
   });

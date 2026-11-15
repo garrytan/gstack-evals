@@ -12,7 +12,7 @@ import { chainStats, clusters, proxyLinks, repeatInWindow, type Link } from "./c
 import { custody, readIdentity, readRecords, sealedStore, writeSums } from "./custody.ts";
 import { AskError, fail, FROZEN, placeholders, seed } from "./frozen.ts";
 import { corpusTexts, scanPublic, syntheticCheck } from "./privacy.ts";
-import { buildPrompt, loadGstack, type GstackText } from "./prompt.ts";
+import { buildPrompt, gstackLines, loadGstack, type GstackText } from "./prompt.ts";
 import { finalRecords, openProxyMeter, runShard, schedule, upstreamRedraw } from "./run.ts";
 import { isNeedless, readout, s1Report } from "./score.ts";
 import { halfWidth, mdd } from "./stats.ts";
@@ -118,6 +118,27 @@ export const SUBCOMMANDS: Record<string, { summary: string; run: Run }> = {
         out[m] = per;
       }
       json(io, { items: items.length, per_class: Object.fromEntries(LABELS.map((l) => [l, items.filter((i) => i.label === l).length])), models: out, note: "estimate: characters/4 input at list input price, 1,500 output tokens per sample at list output price, no cache discount" });
+      return 0;
+    },
+  },
+  arms: {
+    summary: "per arm on an items file: input tokens (characters/4) and arm (a)'s cleanliness counts; numbers only",
+    run: (argv, io) => {
+      const f = flags(argv, ["items", "gstack"]);
+      const items = readItems(need(f, "items"));
+      const gstack = gstackFrom(f);
+      const tokens = Object.fromEntries(ARMS.map((a) => {
+        const per = items.map((it) => {
+          const p = buildPrompt(it, a, gstack);
+          return Math.ceil((p.system.length + p.user.length) / 4);
+        });
+        return [a, { mean: Math.round(per.reduce((s, x) => s + x, 0) / Math.max(1, per.length)), max: Math.max(0, ...per) }];
+      }));
+      const armA = items.map((it) => {
+        const p = buildPrompt(it, "a", gstack);
+        return p.system + "\n" + p.user;
+      });
+      json(io, { items: items.length, input_tokens: tokens, arm_a: { items_with_gstack_lines: armA.filter((t) => gstackLines(t, gstack) > 0).length, gstack_lines: armA.reduce((s, t) => s + gstackLines(t, gstack), 0), items_with_gstack_token: armA.filter((t) => /gstack/i.test(t)).length } });
       return 0;
     },
   },
