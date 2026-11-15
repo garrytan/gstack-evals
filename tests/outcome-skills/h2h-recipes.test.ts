@@ -61,9 +61,12 @@ describe("test-command rules", () => {
     expect(testPlan("go", ["README.md"], f)).toEqual({ code: "E_H2H_B_NO_TESTS", rule: "no_go_test_file" });
   });
   test("Go packages, Maven classes and modules, .NET projects", () => {
-    expect(plan(testPlan("go", ["pkg/a_test.go", "b_test.go"], f)).commands.test[0]).toContain("go test -json -count=1 . ./pkg");
+    const g = plan(testPlan("go", ["pkg/a_test.go", "b_test.go"], f)).commands.test[0]!;
+    expect(g).toContain("set -- '.' './pkg';");
+    expect(g).toContain('go test -json -count=1 "$@"');
     const m = plan(testPlan("maven", ["a/src/test/java/x/FooTest.java"], f)).commands.test[0]!;
-    expect(m).toContain("-Dtest=FooTest -pl a test");
+    expect(m).toContain("cls='FooTest'; pl='a';");
+    expect(m).toContain('-Dtest="$cls" $' + '{pl:+-pl "$pl"} test');
     expect(m).toContain("-Dsurefire.rerunFailingTestsCount=0");
     expect(plan(testPlan("dotnet", ["src/Tests/ATest.cs"], f)).commands.test[0]).toContain("dotnet test 'src/A.csproj'");
   });
