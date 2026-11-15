@@ -32,7 +32,7 @@ describe("review_exclude_paths in .gstack/ship-policy.json", () => {
   });
 
   test("matches only .json files directly inside a wiki/plans post in this tree", () => {
-    for (const p of matched(ROOT)) expect([p, inPlansPost(p)]).toEqual([p, true]);
+    expect(matched(ROOT).filter((p) => !inPlansPost(p))).toEqual([]);
   });
 
   test("matches no file outside wiki/plans and no file that is not .json", () => {
