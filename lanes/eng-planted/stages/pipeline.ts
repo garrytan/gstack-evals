@@ -31,7 +31,7 @@ import { FROZEN, SIZE } from "../frozen.ts";
 import type { BuildArm, GradedBuild, PlantedGrader, PlantedUnit, ReviewArm, ReviewRecord, Reviewer, SkillArm } from "../types.ts";
 import { DETECTOR, EB_ARM, isSkillArm, plantedOpening, plantedPrompt, plantedStopHook, SKILL_ARMS, type Opening } from "./arms.ts";
 import { authorCalls, BATCH_1, BATCH_2, drawSets, hintedVerdict, mintSeed, replaceLost, seededOrder, supplyLine, unforeseeable, type AuthorCall, type AuthorMaterial, type Authored, type Candidate, type CallsRecord, type Draw, type HintedVerdict, type Want } from "./author.ts";
-import { buildKey, hasReview, isReviewed, reviewMount, runPlantedBuild, stockMount, writeMount, type PlantedSession } from "./build.ts";
+import { buildKey, hasReview, isReviewed, readMount, reviewMount, runPlantedBuild, stockMount, writeMount, type PlantedSession } from "./build.ts";
 import { runGated, type ItemGate, type Kind } from "./ledger.ts";
 import { readStep, requireSteps, writeStep, type Step } from "./local.ts";
 
@@ -62,9 +62,9 @@ export interface UnitSource {
 /** The construct part's layout: <units>/<id>/ holds ep-unit.json (PlantedUnit), ep-author.json (AuthorMaterial) and
  * ep-note.md beside eb.json; <repos>/<id>/ is B. */
 export function unitFolders(units: string, repos: string): UnitSource {
-  const ids = () => readdirSync(units).filter((d) => existsSync(join(units, d, "ep-unit.json"))).sort();
+  let read: PlantedUnit[] | null = null;
   return {
-    units: () => ids().map((d) => JSON.parse(readFileSync(join(units, d, "ep-unit.json"), "utf8")) as PlantedUnit),
+    units: () => (read ??= readdirSync(units).filter((d) => existsSync(join(units, d, "ep-unit.json"))).sort().map((d) => JSON.parse(readFileSync(join(units, d, "ep-unit.json"), "utf8")) as PlantedUnit)),
     dir: (id) => join(units, id),
     base: (id) => join(repos, id),
     material: (id) => JSON.parse(readFileSync(join(units, id, "ep-author.json"), "utf8")) as AuthorMaterial,
@@ -121,12 +121,17 @@ export function comparisonUnits(run: string): { units: string[]; pilot: string[]
 }
 
 /** The unit with its set and pilot flag from the draw. */
-function drawnUnit(src: UnitSource, run: string, id: string): PlantedUnit {
+/** The unit as the readings take it: its set and pilot flag from the latest draw (a reserve unit that replaced a lost
+ * one serves the comparison), and its two ratings and hinted outcome from authoring. */
+export function drawnUnit(src: UnitSource, run: string, id: string): PlantedUnit {
   const u = src.units().find((x) => x.id === id) ?? fail("E_USAGE", "unit " + id + " is not in the units folder");
   const d2 = batchDraw(run, 2);
   const d = d2 ?? batchDraw(run, 1);
-  const set = d?.calibration.includes(id) ? "calibration" : d?.reserve.includes(id) ? "reserve" : "comparison";
-  return { ...u, set, pilot: (d?.pilot ?? []).includes(id) };
+  const swapped = d2 !== null && d2.reserve.includes(id) && comparisonUnits(run).units.includes(id);
+  const set = d?.calibration.includes(id) ? "calibration" : d?.reserve.includes(id) && !swapped ? "reserve" : "comparison";
+  const calls = readJson<CallsRecord>(join(authorDir(run, id), "calls.json"));
+  const hinted = readJson<HintedVerdict>(join(authorDir(run, id), "hinted.json"));
+  return { ...u, set, pilot: (d?.pilot ?? []).includes(id), foresee: calls?.foresee ?? null, winnable: hinted?.winnable ?? null };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -521,3 +526,70 @@ export async function buildsStage(o: StageIo & { phase: "pilot" | "comparison" |
   }
   return all;
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+// The records the readings read, in run order.
+
+export interface RunRecords {
+  /** Calibration, the comparison after reserve swaps, and the reserve left; the lost units are listed apart. */
+  units: PlantedUnit[];
+  lost: Array<{ id: string; reason: string }>;
+  /** The exposure smoke's sessions in run order. */
+  smoke: ReviewRecord[];
+  /** The comparison item's reviews in run order: the pilot's plain cells, then the comparison's. */
+  reviews: ReviewRecord[];
+  /** Every scored build in run order: authoring's no-review builds, the pilot's, the comparison's, then stock. A reviewed
+   * cell whose review ended in a gap is here as a gap build. */
+  builds: GradedBuild[];
+  /** Authoring's hinted builds, in the seeded order. */
+  hintedBuilds: GradedBuild[];
+  /** Admitted units both raters called no. */
+  unforeseeable: number;
+}
+
+/** Every record the run wrote, in the order its sessions started (each stage's seeded cell order). */
+export function runRecords(run: string, src: UnitSource): RunRecords {
+  const df = readJson<DrawFile>(join(run, "draw.json")) ?? fail("E_USAGE", "no draw in " + run);
+  const d1 = batchDraw(run, 1);
+  const d = batchDraw(run, 2) ?? d1 ?? fail("E_USAGE", "no batch draw in " + run);
+  const lost = readJson<Array<{ id: string; reason: string }>>(join(run, "lost.json")) ?? [];
+  const comparison = batchDraw(run, 2) ? comparisonUnits(run).units : d.comparison;
+  const ids = [...d.calibration, ...comparison, ...d.reserve.filter((r) => !comparison.includes(r))];
+  const recordsIn = (dir: string, cells: Array<{ unit: string; arm: ReviewArm; rep: number }>) => cells.map((c) => readJson<ReviewRecord>(join(dir, "records", reviewKey(c.unit, c.arm, "opus", c.rep) + ".json"))).filter((r): r is ReviewRecord => r !== null);
+  const smokeIds = d1?.calibration ?? [];
+  const smoke = recordsIn(join(run, "reviews", "smoke"), cellOrder(df.seed, smokeIds, smokeIds.flatMap((unit) => SKILL_ARMS.map((arm) => ({ unit, arm, rep: 1 })))));
+  const seen = new Set<string>();
+  const once = <T extends { unit: string; arm: string; rep: number }>(cells: T[]) => cells.filter((c) => !seen.has(c.unit + "/" + c.arm + "/" + c.rep) && seen.add(c.unit + "/" + c.arm + "/" + c.rep));
+  const tryCells = (phase: "pilot" | "comparison") => {
+    try {
+      return reviewCells(run, phase);
+    } catch {
+      return [];
+    }
+  };
+  const reviewOrder = once([...tryCells("pilot"), ...(batchDraw(run, 2) ? tryCells("comparison") : [])]);
+  const reviews = recordsIn(join(run, "reviews", "comparison"), reviewOrder);
+  const builtIn = (dir: string, keys: string[]) => keys.map((k) => loadBuild(dir, k)).filter((b): b is GradedBuild => b !== null);
+  const authoring = join(run, "builds", "authoring", "cells");
+  const builds = [
+    ...builtIn(authoring, ids.map((id) => buildKey(id, "none", null, 1))),
+    ...builtIn(join(run, "builds", "comparison", "cells"), reviewOrder.map((c) => buildKey(c.unit, c.arm, "opus", c.rep))),
+    ...builtIn(join(run, "builds", "stock", "cells"), comparison.map((id) => buildKey(id, "stock", null, 1))),
+  ];
+  const hintedBuilds = builtIn(authoring, df.order.map((c) => buildKey(c.id, "hinted", null, 1)));
+  const authored = authoredMap(run, df.order);
+  return { units: ids.map((id) => drawnUnit(src, run, id)), lost, smoke, reviews, builds, hintedBuilds, unforeseeable: [...authored.values()].filter((a) => a.admitted && a.unforeseeable).length };
+}
+
+/** The judge's bundle for one unit and source: what that builder saw (a review's mount, the stock mount, or the
+ * authored plan alone for none and plan), with the unit's hint. */
+export function bundleInput(run: string, b: { unit: string; source: ReviewArm | "stock" | "none" | "plan"; rep: number | null }): { unit: string; source: ReviewArm | "stock" | "none" | "plan"; files: Array<{ path: string; text: string }>; hint: string } {
+  const dir = authorDir(run, b.unit);
+  const hint = existsSync(join(dir, "hint.txt")) ? readFileSync(join(dir, "hint.txt"), "utf8").trim() : fail("E_USAGE", "unit " + b.unit + " has no hint in " + dir);
+  let files: Array<{ path: string; text: string }>;
+  if (b.source === "none" || b.source === "plan") files = [{ path: "plan.md", text: readFileSync(join(dir, "plan.md"), "utf8") }];
+  else if (b.source === "stock") files = readMount(join(run, "builds", "stock", "mounts", b.unit));
+  else files = readMount(join(run, "reviews", "comparison", "mounts", reviewKey(b.unit, b.source, "opus", b.rep ?? fail("E_USAGE", "a review bundle names its rep"))));
+  return { unit: b.unit, source: b.source, files, hint };
+}
+

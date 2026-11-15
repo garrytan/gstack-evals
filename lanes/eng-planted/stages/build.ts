@@ -106,14 +106,22 @@ const sameOrWrite = (path: string, text: string) => {
 };
 
 /** Writes a mount as <dir>/plan.md and <dir>/review/<file>, the host paths the build mounts at /work/plan.md and
- * /work/review/. A resume reuses identical files and refuses others. */
+ * /work/review/, with <dir>/files.json naming the review files in their fixed order. A resume reuses identical files and
+ * refuses others. */
 export function writeMount(dir: string, m: ReviewMount): { plan: string; review: string } {
   mkdirSync(join(dir, "review"), { recursive: true });
   sameOrWrite(join(dir, "plan.md"), m.plan);
+  sameOrWrite(join(dir, "files.json"), JSON.stringify(m.files.map((f) => f.name)) + "\n");
   const names = new Set(m.files.map((f) => f.name));
   for (const f of readdirSync(join(dir, "review"))) if (!names.has(f)) fail("E_EB_CACHE_STALE", join(dir, "review", f) + " is not part of the assembled mount; rebuild it, then --resume");
   for (const f of m.files) sameOrWrite(join(dir, "review", f.name), f.text);
   return { plan: join(dir, "plan.md"), review: join(dir, "review") };
+}
+
+/** What a builder saw from a written mount, in order: plan.md, then review/<file> in the mount's fixed order. */
+export function readMount(dir: string): Array<{ path: string; text: string }> {
+  const names = JSON.parse(readFileSync(join(dir, "files.json"), "utf8")) as string[];
+  return [{ path: "plan.md", text: readFileSync(join(dir, "plan.md"), "utf8") }, ...names.map((n) => ({ path: "review/" + n, text: readFileSync(join(dir, "review", n), "utf8") }))];
 }
 
 const REVIEW_PATH = /\/work\/review\b|(?:^|[^\w./-])\.\.\/review\b/;

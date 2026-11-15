@@ -30,6 +30,9 @@ export const ALLOWANCE_USD = { review: 10, build: 16, call: 2 } as const;
  * 500-word plan, and at the routes' prices stays under the call allowance. Reasoning effort is the model's default. */
 export const AUTHOR_MAX_TOKENS = 16_000;
 
+/** Section 8 leaves the judge's output budget open too: the same 16,000 tokens at high effort. */
+export const JUDGE_MAX_TOKENS = 16_000;
+
 /**
  * Section 14: the steps a later step needs on record before it starts. Each is <run>/steps/<name>.json holding
  * { step, ok, at, detail }. The stages part writes its own; the readings part writes exposure-gate (with the arms that

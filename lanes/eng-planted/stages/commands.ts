@@ -8,7 +8,7 @@
 // calls, eng-build's review launcher with both skill arms at the restore pin, and eng-build's build launcher with each
 // cell's mounts; the dry run and the tests pass stub launchers on a temporary ledger.
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { EbError } from "../../eng-build/errors.ts";
@@ -22,12 +22,15 @@ import { EpError, fail, notBuilt } from "../errors.ts";
 import { FROZEN, SIZE } from "../frozen.ts";
 import type { Command, PlantedGrader, ReviewArm } from "../types.ts";
 import { armCheckoutProblems, EB_ARM, plainArmProblems, plantedArmSpec, SKILL_ARMS, skillPin } from "./arms.ts";
+import { judgeAll, ROLE_MODEL, type JudgeCall, type JudgeRole } from "../readings/judge.ts";
+import { JUDGE_MODELS } from "../readings/local.ts";
 import type { AuthorCall } from "./author.ts";
 import { ebSession, type MountTable, type PlantedSession } from "./build.ts";
 import { allInProjection, checkAllIn, ITEMS, itemOf, ItemGate, runSteps, type AllIn, type Kind } from "./ledger.ts";
-import { ALLOWANCE_USD, AUTHOR_MAX_TOKENS, AUTHOR_MODELS, EP_PROGRAM, EP_RUN, EP_SKILL, readStep, type AuthorRole } from "./local.ts";
+import { ALLOWANCE_USD, AUTHOR_MAX_TOKENS, AUTHOR_MODELS, EP_PROGRAM, EP_RUN, EP_SKILL, JUDGE_MAX_TOKENS, readStep, type AuthorRole } from "./local.ts";
 import { PIN_COMMAND } from "./pin.ts";
-import { authorStep, batchDraw, buildCells, buildsStage, comparisonPlanned, comparisonUnits, drawFile, gateArms, hintedTodo, reviewsStage, smokeStage, unitFolders, type AuthorStep, type UnitSource } from "./pipeline.ts";
+import { authorStep, batchDraw, buildCells, buildsStage, bundleInput, comparisonPlanned, comparisonUnits, drawFile, gateArms, hintedTodo, reviewsStage, runRecords, smokeStage, unitFolders, type AuthorStep, type UnitSource } from "./pipeline.ts";
+import { bundleSet } from "../readings/judge.ts";
 
 export { CASES as DRY_CASES } from "./cases.ts";
 
@@ -46,7 +49,7 @@ const logTo = (io: Io) => (l: string) => (/^E_[A-Z_]+ /.test(l) ? io.err : io.ou
 // Paid flags and the item gate.
 
 /** The items each paid command may spend from. */
-export const STAGE_ITEMS = { author: ["ep-authoring"], smoke: ["ep-smoke"], reviews: ["ep-comparison"], builds: ["ep-comparison", "ep-stock"] } as const;
+export const STAGE_ITEMS = { author: ["ep-authoring"], smoke: ["ep-smoke"], reviews: ["ep-comparison"], builds: ["ep-comparison", "ep-stock"], judge: ["ep-judge"] } as const;
 export const PAID = "--item <item> --cap-usd <usd> --ledger-record <dir> --ledger <file> --crew-usd <usd> --hosts-usd <usd>";
 
 export interface PlantedPaid extends Paid {
@@ -87,22 +90,64 @@ async function paidStage<B, T>(p: PlantedPaid, launch: Launcher<B>, body: (backe
 // ---------------------------------------------------------------------------------------------------------------------
 // Seams: the real launchers.
 
+/** A model call by role through the meter, with what it cost. */
+export type Metered<R extends string> = (role: R, prompt: string) => Promise<{ text: string; costUsd: number }>;
+
 /** The meter route each authoring role calls; null where the product-value meter has no route yet. */
 export const AUTHOR_ROUTES: Readonly<Record<AuthorRole, ModelKey | null>> = { writer: "sol", audit: "opus", hint: "sol", hintAudit: "opus", raterCarbon: null, raterOpus: "opus" };
+/** The meter route each judge role calls (readings/judge.ts ROLE_MODEL); Gemini 4 Carbon has none yet. */
+export const JUDGE_ROUTES: Readonly<Record<JudgeRole, ModelKey | null>> = { judge: "astra", "gold-opus": "opus", "gold-gemini": null };
 
-/** Why an authoring role cannot call its model through the meter, one line each. */
-export function authorRouteProblems(routes: Readonly<Record<AuthorRole, ModelKey | null>> = AUTHOR_ROUTES): string[] {
-  return (Object.keys(AUTHOR_MODELS) as AuthorRole[]).flatMap((role) => {
+/** Why a role cannot call its model through the meter, one line each. */
+export function routeProblems<R extends string>(models: Readonly<Record<R, string>>, routes: Readonly<Record<R, ModelKey | null>>, roles: readonly R[] = Object.keys(models) as R[]): string[] {
+  return roles.flatMap((role) => {
     const k = routes[role];
-    if (k === null) return [role + ": the product-value meter has no route for " + AUTHOR_MODELS[role]];
+    if (k === null) return [role + ": the product-value meter has no route for " + models[role]];
     const m = MODELS[k];
     const id = (m.provider === "anthropic" ? "anthropic/" : m.provider === "openai" ? "openai/" : "") + m.id;
-    return id === AUTHOR_MODELS[role] ? [] : [role + ": meter route " + k + " calls " + id + ", not " + AUTHOR_MODELS[role]];
+    return id === models[role] ? [] : [role + ": meter route " + k + " calls " + id + ", not " + models[role]];
   });
+}
+export const authorRouteProblems = (routes: Readonly<Record<AuthorRole, ModelKey | null>> = AUTHOR_ROUTES): string[] => routeProblems(AUTHOR_MODELS, routes);
+const CARBON_FIX = "add a carbon ModelKey (google/gemini-4-carbon on OpenRouter, pinned to Google) to lanes/product-value/meter.ts, its price row to src/runner/pricing/prices.ts, and its route here";
+
+/** A meter launcher for one set of role routes: it refuses before any lease opens when a role it will call has no
+ * route, and counts a call whose cost the meter could not read at the call allowance, so the gate never undercounts. */
+function meterLauncher<R extends string>(o: { out: string; cacheDir: string; maxTokens: number; effort: string | null; label: string; models: Readonly<Record<R, string>>; routes: Readonly<Record<R, ModelKey | null>>; roles: readonly R[] }): Launcher<Metered<R>> {
+  return async (p) => {
+    const problems = routeProblems(o.models, o.routes, o.roles);
+    if (problems.length) return fail("E_EP_NOT_BUILT", "the " + o.label + " routes are not all built, so no lease opened:\n" + problems.join("\n") + "\n" + CARBON_FIX);
+    const meter = await openMeter({ item: p.item, runId: EP_RUN, out: o.out, cacheDir: o.cacheDir, maxOutputTokens: o.maxTokens, amountMicros: Math.round(p.capUsd * 1_000_000), record: p.record, ledger: p.ledger });
+    const call: Metered<R> = async (role, prompt) => {
+      if (!o.roles.includes(role)) return fail("E_USAGE", "this launch did not check the route for " + role);
+      const r = await meter.call({ model: o.routes[role]!, prompt, maxTokens: o.maxTokens, effort: o.effort, label: o.label + ":" + role });
+      if (r.status !== 200 || r.text === null) return fail("E_USAGE", "the " + o.label + " " + role + " call ended " + r.status + (r.problem ? " (" + r.problem + ")" : "") + "; rerun the step, which reuses the meter's cached replies");
+      return { text: r.text, costUsd: r.cached ? 0 : r.micros === null ? ALLOWANCE_USD.call : r.micros / 1_000_000 };
+    };
+    return { lease_id: meter.leaseId, backend: call, close: async () => void (await meter.close()) };
+  };
+}
+
+/** A judge call that waits for the judge item's gate and settles its cost there. */
+export function gatedJudge(gate: ItemGate, call: Metered<JudgeRole>): JudgeCall {
+  return async (role, prompt) => {
+    await gate.acquire("call");
+    let r: { text: string; costUsd: number };
+    try {
+      r = await call(role, prompt);
+    } catch (e) {
+      gate.abort();
+      throw e;
+    }
+    gate.settle("call", r.costUsd, role);
+    return r.text;
+  };
 }
 
 export interface Seams {
   author(o: { out: string; cacheDir: string }): Launcher<AuthorCall>;
+  /** The judged secondary's calls (readings/judge.ts): GPT-6 Astra and the two gold labellers, at JUDGE_MODELS.effort. */
+  judge(o: { out: string; cacheDir: string; roles: JudgeRole[] }): Launcher<Metered<JudgeRole>>;
   /** pin is null when no skill arm runs (the pilot). */
   review(o: { out: string; arms: ReviewArm[]; pin: DigestPin | null; policy?: string; log: (l: string) => void }): Launcher<ReviewSession>;
   build(o: { out: string; src: UnitSource; units: string; repos: string; ids: string[]; reviewed: boolean; planned: number; a: Args }): Launcher<PlantedSession>;
@@ -113,17 +158,8 @@ export interface Seams {
 export const GRADER_MODULE = join(import.meta.dir, "..", "construct", "grader.ts");
 
 export const REAL: Seams = {
-  author: (o) => async (p) => {
-    const problems = authorRouteProblems();
-    if (problems.length) return fail("E_EP_NOT_BUILT", "the authoring routes are not all built, so no lease opened:\n" + problems.join("\n") + "\nadd a carbon ModelKey (google/gemini-4-carbon on OpenRouter, pinned to Google) to lanes/product-value/meter.ts, its price row to src/runner/pricing/prices.ts, and its route to AUTHOR_ROUTES");
-    const meter = await openMeter({ item: p.item, runId: EP_RUN, out: o.out, cacheDir: o.cacheDir, maxOutputTokens: AUTHOR_MAX_TOKENS, amountMicros: Math.round(p.capUsd * 1_000_000), record: p.record, ledger: p.ledger });
-    const call: AuthorCall = async (role, prompt) => {
-      const r = await meter.call({ model: AUTHOR_ROUTES[role]!, prompt, maxTokens: AUTHOR_MAX_TOKENS, effort: null, label: "ep-author:" + role });
-      if (r.status !== 200 || r.text === null) return fail("E_USAGE", "the authoring " + role + " call ended " + r.status + (r.problem ? " (" + r.problem + ")" : "") + "; rerun the calls step, which skips units already authored");
-      return { text: r.text, costUsd: r.cached ? 0 : r.micros === null ? ALLOWANCE_USD.call : r.micros / 1_000_000 };
-    };
-    return { lease_id: meter.leaseId, backend: call, close: async () => void (await meter.close()) };
-  },
+  author: (o) => meterLauncher({ ...o, maxTokens: AUTHOR_MAX_TOKENS, effort: null, label: "ep-author", models: AUTHOR_MODELS, routes: AUTHOR_ROUTES, roles: Object.keys(AUTHOR_MODELS) as AuthorRole[] }),
+  judge: (o) => meterLauncher({ out: o.out, cacheDir: o.cacheDir, maxTokens: JUDGE_MAX_TOKENS, effort: JUDGE_MODELS.effort, label: "ep-judge", models: ROLE_MODEL, routes: JUDGE_ROUTES, roles: o.roles }),
   review: (o) => reviewLauncher({ arms: o.arms.map((a) => EB_ARM[a]), reviewer: "opus", out: o.out, env: process.env, log: o.log, ...(o.pin ? { pins: { precut: o.pin, engphase: o.pin } } : {}), runId: EP_RUN, ...(o.policy ? { policy: o.policy } : {}) }),
   build: (o) => {
     const table: MountTable = new Map();
@@ -289,6 +325,31 @@ export function stagesCommands(seams: Seams = REAL): Record<string, Command> {
     return 0;
   };
 
+  const records: Command["run"] = (a, io) => {
+    const run = runDir(a);
+    const r = runRecords(run, source(a));
+    writeFileSync(need(a, "--out"), JSON.stringify(r, null, 1) + "\n");
+    io.out("records: " + r.units.length + " units, " + r.smoke.length + " smoke sessions, " + r.reviews.length + " reviews, " + r.builds.length + " builds, " + r.hintedBuilds.length + " hinted builds, in run order");
+    return 0;
+  };
+
+  const judge: Command["run"] = async (a, io) => {
+    const run = runDir(a);
+    const role = need(a, "--role") as JudgeRole;
+    if (!(role in ROLE_MODEL)) fail("E_USAGE", "--role is " + Object.keys(ROLE_MODEL).join(", "));
+    const r = runRecords(run, source(a));
+    const picked = a.flags.has("--bundles") ? (JSON.parse(readFileSync(a.flags.get("--bundles")!, "utf8")) as ReturnType<typeof bundleSet>) : bundleSet(r.units.filter((u) => u.set === "comparison"), r.reviews);
+    const inputs = picked.map((b) => bundleInput(run, b));
+    const p = plantedPaid("judge", a, run);
+    const gate = itemGate(p, run);
+    const results = await paidStage(p, seams.judge({ out: join(run, "judge", "meter"), cacheDir: need(a, "--cache"), roles: [role] }), (call) => judgeAll(inputs, gatedJudge(gate, call), role));
+    const out = join(run, "judge", role + ".json");
+    mkdirSync(join(run, "judge"), { recursive: true });
+    writeFileSync(out, JSON.stringify(results, null, 1) + "\n");
+    io.out("judge " + role + ": " + results.length + " bundles, " + results.filter((x) => x.named).length + " name the planted condition, " + results.filter((x) => x.error).length + " with an error; " + out);
+    return 0;
+  };
+
   const preflight: Command["run"] = (a, io) => {
     const rows = preflightRows({ run: need(a, "--run"), units: need(a, "--units"), repos: need(a, "--repos"), gstack: need(a, "--gstack"), record: need(a, "--ledger-record"), harbor: a.flags.get("--harbor") ?? "harbor", docker: a.flags.get("--docker") ?? "docker" });
     for (const r of rows) (r.ok ? io.out : io.err)((r.ok ? "ok   " : "FAIL ") + r.name + ": " + r.detail);
@@ -303,6 +364,8 @@ export function stagesCommands(seams: Seams = REAL): Record<string, Command> {
     smoke: { run: ep(smoke), bools: [], usage: RUN + " --gstack <checkout at the pin> [--parallel n] [--policy <file>] " + PAID, summary: "the exposure smoke: one Opus session per skill arm on each calibration unit (paid: ep-smoke)" },
     reviews: { run: ep(reviews), bools: [], usage: RUN + " --phase pilot|comparison [--gstack <checkout at the pin>] [--parallel n] [--policy <file>] " + PAID, summary: "the pilot's plain reviews or the comparison reviews, with the interim exposure stop (paid: ep-comparison)" },
     builds: { run: ep(builds), bools: [], usage: RUN + " --phase pilot|comparison|stock " + BUILD + " [--parallel n] " + PAID, summary: "the reviewed builds of a phase, or the stock control's (paid: ep-comparison, ep-stock)" },
+    records: { run: ep(records), bools: [], usage: RUN + " --out <json>", summary: "every unit, review and build record of the run, in run order, as the readings read them" },
+    judge: { run: ep(judge), bools: [], usage: RUN + " --role judge|gold-opus|gold-gemini [--bundles <json of {unit, source, rep}>] --cache <dir> " + PAID, summary: "the judged secondary's calls over the bundle set, or over the gold set given (paid: ep-judge)" },
     lost: { run: ep(lost), bools: [], usage: "--run <dir> --unit <id> --reason <text>", summary: "record a comparison unit lost to infrastructure; the next reserve unit in seeded order replaces it" },
   };
 }
