@@ -18,17 +18,19 @@ describe("body check", () => {
     expect(needles[0].text).toBe("const total = items.reduce((a, b) => a + b, 0);");
   });
 
-  test("a run of 3 laid out as in the body drops, re-indented or not", () => {
+  test("a body with 3 or more contiguous removed lines copied outside the region drops, re-indented or not", () => {
     const copy = "function other(items) {\n" + body.map((l) => "    " + l).join("\n") + "\n}\n";
-    expect(judge(needles, scanTexts(needles, [{ path: "lib/b.js", text: copy }])).run).toBe(true);
+    const r = judge(needles, scanTexts(needles, [{ path: "lib/b.js", text: copy }]));
+    expect(r.run).toBe(true);
+    expect(r.passes).toBe(false);
   });
 
-  test("the same lines scattered are a share, not a run, and a share above 10% drops", () => {
-    const scattered = body[0] + "\nx\n\ny\n" + body[2] + "\n";
-    const r = judge(needles, scanTexts(needles, [{ path: "lib/b.js", text: scattered }]));
+  test("shared boilerplate lines of 20 or more characters that form no 3-line run pass, however many match", () => {
+    const scattered = body[0] + "\nx\n\ny\n" + body[2] + "\n\nz\n" + body[3] + "\n";
+    const r = judge(needles, scanTexts(needles, [{ path: "lib/b.js", text: scattered }, { path: "lib/c.js", text: body[3] + "\n" + body[0] + "\n" }]));
     expect(r.run).toBe(false);
-    expect(r.found).toBe(2);
-    expect(r.passes).toBe(false);
+    expect(r.found).toBe(3);
+    expect(r.passes).toBe(true);
     expect(judge(needles, scanTexts(needles, [{ path: "lib/b.js", text: "nothing here\n" }])).passes).toBe(true);
   });
 

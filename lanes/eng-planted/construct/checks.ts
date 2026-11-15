@@ -40,7 +40,7 @@ export interface BodyResult {
 }
 
 /** The rule over hits for one stubbed file's needles: a run of runLines needles found on lines spaced as in the body (or
- * all on one line, as in a source map or minified file), or a found share above maxShare. */
+ * all on one line, as in a source map or minified file). Lines found apart from such a run are counted, never dropped. */
 export function judge(needles: Needle[], hits: Hits): BodyResult {
   const k = FROZEN.bodyCheck.runLines;
   const found = new Set<number>();
@@ -56,8 +56,7 @@ export function judge(needles: Needle[], hits: Hits): BodyResult {
       }
     }
   }
-  const share = needles.length ? found.size / needles.length : 0;
-  return { needles: needles.length, found: found.size, run, passes: !run && share <= FROZEN.bodyCheck.maxShare };
+  return { needles: needles.length, found: found.size, run, passes: !run };
 }
 
 const add = (hits: Hits, file: string, i: number, line: number) => {

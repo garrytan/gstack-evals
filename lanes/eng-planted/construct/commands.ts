@@ -1,17 +1,18 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
-// gstack-evals ep subcommands from the construct part: search, mine, construct, screen, recount and supply, over one run
+// gstack-evals ep subcommands from the construct part: search, mine, construct, screen, recount, supply and units, over one run
 // directory on the screening host (plan section 14, step 2). The run directory holds the frozen manifest and its digest,
 // each repository's mined fixes, the constructed units and every fix's outcome; it holds real repository names and
 // shas, so it stays on that host and is never committed. Every command prints counts only. The lane's cli.ts merges
 // every part's table.
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { removeLabelled } from "../../eng-build/screen.ts";
 import { docker } from "../../real-outcome/task/docker.ts";
 import { fail } from "../errors.ts";
 import type { Command, DryCase, Ecosystem } from "../types.ts";
 import { construct, type Constructed } from "./build.ts";
 import { DRY } from "./dry.ts";
+import { emitUnit, type LabelMap } from "./emit.ts";
 import { qualify, recount, requireSandbox, type Outcome } from "./grade.ts";
 import { FROZEN } from "../frozen.ts";
 import { digest, starStratum, type Manifest, type MinedFix } from "./local.ts";
@@ -26,6 +27,8 @@ const store = (run: string) => ({
   seed: join(run, "seed.txt"),
   manifest: join(run, "manifest.json"),
   digest: join(run, "manifest.digest"),
+  pool: join(run, "pool.json"),
+  poolDigest: join(run, "pool.digest"),
   mirror: (i: number) => join(run, "mirrors", String(i)),
   mined: (i: number) => join(run, "mined", i + ".json"),
   constructed: (id: string) => join(run, "constructed", id + ".json"),
@@ -65,14 +68,29 @@ const allMined = (run: string): Mined[] =>
     : [];
 
 const searchCmd: Command = {
-  summary: "search GitHub per ecosystem, draw in a seeded order and freeze the manifest",
-  usage: "--run <dir> --per-eco <n> [--pages <n>]",
+  summary: "search GitHub per ecosystem, draw in a seeded order and freeze the manifest; --extend draws the next repositories of an earlier run's pool",
+  usage: "--run <dir> --per-eco <n> [--pages <n>] [--extend <earlier run dir>]",
   bools: [],
   async run({ flags }, io) {
     const run = need(flags, "--run");
     const s = store(run);
     if (existsSync(s.manifest)) fail("E_USAGE", "the run already holds a frozen manifest");
     mkdirSync(run, { recursive: true });
+    const from = flags.get("--extend");
+    if (from) {
+      const first = frozenManifest(from);
+      const t = store(from);
+      const poolText = readFileSync(t.pool, "utf8");
+      if (digest(poolText) !== readFileSync(t.poolDigest, "utf8").trim()) fail("E_USAGE", "the earlier run's pool no longer matches its frozen digest");
+      const taken = new Set(first.rows.map((r) => r.repo));
+      const perEco = Math.max(...ECOS.map((e) => first.rows.filter((r) => r.eco === e).length)) + Number(need(flags, "--per-eco"));
+      const m: Manifest = { searchedAt: first.searchedAt, seed: first.seed, queries: first.queries, rows: draw(JSON.parse(poolText), first.seed, perEco).filter((r) => !taken.has(r.repo)) };
+      const f = freeze(m);
+      writeFileSync(s.manifest, f.text, { mode: 0o600 });
+      writeFileSync(s.digest, f.digest + "\n");
+      io.out("search: extension of " + taken.size + " repositories by " + m.rows.length + " in the same seeded order (" + ECOS.map((e) => e + " " + m.rows.filter((r) => r.eco === e).length).join(", ") + "), frozen as " + f.digest);
+      return 0;
+    }
     const seed = mintSeed();
     writeFileSync(s.seed, seed + "\n", { mode: 0o600 });
     const github = githubReader();
@@ -84,6 +102,9 @@ const searchCmd: Command = {
       rows.push(...r.rows.map((x) => ({ ...x, query: x.query + queries.length })));
       queries.push(...r.queries);
     }
+    const poolText = JSON.stringify(rows) + "\n";
+    writeFileSync(s.pool, poolText, { mode: 0o600 });
+    writeFileSync(s.poolDigest, digest(poolText) + "\n");
     const m: Manifest = { searchedAt, seed, queries, rows: draw(rows, seed, Number(need(flags, "--per-eco"))) };
     const f = freeze(m);
     writeFileSync(s.manifest, f.text, { mode: 0o600 });
@@ -213,7 +234,34 @@ const supplyCmd: Command = {
   },
 };
 
-export const COMMANDS: Record<string, Command> = { search: searchCmd, mine: mineCmd, construct: constructCmd, screen: screenCmd, recount: recountCmd, supply: supplyCmd };
+const REPO = resolve(import.meta.dir, "..", "..", "..");
+
+const unitsCmd: Command = {
+  summary: "write every clean unit in the stages contract, with its B tree, and keep the label map in custody",
+  usage: "--run <dir> --units <dir> --repos <dir> --labels <custody file outside the repository>",
+  bools: [],
+  async run({ flags }, io) {
+    const run = need(flags, "--run");
+    const file = resolve(need(flags, "--labels"));
+    if (!relative(REPO, file).startsWith("..")) fail("E_USAGE", "the label map is held out: keep it outside the repository");
+    frozenManifest(run);
+    const s = store(run);
+    const labels: LabelMap = existsSync(file) ? readJson<LabelMap>(file) : { repos: {}, units: {} };
+    const done = new Set(Object.values(labels.units).map((u) => u.candidate));
+    let n = 0;
+    for (const r of allMined(run))
+      for (const f of r.fixes) {
+        if (done.has(f.id) || !existsSync(s.outcome(f.id)) || readJson<Outcome>(s.outcome(f.id)).step !== "clean") continue;
+        emitUnit({ mirror: r.mirror, fix: f, unit: readJson<Constructed>(s.constructed(f.id)), unitDir: s.unit(f.id), units: need(flags, "--units"), repos: need(flags, "--repos"), labels });
+        writeJson(file, labels);
+        n++;
+      }
+    io.out("units: " + n + " written this pass, " + Object.keys(labels.units).length + " in the label map from " + Object.keys(labels.repos).length + " repositories");
+    return 0;
+  },
+};
+
+export const COMMANDS: Record<string, Command> = { search: searchCmd, mine: mineCmd, construct: constructCmd, screen: screenCmd, recount: recountCmd, supply: supplyCmd, units: unitsCmd };
 
 /** This part's keyless dry-run cases; lanes/eng-planted/dryrun.ts runs every part's. */
 export const DRY_CASES: DryCase[] = DRY;
