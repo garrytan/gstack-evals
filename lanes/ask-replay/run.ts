@@ -34,26 +34,39 @@ import type { Arm, AskItem, MissingKind, ModelKey, Sample, SampleRecord } from "
 
 export const sampleId = (item: string, arm: Arm, model: ModelKey, replicate: number): string => item + "." + arm + "." + model + "." + replicate;
 
-/** One model's samples: items by id, and within each item its arms and replicates in seeded random order. */
-export function schedule(items: readonly Pick<AskItem, "item">[], model: ModelKey, k: number, seed: number, arms: readonly Arm[] = FROZEN.models[model].arms): Sample[] {
+/** One model's samples: items by id; within each item its arm cells in seeded random order, each cell's replicates in sequence. k is one count for every arm or a count per arm (the pilot's). */
+export function schedule(items: readonly Pick<AskItem, "item">[], model: ModelKey, k: number | Partial<Record<Arm, number>>, seed: number, arms: readonly Arm[] = FROZEN.models[model].arms): Sample[] {
   const rng = seededRandom(seed);
+  const reps = (arm: Arm) => (typeof k === "number" ? k : k[arm] ?? 0);
   const out: Sample[] = [];
   for (const it of [...items].sort((a, b) => (a.item < b.item ? -1 : a.item > b.item ? 1 : 0))) {
-    const cell = arms.flatMap((arm) => Array.from({ length: k }, (_, r) => ({ id: sampleId(it.item, arm, model, r + 1), item: it.item, arm, model, replicate: r + 1 })));
-    for (let i = cell.length - 1; i > 0; i--) {
+    const order = arms.filter((a) => reps(a) > 0);
+    for (let i = order.length - 1; i > 0; i--) {
       const j = Math.floor(rng() * (i + 1));
-      [cell[i], cell[j]] = [cell[j]!, cell[i]!];
+      [order[i], order[j]] = [order[j]!, order[i]!];
     }
-    out.push(...cell);
+    for (const arm of order) for (let r = 1; r <= reps(arm); r++) out.push({ id: sampleId(it.item, arm, model, r), item: it.item, arm, model, replicate: r });
   }
   return out;
 }
 
-/** The request body for one sample, on the model's provider route, with the cached system prefix and JSON schema mode where frozen.json sets it. */
+/** Samples grouped by cell (item, arm, model) in schedule order. A cell's replicates run one after another, so replicate 2 reads the prompt replicate 1 cached; cells run in parallel. */
+export function cells(samples: readonly Sample[]): Sample[][] {
+  const by = new Map<string, Sample[]>();
+  for (const s of samples) {
+    const key = s.item + "." + s.arm + "." + s.model;
+    const c = by.get(key);
+    if (c) c.push(s);
+    else by.set(key, [s]);
+  }
+  return [...by.values()].map((c) => c.sort((a, b) => a.replicate - b.replicate));
+}
+
+/** The request body for one sample, on the model's provider route, with JSON schema mode where frozen.json sets it. On Anthropic both the system prefix and the user content end in a cache breakpoint (frozen.json caching). */
 export function requestBody(model: ModelKey, p: BuiltPrompt, arm: Arm, maxTokens: number): Record<string, unknown> {
   const m = FROZEN.models[model];
   const schema = replySchema(arm);
-  if (m.provider === "anthropic") return { model: m.id, max_tokens: maxTokens, system: [{ type: "text", text: p.system, cache_control: { type: "ephemeral" } }], messages: [{ role: "user", content: p.user }], output_config: { effort: m.reasoning_effort, ...(m.json_schema ? { format: { type: "json_schema", schema } } : {}) } };
+  if (m.provider === "anthropic") return { model: m.id, max_tokens: maxTokens, system: [{ type: "text", text: p.system, cache_control: { type: "ephemeral" } }], messages: [{ role: "user", content: [{ type: "text", text: p.user, cache_control: { type: "ephemeral" } }] }], output_config: { effort: m.reasoning_effort, ...(m.json_schema ? { format: { type: "json_schema", schema } } : {}) } };
   if (m.provider === "openai") return { model: m.id, input: [{ role: "system", content: p.system }, { role: "user", content: p.user }], max_output_tokens: maxTokens, store: false, reasoning: { effort: m.reasoning_effort }, ...(m.json_schema ? { text: { format: { type: "json_schema", name: "ask_reply", schema, strict: true } } } : {}) };
   return { model: m.id, max_tokens: maxTokens, messages: [{ role: "system", content: p.system }, { role: "user", content: p.user }], reasoning: { effort: m.reasoning_effort }, ...(m.json_schema ? { response_format: { type: "json_schema", json_schema: { name: "ask_reply", strict: true, schema } } } : {}) };
 }
@@ -186,7 +199,7 @@ export async function runShard(o: ShardOptions): Promise<ShardResult> {
   const stopAfter = o.stopAfterMs ?? FROZEN.shards.stop_launching_after_minutes * 60000;
   const open = journaled(join(o.out, "calls.ndjson"));
   const res: ShardResult = { ran: 0, skipped: 0, left: 0, redrawn: {}, lost_twice: 0, stopped: null, missing: { parse: 0, safety: 0, upstream: 0 }, capped: 0 };
-  const jobs = o.samples.map((s) => async () => {
+  const step = async (s: Sample) => {
     if (o.store.has(s.id)) return void res.skipped++;
     if (res.stopped || now() - start >= stopAfter) {
       res.stopped ??= "time";
@@ -223,6 +236,9 @@ export async function runShard(o: ShardOptions): Promise<ShardResult> {
       }
       throw e;
     }
+  };
+  const jobs = cells(o.samples).map((cell) => async () => {
+    for (const s of cell) await step(s);
   });
   await pool(o.concurrency ?? FROZEN.shards.concurrency, jobs);
   return res;
@@ -238,10 +254,12 @@ export async function upstreamRedraw(o: ShardOptions): Promise<{ redrawn: number
   }
   const todo = o.samples.filter((s) => last.get(s.id) === "upstream" && !o.store.has(s.id + "~u"));
   let still = 0;
-  await pool(o.concurrency ?? FROZEN.shards.concurrency, todo.map((s) => async () => {
-    const r = await runSample(o, s, UPSTREAM_DRAW, true);
-    if (r.missing === "upstream") still++;
-    seal(o, s.id + "~u", r);
+  await pool(o.concurrency ?? FROZEN.shards.concurrency, cells(todo).map((cell) => async () => {
+    for (const s of cell) {
+      const r = await runSample(o, s, UPSTREAM_DRAW, true);
+      if (r.missing === "upstream") still++;
+      seal(o, s.id + "~u", r);
+    }
   }));
   return { redrawn: todo.length, still_upstream: still };
 }

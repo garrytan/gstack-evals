@@ -203,7 +203,7 @@ export function rawSet(seed = FROZEN.synthetic.seed): Raw {
     };
     const ownerAnswer = (topic: Topic | null, text?: string) => {
       step(20, 420);
-      say(text ?? pick(["Go with your pick.", "Do it.", "Yes, " + topic!.a + ".", "Let's " + topic!.b + " instead; I want to see how that does first.", "Fine by me, " + topic!.a + "."]), "owner", null);
+      say(text ?? pick(["Go with your pick.", "Go ahead.", "Yes, " + topic!.a + ".", "Let's " + topic!.b + " instead; I want to see how that does first.", "Fine by me, " + topic!.a + "."]), "owner", null);
       for (const x of asked) x.answered = true;
     };
     for (const unit of order) {
@@ -216,9 +216,9 @@ export function rawSet(seed = FROZEN.synthetic.seed): Raw {
           const { project: pj, topic } = topics[nextTopic++]!;
           const multi = rng() < 0.2 ? MINOR[minorNext++ % MINOR.length]! : null;
           const text = multi
-            ? [FIRST + ":", "", "A. " + pj + ", " + topic.ask + "? I recommend we " + topic.a + ": " + topic.why + ".", "B. Same release, " + multi.ask + "? I recommend we " + multi.a + ": " + multi.why + ".", "", 'Reply "do it" to take both.'].join("\n")
+            ? [FIRST + ":", "", "A. " + pj + ", " + topic.ask + "? I recommend we " + topic.a + ": " + topic.why + ".", "B. Same release, " + multi.ask + "? I recommend we " + multi.a + ": " + multi.why + ".", "", "Answer A and B one at a time if you want different calls."].join("\n")
             : pick([
-                pj + " needs one call from you: " + topic.ask + "? My pick is to " + topic.a + ", since " + topic.why + '. Reply "do it" to take it, or tell me to ' + topic.b + ".",
+                pj + " needs one call from you: " + topic.ask + "? My pick is to " + topic.a + ", since " + topic.why + ". Should I go ahead with that, or would you rather I " + topic.b + "?",
                 "TL;DR: one decision on " + pj + ".\n\n" + topic.ask[0]!.toUpperCase() + topic.ask.slice(1) + "? I recommend we " + topic.a + ": " + topic.why + ". The other way is to " + topic.b + ".",
                 FIRST + ":\n\nA. " + pj + ", " + topic.ask + "? I recommend we " + topic.a + "; " + topic.why + ".",
               ]);

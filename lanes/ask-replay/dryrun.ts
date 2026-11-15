@@ -20,7 +20,8 @@ import { ledgerRows, sendCheck } from "./ledger.ts";
 import { classify, parseReply } from "./parse.ts";
 import { itemTexts, scanPublic, redact, emptyCount } from "./privacy.ts";
 import { buildPrompt, CAPABILITY, gstackLines, HARNESS, LEDGER_ADDENDUM, loadGstack, ORDER, type GstackText } from "./prompt.ts";
-import { finalRecords, ledgerClient, runShard, schedule, upstreamRedraw, type ShardOptions } from "./run.ts";
+import { finalRecords, ledgerClient, runShard, sampleId, schedule, upstreamRedraw, type CallKey, type ShardOptions } from "./run.ts";
+import { auditDraw, drawCounts, pilotDraw } from "./draws.ts";
 import { decide, readout, sampleScore } from "./score.ts";
 import { admitChance, halfWidth, mdd } from "./stats.ts";
 import { generate } from "./synthetic/generator.ts";
@@ -103,6 +104,42 @@ async function scriptedRun(items: AskItem[]): Promise<string | true> {
     const bad = want.filter(([, ok]) => !ok).map(([n]) => n);
     if (close.spent_micros <= 0) bad.push("the lease settled with no spend");
     return bad.length ? bad.join("; ") : true;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+/** Replicates in sequence: at full concurrency on a temporary ledger, replicate 2 of a cell starts only after replicate 1 is sealed (an UPSTREAM MISSING included), cells run in parallel, and every Anthropic body ends its system prefix and its user content in a cache breakpoint. */
+async function replicateOrder(items: AskItem[]): Promise<string | true> {
+  const dir = mkdtempSync(join(tmpdir(), "ask-dry-order-"));
+  try {
+    const byId = new Map(items.map((i) => [i.item, i]));
+    const events: string[] = [];
+    const bodies: Array<Record<string, any>> = [];
+    let live = 0;
+    let peak = 0;
+    const base = stubSend((s) => (s.arm === "b" && s.replicate === 1 ? { raw: "upstream" } : { action: "SEND", repeats: "new" }));
+    const send = async (s: Sample, key: CallKey, body: Record<string, unknown>) => {
+      events.push("start " + s.id);
+      bodies.push(body);
+      peak = Math.max(peak, ++live);
+      await new Promise((r) => setTimeout(r, 1 + ((s.replicate * 7 + s.arm.charCodeAt(0)) % 5)));
+      live--;
+      return base(s, key);
+    };
+    const { local, leaseId, record } = lease(dir, FROZEN.spend_items.I6!);
+    const samples = schedule(items.slice(0, 6), "opus", FROZEN.replicates.k, 11);
+    const plain = plainStore(join(dir, "replies"));
+    const store = { has: (id: string) => plain.has(id), write: (id: string, r: SampleRecord) => (events.push("seal " + id), plain.write(id, r)) };
+    await runShard({ items: byId, samples, gstack: FIXTURE_GSTACK, client: ledgerClient({ local, leaseId, runId: FROZEN.spend_items.I6!, maxOutputTokens: FROZEN.output_cap.tokens, send }), store, out: join(dir, "out"), maxOutputTokens: FROZEN.output_cap.tokens, sleep: async () => {}, concurrency: FROZEN.shards.concurrency });
+    settleLease(record, local, leaseId);
+    local.close();
+    const late = samples.filter((s) => s.replicate > 1 && events.indexOf("start " + s.id) < events.indexOf("seal " + sampleId(s.item, s.arm, s.model, s.replicate - 1)));
+    if (late.length) return late.length + " replicates started before the replicate before them was sealed";
+    if (!samples.some((s) => s.replicate > 1)) return "no cell had a second replicate";
+    if (peak < 2) return "cells did not run in parallel";
+    const cached = bodies.every((b) => b.system?.[0]?.cache_control?.type === "ephemeral" && b.messages?.[0]?.content?.[0]?.cache_control?.type === "ephemeral");
+    return cached ? true : "an Anthropic body lacks a cache breakpoint";
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -338,6 +375,15 @@ export function checks(o: { gstack: GstackText | null; clone?: string }): Check[
       return ok && safe && up ? true : "parse " + ok + ", safety " + safe + ", upstream " + up;
     } },
     { name: "run: the scripted stub through the driver on a temporary ledger, every reply path", run: () => scriptedRun(items) },
+    { name: "run: each cell's replicates run in sequence (replicate 2 starts after replicate 1 is sealed), cells in parallel, and Anthropic requests cache the system prefix and the user content", run: () => replicateOrder(items) },
+    { name: "draws: the pilot takes 16 must-ask and 24 needless by class and thread, the label audit 40 must-ask, 40 duplicates and every permission and observable item, and a seed redraws the same set", run: () => {
+      const pool = Array.from({ length: 7 }, (_, n) => items.map((it) => ({ ...it, item: it.item + "-" + n }))).flat();
+      const p = drawCounts(pilotDraw(pool, 3));
+      const a = drawCounts(auditDraw(pool, 3));
+      if (p.items !== 40 || p.per_class.DECISION !== 16) return "pilot " + JSON.stringify(p.per_class);
+      if (a.per_class.DECISION !== 40 || a.per_class.DUPLICATE !== 40 || a.per_class.PERMISSION_FOR_DEFAULT !== 21 || a.per_class.OBSERVABLE !== 14) return "audit " + JSON.stringify(a.per_class);
+      return JSON.stringify(pilotDraw([...pool].reverse(), 3)) === JSON.stringify(pilotDraw(pool, 3)) && JSON.stringify(auditDraw([...pool].reverse(), 3)) === JSON.stringify(auditDraw(pool, 3)) ? true : "the same seed drew a different set";
+    } },
     { name: "ledger leases: one lease opens and settles on each frozen spend item, and an item that served one run refuses a second (E_ITEM_BOUND)", run: leaseCheck },
     { name: "resume: a killed shard resumes with sealed samples skipped, the open call settled unknown and redrawn once, no call counted twice", run: () => resumeCheck(items) },
     { name: "cap: a spend cap stop ends the shard as incomplete (E_ASK_CAP)", run: () => capCheck(items) },

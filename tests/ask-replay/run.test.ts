@@ -9,8 +9,9 @@ import { plainStore } from "../../lanes/ask-replay/custody.ts";
 import { answerBody, FIXTURE_GSTACK, Killed, stubSend } from "../../lanes/ask-replay/fixtures.ts";
 import { FROZEN } from "../../lanes/ask-replay/frozen.ts";
 import { buildPrompt } from "../../lanes/ask-replay/prompt.ts";
-import { finalRecords, ledgerClient, openProxyMeter, requestBody, runShard, sampleId, schedule, UPSTREAM_DRAW, upstreamRedraw, type ShardOptions } from "../../lanes/ask-replay/run.ts";
+import { cells, finalRecords, ledgerClient, openProxyMeter, requestBody, runShard, sampleId, schedule, UPSTREAM_DRAW, upstreamRedraw, type CallKey, type ShardOptions } from "../../lanes/ask-replay/run.ts";
 import { generate } from "../../lanes/ask-replay/synthetic/generator.ts";
+import type { Arm, Sample, SampleRecord } from "../../lanes/ask-replay/types.ts";
 
 const items = generate().items;
 const byId = new Map(items.map((i) => [i.item, i]));
@@ -38,14 +39,32 @@ describe("the schedule", () => {
     for (let i = 0; i < a.length; i += 8) expect(new Set(a.slice(i, i + 8).map((s) => s.item)).size).toBe(1);
     expect(schedule(items.slice(0, 2), "particle", 2, 1).some((s) => s.arm === "d")).toBe(false);
   });
+  test("each arm cell's replicates sit in sequence, and the arm order is seeded per item", () => {
+    const a = schedule(items.slice(0, 20), "opus", 2, 7);
+    for (let i = 0; i < a.length; i += 2) {
+      expect([a[i]!.arm, a[i]!.replicate]).toEqual([a[i + 1]!.arm, 1]);
+      expect(a[i + 1]!.replicate).toBe(2);
+    }
+    const orders = new Set(Array.from({ length: 20 }, (_, n) => a.slice(n * 8, n * 8 + 8).filter((s) => s.replicate === 1).map((s) => s.arm).join("")));
+    expect(orders.size).toBeGreaterThan(1);
+  });
+  test("the pilot's per-arm counts: (a) once and (b) twice, no ledger arms", () => {
+    const p = schedule(items.slice(0, 4), "sol", FROZEN.pilot.arms as Partial<Record<Arm, number>>, 3);
+    expect(p).toHaveLength(12);
+    expect(p.filter((s) => s.arm === "a").map((s) => s.replicate)).toEqual([1, 1, 1, 1]);
+    expect(p.filter((s) => s.arm === "b")).toHaveLength(8);
+    expect(p.some((s) => s.arm === "c" || s.arm === "d")).toBe(false);
+    expect(cells(p).every((c) => c.every((s, i) => s.replicate === i + 1))).toBe(true);
+  });
 });
 
 describe("request bodies", () => {
   const p = buildPrompt(items[10]!, "c", FIXTURE_GSTACK);
-  test("Anthropic: cached system prefix, medium effort, JSON schema", () => {
+  test("Anthropic: cache breakpoints on the system prefix and the user content, medium effort, JSON schema", () => {
     const b = requestBody("opus", p, "c", 4000) as any;
     expect(b.model).toBe("claude-opus-5-5");
     expect(b.system[0].cache_control).toEqual({ type: "ephemeral" });
+    expect(b.messages).toEqual([{ role: "user", content: [{ type: "text", text: p.user, cache_control: { type: "ephemeral" } }] }]);
     expect(b.output_config.effort).toBe("medium");
     expect(b.output_config.format.schema.required).toContain("repeats");
     expect(b.temperature).toBeUndefined();
@@ -98,6 +117,37 @@ describe("shards", () => {
       const recs = o.store as ReturnType<typeof plainStore>;
       const redrawn = [...recs.read().values()].filter((x) => x.draw === 2);
       expect(redrawn).toHaveLength(1);
+    } finally {
+      s.done();
+    }
+  });
+  test("replicate 2 of a cell starts only after replicate 1 is sealed, an UPSTREAM MISSING included, while cells run in parallel", async () => {
+    const s = setup();
+    try {
+      const events: string[] = [];
+      const bodies: any[] = [];
+      let live = 0;
+      let peak = 0;
+      const base = stubSend((smp) => (smp.arm === "b" && smp.replicate === 1 ? { raw: "upstream" } : { action: "SEND", repeats: "new" }));
+      const send = async (smp: Sample, key: CallKey, body: Record<string, unknown>) => {
+        events.push("start " + smp.id);
+        bodies.push(body);
+        peak = Math.max(peak, ++live);
+        await new Promise((r) => setTimeout(r, 1 + ((smp.replicate * 7 + smp.arm.charCodeAt(0)) % 5)));
+        live--;
+        return base(smp, key);
+      };
+      const o = shard(s, send as unknown as ReturnType<typeof stubSend>);
+      const plain = o.store;
+      const store = { has: (id: string) => plain.has(id), write: (id: string, r: SampleRecord) => (events.push("seal " + id), plain.write(id, r)) };
+      const r = await runShard({ ...o, store, concurrency: 8 });
+      expect(r.ran).toBe(24);
+      expect(r.missing.upstream).toBe(3);
+      for (const smp of o.samples.filter((x) => x.replicate === 2)) {
+        expect(events.indexOf("start " + smp.id)).toBeGreaterThan(events.indexOf("seal " + sampleId(smp.item, smp.arm, smp.model, 1)));
+      }
+      expect(peak).toBeGreaterThan(1);
+      expect(bodies.every((b) => b.messages[0].content[0].cache_control.type === "ephemeral")).toBe(true);
     } finally {
       s.done();
     }

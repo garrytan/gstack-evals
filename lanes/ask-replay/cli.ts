@@ -3,13 +3,14 @@
 // rates and digests, never item text. build and run work on custody material and refuse paths off /dev/shm where the
 // plan keeps plaintext there; run reads the age identity from stdin.
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { CODES, docAnchor, isReasonCode, type ReasonCode } from "../../src/errors/codes.ts";
 import { chatPrice } from "../../src/runner/pricing/prices.ts";
 import { buildFiles, readItems, toJsonl } from "./build.ts";
 import { chainStats, clusters, proxyLinks, repeatInWindow, type Link } from "./chains.ts";
 import { custody, readIdentity, readRecords, sealedStore, writeSums } from "./custody.ts";
+import { auditDraw, drawCounts, mintSeed, pilotDraw } from "./draws.ts";
 import { AskError, fail, FROZEN, placeholders, seed } from "./frozen.ts";
 import { corpusTexts, scanPublic, syntheticCheck } from "./privacy.ts";
 import { buildPrompt, gstackLines, loadGstack, type GstackText } from "./prompt.ts";
@@ -17,7 +18,7 @@ import { finalRecords, openProxyMeter, runShard, schedule, upstreamRedraw } from
 import { isNeedless, readout, s1Report } from "./score.ts";
 import { halfWidth, mdd } from "./stats.ts";
 import { generate } from "./synthetic/generator.ts";
-import { ARMS, LABELS, outcomeOf, type AskItem, type ModelKey } from "./types.ts";
+import { ARMS, LABELS, outcomeOf, type Arm, type AskItem, type ModelKey } from "./types.ts";
 import { seededRandom } from "../../src/runner/stats/paired.ts";
 
 interface Io {
@@ -118,6 +119,28 @@ export const SUBCOMMANDS: Record<string, { summary: string; run: Run }> = {
         out[m] = per;
       }
       json(io, { items: items.length, per_class: Object.fromEntries(LABELS.map((l) => [l, items.filter((i) => i.label === l).length])), models: out, note: "estimate: characters/4 input at list input price, 1,500 output tokens per sample at list output price, no cache discount" });
+      return 0;
+    },
+  },
+  draw: {
+    summary: "the pilot's or the label audit's seeded draw from the real items: drawn items to /dev/shm, the seed to a log you name, counts out",
+    run: (argv, io) => {
+      const f = flags(argv, ["kind", "items", "out", "seed-log", "seed"]);
+      const kind = need(f, "kind");
+      if (kind !== "pilot" && kind !== "audit") fail("E_USAGE", "--kind is pilot or audit");
+      const out = need(f, "out");
+      onShm(out);
+      const log = need(f, "seed-log");
+      const bundle = readFileSync(need(f, "items"), "utf8");
+      const items = readItems(need(f, "items"));
+      const minted = f.seed === undefined;
+      const s = minted ? mintSeed() : Number(f.seed);
+      if (!Number.isInteger(s) || s < 0) fail("E_USAGE", "--seed is a whole number of 0 or more");
+      const drawn = kind === "pilot" ? pilotDraw(items, s) : auditDraw(items, s);
+      const jsonl = toJsonl(drawn);
+      writeFileSync(out, jsonl, { mode: 0o600 });
+      appendFileSync(log, "- " + new Date().toISOString() + " ask-replay draw " + kind + ": seed " + s + " (" + (minted ? "minted from random bytes" : "given") + "), " + drawn.length + " of " + items.length + " items, bundle sha256 " + sha(bundle) + ", drawn set sha256 " + sha(jsonl) + "\n");
+      json(io, { kind, ...drawCounts(drawn), drawn_sha256: sha(jsonl), seed_recorded_to: log });
       return 0;
     },
   },
@@ -229,19 +252,22 @@ export const SUBCOMMANDS: Record<string, { summary: string; run: Run }> = {
   run: {
     summary: "a paid shard under custody: identity on stdin, sealed bundle in, sealed replies out (never run without the go)",
     run: async (argv, io) => {
-      const f = flags(argv, ["bundle", "sums", "log", "spend-item", "model", "out", "recipient", "k", "gstack", "record", "ledger", "amount-micros"], ["redraw-upstream"]);
+      const f = flags(argv, ["bundle", "sums", "log", "spend-item", "model", "out", "recipient", "k", "gstack", "record", "ledger", "amount-micros"], ["redraw-upstream", "pilot"]);
       const left = placeholders().filter((p) => p.startsWith("stats.") || p.startsWith("synthetic."));
       if (left.length) fail("E_ASK_UNFROZEN", "frozen.json still holds " + left.join(", "));
       const model = need(f, "model") as ModelKey;
       if (!FROZEN.models[model]) fail("E_USAGE", "--model is one of " + Object.keys(FROZEN.models).join(", "));
       const item = FROZEN.spend_items[need(f, "spend-item")] ?? fail("E_USAGE", "--spend-item is one of " + Object.keys(FROZEN.spend_items).join(", "));
+      const pilot = f.pilot === "1";
+      if (pilot && (f.k || !FROZEN.pilot.models.includes(model))) fail("E_USAGE", "--pilot runs the frozen pilot arms on " + FROZEN.pilot.models.join(" or ") + " and takes no --k");
+      const k: number | Partial<Record<Arm, number>> = pilot ? (FROZEN.pilot.arms as Partial<Record<Arm, number>>) : f.k ? Number(f.k) : FROZEN.replicates.k;
       const gstack = gstackFrom(f);
       const identity = readIdentity();
       const out = resolve(need(f, "out"));
       mkdirSync(out, { recursive: true });
       const result = await custody({ files: [need(f, "bundle")], sums: need(f, "sums"), log: need(f, "log"), identity }, async (dir) => {
         const items = readItems(join(dir, "items.jsonl"));
-        const samples = schedule(items, model, f.k ? Number(f.k) : FROZEN.replicates.k, seed("order_seed", false));
+        const samples = schedule(items, model, k, seed("order_seed", false));
         const meter = await openProxyMeter({ item, runId: item, out, model, maxOutputTokens: FROZEN.output_cap.tokens, record: f.record, ledger: f.ledger, amountMicros: f["amount-micros"] ? Number(f["amount-micros"]) : undefined, warn: (c, m) => io.err(c + " " + m) });
         const warn = (c: ReasonCode, m: string) => io.err(c + " " + m.replace(/i-[0-9a-f]{24}/g, "<item>"));
         const o = { items: new Map(items.map((i) => [i.item, i])), samples, gstack, client: meter.client, store: sealedStore(join(out, "replies"), need(f, "recipient")), out, maxOutputTokens: FROZEN.output_cap.tokens, warn };

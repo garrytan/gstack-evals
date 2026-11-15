@@ -25,6 +25,7 @@ export interface Frozen {
   frontier_models: ModelKey[];
   models: Record<ModelKey, ModelRow>;
   temperature: string;
+  caching: { anthropic: string; openai: string; openrouter: string; replicates: string };
   output_cap: { tokens: number; raised_tokens: number; raise_when_smoke_capped_share_above: number };
   replicates: { k: number; k_after_pilot_rule: number };
   window: { chars: number; cut_note: string };
@@ -34,8 +35,8 @@ export interface Frozen {
   safety_stop: Record<string, string>;
   missing_ceiling: number;
   stats: { bootstrap_draws: number; bootstrap_seed: number | string; order_seed: number | string; mdd_factor: number; planned_spread: { needless: number; must_ask: number }; planned_items: { needless: number; duplicates: number; must_ask: number }; proxy_effective_clusters: number | string; captain_hears_needless_mdd_above: number };
-  pilot: { needless: number; must_ask: number; arms: Record<string, number>; models: ModelKey[]; admit_min_needless_sends: number; admit_max_must_ask_misses: number; k3_when_projected_mdd_above: number; spread_formula: string };
-  label_audit: { items: number; must_ask: number; duplicates: number; permission_and_observable: number; kappa_min: number; labellers: string[]; reasoning_effort: string; seed: string };
+  pilot: { needless: number; must_ask: number; arms: Record<string, number>; models: ModelKey[]; admit_min_needless_sends: number; admit_max_must_ask_misses: number; k3_when_projected_mdd_above: number; spread_formula: string; draw: string; seed: string };
+  label_audit: { items: number; must_ask: number; duplicates: number; permission_and_observable: number; kappa_min: number; labellers: string[]; reasoning_effort: string; seed: string; draw: string };
   gstack: { version: string; commit: string; files: Array<{ path: string; sha256: string; bytes: number }> };
   exposure_phrases: string[];
   lettered_decision: string;

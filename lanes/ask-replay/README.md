@@ -63,12 +63,13 @@ The synthetic set works as `--items lanes/ask-replay/synthetic/items.jsonl` for 
 **Custody only (real items, never in this repo):**
 
 - `build --pages <dir> --audit <csv> --rules <md> --out /dev/shm/<file> [--owner <names>] [--map <file>] [--variant]` writes items JSONL and a thread map, both on /dev/shm, and prints counts and the bundle sha256, never text.
+- `draw --kind pilot|audit --items <file> --out /dev/shm/<file> --seed-log <CUSTODY.md> [--seed <n>]` draws the admission pilot's 40 items (16 must-ask and 24 needless, spread over class and thread) or the label audit's 99 (40 must-ask, 40 duplicates and every permission and observable item). It mints the seed from random bytes and appends it to the log, writes the drawn items to /dev/shm and prints counts only. `--seed` redraws a recorded draw.
 - `synth-check --corpus <file>` compares the synthetic set with the private texts: 6-gram hits and the largest content-word overlap. Any 6-gram hit or an overlap above 0.5 fails.
 - `score --items <file> --replies <dir> [--links <file>] [--draws <n>] [--keyless]` prints the frozen readout and the decision rows, numbers only. `--keyless` uses a test seed instead of the frozen one.
 
 **Paid (only after the preregistration merges and a spend cap is approved):**
 
-- `run --bundle <items.jsonl.age> --sums <SHA256SUMS> --log <CUSTODY.md> --spend-item <I1..I8> --model <opus|sol|particle> --out <dir> --recipient <age recipient> [--k <n>] [--gstack <clone>] [--redraw-upstream]` runs one shard of under 55 minutes. The age identity comes in on stdin. Every sample has a fixed id, its reply is sealed under that id and its spend settles once against that id, so a rerun skips finished samples and never counts a call twice. It refuses while frozen.json still holds a placeholder seed (E_ASK_UNFROZEN).
+- `run --bundle <items.jsonl.age> --sums <SHA256SUMS> --log <CUSTODY.md> --spend-item <I1..I8> --model <opus|sol|particle> --out <dir> --recipient <age recipient> [--k <n> | --pilot] [--gstack <clone>] [--redraw-upstream]` runs one shard of under 55 minutes. `--pilot` runs the pilot's frozen arms and replicate counts. Each cell (item, arm, model) runs its replicates in sequence, so replicate 2 reads the prompt replicate 1 cached. The age identity comes in on stdin. Every sample has a fixed id, its reply is sealed under that id and its spend settles once against that id, so a rerun skips finished samples and never counts a call twice. It refuses while frozen.json still holds a placeholder seed (E_ASK_UNFROZEN).
 
 ## Tests
 

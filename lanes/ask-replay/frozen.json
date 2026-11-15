@@ -57,6 +57,12 @@
     }
   },
   "temperature": "provider default (no temperature field is sent)",
+  "caching": {
+    "anthropic": "cache_control ephemeral breakpoints at the end of the system prefix and at the end of the user content, so replicate 2 of a cell reads the whole prompt from cache",
+    "openai": "the provider's automatic prefix caching; the request sets no cache field",
+    "openrouter": "the endpoint's own caching where it has one; the request sets no cache field",
+    "replicates": "a cell (item, arm, model) runs its replicates in sequence: replicate r+1 starts only after replicate r has a sealed reply or a final MISSING; arm cells keep their seeded random order within each item, and different cells and items run in parallel"
+  },
   "output_cap": {
     "tokens": 4000,
     "raised_tokens": 8000,
@@ -141,7 +147,9 @@
     "admit_min_needless_sends": 5,
     "admit_max_must_ask_misses": 8,
     "k3_when_projected_mdd_above": 0.12,
-    "spread_formula": "W is the mean over needless items of the unbiased variance of (b)'s k samples; V is the unbiased variance across needless items of (b)'s item means; B2 = max(0, V - W/k_pilot), the variance of (b)'s true item rates, stands for the variance of the true paired difference (the difference when the ledger arm holds back what (b) sends); projected P1 spread S(k) = sqrt(B2 + 2*W/k), with the treatment arm's within-item variance taken equal to (b)'s; projected MDD(k) = 2.8 * S(k) / sqrt(proxy effective clusters on needless items); k = 3 when MDD(2) > 0.12"
+    "spread_formula": "W is the mean over needless items of the unbiased variance of (b)'s k samples; V is the unbiased variance across needless items of (b)'s item means; B2 = max(0, V - W/k_pilot), the variance of (b)'s true item rates, stands for the variance of the true paired difference (the difference when the ledger arm holds back what (b) sends); projected P1 spread S(k) = sqrt(B2 + 2*W/k), with the treatment arm's within-item variance taken equal to (b)'s; projected MDD(k) = 2.8 * S(k) / sqrt(proxy effective clusters on needless items); k = 3 when MDD(2) > 0.12",
+    "draw": "16 must-ask and 24 needless items, each spread over its (class, thread) strata in proportion to their sizes by largest remainder with a random tie order, drawn at random within each stratum",
+    "seed": "minted from random bytes at the draw (ask-replay draw --kind pilot) and recorded in CUSTODY.md"
   },
   "label_audit": {
     "items": 99,
@@ -154,7 +162,8 @@
       "openai:gpt-6-astra"
     ],
     "reasoning_effort": "medium",
-    "seed": "minted from random bytes in custody and recorded in CUSTODY.md"
+    "seed": "minted from random bytes at the draw (ask-replay draw --kind audit) and recorded in CUSTODY.md",
+    "draw": "40 must-ask and 40 duplicates at random within class, plus every permission and observable item (ask-replay draw --kind audit)"
   },
   "gstack": {
     "version": "1.99.5.0",
@@ -241,7 +250,7 @@
     "seed": 20261115,
     "items": 60,
     "threads": 3,
-    "sha256": "ec36d117916ba498673e01e69fa57770ac94d9639cb8c512f163187f61e78770"
+    "sha256": "68009e99b8c13be664bec041c17c7b27034798a2422bca3288dd46fab27c45e4"
   },
   "spend_items": {
     "I1": "ask-i1-smoke",

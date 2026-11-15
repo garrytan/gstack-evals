@@ -14,7 +14,7 @@ links:
   - lanes/ask-replay/synthetic/items.jsonl
   - https://github.com/garrytan/gstack/tree/0326b144af36676d599dcf63a9fad9a870d22ed6
 attachments:
-  - 57f1193cc9bbf5f520cad4f634142f19d02957b8e5c2b1f5f0196aaf462e53f2  dryrun.txt
+  - 2a96286531defb9c2821549cfb92dbbaf61c3481d6ac3f488d9f44233c4222fb  dryrun.txt
 ---
 
 # Preregistration: does an ask ledger cut needless asks without holding back needed ones?
@@ -123,7 +123,7 @@ Planned power: about 0.96 for a cut of 15 points on at least one model, times ab
 
 ### 3. Arms (R44)
 
-All arms get the same items, model and settings, one API call per sample, arms interleaved in a seeded random order within each item, the same harness prompt and the same JSON reply shape. The harness defines the three actions plainly:
+All arms get the same items, model and settings, one API call per sample, arm cells (item, arm and model) in a seeded random order within each item with each cell's replicates in sequence, the same harness prompt and the same JSON reply shape. The harness defines the three actions plainly:
 
 - SEND: send it now.
 - FOLD: don't send it now; carry it as one line under "Waiting on you" in the next digest, which reaches the owner at the next scheduled digest.
@@ -162,7 +162,7 @@ What (c) licenses if it wins: building idea 1 as ruled (the agent names the matc
 | GPT-6.1 Sol | OpenAI Responses, gpt-6.1-sol, not stored | (a) to (d) |
 | particle-1 | OpenRouter chat, particle-ai/particle-1, data collection denied | (a) to (c), the low-cost readout |
 
-All run at medium reasoning and the provider's default temperature (no temperature field is sent). The output cap is 4,000 tokens, raised to 8,000 for every model if more than 1% of the synthetic smoke's replies hit it. The shared prompt prefix is cached. Reasoning tokens are priced as output, from src/runner/pricing/prices.ts.
+All run at medium reasoning and the provider's default temperature (no temperature field is sent). The output cap is 4,000 tokens, raised to 8,000 for every model if more than 1% of the synthetic smoke's replies hit it. Caching (frozen.json caching): on Anthropic both the system prefix and the user content end in an ephemeral cache breakpoint; OpenAI and OpenRouter use their own automatic caching, with no cache field in the request. A cell runs its replicates in sequence: replicate 2 starts only after replicate 1 has a sealed reply or a final MISSING, so replicate 2 reads the whole prompt from cache. Different cells and items still run in parallel. Reasoning tokens are priced as output, from src/runner/pricing/prices.ts.
 
 **Processors (ruling L1).** Anthropic and OpenAI see real items, under their API data terms as published on the freeze date: TODO(custody:processor_terms). particle-1 sees real items only through an OpenRouter route that accepts data collection denied (provider.data_collection "deny", only particle-ai, no fallbacks); the request setting and the endpoint's reply are recorded in custody as evidence. If that can't be proven, particle-1 runs on the synthetic set only and the results say it is untested on real items (E_ASK_PROCESSOR).
 
@@ -176,7 +176,7 @@ All run at medium reasoning and the provider's default temperature (no temperatu
 ### 7. Labels and their audit
 
 - **Classes.** Must-ask is the audit's genuine-decision label. Needless is duplicate, permission-for-default or observable. The audit's labels came from two model classifiers (family: TODO(custody:audit_classifier_family)) reading 500-character tails plus the reply kind, without the thread history. They are trusted only after a check.
-- **Label audit (paid, before the main run; E1).** 99 items: 40 must-ask, 40 duplicates and all 19 permission and observable items, drawn with a seed minted from random bytes and recorded in custody. Two labellers, Opus 5.5 and GPT-6 Astra at medium reasoning, each see the full item, the owner's next reply (allowed for labelling only) and a written codebook, blind to the audit's labels and to all arm outputs. Each also says whether the quoted owner message answers the row the ledger marks answered.
+- **Label audit (paid, before the main run; E1).** 99 items: 40 must-ask, 40 duplicates and all 19 permission and observable items, drawn at random within class by `ask-replay draw --kind audit`, which mints its seed from random bytes and appends it to CUSTODY.md, writes the drawn items to /dev/shm and prints counts only. Two labellers, Opus 5.5 and GPT-6 Astra at medium reasoning, each see the full item, the owner's next reply (allowed for labelling only) and a written codebook, blind to the audit's labels and to all arm outputs. Each also says whether the quoted owner message answers the row the ledger marks answered.
 - **Rule.** The audit labels stand when each labeller's kappa against them is at least 0.6 both on needed against needless (pooled) and on duplicate against must-ask alone. Otherwise both label the other 247 items (the contingency), the primary label becomes the two labellers' agreement, and disagreements leave the primary and are shown both ways. Either way, the primary readout is also shown under the labellers' agreement labels on the audited items, and a row that flips between the two is reported as label-sensitive.
 - **Decision chains (F1).** In custody Opus 5.5 links every duplicate to the earlier ask it repeats; Astra links the 40 audited ones too, and their agreement is reported. Chains are the linked groups. Before the freeze, a free deterministic proxy (S1's matcher, then the nearest earlier ask in the same thread by content-word overlap, ties to the newest) gives the planned chain count, TODO(custody:proxy_chains), and the largest chain's share per thread, TODO(custody:largest_chain_share).
 - **No model judge scores arm outputs.** Every score in section 8 is deterministic from the action field. The label audit still holds itself to R78's bar: a cross-family pair, kappa of at least 0.6, and at least 40 labelled outputs.
@@ -201,7 +201,7 @@ All run at medium reasoning and the provider's default temperature (no temperatu
 
 ### 10. Admission pilot and Why null (R48, R61)
 
-- **Pilot (paid, first):** 40 items stratified by class and thread (24 needless, 16 must-ask), arm (a) at k = 1 and arm (b) at k = 2, on Opus 5.5 and Sol. No ledger arm runs, so it can't peek at the effect.
+- **Pilot (paid, first):** 40 items stratified by class and thread (24 needless, 16 must-ask), arm (a) at k = 1 and arm (b) at k = 2, on Opus 5.5 and Sol. `ask-replay draw --kind pilot` draws them: each group is spread over its (class, thread) strata in proportion to their sizes (largest remainder, random tie order) and drawn at random within each stratum, with the seed minted from random bytes and appended to CUSTODY.md. `ask-replay run --pilot` runs the frozen pilot arms and replicate counts. No ledger arm runs, so it can't peek at the effect.
 - **Admission:** admit when, on at least one frontier model, arm (b) sends at least 5 of the 24 needless items and misses at most 8 of the 16 must-asks. Sends and misses are counted as the sum of per-item mean rates, so an item sent in 1 of its 2 samples counts 0.5. The bar admits a true 10% rate about 9% of the time and a true 20% rate about 54%.
 - **Ceiling raise (R61):** if the pilot fails on room, the pre-built variant bundle gets one more pilot. If that fails too, the eval stops with a ceiling report: frontier models already hold repeats back when the history is laid out, and the ledger question moves to the simulated-week eval (idea 2). If the variant is used for the main run, the main-run items are re-capped before it starts.
 - **Why null, for any null:** exposure (in (c) and (d), how often the agent named a row; in (b), whether its reasons cite an earlier ask, counted by the frozen phrase list in frozen.json exposure_phrases), task fit, power against the measured detectable difference, and the ceiling ((b)'s needless rate). Each null ends KEEP, FIX-METHOD or CUT-CANDIDATE, and a cut candidate is reported plainly.
@@ -211,19 +211,19 @@ All run at medium reasoning and the provider's default temperature (no temperatu
 - **What stays private.** The labelled set is the owner's own asks. Items, reconstructed states, his words, label-audit inputs and outputs and every per-item reply stay private, following the pattern in lanes/autoplan-audit/told.ts: sealed age records with a SHA256SUMS file in a private drive, decrypted only on /dev/shm, the identity streamed on stdin and removed after, a leftover sweep at every opening and on every wake, and a CUSTODY.md line for every opening and incident. Readers return counts only.
 - **custody.ts** adds an async wrapper (told.ts's custody() is synchronous and removes the directory when its reader returns), keeps plaintext on /dev/shm and proves teardown with test ! -e at the end of every shard. It refuses an empty identity at once (E_ASK_IDENTITY).
 - **Builder.** An execute program has no filesystem, so it reads the 8 threads through Capy's thread tool and writes each page straight to /dev/shm on the custody machine, returning only counts. No agent context holds the content. The bun builder (`ask-replay build`) then forms items, scans, seals and wipes the raw pages.
-- **Paid run** (section 16, deviation 1): resumable foreground shards of under 55 minutes under a live program on the custody machine, so plaintext never leaves it. Every sample has a fixed id. Its sealed reply is written atomically under that id and its spend lease settles once against that id, so a resumed shard skips every settled sample and can't count a call twice. A sample with an open lease and no sealed reply is reconciled through the spend ledger's unknown-charge path, then redrawn once, and redraws are counted per arm (E_ASK_RESUME).
+- **Paid run** (section 16, deviation 1): resumable foreground shards of under 55 minutes under a live program on the custody machine, so plaintext never leaves it. A cell's replicates run in sequence, so replicate 2 hits the cache replicate 1 wrote, while cells run in parallel. Every sample has a fixed id. Its sealed reply is written atomically under that id and its spend lease settles once against that id, so a resumed shard skips every settled sample and can't count a call twice. A sample with an open lease and no sealed reply is reconciled through the spend ledger's unknown-charge path, then redrawn once, and redraws are counted per arm (E_ASK_RESUME).
 - **Before every push:** gstack-pregate sealed, plus the lane's scan (`ask-replay scan`: no issue keys or thread codes in prose, no dollar figures outside Agent notes, no private names, no 6-gram shared with any custody text), run in custody and reported as a count: TODO(custody:prepush_scan_hits).
 
 ### 12. Public synthetic set (lanes/ask-replay/synthetic/)
 
 - **The set:** 60 items in 3 made-up coordinating threads (S1 to S3) about 4 made-up projects, with a made-up owner and standing rules written from scratch, in the same shape and fields as the real items. Class mix: 35 must-ask, 20 duplicates (10 repeating an open row and 10 an answered one), 3 permission and 2 observable. A seeded template generator writes it, so no model saw real asks while writing it.
-- **Digest:** items.jsonl, 559,631 bytes, sha256 ec36d117916ba498673e01e69fa57770ac94d9639cb8c512f163187f61e78770, generator seed 20261115. `ask-replay synth` checks that the committed set matches the generator byte for byte.
+- **Digest:** items.jsonl, 567,688 bytes, sha256 68009e99b8c13be664bec041c17c7b27034798a2422bca3288dd46fab27c45e4, generator seed 20261115. `ask-replay synth` checks that the committed set matches the generator byte for byte.
 - **Privacy check in custody** (`ask-replay synth-check`): every synthetic text field (conversation, rules, drafts, ledger lines) against all custody text (owner and agent messages, rule rows, asks). It reports 6-gram hits and the largest content-word Jaccard overlap, both as counts, ignoring texts with fewer than 5 content words. Any 6-gram hit or an overlap above 0.5 fails the build. Result: TODO(custody:synth_check).
 - **Uses:** keyless tests and the full dry run with a stub model; and the paid smoke I1 after the go, before the pilot. The smoke draws 20 items (12 must-ask, 6 duplicates, 1 permission, 1 observable) with seed 20261115, one sample per arm, all four arms on Opus and Sol and three on particle-1.
 
 ### 13. Code, tests and dry run
 
-**Modules** in lanes/ask-replay/: types.ts (the item and reply shapes), frozen.json and frozen.ts (every frozen number), build.ts, privacy.ts, ledger.ts, prompt.ts, parse.ts, run.ts, custody.ts, score.ts, stats.ts, chains.ts, synthetic/ (generator, set, digest), fixtures.ts, dryrun.ts and cli.ts. The command is `bin/gstack-evals ask-replay`, with subcommands build, synth, dryrun, smoke-plan, arms, score, s1, chains-proxy, mdd, scan, synth-check and run. lanes/ask-replay/README.md explains each one.
+**Modules** in lanes/ask-replay/: types.ts (the item and reply shapes), frozen.json and frozen.ts (every frozen number), build.ts, privacy.ts, ledger.ts, prompt.ts, parse.ts, run.ts, custody.ts, score.ts, stats.ts, chains.ts, synthetic/ (generator, set, digest), fixtures.ts, dryrun.ts and cli.ts. The command is `bin/gstack-evals ask-replay`, with subcommands build, synth, dryrun, smoke-plan, draw, arms, score, s1, chains-proxy, mdd, scan, synth-check and run. lanes/ask-replay/README.md explains each one.
 
 **Reason codes** in src/errors/codes.ts, each with what, fix and recovery in docs/errors.md:
 
@@ -244,7 +244,7 @@ All run at medium reasoning and the provider's default temperature (no temperatu
 
 **Keyless tests** in tests/ask-replay/ (13 files) cover: ledger status and every gate rule (a whitespace-only reask reason, FOLD naming an answered row, a missing repeats field, an unknown id); every scoring rule and both codings; MISSING bounds per comparison; every decision row on fixtures; stats on fixed data; component order; arm cleanliness; the gstack pins (skipped when no gstack clone is present); the privacy scanners; custody on a throwaway age identity; a resume that never double-counts; the builder on fixture pages; and the dry run.
 
-**Dry run.** `bin/gstack-evals ask-replay dryrun` drives every frozen rule on the synthetic set with a stub model (scripted SEND, FOLD, DROP, unparsable, safety stop, upstream error, a missing repeats field and a reask reason), opens and settles one spend lease per frozen spend item on a temporary ledger, resumes a killed shard with no double count, and runs custody on a throwaway age identity. Its output at this post's head is attached as dryrun.txt: 20 PASS, 0 FAIL.
+**Dry run.** `bin/gstack-evals ask-replay dryrun` drives every frozen rule on the synthetic set with a stub model (scripted SEND, FOLD, DROP, unparsable, safety stop, upstream error, a missing repeats field and a reask reason), opens and settles one spend lease per frozen spend item on a temporary ledger, resumes a killed shard with no double count, checks that a cell's replicates run in sequence with both Anthropic cache breakpoints, checks both seeded draws, and runs custody on a throwaway age identity. Its output at this post's head is attached as dryrun.txt: 22 PASS, 0 FAIL.
 
 **Frozen numbers.** lanes/ask-replay/frozen.json holds every number above. Its final sha256, after the custody values are filled: TODO(custody:frozen_json_sha256). It is attached to this post by that sha256 once final: TODO(custody:frozen_json_attachment).
 
@@ -264,7 +264,7 @@ Each paid step runs as its own spend item through the program ledger, with a cap
 | I7 | ask-i7-sol | main run, GPT-6.1 Sol: the same |
 | I8 | ask-i8-particle | main run, particle-1: all items, arms (a) to (c), 2 samples, only with data collection denied |
 
-Planning sizes: about 20k input tokens per item in (a), 31k in (b), 33k in (c) and 22k in (d), with 11k of gstack text cached in (b) and (c), and about 1.5k output tokens per sample with reasoning counted as output. Measured sizes from the sealed bundle (`ask-replay arms`), mean and largest per arm: TODO(custody:measured_tokens).
+Planning sizes: about 20k input tokens per item in (a), 31k in (b), 33k in (c) and 22k in (d), with 11k of gstack text cached in (b) and (c), and about 1.5k output tokens per sample with reasoning counted as output. Measured means from the sealed bundle (`ask-replay arms`): 24.6k in (a), 35.8k in (b), 38.0k in (c) and 26.8k in (d). Largest per arm: TODO(custody:measured_tokens_max). Agent notes prices the main run from the measured means.
 
 ### 15. Delivery (R77)
 
@@ -284,7 +284,8 @@ Two pull requests. This one, the preregistration, carries the harness, the synth
    - The end-of-run UPSTREAM redraw is draw 3 under its own sample key; draw 2 is the resume redraw (section 11).
    - Synthetic item ids come from the seeded generator, not from random bytes, so the public set reproduces byte for byte. Real item ids stay random.
    - particle-1 is sent without a JSON schema mode and parsed from its text. This was not checked against OpenRouter's list of supported parameters for the model; the I1 smoke confirms all three reply shapes before the pilot.
-4. **Additions the plan didn't list:** the subcommands arms, run, scan and synth-check; the reason codes E_ASK_UNFROZEN, E_ASK_INPUT and E_ASK_DRYRUN_FAIL; and a builder count of rule rows with more than one date (deviation 2). The plan's items.ts is types.ts.
+4. **Caching and replicate order.** The plan cached the shared prompt prefix only. Here Anthropic requests also put a cache breakpoint at the end of the user content, and each cell runs its replicates in sequence (replicate 2 starts only after replicate 1 has a sealed reply or a final MISSING), so replicate 2 reads its whole prompt from cache. Arm cells keep their seeded random order within each item, so the arms are still interleaved.
+5. **Additions the plan didn't list:** the subcommands draw, arms, run, scan and synth-check, and run's --pilot switch; the reason codes E_ASK_UNFROZEN, E_ASK_INPUT and E_ASK_DRYRUN_FAIL; and a builder count of rule rows with more than one date (deviation 2). The plan's items.ts is types.ts.
 
 ### 17. Limits
 
@@ -311,7 +312,7 @@ Filled in at the results post from org research/disclosures.md.
 
 The project owner approved the eval on 2026-11-15 at about $400 to $800 all-in.
 
-Central estimates per spend item, from src/runner/pricing/prices.ts at the planning sizes in section 14; the Captain's caps are 1.35 times these. Measured token counts replace the planning sizes before READY, and the item list with central prices goes with READY.
+Central estimates per spend item, from src/runner/pricing/prices.ts; the Captain's caps are 1.35 times these. I1 to I5 are at the planning sizes in section 14. I6 to I8 are at the measured means, with the replicate-2 cache hit (table below). The item list with central prices goes with READY.
 
 | Item | Central |
 |---|---|
@@ -321,8 +322,18 @@ Central estimates per spend item, from src/runner/pricing/prices.ts at the plann
 | I3 label audit | $41 |
 | I4 relabel, if needed | $102 |
 | I5 duplicate linking | $16 |
-| I6 main run, Opus 5.5 | $332 |
-| I7 main run, GPT-6.1 Sol | $165 |
-| I8 main run, particle-1 | $9 |
+| I6 main run, Opus 5.5 | $308 |
+| I7 main run, GPT-6.1 Sol | $154 |
+| I8 main run, particle-1 | $7 |
 
-Central without contingencies is about $596; with both (the R61 pilot retry and the full relabel) about $723. Using the variant bundle for the main run adds about $80 on Opus. The pilot's k = 3 rule sends its projection to the Captain first when the central passes $800. Crew Capy use is separate: estimated $250 to $330 against a $400 stop.
+Main-run arithmetic, per item, then times 346 items. Input is the sum of the measured means over the model's arms. Replicate 1 pays the cache-write rate on all of it (Opus and Sol at 1.25 times input; particle-1 has no write rate in prices.ts, so plain input). Replicate 2 pays the cache-read rate. Output is 1.5k tokens per sample, 2 samples per arm, at the output rate. Rates are dollars per million tokens.
+
+| Model | Arms | Input per item | Replicate 1 | Replicate 2 | Output | Per item | Central |
+|---|---|---|---|---|---|---|---|
+| Opus 5.5 | a to d | 125.2k | 125.2k x 5 = $0.626 | 125.2k x 0.2 = $0.025 | 12k x 20 = $0.240 | $0.891 | $308.30 |
+| GPT-6.1 Sol | a to d | 125.2k | 125.2k x 2.5 = $0.313 | 125.2k x 0.1 = $0.013 | 12k x 10 = $0.120 | $0.446 | $154.15 |
+| particle-1 | a to c | 98.4k | 98.4k x 0.1 = $0.0098 | 98.4k x 0.003 = $0.0003 | 9k x 1 = $0.0090 | $0.019 | $6.62 |
+
+This is conservative on replicate 1: in (b) and (c) the gstack system prefix is already a cache read for every item after the first, and the table charges it as a write. It assumes replicate 2 always hits the cache. On OpenAI and OpenRouter that depends on the provider's automatic caching.
+
+Central without contingencies is about $559; with both (the R61 pilot retry and the full relabel) about $686. Using the variant bundle for the main run adds about $80 on Opus. The pilot's k = 3 rule sends its projection to the Captain first when the central passes $800. Crew Capy use is separate: estimated $250 to $330 against a $400 stop.

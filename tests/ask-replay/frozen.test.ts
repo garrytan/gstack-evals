@@ -31,7 +31,7 @@ describe("gstack-evals ask-replay", () => {
   test("--help lists every command", async () => {
     const out: string[] = [];
     expect(await main(["--help"], { out: (t) => out.push(t), err: () => {} })).toBe(0);
-    for (const c of ["build", "synth", "dryrun", "smoke-plan", "arms", "score", "s1", "chains-proxy", "mdd", "scan", "synth-check", "run"]) expect(out.join("\n")).toContain("  " + c);
+    for (const c of ["build", "synth", "dryrun", "smoke-plan", "draw", "arms", "score", "s1", "chains-proxy", "mdd", "scan", "synth-check", "run"]) expect(out.join("\n")).toContain("  " + c);
   });
   test("mdd prints the planned values; synth confirms the committed set", async () => {
     const out: string[] = [];
