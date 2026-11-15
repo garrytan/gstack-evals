@@ -1,0 +1,25 @@
+PASS gstack pins: the three files at 0326b14 match frozen.json's sha256
+PASS synthetic set: the generator reproduces items.jsonl (60 items: 35 DECISION, 20 DUPLICATE, 3 PERMISSION_FOR_DEFAULT, 2 OBSERVABLE)
+PASS synthetic set: no secret or contact hits, issue keys, thread codes or dollar figures
+PASS prompts: every arm on every synthetic item keeps the frozen component order
+PASS prompts: no label, item id, thread code or after_reply text in any prompt
+PASS prompts: harness, capability and arm a hold no gstack line of 40+ characters and no gstack token
+PASS prompts: arm d is arm a plus exactly arm c's ledger parts, and arm c is arm b plus the same parts
+PASS ledger: K1 status and every send-time rule on scripted replies
+PASS parse: whole JSON, the last valid object in prose, case-insensitive action, and each provider's safety stop
+PASS run: the scripted stub through the driver on a temporary ledger, every reply path
+PASS labels: the codebook pin, Opus and Astra audit labels and Opus links through the driver on temporary ledgers, kappa, chains from the links, answer judgements and the label views
+PASS run: each cell's replicates run in sequence (replicate 2 starts after replicate 1 is sealed), cells in parallel, and Anthropic requests cache the system prefix and the user content
+PASS draws: the pilot takes 16 must-ask and 24 needless by class and thread, the label audit 40 must-ask, 40 duplicates and every permission and observable item, and a seed redraws the same set
+PASS pilot: the pilot command applies the frozen admission rule and k rule to scripted pilot replies (Opus admits and its projected 15.7-point detectable difference sets k = 3; Sol does not admit)
+PASS ledger leases: one lease opens and settles on each frozen spend item, and an item that served one run refuses a second (E_ITEM_BOUND)
+PASS resume: a killed shard resumes with sealed samples skipped, the open call settled unknown and redrawn once, no call counted twice
+PASS cap: a spend cap stop ends the shard as incomplete (E_ASK_CAP), and score counts its unsealed samples as absent and prints no decision rows
+PASS custody: seal and open on a throwaway age identity with an async reader, leftover swept, teardown proved, empty identity refused
+PASS score: each decision row on interval fixtures, including (a) clearly better, (c) clearly worse, a cut with a failed guard and the trim half
+PASS score: both codings and the MISSING bounds on fixed samples
+PASS stats: planned detectable differences of 8.3 and 8.9 points, the 3.4-point half-width, and the pilot bar at about 9% and 54%
+PASS chains: the proxy linker links every synthetic duplicate and S1 runs on every draft
+PASS score: the full readout on scripted outcomes for the synthetic set reads row 1, build and trim
+PASS build: fixture pages, audit and rules into items, with the scan's placeholder and counts
+ask-replay dryrun: 24 PASS, 0 FAIL

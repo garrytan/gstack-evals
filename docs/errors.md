@@ -298,6 +298,21 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_OF_PROVIDER_DRIFT](#e_of_provider_drift) | 2 | U20 |
 | [E_OF_SUPPLY_SHORT](#e_of_supply_short) | 2 | U20 |
 | [E_OF_DRYRUN_FAIL](#e_of_dryrun_fail) | 2 | U20 |
+| [E_ASK_PIN](#e_ask_pin) | 2 | U20 |
+| [E_ASK_CUSTODY](#e_ask_custody) | 2 | U20 |
+| [E_ASK_IDENTITY](#e_ask_identity) | 2 | U20 |
+| [E_ASK_PROCESSOR](#e_ask_processor) | 2 | U20 |
+| [E_ASK_CAP](#e_ask_cap) | 2 | U20 |
+| [E_ASK_PROXY](#e_ask_proxy) | 2 | U20 |
+| [E_ASK_INCOMPLETE](#e_ask_incomplete) | 2 | U20 |
+| [E_ASK_RESUME](#e_ask_resume) | warning | U20 |
+| [E_ASK_SHARD_LIMIT](#e_ask_shard_limit) | 2 | U20 |
+| [E_ASK_PRIVACY](#e_ask_privacy) | 2 | U20 |
+| [E_ASK_PARSE](#e_ask_parse) | warning | U20 |
+| [E_ASK_MISSING_CEILING](#e_ask_missing_ceiling) | warning | U20 |
+| [E_ASK_UNFROZEN](#e_ask_unfrozen) | 2 | U20 |
+| [E_ASK_INPUT](#e_ask_input) | 2 | U20 |
+| [E_ASK_DRYRUN_FAIL](#e_ask_dryrun_fail) | 2 | U20 |
 | [E_EP_NOT_BUILT](#e_ep_not_built) | 2 | U20 |
 | [E_EP_SUPPLY_SHORT](#e_ep_supply_short) | 2 | U20 |
 | [E_EP_TESTBED_HISTORY](#e_ep_testbed_history) | 2 | U20 |
@@ -2198,6 +2213,102 @@ Fix: Read the FAIL line, fix the rule's code, and run the dry run again before a
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
 
+### E_ASK_PIN
+
+Ask replay eval: a gstack file read for arms b and c has a sha256 that differs from frozen.json, or git show could not read it at the frozen commit. The line names the path, the expected and the actual digest.
+
+Fix: Read the frozen commit with git show from a gstack clone that holds it (git -C &lt;clone> fetch origin if it is missing), never from a live checkout.
+
+Exit 2. Side effects: None: refused before any paid call. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_ASK_CUSTODY
+
+Ask replay eval: a custody step failed (a digest that differs from SHA256SUMS, an age failure, a decrypt directory off /dev/shm, a file still on disk after its removal) or an opening found a leftover from an earlier one.
+
+Fix: Rerun the opening, which sweeps leftovers first; read the CUSTODY.md line it wrote.
+
+Exit 2. Side effects: The decrypted directory is removed and its removal checked with test ! -e; a CUSTODY.md line records the step. Nothing was sent. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_ASK_IDENTITY
+
+Ask replay eval: the custody identity is read from stdin, and stdin is a terminal or empty.
+
+Fix: Pipe the age identity on stdin.
+
+Exit 2. Side effects: None: refused at once instead of waiting for input. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_ASK_PROCESSOR
+
+Ask replay eval: no particle-1 route on OpenRouter accepts the request with data collection denied, so real items cannot go to it.
+
+Fix: None. particle-1 stays untested on real items and is never retried with data collection allowed.
+
+Exit 2. Side effects: particle-1 samples sent so far keep their spend on the lease; nothing else is sent to it. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_ASK_CAP
+
+Ask replay eval: a spend cap refused a call's reservation, so the shard stopped. The run is incomplete.
+
+Fix: None inside the run. Report spent, reserved and unknown; the run is never retried to change a verdict.
+
+Exit 2. Side effects: Partial: sealed replies and their spend are kept; the lease settles with what was spent. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_ASK_PROXY
+
+Ask replay eval: the metering proxy refused a call for a local reason (a missing or rejected key, a closed lease, the ledger, an allowance or a tripwire), so the shard stopped and that sample stays unsealed. It is not an upstream failure and is never scored as MISSING.
+
+Fix: Fix the cause the line names, then resume the shard: sealed samples are skipped and the unsealed one runs again.
+
+Exit 2. Side effects: Partial: sealed replies and their spend are kept; the lease settles with what was spent. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_ASK_INCOMPLETE
+
+Ask replay eval: the replies lack Opus or Sol samples their shards scheduled, or the label audit has not stood (no --labels, an audit label sample with no sealed record, or kappa below 0.6 without a complete contingency), so the run is incomplete. score prints the absent counts or the reason and no decision rows. particle-1's absent samples only mark its readout untested.
+
+Fix: Resume a shard that stopped on time or on a local fault, or finish the label audit and, when it fails, the contingency. A run a spend cap stopped stays incomplete and is never retried to change a verdict.
+
+Exit 2. Side effects: None: nothing was written. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_ASK_SHARD_LIMIT
+
+Ask replay eval: a paid shard reached its 55-minute limit (frozen.json shards.limit_minutes). No attempt starts past it, and a deadline timer at the limit ends the shard; the custody directory is removed on the way out.
+
+Fix: Run the next shard: sealed samples are skipped, and a sample the limit stopped before its attempt was sent runs again under the same draw.
+
+Exit 2. Side effects: Partial: sealed replies and their spend are kept; the lease settles with what was spent, and a call still open at the deadline settles through the unknown-charge path on resume. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_ASK_PRIVACY
+
+Ask replay eval: the lane's public-text scan or the synthetic set's check found a hit (an issue key or thread code in prose, a dollar figure outside Agent notes, a denied name, a 6-gram shared with custody text, or a content-word Jaccard above 0.5).
+
+Fix: Remove or rewrite the text the counts point at, then scan again.
+
+Exit 2. Side effects: None: no push and no build. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_ASK_UNFROZEN
+
+Ask replay eval: frozen.json still holds a TODO(custody:&lt;name>) value that a paid command needs, such as a seed.
+
+Fix: Fill the value at freeze, commit frozen.json with the prereg, then run the command again.
+
+Exit 2. Side effects: None: refused before any paid call. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_ASK_INPUT
+
+Ask replay eval: an input file does not have the frozen shape (an audit CSV header, a transcript page, an items line, a rules row). The line names the file and the place, never its text.
+
+Fix: Rebuild the input in the frozen shape and run the command again.
+
+Exit 2. Side effects: None: nothing was written. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_ASK_DRYRUN_FAIL
+
+Ask replay eval: a dry-run check printed FAIL: a frozen rule did not hold on the synthetic set or its fixtures. The line names the check.
+
+Fix: Read the FAIL line, fix the rule's code, and run the dry run again before any spend.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
 ### E_EP_NOT_BUILT
 
 Planted-unit eng-review read: a module the prereg names is not built yet, so its subcommand or seam refuses.
@@ -2711,5 +2822,29 @@ Warning. Owner: U20.
 A build-read session ended in a second upstream error or a second infrastructure failure, so its cell is a recorded gap. Every verdict also prints the reading that scores gaps as 0.
 
 Fix: None: the gap is recorded under the frozen session rule.
+
+Warning. Owner: U20.
+
+### E_ASK_RESUME
+
+Ask replay eval: a resumed shard found a sample whose call started and has no sealed reply.
+
+Fix: None by hand: the call was reconciled through the spend ledger's unknown-charge path and the sample is redrawn once; redraws are counted per arm.
+
+Warning. Owner: U20.
+
+### E_ASK_PARSE
+
+Ask replay eval: a reply held no valid action after its one retry. The sample is MISSING (parse) and is scored as the MISSING bounds say.
+
+Fix: None: it is a result, counted per arm and model.
+
+Warning. Owner: U20.
+
+### E_ASK_MISSING_CEILING
+
+Ask replay eval: an arm and model cell has more than 3% MISSING samples, so that model's decision rows read as inconclusive.
+
+Fix: None: report it with the MISSING counts by kind.
 
 Warning. Owner: U20.
