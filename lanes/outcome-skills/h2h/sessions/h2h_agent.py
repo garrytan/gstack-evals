@@ -107,7 +107,7 @@ class H2hAgent(RealAgent):
         wrapper.chmod(0o755)
         trial = "h2h-" + uuid.uuid4().hex[:12]
         cfg = {
-            "cli_path": str(wrapper), "cwd": str(host_dir), "repo": repo, "work": WORK, "sh_dir": SH_DIR, "home": HOME, "exec_prefix": ["docker", "exec", "-i", "-w", repo, container],
+            "cli_path": str(wrapper), "cwd": str(host_dir), "repo": repo, "work": WORK, "sh_dir": SH_DIR, "home": HOME, "exec_prefix": ["docker", "exec", "-i", "-w", repo, container], "container": container,
             "out": str(evdir), "model": model, "no_answer": h["no_answer"], "env": env, "turns": h["turns"], "continuation": h["continuation"], "done_rule": h["done_rule"],
             "continuation_cap": h["continuation_cap"], "limits": h["limits"], "disallowed_tools": h["disallowed_tools"], "home_rule": h["home_rule"], "rerun": o.rerun or None,
             "commits": task["commits"], "head": task["base_commit"],

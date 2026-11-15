@@ -11,11 +11,11 @@
 // stop writes its record and ends the part with CAP_STOP.
 import { spawn } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { BOUNDS } from "../../pfchecks/run.ts";
 import { sessionManifest, type SessionImage } from "../../statemachines/image.ts";
 import { HARBOR_MODEL } from "../../statemachines/run.ts";
-import { CLAUDE_BIN } from "../../statemachines/stub-claude.ts";
 import { h2hFail, readPrereg, type H2hPrereg } from "../prereg.ts";
 import { BROWSER, type ArmInstall, type H2hSession, type H2hUnit } from "../types.ts";
 import { h2hLimits, H2H_PREFIX } from "./driver.ts";
@@ -24,8 +24,11 @@ import type { ArmHome } from "./home.ts";
 import type { H2hPlanned } from "./plan.ts";
 import { endOf, retries, SESSION_RERUN, sessionRecord, writeSessionRecord } from "./session.ts";
 import { turnPlan } from "./turns.ts";
+import { buildRuntimeVolume, runtimePath, RUNTIMES_DIR } from "./runtimes.ts";
 
 const ROOT = join(import.meta.dir, "../../../..");
+/** The Claude Code binary every session mounts: the pinned 2.1.325 native build (part A installs the same version). */
+export const H2H_CLAUDE = process.env.H2H_CLAUDE_BIN ?? join(homedir(), ".capy/work/h2h-s/claude/claude-2.1.325/package/claude");
 const KEYS = /^(ANTHROPIC|OPENAI|OPENROUTER|UBICLOUD|GEMINI|GOOGLE|XAI|DEEPSEEK|TYPESAFE)_[A-Z_]*KEY$|_TOKEN$/;
 /** Claude Code's environment in every arm: pfchecks' fixed block and prereg.json's env. */
 export const claudeEnv = (p: H2hPrereg = readPrereg()): Record<string, string> => ({ CLAUDE_CONFIG_DIR: "/root/.claude", HOME: "/root", CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1", CLAUDE_CODE_MAX_OUTPUT_TOKENS: "32000", DISABLE_AUTOUPDATER: "1", DISABLE_TELEMETRY: "1", DISABLE_ERROR_REPORTING: "1", IS_SANDBOX: "1", ...p.env });
@@ -33,7 +36,7 @@ export const claudeEnv = (p: H2hPrereg = readPrereg()): Record<string, string> =
 export const QUIET = { quiet_sec: 30, bg_wait_sec: 600 } as const;
 export const SUMMARY = "h2h-summary.json";
 export const OPENS = "h2h-opens.jsonl";
-const KEEP = ["sdk-messages.jsonl", "claude-session.jsonl", "usersim-events.jsonl", "tree.bundle", SUMMARY];
+const KEEP = ["sdk-messages.jsonl", "claude-session.jsonl", "usersim-events.jsonl", "tree.tar", SUMMARY];
 
 /** A unit as part S runs it: its record, its problem statement, its session image (the stripped tree at base, one
  *  commit), and the repository and work dirs inside the image. Parts B and C build these. */
@@ -45,6 +48,8 @@ export interface H2hRunInput {
   installs?: ArmInstall[];
   /** The Chromium wrapper B1 sessions mount; part B's file by default. */
   browserWrapper?: string;
+  /** The runtime volume; runH2hSession builds or reuses it when not given. */
+  runtime?: { volume: string };
 }
 
 /** The h2h config h2h_agent.py reads. */
@@ -58,11 +63,12 @@ export function h2hConfig(i: Pick<H2hRunInput, "session" | "home" | "allowance" 
   };
 }
 
-/** The compose overlay: the pinned Claude Code, and the browser conditions on B1 units. */
-export function composeOverlay(kind: H2hUnit["kind"], claude: string, wrapper: string) {
+/** The compose overlay: the pinned Claude Code, the runtime volume read-only at /opt/h2h-runtimes with its bin dir after
+ *  the image's own PATH (path: runtimes.ts runtimePath), and the browser conditions on B1 units. */
+export function composeOverlay(kind: H2hUnit["kind"], claude: string, wrapper: string, runtime: { volume: string; path: string }) {
   const b1 = kind === "B1";
-  const volumes = [{ type: "bind", source: claude, target: "/usr/local/bin/claude", read_only: true }, ...(b1 ? [{ type: "bind", source: wrapper, target: BROWSER.wrapper_container_path, read_only: true }] : [])];
-  return { services: { main: { volumes, environment: b1 ? { ...BROWSER.env } : {}, ...(b1 ? { shm_size: BROWSER.shm_size } : {}) } } };
+  const volumes = [{ type: "bind", source: claude, target: "/usr/local/bin/claude", read_only: true }, { type: "volume", source: runtime.volume, target: RUNTIMES_DIR, read_only: true }, ...(b1 ? [{ type: "bind", source: wrapper, target: BROWSER.wrapper_container_path, read_only: true }] : [])];
+  return { services: { main: { volumes, environment: { PATH: runtime.path, ...(b1 ? BROWSER.env : {}) }, ...(b1 ? { shm_size: BROWSER.shm_size } : {}) } }, volumes: { [runtime.volume]: { external: true as const } } };
 }
 
 /** The longest path one attempt can take inside Harbor's agent phase, from pfchecks' BOUNDS: the pre-open calls, the
@@ -94,7 +100,8 @@ export function runCopy(i: H2hRunInput, attempt: 1 | 2, dir: string, p: H2hPrere
   const h2hJson = join(dir, "h2h-config.json");
   writeFileSync(h2hJson, JSON.stringify(config, null, 1) + "\n");
   const compose = join(dir, "h2h.compose.yaml");
-  writeFileSync(compose, JSON.stringify(composeOverlay(u.unit.kind, i.claude ?? CLAUDE_BIN, wrapper), null, 1) + "\n");
+  const runtime = i.runtime ?? h2hFail("E_H2H_SESSION_INPUT", "runCopy needs the runtime volume (runtimes.ts buildRuntimeVolume)");
+  writeFileSync(compose, JSON.stringify(composeOverlay(u.unit.kind, i.claude ?? H2H_CLAUDE, wrapper, { volume: runtime.volume, path: runtimePath(u.image.tag) }), null, 1) + "\n");
   const manifest = join(dir, "images.json");
   const manifestSha = sessionManifest(manifest, label, u.image);
   const armTar = join(dir, "arm.tar");
@@ -171,12 +178,13 @@ export async function runH2hSession(i: H2hRunInput): Promise<{ record: H2hSessio
   if (i.home.arm !== i.session.arm) h2hFail("E_H2H_SESSION_INPUT", "the home is arm " + i.home.arm + "'s, not " + i.session.arm + "'s");
   mkdirSync(i.out, { recursive: true });
   const p = readPrereg();
+  const runtime = i.runtime ?? (await buildRuntimeVolume());
   const started = Date.now();
   let record: H2hSession | null = null;
   for (const attempt of [1, 2] as const) {
     const dir = join(i.out, "a" + attempt);
     mkdirSync(dir, { recursive: true });
-    const { argv, env, config } = runCopy(i, attempt, dir, p);
+    const { argv, env, config } = runCopy({ ...i, runtime }, attempt, dir, p);
     const { exit, killed } = await harbor(i.harbor ?? "harbor", argv, env, h2hBudget(config.limits.wall_sec, config.turns.length + config.continuation_cap).timer_ms, join(dir, "harbor.log"));
     const ev = find(join(dir, "jobs"), "evaluator");
     const summary = ev && existsSync(join(ev, SUMMARY)) ? (JSON.parse(readFileSync(join(ev, SUMMARY), "utf8")) as Record<string, any>) : null;

@@ -3,8 +3,9 @@ import { describe, expect, spyOn, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { EXIT, loadCommands, main, refusal } from "../../lanes/outcome-skills/h2h/cli.ts";
+import { EXIT, loadCommands, main, RERUN_RUNNER, refusal } from "../../lanes/outcome-skills/h2h/cli.ts";
 import { rerun, type RerunRunner } from "../../lanes/outcome-skills/h2h/rerun.ts";
+import { sessionRunner } from "../../lanes/outcome-skills/h2h/sessions/rerunner.ts";
 import type { H2hSession } from "../../lanes/outcome-skills/h2h/types.ts";
 
 const temp = (x: string) => mkdtempSync(join(tmpdir(), x));
@@ -50,7 +51,8 @@ const runner = (o: Partial<RerunRunner> & { outcomes?: Awaited<ReturnType<RerunR
 
 describe("h2h dispatcher", () => {
   test("loads every part's commands and refuses a name two parts export", async () => {
-    expect(Object.keys(await loadCommands()).sort()).toEqual(["analyze", "draw", "ledger-dryrun", "o-frame", "power-table", "readout", "rerun", "score"]);
+    expect(Object.keys(await loadCommands()).sort()).toEqual(["analyze", "audit", "contain-home", "draw", "dryrun", "exposure", "install", "ledger-dryrun", "o-frame", "pins", "power-table", "readout", "rerun", "runtimes", "score", "session-plan", "session-run"]);
+    expect(RERUN_RUNNER).not.toBeNull();
     expect(loadCommands(["./score/commands.ts", "./score/commands.ts"])).rejects.toThrow(/^E_USAGE /);
   });
 
@@ -75,11 +77,15 @@ describe("h2h rerun", () => {
     expect(r.stdout).toContain("nothing ran");
   });
 
-  test("an unwired runner, a usage error and a refused precondition exit 3, 2 and 3", async () => {
+  test("an unwired runner, the wired runner without its environment, a usage error and a refused precondition exit 3, 3, 2 and 3", async () => {
     const units = unitsFile();
-    const unwired = await quiet(() => main(["rerun", "--arm", "gstack", "--units", units, "--spend-cap", "100"]));
-    expect(unwired.value).toBe(3);
-    expect(unwired.stderr).toStartWith("E_H2H_RERUN_UNWIRED ");
+    const argv = ["--arm", "gstack", "--units", units, "--spend-cap", "100"];
+    const unwired = await quiet(() => rerun(argv, null).catch((e) => refusal(e)));
+    expect(unwired.value).toMatchObject({ code: "E_H2H_RERUN_UNWIRED" });
+    expect(EXIT.E_H2H_RERUN_UNWIRED).toBe(3);
+    const wired = await quiet(() => rerun(argv, sessionRunner({})).catch((e) => refusal(e)));
+    expect(wired.value).toMatchObject({ code: "E_H2H_RERUN_PRECONDITION" });
+    expect((wired.value as { text: string }).text).toContain("H2H_CONTROL, H2H_PROXY, H2H_HOMES, H2H_UNITS not set");
     expect((await quiet(() => main(["rerun", "--arm", "nobody", "--units", units, "--spend-cap", "100"]))).value).toBe(2);
     expect((await quiet(() => main(["rerun", "--arm", "gstack", "--units", "/nonexistent.json", "--spend-cap", "100"]))).value).toBe(3);
     const r = runner({ preflight: async () => "docker is not running" });

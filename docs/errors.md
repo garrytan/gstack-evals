@@ -313,6 +313,8 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_H2H_CAPTURE](#e_h2h_capture) | 2 | U20 |
 | [E_H2H_EXPOSURE](#e_h2h_exposure) | 2 | U20 |
 | [E_H2H_DRYRUN_FAIL](#e_h2h_dryrun_fail) | 2 | U20 |
+| [E_H2H_RUNTIMES](#e_h2h_runtimes) | 2 | U20 |
+| [E_H2H_E2E_FAIL](#e_h2h_e2e_fail) | 2 | U20 |
 | [E_H2H_O_SOURCE](#e_h2h_o_source) | 2 | U20 |
 | [E_H2H_O_LICENCE](#e_h2h_o_licence) | 2 | U20 |
 | [E_H2H_O_EXCLUDED](#e_h2h_o_excluded) | 2 | U20 |
@@ -2337,6 +2339,22 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 A line of the head-to-head's driven launch against a fake provider printed FAIL: a frozen rule (the DONE variants, the continuation cap, scripted turns outside the cap, the frozen question reply, reservation-bound refusals at 5 and 21 calls in flight, an allowance stop, a pack's home loading under the Agent SDK) did not hold on its fixture.
 
 Fix: Read the FAIL line, fix the rule's code test-first, and run the dry run again before any spend.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_H2H_RUNTIMES
+
+The head-to-head's runtime volume (post section 3: node, bun, python3 and gh at /opt/h2h-runtimes) could not be built or read: a release download answered an error or its sha256 is not the pin, a copy step failed, the volume did not read back its MANIFEST.json, or a runtime's version read from the volume is not its pin.
+
+Fix: Read the step named in the message, check Docker and the network, and build again; a pin that moved upstream stays pinned and the change goes to the Captain.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_H2H_E2E_FAIL
+
+A line of the head-to-head's keyless end-to-end run printed FAIL: on a real unit in Harbor containers against a fake provider, an arm's session did not end completed with DONE, its pack did not load, a runtime was not on PATH, it read another arm's install, its slot did not close finalized, part C's score did not run or read the wrong outcome, or the driver did not stop clean.
+
+Fix: Read the FAIL line and the session dir it names, fix the cause, and run the end-to-end run again before any spend.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
 

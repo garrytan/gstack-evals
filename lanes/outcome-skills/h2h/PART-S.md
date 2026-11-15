@@ -8,12 +8,14 @@ ledger, and no test reads a provider key.
 ## What runs a session
 
 1. plan.ts orders a stage's sessions from prereg.json's order_seed (h2h-plan.v1).
-2. run.ts writes the attempt's Harbor task, the h2h config and a compose overlay, and runs Harbor with h2h_agent.py.
+2. run.ts writes the attempt's Harbor task, the h2h config and a compose overlay (the pinned Claude Code, and the runtime
+   volume read-only at /opt/h2h-runtimes with its bin dir after the image's PATH), and runs Harbor with h2h_agent.py.
 3. h2h_agent.py checks the image, locks egress to the proxy, copies pfchecks' sh scripts, this folder's sh/ and the
    arm's home into the container (docker cp over /root, so the image's own /root stays), and runs h2h_turns.py.
 4. h2h_turns.py opens one driver slot at the session allowance, runs the arm's scripted turns, then continuations while
-   DONE is absent (at most 6), hashes the tree after every turn, closes the slot, commits the tree with pfchecks'
-   capture.sh and exports it as a git bundle.
+   DONE is absent (at most 6), hashes the tree after every turn, closes the slot, and tars the tree as tree.tar: .git
+   plus every tracked and unignored file, with no capture commit, so part C's scorer diffs the working tree against
+   the record's base_head.
 5. session.ts reads the end, applies the one whole-session retry and the gap codes, and writes h2h-session.v1.
 6. exposure.ts reads loaded, procedure ran and the read audit from both transcripts.
 
@@ -30,7 +32,11 @@ ledger, and no test reads a provider key.
 - h2h_turns.py, h2h_agent.py, sh/treehash.sh: the session loop and its Harbor agent.
 - session.ts, home.ts, run.ts: end rules and record, arm homes, the Harbor runner.
 - markers.ts, markers.json, exposure.ts: frozen markers and the detectors.
-- dryrun.ts, commands.ts: the driven launch and the commands the lead wires.
+- dryrun.ts: the driven launch on the host against a stub upstream.
+- runtimes.ts: the runtime volume (node, bun, python3, gh), its pins, MANIFEST.json and reuse rule.
+- rerunner.ts: the session runner cli.ts wires into gstack-evals h2h rerun (RERUN_RUNNER).
+- e2e.ts: the keyless end-to-end run through that runner in Harbor containers on a real unit.
+- commands.ts: session-plan, session-run, dryrun, exposure, audit and runtimes, loaded by cli.ts.
 
 ## Readings chosen where the post left room
 
@@ -58,6 +64,19 @@ ledger, and no test reads a provider key.
   playbook's first two steps by the sha256 of their first six bare words. markers.json stores only those digests.
 - gstack on bug entries: loaded and procedure ran by the installed pack, as the post says.
 - gstack's timeline event cannot be read from transcripts, so it is not a marker.
+- Runtimes: the volume's bin dir comes after the session image's own PATH, so a tool the image already has wins. The
+  SM harness's session images carry node and bun in /opt/laneb/bin (same versions as the pins) and the unit image its
+  own python3, so on O units only gh resolves from the volume. Node and bun are copied from part A's install-image
+  bases, python3 is python-build-standalone and gh the release tarball, each checked by digest or sha256 and read back.
+- MCP servers: a home's user-scope servers (~/.claude.json mcpServers) are passed to Claude Code under
+  --strict-mcp-config, so a pack's server loads and a unit repository's own .mcp.json does not. Only agent-skills
+  registers one (chrome-devtools-mcp through npx). With egress locked to the proxy, npx waits on the registry past the
+  MCP start timeout and the server fails, so a stdio server gets npm_config_offline=true under its own env and starts
+  from the npm cache part A's install left in the home. Its browser path (/opt/h2h/chromium) exists only on B1 units.
+- Tree capture: the tree leaves the container as one tar (no capture commit and no bundle), so nothing the harness
+  writes lands in the session's history and part C reads the working tree as the agent left it.
+- rerun: records are stage2 sessions indexed in the order run, on the item H2H_RERUN_ITEM names (default plan.ts
+  itemOf's stage 2 item); rerun's flags are frozen, so the driver, homes and unit dirs come from the environment.
 
 ## Contracts assumed from other parts
 
@@ -91,7 +110,30 @@ retryable 429s counted apart from allowance stops; and Claude Code retries its o
 - Exposure markers appear in both transcripts: the <command-name> block and "Base directory for this skill" in Claude
   Code's own transcript, and hook output (superpowers, ponystack) in the SDK's hook records.
 
-## Not yet run
+## The end-to-end run (2026-11-15)
 
-- The Harbor path (run.ts with h2h_agent.py in a container) is typechecked and imports clean but has not been driven
-  end to end: it needs a unit session image from parts B or C and part A's homes.
+The Harbor path now runs end to end, keyless, through rerun's wired runner: one real O unit (c-ares__c-ares-1197, the
+third id in o-order.json, kept by the SM oracle), part A's installed homes, and the pinned Claude Code on the real Agent
+SDK in Harbor containers, against a stub upstream through the driver's metering proxy on a temporary ledger. All nine
+arms (the seven primary arms, gstack-pony and gstack-oneline) passed every check and the driver stopped clean: each
+pack loaded (none's did not), /agent-skills:test resolved from part A's agent-skills home with its chrome-devtools
+server connected, node, bun, python3 and gh resolved in every container, the read audit found no read of another arm's
+install, every slot closed finalized, and part C's score read clean_fix for the eight arms whose stub applied the fix and
+no_fix for none. Commands, versions and the per-arm lines are in sessions/e2e-2026-11-15.md.
+
+What it found and fixed:
+
+- agent-skills' MCP server failed in every container until its env got npm_config_offline=true (see Readings).
+- The capture commit and git bundle were replaced by tree.tar, which part C's scorer reads directly.
+
+Findings for the lead:
+
+- superpowers' installed home drifts from arms-pins.json because Claude Code 2.1.325 writes a timestamp file,
+  .claude/plugins/.last_inuse_sweep, during the install; part A's recorded home lacks it. Removing the file makes the
+  home match. Part A's install should delete it before hashing (or the hash rule should skip it by a new frozen line);
+  HASH_RULE and arms-pins.json were not changed here.
+- The host dry run's --homes mode cannot load plugin packs from part A's homes: their installed_plugins.json records
+  /root paths, which exist only in the container. The dry run with fixture homes still passes, and the end-to-end run
+  is the check for part A's plugin homes.
+- Each session took 60 to 90 s; part C's scoring took 6 to 10 minutes per arm on this unit (C build plus 1,167 stable
+  tests), so scoring, not sessions, sets the wall time of a stage on C units.

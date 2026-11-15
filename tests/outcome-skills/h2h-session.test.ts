@@ -71,12 +71,16 @@ test("the h2h config carries the arm's scripted turns and the frozen texts, rule
   expect(() => h2hConfig({ session: planned("none"), home: { ...home, arm: "none" }, allowance: 30 }, "x", "O")).toThrow(/^E_H2H_SESSION_INPUT/);
 });
 
-test("the compose overlay mounts the pinned Claude Code everywhere and the browser conditions on B1 only", () => {
-  expect(composeOverlay("O", "/c/claude", "/w/chromium")).toEqual({ services: { main: { volumes: [{ type: "bind", source: "/c/claude", target: "/usr/local/bin/claude", read_only: true }], environment: {} } } });
-  const b1 = composeOverlay("B1", "/c/claude", "/w/chromium").services.main as Record<string, any>;
+test("the compose overlay mounts the pinned Claude Code and the runtime volume everywhere and the browser conditions on B1 only", () => {
+  const rt = { volume: "h2h-runtimes-x", path: "/usr/bin:/bin:/opt/h2h-runtimes/bin" };
+  expect(composeOverlay("O", "/c/claude", "/w/chromium", rt)).toEqual({
+    services: { main: { volumes: [{ type: "bind", source: "/c/claude", target: "/usr/local/bin/claude", read_only: true }, { type: "volume", source: "h2h-runtimes-x", target: "/opt/h2h-runtimes", read_only: true }], environment: { PATH: rt.path } } },
+    volumes: { "h2h-runtimes-x": { external: true } },
+  });
+  const b1 = composeOverlay("B1", "/c/claude", "/w/chromium", rt).services.main as Record<string, any>;
   expect(b1.shm_size).toBe(BROWSER.shm_size);
-  expect(b1.volumes[1]).toEqual({ type: "bind", source: "/w/chromium", target: BROWSER.wrapper_container_path, read_only: true });
-  expect(b1.environment).toEqual(BROWSER.env);
+  expect(b1.volumes[2]).toEqual({ type: "bind", source: "/w/chromium", target: BROWSER.wrapper_container_path, read_only: true });
+  expect(b1.environment).toEqual({ PATH: rt.path, ...BROWSER.env });
   expect(h2hBudget(P.limits.wall_sec, 8).agent_s).toBeGreaterThan(P.limits.wall_sec);
 });
 

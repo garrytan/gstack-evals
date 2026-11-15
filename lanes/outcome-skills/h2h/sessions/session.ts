@@ -53,6 +53,7 @@ const ran = (s: Summary | null): Summary[] => ((s?.turns ?? []) as Summary[]).fi
 export function sessionRecord(p: H2hPlanned, s: Summary | null, o: { model: string; attempt: 1 | 2; exposure: Exposure | null; wall_ms: number; home_tree_sha256: string | null }): H2hSession {
   const end = endOf(s);
   const close = closeOf(s);
+  const head = ((s?.check?.HEAD ?? []) as string[])[0];
   const usage = (close.usage ?? {}) as Record<string, number>;
   const questions = Object.values((s?.questions ?? {}) as Record<string, { questions?: number }>).reduce((n, q) => n + (q.questions ?? 0), 0);
   return {
@@ -60,7 +61,7 @@ export function sessionRecord(p: H2hPlanned, s: Summary | null, o: { model: stri
     turns: ran(s).length, scripted_turns: ran(s).filter((t) => String(t.phase).startsWith("t")).length, continuations: Number(s?.continuations ?? 0), spurious_continuations: Number(s?.spurious_continuations ?? 0),
     done_seen: s?.done === true, questions, reservation_refusals: Number(close.reservation_bound ?? 0), cost_usd: Number(close.spent_micros ?? 0) / 1_000_000,
     tokens: { input: usage.input ?? 0, output: usage.output ?? 0, cache_read: usage.cache_read ?? 0, cache_write: usage.cache_write ?? 0 }, wall_ms: o.wall_ms, exposure: o.exposure,
-    transcript: "sdk-messages.jsonl", tree_bundle: "tree.bundle",
+    transcript: "sdk-messages.jsonl", tree_bundle: "tree.tar", ...(head ? { base_head: head } : {}),
     attempts: o.attempt, allowance_stops: Number(close.allowance_stops ?? 0), home_tree_sha256: o.home_tree_sha256, claude_version: typeof s?.claude_version === "string" ? s.claude_version : null, refused: typeof s?.refused === "string" ? s.refused.slice(0, 600) : null,
   };
 }

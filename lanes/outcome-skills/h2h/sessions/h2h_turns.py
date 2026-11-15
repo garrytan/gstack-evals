@@ -7,9 +7,12 @@ across its turns: one wall deadline from the slot's open, and max_turns less the
 end completed (a limit, an error, an upstream end), or in which the assistant stopped for refusal, ends the session;
 run.ts reads the end from the summary (session.ts endOf). AskUserQuestion gets texts.question_reply through
 sm_user.NoAnswer; prose questions are counted and left to the continuation. sh/treehash.sh hashes the tree before the
-first turn and after each one, so a continuation after which the tree did not change counts as spurious. At the end
-pfchecks' capture.sh commits the tree (its inventory taken before the first turn) and the tree leaves as a git bundle; a
-capture step that fails refuses with E_H2H_CAPTURE, its cause read as pf_turns' Session.step reads it.
+first turn and after each one, so a continuation after which the tree did not change counts as spurious. At the end the
+main checkout leaves as tree.tar, as part C's scorer reads it: .git and every file git lists (tracked, or untracked and
+not ignored), as the agent left them, with no commit made; a capture step that fails refuses with E_H2H_CAPTURE, its
+cause read as pf_turns' Session.step reads it. The check before the slot also records which of node, bun, python3, gh
+and git the session's PATH holds (the runtime volume's are appended after the image's own), and the session passes the
+home's user-scope MCP servers to Claude Code under --strict-mcp-config.
 
 Each turn ends as real_agent's _drive ends a phase: the agent ended its turn and its background tasks are quiet (quiet_sec,
 then bg_wait_sec with nothing ends it as bg_wait_expired), bounded by the session's wall deadline.
@@ -18,7 +21,7 @@ Before the slot opens, the tree must hold no CLAUDE.md, CLAUDE.local.md, AGENTS.
 none arm's home holds no pack path at all (home_rule none); a pack arm's holds no gstack (pack); gstack's arms may hold
 gstack (gstack). CHECK lists the same paths as real_agent's SM_CHECK, under the session's home.
 Usage: python h2h_turns.py <config.json>. It writes h2h-summary.json, sdk-messages.jsonl (each record carries its phase,
-t1 to tn for scripted turns and c1 to c6 for continuations), claude-session.jsonl, usersim-events.jsonl, tree.bundle and
+t1 to tn for scripted turns and c1 to c6 for continuations), claude-session.jsonl, usersim-events.jsonl, tree.tar and
 h2h-opens.jsonl (one line written before the slot open request) under out. Under Harbor the agent passes its driver
 slot; the dry run gives control (ControlSlot) or a base_url and token (StaticSlot), and may name local plugin dirs
 (plugins) for fixture homes that register no plugin in their settings.
@@ -26,6 +29,7 @@ slot; the dry run gives control (ControlSlot) or a base_url and token (StaticSlo
 import asyncio
 import json
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -51,10 +55,12 @@ echo "HEAD $(git rev-parse HEAD)"
 find . -name .git -prune -o \( -name CLAUDE.md -o -name CLAUDE.local.md -o -name AGENTS.md -o -name .claude \) -print | sed 's/^/INSTR /'
 for p in .claude/skills .claude/plugins .claude/commands .claude/agents .claude/CLAUDE.md .local/share/gstack .capy .gstack; do [ -e "$2/$p" ] && echo "HOME $p"; done
 [ -d "$2/.claude/skills/gstack" ] && echo "GSTACK $(git -C "$2/.claude/skills/gstack" rev-parse HEAD 2>/dev/null || echo none)"
+for t in node bun python3 gh git; do p=$(command -v "$t" 2>/dev/null) && echo "RUNTIME $t $p $("$t" --version 2>&1 | head -1)"; done
 exit 0
 '''
 REFUSED_HOME = {"none": None, "pack": {".capy", ".local/share/gstack", ".gstack"}, "gstack": {".capy"}}
 GIT = 'GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null git -C "$1" -c safe.directory="*" -c core.hooksPath=/dev/null -c core.fsmonitor=false -c core.excludesFile=/dev/null'
+TREE_TAR = GIT + ' rev-parse --git-dir >/dev/null && { printf ".git\\0"; ' + GIT + ' ls-files -z --cached --others --exclude-standard; } | tar -C "$1" --null -T - -cf "$2/tree.tar" --ignore-failed-read --warning=no-file-removed 2>"$2/tree.tar.err"; s=$?; [ "$s" -le 1 ] || { cat "$2/tree.tar.err" >&2; exit "$s"; }'
 TREE = re.compile(r"^H2H_TREE ([0-9a-f]{64}) files=(\d+)$", re.M)
 
 
@@ -120,14 +126,32 @@ class Turns(PfSession):
     def check(self) -> None:
         cfg = self.cfg
         lines = self.sh(CHECK, cfg["repo"], cfg["home"]).stdout.decode(errors="replace").splitlines()
-        got = {k: [l.split(" ", 1)[1] for l in lines if l.startswith(k + " ")] for k in ("COMMITS", "HEAD", "INSTR", "HOME", "GSTACK")}
+        got = {k: [l.split(" ", 1)[1] for l in lines if l.startswith(k + " ")] for k in ("COMMITS", "HEAD", "INSTR", "HOME", "GSTACK", "RUNTIME")}
         self.summary["check"] = got
+        self.summary["runtimes"] = {r.split(" ", 2)[0]: {"path": r.split(" ", 2)[1], "version": (r.split(" ", 2) + [""])[2]} for r in got["RUNTIME"]}
         if "commits" in cfg and (got["COMMITS"] != [str(cfg["commits"])] or got["HEAD"] != [cfg["head"]]):
             raise RuntimeError(f"E_H2H_SESSION_ARM the session tree has commits {got['COMMITS']} at {got['HEAD']}, not {cfg['commits']} at {cfg['head']}; nothing was opened")
         refused = REFUSED_HOME[cfg["home_rule"]]
         bad = ["INSTR " + p for p in got["INSTR"]] + ["HOME " + p for p in got["HOME"] if refused is None or p in refused] + (["GSTACK " + g for g in got["GSTACK"]] if cfg["home_rule"] != "gstack" else [])
         if bad:
             raise RuntimeError(f"E_H2H_SESSION_ARM the session tree holds an instruction file, or the {cfg['home_rule']} home holds a path its rule refuses: {bad[:10]}; nothing was opened")
+
+    def mcp_servers(self) -> dict:
+        """The MCP servers the arm's home registers at user scope (~/.claude.json mcpServers), passed to Claude Code under
+        --strict-mcp-config so they load as the pack registered them while a unit repository's own .mcp.json does not.
+        Only agent-skills registers one (chrome-devtools-mcp, run by npx). Egress is locked to the proxy, where npx waits
+        on the registry past the MCP start timeout, so a stdio server gets npm_config_offline=true under its own env and
+        starts from the npm cache part A's install left in the home."""
+        if "mcp" not in self.__dict__:
+            res = self.sh('cat "$1/.claude.json" 2>/dev/null || true', self.cfg["home"])
+            try:
+                servers = (json.loads(res.stdout or b"{}") or {}).get("mcpServers") or {}
+            except ValueError:
+                servers = {}
+            servers = servers if isinstance(servers, dict) else {}
+            self.mcp = {k: ({**v, "env": {"npm_config_offline": "true", **(v.get("env") or {})}} if isinstance(v, dict) and v.get("command") else v) for k, v in servers.items()}
+            self.summary["mcp_servers"] = sorted(self.mcp)
+        return self.mcp
 
     def tree(self):
         try:
@@ -175,10 +199,11 @@ class Turns(PfSession):
                     last_text = said
 
         env = {**cfg["env"], "ANTHROPIC_BASE_URL": slot["base_url"], "ANTHROPIC_API_KEY": slot["token"]}
+        servers = self.mcp_servers()
         options = ClaudeAgentOptions(
             cli_path=cfg["cli_path"], cwd=cfg["cwd"], env=env, can_use_tool=can_use_tool, hooks={"PreToolUse": [HookMatcher(matcher=None, hooks=[keep_open])]},
             system_prompt={"type": "preset", "preset": "claude_code"}, permission_mode="default", model=cfg["model"], setting_sources=["user", "project"],
-            max_turns=left, disallowed_tools=list(cfg["disallowed_tools"]), extra_args={"strict-mcp-config": None}, resume=resume,
+            max_turns=left, disallowed_tools=list(cfg["disallowed_tools"]), extra_args={"strict-mcp-config": None}, resume=resume, mcp_servers=servers,
             plugins=[{"type": "local", "path": p} for p in cfg.get("plugins") or []],
         )
         started = time.time()
@@ -221,7 +246,7 @@ class Turns(PfSession):
         repo, work = cfg["repo"], cfg["work"]
         self.check()
         out["claude_version"] = self.sh("claude --version").stdout.decode(errors="replace").strip()
-        start = self.sh('mkdir -p "$2" && bash "$1/capture.sh" inventory "$3" > "$2/inv" && bash "$1/capture.sh" filters "$3"', cfg["sh_dir"], work, repo)
+        start = self.sh('mkdir -p "$2" && bash "$1/capture.sh" filters "$3"', cfg["sh_dir"], work, repo)
         self.filters = start.stdout if start.returncode == 0 else b""
         out["trees"].append(self.tree())
         with (self.out / "h2h-opens.jsonl").open("a") as f:
@@ -262,11 +287,21 @@ class Turns(PfSession):
         finally:
             out["slot"]["close"] = self.slots.close(slot, "agent_finished")
         try:
-            out["capture"] = self.script("capture.sh", "commit", repo, work + "/inv", work, needs=("inv",))
-            (self.out / "tree.bundle").write_bytes(self.step("bundle", (), GIT + ' bundle create "$2/tree.bundle" HEAD >/dev/null && cat "$2/tree.bundle"', repo, work))
-        except RuntimeError as e:
+            self.step("tree", (), TREE_TAR, repo, work)
+            self.copy_out(work + "/tree.tar", self.out / "tree.tar")
+        except (RuntimeError, OSError, subprocess.SubprocessError) as e:
             raise RuntimeError("E_H2H_CAPTURE " + str(e)) from None
+        out["capture"] = {"tree_tar_bytes": (self.out / "tree.tar").stat().st_size}
         return out
+
+    def copy_out(self, src: str, dest: Path) -> None:
+        """Copies a file the session's container wrote to the host: docker cp under Harbor, a plain copy on the host."""
+        if self.cfg.get("container"):
+            r = subprocess.run(["docker", "cp", f"{self.cfg['container']}:{src}", str(dest)], capture_output=True, timeout=1800)
+            if r.returncode != 0:
+                raise RuntimeError(f"docker cp {src} failed: {r.stderr.decode(errors='replace')[-300:]}")
+        else:
+            shutil.copyfile(src, dest)
 
     def finish(self, refused: str | None = None) -> dict:
         out = self.summary

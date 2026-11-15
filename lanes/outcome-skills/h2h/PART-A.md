@@ -32,7 +32,7 @@ This is what part S (sessions) and the lead build on.
 
 ## Commands
 
-`arms/commands.ts` exports `commands`, which the lead wires into `h2h/cli.ts`.
+`arms/commands.ts` exports `commands`, which `h2h/cli.ts` loads (COMMAND_MODULES).
 
 - `install --arm <arm> --home <dir> [--sources <dir>]` installs one home into an empty directory, in a throwaway
   container from the install image, and writes `<home>.install.json` and `<home>.install.log` beside it. It refuses a

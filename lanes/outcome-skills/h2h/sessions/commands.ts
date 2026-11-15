@@ -1,12 +1,13 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
-// Part S's commands for the head-to-head CLI (the lead wires them into h2h/cli.ts). Each takes its argv after the command
-// name and returns an exit code; a refusal prints one line on stderr that starts with its reason code.
+// Part S's commands for the head-to-head CLI (h2h/cli.ts loads them). Each takes its argv after the command name and
+// returns an exit code; a refusal prints one line on stderr that starts with its reason code.
 //   session-plan --units <units.json> --stage <stage0|stage1|stage2> --out <plan.json>
 //   session-run --plan <plan.json> --index <n> --unit <unit-input.json> --control <url> --proxy <url> --out <dir>
 //       (--homes <dir> --pins <arms-pins.json> | --home <dir>) [--allowance <usd>] [--gsd-onboard] [--browser-wrapper <file>]
 //   dryrun [dryrun.ts flags]
 //   exposure --arm <arm> --entry <bug|feature> --transcript <file> [--transcript <file>] [--files <list.txt>]
 //   audit --transcript <file> [--transcript <file>] --pins <arms-pins.json> [--arm <arm>]
+//   runtimes [--cache <dir>]   builds the runtime volume, or reuses it while its manifest holds the pins
 import { readFileSync } from "node:fs";
 import { H2hError, h2hFail } from "../prereg.ts";
 import { ALL_ARMS, type Entry, type H2hArm, type H2hUnit, type Stage } from "../types.ts";
@@ -15,6 +16,7 @@ import { exposure, readAudit, readEvents, readInstalls } from "./exposure.ts";
 import { armHome } from "./home.ts";
 import { planStage, readPlan, writePlan } from "./plan.ts";
 import { runH2hSession, type H2hUnitInput } from "./run.ts";
+import { buildRuntimeVolume } from "./runtimes.ts";
 
 const flag = (argv: string[], k: string): string | undefined => (argv.includes(k) ? argv[argv.indexOf(k) + 1] : undefined);
 const flags = (argv: string[], k: string): string[] => argv.flatMap((a, i) => (a === k && argv[i + 1] !== undefined ? [argv[i + 1]!] : []));
@@ -72,6 +74,12 @@ export const commands: Record<string, (argv: string[]) => Promise<number>> = {
     if (!files.length) h2hFail("E_USAGE", "missing --transcript; usage: " + u);
     const a = flag(argv, "--arm");
     console.log(JSON.stringify(readAudit(readEvents(files), readInstalls(need(argv, "--pins", u)), a === undefined ? undefined : arm(a))));
+    return 0;
+  }),
+  runtimes: guard(async (argv) => {
+    const cache = flag(argv, "--cache");
+    const v = await buildRuntimeVolume(cache === undefined ? {} : { cache });
+    console.log(v.volume + (v.reused ? " reused" : " built") + ": " + Object.entries(v.versions).map(([k, x]) => k + " " + x).join(", "));
     return 0;
   }),
 };

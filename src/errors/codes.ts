@@ -2606,6 +2606,24 @@ export const CODES = {
     resumable: true,
     owner: "U20",
   },
+  E_H2H_RUNTIMES: {
+    exit: 2,
+    meaning: "The head-to-head's runtime volume (post section 3: node, bun, python3 and gh at /opt/h2h-runtimes) could not be built or read: a release download answered an error or its sha256 is not the pin, a copy step failed, the volume did not read back its MANIFEST.json, or a runtime's version read from the volume is not its pin.",
+    fix: "Read the step named in the message, check Docker and the network, and build again; a pin that moved upstream stays pinned and the change goes to the Captain.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: true,
+    owner: "U20",
+  },
+  E_H2H_E2E_FAIL: {
+    exit: 2,
+    meaning: "A line of the head-to-head's keyless end-to-end run printed FAIL: on a real unit in Harbor containers against a fake provider, an arm's session did not end completed with DONE, its pack did not load, a runtime was not on PATH, it read another arm's install, its slot did not close finalized, part C's score did not run or read the wrong outcome, or the driver did not stop clean.",
+    fix: "Read the FAIL line and the session dir it names, fix the cause, and run the end-to-end run again before any spend.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: true,
+    owner: "U20",
+  },
   // h2h, part B: breadth units, image recipes, parsers and the browser oracle.
   // h2h, part C: O draw, scoring additions, analysis, items and the rerun command.
   E_H2H_O_SOURCE: {

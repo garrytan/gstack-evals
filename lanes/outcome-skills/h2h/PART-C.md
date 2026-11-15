@@ -102,8 +102,8 @@ All run as `bin/gstack-evals h2h <command>` (or `bun lanes/outcome-skills/h2h/cl
 ## Rerun
 
 - A real run stops before any session when spent plus one allowance would pass the cap (exit 10).
-- --out defaults to h2h-rerun. RERUN_RUNNER in cli.ts stays null until part S's runner is wired; until then a real run
-  exits 3 with E_H2H_RERUN_UNWIRED.
+- --out defaults to h2h-rerun. RERUN_RUNNER in cli.ts is part S's session runner (sessions/rerunner.ts); with no runner
+  wired a real run exits 3 with E_H2H_RERUN_UNWIRED.
 
 ## Open items
 

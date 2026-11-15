@@ -2,19 +2,20 @@
 // gstack-evals h2h: the skill-pack head-to-head's commands (wiki/plans/2026-11-15-geva-538-skill-pack-h2h-prereg). Each
 // build part exports `commands` from lanes/outcome-skills/h2h/<dir>/commands.ts; COMMAND_MODULES lists the ones this
 // dispatcher loads, and a part is wired by adding its path there. rerun is the dispatcher's own command (rerun.ts), and
-// RERUN_RUNNER is where the lead connects part S's session runner. Every refusal prints its reason code first.
+// RERUN_RUNNER is part S's session runner (sessions/rerunner.ts). Every refusal prints its reason code first.
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { CODES, docAnchor, isReasonCode } from "../../../src/errors/codes.ts";
 import { H2hError, h2hFail } from "./prereg.ts";
 import { rerun, type RerunRunner } from "./rerun.ts";
+import { sessionRunner } from "./sessions/rerunner.ts";
 
 export type Command = (argv: string[]) => Promise<number>;
 
 /** Part modules, relative to this file. Add a part's "./<dir>/commands.ts" here to wire it. */
-export const COMMAND_MODULES = ["./ordinary/commands.ts", "./score/commands.ts", "./analysis/commands.ts"];
-/** Part S's session runner for rerun; null until the lead wires it (rerun then refuses with E_H2H_RERUN_UNWIRED). */
-export const RERUN_RUNNER: RerunRunner | null = null;
+export const COMMAND_MODULES = ["./ordinary/commands.ts", "./arms/commands.ts", "./sessions/commands.ts", "./score/commands.ts", "./analysis/commands.ts"];
+/** Part S's session runner for rerun; null would make rerun refuse with E_H2H_RERUN_UNWIRED. */
+export const RERUN_RUNNER: RerunRunner | null = sessionRunner();
 
 /** Process exit codes by reason code; every other refusal exits 2. rerun's are section 12's. */
 export const EXIT: Record<string, number> = { E_H2H_RERUN_PRECONDITION: 3, E_H2H_RERUN_UNWIRED: 3, E_H2H_RERUN_CAP_STOP: 10, E_H2H_RERUN_CONTAINMENT: 12 };
