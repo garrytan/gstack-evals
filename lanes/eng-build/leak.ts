@@ -30,7 +30,14 @@ export function leakNeedles(repo: string, base: string, merge: string, fixes: st
   };
   const lines = [...new Set([...addedLines(git(repo, ["diff", "--no-renames", "--no-ext-diff", base, merge])), ...fixes.flatMap((f) => addedLines(product(f + "^1", f)))])];
   if (lines.length === 0) return [];
-  const present = new Set(gitRun(repo, ["grep", "-h", "-o", "-F", ...lines.flatMap((l) => ["-e", l]), base]).stdout.split("\n").map((l) => l.trim()));
+  const dir = mkdtempSync(join(tmpdir(), "eb-needles-"));
+  let present: Set<string>;
+  try {
+    writeFileSync(join(dir, "patterns.txt"), lines.join("\n") + "\n");
+    present = new Set(gitRun(repo, ["grep", "-h", "-o", "-F", "-f", join(dir, "patterns.txt"), base]).stdout.split("\n").map((l) => l.trim()));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
   return lines.filter((l) => !present.has(l)).sort((a, b) => b.length - a.length || a.localeCompare(b));
 }
 

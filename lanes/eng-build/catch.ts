@@ -21,7 +21,7 @@ import { EbError } from "./errors.ts";
 import { FROZEN } from "./frozen.ts";
 import { ecoOfFile } from "./recipes.ts";
 import type { CaseClass, Ecosystem } from "./types.ts";
-import { buildUnit, EB_PROTECT, readUnit, scopesOf, targetOfFile, treeGrid, treePatch, type EbTask, type Grid, type UnitSpec } from "./unit.ts";
+import { buildUnit, EB_PROTECT, readUnit, scopesOf, targetOfFile, treeGrid, treePatch, type EbTask, type Grid, type Sandbox, type UnitSpec } from "./unit.ts";
 
 const EB_CONFIG = EB_PROTECT.map((p) => new RegExp(p));
 
@@ -173,6 +173,9 @@ export interface CatchOptions {
   runs?: number;
   seed?: number;
   cpus?: number;
+  /** Planted units (GEVA-537 plan section 2, rule 2): a crash-class failure on the merged tree counts like an assertion. */
+  crash?: boolean;
+  sandbox?: Sandbox;
 }
 
 /** Real-bug catch for one build on one unit. */
@@ -230,6 +233,7 @@ export function catchBuild(o: CatchOptions): CatchResult {
             beforeRuns: (p) => {
               if (p.patch !== "failed" && p.cold && p.cold.changed.length > 0) throw new EbError("E_EB_TRANSPLANT", "product_changed");
             },
+            ...(o.sandbox ? { sandbox: o.sandbox } : {}),
           });
           if (tree.prepare.patch === "failed") why = "real_tree_patch_failed";
         } catch (error) {
@@ -241,7 +245,7 @@ export function catchBuild(o: CatchOptions): CatchResult {
           result.drops.push({ code: "E_EB_TRANSPLANT", unit: eb.unit.id, step: label + "#" + gi, cls: why ?? "no_result" });
           return null;
         }
-        for (const [id, r] of Object.entries(treeGrid(tree, g.runner.kind, scopes))) {
+        for (const [id, r] of Object.entries(treeGrid(tree, g.runner.kind, scopes, [], o.crash ? new Set() : undefined))) {
           grid[id] = r;
           seen.add(id);
         }

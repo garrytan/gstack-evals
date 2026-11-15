@@ -12,7 +12,7 @@ import { docker } from "../real-outcome/task/docker.ts";
 import { LICENCES } from "../real-outcome/task/format.ts";
 import { EbError } from "./errors.ts";
 import { FROZEN } from "./frozen.ts";
-import { aftermathCases, gradeSet, readUnit, treePatch, type EbTask, type Grid } from "./unit.ts";
+import { aftermathCases, gradeSet, readUnit, treePatch, type EbTask, type Grid, type Sandbox } from "./unit.ts";
 
 export interface RecountRow {
   unit: string;
@@ -24,14 +24,14 @@ export interface RecountRow {
 }
 
 /** Recounts one built unit. custody says a copyleft unit is held under custody. */
-export function recountUnit(dir: string, o: { work: string; runs?: number; seed?: number; custody?: boolean }): RecountRow {
+export function recountUnit(dir: string, o: { work: string; runs?: number; seed?: number; custody?: boolean; planted?: boolean; sandbox?: Sandbox; licences?: readonly string[] }): RecountRow {
   const runs = o.runs ?? FROZEN.runs;
   const { eb, task } = readUnit(dir);
   const row: RecountRow = { unit: eb.unit.id, clean: false, reason: null, functional: 0, aftermath: 0 };
-  if (!LICENCES.includes(task.licence) && !o.custody) return { ...row, reason: "licence" };
+  if (!(o.licences ?? LICENCES).includes(task.licence) && !o.custody) return { ...row, reason: "licence" };
   if (docker(["image", "inspect", eb.image.id]).status !== 0) return { ...row, reason: "image_missing" };
   const patch = (label: string) => readFileSync(join(dir, treePatch(label)), "utf8");
-  const grade = (label: string, set: EbTask["sets"][number], want: string[]): Grid => gradeSet({ taskDir: dir, task, eb, set, label, patch: patch(label), runs, seed: o.seed ?? eb.seed + 1000, work: o.work, check: true, want });
+  const grade = (label: string, set: EbTask["sets"][number], want: string[]): Grid => gradeSet({ taskDir: dir, task, eb, set, label, patch: patch(label), runs, seed: o.seed ?? eb.seed + 1000, work: o.work, check: true, want, sandbox: o.sandbox, crash: o.planted ? new Set() : undefined });
   try {
     const functional = grade("merged", eb.sets[0], eb.unit.functional);
     row.functional = eb.unit.functional.filter((id) => functional[id]?.length === runs && functional[id].every((c) => c === "pass")).length;

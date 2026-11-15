@@ -14,7 +14,7 @@ import { VERIFIER_DIR, type Runner } from "../real-outcome/task/format.ts";
 import { splice } from "../real-outcome/task/region.ts";
 import type { ReasonCode } from "../../src/errors/codes.ts";
 import { EbError } from "./errors.ts";
-import { classifyLog, ecoOfFile, findProject, hasRecipe, isDepFile, parseScreen, recipeFor, runClasses, runnable, screenTest, verifierRunner, type Recipe } from "./recipes.ts";
+import { classifyLog, ecoOfFile, findProject, hasRecipe, isDepFile, parseScreen, recipeFor, runClasses, runnable, screenTest, verifierRunner, type Recipe, type RecipeOptions } from "./recipes.ts";
 import type { CaseClass, Ecosystem } from "./types.ts";
 import { attributed, goSubtest, inScope, listing, scopesOf, testChanges } from "./unit.ts";
 
@@ -58,6 +58,11 @@ export interface ScreenOptions {
   testMinutes?: number;
   cpus?: string;
   memory?: string;
+  /** Planted units (GEVA-537 plan sections 2 and 13): the recipe fixes, and rule 2's crash class. */
+  recipe?: RecipeOptions;
+  crash?: boolean;
+  /** Test files at the merge, beyond the ones base to merge changes, run with them for the functional pass. */
+  functionalFiles?: string[];
 }
 
 const MAXF = 60;
@@ -154,7 +159,7 @@ export function screenCandidate(c: Candidate, repo: string, o: ScreenOptions): S
       for (const g of groups.values()) {
         const fs = g.files.sort().slice(0, MAXF);
         const read = (p: string) => (existsSync(join(wt, p)) ? readFileSync(join(wt, p), "utf8") : null);
-        const recipe = recipeFor(g.eco, read, g.root, names);
+        const recipe = recipeFor(g.eco, read, g.root, names, o.recipe);
         const sig = JSON.stringify([...listing(repo, rev)].filter(([p]) => isDepFile(p) && (g.root === "" || p.startsWith(g.root + "/"))).sort());
         const key = g.eco + "|" + g.root;
         let inst = installed.get(key);
@@ -185,7 +190,7 @@ export function screenCandidate(c: Candidate, repo: string, o: ScreenOptions): S
         const parsed = parseScreen(runner, host);
         const ids = [...new Set([...parsed.seen, ...Object.keys(parsed.results)])].filter((id) => inScope(runner.kind, id, scopes) && !(runner.kind === "go" && goSubtest(id)));
         const wanted = want.filter((id) => inScope(runner.kind, id, scopes) && !ids.includes(id));
-        Object.assign(out, runClasses(runner.kind, parsed, [...ids, ...wanted], { timed_out: st.timed_out }));
+        Object.assign(out, runClasses(runner.kind, parsed, [...ids, ...wanted], { timed_out: st.timed_out }, o.crash ? new Set() : undefined));
         st.cases = ids.length;
         if (ids.length === 0) st.cls = st.timed_out ? "timeout" : classifyLog((host(".log") ?? "") + (host(".err") ?? ""));
       }
@@ -197,7 +202,7 @@ export function screenCandidate(c: Candidate, repo: string, o: ScreenOptions): S
       checkout(sha);
     };
 
-    const ownFiles = [...own.whole, ...own.regions];
+    const ownFiles = [...new Set([...own.whole, ...own.regions, ...(o.functionalFiles ?? [])])];
     const merged = runFiles(ownFiles, c.merge, "merged") ?? {};
     res.ecosystems = [...ecos].filter(hasRecipe).sort() as Ecosystem[];
     if (res.ecosystems.length === 0) throw new Stop("E_EB_NO_RECIPE", "recipe", [...ecos].sort().join(",") || "no_test_source");
