@@ -105,7 +105,7 @@ function snapshot(git: Git, workTree: string, base: string, leaveOut: readonly s
   git.run(["read-tree", base], { index });
   git.run(["add", "-A", "--", ".", ...leaveOut.map((d) => ":(exclude,literal)" + d)], { cwd: workTree, index, workTree });
   const tree = git.run(["write-tree"], { cwd: workTree, index, workTree }).stdout.trim();
-  return git.run(["diff", "--binary", base, tree]).stdout;
+  return git.run(["diff", "--binary", "--no-renames", "--no-color", "--no-ext-diff", base, tree]).stdout;
 }
 
 /** Captures a session tree (the repository dir as the session left it, .git included). containerRepoDir maps a linked
@@ -147,12 +147,12 @@ export function openTree(repo: string, base: string, o: { containerRepoDir?: str
       linked.push({ name, path: wtPath, in_tree: inTree, head: wtHead });
       if (inTree) {
         add("worktree " + name, snapshot(git, join(repo, rel!), base, unignored(git, join(repo, rel!)), "wt-" + linked.length));
-      } else if (wtHead && wtHead !== base) add("worktree " + name + " head", git.run(["diff", "--binary", base, wtHead]).stdout);
+      } else if (wtHead && wtHead !== base) add("worktree " + name + " head", git.run(["diff", "--binary", "--no-renames", "--no-color", "--no-ext-diff", base, wtHead]).stdout);
     }
     for (const line of git.run(["for-each-ref", "--format=%(refname) %(objectname)", "refs/heads"]).stdout.split("\n").filter(Boolean)) {
       const [ref, sha] = line.split(" ") as [string, string];
       if (sha === base || checkedOut.has(ref)) continue;
-      add("branch " + ref.replace(/^refs\/heads\//, ""), git.run(["diff", "--binary", base, sha]).stdout);
+      add("branch " + ref.replace(/^refs\/heads\//, ""), git.run(["diff", "--binary", "--no-renames", "--no-color", "--no-ext-diff", base, sha]).stdout);
     }
     const readBase = (path: string) => {
       const r = git.run(["cat-file", "blob", base + ":" + path], { ok: true });
