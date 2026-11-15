@@ -298,6 +298,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_OF_PROVIDER_DRIFT](#e_of_provider_drift) | 2 | U20 |
 | [E_OF_SUPPLY_SHORT](#e_of_supply_short) | 2 | U20 |
 | [E_OF_DRYRUN_FAIL](#e_of_dryrun_fail) | 2 | U20 |
+| [E_H2H_PREREG](#e_h2h_prereg) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -2182,6 +2183,14 @@ An office-hours founder eval dry-run case printed FAIL: a frozen rule did not ho
 Fix: Read the FAIL line, fix the rule's code, and run the dry run again before any spend.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_H2H_PREREG
+
+The skill-pack head-to-head found no usable preregistration: its prereg.json is missing, is not h2h-prereg.v1, lacks an unsigned 32-bit integer draw_seed, order_seed or bootstrap_seed, lists other arms than the lane's, or lacks a text, entry, list or continuation cap.
+
+Fix: Change prereg.json only through the preregistration's own pull request. Nothing runs on values chosen anywhere else.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
 
 ## Exit 3: calibration failed (INCOMPLETE)
 

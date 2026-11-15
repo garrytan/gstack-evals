@@ -2468,6 +2468,19 @@ export const CODES = {
     resumable: true,
     owner: "U20",
   },
+  // h2h, shared: the skill-pack head-to-head (lanes/outcome-skills/h2h). Each build part adds its codes under its own line.
+  E_H2H_PREREG: {
+    exit: 2,
+    meaning: "The skill-pack head-to-head found no usable preregistration: its prereg.json is missing, is not h2h-prereg.v1, lacks an unsigned 32-bit integer draw_seed, order_seed or bootstrap_seed, lists other arms than the lane's, or lacks a text, entry, list or continuation cap.",
+    fix: "Change prereg.json only through the preregistration's own pull request. Nothing runs on values chosen anywhere else.",
+    side_effects: NO_SPEND,
+    retry_safe: false,
+    resumable: false,
+    owner: "U20",
+  },
+  // h2h, part A: arms, installs, turns, exposure and sessions.
+  // h2h, part B: breadth units, image recipes, parsers and the browser oracle.
+  // h2h, part C: O draw, scoring additions, analysis, items and the rerun command.
 } as const satisfies Record<string, CodeInfo>;
 
 export type ReasonCode = keyof typeof CODES;
