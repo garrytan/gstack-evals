@@ -192,12 +192,46 @@ export function clonePinProblems(clone: string): string[] {
   return p;
 }
 
-/** Why an installed gstack tree is not the arm's pin: its VERSION, and for the candidate both digests and the installed skill. */
-export function installPinProblems(arm: ErSkillArm, gstack: string | null, home: string | null): string[] {
+/** A gstack pin another eval runs an arm at (the planted-unit read's restore pin): its commit, VERSION and the sha256 of
+ * each file its arms and detectors read. */
+export interface DigestPin {
+  sha: string;
+  version: string;
+  digests: Readonly<Record<string, string>>;
+}
+
+/** Why a clone does not hold a digest pin: the commit, its VERSION, and each recorded file's sha256 at that commit. A pin
+ * with no commit or no digests is refused, so an empty pin never passes. */
+export function clonePinDigestProblems(clone: string, pin: DigestPin): string[] {
+  if (!/^[0-9a-f]{40}$/.test(pin.sha) || !pin.version || Object.keys(pin.digests).length === 0) return ["the pin names no full commit, VERSION and digests (" + JSON.stringify(pin.sha) + "), so nothing runs at it"];
+  const full = safeGit(clone, ["rev-parse", "--verify", "--quiet", pin.sha + "^{commit}"]).stdout.trim();
+  if (full !== pin.sha) return ["the clone does not hold commit " + pin.sha];
+  const p: string[] = [];
+  const version = safeGit(clone, ["show", pin.sha + ":VERSION"]).stdout.trim();
+  if (version !== pin.version) p.push("VERSION at " + pin.sha.slice(0, 9) + " reads " + JSON.stringify(version) + ", not " + pin.version);
+  for (const [path, want] of Object.entries(pin.digests)) {
+    const r = spawnSync("git", ["-c", "core.hooksPath=/dev/null", "-c", "safe.directory=*", "-C", clone, "show", pin.sha + ":" + path], { timeout: 60_000, env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" } });
+    const got = r.status === 0 ? sha256(r.stdout) : null;
+    if (got !== want) p.push(path + " at " + pin.sha.slice(0, 9) + " has sha256 " + (got ?? "none") + ", not " + want);
+  }
+  return p;
+}
+
+/** Why an installed gstack tree is not the arm's pin: its VERSION, and for the candidate both digests and the installed
+ * skill. With a digest pin, the tree's VERSION and every recorded file are checked against that pin instead. */
+export function installPinProblems(arm: ErSkillArm, gstack: string | null, home: string | null, pin?: DigestPin): string[] {
   if (!gstack) return [arm + ": the arm installs no gstack tree"];
   const p: string[] = [];
   const version = existsSync(join(gstack, "VERSION")) ? readFileSync(join(gstack, "VERSION"), "utf8").trim() : null;
-  if (version !== ER_PINS[arm].version) p.push(arm + ": the installed tree reads VERSION " + (version ?? "none") + ", not " + ER_PINS[arm].version);
+  const wantVersion = pin ? pin.version : ER_PINS[arm].version;
+  if (version !== wantVersion) p.push(arm + ": the installed tree reads VERSION " + (version ?? "none") + ", not " + wantVersion);
+  if (pin) {
+    for (const [path, want] of Object.entries(pin.digests)) {
+      const got = existsSync(join(gstack, path)) ? sha256(readFileSync(join(gstack, path))) : null;
+      if (got !== want) p.push(arm + ": the installed " + path + " has sha256 " + (got ?? "none") + ", not the pinned " + want);
+    }
+    return p;
+  }
   if (arm !== "candidate") return p;
   for (const [path, want] of Object.entries(ER_CANDIDATE_DIGESTS)) {
     const got = existsSync(join(gstack, path)) ? sha256(readFileSync(join(gstack, path))) : null;
