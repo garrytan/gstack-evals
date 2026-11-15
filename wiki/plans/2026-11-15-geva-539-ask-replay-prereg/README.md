@@ -214,7 +214,7 @@ All run at medium reasoning and the provider's default temperature (no temperatu
 - **custody.ts** adds an async wrapper (told.ts's custody() is synchronous and removes the directory when its reader returns), keeps plaintext on /dev/shm and proves teardown with test ! -e at the end of every shard. It refuses an empty identity at once (E_ASK_IDENTITY).
 - **Builder.** An execute program has no filesystem, so it reads the 8 threads through Capy's thread tool and writes each page straight to /dev/shm on the custody machine, returning only counts. No agent context holds the content. The bun builder (`ask-replay build`) then forms items, scans, seals and wipes the raw pages.
 - **Paid run** (section 16, deviation 1): resumable foreground shards of under 55 minutes under a live program on the custody machine, so plaintext never leaves it. A cell's replicates run in sequence, so replicate 2 hits the cache replicate 1 wrote, while cells run in parallel. Every sample has a fixed id. Its sealed reply is written atomically under that id and its spend lease settles once against that id, so a resumed shard skips every settled sample and can't count a call twice. A sample with an open lease and no sealed reply is reconciled through the spend ledger's unknown-charge path, then redrawn once, and redraws are counted per arm (E_ASK_RESUME).
-- **Before every push:** gstack-pregate sealed, plus the lane's scan (`ask-replay scan`: no issue keys or thread codes in prose, no dollar figures outside Agent notes, no private names, no 6-gram shared with any custody text), run in custody and reported as a count: TODO(custody:prepush_scan_hits).
+- **Before every push:** gstack-pregate sealed, plus the lane's scan (`ask-replay scan`: no issue keys or thread codes in prose, no dollar figures outside Agent notes, no private names, no 6-gram shared with any custody text), run in custody and reported as a count. At the freeze it read 46 files with 0 hits in the lane's own prose. The hits it did count fall in four kinds, none private: six-word runs of model names that custody text also uses ("Claude Opus 5.5 and GPT-6.1 Sol", 7 runs in this post); thread codes and dollar amounts in other units' existing rows of the shared registries (src/cli.ts, src/errors/codes.ts); the scanner's own test fixtures (tests/ask-replay/privacy.test.ts); and this thread's code in the review record's answer line. One fixture line that matched a standing rule's wording was rewritten before the freeze.
 
 ### 12. Public synthetic set (lanes/ask-replay/synthetic/)
 
@@ -259,14 +259,14 @@ Each paid step runs as its own spend item through the program ledger, with a cap
 | I1 | ask-i1-smoke | synthetic smoke: 20 items, all arms, 3 models, 1 sample |
 | I2 | ask-i2-pilot | admission pilot: 40 items, (a) k = 1 and (b) k = 2, Opus and Sol |
 | I2r | ask-i2-pilot-retry | the R61 pilot on the variant bundle, only if needed |
-| I3 | ask-i3-label-audit | label audit: 99 items, Opus 5.5 and Astra |
+| I3 | ask-i3-label-audit | label audit: 99 items, Opus 5.5 and Astra, after a 3-item check on the synthetic set with both labellers that confirms the structured-output shapes |
 | I4 | ask-i4-relabel | label contingency: 247 items, both labellers, only if kappa misses 0.6 |
-| I5 | ask-i5-linking | duplicate linking: 121 duplicates on Opus 5.5, plus Astra on the 40 audited |
+| I5 | ask-i5-linking | duplicate linking: 121 duplicates on Opus 5.5 (Astra's links on the 40 audited duplicates come from its I3 labels) |
 | I6 | ask-i6-opus | main run, Opus 5.5: all items, arms (a) to (d), 2 samples |
 | I7 | ask-i7-sol | main run, GPT-6.1 Sol: the same |
 | I8 | ask-i8-particle | main run, particle-1: all items, arms (a) to (c), 2 samples, only with data collection denied |
 
-Planning sizes: about 20k input tokens per item in (a), 31k in (b), 33k in (c) and 22k in (d), with 11k of gstack text cached in (b) and (c), and about 1.5k output tokens per sample with reasoning counted as output. Measured from the sealed bundle (`ask-replay arms`, prompt characters / 4), mean with the largest in brackets: 24,602 (32,929) in (a), 35,838 (44,165) in (b), 38,017 (49,191) in (c) and 26,781 (37,955) in (d). The variant bundle: 25,861 (33,062), 37,097 (44,298), 39,276 (49,324) and 28,040 (38,088). Agent notes prices the main run from the measured means.
+Planning sizes: about 20k input tokens per item in (a), 31k in (b), 33k in (c) and 22k in (d), with 11k of gstack text cached in (b) and (c), and about 1.5k output tokens per sample with reasoning counted as output. Measured from the sealed bundle (`ask-replay arms`, prompt characters / 4), mean with the largest in brackets: 24,602 (32,929) in (a), 35,838 (44,165) in (b), 38,017 (49,191) in (c) and 26,781 (37,955) in (d). The variant bundle: 25,861 (33,062), 37,097 (44,298), 39,276 (49,324) and 28,040 (38,088). Agent notes prices every item from the measured means; the label prompts add about 5k tokens (codebook, numbered earlier asks, the next reply) to an item's (a) size.
 
 ### 15. Delivery (R77)
 
@@ -316,16 +316,16 @@ Filled in at the results post from org research/disclosures.md.
 
 The project owner approved the eval on 2026-11-15 at about $400 to $800 all-in.
 
-Central estimates per spend item, from src/runner/pricing/prices.ts; the Captain's caps are 1.35 times these. I1 to I5 are at the planning sizes in section 14. I6 to I8 are at the measured means, with the replicate-2 cache hit (table below). The item list with central prices goes with READY.
+Central estimates per spend item, from src/runner/pricing/prices.ts; the Captain's caps are 1.35 times these. I1 is from `ask-replay smoke-plan` on the synthetic set. I2 to I5 are at the measured means: the pilot with arm (b)'s replicate 2 as a cache hit, and the label calls at about 30k input tokens and 1.5k output tokens each. I6 to I8 are at the measured means, with the replicate-2 cache hit (table below). The item list with central prices goes with READY.
 
 | Item | Central |
 |---|---|
 | I1 smoke | $8 |
-| I2 pilot | $25 |
-| I2r pilot retry, if needed | $25 |
-| I3 label audit | $41 |
-| I4 relabel, if needed | $102 |
-| I5 duplicate linking | $16 |
+| I2 pilot | $23 |
+| I2r pilot retry, if needed | $24 |
+| I3 label audit | $52 |
+| I4 relabel, if needed | $130 |
+| I5 duplicate linking | $18 |
 | I6 main run, Opus 5.5 | $308 |
 | I7 main run, GPT-6.1 Sol | $154 |
 | I8 main run, particle-1 | $7 |
@@ -340,4 +340,4 @@ Main-run arithmetic, per item, then times 346 items. Input is the sum of the mea
 
 This is conservative on replicate 1: in (b) and (c) the gstack system prefix is already a cache read for every item after the first, and the table charges it as a write. It assumes replicate 2 always hits the cache. On OpenAI and OpenRouter that depends on the provider's automatic caching.
 
-Central without contingencies is about $559; with both (the R61 pilot retry and the full relabel) about $686. Using the variant bundle for the main run adds about $80 on Opus. The pilot's k = 3 rule sends its projection to the Captain first when the central passes $800. Crew Capy use is separate: estimated $250 to $330 against a $400 stop.
+Central without contingencies is about $570; with both (the R61 pilot retry and the full relabel) about $724. Using the variant bundle for the main run adds about $80 on Opus. The pilot's k = 3 rule sends its projection to the Captain first when the central passes $800. Crew Capy use is separate: estimated $250 to $330 against a $400 stop.

@@ -60,7 +60,7 @@ export function stubSend(script: (s: Sample, key: CallKey) => StubReply, calls: 
 /** A stand-in for the pinned gstack files: lines of 40 or more characters that name gstack, as the real files do. */
 export const FIXTURE_GSTACK: GstackText = {
   commit: "fixture",
-  text: ["# capy/skill/gstack/factory.md", "", "Ask the owner once per decision, and never send the same ask twice.", "gstack keeps one open ask per decision and folds repeats into the digest.", "", "# captain/SKILL.md", "", "Run the gstack install check at the start of every session on each machine."].join("\n"),
+  text: ["# capy/skill/gstack/factory.md", "", "Ask the owner once per decision, and never send the same ask twice.", "gstack keeps one open ask per decision and folds repeats into the digest.", "", "# captain/SKILL.md", "", "Check the stack is installed before each session begins on a machine."].join("\n"),
 };
 
 const iv = (lo: number, hi: number, loto: [number, number] | null = [lo, hi]): Interval => ({ delta: (lo + hi) / 2, lo, hi, n_items: 100, n_clusters: 80, loto });
