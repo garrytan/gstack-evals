@@ -10,7 +10,7 @@
 // transcripts, copies the attempt's files beside the record and writes session.json with every attempt's usage. A close whose proxy finalize failed, or an attempt that
 // opened its slot and left no summary, halts with E_H2H_FINALIZE_HALT (the latter after POST /stop on the driver); a cap
 // stop writes its record and ends the part with CAP_STOP.
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -167,12 +167,14 @@ export async function haltCheck(i: H2hRunInput, attempt: 1 | 2, summary: Record<
   h2hFail("E_H2H_FINALIZE_HALT", label + ": the attempt wrote an open line (" + join(ev!, OPENS) + ") and left no summary, so its slot may have spent; the session halts with no retry and no record, and " + (stop ? "POST " + i.control + "/stop failed (" + stop + "): stop the driver by hand; " : "the driver was stopped through POST /stop; ") + dir);
 }
 
-/** Exposure and the read audit from an attempt's transcripts. */
+/** Exposure and the read audit from an attempt's transcripts and the paths its tree.tar holds. */
 export function readExposure(i: Pick<H2hRunInput, "session" | "installs">, dir: string): H2hSession["exposure"] {
   const files = ["sdk-messages.jsonl", "claude-session.jsonl"].map((f) => join(dir, f)).filter(existsSync);
   if (!files.length) return null;
   const evs = readEvents(files);
-  const e = exposure(i.session.arm, i.session.entry, evs);
+  const tar = join(dir, "tree.tar");
+  const listed = existsSync(tar) ? spawnSync("tar", ["-tf", tar, "--exclude=.git"], { encoding: "utf8", maxBuffer: 64 << 20 }) : null;
+  const e = exposure(i.session.arm, i.session.entry, evs, { files: listed?.status === 0 ? listed.stdout.split("\n").filter(Boolean) : [] });
   return { ...e, foreign_reads: i.installs ? readAudit(evs, i.installs, i.session.arm).foreign_reads : [] };
 }
 

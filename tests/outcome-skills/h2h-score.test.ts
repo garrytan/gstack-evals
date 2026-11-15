@@ -7,6 +7,7 @@ import { dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { dropAtPaths, lineCounts, newTestPaths } from "../../lanes/outcome-skills/h2h/score/rules.ts";
 import { scoreSession, type ScoreFirst } from "../../lanes/outcome-skills/h2h/score/score.ts";
+import { extraArgs } from "../../lanes/outcome-skills/statemachines/testrun.ts";
 import { nestedGitDirs, openTree } from "../../lanes/outcome-skills/h2h/score/tree.ts";
 import type { H2hSession } from "../../lanes/outcome-skills/h2h/types.ts";
 import type { OutcomeRecord, ScoreInput } from "../../lanes/outcome-skills/statemachines/score.ts";
@@ -38,7 +39,7 @@ function repo(files: Record<string, string> = { "src/a.go": "package a\n\nfunc A
 const TEST_PATCH = "diff --git a/tests/new_test.go b/tests/new_test.go\nnew file mode 100644\n--- /dev/null\n+++ b/tests/new_test.go\n@@ -0,0 +1 @@\n+package tests\n";
 
 /** An sm-unit.v1 dir that readUnit accepts. */
-function unitDir(id: string, repoDir: string) {
+function unitDir(id: string, repoDir: string, h2h?: Record<string, unknown>) {
   const dir = temp("h2h-score-unit-");
   const body: Record<string, string> = {
     "fix.patch": "diff --git a/src/a.go b/src/a.go\n", "test.patch": TEST_PATCH, "issue.md": "x\n", "parser.py": "def parser(log):\n  return {}\n",
@@ -48,7 +49,7 @@ function unitDir(id: string, repoDir: string) {
   const u = {
     schema: "sm-unit.v1", id, lang: "go", base_commit: "b".repeat(40), repo_dir: repoDir, work_dir: repoDir, split: undefined,
     image: { ref: "example/fixture@sha256:" + "c".repeat(64), image_id: null, runtime_id: null }, test_patch: { files: ["tests/new_test.go"], sha256: sha(TEST_PATCH) },
-    tests: { f2p: ["t1"], p2p: ["t2"] }, files: Object.fromEntries(Object.entries(body).map(([p, b]) => [p, sha(b)])),
+    tests: { f2p: ["t1"], p2p: ["t2"] }, files: Object.fromEntries(Object.entries(body).map(([p, b]) => [p, sha(b)])), ...(h2h ? { h2h } : {}),
   };
   writeFileSync(join(dir, "unit.json"), JSON.stringify(u));
   return dir;
@@ -162,12 +163,22 @@ describe("h2h scoring rules", () => {
 });
 
 describe("h2h scoreSession", () => {
-  const setup = () => {
+  const setup = (h2h?: Record<string, unknown>) => {
     const { d, base } = repo();
     const record = temp("h2h-score-rec-");
     require("node:fs").renameSync(d, join(record, "tree"));
-    return { record, tree: join(record, "tree"), base, unit: unitDir("o__unit-1", join(record, "tree")) };
+    return { record, tree: join(record, "tree"), base, unit: unitDir("o__unit-1", join(record, "tree"), h2h) };
   };
+
+  test("a B1 unit is scored under section 3's browser conditions and a B2 unit under none", () => {
+    for (const kind of ["B1", "B2"]) {
+      const s = setup({ kind });
+      const calls: { patch: string; i: ScoreInput }[] = [];
+      scoreSession(session({ base_head: s.base }), s.record, s.unit, { scoreFirst: fake(() => CLEAN, calls) });
+      if (kind === "B1") expect(extraArgs(calls[0]!.i.extra).slice(0, 2)).toEqual(["--shm-size", "2g"]);
+      else expect(calls[0]!.i.extra).toBeUndefined();
+    }
+  });
 
   test("an arm test at a new hidden-test path is dropped and logged, and a failing new test scores both ways", () => {
     const s = setup();

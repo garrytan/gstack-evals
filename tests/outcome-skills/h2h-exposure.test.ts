@@ -4,11 +4,13 @@
 // loaded the pack and ran its procedure, one that loaded it only, and one that did neither.
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { events, exposure, readAudit, readEvents, readInstalls, type Ev } from "../../lanes/outcome-skills/h2h/sessions/exposure.ts";
 import { freeze, lead, MARKERS_PATH, readMarkers, type Markers } from "../../lanes/outcome-skills/h2h/sessions/markers.ts";
+import { readExposure } from "../../lanes/outcome-skills/h2h/sessions/run.ts";
 import type { ArmInstall, Entry, H2hArm } from "../../lanes/outcome-skills/h2h/types.ts";
 
 const M = readMarkers();
@@ -129,6 +131,29 @@ test("Claude Code's own transcript shape reads the same, sidechains apart", () =
   expect(evs.map((e) => [e.kind, e.main])).toEqual([["context", true], ["text", true], ["tool_use", true], ["tool_result", true], ["tool_result", true], ["text", false], ["context", true]]);
   expect(run("gstack", "feature", evs).markers).toEqual(["command:/autoplan", "skill-start:autoplan"]);
   expect(run("superpowers", "feature", evs).loaded).toBe(true);
+});
+
+test("readExposure counts the GSD planning files the session's tree.tar holds", () => {
+  const dir = mkdtempSync(join(tmpdir(), "h2h-exposure-tree-"));
+  try {
+    const tree = join(dir, "t");
+    mkdirSync(join(tree, ".planning/quick/1"), { recursive: true });
+    mkdirSync(join(tree, ".git"));
+    writeFileSync(join(tree, ".planning/quick/1/PLAN.md"), "x\n");
+    writeFileSync(join(tree, ".git/HEAD"), "x\n");
+    const recs = [
+      { type: "UserMessage", content: "<command-name>/gsd-quick</command-name>", parent_tool_use_id: null },
+      { type: "AssistantMessage", content: [{ type: "tool_use", id: "toolu_q", name: "Bash", input: { command: "gsd_run init quick" } }], parent_tool_use_id: null },
+      { type: "UserMessage", content: [{ type: "tool_result", tool_use_id: "toolu_q", content: "ok", is_error: false }], parent_tool_use_id: null },
+    ];
+    writeFileSync(join(dir, "sdk-messages.jsonl"), recs.map((r) => JSON.stringify(r) + "\n").join(""));
+    const i = { session: { arm: "gsd", entry: "feature" } } as unknown as Parameters<typeof readExposure>[0];
+    expect(flags(readExposure(i, dir)!)).toEqual([true, false]);
+    expect(spawnSync("tar", ["-C", tree, "-cf", join(dir, "tree.tar"), ".git", ".planning/quick/1/PLAN.md"]).status).toBe(0);
+    expect(readExposure(i, dir)).toMatchObject({ loaded: true, procedure: true, markers: ["command:/gsd-quick", "gsd-tools", "planning:.planning/quick/1/PLAN.md"] });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("readEvents joins transcripts in order, drops a torn last line and refuses any other bad line", () => {

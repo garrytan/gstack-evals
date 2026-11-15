@@ -154,6 +154,14 @@ describe("h2h analyze", () => {
     expect(a.arms.find((r) => r.class === "O" && r.arm === "agent-skills")!.cell).toMatchObject({ units: 100, gaps: 20, incomplete: true });
   }, 120_000);
 
+  test("piece G reads nothing from ponystack's exposure: less code holds with its procedure rate under the floor", () => {
+    const us = units("O", 40, "stage2");
+    const { sessions, scores } = records(us, "stage2", (_u, arm, k) => ({ v: 1, procedure: arm !== "gstack-pony", lines: arm === "gstack-pony" ? 3 + (k % 3) : 10 + (k % 4) }));
+    const a = analyze({ units: us, sessions, scores, stage: "stage2" }, p);
+    expect(a.piece_g.exercised).toBe(false);
+    expect(a.piece_g.less_code).toBe(true);
+  }, 120_000);
+
   test("gstack's own exposure under the floor reads FIX-METHOD, and bug units count as run", () => {
     const us = units("O", 40, "stage2", { feature: 20 });
     const { sessions, scores } = records(us, "stage2", (u, arm) => ({ v: arm === "none" ? 1 : 0, procedure: !(arm === "gstack" && u.entry === "feature") }));

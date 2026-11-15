@@ -239,8 +239,8 @@ export function analyze(i: AnalysisInput, p: H2hPrereg): Analysis {
   const ph = holmAdjusted([lines.p, pgIncomplete ? 1 : pv.p]) as [number, number];
   const exposure_pony = exposureOf(d, "O", "gstack-pony");
   const exercised = (exposure_pony.procedure ?? 0) >= floor;
-  const less_code = exercised && ph[0] < ALPHA && lines.ratio !== null && lines.ratio < 1;
-  const more_correct = exercised && !pgIncomplete && ph[1] < ALPHA && !!pv.ci95 && pv.ci95[0] > 0;
+  const less_code = ph[0] < ALPHA && lines.ratio !== null && lines.ratio < 1;
+  const more_correct = !pgIncomplete && ph[1] < ALPHA && !!pv.ci95 && pv.ci95[0] > 0;
   const adoptable = less_code && pv.delta !== null && pv.delta >= p.analysis.piece_g.adopt_min_point_diff && !(pv.ci95 && pv.ci95[1] < 0);
   const piece_g: PieceG = {
     verified: pv, incomplete: pgIncomplete, lines, oneline, p_holm: ph, less_code, more_correct, exposure_pony, exercised,

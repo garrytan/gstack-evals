@@ -7,7 +7,8 @@ import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, rmSync, sta
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { scoreFirst as realScoreFirst, type OutcomeRecord, type ScoreInput } from "../../statemachines/score.ts";
-import { readUnit } from "../../statemachines/unit.ts";
+import { readUnit, type SmUnit } from "../../statemachines/unit.ts";
+import { browserExtra, type BUnitExtra } from "../breadth/oracle-b.ts";
 import { H2hError, h2hFail } from "../prereg.ts";
 import { ALL_ARMS, type H2hScore, type H2hSession } from "../types.ts";
 import { dropAtPaths, lineCounts, newTestPaths } from "./rules.ts";
@@ -61,7 +62,7 @@ const verifiedOf = (r: OutcomeRecord | null) => !!r && r.codes.strict !== "E_SM_
 export function scoreSession(session: H2hSession, recordDir: string, unitDir: string, o: ScoreOptions = {}): ScoredSession {
   if (session?.schema !== "h2h-session.v1") h2hFail("E_H2H_SCORE_INPUT", "the session record is not h2h-session.v1");
   if (!(ALL_ARMS as readonly string[]).includes(session.arm)) h2hFail("E_H2H_SCORE_INPUT", "unknown arm " + JSON.stringify(session.arm));
-  const u = readUnit(unitDir);
+  const u = readUnit(unitDir) as SmUnit & { h2h?: BUnitExtra };
   if (u.id !== session.unit) h2hFail("E_H2H_SCORE_INPUT", "the session is for " + session.unit + ", the unit dir holds " + u.id);
   const blank: H2hScore = {
     schema: "h2h-score.v1", unit: session.unit, arm: session.arm, stage: session.stage, outcome: null, verified: false, verified_without_new_test_rule: false,
@@ -90,7 +91,7 @@ export function scoreSession(session: H2hSession, recordDir: string, unitDir: st
       const run = (patch: string, label: string) => {
         const file = join(work, "change-" + ++n + ".patch");
         writeFileSync(file, patch);
-        return scoreWithRetry(fn, { unitDir, patchFile: file, cell: session.arm, model: session.model, session: SESSION_ID(session) + (label ? " " + label : "") });
+        return scoreWithRetry(fn, { unitDir, patchFile: file, cell: session.arm, model: session.model, session: SESSION_ID(session) + (label ? " " + label : ""), ...(u.h2h?.kind === "B1" ? { extra: browserExtra() } : {}) });
       };
       const main = dropAtPaths(tree.main.patch, paths);
       const lines = lineCounts(main.patch, u.lang, u.test_patch.files, tree.readBase);
