@@ -42,8 +42,8 @@ stage1 p1   hook-prose asis   +0.0 (+0.0 to +0.0) n=38
 stage1 p1   hook-prose bg     +0.0 (+0.0 to +0.0) n=38
 stage1 p1   hook-prose code   +0.0 (+0.0 to +0.0) n=38
 stage1 p1   hook-prose codebg +0.0 (+0.0 to +0.0) n=38
-stage4 opus none         n=200 pass 121/200=60.5%  asis 162/199=81.4%  bg 162/199=81.4%  code 182/197=92.4%  codebg 182/197=92.4%
-stage4 opus plain-2      n=200 pass 132/200=66.0%  asis 155/199=77.9%  bg 155/199=77.9%  code 179/197=90.9%  codebg 179/197=90.9%
+stage4 opus none         n=200 pass 121/200=60.5%  asis 162/199=81.4%  bg 162/199=81.4%  code 183/198=92.4%  codebg 183/198=92.4%
+stage4 opus plain-2      n=200 pass 132/200=66.0%  asis 155/199=77.9%  bg 155/199=77.9%  code 180/198=90.9%  codebg 180/198=90.9%
 stage4 opus verify-prose n=200 pass 123/200=61.5%  asis 192/200=96.0%  bg 192/200=96.0%  code 197/199=99.0%  codebg 197/199=99.0%
 stage4 opus verify-hook  n=200 pass 127/200=63.5%  asis 196/200=98.0%  bg 196/200=98.0%  code 197/200=98.5%  codebg 197/200=98.5%
 stage4 opus hook-prose asis   +2.0 (-1.9 to +5.7) n=200
@@ -83,7 +83,7 @@ p1   verify-hook  misses  12  last edit {'code': 10, 'docs': 2}  why {'bg_check'
 
 ## D. Task difficulty and session length against adherence (stage 4)
 opus none         asis   by other models plain pass: hard 62/77=80.5%  mid 18/20=90.0%  easy 82/102=80.4% | by own tokens (thirds): 55/65=84.6%  53/67=79.1%  54/67=80.6%
-opus none         codebg by other models plain pass: hard 70/75=93.3%  mid 19/20=95.0%  easy 93/102=91.2% | by own tokens (thirds): 58/64=90.6%  64/66=97.0%  60/67=89.6%
+opus none         codebg by other models plain pass: hard 71/76=93.4%  mid 19/20=95.0%  easy 93/102=91.2% | by own tokens (thirds): 58/64=90.6%  65/67=97.0%  60/67=89.6%
 opus verify-prose asis   by other models plain pass: hard 76/77=98.7%  mid 19/20=95.0%  easy 97/103=94.2% | by own tokens (thirds): 64/66=97.0%  62/67=92.5%  66/67=98.5%
 opus verify-prose codebg by other models plain pass: hard 76/76=100.0%  mid 20/20=100.0%  easy 101/103=98.1% | by own tokens (thirds): 64/65=98.5%  66/67=98.5%  67/67=100.0%
 opus verify-hook  asis   by other models plain pass: hard 76/77=98.7%  mid 19/20=95.0%  easy 101/103=98.1% | by own tokens (thirds): 66/66=100.0%  65/67=97.0%  65/67=97.0%
@@ -100,7 +100,7 @@ pool 354, tier 98 in 55 repos; by list {'calibration': 13, 'none': 1, 'scored': 
 tier tasks in the run tables: 70
 largest repos: schemathesis/schemathesis 9, tox-dev/tox 7, astropy/astropy 6, pandas-dev/pandas 6, deepset-ai/haystack 4
 opus none         tier    n= 70 asis 46/70=65.7%    codebg 66/69=95.7%    pass 42/70=60.0%    cost 0.297
-opus none         other   n=170 asis 144/169=85.2%  codebg 151/168=89.9%  pass 104/170=61.2%  cost 0.275
+opus none         other   n=170 asis 144/169=85.2%  codebg 152/169=89.9%  pass 104/170=61.2%  cost 0.275
 opus verify-prose tier    n= 70 asis 63/70=90.0%    codebg 69/69=100.0%   pass 47/70=67.1%    cost 0.456
 opus verify-prose other   n=170 asis 167/170=98.2%  codebg 168/170=98.8%  pass 102/170=60.0%  cost 0.450
 opus verify-hook  tier    n= 70 asis 69/70=98.6%    codebg 69/70=98.6%    pass 45/70=64.3%    cost 0.442

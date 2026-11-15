@@ -3,25 +3,42 @@
 // with the harness mechanics scorer at this repo's head and prints one JSON row: the trial, its model and task, the
 // arm, the verifier's reward, and four readings of the stop rule. "asis" is section 13's rule as #300 scored it (asserted equal to
 // scoreSession's adherent). "code" reads the rule from the last edit to a file that is not documentation or a changelog
-// (DOC below). "bg" also credits a check that ran in the background when a later tool result names its output file and
+// (DOC below), counting every write in a Bash call, not only its last. "bg" also credits a check that ran in the background when a later tool result names its output file and
 // shows a test outcome. "codebg" is both. For a session that misses the rule as is, it adds the kind of its last edit
 // (docs or code) and why it missed (bg_check, fg_check_no_outcome, no_check, no_bash). It counts tool calls, and after the last edit it lists
 // the program name (first word, no arguments) of each Bash command, for the Terminal-Bench 2 instrument check.
 //   bun variants.ts <trial dir root>... > variants.jsonl
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, join, posix } from "node:path";
 import { parseLog } from "../../../quick/laneb/l1/probes.ts";
 import { isCheck, isRepro, scoreSession, showsOutcome, toTranscript } from "../../../lanes/harness-mechanics/score.ts";
-import { lastBashWrite, shellCommands } from "../../../lanes/harness-mechanics/vendor/gstack/lib/shell-writes.ts";
+import { lastBashWrite, shellCommands, writeTargets } from "../../../lanes/harness-mechanics/vendor/gstack/lib/shell-writes.ts";
 
 const EDIT = /^(?:Edit|Write|MultiEdit|NotebookEdit)$/;
 const DOC = /((^|\/)(changelog|changes|news|newsfragments|releasenotes|whatsnew|whats_new|changelog\.d|docs?)\/|(^|\/)(CHANGELOG|CHANGES|HISTORY|NEWS|RELEASE_NOTES|versionhistory)[^/]*$|\.(md|rst|txt)$)/i;
+
+// Every write in one Bash call, in order, each with the commands after it: lastBashWrite's walk without keeping only the last,
+// so a code write followed by a changelog write in the same call still counts as the last code edit.
+function bashWrites(line: string, cwd: string | null, root: string | null) {
+  const top = root !== null && posix.isAbsolute(root) ? posix.normalize(root) : "/\0session";
+  const cmds = shellCommands(line, cwd !== null && posix.isAbsolute(cwd) ? posix.normalize(cwd) : top);
+  const scripts = new Map<string, string>();
+  const out: { files: string[]; after: string }[] = [];
+  for (const [at, c] of cmds.entries()) {
+    const w = writeTargets(c, top, scripts);
+    if (w) out.push({ files: w.files, after: cmds.slice(w.self ? at + 1 : cmds.findIndex((x) => x.pipeline === c.pipeline)).map((x) => x.text).join("\n") });
+    for (const r of c.redirects) if (/^(?:\d*>>?|\d*>\||&>>?)$/.test(r.op) && c.cwd !== null) scripts.set(posix.resolve(c.cwd, r.target), c.heredocs.join("\n"));
+  }
+  const last = lastBashWrite(line, cwd, root);
+  if (JSON.stringify(out.at(-1) ?? null) !== JSON.stringify(last)) throw new Error("bashWrites differs from lastBashWrite on: " + line);
+  return out;
+}
 
 function edits(t: any) {
   const root = t.cwd ?? null;
   return t.events.flatMap((e: any, i: number) => {
     if (e.kind !== "tool_use") return [];
-    if (e.name === "Bash") { const w = lastBashWrite(String(e.input.command ?? ""), e.cwd ?? root, root); return w ? [{ i, files: w.files, after: w.after }] : []; }
+    if (e.name === "Bash") return bashWrites(String(e.input.command ?? ""), e.cwd ?? root, root).map((w) => ({ i, files: w.files, after: w.after }));
     return EDIT.test(e.name) ? [{ i, files: [String(e.input.file_path ?? e.input.notebook_path ?? "")], after: "" }] : [];
   });
 }
@@ -71,6 +88,24 @@ function one(dir: string) {
   };
 }
 
+// Regression cases, run before any trial: a code write then a changelog write in one Bash call, after a passing test, is
+// still untested code; a changelog-only call after a passing test is not.
+function selfCheck() {
+  const rec = (cmd: string) => [
+    { type: "SystemMessage", subtype: "init", init: { cwd: "/r" } },
+    { type: "AssistantMessage", content: [{ id: "a", name: "Edit", input: { file_path: "/r/main.py", old_string: "x", new_string: "y" } }] },
+    { type: "UserMessage", content: [{ tool_use_id: "a", content: "ok" }] },
+    { type: "AssistantMessage", content: [{ id: "b", name: "Bash", input: { command: "pytest" } }] },
+    { type: "UserMessage", content: [{ tool_use_id: "b", content: "==== 1 passed in 0.10s ====" }] },
+    { type: "AssistantMessage", content: [{ id: "c", name: "Bash", input: { command: cmd } }] },
+    { type: "UserMessage", content: [{ tool_use_id: "c", content: "" }] },
+  ];
+  const got = (cmd: string) => { const t = toTranscript(rec(cmd) as any); return [reading(t, false, false).ran, reading(t, true, false).ran, reading(t, true, true).ran].join(); };
+  for (const [cmd, want] of [["printf broken > main.py; printf note > CHANGELOG.md", "false,false,false"], ["printf note > CHANGELOG.md", "false,true,true"]]) {
+    if (got(cmd) !== want) throw new Error("selfCheck: " + cmd + " gave " + got(cmd) + ", want " + want);
+  }
+}
+
 function walk(d: string, depth: number) {
   if (depth > 9) return;
   if (existsSync(join(d, "evaluator/sdk-messages.jsonl")) && existsSync(join(d, "result.json"))) { console.log(JSON.stringify(one(d))); return; }
@@ -81,4 +116,5 @@ function walk(d: string, depth: number) {
     if (dir && x !== "arms" && x !== "tasks") walk(p, depth + 1);
   }
 }
+selfCheck();
 for (const root of process.argv.slice(2)) walk(root, 0);

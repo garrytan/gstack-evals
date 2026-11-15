@@ -4,8 +4,8 @@ cd864818b4eaefd86e799b934fe1d021f09cb0ae055b08984e1cc2495da9b287  stage1.table.j
 26b61891cbf63c320ff0a0808a3aefa21f144490d156f12eb68e28384166478d  stage4.table.jsonl (harness mechanics Stage 4 run table, as merged)
 0d0e01013f35d27419d614361f34e5836b297199d21abade2b63d32b362d1730  geva503-trials.tar.zst (harness mechanics Stage 1 and Stage 4 trial dirs; tar stream 5b1b7da4742d91bf665b432813935e5d0d8960a09179834ec0a0a071a12f8f1f)
 118b398c4d8ac638602a16da58b386543239f7857c3bfd3828a94fa74b98e4d8  tb2-final.tgz (L1 overhaul Terminal-Bench 2 twin set trial dirs, Opus 5.5)
-fa0f1cb1cadde189508ee91cb9489221fc34e10afdedfdd292226b9e029cdef8  variants-hm.jsonl (variants.ts over the harness mechanics trial dirs, one row per session; no transcript text, kept out of this bundle for size)
-cd1801bc1cc999ed18aa4be9db755f770957eef11ad7b77c76f05a10bfc8d14b  variants-tb2.jsonl (variants.ts over the Terminal-Bench 2 twin set trial dirs, the same)
+d0738155c61b74e15edf3e77cd2c6869cd54e71ff3a95db9492c8ebe0c4bca04  variants-hm.jsonl (variants.ts over the harness mechanics trial dirs, one row per session; no transcript text, kept out of this bundle for size)
+00dbc7520803ff58f899626f216c6572c1db32d01bccde6b2304e0c1c7257943  variants-tb2.jsonl (variants.ts over the Terminal-Bench 2 twin set trial dirs, the same)
 # Public: nebius/SWE-rebench-leaderboard at revision 34d5a58864acf91613740a09ec5d205228dcfa39 (equal to the LFS oids there).
 de124584ab7fe2fd2a62e65ac55bed7c3e9a7f7157087407f5859e8ef2b68392  data/2025_10-00000-of-00001.parquet
 961390e018b1f7b18346291746f0e2d1407822605bbef11313913f18de8f8d16  data/2025_11-00000-of-00001.parquet

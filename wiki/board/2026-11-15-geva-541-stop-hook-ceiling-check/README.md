@@ -17,12 +17,12 @@ links:
 attachments:
   - a9498dc08218d54b69ca3325d60b19b2c9ba5e9b499c1387eb01bd3d55dd5ac4  colour.py.txt
   - 6fa3b1d2f0f8b8c976bf0924f7a75b1b878b0cffd04d9b64475ae95c8544ef79  colour.txt
-  - 90a26bfa438776111c42e0503950abe90fef00d9fc405c6c5c4802d8f7f02457  digests.txt
+  - 025b9465d8d7c6254d3a47a737b2291ec581d8b7bf6a66becd27ca453409e9ba  digests.txt
   - dda46691d9109493892d3fdbcf5af5a98e0ca54bbe5f57fbfee7304f3ef3b871  readings.py.txt
-  - 5dca43338e364cf4e770ea66b75f0c6960d7f02777afefc51dbcfcf3ecb45e12  readings.txt
+  - f41aa6e7f533c548f7913726b34c30c98c1bf244a48fbf2e7c1f7c609647c270  readings.txt
   - 83164185b59e6c7f5304bcb06f0f2785812d83d1547b4deb9859668cbafec616  tier.py.txt
   - 99e959c7766cef443f5dca829a7a0754bcb07861e1446aeee6bac9781fd46a0a  tier.txt
-  - 8506715d1d48767969cc74d4876a5e67d605330dddc9fa18308f5a18f78f1593  variants.ts.txt
+  - a73bda0c0b302f291de8fd4c99137cbe4abb25cbad58a86be73d5d5ebd0a20e6  variants.ts.txt
 ---
 
 # Looking for a harder tier for gstack's Stop hook
@@ -139,7 +139,7 @@ colour.txt counts sessions whose tool results print a result line in colour. The
 
 ## Mechanics
 
-- **Readings.** variants.ts finds the last edit as the merged scorer does (Edit, Write, MultiEdit, NotebookEdit, or a Bash command that writes a file) and the checks after it with the scorer's own isCheck, showsOutcome and isRepro. "Docs" means every file the edit wrote matches DOC in variants.ts: a docs or changelog folder, a CHANGELOG, CHANGES, HISTORY, NEWS or RELEASE_NOTES file, or a .md, .rst or .txt file. A background run counts when a later tool result shows an outcome and names that run's output file.
+- **Readings.** variants.ts finds the last edit as the merged scorer does (Edit, Write, MultiEdit, NotebookEdit, or a Bash command that writes a file) and the checks after it with the scorer's own isCheck, showsOutcome and isRepro. For the code-edit readings it counts every write in a Bash call, not only the last, so a code write followed by a changelog write in the same call is still the last code edit; a built-in regression case checks this before any trial is read. "Docs" means every file the edit wrote matches DOC in variants.ts: a docs or changelog folder, a CHANGELOG, CHANGES, HISTORY, NEWS or RELEASE_NOTES file, or a .md, .rst or .txt file. A background run counts when a later tool result shows an outcome and names that run's output file.
 - **Tier.** tier.py reads only the file names in each task's upstream patch from the SWE-rebench leaderboard at a pinned revision, never the patch itself, and marks a task when one matches its changelog pattern. Its list column is the list draw.py put the task on before the run's screen, not where the run used it.
 - **Bands.** A task's band for one model comes from the other two models' none and plain-2 sessions on it in Stage 4.
 - **Pairs.** Hook minus prose pairs the two arms' sessions on the same task and stage. The tier lines count discordant pairs; their MDD uses 2.80 or 3.083 times the square root of the discordance over 255 pairs (85 tasks, 3 repetitions), at 95% and at 97.5% for two models.
