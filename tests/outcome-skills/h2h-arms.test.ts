@@ -134,6 +134,7 @@ describe("h2h home tree hash", () => {
       ".claude/skills/gstack/.git/logs/HEAD": machine,
       ".gstack/installs.tsv": "claude\tglobal\t1.99.4.0\t2026-11-15T04:18:" + (machine === "a" ? "31" : "59") + "Z\n",
       [".npm/_logs/" + machine + ".log"]: machine,
+      ...(machine === "b" ? { ".claude/plugins/.last_inuse_sweep": "2026-11-15T05:02:11.000Z" } : {}),
       ".claude/skills/x/SKILL.md": "skill\n",
       ...extra,
     });
@@ -146,6 +147,7 @@ describe("h2h home tree hash", () => {
     chmodSync(join(ex, ".claude/skills/x/SKILL.md"), 0o755);
     expect(homeTreeSha256(ex)).not.toBe(a);
     expect(HASH_RULE.skip).toContain("**/.git/index");
+    expect(HASH_RULE.skip).toContain(".claude/plugins/.last_inuse_sweep");
   });
 
   test("entries are (path, git mode, sha256) with links by target, and an empty home hashes as the empty list", () => {
