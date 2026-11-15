@@ -7,7 +7,7 @@ author: GEVA-503
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
 date: 2026-11-15
-status: done
+status: superseded
 links:
   - 2026-11-09-geva-448-harness-mechanics-prereg
   - 2026-11-12-geva-501-decision-routing-results
