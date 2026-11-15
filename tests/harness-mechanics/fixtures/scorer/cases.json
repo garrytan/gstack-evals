@@ -1,0 +1,1352 @@
+[
+ {
+  "file": "01-s13-sed-and-pytest.jsonl",
+  "arm": "none",
+  "note": "s18 step 4: same-call check after a sed write, with an outcome in that call",
+  "expect": {
+   "edited": true,
+   "adherent": true,
+   "adherent_strict": true,
+   "verify_loads": 0,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "02-s13-heredoc-repro.jsonl",
+  "arm": "plain-2",
+  "note": "s18 step 4: a heredoc writes a repro, then runs it",
+  "expect": {
+   "edited": true,
+   "adherent": true,
+   "adherent_strict": true,
+   "verify_loads": 0,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "03-s13-pytest-tee.jsonl",
+  "arm": "verify-prose",
+  "note": "s18 step 4: pytest | tee out.log, the write is the check's own output",
+  "expect": {
+   "edited": true,
+   "adherent": true,
+   "adherent_strict": true,
+   "verify_loads": 1,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "04-s13-pytest-then-sed.jsonl",
+  "arm": "verify-hook",
+  "note": "s18 step 4: the check ran before the write in the same call",
+  "expect": {
+   "edited": true,
+   "adherent": false,
+   "adherent_strict": false,
+   "verify_loads": 1,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "05-s13-sed-pytest-version.jsonl",
+  "arm": "none",
+  "note": "s18 step 4: a version probe after the write",
+  "expect": {
+   "edited": true,
+   "adherent": false,
+   "adherent_strict": false,
+   "verify_loads": 0,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "NOT FIXED",
+   "claims_done": false,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "06-s13-sed-fails.jsonl",
+  "arm": "plain-2",
+  "note": "s18 step 4: sed fails, pytest never runs, no outcome",
+  "expect": {
+   "edited": true,
+   "adherent": false,
+   "adherent_strict": false,
+   "verify_loads": 0,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "07-s13-pytest-sed-echo.jsonl",
+  "arm": "verify-prose",
+  "note": "s18 step 4: the earlier summary shows, but echo done is no check",
+  "expect": {
+   "edited": true,
+   "adherent": false,
+   "adherent_strict": false,
+   "verify_loads": 1,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "08-s13-tail-old-log.jsonl",
+  "arm": "verify-hook",
+  "note": "s18 step 4: a later tail reprints an old summary",
+  "expect": {
+   "edited": true,
+   "adherent": false,
+   "adherent_strict": false,
+   "verify_loads": 1,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "09-s13-no-tests-ran.jsonl",
+  "arm": "none",
+  "note": "s18 step 4: no tests ran from a mistyped path",
+  "expect": {
+   "edited": true,
+   "adherent": false,
+   "adherent_strict": false,
+   "verify_loads": 0,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "10-s13-passing-run.jsonl",
+  "arm": "plain-2",
+  "note": "s18 step 4: a passing run in the same position",
+  "expect": {
+   "edited": true,
+   "adherent": true,
+   "adherent_strict": true,
+   "verify_loads": 0,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "11-same-call-false.jsonl",
+  "arm": "verify-prose",
+  "note": "open notes: the check after the write never runs but inherits the earlier summary; scores adherent, a known limit",
+  "expect": {
+   "edited": true,
+   "adherent": true,
+   "adherent_strict": true,
+   "verify_loads": 1,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "12-hook-window.jsonl",
+  "arm": "verify-hook",
+  "note": "section 6 window: edit, Read of verify/SKILL.md, stop; the hook reads met, the scorer non-adherent",
+  "expect": {
+   "edited": true,
+   "adherent": false,
+   "adherent_strict": false,
+   "verify_loads": 2,
+   "edit_before_last_load": true,
+   "last_edit_before_last_load": true,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "13-no-edit.jsonl",
+  "arm": "none",
+  "note": "no edit: left out of adherence and counted",
+  "expect": {
+   "edited": false,
+   "adherent": null,
+   "adherent_strict": null,
+   "verify_loads": 0,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": null,
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "14-write-checks-pass.jsonl",
+  "arm": "verify-prose",
+  "note": "a slash-command load, a Write, and a CHECK PASS line",
+  "expect": {
+   "edited": true,
+   "adherent": true,
+   "adherent_strict": true,
+   "verify_loads": 1,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "15-checks-fail.jsonl",
+  "arm": "verify-hook",
+  "note": "",
+  "expect": {
+   "edited": true,
+   "adherent": true,
+   "adherent_strict": false,
+   "verify_loads": 1,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "16-checks-zero-run.jsonl",
+  "arm": "none",
+  "note": "CHECK ZERO_RUN ran no test",
+  "expect": {
+   "edited": true,
+   "adherent": false,
+   "adherent_strict": false,
+   "verify_loads": 0,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "17-checks-unmapped.jsonl",
+  "arm": "plain-2",
+  "note": "CHECK UNMAPPED ran no test",
+  "expect": {
+   "edited": true,
+   "adherent": false,
+   "adherent_strict": false,
+   "verify_loads": 0,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "18-checks-too-broad.jsonl",
+  "arm": "verify-prose",
+  "note": "CHECK TOO_BROAD ran no test",
+  "expect": {
+   "edited": true,
+   "adherent": false,
+   "adherent_strict": false,
+   "verify_loads": 1,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "19-checks-env.jsonl",
+  "arm": "verify-hook",
+  "note": "CHECK ENV ran no test",
+  "expect": {
+   "edited": true,
+   "adherent": false,
+   "adherent_strict": false,
+   "verify_loads": 1,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "20-checks-timeout.jsonl",
+  "arm": "none",
+  "note": "CHECK TIMEOUT ran no test",
+  "expect": {
+   "edited": true,
+   "adherent": false,
+   "adherent_strict": false,
+   "verify_loads": 0,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "21-checks-incomplete.jsonl",
+  "arm": "plain-2",
+  "note": "CHECK INCOMPLETE ran no test",
+  "expect": {
+   "edited": true,
+   "adherent": false,
+   "adherent_strict": false,
+   "verify_loads": 0,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "22-unittest-ok.jsonl",
+  "arm": "none",
+  "note": "a Skill call whose body never arrives is no load",
+  "expect": {
+   "edited": true,
+   "adherent": true,
+   "adherent_strict": true,
+   "verify_loads": 0,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "DONE",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "23-unittest-fail.jsonl",
+  "arm": "plain-2",
+  "note": "",
+  "expect": {
+   "edited": true,
+   "adherent": true,
+   "adherent_strict": false,
+   "verify_loads": 0,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "24-tox-ok.jsonl",
+  "arm": "verify-prose",
+  "note": "",
+  "expect": {
+   "edited": true,
+   "adherent": true,
+   "adherent_strict": true,
+   "verify_loads": 1,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "25-nox-ok.jsonl",
+  "arm": "verify-hook",
+  "note": "",
+  "expect": {
+   "edited": true,
+   "adherent": true,
+   "adherent_strict": true,
+   "verify_loads": 1,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "26-pytest-failed.jsonl",
+  "arm": "none",
+  "note": "",
+  "expect": {
+   "edited": true,
+   "adherent": true,
+   "adherent_strict": false,
+   "verify_loads": 0,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "27-pytest-error.jsonl",
+  "arm": "plain-2",
+  "note": "",
+  "expect": {
+   "edited": true,
+   "adherent": true,
+   "adherent_strict": false,
+   "verify_loads": 0,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "28-python-c.jsonl",
+  "arm": "verify-prose",
+  "note": "",
+  "expect": {
+   "edited": true,
+   "adherent": false,
+   "adherent_strict": false,
+   "verify_loads": 1,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "29-tmp-write-after-check.jsonl",
+  "arm": "verify-hook",
+  "note": "a write outside the repository is no edit",
+  "expect": {
+   "edited": true,
+   "adherent": true,
+   "adherent_strict": true,
+   "verify_loads": 1,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "30-bash-sh-repro.jsonl",
+  "arm": "none",
+  "note": "",
+  "expect": {
+   "edited": true,
+   "adherent": true,
+   "adherent_strict": true,
+   "verify_loads": 0,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "31-bash-c.jsonl",
+  "arm": "plain-2",
+  "note": "",
+  "expect": {
+   "edited": true,
+   "adherent": false,
+   "adherent_strict": false,
+   "verify_loads": 0,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "32-pip-install.jsonl",
+  "arm": "verify-prose",
+  "note": "",
+  "expect": {
+   "edited": true,
+   "adherent": false,
+   "adherent_strict": false,
+   "verify_loads": 1,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "33-multiedit.jsonl",
+  "arm": "verify-hook",
+  "note": "",
+  "expect": {
+   "edited": true,
+   "adherent": true,
+   "adherent_strict": true,
+   "verify_loads": 1,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "34-notebookedit-no-check.jsonl",
+  "arm": "none",
+  "note": "",
+  "expect": {
+   "edited": true,
+   "adherent": false,
+   "adherent_strict": false,
+   "verify_loads": 0,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "35-check-before-edit.jsonl",
+  "arm": "plain-2",
+  "note": "",
+  "expect": {
+   "edited": true,
+   "adherent": false,
+   "adherent_strict": false,
+   "verify_loads": 0,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "36-last-check-fails.jsonl",
+  "arm": "verify-prose",
+  "note": "an edit before the last load, but not the last edit",
+  "expect": {
+   "edited": true,
+   "adherent": true,
+   "adherent_strict": false,
+   "verify_loads": 2,
+   "edit_before_last_load": true,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "37-fail-then-pass.jsonl",
+  "arm": "verify-hook",
+  "note": "",
+  "expect": {
+   "edited": true,
+   "adherent": true,
+   "adherent_strict": true,
+   "verify_loads": 1,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "38-redirect-read.jsonl",
+  "arm": "none",
+  "note": "pattern 1",
+  "expect": {
+   "edited": true,
+   "adherent": false,
+   "adherent_strict": false,
+   "verify_loads": 0,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 1,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "39-redirect-unread.jsonl",
+  "arm": "plain-2",
+  "note": "pattern 1 not counted: never read",
+  "expect": {
+   "edited": true,
+   "adherent": false,
+   "adherent_strict": false,
+   "verify_loads": 0,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "40-redirect-before-edit.jsonl",
+  "arm": "verify-prose",
+  "note": "pattern 1 not counted: before the last edit",
+  "expect": {
+   "edited": true,
+   "adherent": true,
+   "adherent_strict": true,
+   "verify_loads": 1,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "41-tox-depends.jsonl",
+  "arm": "verify-hook",
+  "note": "pattern 2",
+  "expect": {
+   "edited": true,
+   "adherent": false,
+   "adherent_strict": false,
+   "verify_loads": 1,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 1,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "42-tox-run.jsonl",
+  "arm": "none",
+  "note": "pattern 2 not counted: tox run runs tests",
+  "expect": {
+   "edited": true,
+   "adherent": true,
+   "adherent_strict": true,
+   "verify_loads": 0,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "43-tox-devenv-before-edit.jsonl",
+  "arm": "plain-2",
+  "note": "pattern 2 not counted: before the last edit",
+  "expect": {
+   "edited": true,
+   "adherent": true,
+   "adherent_strict": true,
+   "verify_loads": 0,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "44-pytest-Vv.jsonl",
+  "arm": "verify-prose",
+  "note": "pattern 3",
+  "expect": {
+   "edited": true,
+   "adherent": false,
+   "adherent_strict": false,
+   "verify_loads": 1,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 1
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "45-pytest-vx.jsonl",
+  "arm": "verify-hook",
+  "note": "pattern 3 not counted: a run cluster",
+  "expect": {
+   "edited": true,
+   "adherent": true,
+   "adherent_strict": true,
+   "verify_loads": 1,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "46-tox-av.jsonl",
+  "arm": "none",
+  "note": "pattern 3",
+  "expect": {
+   "edited": true,
+   "adherent": false,
+   "adherent_strict": false,
+   "verify_loads": 0,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 1
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "47-pytest-Vq-before-edit.jsonl",
+  "arm": "plain-2",
+  "note": "pattern 3 not counted: before the last edit",
+  "expect": {
+   "edited": true,
+   "adherent": true,
+   "adherent_strict": true,
+   "verify_loads": 0,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "48-probes-descriptive.jsonl",
+  "arm": "verify-prose",
+  "note": "descriptive probes; tox --notest's result line is credited, as the open notes say",
+  "expect": {
+   "edited": true,
+   "adherent": true,
+   "adherent_strict": true,
+   "verify_loads": 1,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 1,
+    "cache_show": 1,
+    "tox_notest": 1,
+    "make_check_format": 1,
+    "skill_contract_waive": 0
+   }
+  }
+ },
+ {
+  "file": "49-waive-then-check.jsonl",
+  "arm": "verify-hook",
+  "note": "the hook skips this command, the scorer counts it",
+  "expect": {
+   "edited": true,
+   "adherent": true,
+   "adherent_strict": true,
+   "verify_loads": 1,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 1
+   }
+  }
+ },
+ {
+  "file": "50-git-apply-then-check.jsonl",
+  "arm": "none",
+  "note": "",
+  "expect": {
+   "edited": true,
+   "adherent": true,
+   "adherent_strict": true,
+   "verify_loads": 0,
+   "edit_before_last_load": false,
+   "last_edit_before_last_load": false,
+   "claim": "FIXED",
+   "claims_done": true,
+   "patterns": {
+    "redirected_read": 0,
+    "tox_no_tests": 0,
+    "combined_flags": 0
+   },
+   "probes": {
+    "collectonly": 0,
+    "cache_show": 0,
+    "tox_notest": 0,
+    "make_check_format": 0,
+    "skill_contract_waive": 0
+   }
+  }
+ }
+]

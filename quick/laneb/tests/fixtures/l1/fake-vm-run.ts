@@ -6,8 +6,9 @@
 // n+1th open with a cap stop. PROXY_CRASH_AT=<n> lets the n+1th session open (its reserve lands and session_open is logged)
 // and then plays the proxy dying: that session never gets a closed row or a settle, no later session opens, and the batch
 // waits for a STOP, a .dead file or its parent's death. TUNNEL_DOWN_VM=<vm> fails that VM's first ledger read, as
-// vm-run.sh's does when no ledger service answers the tunnel: exit 4 before any trial. Every opened session logs
-// session_open in out/proxy-requests.jsonl, as the proxy does.
+// vm-run.sh's does when no ledger service answers the tunnel: exit 4 before any trial. NO_RESPONSE_AT=<n>[,<n>...] closes
+// those trials' sessions (0-based, on the VM NO_RESPONSE_VM names, or on every VM) with no successful response. Every opened
+// session logs session_open in out/proxy-requests.jsonl, as the proxy does.
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 const [vmDir, prefix, vm, parentPid] = Bun.argv.slice(2) as [string, string, string, string];
@@ -27,6 +28,7 @@ let n = 0;
 const pauseAt = process.env.PAUSE_VM === vm ? Number(process.env.PAUSE_AT ?? -1) : -1;
 const capAt = process.env.PAUSE_VM === vm || !process.env.PAUSE_VM ? Number(process.env.CAP_STOP_AT ?? -1) : -1;
 const crashAt = process.env.PAUSE_VM === vm || !process.env.PAUSE_VM ? Number(process.env.PROXY_CRASH_AT ?? -1) : -1;
+const noResponse = !process.env.NO_RESPONSE_VM || process.env.NO_RESPONSE_VM === vm ? (process.env.NO_RESPONSE_AT ?? "").split(",").filter(Boolean).map(Number) : [];
 const post = async (path: string, body: unknown) => {
   const r = await fetch("http://127.0.0.1:" + port + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   return { status: r.status, body: await r.json() };
@@ -73,7 +75,7 @@ for (const f of jobs) {
       }
     }
     const spent = 100_000 + n;
-    appendFileSync(join(out, "proxy-sessions.jsonl"), JSON.stringify({ id: sid, trial: trial + "__env", model: "claude-opus-5-5", cap_micros: 5_000_000, spent_micros: spent, ok_responses: 1, closed_at: new Date().toISOString(), route_mark_before_output: arm === "after-u", meta: { arm } }) + "\n");
+    appendFileSync(join(out, "proxy-sessions.jsonl"), JSON.stringify({ id: sid, trial: trial + "__env", model: "claude-opus-5-5", cap_micros: 5_000_000, spent_micros: spent, ok_responses: noResponse.includes(n - 1) ? 0 : 1, closed_at: new Date().toISOString(), route_mark_before_output: arm === "after-u", meta: { arm } }) + "\n");
     writeFileSync(join(dir, "result.json"), "{}");
     try { await post("/settle", { id: prefix + sid, usd_micros: spent }); } catch {}
   }

@@ -1,0 +1,23 @@
+// Counts the Stage 2 done items whose inputs change under the colour fix (Deviation S4-2): each Stage 1 session's done
+// facts (judge.ts doneFacts, the live done hook's inputs) from its transcript, with the code at ROOT, against the item text
+// in the replay's items file. No backend call. Usage: ROOT=<checkout> HM=<the run's work dir, ending in /> bun done-count.ts
+import { readFileSync } from "node:fs";
+const ROOT = process.env.ROOT!, HM = process.env.HM!;
+const { doneFacts } = await import(ROOT + "/lanes/harness-mechanics/judge.ts");
+const { useMatchRegex } = await import(ROOT + "/lanes/harness-mechanics/score.ts");
+const { loadMatcher } = await import(ROOT + "/lanes/harness-mechanics/match.ts");
+const jl = (p: string) => readFileSync(p, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+const items = new Map(jl(HM + "replay-build/items.jsonl").filter((i: any) => i.point === "done").map((i: any) => [i.id, i]));
+const sessions = jl(HM + "replay-build/sessions.jsonl");
+let same = 0, gained = 0, lost = 0, changed = 0, missing = 0, gainedPass = 0;
+for (const s of sessions) {
+  const it: any = items.get("done-" + s.trial);
+  if (!it) { missing++; continue; }
+  const f = doneFacts(readFileSync(s.transcript_path, "utf8"));
+  const old = JSON.parse(it.text);
+  if (JSON.stringify(f) === it.text) { same++; continue; }
+  if (!old.check && f.check) { gained++; if (it.tests_pass) gainedPass++; }
+  else if (old.check && !f.check) lost++;
+  else changed++;
+}
+console.log("done items " + items.size + ", sessions " + sessions.length + ", missing " + missing + "; facts identical " + same + "; no check before and a check now " + gained + " (hidden tests pass on " + gainedPass + "); a check before and none now " + lost + "; a different check " + changed);

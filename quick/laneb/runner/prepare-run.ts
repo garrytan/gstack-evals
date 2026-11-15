@@ -15,9 +15,22 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from
 import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { loadR3Drops, loadRebenchPool, loadSwebvTasks, materializeRebench, materializeSwebv, materializeTb2, R3_BAND_SHA256, R3_DROP_FILE, R3_DROP_SHA256, R3A4_POOL_FILE, R3A4_POOL_SHA256 } from "./materialize.ts";
-import { armSpec, CLOSING_LINES, jobConfig, PROCEDURE_LINES } from "./grid.ts";
+import { armSpec, CLOSING_LINES, jobConfig, PROCEDURE_LINES, type AgentOptions } from "./grid.ts";
 
 const sha256 = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
+
+// D1's task setup (harness mechanics): TASK_SETUP names Dockerfile lines appended after runtime-copy.Dockerfile in every
+// task's environment image, never the verifier's, and TASK_SETUP_SHA256 the bytes they must have. With neither set, every
+// Dockerfile is byte-identical to before.
+export function taskSetupLines(env: Record<string, string | undefined> = process.env): string {
+  const file = env.TASK_SETUP, want = env.TASK_SETUP_SHA256;
+  if (!file && !want) return "";
+  if (!file || !want) throw new Error("E_USAGE set TASK_SETUP and TASK_SETUP_SHA256 together");
+  if (!existsSync(file)) throw new Error(`E_USAGE TASK_SETUP ${file} does not exist`);
+  const got = sha256(file);
+  if (got !== want) throw new Error(`E_USAGE TASK_SETUP ${file} has sha256 ${got}, not TASK_SETUP_SHA256 ${want}`);
+  return "\n" + readFileSync(file, "utf8");
+}
 
 // Copies every arm's tar into <run>/arms. Each must be the preregistered bytes: its tar sha256 must equal the committed
 // manifest's. Arms that share a tar (tar=<name>) share one copy of it in the run dir and one manifest.
@@ -63,7 +76,7 @@ if (import.meta.main) {
   if (!/^[\w/-]+$/.test(armManifests) || !existsSync(join(root, armManifests))) throw new Error(`E_USAGE ARM_MANIFESTS ${armManifests} is not a directory under ${root}`);
   const cells = JSON.parse(readFileSync(join(root, "config", cellsFile), "utf8"));
   const runtimeStages = readFileSync(join(here, "runtime-stages.Dockerfile"), "utf8");
-  const runtimeCopy = readFileSync(join(here, "runtime-copy.Dockerfile"), "utf8");
+  const runtimeCopy = readFileSync(join(here, "runtime-copy.Dockerfile"), "utf8") + taskSetupLines();
   const band = taskSet === "swebv-r3" ? loadSwebvTasks(join(root, "tasks/swebv-r3.txt"), join(root, "tasks/swebv-r3.json"), R3_BAND_SHA256) : [];
   const drops = taskSet === "swebv-r3" ? loadR3Drops(join(root, R3_DROP_FILE), R3_DROP_SHA256, band.map((t) => t.task_id)) : [];
   const swebv = band.filter((t) => !drops.some((d) => d.task_id === t.task_id));
@@ -84,8 +97,8 @@ if (import.meta.main) {
   mkdirSync(join(run, "arms"), { recursive: true });
 
   const tasks: Record<string, unknown> = {};
+  const exportDir = process.env.SWEREBENCH ?? join(process.env.HOME ?? "", ".capy/work/ref/swe-rebench-leaderboard");
   if (taskSet === "swerebench-r3a4") {
-    const exportDir = process.env.SWEREBENCH ?? join(process.env.HOME ?? "", ".capy/work/ref/swe-rebench-leaderboard");
     for (const id of final) tasks[id] = materializeRebench(exportDir, rebench.find((t) => t.task_id === id)!, join(run, "tasks", id), { runtimeStages, runtimeCopy, network });
   } else if (taskSet === "swebv-r3") {
     const root = process.env.SWEBV ?? join(process.env.HOME ?? "", ".capy/work/ref/harbor-datasets");
@@ -105,14 +118,35 @@ if (import.meta.main) {
     return m;
   });
   copyFileSync(join(root, "config/proxy.json"), join(run, "proxy.json"));
+  // A judge arm sets backend (grid.ts), so jobConfig emits judge_backend; on such a batch the judge agent resolves each
+  // task's custody at runtime from <markers_dir>/<task>.json. One agent config serves every task in a judge rectangle, so
+  // custody cannot be a static per-task kwarg; prepare-run points every judge arm at the run dir's judge-markers folder,
+  // fills it below (prepareJudgeCustody, on every prepare path: a part, its relaunch and its attempt 2), and launch.sh syncs
+  // the run dir to the VM. A non-judge or L1 arm gets no markers_dir, so its kwargs and job.json stay byte-identical.
+  const hasJudge = arms.some((a) => (a.options as AgentOptions).backend);
+  const judgeMarkersDir = `${vm}/run/judge-markers`;
   const job = jobConfig({
-    job_name: jobName, tasks_dir: `${vm}/run/tasks`, tasks: final, models, arms: arms.map(({ name, tar, sha256, options }) => ({ name, tar, sha256, ...options })),
+    job_name: jobName, tasks_dir: `${vm}/run/tasks`, tasks: final, models,
+    arms: arms.map(({ name, tar, sha256, options }) => ({ name, tar, sha256, ...options, ...((options as AgentOptions).backend ? { markers_dir: judgeMarkersDir } : {}) })),
     ...(cells.sdk_max_turns ? { sdk_max_turns: cells.sdk_max_turns } : {}),
     attempts: Number(attempts), n_concurrent: Number(concurrent), agent_dir: `${vm}/runner/agent`, runner_dir: `${vm}/runner`,
     base_url: "http://__GATEWAY__:8787", max_output_tokens: cells.max_output_tokens, verifier_timeout_multiplier: cells.verifier_timeout_multiplier,
     ...(taskSet === "swebv-r3" || taskSet === "swerebench-r3a4" ? { repo_dir: "/testbed" } : {}),
   });
   writeFileSync(join(run, "job.json"), JSON.stringify(job, null, 2) + "\n");
+  // When this batch has a judge arm, bundle the judge metering proxy into the run dir as one self-contained script. It
+  // rides the run-dir sync launch.sh already does, so the VM needs no src/ checkout to run it; vm-run.sh starts it only
+  // for a judge batch. It then builds the batch's per-task custody (judge-custody.ts) from the task sources in SWEREBENCH;
+  // a task whose image will not list stops the prepare. A batch with no judge arm writes no extra file, so a non-judge or
+  // L1 run dir stays byte-identical.
+  if (hasJudge) {
+    const src = resolve(here, "../../../lanes/harness-mechanics/judge/judge-proxy.ts");
+    const built = Bun.spawnSync(["bun", "build", src, "--target=bun", "--outfile", join(run, "judge-proxy.js")]);
+    if (built.exitCode !== 0) throw new Error(`judge-proxy bundle failed: ${built.stderr.toString().trim()}`);
+    if (taskSet !== "swerebench-r3a4") throw new Error(`E_USAGE a judge arm runs only on swerebench-r3a4, whose task sources its custody reads, not ${taskSet}`);
+    const { prepareJudgeCustody } = await import("../../../lanes/harness-mechanics/judge-custody.ts");
+    console.log(`${run}: judge custody for ${(await prepareJudgeCustody(run, exportDir)).length} task(s)`);
+  }
   if (process.env.ORACLE === "1") {
     const oracle = { ...job, job_name: `${jobName}-oracle`, n_attempts: 1, agents: [{ name: "oracle" }] };
     writeFileSync(join(run, "oracle.json"), JSON.stringify(oracle, null, 2) + "\n");
@@ -125,6 +159,8 @@ if (import.meta.main) {
     proxy_config_sha256: sha256(join(run, "proxy.json")), cells,
     arms: arms.map(({ options, ...arm }) => ({ ...arm, system_prompt: options.system_prompt ?? "sdk-default", session_kind: options.session_kind ?? "", told_skill: options.told ?? "",
       ...(options.gstack_hooks ? { gstack_hooks: options.gstack_hooks } : {}),
+      ...(options.strip_snapshot ? { strip_snapshot: true } : {}),
+      ...(options.checks_trust ? { checks_trust: true } : {}),
       ...(options.procedure_line ? { procedure_line: options.procedure_line, procedure_line_sha256: createHash("sha256").update(PROCEDURE_LINES[options.procedure_line as keyof typeof PROCEDURE_LINES]).digest("hex") } : {}),
       ...(options.closing_line ? { closing_line: options.closing_line, closing_line_sha256: createHash("sha256").update(CLOSING_LINES[options.closing_line as keyof typeof CLOSING_LINES]).digest("hex") } : {}) })), tasks,
   };

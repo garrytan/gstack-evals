@@ -9,6 +9,14 @@
       ],
       "pattern": "\\(str\\(path\\), st\\.st_size, st\\.st_mtime_ns\\)\\s*$",
       "reason": "a file-digest cache key tuple in sha256_file, not a credential"
+    },
+    {
+      "finding": "env.kv",
+      "paths": [
+        "wiki/board/2026-11-15-geva-503-harness-mechanics-results/counts.py.txt"
+      ],
+      "pattern": "\\(short\\.get\\(kw\\.get\\(\"upstream_model\"\\), kw\\.get\\(\"upstream_model\"\\)\\), arm\\)\\s*$",
+      "reason": "a dict key tuple in the published harness mechanics counting script, not a credential"
     }
   ],
   "dependencies": {
@@ -132,6 +140,24 @@
     "tests/stats/fixtures/**": [
       "tests/stats/outcome-decision.test.ts"
     ],
+    "tests/harness-mechanics/fixtures/scorer/**": [
+      "tests/harness-mechanics/score.test.ts"
+    ],
+    "tests/harness-mechanics/fixtures/arms/**": [
+      "tests/harness-mechanics/sessions.test.ts"
+    ],
+    "lanes/harness-mechanics/judge/**": [
+      "tests/harness-mechanics/hooks.test.ts",
+      "tests/harness-mechanics/replay-clients.test.ts",
+      "quick/laneb/tests/vm-run.test.ts"
+    ],
+    "quick/laneb/runner/agent/laneb_hooks.py": [
+      "tests/harness-mechanics/judge-wiring.test.ts"
+    ],
+    "lanes/harness-mechanics/cli.ts": [
+      "tests/harness-mechanics/hold.test.ts",
+      "tests/harness-mechanics/judge-wiring.test.ts"
+    ],
     "src/errors/codes.ts": [
       "tests/errors.test.ts"
     ],
@@ -193,6 +219,7 @@
       "quick/laneb/tests/runner.test.ts",
       "quick/laneb/tests/stacks.test.ts",
       "quick/laneb/tests/vm-run.test.ts",
+      "tests/harness-mechanics/hold.test.ts",
       "tests/outcome-skills/sm-rebench.test.ts"
     ],
     "quick/lanea-quick/**": [
@@ -318,6 +345,12 @@
     ],
     "tests/decision-routing/stubs/**": [
       "tests/decision-routing/agent-sdk.test.ts"
+    ],
+    "lanes/harness-mechanics/risky-written.txt": [
+      "tests/harness-mechanics/replay-items.test.ts"
+    ],
+    "tests/harness-mechanics/replay_bridge_driver.py": [
+      "tests/harness-mechanics/replay-clients.test.ts"
     ],
     "tests/er/stub-er-cli.cjs": [
       "tests/er/run-sdk.test.ts"

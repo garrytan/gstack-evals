@@ -1030,6 +1030,74 @@ describe("retries", () => {
 });
 
 describe("unknown sends and reconcile", () => {
+  test("a client that gives up aborts the upstream send, so a slow call is not bought twice when the client retries", async () => {
+    let completed = 0;
+    let aborted = 0;
+    let n = 0;
+    const t = setup((_url, init) => {
+      if (++n > 1) return (completed++, ok({ input_tokens: 10, output_tokens: 5 }));
+      return new Promise<Response>((resolve, reject) => {
+        const timer = setTimeout(() => (completed++, resolve(ok({ input_tokens: 10, output_tokens: 5 }))), 500);
+        init.signal?.addEventListener("abort", () => (clearTimeout(timer), aborted++, reject(init.signal!.reason)));
+      });
+    });
+    const a = t.bind();
+    const send = (signal?: AbortSignal) => fetch(`http://127.0.0.1:${t.proxy.port}/${a.slot}/anthropic/v1/messages`, { method: "POST", headers: { authorization: `Bearer ${a.token}` }, body: JSON.stringify({ model: "claude-opus-5-5", max_tokens: 100, messages: [{ role: "user", content: "hi" }] }), signal });
+    await expect(send(AbortSignal.timeout(100))).rejects.toThrow();
+    expect((await send()).status).toBe(200);
+    await Bun.sleep(700);
+    expect(aborted).toBe(1);
+    expect(completed).toBe(1);
+    expect(t.ledger.settles.map(([, o]) => o.kind).sort()).toEqual(["spent", "unknown"]);
+  });
+
+  test("a call that answers before its client gives up is untouched: its upstream send is never aborted and it settles spent", async () => {
+    let signal: AbortSignal | undefined;
+    const t = setup((_url, init) => ((signal = init.signal ?? undefined), new Promise<Response>(r => setTimeout(() => r(ok({ input_tokens: 10, output_tokens: 5 })), 50))));
+    const a = t.bind();
+    const res = await fetch(`http://127.0.0.1:${t.proxy.port}/${a.slot}/anthropic/v1/messages`, { method: "POST", headers: { authorization: `Bearer ${a.token}` }, body: JSON.stringify({ model: "claude-opus-5-5", max_tokens: 100, messages: [{ role: "user", content: "hi" }] }), signal: AbortSignal.timeout(5_000) });
+    expect(res.status).toBe(200);
+    expect(signal?.aborted).toBe(false);
+    expect(t.calls).toHaveLength(1);
+    expect(t.ledger.settles.map(([, o]) => o.kind)).toEqual(["spent"]);
+  });
+
+  test("a client that drops a stream after its headers leaves the proxy's own read alone: the call settles spent at its usage", async () => {
+    const enc = new TextEncoder();
+    let release!: () => void;
+    const gate = new Promise<void>(r => (release = r));
+    const t = setup((_url, init) =>
+      new Response(
+        new ReadableStream({
+          async start(c) {
+            init.signal?.addEventListener("abort", () => c.error(init.signal!.reason));
+            c.enqueue(enc.encode(`data: ${JSON.stringify({ type: "message_start", message: { usage: { input_tokens: 10, output_tokens: 1 } } })}
+
+`));
+            await gate;
+            if (init.signal?.aborted) return;
+            c.enqueue(enc.encode(`data: ${JSON.stringify({ type: "message_delta", usage: { output_tokens: 5 } })}
+
+`));
+            c.close();
+          },
+        }),
+        { headers: { "content-type": "text/event-stream" } },
+      ),
+    );
+    const a = t.bind();
+    const client = new AbortController();
+    const res = await fetch(`http://127.0.0.1:${t.proxy.port}/${a.slot}/anthropic/v1/messages`, { method: "POST", headers: { authorization: `Bearer ${a.token}` }, body: JSON.stringify({ model: "claude-opus-5-5", stream: true, max_tokens: 1000, messages: [] }), signal: client.signal });
+    expect(res.status).toBe(200);
+    await res.body!.getReader().read();
+    client.abort();
+    await Bun.sleep(100);
+    release();
+    const meter = await t.proxy.finalize(a.meter_id);
+    expect(t.ledger.settles.map(([, o]) => o.kind)).toEqual(["spent"]);
+    expect(meter.micros).toBe(10 * 4 + 5 * 20);
+  });
+
   test("a lost send keeps its charge, is not resent, and its error carries no bearer or key", async () => {
     const t = setup(() => Promise.reject(new Error("socket hang up", { cause: new Error(`TLS reset while sending x-api-key=${KEY}`) })));
     const a = t.bind();
