@@ -16,7 +16,8 @@ import { ledgerPath, recordPath } from "../../src/runner/ledger/paths.ts";
 import type { ResolvedArms } from "../../src/skill-eval/cli/arms.ts";
 import { DEFAULT_POLICY, loadPolicy, providerOf, type LoadedPolicy } from "../../src/skill-eval/cli/policy.ts";
 import { armNamespaces, dockerRig, slotModels } from "../../src/skill-eval/cli/run-host.ts";
-import { ER_COVERAGE_DIR, ER_INSTALL_SKILL, ER_REC_USER, ER_SKILL, ER_SYSTEM_PROMPT, erFreeform } from "../../src/trial/review/eng-review.ts";
+import { ER_COVERAGE_DIR, ER_INSTALL_SKILL, ER_REC_USER, ER_SKILL, ER_SYSTEM_PROMPT, erFreeform, installPinProblems, type DigestPin } from "../../src/trial/review/eng-review.ts";
+import { gstackDir } from "../../src/trial/review/plan.ts";
 import { STATE_ROOT_DIR } from "../../src/trial/state-root.ts";
 import { runTrial } from "../../src/trial/trial.ts";
 import { erOutcome, type ErOutcome } from "../eng-review/parse.ts";
@@ -32,7 +33,7 @@ import { EB_BUILD_SKILL, EB_RUN } from "./ledger.ts";
 import { NOTE_MODELS, type ModelCall } from "./note.ts";
 import { reviewArmSpec, type AttemptEnd } from "./review-stage.ts";
 import { openingEvidence, type Launcher, type ReviewSession } from "./pipeline.ts";
-import type { Arm, Reviewer, SessionOutcome } from "./types.ts";
+import type { Arm, Reviewer, SessionOutcome, SkillArm } from "./types.ts";
 import { sessionImage, type SessionImage } from "./session-image.ts";
 import { readUnit } from "./unit.ts";
 import { openMeter } from "../product-value/meter.ts";
@@ -61,27 +62,41 @@ export function noteLauncher(o: { out: string; cacheDir: string; env?: Record<st
   };
 }
 
-/** Reviews: the Docker rig opens the item's lease, builds the arm's install from reviewArmSpec and starts the proxy. */
-export function reviewLauncher(o: { arms: Exclude<Arm, "none">[]; reviewer: Reviewer; out: string; env: Record<string, string | undefined>; policy?: string; log?: (line: string) => void }): Launcher<ReviewSession> {
+/** Reviews: the Docker rig opens the item's lease, builds the arm's install from reviewArmSpec and starts the proxy.
+ * pins moves a skill arm to another gstack commit (the planted-unit read's restore pin): the arm installs at that commit,
+ * and its installed tree must read the pin's VERSION and hold each recorded file at its sha256 before any session runs.
+ * runId names the lease's run; both default to this read's. upstream is the rig's test-only upstream override, for a
+ * keyless driven launch against a stub model server. */
+export function reviewLauncher(o: { arms: Exclude<Arm, "none">[]; reviewer: Reviewer; out: string; env: Record<string, string | undefined>; policy?: string; log?: (line: string) => void; pins?: Partial<Record<SkillArm, DigestPin>>; runId?: string; upstream?: string }): Launcher<ReviewSession> {
   return async (p) => {
     const loaded = loadPolicy(o.policy ?? DEFAULT_POLICY);
     if ("problem" in loaded) return fail("E_USAGE", "model policy: " + loaded.problem);
     const policy = loaded as LoadedPolicy;
     const model = REVIEWER_MODEL[o.reviewer];
-    const specs = o.arms.map((arm) => reviewArmSpec(arm) ?? fail("E_USAGE", "arm " + arm + " runs no review session"));
+    const runId = o.runId ?? EB_RUN;
+    const pinOf = (arm: Arm) => (isSkillArm(arm) ? o.pins?.[arm] : undefined);
+    const specs = o.arms.map((arm) => reviewArmSpec(arm, pinOf(arm)) ?? fail("E_USAGE", "arm " + arm + " runs no review session"));
     const tasks = join(o.out, "fixtures", "tasks.json");
     mkdirSync(join(o.out, "fixtures"), { recursive: true });
     writeFileSync(tasks, "[]\n");
     const arms: ResolvedArms = { arms: specs, base: null, skill: null, notes: [] };
     const env = o.env as Record<string, string>;
-    const call = { host: "claude" as const, arms, tasks, out: { path: o.out, rule: "--out" }, ledger: ledgerPath(p.ledger), record: recordPath(p.record, env), item: p.item, runId: EB_RUN, models: [model], policy };
+    const call = { host: "claude" as const, arms, tasks, out: { path: o.out, rule: "--out" }, ledger: ledgerPath(p.ledger), record: recordPath(p.record, env), item: p.item, runId, models: [model], policy };
     const skills = Object.fromEntries(o.arms.filter(isSkillArm).map((a) => [a, ER_INSTALL_SKILL[a]]));
-    const rig = dockerRig(call, { env, skill: null, skills, nonce: randomBytes(6).toString("hex"), cap: Math.round(p.capUsd * 1_000_000), voice: false });
+    const rig = dockerRig(call, { env, skill: null, skills, nonce: randomBytes(6).toString("hex"), cap: Math.round(p.capUsd * 1_000_000), voice: false, ...(o.upstream ? { upstream: o.upstream } : {}) });
+    const installs = o.arms.flatMap((a) => {
+      const pin = pinOf(a);
+      return pin && isSkillArm(a) ? installPinProblems(a, gstackDir(rig.arms[a]!), rig.arms[a]!.layers?.find((l) => l.dest === "")?.src ?? null, pin) : [];
+    });
+    if (installs.length) {
+      await rig.close();
+      return fail("E_USAGE", "the installed arms do not match their pins, so no session ran:\n" + installs.join("\n"));
+    }
     const empty = join(o.out, "fixtures");
     const session: ReviewSession = async (s) => {
       const provider = providerOf(policy, model) ?? fail("E_USAGE", model + " has no provider in the policy");
       const skillArm = isSkillArm(s.arm);
-      const binding = await rig.bind({ cell: { run_id: EB_RUN, arm: s.arm, task: s.unit.id, model, trial: s.rep, attempt: s.attempt }, models: slotModels(policy, model, null), allowance_micros: REVIEW_SESSION.allowanceMicros });
+      const binding = await rig.bind({ cell: { run_id: runId, arm: s.arm, task: s.unit.id, model, trial: s.rep, attempt: s.attempt }, models: slotModels(policy, model, null), allowance_micros: REVIEW_SESSION.allowanceMicros });
       const sandbox = rig.sandbox(s.arm, false, model);
       const run = join(s.dir, "run");
       mkdirSync(join(run, "host"), { recursive: true });
@@ -237,8 +252,10 @@ export function sessionToml(id: string, image: string, wallSec: number): string 
  * the clean-room preflight on that image. Harbor runs as a child process this one awaits, so the driver keeps serving
  * the session's control plane and proxy meanwhile. real_agent's non-SM path opens its trial on the real-outcome sandbox sidecar,
  * which the operator serves at sidecar. serve passes the keyless end-to-end run's stub upstream to the driver.
+ * Another read can move the plan and review mounts per cell (planFor, reviewFor: the planted-unit read mounts a reviewed
+ * arm's own final plan.md), the lease's run (runId) and the skill the stage charges (skill); each defaults to this read's.
  */
-export function buildLauncher(o: { arm: Arm | Arm[]; units: Map<string, { dir: string }>; repos: string; plans: string; bundles: string | null; out: string; host: string; envelopeHost: string; sidecar: string; forbidden: string[]; planned: number; harbor?: string; docker?: string; serve?: Pick<ServeOptions, "fetch" | "env" | "requireAdmission" | "machine" | "log"> }): Launcher<BuildSession> {
+export function buildLauncher(o: { arm: Arm | Arm[]; units: Map<string, { dir: string }>; repos: string; plans: string; bundles: string | null; out: string; host: string; envelopeHost: string; sidecar: string; forbidden: string[]; planned: number; harbor?: string; docker?: string; serve?: Pick<ServeOptions, "fetch" | "env" | "requireAdmission" | "machine" | "log">; planFor?: (cell: string, unit: string) => string; reviewFor?: (cell: string, unit: string) => string | null; runId?: string; skill?: string }): Launcher<BuildSession> {
   return async (p) => {
     const names = [...new Set((Array.isArray(o.arm) ? o.arm : [o.arm]).map(armName))];
     if (names.length !== 1) fail("E_USAGE", "one build launch serves one driver stage, so it runs the none arm alone or reviewed arms together");
@@ -247,7 +264,7 @@ export function buildLauncher(o: { arm: Arm | Arm[]; units: Map<string, { dir: s
     const arms = join(o.out, "eb-registry.json");
     mkdirSync(o.out, { recursive: true });
     writeFileSync(arms, JSON.stringify(registry, null, 2) + "\n");
-    const served = await serveStages({ record: p.record, local, run_id: EB_RUN, envelope_host: o.envelopeHost, stages: [{ item: p.item, arm: names[0]!, skills: [EB_BUILD_SKILL] }], host: o.host, dir: join(o.out, "driver"), planned: o.planned, registry, amount_micros: Math.round(p.capUsd * 1_000_000), ...o.serve });
+    const served = await serveStages({ record: p.record, local, run_id: o.runId ?? EB_RUN, envelope_host: o.envelopeHost, stages: [{ item: p.item, arm: names[0]!, skills: [o.skill ?? EB_BUILD_SKILL] }], host: o.host, dir: join(o.out, "driver"), planned: o.planned, registry, amount_micros: Math.round(p.capUsd * 1_000_000), ...o.serve });
     const stage = served.stages[0]!;
     const stageEnded = async () => ((await (await fetch(served.control + "/status")).json()) as { stages: { lease_id: string; ended: string | null }[] }).stages.find((x) => x.lease_id === stage.lease_id)?.ended ?? null;
     const images = new Map<string, SessionImage>();
@@ -260,8 +277,8 @@ export function buildLauncher(o: { arm: Arm | Arm[]; units: Map<string, { dir: s
       const tree = join(out, "repo");
       cpSync(join(o.repos, s.unit.id), tree, { recursive: true });
       prepareTree(tree);
-      const plan = join(o.plans, s.unit.id + ".md");
-      const review = s.arm === "none" ? null : join(o.bundles ?? fail("E_USAGE", "a reviewed arm builds from its review bundles; pass --bundles"), s.cell.replace(/[^A-Za-z0-9._-]/g, "_"));
+      const plan = o.planFor ? o.planFor(s.cell, s.unit.id) : join(o.plans, s.unit.id + ".md");
+      const review = o.reviewFor ? o.reviewFor(s.cell, s.unit.id) : s.arm === "none" ? null : join(o.bundles ?? fail("E_USAGE", "a reviewed arm builds from its review bundles; pass --bundles"), s.cell.replace(/[^A-Za-z0-9._-]/g, "_"));
       const mounts = buildMounts({ arm: s.arm, repo: tree, plan, review });
       checkMounts(mounts, [unit.dir, ...o.forbidden]);
       const img = images.get(eb.image.id) ?? sessionImage(eb.image.id, { docker: o.docker });
