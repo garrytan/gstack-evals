@@ -4,6 +4,7 @@
  "read": "GitHub GraphQL repository { nameWithOwner isArchived licenseInfo { spdxId } }, once, keyed by the fix reference's owner/repo in lower case",
  "permissive": [
   "MIT",
+  "MIT-0",
   "Apache-2.0",
   "BSD-2-Clause",
   "BSD-3-Clause",
