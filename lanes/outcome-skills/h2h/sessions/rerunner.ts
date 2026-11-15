@@ -24,7 +24,7 @@ import { ARMS_PINS_PATH } from "../arms/pins.ts";
 import { H2hError } from "../prereg.ts";
 import type { RerunOutcome, RerunRunner, RerunSession } from "../rerun.ts";
 import { scoreSession } from "../score/score.ts";
-import type { H2hArm, H2hUnit } from "../types.ts";
+import type { H2hArm, H2hSession, H2hUnit } from "../types.ts";
 import { readInstalls } from "./exposure.ts";
 import { armHome, checkArmHome } from "./home.ts";
 import { itemOf } from "./plan.ts";
@@ -82,18 +82,25 @@ export function sessionRunner(env: Record<string, string | undefined> = process.
         runtime ??= await buildRuntimeVolume();
         const session = { unit: u.id, kind: s.unit.kind, entry: s.unit.entry, stage: "stage2" as const, index: index++, arm: s.arm, item: env.H2H_RERUN_ITEM ?? itemOf("stage2", s.arm) };
         const unit = { unit: s.unit, statement: readFileSync(join(dir, "issue.md"), "utf8"), image, repo_dir: u.repo_dir, work_dir: u.work_dir };
-        const { record, file } = await runH2hSession({ session, unit, home, installs: list, control: env.H2H_CONTROL!, proxy: env.H2H_PROXY!, out: s.out, allowance: s.allowance_usd, runtime });
+        const { record, file } = await runH2hSession({ session, unit, home, installs: list, control: env.H2H_CONTROL!, proxy: env.H2H_PROXY!, out: s.out, allowance: s.allowance_usd, capLeftUsd: s.cap_left_usd, runtime });
         const scored = scoreSession(record, s.out, dir);
         writeFileSync(join(s.out, "score.json"), JSON.stringify(scored.score, null, 1) + "\n");
         for (const w of scored.warnings) console.error(w);
         console.log(s.arm + " " + u.id + ": " + record.end + (record.gap ? " gap " + record.gap : "") + ", verified " + scored.score.verified + "; " + file);
         return { kind: "session", session: record, score: scored.score };
       } catch (e) {
-        const code = e instanceof H2hError ? e.code : "";
-        if (code === "CAP_STOP") return { kind: "cap_stop", detail: (e as Error).message };
-        if (code === "E_H2H_SESSION_ARM" || code === "E_H2H_HOME_DRIFT") return { kind: "refused", detail: (e as Error).message };
-        throw e;
+        return refusedOutcome(e, s.out);
       }
     },
   };
+}
+
+/** The outcome rerun reads from a session that refused: a cap stop with the record runH2hSession wrote, so rerun counts its
+ *  spend, or a refused arm or drifted home. Anything else rethrows. */
+export function refusedOutcome(e: unknown, out: string): RerunOutcome {
+  const code = e instanceof H2hError ? e.code : "";
+  const file = join(out, "session.json");
+  if (code === "CAP_STOP") return { kind: "cap_stop", detail: (e as Error).message, session: existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as H2hSession) : null };
+  if (code === "E_H2H_SESSION_ARM" || code === "E_H2H_HOME_DRIFT") return { kind: "refused", detail: (e as Error).message };
+  throw e;
 }

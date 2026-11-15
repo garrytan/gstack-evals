@@ -92,7 +92,7 @@ export async function main(argv: string[]): Promise<number> {
       const out = join(W, "s-" + arm);
       current = { arm, first: null, requests: 0 };
       const t0 = Date.now();
-      const r = await runner.run({ arm, unit, allowance_usd: P.limits.allowance_usd, out }).catch((e: Error) => ({ kind: "error" as const, detail: e.message }));
+      const r = await runner.run({ arm, unit, allowance_usd: P.limits.allowance_usd, cap_left_usd: 2 * P.limits.allowance_usd, out }).catch((e: Error) => ({ kind: "error" as const, detail: e.message }));
       const s = current;
       current = null;
       if (r.kind !== "session") {

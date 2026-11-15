@@ -5,8 +5,8 @@
 // and question reply, and its home), the one-row image manifest and a compose overlay: the pinned Claude Code binary for
 // every session, and on B1 units the browser conditions (BROWSER: shared memory, the Chromium wrapper at its container
 // path, CHROME_BIN and PUPPETEER_EXECUTABLE_PATH). It first checks the arm's home against its pinned hash, then runs
-// Harbor, retries the whole session once from a fresh container when the session ends upstream or infra, on a slot capped
-// at what the first attempt left of the one session allowance (session.ts), reads exposure and the read audit from the
+// Harbor, retries the whole session once from a fresh container with the full allowance when the session ends upstream
+// or infra and the cap above it covers one more allowance (session.ts), reads exposure and the read audit from the
 // transcripts, copies the attempt's files beside the record and writes session.json with every attempt's usage. A close whose proxy finalize failed, or an attempt that
 // opened its slot and left no summary, halts with E_H2H_FINALIZE_HALT (the latter after POST /stop on the driver); a cap
 // stop writes its record and ends the part with CAP_STOP.
@@ -23,7 +23,7 @@ import { h2hLimits, H2H_PREFIX } from "./driver.ts";
 import { exposure, readAudit, readEvents } from "./exposure.ts";
 import { checkArmHome, type ArmHome } from "./home.ts";
 import type { H2hPlanned } from "./plan.ts";
-import { attemptUsage, endOf, retries, retryAllowance, SESSION_RERUN, sessionRecord, writeSessionRecord, type AttemptUsage, type H2hSessionRecord } from "./session.ts";
+import { attemptUsage, endOf, retries, retryCovered, SESSION_RERUN, sessionRecord, writeSessionRecord, type AttemptUsage, type H2hSessionRecord } from "./session.ts";
 import { turnPlan } from "./turns.ts";
 import { buildRuntimeVolume, runtimePath, RUNTIMES_DIR } from "./runtimes.ts";
 
@@ -49,19 +49,20 @@ export interface H2hRunInput {
   installs?: ArmInstall[];
   /** The Chromium wrapper B1 sessions mount; part B's file by default. */
   browserWrapper?: string;
+  /** What the money cap above this session (rerun's spend cap) had left when it began; a retry opens only while it still
+   *  covers a full allowance. Not given: the driver's item lease decides, refusing the retry's slot with a cap stop. */
+  capLeftUsd?: number;
   /** The runtime volume; runH2hSession builds or reuses it when not given. */
   runtime?: { volume: string };
 }
 
-/** The h2h config h2h_agent.py reads. slotUsd: this attempt's slot cap, at most the session allowance (all of it when
- *  not given); a retry gets what the first attempt left (session.ts retryAllowance). */
-export function h2hConfig(i: Pick<H2hRunInput, "session" | "home" | "allowance" | "gsdOnboard">, statement: string, kind: H2hUnit["kind"], p: H2hPrereg = readPrereg(), slotUsd?: number) {
+/** The h2h config h2h_agent.py reads. */
+export function h2hConfig(i: Pick<H2hRunInput, "session" | "home" | "allowance" | "gsdOnboard">, statement: string, kind: H2hUnit["kind"], p: H2hPrereg = readPrereg()) {
   const t = turnPlan(i.session.arm, i.session.entry, statement, { prereg: p, gsdOnboard: i.gsdOnboard });
   const l = h2hLimits(i.allowance);
-  if (slotUsd !== undefined && !(slotUsd > 0 && slotUsd <= l.session_cap_usd)) h2hFail("E_H2H_SESSION_INPUT", "an attempt's slot cap is more than $0 and at most the session allowance of $" + l.session_cap_usd + "; not $" + slotUsd);
   return {
     schema: "h2h-config.v1", arm: i.session.arm, turns: t.scripted, continuation: t.continuation, done_rule: p.done_rule, continuation_cap: t.continuation_cap, no_answer: t.question_reply,
-    limits: { allowance_usd: slotUsd ?? l.session_cap_usd, wall_sec: l.wall_limit_sec, max_turns: l.max_turns, ...QUIET }, disallowed_tools: [...p.disallowed_tools],
+    limits: { allowance_usd: l.session_cap_usd, wall_sec: l.wall_limit_sec, max_turns: l.max_turns, ...QUIET }, disallowed_tools: [...p.disallowed_tools],
     env: { ...claudeEnv(p), ...(kind === "B1" ? BROWSER.env : {}) }, home: i.home.dir, home_rule: i.home.home_rule,
   };
 }
@@ -84,11 +85,11 @@ export function h2hBudget(wallSec: number, maxTurnsRun: number): { agent_s: numb
 }
 
 /** One attempt's task dir, config, manifest and overlay under dir; returns Harbor's argv and env. */
-export function runCopy(i: H2hRunInput, attempt: 1 | 2, dir: string, p: H2hPrereg = readPrereg(), slotUsd?: number): { argv: string[]; env: Record<string, string>; config: ReturnType<typeof h2hConfig> } {
+export function runCopy(i: H2hRunInput, attempt: 1 | 2, dir: string, p: H2hPrereg = readPrereg()): { argv: string[]; env: Record<string, string>; config: ReturnType<typeof h2hConfig> } {
   const s = i.session;
   const u = i.unit;
   const model = HARBOR_MODEL[p.model] ?? h2hFail("E_H2H_SESSION_INPUT", "no Harbor model for " + p.model);
-  const config = h2hConfig(i, u.statement, u.unit.kind, p, slotUsd);
+  const config = h2hConfig(i, u.statement, u.unit.kind, p);
   const task = join(dir, "task");
   mkdirSync(join(task, "environment"), { recursive: true });
   writeFileSync(join(task, "environment/Dockerfile"), "FROM " + u.image.tag + "\n");
@@ -192,8 +193,7 @@ export async function runH2hSession(i: H2hRunInput): Promise<{ record: H2hSessio
   for (const attempt of [1, 2] as const) {
     const dir = join(i.out, "a" + attempt);
     mkdirSync(dir, { recursive: true });
-    const slotUsd = attempt === 1 ? allowance : retryAllowance(allowance, usage)!;
-    const { argv, env, config } = runCopy({ ...i, runtime }, attempt, dir, p, slotUsd);
+    const { argv, env, config } = runCopy({ ...i, runtime }, attempt, dir, p);
     const { exit, killed } = await harbor(i.harbor ?? "harbor", argv, env, h2hBudget(config.limits.wall_sec, config.turns.length + config.continuation_cap).timer_ms, join(dir, "harbor.log"));
     const ev = find(join(dir, "jobs"), "evaluator");
     const summary = ev && existsSync(join(ev, SUMMARY)) ? (JSON.parse(readFileSync(join(ev, SUMMARY), "utf8")) as Record<string, any>) : null;
@@ -201,15 +201,14 @@ export async function runH2hSession(i: H2hRunInput): Promise<{ record: H2hSessio
     await haltCheck(i, attempt, summary, ev, dir);
     if (typeof summary?.refused === "string" && summary.refused.startsWith("E_H2H_SESSION_ARM")) h2hFail("E_H2H_SESSION_ARM", summary.refused.slice("E_H2H_SESSION_ARM ".length) + "; " + dir);
     if (ev) for (const f of KEEP) if (existsSync(join(ev, f))) copyFileSync(join(ev, f), join(i.out, f));
-    usage.push(attemptUsage(attempt, summary, slotUsd));
+    usage.push(attemptUsage(attempt, summary, allowance));
     const again = retries(endOf(summary), attempt, summary);
-    const left = again ? retryAllowance(allowance, usage) : null;
-    const withheld = again && left === null ? "the retry did not open: the first attempt spent $" + (usage[0]!.spent_micros / 1_000_000).toFixed(2) + " of the $" + allowance + " session allowance, leaving less than half" : undefined;
-    record = sessionRecord(i.session, summary, { model: p.model, attempt, exposure: ev ? readExposure(i, ev) : null, wall_ms: Date.now() - started, home_tree_sha256: i.home.home_tree_sha256, usage: [...usage], ...(withheld ? { retry_withheld: withheld } : {}) });
-    if (!again || withheld) break;
+    const stop = again && !retryCovered(i.capLeftUsd, allowance, usage) ? "the retry needs a full $" + allowance + " allowance and the spend cap had $" + i.capLeftUsd!.toFixed(2) + " left for this session, of which the first attempt spent $" + (usage[0]!.spent_micros / 1_000_000).toFixed(2) : undefined;
+    record = sessionRecord(i.session, summary, { model: p.model, attempt, exposure: ev ? readExposure(i, ev) : null, wall_ms: Date.now() - started, home_tree_sha256: i.home.home_tree_sha256, usage: [...usage], ...(stop ? { retry_cap_stop: stop } : {}) });
+    if (!again || stop) break;
   }
   const file = join(i.out, "session.json");
   writeSessionRecord(file, record!);
-  if (record!.end === "cap_stop") h2hFail("CAP_STOP", i.session.unit + "/" + i.session.arm + " stopped at the cap: the driver refused its slot, so the part ends incomplete and is not retried; " + file);
+  if (record!.end === "cap_stop") h2hFail("CAP_STOP", i.session.unit + "/" + i.session.arm + " stopped at the cap: " + (record!.retry_cap_stop ?? "the driver refused its slot") + ", so the part ends incomplete and is not retried; " + file);
   return { record: record!, file };
 }
