@@ -12,6 +12,7 @@ import type { UnitKind } from "../types.ts";
 import { drawB, planFor, replaceDropped, seededOrder, walk, type DrawUnit, type Gate, type GateResult } from "./draw.ts";
 import { finishFrame, licenceVerdict, needsSecondRead, readLicences, screenFrame, type RowText } from "./frame.ts";
 import { fetchTemplates, loadTemplates, readHfHead, readLicenceFilesGraphQl, readLicencesGraphQl } from "./licences.ts";
+import { readFrameFile, type FrameUnit } from "../frames.ts";
 
 export const BUNDLE = join(PREREG_PATH, "..");
 export const FREEZE_DATE = POST_ID.slice(0, 10);
@@ -87,18 +88,11 @@ async function oFrame(argv: string[]): Promise<number> {
   return 0;
 }
 
-interface FrameFile { schema?: string; units?: (DrawUnit & Record<string, unknown>)[] }
-export function readFrame(path: string, kind: UnitKind): (DrawUnit & Record<string, unknown>)[] {
-  let j: FrameFile;
-  try {
-    j = JSON.parse(readFileSync(path, "utf8"));
-  } catch (e) {
-    return h2hFail("E_H2H_DRAW_INPUT", path + " is not readable JSON: " + (e as Error).message);
-  }
-  if (!Array.isArray(j.units)) h2hFail("E_H2H_DRAW_INPUT", path + " has no units list");
-  if (kind === "O" && j.schema !== "h2h-o-frame.v1") h2hFail("E_H2H_DRAW_INPUT", path + " is not an h2h-o-frame.v1 file");
-  if (kind === "O") for (const u of j.units!) if (u.entry !== "bug" && u.entry !== "feature") h2hFail("E_H2H_DRAW_INPUT", u.id + " has no bug or feature tag");
-  return j.units!;
+/** One frame's units through the shared frame reader, refused unless the file is the frame of kind. */
+export function readFrame(path: string, kind: UnitKind): FrameUnit[] {
+  const f = readFrameFile(path, "E_H2H_DRAW_INPUT");
+  if (f.kind !== kind) h2hFail("E_H2H_DRAW_INPUT", path + " is an " + f.schema + " file, not the " + kind + " frame");
+  return f.units;
 }
 
 /** The seeded order of one frame, as committed beside the frame. */
@@ -138,18 +132,20 @@ export const oracleGate = (unitsDir: string): Gate => ({
 
 const DRAW_HELP = `Usage: gstack-evals h2h draw --class O --frame <o-frame.json> --order-out <file>
        gstack-evals h2h draw --class O --frame <o-frame.json> --gates <h2h-gates.v1 file> [--units-dir <sm unit dirs>] [--n <n>] [--full-size <n>] [--dropped <ids>] --out <file>
-       gstack-evals h2h draw --class B --b1-frame <file> --b2-frame <file> --b1-gates <file> --b2-gates <file> [--n <n>] [--full-size <n>] [--b1-fallbacks-done] [--dropped <ids>] --out <file>
+       gstack-evals h2h draw --class B --b1-frame <file> --b2-frame <file> --b1-gates <file> --b2-gates <file> [--n <n>] [--full-size <n>] [--b1-fallbacks-done] [--b2-widened] [--dropped <ids>] --out <file>
 --order-out writes the frame's seeded order (draw_seed) and touches no gate. Otherwise the gate walk runs over the seeded
 order with the gate results (and, for O, the oracle gate read from --units-dir first) and writes the drawn units with
-their positions and stages. B1 walks its whole frame, then takes its positions from its usable count; when its stage 2
-gets fewer than 20 units the draw stops before B2 (E_H2H_DRAW_SHORT) until the widened frame is drawn with
---b1-fallbacks-done, after which B1 is infeasible and B is B2 alone. --full-size is an approved full n (O 150, B 80):
+their positions and stages. The B1 and B2 frames are drawn over their primary rows. B1 walks its whole frame, then takes
+its positions from its usable count; when its stage 2 gets fewer than 20 units the draw stops before B2
+(E_H2H_DRAW_SHORT) until it is drawn again with --b1-fallbacks-done, which adds the B1 frame's widened rows, after
+which B1 is infeasible and B is B2 alone. --b2-widened adds the B2 frame's widened rows, the fallback when B2 runs
+short. --full-size is an approved full n (O 150, B 80):
 the added units take the next positions after stage 0's units. --dropped lists units that dropped after the draw, which
 reserves replace. A pending gate exits 2 with E_H2H_DRAW_PENDING naming the unit; a frame that runs out exits 2 with
 E_H2H_DRAW_SHORT after writing.`;
 
 async function draw(argv: string[]): Promise<number> {
-  const f = parseFlags(argv, ["--class", "--frame", "--order-out", "--gates", "--units-dir", "--n", "--full-size", "--dropped", "--out", "--b1-frame", "--b2-frame", "--b1-gates", "--b2-gates"], ["--b1-fallbacks-done"], DRAW_HELP);
+  const f = parseFlags(argv, ["--class", "--frame", "--order-out", "--gates", "--units-dir", "--n", "--full-size", "--dropped", "--out", "--b1-frame", "--b2-frame", "--b1-gates", "--b2-gates"], ["--b1-fallbacks-done", "--b2-widened"], DRAW_HELP);
   if (!f) return 0;
   const p = readPrereg();
   const cls = f.need("--class");
@@ -175,14 +171,16 @@ async function draw(argv: string[]): Promise<number> {
     return report(w);
   }
   if (cls !== "B") h2hFail("E_H2H_DRAW_INPUT", "--class is O or B, not " + JSON.stringify(cls));
-  const b1 = readFrame(f.need("--b1-frame"), "B1"), b2 = readFrame(f.need("--b2-frame"), "B2");
-  const d = drawB(p, p.draw_seed, seededOrder(b1, p.draw_seed), seededOrder(b2, p.draw_seed), readGates(f.need("--b1-gates")), readGates(f.need("--b2-gates")), { n, fallbacksDone: f.has("--b1-fallbacks-done"), fullSize: full });
+  const fallbacksDone = f.has("--b1-fallbacks-done");
+  const b1 = readFrame(f.need("--b1-frame"), "B1").filter((u) => fallbacksDone || u.window === "primary");
+  const b2 = readFrame(f.need("--b2-frame"), "B2").filter((u) => f.has("--b2-widened") || u.window === "primary");
+  const d = drawB(p, p.draw_seed, seededOrder(b1, p.draw_seed), seededOrder(b2, p.draw_seed), readGates(f.need("--b1-gates")), readGates(f.need("--b2-gates")), { n, fallbacksDone, fullSize: full });
   const out = { ...d, b1: { ...d.b1, ...replaceDropped(d.b1, dropped) }, b2: d.b2 ? { ...d.b2, ...replaceDropped(d.b2, dropped) } : null };
   writeFileSync(f.need("--out"), json(out));
   const code = report(d.b1);
   console.log("B1: " + d.b1_status + ", stage 2 " + d.n_b1 + " B1 and " + d.n_b2 + " B2 units");
   if (d.b1_status === "fallbacks_due") {
-    console.error("E_H2H_DRAW_SHORT B1's stage 2 gets " + d.n_b1 + " units, under " + p.classes.B.b1_min_units + "; widen the B1 frame to " + p.classes.B.widen_to + " and add the pinned MultiLang browser rows, then draw again with --b1-fallbacks-done");
+    console.error("E_H2H_DRAW_SHORT B1's stage 2 gets " + d.n_b1 + " units, under " + p.classes.B.b1_min_units + "; draw again with --b1-fallbacks-done to add the B1 frame's widened rows from " + p.classes.B.widen_to + " (the pinned MultiLang browser rows are not in that frame)");
     return 2;
   }
   return Math.max(code, d.b2 ? report(d.b2) : 0);

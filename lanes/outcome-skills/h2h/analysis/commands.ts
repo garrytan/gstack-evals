@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { parseFlags, type Command } from "../cli.ts";
 import { h2hFail, readPrereg } from "../prereg.ts";
 import type { H2hScore, H2hSession, H2hUnit, Stage, UnitClass, UnitKind } from "../types.ts";
+import { readFrameFile } from "../frames.ts";
 import { analyze, report } from "./analyze.ts";
 import { ledgerDryRun } from "./ledger-dryrun.ts";
 import { powerTable } from "./power.ts";
@@ -59,10 +60,10 @@ export function readRecords<T>(path: string, schema: string): T[] {
 
 interface Drawn { id: string; repo: string; month: string; entry?: string; position: number; stage: string; language?: string; licence?: string; image_digest?: string; digest?: string; kind?: string; class?: string }
 /** Units from h2h draw outputs (an h2h-draw.v1 walk, a B draw with b1 and b2 walks, or a list), with language, licence and
- *  digest filled from frame files by id. */
+ *  digest filled by id from frame files (O, B1 or B2) read through the shared frame reader. */
 export function readAnalysisUnits(paths: readonly string[], frames: readonly string[]): H2hUnit[] {
   const frame = new Map<string, Record<string, unknown>>();
-  for (const f of frames) for (const u of ((parse(f) as { units?: Record<string, unknown>[] }).units ?? fail(f + " has no units list"))) frame.set(String(u.id), u);
+  for (const f of frames) for (const u of readFrameFile(f, "E_H2H_ANALYSIS_INPUT").units) frame.set(u.id, u);
   const out: H2hUnit[] = [];
   const take = (units: Drawn[], kind: UnitKind | undefined) => {
     for (const u of units) {
