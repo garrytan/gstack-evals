@@ -75,6 +75,16 @@ export interface GateResult {
   quoted: string | null;
 }
 
+/** An ask holds more than one lettered decision: lettered lines (frozen.json lettered_decision) with at least A and B. */
+export function multiDecision(text: string): boolean {
+  const re = new RegExp(FROZEN.lettered_decision);
+  const letters = new Set(text.split(/\r?\n/).flatMap((l) => {
+    const m = re.exec(l);
+    return m ? [m[1]!.toUpperCase()] : [];
+  }));
+  return letters.has("A") && letters.has("B");
+}
+
 /** The send-time check on one c or d reply. */
 export function sendCheck(reply: Reply, rows: readonly LedgerRow[]): GateResult {
   const reask = typeof reply.reask_reason === "string" && reply.reask_reason.trim() !== "";
