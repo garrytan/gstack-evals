@@ -45,6 +45,7 @@ const KEYS = /^(ANTHROPIC|OPENAI|OPENROUTER|UBICLOUD|GEMINI|GOOGLE|XAI|DEEPSEEK|
 const D = 1_000_000;
 const REVIEWED = "# Plan\n\nAdd Mul(a, b int) int to the calculator, with tests. Mul returns the product of a and b.\n\n## Review\n\nTest Mul with a zero on either side.\n";
 const AUTHORED = "# Plan\n\nAdd Mul(a, b int) int to the calculator, with tests.\n";
+const REPLY = "Review done: the plan now says how to test Mul.";
 const ARMS: ReviewArm[] = ["plain", "standalone", "engphase"];
 const b64 = (s: string) => Buffer.from(s).toString("base64");
 
@@ -79,11 +80,11 @@ export async function drivenLaunch(o: { harbor?: string; gstack?: string; keep?:
       const first = main && !text.includes("tool_result");
       stubSeen.push({ main, tools, first });
       const building = text.includes("Implement the plan in plan.md");
-      if (main && building && !first && !buildRead) buildRead = text.includes("Test Mul with a zero") ? "read" : "not read";
+      if (main && building && !first && !buildRead) buildRead = text.includes(REPLY) ? "read" : "not read";
       const command = building
         ? "cat /work/review/review.md && cd /work/repo && echo " + b64(GO_CALC + GO_FIXED) + " | base64 -d > calc.go && echo " + b64('package calc\n\nimport "testing"\n\nfunc TestMulBuild(t *testing.T) {\n\tif Mul(0, 5) != 0 || Mul(2, 3) != 6 {\n\t\tt.Fatal("mul")\n\t}\n}\n') + " | base64 -d > calc_mul_test.go"
         : "echo " + b64(REVIEWED) + " | base64 -d > /work/plan.md";
-      const reply = first ? [{ type: "tool_use", id: "toolu_ep_e2e_" + stubSeen.length, name: "Bash", input: { command, description: building ? "Read the review, write Mul and its test" : "Rewrite the plan" } }] : [{ type: "text", text: building ? "Done." : "Review done: the plan now says how to test Mul." }];
+      const reply = first ? [{ type: "tool_use", id: "toolu_ep_e2e_" + stubSeen.length, name: "Bash", input: { command, description: building ? "Read the review, write Mul and its test" : "Rewrite the plan" } }] : [{ type: "text", text: building ? "Done." : REPLY }];
       if (body.stream) return new Response(sse(body.model, reply as any), { headers: { "content-type": "text/event-stream" } });
       return Response.json({ id: "msg_ep_e2e", type: "message", role: "assistant", model: body.model, content: reply, stop_reason: first ? "tool_use" : "end_turn", usage: { input_tokens: 10, output_tokens: 10, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } });
     },
@@ -124,7 +125,7 @@ export async function drivenLaunch(o: { harbor?: string; gstack?: string; keep?:
     const rp = { item: reviewItem.item, capUsd: 40, record, ledger };
     const records: ReviewRecord[] = await underLease(rp, reviewLauncher({ arms: ARMS.map((a) => EB_ARM[a]), reviewer: "opus", out: join(reviewsOut, "rig"), env: { ...process.env, ANTHROPIC_API_KEY: "stub-not-a-key" }, log, pins: { precut: pin, engphase: pin }, runId: EP_RUN, upstream: "http://host.docker.internal:" + stub.port }), async (session) => {
       check("the review lease is open while sessions run", readItem(record, reviewItem.item).open !== null, "1 lease open on " + reviewItem.item);
-      return runPlantedReviews({ cells: ARMS.map((arm) => ({ unit: id, arm, rep: 1 })), units: new Map([[id, { unit, base, plan, opening }]]), reviewer: "opus", out: reviewsOut, session, gate: new ItemGate(reviewItem, { capUsd: 40 }), interim: false, log });
+      return runPlantedReviews({ cells: ARMS.map((arm) => ({ unit: id, arm, rep: 1 })), units: new Map([[id, { unit, base, plan, opening }]]), reviewer: "opus", out: reviewsOut, session, gate: new ItemGate(reviewItem, { capUsd: 40, planned: { "review:plain": 1, "review:standalone": 1, "review:engphase": 1, build: 0 } }), interim: false, log });
     });
     const rec = (arm: ReviewArm) => records.find((r) => r.arm === arm);
     check("three reviews complete", ARMS.every((a) => rec(a)?.outcome === "completed"), ARMS.map((a) => a + " " + (rec(a)?.outcome ?? "none")).join(", "));
@@ -167,7 +168,10 @@ export async function drivenLaunch(o: { harbor?: string; gstack?: string; keep?:
       removeSessionImages();
       removeCoverageImages();
       removeLabelled();
-      if (unitImage) docker(["rmi", "-f", "--no-prune", unitImage]);
+      if (unitImage) {
+        docker(["run", "--rm", "--network", "none", "--user", "0:0", "-v", W + ":/x", "--entrypoint", "sh", unitImage, "-c", "rm -rf /x/* /x/.[!.]* 2>/dev/null; true"]);
+        docker(["rmi", "-f", "--no-prune", unitImage]);
+      }
       rmSync(W, { recursive: true, force: true });
     }
   }
