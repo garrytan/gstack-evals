@@ -1,0 +1,246 @@
+{
+  "schema": 1,
+  "prereg": "2026-11-15-geva-539-ask-replay-prereg",
+  "question": "On the same models, items and harness, does gstack plus the idea 1 ledger send fewer needless asks than gstack today, without holding back more needed asks?",
+  "decision_table": [
+    "If the ledger arm cuts needless asks without missing must-asks, the ledger gets built in gstack and the prose rule is trimmed.",
+    "If gstack today matches the ledger, the ledger is dropped.",
+    "If the no-gstack arm does as well as both, the quiet and ask rules become a cut candidate, which Garry hears plainly (R48)."
+  ],
+  "margins": {
+    "needless_points": 10,
+    "must_ask_points": 5
+  },
+  "frontier_models": [
+    "opus",
+    "sol"
+  ],
+  "models": {
+    "opus": {
+      "provider": "anthropic",
+      "id": "claude-opus-5-5",
+      "price_row": "anthropic:claude-opus-5-5",
+      "arms": [
+        "a",
+        "b",
+        "c",
+        "d"
+      ],
+      "reasoning_effort": "medium",
+      "json_schema": true
+    },
+    "sol": {
+      "provider": "openai",
+      "id": "gpt-6.1-sol",
+      "price_row": "openai:gpt-6.1-sol",
+      "arms": [
+        "a",
+        "b",
+        "c",
+        "d"
+      ],
+      "reasoning_effort": "medium",
+      "json_schema": true
+    },
+    "particle": {
+      "provider": "openrouter",
+      "id": "particle-ai/particle-1",
+      "price_row": "openrouter:particle-ai/particle-1",
+      "arms": [
+        "a",
+        "b",
+        "c"
+      ],
+      "reasoning_effort": "medium",
+      "json_schema": false,
+      "data_collection": "deny"
+    }
+  },
+  "temperature": "provider default (no temperature field is sent)",
+  "output_cap": {
+    "tokens": 4000,
+    "raised_tokens": 8000,
+    "raise_when_smoke_capped_share_above": 0.01
+  },
+  "replicates": {
+    "k": 2,
+    "k_after_pilot_rule": 3
+  },
+  "window": {
+    "chars": 120000,
+    "cut_note": "Older messages in this thread were cut to fit."
+  },
+  "items": {
+    "classes": {
+      "DECISION": 206,
+      "DUPLICATE": 121,
+      "PERMISSION_FOR_DEFAULT": 11,
+      "OBSERVABLE": 8
+    },
+    "pre_stratum_before": "2026-10-15"
+  },
+  "ledger": {
+    "row_text_cap": 300,
+    "answer_quote_cap": 300,
+    "id_prefix": "q-",
+    "id_hex": 12,
+    "strip": [
+      "^$",
+      "^#{1,6}\\s",
+      "^\\**\\s*TL;DR\\b",
+      "^gstack:",
+      "^\\**[\\p{L}][\\p{L}\\p{M} .'\\u2019-]{0,60}:\\**$"
+    ],
+    "addendum": "Before you send an ask, read the ledger and name the row it repeats, or say new."
+  },
+  "retries": {
+    "unparsable": 1,
+    "upstream": 3,
+    "upstream_backoff_ms": [
+      5000,
+      20000,
+      60000
+    ],
+    "end_of_run_upstream_redraw_passes": 1,
+    "resume_redraws": 1
+  },
+  "safety_stop": {
+    "anthropic": "stop_reason refusal",
+    "openai": "a refusal content part or refusal field, finish_reason content_filter, or incomplete_details.reason content_filter",
+    "openrouter": "finish_reason content_filter"
+  },
+  "missing_ceiling": 0.03,
+  "stats": {
+    "bootstrap_draws": 10000,
+    "bootstrap_seed": "TODO(custody:bootstrap_seed)",
+    "order_seed": "TODO(custody:order_seed)",
+    "mdd_factor": 2.8,
+    "planned_spread": {
+      "needless": 0.35,
+      "must_ask": 0.25
+    },
+    "planned_items": {
+      "needless": 140,
+      "duplicates": 121,
+      "must_ask": 206
+    },
+    "proxy_effective_clusters": "TODO(custody:proxy_effective_clusters)",
+    "captain_hears_needless_mdd_above": 0.1
+  },
+  "pilot": {
+    "needless": 24,
+    "must_ask": 16,
+    "arms": {
+      "a": 1,
+      "b": 2
+    },
+    "models": [
+      "opus",
+      "sol"
+    ],
+    "admit_min_needless_sends": 5,
+    "admit_max_must_ask_misses": 8,
+    "k3_when_projected_mdd_above": 0.12,
+    "spread_formula": "W is the mean over needless items of the unbiased variance of (b)'s k samples; V is the unbiased variance across needless items of (b)'s item means; B2 = max(0, V - W/k_pilot); projected P1 spread S(k) = sqrt(2*B2 + 2*W/k); projected MDD(k) = 2.8 * S(k) / sqrt(proxy effective clusters on needless items)"
+  },
+  "label_audit": {
+    "items": 99,
+    "must_ask": 40,
+    "duplicates": 40,
+    "permission_and_observable": 19,
+    "kappa_min": 0.6,
+    "labellers": [
+      "anthropic:claude-opus-5-5",
+      "openai:gpt-6-astra"
+    ],
+    "reasoning_effort": "medium",
+    "seed": "minted from random bytes in custody and recorded in CUSTODY.md"
+  },
+  "gstack": {
+    "version": "1.99.5.0",
+    "commit": "0326b144af36676d599dcf63a9fad9a870d22ed6",
+    "files": [
+      {
+        "path": "capy/skill/gstack/factory.md",
+        "sha256": "23044b254f7b44d8588525869f2d42b16e78a45f44d103863beb0bd41a40341d",
+        "bytes": 4182
+      },
+      {
+        "path": "capy/skill/gstack/captain.md",
+        "sha256": "991560bbde8ef04cd744d9aef5a339d406eb6ebff4985fc0a6e7222ea5af66fd",
+        "bytes": 12881
+      },
+      {
+        "path": "captain/SKILL.md",
+        "sha256": "2c795bdefa9f2a7d5b4d526bbef4418eb4e41e2b008bf20de3f372b53ce924a4",
+        "bytes": 27843
+      }
+    ]
+  },
+  "exposure_phrases": [
+    "already asked",
+    "asked earlier",
+    "asked before",
+    "asked this",
+    "earlier ask",
+    "previous ask",
+    "same ask",
+    "same question",
+    "already answered",
+    "answered earlier",
+    "answered before",
+    "already sent",
+    "sent earlier",
+    "still waiting",
+    "still open",
+    "waiting on",
+    "follow-up",
+    "follow up",
+    "re-ask",
+    "reask",
+    "repeat",
+    "duplicate"
+  ],
+  "lettered_decision": "^\\s*(?:[-*]\\s+)?\\**\\(?([A-Ha-h])[.):]\\**\\s+\\S",
+  "s1": {
+    "min_shared_content_words": 2
+  },
+  "privacy": {
+    "placeholder": "[redacted]",
+    "jaccard_fail_above": 0.5,
+    "jaccard_min_words": 5,
+    "ngram": 6
+  },
+  "public_scan": {
+    "code_pattern": "\\b[A-Z]{2,6}-\\d{1,5}\\b",
+    "code_allow": [
+      "GPT-6",
+      "GPT-5",
+      "UTF-8"
+    ],
+    "agent_notes_heading": "Agent notes"
+  },
+  "shards": {
+    "stop_launching_after_minutes": 50,
+    "limit_minutes": 55,
+    "concurrency": 8,
+    "request_timeout_ms": 300000
+  },
+  "smoke": {
+    "items": 20,
+    "per_class": {
+      "DECISION": 12,
+      "DUPLICATE": 6,
+      "PERMISSION_FOR_DEFAULT": 1,
+      "OBSERVABLE": 1
+    },
+    "seed": 20261115,
+    "replicates": 1
+  },
+  "synthetic": {
+    "seed": 20261115,
+    "items": 60,
+    "threads": 3,
+    "sha256": "TODO(custody:synthetic_sha256)"
+  }
+}
