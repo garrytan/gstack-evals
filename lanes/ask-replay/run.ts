@@ -1,0 +1,367 @@
+// Copyright (c) 2026 Garry Tan. MIT License.
+// The paid driver (prereg sections 6 and 11), built and tested keyless and never run without the go. Every sample has a
+// fixed id (item, arm, model, replicate); within each item a model's arms and replicates run in a seeded random order.
+// A shard is a foreground run that stops launching samples after 50 minutes, so it ends before 55. Each sample's record
+// is written through an injected store (custody passes one that seals to an age recipient) under its id, atomically,
+// and only then is the sample done, so a resumed shard skips every sealed sample id. Before each call the shard journals
+// the sample id, draw and attempt; a resumed shard that finds a journaled draw with no sealed record reconciles its calls
+// through the spend ledger's unknown-charge path (E_ASK_RESUME), then redraws it once, counted per arm. Retries: one
+// retry with the same prompt on an unparsable reply; three retries with backoff on an upstream failure, then UPSTREAM;
+// safety stops are their own outcome and are not retried; one end-of-run pass redraws UPSTREAM samples only. Spend runs
+// through one lease on the frozen line item per shard (src/runner/ledger): the real client is the metering proxy, which
+// reserves and settles every call against the lease, and the keyless client reserves and settles each call on the same
+// ledger under its sample id, draw and attempt. particle-1 goes through OpenRouter with the price row's routing, which
+// sends data_collection deny; the shard writes that setting to routing.json.
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import type { ReasonCode } from "../../src/errors/codes.ts";
+import { rigAdmission } from "../../src/rig/admission.ts";
+import { openLease, settleLease } from "../../src/runner/ledger/ledger.ts";
+import { openLocalLedger, type LocalLedger } from "../../src/runner/ledger/local.ts";
+import { ledgerPath, recordPath } from "../../src/runner/ledger/paths.ts";
+import { readItem } from "../../src/runner/ledger/record.ts";
+import { chatPrice, openRouterRouting, priceRequest, reservationMicros, usageCost } from "../../src/runner/pricing/prices.ts";
+import { MeteringProxy, reconcileJournal } from "../../src/runner/proxy/metering-proxy.ts";
+import { seededRandom } from "../../src/runner/stats/paired.ts";
+import { pool } from "../product-value/meter.ts";
+import { AskError, fail, FROZEN } from "./frozen.ts";
+import { ledgerRows, sendCheck } from "./ledger.ts";
+import { classify } from "./parse.ts";
+import { buildPrompt, replySchema, type BuiltPrompt, type GstackText } from "./prompt.ts";
+import type { Arm, AskItem, MissingKind, ModelKey, Sample, SampleRecord } from "./types.ts";
+
+export const sampleId = (item: string, arm: Arm, model: ModelKey, replicate: number): string => item + "." + arm + "." + model + "." + replicate;
+
+/** One model's samples: items by id, and within each item its arms and replicates in seeded random order. */
+export function schedule(items: readonly Pick<AskItem, "item">[], model: ModelKey, k: number, seed: number, arms: readonly Arm[] = FROZEN.models[model].arms): Sample[] {
+  const rng = seededRandom(seed);
+  const out: Sample[] = [];
+  for (const it of [...items].sort((a, b) => (a.item < b.item ? -1 : a.item > b.item ? 1 : 0))) {
+    const cell = arms.flatMap((arm) => Array.from({ length: k }, (_, r) => ({ id: sampleId(it.item, arm, model, r + 1), item: it.item, arm, model, replicate: r + 1 })));
+    for (let i = cell.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [cell[i], cell[j]] = [cell[j]!, cell[i]!];
+    }
+    out.push(...cell);
+  }
+  return out;
+}
+
+/** The request body for one sample, on the model's provider route, with the cached system prefix and JSON schema mode where frozen.json sets it. */
+export function requestBody(model: ModelKey, p: BuiltPrompt, arm: Arm, maxTokens: number): Record<string, unknown> {
+  const m = FROZEN.models[model];
+  const schema = replySchema(arm);
+  if (m.provider === "anthropic") return { model: m.id, max_tokens: maxTokens, system: [{ type: "text", text: p.system, cache_control: { type: "ephemeral" } }], messages: [{ role: "user", content: p.user }], output_config: { effort: m.reasoning_effort, ...(m.json_schema ? { format: { type: "json_schema", schema } } : {}) } };
+  if (m.provider === "openai") return { model: m.id, input: [{ role: "system", content: p.system }, { role: "user", content: p.user }], max_output_tokens: maxTokens, store: false, reasoning: { effort: m.reasoning_effort }, ...(m.json_schema ? { text: { format: { type: "json_schema", name: "ask_reply", schema, strict: true } } } : {}) };
+  return { model: m.id, max_tokens: maxTokens, messages: [{ role: "system", content: p.system }, { role: "user", content: p.user }], reasoning: { effort: m.reasoning_effort }, ...(m.json_schema ? { response_format: { type: "json_schema", json_schema: { name: "ask_reply", strict: true, schema } } } : {}) };
+}
+
+export interface Answer {
+  status: number;
+  body: unknown;
+  micros: number | null;
+}
+
+export interface CallKey {
+  draw: number;
+  attempt: number;
+}
+
+export interface Client {
+  /** One call: the provider's answer, or null when none came back. Throws AskError for a cap stop or a processor refusal; any other throw is a crash. */
+  call(sample: Sample, key: CallKey, body: Record<string, unknown>): Promise<Answer | null>;
+  /** Settles a call a killed shard left open through the unknown-charge path; a no-op where the meter reconciles at open. */
+  reconcile?(sample: Sample, key: CallKey, body: Record<string, unknown>): Promise<void>;
+}
+
+export interface Store {
+  has(id: string): boolean;
+  write(id: string, record: SampleRecord): void;
+}
+
+export interface ShardOptions {
+  items: ReadonlyMap<string, AskItem>;
+  samples: readonly Sample[];
+  gstack: GstackText | null;
+  client: Client;
+  store: Store;
+  /** Holds calls.ndjson and index.ndjson: sample ids, draws and failure kinds only. */
+  out: string;
+  maxOutputTokens: number;
+  now?: () => number;
+  sleep?: (ms: number) => Promise<void>;
+  concurrency?: number;
+  stopAfterMs?: number;
+  warn?: (code: ReasonCode, message: string) => void;
+}
+
+export interface ShardResult {
+  ran: number;
+  skipped: number;
+  left: number;
+  redrawn: Partial<Record<Arm, number>>;
+  lost_twice: number;
+  stopped: "time" | "cap" | null;
+  missing: Record<MissingKind, number>;
+  capped: number;
+}
+
+const R = FROZEN.retries;
+const realSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/** Journaled draws per sample id: the highest draw started and its attempts. */
+function journaled(file: string): Map<string, { draw: number; attempts: number[] }> {
+  const out = new Map<string, { draw: number; attempts: number[] }>();
+  if (!existsSync(file)) return out;
+  for (const l of readFileSync(file, "utf8").split("\n")) {
+    if (!l.trim()) continue;
+    let e: { id: string; draw: number; attempt: number };
+    try {
+      e = JSON.parse(l);
+    } catch {
+      continue;
+    }
+    const cur = out.get(e.id);
+    if (!cur || e.draw > cur.draw) out.set(e.id, { draw: e.draw, attempts: [e.attempt] });
+    else if (e.draw === cur.draw) cur.attempts.push(e.attempt);
+  }
+  return out;
+}
+
+function blank(s: Sample, draw: number, redraw: boolean): SampleRecord {
+  return { sample: s, draw, attempts: 0, missing: null, agent_action: null, final_action: null, repeats: s.arm === "c" || s.arm === "d" ? "missing_field" : "not_asked", named: null, reask_reason: false, gate: "none", reason: null, text: null, capped: false, micros: null, upstream_redraw: redraw };
+}
+
+/** One sample to its record, with the frozen retries. */
+export async function runSample(o: ShardOptions, s: Sample, draw: number, redraw = false): Promise<SampleRecord> {
+  const item = o.items.get(s.item) ?? fail("E_ASK_INPUT", "sample " + s.id + " names an item the bundle does not hold");
+  const body = requestBody(s.model, buildPrompt(item, s.arm, o.gstack), s.arm, o.maxOutputTokens);
+  const provider = FROZEN.models[s.model].provider;
+  const sleep = o.sleep ?? realSleep;
+  const rec = blank(s, draw, redraw);
+  let upstream = 0;
+  let unparsable = 0;
+  for (;;) {
+    rec.attempts++;
+    appendFileSync(join(o.out, "calls.ndjson"), JSON.stringify({ id: s.id, draw, attempt: rec.attempts }) + "\n");
+    const answer = await o.client.call(s, { draw, attempt: rec.attempts }, body);
+    if (answer?.micros != null) rec.micros = (rec.micros ?? 0) + answer.micros;
+    const c = classify(provider, answer);
+    if (c.kind === "upstream") {
+      if (upstream < R.upstream) {
+        await sleep(R.upstream_backoff_ms[upstream] ?? R.upstream_backoff_ms.at(-1)!);
+        upstream++;
+        continue;
+      }
+      return { ...rec, missing: "upstream" };
+    }
+    if (c.kind === "safety") return { ...rec, missing: "safety", text: c.text };
+    if (c.kind === "unparsable") {
+      if (unparsable < R.unparsable) {
+        unparsable++;
+        continue;
+      }
+      o.warn?.("E_ASK_PARSE", "sample " + s.id + " has no valid action after its retry");
+      return { ...rec, missing: "parse", text: c.text, capped: c.capped };
+    }
+    const g = s.arm === "c" || s.arm === "d" ? sendCheck(c.reply, ledgerRows(item)) : null;
+    return { ...rec, agent_action: c.reply.action, final_action: g ? g.final_action : c.reply.action, repeats: g ? g.repeats : "not_asked", named: g?.named ?? null, reask_reason: g?.reask_reason ?? false, gate: g?.gate ?? "none", reason: c.reply.reason, text: c.text, capped: c.capped };
+  }
+}
+
+const seal = (o: ShardOptions, id: string, r: SampleRecord) => {
+  o.store.write(id, r);
+  appendFileSync(join(o.out, "index.ndjson"), JSON.stringify({ id, draw: r.draw, missing: r.missing, capped: r.capped }) + "\n");
+};
+
+/** Runs the samples not yet sealed, resuming any a killed shard left open, until done, the time stop or a cap stop. */
+export async function runShard(o: ShardOptions): Promise<ShardResult> {
+  mkdirSync(o.out, { recursive: true });
+  const now = o.now ?? Date.now;
+  const start = now();
+  const stopAfter = o.stopAfterMs ?? FROZEN.shards.stop_launching_after_minutes * 60000;
+  const open = journaled(join(o.out, "calls.ndjson"));
+  const res: ShardResult = { ran: 0, skipped: 0, left: 0, redrawn: {}, lost_twice: 0, stopped: null, missing: { parse: 0, safety: 0, upstream: 0 }, capped: 0 };
+  const jobs = o.samples.map((s) => async () => {
+    if (o.store.has(s.id)) return void res.skipped++;
+    if (res.stopped || now() - start >= stopAfter) {
+      res.stopped ??= "time";
+      return void res.left++;
+    }
+    let draw = 1;
+    const j = open.get(s.id);
+    if (j) {
+      o.warn?.("E_ASK_RESUME", "sample " + s.id + " draw " + j.draw + " started and has no sealed reply; reconciling and redrawing once");
+      const item = o.items.get(s.item);
+      if (o.client.reconcile && item) {
+        const body = requestBody(s.model, buildPrompt(item, s.arm, o.gstack), s.arm, o.maxOutputTokens);
+        for (const attempt of j.attempts) await o.client.reconcile(s, { draw: j.draw, attempt }, body);
+      }
+      if (j.draw > R.resume_redraws) {
+        res.lost_twice++;
+        res.missing.upstream++;
+        return seal(o, s.id, { ...blank(s, j.draw, false), attempts: j.attempts.length, missing: "upstream" });
+      }
+      draw = j.draw + 1;
+      res.redrawn[s.arm] = (res.redrawn[s.arm] ?? 0) + 1;
+    }
+    try {
+      const r = await runSample(o, s, draw);
+      seal(o, s.id, r);
+      res.ran++;
+      if (r.missing) res.missing[r.missing]++;
+      if (r.capped) res.capped++;
+    } catch (e) {
+      if (e instanceof AskError && e.code === "E_ASK_CAP") {
+        res.stopped = "cap";
+        res.left++;
+        return;
+      }
+      throw e;
+    }
+  });
+  await pool(o.concurrency ?? FROZEN.shards.concurrency, jobs);
+  return res;
+}
+
+/** The one end-of-run pass: each UPSTREAM sample once more, sealed under <id>~u; the scorer reads it in place of the first. */
+export async function upstreamRedraw(o: ShardOptions): Promise<{ redrawn: number; still_upstream: number }> {
+  const index = join(o.out, "index.ndjson");
+  const last = new Map<string, string | null>();
+  if (existsSync(index)) for (const l of readFileSync(index, "utf8").split("\n").filter((x) => x.trim())) {
+    const e = JSON.parse(l) as { id: string; missing: string | null };
+    last.set(e.id, e.missing);
+  }
+  const todo = o.samples.filter((s) => last.get(s.id) === "upstream" && !o.store.has(s.id + "~u"));
+  let still = 0;
+  await pool(o.concurrency ?? FROZEN.shards.concurrency, todo.map((s) => async () => {
+    const r = await runSample(o, s, 1, true);
+    if (r.missing === "upstream") still++;
+    seal(o, s.id + "~u", r);
+  }));
+  return { redrawn: todo.length, still_upstream: still };
+}
+
+/** Sealed records to scored records: an end-of-run redraw replaces its first record. */
+export function finalRecords(records: ReadonlyMap<string, SampleRecord>): SampleRecord[] {
+  return [...records.entries()].filter(([id]) => !id.endsWith("~u")).map(([id, r]) => records.get(id + "~u") ?? r);
+}
+
+/** A keyless client on the spend ledger: each call reserves under sample id, draw and attempt and settles once; send stands in for the provider. */
+export function ledgerClient(o: { local: LocalLedger; leaseId: string; runId: string; maxOutputTokens: number; send: (s: Sample, key: CallKey, body: Record<string, unknown>) => Promise<{ status: number; body: unknown } | null> }): Client {
+  const reserve = async (s: Sample, key: CallKey, body: Record<string, unknown>) => {
+    const m = FROZEN.models[s.model];
+    const price = priceRequest(m.provider, body, o.maxOutputTokens);
+    const ik = s.id + "#" + key.draw + "/" + key.attempt;
+    const r = await o.local.reserve({ idempotency_key: ik, lease_id: o.leaseId, cell: { run_id: o.runId, arm: s.arm, task: s.id + "#" + key.draw, model: m.id, trial: s.replicate, attempt: key.attempt, meter_id: ik }, max_micros: reservationMicros(price) });
+    if (!r.ok) throw r.code === "CAP_STOP" ? new AskError("E_ASK_CAP", r.message) : new Error(r.code + " " + r.message);
+    return { price, reservation: r.reservation };
+  };
+  return {
+    async call(s, key, body) {
+      const { price, reservation } = await reserve(s, key, body);
+      const answer = await o.send(s, key, body);
+      const usage = (answer?.body as { usage?: unknown } | undefined)?.usage;
+      const cost = answer ? usageCost(price, usage ?? {}) : null;
+      const settled = await o.local.settle(reservation.reservation_id, cost ? { kind: "spent", spent_micros: cost.micros, usage: cost.usage } : { kind: "unknown" });
+      if (!settled.ok) throw new Error(settled.code + " " + settled.message);
+      return answer && { ...answer, micros: cost?.micros ?? null };
+    },
+    async reconcile(s, key, body) {
+      const { reservation } = await reserve(s, key, body);
+      if (reservation.state === "reserved") await o.local.settle(reservation.reservation_id, { kind: "unknown" });
+    },
+  };
+}
+
+export interface ProxyMeter {
+  client: Client;
+  leaseId: string;
+  routing: Record<string, unknown> | null;
+  close(): Promise<{ spent_micros: number; unknown_micros: number }>;
+}
+
+/**
+ * The real client: one lease on the spend line item for this shard and the repo's metering proxy (as the product-value
+ * eval's meter opens it), with the proxy's journal reconciled and this run's stale lease settled first. The proxy sends
+ * each call once (retries are this driver's, section 6) and reads the provider keys by name from the environment.
+ */
+export async function openProxyMeter(o: { item: string; runId: string; out: string; model: ModelKey; maxOutputTokens: number; amountMicros?: number; record?: string; ledger?: string; env?: Record<string, string | undefined>; fetch?: typeof fetch; warn?: (code: ReasonCode, message: string) => void }): Promise<ProxyMeter> {
+  const env = o.env ?? process.env;
+  const record = recordPath(o.record, env).path;
+  const local = openLocalLedger(ledgerPath(o.ledger, env));
+  const warn = o.warn ?? (() => {});
+  const out = resolve(o.out);
+  mkdirSync(out, { recursive: true });
+  const journal = join(out, "proxy-journal.ndjson");
+  const m = FROZEN.models[o.model];
+  let proxy: MeteringProxy | null = null;
+  let leaseId = "";
+  try {
+    if (existsSync(journal)) {
+      await reconcileJournal(journal, local);
+      renameSync(journal, join(out, "proxy-journal." + Date.now() + ".dead.ndjson"));
+    }
+    const open = readItem(record, o.item).open;
+    if (open && open.run_id === o.runId && local.getLease(open.lease_id)) settleLease(record, local, open.lease_id, warn);
+    leaseId = openLease(record, local, { item: o.item, run_id: o.runId, amount_micros: o.amountMicros, warn, requireAdmission: rigAdmission({ proof: "direct" }) }).lease_id;
+    proxy = new MeteringProxy({ ledger: local, leaseId, host: "127.0.0.1", managementSocket: join(tmpdir(), "ask-" + randomBytes(6).toString("hex") + ".sock"), managementToken: randomBytes(24).toString("hex"), journal, retry: { attempts: 1, elapsed_ms: FROZEN.shards.request_timeout_ms }, env, fetch: o.fetch, maxOutputTokens: o.maxOutputTokens });
+    proxy.start();
+  } catch (e) {
+    if (leaseId && !proxy) settleLease(record, local, leaseId, warn);
+    local.close();
+    throw e;
+  }
+  const p = proxy;
+  const routing = m.provider === "openrouter" ? openRouterRouting(chatPrice(m.price_row)!) : null;
+  if (routing && (routing as { data_collection?: string }).data_collection !== "deny") fail("E_ASK_PROCESSOR", m.id + "'s route does not send data_collection deny");
+  writeFileSync(join(out, "routing.json"), JSON.stringify({ model: m.price_row, provider_routing: routing }) + "\n");
+  const reserved = () => readItem(record, o.item).leases.find((l) => l.lease.lease_id === leaseId)!.lease.reserved_micros;
+  const route = m.provider === "anthropic" ? "/v1/messages" : m.provider === "openai" ? "/v1/responses" : "/v1/chat/completions";
+  let closed = false;
+  return {
+    leaseId,
+    routing,
+    client: {
+      async call(s, key, body) {
+        if (closed) fail("E_USAGE", "the meter is closed");
+        const b = p.bind({ cell: { run_id: o.runId, arm: s.arm, task: s.id + "#" + key.draw, model: m.id, trial: s.replicate, attempt: key.attempt }, models: [m.provider + ":" + m.id], allowance_micros: reserved() });
+        let status = 0;
+        let text = "";
+        try {
+          const res = await fetch("http://127.0.0.1:" + p.port + "/" + b.slot + "/" + m.provider + route, { method: "POST", headers: { authorization: "Bearer " + b.token, "content-type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(FROZEN.shards.request_timeout_ms) });
+          status = res.status;
+          text = await res.text();
+        } catch {
+          status = 0;
+        } finally {
+          await p.finalize(b.meter_id);
+          p.unbind(b.slot);
+        }
+        const micros = local.meters(leaseId).get(b.meter_id)?.spent_micros ?? null;
+        let parsed: any = null;
+        try {
+          parsed = JSON.parse(text);
+        } catch {}
+        if (parsed?.code === "CAP_STOP") throw new AskError("E_ASK_CAP", "the spend cap refused a reservation for sample " + s.id);
+        if (m.provider === "openrouter" && status === 404 && /no endpoints|data polic/i.test(text)) throw new AskError("E_ASK_PROCESSOR", m.id + " has no route that accepts data collection denied");
+        if (m.provider === "openrouter" && status === 200 && !/^particle/i.test(String(parsed?.provider ?? ""))) throw new AskError("E_ASK_PROCESSOR", m.id + " was served by a provider other than its pin");
+        return status === 0 ? null : { status, body: parsed, micros };
+      },
+    },
+    async close() {
+      if (closed) fail("E_USAGE", "the meter is already closed");
+      closed = true;
+      p.stop();
+      try {
+        await reconcileJournal(journal, local);
+        const c = settleLease(record, local, leaseId, warn);
+        return { spent_micros: c.spent_micros, unknown_micros: c.unknown_micros };
+      } finally {
+        local.close();
+      }
+    },
+  };
+}

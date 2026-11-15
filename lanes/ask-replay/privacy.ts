@@ -64,8 +64,11 @@ export function itemTexts(item: AskItem): string[] {
 }
 
 /** The same item with every text field passed through redact(). */
-export function redactItem(item: AskItem, count?: ScanCount): AskItem {
-  const r = (t: string) => redact(t, count);
+export const redactItem = (item: AskItem, count?: ScanCount): AskItem => mapTexts(item, (t) => redact(t, count));
+
+/** The same item with f applied to every text field. */
+export function mapTexts(item: AskItem, f: (text: string) => string): AskItem {
+  const r = f;
   return {
     ...item,
     conversation: item.conversation.map((m) => ({ ...m, text: r(m.text) })),
