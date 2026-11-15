@@ -2341,11 +2341,11 @@ Exit 2. Side effects: The turns before the step spent through the driver's proxy
 
 ### E_H2H_EXPOSURE
 
-The head-to-head's exposure detectors or read audit could not run: an unknown arm, a transcript that is not JSON lines, a markers file whose pins differ from prereg.json, or an install-roots file with no roots for an arm.
+The head-to-head's exposure detectors or read audit could not run: an unknown arm, a transcript that is not JSON lines, a markers file whose pins differ from prereg.json, an install-roots file with no roots for an arm, or a session's tree.tar that tar cannot list.
 
-Fix: Pass a transcript the session runner wrote and the arms-pins.json part A wrote; regenerate markers.json only from clones at prereg.json's pins (bun lanes/outcome-skills/h2h/sessions/markers.ts).
+Fix: Pass a transcript the session runner wrote and the arms-pins.json part A wrote; regenerate markers.json only from clones at prereg.json's pins (bun lanes/outcome-skills/h2h/sessions/markers.ts). For a tree.tar that does not list, keep the run dir, list its tree.tar by hand to find the cause, and take it to the Captain; the session is not rerun to change an outcome.
 
-Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+Exit 2. Side effects: The detectors spend nothing, but when the session runner raises this code the attempt has already spent through the driver's proxy, and no session record is written. Retry safe: no. Resumable: yes. Owner: U20.
 
 ### E_H2H_DRYRUN_FAIL
 

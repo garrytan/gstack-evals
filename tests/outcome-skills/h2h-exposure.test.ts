@@ -133,24 +133,44 @@ test("Claude Code's own transcript shape reads the same, sidechains apart", () =
   expect(run("superpowers", "feature", evs).loaded).toBe(true);
 });
 
-test("readExposure counts the GSD planning files the session's tree.tar holds", () => {
+/** A gsd quick session's run dir: its transcript runs gsd-tools and writes nothing, so only tree.tar can show a planning file. */
+function gsdQuickRun() {
   const dir = mkdtempSync(join(tmpdir(), "h2h-exposure-tree-"));
+  const recs = [
+    { type: "UserMessage", content: "<command-name>/gsd-quick</command-name>", parent_tool_use_id: null },
+    { type: "AssistantMessage", content: [{ type: "tool_use", id: "toolu_q", name: "Bash", input: { command: "gsd_run init quick" } }], parent_tool_use_id: null },
+    { type: "UserMessage", content: [{ type: "tool_result", tool_use_id: "toolu_q", content: "ok", is_error: false }], parent_tool_use_id: null },
+  ];
+  writeFileSync(join(dir, "sdk-messages.jsonl"), recs.map((r) => JSON.stringify(r) + "\n").join(""));
+  const tree = join(dir, "t");
+  mkdirSync(join(tree, ".planning/quick/1"), { recursive: true });
+  mkdirSync(join(tree, ".git"));
+  writeFileSync(join(tree, ".planning/quick/1/PLAN.md"), "x\n");
+  writeFileSync(join(tree, ".git/HEAD"), "x\n");
+  const tar = () => expect(spawnSync("tar", ["-C", tree, "-cf", join(dir, "tree.tar"), ".git", ".planning/quick/1/PLAN.md"]).status).toBe(0);
+  const i = { session: { arm: "gsd", entry: "feature" } } as unknown as Parameters<typeof readExposure>[0];
+  return { dir, tar, i };
+}
+const PLANNED = { loaded: true, procedure: true, markers: ["command:/gsd-quick", "gsd-tools", "planning:.planning/quick/1/PLAN.md"] };
+
+test("readExposure counts the GSD planning files the session's tree.tar holds", () => {
+  const { dir, tar, i } = gsdQuickRun();
   try {
-    const tree = join(dir, "t");
-    mkdirSync(join(tree, ".planning/quick/1"), { recursive: true });
-    mkdirSync(join(tree, ".git"));
-    writeFileSync(join(tree, ".planning/quick/1/PLAN.md"), "x\n");
-    writeFileSync(join(tree, ".git/HEAD"), "x\n");
-    const recs = [
-      { type: "UserMessage", content: "<command-name>/gsd-quick</command-name>", parent_tool_use_id: null },
-      { type: "AssistantMessage", content: [{ type: "tool_use", id: "toolu_q", name: "Bash", input: { command: "gsd_run init quick" } }], parent_tool_use_id: null },
-      { type: "UserMessage", content: [{ type: "tool_result", tool_use_id: "toolu_q", content: "ok", is_error: false }], parent_tool_use_id: null },
-    ];
-    writeFileSync(join(dir, "sdk-messages.jsonl"), recs.map((r) => JSON.stringify(r) + "\n").join(""));
-    const i = { session: { arm: "gsd", entry: "feature" } } as unknown as Parameters<typeof readExposure>[0];
     expect(flags(readExposure(i, dir)!)).toEqual([true, false]);
-    expect(spawnSync("tar", ["-C", tree, "-cf", join(dir, "tree.tar"), ".git", ".planning/quick/1/PLAN.md"]).status).toBe(0);
-    expect(readExposure(i, dir)).toMatchObject({ loaded: true, procedure: true, markers: ["command:/gsd-quick", "gsd-tools", "planning:.planning/quick/1/PLAN.md"] });
+    tar();
+    expect(readExposure(i, dir)).toMatchObject(PLANNED);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("readExposure halts on a tree.tar tar cannot list, with tar's stderr, and reads a valid one", () => {
+  const { dir, tar, i } = gsdQuickRun();
+  try {
+    writeFileSync(join(dir, "tree.tar"), "not a tar archive\n".repeat(64));
+    expect(() => readExposure(i, dir)).toThrow(/^E_H2H_EXPOSURE .*tree\.tar does not list \(tar exit 2\): tar: This does not look like a tar archive.*never read as not exercised/s);
+    tar();
+    expect(readExposure(i, dir)).toMatchObject(PLANNED);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

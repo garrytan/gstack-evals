@@ -174,7 +174,8 @@ export function readExposure(i: Pick<H2hRunInput, "session" | "installs">, dir: 
   const evs = readEvents(files);
   const tar = join(dir, "tree.tar");
   const listed = existsSync(tar) ? spawnSync("tar", ["-tf", tar, "--exclude=.git"], { encoding: "utf8", maxBuffer: 64 << 20 }) : null;
-  const e = exposure(i.session.arm, i.session.entry, evs, { files: listed?.status === 0 ? listed.stdout.split("\n").filter(Boolean) : [] });
+  if (listed && listed.status !== 0) h2hFail("E_H2H_EXPOSURE", tar + " does not list (" + (listed.error?.message ?? "tar exit " + listed.status) + "): " + String(listed.stderr ?? "").trim().slice(0, 500) + "; the session's exposure can't be read, so the session halts with no record and is never read as not exercised");
+  const e = exposure(i.session.arm, i.session.entry, evs, { files: listed ? listed.stdout.split("\n").filter(Boolean) : [] });
   return { ...e, foreign_reads: i.installs ? readAudit(evs, i.installs, i.session.arm).foreign_reads : [] };
 }
 
