@@ -17,13 +17,11 @@ links:
 attachments:
   - a9498dc08218d54b69ca3325d60b19b2c9ba5e9b499c1387eb01bd3d55dd5ac4  colour.py.txt
   - 6fa3b1d2f0f8b8c976bf0924f7a75b1b878b0cffd04d9b64475ae95c8544ef79  colour.txt
-  - 9ec96bbd7b6163adc145fe95153231673cd5c9eb267c4468ee733bb5eebd8177  digests.txt
+  - 90a26bfa438776111c42e0503950abe90fef00d9fc405c6c5c4802d8f7f02457  digests.txt
   - dda46691d9109493892d3fdbcf5af5a98e0ca54bbe5f57fbfee7304f3ef3b871  readings.py.txt
   - 5dca43338e364cf4e770ea66b75f0c6960d7f02777afefc51dbcfcf3ecb45e12  readings.txt
   - 83164185b59e6c7f5304bcb06f0f2785812d83d1547b4deb9859668cbafec616  tier.py.txt
   - 99e959c7766cef443f5dca829a7a0754bcb07861e1446aeee6bac9781fd46a0a  tier.txt
-  - fa0f1cb1cadde189508ee91cb9489221fc34e10afdedfdd292226b9e029cdef8  variants-hm.jsonl
-  - cd1801bc1cc999ed18aa4be9db755f770957eef11ad7b77c76f05a10bfc8d14b  variants-tb2.jsonl
   - 8506715d1d48767969cc74d4876a5e67d605330dddc9fa18308f5a18f78f1593  variants.ts.txt
 ---
 
@@ -38,7 +36,7 @@ Publication status: unpublished. This is a keyless reanalysis of two runs we alr
 | Grade | Exploratory. It is the admission check for one more run, made from earlier transcripts, with no preregistration. Every number is descriptive. |
 | Question | Is there a set of tasks where Opus 5.5 and GPT-6.1 Sol, told to use /verify, often skip running a test after their last edit, so that gstack's Stop hook has room to help? The harness mechanics results owed this check under our rule R61: when a null comes from a ceiling the model already reaches without the part, make one honest attempt to raise the ceiling before calling a cut. |
 | Data | The harness mechanics run: 3,239 graded sessions on 240 SWE-rebench tasks, with Opus 5.5, GPT-6.1 Sol and particle-1. The L1 overhaul's Terminal-Bench 2 twin set: 370 Opus 5.5 sessions on 37 tasks. Their trial dirs hold transcripts, so they stay private; digests.txt lists their sha256. |
-| Code | variants.ts.txt reads each transcript with the merged scorer (lanes/harness-mechanics/score.ts at b18e669) and prints one row per session (variants-hm.jsonl, variants-tb2.jsonl). readings.py.txt prints every table below (readings.txt). tier.py.txt marks the changelog tier (tier.txt). colour.py.txt counts result lines printed in colour (colour.txt). |
+| Code | variants.ts.txt reads each transcript with the merged scorer (lanes/harness-mechanics/score.ts at b18e669) and prints one row per session (variants-hm.jsonl and variants-tb2.jsonl, kept with the private data; digests.txt lists their sha256). readings.py.txt prints every table below (readings.txt). tier.py.txt marks the changelog tier (tier.txt). colour.py.txt counts result lines printed in colour (colour.txt). |
 | Reviewed by | The review of this post, recorded in its pull request |
 | Reproduced by | Not yet. variants.ts asserts that its as-written reading equals the scorer's on every session, and readings.py asserts that it equals each run table's. |
 
@@ -166,7 +164,7 @@ Keyless, from a checkout with bun install and python3 with pyarrow, given the pr
     python3 readings.py.txt variants-hm.jsonl variants-tb2.jsonl <stage1.table.jsonl> <stage4.table.jsonl> tier.txt > readings.txt
     python3 colour.py.txt <harness mechanics trial dirs> > colour.txt
 
-The variants files are public, so the adherence counts per model and arm can be checked from them alone; the stage split, pass flags and token counts come from the private run tables.
+The per-session rows hold no transcript text, but at about 1.1 MB they stay with the private data so this bundle stays reviewable; digests.txt lists their sha256. The stage split, pass flags and token counts come from the private run tables.
 
 ## What is held out, and why
 
