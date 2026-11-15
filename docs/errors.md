@@ -315,6 +315,19 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_H2H_DRYRUN_FAIL](#e_h2h_dryrun_fail) | 2 | U20 |
 | [E_H2H_RUNTIMES](#e_h2h_runtimes) | 2 | U20 |
 | [E_H2H_E2E_FAIL](#e_h2h_e2e_fail) | 2 | U20 |
+| [E_H2H_B_MINE](#e_h2h_b_mine) | 2 | U20 |
+| [E_H2H_B_TOLD](#e_h2h_b_told) | 2 | U20 |
+| [E_H2H_B_NO_LOCKFILE](#e_h2h_b_no_lockfile) | 2 | U20 |
+| [E_H2H_B_NO_RUNNER](#e_h2h_b_no_runner) | 2 | U20 |
+| [E_H2H_B_NO_REPORTER](#e_h2h_b_no_reporter) | 2 | U20 |
+| [E_H2H_B_RETRIES](#e_h2h_b_retries) | 2 | U20 |
+| [E_H2H_B_BUILD](#e_h2h_b_build) | 2 | U20 |
+| [E_H2H_B_NO_TESTS](#e_h2h_b_no_tests) | 2 | U20 |
+| [E_H2H_B_REPORT](#e_h2h_b_report) | 2 | U20 |
+| [E_H2H_B_STORE](#e_h2h_b_store) | 2 | U20 |
+| [E_H2H_B_BROWSER](#e_h2h_b_browser) | 2 | U20 |
+| [E_H2H_B_LABEL](#e_h2h_b_label) | 2 | U20 |
+| [E_H2H_B_INFEASIBLE](#e_h2h_b_infeasible) | 2 | U20 |
 | [E_H2H_O_SOURCE](#e_h2h_o_source) | 2 | U20 |
 | [E_H2H_O_LICENCE](#e_h2h_o_licence) | 2 | U20 |
 | [E_H2H_O_EXCLUDED](#e_h2h_o_excluded) | 2 | U20 |
@@ -2357,6 +2370,110 @@ A line of the head-to-head's keyless end-to-end run printed FAIL: on a real unit
 Fix: Read the FAIL line and the session dir it names, fix the cause, and run the end-to-end run again before any spend.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_H2H_B_MINE
+
+A skill-pack head-to-head breadth miner refused: the advisory-database clone is not at the pinned commit, a GitHub GraphQL query failed or cost more than its budget, or a frozen frame or licence file is missing or not its schema.
+
+Fix: Check out the pinned advisory-database commit (mine-b2 --clone), check gh is signed in and under its rate limit, and run the miner again. Never move the pin after the freeze date.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_H2H_B_TOLD
+
+A breadth unit failed plan section 5's told-mode screen (problem statement under 200 characters, a diff block, or two lines of 30 characters or more that the fix adds). It drops before any draw.
+
+Fix: None: the drop is by rule. It is counted per frame and ecosystem.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2H_B_NO_LOCKFILE
+
+A breadth candidate's repository has no lockfile the frozen recipes install from (package-lock.json, npm-shrinkwrap.json, pnpm-lock.yaml or yarn.lock; go.sum or a go.mod with no requirements; Cargo.lock; a Maven pom.xml; a .NET project with packages.lock.json or a restore that needs none). It drops by rule.
+
+Fix: None: no recipe is written by hand or by a model. The drop is counted per ecosystem.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2H_B_NO_RUNNER
+
+A breadth candidate's tests run under no runner the frozen test-command rules know (for B1, no real-browser runner at the root), so its tests cannot be found by rule. It drops.
+
+Fix: None: the drop is by rule and counted per ecosystem.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2H_B_NO_REPORTER
+
+A breadth candidate's runner writes JUnit XML or JSON only through a reporter package that is not already in its lockfile (karma-junit-reporter, @web/test-runner-junit-reporter, jest-junit for a JUnit-only Jest setup). No reporter package is added, so it drops by rule.
+
+Fix: None: the drop is by rule and counted per ecosystem.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2H_B_RETRIES
+
+A breadth candidate's test retries cannot be switched off by the runner's own flag (jest.retryTimes or Mocha this.retries in the repository's code, or a Maven rerun setting the command cannot override). It drops, since retries hide the flakes the 5+5 oracle must see.
+
+Fix: None: the drop is by rule and counted per ecosystem.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2H_B_BUILD
+
+A breadth candidate's image did not build with its frozen recipe at the fix's parent (dependency install, toolchain or browser install failed, or the build passed its time limit). It drops with this code, counted per ecosystem.
+
+Fix: None for the unit: images are never repaired by hand. A builder-host failure (no Docker, a full disk) is an infra error; rerun the build on a fresh throwaway host.
+
+Exit 2. Side effects: Build cache on the throwaway builder host only. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_H2H_B_NO_TESTS
+
+A breadth candidate's test command ran but its report held none of the fix's test files' tests, or the report parser found no test at all, so its tests cannot be found by the frozen rules. It drops, counted per ecosystem.
+
+Fix: None: the drop is by rule.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2H_B_REPORT
+
+A breadth report parser could not read a report (malformed JUnit XML, TRX, go test -json, cargo test output, or Jest or Vitest JSON), or the report named no format the parser knows.
+
+Fix: Read the report. A run whose report does not parse builds nothing; when every run fails this way the unit drops at test discovery.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_H2H_B_STORE
+
+The breadth image store refused: the image is not stored by digest, the stored digest does not match the one recorded in the unit list, the push or pull failed, or a session or scoring run asked for an image by tag or by a digest the store does not hold.
+
+Fix: Push the built image to the store before its oracle run and record its digest. Sessions and scoring run only from a stored digest; an image is never rebuilt.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_H2H_B_BROWSER
+
+A B1 unit failed the keyless browser-engine check: a fail-to-pass test's report shows no real browser engine (no Playwright project or browserName, no Karma or Web Test Runner browser string, no Vitest browser provider with the report's project name), or the same test is also collected under jsdom or node.
+
+Fix: None: the unit drops by rule before any label call.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2H_B_LABEL
+
+The B1 label step refused: a packet holds something its readers may not see (an arm's output, a unit id), a packet no longer matches its digest, or a reader's answer is not one bare JSON object with the frozen keys and a yes or no. A malformed answer counts as missing and the unit is out.
+
+Fix: Rebuild the packet from the unit dir. A malformed answer is never asked again; the unit stays out.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_H2H_B_INFEASIBLE
+
+B1 ended under 20 usable units after section 6's fallbacks (the 2025-06-01 widening and the MultiLang rows that pass the browser checks). B1 is reported as infeasible at this scale and B is B2 alone; the rules are never loosened.
+
+Fix: None: this is the frozen outcome. Report it as the Infeasible row state.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
 
 ### E_H2H_O_SOURCE
 

@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<testsuite name="Chrome Headless 159.0.0.0 (Linux 0.0.0)" package="" timestamp="2026-11-15T04:19:52" id="0" hostname="runner" tests="2" errors="0" failures="1" time="0.001">
+  <properties>
+    <property name="browser.fullName" value="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/159.0.0.0 Safari/537.36"/>
+  </properties>
+  <testcase name="karma suite passes" time="0.001" classname="karma suite"/>
+  <testcase name="karma suite fails" time="0" classname="karma suite">
+    <failure type="">Error: boom
+    at Context.&lt;anonymous&gt; (karma/k.test.js:1:146)
+</failure>
+  </testcase>
+  <system-out>
+    <![CDATA[
+]]>
+  </system-out>
+  <system-err/>
+</testsuite>
