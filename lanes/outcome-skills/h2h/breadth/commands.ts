@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // Part B's commands. The h2h command table maps its rows here; each takes argv after the command name and returns the
-// exit code. Every refusal throws an H2hError whose message starts with its reason code.
+// exit code. label-send is the one paid command: it sends the B1 label packets under h2h-labels (label-send.ts). Every refusal throws an H2hError whose message starts with its reason code.
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Pacer } from "../../statemachines/oracle.ts";
@@ -13,6 +13,7 @@ import { cloneAdvisoryDb, mineB2 } from "./b2.ts";
 import { browserCheck } from "./browser.ts";
 import { readDiscovery } from "./discover.ts";
 import { FREEZE_DATE, ghGql, licenceStatus, secondReadCounts, writeJson } from "./frame.ts";
+import { sendLabels } from "./label-send.ts";
 import { writePacket } from "./label.ts";
 import { buildB, findCandidate, oracleB, prepareB, type BUnitExtra, type BuildRecord } from "./oracle-b.ts";
 import type { ReportFormat } from "./parse.ts";
@@ -27,6 +28,7 @@ const FLAGS: Record<string, { need: string[]; opt: string[]; bool?: string[] }> 
   "oracle-b": { need: ["--frame", "--id", "--work", "--store", "--ref"], opt: ["--db", "--docker-host", "--pull-log"] },
   "browser-check": { need: ["--unit", "--discovery"], opt: [] },
   "label-packet": { need: ["--unit", "--out"], opt: [] },
+  "label-send": { need: ["--run", "--units", "--out"], opt: ["--record", "--ledger", "--lift-halt"] },
 };
 
 export function flags(cmd: string, argv: readonly string[]): Map<string, string> {
@@ -154,6 +156,12 @@ export const commands: Record<string, (argv: string[]) => Promise<number>> = {
   async "label-packet"(argv) {
     const f = flags("label-packet", argv);
     line({ unit: f.get("--unit"), out: f.get("--out"), sha256: writePacket(f.get("--unit")!, f.get("--out")!) });
+    return 0;
+  },
+  async "label-send"(argv) {
+    const f = flags("label-send", argv);
+    const s = await sendLabels({ run_id: f.get("--run")!, units: f.get("--units")!, out: f.get("--out")!, record: f.get("--record"), ledger: f.get("--ledger"), lift_halts: f.get("--lift-halt")?.split(",").filter(Boolean) });
+    log("label-send item=" + s.item + " run=" + s.run_id + " lease=" + (s.lease_id ?? "none") + " sent=" + s.sent + " " + Object.entries(s.counts).map(([k, v]) => k + "=" + v).join(" ") + " spent_micros=" + s.spent_micros + " unknown_micros=" + s.unknown_micros + " replies=" + s.replies);
     return 0;
   },
 };

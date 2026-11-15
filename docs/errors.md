@@ -328,6 +328,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_H2H_B_BROWSER](#e_h2h_b_browser) | 2 | U20 |
 | [E_H2H_B_LABEL](#e_h2h_b_label) | 2 | U20 |
 | [E_H2H_B_INFEASIBLE](#e_h2h_b_infeasible) | 2 | U20 |
+| [E_H2H_LABEL_INPUT](#e_h2h_label_input) | 2 | U20 |
 | [E_H2H_O_SOURCE](#e_h2h_o_source) | 2 | U20 |
 | [E_H2H_O_LICENCE](#e_h2h_o_licence) | 2 | U20 |
 | [E_H2H_O_EXCLUDED](#e_h2h_o_excluded) | 2 | U20 |
@@ -2489,6 +2490,14 @@ B1 ended under 20 usable units after section 6's fallbacks (the 2025-06-01 widen
 Fix: None: this is the frozen outcome. Report it as the Infeasible row state.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2H_LABEL_INPUT
+
+h2h label-send refused its units before anything was opened: the --units file is missing or lists no unit dir, a dir is not a B1 unit (source h2h-b1), a unit id can't name a file, a unit is listed twice, or a unit's label packet differs from the packet one of its calls was sent, so its two answers would not read one packet.
+
+Fix: Fix the units file. A unit whose packet changed after a call was sent goes back to the dir that call read, or leaves --units; its sent call is never sent again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
 
 ### E_H2H_O_SOURCE
 
