@@ -151,7 +151,7 @@ The prereg's S1 matcher (the office-hours lane's repeat rule: at least two share
 
 ### Chains and links
 
-Opus linked the 121 duplicates the October labels named to the earlier asks they repeat (98 links). Astra's audit labels agree with Opus's links on 36 of the 40 audited duplicates (0.90). On the 302 agreed items the chains form 212 clusters, with 44 chains holding 134 items. The largest chain's share of each thread's needless items: T1 0.50, T2 0.06, T3 0.05, T4 0.21, T5 0.17, T6 0.08, T7 0.18, T8 0.25.
+Opus linked the 121 duplicates the October labels named to the earlier asks they repeat (98 links). Astra's audit labels agree with Opus's links on 36 of the 40 audited duplicates (0.90). On the 302 agreed items the chains form 212 clusters, with 44 chains holding 134 items. The largest chain's share of each thread's scored items, must-asks included: T1 0.50, T2 0.06, T3 0.05, T4 0.21, T5 0.17, T6 0.08, T7 0.18, T8 0.25.
 
 ## Why not built? The R48 questions
 
