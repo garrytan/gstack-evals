@@ -14,6 +14,7 @@ links:
   - 2026-11-01-geva-105-gstack-null-review-and-tb2
   - 2026-11-07-geva-380-r3c-results
 attachments:
+  - 748b5b0ee55bb3501dad111b2d90307380e9721e38b8f903815a9027408cb0e1  arms-pins.json
   - 0edb8a2ecd63d4f69b1033963cc1866255abb58d09450a0a36123c7d69713f9a  power.py
   - 4fd261b2a742437d18c9f51558b88ee68ca168dd940c9521f59d311187f1b803  power.txt
   - ce3c34e81da0f93c5d41750aee37dc4eea873d3f53fd6e2b56109180917b39c7  prereg.json

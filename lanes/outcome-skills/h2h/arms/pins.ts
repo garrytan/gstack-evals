@@ -294,7 +294,8 @@ export async function newerSeen(repo: string): Promise<Seen[]> {
 /** Today's latest version of an npm package. */
 export function npmLatest(name: string): Seen {
   const v = run("npm", ["view", name, "version", "gitHead", "--json"]);
-  const j = v.status === 0 ? (JSON.parse(v.stdout) as { version?: string; gitHead?: string }) : {};
+  const raw = v.status === 0 ? (JSON.parse(v.stdout) as string | { version?: string; gitHead?: string }) : {};
+  const j = typeof raw === "string" ? { version: raw, gitHead: undefined } : raw;
   return { repo: "npm:" + name, sha: j.gitHead ?? "", version: "latest " + (j.version ?? "unreadable") };
 }
 
