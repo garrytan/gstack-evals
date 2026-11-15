@@ -23,15 +23,34 @@ All run as `bin/gstack-evals h2h <command>` (or `bun lanes/outcome-skills/h2h/cl
   first and older months only when the newer ones run out.
 - The exclusion list is checked on the dataset's repository name and on the name GitHub returns today, so a renamed
   repository of an excluded owner stays out.
-- The licence rule is read literally: the spdxId GitHub returns must be on the permissive list. NOASSERTION (70
-  repositories, 160 rows), MIT-0 and CC0-1.0 are out, even where the licence text is permissive.
+- The licence gate takes the spdxId GraphQL returned when it is on the permissive list (MIT-0 is on it). When GraphQL
+  named no licence or returned NOASSERTION, the second read decides: the default branch's root blobs whose names start
+  with LICENSE, LICENCE or COPYING (without case) are read once and classified by classifyLicenceFiles
+  (ordinary/licences.ts, whose header states the frozen rule). The repository passes only when at least one such file
+  exists and every one matches a listed licence. o-licences.json records each file's name, mode, git blob id, size,
+  sha256 and match. A unit that passes this way carries the matched licences joined with " AND " and licence_from
+  "files". A drop is counted as "<first read>:<reason>", such as "NOASSERTION:unmatched" or "none:no_file".
+- The classifier reads spdx/license-list-data v3.29.0's templates, pinned by commit and sha256 and fetched when
+  missing. Each var slot matches up to 300 normalised characters or its own .{0,N} bound; the var's regular
+  expression is not used. The matcher visits each (template step, text position) pair once, because a regular
+  expression with that many slots backtracked for over 20 minutes on one near miss. The whole file must match, so a
+  licence file with extra terms appended, or two licences in one file, fails.
 - Gate results the draw reads (images, oracle, containment) come as a generic h2h-gates.v1 file, because part A's
   containment record format was not fixed when this was built. O's oracle gate reads the state machines unit dirs.
 - Positions count only units that pass every gate. Stage 1 takes prereg.json's positions, stage 2 the other positions up
   to n, then the reserves, then stage 0.
 - The repository cap (3) counts across B1 and B2.
-- B1 takes up to half of B's n. If the B1 frame runs out, its stage 2 share shrinks so its reserves and stage 0 still
-  fill. Under 20 usable B1 units, B1 is infeasible and B is B2 alone at the full n.
+- B1 walks its whole frame first; a repository already holding 3 usable B1 units is skipped unasked. With N usable
+  units, stage 1 takes Math.round(k * N / 7) for k = 1 to 6, stage 0 takes N, the reserves are the last 5 free
+  positions before N, and stage 2 takes the rest in order up to half of B's n. Positions between stage 2 and the
+  reserves stay unused when N is large.
+- B1 is usable when its stage 2 gets at least 20 units (N of 32 or more). Under that, the draw stops before B2 with
+  E_H2H_DRAW_SHORT until the widened B1 frame (2025-06-01 and the pinned MultiLang browser rows) is drawn with
+  --b1-fallbacks-done; if it is still short, B1 takes no stage at all and B is B2 alone at the full n. B2's repository
+  cap counts B1's drawn units.
+- Full size (--full-size, O 150 or B 80) adds stage 2 units at the next usable positions after stage 0's units, marked
+  full_size, and leaves every core unit where it was. O's added units come after the later of its two stage 0 units.
+  B1 has no position after its stage 0 (position N is its last usable unit), so B2 takes all of B's added units.
 - Reserves replace any unit that drops after the draw and before a paid run, in reserve order; O's stage 0 bug or
   feature unit takes the first reserve with its tag.
 
@@ -109,5 +128,3 @@ All run as `bin/gstack-evals h2h <command>` (or `bun lanes/outcome-skills/h2h/cl
 
 - Part S's tree_bundle format and the base commit's field are assumed (a directory or tar with .git, and base_head).
 - Part A's containment record is read through the generic gates file.
-- The literal NOASSERTION reading drops some repositories whose licence text is permissive; changing it needs a ruling
-  and a new frame.

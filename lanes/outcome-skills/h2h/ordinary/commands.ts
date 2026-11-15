@@ -10,8 +10,8 @@ import { parseFlags } from "../cli.ts";
 import { h2hFail, POST_ID, PREREG_PATH, readPrereg } from "../prereg.ts";
 import type { UnitKind } from "../types.ts";
 import { drawB, planFor, replaceDropped, seededOrder, walk, type DrawUnit, type Gate, type GateResult } from "./draw.ts";
-import { finishFrame, readLicences, screenFrame, type RowText } from "./frame.ts";
-import { readHfHead, readLicencesGraphQl } from "./licences.ts";
+import { finishFrame, licenceVerdict, needsSecondRead, readLicences, screenFrame, type RowText } from "./frame.ts";
+import { fetchTemplates, loadTemplates, readHfHead, readLicenceFilesGraphQl, readLicencesGraphQl } from "./licences.ts";
 
 export const BUNDLE = join(PREREG_PATH, "..");
 export const FREEZE_DATE = POST_ID.slice(0, 10);
@@ -19,15 +19,18 @@ const sha = (s: string | Buffer) => createHash("sha256").update(s).digest("hex")
 const writeNew = (path: string, text: string) => writeFileSync(path, text, { flag: "wx" });
 const json = (v: unknown) => JSON.stringify(v, null, 1) + "\n";
 
-const O_FRAME_HELP = `Usage: gstack-evals h2h o-frame --cache <MultiLang cache dir> [--out <dir>] [--read-licences] [--digests <file>]
+const O_FRAME_HELP = `Usage: gstack-evals h2h o-frame --cache <MultiLang cache dir> [--out <dir>] [--read-licences] [--read-licence-files] [--templates <dir>] [--digests <file>]
 Builds the O frame (plan section 5) at the MultiLang revision the state machines harness pins, after checking that it is
 still the dataset's Hugging Face head. --read-licences reads every candidate repository's licence once by GraphQL and
-writes o-licences.json; without it the frame reads the frozen o-licences.json. Image digests are pinned by registry HEAD
+writes o-licences.json; without it the frame reads the frozen o-licences.json. --read-licence-files runs the second read
+once: the root licence files of every repository GraphQL named no licence for or called NOASSERTION, classified against
+the pinned SPDX templates (--templates, default <cache>/spdx-templates, fetched when missing), added to o-licences.json.
+Image digests are pinned by registry HEAD
 for the candidates that pass every other gate, cached in --digests (default <cache>/h2h-o-digests.json). Writes
 o-frame.json to --out (default: the post bundle).`;
 
 async function oFrame(argv: string[]): Promise<number> {
-  const f = parseFlags(argv, ["--cache", "--out", "--digests"], ["--read-licences"], O_FRAME_HELP);
+  const f = parseFlags(argv, ["--cache", "--out", "--digests", "--templates"], ["--read-licences", "--read-licence-files"], O_FRAME_HELP);
   if (!f) return 0;
   const p = readPrereg();
   const cache = f.need("--cache");
@@ -46,9 +49,19 @@ async function oFrame(argv: string[]): Promise<number> {
     console.log("o-licences.json: " + Object.keys(read.repos).length + " repositories read at " + read.read_at);
   }
   if (!existsSync(licPath)) h2hFail("E_H2H_O_LICENCE", licPath + " does not exist; run once with --read-licences on the freeze date");
+  if (f.has("--read-licence-files")) {
+    const first = readLicences(licPath);
+    if (first.second_read) h2hFail("E_H2H_O_LICENCE", licPath + " already holds a second read from " + first.second_read.read_at + "; it is read once");
+    const dir = f.one("--templates") ?? join(cache, "spdx-templates");
+    await fetchTemplates(dir, p.licences);
+    const second = readLicenceFilesGraphQl(Object.entries(first.repos).filter(([, v]) => needsSecondRead(v.spdx)).map(([r]) => r), loadTemplates(dir, p.licences));
+    writeFileSync(licPath, json({ ...first, second_read: second }));
+    const vals = Object.values(second.repos);
+    console.log("o-licences.json: second read of " + vals.length + " repositories at " + second.read_at + ": " + vals.filter((v) => v.eligible).length + " eligible, " + vals.filter((v) => v.reason === "no_file").length + " with no licence file, " + vals.filter((v) => v.reason === "unmatched").length + " with a file that matches no listed licence");
+  }
   const licText = readFileSync(licPath, "utf8");
   const licences = readLicences(licPath);
-  const split = await splitCandidates(cache, cands.filter((c) => c.created_at.slice(0, 10) >= p.classes.O.walk_back_to && licences.repos[c.repo]?.spdx && p.licences.includes(licences.repos[c.repo]!.spdx!)));
+  const split = await splitCandidates(cache, cands.filter((c) => c.created_at.slice(0, 10) >= p.classes.O.walk_back_to && licences.repos[c.repo] && licenceVerdict(c.repo, licences, p.licences).ok));
   const splitById = new Map(split.map((c) => [c.id, c]));
   const merged = cands.map((c) => splitById.get(c.id) ?? c);
   const screened = screenFrame(p, merged, text, licences);
@@ -124,20 +137,25 @@ export const oracleGate = (unitsDir: string): Gate => ({
 });
 
 const DRAW_HELP = `Usage: gstack-evals h2h draw --class O --frame <o-frame.json> --order-out <file>
-       gstack-evals h2h draw --class O --frame <o-frame.json> --gates <h2h-gates.v1 file> [--units-dir <sm unit dirs>] [--n <n>] [--dropped <ids>] --out <file>
-       gstack-evals h2h draw --class B --b1-frame <file> --b2-frame <file> --b1-gates <file> --b2-gates <file> [--n <n>] [--dropped <ids>] --out <file>
+       gstack-evals h2h draw --class O --frame <o-frame.json> --gates <h2h-gates.v1 file> [--units-dir <sm unit dirs>] [--n <n>] [--full-size <n>] [--dropped <ids>] --out <file>
+       gstack-evals h2h draw --class B --b1-frame <file> --b2-frame <file> --b1-gates <file> --b2-gates <file> [--n <n>] [--full-size <n>] [--b1-fallbacks-done] [--dropped <ids>] --out <file>
 --order-out writes the frame's seeded order (draw_seed) and touches no gate. Otherwise the gate walk runs over the seeded
 order with the gate results (and, for O, the oracle gate read from --units-dir first) and writes the drawn units with
-their positions and stages. --dropped lists units that dropped after the draw, which reserves replace. A pending gate
-exits 2 with E_H2H_DRAW_PENDING naming the unit; a frame that runs out exits 2 with E_H2H_DRAW_SHORT after writing.`;
+their positions and stages. B1 walks its whole frame, then takes its positions from its usable count; when its stage 2
+gets fewer than 20 units the draw stops before B2 (E_H2H_DRAW_SHORT) until the widened frame is drawn with
+--b1-fallbacks-done, after which B1 is infeasible and B is B2 alone. --full-size is an approved full n (O 150, B 80):
+the added units take the next positions after stage 0's units. --dropped lists units that dropped after the draw, which
+reserves replace. A pending gate exits 2 with E_H2H_DRAW_PENDING naming the unit; a frame that runs out exits 2 with
+E_H2H_DRAW_SHORT after writing.`;
 
 async function draw(argv: string[]): Promise<number> {
-  const f = parseFlags(argv, ["--class", "--frame", "--order-out", "--gates", "--units-dir", "--n", "--dropped", "--out", "--b1-frame", "--b2-frame", "--b1-gates", "--b2-gates"], [], DRAW_HELP);
+  const f = parseFlags(argv, ["--class", "--frame", "--order-out", "--gates", "--units-dir", "--n", "--full-size", "--dropped", "--out", "--b1-frame", "--b2-frame", "--b1-gates", "--b2-gates"], ["--b1-fallbacks-done"], DRAW_HELP);
   if (!f) return 0;
   const p = readPrereg();
   const cls = f.need("--class");
   const n = f.one("--n") === undefined ? undefined : Number(f.one("--n"));
   if (n !== undefined && !(Number.isInteger(n) && n >= 0)) h2hFail("E_H2H_DRAW_INPUT", "--n must be a whole number");
+  const full = f.one("--full-size") === undefined ? undefined : Number(f.one("--full-size"));
   const dropped = new Set((f.one("--dropped") ?? "").split(",").filter(Boolean));
   const readGates = (path: string) => gatesFrom(JSON.parse(readFileSync(path, "utf8")) as GatesFile);
   if (cls === "O") {
@@ -149,17 +167,25 @@ async function draw(argv: string[]): Promise<number> {
       return 0;
     }
     const gates = [...(f.one("--units-dir") ? [oracleGate(f.need("--units-dir"))] : []), ...readGates(f.need("--gates"))];
-    const w = walk("O", p.draw_seed, seededOrder(readFrame(frame, "O"), p.draw_seed), gates, planFor(p, "O", n), p.classes.O.repo_cap);
+    const core = n ?? p.classes.O.n;
+    if (full !== undefined && !(Number.isInteger(full) && full >= core)) h2hFail("E_H2H_DRAW_INPUT", "--full-size must be a whole number at least the core n " + core);
+    const w = walk("O", p.draw_seed, seededOrder(readFrame(frame, "O"), p.draw_seed), gates, planFor(p, "O", core, full === undefined ? 0 : full - core), p.classes.O.repo_cap);
     const r = replaceDropped(w, dropped);
     writeFileSync(f.need("--out"), json({ ...w, units: r.units, unreplaced: r.unreplaced, frame_sha256: sha(readFileSync(frame)) }));
     return report(w);
   }
   if (cls !== "B") h2hFail("E_H2H_DRAW_INPUT", "--class is O or B, not " + JSON.stringify(cls));
   const b1 = readFrame(f.need("--b1-frame"), "B1"), b2 = readFrame(f.need("--b2-frame"), "B2");
-  const d = drawB(p, p.draw_seed, seededOrder(b1, p.draw_seed), seededOrder(b2, p.draw_seed), readGates(f.need("--b1-gates")), readGates(f.need("--b2-gates")), n);
+  const d = drawB(p, p.draw_seed, seededOrder(b1, p.draw_seed), seededOrder(b2, p.draw_seed), readGates(f.need("--b1-gates")), readGates(f.need("--b2-gates")), { n, fallbacksDone: f.has("--b1-fallbacks-done"), fullSize: full });
   const out = { ...d, b1: { ...d.b1, ...replaceDropped(d.b1, dropped) }, b2: d.b2 ? { ...d.b2, ...replaceDropped(d.b2, dropped) } : null };
   writeFileSync(f.need("--out"), json(out));
-  return Math.max(report(d.b1), d.b2 ? report(d.b2) : 0);
+  const code = report(d.b1);
+  console.log("B1: " + d.b1_status + ", stage 2 " + d.n_b1 + " B1 and " + d.n_b2 + " B2 units");
+  if (d.b1_status === "fallbacks_due") {
+    console.error("E_H2H_DRAW_SHORT B1's stage 2 gets " + d.n_b1 + " units, under " + p.classes.B.b1_min_units + "; widen the B1 frame to " + p.classes.B.widen_to + " and add the pinned MultiLang browser rows, then draw again with --b1-fallbacks-done");
+    return 2;
+  }
+  return Math.max(code, d.b2 ? report(d.b2) : 0);
 }
 
 function report(w: ReturnType<typeof walk>): number {
