@@ -107,6 +107,12 @@ every home twice and diffing the two runs. Its lines cover only what differed be
   `timestamp` and `files` in GSD's file manifest (it lists every file's hash, which the tree hash already covers, with
   the nonce in it); `cached_at` in gstack's gbrain status cache.
 - text replaced: GSD's `GSD_..._ARGS_END_<32 hex>` nonce, and the time at the end of each line in `.gstack/installs.tsv`.
+- added after the freeze-date runs: `.claude/plugins/.last_inuse_sweep`. Claude Code writes this file, holding only the
+  time, when it loads plugins and finds in-use markers to sweep, at most once a day. Whether a `claude plugin` command
+  gets that far before it exits varies from run to run, so any plugin home (superpowers, agent-skills, pstack,
+  gstack-pony) can have it or not. Neither freeze-date run wrote it in any home, and part S's end-to-end install wrote it
+  in superpowers' home, which then drifted from arms-pins.json by this file alone. Skipping it changes no recorded
+  home's hash.
 
 With this rule all 8 homes hash the same in both runs. Everything a pack installed (skills, plugins, hooks, settings,
 MCP entries, exec bits) still changes the hash, which the unit tests check.

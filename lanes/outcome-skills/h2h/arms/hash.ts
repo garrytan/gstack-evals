@@ -23,6 +23,7 @@ export const HASH_RULE = {
     "**/.git/index",
     "**/.git/logs/**",
     ".claude/skills/gstack/bin/.gstack-cso-build.log",
+    ".claude/plugins/.last_inuse_sweep",
   ],
   json: [
     { glob: ".claude.json", drop: ["firstStartTime", "machineID", "userID"] },

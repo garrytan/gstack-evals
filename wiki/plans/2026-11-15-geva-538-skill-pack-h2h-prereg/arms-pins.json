@@ -39,7 +39,8 @@
       ".npm/_logs/**",
       "**/.git/index",
       "**/.git/logs/**",
-      ".claude/skills/gstack/bin/.gstack-cso-build.log"
+      ".claude/skills/gstack/bin/.gstack-cso-build.log",
+      ".claude/plugins/.last_inuse_sweep"
     ],
     "json": [
       {
@@ -516,7 +517,7 @@
       "newer_seen": [
         {
           "repo": "open-gsd/gsd-core",
-          "sha": "ffa72ef1c9fb0f48241e28452f0c4d2e3a5c39b5",
+          "sha": "7977b4762a2fdabd617d9ccc81b770cdf8a4a5b2",
           "version": "head of next"
         },
         {
