@@ -9,6 +9,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { classify, type Lang } from "../../statemachines/langs.ts";
+import type { SecondRead } from "../ordinary/frame.ts";
 import { h2hFail, POST_ID, readPrereg, type H2hPrereg } from "../prereg.ts";
 
 export const sha256 = (s: string | Buffer): string => createHash("sha256").update(s).digest("hex");
@@ -21,7 +22,19 @@ export const FREEZE_DATE = "2026-11-15";
  *  of its root licence files is part C's (ordinary/licences.ts). */
 export const licenceStatus = (spdx: string | null, list: readonly string[]): "permissive" | "second_read_pending" | "out" =>
   spdx && list.includes(spdx) ? "permissive" : !spdx || spdx === "NOASSERTION" ? "second_read_pending" : "out";
-export const LICENCE_RULE = "GraphQL licenseInfo.spdxId on prereg.json's licences is kept; null or NOASSERTION is kept with second_read_pending true and its raw spdxId, for section 5's second read; any other is dropped as licence_not_permissive";
+export const LICENCE_RULE = "GraphQL licenseInfo.spdxId on prereg.json's licences is kept (licence_from graphql); null or NOASSERTION goes to section 5's second read, recorded in b1-licences.json and b2-licences.json: kept with its raw spdxId (licence_from files) when at least one root LICENSE*, LICENCE* or COPYING* file is found and every one matches a listed licence (ordinary/licences.ts classifyLicenceFiles), dropped as licence_files_no_file or licence_files_unmatched otherwise, and kept with second_read_pending true while no second read is recorded for it; any other spdxId is dropped as licence_not_permissive";
+
+/** The second read's verdict for a repository pending it: kept from its licence files, a drop rule, or still pending when
+ *  the licence file holds no second read for it. */
+export function secondReadVerdict(repo: string, second: SecondRead | undefined): "files" | "pending" | "licence_files_no_file" | "licence_files_unmatched" {
+  const v = second?.repos[repo];
+  if (!v) return "pending";
+  return v.eligible ? "files" : v.reason === "no_file" ? "licence_files_no_file" : "licence_files_unmatched";
+}
+export const secondReadCounts = (second: SecondRead | undefined) => {
+  const v = Object.values(second?.repos ?? {});
+  return second ? { read_at: second.read_at, repos: v.length, matched: v.filter((x) => x.eligible).length, no_file: v.filter((x) => x.reason === "no_file").length, unmatched: v.filter((x) => x.reason === "unmatched").length } : null;
+};
 
 /** The first exclusion pattern a repository matches, case-insensitive, or null. "owner/*" matches every repository of the
  *  owner; any other pattern matches one repository. */

@@ -9,7 +9,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { readPrereg, type H2hPrereg } from "../prereg.ts";
-import { LICENCE_RULE, bump, excludedBy, fileClass, FREEZE_DATE, licenceStatus, sha256, sorted, windowOf, windows, type Gql, type Windows } from "./frame.ts";
+import type { SecondRead } from "../ordinary/frame.ts";
+import { LICENCE_RULE, bump, excludedBy, fileClass, FREEZE_DATE, licenceStatus, secondReadCounts, secondReadVerdict, sha256, sorted, windowOf, windows, type Gql, type Windows } from "./frame.ts";
 
 export const SEARCH_LANGS = ["TypeScript", "JavaScript"] as const;
 /** The frozen repository search, one query per language with no licence qualifier (GitHub's licence search cannot find a
@@ -172,7 +173,7 @@ export async function searchRepos(gql: Gql, p: Pick<H2hPrereg, "licences" | "exc
 export type B1Rule = "title_no_fix" | "outside_window" | "no_merge_commit" | "no_closing_issue" | "closes_many" | "no_browser_test" | "source_files_0" | "source_files_over_6";
 
 export interface B1Row {
-  repo: string; number: number; url: string; merged: string; month: string; window: "primary" | "widened"; licence: string | null; second_read_pending: boolean; runners: Runner[];
+  repo: string; number: number; url: string; merged: string; month: string; window: "primary" | "widened"; licence: string | null; second_read_pending: boolean; licence_from: "graphql" | "files" | null; runners: Runner[];
   fix: { commit: string; parent: string }; files: { browser_test: number; test: number; source: number; total: number };
   issue_url: string; statement_sha256: string; statement_chars: number;
 }
@@ -181,7 +182,7 @@ export interface B1Row {
 export interface PrNode { number: number; title: string; url: string; mergedAt: string | null; mergeCommit: { oid: string; parents: { nodes: { oid: string }[] } } | null; files: { totalCount: number; nodes: { path: string }[] }; closingIssuesReferences: { totalCount: number; nodes: { url: string; title: string; body: string | null }[] } }
 
 /** The pull-request rules, in order, over one pull request whose file list is complete. */
-export function screenPr(repo: RepoRow, pr: PrNode, w: Windows): B1Row | B1Rule {
+export function screenPr(repo: RepoRow, pr: PrNode, w: Windows, from: "graphql" | "files" | null = repo.licence === null || repo.licence === "NOASSERTION" ? null : "graphql"): B1Row | B1Rule {
   if (!FIX_TITLE.test(pr.title)) return "title_no_fix";
   const day = (pr.mergedAt ?? "").slice(0, 10);
   const win = windowOf(day, w);
@@ -197,7 +198,7 @@ export function screenPr(repo: RepoRow, pr: PrNode, w: Windows): B1Row | B1Rule 
   if (!pr.mergeCommit || !parent) return "no_merge_commit";
   const issue = ci.nodes[0]!;
   const text = statementText(issue.title, issue.body);
-  return { repo: repo.repo, number: pr.number, url: pr.url, merged: day, month: day.slice(0, 7), window: win, licence: repo.licence, second_read_pending: repo.licence === null || repo.licence === "NOASSERTION", runners: repo.runners ?? [], fix: { commit: pr.mergeCommit.oid, parent }, files: n, issue_url: issue.url, statement_sha256: sha256(text), statement_chars: Array.from(text).length };
+  return { repo: repo.repo, number: pr.number, url: pr.url, merged: day, month: day.slice(0, 7), window: win, licence: repo.licence, second_read_pending: from === null, licence_from: from, runners: repo.runners ?? [], fix: { commit: pr.mergeCommit.oid, parent }, files: n, issue_url: issue.url, statement_sha256: sha256(text), statement_chars: Array.from(text).length };
 }
 
 const prFields = "number title url mergedAt mergeCommit { oid parents(first: 2) { nodes { oid } } } files(first: 100) { totalCount nodes { path } } closingIssuesReferences(first: 2) { totalCount nodes { url title body } }";
@@ -250,13 +251,16 @@ export async function repoPrs(repo: RepoRow, gql: Gql, w: Windows, log: (s: stri
 
 /** The repository screens: not excluded, a licence on the permissive list or pending the second read (kept and marked, never
  *  dropped here), not archived, a root real-browser runner. */
-export function screenRepos(rows: RepoRow[], p: Pick<H2hPrereg, "exclusion" | "licences">): { kept: RepoRow[]; drops: Record<string, number>; excluded: Record<string, number> } {
+export function screenRepos(rows: RepoRow[], p: Pick<H2hPrereg, "exclusion" | "licences">, second?: SecondRead): { kept: RepoRow[]; drops: Record<string, number>; excluded: Record<string, number> } {
   const drops: Record<string, number> = {}, excluded: Record<string, number> = {};
   const kept: RepoRow[] = [];
   for (const r of rows) {
     const ex = excludedBy(r.repo, p.exclusion);
     if (ex) { bump(drops, "excluded"); bump(excluded, ex); continue; }
-    if (licenceStatus(r.licence, p.licences) === "out") { bump(drops, "licence_not_permissive"); continue; }
+    const status = licenceStatus(r.licence, p.licences);
+    if (status === "out") { bump(drops, "licence_not_permissive"); continue; }
+    const v = status === "permissive" ? "graphql" : secondReadVerdict(r.repo, second);
+    if (v === "licence_files_no_file" || v === "licence_files_unmatched") { bump(drops, v); continue; }
     if (r.archived) { bump(drops, "archived"); continue; }
     if (!r.runners?.length) { bump(drops, "no_root_browser_runner"); continue; }
     kept.push(r);
@@ -266,19 +270,20 @@ export function screenRepos(rows: RepoRow[], p: Pick<H2hPrereg, "exclusion" | "l
 
 export const B1_REPOS_SCHEMA = "h2h-b1-repos.v1";
 export const B1_SCHEMA = "h2h-b1-frame.v1";
+export const B1_LICENCES_SCHEMA = "h2h-b1-licences.v1";
 
 /** b1-repos.json's body from one search. */
 export const reposFile = (s: { rows: RepoRow[]; queries: string[] }) => ({ schema: B1_REPOS_SCHEMA, freeze_date: FREEZE_DATE, search: SEARCH, probes: PROBES, runner_rule: "root package.json dependencies, devDependencies and scripts, and the root config files (b1.ts rootRunners), read only for repositories not excluded or archived whose licence is permissive or pending the second read", licence_rule: LICENCE_RULE, queries: s.queries, repos: s.rows });
 
 /** The frame over a frozen repository list and every kept repository's pull requests. */
-export function b1Frame(reposBody: { repos: RepoRow[] }, prs: Record<string, PrNode[]>, p: H2hPrereg = readPrereg()) {
+export function b1Frame(reposBody: { repos: RepoRow[] }, prs: Record<string, PrNode[]>, p: H2hPrereg = readPrereg(), second?: SecondRead) {
   const w = windows(p);
-  const rs = screenRepos(reposBody.repos, p);
+  const rs = screenRepos(reposBody.repos, p, second);
   const byRule: Record<string, Record<string, number>> = {};
   const rows: B1Row[] = [];
   for (const r of rs.kept)
     for (const pr of prs[r.repo] ?? []) {
-      const s = screenPr(r, pr, w);
+      const s = screenPr(r, pr, w, licenceStatus(r.licence, p.licences) === "permissive" ? "graphql" : secondReadVerdict(r.repo, second) === "files" ? "files" : null);
       if (typeof s === "string") {
         const win = windowOf((pr.mergedAt ?? "").slice(0, 10), w) ?? "outside";
         byRule[s] ??= {};
@@ -299,7 +304,7 @@ export function b1Frame(reposBody: { repos: RepoRow[] }, prs: Record<string, PrN
       source: "lanes/outcome-skills/statemachines/langs.ts classify with language ts, browser-test files counted as tests",
       fix: "the pull request's merge commit; parent is its first parent",
     },
-    counts: { repos_searched: reposBody.repos.length, repos_kept: rs.kept.length, repos_kept_second_read_pending: rs.kept.filter((r) => licenceStatus(r.licence, p.licences) === "second_read_pending").length, eligible_primary: rows.filter((r) => r.window === "primary").length, eligible_widened: rows.filter((r) => r.window === "widened").length, second_read_pending_primary: rows.filter((r) => r.window === "primary" && r.second_read_pending).length, second_read_pending_widened: rows.filter((r) => r.window === "widened" && r.second_read_pending).length, cap3_primary: cap3(["primary"]), cap3_with_widened: cap3(["primary", "widened"]) },
+    counts: { repos_searched: reposBody.repos.length, repos_kept: rs.kept.length, repos_kept_second_read_pending: rs.kept.filter((r) => licenceStatus(r.licence, p.licences) === "second_read_pending" && secondReadVerdict(r.repo, second) === "pending").length, eligible_primary: rows.filter((r) => r.window === "primary").length, eligible_widened: rows.filter((r) => r.window === "widened").length, second_read_pending_primary: rows.filter((r) => r.window === "primary" && r.second_read_pending).length, second_read_pending_widened: rows.filter((r) => r.window === "widened" && r.second_read_pending).length, licence_from_files: { primary: rows.filter((r) => r.window === "primary" && r.licence_from === "files").length, widened: rows.filter((r) => r.window === "widened" && r.licence_from === "files").length }, licence_second_read: secondReadCounts(second), cap3_primary: cap3(["primary"]), cap3_with_widened: cap3(["primary", "widened"]) },
     drops: { repos: sorted(rs.drops), excluded_repos_by_pattern: rs.excluded, pull_requests_by_rule: Object.fromEntries(Object.entries(byRule).sort().map(([k, v]) => [k, sorted(v)])) },
     pull_requests: rows,
   };
@@ -307,7 +312,7 @@ export function b1Frame(reposBody: { repos: RepoRow[] }, prs: Record<string, PrN
 
 /** The whole B1 run: the repository search (or a frozen b1-repos.json body), then every kept repository's pull requests,
  *  cached per repository under work so a stopped run resumes. */
-export async function mineB1(o: { gql: Gql; work: string; repos?: ReturnType<typeof reposFile>; log?: (s: string) => void; prereg?: H2hPrereg }) {
+export async function mineB1(o: { gql: Gql; work: string; repos?: ReturnType<typeof reposFile>; second?: SecondRead; log?: (s: string) => void; prereg?: H2hPrereg }) {
   const log = o.log ?? (() => {});
   const p = o.prereg ?? readPrereg();
   const w = windows(p);
@@ -327,5 +332,5 @@ export async function mineB1(o: { gql: Gql; work: string; repos?: ReturnType<typ
     }
     if (++i % 25 === 0) log("repositories mined " + i + "/" + kept.length);
   }
-  return { repos: reposBody, frame: b1Frame(reposBody, prs, p) };
+  return { repos: reposBody, frame: b1Frame(reposBody, prs, p, o.second) };
 }
