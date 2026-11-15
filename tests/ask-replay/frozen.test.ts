@@ -22,8 +22,16 @@ describe("frozen.json holds the plan's frozen numbers", () => {
     expect(Object.values(FROZEN.models).every((m) => m.reasoning_effort === "medium")).toBe(true);
     expect(FROZEN.decision_table).toHaveLength(3);
   });
-  test("only the custody values are left as placeholders", () => {
-    expect(placeholders().sort()).toEqual(["stats.bootstrap_seed", "stats.order_seed", "stats.proxy_effective_clusters"]);
+  test("the custody values are filled, and a placeholder left anywhere is found by its path", () => {
+    expect(placeholders()).toEqual([]);
+    expect(FROZEN.stats).toMatchObject({ bootstrap_seed: 1992076652, order_seed: 1647197898, proxy_effective_clusters: 80 });
+    expect(placeholders({ stats: { order_seed: "TODO(custody:order_seed)" }, x: [1, "TODO(custody:y)"] })).toEqual(["stats.order_seed", "x[1]"]);
+  });
+  test("Astra is a labeller only, and the rules ask pattern is frozen", () => {
+    expect(FROZEN.models.astra).toMatchObject({ provider: "openai", id: "gpt-6-astra", arms: [], role: "labeller", reasoning_effort: "medium" });
+    const re = new RegExp(FROZEN.rules_ask_pattern.pattern, FROZEN.rules_ask_pattern.flags);
+    expect(["Ask once.", "No re-ask.", "Get approval first.", "Any QUESTION"].every((t) => re.test(t))).toBe(true);
+    expect(re.test("Run the tasks and masks.")).toBe(false);
   });
 });
 
@@ -31,7 +39,7 @@ describe("gstack-evals ask-replay", () => {
   test("--help lists every command", async () => {
     const out: string[] = [];
     expect(await main(["--help"], { out: (t) => out.push(t), err: () => {} })).toBe(0);
-    for (const c of ["build", "synth", "dryrun", "smoke-plan", "draw", "arms", "score", "s1", "chains-proxy", "mdd", "scan", "synth-check", "run"]) expect(out.join("\n")).toContain("  " + c);
+    for (const c of ["build", "synth", "dryrun", "smoke-plan", "draw", "arms", "score", "label", "s1", "chains-proxy", "mdd", "scan", "synth-check", "run"]) expect(out.join("\n")).toContain("  " + c);
   });
   test("mdd prints the planned values; synth confirms the committed set", async () => {
     const out: string[] = [];
@@ -49,10 +57,13 @@ describe("gstack-evals ask-replay", () => {
     expect(r.input_tokens.c.mean).toBeGreaterThan(r.input_tokens.b.mean);
     expect(r.arm_a).toEqual({ items_with_gstack_lines: 0, gstack_lines: 0, items_with_gstack_token: 0 });
   });
-  test("run refuses while frozen seeds are placeholders", async () => {
+  test("run refuses the labeller-only model and label refuses a model its kind doesn't run, before any identity is read", async () => {
     const err: string[] = [];
-    expect(await main(["run", "--model", "opus"], { out: () => {}, err: (t) => err.push(t) })).toBe(2);
-    expect(err.join("\n")).toContain("E_ASK_UNFROZEN");
+    const io = { out: () => {}, err: (t: string) => err.push(t) };
+    expect(await main(["run", "--model", "astra", "--spend-item", "I6"], io)).toBe(2);
+    expect(await main(["label", "--kind", "link", "--model", "astra"], io)).toBe(2);
+    expect(await main(["label", "--kind", "audit", "--model", "sol"], io)).toBe(2);
+    expect(err.join("\n").split("\n").filter((l) => l.startsWith("E_USAGE ") && !l.startsWith("E_USAGE fix:") && !l.startsWith("E_USAGE docs:"))).toHaveLength(3);
   });
   test("the smoke takes 20 synthetic items by class", () => {
     const s = smokeItems(generate().items);

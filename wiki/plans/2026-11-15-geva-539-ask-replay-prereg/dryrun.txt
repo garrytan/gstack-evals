@@ -8,6 +8,7 @@ PASS prompts: arm d is arm a plus exactly arm c's ledger parts, and arm c is arm
 PASS ledger: K1 status and every send-time rule on scripted replies
 PASS parse: whole JSON, the last valid object in prose, case-insensitive action, and each provider's safety stop
 PASS run: the scripted stub through the driver on a temporary ledger, every reply path
+PASS labels: the codebook pin, Opus and Astra audit labels and Opus links through the driver on temporary ledgers, kappa, chains from the links, answer judgements and the label views
 PASS run: each cell's replicates run in sequence (replicate 2 starts after replicate 1 is sealed), cells in parallel, and Anthropic requests cache the system prefix and the user content
 PASS draws: the pilot takes 16 must-ask and 24 needless by class and thread, the label audit 40 must-ask, 40 duplicates and every permission and observable item, and a seed redraws the same set
 PASS ledger leases: one lease opens and settles on each frozen spend item, and an item that served one run refuses a second (E_ITEM_BOUND)
@@ -20,4 +21,4 @@ PASS stats: planned detectable differences of 8.3 and 8.9 points, the 3.4-point 
 PASS chains: the proxy linker links every synthetic duplicate and S1 runs on every draft
 PASS score: the full readout on scripted outcomes for the synthetic set reads row 1, build and trim
 PASS build: fixture pages, audit and rules into items, with the scan's placeholder and counts
-ask-replay dryrun: 22 PASS, 0 FAIL
+ask-replay dryrun: 23 PASS, 0 FAIL

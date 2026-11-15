@@ -14,6 +14,8 @@ export interface ModelRow {
   reasoning_effort: string;
   json_schema: boolean;
   data_collection?: "deny";
+  /** labeller: runs only the label calls (label.ts), never an arm. */
+  role?: "labeller";
 }
 
 export interface Frozen {
@@ -37,6 +39,8 @@ export interface Frozen {
   stats: { bootstrap_draws: number; bootstrap_seed: number | string; order_seed: number | string; mdd_factor: number; planned_spread: { needless: number; must_ask: number }; planned_items: { needless: number; duplicates: number; must_ask: number }; proxy_effective_clusters: number | string; captain_hears_needless_mdd_above: number };
   pilot: { needless: number; must_ask: number; arms: Record<string, number>; models: ModelKey[]; admit_min_needless_sends: number; admit_max_must_ask_misses: number; k3_when_projected_mdd_above: number; spread_formula: string; draw: string; seed: string };
   label_audit: { items: number; must_ask: number; duplicates: number; permission_and_observable: number; kappa_min: number; labellers: string[]; reasoning_effort: string; seed: string; draw: string };
+  labelling: { codebook: string; codebook_sha256: string; kinds: Record<"audit" | "contingency" | "link", { spend_item: string; models: ModelKey[]; classes: string[] | null }>; blind_to: string; primary_when_kappa_fails: string; links: string; answer_judged: string };
+  rules_ask_pattern: { pattern: string; flags: string; use: string };
   gstack: { version: string; commit: string; files: Array<{ path: string; sha256: string; bytes: number }> };
   exposure_phrases: string[];
   lettered_decision: string;

@@ -14,7 +14,9 @@ links:
   - lanes/ask-replay/synthetic/items.jsonl
   - https://github.com/garrytan/gstack/tree/0326b144af36676d599dcf63a9fad9a870d22ed6
 attachments:
-  - 2a96286531defb9c2821549cfb92dbbaf61c3481d6ac3f488d9f44233c4222fb  dryrun.txt
+  - fb755012e90568677daf12b36f9863d4066e0a404bab1741a4e271a40542c464  autoplan-review-record.md
+  - 474c5915068063e164764b3d420430f5d89ed07f92ba954180f831719580eb35  dryrun.txt
+  - 82d5b22391faff5c600c410d18ef9be79cbf6ea9b69b467372722a0c0090d5f2  frozen.json
 ---
 
 # Preregistration: does an ask ledger cut needless asks without holding back needed ones?
@@ -81,7 +83,7 @@ Operational reading, frozen with the table before any outcome data. All differen
 
 score.ts decide() reads these rows from the interval results, and the tests drive each row on fixtures: (c) cutting with the guard passing, the trim half, (a) clearly better than (b), (c) clearly worse than (b), and a cut with a failed guard.
 
-Planned power: about 0.96 for a cut of 15 points on at least one model, times about 0.67 for the guard passing on both at a true difference of 0; the guard's power to catch a true 2-point must-ask cost is about 0.17. Recomputed on decision chains (section 9): needless detectable difference TODO(custody:mdd_needless) points, duplicates TODO(custody:mdd_duplicates) points, must-ask half-width TODO(custody:must_ask_half_width) points. If the needless value passes 10 points, the Captain hears it before the freeze; the margins don't widen.
+Planned power: about 0.96 for a cut of 15 points on at least one model, times about 0.67 for the guard passing on both at a true difference of 0; the guard's power to catch a true 2-point must-ask cost is about 0.17. Recomputed on decision chains (section 9): needless detectable difference 8.3 points on items and 11.0 on the proxy chains (80 effective clusters, the worst case), duplicates 12.3 points (63 clusters), must-ask half-width 3.4 points (206 single-item clusters). The needless value passes 10 points on the chains, so the Captain heard it before the freeze and ruled (ruling N1): a real cut under about 11 points will often read inconclusive, and row 2 needs the observed (c) minus (b) difference within about 2 points of zero. That is acceptable because duplicates were 121 of 346 asks and a ledger only earns its build with a cut well above 11 points. Adding a new labelled window would put our labels in place of the audit's and cost a week. The margins stay at 10 and 5.
 
 ### 2. Items
 
@@ -104,22 +106,22 @@ Planned power: about 0.96 for a cut of 15 points on at least one model, times ab
 
 | Count | Main bundle | Variant bundle |
 |---|---|---|
-| Bundle sha256 | TODO(custody:bundle_sha256) | TODO(custody:variant_bundle_sha256) |
-| Items built | TODO(custody:items_built) | TODO(custody:variant_items_built) |
-| Items per class | TODO(custody:per_class) | same as main |
-| Items per thread, T1 to T8 | TODO(custody:per_thread) | same as main |
-| Items dropped, ask event unreadable | TODO(custody:dropped_unreadable) | TODO(custody:variant_dropped_unreadable) |
-| Items before October 15 | TODO(custody:pre_stratum_items) | same as main |
-| Prompt size in tokens (characters / 4): min, quartiles, 90th percentile, max | TODO(custody:token_distribution) | TODO(custody:variant_token_distribution) |
-| Items with older messages cut | TODO(custody:cut_items) | TODO(custody:variant_cut_items) |
-| Crew messages carried | 0 | TODO(custody:variant_crew_messages) |
-| Secret and contact scan hits | TODO(custody:scan_hits) | TODO(custody:variant_scan_hits) |
-| Asks holding more than one lettered decision | TODO(custody:multi_decision_asks) | same as main |
-| Items whose repeated ask lies outside the window | TODO(custody:repeat_outside_window) | TODO(custody:variant_repeat_outside_window) |
-| Rule rows: total, dated, placed by the next dated row, dropped | TODO(custody:rules_counts) | same as main |
-| Rule rows whose date text holds more than one date | TODO(custody:rules_multi_dated) | same as main |
-| Rule rows that restate gstack's ask rules | TODO(custody:rules_restating_gstack) | same as main |
-| Arm (a) prompts holding a gstack line of 40+ characters or the word gstack | TODO(custody:arm_a_clean_count) | TODO(custody:variant_arm_a_clean_count) |
+| Bundle sha256 | f49f0973de12d2b1a01c975354c00927f918b5500d113b39bc1efc6cd66ef06c | cb857f63e2c315fadb4ac4a1c59fb21815ec05825e4070a3f290c430d9dcd325 |
+| Items built | 346 | 346 |
+| Items per class | 206 DECISION, 121 DUPLICATE, 11 PERMISSION_FOR_DEFAULT, 8 OBSERVABLE | same as main |
+| Items per thread, T1 to T8 | DECISION/DUPLICATE/PERMISSION/OBSERVABLE: T1 11/26/0/0, T2 41/22/3/3, T3 61/13/0/1, T4 32/29/2/2, T5 12/3/1/0, T6 27/14/2/1, T7 11/9/3/1, T8 11/5/0/0 | same as main |
+| Items dropped, ask event unreadable | 0 | 0 |
+| Items before October 15 | 33 | same as main |
+| Item size in tokens (item JSON, characters / 4): min, quartiles, 90th percentile, max, mean | 225; 19,765, 38,406, 45,196; 51,620; 64,378; mean 33,655 | 225; 23,844, 38,394, 45,137; 51,955; 63,967; mean 34,889 |
+| Items with older messages cut | 205 | 228 |
+| Crew messages carried | 0 | 8,168 |
+| Secret and contact scan hits | 25 (22 emails, 2 keyword runs, 1 Anthropic-key-shaped string), each replaced with the placeholder | 35 (30 emails, 4 keyword runs, 1 key-shaped string) |
+| Asks holding more than one lettered decision | 11 | same as main |
+| Items whose repeated ask lies outside the window | 8 (113 inside) | 15 (106 inside) |
+| Rule rows: total, dated, placed by the next dated row, dropped | 98 total, 93 dated, 5 placed by the next dated row, 0 dropped | same as main |
+| Rule rows whose date text holds more than one date | 15 | same as main |
+| Rule rows that restate gstack's ask rules | 7 of the 38 rule rows that appear in any item match the frozen ask pattern (frozen.json rules_ask_pattern) | same as main |
+| Arm (a) prompts holding a gstack line of 40+ characters or the word gstack | 0 items hold a gstack line of 40+ characters. All 346 hold the word gstack in the owner conversation or rules, because the threads discuss gstack; the token check covers harness and arm text only | the same as the main bundle |
 
 ### 3. Arms (R44)
 
@@ -164,7 +166,7 @@ What (c) licenses if it wins: building idea 1 as ruled (the agent names the matc
 
 All run at medium reasoning and the provider's default temperature (no temperature field is sent). The output cap is 4,000 tokens, raised to 8,000 for every model if more than 1% of the synthetic smoke's replies hit it. Caching (frozen.json caching): on Anthropic both the system prefix and the user content end in an ephemeral cache breakpoint; OpenAI and OpenRouter use their own automatic caching, with no cache field in the request. A cell runs its replicates in sequence: replicate 2 starts only after replicate 1 has a sealed reply or a final MISSING, so replicate 2 reads the whole prompt from cache. Different cells and items still run in parallel. Reasoning tokens are priced as output, from src/runner/pricing/prices.ts.
 
-**Processors (ruling L1).** Anthropic and OpenAI see real items, under their API data terms as published on the freeze date: TODO(custody:processor_terms). particle-1 sees real items only through an OpenRouter route that accepts data collection denied (provider.data_collection "deny", only particle-ai, no fallbacks); the request setting and the endpoint's reply are recorded in custody as evidence. If that can't be proven, particle-1 runs on the synthetic set only and the results say it is untested on real items (E_ASK_PROCESSOR).
+**Processors (ruling L1).** Anthropic and OpenAI see real items, under their API data terms as published on 2026-11-15. Anthropic doesn't train on API data under its commercial terms and deletes it from back-end storage within 30 days by default ([Anthropic data retention](https://privacy.claude.com/en/articles/7996866-how-long-do-you-store-my-organization-s-data)). OpenAI doesn't train on API data by default and keeps abuse-monitoring logs for up to 30 days ([OpenAI: your data](https://developers.openai.com/api/docs/guides/your-data)). OpenRouter stores no prompts or responses unless logging is opted in, and data_collection "deny" routes only to providers that don't collect ([data collection](https://openrouter.ai/docs/guides/privacy/data-collection), [provider selection](https://openrouter.ai/docs/guides/routing/provider-selection)). OpenRouter lists one particle-1 endpoint, Particle AI's own, with no data policy shown, so the evidence is the reply to I1's first data-collection-denied call. particle-1 sees real items only through an OpenRouter route that accepts data collection denied (provider.data_collection "deny", only particle-ai, no fallbacks); the request setting and the endpoint's reply are recorded in custody as evidence. If that can't be proven, particle-1 runs on the synthetic set only and the results say it is untested on real items (E_ASK_PROCESSOR).
 
 ### 6. Reply parsing and failures (frozen, lanes/ask-replay/parse.ts)
 
@@ -175,10 +177,10 @@ All run at medium reasoning and the provider's default temperature (no temperatu
 
 ### 7. Labels and their audit
 
-- **Classes.** Must-ask is the audit's genuine-decision label. Needless is duplicate, permission-for-default or observable. The audit's labels came from two model classifiers (family: TODO(custody:audit_classifier_family)) reading 500-character tails plus the reply kind, without the thread history. They are trusted only after a check.
-- **Label audit (paid, before the main run; E1).** 99 items: 40 must-ask, 40 duplicates and all 19 permission and observable items, drawn at random within class by `ask-replay draw --kind audit`, which mints its seed from random bytes and appends it to CUSTODY.md, writes the drawn items to /dev/shm and prints counts only. Two labellers, Opus 5.5 and GPT-6 Astra at medium reasoning, each see the full item, the owner's next reply (allowed for labelling only) and a written codebook, blind to the audit's labels and to all arm outputs. Each also says whether the quoted owner message answers the row the ledger marks answered.
-- **Rule.** The audit labels stand when each labeller's kappa against them is at least 0.6 both on needed against needless (pooled) and on duplicate against must-ask alone. Otherwise both label the other 247 items (the contingency), the primary label becomes the two labellers' agreement, and disagreements leave the primary and are shown both ways. Either way, the primary readout is also shown under the labellers' agreement labels on the audited items, and a row that flips between the two is reported as label-sensitive.
-- **Decision chains (F1).** In custody Opus 5.5 links every duplicate to the earlier ask it repeats; Astra links the 40 audited ones too, and their agreement is reported. Chains are the linked groups. Before the freeze, a free deterministic proxy (S1's matcher, then the nearest earlier ask in the same thread by content-word overlap, ties to the newest) gives the planned chain count, TODO(custody:proxy_chains), and the largest chain's share per thread, TODO(custody:largest_chain_share).
+- **Classes.** Must-ask is the audit's genuine-decision label. Needless is duplicate, permission-for-default or observable. The audit's labels came from two model classifiers (family: Anthropic Claude; both classifier passes ran on Opus 5.5, so the Opus labeller shares their family and Astra is the cross-family read) reading 500-character tails plus the reply kind, without the thread history. They are trusted only after a check.
+- **Label audit (paid, before the main run; E1).** 99 items: 40 must-ask, 40 duplicates and all 19 permission and observable items, drawn at random within class by `ask-replay draw --kind audit`, which mints its seed from random bytes and appends it to CUSTODY.md, writes the drawn items to /dev/shm and prints counts only. Two labellers, Opus 5.5 and GPT-6 Astra at medium reasoning, each see the full item, the owner's next reply (allowed for labelling only) and a written codebook, blind to the audit's labels and to all arm outputs. Each also says whether the quoted owner message answers the row the ledger marks answered. The codebook is lanes/ask-replay/codebook.md, pinned by sha256 in frozen.json (labelling.codebook_sha256). It defines the four classes as the October ask audit did, the needed or needless reading, and the tie rule that a mixed ask takes the class of its first lettered decision. Each labeller replies with its class, the position of the earlier ask the ask repeats (or null), a yes, no or unclear judgement for each row the ledger marks answered, and a reason of at most 40 words. `ask-replay label --kind audit` runs it once per labeller, on the arm driver with the same leases, retries and sealed store; Astra is a labeller-only model row in frozen.json.
+- **Rule.** The audit labels stand when each labeller's kappa against them is at least 0.6 both on needed against needless (pooled) and on duplicate against must-ask alone. Otherwise both label the other 247 items (the contingency, `ask-replay label --kind contingency`), the primary label becomes the two labellers' agreement, and disagreements leave the primary and are shown both ways. Either way, the primary readout is also shown under the labellers' agreement labels on the audited items, and a row that flips between the two is reported as label-sensitive. `ask-replay score --labels` computes the kappas, the primary labels, these views, the label-sensitive flag and the chains from the Opus links. For S2, a ledger row counts as answered when both labellers say yes and as not answered when both say no.
+- **Decision chains (F1).** In custody Opus 5.5 links every duplicate to the earlier ask it repeats (`ask-replay label --kind link`, spend item I5). Astra's links on the 40 audited duplicates come from its audit labels, and their agreement is reported. Chains are the linked groups. Before the freeze, a free deterministic proxy (S1's matcher, then the nearest earlier ask in the same thread by content-word overlap, ties to the newest) gives the planned chains: over all items 225 clusters, with 63 chains holding 184 items; over needless items 80 clusters, with 21 chains holding 81 items. The largest chain's share of each thread's needless items: T1 0.77, T2 0.29, T3 0.21, T4 0.30, T5 0.25, T6 0.18, T7 0.15, T8 0.40.
 - **No model judge scores arm outputs.** Every score in section 8 is deterministic from the action field. The label audit still holds itself to R78's bar: a cross-family pair, kappa of at least 0.6, and at least 40 labelled outputs.
 
 ### 8. Scoring (deterministic, frozen, lanes/ask-replay/score.ts)
@@ -189,14 +191,14 @@ All run at medium reasoning and the provider's default temperature (no temperatu
 - **P1 (cut):** the needless-send rate over the 140 needless items, paired (c) minus (b), per model; also (c) minus (a), (b) minus (a), (d) minus (c) and (d) minus (a).
 - **P2 (guard, non-inferiority):** the must-ask miss rate over the 206 must-ask items, same pairs, margin 5 points.
 - **Per class, each on its own:** duplicates (121) with intervals; permission (11) and observable (8) as counts with exact intervals and no claims. The pre-October-15 stratum and single-decision asks are sensitivity reads. For both bundles, the cut on items whose repeated ask is inside the window is reported separately.
-- **S1, automatic filter, free:** the office-hours lane's repeat rule (its sentences, isQuestion and contentWords helpers; at least two shared content words; a draft with no question uses its first sentence) as a send-time matcher. It runs first on the 346 original drafts against their earlier rows, before the pilot (catches on duplicates, and must-asks it would fold), then on arm (b)'s sends.
+- **S1, automatic filter, free:** the office-hours lane's repeat rule (its sentences, isQuestion and contentWords helpers; at least two shared content words; a draft with no question uses its first sentence) as a send-time matcher. It runs first on the 346 original drafts against their earlier rows, before the pilot (catches on duplicates, and must-asks it would fold), then on arm (b)'s sends. Pre-pilot readout on the 346 original drafts, matched of items: DECISION 117 of 206, DUPLICATE 72 of 121, PERMISSION_FOR_DEFAULT 1 of 11, OBSERVABLE 3 of 8. An automatic send-time filter on this rule would fold more than half the must-asks, so it is unusable as a gate.
 - **S2, gate share, free:** how much of (c)'s and (d)'s cut came from the send-time check against the agent's own FOLD or DROP; how often they named a row, said new or gave a reask reason; and gate DROPs split by the label audit's judgement of whether the quoted message answered the row.
 - **Repeat count:** for each needless item, the samples per arm that sent it, summed per thread and per chain.
 
 ### 9. Statistics (R78, lanes/ask-replay/stats.ts)
 
-- **Intervals.** Everything is paired by item. 95% intervals come from a bootstrap over decision chains, resampled within thread, 10,000 resamples, seed frozen in frozen.json (stats.bootstrap_seed: TODO(custody:bootstrap_seed)). Must-ask items that start no chain are their own clusters. Each estimate also gets a leave-one-thread-out range. The arm order seed is frozen the same way (stats.order_seed: TODO(custody:order_seed)).
-- **Planned detectable differences** at 80% power, two-sided 5%, k = 2, with a paired spread of 0.35 on needless and 0.25 on must-ask, on items (2.8 times spread over the square root of clusters): needless 8.3 points, duplicates 8.9 points, must-ask interval half-width 3.4 points. Recomputed on the proxy chain count (effective clusters TODO(custody:proxy_effective_clusters)), the values are in section 1.
+- **Intervals.** Everything is paired by item. 95% intervals come from a bootstrap over decision chains, resampled within thread, 10,000 resamples, seed frozen in frozen.json (stats.bootstrap_seed: 1992076652). Must-ask items that start no chain are their own clusters. Each estimate also gets a leave-one-thread-out range. The arm order seed is frozen the same way (stats.order_seed: 1647197898).
+- **Planned detectable differences** at 80% power, two-sided 5%, k = 2, with a paired spread of 0.35 on needless and 0.25 on must-ask, on items (2.8 times spread over the square root of clusters): needless 8.3 points, duplicates 8.9 points, must-ask interval half-width 3.4 points. Recomputed on the proxy chain count (80 effective clusters on needless items), the values are in section 1.
 - **Pilot spread rule.** The pilot measures within-item spread from (b) at k = 2, and a frozen formula turns it into the projected P1 spread. W is the mean over needless items of the unbiased variance of (b)'s k samples. V is the unbiased variance across needless items of (b)'s item means. B2 = max(0, V minus W/k_pilot) is the variance of (b)'s true item rates and stands for the variance of the true paired difference. The projected spread is S(k) = sqrt(B2 + 2W/k), taking the treatment arm's within-item variance equal to (b)'s, and the projected detectable difference is 2.8 S(k) over the square root of the proxy effective clusters on needless items. If that is above 12 points at k = 2, the main run uses k = 3, which shrinks only the within-item part. A central cost projection past the approved total (Agent notes) goes to the Captain first.
 
 ### 10. Admission pilot and Why null (R48, R61)
@@ -218,12 +220,12 @@ All run at medium reasoning and the provider's default temperature (no temperatu
 
 - **The set:** 60 items in 3 made-up coordinating threads (S1 to S3) about 4 made-up projects, with a made-up owner and standing rules written from scratch, in the same shape and fields as the real items. Class mix: 35 must-ask, 20 duplicates (10 repeating an open row and 10 an answered one), 3 permission and 2 observable. A seeded template generator writes it, so no model saw real asks while writing it.
 - **Digest:** items.jsonl, 567,688 bytes, sha256 68009e99b8c13be664bec041c17c7b27034798a2422bca3288dd46fab27c45e4, generator seed 20261115. `ask-replay synth` checks that the committed set matches the generator byte for byte.
-- **Privacy check in custody** (`ask-replay synth-check`): every synthetic text field (conversation, rules, drafts, ledger lines) against all custody text (owner and agent messages, rule rows, asks). It reports 6-gram hits and the largest content-word Jaccard overlap, both as counts, ignoring texts with fewer than 5 content words. Any 6-gram hit or an overlap above 0.5 fails the build. Result: TODO(custody:synth_check).
+- **Privacy check in custody** (`ask-replay synth-check`): every synthetic text field (conversation, rules, drafts, ledger lines) against all custody text (owner and agent messages, rule rows, asks). It reports 6-gram hits and the largest content-word Jaccard overlap, both as counts, ignoring texts with fewer than 5 content words. Any 6-gram hit or an overlap above 0.5 fails the build. Result: 124 synthetic texts, 0 6-gram hits, largest overlap 0.29, pass.
 - **Uses:** keyless tests and the full dry run with a stub model; and the paid smoke I1 after the go, before the pilot. The smoke draws 20 items (12 must-ask, 6 duplicates, 1 permission, 1 observable) with seed 20261115, one sample per arm, all four arms on Opus and Sol and three on particle-1.
 
 ### 13. Code, tests and dry run
 
-**Modules** in lanes/ask-replay/: types.ts (the item and reply shapes), frozen.json and frozen.ts (every frozen number), build.ts, privacy.ts, ledger.ts, prompt.ts, parse.ts, run.ts, custody.ts, score.ts, stats.ts, chains.ts, synthetic/ (generator, set, digest), fixtures.ts, dryrun.ts and cli.ts. The command is `bin/gstack-evals ask-replay`, with subcommands build, synth, dryrun, smoke-plan, draw, arms, score, s1, chains-proxy, mdd, scan, synth-check and run. lanes/ask-replay/README.md explains each one.
+**Modules** in lanes/ask-replay/: types.ts (the item and reply shapes), frozen.json and frozen.ts (every frozen number), codebook.md and label.ts (the labeller), draws.ts (the pilot and label-audit draws), build.ts, privacy.ts, ledger.ts, prompt.ts, parse.ts, run.ts, custody.ts, score.ts, stats.ts, chains.ts, synthetic/ (generator, set, digest), fixtures.ts, dryrun.ts and cli.ts. The command is `bin/gstack-evals ask-replay`, with subcommands build, synth, dryrun, smoke-plan, draw, arms, score, label, s1, chains-proxy, mdd, scan, synth-check and run. lanes/ask-replay/README.md explains each one.
 
 **Reason codes** in src/errors/codes.ts, each with what, fix and recovery in docs/errors.md:
 
@@ -242,11 +244,11 @@ All run at medium reasoning and the provider's default temperature (no temperatu
 | E_ASK_INPUT | malformed builder input, or a synthetic set that differs from its generator |
 | E_ASK_DRYRUN_FAIL | the dry run had a FAIL line |
 
-**Keyless tests** in tests/ask-replay/ (13 files) cover: ledger status and every gate rule (a whitespace-only reask reason, FOLD naming an answered row, a missing repeats field, an unknown id); every scoring rule and both codings; MISSING bounds per comparison; every decision row on fixtures; stats on fixed data; component order; arm cleanliness; the gstack pins (skipped when no gstack clone is present); the privacy scanners; custody on a throwaway age identity; a resume that never double-counts; the builder on fixture pages; and the dry run.
+**Keyless tests** in tests/ask-replay/ (15 files) cover: the codebook pin, the labeller prompt's blindness, label parsing, labeller calls on the driver and the label readout; both draws; ledger status and every gate rule (a whitespace-only reask reason, FOLD naming an answered row, a missing repeats field, an unknown id); every scoring rule and both codings; MISSING bounds per comparison; every decision row on fixtures; stats on fixed data; component order; arm cleanliness; the gstack pins (skipped when no gstack clone is present); the privacy scanners; custody on a throwaway age identity; a resume that never double-counts; the builder on fixture pages; and the dry run.
 
-**Dry run.** `bin/gstack-evals ask-replay dryrun` drives every frozen rule on the synthetic set with a stub model (scripted SEND, FOLD, DROP, unparsable, safety stop, upstream error, a missing repeats field and a reask reason), opens and settles one spend lease per frozen spend item on a temporary ledger, resumes a killed shard with no double count, checks that a cell's replicates run in sequence with both Anthropic cache breakpoints, checks both seeded draws, and runs custody on a throwaway age identity. Its output at this post's head is attached as dryrun.txt: 22 PASS, 0 FAIL.
+**Dry run.** `bin/gstack-evals ask-replay dryrun` drives every frozen rule on the synthetic set with a stub model (scripted SEND, FOLD, DROP, unparsable, safety stop, upstream error, a missing repeats field and a reask reason), opens and settles one spend lease per frozen spend item on a temporary ledger, resumes a killed shard with no double count, checks that a cell's replicates run in sequence with both Anthropic cache breakpoints, checks both seeded draws, and runs custody on a throwaway age identity. Its output at this post's head is attached as dryrun.txt: 23 PASS, 0 FAIL.
 
-**Frozen numbers.** lanes/ask-replay/frozen.json holds every number above. Its final sha256, after the custody values are filled: TODO(custody:frozen_json_sha256). It is attached to this post by that sha256 once final: TODO(custody:frozen_json_attachment).
+**Frozen numbers.** lanes/ask-replay/frozen.json holds every number above. Its sha256 at this post's head is 82d5b22391faff5c600c410d18ef9be79cbf6ea9b69b467372722a0c0090d5f2, and this post attaches a copy as frozen.json.
 
 ### 14. Spend items
 
@@ -264,7 +266,7 @@ Each paid step runs as its own spend item through the program ledger, with a cap
 | I7 | ask-i7-sol | main run, GPT-6.1 Sol: the same |
 | I8 | ask-i8-particle | main run, particle-1: all items, arms (a) to (c), 2 samples, only with data collection denied |
 
-Planning sizes: about 20k input tokens per item in (a), 31k in (b), 33k in (c) and 22k in (d), with 11k of gstack text cached in (b) and (c), and about 1.5k output tokens per sample with reasoning counted as output. Measured means from the sealed bundle (`ask-replay arms`): 24.6k in (a), 35.8k in (b), 38.0k in (c) and 26.8k in (d). Largest per arm: TODO(custody:measured_tokens_max). Agent notes prices the main run from the measured means.
+Planning sizes: about 20k input tokens per item in (a), 31k in (b), 33k in (c) and 22k in (d), with 11k of gstack text cached in (b) and (c), and about 1.5k output tokens per sample with reasoning counted as output. Measured from the sealed bundle (`ask-replay arms`, prompt characters / 4), mean with the largest in brackets: 24,602 (32,929) in (a), 35,838 (44,165) in (b), 38,017 (49,191) in (c) and 26,781 (37,955) in (d). The variant bundle: 25,861 (33,062), 37,097 (44,298), 39,276 (49,324) and 28,040 (38,088). Agent notes prices the main run from the measured means.
 
 ### 15. Delivery (R77)
 
@@ -273,7 +275,7 @@ Two pull requests. This one, the preregistration, carries the harness, the synth
 ### 16. Deviations
 
 1. **The paid run stays on the custody machine.** The crew's rule puts multi-hour drivers on a dedicated runner VM. The Captain approved, at gate 1, a custody choice instead: resumable foreground shards of under 55 minutes under a live program on the one machine that holds the plaintext, so it never leaves that machine. Fixed sample ids, atomic sealed writes and per-sample lease settlement make a lost shard cost only a resume (section 11).
-2. **Rule text comes from the 2026-11-14 rules history, filtered by first date.** The plan read rule rows from the earliest retained version of the org rules history, its 2026-10-29 seed, so later amendments couldn't leak in. That seed isn't retained. Rule text comes from the 2026-11-14 version instead, and a row enters an item when the earliest date in its date text is on or before the ask's date. A rule amended after its first date therefore shows its amended text in earlier items. TODO(custody:rules_multi_dated) rows have more than one date in their date text and are the ones this can touch.
+2. **Rule text comes from the 2026-11-14 rules history, filtered by first date.** The plan read rule rows from the earliest retained version of the org rules history, its 2026-10-29 seed, so later amendments couldn't leak in. That seed isn't retained. Rule text comes from the 2026-11-14 version instead, and a row enters an item when the earliest date in its date text is on or before the ask's date. A rule amended after its first date therefore shows its amended text in earlier items. 15 rows have more than one date in their date text and are the ones this can touch.
 3. **Rules the plan left open, frozen here:**
    - The pilot spread formula (section 9), which the plan named without giving.
    - Pilot sends and misses counted as sums of per-item mean rates (section 10).
@@ -285,7 +287,8 @@ Two pull requests. This one, the preregistration, carries the harness, the synth
    - Synthetic item ids come from the seeded generator, not from random bytes, so the public set reproduces byte for byte. Real item ids stay random.
    - particle-1 is sent without a JSON schema mode and parsed from its text. This was not checked against OpenRouter's list of supported parameters for the model; the I1 smoke confirms all three reply shapes before the pilot.
 4. **Caching and replicate order.** The plan cached the shared prompt prefix only. Here Anthropic requests also put a cache breakpoint at the end of the user content, and each cell runs its replicates in sequence (replicate 2 starts only after replicate 1 has a sealed reply or a final MISSING), so replicate 2 reads its whole prompt from cache. Arm cells keep their seeded random order within each item, so the arms are still interleaved.
-5. **Additions the plan didn't list:** the subcommands draw, arms, run, scan and synth-check, and run's --pilot switch; the reason codes E_ASK_UNFROZEN, E_ASK_INPUT and E_ASK_DRYRUN_FAIL; and a builder count of rule rows with more than one date (deviation 2). The plan's items.ts is types.ts.
+5. **Codebook choices.** The codebook adds two lines the October ask audit's definitions leave open: an ask that repeats an earlier ask is DUPLICATE even when the earlier ask was a genuine decision, and a labeller that sees several repeated asks names the latest (the proxy linker also ties to the newest).
+6. **Additions the plan didn't list:** the subcommands draw, label, arms, run, scan and synth-check, run's --pilot switch and score's --labels; the reason codes E_ASK_UNFROZEN, E_ASK_INPUT and E_ASK_DRYRUN_FAIL; and a builder count of rule rows with more than one date (deviation 2). The plan's items.ts is types.ts.
 
 ### 17. Limits
 
@@ -294,15 +297,16 @@ Two pull requests. This one, the preregistration, carries the harness, the synth
 - Arm (a) holds the owner's own standing rules, several of which are ask rules, so it is "no gstack prose", not "no ask rules".
 - Labels are model labels audited by models; no human relabels.
 - 8 threads, 3 weeks and one owner; the per-thread spread is shown.
+- Every real item names gstack in its owner conversation or rules, because the threads discuss it. Arm (a) holds no line of gstack prose, but its agent works in a world where gstack exists.
 - Rule text may carry amendments made after an item's date (section 16, deviation 2).
 
 ### 18. Values filled at the freeze
 
-Every value still to fill appears above as a TODO(custody:<name>) token. They come from `ask-replay build` (bundle counts and digests), `chains-proxy` and `mdd --items` (chains and detectable differences), `arms` (measured tokens and arm (a) cleanliness), `synth-check` and `scan` (privacy counts), the seeds minted in custody, and the processors' published terms. None of them is an outcome.
+The values above that came from custody were filled at the freeze from `ask-replay build` (bundle counts and digests), `chains-proxy` and `mdd --items` (chains and detectable differences), `arms` (measured tokens and arm (a) cleanliness), `s1` (the pre-pilot S1 readout), `synth-check` (the synthetic overlap check) and the seeds minted in custody; the processors' terms are as published on 2026-11-15. None of them is an outcome. One is left for the push itself: the lane scan count in section 11.
 
 ## Review record
 
-TODO(custody:review_record)
+One lean /autoplan run, autoplan-20261115054010, reviewed the plan this post freezes, unattended, with the engineering phase only: the CEO and DX lenses were merged into the one engineering reviewer, and the design phase was skipped because the plan has no UI. The reviewer was Claude Opus 5.5; no second-model review ran at this stage. It raised 26 findings: 7 High, 10 Medium, 7 Low and 2 Informational, none Critical. The run log notes that the host had no publication-order guard installed. The full record is attached as autoplan-review-record.md, copied as gstack-autoplan wrote it. Its one issue-key-shaped string is this post's own author code in the answer metadata. The Captain ruled the plan's open points at gate 1 (Big decisions 2, 3 and 6).
 
 ## Disclosures
 

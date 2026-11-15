@@ -14,7 +14,7 @@ import { ledgerPath } from "../../src/runner/ledger/paths.ts";
 import { buildFrom } from "./build.ts";
 import { chainStats, clusters, proxyLinks, s1Match } from "./chains.ts";
 import { custody, gone, keygen, plainStore, readIdentity, readRecords, seal, sealedStore, writeSums } from "./custody.ts";
-import { buildFixture, DECISION_FIXTURES, FIXTURE_GSTACK, Killed, stubSend, type StubReply } from "./fixtures.ts";
+import { buildFixture, DECISION_FIXTURES, FIXTURE_GSTACK, Killed, labelSend, stubSend, type StubReply } from "./fixtures.ts";
 import { AskError, FROZEN } from "./frozen.ts";
 import { ledgerRows, sendCheck } from "./ledger.ts";
 import { classify, parseReply } from "./parse.ts";
@@ -22,10 +22,11 @@ import { itemTexts, scanPublic, redact, emptyCount } from "./privacy.ts";
 import { buildPrompt, CAPABILITY, gstackLines, HARNESS, LEDGER_ADDENDUM, loadGstack, ORDER, type GstackText } from "./prompt.ts";
 import { finalRecords, ledgerClient, runShard, sampleId, schedule, upstreamRedraw, type CallKey, type ShardOptions } from "./run.ts";
 import { auditDraw, drawCounts, pilotDraw } from "./draws.ts";
+import { CODEBOOK, checkCodebook, labelJob, labelReadout, labelSamples } from "./label.ts";
 import { decide, readout, sampleScore } from "./score.ts";
 import { admitChance, halfWidth, mdd } from "./stats.ts";
 import { generate } from "./synthetic/generator.ts";
-import { outcomeOf, type AskItem, type Outcome, type Sample, type SampleRecord } from "./types.ts";
+import { outcomeOf, type AskItem, type LabelReply, type Outcome, type Sample, type SampleRecord } from "./types.ts";
 
 export interface Line {
   name: string;
@@ -140,6 +141,43 @@ async function replicateOrder(items: AskItem[]): Promise<string | true> {
     if (peak < 2) return "cells did not run in parallel";
     const cached = bodies.every((b) => b.system?.[0]?.cache_control?.type === "ephemeral" && b.messages?.[0]?.content?.[0]?.cache_control?.type === "ephemeral");
     return cached ? true : "an Anthropic body lacks a cache breakpoint";
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+/** The labeller calls: audit on Opus and Astra and linking on Opus through the driver on temporary ledgers, then the label readout. */
+async function labelCheck(items: AskItem[]): Promise<string | true> {
+  const dir = mkdtempSync(join(tmpdir(), "ask-dry-label-"));
+  try {
+    checkCodebook();
+    const byId = new Map(items.map((i) => [i.item, i]));
+    const flip = items.find((i) => i.label === "DUPLICATE")!;
+    const bodies: Array<Record<string, any>> = [];
+    const script = (s: Sample) => {
+      const it = byId.get(s.item)!;
+      const rows = ledgerRows(it);
+      const m = s1Match(it);
+      return { class: s.model === "astra" && it === flip ? "DECISION" : it.label, repeats_of: it.label === "DUPLICATE" && m ? rows.findIndex((r) => r.order === m.order) + 1 : null, answer_judgement: rows.flatMap((r, i) => (r.status === "answered" ? [{ row: i + 1, answers: "yes" as const }] : [])) } as Partial<LabelReply>;
+    };
+    const store = plainStore(join(dir, "labels"));
+    for (const [kind, model] of [["audit", "opus"], ["audit", "astra"], ["link", "opus"]] as const) {
+      const sub = join(dir, kind + "-" + model);
+      mkdirSync(sub);
+      const spend = FROZEN.spend_items[FROZEN.labelling.kinds[kind].spend_item]!;
+      const { local, leaseId, record } = lease(sub, spend);
+      await runShard({ items: byId, samples: labelSamples(items, kind, model), gstack: null, client: ledgerClient({ local, leaseId, runId: spend, maxOutputTokens: FROZEN.output_cap.tokens, send: labelSend(script, [], bodies) }), store, out: join(sub, "out"), maxOutputTokens: FROZEN.output_cap.tokens, sleep: async () => {}, job: labelJob });
+      settleLease(record, local, leaseId);
+      local.close();
+    }
+    const r = labelReadout(items, finalRecords(store.read()));
+    const dupLinks = items.filter((i) => i.label === "DUPLICATE" && s1Match(i)).length;
+    const bad: string[] = [];
+    if (!bodies.every((b) => JSON.stringify(b).includes(JSON.stringify(CODEBOOK).slice(1, 200)) && !items.some((i) => JSON.stringify(b).includes(i.item)))) bad.push("a labeller body lacks the codebook or names an item id");
+    if (r.summary.audited !== items.length || !r.summary.kappa || r.summary.kappa.labellers.opus.pooled !== 1 || r.summary.kappa.labellers.astra.duplicate === 1) bad.push("kappa " + JSON.stringify(r.summary.kappa));
+    if (r.links?.length !== dupLinks || r.summary.links.astra_agreement !== 1) bad.push("links " + JSON.stringify(r.summary.links));
+    if (r.summary.answer_judgement.judged_answer_share !== 1 || r.views[0]?.items.length !== items.length - 1) bad.push("judgements or views");
+    return bad.length ? bad.join("; ") : true;
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -375,6 +413,7 @@ export function checks(o: { gstack: GstackText | null; clone?: string }): Check[
       return ok && safe && up ? true : "parse " + ok + ", safety " + safe + ", upstream " + up;
     } },
     { name: "run: the scripted stub through the driver on a temporary ledger, every reply path", run: () => scriptedRun(items) },
+    { name: "labels: the codebook pin, Opus and Astra audit labels and Opus links through the driver on temporary ledgers, kappa, chains from the links, answer judgements and the label views", run: () => labelCheck(items) },
     { name: "run: each cell's replicates run in sequence (replicate 2 starts after replicate 1 is sealed), cells in parallel, and Anthropic requests cache the system prefix and the user content", run: () => replicateOrder(items) },
     { name: "draws: the pilot takes 16 must-ask and 24 needless by class and thread, the label audit 40 must-ask, 40 duplicates and every permission and observable item, and a seed redraws the same set", run: () => {
       const pool = Array.from({ length: 7 }, (_, n) => items.map((it) => ({ ...it, item: it.item + "-" + n }))).flat();

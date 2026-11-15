@@ -37,6 +37,8 @@ The real items stay private. They live as sealed (encrypted) files outside this 
 | run.ts | The paid driver: sample ids, shards, retries, spend leases, resume |
 | custody.ts | Opens sealed files in /dev/shm, proves they are gone afterwards, seals replies |
 | score.ts, stats.ts, chains.ts | Scoring, paired bootstrap intervals, the decision rows and the chain linker |
+| codebook.md, label.ts | The labeller's codebook, prompt, reply reader and the label readout |
+| draws.ts | The seeded pilot and label-audit draws |
 | synthetic/ | The seeded generator, the 60-item public set and its sha256 |
 | dryrun.ts, fixtures.ts | The keyless dry run and the stub model it uses |
 | cli.ts | The commands below |
@@ -65,11 +67,12 @@ The synthetic set works as `--items lanes/ask-replay/synthetic/items.jsonl` for 
 - `build --pages <dir> --audit <csv> --rules <md> --out /dev/shm/<file> [--owner <names>] [--map <file>] [--variant]` writes items JSONL and a thread map, both on /dev/shm, and prints counts and the bundle sha256, never text.
 - `draw --kind pilot|audit --items <file> --out /dev/shm/<file> --seed-log <CUSTODY.md> [--seed <n>]` draws the admission pilot's 40 items (16 must-ask and 24 needless, spread over class and thread) or the label audit's 99 (40 must-ask, 40 duplicates and every permission and observable item). It mints the seed from random bytes and appends it to the log, writes the drawn items to /dev/shm and prints counts only. `--seed` redraws a recorded draw.
 - `synth-check --corpus <file>` compares the synthetic set with the private texts: 6-gram hits and the largest content-word overlap. Any 6-gram hit or an overlap above 0.5 fails.
-- `score --items <file> --replies <dir> [--links <file>] [--draws <n>] [--keyless]` prints the frozen readout and the decision rows, numbers only. `--keyless` uses a test seed instead of the frozen one.
+- `score --items <file> --replies <dir> [--labels <dir>] [--links <file>] [--draws <n>] [--keyless]` prints the frozen readout and the decision rows, numbers only. `--labels` reads the decrypted labeller records: each labeller's kappa against the audit, the primary labels and the views beside them, the label-sensitive flag, chains from the Opus links and the answer judgements. `--keyless` uses a test seed instead of the frozen one.
 
 **Paid (only after the preregistration merges and a spend cap is approved):**
 
 - `run --bundle <items.jsonl.age> --sums <SHA256SUMS> --log <CUSTODY.md> --spend-item <I1..I8> --model <opus|sol|particle> --out <dir> --recipient <age recipient> [--k <n> | --pilot] [--gstack <clone>] [--redraw-upstream]` runs one shard of under 55 minutes. `--pilot` runs the pilot's frozen arms and replicate counts. Each cell (item, arm, model) runs its replicates in sequence, so replicate 2 reads the prompt replicate 1 cached. The age identity comes in on stdin. Every sample has a fixed id, its reply is sealed under that id and its spend settles once against that id, so a rerun skips finished samples and never counts a call twice. It refuses while frozen.json still holds a placeholder seed (E_ASK_UNFROZEN).
+- `label --kind audit|contingency|link --model <opus|astra> --bundle <items.jsonl.age> --sums <SHA256SUMS> --log <CUSTODY.md> --out <dir> --recipient <age recipient> [--redraw-upstream]` runs the labeller from codebook.md on every item in the bundle (link: on the duplicates, Opus only). It uses the same driver, leases and sealed store as run, on spend items I3, I4 and I5.
 
 ## Tests
 

@@ -11,14 +11,15 @@ import { buildFiles, readItems, toJsonl } from "./build.ts";
 import { chainStats, clusters, proxyLinks, repeatInWindow, type Link } from "./chains.ts";
 import { custody, readIdentity, readRecords, sealedStore, writeSums } from "./custody.ts";
 import { auditDraw, drawCounts, mintSeed, pilotDraw } from "./draws.ts";
+import { checkCodebook, labelJob, labelReadout, labelSamples } from "./label.ts";
 import { AskError, fail, FROZEN, placeholders, seed } from "./frozen.ts";
 import { corpusTexts, scanPublic, syntheticCheck } from "./privacy.ts";
 import { buildPrompt, gstackLines, loadGstack, type GstackText } from "./prompt.ts";
-import { finalRecords, openProxyMeter, runShard, schedule, upstreamRedraw } from "./run.ts";
+import { finalRecords, openProxyMeter, runShard, schedule, upstreamRedraw, type LabelJob } from "./run.ts";
 import { isNeedless, readout, s1Report } from "./score.ts";
 import { halfWidth, mdd } from "./stats.ts";
 import { generate } from "./synthetic/generator.ts";
-import { ARMS, LABELS, outcomeOf, type Arm, type AskItem, type ModelKey } from "./types.ts";
+import { ARMS, LABELS, outcomeOf, type Arm, type AskItem, type LabelKind, type ModelKey, type Sample } from "./types.ts";
 import { seededRandom } from "../../src/runner/stats/paired.ts";
 
 interface Io {
@@ -168,12 +169,23 @@ export const SUBCOMMANDS: Record<string, { summary: string; run: Run }> = {
   score: {
     summary: "the frozen readout (sections 8 and 9) from items and decrypted replies, with the decision rows; numbers only",
     run: (argv, io) => {
-      const f = flags(argv, ["items", "replies", "links", "draws"], ["keyless"]);
+      const f = flags(argv, ["items", "replies", "links", "labels", "draws"], ["keyless"]);
       const items = readItems(need(f, "items"));
       const records = finalRecords(readRecords(need(f, "replies")));
-      const links = readLinks(f.links) ?? proxyLinks(items);
-      const r = readout(items, records.map(outcomeOf), { links, seed: seed("bootstrap_seed", f.keyless === "1"), draws: f.draws ? Number(f.draws) : FROZEN.stats.bootstrap_draws });
-      json(io, { links: f.links ? "custody links" : "proxy links", ...r });
+      const lab = f.labels ? labelReadout(items, finalRecords(readRecords(f.labels))) : null;
+      const links = lab?.links ?? readLinks(f.links) ?? proxyLinks(items);
+      const outcomes = records.map(outcomeOf);
+      const opts = { links, seed: seed("bootstrap_seed", f.keyless === "1"), draws: f.draws ? Number(f.draws) : FROZEN.stats.bootstrap_draws, answerJudged: lab?.answer_judged };
+      const view = (its: AskItem[]) => {
+        const ids = new Set(its.map((i) => i.item));
+        return readout(its, outcomes.filter((x) => ids.has(x.item)), opts);
+      };
+      const r = view(lab?.primary ?? items);
+      const views = (lab?.views ?? []).map((v) => {
+        const d = view(v.items).decision;
+        return { name: v.name, items: v.items.length, row: d.row, cut_candidate: d.cut_candidate, flips: d.row !== r.decision.row || d.cut_candidate !== r.decision.cut_candidate };
+      });
+      json(io, { links: lab?.links ? "Opus links" : f.links ? "custody links" : "proxy links", labels: lab?.summary ?? null, ...r, label_views: views, label_sensitive: views.some((v) => v.flips) });
       return 0;
     },
   },
@@ -253,37 +265,57 @@ export const SUBCOMMANDS: Record<string, { summary: string; run: Run }> = {
     summary: "a paid shard under custody: identity on stdin, sealed bundle in, sealed replies out (never run without the go)",
     run: async (argv, io) => {
       const f = flags(argv, ["bundle", "sums", "log", "spend-item", "model", "out", "recipient", "k", "gstack", "record", "ledger", "amount-micros"], ["redraw-upstream", "pilot"]);
-      const left = placeholders().filter((p) => p.startsWith("stats.") || p.startsWith("synthetic."));
-      if (left.length) fail("E_ASK_UNFROZEN", "frozen.json still holds " + left.join(", "));
+      refuseUnfrozen();
       const model = need(f, "model") as ModelKey;
-      if (!FROZEN.models[model]) fail("E_USAGE", "--model is one of " + Object.keys(FROZEN.models).join(", "));
+      if (!FROZEN.models[model]?.arms.length) fail("E_USAGE", "--model is one of " + (Object.keys(FROZEN.models) as ModelKey[]).filter((m) => FROZEN.models[m].arms.length).join(", "));
       const item = FROZEN.spend_items[need(f, "spend-item")] ?? fail("E_USAGE", "--spend-item is one of " + Object.keys(FROZEN.spend_items).join(", "));
       const pilot = f.pilot === "1";
       if (pilot && (f.k || !FROZEN.pilot.models.includes(model))) fail("E_USAGE", "--pilot runs the frozen pilot arms on " + FROZEN.pilot.models.join(" or ") + " and takes no --k");
       const k: number | Partial<Record<Arm, number>> = pilot ? (FROZEN.pilot.arms as Partial<Record<Arm, number>>) : f.k ? Number(f.k) : FROZEN.replicates.k;
-      const gstack = gstackFrom(f);
-      const identity = readIdentity();
-      const out = resolve(need(f, "out"));
-      mkdirSync(out, { recursive: true });
-      const result = await custody({ files: [need(f, "bundle")], sums: need(f, "sums"), log: need(f, "log"), identity }, async (dir) => {
-        const items = readItems(join(dir, "items.jsonl"));
-        const samples = schedule(items, model, k, seed("order_seed", false));
-        const meter = await openProxyMeter({ item, runId: item, out, model, maxOutputTokens: FROZEN.output_cap.tokens, record: f.record, ledger: f.ledger, amountMicros: f["amount-micros"] ? Number(f["amount-micros"]) : undefined, warn: (c, m) => io.err(c + " " + m) });
-        const warn = (c: ReasonCode, m: string) => io.err(c + " " + m.replace(/i-[0-9a-f]{24}/g, "<item>"));
-        const o = { items: new Map(items.map((i) => [i.item, i])), samples, gstack, client: meter.client, store: sealedStore(join(out, "replies"), need(f, "recipient")), out, maxOutputTokens: FROZEN.output_cap.tokens, warn };
-        try {
-          return f["redraw-upstream"] ? { redraw: await upstreamRedraw(o) } : { shard: await runShard(o) };
-        } finally {
-          const spend = await meter.close();
-          writeSums(join(out, "replies"));
-          io.err("ask-replay run: lease closed at " + spend.spent_micros + " micros spent, " + spend.unknown_micros + " unknown");
-        }
-      });
-      json(io, result);
-      return 0;
+      return paidShard(f, io, { name: "run", model, item, gstack: gstackFrom(f), samples: (items) => schedule(items, model, k, seed("order_seed", false)) });
+    },
+  },
+  label: {
+    summary: "a labeller shard under custody (I3 audit, I4 contingency, I5 link): identity on stdin, sealed bundle in, sealed labels out (never run without the go)",
+    run: async (argv, io) => {
+      const f = flags(argv, ["kind", "bundle", "sums", "log", "model", "out", "recipient", "record", "ledger", "amount-micros"], ["redraw-upstream"]);
+      refuseUnfrozen();
+      const kind = need(f, "kind") as LabelKind;
+      const spec = FROZEN.labelling.kinds[kind] ?? fail("E_USAGE", "--kind is one of " + Object.keys(FROZEN.labelling.kinds).join(", "));
+      const model = need(f, "model") as ModelKey;
+      if (!spec.models.includes(model)) fail("E_USAGE", "--kind " + kind + " runs on " + spec.models.join(" or "));
+      checkCodebook();
+      return paidShard(f, io, { name: "label", model, item: FROZEN.spend_items[spec.spend_item]!, gstack: null, samples: (items) => labelSamples(items, kind, model), job: labelJob });
     },
   },
 };
+
+function refuseUnfrozen(): void {
+  const left = placeholders().filter((p) => p.startsWith("stats.") || p.startsWith("synthetic."));
+  if (left.length) fail("E_ASK_UNFROZEN", "frozen.json still holds " + left.join(", "));
+}
+
+/** One paid shard under custody, for run and label: the sealed bundle opens on /dev/shm, one lease meters the spend item, and each reply is sealed as it lands. */
+async function paidShard(f: Record<string, string>, io: Io, o: { name: string; model: ModelKey; item: string; gstack: GstackText | null; samples: (items: AskItem[]) => Sample[]; job?: LabelJob }): Promise<number> {
+  const identity = readIdentity();
+  const out = resolve(need(f, "out"));
+  mkdirSync(out, { recursive: true });
+  const result = await custody({ files: [need(f, "bundle")], sums: need(f, "sums"), log: need(f, "log"), identity }, async (dir) => {
+    const items = readItems(join(dir, "items.jsonl"));
+    const meter = await openProxyMeter({ item: o.item, runId: o.item, out, model: o.model, maxOutputTokens: FROZEN.output_cap.tokens, record: f.record, ledger: f.ledger, amountMicros: f["amount-micros"] ? Number(f["amount-micros"]) : undefined, warn: (c, m) => io.err(c + " " + m) });
+    const warn = (c: ReasonCode, m: string) => io.err(c + " " + m.replace(/i-[0-9a-f]{24}/g, "<item>"));
+    const shard = { items: new Map(items.map((i) => [i.item, i])), samples: o.samples(items), gstack: o.gstack, client: meter.client, store: sealedStore(join(out, "replies"), need(f, "recipient")), out, maxOutputTokens: FROZEN.output_cap.tokens, warn, job: o.job };
+    try {
+      return f["redraw-upstream"] ? { redraw: await upstreamRedraw(shard) } : { shard: await runShard(shard) };
+    } finally {
+      const spend = await meter.close();
+      writeSums(join(out, "replies"));
+      io.err("ask-replay " + o.name + ": lease closed at " + spend.spent_micros + " micros spent, " + spend.unknown_micros + " unknown");
+    }
+  });
+  json(io, result);
+  return 0;
+}
 
 const lines = (code: ReasonCode, message: string) => [message, "fix: " + CODES[code].fix, "docs: " + docAnchor(code)].flatMap((t) => t.split(/\r\n|\r|\n/)).map((l) => code + " " + l).join("\n");
 

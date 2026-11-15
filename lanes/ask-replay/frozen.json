@@ -54,6 +54,15 @@
       "reasoning_effort": "medium",
       "json_schema": false,
       "data_collection": "deny"
+    },
+    "astra": {
+      "provider": "openai",
+      "id": "gpt-6-astra",
+      "price_row": "openai:gpt-6-astra",
+      "arms": [],
+      "reasoning_effort": "medium",
+      "json_schema": true,
+      "role": "labeller"
     }
   },
   "temperature": "provider default (no temperature field is sent)",
@@ -118,8 +127,8 @@
   "missing_ceiling": 0.03,
   "stats": {
     "bootstrap_draws": 10000,
-    "bootstrap_seed": "TODO(custody:bootstrap_seed)",
-    "order_seed": "TODO(custody:order_seed)",
+    "bootstrap_seed": 1992076652,
+    "order_seed": 1647197898,
     "mdd_factor": 2.8,
     "planned_spread": {
       "needless": 0.35,
@@ -130,7 +139,7 @@
       "duplicates": 121,
       "must_ask": 206
     },
-    "proxy_effective_clusters": "TODO(custody:proxy_effective_clusters)",
+    "proxy_effective_clusters": 80,
     "captain_hears_needless_mdd_above": 0.1
   },
   "pilot": {
@@ -164,6 +173,41 @@
     "reasoning_effort": "medium",
     "seed": "minted from random bytes at the draw (ask-replay draw --kind audit) and recorded in CUSTODY.md",
     "draw": "40 must-ask and 40 duplicates at random within class, plus every permission and observable item (ask-replay draw --kind audit)"
+  },
+  "labelling": {
+    "codebook": "codebook.md",
+    "codebook_sha256": "79b75348678b023a4f7a2d752257831c50f87807dd9d16e5278bfd4c00b281e6",
+    "kinds": {
+      "audit": {
+        "spend_item": "I3",
+        "models": [
+          "opus",
+          "astra"
+        ],
+        "classes": null
+      },
+      "contingency": {
+        "spend_item": "I4",
+        "models": [
+          "opus",
+          "astra"
+        ],
+        "classes": null
+      },
+      "link": {
+        "spend_item": "I5",
+        "models": [
+          "opus"
+        ],
+        "classes": [
+          "DUPLICATE"
+        ]
+      }
+    },
+    "blind_to": "the audit's label; the labeller sees the item, the draft, the numbered earlier asks with the K1 answers, and the owner's next message",
+    "primary_when_kappa_fails": "the two labellers' agreement; items they disagree on leave the primary and are shown under each labeller's labels",
+    "links": "chains come from the Opus link run (I5); a repeats_of outside the earlier-ask list counts as no link",
+    "answer_judged": "a row counts as answered when both labellers say yes and as not answered when both say no; anything else is unjudged"
   },
   "gstack": {
     "version": "1.99.5.0",
@@ -211,6 +255,11 @@
     "duplicate"
   ],
   "lettered_decision": "^\\s*(?:[-*]\\s+)?\\**\\(?([A-Ha-h])[.):]\\**\\s+\\S",
+  "rules_ask_pattern": {
+    "pattern": "\\b(ask|asks|asking|asked|re-ask|approval|approvals|approve|permission|question|questions)\\b",
+    "flags": "i",
+    "use": "rule rows in any item that restate ask rules (prereg section 2)"
+  },
   "s1": {
     "min_shared_content_words": 2
   },

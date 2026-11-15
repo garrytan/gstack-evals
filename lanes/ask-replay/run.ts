@@ -28,9 +28,9 @@ import { seededRandom } from "../../src/runner/stats/paired.ts";
 import { pool } from "../product-value/meter.ts";
 import { AskError, fail, FROZEN } from "./frozen.ts";
 import { ledgerRows, sendCheck } from "./ledger.ts";
-import { classify } from "./parse.ts";
+import { classify, parseReply } from "./parse.ts";
 import { buildPrompt, replySchema, type BuiltPrompt, type GstackText } from "./prompt.ts";
-import type { Arm, AskItem, MissingKind, ModelKey, Sample, SampleRecord } from "./types.ts";
+import type { Arm, AskItem, LabelReply, MissingKind, ModelKey, Reply, Sample, SampleRecord } from "./types.ts";
 
 export const sampleId = (item: string, arm: Arm, model: ModelKey, replicate: number): string => item + "." + arm + "." + model + "." + replicate;
 
@@ -63,9 +63,8 @@ export function cells(samples: readonly Sample[]): Sample[][] {
 }
 
 /** The request body for one sample, on the model's provider route, with JSON schema mode where frozen.json sets it. On Anthropic both the system prefix and the user content end in a cache breakpoint (frozen.json caching). */
-export function requestBody(model: ModelKey, p: BuiltPrompt, arm: Arm, maxTokens: number): Record<string, unknown> {
+export function requestBody(model: ModelKey, p: BuiltPrompt, arm: Arm, maxTokens: number, schema: Record<string, unknown> = replySchema(arm)): Record<string, unknown> {
   const m = FROZEN.models[model];
-  const schema = replySchema(arm);
   if (m.provider === "anthropic") return { model: m.id, max_tokens: maxTokens, system: [{ type: "text", text: p.system, cache_control: { type: "ephemeral" } }], messages: [{ role: "user", content: [{ type: "text", text: p.user, cache_control: { type: "ephemeral" } }] }], output_config: { effort: m.reasoning_effort, ...(m.json_schema ? { format: { type: "json_schema", schema } } : {}) } };
   if (m.provider === "openai") return { model: m.id, input: [{ role: "system", content: p.system }, { role: "user", content: p.user }], max_output_tokens: maxTokens, store: false, reasoning: { effort: m.reasoning_effort }, ...(m.json_schema ? { text: { format: { type: "json_schema", name: "ask_reply", schema, strict: true } } } : {}) };
   return { model: m.id, max_tokens: maxTokens, messages: [{ role: "system", content: p.system }, { role: "user", content: p.user }], reasoning: { effort: m.reasoning_effort }, ...(m.json_schema ? { response_format: { type: "json_schema", json_schema: { name: "ask_reply", strict: true, schema } } } : {}) };
@@ -108,7 +107,16 @@ export interface ShardOptions {
   concurrency?: number;
   stopAfterMs?: number;
   warn?: (code: ReasonCode, message: string) => void;
+  /** A labeller run (label.ts): its request body and reply reader replace the arm prompt and the arm reply. */
+  job?: LabelJob;
 }
+
+export interface LabelJob {
+  body(item: AskItem, s: Sample, maxTokens: number): Record<string, unknown>;
+  parse(text: string): LabelReply | null;
+}
+
+const bodyFor = (o: ShardOptions, item: AskItem, s: Sample) => (o.job ? o.job.body(item, s, o.maxOutputTokens) : requestBody(s.model, buildPrompt(item, s.arm, o.gstack), s.arm, o.maxOutputTokens));
 
 export interface ShardResult {
   ran: number;
@@ -152,7 +160,7 @@ function blank(s: Sample, draw: number, redraw: boolean): SampleRecord {
 /** One sample to its record, with the frozen retries. */
 export async function runSample(o: ShardOptions, s: Sample, draw: number, redraw = false): Promise<SampleRecord> {
   const item = o.items.get(s.item) ?? fail("E_ASK_INPUT", "sample " + s.id + " names an item the bundle does not hold");
-  const body = requestBody(s.model, buildPrompt(item, s.arm, o.gstack), s.arm, o.maxOutputTokens);
+  const body = bodyFor(o, item, s);
   const provider = FROZEN.models[s.model].provider;
   const sleep = o.sleep ?? realSleep;
   const rec = blank(s, draw, redraw);
@@ -163,7 +171,7 @@ export async function runSample(o: ShardOptions, s: Sample, draw: number, redraw
     appendFileSync(join(o.out, "calls.ndjson"), JSON.stringify({ id: s.id, draw, attempt: rec.attempts }) + "\n");
     const answer = await o.client.call(s, { draw, attempt: rec.attempts }, body);
     if (answer?.micros != null) rec.micros = (rec.micros ?? 0) + answer.micros;
-    const c = classify(provider, answer);
+    const c = classify<Reply | LabelReply>(provider, answer, o.job ? o.job.parse : parseReply);
     if (c.kind === "upstream") {
       if (upstream < R.upstream) {
         await sleep(R.upstream_backoff_ms[upstream] ?? R.upstream_backoff_ms.at(-1)!);
@@ -181,8 +189,10 @@ export async function runSample(o: ShardOptions, s: Sample, draw: number, redraw
       o.warn?.("E_ASK_PARSE", "sample " + s.id + " has no valid action after its retry");
       return { ...rec, missing: "parse", text: c.text, capped: c.capped };
     }
-    const g = s.arm === "c" || s.arm === "d" ? sendCheck(c.reply, ledgerRows(item)) : null;
-    return { ...rec, agent_action: c.reply.action, final_action: g ? g.final_action : c.reply.action, repeats: g ? g.repeats : "not_asked", named: g?.named ?? null, reask_reason: g?.reask_reason ?? false, gate: g?.gate ?? "none", reason: c.reply.reason, text: c.text, capped: c.capped };
+    if (o.job) return { ...rec, label: c.reply as LabelReply, reason: (c.reply as LabelReply).reason, text: c.text, capped: c.capped };
+    const reply = c.reply as Reply;
+    const g = s.arm === "c" || s.arm === "d" ? sendCheck(reply, ledgerRows(item)) : null;
+    return { ...rec, agent_action: reply.action, final_action: g ? g.final_action : reply.action, repeats: g ? g.repeats : "not_asked", named: g?.named ?? null, reask_reason: g?.reask_reason ?? false, gate: g?.gate ?? "none", reason: reply.reason, text: c.text, capped: c.capped };
   }
 }
 
@@ -211,7 +221,7 @@ export async function runShard(o: ShardOptions): Promise<ShardResult> {
       o.warn?.("E_ASK_RESUME", "sample " + s.id + " draw " + j.draw + " started and has no sealed reply; reconciling and redrawing once");
       const item = o.items.get(s.item);
       if (o.client.reconcile && item) {
-        const body = requestBody(s.model, buildPrompt(item, s.arm, o.gstack), s.arm, o.maxOutputTokens);
+        const body = bodyFor(o, item, s);
         for (const attempt of j.attempts) await o.client.reconcile(s, { draw: j.draw, attempt }, body);
       }
       if (j.draw > R.resume_redraws) {

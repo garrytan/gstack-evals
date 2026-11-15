@@ -193,7 +193,7 @@ export interface ReadoutOptions {
   seed: number;
   draws: number;
   models?: readonly ModelKey[];
-  /** Per audited item, whether the label audit judged the quoted owner message an answer to the row the ledger marks answered. */
+  /** Per ledger row id, whether both labellers judged the quoted owner message an answer to that answered row (label.ts); unjudged rows are absent. */
   answerJudged?: ReadonlyMap<string, boolean>;
 }
 
@@ -244,7 +244,7 @@ export function readout(items: readonly AskItem[], outcomes: readonly Outcome[],
         base_arm: base,
         base_needless_send: baseRate,
         gate_share: agent !== null && fin !== null && baseRate !== null && baseRate - fin > 0 ? Math.round(((agent - fin) / (baseRate - fin)) * 1e4) / 1e4 : null,
-        gate_drops_judged: o.answerJudged ? { answered: drops.filter((x) => o.answerJudged!.get(x.item) === true).length, not_answered: drops.filter((x) => o.answerJudged!.get(x.item) === false).length, not_audited: drops.filter((x) => !o.answerJudged!.has(x.item)).length } : null,
+        gate_drops_judged: o.answerJudged ? { answered: drops.filter((x) => o.answerJudged!.get(x.named ?? "") === true).length, not_answered: drops.filter((x) => o.answerJudged!.get(x.named ?? "") === false).length, unjudged: drops.filter((x) => !o.answerJudged!.has(x.named ?? "")).length } : null,
       }];
     }));
     const sends = new Map<string, Record<string, number>>();

@@ -9,8 +9,8 @@ import { judgeAnswer } from "../../src/adapters/judge.ts";
 import type { Provider } from "../../src/runner/pricing/prices.ts";
 import { ACTIONS, type Action, type Reply } from "./types.ts";
 
-export type Classified =
-  | { kind: "reply"; reply: Reply; text: string; capped: boolean }
+export type Classified<T = Reply> =
+  | { kind: "reply"; reply: T; text: string; capped: boolean }
   | { kind: "unparsable"; text: string; capped: boolean }
   | { kind: "safety"; text: string }
   | { kind: "upstream"; detail: string };
@@ -47,21 +47,26 @@ function objectEnd(text: string, start: number): number {
 
 /** The reply in a model's text: the whole text as JSON, else the last JSON object in it with a valid action. */
 export function parseReply(text: string): Reply | null {
+  return lastObject(text, toReply);
+}
+
+/** The value to() reads from a model's text: the whole text as JSON, else the last JSON object in it that to() accepts. */
+export function lastObject<T>(text: string, to: (v: unknown) => T | null): T | null {
   try {
-    const whole = toReply(JSON.parse(text.trim()));
+    const whole = to(JSON.parse(text.trim()));
     if (whole) return whole;
   } catch {}
-  let best: { end: number; start: number; reply: Reply } | null = null;
+  let best: { end: number; value: T } | null = null;
   for (let i = text.indexOf("{"); i >= 0; i = text.indexOf("{", i + 1)) {
     const end = objectEnd(text, i);
     if (end < 0) continue;
-    let reply: Reply | null = null;
+    let value: T | null = null;
     try {
-      reply = toReply(JSON.parse(text.slice(i, end + 1)));
+      value = to(JSON.parse(text.slice(i, end + 1)));
     } catch {}
-    if (reply && (!best || end > best.end)) best = { end, start: i, reply };
+    if (value && (!best || end > best.end)) best = { end, value };
   }
-  return best?.reply ?? null;
+  return best?.value ?? null;
 }
 
 /** The frozen safety-stop signal in a provider's 200 answer. */
@@ -82,12 +87,12 @@ export function cappedReply(provider: Provider, body: any): boolean {
 }
 
 /** One provider answer (status and parsed body), or null when no answer came back, as a reply or a failure kind. */
-export function classify(provider: Provider, answer: { status: number; body: unknown } | null): Classified {
+export function classify<T = Reply>(provider: Provider, answer: { status: number; body: unknown } | null, parse: (text: string) => T | null = parseReply as unknown as (text: string) => T | null): Classified<T> {
   if (!answer) return { kind: "upstream", detail: "no answer" };
   if (answer.status !== 200 || !answer.body || typeof answer.body !== "object") return { kind: "upstream", detail: "HTTP " + answer.status };
   const text = judgeAnswer(provider, answer.body) ?? "";
   if (safetyStop(provider, answer.body)) return { kind: "safety", text };
   const capped = cappedReply(provider, answer.body);
-  const reply = parseReply(text);
+  const reply = parse(text);
   return reply ? { kind: "reply", reply, text, capped } : { kind: "unparsable", text, capped };
 }

@@ -8,7 +8,7 @@ import type { CallKey } from "./run.ts";
 import type { BuildInput, TranscriptItem } from "./build.ts";
 import type { GstackText } from "./prompt.ts";
 import { FROZEN } from "./frozen.ts";
-import type { Action, Sample } from "./types.ts";
+import type { Action, LabelReply, Sample, SampleRecord } from "./types.ts";
 
 export type StubReply =
   | { action: Action | string; reason?: string; repeats?: unknown; reask_reason?: unknown; wrap?: boolean }
@@ -23,6 +23,21 @@ export function answerBody(model: Sample["model"], text: string, stop: "ok" | "s
 }
 
 export class Killed extends Error {}
+
+/** A stub labeller: the scripted label as the model's JSON text, or text with no valid label. */
+export function labelSend(script: (s: Sample) => Partial<LabelReply> | "unparsable", calls: string[] = [], bodies: Array<Record<string, unknown>> = []) {
+  return async (s: Sample, key: CallKey, body: Record<string, unknown>): Promise<{ status: number; body: unknown }> => {
+    calls.push(s.id + "#" + key.draw + "/" + key.attempt);
+    bodies.push(body);
+    const r = script(s);
+    return { status: 200, body: answerBody(s.model, r === "unparsable" ? "no label in this text" : JSON.stringify({ repeats_of: null, answer_judgement: [], reason: "scripted", ...r })) };
+  };
+}
+
+/** A sealed labeller record for readout tests. */
+export function labelRecord(id: string, item: string, model: Sample["model"], label: LabelReply | null): SampleRecord {
+  return { sample: { id, item, arm: "a", model, replicate: 1 }, draw: 1, attempts: 1, missing: label ? null : "parse", agent_action: null, final_action: null, repeats: "not_asked", named: null, reask_reason: false, gate: "none", reason: label?.reason ?? null, text: null, capped: false, micros: 1, upstream_redraw: false, label };
+}
 
 /** A stub send that answers each call from a script; "kill" throws Killed, as a shard's process dying would. */
 export function stubSend(script: (s: Sample, key: CallKey) => StubReply, calls: string[] = []) {

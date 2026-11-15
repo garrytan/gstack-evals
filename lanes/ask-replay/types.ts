@@ -9,7 +9,19 @@ export type Arm = "a" | "b" | "c" | "d";
 export const ARMS: readonly Arm[] = ["a", "b", "c", "d"];
 export type Action = "SEND" | "FOLD" | "DROP";
 export const ACTIONS: readonly Action[] = ["SEND", "FOLD", "DROP"];
-export type ModelKey = "opus" | "sol" | "particle";
+/** astra is a labeller only (frozen.json models.astra.role); it runs no arm. */
+export type ModelKey = "opus" | "sol" | "particle" | "astra";
+/** The labeller runs (plan section 7): the audit (I3), its contingency (I4) and the duplicate linking (I5). */
+export type LabelKind = "audit" | "contingency" | "link";
+export type AnswerJudgement = "yes" | "no" | "unclear";
+
+/** One labeller reply. Positions count from 1 in the numbered list of earlier asks the labeller saw. */
+export interface LabelReply {
+  class: Label;
+  repeats_of: number | null;
+  answer_judgement: Array<{ row: number; answers: AnswerJudgement }>;
+  reason: string;
+}
 export type From = "agent" | "owner" | "crew";
 
 export interface Message {
@@ -71,7 +83,7 @@ export interface Reply {
 export type MissingKind = "parse" | "safety" | "upstream";
 
 export interface Sample {
-  /** item.arm.model.replicate, fixed before any call. */
+  /** item.arm.model.replicate, fixed before any call; item.label-<kind>.model.1 for a labeller call, whose arm is a and unused. */
   id: string;
   item: string;
   arm: Arm;
@@ -112,9 +124,11 @@ export interface SampleRecord {
   micros: number | null;
   /** The end-of-run UPSTREAM redraw pass wrote this record. */
   upstream_redraw: boolean;
+  /** A labeller call's parsed reply (label.ts); absent on arm samples. */
+  label?: LabelReply | null;
 }
 
 /** The scorer's view of one sample. */
-export type Outcome = Pick<SampleRecord, "missing" | "agent_action" | "final_action" | "repeats" | "reask_reason" | "gate" | "reason"> & Pick<Sample, "item" | "arm" | "model" | "replicate">;
+export type Outcome = Pick<SampleRecord, "missing" | "agent_action" | "final_action" | "repeats" | "reask_reason" | "gate" | "reason"> & Partial<Pick<SampleRecord, "named">> & Pick<Sample, "item" | "arm" | "model" | "replicate">;
 
-export const outcomeOf = (r: SampleRecord): Outcome => ({ item: r.sample.item, arm: r.sample.arm, model: r.sample.model, replicate: r.sample.replicate, missing: r.missing, agent_action: r.agent_action, final_action: r.final_action, repeats: r.repeats, reask_reason: r.reask_reason, gate: r.gate, reason: r.reason });
+export const outcomeOf = (r: SampleRecord): Outcome => ({ item: r.sample.item, arm: r.sample.arm, model: r.sample.model, replicate: r.sample.replicate, missing: r.missing, agent_action: r.agent_action, final_action: r.final_action, repeats: r.repeats, reask_reason: r.reask_reason, gate: r.gate, reason: r.reason, named: r.named });
