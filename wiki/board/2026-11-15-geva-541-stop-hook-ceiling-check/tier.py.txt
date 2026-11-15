@@ -1,0 +1,29 @@
+# tier.py: marks the pool tasks whose upstream fix writes a changelog or news entry (the "changelog tier").
+# Input: the six SWE-rebench leaderboard parquet files for 2025-10 to 2026-03 at the pinned revision below, downloaded from
+#   https://huggingface.co/datasets/nebius/SWE-rebench-leaderboard/resolve/34d5a58864acf91613740a09ec5d205228dcfa39/data/<YYYY_MM>-00000-of-00001.parquet
+# Their sha256 (equal to the LFS oids at that revision) are in digests.txt.
+# It reads only the file names in each task's upstream patch, never its contents, and prints one line per pool task:
+# task, repo, the harness mechanics list it sat on (scored, calibration, spare or none), 1 if it is in the tier, and the
+# changelog paths it writes.
+#   python3 tier.py <parquet dir> <repo root> > tier.txt      (needs pyarrow)
+import glob, json, re, sys
+import pyarrow.parquet as pq
+
+FR = re.compile(r'(^|/)(changelog|changes|news|newsfragments|releasenotes|whatsnew|whats_new|changelog\.d|\.changeset|unreleased)(/|\.|$)|(^|/)(CHANGELOG|CHANGES|HISTORY|NEWS|RELEASE_NOTES|versionhistory)[^/]*$', re.I)
+pq_dir, root = sys.argv[1], sys.argv[2]
+rows = {}
+for f in sorted(glob.glob(pq_dir + '/*.parquet')):
+    for r in pq.read_table(f, columns=['instance_id', 'repo', 'patch']).to_pylist():
+        rows[r['instance_id']] = r
+prereg = root + '/wiki/plans/2026-11-09-geva-448-harness-mechanics-prereg/'
+where = {}
+for name in ('scored', 'calibration', 'spare'):
+    for line in open(prereg + name + '.txt'):
+        if line.strip():
+            where[line.strip()] = name
+pool = json.load(open(root + '/quick/laneb/tasks/swerebench-r3a4.json'))['tasks']
+print('# task\trepo\tlist\ttier\tchangelog_paths')
+for t in pool:
+    r = rows[t['task_id']]
+    frag = [p for p in re.findall(r'^diff --git a/(\S+) b/', r['patch'], re.M) if FR.search(p)]
+    print('\t'.join([t['task_id'], r['repo'], where.get(t['task_id'], 'none'), '1' if frag else '0', ','.join(frag)]))

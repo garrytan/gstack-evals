@@ -1,0 +1,84 @@
+// Copyright (c) 2026 Garry Tan. MIT License.
+// variants.ts: the stop-rule ceiling check's transcript pass. For every trial dir under the roots it reads Lane B's SDK log
+// with the harness mechanics scorer at this repo's head and prints one JSON row: the trial, its model and task, the
+// arm, the verifier's reward, and four readings of the stop rule. "asis" is section 13's rule as #300 scored it (asserted equal to
+// scoreSession's adherent). "code" reads the rule from the last edit to a file that is not documentation or a changelog
+// (DOC below). "bg" also credits a check that ran in the background when a later tool result names its output file and
+// shows a test outcome. "codebg" is both. For a session that misses the rule as is, it adds the kind of its last edit
+// (docs or code) and why it missed (bg_check, fg_check_no_outcome, no_check, no_bash). It counts tool calls, and after the last edit it lists
+// the program name (first word, no arguments) of each Bash command, for the Terminal-Bench 2 instrument check.
+//   bun variants.ts <trial dir root>... > variants.jsonl
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { basename, join } from "node:path";
+import { parseLog } from "../../../quick/laneb/l1/probes.ts";
+import { isCheck, isRepro, scoreSession, showsOutcome, toTranscript } from "../../../lanes/harness-mechanics/score.ts";
+import { lastBashWrite, shellCommands } from "../../../lanes/harness-mechanics/vendor/gstack/lib/shell-writes.ts";
+
+const EDIT = /^(?:Edit|Write|MultiEdit|NotebookEdit)$/;
+const DOC = /((^|\/)(changelog|changes|news|newsfragments|releasenotes|whatsnew|whats_new|changelog\.d|docs?)\/|(^|\/)(CHANGELOG|CHANGES|HISTORY|NEWS|RELEASE_NOTES|versionhistory)[^/]*$|\.(md|rst|txt)$)/i;
+
+function edits(t: any) {
+  const root = t.cwd ?? null;
+  return t.events.flatMap((e: any, i: number) => {
+    if (e.kind !== "tool_use") return [];
+    if (e.name === "Bash") { const w = lastBashWrite(String(e.input.command ?? ""), e.cwd ?? root, root); return w ? [{ i, files: w.files, after: w.after }] : []; }
+    return EDIT.test(e.name) ? [{ i, files: [String(e.input.file_path ?? e.input.notebook_path ?? "")], after: "" }] : [];
+  });
+}
+
+function reading(t: any, codeOnly: boolean, bgCredit: boolean) {
+  const ev = t.events;
+  const all = edits(t).filter((x: any) => !codeOnly || !x.files.every((f: string) => DOC.test(f)));
+  const last = all.at(-1);
+  if (!last) return { ran: null, last, why: null };
+  const results = new Map<string, string>();
+  for (const e of ev) if (e.kind === "tool_result") results.set(e.id, e.text);
+  const cands = [
+    ...(last.after ? [{ cmd: last.after, id: ev[last.i].id, bg: false, at: last.i }] : []),
+    ...ev.flatMap((e: any, i: number) => (i > last.i && e.kind === "tool_use" && e.name === "Bash" ? [{ cmd: String(e.input.command ?? ""), id: e.id, bg: e.input.run_in_background === true, at: i }] : [])),
+  ];
+  const checks = cands.filter((c) => isCheck(c.cmd));
+  for (const c of checks) {
+    const text = results.get(c.id) ?? "";
+    if (showsOutcome(text) || isRepro(c.cmd)) return { ran: true, last, why: null };
+    if (!bgCredit || !c.bg) continue;
+    const id = /\/tasks\/([\w-]+)\.output/.exec(text)?.[1];
+    if (id && ev.slice(c.at + 1).some((e: any) => e.kind === "tool_result" && showsOutcome(e.text) && (e.text.includes(id) || ev.some((u: any) => u.kind === "tool_use" && u.id === e.id && JSON.stringify(u.input).includes(id))))) return { ran: true, last, why: null };
+  }
+  const bash = cands.length > (last.after ? 1 : 0) || last.after;
+  const why = !bash ? "no_bash" : checks.some((c) => c.bg) ? "bg_check" : checks.length ? "fg_check_no_outcome" : "no_check";
+  return { ran: false, last, why };
+}
+
+function one(dir: string) {
+  const j = (f: string) => (existsSync(join(dir, f)) ? JSON.parse(readFileSync(join(dir, f), "utf8")) : null);
+  const res = j("result.json") ?? {};
+  const sum = j("evaluator/laneb-summary.json") ?? {};
+  const rewardFile = join(dir, "verifier/reward.txt");
+  const reward = existsSync(rewardFile) ? Number(readFileSync(rewardFile, "utf8").trim()) : null;
+  const recs = parseLog(readFileSync(join(dir, "evaluator/sdk-messages.jsonl"), "utf8"));
+  const s = scoreSession(recs, { pass: reward === null ? null : reward >= 1 });
+  const t = toTranscript(recs);
+  const asis = reading(t, false, false);
+  if (asis.ran !== s.adherent) throw new Error("asis differs from scoreSession in " + dir);
+  const after = asis.last ? t.events.slice(asis.last.i + 1).filter((e: any) => e.kind === "tool_use" && e.name === "Bash").flatMap((e: any) => shellCommands(String(e.input.command ?? ""), t.cwd ?? null).map((c: any) => basename(String(c.words[0] ?? "")))) : [];
+  return {
+    trial: basename(dir), task: res.task_name ?? null, model: sum?.session?.model ?? null, arm: sum?.arm?.arm ?? null, reward, cost_usd: sum?.session?.spent_micros != null ? sum.session.spent_micros / 1e6 : null,
+    asis: asis.ran, bg: reading(t, false, true).ran, code: reading(t, true, false).ran, codebg: reading(t, true, true).ran,
+    last_kind: asis.last ? (asis.last.files.every((f: string) => DOC.test(f)) ? "docs" : "code") : null, why: asis.why,
+    tool_calls: t.events.filter((e: any) => e.kind === "tool_use").length,
+    after_programs: [...new Set(after.filter(Boolean))].sort(),
+  };
+}
+
+function walk(d: string, depth: number) {
+  if (depth > 9) return;
+  if (existsSync(join(d, "evaluator/sdk-messages.jsonl")) && existsSync(join(d, "result.json"))) { console.log(JSON.stringify(one(d))); return; }
+  for (const x of readdirSync(d).sort()) {
+    const p = join(d, x);
+    let dir = false;
+    try { dir = statSync(p).isDirectory(); } catch {}
+    if (dir && x !== "arms" && x !== "tasks") walk(p, depth + 1);
+  }
+}
+for (const root of process.argv.slice(2)) walk(root, 0);
