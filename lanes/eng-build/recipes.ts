@@ -2,11 +2,13 @@
 // Frozen recipes of the eng-review build read (plan sections 3 and 11), ported from the supply probe: ecosystem
 // detection from the nearest manifest, the install and per-case test step for Go, Node (npm, pnpm, yarn or bun, with
 // jest, vitest, mocha or node:test), Python (pip or uv, with pytest) and Rust (cargo test), and the classifier that
-// gives every case in every run its CaseClass. Only "assert" is a scorable failure: a Python AttributeError, NameError
-// or ImportError, a JavaScript ReferenceError or a TypeError through something undefined, a Go or Rust compile error
-// and a collection or load error never are. Holds no unit data and prints no repository content.
+// gives every case in every run its CaseClass. Only "assert" is a scorable failure, and on planted units rule 2's
+// "crash": otherwise a Python AttributeError, NameError or ImportError, a JavaScript ReferenceError or a TypeError
+// through something undefined, a Go or Rust compile error and a collection or load error never are. Holds no unit data
+// and prints no repository content.
 import type { NodeRunner, Runner } from "../real-outcome/task/format.ts";
 import { parseCargo, parseGoTest, parseJestJson, parseMochaJson, parseNodeEvents, parseXml, resultFor, type Parsed, type Results, type TestResult, type XmlNode } from "../real-outcome/task/record.ts";
+import { isTestPath } from "../real-outcome/mine/paths.ts";
 import { fail } from "./errors.ts";
 import type { CaseClass, Ecosystem } from "./types.ts";
 
@@ -211,15 +213,20 @@ function pythonRecipe(read: Read, root: string, listing: Set<string>): Recipe {
   return { eco: "python", root, pm, images: ["python:" + v, "python:3.12"], env, install, build: null, volumes: [["venv", "/opt/venv"]] };
 }
 
-function goRecipe(read: Read, root: string): Recipe {
+function goRecipe(read: Read, root: string, o: RecipeOptions): Recipe {
   const txt = read(join(root, "go.mod")) ?? "";
+  const env = { GOMODCACHE: "/cache/gomod", GOCACHE: "/cache/gobuild", GOFLAGS: "-buildvcs=false" };
+  if (o.goToolchain) {
+    const tc = /^toolchain\s+go(\d+\.\d+)/m.exec(txt);
+    return { eco: "go", root, pm: "go", images: tc ? ["golang:" + tc[1], "golang:1"] : ["golang:1"], env, install: () => "export GOTOOLCHAIN=auto; go mod download", build: null, volumes: [] };
+  }
   const vers = [/^go\s+(\d+)\.(\d+)/m, /^toolchain\s+go(\d+)\.(\d+)/m].map((re) => re.exec(txt)).filter((m): m is RegExpExecArray => m !== null).map((m) => [Number(m[1]), Number(m[2])] as const);
   const best = vers.reduce<readonly [number, number]>((a, b) => (b[0] > a[0] || (b[0] === a[0] && b[1] > a[1]) ? b : a), [1, 18]);
   const images = vers.length === 0 ? ["golang:1.22", "golang:1"] : ["golang:" + best[0] + "." + best[1], "golang:1"];
   return { eco: "go", root, pm: "go", images, env: { GOMODCACHE: "/cache/gomod", GOCACHE: "/cache/gobuild", GOFLAGS: "-buildvcs=false" }, install: () => "export GOTOOLCHAIN=auto; go mod download", build: null, volumes: [] };
 }
 
-function rustRecipe(read: Read, root: string): Recipe {
+function rustRecipe(read: Read, root: string, o: RecipeOptions): Recipe {
   let image = "rust:1";
   for (const n of ["rust-toolchain.toml", "rust-toolchain"]) {
     const m = /(\d+\.\d+(?:\.\d+)?)/.exec(read(join(root, n)) ?? "");
@@ -236,18 +243,29 @@ function rustRecipe(read: Read, root: string): Recipe {
     env: { CARGO_TARGET_DIR: "/target", CARGO_INCREMENTAL: "0", CARGO_TERM_COLOR: "never", CARGO_BUILD_JOBS: "2" },
     install: () => TOOLCHAIN + "cargo fetch",
     build: null,
-    volumes: [["target", "/target"]],
+    volumes: o.cargoVolumes ? [["target", "/target"], ["cargo-registry", "/usr/local/cargo/registry"], ["cargo-git", "/usr/local/cargo/git"]] : [["target", "/target"]],
   };
 }
 
 const TOOLCHAIN = "export RUSTUP_TOOLCHAIN=$(ls /usr/local/rustup/toolchains | head -1 | sed 's/-x86_64.*//'); ";
 
+/** The planted-unit read's recipe fixes (GEVA-537 plan section 13), off by default so every other caller keeps its
+ * recipe. */
+export interface RecipeOptions {
+  /** Go's image follows go.mod's toolchain line, else the newest Go release, instead of the higher of the go and
+   * toolchain lines; a newer Go builds older modules, and the go line is only a minimum. */
+  goToolchain?: boolean;
+  /** Rust's cargo registry and git checkouts sit on per-unit volumes, so the screen's offline test step sees the crates
+   * its install step fetched. */
+  cargoVolumes?: boolean;
+}
+
 /** The frozen recipe for an ecosystem at an install root. */
-export function recipeFor(eco: Ecosystem, read: Read, root: string, listing: Set<string>): Recipe {
+export function recipeFor(eco: Ecosystem, read: Read, root: string, listing: Set<string>, o: RecipeOptions = {}): Recipe {
   if (eco === "node") return nodeRecipe(read, root, listing);
   if (eco === "python") return pythonRecipe(read, root, listing);
-  if (eco === "go") return goRecipe(read, root);
-  return rustRecipe(read, root);
+  if (eco === "go") return goRecipe(read, root, o);
+  return rustRecipe(read, root, o);
 }
 
 /** The Node runner a group of test files uses: an import names it first, then the project's dependencies and scripts.
@@ -382,10 +400,16 @@ export function parsePytestJunit(xml: string): Parsed {
     const id = [file || cls.replaceAll(".", "/") + ".py", ...inner, tc.attrs.name ?? ""].join("::");
     seen.push(id);
     if (!bad) results[id] = tc.children.some((c) => c.tag === "skipped") ? { status: "skip" } : { status: "pass" };
-    else results[id] = { status: "fail", cls: bad.tag === "error" ? "load" : "assert", exc: excName(text), msg: text.slice(0, 300) };
+    else results[id] = { status: "fail", cls: bad.tag === "error" ? "load" : "assert", exc: excName(text), msg: text.slice(0, 300), ...pyWhere(text) };
   }
   return { results, seen, notes: [] };
 }
+
+/** The innermost frame of a pytest failure: the last "path:line: Error" line of its traceback. */
+const pyWhere = (text: string): { where?: string } => {
+  const m = [...text.matchAll(/^([^\s:]+\.py):(\d+): [A-Za-z_][\w.]*/gm)].pop();
+  return m ? { where: m[1] + ":" + m[2] } : {};
+};
 
 const excName = (text: string): string | undefined => /^(?:E\s+)?([A-Za-z_][\w.]*(?:Error|Exception|Exit|Interrupt))\b/m.exec(text)?.[1]?.split(".").pop();
 
@@ -427,9 +451,50 @@ export function caseClass(runner: Runner["kind"], r: TestResult, run: { timed_ou
   return r.cls === "assert" ? "assert" : r.cls === "missing_name" ? "missing_name" : "load";
 }
 
-/** Every id's class in one parsed run. */
-export function runClasses(runner: Runner["kind"], parsed: Parsed, ids: string[], run: { timed_out?: boolean; stopped?: boolean }): Record<string, CaseClass> {
-  return Object.fromEntries(ids.map((id) => [id, caseClass(runner, resultFor(parsed, id), run, !(id in parsed.results) && resultFor(parsed, id).status === "fail")]));
+/** The innermost frame a failure names: the record's where field when the verifier keeps one, else Rust's panic location
+ * or the first frame of a JavaScript stack in the message. Go and Rust failures are already "assert", so they never need
+ * one. */
+export function innermostFrame(runner: Runner["kind"], r: TestResult): string | null {
+  if ("where" in r && typeof r.where === "string" && r.where) return r.where.replace(/:\d+(?::\d+)?$/, "");
+  const text = r.msg ?? "";
+  if (runner === "cargo") return /panicked at ([^\s:]+):\d+/.exec(text)?.[1] ?? null;
+  if (runner === "pytest" || runner === "go") return null;
+  return /^\s*at (?:[^\n(]*\()?([^\s():]+):\d+:\d+\)?\s*$/m.exec(text)?.[1] ?? null;
+}
+
+/** A frame path in the repository's own product code: not a test file, an installed dependency or the runtime. */
+export function productFrame(path: string): boolean {
+  const p = path.replace(/^file:\/\//, "").replace(/^\/(?:testbed|work)\//, "");
+  if (/(^|\/)(node_modules|site-packages|dist-packages|\.cargo|\.venv|venv)\/|^node:|^internal\/|^<|^\/(usr|rustc|opt|tmp)\//.test(p)) return false;
+  return !isTestPath(p);
+}
+
+/** Planted-unit rule 2 (GEVA-537 plan section 2): a runtime error that is not a compile, collection or load error counts as
+ * a scorable failure ("crash") when its innermost frame is in a product file. Every public name exists on the merged
+ * and fixed trees by construction, so a JavaScript TypeError reading undefined or a Python AttributeError on None there
+ * is the bug, not a missing name. A failure that names no frame never counts. */
+export function plantedClass(runner: Runner["kind"], r: TestResult, run: { timed_out?: boolean; stopped?: boolean }, fromCollect: boolean): CaseClass {
+  const c = caseClass(runner, r, run, fromCollect);
+  if (fromCollect || r.status !== "fail" || (c !== "missing_name" && c !== "load")) return c;
+  const text = (r.exc ?? "") + " " + (r.msg ?? "");
+  if (/ImportError|ModuleNotFoundError|SyntaxError|IndentationError|Cannot find module|ERR_MODULE_NOT_FOUND|Failed to resolve import|error TS\d{4}/.test(text)) return c;
+  const frame = innermostFrame(runner, r);
+  return frame !== null && productFrame(frame) ? "crash" : c;
+}
+
+/** Whether a class is a scorable failure: "assert", or the planted read's "crash", which eng-build's own grading never
+ * gives. */
+export const scorableFail = (c: CaseClass | undefined): boolean => c === "assert" || c === "crash";
+
+/** Every id's class in one parsed run. With crash set, planted-unit rule 2 applies. */
+export function runClasses(runner: Runner["kind"], parsed: Parsed, ids: string[], run: { timed_out?: boolean; stopped?: boolean }, crash = false): Record<string, CaseClass> {
+  return Object.fromEntries(
+    ids.map((id) => {
+      const r = resultFor(parsed, id);
+      const fromCollect = !(id in parsed.results) && r.status === "fail";
+      return [id, (crash ? plantedClass : caseClass)(runner, r, run, fromCollect)];
+    }),
+  );
 }
 
 /** Step failure classes for the screen's accounting, first match wins. Counts only; never the log itself. */

@@ -19,7 +19,7 @@ import { verifyTree, type TreeResult } from "../real-outcome/task/verify.ts";
 import type { ReasonCode } from "../../src/errors/codes.ts";
 import { EbError, fail } from "./errors.ts";
 import { FROZEN } from "./frozen.ts";
-import { ecoOfFile, findProject, hasRecipe, recipeFor, runClasses, runnable, verifierRunner, type Recipe } from "./recipes.ts";
+import { ecoOfFile, findProject, hasRecipe, recipeFor, runClasses, runnable, scorableFail, verifierRunner, type Recipe, type RecipeOptions } from "./recipes.ts";
 import type { AftermathItem, BuildUnit, CaseClass, CaseRuns, Ecosystem, UnitSet, UnitType } from "./types.ts";
 
 export const EB_SCHEMA = "eng-build.unit.v1";
@@ -101,6 +101,9 @@ export interface EbTask {
   trees: Record<string, Record<string, Record<string, string>>>;
   drops: Drop[];
   seed: number;
+  /** Planted units only (GEVA-537 plan section 2): the aftermath cases that failed on the merged tree by rule 2's crash
+   * class rather than an assertion. */
+  planted?: { crash: string[] };
 }
 
 const diff = (repo: string, a: string, b: string, paths: string[] = []): string => git(repo, ["diff", "--binary", "--full-index", "--no-renames", "--no-ext-diff", "--no-textconv", a, b, ...(paths.length ? ["--", ...paths] : [])]);
@@ -258,11 +261,11 @@ export type Grid = Record<string, CaseClass[]>;
 
 const all = (runs: CaseClass[] | undefined, c: CaseClass): boolean => !!runs && runs.length > 0 && runs.every((r) => r === c);
 
-/** The 3-run rule: an aftermath case fails at assertion level in every run on the merged tree and on the fix's parent
- * with the fix's tests in place, and passes in every run on the fix. */
+/** The 3-run rule: an aftermath case fails at assertion level (or, on a planted unit, by rule 2's crash class) in every
+ * run on the merged tree and on the fix's parent with the fix's tests in place, and passes in every run on the fix. */
 export const aftermathCases = (merged: Grid, parent: Grid, fixed: Grid, runs: number): string[] =>
   Object.keys(fixed)
-    .filter((id) => [merged[id], parent[id]].every((g) => all(g, "assert") && g!.length === runs) && all(fixed[id], "pass") && fixed[id].length === runs)
+    .filter((id) => [merged[id], parent[id]].every((g) => !!g && g.length === runs && g.every(scorableFail)) && all(fixed[id], "pass") && fixed[id].length === runs)
     .sort();
 
 /** Anchors: cases in the same fix test files that pass in every run on the merged tree and on the fix. */
@@ -340,6 +343,28 @@ export interface BuildOptions {
   runs?: number;
   seed?: number;
   cpus?: number;
+  /** Planted-unit rules (GEVA-537 plan section 2): rule 1's functional set (cases that pass in every run on the merged
+   * tree and on each fix, fail on base, and are not aftermath cases) and rule 2's crash class. Rule 1's base grid stands in
+   * for the base check, so a planted unit is never dropped for no per-case result on base. */
+  planted?: boolean;
+  recipe?: RecipeOptions;
+  sandbox?: Sandbox;
+  /** Permissive licences beyond the lane's four, and how to read them (the planted frame adds ISC and 0BSD). */
+  licences?: { allowed: readonly string[]; detect: (text: string) => string | null };
+  /** The statement note, when it is written keylessly at the build (planted units' rule 4). */
+  note?: string;
+  /** Test files at the merge, beyond the ones base to merge changes, whose cases the functional set may hold (rule 1:
+   * P's test files that exercise the region). */
+  functionalFiles?: string[];
+}
+
+/** The grading sandbox's changes from the verifier's default (GEVA-537 plan section 2, from eb525-explore-sandbox at
+ * 510fc5f): each run grades a writable copy of the tree, with this /tmp tmpfs size and memory limit. verifyTree reads it
+ * as its sandbox option. */
+export interface Sandbox {
+  writable: boolean;
+  tmp: string;
+  memory: string;
 }
 
 export interface BuildOutcome {
@@ -382,15 +407,17 @@ export function buildUnit(spec: UnitSpec, repo: string, out: string, o: BuildOpt
   const base = commit(spec.base);
   const merge = commit(spec.merge);
   const items = spec.items.map((i) => ({ ...i, commit: commit(i.commit), parent: commit(i.commit + "^1") }));
-  if (!LICENCES.includes(spec.licence) && !spec.custody) reject("E_EB_IMAGE", id, "licence", "copyleft_without_custody");
+  const allowed = o.licences?.allowed ?? LICENCES;
+  if (!allowed.includes(spec.licence) && !spec.custody) reject("E_EB_IMAGE", id, "licence", "copyleft_without_custody");
   const licenceFile = LICENCE_FILES.find((f) => showFile(repo, base, f) !== null);
   if (!licenceFile) reject("E_EB_IMAGE", id, "licence", "no_licence_file");
   const licenceText = showFile(repo, base, licenceFile!)!;
-  if (LICENCES.includes(spec.licence) && detectLicence(licenceText) !== spec.licence) reject("E_EB_IMAGE", id, "licence", "licence_mismatch");
+  if (allowed.includes(spec.licence) && (o.licences?.detect ?? detectLicence)(licenceText) !== spec.licence) reject("E_EB_IMAGE", id, "licence", "licence_mismatch");
 
   const own = testChanges(repo, base, merge);
+  const extra = (o.functionalFiles ?? []).filter((p) => !own.whole.includes(p) && !own.regions.includes(p));
   const noRecipe = new Set<string>();
-  const groupMap = groupsOf(id, repo, merge, [...own.whole, ...own.regions], noRecipe);
+  const groupMap = groupsOf(id, repo, merge, [...own.whole, ...own.regions, ...extra], noRecipe);
   for (const it of items) {
     const tc = testChanges(repo, it.parent, it.commit);
     for (const [k, g] of groupsOf(id, repo, it.commit, [...tc.whole, ...tc.regions], noRecipe)) if (!groupMap.has(k)) groupMap.set(k, { ...g, files: [] });
@@ -410,7 +437,7 @@ export function buildUnit(spec: UnitSpec, repo: string, out: string, o: BuildOpt
   }
   const readBase = (p: string) => showFile(repo, base, p);
   const baseNames = new Set(listing(repo, base).keys());
-  const recipes = [...groupMap.values()].map((g) => ({ ...g, recipe: recipeFor(g.eco, readBase, g.root, baseNames) }));
+  const recipes = [...groupMap.values()].map((g) => ({ ...g, recipe: recipeFor(g.eco, readBase, g.root, baseNames, o.recipe) }));
   const pin = (tags: string[]) => {
     const tag = tags.find((t) => spec.images[t]);
     if (!tag) return reject("E_EB_IMAGE", id, "pull", "no_pinned_image:" + tags[0]);
@@ -469,7 +496,7 @@ export function buildUnit(spec: UnitSpec, repo: string, out: string, o: BuildOpt
   const sets: RestoreSet[] = [];
   writeSet(repo, join(out, "tests"), merge, null, [{ rev: merge, paths: own.regions }]);
   withPyConfig(join(out, "tests"));
-  sets.push({ dir: "tests", role: "functional", item: null, groups: scoped(merge, [...own.whole, ...own.regions].filter((p) => runnableIn(p))) });
+  sets.push({ dir: "tests", role: "functional", item: null, groups: scoped(merge, [...own.whole, ...own.regions, ...extra].filter((p) => runnableIn(p))) });
   const ownRunnable = [...own.whole, ...own.regions].filter((p) => runnableIn(p));
   const near = (keep: (p: string) => boolean) => [...baseNames].filter((p) => keep(p) && runnableIn(p)).sort().slice(0, 20);
   let baseOwn = ownRunnable.filter((p) => baseNames.has(p));
@@ -490,7 +517,7 @@ export function buildUnit(spec: UnitSpec, repo: string, out: string, o: BuildOpt
   writeFileSync(join(out, "solution/gold.patch"), diff(repo, base, merge));
   writeFileSync(join(out, "solution/solve.sh"), SOLVE_SH);
   writeFileSync(join(out, "upstream/LICENSE"), licenceText);
-  writeFileSync(join(out, "instruction.md"), "The statement note for this unit is written by lanes/eng-build/note.ts.\n");
+  writeFileSync(join(out, "instruction.md"), o.note ? o.note.trim() + "\n" : "The statement note for this unit is written by lanes/eng-build/note.ts.\n");
   const task: TaskJson = {
     schema: SCHEMA,
     id,
@@ -532,12 +559,13 @@ export function buildUnit(spec: UnitSpec, repo: string, out: string, o: BuildOpt
   const grid = (label: string, rev: string, set: RestoreSet, want?: string[]) => {
     const patch = rev === base ? "" : diff(repo, base, rev);
     writeFileSync(join(out, treePatch(label)), patch);
-    return gradeSet({ taskDir: out, task, eb, set, label, patch, runs, seed, work: o.work, cpus: o.cpus, want });
+    return gradeSet({ taskDir: out, task, eb, set, label, patch, runs, seed, work: o.work, cpus: o.cpus, want, sandbox: o.sandbox, crash: o.planted });
   };
+  const crashOnMerged = new Set<string>();
   const functional = grid("merged", merge, sets[0]);
   eb.unit.functional = Object.keys(functional).filter((k) => all(functional[k], "pass") && functional[k].length === runs).sort();
-  const atBase = grid("base", base, sets[1]);
-  const baseResults = Object.values(atBase).some((r) => r.some((c) => c === "pass" || c === "assert" || c === "missing_name"));
+  const atBase = o.planted ? {} : grid("base", base, sets[1]);
+  const baseResults = Object.values(atBase).some((r) => r.some((c) => c === "pass" || scorableFail(c) || c === "missing_name"));
 
   for (const [i, it] of items.entries()) {
     const set = sets[2 + i];
@@ -546,6 +574,7 @@ export function buildUnit(spec: UnitSpec, repo: string, out: string, o: BuildOpt
       continue;
     }
     const merged = grid("merged", merge, set);
+    for (const [id, r] of Object.entries(merged)) if (r.includes("crash")) crashOnMerged.add(id);
     const fixed = grid("fix:" + it.item, it.commit, set);
     if (it.kind === "T") {
       eb.unit.tCases.push(...anchorCases(merged, fixed, runs));
@@ -567,10 +596,23 @@ export function buildUnit(spec: UnitSpec, repo: string, out: string, o: BuildOpt
     });
   }
   eb.unit.tCases = [...new Set(eb.unit.tCases)].sort();
+  if (o.planted) {
+    const planted = new Set(eb.unit.aftermath.flatMap((a) => a.cases));
+    eb.planted = { crash: [...planted].filter((id) => crashOnMerged.has(id)).sort() };
+    let keep = eb.unit.functional.filter((id) => !planted.has(id));
+    const onBase = keep.length ? grid("base", base, sets[0], keep) : {};
+    keep = keep.filter((id) => !(onBase[id] ?? []).includes("pass") && (onBase[id] ?? []).some((c) => c !== "no_result" && c !== "timeout"));
+    for (const it of items.filter((i) => i.kind === "B")) {
+      if (keep.length === 0) break;
+      const onFix = grid("fix:" + it.item, it.commit, sets[0], keep);
+      keep = keep.filter((id) => all(onFix[id], "pass") && onFix[id].length === runs);
+    }
+    eb.unit.functional = keep;
+  }
   task.tests.functional = eb.unit.functional;
   let drop: Drop | null = null;
-  if (eb.unit.functional.length === 0) drop = { code: "E_EB_IMAGE", step: "merged", cls: "no_functional_pass", cases: 0 };
-  else if (!baseResults) drop = { code: "E_EB_IMAGE", step: "base", cls: "no_per_case_result", cases: 0 };
+  if (eb.unit.functional.length === 0) drop = { code: "E_EB_IMAGE", step: "merged", cls: o.planted ? "no_functional_case" : "no_functional_pass", cases: 0 };
+  else if (!baseResults && !o.planted) drop = { code: "E_EB_IMAGE", step: "base", cls: "no_per_case_result", cases: 0 };
   else if (!eb.unit.aftermath.some((a) => a.cases.length > 0)) drop = { code: "E_EB_NO_AFTERMATH", step: "aftermath", cls: "no_case_passed_the_rule", cases: 0 };
   writeFileSync(join(out, "eb.json"), JSON.stringify(eb, null, 2) + "\n");
   task.files = fileDigests(out);
@@ -617,6 +659,9 @@ export interface GradeOptions {
   check?: boolean;
   /** Ids to classify even when no run reported them (a case on a tree that does not compile). */
   want?: string[];
+  /** Planted-unit rule 2: crash-class failures grade as "crash". */
+  crash?: boolean;
+  sandbox?: Sandbox;
 }
 
 /** Grades one tree on one restore set: each runner group in its own verifier call, reading only the ids in the set's
@@ -640,8 +685,9 @@ export function gradeSet(o: GradeOptions): Grid {
       ids: sg.targets,
       cold: true,
       beforeRuns: (p) => productCheck(o, sg.group, p),
+      ...(o.sandbox ? { sandbox: o.sandbox } : {}),
     });
-    for (const [id, runs] of Object.entries(treeGrid(tree, g.runner.kind, sg.scopes, o.want))) grid[id] = runs;
+    for (const [id, runs] of Object.entries(treeGrid(tree, g.runner.kind, sg.scopes, o.want, o.crash))) grid[id] = runs;
   }
   return grid;
 }
@@ -664,11 +710,11 @@ function productCheck(o: GradeOptions, group: number, p: TreeResult["prepare"]):
 }
 
 /** Every in-scope id's class in each run of a tree. */
-export function treeGrid(tree: TreeResult, runner: Runner["kind"], scopes: string[], want: string[] = []): Grid {
+export function treeGrid(tree: TreeResult, runner: Runner["kind"], scopes: string[], want: string[] = [], crash = false): Grid {
   const ids = new Set<string>(want.filter((id) => inScope(runner, id, scopes)));
   for (const r of tree.runs) for (const id of [...r.parsed.seen, ...Object.keys(r.parsed.results)]) if (inScope(runner, id, scopes) && !(runner === "go" && goSubtest(id))) ids.add(id);
   const grid: Grid = {};
-  for (const id of [...ids].sort()) grid[id] = tree.runs.map((r) => runClasses(runner, r.parsed, [id], { timed_out: r.timed_out, stopped: r.out_full || r.killed })[id]);
+  for (const id of [...ids].sort()) grid[id] = tree.runs.map((r) => runClasses(runner, r.parsed, [id], { timed_out: r.timed_out, stopped: r.out_full || r.killed }, crash)[id]);
   return grid;
 }
 
