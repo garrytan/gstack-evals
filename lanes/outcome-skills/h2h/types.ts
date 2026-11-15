@@ -75,6 +75,15 @@ export interface H2hSession {
   /** Relative paths inside the session's record directory. */
   transcript: string;
   tree_bundle: string;
+  /** Part S: the attempt the record comes from (2 after the whole-session retry). */
+  attempts?: number;
+  /** Part S: the slot's allowance stops, counted apart from reservation-bound refusals. */
+  allowance_stops?: number;
+  /** Part S: the copied home's digest from arms-pins.json, or null for none and fixture homes. */
+  home_tree_sha256?: string | null;
+  claude_version?: string | null;
+  /** Part S: the session runner's refusal line, when the attempt ended on one. */
+  refused?: string | null;
 }
 
 export type Outcome = "clean_fix" | "fix_broke" | "no_fix" | "no_fix_broke";
