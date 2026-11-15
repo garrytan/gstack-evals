@@ -17,6 +17,9 @@ import { goFixture, nodeFixture, pyFixture, rustFixture, stubGitHub } from "./fi
 import { pinImages, plantedGrader, qualify, RECIPE, recount, type Outcome } from "./grade.ts";
 import { NEUTRAL, type MinedFix } from "./local.ts";
 import { mineRepo } from "./mine.ts";
+import { emitUnit, type LabelMap } from "./emit.ts";
+import { unitFolders } from "../stages/pipeline.ts";
+import { preflightRows, REAL } from "../stages/commands.ts";
 import { supplyGate, supplyReport } from "./supply.ts";
 
 const git = (dir: string, args: string[]) => spawnSync("git", args, { cwd: dir, encoding: "utf8" }).stdout ?? "";
@@ -271,6 +274,53 @@ export const DRY: DryCase[] = [
       const py = await catchOf("python", { "tests/test_build.py": 'from pkg import ops\n\n\ndef test_missing_build():\n    assert ops.label([], "q") == ""\n' });
       const js = await catchOf("node", { "test/build.test.js": 'import { test } from "node:test";\nimport assert from "node:assert/strict";\nimport { port } from "../src/cfg.js";\n\ntest("build default", () => {\n  assert.equal(port({}), 8080);\n});\n' });
       return { ok: py.catch === true && js.catch === true, detail: "python=" + py.catch + (py.drop ? " (" + py.drop + ")" : "") + " node=" + js.catch + (js.drop ? " (" + js.drop + ")" : "") };
+    },
+  },
+  {
+    name: "units: a constructed fix is emitted under random labels in the stages contract; unitFolders reads it and B is one commit",
+    async run() {
+      const { dir, fix, unit } = await constructed("go");
+      const root = dirname(dir);
+      const unitDir = join(root, "unit");
+      mkdirSync(join(unitDir, "environment"), { recursive: true });
+      writeFileSync(join(unitDir, "eb.json"), JSON.stringify({ unit: { id: fix.id, aftermath: [{ item: "B1", cases: [".::TestMul"] }], functional: [".::TestDescribe"] }, planted: { crash: [] } }));
+      const bare = join(root, "bundle.git");
+      git(root, ["init", "-q", "--bare", bare]);
+      git(dir, ["push", "-q", bare, unit.base + ":refs/heads/main"]);
+      git(bare, ["bundle", "create", "-q", join(unitDir, "environment", "task.bundle"), "--all"]);
+      const labels: LabelMap = { repos: {}, units: {} };
+      const u = emitUnit({ mirror: dir, fix, unit, unitDir, units: join(root, "units"), repos: join(root, "repos"), labels });
+      const src = unitFolders(join(root, "units"), join(root, "repos"));
+      const m = src.material(u.id);
+      const commits = git(src.base(u.id), ["rev-list", "--count", "HEAD"]).trim();
+      const sameTree = git(src.base(u.id), ["rev-parse", "HEAD^{tree}"]).trim() === git(dir, ["rev-parse", unit.base + "^{tree}"]).trim();
+      const labelled = /^u[0-9a-f]{12}$/.test(u.id) && /^r[0-9a-f]{12}$/.test(u.repo) && labels.units[u.id]?.candidate === fix.id && !JSON.stringify(u).includes(fix.id);
+      const ok = labelled && src.units().length === 1 && commits === "1" && sameTree && m.stubbed.length === 1 && m.implementation.length === 1 && m.tests.length === 1 && m.fix.diff.length > 0 && src.note(u.id).length > 0;
+      return { ok, detail: "labelled=" + labelled + " units=" + src.units().length + " B commits=" + commits + " same tree=" + sameTree + " stubbed=" + m.stubbed.length + " implementation=" + m.implementation.length + " tests=" + m.tests.length + " callers=" + m.callers.length };
+    },
+  },
+  {
+    name: "units: a Go fixture unit goes through emit, unitFolders, the stages preflight units row and the real grader on F'",
+    docker: true,
+    async run() {
+      const b = await built("go");
+      if (b.outcome.step !== "clean") return { ok: false, detail: "fixture_not_clean " + line(b.outcome) };
+      const root = scratch();
+      const units = join(root, "units");
+      const repos = join(root, "repos");
+      const u = emitUnit({ mirror: b.dir, fix: b.fix, unit: b.unit, unitDir: b.unitDir, units, repos, labels: { repos: {}, units: {} } });
+      const src = unitFolders(units, repos);
+      const row = preflightRows({ run: join(root, "run"), units, repos, gstack: root, record: root, harbor: "harbor", docker: "docker" }).find((r) => r.name === "units")!;
+      const tree = treeAt(b.dir, b.unit.fix);
+      try {
+        const g = await (await REAL.grader({ work: b.work, log: () => {} })).grade(src.units()[0], src.dir(u.id), tree);
+        const pass = g.planted.length === u.planted.length && g.planted.every((p) => p.runs.length > 0 && p.runs.every((c) => c === "pass"));
+        const fn = g.functional.length === u.functional.length && g.functional.every((p) => p.runs.every((c) => c === "pass"));
+        return { ok: row.ok && pass && fn && u.planted.length > 0, detail: "units row " + (row.ok ? "ok" : "failed") + "; planted " + u.planted.length + " pass on F'=" + pass + "; functional " + u.functional.length + " pass on F'=" + fn };
+      } finally {
+        rmSync(tree, { recursive: true, force: true });
+        rmSync(root, { recursive: true, force: true });
+      }
     },
   },
 ];
