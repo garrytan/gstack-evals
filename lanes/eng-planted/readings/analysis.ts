@@ -154,6 +154,7 @@ export function analyze(inp: AnalysisInput): Analysis {
   const pr = contrast("standalone", "engphase", prim);
   const pair = pairWord(pr, SKILL_ARMS.some((a) => facts[a].untested !== null));
   L.push("secondary standalone - engphase: " + pair + "; " + readingLine(pr) + "; " + pairRow(pair));
+  L.push("secondary standalone - engphase, clean check outside the pilot: " + readingLine(contrast("standalone", "engphase", prim, { units: inp.units.filter((u) => !u.pilot) })));
   L.push("secondary plain - none: " + readingLine(contrast("plain", "none", prim)));
 
   if (inp.judged && !inp.judged.reported) L.push("judged secondary: not reported as judged (" + (inp.judged.why ?? "the judge check failed") + ")");
@@ -197,6 +198,12 @@ export function analyze(inp: AnalysisInput): Analysis {
   for (const [name, us] of strata) L.push("stratum " + name + ": " + SKILL_ARMS.map((a) => a + " " + brief(contrast(a, "plain", prim, { units: us }))).join("; "));
   L.push("stratum plain pilot vs later builds: " + lvl(level("plain", prim, { all: (b) => b.pilot })?.estimate ?? null) + " vs " + lvl(level("plain", prim, { all: (b) => !b.pilot })?.estimate ?? null));
 
+  const classes = ["assert", "crash"] as const;
+  const byClass = (cls: (typeof classes)[number]): Measure => (b, u) => {
+    const ids = u.planted.filter((p) => u.plantedClass[p] === cls);
+    return ids.length ? avoid({ ...b, planted: b.planted.filter((r) => ids.includes(r.id)) }, { ...u, planted: ids }) : null;
+  };
+  L.push("planted cases by failure class: " + classes.map((cls) => cls + " " + inp.units.reduce((s, u) => s + u.planted.filter((p) => u.plantedClass[p] === cls).length, 0)).join(", ") + "; avoid by class: " + (["plain", ...SKILL_ARMS] as const).map((arm) => arm + " " + classes.map((cls) => cls + " " + lvl(level(arm, byClass(cls))?.estimate ?? null)).join(" ")).join(", "));
   const scored = inp.builds.filter((b) => !isGap(b));
   const toolShare = scored.length ? scored.filter((b) => b.coverage !== null).length / scored.length : 0;
   L.push("changed-line coverage: the tool scored " + lvl(toolShare, 2) + " of trees, " + (toolShare >= FROZEN.toolTreesMin ? "reported" : "not reported (under " + FROZEN.toolTreesMin.toFixed(2) + ")"));

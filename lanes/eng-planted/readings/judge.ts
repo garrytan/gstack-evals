@@ -48,15 +48,29 @@ export const loadPrompts = (named: string = NAMED_PROMPT): Prompts => ({ quotes:
 /** Arm and package names out of a bundle's text and file names. */
 export const stripNames = (text: string): string => ARM_NAMES.reduce((t, re) => t.replace(re, "[name removed]"), text);
 
-/** The bundle as the judge reads it: each file under a plain marker line, names stripped, cut after 12,000 words. */
+/** The bundle as the judge reads it: each file under a plain marker line, names stripped, and the files' own words cut
+ * after 12,000 (markers don't count). */
 export function bundleText(files: BundleFile[]): { text: string; words: number; truncated: boolean } {
-  const whole = stripNames(files.map((f) => "=== file: " + f.path + " ===\n" + f.text.trim()).join("\n\n"));
-  const max = FROZEN.bundle.maxWords;
-  let n = 0;
-  for (const m of whole.matchAll(/\S+/g)) {
-    if (++n > max) return { text: whole.slice(0, m.index).trimEnd(), words: max, truncated: true };
+  let left = FROZEN.bundle.maxWords;
+  let truncated = false;
+  const parts: string[] = [];
+  for (const f of files) {
+    const text = stripNames(f.text.trim());
+    let n = 0;
+    let cut = text.length;
+    for (const m of text.matchAll(/\S+/g)) {
+      if (n === left) {
+        cut = m.index;
+        truncated = true;
+        break;
+      }
+      n++;
+    }
+    left -= n;
+    if (n === 0 && cut === 0) continue;
+    parts.push("=== file: " + stripNames(f.path) + " ===\n" + text.slice(0, cut).trimEnd());
   }
-  return { text: whole, words: n, truncated: false };
+  return { text: parts.join("\n\n"), words: FROZEN.bundle.maxWords - left, truncated };
 }
 
 const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();

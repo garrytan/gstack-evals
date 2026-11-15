@@ -295,7 +295,8 @@ export const DRY: DryCase[] = [
     name: "judge bundle cap: 12,500 words are cut to 12,000",
     run: () => {
       const t = bundleText([{ path: "plan.md", text: "word ".repeat(9000) }, { path: "review/review.md", text: "more ".repeat(3500) }]);
-      return ok(t.truncated && t.words === 12000 && t.text.split(/\s+/).filter(Boolean).length === 12000, "words " + t.words + ", truncated " + t.truncated);
+      const content = t.text.split("\n").filter((l) => !l.startsWith("=== file: ")).join(" ").split(/\s+/).filter(Boolean).length;
+      return ok(t.truncated && t.words === 12000 && content === 12000 && t.text.includes("=== file: review/review.md ==="), "words " + t.words + " (counted " + content + "), truncated " + t.truncated);
     },
   },
   {
