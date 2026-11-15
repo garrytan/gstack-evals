@@ -241,6 +241,17 @@
     "seed": 20261115,
     "items": 60,
     "threads": 3,
-    "sha256": "TODO(custody:synthetic_sha256)"
+    "sha256": "ec36d117916ba498673e01e69fa57770ac94d9639cb8c512f163187f61e78770"
+  },
+  "spend_items": {
+    "I1": "ask-i1-smoke",
+    "I2": "ask-i2-pilot",
+    "I2r": "ask-i2-pilot-retry",
+    "I3": "ask-i3-label-audit",
+    "I4": "ask-i4-relabel",
+    "I5": "ask-i5-linking",
+    "I6": "ask-i6-opus",
+    "I7": "ask-i7-sol",
+    "I8": "ask-i8-particle"
   }
 }

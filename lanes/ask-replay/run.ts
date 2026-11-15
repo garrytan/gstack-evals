@@ -109,6 +109,8 @@ export interface ShardResult {
 }
 
 const R = FROZEN.retries;
+/** Draws: 1 first, 2 the one redraw after a resume, 3 the end-of-run UPSTREAM pass; each call's ledger key holds its draw. */
+export const UPSTREAM_DRAW = 3;
 const realSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 /** Journaled draws per sample id: the highest draw started and its attempts. */
@@ -237,7 +239,7 @@ export async function upstreamRedraw(o: ShardOptions): Promise<{ redrawn: number
   const todo = o.samples.filter((s) => last.get(s.id) === "upstream" && !o.store.has(s.id + "~u"));
   let still = 0;
   await pool(o.concurrency ?? FROZEN.shards.concurrency, todo.map((s) => async () => {
-    const r = await runSample(o, s, 1, true);
+    const r = await runSample(o, s, UPSTREAM_DRAW, true);
     if (r.missing === "upstream") still++;
     seal(o, s.id + "~u", r);
   }));
@@ -263,9 +265,10 @@ export function ledgerClient(o: { local: LocalLedger; leaseId: string; runId: st
     async call(s, key, body) {
       const { price, reservation } = await reserve(s, key, body);
       const answer = await o.send(s, key, body);
-      const usage = (answer?.body as { usage?: unknown } | undefined)?.usage;
-      const cost = answer ? usageCost(price, usage ?? {}) : null;
-      const settled = await o.local.settle(reservation.reservation_id, cost ? { kind: "spent", spent_micros: cost.micros, usage: cost.usage } : { kind: "unknown" });
+      const cost = answer?.status === 200 ? usageCost(price, (answer.body as { usage?: unknown } | null)?.usage) : null;
+      const zero = { input: 0, output: 0, reasoning: 0, cache_read: 0, cache_write: 0 };
+      const outcome = cost ? { kind: "spent" as const, spent_micros: cost.micros, usage: cost.usage } : answer && answer.status !== 200 ? { kind: "spent" as const, spent_micros: 0, usage: zero } : { kind: "unknown" as const };
+      const settled = await o.local.settle(reservation.reservation_id, outcome);
       if (!settled.ok) throw new Error(settled.code + " " + settled.message);
       return answer && { ...answer, micros: cost?.micros ?? null };
     },

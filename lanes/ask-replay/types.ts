@@ -95,7 +95,7 @@ export interface Usage {
 /** One sample's sealed record. text and reason are model output and stay in custody. */
 export interface SampleRecord {
   sample: Sample;
-  /** 1, or 2 for the one redraw after a resume found an open call with no sealed reply. */
+  /** 1; 2 for the one redraw after a resume found an open call with no sealed reply; 3 for the end-of-run UPSTREAM pass. */
   draw: number;
   attempts: number;
   missing: MissingKind | null;

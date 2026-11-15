@@ -45,6 +45,8 @@ export interface Frozen {
   shards: { stop_launching_after_minutes: number; limit_minutes: number; concurrency: number; request_timeout_ms: number };
   smoke: { items: number; per_class: Record<string, number>; seed: number; replicates: number };
   synthetic: { seed: number; items: number; threads: number; sha256: string };
+  /** The prereg's spend items (I1 to I8 and the pilot retry) as ledger line item names; one lease serves one run. */
+  spend_items: Record<string, string>;
 }
 
 export const FROZEN_PATH = join(import.meta.dir, "frozen.json");
