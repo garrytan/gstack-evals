@@ -9,7 +9,7 @@ import { parseLog } from "../../quick/laneb/l1/probes.ts";
 import { checkContract, validateContract } from "../../lanes/harness-mechanics/vendor/gstack/lib/skill-contract.ts";
 import { loadMatcher } from "../../lanes/harness-mechanics/match.ts";
 import { REPO } from "../../lanes/harness-mechanics/pins.ts";
-import { hookFields, patternsPerArm, pickShip, scoreSession, toTranscript } from "../../lanes/harness-mechanics/score.ts";
+import { hookFields, patternsPerArm, pickShip, scoreSession, showsFailure, showsOutcome, toTranscript } from "../../lanes/harness-mechanics/score.ts";
 import { hmRow } from "../../lanes/harness-mechanics/table.ts";
 
 const FX = join(import.meta.dir, "fixtures", "scorer");
@@ -178,5 +178,34 @@ describe("the lint or typecheck only flag (ruling C's split print)", () => {
     expect(read(true, "CHECK tests ENV 0.0s  no pytest\nCHECK lint ENV 0.0s  no ruff")).toEqual([false, false]);
     expect(read(true)).toEqual([false, false]);
     expect(read(false, "CHECK lint PASS 0.4s")).toEqual([null, null]);
+  });
+});
+
+describe("a pytest summary printed in colour (Deviation S4-2)", () => {
+  const E = "\x1b";
+  const passing = E + "[32m" + E + "[1m57 passed" + E + "[0m" + E + "[32m in 4.87s" + E + "[0m";
+  const failing = E + "[31m" + E + "[1m1 failed" + E + "[0m, " + E + "[32m57 passed" + E + "[0m" + E + "[31m in 4.87s" + E + "[0m";
+  test("a coloured summary is a test outcome, and its failed count is a failure", () => {
+    expect(showsOutcome(passing)).toBe(true);
+    expect(showsFailure(passing)).toBe(false);
+    expect(showsOutcome(failing)).toBe(true);
+    expect(showsFailure(failing)).toBe(true);
+  });
+  test("a line holding 1m57 passed with no colour code before the count is not", () => {
+    expect(showsOutcome("1m57 passed in 4.87s")).toBe(false);
+    expect(showsOutcome("run 1m57 passed in 4.87s")).toBe(false);
+    expect(showsFailure("57 passed, 1m2 failed in 4.87s")).toBe(false);
+  });
+  test("a session whose check after the last edit prints a coloured summary scores adherent", () => {
+    const recs = [
+      { type: "SystemMessage", subtype: "init", init: { cwd: "/testbed" } },
+      { type: "AssistantMessage", content: [{ id: "w", name: "Write", input: { file_path: "/testbed/src/app.py", content: "x = 1\n" } }], usage },
+      { type: "UserMessage", content: [{ tool_use_id: "w", content: "ok" }] },
+      { type: "AssistantMessage", content: [{ id: "c", name: "Bash", input: { command: "cd /testbed; python -m pytest -q tests 2>&1 | tail -2" } }], usage },
+      { type: "UserMessage", content: [{ tool_use_id: "c", content: passing }] },
+      { type: "AssistantMessage", content: [{ text: "STATUS: FIXED" }], usage },
+    ];
+    const s = scoreSession(recs, { pass: null });
+    expect([s.adherent, s.adherent_strict]).toEqual([true, true]);
   });
 });

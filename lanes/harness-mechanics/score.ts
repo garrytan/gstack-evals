@@ -29,7 +29,7 @@ export const isCheck = (cmd: string) => new RegExp(frozen(), "i").test(bare(cmd)
 // alternatives end there; every runner alternative ends on its runner's name or run.
 export const isRepro = (cmd: string) => [...bare(cmd).matchAll(new RegExp(frozen(), "gi"))].some((m) => /\.(?:py|sh)$/.test(m[0]));
 
-const PYTEST = /\b\d+ (?:passed|failed|errors?)\b.*\bin \d+(?:\.\d+)?s\b/;
+const PYTEST = /(?:\b|(?<=\x1b\[[\d;]*m))\d+ (?:passed|failed|errors?)\b.*\bin \d+(?:\.\d+)?s\b/;
 const RESULT_LINES = [
   /^Ran \d+ tests? in \d+(?:\.\d+)?s\b/,
   /^\s*[\w.-]+: (?:OK|FAIL)\b.*seconds\)\s*$/,
@@ -43,7 +43,7 @@ const LINT_LINE = /^CHECK (?:lint|typecheck) (?:PASS|FAIL) \d/;
 /** A test outcome: a pytest summary with passed, failed or error (never "no tests ran"), unittest's Ran N tests, a tox or nox result line, or a CHECK line with PASS or FAIL. */
 export const showsOutcome = (text: string) => lines(text).some((l) => (PYTEST.test(l) && !/no tests ran/.test(l)) || RESULT_LINES.some((re) => re.test(l)));
 /** The stricter line's failure: a failed or error count in a pytest summary, unittest's FAILED (failures=N or errors=N), or a CHECK FAIL line. */
-export const showsFailure = (text: string) => lines(text).some((l) => (PYTEST.test(l) && /\b\d+ (?:failed|errors?)\b/.test(l)) || /^FAILED \((?:failures|errors)=\d+/.test(l) || /^CHECK \S+ FAIL \d/.test(l));
+export const showsFailure = (text: string) => lines(text).some((l) => (PYTEST.test(l) && /(?:\b|(?<=\x1b\[[\d;]*m))\d+ (?:failed|errors?)\b/.test(l)) || /^FAILED \((?:failures|errors)=\d+/.test(l) || /^CHECK \S+ FAIL \d/.test(l));
 
 /** Lane B's SDK records as the Claude Code transcript gstack's parseTranscript reads, every record at the session's cwd. */
 export function toTranscript(recs: Rec[]): Transcript {
