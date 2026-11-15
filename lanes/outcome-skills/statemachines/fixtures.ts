@@ -15,9 +15,13 @@ const git = (dir: string, ...args: string[]) => {
 };
 
 /** A repo with the given files committed over several commits (plus a tag, a branch and a remote), returning its dir and
- *  the head commit. Files under "untracked:" prefixes are written but not committed. */
+ *  the head commit. Files under "untracked:" prefixes are written but not committed. The repo sits one level under a temp
+ *  root that carries .gstack-test-fixture, so gstack's review sweep reads it as a test fixture, not a fetched clone. */
 export function fixtureRepo(files: Record<string, string>, commits = 3): { dir: string; head: string } {
-  const dir = mkdtempSync(join(tmpdir(), "sm-fixture-"));
+  const root = mkdtempSync(join(tmpdir(), "sm-fixture-"));
+  writeFileSync(join(root, ".gstack-test-fixture"), "");
+  const dir = join(root, "repo");
+  mkdirSync(dir);
   git(dir, "init", "-q");
   git(dir, "symbolic-ref", "HEAD", "refs/heads/trunk");
   const entries = Object.entries(files);

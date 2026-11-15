@@ -1,0 +1,22 @@
+[
+  {
+    "name": "dom > has document",
+    "file": "/testbed/tests/dom.vt.test.js",
+    "projectName": "unit"
+  },
+  {
+    "name": "dom > fails",
+    "file": "/testbed/tests/dom.vt.test.js",
+    "projectName": "unit"
+  },
+  {
+    "name": "dom > has document",
+    "file": "/testbed/tests/dom.vt.test.js",
+    "projectName": "browser (chromium)"
+  },
+  {
+    "name": "dom > fails",
+    "file": "/testbed/tests/dom.vt.test.js",
+    "projectName": "browser (chromium)"
+  }
+]
