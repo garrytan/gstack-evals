@@ -209,14 +209,28 @@
       "n": 100,
       "reserve": 10,
       "stage1": 12,
-      "stage1_positions": "10, 20, ..., 120 of the seeded order",
+      "stage1_positions": [
+        10,
+        20,
+        30,
+        40,
+        50,
+        60,
+        70,
+        80,
+        90,
+        100,
+        110,
+        120
+      ],
       "window_from": "2026-03-01",
       "walk_back_to": "2025-01-01",
-      "repo_cap": 3
+      "repo_cap": 3,
+      "position_rule": "positions count only units that pass every gate, walked in the seeded order; stage 2 takes the other positions in order up to n, then the reserves; stage 0 takes the first bug unit and the first feature unit after the reserves"
     },
     "B": {
       "n": 60,
-      "reserve": 10,
+      "reserve": 5,
       "stage1": 12,
       "b1_share_max": 0.5,
       "b1_min_units": 20,
@@ -226,7 +240,17 @@
       ],
       "widen_to": "2025-06-01",
       "repo_cap": 3,
-      "browser_oracle_runs": 5
+      "browser_oracle_runs": 5,
+      "reserve_rule": "5 reserves in each of the B1 and B2 frames",
+      "stage1_positions": [
+        6,
+        12,
+        18,
+        24,
+        30,
+        36
+      ],
+      "position_rule": "the O rule run separately over the B1 and B2 frames; stage 1 takes these positions in each frame (6 units each); stage 0 takes the first unit after each frame's reserves"
     }
   },
   "stage0": {
