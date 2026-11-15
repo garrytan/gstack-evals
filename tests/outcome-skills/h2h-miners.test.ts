@@ -5,7 +5,7 @@ import { describe, expect, test } from "bun:test";
 import { readPrereg } from "../../lanes/outcome-skills/h2h/prereg.ts";
 import { b1Counts, isBrowserTest, screenPr, screenRepos, statementText, type PrNode, type RepoRow } from "../../lanes/outcome-skills/h2h/breadth/b1.ts";
 import { newDrops, readAdvisory, screenAdvisories, screenFiles, screenLicences, type Advisory, type LicencedCandidate } from "../../lanes/outcome-skills/h2h/breadth/b2.ts";
-import { excludedBy, sha256, windows, type Gql } from "../../lanes/outcome-skills/h2h/breadth/frame.ts";
+import { excludedBy, licenceStatus, sha256, windows, type Gql } from "../../lanes/outcome-skills/h2h/breadth/frame.ts";
 import { b1Statement, candidateOf } from "../../lanes/outcome-skills/h2h/breadth/oracle-b.ts";
 
 const p = readPrereg();
@@ -19,6 +19,17 @@ describe("exclusion list", () => {
     expect(excludedBy("addyosmani/agent-skills", p.exclusion)).toBe("addyosmani/agent-skills");
     expect(excludedBy("addyosmani/other", p.exclusion)).toBeNull();
     expect(excludedBy("vercel/next.js", p.exclusion)).toBeNull();
+  });
+});
+
+describe("licence rule", () => {
+  test("permissive, pending the second read, or out", () => {
+    expect(licenceStatus("MIT", p.licences)).toBe("permissive");
+    expect(licenceStatus("MIT-0", p.licences)).toBe("permissive");
+    expect(licenceStatus("NOASSERTION", p.licences)).toBe("second_read_pending");
+    expect(licenceStatus(null, p.licences)).toBe("second_read_pending");
+    expect(licenceStatus("GPL-3.0", p.licences)).toBe("out");
+    expect(licenceStatus("MPL-2.0", p.licences)).toBe("out");
   });
 });
 
@@ -43,19 +54,20 @@ describe("B2 screens", () => {
     expect(Object.keys(d.by_rule).sort()).toEqual(["ecosystem", "excluded", "fix_repos_not_one", "no_github_fix_ref", "not_reviewed", "outside_window", "withdrawn"]);
     expect(d.excluded["openclaw/*"]).toEqual({ primary: 1 });
   });
-  test("licence screen: not found, renamed into the exclusion list, not permissive, archived, kept", () => {
+  test("licence screen: not found, renamed into the exclusion list, not permissive, archived, kept, and pending kept and marked", () => {
     const d = newDrops();
     const c = (repo: string) => ({ ghsa: repo, path: "x", published: "2026-05-01", window: "primary" as const, ecosystems: ["npm"], repo, fix: { repo, kind: "commit" as const, ref: "1234567" }, fix_refs: 1 });
-    const out = screenLicences([c("a/gone"), c("a/moved"), c("a/mpl"), c("a/arch"), c("a/ok")], {
+    const out = screenLicences([c("a/gone"), c("a/moved"), c("a/mpl"), c("a/arch"), c("a/ok"), c("a/other"), c("a/none")], {
       "a/gone": "NOT_FOUND", "a/moved": { name_with_owner: "garrytan/moved", spdx: "MIT", archived: false }, "a/mpl": { name_with_owner: "a/mpl", spdx: "MPL-2.0", archived: false },
-      "a/arch": { name_with_owner: "a/arch", spdx: "MIT", archived: true }, "a/ok": { name_with_owner: "A/Ok", spdx: "Apache-2.0", archived: false },
+      "a/arch": { name_with_owner: "a/arch", spdx: "NOASSERTION", archived: true }, "a/ok": { name_with_owner: "A/Ok", spdx: "Apache-2.0", archived: false },
+      "a/other": { name_with_owner: "a/other", spdx: "NOASSERTION", archived: false }, "a/none": { name_with_owner: "a/none", spdx: null, archived: false },
     }, p, d);
-    expect(out.map((x) => [x.ghsa, x.licence, x.canonical])).toEqual([["a/ok", "Apache-2.0", "A/Ok"]]);
+    expect(out.map((x) => [x.ghsa, x.licence, x.second_read_pending, x.canonical])).toEqual([["a/ok", "Apache-2.0", false, "A/Ok"], ["a/other", "NOASSERTION", true, "a/other"], ["a/none", null, true, "a/none"]]);
     expect(Object.keys(d.by_rule).sort()).toEqual(["archived", "excluded", "licence_not_found", "licence_not_permissive"]);
   });
   test("file-count screen: a test file and 1 to 6 source files under the ecosystems' languages", () => {
     const d = newDrops();
-    const c = (ghsa: string): LicencedCandidate => ({ ghsa, path: "x", published: "2026-05-01", window: "primary", ecosystems: ["Go"], repo: "a/b", fix: { repo: "a/b", kind: "commit", ref: "1234567" }, fix_refs: 1, licence: "MIT", canonical: "a/b" });
+    const c = (ghsa: string): LicencedCandidate => ({ ghsa, path: "x", published: "2026-05-01", window: "primary", ecosystems: ["Go"], repo: "a/b", fix: { repo: "a/b", kind: "commit", ref: "1234567" }, fix_refs: 1, licence: "MIT", second_read_pending: false, canonical: "a/b" });
     const files: Record<string, string[]> = {
       notest: ["a.go"], nosrc: ["a_test.go", "README.md"], many: ["a_test.go", ...Array.from({ length: 7 }, (_, i) => "s" + i + ".go")], ok: ["pkg/a.go", "pkg/a_test.go", "go.sum"],
     };
@@ -68,8 +80,8 @@ describe("B2 screens", () => {
 describe("B1 screens", () => {
   const repo = (o: Partial<RepoRow>): RepoRow => ({ repo: "acme/web", stars: 9000, licence: "MIT", language: "TypeScript", archived: false, runners: ["playwright"], ...o });
   test("repository screen", () => {
-    const s = screenRepos([repo({ repo: "obra/x" }), repo({ repo: "a/gpl", licence: "GPL-3.0" }), repo({ repo: "a/arch", archived: true }), repo({ repo: "a/none", runners: [] }), repo({})], p);
-    expect(s.kept.map((r) => r.repo)).toEqual(["acme/web"]);
+    const s = screenRepos([repo({ repo: "obra/x" }), repo({ repo: "a/gpl", licence: "GPL-3.0" }), repo({ repo: "a/arch", archived: true }), repo({ repo: "a/none", runners: [] }), repo({}), repo({ repo: "a/unlicensed", licence: null }), repo({ repo: "a/other", licence: "NOASSERTION" })], p);
+    expect(s.kept.map((r) => r.repo)).toEqual(["acme/web", "a/unlicensed", "a/other"]);
     expect(s.drops).toEqual({ excluded: 1, licence_not_permissive: 1, archived: 1, no_root_browser_runner: 1 });
   });
   test("browser-test path rule", () => {
@@ -93,9 +105,13 @@ describe("B1 screens", () => {
     expect(row.statement_sha256).toBe(sha256(statementText("Focus lost", "Steps")));
     expect(JSON.stringify(row)).not.toContain("Focus lost");
     expect(row.fix).toEqual({ commit: C40, parent: P40 });
+    expect([row.licence, row.second_read_pending]).toEqual(["MIT", false]);
+    const pending = screenPr(repo({ licence: "NOASSERTION" }), pr({}), w);
+    if (typeof pending === "string") throw new Error(pending);
+    expect([pending.licence, pending.second_read_pending]).toEqual(["NOASSERTION", true]);
   });
   test("the B1 statement is read again through GraphQL and checked against the frozen digest", async () => {
-    const c = candidateOf("B1", { repo: "acme/web", number: 7, url: "u", merged: "2026-06-02", month: "2026-06", window: "primary", licence: "MIT", runners: ["playwright"], fix: { commit: C40, parent: P40 }, files: { browser_test: 1, test: 1, source: 1, total: 2 }, issue_url: "https://github.com/acme/web/issues/3", statement_sha256: sha256(statementText("Focus lost", "Steps")), statement_chars: 17 });
+    const c = candidateOf("B1", { repo: "acme/web", number: 7, url: "u", merged: "2026-06-02", month: "2026-06", window: "primary", licence: "MIT", second_read_pending: false, runners: ["playwright"], fix: { commit: C40, parent: P40 }, files: { browser_test: 1, test: 1, source: 1, total: 2 }, issue_url: "https://github.com/acme/web/issues/3", statement_sha256: sha256(statementText("Focus lost", "Steps")), statement_chars: 17 });
     const stub = (resource: unknown): Gql => async (q) => {
       expect(q).toContain(JSON.stringify("https://github.com/acme/web/issues/3"));
       return { data: { resource } };

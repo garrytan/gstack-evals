@@ -10,7 +10,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { h2hFail, readPrereg, type H2hPrereg } from "../prereg.ts";
-import { bump, ECOSYSTEM_LANG, excludedBy, fileCounts, FREEZE_DATE, pool, sorted, windowOf, windows, writeJson, type Gql, type Windows } from "./frame.ts";
+import { LICENCE_RULE, licenceStatus, bump, ECOSYSTEM_LANG, excludedBy, fileCounts, FREEZE_DATE, pool, sorted, windowOf, windows, writeJson, type Gql, type Windows } from "./frame.ts";
 
 export const ADVISORY_DB = { repo: "github/advisory-database", url: "https://github.com/github/advisory-database.git", commit: "a91f5a514f4697f0303f547c9b50a12eb07fa70f", committed: "2026-11-15T03:35:23Z", licence: "CC-BY-4.0" } as const;
 /** The reviewed advisory directories the miner reads: the years the widened window spans. */
@@ -139,10 +139,10 @@ export async function readLicences(repos: string[], gql: Gql, log: (s: string) =
   return out;
 }
 
-export interface LicencedCandidate extends B2Candidate { licence: string; canonical: string }
+export interface LicencedCandidate extends B2Candidate { licence: string | null; second_read_pending: boolean; canonical: string }
 
-/** The licence screen: found, on prereg.json's permissive list, not archived, and the canonical name (after a rename) not on
- *  the exclusion list either. */
+/** The licence screen: found, the canonical name (after a rename) not on the exclusion list either, a licence on prereg.json's
+ *  permissive list or pending the second read (kept and marked with its raw spdxId), and not archived. */
 export function screenLicences(cands: B2Candidate[], lic: LicenceMap, p: Pick<H2hPrereg, "exclusion" | "licences">, d: Drops): LicencedCandidate[] {
   const out: LicencedCandidate[] = [];
   for (const c of cands) {
@@ -155,9 +155,10 @@ export function screenLicences(cands: B2Candidate[], lic: LicenceMap, p: Pick<H2
       bump(d.excluded[ex]!, c.window);
       continue;
     }
-    if (!l.spdx || !p.licences.includes(l.spdx)) { drop(d, "licence_not_permissive", c.window); continue; }
+    const status = licenceStatus(l.spdx, p.licences);
+    if (status === "out") { drop(d, "licence_not_permissive", c.window); continue; }
     if (l.archived) { drop(d, "archived", c.window); continue; }
-    out.push({ ...c, licence: l.spdx, canonical: l.name_with_owner });
+    out.push({ ...c, licence: l.spdx, second_read_pending: status === "second_read_pending", canonical: l.name_with_owner });
   }
   return out;
 }
@@ -266,7 +267,7 @@ export async function commitFiles(repo: string, ref: string, gitDir: string): Pr
 
 export interface B2Row {
   ghsa: string; advisory_path: string; repo: string; published: string; month: string; window: "primary" | "widened";
-  ecosystem: string; licence: string; fix: { kind: "commit" | "pull"; ref: string; commit: string; parent: string }; fix_refs: number;
+  ecosystem: string; licence: string | null; second_read_pending: boolean; fix: { kind: "commit" | "pull"; ref: string; commit: string; parent: string }; fix_refs: number;
   files: { test: number; source: number; total: number };
 }
 
@@ -282,7 +283,7 @@ export function screenFiles(cands: LicencedCandidate[], files: (c: LicencedCandi
     if (n.test < 1) { drop(d, "no_test_file", c.window); continue; }
     if (n.source < 1) { drop(d, "source_files_0", c.window); continue; }
     if (n.source > 6) { drop(d, "source_files_over_6", c.window); continue; }
-    out.push({ ghsa: c.ghsa, advisory_path: c.path, repo: c.canonical, published: c.published, month: c.published.slice(0, 7), window: c.window, ecosystem: c.ecosystems.join("+"), licence: c.licence, fix: { kind: c.fix.kind, ref: c.fix.ref, commit: f.commit, parent: f.parent }, fix_refs: c.fix_refs, files: n });
+    out.push({ ghsa: c.ghsa, advisory_path: c.path, repo: c.canonical, published: c.published, month: c.published.slice(0, 7), window: c.window, ecosystem: c.ecosystems.join("+"), licence: c.licence, second_read_pending: c.second_read_pending, fix: { kind: c.fix.kind, ref: c.fix.ref, commit: f.commit, parent: f.parent }, fix_refs: c.fix_refs, files: n });
   }
   return out.sort((a, b) => (a.ghsa < b.ghsa ? -1 : 1));
 }
@@ -342,12 +343,13 @@ export async function mineB2(o: { db: string; work: string; gql: Gql; licences?:
     window: { primary: [w.from, w.to], widened: [w.widen_to, w.to] },
     rules: {
       fix_ref: "the advisory's first GitHub pull request reference, else its first commit reference, in the advisory's order (" + FIX_REF.source + ")",
+      licence: LICENCE_RULE,
       ecosystems: Object.fromEntries(Object.entries(ECOSYSTEM_LANG)),
       files: "at least 1 test file and 1 to 6 non-test source files, classified by lanes/outcome-skills/statemachines/langs.ts classify under each ecosystem's language",
       commit_files: "git diff-tree -r --raw --no-renames against the first parent; an exact rename counts once",
       pull_files: "GitHub's pull request file list; fix commit is the merge commit and parent its first parent",
     },
-    counts: { advisories_read: advs.length, eligible_primary: count("primary"), eligible_widened: count("widened"), cap3_primary: cap3(["primary"]), cap3_with_widened: cap3(["primary", "widened"]), eligible_primary_by_ecosystem: sorted(byEco) },
+    counts: { advisories_read: advs.length, eligible_primary: count("primary"), eligible_widened: count("widened"), cap3_primary: cap3(["primary"]), cap3_with_widened: cap3(["primary", "widened"]), eligible_primary_by_ecosystem: sorted(byEco), second_read_pending_primary: rows.filter((r) => r.window === "primary" && r.second_read_pending).length, second_read_pending_widened: rows.filter((r) => r.window === "widened" && r.second_read_pending).length },
     drops: { by_rule: Object.fromEntries(Object.entries(d.by_rule).sort().map(([k, v]) => [k, sorted(v)])), excluded_by_pattern: Object.fromEntries(p.exclusion.map((x) => [x, sorted(d.excluded[x] ?? {})])) },
     advisories: rows,
   };

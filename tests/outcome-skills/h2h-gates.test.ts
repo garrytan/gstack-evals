@@ -72,9 +72,9 @@ describe("gates, one good and one bad case each", () => {
     expect(judge(f2p, base, [...fixed.slice(0, 4), { "t::fails": "fail", "t::ok": "pass" }]).code).toBe("E_SM_ORACLE_UNSTABLE");
     expect(readPrereg().classes.B.browser_oracle_runs).toBe(5);
   });
-  test("B1 floor", () => {
-    expect(planB({ b1: { primary: 20, widened: 0, multilang: 0 }, b2: { primary: 99, widened: 0 } }).b1.infeasible).toBe(false);
-    expect(planB({ b1: { primary: 19, widened: 0, multilang: 0 }, b2: { primary: 99, widened: 0 } }).b1.code).toBe("E_H2H_B_INFEASIBLE");
+  test("B1 floor: stage 2 needs 20 units, so the frame needs 32 usable", () => {
+    expect(planB({ b1: { primary: 32, widened: 0, multilang: 0 }, b2: { primary: 99, widened: 0 } }).b1).toMatchObject({ infeasible: false, stage2: 20 });
+    expect(planB({ b1: { primary: 31, widened: 0, multilang: 0 }, b2: { primary: 99, widened: 0 } }).b1.code).toBe("E_H2H_B_INFEASIBLE");
   });
 });
 
@@ -99,11 +99,11 @@ describe("one B1 unit through every gate", () => {
     assertStored(fakeStore([REF]), REF, REF);
     const root = mkdtempSync(join(tmpdir(), "h2h-gates-"));
     try {
-      const c = candidateOf("B1", { repo: "acme/web", number: 7, url: "u", merged: "2026-06-02", month: "2026-06", window: "primary", licence: "MIT", runners: ["playwright"], fix: { commit: C40, parent: P40 }, files: { browser_test: 1, test: 1, source: 1, total: 2 }, issue_url: "https://github.com/acme/web/issues/3", statement_sha256: "0".repeat(64), statement_chars: statement.length });
+      const c = candidateOf("B1", { repo: "acme/web", number: 7, url: "u", merged: "2026-06-02", month: "2026-06", window: "primary", licence: "MIT", second_read_pending: false, runners: ["playwright"], fix: { commit: C40, parent: P40 }, files: { browser_test: 1, test: 1, source: 1, total: 2 }, issue_url: "https://github.com/acme/web/issues/3", statement_sha256: "0".repeat(64), statement_chars: statement.length });
       const u = writeBUnit(join(root, c.id), {
         c, lang: "ts", plan, statement, tests: { f2p, p2p },
         patches: { fix: "diff --git a/src/focus.ts b/src/focus.ts\n+restore()\n", test: "diff --git a/e2e/focus.spec.ts b/e2e/focus.spec.ts\n+test()\n", all: ["e2e/focus.spec.ts", "src/focus.ts"], testFiles: ["e2e/focus.spec.ts"], fixFiles: ["src/focus.ts"], sourceFiles: ["src/focus.ts"] },
-        h2h: { kind: "B1", image_ref: REF, runner: "playwright", format: plan.format, ecosystem: "npm", licence: "MIT", statement_sha256: "0".repeat(64), browser: bc, build: { image_id: "sha256:" + "1".repeat(64), dockerfile_sha256: "2".repeat(64) } },
+        h2h: { kind: "B1", image_ref: REF, runner: "playwright", format: plan.format, ecosystem: "npm", licence: "MIT", second_read_pending: false, statement_sha256: "0".repeat(64), browser: bc, build: { image_id: "sha256:" + "1".repeat(64), dockerfile_sha256: "2".repeat(64) } },
       });
       const back = readUnit(join(root, c.id));
       expect(back.image.ref).toBe(REF);

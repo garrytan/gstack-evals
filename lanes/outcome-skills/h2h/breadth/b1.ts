@@ -1,20 +1,20 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
-// The B1 miner (plan section 6): a repository list searched once on the freeze date and frozen as b1-repos.json (permissive
-// TypeScript and JavaScript repositories that run a real-browser test runner at the root), then their merged pull
+// The B1 miner (plan section 6): a repository list searched once on the freeze date and frozen as b1-repos.json (TypeScript
+// and JavaScript repositories that run a real-browser test runner at the root, with a permissive licence or one pending
+// section 5's second read), then their merged pull
 // requests with "fix" in the title, closing exactly one linked issue (its title and body are the problem statement, kept
 // only as a sha256), changing at least one browser-test file by the frozen path rule and 1 to 6 non-test source files.
 // The fallback's widened months are mined in the same run and tagged. b1-frame.json holds the issue URL and the
 // statement's sha256, never its text, and the drop counts per rule and per exclusion pattern.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { h2hFail, readPrereg, type H2hPrereg } from "../prereg.ts";
-import { bump, excludedBy, fileClass, FREEZE_DATE, sha256, sorted, windowOf, windows, type Gql, type Windows } from "./frame.ts";
+import { readPrereg, type H2hPrereg } from "../prereg.ts";
+import { LICENCE_RULE, bump, excludedBy, fileClass, FREEZE_DATE, licenceStatus, sha256, sorted, windowOf, windows, type Gql, type Windows } from "./frame.ts";
 
-/** GitHub search's licence keyword for each SPDX id on prereg.json's permissive list. */
-export const LICENCE_KEYWORD: Record<string, string> = { MIT: "mit", "Apache-2.0": "apache-2.0", "BSD-2-Clause": "bsd-2-clause", "BSD-3-Clause": "bsd-3-clause", ISC: "isc", "0BSD": "0bsd", Zlib: "zlib", "BSL-1.0": "bsl-1.0", Unlicense: "unlicense" };
 export const SEARCH_LANGS = ["TypeScript", "JavaScript"] as const;
-/** The frozen repository search, one query per language and licence; star ranges split a query past GitHub's 1,000. */
-export const SEARCH = { stars_min: 5000, pushed_after: "2026-09-01", template: "language:{lang} stars:{stars} license:{licence} archived:false pushed:>2026-09-01" } as const;
+/** The frozen repository search, one query per language with no licence qualifier (GitHub's licence search cannot find a
+ *  repository whose licence it does not detect); star ranges split a query past GitHub's 1,000. */
+export const SEARCH = { stars_min: 5000, pushed_after: "2026-09-01", template: "language:{lang} stars:{stars} archived:false pushed:>2026-09-01" } as const;
 /** Root files probed for a runner's config. */
 export const PROBES: Record<string, string> = {
   pw_ts: "playwright.config.ts", pw_js: "playwright.config.js", pw_mjs: "playwright.config.mjs", pw_mts: "playwright.config.mts",
@@ -99,7 +99,9 @@ export const FIX_TITLE = /\bfix(e[sd]|ing)?\b/i;
 /** The problem statement whose sha256 the frame keeps: the issue's title, a blank line, then its body as GitHub returns it. */
 export const statementText = (title: string, body: string | null): string => title + "\n\n" + (body ?? "");
 
-export interface RepoRow { repo: string; stars: number; licence: string; language: string | null; archived: boolean; runners: Runner[] }
+/** licence is GraphQL's raw spdxId (null when it names none). runners is null when the repository was not probed: its
+ *  licence is neither on the permissive list nor pending the second read, or it is excluded or archived. */
+export interface RepoRow { repo: string; stars: number; licence: string | null; language: string | null; archived: boolean; runners: Runner[] | null }
 
 const lightFields = "nameWithOwner stargazerCount isArchived licenseInfo { spdxId } primaryLanguage { name }";
 const probeFields = "pkg: object(expression: \"HEAD:package.json\") { ... on Blob { text } } " +
@@ -125,9 +127,10 @@ export async function probeRepos(names: string[], gql: Gql, log: (s: string) => 
   return out;
 }
 
-/** The repository search, run once: every language and licence query, paged 50 at a time, star ranges halved while a query
- *  reports more than 1,000 results. Rows are keyed by nameWithOwner. */
-export async function searchRepos(gql: Gql, p: Pick<H2hPrereg, "licences"> = readPrereg(), log: (s: string) => void = () => {}): Promise<{ rows: RepoRow[]; queries: string[] }> {
+/** The repository search, run once: one query per language, paged 50 at a time, star ranges halved while a query reports
+ *  more than 1,000 results. Rows are keyed by nameWithOwner. Only repositories that are not excluded or archived and whose
+ *  licence is permissive or pending are probed; known holds probe results already read on the freeze date. */
+export async function searchRepos(gql: Gql, p: Pick<H2hPrereg, "licences" | "exclusion"> = readPrereg(), log: (s: string) => void = () => {}, known: Record<string, Runner[]> = {}): Promise<{ rows: RepoRow[]; queries: string[] }> {
   const rows = new Map<string, RepoRow>();
   const queries: string[] = [];
   const one = async (q: string) => {
@@ -138,41 +141,38 @@ export async function searchRepos(gql: Gql, p: Pick<H2hPrereg, "licences"> = rea
       const s = data.search ?? {};
       for (const n of s.nodes ?? []) {
         if (!n?.nameWithOwner) continue;
-        rows.set(n.nameWithOwner, { repo: n.nameWithOwner, stars: n.stargazerCount, licence: n.licenseInfo?.spdxId ?? "", language: n.primaryLanguage?.name ?? null, archived: !!n.isArchived, runners: [] });
+        rows.set(n.nameWithOwner, { repo: n.nameWithOwner, stars: n.stargazerCount, licence: n.licenseInfo?.spdxId ?? null, language: n.primaryLanguage?.name ?? null, archived: !!n.isArchived, runners: null });
       }
       if (!s.pageInfo?.hasNextPage) return s.repositoryCount as number;
       after = s.pageInfo.endCursor;
     }
   };
   const count = async (q: string) => ((await gql("query { rateLimit { cost remaining resetAt } search(type: REPOSITORY, query: " + JSON.stringify(q) + ", first: 1) { repositoryCount } }")).data.search?.repositoryCount ?? 0) as number;
-  const walk = async (lang: string, licence: string, lo: number, hi: number | null) => {
+  const walk = async (lang: string, lo: number, hi: number | null) => {
     const stars = hi === null ? ">=" + lo : lo + ".." + hi;
-    const q = SEARCH.template.replace("{lang}", lang).replace("{stars}", stars).replace("{licence}", licence);
+    const q = SEARCH.template.replace("{lang}", lang).replace("{stars}", stars);
     const n = await count(q);
     if (n > 1000 && (hi === null || hi - lo > 1)) {
       const mid = hi === null ? lo * 2 : Math.floor((lo + hi) / 2);
-      await walk(lang, licence, lo, mid);
-      await walk(lang, licence, mid + 1, hi);
+      await walk(lang, lo, mid);
+      await walk(lang, mid + 1, hi);
       return;
     }
     queries.push(q);
     await one(q);
     log("search " + q + ": " + n);
   };
-  for (const lang of SEARCH_LANGS)
-    for (const spdx of p.licences) {
-      const kw = LICENCE_KEYWORD[spdx] ?? h2hFail("E_H2H_B_MINE", "no GitHub search keyword for licence " + spdx);
-      await walk(lang, kw, SEARCH.stars_min + 1, null);
-    }
-  const runners = await probeRepos([...rows.keys()].sort(), gql, log);
-  for (const r of rows.values()) r.runners = runners[r.repo] ?? [];
+  for (const lang of SEARCH_LANGS) await walk(lang, SEARCH.stars_min + 1, null);
+  const probe = [...rows.values()].filter((r) => !excludedBy(r.repo, p.exclusion) && !r.archived && licenceStatus(r.licence, p.licences) !== "out").map((r) => r.repo).sort();
+  const runners = { ...known, ...(await probeRepos(probe.filter((r) => !(r in known)), gql, log)) };
+  for (const r of rows.values()) if (probe.includes(r.repo)) r.runners = runners[r.repo] ?? [];
   return { rows: [...rows.values()].sort((a, b) => (a.repo < b.repo ? -1 : 1)), queries };
 }
 
 export type B1Rule = "title_no_fix" | "outside_window" | "no_merge_commit" | "no_closing_issue" | "closes_many" | "no_browser_test" | "source_files_0" | "source_files_over_6";
 
 export interface B1Row {
-  repo: string; number: number; url: string; merged: string; month: string; window: "primary" | "widened"; licence: string; runners: Runner[];
+  repo: string; number: number; url: string; merged: string; month: string; window: "primary" | "widened"; licence: string | null; second_read_pending: boolean; runners: Runner[];
   fix: { commit: string; parent: string }; files: { browser_test: number; test: number; source: number; total: number };
   issue_url: string; statement_sha256: string; statement_chars: number;
 }
@@ -197,7 +197,7 @@ export function screenPr(repo: RepoRow, pr: PrNode, w: Windows): B1Row | B1Rule 
   if (!pr.mergeCommit || !parent) return "no_merge_commit";
   const issue = ci.nodes[0]!;
   const text = statementText(issue.title, issue.body);
-  return { repo: repo.repo, number: pr.number, url: pr.url, merged: day, month: day.slice(0, 7), window: win, licence: repo.licence, runners: repo.runners, fix: { commit: pr.mergeCommit.oid, parent }, files: n, issue_url: issue.url, statement_sha256: sha256(text), statement_chars: Array.from(text).length };
+  return { repo: repo.repo, number: pr.number, url: pr.url, merged: day, month: day.slice(0, 7), window: win, licence: repo.licence, second_read_pending: repo.licence === null || repo.licence === "NOASSERTION", runners: repo.runners ?? [], fix: { commit: pr.mergeCommit.oid, parent }, files: n, issue_url: issue.url, statement_sha256: sha256(text), statement_chars: Array.from(text).length };
 }
 
 const prFields = "number title url mergedAt mergeCommit { oid parents(first: 2) { nodes { oid } } } files(first: 100) { totalCount nodes { path } } closingIssuesReferences(first: 2) { totalCount nodes { url title body } }";
@@ -248,16 +248,17 @@ export async function repoPrs(repo: RepoRow, gql: Gql, w: Windows, log: (s: stri
   return out;
 }
 
-/** The repository screens: a root real-browser runner, a licence on the permissive list, not archived, not excluded. */
+/** The repository screens: not excluded, a licence on the permissive list or pending the second read (kept and marked, never
+ *  dropped here), not archived, a root real-browser runner. */
 export function screenRepos(rows: RepoRow[], p: Pick<H2hPrereg, "exclusion" | "licences">): { kept: RepoRow[]; drops: Record<string, number>; excluded: Record<string, number> } {
   const drops: Record<string, number> = {}, excluded: Record<string, number> = {};
   const kept: RepoRow[] = [];
   for (const r of rows) {
     const ex = excludedBy(r.repo, p.exclusion);
     if (ex) { bump(drops, "excluded"); bump(excluded, ex); continue; }
-    if (!p.licences.includes(r.licence)) { bump(drops, "licence_not_permissive"); continue; }
+    if (licenceStatus(r.licence, p.licences) === "out") { bump(drops, "licence_not_permissive"); continue; }
     if (r.archived) { bump(drops, "archived"); continue; }
-    if (!r.runners.length) { bump(drops, "no_root_browser_runner"); continue; }
+    if (!r.runners?.length) { bump(drops, "no_root_browser_runner"); continue; }
     kept.push(r);
   }
   return { kept, drops, excluded: Object.fromEntries(p.exclusion.map((x) => [x, excluded[x] ?? 0])) };
@@ -267,7 +268,7 @@ export const B1_REPOS_SCHEMA = "h2h-b1-repos.v1";
 export const B1_SCHEMA = "h2h-b1-frame.v1";
 
 /** b1-repos.json's body from one search. */
-export const reposFile = (s: { rows: RepoRow[]; queries: string[] }) => ({ schema: B1_REPOS_SCHEMA, freeze_date: FREEZE_DATE, search: SEARCH, probes: PROBES, runner_rule: "root package.json dependencies, devDependencies and scripts, and the root config files (b1.ts rootRunners)", queries: s.queries, repos: s.rows });
+export const reposFile = (s: { rows: RepoRow[]; queries: string[] }) => ({ schema: B1_REPOS_SCHEMA, freeze_date: FREEZE_DATE, search: SEARCH, probes: PROBES, runner_rule: "root package.json dependencies, devDependencies and scripts, and the root config files (b1.ts rootRunners), read only for repositories not excluded or archived whose licence is permissive or pending the second read", licence_rule: LICENCE_RULE, queries: s.queries, repos: s.rows });
 
 /** The frame over a frozen repository list and every kept repository's pull requests. */
 export function b1Frame(reposBody: { repos: RepoRow[] }, prs: Record<string, PrNode[]>, p: H2hPrereg = readPrereg()) {
@@ -293,12 +294,12 @@ export function b1Frame(reposBody: { repos: RepoRow[] }, prs: Record<string, PrN
   return {
     schema: B1_SCHEMA, freeze_date: FREEZE_DATE, window: { primary: [w.from, w.to], widened: [w.widen_to, w.to] },
     rules: {
-      title: FIX_TITLE.source, statement: "the one closing issue's title, a blank line, then its body; only its sha256 and length are kept",
+      licence: LICENCE_RULE, title: FIX_TITLE.source, statement: "the one closing issue's title, a blank line, then its body; only its sha256 and length are kept",
       browser_test: { dir: BROWSER_TEST.dir.source, suffix: BROWSER_TEST.suffix.source, browser_dir: BROWSER_TEST.browserDir.source, testy: BROWSER_TEST.testy.source, code: BROWSER_TEST.code.source, not: BROWSER_TEST.declaration.source },
       source: "lanes/outcome-skills/statemachines/langs.ts classify with language ts, browser-test files counted as tests",
       fix: "the pull request's merge commit; parent is its first parent",
     },
-    counts: { repos_searched: reposBody.repos.length, repos_kept: rs.kept.length, eligible_primary: rows.filter((r) => r.window === "primary").length, eligible_widened: rows.filter((r) => r.window === "widened").length, cap3_primary: cap3(["primary"]), cap3_with_widened: cap3(["primary", "widened"]) },
+    counts: { repos_searched: reposBody.repos.length, repos_kept: rs.kept.length, repos_kept_second_read_pending: rs.kept.filter((r) => licenceStatus(r.licence, p.licences) === "second_read_pending").length, eligible_primary: rows.filter((r) => r.window === "primary").length, eligible_widened: rows.filter((r) => r.window === "widened").length, second_read_pending_primary: rows.filter((r) => r.window === "primary" && r.second_read_pending).length, second_read_pending_widened: rows.filter((r) => r.window === "widened" && r.second_read_pending).length, cap3_primary: cap3(["primary"]), cap3_with_widened: cap3(["primary", "widened"]) },
     drops: { repos: sorted(rs.drops), excluded_repos_by_pattern: rs.excluded, pull_requests_by_rule: Object.fromEntries(Object.entries(byRule).sort().map(([k, v]) => [k, sorted(v)])) },
     pull_requests: rows,
   };

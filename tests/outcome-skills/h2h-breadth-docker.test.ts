@@ -87,7 +87,7 @@ describe.skipIf(!on)("part B with Docker", () => {
       git(["clone", "-q", "--bare", src, join(work, "git", "acme__calc.git")], root);
       mkdirSync(db, { recursive: true });
       writeFileSync(join(db, "adv.json"), JSON.stringify({ id: "GHSA-test-0000-0000", summary: "Add returns the difference of its arguments", details: "Every caller that sums two quantities with calc.Add gets a minus b instead of a plus b, so totals computed from user input come out wrong and checks that compare totals can be passed with crafted values. The fix is at https://github.com/acme/calc/commit/" + commit + "." }));
-      const c: BCandidate = { kind: "B2", id: "acme__calc-ghsa-test-0000-0000", repo: "acme/calc", ecosystems: ["Go"], month: "2026-05", created_at: "2026-05-01", pull: "", fix: { commit, parent }, licence: "MIT", runners: [], ghsa: "GHSA-test-0000-0000", advisory_path: "adv.json" };
+      const c: BCandidate = { kind: "B2", id: "acme__calc-ghsa-test-0000-0000", repo: "acme/calc", ecosystems: ["Go"], month: "2026-05", created_at: "2026-05-01", pull: "", fix: { commit, parent }, licence: "MIT", second_read_pending: false, runners: [], ghsa: "GHSA-test-0000-0000", advisory_path: "adv.json" };
       const dir = fetchFix(work, c);
       if (isDrop(dir)) throw new Error(dir.rule);
       const recipe = chooseRecipe("B2", "Go", repoFacts(dir, parent));

@@ -31,7 +31,7 @@ import { assertStored, type ImageStore } from "./store.ts";
 export type BKind = "B1" | "B2";
 export interface BCandidate {
   kind: BKind; id: string; repo: string; ecosystems: Ecosystem[]; month: string; created_at: string; pull: string;
-  fix: { commit: string; parent: string }; licence: string; runners: Runner[];
+  fix: { commit: string; parent: string }; licence: string | null; second_read_pending: boolean; runners: Runner[];
   issue_url?: string; statement_sha256?: string; ghsa?: string; advisory_path?: string;
 }
 
@@ -41,10 +41,10 @@ export const repoUrl = (repo: string): string => "https://github.com/" + repo + 
 export function candidateOf(kind: BKind, row: B1Row | B2Row): BCandidate {
   if (kind === "B1") {
     const r = row as B1Row;
-    return { kind, id: unitId(r.repo, String(r.number)), repo: r.repo, ecosystems: ["npm"], month: r.month, created_at: r.merged, pull: String(r.number), fix: r.fix, licence: r.licence, runners: r.runners, issue_url: r.issue_url, statement_sha256: r.statement_sha256 };
+    return { kind, id: unitId(r.repo, String(r.number)), repo: r.repo, ecosystems: ["npm"], month: r.month, created_at: r.merged, pull: String(r.number), fix: r.fix, licence: r.licence, second_read_pending: r.second_read_pending, runners: r.runners, issue_url: r.issue_url, statement_sha256: r.statement_sha256 };
   }
   const r = row as B2Row;
-  return { kind, id: unitId(r.repo, r.ghsa), repo: r.repo, ecosystems: r.ecosystem.split("+") as Ecosystem[], month: r.month, created_at: r.published, pull: r.fix.kind === "pull" ? r.fix.ref : "", fix: { commit: r.fix.commit, parent: r.fix.parent }, licence: r.licence, runners: [], ghsa: r.ghsa, advisory_path: r.advisory_path };
+  return { kind, id: unitId(r.repo, r.ghsa), repo: r.repo, ecosystems: r.ecosystem.split("+") as Ecosystem[], month: r.month, created_at: r.published, pull: r.fix.kind === "pull" ? r.fix.ref : "", fix: { commit: r.fix.commit, parent: r.fix.parent }, licence: r.licence, second_read_pending: r.second_read_pending, runners: [], ghsa: r.ghsa, advisory_path: r.advisory_path };
 }
 
 /** The candidate a frame file holds under id (the B1 or B2 frame the miners wrote). */
@@ -176,7 +176,7 @@ export function deriveTests(o: { host: BuilderHost; image: string; plan: TestPla
 
 const PAYLOAD = ["fix.patch", "test.patch", "issue.md", "parser.py", "harbor/task.toml", "harbor/environment/Dockerfile", "harbor/instruction.md"];
 
-export interface BUnitExtra { kind: BKind; image_ref: string; runner: TestRunner; format: ReportFormat; ecosystem: Ecosystem; licence: string; issue_url?: string; statement_sha256: string; ghsa?: string; browser?: BrowserCheck; build: { image_id: string; dockerfile_sha256: string } }
+export interface BUnitExtra { kind: BKind; image_ref: string; runner: TestRunner; format: ReportFormat; ecosystem: Ecosystem; licence: string | null; second_read_pending: boolean; issue_url?: string; statement_sha256: string; ghsa?: string; browser?: BrowserCheck; build: { image_id: string; dockerfile_sha256: string } }
 
 /** Writes one B unit dir in sm-unit.v1 format (exclusive: an existing dir refuses). unit.json carries an h2h block. */
 export function writeBUnit(dir: string, o: { c: BCandidate; lang: Lang; plan: TestPlan; patches: Patches; statement: string; tests: { f2p: string[]; p2p: string[] }; h2h: BUnitExtra }): SmUnit & { h2h: BUnitExtra } {
@@ -271,7 +271,7 @@ export async function prepareB(o: { c: BCandidate; work: string; ref: string; st
       const unitDir = join(o.work, "units", c.id);
       writeBUnit(unitDir, {
         c, lang: ECOSYSTEM_LANG[o.build.ecosystem]!, plan, patches, statement, tests: { f2p: t.f2p, p2p: t.p2p },
-        h2h: { kind: c.kind, image_ref: o.ref, runner, format: plan.format, ecosystem: o.build.ecosystem, licence: c.licence, issue_url: c.issue_url, statement_sha256: sha256(statement), ghsa: c.ghsa, browser, build: { image_id: o.build.image_id, dockerfile_sha256: o.build.dockerfile_sha256 ?? "" } },
+        h2h: { kind: c.kind, image_ref: o.ref, runner, format: plan.format, ecosystem: o.build.ecosystem, licence: c.licence, second_read_pending: c.second_read_pending, issue_url: c.issue_url, statement_sha256: sha256(statement), ghsa: c.ghsa, browser, build: { image_id: o.build.image_id, dockerfile_sha256: o.build.dockerfile_sha256 ?? "" } },
       });
       return out({ verdict: "ready", runner, tests: { f2p: t.f2p.length, p2p: t.p2p.length }, browser, unit_dir: unitDir });
     }

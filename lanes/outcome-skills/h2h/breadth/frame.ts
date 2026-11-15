@@ -16,6 +16,13 @@ export const BUNDLE_DIR = join(import.meta.dir, "..", "..", "..", "..", "wiki", 
 /** The freeze date of every frozen read in part B (miners, licences, the repository search). */
 export const FREEZE_DATE = "2026-11-15";
 
+/** Section 5's licence rule as the B frames apply it: on prereg.json's list, pending the second read (GraphQL names no
+ *  licence or NOASSERTION), or out. A pending repository stays in the frame, marked, with its raw spdxId; the second read
+ *  of its root licence files is part C's (ordinary/licences.ts). */
+export const licenceStatus = (spdx: string | null, list: readonly string[]): "permissive" | "second_read_pending" | "out" =>
+  spdx && list.includes(spdx) ? "permissive" : !spdx || spdx === "NOASSERTION" ? "second_read_pending" : "out";
+export const LICENCE_RULE = "GraphQL licenseInfo.spdxId on prereg.json's licences is kept; null or NOASSERTION is kept with second_read_pending true and its raw spdxId, for section 5's second read; any other is dropped as licence_not_permissive";
+
 /** The first exclusion pattern a repository matches, case-insensitive, or null. "owner/*" matches every repository of the
  *  owner; any other pattern matches one repository. */
 export function excludedBy(repo: string, patterns: readonly string[]): string | null {

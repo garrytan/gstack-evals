@@ -91,7 +91,7 @@ describe.skipIf(!on)("the B oracle with Docker", () => {
     const fix = plant("acme/calc", { "go.mod": "module example.com/calc\n\ngo 1.21\n", "calc.go": "package calc\n\nfunc Add(a, b int) int { return a - b }\n\nfunc Sub(a, b int) int { return a - b }\n", "calc_test.go": tst }, { "calc.go": "package calc\n\nfunc Add(a, b int) int { return a + b }\n\nfunc Sub(a, b int) int { return a - b }\n", "calc_test.go": tst + '\nfunc TestAdd(t *testing.T) {\n\tif Add(2, 2) != 4 {\n\t\tt.Fatal("add")\n\t}\n}\n' }, work);
     mkdirSync(db, { recursive: true });
     writeFileSync(join(db, "adv.json"), JSON.stringify({ id: "GHSA-test-0000-0000", summary: "Add returns the difference of its arguments", details: "Every caller that sums two quantities with calc.Add gets a minus b instead of a plus b, so totals computed from user input come out wrong and checks that compare totals can be passed with crafted values." }));
-    const c: BCandidate = { kind: "B2", id: "acme__calc-ghsa-test", repo: "acme/calc", ecosystems: ["Go"], month: "2026-05", created_at: "2026-05-01", pull: "", fix, licence: "MIT", runners: [], ghsa: "GHSA-test-0000-0000", advisory_path: "adv.json" };
+    const c: BCandidate = { kind: "B2", id: "acme__calc-ghsa-test", repo: "acme/calc", ecosystems: ["Go"], month: "2026-05", created_at: "2026-05-01", pull: "", fix, licence: "MIT", second_read_pending: false, runners: [], ghsa: "GHSA-test-0000-0000", advisory_path: "adv.json" };
     const { prep } = await buildStorePrepare(c, work, { db });
     expect([prep.verdict, prep.runner]).toEqual(["ready", "go"]);
     const v = await oracleB(prep.unit_dir!, store, new Pacer(join(work, "pacer.log")));
@@ -114,7 +114,7 @@ describe.skipIf(!on)("the B oracle with Docker", () => {
       "e2e/focus.spec.ts": spec + "\ntest('moves focus to the button', async ({ page }) => {\n  await page.setContent('<button id=\"b\">Save</button><script>' + focusScript + '</script>');\n  await expect(page.locator('#b')).toBeFocused();\n});\n",
     }, work, (src) => run("npm", ["install", "--package-lock-only", "--ignore-scripts", "--no-audit", "--no-fund"], src));
     const title = "Focus does not move to the Save button", body = "When the dialog opens, keyboard focus should land on the Save button so that pressing Enter saves. Instead focus stays on the page body, so keyboard users must tab through every control first. This only shows in a real browser, where focus and the active element are tracked.";
-    const c: BCandidate = { kind: "B1", id: "acme__web-1", repo: "acme/web", ecosystems: ["npm"], month: "2026-06", created_at: "2026-06-02", pull: "1", fix, licence: "MIT", runners: ["playwright"], issue_url: "https://github.com/acme/web/issues/1", statement_sha256: sha256(statementText(title, body)) };
+    const c: BCandidate = { kind: "B1", id: "acme__web-1", repo: "acme/web", ecosystems: ["npm"], month: "2026-06", created_at: "2026-06-02", pull: "1", fix, licence: "MIT", second_read_pending: false, runners: ["playwright"], issue_url: "https://github.com/acme/web/issues/1", statement_sha256: sha256(statementText(title, body)) };
     const { prep } = await buildStorePrepare(c, work, { gql: async () => ({ data: { resource: { title, body } } }) });
     expect([prep.verdict, prep.runner, prep.browser?.ok, prep.browser?.tests[0]?.engine]).toEqual(["ready", "playwright", true, "chromium"]);
     const v = await oracleB(prep.unit_dir!, store, new Pacer(join(work, "pacer.log")));

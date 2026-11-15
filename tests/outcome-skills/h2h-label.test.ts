@@ -13,7 +13,7 @@ const P40 = "d".repeat(40), C40 = "e".repeat(40);
 const REF = "127.0.0.1:5000/h2h@sha256:" + "f".repeat(64);
 
 function plantUnit(root: string): string {
-  const c = candidateOf("B1", { repo: "acme/web", number: 7, url: "u", merged: "2026-06-02", month: "2026-06", window: "primary", licence: "MIT", runners: ["playwright"], fix: { commit: C40, parent: P40 }, files: { browser_test: 1, test: 1, source: 1, total: 2 }, issue_url: "https://github.com/acme/web/issues/3", statement_sha256: "0".repeat(64), statement_chars: 300 });
+  const c = candidateOf("B1", { repo: "acme/web", number: 7, url: "u", merged: "2026-06-02", month: "2026-06", window: "primary", licence: "MIT", second_read_pending: false, runners: ["playwright"], fix: { commit: C40, parent: P40 }, files: { browser_test: 1, test: 1, source: 1, total: 2 }, issue_url: "https://github.com/acme/web/issues/3", statement_sha256: "0".repeat(64), statement_chars: 300 });
   const plan = testPlan("playwright", ["e2e/focus.spec.ts"], { files: ["package.json"], texts: {} });
   if (isDrop(plan)) throw new Error("plan");
   const dir = join(root, c.id);
@@ -21,7 +21,7 @@ function plantUnit(root: string): string {
     c, lang: "ts", plan: plan as TestPlan, statement: "Focus ring disappears after the dialog closes.\n",
     patches: { fix: "diff --git a/src/focus.ts b/src/focus.ts\n+restore()\n", test: "diff --git a/e2e/focus.spec.ts b/e2e/focus.spec.ts\n+test('focus')\n", all: ["e2e/focus.spec.ts", "src/focus.ts"], testFiles: ["e2e/focus.spec.ts"], fixFiles: ["src/focus.ts"], sourceFiles: ["src/focus.ts"] },
     tests: { f2p: ["[chromium]::focus.spec.ts::focus.spec.ts::::focus"], p2p: ["[chromium]::focus.spec.ts::focus.spec.ts::::opens"] },
-    h2h: { kind: "B1", image_ref: REF, runner: "playwright", format: "junit-playwright", ecosystem: "npm", licence: "MIT", statement_sha256: "0".repeat(64), build: { image_id: "sha256:" + "1".repeat(64), dockerfile_sha256: "2".repeat(64) } },
+    h2h: { kind: "B1", image_ref: REF, runner: "playwright", format: "junit-playwright", ecosystem: "npm", licence: "MIT", second_read_pending: false, statement_sha256: "0".repeat(64), build: { image_id: "sha256:" + "1".repeat(64), dockerfile_sha256: "2".repeat(64) } },
   });
   return dir;
 }
