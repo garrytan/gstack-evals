@@ -11,6 +11,7 @@ export const RESTORE_PIN: { repo: "garrytan/gstack"; sha: string; version: strin
   digests: {
     "plan-eng-review/SKILL.md": "58d96f6f3e296ccc2942e2e1a5732810b18f9f8bcd6ed9338115c99c91a88524",
     "plan-eng-review/sections/review-sections.md": "3d04ce8807d0c1afbe8502b18edea88a62f78305d07bc4d1de4bd9b0772e195a",
+    "plan-eng-review/sections/preamble.md": "3eeee274045c6af4a3a4a88895944a348e3f8613232f44e04875fd1318861705",
     "autoplan/SKILL.md": "2ec68c1217fa7fcb0cf392db160eb52ca852afa6f5dff9ae332d91e52949aaf0",
     "autoplan/sections/eng-phase.md": "527e7ff9c629cbee410d292de179ea4477ecbb12b338e97952c1c6749411fb9e",
     "autoplan/sections/unattended.md": "ef2485de42d109de85a803723220c98e6c89e21f7e9cd9efb285972e6ee9eda8",

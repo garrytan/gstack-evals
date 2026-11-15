@@ -31,7 +31,8 @@ export default async function* reporter(source) {
     const err = d.details?.error;
     const cause = err?.cause;
     const msg = cause && typeof cause === "object" ? (cause.name ?? "Error") + ": " + (cause.message ?? "") : String(cause ?? err?.message ?? "");
-    const line = { event: e.type, path, file, skip: d.skip !== undefined && d.skip !== false, todo: d.todo !== undefined && d.todo !== false, exc: cause?.name ?? err?.name ?? null, msg: msg.slice(0, 600) };
+    const where = /\n\s+at (?:[^\n(]*\()?((?:file:\/\/)?\/[^\s():]+:\d+):\d+\)?/.exec(String((cause && typeof cause === "object" ? cause.stack : null) ?? err?.stack ?? ""))?.[1] ?? null;
+    const line = { event: e.type, path, file, skip: d.skip !== undefined && d.skip !== false, todo: d.todo !== undefined && d.todo !== false, exc: cause?.name ?? err?.name ?? null, msg: msg.slice(0, 600), where };
     if (e.type === "test:fail" && d.nesting === 0 && file && resolve(String(d.name)) === resolve(file)) loads.push(line);
     else yield JSON.stringify(line) + "\n";
   }

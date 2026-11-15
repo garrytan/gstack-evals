@@ -18,6 +18,7 @@ import { claudePin } from "../../eng-build/session-image.ts";
 import { MeterError, MODELS, openMeter, type ModelKey } from "../../product-value/meter.ts";
 import { LedgerError, readItem } from "../../../src/runner/ledger/record.ts";
 import type { DigestPin } from "../../../src/trial/review/eng-review.ts";
+import { plantedGrader } from "../construct/grade.ts";
 import { EpError, fail, notBuilt } from "../errors.ts";
 import { FROZEN, SIZE } from "../frozen.ts";
 import type { Command, PlantedGrader, ReviewArm } from "../types.ts";
@@ -94,9 +95,9 @@ async function paidStage<B, T>(p: PlantedPaid, launch: Launcher<B>, body: (backe
 export type Metered<R extends string> = (role: R, prompt: string) => Promise<{ text: string; costUsd: number }>;
 
 /** The meter route each authoring role calls; null where the product-value meter has no route yet. */
-export const AUTHOR_ROUTES: Readonly<Record<AuthorRole, ModelKey | null>> = { writer: "sol", audit: "opus", hint: "sol", hintAudit: "opus", raterCarbon: null, raterOpus: "opus" };
-/** The meter route each judge role calls (readings/judge.ts ROLE_MODEL); Gemini 4 Carbon has none yet. */
-export const JUDGE_ROUTES: Readonly<Record<JudgeRole, ModelKey | null>> = { judge: "astra", "gold-opus": "opus", "gold-gemini": null };
+export const AUTHOR_ROUTES: Readonly<Record<AuthorRole, ModelKey | null>> = { writer: "sol", audit: "opus", hint: "sol", hintAudit: "opus", raterCarbon: "carbon", raterOpus: "opus" };
+/** The meter route each judge role calls (readings/judge.ts ROLE_MODEL). */
+export const JUDGE_ROUTES: Readonly<Record<JudgeRole, ModelKey | null>> = { judge: "astra", "gold-opus": "opus", "gold-gemini": "carbon" };
 
 /** Why a role cannot call its model through the meter, one line each. */
 export function routeProblems<R extends string>(models: Readonly<Record<R, string>>, routes: Readonly<Record<R, ModelKey | null>>, roles: readonly R[] = Object.keys(models) as R[]): string[] {
@@ -113,7 +114,7 @@ const CARBON_FIX = "add a carbon ModelKey (google/gemini-4-carbon on OpenRouter,
 
 /** A meter launcher for one set of role routes: it refuses before any lease opens when a role it will call has no
  * route, and counts a call whose cost the meter could not read at the call allowance, so the gate never undercounts. */
-function meterLauncher<R extends string>(o: { out: string; cacheDir: string; maxTokens: number; effort: string | null; label: string; models: Readonly<Record<R, string>>; routes: Readonly<Record<R, ModelKey | null>>; roles: readonly R[] }): Launcher<Metered<R>> {
+export function meterLauncher<R extends string>(o: { out: string; cacheDir: string; maxTokens: number; effort: string | null; label: string; models: Readonly<Record<R, string>>; routes: Readonly<Record<R, ModelKey | null>>; roles: readonly R[] }): Launcher<Metered<R>> {
   return async (p) => {
     const problems = routeProblems(o.models, o.routes, o.roles);
     if (problems.length) return fail("E_EP_NOT_BUILT", "the " + o.label + " routes are not all built, so no lease opened:\n" + problems.join("\n") + "\n" + CARBON_FIX);
@@ -154,9 +155,6 @@ export interface Seams {
   grader(o: { work: string; log: (l: string) => void }): Promise<PlantedGrader>;
 }
 
-/** The construct part's grader: construct/grader.ts exports plantedGrader({ work, log }), a PlantedGrader. */
-export const GRADER_MODULE = join(import.meta.dir, "..", "construct", "grader.ts");
-
 export const REAL: Seams = {
   author: (o) => meterLauncher({ ...o, maxTokens: AUTHOR_MAX_TOKENS, effort: null, label: "ep-author", models: AUTHOR_MODELS, routes: AUTHOR_ROUTES, roles: Object.keys(AUTHOR_MODELS) as AuthorRole[] }),
   judge: (o) => meterLauncher({ out: o.out, cacheDir: o.cacheDir, maxTokens: JUDGE_MAX_TOKENS, effort: JUDGE_MODELS.effort, label: "ep-judge", models: ROLE_MODEL, routes: JUDGE_ROUTES, roles: o.roles }),
@@ -187,10 +185,7 @@ export const REAL: Seams = {
       return { ...h, backend: ebSession(h.backend, table) };
     };
   },
-  grader: async (o) => {
-    const m = existsSync(GRADER_MODULE) ? ((await import(GRADER_MODULE)) as { plantedGrader?: (o: { work: string; log: (l: string) => void }) => PlantedGrader }) : null;
-    return m?.plantedGrader ? m.plantedGrader(o) : notBuilt("the grading seam (" + GRADER_MODULE + " exporting plantedGrader)");
-  },
+  grader: async (o) => plantedGrader({ work: o.work }),
 };
 
 // ---------------------------------------------------------------------------------------------------------------------

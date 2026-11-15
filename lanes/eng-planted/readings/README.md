@@ -31,7 +31,7 @@ Each reads one JSON file. A stop line exits 2 with its E_EP_ code on stderr.
 | `ep raise --in <f>` | `{units, builds, hinted?, hardAdmitted?, seed?}`: the raise's hard units | E_EP_CEILING |
 | `ep exposure --in <f> [--reviewer opus]` | `{smoke, reviews?}`, sessions in run order | E_EP_EXPOSURE_GATE, E_EP_EXPOSURE_STOP |
 | `ep start --mdd <x>` | the re-printed MDD | E_EP_START_RULE |
-| `ep supply --admitted <n>` | admitted comparison units | E_EP_SUPPLY_SHORT |
+| `ep admitted --admitted <n>` | admitted comparison units | E_EP_SUPPLY_SHORT |
 | `ep analyze --in <f> [--seed n]` | analysis.ts AnalysisInput | none; it prints |
 | `ep kappa --in <f> [--revision n]` | `{gold: GoldRow[], bundles?}` | E_EP_JUDGE_CHECK; exit 1 asks for the one rubric revision |
 | `ep power [flags]` | power.py's flags | none |

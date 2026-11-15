@@ -13,6 +13,7 @@ import { DRY } from "./dry.ts";
 import { admissionLine, admissionReading, enforce, hintedOf, interimCheck, markHard, pilotPowerInput, raiseProjection, raiseRead, raiseStep, smokeGate, startRule, supplyCheck, type Admission, type Hinted, type RaiseInput } from "./gates.ts";
 import { judgeCheck, stockControl, type GoldRow } from "./judge.ts";
 import { SKILL_ARMS } from "./local.ts";
+import { writeStep, type StepRecord } from "../stages/local.ts";
 
 type Args = Parameters<Command["run"]>[0];
 type Io = Parameters<Command["run"]>[1];
@@ -34,6 +35,8 @@ function num(a: Args, flag: string, fallback?: number): number {
   const n = Number(v);
   return Number.isFinite(n) ? n : usage(flag + " needs a number, not " + JSON.stringify(v));
 }
+/** With --run, writes the step record the stages part reads before its next stage (section 14). */
+const recordStep = (a: Args, r: Omit<StepRecord, "at">) => void (a.flags.has("--run") && writeStep(a.flags.get("--run")!, r));
 const seedOf = (a: Args, file: { seed?: number }) => (a.flags.has("--seed") ? num(a, "--seed") : (file.seed ?? usage("--seed is required: the seed minted at the build")));
 const draws = (a: Args) => num(a, "--draws", FROZEN.bootstrapDraws);
 
@@ -65,7 +68,7 @@ interface RaiseFile {
 export const COMMANDS: Record<string, Command> = {
   pilot: {
     summary: "the admission pilot's lines on plain builds (section 7); a first ceiling prints the content raise's projection",
-    usage: "--in <pilot.json> [--seed <n>] [--draws <n>] [--power-json <out>]",
+    usage: "--in <pilot.json> [--seed <n>] [--draws <n>] [--power-json <out>] [--run <dir>]",
     bools: [],
     run: (a, io) => {
       const f = readJson<PilotFile>(a);
@@ -82,6 +85,7 @@ export const COMMANDS: Record<string, Command> = {
         writeFileSync(out, JSON.stringify(pilotPowerInput(units, f.builds, f.unforeseeable ?? 0)) + "\n");
         io.out("power input written; re-print the MDD with: uv run -q --with numpy==2.5.4 python lanes/eng-planted/readings/power.py --fit " + out);
       }
+      recordStep(a, { step: "admission", ok: adm.code === null, detail: adm.code ? adm.message : "primary " + adm.primary });
       return finish(adm, io);
     },
   },
@@ -96,14 +100,16 @@ export const COMMANDS: Record<string, Command> = {
   },
   exposure: {
     summary: "the exposure smoke (5 of 6 Opus, 2 of 3 Sol or particle-1) and the interim stop after 24 non-gap sessions (section 6)",
-    usage: "--in <sessions.json> [--reviewer opus|sol|particle]",
+    usage: "--in <sessions.json> [--reviewer opus|sol|particle] [--run <dir>]",
     bools: [],
     run: (a, io) => {
       const f = readJson<{ smoke: ReviewRecord[]; reviews?: ReviewRecord[] }>(a);
       const reviewer = (a.flags.get("--reviewer") ?? "opus") as Reviewer;
       if (!["opus", "sol", "particle"].includes(reviewer)) usage("--reviewer is opus, sol or particle");
+      if (a.flags.has("--run") && reviewer !== "opus") usage("--run records the run's exposure gate, which reads the Opus smoke");
       const gate = smokeGate(f.smoke, reviewer);
       for (const l of gate.lines) io.out(l);
+      recordStep(a, { step: "exposure-gate", ok: gate.through.length > 0, detail: gate.message || gate.lines.join("; "), arms: gate.through });
       const stops = f.reviews ? SKILL_ARMS.map((arm) => interimCheck(arm, reviewer, f.reviews!)) : [];
       for (const s of stops) if (s.share !== null) io.out("interim " + (s.code ? "stop" : "goes") + ": exposed " + s.share.toFixed(3) + (s.message ? "; " + s.message : ""));
       enforce(gate);
@@ -113,16 +119,17 @@ export const COMMANDS: Record<string, Command> = {
   },
   start: {
     summary: "the start rule: a re-printed MDD past 0.12 waits for the Captain (section 10)",
-    usage: "--mdd <x>",
+    usage: "--mdd <x> [--run <dir>]",
     bools: [],
     run: (a, io) => {
       const d = startRule(num(a, "--mdd"));
+      recordStep(a, { step: "start-rule", ok: d.code === null, detail: d.message });
       if (!d.code) io.out(d.message);
       enforce(d);
       return 0;
     },
   },
-  supply: {
+  admitted: {
     summary: "short supply: under 40 admitted comparison units stops (sections 3 and 9)",
     usage: "--admitted <n>",
     bools: [],

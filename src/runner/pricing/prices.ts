@@ -76,6 +76,13 @@ export const OPENROUTER_MODELS: Record<string, ChatPrice> = {
   // Max Price"); at 0.000002 the same request reached Google (probe of 2026-11-07, two calls at max_tokens 1). So the row
   // carries that image price. The tbv key writer sends text only.
   "google/gemini-4-argon": { input: 2, output: 10, cache_read: 0.1, cache_write: 0.1875, providers: ["google-vertex"], image: 0.000002 },
+  // Gemini 4 Carbon, the planted-unit read's foreseeability rater and second gold labeller (prereg 2026-11-15-geva-537).
+  // OpenRouter's endpoints API (https://openrouter.ai/api/v1/models/google/gemini-4-carbon/endpoints), read
+  // 2026-11-15T03:37Z, lists Google Vertex (google-vertex/global) at $2 input, $10 output, $0.10 cache read, $0.1875 cache
+  // write and an image price of 0.000002, the same as Argon's row. Pinned to google-vertex like Argon; max_price at $2 and
+  // $10 leaves out the dearer google-vertex/us, eu and priority endpoints ($2.20 and $3.60 input), and the image price is
+  // carried for the reason Argon's comment gives.
+  "google/gemini-4-carbon": { input: 2, output: 10, cache_read: 0.1, cache_write: 0.1875, providers: ["google-vertex"], image: 0.000002 },
 };
 
 /**

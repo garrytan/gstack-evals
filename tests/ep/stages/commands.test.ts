@@ -8,7 +8,8 @@ import { join } from "node:path";
 import { recordApproval } from "../../../src/runner/ledger/ledger.ts";
 import { readItem } from "../../../src/runner/ledger/record.ts";
 import { codeOf } from "../../../lanes/eng-planted/stages/cases.ts";
-import { AUTHOR_ROUTES, authorRouteProblems, JUDGE_ROUTES, plantedPaid, preflightRows, REAL, routeProblems, stagesCommands } from "../../../lanes/eng-planted/stages/commands.ts";
+import { AUTHOR_ROUTES, authorRouteProblems, JUDGE_ROUTES, meterLauncher, plantedPaid, preflightRows, REAL, routeProblems, stagesCommands } from "../../../lanes/eng-planted/stages/commands.ts";
+import { AUTHOR_MODELS, type AuthorRole } from "../../../lanes/eng-planted/stages/local.ts";
 import { ITEMS } from "../../../lanes/eng-planted/stages/ledger.ts";
 import { ROLE_MODEL } from "../../../lanes/eng-planted/readings/judge.ts";
 import { plantedUnits } from "./fixture.ts";
@@ -35,22 +36,24 @@ describe("paid flags", () => {
 });
 
 describe("routes", () => {
-  test("every authoring and judge role but Gemini 4 Carbon has its meter route at its model", () => {
-    expect(authorRouteProblems()).toEqual(["raterCarbon: the product-value meter has no route for google/gemini-4-carbon"]);
-    expect(routeProblems(ROLE_MODEL, JUDGE_ROUTES, ["judge", "gold-opus"])).toEqual([]);
-    expect(routeProblems(ROLE_MODEL, JUDGE_ROUTES, ["gold-gemini"])).toHaveLength(1);
+  test("every authoring and judge role has its meter route at its model", () => {
+    expect(authorRouteProblems()).toEqual([]);
+    expect(routeProblems(ROLE_MODEL, JUDGE_ROUTES, ["judge", "gold-opus", "gold-gemini"])).toEqual([]);
+    expect(authorRouteProblems({ ...AUTHOR_ROUTES, raterCarbon: null })).toEqual(["raterCarbon: the product-value meter has no route for google/gemini-4-carbon"]);
     expect(authorRouteProblems({ ...AUTHOR_ROUTES, raterCarbon: "gemini" })).toEqual(["raterCarbon: meter route gemini calls google/gemini-4-argon, not google/gemini-4-carbon"]);
   });
-  test("the real authoring launcher refuses before any lease opens while a route is missing", async () => {
+  test("a meter launcher refuses before any lease opens while a route is missing", async () => {
     const dir = mkdtempSync(join(tmpdir(), "ep-routes-"));
     const record = join(dir, "record");
     recordApproval(record, { action: "init", item: "ep-authoring", cap_micros: 680_000_000, quotes: [{ words: "test", by: "test", source: "test" }], admission: "warn" });
-    const launch = REAL.author({ out: join(dir, "meter"), cacheDir: join(dir, "cache") });
+    const launch = meterLauncher({ out: join(dir, "meter"), cacheDir: join(dir, "cache"), maxTokens: 100, effort: null, label: "ep-author", models: AUTHOR_MODELS, routes: { ...AUTHOR_ROUTES, raterCarbon: null }, roles: Object.keys(AUTHOR_MODELS) as AuthorRole[] });
     expect(await codeOf(() => launch({ item: "ep-authoring", capUsd: 10, record, ledger: join(dir, "l.sqlite") }))).toBe("E_EP_NOT_BUILT");
     expect(readItem(record, "ep-authoring").leases).toHaveLength(0);
   });
-  test("the real grading seam refuses until the construct part's grader lands", async () => {
-    expect(await codeOf(() => REAL.grader({ work: "/tmp", log: () => {} }))).toBe("E_EP_NOT_BUILT");
+  test("the real grading seam is the construct part's planted grader", async () => {
+    const g = await REAL.grader({ work: "/tmp", log: () => {} });
+    expect(typeof g.grade).toBe("function");
+    expect(typeof g.catchOf).toBe("function");
   });
 });
 
@@ -83,8 +86,8 @@ describe("preflight", () => {
     const rows = preflightRows({ run: join(dir, "run"), units: fx.units, repos: fx.repos, gstack: join(dir, "no-gstack"), record, harbor: join(dir, "no-harbor"), docker: join(dir, "no-docker") });
     const by = Object.fromEntries(rows.map((r) => [r.name, r]));
     expect(rows.map((r) => r.name)).toEqual(["docker", "harbor", "claude pin", "restore pin", "gstack checkout", "plain arm", "authoring routes", "ledger items", "units", "run dir"]);
-    expect([by.docker!.ok, by.harbor!.ok, by["gstack checkout"]!.ok, by["authoring routes"]!.ok, by["ledger items"]!.ok]).toEqual([false, false, false, false, false]);
-    expect([by["restore pin"]!.ok, by["plain arm"]!.ok, by.units!.ok, by["run dir"]!.ok]).toEqual([true, true, true, true]);
+    expect([by.docker!.ok, by.harbor!.ok, by["gstack checkout"]!.ok, by["ledger items"]!.ok]).toEqual([false, false, false, false]);
+    expect([by["restore pin"]!.ok, by["plain arm"]!.ok, by["authoring routes"]!.ok, by.units!.ok, by["run dir"]!.ok]).toEqual([true, true, true, true, true]);
     expect(by["ledger items"]!.detail).toContain("ep-comparison has no recorded cap");
   });
 });

@@ -58,8 +58,24 @@ describe("gstack-evals ep, readings part", () => {
     expect(ex.err).toStartWith("E_EP_EXPOSURE_GATE");
     expect((await ep("start", "--mdd", "0.13")).err).toStartWith("E_EP_START_RULE");
     expect((await ep("start", "--mdd", "0.11")).code).toBe(0);
-    expect((await ep("supply", "--admitted", "39")).err).toStartWith("E_EP_SUPPLY_SHORT");
-    expect((await ep("supply", "--admitted", "nope")).err).toStartWith("E_USAGE");
+    expect((await ep("admitted", "--admitted", "39")).err).toStartWith("E_EP_SUPPLY_SHORT");
+    expect((await ep("admitted", "--admitted", "nope")).err).toStartWith("E_USAGE");
+  });
+  test("--run writes the exposure-gate, admission and start-rule records the stages part reads", async () => {
+    const run = mkdtempSync(join(tmpdir(), "ep-run-"));
+    const step = (s: string) => JSON.parse(readFileSync(join(run, "steps", s + ".json"), "utf8")) as { step: string; ok: boolean; detail: string; arms?: string[] };
+    const smoke = (["standalone", "engphase"] as const).flatMap((arm) => [1, 2, 3, 4, 5, 6].map((i) => fxReview("c" + i, arm, 1, arm === "engphase" || i > 2)));
+    expect((await ep("exposure", "--in", file("x2.json", { smoke }), "--run", run)).err).toStartWith("E_EP_EXPOSURE_GATE");
+    expect(step("exposure-gate")).toMatchObject({ step: "exposure-gate", ok: true, arms: ["engphase"] });
+    expect((await ep("exposure", "--in", file("x3.json", { smoke }), "--reviewer", "sol", "--run", run)).err).toStartWith("E_USAGE");
+    expect((await ep("pilot", "--in", file("p7.json", pilotFile(10)), "--draws", "2000", "--run", run)).code).toBe(0);
+    expect(step("admission")).toMatchObject({ step: "admission", ok: true });
+    expect((await ep("pilot", "--in", file("p8.json", pilotFile(1)), "--draws", "2000", "--run", run)).code).toBe(2);
+    expect(step("admission")).toMatchObject({ step: "admission", ok: false });
+    expect((await ep("start", "--mdd", "0.13", "--run", run)).code).toBe(2);
+    expect(step("start-rule").ok).toBe(false);
+    expect((await ep("start", "--mdd", "0.11", "--run", run)).code).toBe(0);
+    expect(step("start-rule")).toMatchObject({ step: "start-rule", ok: true });
   });
   test("analyze prints the readout from records", async () => {
     const w = fxWorld(10, 1, 1, { standalone: () => ({ pass: 1 }), engphase: () => ({ pass: 0 }) }, { draws: 2000 });
