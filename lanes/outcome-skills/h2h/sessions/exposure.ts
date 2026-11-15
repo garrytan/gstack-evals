@@ -125,6 +125,9 @@ function todoLists(r: Read): Array<{ at: number; items: string[] }> {
   return lists;
 }
 
+/** GSD's quick and debug planning dirs from markers.json, each ending in a slash; a path holding one is a planning file. */
+export const planningDirs = (m: Markers = readMarkers()): string[] => [m.packs.gsd!.strings.quick_dir!, m.packs.gsd!.strings.debug_dir!.replace(/\/?$/, "/")];
+
 /** Each arm's procedure markers (section 8). entry is the session's entry. */
 function procedureMarkers(arm: H2hArm, entry: Entry, m: Markers, r: Read, files: string[]): string[] {
   const out: string[] = [];
@@ -159,7 +162,7 @@ function procedureMarkers(arm: H2hArm, entry: Entry, m: Markers, r: Read, files:
   if (arm === "gsd") {
     const g = pk.gsd!.strings;
     const tool = bashUses(r).some((b) => b.input!.command.includes(g.run!) || b.input!.command.includes(g.tools!));
-    const dirs = [g.quick_dir!, g.debug_dir!.replace(/\/?$/, "/")];
+    const dirs = planningDirs(m);
     const wrote = [...writes(r).map((x) => x.path), ...files, ...bashUses(r).filter((b) => /(>|\bmkdir\b|\btee\b|\bcp\b|\bmv\b|\btouch\b)/.test(b.input!.command)).map((b) => b.input!.command)].find((p) => dirs.some((d) => p.includes(d)));
     return tool && wrote ? ["gsd-tools", "planning:" + wrote.slice(0, 120)] : [];
   }
