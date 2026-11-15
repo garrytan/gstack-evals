@@ -8,6 +8,7 @@
 // only; the repository's code runs only inside the verifier's containers.
 import { randomBytes } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { keepEvidence } from "./evidence.ts";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { git, gitRun, showFile } from "../real-outcome/mine/git.ts";
@@ -559,7 +560,9 @@ export function buildUnit(spec: UnitSpec, repo: string, out: string, o: BuildOpt
   const grid = (label: string, rev: string, set: RestoreSet, want?: string[]) => {
     const patch = rev === base ? "" : diff(repo, base, rev);
     writeFileSync(join(out, treePatch(label)), patch);
-    return gradeSet({ taskDir: out, task, eb, set, label, patch, runs, seed, work: o.work, cpus: o.cpus, want, sandbox: o.sandbox, crash: o.planted });
+    const r = gradeSet({ taskDir: out, task, eb, set, label, patch, runs, seed, work: o.work, cpus: o.cpus, want, sandbox: o.sandbox, crash: o.planted });
+    keepEvidence(id, "grid-" + label.replace(/[^\w.-]/g, "_") + ".json", r);
+    return r;
   };
   const crashOnMerged = new Set<string>();
   const functional = grid("merged", merge, sets[0]);
