@@ -1,0 +1,7278 @@
+{
+ "schema": "h2h-b2-licences.v1",
+ "freeze_date": "2026-11-15",
+ "read": "GitHub GraphQL repository { nameWithOwner isArchived licenseInfo { spdxId } }, once, keyed by the fix reference's owner/repo in lower case",
+ "permissive": [
+  "MIT",
+  "Apache-2.0",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "0BSD",
+  "Zlib",
+  "BSL-1.0",
+  "Unlicense"
+ ],
+ "repos": {
+  "0x676e67/vproxy": {
+   "name_with_owner": "0x676e67/vproxy",
+   "spdx": "GPL-3.0",
+   "archived": false
+  },
+  "0xjacky/nginx-ui": {
+   "name_with_owner": "0xJacky/nginx-ui",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "101arrowz/fflate": {
+   "name_with_owner": "101arrowz/fflate",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "197g/static-alloc": {
+   "name_with_owner": "197g/static-alloc",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "1panel-dev/1panel": {
+   "name_with_owner": "1Panel-dev/1Panel",
+   "spdx": "GPL-3.0",
+   "archived": false
+  },
+  "3scale-sre/marin3r": {
+   "name_with_owner": "3scale-sre/marin3r",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "7rulnik/source-map-js": {
+   "name_with_owner": "7rulnik/source-map-js",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "a2aproject/a2a-java": {
+   "name_with_owner": "a2aproject/a2a-java",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "a2ui-project/a2ui": {
+   "name_with_owner": "a2ui-project/a2ui",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "aarnott/nerdbank.messagepack": {
+   "name_with_owner": "AArnott/Nerdbank.MessagePack",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "aarondoran/servify-express": {
+   "name_with_owner": "Aarondoran/servify-express",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "abdolence/slack-morphism-rust": {
+   "name_with_owner": "abdolence/slack-morphism-rust",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "abhinavxd/libredesk": {
+   "name_with_owner": "abhinavxd/libredesk",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "abpframework/abp": {
+   "name_with_owner": "abpframework/abp",
+   "spdx": "LGPL-3.0",
+   "archived": false
+  },
+  "acacode/swagger-typescript-api": {
+   "name_with_owner": "acacode/swagger-typescript-api",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "actualbudget/actual": {
+   "name_with_owner": "actualbudget/actual",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "adaltas/node-csv": {
+   "name_with_owner": "adaltas/node-csv",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "adamhathcock/sharpcompress": {
+   "name_with_owner": "adamhathcock/sharpcompress",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "adguardteam/dnsproxy": {
+   "name_with_owner": "AdguardTeam/dnsproxy",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "adonisjs/bodyparser": {
+   "name_with_owner": "adonisjs/bodyparser",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "adonisjs/http-server": {
+   "name_with_owner": "adonisjs/http-server",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "agentfront/enclave": {
+   "name_with_owner": "agentfront/enclave",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "agentfront/frontmcp": {
+   "name_with_owner": "agentfront/frontmcp",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "agentgateway/agentgateway": {
+   "name_with_owner": "agentgateway/agentgateway",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "agenticmail/agenticmail": {
+   "name_with_owner": "agenticmail/agenticmail",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "agions/taskflow-ai": "NOT_FOUND",
+  "ahdinosaur/set-in": {
+   "name_with_owner": "ahdinosaur/set-in",
+   "spdx": null,
+   "archived": false
+  },
+  "ahmedadelfahim/express-xss-sanitizer": {
+   "name_with_owner": "AhmedAdelFahim/express-xss-sanitizer",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "ai/nanoid": {
+   "name_with_owner": "ai/nanoid",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "ain1084/direct_ring_buffer": {
+   "name_with_owner": "ain1084/direct_ring_buffer",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "aiondadotcom/mcp-ssh": {
+   "name_with_owner": "AiondaDotCom/mcp-ssh",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "airlift/aircompressor": {
+   "name_with_owner": "airlift/aircompressor",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "aiven/aiven-operator": {
+   "name_with_owner": "aiven/aiven-operator",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "akka/akka": {
+   "name_with_owner": "akka/akka-core",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "akkadotnet/akka.net": {
+   "name_with_owner": "akkadotnet/akka.net",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "akoskm/create-mcp-server-stdio": {
+   "name_with_owner": "akoskm/create-mcp-server-stdio",
+   "spdx": null,
+   "archived": false
+  },
+  "akuity/kargo": {
+   "name_with_owner": "akuity/kargo",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "alastairlundy/cliinvoke": {
+   "name_with_owner": "alastairlundy/CliInvoke",
+   "spdx": "MPL-2.0",
+   "archived": false
+  },
+  "alexandre-daubois/ember": {
+   "name_with_owner": "alexandre-daubois/ember",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "alexcrichton/tar-rs": {
+   "name_with_owner": "composefs/tar-rs",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "alexpyattaev/borrowck_sacrifices": {
+   "name_with_owner": "alexpyattaev/borrowck_sacrifices",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "alfonsograziano/node-code-sandbox-mcp": {
+   "name_with_owner": "alfonsograziano/node-code-sandbox-mcp",
+   "spdx": null,
+   "archived": false
+  },
+  "algolia/algoliasearch-helper-js": {
+   "name_with_owner": "algolia/algoliasearch-helper-js",
+   "spdx": "MIT",
+   "archived": true
+  },
+  "alistgo/alist": {
+   "name_with_owner": "AlistGo/alist",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "alloy-rs/core": {
+   "name_with_owner": "alloy-rs/core",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "allure-framework/allure2": {
+   "name_with_owner": "allure-framework/allure2",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "almeidapaulopt/tsdproxy": {
+   "name_with_owner": "almeidapaulopt/tsdproxy",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "amannn/next-intl": {
+   "name_with_owner": "amannn/next-intl",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "amauric/tarteaucitron.js": {
+   "name_with_owner": "AmauriC/tarteaucitron.js",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "amazon-ion/ion-dotnet": {
+   "name_with_owner": "amazon-ion/ion-dotnet",
+   "spdx": "NOASSERTION",
+   "archived": true
+  },
+  "amazon-q-developer/language-servers": {
+   "name_with_owner": "Amazon-Q-Developer/language-servers",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "amir20/dozzle": {
+   "name_with_owner": "amir20/dozzle",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "anacrolix/torrent": {
+   "name_with_owner": "anacrolix/torrent",
+   "spdx": "MPL-2.0",
+   "archived": false
+  },
+  "anchore/grype": {
+   "name_with_owner": "anchore/grype",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "anchore/quill": {
+   "name_with_owner": "anchore/quill",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "andrea9293/mcp-documentation-server": {
+   "name_with_owner": "andrea9293/mcp-documentation-server",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "andrewhickman/id-map": {
+   "name_with_owner": "andrewhickman/id-map",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "anephenix/hub": {
+   "name_with_owner": "anephenix/hub",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "angular/angular": {
+   "name_with_owner": "angular/angular",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "angular/angular-cli": {
+   "name_with_owner": "angular/angular-cli",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "angular/domino": {
+   "name_with_owner": "angular/domino",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "anomalyco/opencode": {
+   "name_with_owner": "anomalyco/opencode",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "antchfx/xpath": {
+   "name_with_owner": "antchfx/xpath",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "anthropic-experimental/sandbox-runtime": {
+   "name_with_owner": "anthropics/sandbox-runtime",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "anthropics/anthropic-sdk-typescript": {
+   "name_with_owner": "anthropics/anthropic-sdk-typescript",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "anthropics/buffa": {
+   "name_with_owner": "anthropics/buffa",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "antonmarsden/toodee": {
+   "name_with_owner": "antonmarsden/toodee",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "antrea-io/antrea": {
+   "name_with_owner": "antrea-io/antrea",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "anycable/anycable": {
+   "name_with_owner": "anycable/anycable",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "apache/activemq": {
+   "name_with_owner": "apache/activemq",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/answer": {
+   "name_with_owner": "apache/answer",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/artemis": {
+   "name_with_owner": "apache/artemis",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/atlas": {
+   "name_with_owner": "apache/atlas",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/avro": {
+   "name_with_owner": "apache/avro",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/calcite": {
+   "name_with_owner": "apache/calcite",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/camel": {
+   "name_with_owner": "apache/camel",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/camel-k": {
+   "name_with_owner": "apache/camel-k",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/cassandra": {
+   "name_with_owner": "apache/cassandra",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/causeway": {
+   "name_with_owner": "apache/causeway",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/commons-configuration": {
+   "name_with_owner": "apache/commons-configuration",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/commons-lang": {
+   "name_with_owner": "apache/commons-lang",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/cxf": {
+   "name_with_owner": "apache/cxf",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/directory-kerby": {
+   "name_with_owner": "apache/directory-kerby",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/directory-ldap-api": {
+   "name_with_owner": "apache/directory-ldap-api",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/druid": {
+   "name_with_owner": "apache/druid",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/echarts": {
+   "name_with_owner": "apache/echarts",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/fesod": {
+   "name_with_owner": "apache/fesod",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/flink": {
+   "name_with_owner": "apache/flink",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/flink-cdc": {
+   "name_with_owner": "apache/flink-cdc",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/fory": {
+   "name_with_owner": "apache/fory",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/freemarker": {
+   "name_with_owner": "apache/freemarker",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/geode": {
+   "name_with_owner": "apache/geode",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/hadoop": {
+   "name_with_owner": "apache/hadoop",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/hive": {
+   "name_with_owner": "apache/hive",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/httpcomponents-client": {
+   "name_with_owner": "apache/httpcomponents-client",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/httpcomponents-core": {
+   "name_with_owner": "apache/httpcomponents-core",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/ignite": {
+   "name_with_owner": "apache/ignite",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/incubator-hugegraph": {
+   "name_with_owner": "apache/hugegraph",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/incubator-seata": {
+   "name_with_owner": "apache/incubator-seata",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/inlong": {
+   "name_with_owner": "apache/inlong",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/iotdb": {
+   "name_with_owner": "apache/iotdb",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/jackrabbit": {
+   "name_with_owner": "apache/jackrabbit",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/jena": {
+   "name_with_owner": "apache/jena",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/jspwiki": {
+   "name_with_owner": "apache/jspwiki",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/kafka": {
+   "name_with_owner": "apache/kafka",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/karaf-decanter": {
+   "name_with_owner": "apache/karaf-decanter",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/kylin": {
+   "name_with_owner": "apache/kylin",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/logging-log4j2": {
+   "name_with_owner": "apache/logging-log4j2",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/logging-log4net": {
+   "name_with_owner": "apache/logging-log4net",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/nifi": {
+   "name_with_owner": "apache/nifi",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/opennlp": {
+   "name_with_owner": "apache/opennlp",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/pdfbox": {
+   "name_with_owner": "apache/pdfbox",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/polaris": {
+   "name_with_owner": "apache/polaris",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/qpid-proton-j": {
+   "name_with_owner": "apache/qpid-proton-j",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/seatunnel": {
+   "name_with_owner": "apache/seatunnel",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/shiro": {
+   "name_with_owner": "apache/shiro",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/skywalking": {
+   "name_with_owner": "apache/skywalking",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/solr": {
+   "name_with_owner": "apache/solr",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/spark": {
+   "name_with_owner": "apache/spark",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/streampark": {
+   "name_with_owner": "apache/streampark",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/struts": {
+   "name_with_owner": "apache/struts",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/syncope": {
+   "name_with_owner": "apache/syncope",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/thrift": {
+   "name_with_owner": "apache/thrift",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/tika": {
+   "name_with_owner": "apache/tika",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/tomcat": {
+   "name_with_owner": "apache/tomcat",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/wicket": {
+   "name_with_owner": "apache/wicket",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/zeppelin": {
+   "name_with_owner": "apache/zeppelin",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apache/zookeeper": {
+   "name_with_owner": "apache/zookeeper",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apicurio/apicurio-registry": {
+   "name_with_owner": "Apicurio/apicurio-registry",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apolloconfig/apollo": {
+   "name_with_owner": "apolloconfig/apollo",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apollographql/apollo-server": {
+   "name_with_owner": "apollographql/apollo-server",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "apollographql/federation": {
+   "name_with_owner": "apollographql/federation",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "apollographql/router": {
+   "name_with_owner": "apollographql/router",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "apostrophecms/apostrophe": {
+   "name_with_owner": "apostrophecms/apostrophe",
+   "spdx": null,
+   "archived": false
+  },
+  "apostrophecms/sanitize-html": {
+   "name_with_owner": "apostrophecms/sanitize-html",
+   "spdx": "MIT",
+   "archived": true
+  },
+  "appium/appium": {
+   "name_with_owner": "appium/appium",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "appium/appium-mcp": {
+   "name_with_owner": "appium/appium-mcp",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "appium/java-client": {
+   "name_with_owner": "appium/java-client",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "appsmithorg/appsmith": {
+   "name_with_owner": "appsmithorg/appsmith",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "apptainer/apptainer": {
+   "name_with_owner": "apptainer/apptainer",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "aquaproj/aqua": {
+   "name_with_owner": "aquaproj/aqua",
+   "spdx": null,
+   "archived": false
+  },
+  "aquasecurity/trivy": {
+   "name_with_owner": "aquasecurity/trivy",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "arcadedata/arcadedb": {
+   "name_with_owner": "ArcadeData/arcadedb",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "ardatan/graphql-tools": {
+   "name_with_owner": "ardatan/graphql-tools",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "argoproj-labs/terraform-provider-argocd": {
+   "name_with_owner": "argoproj-labs/terraform-provider-argocd",
+   "spdx": "MPL-2.0",
+   "archived": false
+  },
+  "argoproj/argo-cd": {
+   "name_with_owner": "argoproj/argo-cd",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "argoproj/argo-workflows": {
+   "name_with_owner": "argoproj/argo-workflows",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "argos-ci/argos-javascript": {
+   "name_with_owner": "argos-ci/argos-javascript",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "arikusi/deepseek-mcp-server": {
+   "name_with_owner": "arikusi/deepseek-mcp-server",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "arnika-project/arnika": {
+   "name_with_owner": "arnika-project/arnika",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "arnog/mathlive": {
+   "name_with_owner": "arnog/mathlive",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "arthurfiorette/axios-cache-interceptor": {
+   "name_with_owner": "arthurfiorette/axios-cache-interceptor",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "ascopes/protobuf-maven-plugin": {
+   "name_with_owner": "ascopes/protobuf-maven-plugin",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "asfhtgkdavid/theshit": {
+   "name_with_owner": "AsfhtgkDavid/theshit",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "assertj/assertj": {
+   "name_with_owner": "assertj/assertj",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "astral-sh/tokio-tar": {
+   "name_with_owner": "astral-sh/tokio-tar",
+   "spdx": "Apache-2.0",
+   "archived": true
+  },
+  "astral-sh/uv": {
+   "name_with_owner": "astral-sh/uv",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "asymmetric-effort/nogginlessdom": {
+   "name_with_owner": "asymmetric-effort/NogginLessDom",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "asymmetric-effort/specifyjs": {
+   "name_with_owner": "asymmetric-effort/specifyjs",
+   "spdx": null,
+   "archived": false
+  },
+  "asynchttpclient/async-http-client": {
+   "name_with_owner": "AsyncHttpClient/async-http-client",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "auth0/nextjs-auth0": {
+   "name_with_owner": "auth0/nextjs-auth0",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "auth0/node-jws": {
+   "name_with_owner": "auth0/node-jws",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "authelia/authelia": {
+   "name_with_owner": "authelia/authelia",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "authorizerdev/authorizer": {
+   "name_with_owner": "authorizerdev/authorizer",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "authzed/spicedb": {
+   "name_with_owner": "authzed/spicedb",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "autobrr/qui": {
+   "name_with_owner": "autobrr/qui",
+   "spdx": "GPL-2.0",
+   "archived": false
+  },
+  "automattic/mongoose": {
+   "name_with_owner": "Automattic/mongoose",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "avwo/whistle": {
+   "name_with_owner": "avwo/whistle",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "aws-amplify/amplify-codegen-ui": {
+   "name_with_owner": "aws-amplify/amplify-codegen-ui",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "aws/agentcore-cli": {
+   "name_with_owner": "aws/agentcore-cli",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "aws/amazon-s3-encryption-client-dotnet": {
+   "name_with_owner": "aws/amazon-s3-encryption-client-dotnet",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "aws/amazon-s3-encryption-client-go": {
+   "name_with_owner": "aws/amazon-s3-encryption-client-go",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "aws/amazon-s3-encryption-client-java": {
+   "name_with_owner": "aws/amazon-s3-encryption-client-java",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "aws/aws-advanced-go-wrapper": {
+   "name_with_owner": "aws/aws-advanced-go-wrapper",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "aws/aws-advanced-jdbc-wrapper": {
+   "name_with_owner": "aws/aws-advanced-jdbc-wrapper",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "aws/aws-advanced-nodejs-wrapper": {
+   "name_with_owner": "aws/aws-advanced-nodejs-wrapper",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "aws/aws-cdk": {
+   "name_with_owner": "aws/aws-cdk",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "awspring/spring-cloud-aws": {
+   "name_with_owner": "awspring/spring-cloud-aws",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "awwaiid/mcp-server-taskwarrior": {
+   "name_with_owner": "awwaiid/mcp-server-taskwarrior",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "axios/axios": {
+   "name_with_owner": "axios/axios",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "axllent/mailpit": {
+   "name_with_owner": "axllent/mailpit",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "azu/request-filtering-agent": {
+   "name_with_owner": "azu/request-filtering-agent",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "azukaar/cosmos-server": {
+   "name_with_owner": "azukaar/Cosmos-Server",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "azure/azure-sdk-for-java": {
+   "name_with_owner": "Azure/azure-sdk-for-java",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "azuread/microsoft-authentication-library-for-js": {
+   "name_with_owner": "AzureAD/microsoft-authentication-library-for-js",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "bablilayoub/openhole": {
+   "name_with_owner": "bablilayoub/openhole",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "babylonlabs-io/babylon": {
+   "name_with_owner": "babylonlabs-io/babylon",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "babylonlabs-io/finality-provider": {
+   "name_with_owner": "babylonlabs-io/finality-provider",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "backstage/backstage": {
+   "name_with_owner": "backstage/backstage",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "bank-vaults/vault-secrets-webhook": {
+   "name_with_owner": "bank-vaults/vault-secrets-webhook",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "baomidou/dynamic-datasource": {
+   "name_with_owner": "baomidou/dynamic-datasource",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "baptistearno/typebot.io": {
+   "name_with_owner": "baptisteArno/typebot.io",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "basekick-labs/arc": {
+   "name_with_owner": "Basekick-Labs/arc",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "bcgit/bc-java": {
+   "name_with_owner": "bcgit/bc-java",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "bcgit/bc-lts-java": {
+   "name_with_owner": "bcgit/bc-lts-java",
+   "spdx": null,
+   "archived": false
+  },
+  "beaugunderson/ip-address": {
+   "name_with_owner": "beaugunderson/ip-address",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "becheran/grid": {
+   "name_with_owner": "becheran/grid",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "bekacru/better-call": {
+   "name_with_owner": "better-auth/better-call",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "bencevans/screenshot-desktop": {
+   "name_with_owner": "bencevans/screenshot-desktop",
+   "spdx": null,
+   "archived": false
+  },
+  "benjamine/jsondiffpatch": {
+   "name_with_owner": "benjamine/jsondiffpatch",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "better-auth/better-auth": {
+   "name_with_owner": "better-auth/better-auth",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "bettercap/bettercap": {
+   "name_with_owner": "bettercap/bettercap",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "binarymuse/toml-node": {
+   "name_with_owner": "BinaryMuse/toml-node",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "bishopfox/sliver": {
+   "name_with_owner": "BishopFox/sliver",
+   "spdx": "GPL-3.0",
+   "archived": false
+  },
+  "bitcoinj/bitcoinj": {
+   "name_with_owner": "bitcoinj/bitcoinj",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "bitcoinjs/tiny-secp256k1": {
+   "name_with_owner": "bitcoinjs/tiny-secp256k1",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "bitnami-labs/sealed-secrets": {
+   "name_with_owner": "bitnami/sealed-secrets",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "bitwiseshiftleft/sjcl": {
+   "name_with_owner": "bitwiseshiftleft/sjcl",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "borewit/music-metadata": {
+   "name_with_owner": "Borewit/music-metadata",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "boscop-fr/orejime": {
+   "name_with_owner": "boscop-fr/orejime",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "bpampuch/pdfmake": {
+   "name_with_owner": "bpampuch/pdfmake",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "bpg/terraform-provider-proxmox": {
+   "name_with_owner": "bpg/terraform-provider-proxmox",
+   "spdx": "MPL-2.0",
+   "archived": false
+  },
+  "briandilley/jsonrpc4j": {
+   "name_with_owner": "briandilley/jsonrpc4j",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "brix/crypto-js": {
+   "name_with_owner": "brix/crypto-js",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "browserify/cipher-base": {
+   "name_with_owner": "browserify/cipher-base",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "browserify/pbkdf2": {
+   "name_with_owner": "browserify/pbkdf2",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "browserify/sha.js": {
+   "name_with_owner": "browserify/sha.js",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "browserslist/browserslist": {
+   "name_with_owner": "browserslist/browserslist",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "bsv-blockchain/ts-sdk": {
+   "name_with_owner": "bsv-blockchain/ts-sdk",
+   "spdx": "NOASSERTION",
+   "archived": true
+  },
+  "budibase/budibase": {
+   "name_with_owner": "Budibase/budibase",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "buger/jsonparser": {
+   "name_with_owner": "buger/jsonparser",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "burtthecoder/mcp-maigret": {
+   "name_with_owner": "w0h1v/mcp-maigret",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "bytebase/bytebase": {
+   "name_with_owner": "bytebase/bytebase",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "bytebase/dbhub": {
+   "name_with_owner": "bytebase/dbhub",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "bytecodealliance/wasmtime": {
+   "name_with_owner": "bytecodealliance/wasmtime",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "bytedeco/javacv": {
+   "name_with_owner": "bytedeco/javacv",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "byvoid/opencc": {
+   "name_with_owner": "BYVoid/OpenCC",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "caddyserver/caddy": {
+   "name_with_owner": "caddyserver/caddy",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "canonical/authd": {
+   "name_with_owner": "canonical/authd",
+   "spdx": "LGPL-3.0",
+   "archived": false
+  },
+  "canonical/lxd": {
+   "name_with_owner": "canonical/lxd",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "canonical/microceph": {
+   "name_with_owner": "canonical/microceph",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "cap-go/capacitor-native-biometric": {
+   "name_with_owner": "Cap-go/capacitor-native-biometric",
+   "spdx": "MPL-2.0",
+   "archived": false
+  },
+  "cap-go/cli": {
+   "name_with_owner": "Cap-go/CLI",
+   "spdx": "AGPL-3.0",
+   "archived": true
+  },
+  "capnproto/capnproto-rust": {
+   "name_with_owner": "capnproto/capnproto-rust",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "capricorn86/happy-dom": {
+   "name_with_owner": "capricorn86/happy-dom",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "carboneio/carbone": {
+   "name_with_owner": "carboneio/carbone",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "casdoor/casdoor": {
+   "name_with_owner": "casdoor/casdoor",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "cberner/fuser": {
+   "name_with_owner": "cberner/fuser",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "ccfos/nightingale": {
+   "name_with_owner": "ccfos/nightingale",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "cdxgen/cdxgen": {
+   "name_with_owner": "cdxgen/cdxgen",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "cel-rust/cel-rust": {
+   "name_with_owner": "cel-rust/cel-rust",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "centrifugal/centrifugo": {
+   "name_with_owner": "centrifugal/centrifugo",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "cert-manager/cert-manager": {
+   "name_with_owner": "cert-manager/cert-manager",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "chainguard-dev/apko": {
+   "name_with_owner": "chainguard-dev/apko",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "chainguard-dev/malcontent": {
+   "name_with_owner": "chainguard-dev/malcontent",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "chainguard-dev/melange": {
+   "name_with_owner": "chainguard-dev/melange",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "chainguard-forks/kaniko": {
+   "name_with_owner": "chainguard-forks/kaniko",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "chaos-mesh/chaos-mesh": {
+   "name_with_owner": "chaos-mesh/chaos-mesh",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "charmbracelet/soft-serve": {
+   "name_with_owner": "charmbracelet/soft-serve",
+   "spdx": "MIT",
+   "archived": true
+  },
+  "chetanxpro/nodejs-whisper": {
+   "name_with_owner": "ChetanXpro/nodejs-whisper",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "chillicream/graphql-platform": {
+   "name_with_owner": "ChilliCream/graphql-platform",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "chinabugotech/hutool": {
+   "name_with_owner": "chinabugotech/hutool",
+   "spdx": "MulanPSL-2.0",
+   "archived": false
+  },
+  "chromedevtools/chrome-devtools-mcp": {
+   "name_with_owner": "ChromeDevTools/chrome-devtools-mcp",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "cilium/cilium": {
+   "name_with_owner": "cilium/cilium",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "cilium/ebpf": {
+   "name_with_owner": "cilium/ebpf",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "ciscoheat/sveltekit-superforms": {
+   "name_with_owner": "ciscoheat/sveltekit-superforms",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "ckeditor/ckeditor5": {
+   "name_with_owner": "ckeditor/ckeditor5",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "clevertap/clevertap-web-sdk": {
+   "name_with_owner": "CleverTap/clevertap-web-sdk",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "cli/cli": {
+   "name_with_owner": "cli/cli",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "cline/cline": {
+   "name_with_owner": "cline/cline",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "cloudflare/agents": {
+   "name_with_owner": "cloudflare/agents",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "cloudflare/circl": {
+   "name_with_owner": "cloudflare/circl",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "cloudflare/gokey": {
+   "name_with_owner": "cloudflare/gokey",
+   "spdx": "BSD-3-Clause",
+   "archived": false
+  },
+  "cloudflare/pingora": {
+   "name_with_owner": "cloudflare/pingora",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "cloudflare/workers-sdk": {
+   "name_with_owner": "cloudflare/workers-sdk",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "cloudfoundry/uaa": {
+   "name_with_owner": "cloudfoundry/uaa",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "cloudinary/cloudinary_npm": {
+   "name_with_owner": "cloudinary/cloudinary_npm",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "cloudnative-pg/cloudnative-pg": {
+   "name_with_owner": "cloudnative-pg/cloudnative-pg",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "cloudnativelabs/kube-router": {
+   "name_with_owner": "cloudnativelabs/kube-router",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "cloudreve/cloudreve": {
+   "name_with_owner": "cloudreve/cloudreve",
+   "spdx": "GPL-3.0",
+   "archived": false
+  },
+  "cnighswonger/claude-code-cache-fix": {
+   "name_with_owner": "cnighswonger/claude-code-cache-fix",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "coddingtonbear/obsidian-local-rest-api": {
+   "name_with_owner": "coddingtonbear/obsidian-local-rest-api",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "codeceptjs/codeceptjs": {
+   "name_with_owner": "codeceptjs/CodeceptJS",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "codehaus-plexus/plexus-utils": {
+   "name_with_owner": "codehaus-plexus/plexus-utils",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "coder/agentapi": {
+   "name_with_owner": "coder/agentapi",
+   "spdx": "MIT",
+   "archived": true
+  },
+  "coder/code-marketplace": {
+   "name_with_owner": "coder/code-marketplace",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "coder/coder": {
+   "name_with_owner": "coder/coder",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "coding-solo/godot-mcp": {
+   "name_with_owner": "Coding-Solo/godot-mcp",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "colinhacks/zod": {
+   "name_with_owner": "colinhacks/zod",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "cometbft/cometbft": {
+   "name_with_owner": "cometbft/cometbft",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "cometd/cometd": {
+   "name_with_owner": "cometd/cometd",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "composefs/tar-rs": {
+   "name_with_owner": "composefs/tar-rs",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "concourse/concourse": {
+   "name_with_owner": "concourse/concourse",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "conductor-oss/conductor": {
+   "name_with_owner": "conductor-oss/conductor",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "consensys/gnark": {
+   "name_with_owner": "Consensys-Incorporated/gnark",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "consensys/gnark-crypto": {
+   "name_with_owner": "Consensys-Incorporated/gnark-crypto",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "containerd/containerd": {
+   "name_with_owner": "containerd/containerd",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "containernetworking/plugins": {
+   "name_with_owner": "containernetworking/plugins",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "containers/aardvark-dns": {
+   "name_with_owner": "containers/aardvark-dns",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "containers/netavark": {
+   "name_with_owner": "containers/netavark",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "containers/podman": {
+   "name_with_owner": "podman-container-tools/podman",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "contentful/contentful-mcp-server": {
+   "name_with_owner": "contentful/contentful-mcp-server",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "controlplaneio-fluxcd/flux-operator": {
+   "name_with_owner": "controlplaneio-fluxcd/flux-operator",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "conventional-changelog/conventional-changelog": {
+   "name_with_owner": "conventional-changelog/conventional-changelog",
+   "spdx": "ISC",
+   "archived": false
+  },
+  "copernik-eu/copernik-xml-factory": {
+   "name_with_owner": "copernik-eu/copernik-xml-factory",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "corazawaf/coraza": {
+   "name_with_owner": "corazawaf/coraza",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "coredns/coredns": {
+   "name_with_owner": "coredns/coredns",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "cosmos/cosmos-sdk": {
+   "name_with_owner": "cosmos/cosmos-sdk",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "cosmos/evm": {
+   "name_with_owner": "cosmos/evm",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "couchbase/couchbase-net-client": {
+   "name_with_owner": "couchbase/couchbase-net-client",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "craftercms/studio": {
+   "name_with_owner": "craftercms/studio",
+   "spdx": "GPL-3.0",
+   "archived": true
+  },
+  "cryspen/hpke-rs": {
+   "name_with_owner": "celabshq/hpke-rs",
+   "spdx": null,
+   "archived": false
+  },
+  "cryspen/libcrux": {
+   "name_with_owner": "celabshq/libcrux",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "cstigler/node-xhtml-purifier": {
+   "name_with_owner": "cstigler/node-xhtml-purifier",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "ctfer-io/chall-manager": {
+   "name_with_owner": "ctfer-io/chall-manager",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "ctfer-io/fullchain": {
+   "name_with_owner": "ctfer-io/fullchain",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "ctfer-io/monitoring": {
+   "name_with_owner": "ctfer-io/monitoring",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "ctfer-io/romeo": {
+   "name_with_owner": "ctfer-io/romeo",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "ctfer-io/terraform-provider-ctfd": {
+   "name_with_owner": "ctfer-io/terraform-provider-ctfd",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "cthackers/adm-zip": {
+   "name_with_owner": "cthackers/adm-zip",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "cure53/dompurify": {
+   "name_with_owner": "cure53/DOMPurify",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "cyanheads/git-mcp-server": {
+   "name_with_owner": "cyanheads/git-mcp-server",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "cyclonedx/cyclonedx-core-java": {
+   "name_with_owner": "CycloneDX/cyclonedx-core-java",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "cyclonedx/cyclonedx-node-npm": {
+   "name_with_owner": "CycloneDX/cyclonedx-node-npm",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "czlonkowski/n8n-mcp": {
+   "name_with_owner": "czlonkowski/n8n-mcp",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "dadrus/heimdall": {
+   "name_with_owner": "dadrus/heimdall",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "dagu-org/dagu": {
+   "name_with_owner": "dagucloud/dagu",
+   "spdx": "GPL-3.0",
+   "archived": false
+  },
+  "dahlia/logtape": {
+   "name_with_owner": "dahlia/logtape",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "dajiaji/hpke-js": {
+   "name_with_owner": "dajiaji/hpke-js",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "danaozhong/rust-zserio": {
+   "name_with_owner": "Danaozhong/rust-zserio",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "danday74/git-diff": {
+   "name_with_owner": "danday74/git-diff",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "danger/danger-js": {
+   "name_with_owner": "danger/danger-js",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "dangerblack/n8n-node-sqlite3": {
+   "name_with_owner": "DangerBlack/n8n-node-sqlite3",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "dapr/dapr": {
+   "name_with_owner": "dapr/dapr",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "daptin/daptin": {
+   "name_with_owner": "daptin/daptin",
+   "spdx": "LGPL-3.0",
+   "archived": false
+  },
+  "datadog/dd-trace-js": {
+   "name_with_owner": "DataDog/dd-trace-js",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "datadog/dd-trace-rs": {
+   "name_with_owner": "DataDog/dd-trace-rs",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "datanoisetv/tinyice": {
+   "name_with_owner": "DatanoiseTV/tinyice",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "datasharingframework/dsf": {
+   "name_with_owner": "datasharingframework/dsf",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "davila7/claude-code-templates": {
+   "name_with_owner": "davila7/claude-code-templates",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "dbgate/dbgate": {
+   "name_with_owner": "dbgate/dbgate",
+   "spdx": "GPL-3.0",
+   "archived": false
+  },
+  "dchester/jsonpath": {
+   "name_with_owner": "dchester/jsonpath",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "dcmjs-org/dcmjs": {
+   "name_with_owner": "dcmjs-org/dcmjs",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "ddev/ddev": {
+   "name_with_owner": "ddev/ddev",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "decentralized-identity/veramo": {
+   "name_with_owner": "decentralized-identity/veramo",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "decolua/9router": {
+   "name_with_owner": "decolua/9router",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "deepseek-ai/deepseek-harness": {
+   "name_with_owner": "deepseek-ai/deepseek-harness",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "deepstreamio/deepstream.io": {
+   "name_with_owner": "deepstreamIO/deepstream.io",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "defenseunicorns/pepr": {
+   "name_with_owner": "defenseunicorns/pepr",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "delmaredigital/payload-puck": {
+   "name_with_owner": "delmaredigital/payload-puck",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "delvedor/find-my-way": {
+   "name_with_owner": "delvedor/find-my-way",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "denoland/deno": {
+   "name_with_owner": "denoland/deno",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "denpiligrim/repostat": {
+   "name_with_owner": "denpiligrim/repostat",
+   "spdx": null,
+   "archived": false
+  },
+  "dependencytrack/frontend": {
+   "name_with_owner": "DependencyTrack/frontend",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "devbridge/jquery-autocomplete": {
+   "name_with_owner": "tkirda/jQuery-Autocomplete",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "devtron-labs/devtron": {
+   "name_with_owner": "devtron-labs/devtron",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "dexidp/dex": {
+   "name_with_owner": "dexidp/dex",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "dfpc-coe/cloudtak": {
+   "name_with_owner": "dfpc-coe/CloudTAK",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "dgraph-io/dgraph": {
+   "name_with_owner": "dgraph-io/dgraph",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "dhax/go-base": {
+   "name_with_owner": "dhax/go-base",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "dicebear/dicebear": {
+   "name_with_owner": "dicebear/dicebear",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "diegosouzapw/omniroute": {
+   "name_with_owner": "cheaper-inference/OmniRoute",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "diesel-rs/diesel": {
+   "name_with_owner": "diesel-rs/diesel",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "diesel-rs/diesel_async": {
+   "name_with_owner": "diesel-rs/diesel_async",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "digitalbazaar/forge": {
+   "name_with_owner": "digitalbazaar/forge",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "diplodoc-platform/search-extension": {
+   "name_with_owner": "diplodoc-platform/search-extension",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "diracgrid/diracx-web": {
+   "name_with_owner": "DIRACGrid/diracx-web",
+   "spdx": "GPL-3.0",
+   "archived": false
+  },
+  "directus/directus": {
+   "name_with_owner": "directus/directus",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "discord-jda/jda": {
+   "name_with_owner": "discord-jda/JDA",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "distribution/distribution": {
+   "name_with_owner": "distribution/distribution",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "dlemstra/magick.net": {
+   "name_with_owner": "dlemstra/Magick.NET",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "dnnsoftware/dnn.platform": {
+   "name_with_owner": "dnnsoftware/Dnn.Platform",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "docker/compose": {
+   "name_with_owner": "docker/compose",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "docker/mcp-gateway": {
+   "name_with_owner": "docker/mcp-gateway",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "donknap/dpanel": {
+   "name_with_owner": "donknap/dpanel",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "doumanash/xxhash-rust": {
+   "name_with_owner": "DoumanAsh/xxhash-rust",
+   "spdx": "BSL-1.0",
+   "archived": false
+  },
+  "dragonflyoss/dragonfly": {
+   "name_with_owner": "dragonflyoss/dragonfly",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "drakkan/sftpgo": {
+   "name_with_owner": "drakkan/sftpgo",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "dspace/dspace": {
+   "name_with_owner": "DSpace/DSpace",
+   "spdx": "BSD-3-Clause",
+   "archived": false
+  },
+  "dtwang/line-desktop-mcp": {
+   "name_with_owner": "dtwang/line-desktop-mcp",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "dunglas/mercure": {
+   "name_with_owner": "dunglas/mercure",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "dvsekhvalnov/jose2go": {
+   "name_with_owner": "dvsekhvalnov/jose2go",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "dynatrace-oss/dynatrace-mcp": {
+   "name_with_owner": "dynatrace-oss/dynatrace-mcp",
+   "spdx": "MIT",
+   "archived": true
+  },
+  "earendil-works/pi": {
+   "name_with_owner": "earendil-works/pi",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "eat-pray-ai/yutu": {
+   "name_with_owner": "eat-pray-ai/yutu",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "eclipse-ee4j/jersey": {
+   "name_with_owner": "eclipse-ee4j/jersey",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "eclipse-theia/theia": {
+   "name_with_owner": "eclipse-theia/theia",
+   "spdx": "EPL-2.0",
+   "archived": false
+  },
+  "eclipse-vertx/vert.x": {
+   "name_with_owner": "eclipse-vertx/vert.x",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "edgelesssys/constellation": {
+   "name_with_owner": "edgelesssys/constellation",
+   "spdx": "NOASSERTION",
+   "archived": true
+  },
+  "edgelesssys/contrast": {
+   "name_with_owner": "edgelesssys/contrast",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "eea/volto-chatbot": {
+   "name_with_owner": "eea/volto-chatbot",
+   "spdx": "MIT",
+   "archived": true
+  },
+  "eemeli/yaml": {
+   "name_with_owner": "eemeli/yaml",
+   "spdx": "ISC",
+   "archived": false
+  },
+  "ekoopmans/html2pdf.js": {
+   "name_with_owner": "eKoopmans/html2pdf.js",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "eladnava/mailgen": {
+   "name_with_owner": "eladnava/mailgen",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "elastic/beats": {
+   "name_with_owner": "elastic/beats",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "elastic/elasticsearch": {
+   "name_with_owner": "elastic/elasticsearch",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "electerm/electerm": {
+   "name_with_owner": "electerm/electerm",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "electron-userland/electron-builder": {
+   "name_with_owner": "electron-userland/electron-builder",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "electron/electron": {
+   "name_with_owner": "electron/electron",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "element-plus/element-plus": {
+   "name_with_owner": "element-plus/element-plus",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "elgentos/magento2-dev-mcp": {
+   "name_with_owner": "elgentos/magento2-dev-mcp",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "ellanetworks/core": {
+   "name_with_owner": "ellanetworks/core",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "elwerene/libreoffice-convert": {
+   "name_with_owner": "elwerene/libreoffice-convert",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "elysiajs/elysia": {
+   "name_with_owner": "elysiajs/elysia",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "elysiajs/elysia-cors": {
+   "name_with_owner": "elysiajs/elysia-cors",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "emiago/sipgo": {
+   "name_with_owner": "emiago/sipgo",
+   "spdx": "BSD-2-Clause",
+   "archived": false
+  },
+  "enchant97/note-mark": {
+   "name_with_owner": "enchant97/note-mark",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "enderfga/claw-orchestrator": {
+   "name_with_owner": "Enderfga/claw-orchestrator",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "ensdomains/ens-contracts": {
+   "name_with_owner": "ensdomains/ens-contracts",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "entireio/cli": {
+   "name_with_owner": "entireio/cli",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "envoyproxy/envoy": {
+   "name_with_owner": "envoyproxy/envoy",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "ericcornelissen/shescape": {
+   "name_with_owner": "ericcornelissen/shescape",
+   "spdx": "MPL-2.0",
+   "archived": false
+  },
+  "ericlbuehler/mistral.rs": {
+   "name_with_owner": "EricLBuehler/mistral.rs",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "erudika/para": {
+   "name_with_owner": "Erudika/para",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "erxes/erxes": {
+   "name_with_owner": "erxes/erxes",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "escape-technologies/graphql-armor": {
+   "name_with_owner": "Escape-Technologies/graphql-armor",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "eslint/rewrite": {
+   "name_with_owner": "eslint/rewrite",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "esm-dev/esm.sh": {
+   "name_with_owner": "esm-dev/esm.sh",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "etcd-io/etcd": {
+   "name_with_owner": "etcd-io/etcd",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "ether/etherpad": {
+   "name_with_owner": "ether/etherpad",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "ethereum/go-ethereum": {
+   "name_with_owner": "ethereum/go-ethereum",
+   "spdx": "LGPL-3.0",
+   "archived": false
+  },
+  "eugeny/russh": {
+   "name_with_owner": "Eugeny/russh",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "evervault/evervault-go": {
+   "name_with_owner": "evervault/evervault-go",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "expr-lang/expr": {
+   "name_with_owner": "expr-lang/expr",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "express-rate-limit/express-rate-limit": {
+   "name_with_owner": "express-rate-limit/express-rate-limit",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "expressjs/body-parser": {
+   "name_with_owner": "expressjs/body-parser",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "expressjs/compression": {
+   "name_with_owner": "expressjs/compression",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "expressjs/morgan": {
+   "name_with_owner": "expressjs/morgan",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "expressjs/multer": {
+   "name_with_owner": "expressjs/multer",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "external-secrets/external-secrets": {
+   "name_with_owner": "external-secrets/external-secrets",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "f1bonacc1/process-compose": {
+   "name_with_owner": "F1bonacc1/process-compose",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "fabiolb/fabio": {
+   "name_with_owner": "fabiolb/fabio",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "fabricjs/fabric.js": {
+   "name_with_owner": "fabricjs/fabric.js",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "facebook/react": {
+   "name_with_owner": "react/react",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "faker-js/faker": {
+   "name_with_owner": "faker-js/faker",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "falcosecurity/plugins": {
+   "name_with_owner": "falcosecurity/plugins",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "fallow-rs/fallow": {
+   "name_with_owner": "fallow-rs/fallow",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "farm-fe/farm": {
+   "name_with_owner": "farm-fe/farm",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "fasterxml/jackson-core": {
+   "name_with_owner": "FasterXML/jackson-core",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "fasterxml/jackson-databind": {
+   "name_with_owner": "FasterXML/jackson-databind",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "fastify/busboy": {
+   "name_with_owner": "fastify/busboy",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "fastify/fast-uri": {
+   "name_with_owner": "fastify/fast-uri",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "fastify/fastify": {
+   "name_with_owner": "fastify/fastify",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "fastify/fastify-express": {
+   "name_with_owner": "fastify/fastify-express",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "fastify/fastify-reply-from": {
+   "name_with_owner": "fastify/fastify-reply-from",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "fastify/fastify-static": {
+   "name_with_owner": "fastify/fastify-static",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "fastify/middie": {
+   "name_with_owner": "fastify/middie",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "fatedier/frp": {
+   "name_with_owner": "fatedier/frp",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "fcmam5/skilleton": {
+   "name_with_owner": "Fcmam5/skilleton",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "feathersjs/feathers": {
+   "name_with_owner": "feathersjs/feathers",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "fecommunity/reactpress": "NOT_FOUND",
+  "fedify-dev/fedify": {
+   "name_with_owner": "fedify-dev/fedify",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "felippe-regazio/ssrfcheck": {
+   "name_with_owner": "harpiafoss/ssrfcheck",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "ffuf/ffuf": {
+   "name_with_owner": "ffuf/ffuf",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "filebrowser/filebrowser": {
+   "name_with_owner": "filebrowser/filebrowser",
+   "spdx": "Apache-2.0",
+   "archived": true
+  },
+  "filecoin-project/curio": {
+   "name_with_owner": "filecoin-project/curio",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "filecoin-project/go-f3": {
+   "name_with_owner": "filecoin-project/go-f3",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "filosottile/edwards25519": {
+   "name_with_owner": "FiloSottile/edwards25519",
+   "spdx": "BSD-3-Clause",
+   "archived": false
+  },
+  "finos/git-proxy": {
+   "name_with_owner": "finos/git-proxy",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "fission/fission": {
+   "name_with_owner": "fission/fission",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "flannel-io/flannel": {
+   "name_with_owner": "flannel-io/flannel",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "fleetdm/fleet": {
+   "name_with_owner": "fleetdm/fleet",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "flipped-aurora/gin-vue-admin": {
+   "name_with_owner": "flipped-aurora/gin-vue-admin",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "flow-scanner/lightning-flow-scanner": {
+   "name_with_owner": "Flow-Scanner/lightning-flow-scanner",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "flowiseai/flowise": {
+   "name_with_owner": "FlowiseAI/Flowise",
+   "spdx": "NOASSERTION",
+   "archived": true
+  },
+  "flux159/mcp-server-kubernetes": {
+   "name_with_owner": "Flux159/mcp-server-kubernetes",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "fluxcd/notification-controller": {
+   "name_with_owner": "fluxcd/notification-controller",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "fluxcd/source-controller": {
+   "name_with_owner": "fluxcd/source-controller",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "flyfish-dev/file-viewer": {
+   "name_with_owner": "flyfish-dev/file-viewer",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "follow-redirects/follow-redirects": {
+   "name_with_owner": "follow-redirects/follow-redirects",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "forceu/gokapi": {
+   "name_with_owner": "Forceu/Gokapi",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "forgekeep/nebula-mesh": {
+   "name_with_owner": "forgekeep/nebula-mesh",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "form-data/form-data": {
+   "name_with_owner": "form-data/form-data",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "formio/formio": {
+   "name_with_owner": "formio/formio",
+   "spdx": "OSL-3.0",
+   "archived": false
+  },
+  "foxcpp/maddy": {
+   "name_with_owner": "foxcpp/maddy",
+   "spdx": "GPL-3.0",
+   "archived": false
+  },
+  "foxinmy/weixin4j": {
+   "name_with_owner": "foxinmy/weixin4j",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "frain-dev/convoy": {
+   "name_with_owner": "frain-dev/convoy",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "frangoteam/fuxa": {
+   "name_with_owner": "frangoteam/FUXA",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "free5gc/amf": {
+   "name_with_owner": "free5gc/amf",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "free5gc/ausf": {
+   "name_with_owner": "free5gc/ausf",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "free5gc/bsf": {
+   "name_with_owner": "free5gc/bsf",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "free5gc/chf": {
+   "name_with_owner": "free5gc/chf",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "free5gc/nef": {
+   "name_with_owner": "free5gc/nef",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "free5gc/nrf": {
+   "name_with_owner": "free5gc/nrf",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "free5gc/nssf": {
+   "name_with_owner": "free5gc/nssf",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "free5gc/pcf": {
+   "name_with_owner": "free5gc/pcf",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "free5gc/smf": {
+   "name_with_owner": "free5gc/smf",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "free5gc/udm": {
+   "name_with_owner": "free5gc/udm",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "free5gc/udr": {
+   "name_with_owner": "free5gc/udr",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "frontfin/mesh-web-sdk": {
+   "name_with_owner": "FrontFin/mesh-web-sdk",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "fuellabs/fuel-vm": {
+   "name_with_owner": "FuelLabs/fuel-vm",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "fulgur-rs/fulgur": {
+   "name_with_owner": "fulgur-rs/fulgur",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "gardener/gardener": {
+   "name_with_owner": "gardener/gardener",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "gchq/cyberchef": {
+   "name_with_owner": "gchq/CyberChef",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "geelen/mcp-remote": {
+   "name_with_owner": "punkpeye/mcp-remote",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "geiserx/genieacs-mcp": {
+   "name_with_owner": "GeiserX/genieacs-mcp",
+   "spdx": "GPL-3.0",
+   "archived": false
+  },
+  "geonetwork/core-geonetwork": {
+   "name_with_owner": "geonetwork/core-geonetwork",
+   "spdx": "GPL-2.0",
+   "archived": false
+  },
+  "geoserver/geoserver": {
+   "name_with_owner": "geoserver/geoserver",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "geosolutions-it/jai-ext": {
+   "name_with_owner": "geosolutions-it/jai-ext",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "geotools/geotools": {
+   "name_with_owner": "geotools/geotools",
+   "spdx": "LGPL-2.1",
+   "archived": false
+  },
+  "getarcaneapp/arcane": {
+   "name_with_owner": "getarcaneapp/arcane",
+   "spdx": "BSD-3-Clause",
+   "archived": false
+  },
+  "getaxonflow/axonflow-sdk-java": {
+   "name_with_owner": "getaxonflow/axonflow-sdk-java",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "getkin/kin-openapi": {
+   "name_with_owner": "getkin/kin-openapi",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "getsentry/sentry-java": {
+   "name_with_owner": "getsentry/sentry-java",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "getsentry/sentry-javascript": {
+   "name_with_owner": "getsentry/sentry-javascript",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "gina-io/swig": {
+   "name_with_owner": "gina-io/swig",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "git-lfs/git-lfs": {
+   "name_with_owner": "git-lfs/git-lfs",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "github/advisory-database": {
+   "name_with_owner": "github/advisory-database",
+   "spdx": "CC-BY-4.0",
+   "archived": false
+  },
+  "github/github-mcp-server": {
+   "name_with_owner": "github/github-mcp-server",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "githubnewbie0/odf-kit": {
+   "name_with_owner": "GitHubNewbie0/odf-kit",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "gitlawb/openclaude": {
+   "name_with_owner": "Twigpine/openclaude",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "gitoxidelabs/gitoxide": {
+   "name_with_owner": "GitoxideLabs/gitoxide",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "gitroomhq/postiz-app": {
+   "name_with_owner": "gitroomhq/postiz-app",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "gittuf/gittuf": {
+   "name_with_owner": "gittuf/gittuf",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "glips/figma-context-mcp": {
+   "name_with_owner": "GLips/Figma-Context-MCP",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "gmrtd/gmrtd": {
+   "name_with_owner": "gmrtd/gmrtd",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "gnome/librsvg": {
+   "name_with_owner": "GNOME/librsvg",
+   "spdx": "LGPL-2.1",
+   "archived": false
+  },
+  "go-acme/lego": {
+   "name_with_owner": "go-acme/lego",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "go-chi/chi": {
+   "name_with_owner": "go-chi/chi",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "go-git/go-git": {
+   "name_with_owner": "go-git/go-git",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "go-gitea/gitea": {
+   "name_with_owner": "go-gitea/gitea",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "go-jose/go-jose": {
+   "name_with_owner": "go-jose/go-jose",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "go-pg/pg": {
+   "name_with_owner": "go-pg/pg",
+   "spdx": "BSD-2-Clause",
+   "archived": false
+  },
+  "go-pkgz/auth": {
+   "name_with_owner": "go-pkgz/auth",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "go-vikunja/vikunja": {
+   "name_with_owner": "go-vikunja/vikunja",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "go-viper/mapstructure": {
+   "name_with_owner": "go-viper/mapstructure",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "goauthentik/authentik": {
+   "name_with_owner": "goauthentik/authentik",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "gofiber/fiber": {
+   "name_with_owner": "gofiber/fiber",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "gofiber/utils": {
+   "name_with_owner": "gofiber/utils",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "gogs/gogs": {
+   "name_with_owner": "gogs/gogs",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "goharbor/harbor": {
+   "name_with_owner": "goharbor/harbor",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "gohugoio/hugo": {
+   "name_with_owner": "gohugoio/hugo",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "gomarkdown/markdown": {
+   "name_with_owner": "gomarkdown/markdown",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "google/clasp": {
+   "name_with_owner": "google/clasp",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "google/go-attestation": {
+   "name_with_owner": "google/go-attestation",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "google/gson": {
+   "name_with_owner": "google/gson",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "google/guava": {
+   "name_with_owner": "google/guava",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "google/osv-scalibr": {
+   "name_with_owner": "google/osv-scalibr",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "google/zx": {
+   "name_with_owner": "google/zx",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "googleapis/mcp-toolbox": {
+   "name_with_owner": "googleapis/mcp-toolbox",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "gopacket/gopacket": {
+   "name_with_owner": "gopacket/gopacket",
+   "spdx": "BSD-3-Clause",
+   "archived": false
+  },
+  "gorilla/websocket": {
+   "name_with_owner": "gorilla/websocket",
+   "spdx": "BSD-2-Clause",
+   "archived": false
+  },
+  "goshs-labs/goshs": {
+   "name_with_owner": "goshs-labs/goshs",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "gotd/td": {
+   "name_with_owner": "gotd/td",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "gotenberg/gotenberg": {
+   "name_with_owner": "gotenberg/gotenberg",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "gotify/server": {
+   "name_with_owner": "gotify/server",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "grafana/grafana": {
+   "name_with_owner": "grafana/grafana",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "grafana/grafana-infinity-datasource": {
+   "name_with_owner": "grafana/grafana-infinity-datasource",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "grafana/tempo": {
+   "name_with_owner": "grafana/tempo",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "graphql-hive/envelop": {
+   "name_with_owner": "graphql-hive/envelop",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "graphql-hive/graphql-modules": {
+   "name_with_owner": "graphql-hive/graphql-modules",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "graphql-hive/graphql-scalars": {
+   "name_with_owner": "graphql-hive/graphql-scalars",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "gravitl/netmaker": {
+   "name_with_owner": "gravitl/netmaker",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "graylog2/graylog2-server": {
+   "name_with_owner": "Graylog2/graylog2-server",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "grpc/grpc-go": {
+   "name_with_owner": "grpc/grpc-go",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "grpc/grpc-node": {
+   "name_with_owner": "grpc/grpc-node",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "gruntwork-io/terragrunt": {
+   "name_with_owner": "gruntwork-io/terragrunt",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "gtsteffaniak/filebrowser": {
+   "name_with_owner": "gtsteffaniak/filebrowser",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "guno1928/alos-http": {
+   "name_with_owner": "guno1928/alos-http",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "h2oai/h2o-3": {
+   "name_with_owner": "h2oai/h2o-3",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "h3js/h3": {
+   "name_with_owner": "h3js/h3",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "h3js/srvx": {
+   "name_with_owner": "h3js/srvx",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "h44z/wg-portal": {
+   "name_with_owner": "h44z/wg-portal",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "hackingrepo/dssrf-js": {
+   "name_with_owner": "HackingRepo/dssrf-js",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "handlebars-lang/handlebars.js": {
+   "name_with_owner": "handlebars-lang/handlebars.js",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "hapifhir/org.hl7.fhir.core": {
+   "name_with_owner": "hapifhir/org.hl7.fhir.core",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "hapijs/content": {
+   "name_with_owner": "hapijs/content",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "hapijs/inert": {
+   "name_with_owner": "hapijs/inert",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "hapijs/joi": {
+   "name_with_owner": "hapijs/joi",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "hapijs/wreck": {
+   "name_with_owner": "hapijs/wreck",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "harness/harness": {
+   "name_with_owner": "harness/harness",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "harttle/liquidjs": {
+   "name_with_owner": "harttle/liquidjs",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "hashicorp/consul": {
+   "name_with_owner": "hashicorp/consul",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "hashicorp/go-getter": {
+   "name_with_owner": "hashicorp/go-getter",
+   "spdx": "MPL-2.0",
+   "archived": false
+  },
+  "hashicorp/next-mdx-remote": {
+   "name_with_owner": "hashicorp/next-mdx-remote",
+   "spdx": "MPL-2.0",
+   "archived": true
+  },
+  "hashicorp/nomad": {
+   "name_with_owner": "hashicorp/nomad",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "hashicorp/terraform-provider-vault": {
+   "name_with_owner": "hashicorp/terraform-provider-vault",
+   "spdx": "MPL-2.0",
+   "archived": false
+  },
+  "hashicorp/vault": {
+   "name_with_owner": "hashicorp/vault",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "hatchet-dev/hatchet": {
+   "name_with_owner": "hatchet-dev/hatchet",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "haxtheweb/haxcms-nodejs": {
+   "name_with_owner": "haxtheweb/haxcms-nodejs",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "haxtheweb/open-apis": {
+   "name_with_owner": "haxtheweb/open-apis",
+   "spdx": "Apache-2.0",
+   "archived": true
+  },
+  "hazelcast/hazelcast": {
+   "name_with_owner": "hazelcast/hazelcast",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "helm/helm": {
+   "name_with_owner": "helm/helm",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "helmetjs/content-security-policy-parser": {
+   "name_with_owner": "helmetjs/content-security-policy-parser",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "hemmeligorg/hemmelig.app": {
+   "name_with_owner": "HemmeligOrg/Hemmelig.app",
+   "spdx": "NOASSERTION",
+   "archived": true
+  },
+  "henrygd/beszel": {
+   "name_with_owner": "henrygd/beszel",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "hibernate/hibernate-orm": {
+   "name_with_owner": "hibernate/hibernate-orm",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "hibernate/hibernate-reactive": {
+   "name_with_owner": "hibernate/hibernate-reactive",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "hibernate/hibernate-validator": {
+   "name_with_owner": "hibernate/hibernate-validator",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "hickory-dns/hickory-dns": {
+   "name_with_owner": "hickory-dns/hickory-dns",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "highcharts/highcharts": {
+   "name_with_owner": "highcharts/highcharts",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "hmbown/codewhale": {
+   "name_with_owner": "codewhale-hq/Codewhale",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "honojs/hono": {
+   "name_with_owner": "honojs/hono",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "honojs/middleware": {
+   "name_with_owner": "honojs/middleware",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "honojs/node-server": {
+   "name_with_owner": "honojs/node-server",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "hotwired/turbo": {
+   "name_with_owner": "hotwired/turbo",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "hs-web/hsweb-framework": {
+   "name_with_owner": "hs-web/hsweb-framework",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "http4k/http4k": {
+   "name_with_owner": "http4k/http4k",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "http4s/blaze": {
+   "name_with_owner": "http4s/blaze",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "http4s/http4s": {
+   "name_with_owner": "http4s/http4s",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "http4s/http4s-scala-xml": {
+   "name_with_owner": "http4s/http4s-scala-xml",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "hubspot/jinjava": {
+   "name_with_owner": "HubSpot/jinjava",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "hubuum/hubuum-client-rust": {
+   "name_with_owner": "hubuum/hubuum-client-rust",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "humanwhocodes/humanfs": {
+   "name_with_owner": "humanwhocodes/humanfs",
+   "spdx": null,
+   "archived": false
+  },
+  "hydraide/hydraide": {
+   "name_with_owner": "hydraide/hydraide",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "hydro-dev/hydro": {
+   "name_with_owner": "hydro-dev/Hydro",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "hypequery/hypequery": {
+   "name_with_owner": "hypequery/hypequery",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "hyperledger/fabric-ca": {
+   "name_with_owner": "hyperledger/fabric-ca",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "i18next/i18next-fs-backend": {
+   "name_with_owner": "i18next/i18next-fs-backend",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "i18next/i18next-http-backend": {
+   "name_with_owner": "i18next/i18next-http-backend",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "i18next/i18next-http-middleware": {
+   "name_with_owner": "i18next/i18next-http-middleware",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "i18next/i18nextify": {
+   "name_with_owner": "i18next/i18nextify",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "ibotpeaches/apktool": {
+   "name_with_owner": "iBotPeaches/Apktool",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "identrail/identrail": {
+   "name_with_owner": "identrail/identrail",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "ieaturanium238/cattown": "NOT_FOUND",
+  "imagemagick/imagemagick": {
+   "name_with_owner": "ImageMagick/ImageMagick",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "imgproxy/imgproxy": {
+   "name_with_owner": "imgproxy/imgproxy",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "immutable-js/immutable-js": {
+   "name_with_owner": "immutable-js/immutable-js",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "imzbf/md-editor-v3": {
+   "name_with_owner": "imzbf/md-editor-v3",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "in-toto/go-witness": {
+   "name_with_owner": "in-toto/go-witness",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "in-toto/in-toto-golang": {
+   "name_with_owner": "in-toto/in-toto-golang",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "indutny/bn.js": {
+   "name_with_owner": "indutny/bn.js",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "infracost/infracost": {
+   "name_with_owner": "infracost/infracost",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "inikulin/replicator": {
+   "name_with_owner": "inikulin/replicator",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "inspektor-gadget/inspektor-gadget": {
+   "name_with_owner": "inspektor-gadget/inspektor-gadget",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "insumerapi/mppx-condition-gate": {
+   "name_with_owner": "insumerapi/mppx-condition-gate",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "intlify/vue-i18n": {
+   "name_with_owner": "intlify/vue-i18n",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "intranda/goobi-viewer-core": {
+   "name_with_owner": "intranda/goobi-viewer-core",
+   "spdx": "GPL-2.0",
+   "archived": false
+  },
+  "ipld/go-ipld-prime": {
+   "name_with_owner": "ipld/go-ipld-prime",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "isaacs/minimatch": {
+   "name_with_owner": "isaacs/minimatch",
+   "spdx": "BlueOak-1.0.0",
+   "archived": false
+  },
+  "isaacs/node-glob": {
+   "name_with_owner": "isaacs/node-glob",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "isaacs/node-tar": {
+   "name_with_owner": "isaacs/node-tar",
+   "spdx": "BlueOak-1.0.0",
+   "archived": false
+  },
+  "istio/istio": {
+   "name_with_owner": "istio/istio",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "ixofoundation/ixo-blockchain": {
+   "name_with_owner": "ixofoundation/ixo-blockchain",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "izpack/izpack": {
+   "name_with_owner": "izpack/izpack",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "j-f-liu/lopdf": {
+   "name_with_owner": "J-F-Liu/lopdf",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "jackc/pgx": {
+   "name_with_owner": "jackc/pgx",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "jandedobbeleer/oh-my-posh": {
+   "name_with_owner": "JanDeDobbeleer/oh-my-posh",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "janssenproject/jans": {
+   "name_with_owner": "JanssenProject/jans",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "jaredforth/webp": {
+   "name_with_owner": "jaredforth/webp",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "jashkenas/underscore": {
+   "name_with_owner": "jashkenas/underscore",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "jasonlovesdoggo/caddy-defender": {
+   "name_with_owner": "JasonLovesDoggo/caddy-defender",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "jasperfx/marten": {
+   "name_with_owner": "JasperFx/marten",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "jaspersoft/jasperreports": {
+   "name_with_owner": "Jaspersoft/jasperreports",
+   "spdx": "LGPL-3.0",
+   "archived": false
+  },
+  "jdx/mise": {
+   "name_with_owner": "jdx/mise",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "jeecgboot/jeecgboot": {
+   "name_with_owner": "jeecgboot/JeecgBoot",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "jenkinsci/active-directory-plugin": {
+   "name_with_owner": "jenkinsci/active-directory-plugin",
+   "spdx": null,
+   "archived": false
+  },
+  "jenkinsci/bitbucket-push-and-pull-request-plugin": {
+   "name_with_owner": "jenkinsci/bitbucket-push-and-pull-request-plugin",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "jenkinsci/blazemeter-plugin": {
+   "name_with_owner": "jenkinsci/blazemeter-plugin",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "jenkinsci/contrast-continuous-application-security-plugin": {
+   "name_with_owner": "jenkinsci/contrast-continuous-application-security-plugin",
+   "spdx": null,
+   "archived": false
+  },
+  "jenkinsci/coverage-plugin": {
+   "name_with_owner": "jenkinsci/coverage-plugin",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "jenkinsci/ec2-fleet-plugin": {
+   "name_with_owner": "jenkinsci/ec2-fleet-plugin",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "jenkinsci/external-workspace-manager-plugin": {
+   "name_with_owner": "jenkinsci/external-workspace-manager-plugin",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "jenkinsci/gatling-plugin": {
+   "name_with_owner": "jenkinsci/gatling-plugin",
+   "spdx": null,
+   "archived": false
+  },
+  "jenkinsci/git-client-plugin": {
+   "name_with_owner": "jenkinsci/git-client-plugin",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "jenkinsci/git-parameter-plugin": {
+   "name_with_owner": "jenkinsci/git-parameter-plugin",
+   "spdx": null,
+   "archived": false
+  },
+  "jenkinsci/gitee-plugin": {
+   "name_with_owner": "jenkinsci/gitee-plugin",
+   "spdx": "GPL-2.0",
+   "archived": false
+  },
+  "jenkinsci/github-branch-source-plugin": {
+   "name_with_owner": "jenkinsci/github-branch-source-plugin",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "jenkinsci/global-build-stats-plugin": {
+   "name_with_owner": "jenkinsci/global-build-stats-plugin",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "jenkinsci/jenkins": {
+   "name_with_owner": "jenkinsci/jenkins",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "jenkinsci/job-config-history-plugin": {
+   "name_with_owner": "jenkinsci/job-config-history-plugin",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "jenkinsci/mcp-server-plugin": {
+   "name_with_owner": "jenkinsci/mcp-server-plugin",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "jenkinsci/opentelemetry-plugin": {
+   "name_with_owner": "jenkinsci/opentelemetry-plugin",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "jenkinsci/priority-sorter-plugin": {
+   "name_with_owner": "jenkinsci/priority-sorter-plugin",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "jenkinsci/saml-plugin": {
+   "name_with_owner": "jenkinsci/saml-plugin",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "jenkinsci/script-security-plugin": {
+   "name_with_owner": "jenkinsci/script-security-plugin",
+   "spdx": null,
+   "archived": false
+  },
+  "jenkinsci/workflow-cps-plugin": {
+   "name_with_owner": "jenkinsci/workflow-cps-plugin",
+   "spdx": null,
+   "archived": false
+  },
+  "jeromefroe/lru-rs": {
+   "name_with_owner": "jeromefroe/lru-rs",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "jetbrains/kotlin": {
+   "name_with_owner": "JetBrains/kotlin",
+   "spdx": null,
+   "archived": false
+  },
+  "jetty/jetty.project": {
+   "name_with_owner": "jetty/jetty.project",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "jhaals/yopass": {
+   "name_with_owner": "jhaals/yopass",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "jhb-software/payload-plugins": {
+   "name_with_owner": "jhb-software/payload-plugins",
+   "spdx": null,
+   "archived": false
+  },
+  "jhipster/generator-jhipster": {
+   "name_with_owner": "jhipster/generator-jhipster",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "jhy/jsoup": {
+   "name_with_owner": "jhy/jsoup",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "jihong88/suneditor": {
+   "name_with_owner": "JiHong88/suneditor",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "jknack/handlebars.java": {
+   "name_with_owner": "jknack/handlebars.java",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "jkroepke/openvpn-auth-oauth2": {
+   "name_with_owner": "jkroepke/openvpn-auth-oauth2",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "jline/jline3": {
+   "name_with_owner": "jline/jline3",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "jm33-m0/emp3r0r": {
+   "name_with_owner": "jm33-m0/emp3r0r",
+   "spdx": "GPL-3.0",
+   "archived": false
+  },
+  "jmlepisto/clatter": {
+   "name_with_owner": "jmlepisto/clatter",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "jmpsec/osctrl": {
+   "name_with_owner": "jmpsec/osctrl",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "joaonuno/flat-to-nested-js": {
+   "name_with_owner": "joaonuno/flat-to-nested-js",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "jon4hz/jellysweep": {
+   "name_with_owner": "jon4hz/jellysweep",
+   "spdx": "GPL-3.0",
+   "archived": false
+  },
+  "jonasbb/serde_with": {
+   "name_with_owner": "jonasbb/serde_with",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "jordanburke/functype": {
+   "name_with_owner": "jordanburke/functype",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "josdejong/mathjs": {
+   "name_with_owner": "josdejong/mathjs",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "joshuayoes/ios-simulator-mcp": {
+   "name_with_owner": "joshuayoes/ios-simulator-mcp",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "jovancoding/network-ai": {
+   "name_with_owner": "Jovancoding/Network-AI",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "js-cookie/js-cookie": {
+   "name_with_owner": "js-cookie/js-cookie",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "jshttp/on-headers": {
+   "name_with_owner": "jshttp/on-headers",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "jshttp/proxy-addr": {
+   "name_with_owner": "jshttp/proxy-addr",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "jsonata-js/jsonata": {
+   "name_with_owner": "jsonata-js/jsonata",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "jsonbored/gittensory": {
+   "name_with_owner": "JSONbored/loopover",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "juju/juju": {
+   "name_with_owner": "juju/juju",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "juju/utils": {
+   "name_with_owner": "juju/utils",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "juliangruber/brace-expansion": {
+   "name_with_owner": "juliangruber/brace-expansion",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "julianhille/muhammarajs": {
+   "name_with_owner": "julianhille/MuhammaraJS",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "juneandgreen/sm-crypto": {
+   "name_with_owner": "JuneAndGreen/sm-crypto",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "junegunn/fzf": {
+   "name_with_owner": "junegunn/fzf",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "junit-team/junit-framework": {
+   "name_with_owner": "junit-team/junit-framework",
+   "spdx": "EPL-2.0",
+   "archived": false
+  },
+  "junkurihara/httpsig-rs": {
+   "name_with_owner": "junkurihara/httpsig-rs",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "junrar/junrar": {
+   "name_with_owner": "junrar/junrar",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "jzeuzs/thread-amount": {
+   "name_with_owner": "jzeuzs/thread-amount",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "kapilduraphe/mcp-watch": {
+   "name_with_owner": "kapilduraphe/mcp-watch",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "karakeep-app/karakeep": {
+   "name_with_owner": "karakeep-app/karakeep",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "karmada-io/dashboard": {
+   "name_with_owner": "karmada-io/dashboard",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "kaspernj/form-data-objectizer": {
+   "name_with_owner": "kaspernj/form-data-objectizer",
+   "spdx": null,
+   "archived": false
+  },
+  "kata-containers/kata-containers": {
+   "name_with_owner": "kata-containers/kata-containers",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "katex/katex": {
+   "name_with_owner": "KaTeX/KaTeX",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "kcp-dev/kcp": {
+   "name_with_owner": "kcp-dev/kcp",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "keats/jsonwebtoken": {
+   "name_with_owner": "Keats/jsonwebtoken",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "kedacore/keda": {
+   "name_with_owner": "kedacore/keda",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "keichi/binary-parser": {
+   "name_with_owner": "keichi/binary-parser",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "kepano/defuddle": {
+   "name_with_owner": "kepano/defuddle",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "kerberos-io/agent": {
+   "name_with_owner": "kerberos-io/agent",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "kerberosmansour/hulumi": {
+   "name_with_owner": "kerberosmansour/hulumi",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "kestra-io/kestra": {
+   "name_with_owner": "kestra-io/kestra",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "kevva/decompress": {
+   "name_with_owner": "kevva/decompress",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "keyang/node-csvtojson": {
+   "name_with_owner": "Keyang/node-csvtojson",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "keycloak/keycloak": {
+   "name_with_owner": "keycloak/keycloak",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "keystonejs/keystone": {
+   "name_with_owner": "keystonejs/keystone",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "kgateway-dev/kgateway": {
+   "name_with_owner": "kgateway-dev/kgateway",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "kite-org/kite": {
+   "name_with_owner": "kite-org/kite",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "kjur/jsrsasign": {
+   "name_with_owner": "kjur/jsrsasign",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "klauspost/compress": {
+   "name_with_owner": "klauspost/compress",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "klever-io/klever-go": {
+   "name_with_owner": "klever-io/klever-go",
+   "spdx": "GPL-3.0",
+   "archived": false
+  },
+  "knadh/listmonk": {
+   "name_with_owner": "knadh/listmonk",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "knative/pkg": {
+   "name_with_owner": "knative/pkg",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "knowns-dev/knowns": {
+   "name_with_owner": "knowns-dev/knowns",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "koajs/koa": {
+   "name_with_owner": "koajs/koa",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "koajs/router": {
+   "name_with_owner": "koajs/router",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "komari-monitor/komari": {
+   "name_with_owner": "komari-monitor/komari",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "kong/kubernetes-ingress-controller": {
+   "name_with_owner": "Kong/kubernetes-ingress-controller",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "kopia/kopia": {
+   "name_with_owner": "kopia/kopia",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "kottster/kottster": {
+   "name_with_owner": "kottster/kottster",
+   "spdx": "Apache-2.0",
+   "archived": true
+  },
+  "kpdecker/jsdiff": {
+   "name_with_owner": "kpdecker/jsdiff",
+   "spdx": "BSD-3-Clause",
+   "archived": false
+  },
+  "kriszyp/cbor-extract": {
+   "name_with_owner": "kriszyp/cbor-extract",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "kuadrant/mcp-gateway": {
+   "name_with_owner": "Kuadrant/mcp-gateway",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "kube-logging/logging-operator": {
+   "name_with_owner": "kube-logging/logging-operator",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "kubeedge/kubeedge": {
+   "name_with_owner": "kubeedge/kubeedge",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "kubeflow/pipelines": {
+   "name_with_owner": "kubeflow/pipelines",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "kubernetes-csi/csi-driver-nfs": {
+   "name_with_owner": "kubernetes-csi/csi-driver-nfs",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "kubernetes-sigs/aws-efs-csi-driver": {
+   "name_with_owner": "kubernetes-sigs/aws-efs-csi-driver",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "kubernetes/ingress-nginx": {
+   "name_with_owner": "kubernetes/ingress-nginx",
+   "spdx": "Apache-2.0",
+   "archived": true
+  },
+  "kubernetes/kubernetes": {
+   "name_with_owner": "kubernetes/kubernetes",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "kubev2v/assisted-migration-agent": {
+   "name_with_owner": "kubev2v/assisted-migration-agent",
+   "spdx": null,
+   "archived": false
+  },
+  "kubev2v/migration-planner": {
+   "name_with_owner": "kubev2v/migration-planner",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "kubevela/kubevela": {
+   "name_with_owner": "kubevela/kubevela",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "kubevirt/kubevirt": {
+   "name_with_owner": "kubevirt/kubevirt",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "kubewarden/kubewarden-controller": {
+   "name_with_owner": "kubewarden/adm-controller",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "kumahq/kuma": {
+   "name_with_owner": "kumahq/kuma",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "kxxt/tracexec": {
+   "name_with_owner": "kxxt/tracexec",
+   "spdx": "GPL-2.0",
+   "archived": false
+  },
+  "kyndryl-open-source/hashi-vault-js": {
+   "name_with_owner": "kyndryl-open-source/hashi-vault-js",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "kysely-org/kysely": {
+   "name_with_owner": "kysely-org/kysely",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "kyverno/kyverno": {
+   "name_with_owner": "kyverno/kyverno",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "l3montree-dev/devguard": {
+   "name_with_owner": "l3montree-dev/devguard",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "labstack/echo": {
+   "name_with_owner": "labstack/echo",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "langchain-ai/langchainjs": {
+   "name_with_owner": "langchain-ai/langchainjs",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "langchain-ai/langgraphjs": {
+   "name_with_owner": "langchain-ai/langgraphjs",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "langchain-ai/langsmith-sdk": {
+   "name_with_owner": "langchain-ai/langsmith-sdk",
+   "spdx": "MIT",
+   "archived": true
+  },
+  "laurent22/joplin": {
+   "name_with_owner": "laurent22/joplin",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "le0pard/re2js": {
+   "name_with_owner": "le0pard/re2js",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "leanprover/vscode-lean4": {
+   "name_with_owner": "leanprover/vscode-lean4",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "lemmynet/activitypub-federation-rust": {
+   "name_with_owner": "LemmyNet/activitypub-federation-rust",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "lemmynet/lemmy": {
+   "name_with_owner": "LemmyNet/lemmy",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "lettermint/lettermint-node": {
+   "name_with_owner": "lettermint/lettermint-node",
+   "spdx": null,
+   "archived": false
+  },
+  "lettre/lettre": {
+   "name_with_owner": "lettre/lettre",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "lf-edge/ekuiper": {
+   "name_with_owner": "lf-edge/ekuiper",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "lf-edge/eve": {
+   "name_with_owner": "lf-edge/eve",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "lfdt-lockness/cggmp21": {
+   "name_with_owner": "LFDT-Lockness/cggmp21",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "libp2p/js-libp2p": {
+   "name_with_owner": "libp2p/js-libp2p",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "libp2p/rust-libp2p": {
+   "name_with_owner": "libp2p/rust-libp2p",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "libp2p/rust-yamux": {
+   "name_with_owner": "libp2p/rust-yamux",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "liferay/liferay-portal": {
+   "name_with_owner": "liferay/liferay-portal",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "lima-vm/lima": {
+   "name_with_owner": "lima-vm/lima",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "lin-snow/ech0": {
+   "name_with_owner": "lin-snow/Ech0",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "line/centraldogma": {
+   "name_with_owner": "line/centraldogma",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "linode/terraform-provider-linode": {
+   "name_with_owner": "linode/terraform-provider-linode",
+   "spdx": "MPL-2.0",
+   "archived": false
+  },
+  "liuyueyi/quick-media": {
+   "name_with_owner": "liuyueyi/quick-media",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "ljharb/qs": {
+   "name_with_owner": "ljharb/qs",
+   "spdx": "BSD-3-Clause",
+   "archived": false
+  },
+  "ljharb/shell-quote": {
+   "name_with_owner": "ljharb/shell-quote",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "lobehub/lobe-chat": {
+   "name_with_owner": "lobehub/lobehub",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "lobehub/lobehub": {
+   "name_with_owner": "lobehub/lobehub",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "locize/gettext-converter": {
+   "name_with_owner": "locize/gettext-converter",
+   "spdx": null,
+   "archived": false
+  },
+  "locize/i18next-locize-backend": {
+   "name_with_owner": "locize/i18next-locize-backend",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "locize/locize": {
+   "name_with_owner": "locize/locize",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "locutusjs/locutus": {
+   "name_with_owner": "locutusjs/locutus",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "lodash/lodash": {
+   "name_with_owner": "lodash/lodash",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "logto-io/logto": {
+   "name_with_owner": "logto-io/logto",
+   "spdx": "MPL-2.0",
+   "archived": false
+  },
+  "louislam/uptime-kuma": {
+   "name_with_owner": "louislam/uptime-kuma",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "lovell/sharp": {
+   "name_with_owner": "lovell/sharp",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "lucasdillmann/nginx-ignition": {
+   "name_with_owner": "lucasdillmann/nginx-ignition",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "luckypennysoftware/automapper": {
+   "name_with_owner": "LuckyPennySoftware/AutoMapper",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "lukilabs/beautiful-mermaid": {
+   "name_with_owner": "lukilabs/beautiful-mermaid",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "luskaner/agelanserver": {
+   "name_with_owner": "luskaner/ageServer",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "luzifer/ots": {
+   "name_with_owner": "Luzifer/ots",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "lxc/incus": {
+   "name_with_owner": "lxc/incus",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "lxc/incus-os": {
+   "name_with_owner": "lxc/incus-os",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "lxsmnsyc/seroval": {
+   "name_with_owner": "lxsmnsyc/seroval",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "m1k1o/neko": {
+   "name_with_owner": "m1k1o/neko",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "mafintosh/protocol-buffers-schema": {
+   "name_with_owner": "mafintosh/protocol-buffers-schema",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "mafintosh/tar-fs": {
+   "name_with_owner": "mafintosh/tar-fs",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "magicmirrororg/magicmirror": {
+   "name_with_owner": "MagicMirrorOrg/MagicMirror",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "mantra-chain/mantrachain": {
+   "name_with_owner": "MANTRA-Chain/mantrachain",
+   "spdx": "MPL-2.0",
+   "archived": false
+  },
+  "manuelmauro/skilo": {
+   "name_with_owner": "manuelmauro/skilo",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "mapfish/mapfish-print": {
+   "name_with_owner": "mapfish/mapfish-print",
+   "spdx": "BSD-2-Clause",
+   "archived": false
+  },
+  "maplibre/maplibre-gl-js": {
+   "name_with_owner": "maplibre/maplibre-gl-js",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "mariadb-corporation/mariadb-connector-j": {
+   "name_with_owner": "mariadb-corporation/mariadb-connector-j",
+   "spdx": "LGPL-2.1",
+   "archived": false
+  },
+  "mariadb-corporation/mariadb-connector-nodejs": {
+   "name_with_owner": "mariadb-corporation/mariadb-connector-nodejs",
+   "spdx": "LGPL-2.1",
+   "archived": false
+  },
+  "mariadb-corporation/mariadb-connector-r2dbc": {
+   "name_with_owner": "mariadb-corporation/mariadb-connector-r2dbc",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "marimerllc/csla": {
+   "name_with_owner": "MarimerLLC/csla",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "markdown-it/linkify-it": {
+   "name_with_owner": "markdown-it/linkify-it",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "markdown-it/markdown-it": {
+   "name_with_owner": "markdown-it/markdown-it",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "masterkale/simplewebauthn": {
+   "name_with_owner": "MasterKale/SimpleWebAuthn",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "mastra-ai/mastra": {
+   "name_with_owner": "mastra-ai/mastra",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "matrix-org/matrix-js-sdk": {
+   "name_with_owner": "matrix-org/matrix-js-sdk",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "matrix-org/matrix-rust-sdk": {
+   "name_with_owner": "matrix-org/matrix-rust-sdk",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "mattermost/desktop": {
+   "name_with_owner": "mattermost/desktop",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "mattermost/mattermost": {
+   "name_with_owner": "mattermost/mattermost",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "mattermost/mattermost-plugin-boards": {
+   "name_with_owner": "mattermost/mattermost-plugin-boards",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "mattermost/mattermost-plugin-calls": {
+   "name_with_owner": "mattermost/mattermost-plugin-calls",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "mattermost/mattermost-plugin-github": {
+   "name_with_owner": "mattermost/mattermost-plugin-github",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "mattermost/mattermost-plugin-msteams": {
+   "name_with_owner": "mattermost/mattermost-plugin-msteams",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "mattermost/mattermost-plugin-msteams-meetings": {
+   "name_with_owner": "mattermost/mattermost-plugin-msteams-meetings",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "mattermost/mattermost-plugin-playbooks": {
+   "name_with_owner": "mattermost/mattermost-plugin-playbooks",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "mattermost/mattermost-plugin-zoom": {
+   "name_with_owner": "mattermost/mattermost-plugin-zoom",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "mattiasw/exifreader": {
+   "name_with_owner": "mattiasw/ExifReader",
+   "spdx": "MPL-2.0",
+   "archived": false
+  },
+  "mauriciopoppe/math-codegen": {
+   "name_with_owner": "mauriciopoppe/math-codegen",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "max-mapper/extract-zip": {
+   "name_with_owner": "max-mapper/extract-zip",
+   "spdx": "BSD-2-Clause",
+   "archived": false
+  },
+  "maximhq/bifrost": {
+   "name_with_owner": "maximhq/bifrost",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "mbuesch/letmein": {
+   "name_with_owner": "mbuesch/letmein",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "mcollina/msgpack5": {
+   "name_with_owner": "mcollina/msgpack5",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "mcpjam/inspector": {
+   "name_with_owner": "MCPJam/inspector",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "medplum/medplum": {
+   "name_with_owner": "medplum/medplum",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "mercurius-js/mercurius": {
+   "name_with_owner": "mercurius-js/mercurius",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "mermaid-js/mermaid": {
+   "name_with_owner": "mermaid-js/mermaid",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "messageformat/messageformat": {
+   "name_with_owner": "messageformat/messageformat",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "messagepack-csharp/messagepack-csharp": {
+   "name_with_owner": "MessagePack-CSharp/MessagePack-CSharp",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "metal3-io/cluster-api-provider-metal3": {
+   "name_with_owner": "metal3-io/cluster-api-provider-metal3",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "metal3-io/ip-address-manager": {
+   "name_with_owner": "metal3-io/ip-address-manager",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "metal3-io/ironic-standalone-operator": {
+   "name_with_owner": "metal3-io/ironic-standalone-operator",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "metalama/metalama": {
+   "name_with_owner": "metalama/Metalama",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "metamask/metamask-sdk": {
+   "name_with_owner": "MetaMask/metamask-sdk",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "mganss/htmlsanitizer": {
+   "name_with_owner": "mganss/HtmlSanitizer",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "mhsanaei/3x-ui": {
+   "name_with_owner": "MHSanaei/3x-ui",
+   "spdx": "GPL-3.0",
+   "archived": false
+  },
+  "mickhansen/dottie.js": {
+   "name_with_owner": "mickhansen/dottie.js",
+   "spdx": "MIT",
+   "archived": true
+  },
+  "micromatch/picomatch": {
+   "name_with_owner": "micromatch/picomatch",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "micrometer-metrics/micrometer": {
+   "name_with_owner": "micrometer-metrics/micrometer",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "micronaut-projects/micronaut-core": {
+   "name_with_owner": "micronaut-projects/micronaut-core",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "microsoft/directxtk": {
+   "name_with_owner": "microsoft/DirectXTK",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "microsoft/directxtk12": {
+   "name_with_owner": "microsoft/DirectXTK12",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "microsoft/kiota": {
+   "name_with_owner": "microsoft/kiota",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "microsoft/kiota-typescript": {
+   "name_with_owner": "microsoft/kiota-typescript",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "microsoft/maker.js": {
+   "name_with_owner": "microsoft/maker.js",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "microsoft/msquic": {
+   "name_with_owner": "microsoft/msquic",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "microsoft/mssql-jdbc": {
+   "name_with_owner": "microsoft/mssql-jdbc",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "microsoft/openapi.net": {
+   "name_with_owner": "microsoft/OpenAPI.NET",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "microsoft/playwright": {
+   "name_with_owner": "microsoft/playwright",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "microsoft/prompty": {
+   "name_with_owner": "microsoft/prompty",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "microsoft/typespec": {
+   "name_with_owner": "microsoft/typespec",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "microstack-tech/parallax": {
+   "name_with_owner": "ParallaxProtocol/parallax",
+   "spdx": "LGPL-3.0",
+   "archived": false
+  },
+  "middleapi/orpc": {
+   "name_with_owner": "middleapi/orpc",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "mikro-orm/mikro-orm": {
+   "name_with_owner": "mikro-orm/mikro-orm",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "milamer/parse-nested-form-data": {
+   "name_with_owner": "milamer/parse-nested-form-data",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "milvus-io/milvus": {
+   "name_with_owner": "milvus-io/milvus",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "mindersec/minder": {
+   "name_with_owner": "mindersec/minder",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "ming-soft/mcms": {
+   "name_with_owner": "ming-soft/MCMS",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "miniflux/v2": {
+   "name_with_owner": "miniflux/v2",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "minio/minio": {
+   "name_with_owner": "minio/minio",
+   "spdx": "AGPL-3.0",
+   "archived": true
+  },
+  "minio/minio-java": {
+   "name_with_owner": "minio/minio-java",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "misskey-dev/misskey": {
+   "name_with_owner": "misskey-dev/misskey",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "mjmlio/mjml": {
+   "name_with_owner": "mjmlio/mjml",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "mkreyman/mcp-memory-keeper": {
+   "name_with_owner": "mkreyman/mcp-memory-keeper",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "mlflow/mlflow": {
+   "name_with_owner": "mlflow/mlflow",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "mobile-next/mobile-mcp": {
+   "name_with_owner": "mobile-next/mobile-mcp",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "moby/buildkit": {
+   "name_with_owner": "moby/buildkit",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "moby/moby": {
+   "name_with_owner": "moby/moby",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "moby/spdystream": {
+   "name_with_owner": "moby/spdystream",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "moby/sys": {
+   "name_with_owner": "moby/sys",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "mockoon/mockoon": {
+   "name_with_owner": "mockoon/mockoon",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "modelcontextprotocol/go-sdk": {
+   "name_with_owner": "modelcontextprotocol/go-sdk",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "modelcontextprotocol/inspector": {
+   "name_with_owner": "modelcontextprotocol/inspector",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "modelcontextprotocol/registry": {
+   "name_with_owner": "modelcontextprotocol/registry",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "modelcontextprotocol/rust-sdk": {
+   "name_with_owner": "modelcontextprotocol/rust-sdk",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "modelcontextprotocol/servers": {
+   "name_with_owner": "modelcontextprotocol/servers",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "modelcontextprotocol/typescript-sdk": {
+   "name_with_owner": "modelcontextprotocol/typescript-sdk",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "moment/moment": {
+   "name_with_owner": "moment/moment",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "monetr/monetr": {
+   "name_with_owner": "monetr/monetr",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "mongodb/mongo-rust-driver": {
+   "name_with_owner": "mongodb/mongo-rust-driver",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "montferret/ferret": {
+   "name_with_owner": "MontFerret/ferret",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "moov-io/signedxml": {
+   "name_with_owner": "moov-io/signedxml",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "moquette-io/moquette": {
+   "name_with_owner": "moquette-io/moquette",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "mozilla/rhino": {
+   "name_with_owner": "mozilla/rhino",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "mpetroff/pannellum": {
+   "name_with_owner": "mpetroff/pannellum",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "mrodrig/json-2-csv": {
+   "name_with_owner": "mrodrig/json-2-csv",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "msgpack/msgpack-java": {
+   "name_with_owner": "msgpack/msgpack-java",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "msiemens/onenote.rs": {
+   "name_with_owner": "msiemens/onenote.rs",
+   "spdx": "MPL-2.0",
+   "archived": false
+  },
+  "mudler/localai": {
+   "name_with_owner": "mudler/LocalAI",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "mullvad/mnl-rs": {
+   "name_with_owner": "mullvad/mnl-rs",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "mullvad/nftnl-rs": {
+   "name_with_owner": "mullvad/nftnl-rs",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "muxinc/next-video": {
+   "name_with_owner": "muxinc/next-video",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "mysql-net/mysqlconnector": {
+   "name_with_owner": "mysql-net/MySqlConnector",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "n8n-io/n8n": {
+   "name_with_owner": "n8n-io/n8n",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "naorsabag/openhop": {
+   "name_with_owner": "naorsabag/openhop",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "nationalsecurityagency/emissary": {
+   "name_with_owner": "NationalSecurityAgency/emissary",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "nats-io/nats-server": {
+   "name_with_owner": "nats-io/nats-server",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "naturalintelligence/fast-xml-parser": {
+   "name_with_owner": "NaturalIntelligence/fast-xml-parser",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "naver/billboard.js": {
+   "name_with_owner": "naver/billboard.js",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "navidrome/navidrome": {
+   "name_with_owner": "navidrome/navidrome",
+   "spdx": "GPL-3.0",
+   "archived": false
+  },
+  "ncalc/ncalc": {
+   "name_with_owner": "ncalc/ncalc",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "ndsev/zserio": {
+   "name_with_owner": "ndsev/zserio",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "nearform/fast-jwt": {
+   "name_with_owner": "nearform/fast-jwt",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "nearform/get-jwks": {
+   "name_with_owner": "nearform/get-jwks",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "nektos/act": {
+   "name_with_owner": "nektos/act",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "nervjs/taro": {
+   "name_with_owner": "NervJS/taro",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "nestjs/nest": {
+   "name_with_owner": "nestjs/nest",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "netbirdio/netbird": {
+   "name_with_owner": "netbirdio/netbird",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "netty/netty": {
+   "name_with_owner": "netty/netty",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "netty/netty-incubator-codec-ohttp": {
+   "name_with_owner": "netty/netty-incubator-codec-ohttp",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "neuvector/neuvector": {
+   "name_with_owner": "neuvector/neuvector",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "neuvector/scanner": {
+   "name_with_owner": "neuvector/scanner",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "nextauthjs/next-auth": {
+   "name_with_owner": "nextauthjs/next-auth",
+   "spdx": "ISC",
+   "archived": false
+  },
+  "nextlevelbuilder/goclaw": {
+   "name_with_owner": "nextlevelbuilder/goclaw",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "nezhahq/nezha": {
+   "name_with_owner": "nezhahq/nezha",
+   "spdx": "WTFPL",
+   "archived": false
+  },
+  "nfrasser/linkifyjs": {
+   "name_with_owner": "nfrasser/linkifyjs",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "nhost/nhost": {
+   "name_with_owner": "nhost/nhost",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "nimiq/core-rs-albatross": {
+   "name_with_owner": "nimiq/core-rs-albatross",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "ninofiliu/interactive-git-checkout": {
+   "name_with_owner": "ninofiliu/interactive-git-checkout",
+   "spdx": null,
+   "archived": false
+  },
+  "nitrojs/nitro": {
+   "name_with_owner": "nitrojs/nitro",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "nl-portal/nl-portal-backend-libraries": {
+   "name_with_owner": "nl-portal/nl-portal-backend-libraries",
+   "spdx": "NOASSERTION",
+   "archived": true
+  },
+  "nocobase/nocobase": {
+   "name_with_owner": "nocobase/nocobase",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "nocodb/nocodb": {
+   "name_with_owner": "nocodb/nocodb",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "node-modules/compressing": {
+   "name_with_owner": "node-modules/compressing",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "node-modules/urllib": {
+   "name_with_owner": "node-modules/urllib",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "node-opcua/node-opcua": {
+   "name_with_owner": "node-opcua/node-opcua",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "node-saml/node-saml": {
+   "name_with_owner": "node-saml/node-saml",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "nodeca/js-yaml": {
+   "name_with_owner": "nodeca/js-yaml",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "nodeca/probe-image-size": {
+   "name_with_owner": "nodeca/probe-image-size",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "nodejs/undici": {
+   "name_with_owner": "nodejs/undici",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "nodemailer/mailparser": {
+   "name_with_owner": "nodemailer/mailparser",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "nodemailer/nodemailer": {
+   "name_with_owner": "nodemailer/nodemailer",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "nodemailer/smtp-server": {
+   "name_with_owner": "nodemailer/smtp-server",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "nolabs-ai/nono": {
+   "name_with_owner": "nolabs-ai/nono",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "nolimits4web/swiper": {
+   "name_with_owner": "nolimits4web/swiper",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "nor2-io/heim-mcp": {
+   "name_with_owner": "Nor2-io/heim-mcp",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "novuhq/novu": {
+   "name_with_owner": "novuhq/novu",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "npm/pacote": {
+   "name_with_owner": "npm/pacote",
+   "spdx": "ISC",
+   "archived": false
+  },
+  "nrwl/nx": {
+   "name_with_owner": "nrwl/nx",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "nuclio/nuclio": {
+   "name_with_owner": "nuclio/nuclio",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "nuxt-content/mdc": {
+   "name_with_owner": "nuxt-content/mdc",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "nuxt-modules/mdc": {
+   "name_with_owner": "nuxt-content/mdc",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "nuxt-modules/og-image": {
+   "name_with_owner": "nuxt-modules/og-image",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "nuxt/devtools": {
+   "name_with_owner": "nuxt/devtools",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "nuxt/nuxt": {
+   "name_with_owner": "nuxt/nuxt",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "nuxt/ui": {
+   "name_with_owner": "nuxt/ui",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "nwaples/rardecode": {
+   "name_with_owner": "nwaples/rardecode",
+   "spdx": "BSD-2-Clause",
+   "archived": false
+  },
+  "nyariv/sandboxjs": {
+   "name_with_owner": "nyariv/SandboxJS",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "nyaruka/phonenumbers": {
+   "name_with_owner": "nyaruka/phonenumbers",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "oakserver/oak": {
+   "name_with_owner": "oakserver/oak",
+   "spdx": "MIT",
+   "archived": true
+  },
+  "oapi-codegen/oapi-codegen": {
+   "name_with_owner": "oapi-codegen/oapi-codegen",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "oasdiff/oasdiff": {
+   "name_with_owner": "oasdiff/oasdiff",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "oauth2-proxy/oauth2-proxy": {
+   "name_with_owner": "oauth2-proxy/oauth2-proxy",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "octo-sts/app": {
+   "name_with_owner": "octo-sts/app",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "okta/okta-sdk-java": {
+   "name_with_owner": "okta/okta-sdk-java",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "olivetin/olivetin": {
+   "name_with_owner": "OliveTin/OliveTin",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "ollama/ollama": {
+   "name_with_owner": "ollama/ollama",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "omec-project/amf": {
+   "name_with_owner": "omec-project/amf",
+   "spdx": null,
+   "archived": false
+  },
+  "omgovich/colord": {
+   "name_with_owner": "omgovich/colord",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "omnifaces/omnifaces": {
+   "name_with_owner": "omnifaces/omnifaces",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "ondata/ckan-mcp-server": {
+   "name_with_owner": "ondata/ckan-mcp-server",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "oneuptime/oneuptime": {
+   "name_with_owner": "OneUptime/oneuptime",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "ongres/scram": {
+   "name_with_owner": "ongres/scram",
+   "spdx": "BSD-2-Clause",
+   "archived": false
+  },
+  "ooples/token-optimizer-mcp": {
+   "name_with_owner": "ooples/token-optimizer-mcp",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "op-engineering/link-preview-js": {
+   "name_with_owner": "OP-Engineering/link-preview-js",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "open-circle/valibot": {
+   "name_with_owner": "open-circle/valibot",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "open-cluster-management-io/ocm": {
+   "name_with_owner": "open-cluster-management-io/ocm",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "open-feature/flagd": {
+   "name_with_owner": "open-feature/flagd",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "open-metadata/openmetadata": {
+   "name_with_owner": "open-metadata/OpenMetadata",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "open-policy-agent/opa-envoy-plugin": {
+   "name_with_owner": "open-policy-agent/opa-envoy-plugin",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "open-telemetry/opentelemetry-dotnet": {
+   "name_with_owner": "open-telemetry/opentelemetry-dotnet",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "open-telemetry/opentelemetry-dotnet-contrib": {
+   "name_with_owner": "open-telemetry/opentelemetry-dotnet-contrib",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "open-telemetry/opentelemetry-ebpf-profiler": {
+   "name_with_owner": "open-telemetry/opentelemetry-ebpf-profiler",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "open-telemetry/opentelemetry-go": {
+   "name_with_owner": "open-telemetry/opentelemetry-go",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "open-telemetry/opentelemetry-java": {
+   "name_with_owner": "open-telemetry/opentelemetry-java",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "open-telemetry/opentelemetry-java-instrumentation": {
+   "name_with_owner": "open-telemetry/opentelemetry-java-instrumentation",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "open-telemetry/opentelemetry-js": {
+   "name_with_owner": "open-telemetry/opentelemetry-js",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "open-telemetry/opentelemetry-js-contrib": {
+   "name_with_owner": "open-telemetry/opentelemetry-js-contrib",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "open-telemetry/opentelemetry-operator": {
+   "name_with_owner": "open-telemetry/opentelemetry-operator",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "open-webui/open-webui": {
+   "name_with_owner": "open-webui/open-webui",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "openai/codex": {
+   "name_with_owner": "openai/codex",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "openbao/openbao": {
+   "name_with_owner": "openbao/openbao",
+   "spdx": "MPL-2.0",
+   "archived": false
+  },
+  "openbao/openbao-plugins": {
+   "name_with_owner": "openbao/openbao-plugins",
+   "spdx": "MPL-2.0",
+   "archived": false
+  },
+  "openc3/cosmos": {
+   "name_with_owner": "OpenC3/cosmos",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "opencast/opencast": {
+   "name_with_owner": "opencast/opencast",
+   "spdx": "ECL-2.0",
+   "archived": false
+  },
+  "openchoreo/openchoreo": {
+   "name_with_owner": "openchoreo/openchoreo",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "opencloud-eu/reva": {
+   "name_with_owner": "opencloud-eu/reva",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "opencontainers/runc": {
+   "name_with_owner": "opencontainers/runc",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "openfga/openfga": {
+   "name_with_owner": "openfga/openfga",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "openflagr/flagr": {
+   "name_with_owner": "openflagr/flagr",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "openidentityplatform/openam": {
+   "name_with_owner": "OpenIdentityPlatform/OpenAM",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "openidentityplatform/opendj": {
+   "name_with_owner": "OpenIdentityPlatform/OpenDJ",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "openkruise/kruise": {
+   "name_with_owner": "openkruise/kruise",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "openlistteam/openlist": {
+   "name_with_owner": "OpenListTeam/OpenList",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "openlistteam/openlist-frontend": {
+   "name_with_owner": "OpenListTeam/OpenList-Frontend",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "openmcdf/openmcdf": {
+   "name_with_owner": "openmcdf/openmcdf",
+   "spdx": "MPL-2.0",
+   "archived": false
+  },
+  "openmeterio/openmeter": {
+   "name_with_owner": "openmeterio/openmeter",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "openmls/openmls": {
+   "name_with_owner": "openmls/openmls",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "openmrs/openmrs-core": {
+   "name_with_owner": "openmrs/openmrs-core",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "opennextjs/opennextjs-cloudflare": {
+   "name_with_owner": "opennextjs/opennextjs-cloudflare",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "openremote/openremote": {
+   "name_with_owner": "openremote/core",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "openrundev/openrun": {
+   "name_with_owner": "openrundev/openrun",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "opensagres/xdocreport": {
+   "name_with_owner": "opensagres/xdocreport",
+   "spdx": null,
+   "archived": false
+  },
+  "opensearch-project/data-prepper": {
+   "name_with_owner": "opensearch-project/data-prepper",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "opensearch-project/opensearch": {
+   "name_with_owner": "opensearch-project/OpenSearch",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "openshift/cluster-logging-operator": {
+   "name_with_owner": "openshift/cluster-logging-operator",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "openshift/openshift-apiserver": {
+   "name_with_owner": "openshift/openshift-apiserver",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "opensolon/solon": {
+   "name_with_owner": "opensolon/solon",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "opentofu/opentofu": {
+   "name_with_owner": "opentofu/opentofu",
+   "spdx": "MPL-2.0",
+   "archived": false
+  },
+  "openzeppelin/contracts-wizard": {
+   "name_with_owner": "OpenZeppelin/contracts-wizard",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "openzeppelin/openzeppelin-confidential-contracts": {
+   "name_with_owner": "OpenZeppelin/openzeppelin-confidential-contracts",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "openzeppelin/openzeppelin-contracts": {
+   "name_with_owner": "OpenZeppelin/openzeppelin-contracts",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "openzipkin/zipkin": {
+   "name_with_owner": "openzipkin/zipkin",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "openziti/zrok": {
+   "name_with_owner": "openziti/zrok",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "orange-opensource/hurl": {
+   "name_with_owner": "Orange-OpenSource/hurl",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "oras-project/oras": {
+   "name_with_owner": "oras-project/oras",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "oras-project/oras-go": {
+   "name_with_owner": "oras-project/oras-go",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "orneryd/nornicdb": {
+   "name_with_owner": "orneryd/NornicDB",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "orphan-oss/ognl": {
+   "name_with_owner": "orphan-oss/ognl",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "orval-labs/orval": {
+   "name_with_owner": "orval-labs/orval",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "orxfun/orx-pinned-vec": {
+   "name_with_owner": "orxfun/orx-pinned-vec",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "ory/oathkeeper": {
+   "name_with_owner": "ory/oathkeeper",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "oschwald/maxminddb-rust": {
+   "name_with_owner": "oschwald/maxminddb-rust",
+   "spdx": "ISC",
+   "archived": false
+  },
+  "osrg/gobgp": {
+   "name_with_owner": "osrg/gobgp",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "ossf/allstar": {
+   "name_with_owner": "ossf/allstar",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "outerbase/studio": {
+   "name_with_owner": "outerbase/studio",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "outray-tunnel/outray": {
+   "name_with_owner": "outray-platform/outray",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "oviva-ag/epa4all-client": {
+   "name_with_owner": "oviva-ag/epa4all-client",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "owasp/java-html-sanitizer": {
+   "name_with_owner": "OWASP/java-html-sanitizer",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "oxia-db/oxia": {
+   "name_with_owner": "oxia-db/oxia",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "oxyno-zeta/s3-proxy": {
+   "name_with_owner": "oxyno-zeta/s3-proxy",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "papra-hq/papra": {
+   "name_with_owner": "papra-hq/papra",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "parallax/jspdf": {
+   "name_with_owner": "parallax/jsPDF",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "parcel-bundler/parcel": {
+   "name_with_owner": "parcel-bundler/parcel",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "parse-community/parse-dashboard": {
+   "name_with_owner": "parse-community/parse-dashboard",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "parse-community/parse-sdk-js": {
+   "name_with_owner": "parse-community/Parse-SDK-JS",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "parse-community/parse-server": {
+   "name_with_owner": "parse-community/parse-server",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "patorjk/figlet.js": {
+   "name_with_owner": "patorjk/figlet.js",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "patrickhener/goshs": {
+   "name_with_owner": "goshs-labs/goshs",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "patrickjuchli/basic-ftp": {
+   "name_with_owner": "patrickjuchli/basic-ftp",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "patriksimek/vm2": {
+   "name_with_owner": "patriksimek/vm2",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "payara/payara": {
+   "name_with_owner": "payara/Payara",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "payloadcms/payload": {
+   "name_with_owner": "payloadcms/payload",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "pdfme/pdfme": {
+   "name_with_owner": "pdfme/pdfme",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "pelicanplatform/pelican": {
+   "name_with_owner": "PelicanPlatform/pelican",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "pendulum-project/ntpd-rs": {
+   "name_with_owner": "pendulum-project/ntpd-rs",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "perses/perses": {
+   "name_with_owner": "perses/perses",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "pf4j/pf4j": {
+   "name_with_owner": "pf4j/pf4j",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "pgjdbc/pgjdbc": {
+   "name_with_owner": "pgjdbc/pgjdbc",
+   "spdx": "BSD-2-Clause",
+   "archived": false
+  },
+  "phialsbasement/nmap-mcp-server": {
+   "name_with_owner": "PhialsBasement/nmap-mcp-server",
+   "spdx": "MIT",
+   "archived": true
+  },
+  "phoenix616/inventorygui": {
+   "name_with_owner": "Phoenix616/InventoryGui",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "php/frankenphp": {
+   "name_with_owner": "php/frankenphp",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "phun-ky/defaults-deep": {
+   "name_with_owner": "phun-ky/defaults-deep",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "pilinux/gorest": {
+   "name_with_owner": "pilinux/gorest",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "pimeys/rust-web-push": {
+   "name_with_owner": "pimeys/rust-web-push",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "pinchtab/pinchtab": {
+   "name_with_owner": "pinchtab/pinchtab",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "pion/dtls": {
+   "name_with_owner": "pion/dtls",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "pion/interceptor": {
+   "name_with_owner": "pion/interceptor",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "pion/stun": {
+   "name_with_owner": "pion/stun",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "pionxzh/wakaru": {
+   "name_with_owner": "pionxzh/wakaru",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "piscinajs/piscina": {
+   "name_with_owner": "piscinajs/piscina",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "plabayo/rama": {
+   "name_with_owner": "plabayo/rama",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "planttheidea/fast-copy": {
+   "name_with_owner": "planttheidea/fast-copy",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "plantuml/plantuml": {
+   "name_with_owner": "plantuml/plantuml",
+   "spdx": "LGPL-3.0",
+   "archived": false
+  },
+  "platform-mesh/kubernetes-graphql-gateway": {
+   "name_with_owner": "platform-mesh/kubernetes-graphql-gateway",
+   "spdx": "Apache-2.0",
+   "archived": true
+  },
+  "plone/volto": {
+   "name_with_owner": "plone/volto",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "plonky3/plonky3": {
+   "name_with_owner": "Plonky3/Plonky3",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "pmd/pmd": {
+   "name_with_owner": "pmd/pmd",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "pnpm/pnpm": {
+   "name_with_owner": "pnpm/pnpm",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "pocket-id/pocket-id": {
+   "name_with_owner": "pocket-id/pocket-id",
+   "spdx": "BSD-2-Clause",
+   "archived": false
+  },
+  "pocketbase/pocketbase": {
+   "name_with_owner": "pocketbase/pocketbase",
+   "spdx": "MIT",
+   "archived": true
+  },
+  "podman-container-tools/podman": {
+   "name_with_owner": "podman-container-tools/podman",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "pomerium/pomerium": {
+   "name_with_owner": "pomerium/pomerium",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "portainer/portainer": {
+   "name_with_owner": "portainer/portainer",
+   "spdx": "Zlib",
+   "archived": false
+  },
+  "portkey-ai/gateway": {
+   "name_with_owner": "Portkey-AI/gateway",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "postalsys/postal-mime": {
+   "name_with_owner": "postalsys/postal-mime",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "postcss/postcss": {
+   "name_with_owner": "postcss/postcss",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "postcss/postcss-selector-parser": {
+   "name_with_owner": "postcss/postcss-selector-parser",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "powerjob/powerjob": {
+   "name_with_owner": "PowerJob/PowerJob",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "powsybl/powsybl-core": {
+   "name_with_owner": "powsybl/powsybl-core",
+   "spdx": "MPL-2.0",
+   "archived": false
+  },
+  "praxis-proxy/praxis": {
+   "name_with_owner": "praxis-proxy/praxis",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "prebid/prebid-server": {
+   "name_with_owner": "prebid/prebid-server",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "prebid/prebid.js": {
+   "name_with_owner": "prebid/Prebid.js",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "prest/prest": {
+   "name_with_owner": "prest/prest",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "priyankark/a11y-mcp": {
+   "name_with_owner": "priyankark/a11y-mcp",
+   "spdx": "MPL-2.0",
+   "archived": false
+  },
+  "project-zot/zot": {
+   "name_with_owner": "project-zot/zot",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "projectcalico/calico": {
+   "name_with_owner": "projectcalico/calico",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "projectcapsule/capsule": {
+   "name_with_owner": "projectcapsule/capsule",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "projectdiscovery/nuclei": {
+   "name_with_owner": "projectdiscovery/nuclei",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "prometheus/prometheus": {
+   "name_with_owner": "prometheus/prometheus",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "prosemirror/prosemirror-view": {
+   "name_with_owner": "ProseMirror/prosemirror-view",
+   "spdx": "MIT",
+   "archived": true
+  },
+  "protobufjs/protobuf.js": {
+   "name_with_owner": "protobufjs/protobuf.js",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "pseitz/lz4_flex": {
+   "name_with_owner": "PSeitz/lz4_flex",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "psi-4ward/psitransfer": {
+   "name_with_owner": "psi-4ward/psitransfer",
+   "spdx": "BSD-2-Clause",
+   "archived": false
+  },
+  "pterodactyl/panel": {
+   "name_with_owner": "pterodactyl/panel",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "pterodactyl/wings": {
+   "name_with_owner": "pterodactyl/wings",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "pyo3/pyo3": {
+   "name_with_owner": "PyO3/pyo3",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "qax-os/excelize": {
+   "name_with_owner": "qax-os/excelize",
+   "spdx": "BSD-3-Clause",
+   "archived": false
+  },
+  "qdrant/qdrant": {
+   "name_with_owner": "qdrant/qdrant",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "qhkm/zeptoclaw": {
+   "name_with_owner": "qhkm/zeptoclaw",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "qos-ch/logback": {
+   "name_with_owner": "qos-ch/logback",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "quantgeekdev/mcp-framework": {
+   "name_with_owner": "QuantGeekDev/mcp-framework",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "quantumnous/new-api": {
+   "name_with_owner": "QuantumNous/new-api",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "quarkiverse/quarkus-openapi-generator": {
+   "name_with_owner": "quarkiverse/quarkus-openapi-generator",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "quarkusio/quarkus": {
+   "name_with_owner": "quarkusio/quarkus",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "quasarframework/quasar": {
+   "name_with_owner": "quasarframework/quasar",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "questdb/ui": {
+   "name_with_owner": "questdb/ui",
+   "spdx": null,
+   "archived": false
+  },
+  "quic-go/quic-go": {
+   "name_with_owner": "quic-go/quic-go",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "quic-go/webtransport-go": {
+   "name_with_owner": "quic-go/webtransport-go",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "quinn-rs/quinn": {
+   "name_with_owner": "quinn-rs/quinn",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "qwikdev/qwik": {
+   "name_with_owner": "QwikDev/qwik",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "r-huijts/xcode-mcp-server": {
+   "name_with_owner": "r-huijts/xcode-mcp-server",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "rabbitmq/amqp091-go": {
+   "name_with_owner": "rabbitmq/amqp091-go",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "rabbitmq/rabbitmq-java-client": {
+   "name_with_owner": "rabbitmq/rabbitmq-java-client",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "rageagainstthepixel/unity-cli": {
+   "name_with_owner": "RageAgainstThePixel/unity-cli",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "rancher/fleet": {
+   "name_with_owner": "rancher/fleet",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "rancher/rancher": {
+   "name_with_owner": "rancher/rancher",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "raszi/node-tmp": {
+   "name_with_owner": "raszi/node-tmp",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "raviqqe/array-queue": {
+   "name_with_owner": "raviqqe/array-queue",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "ray-project/ray": {
+   "name_with_owner": "ray-project/ray",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "raynos/min-document": {
+   "name_with_owner": "Raynos/min-document",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "rclone/rclone": {
+   "name_with_owner": "rclone/rclone",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "react-native-community/cli": {
+   "name_with_owner": "react-native-community/cli",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "reactor/reactor-netty": {
+   "name_with_owner": "reactor/reactor-netty",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "redf0x1/camofox-mcp": {
+   "name_with_owner": "redf0x1/camofox-mcp",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "redhat-developer/gitops-operator": {
+   "name_with_owner": "redhat-developer/gitops-operator",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "redocly/redocly-cli": {
+   "name_with_owner": "Redocly/redocly-cli",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "refraction-networking/utls": {
+   "name_with_owner": "refraction-networking/utls",
+   "spdx": "BSD-3-Clause",
+   "archived": false
+  },
+  "rejetto/hfs": {
+   "name_with_owner": "rejetto/hfs",
+   "spdx": "GPL-3.0",
+   "archived": false
+  },
+  "remix-run/react-router": {
+   "name_with_owner": "remix-run/react-router",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "remorses/genql": {
+   "name_with_owner": "remorses/genql",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "remotion-dev/remotion": {
+   "name_with_owner": "remotion-dev/remotion",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "rhobs/observability-operator": {
+   "name_with_owner": "rhobs/observability-operator",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "rich-harris/degit": {
+   "name_with_owner": "Rich-Harris/degit",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "riganti/dotvvm": {
+   "name_with_owner": "riganti/dotvvm",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "risc0/risc0": {
+   "name_with_owner": "risc0/risc0",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "risc0/risc0-ethereum": {
+   "name_with_owner": "risc0/risc0-ethereum",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "rkyv/rkyv": {
+   "name_with_owner": "rkyv/rkyv",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "robjtede/actix-web-lab": {
+   "name_with_owner": "actix/actix-web-lab",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "robo-code/robocode": {
+   "name_with_owner": "robo-code/robocode",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "rollbar/rollbar.js": {
+   "name_with_owner": "rollbar/rollbar.js",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "rollup/rollup": {
+   "name_with_owner": "rollup/rollup",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "romitou/insatutorat": {
+   "name_with_owner": "Romitou/INSATutorat",
+   "spdx": null,
+   "archived": false
+  },
+  "roomi-fields/notebooklm-mcp": {
+   "name_with_owner": "roomi-fields/notebooklm-mcp",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "rpgp/rpgp": {
+   "name_with_owner": "rpgp/rpgp",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "rtk-ai/rtk": {
+   "name_with_owner": "rtk-ai/rtk",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "runatlantis/atlantis": {
+   "name_with_owner": "runatlantis/atlantis",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "rust-ammonia/ammonia": {
+   "name_with_owner": "rust-ammonia/ammonia",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "rust-ethereum/ethereum": {
+   "name_with_owner": "rust-ethereum/ethereum",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "rust-lang/cargo": {
+   "name_with_owner": "rust-lang/cargo",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "rust-lang/git2-rs": {
+   "name_with_owner": "rust-lang/git2-rs",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "rust-openssl/rust-openssl": {
+   "name_with_owner": "rust-openssl/rust-openssl",
+   "spdx": null,
+   "archived": false
+  },
+  "rust-postgres/rust-postgres": {
+   "name_with_owner": "rust-postgres/rust-postgres",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "rust-random/rand": {
+   "name_with_owner": "rust-random/rand",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "rustcrypto/elliptic-curves": {
+   "name_with_owner": "RustCrypto/elliptic-curves",
+   "spdx": null,
+   "archived": false
+  },
+  "rustcrypto/rsa": {
+   "name_with_owner": "RustCrypto/RSA",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "rustcrypto/signatures": {
+   "name_with_owner": "RustCrypto/signatures",
+   "spdx": null,
+   "archived": false
+  },
+  "rustcrypto/sponges": {
+   "name_with_owner": "RustCrypto/sponges",
+   "spdx": null,
+   "archived": false
+  },
+  "rustcrypto/utils": {
+   "name_with_owner": "RustCrypto/utils",
+   "spdx": null,
+   "archived": false
+  },
+  "rustfs/rustfs": {
+   "name_with_owner": "rustfs/rustfs",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "rustls/rustls": {
+   "name_with_owner": "rustls/rustls",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "rustsec/advisory-db": {
+   "name_with_owner": "rustsec/advisory-db",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "ruvnet/sublinear-time-solver": {
+   "name_with_owner": "ruvnet/sublinear-time-solver",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "safedep/vet": {
+   "name_with_owner": "safedep/vet",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "sakaiproject/sakai": {
+   "name_with_owner": "sakaiproject/sakai",
+   "spdx": "ECL-2.0",
+   "archived": false
+  },
+  "saltbo/zpan": {
+   "name_with_owner": "saltbo/zpan",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "saltcorn/saltcorn": {
+   "name_with_owner": "saltcorn/saltcorn",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "salvo-rs/salvo": {
+   "name_with_owner": "salvo-rs/salvo",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "samanhappy/mcphub": {
+   "name_with_owner": "samanhappy/mcphub",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "samclarke/sceditor": {
+   "name_with_owner": "samclarke/SCEditor",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "sammcj/mcp-package-docs": {
+   "name_with_owner": "sammcj/mcp-package-docs",
+   "spdx": "MIT",
+   "archived": true
+  },
+  "samrocketman/jervis": {
+   "name_with_owner": "samrocketman/jervis",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "samverschueren/decode-uri-component": {
+   "name_with_owner": "SamVerschueren/decode-uri-component",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "sapphi-red/vite-plugin-static-copy": {
+   "name_with_owner": "sapphi-red/vite-plugin-static-copy",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "sbt/sbt": {
+   "name_with_owner": "sbt/sbt",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "scriban/scriban": {
+   "name_with_owner": "scriban/scriban",
+   "spdx": "BSD-2-Clause",
+   "archived": false
+  },
+  "script3/soroban-fixed-point-math": {
+   "name_with_owner": "script3/soroban-fixed-point-math",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "seal773/openclaw-claude-bridge": "NOT_FOUND",
+  "seaweedfs/seaweedfs": {
+   "name_with_owner": "seaweedfs/seaweedfs",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "sebhildebrandt/systeminformation": {
+   "name_with_owner": "sebhildebrandt/systeminformation",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "semaphoreui/semaphore": {
+   "name_with_owner": "semaphoreui/semaphore",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "sentriz/gonic": {
+   "name_with_owner": "sentriz/gonic",
+   "spdx": "GPL-3.0",
+   "archived": false
+  },
+  "sequa-ai/sequa-mcp": {
+   "name_with_owner": "sequa-ai/sequa-mcp",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "sequelize/sequelize": {
+   "name_with_owner": "sequelize/sequelize",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "serverless/serverless": {
+   "name_with_owner": "serverless/serverless",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "sharpred/deephas": {
+   "name_with_owner": "sharpred/deepHas",
+   "spdx": null,
+   "archived": false
+  },
+  "shepherdwind/velocity.js": {
+   "name_with_owner": "shepherdwind/velocity.js",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "shi-gg/linkdave": {
+   "name_with_owner": "shi-gg/linkdave",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "showdownjs/showdown": {
+   "name_with_owner": "showdownjs/showdown",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "siderolabs/omni": {
+   "name_with_owner": "siderolabs/omni",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "siderolabs/talos": {
+   "name_with_owner": "siderolabs/talos",
+   "spdx": "MPL-2.0",
+   "archived": false
+  },
+  "sidorares/node-mysql2": {
+   "name_with_owner": "sidorares/node-mysql2",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "signalk/set-system-time": {
+   "name_with_owner": "SignalK/set-system-time",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "signalk/signalk-server": {
+   "name_with_owner": "SignalK/signalk-server",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "sigstore/cosign": {
+   "name_with_owner": "sigstore/cosign",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "sigstore/fulcio": {
+   "name_with_owner": "sigstore/fulcio",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "sigstore/rekor": {
+   "name_with_owner": "sigstore/rekor",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "sigstore/sigstore": {
+   "name_with_owner": "sigstore/sigstore",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "sigstore/sigstore-go": {
+   "name_with_owner": "sigstore/sigstore-go",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "sigstore/sigstore-java": {
+   "name_with_owner": "sigstore/sigstore-java",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "sigstore/sigstore-js": {
+   "name_with_owner": "sigstore/sigstore-js",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "sigstore/timestamp-authority": {
+   "name_with_owner": "sigstore/timestamp-authority",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "sillytavern/sillytavern": {
+   "name_with_owner": "SillyTavern/SillyTavern",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "silverbucket/webfinger.js": {
+   "name_with_owner": "silverbucket/webfinger.js",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "silverpeas/silverpeas-core": {
+   "name_with_owner": "Silverpeas/Silverpeas-Core",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "simbo1905/thinbus-srp-npm": {
+   "name_with_owner": "simbo1905/thinbus-srp-npm",
+   "spdx": null,
+   "archived": false
+  },
+  "simonhaenisch/md-to-pdf": {
+   "name_with_owner": "simonhaenisch/md-to-pdf",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "simstudioai/sim": {
+   "name_with_owner": "simstudioai/sim",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "sindresorhus/file-type": {
+   "name_with_owner": "sindresorhus/file-type",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "sipcapture/homer": {
+   "name_with_owner": "sipcapture/homer",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "sipeed/picoclaw": {
+   "name_with_owner": "sipeed/picoclaw",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "sipsorcery-org/sipsorcery": {
+   "name_with_owner": "sipsorcery-org/sipsorcery",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "sirupsen/logrus": {
+   "name_with_owner": "sirupsen/logrus",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "siteboon/claudecodeui": {
+   "name_with_owner": "siteboon/claudecodeui",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "sixlabors/imagesharp": {
+   "name_with_owner": "SixLabors/ImageSharp",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "siyuan-note/siyuan": {
+   "name_with_owner": "siyuan-note/siyuan",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "skilvingr/rust-oneringbuf": {
+   "name_with_owner": "skilvingr/rust-oneringbuf",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "slack-go/slack": {
+   "name_with_owner": "slack-go/slack",
+   "spdx": "BSD-2-Clause",
+   "archived": false
+  },
+  "slackhq/nebula": {
+   "name_with_owner": "slackhq/nebula",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "smallstep/certificates": {
+   "name_with_owner": "smallstep/certificates",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "smithy-lang/smithy-rs": {
+   "name_with_owner": "smithy-lang/smithy-rs",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "snowflakedb/snowflake-jdbc": {
+   "name_with_owner": "snowflakedb/snowflake-jdbc",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "snowyu/git-commiters.js": {
+   "name_with_owner": "snowyu/git-commiters.js",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "socketio/socket.io": {
+   "name_with_owner": "socketio/socket.io",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "solana-foundation/anchor": {
+   "name_with_owner": "otter-sec/anchor",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "solana-foundation/kora": {
+   "name_with_owner": "solana-foundation/kora",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "songquanpeng/one-api": {
+   "name_with_owner": "songquanpeng/one-api",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "sonirico/mcp-shell": {
+   "name_with_owner": "sonirico/mcp-shell",
+   "spdx": "GPL-3.0",
+   "archived": false
+  },
+  "sorlen008/desktopcommandermcp": {
+   "name_with_owner": "sorlen008/DesktopCommanderMCP",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "spectolabs/hoverfly": {
+   "name_with_owner": "SpectoLabs/hoverfly",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "spinnaker/spinnaker": {
+   "name_with_owner": "spinnaker/spinnaker",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "spring-ai-community/mcp-security": {
+   "name_with_owner": "spring-ai-community/mcp-security",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "spring-attic/spring-retry": {
+   "name_with_owner": "spring-attic/spring-retry",
+   "spdx": null,
+   "archived": true
+  },
+  "spring-attic/spring-statemachine": {
+   "name_with_owner": "spring-attic/spring-statemachine",
+   "spdx": "Apache-2.0",
+   "archived": true
+  },
+  "spring-cloud/spring-cloud-config": {
+   "name_with_owner": "spring-cloud/spring-cloud-config",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "spring-cloud/spring-cloud-function": {
+   "name_with_owner": "spring-cloud/spring-cloud-function",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "spring-cloud/spring-cloud-gateway": {
+   "name_with_owner": "spring-cloud/spring-cloud-gateway",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "spring-projects/spring-ai": {
+   "name_with_owner": "spring-projects/spring-ai",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "spring-projects/spring-boot": {
+   "name_with_owner": "spring-projects/spring-boot",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "spring-projects/spring-data-commons": {
+   "name_with_owner": "spring-projects/spring-data-commons",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "spring-projects/spring-data-mongodb": {
+   "name_with_owner": "spring-projects/spring-data-mongodb",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "spring-projects/spring-framework": {
+   "name_with_owner": "spring-projects/spring-framework",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "spring-projects/spring-graphql": {
+   "name_with_owner": "spring-projects/spring-graphql",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "spring-projects/spring-hateoas": {
+   "name_with_owner": "spring-projects/spring-hateoas",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "spring-projects/spring-kafka": {
+   "name_with_owner": "spring-projects/spring-kafka",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "spring-projects/spring-ldap": {
+   "name_with_owner": "spring-projects/spring-ldap",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "spring-projects/spring-security": {
+   "name_with_owner": "spring-projects/spring-security",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "spring-projects/spring-ws": {
+   "name_with_owner": "spring-projects/spring-ws",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "spytrap-org/spytrap-adb": {
+   "name_with_owner": "spytrap-org/spytrap-adb",
+   "spdx": "GPL-3.0",
+   "archived": false
+  },
+  "sqls-server/sqls": {
+   "name_with_owner": "sqls-server/sqls",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "square/wire": {
+   "name_with_owner": "square/wire",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "squirrelchat/smol-toml": {
+   "name_with_owner": "squirrelchat/smol-toml",
+   "spdx": "BSD-3-Clause",
+   "archived": false
+  },
+  "srmorete/adb-mcp": {
+   "name_with_owner": "srmorete/adb-mcp",
+   "spdx": "MIT",
+   "archived": true
+  },
+  "sshnet/ssh.net": {
+   "name_with_owner": "sshnet/SSH.NET",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "stablelib/stablelib": {
+   "name_with_owner": "StableLib/stablelib",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "stalniy/casl": {
+   "name_with_owner": "stalniy/casl",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "starman69/mcp-sanitizer": {
+   "name_with_owner": "starman69/mcp-sanitizer",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "static-web-server/static-web-server": {
+   "name_with_owner": "static-web-server/static-web-server",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "steeltoeoss/steeltoe": {
+   "name_with_owner": "SteeltoeOSS/Steeltoe",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "stefanprodan/podinfo": {
+   "name_with_owner": "stefanprodan/podinfo",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "steipete/summarize": {
+   "name_with_owner": "steipete/summarize",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "stellar/rs-soroban-poseidon": {
+   "name_with_owner": "stellar/rs-soroban-poseidon",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "stellar/rs-soroban-sdk": {
+   "name_with_owner": "stellar/rs-soroban-sdk",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "stellar/rs-stellar-xdr": {
+   "name_with_owner": "stellar/rs-stellar-xdr",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "steveiliop56/tinyauth": {
+   "name_with_owner": "tinyauthapp/tinyauth",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "steveukx/git-js": {
+   "name_with_owner": "steveukx/git-js",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "storybookjs/storybook": {
+   "name_with_owner": "storybookjs/storybook",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "strapi/strapi": {
+   "name_with_owner": "strapi/strapi",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "strimzi/strimzi-kafka-operator": {
+   "name_with_owner": "strimzi/strimzi-kafka-operator",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "style-dictionary/style-dictionary": {
+   "name_with_owner": "style-dictionary/style-dictionary",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "sunnyadn/js-toml": {
+   "name_with_owner": "sunnyadn/js-toml",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "superradcompany/microsandbox": {
+   "name_with_owner": "superradcompany/microsandbox",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "supply-chain-tools/gitverify": {
+   "name_with_owner": "supply-chain-tools/gitverify",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "surrealdb/surrealdb": {
+   "name_with_owner": "surrealdb/surrealdb",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "suyuan32/simple-admin-core": {
+   "name_with_owner": "suyuan32/simple-admin-core",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "sveltejs/devalue": {
+   "name_with_owner": "sveltejs/devalue",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "sveltejs/kit": {
+   "name_with_owner": "sveltejs/kit",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "sveltejs/svelte": {
+   "name_with_owner": "sveltejs/svelte",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "sveltia/sveltia-cms": {
+   "name_with_owner": "sveltia/sveltia-cms",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "svg/svgo": {
+   "name_with_owner": "svg/svgo",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "swaldman/c3p0": {
+   "name_with_owner": "swaldman/c3p0",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "swc-project/swc": {
+   "name_with_owner": "swc-project/swc",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "sylabs/singularity": {
+   "name_with_owner": "sylabs/singularity",
+   "spdx": "NOASSERTION",
+   "archived": true
+  },
+  "sylphxai/anymd": {
+   "name_with_owner": "SylphxAI/anymd",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "sync-in/server": {
+   "name_with_owner": "Sync-in/server",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "syntax-tree/mdast-util-to-hast": {
+   "name_with_owner": "syntax-tree/mdast-util-to-hast",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "tailot/taylored": "NOT_FOUND",
+  "tanstack/router": {
+   "name_with_owner": "TanStack/router",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "techarohq/anubis": {
+   "name_with_owner": "TecharoHQ/anubis",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "tektoncd/pipeline": {
+   "name_with_owner": "tektoncd/pipeline",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "tektoncd/pipelines-as-code": {
+   "name_with_owner": "tektoncd/pipelines-as-code",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "temporalio/temporal": {
+   "name_with_owner": "temporalio/temporal",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "tencent/weknora": {
+   "name_with_owner": "Tencent/WeKnora",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "terriajs/terriajs-server": {
+   "name_with_owner": "TerriaJS/terriajs-server",
+   "spdx": "NOASSERTION",
+   "archived": true
+  },
+  "teslamotors/fleet-telemetry": {
+   "name_with_owner": "teslamotors/fleet-telemetry",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "tgies/client-certificate-auth": {
+   "name_with_owner": "tgies/client-certificate-auth",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "th30d4y/openlearnx": {
+   "name_with_owner": "th30d4y/OpenLearnX",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "that1drifter/browse-mcp": {
+   "name_with_owner": "That1Drifter/browse-mcp",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "the-40-thieves/obsidian-tc": {
+   "name_with_owner": "The-40-Thieves/reliquary-tc",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "theagentrouter/agent-router": {
+   "name_with_owner": "theagentrouter/agent-router",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "thedotmack/claude-mem": {
+   "name_with_owner": "thedotmack/claude-mem",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "theecryptochad/merge-guard": {
+   "name_with_owner": "TheeCryptoChad/merge-guard",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "thejoshwolfe/yauzl": {
+   "name_with_owner": "thejoshwolfe/yauzl",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "theupdateframework/go-tuf": {
+   "name_with_owner": "theupdateframework/go-tuf",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "thingsboard/thingsboard": {
+   "name_with_owner": "thingsboard/thingsboard",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "thomaspoignant/scim-patch": {
+   "name_with_owner": "thomaspoignant/scim-patch",
+   "spdx": "Unlicense",
+   "archived": false
+  },
+  "tillitis/tkeyclient": {
+   "name_with_owner": "tillitis/tkeyclient",
+   "spdx": "BSD-2-Clause",
+   "archived": false
+  },
+  "tilt-dev/tilt": {
+   "name_with_owner": "tilt-dev/tilt",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "time-rs/time": {
+   "name_with_owner": "time-rs/time",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "tinacms/tinacms": {
+   "name_with_owner": "tinacms/tinacms",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "tinfoil-factory/netfoil": {
+   "name_with_owner": "tinfoil-factory/netfoil",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "tinyauthapp/tinyauth": {
+   "name_with_owner": "tinyauthapp/tinyauth",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "tinylibs/tinypool": {
+   "name_with_owner": "tinylibs/tinypool",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "tmlmobilidade/go": {
+   "name_with_owner": "tmlmobilidade/go",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "tnborg/panel": {
+   "name_with_owner": "acepanel/panel",
+   "spdx": "BSD-3-Clause",
+   "archived": false
+  },
+  "tobychui/zoraxy": {
+   "name_with_owner": "tobychui/zoraxy",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "tokio-rs/bytes": {
+   "name_with_owner": "tokio-rs/bytes",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "tokio-rs/slab": {
+   "name_with_owner": "tokio-rs/slab",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "tokio-rs/tokio": {
+   "name_with_owner": "tokio-rs/tokio",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "tomwright/dasel": {
+   "name_with_owner": "TomWright/dasel",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "toon-format/toon": {
+   "name_with_owner": "toon-format/toon",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "tootallnate/once": {
+   "name_with_owner": "TooTallNate/once",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "traefik/traefik": {
+   "name_with_owner": "traefik/traefik",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "translated/lara-mcp": {
+   "name_with_owner": "translated/lara-mcp",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "traptitech/traq": {
+   "name_with_owner": "traPtitech/traQ",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "treeverse/lakefs": {
+   "name_with_owner": "treeverse/lakeFS",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "trifectatechfoundation/sudo-rs": {
+   "name_with_owner": "trifectatechfoundation/sudo-rs",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "triggerdotdev/trigger.dev": {
+   "name_with_owner": "triggerdotdev/trigger.dev",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "tritonvm/triton-vm": {
+   "name_with_owner": "TritonVM/triton-vm",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "trpc/trpc": {
+   "name_with_owner": "trpc/trpc",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "tryghost/ghost": {
+   "name_with_owner": "TryGhost/Ghost",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "tutao/tutanota": {
+   "name_with_owner": "tutao/tutanota",
+   "spdx": "GPL-3.0",
+   "archived": false
+  },
+  "tygo-van-den-hurk/slyde": {
+   "name_with_owner": "Tygo-van-den-Hurk/Slyde",
+   "spdx": "GPL-3.0",
+   "archived": true
+  },
+  "typelevel/fs2": {
+   "name_with_owner": "typelevel/fs2",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "typelevel/jawn": {
+   "name_with_owner": "typelevel/jawn",
+   "spdx": null,
+   "archived": false
+  },
+  "typeorm/typeorm": {
+   "name_with_owner": "typeorm/typeorm",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "ubuntu/adsys": {
+   "name_with_owner": "ubuntu/adsys",
+   "spdx": "GPL-3.0",
+   "archived": false
+  },
+  "ubuntu/authd": {
+   "name_with_owner": "canonical/authd",
+   "spdx": "LGPL-3.0",
+   "archived": false
+  },
+  "udecode/plate": {
+   "name_with_owner": "udecode/plate",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "ueberdosis/tiptap": {
+   "name_with_owner": "ueberdosis/tiptap",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "uhop/node-re2": {
+   "name_with_owner": "uhop/node-re2",
+   "spdx": "BSD-3-Clause",
+   "archived": false
+  },
+  "uhop/stream-json": {
+   "name_with_owner": "uhop/stream-json",
+   "spdx": "BSD-3-Clause",
+   "archived": false
+  },
+  "ulikunitz/xz": {
+   "name_with_owner": "ulikunitz/xz",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "umanio-agency/skillctl": {
+   "name_with_owner": "umanio-agency/skillctl",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "umbraco/umbraco-cms": {
+   "name_with_owner": "umbraco/Umbraco-CMS",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "umputun/remark42": {
+   "name_with_owner": "umputun/remark42",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "underctrl-io/commandkit": {
+   "name_with_owner": "neplexlabs/commandkit",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "undertow-io/undertow": {
+   "name_with_owner": "undertow-io/undertow",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "uniget-org/cli": {
+   "name_with_owner": "uniget-org/cli",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "unitech/pm2": {
+   "name_with_owner": "Unitech/pm2",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "unjs/defu": {
+   "name_with_owner": "unjs/defu",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "unjs/ipx": {
+   "name_with_owner": "unjs/ipx",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "unjs/unhead": {
+   "name_with_owner": "unjs/unhead",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "unleash/unleash": {
+   "name_with_owner": "Unleash/unleash",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "uptrace/bun": {
+   "name_with_owner": "uptrace/bun",
+   "spdx": "BSD-2-Clause",
+   "archived": false
+  },
+  "usebruno/bruno": {
+   "name_with_owner": "usebruno/bruno",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "usememos/memos": {
+   "name_with_owner": "usememos/memos",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "uuidjs/uuid": {
+   "name_with_owner": "uuidjs/uuid",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "uutils/coreutils": {
+   "name_with_owner": "uutils/coreutils",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "vaadin/flow": {
+   "name_with_owner": "vaadin/flow",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "vaadin/flow-components": {
+   "name_with_owner": "vaadin/flow-components",
+   "spdx": null,
+   "archived": false
+  },
+  "validatorjs/validator.js": {
+   "name_with_owner": "validatorjs/validator.js",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "valtimo-platform/valtimo": {
+   "name_with_owner": "valtimo-platform/valtimo",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "valtimo-platform/valtimo-backend-libraries": {
+   "name_with_owner": "valtimo-platform/valtimo-backend-libraries",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "velocidex/velociraptor": {
+   "name_with_owner": "Velocidex/velociraptor",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "vendurehq/vendure": {
+   "name_with_owner": "vendurehq/vendure",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "verapdf/verapdf-parser": {
+   "name_with_owner": "veraPDF/veraPDF-parser",
+   "spdx": "GPL-3.0",
+   "archived": false
+  },
+  "verapdf/verapdf-validation": {
+   "name_with_owner": "veraPDF/veraPDF-validation",
+   "spdx": "GPL-3.0",
+   "archived": false
+  },
+  "vercel/ai": {
+   "name_with_owner": "vercel/ai",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "vercel/next.js": {
+   "name_with_owner": "vercel/next.js",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "vercel/workflow": {
+   "name_with_owner": "vercel/workflow",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "versatica/mediasoup": {
+   "name_with_owner": "versatica/mediasoup",
+   "spdx": "ISC",
+   "archived": false
+  },
+  "versity/versitygw": {
+   "name_with_owner": "versity/versitygw",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "vetcoders/mcp-server-semgrep": {
+   "name_with_owner": "vetcoders/mcp-server-semgrep",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "victoriametrics/victoriametrics": {
+   "name_with_owner": "VictoriaMetrics/VictoriaMetrics",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "virustotal/yara-x": {
+   "name_with_owner": "VirusTotal/yara-x",
+   "spdx": "BSD-3-Clause",
+   "archived": false
+  },
+  "vitejs/launch-editor": {
+   "name_with_owner": "vitejs/launch-editor",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "vitejs/vite": {
+   "name_with_owner": "vitejs/vite",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "vitejs/vite-plugin-react": {
+   "name_with_owner": "vitejs/vite-plugin-react",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "vitessio/vitess": {
+   "name_with_owner": "vitessio/vitess",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "vitest-dev/vitest": {
+   "name_with_owner": "vitest-dev/vitest",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "vltpkg/vltpkg": {
+   "name_with_owner": "vltpkg/vltpkg",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "voodoocreation/ts-deepmerge": {
+   "name_with_owner": "voodoocreation/ts-deepmerge",
+   "spdx": null,
+   "archived": false
+  },
+  "vouch/vouch-proxy": {
+   "name_with_owner": "vouch/vouch-proxy",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "vuejs/core": {
+   "name_with_owner": "vuejs/core",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "vuejs/vue-cli": {
+   "name_with_owner": "vuejs/vue-cli",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "vulnogram/vulnogram": {
+   "name_with_owner": "Vulnogram/Vulnogram",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "wailsapp/wails": {
+   "name_with_owner": "wailsapp/wails",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "walinejs/waline": {
+   "name_with_owner": "walinejs/waline",
+   "spdx": "GPL-2.0",
+   "archived": false
+  },
+  "wasmi-labs/wasmi": {
+   "name_with_owner": "wasmi-labs/wasmi",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "weaviate/weaviate": {
+   "name_with_owner": "weaviate/weaviate",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "web-infra-dev/rsdoctor": {
+   "name_with_owner": "web-infra-dev/rsdoctor",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "web-platform-dx/baseline-browser-mapping": {
+   "name_with_owner": "web-platform-dx/baseline-browser-mapping",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "web3/web3.js": {
+   "name_with_owner": "web3/web3.js",
+   "spdx": "NOASSERTION",
+   "archived": true
+  },
+  "webbertakken/docusaurus-plugin-content-gists": {
+   "name_with_owner": "webbertakken/docusaurus-plugin-content-gists",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "webpack/webpack-dev-middleware": {
+   "name_with_owner": "webpack/webpack-dev-middleware",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "webpack/webpack-dev-server": {
+   "name_with_owner": "webpack/webpack-dev-server",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "webreflection/flatted": {
+   "name_with_owner": "WebReflection/flatted",
+   "spdx": "ISC",
+   "archived": false
+  },
+  "websockets/ws": {
+   "name_with_owner": "websockets/ws",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "wevm/mppx": {
+   "name_with_owner": "wevm/mppx",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "whiskeysockets/baileys": {
+   "name_with_owner": "WhiskeySockets/Baileys",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "whyour/qinglong": {
+   "name_with_owner": "whyour/qinglong",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "wildfly/wildfly-core": {
+   "name_with_owner": "wildfly/wildfly-core",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "withastro/astro": {
+   "name_with_owner": "withastro/astro",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "withstudiocms/studiocms": {
+   "name_with_owner": "withstudiocms/studiocms",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "wneessen/go-mail": {
+   "name_with_owner": "wneessen/go-mail",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "wonderwhy-er/desktopcommandermcp": {
+   "name_with_owner": "wonderwhy-er/DesktopCommanderMCP",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "wong2/mcp-cli": {
+   "name_with_owner": "wong2/mcp-cli",
+   "spdx": "GPL-3.0",
+   "archived": false
+  },
+  "woodpecker-ci/woodpecker": {
+   "name_with_owner": "woodpecker-ci/woodpecker",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "workos/authkit-nextjs": {
+   "name_with_owner": "workos/authkit-nextjs",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "workos/authkit-react-router": {
+   "name_with_owner": "workos/authkit-react-router",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "workos/authkit-remix": {
+   "name_with_owner": "workos/authkit-remix",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "workos/authkit-session": {
+   "name_with_owner": "workos/authkit-session",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "woven-by-toyota/go-zserio": {
+   "name_with_owner": "woven-by-toyota/go-zserio",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "wso2/carbon-apimgt": {
+   "name_with_owner": "wso2/carbon-apimgt",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "wso2/carbon-identity-framework": {
+   "name_with_owner": "wso2/carbon-identity-framework",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "wso2/carbon-mediation": {
+   "name_with_owner": "wso2/carbon-mediation",
+   "spdx": null,
+   "archived": false
+  },
+  "wso2/identity-apps": {
+   "name_with_owner": "wso2/identity-apps",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "xdan/jodit": {
+   "name_with_owner": "xdan/jodit",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "xddxdd/bird-lg-go": {
+   "name_with_owner": "xddxdd/bird-lg-go",
+   "spdx": "GPL-3.0",
+   "archived": false
+  },
+  "xerial/snappy-java": {
+   "name_with_owner": "xerial/snappy-java",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "xhmikosr/decompress": {
+   "name_with_owner": "XhmikosR/decompress",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "xmldom/xmldom": {
+   "name_with_owner": "xmldom/xmldom",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "xoofx/zio": {
+   "name_with_owner": "xoofx/zio",
+   "spdx": "BSD-2-Clause",
+   "archived": false
+  },
+  "xtls/xray-core": {
+   "name_with_owner": "XTLS/Xray-core",
+   "spdx": "MPL-2.0",
+   "archived": false
+  },
+  "xuxueli/xxl-job": {
+   "name_with_owner": "xuxueli/xxl-job",
+   "spdx": "GPL-3.0",
+   "archived": false
+  },
+  "xwiki-contrib/application-blog": {
+   "name_with_owner": "xwiki-contrib/application-blog",
+   "spdx": null,
+   "archived": false
+  },
+  "xwiki-contrib/macro-fullcalendar": {
+   "name_with_owner": "xwiki-contrib/macro-fullcalendar",
+   "spdx": null,
+   "archived": false
+  },
+  "xwiki-contrib/macro-plantuml": {
+   "name_with_owner": "xwiki-contrib/macro-plantuml",
+   "spdx": null,
+   "archived": false
+  },
+  "xwiki-contrib/oidc": {
+   "name_with_owner": "xwiki-contrib/oidc",
+   "spdx": "LGPL-2.1",
+   "archived": false
+  },
+  "xwiki/xwiki-commons": {
+   "name_with_owner": "xwiki/xwiki-commons",
+   "spdx": "LGPL-2.1",
+   "archived": false
+  },
+  "xwiki/xwiki-platform": {
+   "name_with_owner": "xwiki/xwiki-platform",
+   "spdx": "LGPL-2.1",
+   "archived": false
+  },
+  "xwiki/xwiki-rendering": {
+   "name_with_owner": "xwiki/xwiki-rendering",
+   "spdx": "LGPL-2.1",
+   "archived": false
+  },
+  "xyproto/algernon": {
+   "name_with_owner": "xyproto/algernon",
+   "spdx": "BSD-3-Clause",
+   "archived": false
+  },
+  "yafnet/yafnet": {
+   "name_with_owner": "YAFNET/YAFNET",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "yahoo/serialize-javascript": {
+   "name_with_owner": "yahoo/serialize-javascript",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "yamcs/yamcs": {
+   "name_with_owner": "yamcs/yamcs",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "yawkat/lz4-java": {
+   "name_with_owner": "yawkat/lz4-java",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "ydb-platform/ydb-go-sdk": {
+   "name_with_owner": "ydb-platform/ydb-go-sdk",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "yeoman/environment": {
+   "name_with_owner": "yeoman/environment",
+   "spdx": "BSD-2-Clause",
+   "archived": false
+  },
+  "yoanbernabeu/grepai": {
+   "name_with_owner": "yoanbernabeu/grepai",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "yosefhayim/ebay-mcp": {
+   "name_with_owner": "YosefHayim/ebay-mcp",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "youki-dev/youki": {
+   "name_with_owner": "youki-dev/youki",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "yuin/goldmark": {
+   "name_with_owner": "yuin/goldmark",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "yuna0x0/hackmd-mcp": {
+   "name_with_owner": "yuna0x0/hackmd-mcp",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "yusing/godoxy": {
+   "name_with_owner": "yusing/godoxy",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "zalando/skipper": {
+   "name_with_owner": "zalando/skipper",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "zarf-dev/zarf": {
+   "name_with_owner": "zarf-dev/zarf",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "zcaceres/markdownify-mcp": {
+   "name_with_owner": "zcaceres/markdownify-mcp",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "zcashfoundation/frost": {
+   "name_with_owner": "ZcashFoundation/frost",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "zcashfoundation/zebra": {
+   "name_with_owner": "ZcashFoundation/zebra",
+   "spdx": "Apache-2.0",
+   "archived": false
+  },
+  "zereight/gitlab-mcp": {
+   "name_with_owner": "zereight/gitlab-mcp",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "zhenorzz/goploy": {
+   "name_with_owner": "zhenorzz/goploy",
+   "spdx": "GPL-3.0",
+   "archived": false
+  },
+  "zingolabs/zaino": {
+   "name_with_owner": "zingolabs/zaino",
+   "spdx": "NOASSERTION",
+   "archived": false
+  },
+  "zip-rs/zip2": {
+   "name_with_owner": "zip-rs/zip2",
+   "spdx": "MIT",
+   "archived": false
+  },
+  "zitadel/zitadel": {
+   "name_with_owner": "zitadel/zitadel",
+   "spdx": "AGPL-3.0",
+   "archived": false
+  },
+  "zugferd/mustangproject": {
+   "name_with_owner": "ZUGFeRD/mustangproject",
+   "spdx": "Apache-2.0",
+   "archived": false
+  }
+ }
+}
