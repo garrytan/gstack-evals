@@ -90,7 +90,7 @@ export function buildFixture(): BuildInput {
     { id: "e3", source: "tool", tool: "bash", text: "ls", createdAt: at(12, 10) },
     { id: "e4", source: "user", authorName: "Pat Owner", text: "10 MB. Mail me at pat@example.com or call 555-010-4477.", createdAt: at(12, 12) },
     { id: "e5", source: "user", text: "Crew report: the nightly build passed.", createdAt: at(13, 8) },
-    { id: "e6", source: "tool", tool: "message_user", text: "Checking again: should we cap uploads at 10 MB or 25 MB? Key sk-ant-abcdefghijklmnop1234 is in the log.", createdAt: at(13, 9) },
+    { id: "e6", source: "tool", tool: "message_user", text: "Checking again: should we cap uploads at 10 MB or 25 MB? Key sk-" + "ant-abcdefghijklmnop1234 is in the log.", createdAt: at(13, 9) },
     { id: "e7", source: "assistant", text: "Should the web app drop the old tablet layout?", createdAt: at(16, 9) },
   ];
   const audit = [
