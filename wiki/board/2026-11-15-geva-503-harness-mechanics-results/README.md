@@ -2,7 +2,7 @@
 id: 2026-11-15-geva-503-harness-mechanics-results
 kind: finding
 title: "Harness mechanics on 200 SWE-rebench fixes and three models: the models already ran a test after their last edit, so gstack's Stop hook had almost nothing to add; a second plain attempt tied /verify at equal spend; Jev ran a risky-command hook at about a sixth of particle-1's hook time"
-summary: "Opus 5.5, GPT-6.1 Sol, particle-1 on 200 SWE-rebench tasks: H1 null, FIX-METHOD (saturation) after a scorer fix; H2 equal at equal spend, KEEP; H3 Jev matches, 0.16x hook time, KEEP."
+summary: "Opus 5.5, GPT-6.1 Sol and particle-1 on 200 SWE-rebench tasks: H1 null, FIX-METHOD (saturation) except CUT-CANDIDATE on Sol; H2 equal at equal spend, KEEP; H3 Jev matches, 0.16x hook time, KEEP."
 author: GEVA-503
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
@@ -21,6 +21,8 @@ attachments:
   - d60b1e6daba6a4dbf2b47a1edaae1c68accad4472e145806fde2cd103547e733  done-count.ts.txt
   - c32b04ae30da976d0c9c8e463ddaa11cefe63c7cd9fd7376493c61db98fddd64  done-items.txt
   - 67869558a486264803b5e012c51e45e76dfb2ad8b8353ee5504cb463c617d452  rebuild.ts.txt
+  - 61e3b4d5d6e9de0a9c6e923bb3bddd8c30493d90036c750ca00a6bac849aeba5  recount.patch.txt
+  - a0465c64718a15df7a0f12ebcdf5eb09afad9934bf4eef44e9e40636fe7d5f47  recount.txt
   - 657e96971be989a7ef5a7f1699703cb20be5843b291f69dcc83fee67212cc752  reliability-done-det.svg
   - 80a88d3538d3b52f1aaf8f189352f0895bcfbd4a431844598aa0026d622c4cd7  reliability-done-jev.svg
   - d1277b6f8ed0b2c6d5ca23a832135da8ea4f5aa3921df59108ea12370f75f94d  reliability-done-p1.svg
@@ -51,11 +53,11 @@ Publication status: unpublished. This is the record of a preregistered run. Done
 
 We learned that coding agents on these bug fixes already run a test after their last edit in most sessions, and gstack's /verify procedure pushes that close to always. With no gstack, Opus 5.5 did it in 81.4% of sessions, GPT-6.1 Sol in 86.0% and particle-1 in 91.5%. Told to use /verify, they did it in 96.0%, 89.0% and 97.5%. gstack's contract hook, which blocks a stop once when the rule is unmet, found something to block in 22 of 600 sessions, and it changed neither how often the rule ran (pooled +0.2 points, 95% CI -2.6 to +2.9) nor passes (-0.3, -2.9 to +2.3). You should write a check-your-work rule into the procedure first, and add a hook only where you can measure that the rule gets skipped.
 
-We learned that a second plain attempt, with a model from the other family picking the better patch, was the only extra spend that measurably raised passes over one plain attempt: +2.0 points (95% CI +0.5 to +3.7), at 2.1 to 2.6 times the spend. At equal spend it tied /verify: the spend-matched policy minus /verify was -0.7 points (-2.8 to +1.5), inside the preregistered 5-point margin. You should treat /verify and a second attempt as two equally good ways to spend extra money on tasks like these, and not expect either to move pass rates by much.
+We learned that at equal spend, gstack's /verify and a second plain attempt tied: the spend-matched policy minus /verify was -0.7 points (95% CI -2.8 to +1.5), inside the preregistered 5-point margin. Neither extra spend raised passes over a single plain attempt once both plain arms are counted. Best-of-2, a second plain attempt with a model from the other family picking the better patch, cost 2.1 to 2.6 times one attempt. Against the none arm it scored +2.0 points (+0.5 to +3.7); against plain-2, the other single plain attempt on the same prompt, it scored -0.3 (-1.6 to +1.0). The +2.0 comes from Opus's none arm, which passed 5.5 points below Opus's plain-2 (see Limits): on Opus, best-of-2 minus none was +4.0 and best-of-2 minus plain-2 was -1.5. You should treat /verify and a second attempt as two equally good ways to spend extra money on tasks like these, and not expect either to move pass rates by much.
 
 We learned that Jev, a small fast decision model, can sit behind a judgment hook on every Bash call without a measurable cost in passes. On a risky-command check, Jev's hook time per session was 0.163 times particle-1's (95% CI 0.151 to 0.177), and passes moved -1.7 points (-6.5 to +3.3), inside the 7.5-point margin. You should consider Jev for judgment hooks on the hot path, knowing that live, the hooks denied 12% to 22% of the commands they judged, and we didn't label whether those denials were right.
 
-**What didn't work.** /verify itself didn't measurably raise passes over plain Claude Code: +1.5 points (-0.7 to +3.6) pooled, at 1.61 times the spend on Opus, 0.94 times on Sol and 1.21 times on particle-1. No backend beat the deterministic rule on the done-claim check in the replay, so the done hook never ran live. The two labelers disagreed on skill routing (kappa 0.19), so the route point has no reading. And our own scorer missed pytest summaries printed in colour, which hid a ceiling until the analysis (Deviation S4-2). The tables below show the reading as run beside the corrected one.
+**What didn't work.** /verify itself didn't measurably raise passes over plain Claude Code: +1.5 points (-0.7 to +3.6) pooled against none and -0.8 (-3.3 to +1.5) against plain-2, at 1.61 times the spend on Opus, 0.94 times on Sol and 1.21 times on particle-1. On Sol, the one model Stage 1 didn't mark saturated, the hook's null on this rule reads CUT-CANDIDATE, on a wide interval (H1 below). No backend beat the deterministic rule on the done-claim check in the replay, so the done hook never ran live. The two labelers disagreed on skill routing (kappa 0.19), so the route point has no reading. And our own scorer missed pytest summaries printed in colour, which hid a ceiling until the analysis (Deviation S4-2). The tables below show the reading as run beside the corrected one.
 
 ### H1: the reading as run and the corrected reading
 
@@ -69,9 +71,11 @@ The section 13 scorer at 3d5dcce missed any pytest summary that pytest printed i
 | Per-model A (no verdict) | Opus +1.5 (-2.4 to +5.3), Sol +1.5 (-3.8 to +7.0), particle-1 -3.0 (-7.3 to +1.1) | Opus +2.0 (-1.6 to +5.6), Sol +2.0 (-3.1 to +7.5), particle-1 -3.5 (-7.4 to 0.0) |
 | Pooled P, hook minus prose pass | -0.3 points, -2.9 to +2.3; MDD 3.4; 600 pairs | the same (the fix changes no pass) |
 | Verdict | NO MEASURABLE DIFFERENCE | NO MEASURABLE DIFFERENCE |
-| End state | CUT-CANDIDATE for the hook on this rule | FIX-METHOD (saturation) on Opus and particle-1, with R61's attempt owed and not run |
+| End state | CUT-CANDIDATE for the hook on this rule | FIX-METHOD (saturation) on Opus and particle-1, with R61's attempt owed and not run; CUT-CANDIDATE for the hook on Sol |
 
 The corrected reading is the one this post stands on. Section 13 counts "a pytest summary with passed, failed or error", and a coloured summary is one, so the fix makes the code do what the rule already said.
+
+Sol is the one model the corrected Stage 1 reading left unsaturated (87.5%). Section 14 sends a saturated model to FIX-METHOD (saturation) and every other model to the end state its table gives. For NO MEASURABLE DIFFERENCE, with A3 passed on every model, that is CUT-CANDIDATE for the hook on this rule. The analysis prints only the saturated models' end state, so this post states Sol's: on this rule, the hook's null on Sol reads CUT-CANDIDATE. It is a weak reading. Sol's own line is +2.0 points (-3.1 to +7.5) with an MDD of 7.1, against the pooled MDD of 3.4, so an effect of several points on Sol alone would still read as no difference.
 
 ## How it works
 
@@ -140,7 +144,7 @@ f is the share of tasks on which the equal-spend policy runs best-of-2 instead o
 | particle-1 | -0.9 (-5.6 to +3.7) | 5.9 | 0.132 | 2.15 (2.02 to 2.30) | 65.5% | 11 of 19 |
 | Pooled | **-0.7 (-2.8 to +1.5): EQUAL AT EQUAL SPEND, KEEP** | 2.9 | | 1.82 (1.71 to 1.92) | | |
 
-Beside it, pooled: best-of-2 minus one plain attempt +2.0 points (+0.5 to +3.7, 17 tasks better and 5 worse); best-of-2 minus /verify +0.5 (-1.6 to +2.8); /verify minus none +1.5 (-0.7 to +3.6); best-of-2 minus verify-hook +0.8 (-1.3 to +3.0). Two plain sessions disagreed on few tasks (15 on Opus, 6 on Sol, 19 on particle-1 of 200), which caps what any picker can add. On Sol's pairs the picker (Opus 5.5) chose the first-listed patch in 127 of 200; on Opus's pairs (GPT-6.1 Sol picking) in 105 of 199; on particle-1's (Opus 5.5) in 99 of 198.
+Beside it, pooled: best-of-2 minus none +2.0 points (+0.5 to +3.7, 17 tasks better and 5 worse) and best-of-2 minus plain-2 -0.3 (-1.6 to +1.0, 8 better and 10 worse); best-of-2 minus /verify +0.5 (-1.6 to +2.8); /verify minus none +1.5 (-0.7 to +3.6) and /verify minus plain-2 -0.8 (-3.3 to +1.5); best-of-2 minus verify-hook +0.8 (-1.3 to +3.0). The +2.0 against none is Opus's: there best-of-2 minus none was +4.0 (+1.5 to +6.9) and best-of-2 minus plain-2 -1.5 (-4.1 to +1.0), because Opus's plain-2 passed 5.5 points (+1.9 to +9.5) above its none arm. On Sol the two lines were +1.5 and -0.5, on particle-1 +0.5 and +1.0. The preregistration names only the none line; the plain-2 lines are a recount made after the final review with the report's own contrast code (recount.patch.txt, recount.txt). Two plain sessions disagreed on few tasks (15 on Opus, 6 on Sol, 19 on particle-1 of 200), which caps what any picker can add. On Sol's pairs the picker (Opus 5.5) chose the first-listed patch in 127 of 200; on Opus's pairs (GPT-6.1 Sol picking) in 105 of 199; on particle-1's (Opus 5.5) in 99 of 198.
 
 ### H3: Jev against particle-1 behind the risky-command hook
 
@@ -187,7 +191,7 @@ Stage 3's pilot passed all three checks: risky hooks logged 1,963 of 1,966 Bash 
 
 | Line | Exposure | Task fit | Power | Frontier without the part | End state |
 |---|---|---|---|---|---|
-| H1, hook against prose | /verify loaded 100%; contract record 95% to 100%; the hook blocked 22 of 600 | every session edited, bar one particle-1 prose session | MDD 3.4 points at discordance 0.088, 599 pairs | none ran the rule in 81.4%, 86.0% and 91.5%; verify-prose in 96.0%, 89.0% and 97.5% | FIX-METHOD (saturation) on Opus and particle-1. The model already follows the rule from /verify's prose in nearly every session, so the hook has little to enforce. |
+| H1, hook against prose | /verify loaded 100%; contract record 95% to 100%; the hook blocked 22 of 600 | every session edited, bar one particle-1 prose session | MDD 3.4 points at discordance 0.088, 599 pairs | none ran the rule in 81.4%, 86.0% and 91.5%; verify-prose in 96.0%, 89.0% and 97.5% | FIX-METHOD (saturation) on Opus and particle-1. The model already follows the rule from /verify's prose in nearly every session, so the hook has little to enforce. CUT-CANDIDATE for the hook on Sol, which wasn't saturated: Sol's own line is +2.0 (-3.1 to +7.5), MDD 7.1. |
 | /verify against none, pass (secondary) | as above | as above | MDD 3.1 | none passed 60.5%, 57.5% and 61.0% | Descriptive, no verdict: +1.5 points (-0.7 to +3.6) |
 | Done-claim judgment hook | never ran live | the done items had wrong inputs on 40 of 480 | about 20 held tasks, clustered | gstack's deterministic version 0.424 | FIX-METHOD (method) |
 | Route judgment hook | replay only | gstack never routes a prompt that starts with /verify | | | FIX-METHOD (labels): the labelers agreed at kappa 0.188 |
@@ -198,7 +202,7 @@ Stage 3's pilot passed all three checks: risky hooks logged 1,963 of 1,966 Bash 
 
 None of these changes a cap, an arm, a draw or a verdict rule. Item 1 changes the scorer and, through it, two end states.
 
-1. **Deviation S4-2: the scorer counted no coloured pytest summary. Fixed after the data.** The scorer's pytest regex needed a word boundary before the count. pytest prints its summary in colour in some repositories, and the colour code ends in a letter right before the count (ESC[1m57 passed), so there was no word boundary and the summary showed no outcome. Section 13's outcome rule as written counts "a pytest summary with passed, failed or error", so the fix lets the count follow an ANSI colour code, and a line holding "1m57 passed" with no colour code still doesn't count. It changed 169 of 2,763 Stage 4 sessions from no rule run to a rule run, spread across all arms (5 to 16 per arm and model), and 38 Stage 1 sessions. No pass, claim or false-done value changed. It was found while reading why the hook recorded "met" in sessions the scorer read as non-adherent, after every verdict at 3d5dcce had printed. The fix doesn't depend on which way any verdict lands: it counts a line the written rule already counts, in every arm the same way. Both readings are printed above.
+1. **Deviation S4-2: the scorer counted no coloured pytest summary. Fixed after the data.** The scorer's pytest regex needed a word boundary before the count. pytest prints its summary in colour in some repositories, and the colour code ends in a letter right before the count (ESC[1m57 passed), so there was no word boundary and the summary showed no outcome. Section 13's outcome rule as written counts "a pytest summary with passed, failed or error", so the fix lets the count follow an ANSI colour code, and a line holding "1m57 passed" with no colour code still doesn't count. It changed 169 of the 2,760 counted Stage 4 sessions from no rule run to a rule run, spread across all arms (5 to 16 per arm and model), and 38 Stage 1 sessions. None of the 3 infrastructure rows that were rerun changed. No pass, claim or false-done value changed. It was found while reading why the hook recorded "met" in sessions the scorer read as non-adherent, after every verdict at 3d5dcce had printed. The fix doesn't depend on which way any verdict lands: it counts a line the written rule already counts, in every arm the same way. Both readings are printed above.
 2. **Deviation S4-1: two Sol parts relaunched after a silent quota skip.** Sol's parts s4-8 and s4-9 never started: the Ubicloud project was at its vCPU quota (536 of 512 in use across several crews), the part VM create was refused, and the launcher at 3d5dcce recorded a part that never started only when a created VM never reached running. So both parts looked finished with no sessions, and nothing flagged the 160 missing Sol sessions until every item had finished. The relaunch, ruled before any Sol arm contrast was read, ran the same code, tasks, arms and caps under new prefixes, with a quota wait and a planned-count check added outside the pinned launcher. Both parts ran in full (80 sessions each), and no Sol cell is missing.
 3. **A 7-hour hold on Sol.** From 15:21 to 22:14 UTC on 2026-11-14 the Sol sequence stood still: the host's attach output printed its next step in the middle of a line, and the sequencer read it only at the start of one. No session was affected, and the sequencer now reads it anywhere in the line.
 4. **One Sol cell ran twice.** py-pdf__pdfly-219 in Sol's none arm was hit by a ledger outage, relaunched, and then rerun again as attempt 2 because the attempt-2 check still saw the outage row. The relaunch session counts and the attempt 2 is a stray, a rule set before its result was read. Both scored 1.0.
@@ -237,6 +241,8 @@ Reanalysis is keyless from a checkout with bun install, given the trial dirs (no
 
 report-3d5dcce.md and report-head.md are the two reports these printed. At 3d5dcce, the stored Stage 1 admission and one recomputed from the Stage 1 table give a byte-identical report.json. The record leaves out the paid launches, which need the ledger, Ubicloud and the provider keys, and the best-of-2 picks, which this post reads from each item's picks.jsonl.
 
+The plain-2 lines in H2 were recounted after the final review: apply recount.patch.txt to lanes/harness-mechanics/analyze.ts at this post's head with git apply, rerun the report command with the head config, and read the H2 secondary RECOUNT lines (recount.txt). Every other line of that report is identical to report-head.md.
+
 ## What is held out, and why
 
 Nothing is sealed. The tasks are public and listed in the preregistration bundle. The trial dirs, picks and ledgers stay in the Captain's drive because they hold transcripts and repository code. digests.txt lists the sha256 of both run tables at both codes and of every final ledger.
@@ -248,6 +254,7 @@ SWE-rebench is the work of Nebius AI R&D, used under CC-BY-4.0; each task reposi
 ## Changelog
 
 - 2026-11-15: first version.
+- 2026-11-15, after the final review: the best-of-2 headline now compares best-of-2 with both single plain attempts and names Opus's none arm as the source of the +2.0; Sol's H1 end state (CUT-CANDIDATE) is stated with its own interval and MDD; the Stage 4 spend line separates $917.13 of model spend from $7.90 of machines; the scorer-fix count reads 169 of the 2,760 counted sessions. The recount is attached.
 
 <details>
 <summary>Agent notes</summary>
@@ -267,7 +274,7 @@ SWE-rebench is the work of Nebius AI R&D, used under CC-BY-4.0; each task reposi
 | Crew agent use, at about $1 per 1,000 credits, read 2026-11-15 | $850.47 | $400 in section 22; $1,050 as a recorded deviation |
 | All-in so far | $2,047.43 | the $3,000 line |
 
-Stage 4 includes the picker calls ($30.91: $3.07 for GPT-6.1 Sol picking for Opus, $14.32 and $13.52 for Opus 5.5 picking for Sol and particle-1), the best-of-2 listing VM ($1.75, in equal shares) and the three hosts ($6.15). The Stage 4 caps were re-priced at measured rates before launch (the preregistration expected $1,223 of Stage 4 model spend; the re-pricing $955; it settled $925.03), and Sol's per-session allowance went from $6 to $10 (Run disclosures item 6).
+Stage 4 includes the picker calls ($30.91: $3.07 for GPT-6.1 Sol picking for Opus, $14.32 and $13.52 for Opus 5.5 picking for Sol and particle-1), the best-of-2 listing VM ($1.75, in equal shares) and the three hosts ($6.15). The Stage 4 caps were re-priced at measured rates before launch (the preregistration expected $1,223 of Stage 4 model spend and the re-pricing $955; Stage 4 settled at $925.03, which includes the $7.90 of listing VM and hosts above, so its model spend was $917.13), and Sol's per-session allowance went from $6 to $10 (Run disclosures item 6).
 
 **The crew overrun, plainly.** Section 22 expected the crew at $260 with a $400 cap. It is at $850.47, $450.47 over the cap and 2.1 times it, and this thread is $677.53 of that (about 2.1B tokens). It went on the D1 to D14 build fixes, four Stage 3 pilots (two stopped, one on the wrong build), the six-step fix-check chain on #300, the Stage 4 sequencing and watching, and this results stage. The preregistration expected $1,894 all-in; the run is about $150 over that, all of it crew.
 
