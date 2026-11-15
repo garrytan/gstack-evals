@@ -132,15 +132,21 @@ export function homeVolume(image: string, dst: string): string {
   return path!;
 }
 
+/** Optional docker run arguments for the test container, added in either mode: a /dev/shm size, read-only bind mounts and
+ *  environment. The skill-pack head-to-head's browser units pass their browser conditions here (lanes/outcome-skills/h2h,
+ *  types.ts BROWSER). Without it the container is exactly as before. */
+export interface RunExtra { shmSize?: string; mounts?: { src: string; dst: string }[]; env?: Record<string, string> }
+export const extraArgs = (x?: RunExtra): string[] => (x ? [...(x.shmSize ? ["--shm-size", x.shmSize] : []), ...(x.mounts ?? []).flatMap((m) => ["--mount", "type=bind,src=" + m.src + ",dst=" + m.dst + ",readonly"]), ...Object.entries(x.env ?? {}).flatMap(([k, v]) => ["-e", k + "=" + v])] : []);
+
 /** The test container's docker run arguments. The home copy applies to hardened mode only. */
-export function runArgs(o: { image: string; volume: string; repoDir: string; workDir?: string; mode: Mode; name: string; home?: { volume: string; path: string } }): string[] {
+export function runArgs(o: { image: string; volume: string; repoDir: string; workDir?: string; mode: Mode; name: string; home?: { volume: string; path: string }; extra?: RunExtra }): string[] {
   const hard = o.mode === "hardened"
     ? ["--user", RUN_UID, "--read-only", "--tmpfs", "/tmp:rw,exec,size=4g,mode=1777", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", ...(o.home ? ["--mount", "type=volume,src=" + o.home.volume + ",dst=" + o.home.path + ",volume-subpath=home", "--mount", "type=volume,src=" + o.home.volume + ",dst=/etc/passwd,volume-subpath=passwd,readonly", "-e", "HOME=" + o.home.path] : ["-e", "HOME=/tmp"])]
     : ["--user", "0:0", "--security-opt", "no-new-privileges"];
-  return ["--rm", "-i", "--network", "none", ...hard, "--cpus", LIMITS.cpus, "--memory", LIMITS.memory, "--pids-limit", LIMITS.pids, "-v", o.volume + ":" + o.repoDir, "-w", o.workDir || o.repoDir, "--entrypoint", "bash", o.image, "-s"];
+  return ["--rm", "-i", "--network", "none", ...hard, "--cpus", LIMITS.cpus, "--memory", LIMITS.memory, "--pids-limit", LIMITS.pids, "-v", o.volume + ":" + o.repoDir, "-w", o.workDir || o.repoDir, ...extraArgs(o.extra), "--entrypoint", "bash", o.image, "-s"];
 }
 
-export function runTests(o: { image: string; volume: string; repoDir: string; workDir?: string; commands: { rebuild: string[]; test: string[]; print: string[] }; mode: Mode; limitMs?: number; label: string; rule?: RebuildRule }): TestRun {
+export function runTests(o: { image: string; volume: string; repoDir: string; workDir?: string; commands: { rebuild: string[]; test: string[]; print: string[] }; mode: Mode; limitMs?: number; label: string; rule?: RebuildRule; extra?: RunExtra }): TestRun {
   const limit = o.limitMs ?? LIMIT_MS;
   const name = runName(o.label);
   const homeVol = o.mode === "hardened" ? name + "-home" : null;
