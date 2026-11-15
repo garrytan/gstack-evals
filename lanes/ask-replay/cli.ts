@@ -169,7 +169,7 @@ export const SUBCOMMANDS: Record<string, { summary: string; run: Run }> = {
   score: {
     summary: "the frozen readout (sections 8 and 9) from items and decrypted replies, with the decision rows; numbers only",
     run: (argv, io) => {
-      const f = flags(argv, ["items", "replies", "links", "labels", "draws"], ["keyless"]);
+      const f = flags(argv, ["items", "replies", "links", "labels", "draws", "pilot-items", "pilot-replies"], ["keyless"]);
       const items = readItems(need(f, "items"));
       const records = finalRecords(readRecords(need(f, "replies")));
       const samples = records.map((r) => r.sample);
@@ -188,10 +188,15 @@ export const SUBCOMMANDS: Record<string, { summary: string; run: Run }> = {
         return readout(its, outcomes.filter((x) => ids.has(x.item)), opts);
       };
       const r = view(lab?.primary ?? items);
-      const withheld = lab ? lab.summary.decision_withheld : "no --labels, so the label audit has not stood";
-      if (withheld) {
-        json(io, { links: lab?.links ? "Opus links" : f.links ? "custody links" : "proxy links", labels: lab?.summary ?? null, ...r, decision: null, decision_withheld: withheld, label_views: [], label_sensitive: null });
-        fail("E_ASK_INCOMPLETE", withheld + ", so score prints no decision rows");
+      const ks = new Set(samples.filter((s) => FROZEN.frontier_models.includes(s.model)).map((s) => s.k));
+      const pilotK = f["pilot-items"] && f["pilot-replies"] ? readPilot(io, f["pilot-items"], f["pilot-replies"]).k : null;
+      const kWithheld = pilotK === null ? "no --pilot-items and --pilot-replies, so the main run's k is not checked against the pilot rule" : ks.size === 1 && ks.has(pilotK) ? null : "the main run's k (" + [...ks].join(", ") + ") is not the pilot rule's k (" + pilotK + ")";
+      const withheld = (lab ? lab.summary.decision_withheld : "no --labels, so the label audit has not stood") ?? kWithheld;
+      const offFrozen = opts.draws === FROZEN.stats.bootstrap_draws ? null : "--draws " + f.draws + " replaces the frozen " + FROZEN.stats.bootstrap_draws + " bootstrap draws, so score prints no decision rows";
+      if (withheld || offFrozen) {
+        json(io, { links: lab?.links ? "Opus links" : f.links ? "custody links" : "proxy links", labels: lab?.summary ?? null, ...r, decision: null, decision_withheld: withheld || offFrozen, label_views: [], label_sensitive: null });
+        if (withheld) fail("E_ASK_INCOMPLETE", withheld + ", so score prints no decision rows");
+        return 0;
       }
       const views = (lab?.views ?? []).map((v) => {
         const d = view(v.items).decision;
@@ -205,7 +210,7 @@ export const SUBCOMMANDS: Record<string, { summary: string; run: Run }> = {
     summary: "the admission pilot's readout from its drawn items and decrypted replies: the frozen admission rule and k rule (sections 9 and 10); numbers only",
     run: (argv, io) => {
       const f = flags(argv, ["items", "replies"]);
-      json(io, pilotReadout(readItems(need(f, "items")), finalRecords(readRecords(need(f, "replies"))).map(outcomeOf)));
+      json(io, readPilot(io, need(f, "items"), need(f, "replies")));
       return 0;
     },
   },
@@ -333,6 +338,18 @@ export function runReplicates(id: string, pilot: boolean, k?: string): number | 
 function refuseUnfrozen(): void {
   const left = placeholders().filter((p) => p.startsWith("stats.") || p.startsWith("synthetic."));
   if (left.length) fail("E_ASK_UNFROZEN", "frozen.json still holds " + left.join(", "));
+}
+
+/** The pilot's readout from its drawn items and decrypted replies, refused (E_ASK_INCOMPLETE) with the absent counts when the replies lack a sample the pilot schedules on Opus or Sol. */
+function readPilot(io: Io, itemsFile: string, repliesFile: string): ReturnType<typeof pilotReadout> {
+  const items = readItems(itemsFile);
+  const records = finalRecords(readRecords(repliesFile));
+  const absent = absentSamples(items, records.map((r) => r.sample), FROZEN.pilot.models, FROZEN.pilot.arms as Partial<Record<Arm, number>>);
+  if (absent.total) {
+    json(io, { incomplete: true, absent: absent.total, absent_by_model_arm: absent.by });
+    fail("E_ASK_INCOMPLETE", "the pilot replies lack " + absent.total + " scheduled Opus or Sol samples, so the pilot is incomplete and gives no admission decision or k");
+  }
+  return pilotReadout(items, records.map(outcomeOf));
 }
 
 /** One paid shard under custody, for run and label: the sealed bundle opens on /dev/shm, one lease meters the spend item, and each reply is sealed as it lands. */

@@ -109,15 +109,15 @@ export interface MissingShare {
   by_kind: Record<MissingKind, number>;
 }
 
-/** Samples the shards scheduled that no record holds, per model and arm, for each model named: every item, every arm the model runs, replicates 1 to the k its shard scheduled, which each record carries (the pilot's is per arm). A model with no record counts every sample of the plan its peers' records carry, or of the frozen k. */
-export function absentSamples(items: readonly Pick<AskItem, "item">[], samples: readonly Pick<Sample, "id" | "model" | "k">[], models: Iterable<ModelKey>): { total: number; by: Partial<Record<ModelKey, Partial<Record<Arm, number>>>> } {
+/** Samples the shards scheduled that no record holds, per model and arm, for each model named: every item, every arm the model runs, replicates 1 to the k its shard scheduled, which each record carries (the pilot's is per arm), or to the plan given in its place. A model with no record counts every sample of the plan its peers' records carry, or of the frozen k. */
+export function absentSamples(items: readonly Pick<AskItem, "item">[], samples: readonly Pick<Sample, "id" | "model" | "k">[], models: Iterable<ModelKey>, plan?: Sample["k"]): { total: number; by: Partial<Record<ModelKey, Partial<Record<Arm, number>>>> } {
   const have = new Set(samples.map((s) => s.id));
   const reps = (k: Sample["k"], arm: Arm) => (k === undefined ? FROZEN.replicates.k : typeof k === "number" ? k : k[arm] ?? 0);
   const by: Partial<Record<ModelKey, Partial<Record<Arm, number>>>> = {};
   let total = 0;
   for (const model of models) {
     const own = samples.filter((s) => s.model === model);
-    const plans = (own.length ? own : samples).map((s) => s.k);
+    const plans = plan !== undefined ? [plan] : (own.length ? own : samples).map((s) => s.k);
     for (const arm of FROZEN.models[model].arms) {
       const k = plans.length ? plans.reduce<number>((m, p) => Math.max(m, reps(p, arm)), 0) : FROZEN.replicates.k;
       let n = 0;

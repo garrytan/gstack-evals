@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openLease, recordApproval, settleLease } from "../../src/runner/ledger/ledger.ts";
@@ -253,6 +253,47 @@ describe("a metering proxy refusal (E_ASK_PROXY)", () => {
   });
 });
 
+describe("any other error inside a sample (E_ASK_PROCESSOR)", () => {
+  async function faulted(fault: boolean) {
+    const s = setup();
+    try {
+      const calls: string[] = [];
+      let first = fault;
+      const slow = stubSend(() => ({ action: "SEND", repeats: "new" }));
+      const send = async (smp: Sample, key: CallKey) => {
+        await new Promise((r) => setTimeout(r, 5));
+        return slow(smp, key);
+      };
+      const base = shard(s, send as unknown as ReturnType<typeof stubSend>);
+      const o = { ...base, concurrency: 2, client: { call: async (smp: Sample, key: CallKey, body: Record<string, unknown>) => {
+        calls.push(smp.id);
+        if (first) {
+          first = false;
+          throw new AskError("E_ASK_PROCESSOR", "particle-ai/particle-1 was served by a provider other than its pin");
+        }
+        return base.client.call(smp, key, body);
+      } } };
+      const run = await runShard(o).catch((e: unknown) => e);
+      await new Promise((r) => setTimeout(r, 30));
+      return { run, calls, sealed: (o.store as ReturnType<typeof plainStore>).read().size, scheduled: o.samples.length };
+    } finally {
+      s.done();
+    }
+  }
+  test("stops the shard: no new cell launches and an in-flight cell starts no next replicate", async () => {
+    const r = await faulted(true);
+    expect(r.run).toMatchObject({ code: "E_ASK_PROCESSOR" });
+    expect(r.calls).toHaveLength(2);
+    expect(r.sealed).toBe(1);
+  });
+  test("with no error the shard sends and seals every scheduled sample, as before", async () => {
+    const r = await faulted(false);
+    expect(r.run).toMatchObject({ ran: r.scheduled, stopped: null });
+    expect(r.calls).toHaveLength(r.scheduled);
+    expect(r.sealed).toBe(r.scheduled);
+  });
+});
+
 describe("the shard limit (frozen.json shards.limit_minutes)", () => {
   const minute = 60_000;
   test("no attempt starts past the limit: the sample stays unsealed and the next shard retries it under the same draw", async () => {
@@ -274,6 +315,76 @@ describe("the shard limit (frozen.json shards.limit_minutes)", () => {
       expect(warned).not.toContain("E_ASK_RESUME");
       expect(calls.at(-1)).toBe(samples[0]!.id + "#1/3");
       expect((o.store as ReturnType<typeof plainStore>).read().get(samples[0]!.id)).toMatchObject({ draw: 1, missing: null, final_action: "FOLD", attempts: 3 });
+    } finally {
+      s.done();
+    }
+  });
+  const failing = [["upstream", 1 + FROZEN.retries.upstream, "upstream"], ["unparsable", 1 + FROZEN.retries.unparsable, "parse"]] as const;
+  test("a resumed attempt keeps the retries its draw already spent, so the draw sends no more than the frozen calls", async () => {
+    for (const [raw, n, missing] of failing) {
+      const s = setup();
+      try {
+        let t = 0;
+        const calls: string[] = [];
+        const samples = schedule(items.slice(0, 1), "opus", 1, 2).slice(0, 1);
+        const id = samples[0]!.id;
+        const o = { ...shard(s, stubSend(() => ((t += 10 * minute), { raw }), calls), samples), concurrency: 1, now: () => t, limitMs: 10 * minute };
+        expect(await runShard(o)).toMatchObject({ stopped: "limit", left: 1, ran: 0 });
+        expect(calls).toEqual([id + "#1/1"]);
+        expect(await runShard({ ...o, limitMs: 60 * minute })).toMatchObject({ ran: 1, redrawn: {}, stopped: null, missing: { [missing]: 1 } });
+        expect(calls).toEqual(Array.from({ length: n }, (_, i) => id + "#1/" + (i + 1)));
+        expect((o.store as ReturnType<typeof plainStore>).read().get(id)).toMatchObject({ draw: 1, missing, attempts: n });
+      } finally {
+        s.done();
+      }
+    }
+  });
+  test("an uninterrupted draw is unchanged: 1 + 3 upstream calls or 1 + 1 parse calls, each failure journaled by kind", async () => {
+    for (const [raw, n, missing] of failing) {
+      const s = setup();
+      try {
+        const calls: string[] = [];
+        const samples = schedule(items.slice(0, 1), "opus", 1, 2).slice(0, 1);
+        const id = samples[0]!.id;
+        const o = { ...shard(s, stubSend(() => ({ raw }), calls), samples), concurrency: 1 };
+        expect(await runShard(o)).toMatchObject({ ran: 1, stopped: null, missing: { [missing]: 1 } });
+        expect(calls).toEqual(Array.from({ length: n }, (_, i) => id + "#1/" + (i + 1)));
+        expect((o.store as ReturnType<typeof plainStore>).read().get(id)).toMatchObject({ draw: 1, missing, attempts: n });
+        const journal = readFileSync(join(o.out, "calls.ndjson"), "utf8").trim().split("\n").map((l) => JSON.parse(l) as { attempt: number; failed?: string });
+        expect(journal.filter((x) => x.failed).map((x) => [x.attempt, x.failed])).toEqual(Array.from({ length: n }, (_, i) => [i + 1, raw]));
+      } finally {
+        s.done();
+      }
+    }
+  });
+  test("a draw-3 attempt the end-of-run pass stopped before sending resumes with that draw's spent retries: at most 1 + 3 calls in draw 3", async () => {
+    const s = setup();
+    try {
+      let t = 0;
+      const calls: string[] = [];
+      const samples = schedule(items.slice(0, 1), "opus", 1, 2).slice(0, 1);
+      const id = samples[0]!.id;
+      const o = { ...shard(s, stubSend(() => ((t += 10 * minute), { raw: "upstream" }), calls), samples), concurrency: 1, now: () => t, limitMs: 600 * minute, stopAfterMs: 600 * minute };
+      expect(await runShard(o)).toMatchObject({ ran: 1, missing: { upstream: 1 } });
+      expect(await upstreamRedraw({ ...o, limitMs: 10 * minute })).toMatchObject({ redrawn: 0, left: 1, stopped: "limit" });
+      expect(await upstreamRedraw(o)).toMatchObject({ redrawn: 1, still_upstream: 1, stopped: null });
+      expect(calls.filter((c) => c.includes("#3/"))).toEqual([1, 2, 3, 4].map((a) => id + "#3/" + a));
+      expect((o.store as ReturnType<typeof plainStore>).read().get(id + "~u")).toMatchObject({ draw: UPSTREAM_DRAW, missing: "upstream", attempts: 4 });
+    } finally {
+      s.done();
+    }
+  });
+  test("an uninterrupted draw 3 is unchanged: 1 + 3 calls, then UPSTREAM", async () => {
+    const s = setup();
+    try {
+      const calls: string[] = [];
+      const samples = schedule(items.slice(0, 1), "opus", 1, 2).slice(0, 1);
+      const id = samples[0]!.id;
+      const o = { ...shard(s, stubSend(() => ({ raw: "upstream" }), calls), samples), concurrency: 1 };
+      await runShard(o);
+      expect(await upstreamRedraw(o)).toMatchObject({ redrawn: 1, still_upstream: 1, stopped: null });
+      expect(calls).toEqual([1, 3].flatMap((d) => [1, 2, 3, 4].map((a) => id + "#" + d + "/" + a)));
+      expect((o.store as ReturnType<typeof plainStore>).read().get(id + "~u")).toMatchObject({ draw: UPSTREAM_DRAW, missing: "upstream", attempts: 4 });
     } finally {
       s.done();
     }
