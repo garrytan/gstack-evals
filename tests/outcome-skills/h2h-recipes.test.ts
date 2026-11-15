@@ -38,6 +38,9 @@ describe("recipes", () => {
     expect(chooseRecipe("B2", "npm", facts(["package.json"], {}))).toEqual({ code: "E_H2H_B_NO_LOCKFILE", rule: "no_js_lockfile" });
     expect(chooseRecipe("B2", "Go", facts(["go.mod"], undefined, { "go.mod": "module x\nrequire y v1\n" }))).toEqual({ code: "E_H2H_B_NO_LOCKFILE", rule: "no_go_sum" });
     expect(chooseRecipe("B2", "crates.io", facts(["Cargo.toml"]))).toEqual({ code: "E_H2H_B_NO_LOCKFILE", rule: "no_cargo_lock" });
+    const go = dockerfile(recipe(chooseRecipe("B2", "Go", facts(["go.mod", "go.sum"], undefined, { "go.mod": "module x\n" }))), "u", P40).split("\n");
+    expect(go.findIndex((l) => l.includes("GOPROXY"))).toBeGreaterThan(go.findIndex((l) => l === "RUN go mod download"));
+    expect(go[1]).not.toContain("GOPROXY");
     expect(recipe(chooseRecipe("B2", "Maven", facts(["pom.xml"], undefined, { "pom.xml": "<maven.compiler.release>17</maven.compiler.release>" }))).image).toBe(TOOLCHAINS.maven17);
   });
 });

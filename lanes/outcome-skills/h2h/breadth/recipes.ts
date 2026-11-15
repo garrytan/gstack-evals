@@ -148,14 +148,19 @@ export function chooseRecipe(kind: "B1" | "B2", ecosystem: Ecosystem, f: RepoFac
 const sh = (s: string) => "'" + s.replace(/'/g, "'\\''") + "'";
 
 /** The image's Dockerfile: the toolchain image, the repository fetched at the fix's parent alone (a depth-1 fetch, so no
- *  later commit is in the image), the install steps, the browser layer and wrapper for B1, and the run environment. */
+ *  later commit is in the image), the install steps, the browser layer and wrapper for B1, and the run environment. The
+ *  offline switches (GOPROXY=off, CARGO_NET_OFFLINE) are set after the install steps, so they bind the runs and not the
+ *  dependency fetch. */
+export const OFFLINE_ENV = ["GOPROXY", "CARGO_NET_OFFLINE"];
 export function dockerfile(r: Recipe, repoUrl: string, parent: string): string {
   if (!/^[0-9a-f]{40}$/.test(parent)) throw new Error("E_H2H_B_BUILD parent is not a 40-hex commit: " + parent);
-  const lines = ["FROM " + r.image, "ENV " + Object.entries(r.env).filter(([k]) => k !== "CHROME_BIN" && k !== "PUPPETEER_EXECUTABLE_PATH").map(([k, v]) => k + "=" + JSON.stringify(v)).join(" ")];
+  const env = (keep: (k: string) => boolean) => Object.entries(r.env).filter(([k]) => keep(k)).map(([k, v]) => k + "=" + JSON.stringify(v)).join(" ");
+  const lines = ["FROM " + r.image, "ENV " + env((k) => k !== "CHROME_BIN" && k !== "PUPPETEER_EXECUTABLE_PATH" && !OFFLINE_ENV.includes(k))];
   if (r.apt.length) lines.push("RUN apt-get update && apt-get install -y --no-install-recommends " + r.apt.join(" ") + " && rm -rf /var/lib/apt/lists/*");
   lines.push("RUN git init -q " + REPO_ROOT_IN_IMAGE + " && cd " + REPO_ROOT_IN_IMAGE + " && git fetch -q --depth 1 " + sh(repoUrl) + " " + parent + " && git checkout -q --detach FETCH_HEAD && git remote remove origin 2>/dev/null; git -C " + REPO_ROOT_IN_IMAGE + " rev-parse HEAD");
   lines.push("WORKDIR " + REPO_ROOT_IN_IMAGE);
   for (const step of r.install) lines.push("RUN " + step);
+  if (OFFLINE_ENV.some((k) => k in r.env)) lines.push("ENV " + env((k) => OFFLINE_ENV.includes(k)));
   if (r.browser) {
     lines.push("COPY chromium-wrapper.sh " + BROWSER.wrapper_container_path, "RUN chmod 0755 " + BROWSER.wrapper_container_path + " && " + BROWSER.wrapper_container_path + " --headless=new --dump-dom about:blank >/dev/null");
     lines.push("ENV CHROME_BIN=" + BROWSER.env.CHROME_BIN + " PUPPETEER_EXECUTABLE_PATH=" + BROWSER.env.PUPPETEER_EXECUTABLE_PATH);
