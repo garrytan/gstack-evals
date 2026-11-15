@@ -195,6 +195,7 @@
   ],
   "licences": [
     "MIT",
+    "MIT-0",
     "Apache-2.0",
     "BSD-2-Clause",
     "BSD-3-Clause",
@@ -242,15 +243,22 @@
       "repo_cap": 3,
       "browser_oracle_runs": 5,
       "reserve_rule": "5 reserves in each of the B1 and B2 frames",
-      "stage1_positions": [
-        6,
-        12,
-        18,
-        24,
-        30,
-        36
-      ],
-      "position_rule": "the O rule run separately over the B1 and B2 frames; stage 1 takes these positions in each frame (6 units each); stage 0 takes the first unit after each frame's reserves"
+      "stage1_positions": {
+        "B2": [
+          6,
+          12,
+          18,
+          24,
+          30,
+          36
+        ],
+        "B1": "round(k * N / 7) for k = 1..6, N = usable B1 units after a walk to the end of the frame"
+      },
+      "position_rule": {
+        "B2": "the O rule over the B2 frame: stage 1 at these positions, stage 2 the other positions in order, then 5 reserves, then stage 0 at the first unit after the reserves",
+        "B1": "walk the whole frame first; stage 0 at position N; the 5 reserves are the last 5 unused positions before N; stage 2 the rest in order"
+      },
+      "b1_min_rule": "B1 is usable for the comparison when stage 2 gets at least 20 B1 units; otherwise the fallbacks run, then B1 is infeasible and B reads on B2 alone"
     }
   },
   "stage0": {
@@ -307,5 +315,18 @@
     "h2h-reserve",
     "h2h-crew",
     "h2h-rerun"
-  ]
+  ],
+  "licence_second_read": "when GraphQL names no licence or returns NOASSERTION, read the root LICENSE*, LICENCE* and COPYING* files once on the freeze date and match each to SPDX texts by a frozen rule; eligible only when at least one file is found and every file matches a listed licence",
+  "full_size_positions": "if the full size is ever approved, its added units in every frame take the next positions after stage 0 units, in order",
+  "runtimes": {
+    "mount": "/opt/h2h-runtimes",
+    "tools": [
+      "node",
+      "bun",
+      "python3",
+      "gh"
+    ],
+    "path": "appended after the image PATH",
+    "scope": "every session container of every arm; not oracle or scoring containers"
+  }
 }

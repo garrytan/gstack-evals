@@ -75,6 +75,17 @@ export interface H2hSession {
   /** Relative paths inside the session's record directory. */
   transcript: string;
   tree_bundle: string;
+  /** Part S: the attempt the record comes from (2 after the whole-session retry). */
+  attempts?: number;
+  /** Part S: the slot's allowance stops, counted apart from reservation-bound refusals. */
+  allowance_stops?: number;
+  /** Part S: the copied home's digest from arms-pins.json, or null for none and fixture homes. */
+  home_tree_sha256?: string | null;
+  claude_version?: string | null;
+  /** Part S: the session runner's refusal line, when the attempt ended on one. */
+  refused?: string | null;
+  /** The commit the session's repository started from, which the scorer extracts the change against (part C). */
+  base_head?: string;
 }
 
 export type Outcome = "clean_fix" | "fix_broke" | "no_fix" | "no_fix_broke";
@@ -97,6 +108,10 @@ export interface H2hScore {
   worktree_pass: boolean | null;
   lines_changed: number;
   planning_lines: number;
+  /** Nested worktree directories left out of the extracted change, relative to the repository root (part C). */
+  nested_left_out?: string[];
+  /** The worktree secondary's candidates, each scored as the main change is (part C). */
+  worktree_candidates?: { source: string; verified: boolean; gap: string | null }[];
 }
 
 /** The frozen row states of section 9. */
@@ -118,6 +133,10 @@ export interface ArmInstall {
   /** Newer versions seen on the freeze date; the pins do not move. */
   newer_seen: { repo: string; sha: string; version?: string }[];
   claude_code_version: string;
+  /** The pack's browser path as installed (plan section 3), in words. */
+  browser?: string;
+  /** Where the install differs from the pack README's commands, in words. */
+  deviations?: string[];
 }
 
 /** The browser conditions sessions, the oracle and scoring share on B1 units (sections 3 and 6). Part B owns the wrapper

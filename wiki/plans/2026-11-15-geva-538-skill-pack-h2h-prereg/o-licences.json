@@ -1,0 +1,1731 @@
+{
+ "schema": "h2h-o-licences.v1",
+ "read_at": "2026-11-15T04:23:15.170Z",
+ "query": "repository(owner, name) { nameWithOwner licenseInfo { spdxId } }",
+ "repos": {
+  "0xERR0R/blocky": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "0xERR0R/blocky"
+  },
+  "AOMediaCodec/libavif": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "AOMediaCodec/libavif"
+  },
+  "AntennaPod/AntennaPod": {
+   "spdx": "GPL-3.0",
+   "name_with_owner": "AntennaPod/AntennaPod"
+  },
+  "AutoMQ/automq": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "AutoMQ/automq"
+  },
+  "Automattic/harper": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "Automattic/harper"
+  },
+  "Automattic/mongoose": {
+   "spdx": "MIT",
+   "name_with_owner": "Automattic/mongoose"
+  },
+  "AvaloniaUI/Avalonia": {
+   "spdx": "MIT",
+   "name_with_owner": "AvaloniaUI/Avalonia"
+  },
+  "Azure/azure-mcp": {
+   "spdx": "MIT",
+   "name_with_owner": "Azure/azure-mcp"
+  },
+  "Azure/azure-sdk-for-net": {
+   "spdx": "MIT",
+   "name_with_owner": "Azure/azure-sdk-for-net"
+  },
+  "BYVoid/OpenCC": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "BYVoid/OpenCC"
+  },
+  "ChaiScript/ChaiScript": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "ChaiScript/ChaiScript"
+  },
+  "ChainSafe/lodestar": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "ChainSafe/lodestar"
+  },
+  "CleverRaven/Cataclysm-DDA": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "CleverRaven/Cataclysm-DDA"
+  },
+  "ClickHouse/ClickHouse": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "ClickHouse/ClickHouse"
+  },
+  "DeusData/codebase-memory-mcp": {
+   "spdx": "MIT",
+   "name_with_owner": "DeusData/codebase-memory-mcp"
+  },
+  "DioxusLabs/dioxus": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "DioxusLabs/dioxus"
+  },
+  "DynamoRIO/dynamorio": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "DynamoRIO/dynamorio"
+  },
+  "ErikEJ/EFCorePowerTools": {
+   "spdx": "MIT",
+   "name_with_owner": "ErikEJ/EFCorePowerTools"
+  },
+  "FastLED/FastLED": {
+   "spdx": "MIT",
+   "name_with_owner": "FastLED/FastLED"
+  },
+  "FasterXML/jackson-databind": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "FasterXML/jackson-databind"
+  },
+  "Finbuckle/Finbuckle.MultiTenant": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "Finbuckle/Finbuckle.MultiTenant"
+  },
+  "Gentleman-Programming/gentle-ai": {
+   "spdx": "MIT",
+   "name_with_owner": "Gentleman-Programming/gentle-ai"
+  },
+  "GitoxideLabs/gitoxide": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "GitoxideLabs/gitoxide"
+  },
+  "GladysAssistant/Gladys": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "GladysAssistant/Gladys"
+  },
+  "GothenburgBitFactory/taskwarrior": {
+   "spdx": "MIT",
+   "name_with_owner": "GothenburgBitFactory/taskwarrior"
+  },
+  "IBM/sarama": {
+   "spdx": "MIT",
+   "name_with_owner": "IBM/sarama"
+  },
+  "IfcOpenShell/IfcOpenShell": {
+   "spdx": "LGPL-3.0",
+   "name_with_owner": "IfcOpenShell/IfcOpenShell"
+  },
+  "J-F-Liu/lopdf": {
+   "spdx": "MIT",
+   "name_with_owner": "J-F-Liu/lopdf"
+  },
+  "JasperFx/marten": {
+   "spdx": "MIT",
+   "name_with_owner": "JasperFx/marten"
+  },
+  "JasperFx/wolverine": {
+   "spdx": "MIT",
+   "name_with_owner": "JasperFx/wolverine"
+  },
+  "KSP-CKAN/CKAN": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "KSP-CKAN/CKAN"
+  },
+  "Kareadita/Kavita": {
+   "spdx": "GPL-3.0",
+   "name_with_owner": "Kareadita/Kavita"
+  },
+  "KhronosGroup/glslang": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "KhronosGroup/glslang"
+  },
+  "LFDT-web3j/web3j": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "LFDT-web3j/web3j"
+  },
+  "Mbed-TLS/mbedtls": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "Mbed-TLS/mbedtls"
+  },
+  "Megabit/Blazorise": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "Megabit/Blazorise"
+  },
+  "MetaMask/metamask-mobile": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "MetaMask/metamask-mobile"
+  },
+  "Milkdown/milkdown": {
+   "spdx": "MIT",
+   "name_with_owner": "Milkdown/milkdown"
+  },
+  "Minestom/Minestom": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "Minestom/Minestom"
+  },
+  "Mintplex-Labs/anything-llm": {
+   "spdx": "MIT",
+   "name_with_owner": "Mintplex-Labs/anything-llm"
+  },
+  "MudBlazor/MudBlazor": {
+   "spdx": "MIT",
+   "name_with_owner": "MudBlazor/MudBlazor"
+  },
+  "MultiQC/MultiQC": {
+   "spdx": "GPL-3.0",
+   "name_with_owner": "MultiQC/MultiQC"
+  },
+  "NVIDIA/NemoClaw": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "NVIDIA/NemoClaw"
+  },
+  "NVIDIA/OpenShell": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "NVIDIA/OpenShell"
+  },
+  "NVIDIA/gpu-operator": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "NVIDIA/gpu-operator"
+  },
+  "NVIDIA/stdexec": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "NVIDIA/stdexec"
+  },
+  "NVlabs/cuda-oxide": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "NVIDIA/cuda-rust"
+  },
+  "OSGeo/gdal": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "OSGeo/gdal"
+  },
+  "Ombi-app/Ombi": {
+   "spdx": "GPL-2.0",
+   "name_with_owner": "Ombi-app/Ombi"
+  },
+  "OpenAPITools/openapi-generator": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "OpenAPITools/openapi-generator"
+  },
+  "OpenLiberty/open-liberty": {
+   "spdx": "EPL-2.0",
+   "name_with_owner": "OpenLiberty/open-liberty"
+  },
+  "OpenLineage/OpenLineage": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "OpenLineage/OpenLineage"
+  },
+  "OpenRCT2/OpenRCT2": {
+   "spdx": "GPL-3.0",
+   "name_with_owner": "OpenRCT2/OpenRCT2"
+  },
+  "OrchardCMS/OrchardCore": {
+   "spdx": "BSD-3-Clause",
+   "name_with_owner": "OrchardCMS/OrchardCore"
+  },
+  "ProvableHQ/leo": {
+   "spdx": "GPL-3.0",
+   "name_with_owner": "aleo-labs-protocol/leo"
+  },
+  "QwenLM/qwen-code": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "QwenLM/qwen-code"
+  },
+  "RocketChat/Rocket.Chat.ReactNative": {
+   "spdx": "MIT",
+   "name_with_owner": "RocketChat/Rocket.Chat.ReactNative"
+  },
+  "RooCodeInc/Roo-Code": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "RooCodeInc/Roo-Code"
+  },
+  "SeaQL/sea-query": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "SeaQL/sea-query"
+  },
+  "Shopify/hydrogen": {
+   "spdx": "MIT",
+   "name_with_owner": "Shopify/hydrogen"
+  },
+  "SixLabors/ImageSharp": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "SixLabors/ImageSharp"
+  },
+  "SubtitleEdit/subtitleedit": {
+   "spdx": "MIT",
+   "name_with_owner": "SubtitleEdit/subtitleedit"
+  },
+  "TanStack/form": {
+   "spdx": "MIT",
+   "name_with_owner": "TanStack/form"
+  },
+  "TanStack/router": {
+   "spdx": "MIT",
+   "name_with_owner": "TanStack/router"
+  },
+  "TeamNewPipe/NewPipeExtractor": {
+   "spdx": "GPL-3.0",
+   "name_with_owner": "TeamNewPipe/NewPipeExtractor"
+  },
+  "TecharoHQ/anubis": {
+   "spdx": "MIT",
+   "name_with_owner": "TecharoHQ/anubis"
+  },
+  "TrenchBroom/TrenchBroom": {
+   "spdx": "GPL-3.0",
+   "name_with_owner": "TrenchBroom/TrenchBroom"
+  },
+  "TryGhost/Ghost": {
+   "spdx": "MIT",
+   "name_with_owner": "TryGhost/Ghost"
+  },
+  "TypeCellOS/BlockNote": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "TypeCellOS/BlockNote"
+  },
+  "UglyToad/PdfPig": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "UglyToad/PdfPig"
+  },
+  "WasmEdge/WasmEdge": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "WasmEdge/WasmEdge"
+  },
+  "a-h/templ": {
+   "spdx": "MIT",
+   "name_with_owner": "a-h/templ"
+  },
+  "actor-framework/actor-framework": {
+   "spdx": "BSD-3-Clause",
+   "name_with_owner": "actor-framework/actor-framework"
+  },
+  "agentgateway/agentgateway": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "agentgateway/agentgateway"
+  },
+  "agentscope-ai/agentscope-java": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "agentscope-ai/agentscope-java"
+  },
+  "akuity/kargo": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "akuity/kargo"
+  },
+  "alibaba/nacos": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "alibaba/nacos"
+  },
+  "alibaba/yalantinglibs": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "alibaba/yalantinglibs"
+  },
+  "amir20/dozzle": {
+   "spdx": "MIT",
+   "name_with_owner": "amir20/dozzle"
+  },
+  "angularsen/UnitsNet": {
+   "spdx": "MIT-0",
+   "name_with_owner": "angularsen/UnitsNet"
+  },
+  "antvis/G2": {
+   "spdx": "MIT",
+   "name_with_owner": "antvis/G2"
+  },
+  "apache/accumulo": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "apache/accumulo"
+  },
+  "apache/arrow-rs": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "apache/arrow-rs"
+  },
+  "apache/datafusion": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "apache/datafusion"
+  },
+  "apache/incubator-seata": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "apache/incubator-seata"
+  },
+  "apache/inlong": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "apache/inlong"
+  },
+  "apache/jena": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "apache/jena"
+  },
+  "apache/kvrocks": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "apache/kvrocks"
+  },
+  "apache/lucene": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "apache/lucene"
+  },
+  "apache/paimon": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "apache/paimon"
+  },
+  "apache/parquet-java": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "apache/parquet-java"
+  },
+  "apache/pinot": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "apache/pinot"
+  },
+  "apache/rocketmq": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "apache/rocketmq"
+  },
+  "apache/shardingsphere": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "apache/shardingsphere"
+  },
+  "appium/appium-inspector": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "appium/appium-inspector"
+  },
+  "apple/pkl": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "apple/pkl"
+  },
+  "aralroca/next-translate": {
+   "spdx": "MIT",
+   "name_with_owner": "aralroca/next-translate"
+  },
+  "argoproj/argo-rollouts": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "argoproj/argo-rollouts"
+  },
+  "asciidwango/js-primer": {
+   "spdx": "CC-BY-4.0",
+   "name_with_owner": "js-primer/js-primer"
+  },
+  "assistant-ui/assistant-ui": {
+   "spdx": "MIT",
+   "name_with_owner": "assistant-ui/assistant-ui"
+  },
+  "astral-sh/uv": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "astral-sh/uv"
+  },
+  "aws-amplify/amplify-ui": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "aws-amplify/amplify-ui"
+  },
+  "aws/s2n-tls": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "aws/s2n-tls"
+  },
+  "better-auth/better-auth": {
+   "spdx": "MIT",
+   "name_with_owner": "better-auth/better-auth"
+  },
+  "biomejs/biome": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "biomejs/biome"
+  },
+  "bpg/terraform-provider-proxmox": {
+   "spdx": "MPL-2.0",
+   "name_with_owner": "bpg/terraform-provider-proxmox"
+  },
+  "btraceio/btrace": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "btraceio/btrace"
+  },
+  "c-ares/c-ares": {
+   "spdx": "MIT",
+   "name_with_owner": "c-ares/c-ares"
+  },
+  "caddyserver/caddy": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "caddyserver/caddy"
+  },
+  "cadence-workflow/cadence": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "cadence-workflow/cadence"
+  },
+  "camunda/camunda-modeler": {
+   "spdx": "MIT",
+   "name_with_owner": "camunda/camunda-modeler"
+  },
+  "can1357/oh-my-pi": {
+   "spdx": "MIT",
+   "name_with_owner": "can1357/oh-my-pi"
+  },
+  "canonical/multipass": {
+   "spdx": "GPL-3.0",
+   "name_with_owner": "canonical/multipass"
+  },
+  "capstone-engine/capstone": {
+   "spdx": null,
+   "name_with_owner": "capstone-engine/capstone"
+  },
+  "carbon-language/carbon-lang": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "carbon-language/carbon-lang"
+  },
+  "casbin/casbin": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "apache/casbin"
+  },
+  "casey/just": {
+   "spdx": "CC0-1.0",
+   "name_with_owner": "casey/just"
+  },
+  "cc65/cc65": {
+   "spdx": "Zlib",
+   "name_with_owner": "cc65/cc65"
+  },
+  "centrifugal/centrifugo": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "centrifugal/centrifugo"
+  },
+  "cert-manager/cert-manager": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "cert-manager/cert-manager"
+  },
+  "charmbracelet/crush": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "charmbracelet/crush"
+  },
+  "checkstyle/checkstyle": {
+   "spdx": "LGPL-2.1",
+   "name_with_owner": "checkstyle/checkstyle"
+  },
+  "chenhg5/cc-connect": {
+   "spdx": null,
+   "name_with_owner": "chenhg5/cc-connect"
+  },
+  "chimurai/http-proxy-middleware": {
+   "spdx": "MIT",
+   "name_with_owner": "chimurai/http-proxy-middleware"
+  },
+  "cilium/tetragon": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "cilium/tetragon"
+  },
+  "clap-rs/clap": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "clap-rs/clap"
+  },
+  "cloudflare/workers-sdk": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "cloudflare/workers-sdk"
+  },
+  "code-charity/youtube": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "code-charity/youtube"
+  },
+  "code-yeongyu/oh-my-openagent": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "code-yeongyu/oh-my-openagent"
+  },
+  "codeceptjs/CodeceptJS": {
+   "spdx": "MIT",
+   "name_with_owner": "codeceptjs/CodeceptJS"
+  },
+  "coder/coder": {
+   "spdx": "AGPL-3.0",
+   "name_with_owner": "coder/coder"
+  },
+  "colbymchenry/codegraph": {
+   "spdx": "MIT",
+   "name_with_owner": "colbymchenry/codegraph"
+  },
+  "coze-dev/coze-loop": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "coze-dev/coze-loop"
+  },
+  "crowdsecurity/crowdsec": {
+   "spdx": "MIT",
+   "name_with_owner": "crowdsecurity/crowdsec"
+  },
+  "cthackers/adm-zip": {
+   "spdx": "MIT",
+   "name_with_owner": "cthackers/adm-zip"
+  },
+  "cucumber/godog": {
+   "spdx": "MIT",
+   "name_with_owner": "cucumber/godog"
+  },
+  "cytoscape/cytoscape.js": {
+   "spdx": "MIT",
+   "name_with_owner": "cytoscape/cytoscape.js"
+  },
+  "danielmiessler/Fabric": {
+   "spdx": "MIT",
+   "name_with_owner": "danielmiessler/Fabric"
+  },
+  "decaporg/decap-cms": {
+   "spdx": "MIT",
+   "name_with_owner": "decaporg/decap-cms"
+  },
+  "delta-io/delta-rs": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "delta-io/delta-rs"
+  },
+  "denoland/std": {
+   "spdx": "MIT",
+   "name_with_owner": "denoland/std"
+  },
+  "diffplug/spotless": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "diffplug/spotless"
+  },
+  "dlvhdr/gh-dash": {
+   "spdx": "MIT",
+   "name_with_owner": "dlvhdr/gh-dash"
+  },
+  "docsifyjs/docsify": {
+   "spdx": "MIT",
+   "name_with_owner": "docsifyjs/docsify"
+  },
+  "dotnet-state-machine/stateless": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "dotnet-state-machine/stateless"
+  },
+  "dotnet/aspnetcore": {
+   "spdx": "MIT",
+   "name_with_owner": "dotnet/aspnetcore"
+  },
+  "dotnet/command-line-api": {
+   "spdx": "MIT",
+   "name_with_owner": "dotnet/command-line-api"
+  },
+  "dotnet/efcore": {
+   "spdx": "MIT",
+   "name_with_owner": "dotnet/efcore"
+  },
+  "dotnet/machinelearning": {
+   "spdx": "MIT",
+   "name_with_owner": "dotnet/machinelearning"
+  },
+  "dotnet/orleans": {
+   "spdx": "MIT",
+   "name_with_owner": "dotnet/orleans"
+  },
+  "dotnet/runtime": {
+   "spdx": "MIT",
+   "name_with_owner": "dotnet/runtime"
+  },
+  "dotnet/sdk": {
+   "spdx": "MIT",
+   "name_with_owner": "dotnet/sdk"
+  },
+  "dotnet/winforms": {
+   "spdx": "MIT",
+   "name_with_owner": "dotnet/winforms"
+  },
+  "dotnet/yarp": {
+   "spdx": "MIT",
+   "name_with_owner": "dotnet/yarp"
+  },
+  "dotnetcore/BootstrapBlazor": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "dotnetcore/BootstrapBlazor"
+  },
+  "dragonflydb/dragonfly": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "dragonflydb/dragonfly"
+  },
+  "dsherret/ts-morph": {
+   "spdx": "MIT",
+   "name_with_owner": "dsherret/ts-morph"
+  },
+  "duckdb/duckdb": {
+   "spdx": "MIT",
+   "name_with_owner": "duckdb/duckdb"
+  },
+  "duckdb/ducklake": {
+   "spdx": "MIT",
+   "name_with_owner": "duckdb/ducklake"
+  },
+  "elsa-workflows/elsa-core": {
+   "spdx": "MIT",
+   "name_with_owner": "elsa-workflows/elsa-core"
+  },
+  "ember-cli/ember-cli": {
+   "spdx": "MIT",
+   "name_with_owner": "ember-cli/ember-cli"
+  },
+  "envoyproxy/gateway": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "envoyproxy/gateway"
+  },
+  "esphome/esphome": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "esphome/esphome"
+  },
+  "ether/etherpad": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "ether/etherpad"
+  },
+  "ethereum/go-ethereum": {
+   "spdx": "LGPL-3.0",
+   "name_with_owner": "ethereum/go-ethereum"
+  },
+  "evcc-io/evcc": {
+   "spdx": "MIT",
+   "name_with_owner": "evcc-io/evcc"
+  },
+  "excalidraw/excalidraw": {
+   "spdx": "MIT",
+   "name_with_owner": "excalidraw/excalidraw"
+  },
+  "eza-community/eza": {
+   "spdx": "EUPL-1.2",
+   "name_with_owner": "eza-community/eza"
+  },
+  "facebook/stylex": {
+   "spdx": "MIT",
+   "name_with_owner": "meta/stylex"
+  },
+  "fastify/fastify": {
+   "spdx": "MIT",
+   "name_with_owner": "fastify/fastify"
+  },
+  "firefox-devtools/profiler": {
+   "spdx": "MPL-2.0",
+   "name_with_owner": "firefox-devtools/profiler"
+  },
+  "floci-io/floci": {
+   "spdx": "MIT",
+   "name_with_owner": "floci-io/floci"
+  },
+  "fluent/fluent-bit": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "fluent/fluent-bit"
+  },
+  "fluentmigrator/fluentmigrator": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "fluentmigrator/fluentmigrator"
+  },
+  "fmtlib/fmt": {
+   "spdx": "MIT",
+   "name_with_owner": "fmtlib/fmt"
+  },
+  "formbricks/formbricks": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "formbricks/formbricks"
+  },
+  "fortio/fortio": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "fortio/fortio"
+  },
+  "gastownhall/beads": {
+   "spdx": "MIT",
+   "name_with_owner": "gastownhall/beads"
+  },
+  "getgauge/gauge": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "getgauge/gauge"
+  },
+  "getsentry/sentry-javascript": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "getsentry/sentry-javascript"
+  },
+  "gfx-rs/wgpu": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "gfx-rs/wgpu"
+  },
+  "ghostfolio/ghostfolio": {
+   "spdx": "AGPL-3.0",
+   "name_with_owner": "ghostfolio/ghostfolio"
+  },
+  "gitbutlerapp/gitbutler": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "gitbutlerapp/gitbutler"
+  },
+  "github/gh-aw": {
+   "spdx": "MIT",
+   "name_with_owner": "github/gh-aw"
+  },
+  "github/github-mcp-server": {
+   "spdx": "MIT",
+   "name_with_owner": "github/github-mcp-server"
+  },
+  "gitlab4j/gitlab4j-api": {
+   "spdx": "MIT",
+   "name_with_owner": "gitlab4j/gitlab4j-api"
+  },
+  "gleam-lang/gleam": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "gleam-lang/gleam"
+  },
+  "go-task/task": {
+   "spdx": "MIT",
+   "name_with_owner": "go-task/task"
+  },
+  "go-vikunja/vikunja": {
+   "spdx": "AGPL-3.0",
+   "name_with_owner": "go-vikunja/vikunja"
+  },
+  "gohugoio/hugo": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "gohugoio/hugo"
+  },
+  "golang-jwt/jwt": {
+   "spdx": "MIT",
+   "name_with_owner": "golang-jwt/jwt"
+  },
+  "google/go-github": {
+   "spdx": "BSD-3-Clause",
+   "name_with_owner": "google/go-github"
+  },
+  "google/starlark-go": {
+   "spdx": "BSD-3-Clause",
+   "name_with_owner": "google/starlark-go"
+  },
+  "google/zx": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "google/zx"
+  },
+  "gpbl/react-day-picker": {
+   "spdx": "MIT",
+   "name_with_owner": "gpbl/react-day-picker"
+  },
+  "graphql-go/graphql": {
+   "spdx": "MIT",
+   "name_with_owner": "graphql-go/graphql"
+  },
+  "grommet/grommet": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "grommet/grommet"
+  },
+  "grpc/grpc-java": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "grpc/grpc-java"
+  },
+  "gruntwork-io/cloud-nuke": {
+   "spdx": "MIT",
+   "name_with_owner": "gruntwork-io/cloud-nuke"
+  },
+  "gsd-build/get-shit-done": {
+   "spdx": "MIT",
+   "name_with_owner": "gsd-build/get-shit-done"
+  },
+  "gsd-build/gsd-2": {
+   "spdx": "MIT",
+   "name_with_owner": "gsd-build/gsd-2"
+  },
+  "gui-cs/Terminal.Gui": {
+   "spdx": "MIT",
+   "name_with_owner": "tui-cs/Terminal.Gui"
+  },
+  "gwtproject/gwt": {
+   "spdx": null,
+   "name_with_owner": "gwtproject/gwt"
+  },
+  "h4ckf0r0day/obscura": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "h4ckf0r0day/obscura"
+  },
+  "hapijs/joi": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "hapijs/joi"
+  },
+  "haraka/Haraka": {
+   "spdx": "MIT",
+   "name_with_owner": "haraka/Haraka"
+  },
+  "harfbuzz/harfbuzz": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "harfbuzz/harfbuzz"
+  },
+  "helidon-io/helidon": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "helidon-io/helidon"
+  },
+  "highcharts/highcharts": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "highcharts/highcharts"
+  },
+  "honojs/hono": {
+   "spdx": "MIT",
+   "name_with_owner": "honojs/hono"
+  },
+  "hotwired/turbo": {
+   "spdx": "MIT",
+   "name_with_owner": "hotwired/turbo"
+  },
+  "hyperledger/besu": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "besu-eth/besu"
+  },
+  "iOfficeAI/AionUi": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "iOfficeAI/AionUi"
+  },
+  "iflytek/skillhub": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "iflytek/skillhub"
+  },
+  "immunant/c2rust": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "immunant/c2rust"
+  },
+  "include-what-you-use/include-what-you-use": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "include-what-you-use/include-what-you-use"
+  },
+  "influxdata/telegraf": {
+   "spdx": "MIT",
+   "name_with_owner": "influxdata/telegraf"
+  },
+  "istio/istio": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "istio/istio"
+  },
+  "jacoco/jacoco": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "jacoco/jacoco"
+  },
+  "javaparser/javaparser": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "javaparser/javaparser"
+  },
+  "jesseduffield/lazygit": {
+   "spdx": "MIT",
+   "name_with_owner": "jesseduffield/lazygit"
+  },
+  "jestjs/jest": {
+   "spdx": "MIT",
+   "name_with_owner": "jestjs/jest"
+  },
+  "jetty/jetty.project": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "jetty/jetty.project"
+  },
+  "jhlywa/chess.js": {
+   "spdx": "BSD-2-Clause",
+   "name_with_owner": "jhlywa/chess.js"
+  },
+  "jj-vcs/jj": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "jj-vcs/jj"
+  },
+  "jsonata-js/jsonata": {
+   "spdx": "MIT",
+   "name_with_owner": "jsonata-js/jsonata"
+  },
+  "jtroo/kanata": {
+   "spdx": "LGPL-3.0",
+   "name_with_owner": "jtroo/kanata"
+  },
+  "junit-team/junit-framework": {
+   "spdx": "EPL-2.0",
+   "name_with_owner": "junit-team/junit-framework"
+  },
+  "karmada-io/karmada": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "karmada-io/karmada"
+  },
+  "katspaugh/wavesurfer.js": {
+   "spdx": "BSD-3-Clause",
+   "name_with_owner": "katspaugh/wavesurfer.js"
+  },
+  "kedacore/keda": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "kedacore/keda"
+  },
+  "kepano/defuddle": {
+   "spdx": "MIT",
+   "name_with_owner": "kepano/defuddle"
+  },
+  "kestra-io/kestra": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "kestra-io/kestra"
+  },
+  "keycloak/keycloak": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "keycloak/keycloak"
+  },
+  "knative/eventing": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "knative/eventing"
+  },
+  "kokkos/kokkos": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "kokkos/kokkos"
+  },
+  "kube-vip/kube-vip": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "kube-vip/kube-vip"
+  },
+  "kubernetes-sigs/controller-runtime": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "kubernetes-sigs/controller-runtime"
+  },
+  "kubernetes-sigs/kubebuilder": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "kubernetes-sigs/kubebuilder"
+  },
+  "kubernetes-sigs/kueue": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "kubernetes-sigs/kueue"
+  },
+  "kubernetes/kops": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "kubernetes/kops"
+  },
+  "kubernetes/kube-state-metrics": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "kubernetes/kube-state-metrics"
+  },
+  "kumahq/kuma": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "kumahq/kuma"
+  },
+  "kvcache-ai/Mooncake": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "kvcache-ai/Mooncake"
+  },
+  "kyverno/kyverno": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "kyverno/kyverno"
+  },
+  "lakehq/sail": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "lakehq/sail"
+  },
+  "lalrpop/lalrpop": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "lalrpop/lalrpop"
+  },
+  "lance-format/lance": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "lance-format/lance"
+  },
+  "langchain4j/langchain4j": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "langchain4j/langchain4j"
+  },
+  "less/less.js": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "less/less.js"
+  },
+  "libarchive/libarchive": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "libarchive/libarchive"
+  },
+  "libp2p/go-libp2p": {
+   "spdx": "MIT",
+   "name_with_owner": "libp2p/go-libp2p"
+  },
+  "lightdash/lightdash": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "lightdash/lightdash"
+  },
+  "lima-vm/lima": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "lima-vm/lima"
+  },
+  "line/armeria": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "line/armeria"
+  },
+  "linebender/vello": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "linebender/vello"
+  },
+  "luau-lang/luau": {
+   "spdx": "MIT",
+   "name_with_owner": "luau-lang/luau"
+  },
+  "magefile/mage": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "magefile/mage"
+  },
+  "magefree/mage": {
+   "spdx": "MIT",
+   "name_with_owner": "magefree/mage"
+  },
+  "maplibre/maplibre-gl-js": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "maplibre/maplibre-gl-js"
+  },
+  "mapstruct/mapstruct": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "mapstruct/mapstruct"
+  },
+  "marko-js/marko": {
+   "spdx": "MIT",
+   "name_with_owner": "marko-js/marko"
+  },
+  "matrix-org/matrix-rust-sdk": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "matrix-org/matrix-rust-sdk"
+  },
+  "mc1arke/sonarqube-community-branch-plugin": {
+   "spdx": "LGPL-3.0",
+   "name_with_owner": "mc1arke/sonarqube-community-branch-plugin"
+  },
+  "mgechev/revive": {
+   "spdx": "MIT",
+   "name_with_owner": "revive-lint/revive"
+  },
+  "micrometer-metrics/micrometer": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "micrometer-metrics/micrometer"
+  },
+  "micropython/micropython": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "micropython/micropython"
+  },
+  "microsoft/DirectXShaderCompiler": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "microsoft/DirectXShaderCompiler"
+  },
+  "microsoft/playwright-java": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "microsoft/playwright-java"
+  },
+  "mikro-orm/mikro-orm": {
+   "spdx": "MIT",
+   "name_with_owner": "mikro-orm/mikro-orm"
+  },
+  "ml-explore/mlx": {
+   "spdx": "MIT",
+   "name_with_owner": "ml-explore/mlx"
+  },
+  "mnfst/manifest": {
+   "spdx": "MIT",
+   "name_with_owner": "mnfst/llm-gateway"
+  },
+  "moby/moby": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "moby/moby"
+  },
+  "modelcontextprotocol/go-sdk": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "modelcontextprotocol/go-sdk"
+  },
+  "modelcontextprotocol/registry": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "modelcontextprotocol/registry"
+  },
+  "modelcontextprotocol/rust-sdk": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "modelcontextprotocol/rust-sdk"
+  },
+  "moment/luxon": {
+   "spdx": "MIT",
+   "name_with_owner": "moment/luxon"
+  },
+  "monero-project/monero": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "monero-project/monero"
+  },
+  "monkeytypegame/monkeytype": {
+   "spdx": "GPL-3.0",
+   "name_with_owner": "monkeytypegame/monkeytype"
+  },
+  "moonD4rk/HackBrowserData": {
+   "spdx": "MIT",
+   "name_with_owner": "moonD4rk/HackBrowserData"
+  },
+  "mozilla/pdf.js": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "mozilla/pdf.js"
+  },
+  "mui/base-ui": {
+   "spdx": "MIT",
+   "name_with_owner": "mui/base-ui"
+  },
+  "mui/mui-x": {
+   "spdx": null,
+   "name_with_owner": "mui/mui-x"
+  },
+  "musescore/MuseScore": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "musescore/MuseScore"
+  },
+  "napi-rs/napi-rs": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "napi-rs/napi-rs"
+  },
+  "nats-io/nats-server": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "nats-io/nats-server"
+  },
+  "naudio/NAudio": {
+   "spdx": "MIT",
+   "name_with_owner": "naudio/NAudio"
+  },
+  "nearai/ironclaw": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "nearai/ironclaw"
+  },
+  "netbirdio/netbird": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "netbirdio/netbird"
+  },
+  "nextlevelbuilder/goclaw": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "nextlevelbuilder/goclaw"
+  },
+  "nginx/kubernetes-ingress": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "nginx/kubernetes-ingress"
+  },
+  "ninja-build/ninja": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "ninja-build/ninja"
+  },
+  "nissl-lab/npoi": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "nissl-lab/npoi"
+  },
+  "nock/nock": {
+   "spdx": "MIT",
+   "name_with_owner": "nock/nock"
+  },
+  "nodejs/node-addon-api": {
+   "spdx": "MIT",
+   "name_with_owner": "nodejs/node-addon-api"
+  },
+  "nodejs/undici": {
+   "spdx": "MIT",
+   "name_with_owner": "nodejs/undici"
+  },
+  "noir-lang/noir": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "noir-lang/noir"
+  },
+  "notify-rs/notify": {
+   "spdx": null,
+   "name_with_owner": "notify-rs/notify"
+  },
+  "notionnext-org/NotionNext": {
+   "spdx": "MIT",
+   "name_with_owner": "notionnext-org/NotionNext"
+  },
+  "nunit/nunit": {
+   "spdx": "MIT",
+   "name_with_owner": "nunit/nunit"
+  },
+  "oauth2-proxy/oauth2-proxy": {
+   "spdx": "MIT",
+   "name_with_owner": "oauth2-proxy/oauth2-proxy"
+  },
+  "ollama/ollama": {
+   "spdx": "MIT",
+   "name_with_owner": "ollama/ollama"
+  },
+  "open-gsd/gsd-core": {
+   "spdx": "MIT",
+   "name_with_owner": "open-gsd/gsd-core"
+  },
+  "open-source-parsers/jsoncpp": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "open-source-parsers/jsoncpp"
+  },
+  "open-telemetry/opentelemetry-collector-contrib": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "open-telemetry/opentelemetry-collector-contrib"
+  },
+  "open-telemetry/opentelemetry-ebpf-profiler": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "open-telemetry/opentelemetry-ebpf-profiler"
+  },
+  "open-telemetry/opentelemetry-go": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "open-telemetry/opentelemetry-go"
+  },
+  "open-telemetry/opentelemetry-go-contrib": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "open-telemetry/opentelemetry-go-contrib"
+  },
+  "open-telemetry/opentelemetry-java-instrumentation": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "open-telemetry/opentelemetry-java-instrumentation"
+  },
+  "open-telemetry/opentelemetry-operator": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "open-telemetry/opentelemetry-operator"
+  },
+  "openai/codex-plugin-cc": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "openai/codex-plugin-cc"
+  },
+  "openai/openai-agents-js": {
+   "spdx": "MIT",
+   "name_with_owner": "openai/openai-agents-js"
+  },
+  "openai/openai-dotnet": {
+   "spdx": "MIT",
+   "name_with_owner": "openai/openai-dotnet"
+  },
+  "openapi-ts/openapi-typescript": {
+   "spdx": "MIT",
+   "name_with_owner": "openapi-ts/openapi-typescript"
+  },
+  "opendataloader-project/opendataloader-pdf": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "opendataloader-project/opendataloader-pdf"
+  },
+  "openfga/openfga": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "openfga/openfga"
+  },
+  "openhab/openhab-addons": {
+   "spdx": "EPL-2.0",
+   "name_with_owner": "openhab/openhab-addons"
+  },
+  "openrewrite/rewrite": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "openrewrite/rewrite"
+  },
+  "opentripplanner/OpenTripPlanner": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "opentripplanner/OpenTripPlanner"
+  },
+  "organicmaps/organicmaps": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "organicmaps/organicmaps"
+  },
+  "orval-labs/orval": {
+   "spdx": "MIT",
+   "name_with_owner": "orval-labs/orval"
+  },
+  "ossf/scorecard": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "ossf/scorecard"
+  },
+  "owid/owid-grapher": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "owid/owid-grapher"
+  },
+  "oxc-project/oxc": {
+   "spdx": "MIT",
+   "name_with_owner": "oxc-project/oxc"
+  },
+  "pelletier/go-toml": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "pelletier/go-toml"
+  },
+  "php/php-src": {
+   "spdx": "BSD-3-Clause",
+   "name_with_owner": "php/php-src"
+  },
+  "playcanvas/engine": {
+   "spdx": "MIT",
+   "name_with_owner": "playcanvas/engine"
+  },
+  "pnpm/pnpm": {
+   "spdx": "MIT",
+   "name_with_owner": "pnpm/pnpm"
+  },
+  "pocoproject/poco": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "pocoproject/poco"
+  },
+  "pola-rs/polars": {
+   "spdx": "MIT",
+   "name_with_owner": "pola-rs/polars"
+  },
+  "portfolio-performance/portfolio": {
+   "spdx": "EPL-1.0",
+   "name_with_owner": "portfolio-performance/portfolio"
+  },
+  "ppy/osu": {
+   "spdx": "MIT",
+   "name_with_owner": "ppy/osu"
+  },
+  "preactjs/preact": {
+   "spdx": "MIT",
+   "name_with_owner": "preactjs/preact"
+  },
+  "prefix-dev/pixi": {
+   "spdx": "BSD-3-Clause",
+   "name_with_owner": "prefix-dev/pixi"
+  },
+  "prettier/prettier": {
+   "spdx": "MIT",
+   "name_with_owner": "prettier/prettier"
+  },
+  "primefaces/primefaces": {
+   "spdx": "MIT",
+   "name_with_owner": "primefaces/primefaces"
+  },
+  "proj4js/proj4js": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "proj4js/proj4js"
+  },
+  "prometheus/alertmanager": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "prometheus/alertmanager"
+  },
+  "puppeteer/puppeteer": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "puppeteer/puppeteer"
+  },
+  "pybind/pybind11": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "pybind/pybind11"
+  },
+  "quarkusio/quarkus": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "quarkusio/quarkus"
+  },
+  "quartznet/quartznet": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "quartznet/quartznet"
+  },
+  "quickjs-ng/quickjs": {
+   "spdx": "MIT",
+   "name_with_owner": "quickjs-ng/quickjs"
+  },
+  "react-hook-form/react-hook-form": {
+   "spdx": "MIT",
+   "name_with_owner": "react-hook-form/react-hook-form"
+  },
+  "reactjs/react-rails": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "reactjs/react-rails"
+  },
+  "recharts/recharts": {
+   "spdx": "MIT",
+   "name_with_owner": "recharts/recharts"
+  },
+  "redis-rs/redis-rs": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "redis-rs/redis-rs"
+  },
+  "redis/redis": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "redis/redis"
+  },
+  "redpanda-data/connect": {
+   "spdx": null,
+   "name_with_owner": "redpanda-data/connect"
+  },
+  "remotion-dev/remotion": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "remotion-dev/remotion"
+  },
+  "reown-com/appkit": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "reown-com/appkit"
+  },
+  "riok/mapperly": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "riok/mapperly"
+  },
+  "rizinorg/rizin": {
+   "spdx": "LGPL-3.0",
+   "name_with_owner": "rizinorg/rizin"
+  },
+  "rollup/rollup": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "rollup/rollup"
+  },
+  "rook/rook": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "rook/rook"
+  },
+  "root-project/root": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "root-project/root"
+  },
+  "rqlite/rqlite": {
+   "spdx": "MIT",
+   "name_with_owner": "rqlite/rqlite"
+  },
+  "rsyslog/rsyslog": {
+   "spdx": "LGPL-3.0",
+   "name_with_owner": "rsyslog/rsyslog"
+  },
+  "ruffle-rs/ruffle": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "ruffle-rs/ruffle"
+  },
+  "rui314/mold": {
+   "spdx": "MIT",
+   "name_with_owner": "rui314/mold"
+  },
+  "rust-lang/mdBook": {
+   "spdx": "MPL-2.0",
+   "name_with_owner": "rust-lang/mdBook"
+  },
+  "rust-lang/rust-analyzer": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "rust-lang/rust-analyzer"
+  },
+  "rust-lang/rust-bindgen": {
+   "spdx": "BSD-3-Clause",
+   "name_with_owner": "rust-lang/rust-bindgen"
+  },
+  "rust-lang/rustfmt": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "rust-lang/rustfmt"
+  },
+  "saghul/txiki.js": {
+   "spdx": "MIT",
+   "name_with_owner": "saghul/txiki.js"
+  },
+  "samtools/samtools": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "samtools/samtools"
+  },
+  "servo/servo": {
+   "spdx": "MPL-2.0",
+   "name_with_owner": "servo/servo"
+  },
+  "shader-slang/slang": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "shader-slang/slang"
+  },
+  "shaka-project/shaka-player": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "shaka-project/shaka-player"
+  },
+  "shimat/opencvsharp": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "shimat/opencvsharp"
+  },
+  "siimon/prom-client": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "prometheus/client_js"
+  },
+  "simple-icons/simple-icons": {
+   "spdx": "CC0-1.0",
+   "name_with_owner": "simple-icons/simple-icons"
+  },
+  "sinelaw/fresh": {
+   "spdx": "GPL-3.0",
+   "name_with_owner": "sinelaw/fresh"
+  },
+  "skim-rs/skim": {
+   "spdx": "MIT",
+   "name_with_owner": "skim-rs/skim"
+  },
+  "slack-go/slack": {
+   "spdx": "BSD-2-Clause",
+   "name_with_owner": "slack-go/slack"
+  },
+  "slatedb/slatedb": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "slatedb/slatedb"
+  },
+  "smithy-lang/smithy": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "smithy-lang/smithy"
+  },
+  "sofastack/sofa-jraft": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "sofastack/sofa-jraft"
+  },
+  "spectreconsole/spectre.console": {
+   "spdx": "MIT",
+   "name_with_owner": "spectreconsole/spectre.console"
+  },
+  "spring-projects/spring-boot": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "spring-projects/spring-boot"
+  },
+  "spring-projects/spring-data-elasticsearch": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "spring-projects/spring-data-elasticsearch"
+  },
+  "spring-projects/spring-framework": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "spring-projects/spring-framework"
+  },
+  "spring-projects/spring-security": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "spring-projects/spring-security"
+  },
+  "springdoc/springdoc-openapi": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "springdoc/springdoc-openapi"
+  },
+  "sqlc-dev/sqlc": {
+   "spdx": "MIT",
+   "name_with_owner": "sqlc-dev/sqlc"
+  },
+  "stdlib-js/stdlib": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "stdlib-js/stdlib"
+  },
+  "stephenberry/glaze": {
+   "spdx": "MIT",
+   "name_with_owner": "stephenberry/glaze"
+  },
+  "stleary/JSON-java": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "stleary/JSON-java"
+  },
+  "strimzi/strimzi-kafka-operator": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "strimzi/strimzi-kafka-operator"
+  },
+  "stripe/stripe-cli": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "stripe/stripe-cli"
+  },
+  "submariner-io/submariner": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "submariner-io/submariner"
+  },
+  "surveyjs/survey-library": {
+   "spdx": "MIT",
+   "name_with_owner": "surveyjs/survey-library"
+  },
+  "sustainable-computing-io/kepler": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "sustainable-computing-io/kepler"
+  },
+  "sveltejs/svelte": {
+   "spdx": "MIT",
+   "name_with_owner": "sveltejs/svelte"
+  },
+  "taiga-family/taiga-ui": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "taiga-family/taiga-ui"
+  },
+  "tailwindlabs/tailwindcss": {
+   "spdx": "MIT",
+   "name_with_owner": "tailwindlabs/tailwindcss"
+  },
+  "terraform-docs/terraform-docs": {
+   "spdx": "MIT",
+   "name_with_owner": "terraform-docs/terraform-docs"
+  },
+  "thlorenz/doctoc": {
+   "spdx": "MIT",
+   "name_with_owner": "thlorenz/doctoc"
+  },
+  "tikv/pd": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "tikv/pd"
+  },
+  "timescale/timescaledb": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "timescale/timescaledb"
+  },
+  "tmc/langchaingo": {
+   "spdx": "MIT",
+   "name_with_owner": "tmc/langchaingo"
+  },
+  "tui-cs/Terminal.Gui": {
+   "spdx": "MIT",
+   "name_with_owner": "tui-cs/Terminal.Gui"
+  },
+  "tursodatabase/turso": {
+   "spdx": "MIT",
+   "name_with_owner": "tursodatabase/turso"
+  },
+  "twentyhq/twenty": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "twentyhq/twenty"
+  },
+  "twpayne/chezmoi": {
+   "spdx": "MIT",
+   "name_with_owner": "twpayne/chezmoi"
+  },
+  "unocss/unocss": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "unocss/unocss"
+  },
+  "unoplatform/uno": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "unoplatform/uno"
+  },
+  "unplugin/unplugin-vue-components": {
+   "spdx": "MIT",
+   "name_with_owner": "unplugin/unplugin-vue-components"
+  },
+  "usebruno/bruno": {
+   "spdx": "MIT",
+   "name_with_owner": "usebruno/bruno"
+  },
+  "uutils/coreutils": {
+   "spdx": "MIT",
+   "name_with_owner": "uutils/coreutils"
+  },
+  "valkey-io/valkey": {
+   "spdx": "BSD-3-Clause",
+   "name_with_owner": "valkey-io/valkey"
+  },
+  "varnishcache/varnish-cache": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "varnishcache/varnish-cache"
+  },
+  "vavr-io/vavr": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "vavr-io/vavr"
+  },
+  "velero-io/velero": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "velero-io/velero"
+  },
+  "vercel/ai": {
+   "spdx": "NOASSERTION",
+   "name_with_owner": "vercel/ai"
+  },
+  "vercel/turborepo": {
+   "spdx": "MIT",
+   "name_with_owner": "vercel/turborepo"
+  },
+  "versatica/mediasoup": {
+   "spdx": "ISC",
+   "name_with_owner": "versatica/mediasoup"
+  },
+  "vmware-tanzu/velero": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "velero-io/velero"
+  },
+  "vueuse/vueuse": {
+   "spdx": "MIT",
+   "name_with_owner": "vueuse/vueuse"
+  },
+  "wasm-bindgen/wasm-bindgen": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "wasm-bindgen/wasm-bindgen"
+  },
+  "web-infra-dev/rspack": {
+   "spdx": "MIT",
+   "name_with_owner": "web-infra-dev/rspack"
+  },
+  "webdriverio/webdriverio": {
+   "spdx": "MIT",
+   "name_with_owner": "webdriverio/webdriverio"
+  },
+  "wiremock/wiremock": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "wiremock/wiremock"
+  },
+  "withastro/starlight": {
+   "spdx": "MIT",
+   "name_with_owner": "withastro/starlight"
+  },
+  "wxt-dev/wxt": {
+   "spdx": "MIT",
+   "name_with_owner": "wxt-dev/wxt"
+  },
+  "xroche/httrack": {
+   "spdx": "GPL-3.0",
+   "name_with_owner": "xroche/httrack"
+  },
+  "yuin/gopher-lua": {
+   "spdx": "MIT",
+   "name_with_owner": "yuin/gopher-lua"
+  },
+  "yvgude/lean-ctx": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "yvgude/lean-ctx"
+  },
+  "zeroclaw-labs/zeroclaw": {
+   "spdx": "Apache-2.0",
+   "name_with_owner": "zeroclaw-labs/zeroclaw"
+  },
+  "zitadel/zitadel": {
+   "spdx": "AGPL-3.0",
+   "name_with_owner": "zitadel/zitadel"
+  },
+  "zmkfirmware/zmk": {
+   "spdx": "MIT",
+   "name_with_owner": "zmkfirmware/zmk"
+  }
+ }
+}
