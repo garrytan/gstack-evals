@@ -4,8 +4,10 @@
 // each repository's mined fixes, the constructed units and every fix's outcome; it holds real repository names and
 // shas, so it stays on that host and is never committed. Every command prints counts only. The lane's cli.ts merges
 // every part's table.
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { spawn, type ChildProcess } from "node:child_process";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { dirname, join, relative, resolve } from "node:path";
+import { keepEvidence } from "../../eng-build/evidence.ts";
 import { removeLabelled } from "../../eng-build/screen.ts";
 import { docker } from "../../real-outcome/task/docker.ts";
 import { fail } from "../errors.ts";
@@ -164,8 +166,8 @@ const constructCmd: Command = {
 };
 
 const screenCmd: Command = {
-  summary: "screen and build every constructed unit in the frozen grading sandbox, with the body, leak and one-commit checks",
-  usage: "--run <dir> --work <dir>",
+  summary: "screen and build every constructed unit in the frozen grading sandbox, with the body, leak and one-commit checks; --minutes drops a candidate whose screen runs past that wall time as screen:timeout",
+  usage: "--run <dir> --work <dir> [--minutes <wall minutes a candidate>]",
   bools: [],
   async run({ flags }, io) {
     const run = need(flags, "--run");
@@ -174,14 +176,39 @@ const screenCmd: Command = {
     requireSandbox();
     const s = store(run);
     const steps = new Map<string, number>();
+    const minutes = flags.has("--minutes") ? Number(flags.get("--minutes")) : null;
+    if (minutes !== null && !(minutes > 0)) fail("E_USAGE", "--minutes needs a positive number of minutes");
+    if (minutes !== null) removeLabelled();
     for (const r of allMined(run))
       for (const f of r.fixes) {
         if (!existsSync(s.constructed(f.id)) || existsSync(s.outcome(f.id))) continue;
+        const mark = join(run, "screening", f.id);
         let o: Outcome;
-        try {
-          o = qualify({ mirror: r.mirror, fix: f, unit: readJson<Constructed>(s.constructed(f.id)), out: s.unit(f.id), work, labels: s.labels });
-        } finally {
-          removeLabelled();
+        if (minutes !== null && existsSync(mark) && Date.now() - statSync(mark).mtimeMs >= minutes * 60000) {
+          o = { id: f.id, repo: f.repo, eco: f.eco, stars: starStratum(f.stars), strict: f.earliestPublic.slice(0, 10) >= FROZEN.window.strictFrom, step: "screen", reason: "timeout", regionLines: readJson<Constructed>(s.constructed(f.id)).regionLines, planted: 0, crash: 0, functional: 0 };
+          keepEvidence(f.id, "drop.json", { step: "screen", reason: "timeout", detail: { minutes } });
+          rmSync(mark, { force: true });
+        } else {
+          let killer: ChildProcess | null = null;
+          if (minutes !== null) {
+            mkdirSync(dirname(mark), { recursive: true });
+            writeFileSync(mark, "");
+            killer = spawn("sh", ["-c", "sleep " + Math.ceil(minutes * 60) + " && kill -TERM " + process.pid], { detached: true, stdio: "ignore" });
+            killer.unref();
+          }
+          try {
+            o = qualify({ mirror: r.mirror, fix: f, unit: readJson<Constructed>(s.constructed(f.id)), out: s.unit(f.id), work, labels: s.labels });
+          } finally {
+            if (killer?.pid) {
+              try {
+                process.kill(-killer.pid, "SIGKILL");
+              } catch {
+                // the timer already ended
+              }
+            }
+            rmSync(mark, { force: true });
+            removeLabelled();
+          }
         }
         writeJson(s.outcome(f.id), o);
         const images = docker(["images", "-q", "--filter", "label=gstack-evals.eb.unit=" + f.id]).stdout.split("\n").filter(Boolean);
