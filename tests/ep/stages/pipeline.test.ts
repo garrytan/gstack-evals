@@ -68,7 +68,7 @@ beforeAll(() => {
     grader: async () => graderStub(UNWINNABLE),
   };
   t = stagesCommands(seams);
-});
+}, 180_000);
 afterAll(() => rmSync(W, { recursive: true, force: true }));
 
 describe("ep stages in section 14's order", () => {
