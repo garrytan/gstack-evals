@@ -196,7 +196,7 @@ export function exposure(arm: H2hArm, entry: Entry, evs: Ev[], o: { markers?: Ma
   const pack = PACK_OF[arm];
   if (!pack) return { loaded: false, procedure: false, markers: [], foreign_reads: [] };
   const pm = m.packs[pack]!;
-  const loaded = loadedMarkers(pm, r, pack === "superpowers" ? pm.strings.session! : pack === "ponystack" ? pm.strings.session! : null);
+  const loaded = loadedMarkers(pm, r, pack === "superpowers" ? pm.strings.banner! : pack === "ponystack" ? pm.strings.banner! : null);
   if ((arm === "gstack" || arm === "gstack-oneline") && entry === "bug") return { loaded: true, procedure: true, markers: ["installed-pack", ...loaded], foreign_reads: [] };
   const proc = procedureMarkers(arm, entry, m, r, o.files ?? []);
   return { loaded: loaded.length > 0, procedure: proc.length > 0, markers: [...loaded, ...proc], foreign_reads: [] };

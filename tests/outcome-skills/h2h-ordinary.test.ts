@@ -106,6 +106,7 @@ describe("h2h licence second read", () => {
     const start = performance.now();
     expect(many.test("word ".repeat(200) + "nope")).toBe(false);
     expect(many.test("word ".repeat(200) + "end")).toBe(true);
+    // gstack-timing-ok: the bound is the contract; it guards the licence classifier against catastrophic backtracking
     expect(performance.now() - start).toBeLessThan(2000);
   });
 

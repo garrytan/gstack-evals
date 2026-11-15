@@ -81,6 +81,7 @@ test("the compose overlay mounts the pinned Claude Code and the runtime volume e
   expect(b1.shm_size).toBe(BROWSER.shm_size);
   expect(b1.volumes[2]).toEqual({ type: "bind", source: "/w/chromium", target: BROWSER.wrapper_container_path, read_only: true });
   expect(b1.environment).toEqual({ PATH: rt.path, ...BROWSER.env });
+  // gstack-timing-ok: compares two configured limits, no elapsed time
   expect(h2hBudget(P.limits.wall_sec, 8).agent_s).toBeGreaterThan(P.limits.wall_sec);
 });
 

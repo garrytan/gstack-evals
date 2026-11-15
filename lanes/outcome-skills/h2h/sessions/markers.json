@@ -98,7 +98,7 @@
    ],
    "commands": [],
    "strings": {
-    "session": "You have superpowers.",
+    "banner": "You have superpowers.",
     "announce": "announce \"Using [skill] to [purpose]\""
    }
   },
@@ -419,7 +419,7 @@
    ],
    "commands": [],
    "strings": {
-    "session": "PONYSTACK ACTIVE",
+    "banner": "PONYSTACK ACTIVE",
     "phase": "PONYSTACK PHASE: "
    }
   }
