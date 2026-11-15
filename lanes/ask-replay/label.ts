@@ -121,7 +121,13 @@ export function labelReadout(items: readonly AskItem[], records: readonly Sample
   });
   const auditComplete = complete("audit");
   const contingencyComplete = complete("contingency");
-  const withheld = !auditComplete ? "the label audit is incomplete: a labeller has scheduled audit labels with no sealed record" : kappa?.stands ? null : contingencyComplete ? null : "the label audit did not stand (a kappa below " + FROZEN.label_audit.kappa_min + ") and the contingency is not complete";
+  const linkPartial = Object.keys(sealed).some((k) => k.startsWith("link.")) && !complete("link");
+  const withheld = linkPartial ? "the link run (I5) is incomplete: scheduled link labels have no sealed record, so the chains would be partial"
+    : !auditComplete ? "the label audit is incomplete: a labeller has scheduled audit labels with no sealed record"
+    : audited.length < 40 ? "fewer than 40 audit items carry both labellers' labels, so the audit cannot stand (the prereg's floor of 40 labelled outputs)"
+    : kappa?.stands ? null
+    : !contingencyComplete ? "the label audit did not stand (a kappa below " + FROZEN.label_audit.kappa_min + ") and the contingency is not complete"
+    : relabelled ? null : "the contingency is complete but no item carries both contingency labels, so no agreement labels replace the rejected audit labels";
   const views = !kappa ? [] : relabelled ? [{ name: "the audit's labels", items: [...items] }, { name: "Opus labels", items: all.map(([id, l]) => relabel(id, l.opus.class)) }, { name: "Astra labels", items: all.map(([id, l]) => relabel(id, l.astra.class)) }] : [{ name: "the labellers' agreement on the audited items", items: agreed(audited) }];
 
   const linkTo = (item: AskItem, l?: LabelReply): number | null => {

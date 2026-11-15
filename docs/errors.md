@@ -2248,7 +2248,7 @@ Exit 2. Side effects: Partial: sealed replies and their spend are kept; the leas
 
 ### E_ASK_INCOMPLETE
 
-Ask replay eval: the replies lack Opus or Sol samples their shards scheduled, or the label audit has not stood (no --labels, an audit label sample with no sealed record, or kappa below 0.6 without a complete contingency), so the run is incomplete. score prints the absent counts or the reason and no decision rows. particle-1's absent samples only mark its readout untested.
+Ask replay eval: the replies lack Opus or Sol samples their shards scheduled, the main run's k is not the pilot rule's k (no --pilot-items and --pilot-replies, or replies at another k), or the label audit has not stood (no --labels, an audit label sample with no sealed record, fewer than 40 audit items with both labels, kappa below 0.6 without a complete contingency that pairs labels, or a link run with scheduled labels unsealed), so the run is incomplete. score prints the absent counts or the reason and no decision rows; pilot prints the absent counts and no admission decision or k. particle-1's absent samples only mark its readout untested.
 
 Fix: Resume a shard that stopped on time or on a local fault, or finish the label audit and, when it fails, the contingency. A run a spend cap stopped stays incomplete and is never retried to change a verdict.
 

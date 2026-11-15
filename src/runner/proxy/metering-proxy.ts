@@ -132,7 +132,7 @@ export const NO_USAGE_5XX_REASON = "a 5xx without usage settles at $0 under DR_A
 /** How long finalize waits for in-flight calls by default, and the most the management socket lets a caller ask for. */
 export const FINALIZE_TIMEOUT_MS = 30_000;
 export const FINALIZE_MAX_MS = 120_000;
-/** One provider call may run this long; long reasoning calls exceed Bun's own 300-second fetch timeout, which is off. */
+/** One provider call may run this long, unless its client gives up first, which aborts it; long reasoning calls exceed Bun's own 300-second fetch timeout, which is off. */
 export const UPSTREAM_DEADLINE_MS = 900_000;
 /** How long a free input-token count may take before the call reserves at its byte bound instead. */
 export const COUNT_TIMEOUT_MS = 10_000;
@@ -898,7 +898,7 @@ export class MeteringProxy {
       let res: Response;
       ctx.sentAt = Date.now();
       try {
-        res = await send(target, { method: "POST", headers, body: outBody, timeout: false, signal: AbortSignal.timeout(UPSTREAM_DEADLINE_MS) } as RequestInit);
+        res = await send(target, { method: "POST", headers, body: outBody, timeout: false, signal: AbortSignal.any([req.signal, AbortSignal.timeout(UPSTREAM_DEADLINE_MS)]) } as RequestInit);
       } catch (e) {
         const reason = `the send failed after it may have reached the provider, so it keeps its charge and is not resent: ${scrubbedCause(e, ctx.secrets)}`;
         meter.upstream.failed++;
