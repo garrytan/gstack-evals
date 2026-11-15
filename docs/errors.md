@@ -313,6 +313,28 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_H2H_CAPTURE](#e_h2h_capture) | 2 | U20 |
 | [E_H2H_EXPOSURE](#e_h2h_exposure) | 2 | U20 |
 | [E_H2H_DRYRUN_FAIL](#e_h2h_dryrun_fail) | 2 | U20 |
+| [E_H2H_O_SOURCE](#e_h2h_o_source) | 2 | U20 |
+| [E_H2H_O_LICENCE](#e_h2h_o_licence) | 2 | U20 |
+| [E_H2H_O_EXCLUDED](#e_h2h_o_excluded) | 2 | U20 |
+| [E_H2H_O_NOT_PERMISSIVE](#e_h2h_o_not_permissive) | 2 | U20 |
+| [E_H2H_O_TOLD](#e_h2h_o_told) | 2 | U20 |
+| [E_H2H_DRAW_INPUT](#e_h2h_draw_input) | 2 | U20 |
+| [E_H2H_DRAW_PENDING](#e_h2h_draw_pending) | 2 | U20 |
+| [E_H2H_DRAW_SHORT](#e_h2h_draw_short) | 2 | U20 |
+| [E_H2H_DRAW_ORACLE](#e_h2h_draw_oracle) | 2 | U20 |
+| [E_H2H_DRAW_CONTAINMENT](#e_h2h_draw_containment) | 2 | U20 |
+| [E_H2H_SCORE_INPUT](#e_h2h_score_input) | 2 | U20 |
+| [E_H2H_SCORE_CAPTURE](#e_h2h_score_capture) | 2 | U20 |
+| [E_H2H_SCORE_ARM_TEST_DROPPED](#e_h2h_score_arm_test_dropped) | warning | U20 |
+| [E_H2H_SCORE_NESTED_WORKTREE](#e_h2h_score_nested_worktree) | warning | U20 |
+| [E_H2H_ANALYSIS_INPUT](#e_h2h_analysis_input) | 2 | U20 |
+| [E_H2H_READOUT_KEY](#e_h2h_readout_key) | 2 | U20 |
+| [E_H2H_READOUT_OUT](#e_h2h_readout_out) | 2 | U20 |
+| [E_H2H_LEDGER_DRYRUN](#e_h2h_ledger_dryrun) | 2 | U20 |
+| [E_H2H_RERUN_PRECONDITION](#e_h2h_rerun_precondition) | 2 | U20 |
+| [E_H2H_RERUN_UNWIRED](#e_h2h_rerun_unwired) | 2 | U20 |
+| [E_H2H_RERUN_CAP_STOP](#e_h2h_rerun_cap_stop) | 2 | U20 |
+| [E_H2H_RERUN_CONTAINMENT](#e_h2h_rerun_containment) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -2318,6 +2340,166 @@ Fix: Read the FAIL line, fix the rule's code test-first, and run the dry run aga
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
 
+### E_H2H_O_SOURCE
+
+The head-to-head's O frame could not read its source: SWE-bench-Live MultiLang's Hugging Face head is not the revision the state machines harness pins (eb09c2e5), the revision read failed, or a frozen input file (o-licences.json, the digest pins) is missing or malformed.
+
+Fix: If the dataset moved, the frame stays at the pinned revision and the move goes to the Captain; otherwise fetch the parquet files again (gstack-evals outcome sm source fetch) and rerun h2h o-frame.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_H2H_O_LICENCE
+
+The head-to-head's O licence read failed: GitHub's GraphQL answer was missing, malformed or partial, or a candidate's repository has no row in the frozen o-licences.json.
+
+Fix: Rerun h2h o-frame --read-licences once on the freeze date with an authenticated gh; never edit o-licences.json by hand.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_H2H_O_EXCLUDED
+
+An O candidate dropped before any draw: its repository matches the preregistration's exclusion list (a pack under test, its organization, or a repository tied to the project owner). The drop is counted per pattern.
+
+Fix: None; the exclusion list is frozen in prereg.json.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2H_O_NOT_PERMISSIVE
+
+An O candidate dropped: its repository's licence on the freeze date, as frozen in o-licences.json, is not on prereg.json's permissive list (no licence, NOASSERTION, MPL-2.0 or any other).
+
+Fix: None; the list and the licence read are frozen.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2H_O_TOLD
+
+An O candidate dropped at the pstack-checks eval's told-mode screen: the problem statement is missing or under 200 characters, holds a diff block line, or holds two or more of the 30-character lines the fix adds.
+
+Fix: None; the screen is frozen (pfchecks/told.ts).
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2H_DRAW_INPUT
+
+The head-to-head's draw could not read its frame: the file is not an h2h frame of the expected class, repeats an id, has a unit with no repository, month or entry tag, or the order file does not match the frame's digest.
+
+Fix: Rebuild the frame with its own command (h2h o-frame for O, part B's commands for B1 and B2) and draw again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_H2H_DRAW_PENDING
+
+The head-to-head's gate walk stopped at a unit whose gate input does not exist yet (no oracle record, no containment record, no image or label record). The line names the unit and the gate.
+
+Fix: Run that gate on the named unit (on the VMs) and run h2h draw again; the walk is deterministic and starts from the top.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_H2H_DRAW_SHORT
+
+The head-to-head's gate walk reached the end of a frame before it filled every stage position (stage 1, stage 2 to n, the reserves and stage 0). The draw lists what it filled.
+
+Fix: Follow the post's supply rule for that frame: O walks back to 2025-01-01 by its order; B widens to 2025-06-01 and B1 may end infeasible. Never loosen a gate.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2H_DRAW_ORACLE
+
+A head-to-head unit dropped at the oracle gate in the walk: its oracle verdict is not kept (unstable, slow, no stable test, leaked or an infra drop recorded by the oracle).
+
+Fix: None; the unit's oracle record decides. The walk takes the next unit in seeded order.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2H_DRAW_CONTAINMENT
+
+A head-to-head unit dropped at the containment gate: a confirmed containment hit in the unit image or any arm's installed home, so it leaves every arm and pairing holds.
+
+Fix: None; the hit is reported per arm. A unit that drops after its draw is replaced by the next reserve.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2H_SCORE_INPUT
+
+The head-to-head scorer could not read its inputs: the session record, the unit dir, the session tree, or its base commit is missing, malformed or does not match.
+
+Fix: Point h2h score at the session's record dir and the unit's sm-unit.v1 dir, then run it again; scoring never reaches back into a session container.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_H2H_SCORE_CAPTURE
+
+The head-to-head scorer could not extract the main checkout's change: the session tree's git directory is gone, broken or no longer holds the session's base commit. The session is a scoring gap counted for the arm that left the tree that way.
+
+Fix: None for the session; the gap stands and the cell's gap share counts it.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2H_ANALYSIS_INPUT
+
+The head-to-head analysis could not read its inputs: a units, sessions or scores file is malformed, repeats a unit and arm, names an unknown arm or unit, or a contrast has no pairs to analyse.
+
+Fix: Fix the named record and run h2h analyze again; nothing is estimated on partial input.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_H2H_READOUT_KEY
+
+The sealed stage 1 readout refused its key: the key path is missing, sits inside the repository, is readable by group or others, or does not hold 32 bytes (raw, or 64 hex characters).
+
+Fix: Mint the key in the sealed store outside the repository (32 random bytes, mode 0600) and pass its path with --key.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_H2H_READOUT_OUT
+
+The sealed stage 1 readout refused its output: the sealed file already exists, or a sealed file did not open or did not match its recorded sha256.
+
+Fix: Write a new sealed file to a new path; to open one, pass the exact file, its key and the sha256 the stage 1 run record holds.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_H2H_LEDGER_DRYRUN
+
+The head-to-head's ledger dry run failed a line: a lease on an items.ts item did not open or settle on the temporary ledger, or the COST re-pricing check did not hold on its fixtures.
+
+Fix: Read the FAIL line, fix the code, and run h2h ledger-dryrun again before any spend.
+
+Exit 2. Side effects: None: the temporary ledger is thrown away. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_H2H_RERUN_PRECONDITION
+
+h2h rerun refused a precondition (exit 3): the units file is missing or malformed, Docker does not answer, an arm's install record or a unit's image digest is missing, or the session runner refused before any paid call.
+
+Fix: Meet the named prerequisite (section 12: an Anthropic key, Docker, network for installs and image builds, room under Docker Hub's pull limit) and run again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_H2H_RERUN_UNWIRED
+
+h2h rerun has no session runner wired in yet (exit 3): part S's runner is built in parallel and the lead connects it in lanes/outcome-skills/h2h/cli.ts. --dry-run still prints the projection.
+
+Fix: Wire the session runner (RerunRunner in lanes/outcome-skills/h2h/rerun.ts) and run again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_H2H_RERUN_CAP_STOP
+
+h2h rerun stopped at its spend cap (exit 10): the spend recorded so far plus the next session's allowance would pass --spend-cap. The sessions already run keep their records.
+
+Fix: A cap stop ends the rerun incomplete; start a new rerun with a cap that fits the units left. Never rerun to change a verdict.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2H_RERUN_CONTAINMENT
+
+h2h rerun halted on a containment failure (exit 12): the session runner found a containment hit before or during a session.
+
+Fix: Read the runner's containment record; the unit drops for every arm by the frozen rule. Do not rerun the unit.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
 ## Exit 3: calibration failed (INCOMPLETE)
 
 ### CALIBRATION_SKILL
@@ -2711,5 +2893,21 @@ Warning. Owner: U20.
 A build-read session ended in a second upstream error or a second infrastructure failure, so its cell is a recorded gap. Every verdict also prints the reading that scores gaps as 0.
 
 Fix: None: the gap is recorded under the frozen session rule.
+
+Warning. Owner: U20.
+
+### E_H2H_SCORE_ARM_TEST_DROPPED
+
+The head-to-head scorer dropped an arm file at a path where the fix adds a new test file, before the fix's tests applied (section 7 rule 3), so a test-first arm's own test never becomes an add/add conflict. Logged per arm.
+
+Fix: None; read the record's dropped_arm_tests.
+
+Warning. Owner: U20.
+
+### E_H2H_SCORE_NESTED_WORKTREE
+
+The head-to-head scorer left a nested worktree directory (a directory below the root holding a .git file or folder) out of the extracted change (section 7 rule 1). Whether a linked worktree or a branch beyond base passes is the worktree secondary.
+
+Fix: None; read the record's nested_left_out and worktree_pass.
 
 Warning. Owner: U20.
