@@ -299,6 +299,11 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_OF_SUPPLY_SHORT](#e_of_supply_short) | 2 | U20 |
 | [E_OF_DRYRUN_FAIL](#e_of_dryrun_fail) | 2 | U20 |
 | [E_H2H_PREREG](#e_h2h_prereg) | 2 | U20 |
+| [E_H2H_INSTALL](#e_h2h_install) | 2 | U20 |
+| [E_H2H_PIN](#e_h2h_pin) | 2 | U20 |
+| [E_H2H_HOME_DRIFT](#e_h2h_home_drift) | 2 | U20 |
+| [E_H2H_HOME_LEAK](#e_h2h_home_leak) | 2 | U20 |
+| [E_H2H_HOME_SCAN](#e_h2h_home_scan) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -2191,6 +2196,46 @@ The skill-pack head-to-head found no usable preregistration: its prereg.json is 
 Fix: Change prereg.json only through the preregistration's own pull request. Nothing runs on values chosen anywhere else.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2H_INSTALL
+
+An arm's home install did not finish as its pack's README says: the install image did not build or runs another Claude Code version, the home directory was not empty, a recipe step exited non-zero in the install container (the record and log beside the home name the step), or the agent-skills marketplace entry no longer has the shape the post describes.
+
+Fix: Read the install log beside the home. Fix the harness side only (image, network, Docker Hub limit) and install again into a fresh home; a pack that cannot install as published is recorded with its failure, never patched.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_H2H_PIN
+
+A pinned source failed its check: the repository could not be cloned or holds no commit at the prereg.json pin, or an installed tree, npm package or marketplace clone did not match its pin (arms-pins.json pin_checks names which and how).
+
+Fix: Pins never move. Restore network or the clone and install again into a fresh home; a mismatch that persists goes to the Captain with the pin_checks row.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_H2H_HOME_DRIFT
+
+An arm's home on disk does not hash (home_tree_sha256, the frozen rule in arms/hash.ts) to the value arms-pins.json records for that arm, or is missing, so a session would run on bytes nobody checked.
+
+Fix: Install the home again with gstack-evals h2h install into a fresh directory and compare its hash; never edit a home by hand. A home that installs to a new hash goes to the Captain before any session.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_H2H_HOME_LEAK
+
+Containment over an arm's installed home (plan section 3) found a confirmed hit: a fix line, a test-side marker or a hidden test name of the unit, in a file, a git object or an archive (two levels) of the home, that the frozen idiom rule does not classify as an idiom. The unit drops for every arm, so pairing holds; the record names the arm, the path and the needle's sha256, never the text.
+
+Fix: None for the unit: it is dropped by rule and replaced from the reserves as the draw says. Report the hit per arm.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2H_HOME_SCAN
+
+Containment over an arm's home did not finish (a grep, git object stream or archive listing failed, or the unit's base tree could not be read), so the home is not known clean. It fails closed: the unit drops for every arm, as a confirmed hit would.
+
+Fix: Read the message, fix the harness side (disk, a missing unzip or tar, the unit's tree volume) and run contain-home again before any session; if it still fails, the unit stays dropped.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 
 ## Exit 3: calibration failed (INCOMPLETE)
 

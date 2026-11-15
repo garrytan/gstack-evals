@@ -118,6 +118,10 @@ export interface ArmInstall {
   /** Newer versions seen on the freeze date; the pins do not move. */
   newer_seen: { repo: string; sha: string; version?: string }[];
   claude_code_version: string;
+  /** The pack's browser path as installed (plan section 3), in words. */
+  browser?: string;
+  /** Where the install differs from the pack README's commands, in words. */
+  deviations?: string[];
 }
 
 /** The browser conditions sessions, the oracle and scoring share on B1 units (sections 3 and 6). Part B owns the wrapper

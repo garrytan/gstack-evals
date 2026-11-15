@@ -2479,6 +2479,51 @@ export const CODES = {
     owner: "U20",
   },
   // h2h, part A: installs, pins, browser runtimes, containment over arm homes.
+  E_H2H_INSTALL: {
+    exit: 2,
+    meaning: "An arm's home install did not finish as its pack's README says: the install image did not build or runs another Claude Code version, the home directory was not empty, a recipe step exited non-zero in the install container (the record and log beside the home name the step), or the agent-skills marketplace entry no longer has the shape the post describes.",
+    fix: "Read the install log beside the home. Fix the harness side only (image, network, Docker Hub limit) and install again into a fresh home; a pack that cannot install as published is recorded with its failure, never patched.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
+  },
+  E_H2H_PIN: {
+    exit: 2,
+    meaning: "A pinned source failed its check: the repository could not be cloned or holds no commit at the prereg.json pin, or an installed tree, npm package or marketplace clone did not match its pin (arms-pins.json pin_checks names which and how).",
+    fix: "Pins never move. Restore network or the clone and install again into a fresh home; a mismatch that persists goes to the Captain with the pin_checks row.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
+  },
+  E_H2H_HOME_DRIFT: {
+    exit: 2,
+    meaning: "An arm's home on disk does not hash (home_tree_sha256, the frozen rule in arms/hash.ts) to the value arms-pins.json records for that arm, or is missing, so a session would run on bytes nobody checked.",
+    fix: "Install the home again with gstack-evals h2h install into a fresh directory and compare its hash; never edit a home by hand. A home that installs to a new hash goes to the Captain before any session.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
+  },
+  E_H2H_HOME_LEAK: {
+    exit: 2,
+    meaning: "Containment over an arm's installed home (plan section 3) found a confirmed hit: a fix line, a test-side marker or a hidden test name of the unit, in a file, a git object or an archive (two levels) of the home, that the frozen idiom rule does not classify as an idiom. The unit drops for every arm, so pairing holds; the record names the arm, the path and the needle's sha256, never the text.",
+    fix: "None for the unit: it is dropped by rule and replaced from the reserves as the draw says. Report the hit per arm.",
+    side_effects: NO_SPEND,
+    retry_safe: false,
+    resumable: false,
+    owner: "U20",
+  },
+  E_H2H_HOME_SCAN: {
+    exit: 2,
+    meaning: "Containment over an arm's home did not finish (a grep, git object stream or archive listing failed, or the unit's base tree could not be read), so the home is not known clean. It fails closed: the unit drops for every arm, as a confirmed hit would.",
+    fix: "Read the message, fix the harness side (disk, a missing unzip or tar, the unit's tree volume) and run contain-home again before any session; if it still fails, the unit stays dropped.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
+  },
   // h2h, part S: turns, the session driver, exposure, the read audit and the driven launch.
   // h2h, part B: breadth units, image recipes, parsers and the browser oracle.
   // h2h, part C: O draw, scoring additions, analysis, items and the rerun command.
