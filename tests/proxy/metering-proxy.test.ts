@@ -1051,6 +1051,42 @@ describe("unknown sends and reconcile", () => {
     expect(t.ledger.settles.map(([, o]) => o.kind)).toEqual(["spent"]);
   });
 
+  test("a client that drops a stream after its headers leaves the proxy's own read alone: the call settles spent at its usage", async () => {
+    const enc = new TextEncoder();
+    let release!: () => void;
+    const gate = new Promise<void>(r => (release = r));
+    const t = setup((_url, init) =>
+      new Response(
+        new ReadableStream({
+          async start(c) {
+            init.signal?.addEventListener("abort", () => c.error(init.signal!.reason));
+            c.enqueue(enc.encode(`data: ${JSON.stringify({ type: "message_start", message: { usage: { input_tokens: 10, output_tokens: 1 } } })}
+
+`));
+            await gate;
+            if (init.signal?.aborted) return;
+            c.enqueue(enc.encode(`data: ${JSON.stringify({ type: "message_delta", usage: { output_tokens: 5 } })}
+
+`));
+            c.close();
+          },
+        }),
+        { headers: { "content-type": "text/event-stream" } },
+      ),
+    );
+    const a = t.bind();
+    const client = new AbortController();
+    const res = await fetch(`http://127.0.0.1:${t.proxy.port}/${a.slot}/anthropic/v1/messages`, { method: "POST", headers: { authorization: `Bearer ${a.token}` }, body: JSON.stringify({ model: "claude-opus-5-5", stream: true, max_tokens: 1000, messages: [] }), signal: client.signal });
+    expect(res.status).toBe(200);
+    await res.body!.getReader().read();
+    client.abort();
+    await Bun.sleep(100);
+    release();
+    const meter = await t.proxy.finalize(a.meter_id);
+    expect(t.ledger.settles.map(([, o]) => o.kind)).toEqual(["spent"]);
+    expect(meter.micros).toBe(10 * 4 + 5 * 20);
+  });
+
   test("a lost send keeps its charge, is not resent, and its error carries no bearer or key", async () => {
     const t = setup(() => Promise.reject(new Error("socket hang up", { cause: new Error(`TLS reset while sending x-api-key=${KEY}`) })));
     const a = t.bind();
