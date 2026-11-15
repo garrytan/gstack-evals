@@ -5,12 +5,14 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Pacer } from "../../statemachines/oracle.ts";
 import { readUnit } from "../../statemachines/unit.ts";
-import { h2hFail } from "../prereg.ts";
-import { mineB1, reposFile, searchRepos } from "./b1.ts";
+import type { SecondRead } from "../ordinary/frame.ts";
+import { fetchTemplates, loadTemplates, readLicenceFilesGraphQl } from "../ordinary/licences.ts";
+import { h2hFail, readPrereg } from "../prereg.ts";
+import { B1_LICENCES_SCHEMA, mineB1, reposFile, screenRepos, searchRepos } from "./b1.ts";
 import { cloneAdvisoryDb, mineB2 } from "./b2.ts";
 import { browserCheck } from "./browser.ts";
 import { readDiscovery } from "./discover.ts";
-import { ghGql, writeJson } from "./frame.ts";
+import { FREEZE_DATE, ghGql, licenceStatus, secondReadCounts, writeJson } from "./frame.ts";
 import { writePacket } from "./label.ts";
 import { buildB, findCandidate, oracleB, prepareB, type BUnitExtra, type BuildRecord } from "./oracle-b.ts";
 import type { ReportFormat } from "./parse.ts";
@@ -18,8 +20,8 @@ import type { TestRunner } from "./recipes.ts";
 import { storeFrom } from "./store.ts";
 
 const FLAGS: Record<string, { need: string[]; opt: string[]; bool?: string[] }> = {
-  "mine-b2": { need: ["--db", "--work"], opt: [], bool: ["--clone"] },
-  "mine-b1": { need: ["--work"], opt: [] },
+  "mine-b2": { need: ["--db", "--work"], opt: ["--templates"], bool: ["--clone", "--read-licence-files"] },
+  "mine-b1": { need: ["--work"], opt: ["--templates"], bool: ["--read-licence-files"] },
   "image-build": { need: ["--frame", "--id", "--work"], opt: ["--docker-host"] },
   "image-store": { need: ["--store", "--image"], opt: ["--docker-host"] },
   "oracle-b": { need: ["--frame", "--id", "--work", "--store", "--ref"], opt: ["--db", "--docker-host", "--pull-log"] },
@@ -47,6 +49,19 @@ const log = (s: string) => console.error(new Date().toISOString() + " " + s);
 const host = (f: Map<string, string>) => (f.has("--docker-host") ? { docker_host: f.get("--docker-host")! } : {});
 const line = (x: unknown) => console.log(JSON.stringify(x));
 
+/** Section 5's second licence read, once, with part C's reader and classifier over the pending repositories; refused when
+ *  the licence file already holds one. Templates are the pinned SPDX templates, fetched into dir when missing. */
+async function readSecond(licPath: string, repos: string[], dir: string): Promise<SecondRead> {
+  const prior = existsSync(licPath) ? (JSON.parse(readFileSync(licPath, "utf8")) as { second_read?: SecondRead }) : null;
+  if (prior?.second_read) h2hFail("E_H2H_B_MINE", licPath + " already holds a second read from " + prior.second_read.read_at + "; it is read once");
+  const p = readPrereg();
+  await fetchTemplates(dir, p.licences);
+  const s = readLicenceFilesGraphQl(repos, loadTemplates(dir, p.licences));
+  log("second licence read: " + JSON.stringify(secondReadCounts(s)));
+  return s;
+}
+const priorSecond = (licPath: string): SecondRead | undefined => (existsSync(licPath) ? JSON.parse(readFileSync(licPath, "utf8")).second_read : undefined);
+
 export const commands: Record<string, (argv: string[]) => Promise<number>> = {
   async "mine-b2"(argv) {
     const f = flags("mine-b2", argv);
@@ -55,7 +70,16 @@ export const commands: Record<string, (argv: string[]) => Promise<number>> = {
     if (!existsSync(join(db, "advisories"))) h2hFail("E_H2H_B_MINE", db + " holds no advisories; pass --clone to fetch the pinned database");
     const cache = join(work, "b2-licences-read.json");
     const read = existsSync(cache) ? JSON.parse(readFileSync(cache, "utf8")).repos : undefined;
-    const { frame, licences } = await mineB2({ db, work, gql: ghGql({ log }), licences: read, log });
+    const licPath = join(work, "b2-licences.json");
+    let second = priorSecond(licPath);
+    if (f.has("--read-licence-files")) {
+      const framePath = join(work, "b2-frame.json");
+      if (!existsSync(framePath) || !existsSync(licPath)) h2hFail("E_H2H_B_MINE", "mine the B2 frame once before its second licence read; " + framePath + " or " + licPath + " is missing");
+      const rows = JSON.parse(readFileSync(framePath, "utf8")).advisories as { repo: string; second_read_pending: boolean }[];
+      second = await readSecond(licPath, [...new Set(rows.filter((r) => r.second_read_pending).map((r) => r.repo))], f.get("--templates") ?? join(work, "spdx-templates"));
+      writeJson(licPath, { ...JSON.parse(readFileSync(licPath, "utf8")), second_read: second });
+    }
+    const { frame, licences } = await mineB2({ db, work, gql: ghGql({ log }), licences: read, second, log });
     if (!read) writeJson(cache, licences);
     writeJson(join(work, "b2-frame.json"), frame);
     writeJson(join(work, "b2-licences.json"), licences);
@@ -63,7 +87,8 @@ export const commands: Record<string, (argv: string[]) => Promise<number>> = {
     return 0;
   },
   async "mine-b1"(argv) {
-    const work = flags("mine-b1", argv).get("--work")!;
+    const f = flags("mine-b1", argv);
+    const work = f.get("--work")!;
     const gql = ghGql({ log, maxCost: 3 });
     const reposPath = join(work, "b1-repos.json");
     let repos = existsSync(reposPath) ? JSON.parse(readFileSync(reposPath, "utf8")) : undefined;
@@ -71,7 +96,15 @@ export const commands: Record<string, (argv: string[]) => Promise<number>> = {
       repos = reposFile(await searchRepos(gql, undefined, log));
       writeJson(reposPath, repos);
     }
-    const { frame } = await mineB1({ gql, work, repos, log });
+    const licPath = join(work, "b1-licences.json");
+    let second = priorSecond(licPath);
+    if (f.has("--read-licence-files")) {
+      const p = readPrereg();
+      const pending = screenRepos(repos.repos, p).kept.filter((r) => licenceStatus(r.licence, p.licences) === "second_read_pending");
+      second = await readSecond(licPath, pending.map((r) => r.repo), f.get("--templates") ?? join(work, "spdx-templates"));
+      writeJson(licPath, { schema: B1_LICENCES_SCHEMA, freeze_date: FREEZE_DATE, read: "the licence b1-repos.json froze from the repository search (licenseInfo.spdxId); the second read covers every kept repository where it is null or NOASSERTION", repos: Object.fromEntries(pending.map((r) => [r.repo, { spdx: r.licence }])), second_read: second });
+    }
+    const { frame } = await mineB1({ gql, work, repos, second, log });
     writeJson(join(work, "b1-frame.json"), frame);
     line(frame.counts);
     return 0;

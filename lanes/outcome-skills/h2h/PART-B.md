@@ -75,6 +75,23 @@ committed code.
   repositories. It could not find repositories whose licence GitHub does not detect, so it was replaced before any
   frame was frozen from it.
 
+**Second licence read.** Ran once on 2026-11-15 at 07:25 UTC with part C's reader and classifier (ordinary/licences.ts
+and its pinned SPDX templates), through mine-b2 and mine-b1 with --read-licence-files. It read the root LICENSE*, LICENCE*
+and COPYING* files of every B2 repository with a pending row in either window (131) and every kept B1 repository
+pending the read (89). For each file it records the name, mode, blob id, size, sha256 and match, never the text, in
+b2-licences.json and b1-licences.json. A repository passes when at least one such file is found and every one matches a
+listed licence. Both frames were then rebuilt from the same caches, and these counts replace the ones above:
+
+- B2: 27 repositories passed, 86 matched no listed licence and 18 had no licence file. Eligible in the primary window:
+  1,575 advisories, 878 at 3 a repository, 67 of them kept by their licence files. By ecosystem: npm 817, Go 431, Maven
+  242, crates.io 53, NuGet 32. Widened only: 448 more, 1,138 at 3 a repository with both windows. The licence-file
+  drops count advisories before the file screen (primary, widened): unmatched 345 and 168, no file 72 and 114.
+- B1: 30 repositories passed, 48 matched no listed licence and 11 had no licence file, so 397 repositories are kept.
+  Eligible in the primary window: 1,441 pull requests in 116 repositories, 280 at 3 a repository, 37 of them kept by
+  their licence files. Widened only: 381 more, 309 at 3 a repository with both windows, in 127 repositories.
+- No row in either frame is pending any more. Most unmatched repositories hold one LICENSE file whose whole text
+  matches no listed template; this build did not audit those texts.
+
 **Oracle smoke runs.** Two small repositories served from a local git daemon went through the whole path in Docker
 (tests/outcome-skills/h2h-oracle-docker.test.ts): recipe build, local registry store by digest, preparation from the
 stored digest, discovery and derived tests, then the state machines oracle. The Go unit was kept over 3 base and 3
@@ -88,7 +105,8 @@ oracle's smoke step used the state machines runtime (Claude Code 2.1.312) and fo
   the draw read rows already tagged widened; nothing is searched again.
 - Licences: a repository whose GraphQL licence is on prereg.json's list is kept; one with no licence named or
   NOASSERTION is kept with second_read_pending true and its raw spdxId, for section 5's second read, which part C's
-  ordinary/licences.ts owns; any other licence drops. Pending repositories are mined like the rest.
+  ordinary/licences.ts owns; any other licence drops. Pending repositories are mined like the rest. Every row carries
+  licence_from: graphql when GraphQL's licence is on the list, files when the second read passed it, null while pending.
 - B2 fix reference: the advisory's first GitHub pull request reference, else its first commit reference. A pull request
   must be merged; its fix commit is the merge commit and the parent its first parent. Commit renames are paired by blob id.
 - B2 file classes use the union of the languages of every affected ecosystem (npm ts, Go go, Maven java, crates.io
@@ -117,6 +135,8 @@ oracle's smoke step used the state machines runtime (Claude Code 2.1.312) and fo
   runs and not the dependency fetch.
 - The oracle, discovery and sessions use registry-store refs only. The archive store is for carrying images between
   hosts and is loaded into a registry before any run.
+- B1 images set every variable in types.ts BROWSER.env (CHROME_BIN, CHROME_PATH for Web Test Runner's Chrome launcher,
+  PUPPETEER_EXECUTABLE_PATH) after the launcher wrapper is in place. No B2 image gets a browser variable.
 - B1 is usable when its stage 2 gets at least 20 units, so its frame needs 32 usable units (20 plus 6 stage 1 units, 5
   reserves and stage 0). fallback.ts applies that floor before and after each fallback; part C's draw assigns positions.
 
@@ -133,8 +153,6 @@ oracle's smoke step used the state machines runtime (Claude Code 2.1.312) and fo
   tests would pass this check; the two-model label is the guard there.
 - CSS, Vue and Svelte-only fixes drop in B1 as source_files_0, because the ts lists count only JavaScript and
   TypeScript as source.
-- Web Test Runner's chromeLauncher needs CHROME_PATH, which the shared browser environment (types.ts BROWSER) does not
-  set. Units that use it may fail discovery. The playwrightLauncher is unaffected. types.ts is shared, so part B left it.
 - The MultiLang fallback rows: fallback.ts takes their count, but the step that picks which pinned MultiLang units pass
   the browser checks is not built, because those units carry the dataset's parsers, not part B's.
 - Image builds are meant to run on a throwaway VM with no keys. buildImage takes a builder host (docker_host) for that,
@@ -161,5 +179,5 @@ no state machines code branches on those values outside its own convert command.
 ## Open items
 
 - Real builds, the oracle and the label calls on mined candidates run later on the eval's VM under its ledger items.
-- The second licence read for pending repositories (part C's classifier) runs at integration; until then pending rows
-  stay in both frames, marked.
+- The second licence read is recorded once in b1-licences.json and b2-licences.json, and mine-b1 and mine-b2 refuse to
+  read it again.

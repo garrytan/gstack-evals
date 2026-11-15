@@ -99,7 +99,7 @@ describe("one B1 unit through every gate", () => {
     assertStored(fakeStore([REF]), REF, REF);
     const root = mkdtempSync(join(tmpdir(), "h2h-gates-"));
     try {
-      const c = candidateOf("B1", { repo: "acme/web", number: 7, url: "u", merged: "2026-06-02", month: "2026-06", window: "primary", licence: "MIT", second_read_pending: false, runners: ["playwright"], fix: { commit: C40, parent: P40 }, files: { browser_test: 1, test: 1, source: 1, total: 2 }, issue_url: "https://github.com/acme/web/issues/3", statement_sha256: "0".repeat(64), statement_chars: statement.length });
+      const c = candidateOf("B1", { repo: "acme/web", number: 7, url: "u", merged: "2026-06-02", month: "2026-06", window: "primary", licence: "MIT", second_read_pending: false, licence_from: "graphql", runners: ["playwright"], fix: { commit: C40, parent: P40 }, files: { browser_test: 1, test: 1, source: 1, total: 2 }, issue_url: "https://github.com/acme/web/issues/3", statement_sha256: "0".repeat(64), statement_chars: statement.length });
       const u = writeBUnit(join(root, c.id), {
         c, lang: "ts", plan, statement, tests: { f2p, p2p },
         patches: { fix: "diff --git a/src/focus.ts b/src/focus.ts\n+restore()\n", test: "diff --git a/e2e/focus.spec.ts b/e2e/focus.spec.ts\n+test()\n", all: ["e2e/focus.spec.ts", "src/focus.ts"], testFiles: ["e2e/focus.spec.ts"], fixFiles: ["src/focus.ts"], sourceFiles: ["src/focus.ts"] },

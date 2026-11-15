@@ -13,7 +13,7 @@ const P40 = "d".repeat(40), C40 = "e".repeat(40);
 const REF = "127.0.0.1:5000/h2h@sha256:" + "f".repeat(64);
 
 function plantUnit(root: string): string {
-  const c = candidateOf("B1", { repo: "acme/web", number: 7, url: "u", merged: "2026-06-02", month: "2026-06", window: "primary", licence: "MIT", second_read_pending: false, runners: ["playwright"], fix: { commit: C40, parent: P40 }, files: { browser_test: 1, test: 1, source: 1, total: 2 }, issue_url: "https://github.com/acme/web/issues/3", statement_sha256: "0".repeat(64), statement_chars: 300 });
+  const c = candidateOf("B1", { repo: "acme/web", number: 7, url: "u", merged: "2026-06-02", month: "2026-06", window: "primary", licence: "MIT", second_read_pending: false, licence_from: "graphql", runners: ["playwright"], fix: { commit: C40, parent: P40 }, files: { browser_test: 1, test: 1, source: 1, total: 2 }, issue_url: "https://github.com/acme/web/issues/3", statement_sha256: "0".repeat(64), statement_chars: 300 });
   const plan = testPlan("playwright", ["e2e/focus.spec.ts"], { files: ["package.json"], texts: {} });
   if (isDrop(plan)) throw new Error("plan");
   const dir = join(root, c.id);
