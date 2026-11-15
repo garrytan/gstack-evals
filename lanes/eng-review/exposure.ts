@@ -73,6 +73,74 @@ export const GSTACK_ER_PINS = {
 export type ErSkillArm = "precut" | "engphase" | "candidate";
 export const ER_SKILL_ARMS: readonly ErSkillArm[] = ["precut", "engphase", "candidate"];
 
+/**
+ * The detectors re-pinned (the planted-unit read, prereg 2026-11-15-geva-537 section 6): the pre-cut detector is its
+ * standalone arm's and the eng phase detector its eng phase arm's, at any gstack commit whose files hold the strings
+ * below. ER_DETECTOR_FILES names the files each arm's method and detector come from; a pin's digests must cover each,
+ * checked by sha256 (detectorPinProblems). The eng phase arm's methodology is built from plan-eng-review/SKILL.md and
+ * review-sections.md (render.ts runs the snapshot tool's methodology step on them), so its list holds those too.
+ */
+export const ER_DETECTOR_FILES: Readonly<Record<"precut" | "engphase", readonly string[]>> = {
+  precut: ["plan-eng-review/SKILL.md", "plan-eng-review/sections/review-sections.md"],
+  engphase: ["autoplan/SKILL.md", "autoplan/sections/eng-phase.md", "autoplan/sections/unattended.md", "bin/gstack-autoplan-snapshot.ts", "plan-eng-review/SKILL.md", "plan-eng-review/sections/review-sections.md"],
+};
+
+/** One string a detector check relies on, and the pinned file that must still tell the session to produce it. */
+export interface ErDetectorString {
+  arm: "precut" | "engphase";
+  check: string;
+  file: string;
+  needle: string;
+}
+
+/** Each check's source text, as it sits in the pinned files (the snapshot tool's dispatch line is a template there). */
+export const ER_DETECTOR_STRINGS: readonly ErDetectorString[] = [
+  ...(["precut", "engphase"] as const).flatMap((arm): ErDetectorString[] => [
+    { arm, check: "scope_challenge", file: "plan-eng-review/SKILL.md", needle: "Scope Challenge" },
+    { arm, check: "sections_in_order", file: "plan-eng-review/sections/review-sections.md", needle: "### 1. Architecture review" },
+    { arm, check: "sections_in_order", file: "plan-eng-review/sections/review-sections.md", needle: "### 2. Code quality review" },
+    { arm, check: "sections_in_order", file: "plan-eng-review/sections/review-sections.md", needle: "### 3. Test review" },
+    { arm, check: "sections_in_order", file: "plan-eng-review/sections/review-sections.md", needle: "### 4. Performance review" },
+    { arm, check: "coverage_diagram", file: "plan-eng-review/sections/review-sections.md", needle: "\u2605" },
+    { arm, check: "coverage_diagram", file: "plan-eng-review/sections/review-sections.md", needle: "GAP" },
+    { arm, check: "coverage_diagram", file: "plan-eng-review/sections/review-sections.md", needle: "[\u2192E2E]" },
+    { arm, check: "coverage_diagram", file: "plan-eng-review/sections/review-sections.md", needle: "[\u2192EVAL]" },
+    { arm, check: "test_plan_artifact", file: "plan-eng-review/sections/review-sections.md", needle: "-eng-review-test-plan-" },
+  ]),
+  { arm: "precut", check: "load", file: "plan-eng-review/SKILL.md", needle: "plan-eng-review/sections/review-sections.md" },
+  { arm: "engphase", check: "test_plan_artifact", file: "autoplan/sections/eng-phase.md", needle: "-eng-review-test-plan-" },
+  { arm: "engphase", check: "native_eng_voice", file: "bin/gstack-autoplan-snapshot.ts", needle: "You are the independent ${phase.toUpperCase()} reviewer for this phase." },
+  { arm: "engphase", check: "consensus_table", file: "autoplan/sections/eng-phase.md", needle: "ENG DUAL VOICES \u2014 CONSENSUS TABLE" },
+  ...["1. Architecture sound?", "2. Test coverage sufficient?", "3. Perf risks", "4. Security threats covered?", "5. Error paths handled?", "6. Deployment risk manageable?"].map((needle): ErDetectorString => ({ arm: "engphase", check: "consensus_table", file: "autoplan/sections/eng-phase.md", needle })),
+  { arm: "engphase", check: "failure_modes", file: "autoplan/sections/eng-phase.md", needle: "Failure modes registry" },
+];
+
+/** Why a pinned tree no longer holds a string an arm's detector relies on, one line each; read returns a file's text or null. */
+export function detectorStringProblems(read: (path: string) => string | null, arms: ReadonlyArray<"precut" | "engphase"> = ["precut", "engphase"]): string[] {
+  const p: string[] = [];
+  const texts = new Map<string, string | null>();
+  for (const s of ER_DETECTOR_STRINGS.filter((x) => arms.includes(x.arm))) {
+    if (!texts.has(s.file)) texts.set(s.file, read(s.file));
+    const t = texts.get(s.file);
+    if (t === null || t === undefined) p.push(s.arm + " " + s.check + ": " + s.file + " is missing");
+    else if (!t.includes(s.needle)) p.push(s.arm + " " + s.check + ": " + s.file + " no longer holds " + JSON.stringify(s.needle));
+  }
+  return [...new Set(p)];
+}
+
+/** Why a pinned tree's files are not the pin's: each of the arm's ER_DETECTOR_FILES must have the sha256 the pin records.
+ * A pin with no commit, or with no digest for one of the files, is refused here too, so an empty pin never runs. */
+export function detectorPinProblems(arm: "precut" | "engphase", pin: { sha: string; digests: Readonly<Record<string, string>> }, read: (path: string) => Buffer | null): string[] {
+  if (!/^[0-9a-f]{40}$/.test(pin.sha)) return [arm + ": the pin names no commit (" + JSON.stringify(pin.sha) + "), so no detector is pinned"];
+  return ER_DETECTOR_FILES[arm].flatMap((file) => {
+    const want = pin.digests[file];
+    if (!want) return [arm + ": the pin records no sha256 for " + file];
+    const body = read(file);
+    const got = body === null ? null : createHash("sha256").update(body).digest("hex");
+    return got === want ? [] : [arm + ": " + file + " has sha256 " + (got ?? "none") + ", not the pinned " + want];
+  });
+}
+
 export interface ErEvidence {
   transcript: string;
   stateRoot: string | null;
