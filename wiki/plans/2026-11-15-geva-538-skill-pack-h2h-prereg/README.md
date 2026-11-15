@@ -14,6 +14,9 @@ links:
   - 2026-11-01-geva-105-gstack-null-review-and-tb2
   - 2026-11-07-geva-380-r3c-results
 attachments:
+  - 850fe2999474ef252f0bd443a8d655bac79531e330a9e9bbdad1a17c8c357453  o-frame.json
+  - a0955f6947e1c79d1f0c59f7c2f1ad5d39eb5ef3d517ffff83cbdc6f4ca0c303  o-licences.json
+  - fbdf9ae8108cb2c70c5c88371e1d9e41428ed532808ad5bdbe501548b767bd7e  o-order.json
   - 0edb8a2ecd63d4f69b1033963cc1866255abb58d09450a0a36123c7d69713f9a  power.py
   - 4fd261b2a742437d18c9f51558b88ee68ca168dd940c9521f59d311187f1b803  power.txt
   - ce3c34e81da0f93c5d41750aee37dc4eea873d3f53fd6e2b56109180917b39c7  prereg.json
