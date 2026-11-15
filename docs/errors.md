@@ -329,6 +329,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_DCW_REGION](#e_dcw_region) | 2 | U20 |
 | [E_DCW_CONTAINER_LEFT](#e_dcw_container_left) | 2 | U20 |
 | [E_DCW_NODE_DROPS](#e_dcw_node_drops) | 2 | U20 |
+| [E_DCW_EARLY_SESSIONS](#e_dcw_early_sessions) | 2 | U20 |
 | [E_DCV_POWER_PY_PIN](#e_dcv_power_py_pin) | 2 | U20 |
 | [E_DCV_PROJECTION_STOP](#e_dcv_projection_stop) | warning | U20 |
 
@@ -2394,11 +2395,19 @@ Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing
 
 ### E_DCW_NODE_DROPS
 
-Design plan review eval (the Captain's Node ruling): the recipes row's node-drops.json lists 3 or more stage 0 candidates that dropped for a Node-version cause (they did not qualify, and their declared Node range excludes the pinned Node or their failing qualification step printed an engine-mismatch error), so the gate check and every authoring row refuse before any provider is built. The message names the labels.
+Design plan review eval (the Captain's Node ruling): the recipes row's node-drops.json lists 3 or more stage 0 candidates that dropped for a Node-version cause no declared range explains (they did not qualify, and their failing qualification step printed an engine-mismatch error; a candidate whose declared Node range excludes the pinned Node is ineligible at the draw and never counts), so the gate check and every authoring row refuse before any provider is built. The message names the labels.
 
 Fix: Bring the labels and each one's node line from the recipes row's output to the Captain. A dropped app is never swapped. The rows run again only once the Captain clears that list: write node-cleared.json into the recipes sink holding {"labels": [...]} with exactly node-drops.json's labels (on the controller host, deliver it with the next row's inputs), then launch the row again into a new sink.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_DCW_EARLY_SESSIONS
+
+Design plan review eval (the fix pin's stop on stage 0): 3 recipe sessions ended outside the agent before any model request (their agent returned with no request on its proxy slot's journal, or never ran because the VM, its install or the job's first steps failed), so the recipes row stopped after the third one's VM was audited and deleted and its spend settled. The message names the sessions and the last cause; each session's failure line is in the row log.
+
+Fix: Read the sessions' failure lines in the row log, find the fault that stops a session before its first model request, and bring it to the Captain with a fix. Launch the recipes row again into a new sink only on the Captain's word.
+
+Exit 2. Side effects: The 3 recipe sessions and their VMs stay on dc-base-apps and dc-hosts at their measured spend. Retry safe: no. Resumable: no. Owner: U20.
 
 ### E_DCV_POWER_PY_PIN
 

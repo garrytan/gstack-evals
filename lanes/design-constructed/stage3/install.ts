@@ -67,6 +67,19 @@ export const NODE: { version: string; sha256: string } = JSON.parse(readFileSync
 /** BT: where Node unpacks in the VM; node, npm, npx and corepack are linked into /usr/local/bin, on every shell's PATH. */
 export const NODE_ROOT = "/opt/dc-node";
 
+/** BT: how long the install waits for the apt mirror's port to answer before the apt step (launch 10: 1 VM in 60 had no route to it right after boot). */
+export const APT_MIRROR_WAIT_S = 60;
+
+/**
+ * The bounded wait: a TCP connect to the apt mirror's host and port each second until one answers or the time runs out.
+ * It always exits 0, so a mirror that never answers fails at the apt step with apt's own cause.
+ */
+export function aptMirrorWait(url: string): string {
+  const u = new URL(url);
+  const port = u.port || (u.protocol === "https:" ? "443" : "80");
+  return "end=$((SECONDS+" + APT_MIRROR_WAIT_S + ")); until timeout 2 bash -c " + q(": > /dev/tcp/" + u.hostname + "/" + port) + " 2>/dev/null; do [ $SECONDS -lt $end ] || break; sleep 1; done; true";
+}
+
 /** BT: Docker's apt packages, for a VM whose spec names the dockerhub mirror; the preamble already wrote its daemon.json. */
 export const DOCKER_APT: readonly string[] = ["docker.io"];
 
@@ -133,6 +146,8 @@ export async function installControllerFiles(backend: VmBackend, vm: Vm, items: 
   must(await backend.exec(vm, "mkdir -p " + q(audit) + " && touch " + q(audit + "/controller-start"), { user: "root" }), "the start marker", vm);
   const apt = [...new Set(items.flatMap((it) => it.apt))];
   const aptGet = (pkgs: readonly string[]) => "export DEBIAN_FRONTEND=noninteractive && apt-get update -o DPkg::Lock::Timeout=600 -q && apt-get install -o DPkg::Lock::Timeout=600 -y -q --no-install-recommends " + pkgs.join(" ");
+  const aptMirror = vm.spec.mirrors.find((m) => m.name === "apt");
+  if ((apt.length || o.dockerMirror) && aptMirror) await backend.exec(vm, aptMirrorWait(aptMirror.url), { user: "root", timeoutMs: (APT_MIRROR_WAIT_S + 30) * 1000 });
   if (apt.length) must(await backend.exec(vm, aptGet(apt), { user: "root", timeoutMs: o.aptTimeoutMs ?? 900_000 }), "the apt packages", vm);
   if (o.dockerMirror) {
     must(await backend.exec(vm, aptGet(DOCKER_APT), { user: "root", timeoutMs: o.aptTimeoutMs ?? 900_000 }), "Docker's apt packages", vm);

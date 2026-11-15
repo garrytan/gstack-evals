@@ -112,18 +112,26 @@ const passing = (patterns: string[]): FileCheck => ({
 });
 
 /** A finished frame folder: n file-check passes (and one failure) in frame order, each on the same tiny clone. */
-export function frameFixture(n: number): string {
+export function frameFixture(n: number, o: { engines?: (position: number) => string | null } = {}): string {
   const dir = scratch("frame");
-  const clone = join(dir, "clones", "app");
-  mkdirSync(join(clone, "src"), { recursive: true });
-  writeFileSync(join(clone, "src", "page.tsx"), "export default function Page() { return null; }\n");
-  const g = (args: string[]) => spawnSync("git", args, { cwd: clone, encoding: "utf8", env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: dir, GIT_CONFIG_NOSYSTEM: "1", GIT_AUTHOR_NAME: "fixture", GIT_AUTHOR_EMAIL: "fixture@invalid", GIT_COMMITTER_NAME: "fixture", GIT_COMMITTER_EMAIL: "fixture@invalid" } });
-  g(["init", "-q"]);
-  g(["add", "."]);
-  g(["commit", "-qm", "fixture"]);
-  const oid = g(["rev-parse", "HEAD"]).stdout.trim();
+  const commit = (path: string, engines: string | null) => {
+    const clone = join(dir, path);
+    mkdirSync(join(clone, "src"), { recursive: true });
+    writeFileSync(join(clone, "src", "page.tsx"), "export default function Page() { return null; }\n");
+    if (engines) writeFileSync(join(clone, "package.json"), JSON.stringify({ name: "app", engines: { node: engines } }));
+    const g = (args: string[]) => spawnSync("git", args, { cwd: clone, encoding: "utf8", env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: dir, GIT_CONFIG_NOSYSTEM: "1", GIT_AUTHOR_NAME: "fixture", GIT_AUTHOR_EMAIL: "fixture@invalid", GIT_COMMITTER_NAME: "fixture", GIT_COMMITTER_EMAIL: "fixture@invalid" } });
+    g(["init", "-q"]);
+    g(["add", "."]);
+    g(["commit", "-qm", "fixture"]);
+    return g(["rev-parse", "HEAD"]).stdout.trim();
+  };
+  const oid = commit("clones/app", null);
   const patterns = ["/(app)/tickets", "/projects", "/projects/[id]", "/settings"];
-  const clones: CloneRecord[] = Array.from({ length: n + 1 }, (_, i) => ({ position: i + 1, nameWithOwner: "fixture/app-" + (i + 1), oid, fetched: true, reason: null, path: "clones/app" }));
+  const clones: CloneRecord[] = Array.from({ length: n + 1 }, (_, i) => {
+    const engines = o.engines?.(i + 1) ?? null;
+    const path = engines ? "clones/app-" + (i + 1) : "clones/app";
+    return { position: i + 1, nameWithOwner: "fixture/app-" + (i + 1), oid: engines ? commit(path, engines) : oid, fetched: true, reason: null, path };
+  });
   const checks = clones.map((c, i) => ({ position: c.position, nameWithOwner: c.nameWithOwner, check: i === 1 ? { ...passing(patterns), routes: false, pass: false } : passing(patterns) }));
   writeFileSync(join(dir, "clones.json"), JSON.stringify(clones));
   writeFileSync(join(dir, "filecheck.json"), JSON.stringify(checks));

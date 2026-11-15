@@ -53,6 +53,8 @@ export interface AgentRun {
   spentUsd: number | null;
   /** For an infra end, the driver's termination, for the record's cause. */
   why?: string;
+  /** The model requests the session's proxy slot journaled; unset where no proxy journal exists (the fakes). */
+  requests?: number;
 }
 
 // ---- Stage 3 (prereg section 11 and 2026-11-09 section 11)

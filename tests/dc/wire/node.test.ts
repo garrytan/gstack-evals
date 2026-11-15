@@ -43,12 +43,27 @@ const caught = (f: () => unknown): DcError => {
 };
 
 describe("the Node-version count", () => {
-  test("counts a candidate that did not qualify and falls outside its range or shows an engine error", () => {
-    const n = nodeDrops([record("c001", false, "no"), record("c002", false, "unknown", true), record("c003", true, "no"), record("c004", false, "yes"), record("c005", false, "unknown"), { ...record("c006", false, "unknown"), node: null, qualification: null } as CandidateRecord]);
-    expect(n).toEqual({ pinned: "24.22.3", count: 2, labels: ["c001", "c002"] });
-    expect(nodeDropsLine(n)).toBe("node-version drops: 2 (c001, c002) at pinned Node 24.22.3");
-    expect(nodeDropsLine(nodeDrops([record("c001", false, "no"), record("c002", false, "no"), record("c003", false, "no")]))).toBe("node-version drops: 3 (c001, c002, c003) at pinned Node 24.22.3; 3 or more, so gatecheck and author refuse until the Captain clears the list");
+  test("counts a candidate that did not qualify on an engine-mismatch error no declared range explains", () => {
+    const n = nodeDrops([record("c001", false, "no"), record("c002", false, "unknown", true), record("c003", true, "no"), record("c004", false, "yes"), record("c005", false, "unknown"), { ...record("c006", false, "unknown"), node: null, qualification: null } as CandidateRecord, record("c007", false, "no", true)]);
+    expect(n).toEqual({ pinned: "24.22.3", count: 1, labels: ["c002"] });
+    expect(nodeDropsLine(n)).toBe("node-version drops: 1 (c002) at pinned Node 24.22.3");
     expect(nodeDropsLine(nodeDrops([]))).toBe("node-version drops: 0 at pinned Node 24.22.3");
+  });
+
+  // Value: protects=the Captain's Node ruling of 2026-11-15; fails_when=a candidate whose declared range excludes the pinned Node counts toward E_DCW_NODE_DROPS; why_new=the ruling makes such a candidate ineligible at the draw; seam=nodeDrops, nodeDropRule; no_claim=the draw itself (tests/dc/wire/recipes-row.test.ts)
+  test("declared-range exclusions never count, so 3 of them leave the gate check and authoring open", () => {
+    const n = nodeDrops([record("c001", false, "no"), record("c002", false, "no", true), record("c003", false, "no", true)]);
+    expect(n.count).toBe(0);
+    expect(nodeDropRule(screenOf(n.labels))()).toBeNull();
+  });
+
+  // Value: protects=the 3-drop stop under the ruling; fails_when=3 engine-mismatch failures no declared range explains stop nothing; why_new=the ruling keeps the stop at 3; seam=nodeDrops, nodeDropsLine, nodeDropRule; no_claim=the qualification's engine-error reading
+  test("3 Node failures that no declared range explains still refuse with E_DCW_NODE_DROPS", () => {
+    const n = nodeDrops([record("c001", false, "yes", true), record("c002", false, "unknown", true), { ...record("c003", false, "unknown", true), node: null } as CandidateRecord]);
+    expect(nodeDropsLine(n)).toBe("node-version drops: 3 (c001, c002, c003) at pinned Node 24.22.3; 3 or more, so gatecheck and author refuse until the Captain clears the list");
+    const e = caught(() => nodeDropRule(screenOf(n.labels))());
+    expect(e.code).toBe("E_DCW_NODE_DROPS");
+    expect(e.message).toContain("c001, c002, c003");
   });
 });
 

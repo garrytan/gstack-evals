@@ -351,7 +351,7 @@ export function cases(): DryRunCase[] {
       name: "a recipe agent session runs the CLI on its slot under the controller's env file and ends completed at the proxy's spend",
       check: async () => {
         const { run, r } = await agentCase("recipe written", { spentMicros: 1_250_000 });
-        return first(eq(run, { end: "completed", spentUsd: 1.25 }, "run"), eq(r.upstream.map((u) => u.path + " " + u.auth), ["/slot1/anthropic/v1/messages Bearer run-token-1"], "upstream"), eq(r.ended, ["recipe session c001"], "ended"));
+        return first(eq(run, { end: "completed", spentUsd: 1.25, requests: 0 }, "run"), eq(r.upstream.map((u) => u.path + " " + u.auth), ["/slot1/anthropic/v1/messages Bearer run-token-1"], "upstream"), eq(r.ended, ["recipe session c001"], "ended"));
       },
     },
     {
@@ -359,7 +359,7 @@ export function cases(): DryRunCase[] {
       name: "a build agent session that hits its turn cap reads as its own limit, with unknown spend held as null",
       check: async () => {
         const { run, r } = await agentCase("LIMIT", { unknownMicros: 5, build: true });
-        return first(eq(run, { end: "own-limit", spentUsd: null }, "run"), eq(r.spawned[0]?.DC_ROUTE, "/r", "env"));
+        return first(eq(run, { end: "own-limit", spentUsd: null, requests: 0 }, "run"), eq(r.spawned[0]?.DC_ROUTE, "/r", "env"));
       },
     },
     {

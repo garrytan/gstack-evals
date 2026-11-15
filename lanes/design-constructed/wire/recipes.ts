@@ -11,8 +11,11 @@ import type { FileCheck } from "../frame/filecheck.ts";
 import { SAFE_ENV, safeArgs } from "../frame/git.ts";
 import { routeKey } from "../frame/routes.ts";
 import type { CloneRecord } from "../frame/run.ts";
+import { RECIPES } from "../frozen.ts";
+import { nodeDeclared } from "../recipes/node.ts";
 import type { BrowserSeam, Candidate, DiscoveredRoute } from "../recipes/seams.ts";
-import { runScreen, supply, type CandidateRecord } from "../recipes/sessions.ts";
+import { runScreen, supply, type CandidateRecord, type ScreenDeps } from "../recipes/sessions.ts";
+import type { AgentRun } from "../stage3/seams.ts";
 import { NODE } from "../stage3/install.ts";
 import { build, hostsSeam, moneySeam, routeMatcher } from "../wire.ts";
 import { readJson, writeJson } from "./json.ts";
@@ -77,9 +80,13 @@ export interface NodeDrops {
   labels: string[];
 }
 
-/** The candidates that did not qualify and either declare a range the pinned Node falls outside or failed on an engine-mismatch error. */
+/**
+ * The candidates that did not qualify on an engine-mismatch error that no declared range explains (the Captain's Node
+ * ruling of 2026-11-15): a declared range that excludes the pinned Node makes a candidate ineligible at the draw
+ * (nodeEligible), so it never counts here.
+ */
 export function nodeDrops(records: readonly CandidateRecord[]): NodeDrops {
-  const labels = records.filter((r) => !r.strict && (r.node?.pinnedFits === "no" || r.qualification?.engineError === true)).map((r) => r.id);
+  const labels = records.filter((r) => !r.strict && r.qualification?.engineError === true && r.node?.pinnedFits !== "no").map((r) => r.id);
   return { pinned: NODE.version, count: labels.length, labels };
 }
 
@@ -106,24 +113,96 @@ export const nodeDropRule = (screen: string | undefined) => (): [string, string]
   return fail("E_DCW_NODE_DROPS", d.labels.length + " stage 0 candidates dropped for a Node-version cause at pinned Node " + (d.pinned ?? NODE.version) + ": " + d.labels.join(", ") + ". " + NODE_DROP_STOP + " or more stop the gate check and authoring until the Captain clears this list" + (cleared === undefined ? "" : "; node-cleared.json names another list"));
 };
 
+/**
+ * The Captain's Node ruling at the draw: a candidate whose declared Node range (package.json engines.node, .nvmrc or
+ * .node-version, as nodeDeclared reads them) excludes the pinned Node is ineligible before any session. The sealed
+ * clone record holds no replacement, so the eligible keep their frame order. A tree that cannot be read stays eligible.
+ */
+export async function nodeEligible(candidates: readonly Candidate[]): Promise<{ eligible: Candidate[]; excluded: string[] }> {
+  const eligible: Candidate[] = [];
+  const excluded: string[] = [];
+  for (const c of candidates) {
+    const fits = await c.tree().then((t) => nodeDeclared(t).pinnedFits, () => "unknown");
+    if (fits === "no") excluded.push(c.id);
+    else eligible.push(c);
+  }
+  return { eligible, excluded };
+}
+
+export const eligibilityLines = (e: { eligible: readonly Candidate[]; excluded: readonly string[] }) => [
+  "node eligibility: " + e.excluded.length + " excluded at the draw" + (e.excluded.length ? " (" + e.excluded.join(", ") + ")" : "") + ", a declared Node range excludes pinned Node " + NODE.version + "; " + e.eligible.length + " eligible",
+  "node eligibility replacements: none in the sealed record",
+];
+
+/** The fix pin's stop: the row stops at this many recipe sessions that ended before any model request. */
+export const EARLY_STOP = 3;
+
+/**
+ * Streams the screen's lines to the row log as they happen and stops the row at the EARLY_STOP-th recipe session that
+ * ended outside the agent before any model request: its agent returned with no request on its slot's journal, or never
+ * ran (the VM, its install or the job's first steps failed). runScreen prints a session's failure line after the VM's
+ * audit, its deletion and the session's settle, so the stop comes after all three.
+ */
+export function earlyStop(d: Pick<ScreenDeps, "agent" | "recipeSpec">, out: (line: string) => void): Pick<ScreenDeps, "agent" | "recipeSpec" | "log"> {
+  let current: { label: string; run: AgentRun | null } | null = null;
+  const early: string[] = [];
+  return {
+    recipeSpec: (label) => {
+      current = { label, run: null };
+      return d.recipeSpec(label);
+    },
+    agent: async (vm, o) => {
+      const run = await d.agent(vm, o);
+      if (current) current.run = run;
+      return run;
+    },
+    log: (line) => {
+      out(line);
+      const m = /^(recipe session \S+(?: retry)?): failed outside the agent: (.*)$/.exec(line);
+      if (!m) return;
+      const run = current?.label === m[1] ? current.run : null;
+      if (run?.requests) return;
+      early.push(m[1]!);
+      if (early.length >= EARLY_STOP)
+        throw new DcError("E_DCW_EARLY_SESSIONS", early.length + " recipe sessions ended before any model request (" + early.join(", ") + "); the row stops after the last one's VM was audited and deleted and its spend settled. Its cause: " + m[2]);
+    },
+  };
+}
+
 export const recipesRow: Row = async (a, io, env) => {
   const usage = "recipes --frame <the frame's sealed folder> --out <new sink folder>";
   const frame = resolve(need(a, "--frame", usage));
   const sink = need(a, "--out", usage);
   const finished = existsSync(join(frame, "run.json"));
   const { candidates, counts } = finished ? candidatesFromFrame(frame) : { candidates: [], counts: { cloneAttempts: 0, clones: 0, fileCheckPasses: 0 } };
-  const launch = await start({ row: "recipes", sink, items: ["dc-base-apps", "dc-hosts"], models: ["opus"], terms: [], rules: [() => (finished ? null : ["7", "--frame holds no finished frame run (run.json); the base-app screen follows the frame and the file check"])], record: { candidates: candidates.length } }, env);
+  const draw = await nodeEligible(candidates);
+  if (finished) for (const l of eligibilityLines(draw)) io.out(l);
+  const short = draw.excluded.length > 0 && draw.eligible.length < RECIPES.minBaseApps;
+  const launch = await start(
+    {
+      row: "recipes",
+      sink,
+      items: ["dc-base-apps", "dc-hosts"],
+      models: ["opus"],
+      terms: [],
+      rules: [
+        () => (finished ? null : ["7", "--frame holds no finished frame run (run.json); the base-app screen follows the frame and the file check"]),
+        () => (short ? ["7", draw.eligible.length + " of " + candidates.length + " candidates are eligible after " + draw.excluded.length + " Node exclusions (" + draw.excluded.join(", ") + "), under the " + RECIPES.minBaseApps + " base apps the screen needs, and the sealed record holds no replacement; the screen stops before any session for the Captain"] : null),
+      ],
+      record: { candidates: candidates.length, nodeExcluded: draw.excluded },
+    },
+    env,
+  );
   for (const l of launch.lines) io.out(l);
   const vm = await build(env.providers, "vm", "recipes");
   try {
     const screen = await underStops(launch.ledger, { inRecipeVm: true }, () =>
-      runScreen(candidates, {
+      runScreen(draw.eligible, {
         sandbox: { backend: vm.backend, hosts: hostsSeam(launch.ledger, vm.priceMicrosPerHour, "recipes"), now: vm.now },
         money: moneySeam(launch.ledger),
-        agent: vm.recipeAgent,
+        ...earlyStop({ agent: vm.recipeAgent, recipeSpec: (l) => vm.spec("recipe", l) }, io.out),
         browser: probe1D(vm.browser, io.out),
         match: routeMatcher,
-        recipeSpec: (l) => vm.spec("recipe", l),
         qualifySpec: (l) => vm.spec("qualify", l),
         seededLogin: true,
         frame: counts,

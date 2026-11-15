@@ -300,6 +300,29 @@ export class SessionProxies {
     return this.live.get(item)?.proxy.journal ?? null;
   }
 
+  /** How many model requests the proxy journaled on one session's meter; a journal that cannot be read counts none. */
+  requests(b: SessionBinding): number {
+    const journal = this.journals.get(b.meterId);
+    if (!journal || !existsSync(journal)) return 0;
+    let text: string;
+    try {
+      text = readFileSync(journal, "utf8");
+    } catch {
+      return 0;
+    }
+    let n = 0;
+    for (const raw of text.split("\n")) {
+      if (!raw.trim()) continue;
+      try {
+        const l = JSON.parse(raw);
+        if (l.kind === "request" && l.cell?.meter_id === b.meterId) n++;
+      } catch {
+        continue;
+      }
+    }
+    return n;
+  }
+
   /**
    * PD-17's errorSeen for one attempt, from its proxy journal (wiring item 9): the proxy refused one of the attempt's
    * calls, or a call's outcome was an upstream error status, never sent, or unknown. A journal that cannot be read

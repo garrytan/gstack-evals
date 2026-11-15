@@ -8,6 +8,7 @@
 // completed reply, the session's own limit (turns, time, its allowance, its context, or a malformed tool call with no
 // error), a failure outside the agent, or a cap stop, which throws CapStopSignal for the item.
 import { spawn, spawnSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { claudeCodeDriver, type ClaudeCodeOptions } from "../../../src/adapters/claude-code/driver.ts";
 import type { AgentSession } from "../../../src/trial/sandbox.ts";
@@ -39,7 +40,8 @@ export interface VmBinding {
 /** The session provider for VM agents: a slot per session on the sub-reservation's item proxy, and its spend at the end. */
 export interface VmSessions {
   bind(sub: SubRef, session: string): Promise<VmBinding>;
-  end(b: VmBinding): Promise<{ spentMicros: number; unknownMicros: number }>;
+  /** The slot's spend, and how many model requests its proxy journal holds. */
+  end(b: VmBinding): Promise<{ spentMicros: number; unknownMicros: number; requests: number }>;
 }
 
 /**
@@ -76,7 +78,7 @@ export function proxySessions(o: { controller: MoneyController; proxies: Session
       o.front.unroute(v.slot);
       const b = bound.get(v.slot) ?? fail("E_INTERNAL", v.session + "'s slot was never bound");
       bound.delete(v.slot);
-      return o.proxies.end(b);
+      return { ...(await o.proxies.end(b)), requests: o.proxies.requests(b) };
     },
     async close() {
       clearInterval(timer);
@@ -125,7 +127,7 @@ export function sshAgentSession(o: SshOptions & { wrap?: (command: string, user:
   const remote = (command: string) => wrap(". " + q(envFile) + " && cd " + q(workDir) + " && " + command, "run");
   return {
     exec(command, timeoutMs) {
-      const argv = sshArgs(o, host, [remote(command)]);
+      const argv = [...sshArgs(o, host), remote(command)];
       const r = spawnSync(argv[0]!, argv.slice(1), { encoding: "utf8", timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024 });
       const timedOut = (r.error as NodeJS.ErrnoException | undefined)?.code === "ETIMEDOUT";
       return { exitCode: timedOut ? null : r.status, timedOut, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
@@ -133,7 +135,7 @@ export function sshAgentSession(o: SshOptions & { wrap?: (command: string, user:
     spawn(argv, env = {}) {
       for (const k of Object.keys(env)) if (!ENV_NAME.test(k)) throw new DcError("E_USAGE", "spawn env name " + JSON.stringify(k) + " is not a plain name");
       const pairs = Object.entries(env).map(([k, v]) => q(k + "=" + v));
-      const line = sshArgs(o, host, [remote("exec " + (pairs.length ? "env " + pairs.join(" ") + " " : "") + argv.map(q).join(" "))]);
+      const line = [...sshArgs(o, host), remote("exec " + (pairs.length ? "env " + pairs.join(" ") + " " : "") + argv.map(q).join(" "))];
       return spawn(line[0]!, line.slice(1), { stdio: ["pipe", "pipe", "pipe"] });
     },
     stop() {},
@@ -144,6 +146,8 @@ export function sshAgentSession(o: SshOptions & { wrap?: (command: string, user:
  * One agent session in a VM: bind a slot on the sub-reservation's item, write the env file, run the adapter with the
  * session's frozen limits (turns as max turns, minutes as the timeout, the slot's allowance as its own stop), then end
  * the slot, stop any CLI still running and remove the env file. Spend is the proxy's figure, null when any is unknown.
+ * An infra end's cause names the termination and its code, and ends with the last words of the CLI's stderr log
+ * (cli-stderr.log); the screen masks it with causeText before it reaches a record or a line.
  */
 export async function runVmAgent(d: VmAgentDeps, vm: Vm, o: { prompt: string; limits: { turns: number; minutes: number }; sub: SubRef; env?: Readonly<Record<string, string>> }): Promise<AgentRun> {
   const label = vm.spec.label;
@@ -152,7 +156,7 @@ export async function runVmAgent(d: VmAgentDeps, vm: Vm, o: { prompt: string; li
   const envFile = dir + "/env";
   const run = vm.spec.runUser;
   let outcome: Awaited<ReturnType<ReturnType<typeof claudeCodeDriver>["run"]>> | null = null;
-  let figures: { spentMicros: number; unknownMicros: number } | null = null;
+  let figures: { spentMicros: number; unknownMicros: number; requests: number } | null = null;
   try {
     const m = DIRECT_MODELS[b.model];
     const driver = claudeCodeDriver({ model: m.id, provider: m.provider === "anthropic" ? "anthropic" : "openrouter", proxy: { baseUrl: b.baseUrl, slot: b.slot, token: b.token }, skill: null, out: join(d.out, safe(label)), maxTurns: o.limits.turns, capStops: true, ...(d.query ? { query: d.query } : {}) });
@@ -170,5 +174,10 @@ export async function runVmAgent(d: VmAgentDeps, vm: Vm, o: { prompt: string; li
   const end = endOf(outcome!.termination);
   if (end.kind === "cap-stop") throw new CapStopSignal(o.sub.item, label + ": the proxy refused a call on the item's cap");
   const kind = end.kind === "completed" ? "completed" : end.kind === "own-limit" ? "own-limit" : "infra";
-  return { end: kind, spentUsd, ...(kind === "infra" ? { why: "the session ended with " + outcome!.termination.kind } : {}) };
+  if (kind !== "infra") return { end: kind, spentUsd, requests: figures.requests };
+  const t = outcome!.termination;
+  const detail = "code" in t ? t.code : "incident" in t ? t.incident : null;
+  const log = join(d.out, safe(label), "cli-stderr.log");
+  const tail = existsSync(log) ? readFileSync(log, "utf8").split(/\s+/).filter(Boolean).join(" ").slice(-240) : "";
+  return { end: kind, spentUsd, requests: figures.requests, why: "the session ended with " + t.kind + (detail ? " (" + detail + ")" : "") + (tail ? "; cli-stderr.log ends: " + tail : "") };
 }

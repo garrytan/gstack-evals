@@ -28,7 +28,7 @@ describe("the in-VM agent session", () => {
   test("a recipe session runs the CLI under the controller's env file, reaches only its slot and ends completed at the proxy's spend", async () => {
     const r = rig({ reply: () => "recipe written", spentMicros: 2_500_000 });
     const run = await runVmAgent(r.deps, r.vm, { prompt: "write the recipe", limits: RECIPES.session, sub: SUB });
-    expect(run).toEqual({ end: "completed", spentUsd: 2.5 });
+    expect(run).toEqual({ end: "completed", spentUsd: 2.5, requests: 0 });
     expect(r.upstream).toHaveLength(1);
     expect(r.upstream[0]).toEqual({ path: "/slot1/anthropic/v1/messages", auth: "Bearer run-token-1", model: "claude-opus-5-5" });
     const envFile = AGENT_ENV_DIR + "/env";
@@ -43,7 +43,7 @@ describe("the in-VM agent session", () => {
   test("a build session carries its env and reads the turn cap as its own limit; unknown spend is null", async () => {
     const r = rig({ reply: () => "LIMIT", unknownMicros: 10 });
     const run = await runVmAgent(r.deps, r.vm, { prompt: BUILD_PROMPT, limits: STAGE3.build, sub: { item: "dc-stage3-builds", id: "sub-2" }, env: { DC_UNIT_ROUTE: "/reports" } });
-    expect(run).toEqual({ end: "own-limit", spentUsd: null });
+    expect(run).toEqual({ end: "own-limit", spentUsd: null, requests: 0 });
     expect(r.spawned[0]!.DC_UNIT_ROUTE).toBe("/reports");
   }, 60_000);
 

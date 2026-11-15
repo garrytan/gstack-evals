@@ -78,7 +78,7 @@ export function agentRig(o: { reply: () => string; out: string; spentMicros?: nu
   };
   const sessions: VmSessions = {
     bind: async (sub, session) => ({ item: sub.item, sub: sub.id, session, baseUrl: "http://127.0.0.1:" + server.port, slot: "slot1", token: "run-token-1", model: "opus" }),
-    end: async (b) => (ended.push(b.session), { spentMicros: o.spentMicros ?? 0, unknownMicros: o.unknownMicros ?? 0 }),
+    end: async (b) => (ended.push(b.session), { spentMicros: o.spentMicros ?? 0, unknownMicros: o.unknownMicros ?? 0, requests: 0 }),
   };
   const session = (_vm: Vm, envFile: string): AgentSession => stubSession(files.get(envFile) ?? "", o.out, spawned);
   const vm = { id: "vm-rig", spec: { label: "recipe session c001", runUser: "run", ...o.spec } } as unknown as Vm;
