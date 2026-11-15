@@ -75,6 +75,8 @@ export interface H2hSession {
   /** Relative paths inside the session's record directory. */
   transcript: string;
   tree_bundle: string;
+  /** The commit the session's repository started from, which the scorer extracts the change against (part C). */
+  base_head?: string;
 }
 
 export type Outcome = "clean_fix" | "fix_broke" | "no_fix" | "no_fix_broke";
@@ -97,6 +99,10 @@ export interface H2hScore {
   worktree_pass: boolean | null;
   lines_changed: number;
   planning_lines: number;
+  /** Nested worktree directories left out of the extracted change, relative to the repository root (part C). */
+  nested_left_out?: string[];
+  /** The worktree secondary's candidates, each scored as the main change is (part C). */
+  worktree_candidates?: { source: string; verified: boolean; gap: string | null }[];
 }
 
 /** The frozen row states of section 9. */
