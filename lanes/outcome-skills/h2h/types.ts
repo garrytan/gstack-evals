@@ -145,6 +145,6 @@ export const BROWSER = {
   wrapper_repo_path: "lanes/outcome-skills/h2h/breadth/chromium-wrapper.sh",
   wrapper_container_path: "/opt/h2h/chromium",
   shm_size: "2g",
-  env: { CHROME_BIN: "/opt/h2h/chromium", PUPPETEER_EXECUTABLE_PATH: "/opt/h2h/chromium" },
+  env: { CHROME_BIN: "/opt/h2h/chromium", CHROME_PATH: "/opt/h2h/chromium", PUPPETEER_EXECUTABLE_PATH: "/opt/h2h/chromium" },
   flags: ["--no-sandbox", "--disable-dev-shm-usage"],
 } as const;
