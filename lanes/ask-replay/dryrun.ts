@@ -227,13 +227,13 @@ async function capCheck(items: AskItem[]): Promise<string | true> {
   const dir = mkdtempSync(join(tmpdir(), "ask-dry-cap-"));
   try {
     const { local, leaseId, record } = lease(dir, FROZEN.spend_items.I6!, 1000);
-    const samples = schedule(items.slice(0, 1), "opus", 1, 3);
+    const samples = schedule(items.slice(0, 1), "opus", FROZEN.replicates.k, 3);
     const o: ShardOptions = { items: new Map(items.map((i) => [i.item, i])), samples, gstack: FIXTURE_GSTACK, client: ledgerClient({ local, leaseId, runId: FROZEN.spend_items.I6!, maxOutputTokens: FROZEN.output_cap.tokens, send: stubSend(() => ({ action: "SEND" })) }), store: plainStore(join(dir, "replies")), out: join(dir, "out"), maxOutputTokens: FROZEN.output_cap.tokens, sleep: async () => {}, concurrency: 1 };
     const res = await runShard(o);
     settleLease(record, local, leaseId);
     local.close();
     if (res.stopped !== "cap" || res.ran !== 0) return "the shard did not stop on the cap (" + res.stopped + ")";
-    const absent = absentSamples(items.slice(0, 1), [...plainStore(join(dir, "replies")).read().values()].map((r) => r.sample), 1, ["opus"]);
+    const absent = absentSamples(items.slice(0, 1), [...plainStore(join(dir, "replies")).read().values()].map((r) => r.sample), ["opus"]);
     return absent.total === samples.length ? true : "score did not count the cap-stopped samples as absent (" + absent.total + " of " + samples.length + ")";
   } finally {
     rmSync(dir, { recursive: true, force: true });

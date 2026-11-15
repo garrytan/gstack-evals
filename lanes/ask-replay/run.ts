@@ -45,7 +45,7 @@ export function schedule(items: readonly Pick<AskItem, "item">[], model: ModelKe
       const j = Math.floor(rng() * (i + 1));
       [order[i], order[j]] = [order[j]!, order[i]!];
     }
-    for (const arm of order) for (let r = 1; r <= reps(arm); r++) out.push({ id: sampleId(it.item, arm, model, r), item: it.item, arm, model, replicate: r });
+    for (const arm of order) for (let r = 1; r <= reps(arm); r++) out.push({ id: sampleId(it.item, arm, model, r), item: it.item, arm, model, replicate: r, k });
   }
   return out;
 }

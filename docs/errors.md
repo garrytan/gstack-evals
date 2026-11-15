@@ -2247,7 +2247,7 @@ Exit 2. Side effects: Partial: sealed replies and their spend are kept; the leas
 
 ### E_ASK_INCOMPLETE
 
-Ask replay eval: the replies lack samples the frozen schedule names, so the run is incomplete. score prints the absent counts per model and arm and no decision rows.
+Ask replay eval: the replies lack Opus or Sol samples their shards scheduled, so the run is incomplete. score prints the absent counts per model and arm and no decision rows. particle-1's absent samples only mark its readout untested.
 
 Fix: Resume a shard that stopped on time or on a local fault. A run a spend cap stopped stays incomplete and is never retried to change a verdict.
 

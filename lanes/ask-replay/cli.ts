@@ -172,15 +172,17 @@ export const SUBCOMMANDS: Record<string, { summary: string; run: Run }> = {
       const f = flags(argv, ["items", "replies", "links", "labels", "draws"], ["keyless"]);
       const items = readItems(need(f, "items"));
       const records = finalRecords(readRecords(need(f, "replies")));
-      const absent = absentSamples(items, records.map((r) => r.sample));
+      const samples = records.map((r) => r.sample);
+      const absent = absentSamples(items, samples, FROZEN.frontier_models);
       if (absent.total) {
         json(io, { incomplete: true, absent: absent.total, absent_by_model_arm: absent.by });
-        fail("E_ASK_INCOMPLETE", "the replies lack " + absent.total + " scheduled samples, so the run is incomplete and score prints no decision rows");
+        fail("E_ASK_INCOMPLETE", "the replies lack " + absent.total + " scheduled Opus or Sol samples, so the run is incomplete and score prints no decision rows");
       }
+      const untested = absentSamples(items, samples, (Object.keys(FROZEN.models) as ModelKey[]).filter((m) => FROZEN.models[m].arms.length && !FROZEN.frontier_models.includes(m))).by;
       const lab = f.labels ? labelReadout(items, finalRecords(readRecords(f.labels))) : null;
       const links = lab?.links ?? readLinks(f.links) ?? proxyLinks(items);
       const outcomes = records.map(outcomeOf);
-      const opts = { links, seed: seed("bootstrap_seed", f.keyless === "1"), draws: f.draws ? Number(f.draws) : FROZEN.stats.bootstrap_draws, answerJudged: lab?.answer_judged };
+      const opts = { links, seed: seed("bootstrap_seed", f.keyless === "1"), draws: f.draws ? Number(f.draws) : FROZEN.stats.bootstrap_draws, answerJudged: lab?.answer_judged, untested };
       const view = (its: AskItem[]) => {
         const ids = new Set(its.map((i) => i.item));
         return readout(its, outcomes.filter((x) => ids.has(x.item)), opts);
@@ -273,8 +275,8 @@ export const SUBCOMMANDS: Record<string, { summary: string; run: Run }> = {
       refuseUnfrozen();
       const model = need(f, "model") as ModelKey;
       if (!FROZEN.models[model]?.arms.length) fail("E_USAGE", "--model is one of " + (Object.keys(FROZEN.models) as ModelKey[]).filter((m) => FROZEN.models[m].arms.length).join(", "));
-      const item = FROZEN.spend_items[need(f, "spend-item")] ?? fail("E_USAGE", "--spend-item is one of " + Object.keys(FROZEN.spend_items).join(", "));
       const pilot = f.pilot === "1";
+      const item = runSpendItem(need(f, "spend-item"), model, pilot);
       if (pilot && (f.k || !FROZEN.pilot.models.includes(model))) fail("E_USAGE", "--pilot runs the frozen pilot arms on " + FROZEN.pilot.models.join(" or ") + " and takes no --k");
       const k: number | Partial<Record<Arm, number>> = pilot ? (FROZEN.pilot.arms as Partial<Record<Arm, number>>) : f.k ? Number(f.k) : FROZEN.replicates.k;
       return paidShard(f, io, { name: "run", model, item, gstack: gstackFrom(f), samples: (items) => schedule(items, model, k, seed("order_seed", false)) });
@@ -294,6 +296,13 @@ export const SUBCOMMANDS: Record<string, { summary: string; run: Run }> = {
     },
   },
 };
+
+/** The spend item a run shard meters, refused before any lease opens unless the prereg's table pairs it with the model: the smoke (I1) on any model, the pilot (I2, I2r) under --pilot, else the model's own main-run item. */
+export function runSpendItem(id: string, model: ModelKey, pilot: boolean): string {
+  const frozen = pilot ? ["I2", "I2r"] : ["I1", ({ opus: "I6", sol: "I7", particle: "I8" } as Record<string, string>)[model]!];
+  if (!frozen.includes(id)) fail("E_USAGE", "--spend-item " + id + " is not frozen for " + (pilot ? "the pilot" : model) + "; use " + frozen.join(" or "));
+  return FROZEN.spend_items[id]!;
+}
 
 function refuseUnfrozen(): void {
   const left = placeholders().filter((p) => p.startsWith("stats.") || p.startsWith("synthetic."));

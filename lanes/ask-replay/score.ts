@@ -13,7 +13,7 @@ import { FROZEN } from "./frozen.ts";
 import { multiDecision } from "./ledger.ts";
 import { sampleId } from "./run.ts";
 import { clopperPearson, pairedInterval, type Interval } from "./stats.ts";
-import { LABELS, type Arm, type AskItem, type Label, type MissingKind, type ModelKey, type Outcome } from "./types.ts";
+import { LABELS, type Arm, type AskItem, type Label, type MissingKind, type ModelKey, type Outcome, type Sample } from "./types.ts";
 
 export type Coding = "primary" | "secondary";
 export type Role = "treatment" | "comparator" | "excluded";
@@ -109,13 +109,17 @@ export interface MissingShare {
   by_kind: Record<MissingKind, number>;
 }
 
-/** Samples the frozen schedule names that no record holds, per model and arm: every item, every arm the model runs, replicates 1 to k, for each model with any record unless models names them. A run with any is incomplete and prints no decision rows. */
-export function absentSamples(items: readonly Pick<AskItem, "item">[], samples: readonly { id: string; model: ModelKey }[], k: number = FROZEN.replicates.k, models: Iterable<ModelKey> = new Set(samples.map((s) => s.model))): { total: number; by: Partial<Record<ModelKey, Partial<Record<Arm, number>>>> } {
+/** Samples the shards scheduled that no record holds, per model and arm, for each model named: every item, every arm the model runs, replicates 1 to the k its shard scheduled, which each record carries (the pilot's is per arm). A model with no record counts every sample of the plan its peers' records carry, or of the frozen k. */
+export function absentSamples(items: readonly Pick<AskItem, "item">[], samples: readonly Pick<Sample, "id" | "model" | "k">[], models: Iterable<ModelKey>): { total: number; by: Partial<Record<ModelKey, Partial<Record<Arm, number>>>> } {
   const have = new Set(samples.map((s) => s.id));
+  const reps = (k: Sample["k"], arm: Arm) => (k === undefined ? FROZEN.replicates.k : typeof k === "number" ? k : k[arm] ?? 0);
   const by: Partial<Record<ModelKey, Partial<Record<Arm, number>>>> = {};
   let total = 0;
   for (const model of models) {
+    const own = samples.filter((s) => s.model === model);
+    const plans = (own.length ? own : samples).map((s) => s.k);
     for (const arm of FROZEN.models[model].arms) {
+      const k = plans.length ? plans.reduce<number>((m, p) => Math.max(m, reps(p, arm)), 0) : FROZEN.replicates.k;
       let n = 0;
       for (const it of items) for (let r = 1; r <= k; r++) if (!have.has(sampleId(it.item, arm, model, r))) n++;
       if (n) (by[model] ??= {})[arm] = n;
@@ -212,15 +216,21 @@ export interface ReadoutOptions {
   models?: readonly ModelKey[];
   /** Per ledger row id, whether both labellers judged the quoted owner message an answer to that answered row (label.ts); unjudged rows are absent. */
   answerJudged?: ReadonlyMap<string, boolean>;
+  /** Models outside the frontier with scheduled samples absent (absentSamples), such as particle-1 after a cap stop: each reads as untested with its absent counts, and the decision rows still print. */
+  untested?: Partial<Record<ModelKey, Partial<Record<Arm, number>>>>;
 }
 
 /** Every number section 8 reports, per model, plus the decision rows. Counts and rates only, never text. */
 export function readout(items: readonly AskItem[], outcomes: readonly Outcome[], o: ReadoutOptions) {
   const infos = itemInfos(items, o.links ?? []);
-  const models = o.models ?? (Object.keys(FROZEN.models) as ModelKey[]).filter((m) => outcomes.some((x) => x.model === m));
+  const models = o.models ?? (Object.keys(FROZEN.models) as ModelKey[]).filter((m) => o.untested?.[m] || outcomes.some((x) => x.model === m));
   const intervals: Partial<Record<ModelKey, ModelIntervals>> = {};
   const per: Record<string, unknown> = {};
   for (const m of models) {
+    if (o.untested?.[m]) {
+      per[m] = { untested: true, absent_by_arm: o.untested[m] };
+      continue;
+    }
     const arms = FROZEN.models[m].arms.filter((a) => outcomes.some((x) => x.model === m && x.arm === a));
     const iv = (t: Arm, c: Arm, set: ItemSet, extra: Partial<CompareOptions> = {}) => (arms.includes(t) && arms.includes(c) ? compare(infos, outcomes, { model: m, t, c, set, seed: o.seed, draws: o.draws, ...extra }) : null);
     const table = (extra: Partial<CompareOptions>) => Object.fromEntries((["needless", "must", "duplicates"] as ItemSet[]).map((set) => [set, Object.fromEntries(COMPARISONS.map(([t, c]) => [t + "-" + c, iv(t, c, set, extra)]))]));

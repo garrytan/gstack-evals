@@ -89,6 +89,8 @@ export interface Sample {
   arm: Arm;
   model: ModelKey;
   replicate: number;
+  /** The replicates its shard scheduled: one count for every arm, or the pilot's count per arm. score checks completeness against it; absent on labeller calls. */
+  k?: number | Partial<Record<Arm, number>>;
 }
 
 /** How a c or d reply named its ledger row. not_asked: arms a and b, which have no ledger. */

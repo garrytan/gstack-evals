@@ -237,7 +237,7 @@ All run at medium reasoning and the provider's default temperature (no temperatu
 | E_ASK_PROCESSOR | no particle-1 route accepts data collection denied; particle-1 untested on real items |
 | E_ASK_CAP | a spend cap stopped a lease; the run is incomplete and never retried to change a verdict |
 | E_ASK_PROXY | the metering proxy refused a call for a local reason; the shard stops, the sample stays unsealed and is never scored as MISSING |
-| E_ASK_INCOMPLETE | score found scheduled samples with no reply; the run is incomplete |
+| E_ASK_INCOMPLETE | score found scheduled Opus or Sol samples with no reply; the run is incomplete |
 | E_ASK_RESUME | a sample has an open lease and no sealed reply; reconcile, redraw once, count it |
 | E_ASK_PRIVACY | the lane scan or the synthetic check found a hit; no push, no build |
 | E_ASK_PARSE | a reply with no valid action; scored as MISSING |
@@ -246,7 +246,7 @@ All run at medium reasoning and the provider's default temperature (no temperatu
 | E_ASK_INPUT | malformed builder input, or a synthetic set that differs from its generator |
 | E_ASK_DRYRUN_FAIL | the dry run had a FAIL line |
 
-A run with any scheduled sample absent is incomplete: score reports the absent counts per model and arm and prints no decision rows.
+A run with any scheduled Opus or Sol sample absent is incomplete: score reports the absent counts per model and arm and prints no decision rows. Each reply records the replicates its shard scheduled (3 after the pilot rule, and the pilot's own count per arm), and score counts against that. A frontier model with no reply counts all its samples absent. If particle-1 has absent samples, for example after a cap stop or E_ASK_PROCESSOR, its readout says untested and the decision rows still print, because particle-1 never decides a row.
 
 **Keyless tests** in tests/ask-replay/ (15 files) cover: the codebook pin, the labeller prompt's blindness, label parsing, labeller calls on the driver and the label readout; both draws; ledger status and every gate rule (a whitespace-only reask reason, FOLD naming an answered row, a missing repeats field, an unknown id); every scoring rule and both codings; MISSING bounds per comparison; every decision row on fixtures; stats on fixed data; component order; arm cleanliness; the gstack pins (skipped when no gstack clone is present); the privacy scanners; custody on a throwaway age identity; a resume that never double-counts; the builder on fixture pages; and the dry run.
 

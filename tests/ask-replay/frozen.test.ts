@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { main, smokeItems } from "../../lanes/ask-replay/cli.ts";
+import { main, runSpendItem, smokeItems } from "../../lanes/ask-replay/cli.ts";
 import { FROZEN, placeholders } from "../../lanes/ask-replay/frozen.ts";
 import { generate } from "../../lanes/ask-replay/synthetic/generator.ts";
 
@@ -64,6 +64,18 @@ describe("gstack-evals ask-replay", () => {
     expect(await main(["label", "--kind", "link", "--model", "astra"], io)).toBe(2);
     expect(await main(["label", "--kind", "audit", "--model", "sol"], io)).toBe(2);
     expect(err.join("\n").split("\n").filter((l) => l.startsWith("E_USAGE ") && !l.startsWith("E_USAGE fix:") && !l.startsWith("E_USAGE docs:"))).toHaveLength(3);
+  });
+  test("run meters only the spend item the prereg pairs with its model, and refuses another before any identity is read", async () => {
+    expect(runSpendItem("I6", "opus", false)).toBe(FROZEN.spend_items.I6!);
+    expect(runSpendItem("I8", "particle", false)).toBe(FROZEN.spend_items.I8!);
+    expect(runSpendItem("I1", "sol", false)).toBe(FROZEN.spend_items.I1!);
+    expect(runSpendItem("I2r", "sol", true)).toBe(FROZEN.spend_items.I2r!);
+    expect(() => runSpendItem("I6", "sol", false)).toThrow();
+    expect(() => runSpendItem("I2", "opus", false)).toThrow();
+    expect(() => runSpendItem("I7", "sol", true)).toThrow();
+    const err: string[] = [];
+    expect(await main(["run", "--model", "sol", "--spend-item", "I6"], { out: () => {}, err: (t) => err.push(t) })).toBe(2);
+    expect(err.join("\n")).toContain("E_USAGE --spend-item I6 is not frozen for sol");
   });
   test("the smoke takes 20 synthetic items by class", () => {
     const s = smokeItems(generate().items);

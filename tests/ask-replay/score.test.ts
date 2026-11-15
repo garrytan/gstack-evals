@@ -1,11 +1,15 @@
 import { describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { proxyLinks } from "../../lanes/ask-replay/chains.ts";
+import { main } from "../../lanes/ask-replay/cli.ts";
 import { DECISION_FIXTURES } from "../../lanes/ask-replay/fixtures.ts";
 import { FROZEN } from "../../lanes/ask-replay/frozen.ts";
 import { schedule } from "../../lanes/ask-replay/run.ts";
 import { absentSamples, compare, decide, itemInfos, itemMeans, missingShares, pastCeiling, readout, sampleScore } from "../../lanes/ask-replay/score.ts";
 import { generate } from "../../lanes/ask-replay/synthetic/generator.ts";
-import type { Action, Arm, AskItem, MissingKind, Outcome } from "../../lanes/ask-replay/types.ts";
+import type { Action, Arm, AskItem, MissingKind, ModelKey, Outcome, Sample, SampleRecord } from "../../lanes/ask-replay/types.ts";
 
 const items = generate().items;
 const links = proxyLinks(items);
@@ -119,8 +123,64 @@ describe("a partial run", () => {
   test("scheduled samples with no record count as absent per model and arm, so the run is incomplete", () => {
     const its = items.slice(0, 2);
     const all = schedule(its, "opus", FROZEN.replicates.k, 7);
-    expect(absentSamples(its, all)).toEqual({ total: 0, by: {} });
+    expect(absentSamples(its, all, ["opus"])).toEqual({ total: 0, by: {} });
     const capped = all.filter((s) => !(s.arm === "b" && s.replicate === 2));
-    expect(absentSamples(its, capped)).toEqual({ total: 2, by: { opus: { b: 2 } } });
+    expect(absentSamples(its, capped, ["opus"])).toEqual({ total: 2, by: { opus: { b: 2 } } });
+  });
+  test("a run cut short at k = 3 counts its unsealed third replicates as absent", () => {
+    const its = items.slice(0, 2);
+    const all = [...schedule(its, "opus", 3, 7), ...schedule(its, "sol", 3, 7)];
+    const cut = all.filter((s) => s.replicate <= 2);
+    const r = absentSamples(its, cut, FROZEN.frontier_models);
+    expect(r.total).toBe(all.length - cut.length);
+    expect(r.by.opus).toEqual({ a: 2, b: 2, c: 2, d: 2 });
+  });
+  test("a complete pilot run, with its own count per arm, has no absent samples", () => {
+    const its = items.slice(0, 2);
+    const pilot = FROZEN.pilot.arms as Partial<Record<Arm, number>>;
+    const all = [...schedule(its, "opus", pilot, 7), ...schedule(its, "sol", pilot, 7)];
+    expect(absentSamples(its, all, FROZEN.frontier_models)).toEqual({ total: 0, by: {} });
+    expect(absentSamples(its, all.slice(1), FROZEN.frontier_models).total).toBe(1);
+  });
+  test("a frontier model with no record counts every sample its peers' plan schedules as absent", () => {
+    const its = items.slice(0, 2);
+    const r = absentSamples(its, schedule(its, "opus", 3, 7), FROZEN.frontier_models);
+    expect(r.by.opus).toBeUndefined();
+    expect(r.by.sol).toEqual({ a: 6, b: 6, c: 6, d: 6 });
+  });
+});
+
+describe("score's completeness guard", () => {
+  const its = items.slice(0, 4);
+  const shard = (m: ModelKey) => schedule(its, m, FROZEN.replicates.k, 7);
+  const record = (s: Sample): SampleRecord => ({ sample: s, draw: 1, attempts: 1, missing: null, agent_action: "SEND", final_action: "SEND", repeats: s.arm === "c" || s.arm === "d" ? "new" : "not_asked", named: null, reask_reason: false, gate: "none", reason: null, text: null, capped: false, micros: null, upstream_redraw: false });
+  async function score(samples: Sample[]) {
+    const dir = mkdtempSync(join(tmpdir(), "ask-score-"));
+    try {
+      writeFileSync(join(dir, "items.jsonl"), its.map((i) => JSON.stringify(i)).join("\n") + "\n");
+      mkdirSync(join(dir, "replies"));
+      for (const s of samples) writeFileSync(join(dir, "replies", s.id + ".ask.json"), JSON.stringify(record(s)));
+      const out: string[] = [];
+      const err: string[] = [];
+      const code = await main(["score", "--items", join(dir, "items.jsonl"), "--replies", join(dir, "replies"), "--draws", "20", "--keyless"], { out: (t) => out.push(t), err: (t) => err.push(t) });
+      return { code, out: JSON.parse(out.join("\n")), err: err.join("\n") };
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+  test("a frontier shard with no records blocks the decision rows", async () => {
+    const r = await score(shard("opus"));
+    expect(r.code).toBe(2);
+    expect(r.err).toContain("E_ASK_INCOMPLETE");
+    expect(r.out.absent_by_model_arm.sol).toEqual({ a: 8, b: 8, c: 8, d: 8 });
+    expect(r.out.decision).toBeUndefined();
+  });
+  test("a particle-1 cap stop reads as untested and the decision rows still print", async () => {
+    const r = await score([...shard("opus"), ...shard("sol"), ...shard("particle").slice(0, 3)]);
+    expect(r.code).toBe(0);
+    expect(typeof r.out.decision.row).toBe("string");
+    expect(r.out.models.particle.untested).toBe(true);
+    expect(Object.values(r.out.models.particle.absent_by_arm as Record<string, number>).reduce((a, b) => a + b, 0)).toBe(shard("particle").length - 3);
+    expect(r.out.models.opus.untested).toBeUndefined();
   });
 });
