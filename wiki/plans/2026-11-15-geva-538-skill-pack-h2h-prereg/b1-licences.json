@@ -1,0 +1,1581 @@
+{
+ "schema": "h2h-b1-licences.v1",
+ "freeze_date": "2026-11-15",
+ "read": "the licence b1-repos.json froze from the repository search (licenseInfo.spdxId); the second read covers every kept repository where it is null or NOASSERTION",
+ "repos": {
+  "Akryum/vue-virtual-scroller": {
+   "spdx": null
+  },
+  "Azgaar/Fantasy-Map-Generator": {
+   "spdx": "NOASSERTION"
+  },
+  "Comcast/react-data-grid": {
+   "spdx": "NOASSERTION"
+  },
+  "Countly/countly-server": {
+   "spdx": "NOASSERTION"
+  },
+  "Dash-Industry-Forum/dash.js": {
+   "spdx": "NOASSERTION"
+  },
+  "DouyinFE/semi-design": {
+   "spdx": "NOASSERTION"
+  },
+  "EKKOLearnAI/ekko-studio": {
+   "spdx": "NOASSERTION"
+  },
+  "Finsys/dockhand": {
+   "spdx": "NOASSERTION"
+  },
+  "Infisical/infisical": {
+   "spdx": "NOASSERTION"
+  },
+  "JOYCEQL/magic-resume": {
+   "spdx": "NOASSERTION"
+  },
+  "KnockOutEZ/wigolo": {
+   "spdx": "NOASSERTION"
+  },
+  "KunAgent/Kun": {
+   "spdx": "NOASSERTION"
+  },
+  "MetaMask/metamask-extension": {
+   "spdx": "NOASSERTION"
+  },
+  "Stuk/jszip": {
+   "spdx": "NOASSERTION"
+  },
+  "TiddlyWiki/TiddlyWiki5": {
+   "spdx": "NOASSERTION"
+  },
+  "WordPress/gutenberg": {
+   "spdx": "NOASSERTION"
+  },
+  "activepieces/activepieces": {
+   "spdx": "NOASSERTION"
+  },
+  "ag-grid/ag-grid": {
+   "spdx": "NOASSERTION"
+  },
+  "agalwood/Motrix": {
+   "spdx": "NOASSERTION"
+  },
+  "apexcharts/apexcharts.js": {
+   "spdx": "NOASSERTION"
+  },
+  "baptisteArno/typebot.io": {
+   "spdx": "NOASSERTION"
+  },
+  "bigskysoftware/htmx": {
+   "spdx": "NOASSERTION"
+  },
+  "bilawalsidhu/gods-eye-view": {
+   "spdx": "NOASSERTION"
+  },
+  "bootboxjs/bootbox": {
+   "spdx": "NOASSERTION"
+  },
+  "bpmn-io/bpmn-js": {
+   "spdx": "NOASSERTION"
+  },
+  "browserless/browserless": {
+   "spdx": "NOASSERTION"
+  },
+  "byoungd/up": {
+   "spdx": "NOASSERTION"
+  },
+  "ckeditor/ckeditor5": {
+   "spdx": "NOASSERTION"
+  },
+  "code-yeongyu/oh-my-openagent": {
+   "spdx": "NOASSERTION"
+  },
+  "datawhalechina/easy-vibe": {
+   "spdx": null
+  },
+  "davidjbradshaw/iframe-resizer": {
+   "spdx": "NOASSERTION"
+  },
+  "digitalbazaar/forge": {
+   "spdx": "NOASSERTION"
+  },
+  "dimthink/PriceAI": {
+   "spdx": "NOASSERTION"
+  },
+  "dyad-sh/dyad": {
+   "spdx": "NOASSERTION"
+  },
+  "elastic/kibana": {
+   "spdx": "NOASSERTION"
+  },
+  "enyo/dropzone": {
+   "spdx": "NOASSERTION"
+  },
+  "faker-js/faker": {
+   "spdx": "NOASSERTION"
+  },
+  "fenixsoft/awesome-fenix": {
+   "spdx": null
+  },
+  "firebase/firebase-js-sdk": {
+   "spdx": "NOASSERTION"
+  },
+  "formatjs/formatjs": {
+   "spdx": null
+  },
+  "formbricks/formbricks": {
+   "spdx": "NOASSERTION"
+  },
+  "foundation/yeti": {
+   "spdx": "NOASSERTION"
+  },
+  "getpaseo/paseo": {
+   "spdx": "NOASSERTION"
+  },
+  "highcharts/highcharts": {
+   "spdx": "NOASSERTION"
+  },
+  "highlight/highlight": {
+   "spdx": "NOASSERTION"
+  },
+  "hiteshchoudhary/apihub": {
+   "spdx": "NOASSERTION"
+  },
+  "jlmakes/scrollreveal": {
+   "spdx": null
+  },
+  "kando-menu/kando": {
+   "spdx": "NOASSERTION"
+  },
+  "kern/filepizza": {
+   "spdx": "NOASSERTION"
+  },
+  "kortix-ai/CompanyOS": {
+   "spdx": "NOASSERTION"
+  },
+  "labring/FastGPT": {
+   "spdx": "NOASSERTION"
+  },
+  "lemomo-ai/lemo-opuscar": {
+   "spdx": "NOASSERTION"
+  },
+  "linshenkx/prompt-optimizer": {
+   "spdx": "NOASSERTION"
+  },
+  "lobehub/lobehub": {
+   "spdx": "NOASSERTION"
+  },
+  "lodash/lodash": {
+   "spdx": "NOASSERTION"
+  },
+  "mapbox/mapbox-gl-js": {
+   "spdx": "NOASSERTION"
+  },
+  "maplibre/maplibre-gl-js": {
+   "spdx": "NOASSERTION"
+  },
+  "microsoft/fast": {
+   "spdx": "NOASSERTION"
+  },
+  "microsoft/fluentui": {
+   "spdx": "NOASSERTION"
+  },
+  "mqttjs/MQTT.js": {
+   "spdx": "NOASSERTION"
+  },
+  "mui/mui-x": {
+   "spdx": null
+  },
+  "n8n-io/n8n": {
+   "spdx": "NOASSERTION"
+  },
+  "nasa/openmct": {
+   "spdx": "NOASSERTION"
+  },
+  "ngrx/platform": {
+   "spdx": "NOASSERTION"
+  },
+  "nightly-labs/openbot": {
+   "spdx": "NOASSERTION"
+  },
+  "novnc/noVNC": {
+   "spdx": "NOASSERTION"
+  },
+  "op7418/CodePilot": {
+   "spdx": "NOASSERTION"
+  },
+  "paperjs/paper.js": {
+   "spdx": "NOASSERTION"
+  },
+  "realworld-apps/angular-realworld-example-app": {
+   "spdx": "NOASSERTION"
+  },
+  "refly-ai/refly": {
+   "spdx": "NOASSERTION"
+  },
+  "rstacruz/cheatsheets": {
+   "spdx": null
+  },
+  "sinonjs/sinon": {
+   "spdx": "NOASSERTION"
+  },
+  "stenciljs/core": {
+   "spdx": "NOASSERTION"
+  },
+  "strapi/strapi": {
+   "spdx": "NOASSERTION"
+  },
+  "swagger-api/swagger-editor": {
+   "spdx": null
+  },
+  "tldraw/tldraw": {
+   "spdx": "NOASSERTION"
+  },
+  "toeverything/AFFiNE": {
+   "spdx": "NOASSERTION"
+  },
+  "tweenjs/tween.js": {
+   "spdx": "NOASSERTION"
+  },
+  "udecode/plate": {
+   "spdx": "NOASSERTION"
+  },
+  "unicity-sphere/sphere": {
+   "spdx": null
+  },
+  "usablica/intro.js": {
+   "spdx": "NOASSERTION"
+  },
+  "vercel/ai": {
+   "spdx": "NOASSERTION"
+  },
+  "vercel/chatbot": {
+   "spdx": "NOASSERTION"
+  },
+  "video-dev/hls.js": {
+   "spdx": "NOASSERTION"
+  },
+  "virattt/dexter": {
+   "spdx": null
+  },
+  "visgl/react-map-gl": {
+   "spdx": "NOASSERTION"
+  },
+  "waooAI/waoowaoo": {
+   "spdx": "NOASSERTION"
+  },
+  "wilsonpage/fastdom": {
+   "spdx": null
+  },
+  "zzsting88/relayAPI": {
+   "spdx": null
+  }
+ },
+ "second_read": {
+  "read_at": "2026-11-15T07:25:06.798Z",
+  "rule": "classifyLicenceFiles in lanes/outcome-skills/h2h/ordinary/licences.ts",
+  "templates": {
+   "source": "spdx/license-list-data",
+   "tag": "v3.29.0",
+   "commit": "31ba1a50e5397e00a304dbadc76531740e89ee48",
+   "sha256": {
+    "MIT": "9b91e12dfe57d42e91ea96d2acb7624040bffc54182bd164d39d0fae33e77794",
+    "MIT-0": "c897e948891e3e587ba8e14acb51743a3ec69a671ce5a0f07f25ddf24f73de7a",
+    "Apache-2.0": "5567209d3a634ebd6ed122a7302563b9668ab141941149a4e30d9c7b887f41b9",
+    "BSD-2-Clause": "922ac644c79e7c2aa31bacac531a5d4d5b9d183853a3dc44a253fd9267c3c890",
+    "BSD-3-Clause": "c42368b683ceef1ad41b6f17999adf3b7534e3c47fbdd51449ed6690edb1fc5f",
+    "ISC": "a382ee687364e5fa6361f299be089d79ded228a7ccbf1d4352a30fa22bfddb8f",
+    "0BSD": "5b5b3cf0d303e1bed3144433e570f46f92810f6d9cb31073fb089786ff5472ff",
+    "Zlib": "517518a720051db892e77865041587abc99146359c9a0eb4de360bdab9e9255b",
+    "BSL-1.0": "5218853c2dd51b793b84bce58bb669dcad92215fc6de3dd06be83946e94d9078",
+    "Unlicense": "e6a01517253c197874d66ab30ca3f596cfce601aafcc310ec2944585a4a254bd"
+   }
+  },
+  "repos": {
+   "Akryum/vue-virtual-scroller": {
+    "head": "cea59032ae45ef8f282e22c5bf47c89e436c49b6",
+    "eligible": false,
+    "reason": "no_file",
+    "files": []
+   },
+   "Azgaar/Fantasy-Map-Generator": {
+    "head": "18795e9b8884b86787190993e6a41b55487b97af",
+    "eligible": true,
+    "reason": "matched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "4b0e677e0db27f5444e7dbb158e2c88c001928a8",
+      "bytes": 1353,
+      "sha256": "c44f4951b37a818ee45fc8cbb0a195a64bf0aec2ac5b27f3849f5626d318dffc",
+      "match": "MIT"
+     }
+    ]
+   },
+   "Comcast/react-data-grid": {
+    "head": "4e3141033f05128a40aca26930ab5eb82db0c747",
+    "eligible": true,
+    "reason": "matched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "00f9bdff4b3c9c94e4a1060d71912ca1063a5ada",
+      "bytes": 1235,
+      "sha256": "743d1de83b7818eb00f0db4bf5e7f1ac90cc11895c85d68e9470d7d753cbae44",
+      "match": "MIT"
+     }
+    ]
+   },
+   "Countly/countly-server": {
+    "head": "950a13c55ad03bbd1334c598a9bd099da17a2e71",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE.md",
+      "mode": 33188,
+      "git_oid": "0bf57dc9a678acd230055ed5805acc28cd7f7be1",
+      "bytes": 1026,
+      "sha256": "3935b474a837a26b1086776f2e7cc65a401c480106bafc7f4507ecf7b71b1e23",
+      "match": null
+     }
+    ]
+   },
+   "Dash-Industry-Forum/dash.js": {
+    "head": "bb0199e4e75de9827808ea40d2612e3c0a5c8f08",
+    "eligible": true,
+    "reason": "matched",
+    "files": [
+     {
+      "name": "LICENSE.md",
+      "mode": 33188,
+      "git_oid": "f7517a4cd37ab6c5424a291c7a8fa45c0719e201",
+      "bytes": 1785,
+      "sha256": "f7cc4ba24850cc564766c75923d07c3d22fa27f304285f4d25ecffeaec964e28",
+      "match": "BSD-3-Clause"
+     }
+    ]
+   },
+   "DouyinFE/semi-design": {
+    "head": "e3c6fc48163e92dcb81df4619fa44ab3cf7525ea",
+    "eligible": true,
+    "reason": "matched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "c21c5cc79eff7582b9fbd2e5d557d338fc1a971e",
+      "bytes": 4624,
+      "sha256": "2acf865e87e59090121369aac0575467067fdd7999923a70d785a46ceae3330f",
+      "match": "MIT"
+     }
+    ]
+   },
+   "EKKOLearnAI/ekko-studio": {
+    "head": "3a064763c1884b8eb4a6b9fd93a91580b31a1d70",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "018013555961ccea8c4fca74f3711501ee15e96e",
+      "bytes": 2650,
+      "sha256": "fe3e400361f80f14f5cf6024e890c05ab51600ec26d5fb2be97b24dc5868a876",
+      "match": null
+     }
+    ]
+   },
+   "Finsys/dockhand": {
+    "head": "c257f4654b48ebd01bfa29f954e3a62565fba6cb",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE.md",
+      "mode": 33188,
+      "git_oid": "7041a3a46bace4d0628684ad72c014ed540a6ce0",
+      "bytes": 23600,
+      "sha256": "708af2e1aca993e911c25e8aa87a23d2e792294286b78dfb35241cd59bd44d1c",
+      "match": null
+     },
+     {
+      "name": "LICENSE.txt",
+      "mode": 33188,
+      "git_oid": "1b78457c1b08608d11062a4dccd77fe810848e7d",
+      "bytes": 24027,
+      "sha256": "51c5dc3d6d4d98343306cedc145c31edb4d5ea98ae8e152422e1316815dbc266",
+      "match": null
+     }
+    ]
+   },
+   "Infisical/infisical": {
+    "head": "8218dcf23cb99b8a1a55b732879996c4b3092b8a",
+    "eligible": true,
+    "reason": "matched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "35d53252fdf304d2f39c7d2496e71ae3f6709d22",
+      "bytes": 1565,
+      "sha256": "ec701a993a5e14b71f1fc6ffb649ca6e704a2e3bc7d06fd5dd47f6334324cf8a",
+      "match": "MIT"
+     }
+    ]
+   },
+   "JOYCEQL/magic-resume": {
+    "head": "6bcf43d2a87eb8333c92094f0eb3a422db199d90",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "19ab267144f250f869e54bc51c99ea82c8741a42",
+      "bytes": 14499,
+      "sha256": "62237fd16c2cad08b8bb3f2aff3e19a557d786c70409dd5a9d3abfe51987a7d5",
+      "match": null
+     }
+    ]
+   },
+   "KnockOutEZ/wigolo": {
+    "head": "5698c881e5475e7c2f73a7e910940fb1832d1b96",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "23b6dd8da485b1be43c793942364cacff6a00e33",
+      "bytes": 35314,
+      "sha256": "98c10790dfa16d0cfe2a6b01c5d97b3e75df80586c0b0bdeb2e3ff294f7e4919",
+      "match": null
+     }
+    ]
+   },
+   "KunAgent/Kun": {
+    "head": "ea29ebfc80ea410f931a72a42eede7a5f75a02af",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "def8c00355e33337e1177ffe749c85d776e1c254",
+      "bytes": 5723,
+      "sha256": "abd0e95093b7399ac682ec54f45883828ef305703fa1fb982f10a3d488cd085b",
+      "match": null
+     }
+    ]
+   },
+   "MetaMask/metamask-extension": {
+    "head": "f625e466c6d9bfcaf1f597b7b41ada67c7229164",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "a6827f6e2fedaf6d2b8f53ba0ff4577a50d217db",
+      "bytes": 3585,
+      "sha256": "de6e58a80037f6fd0458f5bfa54ac9693bcb135a663114cc75160b7a2e181563",
+      "match": null
+     }
+    ]
+   },
+   "Stuk/jszip": {
+    "head": "609d95f4098a11507160cd101e0b181cfad6a582",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE.markdown",
+      "mode": 33188,
+      "git_oid": "f8250b37a61862ea61ea9a93d5d423cad395a364",
+      "bytes": 33753,
+      "sha256": "566c953c6090b1218ca6217dd7359d45dde46581968586dc607d59a78af6a9c4",
+      "match": null
+     }
+    ]
+   },
+   "TiddlyWiki/TiddlyWiki5": {
+    "head": "4215a9154d2b56721c8415f2f7f0b0aa6f655cd4",
+    "eligible": true,
+    "reason": "matched",
+    "files": [
+     {
+      "name": "license",
+      "mode": 33188,
+      "git_oid": "ea8133e69dfe81f4ad464ef4ed2c784aa8e08033",
+      "bytes": 1612,
+      "sha256": "563955ffb71c1ff7090634d68164a68b8c76f1f9048a98fc6a0526124f447513",
+      "match": "BSD-3-Clause"
+     }
+    ]
+   },
+   "WordPress/gutenberg": {
+    "head": "f7e93c7bf419c173a151fa75ae6ebba79e8c57be",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE.md",
+      "mode": 33188,
+      "git_oid": "ec2e73bf87194f4fc0ae489ec1091ec508a6f884",
+      "bytes": 36411,
+      "sha256": "ab2b32b2c482d181f7ea0a1806e22636b346f4daeed820595b118b2bff2b2888",
+      "match": null
+     }
+    ]
+   },
+   "activepieces/activepieces": {
+    "head": "c30d7a7992b5d82f876399f05dd6281f142bcd04",
+    "eligible": true,
+    "reason": "matched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33261,
+      "git_oid": "73e0a2f7acf13c780655de40183b06a0a93e091b",
+      "bytes": 1629,
+      "sha256": "d490fc48488c4f5a721d354f0a5cce0972c7e3de768ac3e0c5851c3de79f3c9b",
+      "match": "MIT"
+     }
+    ]
+   },
+   "ag-grid/ag-grid": {
+    "head": "66795992a80a53c5684bd10690fa02f514de96ee",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE.txt",
+      "mode": 33188,
+      "git_oid": "f1456e7c185b120949fb57793a98ee4d1f0d5ff8",
+      "bytes": 610,
+      "sha256": "01149a553a8f761e71c827c4659bb8f5caca9f61dfab65676ac47023c835837e",
+      "match": null
+     }
+    ]
+   },
+   "agalwood/Motrix": {
+    "head": "6abe17ef86c9b570f31275e60355c74579e7e4e4",
+    "eligible": true,
+    "reason": "matched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "14a94deef9d182c8d6e3e6b648a118b7854ddb33",
+      "bytes": 1225,
+      "sha256": "f3bf2a4fd9eef124016cd77d742cddb36642c76ebc245ab97493e4e299ae06e3",
+      "match": "MIT"
+     }
+    ]
+   },
+   "apexcharts/apexcharts.js": {
+    "head": "7264d12f8b0fc8af24b853c4386f6c91c8474413",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE.md",
+      "mode": 33188,
+      "git_oid": "639f6ad4aa4780384fa0224b99fe857fafd44873",
+      "bytes": 5053,
+      "sha256": "93c2382614506a657f2002d134504e3cf561fa46bc9e34717fa1c9642f384dfa",
+      "match": null
+     }
+    ]
+   },
+   "baptisteArno/typebot.io": {
+    "head": "532c83e78cf2ad3c7b86e7db847456609e363213",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "4f8cf8b3354b5253149dcf44291ac181f7d6f4b4",
+      "bytes": 3756,
+      "sha256": "29f1802604e2b84e0d67ab2e7efd977fdb602d3791f8275d6bce11dca1665f53",
+      "match": null
+     }
+    ]
+   },
+   "bigskysoftware/htmx": {
+    "head": "fa978b24e75fb03c137bf2cdae4fef0e711cf8a1",
+    "eligible": true,
+    "reason": "matched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "d3061a372fda562b5a1d0a85bc56c67fc0d7d3fb",
+      "bytes": 642,
+      "sha256": "d3d2456f76414f2456104660ebd65aff1c04cd7966b942bdabd63f3cdb316a38",
+      "match": "0BSD"
+     }
+    ]
+   },
+   "bilawalsidhu/gods-eye-view": {
+    "head": "e4708a815d012505a60e2f9c7fa57672820dfdd0",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "86483f2d6d94472b62b0671eef00a3d80a31582d",
+      "bytes": 3236,
+      "sha256": "65bfc694b67094c80855179812bcac989da6e55840add547fd2e428b3e4175c3",
+      "match": null
+     }
+    ]
+   },
+   "bootboxjs/bootbox": {
+    "head": "f9fb9913a14c232c7fe4a6096d456c10b04b5c6d",
+    "eligible": true,
+    "reason": "matched",
+    "files": [
+     {
+      "name": "LICENSE.md",
+      "mode": 33188,
+      "git_oid": "f36f124b161f6a946993e422b8bc8b7adbb16680",
+      "bytes": 1110,
+      "sha256": "b1d7cda2c8747992306edc30c34f369ee916171a89bb7c92742ba13f1bba1265",
+      "match": "MIT"
+     }
+    ]
+   },
+   "bpmn-io/bpmn-js": {
+    "head": "b3f1c4837d9ed2f624af9b7a6bcfe5da7f6eeac8",
+    "eligible": true,
+    "reason": "matched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "b20e936ddbc8af301806c0d1cd526b50802c8195",
+      "bytes": 1390,
+      "sha256": "5788cf8bd61481776cee1c943595525499a1355c045e9244f92e6c8092c06770",
+      "match": "MIT"
+     }
+    ]
+   },
+   "browserless/browserless": {
+    "head": "91feec8c5186d5984901bc477644cfdb7ed91148",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "4d8c088c8055c4b558723d0fa1e202bbdadf7dcc",
+      "bytes": 597,
+      "sha256": "11cc057540a8c1dcea4cddba6ee8b1fec3ccfe8931cb5b6f4dc9eeda72c11691",
+      "match": null
+     }
+    ]
+   },
+   "byoungd/up": {
+    "head": "9f83b2503638b3c7ff6e3bb52f3992038b4b4978",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE-CODE.md",
+      "mode": 33188,
+      "git_oid": "d25d58a4ac7d592dcad596695c31f4ca664b19ed",
+      "bytes": 1089,
+      "sha256": "d0a6a0fff1580e24e70fd803706f485b84a89195446188f95fe188ee2ac872cb",
+      "match": "MIT"
+     },
+     {
+      "name": "LICENSE-CONTENT.md",
+      "mode": 33188,
+      "git_oid": "2339c1263b76928d5c9f1825d0806ba05a226a03",
+      "bytes": 956,
+      "sha256": "372179c5e4278c64a348a606c8c640fe365887c91d10534bafd435f13b49eb82",
+      "match": null
+     },
+     {
+      "name": "LICENSE.md",
+      "mode": 33188,
+      "git_oid": "dea9d68b06ec9c355afbeb414382185e558c4c3c",
+      "bytes": 1807,
+      "sha256": "24db3477cdcd574468e3e79052c2fd113eb05d258e59842e2164b703b7210b6e",
+      "match": null
+     }
+    ]
+   },
+   "ckeditor/ckeditor5": {
+    "head": "7bd73340a48c2a9ec93f7a671a7dd07f76751715",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "COPYING.GPL",
+      "mode": 33188,
+      "git_oid": "a66a55f9806c0500ee810a8b13c024f34a6b2e16",
+      "bytes": 17983,
+      "sha256": "de124e5a899ae4074ebf5c0f790494178ab66d310606b86203d67a6f3ef45168",
+      "match": null
+     },
+     {
+      "name": "LICENSE.md",
+      "mode": 33188,
+      "git_oid": "b3cadac3bf8b9bac371849cf712322ed3d2b16b2",
+      "bytes": 170,
+      "sha256": "6226a1b6b05e07d887f516a40bc000bb7617a4fa0f36721234453ca436ba7d23",
+      "match": null
+     }
+    ]
+   },
+   "code-yeongyu/oh-my-openagent": {
+    "head": "45e69a7e381f77120e0d0db3d7bf20ec2f97650b",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE.md",
+      "mode": 33188,
+      "git_oid": "5982a8720a1cb87c26a36bb31d5019f119841769",
+      "bytes": 3973,
+      "sha256": "b61ac928f152d13517328263e6bee9175b928f9ab696a2d2ca2b6cfd961ddc32",
+      "match": null
+     }
+    ]
+   },
+   "datawhalechina/easy-vibe": {
+    "head": "f2239c67052b6ad9ae3e72bc6b7a76f3c903cf64",
+    "eligible": false,
+    "reason": "no_file",
+    "files": []
+   },
+   "davidjbradshaw/iframe-resizer": {
+    "head": "eec42d7ceaec2f1111a005199369e1162af377b9",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "9f6eb8dc19fa631e9e851811f17a58cadfb6c69e",
+      "bytes": 32210,
+      "sha256": "d7d54db187d5f8b731464258838975c28786ede12e48726e622b6590b30ffa06",
+      "match": null
+     }
+    ]
+   },
+   "digitalbazaar/forge": {
+    "head": "01119d67bf65e7898717501ff6417bed9cc37233",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "2b48a95b25f7467d267257a7c3ba9ebd4f9fd8ed",
+      "bytes": 17972,
+      "sha256": "f63ff0e4e239244aa79280da2dd4811a0469e5e201caf5cbc0d97c3a1dff8e82",
+      "match": null
+     }
+    ]
+   },
+   "dimthink/PriceAI": {
+    "head": "b3092c4487ab96e58dd9d1fb97016ac692ea116e",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "58f79a44a6b26fc22fc13136b0d9742386523a7c",
+      "bytes": 5451,
+      "sha256": "511772d6600b3bbb240e8405e7b3b3a2b479b356c7c759a3b38b171c0f58011e",
+      "match": null
+     }
+    ]
+   },
+   "dyad-sh/dyad": {
+    "head": "0838405a9871a77eee5755656050fd3a1d5e48fe",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "d68041161a7a42ada7c4a3789a84e593bff2fdcf",
+      "bytes": 11694,
+      "sha256": "eb194f9b70920f23323e2f993330f92d175e361fd11efb526626f71f9be8f8b2",
+      "match": null
+     }
+    ]
+   },
+   "elastic/kibana": {
+    "head": "243e962bf8b292c70b206f0b81ec870a2f327b2c",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE.txt",
+      "mode": 33188,
+      "git_oid": "060d0d0e8f13c91a77f98655967f2b80fdf023ff",
+      "bytes": 669,
+      "sha256": "09979a6b0701e166ea7bfa4bdf524a431c7ca4a94b16ac2c645bbed9fb7ec2e1",
+      "match": null
+     }
+    ]
+   },
+   "enyo/dropzone": {
+    "head": "a0e896a705c356d4ce427d682041f0f47278237e",
+    "eligible": true,
+    "reason": "matched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "d4bda17db543e5f300de9dcdb6b3eace35f7e83a",
+      "bytes": 1388,
+      "sha256": "4c5e9b973f3d2d0265c3a7dc3cf85a67e5069294af7b16b4d8ae84a45f74a110",
+      "match": "MIT"
+     }
+    ]
+   },
+   "faker-js/faker": {
+    "head": "5060c90a7f06bfa6d65eee322ffb55e4139dcb08",
+    "eligible": true,
+    "reason": "matched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "b5dc0a665ec76bd776a565a6848d9832572f9f0d",
+      "bytes": 2865,
+      "sha256": "8c0814c525426e67c04ca562f28364be477003697903d257160c081d14b271bf",
+      "match": "MIT"
+     }
+    ]
+   },
+   "fenixsoft/awesome-fenix": {
+    "head": "0a714b503441ae7d7c82c662744692a3717c1051",
+    "eligible": false,
+    "reason": "no_file",
+    "files": []
+   },
+   "firebase/firebase-js-sdk": {
+    "head": "e101b004a39fa9ad63212d69f8dc68e825cfcc6a",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "4627db48cf644e15e1ff9bc70b6bc810d9620c63",
+      "bytes": 14096,
+      "sha256": "065e45b5674f9bf76670496e5472611b3fbd87fbeaf99336725430a9909cb687",
+      "match": null
+     }
+    ]
+   },
+   "formatjs/formatjs": {
+    "head": "be1683ed9d0b2661e2ac4f31f18de8de1e325f66",
+    "eligible": false,
+    "reason": "no_file",
+    "files": []
+   },
+   "formbricks/formbricks": {
+    "head": "6fa661f909cd415a33710fdefb5af78097fd0672",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "b8f5f04b6d5369cd84a8a2d5fad09e3b465963f9",
+      "bytes": 35154,
+      "sha256": "b32292faef234d706f112f7ad45f6a13a21abe1a6e5aaafa033ef2ed51889f01",
+      "match": null
+     }
+    ]
+   },
+   "foundation/yeti": {
+    "head": "199661d950f0be216ab5c6263dd272e3afdac8bf",
+    "eligible": true,
+    "reason": "matched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "1a908ae8943bb4ffc3dfb88daadbc201ab678a30",
+      "bytes": 4220,
+      "sha256": "d81db9d0dec248eaac172414e2f3c0ce3e3e876646e761ef27ccd62df914fc91",
+      "match": "MIT"
+     }
+    ]
+   },
+   "getpaseo/paseo": {
+    "head": "dc2dfdab9396abb41bec6a22cb210584f6a8b62d",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "2f5903143b08de0aa991ab535d9582aca6b9b44a",
+      "bytes": 11708,
+      "sha256": "79d5aedce6aa0adc547336dc1bd34c5cc9308ba110fac7079ed97515ee573ad3",
+      "match": null
+     }
+    ]
+   },
+   "highcharts/highcharts": {
+    "head": "25a5ccbcfa435f90719b2a9790cd86ac5b0c8a41",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "license.txt",
+      "mode": 33188,
+      "git_oid": "7ad45e9e8b359bd64378c58e11e631114eae610d",
+      "bytes": 210,
+      "sha256": "b2dc44d62caa0d99623e97442d2ee3807ef2ffbe66bbdb1ed24bd22636c9186c",
+      "match": null
+     }
+    ]
+   },
+   "highlight/highlight": {
+    "head": "3bf002113e555d1ba3d4df648ed44e3503a27e96",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "6b975f050a1de2fef759711d9f7ba7a0de932e4b",
+      "bytes": 12088,
+      "sha256": "da6629617d64fd394231028229e3a0c3c5953509525b86cd86ac58ea65e70eff",
+      "match": null
+     }
+    ]
+   },
+   "hiteshchoudhary/apihub": {
+    "head": "3163bf09d9ee23e29378c402ae4d581e544d6c9f",
+    "eligible": true,
+    "reason": "matched",
+    "files": [
+     {
+      "name": "LICENSE.md",
+      "mode": 33188,
+      "git_oid": "6412deb30b7ed94339851a9371d619c7cec893c7",
+      "bytes": 1082,
+      "sha256": "03c65ef062c0930dfa8f08c8cd4f984ac57f66bbdebd0f1bf4ed20458f77003e",
+      "match": "MIT"
+     }
+    ]
+   },
+   "jlmakes/scrollreveal": {
+    "head": "411043d3fd1d13d21a824f9c3e24e3f180197bd5",
+    "eligible": false,
+    "reason": "no_file",
+    "files": []
+   },
+   "kando-menu/kando": {
+    "head": "08f336449174389144dc6a8ec050b7d181bdf900",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE.md",
+      "mode": 33188,
+      "git_oid": "0c752b02f096d6e7f6e8e55ac2c95caec6369adc",
+      "bytes": 568,
+      "sha256": "fd6cb731b549de5452efacb0833cda7a328eb5263537d29ca18de9d7938f7bab",
+      "match": null
+     }
+    ]
+   },
+   "kern/filepizza": {
+    "head": "1e4d02fa91527d8dc83f4094ca394f8c29a88b56",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "d5de8397ef1dd697512e9abfb63b9e3bc0a2f9b8",
+      "bytes": 5521,
+      "sha256": "0fbc57077232c1ed7762e17985edda14021721e913c95d465781d5e90a0fa819",
+      "match": null
+     }
+    ]
+   },
+   "kortix-ai/CompanyOS": {
+    "head": "97d6592773b7fd32c84a1348dfb8e8f003c5e9e8",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "809108b857ffd2c2a93cafc5b69e496f3b6ace04",
+      "bytes": 3860,
+      "sha256": "48255018b41fc0e965b1115af7e6779bc218bb8a6747d561da800d5022622aa2",
+      "match": null
+     }
+    ]
+   },
+   "labring/FastGPT": {
+    "head": "3b0ad5072e89efb16c5fc97a4e34e1ec69f62723",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "03ba1a33bdb56da2655b1339d09c51ed7a9db414",
+      "bytes": 1901,
+      "sha256": "84569a7a2a79f9f97093019ae12d914b975db773ed17443fb726a0b6f585bc24",
+      "match": null
+     }
+    ]
+   },
+   "lemomo-ai/lemo-opuscar": {
+    "head": "3a7132b996be0241c1ea0ab180d519f06e6f10b6",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "95ade2f9cdde45c7933a706d514bc60f64f140a8",
+      "bytes": 6692,
+      "sha256": "aee72797af4389583c0f531f7fc89c87c87cb939bdba43d888926dd8aaea8d26",
+      "match": null
+     }
+    ]
+   },
+   "linshenkx/prompt-optimizer": {
+    "head": "71f5151148e037dbb790fd6a8a4ff106ca75f52e",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "fd2472b22844ae105ab3448d689433d6217dc7eb",
+      "bytes": 34766,
+      "sha256": "df4a73ed8aed69f82268d976f5ee66a7fda5824bbe1e725b42e5407bc4daf7fd",
+      "match": null
+     }
+    ]
+   },
+   "lobehub/lobehub": {
+    "head": "3e56ad100136dec25b04a9cca9aa8ef79e16a8b8",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "96025078db1637a3b5c34c8297e11fdfdd6834e4",
+      "bytes": 1118,
+      "sha256": "790a8c42f10beb4f5e9122e05a8e65d5522de49f89ac69cd31063c0f2be93ea4",
+      "match": null
+     }
+    ]
+   },
+   "lodash/lodash": {
+    "head": "2b5e6f7399a7b48005140b5d5c6bc6c0e62919a8",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "77c42f1408a38a0609cac12c887616cb21bfb736",
+      "bytes": 1952,
+      "sha256": "f71e8ed126b46346494aad5486874cd8f0aafe95092ed67d2e3cb6110f939abc",
+      "match": null
+     }
+    ]
+   },
+   "mapbox/mapbox-gl-js": {
+    "head": "fa2930b2dc36aa10c86686aef9cef524b6c8e8af",
+    "eligible": true,
+    "reason": "matched",
+    "files": [
+     {
+      "name": "LICENSE.txt",
+      "mode": 33188,
+      "git_oid": "63c84f858e6e31c499ee8af387522c94979fd5a0",
+      "bytes": 5727,
+      "sha256": "c24eff481bf098c82fda9949b2d982589df8b36db11fffa49653d4afe1903998",
+      "match": "MIT"
+     }
+    ]
+   },
+   "maplibre/maplibre-gl-js": {
+    "head": "23a5cbd4729c99dc7faac7ea7527550e1961d480",
+    "eligible": true,
+    "reason": "matched",
+    "files": [
+     {
+      "name": "LICENSE.txt",
+      "mode": 33188,
+      "git_oid": "1e8acbb54fa7baddc844377507cc5a79353174fb",
+      "bytes": 5984,
+      "sha256": "ee5fc05a0677eaf69601d2c7db0d9ecd6cc27c3abc1d0733bc9ed34707cf8ef2",
+      "match": "BSD-3-Clause"
+     }
+    ]
+   },
+   "microsoft/fast": {
+    "head": "7eef158a370572680eca7bb1b9d5bb71a629b22a",
+    "eligible": true,
+    "reason": "matched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "630e2d95d5e51d5ab224989b3161d930e22f35e4",
+      "bytes": 1199,
+      "sha256": "efd3e2455191853bb2fb22f794e521f9097f4e95c9327c2a34be53fb172a2d5a",
+      "match": "MIT"
+     }
+    ]
+   },
+   "microsoft/fluentui": {
+    "head": "f9720c35ba893c9630f4c0389d07dc6d6fd6068d",
+    "eligible": true,
+    "reason": "matched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "f097324d1b1f16528ae8c3ad32c4702c0d793ee1",
+      "bytes": 1212,
+      "sha256": "1434c6b2a8417d41e4db20ff3b772888e66a0069e20d928f83fa1390f44758c7",
+      "match": "MIT"
+     }
+    ]
+   },
+   "mqttjs/MQTT.js": {
+    "head": "0ceae419ff0542105fa258b3ae9760798db7b44d",
+    "eligible": true,
+    "reason": "matched",
+    "files": [
+     {
+      "name": "LICENSE.md",
+      "mode": 33188,
+      "git_oid": "d23ded90216505bc0250a5cf8aa243f06018c09b",
+      "bytes": 1271,
+      "sha256": "81b51ef8ac2a8ac8f111ed34ab1a32d63e7f4f7de586bd65f5510fb1ba3a89eb",
+      "match": "MIT"
+     }
+    ]
+   },
+   "mui/mui-x": {
+    "head": "cd6db723523392a2041aa14030aeb1e6ec8632bd",
+    "eligible": false,
+    "reason": "no_file",
+    "files": []
+   },
+   "n8n-io/n8n": {
+    "head": "51f8cf624992e5813c31684359d95db5bf378092",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE.md",
+      "mode": 33188,
+      "git_oid": "f85f59baa906530c26cee26e0c9ddd6bd5f86dbd",
+      "bytes": 4445,
+      "sha256": "d2f621f59aa4c10eab79b6333e59d9d3d5b53307dcfd16dbd75e40e679e84965",
+      "match": null
+     },
+     {
+      "name": "LICENSE_EE.md",
+      "mode": 33188,
+      "git_oid": "b47966a6c05809c90723aa4beaf47cbbd34fac1b",
+      "bytes": 1879,
+      "sha256": "6110c69fd3b92928328a89e863dc2c862ea449f2335c352a9c4a137a36b13040",
+      "match": null
+     }
+    ]
+   },
+   "nasa/openmct": {
+    "head": "e09bfaf47856b2b7ae2ea74334800b26fd27a41e",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE.md",
+      "mode": 33188,
+      "git_oid": "6f5fecba6c397c7f1941776926c798cbe81ba467",
+      "bytes": 725,
+      "sha256": "c1ea2b0a88b05a699df10fa516f90d0979e62a6bf7aa1b69ba133e02969c2b08",
+      "match": null
+     }
+    ]
+   },
+   "ngrx/platform": {
+    "head": "ddd9772e81e2db8a8964fa65f355086118d29dd9",
+    "eligible": true,
+    "reason": "matched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "c23265bf34e1e3a50a018b94b342187286246ea1",
+      "bytes": 1306,
+      "sha256": "f50593005e6167ce48701e8b6ca14db1e8dfce9aa52c8195665b664624836270",
+      "match": "MIT"
+     }
+    ]
+   },
+   "nightly-labs/openbot": {
+    "head": "a8294bd3ddd1b7505110feeff07b70e59d9a42cd",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "424bbe3cadbd960f5ddad1b87f21279c9be575e2",
+      "bytes": 4732,
+      "sha256": "ffe034ecf735f296ca53cbd856c944849f0c80c7e1490ce162038a99ad89c728",
+      "match": null
+     }
+    ]
+   },
+   "novnc/noVNC": {
+    "head": "e8b5024d4603587b29ffede4fbd28b1fa2939829",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE.txt",
+      "mode": 33188,
+      "git_oid": "0581c11ed02ed57c82335a4691fd805621edd5b6",
+      "bytes": 2163,
+      "sha256": "3ccd2242d7f5b6c5ae831a486f63cce1f18d8cd11c511f6a7a7251673763b2d1",
+      "match": null
+     }
+    ]
+   },
+   "op7418/CodePilot": {
+    "head": "1ae6d76de6993377dab961eacf04927babd99eb1",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "3bac8e97be55897c1c32a1827be62cf906b37d8d",
+      "bytes": 3681,
+      "sha256": "e77188ca224977d67c57d8c9cfe595b2bfb4146423cb2c016f8502dd15f8b6cf",
+      "match": null
+     }
+    ]
+   },
+   "paperjs/paper.js": {
+    "head": "0d1446a1bb040e3c87533b28bcc384d87663587b",
+    "eligible": true,
+    "reason": "matched",
+    "files": [
+     {
+      "name": "LICENSE.txt",
+      "mode": 33188,
+      "git_oid": "84e905d812d93807dbcc0e370b5706ecca0fe4dc",
+      "bytes": 1173,
+      "sha256": "f8833a38807922b4652421eb0cf29065400c55abd6f4832b9c3250dae87e1958",
+      "match": "MIT"
+     }
+    ]
+   },
+   "realworld-apps/angular-realworld-example-app": {
+    "head": "d426ec804f7d035c374aa4a1b48ecdb05a03eb02",
+    "eligible": true,
+    "reason": "matched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "c5e96dde132f31b75a6dc7d23449e402e7add33c",
+      "bytes": 1380,
+      "sha256": "698f055a5fa6844294c29278d88cd6fd8394785d769fdf165ea0accae677e2ce",
+      "match": "MIT"
+     }
+    ]
+   },
+   "refly-ai/refly": {
+    "head": "80de1cbf54cd5400734249777c788545e0d6e91f",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "0a1e3f2b02fcbeffd2f01f6a3f886f6ee8571db7",
+      "bytes": 3043,
+      "sha256": "98fd83a330843ed5cd4472e40293641f154c14104986754ea0ad19fbff7d0f05",
+      "match": null
+     }
+    ]
+   },
+   "rstacruz/cheatsheets": {
+    "head": "104bd5a659d27b4933fc651e2efae346d6b12196",
+    "eligible": true,
+    "reason": "matched",
+    "files": [
+     {
+      "name": "licenses.md",
+      "mode": 33188,
+      "git_oid": "d9a70ca632d40b1c887ede29b4be67381996a9ca",
+      "bytes": 4725,
+      "sha256": "3975f23f92c1e22e0da459694e32c4beeb6e7c0a85dfce37092e62c7fe7a86ff",
+      "match": "BSD-3-Clause"
+     }
+    ]
+   },
+   "sinonjs/sinon": {
+    "head": "530d4622ae149c76756a4d43e26b86bd17c80e2f",
+    "eligible": true,
+    "reason": "matched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "432d21c432108bb42ece0f28f14602a08d9cc39c",
+      "bytes": 1572,
+      "sha256": "3bc2308d9ae41a75767fe742cae4a750cd2f95a30f17e941c5d9a13afc6ea0bf",
+      "match": "BSD-3-Clause"
+     }
+    ]
+   },
+   "stenciljs/core": {
+    "head": "f4fe940f22dacce709e4cb81410e47860660ece6",
+    "eligible": true,
+    "reason": "matched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "a3032612cdfc457abb6d514304bf33539d7fbe87",
+      "bytes": 1428,
+      "sha256": "bc40e84d379da4988d8d9bc806eed129f12bbae61c67f54cd9816bd073f92688",
+      "match": "MIT"
+     }
+    ]
+   },
+   "strapi/strapi": {
+    "head": "6ed1be0fd1a0d37f25a0e0a74ecac2bebb9f14f3",
+    "eligible": true,
+    "reason": "matched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "f63cf15b91b4878a1d3afe0f7c59d28fc7564ebe",
+      "bytes": 2423,
+      "sha256": "b651f49834c5726917e473ceab038d25e1115041374b615ff5d1688e7403d36d",
+      "match": "MIT"
+     }
+    ]
+   },
+   "swagger-api/swagger-editor": {
+    "head": "bc869c8e1b63053d6d45824561b2305a3ba21adb",
+    "eligible": false,
+    "reason": "no_file",
+    "files": []
+   },
+   "tldraw/tldraw": {
+    "head": "17430315822cd9571cf5db5ac5721e67c56118de",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE.md",
+      "mode": 33188,
+      "git_oid": "346511b1cc5338abdca005a4c5cb49eec183f483",
+      "bytes": 4609,
+      "sha256": "9578fcddc20e404b6a29f44b6fea81d8b331698c0e7e9be34132d6f4394fa533",
+      "match": null
+     }
+    ]
+   },
+   "toeverything/AFFiNE": {
+    "head": "9c615502796516da5d0ff91bed1597b1476c7978",
+    "eligible": true,
+    "reason": "matched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "ee4c98c5f018d7421d7a4a28d24f0710f1705269",
+      "bytes": 1663,
+      "sha256": "c107c8088fe42bce6def95d313cfe7b5984d3bb2c1608b67f855327da45f497b",
+      "match": "MIT"
+     },
+     {
+      "name": "LICENSE-MIT",
+      "mode": 33188,
+      "git_oid": "017855f5b3ebdf8ab445c363ca5b55a79bfaa967",
+      "bytes": 1117,
+      "sha256": "1cdeca52d4f740361f103926144eb8b3f265975b2337d4e27b3313f72465897f",
+      "match": "MIT"
+     }
+    ]
+   },
+   "tweenjs/tween.js": {
+    "head": "9ab7edfe498bbc1804307cfcdf5d486f4bd71b7d",
+    "eligible": true,
+    "reason": "matched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "0de4f0b667617bcd4a7619c1a0c6b29a8d229442",
+      "bytes": 1166,
+      "sha256": "c95fecd88f2709bfc34e4d1f1ccc36d17048990e6ba26c283cfecdef0432936b",
+      "match": "MIT"
+     }
+    ]
+   },
+   "udecode/plate": {
+    "head": "3da8213dae48cb19559cb521717e3fcf52d8a695",
+    "eligible": true,
+    "reason": "matched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "d8af939b929938d2cae8698f3cffd18147bd9c80",
+      "bytes": 1293,
+      "sha256": "8b649e3569682298f50ed2048210e8f528034feb56f5d43a9977a7d60b0f7065",
+      "match": "MIT"
+     }
+    ]
+   },
+   "unicity-sphere/sphere": {
+    "head": "3c4778d59c1d29c5243ec5a0b05e87bdb6e550c1",
+    "eligible": false,
+    "reason": "no_file",
+    "files": []
+   },
+   "usablica/intro.js": {
+    "head": "c56cb76d76284e9307b69b1efe53594eee56947b",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "license.md",
+      "mode": 33188,
+      "git_oid": "3b6723132414154787cc3cc72d288b3ff5fabde9",
+      "bytes": 35038,
+      "sha256": "678675e2f7cae890e08a8483e2b57d42f7d3ac33f27941ddf62959c408ada030",
+      "match": null
+     }
+    ]
+   },
+   "vercel/ai": {
+    "head": "8ba3940d3dd1f3cd3c4365bbaec505c6ef0eb1e3",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "6c16c29f41168411dbf6e3ba3a063ce789c27334",
+      "bytes": 552,
+      "sha256": "b4f9adb7c568904834d0dd6cc98d16c390d21ca32fc17ae7a267715269bd5529",
+      "match": null
+     }
+    ]
+   },
+   "vercel/chatbot": {
+    "head": "a8989b522fa3672a2ae52f053105e40993b36ca1",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "695ee2d6a04b691b3f3aa1c4e76e7c4b3a931042",
+      "bytes": 552,
+      "sha256": "5809eb2eab284b24fc53b21484398fd264c6f929d3b32ecdc7108a89f037e943",
+      "match": null
+     }
+    ]
+   },
+   "video-dev/hls.js": {
+    "head": "127c6adee512843abf85748d82767bdf1a3c8e5c",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "5123bda03fe34fd3859bdf6bbc7f6640eb14bf03",
+      "bytes": 1338,
+      "sha256": "ca8773cf798c7ed997d4dd7c8e23c348699f8d5b7462636694cc14de6cda12db",
+      "match": null
+     }
+    ]
+   },
+   "virattt/dexter": {
+    "head": "534f6be455523c5926eba72bdaf4f914555be5c9",
+    "eligible": false,
+    "reason": "no_file",
+    "files": []
+   },
+   "visgl/react-map-gl": {
+    "head": "1afe1a98580680c870eeb1139c40a94835333705",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "155928579bc15b503763edb8c4736e530affaaeb",
+      "bytes": 3821,
+      "sha256": "c80c7101e5039d2f5359729c5fa6b4d58c6904bf7ba75bd6cafd0078438d6634",
+      "match": null
+     }
+    ]
+   },
+   "waooAI/waoowaoo": {
+    "head": "dfec20e32298ed675050329e4a41477024148399",
+    "eligible": false,
+    "reason": "unmatched",
+    "files": [
+     {
+      "name": "LICENSE",
+      "mode": 33188,
+      "git_oid": "809108b857ffd2c2a93cafc5b69e496f3b6ace04",
+      "bytes": 3860,
+      "sha256": "48255018b41fc0e965b1115af7e6779bc218bb8a6747d561da800d5022622aa2",
+      "match": null
+     }
+    ]
+   },
+   "wilsonpage/fastdom": {
+    "head": "20e3e201c9bf4d875ad5fa8e9d99c6c61c2142d5",
+    "eligible": false,
+    "reason": "no_file",
+    "files": []
+   },
+   "zzsting88/relayAPI": {
+    "head": "3a2ec4271f6469cca03f3b31349e0565f442ddc0",
+    "eligible": false,
+    "reason": "no_file",
+    "files": []
+   }
+  }
+ }
+}
