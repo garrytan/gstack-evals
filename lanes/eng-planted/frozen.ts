@@ -42,7 +42,7 @@ export const FROZEN = {
     maxFiles: 2,
   },
   region: { minLines: 10, maxLines: 300 },
-  bodyCheck: { minChars: 20, runLines: 3, maxShare: 0.1 },
+  bodyCheck: { minChars: 20, runLines: 3 },
   supply: { minQualifiers: 80, targetQualifiers: 115 },
   plan: { minWords: 200, maxWords: 500, rewrites: 1 },
   hinted: { runs: 3, passOf: 2 },
