@@ -1,0 +1,332 @@
+{
+  "schema": "h2h-prereg.v1",
+  "post": "2026-11-15-geva-538-skill-pack-h2h-prereg",
+  "draw_seed": 3469618895,
+  "bootstrap_seed": 3169101723,
+  "order_seed": 3520053827,
+  "seed_use": {
+    "draw_seed": "sections 5 and 6: the seeded order over every eligible O and B unit, from which stage 0, 1 and 2 positions and reserves are taken",
+    "bootstrap_seed": "section 9: every repository-clustered bootstrap (10,000 resamples), piece G's included",
+    "order_seed": "section 11: the seeded order of a unit's sessions across arms within each stage"
+  },
+  "minted_at": "2026-11-15T03:54:43.829Z",
+  "mint_command": "node -e 'const c=require(\"crypto\");const b=c.randomBytes(12);console.log(JSON.stringify({minted_at:new Date().toISOString(),draw_seed:b.readUInt32BE(0),bootstrap_seed:b.readUInt32BE(4),order_seed:b.readUInt32BE(8)}))'",
+  "mint_rule": "Minted once from crypto random bytes as unsigned 32-bit integers before any draw or label call. Never re-minted.",
+  "model": "claude-opus-5-5",
+  "arms": {
+    "primary": [
+      "none",
+      "gstack",
+      "superpowers",
+      "agent-skills",
+      "gsd",
+      "pstack",
+      "tstack"
+    ],
+    "piece_g": [
+      "gstack-pony",
+      "gstack-oneline"
+    ],
+    "secondary": [
+      "gstack-qa"
+    ]
+  },
+  "pins": {
+    "gstack": {
+      "repo": "garrytan/gstack",
+      "sha": "3805969159bc7e595cde9dc0f3c267129cef9c16",
+      "version": "1.99.4.0"
+    },
+    "superpowers": {
+      "repo": "obra/superpowers",
+      "sha": "22f0b463e7a5e579904dd6211a520321035526f7",
+      "version": "7.0.2",
+      "marketplace": "anthropics/claude-plugins-official"
+    },
+    "agent-skills": {
+      "repo": "addyosmani/agent-skills",
+      "sha": "39b723ceebf81474d0557c1fecd01eddab585563",
+      "version": "0.6.16"
+    },
+    "gsd": {
+      "repo": "open-gsd/gsd-core",
+      "sha": "357508df233ccca0dcf4332b385d6bee9b113da9",
+      "version": "1.21.0",
+      "npm": "@opengsd/gsd-core@1.21.0"
+    },
+    "pstack": {
+      "repo": "cursor/plugins",
+      "sha": "3dbd22ff12742fb28c9700b9760baa29ed41dc13",
+      "version": "0.15.36",
+      "path": "harness/pstack/claude-code",
+      "tree": "cdbbd4ca5dd2f4ca0eef3294e7b981c0c610d4bb"
+    },
+    "tstack": {
+      "repo": "t3dotgg/tstack",
+      "sha": "11e37a74d0a6868c121cd0910ab2b3bd9873b92a"
+    },
+    "ponystack": {
+      "repo": "AyanbekDos/ponystack",
+      "sha": "bc1b71b0ad0b721bc9ffe299f76a2623e441ff61"
+    }
+  },
+  "gstack_claude_md": "## gstack\n\nUse the /browse skill from gstack for all web browsing. Never use mcp__claude-in-chrome__* tools.\n",
+  "texts": {
+    "task": "{problem statement}\n\nFix this issue in this repository. Don't stop to ask. When the fix is finished, end your last message with DONE on its own line.",
+    "question_reply": "No one is available. Treat this question as answered with your recommended option, except pushing, deploying or deleting data, and keep going.",
+    "continuation": "No one is available. Treat every question or approval you are waiting on as approved with your recommended option, except pushing, deploying or deleting data, and keep going until the fix is finished. End your last message with DONE on its own line.",
+    "oneline": "Make the smallest change that fixes the issue, and nothing more."
+  },
+  "entries": {
+    "none": {
+      "bug": [
+        ""
+      ],
+      "feature": [
+        ""
+      ]
+    },
+    "gstack": {
+      "bug": [
+        ""
+      ],
+      "feature": [
+        "/autoplan "
+      ]
+    },
+    "superpowers": {
+      "bug": [
+        ""
+      ],
+      "feature": [
+        ""
+      ]
+    },
+    "agent-skills": {
+      "bug": [
+        "/agent-skills:test "
+      ],
+      "feature": [
+        "/agent-skills:spec ",
+        "/agent-skills:build auto"
+      ]
+    },
+    "gsd": {
+      "bug": [
+        "/gsd-debug "
+      ],
+      "feature": [
+        "/gsd-onboard",
+        "/gsd-quick "
+      ]
+    },
+    "pstack": {
+      "bug": [
+        "/pstack:poteto-mode "
+      ],
+      "feature": [
+        "/pstack:poteto-mode "
+      ]
+    },
+    "tstack": {
+      "bug": [
+        "Full send: "
+      ],
+      "feature": [
+        "Full send: "
+      ]
+    },
+    "gstack-pony": {
+      "bug": [
+        ""
+      ],
+      "feature": [
+        "/autoplan "
+      ]
+    },
+    "gstack-oneline": {
+      "bug": [
+        ""
+      ],
+      "feature": [
+        "/autoplan "
+      ]
+    },
+    "gstack-qa": {
+      "bug": [
+        "/qa "
+      ]
+    }
+  },
+  "entry_rule": "Each list is the arm's scripted turns in order. A string ending in a space is a prefix for T; any other string is a whole turn. The GSD bug entry gains a leading /gsd-onboard turn only if stage 0 shows /gsd-debug needs it, recorded before stage 1. gstack-oneline appends texts.oneline after T, separated by a blank line.",
+  "done_rule": {
+    "last_nonempty_lines": 3,
+    "strip": "markdown markers and punctuation",
+    "case_insensitive": true,
+    "word": "DONE"
+  },
+  "continuation_cap": 6,
+  "limits": {
+    "allowance_usd": 25,
+    "wall_sec": 5400,
+    "max_turns": 300,
+    "allowance_doubling": "if stage 1's 95th-percentile session cost for any arm is above half the allowance, the allowance doubles for every arm before stage 2"
+  },
+  "env": {
+    "CLAUDE_CODE_DISABLE_BUNDLED_SKILLS": "1",
+    "CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS": "4"
+  },
+  "disallowed_tools": [
+    "WebSearch",
+    "WebFetch"
+  ],
+  "exclusion": [
+    "garrytan/*",
+    "obra/*",
+    "addyosmani/agent-skills",
+    "open-gsd/*",
+    "gsd-build/*",
+    "cursor/plugins",
+    "t3dotgg/*",
+    "AyanbekDos/*",
+    "DietrichGebert/ponytail",
+    "yc-software/*",
+    "openclaw/*"
+  ],
+  "licences": [
+    "MIT",
+    "MIT-0",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "0BSD",
+    "Zlib",
+    "BSL-1.0",
+    "Unlicense"
+  ],
+  "classes": {
+    "O": {
+      "n": 100,
+      "reserve": 10,
+      "stage1": 12,
+      "stage1_positions": [
+        10,
+        20,
+        30,
+        40,
+        50,
+        60,
+        70,
+        80,
+        90,
+        100,
+        110,
+        120
+      ],
+      "window_from": "2026-03-01",
+      "walk_back_to": "2025-01-01",
+      "repo_cap": 3,
+      "position_rule": "positions count only units that pass every gate, walked in the seeded order; stage 2 takes the other positions in order up to n, then the reserves; stage 0 takes the first bug unit and the first feature unit after the reserves"
+    },
+    "B": {
+      "n": 60,
+      "reserve": 5,
+      "stage1": 12,
+      "b1_share_max": 0.5,
+      "b1_min_units": 20,
+      "window": [
+        "2026-03-01",
+        "2026-10-31"
+      ],
+      "widen_to": "2025-06-01",
+      "repo_cap": 3,
+      "browser_oracle_runs": 5,
+      "reserve_rule": "5 reserves in each of the B1 and B2 frames",
+      "stage1_positions": {
+        "B2": [
+          6,
+          12,
+          18,
+          24,
+          30,
+          36
+        ],
+        "B1": "round(k * N / 7) for k = 1..6, N = usable B1 units after a walk to the end of the frame"
+      },
+      "position_rule": {
+        "B2": "the O rule over the B2 frame: stage 1 at these positions, stage 2 the other positions in order, then 5 reserves, then stage 0 at the first unit after the reserves",
+        "B1": "walk the whole frame first; stage 0 at position N; the 5 reserves are the last 5 unused positions before N; stage 2 the rest in order"
+      },
+      "b1_min_rule": "B1 is usable for the comparison when stage 2 gets at least 20 B1 units; otherwise the fallbacks run, then B1 is infeasible and B reads on B2 alone"
+    }
+  },
+  "stage0": {
+    "units": [
+      "O bug",
+      "O feature",
+      "B1",
+      "B2"
+    ],
+    "taken": "the positions after the reserves",
+    "sessions": 33
+  },
+  "analysis": {
+    "family": "gstack minus each of none, superpowers, agent-skills, gsd, pstack and tstack, in O and in B (12)",
+    "test": "two-sided McNemar with Obuchowski's clustered variance, clusters = repositories; exact McNemar reported beside",
+    "adjust": "Holm over 12 at 0.05; an incomplete cell stays in with p = 1",
+    "interval": "95% repository-clustered bootstrap, 10,000 resamples, bootstrap_seed",
+    "ahead": "Holm-adjusted p < 0.05 in gstack's favour and the 95% interval excludes 0 on the same side",
+    "incomplete_gap_share": 0.1,
+    "exposure_floor": 0.8,
+    "half_mdd": "half of section 13's MDD at the measured discordant share and the alpha of that contrast's Holm step",
+    "piece_g": {
+      "family": [
+        "lines ratio gstack-pony over gstack on units both fixed",
+        "verified-correct difference gstack-pony minus gstack"
+      ],
+      "adopt_min_point_diff": -0.05
+    }
+  },
+  "stage1_release": [
+    "no-skills rate per class",
+    "pooled rate across arms per class",
+    "gap rate per cell",
+    "per-arm session cost (mean, median, p95)",
+    "discordant share per contrast, no direction",
+    "piece G log-ratio spread, no direction",
+    "full-size flag (one bit)"
+  ],
+  "stage1_readings": {
+    "floor": "no skills fixes fewer than 2 of 12 in a class: the class stops",
+    "ceiling": "no skills fixes 11 or 12 of 12: one ceiling-raise attempt (fix changes 2 to 6 non-test source files), re-piloted on 12 new units, else the class stops",
+    "infra": "any cell with gaps on more than 10% of units: named harness repairs and a re-pilot of the failed cells",
+    "cost": "re-price every stage 2 item; above the approved total at caps goes to the Captain and the owner; options: a raised line, the frozen n cut (both classes scaled by one factor, rounded down, every arm and class kept), or stopping",
+    "full_size_flag": "true when any B contrast's absolute stage 1 difference is at least the full-size B MDD (n = 80) at the measured discordant share"
+  },
+  "items": [
+    "h2h-smoke",
+    "h2h-pilot",
+    "h2h-opus",
+    "h2h-qa",
+    "h2h-pony",
+    "h2h-labels",
+    "h2h-vms",
+    "h2h-reserve",
+    "h2h-crew",
+    "h2h-rerun"
+  ],
+  "licence_second_read": "when GraphQL names no licence or returns NOASSERTION, read the root LICENSE*, LICENCE* and COPYING* files once on the freeze date and match each to SPDX texts by a frozen rule; eligible only when at least one file is found and every file matches a listed licence",
+  "full_size_positions": "if the full size is ever approved, its added units in every frame take the next positions after stage 0 units, in order",
+  "runtimes": {
+    "mount": "/opt/h2h-runtimes",
+    "tools": [
+      "node",
+      "bun",
+      "python3",
+      "gh"
+    ],
+    "path": "appended after the image PATH",
+    "scope": "every session container of every arm; not oracle or scoring containers"
+  }
+}

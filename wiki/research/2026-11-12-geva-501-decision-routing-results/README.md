@@ -7,7 +7,7 @@ author: GEVA-501
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
 date: 2026-11-12
-status: done
+status: superseded
 links:
   - 2026-11-09-geva-411-decision-routing-prereg
   - 2026-11-09-geva-421-jev-decision-routing

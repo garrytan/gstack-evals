@@ -13,7 +13,7 @@ import { parsePatch, section, walk } from "./fixsplit.ts";
 import { runBash } from "./history.ts";
 import { isProtected, isTestPath, SKIP_MARKERS, SOURCE_EXT, TEST_MODULES, type Lang } from "./langs.ts";
 import { oneRun, treeVolume } from "./oracle.ts";
-import { applyPatches, copyVolume, dropVolume, parseRun, passed, runName, runTests, type Mode } from "./testrun.ts";
+import { applyPatches, copyVolume, dropVolume, parseRun, passed, runName, runTests, type Mode, type RunExtra } from "./testrun.ts";
 import { addUnitFile, oracleF2p, readUnit, saveUnit, smFail, type SmUnit } from "./unit.ts";
 
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
@@ -246,17 +246,17 @@ export interface OutcomeRecord {
 
 export interface ScoreInput {
   unitDir: string; patchFile: string; patchSha?: string; cell: string; model?: string | null; session?: string | null;
-  mode?: Mode; runEmpty?: boolean; volume?: string; limitMs?: number;
+  mode?: Mode; runEmpty?: boolean; volume?: string; limitMs?: number; extra?: RunExtra;
 }
 
 /** Every id the unit's oracle reports on one base and one fixed run, cached in the unit dir as oracle-ids.json. */
-export function knownIds(dir: string, u: SmUnit, volume: string, mode: Mode, limitMs?: number): Set<string> {
+export function knownIds(dir: string, u: SmUnit, volume: string, mode: Mode, limitMs?: number, extra?: RunExtra): Set<string> {
   const f = join(dir, "oracle-ids.json");
   if (u.files["oracle-ids.json"] && existsSync(f)) return new Set(JSON.parse(readFileSync(f, "utf8")) as string[]);
   const image = u.image.runtime_id ?? smFail("E_SM_UNIT", u.id + " has no runtime image; run its oracle first");
   const ids = new Set<string>();
   for (const tree of ["base", "fixed"] as const) {
-    const r = oneRun(dir, u, volume, image, tree, 0, mode, limitMs);
+    const r = oneRun(dir, u, volume, image, tree, 0, mode, limitMs, true, extra);
     if (!r.parsed) smFail("E_SM_INFRA_GAP", u.id + ": the " + tree + " run for the known test ids did not parse");
     for (const id of Object.keys(r.parsed!)) ids.add(id);
   }
@@ -292,12 +292,12 @@ export function buildFailed(t: { stopped: boolean; exits: number[]; built_nothin
 
 /** One scoring run on a fresh copy of volume: the unit's rebuild, test and print commands, then the dataset's parser. A
  *  build failure is buildFailed's. A unit whose oracle record has no rebuild rule flag refuses. */
-export function scoringRun(dir: string, u: SmUnit, image: string, volume: string, n: number, mode: Mode, label: string, limitMs?: number): { view: RunView; summary: RunSummary; log: string } {
+export function scoringRun(dir: string, u: SmUnit, image: string, volume: string, n: number, mode: Mode, label: string, limitMs?: number, extra?: RunExtra): { view: RunView; summary: RunSummary; log: string } {
   const applies = (u.oracle?.rebuild_rule ?? smFail("E_SM_UNIT", u.id + " has no rebuild rule flag on its oracle record; rerun its oracle")).applies;
   const run = volume + "-r" + n;
   copyVolume(image, volume, run, mode);
   try {
-    const t = runTests({ image, volume: run, repoDir: u.repo_dir, workDir: u.work_dir, commands: u.commands, mode, ...(limitMs ? { limitMs } : {}), label: u.id + "-" + label + n, rule: applies ? "applies" : "exempt" });
+    const t = runTests({ image, volume: run, repoDir: u.repo_dir, workDir: u.work_dir, commands: u.commands, mode, ...(limitMs ? { limitMs } : {}), label: u.id + "-" + label + n, rule: applies ? "applies" : "exempt", extra });
     if (t.infra) smFail("E_SM_INFRA_GAP", u.id + " " + label + n + ": the run could not make its mark dir (" + t.infra + "), an infra error, not a score");
     const parsed = t.stopped ? null : parseRun(t, readFileSync(join(dir, "parser.py"), "utf8"), u.id + "-" + label + n);
     const build_failed = buildFailed(t, u.commands.rebuild.length, applies, parsed);
@@ -374,10 +374,10 @@ export function scoreFirst(i: ScoreInput): OutcomeRecord {
       const views: RunView[] = [];
       let v: Verdict;
       do {
-        const r = scoringRun(i.unitDir, u, image, scored, views.length + 1, mode, "score", i.limitMs);
+        const r = scoringRun(i.unitDir, u, image, scored, views.length + 1, mode, "score", i.limitMs, i.extra);
         views.push(r.view);
         res.runs.push(r.summary);
-        known ??= knownIds(i.unitDir, u, volume, mode, i.limitMs);
+        known ??= knownIds(i.unitDir, u, volume, mode, i.limitMs, i.extra);
         v = decide(oracleF2p(u), u.oracle!.stable, known, views);
       } while (v.wants_more);
       return { ...res, fixed: v.fixed, broke: v.broke, broke_by: v.broke_by, absent: v.absent, rerun_2of3: v.rerun_2of3, reruns: v.reruns, new_tests: v.new_tests, outcome: v.outcome };

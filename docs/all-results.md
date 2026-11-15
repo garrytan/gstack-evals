@@ -102,7 +102,7 @@ These results have no numbers here, because they haven't yet had both checks the
 
 **Getting agents to open skills**
 
-- **Helps (opens only), waiting on a recount**, particle-1: gstack's routing overhaul got particle-1 to open /investigate on its own more often, only where the new hook named the skill, and no setup with the hooks switched off ran on particle-1. The result rests on a blind check by readers whose records were lost. Without those records the run's own analysis can't confirm it, so it waits until that check can be redone. [Overhaul on Sol and particle-1](../wiki/board/2026-11-08-geva-353-l1-sol-particle-results/README.md), [claim check](../wiki/board/2026-11-09-geva-431-claim-check-corrections.md#l1-gstacks-overhaul-before-and-after-opus-55-gpt-61-sol-particle-1)
+- **Helps (opens only), waiting on a recount**, particle-1: gstack's routing overhaul got particle-1 to open /investigate on its own more often, only where the new hook named the skill, and no setup with the hooks switched off ran on particle-1. The result rests on a blind check by readers whose records were lost. Without those records the run's own analysis can't confirm it, so it waits until that check can be redone. A later note on task images that kept the answer in their git history corrects the published leak counts and moves no verdict. [Overhaul on Sol and particle-1](../wiki/board/2026-11-08-geva-353-l1-sol-particle-results/README.md), [claim check](../wiki/board/2026-11-09-geva-431-claim-check-corrections.md#l1-gstacks-overhaul-before-and-after-opus-55-gpt-61-sol-particle-1), [containment note, corrected](../wiki/board/2026-11-12-geva-529-containment-note-correction.md)
 
 **plan-ceo-review**
 
@@ -118,9 +118,11 @@ These results have no numbers here, because they haven't yet had both checks the
 - **Steps ran**, Opus 5.5: with a gstack hook that checks the order of autoplan's report, autoplan, when asked for, ran its review steps in most sessions. This checks that the steps ran, not whether they help. [Report-order recheck](../wiki/board/2026-11-08-geva-396-autoplan-report-order-recheck-results/README.md)
 - **Couldn't test**, Opus 5.5: with a gstack hook that checks autoplan's steps before the session stops, autoplan ran them in too few sessions to pass the check that they ran. [Stop gate](../wiki/board/2026-11-07-geva-391-e2-autoplan-exposure-results/README.md)
 - **Couldn't test**, Opus 5.5: with an opt-in version of that hook, the check that the steps ran failed at its early stop, and our automatic check saw fewer review steps than actually ran. [Opt-in gate](../wiki/board/2026-11-07-geva-384-r61-autoplan-gate-results/README.md)
+- **Couldn't test, the run never reached a review session**, Opus 5.5, GPT-6.1 Sol and particle-1 planned: a test of plan-design-review on new screens planned for real open-source web apps stopped as an incomplete run. Eleven launches stopped in the code that starts a run, before the screen of base apps (16 working apps needed) could finish. It found one working app, and a bug in our recipe check rejected two others, so supply wasn't measured fairly. [Design plan review, incomplete run](../wiki/board/2026-11-15-geva-536-design-review-constructed-units-results.md)
 
 **office-hours and /learn**
 
+- **Couldn't test, our instrument failed**, Opus 5.5, GPT-6.1 Sol and particle-1: with invented founders played by a simulated founder, plain Opus never let the founder answer before advising and almost never named the first customer or offering the founder's hidden evidence supported, though it nearly always did when handed that evidence, on founders kept because the evidence leads there. office-hours wasn't compared: our check that its procedure ran saw it in no session, partly because a repair sentence we wrote told the skill to take its own recommended option at every decision, so it stopped asking, and the simulated founder failed its audit. [Office-hours founder eval, stage 1](../wiki/board/2026-11-14-geva-526-office-hours-founder-stage-1-results.md)
 - **No difference we could measure**, Opus 5.5: a shorter office-hours skill (gstack's coach for a product idea) did as well as the longer one in a small test, and /learn (which saves lessons for later sessions) left no room. [Office-hours and /learn quick look](../wiki/board/2026-10-28-gsta-13-quick-look-3-results/README.md)
 - **Tooling test only**, Opus 5.5, GPT-6.1 Sol and particle-1: two trial runs of the test that compares a skill before and after an edit tested our tooling, not a skill, though Sol failed a /learn safety task. [First trial run](../wiki/board/2026-10-30-geva-54-lanea-shakedown-results.md), [rerun](../wiki/board/2026-10-31-geva-65-lanea-shakedown-rerun-results.md)
 
@@ -128,6 +130,11 @@ These results have no numbers here, because they haven't yet had both checks the
 
 - **Nothing to cut**, archived benchmark sessions: we looked for wasted tool calls in gstack sessions and found almost none. [Waste floor](../wiki/board/2026-11-03-geva-220-waste-floor.md)
 - **Couldn't show a case**, the team's own sessions: re-running gstack's pre-merge checks on code already pushed took a tiny share of check time, but the case for dropping that rerun could not be shown. [Waste baseline](../wiki/board/2026-11-03-geva-236-waste-baseline.md)
+
+**Sending a coding agent's small decisions to cheaper models**
+
+- **NO SAVING**, Opus 5.5 and GPT-6.1 Sol: on 279 real GitHub issues, routing a coding agent's small decisions to Jev, a small calibrated model, then to particle-1 for the ones Jev was unsure of, cost more than the plain agent on both models, with no difference we could measure in task success. [Results](../wiki/research/2026-11-12-geva-501-decision-routing-results/README.md), [correction](../wiki/board/2026-11-12-geva-531-decision-routing-correction.md)
+- **PARTICLE-1 ALONE IS ENOUGH**, Opus 5.5 and GPT-6.1 Sol: sending every one of those decisions to particle-1, with no Jev step, did as well as the router, and the router was neither cheaper nor, by the rule fixed in advance, faster. [Results](../wiki/research/2026-11-12-geva-501-decision-routing-results/README.md), [correction](../wiki/board/2026-11-12-geva-531-decision-routing-correction.md)
 
 ## Corrections
 
@@ -158,6 +165,8 @@ The posts were written by and for the AI agent teams that ran the tests, so they
 - **home field:** the /review test bugs came mostly from reviews by gstack-family tools, so the test may suit gstack.
 - **pin:** an exact version of gstack, named by its commit.
 - **KEEP:** the part helped. **CUT:** removing it lost nothing measurable. **CUT-CANDIDATE:** it showed no gain where it should have. **FIX-METHOD:** the test could not answer its question, so the test needs fixing.
+- **NO SAVING:** the decision-routing test's verdict when the range for the router's cut in the bill reaches down to no cut at all or to a higher bill, so no saving was shown.
+- **PARTICLE-1 ALONE IS ENOUGH:** the decision-routing test's verdict when the router, compared with sending every small decision to particle-1 alone, passed neither measurably more nor measurably fewer tasks, stayed inside the success margin fixed in advance, and cleared neither the bar for cheaper nor the bar for faster.
 
 ## Disclosures
 

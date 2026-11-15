@@ -1,0 +1,471 @@
+{
+ "schema": "h2h-markers.v1",
+ "packs": {
+  "gstack": {
+   "pin": "3805969159bc7e595cde9dc0f3c267129cef9c16",
+   "plugin": null,
+   "skills": [
+    "autoplan",
+    "benchmark",
+    "benchmark-models",
+    "browse",
+    "canary",
+    "captain",
+    "careful",
+    "codex",
+    "context-restore",
+    "context-save",
+    "cso",
+    "design-consultation",
+    "design-html",
+    "design-motion",
+    "design-review",
+    "design-shotgun",
+    "deslop-shared-libs",
+    "devex-review",
+    "diagram",
+    "document-generate",
+    "document-release",
+    "eval-plan",
+    "freeze",
+    "gstack",
+    "gstack-upgrade",
+    "guard",
+    "health",
+    "ios-clean",
+    "ios-design-review",
+    "ios-fix",
+    "ios-qa",
+    "ios-sync",
+    "land-and-deploy",
+    "landing-report",
+    "learn",
+    "make-pdf",
+    "modernize",
+    "office-hours",
+    "open-gstack-browser",
+    "pair-agent",
+    "plan-ceo-review",
+    "plan-design-review",
+    "plan-devex-review",
+    "plan-eng-review",
+    "plan-tune",
+    "qa",
+    "qa-only",
+    "retro",
+    "review",
+    "runaway-stopper",
+    "scrape",
+    "setup-browser-cookies",
+    "setup-deploy",
+    "setup-gbrain",
+    "ship",
+    "skillify",
+    "spec",
+    "sync-gbrain",
+    "test-audit",
+    "ubicloud",
+    "unfreeze",
+    "verify",
+    "write-skill"
+   ],
+   "commands": [],
+   "strings": {
+    "skill_start": "gstack-skill-start --skill",
+    "browse": "browse/dist/browse",
+    "verify_nudge": "name: verify"
+   }
+  },
+  "superpowers": {
+   "pin": "22f0b463e7a5e579904dd6211a520321035526f7",
+   "plugin": "superpowers",
+   "skills": [
+    "brainstorming",
+    "diagnosing-superpowers",
+    "dispatching-parallel-agents",
+    "executing-plans",
+    "finishing-a-development-branch",
+    "receiving-code-review",
+    "requesting-code-review",
+    "subagent-driven-development",
+    "systematic-debugging",
+    "test-driven-development",
+    "using-git-worktrees",
+    "using-superpowers",
+    "verification-before-completion",
+    "writing-plans",
+    "writing-skills"
+   ],
+   "commands": [],
+   "strings": {
+    "banner": "You have superpowers.",
+    "announce": "announce \"Using [skill] to [purpose]\""
+   }
+  },
+  "agent-skills": {
+   "pin": "39b723ceebf81474d0557c1fecd01eddab585563",
+   "plugin": "agent-skills",
+   "skills": [
+    "api-and-interface-design",
+    "browser-testing-with-devtools",
+    "ci-cd-and-automation",
+    "code-review-and-quality",
+    "code-simplification",
+    "constraint-driven-development",
+    "context-engineering",
+    "debugging-and-error-recovery",
+    "deprecation-and-migration",
+    "documentation-and-adrs",
+    "doubt-driven-development",
+    "frontend-ui-engineering",
+    "git-workflow-and-versioning",
+    "idea-refine",
+    "incremental-implementation",
+    "interview-me",
+    "observability-and-instrumentation",
+    "performance-optimization",
+    "planning-and-task-breakdown",
+    "security-and-hardening",
+    "shipping-and-launch",
+    "source-driven-development",
+    "spec-driven-development",
+    "test-driven-development",
+    "using-agent-skills"
+   ],
+   "commands": [
+    "build",
+    "code-simplify",
+    "constraints",
+    "plan",
+    "review",
+    "ship",
+    "spec",
+    "test",
+    "webperf"
+   ],
+   "strings": {
+    "spec": "SPEC.md",
+    "plan": "tasks/plan.md",
+    "prove_it": "must FAIL"
+   }
+  },
+  "gsd": {
+   "pin": "357508df233ccca0dcf4332b385d6bee9b113da9",
+   "plugin": null,
+   "skills": [
+    "gsd-add-tests",
+    "gsd-ai-integration-phase",
+    "gsd-audit-fix",
+    "gsd-audit-milestone",
+    "gsd-audit-uat",
+    "gsd-autonomous",
+    "gsd-capture",
+    "gsd-cleanup",
+    "gsd-code-review",
+    "gsd-complete-milestone",
+    "gsd-config",
+    "gsd-debug",
+    "gsd-discuss-phase",
+    "gsd-docs-update",
+    "gsd-eval-review",
+    "gsd-execute-phase",
+    "gsd-explore",
+    "gsd-extract-learnings",
+    "gsd-fast",
+    "gsd-forensics",
+    "gsd-graphify",
+    "gsd-health",
+    "gsd-help",
+    "gsd-import",
+    "gsd-inbox",
+    "gsd-ingest-docs",
+    "gsd-manager",
+    "gsd-map-codebase",
+    "gsd-mempalace-capture",
+    "gsd-mempalace-recall",
+    "gsd-milestone-summary",
+    "gsd-mvp-phase",
+    "gsd-new-milestone",
+    "gsd-new-project",
+    "gsd-next",
+    "gsd-ns-context",
+    "gsd-ns-ideate",
+    "gsd-ns-manage",
+    "gsd-ns-project",
+    "gsd-ns-review",
+    "gsd-ns-workflow",
+    "gsd-onboard",
+    "gsd-pause-work",
+    "gsd-phase",
+    "gsd-plan-phase",
+    "gsd-plan-review-convergence",
+    "gsd-pr-branch",
+    "gsd-profile-user",
+    "gsd-progress",
+    "gsd-quick",
+    "gsd-quick-batch",
+    "gsd-resume-work",
+    "gsd-review",
+    "gsd-review-backlog",
+    "gsd-secure-phase",
+    "gsd-settings",
+    "gsd-ship",
+    "gsd-sketch",
+    "gsd-spec-phase",
+    "gsd-spike",
+    "gsd-stats",
+    "gsd-surface",
+    "gsd-thread",
+    "gsd-ui-phase",
+    "gsd-ui-review",
+    "gsd-ultraplan-phase",
+    "gsd-undo",
+    "gsd-update",
+    "gsd-validate-phase",
+    "gsd-verify-work",
+    "gsd-workspace",
+    "gsd-workstreams"
+   ],
+   "commands": [],
+   "strings": {
+    "run": "gsd_run",
+    "tools": "gsd-tools",
+    "quick_dir": ".planning/quick/",
+    "debug_dir": ".planning/debug"
+   }
+  },
+  "pstack": {
+   "pin": "3dbd22ff12742fb28c9700b9760baa29ed41dc13",
+   "plugin": "pstack",
+   "skills": [
+    "architect",
+    "arena",
+    "automate-me",
+    "benchmark-checklist",
+    "blast-radius",
+    "bro",
+    "correct",
+    "create-formal-verification-skill",
+    "create-verification-skill",
+    "figure-it-out",
+    "how",
+    "in-your-own-words",
+    "interrogate",
+    "ketchup",
+    "ketchup-video",
+    "maintain-formal-verification-skill",
+    "maintain-verification-skill",
+    "make-bot-ui",
+    "no-comments",
+    "poteto-help",
+    "poteto-mode",
+    "principle-attack-the-premise",
+    "principle-boundary-discipline",
+    "principle-build-the-lever",
+    "principle-encode-lessons-in-structure",
+    "principle-exhaust-the-design-space",
+    "principle-experience-first",
+    "principle-explain-the-number",
+    "principle-fix-root-causes",
+    "principle-foundational-thinking",
+    "principle-guard-the-context-window",
+    "principle-laziness-protocol",
+    "principle-make-operations-idempotent",
+    "principle-migrate-callers-then-delete-legacy-apis",
+    "principle-minimize-reader-load",
+    "principle-model-the-domain",
+    "principle-never-block-on-the-human",
+    "principle-outcome-oriented-execution",
+    "principle-prove-it-works",
+    "principle-redesign-from-first-principles",
+    "principle-separate-before-serializing-shared-state",
+    "principle-sequence-verifiable-units",
+    "principle-subtract-before-you-add",
+    "principle-test-behavior-not-implementation",
+    "principle-type-system-discipline",
+    "recall",
+    "reflect",
+    "setup-pstack",
+    "sharpen",
+    "show-me-your-work",
+    "statechart",
+    "swarm",
+    "tdd",
+    "teach",
+    "technical-writing",
+    "typescript-best-practices",
+    "unslop",
+    "why"
+   ],
+   "commands": [],
+   "strings": {
+    "todo_rule": "Open a todolist whose first items are the matched playbook's steps"
+   },
+   "playbooks": {
+    "authoring-a-skill": [
+     "0f60ca04b60c89cf99cc0a87deed5919cdc35a259e8fcf29df36f4367e6cf884",
+     "8ee98ba06acbb626c1310bef8effd946c451be34523ce3d7be22a7b10be74ab5"
+    ],
+    "autonomous-run": [
+     "f3b6948ce10d321a51d9ffe061f49f86f7672b41b53669f9c4c6a60e865a4d5e",
+     "26108b8f8e722eb35e237ec0c9ed27db30fe142a53a5d547ee6f6c907e728a67"
+    ],
+    "autopilot-full": [
+     "5e1903ceb179fe391a20959831dff8288e1903e87c3915af888175e09f5e5d4a",
+     "32f1a8c665df9f43ed1dd154b8bc433c6ded6dea13a413d94da4bcb997b72bde"
+    ],
+    "autopilot-stack": [
+     "526178223aa8986cf02abfe502d0c8b8dc2d2e2ad599ca94d1b86868b4bc4d91",
+     "c5c06619e1300e0c818db21366b80f47305011fb7fe2dddac7c47c4dd83fcb78"
+    ],
+    "babysit": [
+     "276633e24b99448f0b4308bfc52000ab3fa5f3b3fd764a0b16d7557b5094e199",
+     "b8d54a3def82ad99b07be677c76771e6733c01899cdc3ebeb2e5c79f5d8428d4"
+    ],
+    "bug-fix": [
+     "634324eb09aba634f9571c5322b66b2a98e4f6b8dd480c057b0ad2ffc12e21aa",
+     "39ddfbd641bcb1fb9d96ac0f72d7cdce772794683c3e1af0610513128568c2e5"
+    ],
+    "eval": [
+     "4cd781740bc7949db4da3d0f77fb4dcad4ba9f601185afa5e22b8cc3439671d7",
+     "826ff0ad556bcb331fcd6383112b8bc0d8bb5c6f65b0bbe2bc7375d54bbc3ae0"
+    ],
+    "feature": [
+     "df68155a30cf24296e34c3e34f6ef0ba2da54c1bfbc9cb3d2a7455829b8639ed",
+     "64c6fb5e2ee6aa3be32cd4a112c008a55ecf398d27fc09ad22b0ccfc6ea86ac2"
+    ],
+    "hillclimb": [
+     "76970070f283357c39fce56f413989ff2df282a2b49568f582d14fed9944cc76",
+     "c3b5746cec6e079fe521b2ebc66d19b2b2604a2eadc9fdcf6879a27d0092a6fb"
+    ],
+    "investigation": [
+     "4b77b9569d2b8bef291d881f46970f71d5e0948e9ec04bbd208702ebcf566f7c",
+     "455e5ed5babd404506f7cb8093b3bc8a6db3a8651b9ab74ddc0955640f057e80"
+    ],
+    "multi-phase-plan": [
+     "3e03b347c32799ca9152fe47d86a579aeb69da750d04fb65c031e545a49fb846",
+     "19784e6e226159ea45a25d77249ace0212768071cdf09aa6ac6f67442c5d0417"
+    ],
+    "pause-safely": [
+     "c221b4d0bac5524b5b923e7cef2f171dbdfad1a66af33c4955c04db0be9325e7",
+     "3cbc4b5376aa91e6f9b1f252524184fed87247b2e1dd0b858f1020735cf4164d"
+    ],
+    "perf-issue": [
+     "0f36d672c9d547f98d5645f6020ac2aced0e1c189eded920509041be767a0cb9",
+     "e4915b1ee4daa306a245e7aaa6d7108a484b57f55968b02ec79e4e000efdecf6"
+    ],
+    "prototype": [
+     "ed9b93950886825818c7c7441f1f88ff7783de4d38cce34df3e4c31a79d0f868",
+     "7c68d4213c163a2ff39aacb9e528b5d09abed110915a995884621cc216735b79"
+    ],
+    "refactoring": [
+     "39274770e1979bd97ce941b14dfc15f99fc474899c5db7d53df8f9e405c6c19a",
+     "2528e17f6fce3a9c66ba48c8739968407bd87320153680317f92998f77d191e0"
+    ],
+    "runtime-forensics": [
+     "298d48eea940c9108dadcf9b1c1bcbd4eb6f6e92a8c03670b4aeeeb5f7d22bee",
+     "63a53297928986c6d6edd0be494d9d953905f2e6f437ea5545455d6f0af53966"
+    ],
+    "session-pickup": [
+     "18dc84abeba5afcaef43986c8b633c4ab548e12f1a55e11c528f203f3c7b865c",
+     "07b7430524338cdcc16e949194c10e8c4a430f2ffd1fb41ac5665f2f14c203d6"
+    ],
+    "shipping": [
+     "e95889042c67e09219a8598d36141b11067307176e7076b45966fad795d94b8b",
+     "0845cac83184fb9158f06deac921d34aadfed7be6666c98fcb00a1f0f69f9661"
+    ],
+    "trace-forensics": [
+     "eacb73b1c7385e3708419b80d308e2f1f8af8a487fe42612e9073de897e0ed7d",
+     "b2c23464e7775087598d816aeb835025d9e4f9db9d8d6bb8ab0372a102204190"
+    ],
+    "visual-parity": [
+     "e5e0e00473dcd1b50a359b055066e7b371b0c021b21a945ddc76ec6424f0bfb3",
+     "25b0491f72edf7466ec1d204a7ef7e30a032f9492ab7a0998fc6403b9837474c"
+    ],
+    "worktree-cleanup": [
+     "632623eec26f897be0cee584c064303aa1350766a884a7babda54f7d23bba416",
+     "2ec284c44f65d8f6c4d5f824af0b5b77044e51636b60d84d58b30d583103114c"
+    ]
+   }
+  },
+  "tstack": {
+   "pin": "11e37a74d0a6868c121cd0910ab2b3bd9873b92a",
+   "plugin": null,
+   "skills": [
+    "babysit-pr",
+    "council",
+    "file-pr",
+    "full-send",
+    "full-stop",
+    "leaving-pr-comments",
+    "modernize",
+    "sol-loop",
+    "takeover"
+   ],
+   "commands": [],
+   "strings": {
+    "sol_loop": "sol-loop",
+    "file_pr": "file-pr",
+    "babysit_pr": "babysit-pr"
+   }
+  },
+  "ponystack": {
+   "pin": "bc1b71b0ad0b721bc9ffe299f76a2623e441ff61",
+   "plugin": "ponystack",
+   "skills": [
+    "ponystack",
+    "ponystack-contract",
+    "ponystack-ratio"
+   ],
+   "commands": [],
+   "strings": {
+    "banner": "PONYSTACK ACTIVE",
+    "phase": "PONYSTACK PHASE: "
+   }
+  }
+ },
+ "sources": {
+  "pstack:harness/pstack/claude-code/skills/poteto-mode/playbooks/authoring-a-skill.md": "f6a13a445c360b48d6cd72780ac01955f45b82826476efe0e67c7559329407aa",
+  "pstack:harness/pstack/claude-code/skills/poteto-mode/playbooks/autonomous-run.md": "e74323411b5a760ffa7393d908d07fed420c68f8dc2aed1267505eaeadf130f2",
+  "pstack:harness/pstack/claude-code/skills/poteto-mode/playbooks/autopilot-full.md": "2da35982565c6cf1dbe25f7a05ccae28f7729389aefc6dbb3e010eb883abdd19",
+  "pstack:harness/pstack/claude-code/skills/poteto-mode/playbooks/autopilot-stack.md": "34de4bb101dd56524d8067c73bba5988ead6f93d3ab8f96ac13a6adcb43696cb",
+  "pstack:harness/pstack/claude-code/skills/poteto-mode/playbooks/babysit.md": "d546a937ed800abe1d29aae8a689fb57212280fdde62fae1fc1dc7f2efd9d904",
+  "pstack:harness/pstack/claude-code/skills/poteto-mode/playbooks/bug-fix.md": "66e26542dad131cfd7df80ac0cdf81ed4d85e7b5e3f0eb65b933888760c4831f",
+  "pstack:harness/pstack/claude-code/skills/poteto-mode/playbooks/eval.md": "a93d449a908236afa6645179651844094b1547dbab4e484cffcdda630e4b90bf",
+  "pstack:harness/pstack/claude-code/skills/poteto-mode/playbooks/feature.md": "af8ce700b99953741cb547e34308fde0cf6b98ce67e1652c800d0deedf53aba1",
+  "pstack:harness/pstack/claude-code/skills/poteto-mode/playbooks/hillclimb.md": "942c1565b75ad02a2cb6230dd7c1ebd87e19f59a00319ebac2b6616007bf018f",
+  "pstack:harness/pstack/claude-code/skills/poteto-mode/playbooks/investigation.md": "dc66bcf6af3a074fc7f67aa5e12b93ef571a4fb4d8e17f2f1af5ae5359f42e46",
+  "pstack:harness/pstack/claude-code/skills/poteto-mode/playbooks/multi-phase-plan.md": "2b4fbb547e5ccfe46d1279d714eb0199d28e995f06bdc4eda4afbca9221fbbe6",
+  "pstack:harness/pstack/claude-code/skills/poteto-mode/playbooks/opening-a-pr.md": "b22b7ad7cd102b99d334f4399ae1dba78e0aaf4bee2d5241fda71753c7ce48f9",
+  "pstack:harness/pstack/claude-code/skills/poteto-mode/playbooks/orchestrate.md": "dfd7e53e7ef844ae11394672b2f8e22ced47b977ff6e947fef837953cc95bb86",
+  "pstack:harness/pstack/claude-code/skills/poteto-mode/playbooks/pause-safely.md": "77968cfe5f4a71a8cd33e0ae8ffcdbd88dd693a212c240457773e6c40c96c21d",
+  "pstack:harness/pstack/claude-code/skills/poteto-mode/playbooks/perf-issue.md": "c12aa2f82de7651a11676a3d5fea168f539b7f0faaa3a501d279255dd2a469c8",
+  "pstack:harness/pstack/claude-code/skills/poteto-mode/playbooks/prototype.md": "7aa1f52c691c3d46d5afc527b23f90977fce869ce33573c73c81a4c7f0cde962",
+  "pstack:harness/pstack/claude-code/skills/poteto-mode/playbooks/refactoring.md": "0f5dd38113379ea8cf61e2182eca0a7478eea9a869eb40c2dddab3335aeca197",
+  "pstack:harness/pstack/claude-code/skills/poteto-mode/playbooks/runtime-forensics.md": "3463372b578c28f27c236f2627f09b5c5b1e85e86db7399fb984f3892fb450f5",
+  "pstack:harness/pstack/claude-code/skills/poteto-mode/playbooks/session-pickup.md": "d194f2a7ef392c1598ef3f0e3b561370ca25c2c7a78308007af4aa46ada8ee12",
+  "pstack:harness/pstack/claude-code/skills/poteto-mode/playbooks/shipping.md": "bf56339bdf7e0223bcff5abf4e8599e3f5b547b3fcc3b4ce9475e6e7dda14a9f",
+  "pstack:harness/pstack/claude-code/skills/poteto-mode/playbooks/trace-forensics.md": "ef0bbf79856a4ae1a8993d54c1a1da159cb97623941b652c0069cf75a017e0f5",
+  "pstack:harness/pstack/claude-code/skills/poteto-mode/playbooks/visual-parity.md": "950ca51999a6454c98eee6bcbc3d1bbe501a4e3a5d5439b6f6ddc378991b256c",
+  "pstack:harness/pstack/claude-code/skills/poteto-mode/playbooks/worktree-cleanup.md": "be04ae0afe19d4a4da5bcc4e94455f68dbebd1cda6eb0f456ca0d358ecf76c00",
+  "gstack:SKILL.md": "7ec6f873de0a732ac57358eb47220c2f546bb29e08fe03bfe57a9ca295da907f",
+  "gstack:autoplan/SKILL.md": "ced691f913ac9d9b3d948582b3a95b1591c2cf084b83b2bfc8f2b5d6c7e3c6e6",
+  "gstack:browse/SKILL.md": "70e22467ca4bf5741ad7837635bc524e080709b83be094d62224ec9a55a628b5",
+  "gstack:verify/SKILL.md": "7796b61ac09d3047b191ef8d0ab772e804cbb73abcd98dcb64b09fb8eae3cb84",
+  "superpowers:.claude-plugin/plugin.json": "6728b554d1aaf9235f7981c7838a32f50c191297284af97f4c2a808155f7c399",
+  "superpowers:hooks/session-start": "38fdeed045b28b62034a809e45602e33358573acbc23c83787d76d449cb89902",
+  "superpowers:skills/using-superpowers/SKILL.md": "82c5c8866ad7f5dd4440ce66bd7806ba48a2f13771beae5cf112e53f08fe36ba",
+  "agent-skills:.claude-plugin/plugin.json": "ea58afbbcc55a07a6317522ac475b88cdcdf58acae374443aef49c247007cfd9",
+  "agent-skills:skills/spec-driven-development/SKILL.md": "58dd9f5f2e53830c0c0dd9651998bd6ee4e2a1cc520c9dcf855dfb2fbb3f5059",
+  "agent-skills:.claude/commands/plan.md": "e7694b2c86603d732b919f1fc88b9617f652d95bf830799ef1b641d38e50d2fe",
+  "agent-skills:.claude/commands/test.md": "6655d78484ff0457ce3f249ecf30448dd42b3ea3529e89399c2c789fd0f52f51",
+  "gsd:skills/gsd-quick/SKILL.md": "179089ba2bfe7182083c0611ff79087c0b89822b727d506205b27098d22a0401",
+  "gsd:gsd-core/workflows/debug.md": "e50ac215a58af0c104a4a2a89df2fbb1fb21a387df46b197fb5fa8fbdb9435d6",
+  "gsd:commands/gsd/debug.md": "12855440f56881c169d29cb94b20da97368f7fdef2851b6344a935ea766fc891",
+  "pstack:harness/pstack/claude-code/plugin.json": "ebc3ee08ceff88b13521cabd714d92b972fbe9c5b77116f94872ee848b225b31",
+  "pstack:harness/pstack/claude-code/skills/poteto-mode/SKILL.md": "9e9e77f996512b0309a6d2d136f20dd20e394739c3bfe3a9e473003a95c4a3b2",
+  "tstack:skills/full-send/SKILL.md": "ba585e47cd901506b0e2de13025b0e39bc02462c136cf27491ad3efbdfe66020",
+  "ponystack:.claude-plugin/plugin.json": "d37a10161d4cb24031a9f5ff0c8689e17e27f8a133faf9649b4f86ada71bcf14",
+  "ponystack:hooks/ponystack-hook.js": "1adb507affb681c184fdba176c812b750aa65049ca2b567bc702e578215f00d6"
+ }
+}

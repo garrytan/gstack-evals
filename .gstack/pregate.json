@@ -12,6 +12,53 @@
     }
   ],
   "dependencies": {
+    "wiki/plans/2026-11-09-geva-418-office-hours-founder-evidence-prereg/**": [
+      "tests/of/parse.test.ts",
+      "tests/of/author/prompts.test.ts",
+      "tests/of/author/cli.test.ts",
+      "tests/of/sim/founder.test.ts",
+      "tests/of/sim/fidelity.test.ts",
+      "tests/of/score/judge.test.ts",
+      "tests/of/read/projection.test.ts",
+      "tests/of/read/cli.test.ts"
+    ],
+    "lanes/office-hours-founder/score/prompts/**": [
+      "tests/of/score/judge.test.ts",
+      "tests/of/score/seams.test.ts",
+      "tests/of/score/cli.test.ts"
+    ],
+    "lanes/ask-replay/frozen.json": [
+      "tests/ask-replay/build.test.ts",
+      "tests/ask-replay/chains.test.ts",
+      "tests/ask-replay/custody.test.ts",
+      "tests/ask-replay/draws.test.ts",
+      "tests/ask-replay/dryrun.test.ts",
+      "tests/ask-replay/frozen.test.ts",
+      "tests/ask-replay/label.test.ts",
+      "tests/ask-replay/ledger.test.ts",
+      "tests/ask-replay/parse.test.ts",
+      "tests/ask-replay/privacy.test.ts",
+      "tests/ask-replay/prompt.test.ts",
+      "tests/ask-replay/run.test.ts",
+      "tests/ask-replay/score.test.ts",
+      "tests/ask-replay/stats.test.ts",
+      "tests/ask-replay/synthetic.test.ts"
+    ],
+    "lanes/product-value/cutoffs.json": [
+      "tests/of/author/real.test.ts"
+    ],
+    "tests/of/run/driver-sdk.ts": [
+      "tests/of/run/driver-sdk.test.ts"
+    ],
+    "lanes/office-hours-founder/cli.ts": [
+      "tests/cli.test.ts"
+    ],
+    "lanes/office-hours-founder/wire.ts": [
+      "tests/of/score/cli.test.ts"
+    ],
+    "lanes/office-hours-founder/e2e-score.ts": [
+      "tests/cli.test.ts"
+    ],
     "lanes/autoplan-audit/crashchild.ts": [
       "tests/autoplan-audit/dryrun.test.ts"
     ],

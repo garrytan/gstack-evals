@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites name="vitest tests" tests="4" failures="2" errors="0" time="0.147948746">
+    <testsuite name="tests/dom.vt.test.js" timestamp="2026-11-15T04:19:48.458Z" hostname="runner" tests="2" failures="1" errors="0" skipped="0" time="0.019348746">
+        <testcase classname="tests/dom.vt.test.js" name="dom &gt; has document" time="0.011208046">
+        </testcase>
+        <testcase classname="tests/dom.vt.test.js" name="dom &gt; fails" time="0.007177732">
+            <failure message="expected 1 to be 2 // Object.is equality" type="AssertionError">
+AssertionError: expected 1 to be 2 // Object.is equality
+
+- Expected
++ Received
+
+- 2
++ 1
+
+ ❯ tests/dom.vt.test.js:2:130
+            </failure>
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/dom.vt.test.js" timestamp="2026-11-15T04:19:48.462Z" hostname="runner" tests="2" failures="1" errors="0" skipped="0" time="0.1286">
+        <testcase classname="tests/dom.vt.test.js" name="dom &gt; has document" time="0.0008">
+        </testcase>
+        <testcase classname="tests/dom.vt.test.js" name="dom &gt; fails" time="0.1271">
+            <failure message="expected 1 to be 2 // Object.is equality" type="AssertionError">
+AssertionError: expected 1 to be 2 // Object.is equality
+
+- Expected
++ Received
+
+- 2
++ 1
+
+ ❯ tests/dom.vt.test.js:2:130
+            </failure>
+        </testcase>
+    </testsuite>
+</testsuites>

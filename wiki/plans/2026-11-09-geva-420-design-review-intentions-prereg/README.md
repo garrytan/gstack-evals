@@ -7,7 +7,7 @@ author: GEVA-420
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
 date: 2026-11-09
-status: open
+status: superseded
 links:
   - 2026-11-09-geva-412-plan-mode-intentions
   - 2026-11-08-geva-405-eng-review-intentions-prereg

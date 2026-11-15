@@ -238,7 +238,7 @@ export async function judgePackets(o: { map: PacketMap; packets: Map<string, Pac
 const JUDGE_MODEL: Record<JudgeKey, ModelKey> = { astra: "astra", opus: "opus", gemini: "gemini" };
 
 /** The provider's model string from an upstream request and reply, keyed by the prompt it carried. */
-function versionTap(base: typeof fetch, dir: string): typeof fetch {
+export function versionTap(base: typeof fetch, dir: string): typeof fetch {
   return (async (url: any, init?: any) => {
     const res = await base(url, init);
     try {
