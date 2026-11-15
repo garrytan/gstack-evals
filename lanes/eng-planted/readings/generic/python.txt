@@ -1,0 +1,31 @@
+# Common Python edge cases, written before any unit was seen (prereg 2026-11-15-geva-537 section 5). One per line.
+None passed where a value is expected
+attribute access on None
+empty list, dict or string input
+whitespace only string input
+mutable default argument shared between calls
+integer division and floating point rounding
+division by zero
+key missing from a dictionary
+index out of range on a sequence
+iteration over a generator twice
+unicode decoding error on bytes input
+case sensitivity in string comparison
+trailing slash or empty segment in a path
+duplicate entries in the input
+naive versus timezone aware datetime
+daylight saving time transitions
+exception swallowed by a bare except
+resource not closed without a context manager
+file not found or permission denied
+negative numbers or zero as a count
+very large input size
+boolean treated as an integer
+falsy zero or empty string treated as missing
+sorting with mixed types or None values
+float nan comparisons
+string versus bytes type confusion
+shallow copy of nested structures
+unexpected keyword argument or missing argument
+recursion depth on deeply nested input
+truthiness of an empty container
