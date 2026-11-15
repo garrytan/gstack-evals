@@ -249,7 +249,7 @@ export async function prepareB(o: { c: BCandidate; work: string; ref: string; st
     const d = readDiscovery(dlog);
     facts.retries = d.retries;
     for (const runner of runners) {
-      const plan = testPlan(runner, patches.testFiles, facts, d.discovered);
+      const plan = testPlan(runner, patches.testFiles, facts, d.discovered, ECOSYSTEM_LANG[o.build.ecosystem]!);
       if (isDrop(plan)) {
         rec.tried.push({ runner, code: plan.code, rule: plan.rule });
         continue;
