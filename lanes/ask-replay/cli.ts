@@ -16,7 +16,7 @@ import { AskError, fail, FROZEN, placeholders, seed } from "./frozen.ts";
 import { corpusTexts, scanPublic, syntheticCheck } from "./privacy.ts";
 import { buildPrompt, gstackLines, loadGstack, type GstackText } from "./prompt.ts";
 import { finalRecords, openProxyMeter, runShard, schedule, upstreamRedraw, type LabelJob } from "./run.ts";
-import { isNeedless, readout, s1Report } from "./score.ts";
+import { absentSamples, isNeedless, readout, s1Report } from "./score.ts";
 import { halfWidth, mdd } from "./stats.ts";
 import { generate } from "./synthetic/generator.ts";
 import { ARMS, LABELS, outcomeOf, type Arm, type AskItem, type LabelKind, type ModelKey, type Sample } from "./types.ts";
@@ -172,6 +172,11 @@ export const SUBCOMMANDS: Record<string, { summary: string; run: Run }> = {
       const f = flags(argv, ["items", "replies", "links", "labels", "draws"], ["keyless"]);
       const items = readItems(need(f, "items"));
       const records = finalRecords(readRecords(need(f, "replies")));
+      const absent = absentSamples(items, records.map((r) => r.sample));
+      if (absent.total) {
+        json(io, { incomplete: true, absent: absent.total, absent_by_model_arm: absent.by });
+        fail("E_ASK_INCOMPLETE", "the replies lack " + absent.total + " scheduled samples, so the run is incomplete and score prints no decision rows");
+      }
       const lab = f.labels ? labelReadout(items, finalRecords(readRecords(f.labels))) : null;
       const links = lab?.links ?? readLinks(f.links) ?? proxyLinks(items);
       const outcomes = records.map(outcomeOf);
@@ -314,6 +319,11 @@ async function paidShard(f: Record<string, string>, io: Io, o: { name: string; m
     }
   });
   json(io, result);
+  const shard = "shard" in result ? result.shard : undefined;
+  if (shard?.stopped === "cap") {
+    io.err(lines("E_ASK_CAP", "the spend cap stopped the shard with " + shard.left + " samples left; the run is incomplete"));
+    return CODES.E_ASK_CAP.exit ?? 2;
+  }
   return 0;
 }
 

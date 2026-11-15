@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { openLease, recordApproval, settleLease } from "../../src/runner/ledger/ledger.ts";
 import { openLocalLedger } from "../../src/runner/ledger/local.ts";
 import { ledgerPath } from "../../src/runner/ledger/paths.ts";
+import { readItem } from "../../src/runner/ledger/record.ts";
 import { plainStore } from "../../lanes/ask-replay/custody.ts";
 import { answerBody, FIXTURE_GSTACK, Killed, stubSend } from "../../lanes/ask-replay/fixtures.ts";
 import { FROZEN } from "../../lanes/ask-replay/frozen.ts";
@@ -223,5 +224,51 @@ describe("the real client through the metering proxy, with a stub upstream", () 
   test("particle-1's route sends data_collection deny", async () => {
     const { chatPrice, openRouterRouting } = await import("../../src/runner/pricing/prices.ts");
     expect(openRouterRouting(chatPrice(FROZEN.models.particle.price_row)!)).toMatchObject({ data_collection: "deny", only: ["particle-ai"], allow_fallbacks: false });
+  });
+
+  const proxyItem = () => {
+    const dir = mkdtempSync(join(tmpdir(), "ask-proxy-"));
+    const record = join(dir, "record");
+    recordApproval(record, { action: "init", item: "ask-proxy", cap_micros: 5_000_000, quotes: quote, admission: "warn" });
+    let calls = 0;
+    const fetchStub = (async () => {
+      calls++;
+      return new Response(JSON.stringify({ ...answerBody("opus", '{"action":"FOLD","reason":"r"}'), id: "msg_1", type: "message", role: "assistant", model: "claude-opus-5-5" }), { status: 200, headers: { "content-type": "application/json" } });
+    }) as unknown as typeof fetch;
+    const open = (out: string, env: Record<string, string> = { ANTHROPIC_API_KEY: "test-key-not-real" }) => openProxyMeter({ item: "ask-proxy", runId: "ask-proxy", out: join(dir, out), model: "opus", maxOutputTokens: 4000, record, ledger: join(dir, "ledger.sqlite"), env, fetch: fetchStub });
+    return { dir, record, open, calls: () => calls };
+  };
+
+  test("a metering proxy refusal stops the shard with the sample unsealed, never as UPSTREAM MISSING", async () => {
+    const p = proxyItem();
+    try {
+      const meter = await p.open("out", {});
+      const store = plainStore(join(p.dir, "replies"));
+      let slept = 0;
+      const samples = schedule(items.slice(0, 1), "opus", 1, 5).slice(0, 1);
+      await expect(runShard({ items: byId, samples, gstack: FIXTURE_GSTACK, client: meter.client, store, out: join(p.dir, "out"), maxOutputTokens: 4000, sleep: async () => void slept++, concurrency: 1 })).rejects.toMatchObject({ code: "E_ASK_PROXY" });
+      await meter.close();
+      expect(store.read().size).toBe(0);
+      expect(slept).toBe(0);
+      expect(p.calls()).toBe(0);
+    } finally {
+      rmSync(p.dir, { recursive: true, force: true });
+    }
+  });
+
+  test("shards on one spend item run one at a time: another run directory and a second shard in the same one are refused while the first holds its lease", async () => {
+    const p = proxyItem();
+    try {
+      const first = await p.open("one");
+      await expect(p.open("two")).rejects.toMatchObject({ code: "E_LEASE_UNSETTLED" });
+      await expect(p.open("one")).rejects.toMatchObject({ code: "E_USAGE" });
+      expect(readItem(p.record, "ask-proxy").open?.lease_id).toBe(first.leaseId);
+      await first.close();
+      const second = await p.open("two");
+      expect(readItem(p.record, "ask-proxy").open?.lease_id).toBe(second.leaseId);
+      await second.close();
+    } finally {
+      rmSync(p.dir, { recursive: true, force: true });
+    }
   });
 });

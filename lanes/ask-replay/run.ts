@@ -12,7 +12,7 @@
 // reserves and settles every call against the lease, and the keyless client reserves and settles each call on the same
 // ledger under its sample id, draw and attempt. particle-1 goes through OpenRouter with the price row's routing, which
 // sends data_collection deny; the shard writes that setting to routing.json.
-import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -82,7 +82,7 @@ export interface CallKey {
 }
 
 export interface Client {
-  /** One call: the provider's answer, or null when none came back. Throws AskError for a cap stop or a processor refusal; any other throw is a crash. */
+  /** One call: the provider's answer, or null when none came back. Throws AskError for a cap stop, a metering proxy refusal or a processor refusal; any other throw is a crash. */
   call(sample: Sample, key: CallKey, body: Record<string, unknown>): Promise<Answer | null>;
   /** Settles a call a killed shard left open through the unknown-charge path; a no-op where the meter reconciles at open. */
   reconcile?(sample: Sample, key: CallKey, body: Record<string, unknown>): Promise<void>;
@@ -314,20 +314,46 @@ export interface ProxyMeter {
   close(): Promise<{ spent_micros: number; unknown_micros: number }>;
 }
 
+/** One live shard per run directory: a lock file holds the shard's pid and is taken over only when that process is gone. */
+function holdRunDir(out: string): { release(): void } {
+  const lock = join(out, "shard.lock");
+  try {
+    writeFileSync(lock, String(process.pid), { flag: "wx" });
+  } catch {
+    const pid = Number(readFileSync(lock, "utf8"));
+    let live = pid === process.pid;
+    if (!live && pid > 0) {
+      try {
+        process.kill(pid, 0);
+        live = true;
+      } catch (e) {
+        live = (e as { code?: string }).code === "EPERM";
+      }
+    }
+    if (live) fail("E_USAGE", "run directory " + out + " is held by a live shard (pid " + pid + "); run one shard per --out at a time");
+    writeFileSync(lock, String(process.pid));
+  }
+  return { release: () => rmSync(lock, { force: true }) };
+}
+
 /**
  * The real client: one lease on the spend line item for this shard and the repo's metering proxy (as the product-value
- * eval's meter opens it), with the proxy's journal reconciled and this run's stale lease settled first. The proxy sends
+ * eval's meter opens it), with the proxy's journal reconciled and a stale lease this run directory opened settled first. The proxy sends
  * each call once (retries are this driver's, section 6) and reads the provider keys by name from the environment.
  */
 export async function openProxyMeter(o: { item: string; runId: string; out: string; model: ModelKey; maxOutputTokens: number; amountMicros?: number; record?: string; ledger?: string; env?: Record<string, string | undefined>; fetch?: typeof fetch; warn?: (code: ReasonCode, message: string) => void }): Promise<ProxyMeter> {
   const env = o.env ?? process.env;
+  const m = FROZEN.models[o.model];
+  const routing = m.provider === "openrouter" ? openRouterRouting(chatPrice(m.price_row)!) : null;
+  if (routing && (routing as { data_collection?: string }).data_collection !== "deny") fail("E_ASK_PROCESSOR", m.id + "'s route does not send data_collection deny");
   const record = recordPath(o.record, env).path;
-  const local = openLocalLedger(ledgerPath(o.ledger, env));
-  const warn = o.warn ?? (() => {});
   const out = resolve(o.out);
   mkdirSync(out, { recursive: true });
+  const lock = holdRunDir(out);
+  const local = openLocalLedger(ledgerPath(o.ledger, env));
+  const warn = o.warn ?? (() => {});
   const journal = join(out, "proxy-journal.ndjson");
-  const m = FROZEN.models[o.model];
+  const own = join(out, "lease.json");
   let proxy: MeteringProxy | null = null;
   let leaseId = "";
   try {
@@ -336,18 +362,19 @@ export async function openProxyMeter(o: { item: string; runId: string; out: stri
       renameSync(journal, join(out, "proxy-journal." + Date.now() + ".dead.ndjson"));
     }
     const open = readItem(record, o.item).open;
-    if (open && open.run_id === o.runId && local.getLease(open.lease_id)) settleLease(record, local, open.lease_id, warn);
+    const mine = existsSync(own) ? (JSON.parse(readFileSync(own, "utf8")) as { lease_id?: string }).lease_id : undefined;
+    if (open && open.run_id === o.runId && open.lease_id === mine && local.getLease(open.lease_id)) settleLease(record, local, open.lease_id, warn);
     leaseId = openLease(record, local, { item: o.item, run_id: o.runId, amount_micros: o.amountMicros, warn, requireAdmission: rigAdmission({ proof: "direct" }) }).lease_id;
+    writeFileSync(own, JSON.stringify({ lease_id: leaseId }) + "\n");
     proxy = new MeteringProxy({ ledger: local, leaseId, host: "127.0.0.1", managementSocket: join(tmpdir(), "ask-" + randomBytes(6).toString("hex") + ".sock"), managementToken: randomBytes(24).toString("hex"), journal, retry: { attempts: 1, elapsed_ms: FROZEN.shards.request_timeout_ms }, env, fetch: o.fetch, maxOutputTokens: o.maxOutputTokens });
     proxy.start();
   } catch (e) {
     if (leaseId && !proxy) settleLease(record, local, leaseId, warn);
     local.close();
+    lock.release();
     throw e;
   }
   const p = proxy;
-  const routing = m.provider === "openrouter" ? openRouterRouting(chatPrice(m.price_row)!) : null;
-  if (routing && (routing as { data_collection?: string }).data_collection !== "deny") fail("E_ASK_PROCESSOR", m.id + "'s route does not send data_collection deny");
   writeFileSync(join(out, "routing.json"), JSON.stringify({ model: m.price_row, provider_routing: routing }) + "\n");
   const reserved = () => readItem(record, o.item).leases.find((l) => l.lease.lease_id === leaseId)!.lease.reserved_micros;
   const route = m.provider === "anthropic" ? "/v1/messages" : m.provider === "openai" ? "/v1/responses" : "/v1/chat/completions";
@@ -377,6 +404,7 @@ export async function openProxyMeter(o: { item: string; runId: string; out: stri
           parsed = JSON.parse(text);
         } catch {}
         if (parsed?.code === "CAP_STOP") throw new AskError("E_ASK_CAP", "the spend cap refused a reservation for sample " + s.id);
+        if (typeof parsed?.code === "string" && parsed.title === parsed.code && parsed.code !== "UPSTREAM") throw new AskError("E_ASK_PROXY", "the metering proxy refused sample " + s.id + " with " + parsed.code + " (HTTP " + status + "), so the sample stays unsealed");
         if (m.provider === "openrouter" && status === 404 && /no endpoints|data polic/i.test(text)) throw new AskError("E_ASK_PROCESSOR", m.id + " has no route that accepts data collection denied");
         if (m.provider === "openrouter" && status === 200 && !/^particle/i.test(String(parsed?.provider ?? ""))) throw new AskError("E_ASK_PROCESSOR", m.id + " was served by a provider other than its pin");
         return status === 0 ? null : { status, body: parsed, micros };
@@ -392,6 +420,7 @@ export async function openProxyMeter(o: { item: string; runId: string; out: stri
         return { spent_micros: c.spent_micros, unknown_micros: c.unknown_micros };
       } finally {
         local.close();
+        lock.release();
       }
     },
   };

@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { proxyLinks } from "../../lanes/ask-replay/chains.ts";
 import { DECISION_FIXTURES } from "../../lanes/ask-replay/fixtures.ts";
-import { compare, decide, itemInfos, itemMeans, missingShares, pastCeiling, readout, sampleScore } from "../../lanes/ask-replay/score.ts";
+import { FROZEN } from "../../lanes/ask-replay/frozen.ts";
+import { schedule } from "../../lanes/ask-replay/run.ts";
+import { absentSamples, compare, decide, itemInfos, itemMeans, missingShares, pastCeiling, readout, sampleScore } from "../../lanes/ask-replay/score.ts";
 import { generate } from "../../lanes/ask-replay/synthetic/generator.ts";
 import type { Action, Arm, AskItem, MissingKind, Outcome } from "../../lanes/ask-replay/types.ts";
 
@@ -110,5 +112,15 @@ describe("readout parts", () => {
     expect(r.models.opus.s2.c.gate.drop_answered).toBeGreaterThan(0);
     expect(r.models.opus.exposure.b_reasons_citing_earlier_ask.rate).toBe(1);
     expect(r.models.opus.per_class.PERMISSION_FOR_DEFAULT.b.k).toBe(6);
+  });
+});
+
+describe("a partial run", () => {
+  test("scheduled samples with no record count as absent per model and arm, so the run is incomplete", () => {
+    const its = items.slice(0, 2);
+    const all = schedule(its, "opus", FROZEN.replicates.k, 7);
+    expect(absentSamples(its, all)).toEqual({ total: 0, by: {} });
+    const capped = all.filter((s) => !(s.arm === "b" && s.replicate === 2));
+    expect(absentSamples(its, capped)).toEqual({ total: 2, by: { opus: { b: 2 } } });
   });
 });

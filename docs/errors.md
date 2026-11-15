@@ -303,6 +303,8 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_ASK_IDENTITY](#e_ask_identity) | 2 | U20 |
 | [E_ASK_PROCESSOR](#e_ask_processor) | 2 | U20 |
 | [E_ASK_CAP](#e_ask_cap) | 2 | U20 |
+| [E_ASK_PROXY](#e_ask_proxy) | 2 | U20 |
+| [E_ASK_INCOMPLETE](#e_ask_incomplete) | 2 | U20 |
 | [E_ASK_RESUME](#e_ask_resume) | warning | U20 |
 | [E_ASK_PRIVACY](#e_ask_privacy) | 2 | U20 |
 | [E_ASK_PARSE](#e_ask_parse) | warning | U20 |
@@ -2234,6 +2236,22 @@ Ask replay eval: a spend cap refused a call's reservation, so the shard stopped.
 Fix: None inside the run. Report spent, reserved and unknown; the run is never retried to change a verdict.
 
 Exit 2. Side effects: Partial: sealed replies and their spend are kept; the lease settles with what was spent. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_ASK_PROXY
+
+Ask replay eval: the metering proxy refused a call for a local reason (a missing or rejected key, a closed lease, the ledger, an allowance or a tripwire), so the shard stopped and that sample stays unsealed. It is not an upstream failure and is never scored as MISSING.
+
+Fix: Fix the cause the line names, then resume the shard: sealed samples are skipped and the unsealed one runs again.
+
+Exit 2. Side effects: Partial: sealed replies and their spend are kept; the lease settles with what was spent. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_ASK_INCOMPLETE
+
+Ask replay eval: the replies lack samples the frozen schedule names, so the run is incomplete. score prints the absent counts per model and arm and no decision rows.
+
+Fix: Resume a shard that stopped on time or on a local fault. A run a spend cap stopped stays incomplete and is never retried to change a verdict.
+
+Exit 2. Side effects: None: nothing was written. Retry safe: yes. Resumable: yes. Owner: U20.
 
 ### E_ASK_PRIVACY
 

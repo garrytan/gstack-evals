@@ -13,7 +13,7 @@ PASS run: each cell's replicates run in sequence (replicate 2 starts after repli
 PASS draws: the pilot takes 16 must-ask and 24 needless by class and thread, the label audit 40 must-ask, 40 duplicates and every permission and observable item, and a seed redraws the same set
 PASS ledger leases: one lease opens and settles on each frozen spend item, and an item that served one run refuses a second (E_ITEM_BOUND)
 PASS resume: a killed shard resumes with sealed samples skipped, the open call settled unknown and redrawn once, no call counted twice
-PASS cap: a spend cap stop ends the shard as incomplete (E_ASK_CAP)
+PASS cap: a spend cap stop ends the shard as incomplete (E_ASK_CAP), and score counts its unsealed samples as absent and prints no decision rows
 PASS custody: seal and open on a throwaway age identity with an async reader, leftover swept, teardown proved, empty identity refused
 PASS score: each decision row on interval fixtures, including (a) clearly better, (c) clearly worse, a cut with a failed guard and the trim half
 PASS score: both codings and the MISSING bounds on fixed samples

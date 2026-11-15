@@ -15,7 +15,7 @@ links:
   - https://github.com/garrytan/gstack/tree/0326b144af36676d599dcf63a9fad9a870d22ed6
 attachments:
   - fb755012e90568677daf12b36f9863d4066e0a404bab1741a4e271a40542c464  autoplan-review-record.md
-  - 474c5915068063e164764b3d420430f5d89ed07f92ba954180f831719580eb35  dryrun.txt
+  - c46ebcf62e60a45afeb3204e6144342370b5f8691f89b0c04271c780a59db4eb  dryrun.txt
   - 82d5b22391faff5c600c410d18ef9be79cbf6ea9b69b467372722a0c0090d5f2  frozen.json
 ---
 
@@ -236,6 +236,8 @@ All run at medium reasoning and the provider's default temperature (no temperatu
 | E_ASK_IDENTITY | stdin is a terminal or empty; refuse at once |
 | E_ASK_PROCESSOR | no particle-1 route accepts data collection denied; particle-1 untested on real items |
 | E_ASK_CAP | a spend cap stopped a lease; the run is incomplete and never retried to change a verdict |
+| E_ASK_PROXY | the metering proxy refused a call for a local reason; the shard stops, the sample stays unsealed and is never scored as MISSING |
+| E_ASK_INCOMPLETE | score found scheduled samples with no reply; the run is incomplete |
 | E_ASK_RESUME | a sample has an open lease and no sealed reply; reconcile, redraw once, count it |
 | E_ASK_PRIVACY | the lane scan or the synthetic check found a hit; no push, no build |
 | E_ASK_PARSE | a reply with no valid action; scored as MISSING |
@@ -243,6 +245,8 @@ All run at medium reasoning and the provider's default temperature (no temperatu
 | E_ASK_UNFROZEN | a paid run while frozen.json still holds a placeholder |
 | E_ASK_INPUT | malformed builder input, or a synthetic set that differs from its generator |
 | E_ASK_DRYRUN_FAIL | the dry run had a FAIL line |
+
+A run with any scheduled sample absent is incomplete: score reports the absent counts per model and arm and prints no decision rows.
 
 **Keyless tests** in tests/ask-replay/ (15 files) cover: the codebook pin, the labeller prompt's blindness, label parsing, labeller calls on the driver and the label readout; both draws; ledger status and every gate rule (a whitespace-only reask reason, FOLD naming an answered row, a missing repeats field, an unknown id); every scoring rule and both codings; MISSING bounds per comparison; every decision row on fixtures; stats on fixed data; component order; arm cleanliness; the gstack pins (skipped when no gstack clone is present); the privacy scanners; custody on a throwaway age identity; a resume that never double-counts; the builder on fixture pages; and the dry run.
 

@@ -11,6 +11,7 @@
 import { chainStats, clusters, repeatInWindow, s1Match, type ChainStats, type Link } from "./chains.ts";
 import { FROZEN } from "./frozen.ts";
 import { multiDecision } from "./ledger.ts";
+import { sampleId } from "./run.ts";
 import { clopperPearson, pairedInterval, type Interval } from "./stats.ts";
 import { LABELS, type Arm, type AskItem, type Label, type MissingKind, type ModelKey, type Outcome } from "./types.ts";
 
@@ -106,6 +107,22 @@ export interface MissingShare {
   missing: number;
   share: number;
   by_kind: Record<MissingKind, number>;
+}
+
+/** Samples the frozen schedule names that no record holds, per model and arm: every item, every arm the model runs, replicates 1 to k, for each model with any record unless models names them. A run with any is incomplete and prints no decision rows. */
+export function absentSamples(items: readonly Pick<AskItem, "item">[], samples: readonly { id: string; model: ModelKey }[], k: number = FROZEN.replicates.k, models: Iterable<ModelKey> = new Set(samples.map((s) => s.model))): { total: number; by: Partial<Record<ModelKey, Partial<Record<Arm, number>>>> } {
+  const have = new Set(samples.map((s) => s.id));
+  const by: Partial<Record<ModelKey, Partial<Record<Arm, number>>>> = {};
+  let total = 0;
+  for (const model of models) {
+    for (const arm of FROZEN.models[model].arms) {
+      let n = 0;
+      for (const it of items) for (let r = 1; r <= k; r++) if (!have.has(sampleId(it.item, arm, model, r))) n++;
+      if (n) (by[model] ??= {})[arm] = n;
+      total += n;
+    }
+  }
+  return { total, by };
 }
 
 export function missingShares(outcomes: readonly Outcome[], model: ModelKey): Partial<Record<Arm, MissingShare>> {

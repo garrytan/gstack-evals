@@ -23,7 +23,7 @@ import { buildPrompt, CAPABILITY, gstackLines, HARNESS, LEDGER_ADDENDUM, loadGst
 import { finalRecords, ledgerClient, runShard, sampleId, schedule, upstreamRedraw, type CallKey, type ShardOptions } from "./run.ts";
 import { auditDraw, drawCounts, pilotDraw } from "./draws.ts";
 import { CODEBOOK, checkCodebook, labelJob, labelReadout, labelSamples } from "./label.ts";
-import { decide, readout, sampleScore } from "./score.ts";
+import { absentSamples, decide, readout, sampleScore } from "./score.ts";
 import { admitChance, halfWidth, mdd } from "./stats.ts";
 import { generate } from "./synthetic/generator.ts";
 import { outcomeOf, type AskItem, type LabelReply, type Outcome, type Sample, type SampleRecord } from "./types.ts";
@@ -232,7 +232,9 @@ async function capCheck(items: AskItem[]): Promise<string | true> {
     const res = await runShard(o);
     settleLease(record, local, leaseId);
     local.close();
-    return res.stopped === "cap" && res.ran === 0 ? true : "the shard did not stop on the cap (" + res.stopped + ")";
+    if (res.stopped !== "cap" || res.ran !== 0) return "the shard did not stop on the cap (" + res.stopped + ")";
+    const absent = absentSamples(items.slice(0, 1), [...plainStore(join(dir, "replies")).read().values()].map((r) => r.sample), 1, ["opus"]);
+    return absent.total === samples.length ? true : "score did not count the cap-stopped samples as absent (" + absent.total + " of " + samples.length + ")";
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -425,7 +427,7 @@ export function checks(o: { gstack: GstackText | null; clone?: string }): Check[
     } },
     { name: "ledger leases: one lease opens and settles on each frozen spend item, and an item that served one run refuses a second (E_ITEM_BOUND)", run: leaseCheck },
     { name: "resume: a killed shard resumes with sealed samples skipped, the open call settled unknown and redrawn once, no call counted twice", run: () => resumeCheck(items) },
-    { name: "cap: a spend cap stop ends the shard as incomplete (E_ASK_CAP)", run: () => capCheck(items) },
+    { name: "cap: a spend cap stop ends the shard as incomplete (E_ASK_CAP), and score counts its unsealed samples as absent and prints no decision rows", run: () => capCheck(items) },
     { name: "custody: seal and open on a throwaway age identity with an async reader, leftover swept, teardown proved, empty identity refused", run: custodyCheck },
     { name: "score: each decision row on interval fixtures, including (a) clearly better, (c) clearly worse, a cut with a failed guard and the trim half", run: () => {
       const bad = Object.entries(DECISION_FIXTURES).filter(([, f]) => { const d = decide({ opus: f.opus, sol: f.sol }); return d.row !== f.row || d.cut_candidate !== f.cut_candidate; }).map(([n]) => n);
