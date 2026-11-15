@@ -9,6 +9,7 @@
 import type { ReasonCode } from "../../../../src/errors/codes.ts";
 import { printCommand, printFind, REPORT_DIR, REPO_ROOT_IN_IMAGE, type ReportFormat } from "./parse.ts";
 import { BROWSER } from "../types.ts";
+import { SOURCE_EXT, TEST_PATH, type Lang } from "../../statemachines/langs.ts";
 
 export type Ecosystem = "npm" | "Go" | "Maven" | "crates.io" | "NuGet";
 export type PackageManager = "npm" | "pnpm" | "yarn" | "go" | "cargo" | "maven" | "dotnet";
@@ -179,6 +180,22 @@ export interface Discovered {
 
 const RD = REPORT_DIR;
 const q = (files: string[]) => files.map(sh).join(" ");
+
+/** Paths that are never a unit's source: statemachines/langs.ts classify's NOT_SOURCE, which that file does not export
+ *  (h2h-recipes.test.ts checks that the two agree). */
+export const NOT_SOURCE = /(^|\/)(node_modules|vendor|third_party|target|\.git|dist|build|__pycache__|\.venv|venv)(\/|$)/;
+const ere = (r: RegExp) => r.source.replace(/\\\//g, "/");
+
+/** Section 7's verified-correct fix counts a new test file the arm added that fails in all three scoring runs (the reused
+ *  scorer's new-test rule), so a scoring run must collect it. This sets the shell's arguments for a path-filtered runner:
+ *  the fix's test files, then each file new to the base commit (untracked, or added in the index) that langs.ts classify
+ *  calls a test under the unit's language: not under a NOT_SOURCE directory, a source extension, a test path. Strict
+ *  scoring has already dropped the arm's protected files and its files at the fix's new test paths. On the oracle's base
+ *  and fixed trees the only new files are the fix's own new test files, which the list already holds. */
+export function armTestArgs(lang: Lang, tests: string[]): string {
+  const git = "git -c safe.directory='*' -c core.quotePath=false";
+  return "printf '%s\\n' " + q(tests) + " > " + RD + "/fix-tests.txt && { " + git + " ls-files --others --exclude-standard; " + git + " diff --cached --name-only --diff-filter=A HEAD --; } | grep -Ev " + sh(ere(NOT_SOURCE)) + " | grep -E " + sh(ere(SOURCE_EXT[lang])) + " | grep -E " + sh(ere(TEST_PATH[lang])) + " | grep -vxF -f " + RD + "/fix-tests.txt | sort -u > " + RD + "/arm-tests.txt; set -- " + q(tests) + "; while IFS= read -r p; do set -- \"$@\" \"$p\"; done < " + RD + "/arm-tests.txt; ";
+}
 const dirOf = (p: string) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : ".");
 const nearest = (path: string, files: readonly string[], match: (p: string) => boolean): string | null => {
   let d = dirOf(path);
@@ -192,25 +209,26 @@ const nearest = (path: string, files: readonly string[], match: (p: string) => b
 const hex = (s: string) => Buffer.from(s, "utf8").toString("hex");
 
 /** The rule per runner. Every command writes its report under .h2h-reports and runs with retries off. */
-export function testPlan(runner: TestRunner, tests: string[], f: RepoFacts, d: Discovered = {}): TestPlan | Drop {
+export function testPlan(runner: TestRunner, tests: string[], f: RepoFacts, d: Discovered = {}, lang: Lang = "ts"): TestPlan | Drop {
   const dp = deps(f);
   const mk = "mkdir -p " + RD + " && ";
+  const arm = mk + armTestArgs(lang, tests);
   const plan = (format: ReportFormat, test: string[], print: string[]): TestPlan => ({ runner, format, commands: { rebuild: [], test, print } });
   switch (runner) {
     case "playwright":
-      return plan("junit-playwright", [mk + "PLAYWRIGHT_JUNIT_OUTPUT_NAME=" + RD + "/playwright.xml npx --no-install playwright test --reporter=junit --retries=0 " + q(tests)], [printCommand([RD + "/playwright.xml"])]);
+      return plan("junit-playwright", [arm + "PLAYWRIGHT_JUNIT_OUTPUT_NAME=" + RD + "/playwright.xml npx --no-install playwright test --reporter=junit --retries=0 \"$@\""], [printCommand([RD + "/playwright.xml"])]);
     case "vitest": {
       const projects = d.vitest_projects?.length ? d.vitest_projects.map((p) => p.name) : [""];
-      return plan("vitest-json", projects.map((p) => mk + "npx --no-install vitest run" + (p ? " --project " + sh(p) : "") + " --reporter=json --outputFile=" + RD + "/vitest-" + hex(p) + ".json --retry=0 " + q(tests)), [printCommand([RD + "/vitest-*.json"])]);
+      return plan("vitest-json", projects.map((p) => arm + "npx --no-install vitest run" + (p ? " --project " + sh(p) : "") + " --reporter=json --outputFile=" + RD + "/vitest-" + hex(p) + ".json --retry=0 \"$@\""), [printCommand([RD + "/vitest-*.json"])]);
     }
     case "jest":
       if (f.retries?.jest_retry_times) return { code: "E_H2H_B_RETRIES", rule: "jest_retry_times" };
-      return plan("jest-json", [mk + "npx --no-install jest --ci --json --outputFile=" + RD + "/jest.json --runTestsByPath " + q(tests)], [printCommand([RD + "/jest.json"])]);
+      return plan("jest-json", [arm + "npx --no-install jest --ci --json --outputFile=" + RD + "/jest.json --runTestsByPath \"$@\""], [printCommand([RD + "/jest.json"])]);
     case "mocha":
       if (f.retries?.mocha_retries) return { code: "E_H2H_B_RETRIES", rule: "mocha_retries" };
-      return plan("junit", [mk + "npx --no-install mocha --reporter xunit --reporter-option output=" + RD + "/mocha.xml " + q(tests)], [printCommand([RD + "/mocha.xml"])]);
+      return plan("junit", [arm + "npx --no-install mocha --reporter xunit --reporter-option output=" + RD + "/mocha.xml \"$@\""], [printCommand([RD + "/mocha.xml"])]);
     case "node-test":
-      return plan("junit", [mk + "node --test --test-reporter=junit --test-reporter-destination=" + RD + "/node.xml " + q(tests)], [printCommand([RD + "/node.xml"])]);
+      return plan("junit", [arm + "node --test --test-reporter=junit --test-reporter-destination=" + RD + "/node.xml \"$@\""], [printCommand([RD + "/node.xml"])]);
     case "karma": {
       if (!dp.has("karma-junit-reporter")) return { code: "E_H2H_B_NO_REPORTER", rule: "karma-junit-reporter" };
       const conf = ["karma.conf.js", "karma.conf.cjs"].find((p) => has(f, p));
@@ -223,10 +241,10 @@ export function testPlan(runner: TestRunner, tests: string[], f: RepoFacts, d: D
       const conf = ["web-test-runner.config.mjs", "web-test-runner.config.js", "web-test-runner.config.cjs"].find((p) => has(f, p));
       if (!conf) return { code: "E_H2H_B_NO_RUNNER", rule: "wtr_no_root_config" };
       const wrapper = "import base from './" + conf + "'; import { defaultReporter } from '@web/test-runner'; import { junitReporter } from '@web/test-runner-junit-reporter'; export default { ...base, reporters: [defaultReporter(), junitReporter({ outputPath: '" + RD + "/wtr.xml' })] };";
-      return plan("junit", [mk + "printf '%s\\n' " + sh(wrapper) + " > .h2h-wtr.config.mjs && npx --no-install wtr --config .h2h-wtr.config.mjs " + q(tests)], [printCommand([RD + "/wtr.xml"])]);
+      return plan("junit", [arm + "printf '%s\\n' " + sh(wrapper) + " > .h2h-wtr.config.mjs && npx --no-install wtr --config .h2h-wtr.config.mjs \"$@\""], [printCommand([RD + "/wtr.xml"])]);
     }
     case "cypress":
-      return plan("junit", [mk + "npx --no-install cypress run --reporter junit --reporter-options " + sh("mochaFile=" + RD + "/cypress-[hash].xml") + " --config retries=0 --spec " + sh(tests.join(","))], [printCommand([RD + "/cypress-*.xml"])]);
+      return plan("junit", [arm + "npx --no-install cypress run --reporter junit --reporter-options " + sh("mochaFile=" + RD + "/cypress-[hash].xml") + " --config retries=0 --spec \"$(IFS=,; printf '%s' \"$*\")\""], [printCommand([RD + "/cypress-*.xml"])]);
     case "go": {
       const pkgs = [...new Set(tests.filter((t) => t.endsWith("_test.go")).map((t) => "./" + (dirOf(t) === "." ? "" : dirOf(t))))].sort();
       if (!pkgs.length) return { code: "E_H2H_B_NO_TESTS", rule: "no_go_test_file" };
