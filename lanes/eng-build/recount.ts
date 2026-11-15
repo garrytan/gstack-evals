@@ -31,7 +31,7 @@ export function recountUnit(dir: string, o: { work: string; runs?: number; seed?
   if (!(o.licences ?? LICENCES).includes(task.licence) && !o.custody) return { ...row, reason: "licence" };
   if (docker(["image", "inspect", eb.image.id]).status !== 0) return { ...row, reason: "image_missing" };
   const patch = (label: string) => readFileSync(join(dir, treePatch(label)), "utf8");
-  const grade = (label: string, set: EbTask["sets"][number], want: string[]): Grid => gradeSet({ taskDir: dir, task, eb, set, label, patch: patch(label), runs, seed: o.seed ?? eb.seed + 1000, work: o.work, check: true, want, sandbox: o.sandbox, crash: o.planted ? new Set() : undefined });
+  const grade = (label: string, set: EbTask["sets"][number], want: string[]): Grid => gradeSet({ taskDir: dir, task, eb, set, label, patch: patch(label), runs, seed: o.seed ?? eb.seed + 1000, work: o.work, check: true, want, sandbox: o.sandbox, crash: o.planted });
   try {
     const functional = grade("merged", eb.sets[0], eb.unit.functional);
     row.functional = eb.unit.functional.filter((id) => functional[id]?.length === runs && functional[id].every((c) => c === "pass")).length;

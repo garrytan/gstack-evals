@@ -2,9 +2,10 @@
 // Frozen recipes of the eng-review build read (plan sections 3 and 11), ported from the supply probe: ecosystem
 // detection from the nearest manifest, the install and per-case test step for Go, Node (npm, pnpm, yarn or bun, with
 // jest, vitest, mocha or node:test), Python (pip or uv, with pytest) and Rust (cargo test), and the classifier that
-// gives every case in every run its CaseClass. Only "assert" is a scorable failure: a Python AttributeError, NameError
-// or ImportError, a JavaScript ReferenceError or a TypeError through something undefined, a Go or Rust compile error
-// and a collection or load error never are. Holds no unit data and prints no repository content.
+// gives every case in every run its CaseClass. Only "assert" is a scorable failure, and on planted units rule 2's
+// "crash": otherwise a Python AttributeError, NameError or ImportError, a JavaScript ReferenceError or a TypeError
+// through something undefined, a Go or Rust compile error and a collection or load error never are. Holds no unit data
+// and prints no repository content.
 import type { NodeRunner, Runner } from "../real-outcome/task/format.ts";
 import { parseCargo, parseGoTest, parseJestJson, parseMochaJson, parseNodeEvents, parseXml, resultFor, type Parsed, type Results, type TestResult, type XmlNode } from "../real-outcome/task/record.ts";
 import { isTestPath } from "../real-outcome/mine/paths.ts";
@@ -469,7 +470,7 @@ export function productFrame(path: string): boolean {
 }
 
 /** Planted-unit rule 2 (GEVA-537 plan section 2): a runtime error that is not a compile, collection or load error counts as
- * a scorable failure ("assert") when its innermost frame is in a product file. Every public name exists on the merged
+ * a scorable failure ("crash") when its innermost frame is in a product file. Every public name exists on the merged
  * and fixed trees by construction, so a JavaScript TypeError reading undefined or a Python AttributeError on None there
  * is the bug, not a missing name. A failure that names no frame never counts. */
 export function plantedClass(runner: Runner["kind"], r: TestResult, run: { timed_out?: boolean; stopped?: boolean }, fromCollect: boolean): CaseClass {
@@ -478,21 +479,20 @@ export function plantedClass(runner: Runner["kind"], r: TestResult, run: { timed
   const text = (r.exc ?? "") + " " + (r.msg ?? "");
   if (/ImportError|ModuleNotFoundError|SyntaxError|IndentationError|Cannot find module|ERR_MODULE_NOT_FOUND|Failed to resolve import|error TS\d{4}/.test(text)) return c;
   const frame = innermostFrame(runner, r);
-  return frame !== null && productFrame(frame) ? "assert" : c;
+  return frame !== null && productFrame(frame) ? "crash" : c;
 }
 
-/** Every id's class in one parsed run. With crash set, planted-unit rule 2 applies and the ids it turned into "assert" are
- * added to it. */
-export function runClasses(runner: Runner["kind"], parsed: Parsed, ids: string[], run: { timed_out?: boolean; stopped?: boolean }, crash?: Set<string>): Record<string, CaseClass> {
+/** Whether a class is a scorable failure: "assert", or the planted read's "crash", which eng-build's own grading never
+ * gives. */
+export const scorableFail = (c: CaseClass | undefined): boolean => c === "assert" || c === "crash";
+
+/** Every id's class in one parsed run. With crash set, planted-unit rule 2 applies. */
+export function runClasses(runner: Runner["kind"], parsed: Parsed, ids: string[], run: { timed_out?: boolean; stopped?: boolean }, crash = false): Record<string, CaseClass> {
   return Object.fromEntries(
     ids.map((id) => {
       const r = resultFor(parsed, id);
       const fromCollect = !(id in parsed.results) && r.status === "fail";
-      const c = caseClass(runner, r, run, fromCollect);
-      if (!crash || c === "assert") return [id, c];
-      const p = plantedClass(runner, r, run, fromCollect);
-      if (p === "assert") crash.add(id);
-      return [id, p];
+      return [id, (crash ? plantedClass : caseClass)(runner, r, run, fromCollect)];
     }),
   );
 }

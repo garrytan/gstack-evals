@@ -19,7 +19,7 @@ import { verifyTree, type TreeResult } from "../real-outcome/task/verify.ts";
 import type { ReasonCode } from "../../src/errors/codes.ts";
 import { EbError, fail } from "./errors.ts";
 import { FROZEN } from "./frozen.ts";
-import { ecoOfFile, findProject, hasRecipe, recipeFor, runClasses, runnable, verifierRunner, type Recipe, type RecipeOptions } from "./recipes.ts";
+import { ecoOfFile, findProject, hasRecipe, recipeFor, runClasses, runnable, scorableFail, verifierRunner, type Recipe, type RecipeOptions } from "./recipes.ts";
 import type { AftermathItem, BuildUnit, CaseClass, CaseRuns, Ecosystem, UnitSet, UnitType } from "./types.ts";
 
 export const EB_SCHEMA = "eng-build.unit.v1";
@@ -261,11 +261,11 @@ export type Grid = Record<string, CaseClass[]>;
 
 const all = (runs: CaseClass[] | undefined, c: CaseClass): boolean => !!runs && runs.length > 0 && runs.every((r) => r === c);
 
-/** The 3-run rule: an aftermath case fails at assertion level in every run on the merged tree and on the fix's parent
- * with the fix's tests in place, and passes in every run on the fix. */
+/** The 3-run rule: an aftermath case fails at assertion level (or, on a planted unit, by rule 2's crash class) in every
+ * run on the merged tree and on the fix's parent with the fix's tests in place, and passes in every run on the fix. */
 export const aftermathCases = (merged: Grid, parent: Grid, fixed: Grid, runs: number): string[] =>
   Object.keys(fixed)
-    .filter((id) => [merged[id], parent[id]].every((g) => all(g, "assert") && g!.length === runs) && all(fixed[id], "pass") && fixed[id].length === runs)
+    .filter((id) => [merged[id], parent[id]].every((g) => !!g && g.length === runs && g.every(scorableFail)) && all(fixed[id], "pass") && fixed[id].length === runs)
     .sort();
 
 /** Anchors: cases in the same fix test files that pass in every run on the merged tree and on the fix. */
@@ -344,7 +344,8 @@ export interface BuildOptions {
   seed?: number;
   cpus?: number;
   /** Planted-unit rules (GEVA-537 plan section 2): rule 1's functional set (cases that pass in every run on the merged
-   * tree and on each fix, fail on base, and are not aftermath cases) and rule 2's crash class. */
+   * tree and on each fix, fail on base, and are not aftermath cases) and rule 2's crash class. Rule 1's base grid stands in
+   * for the base check, so a planted unit is never dropped for no per-case result on base. */
   planted?: boolean;
   recipe?: RecipeOptions;
   sandbox?: Sandbox;
@@ -555,16 +556,16 @@ export function buildUnit(spec: UnitSpec, repo: string, out: string, o: BuildOpt
     seed,
   };
   mkdirSync(join(out, "trees"), { recursive: true });
-  const grid = (label: string, rev: string, set: RestoreSet, want?: string[], crash?: Set<string>) => {
+  const grid = (label: string, rev: string, set: RestoreSet, want?: string[]) => {
     const patch = rev === base ? "" : diff(repo, base, rev);
     writeFileSync(join(out, treePatch(label)), patch);
-    return gradeSet({ taskDir: out, task, eb, set, label, patch, runs, seed, work: o.work, cpus: o.cpus, want, sandbox: o.sandbox, crash: crash ?? (o.planted ? new Set() : undefined) });
+    return gradeSet({ taskDir: out, task, eb, set, label, patch, runs, seed, work: o.work, cpus: o.cpus, want, sandbox: o.sandbox, crash: o.planted });
   };
   const crashOnMerged = new Set<string>();
   const functional = grid("merged", merge, sets[0]);
   eb.unit.functional = Object.keys(functional).filter((k) => all(functional[k], "pass") && functional[k].length === runs).sort();
-  const atBase = grid("base", base, sets[1]);
-  const baseResults = Object.values(atBase).some((r) => r.some((c) => c === "pass" || c === "assert" || c === "missing_name"));
+  const atBase = o.planted ? {} : grid("base", base, sets[1]);
+  const baseResults = Object.values(atBase).some((r) => r.some((c) => c === "pass" || scorableFail(c) || c === "missing_name"));
 
   for (const [i, it] of items.entries()) {
     const set = sets[2 + i];
@@ -572,7 +573,8 @@ export function buildUnit(spec: UnitSpec, repo: string, out: string, o: BuildOpt
       drops.push({ code: "E_EB_NO_AFTERMATH", step: "aftermath:" + it.item, cls: "no_runnable_test_files", cases: 0 });
       continue;
     }
-    const merged = grid("merged", merge, set, undefined, o.planted ? crashOnMerged : undefined);
+    const merged = grid("merged", merge, set);
+    for (const [id, r] of Object.entries(merged)) if (r.includes("crash")) crashOnMerged.add(id);
     const fixed = grid("fix:" + it.item, it.commit, set);
     if (it.kind === "T") {
       eb.unit.tCases.push(...anchorCases(merged, fixed, runs));
@@ -610,7 +612,7 @@ export function buildUnit(spec: UnitSpec, repo: string, out: string, o: BuildOpt
   task.tests.functional = eb.unit.functional;
   let drop: Drop | null = null;
   if (eb.unit.functional.length === 0) drop = { code: "E_EB_IMAGE", step: "merged", cls: o.planted ? "no_functional_case" : "no_functional_pass", cases: 0 };
-  else if (!baseResults) drop = { code: "E_EB_IMAGE", step: "base", cls: "no_per_case_result", cases: 0 };
+  else if (!baseResults && !o.planted) drop = { code: "E_EB_IMAGE", step: "base", cls: "no_per_case_result", cases: 0 };
   else if (!eb.unit.aftermath.some((a) => a.cases.length > 0)) drop = { code: "E_EB_NO_AFTERMATH", step: "aftermath", cls: "no_case_passed_the_rule", cases: 0 };
   writeFileSync(join(out, "eb.json"), JSON.stringify(eb, null, 2) + "\n");
   task.files = fileDigests(out);
@@ -657,8 +659,8 @@ export interface GradeOptions {
   check?: boolean;
   /** Ids to classify even when no run reported them (a case on a tree that does not compile). */
   want?: string[];
-  /** Planted-unit rule 2: crash-class failures grade as "assert" and their ids are added here. */
-  crash?: Set<string>;
+  /** Planted-unit rule 2: crash-class failures grade as "crash". */
+  crash?: boolean;
   sandbox?: Sandbox;
 }
 
@@ -708,7 +710,7 @@ function productCheck(o: GradeOptions, group: number, p: TreeResult["prepare"]):
 }
 
 /** Every in-scope id's class in each run of a tree. */
-export function treeGrid(tree: TreeResult, runner: Runner["kind"], scopes: string[], want: string[] = [], crash?: Set<string>): Grid {
+export function treeGrid(tree: TreeResult, runner: Runner["kind"], scopes: string[], want: string[] = [], crash = false): Grid {
   const ids = new Set<string>(want.filter((id) => inScope(runner, id, scopes)));
   for (const r of tree.runs) for (const id of [...r.parsed.seen, ...Object.keys(r.parsed.results)]) if (inScope(runner, id, scopes) && !(runner === "go" && goSubtest(id))) ids.add(id);
   const grid: Grid = {};

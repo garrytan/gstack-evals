@@ -178,10 +178,13 @@ export const DRY: DryCase[] = [
     name: "rule 2: a runtime error whose innermost frame is in a product file is scorable; one in a test file or a load error is not",
     run() {
       const run = {};
-      const py = (where: string, exc = "AttributeError") => plantedClass("pytest", { status: "fail", cls: "missing_name", exc, msg: exc + ": 'NoneType' object has no attribute 'get'", where }, run, false);
+      const py = (where: string, exc = "AttributeError") => {
+        const r = { status: "fail" as const, cls: "missing_name" as const, exc, msg: exc + ": 'NoneType' object has no attribute 'get'", where };
+        return plantedClass("pytest", r, run, false);
+      };
       const js = (frame: string) => plantedClass("nodetest", { status: "fail", cls: "missing_name", exc: "TypeError", msg: "TypeError: Cannot read properties of undefined (reading 'port')\n    at port (" + frame + ":4:22)" }, run, false);
       const got = [py("/testbed/pkg/ops.py:13"), py("/testbed/tests/test_ops.py:9"), py("/testbed/pkg/ops.py:1", "ModuleNotFoundError"), js("/testbed/src/cfg.js"), js("/testbed/node_modules/x/index.js")];
-      const ok = got.join() === ["assert", "missing_name", "missing_name", "assert", "missing_name"].join();
+      const ok = got.join() === ["crash", "missing_name", "missing_name", "crash", "missing_name"].join();
       return { ok, detail: got.join(",") };
     },
   },

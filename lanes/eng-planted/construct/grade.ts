@@ -95,7 +95,7 @@ export function qualify(o: { mirror: string; fix: MinedFix; unit: Constructed; o
   if (needles.some((n) => !judge(n, scanTexts(n, tree)).passes)) return drop("body", "body_in_base_tree");
   requireSandbox();
   const extra = functionalFiles(o.mirror, m, c);
-  const screened = screenCandidate({ id: m.id, base: c.base, merge: c.merge, fixes: [{ commit: c.fix, kind: "fix" }] }, o.mirror, { work: o.work, recipe: RECIPE, crash: true, functionalFiles: extra });
+  const screened = screenCandidate({ id: m.id, base: c.base, merge: c.merge, fixes: [{ commit: c.fix, kind: "fix" }] }, o.mirror, { work: o.work, recipe: RECIPE, crash: true, functionalFiles: extra, ownTestsAtBase: true });
   if (!screened.qualifies) return drop("screen", [screened.step, screened.cls].join(":"));
   const images = o.images ?? pinImages(o.mirror, c.base, c.merge, c.fix);
   let built;
@@ -165,7 +165,7 @@ export function plantedGrader(o: { work: string; runs?: number }): PlantedGrader
       requireSandbox();
       const { eb, task } = readUnit(unitDir);
       const patch = treeDiff(unitDir, null, tree);
-      const grid = (set: (typeof eb.sets)[number] | undefined, want: string[]) => (set && want.length ? gradeSet({ taskDir: unitDir, task, eb, set, label: "build", patch, runs, seed: eb.seed + 3000, work: o.work, want, crash: new Set(), sandbox: SANDBOX }) : {});
+      const grid = (set: (typeof eb.sets)[number] | undefined, want: string[]) => (set && want.length ? gradeSet({ taskDir: unitDir, task, eb, set, label: "build", patch, runs, seed: eb.seed + 3000, work: o.work, want, crash: true, sandbox: SANDBOX }) : {});
       return {
         planted: caseRuns(grid(eb.sets.find((s) => s.role === "B"), unit.planted), unit.planted),
         functional: caseRuns(grid(eb.sets[0], unit.functional), unit.functional),
