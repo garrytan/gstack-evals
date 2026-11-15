@@ -2,6 +2,7 @@
 // Keyless fixtures shared by the dry run and the tests: a scripted stub model in each provider's answer shape, a
 // stand-in gstack text for machines with no gstack clone, a tiny raw build input with planted secret shapes, and
 // interval fixtures for the decision rows.
+import { spawnSync } from "node:child_process";
 import type { Interval } from "./stats.ts";
 import type { Decision, ModelIntervals } from "./score.ts";
 import type { CallKey } from "./run.ts";
@@ -24,6 +25,9 @@ export function answerBody(model: Sample["model"], text: string, stop: "ok" | "s
 
 export class Killed extends Error {}
 
+/** The pid of a process that has already exited, as a custody leftover's dead owner. */
+export const deadPid = (): number => spawnSync("true").pid!;
+
 /** A stub labeller: the scripted label as the model's JSON text, or text with no valid label. */
 export function labelSend(script: (s: Sample) => Partial<LabelReply> | "unparsable", calls: string[] = [], bodies: Array<Record<string, unknown>> = []) {
   return async (s: Sample, key: CallKey, body: Record<string, unknown>): Promise<{ status: number; body: unknown }> => {
@@ -34,9 +38,9 @@ export function labelSend(script: (s: Sample) => Partial<LabelReply> | "unparsab
   };
 }
 
-/** A sealed labeller record for readout tests. */
-export function labelRecord(id: string, item: string, model: Sample["model"], label: LabelReply | null): SampleRecord {
-  return { sample: { id, item, arm: "a", model, replicate: 1 }, draw: 1, attempts: 1, missing: label ? null : "parse", agent_action: null, final_action: null, repeats: "not_asked", named: null, reask_reason: false, gate: "none", reason: label?.reason ?? null, text: null, capped: false, micros: 1, upstream_redraw: false, label };
+/** A sealed labeller record for readout tests; scheduled is how many calls its shard scheduled. */
+export function labelRecord(id: string, item: string, model: Sample["model"], label: LabelReply | null, scheduled?: number): SampleRecord {
+  return { sample: { id, item, arm: "a", model, replicate: 1, ...(scheduled === undefined ? {} : { scheduled }) }, draw: 1, attempts: 1, missing: label ? null : "parse", agent_action: null, final_action: null, repeats: "not_asked", named: null, reask_reason: false, gate: "none", reason: label?.reason ?? null, text: null, capped: false, micros: 1, upstream_redraw: false, label };
 }
 
 /** A stub send that answers each call from a script; "kill" throws Killed, as a shard's process dying would. */

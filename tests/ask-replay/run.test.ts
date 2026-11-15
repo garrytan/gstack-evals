@@ -8,9 +8,9 @@ import { ledgerPath } from "../../src/runner/ledger/paths.ts";
 import { readItem } from "../../src/runner/ledger/record.ts";
 import { plainStore } from "../../lanes/ask-replay/custody.ts";
 import { answerBody, FIXTURE_GSTACK, Killed, stubSend } from "../../lanes/ask-replay/fixtures.ts";
-import { FROZEN } from "../../lanes/ask-replay/frozen.ts";
+import { AskError, FROZEN } from "../../lanes/ask-replay/frozen.ts";
 import { buildPrompt } from "../../lanes/ask-replay/prompt.ts";
-import { cells, finalRecords, ledgerClient, openProxyMeter, requestBody, runShard, sampleId, schedule, UPSTREAM_DRAW, upstreamRedraw, type CallKey, type ShardOptions } from "../../lanes/ask-replay/run.ts";
+import { cells, finalRecords, ledgerClient, openProxyMeter, requestBody, runShard, sampleId, schedule, UPSTREAM_DRAW, upstreamRedraw, type CallKey, type Client, type ShardOptions } from "../../lanes/ask-replay/run.ts";
 import { generate } from "../../lanes/ask-replay/synthetic/generator.ts";
 import type { Arm, Sample, SampleRecord } from "../../lanes/ask-replay/types.ts";
 
@@ -191,6 +191,144 @@ describe("shards", () => {
       expect(recs.get(a.id + "~u")).toMatchObject({ final_action: "FOLD", draw: UPSTREAM_DRAW, upstream_redraw: true });
       expect(finalRecords(recs).find((x) => x.sample.id === a.id)!.final_action).toBe("FOLD");
       expect(r.still_upstream).toBe(1);
+    } finally {
+      s.done();
+    }
+  });
+});
+
+describe("a metering proxy refusal (E_ASK_PROXY)", () => {
+  /** The ledger client behind a stand-in proxy that refuses, before any reservation, every call refuse() picks. */
+  const refusing = (inner: Client, refuse: (s: Sample) => boolean, calls: string[]): Client => ({
+    async call(s, key, body) {
+      calls.push(s.id + "#" + key.draw + "/" + key.attempt);
+      if (refuse(s)) throw new AskError("E_ASK_PROXY", "the metering proxy refused sample " + s.id);
+      return inner.call(s, key, body);
+    },
+    reconcile: inner.reconcile,
+  });
+  test("a refused sample resumes under the same draw: refused, refused again, then sealed with no redraw and no MISSING", async () => {
+    const s = setup();
+    try {
+      const calls: string[] = [];
+      const samples = schedule(items.slice(0, 1), "opus", 1, 9);
+      const target = samples[1]!;
+      let refuse = true;
+      const base = shard(s, stubSend(() => ({ action: "SEND", repeats: "new" })), samples);
+      const o = { ...base, concurrency: 1, client: refusing(base.client, (x) => refuse && x.id === target.id, calls) };
+      const warned: string[] = [];
+      await expect(runShard({ ...o, warn: (c) => warned.push(c) })).rejects.toMatchObject({ code: "E_ASK_PROXY" });
+      await expect(runShard({ ...o, warn: (c) => warned.push(c) })).rejects.toMatchObject({ code: "E_ASK_PROXY" });
+      refuse = false;
+      const r = await runShard({ ...o, warn: (c) => warned.push(c) });
+      expect(r).toMatchObject({ redrawn: {}, lost_twice: 0, missing: { parse: 0, safety: 0, upstream: 0 }, stopped: null });
+      expect(warned).not.toContain("E_ASK_RESUME");
+      const rec = (o.store as ReturnType<typeof plainStore>).read().get(target.id)!;
+      expect(rec).toMatchObject({ draw: 1, missing: null, final_action: "SEND", attempts: 1 });
+      expect(calls.filter((c) => c.startsWith(target.id))).toEqual([target.id + "#1/1", target.id + "#1/1", target.id + "#1/1"]);
+      expect((o.store as ReturnType<typeof plainStore>).read().size).toBe(samples.length);
+    } finally {
+      s.done();
+    }
+  });
+  test("after a refusal no new cell launches and an in-flight cell starts no next replicate", async () => {
+    const s = setup();
+    try {
+      const calls: string[] = [];
+      let first = true;
+      const slow = stubSend(() => ({ action: "SEND", repeats: "new" }));
+      const send = async (smp: Sample, key: CallKey) => {
+        await new Promise((r) => setTimeout(r, 5));
+        return slow(smp, key);
+      };
+      const base = shard(s, send as unknown as ReturnType<typeof stubSend>);
+      const o = { ...base, concurrency: 2, client: refusing(base.client, () => (first ? ((first = false), true) : false), calls) };
+      await expect(runShard(o)).rejects.toMatchObject({ code: "E_ASK_PROXY" });
+      await new Promise((r) => setTimeout(r, 30));
+      expect(calls).toHaveLength(2);
+      expect((o.store as ReturnType<typeof plainStore>).read().size).toBe(1);
+    } finally {
+      s.done();
+    }
+  });
+});
+
+describe("the shard limit (frozen.json shards.limit_minutes)", () => {
+  const minute = 60_000;
+  test("no attempt starts past the limit: the sample stays unsealed and the next shard retries it under the same draw", async () => {
+    const s = setup();
+    try {
+      let t = 0;
+      let up = true;
+      const calls: string[] = [];
+      const samples = schedule(items.slice(0, 1), "opus", 1, 2).slice(0, 1);
+      const o = { ...shard(s, stubSend(() => ((t += 6 * minute), up ? { raw: "upstream" } : { action: "FOLD" }), calls), samples), concurrency: 1, now: () => t, limitMs: 10 * minute };
+      const r = await runShard(o);
+      expect(r).toMatchObject({ stopped: "limit", left: 1, ran: 0 });
+      expect(calls).toEqual([samples[0]!.id + "#1/1", samples[0]!.id + "#1/2"]);
+      expect((o.store as ReturnType<typeof plainStore>).read().size).toBe(0);
+      up = false;
+      const warned: string[] = [];
+      const again = await runShard({ ...o, warn: (c) => warned.push(c) });
+      expect(again).toMatchObject({ ran: 1, redrawn: {}, lost_twice: 0, stopped: null });
+      expect(warned).not.toContain("E_ASK_RESUME");
+      expect(calls.at(-1)).toBe(samples[0]!.id + "#1/3");
+      expect((o.store as ReturnType<typeof plainStore>).read().get(samples[0]!.id)).toMatchObject({ draw: 1, missing: null, final_action: "FOLD", attempts: 3 });
+    } finally {
+      s.done();
+    }
+  });
+  test("under the limit the frozen retries run as before", async () => {
+    const s = setup();
+    try {
+      let t = 0;
+      const samples = schedule(items.slice(0, 1), "opus", 1, 2).slice(0, 1);
+      const r = await runShard({ ...shard(s, stubSend(() => ((t += 6 * minute), { raw: "upstream" })), samples), concurrency: 1, now: () => t, limitMs: 60 * minute });
+      expect(r).toMatchObject({ stopped: null, ran: 1, missing: { upstream: 1 } });
+    } finally {
+      s.done();
+    }
+  });
+  test("the deadline timer at the limit ends the shard (E_ASK_SHARD_LIMIT) and nothing launches after it; unfired, it is cancelled", async () => {
+    const s = setup();
+    try {
+      let fire = () => {};
+      let firing = true;
+      let armed = -1;
+      let cancelled = false;
+      const deadline = (ms: number, f: () => void) => ((armed = ms), (fire = f), () => void (cancelled = true));
+      const calls: string[] = [];
+      const o = { ...shard(s, stubSend(() => (firing && fire(), { action: "SEND", repeats: "new" }), calls)), concurrency: 1, deadline };
+      await expect(runShard(o)).rejects.toMatchObject({ code: "E_ASK_SHARD_LIMIT" });
+      await new Promise((r) => setTimeout(r, 20));
+      expect(calls).toHaveLength(1);
+      expect(armed).toBeGreaterThan((FROZEN.shards.limit_minutes - 1) * 60_000);
+      expect(armed).toBeLessThanOrEqual(FROZEN.shards.limit_minutes * 60_000);
+      firing = false;
+      const r = await runShard({ ...o, store: plainStore(join(s.dir, "replies2")), out: join(s.dir, "out2") });
+      expect(r).toMatchObject({ ran: 24, stopped: null });
+      expect(cancelled).toBe(true);
+    } finally {
+      s.done();
+    }
+  });
+  test("the end-of-run UPSTREAM pass keeps the launch stop and the limit", async () => {
+    const s = setup();
+    try {
+      let pass = 1;
+      const samples = schedule(items.slice(0, 2), "opus", 1, 2);
+      const o = shard(s, stubSend((smp) => (smp.arm === "a" && pass === 1 ? { raw: "upstream" } : { action: "FOLD" })), samples);
+      await runShard(o);
+      pass = 2;
+      let t = 0;
+      expect(await upstreamRedraw({ ...o, now: () => (t += 60 * 60_000) })).toMatchObject({ redrawn: 0, left: 2, stopped: "time" });
+      let fire = () => {};
+      const calls: string[] = [];
+      const timed = { ...o, concurrency: 1, client: { call: async (smp: Sample, key: CallKey, body: Record<string, unknown>) => (calls.push(smp.id), fire(), o.client.call(smp, key, body)) }, deadline: (_ms: number, f: () => void) => ((fire = f), () => {}) };
+      await expect(upstreamRedraw(timed)).rejects.toMatchObject({ code: "E_ASK_SHARD_LIMIT" });
+      await new Promise((r) => setTimeout(r, 20));
+      expect(calls).toHaveLength(1);
+      expect(await upstreamRedraw(o)).toMatchObject({ redrawn: 1, stopped: null });
     } finally {
       s.done();
     }

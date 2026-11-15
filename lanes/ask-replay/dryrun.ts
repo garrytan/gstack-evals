@@ -14,7 +14,8 @@ import { ledgerPath } from "../../src/runner/ledger/paths.ts";
 import { buildFrom } from "./build.ts";
 import { chainStats, clusters, proxyLinks, s1Match } from "./chains.ts";
 import { custody, gone, keygen, plainStore, readIdentity, readRecords, seal, sealedStore, writeSums } from "./custody.ts";
-import { buildFixture, DECISION_FIXTURES, FIXTURE_GSTACK, Killed, labelSend, stubSend, type StubReply } from "./fixtures.ts";
+import { main } from "./cli.ts";
+import { buildFixture, deadPid, DECISION_FIXTURES, FIXTURE_GSTACK, Killed, labelSend, stubSend, type StubReply } from "./fixtures.ts";
 import { AskError, FROZEN } from "./frozen.ts";
 import { ledgerRows, sendCheck } from "./ledger.ts";
 import { classify, parseReply } from "./parse.ts";
@@ -26,7 +27,7 @@ import { CODEBOOK, checkCodebook, labelJob, labelReadout, labelSamples } from ".
 import { absentSamples, decide, readout, sampleScore } from "./score.ts";
 import { admitChance, halfWidth, mdd } from "./stats.ts";
 import { generate } from "./synthetic/generator.ts";
-import { outcomeOf, type AskItem, type LabelReply, type Outcome, type Sample, type SampleRecord } from "./types.ts";
+import { outcomeOf, type Action, type Arm, type AskItem, type LabelReply, type Outcome, type Sample, type SampleRecord } from "./types.ts";
 
 export interface Line {
   name: string;
@@ -285,6 +286,7 @@ async function custodyCheck(): Promise<string | true> {
     const bad: string[] = [];
     if (!gone(plain)) bad.push("the plaintext stayed after sealing");
     mkdirSync(join(shm, "ask-custody-leftover"), { recursive: true });
+    writeFileSync(join(shm, "ask-custody-leftover", "owner.pid"), String(deadPid()));
     const log = join(dir, "CUSTODY.md");
     let seen = "";
     let during = false;
@@ -319,6 +321,38 @@ async function custodyCheck(): Promise<string | true> {
     return bad.length ? bad.join("; ") : true;
   } finally {
     rmSync(shm, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+/** The pilot command on scripted pilot replies: on Opus, arm (b) sends 8 needless items twice and 4 once and misses 2 must-asks, so Opus admits and its projected detectable difference at k = 2 (15.7 points) sets k = 3; on Sol, (b) sends none, so Sol does not admit. */
+async function pilotCheck(items: AskItem[]): Promise<string | true> {
+  const dir = mkdtempSync(join(tmpdir(), "ask-dry-pilot-"));
+  try {
+    const drawn = pilotDraw(items, 5);
+    const needless = drawn.filter((i) => i.label !== "DECISION").map((i) => i.item);
+    const must = drawn.filter((i) => i.label === "DECISION").map((i) => i.item);
+    if (needless.length !== 24 || must.length !== 16) return "the pilot draw holds " + needless.length + " needless and " + must.length + " must-ask items";
+    writeFileSync(join(dir, "items.jsonl"), drawn.map((i) => JSON.stringify(i)).join("\n") + "\n");
+    const store = plainStore(join(dir, "replies"));
+    for (const model of ["opus", "sol"] as const) for (const s of schedule(drawn, model, FROZEN.pilot.arms as Partial<Record<Arm, number>>, 5)) {
+      const n = needless.indexOf(s.item);
+      const opusB = model === "opus" && s.arm === "b";
+      const action: Action = n >= 0 ? (opusB && (n < 8 || (n < 12 && s.replicate === 1)) ? "SEND" : "FOLD") : opusB && must.indexOf(s.item) < 2 ? "FOLD" : "SEND";
+      store.write(s.id, { sample: s, draw: 1, attempts: 1, missing: null, agent_action: action, final_action: action, repeats: "not_asked", named: null, reask_reason: false, gate: "none", reason: "scripted", text: null, capped: false, micros: null, upstream_redraw: false });
+    }
+    const out: string[] = [];
+    const code = await main(["pilot", "--items", join(dir, "items.jsonl"), "--replies", join(dir, "replies")], { out: (t) => out.push(t), err: () => {} });
+    const r = JSON.parse(out.join("\n"));
+    const o = r.models?.opus;
+    const bad: string[] = [];
+    if (code !== 0) bad.push("exit " + code);
+    if (r.admit !== true || o?.admit !== true || o.needless_sends !== 10 || o.must_misses !== 2) bad.push("opus admission " + JSON.stringify(o && [o.admit, o.needless_sends, o.must_misses]));
+    if (o?.W !== 0.0833 || o?.V !== 0.2101 || o?.B2 !== 0.1685 || o?.mdd_k2 !== 0.1571 || o?.k !== 3) bad.push("opus projection " + JSON.stringify(o && [o.W, o.V, o.B2, o.mdd_k2, o.k]));
+    if (r.models?.sol?.admit !== false || r.models?.sol?.k !== 2) bad.push("sol " + JSON.stringify(r.models?.sol));
+    if (r.k !== FROZEN.replicates.k_after_pilot_rule) bad.push("run k " + r.k);
+    return bad.length ? bad.join("; ") : true;
+  } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 }
@@ -425,6 +459,7 @@ export function checks(o: { gstack: GstackText | null; clone?: string }): Check[
       if (a.per_class.DECISION !== 40 || a.per_class.DUPLICATE !== 40 || a.per_class.PERMISSION_FOR_DEFAULT !== 21 || a.per_class.OBSERVABLE !== 14) return "audit " + JSON.stringify(a.per_class);
       return JSON.stringify(pilotDraw([...pool].reverse(), 3)) === JSON.stringify(pilotDraw(pool, 3)) && JSON.stringify(auditDraw([...pool].reverse(), 3)) === JSON.stringify(auditDraw(pool, 3)) ? true : "the same seed drew a different set";
     } },
+    { name: "pilot: the pilot command applies the frozen admission rule and k rule to scripted pilot replies (Opus admits and its projected 15.7-point detectable difference sets k = 3; Sol does not admit)", run: () => pilotCheck(items) },
     { name: "ledger leases: one lease opens and settles on each frozen spend item, and an item that served one run refuses a second (E_ITEM_BOUND)", run: leaseCheck },
     { name: "resume: a killed shard resumes with sealed samples skipped, the open call settled unknown and redrawn once, no call counted twice", run: () => resumeCheck(items) },
     { name: "cap: a spend cap stop ends the shard as incomplete (E_ASK_CAP), and score counts its unsealed samples as absent and prints no decision rows", run: () => capCheck(items) },

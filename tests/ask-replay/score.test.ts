@@ -4,12 +4,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { proxyLinks } from "../../lanes/ask-replay/chains.ts";
 import { main } from "../../lanes/ask-replay/cli.ts";
-import { DECISION_FIXTURES } from "../../lanes/ask-replay/fixtures.ts";
+import { DECISION_FIXTURES, labelRecord } from "../../lanes/ask-replay/fixtures.ts";
 import { FROZEN } from "../../lanes/ask-replay/frozen.ts";
+import { labelId } from "../../lanes/ask-replay/label.ts";
 import { schedule } from "../../lanes/ask-replay/run.ts";
-import { absentSamples, compare, decide, itemInfos, itemMeans, missingShares, pastCeiling, readout, sampleScore } from "../../lanes/ask-replay/score.ts";
+import { absentSamples, compare, decide, itemInfos, itemMeans, missingShares, pastCeiling, pilotReadout, readout, sampleScore } from "../../lanes/ask-replay/score.ts";
 import { generate } from "../../lanes/ask-replay/synthetic/generator.ts";
-import type { Action, Arm, AskItem, MissingKind, ModelKey, Outcome, Sample, SampleRecord } from "../../lanes/ask-replay/types.ts";
+import { outcomeOf } from "../../lanes/ask-replay/types.ts";
+import type { Action, Arm, AskItem, Label, LabelKind, MissingKind, ModelKey, Outcome, Sample, SampleRecord } from "../../lanes/ask-replay/types.ts";
 
 const items = generate().items;
 const links = proxyLinks(items);
@@ -27,6 +29,9 @@ function outcomes(rule: (it: AskItem, arm: Arm, r: number) => Action | MissingKi
   return out;
 }
 const needless = (it: AskItem) => it.label !== "DECISION";
+const record = (s: Sample): SampleRecord => ({ sample: s, draw: 1, attempts: 1, missing: null, agent_action: "SEND", final_action: "SEND", repeats: s.arm === "c" || s.arm === "d" ? "new" : "not_asked", named: null, reask_reason: false, gate: "none", reason: null, text: null, capped: false, micros: null, upstream_redraw: false });
+/** Sealed labeller records for one kind on items, each labeller giving cls(item), each carrying the count its shard scheduled. */
+const labels = (kind: LabelKind, on: readonly AskItem[], cls: (it: AskItem) => Label = (it) => it.label, scheduled = on.length) => (["opus", "astra"] as const).flatMap((m) => on.map((it) => labelRecord(labelId(it.item, kind, m), it.item, m, { class: cls(it), repeats_of: null, answer_judgement: [], reason: "r" }, scheduled)));
 
 describe("per-sample codings (section 8)", () => {
   const dupAnswered = { label: "DUPLICATE" as const, answered_dup: true };
@@ -153,16 +158,18 @@ describe("a partial run", () => {
 describe("score's completeness guard", () => {
   const its = items.slice(0, 4);
   const shard = (m: ModelKey) => schedule(its, m, FROZEN.replicates.k, 7);
-  const record = (s: Sample): SampleRecord => ({ sample: s, draw: 1, attempts: 1, missing: null, agent_action: "SEND", final_action: "SEND", repeats: s.arm === "c" || s.arm === "d" ? "new" : "not_asked", named: null, reask_reason: false, gate: "none", reason: null, text: null, capped: false, micros: null, upstream_redraw: false });
-  async function score(samples: Sample[]) {
+  const standing = () => labels("audit", its);
+  async function score(samples: Sample[], labelRecords: SampleRecord[] | null = standing()) {
     const dir = mkdtempSync(join(tmpdir(), "ask-score-"));
     try {
       writeFileSync(join(dir, "items.jsonl"), its.map((i) => JSON.stringify(i)).join("\n") + "\n");
       mkdirSync(join(dir, "replies"));
       for (const s of samples) writeFileSync(join(dir, "replies", s.id + ".ask.json"), JSON.stringify(record(s)));
+      mkdirSync(join(dir, "labels"));
+      for (const r of labelRecords ?? []) writeFileSync(join(dir, "labels", r.sample.id + ".ask.json"), JSON.stringify(r));
       const out: string[] = [];
       const err: string[] = [];
-      const code = await main(["score", "--items", join(dir, "items.jsonl"), "--replies", join(dir, "replies"), "--draws", "20", "--keyless"], { out: (t) => out.push(t), err: (t) => err.push(t) });
+      const code = await main(["score", "--items", join(dir, "items.jsonl"), "--replies", join(dir, "replies"), ...(labelRecords ? ["--labels", join(dir, "labels")] : []), "--draws", "20", "--keyless"], { out: (t) => out.push(t), err: (t) => err.push(t) });
       return { code, out: JSON.parse(out.join("\n")), err: err.join("\n") };
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -182,5 +189,88 @@ describe("score's completeness guard", () => {
     expect(r.out.models.particle.untested).toBe(true);
     expect(Object.values(r.out.models.particle.absent_by_arm as Record<string, number>).reduce((a, b) => a + b, 0)).toBe(shard("particle").length - 3);
     expect(r.out.models.opus.untested).toBeUndefined();
+  });
+});
+
+describe("the pilot readout (sections 9 and 10)", () => {
+  const pilotItems = [...items.filter(needless).slice(0, 24), ...items.filter((i) => !needless(i)).slice(0, 16)];
+  const run = (send: (it: AskItem, r: number) => boolean) => (["opus", "sol"] as const).flatMap((m) => schedule(pilotItems, m, FROZEN.pilot.arms as Partial<Record<Arm, number>>, 3)).map((s) => {
+    const it = pilotItems.find((i) => i.item === s.item)!;
+    const a: Action = s.arm === "b" && send(it, s.replicate) ? "SEND" : needless(it) ? "FOLD" : "SEND";
+    return outcomeOf({ ...record(s), agent_action: a, final_action: a });
+  });
+  test("a (b) that sends no needless item does not admit, and its zero spread keeps k = 2", () => {
+    const r = pilotReadout(pilotItems, run(() => false));
+    expect(r).toMatchObject({ items: 40, needless: 24, must_ask: 16, admit: false, k: FROZEN.replicates.k });
+    expect(r.models.opus).toMatchObject({ needless_sends: 0, must_misses: 0, admit: false, mdd_k2: 0, k: 2 });
+  });
+  test("a (b) that sends half the needless items on one replicate admits, and its within-item spread sets k = 3", () => {
+    const r = pilotReadout(pilotItems, run((it, rep) => needless(it) && rep === 1 && pilotItems.indexOf(it) % 2 === 0));
+    expect(r.admit).toBe(true);
+    expect(r.models.sol).toMatchObject({ needless_sends: 6, admit: true, k: 3 });
+    expect(r.models.sol!.mdd_k2).toBeGreaterThan(FROZEN.pilot.k3_when_projected_mdd_above);
+    expect(r.k).toBe(FROZEN.replicates.k_after_pilot_rule);
+  });
+});
+
+describe("score's label guard (section 7)", () => {
+  const its = items.slice(0, 4);
+  const all = () => (["opus", "sol"] as const).flatMap((m) => schedule(its, m, FROZEN.replicates.k, 7));
+  const flip = (it: AskItem): Label => (it.label === "DECISION" ? "DUPLICATE" : "DECISION");
+  async function score(labelRecords: SampleRecord[] | null) {
+    const dir = mkdtempSync(join(tmpdir(), "ask-score-labels-"));
+    try {
+      writeFileSync(join(dir, "items.jsonl"), its.map((i) => JSON.stringify(i)).join("\n") + "\n");
+      mkdirSync(join(dir, "replies"));
+      for (const s of all()) writeFileSync(join(dir, "replies", s.id + ".ask.json"), JSON.stringify(record(s)));
+      mkdirSync(join(dir, "labels"));
+      for (const r of labelRecords ?? []) writeFileSync(join(dir, "labels", r.sample.id + ".ask.json"), JSON.stringify(r));
+      const out: string[] = [];
+      const err: string[] = [];
+      const code = await main(["score", "--items", join(dir, "items.jsonl"), "--replies", join(dir, "replies"), ...(labelRecords ? ["--labels", join(dir, "labels")] : []), "--draws", "20", "--keyless"], { out: (t) => out.push(t), err: (t) => err.push(t) });
+      return { code, out: JSON.parse(out.join("\n")), err: err.join("\n") };
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+  const withheld = (r: Awaited<ReturnType<typeof score>>) => {
+    expect(r.code).toBe(2);
+    expect(r.err).toContain("E_ASK_INCOMPLETE");
+    expect(r.out.decision).toBeNull();
+    expect(typeof r.out.decision_withheld).toBe("string");
+    expect(r.out.models.opus).toBeDefined();
+  };
+  test("with no --labels the audit has not stood: the readout numbers print and the decision is withheld", async () => {
+    const r = await score(null);
+    withheld(r);
+    expect(r.out.decision_withheld).toContain("no --labels");
+  });
+  test("an audit with a scheduled label missing is incomplete, so no decision rows", async () => {
+    const r = await score(labels("audit", its).slice(1));
+    withheld(r);
+    expect(r.out.labels.audit_complete).toBe(false);
+  });
+  test("labels with no scheduled count give no completeness evidence, so no decision rows", async () => {
+    const r = await score(labels("audit", its).map((l) => ({ ...l, sample: { ...l.sample, scheduled: undefined } })));
+    withheld(r);
+  });
+  test("a complete audit that stands prints the decision rows", async () => {
+    const r = await score(labels("audit", its));
+    expect(r.code).toBe(0);
+    expect(r.out.labels).toMatchObject({ audit_complete: true, decision_withheld: null });
+    expect(typeof r.out.decision.row).toBe("string");
+  });
+  test("a failed audit withholds the decision until the contingency on the items outside the audit is complete, then the agreement labels decide", async () => {
+    const audited = its.slice(0, 2);
+    const rest = its.slice(2);
+    const failed = labels("audit", audited, flip);
+    const r = await score(failed);
+    withheld(r);
+    expect(r.out.labels.kappa.stands).toBe(false);
+    withheld(await score([...failed, ...labels("contingency", rest).slice(1)]));
+    const done = await score([...failed, ...labels("contingency", rest)]);
+    expect(done.code).toBe(0);
+    expect(done.out.labels).toMatchObject({ contingency_complete: true, primary_labels: "the labellers' agreement", decision_withheld: null });
+    expect(typeof done.out.decision.row).toBe("string");
   });
 });

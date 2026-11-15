@@ -1,11 +1,14 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // The paid driver (prereg sections 6 and 11), built and tested keyless and never run without the go. Every sample has a
 // fixed id (item, arm, model, replicate); within each item a model's arms and replicates run in a seeded random order.
-// A shard is a foreground run that stops launching samples after 50 minutes, so it ends before 55. Each sample's record
+// A shard is a foreground run that stops launching samples after 50 minutes and starts no attempt past 55, where a
+// deadline timer ends it (E_ASK_SHARD_LIMIT); the end-of-run UPSTREAM pass keeps the same two stops. Each sample's record
 // is written through an injected store (custody passes one that seals to an age recipient) under its id, atomically,
 // and only then is the sample done, so a resumed shard skips every sealed sample id. Before each call the shard journals
 // the sample id, draw and attempt; a resumed shard that finds a journaled draw with no sealed record reconciles its calls
-// through the spend ledger's unknown-charge path (E_ASK_RESUME), then redraws it once, counted per arm. Retries: one
+// through the spend ledger's unknown-charge path (E_ASK_RESUME), then redraws it once, counted per arm. An attempt the
+// shard stopped before sending (a metering proxy refusal, E_ASK_PROXY, or the shard limit) is journaled as unsent, and
+// a resumed shard retries it under the same draw with no redraw; after a proxy refusal no new sample launches. Retries: one
 // retry with the same prompt on an unparsable reply; three retries with backoff on an upstream failure, then UPSTREAM;
 // safety stops are their own outcome and are not retried; one end-of-run pass redraws UPSTREAM samples only. Spend runs
 // through one lease on the frozen line item per shard (src/runner/ledger): the real client is the metering proxy, which
@@ -106,6 +109,10 @@ export interface ShardOptions {
   sleep?: (ms: number) => Promise<void>;
   concurrency?: number;
   stopAfterMs?: number;
+  /** The shard limit: no attempt starts past it, and a deadline timer ends the shard there. Defaults to frozen.json shards.limit_minutes. */
+  limitMs?: number;
+  /** Starts the deadline timer: calls fire after ms and returns a cancel; defaults to setTimeout. */
+  deadline?: (ms: number, fire: () => void) => () => void;
   warn?: (code: ReasonCode, message: string) => void;
   /** A labeller run (label.ts): its request body and reply reader replace the arm prompt and the arm reply. */
   job?: LabelJob;
@@ -124,31 +131,40 @@ export interface ShardResult {
   left: number;
   redrawn: Partial<Record<Arm, number>>;
   lost_twice: number;
-  stopped: "time" | "cap" | null;
+  stopped: Stop | null;
   missing: Record<MissingKind, number>;
   capped: number;
 }
+
+/** time: the 50-minute launch stop; limit: the 55-minute shard limit; cap: a spend cap; proxy: a metering proxy refusal. */
+export type Stop = "time" | "limit" | "cap" | "proxy";
 
 const R = FROZEN.retries;
 /** Draws: 1 first, 2 the one redraw after a resume, 3 the end-of-run UPSTREAM pass; each call's ledger key holds its draw. */
 export const UPSTREAM_DRAW = 3;
 const realSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
-/** Journaled draws per sample id: the highest draw started and its attempts. */
-function journaled(file: string): Map<string, { draw: number; attempts: number[] }> {
-  const out = new Map<string, { draw: number; attempts: number[] }>();
+/** Journaled draws per sample id: the highest draw started, its attempts sent, and the attempt the shard stopped before sending when that is the draw's last entry. */
+function journaled(file: string): Map<string, { draw: number; attempts: number[]; unsent: number | null }> {
+  const out = new Map<string, { draw: number; attempts: number[]; unsent: number | null }>();
   if (!existsSync(file)) return out;
   for (const l of readFileSync(file, "utf8").split("\n")) {
     if (!l.trim()) continue;
-    let e: { id: string; draw: number; attempt: number };
+    let e: { id: string; draw: number; attempt: number; unsent?: boolean };
     try {
       e = JSON.parse(l);
     } catch {
       continue;
     }
-    const cur = out.get(e.id);
-    if (!cur || e.draw > cur.draw) out.set(e.id, { draw: e.draw, attempts: [e.attempt] });
-    else if (e.draw === cur.draw) cur.attempts.push(e.attempt);
+    let cur = out.get(e.id);
+    if (cur && e.draw < cur.draw) continue;
+    if (!cur || e.draw > cur.draw) out.set(e.id, (cur = { draw: e.draw, attempts: [], unsent: null }));
+    cur.attempts = cur.attempts.filter((a) => a !== e.attempt);
+    if (e.unsent) cur.unsent = e.attempt;
+    else {
+      cur.attempts.push(e.attempt);
+      cur.unsent = null;
+    }
   }
   return out;
 }
@@ -157,19 +173,31 @@ function blank(s: Sample, draw: number, redraw: boolean): SampleRecord {
   return { sample: s, draw, attempts: 0, missing: null, agent_action: null, final_action: null, repeats: s.arm === "c" || s.arm === "d" ? "missing_field" : "not_asked", named: null, reask_reason: false, gate: "none", reason: null, text: null, capped: false, micros: null, upstream_redraw: redraw };
 }
 
-/** One sample to its record, with the frozen retries. */
-export async function runSample(o: ShardOptions, s: Sample, draw: number, redraw = false): Promise<SampleRecord> {
+/** One sample to its record, with the frozen retries. first is the attempt to start at (a resumed unsent attempt); past() says the shard limit has passed, so no attempt starts. */
+export async function runSample(o: ShardOptions, s: Sample, draw: number, x: { redraw?: boolean; first?: number; past?: () => boolean } = {}): Promise<SampleRecord> {
   const item = o.items.get(s.item) ?? fail("E_ASK_INPUT", "sample " + s.id + " names an item the bundle does not hold");
   const body = bodyFor(o, item, s);
   const provider = FROZEN.models[s.model].provider;
   const sleep = o.sleep ?? realSleep;
-  const rec = blank(s, draw, redraw);
+  const calls = join(o.out, "calls.ndjson");
+  const rec = { ...blank(s, draw, x.redraw ?? false), attempts: (x.first ?? 1) - 1 };
+  const unsent = () => appendFileSync(calls, JSON.stringify({ id: s.id, draw, attempt: rec.attempts, unsent: true }) + "\n");
   let upstream = 0;
   let unparsable = 0;
   for (;;) {
     rec.attempts++;
-    appendFileSync(join(o.out, "calls.ndjson"), JSON.stringify({ id: s.id, draw, attempt: rec.attempts }) + "\n");
-    const answer = await o.client.call(s, { draw, attempt: rec.attempts }, body);
+    if (x.past?.()) {
+      unsent();
+      fail("E_ASK_SHARD_LIMIT", "sample " + s.id + " attempt " + rec.attempts + " would start past the shard limit");
+    }
+    appendFileSync(calls, JSON.stringify({ id: s.id, draw, attempt: rec.attempts }) + "\n");
+    let answer: Answer | null;
+    try {
+      answer = await o.client.call(s, { draw, attempt: rec.attempts }, body);
+    } catch (e) {
+      if (e instanceof AskError && e.code === "E_ASK_PROXY") unsent();
+      throw e;
+    }
     if (answer?.micros != null) rec.micros = (rec.micros ?? 0) + answer.micros;
     const c = classify<Reply | LabelReply>(provider, answer, o.job ? o.job.parse : parseReply);
     if (c.kind === "upstream") {
@@ -201,23 +229,65 @@ const seal = (o: ShardOptions, id: string, r: SampleRecord) => {
   appendFileSync(join(o.out, "index.ndjson"), JSON.stringify({ id, draw: r.draw, missing: r.missing, capped: r.capped }) + "\n");
 };
 
-/** Runs the samples not yet sealed, resuming any a killed shard left open, until done, the time stop or a cap stop. */
-export async function runShard(o: ShardOptions): Promise<ShardResult> {
-  mkdirSync(o.out, { recursive: true });
+/** Runs each cell's replicates in sequence and cells in parallel under the shard's clock: step launches nothing once the launch stop has passed, past() says the shard limit has passed, and a deadline timer at the limit sets stopped to limit and ends the run with E_ASK_SHARD_LIMIT. A cap stop, a proxy refusal or the limit inside a sample stops new launches; a proxy refusal is thrown once the cells settle. */
+async function drive(o: ShardOptions, samples: readonly Sample[], res: { stopped: Stop | null; left: number }, run: (s: Sample, past: () => boolean) => Promise<void>): Promise<void> {
   const now = o.now ?? Date.now;
   const start = now();
-  const stopAfter = o.stopAfterMs ?? FROZEN.shards.stop_launching_after_minutes * 60000;
-  const open = journaled(join(o.out, "calls.ndjson"));
-  const res: ShardResult = { ran: 0, skipped: 0, left: 0, redrawn: {}, lost_twice: 0, stopped: null, missing: { parse: 0, safety: 0, upstream: 0 }, capped: 0 };
+  const launch = o.stopAfterMs ?? FROZEN.shards.stop_launching_after_minutes * 60000;
+  const limit = o.limitMs ?? FROZEN.shards.limit_minutes * 60000;
+  const past = () => res.stopped === "limit" || now() - start >= limit;
+  let refusal: unknown = null;
   const step = async (s: Sample) => {
-    if (o.store.has(s.id)) return void res.skipped++;
-    if (res.stopped || now() - start >= stopAfter) {
+    if (res.stopped || now() - start >= launch) {
       res.stopped ??= "time";
       return void res.left++;
     }
+    try {
+      await run(s, past);
+    } catch (e) {
+      const code = e instanceof AskError ? e.code : null;
+      if (code !== "E_ASK_CAP" && code !== "E_ASK_PROXY" && code !== "E_ASK_SHARD_LIMIT") throw e;
+      res.stopped = code === "E_ASK_CAP" ? "cap" : code === "E_ASK_PROXY" ? "proxy" : "limit";
+      if (code === "E_ASK_PROXY") refusal ??= e;
+      res.left++;
+    }
+  };
+  let fire: (e: unknown) => void = () => {};
+  const ended = new Promise<never>((_, reject) => (fire = reject));
+  const cancel = (o.deadline ?? ((ms, f) => {
+    const t = setTimeout(f, ms);
+    return () => clearTimeout(t);
+  }))(Math.max(0, limit - (now() - start)), () => {
+    res.stopped = "limit";
+    fire(new AskError("E_ASK_SHARD_LIMIT", "the shard reached its " + Math.round(limit / 60000) + "-minute limit, so it ended; the next shard resumes the unsealed samples"));
+  });
+  try {
+    await Promise.race([pool(o.concurrency ?? FROZEN.shards.concurrency, cells(samples).map((cell) => async () => {
+      for (const s of cell) await step(s);
+    })), ended]);
+  } finally {
+    cancel();
+  }
+  if (refusal) throw refusal;
+}
+
+/** Runs the samples not yet sealed, resuming any a killed or stopped shard left open, until done or a stop (time, limit, cap or a proxy refusal, which is thrown). */
+export async function runShard(o: ShardOptions): Promise<ShardResult> {
+  mkdirSync(o.out, { recursive: true });
+  const open = journaled(join(o.out, "calls.ndjson"));
+  const res: ShardResult = { ran: 0, skipped: 0, left: 0, redrawn: {}, lost_twice: 0, stopped: null, missing: { parse: 0, safety: 0, upstream: 0 }, capped: 0 };
+  await drive(o, o.samples.filter((s) => {
+    if (!o.store.has(s.id)) return true;
+    res.skipped++;
+    return false;
+  }), res, async (s, past) => {
     let draw = 1;
+    let first = 1;
     const j = open.get(s.id);
-    if (j) {
+    if (j?.unsent != null) {
+      draw = j.draw;
+      first = j.unsent;
+    } else if (j) {
       o.warn?.("E_ASK_RESUME", "sample " + s.id + " draw " + j.draw + " started and has no sealed reply; reconciling and redrawing once");
       const item = o.items.get(s.item);
       if (o.client.reconcile && item) {
@@ -232,30 +302,17 @@ export async function runShard(o: ShardOptions): Promise<ShardResult> {
       draw = j.draw + 1;
       res.redrawn[s.arm] = (res.redrawn[s.arm] ?? 0) + 1;
     }
-    try {
-      const r = await runSample(o, s, draw);
-      seal(o, s.id, r);
-      res.ran++;
-      if (r.missing) res.missing[r.missing]++;
-      if (r.capped) res.capped++;
-    } catch (e) {
-      if (e instanceof AskError && e.code === "E_ASK_CAP") {
-        res.stopped = "cap";
-        res.left++;
-        return;
-      }
-      throw e;
-    }
-  };
-  const jobs = cells(o.samples).map((cell) => async () => {
-    for (const s of cell) await step(s);
+    const r = await runSample(o, s, draw, { first, past });
+    seal(o, s.id, r);
+    res.ran++;
+    if (r.missing) res.missing[r.missing]++;
+    if (r.capped) res.capped++;
   });
-  await pool(o.concurrency ?? FROZEN.shards.concurrency, jobs);
   return res;
 }
 
-/** The one end-of-run pass: each UPSTREAM sample once more, sealed under <id>~u; the scorer reads it in place of the first. */
-export async function upstreamRedraw(o: ShardOptions): Promise<{ redrawn: number; still_upstream: number }> {
+/** The one end-of-run pass: each UPSTREAM sample once more, sealed under <id>~u; the scorer reads it in place of the first. It keeps the shard's launch stop and limit. */
+export async function upstreamRedraw(o: ShardOptions): Promise<{ redrawn: number; still_upstream: number; left: number; stopped: Stop | null }> {
   const index = join(o.out, "index.ndjson");
   const last = new Map<string, string | null>();
   if (existsSync(index)) for (const l of readFileSync(index, "utf8").split("\n").filter((x) => x.trim())) {
@@ -263,15 +320,14 @@ export async function upstreamRedraw(o: ShardOptions): Promise<{ redrawn: number
     last.set(e.id, e.missing);
   }
   const todo = o.samples.filter((s) => last.get(s.id) === "upstream" && !o.store.has(s.id + "~u"));
-  let still = 0;
-  await pool(o.concurrency ?? FROZEN.shards.concurrency, cells(todo).map((cell) => async () => {
-    for (const s of cell) {
-      const r = await runSample(o, s, UPSTREAM_DRAW, true);
-      if (r.missing === "upstream") still++;
-      seal(o, s.id + "~u", r);
-    }
-  }));
-  return { redrawn: todo.length, still_upstream: still };
+  const res = { redrawn: 0, still_upstream: 0, left: 0, stopped: null as Stop | null };
+  await drive(o, todo, res, async (s, past) => {
+    const r = await runSample(o, s, UPSTREAM_DRAW, { redraw: true, past });
+    if (r.missing === "upstream") res.still_upstream++;
+    seal(o, s.id + "~u", r);
+    res.redrawn++;
+  });
+  return res;
 }
 
 /** Sealed records to scored records: an end-of-run redraw replaces its first record. */

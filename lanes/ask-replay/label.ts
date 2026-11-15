@@ -72,14 +72,16 @@ export const labelJob: LabelJob = {
 
 export const labelId = (item: string, kind: LabelKind, model: ModelKey): string => item + ".label-" + kind + "." + model + ".1";
 
-/** One labeller call per item in the bundle, or per item of the kind's classes (link: duplicates), by item id. */
-export function labelSamples(items: readonly AskItem[], kind: LabelKind, model: ModelKey): Sample[] {
+/** One labeller call per item in the bundle, or per item of the kind's classes (link: duplicates), by item id, each carrying how many its shard scheduled. The contingency labels only the items outside the audit draw and refuses to run without it. */
+export function labelSamples(items: readonly AskItem[], kind: LabelKind, model: ModelKey, audited?: ReadonlySet<string>): Sample[] {
   const spec = FROZEN.labelling.kinds[kind];
   if (!spec.models.includes(model)) fail("E_USAGE", "label --kind " + kind + " runs on " + spec.models.join(" or "));
-  return [...items]
-    .filter((i) => !spec.classes || spec.classes.includes(i.label))
-    .sort((a, b) => (a.item < b.item ? -1 : a.item > b.item ? 1 : 0))
-    .map((i) => ({ id: labelId(i.item, kind, model), item: i.item, arm: "a", model, replicate: 1 }));
+  if (kind === "contingency" && !audited) fail("E_USAGE", "label --kind contingency labels only the items outside the audit draw; pass --audit-draw");
+  const ids = [...items]
+    .filter((i) => (!spec.classes || spec.classes.includes(i.label)) && !(kind === "contingency" && audited!.has(i.item)))
+    .map((i) => i.item)
+    .sort();
+  return ids.map((item) => ({ id: labelId(item, kind, model), item, arm: "a", model, replicate: 1, scheduled: ids.length }));
 }
 
 type Pair = { opus: LabelReply; astra: LabelReply };
@@ -89,10 +91,14 @@ const r4 = (x: number) => Math.round(x * 1e4) / 1e4;
 export function labelReadout(items: readonly AskItem[], records: readonly SampleRecord[]) {
   const byId = new Map(items.map((i) => [i.item, i]));
   const kinds: Record<LabelKind, Map<string, Partial<Record<ModelKey, LabelReply>>>> = { audit: new Map(), contingency: new Map(), link: new Map() };
+  const sealed: Record<string, { sealed: number; scheduled: number | null }> = {};
   let missing = 0;
   for (const r of records) {
     const m = /^(.+)\.label-(audit|contingency|link)\.([a-z]+)\.1$/.exec(r.sample.id);
     if (!m || !byId.has(m[1]!)) continue;
+    const c = (sealed[m[2] + "." + m[3]] ??= { sealed: 0, scheduled: null });
+    c.sealed++;
+    if (r.sample.scheduled !== undefined) c.scheduled = Math.max(c.scheduled ?? 0, r.sample.scheduled);
     if (!r.label) {
       missing++;
       continue;
@@ -109,6 +115,13 @@ export function labelReadout(items: readonly AskItem[], records: readonly Sample
   const relabelled = !!kappa && !kappa.stands && contingency.length > 0;
   const all = [...audited, ...contingency];
   const primary = relabelled ? agreed(all) : [...items];
+  const complete = (kind: LabelKind) => FROZEN.labelling.kinds[kind].models.every((m) => {
+    const c = sealed[kind + "." + m];
+    return !!c && c.scheduled !== null && c.sealed === c.scheduled;
+  });
+  const auditComplete = complete("audit");
+  const contingencyComplete = complete("contingency");
+  const withheld = !auditComplete ? "the label audit is incomplete: a labeller has scheduled audit labels with no sealed record" : kappa?.stands ? null : contingencyComplete ? null : "the label audit did not stand (a kappa below " + FROZEN.label_audit.kappa_min + ") and the contingency is not complete";
   const views = !kappa ? [] : relabelled ? [{ name: "the audit's labels", items: [...items] }, { name: "Opus labels", items: all.map(([id, l]) => relabel(id, l.opus.class)) }, { name: "Astra labels", items: all.map(([id, l]) => relabel(id, l.astra.class)) }] : [{ name: "the labellers' agreement on the audited items", items: agreed(audited) }];
 
   const linkTo = (item: AskItem, l?: LabelReply): number | null => {
@@ -161,6 +174,10 @@ export function labelReadout(items: readonly AskItem[], records: readonly Sample
     answer_judged: answered,
     summary: {
       missing_labels: missing,
+      sealed,
+      audit_complete: auditComplete,
+      contingency_complete: contingencyComplete,
+      decision_withheld: withheld,
       audited: audited.length,
       kappa,
       contingency: contingency.length,

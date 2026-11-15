@@ -9,10 +9,10 @@
 // past 3% MISSING has its decision rows read as inconclusive. Per item and arm the score is the mean over the item's
 // samples. decide() reads the decision table's rows from the frontier models' intervals, as section 1 words them.
 import { chainStats, clusters, repeatInWindow, s1Match, type ChainStats, type Link } from "./chains.ts";
-import { FROZEN } from "./frozen.ts";
+import { fail, FROZEN } from "./frozen.ts";
 import { multiDecision } from "./ledger.ts";
 import { sampleId } from "./run.ts";
-import { clopperPearson, pairedInterval, type Interval } from "./stats.ts";
+import { clopperPearson, pairedInterval, pilotAdmit, spreadProjection, type Interval, type PilotCell } from "./stats.ts";
 import { LABELS, type Arm, type AskItem, type Label, type MissingKind, type ModelKey, type Outcome, type Sample } from "./types.ts";
 
 export type Coding = "primary" | "secondary";
@@ -309,4 +309,26 @@ export function readout(items: readonly AskItem[], outcomes: readonly Outcome[],
   const cl = clusters(items, o.links ?? []);
   const chains: ChainStats = chainStats(items, cl);
   return { items: items.length, chains, models: per, decision: decide(intervals), s1: s1Report(items, outcomes) };
+}
+
+/** The admission pilot's readout (sections 9 and 10) on its drawn items: per pilot model, arm (b)'s needless sends and must-ask misses under the primary coding (MISSING left out), the frozen admission rule and the frozen k rule on the proxy effective clusters. The main run takes the pilot rule's k when any model's projection asks for it. */
+export function pilotReadout(items: readonly AskItem[], outcomes: readonly Outcome[]) {
+  const clusters = FROZEN.stats.proxy_effective_clusters;
+  if (typeof clusters !== "number") return fail("E_ASK_UNFROZEN", "frozen.json stats.proxy_effective_clusters is still " + clusters);
+  const cells: Partial<Record<ModelKey, PilotCell>> = {};
+  for (const m of FROZEN.pilot.models) {
+    if (!outcomes.some((o) => o.model === m)) continue;
+    const per = new Map<string, number[]>(items.map((i) => [i.item, []]));
+    for (const o of outcomes) {
+      const it = items.find((i) => i.item === o.item);
+      const v = it && o.model === m && o.arm === "b" ? sampleScore({ label: it.label, answered_dup: null }, o, "primary") : null;
+      if (v !== null) per.get(o.item)!.push(v);
+    }
+    const of = (needless: boolean) => items.filter((i) => isNeedless(i.label) === needless).map((i) => per.get(i.item)!);
+    cells[m] = { needless: of(true), must: of(false) };
+  }
+  const admission = pilotAdmit(cells);
+  const models = Object.fromEntries(Object.entries(cells).map(([m, c]) => [m, { ...admission.models[m]!, ...spreadProjection(c!.needless, clusters) }]));
+  const k = Object.values(models).some((p) => p.k === FROZEN.replicates.k_after_pilot_rule) ? FROZEN.replicates.k_after_pilot_rule : FROZEN.replicates.k;
+  return { items: items.length, needless: items.filter((i) => isNeedless(i.label)).length, must_ask: items.filter((i) => !isNeedless(i.label)).length, effective_clusters: clusters, admit: admission.admit, models, k };
 }

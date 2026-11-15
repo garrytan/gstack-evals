@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { main, runSpendItem, smokeItems } from "../../lanes/ask-replay/cli.ts";
+import { main, runReplicates, runSpendItem, smokeItems } from "../../lanes/ask-replay/cli.ts";
 import { FROZEN, placeholders } from "../../lanes/ask-replay/frozen.ts";
 import { generate } from "../../lanes/ask-replay/synthetic/generator.ts";
 
@@ -16,7 +16,7 @@ describe("frozen.json holds the plan's frozen numbers", () => {
     expect(FROZEN.window.chars).toBe(120_000);
     expect(FROZEN.missing_ceiling).toBe(0.03);
     expect(FROZEN.stats.bootstrap_draws).toBe(10_000);
-    expect(FROZEN.output_cap).toMatchObject({ tokens: 4000, raised_tokens: 8000 });
+    expect(FROZEN.output_cap).toEqual({ tokens: 4000 });
     expect(FROZEN.frontier_models).toEqual(["opus", "sol"]);
     expect(FROZEN.models.particle.arms).toEqual(["a", "b", "c"]);
     expect(Object.values(FROZEN.models).every((m) => m.reasoning_effort === "medium")).toBe(true);
@@ -39,7 +39,7 @@ describe("gstack-evals ask-replay", () => {
   test("--help lists every command", async () => {
     const out: string[] = [];
     expect(await main(["--help"], { out: (t) => out.push(t), err: () => {} })).toBe(0);
-    for (const c of ["build", "synth", "dryrun", "smoke-plan", "draw", "arms", "score", "label", "s1", "chains-proxy", "mdd", "scan", "synth-check", "run"]) expect(out.join("\n")).toContain("  " + c);
+    for (const c of ["build", "synth", "dryrun", "smoke-plan", "draw", "arms", "score", "pilot", "label", "s1", "chains-proxy", "mdd", "scan", "synth-check", "run"]) expect(out.join("\n")).toContain("  " + c);
   });
   test("mdd prints the planned values; synth confirms the committed set", async () => {
     const out: string[] = [];
@@ -76,6 +76,26 @@ describe("gstack-evals ask-replay", () => {
     const err: string[] = [];
     expect(await main(["run", "--model", "sol", "--spend-item", "I6"], { out: () => {}, err: (t) => err.push(t) })).toBe(2);
     expect(err.join("\n")).toContain("E_USAGE --spend-item I6 is not frozen for sol");
+  });
+  test("run schedules only the replicates the frozen rule allows, and refuses another --k before any identity is read", async () => {
+    expect(runReplicates("I1", false)).toBe(FROZEN.smoke.replicates);
+    expect(runReplicates("I1", false, String(FROZEN.smoke.replicates))).toBe(FROZEN.smoke.replicates);
+    expect(runReplicates("I6", false)).toBe(FROZEN.replicates.k);
+    expect(runReplicates("I7", false, String(FROZEN.replicates.k_after_pilot_rule))).toBe(FROZEN.replicates.k_after_pilot_rule);
+    expect(runReplicates("I2", true)).toEqual(FROZEN.pilot.arms);
+    expect(() => runReplicates("I1", false, "2")).toThrow(/E_USAGE/);
+    for (const k of ["1", "4", "2.5", ""]) expect(() => runReplicates("I8", false, k)).toThrow(/E_USAGE/);
+    expect(() => runReplicates("I2", true, "2")).toThrow(/E_USAGE/);
+    const err: string[] = [];
+    expect(await main(["run", "--model", "opus", "--spend-item", "I6", "--k", "5"], { out: () => {}, err: (t) => err.push(t) })).toBe(2);
+    expect(await main(["run", "--model", "sol", "--spend-item", "I1", "--k", "2"], { out: () => {}, err: (t) => err.push(t) })).toBe(2);
+    expect(err.join("\n")).toContain("E_USAGE --k 5 is not frozen for I6; use 2 or 3");
+    expect(err.join("\n")).toContain("E_USAGE --k 2 is not frozen for I1; use 1");
+  });
+  test("label --kind contingency refuses to run without the audit draw, before any identity is read", async () => {
+    const err: string[] = [];
+    expect(await main(["label", "--kind", "contingency", "--model", "opus"], { out: () => {}, err: (t) => err.push(t) })).toBe(2);
+    expect(err.join("\n")).toContain("E_USAGE --audit-draw is required");
   });
   test("the smoke takes 20 synthetic items by class", () => {
     const s = smokeItems(generate().items);

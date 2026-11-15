@@ -1,18 +1,19 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // Custody for the ask replay eval (prereg section 11), on the pattern of lanes/autoplan-audit/told.ts with an async
-// reader. custody() first removes any ask-custody-* directory an earlier opening left on /dev/shm, a CUSTODY.md
-// incident line each. It checks each sealed record's sha256 against its SHA256SUMS line, writes the identity (streamed in
-// on stdin) to a fresh directory on /dev/shm, decrypts every record there with age, removes the identity and proves it
+// reader. custody() first removes any ask-custody-* directory an earlier opening left on /dev/shm whose recorded owner
+// pid is dead, a CUSTODY.md incident line each; a directory whose owner is alive or unreadable is left alone. It checks each sealed record's sha256 against its SHA256SUMS line, writes the identity (streamed in
+// on stdin) to a fresh directory on /dev/shm that records its owner pid, decrypts every record there with age, removes the identity and proves it
 // gone with test ! -e, then awaits the reader. The directory stays until the reader's promise settles; then it is
 // removed and proved gone, and /tmp, /var/tmp and ~/.capy/tool-outputs are swept of files with an ask-replay record's
 // name written since the opening, counted and deleted unopened. Each step is a CUSTODY.md line; a failure stops with
-// E_ASK_CUSTODY. A kill skips the teardown, so the next opening's leftover sweep removes what it left and logs it.
+// E_ASK_CUSTODY. SIGTERM, SIGINT and SIGHUP during the opening remove the directory, log it and exit; SIGKILL skips the
+// teardown, so the next opening's leftover sweep removes what it left and logs it.
 // seal() encrypts a file to a recipient; sealedStore() is the reply store a paid shard writes, encrypting each record
 // from memory so no reply touches disk in the clear. age and age-keygen come from ~/.local/bin when they are there.
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { constants, homedir } from "node:os";
 import { basename, join } from "node:path";
 import { isatty } from "node:tty";
 import { AskError, fail } from "./frozen.ts";
@@ -41,16 +42,39 @@ export interface CustodyOptions {
   shm?: string;
   sweep?: string[];
   now?: () => Date;
+  /** Ends the process after a signal's teardown; defaults to process.exit. */
+  exit?: (code: number) => void;
 }
 
 const line = (log: string, text: string, now: () => Date) => appendFileSync(log, "- " + now().toISOString() + " " + text + "\n");
 
-/** Removes the custody directories an earlier opening left on the RAM disk, an incident line each; returns how many. */
+/** The opening's owner pid file inside its directory. */
+const OWNER = "owner.pid";
+
+/** True only when the pid an opening recorded is a process that no longer exists (kill 0 fails with ESRCH). */
+function ownerDead(dir: string): boolean {
+  let pid: number;
+  try {
+    pid = Number(readFileSync(join(dir, OWNER), "utf8").trim());
+  } catch {
+    return false;
+  }
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return false;
+  } catch (e) {
+    return (e as { code?: string }).code === "ESRCH";
+  }
+}
+
+/** Removes the custody directories an earlier opening left on the RAM disk whose recorded owner pid is dead, an incident line each; returns how many. */
 export function sweepLeftovers(shm: string, log: string, now: () => Date = () => new Date()): number {
   if (!existsSync(log)) writeFileSync(log, "# CUSTODY\n\n");
   let n = 0;
   for (const name of readdirSync(shm).filter((x) => x.startsWith(PREFIX))) {
     const left = join(shm, name);
+    if (!ownerDead(left)) continue;
     rmSync(left, { recursive: true, force: true });
     if (!gone(left)) {
       line(log, "incident: a custody directory an earlier opening left is still on disk after its removal", now);
@@ -107,12 +131,23 @@ export async function custody<T>(o: CustodyOptions, read: (dir: string) => Promi
   const sums = new Map(readFileSync(o.sums, "utf8").split("\n").filter((l) => l.trim()).map((l) => [l.slice(66).trim(), l.slice(0, 64)] as const));
   for (const f of o.files) if (sums.get(basename(f)) !== sha256(readFileSync(f))) incident("a sealed record's sha256 differs from its SHA256SUMS line");
   const dir = mkdtempSync(join(shm, PREFIX));
+  writeFileSync(join(dir, OWNER), String(process.pid), { mode: 0o600 });
   const plain = join(dir, "plain");
   mkdirSync(plain, { mode: 0o700 });
   const identity = join(dir, "identity");
   line(o.log, "open: " + o.files.length + " sealed records, digests checked, decrypting on the RAM disk", now);
   let result: T | undefined;
   let error: unknown = null;
+  const signals = (["SIGTERM", "SIGINT", "SIGHUP"] as const).map((sig) => {
+    const on = () => {
+      rmSync(identity, { force: true });
+      rmSync(dir, { recursive: true, force: true });
+      line(o.log, "incident: " + sig + " ended the opening; decrypted directory removed (test ! -e " + (gone(dir) ? "passed" : "FAILED") + ")", now);
+      (o.exit ?? process.exit)(128 + constants.signals[sig]);
+    };
+    process.on(sig, on);
+    return () => process.off(sig, on);
+  });
   try {
     writeFileSync(identity, o.identity, { mode: 0o600 });
     for (const f of o.files) {
@@ -132,6 +167,7 @@ export async function custody<T>(o: CustodyOptions, read: (dir: string) => Promi
   } catch (e) {
     error = e;
   } finally {
+    for (const off of signals) off();
     rmSync(identity, { force: true });
     rmSync(dir, { recursive: true, force: true });
     const ok = gone(dir) && gone(identity);

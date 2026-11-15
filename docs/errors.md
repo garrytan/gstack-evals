@@ -306,6 +306,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_ASK_PROXY](#e_ask_proxy) | 2 | U20 |
 | [E_ASK_INCOMPLETE](#e_ask_incomplete) | 2 | U20 |
 | [E_ASK_RESUME](#e_ask_resume) | warning | U20 |
+| [E_ASK_SHARD_LIMIT](#e_ask_shard_limit) | 2 | U20 |
 | [E_ASK_PRIVACY](#e_ask_privacy) | 2 | U20 |
 | [E_ASK_PARSE](#e_ask_parse) | warning | U20 |
 | [E_ASK_MISSING_CEILING](#e_ask_missing_ceiling) | warning | U20 |
@@ -2247,11 +2248,19 @@ Exit 2. Side effects: Partial: sealed replies and their spend are kept; the leas
 
 ### E_ASK_INCOMPLETE
 
-Ask replay eval: the replies lack Opus or Sol samples their shards scheduled, so the run is incomplete. score prints the absent counts per model and arm and no decision rows. particle-1's absent samples only mark its readout untested.
+Ask replay eval: the replies lack Opus or Sol samples their shards scheduled, or the label audit has not stood (no --labels, an audit label sample with no sealed record, or kappa below 0.6 without a complete contingency), so the run is incomplete. score prints the absent counts or the reason and no decision rows. particle-1's absent samples only mark its readout untested.
 
-Fix: Resume a shard that stopped on time or on a local fault. A run a spend cap stopped stays incomplete and is never retried to change a verdict.
+Fix: Resume a shard that stopped on time or on a local fault, or finish the label audit and, when it fails, the contingency. A run a spend cap stopped stays incomplete and is never retried to change a verdict.
 
 Exit 2. Side effects: None: nothing was written. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_ASK_SHARD_LIMIT
+
+Ask replay eval: a paid shard reached its 55-minute limit (frozen.json shards.limit_minutes). No attempt starts past it, and a deadline timer at the limit ends the shard; the custody directory is removed on the way out.
+
+Fix: Run the next shard: sealed samples are skipped, and a sample the limit stopped before its attempt was sent runs again under the same draw.
+
+Exit 2. Side effects: Partial: sealed replies and their spend are kept; the lease settles with what was spent, and a call still open at the deadline settles through the unknown-charge path on resume. Retry safe: yes. Resumable: yes. Owner: U20.
 
 ### E_ASK_PRIVACY
 

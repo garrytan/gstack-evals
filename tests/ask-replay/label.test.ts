@@ -23,7 +23,7 @@ const positionOf = (it: AskItem) => {
 };
 const answeredRows = (it: AskItem) => ledgerRows(it).flatMap((r, i) => (r.status === "answered" ? [i + 1] : []));
 const reply = (it: AskItem, cls: Label = it.label, answers: "yes" | "no" | "unclear" = "yes"): LabelReply => ({ class: cls, repeats_of: it.label === "DUPLICATE" ? positionOf(it) : null, answer_judgement: answeredRows(it).map((row) => ({ row, answers })), reason: "r" });
-const recs = (kind: "audit" | "contingency" | "link", model: ModelKey, its: readonly AskItem[], f: (it: AskItem) => LabelReply | null = (it) => reply(it)): SampleRecord[] => its.map((it) => labelRecord(labelId(it.item, kind, model), it.item, model, f(it)));
+const recs = (kind: "audit" | "contingency" | "link", model: ModelKey, its: readonly AskItem[], f: (it: AskItem) => LabelReply | null = (it) => reply(it)): SampleRecord[] => its.map((it) => labelRecord(labelId(it.item, kind, model), it.item, model, f(it), its.length));
 
 describe("the codebook and the labeller prompt (section 7)", () => {
   test("codebook.md matches frozen.json's sha256, and a changed codebook stops with E_ASK_PIN", () => {
@@ -70,6 +70,18 @@ describe("the codebook and the labeller prompt (section 7)", () => {
     expect(link.every((s) => byId.get(s.item)!.label === "DUPLICATE" && s.id === labelId(s.item, "link", "opus"))).toBe(true);
     expect(() => labelSamples(items, "link", "astra")).toThrow(/E_USAGE/);
     expect(() => labelSamples(items, "audit", "sol")).toThrow(/E_USAGE/);
+  });
+  test("each label sample carries how many its shard scheduled", () => {
+    expect(labelSamples(items, "audit", "opus").every((s) => s.scheduled === 60)).toBe(true);
+    expect(labelSamples(items, "link", "opus").every((s) => s.scheduled === 20)).toBe(true);
+  });
+  test("the contingency labels only the items outside the audit draw, and refuses to run without it", () => {
+    const audited = new Set(items.slice(0, 10).map((i) => i.item));
+    const c = labelSamples(items, "contingency", "astra", audited);
+    expect(c).toHaveLength(50);
+    expect(c.some((s) => audited.has(s.item))).toBe(false);
+    expect(c.every((s) => s.scheduled === 50)).toBe(true);
+    expect(() => labelSamples(items, "contingency", "opus")).toThrow(/E_USAGE/);
   });
 });
 
@@ -129,6 +141,23 @@ describe("the label readout", () => {
     expect(withC.primary.every((it) => it.label !== byId.get(it.item)!.label)).toBe(true);
     expect(withC.views.map((v) => v.name)).toEqual(["the audit's labels", "Opus labels", "Astra labels"]);
     expect(withC.summary.answer_judgement.both_no).toBeGreaterThan(0);
+  });
+  test("decision rows wait for a complete audit that stands, or a failed audit plus a complete contingency on the other items", () => {
+    const flip = (it: AskItem) => reply(it, it.label === "DECISION" ? "DUPLICATE" : "DECISION");
+    const half = items.slice(0, 30);
+    const rest = items.slice(30);
+    const audit = [...recs("audit", "opus", half), ...recs("audit", "astra", half)];
+    expect(labelReadout(items, audit).summary).toMatchObject({ audit_complete: true, decision_withheld: null });
+    expect(labelReadout(items, audit.slice(1)).summary).toMatchObject({ audit_complete: false, sealed: { "audit.opus": { sealed: 29, scheduled: 30 } } });
+    expect(labelReadout(items, audit.slice(1)).summary.decision_withheld).toContain("incomplete");
+    expect(labelReadout(items, recs("audit", "opus", half)).summary.audit_complete).toBe(false);
+    const failed = [...recs("audit", "opus", half, flip), ...recs("audit", "astra", half, flip)];
+    expect(labelReadout(items, failed).summary.decision_withheld).toContain("did not stand");
+    const partial = labelReadout(items, [...failed, ...recs("contingency", "opus", rest), ...recs("contingency", "astra", rest).slice(1)]);
+    expect(partial.summary).toMatchObject({ contingency_complete: false });
+    expect(partial.summary.decision_withheld).toContain("did not stand");
+    const done = labelReadout(items, [...failed, ...recs("contingency", "opus", rest), ...recs("contingency", "astra", rest)]);
+    expect(done.summary).toMatchObject({ contingency_complete: true, decision_withheld: null, primary_items: 60 });
   });
   test("a missing label or a position past the list counts as no label and no link", () => {
     const d = dups[0]!;

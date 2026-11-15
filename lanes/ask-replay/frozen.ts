@@ -28,7 +28,7 @@ export interface Frozen {
   models: Record<ModelKey, ModelRow>;
   temperature: string;
   caching: { anthropic: string; openai: string; openrouter: string; replicates: string };
-  output_cap: { tokens: number; raised_tokens: number; raise_when_smoke_capped_share_above: number };
+  output_cap: { tokens: number };
   replicates: { k: number; k_after_pilot_rule: number };
   window: { chars: number; cut_note: string };
   items: { classes: Record<string, number>; pre_stratum_before: string };

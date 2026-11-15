@@ -73,9 +73,7 @@
     "replicates": "a cell (item, arm, model) runs its replicates in sequence: replicate r+1 starts only after replicate r has a sealed reply or a final MISSING; arm cells keep their seeded random order within each item, and different cells and items run in parallel"
   },
   "output_cap": {
-    "tokens": 4000,
-    "raised_tokens": 8000,
-    "raise_when_smoke_capped_share_above": 0.01
+    "tokens": 4000
   },
   "replicates": {
     "k": 2,

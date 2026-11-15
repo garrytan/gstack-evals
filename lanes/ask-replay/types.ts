@@ -91,6 +91,8 @@ export interface Sample {
   replicate: number;
   /** The replicates its shard scheduled: one count for every arm, or the pilot's count per arm. score checks completeness against it; absent on labeller calls. */
   k?: number | Partial<Record<Arm, number>>;
+  /** A labeller call's: how many calls its shard scheduled for its kind and model. score checks the audit's and the contingency's completeness against it; absent on arm samples. */
+  scheduled?: number;
 }
 
 /** How a c or d reply named its ledger row. not_asked: arms a and b, which have no ledger. */

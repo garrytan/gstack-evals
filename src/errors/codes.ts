@@ -2524,8 +2524,8 @@ export const CODES = {
   },
   E_ASK_INCOMPLETE: {
     exit: 2,
-    meaning: "Ask replay eval: the replies lack Opus or Sol samples their shards scheduled, so the run is incomplete. score prints the absent counts per model and arm and no decision rows. particle-1's absent samples only mark its readout untested.",
-    fix: "Resume a shard that stopped on time or on a local fault. A run a spend cap stopped stays incomplete and is never retried to change a verdict.",
+    meaning: "Ask replay eval: the replies lack Opus or Sol samples their shards scheduled, or the label audit has not stood (no --labels, an audit label sample with no sealed record, or kappa below 0.6 without a complete contingency), so the run is incomplete. score prints the absent counts or the reason and no decision rows. particle-1's absent samples only mark its readout untested.",
+    fix: "Resume a shard that stopped on time or on a local fault, or finish the label audit and, when it fails, the contingency. A run a spend cap stopped stays incomplete and is never retried to change a verdict.",
     side_effects: "None: nothing was written.",
     retry_safe: true,
     resumable: true,
@@ -2535,6 +2535,15 @@ export const CODES = {
     exit: null,
     meaning: "Ask replay eval: a resumed shard found a sample whose call started and has no sealed reply.",
     fix: "None by hand: the call was reconciled through the spend ledger's unknown-charge path and the sample is redrawn once; redraws are counted per arm.",
+    owner: "U20",
+  },
+  E_ASK_SHARD_LIMIT: {
+    exit: 2,
+    meaning: "Ask replay eval: a paid shard reached its 55-minute limit (frozen.json shards.limit_minutes). No attempt starts past it, and a deadline timer at the limit ends the shard; the custody directory is removed on the way out.",
+    fix: "Run the next shard: sealed samples are skipped, and a sample the limit stopped before its attempt was sent runs again under the same draw.",
+    side_effects: "Partial: sealed replies and their spend are kept; the lease settles with what was spent, and a call still open at the deadline settles through the unknown-charge path on resume.",
+    retry_safe: true,
+    resumable: true,
     owner: "U20",
   },
   E_ASK_PRIVACY: {

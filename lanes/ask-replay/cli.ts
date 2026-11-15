@@ -16,7 +16,7 @@ import { AskError, fail, FROZEN, placeholders, seed } from "./frozen.ts";
 import { corpusTexts, scanPublic, syntheticCheck } from "./privacy.ts";
 import { buildPrompt, gstackLines, loadGstack, type GstackText } from "./prompt.ts";
 import { finalRecords, openProxyMeter, runShard, schedule, upstreamRedraw, type LabelJob } from "./run.ts";
-import { absentSamples, isNeedless, readout, s1Report } from "./score.ts";
+import { absentSamples, isNeedless, pilotReadout, readout, s1Report } from "./score.ts";
 import { halfWidth, mdd } from "./stats.ts";
 import { generate } from "./synthetic/generator.ts";
 import { ARMS, LABELS, outcomeOf, type Arm, type AskItem, type LabelKind, type ModelKey, type Sample } from "./types.ts";
@@ -188,11 +188,24 @@ export const SUBCOMMANDS: Record<string, { summary: string; run: Run }> = {
         return readout(its, outcomes.filter((x) => ids.has(x.item)), opts);
       };
       const r = view(lab?.primary ?? items);
+      const withheld = lab ? lab.summary.decision_withheld : "no --labels, so the label audit has not stood";
+      if (withheld) {
+        json(io, { links: lab?.links ? "Opus links" : f.links ? "custody links" : "proxy links", labels: lab?.summary ?? null, ...r, decision: null, decision_withheld: withheld, label_views: [], label_sensitive: null });
+        fail("E_ASK_INCOMPLETE", withheld + ", so score prints no decision rows");
+      }
       const views = (lab?.views ?? []).map((v) => {
         const d = view(v.items).decision;
         return { name: v.name, items: v.items.length, row: d.row, cut_candidate: d.cut_candidate, flips: d.row !== r.decision.row || d.cut_candidate !== r.decision.cut_candidate };
       });
       json(io, { links: lab?.links ? "Opus links" : f.links ? "custody links" : "proxy links", labels: lab?.summary ?? null, ...r, label_views: views, label_sensitive: views.some((v) => v.flips) });
+      return 0;
+    },
+  },
+  pilot: {
+    summary: "the admission pilot's readout from its drawn items and decrypted replies: the frozen admission rule and k rule (sections 9 and 10); numbers only",
+    run: (argv, io) => {
+      const f = flags(argv, ["items", "replies"]);
+      json(io, pilotReadout(readItems(need(f, "items")), finalRecords(readRecords(need(f, "replies"))).map(outcomeOf)));
       return 0;
     },
   },
@@ -278,21 +291,25 @@ export const SUBCOMMANDS: Record<string, { summary: string; run: Run }> = {
       const pilot = f.pilot === "1";
       const item = runSpendItem(need(f, "spend-item"), model, pilot);
       if (pilot && (f.k || !FROZEN.pilot.models.includes(model))) fail("E_USAGE", "--pilot runs the frozen pilot arms on " + FROZEN.pilot.models.join(" or ") + " and takes no --k");
-      const k: number | Partial<Record<Arm, number>> = pilot ? (FROZEN.pilot.arms as Partial<Record<Arm, number>>) : f.k ? Number(f.k) : FROZEN.replicates.k;
+      const k = runReplicates(need(f, "spend-item"), pilot, f.k);
       return paidShard(f, io, { name: "run", model, item, gstack: gstackFrom(f), samples: (items) => schedule(items, model, k, seed("order_seed", false)) });
     },
   },
   label: {
     summary: "a labeller shard under custody (I3 audit, I4 contingency, I5 link): identity on stdin, sealed bundle in, sealed labels out (never run without the go)",
     run: async (argv, io) => {
-      const f = flags(argv, ["kind", "bundle", "sums", "log", "model", "out", "recipient", "record", "ledger", "amount-micros"], ["redraw-upstream"]);
+      const f = flags(argv, ["kind", "bundle", "sums", "log", "model", "out", "recipient", "record", "ledger", "amount-micros", "audit-draw"], ["redraw-upstream"]);
       refuseUnfrozen();
       const kind = need(f, "kind") as LabelKind;
       const spec = FROZEN.labelling.kinds[kind] ?? fail("E_USAGE", "--kind is one of " + Object.keys(FROZEN.labelling.kinds).join(", "));
       const model = need(f, "model") as ModelKey;
       if (!spec.models.includes(model)) fail("E_USAGE", "--kind " + kind + " runs on " + spec.models.join(" or "));
       checkCodebook();
-      return paidShard(f, io, { name: "label", model, item: FROZEN.spend_items[spec.spend_item]!, gstack: null, samples: (items) => labelSamples(items, kind, model), job: labelJob });
+      const audited = kind === "contingency" ? new Set(readItems(need(f, "audit-draw")).map((i) => i.item)) : undefined;
+      return paidShard(f, io, { name: "label", model, item: FROZEN.spend_items[spec.spend_item]!, gstack: null, job: labelJob, samples: (items) => {
+        if (audited && [...audited].some((id) => !items.some((i) => i.item === id))) fail("E_ASK_INPUT", "the audit draw names items the bundle does not hold");
+        return labelSamples(items, kind, model, audited);
+      } });
     },
   },
 };
@@ -302,6 +319,15 @@ export function runSpendItem(id: string, model: ModelKey, pilot: boolean): strin
   const frozen = pilot ? ["I2", "I2r"] : ["I1", ({ opus: "I6", sol: "I7", particle: "I8" } as Record<string, string>)[model]!];
   if (!frozen.includes(id)) fail("E_USAGE", "--spend-item " + id + " is not frozen for " + (pilot ? "the pilot" : model) + "; use " + frozen.join(" or "));
   return FROZEN.spend_items[id]!;
+}
+
+/** The replicates a run shard schedules, refused unless the frozen rule allows them: the pilot's per-arm counts under --pilot, the smoke's count on I1, else k or the pilot rule's k (sections 9 and 10). */
+export function runReplicates(id: string, pilot: boolean, k?: string): number | Partial<Record<Arm, number>> {
+  if (pilot) return k === undefined ? (FROZEN.pilot.arms as Partial<Record<Arm, number>>) : fail("E_USAGE", "--pilot takes no --k");
+  const allowed = id === "I1" ? [FROZEN.smoke.replicates] : [FROZEN.replicates.k, FROZEN.replicates.k_after_pilot_rule];
+  const n = k === undefined ? allowed[0]! : Number(k);
+  if (!allowed.includes(n)) fail("E_USAGE", "--k " + k + " is not frozen for " + id + "; use " + allowed.join(" or "));
+  return n;
 }
 
 function refuseUnfrozen(): void {
@@ -328,10 +354,14 @@ async function paidShard(f: Record<string, string>, io: Io, o: { name: string; m
     }
   });
   json(io, result);
-  const shard = "shard" in result ? result.shard : undefined;
-  if (shard?.stopped === "cap") {
-    io.err(lines("E_ASK_CAP", "the spend cap stopped the shard with " + shard.left + " samples left; the run is incomplete"));
+  const end = result.shard ?? result.redraw!;
+  if (end.stopped === "cap") {
+    io.err(lines("E_ASK_CAP", "the spend cap stopped the shard with " + end.left + " samples left; the run is incomplete"));
     return CODES.E_ASK_CAP.exit ?? 2;
+  }
+  if (end.stopped === "limit") {
+    io.err(lines("E_ASK_SHARD_LIMIT", "the shard reached its " + FROZEN.shards.limit_minutes + "-minute limit with " + end.left + " samples left; run the next shard to resume them"));
+    return CODES.E_ASK_SHARD_LIMIT.exit ?? 2;
   }
   return 0;
 }
