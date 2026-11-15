@@ -17,7 +17,7 @@ links:
 # Corrected harness mechanics results: Stage 4 spent $880.20 on model calls and $44.84 on machines, not $917.13 and $7.90, and its records sit in a private archive; no total or verdict changes
 
 - We learned that the harness mechanics results post split Stage 4's cost wrongly. Stage 4 settled at $925.03, as the post says, but $880.20 of it was model calls and $44.84 was machines. The post said $917.13 and $7.90, because its machine figure left out the VMs the sessions ran on ($36.92). No total, per-session cost ratio, count or verdict changes. You should read the post as published, with this note's split in place of its own.
-- We learned that the post names the wrong place for the run's records. They are kept in the eval team's private archive with checksums, and the post's digests still pin its run tables and ledgers. You should read the corrected wording below in place of the post's Data row and its "What is held out" section.
+- We learned that the post pointed readers to an internal folder for the run's records, and that when the post merged the trial dirs, picks, ledgers and run tables were not in it yet. They are now kept in the eval team's private archive with checksums, and the post's digests still pin its run tables and ledgers. You should read the wording below in place of the post's Data row and its "What is held out" section.
 - We learned that a cost split is only as complete as the list of rows it adds up. You should split a cost line from the ledger's own row ids, not from a list of the items you remember.
 
 This note supersedes [the harness mechanics results post](2026-11-15-geva-503-harness-mechanics-results/README.md). Merged posts don't change, so that post's body stays as it merged and only its status moves to superseded. Two things in it are corrected here: the Stage 4 cost split, and where it says the run's records are kept. Everything else stands as published.
@@ -26,7 +26,7 @@ This note supersedes [the harness mechanics results post](2026-11-15-geva-503-ha
 
 The post's Agent notes say "Stage 4 settled at $925.03, which includes the $7.90 of listing VM and hosts above, so its model spend was $917.13", and its changelog says the spend line "separates $917.13 of model spend from $7.90 of machines". Both are wrong. The $7.90 counted the best-of-2 listing VM ($1.75) and the three hosts, and left out the part VMs the scored sessions ran on: 36 part-VM rows on the ledgers, $36.92. Two of those rows, for the two Sol parts that a quota refusal stopped before they began, settled less than a tenth of a cent between them.
 
-Read instead: Stage 4 settled at $925.03, which includes $44.84 of machines (part VMs $36.92, the listing VM $1.75 and the three hosts $6.16), so its model calls came to $880.20 (sessions $848.55, best-of-2 picker calls $30.91 and judge calls $0.74).
+Read instead: Stage 4 settled at $925.03, made up of $880.20 of model calls (sessions $848.55, best-of-2 picker calls $30.91 and judge calls $0.74) and $44.84 of machines (part VMs $36.92, the listing VM $1.75 and the three hosts $6.16), each rounded separately from the ledgers' exact sums.
 
 The recount sums every settled row on the three Stage 4 ledgers, classed by row id. Each column is one model's ledger item. The picker for Opus's item was GPT-6.1 Sol, and Opus 5.5 picked for the other two.
 
@@ -44,7 +44,7 @@ The recount sums every settled row on the three Stage 4 ledgers, classed by row 
 
 Each figure is a ledger sum in micro-dollars rounded to the cent, so a total can differ by a cent from the sum of its rounded rows. The post's $6.15 for the hosts added the three hosts after rounding each one; their exact sum rounds to $6.16.
 
-How the rows were classed: a session row's id is the item, the part and the session (for example `stage4-opus/s4-1/s-<hex>`), a part VM's is the item, the part and `vm`, picker and judge rows start with `picker:` and `judge:`, the listing VM's share is `pick4/vm` and a host is `host-1`. Every settled row on the three ledgers falls in exactly one class. The three Stage 4 ledgers and the vms ledger match the sha256 values in the results post's digests.txt.
+How the rows were classed: a session row's id is the item, the part and the session (for example `stage4-opus/s4-1/s-<hex>`), a part VM's is the item, the part and `vm`, picker and judge rows start with `picker:` and `judge:`, the listing VM's share is `pick4/vm` and a host is `host-1`. Every settled row on the three ledgers falls in exactly one class. The recount read the final ledgers, the copies now in the archive; the three Stage 4 ledgers and the vms ledger each match their sha256 in the results post's digests.txt.
 
 ## What didn't change
 
@@ -55,7 +55,7 @@ How the rows were classed: a session row's id is the item, the part and the sess
 
 ## Where the records are kept
 
-The post's Data row and its "What is held out" section say the trial dirs, ledgers, picks and run records sit in a drive folder. Read instead: the run tables, the trial records of Stages 1 and 4 (transcripts, verifier output, meters and hook logs), the ledgers and the picks are kept in the eval team's private archive with checksums, and the run records sit beside them. They stay private because they hold transcripts and repository code. The task dirs rebuild from the public SWE-rebench dataset and the frozen task list in the preregistration bundle, and the arm installs rebuild from commit 3d5dcce. The results post's digests.txt still lists the sha256 of both run tables at both codes and of every final ledger.
+The post's Data row and its "What is held out" section point to an internal folder by its path. When the post merged, the trial dirs, picks, ledgers and run tables were still on the eval team's working machine, not in that folder; they were archived afterwards. Read instead: the run tables, the trial records of Stages 1 and 4 (transcripts, verifier output, meters and hook logs), the ledgers and the picks are kept in the eval team's private archive with checksums, and the run records sit beside them. They stay private because they hold transcripts and repository code. The task dirs rebuild from the public SWE-rebench dataset and the frozen task list in the preregistration bundle, and the arm installs rebuild from commit 3d5dcce. The results post's digests.txt still lists the sha256 of both run tables at both codes and of every final ledger.
 
 ## Changelog
 
