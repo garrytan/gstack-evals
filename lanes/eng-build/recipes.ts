@@ -6,6 +6,7 @@
 // "crash": otherwise a Python AttributeError, NameError or ImportError, a JavaScript ReferenceError or a TypeError
 // through something undefined, a Go or Rust compile error and a collection or load error never are. Holds no unit data
 // and prints no repository content.
+import { stripVTControlCharacters } from "node:util";
 import type { NodeRunner, Runner } from "../real-outcome/task/format.ts";
 import { parseCargo, parseGoTest, parseJestJson, parseMochaJson, parseNodeEvents, parseXml, resultFor, type Parsed, type Results, type TestResult, type XmlNode } from "../real-outcome/task/record.ts";
 import { isTestPath } from "../real-outcome/mine/paths.ts";
@@ -472,8 +473,10 @@ export function productFrame(path: string): boolean {
 /** Planted-unit rule 2 (GEVA-537 plan section 2): a runtime error that is not a compile, collection or load error counts as
  * a scorable failure ("crash") when its innermost frame is in a product file. Every public name exists on the merged
  * and fixed trees by construction, so a JavaScript TypeError reading undefined or a Python AttributeError on None there
- * is the bug, not a missing name. A failure that names no frame never counts. */
-export function plantedClass(runner: Runner["kind"], r: TestResult, run: { timed_out?: boolean; stopped?: boolean }, fromCollect: boolean): CaseClass {
+ * is the bug, not a missing name. A failure that names no frame never counts. Colour codes in the failure text, which a
+ * vitest or jest report can carry, are stripped first, so a coloured message reads as its plain text. */
+export function plantedClass(runner: Runner["kind"], raw: TestResult, run: { timed_out?: boolean; stopped?: boolean }, fromCollect: boolean): CaseClass {
+  const r: TestResult = { ...raw, ...(raw.exc === undefined ? {} : { exc: stripVTControlCharacters(raw.exc) }), ...(raw.msg === undefined ? {} : { msg: stripVTControlCharacters(raw.msg) }) };
   const c = caseClass(runner, r, run, fromCollect);
   if (fromCollect || r.status !== "fail" || (c !== "missing_name" && c !== "load")) return c;
   const text = (r.exc ?? "") + " " + (r.msg ?? "");
