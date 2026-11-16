@@ -71,6 +71,8 @@ export interface CallResult {
   text: string | null;
   status: number;
   micros: number | null;
+  /** What the call's meter holds as unknown (a reply with no usage), at its full reservation; 0 on a cache hit. */
+  unknown_micros?: number;
   cached: boolean;
   problem: string | null;
   served_by: string | null;
@@ -156,7 +158,7 @@ export async function openMeter(o: MeterOptions): Promise<Meter> {
       const file = join(o.cacheDir, cacheKey(req.model, body) + ".json");
       if (existsSync(file)) {
         const hit = JSON.parse(readFileSync(file, "utf8")) as CallResult;
-        return { ...hit, cached: true, micros: 0 };
+        return { ...hit, cached: true, micros: 0, unknown_micros: 0 };
       }
       const b = p.bind({ cell: { run_id: o.runId, arm: "pv", task: req.label, model: m.id, trial: 1, attempt: 1 }, models: [m.provider + ":" + m.id], allowance_micros: reserved() });
       let status = 0;
@@ -169,18 +171,20 @@ export async function openMeter(o: MeterOptions): Promise<Meter> {
         await p.finalize(b.meter_id);
         p.unbind(b.slot);
       }
-      const micros = local.meters(leaseId).get(b.meter_id)?.spent_micros ?? null;
+      const row = local.meters(leaseId).get(b.meter_id);
+      const micros = row?.spent_micros ?? null;
+      const unknown_micros = row?.unknown_micros ?? 0;
       let parsed: any = null;
       try {
         parsed = JSON.parse(text);
       } catch {}
       if (status !== 200) {
         const problem = typeof parsed?.code === "string" ? parsed.code + ": " + (parsed.detail ?? "") : "HTTP " + status;
-        return { text: null, status, micros, cached: false, problem, served_by: null };
+        return { text: null, status, micros, unknown_micros, cached: false, problem, served_by: null };
       }
       const servedBy = m.provider === "openrouter" ? (typeof parsed?.provider === "string" ? parsed.provider : null) : m.provider;
       if (m.served_by && (servedBy === null || !m.served_by.test(servedBy))) throw new MeterError("E_PV_PROVIDER_DRIFT", m.id + " was served by " + (servedBy ?? "an unnamed provider") + ", not its pinned provider; stop this model's items and ask the Captain");
-      const result: CallResult = { text: parsed ? judgeAnswer(m.provider, parsed) : null, status, micros, cached: false, problem: parsed ? null : "the reply is not JSON", served_by: servedBy };
+      const result: CallResult = { text: parsed ? judgeAnswer(m.provider, parsed) : null, status, micros, unknown_micros, cached: false, problem: parsed ? null : "the reply is not JSON", served_by: servedBy };
       if (result.text !== null) {
         writeFileSync(file + ".tmp", JSON.stringify(result), { mode: 0o600 });
         renameSync(file + ".tmp", file);

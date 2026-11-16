@@ -11,8 +11,10 @@
 // - The first session of each item runs alone. When it settles, the item is re-projected; past its cap, the item stops
 //   (E_EP_REPROJECT).
 // - From the 10th settled session on, the item is re-projected after each one, and past its cap it halts (E_EP_REPROJECT).
-// - The re-projection is settled spend plus, for each kind of session, the sessions still planned times that kind's
-//   running mean, or the plan's planning figure for a kind not yet measured.
+// - The re-projection is settled spend plus, for each kind of session, the cells still planned times that kind's
+//   running mean per completed cell, or the plan's planning figure for a kind not yet measured. A cell is counted once
+//   however many journal lines it has: a session that spent and then failed is journaled as failed and leaves its cell
+//   to run again on a resume, and a cached call a resume repeats under the same key adds nothing.
 // - The all-in projection is, over every item, its settled spend when it is finished and its re-projection otherwise
 //   (its plan projection before it starts), plus the crew and host figures. Past FROZEN.money.allInStopUsd it stops
 //   everything (E_EP_PROJECTION), checked before every session starts and after every session settles. Each gate writes
@@ -26,6 +28,7 @@ import type { Launcher } from "../../eng-build/pipeline.ts";
 import { openLease, settleLease, type RequireAdmission } from "../../../src/runner/ledger/ledger.ts";
 import { openLocalLedger, type LocalLedger } from "../../../src/runner/ledger/local.ts";
 import { ledgerPath } from "../../../src/runner/ledger/paths.ts";
+import { takeSpend } from "../../eng-build/spend.ts";
 import { EpError, fail } from "../errors.ts";
 import { FROZEN, SIZE } from "../frozen.ts";
 import { ALLOWANCE_USD, EP_PROGRAM, EP_RUN, EP_SKILL } from "./local.ts";
@@ -103,6 +106,8 @@ export interface Settled {
   usd: number;
   /** The cell the session ran, when it has one. */
   cell?: string;
+  /** The session spent and then threw, so its cell has no record and runs again on a resume. */
+  failed?: true;
 }
 
 export interface ItemState {
@@ -182,13 +187,15 @@ export class ItemGate {
     return this.flying;
   }
 
-  /** Settled spend plus each kind's remaining planned sessions at its running mean, or its planning figure. */
+  /** Settled spend plus each kind's remaining planned cells at its running mean per completed cell, or its planning
+   * figure. Failed lines count in settled spend only; lines that share a cell key count as one cell. */
   reprojection(): number {
     let total = this.settled();
     for (const [k, v] of Object.entries(this.plan.kinds) as Array<[Kind, { planned: number; usd: number }]>) {
-      const mine = this.done.filter((d) => d.kind === k);
-      const left = Math.max(0, (this.planned[k] ?? v.planned) - mine.length);
-      const mean = mine.length ? mine.reduce((s, d) => s + d.usd, 0) / mine.length : v.usd;
+      const ok = this.done.filter((d) => d.kind === k && !d.failed);
+      const cells = new Set(ok.filter((d) => d.cell).map((d) => d.cell)).size + ok.filter((d) => !d.cell).length;
+      const left = Math.max(0, (this.planned[k] ?? v.planned) - cells);
+      const mean = cells ? ok.reduce((s, d) => s + d.usd, 0) / cells : v.usd;
       total += left * mean;
     }
     return total;
@@ -247,10 +254,11 @@ export class ItemGate {
     this.wake();
   }
 
-  /** Records one settled session (its journal line first), then runs the item's stops. */
-  settle(kind: Kind, costUsd: number, cell = ""): void {
+  /** Records one settled session (its journal line first), then runs the item's stops. failed marks a session that
+   * spent and then threw. */
+  settle(kind: Kind, costUsd: number, cell = "", failed = false): void {
     this.flying = Math.max(0, this.flying - 1);
-    const d: Settled = { kind, usd: costUsd, ...(cell ? { cell } : {}) };
+    const d: Settled = { kind, usd: costUsd, ...(cell ? { cell } : {}), ...(failed ? { failed: true as const } : {}) };
     if (this.o.journal) {
       mkdirSync(dirname(this.o.journal), { recursive: true });
       appendFileSync(this.o.journal, JSON.stringify(d) + "\n");
@@ -271,18 +279,45 @@ export class ItemGate {
   }
 }
 
+/** A gate stop: the item's re-projection or the all-in projection. It outranks any other error a stage meets, because
+ * it is a stop line that goes to the Captain. */
+export const isGateStop = (e: unknown): e is EpError => e instanceof EpError && (e.code === "E_EP_REPROJECT" || e.code === "E_EP_PROJECTION");
+
+/**
+ * Settles what a thrown session spent (spend.ts) as a failed line under its cell's key, or frees its slot when it spent
+ * nothing, and returns the error to throw: the session's own, or the gate stop that settling it raised, which names the
+ * session's error too.
+ */
+export function settleThrown(gate: ItemGate, kind: Kind, e: unknown, cell: string): unknown {
+  const spent = takeSpend(e);
+  if (!(spent > 0)) {
+    gate.abort();
+    return e;
+  }
+  try {
+    gate.settle(kind, spent, cell, true);
+  } catch (s) {
+    return isGateStop(s) ? new EpError(s.code, s.message + "; the session that spent it ended with: " + (e instanceof Error ? e.message : String(e))) : s;
+  }
+  return e;
+}
+
 /**
  * Runs cells through an item gate, at most parallel at a time: each waits for its admission, then runs. The first error
- * (a gate stop, a launcher's cap stop) stops new starts; cells already running finish and settle, then it is thrown.
- * run returns the session's cost, which the gate settles (its journal line) under the cell's key, and commit, which then
- * writes the session's record whether or not the settle stopped the item. A run that throws with spentUsd on its error (a
- * session that spent before its grading failed) has that spend settled under the cell's key, with no record, before the
- * error is thrown, so the gate's stops and a resume count it. skip, checked as each cell comes up, leaves a cell out
- * without a session (an arm the exposure stop ended).
+ * (a gate stop, a launcher's cap stop) stops new starts; cells already running finish and settle, then it is thrown,
+ * except that a gate stop met later outranks any other error. run returns the session's cost, which the gate settles (its
+ * journal line) under the cell's key, and commit, which then writes the session's record whether or not the settle
+ * stopped the item. A run that throws with spend on its error (spend.ts: a session that spent before its grading failed,
+ * or a launcher's cap stop) has that spend settled as a failed line under the cell's key, with no record, before the
+ * error is thrown, so the gate's stops and a resume count it, and the resume runs the cell again. skip, checked as each
+ * cell comes up, leaves a cell out without a session (an arm the exposure stop ended).
  */
 export async function runGated<C>(cells: readonly C[], o: { gate: ItemGate; parallel?: number; kind: (c: C) => Kind; key: (c: C) => string; skip?: (c: C) => boolean; run: (c: C) => Promise<{ costUsd: number; commit?: () => void }> }): Promise<void> {
   let next = 0;
   let first: unknown = null;
+  const keep = (e: unknown) => {
+    if (first === null || (isGateStop(e) && !isGateStop(first))) first = e;
+  };
   const worker = async () => {
     while (first === null && next < cells.length) {
       const c = cells[next++]!;
@@ -291,7 +326,7 @@ export async function runGated<C>(cells: readonly C[], o: { gate: ItemGate; para
       try {
         await o.gate.acquire(kind);
       } catch (e) {
-        first ??= e;
+        keep(e);
         return;
       }
       if (first !== null) {
@@ -302,28 +337,18 @@ export async function runGated<C>(cells: readonly C[], o: { gate: ItemGate; para
       try {
         ran = await o.run(c);
       } catch (e) {
-        first ??= e;
-        const spent = (e as { spentUsd?: unknown } | null)?.spentUsd;
-        if (typeof spent !== "number" || !(spent > 0)) {
-          o.gate.abort();
-          return;
-        }
-        try {
-          o.gate.settle(kind, spent, o.key(c));
-        } catch (s) {
-          first ??= s;
-        }
+        keep(settleThrown(o.gate, kind, e, o.key(c)));
         return;
       }
       try {
         o.gate.settle(kind, ran.costUsd, o.key(c));
       } catch (e) {
-        first ??= e;
+        keep(e);
       }
       try {
         ran.commit?.();
       } catch (e) {
-        first ??= e;
+        keep(e);
       }
     }
   };

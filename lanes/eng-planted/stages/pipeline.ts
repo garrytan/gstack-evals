@@ -23,6 +23,7 @@ import { createHash } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { prepareReviewTree, runSession, type Attempt } from "../../eng-build/review-stage.ts";
+import { addSpend } from "../../eng-build/spend.ts";
 import type { ReviewLeft, ReviewSession, ReviewUnit } from "../../eng-build/pipeline.ts";
 import { erExposure } from "../../eng-review/exposure.ts";
 import type { DigestPin } from "../../../src/trial/review/eng-review.ts";
@@ -32,7 +33,7 @@ import type { BuildArm, GradedBuild, PlantedGrader, PlantedUnit, ReviewArm, Revi
 import { DETECTOR, EB_ARM, isSkillArm, plantedOpening, plantedPrompt, plantedStopHook, SKILL_ARMS, type Opening } from "./arms.ts";
 import { authorCalls, BATCH_1, BATCH_2, drawSets, hintedVerdict, mintSeed, replaceLost, seededOrder, supplyLine, unforeseeable, type AuthorCall, type AuthorMaterial, type Authored, type Candidate, type CallsRecord, type Draw, type HintedVerdict, type Want } from "./author.ts";
 import { buildKey, hasReview, isReviewed, readMount, reviewMount, runPlantedBuild, stockMount, writeMount, type PlantedSession } from "./build.ts";
-import { runGated, type ItemGate, type Kind } from "./ledger.ts";
+import { runGated, settleThrown, type ItemGate, type Kind } from "./ledger.ts";
 import { readStep, requireSteps, writeStep, type Step } from "./local.ts";
 
 const sha = (s: string | Buffer) => createHash("sha256").update(s).digest("hex");
@@ -137,7 +138,8 @@ export function drawnUnit(src: UnitSource, run: string, id: string): PlantedUnit
 // ---------------------------------------------------------------------------------------------------------------------
 // Authoring.
 
-/** A model call that waits for its item's gate and settles its cost there. */
+/** A model call that waits for its item's gate and settles its cost there. A call that spent and threw settles as a
+ * failed line (spend.ts). */
 export function gatedCall(gate: ItemGate, call: AuthorCall, unit: string): AuthorCall {
   return async (role, prompt) => {
     await gate.acquire("call");
@@ -145,8 +147,7 @@ export function gatedCall(gate: ItemGate, call: AuthorCall, unit: string): Autho
     try {
       r = await call(role, prompt);
     } catch (e) {
-      gate.abort();
-      throw e;
+      throw settleThrown(gate, "call", e, unit + ":" + role);
     }
     gate.settle("call", r.costUsd, unit + ":" + role);
     return r;
@@ -311,7 +312,8 @@ export function interimStop(arm: SkillArm, ordered: ReadonlyArray<ReviewRecord |
 /**
  * Runs review cells through the item's gate. A cell with a record is kept. Each attempt gets a fresh seed folder (B
  * stripped, one commit, and the authored plan); a finished session's mount (reviewMount) is written to mounts/<key>
- * before its record. With interim on, a skill arm's exposure stop is written to stops/<arm>.json and its later cells are
+ * before its record. A throw after any attempt spent (a launcher's cap stop, the mount or the exposure reading failing)
+ * carries every attempt's spend (spend.ts), which runGated settles. With interim on, a skill arm's exposure stop is written to stops/<arm>.json and its later cells are
  * left out, now and on a resume.
  */
 export async function runPlantedReviews(o: { cells: ReviewCell[]; units: Map<string, { unit: PlantedUnit; base: string; plan: string; opening: Opening | null }>; reviewer: Reviewer; out: string; session: ReviewSession; gate: ItemGate; interim: boolean; parallel?: number; log?: (line: string) => void }): Promise<ReviewRecord[]> {
@@ -342,24 +344,32 @@ export async function runPlantedReviews(o: { cells: ReviewCell[]; units: Map<str
       const ru: ReviewUnit = { id: c.unit, repo: u.base, plan: u.plan, opening: c.arm === "engphase" ? u.opening : null };
       const prompt = plantedPrompt(c.arm, u.opening?.text ?? null);
       const base = join(o.out, "sessions", cell);
-      const run = await runSession<ReviewLeft>(cell, async (attempt): Promise<Attempt<ReviewLeft>> => {
-        const dir = join(base, "a" + attempt);
-        rmSync(dir, { recursive: true, force: true });
-        const seed = join(dir, "seed");
-        mkdirSync(seed, { recursive: true });
-        cpSync(u.base, join(seed, "repo"), { recursive: true });
-        prepareReviewTree(join(seed, "repo"));
-        cpSync(u.plan, join(seed, "plan.md"));
-        return o.session({ cell, unit: ru, arm: EB_ARM[c.arm], reviewer: o.reviewer, rep: c.rep, attempt, prompt, seed, dir, hook: (evidence) => plantedStopHook(c.arm, evidence) });
-      }, o.log);
-      const left = run.attempts.at(-1)!.result;
-      const gap = run.outcome === "upstream_gap" || run.outcome === "infra_gap";
-      const cost = run.attempts.reduce((s, a) => s + a.costUsd, 0);
-      const mount = gap ? null : reviewMount(c.arm, left.outputs, readFileSync(u.plan, "utf8"));
-      const exposed = isSkillArm(c.arm) && !gap ? erExposure(DETECTOR[c.arm], { transcript: left.outputs.transcript, stateRoot: left.outputs.stateRoot, coverage: left.outputs.coverage, opening: c.arm === "engphase" && u.opening ? { methodology: u.opening.methodology, readRanges: u.opening.readRanges } : null }).exposed : null;
-      const rec: ReviewRecord = { unit: c.unit, arm: c.arm, reviewer: o.reviewer, rep: c.rep, outcome: run.outcome, exposed, exposedBeforeBlock: exposed === null ? null : exposed && left.blocks === 0, blocks: left.blocks, bundleWords: mount?.words ?? 0, truncated: mount?.truncated ?? false, repoEditsDiscarded: gap ? 0 : left.repoEdits, costUsd: cost };
+      let spent = 0;
+      let rec: ReviewRecord;
+      let mount: ReturnType<typeof reviewMount> | null;
+      try {
+        const run = await runSession<ReviewLeft>(cell, async (attempt): Promise<Attempt<ReviewLeft>> => {
+          const dir = join(base, "a" + attempt);
+          rmSync(dir, { recursive: true, force: true });
+          const seed = join(dir, "seed");
+          mkdirSync(seed, { recursive: true });
+          cpSync(u.base, join(seed, "repo"), { recursive: true });
+          prepareReviewTree(join(seed, "repo"));
+          cpSync(u.plan, join(seed, "plan.md"));
+          const a = await o.session({ cell, unit: ru, arm: EB_ARM[c.arm], reviewer: o.reviewer, rep: c.rep, attempt, prompt, seed, dir, hook: (evidence) => plantedStopHook(c.arm, evidence) });
+          spent += a.costUsd;
+          return a;
+        }, o.log);
+        const left = run.attempts.at(-1)!.result;
+        const gap = run.outcome === "upstream_gap" || run.outcome === "infra_gap";
+        mount = gap ? null : reviewMount(c.arm, left.outputs, readFileSync(u.plan, "utf8"));
+        const exposed = isSkillArm(c.arm) && !gap ? erExposure(DETECTOR[c.arm], { transcript: left.outputs.transcript, stateRoot: left.outputs.stateRoot, coverage: left.outputs.coverage, opening: c.arm === "engphase" && u.opening ? { methodology: u.opening.methodology, readRanges: u.opening.readRanges } : null }).exposed : null;
+        rec = { unit: c.unit, arm: c.arm, reviewer: o.reviewer, rep: c.rep, outcome: run.outcome, exposed, exposedBeforeBlock: exposed === null ? null : exposed && left.blocks === 0, blocks: left.blocks, bundleWords: mount?.words ?? 0, truncated: mount?.truncated ?? false, repoEditsDiscarded: gap ? 0 : left.repoEdits, costUsd: spent };
+      } catch (e) {
+        throw addSpend(e, spent);
+      }
       return {
-        costUsd: cost,
+        costUsd: spent,
         commit: () => {
           if (mount) writeMount(join(o.out, "mounts", cell), mount);
           writeJson(join(records, cell + ".json"), rec);

@@ -8,12 +8,14 @@
 // calls, eng-build's review launcher with both skill arms at the restore pin, and eng-build's build launcher with each
 // cell's mounts; the dry run and the tests pass stub launchers on a temporary ledger.
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { EbError } from "../../eng-build/errors.ts";
 import { buildLauncher, reviewLauncher } from "../../eng-build/launch.ts";
 import { underLease, type Launcher, type Paid, type ReviewSession } from "../../eng-build/pipeline.ts";
+import { addSpend } from "../../eng-build/spend.ts";
 import { claudePin } from "../../eng-build/session-image.ts";
 import { MeterError, MODELS, openMeter, type ModelKey } from "../../product-value/meter.ts";
 import { LedgerError, readItem } from "../../../src/runner/ledger/record.ts";
@@ -27,7 +29,7 @@ import { judgeAll, ROLE_MODEL, type JudgeCall, type JudgeRole } from "../reading
 import { JUDGE_MODELS } from "../readings/local.ts";
 import type { AuthorCall } from "./author.ts";
 import { ebSession, type MountTable, type PlantedSession } from "./build.ts";
-import { allInProjection, checkAllIn, ITEMS, itemOf, ItemGate, runSteps, type AllIn, type Kind } from "./ledger.ts";
+import { allInProjection, checkAllIn, ITEMS, itemOf, ItemGate, runSteps, settleThrown, type AllIn, type Kind } from "./ledger.ts";
 import { ALLOWANCE_USD, AUTHOR_MAX_TOKENS, AUTHOR_MODELS, EP_PROGRAM, EP_RUN, EP_SKILL, JUDGE_MAX_TOKENS, readStep, type AuthorRole } from "./local.ts";
 import { PIN_COMMAND } from "./pin.ts";
 import { authorStep, batchDraw, buildCells, buildsStage, bundleInput, comparisonPlanned, comparisonUnits, drawFile, gateArms, hintedTodo, reviewsStage, runRecords, smokeStage, unitFolders, type AuthorStep, type UnitSource } from "./pipeline.ts";
@@ -113,34 +115,45 @@ export const authorRouteProblems = (routes: Readonly<Record<AuthorRole, ModelKey
 const CARBON_FIX = "add a carbon ModelKey (google/gemini-4-carbon on OpenRouter, pinned to Google) to lanes/product-value/meter.ts, its price row to src/runner/pricing/prices.ts, and its route here";
 
 /** A meter launcher for one set of role routes: it refuses before any lease opens when a role it will call has no
- * route, and counts a call whose cost the meter could not read at the call allowance, so the gate never undercounts. */
-export function meterLauncher<R extends string>(o: { out: string; cacheDir: string; maxTokens: number; effort: string | null; label: string; models: Readonly<Record<R, string>>; routes: Readonly<Record<R, ModelKey | null>>; roles: readonly R[] }): Launcher<Metered<R>> {
+ * route. A call costs what its meter holds, spent plus unknown; an answered call whose cost the meter could not read
+ * counts at the call allowance, so the gate never undercounts, and a refusal the proxy answered before it reserved
+ * anything costs nothing. A call that billed and then failed (a non-200 answer, no text, a provider drift stop) throws
+ * with that cost on its error (spend.ts), which the gated callers settle. fetch and env reach the meter for the keyless
+ * tests. */
+export function meterLauncher<R extends string>(o: { out: string; cacheDir: string; maxTokens: number; effort: string | null; label: string; models: Readonly<Record<R, string>>; routes: Readonly<Record<R, ModelKey | null>>; roles: readonly R[]; fetch?: typeof fetch; env?: Record<string, string | undefined> }): Launcher<Metered<R>> {
   return async (p) => {
     const problems = routeProblems(o.models, o.routes, o.roles);
     if (problems.length) return fail("E_EP_NOT_BUILT", "the " + o.label + " routes are not all built, so no lease opened:\n" + problems.join("\n") + "\n" + CARBON_FIX);
-    const meter = await openMeter({ item: p.item, runId: EP_RUN, out: o.out, cacheDir: o.cacheDir, maxOutputTokens: o.maxTokens, amountMicros: Math.round(p.capUsd * 1_000_000), record: p.record, ledger: p.ledger });
+    const meter = await openMeter({ item: p.item, runId: EP_RUN, out: o.out, cacheDir: o.cacheDir, maxOutputTokens: o.maxTokens, amountMicros: Math.round(p.capUsd * 1_000_000), record: p.record, ledger: p.ledger, ...(o.fetch ? { fetch: o.fetch } : {}), ...(o.env ? { env: o.env } : {}) });
     const call: Metered<R> = async (role, prompt) => {
       if (!o.roles.includes(role)) return fail("E_USAGE", "this launch did not check the route for " + role);
-      const r = await meter.call({ model: o.routes[role]!, prompt, maxTokens: o.maxTokens, effort: o.effort, label: o.label + ":" + role });
-      if (r.status !== 200 || r.text === null) return fail("E_USAGE", "the " + o.label + " " + role + " call ended " + r.status + (r.problem ? " (" + r.problem + ")" : "") + "; rerun the step, which reuses the meter's cached replies");
-      return { text: r.text, costUsd: r.cached ? 0 : r.micros === null ? ALLOWANCE_USD.call : r.micros / 1_000_000 };
+      let r: Awaited<ReturnType<typeof meter.call>>;
+      try {
+        r = await meter.call({ model: o.routes[role]!, prompt, maxTokens: o.maxTokens, effort: o.effort, label: o.label + ":" + role });
+      } catch (e) {
+        throw e instanceof MeterError && e.code === "E_PV_PROVIDER_DRIFT" ? addSpend(e, ALLOWANCE_USD.call) : e;
+      }
+      const costUsd = r.cached ? 0 : r.micros === null ? (r.status === 200 ? ALLOWANCE_USD.call : 0) : (r.micros + (r.unknown_micros ?? 0)) / 1_000_000;
+      if (r.status !== 200 || r.text === null) throw addSpend(new EpError("E_USAGE", "the " + o.label + " " + role + " call ended " + r.status + (r.problem ? " (" + r.problem + ")" : "") + "; rerun the step, which reuses the meter's cached replies"), costUsd);
+      return { text: r.text, costUsd };
     };
     return { lease_id: meter.leaseId, backend: call, close: async () => void (await meter.close()) };
   };
 }
 
-/** A judge call that waits for the judge item's gate and settles its cost there. */
+/** A judge call that waits for the judge item's gate and settles its cost there, under the role and the prompt's digest,
+ * so a resume that repeats a cached call counts one cell. A call that spent and threw settles as a failed line. */
 export function gatedJudge(gate: ItemGate, call: Metered<JudgeRole>): JudgeCall {
   return async (role, prompt) => {
+    const cell = role + ":" + createHash("sha256").update(prompt).digest("hex").slice(0, 16);
     await gate.acquire("call");
     let r: { text: string; costUsd: number };
     try {
       r = await call(role, prompt);
     } catch (e) {
-      gate.abort();
-      throw e;
+      throw settleThrown(gate, "call", e, cell);
     }
-    gate.settle("call", r.costUsd, role);
+    gate.settle("call", r.costUsd, cell);
     return r.text;
   };
 }

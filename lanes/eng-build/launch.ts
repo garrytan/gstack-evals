@@ -37,6 +37,7 @@ import type { Arm, Reviewer, SessionOutcome, SkillArm } from "./types.ts";
 import { sessionImage, type SessionImage } from "./session-image.ts";
 import { readUnit } from "./unit.ts";
 import { openMeter } from "../product-value/meter.ts";
+import { addSpend, spending } from "./spend.ts";
 
 const ROOT = join(import.meta.dir, "../..");
 const sha = (b: string | Buffer) => createHash("sha256").update(b).digest("hex");
@@ -120,28 +121,30 @@ export function reviewLauncher(o: { arms: Exclude<Arm, "none">[]; reviewer: Revi
         return { end: "infra", costUsd: ran.micros / 1_000_000, result: { dir: run, outputs: { plan: null, transcript: "", stateRoot: null, coverage: null }, repoEdits: 0, blocks: hook?.blocks() ?? 0 } };
       }
       const trial = ran.trial;
-      const transcriptFile = join(run, "host", "transcript.ndjson");
-      const transcript = existsSync(transcriptFile) ? readFileSync(transcriptFile, "utf8") : null;
-      const { end, why } = reviewEnd(erOutcome(trial.record.termination, transcript).outcome, s.cell);
-      if (why) o.log?.("cell " + s.cell + " a" + s.attempt + ": " + why);
-      const kept = (captured as ReviewCapture | null) ?? fail("E_USAGE", "cell " + s.cell + " a" + s.attempt + ": the trial ended before its work tree was read");
-      const dirOf = (d: string) => (existsSync(d) ? d : null);
-      return { end, costUsd: ran.micros / 1_000_000, result: { dir: run, outputs: { plan: kept.plan, transcript: transcript ?? "", stateRoot: skillArm ? dirOf(join(run, "host", "gstack-state")) : null, coverage: dirOf(join(run, "host", "plan-coverage")) }, repoEdits: kept.repoEdits, blocks: hook?.blocks() ?? 0 } };
+      return spending(ran.micros / 1_000_000, () => {
+        const transcriptFile = join(run, "host", "transcript.ndjson");
+        const transcript = existsSync(transcriptFile) ? readFileSync(transcriptFile, "utf8") : null;
+        const { end, why } = reviewEnd(erOutcome(trial.record.termination, transcript).outcome, s.cell);
+        if (why) o.log?.("cell " + s.cell + " a" + s.attempt + ": " + why);
+        const kept = (captured as ReviewCapture | null) ?? fail("E_USAGE", "cell " + s.cell + " a" + s.attempt + ": the trial ended before its work tree was read");
+        const dirOf = (d: string) => (existsSync(d) ? d : null);
+        return { end, costUsd: ran.micros / 1_000_000, result: { dir: run, outputs: { plan: kept.plan, transcript: transcript ?? "", stateRoot: skillArm ? dirOf(join(run, "host", "gstack-state")) : null, coverage: dirOf(join(run, "host", "plan-coverage")) }, repoEdits: kept.repoEdits, blocks: hook?.blocks() ?? 0 } };
+      });
     };
     return { lease_id: rig.recovery?.lease_id ?? "", backend: session, close: async () => void (await rig.close()) };
   };
 }
 
 /** Runs a review attempt's trial and finalizes its meter on every path. A throw from the ledger or this lane, such as a
- * cap stop, still stops the stage once the meter is final; any other throw, such as the sandbox failing to start, ends
- * the attempt infra (one rerun, then a gap) with its message. */
+ * cap stop, still stops the stage once the meter is final, carrying what the attempt spent (spend.ts); any other throw,
+ * such as the sandbox failing to start, ends the attempt infra (one rerun, then a gap) with its message. */
 export async function finishTrial<T>(run: () => Promise<T>, finalize: () => Promise<{ micros: number }>): Promise<{ trial: T; micros: number } | { trial: null; error: string; micros: number }> {
   let trial: T;
   try {
     trial = await run();
   } catch (error) {
     const { micros } = await finalize();
-    if (error instanceof EbError || error instanceof LedgerError) throw error;
+    if (error instanceof EbError || error instanceof LedgerError) throw addSpend(error, micros / 1_000_000);
     return { trial: null, error: (error instanceof Error ? error.name + ": " + error.message : String(error)).slice(0, 300), micros };
   }
   return { trial, micros: (await finalize()).micros };
@@ -205,7 +208,7 @@ function findDir(dir: string, name: string): string | null {
  * sessionEnd), with every limit scored as is and an upstream or infra end sent to the outcome rule's retry. */
 /** Stops a build attempt that the item's cap or a halt ended: the driver stage ended cap_stop or halted, or real_agent's
  * session open met the cap (its ledger_cap_stop event). The stage is then incomplete, so the cell is never saved as a gap
- * and never retried to change a reading. */
+ * and never retried to change a reading. The session adds what the attempt spent to the stop it throws (spend.ts). */
 export function buildStop(cell: string, ended: string | null, events: string | null): void {
   const refused = (events ?? "").split("\n").some((l) => /"event":\s*"ledger_cap_stop"/.test(l));
   if (ended === "cap_stop" || ended === "halted" || refused) fail("E_EB_CELL_INCOMPLETE", "the driver stopped cell " + cell + " (" + (ended === "cap_stop" || ended === "halted" ? "its stage ended " + ended : "the session open met the cap") + "); the stage is incomplete and is never retried to change a reading");
@@ -312,14 +315,23 @@ export function buildLauncher(o: { arm: Arm | Arm[]; units: Map<string, { dir: s
       const model = HARBOR_MODEL[BUILD_MODEL] ?? fail("E_USAGE", "no Harbor model for " + BUILD_MODEL);
       const h = await runAsync(o.harbor ?? "harbor", ["run", "-y", "-p", task, "-a", "real_agent:RealAgent", "-m", model, "--base-url", proxy, ...Object.entries(ak).flatMap(([k, v]) => ["--ak", k + "=" + v]), "-e", "docker", "--extra-docker-compose", join(ROOT, "quick/laneb/runner/agent-caps.compose.yaml"), "--extra-docker-compose", compose, "-o", join(out, "jobs"), "--job-name", "eb-" + sha(label + s.attempt + Date.now()).slice(0, 12), "--disable-verification", "--delete"], env, (registry.arms[s.armName]!.limits.wall_limit_sec + 900) * 1000);
       writeFileSync(join(out, "harbor.log"), h);
-      spawnSync(o.docker ?? "docker", ["run", "--rm", "--network", "none", "--user", "0:0", "-v", tree + ":/eb-tree", "--entrypoint", "chown", img.id, "-R", (process.getuid?.() ?? 1000) + ":" + (process.getgid?.() ?? 1000), "/eb-tree"], { encoding: "utf8", timeout: 300_000 });
-      restoreTree(tree, img.deps, img.depFiles);
       const ev = findDir(join(out, "jobs"), "evaluator");
-      buildStop(s.cell, await stageEnded(), ev && existsSync(join(ev, "usersim-events.jsonl")) ? readFileSync(join(ev, "usersim-events.jsonl"), "utf8") : null);
-      const summary = ev && existsSync(join(ev, "real-summary.json")) ? (JSON.parse(readFileSync(join(ev, "real-summary.json"), "utf8")) as Record<string, any>) : null;
+      let summary: Record<string, any> | null = null;
+      let unread: unknown = null;
+      try {
+        summary = ev && existsSync(join(ev, "real-summary.json")) ? (JSON.parse(readFileSync(join(ev, "real-summary.json"), "utf8")) as Record<string, any>) : null;
+      } catch (e) {
+        unread = e;
+      }
       const spent = typeof summary?.proxy?.spent_micros === "number" ? summary.proxy.spent_micros / 1_000_000 : 0;
-      const outcome = buildEnd(summary);
-      return { outcome, tree: ev && existsSync(join(ev, "final.patch")) ? ev : null, costUsd: spent };
+      return spending(spent, async () => {
+        spawnSync(o.docker ?? "docker", ["run", "--rm", "--network", "none", "--user", "0:0", "-v", tree + ":/eb-tree", "--entrypoint", "chown", img.id, "-R", (process.getuid?.() ?? 1000) + ":" + (process.getgid?.() ?? 1000), "/eb-tree"], { encoding: "utf8", timeout: 300_000 });
+        restoreTree(tree, img.deps, img.depFiles);
+        buildStop(s.cell, await stageEnded(), ev && existsSync(join(ev, "usersim-events.jsonl")) ? readFileSync(join(ev, "usersim-events.jsonl"), "utf8") : null);
+        if (unread !== null) throw unread;
+        const outcome = buildEnd(summary);
+        return { outcome, tree: ev && existsSync(join(ev, "final.patch")) ? ev : null, costUsd: spent };
+      });
     };
     return {
       lease_id: stage.lease_id,

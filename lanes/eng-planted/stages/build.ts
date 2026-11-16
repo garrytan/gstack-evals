@@ -28,6 +28,7 @@ import { join } from "node:path";
 import { armName, BUILD_LINE, REVIEW_LINE, runSessionCell, type BuildSession } from "../../eng-build/build-stage.ts";
 import { bundleParts, type ReviewOutputs } from "../../eng-build/bundle.ts";
 import { testLinesAdded } from "../../eng-build/pipeline.ts";
+import { addSpend } from "../../eng-build/spend.ts";
 import { cut } from "../../product-value/author/run.ts";
 import { fail } from "../errors.ts";
 import { FROZEN } from "../frozen.ts";
@@ -176,8 +177,8 @@ export function ebSession(eb: BuildSession, table: MountTable): PlantedSession {
 
 export const buildKey = (unit: string, arm: BuildArm, reviewer: Reviewer | null, rep: number) => (unit + ":" + arm + ":" + (reviewer ?? "-") + ":" + rep).replace(/[^A-Za-z0-9._-]/g, "_");
 
-/** One build cell: the session under the outcome rule, then the grader and catch. An error after the session spent
- * carries that spend as spentUsd, which runGated settles. */
+/** One build cell: the session under the outcome rule, then the grader and catch. An error after a session spent
+ * carries that spend (spend.ts), every earlier attempt's included, which runGated settles. */
 export async function runPlantedBuild(o: { unit: PlantedUnit; unitDir: string; arm: BuildArm; reviewer: Reviewer | null; rep: number; note: string; hint?: string | null; mount: { plan: string; review: string | null }; review?: ReviewRecord | null; session: PlantedSession; grader: PlantedGrader; coverage?: (unitDir: string, tree: string) => Promise<number | null>; log?: (line: string) => void }): Promise<GradedBuild> {
   const cell = buildKey(o.unit.id, o.arm, o.reviewer, o.rep);
   if (isReviewed(o.arm) !== (o.reviewer !== null)) fail("E_USAGE", "cell " + cell + ": a reviewed arm names its reviewer, and no other arm does");
@@ -224,7 +225,6 @@ export async function runPlantedBuild(o: { unit: PlantedUnit; unitDir: string; a
       costUsd: cost,
     };
   } catch (e) {
-    if (cost > 0 && typeof e === "object" && e !== null) Object.assign(e, { spentUsd: cost });
-    throw e;
+    throw addSpend(e, cost);
   }
 }
