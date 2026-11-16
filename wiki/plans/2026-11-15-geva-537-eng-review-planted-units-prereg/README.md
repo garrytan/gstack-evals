@@ -18,6 +18,9 @@ links:
   - garrytan/gstack#4375
 attachments:
   - c730757f068ec0782153d257d83eeb0f38536fc2347f88c1862cae20c5186be8  review-record.md
+  - 783f9380b5dbb5c5d8d11306c93dd5fbc6858ebb8cda3a0a7312e1b4d209dcd4  power.py
+  - 60e9446f42b7df1b7d4dd04e291260900b3f832c1e545165af4db43c81a5ce29  power.txt
+  - 2c6a9094fe3e10a606ef5a2a4d058a938687b28ce68ee01eb6f4b44554cb403c  power-supply.txt
 ---
 
 # Preregistration: does a plan reviewed by gstack's engineering review lead to code that avoids, and tests that catch, real bugs?
@@ -53,7 +56,7 @@ Garry said "do it" on 2026-11-15 (relayed by Harness Evals) to a third measureme
 
 ## Big decisions
 
-1. **Units: planted from real fixes, not real changes.** A unit is one real merged fix commit F with a regression test, in a permissive repository: the repository at F's parent (the real buggy code) with the bodies of the functions F changed removed, committed as a one-commit tree, and a plan to implement them that is silent about the condition F fixed. Why: attempt 2 needed a change and a later fix with runnable tests in the same window (2 of 51 survived), while any well-tested repository has many fixes that ship with a test, so supply stops being the limit and the bug and its test are real. What it costs: the claim narrows from "planning a new change" to "planning the implementation of real functions whose first version shipped a real bug". What would flip it: the keyless supply count in the frozen sandbox coming in under 80 qualifiers.
+1. **Units: planted from real fixes, not real changes.** A unit is one real merged fix commit F with a regression test, in a permissive repository: the repository at F's parent (the real buggy code) with the bodies of the functions F changed removed, committed as a one-commit tree, and a plan to implement them that is silent about the condition F fixed. Why: attempt 2 needed a change and a later fix with runnable tests in the same window (2 of 51 survived), while any well-tested repository has many fixes that ship with a test, so supply stops being the limit and the bug and its test are real. What it costs: the claim narrows from "planning a new change" to "planning the implementation of real functions whose first version shipped a real bug". What would flip it: the keyless supply count in the frozen sandbox coming in under 80 qualifiers. It came in at 131 usable units (section 2).
 2. **Only units a review could plausibly help.** Each unit gets a blind foreseeability rating from two raters in two families (could a careful reviewer name the condition from the plan and the code alone?). Units both raters call unforeseeable leave the comparison draw. A hinted build (the builder told the condition) also drops units whose fix test can't be passed by an independent implementation. Why: unwinnable and unforeseeable units dilute every contrast toward zero and would make the content raise worse.
 3. **Primary: a judge-free composite of what ships.** Each build scores half a point for code that passes the real fix's failing cases (avoid, ENG-3) and half for its own tests catching the real bug on the real buggy code (catch, ENG-2). Why: both are the skill's named aims (coverage and test plan, edge cases and failure modes), both are deterministic, and averaging two correlated reads gains power over either alone. The pilot reads each component's control level first: both in band keeps the composite, one in band makes it the primary alone, both out of band stops.
 4. **Arms.** Reviewers, all Opus 5.5 in Claude Code: plain with no gstack (R44), autoplan's eng phase, and the restored standalone /plan-eng-review, both at the restore's gstack commit with the Stop hook that enforces their procedure. Autoplan's Phase 3 loads the same plan-eng-review/SKILL.md inside its own wrapper, so standalone minus eng phase reads that wrapper. Build-only controls, descriptive: no review, and a fixed stock review (a generic checklist). The builder implements the reviewed plan itself, the way users use the skill, with the review's other files beside it. No lens arm: it would cost about $640 and no decision below needs it.
@@ -106,7 +109,55 @@ Garry said "do it" on 2026-11-15 (relayed by Harness Evals) to a third measureme
 
 **Hosts.** Construction, screening and the recount install packages from unknown authors with the network on, so they run on Ubicloud VMs that hold no key, no sealed plaintext, no ledger and no metering proxy, and every such VM is destroyed after. Mining only clones repositories and reads the GitHub API, and runs no repository code, so it runs on a Capy machine. Paid stages run on a separate host. Long drivers run detached on a named Ubicloud VM with UBI_TTL_HOURS past the longest batch, never on a Capy machine that can sleep.
 
-**Supply read before the prereg freezes.** A keyless probe on 2026-11-15 searched 43 repositories (about 10 an ecosystem, at most 6 candidates mined a repository) and ran the lane's screen containers, one run a tree, not yet any verifier sandbox. Every mined candidate constructed with no apply failure and no tree mismatch: 141 constructed, 133 screened, 50 qualified (Node 23 of 39, Go 12 of 39, Python 11 of 22, Rust 4 of 15 after a one-line fix to the Rust screen recipe, which kept the cargo registry inside the install container so every offline test step failed). Capped at 3 a repository, that is 40 usable units from 20 repositories (7 give 1, 6 give 2, 7 give 3 or more). Qualifiers are small: a median of 1 to 2 planted cases, 19 to 33 stubbed lines and 3 to 5 changed product lines. Most other screen drops were real and trace to two faults fixed below and in section 13: removing whole test files at B broke the remaining tests of 17 of 39 Go packages (shared helpers), and the Go image came from go.mod's minimum version, too old for some test code. Two counts are not in yet: the earliest public date (the probe used the fix's committer date) and the 3-run check in the frozen sandbox, which the probe runs next on up to 15 qualifiers. At about 0.9 usable units a repository searched, 125 to 200 repositories reach the target below; the search frame holds thousands. Before the prereg freezes the size, the full keyless screen and the 3-run recount in the frozen sandbox run on the whole frozen manifest. The comparison needs 64 units, plus 6 calibration units (exposure smoke only) and 6 reserve units, after the paid authoring drops in section 3; at the planning survival of about two thirds, that is about 115 qualifiers. Fewer than 80 qualifiers comes to the Captain before the prereg freezes.
+**Supply read before the prereg freezes.** A keyless probe on 2026-11-15 searched 43 repositories and ran the lane's screen containers outside the frozen sandbox, one run a tree, dating each fix by its committer date. It found 50 qualifiers, 40 usable after the per-repository cap (about 0.9 usable units a repository searched), and two faults fixed below and in section 13: removing whole test files at B broke the remaining tests of 17 of 39 Go packages (shared helpers), and the Go image came from go.mod's minimum version, too old for some test code. The probe overstated supply about sixfold, so the size rests only on the full read below.
+
+The full read ran keyless in the frozen sandbox on Ubicloud VMs on 2026-11-15 and 2026-11-16, with the earliest-public-date filter and the 3-run recount on every qualifier. It ran in three phases drawn in seeded order from the frozen search pools: wave 1 (152 repositories), the extension (201) and stage 2 (600, in 3 batches of 50 a language). Wave 1 and the extension each took a second pass for candidates with no outcome and units still to recount; the tables count each candidate once, at its final outcome. The comparison needs 64 units, plus 6 calibration units (exposure smoke only) and 6 reserve units, after the paid authoring drops in section 3; at the planning survival of about two thirds, that is about 115 qualifiers.
+
+The gate was mechanical (the Captain's rule, 2026-11-15): project only from recount-clean qualifiers after the 3-a-repository cap, each language at its own rate over its remaining repositories up to 625 a language, and search on toward 2,500 repositories only while that projection is at least 115. After wave 1 and the extension it read 256.5 (37 usable units from 353 repositories), so stage 2 ran. Stage 2 stopped at whichever came first: 115 usable units in hand, 2,500 repositories, $100 of VM time for the phase, or the thread's token stop. It ended on the first after batch 3, with 131 usable units from 953 repositories and a projection of 345.9.
+
+| | Wave 1 | Extension | Stage 2 | All |
+|---|---|---|---|---|
+| Repositories searched | 152 | 201 | 600 | 953 |
+| Candidates mined | 148 | 209 | 759 | 1,116 |
+| With an outcome | 148 | 209 | 735 | 1,092 |
+| Dropped at construction | 6 | 18 | 40 | 64 |
+| Dropped at region size | 20 | 34 | 97 | 151 |
+| Dropped by the body check | 32 | 37 | 172 | 241 |
+| Dropped at the screen | 52 | 57 | 226 | 335 |
+| Dropped at the build (no functional case, or the image) | 24 | 20 | 81 | 125 |
+| Dropped by the leak check | 3 | 13 | 22 | 38 |
+| Qualified, all recount-clean in 3 of 3 runs | 11 | 30 | 97 | 138 |
+| Usable after the 3-a-repository cap | 11 | 28 | 92 | 131 |
+
+No qualifier failed its recount. Stage 2's drop reasons, largest first within each check:
+- Screen: no per-case result on M (113), no case that fails on M and passes on F' (39), a test layout the recipe can't run (32: tests in a subfolder, bun test, or no runner found), an install failure (28), no per-case result on B (7), no functional pass on M (3), no test source (3) and the wall-time limit (1).
+- Body check: removed lines found in B's tree (168) or in the unit image (4).
+- Build: no functional case (78), a product hash mismatch (2) and an image that failed to build (1).
+- Construction: a test-removal parse error (32) or a stub parse error (8).
+- Leak: every drop found a later fix's or the merge's lines in the image (22).
+
+| By language | Go | Node | Python | Rust | All |
+|---|---|---|---|---|---|
+| Repositories searched | 231 | 268 | 231 | 223 | 953 |
+| Usable units | 68 | 24 | 35 | 4 | 131 |
+| Usable units a repository searched | 0.29 | 0.09 | 0.15 | 0.02 | 0.14 |
+| Projected at 625 repositories a language | 184.0 | 56.0 | 94.7 | 11.2 | 345.9 |
+
+The 131 usable units come from 79 repositories: 41 give 1 unit, 24 give 2 and 14 give 3. The mix leans to Go and Python, and Rust's 4 units come from 2 repositories. Results print per language as a descriptive, and no claim is made per language.
+
+**Training cutoff (Captain condition 1).** Mining reads the earliest public date of every fix committed from 2026-07-01 on:
+
+| | Wave 1 | Extension | Stage 2 | All |
+|---|---|---|---|---|
+| Dropped: committed in the window, first public before 2026-07-01 | 17 | 19 | 86 | 122 |
+| Dropped: committed after the window, first public before 2026-07-01 | 1 | 1 | 2 | 4 |
+| Dropped: pull request or linked issue unreadable | 0 | 0 | 22 | 22 |
+| Kept: committed after the window, first public inside it | 6 | 8 | 30 | 44 |
+| Outside the frame: first public after 2026-10-31 | 11 | 16 | 78 | 105 |
+
+So the filter dropped 122 fixes that a committer-date window would have kept. The 1,116 candidates above are what remained.
+
+**What has no outcome or no raw log.** 24 stage 2 candidates (Go 6, Node 12, Python 6) have no outcome. On one batch 3 VM, Docker could not start containers (runc failed to apply its cgroup settings), and that shard's screen stopped with E_INTERNAL after 2.5 hours. They are not drops, and they were not rescreened because the stop had been reached. Wave 1's 11 qualifiers were screened before the screen kept raw evidence, so their raw screen logs are gone. Their outcome records and recount results stand, but the colour comparison below could not run on their screens. The supply read's driver ran on a Capy machine rather than on a named VM, against the Hosts rule above. That machine slept once for about 4 hours, which left two finished VMs idle for 6.4 VM-hours (about $1.60) and changed no outcome. The run's drivers follow the rule.
 
 **Change made before the freeze: the body check (Captain ruling, one amendment round).** The first full screen of wave 1 dropped 85 of 148 candidates at the body check, when the check also dropped a unit for a found share above 10% of its body lines. The ruling dropped the share part and kept the run-of-3 test, with a keyless test each way (lines found apart pass; a run of 3 drops). The leak and functional-case checks were read for false positives and left unchanged, because none could be shown with its cases. Real leaks stay dropped, and there is no second round of loosening. Drops by check:
 
@@ -121,6 +172,22 @@ Garry said "do it" on 2026-11-15 (relayed by Harness Evals) to a third measureme
 
 The leak and functional-case counts rose with no change to their code, most likely because units the share part used to stop now reach those checks.
 
+**Change made before the freeze: colour codes in rule 2 (Captain ruling).** A vitest or jest failure message can carry colour codes, which broke rule 2's reading of a crash frame. Rule 2 now strips them before it reads the text, with a keyless test each way. The stored step records were then read raw and stripped by a keyless script that printed counts only:
+
+| Records read | Files | Coloured files | Verdicts that differ |
+|---|---|---|---|
+| Stage 1's screens (the extension and wave 1's second pass) | 722 step records | 26 logs (22 Node console logs the parser never reads, and 4 cargo logs with 137 cases, 6 failing) and 8 vitest reports (703 cases, 103 failing) | 0 |
+| Stage 1's recount pass | 1,478 | 1 log, not a parsed record | 0 |
+| Stage 2, batches 0 to 3 | 11,621 | 16 logs (none a parsed record), 11 JSON files (7 unparsable), 37 node:test files (37 cases, all failing) and 4 vitest reports (395 cases, 34 failing) | 0 |
+
+Wave 1's first-pass screens have no raw logs (above), so they could not be compared.
+
+**Other changes before the freeze.** None changes a check's rule; the last adds one drop reason.
+- The extension's first screen launch failed on the driver's side. The fix touched plumbing only: one launcher per shard, a start check on the pid and progress log, and a copy-back count before any VM is destroyed.
+- From the extension on, the screen keeps each candidate's raw drop evidence when EP_EVIDENCE names a folder (run output, per-case grids, leak hits, recount and grading run records), sealed to custody after each batch (section 15). It never changes an outcome.
+- A unit written again reuses its candidate's label, so a rebuilt unit keeps it.
+- `ep screen --minutes` drops a candidate whose screen runs past a wall-time limit as screen:timeout, so one stuck candidate can't hold a shard. Stage 2 set 90 minutes, and the limit dropped 2 candidates in all (1 in stage 2 and 1 in a second pass).
+
 ## 3. Authoring (paid, after the prereg merges)
 
 - **Plan.** GPT-6.1 Sol (another family from every reviewer and the builder) writes plan.md from the stubbed signatures and doc comments, M's implementation of the region, the functional test files and the region's callers. It never sees F. The plan is what a team writes before building: the goal, the intent and interface of each function, the files, and one line on testing; 200 to 500 words; no code beyond signatures; and no description of the current implementation's edge behavior. The prompt is frozen in the prereg.
@@ -129,7 +196,7 @@ The leak and functional-case counts rose with no change to their code, most like
 - **Foreseeability rating.** Two raters from two families (Gemini 4 Carbon and Opus 5.5, no tools) each see the plan, B's region files and callers, and the hint, never F's diff, and answer yes, maybe or no: could a careful reviewer name this condition from the plan and the code alone? A unit both raters call no leaves the comparison draw (recorded; it can still serve calibration). The primary also prints on yes-only units.
 - **Hinted build (winnability).** One Opus build from the plan plus the hint. A unit whose hinted build passes no planted case in 2 of 3 runs drops as unwinnable (the fix's test is coupled to the original implementation, such as an exact message), recorded with its count.
 - **No-review build.** One Opus build from the plan alone, for every admitted unit: the descriptive no-review arm and the difficulty flag for the content raise (section 7).
-- **Sets.** Calibration (6), comparison (64) and reserve (6) are drawn after authoring in seeded order with the per-repo cap. Batch 1 authors the 6 calibration units and the first 20 comparison units (the pilot); batch 2 runs only after admission. When admitted units fall short, the comparison runs at the achieved number if it is at least 40, with the MDD re-printed; under 40 it stops for the Captain. Reserve units replace a comparison unit lost to infrastructure (an image that no longer builds) in seeded order, recorded.
+- **Sets.** Calibration (6), comparison (64) and reserve (6) are drawn after authoring in seeded order with the per-repo cap. Batch 1 authors the 6 calibration units and the first 20 comparison units (the pilot); batch 2 runs only after admission. When admitted units fall short, the comparison runs at the achieved number if it is at least 40, with the MDD re-printed; under 40 it stops for the Captain. Reserve units replace a comparison unit lost to infrastructure (an image that no longer builds, or a unit that can't be rebuilt to its sealed digests, section 15) in seeded order, recorded.
 
 ## 4. Arms and sessions
 
@@ -206,15 +273,17 @@ Before any judged number counts: Astra's two-call reading is checked against gol
 
 ## 10. Power and MDD
 
-power.py (attached to the prereg, seeded, keyless) simulates the frozen readout: repositories with 1 to 3 units at the supply read's mix and a repository-level effect SD of 0.3 on the logit scale, a unit baseline with SD 1.5 for avoid and for catch, catch possible only when the build's code handled at least one planted case (else 0.03), each skill arm's per-unit effect with SD 0.5 around its mean on both, a per-build effect with SD 0.5 or 1.0 shared by that build's cases, 1 to 3 planted cases a unit (0.55, 0.30, 0.15), an unforeseeable share p of units no arm can move (0, 0.2), and the cluster sign-flip test at alpha 0.05 two-sided. MDD at 80% power, in composite points (ranges over control levels avoid 0.43 to 0.57 and catch 0.21 to 0.36, a composite control of 0.32 to 0.46, build SD 0.5 and 1.0, and unforeseeable share 0 and 0.2; planning repository mix 0.40, 0.35 and 0.25 for 1, 2 and 3 units, about 35 repositories at 64 units; the probe's mix, 0.35, 0.30 and 0.35, gives the same 64 x 3 range, and it is re-run on the full supply read's mix before the freeze; 2,000 simulated runs with 1,000 sign flips each at the reported point):
+power.py (attached to the prereg, seeded, keyless) simulates the frozen readout: repositories with 1 to 3 units at the supply read's mix and a repository-level effect SD of 0.3 on the logit scale, a unit baseline with SD 1.5 for avoid and for catch, catch possible only when the build's code handled at least one planted case (else 0.03), each skill arm's per-unit effect with SD 0.5 around its mean on both, a per-build effect with SD 0.5 or 1.0 shared by that build's cases, 1 to 3 planted cases a unit (0.55, 0.30, 0.15), an unforeseeable share p of units no arm can move (0, 0.2), and the cluster sign-flip test at alpha 0.05 two-sided. MDD at 80% power, in composite points (ranges over control levels avoid 0.43 to 0.57 and catch 0.21 to 0.36, a composite control of 0.32 to 0.46, build SD 0.5 and 1.0, and unforeseeable share 0 and 0.2; the supply read's repository mix, 0.52, 0.30 and 0.18 for 1, 2 and 3 units (41, 24 and 14 of 79 repositories, section 2), about 39 repositories at 64 units; the planning mix, 0.40, 0.35 and 0.25, gives every range below to within 0.01, and the probe's mix gives the same 64 x 3 range; 2,000 simulated runs with 1,000 sign flips each at the reported point):
 
-| Units x reviews and builds a cell | Composite MDD |
-|---|---|
-| 40 x 3 (the floor) | 0.13 to 0.15 |
-| 64 x 2 | 0.12 to 0.14 |
-| **64 x 3 (frozen)** | **0.10 to 0.11** |
-| 80 x 3 | 0.09 to 0.10 |
-| 96 x 3 | 0.08 to 0.09 |
+| Units x reviews and builds a cell | Composite MDD at the supply mix (frozen) | At the planning mix |
+|---|---|---|
+| 40 x 3 (the floor) | 0.13 to 0.14 | 0.13 to 0.15 |
+| 64 x 2 | 0.12 to 0.14 | 0.12 to 0.14 |
+| **64 x 3 (frozen)** | **0.10 to 0.11** | 0.10 to 0.11 |
+| 80 x 3 | 0.09 to 0.10 | 0.09 to 0.10 |
+| 96 x 3 | 0.08 to 0.09 | 0.08 to 0.09 |
+
+power.txt is power.py's output at the planning mix (its default, with no flags), and power-supply.txt is its output at the supply mix (`--mix 0.519,0.304,0.177`). Both are attached, with power.py.
 
 The unforeseeable share leaves the MDD in mean points unchanged, but the effect each movable unit needs grows by 1 / (1 - p): with a fifth of units unmovable, a 10-point mean needs 12.5 points on the rest. At 64 x 3 a true 10-point effect has about 75% power.
 
@@ -257,6 +326,8 @@ Prices at $1 per 1,000 credits, measured where we have them (attempt 1's ledger-
 
 Reserve mechanics: if the running all-in projection for this attempt (settled spend plus each open item's re-projection, crew included) passes $5,000, the run stops for the Captain before spending past it, because Garry gets a heads-up there under R42 (Captain condition 3). Each run item opens one ledger lease; a review or build session is admitted only when the item's settled spend, plus $16 for each attempt in flight, plus the new attempt's allowance, fits under its cap. The first session of each item runs alone, and if its measured cost re-projects the item past its cap, the item stops and comes to the Captain. Run items halt after 10 sessions if the running mean projects past the cap. A draw on the reserve, a cap raise, or a projection past the recorded line comes to the Captain before spend. The content raise is not in the caps above; its projection and cap come to the Captain before it spends (section 7). Caps sit at about 1.2 times each projection.
 
+**Spend before the freeze and re-projection (2026-11-16).** The keyless supply read ran before the freeze, not after it as section 14 first planned, and searched 953 repositories instead of 125 to 200. It spent $49.60 of Ubicloud VM time, under the Captain's separate $100 limit for that phase. This thread had used $231 at list price by the end of the supply read. Re-projected, the Hosts line is about $140 (the $49.60 spent plus the run's $90), and the crew line is about $600 (this thread about $320 to the merge, and the run and results threads about $280). That puts the all-in projection at about $4,521 against the approved $4,321, still under the $5,000 stop. The caps above are as approved. The Captain records each item's cap at the go, and these two lines go to the Captain then.
+
 **Spend order keeps the risk small:** authoring batch 1, the exposure smoke and the pilot cost about $330 of paid calls; if the pilot stops, the attempt ends near $800 all-in with crew.
 
 **Conditional Sol and particle-1 stage** (R54; reviewers only, the Opus builder, plain, eng phase and standalone, 2 a cell on the 64 units, with its own 3-session exposure smoke per arm): Sol about 64 x 2 x ($1.21 + $4.53 + $2.04 + 3 x $2.50) = $1,956; particle-1 about 64 x 2 x ($0.07 + $0.25 + $0.35 + 3 x $2.50) = $1,046; about $3,030 with smokes. It runs only if an Opus skill arm reads helps or hurts, and only after the Captain's go; it takes the attempt past $5,000, so it also goes to Garry. Sol pins main's metering proxy with GST-2384's token-count reservations; any reservation-only refusal above 1% stops for the Captain.
@@ -265,10 +336,10 @@ Reserve mechanics: if the running all-in projection for this attempt (settled sp
 
 Everything new sits in lanes/eng-planted/ behind `gstack-evals ep`, in three parts that share one command table, types.ts, errors.ts and frozen.ts (the frozen sizes and lines, and the restore pin's digests). Reused from main's lanes/eng-build (prereg 2026-11-11-geva-522): recipes, the screen, the unit builder and its eb.json schema, the leak and containment gates, the sandbox sidecar, the review stage and its launcher, the build launcher and session image, catch.ts and recount. Reused from attempt 1's lane on main: render.ts, exposure.ts and stophook.ts. The standalone arm runs through eng-build's review stage as that lane's "precut" arm kind, which is `/plan-eng-review plan.md` with a default install of the pinned gstack, so the arm is the one in section 4 under the lane's older name. Each part has its tests under tests/ep/.
 
-- **construct/:** the repository search and seeded draw; the miner (fix commits in the frame by earliest public date, read from the GitHub API); the region finder (the enclosing function or method of each product hunk at P, with ast-grep 0.51.2); the stubber per language with the Rust test-region rule; B, M and F' in a local mirror; the unit build in the frozen grading sandbox with rule 1's functional set, the crash class and the keyless signature note; the /testbed one-commit check; the body check; the 3-run recount; the planted grader the build stage calls (planted and functional cases on a tree, and a build's catch with the null rule); the supply count; and the writer of each unit's folder in the layout the stages part reads. Every drop is a record with a reason.
+- **construct/:** the repository search and seeded draw; the miner (fix commits in the frame by earliest public date, read from the GitHub API); the region finder (the enclosing function or method of each product hunk at P, with ast-grep 0.51.2); the stubber per language with the Rust test-region rule; B, M and F' in a local mirror; the unit build in the frozen grading sandbox with rule 1's functional set, the crash class and the keyless signature note; the /testbed one-commit check; the body check; the 3-run recount; the planted grader the build stage calls (planted and functional cases on a tree, and a build's catch with the null rule); the supply count; the writer of each unit's folder in the layout the stages part reads; and `ep digests`, which writes a unit's content digests and checks a rebuilt unit against the sealed ones (section 15). Every drop is a record with a reason.
 - **stages/:** the paid stages in section 14's order, each item on one ledger lease: authoring (plan, two-way audit, hint, the two raters, the hinted and no-review builds), the seeded draw into calibration, comparison and reserve with the per-repository cap and the reserve swap, the exposure smoke, the pilot, the comparison reviews and builds, the stock builds and the judge calls. Also the plain arm's clean-room check, the restore pin check, a preflight that names every missing piece before any paid row, and a step record per stage, so a stage refuses to start until the steps it needs passed. Where this plan is silent, it fills in these rules: a hint that fails its audit gets one rewrite, as the plan does, then the unit drops; a rater's answer without its FORESEE line is asked once more, and a second unreadable answer drops the unit; a hinted build that ends in a gap drops the unit, counted apart; a model call is a session for the item's gate, with a $2 allowance; an item's re-projection uses each session kind's running mean (the planning figure until that kind is measured); and the check "after 10 sessions" runs at the 10th settled session and after each one from then on.
 - **readings/:** the scores, the exposure gate and the interim stop, the admission pilot and the content raise, the start rule, short supply, the judge and its check, the statistics (the repository sign-flip test, the Holm line, bootstrap intervals), the verdicts and decision rows, and power.py. Each command reads the run's records as JSON and prints its lines; with `--run`, the exposure, pilot and start commands also write the step records the stages part requires.
-- **Shared changes outside the lane:** the Gemini 4 Carbon route on the product-value meter and its OpenRouter price row (endpoints read 2026-11-15T03:37Z: google-vertex at $2 input and $10 output, pinned like Argon, with Argon's image price); the real-outcome verifier's writable-sandbox option (a writable copy of the tree per run, a larger /tmp and more memory) and the frame location in its records, both found by the supply probe; the ep row in src/cli.ts; and the reason codes below.
+- **Shared changes outside the lane:** the Gemini 4 Carbon route on the product-value meter and its OpenRouter price row (endpoints read 2026-11-15T03:37Z: google-vertex at $2 input and $10 output, pinned like Argon, with Argon's image price); the real-outcome verifier's writable-sandbox option (a writable copy of the tree per run, a larger /tmp and more memory) and the frame location in its records, both found by the supply probe; the screen's evidence output in the eng-build screen, unit builder and leak check and in the real-outcome verifier, which writes only when EP_EVIDENCE names a folder and never changes an outcome; the ep row in src/cli.ts; and the reason codes below.
 - **Recipe fixes the probe found:** the Rust screen mounts the cargo registry and git directories as volumes so offline tests see the installed crates; the Go image follows go.mod's toolchain line, else the newest Go release that builds M's tests, instead of go.mod's minimum version.
 - **Scoring and analysis:** the composite and the component rule, per-arm families with the Holm line, the standalone minus eng phase secondary, the stock and no-review lines, the verdict precedence above (no CUT-CANDIDATE path), the pilot's lines and the content raise, MDD and re-projection prints.
 - **Judged secondary:** the two-call Astra reading, the gold labelling, kappa with sensitivity and specificity, the stock and generic controls, the plan-leak flag, the section map.
@@ -279,7 +350,7 @@ Everything new sits in lanes/eng-planted/ behind `gstack-evals ep`, in three par
 ## 14. Order, start rules and stops
 
 1. The prereg PR merges through /ship at gate class; the Captain records line and item caps and gives the go.
-2. Keyless, on the screening host: mine, construct, screen and recount the whole frozen manifest in the frozen sandbox. Under 80 qualifiers stops for the Captain.
+2. Keyless, before the freeze (section 2, done): mine, construct, screen and recount the frozen search pools in the frozen sandbox. After the go, on a screening VM: rebuild each usable unit from its recipe at the frozen harness commit (construct, screen and units), and check it with `gstack-evals ep digests --check` against its sealed digests. A sealed full copy may stand in for the rebuild after the same check. A unit that can't be rebuilt or fails the check counts as lost (section 15), and the draw's floor rules in section 3 apply as written.
 3. Authoring batch 1 (6 calibration and 20 pilot units), then the exposure smoke, then the pilot and its admission read, and the first judge call alone. Any stop line goes to the Captain at once, in the same step that proves it.
 4. Fewer than one Opus skill arm through the exposure gate ends the comparison; one arm through runs that arm's family alone.
 5. Authoring batch 2, then the comparison cells, then the judge check and the judged secondary, then analysis and the results PR.
@@ -287,7 +358,18 @@ Everything new sits in lanes/eng-planted/ behind `gstack-evals ep`, in three par
 
 ## 15. Custody, outside terms and public safety
 
-Units come from public permissive repositories, cloned at build time; nothing is redistributed. The candidate manifest, fix ids, plans, hints, notes, ratings, planted case ids and every transcript are held-out material: sealed with age to the eng-review recipient, stored in org custody, never committed. The public repo gets the prereg, the harness, counts and digests. Model terms: Anthropic, OpenAI and Google API use as in earlier evals; GitHub search and API use within rate limits; no outside benchmark or dataset is used. The no-gstack arm runs where no drive and no gstack path exist.
+Units come from public permissive repositories, cloned at build time; nothing is redistributed. The candidate manifest, fix ids, plans, hints, notes, ratings, planted case ids and every transcript are held-out material: sealed with age to the eng-review recipient, stored in org custody, never committed. The public repo gets the prereg, the harness, counts and digests.
+
+**How units are kept (Captain ruling A1, 2026-11-16).** A unit folder holds its repository's code at B (task.bundle) and its installed dependencies (restore/), which runs to about 20 MB a unit, too large for org custody. So custody keeps each usable unit as its recipe and its digests, not as a full copy:
+- the recipe, sealed for all 138 units: each unit's label, repository, fix commit and mined fix row, with each search's frozen manifest digest and the label maps, which the run rebuilds at the frozen harness commit;
+- the unit folder without task.bundle and restore/, in sealed small parts (138 units, about 14 MB in all);
+- ep-digests.txt in each small part: the B commit and tree, every restore/ file's sha256 and the Dockerfile's sha256. The rebuild proof's script wrote them, and `gstack-evals ep digests` prints the same lines byte for byte (checked on 2 real units, 8 and 2,306 lines).
+
+A rebuild proof on 1 Go and 1 Node unit, rebuilt from their public repositories, matched 1,515 of 1,515 digest lines (2026-11-15). The image tag, image id and seed in eb.json are minted per build by design, so they are not compared. Full sealed copies stay on the supply driver's machine as a spare, but the run does not depend on them. Drop evidence is sealed in custody for every phase except wave 1's first-pass screens (section 2): outcome records whole, and every other file over 256 KB cut to its last 256 KB. The custody log records every opening, deletion and trim.
+
+**Risk: rebuilding from a public repository.** After the freeze, a repository can be deleted, made private or force-pushed, and a dependency can be pulled from its registry. A unit whose repository or commit can't be fetched, or whose rebuild doesn't match its sealed digests line for line, counts as lost to infrastructure. Before the draw it leaves the pool; after the draw the reserve replaces it in seeded order (section 3). It is never rebuilt from a different commit. Lost units print with their count by cause.
+
+Model terms: Anthropic, OpenAI and Google API use as in earlier evals; GitHub search and API use within rate limits; no outside benchmark or dataset is used. The no-gstack arm runs where no drive and no gstack path exist.
 
 ## 16. Risks and limits
 
@@ -297,6 +379,8 @@ Units come from public permissive repositories, cloned at build time; nothing is
 - **Plan realism:** plans are written by Sol from the real code and audited to be silent at the planted condition; they may read cleaner than team plans. Plan words and the first-draft bug-statement rate print.
 - **Contamination:** fixes are public after Opus's stated cutoff by their earliest date, but the buggy pre-fix code may predate it. That pushes every arm toward the original bug equally and biases toward a null, not toward a skill; the popularity and strict-window strata print.
 - **Catch compile:** a build that renames or adds helpers can't transplant its tests; the compile rate prints per arm, and the note fixes public names.
+- **Supply mix:** of 131 usable units, 68 are Go, 35 Python, 24 Node and 4 Rust (from 2 repositories). A skill effect is read mostly on Go and Python, and no claim is made per language.
+- **Rebuilds:** a unit is rebuilt from its public repository at the run's start, so a repository that disappears costs a unit (section 15).
 - **Forced package:** the skills run under a forced invocation and a Stop hook that production gstack doesn't have; every claim names that package.
 - **The eng phase arm** runs autoplan's Phase 3 text alone on a plan, as attempt 1 did, not a whole autoplan run.
 - Not in scope: changing gstack (skill findings go to the Captain), the design, HM, SM and PF lanes, and any posting.
