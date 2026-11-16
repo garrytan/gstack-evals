@@ -23,7 +23,8 @@ the ledger. Changes there keep every existing caller's behavior by default, and 
 - stock-review.md: the stock control's fixed review, written before any unit was seen.
 - construct/: the repository search and seeded draw, the miner with the earliest public date, the region finder, the
   stubber, the root-commit construction, the body and one-commit checks, the planted screen and grading rules, the
-  keyless signature note and the supply count.
+  keyless signature note, the supply count and `ep digests`, the content digests custody checks a rebuilt unit
+  against.
 - stages/: authoring (plan, two-way audit, hint, foreseeability raters, hinted and no-review builds), the three review
   arms at the restore pin, the stock control, the build stage with the reviewed plan mounted, the ledger items and the
   all-in projection stop, and the driven launch.

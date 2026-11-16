@@ -12,6 +12,7 @@ import { readUnit } from "../../eng-build/unit.ts";
 import { EpError } from "../errors.ts";
 import type { DryCase, Ecosystem, PlantedUnit } from "../types.ts";
 import { construct, type Constructed } from "./build.ts";
+import { compareDigests, unitDigests } from "./digests.ts";
 import { bundleHistory } from "./checks.ts";
 import { goFixture, nodeFixture, pyFixture, rustFixture, stubGitHub } from "./fixtures.ts";
 import { pinImages, plantedGrader, qualify, RECIPE, recount, type Outcome } from "./grade.ts";
@@ -297,6 +298,32 @@ export const DRY: DryCase[] = [
       const labelled = /^u[0-9a-f]{12}$/.test(u.id) && /^r[0-9a-f]{12}$/.test(u.repo) && labels.units[u.id]?.candidate === fix.id && !JSON.stringify(u).includes(fix.id);
       const ok = labelled && src.units().length === 1 && commits === "1" && sameTree && m.stubbed.length === 1 && m.implementation.length === 1 && m.tests.length === 1 && m.fix.diff.length > 0 && src.note(u.id).length > 0;
       return { ok, detail: "labelled=" + labelled + " units=" + src.units().length + " B commits=" + commits + " same tree=" + sameTree + " stubbed=" + m.stubbed.length + " implementation=" + m.implementation.length + " tests=" + m.tests.length + " callers=" + m.callers.length };
+    },
+  },
+  {
+    name: "digests: B built twice from the same fix gives the same digest lines, which check as a match; a changed restore file reads mismatch",
+    async run() {
+      const build = async (): Promise<string> => {
+        const { dir, unit } = await constructed("go");
+        const root = dirname(dir);
+        const unitDir = join(root, "unit");
+        mkdirSync(join(unitDir, "environment"), { recursive: true });
+        mkdirSync(join(unitDir, "restore"), { recursive: true });
+        writeFileSync(join(unitDir, "environment", "Dockerfile"), "FROM scratch\n");
+        writeFileSync(join(unitDir, "restore", "go.sum"), "fixture\n");
+        const bare = join(root, "bundle.git");
+        git(root, ["init", "-q", "--bare", bare]);
+        git(dir, ["push", "-q", bare, unit.base + ":refs/heads/main"]);
+        git(bare, ["bundle", "create", "-q", join(unitDir, "environment", "task.bundle"), "--all"]);
+        return unitDir;
+      };
+      const first = await build();
+      const again = await build();
+      const same = compareDigests(unitDigests(first), unitDigests(again));
+      writeFileSync(join(again, "restore", "go.sum"), "changed\n");
+      const moved = compareDigests(unitDigests(first), unitDigests(again));
+      const ok = same.match && !moved.match && moved.kinds.B.matched === 1 && moved.kinds.R.matched === 0 && moved.kinds.D.matched === 1;
+      return { ok, detail: "rebuilt match=" + same.match + ", changed restore file match=" + moved.match + " (R " + moved.kinds.R.matched + " of " + moved.kinds.R.compared + ")" };
     },
   },
   {

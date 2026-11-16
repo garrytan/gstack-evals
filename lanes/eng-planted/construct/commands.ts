@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
-// gstack-evals ep subcommands from the construct part: search, mine, construct, screen, recount, supply and units, over one run
+// gstack-evals ep subcommands from the construct part: search, mine, construct, screen, recount, supply, units and digests, over one run
 // directory on the screening host (plan section 14, step 2). The run directory holds the frozen manifest and its digest,
 // each repository's mined fixes, the constructed units and every fix's outcome; it holds real repository names and
 // shas, so it stays on that host and is never committed. Every command prints counts only. The lane's cli.ts merges
@@ -13,6 +13,7 @@ import { docker } from "../../real-outcome/task/docker.ts";
 import { fail } from "../errors.ts";
 import type { Command, DryCase, Ecosystem } from "../types.ts";
 import { construct, type Constructed } from "./build.ts";
+import { compareDigests, unitDigests } from "./digests.ts";
 import { DRY } from "./dry.ts";
 import { emitUnit, type LabelMap } from "./emit.ts";
 import { qualify, recount, requireSandbox, type Outcome } from "./grade.ts";
@@ -288,7 +289,30 @@ const unitsCmd: Command = {
   },
 };
 
-export const COMMANDS: Record<string, Command> = { search: searchCmd, mine: mineCmd, construct: constructCmd, screen: screenCmd, recount: recountCmd, supply: supplyCmd, units: unitsCmd };
+const digestsCmd: Command = {
+  summary: "write a unit folder's content digests to a custody file, or check a rebuilt unit against its sealed digests (exit 1 on a mismatch)",
+  usage: "--unit <dir> (--out <file outside the repository> | --check <sealed digests file>)",
+  bools: [],
+  async run({ flags }, io) {
+    const unit = need(flags, "--unit");
+    const out = flags.get("--out");
+    const check = flags.get("--check");
+    if ((out === undefined) === (check === undefined)) fail("E_USAGE", "pass exactly one of --out and --check");
+    if (out !== undefined) {
+      const file = resolve(out);
+      if (!relative(REPO, file).startsWith("..")) fail("E_USAGE", "a unit's digests are held out: keep them outside the repository");
+      const lines = unitDigests(unit);
+      writeFileSync(file, lines.join("\n") + "\n");
+      io.out("digests: " + lines.length + " lines written, " + (lines.length - 2) + " of them restore files");
+      return 0;
+    }
+    const r = compareDigests(readFileSync(resolve(check!), "utf8").split("\n").filter(Boolean), unitDigests(unit));
+    io.out("digests: " + (["B", "R", "D"] as const).map((k) => k + " " + r.kinds[k].matched + " of " + r.kinds[k].compared).join(", ") + " matched; " + (r.match ? "match" : "mismatch, so the unit counts as lost (section 15)"));
+    return r.match ? 0 : 1;
+  },
+};
+
+export const COMMANDS: Record<string, Command> = { search: searchCmd, mine: mineCmd, construct: constructCmd, screen: screenCmd, recount: recountCmd, supply: supplyCmd, units: unitsCmd, digests: digestsCmd };
 
 /** This part's keyless dry-run cases; lanes/eng-planted/dryrun.ts runs every part's. */
 export const DRY_CASES: DryCase[] = DRY;
