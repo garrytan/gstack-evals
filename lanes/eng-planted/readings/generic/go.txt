@@ -1,0 +1,31 @@
+# Common Go edge cases, written before any unit was seen (prereg 2026-11-15-geva-537 section 5). One per line.
+nil pointer receiver or nil map access
+nil slice versus empty slice input
+zero value struct fields left unset
+integer overflow when converting between integer types
+off by one at slice bounds
+string indexed by byte instead of rune for unicode
+error returned and then ignored
+send or receive on a closed channel
+context cancellation and deadline exceeded
+concurrent map writes without a mutex
+goroutine leak when the reader stops reading
+trailing slash or empty segment in a path
+time zone and daylight saving transitions
+negative duration or zero timeout
+duplicate keys in the input
+very large input size or memory growth
+empty or whitespace only string input
+case sensitivity in string comparison
+file not found or permission denied
+partial read or short write on io
+json null versus missing field
+division by zero
+unstable sort with equal elements
+defer inside a loop holding resources open
+shadowed err variable inside a block
+invalid utf-8 bytes in input
+maximum and minimum integer values
+retry after a transient network error
+leading zeros or sign characters when parsing numbers
+end of file reached before the expected input

@@ -376,6 +376,21 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_ASK_UNFROZEN](#e_ask_unfrozen) | 2 | U20 |
 | [E_ASK_INPUT](#e_ask_input) | 2 | U20 |
 | [E_ASK_DRYRUN_FAIL](#e_ask_dryrun_fail) | 2 | U20 |
+| [E_EP_NOT_BUILT](#e_ep_not_built) | 2 | U20 |
+| [E_EP_SUPPLY_SHORT](#e_ep_supply_short) | 2 | U20 |
+| [E_EP_TESTBED_HISTORY](#e_ep_testbed_history) | 2 | U20 |
+| [E_EP_INSTRUMENT](#e_ep_instrument) | 2 | U20 |
+| [E_EP_FLOOR](#e_ep_floor) | 2 | U20 |
+| [E_EP_CEILING](#e_ep_ceiling) | 2 | U20 |
+| [E_EP_RAISE](#e_ep_raise) | 2 | U20 |
+| [E_EP_COMPONENTS_SPLIT](#e_ep_components_split) | 2 | U20 |
+| [E_EP_START_RULE](#e_ep_start_rule) | 2 | U20 |
+| [E_EP_EXPOSURE_GATE](#e_ep_exposure_gate) | 2 | U20 |
+| [E_EP_EXPOSURE_STOP](#e_ep_exposure_stop) | 2 | U20 |
+| [E_EP_PROJECTION](#e_ep_projection) | 2 | U20 |
+| [E_EP_REPROJECT](#e_ep_reproject) | 2 | U20 |
+| [E_EP_JUDGE_CHECK](#e_ep_judge_check) | 2 | U20 |
+| [E_EP_DRYRUN_FAIL](#e_ep_dryrun_fail) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -2840,6 +2855,126 @@ Exit 2. Side effects: None: nothing was written. Retry safe: yes. Resumable: yes
 ### E_ASK_DRYRUN_FAIL
 
 Ask replay eval: a dry-run check printed FAIL: a frozen rule did not hold on the synthetic set or its fixtures. The line names the check.
+
+Fix: Read the FAIL line, fix the rule's code, and run the dry run again before any spend.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_EP_NOT_BUILT
+
+Planted-unit eng-review read: a module the prereg names is not built yet, so its subcommand or seam refuses.
+
+Fix: Build the module the line names before running this step.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_EP_SUPPLY_SHORT
+
+Planted-unit eng-review read (sections 2 and 3): the keyless screen and 3-run recount, after the training-cutoff filter, left fewer than 80 qualifiers before the prereg freezes, or authoring admitted fewer than 40 comparison units. The line prints the counts by step and reason.
+
+Fix: Bring the counts to the Captain. Do not --resume; a larger frame is a new prereg decision.
+
+Exit 2. Side effects: Keyless stages spend nothing. After authoring, authoring spend is settled on its lease and the comparison items stay unopened. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_EP_TESTBED_HISTORY
+
+Planted-unit eng-review read (section 2): a unit image or session image holds more than one commit in /testbed/.git or /work/repo/.git, so the real function bodies could reach a session through history. Units are built from a parentless base, so this is a harness fault.
+
+Fix: Fix the unit builder and rebuild the unit; no session may start on the image.
+
+Exit 2. Side effects: None for spend: the check runs before any session on the image. The image is removed. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_EP_INSTRUMENT
+
+Planted-unit eng-review read pilot (section 7, line 1): reach is under 0.60, or hinted builds passed a planted case on under 0.60 of batch 1's screened units, so the instrument can't read the primary. The attempt ends as FIX-METHOD on the instrument.
+
+Fix: Bring the reading to the Captain. Do not --resume.
+
+Exit 2. Side effects: The pilot's reviews and builds are settled in the ledger, open leases are settled and the run record is sealed. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_EP_FLOOR
+
+Planted-unit eng-review read pilot (section 7, line 3): the chosen primary, or both components, sit under 0.10 on plain reviews. FIX-METHOD on task fit; the line prints the functional share first (under 0.50 points at the build setup).
+
+Fix: Bring the reading to the Captain. Do not --resume.
+
+Exit 2. Side effects: The pilot's reviews and builds are settled in the ledger, open leases are settled and the run record is sealed. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_EP_CEILING
+
+Planted-unit eng-review read (section 7, line 4): after the content raise, the chosen primary still sits above 0.75 or its 95% lower bound above 0.65 on plain reviews of hard units, or the supply can't reach 40 hard units. FIX-METHOD on saturation; no cut.
+
+Fix: Bring the reading to the Captain. Do not --resume.
+
+Exit 2. Side effects: The pilot's and the raise's spend are settled in the ledger, open leases are settled and the run record is sealed. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_EP_RAISE
+
+Planted-unit eng-review read pilot (section 7, line 4): plain reviews read a ceiling, so the comparison needs the content raise to hard units. Its projection, hard-unit target and cap print here and need the Captain's go before any raise spend.
+
+Fix: Bring the projection to the Captain. After the Captain records the raise's cap and gives the go, --resume runs the raise.
+
+Exit 2. Side effects: The pilot's spend is settled; no raise spend has happened and no raise lease is open. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_EP_COMPONENTS_SPLIT
+
+Planted-unit eng-review read pilot (section 7, line 4): one component sits at the floor and the other at the ceiling on plain reviews, so neither the composite nor one component can be the primary. FIX-METHOD on task fit.
+
+Fix: Bring the reading to the Captain. Do not --resume.
+
+Exit 2. Side effects: The pilot's reviews and builds are settled in the ledger, open leases are settled and the run record is sealed. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_EP_START_RULE
+
+Planted-unit eng-review read start rule (section 10): after the pilot, the MDD re-printed with the measured control rate, build variance, unforeseeable share and repository mix is above 0.12, so the comparison waits for the Captain before any skill-arm build.
+
+Fix: Bring the re-printed MDD to the Captain with the pre-decided option (move the eng phase arm's remaining budget into more standalone units). --resume continues on the Captain's pick.
+
+Exit 2. Side effects: The pilot's spend is settled; no skill-arm comparison build has started. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_EP_EXPOSURE_GATE
+
+Planted-unit eng-review read exposure smoke (section 6): a skill arm ran its procedure in under 5 of 6 Opus sessions (under 2 of 3 for Sol or particle-1). That arm reads untested (FIX-METHOD on the instrument) and its cap is released; with no Opus skill arm through, the comparison does not start.
+
+Fix: Bring the gate's counts to the Captain for GStack Minder. With one arm through, --resume runs that arm's family alone.
+
+Exit 2. Side effects: The smoke's spend is settled; the failed arm's comparison item is released unopened. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_EP_EXPOSURE_STOP
+
+Planted-unit eng-review read (section 6): a skill arm's exposed share is under 0.70 after its first 24 non-gap comparison sessions, so that arm stops and reads untested.
+
+Fix: Bring the counts to the Captain. --resume continues the other arms; the stopped arm does not restart.
+
+Exit 2. Side effects: The arm's settled sessions are kept; its lease is settled and the rest of its cap released. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_EP_PROJECTION
+
+Planted-unit eng-review read (section 12, the Captain's condition 3): the running all-in projection for the attempt (settled spend plus each open item's re-projection, crew included) passes $5,000. Nothing spends past it until the Captain gives Garry a heads-up and says go.
+
+Fix: Bring the projection to the Captain. --resume continues only after the Captain's go is recorded.
+
+Exit 2. Side effects: Settled sessions are kept; open leases stay open with no session in flight. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_EP_REPROJECT
+
+Planted-unit eng-review read (section 12): an item's first session, measured alone, or its running mean after 10 sessions, re-projects the item past its recorded cap. The item stops.
+
+Fix: Bring the re-projection to the Captain. A cap raise or a reserve draw is the Captain's call; --resume continues after it is recorded.
+
+Exit 2. Side effects: The item's settled sessions are kept; its lease stays open with no session in flight. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_EP_JUDGE_CHECK
+
+Planted-unit eng-review read judge check (section 8): GPT-6 Astra's two-call reading scored a Cohen's kappa under 0.6 against gold on at least 48 bundles, or the stock control scored above 0 after the one allowed rubric revision. The judged secondary is not reported as judged; the primary is unaffected.
+
+Fix: Report the secondary as unjudged in the results. Do not --resume the judge.
+
+Exit 2. Side effects: The judge's calls are settled on its lease; the primary's records are untouched. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_EP_DRYRUN_FAIL
+
+A planted-unit eng-review read dry-run case printed FAIL: a frozen rule did not hold on its fixtures, or the driven launch failed on the real path. The line names the case.
 
 Fix: Read the FAIL line, fix the rule's code, and run the dry run again before any spend.
 

@@ -3,6 +3,7 @@
 // builder's output and readTask's tamper checks, and prepare.sh's restore rules run on host directories.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, symlinkSync, truncateSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { main as real } from "../../lanes/real-outcome/cli.ts";
@@ -169,6 +170,10 @@ describe("build and the static checks", () => {
     for (const script of ["lanes/real-outcome/task/verifier/prepare.sh", "lanes/real-outcome/task/verifier/vrun.py"]) {
       expect(readFileSync(join(tmp.dir, "out/k1/tests", script.split("/").pop()!))).toEqual(readFileSync(join(import.meta.dir, "../..", script)));
     }
+  });
+
+  test("the verifier's own vrun.py stays the copy sealed tasks were built with, so readTask still accepts them", () => {
+    expect(createHash("sha256").update(readFileSync(join(VERIFIER_DIR, "vrun.py"))).digest("hex")).toBe("d56bcf06eaedecfa0884ebd86a86234292291263da4ecb0341739a7fd8321ca9");
   });
 
   test("builds a K4 replay on a replay commit holding exactly the change, and a decoy", () => {

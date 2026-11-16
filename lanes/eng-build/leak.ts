@@ -5,6 +5,7 @@
 // can't carry the fix in. Hits in installed third-party code that names no part of the project are not leaks, as in
 // L2; a hit in the repository or in an installed copy of the project is, and refuses the image with E_EB_LEAK.
 import { randomBytes } from "node:crypto";
+import { keepEvidence } from "./evidence.ts";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -30,7 +31,14 @@ export function leakNeedles(repo: string, base: string, merge: string, fixes: st
   };
   const lines = [...new Set([...addedLines(git(repo, ["diff", "--no-renames", "--no-ext-diff", base, merge])), ...fixes.flatMap((f) => addedLines(product(f + "^1", f)))])];
   if (lines.length === 0) return [];
-  const present = new Set(gitRun(repo, ["grep", "-h", "-o", "-F", ...lines.flatMap((l) => ["-e", l]), base]).stdout.split("\n").map((l) => l.trim()));
+  const dir = mkdtempSync(join(tmpdir(), "eb-needles-"));
+  let present: Set<string>;
+  try {
+    writeFileSync(join(dir, "patterns.txt"), lines.join("\n") + "\n");
+    present = new Set(gitRun(repo, ["grep", "-h", "-o", "-F", "-f", join(dir, "patterns.txt"), base]).stdout.split("\n").map((l) => l.trim()));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
   return lines.filter((l) => !present.has(l)).sort((a, b) => b.length - a.length || a.localeCompare(b));
 }
 
@@ -62,6 +70,7 @@ export function leakCheck(o: { unit: string; image: string; repo: string; runner
     };
     const manifests = Object.fromEntries(section("manifests").map((l) => [l.slice(0, l.indexOf(" ")), Buffer.from(l.slice(l.indexOf(" ") + 1), "base64").toString("utf8")]));
     const { leaks, installed } = sortHits(section("hits").sort(), projectNames({ repo: o.repo, runner: o.runner }, section("packages"), manifests), section("tracked"));
+    if (leaks.length > 0) keepEvidence(o.unit, "leak.json", { leaks, installed });
     if (leaks.length > 0) fail("E_EB_LEAK", o.unit + " step=leak class=fix_or_merge_lines: " + leaks.length + " files in the image hold a later fix's or the merge's lines");
     return { needles: o.needles.length, leaks, installed: installed.length };
   } finally {

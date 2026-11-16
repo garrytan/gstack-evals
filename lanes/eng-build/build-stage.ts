@@ -197,8 +197,9 @@ export interface SessionRun {
   costUsd: number;
 }
 
-/** The seam the driver and real_agent fill: one session attempt from a fresh container. */
-export type BuildSession = (o: { cell: string; unit: BuildUnit; arm: Arm; armName: string; prompt: string; attempt: number }) => Promise<SessionRun>;
+/** The seam the driver and real_agent fill: one session attempt from a fresh container. It reads only the unit's id, so
+ * another lane's unit can run through it. */
+export type BuildSession = (o: { cell: string; unit: Pick<BuildUnit, "id">; arm: Arm; armName: string; prompt: string; attempt: number }) => Promise<SessionRun>;
 export type GraderResult = Pick<GradedBuild, "functional" | "aftermath" | "anchors" | "tCases" | "catches" | "coverage" | "mutation" | "testLinesAdded">;
 /** The seam the verifier fills: grade one final tree in the unit's pinned image, 3 runs. */
 export type Grader = (o: { unit: BuildUnit; tree: string }) => Promise<GraderResult>;
