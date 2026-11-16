@@ -1,0 +1,355 @@
+# task	repo	list	tier	changelog_paths
+AbsaOSS__generate-release-notes-207	AbsaOSS/generate-release-notes	scored	0	
+All-Hands-AI__OpenHands-11914	All-Hands-AI/OpenHands	scored	0	
+BerriAI__litellm-15753	BerriAI/litellm	scored	0	
+BerriAI__litellm-16275	BerriAI/litellm	calibration	0	
+BerriAI__litellm-16315	BerriAI/litellm	calibration	0	
+BerriAI__litellm-16320	BerriAI/litellm	spare	0	
+BerriAI__litellm-16429	BerriAI/litellm	spare	0	
+BerriAI__litellm-16487	BerriAI/litellm	calibration	0	
+BerriAI__litellm-16526	BerriAI/litellm	calibration	0	
+BerriAI__litellm-16550	BerriAI/litellm	none	0	
+BerriAI__litellm-16852	BerriAI/litellm	scored	0	
+BerriAI__litellm-16864	BerriAI/litellm	none	0	
+BerriAI__litellm-16899	BerriAI/litellm	spare	0	
+BerriAI__litellm-16943	BerriAI/litellm	scored	0	
+BerriAI__litellm-16997	BerriAI/litellm	scored	0	
+BerriAI__litellm-17027	BerriAI/litellm	spare	0	
+BrianPugh__cyclopts-609	BrianPugh/cyclopts	spare	0	
+BrianPugh__cyclopts-633	BrianPugh/cyclopts	spare	0	
+BrianPugh__cyclopts-701	BrianPugh/cyclopts	spare	0	
+Cambridge-ICCS__TCTrack-118	Cambridge-ICCS/TCTrack	scored	0	
+Cambridge-ICCS__TCTrack-119	Cambridge-ICCS/TCTrack	scored	0	
+DiamondLightSource__mx-bluesky-1519	DiamondLightSource/mx-bluesky	spare	0	
+ImperialCollegeLondon__proCAT-503	ImperialCollegeLondon/proCAT	spare	0	
+ImperialCollegeLondon__virtual_ecosystem-1232	ImperialCollegeLondon/virtual_ecosystem	scored	0	
+PyPSA__PyPSA-1404	PyPSA/PyPSA	none	0	
+PyPSA__PyPSA-1414	PyPSA/PyPSA	none	0	
+PyPSA__PyPSA-1498	PyPSA/PyPSA	scored	0	
+SciTools__iris-6754	SciTools/iris	scored	0	
+UXARRAY__uxarray-1423	UXARRAY/uxarray	spare	0	
+Ultraplot__UltraPlot-357	Ultraplot/UltraPlot	none	0	
+VRSEN__agency-swarm-468	VRSEN/agency-swarm	scored	0	
+a2aproject__a2a-python-576	a2aproject/a2a-python	scored	0	
+a2aproject__a2a-python-682_interface	a2aproject/a2a-python	calibration	0	
+aallan__vera-662_interface	aallan/vera	calibration	1	CHANGELOG.md,HISTORY.md
+adrn__gala-495	adrn/gala	scored	1	CHANGES.rst
+aeye-lab__pymovements-1408	aeye-lab/pymovements	scored	0	
+ag2ai__faststream-2701	ag2ai/faststream	scored	0	
+agentscope-ai__qwenpaw-3278	agentscope-ai/QwenPaw	scored	0	
+agronholm__anyio-1121	agronholm/anyio	scored	1	docs/versionhistory.rst
+agronholm__anyio-1134	agronholm/anyio	scored	1	docs/versionhistory.rst
+alibaba__opensandbox-426	alibaba/OpenSandbox	scored	0	
+alibaba__opensandbox-816	alibaba/OpenSandbox	scored	0	
+allenneuraldynamics__aind-data-schema-1677	AllenNeuralDynamics/aind-data-schema	scored	0	
+apache__iceberg-python-2797	apache/iceberg-python	spare	0	
+apache__iceberg-python-3295	apache/iceberg-python	spare	0	
+ardupilot__methodicconfigurator-1201	ArduPilot/MethodicConfigurator	scored	0	
+astronomer__astronomer-cosmos-2332	astronomer/astronomer-cosmos	none	0	
+astronomy-commons__hats-648	astronomy-commons/hats	scored	0	
+astronomy-commons__lsdb-1349	astronomy-commons/lsdb	spare	0	
+astropy__astropy-18681	astropy/astropy	scored	1	docs/changes/io.fits/18681.bugfix.rst
+astropy__astropy-18752	astropy/astropy	scored	1	docs/changes/table/18752.bugfix.rst
+astropy__astropy-18818	astropy/astropy	calibration	1	docs/changes/table/18818.bugfix.rst
+astropy__astropy-18868	astropy/astropy	spare	0	
+astropy__astropy-18911	astropy/astropy	scored	0	
+astropy__astropy-18958	astropy/astropy	calibration	1	docs/changes/modeling/18958.bugfix.rst
+astropy__astropy-19055	astropy/astropy	scored	1	docs/changes/units/19055.bugfix.rst
+astropy__astropy-19438	astropy/astropy	spare	1	docs/changes/io.fits/19438.bugfix.rst
+avaiga__taipy-2797	Avaiga/taipy	spare	0	
+aws-cloudformation__cfn-python-lint-4368	aws-cloudformation/cfn-python-lint	spare	0	
+aws__bedrock-agentcore-sdk-python-279_interface	aws/bedrock-agentcore-sdk-python	scored	0	
+azure-samples__azure-search-openai-demo-3025	Azure-Samples/azure-search-openai-demo	spare	0	
+bas-amop__PolarRoute-server-159	bas-amop/PolarRoute-server	spare	0	
+basicmachines-co__basic-memory-334	basicmachines-co/basic-memory	spare	0	
+basicmachines-co__basic-memory-341	basicmachines-co/basic-memory	scored	0	
+basicmachines-co__basic-memory-484	basicmachines-co/basic-memory	spare	0	
+beever-ai__beever-atlas-102	Beever-AI/beever-atlas	spare	0	
+beeware__briefcase-2546	beeware/briefcase	scored	1	changes/2490.bugfix.md
+beeware__briefcase-2651	beeware/briefcase	spare	1	changes/2651.feature.md
+bluesky__ophyd-async-1164	bluesky/ophyd-async	scored	0	
+bluesky__ophyd-async-1165	bluesky/ophyd-async	none	0	
+cal-itp__benefits-3330	cal-itp/benefits	scored	0	
+calliope-project__calliope-854	calliope-project/calliope	scored	1	CHANGELOG.md
+careamics__careamics-688	CAREamics/careamics	spare	0	
+celestoai__smolvm-172	CelestoAI/SmolVM	scored	0	
+chaoss__augur-3512	chaoss/augur	scored	0	
+collective__icalendar-921	collective/icalendar	spare	1	CHANGES.rst
+con__nwb2bids-347_interface	con/nwb2bids	scored	0	
+conan-io__conan-19393	conan-io/conan	scored	0	
+conan-io__conan-19604	conan-io/conan	scored	0	
+conan-io__conan-19735_interface	conan-io/conan	scored	0	
+conan-io__conan-19750	conan-io/conan	scored	0	
+containers__ramalama-2487	containers/ramalama	scored	0	
+copier-org__copier-2646	copier-org/copier	scored	0	
+cpp-linter__cpp-linter-hooks-142	cpp-linter/cpp-linter-hooks	scored	0	
+cpp-linter__cpp-linter-hooks-206_interface	cpp-linter/cpp-linter-hooks	scored	0	
+cs-si__eodag-2176	CS-SI/eodag	spare	0	
+dagster-io__dagster-33605	dagster-io/dagster	scored	0	
+dask__dask-12096	dask/dask	scored	0	
+dask__dask-12119	dask/dask	scored	0	
+databricks__dbt-databricks-1428	databricks/dbt-databricks	spare	1	CHANGELOG.md
+deepset-ai__haystack-10029	deepset-ai/haystack	scored	1	releasenotes/notes/use-deepcopy-with-exceptions-snapshot-82cf5b6d2cbb3904.yaml
+deepset-ai__haystack-10171	deepset-ai/haystack	spare	1	releasenotes/notes/fix-tool-invoker-warmup-tool-registry-cda6e84af3387ac8.yaml
+deepset-ai__haystack-10189	deepset-ai/haystack	scored	1	releasenotes/notes/conditional-router-template-error-message-f633f9e786a8c7fc.yaml
+deepset-ai__haystack-10547	deepset-ai/haystack	scored	1	releasenotes/notes/resolve-future-annotations-00bcac141c66fa4e.yaml
+delgan__loguru-1425	Delgan/loguru	calibration	1	CHANGELOG.rst
+delgan__loguru-1451	Delgan/loguru	scored	0	
+deltares__hydrolib-core-1049_interface	Deltares/HYDROLIB-core	scored	0	
+destine-climate-dt__aqua-2768	DestinE-Climate-DT/AQUA	scored	1	CHANGELOG.md
+docling-project__docling-2983	docling-project/docling	scored	0	
+docling-project__docling-2998	docling-project/docling	scored	0	
+dstackai__gpuhunt-197	dstackai/gpuhunt	calibration	0	
+equinor__ert-11988	equinor/ert	scored	0	
+equinor__ert-12275	equinor/ert	spare	0	
+equinor__ert-12491	equinor/ert	spare	0	
+ethereum__web3.py-3800	ethereum/web3.py	scored	1	newsfragments/3800.bugfix.rst
+facelessuser__pymdown-extensions-2807	facelessuser/pymdown-extensions	scored	1	docs/src/markdown/about/changelog.md
+fsspec__universal_pathlib-495	fsspec/universal_pathlib	scored	0	
+fsspec__universal_pathlib-529	fsspec/universal_pathlib	scored	0	
+gammapy__gammapy-6409	gammapy/gammapy	scored	0	
+genericmappingtools__pygmt-4342	GenericMappingTools/pygmt	none	0	
+genericmappingtools__pygmt-4371	GenericMappingTools/pygmt	spare	0	
+genericmappingtools__pygmt-4463	GenericMappingTools/pygmt	scored	0	
+geopython__pygeoapi-2338	geopython/pygeoapi	scored	0	
+getmoto__moto-9350	getmoto/moto	scored	0	
+getmoto__moto-9356	getmoto/moto	scored	0	
+getmoto__moto-9440	getmoto/moto	spare	0	
+getmoto__moto-9549	getmoto/moto	scored	0	
+getmoto__moto-9590	getmoto/moto	calibration	0	
+getmoto__moto-9727	getmoto/moto	spare	0	
+getmoto__moto-9841	getmoto/moto	scored	0	
+getmoto__moto-9903	getmoto/moto	spare	0	
+gitpython-developers__GitPython-2075	gitpython-developers/GitPython	scored	0	
+google__adk-python-3088	google/adk-python	scored	0	
+google__flax-5171	google/flax	scored	0	
+graphistry__pygraphistry-1107_interface	graphistry/pygraphistry	scored	0	
+graphistry__pygraphistry-1277	graphistry/pygraphistry	scored	1	CHANGELOG.md
+harumiweb__exstruct-113	harumiWeb/exstruct	scored	0	
+hdmf-dev__hdmf-1374	hdmf-dev/hdmf	scored	1	CHANGELOG.md
+hiero-ledger__hiero-sdk-python-1914_interface	hiero-ledger/hiero-sdk-python	scored	1	CHANGELOG.md
+hiero-ledger__hiero-sdk-python-2007_interface	hiero-ledger/hiero-sdk-python	spare	1	CHANGELOG.md
+hkuds__openharness-217	HKUDS/OpenHarness	scored	0	
+holoviz__holoviews-6783	holoviz/holoviews	calibration	0	
+holoviz__param-1117	holoviz/param	spare	0	
+huggingface__huggingface_hub-4056	huggingface/huggingface_hub	spare	0	
+huggingface__transformers-43721_interface	huggingface/transformers	scored	0	
+huggingface__transformers-44080	huggingface/transformers	spare	0	
+huggingface__trl-5135	huggingface/trl	scored	0	
+idaholab__MontePy-850	idaholab/MontePy	calibration	1	doc/source/changelog.rst
+idaholab__montepy-882	idaholab/MontePy	scored	1	doc/source/changelog.rst
+idaholab__montepy-933_interface	idaholab/MontePy	spare	1	doc/source/changelog.rst
+iluvcapra__pycmx-15	iluvcapra/pycmx	spare	0	
+imperialcollegelondon__pyrealm-593	ImperialCollegeLondon/pyrealm	calibration	0	
+itsdnns__docsight-437	itsDNNS/docsight	scored	0	
+jlowin__fastmcp-3235	jlowin/fastmcp	scored	0	
+jlowin__fastmcp-3237_interface	jlowin/fastmcp	spare	0	
+jmcgeheeiv__pyfakefs-1286	jmcgeheeiv/pyfakefs	calibration	1	CHANGES.md
+joke2k__django-environ-592	joke2k/django-environ	scored	0	
+joke2k__faker-2309	joke2k/faker	scored	0	
+joshuadavidthomas__django-bird-239	joshuadavidthomas/django-bird	scored	1	CHANGELOG.md
+jsonpickle__jsonpickle-587	jsonpickle/jsonpickle	scored	1	CHANGES.rst
+jsonpickle__jsonpickle-588	jsonpickle/jsonpickle	spare	1	CHANGES.rst
+keras-team__keras-22138	keras-team/keras	scored	0	
+keras-team__keras-22316	keras-team/keras	scored	0	
+keras-team__keras-22330	keras-team/keras	scored	0	
+keras-team__keras-22642	keras-team/keras	scored	0	
+koxudaxi__datamodel-code-generator-2993	koxudaxi/datamodel-code-generator	scored	0	
+koxudaxi__datamodel-code-generator-2996	koxudaxi/datamodel-code-generator	spare	0	
+koxudaxi__datamodel-code-generator-2998	koxudaxi/datamodel-code-generator	spare	0	
+koxudaxi__datamodel-code-generator-3046	koxudaxi/datamodel-code-generator	scored	0	
+koxudaxi__datamodel-code-generator-3070	koxudaxi/datamodel-code-generator	scored	0	
+koxudaxi__datamodel-code-generator-3071	koxudaxi/datamodel-code-generator	calibration	0	
+kubeflow__pipelines-13112	kubeflow/pipelines	scored	0	
+lincc-frameworks__nested-pandas-425	lincc-frameworks/nested-pandas	scored	0	
+line__line-bot-sdk-python-981_interface	line/line-bot-sdk-python	scored	0	
+linkml__linkml-3098	linkml/linkml	scored	0	
+litestar-org__advanced-alchemy-673_interface	litestar-org/advanced-alchemy	scored	0	
+macbre__sql-metadata-625_interface	macbre/sql-metadata	scored	0	
+marimo-team__marimo-6629	marimo-team/marimo	spare	0	
+marimo-team__marimo-6819	marimo-team/marimo	calibration	0	
+marimo-team__marimo-8387_interface	marimo-team/marimo	calibration	0	
+marimo-team__marimo-8401	marimo-team/marimo	scored	0	
+marshmallow-code__marshmallow-2925_interface	marshmallow-code/marshmallow	calibration	1	CHANGELOG.rst
+meltano__meltano-9929	meltano/meltano	scored	0	
+meltano__meltano-9950	meltano/meltano	scored	0	
+mempalace__mempalace-1004	MemPalace/mempalace	scored	1	CHANGELOG.md
+microsoft__Agents-for-python-264	microsoft/Agents-for-python	spare	0	
+microsoft__fabric-cicd-670	microsoft/fabric-cicd	scored	0	
+microsoft__qcodes-8039	microsoft/Qcodes	scored	1	docs/changes/newsfragments/5518.improved
+milvus-io__pymilvus-3273	milvus-io/pymilvus	scored	0	
+mlte-team__mlte-809	mlte-team/mlte	none	0	
+mmornati__home-assistant-csnet-home-132	mmornati/home-assistant-csnet-home	scored	0	
+modelcontextprotocol__python-sdk-1864	modelcontextprotocol/python-sdk	spare	0	
+mwouts__jupytext-1443	mwouts/jupytext	spare	1	CHANGELOG.md
+narwhals-dev__narwhals-3251	narwhals-dev/narwhals	spare	0	
+narwhals-dev__narwhals-3478	narwhals-dev/narwhals	spare	0	
+narwhals-dev__narwhals-3480	narwhals-dev/narwhals	scored	0	
+ncar__geocat-comp-807	NCAR/geocat-comp	scored	0	
+ncar__geocat-comp-811	NCAR/geocat-comp	scored	0	
+nesquena__hermes-webui-1818	nesquena/hermes-webui	scored	1	CHANGELOG.md
+nesquena__hermes-webui-2056	nesquena/hermes-webui	scored	1	CHANGELOG.md
+nesquena__hermes-webui-330_interface	nesquena/hermes-webui	scored	1	CHANGELOG.md
+networkx__networkx-8369	networkx/networkx	scored	0	
+newton-physics__newton-1582	newton-physics/newton	scored	0	
+newton-physics__newton-1653	newton-physics/newton	scored	0	
+niconoe__pyinaturalist-643	niconoe/pyinaturalist	scored	1	HISTORY.md
+nilearn__nilearn-5739	nilearn/nilearn	scored	0	
+nilearn__nilearn-5741	nilearn/nilearn	scored	0	
+nilearn__nilearn-6031_interface	nilearn/nilearn	spare	0	
+nolar__kopf-1225	nolar/kopf	scored	0	
+oOo0oOo__leanclient-24	oOo0oOo/leanclient	scored	0	
+oemof__tespy-921	oemof/tespy	scored	1	docs/whats_new/v0-9-14.rst
+olofk__fusesoc-776_interface	olofk/fusesoc	scored	0	
+omni-us__jsonargparse-781	omni-us/jsonargparse	calibration	1	CHANGELOG.rst
+omni-us__jsonargparse-827	omni-us/jsonargparse	spare	1	CHANGELOG.rst
+omni-us__jsonargparse-839	omni-us/jsonargparse	scored	1	CHANGELOG.rst
+open-telemetry__opentelemetry-python-4891	open-telemetry/opentelemetry-python	scored	1	CHANGELOG.md
+openai__openai-agents-python-1965	openai/openai-agents-python	spare	0	
+openai__openai-agents-python-1984	openai/openai-agents-python	spare	0	
+openai__openai-agents-python-2144	openai/openai-agents-python	scored	0	
+opsmill__infrahub-8407	opsmill/infrahub	scored	1	changelog/8388.fixed.md
+opsmill__infrahub-8423	opsmill/infrahub	scored	1	changelog/7903.fixed.md
+optuna__optuna-6428	optuna/optuna	scored	0	
+packit__packit-2684	packit/packit	scored	0	
+pallets-eco__wtforms-892_interface	pallets-eco/wtforms	spare	1	CHANGES.rst
+pallets__click-3239	pallets/click	scored	1	CHANGES.rst
+pandas-dev__pandas-63945	pandas-dev/pandas	scored	1	doc/source/whatsnew/v3.0.1.rst
+pandas-dev__pandas-64092	pandas-dev/pandas	scored	1	doc/source/whatsnew/v3.0.1.rst
+pandas-dev__pandas-64104	pandas-dev/pandas	calibration	1	doc/source/whatsnew/v3.0.1.rst
+pandas-dev__pandas-64796	pandas-dev/pandas	calibration	1	doc/source/whatsnew/v3.1.0.rst
+pandas-dev__pandas-64797	pandas-dev/pandas	scored	1	doc/source/whatsnew/v3.1.0.rst
+pandas-dev__pandas-64816	pandas-dev/pandas	scored	1	doc/source/whatsnew/v3.1.0.rst
+pdm-project__pdm-3759	pdm-project/pdm	scored	1	news/3756.bugfix.md
+pennylaneai__pennylane-9298	PennyLaneAI/pennylane	spare	1	doc/releases/changelog-dev.md
+pgmpy__pgmpy-3137	pgmpy/pgmpy	spare	0	
+pipecat-ai__pipecat-4283	pipecat-ai/pipecat	spare	1	changelog/4283.fixed.md
+piskvorky__smart_open-889	piskvorky/smart_open	scored	0	
+piskvorky__smart_open-892	piskvorky/smart_open	scored	0	
+plone__cookieplone-templates-308	plone/cookieplone-templates	scored	1	news/307.bugfix
+plone__cookieplone-templates-322	plone/cookieplone-templates	spare	1	news/321.breaking
+psd-tools__psd-tools-551	psd-tools/psd-tools	scored	0	
+psd-tools__psd-tools-593	psd-tools/psd-tools	calibration	0	
+psf__black-4952	psf/black	scored	1	CHANGES.md
+py-pdf__pdfly-219	py-pdf/pdfly	scored	1	CHANGELOG.md
+pyccel__pyccel-2512	pyccel/pyccel	calibration	1	CHANGELOG.md
+pycqa__isort-2491	PyCQA/isort	scored	0	
+pydap__pydap-624	pydap/pydap	spare	0	
+pydata__xarray-10838	pydata/xarray	scored	0	
+pydata__xarray-10863	pydata/xarray	spare	0	
+pyfar__pyrato-113	pyfar/pyrato	scored	0	
+pyinfra-dev__pyinfra-1630	pyinfra-dev/pyinfra	spare	0	
+pyinfra-dev__pyinfra-1665	pyinfra-dev/pyinfra	scored	0	
+pyinfra-dev__pyinfra-1679_interface	pyinfra-dev/pyinfra	scored	0	
+pyjanitor-devs__pyjanitor-1593	pyjanitor-devs/pyjanitor	scored	0	
+pymc-devs__pytensor-1668	pymc-devs/pytensor	scored	0	
+pymc-devs__pytensor-1701	pymc-devs/pytensor	spare	0	
+pypa__build-1027	pypa/build	scored	1	docs/changelog/860.bugfix.rst
+pypa__twine-1309	pypa/twine	spare	0	
+pypa__virtualenv-3015	pypa/virtualenv	scored	1	docs/changelog/2985.bugfix.rst
+pypsa__pypsa-1653	PyPSA/PyPSA	scored	0	
+pytest-dev__pyfakefs-1269	pytest-dev/pyfakefs	spare	1	CHANGES.md
+pytest-dev__pyfakefs-1286	pytest-dev/pyfakefs	none	1	CHANGES.md
+python-markdown__markdown-1587	Python-Markdown/markdown	spare	1	docs/changelog.md
+python-scim__scim2-models-120	python-scim/scim2-models	scored	1	doc/changelog.rst
+python-scim__scim2-models-126	python-scim/scim2-models	scored	1	doc/changelog.rst
+python-scim__scim2-models-139_interface	python-scim/scim2-models	calibration	0	
+python-wheel-build__fromager-1106	python-wheel-build/fromager	scored	0	
+python-wheel-build__fromager-1124	python-wheel-build/fromager	spare	0	
+pytorch__ignite-3532_interface	pytorch/ignite	spare	0	
+raullenchai__rapid-mlx-227	raullenchai/Rapid-MLX	scored	0	
+raullenchai__rapid-mlx-228	raullenchai/Rapid-MLX	calibration	0	
+raullenchai__rapid-mlx-289	raullenchai/Rapid-MLX	spare	0	
+raullenchai__rapid-mlx-341_interface	raullenchai/Rapid-MLX	spare	0	
+reata__sqllineage-743	reata/sqllineage	spare	0	
+reframe-hpc__reframe-3660_interface	reframe-hpc/reframe	scored	0	
+researchobject__ro-crate-py-248	ResearchObject/ro-crate-py	spare	0	
+run-llama__llama_index-20748_interface	run-llama/llama_index	scored	0	
+schemathesis__schemathesis-3195	schemathesis/schemathesis	calibration	1	CHANGELOG.md
+schemathesis__schemathesis-3270	schemathesis/schemathesis	scored	1	CHANGELOG.md
+schemathesis__schemathesis-3291	schemathesis/schemathesis	spare	1	CHANGELOG.md
+schemathesis__schemathesis-3334	schemathesis/schemathesis	spare	1	CHANGELOG.md
+schemathesis__schemathesis-3388	schemathesis/schemathesis	spare	1	CHANGELOG.md
+schemathesis__schemathesis-3405	schemathesis/schemathesis	scored	1	CHANGELOG.md
+schemathesis__schemathesis-3778	schemathesis/schemathesis	scored	1	CHANGELOG.md
+schemathesis__schemathesis-3933	schemathesis/schemathesis	scored	1	CHANGELOG.md
+schemathesis__schemathesis-4087	schemathesis/schemathesis	spare	1	CHANGELOG.md
+scientific-python__docstub-123	scientific-python/docstub	calibration	0	
+scikit-learn__scikit-learn-33168	scikit-learn/scikit-learn	scored	1	doc/whats_new/upcoming_changes/sklearn.linear_model/33168.fix.rst
+scikit-learn__scikit-learn-33565	scikit-learn/scikit-learn	spare	1	doc/whats_new/upcoming_changes/sklearn.linear_model/33565.fix.rst
+scikit-rf__scikit-rf-1336	scikit-rf/scikit-rf	scored	0	
+scipp__plopp-513	scipp/plopp	spare	0	
+sciunto-org__python-bibtexparser-515	sciunto-org/python-bibtexparser	scored	0	
+scrapy__scrapy-7255	scrapy/scrapy	scored	0	
+scrapy__scrapy-7351_interface	scrapy/scrapy	calibration	0	
+sigma67__ytmusicapi-909_interface	sigma67/ytmusicapi	none	0	
+sigstore__sigstore-python-1652	sigstore/sigstore-python	spare	1	CHANGELOG.md
+sissbruecker__linkding-1291	sissbruecker/linkding	scored	0	
+skrub-data__skrub-1899	skrub-data/skrub	scored	1	CHANGES.rst
+skypilot-org__skypilot-8908	skypilot-org/skypilot	scored	0	
+spacetelescope__jwst-9967	spacetelescope/jwst	scored	1	changes/9967.tso_photometry.rst
+spack__spack-51723	spack/spack	calibration	0	
+spack__spack-52244	spack/spack	scored	0	
+sqlfluff__sqlfluff-7615	sqlfluff/sqlfluff	spare	0	
+sqlfluff__sqlfluff-7617	sqlfluff/sqlfluff	scored	0	
+sqlfluff__sqlfluff-7622	sqlfluff/sqlfluff	scored	0	
+stanfordnlp__dspy-8890	stanfordnlp/dspy	spare	0	
+stanfordnlp__dspy-9478_interface	stanfordnlp/dspy	calibration	0	
+strands-agents__sdk-python-1719	strands-agents/sdk-python	scored	0	
+strands-agents__sdk-python-1734	strands-agents/sdk-python	scored	0	
+strands-agents__sdk-python-994	strands-agents/sdk-python	scored	0	
+stravalib__stravalib-709_interface	stravalib/stravalib	spare	1	changelog.md
+sunpy__sunpy-8548_interface	sunpy/sunpy	scored	1	changelog/8548.feature.rst
+sympy__sympy-28454	sympy/sympy	scored	0	
+sympy__sympy-28467	sympy/sympy	spare	0	
+sympy__sympy-28564	sympy/sympy	calibration	0	
+sympy__sympy-28570	sympy/sympy	scored	0	
+sympy__sympy-28639	sympy/sympy	calibration	0	
+sympy__sympy-28660	sympy/sympy	scored	0	
+sympy__sympy-28714	sympy/sympy	scored	0	
+sympy__sympy-28738	sympy/sympy	spare	0	
+sympy__sympy-28790	sympy/sympy	calibration	0	
+tobymao__sqlglot-6067	tobymao/sqlglot	none	0	
+tobymao__sqlglot-6174	tobymao/sqlglot	scored	0	
+tobymao__sqlglot-6314	tobymao/sqlglot	none	0	
+tobymao__sqlglot-6346	tobymao/sqlglot	spare	0	
+tobymao__sqlglot-6374	tobymao/sqlglot	none	0	
+tobymao__sqlglot-6383	tobymao/sqlglot	none	0	
+tobymao__sqlglot-6385	tobymao/sqlglot	none	0	
+tobymao__sqlglot-6389	tobymao/sqlglot	spare	0	
+tobymao__sqlglot-6409	tobymao/sqlglot	scored	0	
+tobymao__sqlglot-6413	tobymao/sqlglot	calibration	0	
+tobymao__sqlglot-6556	tobymao/sqlglot	scored	0	
+tobymao__sqlglot-6563	tobymao/sqlglot	calibration	0	
+tobymao__sqlglot-6573	tobymao/sqlglot	none	0	
+tobymao__sqlglot-6610	tobymao/sqlglot	calibration	0	
+tobymao__sqlglot-6632	tobymao/sqlglot	spare	0	
+tobymao__sqlglot-6991	tobymao/sqlglot	none	0	
+tobymao__sqlglot-7187	tobymao/sqlglot	spare	0	
+tobymao__sqlglot-7457	tobymao/sqlglot	scored	0	
+tobymao__sqlglot-7479	tobymao/sqlglot	calibration	0	
+tox-dev__sphinx-autodoc-typehints-606	tox-dev/sphinx-autodoc-typehints	scored	0	
+tox-dev__sphinx-autodoc-typehints-607	tox-dev/sphinx-autodoc-typehints	scored	0	
+tox-dev__tox-3666	tox-dev/tox	scored	1	docs/changelog/3561.feature.rst
+tox-dev__tox-3683	tox-dev/tox	calibration	1	docs/changelog/3649.bugfix.rst
+tox-dev__tox-3759	tox-dev/tox	scored	1	docs/changelog/3758.bugfix.rst
+tox-dev__tox-3810	tox-dev/tox	spare	1	docs/changelog/3809.bugfix.rst
+tox-dev__tox-3846	tox-dev/tox	scored	1	docs/changelog/3845.bugfix.rst
+tox-dev__tox-3904	tox-dev/tox	scored	1	docs/changelog/3903.bugfix.rst
+tox-dev__tox-3931	tox-dev/tox	spare	1	docs/changelog/3929.bugfix.rst
+ucfopen__canvasapi-716	ucfopen/canvasapi	spare	0	
+ultraplot__ultraplot-696	Ultraplot/UltraPlot	scored	0	
+unit8co__darts-2985	unit8co/darts	spare	1	CHANGELOG.md
+unit8co__darts-3065	unit8co/darts	scored	1	CHANGELOG.md
+vndee__llm-sandbox-101	vndee/llm-sandbox	scored	0	
+vprusso__toqito-1484_interface	vprusso/toqito	scored	0	
+vprusso__toqito-1538	vprusso/toqito	spare	0	
+vyperlang__vyper-4801	vyperlang/vyper	scored	0	
+youssofal__mtplx-21	youssofal/MTPLX	scored	1	CHANGELOG.md
+yt-project__unyt-593	yt-project/unyt	spare	0	
+yt-project__unyt-628	yt-project/unyt	calibration	0	
+yukinarit__pyserde-682	yukinarit/pyserde	spare	0	
+zarr-developers__virtualizarr-979	zarr-developers/VirtualiZarr	scored	0	
+zauberzeug__nicegui-5858	zauberzeug/nicegui	scored	0	
+zauberzeug__nicegui-5914	zauberzeug/nicegui	scored	0	
+zwicker-group__py-pde-733	zwicker-group/py-pde	spare	0	

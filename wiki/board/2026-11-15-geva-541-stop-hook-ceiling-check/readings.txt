@@ -1,0 +1,131 @@
+graded run table rows 3239 ; left out {('stage1', 'infra'): 1, ('stage1', 'contaminated'): 1, ('stage4', 'infra'): 3} ; terminal-bench rows 370
+
+## A. Terminal-Bench 2 twin set, Opus 5.5 (37 tasks, 2 reps per arm)
+arm      n   pass            cost   calls  edited asis
+none      74 63/74=85.1%     0.139    4.7    58   18/58=31.0%
+before-u  74 60/74=81.1%     0.157    4.9    60   20/60=33.3%
+before-t  74 64/74=86.5%     0.221    5.8    55   19/55=34.5%
+after-u   74 59/74=79.7%     0.155    4.9    55   20/55=36.4%
+after-t   74 63/74=85.1%     0.241    6.9    56   20/56=35.7%
+pass discordance none against before-u: 0.122 over 74 pairs (task and rep order); MDD with 3 reps of 37 tasks 10.2 points (97.5%)
+pass discordance none against before-t: 0.014 over 74 pairs (task and rep order); MDD with 3 reps of 37 tasks 3.4 points (97.5%)
+pass discordance none against after-u: 0.081 over 74 pairs (task and rep order); MDD with 3 reps of 37 tasks 8.3 points (97.5%)
+pass discordance none against after-t: 0.054 over 74 pairs (task and rep order); MDD with 3 reps of 37 tasks 6.8 points (97.5%)
+none-arm failures 11, on tasks no session in any arm passed 8 (4 such tasks of 37)
+harness mechanics stage 4, opus none: pass 121/200=60.5% cost 0.278 calls 12.5 asis 162/199=81.4%
+terminal-bench misses, all arms: 187 last edit {'code': 141, 'docs': 46} why {'no_check': 176, 'no_bash': 11}
+of those misses, sessions that ran a program, a compiler or a comparison after the last edit ($C $P $c $p Rscript bash cargo cc clang cmake cmp curl diff g++ gcc go java javac julia make node pdflatex perl pip python python3 ruby rustc sh sqlite3 uv): 48
+programs run after the last edit in those misses (sessions): cd 48, grep 30, cat 30, gstack-skill-end 28, true 28, echo 28, rm 21, ls 19, python3 14, tail 14, cp 14, which 11, python 11, diff 10, mkdir 10, wc 10, for 9, node 8, git 7, pgrep 7, sleep 7, pip 7, sed 6, head 6, pdflatex 6
+
+## B. Adherence under four readings (edited sessions)
+stage1 opus none         n= 40 pass 25/40=62.5%    asis 28/40=70.0%  bg 28/40=70.0%  code 35/40=87.5%  codebg 35/40=87.5%
+stage1 opus plain-2      n= 40 pass 25/40=62.5%    asis 33/40=82.5%  bg 33/40=82.5%  code 36/40=90.0%  codebg 36/40=90.0%
+stage1 opus verify-prose n= 40 pass 26/40=65.0%    asis 38/40=95.0%  bg 38/40=95.0%  code 40/40=100.0%  codebg 40/40=100.0%
+stage1 opus verify-hook  n= 40 pass 27/40=67.5%    asis 40/40=100.0%  bg 40/40=100.0%  code 40/40=100.0%  codebg 40/40=100.0%
+stage1 opus hook-prose asis   +5.0 (+0.0 to +12.8) n=40
+stage1 opus hook-prose bg     +5.0 (+0.0 to +12.8) n=40
+stage1 opus hook-prose code   +0.0 (+0.0 to +0.0) n=40
+stage1 opus hook-prose codebg +0.0 (+0.0 to +0.0) n=40
+stage1 sol  none         n= 40 pass 23/40=57.5%    asis 32/40=80.0%  bg 32/40=80.0%  code 33/40=82.5%  codebg 33/40=82.5%
+stage1 sol  plain-2      n= 40 pass 22/40=55.0%    asis 35/40=87.5%  bg 35/40=87.5%  code 35/40=87.5%  codebg 35/40=87.5%
+stage1 sol  verify-prose n= 40 pass 25/40=62.5%    asis 35/40=87.5%  bg 39/40=97.5%  code 35/40=87.5%  codebg 39/40=97.5%
+stage1 sol  verify-hook  n= 40 pass 24/40=60.0%    asis 39/40=97.5%  bg 40/40=100.0%  code 39/40=97.5%  codebg 40/40=100.0%
+stage1 sol  hook-prose asis   +10.0 (+2.4 to +20.0) n=40
+stage1 sol  hook-prose bg     +2.5 (+0.0 to +8.6) n=40
+stage1 sol  hook-prose code   +10.0 (+2.4 to +20.0) n=40
+stage1 sol  hook-prose codebg +2.5 (+0.0 to +8.6) n=40
+stage1 p1   none         n= 40 pass 30/40=75.0%    asis 35/38=92.1%  bg 35/38=92.1%  code 35/38=92.1%  codebg 35/38=92.1%
+stage1 p1   plain-2      n= 39 pass 27/39=69.2%    asis 36/39=92.3%  bg 36/39=92.3%  code 36/39=92.3%  codebg 36/39=92.3%
+stage1 p1   verify-prose n= 40 pass 27/40=67.5%    asis 38/38=100.0%  bg 38/38=100.0%  code 38/38=100.0%  codebg 38/38=100.0%
+stage1 p1   verify-hook  n= 40 pass 28/40=70.0%    asis 39/39=100.0%  bg 39/39=100.0%  code 39/39=100.0%  codebg 39/39=100.0%
+stage1 p1   hook-prose asis   +0.0 (+0.0 to +0.0) n=38
+stage1 p1   hook-prose bg     +0.0 (+0.0 to +0.0) n=38
+stage1 p1   hook-prose code   +0.0 (+0.0 to +0.0) n=38
+stage1 p1   hook-prose codebg +0.0 (+0.0 to +0.0) n=38
+stage4 opus none         n=200 pass 121/200=60.5%  asis 162/199=81.4%  bg 162/199=81.4%  code 183/198=92.4%  codebg 183/198=92.4%
+stage4 opus plain-2      n=200 pass 132/200=66.0%  asis 155/199=77.9%  bg 155/199=77.9%  code 180/198=90.9%  codebg 180/198=90.9%
+stage4 opus verify-prose n=200 pass 123/200=61.5%  asis 192/200=96.0%  bg 192/200=96.0%  code 197/199=99.0%  codebg 197/199=99.0%
+stage4 opus verify-hook  n=200 pass 127/200=63.5%  asis 196/200=98.0%  bg 196/200=98.0%  code 197/200=98.5%  codebg 197/200=98.5%
+stage4 opus hook-prose asis   +2.0 (-1.9 to +5.7) n=200
+stage4 opus hook-prose bg     +2.0 (-1.9 to +5.7) n=200
+stage4 opus hook-prose code   -0.5 (-3.3 to +2.1) n=199
+stage4 opus hook-prose codebg -0.5 (-3.3 to +2.1) n=199
+stage4 sol  none         n=200 pass 115/200=57.5%  asis 172/200=86.0%  bg 178/200=89.0%  code 177/199=88.9%  codebg 183/199=92.0%
+stage4 sol  plain-2      n=200 pass 119/200=59.5%  asis 176/200=88.0%  bg 180/200=90.0%  code 181/199=91.0%  codebg 184/199=92.5%
+stage4 sol  verify-prose n=200 pass 120/200=60.0%  asis 178/200=89.0%  bg 186/200=93.0%  code 178/199=89.4%  codebg 186/199=93.5%
+stage4 sol  verify-hook  n=200 pass 116/200=58.0%  asis 182/200=91.0%  bg 190/200=95.0%  code 182/199=91.5%  codebg 189/199=95.0%
+stage4 sol  hook-prose asis   +2.0 (-3.2 to +7.6) n=200
+stage4 sol  hook-prose bg     +2.0 (-2.6 to +6.7) n=200
+stage4 sol  hook-prose code   +2.0 (-3.0 to +7.3) n=199
+stage4 sol  hook-prose codebg +1.5 (-3.1 to +5.9) n=199
+stage4 p1   none         n=200 pass 122/200=61.0%  asis 183/200=91.5%  bg 183/200=91.5%  code 188/200=94.0%  codebg 188/200=94.0%
+stage4 p1   plain-2      n=200 pass 121/200=60.5%  asis 182/199=91.5%  bg 182/199=91.5%  code 185/199=93.0%  codebg 185/199=93.0%
+stage4 p1   verify-prose n=200 pass 124/200=62.0%  asis 194/199=97.5%  bg 194/199=97.5%  code 193/198=97.5%  codebg 193/198=97.5%
+stage4 p1   verify-hook  n=200 pass 122/200=61.0%  asis 188/200=94.0%  bg 188/200=94.0%  code 190/200=95.0%  codebg 190/200=95.0%
+stage4 p1   hook-prose asis   -3.5 (-7.4 to +0.0) n=199
+stage4 p1   hook-prose bg     -3.5 (-7.4 to +0.0) n=199
+stage4 p1   hook-prose code   -2.5 (-6.2 to +1.0) n=198
+stage4 p1   hook-prose codebg -2.5 (-6.2 to +1.0) n=198
+
+## C. Why the rule as written was missed (both stages)
+opus none         misses  49  last edit {'code': 18, 'docs': 31}  why {'bg_check': 1, 'fg_check_no_outcome': 7, 'no_bash': 10, 'no_check': 31}
+opus plain-2      misses  51  last edit {'code': 19, 'docs': 32}  why {'fg_check_no_outcome': 8, 'no_bash': 9, 'no_check': 34}
+opus verify-prose misses  10  last edit {'code': 2, 'docs': 8}  why {'fg_check_no_outcome': 3, 'no_check': 7}
+opus verify-hook  misses   4  last edit {'code': 3, 'docs': 1}  why {'bg_check': 2, 'fg_check_no_outcome': 2}
+sol  none         misses  36  last edit {'code': 27, 'docs': 9}  why {'bg_check': 6, 'fg_check_no_outcome': 3, 'no_bash': 11, 'no_check': 16}
+sol  plain-2      misses  29  last edit {'code': 22, 'docs': 7}  why {'bg_check': 6, 'fg_check_no_outcome': 1, 'no_bash': 4, 'no_check': 18}
+sol  verify-prose misses  27  last edit {'code': 24, 'docs': 3}  why {'bg_check': 13, 'fg_check_no_outcome': 3, 'no_bash': 2, 'no_check': 9}
+sol  verify-hook  misses  19  last edit {'code': 18, 'docs': 1}  why {'bg_check': 10, 'fg_check_no_outcome': 9}
+p1   none         misses  20  last edit {'code': 13, 'docs': 7}  why {'fg_check_no_outcome': 3, 'no_bash': 3, 'no_check': 14}
+p1   plain-2      misses  20  last edit {'code': 17, 'docs': 3}  why {'fg_check_no_outcome': 4, 'no_check': 16}
+p1   verify-prose misses   5  last edit {'code': 5}  why {'fg_check_no_outcome': 2, 'no_bash': 1, 'no_check': 2}
+p1   verify-hook  misses  12  last edit {'code': 10, 'docs': 2}  why {'bg_check': 2, 'fg_check_no_outcome': 6, 'no_bash': 1, 'no_check': 3}
+
+## D. Task difficulty and session length against adherence (stage 4)
+opus none         asis   by other models plain pass: hard 62/77=80.5%  mid 18/20=90.0%  easy 82/102=80.4% | by own tokens (thirds): 55/65=84.6%  53/67=79.1%  54/67=80.6%
+opus none         codebg by other models plain pass: hard 71/76=93.4%  mid 19/20=95.0%  easy 93/102=91.2% | by own tokens (thirds): 58/64=90.6%  65/67=97.0%  60/67=89.6%
+opus verify-prose asis   by other models plain pass: hard 76/77=98.7%  mid 19/20=95.0%  easy 97/103=94.2% | by own tokens (thirds): 64/66=97.0%  62/67=92.5%  66/67=98.5%
+opus verify-prose codebg by other models plain pass: hard 76/76=100.0%  mid 20/20=100.0%  easy 101/103=98.1% | by own tokens (thirds): 64/65=98.5%  66/67=98.5%  67/67=100.0%
+opus verify-hook  asis   by other models plain pass: hard 76/77=98.7%  mid 19/20=95.0%  easy 101/103=98.1% | by own tokens (thirds): 66/66=100.0%  65/67=97.0%  65/67=97.0%
+opus verify-hook  codebg by other models plain pass: hard 76/77=98.7%  mid 19/20=95.0%  easy 102/103=99.0% | by own tokens (thirds): 66/66=100.0%  65/67=97.0%  66/67=98.5%
+sol  none         asis   by other models plain pass: hard 59/69=85.5%  mid 23/28=82.1%  easy 90/103=87.4% | by own tokens (thirds): 60/66=90.9%  57/67=85.1%  55/67=82.1%
+sol  none         codebg by other models plain pass: hard 62/68=91.2%  mid 25/28=89.3%  easy 96/103=93.2% | by own tokens (thirds): 61/65=93.8%  62/67=92.5%  60/67=89.6%
+sol  verify-prose asis   by other models plain pass: hard 64/69=92.8%  mid 23/28=82.1%  easy 91/103=88.3% | by own tokens (thirds): 62/66=93.9%  61/67=91.0%  55/67=82.1%
+sol  verify-prose codebg by other models plain pass: hard 65/68=95.6%  mid 26/28=92.9%  easy 95/103=92.2% | by own tokens (thirds): 62/65=95.4%  62/67=92.5%  62/67=92.5%
+sol  verify-hook  asis   by other models plain pass: hard 62/69=89.9%  mid 26/28=92.9%  easy 94/103=91.3% | by own tokens (thirds): 62/66=93.9%  64/67=95.5%  56/67=83.6%
+sol  verify-hook  codebg by other models plain pass: hard 65/68=95.6%  mid 26/28=92.9%  easy 98/103=95.1% | by own tokens (thirds): 61/65=93.8%  66/67=98.5%  62/67=92.5%
+
+## E. Changelog tier: tasks whose upstream fix writes a changelog or news entry
+pool 354, tier 98 in 55 repos; by list {'calibration': 13, 'none': 1, 'scored': 58, 'spare': 26}
+tier tasks in the run tables: 70
+largest repos: schemathesis/schemathesis 9, tox-dev/tox 7, astropy/astropy 6, pandas-dev/pandas 6, deepset-ai/haystack 4
+opus none         tier    n= 70 asis 46/70=65.7%    codebg 66/69=95.7%    pass 42/70=60.0%    cost 0.297
+opus none         other   n=170 asis 144/169=85.2%  codebg 152/169=89.9%  pass 104/170=61.2%  cost 0.275
+opus verify-prose tier    n= 70 asis 63/70=90.0%    codebg 69/69=100.0%   pass 47/70=67.1%    cost 0.456
+opus verify-prose other   n=170 asis 167/170=98.2%  codebg 168/170=98.8%  pass 102/170=60.0%  cost 0.450
+opus verify-hook  tier    n= 70 asis 69/70=98.6%    codebg 69/70=98.6%    pass 45/70=64.3%    cost 0.442
+opus verify-hook  other   n=170 asis 167/170=98.2%  codebg 168/170=98.8%  pass 109/170=64.1%  cost 0.455
+opus tier hook-prose asis   +8.6 points; hook-only 7, prose-only 1 of 70 pairs; discordance 0.114; MDD at 255 pairs 5.9 (95%) 6.5 (97.5%)
+opus tier hook-prose codebg -1.4 points; hook-only 0, prose-only 1 of 69 pairs; discordance 0.014; MDD at 255 pairs 2.1 (95%) 2.3 (97.5%)
+opus tier prose misses 7, last edit {'docs': 7}
+opus tier cost of one task in all three arms 1.195
+sol  none         tier    n= 70 asis 57/70=81.4%    codebg 64/70=91.4%    pass 43/70=61.4%    cost 0.483
+sol  none         other   n=170 asis 147/170=86.5%  codebg 152/169=89.9%  pass 95/170=55.9%   cost 0.428
+sol  verify-prose tier    n= 70 asis 64/70=91.4%    codebg 68/70=97.1%    pass 46/70=65.7%    cost 0.444
+sol  verify-prose other   n=170 asis 149/170=87.6%  codebg 157/169=92.9%  pass 99/170=58.2%   cost 0.424
+sol  verify-hook  tier    n= 70 asis 61/70=87.1%    codebg 65/70=92.9%    pass 44/70=62.9%    cost 0.449
+sol  verify-hook  other   n=170 asis 160/170=94.1%  codebg 164/169=97.0%  pass 96/170=56.5%   cost 0.389
+sol  tier hook-prose asis   -4.3 points; hook-only 3, prose-only 6 of 70 pairs; discordance 0.129; MDD at 255 pairs 6.3 (95%) 6.9 (97.5%)
+sol  tier hook-prose codebg -4.3 points; hook-only 0, prose-only 3 of 70 pairs; discordance 0.043; MDD at 255 pairs 3.6 (95%) 4.0 (97.5%)
+sol  tier prose misses 6, last edit {'code': 6}
+sol  tier cost of one task in all three arms 1.375
+p1   none         tier    n= 70 asis 62/70=88.6%    codebg 66/70=94.3%    pass 49/70=70.0%    cost 0.124
+p1   none         other   n=170 asis 156/168=92.9%  codebg 157/168=93.5%  pass 103/170=60.6%  cost 0.114
+p1   verify-prose tier    n= 70 asis 69/69=100.0%   codebg 69/69=100.0%   pass 46/70=65.7%    cost 0.143
+p1   verify-prose other   n=170 asis 163/168=97.0%  codebg 162/167=97.0%  pass 105/170=61.8%  cost 0.128
+p1   verify-hook  tier    n= 70 asis 67/70=95.7%    codebg 68/70=97.1%    pass 46/70=65.7%    cost 0.163
+p1   verify-hook  other   n=170 asis 160/169=94.7%  codebg 161/169=95.3%  pass 104/170=61.2%  cost 0.126
+p1   tier hook-prose asis   -4.3 points; hook-only 0, prose-only 3 of 69 pairs; discordance 0.043; MDD at 255 pairs 3.7 (95%) 4.0 (97.5%)
+p1   tier hook-prose codebg -2.9 points; hook-only 0, prose-only 2 of 69 pairs; discordance 0.029; MDD at 255 pairs 3.0 (95%) 3.3 (97.5%)
+p1   tier prose misses 0, last edit {}
+p1   tier cost of one task in all three arms 0.430
