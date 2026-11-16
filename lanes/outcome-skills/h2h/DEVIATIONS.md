@@ -61,8 +61,11 @@ What changed (procedureMarkers and its helpers in sessions/exposure.ts):
 - The failing run may be the call that wrote the test or any later call, still before the source edit.
 - A run sent to the background counts where its output is read (a Read of its output file, TaskOutput or BashOutput
   naming its id, or its task notification), never at its launch.
-- A compiler's error count ("5 errors and 0 warnings generated") reads as a failing result. One of the two missed
-  sessions saw its new test fail that way, when the compiler under test rejected it.
+
+Added after the smoke, with GEVA-2's approval once it had seen why: a compiler's error count ("5 errors and 0 warnings
+generated") reads as a failing result. Without it the cc65 session still read as not run, because cc65 rejecting the
+agent's new test printed no FAIL word and the agent echoed the exit status as a bare "1". Only agent-skills' detector
+reads failing results; no other arm's procedure marker reads a test run's output, so no other arm needs the rule.
 
 What did not change. The source edit is still read from the Write and Edit tools only, so a session that edits source
 only through Bash still reads as not run. The feature-unit rule (SPEC.md and tasks/plan.md) and every other arm's
@@ -75,3 +78,11 @@ detector, the two agent-skills sessions now read as procedure ran, the other 14 
 reading is unchanged. By hand: in the gstack-pony cc65 session the test was written through Bash after the source edit
 and never failed, and in the no-skills gogs session the test was edited after the source; both still read as not run.
 Ruling: B1, GEVA-2.
+
+## 2026-11-16: the rerun smoke pays from a new item, h2h-resmoke (section 14, pre-data)
+
+The 25-session smoke reruns at the two changes above. The ledger binds each item to one run, and h2h-smoke is bound to
+stage 0's run, so the rerun needs its own item. h2h-rerun stays free for the independent recompute and re-score it was
+planned for. h2h-resmoke is capped at $20, moved out of h2h-reserve (which drops from $200 to $180), so the program
+total at caps does not change. The driver's model-item list (H2H_STAGES in sessions/driver.ts) gains h2h-resmoke,
+paying for all nine arms; prereg.json's item list is unchanged. Ruling: GEVA-2.

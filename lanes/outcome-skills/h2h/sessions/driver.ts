@@ -11,9 +11,11 @@ export const H2H_PREFIX = "h2h:";
 export const H2H_SKILL = "h2h";
 const tag = (arms: readonly H2hArm[]) => arms.map((a) => H2H_PREFIX + a);
 
-/** The model items a stage may name and the arms each one pays for (plan.ts itemOf reads the same split). */
+/** The model items a stage may name and the arms each one pays for (plan.ts itemOf reads the same split). h2h-resmoke,
+ *  outside prereg.json's item list, pays for stage 0's rerun after the todo-tools and detector changes (DEVIATIONS.md). */
 export const H2H_STAGES: Record<string, string[]> = {
   "h2h-smoke": tag(ALL_ARMS),
+  "h2h-resmoke": tag(ALL_ARMS),
   "h2h-pilot": tag(ALL_ARMS),
   "h2h-opus": tag(PRIMARY_ARMS),
   "h2h-pony": tag(PIECE_G_ARMS),
