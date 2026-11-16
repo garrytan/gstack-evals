@@ -86,6 +86,33 @@ test("agent-skills: a failing test written and run before the source on bugs, SP
   expect(flags(run("agent-skills", "feature", sdk().user("<command-name>/superpowers:brainstorming</command-name>").evs()))).toEqual([false, false]);
 });
 
+test("agent-skills on bugs: a test Bash writes counts, its failing run may be that call or a later one, and a background run counts where its output is read", () => {
+  const ran = (s: ReturnType<typeof sdk>) => run("agent-skills", "bug", s.evs()).markers;
+  const fix = { file_path: "/testbed/src/cc65/pragma.c", old_string: "a", new_string: "b" };
+  const heredoc = "cd /testbed/test; cat > val/pragma-comment.c <<'EOF'\nint main(void) { return 0; }\nEOF\n../bin/cc65 -o /tmp/p.s val/pragma-comment.c; echo $?";
+  const rejected = "val/pragma-comment.c:9: Error: Invalid pragma argument\n5 errors and 0 warnings generated.\n1";
+  expect(ran(sdk().tool("Bash", { command: heredoc }, rejected).tool("Edit", fix))).toEqual(["test-first:/testbed/test/val/pragma-comment.c", "failing-run"]);
+  const python = "cd internal/urlx && python3 - <<'EOF'\np='urlx_test.go'\ns=open(p).read()\nopen(p,'w').write(s)\nEOF\ngo test .";
+  expect(ran(sdk().tool("Bash", { command: python }, "--- FAIL: TestIsSameSite\nFAIL").tool("Write", { file_path: "/testbed/internal/urlx/urlx.go" }))).toEqual(["test-first:internal/urlx/urlx_test.go", "failing-run"]);
+  expect(ran(sdk().tool("Bash", { command: "sed -i 's/old/new/' tests/test_parse.py" }).tool("Bash", { command: "pytest tests" }, "1 failed", true).tool("Edit", { file_path: "/app/parse.py" }))).toEqual(["test-first:tests/test_parse.py", "failing-run"]);
+  expect(ran(sdk().tool("Bash", { command: "cat <<'EOF' | tee -a spec/parse_spec.rb\nit 'parses'\nEOF" }).tool("Bash", { command: "rspec" }, "1 example, 1 failure").tool("Edit", { file_path: "/app/lib/parse.rb" }))).toEqual(["test-first:spec/parse_spec.rb", "failing-run"]);
+
+  const write = "cat > /app/pkg/parse_test.go <<'EOF'\npackage pkg\nEOF";
+  const notice = "Command running in background with ID: b7k2. Output is being written to: /tmp/claude/tasks/b7k2.output.";
+  const launched = () => sdk().tool("Bash", { command: write }).tool("Bash", { command: "go test ./pkg/", run_in_background: true }, notice);
+  expect(ran(launched().tool("Read", { file_path: "/tmp/claude/tasks/b7k2.output" }, "--- FAIL: TestParse").tool("Edit", { file_path: "/app/pkg/parse.go" }))).toEqual(["test-first:/app/pkg/parse_test.go", "failing-run"]);
+  expect(ran(launched().tool("TaskOutput", { task_id: "b7k2" }, "--- FAIL: TestParse").tool("Edit", { file_path: "/app/pkg/parse.go" }))).toEqual(["test-first:/app/pkg/parse_test.go", "failing-run"]);
+  expect(ran(launched().user("<task-notification>\n<task-id>b7k2</task-id>\n--- FAIL: TestParse\n</task-notification>").tool("Edit", { file_path: "/app/pkg/parse.go" }))).toEqual(["test-first:/app/pkg/parse_test.go", "failing-run"]);
+
+  // Still not run: a test written after the source edit, a test that never fails before it, a background run whose
+  // output is read only after it, and a failing run of tests the session did not write.
+  expect(ran(sdk().tool("Edit", fix).tool("Bash", { command: heredoc }, rejected))).toEqual([]);
+  expect(ran(sdk().tool("Bash", { command: write + "\ngo test ./pkg/" }, "ok  \tpkg\t0.01s").tool("Edit", { file_path: "/app/pkg/parse.go" }).tool("Bash", { command: "go test ./..." }, "--- FAIL: TestOther"))).toEqual([]);
+  expect(ran(launched().tool("Edit", { file_path: "/app/pkg/parse.go" }).tool("Read", { file_path: "/tmp/claude/tasks/b7k2.output" }, "--- FAIL: TestParse"))).toEqual([]);
+  expect(ran(launched().tool("Read", { file_path: "/tmp/claude/tasks/other.output" }, "--- FAIL: TestParse").tool("Edit", { file_path: "/app/pkg/parse.go" }))).toEqual([]);
+  expect(ran(sdk().tool("Bash", { command: "go test ./... > /tmp/test_run.log 2>&1" }, "Exit code 1", true).tool("Bash", { command: "cd tests && pytest 2>&1 | tee run_tests.txt" }, "FAILED tests/test_parse.py::test_x").tool("Bash", { command: "cat tests/test_parse.py; pytest tests/test_parse.py" }, "1 failed", true).tool("Edit", { file_path: "/app/parse.py" }))).toEqual([]);
+});
+
 test("gsd: its tools run and a quick or debug planning file written", () => {
   expect(run("gsd", "bug", sdk().user("<command-name>/gsd-debug</command-name>").tool("Bash", { command: "node \"$HOME/.claude/gsd-core/bin/gsd-tools.cjs\" init debug" }).tool("Write", { file_path: "/app/.planning/debug/parse.md" }).evs()).markers).toEqual(["command:/gsd-debug", "gsd-tools", "planning:/app/.planning/debug/parse.md"]);
   expect(flags(run("gsd", "feature", sdk().user("<command-name>/gsd-quick</command-name>").tool("Bash", { command: "gsd_run init quick" }).evs(), M, [".planning/quick/260101-flag/PLAN.md"]))).toEqual([true, true]);

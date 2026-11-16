@@ -32,8 +32,9 @@ const ROOT = join(import.meta.dir, "../../../..");
 /** The Claude Code binary every session mounts: the pinned 2.1.325 native build (part A installs the same version). */
 export const H2H_CLAUDE = process.env.H2H_CLAUDE_BIN ?? join(homedir(), ".capy/work/h2h-s/claude/claude-2.1.325/package/claude");
 const KEYS = /^(ANTHROPIC|OPENAI|OPENROUTER|UBICLOUD|GEMINI|GOOGLE|XAI|DEEPSEEK|TYPESAFE)_[A-Z_]*KEY$|_TOKEN$/;
-/** Claude Code's environment in every arm: pfchecks' fixed block and prereg.json's env. */
-export const claudeEnv = (p: H2hPrereg = readPrereg()): Record<string, string> => ({ CLAUDE_CONFIG_DIR: "/root/.claude", HOME: "/root", CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1", CLAUDE_CODE_MAX_OUTPUT_TOKENS: "32000", DISABLE_AUTOUPDATER: "1", DISABLE_TELEMETRY: "1", DISABLE_ERROR_REPORTING: "1", IS_SANDBOX: "1", ...p.env });
+/** Claude Code's environment in every arm: pfchecks' fixed block, the todo tools Claude Code withholds from Opus 5.5 by
+ *  default (DEVIATIONS.md, 2026-11-16) and prereg.json's env. */
+export const claudeEnv = (p: H2hPrereg = readPrereg()): Record<string, string> => ({ CLAUDE_CONFIG_DIR: "/root/.claude", HOME: "/root", CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1", CLAUDE_CODE_MAX_OUTPUT_TOKENS: "32000", DISABLE_AUTOUPDATER: "1", DISABLE_TELEMETRY: "1", DISABLE_ERROR_REPORTING: "1", IS_SANDBOX: "1", CLAUDE_CODE_ENABLE_TODO_TOOLS: "1", ...p.env });
 /** _drive's quiet rule, as pfchecks runs it. */
 export const QUIET = { quiet_sec: 30, bg_wait_sec: 600 } as const;
 export const SUMMARY = "h2h-summary.json";
