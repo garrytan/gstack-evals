@@ -11,6 +11,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { randomBytes } from "node:crypto";
 import { catchBuild } from "../../eng-build/catch.ts";
+import { keepEvidence } from "../../eng-build/evidence.ts";
 import { EbError } from "../../eng-build/errors.ts";
 import { leakCheck, leakNeedles } from "../../eng-build/leak.ts";
 import { plantedNote } from "../../eng-build/note.ts";
@@ -88,42 +89,58 @@ export function functionalFiles(mirror: string, m: MinedFix, c: Constructed): st
 export function qualify(o: { mirror: string; fix: MinedFix; unit: Constructed; out: string; work: string; labels: string; images?: Record<string, string> }): Outcome {
   const { fix: m, unit: c } = o;
   const res: Outcome = { id: m.id, repo: m.repo, eco: m.eco, stars: starStratum(m.stars), strict: m.earliestPublic.slice(0, 10) >= FROZEN.window.strictFrom, step: "region", reason: null, regionLines: c.regionLines, planted: 0, crash: 0, functional: 0 };
-  const drop = (step: DropRecord["step"], reason: string): Outcome => Object.assign(res, { step, reason });
-  if (c.regionLines < FROZEN.region.minLines || c.regionLines > FROZEN.region.maxLines) return drop("region", "region_lines");
+  const drop = (step: DropRecord["step"], reason: string, detail: unknown = null): Outcome => {
+    keepEvidence(m.id, "drop.json", { step, reason, detail });
+    return Object.assign(res, { step, reason });
+  };
+  if (c.regionLines < FROZEN.region.minLines || c.regionLines > FROZEN.region.maxLines) return drop("region", "region_lines", { regionLines: c.regionLines, min: FROZEN.region.minLines, max: FROZEN.region.maxLines });
   const needles = needlesOf(c.removed);
   const tree = treeTexts(o.mirror, c.base);
-  if (needles.some((n) => !judge(n, scanTexts(n, tree)).passes)) return drop("body", "body_in_base_tree");
+  for (const n of needles) {
+    const hits = scanTexts(n, tree);
+    if (!judge(n, hits).passes) return drop("body", "body_in_base_tree", { needle: n, hits });
+  }
   requireSandbox();
   const extra = functionalFiles(o.mirror, m, c);
   const screened = screenCandidate({ id: m.id, base: c.base, merge: c.merge, fixes: [{ commit: c.fix, kind: "fix" }] }, o.mirror, { work: o.work, recipe: RECIPE, crash: true, functionalFiles: extra, ownTestsAtBase: true });
-  if (!screened.qualifies) return drop("screen", [screened.step, screened.cls].join(":"));
+  if (!screened.qualifies) return drop("screen", [screened.step, screened.cls].join(":"), screened);
   const images = o.images ?? pinImages(o.mirror, c.base, c.merge, c.fix);
   let built;
   try {
     built = buildUnit(unitSpec(m, c, images, FROZEN.window.strictFrom), o.mirror, o.out, { work: o.work, labels: o.labels, planted: true, recipe: RECIPE, sandbox: SANDBOX, licences: LICENCE_OPTS, note: plantedNote(c.signatures), functionalFiles: extra });
   } catch (error) {
-    if (error instanceof EbError) return drop("build", error.code + ":" + (/step=(\S+) class=(\S+)/.exec(error.message)?.slice(1).join(":") ?? "error"));
+    if (error instanceof EbError) return drop("build", error.code + ":" + (/step=(\S+) class=(\S+)/.exec(error.message)?.slice(1).join(":") ?? "error"), error.message);
     throw error;
   }
   const planted = built.eb.unit.aftermath.flatMap((a) => a.cases);
   Object.assign(res, { planted: planted.length, crash: built.eb.planted?.crash.length ?? 0, functional: built.eb.unit.functional.length });
-  if (!built.qualifies) return drop("build", built.drop!.step + ":" + built.drop!.cls);
+  if (!built.qualifies) return drop("build", built.drop!.step + ":" + built.drop!.cls, { drop: built.drop, unit: built.eb.unit });
   bundleHistory(m.id, join(o.out, "environment/task.bundle"));
   imageHistory(m.id, built.eb.image.id);
   try {
     leakCheck({ unit: m.id, image: built.eb.image.id, repo: m.repo, runner: built.eb.groups[0].runner, needles: leakNeedles(o.mirror, c.base, c.merge, [c.fix]) });
   } catch (error) {
-    if (error instanceof EbError && error.code === "E_EB_LEAK") return drop("leak", /class=(\S+)/.exec(error.message)?.[1] ?? "leak");
+    if (error instanceof EbError && error.code === "E_EB_LEAK") return drop("leak", /class=(\S+)/.exec(error.message)?.[1] ?? "leak", error.message);
     throw error;
   }
-  if (needles.some((n) => !judge(n, scanImage(built.eb.image.id, n)).passes)) return drop("body", "body_in_unit_image");
+  for (const n of needles) {
+    const hits = scanImage(built.eb.image.id, n);
+    if (!judge(n, hits).passes) return drop("body", "body_in_unit_image", { needle: n, hits });
+  }
   return Object.assign(res, { step: "qualified" as const, reason: null });
 }
 
 /** The 3-run recount of a qualified unit in the frozen sandbox, under the planted rules. */
 export function recount(res: Outcome, unitDir: string, work: string): Outcome {
   requireSandbox();
-  const row = recountUnit(unitDir, { work, planted: true, sandbox: SANDBOX, licences: FROZEN.frame.licences });
+  process.env.EP_EVIDENCE_TAG = "recount";
+  let row;
+  try {
+    row = recountUnit(unitDir, { work, planted: true, sandbox: SANDBOX, licences: FROZEN.frame.licences });
+  } finally {
+    delete process.env.EP_EVIDENCE_TAG;
+  }
+  keepEvidence(res.id, "recount.json", row);
   return row.clean ? { ...res, step: "clean", reason: null } : { ...res, step: "recount", reason: row.reason };
 }
 

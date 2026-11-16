@@ -7,6 +7,7 @@
 // Prints and returns counts only, never repository content.
 import { randomBytes } from "node:crypto";
 import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { keepEvidenceDir } from "./evidence.ts";
 import { dirname, join } from "node:path";
 import { git, gitRun, showFile } from "../real-outcome/mine/git.ts";
 import { docker } from "../real-outcome/task/docker.ts";
@@ -282,6 +283,7 @@ export function screenCandidate(c: Candidate, repo: string, o: ScreenOptions): S
     res.step = error.step;
     res.cls = error.cls;
   } finally {
+    keepEvidenceDir(c.id, "screen-out", join(wt, ".eb-out"));
     if (existsSync(wt)) {
       const image = [...images.values()].find((x): x is string => !!x);
       if (image) docker(["run", "--rm", "--label", SCREEN_LABEL, "--network", "none", "-v", wt + ":/x", "--entrypoint", "sh", image, "-c", "rm -rf /x/* /x/.[!.]* 2>/dev/null; true"], { timeoutMs: 600000 });

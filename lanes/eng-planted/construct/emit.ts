@@ -85,7 +85,7 @@ function callerFiles(mirror: string, base: string, c: Constructed): string[] {
 export function emitUnit(o: { mirror: string; fix: MinedFix; unit: Constructed; unitDir: string; units: string; repos: string; labels: LabelMap }): PlantedUnit {
   const { fix: m, unit: c } = o;
   const eb = JSON.parse(readFileSync(join(o.unitDir, "eb.json"), "utf8")) as EbTask;
-  const id = mintLabel("u", (l) => l in o.labels.units);
+  const id = Object.keys(o.labels.units).find((l) => o.labels.units[l].candidate === m.id) ?? mintLabel("u", (l) => l in o.labels.units);
   const repo = (o.labels.repos[m.repo] ??= mintLabel("r", (l) => Object.values(o.labels.repos).includes(l)));
   const planted = [...new Set(eb.unit.aftermath.flatMap((a) => a.cases))].sort();
   const crash = new Set(eb.planted?.crash ?? []);

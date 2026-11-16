@@ -8,7 +8,8 @@
 // open for the host to read. The B6 scorer grades a shipped head the same way.
 import { randomBytes } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
+import { keepEvidence } from "../../eng-build/evidence.ts";
 import { docker, dockerRun } from "./docker.ts";
 import { regressionFrozen, sha256, TaskError, targetOf, type Runner, type TaskJson } from "./format.ts";
 import { jsFailClass, parseCargo, parseGoTest, parseJestJson, parseMochaJson, parseNodeEvents, parsePytest, resultFor, type Parsed, type TestResult } from "./record.ts";
@@ -283,6 +284,7 @@ export function verifyTree(o: VerifyOptions): TreeResult {
           const f = docker(["exec", out, "sh", "-c", READ_OUT, "sh", "/out/" + file], { timeoutMs: 120000 });
           const text = outText(f);
           if (text === undefined) throw noVerdict("/out/" + file + " could not be read", f);
+          if (text !== null) keepEvidence(basename(o.taskDir), (process.env.EP_EVIDENCE_TAG ?? "tree") + "-out/" + o.label.replace(/[^\w.-]/g, "_") + "/run" + (i + 1) + "-" + file.replace(/[^\w.-]/g, "_"), text);
           return text;
         };
         const parsed = parseRecord(r, read);
