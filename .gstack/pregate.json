@@ -357,6 +357,18 @@
     ],
     "tests/er/test-contain-check.py": [
       "tests/er/contain-check.test.ts"
+    ],
+    "lanes/eng-planted/construct/dry.ts": [
+      "tests/ep/construct/dry.test.ts"
+    ],
+    "lanes/eng-planted/construct/emit.ts": [
+      "tests/ep/construct/dry.test.ts"
+    ],
+    "lanes/eng-planted/construct/supply.ts": [
+      "tests/ep/construct/dry.test.ts"
+    ],
+    "lanes/eng-planted/readings/generic/**": [
+      "tests/ep/readings/judge.test.ts"
     ]
   },
   "guards": [
