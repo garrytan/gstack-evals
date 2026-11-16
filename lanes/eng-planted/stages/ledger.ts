@@ -275,8 +275,10 @@ export class ItemGate {
  * Runs cells through an item gate, at most parallel at a time: each waits for its admission, then runs. The first error
  * (a gate stop, a launcher's cap stop) stops new starts; cells already running finish and settle, then it is thrown.
  * run returns the session's cost, which the gate settles (its journal line) under the cell's key, and commit, which then
- * writes the session's record whether or not the settle stopped the item. skip, checked as each cell comes up, leaves a
- * cell out without a session (an arm the exposure stop ended).
+ * writes the session's record whether or not the settle stopped the item. A run that throws with spentUsd on its error (a
+ * session that spent before its grading failed) has that spend settled under the cell's key, with no record, before the
+ * error is thrown, so the gate's stops and a resume count it. skip, checked as each cell comes up, leaves a cell out
+ * without a session (an arm the exposure stop ended).
  */
 export async function runGated<C>(cells: readonly C[], o: { gate: ItemGate; parallel?: number; kind: (c: C) => Kind; key: (c: C) => string; skip?: (c: C) => boolean; run: (c: C) => Promise<{ costUsd: number; commit?: () => void }> }): Promise<void> {
   let next = 0;
@@ -300,8 +302,17 @@ export async function runGated<C>(cells: readonly C[], o: { gate: ItemGate; para
       try {
         ran = await o.run(c);
       } catch (e) {
-        o.gate.abort();
         first ??= e;
+        const spent = (e as { spentUsd?: unknown } | null)?.spentUsd;
+        if (typeof spent !== "number" || !(spent > 0)) {
+          o.gate.abort();
+          return;
+        }
+        try {
+          o.gate.settle(kind, spent, o.key(c));
+        } catch (s) {
+          first ??= s;
+        }
         return;
       }
       try {

@@ -180,7 +180,7 @@ export function writeSet(repo: string, dir: string, tree: string, overlay: { rev
     writeFileSync(join(dir, "regions", p), text);
   }
   writeFileSync(join(dir, "regions.list"), [...moved.keys()].sort().join("\n") + (moved.size ? "\n" : ""));
-  for (const f of SET_FILES) copyFileSync(join(VERIFIER_DIR, f), join(dir, f));
+  for (const f of SET_FILES) copyFileSync(join(VERIFIER_DIR, f === "vrun.py" ? "vrun-where.py" : f), join(dir, f));
 }
 
 /** A Rust source file's module path in its crate: src/a/b.rs and src/a/b/mod.rs are a::b, the crate roots are empty. */

@@ -57,10 +57,7 @@ def main():
             outcome = yield
             report = outcome.get_result()
             exc = call.excinfo
-            where = None
-            if exc is not None and len(exc.traceback) > 0:
-                where = "%s:%d" % (exc.traceback[-1].path, exc.traceback[-1].lineno + 1)
-            emit(event="phase", id=item.nodeid, when=call.when, outcome=report.outcome, xfail=hasattr(report, "wasxfail"), exc=exc.typename if exc else None, msg=exc.exconly()[:600] if exc else None, where=where)
+            emit(event="phase", id=item.nodeid, when=call.when, outcome=report.outcome, xfail=hasattr(report, "wasxfail"), exc=exc.typename if exc else None, msg=exc.exconly()[:600] if exc else None)
 
         def pytest_collectreport(self, report):
             if report.outcome != "passed":

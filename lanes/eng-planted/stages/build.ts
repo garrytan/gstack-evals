@@ -176,7 +176,8 @@ export function ebSession(eb: BuildSession, table: MountTable): PlantedSession {
 
 export const buildKey = (unit: string, arm: BuildArm, reviewer: Reviewer | null, rep: number) => (unit + ":" + arm + ":" + (reviewer ?? "-") + ":" + rep).replace(/[^A-Za-z0-9._-]/g, "_");
 
-/** One build cell: the session under the outcome rule, then the grader and catch. */
+/** One build cell: the session under the outcome rule, then the grader and catch. An error after the session spent
+ * carries that spend as spentUsd, which runGated settles. */
 export async function runPlantedBuild(o: { unit: PlantedUnit; unitDir: string; arm: BuildArm; reviewer: Reviewer | null; rep: number; note: string; hint?: string | null; mount: { plan: string; review: string | null }; review?: ReviewRecord | null; session: PlantedSession; grader: PlantedGrader; coverage?: (unitDir: string, tree: string) => Promise<number | null>; log?: (line: string) => void }): Promise<GradedBuild> {
   const cell = buildKey(o.unit.id, o.arm, o.reviewer, o.rep);
   if (isReviewed(o.arm) !== (o.reviewer !== null)) fail("E_USAGE", "cell " + cell + ": a reviewed arm names its reviewer, and no other arm does");
@@ -194,31 +195,36 @@ export async function runPlantedBuild(o: { unit: PlantedUnit; unitDir: string; a
   const prompt = plantedBuildPrompt(o.arm, o.note, o.arm === "hinted" ? (o.hint ?? null) : null);
   let cost = 0;
   let tree: string | null = null;
-  const run = await runSessionCell(cell, async (attempt) => {
-    const s = await o.session({ cell, unit: o.unit, arm: o.arm, prompt, plan: o.mount.plan, review: o.mount.review, attempt });
-    cost += s.costUsd;
-    tree = s.tree;
-    return s.outcome;
-  });
-  if (run.gap) {
-    o.log?.(run.line!);
-    return gap(run.outcome, cost);
+  try {
+    const run = await runSessionCell(cell, async (attempt) => {
+      const s = await o.session({ cell, unit: o.unit, arm: o.arm, prompt, plan: o.mount.plan, review: o.mount.review, attempt });
+      cost += s.costUsd;
+      tree = s.tree;
+      return s.outcome;
+    });
+    if (run.gap) {
+      o.log?.(run.line!);
+      return gap(run.outcome, cost);
+    }
+    const t: string = tree ?? fail("E_USAGE", "cell " + cell + ": the session ended " + run.outcome + " but left no tree to grade");
+    const g = await o.grader.grade(o.unit, o.unitDir, t);
+    const c = await o.grader.catchOf(o.unit, o.unitDir, t);
+    const file = (n: string) => (lstatSync(join(t, n), { throwIfNoEntry: false })?.isFile() ? readFileSync(join(t, n), "utf8") : "");
+    return {
+      ...meta,
+      outcome: run.outcome,
+      limitStop: run.outcome === "limit",
+      planted: g.planted,
+      functional: g.functional,
+      catch: c.catch,
+      catchDrop: c.drop,
+      readReview: hasReview(o.arm) ? readReview(file("sdk-messages.jsonl")) : null,
+      coverage: o.coverage ? await o.coverage(o.unitDir, t) : null,
+      testLinesAdded: testLinesAdded(file("final.patch")),
+      costUsd: cost,
+    };
+  } catch (e) {
+    if (cost > 0 && typeof e === "object" && e !== null) Object.assign(e, { spentUsd: cost });
+    throw e;
   }
-  const t: string = tree ?? fail("E_USAGE", "cell " + cell + ": the session ended " + run.outcome + " but left no tree to grade");
-  const g = await o.grader.grade(o.unit, o.unitDir, t);
-  const c = await o.grader.catchOf(o.unit, o.unitDir, t);
-  const file = (n: string) => (lstatSync(join(t, n), { throwIfNoEntry: false })?.isFile() ? readFileSync(join(t, n), "utf8") : "");
-  return {
-    ...meta,
-    outcome: run.outcome,
-    limitStop: run.outcome === "limit",
-    planted: g.planted,
-    functional: g.functional,
-    catch: c.catch,
-    catchDrop: c.drop,
-    readReview: hasReview(o.arm) ? readReview(file("sdk-messages.jsonl")) : null,
-    coverage: o.coverage ? await o.coverage(o.unitDir, t) : null,
-    testLinesAdded: testLinesAdded(file("final.patch")),
-    costUsd: cost,
-  };
 }

@@ -66,6 +66,21 @@ describe("runPlantedBuild", () => {
     expect([b.outcome, b.readReview, b.catch, b.testLinesAdded, b.pilot, b.costUsd]).toEqual(["completed", true, true, 1, true, 1]);
     expect(b.planted).toEqual(runsOf(3));
   });
+  test("a grading failure after a paid session rethrows with that session's spend on the error; a throw before any spend carries none", async () => {
+    const caught = async (f: () => Promise<unknown>) => {
+      try {
+        await f();
+      } catch (e) {
+        return e as Error & { spentUsd?: number };
+      }
+      return null;
+    };
+    const failing: PlantedGrader = { ...grader, grade: async () => { throw new Error("noVerdict"); } };
+    const graded = await caught(() => runPlantedBuild({ ...base, grader: failing, review: review("completed"), session: session(["completed"]) }));
+    expect([graded?.message, graded?.spentUsd]).toEqual(["noVerdict", 1]);
+    const early = await caught(() => runPlantedBuild({ ...base, review: review("completed"), session: async () => { throw new Error("launch"); } }));
+    expect([early?.message, early?.spentUsd]).toEqual(["launch", undefined]);
+  });
   test("a review that ended in a gap leaves a gap build with no session, empty cases and catch null", async () => {
     const seen: string[] = [];
     const b = await runPlantedBuild({ ...base, review: review("upstream_gap"), session: session(["completed"], seen) });

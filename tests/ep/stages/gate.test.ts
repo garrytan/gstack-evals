@@ -72,6 +72,22 @@ describe("ItemGate", () => {
 });
 
 describe("runGated", () => {
+  test("a run that throws after its session spent settles that spend under its key and rethrows", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "ep-spent-"));
+    const journal = join(dir, "costs", "ep-stock.jsonl");
+    const g = new ItemGate(plan, { journal });
+    const e = await codeOf(() => runGated([1], { gate: g, kind: () => "build", key: (c) => "c" + c, run: async () => { throw Object.assign(new Error("noVerdict"), { spentUsd: 5 }); } }));
+    expect(e).toBe("error: noVerdict");
+    expect([g.settled(), g.sessions(), g.inFlight()]).toEqual([5, 1, 0]);
+    expect(readFileSync(journal, "utf8").trim().split("\n").map((l) => JSON.parse(l))).toEqual([{ kind: "build", usd: 5, cell: "c1" }]);
+  });
+
+  test("a run that throws with nothing spent settles nothing and frees its slot", async () => {
+    const g = new ItemGate(plan);
+    expect(await codeOf(() => runGated([1], { gate: g, kind: () => "build", key: (c) => "c" + c, run: async () => { throw new Error("before any session"); } }))).toBe("error: before any session");
+    expect([g.settled(), g.sessions(), g.inFlight()]).toEqual([0, 0, 0]);
+  });
+
   test("the first error stops new starts; running cells settle and commit; skip leaves a cell out", async () => {
     const g = new ItemGate(plan);
     const ran: number[] = [];
