@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { EpError } from "../../../lanes/eng-planted/errors.ts";
 import { fxBuild, fxReview, fxUnit } from "../../../lanes/eng-planted/readings/fixtures.ts";
-import { admissionLine, enforce, exposureCounts, hardOf, hintedOf, interimCheck, raiseProjection, raiseRead, raiseStep, smokeGate, startRule, supplyCheck, type AdmissionReading } from "../../../lanes/eng-planted/readings/gates.ts";
+import { admissionLine, enforce, exposureCounts, hardOf, interimCheck, raiseProjection, raiseRead, raiseStep, smokeGate, startRule, supplyCheck, type AdmissionReading } from "../../../lanes/eng-planted/readings/gates.ts";
 
 const rd = (estimate: number, lo: number) => ({ estimate, lo, hi: estimate + 0.1, p: 0.5, units: 20, repos: 15, worse: 0, sd: 0.05, mdd: 0.14 });
 const reading = (avoid: [number, number], c: [number, number], composite?: [number, number], o: Partial<AdmissionReading> = {}): AdmissionReading => ({
@@ -41,9 +41,6 @@ describe("the admission pilot's lines", () => {
     const c = admissionLine(reading([0.74, 0.6], [0.74, 0.6], [0.74, 0.66]), { afterRaise: false });
     expect([c.code, c.primary, c.ceiling.join()]).toEqual(["E_EP_RAISE", "composite", "avoid,catch"]);
     expect(admissionLine(reading([0.4, 0.3], [0.3, 0.2]), { afterRaise: true }).line).toBe("HEADROOM");
-  });
-  test("hinted builds come from the units' winnable flags", () => {
-    expect(hintedOf([fxUnit(0), fxUnit(1, 1, 1, { winnable: false }), fxUnit(2, 1, 1, { winnable: null })])).toEqual({ passed: 1, screened: 2 });
   });
 });
 

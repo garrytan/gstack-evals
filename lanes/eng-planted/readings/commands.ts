@@ -10,7 +10,7 @@ import { FROZEN } from "../frozen.ts";
 import type { Command, DryCase, GradedBuild, JudgedBundle, PlantedUnit, Reviewer, ReviewRecord } from "../types.ts";
 import { analyze, type AnalysisInput } from "./analysis.ts";
 import { DRY } from "./dry.ts";
-import { admissionLine, admissionReading, enforce, hintedOf, interimCheck, markHard, pilotPowerInput, raiseProjection, raiseRead, raiseStep, smokeGate, startRule, supplyCheck, type Admission, type Hinted, type RaiseInput } from "./gates.ts";
+import { admissionLine, admissionReading, enforce, interimCheck, markHard, pilotPowerInput, raiseProjection, raiseRead, raiseStep, smokeGate, startRule, supplyCheck, type Admission, type Hinted, type RaiseInput } from "./gates.ts";
 import { judgeCheck, stockControl, type GoldRow } from "./judge.ts";
 import { SKILL_ARMS } from "./local.ts";
 import { writeStep, type StepRecord } from "../stages/local.ts";
@@ -39,6 +39,7 @@ function num(a: Args, flag: string, fallback?: number): number {
 const recordStep = (a: Args, r: Omit<StepRecord, "at">) => void (a.flags.has("--run") && writeStep(a.flags.get("--run")!, r));
 const seedOf = (a: Args, file: { seed?: number }) => (a.flags.has("--seed") ? num(a, "--seed") : (file.seed ?? usage("--seed is required: the seed minted at the build")));
 const draws = (a: Args) => num(a, "--draws", FROZEN.bootstrapDraws);
+const hintedIn = (f: { hinted?: Hinted }) => f.hinted ?? usage("--in needs hinted {passed, screened}, every screened unit's hinted outcome, which ep records writes; the drawn units hold only the survivors");
 
 /** Prints an admission's lines; a stop prints its code line through cli.ts instead. */
 function finish(a: Admission, io: Io): number {
@@ -54,6 +55,7 @@ interface PilotFile {
   hinted?: Hinted;
   raise?: Omit<RaiseInput, "read" | "hard">;
   unforeseeable?: number;
+  admitted?: number;
   seed?: number;
 }
 
@@ -73,7 +75,7 @@ export const COMMANDS: Record<string, Command> = {
     run: (a, io) => {
       const f = readJson<PilotFile>(a);
       const units = f.units.filter((u) => u.pilot && u.set === "comparison");
-      const reading = admissionReading(units, f.builds, f.hinted ?? hintedOf(f.units), seedOf(a, f), draws(a));
+      const reading = admissionReading(units, f.builds, hintedIn(f), seedOf(a, f), draws(a));
       let adm = admissionLine(reading, { afterRaise: false });
       if (adm.code === "E_EP_RAISE") {
         if (!f.raise) usage("the pilot reads a first ceiling; add raise {authored, admitted, unused, perCandidateUsd, perReadUsd} to --in so the projection prints");
@@ -82,7 +84,9 @@ export const COMMANDS: Record<string, Command> = {
       }
       const out = a.flags.get("--power-json");
       if (out) {
-        writeFileSync(out, JSON.stringify(pilotPowerInput(units, f.builds, f.unforeseeable ?? 0)) + "\n");
+        const unf = f.unforeseeable ?? 0;
+        if (unf > 0 && !(f.admitted !== undefined && f.admitted > unf)) usage("the power input's unforeseeable share needs admitted, the count of admitted authored units, above unforeseeable; ep records writes both");
+        writeFileSync(out, JSON.stringify(pilotPowerInput(units, f.builds, unf > 0 ? unf / f.admitted! : 0)) + "\n");
         io.out("power input written; re-print the MDD with: uv run -q --with numpy==2.5.4 python lanes/eng-planted/readings/power.py --fit " + out);
       }
       recordStep(a, { step: "admission", ok: adm.code === null, detail: adm.code ? adm.message : "primary " + adm.primary });
@@ -95,7 +99,9 @@ export const COMMANDS: Record<string, Command> = {
     bools: [],
     run: (a, io) => {
       const f = readJson<RaiseFile>(a);
-      return finish(raiseRead(admissionReading(f.units, f.builds, f.hinted ?? hintedOf(f.units), seedOf(a, f), draws(a)), f.hardAdmitted ?? null), io);
+      const code = finish(raiseRead(admissionReading(f.units, f.builds, hintedIn(f), seedOf(a, f), draws(a)), f.hardAdmitted ?? null), io);
+      io.out("note: the raise read passed, but admission stays blocked: the hard units' authoring and draw are built, reviewed and dry-run on the results branch before any raise spend (sections 7 and 14)");
+      return code;
     },
   },
   exposure: {

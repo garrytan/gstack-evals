@@ -177,7 +177,7 @@ export function ebSession(eb: BuildSession, table: MountTable): PlantedSession {
 export const buildKey = (unit: string, arm: BuildArm, reviewer: Reviewer | null, rep: number) => (unit + ":" + arm + ":" + (reviewer ?? "-") + ":" + rep).replace(/[^A-Za-z0-9._-]/g, "_");
 
 /** One build cell: the session under the outcome rule, then the grader and catch. */
-export async function runPlantedBuild(o: { unit: PlantedUnit; unitDir: string; baseTree: string; arm: BuildArm; reviewer: Reviewer | null; rep: number; note: string; hint?: string | null; mount: { plan: string; review: string | null }; review?: ReviewRecord | null; session: PlantedSession; grader: PlantedGrader; coverage?: (unitDir: string, tree: string) => Promise<number | null>; log?: (line: string) => void }): Promise<GradedBuild> {
+export async function runPlantedBuild(o: { unit: PlantedUnit; unitDir: string; arm: BuildArm; reviewer: Reviewer | null; rep: number; note: string; hint?: string | null; mount: { plan: string; review: string | null }; review?: ReviewRecord | null; session: PlantedSession; grader: PlantedGrader; coverage?: (unitDir: string, tree: string) => Promise<number | null>; log?: (line: string) => void }): Promise<GradedBuild> {
   const cell = buildKey(o.unit.id, o.arm, o.reviewer, o.rep);
   if (isReviewed(o.arm) !== (o.reviewer !== null)) fail("E_USAGE", "cell " + cell + ": a reviewed arm names its reviewer, and no other arm does");
   if (hasReview(o.arm) !== (o.mount.review !== null)) fail("E_USAGE", "cell " + cell + ": arm " + o.arm + (hasReview(o.arm) ? " needs its /work/review/ mount" : " gets no /work/review/"));
@@ -206,7 +206,7 @@ export async function runPlantedBuild(o: { unit: PlantedUnit; unitDir: string; b
   }
   const t: string = tree ?? fail("E_USAGE", "cell " + cell + ": the session ended " + run.outcome + " but left no tree to grade");
   const g = await o.grader.grade(o.unit, o.unitDir, t);
-  const c = await o.grader.catchOf(o.unit, o.unitDir, t, o.baseTree);
+  const c = await o.grader.catchOf(o.unit, o.unitDir, t);
   const file = (n: string) => (lstatSync(join(t, n), { throwIfNoEntry: false })?.isFile() ? readFileSync(join(t, n), "utf8") : "");
   return {
     ...meta,

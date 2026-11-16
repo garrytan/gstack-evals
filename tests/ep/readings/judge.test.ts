@@ -61,7 +61,7 @@ describe("the judge's reading", () => {
     const rs = [fxReview("u0", "plain", 2, null), fxReview("u0", "plain", 1, null, "upstream_gap"), fxReview("u0", "standalone", 3, true), fxReview("u0", "standalone", 1, true)];
     expect(bundleSet([fxUnit(0)], rs)).toEqual([
       { unit: "u0", source: "plain", rep: 2 },
-      { unit: "u0", source: "standalone", rep: 1 },
+      { unit: "u0", source: "standalone", rep: 3 },
       { unit: "u0", source: "stock", rep: null },
       { unit: "u0", source: "none", rep: null },
       { unit: "u0", source: "plan", rep: null },

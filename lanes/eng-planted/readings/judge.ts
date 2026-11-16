@@ -150,13 +150,13 @@ export async function judgeAll(bundles: BundleInput[], call: JudgeCall, role: Ju
   return out;
 }
 
-/** The bundle set: per unit, the first review of each arm in the seeded order (lowest rep with no gap), plus stock, no
- * review and the authored plan alone. */
+/** The bundle set: per unit, the first review of each arm with no gap in the order given (the records' seeded run
+ * order), plus stock, no review and the authored plan alone. */
 export function bundleSet(units: PlantedUnit[], reviews: ReviewRecord[]): Array<{ unit: string; source: Source; rep: number | null }> {
   const out: Array<{ unit: string; source: Source; rep: number | null }> = [];
   for (const u of units) {
     for (const arm of ["plain", "engphase", "standalone"] as const) {
-      const first = reviews.filter((r) => r.unit === u.id && r.arm === arm && r.reviewer === "opus" && !isGap(r)).sort((a, b) => a.rep - b.rep)[0];
+      const first = reviews.find((r) => r.unit === u.id && r.arm === arm && r.reviewer === "opus" && !isGap(r));
       if (first) out.push({ unit: u.id, source: arm, rep: first.rep });
     }
     for (const source of ["stock", "none", "plan"] as const) out.push({ unit: u.id, source, rep: null });

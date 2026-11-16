@@ -105,10 +105,12 @@ export interface DryCase {
 
 /** The grading seam the build stage calls (construct part): one tree's planted and functional cases, and one build's catch. */
 export interface PlantedGrader {
-  /** Grade a tree in the unit's pinned image under the frozen sandbox, FROZEN.runs times, with the hidden tests restored. */
+  /** Grade a build in the unit's pinned image under the frozen sandbox, FROZEN.runs times, with the hidden tests restored.
+   * tree is the build session's output folder (PlantedSessionRun.tree), whose final.patch is the build's diff from B. */
   grade(unit: PlantedUnit, unitDir: string, tree: string): Promise<{ planted: CaseRuns[]; functional: CaseRuns[] }>;
-  /** Move the build's own new and changed tests onto M and F' (product files at their real content) and apply the catch rule. */
-  catchOf(unit: PlantedUnit, unitDir: string, buildTree: string, baseTree: string): Promise<{ catch: boolean | null; drop: string | null }>;
+  /** Move the build's own new and changed tests from that folder's final.patch onto M and F' (product files at their real
+   * content) and apply the catch rule. */
+  catchOf(unit: PlantedUnit, unitDir: string, buildTree: string): Promise<{ catch: boolean | null; drop: string | null }>;
 }
 
 /** One bundle the judged secondary reads (prereg section 5): a review's mounted plan and review files, a control, or the authored plan alone. */

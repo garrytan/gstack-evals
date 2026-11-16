@@ -22,16 +22,24 @@ const pilotFile = (good: number, n = 20) => {
   const units = Array.from({ length: n }, (_, i) => fxUnit(i, 1, 1, { pilot: true }));
   const builds = units.flatMap((u, i) => [1, 2].map((rep) => fxBuild(u, "plain", rep, { pass: i < good ? 1 : 0, catch: i < good, pilot: true })));
   const none = units.map((u, i) => fxBuild(u, "none", 1, { pass: i % 2, catch: true }));
-  return { units, builds: [...builds, ...none], seed: 5 };
+  return { units, builds: [...builds, ...none], hinted: { passed: n, screened: n }, seed: 5 };
 };
 
 describe("gstack-evals ep, readings part", () => {
   test("pilot reads HEADROOM, prints the primary and writes the power input", async () => {
     const power = join(dir, "power.json");
-    const r = await ep("pilot", "--in", file("p1.json", pilotFile(10)), "--draws", "2000", "--power-json", power);
+    const r = await ep("pilot", "--in", file("p1.json", { ...pilotFile(10), unforeseeable: 2, admitted: 10 }), "--draws", "2000", "--power-json", power);
     expect(r.code).toBe(0);
     expect(r.out).toContain("primary composite");
-    expect(JSON.parse(readFileSync(power, "utf8")).builds).toHaveLength(40);
+    const input = JSON.parse(readFileSync(power, "utf8"));
+    expect(input.builds).toHaveLength(40);
+    expect(input.unforeseeable).toBe(0.2);
+  });
+  test("pilot needs every screened unit's hinted outcome, and the admitted count behind an unforeseeable share", async () => {
+    const { hinted: _hinted, ...bare } = pilotFile(10);
+    expect((await ep("pilot", "--in", file("p9.json", bare), "--draws", "2000")).err).toStartWith("E_USAGE gstack-evals ep pilot: --in needs hinted");
+    const power = join(dir, "power-bad.json");
+    expect((await ep("pilot", "--in", file("p10.json", { ...pilotFile(10), unforeseeable: 2 }), "--draws", "2000", "--power-json", power)).err).toStartWith("E_USAGE gstack-evals ep pilot: the power input's unforeseeable share needs admitted");
   });
   test("pilot stops with the code's lines on stderr; a first ceiling needs the raise inputs, then prints the projection", async () => {
     const floor = await ep("pilot", "--in", file("p2.json", pilotFile(1)), "--draws", "2000");
@@ -51,6 +59,9 @@ describe("gstack-evals ep, readings part", () => {
   });
   test("raise, exposure, start and supply", async () => {
     expect((await ep("raise", "--in", file("r1.json", { ...pilotFile(18, 16), hardAdmitted: 40 }), "--draws", "2000")).err).toStartWith("E_EP_CEILING");
+    const passed = await ep("raise", "--in", file("r2.json", { ...pilotFile(10), hardAdmitted: 40 }), "--draws", "2000");
+    expect(passed.code).toBe(0);
+    expect(passed.out).toContain("note: the raise read passed, but admission stays blocked");
     const smoke = (["standalone", "engphase"] as const).flatMap((arm) => [1, 2, 3, 4, 5, 6].map((i) => fxReview("c" + i, arm, 1, arm === "engphase" || i > 2)));
     const ex = await ep("exposure", "--in", file("x1.json", { smoke }));
     expect(ex.code).toBe(2);

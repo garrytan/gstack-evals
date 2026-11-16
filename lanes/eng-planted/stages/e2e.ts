@@ -150,7 +150,7 @@ export async function drivenLaunch(o: { harbor?: string; gstack?: string; keep?:
     const b = await underLease(bp, async (p) => {
       const h = await inner(p);
       return { ...h, backend: ebSession(h.backend, table) };
-    }, (session) => runPlantedBuild({ unit, unitDir, baseTree: base, arm: "standalone", reviewer: "opus", rep: 1, note: "The change adds Mul(a, b int) int, which returns the product of a and b.", mount: { plan: join(mountDir, "plan.md"), review: join(mountDir, "review") }, review: rec("standalone") ?? null, session, grader, log }));
+    }, (session) => runPlantedBuild({ unit, unitDir, arm: "standalone", reviewer: "opus", rep: 1, note: "The change adds Mul(a, b int) int, which returns the product of a and b.", mount: { plan: join(mountDir, "plan.md"), review: join(mountDir, "review") }, review: rec("standalone") ?? null, session, grader, log }));
     const passing = (c: { runs: string[] }[]) => c.filter((x) => x.runs.filter((r) => r === "pass").length >= 2).length;
     check("the build completes and reads the review", b.outcome === "completed" && b.readReview === true && buildRead === "read", "outcome " + b.outcome + ", readReview " + b.readReview + ", the builder's tool result " + (buildRead || "missing"));
     check("the grader scores the built tree", passing(b.planted) === planted.length && passing(b.functional) === b.functional.length, "planted " + passing(b.planted) + " of " + b.planted.length + " pass, functional " + passing(b.functional) + " of " + b.functional.length + ", cell " + buildKey(id, "standalone", "opus", 1));

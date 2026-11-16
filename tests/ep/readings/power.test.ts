@@ -34,5 +34,9 @@ describe("power.py (needs uv and numpy 2.5.4)", () => {
     expect(v.fitted.mix).toEqual([0, 1, 0]);
     expect(v.fitted.unforeseeable).toBe(0.2);
     expect(Object.keys(v.mdd)).toEqual(["64x3", "40x3"]);
+    writeFileSync(p, JSON.stringify({ builds, unforeseeable: 3 }));
+    const count = py(["--fit", p, "--json"]);
+    expect(count.status).toBe(2);
+    expect(count.stderr).toStartWith("E_USAGE power.py --fit: the unforeseeable share must be at least 0 and under 1");
   }, 300_000);
 });

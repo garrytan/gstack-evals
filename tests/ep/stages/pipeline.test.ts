@@ -190,6 +190,8 @@ describe("ep stages in section 14's order", () => {
     expect(r.builds.filter((b) => b.arm === "plain" || b.arm === "standalone").every((b) => b.readReview === true && b.reviewer === "opus")).toBe(true);
     expect(r.hintedBuilds.some((b) => b.unit === UNWINNABLE[0])).toBe(true);
     expect(r.unforeseeable).toBe(1);
+    expect(r.hinted.screened - r.hinted.passed).toBe(UNWINNABLE.length);
+    expect(r.admitted).toBe(r.hinted.passed);
   });
 
   test("the judge reads each comparison unit's bundles under the judge item", async () => {

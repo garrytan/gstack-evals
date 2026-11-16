@@ -20,7 +20,8 @@
 # No arguments: the frozen table (every row, then the ranges). --rows 64x3 or --rows 64x3:avoid: one design's rows and
 # range (the dry run's case). --n: one MDD for the inputs given. --fit pilot.json: refits the control centers, the build
 # SD and the repository mix from the pilot's plain builds and prints the re-projected MDD (the start rule's input).
-# pilot.json: {"builds": [{"unit": "u1", "repo": "r1", "avoid": 0.5, "catch": 1}, ...], "unforeseeable": 0.0}.
+# pilot.json: {"builds": [{"unit": "u1", "repo": "r1", "avoid": 0.5, "catch": 1}, ...], "unforeseeable": 0.0}, where
+# unforeseeable is the share of admitted units both raters called no (at least 0 and under 1), never a count.
 import argparse, json, sys
 import numpy as np
 
@@ -136,6 +137,9 @@ def fit(path, unf_flag):
     counts = [sum(1 for c in per_repo.values() if min(c, 3) == k) for k in (1, 2, 3)]
     mix = tuple(c / sum(counts) for c in counts)
     unf = unf_flag if unf_flag is not None else float(data.get("unforeseeable", 0.0))
+    if not 0.0 <= unf < 1.0:
+        print("E_USAGE power.py --fit: the unforeseeable share must be at least 0 and under 1 (a share of admitted units, not a count), got %r" % unf, file=sys.stderr)
+        sys.exit(2)
     clip = lambda x: float(np.clip(x, 0.02, 0.98))
     best = None
     for sd_e in np.arange(0.0, 2.01, 0.25):

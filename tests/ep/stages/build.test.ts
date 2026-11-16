@@ -59,7 +59,7 @@ describe("runPlantedBuild", () => {
     return { outcome, tree: outcome === "completed" || outcome === "limit" ? tree : null, costUsd: 1 };
   };
   const review = (outcome: SessionOutcome): ReviewRecord => ({ unit: "u1", arm: "standalone", reviewer: "opus", rep: 2, outcome, exposed: true, exposedBeforeBlock: true, blocks: 0, bundleWords: 10, truncated: false, repoEditsDiscarded: 0, costUsd: 1 });
-  const base = { unit, unitDir: dir, baseTree: dir, arm: "standalone" as const, reviewer: "opus" as const, rep: 2, note: "", mount: { plan: "p", review: "r" }, grader };
+  const base = { unit, unitDir: dir, arm: "standalone" as const, reviewer: "opus" as const, rep: 2, note: "", mount: { plan: "p", review: "r" }, grader };
 
   test("a completed reviewed build is graded, with readReview and the test lines from its tree", async () => {
     const b = await runPlantedBuild({ ...base, review: review("completed"), session: session(["completed"]) });

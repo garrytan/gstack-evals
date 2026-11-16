@@ -234,7 +234,7 @@ async function runAuthoringBuilds(o: { run: string; src: UnitSource; arm: "hinte
     run: async (id) => {
       const dir = authorDir(o.run, id);
       const hint = o.arm === "hinted" ? readFileSync(join(dir, "hint.txt"), "utf8").trim() : null;
-      const b = await runPlantedBuild({ unit: drawnUnit(o.src, o.run, id), unitDir: o.src.dir(id), baseTree: o.src.base(id), arm: o.arm, reviewer: null, rep: 1, note: o.src.note(id), hint, mount: { plan: join(dir, "plan.md"), review: null }, session, grader, log: o.log });
+      const b = await runPlantedBuild({ unit: drawnUnit(o.src, o.run, id), unitDir: o.src.dir(id), arm: o.arm, reviewer: null, rep: 1, note: o.src.note(id), hint, mount: { plan: join(dir, "plan.md"), review: null }, session, grader, log: o.log });
       return {
         costUsd: b.costUsd,
         commit: () => {
@@ -498,7 +498,7 @@ export async function buildsStage(o: StageIo & { phase: "pilot" | "comparison" |
   for (const c of cells) {
     const r = isReviewed(c.arm) ? reviewOf(c) : null;
     if (done(c) || !r || (r.outcome !== "upstream_gap" && r.outcome !== "infra_gap")) continue;
-    const b = await runPlantedBuild({ unit: unit(c.unit), unitDir: o.src.dir(c.unit), baseTree: o.src.base(c.unit), arm: c.arm, reviewer: c.reviewer, rep: c.rep, note: "", mount: { plan: "", review: "" }, review: r, session: o.session, grader: { grade: () => fail("E_INTERNAL", "a gap is never graded"), catchOf: () => fail("E_INTERNAL", "a gap is never graded") }, log: o.log });
+    const b = await runPlantedBuild({ unit: unit(c.unit), unitDir: o.src.dir(c.unit), arm: c.arm, reviewer: c.reviewer, rep: c.rep, note: "", mount: { plan: "", review: "" }, review: r, session: o.session, grader: { grade: () => fail("E_INTERNAL", "a gap is never graded"), catchOf: () => fail("E_INTERNAL", "a gap is never graded") }, log: o.log });
     saveBuild(outDir, b);
   }
   await runGated(cellOrder(df.seed, [...new Set(cells.map((c) => c.unit))], cells), {
@@ -514,7 +514,7 @@ export async function buildsStage(o: StageIo & { phase: "pilot" | "comparison" |
       else if (c.arm === "stock") mount = writeMount(join(o.run, "builds", "stock", "mounts", c.unit), stockMount(readFileSync(plan, "utf8")));
       else mount = { plan, review: null };
       if (hasReview(c.arm) && !existsSync(mount.review!)) fail("E_USAGE", "build cell " + buildKey(c.unit, c.arm, c.reviewer, c.rep) + ": its review mount " + mount.review + " is missing");
-      const b = await runPlantedBuild({ unit: unit(c.unit), unitDir: o.src.dir(c.unit), baseTree: o.src.base(c.unit), arm: c.arm, reviewer: c.reviewer, rep: c.rep, note: o.src.note(c.unit), mount, review: isReviewed(c.arm) ? reviewOf(c) : null, session: o.session, grader: o.grader, log: o.log });
+      const b = await runPlantedBuild({ unit: unit(c.unit), unitDir: o.src.dir(c.unit), arm: c.arm, reviewer: c.reviewer, rep: c.rep, note: o.src.note(c.unit), mount, review: isReviewed(c.arm) ? reviewOf(c) : null, session: o.session, grader: o.grader, log: o.log });
       return { costUsd: b.costUsd, commit: () => void saveBuild(outDir, b) };
     },
   });
@@ -545,6 +545,10 @@ export interface RunRecords {
   hintedBuilds: GradedBuild[];
   /** Admitted units both raters called no. */
   unforeseeable: number;
+  /** Authored units admitted (calls and hinted build passed): the unforeseeable share's denominator. */
+  admitted: number;
+  /** Every screened unit's hinted outcome so far, a hinted gap left out; at the pilot, batch 1's screened units. */
+  hinted: { passed: number; screened: number };
 }
 
 /** Every record the run wrote, in the order its sessions started (each stage's seeded cell order). */
@@ -577,8 +581,10 @@ export function runRecords(run: string, src: UnitSource): RunRecords {
     ...builtIn(join(run, "builds", "stock", "cells"), comparison.map((id) => buildKey(id, "stock", null, 1))),
   ];
   const hintedBuilds = builtIn(authoring, df.order.map((c) => buildKey(c.id, "hinted", null, 1)));
-  const authored = authoredMap(run, df.order);
-  return { units: ids.map((id) => drawnUnit(src, run, id)), lost, smoke, reviews, builds, hintedBuilds, unforeseeable: [...authored.values()].filter((a) => a.admitted && a.unforeseeable).length };
+  const authored = [...authoredMap(run, df.order).values()].filter((a) => a.admitted);
+  const screened = df.order.map((c) => readJson<HintedVerdict>(join(authorDir(run, c.id), "hinted.json"))).filter((h): h is HintedVerdict => h !== null && h.winnable !== null);
+  const hinted = { passed: screened.filter((h) => h.winnable).length, screened: screened.length };
+  return { units: ids.map((id) => drawnUnit(src, run, id)), lost, smoke, reviews, builds, hintedBuilds, unforeseeable: authored.filter((a) => a.unforeseeable).length, admitted: authored.length, hinted };
 }
 
 /** The judge's bundle for one unit and source: what that builder saw (a review's mount, the stock mount, or the

@@ -7,7 +7,7 @@
 // reason when the transplant drops or the build's own tests don't compile. Prints nothing.
 import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { randomBytes } from "node:crypto";
 import { catchBuild } from "../../eng-build/catch.ts";
@@ -151,7 +151,8 @@ function gitIn(gitDir: string, args: string[], index?: string): string {
 }
 
 /** A tree's diff from a base: the base as a directory, or, when it is null, the unit's base commit from its bundle. Build
- * outputs a tree's .gitignore names are left out, as git leaves them out. */
+ * outputs a tree's .gitignore names are left out, as git leaves them out. The dry run writes a fixture build's final.patch
+ * with it. */
 export function treeDiff(unitDir: string, baseTree: string | null, tree: string): string {
   const dir = mkdtempSync(join(tmpdir(), "ep-diff-"));
   const g = join(dir, "g.git");
@@ -174,23 +175,25 @@ export function treeDiff(unitDir: string, baseTree: string | null, tree: string)
   }
 }
 
-/** The PlantedGrader seam (types.ts). */
+/** The PlantedGrader seam (types.ts). A build's tree is the session's output folder, and its final.patch (the build's diff
+ * from B) is what both reads grade, as eng-build's grader does. */
 export function plantedGrader(o: { work: string; runs?: number }): PlantedGrader {
   const runs = o.runs ?? FROZEN.runs;
+  const patchOf = (tree: string) => readFileSync(join(tree, "final.patch"), "utf8");
   return {
     async grade(unit, unitDir, tree) {
       requireSandbox();
       const { eb, task } = readUnit(unitDir);
-      const patch = treeDiff(unitDir, null, tree);
+      const patch = patchOf(tree);
       const grid = (set: (typeof eb.sets)[number] | undefined, want: string[]) => (set && want.length ? gradeSet({ taskDir: unitDir, task, eb, set, label: "build", patch, runs, seed: eb.seed + 3000, work: o.work, want, crash: true, sandbox: SANDBOX }) : {});
       return {
         planted: caseRuns(grid(eb.sets.find((s) => s.role === "B"), unit.planted), unit.planted),
         functional: caseRuns(grid(eb.sets[0], unit.functional), unit.functional),
       };
     },
-    async catchOf(_unit, unitDir, buildTree, baseTree) {
+    async catchOf(_unit, unitDir, buildTree) {
       requireSandbox();
-      const r = catchBuild({ unitDir, patch: treeDiff(unitDir, baseTree, buildTree), work: o.work, runs, crash: true, sandbox: SANDBOX });
+      const r = catchBuild({ unitDir, patch: patchOf(buildTree), work: o.work, runs, crash: true, sandbox: SANDBOX });
       const drop = r.drops[0]?.cls ?? (r.compiled < r.trees ? "own_tests_do_not_compile" : null);
       if (drop) return { catch: null, drop };
       const c = Object.values(r.catches)[0] ?? null;

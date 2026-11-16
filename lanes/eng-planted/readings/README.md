@@ -27,8 +27,8 @@ Each reads one JSON file. A stop line exits 2 with its E_EP_ code on stderr.
 
 | Command | Input | Stops |
 |---|---|---|
-| `ep pilot --in <f> [--seed n] [--power-json out]` | `{units, builds, hinted?, raise?: {authored, admitted, unused, perCandidateUsd, perReadUsd}, unforeseeable?, seed?}`; the pilot's units are those with `pilot` set | E_EP_INSTRUMENT, E_EP_FLOOR, E_EP_RAISE (first ceiling, with the projection), E_EP_CEILING (supply short of 40 hard units), E_EP_COMPONENTS_SPLIT |
-| `ep raise --in <f>` | `{units, builds, hinted?, hardAdmitted?, seed?}`: the raise's hard units | E_EP_CEILING |
+| `ep pilot --in <f> [--seed n] [--power-json out]` | `{units, builds, hinted, raise?: {authored, admitted, unused, perCandidateUsd, perReadUsd}, unforeseeable?, admitted?, seed?}` as `ep records` writes it (hinted counts every screened unit; --power-json turns unforeseeable over admitted into a share); the pilot's units are those with `pilot` set | E_EP_INSTRUMENT, E_EP_FLOOR, E_EP_RAISE (first ceiling, with the projection), E_EP_CEILING (supply short of 40 hard units), E_EP_COMPONENTS_SPLIT |
+| `ep raise --in <f>` | `{units, builds, hinted, hardAdmitted?, seed?}`: the raise's hard units; a pass prints a note that admission stays blocked until the raise's authoring and draw are built | E_EP_CEILING |
 | `ep exposure --in <f> [--reviewer opus]` | `{smoke, reviews?}`, sessions in run order | E_EP_EXPOSURE_GATE, E_EP_EXPOSURE_STOP |
 | `ep start --mdd <x>` | the re-printed MDD | E_EP_START_RULE |
 | `ep admitted --admitted <n>` | admitted comparison units | E_EP_SUPPLY_SHORT |

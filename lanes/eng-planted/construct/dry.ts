@@ -15,7 +15,7 @@ import { construct, type Constructed } from "./build.ts";
 import { compareDigests, unitDigests } from "./digests.ts";
 import { bundleHistory } from "./checks.ts";
 import { goFixture, nodeFixture, pyFixture, rustFixture, stubGitHub } from "./fixtures.ts";
-import { pinImages, plantedGrader, qualify, RECIPE, recount, type Outcome } from "./grade.ts";
+import { pinImages, plantedGrader, qualify, RECIPE, recount, treeDiff, type Outcome } from "./grade.ts";
 import { NEUTRAL, type MinedFix } from "./local.ts";
 import { mineRepo } from "./mine.ts";
 import { emitUnit, type LabelMap } from "./emit.ts";
@@ -85,6 +85,13 @@ function treeAt(repo: string, rev: string, extra: Record<string, string> = {}): 
   return dir;
 }
 
+/** A build session's output folder as the real launcher leaves it: final.patch, the build's diff from B. */
+function sessionOut(unitDir: string, tree: string, base: string | null = null): string {
+  const out = scratch();
+  writeFileSync(join(out, "final.patch"), treeDiff(unitDir, base, tree));
+  return out;
+}
+
 function plantedOf(b: Built): PlantedUnit {
   const { eb } = readUnit(b.unitDir);
   const planted = eb.unit.aftermath.flatMap((a) => a.cases);
@@ -96,11 +103,11 @@ async function catchOf(eco: Ecosystem, files: Record<string, string>) {
   if (b.outcome.step !== "clean") return { catch: null, drop: "fixture_not_clean" };
   const base = treeAt(b.dir, b.unit.base);
   const tree = treeAt(b.dir, b.unit.fix, files);
+  const out = sessionOut(b.unitDir, tree, base);
   try {
-    return await plantedGrader({ work: b.work }).catchOf(plantedOf(b), b.unitDir, tree, base);
+    return await plantedGrader({ work: b.work }).catchOf(plantedOf(b), b.unitDir, out);
   } finally {
-    rmSync(base, { recursive: true, force: true });
-    rmSync(tree, { recursive: true, force: true });
+    for (const d of [base, tree, out]) rmSync(d, { recursive: true, force: true });
   }
 }
 
@@ -224,8 +231,9 @@ export const DRY: DryCase[] = [
       const b = await built("go");
       if (b.outcome.step !== "clean") return { ok: false, detail: line(b.outcome) };
       const tree = treeAt(b.dir, b.unit.fix);
-      const g = await plantedGrader({ work: b.work }).grade(plantedOf(b), b.unitDir, tree);
-      rmSync(tree, { recursive: true, force: true });
+      const out = sessionOut(b.unitDir, tree);
+      const g = await plantedGrader({ work: b.work }).grade(plantedOf(b), b.unitDir, out);
+      for (const d of [tree, out]) rmSync(d, { recursive: true, force: true });
       const allPass = [...g.planted, ...g.functional].every((c) => c.runs.length === 3 && c.runs.every((r) => r === "pass"));
       const goImage = Object.keys(b.images).join(",");
       return { ok: allPass && goImage === "golang:1", detail: line(b.outcome) + " images=" + goImage + " graded F' all pass=" + allPass };
@@ -339,14 +347,14 @@ export const DRY: DryCase[] = [
       const src = unitFolders(units, repos);
       const row = preflightRows({ run: join(root, "run"), units, repos, gstack: root, record: root, harbor: "harbor", docker: "docker" }).find((r) => r.name === "units")!;
       const tree = treeAt(b.dir, b.unit.fix);
+      const out = sessionOut(src.dir(u.id), tree);
       try {
-        const g = await (await REAL.grader({ work: b.work, log: () => {} })).grade(src.units()[0], src.dir(u.id), tree);
+        const g = await (await REAL.grader({ work: b.work, log: () => {} })).grade(src.units()[0], src.dir(u.id), out);
         const pass = g.planted.length === u.planted.length && g.planted.every((p) => p.runs.length > 0 && p.runs.every((c) => c === "pass"));
         const fn = g.functional.length === u.functional.length && g.functional.every((p) => p.runs.every((c) => c === "pass"));
         return { ok: row.ok && pass && fn && u.planted.length > 0, detail: "units row " + (row.ok ? "ok" : "failed") + "; planted " + u.planted.length + " pass on F'=" + pass + "; functional " + u.functional.length + " pass on F'=" + fn };
       } finally {
-        rmSync(tree, { recursive: true, force: true });
-        rmSync(root, { recursive: true, force: true });
+        for (const d of [tree, out, root]) rmSync(d, { recursive: true, force: true });
       }
     },
   },

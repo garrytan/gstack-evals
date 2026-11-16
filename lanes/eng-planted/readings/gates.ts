@@ -33,15 +33,11 @@ export const enforce = (d: GateDecision): void => {
 // ---------------------------------------------------------------------------------------------------------------------
 // Admission pilot (section 7).
 
+/** Batch 1's screened units whose hinted build passed a planted case in 2 of 3 runs, out of those screened (a hinted
+ * gap left out); ep records counts them from authoring's verdicts, since the drawn units hold only the survivors. */
 export interface Hinted {
   passed: number;
   screened: number;
-}
-
-/** Batch 1's screened units whose hinted build passed a planted case in 2 of 3 runs (PlantedUnit.winnable). */
-export function hintedOf(units: PlantedUnit[]): Hinted {
-  const s = units.filter((u) => u.winnable !== null);
-  return { passed: s.filter((u) => u.winnable === true).length, screened: s.length };
 }
 
 export interface AdmissionReading {
@@ -217,7 +213,8 @@ export function raiseRead(r: AdmissionReading, hardAdmitted: number | null): Adm
   return { ...a, line: "CEILING", code: "E_EP_CEILING", message, lines: [...a.lines, "E_EP_CEILING " + message] };
 }
 
-/** The start rule's input for power.py --fit: one row per scored plain pilot build. */
+/** The start rule's input for power.py --fit: one row per scored plain pilot build, and the unforeseeable share of
+ * admitted units. */
 export function pilotPowerInput(units: PlantedUnit[], builds: GradedBuild[], unforeseeable: number) {
   const byId = new Map(units.map((u) => [u.id, u]));
   const rows: Array<{ unit: string; repo: string; avoid: number; catch: number }> = [];

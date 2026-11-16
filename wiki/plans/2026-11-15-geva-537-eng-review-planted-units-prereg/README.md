@@ -18,7 +18,7 @@ links:
   - garrytan/gstack#4375
 attachments:
   - c730757f068ec0782153d257d83eeb0f38536fc2347f88c1862cae20c5186be8  review-record.md
-  - 783f9380b5dbb5c5d8d11306c93dd5fbc6858ebb8cda3a0a7312e1b4d209dcd4  power.py
+  - 5ff2e90a51592685e1bd3ab6b5cf907beb479c22944e8210d5dfe12d969b228b  power.py
   - 60e9446f42b7df1b7d4dd04e291260900b3f832c1e545165af4db43c81a5ce29  power.txt
   - 2c6a9094fe3e10a606ef5a2a4d058a938687b28ce68ee01eb6f4b44554cb403c  power-supply.txt
 ---
@@ -242,7 +242,7 @@ On the first 20 comparison units in seeded order: plain reviews, each built once
 4. **CEILING:** the chosen primary above 0.75 or its lower bound above 0.65, or both components above. Then the content raise below. A pair with one component at the floor and the other at the ceiling stops as FIX-METHOD on task fit.
 5. Otherwise HEADROOM, and the re-projection runs on the pilot's measured costs and variance (section 10).
 
-**Content raise (R61), by content, not session length:** the comparison population becomes the hard stratum, foreseeable units whose no-review build missed on the component at the ceiling (avoid under 1, or catch 0). More candidates come from the frozen manifest's unused qualifiers through the same screen and authoring, at batch 1's measured hard rate; the projection, the size target (64 hard units, down to the floor of 40) and its cap go to the Captain before it spends. The raise reads 16 hard units' plain builds (2 a unit) on the same lines: in band, the comparison runs on hard units only and every claim names that population; still at the ceiling, or the supply can't reach 40 hard units, the attempt stops as FIX-METHOD (saturation), no cut. The selection uses a different build from every compared one, so it shifts every arm's population the same way and biases no contrast.
+**Content raise (R61), by content, not session length:** the comparison population becomes the hard stratum, foreseeable units whose no-review build missed on the component at the ceiling (avoid under 1, or catch 0). More candidates come from the frozen manifest's unused qualifiers through the same screen and authoring, at batch 1's measured hard rate; the projection, the size target (64 hard units, down to the floor of 40) and its cap go to the Captain before it spends. The raise reads 16 hard units' plain builds (2 a unit) on the same lines: in band, the comparison runs on hard units only and every claim names that population; still at the ceiling, or the supply can't reach 40 hard units, the attempt stops as FIX-METHOD (saturation), no cut. The selection uses a different build from every compared one, so it shifts every arm's population the same way and biases no contrast. This PR builds the raise's read (`ep raise`) but not its hard-unit authoring and draw: those are built, reviewed and dry-run on the results branch before any raise spend, and admission stays blocked until then.
 
 The pilot reads only control levels, so continuing past it biases no primary. Its plain builds choose the primary and also count in the plain cells, so every contrast also prints on the 44 units outside the pilot, the clean check, and the plain arm prints a pilot-versus-later stratum.
 
@@ -351,7 +351,7 @@ Everything new sits in lanes/eng-planted/ behind `gstack-evals ep`, in three par
 
 1. The prereg PR merges through /ship at gate class; the Captain records line and item caps and gives the go.
 2. Keyless, before the freeze (section 2, done): mine, construct, screen and recount the frozen search pools in the frozen sandbox. After the go, on a screening VM: rebuild each usable unit from its recipe at the frozen harness commit (construct, screen and units), and check it with `gstack-evals ep digests --check` against its sealed digests. A sealed full copy may stand in for the rebuild after the same check. A unit that can't be rebuilt or fails the check counts as lost (section 15), and the draw's floor rules in section 3 apply as written.
-3. Authoring batch 1 (6 calibration and 20 pilot units), then the exposure smoke, then the pilot and its admission read, and the first judge call alone. Any stop line goes to the Captain at once, in the same step that proves it.
+3. Authoring batch 1 (6 calibration and 20 pilot units), then the exposure smoke, then the pilot and its admission read, and the first judge call alone. Any stop line goes to the Captain at once, in the same step that proves it. A content raise spends only after its hard-unit authoring and draw are built, reviewed and dry-run (section 7).
 4. Fewer than one Opus skill arm through the exposure gate ends the comparison; one arm through runs that arm's family alone.
 5. Authoring batch 2, then the comparison cells, then the judge check and the judged secondary, then analysis and the results PR.
 6. Every stage's records are sealed to the eng-review recipient and copied to org custody as soon as they are written; any host holding non-reproducible images is copied off before a paid stage depends on it, and every VM is destroyed when its work ends.
