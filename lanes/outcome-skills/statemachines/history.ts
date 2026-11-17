@@ -82,14 +82,17 @@ export const FOLLOWON_SCRIPT = sh("followon.sh");
 
 /** Section 4's strip rule on a first stage's full-tree patch, for the follow-on tree built on it: every CLAUDE.md,
  *  CLAUDE.local.md and AGENTS.md the patch writes (so .claude/AGENTS.md too), the outermost .claude a written path sits
- *  in, and each in-repository @import a written CLAUDE.md or CLAUDE.local.md names. The base tree was stripped already,
- *  so anything the rule names in a follow-on tree came from the patch. A CLAUDE.md or CLAUDE.local.md the patch makes from
+ *  in, and each @import of a written CLAUDE.md or CLAUDE.local.md that names a file the patch creates. An import of a base
+ *  file or a directory stays: with the CLAUDE.md gone nothing loads it as memory, and removing it would take the base's
+ *  own code out of the follow-on tree. A CLAUDE.md or CLAUDE.local.md the patch makes from
  *  an existing file (renamed, copied or edited) or writes as binary refuses (E_SM_STRIP): the patch doesn't hold its whole
  *  text, so it can't name every import. */
 export function followOnStrip(treePatch: string, repoDir: string): string[] {
   const remove = new Set<string>();
   const texts = treePatch.split(/^(?=diff --git )/m).filter((s) => s.startsWith("diff --git "));
-  fileChanges(treePatch).forEach((c, i) => {
+  const changes = fileChanges(treePatch);
+  const created = new Set(changes.filter((c) => c.oldPath === null && c.newPath !== null).map((c) => c.newPath));
+  changes.forEach((c, i) => {
     const p = c.newPath;
     if (!p) return;
     const parts = p.split("/");
@@ -102,7 +105,7 @@ export function followOnStrip(treePatch: string, repoDir: string): string[] {
       const body = (texts[i] ?? "").split("\n");
       const hunk = body.findIndex((l) => l.startsWith("@@"));
       const text = hunk < 0 ? "" : body.slice(hunk).filter((l) => l.startsWith("+")).map((l) => l.slice(1)).join("\n");
-      for (const imp of importsOf(p, text, repoDir)) remove.add(imp);
+      for (const imp of importsOf(p, text, repoDir)) if (created.has(imp)) remove.add(imp);
     }
   });
   return [...remove].sort();

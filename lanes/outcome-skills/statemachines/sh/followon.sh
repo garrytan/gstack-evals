@@ -2,7 +2,8 @@
 # section 4 strip: each path in $2/remove (NUL-separated, from history.ts followOnStrip) that the tree holds is removed
 # from the index and the tree and printed as STRIPPED, before the commit. A mount point inside the tree (a VOLUME the
 # image declares) cannot be removed, so a strip path that is one is kept and one that holds one loses everything around
-# it, as rewrite.sh does on the base tree.
+# it, as rewrite.sh does on the base tree. A strip path with a symlink in its parent chain refuses (E_SM_STRIP, exit 3)
+# before anything is removed: rm would follow the link out of the path the rule named.
 set -euo pipefail
 cd "$1"
 git update-index -q --refresh || true
@@ -19,6 +20,13 @@ if [ -s "$2/remove" ]; then
       *) rm -rf -- "$1" ;;
     esac
   }
+  while IFS= read -r -d '' p; do
+    q=$p
+    while [ "${q%/*}" != "$q" ]; do
+      q=${q%/*}
+      if [ -L "$q" ]; then printf 'E_SM_STRIP the strip path %s has the symlink %s in its parent chain; nothing was removed\n' "$p" "$q" >&2; exit 3; fi
+    done
+  done < "$2/remove"
   while IFS= read -r -d '' p; do
     if [ -e "$p" ] || [ -L "$p" ]; then
       git --literal-pathspecs rm -r -q --cached --ignore-unmatch -- "$p" >/dev/null

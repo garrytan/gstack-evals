@@ -1,7 +1,8 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fixtureRepo, gitOut } from "../../lanes/outcome-skills/statemachines/fixtures.ts";
 import { FOLLOWON_SCRIPT, followOnFiles, followOnStrip, prepareBase, preflight, runBash, strippedPaths } from "../../lanes/outcome-skills/statemachines/history.ts";
@@ -16,6 +17,7 @@ const add = (p: string, body: string): string => {
   if (l[l.length - 1] === "") l.pop();
   return "diff --git a/" + p + " b/" + p + "\nnew file mode 100644\n--- /dev/null\n+++ b/" + p + "\n@@ -0,0 +1," + l.length + " @@\n" + l.map((x) => "+" + x).join("\n") + "\n";
 };
+const link = (p: string, target: string): string => "diff --git a/" + p + " b/" + p + "\nnew file mode 120000\n--- /dev/null\n+++ b/" + p + "\n@@ -0,0 +1 @@\n+" + target + "\n\\ No newline at end of file\n";
 
 const plain = add("src/x.ts", "export const x = 1;\n");
 const memory = [
@@ -37,8 +39,8 @@ const baseTree = () => {
 };
 
 describe("follow-on trees under section 4's strip", () => {
-  test("the strip list names every memory file a first stage writes, the outermost .claude, and in-repository @imports", () => {
-    expect(followOnStrip(memory, "/testbed/repo")).toEqual([".claude", "CLAUDE.md", "README.md", "a/b/AGENTS.md", "deep/.claude", "docs/new.md", "pkg/CLAUDE.local.md", "pkg/note.txt"]);
+  test("the strip list names every memory file a first stage writes, the outermost .claude, and @imports of files it creates", () => {
+    expect(followOnStrip(memory, "/testbed/repo")).toEqual([".claude", "CLAUDE.md", "a/b/AGENTS.md", "deep/.claude", "docs/new.md", "pkg/CLAUDE.local.md"]);
     expect(followOnStrip(plain, "/testbed/repo")).toEqual([]);
     expect(followOnStrip("", "/testbed/repo")).toEqual([]);
   });
@@ -55,8 +57,8 @@ describe("follow-on trees under section 4's strip", () => {
     const dir = baseTree();
     const r = runBash({ kind: "host", dir }, FOLLOWON_SCRIPT, followOnFiles(memory, dir));
     expect(r.status).toBe(0);
-    expect(strippedPaths(r.stdout)).toEqual([".claude", "CLAUDE.md", "README.md", "a/b/AGENTS.md", "deep/.claude", "docs/new.md", "pkg/CLAUDE.local.md"]);
-    expect(gitOut(dir, "ls-files").split("\n").sort()).toEqual([".gitignore", "docs/in-span.md", "src/lib.rs", "src/x.ts"]);
+    expect(strippedPaths(r.stdout)).toEqual([".claude", "CLAUDE.md", "a/b/AGENTS.md", "deep/.claude", "docs/new.md", "pkg/CLAUDE.local.md"]);
+    expect(gitOut(dir, "ls-files").split("\n").sort()).toEqual([".gitignore", "README.md", "docs/in-span.md", "src/lib.rs", "src/x.ts"]);
     expect(gitOut(dir, "status", "--porcelain", "--ignored")).toBe("");
     expect(existsSync(join(dir, "deep"))).toBe(true);
     expect(preflight({ kind: "host", dir }, 2, "fixture")).toContain("count=2 refs=refs/heads/main");
@@ -71,6 +73,33 @@ describe("follow-on trees under section 4's strip", () => {
     expect(r.status).toBe(0);
     expect(strippedPaths(r.stdout)).toEqual([]);
     expect(gitOut(after, "rev-parse", "HEAD")).toBe(gitOut(before, "rev-parse", "HEAD"));
+  });
+
+  test("an import of a base file or directory stays in the tree; only a file the patch creates is stripped with it", () => {
+    const patch = add("CLAUDE.md", "Source lives in @src\nTests in @tests/\nRead @README.md\nNotes in @docs/new.md\n") + add("docs/new.md", "notes\n");
+    expect(followOnStrip(patch, "/testbed/repo")).toEqual(["CLAUDE.md", "docs/new.md"]);
+    const dir = baseTree();
+    const r = runBash({ kind: "host", dir }, FOLLOWON_SCRIPT, followOnFiles(patch, dir));
+    expect(r.status).toBe(0);
+    expect(strippedPaths(r.stdout)).toEqual(["CLAUDE.md", "docs/new.md"]);
+    expect(gitOut(dir, "ls-files").split("\n").sort()).toEqual([".gitignore", "README.md", "src/lib.rs"]);
+  });
+
+  test("a strip path with a symlink in its parent chain refuses before anything is removed", () => {
+    const outside = mkdtempSync(join(tmpdir(), "sm-outside-"));
+    try {
+      writeFileSync(join(outside, "f"), "keep\n");
+      const patch = link("docs", outside) + add("CLAUDE.md", "see @docs/f\n");
+      expect(followOnStrip(patch, "/testbed/repo")).toEqual(["CLAUDE.md"]);
+      const dir = baseTree();
+      const r = runBash({ kind: "host", dir }, FOLLOWON_SCRIPT, { "tree.patch": patch, remove: "CLAUDE.md\0docs/f\0" });
+      expect(r.status).toBe(3);
+      expect(r.stderr).toMatch(/^E_SM_STRIP the strip path docs\/f has the symlink docs in its parent chain/m);
+      expect(existsSync(join(outside, "f"))).toBe(true);
+      expect(existsSync(join(dir, "CLAUDE.md"))).toBe(true);
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
   });
 
   test("the session tree check still refuses a tree that holds one", () => {
@@ -104,7 +133,7 @@ describe.skipIf(process.env.GSTACK_EVALS_DOCKER !== "1")("the session image and 
       const t = startTree(u, u.image.runtime_id!, vol, "S2", memory, dst);
       expect(img.commits).toBe(2);
       expect(t.head).toBe(img.head);
-      expect(img.removed).toEqual([".claude", "CLAUDE.md", "README.md", "a/b/AGENTS.md", "deep/.claude", "docs/new.md", "pkg/CLAUDE.local.md"]);
+      expect(img.removed).toEqual([".claude", "CLAUDE.md", "a/b/AGENTS.md", "deep/.claude", "docs/new.md", "pkg/CLAUDE.local.md"]);
       expect(t.removed).toEqual(img.removed);
     } finally {
       dropVolume(dst);
