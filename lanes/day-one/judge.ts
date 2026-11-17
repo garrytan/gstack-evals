@@ -96,10 +96,12 @@ export function parseLabels(text: string | null, ids: readonly string[]): LabelP
     return { kind: "bad", reason: "the last labels block is not JSON", labels: [] };
   }
   if (!Array.isArray(obj?.items)) return { kind: "bad", reason: "the block has no items list", labels: [] };
+  const times = new Map<unknown, number>();
+  for (const it of obj.items) times.set(it?.id, (times.get(it?.id) ?? 0) + 1);
   const seen = new Map<string, Label>();
   const bad: string[] = [];
   for (const it of obj.items) {
-    if (!ids.includes(it?.id) || seen.has(it.id) || typeof it?.covered !== "boolean" || typeof it?.usable !== "boolean") {
+    if (!ids.includes(it?.id) || times.get(it.id)! > 1 || typeof it?.covered !== "boolean" || typeof it?.usable !== "boolean") {
       bad.push(String(it?.id));
       continue;
     }

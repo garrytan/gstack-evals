@@ -117,6 +117,8 @@ function armSpec(arm: PlanArm | "build" | "check"): ArmSpec {
 }
 
 async function stage(f: Map<string, string[]>, io: Io, env: Env): Promise<number> {
+  const parallel = Number(opt(f, "--parallel") ?? "1");
+  if (!Number.isInteger(parallel) || parallel < 1) refuse("--parallel is a whole number from 1");
   const st = one(f, "--stage") as Stage;
   if (!["base", "review", "build", "check"].includes(st)) refuse("--stage is base, review, build or check");
   const arms = (f.get("--arms") ?? refuse("missing --arms")) as PlanArm[];
@@ -157,7 +159,7 @@ async function stage(f: Map<string, string[]>, io: Io, env: Env): Promise<number
         cap: usd(one(f, "--spend-cap"), "--spend-cap"),
         ownerCap: planning ? usd(one(f, "--owner-spend-cap"), "--owner-spend-cap") : 0,
         voiceCap: opt(f, "--voice-cap") ? usd(opt(f, "--voice-cap")!, "--voice-cap") : 0,
-        parallel: Number(opt(f, "--parallel") ?? "1"),
+        parallel,
         policy: policy as LoadedPolicy,
         ledger: ledger.path,
         docker: env.GSTACK_EVALS_DOCKER_BIN || "docker",
@@ -224,12 +226,20 @@ function readings(f: Map<string, string[]>, io: Io): number {
   const out = resolve(one(f, "--out"));
   const unitsDir = resolve(one(f, "--units-dir"));
   const arms = (f.get("--arms") ?? refuse("missing --arms")) as PlanArm[];
-  const rows: Row[] = (f.get("--tag") ?? refuse("missing --tag")).flatMap((t) => (existsSync(join(out, "check-" + t, "rows.ndjson")) ? readNd(join(out, "check-" + t, "rows.ndjson")) : []));
+  const selected = new Set<string>();
+  const rows: Row[] = (f.get("--tag") ?? refuse("missing --tag")).flatMap((t) => {
+    const dir = join(out, "check-" + t);
+    if (!existsSync(join(dir, "manifest.json"))) refuse("--tag " + t + ": no check stage manifest at " + join(dir, "manifest.json"));
+    const m = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8")) as { units: string[]; reps: number[] };
+    for (const u of m.units) for (const r of m.reps) selected.add(u + "/r" + r);
+    return existsSync(join(dir, "rows.ndjson")) ? readNd(join(dir, "rows.ndjson")) : [];
+  });
   const planRows: Row[] = readdirSync(out).filter((d) => d.startsWith("base-") || d.startsWith("review-")).flatMap((d) => (existsSync(join(out, d, "rows.ndjson")) ? readNd(join(out, d, "rows.ndjson")) : []));
   const unitOf = new Map<string, Unit>();
   const builds: ScoredBuild[] = [];
   for (const pr of planRows) {
     if (pr.cell.stage === "base" && !arms.includes("n")) continue;
+    if (!selected.has(pr.cell.unit + "/r" + pr.cell.rep)) continue;
     const loaded = unitOf.has(pr.cell.unit) ? null : loadUnit(unitsDir, pr.cell.unit);
     const u = unitOf.get(pr.cell.unit) ?? (loaded && "unit" in loaded ? loaded.unit : null);
     if (!u || u.category !== 2 || !arms.includes(pr.cell.arm)) continue;

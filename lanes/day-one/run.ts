@@ -168,24 +168,23 @@ function readRows(dir: string): Map<string, Row> {
   return rows;
 }
 
-/** An attempt a crash left with a marker and no row: an infrastructure failure, charged what the ledger holds for its meters. */
+/** An attempt a crash left with a marker and no row: an infrastructure failure, charged what the ledger holds for each meter, the voice meter's on the voice. */
 function reconcile(dir: string, ledger: string | null): AttemptRead {
   const meter = existsSync(join(dir, "meter.json")) ? (JSON.parse(readFileSync(join(dir, "meter.json"), "utf8")) as { meter_id: string; voice_meter_id: string | null; lease_id: string | null }) : null;
-  let spent = 0;
+  let planner = 0;
+  let voice = 0;
   if (meter?.lease_id && ledger && existsSync(ledger)) {
     const local = openLocalLedger({ path: ledger, rule: "the run's local ledger" });
     try {
       const ms = local.meters(meter.lease_id);
-      for (const id of [meter.meter_id, meter.voice_meter_id]) {
-        const m = id ? ms.get(id) : undefined;
-        if (m) spent += m.spent_micros + m.unknown_micros;
-      }
+      planner = ms.get(meter.meter_id)?.held_micros ?? 0;
+      voice = meter.voice_meter_id ? (ms.get(meter.voice_meter_id)?.held_micros ?? 0) : 0;
     } finally {
       local.close();
     }
   }
-  writeFileSync(join(dir, "reconcile.json"), JSON.stringify({ meter, ledger_micros: spent }, null, 2) + "\n");
-  return { termination: { kind: "infra", incident: "an attempt a crash left unfinished, reconciled" }, web: 0, gstack_reads: [], contained: [], micros: spent, voice: null, out: null };
+  writeFileSync(join(dir, "reconcile.json"), JSON.stringify({ meter, planner_micros: planner, voice_micros: voice }, null, 2) + "\n");
+  return { termination: { kind: "infra", incident: "an attempt a crash left unfinished, reconciled" }, web: 0, gstack_reads: [], contained: [], micros: planner, voice: meter?.voice_meter_id ? { micros: voice, requests: 0, refused: 0 } : null, out: null };
 }
 
 /** Whether autoplan's run in the live work dir waits at its gate. */
@@ -311,7 +310,7 @@ export async function runStage(o: StageInput, deps: StageDeps): Promise<StageRes
             if (infra && attempt === 2) end = { state: "missing", code: "E_DAYONE_APP", why: appRun?.detail ?? "the browser container failed twice" };
             continue;
           }
-          const ran = await launch({ rig, policy: o.policy, docker: o.docker, runId: o.runId, arm: "check", cell: c.unit + "-r" + c.rep + "-" + c.arm, rep: c.rep, attempt, model: lim.model, dir: sdir, seed: null, prompt, minutes: lim.minutes, turns: lim.turns, allowanceMicros: micros(lim.usd), nextUser });
+          const ran = await launch({ rig, policy: o.policy, docker: o.docker, runId: o.runId, arm: "check", cell: c.unit + "-r" + c.rep + "-" + c.arm, rep: c.rep, attempt, model: lim.model, dir: sdir, seed: null, prompt, minutes: lim.minutes, turns: lim.turns, allowanceMicros: micros(lim.usd), nextUser, mcpUrl: appRun.mcpUrl });
           app.stop(appRun, o.docker, join(sdir, "browser"));
           read = ran;
           const outcome0 = settle(attemptOutcome(read, null), attempt);

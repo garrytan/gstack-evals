@@ -103,6 +103,7 @@ function stubLaunch(o: { leak?: boolean; usd?: number } = {}) {
     const out = join(l.dir, "out");
     mkdirSync(out, { recursive: true });
     if (l.arm === "check") {
+      must(l.mcpUrl === "http://c:8931/mcp", "the checker was launched without the browser container's MCP endpoint");
       await l.nextUser(["Tried every task.\n```verdicts\n" + JSON.stringify({ tasks: [1, 2, 3, 4, 5].map((i) => ({ id: "t" + i, done: i <= 2, why: "seen" })) }) + "\n```"]);
     } else if (l.arm === "build") {
       writeFileSync(join(out, "start.sh"), "node server.js\n");
@@ -119,9 +120,9 @@ function stubLaunch(o: { leak?: boolean; usd?: number } = {}) {
 
 const stubApp = { start: async () => ({ container: "c", mcpUrl: "http://c:8931/mcp", started: true, start_s: 3, detail: "ok", copy: "/nonexistent" }), stop: () => {} } as unknown as NonNullable<StageDeps["app"]>;
 
-async function stageRun(dir: string, us: Unit[], st: Stage, arms: ("n" | "d" | "a")[], cap: number, extra: Partial<StageDeps> = {}, closed = { n: 0 }) {
+async function stageRun(dir: string, us: Unit[], st: Stage, arms: ("n" | "d" | "a")[], cap: number, extra: Partial<StageDeps> = {}, closed = { n: 0 }, ledger: string | null = null) {
   const calls: string[] = [];
-  return runStage({ stage: st, tag: "dry", units: us, reps: [1], arms, out: dir, runId: DAYONE_RUN, cap: cap * 1e6, ownerCap: 10e6, voiceCap: 100e6, parallel: 2, policy: policyOf(), ledger: null, docker: "docker", scratch: join(dir, "scratch"), nodeVolume: "vol", log: () => {} }, { openRig: () => stubRig(closed), ownerMeter: ownerMeter(calls), launch: stubLaunch(), app: stubApp, ...extra });
+  return runStage({ stage: st, tag: "dry", units: us, reps: [1], arms, out: dir, runId: DAYONE_RUN, cap: cap * 1e6, ownerCap: 10e6, voiceCap: 100e6, parallel: 2, policy: policyOf(), ledger, docker: "docker", scratch: join(dir, "scratch"), nodeVolume: "vol", log: () => {} }, { openRig: () => stubRig(closed), ownerMeter: ownerMeter(calls), launch: stubLaunch(), app: stubApp, ...extra });
 }
 
 export const CASES: Record<string, Case> = {
@@ -219,13 +220,15 @@ export const CASES: Record<string, Case> = {
     let sends = 0;
     const r = await labelPacket(ps[0]!, async () => (++sends === 1 ? { text: "garbled" } : { text: block([{ id: "c1", covered: true, usable: true }, { id: "c2", covered: false, usable: false }]) }));
     must(sends === 2 && r.resent && !r.missing.length, "the resend did not replace a garbled answer");
+    const twice = await labelPacket(ps[0]!, async () => ({ text: block([{ id: "c1", covered: true, usable: true }, { id: "c1", covered: false, usable: false }, { id: "c2", covered: false, usable: false }]) }));
+    must(twice.missing.join() === "c1" && twice.labels.length === 1 && twice.labels[0]!.id === "c2", "a check labelled twice after the resend kept a label");
     const stock = controls({ stock: [{ checks, labels: [{ id: "c1", covered: true, usable: false }] }], volume: [] });
     must(!stock.passed, "a stock plan covering a primary check passed");
     const l = (covered: boolean): Label => ({ id: "c1", covered, usable: covered });
     const gold = new Map<string, Label>(Array.from({ length: 40 }, (_, i) => ["k" + i, l(i % 2 === 0)]));
     must(goldAgreement(new Map(gold), gold).admitted && !goldAgreement(new Map([...gold].slice(0, 39)), gold).admitted, "gold admission ignores the 40-pair floor");
     must(stockPlan().startsWith("# Plan"), "the stock plan did not load");
-    return "blind labels, usable needs covered, one resend, stock control, gold floor of 40";
+    return "blind labels, usable needs covered, one resend, a check labelled twice stays unlabelled, stock control, gold floor of 40";
   },
   "stage runner": () =>
     withTmp(async (dir) => {
@@ -256,9 +259,28 @@ export const CASES: Record<string, Case> = {
       writeFileSync(join(reDir, "base-dry", "sessions", "aaaaaa", "r1", "n", "a1", "attempt.json"), "{}\n");
       const re = await stageRun(reDir, us.slice(0, 1), "base", ["n"], 100);
       must(re.rows[0]!.attempts.length === 2 && re.rows[0]!.attempts[0]!.outcome === "retry", "a crash marker was not counted as an infra failure");
+      const vDir = join(dir, "voice-crash");
+      const vLedger = join(dir, "crash-ledger.sqlite");
+      const local = openLocalLedger(ledgerPath(vLedger));
+      try {
+        const record = join(dir, "crash-record");
+        recordApproval(record, { action: "init", item: "day1-plans", cap_micros: 10e6, quotes: [{ words: "dry run on a temporary ledger", by: "day-one dryrun", source: "section 12" }], admission: "warn" });
+        const lease = openLease(record, local, { item: "day1-plans", run_id: DAYONE_RUN, requireAdmission: () => null });
+        const cell = { run_id: DAYONE_RUN, arm: "n", task: "aaaaaa-r1", model: "claude-opus-5-5", trial: 1, attempt: 1 };
+        must((await local.reserve({ idempotency_key: "crash-plan", lease_id: lease.lease_id, cell: { ...cell, meter_id: "mp" }, max_micros: 2e6 })).ok && (await local.reserve({ idempotency_key: "crash-voice", lease_id: lease.lease_id, cell: { ...cell, arm: "n-voice", meter_id: "mv" }, max_micros: 3e6 })).ok, "the crash ledger refused a reservation");
+        const a1 = join(vDir, "base-dry", "sessions", "aaaaaa", "r1", "n", "a1");
+        mkdirSync(a1, { recursive: true });
+        writeFileSync(join(a1, "attempt.json"), "{}\n");
+        writeFileSync(join(a1, "meter.json"), JSON.stringify({ meter_id: "mp", voice_meter_id: "mv", lease_id: lease.lease_id }) + "\n");
+      } finally {
+        local.close();
+      }
+      const vre = await stageRun(vDir, us.slice(0, 1), "base", ["n"], 100, {}, { n: 0 }, vLedger);
+      const crashed = vre.rows[0]!.attempts[0]!;
+      must(crashed.usd === 2 && crashed.voice_usd === 3 && vre.voice_micros === 3e6, "a crashed attempt's held spend was not split by meter (planner $" + crashed.usd + ", voice $" + crashed.voice_usd + ", stage voice " + vre.voice_micros + " micros)");
       const halt = await stageRun(join(dir, "halt"), us, "base", ["n"], 100, { launch: stubLaunch({ leak: true }) });
       must(halt.stops.some((s) => s.code === "E_DAYONE_LEAK"), "a containment departure did not halt");
-      return "base, review, build and check end to end; cap stop and its refusal; " + (changed ? "a changed manifest refused" : "manifest unchanged") + "; crash marker reconciled; leak halts";
+      return "base, review, build and check end to end, the checker on the browser endpoint; cap stop and its refusal; " + (changed ? "a changed manifest refused" : "manifest unchanged") + "; crash marker reconciled, a crashed attempt's held spend split between planner and voice; leak halts";
     }),
   "voice route": () =>
     withTmp(async (dir) => {

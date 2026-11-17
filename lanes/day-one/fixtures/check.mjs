@@ -2,7 +2,7 @@
 // does (navigate, type, click, upload, snapshot, all through MCP) and prints a verdicts block. It runs keyless in a
 // sidecar on the trial network. A tool call that fails (no such element) leaves its task not done.
 const url = process.argv[2];
-const APP = "http://localhost:3000/";
+const APP = "http://localhost:3000";
 let sid = null;
 let n = 0;
 async function rpc(method, params, notify = false) {
