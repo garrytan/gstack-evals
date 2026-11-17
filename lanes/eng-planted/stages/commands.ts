@@ -30,7 +30,7 @@ import { JUDGE_MODELS } from "../readings/local.ts";
 import type { AuthorCall } from "./author.ts";
 import { ebSession, type MountTable, type PlantedSession } from "./build.ts";
 import { allInProjection, checkAllIn, ITEMS, itemOf, ItemGate, runSteps, settleThrown, type AllIn, type Kind } from "./ledger.ts";
-import { ALLOWANCE_USD, AUTHOR_EFFORT, AUTHOR_MAX_TOKENS, AUTHOR_MODELS, EP_PROGRAM, EP_RUN, EP_SKILL, JUDGE_MAX_TOKENS, readStep, type AuthorRole } from "./local.ts";
+import { ALLOWANCE_USD, AUTHOR_MAX_TOKENS, AUTHOR_MODELS, EP_PROGRAM, EP_RUN, EP_SKILL, JUDGE_MAX_TOKENS, readStep, type AuthorRole } from "./local.ts";
 import { PIN_COMMAND } from "./pin.ts";
 import { authorStep, batchDraw, buildCells, buildsStage, bundleInput, comparisonPlanned, comparisonUnits, drawFile, gateArms, hintedTodo, reviewsStage, runRecords, smokeStage, unitFolders, type AuthorStep, type UnitSource } from "./pipeline.ts";
 import { bundleSet } from "../readings/judge.ts";
@@ -117,10 +117,11 @@ const CARBON_FIX = "add a carbon ModelKey (google/gemini-4-carbon on OpenRouter,
 /** A meter launcher for one set of role routes: it refuses before any lease opens when a role it will call has no
  * route. A call costs what its meter holds, spent plus unknown; an answered call whose cost the meter could not read
  * counts at the call allowance, so the gate never undercounts, and a refusal the proxy answered before it reserved
- * anything costs nothing. A call that billed and then failed (a non-200 answer, no text, a provider drift stop) throws
+ * anything costs nothing. A call that billed and then failed (a non-200 answer, no text, a provider drift stop, a stream
+ * that ended with an error event) throws
  * with that cost on its error (spend.ts), which the gated callers settle. fetch and env reach the meter for the keyless
  * tests. */
-export function meterLauncher<R extends string>(o: { out: string; cacheDir: string; maxTokens: number; effort: string | null; efforts?: Readonly<Partial<Record<R, string>>>; label: string; models: Readonly<Record<R, string>>; routes: Readonly<Record<R, ModelKey | null>>; roles: readonly R[]; fetch?: typeof fetch; env?: Record<string, string | undefined> }): Launcher<Metered<R>> {
+export function meterLauncher<R extends string>(o: { out: string; cacheDir: string; maxTokens: number; effort: string | null; label: string; models: Readonly<Record<R, string>>; routes: Readonly<Record<R, ModelKey | null>>; roles: readonly R[]; fetch?: typeof fetch; env?: Record<string, string | undefined> }): Launcher<Metered<R>> {
   return async (p) => {
     const problems = routeProblems(o.models, o.routes, o.roles);
     if (problems.length) return fail("E_EP_NOT_BUILT", "the " + o.label + " routes are not all built, so no lease opened:\n" + problems.join("\n") + "\n" + CARBON_FIX);
@@ -129,9 +130,9 @@ export function meterLauncher<R extends string>(o: { out: string; cacheDir: stri
       if (!o.roles.includes(role)) return fail("E_USAGE", "this launch did not check the route for " + role);
       let r: Awaited<ReturnType<typeof meter.call>>;
       try {
-        r = await meter.call({ model: o.routes[role]!, prompt, maxTokens: o.maxTokens, effort: o.efforts?.[role] ?? o.effort, label: o.label + ":" + role, ...(attempt ? { attempt } : {}) });
+        r = await meter.call({ model: o.routes[role]!, prompt, maxTokens: o.maxTokens, effort: o.effort, label: o.label + ":" + role, ...(attempt ? { attempt } : {}) });
       } catch (e) {
-        throw e instanceof MeterError && e.code === "E_PV_PROVIDER_DRIFT" ? addSpend(e, ALLOWANCE_USD.call) : e;
+        throw e instanceof MeterError && (e.code === "E_PV_PROVIDER_DRIFT" || e.code === "E_PV_STREAM_ERROR") ? addSpend(e, ALLOWANCE_USD.call) : e;
       }
       const costUsd = r.cached ? 0 : r.micros === null ? (r.status === 200 ? ALLOWANCE_USD.call : 0) : (r.micros + (r.unknown_micros ?? 0)) / 1_000_000;
       if (r.status !== 200 || r.text === null) throw addSpend(new EpError("E_USAGE", "the " + o.label + " " + role + " call ended " + r.status + (r.problem ? " (" + r.problem + ")" : "") + "; rerun the step, which reuses the meter's cached replies"), costUsd);
@@ -169,7 +170,7 @@ export interface Seams {
 }
 
 export const REAL: Seams = {
-  author: (o) => meterLauncher({ ...o, maxTokens: AUTHOR_MAX_TOKENS, effort: null, efforts: AUTHOR_EFFORT, label: "ep-author", models: AUTHOR_MODELS, routes: AUTHOR_ROUTES, roles: Object.keys(AUTHOR_MODELS) as AuthorRole[] }),
+  author: (o) => meterLauncher({ ...o, maxTokens: AUTHOR_MAX_TOKENS, effort: null, label: "ep-author", models: AUTHOR_MODELS, routes: AUTHOR_ROUTES, roles: Object.keys(AUTHOR_MODELS) as AuthorRole[] }),
   judge: (o) => meterLauncher({ out: o.out, cacheDir: o.cacheDir, maxTokens: JUDGE_MAX_TOKENS, effort: JUDGE_MODELS.effort, label: "ep-judge", models: ROLE_MODEL, routes: JUDGE_ROUTES, roles: o.roles }),
   review: (o) => reviewLauncher({ arms: o.arms.map((a) => EB_ARM[a]), reviewer: "opus", out: o.out, env: process.env, log: o.log, ...(o.pin ? { pins: { precut: o.pin, engphase: o.pin } } : {}), runId: EP_RUN, ...(o.policy ? { policy: o.policy } : {}) }),
   build: (o) => {
@@ -238,7 +239,7 @@ export function stagesCommands(seams: Seams = REAL): Record<string, Command> {
     if (!["calls", "hinted", "draw", "none"].includes(step)) fail("E_USAGE", "--step is calls, hinted, draw or none");
     const src = source(a);
     const log = logTo(io);
-    const o = { run, src, batch: batch as 1 | 2, step, chunk: a.flags.has("--chunk") ? whole(a, "--chunk", 1) : undefined, parallel: whole(a, "--parallel", 1), log };
+    const o = { run, src, batch: batch as 1 | 2, step, chunk: a.flags.has("--chunk") ? whole(a, "--chunk", 1) : undefined, first: a.flags.get("--first")?.split(","), parallel: whole(a, "--parallel", 1), log };
     if (step === "draw") {
       io.out((await authorStep(o)).line);
       return 0;
@@ -368,7 +369,7 @@ export function stagesCommands(seams: Seams = REAL): Record<string, Command> {
     pin: PIN_COMMAND,
     ledger: { run: ep(ledger), bools: ["--projection"], usage: "[--projection --run <dir> --crew-usd <usd> --hosts-usd <usd>]", summary: "the program and item init lines, or the running all-in projection against the $5,000 stop" },
     preflight: { run: ep(preflight), bools: [], usage: RUN + " --gstack <checkout at the pin> --ledger-record <dir> [--harbor <bin>] [--docker <bin>]", summary: "the no-model preflight on the run host: Docker, Harbor, the pins, the plain arm, the routes, the items, the units and the run dir" },
-    author: { run: ep(author), bools: [], usage: RUN + " --batch 1|2 --step calls|hinted|draw|none [--chunk n] [--parallel n] [--cache <dir> for calls] [" + BUILD + " for hinted and none] " + PAID, summary: "authoring in seeded order: plan, audits, hint and ratings; the hinted builds; the draw; the no-review builds (paid: ep-authoring)" },
+    author: { run: ep(author), bools: [], usage: RUN + " --batch 1|2 --step calls|hinted|draw|none [--chunk n] [--first <unit,...> for calls] [--parallel n] [--cache <dir> for calls] [" + BUILD + " for hinted and none] " + PAID, summary: "authoring in seeded order: plan, audits, hint and ratings; the hinted builds; the draw; the no-review builds (paid: ep-authoring)" },
     smoke: { run: ep(smoke), bools: [], usage: RUN + " --gstack <checkout at the pin> [--parallel n] [--policy <file>] " + PAID, summary: "the exposure smoke: one Opus session per skill arm on each calibration unit (paid: ep-smoke)" },
     reviews: { run: ep(reviews), bools: [], usage: RUN + " --phase pilot|comparison [--gstack <checkout at the pin>] [--parallel n] [--policy <file>] " + PAID, summary: "the pilot's plain reviews or the comparison reviews, with the interim exposure stop (paid: ep-comparison)" },
     builds: { run: ep(builds), bools: [], usage: RUN + " --phase pilot|comparison|stock " + BUILD + " [--parallel n] " + PAID, summary: "the reviewed builds of a phase, or the stock control's (paid: ep-comparison, ep-stock)" },

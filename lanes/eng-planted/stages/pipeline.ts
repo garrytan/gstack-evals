@@ -170,11 +170,12 @@ export type AuthorStep = "calls" | "hinted" | "draw" | "none";
 
 /**
  * One authoring step for a batch. calls: plan, audits, hint and ratings for the next chunk in seeded order (default:
- * one and a half times the units the draw still needs). hinted: the hinted build for every unit whose calls passed.
+ * one and a half times the units the draw still needs); first names units of that chunk to start ahead of the rest,
+ * and never adds a unit to it. hinted: the hinted build for every unit whose calls passed.
  * draw: the batch's draw from the outcomes so far. none: the no-review build for every drawn unit, then the batch's step
  * record once its draw is filled (or the order ran out at or above the floor).
  */
-export async function authorStep(o: { run: string; src: UnitSource; batch: 1 | 2; step: AuthorStep; seed?: string; chunk?: number; call?: AuthorCall; session?: PlantedSession; grader?: PlantedGrader; gate?: ItemGate; parallel?: number; log?: (line: string) => void }): Promise<{ draw: Draw; line: string }> {
+export async function authorStep(o: { run: string; src: UnitSource; batch: 1 | 2; step: AuthorStep; seed?: string; chunk?: number; first?: readonly string[]; call?: AuthorCall; session?: PlantedSession; grader?: PlantedGrader; gate?: ItemGate; parallel?: number; log?: (line: string) => void }): Promise<{ draw: Draw; line: string }> {
   const log = o.log ?? (() => {});
   if (o.batch === 2) requireSteps(o.run, "authoring batch 2", ["author-batch1", "exposure-gate", "admission", "start-rule"]);
   const df = drawFile(o.run, o.src, o.seed);
@@ -184,7 +185,11 @@ export async function authorStep(o: { run: string; src: UnitSource; batch: 1 | 2
     const gate = o.gate ?? fail("E_USAGE", "the calls step runs under the authoring item's gate");
     const call = o.call ?? fail("E_USAGE", "the calls step needs its model calls");
     const d = draw();
-    const ids = nextToAuthor(o.run, df.order, d, o.chunk ?? Math.max(1, Math.ceil(1.5 * missing(want, d))));
+    const chunk = nextToAuthor(o.run, df.order, d, o.chunk ?? Math.max(1, Math.ceil(1.5 * missing(want, d))));
+    const lead = o.first ?? [];
+    const outside = lead.filter((id) => !chunk.includes(id));
+    if (outside.length) fail("E_USAGE", "--first orders the chunk and never adds to it: " + outside.join(", ") + " is not among the next " + chunk.length + " units to author");
+    const ids = [...lead, ...chunk.filter((id) => !lead.includes(id))];
     let first: unknown = null;
     let next = 0;
     const worker = async () => {

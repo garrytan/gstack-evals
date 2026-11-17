@@ -1790,6 +1790,15 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_PV_STREAM_ERROR: {
+    exit: 2,
+    meaning: "Product-value meter: a streamed OpenRouter reply ended with an error event (an error field, or a choice that finished with \"error\"), such as a 504 timeout after the stream began. The reply is never read as an answer, so that model's items stop for the Captain.",
+    fix: "Keep the stream's body, saved beside the reply cache as no-usage-<meter id>.txt or stream-error-<meter id>.txt, and send the question to the Captain. Never retry on another provider.",
+    side_effects: "Calls already sent on the lease stay on its journal and its spend.",
+    retry_safe: false,
+    resumable: false,
+    owner: "U20",
+  },
   E_PV_SUPPLY_SHORT: {
     exit: 2,
     meaning: "Product-value eval (section 4): supply is short. A named project type has fewer than 4 eligible units across both sources, the pooled count of passing comparison units is under 48, or a second named type is short of 2 audited public units in the calibration slice. Authoring stops and the question goes to the Captain.",

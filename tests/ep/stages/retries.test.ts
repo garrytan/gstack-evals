@@ -1,7 +1,8 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // Every "once more" rule of authoring on the real meter and its reply cache, with a fake upstream: the plan rewrite and
 // its audit, the hint rewrite and its audit, and a rating asked once more each reach the model; the same attempt asked
-// again replays from the cache; Carbon rates at medium effort; a reply with no usage keeps its body and still stops.
+// again replays from the cache; Carbon streams at its default effort; a reply with no usage keeps its body and still
+// stops; a rating stream that ends with an error event stops the run.
 import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -10,6 +11,7 @@ import { underLease } from "../../../lanes/eng-build/pipeline.ts";
 import { authorCalls } from "../../../lanes/eng-planted/stages/author.ts";
 import { codeOf, MATERIAL } from "../../../lanes/eng-planted/stages/cases.ts";
 import { REAL } from "../../../lanes/eng-planted/stages/commands.ts";
+import { takeSpend } from "../../../lanes/eng-build/spend.ts";
 import { recordApproval } from "../../../src/runner/ledger/ledger.ts";
 
 const root = mkdtempSync(join(tmpdir(), "ep-retries-"));
@@ -82,12 +84,21 @@ describe("each second ask reaches the model through the meter's cache", () => {
   });
 });
 
-describe("Carbon's effort and a reply with no usage", () => {
-  test("Carbon rates at medium effort; every other role sends none", async () => {
+describe("Carbon's stream and effort, and replies that stop", () => {
+  test("Carbon streams at its model's default effort; every other role sends no effort and no stream", async () => {
     const seen: Seen[] = [];
     await author("effort", seen);
-    expect(seen.filter((s) => s.who === "carbon").map((s) => s.body.reasoning)).toEqual([{ effort: "medium" }]);
-    expect(seen.filter((s) => s.who !== "carbon").every((s) => s.body.reasoning === undefined && s.body.output_config === undefined)).toBe(true);
+    expect(seen.filter((s) => s.who === "carbon").map((s) => [s.body.stream, s.body.reasoning])).toEqual([[true, undefined]]);
+    expect(seen.filter((s) => s.who !== "carbon").every((s) => s.body.reasoning === undefined && s.body.output_config === undefined && s.body.stream === undefined)).toBe(true);
+  });
+  test("a rating stream that ends with an error event stops the run at the call allowance, never asking again over an empty answer", async () => {
+    const seen: Seen[] = [];
+    const event = { id: "gen-t", model: "google/gemini-4-carbon", provider: "Google", error: { code: 504, message: "A Timeout Occurred", metadata: { error_type: "timeout" } }, choices: [{ index: 0, delta: { content: "" }, finish_reason: "error" }] };
+    const timeout = () => new Response(": OPENROUTER PROCESSING\n\ndata: " + JSON.stringify(event) + "\n\ndata: [DONE]\n\n", { headers: { "content-type": "text/event-stream" } });
+    const thrown = await author("stream-error", seen, (s) => (s.who === "carbon" ? timeout() : undefined)).then(() => null, (e: unknown) => e);
+    expect((thrown as { code?: string } | null)?.code).toBe("E_PV_STREAM_ERROR");
+    expect(takeSpend(thrown)).toBe(2);
+    expect(seen.filter((s) => s.who === "carbon")).toHaveLength(1);
   });
   test("a 200 with an error body and no usage keeps its body beside the cache and still stops as provider drift", async () => {
     const seen: Seen[] = [];
