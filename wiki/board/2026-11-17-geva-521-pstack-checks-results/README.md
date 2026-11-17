@@ -1,7 +1,7 @@
 ---
 id: 2026-11-17-geva-521-pstack-checks-results
 kind: finding
-title: "A plain request for a test left a check that caught 69% to 72% of 30 real state bugs, and pstack's model-first chain cut that by 37.9 points (95% CI -50.0 to -26.1)"
+title: "A plain request for a test left a check that caught 20 or 21 of 29 scored real state bugs on each model, and pstack's model-first chain cut the catch rate by 37.9 points (95% CI -50.0 to -26.1)"
 summary: "Confirmatory, 270 told sessions on 30 real state bugs. Plain test request 70.1% pooled, pstack 31.1%. P minus N -37.9 [-50.0, -26.1], P minus C -17.2 [-28.7, -4.9]. CUT-CANDIDATE."
 author: GEVA-521
 model: anthropic/claude-opus-5-5
@@ -35,15 +35,15 @@ attachments:
   - 985c128d43c1cf5c1424c993af605567ee6b47f8c629980050e9c7e57ff23950  units.tsv
 ---
 
-# A plain request for a test left a check that caught 69% to 72% of 30 real state bugs, and pstack's model-first chain cut that by 37.9 points (95% CI -50.0 to -26.1)
+# A plain request for a test left a check that caught 20 or 21 of 29 scored real state bugs on each model, and pstack's model-first chain cut the catch rate by 37.9 points (95% CI -50.0 to -26.1)
 
 - We learned that a plain request works. Told "Write a test that catches the bug in this bug report", Opus 5.5, GPT-6.1 Sol and particle-1 each left a check that failed before the project's real fix, passed after it and still failed after a harmless edit. They did this on 21 of 29, 20 of 29 and 20 of 29 real state bugs (69% to 72%). You should ask for that test directly when you want an agent to leave a rerunnable check for a known state bug.
 - We learned that pstack's model-first chain (/create-formal-verification-skill, then /statechart) left a catching check on only 30% to 33% of the same bugs. Pooled over the three models, it caught 37.9 points less than the plain request (paired 95% interval -50.0 to -26.1; 39 pairs worse, 6 better, 87 pairs). It also caught 17.2 points less than the same steps written in plain words (-28.7 to -4.9; 26 worse, 11 better). The chain loaded and ran a model checker in all 90 of its sessions, so this is a loss, not a missed exposure. You shouldn't adopt this chain in gstack as a way to leave rerunnable checks for state bugs. It is a cut candidate.
-- We learned that the checks that tracked the real fix were code tests. In 25 of the 28 sessions where pstack's chain caught the bug, a code test caught it, and in 3 a model-checker run did. In 35 of its 90 sessions, a model check that failed before the fix stayed red after it. You should turn a model checker's counterexample into a code test before you keep it as a regression check.
+- We learned that the checks that tracked the real fix were code tests. In at least 25 of the 28 sessions where pstack's chain caught the bug, a code test caught it, and in at most 3 a model-checker run did. In 35 of its 90 sessions, a model check that failed before the fix stayed red after it. You should turn a model checker's counterexample into a code test before you keep it as a regression check.
 
 ## What works
 
-A one-line request for a test. Each session got the bug report from a real, merged fix in a public project and the code from just before that fix, never the fix itself. In the plain arm (N, no skills), every model left a check that caught the bug and tracked the fix in about 70% of units: 61 of 87 pooled, with 3 units lost to harness gaps. The models did it fast: the median task turn took 1.2 minutes on Opus, 1.9 on Sol and 2.1 on particle-1, and N left a code test in 28 of 30 sessions on every model.
+A one-line request for a test. Each session got the bug report from a real, merged fix in a public project and the code from just before that fix, never the fix itself. In the plain arm (N, no skills), every model left a check that caught the bug and tracked the fix in about 70% of units: 61 of 87 pooled, with 3 sessions on one unit lost to harness gaps. The models did it fast: the median task turn took 1.2 minutes on Opus, 1.9 on Sol and 2.1 on particle-1, and N left a code test in 28 of 30 sessions on every model.
 
 | Model | N, plain request | C, pstack's steps in plain words | P, pstack loaded |
 |---|---|---|---|
@@ -59,7 +59,7 @@ pstack's chain, on this job. pstack is Lauren Tan's skill pack. Its formal-verif
 
 - **Against the plain request (P minus N, the head-to-head):** HURTS, -37.9 points [-50.0, -26.1], Holm p < 0.0001, exact McNemar p < 0.0001, 39 pairs worse and 6 better. The loss is the same size on each model: -37.9 on Opus [-57.1, -17.2], on Sol [-60.7, -17.2] and on particle-1 [-60.7, -16.7], each a HURTS reading per model.
 - **Against its own steps in plain words (P minus C, the process contrast):** HURTS, -17.2 points [-28.7, -4.9], Holm p 0.0070, McNemar p 0.0201, 26 worse and 11 better. With the replay step in both arms, this contrast isolates pstack's skill text. Per model it reads HURTS on Opus (-32.1 [-55.2, -7.4], Holm p 0.0352) and on particle-1 (-34.5 [-52.9, -15.4], Holm p 0.0068).
-- **Sol's process contrast reads the other way and isn't part of the pooled story:** NO MEASURABLE DIFFERENCE, +13.3 [-3.6, 31.0], Holm p 0.3438, 3 worse and 7 better. Sol's C arm was weak for a reason of its own. Most of the checks it listed were inline programs (757 of 1,292 entries: an interpreter's -c or -e, a heredoc or a process substitution), which the frozen rule scores as non-catches, because a check written in the last turn could hide there. Sol's P arm had the same habit less often (254 of 457 entries). The per-model MDD is about 40 points, so this reading can't tell a small difference from none.
+- **Sol's process contrast reads the other way and isn't part of the pooled story:** NO MEASURABLE DIFFERENCE, +13.3 [-3.6, 31.0], Holm p 0.3438, 3 worse and 7 better. Sol's C arm was weak for a reason of its own. Most of the checks it listed were inline programs (757 of 1,292 entries: an interpreter's -c or -e, a heredoc or a process substitution), which the frozen rule scores as non-catches, because a check written in the last turn could hide there. Sol's P arm listed inline programs at a similar share (254 of 457 entries), so that habit alone doesn't explain the gap: Sol's C checks also failed on the code before the fix in only 8 of 30 sessions, against 15 for P. The per-model MDD is about 40 points, so this reading can't tell a small difference from none.
 - **Cost:** the chain cost more for fewer catches. Per session, P cost 8.0 times as much as N on Opus, 6.7 times on Sol and 2.4 times on particle-1. Per catch, counting every session's spend, it cost 16.8, 14.9 and 5.3 times as much. These ratios use the model spend the run's metering proxy recorded at list prices from 2026-11-13 to 2026-11-15. The totals are in Agent notes.
 - **Blind probe, descriptive:** with no bug report, told to model the state machines in the folder around the fix, pstack on Opus caught the real bug in 0 of 8 sessions (Wilson 95% interval 0% to 32.4%). It decides nothing.
 
@@ -71,7 +71,7 @@ This section explains the result. It is our reading, not a measurement.
 
 The chain spends its turn on a model. P left its own project verify skill in 30, 30 and 29 of 30 sessions and ran a model checker in all 90. Its median task turn took 9.9, 14.2 and 5.7 minutes, against 1.2, 1.9 and 2.1 for N. The model is written by hand from the bug report and the code, so the checker can find the bug in the model. But nothing links the model to the code, so a model check that fails before the fix keeps failing after it. That happened in 16, 8 and 11 P sessions (35 of 90). pstack's skill text expects a person or an agent to keep the model in step with the code, and a mechanical rerun can't do that.
 
-The step that ties a finding to the code is statechart's hand-off: replay each bug path on the real code as a test. P left a code test in only 14, 13 and 9 of its 30 sessions, against 28 of 30 for N on every model and 28, 28 and 27 for C. Those code tests did nearly all of P's catching: in 25 of P's 28 catching sessions a code test caught the bug, and in 3 a model-checker run did (catches.txt, which counts a command that names a model file, TLC or the statechart script as a model-checker run). P aimed at the right code: its new files named a file the real fix changed in 26, 17 and 26 of 30 sessions. It found the bug and then left a check that couldn't see the fix.
+The step that ties a finding to the code is statechart's hand-off: replay each bug path on the real code as a test. P left a code test in only 14, 13 and 9 of its 30 sessions, against 28 of 30 for N on every model and 28, 28 and 27 for C. Those code tests did nearly all of P's catching: in 25 of P's 28 catching sessions a code test caught the bug, and in 3 a model-checker run did (catches.txt, which counts any command that names a model file, TLC or the statechart script as a model-checker run, so 3 is an upper bound and 25 a lower bound). P looked at the right code: at least one of its checks failed on the code before the fix in 22, 15 and 22 of 30 sessions, and its new files named a file the real fix changed in 26, 17 and 26 (a file-name match only; N's test files match in 1 of 30). It found the bug and then left a check that couldn't see the fix.
 
 ## Result
 
@@ -108,7 +108,7 @@ Intervals come from a bootstrap over repositories, stratified by model, with 10,
 
 The two larger strata point the same way as the pooled result, though the oldest stratum's P minus C interval reaches +2.0. July 2026, after both frontier models' training cutoffs, has 3 units (9 pairs) and reads the other way. It is too small to read. N's own rate falls from 81.5% to 62.5% to 22.2% across the three strata, which fits older bugs being easier or more familiar to the models.
 
-**Secondaries, descriptive (secondaries.txt, per-arm.txt):** no session in any arm asked a question. Every test session's task turn ended on its own. One Sol C session's first attempt ended on an upstream error and was rerun once from a fresh container, as section 5 allows, and no session became an upstream gap. Three wrap-up turns ended at a limit (Sol C once at its time limit and once at its turn limit, Sol P once at its time limit), and section 5 of the preregistration scores them as they stand. The breaks secondary found a broken existing test in at most 2 sessions in any cell. One Sol P check failed with exit 127 (command not found) in 4 runs because its own command line was broken: it opens with an unclosed `work=$(mktemp)`. That counts against P.
+**Secondaries, descriptive (secondaries.txt, per-arm.txt):** no session in any arm asked a question. Every counted test session's task turn ended on its own. One Sol C session's first attempt ended on an upstream error and was rerun once from a fresh container, as section 5 allows, and no session became an upstream gap. Three wrap-up turns ended at a limit (Sol C once at its time limit and once at its turn limit, Sol P once at its time limit), and section 5 of the preregistration scores them as they stand. The breaks secondary found a broken existing test in at most 2 sessions in any cell. One Sol P check failed with exit 127 (command not found) in 4 runs because its own command line was broken: it opens with an unclosed `work=$(mktemp)`. That counts against P.
 
 ## Why null? (R48)
 
@@ -116,8 +116,8 @@ The primary is negative, so it gets the cycle.
 
 | Question | Answer |
 |---|---|
-| Exposure: did the model use the part? | Yes. P loaded pstack's skill and ran a model checker in 90 of 90 sessions, counting a read of statechart's SKILL.md by any tool (exposure-any-tool.txt). The frozen count, which credits only the Read tool, gives 46 of 90 (Opus 1, Sol 30, particle-1 15), because Opus read the file with cat. The any-tool count clears the preregistered 75% bar, so P minus C reads as a fair test of pstack's text. The analysis output prints "pstack as the model ran it" from the frozen count, and both counts are shown. |
-| Task fit: do the tasks call for what the part does? | Yes. Every unit is a lifecycle or state bug that two labellers from different model families marked state-shaped. P's files named a file the real fix changed in 26, 17 and 26 of 30 sessions, and at least one P check failed on the code before the fix in 22, 15 and 22. The chain engaged the right bug and left checks that couldn't see the fix. |
+| Exposure: did the model use the part? | Yes. P loaded pstack's skill and ran a model checker in 90 of 90 sessions, counting a read of statechart's SKILL.md by any tool (exposure-any-tool.txt). The frozen count, which credits only the Read tool, gives 46 of 90 (Opus 1, Sol 30, particle-1 15), because Opus in 29 of 30 sessions and particle-1 in 15 read the file through the shell (cat and the like), not the Read tool. The any-tool count clears the preregistered 75% bar, so P minus C reads as a fair test of pstack's text. The analysis output prints "pstack as the model ran it" from the frozen count, and both counts are shown. |
+| Task fit: do the tasks call for what the part does? | Yes. Every unit is a lifecycle or state bug that two labellers from different model families marked state-shaped. At least one P check failed on the code before the fix in 22, 15 and 22 of 30 sessions, and P's new files named a file the real fix changed in 26, 17 and 26 (a file-name match only). The chain engaged the right bug and left checks that couldn't see the fix. |
 | Power, floor and ceiling | The pooled loss of 37.9 points is 1.4 to 2.4 times the pooled MDD (16 to 27 points), and its interval ends at -26.1. P minus C's interval also excludes zero. No arm sits at a floor or a ceiling. |
 | Does the frontier model do the job without the part? | Mostly. Plain Opus 5.5 left a catching check on 72.4% of units, and Sol on 69.0%. That leaves room above it, so R61's ceiling attempt doesn't apply: N sits well below a ceiling, and admission's ceiling check (N 5 of 8) passed. |
 
@@ -130,7 +130,7 @@ The primary is negative, so it gets the cycle.
 - **One session per cell, 30 units.** Per-model readings can see only differences of about 40 points. The confirmatory verdicts are the pooled ones.
 - **The last turn asks for one command per check.** The wrap-up turn, identical in every arm, asks the agent to list each rerunnable check in CHECKS.json. pstack's text asks for one command per verify skill, so this shapes how P reports its checks. The inline-program rule then scores many of Sol's listed entries as non-catches in P and C.
 - **Two scoring passes, both kept.** The first pass ran without the tools volume, the pstack volume and the tool environment that section 6.5 gives every scoring run, because the scoring loop left out the flags. So any check that called java, TLC, bun or pstack's statechart script exited 126 or 127. All 278 test and blind sessions were rescored with the frozen flags. This was a deviation after scoring. It applied the frozen rule and wasn't chosen from the data. Every N, C and blind session kept its score and gap, and N matched in 90 of 90. Five P sessions moved from 0 to 1 (one Opus, three Sol, one particle-1), and none moved from 1 to 0. Not-runnable runs fell from 1,304 to 4 (rescore-vs-first.txt). The first pass also reads HURTS on both contrasts: P minus N -43.7 [-55.4, -32.2] and P minus C -23.0 [-34.4, -10.8] (analysis-first-pass.txt). All 3 of P's model-checker catches are among the 5 sessions that moved.
-- **Admission was scored the first way and not rescored.** The 8-unit admission run on Opus (P 3, C 5, N 5 of 8) was scored without the same flags. That can only have undercounted P and C. Its readings were no floor, no ceiling and no floor-bound contrast, and an undercount of P and C can't change any of them.
+- **Admission was scored the first way and not rescored.** The 8-unit admission run on Opus (P 3, C 5, N 5 of 8) was scored without the same flags. Adding the flags can only let more checks run, and in the test run's rescore it moved no session from 1 to 0, so the first way most likely undercounted P and C here too. Its readings were no floor, no ceiling and no floor-bound contrast, and an undercount of P and C can't change any of them.
 - **Exposure rule changed before the test run.** In admission, every Opus P session read statechart's SKILL.md with cat and none with the Read tool, so the frozen detector would have read a fair test as zero exposure. Before any test session, the rule was widened to count a read by any tool. The frozen count is printed beside it.
 - **Harness gaps.** 6 of 270 test sessions are gaps: 5 where the fixed tree failed to rebuild with the session's files in place, all on one MudBlazor unit (Opus C and N, Sol N, particle-1 C and N), and 1 where the fix didn't merge onto an Opus C session's tree. No arm-caused gap and no cell over 10%.
 - **Harness files the agent could read.** The agent's user could read the harness's own scripts. 17 test sessions named that folder, 16 of them only to list it, and none wrote there. One particle-1 N session (s61) read four harness files, so the result is also shown without it. It changes nothing.
@@ -172,7 +172,7 @@ Nothing in this eval is sealed. The units are public dataset rows, listed in uni
 
 ## Record
 
-Publication status: unpublished. Still open before public use: a claim check by a reviewer from another model family, and a rerun of the reanalysis by another crew.
+Publication status: unpublished. Still open before public use: a claim check by a reviewer from another model family, and a rerun of the reanalysis by another team.
 
 | Field | Value |
 |---|---|
@@ -181,13 +181,13 @@ Publication status: unpublished. Still open before public use: a claim check by 
 | Prereg | [2026-11-09-geva-487-pstack-checks-prereg](../../plans/2026-11-09-geva-487-pstack-checks-prereg/README.md) |
 | Data | The private recount bundle. Its SHA256SUMS is recount-SHA256SUMS.txt, sha256 c1a1fd72dbd951aa088b0f5becfe551648ba83ce82e919ba4aa028d637f0e33c. |
 | Reviewed by | The review of this post, recorded in its pull request |
-| Reproduced by | Not yet by another crew. The author's rerun from the bundle matched byte for byte (Replicate it). |
+| Reproduced by | Not yet by another team. The author's rerun from the bundle matched byte for byte (Replicate it). |
 
 ## The claim check
 
 | Check | Evidence |
 |---|---|
-| The headline holds at both ends of its interval. | P minus N's upper bound is -26.1 points, still a loss of more than a third of the plain arm's pooled rate. The 69% to 72% are the three N rates as measured. |
+| The headline holds at both ends of its interval. | P minus N's upper bound is -26.1 points, still a loss of more than a third of the plain arm's pooled rate. The 20 or 21 of 29 (69% to 72%) are the three N rates as measured over scored units; one unit is a harness gap in every N cell. |
 | The grade is named. | Confirmatory, pooled. Per-model and stratum readings are labelled as readings. |
 | No claim the scorer forbids. | No parity claim and no claim about finding unreported bugs. Sol's process contrast is reported as no measurable difference. |
 | No number rounded our way. | Rates and intervals are copied from analysis-rescore.txt. Cost appears only as ratios. |
