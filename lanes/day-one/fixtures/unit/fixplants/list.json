@@ -1,0 +1,50 @@
+{
+  "obvious": false,
+  "tasks": [
+    {
+      "id": "t1",
+      "rank": 1,
+      "task": "Add a plant called Fern that needs water every 3 days.",
+      "success": "Fern shows in the plant list with its 3-day rhythm, and still shows after a page reload.",
+      "data": null,
+      "from": "brief",
+      "support": "The brief asks for a page that keeps track of the plants."
+    },
+    {
+      "id": "t2",
+      "rank": 2,
+      "task": "See which plants need water today.",
+      "success": "Fern, which has never been watered, is marked as due today.",
+      "data": null,
+      "from": "brief",
+      "support": "The brief asks to see what needs watering today."
+    },
+    {
+      "id": "t3",
+      "rank": 3,
+      "task": "Mark Fern as watered.",
+      "success": "Fern is no longer marked as due today, and that holds after a page reload.",
+      "data": null,
+      "from": "brief",
+      "support": "The brief asks to tick a plant off once watered."
+    },
+    {
+      "id": "t4",
+      "rank": 4,
+      "task": "Bring in the plant spreadsheet.",
+      "success": "After importing the file, Cactus, Basil and Ivy all show in the plant list after a page reload.",
+      "data": "plants.csv",
+      "from": "implied",
+      "support": "The brief says the owner already keeps a spreadsheet; the profile says it exports as CSV."
+    },
+    {
+      "id": "t5",
+      "rank": 5,
+      "task": "Take Ivy off the list.",
+      "success": "Ivy no longer shows in the plant list after a page reload, and the other plants are still there.",
+      "data": null,
+      "from": "implied",
+      "support": "The profile says the owner sometimes gives plants away."
+    }
+  ]
+}

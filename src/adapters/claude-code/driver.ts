@@ -187,8 +187,14 @@ export interface ClaudeCodeOptions {
   stopHook?: (transcript: string) => string | null;
   /** Plugin roots in the agent's HOME, loaded for the session as plugin directories. */
   plugins?: string[];
-  /** The cell's cross-family voice through the Codex CLI: the provider of the slot's route and the model Codex runs. */
-  codex?: { provider: CodexProvider; model: string };
+  /** The cell's cross-family voice through the Codex CLI: the provider of the slot's route and the model Codex runs, and, when set, the voice's own proxy slot and bearer in place of the session's. */
+  codex?: { provider: CodexProvider; model: string; proxy?: { slot: string; token: string } };
+  /** MCP servers the session gets, by name: HTTP servers only, such as a browser container's Playwright server. */
+  mcpServers?: Record<string, { type: "http"; url: string }>;
+  /** When set, canUseTool denies every tool not named here (AskUserQuestion keeps its own rule). */
+  onlyTools?: readonly string[];
+  /** GSTACK_CODEX_NO_SANDBOX=1 for the agent env: gstack runs the Codex voice without Codex's own sandbox, which cannot start in the trial container, so the container is the sandbox. Only with codex. */
+  codexNoSandbox?: boolean;
 }
 
 /** What nextUser returns: the next user message, the session's end, or a termination that ends it. */
@@ -199,9 +205,10 @@ type SdkMessage = Record<string, any>;
 type QueryFn = (args: { prompt: AsyncIterable<SdkMessage>; options: Record<string, unknown> }) => AsyncIterable<SdkMessage>;
 
 /** The agent env the adapter adds: proxy, bearer, model purity and host settings. Every name is on U9's agent allowlist. */
-export function claudeCodeEnv(o: Pick<ClaudeCodeOptions, "model" | "provider" | "proxy" | "codex" | "sessionKind" | "skillGateDeadlineMs" | "disable1mContext">): Record<string, string> {
+export function claudeCodeEnv(o: Pick<ClaudeCodeOptions, "model" | "provider" | "proxy" | "codex" | "sessionKind" | "skillGateDeadlineMs" | "disable1mContext" | "codexNoSandbox">): Record<string, string> {
   return {
-    ...(o.codex ? { OPENAI_API_KEY: o.proxy.token } : {}),
+    ...(o.codex ? { OPENAI_API_KEY: (o.codex.proxy ?? o.proxy).token } : {}),
+    ...(o.codex && o.codexNoSandbox ? { GSTACK_CODEX_NO_SANDBOX: "1" } : {}),
     ANTHROPIC_BASE_URL: o.proxy.baseUrl.replace(/\/+$/, "") + "/" + o.proxy.slot + "/" + o.provider,
     ANTHROPIC_AUTH_TOKEN: o.proxy.token,
     ANTHROPIC_MODEL: o.model,
@@ -373,7 +380,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
         return without(INFRA);
       }
       if (o.codex) {
-        const wrote = session.exec(codexConfigCommand(o.codex, o.proxy), 30_000);
+        const wrote = session.exec(codexConfigCommand(o.codex, o.codex.proxy ? { ...o.proxy, ...o.codex.proxy } : o.proxy), 30_000);
         if (wrote.exitCode !== 0) {
           log("adapter: the Codex config step exited " + wrote.exitCode + ": " + (wrote.stdout + wrote.stderr).trim().slice(-500) + "\n");
           return without({ kind: "missing", code: "E_CODEX_CONFIG" });
@@ -510,6 +517,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
       const hooked = new Set<string>();
       const canUseTool = async (name: string, input: Record<string, unknown>, options?: { toolUseID?: string }) => {
         if (options?.toolUseID) approved.add(options.toolUseID);
+        if (name !== "AskUserQuestion" && o.onlyTools && !o.onlyTools.includes(name)) return { behavior: "deny", message: "That tool is not available in this session." };
         if (name !== "AskUserQuestion") return { behavior: "allow", updatedInput: input };
         let r: Awaited<ReturnType<UserSim["answerAsk"]>>;
         try {
@@ -539,6 +547,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
             disallowedTools: o.denyAsk ? [...DISALLOWED_TOOLS, "AskUserQuestion"] : DISALLOWED_TOOLS,
             ...(o.systemPrompt === "claude-code-preset" ? { systemPrompt: { type: "preset", preset: "claude_code" } } : {}),
             ...(o.plugins?.length ? { plugins: o.plugins.map((path) => ({ type: "local", path })) } : {}),
+            ...(o.mcpServers ? { mcpServers: o.mcpServers, strictMcpConfig: true } : {}),
             abortController: abort,
             canUseTool,
             hooks: {

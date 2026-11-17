@@ -58,7 +58,8 @@ export interface Sandbox {
   /** The HOME every child gets, given the trial's evaluator-side directory. */
   homePath(dir: string): string;
   step(role: "setup" | "check", command: string, task: string, opts: StepOptions): StepResult;
-  agent(task: string, opts: { work: string; env: Record<string, string>; network?: string | null; root?: boolean; mounts?: readonly ReadOnlyMount[] }): AgentSession;
+  /** ram puts the agent's HOME and /tmp on tmpfs of that size, owned by the runner's uid and gid like the container's user, HOME seeded with the image's own copy; unset, both stay on the container's disk layer. */
+  agent(task: string, opts: { work: string; env: Record<string, string>; network?: string | null; root?: boolean; mounts?: readonly ReadOnlyMount[]; ram?: { size: string } }): AgentSession;
 }
 
 /** A host file or directory the agent sees read-only at path. */
@@ -111,8 +112,19 @@ export function dockerSandbox(opts: { trialImage: string; armImage?: string; doc
       const name = "gse-agent-" + randomBytes(6).toString("hex");
       const path = workPath(o.work, task, o.root);
       const ro = (o.mounts ?? []).flatMap((m) => ["-v", m.host + ":" + m.path + ":ro"]);
-      const start = dockerStep(docker, ["-d", "--network", o.network ?? "none", "--user", uid(), ...HARDENING, "-v", o.work + ":" + path, ...ro, "-w", path], ["--entrypoint", "sleep", opts.armImage ?? opts.trialImage, "infinity"], name, o.env, 120_000);
+      const image = opts.armImage ?? opts.trialImage;
+      const owner = ",uid=" + (process.getuid?.() ?? 1000) + ",gid=" + (process.getgid?.() ?? 1000);
+      const ram = o.ram ? ["--tmpfs", "/tmp:rw,exec,mode=1777,size=" + o.ram.size + owner, "--tmpfs", "/home/agent:rw,exec,mode=1777,size=" + o.ram.size + owner] : [];
+      const start = dockerStep(docker, ["-d", "--network", o.network ?? "none", "--user", uid(), ...HARDENING, ...ram, "-v", o.work + ":" + path, ...ro, "-w", path], ["--entrypoint", "sleep", image, "infinity"], name, o.env, 120_000);
       if (start.exitCode !== 0) throw new IsolationError("could not start the agent container: " + start.stderr.trim().split("\n").slice(-1)[0]);
+      if (o.ram) {
+        const home = spawnSync(docker, ["run", "--rm", "--network", "none", ...HARDENING, "--entrypoint", "tar", image, "-C", "/home/agent", "-cf", "-", "."], { timeout: 120_000, maxBuffer: 1024 * 1024 * 1024 });
+        const seeded = home.status === 0 ? spawnSync(docker, ["exec", "-i", name, "tar", "-C", "/home/agent", "-xf", "-"], { input: home.stdout, timeout: 120_000, maxBuffer: STEP_BUFFER }) : null;
+        if (seeded?.status !== 0) {
+          spawnSync(docker, ["rm", "-f", name], { stdio: "ignore" });
+          throw new IsolationError("could not seed the agent's RAM-backed home: " + String((seeded ?? home).stderr ?? "").trim().split("\n").slice(-1)[0]);
+        }
+      }
       let stopped = false;
       return {
         spawn: (argv, env = {}) => {
