@@ -12,7 +12,8 @@
 // B1 also reads four Bash write forms the vendored parser leaves out (cp, mv, install or rsync onto a file, dd of=, a
 // patch file git apply or patch reads when the session wrote that file, and a shell script the session wrote), and counts
 // every Bash call that writes somewhere no parser can name (unresolved_writes), so the report can score those sessions
-// both ways.
+// both ways. A relative write after a cd the parser can't resolve is one of those. Inside one Bash call, writes and runs
+// are ordered by the place of their commands (sequence).
 import { posix } from "node:path";
 import { showsFailure, showsOutcome, toTranscript } from "../harness-mechanics/score.ts";
 import type { TranscriptEvent } from "../harness-mechanics/vendor/gstack/lib/skill-contract.ts";
@@ -38,6 +39,8 @@ const EDITS = /\b(?:sed|perl)\s+(?:-\S+\s+)*-[a-zA-Z]*i|\bopen\([^)]*,\s*['"][wa
 const PATHLIKE = /[^\s'"`=(),;&|<>{}[\]]+\.[A-Za-z0-9]+(?![\w.])/g;
 /** A word no parser can name a file from: a variable, a command substitution, a glob, or find's {}. */
 const OPEN_WORD = /[$`*?]|^\{\}$/;
+/** Stands in for a folder a cd left unknown (cd "$DIR", cd ~, cd -): a relative write there is a write no parser can name. */
+const UNKNOWN_CWD = "/\0cwd";
 const WRITE_REDIRECT = /^(?:\d*>>?|\d*>\||&>>?)$/;
 const IN_PLACE = /\b(?:g?sed|perl)\s+(?:-\S+\s+)*-[a-zA-Z]*i|--in-place/;
 const WRITER = /\b(?:g?sed|perl)\s+(?:-\S+\s+)*-[a-zA-Z]*i|--in-place|(?:^|\s)(?:tee|cp|mv|install|dd|truncate)\s/;
@@ -87,25 +90,27 @@ function codeOf(c: ShellCommand, scripts: Map<string, string>): string[] {
   return [...c.heredocs, ...c.redirects.filter((r) => r.op === "<<<").map((r) => r.target), ...c.redirects.filter((r) => r.op === "<").map((r) => file(r.target))];
 }
 /** Whether a word no parser can name still can't be a file in the session's tree: its fixed part ends in a folder outside
- *  the tree (a scratch folder such as /tmp), so it is no repository write. */
+ *  the tree (a scratch folder such as /tmp), so it is no repository write. A folder a cd left unknown may be in the tree. */
 function outsideTree(word: string, cwd: string, root: string): boolean {
   const fixed = word.split(/[$`*?]/)[0]!, slash = fixed.lastIndexOf("/");
   const dir = slash < 0 ? cwd : posix.resolve(cwd, fixed.slice(0, slash + 1));
+  if (dir === UNKNOWN_CWD || dir.startsWith(UNKNOWN_CWD + "/")) return false;
   return !(dir === root || dir.startsWith(root + "/") || root.startsWith(dir.replace(/\/$/, "") + "/"));
 }
 const diffTargets = (diff: string) => [...diff.matchAll(/^\+\+\+ (\S+)/gm)].map((m) => m[1]!.replace(/^[ab]\//, "")).filter((f) => f !== "/dev/null");
 
 /** The files one simple command writes, absolute, and whether it also writes somewhere in the session's tree (root) that no
- *  parser can name (open). Reads, output to stdout, /dev paths and fd duplications are never writes. */
+ *  parser can name (open). Reads, output to stdout, /dev paths and fd duplications are never writes. A relative write in a
+ *  folder a cd left unknown is read under UNKNOWN_CWD and counted as open, never resolved against /. */
 function commandWrites(c: ShellCommand, scripts: Map<string, string>, root: string, depth = 0): { files: string[]; open: boolean } {
-  const cwd = c.cwd ?? "/", files: string[] = [];
+  const cwd = c.cwd ?? UNKNOWN_CWD, files: string[] = [];
   let open = false;
   const unnamed = (w: string) => OPEN_WORD.test(w) && !outsideTree(w, cwd, root);
   const name = posix.basename(c.words[0] ?? ""), args = c.words.slice(1);
   let dir = cwd;
   if (name === "git") { const at = args.indexOf("-C"); if (at >= 0 && args[at + 1]) dir = posix.resolve(cwd, args[at + 1]!); }
   if (name === "patch") { const at = args.findIndex((a) => a === "-d" || a === "--directory"); if (at >= 0 && args[at + 1]) dir = posix.resolve(cwd, args[at + 1]!); }
-  for (const f of writeTargets(c, "/", scripts)?.files ?? []) {
+  for (const f of writeTargets({ ...c, cwd }, "/", scripts)?.files ?? []) {
     const p = posix.resolve("/", f);
     if (p === dir || p === cwd) {
       const sub = args.indexOf("apply"), patches = name === "git" && sub >= 0 ? args.slice(sub + 1).filter((a) => !a.startsWith("-")) : [];
@@ -131,7 +136,7 @@ function commandWrites(c: ShellCommand, scripts: Map<string, string>, root: stri
   }
   if (name === "find" && args.some((a) => a === "-exec" || a === "-execdir") && WRITER.test(" " + args.join(" ") + " ") && !outsideTree((args.find((a) => !a.startsWith("-")) ?? ".") + "/", cwd, root)) open = true;
   if (name === "xargs" && WRITER.test(" " + args.join(" ") + " ") && !outsideTree("./", cwd, root)) open = true;
-  if (INTERPRETER.test(name)) for (const code of codeOf(c, scripts)) for (const re of WRITE_CALLS) for (const m of code.matchAll(re)) {
+  if (INTERPRETER.test(name)) for (const code of codeOf({ ...c, cwd }, scripts)) for (const re of WRITE_CALLS) for (const m of code.matchAll(re)) {
     const target = targetOf(m[1]!, code, m.index!);
     if (target === null) open = true;
     else files.push(posix.resolve(cwd, target));
@@ -157,12 +162,16 @@ function commandWrites(c: ShellCommand, scripts: Map<string, string>, root: stri
     const body = scripts.get(posix.resolve(cwd, args[0]));
     if (body !== undefined) for (const inner of shellCommands(body, cwd)) { const w = commandWrites(inner, scripts, root, depth + 1); files.push(...w.files); open ||= w.open; }
   }
-  return { files, open };
+  const named = files.filter((f) => f !== UNKNOWN_CWD && !f.startsWith(UNKNOWN_CWD + "/"));
+  return { files: named, open: open || named.length < files.length };
 }
 
 type Use = Extract<TranscriptEvent, { kind: "tool_use" }> & { at: number; ok: boolean; result: string };
-export type Write = { at: number; path: string; via: "tool" | "bash" };
-export type Run = { at: number; ok: boolean; result: string; command: string; cwd: string };
+/** A write, with the places in its tool call of the commands that wrote it (ks): a Bash write's simple command, none for a
+ *  Bash call read as writing every file it names, and 0 for a tool's own write. */
+export type Write = { at: number; path: string; via: "tool" | "bash"; ks: number[] };
+/** A run: a Bash call and its result, or a background run where its output is read (later). */
+export type Run = { at: number; ok: boolean; result: string; command: string; cwd: string; later: boolean };
 export interface Detection {
   /** The primary: test written, failing run before the first source edit, passing run after it. */
   followed: boolean;
@@ -217,14 +226,19 @@ function uses(ev: TranscriptEvent[]): Use[] {
 }
 
 /** The folder each Bash call runs in. Claude Code keeps its shell's working directory from one Bash call to the next, so a
- *  call starts where the last call's cd left it, unless Claude Code reports that it reset the shell (a cd out of the project). */
-function bashCwds(us: Use[], root: string): Map<number, string> {
-  const out = new Map<number, string>();
-  let here = root;
+ *  call starts where the last call's cd left it, unless Claude Code reports that it reset the shell (a cd out of the project).
+ *  A cd the parser can't resolve leaves the folder unknown until a cd to a full path or a reset: a relative write there is a
+ *  write no parser can name, and runs are still read in the last folder known. */
+type Cwd = { cwd: string; known: boolean };
+function bashCwds(us: Use[], root: string): Map<number, Cwd> {
+  const out = new Map<number, Cwd>();
+  let here = root, known = true;
   for (const u of us) {
     if (u.name !== "Bash" || typeof u.input.command !== "string") continue;
-    out.set(u.at, here);
-    here = /Shell cwd was reset to (\/\S*)/.exec(u.result)?.[1] ?? shellCommands(u.input.command + "\n:", here).at(-1)?.cwd ?? here;
+    out.set(u.at, { cwd: here, known });
+    const end: string | null = /Shell cwd was reset to (\/\S*)/.exec(u.result)?.[1] ?? shellCommands(u.input.command + "\n:", known ? here : null).at(-1)?.cwd ?? null;
+    known = end !== null;
+    if (end !== null) here = end;
   }
   return out;
 }
@@ -234,20 +248,21 @@ function bashCwds(us: Use[], root: string): Map<number, string> {
  *  head-to-head's rule for an in-place edit or inline write, kept for the calls that need it). The session's own
  *  files (a Write's content, a heredoc sent to a file) are kept so a script or patch it runs later can be read. unresolved
  *  counts the Bash calls with a write no parser can name. */
-function writesOf(us: Use[], root: string, cwds: Map<number, string>): { writes: Write[]; unresolved: number } {
+function writesOf(us: Use[], root: string, cwds: Map<number, Cwd>): { writes: Write[]; unresolved: number } {
   const out: Write[] = [], scripts = new Map<string, string>();
   let unresolved = 0;
-  const named = (u: Use, cmd: string) => { if (EDITS.test(cmd)) for (const m of cmd.matchAll(PATHLIKE)) out.push({ at: u.at, path: posix.resolve(cwds.get(u.at) ?? root, m[0]), via: "bash" }); };
+  const named = (u: Use, cmd: string) => { if (EDITS.test(cmd)) for (const m of cmd.matchAll(PATHLIKE)) out.push({ at: u.at, path: posix.resolve(cwds.get(u.at)?.cwd ?? root, m[0]), via: "bash", ks: [] }); };
   for (const u of us) {
     if (WRITE_TOOLS.has(u.name)) {
       const p = u.input.file_path ?? u.input.notebook_path;
-      if (typeof p === "string") out.push({ at: u.at, path: posix.resolve(root, p), via: "tool" });
+      if (typeof p === "string") out.push({ at: u.at, path: posix.resolve(root, p), via: "tool", ks: [0] });
       if (u.name === "Write" && typeof p === "string" && typeof u.input.content === "string") scripts.set(posix.resolve(root, p), u.input.content);
     } else if (u.name === "Bash" && typeof u.input.command === "string") {
       let open = false;
-      for (const c of shellCommands(u.input.command, cwds.get(u.at) ?? root)) {
+      const start = cwds.get(u.at);
+      for (const [k, c] of shellCommands(u.input.command, !start ? root : start.known ? start.cwd : null).entries()) {
         const w = commandWrites(c, scripts, root);
-        for (const f of new Set(w.files)) out.push({ at: u.at, path: f, via: "bash" });
+        for (const f of new Set(w.files)) out.push({ at: u.at, path: f, via: "bash", ks: [k] });
         open ||= w.open;
         for (const r of c.redirects) if (WRITE_REDIRECT.test(r.op) && c.cwd !== null && !OPEN_WORD.test(r.target)) scripts.set(posix.resolve(c.cwd, r.target), c.heredocs.join("\n"));
       }
@@ -260,14 +275,14 @@ function writesOf(us: Use[], root: string, cwds: Map<number, string>): { writes:
 /** Each Bash run's result where the session saw it: a background run is seen where its output is read (a Read of its
  *  output file, a later Bash command that names the file, such as a tail or rg of it, or TaskOutput or BashOutput naming
  *  its id), never at its launch. */
-function runsOf(us: Use[], root: string, cwds: Map<number, string>): { runs: Run[]; unread: number } {
+function runsOf(us: Use[], root: string, cwds: Map<number, Cwd>): { runs: Run[]; unread: number } {
   let unread = 0;
   const runs = us.filter((u) => u.name === "Bash" && typeof u.input.command === "string").flatMap((b): Run[] => {
     const bg = BACKGROUND.exec(b.result);
-    const command = String(b.input.command), cwd = cwds.get(b.at) ?? root;
-    if (!bg) return [{ at: b.at, ok: b.ok, result: b.result, command, cwd }];
+    const command = String(b.input.command), cwd = cwds.get(b.at)?.cwd ?? root;
+    if (!bg) return [{ at: b.at, ok: b.ok, result: b.result, command, cwd, later: false }];
     const [, id, file] = bg;
-    const reads = us.filter((u) => u.at > b.at && ((u.name === "Read" && u.input.file_path === file) || (u.name === "Bash" && typeof u.input.command === "string" && u.input.command.includes(file!)) || ((u.name === "TaskOutput" || u.name === "BashOutput") && Object.values(u.input ?? {}).includes(id)))).map((u) => ({ at: u.at, ok: true, result: u.result, command, cwd }));
+    const reads = us.filter((u) => u.at > b.at && ((u.name === "Read" && u.input.file_path === file) || (u.name === "Bash" && typeof u.input.command === "string" && u.input.command.includes(file!)) || ((u.name === "TaskOutput" || u.name === "BashOutput") && Object.values(u.input ?? {}).includes(id)))).map((u) => ({ at: u.at, ok: true, result: u.result, command, cwd, later: true }));
     if (!reads.length) unread++;
     return reads;
   });
@@ -320,7 +335,8 @@ const traceFile = (l: string, raised: boolean) => (/^(\S+?):\d+:(?:\s*$| in \S+$
 const failedHere = (f: { path?: string; mod?: string }, test: string) => (f.path !== undefined && isFile(f.path, test)) || (f.mod !== undefined && isModule(f.mod, test));
 /** Whether a run starts the test file itself: a simple command that is a test runner, an interpreter or a script (./x,
  *  x.sh, x.py) and has the file, a test in it or its module as an argument. A git add or cat of the file starts nothing. */
-const runsFile = (r: Run, test: string) => shellCommands(r.command, r.cwd).some((c) => (runnerAt(c) >= 0 || INTERPRETER.test(posix.basename(c.words[0] ?? "")) || /\.(?:py|sh)$|^\.{0,2}\//.test(c.words[0] ?? "")) && c.words.some((a) => namesFileArg(a, c.cwd ?? r.cwd, test)));
+const startsFile = (c: ShellCommand, cwd: string, test: string) => (runnerAt(c) >= 0 || INTERPRETER.test(posix.basename(c.words[0] ?? "")) || /\.(?:py|sh)$|^\.{0,2}\//.test(c.words[0] ?? "")) && c.words.some((a) => namesFileArg(a, cwd, test));
+const runsFile = (r: Run, test: string) => shellCommands(r.command, r.cwd).some((c) => startsFile(c, c.cwd ?? r.cwd, test));
 /** A failure a test runner reports without naming the test: a failing count (a pytest summary, unittest's FAILED, a CHECK
  *  FAIL line), pytest's FAILURES or ERRORS section, or its progress line with an F or E. Claude Code cuts a long result in
  *  the middle, which can drop every line that names the test and keep only these. */
@@ -340,21 +356,7 @@ const runnerAt = (c: ShellCommand) => c.words.findIndex((x, i) => RUNNER.test(po
  *  above it, or that has no path argument (the whole suite; a -k or -m filter is not read); an inline script that names the file and calls pytest.main or unittest.main; or output naming the file on a passing line
  *  (pytest's PASSED or progress line, unittest's ok line). */
 function selectsTest(r: Run, test: string): boolean {
-  if (runsFile(r, test)) return true;
-  for (const c of shellCommands(r.command, r.cwd)) {
-    const cwd = c.cwd ?? r.cwd, at = runnerAt(c);
-    if (at >= 0) {
-      const rest = c.words.slice(at + 1), args: string[] = [];
-      for (let k = 0; k < rest.length; k++) {
-        const a = rest[k]!;
-        if (VALUED.has(a)) k++;
-        else if (!a.startsWith("-") && /[/.]/.test(a) && a !== "unittest") args.push(a);
-      }
-      if (!args.length || args.some((a) => selects(a, cwd, test))) return true;
-    }
-    const code = INTERPRETER.test(posix.basename(c.words[0] ?? "")) ? codeOf(c, new Map()).join("\n") : "";
-    if (/\b(?:pytest|unittest)\.main\b/.test(code) && code.includes(posix.basename(test))) return true;
-  }
+  if (shellCommands(r.command, r.cwd).some((c) => commandSelects(c, c.cwd ?? r.cwd, test))) return true;
   return resultLines(r.result).some((l) => {
     const m = /^(\S+?)::\S+ (?:PASSED|XPASS)\b/.exec(l) ?? /^(\S+) [.sxX]+(?:\s+\[\s*\d+%\])?$/.exec(l);
     if (m) return isFile(m[1]!, test);
@@ -362,16 +364,79 @@ function selectsTest(r: Run, test: string): boolean {
     return !!u && isModule(u[1]!, test);
   });
 }
+/** Whether one command of a run selects the test file by its words: it starts the file, it is a test runner whose path
+ *  argument is a folder above the file or that has none, or it is an inline script that names the file and calls
+ *  pytest.main or unittest.main. */
+function commandSelects(c: ShellCommand, cwd: string, test: string): boolean {
+  if (startsFile(c, cwd, test)) return true;
+  const at = runnerAt(c);
+  if (at >= 0) {
+    const rest = c.words.slice(at + 1), args: string[] = [];
+    for (let k = 0; k < rest.length; k++) {
+      const a = rest[k]!;
+      if (VALUED.has(a)) k++;
+      else if (!a.startsWith("-") && /[/.]/.test(a) && a !== "unittest") args.push(a);
+    }
+    if (!args.length || args.some((a) => selects(a, cwd, test))) return true;
+  }
+  const code = INTERPRETER.test(posix.basename(c.words[0] ?? "")) ? codeOf(c, new Map()).join("\n") : "";
+  return /\b(?:pytest|unittest)\.main\b/.test(code) && code.includes(posix.basename(test));
+}
 /** The passing run of a test: a run that succeeds, shows a test outcome with no failing count, reports no failed test in the
  *  session's test files and selects one of them, so an unrelated green run does not count. */
 const passing = (r: Run, tests: string[]) => r.ok && showsOutcome(r.result) && !showsFailure(r.result) && !resultLines(r.result).some((l) => { const f = failedTest(l); return f !== null && tests.some((t) => failedHere(f, t)); }) && tests.some((t) => selectsTest(r, t));
 
-function read(ws: Write[], runs: Run[], fix: Set<string>) {
+type Sequence = { items: { kind: "cmd" | "and" | "or" | "bg"; pipeline: number }[]; at: number[] };
+const MARKS = new Map<string, "and" | "or" | "bg">([["__b1_and__", "and"], ["__b1_or__", "or"], ["__b1_bg__", "bg"]]);
+/** A Bash call's simple commands in order (at: each one's place among items), with the &&, || and & between them. The
+ *  vendored parser drops its operators, so the call is parsed again with each of them made a marker command; inside a quoted
+ *  word, a heredoc or a comment a marker stays text. Null when the two parses don't line up, which leaves the call unordered. */
+function sequence(command: string): Sequence | null {
+  const marked = command.replace(/(?<!\\)&&/g, " ;__b1_and__; ").replace(/(?<!\\)\|\|/g, " ;__b1_or__; ").replace(/(?<![&|<>\\])&(?![&>])/g, " ;__b1_bg__; ");
+  const items: Sequence["items"] = [], at: number[] = [];
+  for (const c of shellCommands(marked, "/")) {
+    const mark = MARKS.get(c.words[0] ?? "");
+    if (!mark) at.push(items.length);
+    items.push({ kind: mark ?? "cmd", pipeline: c.pipeline });
+  }
+  return at.length === shellCommands(command, "/").length ? { items, at } : null;
+}
+/** Whether, in one Bash call, command j can run after command i ended as given (ok: i worked; else i failed). j must come
+ *  later, in another pipeline, with no & between them, and bash's &&, || and ; must let it run: a command after || runs only
+ *  when what came before failed, so a run after a fix's || gets no order, while one after || true; or || true && keeps it. */
+function ordered(s: Sequence, i: number, j: number, ok: boolean): boolean {
+  const a = s.at[i], b = s.at[j];
+  if (a === undefined || b === undefined || a >= b || s.items[a]!.pipeline === s.items[b]!.pipeline) return false;
+  const piped = s.items[a + 1]?.kind === "cmd" && s.items[a + 1]!.pipeline === s.items[a]!.pipeline;
+  let may0 = ok || piped, may1 = !ok || piped;
+  for (let k = a + 1; k <= b; k++) {
+    const it = s.items[k]!, prev = s.items[k - 1]!;
+    if (it.kind === "bg") return false;
+    if (it.kind !== "cmd" || (prev.kind === "cmd" && prev.pipeline === it.pipeline)) continue;
+    const runs = prev.kind === "and" ? may0 : prev.kind === "or" ? may1 : true;
+    if (it.pipeline === s.items[b]!.pipeline) return runs;
+    if (prev.kind === "and") may1 ||= may0;
+    else if (prev.kind === "or") may0 ||= may1;
+    else may0 = may1 = true;
+  }
+  return false;
+}
+
+/** The steps in order. One thing comes before another when its tool call is earlier or, in the same Bash call, when one of
+ *  its commands is ordered before one of the other's (a failing run as a command that failed). A run's commands are those that select one of the session's tests; a
+ *  background run read later has none, so it is never ordered inside the call that reads it. */
+function read(ws: Write[], runs: Run[], fix: Set<string>, seqAt: (at: number) => Sequence | null) {
+  const first = (a: { at: number; ks: number[] }, b: { at: number; ks: number[] }, ok = true) => {
+    if (a.at !== b.at) return a.at < b.at;
+    const s = seqAt(a.at);
+    return s !== null && a.ks.some((i) => b.ks.some((j) => ordered(s, i, j, ok)));
+  };
   const source = ws.find((w) => fix.has(w.path));
-  const tests = ws.filter((w) => TEST_PATH.test(w.path) && !NOT_SOURCE.test(w.path) && !fix.has(w.path) && (!source || w.at < source.at));
-  const test = tests[0];
-  const before = test && source ? runs.find((r) => r.at >= test.at && r.at < source.at && failing(r, tests.filter((t) => t.at <= r.at).map((t) => t.path))) : undefined;
-  const after = test && source ? runs.find((r) => r.at > source.at && passing(r, tests.map((t) => t.path))) : undefined;
+  const tests = ws.filter((w) => TEST_PATH.test(w.path) && !NOT_SOURCE.test(w.path) && !fix.has(w.path) && (!source || first(w, source)));
+  const test = tests[0], paths = tests.map((t) => t.path);
+  const place = (r: Run) => ({ at: r.at, ks: r.later ? [] : shellCommands(r.command, r.cwd).flatMap((c, k) => (paths.some((t) => commandSelects(c, c.cwd ?? r.cwd, t)) ? [k] : [])) });
+  const before = test && source ? runs.find((r) => { const p = place(r), seen = tests.filter((t) => first(t, p)); return seen.length > 0 && first(p, source, false) && failing(r, seen.map((t) => t.path)); }) : undefined;
+  const after = test && source ? runs.find((r) => first(source, place(r)) && passing(r, paths)) : undefined;
   return { source, test, before, after, followed: !!(test && source && before && after) };
 }
 
@@ -385,8 +450,11 @@ export function detect(recs: Rec[], patch: string, rootIn?: string): Detection {
   const cwds = bashCwds(us, root);
   const { writes: ws, unresolved } = writesOf(us, root, cwds);
   const { runs, unread } = runsOf(us, root, cwds);
-  const all = read(ws, runs, fix);
-  const tool = read(ws.filter((w) => w.via === "tool"), runs, fix);
+  const bash = new Map(us.flatMap((u) => (u.name === "Bash" && typeof u.input.command === "string" ? [[u.at, u.input.command] as const] : [])));
+  const seqs = new Map<number, Sequence | null>();
+  const seqAt = (at: number) => { if (!seqs.has(at)) seqs.set(at, bash.has(at) ? sequence(bash.get(at)!) : null); return seqs.get(at) ?? null; };
+  const all = read(ws, runs, fix, seqAt);
+  const tool = read(ws.filter((w) => w.via === "tool"), runs, fix, seqAt);
   const fixWrites = ws.filter((w) => fix.has(w.path));
   return {
     followed: all.followed,

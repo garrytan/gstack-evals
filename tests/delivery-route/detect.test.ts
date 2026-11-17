@@ -281,3 +281,45 @@ describe("the shell's folder carries from one Bash call to the next", () => {
     expect([d.followed, d.source_write_unseen]).toEqual([true, false]);
   });
 });
+
+describe("inside one Bash call, commands run in the order bash runs them", () => {
+  const FIX = "sed -i s/a/b/ pkg/mod.py", RUN = "pytest tests/test_mod.py -q";
+  const ran = (command: string) => detect(log([write(TEST), bash("pytest tests/test_mod.py", FAILED, true), bash(command, PASSED)]), PATCH);
+  test("a fix and its passing run in one call count across &&, ; and newlines, after || true, through a pipe after the run, and with an operator inside a heredoc", () => {
+    const heredoc = "python - <<'EOF'\nimport pathlib\np = pathlib.Path('pkg/mod.py')\np.write_text(p.read_text().replace('a || b', 'a & b'))\nEOF\n" + RUN;
+    for (const c of [FIX + " && " + RUN, FIX + "; " + RUN, FIX + "\n" + RUN, FIX + " || true; " + RUN, FIX + " || true && " + RUN, FIX + " && " + RUN + " 2>&1 | tail -5", heredoc])
+      expect([c, ran(c).followed, ran(c).bash_only_source]).toEqual([c, true, true]);
+  });
+  test("the run before the fix, a run only a failed fix reaches (||), a pipe and a & give the passing run no order", () => {
+    for (const c of [RUN + "; " + FIX, FIX + " || " + RUN, FIX + " | " + RUN, FIX + " & " + RUN])
+      expect([c, ran(c).followed, ran(c).bash_only_source]).toEqual([c, false, true]);
+    const split = detect(log([write(TEST), bash("pytest tests/test_mod.py", FAILED, true), bash(FIX, ""), bash(RUN, PASSED)]), PATCH);
+    expect(split.followed).toBe(true);
+  });
+  test("a failing run before the fix in the same call counts, and one after it does not", () => {
+    const fails = (command: string) => detect(log([write(TEST), bash(command, FAILED, true), bash(RUN, PASSED)]), PATCH);
+    expect([fails("pytest tests/test_mod.py; " + FIX).followed, fails("pytest tests/test_mod.py || " + FIX).followed, fails(FIX + "; pytest tests/test_mod.py").followed]).toEqual([true, true, false]);
+  });
+  test("a test written and run in one call has its failing run only when the run comes after the write", () => {
+    const body = "cat > tests/test_mod.py <<'EOF'\ndef test_x():\n    assert f() == 1\nEOF\n";
+    const first = detect(log([bash(body + "pytest tests/test_mod.py", FAILED, true), edit("/testbed/pkg/mod.py"), bash(RUN, PASSED)]), PATCH);
+    const late = detect(log([bash("pytest tests/test_mod.py; " + body, FAILED, true), edit("/testbed/pkg/mod.py"), bash(RUN, PASSED)]), PATCH);
+    expect([first.followed, first.test_file, late.followed, late.test_file]).toEqual([true, TEST, false, TEST]);
+  });
+});
+
+describe("a cd the parser can't resolve leaves the folder unknown", () => {
+  const tail = [write(TEST), bash("pytest tests/test_mod.py", FAILED, true), edit("/testbed/pkg/mod.py"), bash("pytest tests/test_mod.py -q", PASSED)];
+  const read = (d: ReturnType<typeof detect>) => [d.followed, d.unresolved_writes];
+  test("a relative fix after it, in that call or the next, is a write no parser can name, in both directions", () => {
+    expect(read(detect(log([bash('cd "$(git rev-parse --show-toplevel)" && sed -i s/a/b/ pkg/mod.py', ""), ...tail]), PATCH))).toEqual([false, 1]);
+    expect(read(detect(log([bash('cd "$REPO" && printf x > pkg/mod.py', ""), ...tail]), PATCH))).toEqual([true, 1]);
+    expect(read(detect(log([bash('cd "$REPO"', ""), bash("sed -i s/a/b/ pkg/mod.py", ""), ...tail]), PATCH))).toEqual([false, 1]);
+    expect(read(detect(log([write(TEST), bash("pytest tests/test_mod.py", FAILED, true), bash("cd ~/src && sed -i s/a/b/ pkg/mod.py", ""), bash("pytest tests/test_mod.py -q", PASSED)]), PATCH))).toEqual([true, 1]);
+  });
+  test("a write to a full path there, and a relative write after a cd to a full path, are read as before", () => {
+    expect(read(detect(log([bash('cd "$REPO" && sed -i s/a/b/ /testbed/pkg/mod.py', ""), ...tail]), PATCH))).toEqual([false, 0]);
+    expect(read(detect(log([bash("cd /testbed && sed -i s/a/b/ pkg/mod.py", ""), ...tail]), PATCH))).toEqual([false, 0]);
+    expect(read(detect(log([bash('cd "$REPO"', ""), bash("cd /testbed", ""), bash("sed -i s/a/b/ pkg/mod.py", ""), ...tail]), PATCH))).toEqual([false, 0]);
+  });
+});
