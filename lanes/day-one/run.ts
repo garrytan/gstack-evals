@@ -87,6 +87,8 @@ export interface StageInput {
   /** Micro-dollars the rig's lease holds at open (leaseAmount: cap or less, when the item has less left); rounds are admitted inside it. Unset, cap. */
   lease?: number;
   ownerCap: number;
+  /** Micro-dollars the responder's lease holds at open (cli.ts openOwnerMeter: ownerCap or less, when the owner item has less left); rounds are admitted inside it. Unset, ownerCap. */
+  ownerLease?: number;
   /** Micro-dollars the gstack arms' Astra voice slots may spend in this launch, inside cap (C2's own capped line). */
   voiceCap: number;
   parallel: number;
@@ -330,6 +332,7 @@ export async function runStage(o: StageInput, deps: StageDeps): Promise<StageRes
     result.owner_micros += Math.round(r.owner_usd * D);
   }
   const room = Math.min(o.cap, result.spent_micros + (o.lease ?? o.cap));
+  const ownerRoom = Math.min(o.ownerCap, result.owner_micros + (o.ownerLease ?? o.ownerCap));
   const adoptedHalt = [...done.values()].find((r) => r.state === "halt");
   if (adoptedHalt) {
     result.stops.push({ code: adoptedHalt.code!, message: adoptedHalt.id + ": " + adoptedHalt.why + "; adopted after a crash, so the launch stops for the Captain" });
@@ -561,8 +564,8 @@ export async function runStage(o: StageInput, deps: StageDeps): Promise<StageRes
       const worst = round.reduce((s, c) => s + 2 * micros(cellLimits(c).usd + cellLimits(c).voice_usd), 0);
       const ownerWorst = o.ownerChannel ? round.reduce((s, c) => s + 2 * micros(cellLimits(c).owner_usd), 0) : 0;
       const voiceWorst = round.reduce((s, c) => s + 2 * micros(cellLimits(c).voice_usd), 0);
-      if (result.spent_micros + worst > room || result.owner_micros + ownerWorst > o.ownerCap || result.voice_micros + voiceWorst > o.voiceCap) {
-        result.stops.push({ code: "E_DAYONE_ADMISSION", message: "the round from cell " + (i + 1) + " has a worst case of " + usd(worst) + " on the item (" + usd(voiceWorst) + " of it on the voice) and " + usd(ownerWorst) + " on the responder, more than this launch may still spend (" + usd(room - result.spent_micros) + ", " + usd(o.voiceCap - result.voice_micros) + " and " + usd(o.ownerCap - result.owner_micros) + "); nothing in it ran. Fix: relaunch this stage with a smaller --parallel (ended cells stay ended); if a single cell does not fit, the line is short and goes to the Captain" });
+      if (result.spent_micros + worst > room || result.owner_micros + ownerWorst > ownerRoom || result.voice_micros + voiceWorst > o.voiceCap) {
+        result.stops.push({ code: "E_DAYONE_ADMISSION", message: "the round from cell " + (i + 1) + " has a worst case of " + usd(worst) + " on the item (" + usd(voiceWorst) + " of it on the voice) and " + usd(ownerWorst) + " on the responder, more than this launch may still spend (" + usd(room - result.spent_micros) + ", " + usd(o.voiceCap - result.voice_micros) + " and " + usd(ownerRoom - result.owner_micros) + "); nothing in it ran. Fix: relaunch this stage with a smaller --parallel (ended cells stay ended); if a single cell does not fit, the line is short and goes to the Captain" });
         break;
       }
       await pool(o.parallel, round.map((c) => () => runCell(c)));

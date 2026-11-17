@@ -204,13 +204,14 @@ async function stage(f: Map<string, string[]>, io: Io, env: Env): Promise<number
   const ownerItem = opt(f, "--owner-item");
   const withOwner = planning && channel === "on";
   if (withOwner && !ownerItem) refuse("a planning stage with the owner channel on needs --owner-item and --owner-spend-cap");
+  const ownerCap = withOwner ? usd(one(f, "--owner-spend-cap"), "--owner-spend-cap") : 0;
   const policy = policyOf(f);
   const cap = usd(one(f, "--spend-cap"), "--spend-cap");
   const rigArms: (PlanArm | "build" | "check")[] = st === "build" ? ["build"] : st === "check" ? ["check"] : st === "base" ? ["n"] : arms.filter((a) => a !== "n");
   const specs = rigArms.map(armSpec);
   const rig = rigFor(f, env, { out, item, specs, model: st === "check" ? MODELS.checker : MODELS.planner, policy, cap });
   const volume = st === "build" || st === "check" ? nodeVolume(env.GSTACK_EVALS_DOCKER_BIN || "docker").volume : null;
-  const meter = withOwner ? await openMeter({ item: ownerItem!, runId: DAYONE_RUN, out: join(out, "owner-meter"), cacheDir: join(out, "owner-cache"), maxOutputTokens: 1200, amountMicros: usd(one(f, "--owner-spend-cap"), "--owner-spend-cap"), record: rig.record.path, ledger: rig.ledger.path, env }) : null;
+  const owner = withOwner ? await openOwnerMeter({ item: ownerItem!, capMicros: ownerCap, out, record: rig.record.path, ledger: rig.ledger.path, env }) : null;
   try {
     const r = await runStage(
       {
@@ -223,7 +224,8 @@ async function stage(f: Map<string, string[]>, io: Io, env: Env): Promise<number
         runId: DAYONE_RUN,
         cap,
         lease: rig.lease,
-        ownerCap: withOwner ? usd(one(f, "--owner-spend-cap"), "--owner-spend-cap") : 0,
+        ownerCap,
+        ownerLease: owner?.lease ?? 0,
         voiceCap: opt(f, "--voice-cap") ? usd(opt(f, "--voice-cap")!, "--voice-cap") : 0,
         parallel,
         ownerChannel: channel === "on",
@@ -234,15 +236,22 @@ async function stage(f: Map<string, string[]>, io: Io, env: Env): Promise<number
         nodeVolume: volume,
         log: (l) => io.err(l),
       },
-      { openRig: rig.open, ...(meter ? { ownerMeter: meter } : {}) },
+      { openRig: rig.open, ...(owner ? { ownerMeter: owner.meter } : {}) },
     );
     io.out(st + "-" + r.manifest_sha256.slice(0, 12) + ": " + r.rows.length + " cells ended, " + r.unrun.length + " unrun, $" + (r.spent_micros / 1e6).toFixed(2) + " on the item ($" + (r.voice_micros / 1e6).toFixed(2) + " voice), $" + (r.owner_micros / 1e6).toFixed(2) + " responder");
     for (const s of r.stops) io.err(s.code + " day-one stage: " + s.message);
     return r.stops.length ? 2 : 0;
   } finally {
-    await meter?.close();
+    await owner?.meter.close();
     cpSync(out, receipts, { recursive: true, filter: (src) => !lstatSync(src).isSocket() && !src.includes("/scratch") });
   }
+}
+
+/** The responder's meter for a planning stage and the micro-dollars its lease holds: the --owner-spend-cap, or the owner item's balance when less is left, so a resume asks only for what remains, as the stage's own lease does. */
+export async function openOwnerMeter(o: { item: string; capMicros: number; out: string; record: string; ledger: string; env: Env }): Promise<{ meter: Meter; lease: number }> {
+  const lease = leaseAmount(o.record, o.item, o.capMicros);
+  const meter = await openMeter({ item: o.item, runId: DAYONE_RUN, out: join(o.out, "owner-meter"), cacheDir: join(o.out, "owner-cache"), maxOutputTokens: 1200, amountMicros: lease, record: o.record, ledger: o.ledger, env: o.env });
+  return { meter, lease };
 }
 
 /** The fixtures with the real checker (the smoke's step), on the smoke's item. */
