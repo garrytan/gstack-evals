@@ -4,7 +4,9 @@
 // - The run is the run.json under the state root whose plan_input or plan_source names plan.md, latest updated_at first.
 // - Exposed: the run's status is complete (the gate was answered and applied); CEO and Eng closed; Design closed or
 //   skipped by autoplan's own scope rule; every closed phase's native voice completed; and every closed phase's outside
-//   voice ended (completed, or recorded unavailable or failed). Anything less is not exposed: reported, never a loss.
+//   voice ended (completed, or recorded unavailable or failed). An outside voice that is disabled (the config turned it
+//   off) or skipped never ran, so its session is not exposed, with that reason. Anything less is not exposed: reported,
+//   never a loss.
 // - Voice: astra when the voice slot sent at least one request and every closed phase's outside voice completed;
 //   otherwise fallback (E_DAYONE_VOICE), logged per session.
 // - The arm's plan: plan.md at the session's end when it differs from the base plan; otherwise the run's active plan
@@ -75,7 +77,8 @@ export function readExposure(stateRoot: string, voiceRequests: number): Exposure
   if (phases.design.state !== "closed" && phases.design.state !== "skipped") gaps.push("design " + phases.design.state);
   for (const [k, p] of closed) {
     if (p.native !== "completed") gaps.push(k + " native voice " + p.native);
-    if (!["completed", "unavailable", "failed", "disabled"].includes(String(p.outside))) gaps.push(k + " outside voice " + p.outside);
+    if (p.outside === "disabled" || p.outside === "skipped") gaps.push(k + " outside voice " + p.outside + ", so it never ran");
+    else if (!["completed", "unavailable", "failed"].includes(String(p.outside))) gaps.push(k + " outside voice " + p.outside);
   }
   const astra = voiceRequests > 0 && closed.length > 0 && closed.every(([, p]) => p.outside === "completed");
   return { run: relative(stateRoot, r.path), status: b.status ?? null, phases, outside_model: b.outside_model ?? null, exposed: gaps.length === 0, voice: astra ? "astra" : "fallback", why: gaps.length ? gaps.join("; ") : "every phase closed and the gate answered" };

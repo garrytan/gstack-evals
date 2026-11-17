@@ -12,9 +12,8 @@ Build a simple, reliable first version of the app described in the brief, then i
 ## Milestones
 1. Set up the project structure and a start script.
 2. Build the main pages and the data store.
-3. Add create, edit and delete for the main records.
-4. Polish the layout and test the main flows by hand.
-5. Gather feedback from the owner and plan version 2.
+3. Polish the layout and test the main flows by hand.
+4. Gather feedback from the owner and plan version 2.
 
 ## Risks
 - Scope creep: keep version 1 small and move extra ideas to a later version.

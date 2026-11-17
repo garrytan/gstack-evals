@@ -1,11 +1,14 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // gstack-evals day-one dryrun (prereg section 12): the keyless dry run. Each case drives a frozen rule on fixtures and
 // prints one PASS or FAIL line with what it saw; nothing calls a provider. The stage runner runs end to end on a stub rig
-// and a stub launch (every stage, the owner channel, the cap stop and its refusal, a changed manifest, a crash marker, a
-// containment halt); the Astra voice route runs on a real metering proxy against a stub upstream on a temporary
-// ledger; and every metered line item opens and settles one lease on a temporary ledger.
+// and a stub launch (every stage, the owner channel on and dropped, an admission stop and its resume, a session cap stop
+// and its refusal, a changed manifest, the cross-launch guard, a crash marker, a containment halt); the checker
+// session's setup runs through launchSession with a stub driver; the fixtures with the real checker run on a stub
+// launch; the Astra voice route runs on a real metering proxy against a stub upstream on a temporary ledger; the
+// smoke's admission arithmetic replays at planning prices; and every metered line item opens and settles one lease on
+// a temporary ledger.
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openLease, recordApproval } from "../../src/runner/ledger/ledger.ts";
@@ -16,13 +19,16 @@ import type { HostRig } from "../../src/skill-eval/cli/run-host.ts";
 import type { LoadedPolicy } from "../../src/skill-eval/cli/policy.ts";
 import { DEFAULT_POLICY, loadPolicy } from "../../src/skill-eval/cli/policy.ts";
 import type { Meter as PvMeter } from "../product-value/meter.ts";
-import { decide, paired, read, type ScoredBuild } from "./analysis.ts";
-import { armPrompt, COMMON_ASK, DAY_ONE_PASS, OWNER_CLOSING, OWNER_NOTICE, PREREG, PROMPTS_SHA256, BUILD_PROMPT, CHECK_FOOTER, CHECK_HEADER, OWNER_HEAD, OWNER_RULES, PLATFORM, REVIEW_ASK, AUTOPLAN_LINE } from "./frozen.ts";
+import { decide, paired, read, source, type Interval, type ScoredBuild } from "./analysis.ts";
+import { appWrites } from "./app.ts";
+import { readExposure } from "./exposure.ts";
+import { runRealFixtures } from "./fixtures.ts";
+import { armPrompt, COMMON_ASK, DAY_ONE_PASS, GATE_REPLY, MODELS, OWNER_CLOSING, OWNER_NOTICE, PREREG, PROBE_QUESTIONS, PROMPTS_SHA256, BUILD_PROMPT, CHECK_FOOTER, CHECK_HEADER, OWNER_HEAD, OWNER_RULES, PLATFORM, QUESTION_CHARS, REVIEW_ASK, AUTOPLAN_LINE } from "./frozen.ts";
 import { controls, goldAgreement, labelPacket, packets, parseLabels, stockPlan, type Label } from "./judge.ts";
-import { ALL_IN_USD, DAYONE_RUN, ITEMS, ledgerCapUsd, leaseItem, settleItem, shrink } from "./ledger.ts";
+import { ALL_IN_USD, DAYONE_RUN, HEADROOM_USD, ITEMS, itemOf, ledgerCapUsd, leaseItem, PLANNING_PRICES, settleItem, shrink } from "./ledger.ts";
 import { ownerLoop, splitSource } from "./owner.ts";
-import { runStage, type Stage, type StageDeps } from "./run.ts";
-import { attemptOutcome, settle, type AttemptRead, type LaunchInput } from "./sessions.ts";
+import { cellLimits, planFile, runStage, stageCells, type Stage, type StageDeps, type StageInput } from "./run.ts";
+import { attemptOutcome, BROWSER_TOOLS, launchSession, settle, type AttemptRead, type LaunchInput } from "./sessions.ts";
 import { briefText, loadUnit, type Unit } from "./units.ts";
 import { checkPrompt, parseVerdicts, scoreBuild } from "./verdict.ts";
 
@@ -34,6 +40,9 @@ type Case = () => string | Promise<string>;
 class Fail extends Error {}
 const must = (ok: boolean, why: string) => {
   if (!ok) throw new Fail(why);
+};
+const fail = (why: string): never => {
+  throw new Fail(why);
 };
 const withTmp = async <T>(fn: (dir: string) => T | Promise<T>): Promise<T> => {
   const dir = mkdtempSync(join(tmpdir(), "day-one-dry-"));
@@ -98,10 +107,12 @@ const ownerMeter = (calls: string[]): PvMeter => ({
 });
 
 /** A launch that plays each stage's agent: asks the owner once on a plan, writes the stage's output, answers the checker. */
-function stubLaunch(o: { leak?: boolean; usd?: number } = {}) {
+function stubLaunch(o: { leak?: boolean; usd?: number; dropped?: boolean; seen?: LaunchInput[]; capStop?: boolean } = {}) {
   return async (l: LaunchInput): Promise<AttemptRead> => {
+    o.seen?.push(l);
     const out = join(l.dir, "out");
     mkdirSync(out, { recursive: true });
+    if (o.capStop) return { termination: { kind: "cap_stop" } as never, web: 0, gstack_reads: [], contained: [], micros: 1e6, voice: null, out };
     if (l.arm === "check") {
       must(l.mcpUrl === "http://c:8931/mcp", "the checker was launched without the browser container's MCP endpoint");
       await l.nextUser(["Tried every task.\n```verdicts\n" + JSON.stringify({ tasks: [1, 2, 3, 4, 5].map((i) => ({ id: "t" + i, done: i <= 2, why: "seen" })) }) + "\n```"]);
@@ -110,7 +121,7 @@ function stubLaunch(o: { leak?: boolean; usd?: number } = {}) {
       await l.nextUser(["Built."]);
     } else {
       const q = await l.nextUser(["Which days do you water?"]);
-      must("reply" in q, "the owner loop did not answer a question");
+      must(o.dropped ? "end" in q : "reply" in q, o.dropped ? "a question was answered with the channel dropped" : "the owner loop did not answer a question");
       writeFileSync(join(out, "plan.md"), "# Plan by " + l.arm + "\n");
       await l.nextUser(["Done."]);
     }
@@ -118,21 +129,26 @@ function stubLaunch(o: { leak?: boolean; usd?: number } = {}) {
   };
 }
 
-const stubApp = { start: async () => ({ container: "c", mcpUrl: "http://c:8931/mcp", started: true, start_s: 3, detail: "ok", copy: "/nonexistent" }), stop: () => {} } as unknown as NonNullable<StageDeps["app"]>;
+const stubApp = { start: async () => ({ container: "c", mcpUrl: "http://c:8931/mcp", started: true, start_s: 3, detail: "ok", copy: "/nonexistent", build: "/nonexistent" }), stop: () => [] } as unknown as NonNullable<StageDeps["app"]>;
 
-async function stageRun(dir: string, us: Unit[], st: Stage, arms: ("n" | "d" | "a")[], cap: number, extra: Partial<StageDeps> = {}, closed = { n: 0 }, ledger: string | null = null) {
+async function stageRun(dir: string, us: Unit[], st: Stage, arms: ("n" | "d" | "r" | "a")[], cap: number, extra: Partial<StageDeps> = {}, closed = { n: 0 }, more: Partial<StageInput> = {}) {
   const calls: string[] = [];
-  return runStage({ stage: st, tag: "dry", units: us, reps: [1], arms, out: dir, runId: DAYONE_RUN, cap: cap * 1e6, ownerCap: 10e6, voiceCap: 100e6, parallel: 2, policy: policyOf(), ledger, docker: "docker", scratch: join(dir, "scratch"), nodeVolume: "vol", log: () => {} }, { openRig: () => stubRig(closed), ownerMeter: ownerMeter(calls), launch: stubLaunch(), app: stubApp, ...extra });
+  return runStage({ stage: st, tag: "dry", units: us, reps: [1], arms, out: dir, runId: DAYONE_RUN, cap: cap * 1e6, ownerCap: 10e6, voiceCap: 100e6, parallel: 2, ownerChannel: true, policy: policyOf(), ledger: null, docker: "docker", scratch: join(dir, "scratch"), nodeVolume: "vol", log: () => {}, ...more }, { openRig: () => stubRig(closed), ownerMeter: ownerMeter(calls), launch: stubLaunch(), app: stubApp, ...extra });
 }
+
+const iv = (lo: number, hi: number, briefs = 15): Interval => ({ est: (lo + hi) / 2, lo, hi, briefs, sd: 0.2 });
 
 export const CASES: Record<string, Case> = {
   "frozen texts": () => {
     const prereg = existsSync(PREREG) ? readFileSync(PREREG, "utf8") : null;
     must(prereg !== null, PREREG + " is missing");
-    const missing = Object.entries({ COMMON_ASK, REVIEW_ASK, DAY_ONE_PASS, AUTOPLAN_LINE, OWNER_NOTICE, PLATFORM, BUILD_PROMPT, CHECK_HEADER, CHECK_FOOTER, OWNER_HEAD, OWNER_RULES, OWNER_CLOSING }).filter(([, v]) => !prereg!.includes(v)).map(([k]) => k);
+    const texts = { COMMON_ASK, REVIEW_ASK, DAY_ONE_PASS, AUTOPLAN_LINE, OWNER_NOTICE, PLATFORM, BUILD_PROMPT, CHECK_HEADER, CHECK_FOOTER, OWNER_HEAD, OWNER_RULES, OWNER_CLOSING, GATE_REPLY, ...Object.fromEntries(PROBE_QUESTIONS.map((q, i) => ["PROBE_" + (i + 1), q])) };
+    const missing = Object.entries(texts).filter(([, v]) => !prereg!.includes(v)).map(([k]) => k);
     must(!missing.length, "not in the prereg byte for byte: " + missing.join(", "));
     must(armPrompt("d").startsWith(REVIEW_ASK + "\n\n" + DAY_ONE_PASS), "D's prompt is not the review ask then the day-one paragraph");
-    return "12 frozen texts in the prereg; prompts sha256 " + PROMPTS_SHA256.slice(0, 12);
+    must(armPrompt("r") === REVIEW_ASK + "\n\n" + OWNER_NOTICE && armPrompt("d") === REVIEW_ASK + "\n\n" + DAY_ONE_PASS + "\n\n" + OWNER_NOTICE, "R is not D's review ask without the day-one pass");
+    must((["n", "d", "r", "a"] as const).every((a) => !armPrompt(a, false).includes(OWNER_NOTICE)), "a dropped channel kept the owner notice");
+    return Object.keys(texts).length + " frozen texts in the prereg; R is D without the day-one pass; prompts sha256 " + PROMPTS_SHA256.slice(0, 12);
   },
   "units": () =>
     withTmp((dir) => {
@@ -165,7 +181,15 @@ export const CASES: Record<string, Case> = {
     must("end" in none, "a reply with no question did not end the session");
     must("stop" in f && f.stop.kind === "missing", "a failed responder call did not stop the session");
     must(splitSource("I don't know.\nSOURCE: unknown").source === "unknown" && splitSource("No tag").source === "untagged", "source tags misread");
-    return "answer with its source cut, closing at the limit, gate question, no question ends, failed call stops";
+    const long: string[] = [];
+    await ownerLoop({ ask: async (q) => (long.push(q), { text: "Yes.\nSOURCE: profile" }) }).nextUser(["x".repeat(QUESTION_CHARS + 2000) + " Shall I go on?"]);
+    must(long[0]!.length === QUESTION_CHARS && long[0]!.endsWith("Shall I go on?"), "the question is not the asking reply's last " + QUESTION_CHARS + " characters");
+    const dropped = ownerLoop({ ask: async () => fail("the responder was called with the channel dropped"), gatePending: () => true, dropped: true });
+    const dg = await dropped.nextUser(["The plan waits at its approval gate."]);
+    const dq = await ownerLoop({ ask: async () => fail("the responder was called with the channel dropped"), dropped: true }).nextUser(["Which day do you bake?"]);
+    must("reply" in dg && dg.reply === GATE_REPLY && dropped.state.turns[0]!.source === "recommended" && dropped.state.turns[0]!.gate, "a dropped channel did not answer the gate with the fixed reply, logged as recommended");
+    must("end" in dq, "a dropped channel answered a question");
+    return "answer with its source cut, closing at the limit, gate question, no question ends, failed call stops, the whole asking reply up to " + QUESTION_CHARS + " characters; dropped: the gate gets \"" + GATE_REPLY + "\" as recommended and a question ends";
   },
   "session outcomes": () => {
     const base: AttemptRead = { termination: { kind: "completed" }, web: 0, gstack_reads: [], contained: [], micros: 0, voice: null, out: "/x" };
@@ -196,11 +220,17 @@ export const CASES: Record<string, Case> = {
     return "ok block, four bad blocks refused, not started scores 0, unparsable unscored, share 1/3";
   },
   "readings": () => {
-    const iv = (lo: number, hi: number) => ({ est: (lo + hi) / 2, lo, hi, briefs: 15, sd: 0.2 });
     must(decide(iv(0.1, 0.3), iv(-0.1, 0.1), iv(0.05, 0.2)) === "keep", "keep");
     must(decide(iv(0.1, 0.3), iv(0.1, 0.3), iv(-0.1, 0.1)) === "slim", "slim");
-    must(decide(iv(-0.1, 0.2), iv(-0.1, 0.2), iv(-0.1, 0.1)) === "cut", "cut");
+    must(decide(iv(-0.1, 0.15), iv(-0.1, 0.15), iv(-0.1, 0.1)) === "cut", "cut with both upper ends under the MDD");
+    must(decide(iv(-0.1, 0.2), iv(-0.1, 0.2), iv(-0.1, 0.1)) === "undecided", "a null whose upper end reaches the MDD read cut");
     must(decide(iv(0.05, 0.3), iv(-0.05, 0.2), iv(-0.1, 0.2)) === "undecided", "undecided");
+    const none = paired(new Map(), new Map());
+    must(decide(none, none, none) === "undecided" && decide(iv(-0.1, 0.1, 11), iv(-0.1, 0.1, 11), iv(-0.1, 0.1, 11)) === "undecided" && decide(iv(0.1, 0.3, 11), iv(0.1, 0.3), iv(0.05, 0.2)) === "undecided", "no data or under 12 briefs did not read undecided");
+    must(source(iv(0.05, 0.3), iv(-0.1, 0.1), iv(0.1, 0.3)) === "wording", "wording");
+    must(source(iv(-0.1, 0.1), iv(0.05, 0.3), iv(0.05, 0.3)) === "second-pass", "second pass");
+    must(source(iv(-0.1, 0.1), iv(-0.1, 0.1), iv(-0.1, 0.1)) === "neither", "neither");
+    must(source(iv(-0.1, 0.25), iv(0.05, 0.3), iv(-0.05, 0.3)) === "undecided" && source(iv(0.05, 0.3, 11), iv(-0.1, 0.1), iv(0.1, 0.3)) === "undecided", "source undecided");
     const b = (unit: string, arm: "n" | "d" | "a", done: boolean[] | null, more: Partial<ScoredBuild> = {}): ScoredBuild => ({ unit, rep: 1, arm, done, empty_plan: false, contaminated: false, implied: [false, false, true, true, false], obvious: false, ...more });
     const builds = ["u1", "u2", "u3", "u4"].flatMap((u, i) => [b(u, "n", [true, false, false, false, false]), b(u, "d", [true, true, i > 0, false, false]), b(u, "a", i === 3 ? null : [true, true, true, true, false], i === 2 ? { empty_plan: true } : {})]);
     const r = read(builds, ["n", "d", "a"]);
@@ -208,7 +238,9 @@ export const CASES: Record<string, Case> = {
     must(r.comparisons["a-n"]!.briefs === 3 && r.excluded.length === 1, "the unscored A build was not dropped from its pair");
     must(r.arms["a"]!.briefs === 3 && r.comparisons["d-n"]!.briefs === 4, "brief counts are wrong");
     must(JSON.stringify(again) === JSON.stringify(paired(new Map([["u1", 0.4], ["u2", 0.6]]), new Map([["u1", 0.2], ["u2", 0.2]]))), "the bootstrap is not seeded");
-    return "keep, slim, cut and undecided; an empty plan scores 0; an unscored build leaves its pair; MDD " + r.mdd + " at " + r.comparisons["a-n"]!.briefs + " briefs";
+    must(r.r107 === "undecided" && r.excluded_counts["a"]!["unscored build"] === 1, "a short reading was not undecided, or exclusions were not counted by arm and cause");
+    must(read(builds, ["n", "d", "a"], ["no validation"]).r107 === "not counted", "a reading with a failed gate counted");
+    return "keep, slim, cut (both upper ends under the MDD) and undecided; no data or under 12 briefs undecided; wording, second pass, neither and undecided; not counted without its gates; an empty plan scores 0; an unscored build leaves its pair; MDD " + r.mdd + " at " + r.comparisons["a-n"]!.briefs + " briefs";
   },
   "judge": async () => {
     const checks = [{ id: "c1", kind: "ask" as const, statement: "s", covered_if: "c", usable_if: "u", from_brief: "implied" as const, rank: 1, role: "primary" as const }, { id: "c2", kind: "ask" as const, statement: "s2", covered_if: "c", usable_if: "u", from_brief: "implied" as const, rank: 2, role: "secondary" as const }];
@@ -224,11 +256,14 @@ export const CASES: Record<string, Case> = {
     must(twice.missing.join() === "c1" && twice.labels.length === 1 && twice.labels[0]!.id === "c2", "a check labelled twice after the resend kept a label");
     const stock = controls({ stock: [{ checks, labels: [{ id: "c1", covered: true, usable: false }] }], volume: [] });
     must(!stock.passed, "a stock plan covering a primary check passed");
+    const many = Array.from({ length: 40 }, () => ({ checks, labels: [{ id: "c1", covered: false, usable: false }] as Label[] }));
+    many[0]!.labels = [{ id: "c1", covered: true, usable: true }];
+    must(controls({ stock: many, volume: [] }).passed && !controls({ stock: many.map((s, i) => (i < 3 ? { checks, labels: [{ id: "c1", covered: true, usable: true }] } : s)), volume: [] }).passed, "the stock control's 5% tolerance misread");
     const l = (covered: boolean): Label => ({ id: "c1", covered, usable: covered });
     const gold = new Map<string, Label>(Array.from({ length: 40 }, (_, i) => ["k" + i, l(i % 2 === 0)]));
     must(goldAgreement(new Map(gold), gold).admitted && !goldAgreement(new Map([...gold].slice(0, 39)), gold).admitted, "gold admission ignores the 40-pair floor");
     must(stockPlan().startsWith("# Plan"), "the stock plan did not load");
-    return "blind labels, usable needs covered, one resend, a check labelled twice stays unlabelled, stock control, gold floor of 40";
+    return "blind labels, usable needs covered, one resend, a check labelled twice stays unlabelled, stock control with its 5% tolerance, gold floor of 40";
   },
   "stage runner": () =>
     withTmp(async (dir) => {
@@ -238,22 +273,34 @@ export const CASES: Record<string, Case> = {
       const us = ["aaaaaa", "bbbbbb"].map((id) => (loadUnit(units, id) as { unit: Unit }).unit);
       const out = join(dir, "out");
       const closed = { n: 0 };
-      const base = await stageRun(out, us, "base", ["n", "d"], 100, {}, closed);
-      const review = await stageRun(out, us, "review", ["n", "d"], 100, {}, closed);
-      const build = await stageRun(out, us, "build", ["n", "d"], 100, {}, closed);
-      const check = await stageRun(out, us, "check", ["n", "d"], 100, {}, closed);
-      must(base.rows.length === 2 && review.rows.length === 2 && build.rows.length === 4 && check.rows.length === 4, "rows: " + [base, review, build, check].map((r) => r.rows.length).join("/"));
+      const base = await stageRun(out, us, "base", ["n", "d", "r"], 100, {}, closed);
+      const review = await stageRun(out, us, "review", ["n", "d", "r"], 100, {}, closed);
+      const build = await stageRun(out, us, "build", ["n", "d", "r"], 100, {}, closed);
+      const check = await stageRun(out, us, "check", ["n", "d", "r"], 100, {}, closed);
+      must(base.rows.length === 2 && review.rows.length === 4 && build.rows.length === 6 && check.rows.length === 6, "rows: " + [base, review, build, check].map((r) => r.rows.length).join("/"));
       must(base.rows.every((r) => r.owner?.counts.questions === 1 && r.owner.counts.profile === 1), "the owner channel was not logged");
       must(check.rows.every((r) => r.check?.score.share === 0.4), "the check score is not 2 of 5");
       must(closed.n === 4, "a rig was left open");
+      const admDir = join(dir, "admission");
+      const adm = await stageRun(admDir, us, "base", ["n"], 20);
+      must(adm.stops.some((s) => s.code === "E_DAYONE_ADMISSION" && /smaller --parallel/.test(s.message)) && !adm.rows.length, "a round over the launch's room ran, or its stop named no fix");
+      const resumed = await stageRun(admDir, us, "base", ["n"], 20, {}, { n: 0 }, { parallel: 1 });
+      must(resumed.rows.length === 2 && !resumed.stops.length, "an admission stop did not resume at --parallel 1");
       const capDir = join(dir, "cap");
-      const cap = await stageRun(capDir, us, "base", ["n"], 5);
-      must(cap.stops.some((s) => s.code === "CAP_STOP") && !cap.rows.length, "a round over the cap ran");
+      const cap = await stageRun(capDir, us, "base", ["n"], 100, { launch: stubLaunch({ capStop: true }) });
+      must(cap.stops.some((s) => s.code === "CAP_STOP"), "a session's cap stop did not stop the launch");
       let refused = "";
-      await stageRun(capDir, us, "base", ["n"], 500).catch((e) => (refused = String(e.message)));
+      await stageRun(capDir, us, "base", ["n"], 100).catch((e) => (refused = String(e.message)));
       must(/cap stop/.test(refused), "a launch after a cap stop was not refused");
       let changed = "";
       await stageRun(out, us, "base", ["n", "d", "a"], 100).catch((e) => (changed = String(e.message)));
+      must(/another manifest/.test(changed), "a changed manifest was not refused");
+      const seen: LaunchInput[] = [];
+      const again = await stageRun(out, us, "review", ["n", "d"], 100, { launch: stubLaunch({ seen }) }, { n: 0 }, { tag: "again" });
+      must(!again.rows.length && !seen.length && existsSync(planFile(out, "aaaaaa", 1, "d")), "a second tag ran cells whose plans another launch wrote");
+      const dropSeen: LaunchInput[] = [];
+      const dropped = await stageRun(join(dir, "dropped"), us, "base", ["n"], 100, { launch: stubLaunch({ dropped: true, seen: dropSeen }) }, { n: 0 }, { ownerChannel: false });
+      must(dropped.rows.length === 2 && dropSeen.every((l) => !l.prompt.includes(OWNER_NOTICE)) && dropped.rows.every((r) => r.owner?.counts.questions === 0), "a dropped channel kept the notice or answered a question");
       const reDir = join(dir, "re");
       mkdirSync(join(reDir, "base-dry", "sessions", "aaaaaa", "r1", "n", "a1"), { recursive: true });
       writeFileSync(join(reDir, "base-dry", "sessions", "aaaaaa", "r1", "n", "a1", "attempt.json"), "{}\n");
@@ -275,12 +322,12 @@ export const CASES: Record<string, Case> = {
       } finally {
         local.close();
       }
-      const vre = await stageRun(vDir, us.slice(0, 1), "base", ["n"], 100, {}, { n: 0 }, vLedger);
+      const vre = await stageRun(vDir, us.slice(0, 1), "base", ["n"], 100, {}, { n: 0 }, { ledger: vLedger });
       const crashed = vre.rows[0]!.attempts[0]!;
       must(crashed.usd === 2 && crashed.voice_usd === 3 && vre.voice_micros === 3e6, "a crashed attempt's held spend was not split by meter (planner $" + crashed.usd + ", voice $" + crashed.voice_usd + ", stage voice " + vre.voice_micros + " micros)");
       const halt = await stageRun(join(dir, "halt"), us, "base", ["n"], 100, { launch: stubLaunch({ leak: true }) });
       must(halt.stops.some((s) => s.code === "E_DAYONE_LEAK"), "a containment departure did not halt");
-      return "base, review, build and check end to end, the checker on the browser endpoint; cap stop and its refusal; " + (changed ? "a changed manifest refused" : "manifest unchanged") + "; crash marker reconciled, a crashed attempt's held spend split between planner and voice; leak halts";
+      return "base, review (D and R), build and check end to end, the checker on the browser endpoint; an admission stop resumed at --parallel 1; a session cap stop and its refusal; a changed manifest refused; a second tag runs no cell another launch planned; a dropped channel sends no notice and answers no question; crash marker reconciled, a crashed attempt's held spend split between planner and voice; leak halts";
     }),
   "voice route": () =>
     withTmp(async (dir) => {
@@ -335,17 +382,109 @@ export const CASES: Record<string, Case> = {
         must(bound !== "no refusal", "a second run id opened a lease on a bound item");
         const caps = ITEMS.reduce((a, i) => a + i.capUsd, 0);
         must(caps === ALL_IN_USD, "the caps total $" + caps + ", not the all-in $" + ALL_IN_USD);
-        return "caps total $" + caps + "; " + metered.length + " items, " + metered.length + " leases opened and settled on " + DAYONE_RUN + "; a second run: " + bound;
+        const thin = ITEMS.filter((i) => i.capUsd < i.projectionUsd + i.headroomUsd || i.capUsd < Math.ceil(i.projectionUsd * 1.15)).map((i) => i.item);
+        must(!thin.length, "caps below their projection plus headroom or 15%: " + thin.join(", "));
+        const projection = ITEMS.reduce((a, i) => a + i.projectionUsd, 0);
+        return "caps total $" + caps + " over a $" + projection + " projection, every cap at least 15% and its headroom over its line ($" + HEADROOM_USD + " of headroom in all); " + metered.length + " items, " + metered.length + " leases opened and settled on " + DAYONE_RUN + "; a second run: " + bound;
       } finally {
         local.close();
       }
     }),
   "shrink order": () => {
-    const s = shrink(4150, [81, 81, 420]);
+    const s = shrink(4400, [81, 81, 420]);
     const r = shrink(5200, [81, 81, 420]);
     must("steps" in s && s.steps === 2 && "ruling" in r, "the shrink order misapplied");
-    return "4,150 takes 2 steps to " + s.projected + "; 5,200 needs a ruling";
+    return "4,400 takes 2 steps to " + s.projected + " (plus $" + HEADROOM_USD + " headroom, within $" + ALL_IN_USD + "); 5,200 needs a ruling";
   },
+  "smoke admission": () => {
+    const units = ["p1", "p2", "p3"].map((id) => ({ id, category: 2 }) as Unit);
+    const price = (c: { stage: Stage; arm: string }) => (c.stage === "build" ? PLANNING_PRICES.build : c.stage === "check" ? PLANNING_PRICES.check : c.arm === "a" ? PLANNING_PRICES.gstack + PLANNING_PRICES.voice : PLANNING_PRICES[c.arm as "n" | "d" | "r"]);
+    const built = (c: { unit: string; arm: string }) => (c.unit === "p1" && ["n", "d", "a"].includes(c.arm)) || (c.unit === "p2" && ["n", "a"].includes(c.arm));
+    const launches = [stageCells("base", units, [1], ["n"]), stageCells("review", units, [1], ["d", "r", "a"]), stageCells("build", units, [1], ["n", "d", "a"]).filter(built), stageCells("check", units, [1], ["n", "d", "a"]).filter(built), ["placeholder", "reference"].map((app) => ({ stage: "check" as Stage, unit: "fix", rep: 1, arm: app as never }))];
+    const replay = (cap: number): string | number => {
+      let left = cap;
+      for (const cells of launches) {
+        let spent = 0;
+        for (const c of cells) {
+          const lim = cellLimits(c);
+          if (spent + 2 * (lim.usd + lim.voice_usd) > left) return c.stage + "/" + c.unit + "/" + c.arm;
+          spent += price(c);
+        }
+        left -= spent;
+      }
+      return left;
+    };
+    const cap = itemOf("day1-smoke").capUsd;
+    const left = replay(cap);
+    const old = replay(230);
+    must(typeof left === "number" && typeof old === "string", "day1-smoke's $" + cap + " stopped at " + left + ", or $230 admitted the smoke");
+    return "day1-smoke's $" + cap + " admits every smoke round at --parallel 1 at planning prices, $" + Math.round((cap - (left as number)) * 100) / 100 + " spent and $" + Math.round((left as number) * 100) / 100 + " left; $230 stops at " + old;
+  },
+  "exposure": () =>
+    withTmp((dir) => {
+      const run = (outside: string) => {
+        const d = join(dir, outside);
+        mkdirSync(join(d, "r"), { recursive: true });
+        const phase = { closed_at: "2026-11-17T00:00:00Z", native: { status: "completed" }, outside: { status: outside } };
+        writeFileSync(join(d, "r", "run.json"), JSON.stringify({ status: "complete", plan_input: "plan.md", updated_at: "2026-11-17T00:00:00Z", phases: { ceo: phase, design: { skipped: true }, eng: phase } }));
+        return readExposure(d, 3);
+      };
+      const ok = run("completed");
+      const disabled = run("disabled");
+      const skipped = run("skipped");
+      const unavailable = run("unavailable");
+      must(ok.exposed && ok.voice === "astra", "a complete run with both voices was not exposed on astra");
+      must(!disabled.exposed && /disabled/.test(disabled.why) && !skipped.exposed && /skipped/.test(skipped.why), "a disabled or skipped outside voice read exposed");
+      must(unavailable.exposed && unavailable.voice === "fallback", "an unavailable outside voice did not read exposed on the fallback");
+      return "both voices: exposed, astra; a disabled or skipped outside voice: not exposed, with the reason; unavailable: exposed on the fallback";
+    }),
+  "checker session setup": () =>
+    withTmp(async (dir) => {
+      const seen: any[] = [];
+      const rig = { ...stubRig({ n: 0 }), sandbox: () => ({ homePath: () => "/home/agent", workPath: () => "/work/app", agent: () => fail("no container starts in the dry run") }) as never, finalize: async () => ({ micros: 0, requests: 0, refused: 0 }) as never } as HostRig;
+      const go = async (arm: string, mcpUrl?: string) => {
+        const d = join(dir, arm);
+        mkdirSync(d, { recursive: true });
+        await launchSession({ rig, policy: policyOf(), docker: "docker", runId: DAYONE_RUN, arm, cell: "u-r1-" + arm, rep: 1, attempt: 1, model: arm === "check" ? MODELS.checker : MODELS.planner, dir: d, seed: null, prompt: "p", minutes: 1, turns: 1, allowanceMicros: 1e6, nextUser: async () => ({ end: true }), ...(mcpUrl ? { mcpUrl } : {}) }, { driver: ((o: unknown) => (seen.push(o), { env: {} })) as never, trial: (async () => ({ record: { termination: { kind: "completed" } } })) as never });
+      };
+      await go("check", "http://c:8931/mcp");
+      await go("n");
+      must(seen[0]?.mcpServers?.browser?.url === "http://c:8931/mcp" && JSON.stringify(seen[0].onlyTools) === JSON.stringify(BROWSER_TOOLS), "the checker's driver did not get the browser server and the browser-only tool list");
+      must(!seen[1]?.mcpServers && !seen[1]?.onlyTools, "a planner's driver got browser tools");
+      return "the checker's driver gets the browser MCP server and only the " + BROWSER_TOOLS.length + " browser tools; a planner's gets neither";
+    }),
+  "fixtures with the real checker": () =>
+    withTmp(async (dir) => {
+      const launch = (doneFor: (app: string) => number) => async (l: LaunchInput): Promise<AttemptRead> => {
+        must(l.arm === "check" && l.mcpUrl === "http://c:8931/mcp", "a fixture check was not a checker session on the browser endpoint");
+        const app = l.cell.split("-").pop()!;
+        await l.nextUser(["```verdicts\n" + JSON.stringify({ tasks: [1, 2, 3, 4, 5].map((i) => ({ id: "t" + i, done: i <= doneFor(app), why: "seen" })) }) + "\n```"]);
+        return { termination: { kind: "completed" }, web: 0, gstack_reads: [], contained: [], micros: 2e6, voice: null, out: null };
+      };
+      const run = (out: string, reference: number) => runRealFixtures({ rig: stubRig({ n: 0 }), policy: policyOf(), docker: "docker", runId: DAYONE_RUN, out, volume: "vol", launch: launch((a) => (a === "reference" ? reference : 0)), app: stubApp, log: () => {} });
+      const ok = await run(join(dir, "ok"), 5);
+      const bad = await run(join(dir, "bad"), 4);
+      must(ok.passed && JSON.parse(readFileSync(join(dir, "ok", "fixtures-real.json"), "utf8")).passed === true, "both fixtures at their bars did not pass, or wrote no receipt");
+      must(!bad.passed && bad.apps[1]!.share === 0.8, "a reference app at 4 of 5 passed");
+      return "placeholder 0 and reference 5 of 5 pass with a receipt; a reference at 4 of 5 fails";
+    }),
+  "app writes": () =>
+    withTmp((dir) => {
+      const build = join(dir, "build");
+      const app = join(dir, "app");
+      mkdirSync(join(build, "data"), { recursive: true });
+      writeFileSync(join(build, "server.js"), "x");
+      writeFileSync(join(build, "data", "plants.json"), JSON.stringify(Array.from({ length: 5 }, (_, i) => ({ name: "Test plant " + i }))));
+      writeFileSync(join(build, "data", "empty.json"), "[]");
+      cpSync(build, app, { recursive: true });
+      writeFileSync(join(app, "data", "plants.json"), "[]");
+      writeFileSync(join(app, "data", "empty.json"), '[{"name":"Fern"}]');
+      writeFileSync(join(app, "data", "log.json"), "[]");
+      const w = appWrites(build, app);
+      const by = (p: string) => w.find((x) => x.path === join("data", p));
+      must(w.length === 3 && by("plants.json")!.change === "changed" && by("plants.json")!.bytes_before > 64 && by("empty.json")!.bytes_before === 2 && by("log.json")!.change === "added", "the app's writes against the handed-off build misread: " + JSON.stringify(w));
+      return "a store that held the builder's records, an empty store and a new file, each with its size at hand-off";
+    }),
 };
 
 export async function runDryrun(io: Io): Promise<number> {

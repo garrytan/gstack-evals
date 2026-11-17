@@ -9,8 +9,13 @@
 //   scored. A halt (a containment departure, rejected credentials) writes its row and stops the launch for the Captain.
 // - A round of up to --parallel cells starts only when its worst case fits what the launch may still spend: twice each
 //   session's allowance on the item (twice the voice's on a gstack arm) and twice the responder's on the responder
-//   item. A round that does not fit is a cap stop: the launch ends incomplete, nothing is retried, and stops.json lists
-//   every cell left unrun; a later launch on that out dir is refused. So is a ledger cap stop inside a session.
+//   item. A round that does not fit is an admission stop (E_DAYONE_ADMISSION): nothing in it ran, stops.json lists the
+//   cells left unrun, and a relaunch of the same stage with a smaller --parallel resumes it. A ledger cap stop inside a
+//   session is a cap stop: the launch ends incomplete, nothing is retried, and a later launch on that dir is refused.
+// - Plans and builds live in shared folders (<out>/plans, <out>/builds), so a cell whose plan or build is already there
+//   from another launch is not run again; it is logged and left for that launch's rows.
+// - With the owner channel dropped (a failed fidelity bar), no arm gets the owner notice, questions end the session,
+//   and only /autoplan's waiting gate gets the fixed reply (owner.ts). The stage's manifest records the channel.
 // - Every attempt writes attempt.json before it starts; a later launch that finds a marker with no row counts that
 //   attempt as an infrastructure failure with the ledger's spend for its meters.
 // - Plans: n with no plan is an arm stop that gets the one retry; on a review arm, or on the retry, the plan is empty
@@ -29,7 +34,7 @@ import type { CallRequest, CallResult } from "../product-value/meter.ts";
 import { pool } from "../product-value/meter.ts";
 import { meterSlot } from "../office-hours-founder/run/run.ts";
 import type { Meter } from "../product-value/meter.ts";
-import { startApp, stopApp, type AppRun } from "./app.ts";
+import { startApp, stopApp, type AppRun, type AppWrite } from "./app.ts";
 import { armPlan, loadedSkills, readExposure, type Exposure, type SkillLoad } from "./exposure.ts";
 import { armPrompt, BUILD_PROMPT, GSTACK_ARMS, LIMITS, MODELS, type PlanArm } from "./frozen.ts";
 import { ownerLoop, ownerPrompt, sourceCounts, type OwnerTurn } from "./owner.ts";
@@ -60,7 +65,7 @@ export interface Row {
   plan: { sha256: string; words: number; from: string } | null;
   exposure: Exposure | null;
   skills: SkillLoad[];
-  check: { started: boolean; start_s: number | null; parse: VerdictParse | null; score: BuildScore } | null;
+  check: { started: boolean; start_s: number | null; parse: VerdictParse | null; score: BuildScore; app_writes: AppWrite[] } | null;
   transcript: string | null;
 }
 
@@ -80,6 +85,8 @@ export interface StageInput {
   /** Micro-dollars the gstack arms' Astra voice slots may spend in this launch, inside cap (C2's own capped line). */
   voiceCap: number;
   parallel: number;
+  /** False when the fidelity bar dropped the owner channel. */
+  ownerChannel: boolean;
   policy: LoadedPolicy;
   ledger: string | null;
   docker: string;
@@ -214,7 +221,7 @@ export async function runStage(o: StageInput, deps: StageDeps): Promise<StageRes
   const stopsFile = join(dir, "stops.json");
   const before = existsSync(stopsFile) ? (JSON.parse(readFileSync(stopsFile, "utf8")) as { stops: StageResult["stops"] }) : null;
   if (before?.stops.some((s) => s.code === "CAP_STOP")) throw new Error("E_USAGE " + dir + " ended in a cap stop, an incomplete run that is never resumed; its stops.json stands");
-  const frozen = freeze(join(dir, "manifest.json"), { schema: "day-one.stage.v1", stage: o.stage, units: o.units.map((u) => u.id).sort(), reps: o.reps, arms: o.arms, cells: cells.map(cellId), cap_micros: o.cap, owner_cap_micros: o.ownerCap, voice_cap_micros: o.voiceCap, limits: LIMITS, models: MODELS });
+  const frozen = freeze(join(dir, "manifest.json"), { schema: "day-one.stage.v1", stage: o.stage, units: o.units.map((u) => u.id).sort(), reps: o.reps, arms: o.arms, cells: cells.map(cellId), cap_micros: o.cap, owner_cap_micros: o.ownerCap, voice_cap_micros: o.voiceCap, owner_channel: o.ownerChannel, limits: LIMITS, models: MODELS });
   if ("problem" in frozen) throw new Error("E_USAGE " + frozen.problem);
   const done = readRows(dir);
   const result: StageResult = { manifest_sha256: frozen.sha256, rows: [], stops: [], unrun: [], spent_micros: 0, owner_micros: 0, voice_micros: 0, closed: null };
@@ -266,10 +273,11 @@ export async function runStage(o: StageInput, deps: StageDeps): Promise<StageRes
         let ownerState: ReturnType<typeof ownerLoop>["state"] | null = null;
         let slot: { call: (req: CallRequest) => Promise<CallResult>; spent: () => number } | null = null;
         if (planning) {
-          prompt = armPrompt(c.arm);
+          prompt = armPrompt(c.arm, o.ownerChannel);
           seed = planSeed(u, join(sdir, "seed"), base);
-          slot = slotOf ? slotOf(id + "/a" + attempt, micros(lim.owner_usd)) : null;
+          slot = slotOf && o.ownerChannel ? slotOf(id + "/a" + attempt, micros(lim.owner_usd)) : null;
           const loop = ownerLoop({
+            dropped: !o.ownerChannel,
             ask: async (question) => {
               if (!slot) return { failed: "provider", detail: "no responder meter" };
               const r = await slot.call({ model: MODELS.owner, prompt: ownerPrompt(u.profile, question), maxTokens: 1024, effort: "low", label: id + "/owner" });
@@ -299,19 +307,19 @@ export async function runStage(o: StageInput, deps: StageDeps): Promise<StageRes
           nextUser = loop.nextUser;
           texts = loop.last;
           if (!appRun || !appRun.started) {
-            if (appRun) app.stop(appRun, o.docker, join(sdir, "browser"));
+            const writes = appRun ? app.stop(appRun, o.docker, join(sdir, "browser")) : [];
             const infra = !appRun || /MCP server never answered|docker run failed/.test(appRun.detail);
             read = { termination: infra ? { kind: "infra", incident: "E_DAYONE_APP " + (appRun?.detail ?? "the browser container failed") } : { kind: "completed" }, web: 0, gstack_reads: [], contained: [], micros: 0, voice: null, out: null };
             records.push({ attempt, outcome: infra ? "retry" : "app-not-started", why: appRun?.detail ?? "no container", usd: 0, voice_usd: 0, owner_usd: 0 });
             if (!infra && attempt === 2) {
-              check = { started: false, start_s: null, parse: null, score: scoreBuild(u.list!, false, null) };
+              check = { started: false, start_s: null, parse: null, score: scoreBuild(u.list!, false, null), app_writes: writes };
               end = { state: "ended", how: "completed" };
             }
             if (infra && attempt === 2) end = { state: "missing", code: "E_DAYONE_APP", why: appRun?.detail ?? "the browser container failed twice" };
             continue;
           }
           const ran = await launch({ rig, policy: o.policy, docker: o.docker, runId: o.runId, arm: "check", cell: c.unit + "-r" + c.rep + "-" + c.arm, rep: c.rep, attempt, model: lim.model, dir: sdir, seed: null, prompt, minutes: lim.minutes, turns: lim.turns, allowanceMicros: micros(lim.usd), nextUser, mcpUrl: appRun.mcpUrl });
-          app.stop(appRun, o.docker, join(sdir, "browser"));
+          const writes = app.stop(appRun, o.docker, join(sdir, "browser"));
           read = ran;
           const outcome0 = settle(attemptOutcome(read, null), attempt);
           if (outcome0.state === "ended") {
@@ -322,7 +330,7 @@ export async function runStage(o: StageInput, deps: StageDeps): Promise<StageRes
               result.spent_micros += read.micros;
               continue;
             }
-            check = { started: true, start_s: appRun.start_s, parse, score: scoreBuild(u.list!, true, parse.kind === "ok" ? parse : null) };
+            check = { started: true, start_s: appRun.start_s, parse, score: scoreBuild(u.list!, true, parse.kind === "ok" ? parse : null), app_writes: writes };
             if (parse.kind === "bad") {
               records.push({ attempt, outcome: "missing", why: "unparsable verdicts: " + parse.reason, usd: read.micros / D, voice_usd: 0, owner_usd: 0 });
               usdArm += read.micros / D;
@@ -411,7 +419,8 @@ export async function runStage(o: StageInput, deps: StageDeps): Promise<StageRes
     const todo = cells.filter((c) => !done.has(cellId(c)));
     for (let i = 0; i < todo.length && !halted; i += o.parallel) {
       const round = todo.slice(i, i + o.parallel).filter((c) => {
-        const p = inputProblem(o.out, c);
+        const elsewhere = (c.stage === "base" || c.stage === "review") && existsSync(planFile(o.out, c.unit, c.rep, c.arm)) ? "its plan" : c.stage === "build" && existsSync(join(buildDir(o.out, c.unit, c.rep, c.arm), "tree")) ? "its build" : null;
+        const p = elsewhere ? elsewhere + " is already in the shared folder from another launch, so it is not run again" : inputProblem(o.out, c);
         if (p) o.log(cellId(c) + ": not run, " + p);
         return !p;
       });
@@ -420,7 +429,7 @@ export async function runStage(o: StageInput, deps: StageDeps): Promise<StageRes
       const ownerWorst = round.reduce((s, c) => s + 2 * micros(cellLimits(c).owner_usd), 0);
       const voiceWorst = round.reduce((s, c) => s + 2 * micros(cellLimits(c).voice_usd), 0);
       if (result.spent_micros + worst > o.cap || result.owner_micros + ownerWorst > o.ownerCap || result.voice_micros + voiceWorst > o.voiceCap) {
-        result.stops.push({ code: "CAP_STOP", message: "the round from cell " + (i + 1) + " has a worst case of " + usd(worst) + " on the item (" + usd(voiceWorst) + " of it on the voice) and " + usd(ownerWorst) + " on the responder, more than this launch may still spend (" + usd(o.cap - result.spent_micros) + ", " + usd(o.voiceCap - result.voice_micros) + " and " + usd(o.ownerCap - result.owner_micros) + ")" });
+        result.stops.push({ code: "E_DAYONE_ADMISSION", message: "the round from cell " + (i + 1) + " has a worst case of " + usd(worst) + " on the item (" + usd(voiceWorst) + " of it on the voice) and " + usd(ownerWorst) + " on the responder, more than this launch may still spend (" + usd(o.cap - result.spent_micros) + ", " + usd(o.voiceCap - result.voice_micros) + " and " + usd(o.ownerCap - result.owner_micros) + "); nothing in it ran. Fix: relaunch this stage with a smaller --parallel (ended cells stay ended); if a single cell does not fit, the line is short and goes to the Captain" });
         break;
       }
       await pool(o.parallel, round.map((c) => () => runCell(c)));

@@ -404,6 +404,9 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_DAYONE_GOLD](#e_dayone_gold) | 2 | U20 |
 | [E_DAYONE_FIXTURE](#e_dayone_fixture) | 2 | U20 |
 | [E_DAYONE_DRYRUN](#e_dayone_dryrun) | 2 | U20 |
+| [E_DAYONE_ADMISSION](#e_dayone_admission) | 2 | U20 |
+| [E_DAYONE_VALIDATION](#e_dayone_validation) | 2 | U20 |
+| [E_DAYONE_CONTROLS](#e_dayone_controls) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -3013,7 +3016,7 @@ Exit 2. Side effects: No spend: the checker's session has not started. Retry saf
 
 Day-one eval (section 7): a session ended in an upstream or infrastructure failure on both of its attempts, so its cell is a recorded gap and the stages after it do not run for that cell.
 
-Fix: Nothing to retry: report the gap beside the arm's result. A rate above the prereg's gap rule goes to the Captain.
+Fix: Nothing to retry: report the gap beside the arm's result. A comparison left with fewer than 12 briefs reads undecided (section 10), and that goes to the Captain.
 
 Exit 2. Side effects: The attempts' metered spend stays on the lease. Retry safe: no. Resumable: yes. Owner: U20.
 
@@ -3083,11 +3086,11 @@ Exit 2. Side effects: No extra spend. Retry safe: no. Resumable: yes. Owner: U20
 
 ### E_DAYONE_FIXTURE
 
-Day-one eval (section 6): a keyless checker fixture failed: the placeholder app scored a task done, or the reference app missed one. No paid build may start.
+Day-one eval (section 6): a checker fixture failed: the placeholder app scored a task done, or the reference app missed one, with the scripted checker (keyless) or the real checker (the smoke's step). No paid build may start.
 
-Fix: Fix the checklist runner or the fixture, then run both fixtures again.
+Fix: Keyless: fix the checklist runner or the fixture, then run both fixtures again. With the real checker: the wave stops and the receipt goes to the Captain.
 
-Exit 2. Side effects: No spend: fixtures run keyless. Retry safe: yes. Resumable: yes. Owner: U20.
+Exit 2. Side effects: Keyless runs spend nothing; the real-checker run's sessions stay on the smoke's lease. Retry safe: yes. Resumable: yes. Owner: U20.
 
 ### E_DAYONE_DRYRUN
 
@@ -3096,6 +3099,30 @@ Day-one eval (section 11): a dry-run case printed FAIL: a frozen rule did not ho
 Fix: Read the FAIL line, fix the rule's code, and run the dry run again before any spend.
 
 Exit 2. Side effects: No spend: the dry run is keyless. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_DAYONE_ADMISSION
+
+Day-one eval (section 7): a round's worst case (twice each session's allowance, and the voice's and the responder's) does not fit what the launch may still spend, so nothing in that round ran.
+
+Fix: Relaunch the same stage with a smaller --parallel; cells that ended stay ended. If a single cell does not fit, the line is short: take the figure to the Captain.
+
+Exit 2. Side effects: None for the refused round; earlier rounds' spend stays on the lease. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_DAYONE_VALIDATION
+
+Day-one eval (section 6, R78): the checker validation drew fewer than 40 task verdicts, or the checker's kappa on done against the hand labels is under 0.6, or an arm has fewer than 3 labelled builds. No category 2 number counts.
+
+Fix: Under 40 verdicts: draw again with a larger --count into a new --dest and --key, and label the new builds. A low kappa goes to the Captain; the checker is not tuned after the fact.
+
+Exit 2. Side effects: Writes validation.json in the out dir with admitted false; no spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_DAYONE_CONTROLS
+
+Day-one eval (section 9): a judge control failed: the stock plan is covered on more than 5% of the primary checks, or padded plans agree with their base plans on covered in under 90% of pairs. No judge number counts.
+
+Fix: Report it beside the judge's numbers and take it to the Captain; the judge's prompt is frozen and is not tuned after the fact.
+
+Exit 2. Side effects: None: the controls read labels already paid for. Retry safe: yes. Resumable: yes. Owner: U20.
 
 ## Exit 3: calibration failed (INCOMPLETE)
 

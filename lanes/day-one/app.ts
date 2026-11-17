@@ -10,10 +10,13 @@
 //   HTTP request within APP_START_S; a build that never answers is "does not start", scored as no task done.
 // - The checker's session never sees the app's files: its own work dir is empty and its only route to the app is the
 //   browser.
+// - stopApp returns every file the app added or changed while the checker used it, against the build as handed off,
+//   with its size at hand-off: a changed file that already held more than PREFILLED_BYTES bytes means the build came
+//   with saved data (the builder's own test records), logged in the check row.
 import { spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { cpSync, mkdirSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { join, relative } from "node:path";
 import { RUNTIME_PINS } from "../outcome-skills/h2h/sessions/runtimes.ts";
 import { APP_PORT, APP_START_S, BROWSER_IMAGE, MCP_PORT } from "./frozen.ts";
 
@@ -50,6 +53,36 @@ export interface AppRun {
   detail: string;
   /** The writable copy of the build the app ran from. */
   copy: string;
+  /** The build as handed off. */
+  build: string;
+}
+
+export interface AppWrite {
+  path: string;
+  change: "added" | "changed";
+  bytes_before: number;
+}
+export const PREFILLED_BYTES = 64;
+
+/** Files under the app's copy that differ from the build as handed off. */
+export function appWrites(build: string, app: string): AppWrite[] {
+  const out: AppWrite[] = [];
+  const walk = (d: string) => {
+    for (const name of readdirSync(d)) {
+      const p = join(d, name);
+      const st = statSync(p, { throwIfNoEntry: false });
+      if (!st) continue;
+      if (st.isDirectory()) walk(p);
+      else if (st.isFile()) {
+        const rel = relative(app, p);
+        const before = join(build, rel);
+        if (!existsSync(before)) out.push({ path: rel, change: "added", bytes_before: 0 });
+        else if (!readFileSync(before).equals(readFileSync(p))) out.push({ path: rel, change: "changed", bytes_before: statSync(before).size });
+      }
+    }
+  };
+  if (existsSync(app)) walk(app);
+  return out.slice(0, 200);
 }
 
 /** The shell line the browser container runs: the app in the background, then the MCP server in the foreground. */
@@ -66,7 +99,7 @@ export async function startApp(o: { docker: string; network: string; build: stri
   mkdirSync(join(copy, "work"), { recursive: true });
   cpSync(o.build, join(copy, "work", "app"), { recursive: true, verbatimSymlinks: true, filter: (src) => !src.split("/").includes(".git") });
   mkdirSync(join(copy, "work", "shots"), { recursive: true });
-  const base = { container, mcpUrl: "http://" + container + ":" + MCP_PORT + "/mcp", copy };
+  const base = { container, mcpUrl: "http://" + container + ":" + MCP_PORT + "/mcp", copy, build: o.build };
   const r = run(o.docker, ["run", "-d", "--name", container, "--network", o.network, "--pids-limit", "2048", "--user", process.getuid!() + ":" + process.getgid!(), "-e", "HOME=/tmp", "-v", join(copy, "work") + ":/work", "-v", o.samples + ":/samples:ro", "-v", o.volume + ":" + NODE_DIR + ":ro", "--entrypoint", "sh", BROWSER_IMAGE, "-c", browserCommand()]);
   if (r.status !== 0) return { ...base, started: false, start_s: null, detail: "docker run failed: " + (r.stderr || r.stdout).trim().slice(-300) };
   const probe = (port: number) => run(o.docker, ["exec", container, "node", "-e", "fetch('http://localhost:" + port + "/').then(()=>process.exit(0),()=>process.exit(1))"], 15_000).status === 0;
@@ -84,9 +117,10 @@ export async function startApp(o: { docker: string; network: string; build: stri
   return { ...base, started: app, start_s, detail: app ? "the app answered on " + APP_PORT : "the app never answered on " + APP_PORT + " within " + APP_START_S + " s; app.log tail: " + log };
 }
 
-/** Stops the browser container and copies its screenshots and app log to dest; the scratch copy is removed. */
-export function stopApp(a: Pick<AppRun, "container" | "copy">, docker: string, dest: string): void {
+/** Stops the browser container, copies its screenshots and app log to dest, and returns what the app wrote; the scratch copy is removed. */
+export function stopApp(a: Pick<AppRun, "container" | "copy" | "build">, docker: string, dest: string): AppWrite[] {
   run(docker, ["rm", "-f", a.container], 60_000);
+  const writes = appWrites(a.build, join(a.copy, "work", "app"));
   mkdirSync(dest, { recursive: true });
   try {
     cpSync(join(a.copy, "work", "shots"), join(dest, "shots"), { recursive: true });
@@ -95,4 +129,5 @@ export function stopApp(a: Pick<AppRun, "container" | "copy">, docker: string, d
     // nothing to keep
   }
   rmSync(a.copy, { recursive: true, force: true });
+  return writes;
 }

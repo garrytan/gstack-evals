@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { mddFor } from "../../lanes/day-one/analysis.ts";
 import { main } from "../../lanes/day-one/cli.ts";
@@ -9,7 +8,7 @@ import { ALL_IN_USD, ITEMS, ledgerCapUsd, projectionUsd } from "../../lanes/day-
 import { UNIT_ID } from "../../lanes/day-one/units.ts";
 
 const prereg = readFileSync(join(import.meta.dir, "../..", F.PREREG), "utf8");
-const TEXTS = { COMMON_ASK: F.COMMON_ASK, REVIEW_ASK: F.REVIEW_ASK, DAY_ONE_PASS: F.DAY_ONE_PASS, AUTOPLAN_LINE: F.AUTOPLAN_LINE, OWNER_NOTICE: F.OWNER_NOTICE, PLATFORM: F.PLATFORM, BUILD_PROMPT: F.BUILD_PROMPT, CHECK_HEADER: F.CHECK_HEADER, CHECK_FOOTER: F.CHECK_FOOTER, OWNER_HEAD: F.OWNER_HEAD, OWNER_RULES: F.OWNER_RULES, OWNER_CLOSING: F.OWNER_CLOSING };
+const TEXTS = { COMMON_ASK: F.COMMON_ASK, REVIEW_ASK: F.REVIEW_ASK, DAY_ONE_PASS: F.DAY_ONE_PASS, AUTOPLAN_LINE: F.AUTOPLAN_LINE, OWNER_NOTICE: F.OWNER_NOTICE, PLATFORM: F.PLATFORM, BUILD_PROMPT: F.BUILD_PROMPT, CHECK_HEADER: F.CHECK_HEADER, CHECK_FOOTER: F.CHECK_FOOTER, OWNER_HEAD: F.OWNER_HEAD, OWNER_RULES: F.OWNER_RULES, OWNER_CLOSING: F.OWNER_CLOSING, GATE_REPLY: F.GATE_REPLY, LIMITS: F.limitsTable(), ...Object.fromEntries(F.PROBE_QUESTIONS.map((q, i) => ["PROBE_" + (i + 1), q])) };
 
 describe("the day-one prereg holds the frozen values", () => {
   test("every frozen text appears byte for byte, with the prompts digest", () => {
@@ -20,6 +19,14 @@ describe("the day-one prereg holds the frozen values", () => {
     expect(F.armPrompt("n")).toBe(F.COMMON_ASK + "\n\n" + F.OWNER_NOTICE);
     expect(F.armPrompt("d")).toBe(F.REVIEW_ASK + "\n\n" + F.DAY_ONE_PASS + "\n\n" + F.OWNER_NOTICE);
     expect(F.armPrompt("a")).toBe(F.AUTOPLAN_LINE + "\n\n" + F.REVIEW_ASK + "\n\n" + F.OWNER_NOTICE);
+    expect(F.armPrompt("r")).toBe(F.REVIEW_ASK + "\n\n" + F.OWNER_NOTICE);
+    expect(F.armPrompt("d", false)).toBe(F.REVIEW_ASK + "\n\n" + F.DAY_ONE_PASS);
+    expect(F.LIMITS.r).toEqual(F.LIMITS.d);
+    expect(F.LIMITS.d).toEqual(F.LIMITS.n);
+  });
+  test("each arm's first message prints with its bytes and sha256", () => {
+    expect(F.ARM_PROMPTS.map((p) => p.arm)).toEqual(["n", "d", "r", "a"]);
+    for (const p of F.ARM_PROMPTS) expect(prereg).toContain(p.sha256);
   });
   test("the unit sets: random labels, no label in two splits, every digest in the prereg", () => {
     const all = Object.values(F.UNIT_SETS).flatMap((s) => [...s.labels]);
@@ -36,8 +43,10 @@ describe("the day-one prereg holds the frozen values", () => {
   });
   test("the caps total the all-in stop and day1-plans' ledger cap carries the voice", () => {
     expect(ITEMS.reduce((a, i) => a + i.capUsd, 0)).toBe(ALL_IN_USD);
-    expect(projectionUsd()).toBe(3708);
-    expect(ledgerCapUsd("day1-plans")).toBe(1060);
+    expect(ALL_IN_USD).toBe(4680);
+    expect(projectionUsd()).toBe(3974);
+    expect(ledgerCapUsd("day1-plans")).toBe(1020);
+    expect(prereg).toContain("$4,680");
     for (const i of ITEMS) expect(prereg).toContain("| " + i.item + " |");
   });
   test("the MDD is 0.18 at 15 briefs and 0.20 at 12", () => {
@@ -50,10 +59,10 @@ describe("gstack-evals day-one", () => {
   test("--help lists every subcommand", async () => {
     const out: string[] = [];
     expect(await main(["--help"], { out: (t) => out.push(t), err: () => {} })).toBe(0);
-    for (const c of ["units", "stage", "judge", "gold", "read", "dryrun", "fixtures", "voice-check"]) expect(out.join("\n")).toContain("day-one " + c);
+    for (const c of ["units", "stage", "judge", "controls", "gold", "read", "validate draw", "validate score", "probe", "dryrun", "fixtures", "fixtures-real", "voice-check"]) expect(out.join("\n")).toContain("day-one " + c);
   });
-  test("a unit outside every frozen split is refused before anything runs", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "day-one-units-"));
+  test.skipIf(!existsSync("/dev/shm"))("a unit outside every frozen split is refused before anything runs", async () => {
+    const dir = mkdtempSync("/dev/shm/day-one-units-");
     const err: string[] = [];
     try {
       expect(await main(["units", "--units-dir", dir, "--units", "aaaaaa"], { out: () => {}, err: (t) => err.push(t) })).toBe(2);

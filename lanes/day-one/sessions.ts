@@ -86,8 +86,8 @@ export interface AttemptRead {
 
 const D = 1_000_000;
 
-/** One attempt on the Docker rig. */
-export async function launchSession(o: LaunchInput): Promise<AttemptRead> {
+/** One attempt on the Docker rig; deps swap the driver and the trial for keyless tests of the session's setup. */
+export async function launchSession(o: LaunchInput, deps: { driver?: typeof claudeCodeDriver; trial?: typeof runTrial } = {}): Promise<AttemptRead> {
   const provider = providerOf(o.policy, o.model) as ClaudeProvider;
   const none: AttemptRead = { termination: { kind: "infra", incident: "" }, web: 0, gstack_reads: [], contained: [], micros: 0, voice: null, out: null };
   const cell = { run_id: o.runId, arm: o.arm, task: o.cell, model: o.model, trial: o.rep, attempt: o.attempt };
@@ -125,7 +125,7 @@ export async function launchSession(o: LaunchInput): Promise<AttemptRead> {
   };
   const install = o.rig.arms[o.arm]!;
   const skill = o.gstack && install.skill ? { name: o.gstack.skill, roots: install.skill.roots.map((r) => posix.join(home, r)), home, dir: install.skill.dir, namespaces: armNamespaces(install) } : null;
-  const agent = claudeCodeDriver({
+  const agent = (deps.driver ?? claudeCodeDriver)({
     model: o.model,
     provider,
     proxy: { baseUrl: o.rig.baseUrl, slot: binding.slot, token: binding.token },
@@ -145,7 +145,7 @@ export async function launchSession(o: LaunchInput): Promise<AttemptRead> {
   const out = join(o.dir, "out");
   let termination: Termination;
   try {
-    const trial = await runTrial({
+    const trial = await (deps.trial ?? runTrial)({
       cell: { model: o.model, arm: o.arm, round: 1, trial: o.rep },
       task: { id: TASK, prompt: o.prompt },
       tasksDir: join(o.dir, "tasks"),

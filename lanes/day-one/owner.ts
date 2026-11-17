@@ -7,20 +7,23 @@
 // - A reply asks the owner when its last 600 characters hold a question mark (usersim's proseQuestion), or, on a gstack
 //   arm, when autoplan's run in the session's state root waits at its gate (gatePending). Otherwise the session ends.
 // - The responder gets usersim's persona prompt (src/usersim/persona.ts) with the persona text OWNER_HEAD, the sealed
-//   profile and OWNER_RULES, and the asking reply's text as the question: one request per question, no transcript.
+//   profile and OWNER_RULES, and the whole asking reply (its last QUESTION_CHARS characters) as the question: one
+//   request per question, no transcript.
+// - With the channel dropped (a failed fidelity bar), no question is answered and the session ends, except at
+//   /autoplan's waiting gate, which gets GATE_REPLY, logged as recommended.
 // - The responder ends its answer with a SOURCE line (profile, recommended or unknown). The line is cut before the
 //   answer goes back; a missing or unreadable line logs untagged. Question counts and sources are logged by arm.
 // - After OWNER_REPLIES answers, OWNER_CLOSING goes instead, and the reply to it ends the session whatever it holds.
 import type { NextUser } from "../../src/adapters/claude-code/driver.ts";
 import { personaPrompt } from "../../src/usersim/persona.ts";
 import { proseQuestion } from "../../src/usersim/classifier.ts";
-import { OWNER_CLOSING, OWNER_HEAD, OWNER_REPLIES, OWNER_RULES } from "./frozen.ts";
+import { GATE_REPLY, OWNER_CLOSING, OWNER_HEAD, OWNER_REPLIES, OWNER_RULES, QUESTION_CHARS } from "./frozen.ts";
 
 export type AnswerSource = "profile" | "recommended" | "unknown" | "untagged";
 
 export interface OwnerTurn {
   n: number;
-  /** What the responder was shown as the question: the asking reply's tail, at most 600 characters. */
+  /** What the responder was shown as the question: the asking reply, at most its last QUESTION_CHARS characters. */
   question: string;
   answer: string;
   source: AnswerSource;
@@ -60,14 +63,13 @@ export function splitSource(text: string): { answer: string; source: AnswerSourc
 /** The question a reply asks the owner, or null when it asks none. */
 export function ownerQuestion(texts: readonly string[], gatePending: boolean): { question: string; gate: boolean } | null {
   const all = texts.join("\n\n");
-  const q = proseQuestion(all);
-  if (q !== null) return { question: q, gate: false };
-  if (gatePending && all.trim()) return { question: all.slice(-600), gate: true };
+  if (proseQuestion(all) !== null) return { question: all.slice(-QUESTION_CHARS), gate: false };
+  if (gatePending && all.trim()) return { question: all.slice(-QUESTION_CHARS), gate: true };
   return null;
 }
 
 /** The driver's nextUser for one attempt, and the state it fills. */
-export function ownerLoop(o: { ask: (question: string) => Promise<OwnerReply>; gatePending?: () => boolean; limit?: number }): { state: OwnerState; nextUser: (texts: string[]) => Promise<NextUser> } {
+export function ownerLoop(o: { ask: (question: string) => Promise<OwnerReply>; gatePending?: () => boolean; limit?: number; dropped?: boolean }): { state: OwnerState; nextUser: (texts: string[]) => Promise<NextUser> } {
   const limit = o.limit ?? OWNER_REPLIES;
   const state: OwnerState = { turns: [], replies: 0, closing_sent: false, ended: null, failed: null };
   const nextUser = async (texts: string[]): Promise<NextUser> => {
@@ -77,13 +79,17 @@ export function ownerLoop(o: { ask: (question: string) => Promise<OwnerReply>; g
       return { end: true };
     }
     const q = ownerQuestion(texts, o.gatePending?.() ?? false);
-    if (!q) {
+    if (!q || (o.dropped && !q.gate)) {
       state.ended = "no-question";
       return { end: true };
     }
     if (state.turns.length >= limit) {
       state.closing_sent = true;
       return { reply: OWNER_CLOSING };
+    }
+    if (o.dropped) {
+      state.turns.push({ n: state.turns.length + 1, question: q.question, answer: GATE_REPLY, source: "recommended", gate: true });
+      return { reply: GATE_REPLY };
     }
     const r = await o.ask(q.question);
     if ("failed" in r) {
