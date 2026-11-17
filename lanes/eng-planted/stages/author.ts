@@ -14,6 +14,9 @@
 // - Hint: Sol writes one sentence from F's message and diff (prompts/hint-writer.md); Opus confirms it holds no code
 //   (prompts/hint-audit.md, HINT: CLEAN or CODE). A hint stands when it is one line of 5 to 80 words ending a sentence
 //   and the audit says CLEAN. The plan's rule applies: one rewrite (the same prompt), then the unit drops (hint-audit).
+// - A repeated ask (the hint rewrite, its audit when the hint comes back the same, a rating asked once more) carries its
+//   attempt number to the caller, so the meter's reply cache keys it apart and the repeat reaches the model rather than
+//   replaying the first reply (dated plan change, Captain, 2026-11-17).
 // - Ratings: Gemini 4 Carbon, then Opus 5.5, each with the plan, the stubbed files, the callers and the hint, never F's
 //   diff (prompts/rater.md), answer FORESEE: yes, maybe or no. An answer without that line is asked once more; a second
 //   one drops the unit (rater-unreadable). Both "no" keeps the unit out of the comparison draw; it can serve calibration.
@@ -60,8 +63,10 @@ export interface AuthorMaterial {
   fix: { message: string; diff: string };
 }
 
-/** One model call; the caller routes the role to its model (local.ts AUTHOR_MODELS) and reports what it cost. */
-export type AuthorCall = (role: AuthorRole, prompt: string) => Promise<{ text: string; costUsd: number }>;
+/** One model call; the caller routes the role to its model (local.ts AUTHOR_MODELS) and reports what it cost. attempt
+ * numbers the asks of one role with one prompt (2 for the second), so a reply cache keyed on the request keeps a repeat
+ * apart and the repeat reaches the model. */
+export type AuthorCall = (role: AuthorRole, prompt: string, attempt?: number) => Promise<{ text: string; costUsd: number }>;
 
 const fenceFor = (text: string) => "\x60".repeat(Math.max(3, ...[...text.matchAll(/\x60+/g)].map((m) => m[0].length + 1)));
 /** Files under their paths, each in a code fence longer than any backtick run inside it. */
@@ -127,8 +132,11 @@ export interface CallsRecord {
 /** Plan, audit, hint, audit and the two ratings for one unit, stopping at the first drop. */
 export async function authorCalls(m: AuthorMaterial, call: AuthorCall): Promise<{ record: CallsRecord; plan: string | null; hint: string | null }> {
   let cost = 0;
+  const asked = new Map<string, number>();
   const ask = async (role: AuthorRole, text: string) => {
-    const r = await call(role, text);
+    const attempt = (asked.get(role + "\n" + text) ?? 0) + 1;
+    asked.set(role + "\n" + text, attempt);
+    const r = await call(role, text, attempt);
     cost += r.costUsd;
     return r.text;
   };

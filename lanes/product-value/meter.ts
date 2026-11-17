@@ -51,6 +51,9 @@ export interface CallRequest {
   effort?: string | null;
   /** A label for the journal's cell (never prompt text). */
   label: string;
+  /** Numbers a repeat of the same request (2 for the second ask); a repeat past the first has its own cache entry, so it
+   * reaches the model instead of replaying the first reply. */
+  attempt?: number;
   /** OpenRouter only: a system text sent as a first system message. */
   system?: string;
   /** OpenRouter only: the chat to send in place of the one user prompt. */
@@ -97,7 +100,8 @@ export interface MeterOptions {
   runId: string;
   /** Holds journal.ndjson; replies never go here. */
   out: string;
-  /** Holds the reply cache; it carries model output, so it sits on tmpfs for sealed work. */
+  /** Holds the reply cache and the body of any reply with no usage (no-usage-<meter id>.txt); it carries model output,
+   * so it sits on tmpfs for sealed work. */
   cacheDir: string;
   maxOutputTokens: number;
   /** The most the lease reserves, in micros; without it the lease reserves what the item's cap has left. */
@@ -155,12 +159,13 @@ export async function openMeter(o: MeterOptions): Promise<Meter> {
       const m = MODELS[req.model];
       if (req.maxTokens > o.maxOutputTokens) throw new MeterError("E_USAGE", "a " + req.maxTokens + "-token request is above this meter's output cap of " + o.maxOutputTokens);
       const body = requestBody(m, req.prompt, req.maxTokens, req.effort, req);
-      const file = join(o.cacheDir, cacheKey(req.model, body) + ".json");
+      const attempt = req.attempt ?? 1;
+      const file = join(o.cacheDir, cacheKey(req.model, body) + (attempt > 1 ? ".a" + attempt : "") + ".json");
       if (existsSync(file)) {
         const hit = JSON.parse(readFileSync(file, "utf8")) as CallResult;
         return { ...hit, cached: true, micros: 0, unknown_micros: 0 };
       }
-      const b = p.bind({ cell: { run_id: o.runId, arm: "pv", task: req.label, model: m.id, trial: 1, attempt: 1 }, models: [m.provider + ":" + m.id], allowance_micros: reserved() });
+      const b = p.bind({ cell: { run_id: o.runId, arm: "pv", task: req.label, model: m.id, trial: 1, attempt }, models: [m.provider + ":" + m.id], allowance_micros: reserved() });
       let status = 0;
       let text = "";
       try {
@@ -174,6 +179,7 @@ export async function openMeter(o: MeterOptions): Promise<Meter> {
       const row = local.meters(leaseId).get(b.meter_id);
       const micros = row?.spent_micros ?? null;
       const unknown_micros = row?.unknown_micros ?? 0;
+      if (micros === null || unknown_micros > 0) writeFileSync(join(o.cacheDir, "no-usage-" + b.meter_id + ".txt"), text, { mode: 0o600 });
       let parsed: any = null;
       try {
         parsed = JSON.parse(text);

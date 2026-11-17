@@ -141,11 +141,11 @@ export function drawnUnit(src: UnitSource, run: string, id: string): PlantedUnit
 /** A model call that waits for its item's gate and settles its cost there. A call that spent and threw settles as a
  * failed line (spend.ts). */
 export function gatedCall(gate: ItemGate, call: AuthorCall, unit: string): AuthorCall {
-  return async (role, prompt) => {
+  return async (role, prompt, attempt) => {
     await gate.acquire("call");
     let r: { text: string; costUsd: number };
     try {
-      r = await call(role, prompt);
+      r = await call(role, prompt, attempt);
     } catch (e) {
       throw settleThrown(gate, "call", e, unit + ":" + role);
     }

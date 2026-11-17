@@ -27,8 +27,15 @@ export type AuthorRole = keyof typeof AUTHOR_MODELS;
 export const ALLOWANCE_USD = { review: 10, build: 16, call: 2 } as const;
 
 /** Section 3 leaves the authoring calls' output budget open: 16,000 tokens holds a reasoning model's thinking and a
- * 500-word plan, and at the routes' prices stays under the call allowance. Reasoning effort is the model's default. */
+ * 500-word plan, and at the routes' prices stays under the call allowance. Reasoning effort is the model's default,
+ * except where AUTHOR_EFFORT names one. */
 export const AUTHOR_MAX_TOKENS = 16_000;
+
+/** Reasoning effort by authoring role; a role not listed runs at its model's default. Dated plan change (Captain,
+ * 2026-11-17, before any outcome data): Gemini 4 Carbon rates at medium, still pinned to Google Vertex, because at its
+ * default the provider cut 4 of its first 31 rating calls at about 300 seconds with an empty reply
+ * (https://github.com/can1357/oh-my-pi/issues/15837 reports the same). */
+export const AUTHOR_EFFORT: Readonly<Partial<Record<AuthorRole, string>>> = { raterCarbon: "medium" };
 
 /** Section 8 leaves the judge's output budget open too: the same 16,000 tokens at high effort. */
 export const JUDGE_MAX_TOKENS = 16_000;
