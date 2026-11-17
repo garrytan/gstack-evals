@@ -35,10 +35,15 @@ describe("the day-one prereg holds the frozen values", () => {
     expect([F.UNIT_SETS.set.labels.length, F.UNIT_SETS.spares.labels.length, F.UNIT_SETS.practice.labels.length, F.UNIT_SETS.cat1.labels.length]).toEqual([15, 3, 3, 2]);
     for (const s of Object.values(F.UNIT_SETS)) expect(prereg).toContain(s.digest);
   });
-  test("A's gstack pin is in the prereg; the strengthened arms wait for theirs", () => {
-    expect(F.GSTACK_PINS.a).toEqual({ repo: "garrytan/gstack", sha: "5b4fa9ea335e3ba743a36e3269da95980b77b32d", version: "1.99.5.0" });
-    expect(prereg).toContain(F.GSTACK_PINS.a.sha!);
-    expect(F.GSTACK_PINS["s-full"].sha).toBeNull();
+  test("every gstack arm's pin is in the dated pin change, and the browser image in the prereg", () => {
+    expect(F.GSTACK_PINS).toEqual({
+      a: { repo: "garrytan/gstack", sha: "c5250dedc1ef9398ff3f10519c17919aaae880dc", version: "1.99.5.0" },
+      "s-full": { repo: "garrytan/gstack", sha: "439827d71d14292d8d5e32b4decf94bccd56a985", version: "1.99.5.0" },
+      "s-dayone": { repo: "garrytan/gstack", sha: "26f427d9ffca5ac3aac75e18945552af29b12550", version: "1.99.5.0" },
+    });
+    const change = readFileSync(join(import.meta.dir, "../..", F.PIN_CHANGE), "utf8");
+    for (const pin of Object.values(F.GSTACK_PINS)) expect(change).toContain(pin.sha!);
+    expect(change).toContain("2026-11-17-geva-546-day-one-usefulness-prereg");
     expect(prereg).toContain(F.BROWSER_IMAGE.split("@")[1]!);
   });
   test("the caps total the all-in stop and day1-plans' ledger cap carries the voice", () => {
