@@ -191,7 +191,7 @@ export interface ClaudeCodeOptions {
   codex?: { provider: CodexProvider; model: string; proxy?: { slot: string; token: string } };
   /** MCP servers the session gets, by name: HTTP servers only, such as a browser container's Playwright server. */
   mcpServers?: Record<string, { type: "http"; url: string }>;
-  /** When set, canUseTool denies every tool not named here (AskUserQuestion keeps its own rule). */
+  /** When set, canUseTool denies every tool not named here (AskUserQuestion keeps its own rule), and ToolSearch is disallowed unless named, so the CLI declares every MCP tool up front instead of deferring it behind a search the session may not call. */
   onlyTools?: readonly string[];
   /** GSTACK_CODEX_NO_SANDBOX=1 for the agent env: gstack runs the Codex voice without Codex's own sandbox, which cannot start in the trial container, so the container is the sandbox. Only with codex. */
   codexNoSandbox?: boolean;
@@ -544,7 +544,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
             permissionMode: "default",
             settingSources: ["user", "project", "local"],
             ...(settings ? { settings } : {}),
-            disallowedTools: o.denyAsk ? [...DISALLOWED_TOOLS, "AskUserQuestion"] : DISALLOWED_TOOLS,
+            disallowedTools: [...DISALLOWED_TOOLS, ...(o.denyAsk ? ["AskUserQuestion"] : []), ...(o.onlyTools && !o.onlyTools.includes("ToolSearch") ? ["ToolSearch"] : [])],
             ...(o.systemPrompt === "claude-code-preset" ? { systemPrompt: { type: "preset", preset: "claude_code" } } : {}),
             ...(o.plugins?.length ? { plugins: o.plugins.map((path) => ({ type: "local", path })) } : {}),
             ...(o.mcpServers ? { mcpServers: o.mcpServers, strictMcpConfig: true } : {}),
