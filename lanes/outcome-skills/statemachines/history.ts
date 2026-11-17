@@ -83,7 +83,9 @@ export const FOLLOWON_SCRIPT = sh("followon.sh");
 /** Section 4's strip rule on a first stage's full-tree patch, for the follow-on tree built on it: every CLAUDE.md,
  *  CLAUDE.local.md and AGENTS.md the patch writes (so .claude/AGENTS.md too), the outermost .claude a written path sits
  *  in, and each in-repository @import a written CLAUDE.md or CLAUDE.local.md names. The base tree was stripped already,
- *  so anything the rule names in a follow-on tree came from the patch. */
+ *  so anything the rule names in a follow-on tree came from the patch. A CLAUDE.md or CLAUDE.local.md the patch makes from
+ *  an existing file (renamed, copied or edited) or writes as binary refuses (E_SM_STRIP): the patch doesn't hold its whole
+ *  text, so it can't name every import. */
 export function followOnStrip(treePatch: string, repoDir: string): string[] {
   const remove = new Set<string>();
   const texts = treePatch.split(/^(?=diff --git )/m).filter((s) => s.startsWith("diff --git "));
@@ -95,7 +97,8 @@ export function followOnStrip(treePatch: string, repoDir: string): string[] {
     const at = parts.indexOf(".claude");
     if (at >= 0) remove.add(parts.slice(0, at + 1).join("/"));
     else if (name === "AGENTS.md" || name === "CLAUDE.md" || name === "CLAUDE.local.md") remove.add(p);
-    if ((name === "CLAUDE.md" || name === "CLAUDE.local.md") && !c.binary) {
+    if (name === "CLAUDE.md" || name === "CLAUDE.local.md") {
+      if (c.oldPath !== null || c.binary) smFail("E_SM_STRIP", "the first stage's patch writes " + p + (c.binary ? " as a binary file" : " from " + c.oldPath) + ", so the patch doesn't hold the whole text its @imports come from");
       const body = (texts[i] ?? "").split("\n");
       const hunk = body.findIndex((l) => l.startsWith("@@"));
       const text = hunk < 0 ? "" : body.slice(hunk).filter((l) => l.startsWith("+")).map((l) => l.slice(1)).join("\n");

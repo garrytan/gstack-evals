@@ -43,6 +43,14 @@ describe("follow-on trees under section 4's strip", () => {
     expect(followOnStrip("", "/testbed/repo")).toEqual([]);
   });
 
+  test("a CLAUDE.md made from an existing file refuses, because the patch doesn't hold every line its imports come from", () => {
+    const renamed = "diff --git a/README.md b/CLAUDE.md\nsimilarity index 100%\nrename from README.md\nrename to CLAUDE.md\n";
+    const edited = "diff --git a/docs/guide.md b/pkg/CLAUDE.local.md\nsimilarity index 75%\nrename from docs/guide.md\nrename to pkg/CLAUDE.local.md\nindex 1111111..2222222 100644\n--- a/docs/guide.md\n+++ b/pkg/CLAUDE.local.md\n@@ -1,2 +1,2 @@\n See @docs/old.md\n-x\n+y\n";
+    const binary = "diff --git a/CLAUDE.md b/CLAUDE.md\nnew file mode 100644\nindex 0000000..1111111\nBinary files /dev/null and b/CLAUDE.md differ\n";
+    for (const p of [renamed, edited, binary]) expect(() => followOnStrip(plain + p, "/testbed/repo")).toThrow(/^E_SM_STRIP /);
+    expect(followOnStrip("diff --git a/README.md b/AGENTS.md\nsimilarity index 100%\nrename from README.md\nrename to AGENTS.md\n", "/testbed/repo")).toEqual(["AGENTS.md"]);
+  });
+
   test("a patch that adds them: commit two drops them, records what it dropped, and passes the session tree check", () => {
     const dir = baseTree();
     const r = runBash({ kind: "host", dir }, FOLLOWON_SCRIPT, followOnFiles(memory, dir));

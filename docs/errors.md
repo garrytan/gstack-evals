@@ -1926,7 +1926,7 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable:
 
 ### E_SM_STRIP
 
-A state machines session saw instructions the strip rule removes: a CLAUDE.md, CLAUDE.local.md or AGENTS.md, or a file under .claude/, inside the repository, in the session's tree or its loaded memory; or an A3 (qa:told) session whose loaded memory lacks gstack's installed instructions. The session is not scored.
+A state machines session saw instructions the strip rule removes: a CLAUDE.md, CLAUDE.local.md or AGENTS.md, or a file under .claude/, inside the repository, in the session's tree or its loaded memory; a follow-on whose first-stage patch writes a CLAUDE.md or CLAUDE.local.md from an existing file (renamed, copied or edited) or as binary, so the strip can't read every @import it names; or an A3 (qa:told) session whose loaded memory lacks gstack's installed instructions. The session is not scored.
 
 Fix: Prepare the unit's base tree again with the strip (gstack-evals outcome sm convert), check nothing in the arm setup writes into the repository, and for A3 check the install went into the container's home after the strip.
 
