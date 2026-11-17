@@ -324,7 +324,9 @@ export function interimStop(arm: SkillArm, ordered: ReadonlyArray<ReviewRecord |
 
 /**
  * Runs review cells through the item's gate. A cell with a record is kept. Each attempt gets a fresh seed folder (B
- * stripped, one commit, and the authored plan); a finished session's mount (reviewMount) is written to mounts/<key>
+ * stripped, one commit, and the authored plan). A cell an earlier run started and left with no record goes on from the
+ * attempt after the highest folder it left, and those folders are kept, so the cell still gets one retry in all (dated
+ * pre-run fix, 2026-11-17); a finished session's mount (reviewMount) is written to mounts/<key>
  * before its record. A throw after any attempt spent (a launcher's cap stop, the mount or the exposure reading failing)
  * carries every attempt's spend (spend.ts), which runGated settles. With interim on, a skill arm's exposure stop is written to stops/<arm>.json and its later cells are
  * left out, now and on a resume.
@@ -357,13 +359,14 @@ export async function runPlantedReviews(o: { cells: ReviewCell[]; units: Map<str
       const ru: ReviewUnit = { id: c.unit, repo: u.base, plan: u.plan, opening: c.arm === "engphase" ? u.opening : null };
       const prompt = plantedPrompt(c.arm, u.opening?.text ?? null);
       const base = join(o.out, "sessions", cell);
+      const earlier = Math.max(0, ...(existsSync(base) ? readdirSync(base) : []).map((n) => Number(/^a(\d+)$/.exec(n)?.[1] ?? 0)));
+      if (earlier >= 2) fail("E_EB_CELL_INCOMPLETE", "review cell " + cell + ": earlier runs started attempts up to a" + earlier + " and left no record, so its one retry is spent and nothing opens; bring it to the Captain");
       let spent = 0;
       let rec: ReviewRecord;
       let mount: ReturnType<typeof reviewMount> | null;
       try {
         const tries = await oneRetry(async (attempt): Promise<Attempt<ReviewLeft>> => {
           const dir = join(base, "a" + attempt);
-          rmSync(dir, { recursive: true, force: true });
           const seed = join(dir, "seed");
           mkdirSync(seed, { recursive: true });
           cpSync(u.base, join(seed, "repo"), { recursive: true });
@@ -373,7 +376,7 @@ export async function runPlantedReviews(o: { cells: ReviewCell[]; units: Map<str
           const a = await o.session({ cell, unit: ru, arm: EB_ARM[c.arm], reviewer: o.reviewer, rep: c.rep, attempt, prompt, seed, dir, hook: (evidence) => plantedStopHook(c.arm, evidence) });
           spent += a.costUsd;
           return a;
-        }, (a) => a.end === "completed" || a.end === "limit");
+        }, (a) => a.end === "completed" || a.end === "limit", earlier);
         const last = tries.at(-1)!;
         const outcome: SessionOutcome = last.end === "upstream" ? "upstream_gap" : last.end === "infra" ? "infra_gap" : last.end;
         const gap = outcome === "upstream_gap" || outcome === "infra_gap";

@@ -209,7 +209,7 @@ export const REAL: Seams = {
     });
     return async (p) => {
       const h = await inner(p);
-      return { ...h, backend: owedOnRefusal(ebSession(h.backend, table), o.driver, EP_RUN) };
+      return { ...h, backend: owedOnRefusal(ebSession(h.backend, table), o.driver, EP_RUN, join(o.out, "sessions")) };
     };
   },
   grader: async (o) => plantedGrader({ work: o.work }),

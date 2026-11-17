@@ -68,8 +68,9 @@ export function stagePlan(driver: string, run_id: string, arm: string, cells: re
 
 /** An attempt that ended in a gap with no new open in the driver's log ran no session: the driver refused its open, or
  * it never reached the driver. Its cell is owed, not a gap: it stops with E_EB_CELL_INCOMPLETE, nothing is recorded for
- * it, and the step's next run retries it. */
-export function owedOnRefusal(session: PlantedSession, driver: string, run_id: string): PlantedSession {
+ * it, and the step's next run retries it. The launcher clears an attempt's folder when it starts that attempt again, so
+ * the owed attempt's folder under sessions is renamed with ".owed" first, never overwritten. */
+export function owedOnRefusal(session: PlantedSession, driver: string, run_id: string, sessions?: string): PlantedSession {
   return async (s) => {
     const opens = () => driverCells(driver, run_id).get(s.cell)?.opens ?? 0;
     const before = opens();
@@ -77,7 +78,11 @@ export function owedOnRefusal(session: PlantedSession, driver: string, run_id: s
     const r = await session(s);
     if ((r.outcome !== "upstream_gap" && r.outcome !== "infra_gap") || opens() > before) return r;
     const refused = (driverCells(driver, run_id).get(s.cell)?.refusals ?? []).filter((x) => x.at >= since);
-    return fail("E_EB_CELL_INCOMPLETE", "cell " + s.cell + ": " + (refused.length ? "the driver refused attempt " + s.attempt + "'s open (" + refused[0]!.code + " " + refused[0]!.status + ": " + refused[0]!.detail + ")" : "attempt " + s.attempt + " never reached the driver") + ", so no session ran; the cell is owed, nothing is recorded for it, and the step's next run retries it");
+    const dir = sessions ? join(sessions, s.cell.replace(/[^A-Za-z0-9._-]/g, "_"), "a" + s.attempt) : null;
+    let kept = dir + ".owed";
+    for (let i = 2; existsSync(kept); i++) kept = dir + ".owed-" + i;
+    if (dir && existsSync(dir)) renameSync(dir, kept);
+    return fail("E_EB_CELL_INCOMPLETE", "cell " + s.cell + ": " + (refused.length ? "the driver refused attempt " + s.attempt + "'s open (" + refused[0]!.code + " " + refused[0]!.status + ": " + refused[0]!.detail + ")" : "attempt " + s.attempt + " never reached the driver") + ", so no session ran; the cell is owed, nothing is recorded for it, and the step's next run retries it" + (dir && existsSync(kept) ? "; its attempt folder is kept as " + kept : ""));
   };
 }
 

@@ -96,17 +96,60 @@ describe("an upstream or infra end", () => {
   });
 });
 
+describe("a review cell an earlier run left with no record", () => {
+  // Value: protects=the one retry across runs and the earlier attempts' evidence; fails_when=a resumed review stage
+  // starts the cell at attempt 1 again, deleting the earlier attempt's folder and opening more sessions than one retry.
+  test("goes on from its next attempt, keeps the earlier folders, and opens nothing once both attempts started", async () => {
+    const W = temp();
+    const fx = plantedUnits(W, 2);
+    const plan = join(W, "plan.md");
+    writeFileSync(plan, "# Plan\n");
+    const units = new Map(fx.ids.map((id) => [id, { unit: unitOf(fx, id), base: join(fx.repos, id), plan, opening: null }] as const));
+    const inner = reviewStub([]);
+    const seen: string[] = [];
+    let stop = (_u: string, _n: number) => false;
+    const session: ReviewSession = async (s) => {
+      seen.push(s.unit.id + ":" + s.attempt);
+      if (stop(s.unit.id, s.attempt)) throw new Error("stopped mid-cell");
+      const a = await inner(s);
+      return s.attempt === 1 ? { ...a, end: "infra" } : a;
+    };
+    const review = (id: string) => runPlantedReviews({ cells: [{ unit: id, arm: "plain", rep: 1 }], units, reviewer: "opus", out: join(W, "out"), session, gate: new ItemGate(itemOf("ep-comparison"), { capUsd: 40, planned: { "review:plain": 1, "review:standalone": 0, "review:engphase": 0, build: 0 } }), interim: false });
+    const folder = (id: string, a: string) => existsSync(join(W, "out", "sessions", id + "_plain_opus_1", a));
+    const [u0, u1] = [fx.ids[0]!, fx.ids[1]!];
+    stop = (u, n) => u === u0 && n === 1;
+    expect((await caught(() => review(u0)))?.message).toContain("stopped mid-cell");
+    stop = () => false;
+    const [r0] = await review(u0);
+    expect([r0!.outcome, seen, folder(u0, "a1"), folder(u0, "a2")]).toEqual(["completed", [u0 + ":1", u0 + ":2"], true, true]);
+    seen.length = 0;
+    stop = (u, n) => u === u1 && n === 2;
+    expect((await caught(() => review(u1)))?.message).toContain("stopped mid-cell");
+    stop = () => false;
+    expect((await caught(() => review(u1)))?.code).toBe("E_EB_CELL_INCOMPLETE");
+    expect([seen, folder(u1, "a1"), folder(u1, "a2")]).toEqual([[u1 + ":1", u1 + ":2"], true, true]);
+  });
+});
+
 describe("an attempt that ended in a gap with no new driver open", () => {
   // Value: protects=ruling A's owed cells; fails_when=an attempt whose harbor run never reached the driver is counted
   // as the cell's retry and recorded as a gap, though no session ran.
-  test("leaves the cell owed; one the driver opened stands", async () => {
-    const driver = join(temp(), "driver");
+  test("leaves the cell owed and keeps its attempt folder; one the driver opened stands", async () => {
+    const W = temp();
+    const driver = join(W, "driver");
+    const sessions = join(W, "rig", "sessions");
     row(driver, { event: "open", arm: ARM, task: "c1", trial_n: 1 });
     const s = { cell: "c1", attempt: 2 } as Parameters<PlantedSession>[0];
-    const never = owedOnRefusal(async () => ({ outcome: "infra_gap", tree: null, costUsd: 0 }), driver, EP_RUN);
+    mkdirSync(join(sessions, "c1", "a2"), { recursive: true });
+    writeFileSync(join(sessions, "c1", "a2", "harbor.log"), "log\n");
+    const never = owedOnRefusal(async () => ({ outcome: "infra_gap", tree: null, costUsd: 0 }), driver, EP_RUN, sessions);
     const e = await caught(() => never(s));
     expect(e?.code).toBe("E_EB_CELL_INCOMPLETE");
     expect(e?.message).toContain("cell c1: attempt 2 never reached the driver, so no session ran; the cell is owed");
+    expect([existsSync(join(sessions, "c1", "a2")), readFileSync(join(sessions, "c1", "a2.owed", "harbor.log"), "utf8")]).toEqual([false, "log\n"]);
+    mkdirSync(join(sessions, "c1", "a2"));
+    expect((await caught(() => never(s)))?.message).toContain("its attempt folder is kept as " + join(sessions, "c1", "a2.owed-2"));
+    expect(existsSync(join(sessions, "c1", "a2.owed", "harbor.log"))).toBe(true);
     const opened = owedOnRefusal(async () => (row(driver, { event: "open", arm: ARM, task: "c1", trial_n: 1, rerun: RERUN }), { outcome: "infra_gap", tree: null, costUsd: 0.25 }), driver, EP_RUN);
     expect((await opened(s)).outcome).toBe("infra_gap");
   });
