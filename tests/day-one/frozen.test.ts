@@ -37,9 +37,9 @@ describe("the day-one prereg holds the frozen values", () => {
   });
   test("every gstack arm's pin is in the dated pin change, and the browser image in the prereg", () => {
     expect(F.GSTACK_PINS).toEqual({
-      a: { repo: "garrytan/gstack", sha: "c5250dedc1ef9398ff3f10519c17919aaae880dc", version: "1.99.5.0" },
-      "s-full": { repo: "garrytan/gstack", sha: "439827d71d14292d8d5e32b4decf94bccd56a985", version: "1.99.5.0" },
-      "s-dayone": { repo: "garrytan/gstack", sha: "26f427d9ffca5ac3aac75e18945552af29b12550", version: "1.99.5.0" },
+      a: { repo: "garrytan/gstack", sha: "e671a531f4ede3d63b3143c96903466c960aca58", version: "1.100.0.0" },
+      "s-full": { repo: "garrytan/gstack", sha: "798782aeea7548d979878b7b559f5fc47bea2400", version: "1.100.0.0" },
+      "s-dayone": { repo: "garrytan/gstack", sha: "a2a421ba6734a861fee93234aa9fb4373dc858d0", version: "1.100.0.0" },
     });
     const change = readFileSync(join(import.meta.dir, "../..", F.PIN_CHANGE), "utf8");
     for (const pin of Object.values(F.GSTACK_PINS)) expect(change).toContain(pin.sha!);

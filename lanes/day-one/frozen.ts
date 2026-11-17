@@ -131,14 +131,14 @@ export const MODELS = {
 /** Every session: the claude-code-preset system prompt and a 200,000-token window. */
 export const SYSTEM_PROMPT = "claude-code-preset" as const;
 
-/** The dated plan change that set the gstack arms' pins after the prereg merged. */
-export const PIN_CHANGE = "wiki/plans/2026-11-17-geva-549-day-one-pin-change.md";
+/** The dated plan change that sets the gstack arms' pins after the prereg merged: the second, on gstack's unattended second-review fix. */
+export const PIN_CHANGE = "wiki/plans/2026-11-17-geva-549-day-one-second-pin-change.md";
 
 /** The gstack arms' pins, set by PIN_CHANGE: a on gstack main, s-dayone and s-full on the strengthened branches. */
 export const GSTACK_PINS: Readonly<Record<"a" | "s-full" | "s-dayone", { repo: string; sha: string | null; version: string | null }>> = {
-  a: { repo: "garrytan/gstack", sha: "c5250dedc1ef9398ff3f10519c17919aaae880dc", version: "1.99.5.0" },
-  "s-full": { repo: "garrytan/gstack", sha: "439827d71d14292d8d5e32b4decf94bccd56a985", version: "1.99.5.0" },
-  "s-dayone": { repo: "garrytan/gstack", sha: "26f427d9ffca5ac3aac75e18945552af29b12550", version: "1.99.5.0" },
+  a: { repo: "garrytan/gstack", sha: "e671a531f4ede3d63b3143c96903466c960aca58", version: "1.100.0.0" },
+  "s-full": { repo: "garrytan/gstack", sha: "798782aeea7548d979878b7b559f5fc47bea2400", version: "1.100.0.0" },
+  "s-dayone": { repo: "garrytan/gstack", sha: "a2a421ba6734a861fee93234aa9fb4373dc858d0", version: "1.100.0.0" },
 };
 
 /** The app and browser container: Playwright's MCP server image, pinned by digest, serving MCP over HTTP. */
