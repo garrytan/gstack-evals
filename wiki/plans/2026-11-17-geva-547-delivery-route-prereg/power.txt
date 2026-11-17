@@ -1,0 +1,30 @@
+paired MDD at n=60, two-sided alpha 0.05, power 0.8: (z_0.975 + z_0.8) = 2.8016
+  discordant share 0.2: 16.2 points
+  discordant share 0.3: 19.8 points
+  discordant share 0.4: 22.9 points
+  discordant share 0.5: 25.6 points
+  discordant share 0.6: 28.0 points
+  discordant share 0.7: 30.3 points
+bar at n=60 graded: 48 followed (80.0%)
+  true rate 0.60 reaches it with probability 0.001
+  true rate 0.70 reaches it with probability 0.057
+  true rate 0.75 reaches it with probability 0.232
+  true rate 0.80 reaches it with probability 0.576
+  true rate 0.85 reaches it with probability 0.894
+  true rate 0.90 reaches it with probability 0.994
+  true rate 0.95 reaches it with probability 1.000
+bar at n=54 graded: 44 followed (81.5%)
+  true rate 0.60 reaches it with probability 0.001
+  true rate 0.70 reaches it with probability 0.041
+  true rate 0.75 reaches it with probability 0.174
+  true rate 0.80 reaches it with probability 0.473
+  true rate 0.85 reaches it with probability 0.822
+  true rate 0.90 reaches it with probability 0.983
+  true rate 0.95 reaches it with probability 1.000
+wilson 0/60: 0.0% [0.0%, 6.0%]
+wilson 1/60: 1.7% [0.3%, 8.9%]
+wilson 30/60: 50.0% [37.7%, 62.3%]
+wilson 46/60: 76.7% [64.6%, 85.6%]
+wilson 48/60: 80.0% [68.2%, 88.2%]
+wilson 54/60: 90.0% [79.9%, 95.3%]
+wilson 60/60: 100.0% [94.0%, 100.0%]

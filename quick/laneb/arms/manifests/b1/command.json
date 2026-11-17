@@ -1,0 +1,38 @@
+{
+  "arm": "command",
+  "claude_code": "2.1.312",
+  "typed": true,
+  "spec": "command:tar=command:told=prove-it:system_prompt=claude-code-preset:gstack_hooks=copy:strip_snapshot=true:closing_line=hm-status",
+  "steps": {
+    "sha256": "47bfc31f877aef8938dfabc4984a759eaaa1f8f7588a408c542199bde6e34557",
+    "bytes": 203,
+    "source": "https://github.com/addyosmani/agent-skills 39b723ceebf81474d0557c1fecd01eddab585563 .claude/commands/test.md lines 13-18"
+  },
+  "carrier": {
+    "file": "command-prove-it.md",
+    "bytes": 353,
+    "before": 150,
+    "after": 0,
+    "path": ".claude/commands/prove-it.md"
+  },
+  "tar_command": "tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner --format=gnu -cf <arm>.tar .claude (tar (GNU tar) 1.35)",
+  "tar": {
+    "file": "command.tar",
+    "bytes": 10240,
+    "sha256": "ebecf4d311cbff688a7376b472110c8ae118515b0fb31875c38b2692ffbf031f"
+  },
+  "tree": {
+    "files": 1,
+    "symlinks": 0,
+    "dirs": 3,
+    "bytes": 353,
+    "digest": "d0a833234eced14d37c581b24f469362c7029ce57fb9a8a765dd6fef65e93620"
+  },
+  "skills": {
+    "count": 0,
+    "tree_digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "skill_md_digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "names": []
+  },
+  "inventory_sha256": "58ba7263a2181cb1445f33e9038a610c95aab644dc3f6394163678251497f88d"
+}

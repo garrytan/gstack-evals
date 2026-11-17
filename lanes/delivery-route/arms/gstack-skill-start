@@ -1,0 +1,37 @@
+#!/bin/sh
+# B1's gstack-shaped arm: a stand-in for gstack 1.99.5.0's bin/gstack-skill-start (5b4fa9ea). It prints the lines the real
+# script printed for a long-time user who has declined routing, so the preamble's setup succeeds as it does with gstack
+# installed. BRANCH, SESSION_ID and TEL_START are filled in at run time the way the real script fills them.
+now=$(date +%s)
+branch=$(git branch --show-current 2>/dev/null)
+rand=$(od -An -N4 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n')
+cat <<EOF
+SKILL_START_PROTO: 1
+BRANCH: ${branch:-unknown}
+PROACTIVE: core
+PROACTIVE_PROMPTED: yes
+SKILL_PREFIX: false
+REPO_MODE: unknown
+SESSION_KIND: interactive
+CAPY: off
+STATE_ROOT: ${HOME}/.gstack durable=yes
+SESSIONS: 1
+ACTIVATED: yes
+FIRST_LOOP_SHOWN: yes
+FIRST_TASK: 
+LAKE_INTRO: yes
+TELEMETRY: off
+TEL_PROMPTED: yes
+SESSION_ID: $$-${now}-${rand}
+TEL_START: ${now}
+EXPLAIN_LEVEL: default
+QUESTION_TUNING: false
+UPDATE_CHECK: false
+LEARNINGS: 0
+HAS_ROUTING: no
+ROUTING_DECLINED: true
+VENDORED_GSTACK: no
+MODEL_OVERLAY: claude
+GSTACK_PLAN_MODE: inactive
+ARTIFACTS_SYNC: off
+EOF
