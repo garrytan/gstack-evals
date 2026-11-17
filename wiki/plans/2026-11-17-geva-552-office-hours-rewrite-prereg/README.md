@@ -15,8 +15,8 @@ links:
   - wiki/research/2026-11-09-geva-412-plan-mode-intentions/README.md
   - lanes/office-hours-founder/
 attachments:
-  - 38d337d8a7084712662978763b70c3eb1a384642d469ca9cb48cca26d1129416  cost.py
-  - f44bb877f7172be26ad86aedab6a4ba88fe0ea257273a440fee35ee382b2dc9e  cost.txt
+  - c8996f800fc10ee92ec5d7ea5fd0c357939ae2e7c56318842bf1ac5abc96aeaf  cost.py
+  - 9cc2d0eab9f8a7f1e6f0e8a89d854ebd724c1b66121134efc44ca5bc33c5857b  cost.txt
   - 8ea44fae503752e3b64e99fd18962a44eadee9d0be8490619f748674b532dec9  power.py
   - 0ea5f62bbe4ed708b47ab02e9425d1d8e58422cc90b5acd207cac3f8870f5bf1  power.txt
 ---
@@ -52,7 +52,7 @@ The decision rule is an ordered table (section 10). Each outcome names what happ
 - **new:** gstack at the content change's head.
 - **none:** no gstack.
 
-A dated change to this plan pins both commits before any paid call: the full sha, VERSION and the sha256 of every office-hours file. Each container checks them after install. A pinned arm never moves.
+A dated change to this plan pins both commits before any paid call: the full sha, VERSION and the sha256 of every office-hours file. The same change diffs the current pin against da98d0a, the commit the current skill's inventory read, over every file that inventory cites, and either confirms the inventory or amends it with a new post. Each container checks them after install. A pinned arm never moves.
 
 **Models under test.** Opus 5.5 and GPT-6.1 Sol are primary. particle-1 runs on all three arms as a descriptive secondary; it decides nothing.
 
@@ -82,7 +82,7 @@ A skin is one instance of all eight types: 14 founder briefs in 8 opening cluste
 **Authoring and validation** reuse the founder lane's pipeline. GPT-6.1 Sol and Gemini 4 Argon author alternately from a frozen type, skin and industry. No Claude model authors, and authors never see either skill. Each brief then passes the lane's vocabulary screen, unanimous key, give-away screen, blind two-family audit, recognition probe and generic screen. A brief gets one rewrite in all, and every check binds the brief's digest.
 
 - **Key.** A founder brief's sealed key holds the decision (one line), 2 to 4 acceptable next-action classes, 1 or 2 decisive fact ids, its twin, and a traction flag (the founder has a named payer or user). A builder brief's key holds the build-first call, the acceptable first steps and its decisive fact ids. Every unpaired brief's key, founder or builder, also holds one plausible wrong call that the hidden facts rule out; the blind audit checks it, and its near-miss row in judge packets comes from it (section 5).
-- **Unanimous key.** Opus 5.5, GPT-6.1 Sol and GPT-6.2 Astra each get every fact. Each must make the key's decision and name an acceptable action, judged by a model from the other family. If one fails, the brief drops, and its twin drops with it so pairs stay whole.
+- **Unanimous key.** Opus 5.5, GPT-6.1 Sol and GPT-6.2 Astra each get every fact. Each must make the key's decision and name an acceptable action, judged by a model from the other family. If one fails, the brief drops. When one twin of a pair fails, its passing partner gets a newly authored twin with the same opening, as the founder lane topped up its twins. A pair is placed only when both twins pass, and a partner still unmatched when authoring ends drops, so pairs stay whole. Both twins of a pair, and any top-up twin, come from the pair's author family.
 - **Give-away screen.** An unpaired brief drops when any of the three makes the key's call from the opening alone. Twins share one opening and need opposite calls, so an opening alone cannot carry either call. Pairs pass this screen by construction.
 - **Supply.** Authoring draws until 110 briefs are placed (70 founder, 24 builder, 8 calibration, 8 reserves) or its cap stops it. A shortfall goes to the Captain before stage 1, with the MDD at the count that can fill. The run never quietly shrinks the set.
 
@@ -163,7 +163,7 @@ Rewrite, main intentions as its approved plan states them. Its inventory confirm
 
 | Intention | How this eval reads it |
 |---|---|
-| N1 a reality check first at every startup stage, skipped when the opening names a payer or user | R1; guardrail G2 on traction twins |
+| N1 a reality check first at every startup stage, skipped when the opening names a payer or user | R1 for the check. The skip is untested, because every opening here hides traction. Guardrail G2 bounds extra questions on traction twins, not the skip |
 | N2 a memo with one dated, numbered action and a kill line for no-outcome and pivot sessions | R2 and R3 for content; the format is a reported compliance check |
 | N3 the design doc kept for builders and founders with traction | compliance check; builder kept-whole rate (decides) |
 | N4 a pivot flow that first asks love or size, with a small ceiling check | T6 and T4 pairs |
@@ -180,6 +180,7 @@ Rewrite, main intentions as its approved plan states them. Its inventory confirm
 - The second opinion and the visual design step, which are declined or never reached.
 - The closing tiers across sessions, beyond one seeded prior session.
 - Founder resources and the YC invitation text.
+- The rewrite's skip of the reality check when the opening names a payer or user, since no opening here does.
 
 **Consequence.** Main intentions stay partly untested, so this eval cannot support a CUT-CANDIDATE verdict: the project's rule for plan-mode skills keeps that verdict for an eval whose score covers the skill's main intentions. A cut-type result reads FIX-METHOD on task fit, and the project owner still hears it plainly.
 
@@ -354,6 +355,8 @@ Gold labels are the cells where GPT-6.2 Astra and Opus 5.5 agree in a separate m
 - near-miss accuracy of at least 0.8;
 - no stock row credited.
 
+Each of the two kappas needs at least 10 gold cells of each class, credited and not credited. A kappa short of them, or undefined, reads NO READ for that judge, which fails A4 and takes admission's one repair. The dry run drives both cases.
+
 Gold here is two models agreeing, so these figures measure agreement, not accuracy, and the post says so. A judge's production numbers count only after its check passes.
 
 ## 13. Money
@@ -364,7 +367,7 @@ cost.py (attached) computes every figure below from these planning inputs:
 - a Sol skill session, $2.00, and a none session, $0.30. No interactive Sol figure exists yet, because the founder lane's sessions mostly ended in their first reply;
 - particle-1, $0.30 with a skill and $0.05 without;
 - per session, $0.08 for the simulator and $0.06 for its judge label, from the founder lane's measured $0.0064 a simulator reply and $0.062 a session of labels;
-- authoring at the founder lane's $1.04 a drawn brief ($129.19 over 124 draws) and its pass rate of 96 in 124. A matched pair passes only when both twins pass, so placing 34 pairs and 42 unpaired briefs takes about 168 draws;
+- authoring at the founder lane's $1.04 a drawn brief ($129.19 over 124 draws), its pass rate of 96 in 124 for a first twin or an unpaired brief, and its measured yield of 7 in 16 for second skins, used here for the second twin. A failed twin is re-authored alone (section 3), so placing 34 pairs and 42 unpaired briefs takes about 176 draws;
 - the simulator audit: a six-question script over 110 sheets at $0.0064 a reply, and 80 audited turns at the lane's $0.314 a turn for two auditors;
 - the judge check: 1,000 rows labelled by both gold models at maximum effort at the lane's $0.078 a row, the production labels on the same rows at $0.0098 a row, and $2 of live probes;
 - hosts: 4 VM-minutes a session at the lane's $0.00416 a VM-minute.
@@ -373,16 +376,16 @@ Each cap is 1.35 times central plus one allowance for the item's costliest unit,
 
 | Ledger item | What it pays for | Central | Cap |
 |---|---|---|---|
-| 1 Authoring | about 168 draws to place 110 briefs, with keys and validation | $175 | $240 |
+| 1 Authoring | about 176 draws to place 110 briefs, with keys and validation | $183 | $251 |
 | 2 Simulator audit | the fixed script and two auditors | $29 | $41 |
 | 3 Stage 1 | 48 sessions on Opus and Sol and 24 on particle-1, with simulator and labels | $110 | $164 |
 | 4 Judge check | the gold pass, production labels on it and live probes | $90 | $123 |
 | 5 Stage 2, Opus and Sol | 420 founder and 144 builder sessions, with simulator and labels | $1,188 | $1,620 |
 | 6 Stage 2, particle-1 | 282 sessions, with simulator and labels | $101 | $139 |
 | 7 Hosts | runner VMs | $15 | $22 |
-| **Paid total** | | **$1,708** | **$2,349** |
+| **Paid total** | | **$1,716** | **$2,360** |
 
-Agent model use adds about $350: about $100 for writing and reviewing this plan and about $250 for the build and the runs. That is about $2,058 all-in at central and $2,699 at caps, inside the $2,745 the project's owners approved for this sizing on 2026-11-17. particle-1 costs about $109 central and about $151 at caps across both stages. A cap stop is an incomplete run, never retried to change a verdict.
+Agent model use adds about $350: about $100 for writing and reviewing this plan and about $250 for the build and the runs. That is about $2,066 all-in at central and $2,710 at caps, inside the $2,745 the project's owners approved for this sizing on 2026-11-17. particle-1 costs about $109 central and about $151 at caps across both stages. A cap stop is an incomplete run, never retried to change a verdict.
 
 ## 14. Reused from the founder lane, and what changes
 
@@ -422,7 +425,7 @@ This plan governs where the two differ.
 - **Judges:** one label at medium effort, the founder lane's checked setting, instead of three samples and the median. The check validates exactly what runs.
 - **The simulator:** Gemini 4 Argon, the founder lane's tested and pinned route, instead of Gemini 4 Hydrogen. Both are a third family.
 - **The price smoke:** 12 sessions became stage 1's 72, which also serve the judge check and admission.
-- **Money:** $1,708 central and $2,349 at caps for paid calls, against the plan's $1,270 and $1,800.
+- **Money:** $1,716 central and $2,360 at caps for paid calls, against the plan's $1,270 and $1,800.
 
 ## 16. Limits
 

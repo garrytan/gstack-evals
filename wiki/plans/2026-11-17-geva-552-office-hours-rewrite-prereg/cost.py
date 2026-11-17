@@ -11,7 +11,8 @@ ALLOW = {"opus_skill": 15.0, "particle_skill": 3.0, "brief": 3.50, "other": 1.0}
 
 DRAW_USD = 129.19 / 124
 PASS = 96 / 124
-PAIRED, UNPAIRED = 68, 42
+PAIRS, UNPAIRED = 34, 42
+TWIN_PASS = 7 / 16
 
 SCRIPT_TURNS, SIM_TURN = 660, 0.0064
 AUDIT_TURNS, AUDIT_TURN = 80, 0.314
@@ -36,7 +37,7 @@ def particle(briefs):
     return briefs * (2 * P1_SKILL + P1_NONE) + n * (SIM + LABEL), n
 
 
-draws = PAIRED / PASS**2 + UNPAIRED / PASS
+draws = PAIRS / PASS + PAIRS / TWIN_PASS + UNPAIRED / PASS
 authoring = draws * DRAW_USD
 audit = SCRIPT_TURNS * SIM_TURN + AUDIT_TURNS * AUDIT_TURN
 s1_main, s1_n = sessions(CALIBRATION)
