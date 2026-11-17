@@ -11,15 +11,122 @@ with the sessions of either kind scored not followed, then followed. unread-bg: 
 read. passes: verifier reward 1 (descriptive).
 
 model            arm           set   n followed tool-only test-first failing-first passing-after bash-only unseen  unresolved spec-folder low-high unread-bg passes
-claude-opus-5-5  none          all   200        0         0          1             0             0       154      4     13 (13)           3     0-16        29    121
-claude-opus-5-5  none          drawn 60        0         0          0             0             0        48      1       4 (4)           2      0-6         7     34
-claude-opus-5-5  verify-prose  all   200        0         0          2             1             1       111      4     15 (15)           3     0-18        28    123
-claude-opus-5-5  verify-prose  drawn 60        0         0          2             1             1        35      1       4 (4)           2      0-6         7     37
-gpt-6.1-sol      none          all   200      152       152        157           154           155         0      0      4 (10)           4  146-153        13    115
-gpt-6.1-sol      none          drawn 60       48        48         49            48            49         0      0       1 (6)           2    45-48         5     32
-gpt-6.1-sol      verify-prose  all   200      142       142        165           163           144         0      0       2 (3)           5  137-144         5    120
-gpt-6.1-sol      verify-prose  drawn 60       45        45         50            50            45         0      0       1 (1)           2    43-46         2     32
-particle-1       none          all   200        1         0          5             2             2         1      0     11 (30)           4     1-15        10    122
-particle-1       none          drawn 60        1         0          3             1             2         0      0      4 (18)           2      1-6         2     34
-particle-1       verify-prose  all   200        3         2          8             3             6         1      0     14 (33)           4     2-20        26    124
-particle-1       verify-prose  drawn 60        2         1          5             2             4         0      0       3 (7)           2      1-6         5     37
+claude-opus-5-5  none          all   200        0         0          1             0             0       156      2     18 (18)           3     0-21        14    121
+claude-opus-5-5  none          drawn 60        0         0          0             0             0        49      0       6 (6)           2      0-8         4     34
+claude-opus-5-5  verify-prose  all   200        0         0          1             1             0       113      2     17 (17)           3     0-20        13    123
+claude-opus-5-5  verify-prose  drawn 60        0         0          1             1             0        36      0       4 (4)           2      0-6         4     37
+gpt-6.1-sol      none          all   200      151       151        156           153           154         0      0      4 (10)           4  145-152        10    115
+gpt-6.1-sol      none          drawn 60       48        48         48            48            48         0      0       1 (6)           2    45-48         4     32
+gpt-6.1-sol      verify-prose  all   200      143       143        165           161           145         0      0       2 (3)           5  137-144         2    120
+gpt-6.1-sol      verify-prose  drawn 60       46        46         50            50            46         0      0       1 (1)           2    43-46         0     32
+particle-1       none          all   200        1         0          5             1             2         1      0     11 (30)           4     1-15         3    122
+particle-1       none          drawn 60        1         0          3             1             2         0      0      4 (18)           2      1-6         1     34
+particle-1       verify-prose  all   200        4         2          8             4             6         1      0     14 (33)           4     3-21        10    124
+particle-1       verify-prose  drawn 60        3         1          5             3             4         0      0       3 (7)           2      2-7         1     37
+
+Sessions whose reading changed when section 6's run, inline-script and shell-folder rules were revised after review, against the
+detector before the revision: 103 of 1200 sessions, one line each. No none arm's followed count on the drawn 60 moved.
+
+claude-opus-5-5 verify-prose optuna__optuna-6428 (drawn): unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 verify-prose scikit-rf__scikit-rf-1336: unread_background 2 to 1. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 none copier-org__copier-2646 (drawn): unresolved_writes 0 to 1, unread_background 2 to 0. A for loop rebinds the name an inline script writes through, so that write is one no parser can name; a background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 verify-prose dask__dask-12119: unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 verify-prose ethereum__web3.py-3800: unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 none graphistry__pygraphistry-1107_interface (drawn): unread_background 2 to 1. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 verify-prose newton-physics__newton-1653: unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 none nilearn__nilearn-5739: unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 none pandas-dev__pandas-64797: unread_background 3 to 1. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 verify-prose Cambridge-ICCS__TCTrack-119: unresolved_writes 0 to 1. A for loop rebinds the name an inline script writes through, so that write is one no parser can name.
+claude-opus-5-5 verify-prose ImperialCollegeLondon__proCAT-503: unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 none koxudaxi__datamodel-code-generator-3046: unread_background 2 to 1. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 none tox-dev__tox-3666 (drawn): unread_background 2 to 1. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 none genericmappingtools__pygmt-4463: unresolved_writes 0 to 1. A for loop rebinds the name an inline script writes through, so that write is one no parser can name.
+claude-opus-5-5 none graphistry__pygraphistry-1277: unread_background 2 to 0. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 verify-prose marimo-team__marimo-6629: unread_background 2 to 1. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 none narwhals-dev__narwhals-3480: unresolved_writes 0 to 1. A for loop rebinds the name an inline script writes through, so that write is one no parser can name.
+claude-opus-5-5 none ImperialCollegeLondon__virtual_ecosystem-1232 (drawn): unread_background 2 to 0. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 none koxudaxi__datamodel-code-generator-3070: unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 verify-prose newton-physics__newton-1582 (drawn): unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 none pyjanitor-devs__pyjanitor-1593: unread_background 2 to 1. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 verify-prose pyjanitor-devs__pyjanitor-1593: unread_background 4 to 1. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 verify-prose python-wheel-build__fromager-1124: unresolved_writes 0 to 1. A for loop rebinds the name an inline script writes through, so that write is one no parser can name.
+claude-opus-5-5 none python-wheel-build__fromager-1124: unresolved_writes 0 to 1. A for loop rebinds the name an inline script writes through, so that write is one no parser can name.
+claude-opus-5-5 verify-prose pydata__xarray-10838: unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 verify-prose pypa__build-1027: unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 none sympy__sympy-28660: unread_background 6 to 4. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 none equinor__ert-11988: unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 verify-prose keras-team__keras-22316: unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 verify-prose keras-team__keras-22330: unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 none nolar__kopf-1225: unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 none tox-dev__tox-3904: unread_background 2 to 0. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 verify-prose tox-dev__tox-3904: unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 verify-prose cpp-linter__cpp-linter-hooks-206_interface: unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 none dagster-io__dagster-33605: bash_only_source false to true, source_write_unseen true to false, unread_background 1 to 0, test_file "/testbed/asset_defs_tests/test_partitioned_assets.py" to null. A cd in an earlier Bash call now carries to the sed -i that edits the source, so the edit is seen.
+claude-opus-5-5 none meltano__meltano-9950: unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 verify-prose pydata__xarray-10863 (drawn): unread_background 2 to 1. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 verify-prose pyfar__pyrato-113 (drawn): test_before_source true to false, passing_after_source true to false, test_file "/testbed/tests/test_data/analytic_rir_psnr50_2D.csv" to null. A call that only named a data file under tests/ was read as writing it, which made it the test; no test is written before the fix now.
+claude-opus-5-5 none schemathesis__schemathesis-3405: unread_background 8 to 5. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 verify-prose stanfordnlp__dspy-8890: unread_background 2 to 1. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 none sympy__sympy-28714: unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 verify-prose cpp-linter__cpp-linter-hooks-142: unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 verify-prose kubeflow__pipelines-13112: bash_only_source false to true, source_write_unseen true to false, test_file "/testbed/sdk/python/kfp/compiler/compiler_test.py" to null. A cd in an earlier Bash call now carries to the edit of the source, so the edit is seen.
+claude-opus-5-5 verify-prose pymc-devs__pytensor-1668 (drawn): unread_background 2 to 1. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 none run-llama__llama_index-20748_interface (drawn): bash_only_source false to true, source_write_unseen true to false, test_file "/testbed/tests/node_parser/test_semantic_double_merging_splitter.py" to null. A cd in an earlier Bash call now carries to the edit of the source, so the edit is seen.
+claude-opus-5-5 verify-prose run-llama__llama_index-20748_interface (drawn): bash_only_source false to true, source_write_unseen true to false, test_file "/testbed/tests/node_parser/test_semantic_double_merging_splitter.py" to null. A cd in an earlier Bash call now carries to the edit of the source, so the edit is seen.
+claude-opus-5-5 none schemathesis__schemathesis-3270: unread_background 2 to 1. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 verify-prose skypilot-org__skypilot-8908: unread_background 2 to 1. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 none skypilot-org__skypilot-8908: unread_background 3 to 2. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 none tox-dev__tox-3759: unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 none DiamondLightSource__mx-bluesky-1519 (drawn): unresolved_writes 0 to 1. A for loop rebinds the name an inline script writes through, so that write is one no parser can name.
+claude-opus-5-5 none apache__iceberg-python-2797: unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 none basicmachines-co__basic-memory-341: unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 verify-prose basicmachines-co__basic-memory-341: unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 none marimo-team__marimo-8401 (drawn): unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 verify-prose sqlfluff__sqlfluff-7622 (drawn): unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 verify-prose ultraplot__ultraplot-696 (drawn): unread_background 6 to 3. A background run's output is read by a later Bash command that names its file.
+claude-opus-5-5 none ultraplot__ultraplot-696 (drawn): unread_background 2 to 1. A background run's output is read by a later Bash command that names its file.
+gpt-6.1-sol verify-prose hdmf-dev__hdmf-1374 (drawn): unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+gpt-6.1-sol none spack__spack-52244: unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+gpt-6.1-sol none tox-dev__tox-3666 (drawn): unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+gpt-6.1-sol none graphistry__pygraphistry-1277: unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+gpt-6.1-sol verify-prose astropy__astropy-18681 (drawn): unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+gpt-6.1-sol none harumiweb__exstruct-113 (drawn): test_before_source true to false, passing_after_source true to false, test_file "/testbed/tests/cli/test_cli_lazy_imports.py" to null. A heredoc that wrote to /tmp was read as writing every file its call named, the test included; no test is written before the fix now.
+gpt-6.1-sol verify-prose scikit-learn__scikit-learn-33168: unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+gpt-6.1-sol none azure-samples__azure-search-openai-demo-3025: followed true to false, followed_tool_only true to false, failing_before_source true to false. Its only failing run before the fix was a conftest that failed to import (exit code 4), so no test ran.
+gpt-6.1-sol verify-prose basicmachines-co__basic-memory-484: failing_before_source true to false. Its only failing run before the fix was a conftest that failed to import (exit code 4), so no test ran.
+gpt-6.1-sol none meltano__meltano-9950: unread_background 2 to 1. A background run's output is read by a later Bash command that names its file.
+gpt-6.1-sol verify-prose AbsaOSS__generate-release-notes-207 (drawn): followed true to false, followed_tool_only true to false, passing_after_source true to false. Its only passing run after the fix was gstack-check's CHECK tests PASS line, which names no test; no B1 arm runs gstack-check.
+gpt-6.1-sol verify-prose ardupilot__methodicconfigurator-1201: failing_before_source true to false. Its only failing run before the fix was a conftest that failed to import (pyautogui needs a display), so no test ran.
+gpt-6.1-sol verify-prose gitpython-developers__GitPython-2075 (drawn): followed false to true, followed_tool_only false to true, passing_after_source false to true. Its passing run held the word failure in a skip reason, which the old passing check rejected.
+gpt-6.1-sol verify-prose DiamondLightSource__mx-bluesky-1519 (drawn): followed false to true, followed_tool_only false to true, passing_after_source false to true. Its passing run held AssertionError in passing tests' names, which the old passing check rejected.
+particle-1 verify-prose omni-us__jsonargparse-839 (drawn): followed false to true, failing_before_source false to true. Its own test in /tmp/repro raised before the fix, a traceback through the test; the old rule missed it because the run went through tail (exit 0) and ArgumentError is not in its word list.
+particle-1 verify-prose scikit-rf__scikit-rf-1336: unread_background 6 to 4. A background run's output is read by a later Bash command that names its file.
+particle-1 verify-prose VRSEN__agency-swarm-468: unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+particle-1 none copier-org__copier-2646 (drawn): unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+particle-1 verify-prose newton-physics__newton-1653: unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+particle-1 none pandas-dev__pandas-64797: unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+particle-1 verify-prose zwicker-group__py-pde-733: unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+particle-1 verify-prose marimo-team__marimo-6629: unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+particle-1 none meltano__meltano-9929: unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+particle-1 verify-prose agronholm__anyio-1121: unread_background 2 to 1. A background run's output is read by a later Bash command that names its file.
+particle-1 verify-prose koxudaxi__datamodel-code-generator-3070: unread_background 2 to 1. A background run's output is read by a later Bash command that names its file.
+particle-1 verify-prose newton-physics__newton-1582 (drawn): unread_background 2 to 0. A background run's output is read by a later Bash command that names its file.
+particle-1 verify-prose pyjanitor-devs__pyjanitor-1593: unread_background 4 to 2. A background run's output is read by a later Bash command that names its file.
+particle-1 none sqlfluff__sqlfluff-7617: failing_before_source true to false. Its failing run before the fix was a sqlfluff lint of a scratch file, no test run.
+particle-1 verify-prose apache__iceberg-python-3295 (drawn): unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+particle-1 verify-prose pypa__build-1027: unread_background 2 to 1. A background run's output is read by a later Bash command that names its file.
+particle-1 verify-prose sympy__sympy-28660: unread_background 3 to 0. A background run's output is read by a later Bash command that names its file.
+particle-1 verify-prose keras-team__keras-22316: unread_background 5 to 3. A background run's output is read by a later Bash command that names its file.
+particle-1 verify-prose tox-dev__sphinx-autodoc-typehints-607: unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+particle-1 verify-prose meltano__meltano-9950: unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+particle-1 none stanfordnlp__dspy-8890: unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+particle-1 verify-prose ardupilot__methodicconfigurator-1201: unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+particle-1 none beeware__briefcase-2546: unread_background 2 to 0. A background run's output is read by a later Bash command that names its file.
+particle-1 verify-prose kubeflow__pipelines-13112: unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+particle-1 verify-prose pymc-devs__pytensor-1668 (drawn): unread_background 2 to 0. A background run's output is read by a later Bash command that names its file.
+particle-1 verify-prose schemathesis__schemathesis-3270: unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+particle-1 none schemathesis__schemathesis-3270: unread_background 2 to 0. A background run's output is read by a later Bash command that names its file.
+particle-1 verify-prose skypilot-org__skypilot-8908: unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+particle-1 none skypilot-org__skypilot-8908: unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.
+particle-1 verify-prose basicmachines-co__basic-memory-341: unread_background 2 to 0. A background run's output is read by a later Bash command that names its file.
+particle-1 verify-prose ultraplot__ultraplot-696 (drawn): unread_background 1 to 0. A background run's output is read by a later Bash command that names its file.

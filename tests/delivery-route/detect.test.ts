@@ -22,7 +22,9 @@ const diff = (...files: string[]) => files.map((f) => "diff --git a/" + f + " b/
 const write = (path: string) => ({ name: "Write", input: { file_path: path, content: "def test_x():\n    assert f() == 1\n" }, result: "File created successfully at: " + path });
 const edit = (path: string) => ({ name: "Edit", input: { file_path: path, old_string: "a", new_string: "b" }, result: "The file " + path + " has been updated successfully." });
 const bash = (command: string, result: string, error = false) => ({ name: "Bash", input: { command }, result, error });
-const FAILED = "F\n=========================== 1 failed in 0.02s ===========================";
+/** pytest -q's report of a failing test, as it prints it: the progress line, the traceback's frame line and the short summary. */
+const failedIn = (file: string) => "F                                                                        [100%]\n=================================== FAILURES ===================================\n____________________________________ test_x ____________________________________\n\n    def test_x():\n>       assert f() == 1\nE       assert 0 == 1\n\n" + file + ":2: AssertionError\n=========================== short test summary info ============================\nFAILED " + file + "::test_x - assert 0 == 1\n1 failed in 0.02s";
+const FAILED = failedIn("tests/test_mod.py");
 const PASSED = "=========================== 1 passed in 0.01s ===========================";
 const PATCH = diff("pkg/mod.py", "tests/test_mod.py");
 
@@ -36,7 +38,7 @@ describe("which runs cover the test", () => {
     expect(d.followed).toBe(true);
   });
   test("a run of another file does not cover the test", () => {
-    const d = detect(log([write("/testbed/tests/test_mod.py"), bash("pytest other/test_b.py", FAILED, true), edit("/testbed/pkg/mod.py"), bash("pytest tests/test_mod.py", PASSED)]), PATCH);
+    const d = detect(log([write("/testbed/tests/test_mod.py"), bash("pytest other/test_b.py", failedIn("other/test_b.py"), true), edit("/testbed/pkg/mod.py"), bash("pytest tests/test_mod.py", PASSED)]), PATCH);
     expect([d.test_before_source, d.failing_before_source, d.passing_after_source, d.followed]).toEqual([true, false, true, false]);
   });
   test("a bare pytest run covers every test", () => {
@@ -182,5 +184,100 @@ describe("writes no parser can name", () => {
   test("a session with several counts each Bash call once", () => {
     const d = detect(log([write(TEST), ...OPEN.slice(0, 3).map((c) => bash("cd /testbed && " + c, "")), bash("cd /testbed && " + OPEN[3] + " && " + OPEN[1], "")]), PATCH);
     expect(d.unresolved_writes).toBe(4);
+  });
+});
+
+describe("the failing run is a run of the test that fails", () => {
+  const before = (run: Step) => detect(log([write(TEST), run, edit("/testbed/pkg/mod.py"), bash("pytest tests/test_mod.py", PASSED)]), PATCH);
+  test("a grep that finds nothing, a lint error and a cat that prints an assertion name the test but are no failing run", () => {
+    const runs = [bash("grep -n missing tests/test_mod.py", "Exit code 1", true), bash("ruff check tests/test_mod.py", "Exit code 1\ntests/test_mod.py:1:8: F401 [*] `os` imported but unused\nFound 1 error.", true),
+      bash("cat tests/test_mod.py", "import pytest\n\ndef test_x():\n    with pytest.raises(AssertionError):\n        f()\n"), bash("python -c 'import tests.test_mod'", "Exit code 1\nModuleNotFoundError: No module named 'pkg.new'", true)];
+    for (const r of runs) expect([r.input.command, before(r).failing_before_source]).toEqual([r.input.command, false]);
+  });
+  test("a suite run that fails only on another test is no failing run of the test, even when it lists the test as passed", () => {
+    const quiet = bash("pytest", failedIn("tests/test_other.py"), true);
+    const verbose = bash("pytest -v", "tests/test_mod.py::test_x PASSED [ 50%]\ntests/test_other.py::test_y FAILED [100%]\nFAILED tests/test_other.py::test_y - assert 1\n1 failed, 1 passed in 0.1s", true);
+    expect([before(quiet).failing_before_source, before(verbose).failing_before_source]).toEqual([false, false]);
+  });
+  test("a run reports the test's failure by naming it: pytest's FAILED line or collection error, unittest's FAIL line, or a traceback through the test", () => {
+    const runs = [bash("pytest tests/", FAILED, true), bash("pytest tests/test_mod.py", "Exit code 2\n==================================== ERRORS ====================================\n______________________ ERROR collecting tests/test_mod.py ______________________\nImportError while importing test module '/testbed/tests/test_mod.py'.\nE   ImportError: cannot import name 'g' from 'pkg.mod'\n=========================== short test summary info ============================\nERROR tests/test_mod.py\n1 error in 0.10s", true),
+      bash("python -m unittest discover -s tests -v", "Exit code 1\ntest_x (tests.test_mod.T.test_x) ... FAIL\n\n======================================================================\nFAIL: test_x (tests.test_mod.T.test_x)\n----------------------------------------------------------------------\nAssertionError: 0 != 1\n\nFAILED (failures=1)", true),
+      bash("python -c 'import sys; sys.path.insert(0, \"tests\"); import test_mod; test_mod.test_x()'", "Exit code 1\nTraceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n  File \"/testbed/tests/test_mod.py\", line 2, in test_x\n    assert f() == 1\nAssertionError", true)];
+    for (const r of runs) expect([r.input.command, before(r).failing_before_source]).toEqual([r.input.command, true]);
+  });
+  test("a stack printed through the test with no exception raised is no failure", () => {
+    expect(before(bash("python -c 'import tests.test_mod as t; t.show()'", "  File \"/testbed/tests/test_mod.py\", line 9, in show\n    traceback.print_stack()\ndone")).failing_before_source).toBe(false);
+  });
+  test("pytest run through coverage, or from a python heredoc calling pytest.main, counts", () => {
+    const runs = [bash("python -m coverage run -m pytest --log-level DEBUG -q tests/test_mod.py -k x --maxfail=3", FAILED, true), bash("python - <<'PY'\nimport pytest\nraise SystemExit(pytest.main(['-q', 'tests/test_mod.py']))\nPY", FAILED, true)];
+    for (const r of runs) expect([r.input.command, before(r).followed]).toEqual([r.input.command, true]);
+  });
+  test("a result Claude Code cut in the middle still counts when the run starts the test file and pytest shows its failures", () => {
+    const cut = "Exit code 1\n.FFFF                                                                    [100%]\n=================================== FAILURES ===================================\n___________________________ test_x ___________________________\n\n    def test_x():\n... [20010 characters truncated] ...\n        mock_session = Mock()";
+    expect([before(bash("pytest -q tests/test_mod.py -k x", cut, true)).failing_before_source, before(bash("pytest -q tests/", cut, true)).failing_before_source]).toEqual([true, false]);
+  });
+  test("a conftest that fails to import runs no test, so it is no failing run", () => {
+    expect(before(bash("pytest -q tests/test_mod.py --maxfail=3", "Exit code 4\nImportError while loading conftest '/testbed/tests/conftest.py'.\ntests/conftest.py:32: in <module>\n    import app\nE   ModuleNotFoundError: No module named 'testcontainers'", true)).failing_before_source).toBe(false);
+  });
+  test("unittest.main run as a script counts through its failing count", () => {
+    expect(before(bash("python tests/test_mod.py", "Exit code 1\nF\n======================================================================\nFAIL: test_x (__main__.T.test_x)\n----------------------------------------------------------------------\nAssertionError: 0 != 1\n\nFAILED (failures=1)", true)).followed).toBe(true);
+  });
+});
+
+describe("the passing run selects the test", () => {
+  const after = (run: Step) => detect(log([write(TEST), bash("pytest tests/test_mod.py", FAILED, true), edit("/testbed/pkg/mod.py"), run]), PATCH);
+  test("a green run of another file is no passing run, even when its output names the test", () => {
+    const d = after(bash("pytest tests/test_other.py; git status --short", "1 passed in 0.1s\n M tests/test_mod.py"));
+    expect([d.passing_after_source, d.followed]).toEqual([false, false]);
+  });
+  test("a green run whose output reports the test failed is not passing", () => {
+    expect(after(bash("pytest tests/test_mod.py", "Exit code 0\nFAILED tests/test_mod.py::test_x - assert 0 == 1\n1 passed in 0.1s")).passing_after_source).toBe(false);
+  });
+  test("a failure word in a passing test's name or message does not reject the run", () => {
+    expect(after(bash("pytest tests/test_mod.py -v", "tests/test_mod.py::test_failure_message PASSED [100%]\nno failures expected here\n1 passed in 0.1s")).followed).toBe(true);
+  });
+  test("a run of the test's folder, the whole suite, a -k selection of it, or a script given the test file selects it", () => {
+    const runs = [bash("pytest tests/ -q", PASSED), bash("pytest", PASSED), bash("pytest -k mod -q", PASSED), bash("python /tmp/run_tests.py -q tests/test_mod.py", "....\n4 passed in 0.1s"), bash("python - <<'PY'\nimport pytest\nraise SystemExit(pytest.main(['-q', 'tests/test_mod.py']))\nPY", "..\n2 passed in 0.1s")];
+    for (const r of runs) expect([r.input.command, after(r).followed]).toEqual([r.input.command, true]);
+  });
+  test("a background run read through tail or rg of its output file is seen there", () => {
+    const launch = { ...bash("pytest tests/", "Command running in background with ID: bg2. Output is being written to: /tmp/tasks/bg2.output"), input: { command: "pytest tests/", run_in_background: true } };
+    const d = after(launch);
+    const read = detect(log([write(TEST), bash("pytest tests/test_mod.py", FAILED, true), edit("/testbed/pkg/mod.py"), launch, bash("rg -n 'passed|failed' /tmp/tasks/bg2.output; git status --short", "36:3 passed in 0.1s\n M tests/test_mod.py")]), PATCH);
+    expect([d.followed, d.unread_background, read.followed, read.unread_background]).toEqual([false, 1, true, 0]);
+  });
+});
+
+describe("inline scripts read for the file they write", () => {
+  const S = (code: string) => bash("cd /testbed && python - <<'E'\n" + code + "\nE", "");
+  const both = (step: Step) => [detect(log([write(TEST), bash("pytest tests/test_mod.py", FAILED, true), step, bash("pytest tests/test_mod.py", PASSED)]), PATCH), detect(log([step, write(TEST), bash("pytest tests/test_mod.py", FAILED, true), bash("pytest tests/test_mod.py", PASSED)]), PATCH)] as const;
+  test("a name assigned again between writes is read at each write, in both directions", () => {
+    const [first, late] = both(S("p='pkg/other.py'; s=open(p).read()\nopen(p,'w').write(s)\np='pkg/mod.py'; s=open(p).read()\nopen(p,'w').write(s.replace('a','b'))"));
+    expect([first.followed, first.bash_only_source, first.unresolved_writes, late.followed, late.test_before_source]).toEqual([true, true, 0, false, false]);
+  });
+  test("a name a for loop binds is a write no parser can name, and the files the call names are still read as written, in both directions", () => {
+    const [first, late] = both(S("p='pkg/other.py'; s=open(p).read()\nopen(p,'w').write(s)\nfor p,old in [('pkg/mod.py','a')]:\n    s=open(p).read(); open(p,'w').write(s.replace(old,'b',1))"));
+    expect([first.followed, first.bash_only_source, first.unresolved_writes, late.followed, late.unresolved_writes]).toEqual([true, true, 1, false, 1]);
+  });
+  test("code inside a string the script writes is not read as a binding", () => {
+    const [first] = both(S("p='pkg/mod.py'; s=open(p).read()\ns+='''\nfor p in items:\n    pass\n'''\nopen(p,'w').write(s)"));
+    expect([first.followed, first.unresolved_writes]).toEqual([true, 0]);
+  });
+  test("a script that writes only to /tmp writes no source or test, even when the same call names them", () => {
+    const tmp = bash("cd /testbed && python - <<'PY'\nfrom pathlib import Path\nPath('/tmp/baseline.json').write_text('{}')\nPY\npython -m pytest tests/test_mod.py -q", "1 passed in 0.1s");
+    const reads = bash("python3 - <<'EOF'\ns = open('pkg/mod.py').read()\nopen('/tmp/out.txt', 'w').write(s)\nEOF", "");
+    const d = detect(log([tmp, reads, write(TEST), bash("pytest tests/test_mod.py", FAILED, true), edit("/testbed/pkg/mod.py"), bash("pytest tests/test_mod.py", PASSED)]), PATCH);
+    expect([d.followed, d.test_file, d.followed_tool_only, d.unresolved_writes]).toEqual([true, TEST, true, 0]);
+  });
+});
+
+describe("the shell's folder carries from one Bash call to the next", () => {
+  test("a cd in one call places a relative edit in the next", () => {
+    const d = detect(log([write(TEST), bash("pytest tests/test_mod.py", FAILED, true), bash("cd /testbed/pkg", ""), bash("sed -i 's/a/b/' mod.py", ""), bash("cd /testbed && pytest tests/test_mod.py", PASSED)]), PATCH);
+    expect([d.followed, d.bash_only_source, d.source_write_unseen]).toEqual([true, true, false]);
+  });
+  test("Claude Code's reset after a cd out of the project puts the next call back in the project", () => {
+    const d = detect(log([write(TEST), bash("pytest tests/test_mod.py", FAILED, true), bash("cd /tmp/repro && ls", "a.py\nShell cwd was reset to /testbed"), bash("sed -i 's/a/b/' pkg/mod.py", ""), bash("pytest tests/test_mod.py", PASSED)]), PATCH);
+    expect([d.followed, d.source_write_unseen]).toEqual([true, false]);
   });
 });

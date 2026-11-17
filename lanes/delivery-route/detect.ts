@@ -1,13 +1,14 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // B1's exposure detector (preregistration section 6): did a session follow the Prove-It steps? It reads Lane B's SDK log
 // through the harness mechanics scorer's reader (toTranscript), so it sees the same tool calls and results that run scored.
-// The test-first logic is the head-to-head's repaired agent-skills bug-unit detector: a test file written, a failing test
-// run seen at or after that write and before the first source edit, a background run seen where its output is read, and a
-// compiler's error count read as a failing result. B1 adds two things. The source edit is the first write, by Write, Edit or
-// a Bash command (gstack's vendored shell-write parser, which the harness mechanics scorer also uses), to a file the
-// session's final patch modifies, so a scratch script is never the fix. And the steps end with the test passing: a passing
-// run that names the test, seen after the first source edit. Every source edit made only through Bash is counted, and the
-// head-to-head's Write-and-Edit-only reading is kept beside the primary as a sensitivity line.
+// The test-first logic starts from the head-to-head's repaired agent-skills bug-unit detector: a test file written, a
+// failing test run seen at or after that write and before the first source edit, and a background run seen where its output
+// is read. B1 adds three things. The source edit is the first write, by Write, Edit or a Bash command (gstack's vendored
+// shell-write parser, which the harness mechanics scorer also uses), to a file the session's final patch modifies, so a
+// scratch script is never the fix. The steps end with the test passing: a passing run that selects the test, seen after the
+// first source edit. And each run must be a run of the test: a failing run's result reports the test failing, so a grep,
+// lint or cat that errors is none. Every source edit made only through Bash is counted, and the head-to-head's
+// Write-and-Edit-only reading is kept beside the primary as a sensitivity line.
 // B1 also reads four Bash write forms the vendored parser leaves out (cp, mv, install or rsync onto a file, dd of=, a
 // patch file git apply or patch reads when the session wrote that file, and a shell script the session wrote), and counts
 // every Bash call that writes somewhere no parser can name (unresolved_writes), so the report can score those sessions
@@ -22,8 +23,6 @@ import type { Rec } from "../../quick/laneb/l1/probes.ts";
  *  spec and specs folders. Every task here is a Python repository, where a spec folder is a source package (hdmf's
  *  src/hdmf/spec/, met in the hand-check); a spec file by name (x_spec.rb, x.spec.ts) is still a test. */
 export const TEST_PATH = /(^|\/)(tests?|__tests__|testing|e2e)\/|[._-](test|spec|tests)\.[A-Za-z0-9]+$|_test\.go$|(^|\/)test_[^/]*\.[A-Za-z0-9]+$|Tests?\.(java|kt|cs|scala)$|(^|\/)src\/test\//;
-/** A Bash result that shows a failing test run, or a compiler's error count: the head-to-head's repaired rule. */
-export const FAILING = /\b(FAIL|FAILED|failing|failures?|AssertionError|panicked|assertion failed)\b|Exit code [1-9]|\b[1-9]\d* errors? (and \d+ warnings? )?generated\b/;
 /** A spec or specs folder. Its files read as source unless named as a spec, so a helper, fixture or factory there does too;
  *  a session that writes one is flagged (spec_folder_write) and scored both ways, rather than given a second path rule. */
 const SPEC_FOLDER = /(^|\/)specs?\//;
@@ -32,8 +31,8 @@ export const NOT_SOURCE = /\.(md|rst|txt|json|ya?ml|toml|lock|cfg|ini)$/i;
 /** Claude Code's notice for a Bash run sent to the background: its id and the file its output goes to. */
 const BACKGROUND = /background (?:with ID: |\(ID: )([\w-]+)[\s\S]*?Output is being written to: (\S+?)\.?(?:\s|$)/;
 const WRITE_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
-/** An in-place edit or an inline script that opens a file to write (the head-to-head's repaired rule): the command is read
- *  as writing every file it names, so a write the shell-write parser can't resolve (a path held in a loop variable) still counts. */
+/** An in-place edit or an inline script that opens a file to write (the head-to-head's repaired rule). A Bash call with such a
+ *  write that no parser can name is read as writing every file it names, so a path held in a loop variable still counts. */
 const EDITS = /\b(?:sed|perl)\s+(?:-\S+\s+)*-[a-zA-Z]*i|\bopen\([^)]*,\s*['"][wa+]|\.write_text\(|\bwriteFileSync\(/;
 /** A path-like word: a name with an extension. */
 const PATHLIKE = /[^\s'"`=(),;&|<>{}[\]]+\.[A-Za-z0-9]+(?![\w.])/g;
@@ -51,13 +50,28 @@ const WRITE_CALLS = [
   /\b(?:writeFileSync|writeFile|appendFileSync|appendFile|Bun\.write|Deno\.writeTextFile(?:Sync)?|Deno\.writeFile(?:Sync)?|File\.write|File\.binwrite)\s*\(\s*([^,]+?)\s*,/g,
 ];
 const LITERAL = /^(?:(?:pathlib\.)?Path\(\s*)?[rbuRBU]{0,2}(['"])[^'"{]*\1\s*\)?$/;
-/** Whether a write call's path expression names a file: a string literal, Path(literal), or a name assigned one of those in
- *  the same script (the vendored parser's rule). */
-function namesFile(expr: string, code: string): boolean {
+/** The file a write call's path expression names, or null when no parser can tell: a string literal or Path(literal), or a
+ *  name every binding of which in the script is a plain assignment of one of those, read at the last such assignment
+ *  before the call (p = 'a.py' ... open(p, 'w') ... p = 'b.py' ... open(p, 'w')). A name also bound any other way (a for
+ *  loop, a with ... as, a tuple target, a parameter, a computed value) names no single file. Bindings are looked for with
+ *  every string's contents blanked, so code inside a string the script writes into a file is not read as its own. */
+function targetOf(expr: string, code: string, at: number): string | null {
   const e = expr.trim();
-  if (LITERAL.test(e)) return true;
-  if (!/^[A-Za-z_$][\w$]*$/.test(e)) return false;
-  return new RegExp("(?:^|[\\s;(])(?:const\\s+|let\\s+|var\\s+)?" + e.replace(/\$/g, "\\$") + "\\s*=\\s*(?:(?:pathlib\\.)?Path\\(\\s*)?[rbuRBU]{0,2}(['\"])[^'\"{]*\\1", "m").test(code);
+  if (LITERAL.test(e)) return /(['"])([^'"{]*)\1/.exec(e)![2]!;
+  if (!/^[A-Za-z_$][\w$]*$/.test(e)) return null;
+  const n = e.replace(/\$/g, "\\$"), w = "(?<![\\w$.])" + n + "(?![\\w$])";
+  const assign = new RegExp("(?:^|;)\\s*(?:const\\s+|let\\s+|var\\s+)?(?:[\\w$]+\\s*,\\s*)*" + w + "(?:\\s*,\\s*[\\w$]+)*\\s*(?:[-+*/%]|//)?=(?!=)", "gm");
+  const literal = new RegExp("(?:^|;)\\s*(?:const\\s+|let\\s+|var\\s+)?" + n + "\\s*=\\s*(?:(?:pathlib\\.)?Path\\(\\s*)?[rbuRBU]{0,2}(['\"])([^'\"{\\n]*)\\1\\s*\\)?\\s*(?:[;#]|$)", "my");
+  const bare = code.replace(/'''[\s\S]*?'''|"""[\s\S]*?"""|'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"/g, (s) => s[0] + s.slice(1, -1).replace(/[^\n]/g, " ") + s.at(-1));
+  if (new RegExp("\\bfor\\s+[^\\n]*?" + w + "[^\\n]*?\\s(?:in|of)\\b|\\bas\\s+" + w + "|" + w + "\\s*:=|\\b(?:def|function)\\s*[\\w$]*\\s*\\([^)]*" + w, "m").test(bare)) return null;
+  let last: string | null = null;
+  for (const m of bare.matchAll(assign)) {
+    literal.lastIndex = m.index!;
+    const lit = literal.exec(code);
+    if (!lit) return null;
+    if (m.index! < at) last = lit[2]!;
+  }
+  return last;
 }
 /** The code an interpreter command runs, when the session shows it: an inline -c or -e script, its stdin, or a file the
  *  session wrote (the vendored parser's rule, with the session's own files). */
@@ -117,7 +131,11 @@ function commandWrites(c: ShellCommand, scripts: Map<string, string>, root: stri
   }
   if (name === "find" && args.some((a) => a === "-exec" || a === "-execdir") && WRITER.test(" " + args.join(" ") + " ") && !outsideTree((args.find((a) => !a.startsWith("-")) ?? ".") + "/", cwd, root)) open = true;
   if (name === "xargs" && WRITER.test(" " + args.join(" ") + " ") && !outsideTree("./", cwd, root)) open = true;
-  if (INTERPRETER.test(name)) for (const code of codeOf(c, scripts)) for (const re of WRITE_CALLS) for (const m of code.matchAll(re)) if (!namesFile(m[1]!, code)) open = true;
+  if (INTERPRETER.test(name)) for (const code of codeOf(c, scripts)) for (const re of WRITE_CALLS) for (const m of code.matchAll(re)) {
+    const target = targetOf(m[1]!, code, m.index!);
+    if (target === null) open = true;
+    else files.push(posix.resolve(cwd, target));
+  }
   if (/^(?:cp|mv|install|rsync)$/.test(name)) {
     const pos: string[] = [];
     let target: string | null = null;
@@ -198,14 +216,28 @@ function uses(ev: TranscriptEvent[]): Use[] {
   });
 }
 
+/** The folder each Bash call runs in. Claude Code keeps its shell's working directory from one Bash call to the next, so a
+ *  call starts where the last call's cd left it, unless Claude Code reports that it reset the shell (a cd out of the project). */
+function bashCwds(us: Use[], root: string): Map<number, string> {
+  const out = new Map<number, string>();
+  let here = root;
+  for (const u of us) {
+    if (u.name !== "Bash" || typeof u.input.command !== "string") continue;
+    out.set(u.at, here);
+    here = /Shell cwd was reset to (\/\S*)/.exec(u.result)?.[1] ?? shellCommands(u.input.command + "\n:", here).at(-1)?.cwd ?? here;
+  }
+  return out;
+}
+
 /** Every file each tool call writes, absolute: Write and Edit by their path, Bash by gstack's shell-write parser with B1's
- *  additions (commandWrites) and, for an in-place edit or inline write, every file the command names. The session's own
+ *  additions (commandWrites) and, for a call with a write no parser can name, every file the command names (the
+ *  head-to-head's rule for an in-place edit or inline write, kept for the calls that need it). The session's own
  *  files (a Write's content, a heredoc sent to a file) are kept so a script or patch it runs later can be read. unresolved
  *  counts the Bash calls with a write no parser can name. */
-function writesOf(us: Use[], root: string): { writes: Write[]; unresolved: number } {
+function writesOf(us: Use[], root: string, cwds: Map<number, string>): { writes: Write[]; unresolved: number } {
   const out: Write[] = [], scripts = new Map<string, string>();
   let unresolved = 0;
-  const named = (u: Use, cmd: string) => { if (EDITS.test(cmd)) for (const m of cmd.matchAll(PATHLIKE)) out.push({ at: u.at, path: posix.resolve(u.cwd ?? root, m[0]), via: "bash" }); };
+  const named = (u: Use, cmd: string) => { if (EDITS.test(cmd)) for (const m of cmd.matchAll(PATHLIKE)) out.push({ at: u.at, path: posix.resolve(cwds.get(u.at) ?? root, m[0]), via: "bash" }); };
   for (const u of us) {
     if (WRITE_TOOLS.has(u.name)) {
       const p = u.input.file_path ?? u.input.notebook_path;
@@ -213,29 +245,29 @@ function writesOf(us: Use[], root: string): { writes: Write[]; unresolved: numbe
       if (u.name === "Write" && typeof p === "string" && typeof u.input.content === "string") scripts.set(posix.resolve(root, p), u.input.content);
     } else if (u.name === "Bash" && typeof u.input.command === "string") {
       let open = false;
-      for (const c of shellCommands(u.input.command, u.cwd ?? root)) {
+      for (const c of shellCommands(u.input.command, cwds.get(u.at) ?? root)) {
         const w = commandWrites(c, scripts, root);
         for (const f of new Set(w.files)) out.push({ at: u.at, path: f, via: "bash" });
         open ||= w.open;
         for (const r of c.redirects) if (WRITE_REDIRECT.test(r.op) && c.cwd !== null && !OPEN_WORD.test(r.target)) scripts.set(posix.resolve(c.cwd, r.target), c.heredocs.join("\n"));
       }
-      if (open) unresolved++;
-      named(u, u.input.command);
+      if (open) { unresolved++; named(u, u.input.command); }
     }
   }
   return { writes: out, unresolved };
 }
 
 /** Each Bash run's result where the session saw it: a background run is seen where its output is read (a Read of its
- *  output file, or TaskOutput or BashOutput naming its id), never at its launch. */
-function runsOf(us: Use[], root: string): { runs: Run[]; unread: number } {
+ *  output file, a later Bash command that names the file, such as a tail or rg of it, or TaskOutput or BashOutput naming
+ *  its id), never at its launch. */
+function runsOf(us: Use[], root: string, cwds: Map<number, string>): { runs: Run[]; unread: number } {
   let unread = 0;
   const runs = us.filter((u) => u.name === "Bash" && typeof u.input.command === "string").flatMap((b): Run[] => {
     const bg = BACKGROUND.exec(b.result);
-    const command = String(b.input.command), cwd = b.cwd ?? root;
+    const command = String(b.input.command), cwd = cwds.get(b.at) ?? root;
     if (!bg) return [{ at: b.at, ok: b.ok, result: b.result, command, cwd }];
     const [, id, file] = bg;
-    const reads = us.filter((u) => u.at > b.at && ((u.name === "Read" && u.input.file_path === file) || ((u.name === "TaskOutput" || u.name === "BashOutput") && Object.values(u.input ?? {}).includes(id)))).map((u) => ({ at: u.at, ok: true, result: u.result, command, cwd }));
+    const reads = us.filter((u) => u.at > b.at && ((u.name === "Read" && u.input.file_path === file) || (u.name === "Bash" && typeof u.input.command === "string" && u.input.command.includes(file!)) || ((u.name === "TaskOutput" || u.name === "BashOutput") && Object.values(u.input ?? {}).includes(id)))).map((u) => ({ at: u.at, ok: true, result: u.result, command, cwd }));
     if (!reads.length) unread++;
     return reads;
   });
@@ -244,6 +276,8 @@ function runsOf(us: Use[], root: string): { runs: Run[]; unread: number } {
 
 const RUNNER = /^(?:pytest|py\.test|tox|nox)$/;
 const MODULE = /^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+$/;
+/** pytest and unittest options whose value is the next word. */
+const VALUED = new Set(["-k", "-m", "-c", "-p", "-o", "-W", "--ignore", "--ignore-glob", "--deselect", "--rootdir", "--junitxml", "--basetemp", "--confcutdir", "--cov-config"]);
 /** Whether a runner's path argument selects a test file: a path to the file or to a directory above it, or a dotted module
  *  name (unittest's tests.test_calc, or tests.test_calc.AddTest.test_add) for the file or a test inside it. */
 function selects(arg: string, cwd: string, test: string): boolean {
@@ -253,30 +287,91 @@ function selects(arg: string, cwd: string, test: string): boolean {
   const mod = posix.resolve(cwd, arg.replace(/\./g, "/")), file = test.replace(/\.py$/, "");
   return file === mod || mod.startsWith(file + "/") || test.startsWith(mod + "/");
 }
-/** A run covers a test file when its command or output names the file, when it starts a test runner (pytest, python -m
- *  pytest or unittest, tox, nox) whose path argument selects the file, or when it starts one with no path argument, which
- *  runs the whole suite or a -k selection of it. */
-function covers(r: Run, tests: string[]): boolean {
-  if (tests.some((t) => r.command.includes(posix.basename(t)) || r.result.includes(posix.basename(t)))) return true;
-  for (const c of shellCommands(r.command, r.cwd)) {
-    const w = c.words.map((x) => posix.basename(x));
-    const at = w.findIndex((x, i) => RUNNER.test(x) || (/^python[\d.]*$/.test(x) && c.words[i + 1] === "-m" && /^(?:pytest|unittest)$/.test(c.words[i + 2] ?? "")));
-    if (at < 0) continue;
-    const args = c.words.slice(at + 1).filter((x) => !x.startsWith("-") && /[/.]/.test(x) && !/^(?:pytest|unittest)$/.test(x));
-    if (!args.length) return true;
-    if (args.some((a) => tests.some((t) => selects(a, c.cwd ?? r.cwd, t)))) return true;
-  }
-  return false;
+/** Whether a word names a test file itself: a path to it, a test in it (path::node), or its dotted module or a test in it. */
+function namesFileArg(arg: string, cwd: string, test: string): boolean {
+  if (posix.resolve(cwd, arg.split("::")[0]!) === test) return true;
+  if (!MODULE.test(arg) || /\.py$/.test(arg)) return false;
+  const mod = posix.resolve(cwd, arg.replace(/\./g, "/")), file = test.replace(/\.py$/, "");
+  return file === mod || mod.startsWith(file + "/");
 }
-const failing = (r: Run) => r.result !== "" && (!r.ok || FAILING.test(r.result) || showsFailure(r.result));
-const passing = (r: Run) => r.ok && showsOutcome(r.result) && !showsFailure(r.result) && !FAILING.test(r.result);
+/** Whether a path a runner printed (relative to its root folder, or absolute) is the test file. */
+const isFile = (p: string, test: string) => { const q = p.split("::")[0]!.replace(/^\.\//, ""); return q !== "" && (test === q || test.endsWith("/" + q)); };
+/** Whether a dotted name unittest printed is in the test file's module. */
+function isModule(mod: string, test: string): boolean {
+  const parts = mod.split("."), at = parts.lastIndexOf(posix.basename(test).replace(/\.py$/, ""));
+  if (at < 0) return false;
+  const path = parts.slice(0, at + 1).join("/"), file = test.replace(/\.py$/, "");
+  return file === path || file.endsWith("/" + path);
+}
+/** The lines of a result as the runner printed them: colour codes and a reader's line numbers (Read's 12 and a tab, rg's or
+ *  grep's 12:) taken off. */
+const resultLines = (s: string) => s.replace(/\x1b\[[\d;]*m/g, "").split("\n").map((l) => l.replace(/^\s*\d+(?:\t|→|:(?=\S))/, ""));
+/** A line where a test runner reports a failed test, and the file or module it names: pytest's FAILED or ERROR line (short
+ *  summary or verbose), its collection error header, its progress line with an F or E, or unittest's FAIL: or ERROR: line. */
+function failedTest(l: string): { path?: string; mod?: string } | null {
+  const m = /^(?:FAILED|ERROR) ([^\s(]\S*)/.exec(l) ?? /^(\S+?::\S+) (?:FAILED|ERROR)\b/.exec(l) ?? /ERROR collecting (\S+)/.exec(l) ?? /^(\S+) [.sxX]*[FE][.sxXFE]*(?:\s+\[\s*\d+%\])?$/.exec(l);
+  if (m) return { path: m[1]! };
+  const u = /^(?:FAIL|ERROR): \S+ \(([\w.]+)\)/.exec(l);
+  return u && !u[1]!.startsWith("__main__.") ? { mod: u[1]! } : null;
+}
+/** A traceback line in a file: pytest's file:line: frame line (bare, with in frame, or with the error), or, in a result
+ *  that holds a raised exception's traceback, Python's File "...", line N, in frame (a printed stack alone is no failure). */
+const traceFile = (l: string, raised: boolean) => (/^(\S+?):\d+:(?:\s*$| in \S+$| [A-Za-z_][\w.]*(?:Error|Exception|Failed)\b)/.exec(l) ?? (raised ? /^\s*File "([^"]+)", line \d+, in /.exec(l) : null))?.[1] ?? null;
+const failedHere = (f: { path?: string; mod?: string }, test: string) => (f.path !== undefined && isFile(f.path, test)) || (f.mod !== undefined && isModule(f.mod, test));
+/** Whether a run starts the test file itself: a simple command that is a test runner, an interpreter or a script (./x,
+ *  x.sh, x.py) and has the file, a test in it or its module as an argument. A git add or cat of the file starts nothing. */
+const runsFile = (r: Run, test: string) => shellCommands(r.command, r.cwd).some((c) => (runnerAt(c) >= 0 || INTERPRETER.test(posix.basename(c.words[0] ?? "")) || /\.(?:py|sh)$|^\.{0,2}\//.test(c.words[0] ?? "")) && c.words.some((a) => namesFileArg(a, c.cwd ?? r.cwd, test)));
+/** A failure a test runner reports without naming the test: a failing count (a pytest summary, unittest's FAILED, a CHECK
+ *  FAIL line), pytest's FAILURES or ERRORS section, or its progress line with an F or E. Claude Code cuts a long result in
+ *  the middle, which can drop every line that names the test and keep only these. */
+const showsRunnerFailure = (s: string) => showsFailure(s) || resultLines(s).some((l) => /^=+ (?:FAILURES|ERRORS) =+$|^[.sxX]*[FE][.sxXFE]*(?:\s+\[\s*\d+%\])?$/.test(l.trim()));
+/** The failing run of a test, from any command: a runner's line reporting a failed test in the file, or a traceback through
+ *  the file; or, when the output reports no failed test by name, a runner's unnamed failure from a run that starts the file
+ *  itself. A grep, lint or cat that errors shows none of these, and a suite run that fails only on another test names that
+ *  other test. */
+function failing(r: Run, tests: string[]): boolean {
+  const ls = resultLines(r.result), failed = ls.map(failedTest).filter((f) => f !== null), raised = r.result.includes("Traceback (most recent call last):");
+  return tests.some((t) => failed.some((f) => failedHere(f, t)) || ls.some((l) => { const p = traceFile(l, raised); return p !== null && isFile(p, t); }) || (!failed.length && showsRunnerFailure(r.result) && runsFile(r, t)));
+}
+/** Where a simple command starts a test runner: pytest, py.test, tox or nox, or pytest or unittest run as a module (python
+ *  -m pytest, coverage run -m unittest), found anywhere in its words so uv run, poetry run and coverage count. */
+const runnerAt = (c: ShellCommand) => c.words.findIndex((x, i) => RUNNER.test(posix.basename(x)) || (x === "unittest" && c.words[i - 1] === "-m"));
+/** Whether a run selects the test file: a run that starts the file itself; a test runner whose path argument is a folder
+ *  above it, or that has no path argument (the whole suite; a -k or -m filter is not read); an inline script that names the file and calls pytest.main or unittest.main; or output naming the file on a passing line
+ *  (pytest's PASSED or progress line, unittest's ok line). */
+function selectsTest(r: Run, test: string): boolean {
+  if (runsFile(r, test)) return true;
+  for (const c of shellCommands(r.command, r.cwd)) {
+    const cwd = c.cwd ?? r.cwd, at = runnerAt(c);
+    if (at >= 0) {
+      const rest = c.words.slice(at + 1), args: string[] = [];
+      for (let k = 0; k < rest.length; k++) {
+        const a = rest[k]!;
+        if (VALUED.has(a)) k++;
+        else if (!a.startsWith("-") && /[/.]/.test(a) && a !== "unittest") args.push(a);
+      }
+      if (!args.length || args.some((a) => selects(a, cwd, test))) return true;
+    }
+    const code = INTERPRETER.test(posix.basename(c.words[0] ?? "")) ? codeOf(c, new Map()).join("\n") : "";
+    if (/\b(?:pytest|unittest)\.main\b/.test(code) && code.includes(posix.basename(test))) return true;
+  }
+  return resultLines(r.result).some((l) => {
+    const m = /^(\S+?)::\S+ (?:PASSED|XPASS)\b/.exec(l) ?? /^(\S+) [.sxX]+(?:\s+\[\s*\d+%\])?$/.exec(l);
+    if (m) return isFile(m[1]!, test);
+    const u = /^\S+ \(([\w.]+)\) \.\.\. ok$/.exec(l);
+    return !!u && isModule(u[1]!, test);
+  });
+}
+/** The passing run of a test: a run that succeeds, shows a test outcome with no failing count, reports no failed test in the
+ *  session's test files and selects one of them, so an unrelated green run does not count. */
+const passing = (r: Run, tests: string[]) => r.ok && showsOutcome(r.result) && !showsFailure(r.result) && !resultLines(r.result).some((l) => { const f = failedTest(l); return f !== null && tests.some((t) => failedHere(f, t)); }) && tests.some((t) => selectsTest(r, t));
 
 function read(ws: Write[], runs: Run[], fix: Set<string>) {
   const source = ws.find((w) => fix.has(w.path));
   const tests = ws.filter((w) => TEST_PATH.test(w.path) && !NOT_SOURCE.test(w.path) && !fix.has(w.path) && (!source || w.at < source.at));
   const test = tests[0];
-  const before = test && source ? runs.find((r) => r.at >= test.at && r.at < source.at && failing(r) && covers(r, tests.filter((t) => t.at <= r.at).map((t) => t.path))) : undefined;
-  const after = test && source ? runs.find((r) => r.at > source.at && passing(r) && covers(r, tests.map((t) => t.path))) : undefined;
+  const before = test && source ? runs.find((r) => r.at >= test.at && r.at < source.at && failing(r, tests.filter((t) => t.at <= r.at).map((t) => t.path))) : undefined;
+  const after = test && source ? runs.find((r) => r.at > source.at && passing(r, tests.map((t) => t.path))) : undefined;
   return { source, test, before, after, followed: !!(test && source && before && after) };
 }
 
@@ -287,8 +382,9 @@ export function detect(recs: Rec[], patch: string, rootIn?: string): Detection {
   const us = uses(t.events);
   const fixList = modifiedFiles(patch).filter((f) => !TEST_PATH.test(f) && !NOT_SOURCE.test(f)).map((f) => posix.resolve(root, f));
   const fix = new Set(fixList);
-  const { writes: ws, unresolved } = writesOf(us, root);
-  const { runs, unread } = runsOf(us, root);
+  const cwds = bashCwds(us, root);
+  const { writes: ws, unresolved } = writesOf(us, root, cwds);
+  const { runs, unread } = runsOf(us, root, cwds);
   const all = read(ws, runs, fix);
   const tool = read(ws.filter((w) => w.via === "tool"), runs, fix);
   const fixWrites = ws.filter((w) => fix.has(w.path));

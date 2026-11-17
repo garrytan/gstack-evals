@@ -40,10 +40,11 @@ export const maxGaps = (planned: number) => Math.floor(planned * B1.gapMax + 1e-
 /** A session the sensitivity line scores both ways: a Bash write no parser can name, or a non-spec file under a spec folder. */
 const bothWays = (r: B1Row) => r.detect.unresolved_writes > 0 || r.detect.spec_folder_write;
 export function armStats(rows: B1Row[], planned: number): ArmStat[] {
+  const capped = rows.some((r) => r.outcome === "cap_stop");
   return ARM_NAMES.map((arm) => {
     const all = rows.filter((r) => r.arm === arm), g = all.filter((r) => r.outcome === "graded");
     const k = g.filter((r) => r.detect.followed).length, count = (f: (r: B1Row) => boolean) => g.filter(f).length;
-    const gaps = planned - g.length, incomplete = gaps > maxGaps(planned);
+    const gaps = planned - g.length, incomplete = gaps > maxGaps(planned) || capped;
     const costs = all.map((r) => r.cost_usd).filter((x): x is number => x !== null);
     return {
       arm, planned, graded: g.length, gaps, cap_stops: all.filter((r) => r.outcome === "cap_stop").length, followed: k, rate: g.length ? k / g.length : null, ci: g.length ? wilson(k, g.length) : null,
@@ -85,7 +86,10 @@ export function contrast(rows: B1Row[], a: B1Arm, b: B1Arm): Contrast {
 export type Reading = { key: "incomplete" | "ceiling" | "steps-first" | "descriptions" | "layout-ok" | "hooks" | "not-shown"; text: string };
 export function reading(stats: ArmStat[], contrasts: Contrast[], guard = true): Reading {
   const s = (a: B1Arm) => stats.find((x) => x.arm === a)!, up = (a: B1Arm, b: B1Arm) => !guard || (contrasts.find((c) => c.a === a && c.b === b)?.lo ?? -1) > 0;
-  if (stats.some((x) => x.incomplete)) return { key: "incomplete", text: "INCOMPLETE: " + stats.filter((x) => x.incomplete).map((x) => x.arm + " has " + x.gaps + " of " + x.planned + " sessions ungraded").join("; ") + "; no reading" };
+  if (stats.some((x) => x.incomplete)) {
+    const capped = stats.reduce((k, x) => k + x.cap_stops, 0);
+    return { key: "incomplete", text: "INCOMPLETE: " + [...(capped ? ["the item stopped at its cap (" + capped + " cap stop sessions)"] : []), ...stats.filter((x) => x.gaps > maxGaps(x.planned)).map((x) => x.arm + " has " + x.gaps + " of " + x.planned + " sessions ungraded")].join("; ") + "; no reading" };
+  }
   const [N, D, G, C] = (["none", "described", "gstack-shaped", "command"] as B1Arm[]).map((a) => s(a).reaches);
   if (N) return { key: "ceiling", text: "none reaches the bar: the model follows the steps unprompted, so no route can show lift here" };
   if (C && !G) return up("command", "gstack-shaped") ? { key: "steps-first", text: "command reaches the bar and gstack-shaped does not: move checkable steps to the top of routed skills" + (D ? "; the described skill reaches it too" : "") } : { key: "not-shown", text: "command reaches the bar and gstack-shaped does not, but their paired difference's interval includes 0: no layout change is shown" };
@@ -105,7 +109,7 @@ export function report(rows: B1Row[], planned = B1.tasks) {
     const stats = armStats(mine, planned), contrasts = CONTRASTS.map(([a, b]) => contrast(mine, a, b)), r = reading(stats, contrasts);
     out[m] = { stats, contrasts, reading: r };
     lines.push("== " + MODELS[m].id + (m === "opus" ? " (decision model)" : " (descriptive)"));
-    for (const s of stats) lines.push("  " + s.arm + ": followed " + s.followed + "/" + s.graded + " " + pct(s.rate) + (s.ci ? " [" + pct(s.ci[0]) + ", " + pct(s.ci[1]) + "]" : "") + (s.reaches ? " REACHES" : "") + (s.incomplete ? " INCOMPLETE" : "") + "; gaps " + s.gaps + ", tool-only " + s.followed_tool_only + ", bash-only source " + s.bash_only_source + ", unseen source " + s.source_write_unseen + ", steps seen " + s.steps_seen + ", loaded " + s.loaded + ", safety stops " + s.safety_stops + ", audit " + s.audit_sessions + ", passes " + s.passes + " (descriptive)");
+    for (const s of stats) lines.push("  " + s.arm + ": followed " + s.followed + "/" + s.graded + " " + pct(s.rate) + (s.ci ? " [" + pct(s.ci[0]) + ", " + pct(s.ci[1]) + "]" : "") + (s.reaches ? " REACHES" : "") + (s.incomplete ? " INCOMPLETE" : "") + "; gaps " + s.gaps + ", cap stops " + s.cap_stops + ", tool-only " + s.followed_tool_only + ", bash-only source " + s.bash_only_source + ", unseen source " + s.source_write_unseen + ", steps seen " + s.steps_seen + ", loaded " + s.loaded + ", safety stops " + s.safety_stops + ", audit " + s.audit_sessions + ", passes " + s.passes + " (descriptive)");
     for (const s of stats) lines.push("  " + s.arm + " sensitivity: " + s.unresolved_writes + " Bash writes no parser can name, in " + s.unresolved_sessions + " sessions; " + s.spec_folder_sessions + " sessions write a non-spec file under a spec folder; followed " + s.followed_low + "/" + s.graded + " with those sessions scored not followed, " + s.followed_high + "/" + s.graded + " scored followed" + (s.graded && !s.incomplete && (s.followed_low >= barCount(s.graded)) !== (s.followed_high >= barCount(s.graded)) ? "; the bar reading rests on them" : ""));
     for (const c of contrasts) lines.push("  " + c.a + " - " + c.b + ": " + pts(c.diff) + " points [" + pts(c.lo) + ", " + pts(c.hi) + "] on " + c.pairs + " paired tasks (" + c.a_only + " vs " + c.b_only + " discordant)");
     lines.push("  reading: " + r.text);

@@ -87,6 +87,16 @@ describe("writes no parser can name", () => {
     expect(report(r).lines).toContain("  described sensitivity: 1 Bash writes no parser can name, in 1 sessions; 3 sessions write a non-spec file under a spec folder; followed 45/60 with those sessions scored not followed, 48/60 scored followed; the bar reading rests on them");
   });
 });
+describe("cap stops", () => {
+  test("a cap stop ends the item INCOMPLETE whatever the gap count, and the report prints it", () => {
+    const r = rows({ command: 50 }).map((x) => (x.arm === "none" && x.task === "t59" ? { ...x, outcome: "cap_stop" as const } : x));
+    const stats = armStats(r, 60);
+    const read = reading(stats, CONTRASTS.map(([a, b]) => contrast(r, a, b)));
+    expect([stats.every((s) => s.incomplete), stats.find((s) => s.arm === "none")!.gaps, read.key, read.text.includes("stopped at its cap (1 cap stop sessions)")]).toEqual([true, 1, "incomplete", true]);
+    expect(report(r).lines.some((l) => l.includes("none: ") && l.includes("cap stops 1"))).toBe(true);
+  });
+});
+
 describe("rows the report reads", () => {
   const run = drawnTasks(loadBundle()).run;
   const clean = () => ARM_NAMES.flatMap((a) => run.map((t) => row(a, t, true)));
