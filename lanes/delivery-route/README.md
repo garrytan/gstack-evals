@@ -12,9 +12,9 @@ It runs on the harness mechanics eval's rig (lanes/harness-mechanics) and L1's h
 | arms/ | The arm sources: the step text, the three files that carry it, and the gstack-shaped arm's three stand-in scripts |
 | arms.ts | Regenerates the arm sources from pinned agent-skills and gstack checkouts, builds the canonical tars, writes and checks the manifests under quick/laneb/arms/manifests/b1 |
 | fake-model.ts, sessions.ts | Keyless scripted sessions in the real Claude Code image against a stub model: what each arm delivers, the gstack-shaped setup, its stand-in scripts against real gstack 1.99.5.0, and the detector on real transcripts |
-| detect.ts | The primary: did a session write a test, see it fail before the first source edit, and see it pass after. It also counts the Bash writes no parser can name |
+| detect.ts | The primary: did a session write a test, see it fail before the first source edit, and see it pass after. It also counts the Bash writes no parser can name and flags writes to non-spec files under a spec folder |
 | table.ts | One row per trial: outcome class, reward, cost, the detector's reading, steps seen, skill loads, safety stops, the read audit |
-| analyze.ts | Per model and arm: followed rate with its interval, the 80% bar, the gap rule, the line that scores sessions with unnamed writes both ways, paired contrasts and the decision reading |
+| analyze.ts | Per model and arm: followed rate with its interval, the 80% bar, the gap rule, the line that scores sessions with unnamed or spec-folder writes both ways, paired contrasts and the decision reading |
 | plans.ts, money.ts | The items and parts, the launcher profile, approvals, the cap formula, the launch guard and the one rerun |
 | cli.ts | `gstack-evals b1 <command>` |
 

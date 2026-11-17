@@ -24,6 +24,9 @@ import type { Rec } from "../../quick/laneb/l1/probes.ts";
 export const TEST_PATH = /(^|\/)(tests?|__tests__|testing|e2e)\/|[._-](test|spec|tests)\.[A-Za-z0-9]+$|_test\.go$|(^|\/)test_[^/]*\.[A-Za-z0-9]+$|Tests?\.(java|kt|cs|scala)$|(^|\/)src\/test\//;
 /** A Bash result that shows a failing test run, or a compiler's error count: the head-to-head's repaired rule. */
 export const FAILING = /\b(FAIL|FAILED|failing|failures?|AssertionError|panicked|assertion failed)\b|Exit code [1-9]|\b[1-9]\d* errors? (and \d+ warnings? )?generated\b/;
+/** A spec or specs folder. Its files read as source unless named as a spec, so a helper, fixture or factory there does too;
+ *  a session that writes one is flagged (spec_folder_write) and scored both ways, rather than given a second path rule. */
+const SPEC_FOLDER = /(^|\/)specs?\//;
 /** Files that are never the fix: docs, data and config by extension. */
 export const NOT_SOURCE = /\.(md|rst|txt|json|ya?ml|toml|lock|cfg|ini)$/i;
 /** Claude Code's notice for a Bash run sent to the background: its id and the file its output goes to. */
@@ -162,6 +165,10 @@ export interface Detection {
    *  in-place edit or a patch with no visible target, find or xargs running a writer, or an inline script's write call whose
    *  path is not a literal. Such a write counts as no write; the report scores these sessions both ways. */
   unresolved_writes: number;
+  /** The session writes, or its patch changes, a file under a spec or specs folder that is not named as a spec (a
+   *  spec_helper, spec/support/*, a fixture or factory, or a source package named spec). The report scores these sessions
+   *  both ways, with the writes no parser can name. */
+  spec_folder_write: boolean;
   test_file: string | null;
   fix_files: string[];
 }
@@ -296,6 +303,7 @@ export function detect(recs: Rec[], patch: string, rootIn?: string): Detection {
     source_write_unseen: fix.size > 0 && fixWrites.length === 0,
     unread_background: unread,
     unresolved_writes: unresolved,
+    spec_folder_write: [...ws.map((w) => w.path), ...modifiedFiles(patch).map((f) => posix.resolve(root, f))].some((p) => SPEC_FOLDER.test(p) && !TEST_PATH.test(p)),
     test_file: all.test?.path ?? null,
     fix_files: fixList,
   };

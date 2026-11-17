@@ -81,6 +81,24 @@ describe("background runs", () => {
   });
 });
 
+describe("spec folders", () => {
+  test("a source package named spec is source, and a session that writes into it is flagged", () => {
+    const d = detect(log([edit("/testbed/src/pkg/spec/namespace.py"), write(TEST), bash("pytest tests/test_mod.py", PASSED)]), diff("src/pkg/spec/namespace.py", "tests/test_mod.py"));
+    expect([d.fix_files, d.test_file, d.followed, d.spec_folder_write]).toEqual([["/testbed/src/pkg/spec/namespace.py"], null, false, true]);
+  });
+  test("a helper under spec/ written before the test is flagged, through a tool or through Bash", () => {
+    for (const helper of [edit("/testbed/spec/support/helpers.py"), bash("cd /testbed && cat > spec/spec_helper.rb <<'EOF'\nrequire 'x'\nEOF", "")]) {
+      const d = detect(log([helper, write(TEST), bash("pytest tests/test_mod.py", FAILED, true), edit("/testbed/pkg/mod.py"), bash("pytest tests/test_mod.py", PASSED)]), PATCH);
+      expect([d.followed, d.spec_folder_write]).toEqual([true, true]);
+    }
+  });
+  test("a file named as a spec is a test and is not flagged, and a session with no spec folder is not flagged", () => {
+    const named = detect(log([write("/testbed/spec/models/user_spec.rb"), bash("rspec spec/models/user_spec.rb", "1 example, 1 failure", true), edit("/testbed/app/user.rb"), bash("rspec spec/models/user_spec.rb", "1 example, 0 failures\nRan 1 test")]), diff("app/user.rb"));
+    expect([named.test_file, named.spec_folder_write]).toEqual(["/testbed/spec/models/user_spec.rb", false]);
+    expect(detect(log([write(TEST), edit("/testbed/pkg/mod.py")]), PATCH).spec_folder_write).toBe(false);
+  });
+});
+
 test("modifiedFiles keeps files named on both sides and drops added and deleted ones", () => {
   const p = diff("a.py") + "diff --git a/new.py b/new.py\nnew file mode 100644\n--- /dev/null\n+++ b/new.py\n@@ -0,0 +1 @@\n+x\n" + "diff --git a/AGENTS.md b/AGENTS.md\ndeleted file mode 100644\n--- a/AGENTS.md\n+++ /dev/null\n@@ -1 +0,0 @@\n-x\n";
   expect(modifiedFiles(p)).toEqual(["a.py"]);

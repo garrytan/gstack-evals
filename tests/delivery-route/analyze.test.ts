@@ -1,15 +1,16 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // The delivery route report (lanes/delivery-route/analyze.ts): the bar and gap rule as integers, the intervals, and every row
-// of the preregistration's decision table, guard included, and the sensitivity line for writes no parser can name.
+// of the preregistration's decision table, guard included, and the sensitivity line for writes no parser can name and
+// spec-folder writes.
 import { describe, expect, test } from "bun:test";
 import { armStats, barCount, CONTRASTS, contrast, maxGaps, newcombe, reading, report, wilson } from "../../lanes/delivery-route/analyze.ts";
 import { ARM_NAMES, type B1Arm } from "../../lanes/delivery-route/pins.ts";
 import type { B1Row } from "../../lanes/delivery-route/table.ts";
 
-const row = (arm: B1Arm, task: string, followed: boolean, outcome: B1Row["outcome"] = "graded", model = "claude-opus-5-5", unresolved = 0): B1Row => ({
+const row = (arm: B1Arm, task: string, followed: boolean, outcome: B1Row["outcome"] = "graded", model = "claude-opus-5-5", unresolved = 0, spec = false): B1Row => ({
   schema: "b1-session/1", model, part: "b1-1", arm, task, trial: task + "__" + arm, outcome, reason: outcome, pass: false, reward: outcome === "graded" ? 0 : null,
   allowance_stop: false, turn_cap: false, cost_usd: 0.1, tokens: 1, steps_seen: arm !== "none", skill_loads: 0, safety_stop: false, audit_hits: [],
-  detect: { followed, followed_tool_only: followed, test_before_source: followed, failing_before_source: followed, passing_after_source: followed, source_changed: true, bash_only_source: false, source_write_unseen: false, unread_background: 0, unresolved_writes: unresolved, test_file: null, fix_files: [] },
+  detect: { followed, followed_tool_only: followed, test_before_source: followed, failing_before_source: followed, passing_after_source: followed, source_changed: true, bash_only_source: false, source_write_unseen: false, unread_background: 0, unresolved_writes: unresolved, spec_folder_write: spec, test_file: null, fix_files: [] },
 });
 /** 60 tasks; each arm follows on the first k of them. */
 const rows = (k: Partial<Record<B1Arm, number>>, gaps: Partial<Record<B1Arm, number>> = {}) =>
@@ -75,7 +76,14 @@ describe("writes no parser can name", () => {
     const r = rows({ command: 46 }).map((x) => (x.arm === "command" && ["t40", "t41", "t50", "t51", "t52"].includes(x.task) ? { ...x, detect: { ...x.detect, unresolved_writes: x.task === "t50" ? 2 : 1 } } : x));
     const s = armStats(r, 60).find((x) => x.arm === "command")!;
     expect([s.followed, s.unresolved_sessions, s.unresolved_writes, s.followed_low, s.followed_high]).toEqual([46, 5, 6, 44, 49]);
-    expect(report(r).lines).toContain("  command sensitivity: 6 Bash writes no parser can name, in 5 sessions; followed 44/60 with those sessions scored not followed, 49/60 scored followed; the bar reading rests on them");
-    expect(report(r).lines).toContain("  none sensitivity: 0 Bash writes no parser can name, in 0 sessions; followed 0/60 with those sessions scored not followed, 0/60 scored followed");
+    expect(report(r).lines).toContain("  command sensitivity: 6 Bash writes no parser can name, in 5 sessions; 0 sessions write a non-spec file under a spec folder; followed 44/60 with those sessions scored not followed, 49/60 scored followed; the bar reading rests on them");
+    expect(report(r).lines).toContain("  none sensitivity: 0 Bash writes no parser can name, in 0 sessions; 0 sessions write a non-spec file under a spec folder; followed 0/60 with those sessions scored not followed, 0/60 scored followed");
+  });
+  test("a spec-folder write joins the sessions scored both ways, counted once when a session has both flags", () => {
+    const flag = (x: B1Row, unresolved: number, spec: boolean) => ({ ...x, detect: { ...x.detect, unresolved_writes: unresolved, spec_folder_write: spec } });
+    const r = rows({ described: 47 }).map((x) => (x.arm !== "described" ? x : x.task === "t0" ? flag(x, 1, true) : x.task === "t1" || x.task === "t50" ? flag(x, 0, true) : x));
+    const s = armStats(r, 60).find((x) => x.arm === "described")!;
+    expect([s.followed, s.unresolved_sessions, s.spec_folder_sessions, s.followed_low, s.followed_high]).toEqual([47, 1, 3, 45, 48]);
+    expect(report(r).lines).toContain("  described sensitivity: 1 Bash writes no parser can name, in 1 sessions; 3 sessions write a non-spec file under a spec folder; followed 45/60 with those sessions scored not followed, 48/60 scored followed; the bar reading rests on them");
   });
 });
