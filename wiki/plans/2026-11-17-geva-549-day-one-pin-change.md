@@ -1,8 +1,8 @@
 ---
 id: 2026-11-17-geva-549-day-one-pin-change
 kind: plan
-title: "Day-one usefulness eval: the /autoplan arms' gstack pins and three fixes made before any run"
-summary: "Pins A to gstack c5250ded and the strengthened /autoplan arms to their branch commits, lists the planning-skill changes since the prereg's pin, and adds three pre-smoke fixes."
+title: "Day-one usefulness eval: the /autoplan arms' gstack pins and the fixes made before any run"
+summary: "Pins A to gstack c5250ded and the strengthened /autoplan arms to their branch commits, lists the planning-skill changes since the prereg's pin, and records every fix made before the smoke."
 author: GEVA-549
 model: anthropic/claude-opus-5-5
 date: 2026-11-17
@@ -15,7 +15,7 @@ links:
   - https://github.com/garrytan/gstack/tree/439827d71d14292d8d5e32b4decf94bccd56a985
 ---
 
-# Day-one usefulness eval: the /autoplan arms' pins and three fixes made before any run
+# Day-one usefulness eval: the /autoplan arms' pins and the fixes made before any run
 
 This is a dated change to the day-one usefulness preregistration (2026-11-17-geva-546-day-one-usefulness-prereg). It was made on 2026-11-17, before any paid call and before any outcome data existed. The merged preregistration stays as it is; this post and the code on the results branch carry the change.
 
@@ -71,3 +71,14 @@ The preregistration's last review left these as notes to fix before the smoke. E
 3. **The voice bearer stays out of every exec argument** (lanes/day-one/sessions.ts and src/trial/sandbox.ts). Section 7's containment check compares the container's OPENAI_API_KEY with the voice slot's bearer. The code put the bearer into the docker exec command, so it showed in the runner host's process list and in Docker's exec events while the check ran. The check now sends the bearer on the exec's standard input and compares it inside the container; no form of it, a digest included, is in any argument. The bearer is a per-session proxy slot token; no provider key was ever in the container.
 
 Before the smoke, one second-model read of just these three fix commits runs as an advisory check, not a review round. The results pull request's own review covers them in full.
+
+## 5. What the advisory read found
+
+The advisory read of the three fix commits returned two blocking findings and three notes. Each change below is its own commit on the results branch, made before any paid call. The first three have a test that fails on the code before them and passes after.
+
+1. **A crashed launch's responder lease no longer blocks its resume** (lanes/day-one/cli.ts and lanes/product-value/meter.ts). Fix 2 read the responder line's balance before the meter settled the crashed launch's open lease. An open lease counts its whole reservation as committed, so the balance read zero and the new lease asked for nothing, which the ledger refuses as a cap stop. The meter now reads the balance after it settles the stale lease. The test covers a stale lease with no spend and one with some spend.
+2. **A skill load marks an N, D or R planning session contaminated** (lanes/day-one/sessions.ts). Section 8 marks a session contaminated for any gstack read or skill load, but the code counted only tool calls whose path or command named gstack. It now also counts every entry of the session's loaded-skill log: a Skill tool call, or a Read of a SKILL.md or of a file under a skills/ folder. This gap was in the merged code; fix 1 did not cause it. N, D and R containers hold no skills, so the check should find nothing; as section 8 says, it is descriptive.
+3. **The bearer check fails closed** (lanes/day-one/sessions.ts). The comparison now needs a successful read of a nonempty bearer, and the runner takes its answer only from an exec that exited 0 inside its time limit. Before, a lost stdin with an empty OPENAI_API_KEY in the container, or a timed-out exec that had printed the marker, could pass.
+4. **A transport test for stdin** (tests/trial/sandbox-stdin.test.ts). Docker exec gets -i and the input on stdin only when there is input, bubblewrap forwards it too, and no argument holds it. The code was already right; the test fails if -i is dropped or always added, or if either sandbox drops the input.
+
+One note stays a note. The keyless voice check (gstack-evals day-one voice-check, lanes/day-one/voicecheck.ts) still passes its stub bearers and a fake provider key as process arguments. It runs only against a local stub provider with a temporary ledger, so no paid-run credential is involved, and fix 3's claim covers counted sessions only.
