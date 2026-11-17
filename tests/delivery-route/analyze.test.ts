@@ -47,6 +47,13 @@ describe("intervals", () => {
     expect(b.lo).toBeCloseTo(-a.hi, 10);
     expect(b.hi).toBeCloseTo(-a.lo, 10);
   });
+  test("the paired interval is Newcombe's method 10: Altman's worked example, the bar table it keeps at not shown, and a table with ad below bc", () => {
+    const four = (x: { diff: number; lo: number; hi: number }) => [x.diff, x.lo, x.hi].map((v) => Number(v.toFixed(4)));
+    expect(four(newcombe(14, 5, 0, 22))).toEqual([0.122, 0.0115, 0.2265]);
+    const bar = newcombe(44, 4, 0, 12);
+    expect([...four(bar), bar.lo > 0]).toEqual([0.0667, -0.0068, 0.145, false]);
+    expect(four(newcombe(5, 20, 25, 10))).toEqual([-0.0833, -0.2905, 0.1326]);
+  });
 });
 
 describe("the decision table on Opus", () => {

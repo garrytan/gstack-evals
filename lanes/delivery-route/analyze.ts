@@ -12,13 +12,16 @@ export function wilson(k: number, n: number): [number, number] {
   const p = k / n, d = 1 + (Z * Z) / n, c = p + (Z * Z) / (2 * n), h = Z * Math.sqrt((p * (1 - p)) / n + (Z * Z) / (4 * n * n));
   return [Math.max(0, (c - h) / d), Math.min(1, (c + h) / d)];
 }
-/** Newcombe's method 10 for a difference of paired proportions: a = both, b = first only, c = second only, d = neither. */
+/** Newcombe's method 10 for a difference of paired proportions: a = both, b = first only, c = second only, d = neither. Each
+ *  margin's Wilson interval, joined by phi whose numerator ad - bc is continuity-corrected: ad - bc - n/2 when that is
+ *  positive, 0 when ad - bc lies between 0 and n/2, and ad - bc unchanged when it is negative (Newcombe 1998; Altman et al.
+ *  2000, Statistics with Confidence, p. 52). */
 export function newcombe(a: number, b: number, c: number, d: number): { diff: number; lo: number; hi: number } {
   const n = a + b + c + d;
   if (!n) return { diff: 0, lo: -1, hi: 1 };
   const p1 = (a + b) / n, p2 = (a + c) / n, [l1, u1] = wilson(a + b, n), [l2, u2] = wilson(a + c, n);
   const den = Math.sqrt((a + b) * (c + d) * (a + c) * (b + d));
-  const phi = den ? (a * d - b * c) / den : 0;
+  const cross = a * d - b * c, phi = den ? (cross > n / 2 ? cross - n / 2 : cross < 0 ? cross : 0) / den : 0;
   const diff = p1 - p2;
   return {
     diff,
