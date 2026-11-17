@@ -153,7 +153,10 @@ export function prepareTree(repo: string): string[] {
  * The strip rule carried into the base commit, for units whose B tracks a stripped name: the one commit is written again
  * without those paths (its message, author and dates kept), and the old objects are pruned, so a session can't read one
  * back with git show or from the object store. A base that tracks no stripped name is left as it is. Returns the paths
- * it took out of the commit; prepareTree then strips the working tree and checks the result.
+ * it took out of the commit; prepareTree then strips the working tree and checks the result. First it refuses a
+ * repository whose objects the prune can't reach or whose history sits elsewhere: one that borrows objects from another
+ * store (objects/info/alternates), keeps a pack (a .keep file), or holds another .git below its root. Then it resets the
+ * index to the base commit, so nothing staged reaches the new commit.
  */
 export function stripBase(repo: string): string[] {
   const run = (args: string[], input?: string | Buffer): Buffer => {
@@ -161,6 +164,13 @@ export function stripBase(repo: string): string[] {
     if (r.status !== 0) fail("E_USAGE", repo + ": git " + args[0] + " failed while stripping the base commit (" + String(r.stderr).trim() + ")");
     return r.stdout;
   };
+  if (existsSync(join(repo, ".git/objects/info/alternates"))) fail("E_USAGE", repo + ": the base repository borrows objects from another store (objects/info/alternates), which the prune can't reach");
+  const packs = join(repo, ".git/objects/pack");
+  const kept = existsSync(packs) ? readdirSync(packs).filter((f) => f.endsWith(".keep")).length : 0;
+  if (kept) fail("E_USAGE", repo + ": the base repository keeps " + kept + " pack(s) with a .keep file, which the prune skips");
+  const nested = (dir: string): boolean => readdirSync(dir, { withFileTypes: true }).some((e) => (e.name === ".git" ? dir !== repo : e.isDirectory() && nested(join(dir, e.name))));
+  if (nested(repo)) fail("E_USAGE", repo + ": the base repository holds another .git below its root, which the strip rule never reaches");
+  run(["read-tree", "HEAD"]);
   const tracked = String(run(["ls-tree", "-r", "--name-only", "-z", "HEAD"])).split("\0").filter((p) => p && p.split("/").some((s) => STRIP.has(s)));
   if (!tracked.length) return [];
   run(["rm", "-r", "-q", "--cached", "--pathspec-from-file=-", "--pathspec-file-nul"], tracked.join("\0"));

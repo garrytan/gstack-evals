@@ -2,11 +2,12 @@
 // The strip rule reaches the base commit (dated pre-run fix, 2026-11-17). 70 of the run's 135 units track AGENTS.md,
 // CLAUDE.md or .claude in B, so prepareTree refused their review and build trees. stripBase writes the one commit again
 // without them and prunes the old objects; the planted review seed and the planted build launcher run it before
-// prepareTree, and the unit's own B is left as it is. The hinted step's log line counts passing runs per planted case and
+// prepareTree, and the unit's own B is left as it is. It refuses a repository with alternates, a kept pack or a nested
+// .git, and resets the index first (second dated pre-run change, 2026-11-17). The hinted step's log line counts passing runs per planted case and
 // never names a case.
 import { afterAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { prepareTree, stripBase } from "../../../lanes/eng-build/build-stage.ts";
@@ -56,6 +57,49 @@ describe("stripBase", () => {
     const head = git(repo, "rev-parse", "HEAD").stdout;
     expect(stripBase(repo)).toEqual([]);
     expect(git(repo, "rev-parse", "HEAD").stdout).toBe(head);
+  });
+  // Value: protects=the new base commit holds B's tree less the stripped names and nothing else; fails_when=a file staged
+  // in the copied index reaches the commit stripBase writes.
+  test("resets the index to B first, so a staged file never reaches the new commit", () => {
+    const { repos, ids } = plantedUnits(join(root, "e"), 1);
+    const repo = join(repos, ids[0]!);
+    plantAgentFiles(repo);
+    writeFileSync(join(repo, "staged.txt"), "staged\n");
+    git(repo, "add", "staged.txt");
+    expect(stripBase(repo)).toEqual([".claude/settings.json", "AGENTS.md", "sub/CLAUDE.md"]);
+    expect(tracked(repo)).toEqual(["range.go"]);
+    expect(git(repo, "diff", "--cached", "--name-only").stdout).toBe("");
+  });
+  // Value: protects=the old objects of a stripped file are gone after the prune; fails_when=a repository whose objects
+  // the prune can't reach, or whose history sits in another .git, is rewritten instead of refused.
+  const refused = async (name: string, setup: (repo: string) => void) => {
+    const { repos, ids } = plantedUnits(join(root, "f-" + name), 1);
+    const repo = join(repos, ids[0]!);
+    plantAgentFiles(repo);
+    setup(repo);
+    const head = git(repo, "rev-parse", "HEAD").stdout;
+    expect(await codeOf(() => stripBase(repo))).toBe("E_USAGE");
+    expect(git(repo, "rev-parse", "HEAD").stdout).toBe(head);
+  };
+  test("refuses a repository that borrows objects from another store, and writes nothing", async () => {
+    await refused("alternates", (repo) => {
+      const other = join(root, "f-store");
+      spawnSync("git", ["init", "-q", other]);
+      writeFileSync(join(repo, ".git/objects/info/alternates"), join(other, ".git/objects") + "\n");
+    });
+  });
+  test("refuses a repository that keeps a pack, and writes nothing", async () => {
+    await refused("keep", (repo) => {
+      git(repo, "repack", "-a", "-d", "-q");
+      const packs = join(repo, ".git/objects/pack");
+      for (const f of readdirSync(packs).filter((f) => f.endsWith(".pack"))) writeFileSync(join(packs, f.replace(/\.pack$/, ".keep")), "");
+    });
+  });
+  test("refuses a repository that holds another .git below its root, and writes nothing", async () => {
+    await refused("nested", (repo) => {
+      mkdirSync(join(repo, "vendor/lib"), { recursive: true });
+      spawnSync("git", ["init", "-q", join(repo, "vendor/lib")]);
+    });
   });
 });
 
