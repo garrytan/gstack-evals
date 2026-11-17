@@ -391,6 +391,19 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_EP_REPROJECT](#e_ep_reproject) | 2 | U20 |
 | [E_EP_JUDGE_CHECK](#e_ep_judge_check) | 2 | U20 |
 | [E_EP_DRYRUN_FAIL](#e_ep_dryrun_fail) | 2 | U20 |
+| [E_DAYONE_OWNER](#e_dayone_owner) | 2 | U20 |
+| [E_DAYONE_APP](#e_dayone_app) | 2 | U20 |
+| [E_DAYONE_GAP](#e_dayone_gap) | 2 | U20 |
+| [E_DAYONE_LEAK](#e_dayone_leak) | 2 | U20 |
+| [E_DAYONE_CONTAMINATED](#e_dayone_contaminated) | 2 | U20 |
+| [E_DAYONE_NO_PLAN](#e_dayone_no_plan) | 2 | U20 |
+| [E_DAYONE_VERDICT](#e_dayone_verdict) | 2 | U20 |
+| [E_DAYONE_VOICE](#e_dayone_voice) | 2 | U20 |
+| [E_DAYONE_EXPOSURE](#e_dayone_exposure) | 2 | U20 |
+| [E_DAYONE_JUDGE](#e_dayone_judge) | 2 | U20 |
+| [E_DAYONE_GOLD](#e_dayone_gold) | 2 | U20 |
+| [E_DAYONE_FIXTURE](#e_dayone_fixture) | 2 | U20 |
+| [E_DAYONE_DRYRUN](#e_dayone_dryrun) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -2979,6 +2992,110 @@ A planted-unit eng-review read dry-run case printed FAIL: a frozen rule did not 
 Fix: Read the FAIL line, fix the rule's code, and run the dry run again before any spend.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_DAYONE_OWNER
+
+Day-one eval (section 5): the owner responder's metered call failed, on the session's responder allowance or at the provider. A provider failure is an infrastructure failure that gets the session's one retry; an allowance refusal leaves the session missing.
+
+Fix: Nothing to change: the run applies the retry rule. A high rate goes to the Captain with the failing calls.
+
+Exit 2. Side effects: The responder's metered spend stays on its lease. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_DAYONE_APP
+
+Day-one eval (section 6): the browser container or the node volume could not be set up (docker failed, or the MCP server never answered). It is an infrastructure failure of the checklist run, never a build that does not start.
+
+Fix: Read the line's docker output, fix the host, and run the stage again with --resume.
+
+Exit 2. Side effects: No spend: the checker's session has not started. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_DAYONE_GAP
+
+Day-one eval (section 7): a session ended in an upstream or infrastructure failure on both of its attempts, so its cell is a recorded gap and the stages after it do not run for that cell.
+
+Fix: Nothing to retry: report the gap beside the arm's result. A rate above the prereg's gap rule goes to the Captain.
+
+Exit 2. Side effects: The attempts' metered spend stays on the lease. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_DAYONE_LEAK
+
+Day-one eval (section 7): the containment probe found a departure in a session's container: a key-like env name other than the session's bearers, a mount outside the work dir, HOME and the node volume, or open egress. The run halts for the Captain.
+
+Fix: Find how the departure got in, fix the rig, and bring it to the Captain before any further session.
+
+Exit 2. Side effects: The session's metered spend stays on the lease; no further session starts. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_DAYONE_CONTAMINATED
+
+Day-one eval (section 7): a session used a web tool, or a session on an arm with no gstack read a gstack file. Its plan is contaminated: reported, never scored as that arm's result.
+
+Fix: Nothing to retry: report it beside the arm's result.
+
+Exit 2. Side effects: The session's metered spend stays on the lease. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_DAYONE_NO_PLAN
+
+Day-one eval (section 4): a planning session ended with no non-empty plan.md (and, on a gstack arm, no autoplan active plan). On the base plan it is an arm stop that gets the session's one retry; on a review arm, or on the retry, the arm's plan is empty and its build is scored as doing nothing.
+
+Fix: Nothing to retry beyond the rule: report it beside the arm's result.
+
+Exit 2. Side effects: The session's metered spend stays on the lease. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_DAYONE_VERDICT
+
+Day-one eval (section 6): the checker's last reply held no parsable verdicts block (every task id exactly once, each with a boolean done) on both attempts, so the build is unscored, a gap rather than a zero.
+
+Fix: Nothing to retry: report the gap. A high rate goes to the Captain with the replies.
+
+Exit 2. Side effects: The checker's metered spend stays on the lease. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_DAYONE_VOICE
+
+Day-one eval (C2): a gstack arm session ran without its GPT-6 Astra voice (no Astra call on the voice slot, or autoplan recorded its outside voice as unavailable or failed). The session is logged as voice fallback, never swapped silently.
+
+Fix: Nothing to retry: report the fallback beside the arm's result, with the phase records.
+
+Exit 2. Side effects: The session's metered spend stays on the lease. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_DAYONE_EXPOSURE
+
+Day-one eval (section 8): a gstack arm session did not reach autoplan's exposure bar (CEO and Eng closed, Design closed or skipped by scope, both voices bound or the outside voice recorded, the gate answered). It is reported as not exposed, never scored as a loss.
+
+Fix: Nothing to retry: report the exposure rate beside every verdict.
+
+Exit 2. Side effects: No extra spend. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_DAYONE_JUDGE
+
+Day-one eval (section 9): the plan judge's answer for a packet missed or garbled a cell on both sends, so those plan-check pairs stay unlabelled.
+
+Fix: Nothing to retry beyond the one resend: report the missing pairs.
+
+Exit 2. Side effects: The judge's metered spend stays on its lease. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_DAYONE_GOLD
+
+Day-one eval (section 9): the gold set holds fewer than 40 pairs, or the judge's kappa against gold is under 0.6 on covered or usable, so no judge number counts.
+
+Fix: Report it and stop the judge's counted use; bring a gold fix to the Captain.
+
+Exit 2. Side effects: No extra spend. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_DAYONE_FIXTURE
+
+Day-one eval (section 6): a keyless checker fixture failed: the placeholder app scored a task done, or the reference app missed one. No paid build may start.
+
+Fix: Fix the checklist runner or the fixture, then run both fixtures again.
+
+Exit 2. Side effects: No spend: fixtures run keyless. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_DAYONE_DRYRUN
+
+Day-one eval (section 11): a dry-run case printed FAIL: a frozen rule did not hold on its fixtures, or the driven launch failed on the keyless path. The line names the case.
+
+Fix: Read the FAIL line, fix the rule's code, and run the dry run again before any spend.
+
+Exit 2. Side effects: No spend: the dry run is keyless. Retry safe: yes. Resumable: yes. Owner: U20.
 
 ## Exit 3: calibration failed (INCOMPLETE)
 
