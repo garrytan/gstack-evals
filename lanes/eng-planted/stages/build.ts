@@ -22,7 +22,9 @@
 //   beside final.patch) names a path under /work/review, or ../review from /work/repo. null for arms with no review files.
 // - Outcomes: completed or limit is graded as is (limitStop marks a limit); an upstream or infrastructure end gets one
 //   fresh retry, then the cell is a gap (eng-build's runSessionCell). A reviewed arm whose review ended in a gap is a gap
-//   and never builds. A gap's catch is null with catchDrop "gap".
+//   and never builds. A gap's catch is null with catchDrop "gap". The retry counts across leases: an attempt an earlier
+//   lease opened and left with no record (earlier, from the driver's log) was the cell's first, so its next attempt is
+//   its retry (dated pre-run fix, 2026-11-17).
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { armName, BUILD_LINE, REVIEW_LINE, runSessionCell, type BuildSession } from "../../eng-build/build-stage.ts";
@@ -179,7 +181,7 @@ export const buildKey = (unit: string, arm: BuildArm, reviewer: Reviewer | null,
 
 /** One build cell: the session under the outcome rule, then the grader and catch. An error after a session spent
  * carries that spend (spend.ts), every earlier attempt's included, which runGated settles. */
-export async function runPlantedBuild(o: { unit: PlantedUnit; unitDir: string; arm: BuildArm; reviewer: Reviewer | null; rep: number; note: string; hint?: string | null; mount: { plan: string; review: string | null }; review?: ReviewRecord | null; session: PlantedSession; grader: PlantedGrader; coverage?: (unitDir: string, tree: string) => Promise<number | null>; log?: (line: string) => void }): Promise<GradedBuild> {
+export async function runPlantedBuild(o: { unit: PlantedUnit; unitDir: string; arm: BuildArm; reviewer: Reviewer | null; rep: number; note: string; hint?: string | null; mount: { plan: string; review: string | null }; review?: ReviewRecord | null; session: PlantedSession; grader: PlantedGrader; coverage?: (unitDir: string, tree: string) => Promise<number | null>; earlier?: number; log?: (line: string) => void }): Promise<GradedBuild> {
   const cell = buildKey(o.unit.id, o.arm, o.reviewer, o.rep);
   if (isReviewed(o.arm) !== (o.reviewer !== null)) fail("E_USAGE", "cell " + cell + ": a reviewed arm names its reviewer, and no other arm does");
   if (hasReview(o.arm) !== (o.mount.review !== null)) fail("E_USAGE", "cell " + cell + ": arm " + o.arm + (hasReview(o.arm) ? " needs its /work/review/ mount" : " gets no /work/review/"));
@@ -193,6 +195,8 @@ export async function runPlantedBuild(o: { unit: PlantedUnit; unitDir: string; a
       return gap(r.outcome, 0);
     }
   }
+  const earlier = o.earlier ?? 0;
+  if (earlier >= 2) fail("E_EB_CELL_INCOMPLETE", "cell " + cell + ": earlier leases opened it " + earlier + " times and left no record, so its one retry is spent and nothing opens; bring it to the Captain");
   const prompt = plantedBuildPrompt(o.arm, o.note, o.arm === "hinted" ? (o.hint ?? null) : null);
   let cost = 0;
   let tree: string | null = null;
@@ -202,7 +206,7 @@ export async function runPlantedBuild(o: { unit: PlantedUnit; unitDir: string; a
       cost += s.costUsd;
       tree = s.tree;
       return s.outcome;
-    });
+    }, earlier);
     if (run.gap) {
       o.log?.(run.line!);
       return gap(run.outcome, cost);

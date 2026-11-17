@@ -13,6 +13,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from
 import { homedir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { EbError } from "../../eng-build/errors.ts";
+import { armName } from "../../eng-build/build-stage.ts";
 import { buildLauncher, reviewLauncher } from "../../eng-build/launch.ts";
 import { underLease, type Launcher, type Paid, type ReviewSession } from "../../eng-build/pipeline.ts";
 import { addSpend } from "../../eng-build/spend.ts";
@@ -28,10 +29,11 @@ import { armCheckoutProblems, EB_ARM, plainArmProblems, plantedArmSpec, SKILL_AR
 import { judgeAll, ROLE_MODEL, type JudgeCall, type JudgeRole } from "../readings/judge.ts";
 import { JUDGE_MODELS } from "../readings/local.ts";
 import type { AuthorCall } from "./author.ts";
-import { ebSession, type MountTable, type PlantedSession } from "./build.ts";
+import { buildKey, ebSession, type MountTable, type PlantedSession } from "./build.ts";
 import { allInProjection, checkAllIn, ITEMS, itemOf, ItemGate, runSteps, settleThrown, type AllIn, type Kind } from "./ledger.ts";
 import { ALLOWANCE_USD, AUTHOR_MAX_TOKENS, AUTHOR_MODELS, CARBON_MAX_TOKENS, EP_PROGRAM, EP_RUN, EP_SKILL, JUDGE_MAX_TOKENS, readStep, type AuthorRole } from "./local.ts";
 import { PIN_COMMAND } from "./pin.ts";
+import { driverCells, owedOnRefusal, setAsideRefusedGaps, stagePlan } from "./rerun-log.ts";
 import { authorStep, batchDraw, buildCells, buildsStage, bundleInput, comparisonPlanned, comparisonUnits, drawFile, gateArms, hintedTodo, reviewsStage, runRecords, smokeStage, unitFolders, type AuthorStep, type UnitSource } from "./pipeline.ts";
 import { bundleSet } from "../readings/judge.ts";
 
@@ -170,8 +172,9 @@ export interface Seams {
   judge(o: { out: string; cacheDir: string; roles: JudgeRole[] }): Launcher<Metered<JudgeRole>>;
   /** pin is null when no skill arm runs (the pilot). */
   review(o: { out: string; arms: ReviewArm[]; pin: DigestPin | null; policy?: string; log: (l: string) => void }): Launcher<ReviewSession>;
-  /** driver is the outcome driver's run directory, one for every build stage of the run (buildDriver). */
-  build(o: { out: string; driver: string; src: UnitSource; units: string; repos: string; ids: string[]; reviewed: boolean; planned: number; a: Args }): Launcher<PlantedSession>;
+  /** driver is the outcome driver's run directory, one for every build stage of the run (buildDriver); cells are the keys
+   * of the cells the stage may open, which the driver's planned sessions and reruns count (rerun-log.ts stagePlan). */
+  build(o: { out: string; driver: string; src: UnitSource; units: string; repos: string; ids: string[]; reviewed: boolean; cells: string[]; a: Args }): Launcher<PlantedSession>;
   grader(o: { work: string; log: (l: string) => void }): Promise<PlantedGrader>;
 }
 
@@ -182,8 +185,10 @@ export const REAL: Seams = {
   build: (o) => {
     const table: MountTable = new Map();
     const mountOf = (cell: string) => table.get(cell) ?? fail("E_USAGE", "cell " + cell + " has no mounts filed; only ebSession starts a planted build");
+    const arm = o.reviewed ? "plain" : "none";
+    const plan = stagePlan(o.driver, EP_RUN, armName(arm), o.cells);
     const inner = buildLauncher({
-      arm: o.reviewed ? "plain" : "none",
+      arm,
       units: new Map(o.ids.map((id) => [id, { dir: o.src.dir(id) }])),
       repos: o.repos,
       plans: o.out,
@@ -193,18 +198,18 @@ export const REAL: Seams = {
       envelopeHost: need(o.a, "--envelope-host"),
       sidecar: need(o.a, "--sidecar"),
       forbidden: [o.units, join(homedir(), ".capy", "drive")],
-      planned: Math.max(1, o.planned),
+      planned: plan.planned,
       planFor: (cell) => mountOf(cell).plan,
       reviewFor: (cell) => mountOf(cell).review,
       runId: EP_RUN,
       skill: EP_SKILL,
-      serve: { dir: o.driver, unheld_ok: true },
+      serve: { dir: o.driver, unheld_ok: true, reruns: plan.reruns },
       stripBase: true,
       ...(o.a.flags.has("--harbor") ? { harbor: o.a.flags.get("--harbor")! } : {}),
     });
     return async (p) => {
       const h = await inner(p);
-      return { ...h, backend: ebSession(h.backend, table) };
+      return { ...h, backend: owedOnRefusal(ebSession(h.backend, table), o.driver, EP_RUN) };
     };
   },
   grader: async (o) => plantedGrader({ work: o.work }),
@@ -261,7 +266,9 @@ export function stagesCommands(seams: Seams = REAL): Record<string, Command> {
     const grader = await seams.grader({ work: need(a, "--work"), log });
     const d = step === "none" ? batchDraw(run, o.batch) : null;
     const ids = step === "hinted" ? hintedTodo(run, drawFile(run, src).order) : d ? [...d.calibration, ...d.comparison, ...d.reserve] : [];
-    io.out((await paidStage(p, seams.build({ out: join(run, "builds", "authoring", "rig"), driver: buildDriver(run), src, units: need(a, "--units"), repos: need(a, "--repos"), ids, reviewed: false, planned: ids.length, a }), (session) => authorStep({ ...o, session, grader, gate }))).line);
+    const opened = driverCells(buildDriver(run), EP_RUN);
+    const cells = ids.map((id) => buildKey(id, step === "hinted" ? "hinted" : "none", null, 1));
+    io.out((await paidStage(p, seams.build({ out: join(run, "builds", "authoring", "rig"), driver: buildDriver(run), src, units: need(a, "--units"), repos: need(a, "--repos"), ids, reviewed: false, cells, a }), (session) => authorStep({ ...o, session, grader, gate, earlier: (cell) => opened.get(cell)?.opens ?? 0 }))).line);
     return 0;
   };
 
@@ -304,7 +311,8 @@ export function stagesCommands(seams: Seams = REAL): Record<string, Command> {
     const planned = phase === "stock" || !readStep(run, "exposure-gate") ? undefined : comparisonPlanned(phase === "comparison" ? comparisonUnits(run).units.length : SIZE.units, gateArms(run));
     const gate = itemGate(p, run, planned);
     const grader = await seams.grader({ work: need(a, "--work"), log });
-    const done = await paidStage(p, seams.build({ out: join(run, "builds", phase === "stock" ? "stock" : "comparison", "rig"), driver: buildDriver(run), src, units: need(a, "--units"), repos: need(a, "--repos"), ids: [...new Set(cells.map((c) => c.unit))], reviewed: true, planned: cells.length, a }), (session) => buildsStage({ run, src, gate, session, grader, phase, parallel: whole(a, "--parallel", 1), log }));
+    const opened = driverCells(buildDriver(run), EP_RUN);
+    const done = await paidStage(p, seams.build({ out: join(run, "builds", phase === "stock" ? "stock" : "comparison", "rig"), driver: buildDriver(run), src, units: need(a, "--units"), repos: need(a, "--repos"), ids: [...new Set(cells.map((c) => c.unit))], reviewed: true, cells: cells.map((c) => buildKey(c.unit, c.arm, c.reviewer, c.rep)), a }), (session) => buildsStage({ run, src, gate, session, grader, phase, parallel: whole(a, "--parallel", 1), log, earlier: (cell) => opened.get(cell)?.opens ?? 0 }));
     io.out("builds " + phase + ": " + done.length + " of " + cells.length + " cells recorded, $" + done.reduce((s, b) => s + b.costUsd, 0).toFixed(2));
     return 0;
   };
@@ -339,6 +347,14 @@ export function stagesCommands(seams: Seams = REAL): Record<string, Command> {
     const r = comparisonUnits(run);
     for (const s of r.swaps) io.out("lost " + s.lost + " (" + s.reason + "), replaced by reserve " + s.by);
     io.out("comparison: " + r.units.length + " units");
+    return 0;
+  };
+
+  const owed: Command["run"] = (a, io) => {
+    const run = runDir(a);
+    const rows = setAsideRefusedGaps(run, buildDriver(run), EP_RUN);
+    for (const r of rows) io.out("owed " + r.cell + ": recorded " + r.outcome + " as a gap, but the driver opened it " + r.opens + " time" + (r.opens === 1 ? "" : "s") + " and refused " + r.refusals.map((x) => x.at + " " + x.code + " " + x.status + " (" + x.detail + "; trial " + x.trial + ")").join(", ") + "; set aside " + r.moved.join(", "));
+    io.out("owed: " + rows.length + " cell" + (rows.length === 1 ? "" : "s") + " set aside; the step's next run gives each its one retry");
     return 0;
   };
 
@@ -383,6 +399,7 @@ export function stagesCommands(seams: Seams = REAL): Record<string, Command> {
     builds: { run: ep(builds), bools: [], usage: RUN + " --phase pilot|comparison|stock " + BUILD + " [--parallel n] " + PAID, summary: "the reviewed builds of a phase, or the stock control's (paid: ep-comparison, ep-stock)" },
     records: { run: ep(records), bools: [], usage: RUN + " --out <json>", summary: "every unit, review and build record of the run, in run order, as the readings read them" },
     judge: { run: ep(judge), bools: [], usage: RUN + " --role judge|gold-opus|gold-gemini [--bundles <json of {unit, source, rep}>] --cache <dir> " + PAID, summary: "the judged secondary's calls over the bundle set, or over the gold set given (paid: ep-judge)" },
+    owed: { run: ep(owed), bools: [], usage: "--run <dir>", summary: "set aside each build cell recorded as a gap after the driver refused its retry, read from the driver's log; the step's next run retries it" },
     lost: { run: ep(lost), bools: [], usage: "--run <dir> --unit <id> --reason <text>", summary: "record a comparison unit lost to infrastructure; the next reserve unit in seeded order replaces it" },
   };
 }

@@ -251,20 +251,27 @@ export function sessionToml(id: string, image: string, wallSec: number): string 
  * Builds: the outcome driver opens the item's lease and serves one stage for the arm (kind none, from buildRegistry,
  * charging EB_BUILD_SKILL), and each attempt is one Harbor run of real_agent on the driver's control plane (ledger u4) in
  * the unit's session image (session-image.ts: the unit's pinned image with the review stage's Claude Code on top, built
- * once per unit and removed on close), with the build tree, plan and bundle mounted by buildMounts after checkMounts and
- * the clean-room preflight on that image. Harbor runs as a child process this one awaits, so the driver keeps serving
+ * for every unit before the driver serves, so no image build holds the driver's event loop while sessions run (dated
+ * pre-run fix, 2026-11-17), and removed on close), with the build tree, plan and bundle mounted by buildMounts after
+ * checkMounts and the clean-room preflight on that image. Harbor runs as a child process this one awaits, so the driver keeps serving
  * the session's control plane and proxy meanwhile. real_agent's non-SM path opens its trial on the real-outcome sandbox sidecar,
  * which the operator serves at sidecar. serve passes the keyless end-to-end run's stub upstream to the driver, and lets
- * another read serve every build stage from one driver directory (dir) on items its own leases share (unheld_ok).
+ * another read serve every build stage from one driver directory (dir) on items its own leases share (unheld_ok), with
+ * its own rerun count (reruns).
  * Another read can move the plan and review mounts per cell (planFor, reviewFor: the planted-unit read mounts a reviewed
  * arm's own final plan.md), the lease's run (runId) and the skill the stage charges (skill); each defaults to this read's.
  * stripBase writes each tree's one commit again without the stripped names (build-stage.ts stripBase), for units whose B
  * tracks one.
  */
-export function buildLauncher(o: { arm: Arm | Arm[]; units: Map<string, { dir: string }>; repos: string; plans: string; bundles: string | null; out: string; host: string; envelopeHost: string; sidecar: string; forbidden: string[]; planned: number; harbor?: string; docker?: string; serve?: Pick<ServeOptions, "fetch" | "env" | "requireAdmission" | "machine" | "log" | "unheld_ok"> & { dir?: string }; planFor?: (cell: string, unit: string) => string; reviewFor?: (cell: string, unit: string) => string | null; runId?: string; skill?: string; stripBase?: boolean }): Launcher<BuildSession> {
+export function buildLauncher(o: { arm: Arm | Arm[]; units: Map<string, { dir: string }>; repos: string; plans: string; bundles: string | null; out: string; host: string; envelopeHost: string; sidecar: string; forbidden: string[]; planned: number; harbor?: string; docker?: string; serve?: Pick<ServeOptions, "fetch" | "env" | "requireAdmission" | "machine" | "log" | "unheld_ok" | "reruns"> & { dir?: string }; planFor?: (cell: string, unit: string) => string; reviewFor?: (cell: string, unit: string) => string | null; runId?: string; skill?: string; stripBase?: boolean }): Launcher<BuildSession> {
   return async (p) => {
     const names = [...new Set((Array.isArray(o.arm) ? o.arm : [o.arm]).map(armName))];
     if (names.length !== 1) fail("E_USAGE", "one build launch serves one driver stage, so it runs the none arm alone or reviewed arms together");
+    const images = new Map<string, SessionImage>();
+    for (const unit of o.units.values()) {
+      const id = readUnit(unit.dir).eb.image.id;
+      if (!images.has(id)) images.set(id, sessionImage(id, { docker: o.docker }));
+    }
     const local = openLocalLedger(ledgerPath(p.ledger));
     const registry = buildRegistry();
     const arms = join(o.out, "eb-registry.json");
@@ -274,7 +281,6 @@ export function buildLauncher(o: { arm: Arm | Arm[]; units: Map<string, { dir: s
     const served = await serveStages({ record: p.record, local, run_id: o.runId ?? EB_RUN, envelope_host: o.envelopeHost, stages: [{ item: p.item, arm: names[0]!, skills: [o.skill ?? EB_BUILD_SKILL] }], host: o.host, dir: driver, planned: o.planned, registry, amount_micros: Math.round(p.capUsd * 1_000_000), ...o.serve });
     const stage = served.stages[0]!;
     const stageEnded = async () => ((await (await fetch(served.control + "/status")).json()) as { stages: { lease_id: string; ended: string | null }[] }).stages.find((x) => x.lease_id === stage.lease_id)?.ended ?? null;
-    const images = new Map<string, SessionImage>();
     const session: BuildSession = async (s) => {
       buildStop(s.cell, await stageEnded(), null);
       const unit = o.units.get(s.unit.id) ?? fail("E_USAGE", "no unit folder for " + s.unit.id);
@@ -289,8 +295,7 @@ export function buildLauncher(o: { arm: Arm | Arm[]; units: Map<string, { dir: s
       const review = o.reviewFor ? o.reviewFor(s.cell, s.unit.id) : s.arm === "none" ? null : join(o.bundles ?? fail("E_USAGE", "a reviewed arm builds from its review bundles; pass --bundles"), s.cell.replace(/[^A-Za-z0-9._-]/g, "_"));
       const mounts = buildMounts({ arm: s.arm, repo: tree, plan, review });
       checkMounts(mounts, [unit.dir, ...o.forbidden]);
-      const img = images.get(eb.image.id) ?? sessionImage(eb.image.id, { docker: o.docker });
-      images.set(eb.image.id, img);
+      const img = images.get(eb.image.id) ?? fail("E_USAGE", "unit " + s.unit.id + " is not among the units whose session images this launch built before it served");
       preflight({ docker: o.docker ?? "docker", image: img.tag, digest: img.id, mounts });
       const task = join(out, "task");
       mkdirSync(join(task, "environment"), { recursive: true });

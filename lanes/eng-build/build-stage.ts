@@ -213,16 +213,19 @@ export interface CellRun {
   line: string | null;
 }
 
-/** Completed or limit: scored as is. Upstream: one retry from a fresh container; a second is a gap. Infra: one rerun; a second is a gap. */
-export async function runSessionCell(cell: string, attempt: (n: number) => Promise<SessionOutcome>): Promise<CellRun> {
+/** Completed or limit: scored as is. Upstream: one retry from a fresh container; a second is a gap. Infra: one rerun; a second is a gap.
+ * earlier counts the attempts an earlier lease opened for the cell and left with no record; each counts as both kinds, so
+ * the cell's next attempt is its one retry and is numbered after them (dated pre-run fix, 2026-11-17). */
+export async function runSessionCell(cell: string, attempt: (n: number) => Promise<SessionOutcome>, earlier = 0): Promise<CellRun> {
   const attempts: SessionOutcome[] = [];
-  const seen = { upstream_gap: 0, infra_gap: 0 };
+  const seen = { upstream_gap: earlier, infra_gap: earlier };
   for (;;) {
-    const o = await attempt(attempts.length + 1);
+    const n = earlier + attempts.length + 1;
+    const o = await attempt(n);
     attempts.push(o);
     if (o === "completed" || o === "limit") return { outcome: o, attempts, gap: false, line: null };
     if (o !== "upstream_gap" && o !== "infra_gap") fail("E_USAGE", "cell " + cell + ": unknown session outcome " + JSON.stringify(o));
-    if (++seen[o] >= 2) return { outcome: o, attempts, gap: true, line: "E_EB_GAP cell " + cell + ": " + o + " again after " + (attempts.length - 1) + " retr" + (attempts.length === 2 ? "y" : "ies") + "; recorded as a gap" };
+    if (++seen[o] >= 2) return { outcome: o, attempts, gap: true, line: "E_EB_GAP cell " + cell + ": " + o + " again after " + (n - 1) + " retr" + (n === 2 ? "y" : "ies") + "; recorded as a gap" };
   }
 }
 

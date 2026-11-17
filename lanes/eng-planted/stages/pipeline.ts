@@ -176,7 +176,7 @@ export type AuthorStep = "calls" | "hinted" | "draw" | "none";
  * draw: the batch's draw from the outcomes so far. none: the no-review build for every drawn unit, then the batch's step
  * record once its draw is filled (or the order ran out at or above the floor).
  */
-export async function authorStep(o: { run: string; src: UnitSource; batch: 1 | 2; step: AuthorStep; seed?: string; chunk?: number; first?: readonly string[]; call?: AuthorCall; session?: PlantedSession; grader?: PlantedGrader; gate?: ItemGate; parallel?: number; log?: (line: string) => void }): Promise<{ draw: Draw; line: string }> {
+export async function authorStep(o: { run: string; src: UnitSource; batch: 1 | 2; step: AuthorStep; seed?: string; chunk?: number; first?: readonly string[]; call?: AuthorCall; session?: PlantedSession; grader?: PlantedGrader; gate?: ItemGate; parallel?: number; earlier?: (cell: string) => number; log?: (line: string) => void }): Promise<{ draw: Draw; line: string }> {
   const log = o.log ?? (() => {});
   if (o.batch === 2) requireSteps(o.run, "authoring batch 2", ["author-batch1", "exposure-gate", "admission", "start-rule"]);
   const df = drawFile(o.run, o.src, o.seed);
@@ -229,7 +229,7 @@ export async function authorStep(o: { run: string; src: UnitSource; batch: 1 | 2
   return { draw: d, line };
 }
 
-async function runAuthoringBuilds(o: { run: string; src: UnitSource; arm: "hinted" | "none"; ids: string[]; session?: PlantedSession; grader?: PlantedGrader; gate: ItemGate; parallel?: number; log: (line: string) => void }): Promise<void> {
+async function runAuthoringBuilds(o: { run: string; src: UnitSource; arm: "hinted" | "none"; ids: string[]; session?: PlantedSession; grader?: PlantedGrader; gate: ItemGate; parallel?: number; earlier?: (cell: string) => number; log: (line: string) => void }): Promise<void> {
   const session = o.session ?? fail("E_USAGE", "the " + o.arm + " builds need their session");
   const grader = o.grader ?? fail("E_USAGE", "the " + o.arm + " builds need the grader");
   const cells = join(o.run, "builds", "authoring", "cells");
@@ -241,7 +241,7 @@ async function runAuthoringBuilds(o: { run: string; src: UnitSource; arm: "hinte
     run: async (id) => {
       const dir = authorDir(o.run, id);
       const hint = o.arm === "hinted" ? readFileSync(join(dir, "hint.txt"), "utf8").trim() : null;
-      const b = await runPlantedBuild({ unit: drawnUnit(o.src, o.run, id), unitDir: o.src.dir(id), arm: o.arm, reviewer: null, rep: 1, note: o.src.note(id), hint, mount: { plan: join(dir, "plan.md"), review: null }, session, grader, log: o.log });
+      const b = await runPlantedBuild({ unit: drawnUnit(o.src, o.run, id), unitDir: o.src.dir(id), arm: o.arm, reviewer: null, rep: 1, note: o.src.note(id), hint, mount: { plan: join(dir, "plan.md"), review: null }, session, grader, earlier: o.earlier?.(buildKey(id, o.arm, null, 1)), log: o.log });
       return {
         costUsd: b.costUsd,
         commit: () => {
@@ -500,7 +500,7 @@ export function buildCells(run: string, phase: "pilot" | "comparison" | "stock")
  * Builds on the comparison item (pilot or comparison: one build per recorded review) or the stock item (one stock build
  * per comparison unit). A reviewed cell whose review ended in a gap is recorded as a gap without a session.
  */
-export async function buildsStage(o: StageIo & { phase: "pilot" | "comparison" | "stock"; session: PlantedSession; grader: PlantedGrader }): Promise<GradedBuild[]> {
+export async function buildsStage(o: StageIo & { phase: "pilot" | "comparison" | "stock"; session: PlantedSession; grader: PlantedGrader; earlier?: (cell: string) => number }): Promise<GradedBuild[]> {
   if (o.phase === "pilot") requireSteps(o.run, "the pilot's builds", ["pilot-reviews"]);
   if (o.phase === "comparison") requireSteps(o.run, "the comparison builds", ["comparison-reviews"]);
   if (o.phase === "stock") requireSteps(o.run, "the stock builds", ["author-batch2"]);
@@ -531,7 +531,7 @@ export async function buildsStage(o: StageIo & { phase: "pilot" | "comparison" |
       else if (c.arm === "stock") mount = writeMount(join(o.run, "builds", "stock", "mounts", c.unit), stockMount(readFileSync(plan, "utf8")));
       else mount = { plan, review: null };
       if (hasReview(c.arm) && !existsSync(mount.review!)) fail("E_USAGE", "build cell " + buildKey(c.unit, c.arm, c.reviewer, c.rep) + ": its review mount " + mount.review + " is missing");
-      const b = await runPlantedBuild({ unit: unit(c.unit), unitDir: o.src.dir(c.unit), arm: c.arm, reviewer: c.reviewer, rep: c.rep, note: o.src.note(c.unit), mount, review: isReviewed(c.arm) ? reviewOf(c) : null, session: o.session, grader: o.grader, log: o.log });
+      const b = await runPlantedBuild({ unit: unit(c.unit), unitDir: o.src.dir(c.unit), arm: c.arm, reviewer: c.reviewer, rep: c.rep, note: o.src.note(c.unit), mount, review: isReviewed(c.arm) ? reviewOf(c) : null, session: o.session, grader: o.grader, earlier: o.earlier?.(buildKey(c.unit, c.arm, c.reviewer, c.rep)), log: o.log });
       return { costUsd: b.costUsd, commit: () => void saveBuild(outDir, b) };
     },
   });
