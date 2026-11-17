@@ -29,6 +29,7 @@ import type { ReadOnlyMount, Sandbox } from "../../src/trial/sandbox.ts";
 import { runTrial } from "../../src/trial/trial.ts";
 import type { Termination } from "../../src/types.ts";
 import { webUses } from "../product-value/parse.ts";
+import { readTranscript } from "../../src/trial/review/readers.ts";
 import { gstackReads, probe, type Probe } from "../office-hours-founder/run/contain.ts";
 import { NODE_BIN, NODE_DIR } from "./app.ts";
 import { SYSTEM_PROMPT } from "./frozen.ts";
@@ -42,6 +43,10 @@ const PATH = "/usr/local/bin:/usr/bin:/bin";
 
 /** The browser tools a checker may call: what a person does in a browser, never page scripts or network reads. */
 export const BROWSER_SERVER = "browser";
+/** The tmpfs size for each session's HOME and /tmp, so no sealed conversation state reaches a disk layer. */
+export const RAM_SIZE = "2g";
+/** Prints each RAM-backed mount with under 1 MiB free; any output means it filled. */
+export const RAM_FULL_CHECK = "df -Pk /home/agent /tmp | awk 'NR > 1 && $4 < 1024 { print $6 }'";
 export const BROWSER_TOOLS: readonly string[] = ["browser_navigate", "browser_navigate_back", "browser_snapshot", "browser_click", "browser_type", "browser_fill_form", "browser_select_option", "browser_press_key", "browser_hover", "browser_drag", "browser_drop", "browser_file_upload", "browser_handle_dialog", "browser_tabs", "browser_wait_for", "browser_take_screenshot", "browser_resize", "browser_find"].map((t) => "mcp__" + BROWSER_SERVER + "__" + t);
 
 export interface LaunchInput {
@@ -105,16 +110,19 @@ export async function launchSession(o: LaunchInput, deps: { driver?: typeof clau
   const mounts: ReadOnlyMount[] = o.nodeVolume ? [{ host: o.nodeVolume, path: NODE_DIR }] : [];
   let found: Probe | null = null;
   let tokenOk: boolean | null = null;
+  let ramFull: string | null = null;
   const sandbox: Sandbox = {
     ...base,
     agent(task, opts) {
-      const session = base.agent(task, opts);
+      const session = base.agent(task, { ...opts, ram: { size: RAM_SIZE } });
       let done = false;
       return {
         ...session,
         stop() {
           if (!done) {
             done = true;
+            const full = session.exec(RAM_FULL_CHECK, 30_000).stdout.trim();
+            if (full) ramFull = full.split("\n").join(", ");
             found = probe(session, o.docker, [base.workPath(opts.work, task, opts.root), home, ...mounts.map((m) => m.path)]);
             if (voice) tokenOk = session.exec('[ "$OPENAI_API_KEY" = "' + voice.token + '" ] && echo voice-bearer', 30_000).stdout.trim() === "voice-bearer";
           }
@@ -167,6 +175,7 @@ export async function launchSession(o: LaunchInput, deps: { driver?: typeof clau
   } catch (e) {
     termination = { kind: "infra", incident: "the trial failed: " + (e as Error).message };
   }
+  if (ramFull) termination = { kind: "infra", incident: "the session's RAM-backed " + ramFull + " filled (" + RAM_SIZE + ")" };
   const meter = await o.rig.finalize(binding.meter_id);
   const vmeter = voice ? await o.rig.finalize(voice.meter_id) : null;
   let transcript = "";
@@ -186,6 +195,20 @@ export async function launchSession(o: LaunchInput, deps: { driver?: typeof clau
     voice: vmeter ? { micros: vmeter.micros, requests: vmeter.requests, refused: vmeter.refused } : null,
     out: existsSync(out) && !copyFailed ? out : null,
   };
+}
+
+/** Whether a checker transcript holds at least one browser tool call that came back without an error. */
+export function browserAnswered(transcript: string): boolean {
+  const calls = new Set<string>();
+  const answered = new Set<string>();
+  for (const m of readTranscript(transcript)) {
+    const content = Array.isArray(m.message?.content) ? (m.message.content as Record<string, any>[]) : [];
+    for (const b of content) {
+      if (m.type === "assistant" && b?.type === "tool_use" && String(b.name ?? "").startsWith("mcp__" + BROWSER_SERVER + "__")) calls.add(String(b.id));
+      if (m.type === "user" && b?.type === "tool_result" && b.is_error !== true) answered.add(String(b.tool_use_id));
+    }
+  }
+  return [...calls].some((id) => answered.has(id));
 }
 
 /** One attempt's outcome under section 7's rule. */

@@ -137,6 +137,10 @@ describe.skipIf(!onShm)("day-one validate", () => {
       const noA = await run(["validate", "score", "--out", out, "--tag", "wave", "--key", key, "--labels", join(shm, "no-a.ndjson")]);
       expect(noA.code).toBe(2);
       expect(noA.err).toContain("builds for a");
+      writeFileSync(join(shm, "padded.ndjson"), labels.map((l) => { const ts = byId.get(k[l]!.row)!.check.parse.tasks.slice(0, 2); return JSON.stringify({ label: l, tasks: [...ts, ...ts, ...ts, ...ts].map((t) => ({ id: t.id, done: t.done })) }); }).join("\n") + "\n");
+      const padded = await run(["validate", "score", "--out", out, "--tag", "wave", "--key", key, "--labels", join(shm, "padded.ndjson")]);
+      expect(padded.code).toBe(2);
+      expect(JSON.parse(readFileSync(join(out, "validation.json"), "utf8"))).toMatchObject({ pairs: 24, admitted: false });
       writeFileSync(join(shm, "twice.ndjson"), hand(false) + hand(false));
       expect((await run(["validate", "score", "--out", out, "--tag", "wave", "--key", key, "--labels", join(shm, "twice.ndjson")])).code).not.toBe(0);
     } finally {

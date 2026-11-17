@@ -25,10 +25,10 @@ import { armPlan, readExposure } from "./exposure.ts";
 import { runRealFixtures } from "./fixtures.ts";
 import { armPrompt, COMMON_ASK, DAY_ONE_PASS, GATE_REPLY, MODELS, OWNER_CLOSING, OWNER_NOTICE, PREREG, PROBE_QUESTIONS, PROMPTS_SHA256, BUILD_PROMPT, CHECK_FOOTER, CHECK_HEADER, OWNER_HEAD, OWNER_RULES, PLATFORM, QUESTION_CHARS, REVIEW_ASK, AUTOPLAN_LINE } from "./frozen.ts";
 import { controls, goldAgreement, labelPacket, packets, parseLabels, stockPlan, type Label } from "./judge.ts";
-import { ALL_IN_USD, DAYONE_RUN, HEADROOM_USD, ITEMS, itemOf, ledgerCapUsd, leaseItem, PLANNING_PRICES, settleItem, shrink } from "./ledger.ts";
+import { ALL_IN_USD, DAYONE_RUN, HEADROOM_USD, ITEMS, itemOf, ledgerCapUsd, leaseAmount, leaseItem, PLANNING_PRICES, settleItem, shrink } from "./ledger.ts";
 import { ownerLoop, splitSource } from "./owner.ts";
 import { buildDir, cellLimits, planFile, runStage, treeDigest, type CrashPoint, stageCells, type Stage, type StageDeps, type StageInput } from "./run.ts";
-import { attemptOutcome, BROWSER_TOOLS, launchSession, settle, type AttemptRead, type LaunchInput } from "./sessions.ts";
+import { attemptOutcome, BROWSER_TOOLS, launchSession, RAM_FULL_CHECK, RAM_SIZE, settle, type AttemptRead, type LaunchInput } from "./sessions.ts";
 import { briefText, loadUnit, type Unit } from "./units.ts";
 import { checkPrompt, parseVerdicts, scoreBuild } from "./verdict.ts";
 
@@ -107,7 +107,7 @@ const ownerMeter = (calls: string[]): PvMeter => ({
 });
 
 /** A launch that plays each stage's agent: asks the owner once on a plan, writes the stage's output, answers the checker. */
-function stubLaunch(o: { leak?: boolean; usd?: number; dropped?: boolean; seen?: LaunchInput[]; capStop?: boolean } = {}) {
+function stubLaunch(o: { leak?: boolean; usd?: number; dropped?: boolean; seen?: LaunchInput[]; capStop?: boolean; noBrowser?: boolean; allFail?: boolean } = {}) {
   return async (l: LaunchInput): Promise<AttemptRead> => {
     o.seen?.push(l);
     const out = join(l.dir, "out");
@@ -115,7 +115,9 @@ function stubLaunch(o: { leak?: boolean; usd?: number; dropped?: boolean; seen?:
     if (o.capStop) return { termination: { kind: "cap_stop" } as never, web: 0, gstack_reads: [], contained: [], micros: 1e6, voice: null, out };
     if (l.arm === "check") {
       must(l.mcpUrl === "http://c:8931/mcp", "the checker was launched without the browser container's MCP endpoint");
-      await l.nextUser(["Tried every task.\n```verdicts\n" + JSON.stringify({ tasks: [1, 2, 3, 4, 5].map((i) => ({ id: "t" + i, done: i <= 2, why: "seen" })) }) + "\n```"]);
+      mkdirSync(join(l.dir, "host"), { recursive: true });
+      if (!o.noBrowser) writeFileSync(join(l.dir, "host", "transcript.ndjson"), JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: "b1", name: "mcp__browser__browser_navigate", input: {} }] } }) + "\n" + JSON.stringify({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "b1", content: "ok" }] } }) + "\n");
+      await l.nextUser(["Tried every task.\n```verdicts\n" + JSON.stringify({ tasks: [1, 2, 3, 4, 5].map((i) => ({ id: "t" + i, done: !o.allFail && i <= 2, why: "seen" })) }) + "\n```"]);
     } else if (l.arm === "build") {
       writeFileSync(join(out, "start.sh"), "node server.js\n");
       await l.nextUser(["Built."]);
@@ -350,6 +352,24 @@ export const CASES: Record<string, Case> = {
           const adopted = point !== "partials";
           must(killed && rows.length === 1 && files && rows[0]!.usd === 1 && restartSeen.length === (adopted ? 0 : 1) && rows[0]!.attempts.length === (adopted ? 1 : 2), "a " + st + " cell killed at " + point + " did not end done with its files, with one row, charged once and " + (adopted ? "adopted without a rerun" : "run again") + ": " + JSON.stringify({ killed, rows: rows.length, files, usd: rows[0]?.usd, reruns: restartSeen.length }));
         }
+      const built = async (d: string) => {
+        await stageRun(d, one, "base", ["n"], 100, {}, { n: 0 }, { parallel: 1 });
+        await stageRun(d, one, "build", ["n"], 100, {}, { n: 0 }, { parallel: 1 });
+      };
+      const tDir = join(dir, "throw");
+      await built(tDir);
+      let stops = 0;
+      let threw = false;
+      await stageRun(tDir, one, "check", ["n"], 100, { launch: async () => { throw new Error("finalize failed"); }, app: { ...stubApp, stop: () => (stops++, []) } as never }, { n: 0 }, { parallel: 1 }).catch(() => (threw = true));
+      must(threw && stops === 1, "a checker launch that threw left its browser container running (stops: " + stops + ")");
+      const nbDir = join(dir, "no-browser");
+      await built(nbDir);
+      const nb = await stageRun(nbDir, one, "check", ["n"], 100, { launch: stubLaunch({ noBrowser: true }) }, { n: 0 }, { parallel: 1 });
+      must(nb.rows[0]!.state === "missing" && nb.rows[0]!.code === "E_DAYONE_GAP" && nb.rows[0]!.attempts.length === 2 && nb.rows[0]!.check === null, "a checker whose browser never answered was not a retry and then a gap: " + JSON.stringify({ state: nb.rows[0]!.state, code: nb.rows[0]!.code, score: nb.rows[0]!.check?.score.share }));
+      const afDir = join(dir, "all-fail");
+      await built(afDir);
+      const af = await stageRun(afDir, one, "check", ["n"], 100, { launch: stubLaunch({ allFail: true }) }, { n: 0 }, { parallel: 1 });
+      must(af.rows[0]!.state === "scored" && af.rows[0]!.check?.score.share === 0 && af.rows[0]!.attempts.length === 1, "a checker that used the browser and found no task done did not score 0");
       const haltSeen: LaunchInput[] = [];
       const haltAgain = await stageRun(join(dir, "halt"), us, "base", ["n"], 100, { launch: stubLaunch({ seen: haltSeen }) }, { n: 0 }, { tag: "again" });
       must(!haltAgain.rows.length && !haltSeen.length, "a second tag reran a cell another launch ended with a row and no plan");
@@ -392,7 +412,7 @@ export const CASES: Record<string, Case> = {
       }
     }),
   "one ledger lease per item": () =>
-    withTmp((dir) => {
+    withTmp(async (dir) => {
       const record = join(dir, "record");
       const local = openLocalLedger(ledgerPath(join(dir, "ledger.sqlite")));
       try {
@@ -406,6 +426,37 @@ export const CASES: Record<string, Case> = {
           bound = (e as { code?: string }).code ?? "error";
         }
         must(bound !== "no refusal", "a second run id opened a lease on a bound item");
+        const rRecord = join(dir, "resume-record");
+        const rLocal = openLocalLedger(ledgerPath(join(dir, "resume.sqlite")));
+        try {
+          recordApproval(rRecord, { action: "init", item: "day1-plans", cap_micros: 20e6, quotes: [{ words: "dry run on a temporary ledger", by: "day-one dryrun", source: "section 12" }], admission: "warn" });
+          const spend = async (lease_id: string, key: string, amount: number) => {
+            const r = (await rLocal.reserve({ idempotency_key: key, lease_id, cell: { run_id: DAYONE_RUN, arm: "n", task: "aaaaaa-r1", model: "claude-opus-5-5", trial: 1, attempt: 1, meter_id: key } as never, max_micros: amount })) as { reservation: { reservation_id: string } };
+            await rLocal.settle(r.reservation.reservation_id, { kind: "spent", spent_micros: amount, usage: { input: 1, output: 1, reasoning: 0, cache_read: 0, cache_write: 0 } } as never);
+          };
+          const first = openLease(rRecord, rLocal, { item: "day1-plans", run_id: DAYONE_RUN, amount_micros: leaseAmount(rRecord, "day1-plans", 20e6), requireAdmission: () => null });
+          await spend(first.lease_id, "r1", 1e6);
+          settleItem(rRecord, rLocal, first.lease_id);
+          let whole = "admitted";
+          try {
+            settleItem(rRecord, rLocal, openLease(rRecord, rLocal, { item: "day1-plans", run_id: DAYONE_RUN, amount_micros: 20e6, requireAdmission: () => null }).lease_id);
+          } catch (e) {
+            whole = (e as { code?: string }).code ?? "error";
+          }
+          const resumed = openLease(rRecord, rLocal, { item: "day1-plans", run_id: DAYONE_RUN, amount_micros: leaseAmount(rRecord, "day1-plans", 20e6), requireAdmission: () => null });
+          must(whole === "CAP_STOP" && resumed.reserved_micros === 19e6, "a resume after $1 of a $20 item did not lease the $19 left (the whole $20: " + whole + ")");
+          await spend(resumed.lease_id, "r2", 19e6);
+          settleItem(rRecord, rLocal, resumed.lease_id);
+          let spent = "admitted";
+          try {
+            openLease(rRecord, rLocal, { item: "day1-plans", run_id: DAYONE_RUN, amount_micros: leaseAmount(rRecord, "day1-plans", 20e6), requireAdmission: () => null });
+          } catch (e) {
+            spent = (e as { code?: string }).code ?? "error";
+          }
+          must(spent === "CAP_STOP", "a resume on a spent item was admitted");
+        } finally {
+          rLocal.close();
+        }
         const caps = ITEMS.reduce((a, i) => a + i.capUsd, 0);
         must(caps === ALL_IN_USD, "the caps total $" + caps + ", not the all-in $" + ALL_IN_USD);
         const thin = ITEMS.filter((i) => i.capUsd < i.projectionUsd + i.headroomUsd || i.capUsd < Math.ceil(i.projectionUsd * 1.15)).map((i) => i.item);
@@ -493,6 +544,20 @@ export const CASES: Record<string, Case> = {
         return { record: { termination: { kind: "completed" } } };
       });
       must(partial.out === null, "a work tree with a failed copy-out was kept as complete");
+      const ramRun = async (full: boolean) => {
+        const opened: any[] = [];
+        const session = { exec: (cmd: string) => ({ exitCode: 0, timedOut: false, stdout: cmd === RAM_FULL_CHECK && full ? "/home/agent\n" : "", stderr: "" }), spawn: () => fail("no process starts"), stop: () => {} };
+        const ramRig = { ...rig, sandbox: () => ({ homePath: () => "/home/agent", workPath: () => "/work/app", agent: (_t: string, opts: unknown) => (opened.push(opts), session) }) as never } as HostRig;
+        const d = join(dir, full ? "ram-full" : "ram-ok");
+        mkdirSync(d, { recursive: true });
+        const read = await launchSession({ rig: ramRig, policy: policyOf(), docker: "docker", runId: DAYONE_RUN, arm: "b", cell: "u-r1-b", rep: 1, attempt: 1, model: MODELS.builder, dir: d, seed: null, prompt: "p", minutes: 1, turns: 1, allowanceMicros: 1e6, nextUser: async () => ({ end: true }) }, { driver: (() => ({ env: {} })) as never, trial: (async (spec: { sandbox: { agent: (t: string, o: unknown) => { stop: () => void } } }) => { spec.sandbox.agent("t", { work: d, env: {} }).stop(); mkdirSync(join(d, "out"), { recursive: true }); return { record: { termination: { kind: "completed" } } }; }) as never });
+        return { read, opened };
+      };
+      const ok = await ramRun(false);
+      const full = await ramRun(true);
+      must(ok.opened[0]?.ram?.size === RAM_SIZE && ok.read.termination.kind === "completed" && full.read.termination.kind === "infra" && /RAM-backed \/home\/agent filled/.test((full.read.termination as { incident: string }).incident), "a session did not get a RAM-backed HOME and /tmp, or a full one did not read as an infrastructure failure");
+      const fullOutcome = attemptOutcome(full.read, null);
+      must(settle(fullOutcome, 1).state === "retry" && settle(fullOutcome, 2).state === "missing" && (settle(fullOutcome, 2) as { code: string }).code === "E_DAYONE_GAP", "a full RAM-backed mount was not a retry and then a gap");
       return "the checker's driver gets the browser MCP server and only the " + BROWSER_TOOLS.length + " browser tools; a planner's gets neither";
     }),
   "fixtures with the real checker": () =>

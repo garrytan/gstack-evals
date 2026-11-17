@@ -38,7 +38,7 @@ import { startApp, stopApp, type AppRun, type AppWrite } from "./app.ts";
 import { armPlan, loadedSkills, readExposure, type Exposure, type SkillLoad } from "./exposure.ts";
 import { armPrompt, BUILD_PROMPT, GSTACK_ARMS, LIMITS, MODELS, type PlanArm } from "./frozen.ts";
 import { ownerLoop, ownerPrompt, sourceCounts, type OwnerTurn } from "./owner.ts";
-import { attemptOutcome, endLoop, launchSession, micros, settle, type AttemptRead, type LaunchInput, type Outcome } from "./sessions.ts";
+import { attemptOutcome, browserAnswered, endLoop, launchSession, micros, settle, type AttemptRead, type LaunchInput, type Outcome } from "./sessions.ts";
 import { buildSeed, copySamples, planSeed, type Unit } from "./units.ts";
 import { checkPrompt, parseVerdicts, scoreBuild, type BuildScore, type VerdictParse } from "./verdict.ts";
 
@@ -401,10 +401,14 @@ export async function runStage(o: StageInput, deps: StageDeps): Promise<StageRes
             if (infra && attempt === 2) end = { state: "missing", code: "E_DAYONE_APP", why: appRun?.detail ?? "the browser container failed twice" };
             continue;
           }
-          const ran = await launch({ rig, policy: o.policy, docker: o.docker, runId: o.runId, arm: "check", cell: c.unit + "-r" + c.rep + "-" + c.arm, rep: c.rep, attempt, model: lim.model, dir: sdir, seed: null, prompt, minutes: lim.minutes, turns: lim.turns, allowanceMicros: micros(lim.usd), nextUser, mcpUrl: appRun.mcpUrl });
-          const writes = app.stop(appRun, o.docker, join(sdir, "browser"));
-          read = ran;
-          const outcome0 = settle(attemptOutcome(read, null), attempt);
+          const running = appRun;
+          let writes: AppWrite[] = [];
+          read = await launch({ rig, policy: o.policy, docker: o.docker, runId: o.runId, arm: "check", cell: c.unit + "-r" + c.rep + "-" + c.arm, rep: c.rep, attempt, model: lim.model, dir: sdir, seed: null, prompt, minutes: lim.minutes, turns: lim.turns, allowanceMicros: micros(lim.usd), nextUser, mcpUrl: running.mcpUrl }).finally(() => {
+            writes = app.stop(running, o.docker, join(sdir, "browser"));
+          });
+          const transcriptFile = join(sdir, "host", "transcript.ndjson");
+          let outcome0 = settle(attemptOutcome(read, null), attempt);
+          if (outcome0.state === "ended" && !browserAnswered(existsSync(transcriptFile) ? readFileSync(transcriptFile, "utf8") : "")) outcome0 = settle({ state: "retry", why: "the checker's browser never answered a tool call, an infrastructure failure" }, attempt);
           if (outcome0.state === "ended") {
             const parse = parseVerdicts(loop.last, u.list!.tasks.map((t) => t.id));
             if (parse.kind === "bad" && attempt === 1) {

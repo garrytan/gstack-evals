@@ -34,7 +34,7 @@ import { runDryrun } from "./dryrun.ts";
 import { FIXTURES_RECEIPT, runFixtures, runRealFixtures } from "./fixtures.ts";
 import { GSTACK_ARMS, GSTACK_PINS, LIMITS, MODELS, PLAN_ARMS, PROBE_QUESTIONS, SEED, UNIT_SETS, VALIDATION, type PlanArm } from "./frozen.ts";
 import { controls, goldAgreement, JUDGE_EFFORT, JUDGE_MAX_TOKENS, labelPacket, packets, padded, stockPlan, type Label } from "./judge.ts";
-import { DAYONE_RUN, itemOf } from "./ledger.ts";
+import { DAYONE_RUN, itemOf, leaseAmount } from "./ledger.ts";
 import { ownerPrompt, splitSource } from "./owner.ts";
 import { buildDir, runStage, type Row, type Stage } from "./run.ts";
 import { copySamples, loadUnit, taskChecks, unitsDigest, type Unit } from "./units.ts";
@@ -163,7 +163,7 @@ function rigFor(f: Map<string, string[]>, env: Env, o: { out: string; item: stri
   const record = recordPath(opt(f, "--record"), env);
   mkdirSync(join(o.out, "fixtures"), { recursive: true });
   writeFileSync(join(o.out, "fixtures", "tasks.json"), "[]\n");
-  const open = () => dockerRig({ host: "claude", arms: { arms: o.specs, base: null, skill: null, notes: [] }, tasks: join(o.out, "fixtures", "tasks.json"), out: { path: o.out, rule: "--out" }, ledger, record, item: o.item, runId: DAYONE_RUN, models: [o.model], policy: o.policy }, { env, skill: null, skills: Object.fromEntries(o.specs.filter((s) => s.kind === "stack").map((s) => [s.name, "autoplan"])), nonce: randomBytes(6).toString("hex"), cap: o.cap, voice: false });
+  const open = () => dockerRig({ host: "claude", arms: { arms: o.specs, base: null, skill: null, notes: [] }, tasks: join(o.out, "fixtures", "tasks.json"), out: { path: o.out, rule: "--out" }, ledger, record, item: o.item, runId: DAYONE_RUN, models: [o.model], policy: o.policy }, { env, skill: null, skills: Object.fromEntries(o.specs.filter((s) => s.kind === "stack").map((s) => [s.name, "autoplan"])), nonce: randomBytes(6).toString("hex"), cap: leaseAmount(record.path, o.item, o.cap), voice: false });
   return { ledger, record, open };
 }
 
@@ -444,9 +444,12 @@ function validateScore(f: Map<string, string[]>, io: Io): number {
     const parse = byId.get(k.row)?.check?.parse;
     if (parse?.kind !== "ok") return refuse("the checker's verdicts for " + l.label + " are missing or unparsable");
     perArm[k.arm] = (perArm[k.arm] ?? 0) + 1;
+    const counted = new Set<string>();
     for (const t of l.tasks) {
       const v = parse.tasks.find((x) => x.id === t.id) ?? refuse(l.label + ": the checker has no verdict for " + t.id);
       if (typeof t.done !== "boolean") refuse(l.label + ": task " + t.id + " has no boolean done");
+      if (counted.has(t.id)) continue;
+      counted.add(t.id);
       pairs.push([v.done, t.done]);
     }
   }

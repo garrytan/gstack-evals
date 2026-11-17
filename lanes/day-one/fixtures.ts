@@ -57,8 +57,7 @@ export async function runRealFixtures(o: { rig: HostRig; policy: LoadedPolicy; d
         continue;
       }
       const loop = endLoop();
-      const read = await launch({ rig: o.rig, policy: o.policy, docker: o.docker, runId: o.runId, arm: "check", cell: "fixplants-" + f.app, rep: 1, attempt, model: MODELS.checker, dir: sdir, seed: null, prompt: checkPrompt(u.list!), minutes: LIMITS.check.minutes, turns: LIMITS.check.turns, allowanceMicros: micros(LIMITS.check.usd), nextUser: loop.nextUser, mcpUrl: a.mcpUrl });
-      app.stop(a, o.docker, join(sdir, "browser"));
+      const read = await launch({ rig: o.rig, policy: o.policy, docker: o.docker, runId: o.runId, arm: "check", cell: "fixplants-" + f.app, rep: 1, attempt, model: MODELS.checker, dir: sdir, seed: null, prompt: checkPrompt(u.list!), minutes: LIMITS.check.minutes, turns: LIMITS.check.turns, allowanceMicros: micros(LIMITS.check.usd), nextUser: loop.nextUser, mcpUrl: a.mcpUrl }).finally(() => app.stop(a, o.docker, join(sdir, "browser")));
       spent += read.micros;
       const outcome = settle(attemptOutcome(read, null), attempt);
       if (outcome.state === "halt" || outcome.state === "cap" || outcome.state === "contaminated" || outcome.state === "missing") {

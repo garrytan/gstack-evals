@@ -14,7 +14,7 @@
 // - The all-in stop: after the smoke, the projection is redone on measured prices. If it plus every line's headroom
 //   passes the all-in total, the frozen shrink order applies once (shrink); a total past $5,000 goes to the Captain for
 //   Garry.
-import { openLease, settleLease, type RequireAdmission } from "../../src/runner/ledger/ledger.ts";
+import { ledgerStatus, openLease, settleLease, type RequireAdmission } from "../../src/runner/ledger/ledger.ts";
 import type { LocalLedger } from "../../src/runner/ledger/local.ts";
 
 export const DAYONE_RUN = "geva-546-day-one";
@@ -68,6 +68,12 @@ export const leaseItem = (record: string, local: LocalLedger, item: string, o: {
   return openLease(record, local, { item, run_id: DAYONE_RUN, ...o });
 };
 export const settleItem = (record: string, local: LocalLedger, lease_id: string) => settleLease(record, local, lease_id);
+
+/** What a launch leases on an item: its --spend-cap, or the item's balance when less is left, so a resume asks only for what remains. */
+export function leaseAmount(record: string, item: string, capMicros: number): number {
+  const s = ledgerStatus(record, item).find((x) => x.item === item);
+  return s ? Math.min(capMicros, Math.max(s.left_micros, 0)) : capMicros;
+}
 
 /** The frozen shrink order (G1), applied once after the smoke: each step keeps the ones before it. */
 export const SHRINK = [
