@@ -17,8 +17,8 @@ links:
 attachments:
   - 38d337d8a7084712662978763b70c3eb1a384642d469ca9cb48cca26d1129416  cost.py
   - f44bb877f7172be26ad86aedab6a4ba88fe0ea257273a440fee35ee382b2dc9e  cost.txt
-  - d960e27c8e69f489b8dc7629784c06c8e0839a51b1c144ff0af4d1b1a1321c0b  power.py
-  - 73e2b6c9e3ca9d790877319e4dad96acf78758584631e00fe08cbde50c2a0fde  power.txt
+  - 8ea44fae503752e3b64e99fd18962a44eadee9d0be8490619f748674b532dec9  power.py
+  - 0ea5f62bbe4ed708b47ab02e9425d1d8e58422cc90b5acd207cac3f8870f5bf1  power.txt
 ---
 
 # Preregistration: does the rewritten office-hours skill make the right call more often than the current one?
@@ -27,7 +27,7 @@ attachments:
 
 - gstack is rewriting its office-hours skill. A founder with no real customer yet would get a one-page decision memo with one dated, numbered action and a line that says when to change direction. Builders and founders with traction keep the design doc. This eval decides whether that rewrite merges.
 - We compare the current skill, the rewrite and no gstack on Opus 5.5 and GPT-6.1 Sol. A simulated founder holds hidden facts and gives them up only when asked. The primary score asks whether the session drew out the decisive fact and ended with the decision and next action those facts support.
-- The plan as first written could not tell a 15-point gain from zero: its smallest detectable difference (MDD) was 28 to 33 points per model. This design pools the two models and runs 70 founder briefs, which brings the pooled MDD to 12 or 13 points under conservative assumptions. The merge bar stays literal: a pooled lift of at least 15 points, with its interval above zero. That bar costs power, and section 9 prints how much.
+- The plan as first written could not tell a 15-point gain from zero: its smallest detectable difference (MDD) was 28 or 29 points per model, and 30 or more under the founder lane's other correlation assumption. This design pools the two models and runs 70 founder briefs, which brings the pooled MDD to 12 or 13 points under conservative assumptions. The merge bar stays literal: a pooled lift of at least 15 points, with its interval above zero. That bar costs power, and section 9 prints how much.
 
 ## 1. The decision this result changes
 
@@ -81,7 +81,7 @@ A skin is one instance of all eight types: 14 founder briefs in 8 opening cluste
 
 **Authoring and validation** reuse the founder lane's pipeline. GPT-6.1 Sol and Gemini 4 Argon author alternately from a frozen type, skin and industry. No Claude model authors, and authors never see either skill. Each brief then passes the lane's vocabulary screen, unanimous key, give-away screen, blind two-family audit, recognition probe and generic screen. A brief gets one rewrite in all, and every check binds the brief's digest.
 
-- **Key.** A founder brief's sealed key holds the decision (one line), 2 to 4 acceptable next-action classes, 1 or 2 decisive fact ids, its twin, and a traction flag (the founder has a named payer or user). A builder brief's key holds the build-first call, the acceptable first steps and its decisive fact ids.
+- **Key.** A founder brief's sealed key holds the decision (one line), 2 to 4 acceptable next-action classes, 1 or 2 decisive fact ids, its twin, and a traction flag (the founder has a named payer or user). A builder brief's key holds the build-first call, the acceptable first steps and its decisive fact ids. Every unpaired brief's key, founder or builder, also holds one plausible wrong call that the hidden facts rule out; the blind audit checks it, and its near-miss row in judge packets comes from it (section 5).
 - **Unanimous key.** Opus 5.5, GPT-6.1 Sol and GPT-6.2 Astra each get every fact. Each must make the key's decision and name an acceptable action, judged by a model from the other family. If one fails, the brief drops, and its twin drops with it so pairs stay whole.
 - **Give-away screen.** An unpaired brief drops when any of the three makes the key's call from the opening alone. Twins share one opening and need opposite calls, so an opening alone cannot carry either call. Pairs pass this screen by construction.
 - **Supply.** Authoring draws until 110 briefs are placed (70 founder, 24 builder, 8 calibration, 8 reserves) or its cap stops it. A shortfall goes to the Captain before stage 1, with the MDD at the count that can fill. The run never quietly shrinks the set.
@@ -194,10 +194,10 @@ Rewrite, main intentions as its approved plan states them. Its inventory confirm
 
 Each pin's markers are frozen from stage 1 transcripts and tested on planted fixtures before they read stage 2.
 
-**Non-inferiority.** Builders aren't harmed when the 95% lower bound of new minus current on the kept-whole rate is above -15 points. The interval is Newcombe's method 10 for paired proportions, on the 48 brief-and-model pairs (one session each arm). It is the repo's existing implementation in lanes/delivery-route/analyze.ts, already tested against Altman's worked example (a 14, b 5, c 0, d 22 gives 0.1220, 0.0115 to 0.2265). Why 15 points:
+**Non-inferiority.** Builders aren't harmed when the 95% lower bound of new minus current on the kept-whole rate is above -15 points. The interval is Newcombe's method 10 for paired proportions, on the brief-and-model pairs where both arms scored (48 when none is missing). Both models run the same 24 briefs, so their pairs are not independent. Each of the four pair counts is therefore divided by a design effect before the interval is computed: the cluster-robust variance of the mean difference, with briefs as clusters, over the variance that treats every pair as independent, held between 1 and 2. A brief with only one model's pair complete is a cluster of one. If both models lose the same one brief and keep every other session whole, the uncorrected lower bound reads -0.140 and the corrected one -0.202, the same as 24 independent briefs (power.txt prints both). Method 10 itself is the repo's existing implementation in lanes/delivery-route/analyze.ts, tested against Altman's worked example (a 14, b 5, c 0, d 22 gives 0.1220, 0.0115 to 0.2265). The run adds the design effect, with a test of the example above. Why 15 points:
 
-- A 10-point margin needs about 48 builder briefs to reach 80% power, about $500 more at caps.
-- The cluster t interval passed non-inferiority falsely 10% to 23% of the time near the ceiling, so it is not used here.
+- At a 10-point margin, 24 briefs pass the check in only 0.35 to 0.56 of runs when nothing changes (rho 0.5), so it would hold a harmless rewrite about half the time.
+- The cluster t interval passes falsely in 0.05 to 0.07 of runs at a true 15-point loss on this design, against 0.026 to 0.043 for the corrected interval, so it is not used here.
 - The main way the rewrite could harm builders, a startup question leaking into a builder session, is covered absolutely by guardrail G1. G1 needs no interval.
 
 **Builder quality.** The builder right call has the same form as R, keyed to the builder's decisive fact and build-first call. It is reported with its interval. If the 95% interval for new minus current lies wholly below zero, that is a real quality loss and it holds the merge (row 2).
@@ -208,7 +208,7 @@ Each pin's markers are frozen from stage 1 transcripts and tested on planted fix
 
 **Interval.** A paired t interval over cluster differences, with C - 1 degrees of freedom, two-sided 95%. It is pinned to Student's sleep data (R datasets::sleep, paired): mean 1.58, interval 0.7001142 to 2.4598858. power.py asserts the interval, and the run's tests must assert the mean and the interval.
 
-The same estimator gives new minus none, current minus none, and each model alone. Builder kept-whole uses Newcombe's method 10 (section 7). The builder right call and the guardrail counts use the t estimator over builder briefs or over founder clusters.
+The same estimator gives new minus none, current minus none, and each model alone. Builder kept-whole uses Newcombe's method 10 with the design-effect correction (section 7). The builder right call and the guardrail counts use the t estimator over builder briefs or over founder clusters.
 
 **Failure scoring, frozen.**
 
@@ -237,24 +237,24 @@ The gain comes from more clusters and from pooling the two models. A second tria
 
 | Design | Clusters | Sessions per brief and arm | MDD, one model | MDD, pooled |
 |---|---|---|---|---|
-| The plan as written: 14 founder briefs (5 pairs, 4 unpaired), 3 trials | 9 | 3 a model | 0.28 to 0.33, over 0.45 at p0 0.55 and rho 0.843 | 0.22 to 0.28, over 0.45 there |
+| The plan as written: 14 founder briefs (5 pairs, 4 unpaired), 3 trials | 9 | 3 a model | 0.28 to 0.29 (0.30 to 0.33, and not reached by 0.39 at p0 0.55) | 0.22 (0.26 to 0.28, and not reached by 0.39 at p0 0.55) |
 | 42 founder briefs (3 skins), 1 trial | 24 | 1 a model | | 0.16 to 0.17 (0.12 at rho 0.843) |
 | 56 founder briefs (4 skins), 1 trial | 32 | 1 a model | | 0.14 to 0.15 (0.09 to 0.10) |
 | **Frozen: 70 founder briefs (5 skins), 1 trial** | **40** | **1 a model** | **0.17 to 0.18 (0.11)** | **0.12 to 0.13 (0.08)** |
 
 Ranges cover p0 from 0.25 to 0.55 at rho 0.5. The figure in brackets uses rho 0.843, the founder lane's other assumption. A twin correlation of 0.5 leaves the frozen MDD unchanged. For the contrasts against no gstack, with none as control at p0 0.05 to 0.40, the pooled MDD is 0.08 to 0.13 (one model alone, 0.11 to 0.18). The interval's simulated coverage is 0.93 to 0.97 pooled and 0.91 to 0.98 for one model alone. It falls below 0.95 at a 10-point true lift on a 5% control rate (0.93 pooled, 0.91 for one model).
 
-**What the literal bar costs.** MERGE needs a pooled estimate of at least 15 points and an interval wholly above zero (section 10). On the frozen design, with p0 0.40 and rho 0.5, the share of simulated runs that read MERGE is:
+**What the literal bar costs.** Row 4 needs a pooled estimate of at least 15 points and an interval wholly above zero (section 10). On the frozen design, with p0 0.40 and rho 0.5, the share of 4,000 simulated runs in which the founder rows read MERGE, with rows 1 to 3 assumed to pass, is:
 
 | True lift | 0 | 10 points | 15 points | 20 points | 25 points |
 |---|---|---|---|---|---|
-| Reads MERGE | 0.000 | 0.139 | 0.537 | 0.880 | 0.987 |
+| Founder rows read MERGE | 0.000 | 0.139 | 0.537 | 0.880 | 0.987 |
 
-At rho 0.843 the shares are 0.000, 0.084, 0.505 and 0.895 for lifts of 0, 10, 15 and 20 points. So a rewrite that truly gains exactly 15 points merges about half the time. One that gains 20 merges about nine times in ten. One that gains nothing never merges.
+At rho 0.843 the shares are 0.000, 0.084, 0.505 and 0.895 for lifts of 0, 10, 15 and 20 points. So a rewrite that truly gains exactly 15 points clears the founder rows about half the time, one that gains 20 about nine times in ten, and one that gains nothing in none of 4,000 runs. These shares leave out the rows above row 4. The builder check is simulated apart (below) and is independent of the founder rows in this model, so with builders unchanged the full rule's chance of MERGE is at most the founder share times the builder pass rate: about 0.880 × 0.777 = 0.68 at a 20-point lift, with builders at p0 0.90 and rho 0.5.
 
-**Builder non-inferiority.** This uses 24 builder briefs, 48 brief-and-model pairs and Newcombe's method 10 with a 15-point margin. When nothing changes, it passes in 0.73, 0.82 and 0.92 of runs when the current skill keeps 85%, 90% and 95% of builder sessions whole (rho 0.5), and in 0.95 to 0.99 at rho 0.843. At a true 15-point loss it passes in 0.03 to 0.06 of runs.
+**Builder non-inferiority.** This uses 24 builder briefs, 48 brief-and-model pairs and the corrected method 10 interval with a 15-point margin (power.txt Part E). When nothing changes, it passes in 0.68, 0.78 and 0.88 of runs when the current skill keeps 85%, 90% and 95% of builder sessions whole (rho 0.5), and in 0.91 to 0.96 at rho 0.843. So at rho 0.5 this check holds a rewrite that leaves builders alone in 12% to 32% of runs. At a true 15-point loss it passes in 0.026 to 0.043 of runs, against 0.025 nominal.
 
-**Re-reading the assumptions.** After stage 1, power.py reruns with the stage's estimates of p0 and rho, and the results post prints the MDD at the observed control rate beside each contrast.
+**Re-reading the assumptions.** After stage 1, power.py reruns at the stage's observed control rates (p0 for the founder rows and the kept-whole rate for builders), at both rho values, because one session per brief, arm and model cannot estimate rho. The results post prints the MDD at the observed control rate beside each contrast, and the design effect the builder interval used.
 
 ## 10. Decision rule
 
@@ -263,7 +263,7 @@ The rows are exclusive and checked from top to bottom. The first row whose condi
 | Row | Outcome | Condition (pooled over Opus 5.5 and Sol unless named) |
 |---|---|---|
 | 1 | INCOMPLETE | an admission condition failed and was not repaired (section 12); a cap stop; a missing limit passed (section 8); or a judge check failed |
-| 2 | HOLD (harm) | any of: new minus current has an upper bound below 0, pooled or on Opus alone or on Sol alone; builder kept-whole has a lower bound at or below -15 points; the builder right call, new minus current, has an upper bound below 0; or a guardrail breaks |
+| 2 | HOLD (harm) | any of: new minus current has an upper bound below 0, pooled or on Opus alone or on Sol alone; builder kept-whole has a lower bound at or below -15 points (section 7's corrected interval); the builder right call, new minus current, has an upper bound below 0; or a guardrail breaks |
 | 3 | CUT | new minus none has an upper bound below 0 |
 | 4 | MERGE | new minus current has an estimate of at least +15 points and a lower bound above 0 |
 | 5 | HOLD (below bar) | new minus current has an estimate below +15 points, and either a lower bound above 0 or an upper bound below +15 |
@@ -415,10 +415,10 @@ The lane's 64 sealed comparison founders are not reused. They are keyed to a fir
 
 This plan governs where the two differ.
 
-- **Briefs and trials:** 70 founder and 24 builder briefs at one session per model and arm, instead of 16 briefs at three trials. The pivot briefs became a matched pair. Why: the plan's MDD of 28 to 33 points per model could not confirm a 15-point bar.
+- **Briefs and trials:** 70 founder and 24 builder briefs at one session per model and arm, instead of 16 briefs at three trials. The pivot briefs became a matched pair. Why: the plan's MDD of 28 or 29 points per model (30 or more at rho 0.843) could not confirm a 15-point bar.
 - **The decision:** an ordered table on the pooled primary. The plan merged on a point estimate of 15 or more with one model's interval above zero. Merge now needs the pooled estimate at 15 or more and the pooled interval above zero, with per-model losses as a harm guard.
 - **The cut:** the plan read "no gstack matches or beats the new skill" as CUT-CANDIDATE. Here CUT needs the new-minus-none interval wholly below zero, and the verdict reads FIX-METHOD under the plan-mode rule. A tie with no gstack is reported beside the outcome, because a tie can sit beside a real lift over the current skill.
-- **Builders:** a stated 15-point non-inferiority margin on the kept-whole rate, plus the zero-leak guardrail, replaces the plan's guardrail alone.
+- **Builders:** a stated 15-point non-inferiority margin on the kept-whole rate, read with Newcombe's method 10 corrected for the two models sharing each brief, plus the zero-leak guardrail, replaces the plan's guardrail alone.
 - **Judges:** one label at medium effort, the founder lane's checked setting, instead of three samples and the median. The check validates exactly what runs.
 - **The simulator:** Gemini 4 Argon, the founder lane's tested and pinned route, instead of Gemini 4 Hydrogen. Both are a third family.
 - **The price smoke:** 12 sessions became stage 1's 72, which also serve the judge check and admission.

@@ -10,12 +10,15 @@
 # session variance that sits between briefs), on the logit scale, plus a model-by-brief term ETA. The new skill moves
 # each brief by a logit shift plus brief noise TAU and model-by-brief noise TAU_M, with the shift solved so the mean
 # lift is delta. Twins' brief noise correlates at twin corr.
-# MDD = the smallest delta (0.01 steps) at which the 95% lower bound is above zero in at least 80% of simulated runs.
+# MDD = the smallest delta (0.01 steps) at which the 95% lower bound is above zero in at least 80% of simulated runs. A lift
+# that would take the control rate to 0.95 or more is not tested, so an MDD can read "not reached by" the last lift tested.
 # Frozen design: 5 skins of 14 founder briefs (6 matched pairs and 2 unpaired a skin: 70 briefs, 40 clusters) and 24
 # unpaired builder briefs, one session a model an arm. Part D reads the frozen MERGE row: pooled estimate at least 0.15
-# and pooled lower bound above zero. Part E reads the builder check: Newcombe's method 10 on brief and model pairs,
-# lower bound of new minus current above -0.15. Parts F and the Altman line check the two intervals against
-# published worked examples.
+# and pooled lower bound above zero, with every other row of the decision table assumed to pass. Part E reads the
+# builder check: Newcombe's method 10 on brief and model pairs, with each of the four counts divided by a design effect
+# for the two models sharing a brief (the cluster-robust variance of the mean difference, briefs as clusters, over the
+# variance that treats the pairs as independent, held between 1 and 2), lower bound of new minus current above -0.15.
+# Parts F and the Altman line check the two intervals against published worked examples.
 # Run: uv run --with numpy==2.3.4 --with scipy==1.16.2 python power.py > power.txt   (seeded; no key, no network)
 import numpy as np
 from scipy import stats
@@ -82,14 +85,16 @@ def t_interval(dc):
     return m - t * se, m + t * se, m
 
 def mdd(p0, rho, ids, nclus, k, models, rng, twin=0.0):
+    last = None
     for delta in STEPS:
-        if p0 + delta >= 0.95: return None
+        if p0 + delta >= 0.95: break
+        last = delta
         lo, hi, m = t_interval(cluster_diffs(p0, rho, delta, ids, nclus, k, models, rng, twin))
-        if (lo > 0).mean() >= 0.80: return float(delta)
-    return None
+        if (lo > 0).mean() >= 0.80: return "%.2f" % delta
+    return "not reached by %.2f" % last
 
 rng = np.random.default_rng(SEED)
-f = lambda v: "over 0.45" if v is None else "%.2f" % v
+f = lambda v: v
 print("power.py, seed %d, %d simulated runs a point, tau %.1f, tau_m %.1f, eta %.1f; MDD at 80%% power, two-sided 95%% paired t interval over opening clusters" % (SEED, SIMS, TAU, TAU_M, ETA))
 
 print("Part A. The plan as written: 14 founder briefs (5 matched pairs and 4 unpaired, 9 clusters), 3 trials a model an arm")
@@ -113,7 +118,7 @@ ids, nclus = layout(5, 6, 2)
 for p0 in (0.05, 0.10, 0.20, 0.40):
     print("against none  p0 %.2f  rho 0.500  pooled MDD %s  one model MDD %s" % (p0, f(mdd(p0, 0.5, ids, nclus, 1, 2, rng)), f(mdd(p0, 0.5, ids, nclus, 1, 1, rng))), flush=True)
 
-print("Part D. Frozen layout, ordered rows 4 to 6 on the pooled primary (guard rows off). MERGE: estimate >= %.2f and lower bound > 0. HOLD below bar: not MERGE, estimate < %.2f, and lower bound > 0 or upper bound < %.2f. INCONCLUSIVE: the rest. Share of simulated runs reading each, by true lift d" % (BAR, BAR, BAR))
+print("Part D. Frozen layout, ordered rows 4 to 6 on the pooled primary, with rows 1 to 3 assumed to pass (founder rows only; the builder check of Part E and the guardrails are not simulated here). MERGE: estimate >= %.2f and lower bound > 0. HOLD below bar: not MERGE, estimate < %.2f, and lower bound > 0 or upper bound < %.2f. INCONCLUSIVE: the rest. Share of simulated runs reading each, by true lift d" % (BAR, BAR, BAR))
 for p0 in (0.25, 0.40, 0.55):
     for rho in (0.5, 0.843):
         row = []
@@ -157,22 +162,43 @@ def builder_pairs(p0, rho, delta, nb, rng):
     x = brief_logits(p0, rho, (SIMS, nb, 1), rng) + rng.normal(0, ETA, (SIMS, nb, 2))
     q0 = expit(x)
     q1 = expit(x + shift + rng.normal(0, TAU, (SIMS, nb, 1)) + rng.normal(0, TAU_M, (SIMS, nb, 2)))
-    y1 = rng.random(q1.shape) < q1
-    y0 = rng.random(q0.shape) < q0
-    count = lambda m: m.reshape(SIMS, -1).sum(axis=1).astype(float)
+    return rng.random(q1.shape) < q1, rng.random(q0.shape) < q0
+
+def pair_counts(y1, y0):
+    count = lambda m: m.reshape(m.shape[0], -1).sum(axis=1).astype(float)
     return count(y1 & y0), count(y1 & ~y0), count(~y1 & y0), count(~y1 & ~y0)
 
-print("Part E. Builder non-inferiority on the kept-whole rate: share of runs whose 95%% lower bound of new minus current is above -margin, at true differences d. Brief and model pairs, one session a model an arm, read by Newcombe's method 10. Frozen: 24 briefs, margin %.2f. The 0.10 margin, and the cluster t interval, are printed for comparison" % MARGIN)
+def design_effect(y1, y0):
+    # y1, y0: (runs, briefs, models) kept-whole outcomes, new and current, every pair complete
+    dj = y1.astype(float) - y0.astype(float)
+    runs, nb, m = dj.shape
+    n = nb * m
+    mean = dj.reshape(runs, -1).mean(axis=1)
+    vc = (nb / (nb - 1)) * ((dj.sum(axis=2) - m * mean[:, None]) ** 2).sum(axis=1) / n ** 2
+    vs = ((dj.reshape(runs, -1) - mean[:, None]) ** 2).sum(axis=1) / n ** 2
+    return np.clip(np.where(vs > 0, vc / np.where(vs > 0, vs, 1), 1.0), 1.0, float(m))
+
+def builder_interval(y1, y0):
+    k = design_effect(y1, y0)
+    return newcombe(*(c / k for c in pair_counts(y1, y0)))
+
+print("Part E. Builder non-inferiority on the kept-whole rate: share of runs whose 95%% lower bound of new minus current is above -margin, at true differences d. Brief and model pairs, one session a model an arm, read by Newcombe's method 10 with the design-effect correction (adjusted). Frozen: 24 briefs, margin %.2f. The 0.10 margin, method 10 reading the 48 pairs as independent (naive) and the cluster t interval are printed for comparison" % MARGIN)
 for nb, margin in ((24, 0.15), (24, 0.10), (16, 0.10)):
     bids, bclus = layout(1, 0, nb)
     for p0 in (0.85, 0.90, 0.95):
         for rho in (0.5, 0.843):
             row = []
             for delta in (0.0, -0.05, -0.10, -0.15):
-                d, lo, hi = newcombe(*builder_pairs(p0, rho, delta, nb, rng))
+                y1, y0 = builder_pairs(p0, rho, delta, nb, rng)
+                d, lo, hi = builder_interval(y1, y0)
+                nd, nlo, nhi = newcombe(*pair_counts(y1, y0))
                 tlo, thi, tm = t_interval(cluster_diffs(p0, rho, delta, bids, bclus, 1, 2, rng))
-                row.append("d %+.2f newcombe %.3f t %.3f" % (delta, (lo > -margin).mean(), (tlo > -margin).mean()))
+                row.append("d %+.2f adjusted %.3f naive %.3f t %.3f" % (delta, (lo > -margin).mean(), (nlo > -margin).mean(), (tlo > -margin).mean()))
             print("builder briefs %d  margin %.2f  p0 %.2f  rho %.3f  | %s" % (nb, margin, p0, rho, " | ".join(row)), flush=True)
+one = np.zeros((1, 24, 2), dtype=bool)
+lost = one.copy()
+lost[0, 0, :] = True
+print("Both models lose the same one brief of 24, every other session kept whole: naive lower bound %.4f, adjusted lower bound %.4f (24 independent briefs: %.4f)" % (float(newcombe(*pair_counts(~lost, ~one))[1][0]), float(builder_interval(~lost, ~one)[1][0]), float(newcombe(np.array(23.0), np.array(0.0), np.array(1.0), np.array(0.0))[1])))
 print("Altman's worked example for method 10 (a 14, b 5, c 0, d 22): diff %.4f, %.4f to %.4f (published 0.1220, 0.0115 to 0.2265)" % tuple(float(v) for v in newcombe(np.array(14.0), np.array(5.0), np.array(0.0), np.array(22.0))))
 print("Part F. Worked example the interval code must reproduce: Student's sleep data (R datasets::sleep), paired, group 2 minus group 1")
 g1 = np.array([0.7, -1.6, -0.2, -1.2, -0.1, 3.4, 3.7, 0.8, 0.0, 2.0])

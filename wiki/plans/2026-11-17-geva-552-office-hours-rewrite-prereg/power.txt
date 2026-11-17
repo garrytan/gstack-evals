@@ -5,7 +5,7 @@ plan  p0 0.25  rho 0.843  one model MDD 0.30  pooled over two models MDD 0.26
 plan  p0 0.40  rho 0.500  one model MDD 0.29  pooled over two models MDD 0.22
 plan  p0 0.40  rho 0.843  one model MDD 0.33  pooled over two models MDD 0.28
 plan  p0 0.55  rho 0.500  one model MDD 0.28  pooled over two models MDD 0.22
-plan  p0 0.55  rho 0.843  one model MDD over 0.45  pooled over two models MDD over 0.45
+plan  p0 0.55  rho 0.843  one model MDD not reached by 0.39  pooled over two models MDD not reached by 0.39
 Part B. Pooled primary on the frozen layout and its neighbours: skins of 14 founder briefs (6 matched pairs and 2 unpaired, 8 clusters a skin)
 skins 3  briefs 42  clusters 24  trials 1  p0 0.25  rho 0.500  pooled MDD 0.16
 skins 3  briefs 42  clusters 24  trials 1  p0 0.25  rho 0.843  pooled MDD 0.12
@@ -36,7 +36,7 @@ against none  p0 0.05  rho 0.500  pooled MDD 0.08  one model MDD 0.11
 against none  p0 0.10  rho 0.500  pooled MDD 0.09  one model MDD 0.13
 against none  p0 0.20  rho 0.500  pooled MDD 0.12  one model MDD 0.16
 against none  p0 0.40  rho 0.500  pooled MDD 0.13  one model MDD 0.18
-Part D. Frozen layout, ordered rows 4 to 6 on the pooled primary (guard rows off). MERGE: estimate >= 0.15 and lower bound > 0. HOLD below bar: not MERGE, estimate < 0.15, and lower bound > 0 or upper bound < 0.15. INCONCLUSIVE: the rest. Share of simulated runs reading each, by true lift d
+Part D. Frozen layout, ordered rows 4 to 6 on the pooled primary, with rows 1 to 3 assumed to pass (founder rows only; the builder check of Part E and the guardrails are not simulated here). MERGE: estimate >= 0.15 and lower bound > 0. HOLD below bar: not MERGE, estimate < 0.15, and lower bound > 0 or upper bound < 0.15. INCONCLUSIVE: the rest. Share of simulated runs reading each, by true lift d
 p0 0.25 rho 0.500 | d -0.05 M 0.000 H 0.999 I 0.001 | d +0.00 M 0.000 H 0.969 I 0.030 | d +0.05 M 0.008 H 0.863 I 0.129 | d +0.10 M 0.131 H 0.742 I 0.127 | d +0.15 M 0.514 H 0.449 I 0.037 | d +0.20 M 0.892 H 0.106 I 0.003 | d +0.25 M 0.989 H 0.011 I 0.000 | d +0.30 M 0.999 H 0.001 I 0.000
 p0 0.25 rho 0.843 | d -0.05 M 0.000 H 1.000 I 0.000 | d +0.00 M 0.000 H 1.000 I 0.000 | d +0.05 M 0.001 H 0.994 I 0.005 | d +0.10 M 0.087 H 0.911 I 0.002 | d +0.15 M 0.517 H 0.483 I 0.000 | d +0.20 M 0.895 H 0.105 I 0.000 | d +0.25 M 0.992 H 0.008 I 0.000 | d +0.30 M 0.999 H 0.001 I 0.000
 p0 0.40 rho 0.500 | d -0.05 M 0.000 H 0.994 I 0.006 | d +0.00 M 0.000 H 0.929 I 0.071 | d +0.05 M 0.015 H 0.777 I 0.209 | d +0.10 M 0.139 H 0.651 I 0.209 | d +0.15 M 0.537 H 0.402 I 0.061 | d +0.20 M 0.880 H 0.112 I 0.009 | d +0.25 M 0.987 H 0.013 I 0.000 | d +0.30 M 1.000 H 0.000 I 0.000
@@ -53,25 +53,26 @@ coverage of the 95% interval, pooled, p0 0.40, true delta 0.00: 0.953
 coverage of the 95% interval, one model, p0 0.40, true delta 0.00: 0.950
 coverage of the 95% interval, pooled, p0 0.40, true delta 0.15: 0.945
 coverage of the 95% interval, one model, p0 0.40, true delta 0.15: 0.958
-Part E. Builder non-inferiority on the kept-whole rate: share of runs whose 95% lower bound of new minus current is above -margin, at true differences d. Brief and model pairs, one session a model an arm, read by Newcombe's method 10. Frozen: 24 briefs, margin 0.15. The 0.10 margin, and the cluster t interval, are printed for comparison
-builder briefs 24  margin 0.15  p0 0.85  rho 0.500  | d +0.00 newcombe 0.733 t 0.769 | d -0.05 newcombe 0.385 t 0.469 | d -0.10 newcombe 0.151 t 0.187 | d -0.15 newcombe 0.030 t 0.051
-builder briefs 24  margin 0.15  p0 0.85  rho 0.843  | d +0.00 newcombe 0.952 t 0.967 | d -0.05 newcombe 0.582 t 0.625 | d -0.10 newcombe 0.226 t 0.248 | d -0.15 newcombe 0.057 t 0.070
-builder briefs 24  margin 0.15  p0 0.90  rho 0.500  | d +0.00 newcombe 0.821 t 0.871 | d -0.05 newcombe 0.420 t 0.522 | d -0.10 newcombe 0.148 t 0.228 | d -0.15 newcombe 0.033 t 0.067
-builder briefs 24  margin 0.15  p0 0.90  rho 0.843  | d +0.00 newcombe 0.969 t 0.982 | d -0.05 newcombe 0.578 t 0.610 | d -0.10 newcombe 0.196 t 0.246 | d -0.15 newcombe 0.045 t 0.070
-builder briefs 24  margin 0.15  p0 0.95  rho 0.500  | d +0.00 newcombe 0.920 t 0.956 | d -0.05 newcombe 0.509 t 0.613 | d -0.10 newcombe 0.161 t 0.249 | d -0.15 newcombe 0.045 t 0.073
-builder briefs 24  margin 0.15  p0 0.95  rho 0.843  | d +0.00 newcombe 0.990 t 0.995 | d -0.05 newcombe 0.581 t 0.634 | d -0.10 newcombe 0.166 t 0.266 | d -0.15 newcombe 0.030 t 0.065
-builder briefs 24  margin 0.10  p0 0.85  rho 0.500  | d +0.00 newcombe 0.404 t 0.529 | d -0.05 newcombe 0.131 t 0.210 | d -0.10 newcombe 0.031 t 0.070 | d -0.15 newcombe 0.005 t 0.007
-builder briefs 24  margin 0.10  p0 0.85  rho 0.843  | d +0.00 newcombe 0.698 t 0.835 | d -0.05 newcombe 0.224 t 0.319 | d -0.10 newcombe 0.053 t 0.088 | d -0.15 newcombe 0.009 t 0.017
-builder briefs 24  margin 0.10  p0 0.90  rho 0.500  | d +0.00 newcombe 0.463 t 0.645 | d -0.05 newcombe 0.136 t 0.262 | d -0.10 newcombe 0.024 t 0.071 | d -0.15 newcombe 0.004 t 0.013
-builder briefs 24  margin 0.10  p0 0.90  rho 0.843  | d +0.00 newcombe 0.728 t 0.885 | d -0.05 newcombe 0.190 t 0.355 | d -0.10 newcombe 0.036 t 0.081 | d -0.15 newcombe 0.005 t 0.015
-builder briefs 24  margin 0.10  p0 0.95  rho 0.500  | d +0.00 newcombe 0.596 t 0.795 | d -0.05 newcombe 0.147 t 0.329 | d -0.10 newcombe 0.029 t 0.077 | d -0.15 newcombe 0.004 t 0.015
-builder briefs 24  margin 0.10  p0 0.95  rho 0.843  | d +0.00 newcombe 0.806 t 0.951 | d -0.05 newcombe 0.161 t 0.353 | d -0.10 newcombe 0.020 t 0.071 | d -0.15 newcombe 0.002 t 0.011
-builder briefs 16  margin 0.10  p0 0.85  rho 0.500  | d +0.00 newcombe 0.242 t 0.473 | d -0.05 newcombe 0.090 t 0.245 | d -0.10 newcombe 0.025 t 0.098 | d -0.15 newcombe 0.007 t 0.042
-builder briefs 16  margin 0.10  p0 0.85  rho 0.843  | d +0.00 newcombe 0.433 t 0.870 | d -0.05 newcombe 0.165 t 0.498 | d -0.10 newcombe 0.051 t 0.212 | d -0.15 newcombe 0.016 t 0.075
-builder briefs 16  margin 0.10  p0 0.90  rho 0.500  | d +0.00 newcombe 0.255 t 0.619 | d -0.05 newcombe 0.088 t 0.345 | d -0.10 newcombe 0.019 t 0.148 | d -0.15 newcombe 0.005 t 0.058
-builder briefs 16  margin 0.10  p0 0.90  rho 0.843  | d +0.00 newcombe 0.366 t 0.919 | d -0.05 newcombe 0.126 t 0.521 | d -0.10 newcombe 0.035 t 0.226 | d -0.15 newcombe 0.010 t 0.059
-builder briefs 16  margin 0.10  p0 0.95  rho 0.500  | d +0.00 newcombe 0.258 t 0.824 | d -0.05 newcombe 0.050 t 0.474 | d -0.10 newcombe 0.008 t 0.204 | d -0.15 newcombe 0.002 t 0.079
-builder briefs 16  margin 0.10  p0 0.95  rho 0.843  | d +0.00 newcombe 0.214 t 0.965 | d -0.05 newcombe 0.044 t 0.547 | d -0.10 newcombe 0.009 t 0.207 | d -0.15 newcombe 0.002 t 0.057
+Part E. Builder non-inferiority on the kept-whole rate: share of runs whose 95% lower bound of new minus current is above -margin, at true differences d. Brief and model pairs, one session a model an arm, read by Newcombe's method 10 with the design-effect correction (adjusted). Frozen: 24 briefs, margin 0.15. The 0.10 margin, method 10 reading the 48 pairs as independent (naive) and the cluster t interval are printed for comparison
+builder briefs 24  margin 0.15  p0 0.85  rho 0.500  | d +0.00 adjusted 0.684 naive 0.733 t 0.769 | d -0.05 adjusted 0.338 naive 0.385 t 0.469 | d -0.10 adjusted 0.132 naive 0.151 t 0.187 | d -0.15 adjusted 0.026 naive 0.030 t 0.051
+builder briefs 24  margin 0.15  p0 0.85  rho 0.843  | d +0.00 adjusted 0.912 naive 0.952 t 0.967 | d -0.05 adjusted 0.507 naive 0.582 t 0.625 | d -0.10 adjusted 0.176 naive 0.226 t 0.248 | d -0.15 adjusted 0.043 naive 0.057 t 0.070
+builder briefs 24  margin 0.15  p0 0.90  rho 0.500  | d +0.00 adjusted 0.777 naive 0.821 t 0.871 | d -0.05 adjusted 0.374 naive 0.420 t 0.522 | d -0.10 adjusted 0.126 naive 0.148 t 0.228 | d -0.15 adjusted 0.027 naive 0.033 t 0.067
+builder briefs 24  margin 0.15  p0 0.90  rho 0.843  | d +0.00 adjusted 0.937 naive 0.969 t 0.982 | d -0.05 adjusted 0.482 naive 0.578 t 0.610 | d -0.10 adjusted 0.159 naive 0.196 t 0.246 | d -0.15 adjusted 0.041 naive 0.045 t 0.070
+builder briefs 24  margin 0.15  p0 0.95  rho 0.500  | d +0.00 adjusted 0.881 naive 0.920 t 0.956 | d -0.05 adjusted 0.453 naive 0.509 t 0.613 | d -0.10 adjusted 0.136 naive 0.161 t 0.249 | d -0.15 adjusted 0.037 naive 0.045 t 0.073
+builder briefs 24  margin 0.15  p0 0.95  rho 0.843  | d +0.00 adjusted 0.961 naive 0.990 t 0.995 | d -0.05 adjusted 0.492 naive 0.581 t 0.634 | d -0.10 adjusted 0.148 naive 0.166 t 0.266 | d -0.15 adjusted 0.027 naive 0.030 t 0.065
+builder briefs 24  margin 0.10  p0 0.85  rho 0.500  | d +0.00 adjusted 0.354 naive 0.404 t 0.529 | d -0.05 adjusted 0.111 naive 0.131 t 0.210 | d -0.10 adjusted 0.026 naive 0.031 t 0.070 | d -0.15 adjusted 0.005 naive 0.005 t 0.007
+builder briefs 24  margin 0.10  p0 0.85  rho 0.843  | d +0.00 adjusted 0.666 naive 0.698 t 0.835 | d -0.05 adjusted 0.222 naive 0.224 t 0.319 | d -0.10 adjusted 0.053 naive 0.053 t 0.088 | d -0.15 adjusted 0.009 naive 0.009 t 0.017
+builder briefs 24  margin 0.10  p0 0.90  rho 0.500  | d +0.00 adjusted 0.417 naive 0.463 t 0.645 | d -0.05 adjusted 0.120 naive 0.136 t 0.262 | d -0.10 adjusted 0.022 naive 0.024 t 0.071 | d -0.15 adjusted 0.004 naive 0.004 t 0.013
+builder briefs 24  margin 0.10  p0 0.90  rho 0.843  | d +0.00 adjusted 0.698 naive 0.728 t 0.885 | d -0.05 adjusted 0.189 naive 0.190 t 0.355 | d -0.10 adjusted 0.036 naive 0.036 t 0.081 | d -0.15 adjusted 0.005 naive 0.005 t 0.015
+builder briefs 24  margin 0.10  p0 0.95  rho 0.500  | d +0.00 adjusted 0.559 naive 0.596 t 0.795 | d -0.05 adjusted 0.141 naive 0.147 t 0.329 | d -0.10 adjusted 0.028 naive 0.029 t 0.077 | d -0.15 adjusted 0.004 naive 0.004 t 0.015
+builder briefs 24  margin 0.10  p0 0.95  rho 0.843  | d +0.00 adjusted 0.780 naive 0.806 t 0.951 | d -0.05 adjusted 0.161 naive 0.161 t 0.353 | d -0.10 adjusted 0.020 naive 0.020 t 0.071 | d -0.15 adjusted 0.002 naive 0.002 t 0.011
+builder briefs 16  margin 0.10  p0 0.85  rho 0.500  | d +0.00 adjusted 0.197 naive 0.242 t 0.473 | d -0.05 adjusted 0.070 naive 0.090 t 0.245 | d -0.10 adjusted 0.019 naive 0.025 t 0.098 | d -0.15 adjusted 0.007 naive 0.007 t 0.042
+builder briefs 16  margin 0.10  p0 0.85  rho 0.843  | d +0.00 adjusted 0.401 naive 0.433 t 0.870 | d -0.05 adjusted 0.163 naive 0.165 t 0.498 | d -0.10 adjusted 0.051 naive 0.051 t 0.212 | d -0.15 adjusted 0.016 naive 0.016 t 0.075
+builder briefs 16  margin 0.10  p0 0.90  rho 0.500  | d +0.00 adjusted 0.217 naive 0.255 t 0.619 | d -0.05 adjusted 0.075 naive 0.088 t 0.345 | d -0.10 adjusted 0.018 naive 0.019 t 0.148 | d -0.15 adjusted 0.005 naive 0.005 t 0.058
+builder briefs 16  margin 0.10  p0 0.90  rho 0.843  | d +0.00 adjusted 0.342 naive 0.366 t 0.919 | d -0.05 adjusted 0.125 naive 0.126 t 0.521 | d -0.10 adjusted 0.035 naive 0.035 t 0.226 | d -0.15 adjusted 0.010 naive 0.010 t 0.059
+builder briefs 16  margin 0.10  p0 0.95  rho 0.500  | d +0.00 adjusted 0.228 naive 0.258 t 0.824 | d -0.05 adjusted 0.047 naive 0.050 t 0.474 | d -0.10 adjusted 0.008 naive 0.008 t 0.204 | d -0.15 adjusted 0.002 naive 0.002 t 0.079
+builder briefs 16  margin 0.10  p0 0.95  rho 0.843  | d +0.00 adjusted 0.196 naive 0.214 t 0.965 | d -0.05 adjusted 0.044 naive 0.044 t 0.547 | d -0.10 adjusted 0.009 naive 0.009 t 0.207 | d -0.15 adjusted 0.002 naive 0.002 t 0.057
+Both models lose the same one brief of 24, every other session kept whole: naive lower bound -0.1398, adjusted lower bound -0.2024 (24 independent briefs: -0.2024)
 Altman's worked example for method 10 (a 14, b 5, c 0, d 22): diff 0.1220, 0.0115 to 0.2265 (published 0.1220, 0.0115 to 0.2265)
 Part F. Worked example the interval code must reproduce: Student's sleep data (R datasets::sleep), paired, group 2 minus group 1
 mean 1.5800000  95% interval 0.7001142 to 2.4598858  (published: 1.58, 0.7001142 to 2.4598858)
