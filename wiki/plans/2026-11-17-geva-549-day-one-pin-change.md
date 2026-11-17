@@ -123,3 +123,20 @@ On the smoke's three A transcripts, the rule finds all three runs. Two of them w
 - Builds and checks do not hold. They are scored on the tree and in the browser, and a dev server left running would turn every such build into a gap.
 
 Of the smoke's 23 sessions, only that one A session ended with background work still running. No N, D or R session did, and nothing reruns. The new tests are in tests/day-one/hold.test.ts.
+
+**What the advisory read found.** One cross-family read of both changes (GPT-6.1 Sol, read-only) reported eight blockers and one note. All eight were fixed test-first in one commit, with no second read:
+
+- The command log missed real calls in some shell shapes: behind a wrapper (env, command, exec, timeout and others), inside a command substitution, or inside eval or a bash -c string. A cd inside a subshell or in a subagent's shell also moved the main agent's folder, and `${X:-default}` and escaped dollars expanded wrongly. The command log now reads all of these.
+- A read-only Python command that wrote to stdout refused the record. Interpreter code now counts as an edit only when it opens a file for writing.
+- Edits made through env, eval or bash -c were missed. They are now read.
+- A call that only asked for help counted. Only next and run calls start a run now.
+- A symlink loop in the work tree stopped the scan, and a symlinked folder read differently live and after the copy-out. The scan no longer follows symlinks, which matches the copy-out.
+- A held session that reached its deadline retried when its containment probe could not run. The deadline gap now comes first.
+
+Three limits remain, kept as notes:
+
+- A call that is written but never runs, such as one after `false &&`, or another program named gstack-autoplan, still counts.
+- Interpreter code that builds the record's path at run time, without naming run.json, is not seen as an edit.
+- An edit made through a symlinked path is not seen.
+
+A held session whose RAM-backed mount fills still retries as an infrastructure failure. The full mount may be why its work never finished.
