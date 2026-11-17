@@ -42,7 +42,12 @@ with no network, on the unit's tree volume.
    the old repository tracked and that remain after the strip are committed as one commit on main, with a fixed author,
    committer and date. Nested .git dirs are removed. Untracked build output stays on disk, untracked. Then reflog expiry,
    .git/logs removal and git gc --prune=now.
-3. Follow-on trees (followon.sh): the first stage's full-tree patch, staged with git apply --index, as commit two.
+3. Follow-on trees (followon.sh): the first stage's full-tree patch, staged with git apply --index, as commit two, less
+   what step 1's strip rule removes from it (history.ts followOnStrip): every CLAUDE.md, CLAUDE.local.md and AGENTS.md
+   the patch writes, the outermost .claude dir a written path sits in, and each @import of a written CLAUDE.md or
+   CLAUDE.local.md that names a file the patch creates. A CLAUDE.md or CLAUDE.local.md the patch makes from an existing
+   file or writes as binary, or a strip path with a symlink in its parent chain, refuses (E_SM_STRIP). The removed paths
+   are recorded in the session record's strip.first_stage and the start set's removed.
 4. Preflight (preflight.sh): commit count 1 on a base tree and 2 on a follow-on tree, every commit reachable from HEAD,
    refs only refs/heads/main, no remote, stash, reflog file or loose object. Else E_SM_HISTORY.
 5. Scope (scope.ts): the deepest dir holding every non-test source file the fix changed, widened one parent at a time
