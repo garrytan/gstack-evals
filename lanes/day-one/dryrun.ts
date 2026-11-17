@@ -8,7 +8,7 @@
 // smoke's admission arithmetic replays at planning prices; and every metered line item opens and settles one lease on
 // a temporary ledger.
 import { createHash, randomBytes } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openLease, recordApproval } from "../../src/runner/ledger/ledger.ts";
@@ -188,6 +188,12 @@ export const CASES: Record<string, Case> = {
     must(long[0]!.length === QUESTION_CHARS && long[0]!.endsWith("Shall I go on?"), "the question is not the asking reply's last " + QUESTION_CHARS + " characters");
     const dropped = ownerLoop({ ask: async () => fail("the responder was called with the channel dropped"), gatePending: () => true, dropped: true });
     const dg = await dropped.nextUser(["The plan waits at its approval gate."]);
+    const askedGate = ownerLoop({ ask: async () => ({ text: "Go with the recommendation.\nSOURCE: recommended" }), gatePending: () => true });
+    const ag = await askedGate.nextUser(["Do you approve the recommended plan?"]);
+    must("reply" in ag && askedGate.state.turns[0]!.gate, "a gate whose text asks a question was not logged as the gate with the channel on");
+    const droppedAsk = ownerLoop({ ask: async () => fail("the responder was called with the channel dropped"), gatePending: () => true, dropped: true });
+    const dag = await droppedAsk.nextUser(["Do you approve the recommended plan?"]);
+    must("reply" in dag && dag.reply === GATE_REPLY && droppedAsk.state.turns[0]!.gate, "a gate whose text asks a question did not get the fixed reply with the channel dropped");
     const dq = await ownerLoop({ ask: async () => fail("the responder was called with the channel dropped"), dropped: true }).nextUser(["Which day do you bake?"]);
     must("reply" in dg && dg.reply === GATE_REPLY && dropped.state.turns[0]!.source === "recommended" && dropped.state.turns[0]!.gate, "a dropped channel did not answer the gate with the fixed reply, logged as recommended");
     must("end" in dq, "a dropped channel answered a question");
@@ -339,6 +345,17 @@ export const CASES: Record<string, Case> = {
       must(crashed.usd === 2 && crashed.voice_usd === 3 && vre.voice_micros === 3e6, "a crashed attempt's held spend was not split by meter (planner $" + crashed.usd + ", voice $" + crashed.voice_usd + ", stage voice " + vre.voice_micros + " micros)");
       const halt = await stageRun(join(dir, "halt"), us, "base", ["n"], 100, { launch: stubLaunch({ leak: true }) });
       must(halt.stops.some((s) => s.code === "E_DAYONE_LEAK"), "a containment departure did not halt");
+      const haltMark = JSON.parse(readFileSync(join(dir, "halt", "base-dry", "stops.json"), "utf8")) as { stops: { code: string }[] };
+      must(haltMark.stops.some((s) => s.code === "E_DAYONE_LEAK"), "the halt was not written to stops.json");
+      let relaunched = "admitted";
+      const relaunchSeen: LaunchInput[] = [];
+      await stageRun(join(dir, "halt"), us, "base", ["n"], 100, { launch: stubLaunch({ seen: relaunchSeen }) }).catch((e) => (relaunched = String((e as Error).message)));
+      must(/halted/.test(relaunched) && !relaunchSeen.length, "a relaunch after a containment halt started a session: " + relaunched);
+      const markDir = join(dir, "halt-mark");
+      await stageRun(markDir, us.slice(0, 1), "base", ["n"], 100, { launch: stubLaunch({ leak: true }), crash: (p) => { if (p === "row") throw new Error("killed after the halt row"); } }, { n: 0 }, { parallel: 1 }).catch(() => {});
+      let markRelaunch = "admitted";
+      await stageRun(markDir, us.slice(0, 1), "base", ["n"], 100).catch((e) => (markRelaunch = String((e as Error).message)));
+      must(/halt/.test(markRelaunch), "a runner killed right after a halt left a dir a relaunch could run in: " + markRelaunch);
       const one = us.slice(0, 1);
       for (const st of ["base", "build"] as const)
         for (const point of ["partials", "pending", "published", "row"] as CrashPoint[]) {
@@ -354,6 +371,19 @@ export const CASES: Record<string, Case> = {
           const adopted = point !== "partials";
           must(killed && rows.length === 1 && files && rows[0]!.usd === 1 && restartSeen.length === (adopted ? 0 : 1) && rows[0]!.attempts.length === (adopted ? 1 : 2), "a " + st + " cell killed at " + point + " did not end done with its files, with one row, charged once and " + (adopted ? "adopted without a rerun" : "run again") + ": " + JSON.stringify({ killed, rows: rows.length, files, usd: rows[0]?.usd, reruns: restartSeen.length }));
         }
+      const cutDir = join(dir, "cut-row");
+      await stageRun(cutDir, one, "base", ["n"], 100, { crash: (p) => { if (p === "published") throw new Error("killed mid-append"); } }, { n: 0 }, { parallel: 1 }).catch(() => {});
+      const cutStage = join(cutDir, "base-dry");
+      const pendingRow = (JSON.parse(readFileSync(join(cutStage, "pending", readdirSync(join(cutStage, "pending"))[0]!), "utf8")) as { row: unknown }).row;
+      appendFileSync(join(cutStage, "rows.ndjson"), JSON.stringify(pendingRow).slice(0, 40));
+      const cutSeen: LaunchInput[] = [];
+      for (let k = 0; k < 2; k++) await stageRun(cutDir, one, "base", ["n"], 100, { launch: stubLaunch({ seen: cutSeen }) }, { n: 0 }, { parallel: 1 });
+      const cutLines = readFileSync(join(cutStage, "rows.ndjson"), "utf8").split("\n").filter((l) => l.trim());
+      must(cutLines.length === 1 && cutLines.every((l) => { try { return (JSON.parse(l) as { id: string }).id === "base/aaaaaa/r1/n"; } catch { return false; } }) && !cutSeen.length, "a row cut off mid-append lost its cell or ran it again: " + JSON.stringify({ lines: cutLines.length, reruns: cutSeen.length }));
+      appendFileSync(join(cutStage, "rows.ndjson"), "not a row\n");
+      let garbled = "admitted";
+      await stageRun(cutDir, one, "base", ["n"], 100, {}, { n: 0 }, { parallel: 1 }).catch((e) => (garbled = String((e as Error).message)));
+      must(/is not a row/.test(garbled), "a rows.ndjson line that is not a row was skipped silently");
       const built = async (d: string) => {
         await stageRun(d, one, "base", ["n"], 100, {}, { n: 0 }, { parallel: 1 });
         await stageRun(d, one, "build", ["n"], 100, {}, { n: 0 }, { parallel: 1 });

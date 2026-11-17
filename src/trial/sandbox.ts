@@ -58,7 +58,7 @@ export interface Sandbox {
   /** The HOME every child gets, given the trial's evaluator-side directory. */
   homePath(dir: string): string;
   step(role: "setup" | "check", command: string, task: string, opts: StepOptions): StepResult;
-  /** ram puts the agent's HOME and /tmp on tmpfs of that size, HOME seeded with the image's own copy; unset, both stay on the container's disk layer. */
+  /** ram puts the agent's HOME and /tmp on tmpfs of that size, owned by the runner's uid and gid like the container's user, HOME seeded with the image's own copy; unset, both stay on the container's disk layer. */
   agent(task: string, opts: { work: string; env: Record<string, string>; network?: string | null; root?: boolean; mounts?: readonly ReadOnlyMount[]; ram?: { size: string } }): AgentSession;
 }
 
@@ -113,7 +113,8 @@ export function dockerSandbox(opts: { trialImage: string; armImage?: string; doc
       const path = workPath(o.work, task, o.root);
       const ro = (o.mounts ?? []).flatMap((m) => ["-v", m.host + ":" + m.path + ":ro"]);
       const image = opts.armImage ?? opts.trialImage;
-      const ram = o.ram ? ["--tmpfs", "/tmp:rw,exec,mode=1777,size=" + o.ram.size, "--tmpfs", "/home/agent:rw,exec,mode=1777,size=" + o.ram.size] : [];
+      const owner = ",uid=" + (process.getuid?.() ?? 1000) + ",gid=" + (process.getgid?.() ?? 1000);
+      const ram = o.ram ? ["--tmpfs", "/tmp:rw,exec,mode=1777,size=" + o.ram.size + owner, "--tmpfs", "/home/agent:rw,exec,mode=1777,size=" + o.ram.size + owner] : [];
       const start = dockerStep(docker, ["-d", "--network", o.network ?? "none", "--user", uid(), ...HARDENING, ...ram, "-v", o.work + ":" + path, ...ro, "-w", path], ["--entrypoint", "sleep", image, "infinity"], name, o.env, 120_000);
       if (start.exitCode !== 0) throw new IsolationError("could not start the agent container: " + start.stderr.trim().split("\n").slice(-1)[0]);
       if (o.ram) {

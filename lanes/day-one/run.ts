@@ -6,12 +6,15 @@
 //   rig, and writes <out>/<stage>/manifest.json before the rig opens; a launch whose manifest differs is refused.
 // - A cell is one unit, replicate and arm. It takes at most two attempts: a retryable outcome (sessions.ts) on the first
 //   attempt runs once more in a fresh container, and on the second it is a gap. Contaminated cells are reported, never
-//   scored. A halt (a containment departure, rejected credentials) writes its row and stops the launch for the Captain.
+//   scored. A halt (a containment departure, rejected credentials) writes its row and stops.json at once and stops the
+//   launch for the Captain; a later launch on that dir is refused.
 // - A round of up to --parallel cells starts only when its worst case fits what the launch may still spend: twice each
 //   session's allowance on the item (twice the voice's on a gstack arm) and twice the responder's on the responder
 //   item. A round that does not fit is an admission stop (E_DAYONE_ADMISSION): nothing in it ran, stops.json lists the
 //   cells left unrun, and a relaunch of the same stage with a smaller --parallel resumes it. A ledger cap stop inside a
-//   session is a cap stop: the launch ends incomplete, nothing is retried, and a later launch on that dir is refused.
+//   session is a cap stop: stops.json records it at once, the launch ends incomplete, nothing is retried, and a later
+//   launch on that dir is refused. A rows.ndjson that ends in a cut-off row (a kill or a full disk mid-append) loses
+//   that tail at load, so the cell's pending file adopts it by digest; any other line that is not a row is refused.
 // - Plans and builds live in shared folders (<out>/plans, <out>/builds), so a cell whose plan or build is already there
 //   from another launch is not run again; it is logged and left for that launch's rows.
 // - With the owner channel dropped (a failed fidelity bar), no arm gets the owner notice, questions end the session,
@@ -219,17 +222,23 @@ function publish(out: string, p: Pending): boolean {
 
 const pendingFile = (dir: string, id: string) => join(dir, "pending", sha(id).slice(0, 16) + ".json");
 
-function readRows(dir: string): Map<string, Row> {
+function readRows(dir: string, repair?: (line: string) => void): Map<string, Row> {
   const rows = new Map<string, Row>();
   const f = join(dir, "rows.ndjson");
   if (!existsSync(f)) return rows;
-  for (const l of readFileSync(f, "utf8").split("\n")) {
+  const text = readFileSync(f, "utf8");
+  const whole = text.slice(0, text.lastIndexOf("\n") + 1);
+  if (whole.length < text.length && repair) {
+    writeFileSync(f, whole);
+    repair(text.slice(whole.length));
+  }
+  for (const [n, l] of whole.split("\n").entries()) {
     if (!l.trim()) continue;
     try {
       const r = JSON.parse(l) as Row;
       rows.set(r.id, r);
     } catch {
-      continue;
+      throw new Error("E_USAGE " + f + " line " + (n + 1) + " is not a row; a cell's row may be lost, so nothing runs until it is resolved by hand");
     }
   }
   return rows;
@@ -285,9 +294,13 @@ export async function runStage(o: StageInput, deps: StageDeps): Promise<StageRes
   const stopsFile = join(dir, "stops.json");
   const before = existsSync(stopsFile) ? (JSON.parse(readFileSync(stopsFile, "utf8")) as { stops: StageResult["stops"] }) : null;
   if (before?.stops.some((s) => s.code === "CAP_STOP")) throw new Error("E_USAGE " + dir + " ended in a cap stop, an incomplete run that is never resumed; its stops.json stands");
+  const halt = before?.stops.find((s) => s.code !== "E_DAYONE_ADMISSION");
+  if (halt) throw new Error("E_USAGE " + dir + " halted (" + halt.code + ": " + halt.message + "); no session starts in it again until the Captain clears it, and its stops.json stands");
   const frozen = freeze(join(dir, "manifest.json"), { schema: "day-one.stage.v1", stage: o.stage, units: o.units.map((u) => u.id).sort(), reps: o.reps, arms: o.arms, cells: cells.map(cellId), cap_micros: o.cap, owner_cap_micros: o.ownerCap, voice_cap_micros: o.voiceCap, owner_channel: o.ownerChannel, limits: LIMITS, models: MODELS });
   if ("problem" in frozen) throw new Error("E_USAGE " + frozen.problem);
-  const done = readRows(dir);
+  const done = readRows(dir, (cut) => o.log(join(dir, "rows.ndjson") + " ended in a cut-off row of " + cut.length + " bytes; removed, so its cell's pending file adopts it by digest or its attempt marker reconciles it"));
+  const haltRow = [...done.values()].find((r) => r.state === "halt");
+  if (haltRow) throw new Error("E_USAGE " + dir + " holds a halt row (" + haltRow.id + ", " + haltRow.code + "); no session starts in it again until the Captain clears it");
   if (existsSync(join(dir, "pending"))) {
     for (const name of readdirSync(join(dir, "pending"))) {
       const f = join(dir, "pending", name);
@@ -308,6 +321,7 @@ export async function runStage(o: StageInput, deps: StageDeps): Promise<StageRes
     }
   }
   const result: StageResult = { manifest_sha256: frozen.sha256, rows: [], stops: [], unrun: [], spent_micros: 0, owner_micros: 0, voice_micros: 0, closed: null };
+  const markStops = () => writeFileSync(stopsFile, JSON.stringify({ stops: result.stops, unrun: result.unrun }, null, 2) + "\n");
   for (const r of done.values()) {
     result.spent_micros += Math.round((r.usd + r.voice_usd) * D);
     result.voice_micros += Math.round(r.voice_usd * D);
@@ -444,6 +458,7 @@ export async function runStage(o: StageInput, deps: StageDeps): Promise<StageRes
             halted = true;
             result.stops.push({ code: "CAP_STOP", message: id + ": " + outcome0.why });
             result.unrun.push({ id, how: "stopped" });
+            markStops();
             return;
           }
           if (outcome0.state !== "retry") end = outcome0;
@@ -486,6 +501,7 @@ export async function runStage(o: StageInput, deps: StageDeps): Promise<StageRes
         halted = true;
         result.stops.push({ code: "CAP_STOP", message: id + ": " + outcome.why });
         result.unrun.push({ id, how: "stopped" });
+        markStops();
         return;
       }
       if (outcome.state !== "retry") end = outcome;
@@ -519,6 +535,7 @@ export async function runStage(o: StageInput, deps: StageDeps): Promise<StageRes
     if (e.state === "halt") {
       halted = true;
       result.stops.push({ code: e.code, message: id + ": " + e.why + "; the launch stops for the Captain" });
+      markStops();
     }
   };
 
@@ -546,7 +563,7 @@ export async function runStage(o: StageInput, deps: StageDeps): Promise<StageRes
     result.unrun.push(...cells.map(cellId).filter((id) => !ran.has(id)).map((id) => ({ id, how: "unstarted" as const })));
   } finally {
     result.closed = await rig.close();
-    writeFileSync(stopsFile, JSON.stringify({ stops: result.stops, unrun: result.unrun }, null, 2) + "\n");
+    markStops();
   }
   return result;
 }

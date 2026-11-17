@@ -63,8 +63,8 @@ export function splitSource(text: string): { answer: string; source: AnswerSourc
 /** The question a reply asks the owner, or null when it asks none. */
 export function ownerQuestion(texts: readonly string[], gatePending: boolean): { question: string; gate: boolean } | null {
   const all = texts.join("\n\n");
-  if (proseQuestion(all) !== null) return { question: all.slice(-QUESTION_CHARS), gate: false };
   if (gatePending && all.trim()) return { question: all.slice(-QUESTION_CHARS), gate: true };
+  if (proseQuestion(all) !== null) return { question: all.slice(-QUESTION_CHARS), gate: false };
   return null;
 }
 
