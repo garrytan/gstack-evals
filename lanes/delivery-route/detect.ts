@@ -399,26 +399,49 @@ const reportsFailed = (r: Run, tests: string[]) => resultLines(r.result).some((l
  *  (covered), so an unrelated green run, or a pass on another written test, does not count. */
 const passing = (r: Run, tests: string[], covered: string[]) => r.ok && showsOutcome(r.result) && !showsFailure(r.result) && !reportsFailed(r, tests) && covered.some((t) => selectsTest(r, t));
 /** A result's test summaries in order, each true when it passed: pytest's summary line (a passed, failed or error count with
- *  its time; passed when it holds no failed or error count) and unittest's Ran line (passed when it ran a test and the next
- *  line opens with OK). */
+ *  its time; passed when it holds a passed count above 0 and no failed or error count) and unittest's Ran line (passed when it
+ *  ran a test and the next line opens with OK). */
 function summaries(s: string): boolean[] {
   const ls = resultLines(s), out: boolean[] = [];
   ls.forEach((l, i) => {
-    if (/\b\d+ (?:passed|failed|errors?)\b.*\bin \d+(?:\.\d+)?s\b/.test(l) && !/no tests ran/.test(l)) out.push(!/\b\d+ (?:failed|errors?)\b/.test(l));
+    if (/\b\d+ (?:passed|failed|errors?)\b.*\bin \d+(?:\.\d+)?s\b/.test(l) && !/no tests ran/.test(l)) out.push(/\b[1-9]\d* passed\b/.test(l) && !/\b\d+ (?:failed|errors?)\b/.test(l));
     else if (/^Ran \d+ tests? in /.test(l)) out.push(!/^Ran 0 /.test(l) && /^OK\b/.test(ls.slice(i + 1).find((x) => x.trim())?.trim() ?? ""));
   });
   return out;
 }
+const WRAPPER = /^(?:[A-Za-z_]\w*=.*|-\S*|\d+(?:\.\d+)?[smhd]?|timeout|env|nice|time|exec|uv|poetry|pdm|hatch|rye|run|coverage)$/;
+/** A runner command that runs its tests once: pytest or unittest, with only an interpreter, options and known wrappers
+ *  (timeout, env, uv run, coverage run and the like) before it. */
+const soleRun = (c: ShellCommand) => { const i = runnerAt(c); return i >= 0 && /^(?:pytest|py\.test|unittest)$/.test(posix.basename(c.words[i]!)) && c.words.slice(0, i).every((w) => WRAPPER.test(w) || INTERPRETER.test(posix.basename(w))); };
+const QUIET = /^(?:cd|pwd|export|unset|echo|printf|true|false|sleep|ls|git|cp|mv|rm|mkdir|touch|ruff|black|pyink|isort|flake8|mypy|pyright|pylint)$/;
+const FILTER = /^(?:tail|head|grep|egrep|rg|sed|awk|cut|sort|uniq|tr|wc|tee|cat)$/;
+/** A command that prints no test summary of its own: a plain assignment, a filter reading a pipe, an in-place sed or perl,
+ *  sourcing a virtualenv's activate script, or a command on a short list (cd, echo, git, ls, file moves, linters and
+ *  formatters). An interpreter, a shell, a script, make, pip, a command named by a variable or a reader given a file could
+ *  print one, so any of those leaves the call to be read whole. */
+function printsNoSummary(c: ShellCommand, piped: boolean): boolean {
+  const w = c.words.filter((x) => !/^[A-Za-z_]\w*=/.test(x)), name = posix.basename(w[0] ?? "");
+  if (!w.length || QUIET.test(name) || (piped && FILTER.test(name))) return true;
+  if (/^(?:g?sed|perl)$/.test(name)) return IN_PLACE.test(c.text);
+  return /^(?:source|\.)$/.test(name) && w.length === 2 && /\/activate$/.test(w[1]!);
+}
 /** Deviation D1 (2026-11-17, before any counted session): the passing run read per test-runner command. When a Bash call's
  *  test-runner commands and its result's test summaries pair one to one, in order, each runner command's outcome is its own
  *  summary, so a missing linter or another suite's failure in the same call no longer hides the test's own pass. Returns the
- *  places of the runner commands that select a covered test and whose summary passed: none for a background run read later,
- *  a result that reports a failed test in the session's test files, or a call whose runners and summaries don't pair (it is
- *  then read whole, as merged). */
+ *  places of the runner commands that select a covered test and whose summary passed. It returns none, and the call is then
+ *  read whole as merged, for a background run read later, a result that reports a failed test in the session's test files,
+ *  or a call whose runners and summaries don't pair. Summaries pair with runners only when nothing else can print one or
+ *  print them out of order, so it also returns none for a call the parser can't order or with a &, a runner other than
+ *  pytest or unittest (tox and nox print one summary an environment) or behind anything but an interpreter, options and
+ *  known wrappers (so xargs, find -exec and a loop's body don't count), or any other command that could print a summary,
+ *  a loop's own words included (printsNoSummary). */
 function passingOwn(r: Run, tests: string[], covered: string[]): number[] {
   if (r.later || reportsFailed(r, tests)) return [];
+  const seq = sequence(r.command);
+  if (!seq || seq.items.some((it) => it.kind === "bg")) return [];
   const cs = shellCommands(r.command, r.cwd), runners = cs.flatMap((c, k) => (runnerAt(c) >= 0 ? [k] : [])), s = summaries(r.result);
   if (!runners.length || runners.length !== s.length) return [];
+  if (!runners.every((k) => soleRun(cs[k]!)) || !cs.every((c, k) => runners.includes(k) || printsNoSummary(c, k > 0 && cs[k - 1]!.pipeline === c.pipeline))) return [];
   return runners.filter((k, i) => s[i] && covered.some((t) => commandSelects(cs[k]!, cs[k]!.cwd ?? r.cwd, t)));
 }
 
