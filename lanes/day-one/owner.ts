@@ -5,7 +5,8 @@
 // - AskUserQuestion is denied in every session (beside WebSearch and WebFetch), so every question reaches the owner as
 //   text at the end of a reply, as in the office-hours founder lane. The driver calls nextUser after each reply.
 // - A reply asks the owner when its last 600 characters hold a question mark (usersim's proseQuestion), or, on a gstack
-//   arm, when autoplan's run in the session's state root waits at its gate (gatePending). Otherwise the session ends.
+//   arm, when the session's autoplan run (exposure.ts's record) waits at its gate (gatePending). Otherwise the loop has no
+//   reply: the session ends, or holds while its background work runs (sessions.ts).
 // - The responder gets usersim's persona prompt (src/usersim/persona.ts) with the persona text OWNER_HEAD, the sealed
 //   profile and OWNER_RULES, and the whole asking reply (its last QUESTION_CHARS characters) as the question: one
 //   request per question, no transcript.

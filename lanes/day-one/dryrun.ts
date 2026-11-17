@@ -21,7 +21,7 @@ import { DEFAULT_POLICY, loadPolicy } from "../../src/skill-eval/cli/policy.ts";
 import type { Meter as PvMeter } from "../product-value/meter.ts";
 import { decide, paired, read, source, type Interval, type ScoredBuild } from "./analysis.ts";
 import { appWrites, RAM_SIZE } from "./app.ts";
-import { armPlan, readExposure } from "./exposure.ts";
+import { armPlan, findRun, PLAN, readExposure, WORK } from "./exposure.ts";
 import { runRealFixtures } from "./fixtures.ts";
 import { armPrompt, COMMON_ASK, DAY_ONE_PASS, GATE_REPLY, MODELS, OWNER_CLOSING, OWNER_NOTICE, PREREG, PROBE_QUESTIONS, PROMPTS_SHA256, BUILD_PROMPT, CHECK_FOOTER, CHECK_HEADER, OWNER_HEAD, OWNER_RULES, PLATFORM, QUESTION_CHARS, REVIEW_ASK, AUTOPLAN_LINE } from "./frozen.ts";
 import { controls, goldAgreement, labelPacket, packets, parseLabels, stockPlan, type Label } from "./judge.ts";
@@ -565,12 +565,13 @@ export const CASES: Record<string, Case> = {
   },
   "exposure": () =>
     withTmp((dir) => {
-      const run = (outside: string) => {
-        const d = join(dir, outside);
+      const call = JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: "b1", name: "Bash", input: { command: "gstack-autoplan next --out " + WORK + "/r --plan " + PLAN + " --full" } }] } }) + "\n";
+      const run = (outside: string, transcript = call) => {
+        const d = join(dir, outside + (transcript ? "" : "-planted"));
         mkdirSync(join(d, "r"), { recursive: true });
         const phase = { closed_at: "2026-11-17T00:00:00Z", native: { status: "completed" }, outside: { status: outside } };
-        writeFileSync(join(d, "r", "run.json"), JSON.stringify({ status: "complete", plan_input: "plan.md", updated_at: "2026-11-17T00:00:00Z", phases: { ceo: phase, design: { skipped: true }, eng: phase } }));
-        return readExposure(d, 3);
+        writeFileSync(join(d, "r", "run.json"), JSON.stringify({ status: "complete", plan_input: PLAN, updated_at: "2026-11-17T00:00:00Z", phases: { ceo: phase, design: { skipped: true }, eng: phase } }));
+        return readExposure(findRun([{ dir: d, seen: WORK }], transcript), 3);
       };
       const ok = run("completed");
       const disabled = run("disabled");
@@ -579,17 +580,19 @@ export const CASES: Record<string, Case> = {
       must(ok.exposed && ok.voice === "astra", "a complete run with both voices was not exposed on astra");
       must(!disabled.exposed && /disabled/.test(disabled.why) && !skipped.exposed && /skipped/.test(skipped.why), "a disabled or skipped outside voice read exposed");
       must(unavailable.exposed && unavailable.voice === "fallback", "an unavailable outside voice did not read exposed on the fallback");
+      const planted = run("completed", "");
+      must(!planted.exposed && planted.run === null, "a run.json that no gstack-autoplan call wrote read exposed");
       const state = join(dir, "state");
       mkdirSync(join(state, "r"), { recursive: true });
       mkdirSync(join(dir, "work"), { recursive: true });
       writeFileSync(join(dir, "outside.md"), "OUTSIDE plan");
       writeFileSync(join(state, "r", "inside.md"), "INSIDE plan");
       const plan = (active: string, runOut = "/") => {
-        writeFileSync(join(state, "r", "run.json"), JSON.stringify({ updated_at: "2026-11-17T00:00:00Z", active_plan: active, out: runOut }));
-        return armPlan(join(dir, "work"), "base", state).text;
+        writeFileSync(join(state, "r", "run.json"), JSON.stringify({ updated_at: "2026-11-17T00:00:00Z", plan_input: PLAN, active_plan: active, out: runOut }));
+        return armPlan(join(dir, "work"), "base", findRun([{ dir: state, seen: WORK }], call).run).text;
       };
       must(plan("r/inside.md") === "INSIDE plan" && !plan("../outside.md").includes("OUTSIDE") && !plan("/a/b/outside.md", "/a/b/c/d").includes("OUTSIDE"), "an autoplan plan outside the state root was read, or one inside it was not");
-      return "both voices: exposed, astra; a disabled or skipped outside voice: not exposed, with the reason; unavailable: exposed on the fallback";
+      return "both voices: exposed, astra; a disabled or skipped outside voice: not exposed, with the reason; unavailable: exposed on the fallback; a run.json no gstack-autoplan call wrote: not exposed";
     }),
   "checker session setup": () =>
     withTmp(async (dir) => {

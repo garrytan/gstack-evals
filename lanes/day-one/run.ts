@@ -38,7 +38,7 @@ import { pool } from "../product-value/meter.ts";
 import { meterSlot } from "../office-hours-founder/run/run.ts";
 import type { Meter } from "../product-value/meter.ts";
 import { startApp, stopApp, type AppRun, type AppWrite } from "./app.ts";
-import { armPlan, loadedSkills, readExposure, type Exposure, type SkillLoad } from "./exposure.ts";
+import { armPlan, findRun, gatePending, loadedSkills, readExposure, WORK, type Exposure, type SkillLoad } from "./exposure.ts";
 import { armPrompt, BUILD_PROMPT, GSTACK_ARMS, LIMITS, MODELS, type PlanArm } from "./frozen.ts";
 import { ownerLoop, ownerPrompt, sourceCounts, type OwnerTurn } from "./owner.ts";
 import { attemptOutcome, browserAnswered, endLoop, launchSession, micros, settle, type AttemptRead, type LaunchInput, type Outcome } from "./sessions.ts";
@@ -267,23 +267,7 @@ function reconcile(dir: string, ledger: string | null): AttemptRead {
   return { termination: { kind: "infra", incident: "an attempt a crash left unfinished, reconciled" }, web: 0, gstack_reads: [], contained: [], micros: planner, voice: meter?.voice_meter_id ? { micros: voice, requests: 0, refused: 0 } : null, out: null };
 }
 
-/** Whether autoplan's run in the live work dir waits at its gate. */
-function gatePending(work: string): boolean {
-  const root = join(work, STATE_ROOT_DIR);
-  if (!existsSync(root)) return false;
-  try {
-    const found = Bun.spawnSync(["find", root, "-name", "run.json", "-newer", join(work, "plan.md")]).stdout.toString().trim().split("\n").filter(Boolean);
-    return found.some((f) => {
-      try {
-        return JSON.parse(readFileSync(f, "utf8"))?.status === "gate_pending";
-      } catch {
-        return false;
-      }
-    });
-  } catch {
-    return false;
-  }
-}
+const text = (f: string) => (existsSync(f) ? readFileSync(f, "utf8") : "");
 
 /** A stage tag: it names the stage's dir under the sealed --out, so it may never leave it. */
 export const TAG = /^[a-z0-9-]+$/;
@@ -400,7 +384,7 @@ export async function runStage(o: StageInput, deps: StageDeps): Promise<StageRes
               if (r.text !== null) return { text: r.text };
               return { failed: r.status === 402 || /E_ALLOWANCE/.test(r.problem ?? "") ? "allowance" : "provider", detail: (r.problem ?? "status " + r.status).slice(0, 300) };
             },
-            ...(isGstack(c.arm) ? { gatePending: () => gatePending(join(sdir, "work", "app")) } : {}),
+            ...(isGstack(c.arm) ? { gatePending: () => gatePending(join(sdir, "work", "app"), text(join(sdir, "host", "transcript.ndjson"))) } : {}),
           });
           ownerState = loop.state;
           nextUser = loop.nextUser;
@@ -492,13 +476,14 @@ export async function runStage(o: StageInput, deps: StageDeps): Promise<StageRes
       result.voice_micros += read.voice?.micros ?? 0;
       let outcome = settle(attemptOutcome(read, loopFailed), attempt);
       if (outcome.state === "ended" && planning && read.out) {
-        const p = armPlan(read.out, base, isGstack(c.arm) ? join(sdir, "host", "gstack-state") : null);
+        const found = isGstack(c.arm) ? findRun([{ dir: read.out, seen: WORK }, { dir: join(sdir, "host", "gstack-state"), seen: WORK + "/" + STATE_ROOT_DIR }], text(join(sdir, "host", "transcript.ndjson"))) : null;
+        const p = armPlan(read.out, base, found?.run ?? null);
         if (!p.text.trim() && c.arm === "n" && attempt === 1) outcome = { state: "retry", why: "no plan.md (an arm stop)" };
         else {
           plan = { sha256: sha(p.text), words: p.text.split(/\s+/).filter(Boolean).length, from: p.from };
           planText = p.text;
         }
-        if (isGstack(c.arm)) exposure = readExposure(join(sdir, "host", "gstack-state"), read.voice?.requests ?? 0);
+        if (found) exposure = readExposure(found, read.voice?.requests ?? 0);
       }
       if (outcome.state === "ended" && c.stage === "build" && read.out) {
         partialTree = join(buildDir(o.out, c.unit, c.rep, c.arm), "tree.partial");
