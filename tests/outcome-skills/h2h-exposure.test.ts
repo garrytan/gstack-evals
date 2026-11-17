@@ -113,6 +113,15 @@ test("agent-skills on bugs: a test Bash writes counts, its failing run may be th
   expect(ran(sdk().tool("Bash", { command: "go test ./... > /tmp/test_run.log 2>&1" }, "Exit code 1", true).tool("Bash", { command: "cd tests && pytest 2>&1 | tee run_tests.txt" }, "FAILED tests/test_parse.py::test_x").tool("Bash", { command: "cat tests/test_parse.py; pytest tests/test_parse.py" }, "1 failed", true).tool("Edit", { file_path: "/app/parse.py" }))).toEqual([]);
 });
 
+test("agent-skills on bugs: a spec or specs folder is no test by itself, a spec-named file still is", () => {
+  const ran = (s: ReturnType<typeof sdk>) => run("agent-skills", "bug", s.evs()).markers;
+  const pkg = { file_path: "/testbed/src/hdmf/spec/namespace.py", old_string: "a", new_string: "b" };
+  expect(ran(sdk().tool("Write", { file_path: "/testbed/tests/unit/test_namespace.py", content: "x" }).tool("Bash", { command: "pytest tests/unit" }, "1 failed", true).tool("Edit", pkg))).toEqual(["test-first:/testbed/tests/unit/test_namespace.py", "failing-run"]);
+  expect(ran(sdk().tool("Edit", pkg).tool("Bash", { command: "pytest tests/unit" }, "1 failed", true).tool("Edit", { file_path: "/testbed/src/hdmf/utils.py" }))).toEqual([]);
+  expect(ran(sdk().tool("Write", { file_path: "/app/spec/models/user_spec.rb" }).tool("Bash", { command: "rspec" }, "1 example, 1 failure").tool("Edit", { file_path: "/app/app/models/user.rb" }))).toEqual(["test-first:/app/spec/models/user_spec.rb", "failing-run"]);
+  expect(ran(sdk().tool("Write", { file_path: "/app/specs/parse.spec.ts" }).tool("Bash", { command: "bun test" }, "1 fail", true).tool("Edit", { file_path: "/app/src/parse.ts" }))).toEqual(["test-first:/app/specs/parse.spec.ts", "failing-run"]);
+});
+
 test("gsd: its tools run and a quick or debug planning file written", () => {
   expect(run("gsd", "bug", sdk().user("<command-name>/gsd-debug</command-name>").tool("Bash", { command: "node \"$HOME/.claude/gsd-core/bin/gsd-tools.cjs\" init debug" }).tool("Write", { file_path: "/app/.planning/debug/parse.md" }).evs()).markers).toEqual(["command:/gsd-debug", "gsd-tools", "planning:/app/.planning/debug/parse.md"]);
   expect(flags(run("gsd", "feature", sdk().user("<command-name>/gsd-quick</command-name>").tool("Bash", { command: "gsd_run init quick" }).evs(), M, [".planning/quick/260101-flag/PLAN.md"]))).toEqual([true, true]);

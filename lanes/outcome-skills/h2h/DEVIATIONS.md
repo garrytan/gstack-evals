@@ -86,3 +86,26 @@ stage 0's run, so the rerun needs its own item. h2h-rerun stays free for the ind
 planned for. h2h-resmoke is capped at $20, moved out of h2h-reserve (which drops from $200 to $180), so the program
 total at caps does not change. The driver's model-item list (H2H_STAGES in sessions/driver.ts) gains h2h-resmoke,
 paying for all nine arms; prereg.json's item list is unchanged. Ruling: GEVA-2.
+
+## 2026-11-17: agent-skills' test-path rule no longer counts spec folders (section 8, after stage 0 froze the detectors)
+
+The agent-skills bug-unit detector reads a write as a test by its path (TEST_PATH in sessions/exposure.ts). That rule
+counted any file under a spec/ or specs/ folder as a test. The B1 delivery-route eval vendored this detector, and its
+hand-check (GEVA-547) found the rule reading a Python source package as tests: in hdmf-1374, src/hdmf/spec/namespace.py
+counted as a test write, so an Opus session's source edit read as a test write. #361 (d3614c4) dropped the folder rule
+there and kept spec-named files as tests. This change makes the same edit here: a spec or specs folder is no test by
+itself, and a spec-named file (x_spec.rb, x.spec.ts, x-spec.js) still is. Only agent-skills' bug-unit procedure reads
+TEST_PATH, so no other arm's reading can move.
+
+Trade-off. A helper under a spec folder that is not named as a spec (spec_helper.rb, spec/support/*.js) now reads as a
+source edit, not a test write. The O frame holds no Python or Ruby units; about half of B2's frame is npm, where some
+repositories keep test helpers under spec/.
+
+Effect so far. Read both ways on every session to date (stage 0's 25, the rerun's 25 and the pilot's first 60), no
+reading changes, and no tool call in any of those sessions names a spec/ or specs/ folder. The pilot's remaining
+sessions are read the same way before its readout, which reports the count by arm.
+
+Checks. A new keyless test in tests/outcome-skills/h2h-exposure.test.ts fails on the old rule and passes on the new: a
+source edit in a spec package after a failing test reads as procedure ran, an edit in a spec package before any test no
+longer counts as the test, and spec-named files under spec/ and specs/ still count. Ruling: GEVA-2 ("If it does, apply
+the same fix test-first, with both-direction fixtures, and rescore").

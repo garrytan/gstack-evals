@@ -21,8 +21,9 @@ export const SESSION_HOME = "/root";
 const TODO_TOOLS = new Set(["TodoWrite", "TaskCreate"]);
 const WRITE_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
 const READ_TOOLS = new Set(["Read", "Grep", "Glob", "NotebookRead", "LS"]);
-/** A test file by its path, in every language the units carry. */
-export const TEST_PATH = /(^|\/)(tests?|__tests__|specs?|testing|e2e)\/|[._-](test|spec|tests)\.[A-Za-z0-9]+$|_test\.go$|(^|\/)test_[^/]*\.[A-Za-z0-9]+$|Tests?\.(java|kt|cs|scala)$|(^|\/)src\/test\//;
+/** A test file by its path, in every language the units carry. A spec or specs folder is no test by itself, because a
+ *  Python package can be named spec (hdmf's src/hdmf/spec/); a spec-named file (x_spec.rb, x.spec.ts) still is. */
+export const TEST_PATH = /(^|\/)(tests?|__tests__|testing|e2e)\/|[._-](test|spec|tests)\.[A-Za-z0-9]+$|_test\.go$|(^|\/)test_[^/]*\.[A-Za-z0-9]+$|Tests?\.(java|kt|cs|scala)$|(^|\/)src\/test\//;
 /** A Bash result that shows a failing test run, or a compiler's error count (a test the code under test rejects). */
 const FAILING = /\b(FAIL|FAILED|failing|failures?|AssertionError|panicked|assertion failed)\b|Exit code [1-9]|\b[1-9]\d* errors? (and \d+ warnings? )?generated\b/;
 /** A shell word, quoted or bare. */
