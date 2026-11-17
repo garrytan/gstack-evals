@@ -1,0 +1,34 @@
+p2/s29 particle-ai/particle-1 code 3
+p2/s34 claude-opus-5-5 code 4
+p2/s48 openai/gpt-6.1-sol model 2
+p2/s57 openai/gpt-6.1-sol code 4
+p2/s7 particle-ai/particle-1 code 1
+p2/s70 claude-opus-5-5 code 3
+p2/s76 openai/gpt-6.1-sol code 18
+p2/s78 particle-ai/particle-1 code 1
+p2/s85 particle-ai/particle-1 code 1
+p3/s16 claude-opus-5-5 code 3
+p3/s17 openai/gpt-6.1-sol code 6
+p3/s46 claude-opus-5-5 code 2
+p3/s59 claude-opus-5-5 code 1
+p3/s65 openai/gpt-6.1-sol code 1
+p3/s69 claude-opus-5-5 model 2
+p3/s78 particle-ai/particle-1 code 3
+p3/s79 openai/gpt-6.1-sol code 12
+p3/s82 claude-opus-5-5 code 1
+p3/s83 particle-ai/particle-1 code 1
+p4/s17 particle-ai/particle-1 code 1
+p4/s21 claude-opus-5-5 code 3
+p4/s30 claude-opus-5-5 code 2
+p4/s46 openai/gpt-6.1-sol code 3
+p4/s47 particle-ai/particle-1 code 1
+p4/s6 claude-opus-5-5 code 4
+p4/s68 openai/gpt-6.1-sol code 1
+p4/s69 particle-ai/particle-1 code 1
+p4/s85 openai/gpt-6.1-sol model 1
+TOTAL
+claude-opus-5-5 code 9
+claude-opus-5-5 model 1
+openai/gpt-6.1-sol code 7
+openai/gpt-6.1-sol model 2
+particle-ai/particle-1 code 9

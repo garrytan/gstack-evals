@@ -1,0 +1,40 @@
+import glob, json, os, re, statistics as st, sys
+h = os.path.expanduser("~")
+out = []
+def P(*a): out.append(" ".join(str(x) for x in a))
+sess = {}
+for p in ["p2", "p3", "p4"]:
+    for f in glob.glob(h + "/pf/run-test/%s/s*/session.json" % p): sess[(p, f.split("/")[-2])] = json.load(open(f))
+for f in glob.glob(h + "/pf/run-blind/p5/s*/session.json"): sess[("p5", f.split("/")[-2])] = json.load(open(f))
+rec = {}
+for (p, s) in sess:
+    rec[(p, s)] = json.load(open(h + "/pf/rescore/score-%s/%s.json" % (p, s)))
+P("sessions", len(sess), "records", len(rec))
+ex = next(iter(sess.values()))
+P("task keys sample", json.dumps(ex["task"])[:300]); P("questions sample", json.dumps(ex["questions"])[:200]); P("wrapup sample", json.dumps(ex["wrapup"])[:300])
+agg = {}
+for k, s in sess.items():
+    r = rec[k]; key = (s["model"], s["arm"])
+    a = agg.setdefault(key, {"n": 0, "task_end": {}, "wrapup_end": {}, "turns": [], "wall_min": [], "usd": [], "ask_q": 0, "prose_q": 0, "sessions_with_q": 0, "catch": 0, "cap_stop": 0, "force": 0, "listed": 0, "inline": 0, "names_nothing": 0, "beyond_cap": 0, "run": 0, "no_manifest": 0, "zero_listed": 0, "score_wall_min": []})
+    a["n"] += 1
+    te = s["task"].get("end"); a["task_end"][te] = a["task_end"].get(te, 0) + 1
+    we = s.get("wrapup_end"); a["wrapup_end"][we] = a["wrapup_end"].get(we, 0) + 1
+    a["turns"].append((s["task"].get("turns") or 0) + (s["wrapup"].get("turns") or 0))
+    a["wall_min"].append((s["task"].get("wall_ms") or 0) / 60000)
+    a["usd"].append(((s["task"].get("spent_micros") or 0) + (s["wrapup"].get("spent_micros") or 0)) / 1e6)
+    q = s.get("questions") or {}
+    aq = q.get("ask_user_question") or 0; pq = q.get("prose") or 0
+    aq = len(aq) if isinstance(aq, list) else aq; pq = len(pq) if isinstance(pq, list) else pq
+    a["ask_q"] += aq; a["prose_q"] += pq; a["sessions_with_q"] += (aq + pq) > 0
+    a["catch"] += r["score"] == 1; a["cap_stop"] += bool(s.get("cap_stop"))
+    a["force"] += r.get("force_captured") or 0
+    m = r.get("manifest") or {}
+    a["listed"] += m.get("listed") or 0
+    for f in ["inline", "names_nothing", "beyond_cap", "run"]: a[f] += len(m.get(f) or [])
+    a["no_manifest"] += bool(r.get("no_manifest")); a["zero_listed"] += (m.get("listed") or 0) == 0
+    a["score_wall_min"].append((r.get("wall_ms") or 0) / 60000)
+P("model arm n task_end wrapup_end wall_min_median catch ask_q prose_q sessions_with_q cap_stop force_captured listed inline names_nothing beyond_cap run no_manifest zero_listed scoring_min_median")
+for k in sorted(agg):
+    a = agg[k]
+    P(k[0], k[1], a["n"], json.dumps(a["task_end"]), json.dumps(a["wrapup_end"]), round(st.median(a["wall_min"]), 1), a["catch"], a["ask_q"], a["prose_q"], a["sessions_with_q"], a["cap_stop"], a["force"], a["listed"], a["inline"], a["names_nothing"], a["beyond_cap"], a["run"], a["no_manifest"], a["zero_listed"], round(st.median(a["score_wall_min"]), 1))
+print("\n".join(out))

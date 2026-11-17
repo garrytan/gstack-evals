@@ -1,0 +1,11 @@
+// Copyright (c) 2026 Garry Tan. MIT License.
+// pf-mounts.ts <image> <arm>: prints, one per line, the score flags that section 6.5 gives every scoring run: the tools
+// volume's --mount for every arm, the pstack volume's --mount for P and blind, and the tools env (TLA2TOOLS, JAVA, and
+// bun ahead of the image's PATH) as --env pairs. It calls the pinned lane's own toolsMount, pstackMount and toolsEnv,
+// the same functions the session overlay and the dry run use. Writes nothing.
+import { toolsMount, toolsEnv } from "<gstack-evals checkout>/lanes/outcome-skills/pfchecks/tools.ts";
+import { pstackMount } from "<gstack-evals checkout>/lanes/outcome-skills/pfchecks/pstack.ts";
+const [image, arm] = process.argv.slice(2);
+if (!image || !arm) { console.error("E_USAGE pf-mounts.ts <image> <arm>"); process.exit(2); }
+const out = ["--mount", toolsMount(), ...(arm === "P" || arm === "blind" ? ["--mount", pstackMount()] : []), ...toolsEnv(image).flatMap((e) => ["--env", e])];
+for (const x of out) console.log(x);

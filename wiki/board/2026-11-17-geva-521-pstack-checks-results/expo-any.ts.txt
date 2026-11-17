@@ -1,0 +1,54 @@
+// Copyright (c) 2026 Garry Tan. MIT License.
+// expo-any.ts <part dir>...: the any-tool exposure reading (Captain ruling B2, 2026-11-13, a pre-data deviation for the
+// test run). A P session loads the skill when the body's heading appears (frozen) and, in the task turn, it reads
+// statechart/SKILL.md through the Read tool (frozen) or through a Bash command segment that starts with cat, head, tail,
+// sed -n, less, more or bat and names that path. Running the checker stays frozen (ranChecker). Prints one JSON line per
+// session and a total per model and arm. Run from the gstack-evals checkout at the pin; it writes nothing.
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { pLoaded, ranChecker, readSession } from "<gstack-evals checkout>/lanes/outcome-skills/pfchecks/exposure.ts";
+
+type Rec = { type?: string; content?: unknown; phase?: string };
+const PATH = /(^|[\s'"=:\/])statechart\/SKILL\.md(?=$|[\s'";|&)<>])/;
+const PRINTER = /^(?:(?:sudo|command|env)\s+)?(?:cat|head|tail|less|more|bat)(?:\s|$)|^(?:sudo\s+)?sed\s+(?:-[A-Za-z]+\s+)*-[A-Za-z]*n[A-Za-z]*(?:\s|$)|^(?:sudo\s+)?sed\s+.*\s-n(?:\s|$)/;
+export const bashPrints = (cmd: string): boolean =>
+  cmd.split(/\n|;|&&|\|\||\|/).some((seg) => {
+    const s = seg.trim().replace(/^[({]\s*/, "").replace(/^(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)+/, "");
+    return PRINTER.test(s) && PATH.test(" " + s);
+  });
+const bashReads = (records: Rec[]): number =>
+  records
+    .filter((r) => r.phase === undefined || r.phase === "task")
+    .flatMap((r) => (r.type === "AssistantMessage" && Array.isArray(r.content) ? (r.content as Array<Record<string, any>>) : []))
+    .filter((b) => b?.type === "tool_use" && b.name === "Bash" && bashPrints(String(b.input?.command ?? ""))).length;
+
+const totals: Record<string, { sessions: number; frozen: number; any: number }> = {};
+for (const pd of process.argv.slice(2)) {
+  const dirs = readdirSync(pd).filter((d) => /^s\d+$/.test(d)).sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
+  for (const d of dirs) {
+    const sj = join(pd, d, "session.json");
+    if (!existsSync(sj)) continue;
+    const sess = JSON.parse(readFileSync(sj, "utf8"));
+    if (sess.arm !== "P") continue;
+    const transcript: string | null = sess.transcript ?? null;
+    const records = transcript && existsSync(transcript) ? (readSession(transcript) as Rec[]) : null;
+    const ccFile = sess.claude_session ?? (transcript ? join(dirname(transcript), "claude-session.jsonl") : null);
+    const cc = ccFile && existsSync(ccFile) ? (readSession(ccFile) as Rec[]) : null;
+    const row: Record<string, unknown> = { part: pd, s: d, unit: sess.unit, model: sess.model, arm: sess.arm, gap: sess.gap ?? null };
+    if (!records) {
+      Object.assign(row, { body: null, statechart_read: null, bash_read: null, loaded_frozen: null, loaded_any: null, checker: null });
+    } else {
+      const f = pLoaded(records as any, cc as any);
+      const br = bashReads(records);
+      const checker = ranChecker(records as any);
+      Object.assign(row, { body: f.body, statechart_read: f.statechart_read, bash_read: br, loaded_frozen: f.loaded, loaded_any: f.body && (f.statechart_read || br > 0), checker });
+      const k = sess.model + " " + sess.arm;
+      const t = (totals[k] ??= { sessions: 0, frozen: 0, any: 0 });
+      t.sessions++;
+      if (f.loaded && checker) t.frozen++;
+      if (row.loaded_any && checker) t.any++;
+    }
+    console.log(JSON.stringify(row));
+  }
+}
+for (const [k, t] of Object.entries(totals)) console.log("EXPO_ANY " + k + " sessions=" + t.sessions + " frozen_loaded_and_checker=" + t.frozen + " any_loaded_and_checker=" + t.any + " fair_at=" + Math.ceil(0.75 * t.sessions));

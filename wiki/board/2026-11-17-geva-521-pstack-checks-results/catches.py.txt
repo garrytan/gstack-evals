@@ -1,0 +1,14 @@
+import glob, json, re, sys
+root = sys.argv[1]
+MODEL = re.compile(r"\.(tla|cfg|pcal|als|pml|smv|qnt)\b|tla2tools|tlc2|\btlc\b|statechart", re.I)
+tot = {}
+for f in sorted(glob.glob(root + "/rescore/score-p[234]/s*.json")):
+    d = json.load(open(f))
+    if d["arm"] != "P" or d["score"] != 1: continue
+    cats = [e for e in d["entries"] if e.get("outcome") == "catch"]
+    kinds = sorted({"model" if MODEL.search(e["command"]) else "code" for e in cats})
+    k = "+".join(kinds)
+    tot[(d["model"], k)] = tot.get((d["model"], k), 0) + 1
+    print(f.split("/")[-2][6:] + "/" + f.split("/")[-1][:-5], d["model"], k, len(cats))
+print("TOTAL")
+for (m, k), n in sorted(tot.items()): print(m, k, n)
