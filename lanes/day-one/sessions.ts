@@ -18,6 +18,8 @@
 //   env name other than the session's bearers (ANTHROPIC_AUTH_TOKEN, and OPENAI_API_KEY on a gstack arm, whose value
 //   must equal the voice slot's bearer), or a mount other than the work dir, HOME and, on builds, the node volume.
 // - The work tree is copied out to out/ after the session, and plan.md is read from there.
+// - The gstack-read check (section 8) runs on N, D and R planning sessions only: a build or check session that names
+//   gstack while it reads an /autoplan plan has not read gstack.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, posix } from "node:path";
 import { claudeCodeDriver, type ClaudeProvider, type NextUser } from "../../src/adapters/claude-code/driver.ts";
@@ -32,7 +34,7 @@ import { webUses } from "../product-value/parse.ts";
 import { readTranscript } from "../../src/trial/review/readers.ts";
 import { gstackReads, probe, type Probe } from "../office-hours-founder/run/contain.ts";
 import { NODE_BIN, NODE_DIR, RAM_SIZE } from "./app.ts";
-import { SYSTEM_PROMPT } from "./frozen.ts";
+import { PLAN_ARMS, SYSTEM_PROMPT } from "./frozen.ts";
 
 /** The gstack arms' state root config: readers on the session's model, the Codex voice on. */
 export const GSTACK_CONFIG: Readonly<Record<string, string>> = { agent_model: "host", codex_reviews: "enabled" };
@@ -187,7 +189,7 @@ export async function launchSession(o: LaunchInput, deps: { driver?: typeof clau
   return {
     termination,
     web: webUses(transcript).length,
-    gstack_reads: o.gstack ? [] : gstackReads(transcript),
+    gstack_reads: (PLAN_ARMS as readonly string[]).includes(o.arm) && !o.gstack ? gstackReads(transcript) : [],
     contained: departures,
     micros: meter.micros,
     voice: vmeter ? { micros: vmeter.micros, requests: vmeter.requests, refused: vmeter.refused } : null,
