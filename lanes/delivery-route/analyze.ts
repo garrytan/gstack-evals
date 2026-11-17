@@ -59,6 +59,19 @@ export function armStats(rows: B1Row[], planned: number): ArmStat[] {
   });
 }
 
+/** Rows the report must not read: one problem per row whose task is not one of the drawn run tasks (smoke and calibration
+ *  tasks included), and one per model, arm and task with more than one graded row. Infra and cap-stop rows never count as
+ *  repeats, so an attempt 2 or a relaunch after one is read. */
+export function checkRows(rows: B1Row[], drawn: string[]): string[] {
+  const run = new Set(drawn), graded = new Map<string, number>(), bad: string[] = [];
+  for (const r of rows) {
+    if (!run.has(r.task)) bad.push(r.trial + ": task " + r.task + " is not one of the " + run.size + " drawn tasks");
+    if (r.outcome === "graded") graded.set(r.model + " " + r.arm + " " + r.task, (graded.get(r.model + " " + r.arm + " " + r.task) ?? 0) + 1);
+  }
+  for (const [k, n] of graded) if (n > 1) bad.push(k + " has " + n + " graded rows, not 1");
+  return bad;
+}
+
 export function contrast(rows: B1Row[], a: B1Arm, b: B1Arm): Contrast {
   const graded = (arm: B1Arm) => new Map(rows.filter((r) => r.arm === arm && r.outcome === "graded").map((r) => [r.task, r.detect.followed]));
   const A = graded(a), B = graded(b);

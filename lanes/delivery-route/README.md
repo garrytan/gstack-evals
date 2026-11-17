@@ -43,6 +43,8 @@ The launcher commands are L1's (quick/laneb/l1/README.md) under this lane's prof
 
 The table config is the harness mechanics one: {"jobs": [{"dir": "<pulled>/jobs/<job>", "part": "<part>"}], "sessions": ["<pulled>/out/proxy-sessions.jsonl"]}.
 
+`report` refuses a table that holds a row whose task is not one of the 60 drawn tasks, or two graded rows for one model, arm and task. It prints one E_USAGE line per problem and exits 2. Infra and cap-stop rows never count as repeats, so an attempt 2 or a relaunch is read.
+
 ## Credits
 
 The Prove-It steps, the /test front matter and the test-driven-development description are from [agent-skills](https://github.com/addyosmani/agent-skills) by Addy Osmani (MIT). The gstack-shaped setup text is gstack's own /verify setup. NOTICE.md has both rows.

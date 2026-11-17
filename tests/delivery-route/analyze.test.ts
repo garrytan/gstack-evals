@@ -3,8 +3,8 @@
 // of the preregistration's decision table, guard included, and the sensitivity line for writes no parser can name and
 // spec-folder writes.
 import { describe, expect, test } from "bun:test";
-import { armStats, barCount, CONTRASTS, contrast, maxGaps, newcombe, reading, report, wilson } from "../../lanes/delivery-route/analyze.ts";
-import { ARM_NAMES, type B1Arm } from "../../lanes/delivery-route/pins.ts";
+import { armStats, barCount, checkRows, CONTRASTS, contrast, maxGaps, newcombe, reading, report, wilson } from "../../lanes/delivery-route/analyze.ts";
+import { ARM_NAMES, drawnTasks, loadBundle, SMOKE_TASKS, type B1Arm } from "../../lanes/delivery-route/pins.ts";
 import type { B1Row } from "../../lanes/delivery-route/table.ts";
 
 const row = (arm: B1Arm, task: string, followed: boolean, outcome: B1Row["outcome"] = "graded", model = "claude-opus-5-5", unresolved = 0, spec = false): B1Row => ({
@@ -85,5 +85,24 @@ describe("writes no parser can name", () => {
     const s = armStats(r, 60).find((x) => x.arm === "described")!;
     expect([s.followed, s.unresolved_sessions, s.spec_folder_sessions, s.followed_low, s.followed_high]).toEqual([47, 1, 3, 45, 48]);
     expect(report(r).lines).toContain("  described sensitivity: 1 Bash writes no parser can name, in 1 sessions; 3 sessions write a non-spec file under a spec folder; followed 45/60 with those sessions scored not followed, 48/60 scored followed; the bar reading rests on them");
+  });
+});
+describe("rows the report reads", () => {
+  const run = drawnTasks(loadBundle()).run;
+  const clean = () => ARM_NAMES.flatMap((a) => run.map((t) => row(a, t, true)));
+  test("a clean table of the 60 drawn tasks has no problems", () => {
+    expect(checkRows(clean(), run)).toEqual([]);
+  });
+  test("a smoke task's row is refused", () => {
+    const bad = checkRows([...clean(), row("none", SMOKE_TASKS[0]!, true)], run);
+    expect(bad).toHaveLength(1);
+    expect(bad[0]).toContain(SMOKE_TASKS[0]! + " is not one of the 60 drawn tasks");
+  });
+  test("two graded rows for one cell are refused", () => {
+    const bad = checkRows([...clean(), row("command", run[0]!, false)], run);
+    expect(bad).toEqual(["claude-opus-5-5 command " + run[0] + " has 2 graded rows, not 1"]);
+  });
+  test("an infra attempt 1 beside a graded attempt 2 for one cell is accepted", () => {
+    expect(checkRows([...clean(), row("command", run[0]!, false, "infra"), row("described", run[1]!, false, "cap_stop")], run)).toEqual([]);
   });
 });

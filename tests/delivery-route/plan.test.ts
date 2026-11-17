@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { plannedCells, type Plan } from "../../quick/laneb/l1/l1.ts";
 import { appendRow, readRows, toMicros } from "../../quick/laneb/runner/ledger.ts";
 import { check, wrappers } from "../../lanes/delivery-route/arms.ts";
-import { approve, capOf, launchGuard, needsRerun } from "../../lanes/delivery-route/money.ts";
+import { approve, capOf, launchGuard, markDone, needsRerun } from "../../lanes/delivery-route/money.ts";
 import { ARM_NAMES, ARMS, CAPS_USD, CLOSING, drawnTasks, ITEM_NAMES, loadBundle, REPO, SMOKE_TASKS, sha256 } from "../../lanes/delivery-route/pins.ts";
 import { B1_PROFILE, itemPlan } from "../../lanes/delivery-route/plans.ts";
 import { b1Row, safetyStop, stepsSeen } from "../../lanes/delivery-route/table.ts";
@@ -83,6 +83,24 @@ describe("money", () => {
     approve(f, "b1-opus", 170, "test");
     appendRow(f, { ts: "t", item: "b1-opus", kind: "note", id: "done", usd_micros: 0 });
     expect(launchGuard("b1-opus", { "b1-opus": readRows(f) }, {}, { as_of: "t", usd: 0 }).why[0]).toMatch(/marked done/);
+  });
+  test("done refuses while a reservation is open and refuses a second done", () => {
+    const f = join(d(), "b1-opus.jsonl");
+    approve(f, "b1-opus", 170, "test");
+    appendRow(f, { ts: "t", item: "b1-opus", kind: "reserve", id: "s1", usd_micros: toMicros(5) });
+    expect(() => markDone(f, "b1-opus")).toThrow(/open reservations/);
+    appendRow(f, { ts: "t", item: "b1-opus", kind: "settle", id: "s1", usd_micros: toMicros(3) });
+    markDone(f, "b1-opus");
+    expect(() => markDone(f, "b1-opus")).toThrow(/marked done already/);
+  });
+  test("the guard refuses an item whose spend plus its parts left passes its own cap, and passes it once no part is left", () => {
+    const f = join(d(), "b1-opus.jsonl"), opus = itemPlan("b1-opus", draw.run).parts;
+    approve(f, "b1-opus", 170, "test");
+    appendRow(f, { ts: "t", item: "b1-opus", kind: "reserve", id: "s1", usd_micros: toMicros(160) });
+    appendRow(f, { ts: "t", item: "b1-opus", kind: "settle", id: "s1", usd_micros: toMicros(160) });
+    const over = launchGuard("b1-opus", { "b1-opus": readRows(f) }, { "b1-opus": { parts: opus, finished: [] } }, { as_of: "t", usd: 0 });
+    expect([over.ok, over.why.some((w) => w.includes("passes its cap $170.00"))]).toEqual([false, true]);
+    expect(launchGuard("b1-opus", { "b1-opus": readRows(f) }, { "b1-opus": { parts: opus, finished: opus.map((p) => p.name) } }, { as_of: "t", usd: 0 }).ok).toBe(true);
   });
 });
 

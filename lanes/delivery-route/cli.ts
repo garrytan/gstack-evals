@@ -7,7 +7,7 @@ import { join, resolve } from "node:path";
 import { l1Main } from "../../quick/laneb/l1/l1.ts";
 import { readRows, type Row } from "../../quick/laneb/runner/ledger.ts";
 import { parseLog } from "../../quick/laneb/l1/probes.ts";
-import { report } from "./analyze.ts";
+import { checkRows, report } from "./analyze.ts";
 import { main as armsMain } from "./arms.ts";
 import { detect } from "./detect.ts";
 import { approve, capOf, launchGuard, markDone, type Crew } from "./money.ts";
@@ -99,7 +99,9 @@ export async function main(argv: string[]): Promise<number> {
     }
     if (cmd === "report") {
       if (!rest[0] || rest[0].startsWith("--")) throw new Error(USAGE);
-      const r = report(readTable(rest[0]));
+      const rows = readTable(rest[0]), bad = checkRows(rows, drawnTasks(loadBundle()).run);
+      if (bad.length) { for (const b of bad) console.error("E_USAGE b1 report: " + b); return 2; }
+      const r = report(rows);
       for (const l of r.lines) console.log(l);
       const out = opt("out");
       if (out) { mkdirSync(out, { recursive: true }); writeFileSync(join(out, "report.json"), JSON.stringify(r.models, null, 2) + "\n"); writeFileSync(join(out, "report.md"), r.lines.join("\n") + "\n"); }
