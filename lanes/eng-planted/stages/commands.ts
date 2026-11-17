@@ -353,7 +353,7 @@ export function stagesCommands(seams: Seams = REAL): Record<string, Command> {
   const owed: Command["run"] = (a, io) => {
     const run = runDir(a);
     const rows = setAsideRefusedGaps(run, buildDriver(run), EP_RUN);
-    for (const r of rows) io.out("owed " + r.cell + ": recorded " + r.outcome + " as a gap, but the driver opened it " + r.opens + " time" + (r.opens === 1 ? "" : "s") + " and refused " + r.refusals.map((x) => x.at + " " + x.code + " " + x.status + " (" + x.detail + "; trial " + x.trial + ")").join(", ") + "; set aside " + r.moved.join(", "));
+    for (const r of rows) io.out("owed " + r.cell + ": recorded " + r.outcome + " as a gap, but the driver opened it " + r.opens + " time" + (r.opens === 1 ? "" : "s") + (r.refusals.length ? " and refused " + r.refusals.map((x) => x.at + " " + x.code + " " + x.status + " (" + x.detail + "; trial " + x.trial + ")").join(", ") : ", and its retry never reached the driver") + "; set aside " + r.moved.join(", "));
     io.out("owed: " + rows.length + " cell" + (rows.length === 1 ? "" : "s") + " set aside; the step's next run gives each its one retry");
     return 0;
   };
@@ -399,7 +399,7 @@ export function stagesCommands(seams: Seams = REAL): Record<string, Command> {
     builds: { run: ep(builds), bools: [], usage: RUN + " --phase pilot|comparison|stock " + BUILD + " [--parallel n] " + PAID, summary: "the reviewed builds of a phase, or the stock control's (paid: ep-comparison, ep-stock)" },
     records: { run: ep(records), bools: [], usage: RUN + " --out <json>", summary: "every unit, review and build record of the run, in run order, as the readings read them" },
     judge: { run: ep(judge), bools: [], usage: RUN + " --role judge|gold-opus|gold-gemini [--bundles <json of {unit, source, rep}>] --cache <dir> " + PAID, summary: "the judged secondary's calls over the bundle set, or over the gold set given (paid: ep-judge)" },
-    owed: { run: ep(owed), bools: [], usage: "--run <dir>", summary: "set aside each build cell recorded as a gap after the driver refused its retry, read from the driver's log; the step's next run retries it" },
+    owed: { run: ep(owed), bools: [], usage: "--run <dir>", summary: "set aside each build cell recorded as a gap whose retry never opened (refused, or never reaching the driver), read from the driver's log; the step's next run retries it" },
     lost: { run: ep(lost), bools: [], usage: "--run <dir> --unit <id> --reason <text>", summary: "record a comparison unit lost to infrastructure; the next reserve unit in seeded order replaces it" },
   };
 }

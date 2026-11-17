@@ -23,17 +23,17 @@ import { createHash } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { stripBase } from "../../eng-build/build-stage.ts";
-import { prepareReviewTree, runSession, type Attempt } from "../../eng-build/review-stage.ts";
+import { prepareReviewTree, type Attempt } from "../../eng-build/review-stage.ts";
 import { addSpend } from "../../eng-build/spend.ts";
 import type { ReviewLeft, ReviewSession, ReviewUnit } from "../../eng-build/pipeline.ts";
 import { erExposure } from "../../eng-review/exposure.ts";
 import type { DigestPin } from "../../../src/trial/review/eng-review.ts";
 import { fail } from "../errors.ts";
 import { FROZEN, SIZE } from "../frozen.ts";
-import type { BuildArm, GradedBuild, PlantedGrader, PlantedUnit, ReviewArm, ReviewRecord, Reviewer, SkillArm } from "../types.ts";
+import type { BuildArm, GradedBuild, PlantedGrader, PlantedUnit, ReviewArm, ReviewRecord, Reviewer, SessionOutcome, SkillArm } from "../types.ts";
 import { DETECTOR, EB_ARM, isSkillArm, plantedOpening, plantedPrompt, plantedStopHook, SKILL_ARMS, type Opening } from "./arms.ts";
 import { authorCalls, BATCH_1, BATCH_2, drawSets, hintedVerdict, mintSeed, replaceLost, seededOrder, supplyLine, unforeseeable, type AuthorCall, type AuthorMaterial, type Authored, type Candidate, type CallsRecord, type Draw, type HintedVerdict, type Want } from "./author.ts";
-import { buildKey, hasReview, isReviewed, readMount, reviewMount, runPlantedBuild, stockMount, writeMount, type PlantedSession } from "./build.ts";
+import { buildKey, hasReview, isReviewed, oneRetry, readMount, reviewMount, runPlantedBuild, stockMount, writeMount, type PlantedSession } from "./build.ts";
 import { runGated, settleThrown, type ItemGate, type Kind } from "./ledger.ts";
 import { readStep, requireSteps, writeStep, type Step } from "./local.ts";
 
@@ -233,7 +233,18 @@ async function runAuthoringBuilds(o: { run: string; src: UnitSource; arm: "hinte
   const session = o.session ?? fail("E_USAGE", "the " + o.arm + " builds need their session");
   const grader = o.grader ?? fail("E_USAGE", "the " + o.arm + " builds need the grader");
   const cells = join(o.run, "builds", "authoring", "cells");
-  await runGated(o.ids, {
+  const verdict = (id: string, b: GradedBuild) => {
+    const v = hintedVerdict(b.outcome, b.planted);
+    writeJson(join(authorDir(o.run, id), "hinted.json"), { ...v, costUsd: b.costUsd });
+    o.log("hinted " + id + ": " + (v.drop ? "dropped (" + v.drop + ")" : "winnable") + ", passing runs per planted case " + Object.values(v.passes).join(", "));
+  };
+  const saved = o.arm === "hinted" ? o.ids.filter((id) => loadBuild(cells, buildKey(id, "hinted", null, 1)) !== null) : [];
+  for (const id of saved) {
+    if (existsSync(join(authorDir(o.run, id), "hinted.refused-gap.json"))) fail("E_USAGE", "hinted " + id + ": ep owed stopped halfway while setting this cell aside (hinted.refused-gap.json is there and the record is not set aside); run ep owed --run again first");
+    o.log("hinted " + id + ": its record was saved before its verdict, so the verdict comes from that record and no session opens");
+    verdict(id, loadBuild(cells, buildKey(id, "hinted", null, 1))!);
+  }
+  await runGated(o.ids.filter((id) => !saved.includes(id)), {
     gate: o.gate,
     parallel: o.parallel,
     kind: () => "build",
@@ -241,16 +252,12 @@ async function runAuthoringBuilds(o: { run: string; src: UnitSource; arm: "hinte
     run: async (id) => {
       const dir = authorDir(o.run, id);
       const hint = o.arm === "hinted" ? readFileSync(join(dir, "hint.txt"), "utf8").trim() : null;
-      const b = await runPlantedBuild({ unit: drawnUnit(o.src, o.run, id), unitDir: o.src.dir(id), arm: o.arm, reviewer: null, rep: 1, note: o.src.note(id), hint, mount: { plan: join(dir, "plan.md"), review: null }, session, grader, earlier: o.earlier?.(buildKey(id, o.arm, null, 1)), log: o.log });
+      const b = await runPlantedBuild({ unit: drawnUnit(o.src, o.run, id), unitDir: o.src.dir(id), arm: o.arm, reviewer: null, rep: 1, note: o.src.note(id), hint, mount: { plan: join(dir, "plan.md"), review: null }, session, grader, earlier: o.earlier?.(buildKey(id, o.arm, null, 1)), marker: join(cells, buildKey(id, o.arm, null, 1) + ".grade-error"), log: o.log });
       return {
         costUsd: b.costUsd,
         commit: () => {
           saveBuild(cells, b);
-          if (o.arm === "hinted") {
-            const v = hintedVerdict(b.outcome, b.planted);
-            writeJson(join(dir, "hinted.json"), { ...v, costUsd: b.costUsd });
-            o.log("hinted " + id + ": " + (v.drop ? "dropped (" + v.drop + ")" : "winnable") + ", passing runs per planted case " + Object.values(v.passes).join(", "));
-          }
+          if (o.arm === "hinted") verdict(id, b);
         },
       };
     },
@@ -354,7 +361,7 @@ export async function runPlantedReviews(o: { cells: ReviewCell[]; units: Map<str
       let rec: ReviewRecord;
       let mount: ReturnType<typeof reviewMount> | null;
       try {
-        const run = await runSession<ReviewLeft>(cell, async (attempt): Promise<Attempt<ReviewLeft>> => {
+        const tries = await oneRetry(async (attempt): Promise<Attempt<ReviewLeft>> => {
           const dir = join(base, "a" + attempt);
           rmSync(dir, { recursive: true, force: true });
           const seed = join(dir, "seed");
@@ -366,12 +373,15 @@ export async function runPlantedReviews(o: { cells: ReviewCell[]; units: Map<str
           const a = await o.session({ cell, unit: ru, arm: EB_ARM[c.arm], reviewer: o.reviewer, rep: c.rep, attempt, prompt, seed, dir, hook: (evidence) => plantedStopHook(c.arm, evidence) });
           spent += a.costUsd;
           return a;
-        }, o.log);
-        const left = run.attempts.at(-1)!.result;
-        const gap = run.outcome === "upstream_gap" || run.outcome === "infra_gap";
+        }, (a) => a.end === "completed" || a.end === "limit");
+        const last = tries.at(-1)!;
+        const outcome: SessionOutcome = last.end === "upstream" ? "upstream_gap" : last.end === "infra" ? "infra_gap" : last.end;
+        const gap = outcome === "upstream_gap" || outcome === "infra_gap";
+        if (gap) o.log?.("E_EB_GAP " + cell + ": " + outcome + " after 1 retry; the cell is a recorded gap and its build is not run");
+        const left = last.result;
         mount = gap ? null : reviewMount(c.arm, left.outputs, readFileSync(u.plan, "utf8"));
         const exposed = isSkillArm(c.arm) && !gap ? erExposure(DETECTOR[c.arm], { transcript: left.outputs.transcript, stateRoot: left.outputs.stateRoot, coverage: left.outputs.coverage, opening: c.arm === "engphase" && u.opening ? { methodology: u.opening.methodology, readRanges: u.opening.readRanges } : null }).exposed : null;
-        rec = { unit: c.unit, arm: c.arm, reviewer: o.reviewer, rep: c.rep, outcome: run.outcome, exposed, exposedBeforeBlock: exposed === null ? null : exposed && left.blocks === 0, blocks: left.blocks, bundleWords: mount?.words ?? 0, truncated: mount?.truncated ?? false, repoEditsDiscarded: gap ? 0 : left.repoEdits, costUsd: spent };
+        rec = { unit: c.unit, arm: c.arm, reviewer: o.reviewer, rep: c.rep, outcome, exposed, exposedBeforeBlock: exposed === null ? null : exposed && left.blocks === 0, blocks: left.blocks, bundleWords: mount?.words ?? 0, truncated: mount?.truncated ?? false, repoEditsDiscarded: gap ? 0 : left.repoEdits, costUsd: spent };
       } catch (e) {
         throw addSpend(e, spent);
       }
@@ -531,7 +541,7 @@ export async function buildsStage(o: StageIo & { phase: "pilot" | "comparison" |
       else if (c.arm === "stock") mount = writeMount(join(o.run, "builds", "stock", "mounts", c.unit), stockMount(readFileSync(plan, "utf8")));
       else mount = { plan, review: null };
       if (hasReview(c.arm) && !existsSync(mount.review!)) fail("E_USAGE", "build cell " + buildKey(c.unit, c.arm, c.reviewer, c.rep) + ": its review mount " + mount.review + " is missing");
-      const b = await runPlantedBuild({ unit: unit(c.unit), unitDir: o.src.dir(c.unit), arm: c.arm, reviewer: c.reviewer, rep: c.rep, note: o.src.note(c.unit), mount, review: isReviewed(c.arm) ? reviewOf(c) : null, session: o.session, grader: o.grader, earlier: o.earlier?.(buildKey(c.unit, c.arm, c.reviewer, c.rep)), log: o.log });
+      const b = await runPlantedBuild({ unit: unit(c.unit), unitDir: o.src.dir(c.unit), arm: c.arm, reviewer: c.reviewer, rep: c.rep, note: o.src.note(c.unit), mount, review: isReviewed(c.arm) ? reviewOf(c) : null, session: o.session, grader: o.grader, earlier: o.earlier?.(buildKey(c.unit, c.arm, c.reviewer, c.rep)), marker: join(outDir, buildKey(c.unit, c.arm, c.reviewer, c.rep) + ".grade-error"), log: o.log });
       return { costUsd: b.costUsd, commit: () => void saveBuild(outDir, b) };
     },
   });

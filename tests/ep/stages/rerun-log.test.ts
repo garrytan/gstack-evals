@@ -160,7 +160,7 @@ describe("a refused retry", () => {
     refuse = false;
     expect(await step("hinted")).toBe(0);
     expect(calls).toEqual([1, 2, 2]);
-    expect(lines).toContain("E_EB_GAP cell " + id + "_hinted_-_1: upstream_gap again after 1 retry; recorded as a gap");
+    expect(lines).toContain("E_EB_GAP cell " + id + "_hinted_-_1: upstream_gap after 1 retry; recorded as a gap");
     expect((JSON.parse(readFileSync(join(run, "author", id, "hinted.json"), "utf8")) as { drop: string }).drop).toBe("hinted-gap");
   });
 });
@@ -179,7 +179,7 @@ describe("the gaps recorded when the driver refused a retry", () => {
       writeFileSync(join(run, "author", unit, "hinted.json"), JSON.stringify({ drop: outcome === "completed" ? null : "hinted-gap" }) + "\n");
       for (const a of ["a1", "a2"]) mkdirSync(join(run, "builds", "authoring", "rig", "sessions", unit + "_hinted_-_1", a), { recursive: true });
     }
-    const refuse = (task: string) => row(driver, { event: "refuse", code: "E_USAGE", status: 422, arm: ARM, task, trial_n: 1, trial: "task__x", detail: "E_USAGE: outcome driver: stage ep-authoring has used its 2 reruns" });
+    const refuse = (task: string) => row(driver, { event: "refuse", code: "E_USAGE", status: 422, arm: ARM, task, trial_n: 1, trial: "task__x", rerun: "fresh container after an upstream or infra end", detail: "E_USAGE: outcome driver: stage ep-authoring has used its 2 reruns" });
     row(driver, { event: "open", arm: ARM, task: "u1_hinted_-_1", trial_n: 1 });
     refuse("u1_hinted_-_1");
     for (const u of ["u2", "u2"]) row(driver, { event: "open", arm: ARM, task: u + "_hinted_-_1", trial_n: 1 });
@@ -192,7 +192,7 @@ describe("the gaps recorded when the driver refused a retry", () => {
       ["u1_hinted_-_1", "infra_gap", 1, 1],
       ["u4_hinted_-_1", "upstream_gap", 1, 1],
     ]);
-    expect(rows[0]!.moved).toEqual([join(cells, "u1_hinted_-_1.refused-gap.json"), join(cells, "u1_hinted_-_1.refused-gap.sha256"), join(run, "author", "u1", "hinted.refused-gap.json"), join(run, "builds", "authoring", "rig", "sessions", "u1_hinted_-_1", "a2.refused-gap")]);
+    expect(rows[0]!.moved).toEqual([join(run, "author", "u1", "hinted.refused-gap.json"), join(run, "builds", "authoring", "rig", "sessions", "u1_hinted_-_1", "a2.refused-gap"), join(cells, "u1_hinted_-_1.refused-gap.sha256"), join(cells, "u1_hinted_-_1.refused-gap.json")]);
     for (const p of rows[0]!.moved) expect(existsSync(p)).toBe(true);
     expect(existsSync(join(cells, "u1_hinted_-_1.json"))).toBe(false);
     expect(existsSync(join(run, "builds", "authoring", "rig", "sessions", "u1_hinted_-_1", "a1"))).toBe(true);

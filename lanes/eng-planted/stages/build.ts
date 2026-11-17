@@ -21,13 +21,15 @@
 // - readReview: a build with /work/review/ read it when any tool call in its transcript (real_agent's sdk-messages.jsonl
 //   beside final.patch) names a path under /work/review, or ../review from /work/repo. null for arms with no review files.
 // - Outcomes: completed or limit is graded as is (limitStop marks a limit); an upstream or infrastructure end gets one
-//   fresh retry, then the cell is a gap (eng-build's runSessionCell). A reviewed arm whose review ended in a gap is a gap
-//   and never builds. A gap's catch is null with catchDrop "gap". The retry counts across leases: an attempt an earlier
-//   lease opened and left with no record (earlier, from the driver's log) was the cell's first, so its next attempt is
-//   its retry (dated pre-run fix, 2026-11-17).
+//   fresh retry in all, whatever kind each end was, then the cell is a gap (oneRetry; eng-build's runSessionCell counts
+//   each kind on its own, which would allow a third attempt). A reviewed arm whose review ended in a gap is a gap and
+//   never builds. A gap's catch is null with catchDrop "gap". The retry counts across leases: an attempt an earlier lease
+//   opened and left with no record (earlier, from the driver's log) was the cell's first, so its next attempt is its
+//   retry. A grader error after a completed session writes the cell's marker and stops the cell, so no retry opens for
+//   it until the Captain rules (dated pre-run fixes, 2026-11-17).
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { armName, BUILD_LINE, REVIEW_LINE, runSessionCell, type BuildSession } from "../../eng-build/build-stage.ts";
+import { dirname, join } from "node:path";
+import { armName, BUILD_LINE, REVIEW_LINE, type BuildSession } from "../../eng-build/build-stage.ts";
 import { bundleParts, type ReviewOutputs } from "../../eng-build/bundle.ts";
 import { testLinesAdded } from "../../eng-build/pipeline.ts";
 import { addSpend } from "../../eng-build/spend.ts";
@@ -179,9 +181,21 @@ export function ebSession(eb: BuildSession, table: MountTable): PlantedSession {
 
 export const buildKey = (unit: string, arm: BuildArm, reviewer: Reviewer | null, rep: number) => (unit + ":" + arm + ":" + (reviewer ?? "-") + ":" + rep).replace(/[^A-Za-z0-9._-]/g, "_");
 
+/** Prereg section 4's session rule: completed or limit ends the cell; an upstream or infra end gets one fresh retry in
+ * all, whatever kind each end was. Attempts are numbered on from earlier, the attempts earlier leases opened with no
+ * record. Returns every attempt's result; the last one decides the cell. */
+export async function oneRetry<T>(start: (attempt: number) => Promise<T>, ended: (t: T) => boolean, earlier = 0): Promise<T[]> {
+  const out: T[] = [];
+  for (let n = earlier + 1; ; n++) {
+    const t = await start(n);
+    out.push(t);
+    if (ended(t) || n >= 2) return out;
+  }
+}
+
 /** One build cell: the session under the outcome rule, then the grader and catch. An error after a session spent
  * carries that spend (spend.ts), every earlier attempt's included, which runGated settles. */
-export async function runPlantedBuild(o: { unit: PlantedUnit; unitDir: string; arm: BuildArm; reviewer: Reviewer | null; rep: number; note: string; hint?: string | null; mount: { plan: string; review: string | null }; review?: ReviewRecord | null; session: PlantedSession; grader: PlantedGrader; coverage?: (unitDir: string, tree: string) => Promise<number | null>; earlier?: number; log?: (line: string) => void }): Promise<GradedBuild> {
+export async function runPlantedBuild(o: { unit: PlantedUnit; unitDir: string; arm: BuildArm; reviewer: Reviewer | null; rep: number; note: string; hint?: string | null; mount: { plan: string; review: string | null }; review?: ReviewRecord | null; session: PlantedSession; grader: PlantedGrader; coverage?: (unitDir: string, tree: string) => Promise<number | null>; earlier?: number; marker?: string; log?: (line: string) => void }): Promise<GradedBuild> {
   const cell = buildKey(o.unit.id, o.arm, o.reviewer, o.rep);
   if (isReviewed(o.arm) !== (o.reviewer !== null)) fail("E_USAGE", "cell " + cell + ": a reviewed arm names its reviewer, and no other arm does");
   if (hasReview(o.arm) !== (o.mount.review !== null)) fail("E_USAGE", "cell " + cell + ": arm " + o.arm + (hasReview(o.arm) ? " needs its /work/review/ mount" : " gets no /work/review/"));
@@ -195,39 +209,54 @@ export async function runPlantedBuild(o: { unit: PlantedUnit; unitDir: string; a
       return gap(r.outcome, 0);
     }
   }
+  if (o.marker && existsSync(o.marker)) fail("E_EB_CELL_INCOMPLETE", "cell " + cell + ": its grader failed after a completed session (" + readFileSync(o.marker, "utf8").trim() + "), so no retry opens; bring it to the Captain");
   const earlier = o.earlier ?? 0;
   if (earlier >= 2) fail("E_EB_CELL_INCOMPLETE", "cell " + cell + ": earlier leases opened it " + earlier + " times and left no record, so its one retry is spent and nothing opens; bring it to the Captain");
   const prompt = plantedBuildPrompt(o.arm, o.note, o.arm === "hinted" ? (o.hint ?? null) : null);
   let cost = 0;
   let tree: string | null = null;
   try {
-    const run = await runSessionCell(cell, async (attempt) => {
-      const s = await o.session({ cell, unit: o.unit, arm: o.arm, prompt, plan: o.mount.plan, review: o.mount.review, attempt });
-      cost += s.costUsd;
-      tree = s.tree;
-      return s.outcome;
-    }, earlier);
-    if (run.gap) {
-      o.log?.(run.line!);
-      return gap(run.outcome, cost);
+    const ends = await oneRetry(
+      async (attempt) => {
+        const s = await o.session({ cell, unit: o.unit, arm: o.arm, prompt, plan: o.mount.plan, review: o.mount.review, attempt });
+        cost += s.costUsd;
+        tree = s.tree;
+        if (s.outcome !== "completed" && s.outcome !== "limit" && s.outcome !== "upstream_gap" && s.outcome !== "infra_gap") fail("E_USAGE", "cell " + cell + ": unknown session outcome " + JSON.stringify(s.outcome));
+        return s.outcome;
+      },
+      (x) => x === "completed" || x === "limit",
+      earlier,
+    );
+    const outcome = ends.at(-1)!;
+    if (outcome === "upstream_gap" || outcome === "infra_gap") {
+      o.log?.("E_EB_GAP cell " + cell + ": " + outcome + " after 1 retry; recorded as a gap");
+      return gap(outcome, cost);
     }
-    const t: string = tree ?? fail("E_USAGE", "cell " + cell + ": the session ended " + run.outcome + " but left no tree to grade");
-    const g = await o.grader.grade(o.unit, o.unitDir, t);
-    const c = await o.grader.catchOf(o.unit, o.unitDir, t);
-    const file = (n: string) => (lstatSync(join(t, n), { throwIfNoEntry: false })?.isFile() ? readFileSync(join(t, n), "utf8") : "");
-    return {
-      ...meta,
-      outcome: run.outcome,
-      limitStop: run.outcome === "limit",
-      planted: g.planted,
-      functional: g.functional,
-      catch: c.catch,
-      catchDrop: c.drop,
-      readReview: hasReview(o.arm) ? readReview(file("sdk-messages.jsonl")) : null,
-      coverage: o.coverage ? await o.coverage(o.unitDir, t) : null,
-      testLinesAdded: testLinesAdded(file("final.patch")),
-      costUsd: cost,
-    };
+    const t: string = tree ?? fail("E_USAGE", "cell " + cell + ": the session ended " + outcome + " but left no tree to grade");
+    try {
+      const g = await o.grader.grade(o.unit, o.unitDir, t);
+      const c = await o.grader.catchOf(o.unit, o.unitDir, t);
+      const file = (n: string) => (lstatSync(join(t, n), { throwIfNoEntry: false })?.isFile() ? readFileSync(join(t, n), "utf8") : "");
+      return {
+        ...meta,
+        outcome,
+        limitStop: outcome === "limit",
+        planted: g.planted,
+        functional: g.functional,
+        catch: c.catch,
+        catchDrop: c.drop,
+        readReview: hasReview(o.arm) ? readReview(file("sdk-messages.jsonl")) : null,
+        coverage: o.coverage ? await o.coverage(o.unitDir, t) : null,
+        testLinesAdded: testLinesAdded(file("final.patch")),
+        costUsd: cost,
+      };
+    } catch (e) {
+      if (!o.marker) throw e;
+      const line = String(e instanceof Error ? e.message : e).split("\n")[0]!;
+      mkdirSync(dirname(o.marker), { recursive: true });
+      writeFileSync(o.marker, line + "\n", { flag: "wx" });
+      return fail("E_EB_CELL_INCOMPLETE", "cell " + cell + ": its grader failed after a completed session (" + line + "); its marker " + o.marker + " holds that line, so no retry opens; bring it to the Captain");
+    }
   } catch (e) {
     throw addSpend(e, cost);
   }
