@@ -247,10 +247,10 @@ async function stage(f: Map<string, string[]>, io: Io, env: Env): Promise<number
   }
 }
 
-/** The responder's meter for a planning stage and the micro-dollars its lease holds: the --owner-spend-cap, or the owner item's balance when less is left, so a resume asks only for what remains, as the stage's own lease does. */
+/** The responder's meter for a planning stage and the micro-dollars its lease holds: the --owner-spend-cap, or the owner item's balance when less is left, so a resume asks only for what remains, as the stage's own lease does. The balance is read after the meter settles this run's stale lease from a crashed launch. */
 export async function openOwnerMeter(o: { item: string; capMicros: number; out: string; record: string; ledger: string; env: Env }): Promise<{ meter: Meter; lease: number }> {
-  const lease = leaseAmount(o.record, o.item, o.capMicros);
-  const meter = await openMeter({ item: o.item, runId: DAYONE_RUN, out: join(o.out, "owner-meter"), cacheDir: join(o.out, "owner-cache"), maxOutputTokens: 1200, amountMicros: lease, record: o.record, ledger: o.ledger, env: o.env });
+  let lease = 0;
+  const meter = await openMeter({ item: o.item, runId: DAYONE_RUN, out: join(o.out, "owner-meter"), cacheDir: join(o.out, "owner-cache"), maxOutputTokens: 1200, amountMicros: () => (lease = leaseAmount(o.record, o.item, o.capMicros)), record: o.record, ledger: o.ledger, env: o.env });
   return { meter, lease };
 }
 

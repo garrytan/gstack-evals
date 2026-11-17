@@ -48,6 +48,33 @@ describe("the responder's lease on a planning resume", () => {
     });
   });
 
+  test("a resume after a crash settles the responder's stale lease first, then leases what the line has left", async () => {
+    for (const spent of [0, 5e6]) {
+      await withDir(async (dir) => {
+        const record = join(dir, "record");
+        const ledger = join(dir, "ledger.sqlite");
+        recordApproval(record, { action: "init", item: "day1-owner", cap_micros: 35e6, quotes: [{ words: "a test on a temporary ledger", by: "day-one test", source: "tests" }], admission: "warn" });
+        const local = openLocalLedger(ledgerPath(ledger));
+        try {
+          const stale = openLease(record, local, { item: "day1-owner", run_id: DAYONE_RUN, amount_micros: 35e6, requireAdmission: () => null });
+          if (spent) {
+            const r = (await local.reserve({ idempotency_key: "k1", lease_id: stale.lease_id, cell: { run_id: DAYONE_RUN, arm: "pv", task: "q", model: "gpt-6.1-sol", trial: 1, attempt: 1, meter_id: "k1" } as never, max_micros: spent })) as { reservation: { reservation_id: string } };
+            await local.settle(r.reservation.reservation_id, { kind: "spent", spent_micros: spent, usage: { input: 1, output: 1, reasoning: 0, cache_read: 0, cache_write: 0 } } as never);
+          }
+        } finally {
+          local.close();
+        }
+        const { meter, lease } = await openOwnerMeter({ item: "day1-owner", capMicros: 35e6, out: dir, record, ledger, env: {} });
+        try {
+          expect(lease).toBe(35e6 - spent);
+          expect(ledgerStatus(record, "day1-owner")[0]!.open_lease).toMatchObject({ reserved_micros: 35e6 - spent });
+        } finally {
+          await meter.close();
+        }
+      });
+    }
+  });
+
   test("a round is admitted only inside the responder's lease, so a short lease is an admission stop and not a lost cell", async () => {
     const policy = loadPolicy(DEFAULT_POLICY) as LoadedPolicy;
     const stubRig = (): HostRig => ({ baseUrl: "http://proxy", network: "none", imageDigest: null, bind: async () => ({}) as never, finalize: async () => ({}) as never, arms: {}, sandbox: () => ({}) as never, judgeSandbox: () => ({}) as never, egress: () => ({ open: false, detail: "" }), close: async () => ({ committed: 0, unknown: 0, lease_id: null }), recovery: null });
