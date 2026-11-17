@@ -1,0 +1,69 @@
+KEYS real 323 stock 13
+THIRDS claude-opus-5-5 n 108 cuts lines_total 509 1114
+JUDGED claude-opus-5-5 small ux A1 mean 0.65 n 34 | S2 mean None n 0 | A1-S2 None
+JUDGED claude-opus-5-5 small dx A1 mean 1.0 n 34 | S2 mean None n 0 | A1-S2 None
+JUDGED claude-opus-5-5 small ax A1 mean 1.0 n 34 | S2 mean None n 0 | A1-S2 None
+JUDGED_MISSING claude-opus-5-5 small A1 2 of 36 S2 0 of 0
+JUDGED claude-opus-5-5 mid ux A1 mean 1.07 n 15 | S2 mean 0.63 n 19 | A1-S2 0.44
+JUDGED claude-opus-5-5 mid dx A1 mean 1.0 n 15 | S2 mean 1.0 n 19 | A1-S2 0.0
+JUDGED claude-opus-5-5 mid ax A1 mean 1.0 n 15 | S2 mean 1.0 n 19 | A1-S2 0.0
+JUDGED_MISSING claude-opus-5-5 mid A1 0 of 15 S2 2 of 21
+JUDGED claude-opus-5-5 large ux A1 mean 0.33 n 3 | S2 mean 0.42 n 31 | A1-S2 -0.09
+JUDGED claude-opus-5-5 large dx A1 mean 1.0 n 3 | S2 mean 1.06 n 31 | A1-S2 -0.06
+JUDGED claude-opus-5-5 large ax A1 mean 1.0 n 3 | S2 mean 1.06 n 31 | A1-S2 -0.06
+JUDGED_MISSING claude-opus-5-5 large A1 0 of 3 S2 2 of 33
+THIRDS openai/gpt-6.1-sol n 107 cuts lines_total 1203 1971
+JUDGED openai/gpt-6.1-sol small ux A1 mean 1.04 n 26 | S2 mean 0.12 n 8 | A1-S2 0.92
+JUDGED openai/gpt-6.1-sol small dx A1 mean 1.04 n 26 | S2 mean 1.12 n 8 | A1-S2 -0.08
+JUDGED openai/gpt-6.1-sol small ax A1 mean 1.12 n 26 | S2 mean 1.12 n 8 | A1-S2 0.0
+JUDGED_MISSING openai/gpt-6.1-sol small A1 0 of 26 S2 1 of 9
+JUDGED openai/gpt-6.1-sol mid ux A1 mean 1.18 n 17 | S2 mean 0.39 n 18 | A1-S2 0.79
+JUDGED openai/gpt-6.1-sol mid dx A1 mean 1.06 n 17 | S2 mean 1.28 n 18 | A1-S2 -0.22
+JUDGED openai/gpt-6.1-sol mid ax A1 mean 1.12 n 17 | S2 mean 1.33 n 18 | A1-S2 -0.21
+JUDGED_MISSING openai/gpt-6.1-sol mid A1 1 of 18 S2 0 of 18
+JUDGED openai/gpt-6.1-sol large ux A1 mean 1.0 n 9 | S2 mean 0.31 n 26 | A1-S2 0.69
+JUDGED openai/gpt-6.1-sol large dx A1 mean 0.78 n 9 | S2 mean 1.23 n 26 | A1-S2 -0.45
+JUDGED openai/gpt-6.1-sol large ax A1 mean 1.11 n 9 | S2 mean 1.35 n 26 | A1-S2 -0.24
+JUDGED_MISSING openai/gpt-6.1-sol large A1 0 of 9 S2 1 of 27
+THIRDS particle-ai/particle-1 n 108 cuts lines_total 1061 2049
+JUDGED particle-ai/particle-1 small ux A1 mean 0.5 n 24 | S2 mean 0.62 n 8 | A1-S2 -0.12
+JUDGED particle-ai/particle-1 small dx A1 mean 0.75 n 24 | S2 mean 1.12 n 8 | A1-S2 -0.37
+JUDGED particle-ai/particle-1 small ax A1 mean 0.75 n 24 | S2 mean 1.0 n 8 | A1-S2 -0.25
+JUDGED_MISSING particle-ai/particle-1 small A1 4 of 28 S2 0 of 8
+JUDGED particle-ai/particle-1 mid ux A1 mean 0.65 n 17 | S2 mean 0.38 n 13 | A1-S2 0.27
+JUDGED particle-ai/particle-1 mid dx A1 mean 0.71 n 17 | S2 mean 1.08 n 13 | A1-S2 -0.37
+JUDGED particle-ai/particle-1 mid ax A1 mean 0.82 n 17 | S2 mean 1.08 n 13 | A1-S2 -0.26
+JUDGED_MISSING particle-ai/particle-1 mid A1 4 of 21 S2 2 of 15
+JUDGED particle-ai/particle-1 large ux A1 mean 0.5 n 4 | S2 mean 0.23 n 30 | A1-S2 0.27
+JUDGED particle-ai/particle-1 large dx A1 mean 0.25 n 4 | S2 mean 1.0 n 30 | A1-S2 -0.75
+JUDGED particle-ai/particle-1 large ax A1 mean 0.5 n 4 | S2 mean 0.87 n 30 | A1-S2 -0.37
+JUDGED_MISSING particle-ai/particle-1 large A1 1 of 5 S2 1 of 31
+STOCK astra n 4 above0 0 below0_any_axis 2 malformed 0 flagged False {('comments_whitespace', 'below0'): 1, ('rename_only', 'zero'): 1, ('comments_whitespace', 'zero'): 1, ('logging', 'below0'): 1}
+STOCK opus n 9 above0 0 below0_any_axis 6 malformed 0 flagged False {('comments_whitespace', 'below0'): 3, ('logging', 'below0'): 3, ('rename_only', 'zero'): 3}
+MALFORMED_BY_ARM astra frozen A1 2 of 54
+MALFORMED_BY_ARM astra frozen S2 4 of 54
+MALFORMED_BY_ARM astra labelled 0 of 48
+MALFORMED_BY_ARM astra second grade (real 60) A1 3 of 20
+MALFORMED_BY_ARM astra second grade (real 60) S2 1 of 15
+MALFORMED_BY_ARM astra stock 0 of 4
+MALFORMED_BY_ARM opus frozen A1 10 of 107
+MALFORMED_BY_ARM opus frozen S2 5 of 108
+MALFORMED_BY_ARM opus labelled 0 of 48
+MALFORMED_BY_ARM opus second grade (real 60) A1 1 of 8
+MALFORMED_BY_ARM opus second grade (real 60) S2 3 of 17
+MALFORMED_BY_ARM opus stock 0 of 6
+FOLLOWON claude-opus-5-5 A1 n 162 mean_usd 0.413 median_turns 17 median_wall_min 4.0 median_files 2 read_first_stage_files (10, 'of', 162)
+FOLLOWON claude-opus-5-5 S0 n 162 mean_usd 0.384 median_turns 16 median_wall_min 3.8 median_files 3 read_first_stage_files (0, 'of', 162)
+FOLLOWON claude-opus-5-5 S2 n 162 mean_usd 0.392 median_turns 16 median_wall_min 3.8 median_files 2 read_first_stage_files (15, 'of', 162)
+FOLLOWON openai/gpt-6.1-sol A1 n 156 mean_usd 0.674 median_turns 46 median_wall_min 6.2 median_files 3 read_first_stage_files (71, 'of', 156)
+FOLLOWON openai/gpt-6.1-sol S0 n 162 mean_usd 0.566 median_turns 44 median_wall_min 5.5 median_files 3 read_first_stage_files (0, 'of', 162)
+FOLLOWON openai/gpt-6.1-sol S2 n 162 mean_usd 0.643 median_turns 46 median_wall_min 6.1 median_files 3 read_first_stage_files (83, 'of', 162)
+FOLLOWON particle-ai/particle-1 A1 n 162 mean_usd 0.062 median_turns 54 median_wall_min 6.5 median_files 3 read_first_stage_files (45, 'of', 162)
+FOLLOWON particle-ai/particle-1 S0 n 162 mean_usd 0.068 median_turns 55 median_wall_min 7.0 median_files 3 read_first_stage_files (0, 'of', 162)
+FOLLOWON particle-ai/particle-1 S2 n 162 mean_usd 0.063 median_turns 55 median_wall_min 7.2 median_files 3 read_first_stage_files (67, 'of', 162)
+FIRST claude-opus-5-5 A1 n 54 mean_usd 1.599 median_turns 32 median_wall_min 7.1
+FIRST claude-opus-5-5 S2 n 54 mean_usd 2.205 median_turns 36 median_wall_min 10.0
+FIRST openai/gpt-6.1-sol A1 n 54 mean_usd 4.222 median_turns 140 median_wall_min 16.2
+FIRST openai/gpt-6.1-sol S2 n 54 mean_usd 3.156 median_turns 121 median_wall_min 14.4
+FIRST particle-ai/particle-1 A1 n 54 mean_usd 0.177 median_turns 112 median_wall_min 14.7
+FIRST particle-ai/particle-1 S2 n 54 mean_usd 0.214 median_turns 121 median_wall_min 18.6

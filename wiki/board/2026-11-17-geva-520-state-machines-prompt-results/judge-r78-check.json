@@ -1,0 +1,74 @@
+{
+ "schema": "sm-r78.v2",
+ "real_used": 60,
+ "axes": {
+  "ux": {
+   "kappa": 0.7377049180327869,
+   "n": 48,
+   "malformed": 12,
+   "may_stand": true,
+   "reading": "passes its check"
+  },
+  "dx": {
+   "kappa": 0,
+   "n": 48,
+   "malformed": 12,
+   "may_stand": false,
+   "reading": "judge failed its check"
+  },
+  "ax": {
+   "kappa": 0,
+   "n": 48,
+   "malformed": 12,
+   "may_stand": false,
+   "reading": "judge failed its check"
+  }
+ },
+ "judges": {
+  "astra": {
+   "catch": {
+    "n": 24,
+    "caught": 23,
+    "rate": 0.9583333333333334
+   },
+   "false_fail": {
+    "n": 24,
+    "failed": 16,
+    "rate": 0.6666666666666666
+   },
+   "stock_above": {
+    "n": 24,
+    "above": 0
+   },
+   "malformed": 0,
+   "kappa": {
+    "ux": 0.7377049180327869,
+    "dx": 0,
+    "ax": 0
+   }
+  },
+  "opus": {
+   "catch": {
+    "n": 24,
+    "caught": 24,
+    "rate": 1
+   },
+   "false_fail": {
+    "n": 24,
+    "failed": 16,
+    "rate": 0.6666666666666666
+   },
+   "stock_above": {
+    "n": 24,
+    "above": 0
+   },
+   "malformed": 0,
+   "kappa": {
+    "ux": 0.7377049180327869,
+    "dx": 0,
+    "ax": 0
+   }
+  }
+ },
+ "agreement": "descriptive only: 40 of 60 real diffs got the same sign from both judges on every axis; this is not a catch or false-fail rate"
+}
