@@ -48,7 +48,7 @@ const home = (name: string) => {
 const goodHome = home("homes-good");
 const input = (out: string): H2hRunInput => ({
   session: planned, out, harbor: HARBOR, claude: "/bin/true", control: "http://127.0.0.1:9", proxy: "http://127.0.0.1:9", runtime: { volume: "h2h-runtimes-test" },
-  unit: { unit: { id: "u1", class: "O", kind: "O", entry: "bug" } as H2hUnit, statement: "The flag is never reset.", repo_dir: "/testbed", work_dir: "/testbed", image: { image_id: "sha256:" + "1".repeat(64), tag: "h2h-test-image:none", runtime_id: "sha256:" + "2".repeat(64), volume: "v", commits: 1, head: "a".repeat(40), home: "none", tree_patch_sha256: null, qa_home: null } },
+  unit: { unit: { id: "u1", class: "O", kind: "O", entry: "bug" } as H2hUnit, statement: "The flag is never reset.", repo_dir: "/testbed", work_dir: "/testbed", image: { image_id: "sha256:" + "1".repeat(64), tag: "h2h-test-image:none", runtime_id: "sha256:" + "2".repeat(64), volume: "v", commits: 1, head: "a".repeat(40), home: "none", tree_patch_sha256: null, qa_home: null, removed: [] } },
   home: { arm: "gstack", dir: goodHome, home_rule: "gstack", home_tree_sha256: homeTreeSha256(goodHome) },
 });
 const calls = (log: string) => readFileSync(log, "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l) as { job: string; cap: number; rerun: string | null });
