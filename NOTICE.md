@@ -24,6 +24,8 @@ A unit that vendors a file records the exact source commit in its row, keeps the
 | [gstack](https://github.com/garrytan/gstack) `lib/skill-contract.ts`, `lib/shell-writes.ts`, `lib/fs-atomic.ts`, `lib/skill-route.ts`, `lib/skill-triggers.ts`, `lib/state-root.ts` and `hosts/claude/hooks/skill-contract-stop-hook.ts` | gstack's skill contract checker and the files it imports, so the harness mechanics matcher runs gstack's own checkContract, and its scorer the same lastBashWrite, with no checkout; the Stop hook as text (`.ts.txt`), read for its checkContract call and never run. The upstream files carry no copyright line, so gstack's LICENSE line applies | lanes/harness-mechanics/vendor/gstack/ | MIT, Copyright (c) 2026 Garry Tan | harness mechanics matcher | vendored unchanged from ba2289e1cd9f (v1.98.0.0); each file's git blob sha is in lanes/harness-mechanics/pins.ts, and the dry run checks it against a checkout of that commit |
 | The review replay panel, by a Capy crew thread working for this repo's owner | Panel cases 1 and 2 (gstack #3516 and #3518), build.ts (from build2.ts), two evals' preregistrations, frozen prompt digests, items and results tables, and measured tokens. The harness-evals case, rendered prompts, per-trial model output and run.ts are not vendored | lanes/review-replay/panel/ | Joins under this repo's MIT licence; credited in the lane README and each file header | U13 | vendored, with no source commit (scratch scripts from that thread's machine); every source file's sha256 is in the lane README's digest table, and the changes are listed in build.ts's header and the README |
 | [Harbor](https://github.com/harbor-framework/harbor) `src/harbor/environments/docker/harbor-docker-egress-control-sidecar/` and `LICENSE` | The egress sidecar's build context (Dockerfile, gost.yaml, entrypoint.sh, bin/network-policy, allowlist.txt) that the decision-routing runner builds for each trial, with the redirect handler's readTimeout set to 900s so a model reply that starts after 15 s still reaches the agent (agent/dr_sidecar.py names it to Harbor) | lanes/decision-routing/agent/egress-sidecar/ | Apache License 2.0, Copyright (c) Harbor Framework Team (Harbor's LICENSE names no holder; its CITATION.cff names the Harbor Framework Team) | decision-routing calibration | vendored from f3a5a923f6d722472c9e797af836ae4425fb215f (v0.25.0); every file but the empty allowlist.txt carries a header naming the source, the licence and its changes; gost.yaml adds one line, `readTimeout: 900s`; the rest, LICENSE included, is unchanged apart from those headers |
+| [agent-skills](https://github.com/addyosmani/agent-skills) `.claude/commands/test.md` lines 1 to 4 and 13 to 18, and `skills/test-driven-development/SKILL.md` line 3 | The Prove-It steps, the /test command's front matter and the test-driven-development description, which the delivery route eval's four arms deliver to Claude Code. The arm files carry no header, because their bytes are what the session receives, so this row stands in for the copyright line | lanes/delivery-route/arms/ (steps.md, described-SKILL.md, command-prove-it.md and the last lines of gstack-shaped-SKILL.md) | MIT, Copyright (c) 2025 Addy Osmani | delivery route build | vendored from 39b723ceebf81474d0557c1fecd01eddab585563; the lines are unchanged; described-SKILL.md adds its own front matter around the description, and command-prove-it.md and gstack-shaped-SKILL.md join the lines as lanes/delivery-route/arms.ts sources writes them, which regenerates every file from a checkout of that commit |
+| [gstack](https://github.com/garrytan/gstack) `verify/SKILL.md`, every byte before `# /verify` | The setup layout of a gstack skill (front matter, preamble and the sections before the procedure) for the delivery route eval's gstack-shaped arm. The three stand-in scripts beside it (gstack-skill-start, gstack-skill-end, gstack-learnings-log) are new code that print the lines gstack's own scripts print, and copy none of them | lanes/delivery-route/arms/gstack-shaped-SKILL.md | MIT, Copyright (c) 2026 Garry Tan | delivery route build | adapted from 5b4fa9ea335e3ba743a36e3269da95980b77b32d (v1.99.5.0): the skill's name, description, triggers and the name its setup and telemetry commands pass are changed (lanes/delivery-route/arms.ts SUBSTITUTIONS), and the procedure after it is agent-skills' steps |
 
 harness-evals is a private repository, so its links here and in the vendored files' headers do not open for outside readers. Each vendored file still names its source commit and keeps the upstream copyright line.
 
@@ -33,6 +35,32 @@ harness-evals and gbrain-evals carry the same licence text and copyright holder 
 MIT License
 
 Copyright (c) 2026 Nico Bailon
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+agent-skills' licence:
+
+```
+MIT License
+
+Copyright (c) 2025 Addy Osmani
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

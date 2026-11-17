@@ -3295,6 +3295,33 @@ export const CODES = {
     resumable: true,
     owner: "U20",
   },
+  E_B1_PIN: {
+    exit: 2,
+    meaning: "A delivery route pin does not hold (lanes/delivery-route): an agent-skills or gstack checkout given to arms.ts sources is not at its pinned commit or holds another blob, a wrapper substitution does not match the pinned text the expected number of times, a treated arm's file does not hold the step text exactly once, a tar build failed, a scripted session's assertion failed (sessions.ts), or the stub model did not start.",
+    fix: "Point arms.ts at checkouts of the pinned commits, or read the named assertion in the session's capture and fix the arm or the code. Never edit a pinned file, a manifest or a fixture to make it match.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
+  },
+  E_B1_INPUT: {
+    exit: 2,
+    meaning: "A delivery route input does not hold (lanes/delivery-route): a prereg attachment is not at its front-matter sha256, tasks.txt does not hold 60 run tasks from 60 repositories and the preregistered smoke tasks, a task is not in the SWE-rebench list, a recorded cap is not the cap formula's, or config/proxy.json has no route for a smoke part's model.",
+    fix: "Fix the named input and run the command again. Never edit a frozen file to make it match.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
+  },
+  E_B1_LAUNCH: {
+    exit: 2,
+    meaning: "A delivery route launch was refused before it started (lanes/delivery-route/money.ts launchGuard): the item's projection (its spend so far, its parts still to run at the planning rates, its parallel allowances and its host and part-VM reserves) would pass its cap, every item's projection plus the crew file's counter would pass the all-in stop, or the item is marked done. The message says what doesn't fit.",
+    fix: "Take the line to the Captain before launching. A cap raise needs the Captain's record and a new approval row; nothing launches until the guard passes.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: true,
+    owner: "U20",
+  },
 } as const satisfies Record<string, CodeInfo>;
 
 export type ReasonCode = keyof typeof CODES;

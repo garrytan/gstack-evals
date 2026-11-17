@@ -391,6 +391,9 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_EP_REPROJECT](#e_ep_reproject) | 2 | U20 |
 | [E_EP_JUDGE_CHECK](#e_ep_judge_check) | 2 | U20 |
 | [E_EP_DRYRUN_FAIL](#e_ep_dryrun_fail) | 2 | U20 |
+| [E_B1_PIN](#e_b1_pin) | 2 | U20 |
+| [E_B1_INPUT](#e_b1_input) | 2 | U20 |
+| [E_B1_LAUNCH](#e_b1_launch) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -2977,6 +2980,30 @@ Exit 2. Side effects: The judge's calls are settled on its lease; the primary's 
 A planted-unit eng-review read dry-run case printed FAIL: a frozen rule did not hold on its fixtures, or the driven launch failed on the real path. The line names the case.
 
 Fix: Read the FAIL line, fix the rule's code, and run the dry run again before any spend.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_B1_PIN
+
+A delivery route pin does not hold (lanes/delivery-route): an agent-skills or gstack checkout given to arms.ts sources is not at its pinned commit or holds another blob, a wrapper substitution does not match the pinned text the expected number of times, a treated arm's file does not hold the step text exactly once, a tar build failed, a scripted session's assertion failed (sessions.ts), or the stub model did not start.
+
+Fix: Point arms.ts at checkouts of the pinned commits, or read the named assertion in the session's capture and fix the arm or the code. Never edit a pinned file, a manifest or a fixture to make it match.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_B1_INPUT
+
+A delivery route input does not hold (lanes/delivery-route): a prereg attachment is not at its front-matter sha256, tasks.txt does not hold 60 run tasks from 60 repositories and the preregistered smoke tasks, a task is not in the SWE-rebench list, a recorded cap is not the cap formula's, or config/proxy.json has no route for a smoke part's model.
+
+Fix: Fix the named input and run the command again. Never edit a frozen file to make it match.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_B1_LAUNCH
+
+A delivery route launch was refused before it started (lanes/delivery-route/money.ts launchGuard): the item's projection (its spend so far, its parts still to run at the planning rates, its parallel allowances and its host and part-VM reserves) would pass its cap, every item's projection plus the crew file's counter would pass the all-in stop, or the item is marked done. The message says what doesn't fit.
+
+Fix: Take the line to the Captain before launching. A cap raise needs the Captain's record and a new approval row; nothing launches until the guard passes.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
 

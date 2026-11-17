@@ -1,0 +1,22 @@
+B1 admission: the delivery route detector (lanes/delivery-route/detect.ts, at this preregistration's commit) run over the
+harness mechanics eval's Stage 4 sessions on the same rig, models and Claude Code (its none and verify-prose arms, graded
+sessions only). "all" is that eval's 200 scored tasks; "drawn" is this eval's 60 run tasks (tasks.txt). Counts, not rates.
+followed: test written, a failing run before the first source edit, a passing run after it (the primary).
+tool-only: the same rule with only Write and Edit seen as writes. test-first: a test file written before the first source
+edit. failing-first: that, plus a failing run of it before the source edit. passing-after: a passing run of the test after
+the source edit. bash-only: every write to the patch's source files came through Bash. unseen: the patch changes a source
+file and no write to one was seen. unread-bg: a background run never read. passes: verifier reward 1 (descriptive).
+
+model            arm           set    n  followed tool-only test-first failing-first passing-after bash-only unseen unread-bg passes
+claude-opus-5-5  none          all  200         0         0          2             0             1       154      4        29    121
+claude-opus-5-5  none          drawn 60         0         0          1             0             1        48      1         7     34
+claude-opus-5-5  verify-prose  all  200         1         1          4             2             3       111      4        28    123
+claude-opus-5-5  verify-prose  drawn 60         0         0          3             1             2        35      1         7     37
+gpt-6.1-sol      none          all  200       150       150        155           152           153         0      0        13    115
+gpt-6.1-sol      none          drawn 60        46        46         47            46            47         0      0         5     32
+gpt-6.1-sol      verify-prose  all  200       140       140        163           161           142         0      0         5    120
+gpt-6.1-sol      verify-prose  drawn 60        43        43         48            48            43         0      0         2     32
+particle-1       none          all  200         1         0          5             2             2         1      0        10    122
+particle-1       none          drawn 60         1         0          3             1             2         0      0         2     34
+particle-1       verify-prose  all  200         2         2          9             2             7         1      0        26    124
+particle-1       verify-prose  drawn 60         1         1          5             1             4         0      0         5     37

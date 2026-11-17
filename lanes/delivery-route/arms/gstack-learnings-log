@@ -1,0 +1,4 @@
+#!/bin/sh
+# B1's gstack-shaped arm: a stand-in for gstack 1.99.5.0's bin/gstack-learnings-log (5b4fa9ea). It accepts the entry and
+# keeps nothing.
+exit 0

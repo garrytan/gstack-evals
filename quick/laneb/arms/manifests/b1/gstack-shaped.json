@@ -1,0 +1,40 @@
+{
+  "arm": "gstack-shaped",
+  "claude_code": "2.1.312",
+  "typed": true,
+  "spec": "gstack-shaped:tar=gstack-shaped:told=prove-it:system_prompt=claude-code-preset:gstack_hooks=copy:strip_snapshot=true:closing_line=hm-status",
+  "steps": {
+    "sha256": "47bfc31f877aef8938dfabc4984a759eaaa1f8f7588a408c542199bde6e34557",
+    "bytes": 203,
+    "source": "https://github.com/addyosmani/agent-skills 39b723ceebf81474d0557c1fecd01eddab585563 .claude/commands/test.md lines 13-18"
+  },
+  "carrier": {
+    "file": "gstack-shaped-SKILL.md",
+    "bytes": 9343,
+    "before": 9140,
+    "after": 0,
+    "path": ".claude/skills/prove-it/SKILL.md"
+  },
+  "tar_command": "tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner --format=gnu -cf <arm>.tar .claude (tar (GNU tar) 1.35)",
+  "tar": {
+    "file": "gstack-shaped.tar",
+    "bytes": 20480,
+    "sha256": "9dd47945bbfa662e68f6f338bf8bae8a5e5708e739c7f9d5bbd1f6a7b6ce7850"
+  },
+  "tree": {
+    "files": 4,
+    "symlinks": 0,
+    "dirs": 5,
+    "bytes": 11002,
+    "digest": "140d35f20eb4c34e25c38cbe3b39bc98e9c6048c80e4bf8964ce6537a5a4e2ac"
+  },
+  "skills": {
+    "count": 1,
+    "tree_digest": "95187945a0ecdcf0d9d2bc5f9a576dfd843c153f2243c38515395e3a59462a3c",
+    "skill_md_digest": "4176b10ed0b16029089b374538f4ddd2afc2bc0e7721d777feef435cf84d2e5f",
+    "names": [
+      "prove-it"
+    ]
+  },
+  "inventory_sha256": "2759369a3a6b3c657b81fc3fa47d5a8704a6035e013fa4ccf2c94a0f4d05559a"
+}
