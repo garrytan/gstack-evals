@@ -93,6 +93,16 @@ describe("the gstack-read check (prereg section 8)", () => {
   });
 });
 
+// Value: protects=a gap's row names why its session never started: when the trial fails before the agent runs, the containment probe never runs, and the row's why now carries the trial's own incident; fails_when=the why drops the incident, or a probe failure with no incident gains text; why_new=the day-one smoke, where every A review session read only "the containment probe could not run" with no cause; seam=attemptOutcome; no_claim=which failures stop a trial before its agent
+describe("a session whose containment probe never ran", () => {
+  test("keeps the trial's incident in its why, and stays a retry", () => {
+    const read = { web: 0, gstack_reads: [], contained: null, micros: 0, voice: null, out: null };
+    expect(attemptOutcome({ ...read, termination: { kind: "infra", incident: "the trial failed: no image" } }, null)).toEqual({ state: "retry", why: "the containment probe could not run: the trial failed: no image" });
+    expect(attemptOutcome({ ...read, termination: { kind: "infra", incident: "" } }, null)).toEqual({ state: "retry", why: "the containment probe could not run" });
+    expect(attemptOutcome({ ...read, termination: { kind: "completed" } }, null)).toEqual({ state: "retry", why: "the containment probe could not run" });
+  });
+});
+
 describe("the voice bearer check (prereg section 7)", () => {
   /** One gstack-arm session whose container holds inContainer(voice bearer) as OPENAI_API_KEY, with every exec it ran; transport can lose the exec's stdin or report a timeout. */
   const bearerSession = async (dir: string, name: string, inContainer: (voiceToken: string) => string, transport: { dropInput?: boolean; timedOut?: boolean } = {}) => {
