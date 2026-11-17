@@ -25,7 +25,7 @@ import { serveStages, type ServeOptions } from "../outcome-skills/driver/stage.t
 import { HARBOR_MODEL } from "../outcome-skills/statemachines/run.ts";
 import { sessionEnd } from "../outcome-skills/statemachines/session.ts";
 import { isSkillArm, REVIEW_SESSION } from "./arms.ts";
-import { armName, BUILD_MODEL, buildMounts, buildRegistry, checkMounts, preflight, prepareTree, REPO_DIR, type BuildSession } from "./build-stage.ts";
+import { armName, BUILD_MODEL, buildMounts, buildRegistry, checkMounts, preflight, prepareTree, REPO_DIR, stripBase, type BuildSession } from "./build-stage.ts";
 import { repoEdits } from "./bundle.ts";
 import { trialTask } from "./contain.ts";
 import { EbError, fail } from "./errors.ts";
@@ -111,7 +111,7 @@ export function reviewLauncher(o: { arms: Exclude<Arm, "none">[]; reviewer: Revi
       const hook = s.hook((t) => ({ transcript: t, stateRoot: join(work, STATE_ROOT_DIR), coverage: join(work, ER_COVERAGE_DIR), opening }));
       let captured: ReviewCapture | null = null;
       const gate = (w: string) => {
-        captured = captureReview(w, s.unit.repo, join(run, "host"));
+        captured = captureReview(w, join(s.seed, "repo"), join(run, "host"));
         return { copy_out: [], gate: { plan: captured.plan !== null, repo_edits: captured.repoEdits } };
       };
       const agent = (rig.driver ?? hostDriver)({ host: "claude", model, provider, proxy: { baseUrl: rig.baseUrl, slot: binding.slot, token: binding.token }, interactive: true, skill, out: join(run, "host"), entry: { user: ER_REC_USER }, freeform: erFreeform, systemPrompt: ER_SYSTEM_PROMPT, maxTurns: REVIEW_SESSION.maxTurns, ...(skillArm ? { sessionKind: "unattended" as const } : {}), disable1mContext: true, capStops: true, backgroundWaitMs: BACKGROUND_WAIT_MS, ...(hook ? { stopHook: hook.onStop } : {}) });
@@ -258,8 +258,10 @@ export function sessionToml(id: string, image: string, wallSec: number): string 
  * another read serve every build stage from one driver directory (dir) on items its own leases share (unheld_ok).
  * Another read can move the plan and review mounts per cell (planFor, reviewFor: the planted-unit read mounts a reviewed
  * arm's own final plan.md), the lease's run (runId) and the skill the stage charges (skill); each defaults to this read's.
+ * stripBase writes each tree's one commit again without the stripped names (build-stage.ts stripBase), for units whose B
+ * tracks one.
  */
-export function buildLauncher(o: { arm: Arm | Arm[]; units: Map<string, { dir: string }>; repos: string; plans: string; bundles: string | null; out: string; host: string; envelopeHost: string; sidecar: string; forbidden: string[]; planned: number; harbor?: string; docker?: string; serve?: Pick<ServeOptions, "fetch" | "env" | "requireAdmission" | "machine" | "log" | "unheld_ok"> & { dir?: string }; planFor?: (cell: string, unit: string) => string; reviewFor?: (cell: string, unit: string) => string | null; runId?: string; skill?: string }): Launcher<BuildSession> {
+export function buildLauncher(o: { arm: Arm | Arm[]; units: Map<string, { dir: string }>; repos: string; plans: string; bundles: string | null; out: string; host: string; envelopeHost: string; sidecar: string; forbidden: string[]; planned: number; harbor?: string; docker?: string; serve?: Pick<ServeOptions, "fetch" | "env" | "requireAdmission" | "machine" | "log" | "unheld_ok"> & { dir?: string }; planFor?: (cell: string, unit: string) => string; reviewFor?: (cell: string, unit: string) => string | null; runId?: string; skill?: string; stripBase?: boolean }): Launcher<BuildSession> {
   return async (p) => {
     const names = [...new Set((Array.isArray(o.arm) ? o.arm : [o.arm]).map(armName))];
     if (names.length !== 1) fail("E_USAGE", "one build launch serves one driver stage, so it runs the none arm alone or reviewed arms together");
@@ -281,6 +283,7 @@ export function buildLauncher(o: { arm: Arm | Arm[]; units: Map<string, { dir: s
       rmSync(out, { recursive: true, force: true });
       const tree = join(out, "repo");
       cpSync(join(o.repos, s.unit.id), tree, { recursive: true });
+      if (o.stripBase) stripBase(tree);
       prepareTree(tree);
       const plan = o.planFor ? o.planFor(s.cell, s.unit.id) : join(o.plans, s.unit.id + ".md");
       const review = o.reviewFor ? o.reviewFor(s.cell, s.unit.id) : s.arm === "none" ? null : join(o.bundles ?? fail("E_USAGE", "a reviewed arm builds from its review bundles; pass --bundles"), s.cell.replace(/[^A-Za-z0-9._-]/g, "_"));

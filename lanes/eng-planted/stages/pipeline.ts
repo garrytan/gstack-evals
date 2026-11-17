@@ -22,6 +22,7 @@
 import { createHash } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { stripBase } from "../../eng-build/build-stage.ts";
 import { prepareReviewTree, runSession, type Attempt } from "../../eng-build/review-stage.ts";
 import { addSpend } from "../../eng-build/spend.ts";
 import type { ReviewLeft, ReviewSession, ReviewUnit } from "../../eng-build/pipeline.ts";
@@ -248,7 +249,7 @@ async function runAuthoringBuilds(o: { run: string; src: UnitSource; arm: "hinte
           if (o.arm === "hinted") {
             const v = hintedVerdict(b.outcome, b.planted);
             writeJson(join(dir, "hinted.json"), { ...v, costUsd: b.costUsd });
-            o.log("hinted " + id + ": " + (v.drop ? "dropped (" + v.drop + ")" : "winnable") + ", passes " + JSON.stringify(v.passes));
+            o.log("hinted " + id + ": " + (v.drop ? "dropped (" + v.drop + ")" : "winnable") + ", passing runs per planted case " + Object.values(v.passes).join(", "));
           }
         },
       };
@@ -359,6 +360,7 @@ export async function runPlantedReviews(o: { cells: ReviewCell[]; units: Map<str
           const seed = join(dir, "seed");
           mkdirSync(seed, { recursive: true });
           cpSync(u.base, join(seed, "repo"), { recursive: true });
+          stripBase(join(seed, "repo"));
           prepareReviewTree(join(seed, "repo"));
           cpSync(u.plan, join(seed, "plan.md"));
           const a = await o.session({ cell, unit: ru, arm: EB_ARM[c.arm], reviewer: o.reviewer, rep: c.rep, attempt, prompt, seed, dir, hook: (evidence) => plantedStopHook(c.arm, evidence) });

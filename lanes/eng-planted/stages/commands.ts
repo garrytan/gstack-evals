@@ -199,6 +199,7 @@ export const REAL: Seams = {
       runId: EP_RUN,
       skill: EP_SKILL,
       serve: { dir: o.driver, unheld_ok: true },
+      stripBase: true,
       ...(o.a.flags.has("--harbor") ? { harbor: o.a.flags.get("--harbor")! } : {}),
     });
     return async (p) => {
