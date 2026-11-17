@@ -38,8 +38,8 @@ export interface StepOptions {
 }
 
 export interface AgentSession {
-  /** Runs one shell step in the agent's environment, in the work dir. */
-  exec(command: string, timeoutMs: number): StepResult;
+  /** Runs one shell step in the agent's environment, in the work dir; input, when given, is the step's stdin, so a value the step needs never rides in its arguments. */
+  exec(command: string, timeoutMs: number, input?: string): StepResult;
   /**
    * Starts one long-lived process in the agent's environment, in the work dir, with stdin, stdout and stderr piped: the
    * host CLI a driver streams to. env adds non-credential names on top of the session's env. The caller kills it.
@@ -132,8 +132,8 @@ export function dockerSandbox(opts: { trialImage: string; armImage?: string; doc
           const client = Object.fromEntries(["PATH", "HOME", "DOCKER_HOST", "DOCKER_CONFIG", "DOCKER_CONTEXT", "XDG_RUNTIME_DIR"].flatMap((k) => (process.env[k] ? [[k, process.env[k]!]] : [])));
           return spawn(docker, ["exec", "-i", "-w", path, ...envArgs, name, ...argv], { env: { ...client, ...clientEnv }, stdio: ["pipe", "pipe", "pipe"] });
         },
-        exec: (command, timeoutMs) => {
-          const r = result(spawnSync(docker, ["exec", "-w", path, name, "sh", "-c", command], { timeout: timeoutMs, encoding: "utf8", maxBuffer: STEP_BUFFER }));
+        exec: (command, timeoutMs, input) => {
+          const r = result(spawnSync(docker, ["exec", ...(input === undefined ? [] : ["-i"]), "-w", path, name, "sh", "-c", command], { timeout: timeoutMs, encoding: "utf8", maxBuffer: STEP_BUFFER, input }));
           if (r.timedOut) spawnSync(docker, ["exec", name, "sh", "-c", "kill -9 -1"], { stdio: "ignore" });
           return r;
         },
@@ -187,7 +187,7 @@ export function processSandbox(opts: { bwrap?: string } = {}): Sandbox {
       if (!home) throw new IsolationError("the agent's env has no HOME to bind into its bubblewrap session");
       if (o.root || o.mounts?.length) throw new IsolationError("a session with a work root or read-only mounts runs under --isolation docker");
       return {
-        exec: (command, timeoutMs) => result(spawnSync(bwrap, bwrapArgs(o.work, home, command), { env: o.env, timeout: timeoutMs, encoding: "utf8", maxBuffer: STEP_BUFFER })),
+        exec: (command, timeoutMs, input) => result(spawnSync(bwrap, bwrapArgs(o.work, home, command), { env: o.env, timeout: timeoutMs, encoding: "utf8", maxBuffer: STEP_BUFFER, input })),
         spawn: (argv, env = {}) => spawn(bwrap, bwrapArgv(o.work, home, argv), { env: { ...o.env, ...env }, stdio: ["pipe", "pipe", "pipe"] }),
         stop: () => {},
       };
