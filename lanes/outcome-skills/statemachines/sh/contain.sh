@@ -212,7 +212,7 @@ inbase() {
 pat() { if [ -s "$in/$1" ]; then LC_ALL=C grep -a "${@:2}" -f "$in/$1"; [ $? -le 1 ]; else cat > /dev/null; fi; }
 inbase; ib=$?
 [ $ib -eq 0 ] && g -v -x -F -f "$tmp/name-in-base" "$in/names" | g . > "$tmp/names" || err scan "grep base names"
-[ $ib -eq 0 ] && g -x -F -f "$in/markers" "$tmp/mark-lines" > "$tmp/mark-in-base" && g -v -x -F -f "$tmp/mark-in-base" "$in/markers" | g . > "$tmp/markers" || err scan "grep base markers"
+[ $ib -eq 0 ] && g -a -x -F -f "$in/markers" "$tmp/mark-lines" > "$tmp/mark-in-base" && g -v -x -F -f "$tmp/mark-in-base" "$in/markers" | g . > "$tmp/markers" || err scan "grep base markers"
 hit() { while IFS= read -r -d '' p && IFS= read -r m; do printf 'HIT %s %s %s\n' "$1" "$(enc "$(rel "$p")")" "$(enc "$m")"; done; }
 scan() {
   [ -s "$tmp/$1s" ] || return 0
