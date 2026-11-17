@@ -112,7 +112,7 @@ export interface StageDeps {
   crash?: (point: CrashPoint, id: string) => void;
 }
 
-export type CrashPoint = "partials" | "pending" | "published" | "row";
+export type CrashPoint = "partials" | "pending" | "published" | "row" | "repair";
 
 /** A cell's row before it is appended, with the digests its published files must match. */
 interface Pending {
@@ -222,14 +222,16 @@ function publish(out: string, p: Pending): boolean {
 
 const pendingFile = (dir: string, id: string) => join(dir, "pending", sha(id).slice(0, 16) + ".json");
 
-function readRows(dir: string, repair?: (line: string) => void): Map<string, Row> {
+function readRows(dir: string, repair?: (line: string) => void, crash?: () => void): Map<string, Row> {
   const rows = new Map<string, Row>();
   const f = join(dir, "rows.ndjson");
   if (!existsSync(f)) return rows;
   const text = readFileSync(f, "utf8");
   const whole = text.slice(0, text.lastIndexOf("\n") + 1);
   if (whole.length < text.length && repair) {
-    writeFileSync(f, whole);
+    writeFileSync(f + ".partial", whole);
+    crash?.();
+    renameSync(f + ".partial", f);
     repair(text.slice(whole.length));
   }
   for (const [n, l] of whole.split("\n").entries()) {
@@ -298,7 +300,7 @@ export async function runStage(o: StageInput, deps: StageDeps): Promise<StageRes
   if (halt) throw new Error("E_USAGE " + dir + " halted (" + halt.code + ": " + halt.message + "); no session starts in it again until the Captain clears it, and its stops.json stands");
   const frozen = freeze(join(dir, "manifest.json"), { schema: "day-one.stage.v1", stage: o.stage, units: o.units.map((u) => u.id).sort(), reps: o.reps, arms: o.arms, cells: cells.map(cellId), cap_micros: o.cap, owner_cap_micros: o.ownerCap, voice_cap_micros: o.voiceCap, owner_channel: o.ownerChannel, limits: LIMITS, models: MODELS });
   if ("problem" in frozen) throw new Error("E_USAGE " + frozen.problem);
-  const done = readRows(dir, (cut) => o.log(join(dir, "rows.ndjson") + " ended in a cut-off row of " + cut.length + " bytes; removed, so its cell's pending file adopts it by digest or its attempt marker reconciles it"));
+  const done = readRows(dir, (cut) => o.log(join(dir, "rows.ndjson") + " ended in a cut-off row of " + cut.length + " bytes; removed, so its cell's pending file adopts it by digest or its attempt marker reconciles it"), () => deps.crash?.("repair", dir));
   const haltRow = [...done.values()].find((r) => r.state === "halt");
   if (haltRow) throw new Error("E_USAGE " + dir + " holds a halt row (" + haltRow.id + ", " + haltRow.code + "); no session starts in it again until the Captain clears it");
   if (existsSync(join(dir, "pending"))) {
@@ -328,6 +330,12 @@ export async function runStage(o: StageInput, deps: StageDeps): Promise<StageRes
     result.owner_micros += Math.round(r.owner_usd * D);
   }
   const room = Math.min(o.cap, result.spent_micros + (o.lease ?? o.cap));
+  const adoptedHalt = [...done.values()].find((r) => r.state === "halt");
+  if (adoptedHalt) {
+    result.stops.push({ code: adoptedHalt.code!, message: adoptedHalt.id + ": " + adoptedHalt.why + "; adopted after a crash, so the launch stops for the Captain" });
+    markStops();
+    return result;
+  }
   const launch = deps.launch ?? launchSession;
   const app = deps.app ?? { start: startApp, stop: stopApp };
   const slotOf = deps.ownerMeter ? meterSlot(deps.ownerMeter) : null;
@@ -510,6 +518,11 @@ export async function runStage(o: StageInput, deps: StageDeps): Promise<StageRes
     if (planning && end?.state === "ended" && !plan) plan = { sha256: sha(""), words: 0, from: "none" };
     if (planning && plan && plan.words === 0) planText = "";
     const e = end!;
+    if (e.state === "halt") {
+      halted = true;
+      result.stops.push({ code: e.code, message: id + ": " + e.why + "; the launch stops for the Captain" });
+      markStops();
+    }
     const state: Row["state"] = e.state === "ended" ? "scored" : e.state === "contaminated" ? "contaminated" : e.state === "halt" ? "halt" : "missing";
     const code: ReasonCode | null = "code" in e ? e.code : planning && plan?.words === 0 ? "E_DAYONE_NO_PLAN" : null;
     const transcript = lastHost ? join(lastHost, "transcript.ndjson") : null;
@@ -532,11 +545,6 @@ export async function runStage(o: StageInput, deps: StageDeps): Promise<StageRes
     rmSync(pendingFile(dir, id), { force: true });
     result.rows.push(row);
     o.log(id + ": " + state + (code ? " " + code : "") + " (" + row.why + "), " + usd(Math.round((usdArm + usdVoice) * D)) + (usdOwner ? ", responder " + usd(Math.round(usdOwner * D)) : ""));
-    if (e.state === "halt") {
-      halted = true;
-      result.stops.push({ code: e.code, message: id + ": " + e.why + "; the launch stops for the Captain" });
-      markStops();
-    }
   };
 
   try {

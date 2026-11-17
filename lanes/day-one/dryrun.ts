@@ -356,6 +356,21 @@ export const CASES: Record<string, Case> = {
       let markRelaunch = "admitted";
       await stageRun(markDir, us.slice(0, 1), "base", ["n"], 100).catch((e) => (markRelaunch = String((e as Error).message)));
       must(/halt/.test(markRelaunch), "a runner killed right after a halt left a dir a relaunch could run in: " + markRelaunch);
+      for (const point of ["partials", "pending", "published"] as CrashPoint[]) {
+        const hDir = join(dir, "halt-kill", point);
+        await stageRun(hDir, us.slice(0, 1), "base", ["n"], 100, { launch: stubLaunch({ leak: true }), crash: (p) => { if (p === point) throw new Error("killed at " + p); } }, { n: 0 }, { parallel: 1 }).catch(() => {});
+        const hSeen: LaunchInput[] = [];
+        let first: string;
+        try {
+          const r = await stageRun(hDir, us.slice(0, 1), "base", ["n"], 100, { launch: stubLaunch({ seen: hSeen }) }, { n: 0 }, { parallel: 1 });
+          first = r.stops.map((s) => s.code).join(",") || "ran";
+        } catch (e) {
+          first = String((e as Error).message);
+        }
+        let second = "admitted";
+        await stageRun(hDir, us.slice(0, 1), "base", ["n"], 100, { launch: stubLaunch({ seen: hSeen }) }, { n: 0 }, { parallel: 1 }).catch((e) => (second = String((e as Error).message)));
+        must(/E_DAYONE_LEAK|halt/.test(first) && /halt/.test(second) && !hSeen.length, "a halting cell killed at " + point + " let a relaunch run past the halt: " + JSON.stringify({ first, second, sessions: hSeen.length }));
+      }
       const one = us.slice(0, 1);
       for (const st of ["base", "build"] as const)
         for (const point of ["partials", "pending", "published", "row"] as CrashPoint[]) {
@@ -384,6 +399,16 @@ export const CASES: Record<string, Case> = {
       let garbled = "admitted";
       await stageRun(cutDir, one, "base", ["n"], 100, {}, { n: 0 }, { parallel: 1 }).catch((e) => (garbled = String((e as Error).message)));
       must(/is not a row/.test(garbled), "a rows.ndjson line that is not a row was skipped silently");
+      const rpDir = join(dir, "repair-kill");
+      await stageRun(rpDir, one, "base", ["n"], 100, {}, { n: 0 }, { parallel: 1 });
+      const rpRows = join(rpDir, "base-dry", "rows.ndjson");
+      const intact = readFileSync(rpRows, "utf8");
+      appendFileSync(rpRows, intact.slice(0, 40));
+      let repairKilled = false;
+      await stageRun(rpDir, one, "base", ["n"], 100, { crash: (p) => { if (p === "repair") throw new Error("killed mid-repair"); } }, { n: 0 }, { parallel: 1 }).catch(() => (repairKilled = true));
+      const rpSeen: LaunchInput[] = [];
+      await stageRun(rpDir, one, "base", ["n"], 100, { launch: stubLaunch({ seen: rpSeen }) }, { n: 0 }, { parallel: 1 });
+      must(repairKilled && readFileSync(rpRows, "utf8") === intact && !rpSeen.length, "a kill during the cut-off repair lost finished rows or ran a cell again: " + JSON.stringify({ killed: repairKilled, intact: readFileSync(rpRows, "utf8") === intact, reruns: rpSeen.length }));
       const built = async (d: string) => {
         await stageRun(d, one, "base", ["n"], 100, {}, { n: 0 }, { parallel: 1 });
         await stageRun(d, one, "build", ["n"], 100, {}, { n: 0 }, { parallel: 1 });

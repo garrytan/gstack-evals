@@ -13,7 +13,7 @@ describe.skipIf(!image || process.getuid?.() === 0)("docker sandbox ram", () => 
     const work = mkdtempSync(join(tmpdir(), "sandbox-ram-"));
     try {
       const sandbox = dockerSandbox({ trialImage: image! });
-      const dirs = sandbox.homePath() + " /tmp";
+      const dirs = sandbox.homePath(work) + " /tmp";
       const session = sandbox.agent("app", { work, env: {}, ram: { size: "64m" } });
       try {
         const r = session.exec("for d in " + dirs + "; do touch $d/x; done && stat -c %u " + dirs + " && df -P " + dirs + " | awk 'NR > 1 { print $1 }'", 60_000);
