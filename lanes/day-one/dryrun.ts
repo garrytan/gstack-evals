@@ -7,7 +7,7 @@
 // launch; the Astra voice route runs on a real metering proxy against a stub upstream on a temporary ledger; the
 // smoke's admission arithmetic replays at planning prices; and every metered line item opens and settles one lease on
 // a temporary ledger.
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -27,7 +27,7 @@ import { armPrompt, COMMON_ASK, DAY_ONE_PASS, GATE_REPLY, MODELS, OWNER_CLOSING,
 import { controls, goldAgreement, labelPacket, packets, parseLabels, stockPlan, type Label } from "./judge.ts";
 import { ALL_IN_USD, DAYONE_RUN, HEADROOM_USD, ITEMS, itemOf, ledgerCapUsd, leaseItem, PLANNING_PRICES, settleItem, shrink } from "./ledger.ts";
 import { ownerLoop, splitSource } from "./owner.ts";
-import { buildDir, cellLimits, planFile, runStage, stageCells, type Stage, type StageDeps, type StageInput } from "./run.ts";
+import { buildDir, cellLimits, planFile, runStage, treeDigest, type CrashPoint, stageCells, type Stage, type StageDeps, type StageInput } from "./run.ts";
 import { attemptOutcome, BROWSER_TOOLS, launchSession, settle, type AttemptRead, type LaunchInput } from "./sessions.ts";
 import { briefText, loadUnit, type Unit } from "./units.ts";
 import { checkPrompt, parseVerdicts, scoreBuild } from "./verdict.ts";
@@ -261,6 +261,8 @@ export const CASES: Record<string, Case> = {
     const pair = [{ base: [{ id: "c1", covered: true, usable: true }], padded: [{ id: "c1", covered: true, usable: true }] }];
     must(controls({ stock: many, volume: pair }).passed && !controls({ stock: many.map((s, i) => (i < 3 ? { checks, labels: [{ id: "c1", covered: true, usable: true }] } : s)), volume: pair }).passed, "the stock control's 5% tolerance misread");
     must(!controls({ stock: [], volume: pair }).passed && !controls({ stock: many, volume: [] }).passed && !controls({ stock: [...many, { checks, labels: [] }], volume: pair }).passed && !controls({ stock: many, volume: [...pair, { base: pair[0]!.base, padded: [] }] }).passed, "a control with no stock checks, an unlabelled stock check, no volume pair or an empty padded packet passed");
+    const eight = Array.from({ length: 8 }, (_, i) => ({ id: "c" + i, covered: i % 2 === 0, usable: false }));
+    must(controls({ stock: many, volume: [{ base: eight, padded: eight.map((x) => ({ ...x })) }] }).passed && !controls({ stock: many, volume: [{ base: eight, padded: [{ ...eight[0]! }] }] }).passed, "a padded packet with most checks unlabelled passed the volume control, or a whole agreeing packet failed it");
     const l = (covered: boolean): Label => ({ id: "c1", covered, usable: covered });
     const gold = new Map<string, Label>(Array.from({ length: 40 }, (_, i) => ["k" + i, l(i % 2 === 0)]));
     must(goldAgreement(new Map(gold), gold).admitted && !goldAgreement(new Map([...gold].slice(0, 39)), gold).admitted, "gold admission ignores the 40-pair floor");
@@ -333,6 +335,21 @@ export const CASES: Record<string, Case> = {
       must(crashed.usd === 2 && crashed.voice_usd === 3 && vre.voice_micros === 3e6, "a crashed attempt's held spend was not split by meter (planner $" + crashed.usd + ", voice $" + crashed.voice_usd + ", stage voice " + vre.voice_micros + " micros)");
       const halt = await stageRun(join(dir, "halt"), us, "base", ["n"], 100, { launch: stubLaunch({ leak: true }) });
       must(halt.stops.some((s) => s.code === "E_DAYONE_LEAK"), "a containment departure did not halt");
+      const one = us.slice(0, 1);
+      for (const st of ["base", "build"] as const)
+        for (const point of ["partials", "pending", "published", "row"] as CrashPoint[]) {
+          const kDir = join(dir, "kill", st, point);
+          if (st === "build") await stageRun(kDir, one, "base", ["n"], 100, {}, { n: 0 }, { parallel: 1 });
+          let killed = false;
+          await stageRun(kDir, one, st, ["n"], 100, { crash: (p) => { if (p === point) throw new Error("killed at " + p); } }, { n: 0 }, { parallel: 1 }).catch(() => (killed = true));
+          const restartSeen: LaunchInput[] = [];
+          await stageRun(kDir, one, st, ["n"], 100, { launch: stubLaunch({ seen: restartSeen }) }, { n: 0 }, { parallel: 1 });
+          const rows = readFileSync(join(kDir, st + "-dry", "rows.ndjson"), "utf8").trim().split("\n").map((l) => JSON.parse(l) as { attempts: { usd: number }[]; usd: number; plan: { sha256: string } | null });
+          const tree = join(buildDir(kDir, "aaaaaa", 1, "n"), "tree");
+          const files = st === "base" ? existsSync(planFile(kDir, "aaaaaa", 1, "n")) && createHash("sha256").update(readFileSync(planFile(kDir, "aaaaaa", 1, "n"), "utf8")).digest("hex") === rows[0]!.plan!.sha256 : existsSync(join(tree, "start.sh")) && !existsSync(tree + ".partial") && treeDigest(tree).length === 64;
+          const adopted = point !== "partials";
+          must(killed && rows.length === 1 && files && rows[0]!.usd === 1 && restartSeen.length === (adopted ? 0 : 1) && rows[0]!.attempts.length === (adopted ? 1 : 2), "a " + st + " cell killed at " + point + " did not end done with its files, with one row, charged once and " + (adopted ? "adopted without a rerun" : "run again") + ": " + JSON.stringify({ killed, rows: rows.length, files, usd: rows[0]?.usd, reruns: restartSeen.length }));
+        }
       const haltSeen: LaunchInput[] = [];
       const haltAgain = await stageRun(join(dir, "halt"), us, "base", ["n"], 100, { launch: stubLaunch({ seen: haltSeen }) }, { n: 0 }, { tag: "again" });
       must(!haltAgain.rows.length && !haltSeen.length, "a second tag reran a cell another launch ended with a row and no plan");

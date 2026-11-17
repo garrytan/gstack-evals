@@ -152,8 +152,8 @@ export function controls(o: { stock: readonly { checks: readonly Check[]; labels
   for (const v of o.volume)
     for (const b of v.base) {
       const p = v.padded.find((x) => x.id === b.id);
-      if (!p) continue;
       n++;
+      if (!p) continue;
       if (p.covered === b.covered) same++;
     }
   const agreement = n ? same / n : null;

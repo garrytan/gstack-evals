@@ -23,7 +23,7 @@
 //   attempt in a fresh browser container, and then scores no task done; an unparsable verdict gets one more attempt,
 //   and then the build is unscored (E_DAYONE_VERDICT).
 import { createHash } from "node:crypto";
-import { appendFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ReasonCode } from "../../src/errors/codes.ts";
 import { openLocalLedger } from "../../src/runner/ledger/local.ts";
@@ -103,6 +103,17 @@ export interface StageDeps {
   ownerMeter?: Meter;
   launch?: (o: LaunchInput) => Promise<AttemptRead>;
   app?: { start: typeof startApp; stop: typeof stopApp };
+  /** Called at each point between a cell's file publish and its row; a throw there stands in for the runner being killed. */
+  crash?: (point: CrashPoint, id: string) => void;
+}
+
+export type CrashPoint = "partials" | "pending" | "published" | "row";
+
+/** A cell's row before it is appended, with the digests its published files must match. */
+interface Pending {
+  row: Row;
+  plan_sha256: string | null;
+  tree_sha256: string | null;
 }
 
 export interface StageResult {
@@ -158,6 +169,53 @@ function freeze(path: string, body: unknown): { sha256: string } | { problem: st
   writeFileSync(path, text);
   return { sha256: sha(text) };
 }
+
+/** A build tree's digest: every path in order, with each file's bytes and each link's target. */
+export function treeDigest(root: string): string {
+  const h = createHash("sha256");
+  const walk = (d: string, rel: string) => {
+    for (const name of readdirSync(d).sort()) {
+      const p = join(d, name);
+      const r = rel ? rel + "/" + name : name;
+      const st = lstatSync(p);
+      if (st.isDirectory()) {
+        h.update("d " + r + "\n");
+        walk(p, r);
+      } else if (st.isSymbolicLink()) h.update("l " + r + " " + readlinkSync(p) + "\n");
+      else if (st.isFile()) {
+        h.update("f " + r + " " + st.size + "\n");
+        h.update(readFileSync(p));
+      }
+    }
+  };
+  walk(root, "");
+  return h.digest("hex");
+}
+
+/** Moves a pending cell's staged files into place; true when every file it names is in place with its digest. */
+function publish(out: string, p: Pending): boolean {
+  const c = p.row.cell;
+  if (p.plan_sha256 !== null) {
+    const f = planFile(out, c.unit, c.rep, c.arm);
+    const has = (x: string) => existsSync(x) && sha(readFileSync(x, "utf8")) === p.plan_sha256;
+    if (!has(f)) {
+      if (!has(f + ".partial")) return false;
+      renameSync(f + ".partial", f);
+    }
+  }
+  if (p.tree_sha256 !== null) {
+    const t = join(buildDir(out, c.unit, c.rep, c.arm), "tree");
+    const has = (x: string) => existsSync(x) && treeDigest(x) === p.tree_sha256;
+    if (!has(t)) {
+      if (!has(t + ".partial")) return false;
+      rmSync(t, { recursive: true, force: true });
+      renameSync(t + ".partial", t);
+    }
+  }
+  return true;
+}
+
+const pendingFile = (dir: string, id: string) => join(dir, "pending", sha(id).slice(0, 16) + ".json");
 
 function readRows(dir: string): Map<string, Row> {
   const rows = new Map<string, Row>();
@@ -224,6 +282,25 @@ export async function runStage(o: StageInput, deps: StageDeps): Promise<StageRes
   const frozen = freeze(join(dir, "manifest.json"), { schema: "day-one.stage.v1", stage: o.stage, units: o.units.map((u) => u.id).sort(), reps: o.reps, arms: o.arms, cells: cells.map(cellId), cap_micros: o.cap, owner_cap_micros: o.ownerCap, voice_cap_micros: o.voiceCap, owner_channel: o.ownerChannel, limits: LIMITS, models: MODELS });
   if ("problem" in frozen) throw new Error("E_USAGE " + frozen.problem);
   const done = readRows(dir);
+  if (existsSync(join(dir, "pending"))) {
+    for (const name of readdirSync(join(dir, "pending"))) {
+      const f = join(dir, "pending", name);
+      let p: Pending | null = null;
+      try {
+        p = JSON.parse(readFileSync(f, "utf8")) as Pending;
+      } catch {
+        p = null;
+      }
+      if (p && !done.has(p.row.id)) {
+        if (publish(o.out, p)) {
+          appendFileSync(join(dir, "rows.ndjson"), JSON.stringify(p.row) + "\n");
+          done.set(p.row.id, p.row);
+          o.log(p.row.id + ": a crash came after its files were staged and before its row; adopted them by digest, so it is not run again");
+        } else o.log(p.row.id + ": a crash came before its files were all staged, so it is not done and runs again");
+      }
+      rmSync(f, { force: true });
+    }
+  }
   const result: StageResult = { manifest_sha256: frozen.sha256, rows: [], stops: [], unrun: [], spent_micros: 0, owner_micros: 0, voice_micros: 0, closed: null };
   for (const r of done.values()) {
     result.spent_micros += Math.round((r.usd + r.voice_usd) * D);
@@ -409,12 +486,21 @@ export async function runStage(o: StageInput, deps: StageDeps): Promise<StageRes
     const transcript = lastHost ? join(lastHost, "transcript.ndjson") : null;
     if (transcript && existsSync(transcript)) skills = loadedSkills(readFileSync(transcript, "utf8"));
     const row: Row = { id, cell: c, state, code, why: "why" in e ? e.why : "ended: " + e.how, attempts: records, usd: usdArm, owner_usd: usdOwner, voice_usd: usdVoice, owner, plan, exposure, skills, check, transcript };
-    appendFileSync(join(dir, "rows.ndjson"), JSON.stringify(row) + "\n");
-    if (planning && plan && planText !== null) {
+    const staged = planning && plan && planText !== null;
+    if (staged) {
       mkdirSync(join(o.out, "plans", c.unit, "r" + c.rep), { recursive: true });
-      writeFileSync(planFile(o.out, c.unit, c.rep, c.arm), planText);
+      writeFileSync(planFile(o.out, c.unit, c.rep, c.arm) + ".partial", planText!);
     }
-    if (partialTree && e.state === "ended") renameSync(partialTree, join(buildDir(o.out, c.unit, c.rep, c.arm), "tree"));
+    const pending: Pending = { row, plan_sha256: staged ? plan!.sha256 : null, tree_sha256: partialTree && e.state === "ended" ? treeDigest(partialTree) : null };
+    deps.crash?.("partials", id);
+    mkdirSync(join(dir, "pending"), { recursive: true });
+    writeFileSync(pendingFile(dir, id), JSON.stringify(pending) + "\n");
+    deps.crash?.("pending", id);
+    if (!publish(o.out, pending)) throw new Error(id + ": its staged files did not match their digests");
+    deps.crash?.("published", id);
+    appendFileSync(join(dir, "rows.ndjson"), JSON.stringify(row) + "\n");
+    deps.crash?.("row", id);
+    rmSync(pendingFile(dir, id), { force: true });
     result.rows.push(row);
     o.log(id + ": " + state + (code ? " " + code : "") + " (" + row.why + "), " + usd(Math.round((usdArm + usdVoice) * D)) + (usdOwner ? ", responder " + usd(Math.round(usdOwner * D)) : ""));
     if (e.state === "halt") {
