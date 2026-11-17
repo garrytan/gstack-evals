@@ -41,15 +41,16 @@ export function withRefusalFallback(s: Summary | null, transcript: string): Summ
 
 /** The session's end from an attempt's summary (null when the attempt left none). A harness error, or a close whose proxy
  *  finalize failed with no allowance stop counted, is infra; an allowance stop is limit_allowance whatever the turn
- *  said; a refusal stop in any turn, or a refusal fallback, is safety_stop; then the last turn's wall and turn limits and
- *  completed; an UPSTREAM refusal or an error result is upstream; anything else is infra. */
+ *  said; a refusal stop in any turn, or a refusal fallback (even when the turn then ended on a harness error), is
+ *  safety_stop; then the last turn's wall and turn limits and completed; an UPSTREAM refusal or an error result is
+ *  upstream; anything else is infra. */
 export function endOf(s: Summary | null): SessionEnd {
   if (!s) return "infra";
   if (s.cap_stop) return "cap_stop";
   const close = closeOf(s);
   const stops = Number(close.allowance_stops ?? 0);
   const last = (s.turns ?? []).at(-1) as Summary | undefined;
-  if (!last || last.termination === "error" || (close.finalized === false && !stops)) return "infra";
+  if (!last || (last.termination === "error" && s.refusal_fallback !== true) || (close.finalized === false && !stops)) return "infra";
   if (stops) return "limit_allowance";
   if (s.refusal_fallback === true || (s.turns as Summary[]).some((t) => t.refusal)) return "safety_stop";
   const refusals: string[] = Array.isArray(close.refusals) ? close.refusals.map(String) : [];

@@ -124,13 +124,16 @@ make every B row incomplete.
 
 The change. withRefusalFallback in sessions/session.ts marks an attempt's summary when its sdk-messages.jsonl holds the
 model_refusal_fallback notice, and endOf reads the mark as safety_stop: no retry, no gap, scored as no fix by the
-existing rule in score/score.ts. run.ts passes each attempt's summary through it. Claude Code stays at its defaults
+existing rule in score/score.ts. The notice counts wherever the transcript holds it, a subagent's included, and it wins
+over a harness error that ends the turn after it (found by the advisory read); a failed proxy finalize still halts the
+session, and an allowance stop still reads as one. run.ts passes each attempt's summary through it. Claude Code stays at its defaults
 (the fallback switch is left on), and the model under test is never swapped.
 
 Checks. A new keyless test in tests/outcome-skills/h2h-session.test.ts fails on the old rule and passes on the new: the
 recorded shape of a refused fallback (403 E_ALLOWANCE error result plus the notice) reads safety_stop with no retry and
 no gap; the same summary without the notice still reads upstream and gaps on its second attempt; an ordinary provider
-error (529) still reads upstream; a completed session with the notice reads safety_stop. Read both ways on every
+error (529) still reads upstream; a harness error after the notice reads safety_stop and without it infra; a completed
+session with the notice reads safety_stop. Read both ways on every
 recorded attempt (stage 0's 25, the rerun's 25 and the pilot's 199): exactly the 14 vm2 attempts change, upstream to
 safety_stop, and no other attempt's end moves.
 

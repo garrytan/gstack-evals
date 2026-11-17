@@ -77,6 +77,10 @@ test("Claude Code's refusal fallback is a safety stop, and an ordinary provider 
     expect(retries(endOf(ordinary), 1, ordinary)).toBe(true);
     expect(gapOf(endOf(ordinary), 2, ordinary)).toBe("E_H2H_UPSTREAM_GAP");
 
+    expect(endOf(withRefusalFallback(summary([turn("t1", "error")]), flagged))).toBe("safety_stop");
+    expect(endOf(withRefusalFallback(summary([turn("t1", "error")]), plain))).toBe("infra");
+    expect(endOf(withRefusalFallback(summary([turn("t1", "error")], { finalized: false, allowance_stops: 0 }), flagged))).toBe("infra");
+    expect(endOf(withRefusalFallback(summary([turn("t1", "error_result")], { finalized: true, allowance_stops: 1 }), flagged))).toBe("limit_allowance");
     expect(endOf(withRefusalFallback(summary([turn("t1", "completed")]), flagged))).toBe("safety_stop");
     expect(endOf(withRefusalFallback(summary([turn("t1", "completed")]), plain))).toBe("completed");
     expect(withRefusalFallback(refusedModel, join(dir, "missing.jsonl"))).toBe(refusedModel);
