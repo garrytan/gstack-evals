@@ -1,10 +1,12 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // Every "once more" rule of authoring on the real meter and its reply cache, with a fake upstream: the plan rewrite and
 // its audit, the hint rewrite and its audit, and a rating asked once more each reach the model; the same attempt asked
-// again replays from the cache; Carbon streams at its default effort; a reply with no usage keeps its body and still
-// stops; a rating stream that ends with an error event stops the run.
+// again replays from the cache; Carbon streams at its default effort with a 32,000-token cap while every other role
+// keeps 16,000 and its cache key; a reply with no usage keeps its body and still stops; a rating stream that ends with an
+// error event stops the run.
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { underLease } from "../../../lanes/eng-build/pipeline.ts";
@@ -85,11 +87,38 @@ describe("each second ask reaches the model through the meter's cache", () => {
 });
 
 describe("Carbon's stream and effort, and replies that stop", () => {
-  test("Carbon streams at its model's default effort; every other role sends no effort and no stream", async () => {
+  test("Carbon streams at its model's default effort with a 32,000-token cap; every other role sends 16,000, no effort and no stream", async () => {
     const seen: Seen[] = [];
     await author("effort", seen);
-    expect(seen.filter((s) => s.who === "carbon").map((s) => [s.body.stream, s.body.reasoning])).toEqual([[true, undefined]]);
-    expect(seen.filter((s) => s.who !== "carbon").every((s) => s.body.reasoning === undefined && s.body.output_config === undefined && s.body.stream === undefined)).toBe(true);
+    expect(seen.filter((s) => s.who === "carbon").map((s) => [s.body.stream, s.body.reasoning, s.body.max_tokens])).toEqual([[true, undefined, 32_000]]);
+    const others = seen.filter((s) => s.who !== "carbon");
+    expect(others.length).toBeGreaterThan(0);
+    expect(others.every((s) => s.body.reasoning === undefined && s.body.output_config === undefined && s.body.stream === undefined && s.body.max_tokens === 16_000)).toBe(true);
+  });
+  test("every other role's reply is cached under the key it had before the Carbon cap, so its cached calls stand", async () => {
+    const seen: Seen[] = [];
+    const cache = join(root, "keys", "cache");
+    await author("keys", seen, undefined, cache);
+    const key = (route: string, body: Record<string, unknown>) => createHash("sha256").update(route + "\n" + JSON.stringify(body)).digest("hex") + ".json";
+    const before = (s: Seen) => key(s.who, { model: s.body.model, max_tokens: 16_000, messages: [{ role: "user", content: s.body.messages[0].content }] });
+    const others = seen.filter((s) => s.who !== "carbon");
+    expect(others.length).toBe(5);
+    expect(others.filter((s) => !existsSync(join(cache, before(s))))).toEqual([]);
+    const carbon = seen.find((s) => s.who === "carbon")!;
+    expect(existsSync(join(cache, key("carbon", { model: carbon.body.model, max_tokens: 32_000, messages: [{ role: "user", content: carbon.body.messages[0].content }], stream: true })))).toBe(true);
+  });
+  test("a Carbon rating cached at 16,000 tokens misses the cache at 32,000 and reaches the model", async () => {
+    const first: Seen[] = [];
+    await author("cap16-a", first);
+    const prompt = first.find((s) => s.who === "carbon")!.body.messages[0].content;
+    const cache = join(root, "cap16-b", "cache");
+    mkdirSync(cache, { recursive: true });
+    const at16 = createHash("sha256").update("carbon\n" + JSON.stringify({ model: "google/gemini-4-carbon", max_tokens: 16_000, messages: [{ role: "user", content: prompt }], stream: true })).digest("hex");
+    writeFileSync(join(cache, at16 + ".json"), JSON.stringify({ text: "FORESEE: no", status: 200, micros: 1, unknown_micros: 0, cached: false, problem: null, served_by: "Google" }));
+    const seen: Seen[] = [];
+    const r = await author("cap16-b", seen, undefined, cache);
+    expect(seen.filter((s) => s.who === "carbon").map((s) => s.body.messages[0].content)).toEqual([prompt]);
+    expect(r.record.foresee).toEqual(["maybe", "maybe"]);
   });
   test("a rating stream that ends with an error event stops the run at the call allowance, never asking again over an empty answer", async () => {
     const seen: Seen[] = [];

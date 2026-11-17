@@ -30,7 +30,7 @@ import { JUDGE_MODELS } from "../readings/local.ts";
 import type { AuthorCall } from "./author.ts";
 import { ebSession, type MountTable, type PlantedSession } from "./build.ts";
 import { allInProjection, checkAllIn, ITEMS, itemOf, ItemGate, runSteps, settleThrown, type AllIn, type Kind } from "./ledger.ts";
-import { ALLOWANCE_USD, AUTHOR_MAX_TOKENS, AUTHOR_MODELS, EP_PROGRAM, EP_RUN, EP_SKILL, JUDGE_MAX_TOKENS, readStep, type AuthorRole } from "./local.ts";
+import { ALLOWANCE_USD, AUTHOR_MAX_TOKENS, AUTHOR_MODELS, CARBON_MAX_TOKENS, EP_PROGRAM, EP_RUN, EP_SKILL, JUDGE_MAX_TOKENS, readStep, type AuthorRole } from "./local.ts";
 import { PIN_COMMAND } from "./pin.ts";
 import { authorStep, batchDraw, buildCells, buildsStage, bundleInput, comparisonPlanned, comparisonUnits, drawFile, gateArms, hintedTodo, reviewsStage, runRecords, smokeStage, unitFolders, type AuthorStep, type UnitSource } from "./pipeline.ts";
 import { bundleSet } from "../readings/judge.ts";
@@ -96,6 +96,10 @@ async function paidStage<B, T>(p: PlantedPaid, launch: Launcher<B>, body: (backe
 /** A model call by role through the meter, with what it cost. */
 export type Metered<R extends string> = (role: R, prompt: string, attempt?: number) => Promise<{ text: string; costUsd: number }>;
 
+/** The outcome driver's run directory for every build stage of a run. The ledger binds a run to the directory of its first
+ * driver lease, so the authoring, comparison and stock builds share one (dated pre-run fix, 2026-11-17). */
+export const buildDriver = (run: string): string => join(run, "builds", "driver");
+
 /** The meter route each authoring role calls; null where the product-value meter has no route yet. */
 export const AUTHOR_ROUTES: Readonly<Record<AuthorRole, ModelKey | null>> = { writer: "sol", audit: "opus", hint: "sol", hintAudit: "opus", raterCarbon: "carbon", raterOpus: "opus" };
 /** The meter route each judge role calls (readings/judge.ts ROLE_MODEL). */
@@ -119,18 +123,19 @@ const CARBON_FIX = "add a carbon ModelKey (google/gemini-4-carbon on OpenRouter,
  * counts at the call allowance, so the gate never undercounts, and a refusal the proxy answered before it reserved
  * anything costs nothing. A call that billed and then failed (a non-200 answer, no text, a provider drift stop, a stream
  * that ended with an error event) throws
- * with that cost on its error (spend.ts), which the gated callers settle. fetch and env reach the meter for the keyless
- * tests. */
+ * with that cost on its error (spend.ts), which the gated callers settle. A role routed to Carbon asks for
+ * CARBON_MAX_TOKENS; every other role asks for maxTokens. fetch and env reach the meter for the keyless tests. */
 export function meterLauncher<R extends string>(o: { out: string; cacheDir: string; maxTokens: number; effort: string | null; label: string; models: Readonly<Record<R, string>>; routes: Readonly<Record<R, ModelKey | null>>; roles: readonly R[]; fetch?: typeof fetch; env?: Record<string, string | undefined> }): Launcher<Metered<R>> {
   return async (p) => {
     const problems = routeProblems(o.models, o.routes, o.roles);
     if (problems.length) return fail("E_EP_NOT_BUILT", "the " + o.label + " routes are not all built, so no lease opened:\n" + problems.join("\n") + "\n" + CARBON_FIX);
-    const meter = await openMeter({ item: p.item, runId: EP_RUN, out: o.out, cacheDir: o.cacheDir, maxOutputTokens: o.maxTokens, amountMicros: Math.round(p.capUsd * 1_000_000), record: p.record, ledger: p.ledger, ...(o.fetch ? { fetch: o.fetch } : {}), ...(o.env ? { env: o.env } : {}) });
+    const capOf = (role: R) => (o.routes[role] === "carbon" ? CARBON_MAX_TOKENS : o.maxTokens);
+    const meter = await openMeter({ item: p.item, runId: EP_RUN, out: o.out, cacheDir: o.cacheDir, maxOutputTokens: Math.max(...o.roles.map(capOf)), amountMicros: Math.round(p.capUsd * 1_000_000), record: p.record, ledger: p.ledger, ...(o.fetch ? { fetch: o.fetch } : {}), ...(o.env ? { env: o.env } : {}) });
     const call: Metered<R> = async (role, prompt, attempt) => {
       if (!o.roles.includes(role)) return fail("E_USAGE", "this launch did not check the route for " + role);
       let r: Awaited<ReturnType<typeof meter.call>>;
       try {
-        r = await meter.call({ model: o.routes[role]!, prompt, maxTokens: o.maxTokens, effort: o.effort, label: o.label + ":" + role, ...(attempt ? { attempt } : {}) });
+        r = await meter.call({ model: o.routes[role]!, prompt, maxTokens: capOf(role), effort: o.effort, label: o.label + ":" + role, ...(attempt ? { attempt } : {}) });
       } catch (e) {
         throw e instanceof MeterError && (e.code === "E_PV_PROVIDER_DRIFT" || e.code === "E_PV_STREAM_ERROR") ? addSpend(e, ALLOWANCE_USD.call) : e;
       }
@@ -165,13 +170,14 @@ export interface Seams {
   judge(o: { out: string; cacheDir: string; roles: JudgeRole[] }): Launcher<Metered<JudgeRole>>;
   /** pin is null when no skill arm runs (the pilot). */
   review(o: { out: string; arms: ReviewArm[]; pin: DigestPin | null; policy?: string; log: (l: string) => void }): Launcher<ReviewSession>;
-  build(o: { out: string; src: UnitSource; units: string; repos: string; ids: string[]; reviewed: boolean; planned: number; a: Args }): Launcher<PlantedSession>;
+  /** driver is the outcome driver's run directory, one for every build stage of the run (buildDriver). */
+  build(o: { out: string; driver: string; src: UnitSource; units: string; repos: string; ids: string[]; reviewed: boolean; planned: number; a: Args }): Launcher<PlantedSession>;
   grader(o: { work: string; log: (l: string) => void }): Promise<PlantedGrader>;
 }
 
 export const REAL: Seams = {
   author: (o) => meterLauncher({ ...o, maxTokens: AUTHOR_MAX_TOKENS, effort: null, label: "ep-author", models: AUTHOR_MODELS, routes: AUTHOR_ROUTES, roles: Object.keys(AUTHOR_MODELS) as AuthorRole[] }),
-  judge: (o) => meterLauncher({ out: o.out, cacheDir: o.cacheDir, maxTokens: JUDGE_MAX_TOKENS, effort: JUDGE_MODELS.effort, label: "ep-judge", models: ROLE_MODEL, routes: JUDGE_ROUTES, roles: o.roles }),
+  judge: (o) => meterLauncher({ ...o, maxTokens: JUDGE_MAX_TOKENS, effort: JUDGE_MODELS.effort, label: "ep-judge", models: ROLE_MODEL, routes: JUDGE_ROUTES }),
   review: (o) => reviewLauncher({ arms: o.arms.map((a) => EB_ARM[a]), reviewer: "opus", out: o.out, env: process.env, log: o.log, ...(o.pin ? { pins: { precut: o.pin, engphase: o.pin } } : {}), runId: EP_RUN, ...(o.policy ? { policy: o.policy } : {}) }),
   build: (o) => {
     const table: MountTable = new Map();
@@ -192,6 +198,7 @@ export const REAL: Seams = {
       reviewFor: (cell) => mountOf(cell).review,
       runId: EP_RUN,
       skill: EP_SKILL,
+      serve: { dir: o.driver, unheld_ok: true },
       ...(o.a.flags.has("--harbor") ? { harbor: o.a.flags.get("--harbor")! } : {}),
     });
     return async (p) => {
@@ -253,7 +260,7 @@ export function stagesCommands(seams: Seams = REAL): Record<string, Command> {
     const grader = await seams.grader({ work: need(a, "--work"), log });
     const d = step === "none" ? batchDraw(run, o.batch) : null;
     const ids = step === "hinted" ? hintedTodo(run, drawFile(run, src).order) : d ? [...d.calibration, ...d.comparison, ...d.reserve] : [];
-    io.out((await paidStage(p, seams.build({ out: join(run, "builds", "authoring", "rig"), src, units: need(a, "--units"), repos: need(a, "--repos"), ids, reviewed: false, planned: ids.length, a }), (session) => authorStep({ ...o, session, grader, gate }))).line);
+    io.out((await paidStage(p, seams.build({ out: join(run, "builds", "authoring", "rig"), driver: buildDriver(run), src, units: need(a, "--units"), repos: need(a, "--repos"), ids, reviewed: false, planned: ids.length, a }), (session) => authorStep({ ...o, session, grader, gate }))).line);
     return 0;
   };
 
@@ -296,7 +303,7 @@ export function stagesCommands(seams: Seams = REAL): Record<string, Command> {
     const planned = phase === "stock" || !readStep(run, "exposure-gate") ? undefined : comparisonPlanned(phase === "comparison" ? comparisonUnits(run).units.length : SIZE.units, gateArms(run));
     const gate = itemGate(p, run, planned);
     const grader = await seams.grader({ work: need(a, "--work"), log });
-    const done = await paidStage(p, seams.build({ out: join(run, "builds", phase === "stock" ? "stock" : "comparison", "rig"), src, units: need(a, "--units"), repos: need(a, "--repos"), ids: [...new Set(cells.map((c) => c.unit))], reviewed: true, planned: cells.length, a }), (session) => buildsStage({ run, src, gate, session, grader, phase, parallel: whole(a, "--parallel", 1), log }));
+    const done = await paidStage(p, seams.build({ out: join(run, "builds", phase === "stock" ? "stock" : "comparison", "rig"), driver: buildDriver(run), src, units: need(a, "--units"), repos: need(a, "--repos"), ids: [...new Set(cells.map((c) => c.unit))], reviewed: true, planned: cells.length, a }), (session) => buildsStage({ run, src, gate, session, grader, phase, parallel: whole(a, "--parallel", 1), log }));
     io.out("builds " + phase + ": " + done.length + " of " + cells.length + " cells recorded, $" + done.reduce((s, b) => s + b.costUsd, 0).toFixed(2));
     return 0;
   };

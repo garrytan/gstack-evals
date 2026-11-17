@@ -30,6 +30,11 @@ export const ALLOWANCE_USD = { review: 10, build: 16, call: 2 } as const;
  * 500-word plan, and at the routes' prices stays under the call allowance. Reasoning effort is the model's default. */
 export const AUTHOR_MAX_TOKENS = 16_000;
 
+/** Gemini 4 Carbon's output cap, for the rater and the judge's gold labeller alike (Captain's dated plan change,
+ * 2026-11-17, before any outcome data): at 16,000 tokens one rating spent the whole cap thinking, twice, and gave no
+ * answer. Every other role keeps its stage's cap. */
+export const CARBON_MAX_TOKENS = 32_000;
+
 /** Section 8 leaves the judge's output budget open too: the same 16,000 tokens at high effort. */
 export const JUDGE_MAX_TOKENS = 16_000;
 

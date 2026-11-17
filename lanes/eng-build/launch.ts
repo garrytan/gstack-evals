@@ -254,11 +254,12 @@ export function sessionToml(id: string, image: string, wallSec: number): string 
  * once per unit and removed on close), with the build tree, plan and bundle mounted by buildMounts after checkMounts and
  * the clean-room preflight on that image. Harbor runs as a child process this one awaits, so the driver keeps serving
  * the session's control plane and proxy meanwhile. real_agent's non-SM path opens its trial on the real-outcome sandbox sidecar,
- * which the operator serves at sidecar. serve passes the keyless end-to-end run's stub upstream to the driver.
+ * which the operator serves at sidecar. serve passes the keyless end-to-end run's stub upstream to the driver, and lets
+ * another read serve every build stage from one driver directory (dir) on items its own leases share (unheld_ok).
  * Another read can move the plan and review mounts per cell (planFor, reviewFor: the planted-unit read mounts a reviewed
  * arm's own final plan.md), the lease's run (runId) and the skill the stage charges (skill); each defaults to this read's.
  */
-export function buildLauncher(o: { arm: Arm | Arm[]; units: Map<string, { dir: string }>; repos: string; plans: string; bundles: string | null; out: string; host: string; envelopeHost: string; sidecar: string; forbidden: string[]; planned: number; harbor?: string; docker?: string; serve?: Pick<ServeOptions, "fetch" | "env" | "requireAdmission" | "machine" | "log">; planFor?: (cell: string, unit: string) => string; reviewFor?: (cell: string, unit: string) => string | null; runId?: string; skill?: string }): Launcher<BuildSession> {
+export function buildLauncher(o: { arm: Arm | Arm[]; units: Map<string, { dir: string }>; repos: string; plans: string; bundles: string | null; out: string; host: string; envelopeHost: string; sidecar: string; forbidden: string[]; planned: number; harbor?: string; docker?: string; serve?: Pick<ServeOptions, "fetch" | "env" | "requireAdmission" | "machine" | "log" | "unheld_ok"> & { dir?: string }; planFor?: (cell: string, unit: string) => string; reviewFor?: (cell: string, unit: string) => string | null; runId?: string; skill?: string }): Launcher<BuildSession> {
   return async (p) => {
     const names = [...new Set((Array.isArray(o.arm) ? o.arm : [o.arm]).map(armName))];
     if (names.length !== 1) fail("E_USAGE", "one build launch serves one driver stage, so it runs the none arm alone or reviewed arms together");
@@ -267,7 +268,8 @@ export function buildLauncher(o: { arm: Arm | Arm[]; units: Map<string, { dir: s
     const arms = join(o.out, "eb-registry.json");
     mkdirSync(o.out, { recursive: true });
     writeFileSync(arms, JSON.stringify(registry, null, 2) + "\n");
-    const served = await serveStages({ record: p.record, local, run_id: o.runId ?? EB_RUN, envelope_host: o.envelopeHost, stages: [{ item: p.item, arm: names[0]!, skills: [o.skill ?? EB_BUILD_SKILL] }], host: o.host, dir: join(o.out, "driver"), planned: o.planned, registry, amount_micros: Math.round(p.capUsd * 1_000_000), ...o.serve });
+    const driver = o.serve?.dir ?? join(o.out, "driver");
+    const served = await serveStages({ record: p.record, local, run_id: o.runId ?? EB_RUN, envelope_host: o.envelopeHost, stages: [{ item: p.item, arm: names[0]!, skills: [o.skill ?? EB_BUILD_SKILL] }], host: o.host, dir: driver, planned: o.planned, registry, amount_micros: Math.round(p.capUsd * 1_000_000), ...o.serve });
     const stage = served.stages[0]!;
     const stageEnded = async () => ((await (await fetch(served.control + "/status")).json()) as { stages: { lease_id: string; ended: string | null }[] }).stages.find((x) => x.lease_id === stage.lease_id)?.ended ?? null;
     const images = new Map<string, SessionImage>();
@@ -344,7 +346,7 @@ export function buildLauncher(o: { arm: Arm | Arm[]; units: Map<string, { dir: s
           local.close();
           if (images.size) spawnSync(o.docker ?? "docker", ["rmi", "-f", "--no-prune", ...[...images.values()].map((i) => i.tag)], { encoding: "utf8", timeout: 120_000 });
         }
-        if (code !== 0) fail("E_EB_CELL_INCOMPLETE", "the build stage's driver ended with exit " + code + " (a stage failed or halted, or a lease stayed open), so the stage is incomplete; read " + join(o.out, "driver") + " before anything else spends");
+        if (code !== 0) fail("E_EB_CELL_INCOMPLETE", "the build stage's driver ended with exit " + code + " (a stage failed or halted, or a lease stayed open), so the stage is incomplete; read " + driver + " before anything else spends");
       },
     };
   };
