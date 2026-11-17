@@ -10,7 +10,7 @@ import type { B1Row } from "../../lanes/delivery-route/table.ts";
 const row = (arm: B1Arm, task: string, followed: boolean, outcome: B1Row["outcome"] = "graded", model = "claude-opus-5-5", unresolved = 0, spec = false): B1Row => ({
   schema: "b1-session/1", model, part: "b1-1", arm, task, trial: task + "__" + arm, outcome, reason: outcome, pass: false, reward: outcome === "graded" ? 0 : null,
   allowance_stop: false, turn_cap: false, cost_usd: 0.1, tokens: 1, steps_seen: arm !== "none", skill_loads: 0, safety_stop: false, audit_hits: [],
-  detect: { followed, followed_tool_only: followed, test_before_source: followed, failing_before_source: followed, passing_after_source: followed, source_changed: true, bash_only_source: false, source_write_unseen: false, unread_background: 0, unresolved_writes: unresolved, spec_folder_write: spec, test_file: null, fix_files: [] },
+  detect: { followed, followed_tool_only: followed, followed_as_merged: followed, test_before_source: followed, failing_before_source: followed, passing_after_source: followed, source_changed: true, bash_only_source: false, source_write_unseen: false, unread_background: 0, unresolved_writes: unresolved, spec_folder_write: spec, test_file: null, fix_files: [] },
 });
 /** 60 tasks; each arm follows on the first k of them. */
 const rows = (k: Partial<Record<B1Arm, number>>, gaps: Partial<Record<B1Arm, number>> = {}) =>
@@ -121,5 +121,15 @@ describe("rows the report reads", () => {
   });
   test("an infra attempt 1 beside a graded attempt 2 for one cell is accepted", () => {
     expect(checkRows([...clean(), row("command", run[0]!, false, "infra"), row("described", run[1]!, false, "cap_stop")], run)).toEqual([]);
+  });
+});
+
+describe("the rule as merged, before deviation D1", () => {
+  test("each arm has its as-merged count beside the primary, and the reading under that rule is printed too", () => {
+    const r = rows({ command: 48 }).map((x) => (x.arm === "command" && ["t44", "t45", "t46", "t47"].includes(x.task) ? { ...x, detect: { ...x.detect, followed_as_merged: false } } : x));
+    const lines = report(r).lines, merged = lines.find((l) => l.startsWith("  command as merged, before D1: "))!;
+    expect([merged.includes("followed 44/60 73.3%"), merged.includes("REACHES"), lines.some((l) => l.startsWith("  command: followed 48/60") && l.includes("REACHES"))]).toEqual([true, false, true]);
+    expect(lines.filter((l) => l.startsWith("  reading"))).toEqual(["  reading: command reaches the bar and gstack-shaped does not: move checkable steps to the top of routed skills", "  reading as merged, before D1: no route reaches the bar: keep hooks for steps that must run, and stop spending on wording"]);
+    expect(report(r).models.opus!.as_merged.stats.find((s) => s.arm === "command")!.followed).toBe(44);
   });
 });
