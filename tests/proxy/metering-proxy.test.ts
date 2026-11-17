@@ -1681,6 +1681,24 @@ describe("free POST routes and the request-shape refusals (containment tightenin
     expect(t.calls).toHaveLength(counts.length + 2);
     expect(t.journal().filter(l => l.kind === "refusal")).toHaveLength(0);
   });
+  // Value: protects=a browser session's next request: Claude Code replays the model's own tool call, and browser_navigate's input is {url}, which the provider never fetches, on both the paid and the free count routes; fails_when=the remote-input check reads a client tool call's input as a remote url; why_new=the day-one smoke's checker, whose request after its first browser_navigate the proxy refused E_ALLOWANCE; seam=refuseRequestShape's walk over messages; no_claim=hosted tool calls (server_tool_use), which keep today's handling
+  test("a replayed client tool call with a url argument passes, and a url source beside it is still refused", () => {
+    const turn = (model: string, extra: unknown[] = []) => ({
+      model,
+      max_tokens: 1000,
+      messages: [
+        { role: "user", content: "Check the app." },
+        { role: "assistant", content: [{ type: "tool_use", id: "toolu_1", name: "mcp__browser__browser_navigate", input: { url: "http://app:3000/" } }] },
+        { role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_1", content: "page ok" }, ...extra] },
+      ],
+    });
+    expect(priceRequest("anthropic", turn("claude-opus-5-5"), 1000).model).toBe("claude-opus-5-5");
+    expect(priceRequest("openrouter", turn(PARTICLE), 1000, "/v1/messages").format).toBe("anthropic");
+    const image = { type: "image", source: { type: "url", url: "http://x/a.png" } };
+    expect(() => priceRequest("anthropic", turn("claude-opus-5-5", [image]), 1000)).toThrow("the request uses a url source, whose cost the proxy cannot bound from the request");
+    const nested = { type: "tool_result", tool_use_id: "toolu_1", content: [{ type: "text", text: "see", image_url: "http://x/a.png" }] };
+    expect(() => priceRequest("anthropic", turn("claude-opus-5-5", [nested]), 1000)).toThrow("the request uses a remote image_url, whose cost the proxy cannot bound from the request");
+  });
   // Value: protects=a refusal that quotes a client value (n, service_tier, speed, inference_geo, a hosted tool type, an OpenRouter server tool type, the mcp_toolset type) gives an honest value the same text as before; fails_when=bounding the quote changes the text an honest value gets; why_new=GST-2321 review (bounded quoting of client values, Captain's A2); seam=refuseRequestShape's reasons; no_claim=values no provider documents
   test("a refusal quotes an honest client value with the same text as before", () => {
     const reason = (provider: Parameters<typeof priceRequest>[0], body: Record<string, unknown>) => {
