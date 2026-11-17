@@ -31,7 +31,7 @@ import type { Termination } from "../../src/types.ts";
 import { webUses } from "../product-value/parse.ts";
 import { readTranscript } from "../../src/trial/review/readers.ts";
 import { gstackReads, probe, type Probe } from "../office-hours-founder/run/contain.ts";
-import { NODE_BIN, NODE_DIR } from "./app.ts";
+import { NODE_BIN, NODE_DIR, RAM_SIZE } from "./app.ts";
 import { SYSTEM_PROMPT } from "./frozen.ts";
 
 /** The gstack arms' state root config: readers on the session's model, the Codex voice on. */
@@ -43,8 +43,6 @@ const PATH = "/usr/local/bin:/usr/bin:/bin";
 
 /** The browser tools a checker may call: what a person does in a browser, never page scripts or network reads. */
 export const BROWSER_SERVER = "browser";
-/** The tmpfs size for each session's HOME and /tmp, so no sealed conversation state reaches a disk layer. */
-export const RAM_SIZE = "2g";
 /** Prints each RAM-backed mount with under 1 MiB free; any output means it filled. */
 export const RAM_FULL_CHECK = "df -Pk /home/agent /tmp | awk 'NR > 1 && $4 < 1024 { print $6 }'";
 export const BROWSER_TOOLS: readonly string[] = ["browser_navigate", "browser_navigate_back", "browser_snapshot", "browser_click", "browser_type", "browser_fill_form", "browser_select_option", "browser_press_key", "browser_hover", "browser_drag", "browser_drop", "browser_file_upload", "browser_handle_dialog", "browser_tabs", "browser_wait_for", "browser_take_screenshot", "browser_resize", "browser_find"].map((t) => "mcp__" + BROWSER_SERVER + "__" + t);

@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { main } from "../../lanes/day-one/cli.ts";
+import { main, probeTranscripts } from "../../lanes/day-one/cli.ts";
+import { read, type ScoredBuild } from "../../lanes/day-one/analysis.ts";
+import { PROBE_QUESTIONS } from "../../lanes/day-one/frozen.ts";
 import { fixtureUnit } from "../../lanes/day-one/dryrun.ts";
 
 const run = async (argv: string[]) => {
@@ -143,6 +145,79 @@ describe.skipIf(!onShm)("day-one validate", () => {
       expect(JSON.parse(readFileSync(join(out, "validation.json"), "utf8"))).toMatchObject({ pairs: 24, admitted: false });
       writeFileSync(join(shm, "twice.ndjson"), hand(false) + hand(false));
       expect((await run(["validate", "score", "--out", out, "--tag", "wave", "--key", key, "--labels", join(shm, "twice.ndjson")])).code).not.toBe(0);
+      writeFileSync(join(shm, "conflict.ndjson"), labels.map((l) => { const ts = byId.get(k[l]!.row)!.check.parse.tasks; return JSON.stringify({ label: l, tasks: [...ts.map((t) => ({ id: t.id, done: t.done })), { id: ts[0]!.id, done: !ts[0]!.done }] }); }).join("\n") + "\n");
+      const conflict = await run(["validate", "score", "--out", out, "--tag", "wave", "--key", key, "--labels", join(shm, "conflict.ndjson")]);
+      expect(conflict.code).not.toBe(0);
+      expect(conflict.err).toContain("labelled both done and not done");
+    } finally {
+      rmSync(shm, { recursive: true, force: true });
+    }
+  });
+
+  test("a draw with no scored builds from one of N, D, R and A is never admitted, however well the rest agree", async () => {
+    const shm = mkdtempSync("/dev/shm/day-one-validate-");
+    try {
+      const units = join(shm, "units");
+      const out = join(shm, "out");
+      const ids = ["aaaaaa", "bbbbbb", "cccccc"];
+      for (const id of ids) fixtureUnit(units, id, 2);
+      const rows = ids.flatMap((u, i) => ["n", "d", "r"].map((a, j) => checkRow(u, a, [true, (i + j) % 2 === 0, j > 1, false, i === 2])));
+      stageDir(out, "check-wave", rows, { units: ids, reps: [1] });
+      for (const r of rows) mkdirSync(join(out, "builds", r.cell.unit, "r1", r.cell.arm, "tree"), { recursive: true });
+      const dest = join(shm, "draw");
+      const key = join(shm, "key.json");
+      expect((await run(["validate", "draw", "--out", out, "--units-dir", units, "--tag", "wave", "--dest", dest, "--key", key, "--count", "9"])).code).toBe(0);
+      const k = JSON.parse(readFileSync(key, "utf8")) as Record<string, { row: string }>;
+      const byId = new Map(rows.map((r) => [r.id, r]));
+      writeFileSync(join(shm, "agree.ndjson"), readdirSync(dest).map((l) => JSON.stringify({ label: l, tasks: byId.get(k[l]!.row)!.check.parse.tasks.map((t) => ({ id: t.id, done: t.done })) })).join("\n") + "\n");
+      const score = await run(["validate", "score", "--out", out, "--tag", "wave", "--key", key, "--labels", join(shm, "agree.ndjson")]);
+      expect(score.code).toBe(2);
+      expect(score.err).toContain("builds for a");
+      expect(JSON.parse(readFileSync(join(out, "validation.json"), "utf8"))).toMatchObject({ pairs: 45, kappa: 1, admitted: false });
+    } finally {
+      rmSync(shm, { recursive: true, force: true });
+    }
+  });
+});
+
+test("a reading counts each arm's builds whose app never started", () => {
+  const build = (arm: "n" | "a", started: boolean | null): ScoredBuild => ({ unit: "u" + arm + String(started), rep: 1, arm, done: started ? [true, false, false, false, false] : [false, false, false, false, false], empty_plan: false, contaminated: false, implied: [false, false, false, false, false], obvious: false, started });
+  const r = read([build("n", false), build("n", true), build("a", true), build("a", null)], ["n", "a"]);
+  expect(r.arms.n!.not_started).toBe(1);
+  expect(r.arms.a!.not_started).toBe(0);
+});
+
+describe.skipIf(!onShm)("day-one probe", () => {
+  test("ten transcripts share one meter capped at --spend-cap", async () => {
+    const shm = mkdtempSync("/dev/shm/day-one-probe-");
+    try {
+      const capMicros = 1e6;
+      const priceMicros = 50_000;
+      let opened = 0;
+      let spent = 0;
+      const open = (async () => {
+        opened++;
+        let left = capMicros;
+        return {
+          leaseId: "lease-" + opened,
+          call: async () => {
+            if (left < priceMicros) return { text: null, problem: "the lease is spent", status: 0 };
+            left -= priceMicros;
+            spent += priceMicros;
+            return { text: "A few plants. [source: profile]", status: 200 };
+          },
+          spent: () => spent,
+          close: async () => ({ spent_micros: spent, unknown_micros: 0 }),
+        };
+      }) as never;
+      const err: string[] = [];
+      const us = ["p1", "p2", "p3"].map((id) => ({ id, profile: "I have about a dozen plants." }));
+      const code = await probeTranscripts({ us, count: 10, out: shm, io: { out: () => {}, err: (t) => err.push(t) }, open });
+      expect(10 * PROBE_QUESTIONS.length * priceMicros).toBeGreaterThan(capMicros);
+      expect(opened).toBe(1);
+      expect(spent).toBeLessThanOrEqual(capMicros);
+      expect(code).toBe(2);
+      expect(err.join("\n")).toContain("E_DAYONE_OWNER");
     } finally {
       rmSync(shm, { recursive: true, force: true });
     }

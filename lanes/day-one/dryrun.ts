@@ -20,7 +20,7 @@ import type { LoadedPolicy } from "../../src/skill-eval/cli/policy.ts";
 import { DEFAULT_POLICY, loadPolicy } from "../../src/skill-eval/cli/policy.ts";
 import type { Meter as PvMeter } from "../product-value/meter.ts";
 import { decide, paired, read, source, type Interval, type ScoredBuild } from "./analysis.ts";
-import { appWrites } from "./app.ts";
+import { appWrites, RAM_SIZE } from "./app.ts";
 import { armPlan, readExposure } from "./exposure.ts";
 import { runRealFixtures } from "./fixtures.ts";
 import { armPrompt, COMMON_ASK, DAY_ONE_PASS, GATE_REPLY, MODELS, OWNER_CLOSING, OWNER_NOTICE, PREREG, PROBE_QUESTIONS, PROMPTS_SHA256, BUILD_PROMPT, CHECK_FOOTER, CHECK_HEADER, OWNER_HEAD, OWNER_RULES, PLATFORM, QUESTION_CHARS, REVIEW_ASK, AUTOPLAN_LINE } from "./frozen.ts";
@@ -28,7 +28,7 @@ import { controls, goldAgreement, labelPacket, packets, parseLabels, stockPlan, 
 import { ALL_IN_USD, DAYONE_RUN, HEADROOM_USD, ITEMS, itemOf, ledgerCapUsd, leaseAmount, leaseItem, PLANNING_PRICES, settleItem, shrink } from "./ledger.ts";
 import { ownerLoop, splitSource } from "./owner.ts";
 import { buildDir, cellLimits, planFile, runStage, treeDigest, type CrashPoint, stageCells, type Stage, type StageDeps, type StageInput } from "./run.ts";
-import { attemptOutcome, BROWSER_TOOLS, launchSession, RAM_FULL_CHECK, RAM_SIZE, settle, type AttemptRead, type LaunchInput } from "./sessions.ts";
+import { attemptOutcome, BROWSER_TOOLS, launchSession, RAM_FULL_CHECK, settle, type AttemptRead, type LaunchInput } from "./sessions.ts";
 import { briefText, loadUnit, type Unit } from "./units.ts";
 import { checkPrompt, parseVerdicts, scoreBuild } from "./verdict.ts";
 

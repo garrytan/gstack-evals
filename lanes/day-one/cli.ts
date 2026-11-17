@@ -26,7 +26,7 @@ import { parseStackRef } from "../../src/skill-eval/cli/arms.ts";
 import { DEFAULT_POLICY, loadPolicy, type LoadedPolicy } from "../../src/skill-eval/cli/policy.ts";
 import { dockerRig } from "../../src/skill-eval/cli/run-host.ts";
 import type { ArmSpec } from "../../src/types.ts";
-import { openMeter } from "../product-value/meter.ts";
+import { openMeter, type Meter } from "../product-value/meter.ts";
 import { kappa, seededRandom, shuffle } from "../product-value/stats.ts";
 import { read, type ScoredBuild } from "./analysis.ts";
 import { nodeVolume, PREFILLED_BYTES } from "./app.ts";
@@ -358,6 +358,7 @@ function readings(f: Map<string, string[]>, io: Io): number {
       answers: pr.owner ? { ...pr.owner.counts } : null,
       usd: Math.round(cost * 100) / 100,
       prefilled: c?.check ? (c.check.app_writes ?? []).some((w) => w.change === "changed" && w.bytes_before > PREFILLED_BYTES) : null,
+      started: c?.check ? c.check.started : null,
     });
   }
   const receipt = (flag: string, name: string) => {
@@ -444,17 +445,20 @@ function validateScore(f: Map<string, string[]>, io: Io): number {
     const parse = byId.get(k.row)?.check?.parse;
     if (parse?.kind !== "ok") return refuse("the checker's verdicts for " + l.label + " are missing or unparsable");
     perArm[k.arm] = (perArm[k.arm] ?? 0) + 1;
-    const counted = new Set<string>();
+    const counted = new Map<string, boolean>();
     for (const t of l.tasks) {
       const v = parse.tasks.find((x) => x.id === t.id) ?? refuse(l.label + ": the checker has no verdict for " + t.id);
       if (typeof t.done !== "boolean") refuse(l.label + ": task " + t.id + " has no boolean done");
-      if (counted.has(t.id)) continue;
-      counted.add(t.id);
+      if (counted.has(t.id)) {
+        if (counted.get(t.id) !== t.done) refuse(l.label + ": task " + t.id + " is labelled both done and not done");
+        continue;
+      }
+      counted.set(t.id, t.done);
       pairs.push([v.done, t.done]);
     }
   }
   const k = kappa(pairs);
-  const armsShort = [...new Set(Object.values(key).map((k) => k.arm))].filter((a) => (perArm[a] ?? 0) < VALIDATION.per_arm);
+  const armsShort = [...new Set<string>(["n", "d", "r", "a", ...Object.values(key).map((k) => k.arm)])].filter((a) => (perArm[a] ?? 0) < VALIDATION.per_arm);
   const admitted = pairs.length >= VALIDATION.verdicts && k !== null && k >= VALIDATION.kappa && armsShort.length === 0;
   const receipt = { schema: "day-one.validation.v1", builds: labels.length, per_arm: perArm, pairs: pairs.length, kappa: k, admitted };
   writeFileSync(join(out, "validation.json"), JSON.stringify(receipt, null, 2) + "\n");
@@ -474,10 +478,16 @@ async function probe(f: Map<string, string[]>, io: Io, env: Env): Promise<number
   const item = one(f, "--item");
   itemOf(item);
   const amount = usd(one(f, "--spend-cap"), "--spend-cap");
-  for (let i = 0; i < count; i++) {
-    const u = us[i % us.length]!;
-    const meter = await openMeter({ item, runId: DAYONE_RUN, out: join(out, "meter-" + i), cacheDir: join(out, "cache-" + i), maxOutputTokens: 1200, amountMicros: amount, record: recordPath(opt(f, "--record"), env).path, ledger: ledgerPath(opt(f, "--ledger"), env).path, env });
-    try {
+  return probeTranscripts({ us, count, out, io, open: () => openMeter({ item, runId: DAYONE_RUN, out: join(out, "meter"), cacheDir: join(out, "cache"), maxOutputTokens: 1200, amountMicros: amount, record: recordPath(opt(f, "--record"), env).path, ledger: ledgerPath(opt(f, "--ledger"), env).path, env }) });
+}
+
+/** The probe's transcripts, all on the one meter open() leases, so --spend-cap bounds the whole probe. */
+export async function probeTranscripts(o: { us: readonly Pick<Unit, "id" | "profile">[]; count: number; out: string; io: Io; open: () => Promise<Meter> }): Promise<number> {
+  const { us, count, out, io } = o;
+  const meter = await o.open();
+  try {
+    for (let i = 0; i < count; i++) {
+      const u = us[i % us.length]!;
       const turns = [];
       for (const [n, q] of PROBE_QUESTIONS.entries()) {
         const r = await meter.call({ model: MODELS.owner, prompt: ownerPrompt(u.profile, q), maxTokens: 1024, effort: "low", label: "probe/" + i + "/" + (n + 1) });
@@ -488,9 +498,9 @@ async function probe(f: Map<string, string[]>, io: Io, env: Env): Promise<number
         turns.push({ n: n + 1, question: q, ...splitSource(r.text), gate: false });
       }
       appendFileSync(join(out, "probe.ndjson"), JSON.stringify({ transcript: i, unit: u.id, turns }) + "\n");
-    } finally {
-      await meter.close();
     }
+  } finally {
+    await meter.close();
   }
   io.out("probe: " + count + " transcripts of " + PROBE_QUESTIONS.length + " questions in " + join(out, "probe.ndjson"));
   return 0;

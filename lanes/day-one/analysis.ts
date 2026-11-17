@@ -35,13 +35,14 @@ export interface ScoredBuild {
   /** Tasks marked implied, in rank order. */
   implied: boolean[];
   obvious: boolean;
-  /** Descriptive: A's exposure and voice (null on other arms), the plan's words, the owner's answers by type, the cell's dollars (plan, voice, responder, build and check), and whether the app wrote to a file that already held data at hand-off. */
+  /** Descriptive: A's exposure and voice (null on other arms), the plan's words, the owner's answers by type, the cell's dollars (plan, voice, responder, build and check), whether the app wrote to a file that already held data at hand-off, and whether its app started for the checker (null with no check row). */
   exposed?: boolean | null;
   voice?: "astra" | "fallback" | null;
   plan_words?: number | null;
   answers?: Record<string, number> | null;
   usd?: number | null;
   prefilled?: boolean | null;
+  started?: boolean | null;
 }
 
 export interface Interval {
@@ -154,6 +155,8 @@ export interface ArmRead {
   voice: { astra: number; fallback: number };
   exposed: { yes: number; no: number };
   prefilled: number;
+  /** Descriptive: checked builds whose app never answered ("does not start", scored no task done). */
+  not_started: number;
 }
 
 export interface Reading {
@@ -199,6 +202,7 @@ export function read(builds: readonly ScoredBuild[], arms: readonly PlanArm[], b
       voice: { astra: mine.filter((b) => b.voice === "astra").length, fallback: mine.filter((b) => b.voice === "fallback").length },
       exposed: { yes: mine.filter((b) => b.exposed === true).length, no: mine.filter((b) => b.exposed === false).length },
       prefilled: mine.filter((b) => b.prefilled === true).length,
+      not_started: mine.filter((b) => b.started === false).length,
     };
   }
   const comparisons: Record<string, Interval> = {};

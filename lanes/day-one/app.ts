@@ -4,8 +4,9 @@
 // - nodeVolume: a read-only volume holding Node 24 alone (the h2h runtimes' node pin, copied out of its image), mounted
 //   at NODE_DIR in build sessions and here, so the builder and the app run the same node.
 // - startApp: copies the build's tree to a scratch folder, mounts it at /work/app (writable, so the app can save),
-//   the samples at /samples (read-only) and the node volume; runs sh ./start.sh in /work/app with PORT=3000 and node on
-//   PATH; then starts the MCP server over HTTP on 8931 with headless Chromium, an isolated profile, /samples as its only
+//   the samples at /samples (read-only) and the node volume, with HOME=/tmp on a RAM-backed tmpfs of RAM_SIZE like the
+//   agent sessions', so Chromium's profile and temp files never reach the container's disk layer; runs ./start.sh in
+//   /work/app as the prereg words it, so its first line picks the shell, with PORT=3000 and node on PATH; then starts the MCP server over HTTP on 8931 with headless Chromium, an isolated profile, /samples as its only
 //   workspace root (--ignore-roots) and screenshots to /work/shots. The app counts as started once its port answers an
 //   HTTP request within APP_START_S; a build that never answers is "does not start", scored as no task done.
 // - The checker's session never sees the app's files: its own work dir is empty and its only route to the app is the
@@ -23,6 +24,8 @@ import { APP_PORT, APP_START_S, BROWSER_IMAGE, MCP_PORT } from "./frozen.ts";
 export const NODE_DIR = "/opt/day-one-node";
 export const NODE_BIN = NODE_DIR + "/bin";
 export const NODE_PIN = RUNTIME_PINS.node;
+/** The tmpfs size for each session's and each browser container's HOME and /tmp, so no sealed state reaches a disk layer. */
+export const RAM_SIZE = "2g";
 export const nodeVolumeName = (): string => "day-one-node-" + createHash("sha256").update(JSON.stringify(NODE_PIN)).digest("hex").slice(0, 16);
 
 const run = (docker: string, args: string[], timeout = 300_000) => spawnSync(docker, args, { encoding: "utf8", timeout, maxBuffer: 1 << 24 });
@@ -89,7 +92,7 @@ export function appWrites(build: string, app: string): AppWrite[] {
 
 /** The shell line the browser container runs: the app in the background, then the MCP server in the foreground. */
 export const browserCommand = (): string =>
-  "cd /work/app && (PATH=" + NODE_BIN + ":$PATH PORT=" + APP_PORT + " sh ./start.sh > /work/app.log 2>&1 &) ; " +
+  "cd /work/app && (PATH=" + NODE_BIN + ":$PATH PORT=" + APP_PORT + " ./start.sh > /work/app.log 2>&1 &) ; " +
   "cd /samples && exec node /app/cli.js --headless --browser chromium --no-sandbox --isolated --ignore-roots --port " + MCP_PORT + " --host 0.0.0.0 --allowed-hosts '*' --output-dir /work/shots --viewport-size 1280x900";
 
 /** Starts the browser container for one build and waits for the app and the MCP server. */
@@ -102,7 +105,7 @@ export async function startApp(o: { docker: string; network: string; build: stri
   cpSync(o.build, join(copy, "work", "app"), { recursive: true, verbatimSymlinks: true, filter: (src) => !src.split("/").includes(".git") });
   mkdirSync(join(copy, "work", "shots"), { recursive: true });
   const base = { container, mcpUrl: "http://" + container + ":" + MCP_PORT + "/mcp", copy, build: o.build };
-  const r = run(o.docker, ["run", "-d", "--name", container, "--network", o.network, "--pids-limit", "2048", "--user", process.getuid!() + ":" + process.getgid!(), "-e", "HOME=/tmp", "-v", join(copy, "work") + ":/work", "-v", o.samples + ":/samples:ro", "-v", o.volume + ":" + NODE_DIR + ":ro", "--entrypoint", "sh", BROWSER_IMAGE, "-c", browserCommand()]);
+  const r = run(o.docker, ["run", "-d", "--name", container, "--network", o.network, "--pids-limit", "2048", "--user", process.getuid!() + ":" + process.getgid!(), "-e", "HOME=/tmp", "--tmpfs", "/tmp:rw,exec,mode=1777,size=" + RAM_SIZE, "-v", join(copy, "work") + ":/work", "-v", o.samples + ":/samples:ro", "-v", o.volume + ":" + NODE_DIR + ":ro", "--entrypoint", "sh", BROWSER_IMAGE, "-c", browserCommand()]);
   if (r.status !== 0) return { ...base, started: false, start_s: null, detail: "docker run failed: " + (r.stderr || r.stdout).trim().slice(-300) };
   const probe = (port: number) => run(o.docker, ["exec", container, "node", "-e", "fetch('http://localhost:" + port + "/').then(()=>process.exit(0),()=>process.exit(1))"], 15_000).status === 0;
   let mcp = false;
