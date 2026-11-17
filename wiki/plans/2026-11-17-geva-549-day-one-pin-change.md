@@ -17,7 +17,7 @@ links:
 
 # Day-one usefulness eval: the /autoplan arms' pins and the harness fixes
 
-This is a dated change to the day-one usefulness preregistration (2026-11-17-geva-546-day-one-usefulness-prereg). It was made on 2026-11-17, before any paid call and before any outcome data existed. Section 6 was added the same day, during the smoke on the practice briefs, which are never counted. The merged preregistration stays as it is; this post and the code on the results branch carry the change.
+This is a dated change to the day-one usefulness preregistration (2026-11-17-geva-546-day-one-usefulness-prereg). It was made on 2026-11-17, before any paid call and before any outcome data existed. Sections 6 and 7 were added the same day, during and after the smoke on the practice briefs, which are never counted. The merged preregistration stays as it is; this post and the code on the results branch carry the change.
 
 It does two things. It pins the three /autoplan arms, A, S-dayone and S-full, to gstack commits (sections 1 to 3), and it adds three fixes to the lane's code before the smoke (section 4). It changes no frozen text, threshold, arm prompt, size, cap or decision rule.
 
@@ -94,3 +94,32 @@ The smoke's first step, the fixtures with the real checker, stopped the wave: th
 5. **A gap names its cause** (lanes/day-one/sessions.ts). When a session failed before its agent started, its row said only that the containment probe could not run. The row now adds the trial's own reason, so the results can say why each gap happened.
 
 Neither check before the smoke could catch these. The keyless fixtures use a scripted checker that drives the browser server directly, with no Claude Code session and no proxy. The dry run checks the tool list the driver is given, not the request the CLI sends. Under the preregistration a failed fixture stops the wave for a decision; the run record logs that decision and any rerun.
+
+## 7. Two changes after the A smoke
+
+Dated 2026-11-17. Both changes come after the smoke's A sessions on the practice briefs and before any counted session. They also come before the second pin change, which will re-pin A and the strengthened arms on a gstack fix for the second-model review. Each change has tests that fail on the code before it and pass after. Both cover the strengthened arms too: they run through the same session code as A.
+
+**A. Which autoplan run counts** (lanes/day-one/exposure.ts, lanes/day-one/run.ts). /autoplan ran in all three of the smoke's A sessions, but the harness found none of the runs. Each run's record sat where the session's own `gstack-autoplan next --out` call put it, /work/app/.gstack/tmp/autoplan/run. The harness looked only in the state root, /work/app/.gstack-home. So no A session read as exposed, and the live check that hands a waiting gate to the owner never fired. The rule now:
+
+- A run.json anywhere in the work tree, the state root included, counts only when the session's own command log holds the gstack-autoplan call that wrote it. That call's --out must be the run.json's folder and its --plan must be /work/app/plan.md. The record's plan_input must also be /work/app/plan.md.
+- A record the session wrote or edited any other way never counts. That covers the Write and Edit tools, a shell redirect, tee, sed -i, cp, mv and an interpreter's inline write.
+- Exposure and the live gate check read the same record. Of the records that count, the newest wins.
+- The command log is read as shell. Variables the command sets are expanded, and relative paths resolve against the folder the last cd left.
+
+The new tests (tests/day-one/run-record.test.ts) cover four cases:
+
+- a real --out record in the work tree is found;
+- a record in the state root is found;
+- a planted run.json with no matching call is refused, and so is one edited after the call;
+- a record for another plan file is ignored.
+
+On the smoke's three A transcripts, the rule finds all three runs. Two of them wait at the gate, and one stopped in its CEO phase. The dry run's exposure case now also checks that a planted record does not count.
+
+**B. Planning sessions wait for their own background work** (lanes/day-one/sessions.ts, lanes/day-one/run.ts). One A session started its second-model review as a background task, said it would wait for the result, and ended its turn. A session that gets no reply ends at its turn's result, so the review was cut off and the run stopped in its CEO phase. Planning sessions now stay open while background work they started still runs, through the driver's existing hold.
+
+- The hold works the same way for every arm: N, D, R, A and both strengthened arms.
+- It lasts at most the session's own time limit.
+- A session that reaches the limit while held becomes a gap row, E_DAYONE_BACKGROUND, with no retry.
+- Builds and checks do not hold. They are scored on the tree and in the browser, and a dev server left running would turn every such build into a gap.
+
+Of the smoke's 23 sessions, only that one A session ended with background work still running. No N, D or R session did, and nothing reruns. The new tests are in tests/day-one/hold.test.ts.
