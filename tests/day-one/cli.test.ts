@@ -187,6 +187,40 @@ test("a reading counts each arm's builds whose app never started", () => {
   expect(r.arms.a!.not_started).toBe(0);
 });
 
+describe.skipIf(!onShm)("day-one validate with the strengthened arms in the wave", () => {
+  test("scored S-full and S-dayone builds never push N, D, R or A under 3 at the default 12, and fill later slots without a floor of their own", async () => {
+    const shm = mkdtempSync("/dev/shm/day-one-validate-");
+    try {
+      const units = join(shm, "units");
+      const out = join(shm, "out");
+      const ids = ["aaaaaa", "bbbbbb", "cccccc"];
+      for (const id of ids) fixtureUnit(units, id, 2);
+      const rows = ids.flatMap((u, i) => ["n", "d", "r", "a", "s-full", "s-dayone"].map((a, j) => checkRow(u, a, [true, (i + j) % 2 === 0, j > 1, false, i === 2])));
+      stageDir(out, "check-wave", rows, { units: ids, reps: [1] });
+      for (const r of rows) mkdirSync(join(out, "builds", r.cell.unit, "r1", r.cell.arm, "tree"), { recursive: true });
+      const byId = new Map(rows.map((r) => [r.id, r]));
+      const draw = async (name: string, extra: string[]) => {
+        const dest = join(shm, name);
+        const key = join(shm, name + ".json");
+        expect((await run(["validate", "draw", "--out", out, "--units-dir", units, "--tag", "wave", "--dest", dest, "--key", key, ...extra])).code).toBe(0);
+        const k = JSON.parse(readFileSync(key, "utf8")) as Record<string, { row: string; arm: string }>;
+        const per: Record<string, number> = {};
+        for (const v of Object.values(k)) per[v.arm] = (per[v.arm] ?? 0) + 1;
+        writeFileSync(join(shm, name + ".ndjson"), Object.keys(k).map((l) => JSON.stringify({ label: l, tasks: byId.get(k[l]!.row)!.check.parse.tasks.map((t) => ({ id: t.id, done: t.done })) })).join("\n") + "\n");
+        return { per, score: await run(["validate", "score", "--out", out, "--tag", "wave", "--key", key, "--labels", join(shm, name + ".ndjson")]) };
+      };
+      const twelve = await draw("d12", []);
+      expect(twelve.per).toEqual({ n: 3, d: 3, r: 3, a: 3 });
+      expect(twelve.score.code).toBe(0);
+      const fourteen = await draw("d14", ["--count", "14"]);
+      expect((fourteen.per["s-full"] ?? 0) + (fourteen.per["s-dayone"] ?? 0)).toBe(2);
+      expect(fourteen.score.code).toBe(0);
+    } finally {
+      rmSync(shm, { recursive: true, force: true });
+    }
+  });
+});
+
 describe.skipIf(!onShm)("day-one probe", () => {
   test("ten transcripts share one meter capped at --spend-cap", async () => {
     const shm = mkdtempSync("/dev/shm/day-one-probe-");

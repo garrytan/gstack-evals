@@ -391,7 +391,7 @@ function controlsCmd(f: Map<string, string[]>, io: Io): number {
   return c.passed ? 0 : 2;
 }
 
-/** The checker validation's draw: a seeded order of the scored builds, the first VALIDATION.per_arm of each arm first, then the rest in order; each drawn build is copied under a random label with its samples and tasks, and the key goes to its own file. */
+/** The checker validation's draw: a seeded order of the scored builds, the first VALIDATION.per_arm of each of N, D, R and A first, then the rest in order, S builds included; the checker is validated on N, D, R and A builds and applied unchanged to S builds; each drawn build is copied under a random label with its samples and tasks, and the key goes to its own file. */
 function validateDraw(f: Map<string, string[]>, io: Io): number {
   const out = sealedPath(one(f, "--out"), "--out");
   const unitsDir = sealedPath(one(f, "--units-dir"), "--units-dir");
@@ -404,7 +404,7 @@ function validateDraw(f: Map<string, string[]>, io: Io): number {
   const scored = rows.filter((r) => r.state === "scored" && r.check?.started && r.check.parse?.kind === "ok").sort((a, b) => a.id.localeCompare(b.id));
   const order = shuffle(scored, seededRandom(SEED));
   const arms = [...new Set(order.map((r) => r.cell.arm))].sort();
-  const firsts = new Set(arms.flatMap((a) => order.filter((r) => r.cell.arm === a).slice(0, VALIDATION.per_arm).map((r) => r.id)));
+  const firsts = new Set(["n", "d", "r", "a"].flatMap((a) => order.filter((r) => r.cell.arm === a).slice(0, VALIDATION.per_arm).map((r) => r.id)));
   const drawn = [...order.filter((r) => firsts.has(r.id)), ...order.filter((r) => !firsts.has(r.id))].slice(0, count);
   const key: Record<string, { row: string; unit: string; rep: number; arm: PlanArm }> = {};
   let verdicts = 0;
@@ -458,7 +458,7 @@ function validateScore(f: Map<string, string[]>, io: Io): number {
     }
   }
   const k = kappa(pairs);
-  const armsShort = [...new Set<string>(["n", "d", "r", "a", ...Object.values(key).map((k) => k.arm)])].filter((a) => (perArm[a] ?? 0) < VALIDATION.per_arm);
+  const armsShort = ["n", "d", "r", "a"].filter((a) => (perArm[a] ?? 0) < VALIDATION.per_arm);
   const admitted = pairs.length >= VALIDATION.verdicts && k !== null && k >= VALIDATION.kappa && armsShort.length === 0;
   const receipt = { schema: "day-one.validation.v1", builds: labels.length, per_arm: perArm, pairs: pairs.length, kappa: k, admitted };
   writeFileSync(join(out, "validation.json"), JSON.stringify(receipt, null, 2) + "\n");

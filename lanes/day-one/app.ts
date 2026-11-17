@@ -5,8 +5,9 @@
 //   at NODE_DIR in build sessions and here, so the builder and the app run the same node.
 // - startApp: copies the build's tree to a scratch folder, mounts it at /work/app (writable, so the app can save),
 //   the samples at /samples (read-only) and the node volume, with HOME=/tmp on a RAM-backed tmpfs of RAM_SIZE like the
-//   agent sessions', so Chromium's profile and temp files never reach the container's disk layer; runs ./start.sh in
-//   /work/app as the prereg words it, so its first line picks the shell, with PORT=3000 and node on PATH; then starts the MCP server over HTTP on 8931 with headless Chromium, an isolated profile, /samples as its only
+//   agent sessions', so Chromium's profile and temp files never reach the container's disk layer; sets the copy's
+//   start.sh executable (the build tree keeps its modes) and runs ./start.sh in /work/app as the prereg words it, so
+//   its first line picks the shell, with PORT=3000 and node on PATH; then starts the MCP server over HTTP on 8931 with headless Chromium, an isolated profile, /samples as its only
 //   workspace root (--ignore-roots) and screenshots to /work/shots. The app counts as started once its port answers an
 //   HTTP request within APP_START_S; a build that never answers is "does not start", scored as no task done.
 // - The checker's session never sees the app's files: its own work dir is empty and its only route to the app is the
@@ -16,7 +17,7 @@
 //   with saved data (the builder's own test records), logged in the check row.
 import { spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join, relative } from "node:path";
 import { RUNTIME_PINS } from "../outcome-skills/h2h/sessions/runtimes.ts";
 import { APP_PORT, APP_START_S, BROWSER_IMAGE, MCP_PORT } from "./frozen.ts";
@@ -103,6 +104,8 @@ export async function startApp(o: { docker: string; network: string; build: stri
   rmSync(copy, { recursive: true, force: true });
   mkdirSync(join(copy, "work"), { recursive: true });
   cpSync(o.build, join(copy, "work", "app"), { recursive: true, verbatimSymlinks: true, filter: (src) => !src.split("/").includes(".git") });
+  const startSh = join(copy, "work", "app", "start.sh");
+  if (lstatSync(startSh, { throwIfNoEntry: false })?.isFile()) chmodSync(startSh, 0o755);
   mkdirSync(join(copy, "work", "shots"), { recursive: true });
   const base = { container, mcpUrl: "http://" + container + ":" + MCP_PORT + "/mcp", copy, build: o.build };
   const r = run(o.docker, ["run", "-d", "--name", container, "--network", o.network, "--pids-limit", "2048", "--user", process.getuid!() + ":" + process.getgid!(), "-e", "HOME=/tmp", "--tmpfs", "/tmp:rw,exec,mode=1777,size=" + RAM_SIZE, "-v", join(copy, "work") + ":/work", "-v", o.samples + ":/samples:ro", "-v", o.volume + ":" + NODE_DIR + ":ro", "--entrypoint", "sh", BROWSER_IMAGE, "-c", browserCommand()]);

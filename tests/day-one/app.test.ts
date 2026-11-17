@@ -1,7 +1,7 @@
 // Value: protects=the browser container: a build's ./start.sh runs as its first line says, a script that fails still reads "does not start", and Chromium's profile and temp files stay off disk.
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { chmodSync, cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { nodeVolume, startApp, stopApp, type AppRun } from "../../lanes/day-one/app.ts";
@@ -22,17 +22,18 @@ const MCP_NAVIGATE = [
 ].join("\n");
 
 describe.skipIf(!haveImage)("day-one browser container", () => {
-  const withBuild = async (startSh: string, use: (a: AppRun) => void) => {
+  const withBuild = async (startSh: string, mode: number, use: (a: AppRun) => void) => {
     const dir = mkdtempSync(join(tmpdir(), "day-one-app-"));
     try {
       const build = join(dir, "build");
       cpSync(REFERENCE, build, { recursive: true });
       writeFileSync(join(build, "start.sh"), startSh);
-      chmodSync(join(build, "start.sh"), 0o755);
+      chmodSync(join(build, "start.sh"), mode);
       mkdirSync(join(dir, "samples"));
       const a = await startApp({ docker: "docker", network: "none", build, samples: join(dir, "samples"), scratch: join(dir, "scratch"), volume: nodeVolume().volume, label: "test" });
       try {
         use(a);
+        expect(statSync(join(build, "start.sh")).mode & 0o777).toBe(mode);
       } finally {
         stopApp(a, "docker", join(dir, "kept"));
       }
@@ -41,12 +42,12 @@ describe.skipIf(!haveImage)("day-one browser container", () => {
     }
   };
 
-  test("a bash start script with set -euo pipefail starts", async () => {
-    await withBuild("#!/usr/bin/env bash\nset -euo pipefail\nexec node server.js\n", (a) => expect(a.detail).toBe("the app answered on 3000"));
+  test("a bash start script with set -euo pipefail, written 0644 as Claude Code's Write tool leaves it, starts", async () => {
+    await withBuild("#!/usr/bin/env bash\nset -euo pipefail\nexec node server.js\n", 0o644, (a) => expect(a.detail).toBe("the app answered on 3000"));
   }, 180_000);
 
-  test("a one-line start script starts, and Chromium writes nothing to the container's disk layer", async () => {
-    await withBuild("node server.js\n", (a) => {
+  test("a 0755 one-line start script starts, and Chromium writes nothing to the container's disk layer", async () => {
+    await withBuild("node server.js\n", 0o755, (a) => {
       expect(a.started).toBe(true);
       const nav = spawnSync("docker", ["exec", a.container, "node", "--input-type=module", "-e", MCP_NAVIGATE], { encoding: "utf8", timeout: 90_000 });
       expect(nav.stdout).toContain("http://localhost:3000/");
@@ -55,10 +56,11 @@ describe.skipIf(!haveImage)("day-one browser container", () => {
     });
   }, 180_000);
 
-  test("a start script that fails reads as does not start", async () => {
-    await withBuild("#!/usr/bin/env bash\nset -euo pipefail\necho broken >&2\nexit 3\n", (a) => {
+  test("a 0644 start script that fails reads as does not start", async () => {
+    await withBuild("#!/usr/bin/env bash\nset -euo pipefail\necho broken >&2\nexit 3\n", 0o644, (a) => {
       expect(a.started).toBe(false);
       expect(a.detail).toContain("the app never answered on 3000");
+      expect(a.detail).toContain("broken");
     });
   }, 180_000);
 });
