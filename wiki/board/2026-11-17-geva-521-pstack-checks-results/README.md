@@ -108,7 +108,7 @@ Intervals come from a bootstrap over repositories, stratified by model, with 10,
 
 The two larger strata point the same way as the pooled result, though the oldest stratum's P minus C interval reaches +2.0. July 2026, after both frontier models' training cutoffs, has 3 units (9 pairs) and reads the other way. It is too small to read. N's own rate falls from 81.5% to 62.5% to 22.2% across the three strata, which fits older bugs being easier or more familiar to the models.
 
-**Secondaries, descriptive (secondaries.txt, per-arm.txt):** no session in any arm asked a question. Every test session's task turn ended on its own. Three wrap-up turns ended at a limit (Sol C once at its time limit and once at its turn limit, Sol P once at its time limit), and section 5 of the preregistration scores them as they stand. The breaks secondary found a broken existing test in at most 2 sessions in any cell. One Sol P check failed with exit 127 (command not found) in 4 runs because its own command line was broken: it opens with an unclosed `work=$(mktemp)`. That counts against P.
+**Secondaries, descriptive (secondaries.txt, per-arm.txt):** no session in any arm asked a question. Every test session's task turn ended on its own. One Sol C session's first attempt ended on an upstream error and was rerun once from a fresh container, as section 5 allows, and no session became an upstream gap. Three wrap-up turns ended at a limit (Sol C once at its time limit and once at its turn limit, Sol P once at its time limit), and section 5 of the preregistration scores them as they stand. The breaks secondary found a broken existing test in at most 2 sessions in any cell. One Sol P check failed with exit 127 (command not found) in 4 runs because its own command line was broken: it opens with an unclosed `work=$(mktemp)`. That counts against P.
 
 ## Why null? (R48)
 
@@ -215,7 +215,7 @@ The units come from SWE-bench-Live MultiLang (MIT licence) at a pinned revision,
 
 - Admission (24 Opus sessions, 12 Sol and particle-1 price-probe sessions): $44.06.
 - Eligibility labels: $19.89.
-- Test run: Opus $111.99; Sol $89.87 metered, plus $6.01 for 3 Sol calls of unknown cost, charged at the worst case; particle-1 $6.51.
+- Test run: Opus $111.99; Sol $89.87 metered, plus $6.01 for 3 Sol calls of unknown cost, charged at the worst case; particle-1 $6.51. Sol's metered total includes $0.96 for the first attempt of one Sol C session (part 2, s5, c-ares-1197), which ended on an upstream error and was rerun as a whole session under section 5. The table below covers only the 90 counted sessions per model, so Sol's rows come to $88.91.
 - Blind probe: $76.73 of its $120 cap.
 - Metered total $349.04, committed $355.06, against the line's $1,980.
 
