@@ -51,7 +51,7 @@ export const BROWSER_SERVER = "browser";
 /** Prints each RAM-backed mount with under 1 MiB free; any output means it filled. */
 export const RAM_FULL_CHECK = "df -Pk /home/agent /tmp | awk 'NR > 1 && $4 < 1024 { print $6 }'";
 /** Reads the voice slot's bearer from stdin and compares it with the container's OPENAI_API_KEY, so no form of it is in an exec argument. */
-export const VOICE_BEARER_CHECK = 'IFS= read -r t; [ "$OPENAI_API_KEY" = "$t" ] && echo voice-bearer';
+export const VOICE_BEARER_CHECK = 'IFS= read -r t && [ -n "$t" ] && [ "$OPENAI_API_KEY" = "$t" ] && echo voice-bearer';
 export const BROWSER_TOOLS: readonly string[] = ["browser_navigate", "browser_navigate_back", "browser_snapshot", "browser_click", "browser_type", "browser_fill_form", "browser_select_option", "browser_press_key", "browser_hover", "browser_drag", "browser_drop", "browser_file_upload", "browser_handle_dialog", "browser_tabs", "browser_wait_for", "browser_take_screenshot", "browser_resize", "browser_find"].map((t) => "mcp__" + BROWSER_SERVER + "__" + t);
 
 export interface LaunchInput {
@@ -130,7 +130,10 @@ export async function launchSession(o: LaunchInput, deps: { driver?: typeof clau
             const full = session.exec(RAM_FULL_CHECK, 30_000).stdout.trim();
             if (full) ramFull = full.split("\n").join(", ");
             found = probe(session, o.docker, [base.workPath(opts.work, task, opts.root), home, ...mounts.map((m) => m.path)]);
-            if (voice) tokenOk = session.exec(VOICE_BEARER_CHECK, 30_000, voice.token + "\n").stdout.trim() === "voice-bearer";
+            if (voice) {
+              const r = session.exec(VOICE_BEARER_CHECK, 30_000, voice.token + "\n");
+              tokenOk = r.exitCode === 0 && !r.timedOut && r.stdout.trim() === "voice-bearer";
+            }
           }
           session.stop();
         },

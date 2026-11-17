@@ -69,6 +69,7 @@ describe("the gstack-read check (prereg section 8)", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
   test("marks a skill load in an N, D or R planning session, and never in a build or check session", async () => {
     const dir = mkdtempSync(join(tmpdir(), "day-one-skills-"));
     try {
@@ -93,55 +94,57 @@ describe("the gstack-read check (prereg section 8)", () => {
 });
 
 describe("the voice bearer check (prereg section 7)", () => {
+  /** One gstack-arm session whose container holds inContainer(voice bearer) as OPENAI_API_KEY, with every exec it ran; transport can lose the exec's stdin or report a timeout. */
+  const bearerSession = async (dir: string, name: string, inContainer: (voiceToken: string) => string, transport: { dropInput?: boolean; timedOut?: boolean } = {}) => {
+    const docker = join(dir, "docker");
+    writeFileSync(docker, "#!/bin/sh\necho '[]'\n");
+    chmodSync(docker, 0o755);
+    const tokens: string[] = [];
+    const execs: { command: string; input: string | undefined }[] = [];
+    let n = 0;
+    const session = {
+      exec: (command: string, _timeoutMs: number, input?: string) => {
+        execs.push({ command, input });
+        if (command === RAM_FULL_CHECK) return { exitCode: 0, timedOut: false, stdout: "", stderr: "" };
+        if (command.startsWith("hostname;")) return { exitCode: 0, timedOut: false, stdout: "c1\n---gse-probe---\nOPENAI_API_KEY\nANTHROPIC_AUTH_TOKEN\n---gse-probe---\n000 exit=7", stderr: "" };
+        const r = spawnSync("sh", ["-c", command], { env: { PATH: process.env.PATH ?? "/usr/bin:/bin", OPENAI_API_KEY: inContainer(tokens[1]!) }, input: transport.dropInput ? "" : (input ?? ""), encoding: "utf8" });
+        return { exitCode: transport.timedOut ? null : r.status, timedOut: transport.timedOut === true, stdout: r.stdout, stderr: r.stderr };
+      },
+      spawn: () => {
+        throw new Error("no process starts here");
+      },
+      stop: () => {},
+    };
+    const rig = {
+      ...stubRig(),
+      bind: async () => {
+        const token = "slot-" + ++n + "-" + randomBytes(16).toString("hex");
+        tokens.push(token);
+        return { slot: "s" + n, token, meter_id: "m" + n };
+      },
+      arms: { a: { skill: null } },
+      sandbox: () => ({ homePath: () => "/home/agent", workPath: () => "/work/app", agent: () => session }),
+    } as unknown as HostRig;
+    const d = join(dir, name);
+    mkdirSync(d, { recursive: true });
+    const trial = async (spec: { sandbox: { agent: (t: string, o: unknown) => { stop: () => void } } }) => {
+      spec.sandbox.agent("app", { work: d, env: {} }).stop();
+      mkdirSync(join(d, "out"), { recursive: true });
+      return { record: { termination: { kind: "completed" } } };
+    };
+    const read = await launchSession(
+      { rig, policy, docker, runId: DAYONE_RUN, arm: "a", cell: "u-r1-a", rep: 1, attempt: 1, model: MODELS.planner, dir: d, seed: null, prompt: "p", minutes: 1, turns: 1, allowanceMicros: 1e6, nextUser: async () => ({ end: true }), gstack: { skill: "autoplan", voiceModel: MODELS.voice, voiceMicros: 1e6 } },
+      { driver: (() => ({ env: {} })) as never, trial: trial as never },
+    );
+    return { read, execs, voice: tokens[1]! };
+  };
+
   test("compares the container's OPENAI_API_KEY with the voice slot's bearer without any form of the bearer in an exec argument", async () => {
     const dir = mkdtempSync(join(tmpdir(), "day-one-bearer-"));
     try {
-      const docker = join(dir, "docker");
-      writeFileSync(docker, "#!/bin/sh\necho '[]'\n");
-      chmodSync(docker, 0o755);
-      const run = async (name: string, inContainer: (voiceToken: string) => string) => {
-        const tokens: string[] = [];
-        const execs: { command: string; input: string | undefined }[] = [];
-        let n = 0;
-        const session = {
-          exec: (command: string, _timeoutMs: number, input?: string) => {
-            execs.push({ command, input });
-            if (command === RAM_FULL_CHECK) return { exitCode: 0, timedOut: false, stdout: "", stderr: "" };
-            if (command.startsWith("hostname;")) return { exitCode: 0, timedOut: false, stdout: "c1\n---gse-probe---\nOPENAI_API_KEY\nANTHROPIC_AUTH_TOKEN\n---gse-probe---\n000 exit=7", stderr: "" };
-            const r = spawnSync("sh", ["-c", command], { env: { PATH: process.env.PATH ?? "/usr/bin:/bin", OPENAI_API_KEY: inContainer(tokens[1]!) }, input: input ?? "", encoding: "utf8" });
-            return { exitCode: r.status, timedOut: false, stdout: r.stdout, stderr: r.stderr };
-          },
-          spawn: () => {
-            throw new Error("no process starts here");
-          },
-          stop: () => {},
-        };
-        const rig = {
-          ...stubRig(),
-          bind: async () => {
-            const token = "slot-" + ++n + "-" + randomBytes(16).toString("hex");
-            tokens.push(token);
-            return { slot: "s" + n, token, meter_id: "m" + n };
-          },
-          arms: { a: { skill: null } },
-          sandbox: () => ({ homePath: () => "/home/agent", workPath: () => "/work/app", agent: () => session }),
-        } as unknown as HostRig;
-        const d = join(dir, name);
-        mkdirSync(d, { recursive: true });
-        const trial = async (spec: { sandbox: { agent: (t: string, o: unknown) => { stop: () => void } } }) => {
-          spec.sandbox.agent("app", { work: d, env: {} }).stop();
-          mkdirSync(join(d, "out"), { recursive: true });
-          return { record: { termination: { kind: "completed" } } };
-        };
-        const read = await launchSession(
-          { rig, policy, docker, runId: DAYONE_RUN, arm: "a", cell: "u-r1-a", rep: 1, attempt: 1, model: MODELS.planner, dir: d, seed: null, prompt: "p", minutes: 1, turns: 1, allowanceMicros: 1e6, nextUser: async () => ({ end: true }), gstack: { skill: "autoplan", voiceModel: MODELS.voice, voiceMicros: 1e6 } },
-          { driver: (() => ({ env: {} })) as never, trial: trial as never },
-        );
-        return { read, execs, voice: tokens[1]! };
-      };
       const forms = (t: string) => [t, Buffer.from(t).toString("base64"), Buffer.from(t).toString("hex"), ...["sha256", "sha1", "md5", "sha512"].map((h) => createHash(h).update(t).digest("hex")), ...Array.from({ length: t.length - 11 }, (_, i) => t.slice(i, i + 12))];
-      const same = await run("same", (voice) => voice);
-      const other = await run("other", () => "slot-9-" + "0".repeat(32));
+      const same = await bearerSession(dir, "same", (voice) => voice);
+      const other = await bearerSession(dir, "other", () => "slot-9-" + "0".repeat(32));
       expect(same.read.contained).toEqual([]);
       expect(other.read.contained).toEqual(["OPENAI_API_KEY is not the voice slot's bearer"]);
       for (const r of [same, other]) {
@@ -153,5 +156,15 @@ describe("the voice bearer check (prereg section 7)", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
-});
 
+  test("counts a match only when the check read the bearer and its exec exited cleanly", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "day-one-bearer-"));
+    try {
+      const lost = await bearerSession(dir, "lost", () => "", { dropInput: true });
+      const late = await bearerSession(dir, "late", (voice) => voice, { timedOut: true });
+      for (const r of [lost, late]) expect(r.read.contained).toEqual(["OPENAI_API_KEY is not the voice slot's bearer"]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
