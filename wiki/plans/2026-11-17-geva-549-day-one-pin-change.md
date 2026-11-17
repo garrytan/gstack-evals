@@ -1,8 +1,8 @@
 ---
 id: 2026-11-17-geva-549-day-one-pin-change
 kind: plan
-title: "Day-one usefulness eval: the /autoplan arms' gstack pins and the fixes made before any run"
-summary: "Pins A to gstack c5250ded and the strengthened /autoplan arms to their branch commits, lists the planning-skill changes since the prereg's pin, and records every fix made before the smoke."
+title: "Day-one usefulness eval: the /autoplan arms' gstack pins and the harness fixes"
+summary: "Pins A to gstack c5250ded and the strengthened /autoplan arms to their branch commits, lists the planning-skill changes since the prereg's pin, and records each harness fix."
 author: GEVA-549
 model: anthropic/claude-opus-5-5
 date: 2026-11-17
@@ -15,9 +15,9 @@ links:
   - https://github.com/garrytan/gstack/tree/439827d71d14292d8d5e32b4decf94bccd56a985
 ---
 
-# Day-one usefulness eval: the /autoplan arms' pins and the fixes made before any run
+# Day-one usefulness eval: the /autoplan arms' pins and the harness fixes
 
-This is a dated change to the day-one usefulness preregistration (2026-11-17-geva-546-day-one-usefulness-prereg). It was made on 2026-11-17, before any paid call and before any outcome data existed. The merged preregistration stays as it is; this post and the code on the results branch carry the change.
+This is a dated change to the day-one usefulness preregistration (2026-11-17-geva-546-day-one-usefulness-prereg). It was made on 2026-11-17, before any paid call and before any outcome data existed. Section 6 was added the same day, after the smoke's first step stopped, and still before any plan, build or check ran. The merged preregistration stays as it is; this post and the code on the results branch carry the change.
 
 It does two things. It pins the three /autoplan arms, A, S-dayone and S-full, to gstack commits (sections 1 to 3), and it adds three fixes to the lane's code before the smoke (section 4). It changes no frozen text, threshold, arm prompt, size, cap or decision rule.
 
@@ -82,3 +82,12 @@ The advisory read of the three fix commits returned two blocking findings and th
 4. **A transport test for stdin** (tests/trial/sandbox-stdin.test.ts). Docker exec gets -i and the input on stdin only when there is input, bubblewrap forwards it too, and no argument holds it. The code was already right; the test fails if -i is dropped or always added, or if either sandbox drops the input.
 
 One note stays a note. The keyless voice check (gstack-evals day-one voice-check, lanes/day-one/voicecheck.ts) still passes its stub bearers and a fake provider key as process arguments. It runs only against a local stub provider with a temporary ledger, so no paid-run credential is involved, and fix 3's claim covers counted sessions only.
+
+## 6. Fixes made at the smoke's first stop
+
+The smoke's first step, the fixtures with the real checker, stopped the wave: the reference app scored 0 of 5 tasks done. The placeholder also scored 0, but for the wrong reason. The two checker transcripts show the cause. In both, the checker's first call was ToolSearch, to load the browser tools. The session's tool limit refused it ("That tool is not available in this session"), and the checker wrote verdicts saying it could not reach the browser. No plan, build or check had run. Two harness bugs were behind the miss. Each fix is its own commit, with a test that fails on the code before it and passes after.
+
+1. **A session limited to named tools gets them in its request** (src/adapters/claude-code/driver.ts). Claude Code 2.1.314 defers MCP tools behind its ToolSearch tool: the request carries only a placeholder, and the model must call ToolSearch to load them. The checker's session allows only its 18 browser tools, so that call was refused and the session never saw a browser. The driver now also disallows ToolSearch for such a session, unless its list names it, and Claude Code then declares the MCP tools in the request. The new test (tests/adapters/only-tools.test.ts) runs the pinned CLI with no key against a stub MCP server. It checks that the request declares every browser tool and no ToolSearch, that the first browser call reaches the server, and that the session completes.
+2. **A replayed tool call with a url argument is priced** (src/runner/pricing/prices.ts). With fix 1 in, the test session's next request was refused E_ALLOWANCE. The metering proxy read browser_navigate's url argument, inside the model's own replayed tool call, as a remote file the provider would fetch. The provider never fetches a client tool call's input, so the check now skips it. A url image source or a remote image_url elsewhere in the same request is still refused. The real checker would have hit this on its first page load.
+
+Neither check before the smoke could catch these. The keyless fixtures use a scripted checker that drives the browser server directly, with no Claude Code session and no proxy. The dry run checks the tool list the driver is given, not the request the CLI sends. Under the preregistration a failed fixture stops the wave for a decision; the run record logs that decision and any rerun.
