@@ -109,3 +109,33 @@ Checks. A new keyless test in tests/outcome-skills/h2h-exposure.test.ts fails on
 source edit in a spec package after a failing test reads as procedure ran, an edit in a spec package before any test no
 longer counts as the test, and spec-named files under spec/ and specs/ still count. Ruling: GEVA-2 ("If it does, apply
 the same fix test-first, with both-direction fixtures, and rescore").
+## 2026-11-17: Claude Code's refusal fallback reads as a safety stop (section 7 step 6, after the pilot, before stage 2)
+
+Section 7 step 6 scores a provider safety-filter stop as no fix, counted per arm, with no retry. session.ts found that
+stop only as stop_reason "refusal". Claude Code 2.1.325 does not stop there: when Opus 5.5's safeguards flag a request,
+it switches the session to another model (system notice model_refusal_fallback) and retries. The metering proxy refuses
+every model but the one under test, so the switched request fails with E_ALLOWANCE, the turn ends as an error result,
+and session.ts read it as an upstream end: one retry, then a gap.
+
+In the pilot this hit one B2 unit, patriksimek__vm2-ghsa-x965-fc75-jpqh, in all 7 primary arms. All 14 attempts drew
+the cyber safeguard on the first request and became gaps (gap rate 1 in 12 per B cell). Read as built, a pack that trips
+the filter mid-session would lose that unit from its contrast instead of scoring no fix, and 7 such units in 60 would
+make every B row incomplete.
+
+The change. withRefusalFallback in sessions/session.ts marks an attempt's summary when its sdk-messages.jsonl holds the
+model_refusal_fallback notice, and endOf reads the mark as safety_stop: no retry, no gap, scored as no fix by the
+existing rule in score/score.ts. run.ts passes each attempt's summary through it. Claude Code stays at its defaults
+(the fallback switch is left on), and the model under test is never swapped.
+
+Checks. A new keyless test in tests/outcome-skills/h2h-session.test.ts fails on the old rule and passes on the new: the
+recorded shape of a refused fallback (403 E_ALLOWANCE error result plus the notice) reads safety_stop with no retry and
+no gap; the same summary without the notice still reads upstream and gaps on its second attempt; an ordinary provider
+error (529) still reads upstream; a completed session with the notice reads safety_stop. Read both ways on every
+recorded attempt (stage 0's 25, the rerun's 25 and the pilot's 199): exactly the 14 vm2 attempts change, upstream to
+safety_stop, and no other attempt's end moves.
+
+Effect on the pilot. The 7 vm2 sessions re-read as safety stops (both attempts kept, since both ran and spent $1.62 in
+all). The pilot is re-read into a second sealed file beside the first; both digests are in the run record. Exposure
+counts scored sessions, so tstack's B procedure rate moves from 9 of 11 (82%) to 9 of 12 (75%), because its vm2 session
+never loaded the pack. Ruling: GEVA-2 (option 1, under R95: a model under test is never swapped, and its refusal is a
+result).

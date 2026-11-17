@@ -24,7 +24,7 @@ import { exposure, planningDirs, readAudit, readEvents } from "./exposure.ts";
 import { checkArmHome, type ArmHome } from "./home.ts";
 import { readMarkers } from "./markers.ts";
 import type { H2hPlanned } from "./plan.ts";
-import { attemptUsage, endOf, retries, retryCovered, SESSION_RERUN, sessionRecord, writeSessionRecord, type AttemptUsage, type H2hSessionRecord } from "./session.ts";
+import { attemptUsage, endOf, retries, retryCovered, SESSION_RERUN, sessionRecord, withRefusalFallback, writeSessionRecord, type AttemptUsage, type H2hSessionRecord } from "./session.ts";
 import { turnPlan } from "./turns.ts";
 import { buildRuntimeVolume, runtimePath, RUNTIMES_DIR } from "./runtimes.ts";
 
@@ -220,7 +220,7 @@ export async function runH2hSession(i: H2hRunInput): Promise<{ record: H2hSessio
     const { argv, env, config } = runCopy({ ...i, runtime }, attempt, dir, p);
     const { exit, killed } = await harbor(i.harbor ?? "harbor", argv, env, h2hBudget(config.limits.wall_sec, config.turns.length + config.continuation_cap).timer_ms, join(dir, "harbor.log"));
     const ev = find(join(dir, "jobs"), "evaluator");
-    const summary = ev && existsSync(join(ev, SUMMARY)) ? (JSON.parse(readFileSync(join(ev, SUMMARY), "utf8")) as Record<string, any>) : null;
+    const summary = ev && existsSync(join(ev, SUMMARY)) ? withRefusalFallback(JSON.parse(readFileSync(join(ev, SUMMARY), "utf8")) as Record<string, any>, join(ev, "sdk-messages.jsonl")) : null;
     if (!summary) writeFileSync(join(dir, "attempt.json"), JSON.stringify({ harbor_exit: exit, killed }) + "\n");
     await haltCheck(i, attempt, summary, ev, dir);
     if (typeof summary?.refused === "string" && summary.refused.startsWith("E_H2H_SESSION_ARM")) h2hFail("E_H2H_SESSION_ARM", summary.refused.slice("E_H2H_SESSION_ARM ".length) + "; " + dir);

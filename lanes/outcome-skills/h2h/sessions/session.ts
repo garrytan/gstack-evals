@@ -8,8 +8,9 @@
 // allowance, and otherwise the session ends as a cap stop, never as a gap or on a smaller slot. Each attempt's own slot,
 // spend and tokens stay in the record, and cost_usd and tokens are their sums: the session cost that pricing, dollars per
 // verified fix and section 3's doubling rule read. A cap stop ends the part incomplete. A tree that could not leave the container is a gap (E_H2H_CAPTURE). A
-// safety stop is its own end and is scored like any other.
-import { writeFileSync } from "node:fs";
+// safety stop is its own end and is scored like any other. Claude Code's refusal fallback (a safety filter flagged the
+// request and Claude Code switched models, which the proxy refuses) is that safety stop, never an upstream end.
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { h2hFail } from "../prereg.ts";
 import type { Exposure, H2hSession, SessionEnd } from "../types.ts";
 import type { H2hPlanned } from "./plan.ts";
@@ -21,10 +22,27 @@ const ENDS: Record<string, SessionEnd> = { completed: "completed", bg_wait_expir
 type Summary = Record<string, any>;
 const closeOf = (s: Summary | null): Record<string, any> => s?.slot?.close ?? {};
 
+/** The attempt's summary, marked refusal_fallback when its transcript (the attempt's sdk-messages.jsonl) holds Claude Code's
+ *  model_refusal_fallback notice: a safety filter flagged a request and Claude Code switched models. The model under test
+ *  is never swapped (the proxy refuses every other model), so endOf reads the mark as a safety stop. */
+export function withRefusalFallback(s: Summary | null, transcript: string): Summary | null {
+  if (!s || !existsSync(transcript)) return s;
+  const notice = readFileSync(transcript, "utf8").split("\n").some((l) => {
+    if (!l.includes("model_refusal_fallback")) return false;
+    try {
+      const m = JSON.parse(l);
+      return m?.subtype === "model_refusal_fallback" || m?.data?.subtype === "model_refusal_fallback";
+    } catch {
+      return false;
+    }
+  });
+  return notice ? { ...s, refusal_fallback: true } : s;
+}
+
 /** The session's end from an attempt's summary (null when the attempt left none). A harness error, or a close whose proxy
  *  finalize failed with no allowance stop counted, is infra; an allowance stop is limit_allowance whatever the turn
- *  said; a refusal stop in any turn is safety_stop; then the last turn's wall and turn limits and completed; an UPSTREAM
- *  refusal or an error result is upstream; anything else is infra. */
+ *  said; a refusal stop in any turn, or a refusal fallback, is safety_stop; then the last turn's wall and turn limits and
+ *  completed; an UPSTREAM refusal or an error result is upstream; anything else is infra. */
 export function endOf(s: Summary | null): SessionEnd {
   if (!s) return "infra";
   if (s.cap_stop) return "cap_stop";
@@ -33,7 +51,7 @@ export function endOf(s: Summary | null): SessionEnd {
   const last = (s.turns ?? []).at(-1) as Summary | undefined;
   if (!last || last.termination === "error" || (close.finalized === false && !stops)) return "infra";
   if (stops) return "limit_allowance";
-  if ((s.turns as Summary[]).some((t) => t.refusal)) return "safety_stop";
+  if (s.refusal_fallback === true || (s.turns as Summary[]).some((t) => t.refusal)) return "safety_stop";
   const refusals: string[] = Array.isArray(close.refusals) ? close.refusals.map(String) : [];
   return ENDS[last.termination] ?? (refusals.some((r) => r.includes("UPSTREAM")) || last.termination === "error_result" ? "upstream" : "infra");
 }
