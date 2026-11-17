@@ -1,0 +1,16 @@
+claude-opus-5-5 C n=30 same=30 0to1=0 1to0=0 gapchg=0 first_catch=18 re_catch=18 ex127_first=80 ex127_re=0
+claude-opus-5-5 N n=30 same=30 0to1=0 1to0=0 gapchg=0 first_catch=21 re_catch=21 ex127_first=0 ex127_re=0
+claude-opus-5-5 P n=30 same=29 0to1=1 1to0=0 gapchg=0 first_catch=9 re_catch=10 ex127_first=476 ex127_re=0
+claude-opus-5-5 blind n=8 same=8 0to1=0 1to0=0 gapchg=0 first_catch=0 re_catch=0 ex127_first=288 ex127_re=0
+openai/gpt-6.1-sol C n=30 same=30 0to1=0 1to0=0 gapchg=0 first_catch=5 re_catch=5 ex127_first=84 ex127_re=0
+openai/gpt-6.1-sol N n=30 same=30 0to1=0 1to0=0 gapchg=0 first_catch=20 re_catch=20 ex127_first=0 ex127_re=0
+openai/gpt-6.1-sol P n=30 same=27 0to1=3 1to0=0 gapchg=0 first_catch=6 re_catch=9 ex127_first=220 ex127_re=4
+particle-ai/particle-1 C n=30 same=30 0to1=0 1to0=0 gapchg=0 first_catch=19 re_catch=19 ex127_first=36 ex127_re=0
+particle-ai/particle-1 N n=30 same=30 0to1=0 1to0=0 gapchg=0 first_catch=20 re_catch=20 ex127_first=0 ex127_re=0
+particle-ai/particle-1 P n=30 same=29 0to1=1 1to0=0 gapchg=0 first_catch=8 re_catch=9 ex127_first=120 ex127_re=0
+CHANGED
+p2 s48 openai/gpt-6.1-sol P score 0 -> 1 gap None -> None
+p2 s7 particle-ai/particle-1 P score 0 -> 1 gap None -> None
+p3 s69 claude-opus-5-5 P score 0 -> 1 gap None -> None
+p4 s68 openai/gpt-6.1-sol P score 0 -> 1 gap None -> None
+p4 s85 openai/gpt-6.1-sol P score 0 -> 1 gap None -> None

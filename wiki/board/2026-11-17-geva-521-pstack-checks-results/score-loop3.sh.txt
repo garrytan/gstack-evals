@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# score-loop3.sh <list> <out root>: score-loop2.sh with the section 6.5 environment it left out. Every scoring run gets the
+# tools volume read-only at /opt/pf-tools and the tools env (TLA2TOOLS, JAVA, bun ahead of the image's PATH), and P and
+# blind runs also get the pstack volume at /opt/pf-pstack, as kit/pf-mounts.ts prints them from the pinned lane code.
+# Otherwise unchanged: one session at a time in list order, --breaks, <out root>/score-<part>/<sN>.json and .log, skips a
+# session whose record exists, stops before the next session when <list>.stop exists.
+set -uo pipefail
+list=$1 root=$2
+export PATH=$HOME/.bun/bin:$PATH
+cd "$HOME/work/gstack-evals"
+while IFS= read -r f; do
+  [ -e "$list.stop" ] && { echo "SCORE_STOPPED $(date -u +%FT%TZ)"; exit 3; }
+  s=$(basename $(dirname $f)); part=$(basename $(dirname $(dirname $f))); u=$(jq -r .unit $f); arm=$(jq -r .arm $f); out=$root/score-$part
+  mkdir -p "$out"
+  [ -f "$out/$s.json" ] && { echo "SKIP $part/$s"; continue; }
+  img=$(jq -r '.image.runtime_id // .image.image_id' $HOME/pf/units/$u/unit.json)
+  mapfile -t extra < <(sg docker -c "bun $HOME/pf/kit/pf-mounts.ts $img $arm")
+  [ "${#extra[@]}" -ge 6 ] || { echo "SCORE $part/$s $u MOUNTS_FAILED"; continue; }
+  q=$(printf "%q " "${extra[@]}")
+  t0=$(date +%s)
+  sg docker -c "bin/gstack-evals outcome pf score --s $(jq -r .s.repo $f) --ref $(jq -r '.s.ref // "HEAD"' $f) --unit $HOME/pf/units/$u --neutral $HOME/pf/neutral/$u.json --checks $(jq -r .checks $f) --session $f --out $out/$s.json --breaks $q" </dev/null > "$out/$s.log" 2>&1
+  rc=$?
+  echo "SCORE $part/$s $u $(jq -r '.model + " " + .arm' $f) rc=$rc s=$(( $(date +%s) - t0 )) at=$(date -u +%FT%TZ) mounts=${#extra[@]} $(tail -1 $out/$s.log | cut -c1-200)"
+done < "$list"
+echo "SCORE_DONE $(date -u +%FT%TZ)"

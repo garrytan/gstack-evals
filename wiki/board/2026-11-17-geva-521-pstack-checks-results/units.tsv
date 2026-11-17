@@ -1,0 +1,42 @@
+# test units: rescore records, score 1 = a listed check caught the bug (section 6.6), gap = harness gap (section 6.8)
+unit	month	stratum	opus_P	opus_C	opus_N	sol_P	sol_C	sol_N	p1_P	p1_C	p1_N
+openai__openai-agents-js-156	2025-06	pre-2026	0	0	0	1	0	0	0	1	0
+Automattic__mongoose-15534	2025-07	pre-2026	0	1	1	0	0	1	0	1	1
+Azure__azure-mcp-604	2025-07	pre-2026	0	1	1	0	0	1	0	0	1
+TecharoHQ__anubis-881	2025-07	pre-2026	1	0	1	0	0	1	0	0	1
+google__starlark-go-599	2025-07	pre-2026	1	1	1	0	1	0	1	1	1
+jhlywa__chess.js-546	2025-07	pre-2026	0	1	1	1	0	1	1	1	1
+jtroo__kanata-1681	2025-07	pre-2026	1	0	1	0	0	1	0	1	1
+linebender__vello-1132	2025-07	pre-2026	0	0	0	0	0	0	0	0	0
+notify-rs__notify-701	2025-07	pre-2026	1	gap	1	0	0	1	0	1	0
+openai__openai-agents-js-205	2025-07	pre-2026	0	1	1	0	1	1	1	1	1
+react-hook-form__react-hook-form-12990	2025-07	pre-2026	0	1	1	1	0	1	1	1	1
+siimon__prom-client-679	2025-07	pre-2026	0	0	1	0	0	1	1	0	1
+bpg__terraform-provider-proxmox-2122	2025-08	pre-2026	1	1	1	1	0	1	0	1	1
+monkeytypegame__monkeytype-6830	2025-08	pre-2026	0	1	1	1	0	1	0	1	1
+mui__base-ui-2591	2025-08	pre-2026	0	1	1	1	0	1	1	1	1
+openai__openai-agents-js-318	2025-08	pre-2026	0	1	1	1	1	1	1	1	1
+sveltejs__svelte-16570	2025-08	pre-2026	1	1	0	0	0	1	0	1	1
+sveltejs__svelte-16619	2025-08	pre-2026	0	1	1	1	0	0	0	0	1
+getgauge__gauge-2836	2026-03	jan-jun-2026	1	1	1	0	0	1	0	1	1
+go-task__task-2716	2026-03	jan-jun-2026	1	1	1	0	0	1	0	0	1
+ninja-build__ninja-2749	2026-03	jan-jun-2026	0	1	1	0	0	1	0	1	1
+MudBlazor__MudBlazor-13109	2026-04	jan-jun-2026	0	gap	gap	0	0	gap	0	gap	gap
+chenhg5__cc-connect-567	2026-04	jan-jun-2026	0	0	0	0	0	0	0	0	0
+gastownhall__beads-2992	2026-04	jan-jun-2026	0	1	0	0	0	0	0	0	0
+go-vikunja__vikunja-2574	2026-04	jan-jun-2026	0	1	1	0	0	1	0	1	1
+gui-cs__Terminal.Gui-4982	2026-04	jan-jun-2026	0	0	0	0	0	0	0	0	0
+openai__codex-plugin-cc-83	2026-04	jan-jun-2026	1	1	1	0	1	1	1	1	1
+c-ares__c-ares-1197	2026-07	july-2026	0	0	1	0	0	1	1	1	0
+gitbutlerapp__gitbutler-14920	2026-07	july-2026	0	0	0	0	0	0	0	0	0
+h4ckf0r0day__obscura-413	2026-07	july-2026	1	0	0	1	1	0	0	1	0
+# blind probe: Opus P blind on the 8 admission units, rescore records
+unit	month	blind_P
+sveltejs__svelte-18039	2026-03	0
+quartznet__quartznet-2955	2026-03	0
+actor-framework__actor-framework-2300	2026-03	0
+gui-cs__Terminal.Gui-4860	2026-03	0
+MudBlazor__MudBlazor-12915	2026-03	0
+MudBlazor__MudBlazor-12775	2026-03	0
+gui-cs__Terminal.Gui-4841	2026-03	0
+quartznet__quartznet-2934	2026-03	0
