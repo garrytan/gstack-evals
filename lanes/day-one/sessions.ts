@@ -8,6 +8,9 @@
 //   /work/app; the checker's is empty.
 // - Planning sessions take the owner loop (owner.ts) as nextUser. Builds and checks take a loop that ends the session
 //   at its first reply.
+// - Planning sessions of every arm hold (pin change 2, item B): when a turn ends with background work the session started
+//   still running, the driver keeps the session open for it, in all at most the session's minutes. A session that
+//   reaches that limit while held is a gap row, E_DAYONE_BACKGROUND, with no retry. Builds and checks do not hold.
 // - gstack arms: the arm's gstack at its pin, a fresh state root copied out to host/gstack-state, GSTACK_SESSION_KIND
 //   unattended, and GPT-6 Astra as the Codex voice on its own slot (C2): its own meter and allowance, OPENAI_API_KEY in the
 //   container set to that slot's bearer and never the provider key, and GSTACK_CODEX_NO_SANDBOX=1. Every other arm has
@@ -80,6 +83,8 @@ export interface LaunchInput {
   nodeVolume?: string;
   /** Checks: the browser container's MCP URL. */
   mcpUrl?: string;
+  /** Planning sessions: held open while background work the session started still runs, up to the session's minutes. */
+  hold?: true;
 }
 
 export interface AttemptRead {
@@ -154,6 +159,7 @@ export async function launchSession(o: LaunchInput, deps: { driver?: typeof clau
     disable1mContext: true,
     denyAsk: true,
     nextUser: o.nextUser,
+    ...(o.hold ? { backgroundWaitMs: o.minutes * 60_000 } : {}),
     ...(o.gstack && voice ? { sessionKind: "unattended" as const, codex: { provider: "openai" as const, model: o.gstack.voiceModel, proxy: { slot: voice.slot, token: voice.token } }, codexNoSandbox: true } : {}),
     ...(o.mcpUrl ? { mcpServers: { [BROWSER_SERVER]: { type: "http" as const, url: o.mcpUrl } }, onlyTools: BROWSER_TOOLS } : {}),
   });
@@ -242,6 +248,7 @@ export function attemptOutcome(a: AttemptRead, owner: OwnerFailure): Outcome {
   if (a.gstack_reads.length) return { state: "contaminated", code: "E_DAYONE_CONTAMINATED", why: "read " + a.gstack_reads.slice(0, 3).join(", ") };
   if (a.contained === null) return { state: "retry", why: "the containment probe could not run" + (t.kind === "infra" && t.incident ? ": " + t.incident : "") };
   if (owner?.reason === "provider") return { state: "retry", why: "a responder provider failure: " + owner.detail };
+  if (t.kind === "missing" && t.code === "E_BACKGROUND_DEADLINE") return { state: "missing", code: "E_DAYONE_BACKGROUND", why: "background work the session started still ran at its time limit" };
   if (t.kind === "completed" || t.kind === "turn_cap" || t.kind === "timeout" || t.kind === "allowance_stop") return { state: "ended", how: t.kind };
   return { state: "retry", why: "an upstream or infrastructure failure: " + t.kind + ("code" in t ? " " + t.code : "incident" in t ? " " + t.incident : "") };
 }

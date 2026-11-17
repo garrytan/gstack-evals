@@ -459,7 +459,7 @@ export async function runStage(o: StageInput, deps: StageDeps): Promise<StageRes
           if (outcome0.state !== "retry") end = outcome0;
           continue;
         }
-        read = await launch({ rig, policy: o.policy, docker: o.docker, runId: o.runId, arm: c.stage === "build" ? "build" : c.arm, cell: c.unit + "-r" + c.rep + "-" + c.stage + "-" + c.arm, rep: c.rep, attempt, model: lim.model, dir: sdir, seed, prompt, minutes: lim.minutes, turns: lim.turns, allowanceMicros: micros(lim.usd), nextUser, ...(c.stage === "build" && o.nodeVolume ? { nodeVolume: o.nodeVolume } : {}), ...(planning && isGstack(c.arm) ? { gstack: { skill: "autoplan", voiceModel: MODELS.voice, voiceMicros: micros(lim.voice_usd) } } : {}) });
+        read = await launch({ rig, policy: o.policy, docker: o.docker, runId: o.runId, arm: c.stage === "build" ? "build" : c.arm, cell: c.unit + "-r" + c.rep + "-" + c.stage + "-" + c.arm, rep: c.rep, attempt, model: lim.model, dir: sdir, seed, prompt, minutes: lim.minutes, turns: lim.turns, allowanceMicros: micros(lim.usd), nextUser, ...(planning ? { hold: true as const } : {}), ...(c.stage === "build" && o.nodeVolume ? { nodeVolume: o.nodeVolume } : {}), ...(planning && isGstack(c.arm) ? { gstack: { skill: "autoplan", voiceModel: MODELS.voice, voiceMicros: micros(lim.voice_usd) } } : {}) });
         if (ownerState) {
           loopFailed = ownerState.failed;
           owner = { turns: ownerState.turns, counts: sourceCounts(ownerState.turns) };
