@@ -16,7 +16,7 @@ import { B1_PROFILE, itemPlan } from "./plans.ts";
 import { main as sessionsMain } from "./sessions.ts";
 import { buildB1Table, type B1Row } from "./table.ts";
 
-const USAGE = "E_USAGE usage: b1 arms sources|build|check ... | sessions run --out <dir> | plan | approve --ledger <jsonl> --item <item> --usd <cap> --approved-by <who> | done --ledger <jsonl> --item <item> | guard <work> | prepare <work> --item <item> | host-up|attach|recover|host-down <work> | launch|relaunch|rerun <work> --part <part> | table <config.json> <out.jsonl> | report <table.jsonl> [--out <dir>] | detect <trial dir>";
+const USAGE = "E_USAGE usage: b1 arms sources|build|check ... | sessions run --out <dir> [--gstack <checkout>] [--cut <dir>] | plan | approve --ledger <jsonl> --item <item> --usd <cap> --approved-by <who> | done --ledger <jsonl> --item <item> | guard <work> | prepare <work> --item <item> | host-up|attach|recover|host-down <work> | launch|relaunch|rerun <work> --part <part> | table <config.json> <out.jsonl> | report <table.jsonl> [--out <dir>] | detect <trial dir>";
 const LAUNCHER = ["prepare", "host-up", "launch", "attach", "relaunch", "rerun", "recover", "host-down"];
 const GUARDED = ["host-up", "launch", "relaunch"];
 

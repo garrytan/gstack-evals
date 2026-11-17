@@ -8,14 +8,20 @@
 // session's final patch modifies, so a scratch script is never the fix. And the steps end with the test passing: a passing
 // run that names the test, seen after the first source edit. Every source edit made only through Bash is counted, and the
 // head-to-head's Write-and-Edit-only reading is kept beside the primary as a sensitivity line.
+// B1 also reads four Bash write forms the vendored parser leaves out (cp, mv, install or rsync onto a file, dd of=, a
+// patch file git apply or patch reads when the session wrote that file, and a shell script the session wrote), and counts
+// every Bash call that writes somewhere no parser can name (unresolved_writes), so the report can score those sessions
+// both ways.
 import { posix } from "node:path";
 import { showsFailure, showsOutcome, toTranscript } from "../harness-mechanics/score.ts";
 import type { TranscriptEvent } from "../harness-mechanics/vendor/gstack/lib/skill-contract.ts";
-import { shellCommands, writeTargets } from "../harness-mechanics/vendor/gstack/lib/shell-writes.ts";
+import { shellCommands, writeTargets, type ShellCommand } from "../harness-mechanics/vendor/gstack/lib/shell-writes.ts";
 import type { Rec } from "../../quick/laneb/l1/probes.ts";
 
-/** A test file by its path: the head-to-head's frozen rule (lanes/outcome-skills/h2h/sessions/exposure.ts TEST_PATH). */
-export const TEST_PATH = /(^|\/)(tests?|__tests__|specs?|testing|e2e)\/|[._-](test|spec|tests)\.[A-Za-z0-9]+$|_test\.go$|(^|\/)test_[^/]*\.[A-Za-z0-9]+$|Tests?\.(java|kt|cs|scala)$|(^|\/)src\/test\//;
+/** A test file by its path: the head-to-head's frozen rule (lanes/outcome-skills/h2h/sessions/exposure.ts TEST_PATH) less its
+ *  spec and specs folders. Every task here is a Python repository, where a spec folder is a source package (hdmf's
+ *  src/hdmf/spec/, met in the hand-check); a spec file by name (x_spec.rb, x.spec.ts) is still a test. */
+export const TEST_PATH = /(^|\/)(tests?|__tests__|testing|e2e)\/|[._-](test|spec|tests)\.[A-Za-z0-9]+$|_test\.go$|(^|\/)test_[^/]*\.[A-Za-z0-9]+$|Tests?\.(java|kt|cs|scala)$|(^|\/)src\/test\//;
 /** A Bash result that shows a failing test run, or a compiler's error count: the head-to-head's repaired rule. */
 export const FAILING = /\b(FAIL|FAILED|failing|failures?|AssertionError|panicked|assertion failed)\b|Exit code [1-9]|\b[1-9]\d* errors? (and \d+ warnings? )?generated\b/;
 /** Files that are never the fix: docs, data and config by extension. */
@@ -28,6 +34,110 @@ const WRITE_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
 const EDITS = /\b(?:sed|perl)\s+(?:-\S+\s+)*-[a-zA-Z]*i|\bopen\([^)]*,\s*['"][wa+]|\.write_text\(|\bwriteFileSync\(/;
 /** A path-like word: a name with an extension. */
 const PATHLIKE = /[^\s'"`=(),;&|<>{}[\]]+\.[A-Za-z0-9]+(?![\w.])/g;
+/** A word no parser can name a file from: a variable, a command substitution, a glob, or find's {}. */
+const OPEN_WORD = /[$`*?]|^\{\}$/;
+const WRITE_REDIRECT = /^(?:\d*>>?|\d*>\||&>>?)$/;
+const IN_PLACE = /\b(?:g?sed|perl)\s+(?:-\S+\s+)*-[a-zA-Z]*i|--in-place/;
+const WRITER = /\b(?:g?sed|perl)\s+(?:-\S+\s+)*-[a-zA-Z]*i|--in-place|(?:^|\s)(?:tee|cp|mv|install|dd|truncate)\s/;
+const INTERPRETER = /^(?:python[\d.]*|node|nodejs|ruby|bun|deno)$/;
+/** An inline script's write calls, each with the path expression it names first. */
+const WRITE_CALLS = [
+  /\bopen\(\s*([^,()]+(?:\([^()]*\))?)\s*,\s*(?:mode\s*=\s*)?[rbuRBU]{0,2}(['"])[^'"]*[wax+][^'"]*\2/g,
+  /([\w.]+(?:\(\s*[^()]*\))?)\s*\.\s*(?:write_text|write_bytes)\s*\(/g,
+  /([\w.]+(?:\(\s*[^()]*\))?)\s*\.\s*open\(\s*(?:mode\s*=\s*)?['"][^'"]*[wax+]/g,
+  /\b(?:writeFileSync|writeFile|appendFileSync|appendFile|Bun\.write|Deno\.writeTextFile(?:Sync)?|Deno\.writeFile(?:Sync)?|File\.write|File\.binwrite)\s*\(\s*([^,]+?)\s*,/g,
+];
+const LITERAL = /^(?:(?:pathlib\.)?Path\(\s*)?[rbuRBU]{0,2}(['"])[^'"{]*\1\s*\)?$/;
+/** Whether a write call's path expression names a file: a string literal, Path(literal), or a name assigned one of those in
+ *  the same script (the vendored parser's rule). */
+function namesFile(expr: string, code: string): boolean {
+  const e = expr.trim();
+  if (LITERAL.test(e)) return true;
+  if (!/^[A-Za-z_$][\w$]*$/.test(e)) return false;
+  return new RegExp("(?:^|[\\s;(])(?:const\\s+|let\\s+|var\\s+)?" + e.replace(/\$/g, "\\$") + "\\s*=\\s*(?:(?:pathlib\\.)?Path\\(\\s*)?[rbuRBU]{0,2}(['\"])[^'\"{]*\\1", "m").test(code);
+}
+/** The code an interpreter command runs, when the session shows it: an inline -c or -e script, its stdin, or a file the
+ *  session wrote (the vendored parser's rule, with the session's own files). */
+function codeOf(c: ShellCommand, scripts: Map<string, string>): string[] {
+  const args = c.words.slice(1), file = (f: string) => scripts.get(posix.resolve(c.cwd ?? "/", f)) ?? "";
+  for (let k = 0; k < args.length; k++) {
+    const a = args[k]!;
+    if (/^(?:-c|-e|--eval|eval)$/.test(a)) return [args[k + 1] ?? ""];
+    if (/^(?:-m|-W|-X|-r|--require|-I)$/.test(a)) { if (a === "-m") return []; k++; continue; }
+    if (!a.startsWith("-")) return [file(a)];
+    if (a === "-") break;
+  }
+  return [...c.heredocs, ...c.redirects.filter((r) => r.op === "<<<").map((r) => r.target), ...c.redirects.filter((r) => r.op === "<").map((r) => file(r.target))];
+}
+/** Whether a word no parser can name still can't be a file in the session's tree: its fixed part ends in a folder outside
+ *  the tree (a scratch folder such as /tmp), so it is no repository write. */
+function outsideTree(word: string, cwd: string, root: string): boolean {
+  const fixed = word.split(/[$`*?]/)[0]!, slash = fixed.lastIndexOf("/");
+  const dir = slash < 0 ? cwd : posix.resolve(cwd, fixed.slice(0, slash + 1));
+  return !(dir === root || dir.startsWith(root + "/") || root.startsWith(dir.replace(/\/$/, "") + "/"));
+}
+const diffTargets = (diff: string) => [...diff.matchAll(/^\+\+\+ (\S+)/gm)].map((m) => m[1]!.replace(/^[ab]\//, "")).filter((f) => f !== "/dev/null");
+
+/** The files one simple command writes, absolute, and whether it also writes somewhere in the session's tree (root) that no
+ *  parser can name (open). Reads, output to stdout, /dev paths and fd duplications are never writes. */
+function commandWrites(c: ShellCommand, scripts: Map<string, string>, root: string, depth = 0): { files: string[]; open: boolean } {
+  const cwd = c.cwd ?? "/", files: string[] = [];
+  let open = false;
+  const unnamed = (w: string) => OPEN_WORD.test(w) && !outsideTree(w, cwd, root);
+  const name = posix.basename(c.words[0] ?? ""), args = c.words.slice(1);
+  let dir = cwd;
+  if (name === "git") { const at = args.indexOf("-C"); if (at >= 0 && args[at + 1]) dir = posix.resolve(cwd, args[at + 1]!); }
+  if (name === "patch") { const at = args.findIndex((a) => a === "-d" || a === "--directory"); if (at >= 0 && args[at + 1]) dir = posix.resolve(cwd, args[at + 1]!); }
+  for (const f of writeTargets(c, "/", scripts)?.files ?? []) {
+    const p = posix.resolve("/", f);
+    if (p === dir || p === cwd) {
+      const sub = args.indexOf("apply"), patches = name === "git" && sub >= 0 ? args.slice(sub + 1).filter((a) => !a.startsWith("-")) : [];
+      if (name === "patch") { const at = args.findIndex((a) => a === "-i" || a === "--input"); if (at >= 0 && args[at + 1]) patches.push(args[at + 1]!); patches.push(...c.redirects.filter((r) => r.op === "<").map((r) => r.target)); }
+      const known = patches.map((x) => scripts.get(posix.resolve(cwd, x))).filter((x): x is string => x !== undefined).flatMap(diffTargets);
+      if (known.length) files.push(...known.map((x) => posix.resolve(dir, x)));
+      else if (!outsideTree(dir + "/", "/", root)) open = true;
+    } else if (/[*?]/.test(p)) open ||= !outsideTree(p, "/", root);
+    else files.push(p);
+  }
+  for (const r of c.redirects) if (WRITE_REDIRECT.test(r.op) && unnamed(r.target)) open = true;
+  if (name === "tee" && args.some((a) => !a.startsWith("-") && unnamed(a))) open = true;
+  if ((name === "sed" || name === "gsed" || name === "perl") && IN_PLACE.test(c.text)) {
+    const targets: string[] = [];
+    let script = false;
+    for (let k = 0; k < args.length; k++) {
+      const a = args[k]!;
+      if (/^(?:-e|--expression|-f|--file)$/.test(a) || (name === "perl" && /^-[a-zA-Z]*e$/.test(a))) { script = true; k++; }
+      else if (a !== "" && !a.startsWith("-")) targets.push(a);
+    }
+    if (!script) targets.shift();
+    if (!targets.length || targets.some(unnamed)) open = true;
+  }
+  if (name === "find" && args.some((a) => a === "-exec" || a === "-execdir") && WRITER.test(" " + args.join(" ") + " ") && !outsideTree((args.find((a) => !a.startsWith("-")) ?? ".") + "/", cwd, root)) open = true;
+  if (name === "xargs" && WRITER.test(" " + args.join(" ") + " ") && !outsideTree("./", cwd, root)) open = true;
+  if (INTERPRETER.test(name)) for (const code of codeOf(c, scripts)) for (const re of WRITE_CALLS) for (const m of code.matchAll(re)) if (!namesFile(m[1]!, code)) open = true;
+  if (/^(?:cp|mv|install|rsync)$/.test(name)) {
+    const pos: string[] = [];
+    let target: string | null = null;
+    for (let k = 0; k < args.length; k++) {
+      const a = args[k]!;
+      if (a === "-t" || a === "--target-directory") target = args[++k] ?? null;
+      else if (a.startsWith("--target-directory=")) target = a.slice(19);
+      else if (/^(?:-S|--suffix|-m|--mode|-o|--owner|-g|--group)$/.test(a)) k++;
+      else if (!a.startsWith("-")) pos.push(a);
+    }
+    const dest = target ?? (pos.length > 1 ? pos.pop()! : null);
+    if (dest !== null) {
+      if (OPEN_WORD.test(dest)) open ||= unnamed(dest);
+      else { files.push(posix.resolve(cwd, dest)); for (const src of pos) if (!OPEN_WORD.test(src)) files.push(posix.resolve(cwd, dest, posix.basename(src))); }
+    }
+  }
+  if (name === "dd") for (const a of args) if (a.startsWith("of=")) { if (OPEN_WORD.test(a.slice(3))) open ||= unnamed(a.slice(3)); else files.push(posix.resolve(cwd, a.slice(3))); }
+  if (/^(?:ba|da|z)?sh$/.test(name) && args[0] && !args[0].startsWith("-") && depth < 3) {
+    const body = scripts.get(posix.resolve(cwd, args[0]));
+    if (body !== undefined) for (const inner of shellCommands(body, cwd)) { const w = commandWrites(inner, scripts, root, depth + 1); files.push(...w.files); open ||= w.open; }
+  }
+  return { files, open };
+}
 
 type Use = Extract<TranscriptEvent, { kind: "tool_use" }> & { at: number; ok: boolean; result: string };
 export type Write = { at: number; path: string; via: "tool" | "bash" };
@@ -48,6 +158,10 @@ export interface Detection {
   source_write_unseen: boolean;
   /** Bash runs sent to the background and never read. */
   unread_background: number;
+  /** Bash calls that write somewhere no parser can name: a target held in a variable, a command substitution or a glob, an
+   *  in-place edit or a patch with no visible target, find or xargs running a writer, or an inline script's write call whose
+   *  path is not a literal. Such a write counts as no write; the report scores these sessions both ways. */
+  unresolved_writes: number;
   test_file: string | null;
   fix_files: string[];
 }
@@ -77,24 +191,32 @@ function uses(ev: TranscriptEvent[]): Use[] {
   });
 }
 
-/** Every file each tool call writes, absolute: Write and Edit by their path, Bash by gstack's shell-write parser and, for an
- *  in-place edit or inline write, every file the command names. */
-function writesOf(us: Use[], root: string): Write[] {
-  const out: Write[] = [];
+/** Every file each tool call writes, absolute: Write and Edit by their path, Bash by gstack's shell-write parser with B1's
+ *  additions (commandWrites) and, for an in-place edit or inline write, every file the command names. The session's own
+ *  files (a Write's content, a heredoc sent to a file) are kept so a script or patch it runs later can be read. unresolved
+ *  counts the Bash calls with a write no parser can name. */
+function writesOf(us: Use[], root: string): { writes: Write[]; unresolved: number } {
+  const out: Write[] = [], scripts = new Map<string, string>();
+  let unresolved = 0;
   const named = (u: Use, cmd: string) => { if (EDITS.test(cmd)) for (const m of cmd.matchAll(PATHLIKE)) out.push({ at: u.at, path: posix.resolve(u.cwd ?? root, m[0]), via: "bash" }); };
   for (const u of us) {
     if (WRITE_TOOLS.has(u.name)) {
       const p = u.input.file_path ?? u.input.notebook_path;
       if (typeof p === "string") out.push({ at: u.at, path: posix.resolve(root, p), via: "tool" });
+      if (u.name === "Write" && typeof p === "string" && typeof u.input.content === "string") scripts.set(posix.resolve(root, p), u.input.content);
     } else if (u.name === "Bash" && typeof u.input.command === "string") {
+      let open = false;
       for (const c of shellCommands(u.input.command, u.cwd ?? root)) {
-        const w = writeTargets(c, "/");
-        if (w) for (const f of w.files) out.push({ at: u.at, path: posix.resolve("/", f), via: "bash" });
+        const w = commandWrites(c, scripts, root);
+        for (const f of new Set(w.files)) out.push({ at: u.at, path: f, via: "bash" });
+        open ||= w.open;
+        for (const r of c.redirects) if (WRITE_REDIRECT.test(r.op) && c.cwd !== null && !OPEN_WORD.test(r.target)) scripts.set(posix.resolve(c.cwd, r.target), c.heredocs.join("\n"));
       }
+      if (open) unresolved++;
       named(u, u.input.command);
     }
   }
-  return out;
+  return { writes: out, unresolved };
 }
 
 /** Each Bash run's result where the session saw it: a background run is seen where its output is read (a Read of its
@@ -158,7 +280,7 @@ export function detect(recs: Rec[], patch: string, rootIn?: string): Detection {
   const us = uses(t.events);
   const fixList = modifiedFiles(patch).filter((f) => !TEST_PATH.test(f) && !NOT_SOURCE.test(f)).map((f) => posix.resolve(root, f));
   const fix = new Set(fixList);
-  const ws = writesOf(us, root);
+  const { writes: ws, unresolved } = writesOf(us, root);
   const { runs, unread } = runsOf(us, root);
   const all = read(ws, runs, fix);
   const tool = read(ws.filter((w) => w.via === "tool"), runs, fix);
@@ -173,6 +295,7 @@ export function detect(recs: Rec[], patch: string, rootIn?: string): Detection {
     bash_only_source: fixWrites.length > 0 && fixWrites.every((w) => w.via === "bash"),
     source_write_unseen: fix.size > 0 && fixWrites.length === 0,
     unread_background: unread,
+    unresolved_writes: unresolved,
     test_file: all.test?.path ?? null,
     fix_files: fixList,
   };

@@ -28,7 +28,8 @@ export function newcombe(a: number, b: number, c: number, d: number): { diff: nu
 }
 
 export type ArmStat = { arm: B1Arm; planned: number; graded: number; gaps: number; cap_stops: number; followed: number; rate: number | null; ci: [number, number] | null; incomplete: boolean; reaches: boolean;
-  followed_tool_only: number; source_changed: number; bash_only_source: number; source_write_unseen: number; unread_background: number; steps_seen: number; loaded: number; passes: number; safety_stops: number; audit_sessions: number; mean_cost_usd: number | null };
+  followed_tool_only: number; unresolved_sessions: number; unresolved_writes: number; followed_low: number; followed_high: number;
+  source_changed: number; bash_only_source: number; source_write_unseen: number; unread_background: number; steps_seen: number; loaded: number; passes: number; safety_stops: number; audit_sessions: number; mean_cost_usd: number | null };
 export type Contrast = { a: B1Arm; b: B1Arm; pairs: number; both: number; a_only: number; b_only: number; neither: number; diff: number; lo: number; hi: number };
 // The contrasts the report prints, each as first minus second: every route against none, and the routes against each other.
 export const CONTRASTS: [B1Arm, B1Arm][] = [["described", "none"], ["gstack-shaped", "none"], ["command", "none"], ["command", "gstack-shaped"], ["described", "gstack-shaped"], ["command", "described"]];
@@ -45,7 +46,10 @@ export function armStats(rows: B1Row[], planned: number): ArmStat[] {
     return {
       arm, planned, graded: g.length, gaps, cap_stops: all.filter((r) => r.outcome === "cap_stop").length, followed: k, rate: g.length ? k / g.length : null, ci: g.length ? wilson(k, g.length) : null,
       incomplete, reaches: !incomplete && g.length > 0 && k >= barCount(g.length),
-      followed_tool_only: count((r) => r.detect.followed_tool_only), source_changed: count((r) => r.detect.source_changed), bash_only_source: count((r) => r.detect.bash_only_source),
+      followed_tool_only: count((r) => r.detect.followed_tool_only),
+      unresolved_sessions: count((r) => r.detect.unresolved_writes > 0), unresolved_writes: g.reduce((x, r) => x + r.detect.unresolved_writes, 0),
+      followed_low: count((r) => r.detect.followed && r.detect.unresolved_writes === 0), followed_high: count((r) => r.detect.followed || r.detect.unresolved_writes > 0),
+      source_changed: count((r) => r.detect.source_changed), bash_only_source: count((r) => r.detect.bash_only_source),
       source_write_unseen: count((r) => r.detect.source_write_unseen), unread_background: count((r) => r.detect.unread_background > 0), steps_seen: count((r) => r.steps_seen === true),
       loaded: count((r) => r.skill_loads > 0), passes: count((r) => r.pass), safety_stops: all.filter((r) => r.safety_stop).length, audit_sessions: all.filter((r) => r.audit_hits.length > 0).length,
       mean_cost_usd: costs.length ? costs.reduce((x, y) => x + y, 0) / costs.length : null,
@@ -87,6 +91,7 @@ export function report(rows: B1Row[], planned = B1.tasks) {
     out[m] = { stats, contrasts, reading: r };
     lines.push("== " + MODELS[m].id + (m === "opus" ? " (decision model)" : " (descriptive)"));
     for (const s of stats) lines.push("  " + s.arm + ": followed " + s.followed + "/" + s.graded + " " + pct(s.rate) + (s.ci ? " [" + pct(s.ci[0]) + ", " + pct(s.ci[1]) + "]" : "") + (s.reaches ? " REACHES" : "") + (s.incomplete ? " INCOMPLETE" : "") + "; gaps " + s.gaps + ", tool-only " + s.followed_tool_only + ", bash-only source " + s.bash_only_source + ", unseen source " + s.source_write_unseen + ", steps seen " + s.steps_seen + ", loaded " + s.loaded + ", safety stops " + s.safety_stops + ", audit " + s.audit_sessions + ", passes " + s.passes + " (descriptive)");
+    for (const s of stats) lines.push("  " + s.arm + " sensitivity: " + s.unresolved_writes + " Bash writes no parser can name, in " + s.unresolved_sessions + " sessions; followed " + s.followed_low + "/" + s.graded + " with those sessions scored not followed, " + s.followed_high + "/" + s.graded + " scored followed" + (s.graded && !s.incomplete && (s.followed_low >= barCount(s.graded)) !== (s.followed_high >= barCount(s.graded)) ? "; the bar reading rests on them" : ""));
     for (const c of contrasts) lines.push("  " + c.a + " - " + c.b + ": " + pts(c.diff) + " points [" + pts(c.lo) + ", " + pts(c.hi) + "] on " + c.pairs + " paired tasks (" + c.a_only + " vs " + c.b_only + " discordant)");
     lines.push("  reading: " + r.text);
   }

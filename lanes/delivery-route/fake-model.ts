@@ -3,7 +3,7 @@
 // [b1-script <mode>] marker in the task text. The task is calc.py's add(), which returns a - b. Each script is a fixed list
 // of tool calls, sent one per turn until each has a result, then a closing STATUS line. The scripts drive the detector both
 // ways on real Claude Code output (prove, bash, background: followed; stop, late, nofail: not), run the gstack-shaped
-// preamble (setup), and open the described skill through the Skill tool (skill). It logs every request body it answers,
+// preamble's three gstack commands as the skill writes them (setup), and open the described skill through the Skill tool (skill). It logs every request body it answers,
 // so a session's first request can be checked. It never sees a key.
 //
 //   bun lanes/delivery-route/fake-model.ts <port> <request log> <body log>
@@ -31,7 +31,9 @@ export const SCRIPTS: Record<Mode, Step[]> = {
   nofail: [read, write(0, 0, 0), bash(RUN), edit, bash(RUN)],
   background: [read, write(2, 3, 5), bash(RUN + " > /tmp/b1-run.log 2>&1; cat /tmp/b1-run.log", { run_in_background: true }), bash("sleep 3"),
     (r) => { const f = /Output is being written to: (\S+?)\.?(?:\s|$)/.exec(Object.values(r).join("\n"))?.[1] ?? "/nonexistent"; return { name: "Read", input: { file_path: f } }; }, edit, bash(RUN)],
-  setup: [bash("~/.claude/skills/gstack/bin/gstack-skill-start --skill \"" + SKILL + "\" --model \"claude\"")],
+  setup: [bash("~/.claude/skills/gstack/bin/gstack-skill-start --skill \"" + SKILL + "\" --model \"claude\""),
+    bash("~/.claude/skills/gstack/bin/gstack-learnings-log '{\"skill\":\"" + SKILL + "\",\"type\":\"operational\",\"key\":\"b1-session\",\"insight\":\"The preamble ran.\",\"confidence\":5,\"source\":\"observed\"}'"),
+    bash("~/.claude/skills/gstack/bin/gstack-skill-end --skill \"" + SKILL + "\" --outcome success --session-id \"b1-session\" --tel-start \"$(date +%s)\" --used-browse no --error-message \"\" --failed-step \"\" 2>/dev/null || true")],
   skill: [{ name: "Skill", input: { skill: DESCRIBED_SKILL } }],
 };
 const textOf = (m: any): string => (typeof m?.content === "string" ? m.content : (m?.content ?? []).map((b: any) => b.text ?? "").join("\n"));

@@ -1,12 +1,12 @@
 diff --git a/__pycache__/calc.cpython-312.pyc b/__pycache__/calc.cpython-312.pyc
 new file mode 100644
-index 0000000000000000000000000000000000000000..16c5786ba28a96811519dc88aa70dddbad52a229
+index 0000000000000000000000000000000000000000..df537dfadabf96d4955ed0fa93bf1c85de3e5fa5
 GIT binary patch
 literal 227
-zcmX@j%ge<81iys-WGMjY#~=<2FhUuhK}x1Gq%gEFL@`t{YBD7=!IS`L5Stl@Kl1>I
+zcmX@j%ge<81jnTRWGMjY#~=<2FhUuhK}x1Gq%gEFL@`t{YBD7=!IS`L5Stl@Kl1>I
 z=?patHH=k2RxpDmqu)vfO{QCniMJS&ib2X06n+Wlm!uY#B&DY4Cnx44>lIYqVopp+
 zDPjl8f~+g%1`-VnH@JB^3Oh|3d_DuY41Su7U<E}WYl=8P1RId}#bJ}1pHiBWYFESw
-W<bt(>T>62Tk&*E;6C<M_SS<iThA7Mc
+W<bt(>T>62Tk&*E;6C<M_SS<h@v?!qf
 
 literal 0
 HcmV?d00001
@@ -21,17 +21,17 @@ index 12ee743..4693ad3 100644
 +    return a + b
 diff --git a/tests/__pycache__/test_calc.cpython-312.pyc b/tests/__pycache__/test_calc.cpython-312.pyc
 new file mode 100644
-index 0000000000000000000000000000000000000000..8fa94467747e6a380d9ba84f43cd2ea09e7588ec
+index 0000000000000000000000000000000000000000..35f7b67b0817a4295a506c10459f92bda2c304e6
 GIT binary patch
 literal 604
-zcmYjOJxc>Y5S`t-Gi%f+Y7r69O1UQf0TEQhE+C}3W;wGb8ZLg^UWyY7ixmEY2wJ2S
-ze~MKKQC6(1?1a-MSU7W+7`J%y=5ycdK2A*)0Z)JSr*Vz;ot)uu1|;1^(g6jEh2W9p
-zA!~AvGvKfX%4&nM189s58%OrR%DHDJ%ymA<sk+QqzEbs36#yGJ=`4~C1mH0R9#^al
-zo|SOdGKDRrYJraH!&2&?8|j901EB+#(D<Ll7@c^a0Z_kU4?K^K7=r{{UX3W>ax>v;
-z9Ypc&dCLzYYDK-a4#GoCvse0y>oLkW2vlZuhO+L5^~zad1mz@dcQG^2TNy@3t1cs4
-z!HbxD7UiBO-_70ZciHVick4;4rkKOmv5k=O#BT;tnxd4=Q`HKIPfAIW@=Qd(b`Q}6
-znrNJWJ}Uzvx`5Dzlrv{7uc4^x7|}X8j!BWRNpiNI5j70#__%d8WSS=Z4epDLT*78F
-khY5NEy@c>-F~(kD`VHp4#yDHMK6)-K_e#s(fKJx_3v_jR#{d8T
+zcmYjOJxc>Y5S`t-=$gb2j73BwR?0Q;4~U>5b^*can&rGb(Qt`+dnqCo7AgD(5wx%s
+z|A&p0g(xdlR(8T^BNoow<&0ardGon%cJIf>i-6~D?x%T<_KlqU6b2+&N74rciiO~k
+z<soZvmown71<LAyvIA(2<c&jnYh~QEyUZ!PlhbgRu{@>xVHE%yILS1UJ_O)01uj>t
+z2d>rSj%7yIl-db&?B}J_K{wJ3$qGUrPNDffi!nO!Km(wD#cp{P9Wn-8aCjr4gu_kA
+z(>jRa&Et+2M%0RWZ5@Prnr1J2&n?F&V>eK#)hSBf3;p_0*9gi<-0oy*ptqh!NUN?Q
+zoWZjwKZ)vts9serwy)Xc?Dg8CSWGa7uVWh_W!q~7QktTatwYrbiI=4$Nm(YMU%P>*
+zgeDpzpwCKyh#p1gLBd&KDXXEVQ!t{_K8Q(?u}N~epAkD4*zj=cbjT!4`WyT$Rx$~z
+lQ3Vt926`Uh!(xoRz~n2;e2#FobiV&IQG1xEeE~XY`!5hsdz=6O
 
 literal 0
 HcmV?d00001

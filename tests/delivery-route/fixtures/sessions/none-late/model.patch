@@ -1,12 +1,12 @@
 diff --git a/__pycache__/calc.cpython-312.pyc b/__pycache__/calc.cpython-312.pyc
 new file mode 100644
-index 0000000000000000000000000000000000000000..c32d6df4056de84234ad517dfd1cb627ce7ff8f1
+index 0000000000000000000000000000000000000000..40bb5232194b68d099ed938d6a8e611699f80d54
 GIT binary patch
 literal 227
-zcmX@j%ge<81mA`JWGMjY#~=<2FhUuhK}x1Gq%gEFL@`t{YBD7=!IS`L5Stl@Kl1>I
+zcmX@j%ge<81c#;nWGMjY#~=<2FhUuhK}x1Gq%gEFL@`t{YBD7=!IS`L5Stl@Kl1>I
 z=?patHH=k2RxpDmqu)vfO{QCniMJS&ib2X06n+Wlm!uY#B&DY4Cnx44>lIYqVopp+
 zDPjl8f~+g%1`-VnH@JB^3Oh|3d_DuY41Su7U<E}WYl=8P1RId}#bJ}1pHiBWYFESw
-W<bt(>T>62Tk&*E;6C<M_SS<iQ^(e^z
+W<bt(>T>62Tk&*E;6C<M_SS<h>BPgB#
 
 literal 0
 HcmV?d00001
@@ -21,17 +21,17 @@ index 12ee743..4693ad3 100644
 +    return a + b
 diff --git a/tests/__pycache__/test_calc.cpython-312.pyc b/tests/__pycache__/test_calc.cpython-312.pyc
 new file mode 100644
-index 0000000000000000000000000000000000000000..f187a2bd715b529b4ec452b5c12ab1e934fba785
+index 0000000000000000000000000000000000000000..de6a4b546b0f965cb08cc6957ad418fbe93e0385
 GIT binary patch
 literal 614
-zcmYjOu}T9$5S`t-m_?H)Q6wS~E9DyffgnT?J3+9zW;wGb8ZJ?9FGa+{B1Qfnf)=*o
-zr&w8tvSMYGPB=vn3uo?f#4X;unK!%pX7{03oCI9o<=<u><2xnU%8f|8iDUo@6brzm
-z$OG2mE@!}D2b9$VW&6;a$Tp7Sy_Is;?lLDgq-57&#`2VEjJp8XD2dBR2H=Cs6u4Zm
-z9=KMQJC@1UmD=}p)W}+C2i-_F#5IHgTtM@`iZxo%$OE8%#qW7qRaV9rbiuKAha?QC
-zcSwUf+)Q~|`(d<w*71Un1axj|KRDEM%kt0SdW41!e3e9<plo<SW9_tS1ZfiIJf9gk
-zU&|`wT2~M*;YAdlMdeXcZf39cZrSz1ZT(5C#Hisr*+xj&_FBG_W>U)5iRuKz3sRD$
-zR0)gNdk0|&Ls%dn_X!Zud4wLsoaI*2o@BV35uNsNM2?J2mXrC6*vG<_hf^nq&}WPf
-r{t>m*!bUic0=<D=Lin&4W3Mp%26LYioUQhco=eroQuPZkNw)t1>Ro;{
+zcmYjOJxc>Y5S`t-m_?H)DiRUV%5Y8m13^#`J3+9zW;t(9G+g|+y%Z4(ixmEY2wJ2S
+ze}<)%g(xdlR_TP(Ml77U%MrJD^Jd=c?wj4ma(NtZJuLh-uP}a4lCQ#$BpXP2pg^$@
+zT#7toE$(s#9JWDOT~Kxa&9QvrDBfEcckK>y3Ij@Z9A+#}DSy-jz=laOjid(wxJ-e|
+z73+d)b+}`h;<{3MfsXyWm3GjLbVJfW=)nav|EpM|6%RcC`d9p(XH{k8j6nw+duKqx
+zfO-csxWmnar*#m;TW4)Aj7UJ|whqDrO}8xnEUd<8Xg^SC)G12e3;p_O#|Y9S&UrpH
+zbY9OZ<XTq|F5y*_UPSdtRBvalcl+#SzQ6t~Rua_koopkdJoZ|FlxAGY)`@C|#7k0=
+zrA&#+*n0<21w&LKAonQ{(M5zVB%Bp$Sx-7#!HD+pQB01EO_tO7jM&4%riW9fhtOw?
+s4*n61%)(kUhXTEUUPSn`7-MfR`3|#RW1Q8l4qqxuPnD%_z$D%N2ZV}#3IG5A
 
 literal 0
 HcmV?d00001

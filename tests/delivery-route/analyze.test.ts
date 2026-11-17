@@ -1,15 +1,15 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // The delivery route report (lanes/delivery-route/analyze.ts): the bar and gap rule as integers, the intervals, and every row
-// of the preregistration's decision table, guard included.
+// of the preregistration's decision table, guard included, and the sensitivity line for writes no parser can name.
 import { describe, expect, test } from "bun:test";
 import { armStats, barCount, CONTRASTS, contrast, maxGaps, newcombe, reading, report, wilson } from "../../lanes/delivery-route/analyze.ts";
 import { ARM_NAMES, type B1Arm } from "../../lanes/delivery-route/pins.ts";
 import type { B1Row } from "../../lanes/delivery-route/table.ts";
 
-const row = (arm: B1Arm, task: string, followed: boolean, outcome: B1Row["outcome"] = "graded", model = "claude-opus-5-5"): B1Row => ({
+const row = (arm: B1Arm, task: string, followed: boolean, outcome: B1Row["outcome"] = "graded", model = "claude-opus-5-5", unresolved = 0): B1Row => ({
   schema: "b1-session/1", model, part: "b1-1", arm, task, trial: task + "__" + arm, outcome, reason: outcome, pass: false, reward: outcome === "graded" ? 0 : null,
   allowance_stop: false, turn_cap: false, cost_usd: 0.1, tokens: 1, steps_seen: arm !== "none", skill_loads: 0, safety_stop: false, audit_hits: [],
-  detect: { followed, followed_tool_only: followed, test_before_source: followed, failing_before_source: followed, passing_after_source: followed, source_changed: true, bash_only_source: false, source_write_unseen: false, unread_background: 0, test_file: null, fix_files: [] },
+  detect: { followed, followed_tool_only: followed, test_before_source: followed, failing_before_source: followed, passing_after_source: followed, source_changed: true, bash_only_source: false, source_write_unseen: false, unread_background: 0, unresolved_writes: unresolved, test_file: null, fix_files: [] },
 });
 /** 60 tasks; each arm follows on the first k of them. */
 const rows = (k: Partial<Record<B1Arm, number>>, gaps: Partial<Record<B1Arm, number>> = {}) =>
@@ -67,5 +67,15 @@ describe("the decision table on Opus", () => {
     const r = report([...rows({ command: 50 }), ...rows({ none: 50 }).map((x) => ({ ...x, model: "gpt-6.1-sol" }))]);
     expect(r.lines.filter((l) => l.startsWith("== "))).toEqual(["== claude-opus-5-5 (decision model)", "== gpt-6.1-sol (descriptive)"]);
     expect([r.models.opus!.reading.key, r.models.sol!.reading.key]).toEqual(["steps-first", "ceiling"]);
+  });
+});
+
+describe("writes no parser can name", () => {
+  test("their sessions are scored both ways, and the report says when the bar reading rests on them", () => {
+    const r = rows({ command: 46 }).map((x) => (x.arm === "command" && ["t40", "t41", "t50", "t51", "t52"].includes(x.task) ? { ...x, detect: { ...x.detect, unresolved_writes: x.task === "t50" ? 2 : 1 } } : x));
+    const s = armStats(r, 60).find((x) => x.arm === "command")!;
+    expect([s.followed, s.unresolved_sessions, s.unresolved_writes, s.followed_low, s.followed_high]).toEqual([46, 5, 6, 44, 49]);
+    expect(report(r).lines).toContain("  command sensitivity: 6 Bash writes no parser can name, in 5 sessions; followed 44/60 with those sessions scored not followed, 49/60 scored followed; the bar reading rests on them");
+    expect(report(r).lines).toContain("  none sensitivity: 0 Bash writes no parser can name, in 0 sessions; followed 0/60 with those sessions scored not followed, 0/60 scored followed");
   });
 });
