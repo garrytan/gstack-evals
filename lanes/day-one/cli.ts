@@ -36,7 +36,7 @@ import { GSTACK_ARMS, GSTACK_PINS, LIMITS, MODELS, PLAN_ARMS, PROBE_QUESTIONS, S
 import { controls, goldAgreement, JUDGE_EFFORT, JUDGE_MAX_TOKENS, labelPacket, packets, padded, stockPlan, type Label } from "./judge.ts";
 import { DAYONE_RUN, itemOf, leaseAmount } from "./ledger.ts";
 import { ownerPrompt, splitSource } from "./owner.ts";
-import { buildDir, runStage, type Row, type Stage } from "./run.ts";
+import { buildDir, runStage, TAG, type Row, type Stage } from "./run.ts";
 import { copySamples, loadUnit, taskChecks, unitsDigest, type Unit } from "./units.ts";
 import { runVoiceCheck } from "./voicecheck.ts";
 
@@ -48,6 +48,13 @@ interface Io {
 class Usage extends Error {}
 const refuse = (why: string): never => {
   throw new Usage(why);
+};
+
+/** The --tag values; each names a stage dir under the sealed --out, so it is lowercase letters, digits and hyphens. */
+const tagsOf = (f: Map<string, string[]>): string[] => {
+  const tags = f.get("--tag") ?? refuse("missing --tag");
+  for (const t of tags) if (!TAG.test(t)) refuse("--tag " + JSON.stringify(t) + " is not lowercase letters, digits and hyphens");
+  return tags;
 };
 
 const HELP = [
@@ -163,8 +170,9 @@ function rigFor(f: Map<string, string[]>, env: Env, o: { out: string; item: stri
   const record = recordPath(opt(f, "--record"), env);
   mkdirSync(join(o.out, "fixtures"), { recursive: true });
   writeFileSync(join(o.out, "fixtures", "tasks.json"), "[]\n");
-  const open = () => dockerRig({ host: "claude", arms: { arms: o.specs, base: null, skill: null, notes: [] }, tasks: join(o.out, "fixtures", "tasks.json"), out: { path: o.out, rule: "--out" }, ledger, record, item: o.item, runId: DAYONE_RUN, models: [o.model], policy: o.policy }, { env, skill: null, skills: Object.fromEntries(o.specs.filter((s) => s.kind === "stack").map((s) => [s.name, "autoplan"])), nonce: randomBytes(6).toString("hex"), cap: leaseAmount(record.path, o.item, o.cap), voice: false });
-  return { ledger, record, open };
+  const lease = leaseAmount(record.path, o.item, o.cap);
+  const open = () => dockerRig({ host: "claude", arms: { arms: o.specs, base: null, skill: null, notes: [] }, tasks: join(o.out, "fixtures", "tasks.json"), out: { path: o.out, rule: "--out" }, ledger, record, item: o.item, runId: DAYONE_RUN, models: [o.model], policy: o.policy }, { env, skill: null, skills: Object.fromEntries(o.specs.filter((s) => s.kind === "stack").map((s) => [s.name, "autoplan"])), nonce: randomBytes(6).toString("hex"), cap: lease, voice: false });
+  return { ledger, record, open, lease };
 }
 
 const policyOf = (f: Map<string, string[]>): LoadedPolicy => {
@@ -183,6 +191,7 @@ async function stage(f: Map<string, string[]>, io: Io, env: Env): Promise<number
   const channel = opt(f, "--owner-channel") ?? "on";
   if (channel !== "on" && channel !== "dropped") refuse("--owner-channel is on or dropped");
   const unitsDir = sealedPath(one(f, "--units-dir"), "--units-dir");
+  const tag = tagsOf(f)[0]!;
   const us = units(unitsDir, f.get("--units") ?? refuse("missing --units"));
   const reps = (f.get("--reps") ?? refuse("missing --reps")).map(Number);
   if (reps.some((r) => !Number.isInteger(r) || r < 1)) refuse("--reps are whole numbers from 1");
@@ -206,13 +215,14 @@ async function stage(f: Map<string, string[]>, io: Io, env: Env): Promise<number
     const r = await runStage(
       {
         stage: st,
-        tag: (f.get("--tag") ?? refuse("missing --tag"))[0]!,
+        tag,
         units: us,
         reps,
         arms,
         out,
         runId: DAYONE_RUN,
         cap,
+        lease: rig.lease,
         ownerCap: withOwner ? usd(one(f, "--owner-spend-cap"), "--owner-spend-cap") : 0,
         voiceCap: opt(f, "--voice-cap") ? usd(opt(f, "--voice-cap")!, "--voice-cap") : 0,
         parallel,
@@ -327,7 +337,7 @@ function readings(f: Map<string, string[]>, io: Io): number {
   const out = sealedPath(one(f, "--out"), "--out");
   const unitsDir = sealedPath(one(f, "--units-dir"), "--units-dir");
   const arms = (f.get("--arms") ?? refuse("missing --arms")) as PlanArm[];
-  const { rows, selected } = checkRows(out, f.get("--tag") ?? refuse("missing --tag"));
+  const { rows, selected } = checkRows(out, tagsOf(f));
   const planRows = stageRows(out, ["base-", "review-"]);
   const buildRows = stageRows(out, ["build-"]);
   const same = (a: Row, b: Row) => a.cell.unit === b.cell.unit && a.cell.rep === b.cell.rep && a.cell.arm === b.cell.arm;
@@ -400,7 +410,7 @@ function validateDraw(f: Map<string, string[]>, io: Io): number {
   if (existsSync(dest) || existsSync(keyFile)) refuse("--dest and --key must not exist yet; a draw is written once");
   const count = Number(opt(f, "--count") ?? String(VALIDATION.builds));
   if (!Number.isInteger(count) || count < 1) refuse("--count is a whole number from 1");
-  const { rows } = checkRows(out, f.get("--tag") ?? refuse("missing --tag"));
+  const { rows } = checkRows(out, tagsOf(f));
   const scored = rows.filter((r) => r.state === "scored" && r.check?.started && r.check.parse?.kind === "ok").sort((a, b) => a.id.localeCompare(b.id));
   const order = shuffle(scored, seededRandom(SEED));
   const arms = [...new Set(order.map((r) => r.cell.arm))].sort();
@@ -431,9 +441,10 @@ function validateDraw(f: Map<string, string[]>, io: Io): number {
 /** The checker validation's score: kappa on done between the hand labels and the checker's verdicts on the drawn builds. */
 function validateScore(f: Map<string, string[]>, io: Io): number {
   const out = sealedPath(one(f, "--out"), "--out");
+  const tags = tagsOf(f);
   const key = JSON.parse(readFileSync(sealedPath(one(f, "--key"), "--key"), "utf8")) as Record<string, { row: string; arm: PlanArm }>;
   const labels = readNd(sealedPath(one(f, "--labels"), "--labels")) as { label: string; tasks: { id: string; done: boolean }[] }[];
-  const { rows } = checkRows(out, f.get("--tag") ?? refuse("missing --tag"));
+  const { rows } = checkRows(out, tags);
   const byId = new Map(rows.map((r) => [r.id, r]));
   const pairs: [boolean, boolean][] = [];
   const perArm: Record<string, number> = {};
@@ -445,6 +456,8 @@ function validateScore(f: Map<string, string[]>, io: Io): number {
     const parse = byId.get(k.row)?.check?.parse;
     if (parse?.kind !== "ok") return refuse("the checker's verdicts for " + l.label + " are missing or unparsable");
     perArm[k.arm] = (perArm[k.arm] ?? 0) + 1;
+    const ids = new Set(l.tasks.map((t) => t.id));
+    if (ids.size !== parse.tasks.length || parse.tasks.some((t) => !ids.has(t.id))) refuse(l.label + ": the labels list " + ids.size + " task ids, not exactly the build's " + parse.tasks.length + " tasks");
     const counted = new Map<string, boolean>();
     for (const t of l.tasks) {
       const v = parse.tasks.find((x) => x.id === t.id) ?? refuse(l.label + ": the checker has no verdict for " + t.id);
@@ -457,6 +470,8 @@ function validateScore(f: Map<string, string[]>, io: Io): number {
       pairs.push([v.done, t.done]);
     }
   }
+  const unlabelled = Object.keys(key).filter((l) => !seen.has(l));
+  if (unlabelled.length) refuse(unlabelled.length + " drawn builds have no labels (" + unlabelled.join(", ") + "); label every build in the key");
   const k = kappa(pairs);
   const armsShort = ["n", "d", "r", "a"].filter((a) => (perArm[a] ?? 0) < VALIDATION.per_arm);
   const admitted = pairs.length >= VALIDATION.verdicts && k !== null && k >= VALIDATION.kappa && armsShort.length === 0;

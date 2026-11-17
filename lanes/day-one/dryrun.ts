@@ -296,6 +296,8 @@ export const CASES: Record<string, Case> = {
       must(adm.stops.some((s) => s.code === "E_DAYONE_ADMISSION" && /smaller --parallel/.test(s.message)) && !adm.rows.length, "a round over the launch's room ran, or its stop named no fix");
       const resumed = await stageRun(admDir, us, "base", ["n"], 20, {}, { n: 0 }, { parallel: 1 });
       must(resumed.rows.length === 2 && !resumed.stops.length, "an admission stop did not resume at --parallel 1");
+      const leased = await stageRun(join(dir, "lease-short"), us, "base", ["n"], 100, {}, { n: 0 }, { lease: 20e6 });
+      must(leased.stops.some((s) => s.code === "E_DAYONE_ADMISSION") && !leased.stops.some((s) => s.code === "CAP_STOP") && !leased.rows.length, "a round over what the lease holds (the item had less left than --spend-cap) was admitted instead of stopping for admission");
       const capDir = join(dir, "cap");
       const cap = await stageRun(capDir, us, "base", ["n"], 100, { launch: stubLaunch({ capStop: true }) });
       must(cap.stops.some((s) => s.code === "CAP_STOP"), "a session's cap stop did not stop the launch");
@@ -366,6 +368,15 @@ export const CASES: Record<string, Case> = {
       await built(nbDir);
       const nb = await stageRun(nbDir, one, "check", ["n"], 100, { launch: stubLaunch({ noBrowser: true }) }, { n: 0 }, { parallel: 1 });
       must(nb.rows[0]!.state === "missing" && nb.rows[0]!.code === "E_DAYONE_GAP" && nb.rows[0]!.attempts.length === 2 && nb.rows[0]!.check === null, "a checker whose browser never answered was not a retry and then a gap: " + JSON.stringify({ state: nb.rows[0]!.state, code: nb.rows[0]!.code, score: nb.rows[0]!.check?.score.share }));
+      const lateDir = join(dir, "started-then-missed");
+      await built(lateDir);
+      let starts = 0;
+      const late = await stageRun(lateDir, one, "check", ["n"], 100, { launch: stubLaunch({ noBrowser: true }), app: { ...stubApp, start: async () => (++starts === 1 ? stubApp.start({} as never) : { container: "c", mcpUrl: "http://c:8931/mcp", started: false, start_s: null, detail: "the app never answered on 3000 within 60 s", copy: "/nonexistent", build: "/nonexistent" }) } as never }, { n: 0 }, { parallel: 1 });
+      must(late.rows[0]!.state === "missing" && late.rows[0]!.code === "E_DAYONE_APP" && late.rows[0]!.check === null, "a build whose app started on attempt 1 and missed the start window on attempt 2 was scored as does not start, not a gap: " + JSON.stringify({ state: late.rows[0]!.state, code: late.rows[0]!.code, share: late.rows[0]!.check?.score.share }));
+      const neverDir = join(dir, "never-started");
+      await built(neverDir);
+      const never = await stageRun(neverDir, one, "check", ["n"], 100, { app: { ...stubApp, start: async () => ({ container: "c", mcpUrl: "http://c:8931/mcp", started: false, start_s: null, detail: "the app never answered on 3000 within 60 s", copy: "/nonexistent", build: "/nonexistent" }) } as never }, { n: 0 }, { parallel: 1 });
+      must(never.rows[0]!.state === "scored" && never.rows[0]!.check?.started === false && never.rows[0]!.check?.score.share === 0 && never.rows[0]!.attempts.length === 2, "a build that never started on either attempt did not read does not start, no task done");
       const afDir = join(dir, "all-fail");
       await built(afDir);
       const af = await stageRun(afDir, one, "check", ["n"], 100, { launch: stubLaunch({ allFail: true }) }, { n: 0 }, { parallel: 1 });

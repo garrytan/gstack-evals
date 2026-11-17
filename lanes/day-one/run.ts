@@ -81,6 +81,8 @@ export interface StageInput {
   runId: string;
   /** Micro-dollars this launch may spend on its item, and on the responder item (planning stages). */
   cap: number;
+  /** Micro-dollars the rig's lease holds at open (leaseAmount: cap or less, when the item has less left); rounds are admitted inside it. Unset, cap. */
+  lease?: number;
   ownerCap: number;
   /** Micro-dollars the gstack arms' Astra voice slots may spend in this launch, inside cap (C2's own capped line). */
   voiceCap: number;
@@ -270,8 +272,12 @@ function gatePending(work: string): boolean {
   }
 }
 
+/** A stage tag: it names the stage's dir under the sealed --out, so it may never leave it. */
+export const TAG = /^[a-z0-9-]+$/;
+
 /** Runs one stage round by round until its cells end or a stop. */
 export async function runStage(o: StageInput, deps: StageDeps): Promise<StageResult> {
+  if (!TAG.test(o.tag)) throw new Error("E_USAGE day-one stage: --tag " + JSON.stringify(o.tag) + " is not lowercase letters, digits and hyphens");
   const dir = join(o.out, o.stage + "-" + o.tag);
   mkdirSync(dir, { recursive: true });
   const cells = stageCells(o.stage, o.units, o.reps, o.arms);
@@ -307,6 +313,7 @@ export async function runStage(o: StageInput, deps: StageDeps): Promise<StageRes
     result.voice_micros += Math.round(r.voice_usd * D);
     result.owner_micros += Math.round(r.owner_usd * D);
   }
+  const room = Math.min(o.cap, result.spent_micros + (o.lease ?? o.cap));
   const launch = deps.launch ?? launchSession;
   const app = deps.app ?? { start: startApp, stop: stopApp };
   const slotOf = deps.ownerMeter ? meterSlot(deps.ownerMeter) : null;
@@ -328,6 +335,7 @@ export async function runStage(o: StageInput, deps: StageDeps): Promise<StageRes
     let exposure: Exposure | null = null;
     let skills: SkillLoad[] = [];
     let check: Row["check"] = null;
+    let appStarted = false;
     let lastHost: string | null = null;
     let usdArm = 0;
     let usdVoice = 0;
@@ -391,7 +399,7 @@ export async function runStage(o: StageInput, deps: StageDeps): Promise<StageRes
           texts = loop.last;
           if (!appRun || !appRun.started) {
             const writes = appRun ? app.stop(appRun, o.docker, join(sdir, "browser")) : [];
-            const infra = !appRun || /MCP server never answered|docker run failed/.test(appRun.detail);
+            const infra = !appRun || appStarted || /MCP server never answered|docker run failed/.test(appRun.detail);
             read = { termination: infra ? { kind: "infra", incident: "E_DAYONE_APP " + (appRun?.detail ?? "the browser container failed") } : { kind: "completed" }, web: 0, gstack_reads: [], contained: [], micros: 0, voice: null, out: null };
             records.push({ attempt, outcome: infra ? "retry" : "app-not-started", why: appRun?.detail ?? "no container", usd: 0, voice_usd: 0, owner_usd: 0 });
             if (!infra && attempt === 2) {
@@ -402,6 +410,7 @@ export async function runStage(o: StageInput, deps: StageDeps): Promise<StageRes
             continue;
           }
           const running = appRun;
+          appStarted = true;
           let writes: AppWrite[] = [];
           read = await launch({ rig, policy: o.policy, docker: o.docker, runId: o.runId, arm: "check", cell: c.unit + "-r" + c.rep + "-" + c.arm, rep: c.rep, attempt, model: lim.model, dir: sdir, seed: null, prompt, minutes: lim.minutes, turns: lim.turns, allowanceMicros: micros(lim.usd), nextUser, mcpUrl: running.mcpUrl }).finally(() => {
             writes = app.stop(running, o.docker, join(sdir, "browser"));
@@ -527,8 +536,8 @@ export async function runStage(o: StageInput, deps: StageDeps): Promise<StageRes
       const worst = round.reduce((s, c) => s + 2 * micros(cellLimits(c).usd + cellLimits(c).voice_usd), 0);
       const ownerWorst = o.ownerChannel ? round.reduce((s, c) => s + 2 * micros(cellLimits(c).owner_usd), 0) : 0;
       const voiceWorst = round.reduce((s, c) => s + 2 * micros(cellLimits(c).voice_usd), 0);
-      if (result.spent_micros + worst > o.cap || result.owner_micros + ownerWorst > o.ownerCap || result.voice_micros + voiceWorst > o.voiceCap) {
-        result.stops.push({ code: "E_DAYONE_ADMISSION", message: "the round from cell " + (i + 1) + " has a worst case of " + usd(worst) + " on the item (" + usd(voiceWorst) + " of it on the voice) and " + usd(ownerWorst) + " on the responder, more than this launch may still spend (" + usd(o.cap - result.spent_micros) + ", " + usd(o.voiceCap - result.voice_micros) + " and " + usd(o.ownerCap - result.owner_micros) + "); nothing in it ran. Fix: relaunch this stage with a smaller --parallel (ended cells stay ended); if a single cell does not fit, the line is short and goes to the Captain" });
+      if (result.spent_micros + worst > room || result.owner_micros + ownerWorst > o.ownerCap || result.voice_micros + voiceWorst > o.voiceCap) {
+        result.stops.push({ code: "E_DAYONE_ADMISSION", message: "the round from cell " + (i + 1) + " has a worst case of " + usd(worst) + " on the item (" + usd(voiceWorst) + " of it on the voice) and " + usd(ownerWorst) + " on the responder, more than this launch may still spend (" + usd(room - result.spent_micros) + ", " + usd(o.voiceCap - result.voice_micros) + " and " + usd(o.ownerCap - result.owner_micros) + "); nothing in it ran. Fix: relaunch this stage with a smaller --parallel (ended cells stay ended); if a single cell does not fit, the line is short and goes to the Captain" });
         break;
       }
       await pool(o.parallel, round.map((c) => () => runCell(c)));

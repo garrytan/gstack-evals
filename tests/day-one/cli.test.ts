@@ -138,11 +138,15 @@ describe.skipIf(!onShm)("day-one validate", () => {
       writeFileSync(join(shm, "no-a.ndjson"), hand(false, labels.filter((l) => k[l]!.arm !== "a")));
       const noA = await run(["validate", "score", "--out", out, "--tag", "wave", "--key", key, "--labels", join(shm, "no-a.ndjson")]);
       expect(noA.code).toBe(2);
-      expect(noA.err).toContain("builds for a");
-      writeFileSync(join(shm, "padded.ndjson"), labels.map((l) => { const ts = byId.get(k[l]!.row)!.check.parse.tasks.slice(0, 2); return JSON.stringify({ label: l, tasks: [...ts, ...ts, ...ts, ...ts].map((t) => ({ id: t.id, done: t.done })) }); }).join("\n") + "\n");
+      expect(noA.err).toContain("3 drawn builds have no labels");
+      writeFileSync(join(shm, "padded.ndjson"), labels.map((l) => { const ts = byId.get(k[l]!.row)!.check.parse.tasks; return JSON.stringify({ label: l, tasks: [...ts, ...ts, ...ts, ...ts].map((t) => ({ id: t.id, done: t.done })) }); }).join("\n") + "\n");
       const padded = await run(["validate", "score", "--out", out, "--tag", "wave", "--key", key, "--labels", join(shm, "padded.ndjson")]);
-      expect(padded.code).toBe(2);
-      expect(JSON.parse(readFileSync(join(out, "validation.json"), "utf8"))).toMatchObject({ pairs: 24, admitted: false });
+      expect(padded.code).toBe(0);
+      expect(JSON.parse(readFileSync(join(out, "validation.json"), "utf8"))).toMatchObject({ pairs: 60, admitted: true });
+      writeFileSync(join(shm, "partial.ndjson"), labels.map((l) => JSON.stringify({ label: l, tasks: byId.get(k[l]!.row)!.check.parse.tasks.slice(0, 4).map((t) => ({ id: t.id, done: t.done })) })).join("\n") + "\n");
+      const partial = await run(["validate", "score", "--out", out, "--tag", "wave", "--key", key, "--labels", join(shm, "partial.ndjson")]);
+      expect(partial.code).toBe(2);
+      expect(partial.err).toContain("not exactly the build's 5 tasks");
       writeFileSync(join(shm, "twice.ndjson"), hand(false) + hand(false));
       expect((await run(["validate", "score", "--out", out, "--tag", "wave", "--key", key, "--labels", join(shm, "twice.ndjson")])).code).not.toBe(0);
       writeFileSync(join(shm, "conflict.ndjson"), labels.map((l) => { const ts = byId.get(k[l]!.row)!.check.parse.tasks; return JSON.stringify({ label: l, tasks: [...ts.map((t) => ({ id: t.id, done: t.done })), { id: ts[0]!.id, done: !ts[0]!.done }] }); }).join("\n") + "\n");
@@ -215,6 +219,30 @@ describe.skipIf(!onShm)("day-one validate with the strengthened arms in the wave
       const fourteen = await draw("d14", ["--count", "14"]);
       expect((fourteen.per["s-full"] ?? 0) + (fourteen.per["s-dayone"] ?? 0)).toBe(2);
       expect(fourteen.score.code).toBe(0);
+    } finally {
+      rmSync(shm, { recursive: true, force: true });
+    }
+  });
+});
+
+describe.skipIf(!onShm)("day-one tags", () => {
+  test("a --tag that could leave the sealed --out is refused by every command that reads one", async () => {
+    const shm = mkdtempSync("/dev/shm/day-one-tag-");
+    try {
+      const bad = "x/../../../../tmp/day-one-leak";
+      const d = join(shm, "d");
+      mkdirSync(d);
+      for (const argv of [
+        ["stage", "--stage", "base", "--arms", "n", "--units-dir", d, "--units", "aaaaaa", "--reps", "1", "--out", d, "--receipts", join(d, "r"), "--item", "day1-plans", "--spend-cap", "1", "--tag", bad],
+        ["read", "--out", d, "--units-dir", d, "--tag", bad, "--arms", "n"],
+        ["validate", "draw", "--out", d, "--units-dir", d, "--tag", bad, "--dest", join(d, "dest"), "--key", join(d, "key")],
+        ["validate", "score", "--out", d, "--tag", bad, "--key", join(d, "k"), "--labels", join(d, "x")],
+      ]) {
+        const r = await run(argv);
+        expect(r.code).toBe(2);
+        expect(r.err).toContain("is not lowercase letters, digits and hyphens");
+      }
+      expect(existsSync("/tmp/day-one-leak")).toBe(false);
     } finally {
       rmSync(shm, { recursive: true, force: true });
     }
