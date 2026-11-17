@@ -69,6 +69,27 @@ describe("the gstack-read check (prereg section 8)", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+  test("marks a skill load in an N, D or R planning session, and never in a build or check session", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "day-one-skills-"));
+    try {
+      const calls: { name: string; input: Record<string, string> }[] = [
+        { name: "Skill", input: { skill: "plan-ceo-review" } },
+        { name: "Read", input: { file_path: "/opt/skills/review/SKILL.md" } },
+      ];
+      for (const arm of ["n", "d", "r"]) {
+        const read = await session(dir, arm, calls);
+        expect(read.gstack_reads).toEqual(["Skill plan-ceo-review", "Read /opt/skills/review/SKILL.md"]);
+        expect(attemptOutcome(read, null).state).toBe("contaminated");
+      }
+      for (const arm of ["build", "check"]) {
+        const read = await session(dir, arm, calls);
+        expect(read.gstack_reads).toEqual([]);
+        expect(attemptOutcome(read, null).state).not.toBe("contaminated");
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("the voice bearer check (prereg section 7)", () => {
