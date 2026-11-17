@@ -144,6 +144,7 @@ export async function launchSession(o: LaunchInput, deps: { driver?: typeof clau
   mkdirSync(join(o.dir, "tasks"), { recursive: true });
   const out = join(o.dir, "out");
   let termination: Termination;
+  let copyFailed = false;
   try {
     const trial = await (deps.trial ?? runTrial)({
       cell: { model: o.model, arm: o.arm, round: 1, trial: o.rep },
@@ -160,6 +161,9 @@ export async function launchSession(o: LaunchInput, deps: { driver?: typeof clau
       copyDirs: [{ from: ".", to: out }],
     });
     termination = trial.record.termination;
+    const trialJson = join(o.dir, "trial.json");
+    const copyOut = existsSync(trialJson) ? JSON.parse(readFileSync(trialJson, "utf8")).logs?.copy_out : null;
+    copyFailed = Array.isArray(copyOut) && copyOut.some((f) => String(f).startsWith(".: "));
   } catch (e) {
     termination = { kind: "infra", incident: "the trial failed: " + (e as Error).message };
   }
@@ -180,7 +184,7 @@ export async function launchSession(o: LaunchInput, deps: { driver?: typeof clau
     contained: departures,
     micros: meter.micros,
     voice: vmeter ? { micros: vmeter.micros, requests: vmeter.requests, refused: vmeter.refused } : null,
-    out: existsSync(out) ? out : null,
+    out: existsSync(out) && !copyFailed ? out : null,
   };
 }
 

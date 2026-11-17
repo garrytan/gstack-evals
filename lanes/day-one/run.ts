@@ -23,7 +23,7 @@
 //   attempt in a fresh browser container, and then scores no task done; an unparsable verdict gets one more attempt,
 //   and then the build is unscored (E_DAYONE_VERDICT).
 import { createHash } from "node:crypto";
-import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ReasonCode } from "../../src/errors/codes.ts";
 import { openLocalLedger } from "../../src/runner/ledger/local.ts";
@@ -255,7 +255,13 @@ export async function runStage(o: StageInput, deps: StageDeps): Promise<StageRes
     let usdArm = 0;
     let usdVoice = 0;
     let usdOwner = 0;
+    let planText: string | null = null;
+    let partialTree: string | null = null;
     for (let attempt = 1; attempt <= 2 && !end; attempt++) {
+      if (attempt > 1 && halted) {
+        result.unrun.push({ id, how: "stopped" });
+        return;
+      }
       const sdir = join(dir, "sessions", c.unit, "r" + c.rep, c.arm, "a" + attempt);
       let read: AttemptRead;
       let loopFailed: ReturnType<typeof ownerLoop>["state"]["failed"] = null;
@@ -372,17 +378,17 @@ export async function runStage(o: StageInput, deps: StageDeps): Promise<StageRes
       if (outcome.state === "ended" && planning && read.out) {
         const p = armPlan(read.out, base, isGstack(c.arm) ? join(sdir, "host", "gstack-state") : null);
         if (!p.text.trim() && c.arm === "n" && attempt === 1) outcome = { state: "retry", why: "no plan.md (an arm stop)" };
-        else plan = { sha256: sha(p.text), words: p.text.split(/\s+/).filter(Boolean).length, from: p.from };
-        if (plan) {
-          mkdirSync(join(o.out, "plans", c.unit, "r" + c.rep), { recursive: true });
-          writeFileSync(planFile(o.out, c.unit, c.rep, c.arm), p.text);
+        else {
+          plan = { sha256: sha(p.text), words: p.text.split(/\s+/).filter(Boolean).length, from: p.from };
+          planText = p.text;
         }
         if (isGstack(c.arm)) exposure = readExposure(join(sdir, "host", "gstack-state"), read.voice?.requests ?? 0);
       }
       if (outcome.state === "ended" && c.stage === "build" && read.out) {
-        const dest = buildDir(o.out, c.unit, c.rep, c.arm);
-        mkdirSync(dest, { recursive: true });
-        cpSync(read.out, join(dest, "tree"), { recursive: true, verbatimSymlinks: true, filter: (src) => !src.split("/").includes(".git") });
+        partialTree = join(buildDir(o.out, c.unit, c.rep, c.arm), "tree.partial");
+        rmSync(partialTree, { recursive: true, force: true });
+        mkdirSync(partialTree, { recursive: true });
+        cpSync(read.out, partialTree, { recursive: true, verbatimSymlinks: true, filter: (src) => !src.split("/").includes(".git") });
       }
       if (outcome.state === "ended" && !read.out) outcome = settle({ state: "retry", why: "the work tree was not copied out" }, attempt);
       records.push({ attempt, outcome: outcome.state, why: "why" in outcome ? outcome.why : outcome.how, usd: read.micros / D, voice_usd: (read.voice?.micros ?? 0) / D, owner_usd: usdOwner });
@@ -396,10 +402,7 @@ export async function runStage(o: StageInput, deps: StageDeps): Promise<StageRes
       else o.log(id + ": attempt " + attempt + ": " + outcome.why + "; its one retry runs");
     }
     if (planning && end?.state === "ended" && !plan) plan = { sha256: sha(""), words: 0, from: "none" };
-    if (planning && plan && plan.words === 0) {
-      mkdirSync(join(o.out, "plans", c.unit, "r" + c.rep), { recursive: true });
-      writeFileSync(planFile(o.out, c.unit, c.rep, c.arm), "");
-    }
+    if (planning && plan && plan.words === 0) planText = "";
     const e = end!;
     const state: Row["state"] = e.state === "ended" ? "scored" : e.state === "contaminated" ? "contaminated" : e.state === "halt" ? "halt" : "missing";
     const code: ReasonCode | null = "code" in e ? e.code : planning && plan?.words === 0 ? "E_DAYONE_NO_PLAN" : null;
@@ -407,6 +410,11 @@ export async function runStage(o: StageInput, deps: StageDeps): Promise<StageRes
     if (transcript && existsSync(transcript)) skills = loadedSkills(readFileSync(transcript, "utf8"));
     const row: Row = { id, cell: c, state, code, why: "why" in e ? e.why : "ended: " + e.how, attempts: records, usd: usdArm, owner_usd: usdOwner, voice_usd: usdVoice, owner, plan, exposure, skills, check, transcript };
     appendFileSync(join(dir, "rows.ndjson"), JSON.stringify(row) + "\n");
+    if (planning && plan && planText !== null) {
+      mkdirSync(join(o.out, "plans", c.unit, "r" + c.rep), { recursive: true });
+      writeFileSync(planFile(o.out, c.unit, c.rep, c.arm), planText);
+    }
+    if (partialTree && e.state === "ended") renameSync(partialTree, join(buildDir(o.out, c.unit, c.rep, c.arm), "tree"));
     result.rows.push(row);
     o.log(id + ": " + state + (code ? " " + code : "") + " (" + row.why + "), " + usd(Math.round((usdArm + usdVoice) * D)) + (usdOwner ? ", responder " + usd(Math.round(usdOwner * D)) : ""));
     if (e.state === "halt") {
@@ -417,16 +425,17 @@ export async function runStage(o: StageInput, deps: StageDeps): Promise<StageRes
 
   try {
     const todo = cells.filter((c) => !done.has(cellId(c)));
+    const elsewhereRows = new Set(readdirSync(o.out).filter((d) => d.startsWith(o.stage + "-") && join(o.out, d) !== dir).flatMap((d) => [...readRows(join(o.out, d)).keys()]));
     for (let i = 0; i < todo.length && !halted; i += o.parallel) {
       const round = todo.slice(i, i + o.parallel).filter((c) => {
-        const elsewhere = (c.stage === "base" || c.stage === "review") && existsSync(planFile(o.out, c.unit, c.rep, c.arm)) ? "its plan" : c.stage === "build" && existsSync(join(buildDir(o.out, c.unit, c.rep, c.arm), "tree")) ? "its build" : null;
+        const elsewhere = elsewhereRows.has(cellId(c)) ? "its row" : (c.stage === "base" || c.stage === "review") && existsSync(planFile(o.out, c.unit, c.rep, c.arm)) ? "its plan" : c.stage === "build" && existsSync(join(buildDir(o.out, c.unit, c.rep, c.arm), "tree")) ? "its build" : null;
         const p = elsewhere ? elsewhere + " is already in the shared folder from another launch, so it is not run again" : inputProblem(o.out, c);
         if (p) o.log(cellId(c) + ": not run, " + p);
         return !p;
       });
       if (!round.length) continue;
       const worst = round.reduce((s, c) => s + 2 * micros(cellLimits(c).usd + cellLimits(c).voice_usd), 0);
-      const ownerWorst = round.reduce((s, c) => s + 2 * micros(cellLimits(c).owner_usd), 0);
+      const ownerWorst = o.ownerChannel ? round.reduce((s, c) => s + 2 * micros(cellLimits(c).owner_usd), 0) : 0;
       const voiceWorst = round.reduce((s, c) => s + 2 * micros(cellLimits(c).voice_usd), 0);
       if (result.spent_micros + worst > o.cap || result.owner_micros + ownerWorst > o.ownerCap || result.voice_micros + voiceWorst > o.voiceCap) {
         result.stops.push({ code: "E_DAYONE_ADMISSION", message: "the round from cell " + (i + 1) + " has a worst case of " + usd(worst) + " on the item (" + usd(voiceWorst) + " of it on the voice) and " + usd(ownerWorst) + " on the responder, more than this launch may still spend (" + usd(o.cap - result.spent_micros) + ", " + usd(o.voiceCap - result.voice_micros) + " and " + usd(o.ownerCap - result.owner_micros) + "); nothing in it ran. Fix: relaunch this stage with a smaller --parallel (ended cells stay ended); if a single cell does not fit, the line is short and goes to the Captain" });

@@ -139,8 +139,11 @@ export function goldAgreement(judge: ReadonlyMap<string, Label>, gold: ReadonlyM
 export function controls(o: { stock: readonly { checks: readonly Check[]; labels: readonly Label[] }[]; volume: readonly { base: readonly Label[]; padded: readonly Label[] }[] }): { stock_primary_covered: number; stock_primary_checks: number; stock_allowed: number; volume_agreement: number | null; volume_pairs: number; passed: boolean } {
   let stockCovered = 0;
   let primary = 0;
+  let unlabelled = 0;
   for (const s of o.stock) {
-    primary += s.checks.filter((c) => c.role === "primary").length;
+    const primaries = s.checks.filter((c) => c.role === "primary");
+    primary += primaries.length;
+    unlabelled += primaries.filter((c) => !s.labels.some((l) => l.id === c.id)).length;
     for (const l of s.labels) if (l.covered && s.checks.find((c) => c.id === l.id)?.role === "primary") stockCovered++;
   }
   const allowed = Math.floor(STOCK_TOLERANCE * primary);
@@ -154,7 +157,7 @@ export function controls(o: { stock: readonly { checks: readonly Check[]; labels
       if (p.covered === b.covered) same++;
     }
   const agreement = n ? same / n : null;
-  return { stock_primary_covered: stockCovered, stock_primary_checks: primary, stock_allowed: allowed, volume_agreement: agreement, volume_pairs: n, passed: stockCovered <= allowed && (agreement === null || agreement >= VOLUME_AGREEMENT) };
+  return { stock_primary_covered: stockCovered, stock_primary_checks: primary, stock_allowed: allowed, volume_agreement: agreement, volume_pairs: n, passed: primary > 0 && unlabelled === 0 && stockCovered <= allowed && n > 0 && o.volume.every((v) => v.padded.length > 0) && agreement !== null && agreement >= VOLUME_AGREEMENT };
 }
 
 /** A base plan with the stock plan appended, for the volume control. */

@@ -436,7 +436,10 @@ function validateScore(f: Map<string, string[]>, io: Io): number {
   const byId = new Map(rows.map((r) => [r.id, r]));
   const pairs: [boolean, boolean][] = [];
   const perArm: Record<string, number> = {};
+  const seen = new Set<string>();
   for (const l of labels) {
+    if (seen.has(l.label)) refuse("label " + l.label + " appears twice in the labels file");
+    seen.add(l.label);
     const k = key[l.label] ?? refuse("label " + l.label + " is not in the key");
     const parse = byId.get(k.row)?.check?.parse;
     if (parse?.kind !== "ok") return refuse("the checker's verdicts for " + l.label + " are missing or unparsable");
@@ -448,7 +451,7 @@ function validateScore(f: Map<string, string[]>, io: Io): number {
     }
   }
   const k = kappa(pairs);
-  const armsShort = Object.entries(perArm).filter(([, n]) => n < VALIDATION.per_arm).map(([a]) => a);
+  const armsShort = [...new Set(Object.values(key).map((k) => k.arm))].filter((a) => (perArm[a] ?? 0) < VALIDATION.per_arm);
   const admitted = pairs.length >= VALIDATION.verdicts && k !== null && k >= VALIDATION.kappa && armsShort.length === 0;
   const receipt = { schema: "day-one.validation.v1", builds: labels.length, per_arm: perArm, pairs: pairs.length, kappa: k, admitted };
   writeFileSync(join(out, "validation.json"), JSON.stringify(receipt, null, 2) + "\n");

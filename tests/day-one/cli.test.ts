@@ -121,9 +121,9 @@ describe.skipIf(!onShm)("day-one validate", () => {
       expect(labels.some((l) => arms.includes(l) || ids.includes(l))).toBe(false);
       expect(existsSync(join(dest, labels[0]!, "app", "start.sh")) && existsSync(join(dest, labels[0]!, "tasks.json"))).toBe(true);
 
-      const k = JSON.parse(readFileSync(key, "utf8")) as Record<string, { row: string }>;
+      const k = JSON.parse(readFileSync(key, "utf8")) as Record<string, { row: string; arm: string }>;
       const byId = new Map(rows.map((r) => [r.id, r]));
-      const hand = (flip: boolean) => labels.map((l) => JSON.stringify({ label: l, tasks: byId.get(k[l]!.row)!.check.parse.tasks.map((t) => ({ id: t.id, done: flip ? !t.done : t.done })) })).join("\n") + "\n";
+      const hand = (flip: boolean, list = labels) => list.map((l) => JSON.stringify({ label: l, tasks: byId.get(k[l]!.row)!.check.parse.tasks.map((t) => ({ id: t.id, done: flip ? !t.done : t.done })) })).join("\n") + "\n";
       writeFileSync(join(shm, "agree.ndjson"), hand(false));
       const agree = await run(["validate", "score", "--out", out, "--tag", "wave", "--key", key, "--labels", join(shm, "agree.ndjson")]);
       expect(agree.code).toBe(0);
@@ -133,6 +133,12 @@ describe.skipIf(!onShm)("day-one validate", () => {
       expect(flip.code).toBe(2);
       expect(flip.err).toContain("E_DAYONE_VALIDATION");
       expect(JSON.parse(readFileSync(join(out, "validation.json"), "utf8")).admitted).toBe(false);
+      writeFileSync(join(shm, "no-a.ndjson"), hand(false, labels.filter((l) => k[l]!.arm !== "a")));
+      const noA = await run(["validate", "score", "--out", out, "--tag", "wave", "--key", key, "--labels", join(shm, "no-a.ndjson")]);
+      expect(noA.code).toBe(2);
+      expect(noA.err).toContain("builds for a");
+      writeFileSync(join(shm, "twice.ndjson"), hand(false) + hand(false));
+      expect((await run(["validate", "score", "--out", out, "--tag", "wave", "--key", key, "--labels", join(shm, "twice.ndjson")])).code).not.toBe(0);
     } finally {
       rmSync(shm, { recursive: true, force: true });
     }

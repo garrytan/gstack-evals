@@ -15,7 +15,7 @@
 //   with saved data (the builder's own test records), logged in the check row.
 import { spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join, relative } from "node:path";
 import { RUNTIME_PINS } from "../outcome-skills/h2h/sessions/runtimes.ts";
 import { APP_PORT, APP_START_S, BROWSER_IMAGE, MCP_PORT } from "./frozen.ts";
@@ -70,14 +70,16 @@ export function appWrites(build: string, app: string): AppWrite[] {
   const walk = (d: string) => {
     for (const name of readdirSync(d)) {
       const p = join(d, name);
-      const st = statSync(p, { throwIfNoEntry: false });
+      const st = lstatSync(p, { throwIfNoEntry: false });
       if (!st) continue;
       if (st.isDirectory()) walk(p);
       else if (st.isFile()) {
         const rel = relative(app, p);
         const before = join(build, rel);
-        if (!existsSync(before)) out.push({ path: rel, change: "added", bytes_before: 0 });
-        else if (!readFileSync(before).equals(readFileSync(p))) out.push({ path: rel, change: "changed", bytes_before: statSync(before).size });
+        const was = lstatSync(before, { throwIfNoEntry: false });
+        if (!was) out.push({ path: rel, change: "added", bytes_before: 0 });
+        else if (!was.isFile()) out.push({ path: rel, change: "changed", bytes_before: 0 });
+        else if (!readFileSync(before).equals(readFileSync(p))) out.push({ path: rel, change: "changed", bytes_before: was.size });
       }
     }
   };

@@ -13,8 +13,8 @@
 //   (run.json active_plan, or the exported plan.md artifact) when that differs from the base; otherwise plan.md as is.
 // - loadedSkills: every Skill tool call and every Read of a SKILL.md or skill reference file in the transcript,
 //   subagents included, with its path, for the loaded-skill log. On an arm with no gstack any entry marks the session.
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { join, relative, sep } from "node:path";
 import { readTranscript } from "../../src/trial/review/readers.ts";
 
 export interface PhaseRead {
@@ -90,11 +90,25 @@ export function armPlan(out: string, base: string | null, stateRoot: string | nu
   const plan = read(join(out, "plan.md"));
   if (plan.trim() && (base === null || plan !== base)) return { text: plan, from: "plan.md" };
   if (stateRoot && base !== null) {
+    const root = existsSync(stateRoot) ? realpathSync(stateRoot) : null;
+    const inside = (p: string) => {
+      if (!root) return null;
+      try {
+        const real = realpathSync(p);
+        return real.startsWith(root + sep) ? real : null;
+      } catch {
+        return null;
+      }
+    };
+    const readInside = (p: string) => {
+      const real = inside(p);
+      return real ? read(real) : "";
+    };
     const r = runs(stateRoot).sort((a, b) => String(b.body?.updated_at ?? "").localeCompare(String(a.body?.updated_at ?? "")))[0];
     const candidates = r ? [r.body?.active_plan, r.body?.artifacts?.["plan.md"]?.path].filter((p): p is string => typeof p === "string") : [];
     for (const c of candidates) {
       const p = c.startsWith("/") ? join(stateRoot, relative(String(r!.body?.out ?? "/"), c)) : join(stateRoot, c);
-      const t = read(p) || read(join(r!.path, "..", c.split("/").pop()!));
+      const t = readInside(p) || readInside(join(r!.path, "..", c.split("/").pop()!));
       if (t.trim() && t !== base) return { text: t, from: "autoplan" };
     }
   }
