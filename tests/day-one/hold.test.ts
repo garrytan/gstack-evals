@@ -85,5 +85,6 @@ describe("a held session that reaches its time limit", () => {
     const o = attemptOutcome({ ...read, termination: { kind: "missing", code: "E_BACKGROUND_DEADLINE" } }, null);
     expect(o).toEqual({ state: "missing", code: "E_DAYONE_BACKGROUND", why: "background work the session started still ran at its time limit" });
     expect(settle(o, 1)).toEqual(o);
+    expect(attemptOutcome({ ...read, contained: null, termination: { kind: "missing", code: "E_BACKGROUND_DEADLINE" } }, null)).toEqual(o);
   });
 });

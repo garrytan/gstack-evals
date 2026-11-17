@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { armPlan, findRun, gatePending, PLAN, readExposure, WORK, type RunRoot } from "../../lanes/day-one/exposure.ts";
@@ -12,8 +12,8 @@ const SUBMIT = "cd /work/app; B=" + BIN + "; O=" + RUN + '; $B submit --out $O -
 const closed = { closed_at: "2026-11-17T18:30:00Z", native: { status: "completed" }, outside: { status: "unavailable" } };
 const body = (o: Record<string, unknown> = {}) => ({ status: "complete", plan_input: PLAN, plan_source: PLAN, out: RUN, active_plan: RUN + "/plan-active.md", updated_at: "2026-11-17T18:30:36Z", phases: { ceo: closed, design: closed, eng: closed }, ...o });
 
-type Call = { command: string } | { name: string; input: Record<string, unknown> };
-const tx = (calls: Call[]) => calls.map((c, i) => JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: "t" + i, ...("command" in c ? { name: "Bash", input: { command: c.command } } : c) }] } }) + "\n").join("");
+type Call = { command: string; parent?: string } | { name: string; input: Record<string, unknown> };
+const tx = (calls: Call[]) => calls.map((c, i) => JSON.stringify({ type: "assistant", ...("parent" in c && c.parent ? { parent_tool_use_id: c.parent } : {}), message: { content: [{ type: "tool_use", id: "t" + i, ...("command" in c ? { name: "Bash", input: { command: c.command } } : c) }] } }) + "\n").join("");
 
 /** Writes run.json for the run folder the session saw at seenDir, under the host root that the session saw at rootSeen. */
 const put = (root: string, rootSeen: string, seenDir: string, b: object) => {
@@ -107,5 +107,52 @@ describe("the session's autoplan run record", () => {
       expect(findRun(roots, relabelled).run?.seen).toBe(RUN + "/run.json");
       const elsewhere = tx([{ command: BIN + " next --out " + RUN + " --plan " + notes + " --full" }]);
       expect(findRun(roots, elsewhere).run).toBeNull();
+    }));
+});
+
+// Value: protects=the run-record rule against the shell shapes a session writes: wrapper commands, command substitution, default expansion, child shells, subshell and subagent cwd, and interpreter code that only reads the record; fails_when=a real call in one of these shapes is missed, a read-only command refuses the record, an edit through env, eval or a child shell is missed, a call that only asks for help counts, or a cd in a subshell or a subagent moves the main agent's folder; why_new=the cross-family advisory read of the rule, which reproduced each shape; seam=commandLog through findRun; no_claim=a full shell, so a write through a path the code builds at run time is not seen
+describe("the command log's shell shapes", () => {
+  const C = BIN + " next --out " + RUN + " --plan " + PLAN + " --full";
+  test("finds a real call behind a wrapper, a substitution, a default expansion or a child shell, and keeps reads as reads", () =>
+    withDir((dir) => {
+      const work = join(dir, "work");
+      const roots: RunRoot[] = [{ dir: work, seen: WORK }];
+      put(work, WORK, RUN, body());
+      const found: Record<string, Call[]> = {
+        command: [{ command: "command " + C }],
+        "an env prefix": [{ command: "env GSTACK_SESSION_KIND=unattended " + C + " 2>&1 | tail -20" }],
+        "a command substitution": [{ command: 'OUT="$(' + C + ' 2>&1)"; echo "$OUT" | tail -5' }],
+        backticks: [{ command: "OUT=`" + C + "`; echo $OUT" }],
+        "a default expansion": [{ command: "R=${R:-" + RUN + "}; " + BIN + ' next --out "$R" --plan ' + PLAN + " --full" }],
+        "bash -c": [{ command: "bash -c '" + C + "'" }],
+        "a subshell cd": [{ command: "(cd /tmp && ls); " + BIN + " next --out .gstack/tmp/autoplan/run --plan " + PLAN + " --full" }],
+        "a subagent's cd": [{ command: "cd /tmp", parent: "agent1" }, { command: BIN + " next --out .gstack/tmp/autoplan/run --plan " + PLAN + " --full" }],
+        "a python read": [{ command: C }, { command: "python3 -c \"import sys; sys.stdout.write(open('" + RUN + "/run.json').read())\"" }],
+        "an escaped dollar": [{ command: 'X=' + RUN + '; echo "\\$X is not a path"; ' + C }],
+      };
+      for (const [how, calls] of Object.entries(found)) expect([how, findRun(roots, tx(calls)).run?.seen]).toEqual([how, RUN + "/run.json"]);
+      const refused: Record<string, Call[]> = {
+        "a help call": [{ command: BIN + " --help --out " + RUN + " --plan " + PLAN }],
+        "env python": [{ command: C }, { command: "env python3 -c \"open('" + RUN + "/run.json','w').write('{}')\"" }],
+        eval: [{ command: C }, { command: "eval 'echo {} > " + RUN + "/run.json'" }],
+        "bash -c": [{ command: C }, { command: "bash -c 'printf {} > " + RUN + "/run.json'" }],
+        "a python write through a variable": [{ command: C }, { command: "python3 -c \"import json; p='" + RUN + "/run.json'; f=open(p, mode='w'); f.write('{}')\"" }],
+      };
+      for (const [how, calls] of Object.entries(refused)) expect([how, findRun(roots, tx(calls)).run]).toEqual([how, null]);
+    }));
+
+  test("never follows a symlink in the work tree, so a loop does not stop the scan and the live and copied trees read alike", () =>
+    withDir((dir) => {
+      const work = join(dir, "work");
+      const roots: RunRoot[] = [{ dir: work, seen: WORK }];
+      put(work, WORK, RUN, body({ status: "gate_pending" }));
+      symlinkSync("loop", join(work, "loop"));
+      symlinkSync(join(work, ".gstack/tmp/autoplan/run"), join(work, "alias"));
+      const real = tx([{ command: BIN + " next --out " + RUN + " --plan " + PLAN + " --full" }]);
+      expect(findRun(roots, real).run?.seen).toBe(RUN + "/run.json");
+      expect(gatePending(work, real)).toBe(true);
+      const viaAlias = tx([{ command: BIN + " next --out " + WORK + "/alias --plan " + PLAN + " --full" }]);
+      expect(findRun(roots, viaAlias).run).toBeNull();
+      expect(gatePending(work, viaAlias)).toBe(false);
     }));
 });

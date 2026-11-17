@@ -246,9 +246,9 @@ export function attemptOutcome(a: AttemptRead, owner: OwnerFailure): Outcome {
   if (owner?.reason === "allowance") return { state: "missing", code: "E_DAYONE_OWNER", why: "the responder's allowance refused a call: " + owner.detail };
   if (a.web > 0) return { state: "contaminated", code: "E_DAYONE_CONTAMINATED", why: a.web + " web tool result(s)" };
   if (a.gstack_reads.length) return { state: "contaminated", code: "E_DAYONE_CONTAMINATED", why: "read " + a.gstack_reads.slice(0, 3).join(", ") };
+  if (t.kind === "missing" && t.code === "E_BACKGROUND_DEADLINE") return { state: "missing", code: "E_DAYONE_BACKGROUND", why: "background work the session started still ran at its time limit" };
   if (a.contained === null) return { state: "retry", why: "the containment probe could not run" + (t.kind === "infra" && t.incident ? ": " + t.incident : "") };
   if (owner?.reason === "provider") return { state: "retry", why: "a responder provider failure: " + owner.detail };
-  if (t.kind === "missing" && t.code === "E_BACKGROUND_DEADLINE") return { state: "missing", code: "E_DAYONE_BACKGROUND", why: "background work the session started still ran at its time limit" };
   if (t.kind === "completed" || t.kind === "turn_cap" || t.kind === "timeout" || t.kind === "allowance_stop") return { state: "ended", how: t.kind };
   return { state: "retry", why: "an upstream or infrastructure failure: " + t.kind + ("code" in t ? " " + t.code : "incident" in t ? " " + t.incident : "") };
 }

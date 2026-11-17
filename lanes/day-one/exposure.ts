@@ -2,14 +2,18 @@
 // What a gstack arm session actually ran (prereg section 8, R48's procedure gate), read from autoplan's own run record,
 // never from what the model said.
 // - The run (pin change 2, item A): a run.json anywhere in the session's work tree, the state root included, counts
-//   only when the session's own command log holds the gstack-autoplan call that wrote it, a call whose --out is that
-//   run.json's folder and whose --plan is /work/app/plan.md, and the record's plan_input is /work/app/plan.md. A record
-//   that the command log touched any other way is hand-edited and never counts: a Write, Edit, MultiEdit or NotebookEdit
-//   call on it, a shell redirect into it, tee, sed -i, cp, mv, install, ln, dd or truncate onto it, or an interpreter's
-//   inline code that names it and writes. Of the records that count, the latest updated_at wins. Exposure and the live
-//   gate check (gatePending) read this one record.
+//   only when the session's own command log holds the gstack-autoplan call that wrote it, a next or run call whose
+//   --out is that run.json's folder and whose --plan is /work/app/plan.md, and the record's plan_input is
+//   /work/app/plan.md. A record that the command log touched any other way is hand-edited and never counts: a Write,
+//   Edit, MultiEdit or NotebookEdit call on it, a shell redirect into it, tee, sed -i, cp, mv, install, ln, dd or
+//   truncate onto it, or an interpreter's inline code that opens it for writing (a target the code builds at run time
+//   counts every run.json the code names). Of the records that count, the latest updated_at wins. Exposure and the live
+//   gate check (gatePending) read this one record. The scan never follows a symlink, as the copy-out does not.
 // - The command log is every Bash call in the transcript, subagents included, read as shell: variables a command sets
-//   are expanded, ~ is HOME, and a relative path resolves against the folder the last cd left (/work/app at first).
+//   are expanded (with ${X:-default}), ~ is HOME, wrappers (env, command, exec, nohup, time, timeout, sudo, nice) are
+//   stripped, and command substitutions, eval and bash or sh -c strings are read as commands too. A relative path
+//   resolves against the folder the last cd left in that agent's shell (/work/app at first); a cd inside a subshell,
+//   a substitution or a child shell does not leave it.
 // - Exposed: the run's status is complete (the gate was answered and applied); CEO and Eng closed; Design closed or
 //   skipped by autoplan's own scope rule; every closed phase's native voice completed; and every closed phase's outside
 //   voice ended (completed, or recorded unavailable or failed). An outside voice that is disabled (the config turned it
@@ -22,7 +26,7 @@
 //   differs from the base; otherwise plan.md as is.
 // - loadedSkills: every Skill tool call and every Read of a SKILL.md or skill reference file in the transcript,
 //   subagents included, with its path, for the loaded-skill log. On an arm with no gstack any entry marks the session.
-import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, join, posix, relative, sep } from "node:path";
 import { readTranscript } from "../../src/trial/review/readers.ts";
 
@@ -67,13 +71,19 @@ function runs(dir: string): { path: string; body: any }[] {
   const out: { path: string; body: any }[] = [];
   const walk = (d: string, depth: number) => {
     if (depth > 8 || !existsSync(d)) return;
-    for (const name of readdirSync(d)) {
+    let names: string[];
+    try {
+      names = readdirSync(d);
+    } catch {
+      return;
+    }
+    for (const name of names) {
       const p = join(d, name);
-      const st = statSync(p, { throwIfNoEntry: false });
+      const st = lstatSync(p, { throwIfNoEntry: false });
       if (!st) continue;
       if (st.isDirectory()) {
         if (name !== ".git") walk(p, depth + 1);
-      } else if (name === "run.json") {
+      } else if (st.isFile() && name === "run.json") {
         try {
           out.push({ path: p, body: JSON.parse(readFileSync(p, "utf8")) });
         } catch {
@@ -86,10 +96,34 @@ function runs(dir: string): { path: string; body: any }[] {
   return out;
 }
 
-type Piece = { t: string; q: boolean };
+type Piece = { t: string; q: boolean; sub?: string };
 type Tok = { op: string } | { word: Piece[] };
 
-/** Shell words and operators; q marks text that is never expanded. A heredoc's body joins its command as one more word. */
+/** The command substitution that opens at s[i] ("$(" or a backtick): its inner text and the index after it. */
+function substitution(s: string, i: number): { inner: string; end: number } {
+  if (s[i] === "`") {
+    let j = i + 1;
+    while (j < s.length && s[j] !== "`") j += s[j] === "\\" ? 2 : 1;
+    return { inner: s.slice(i + 1, j), end: j + 1 };
+  }
+  let depth = 1;
+  let j = i + 2;
+  let q: string | null = null;
+  while (j < s.length && depth) {
+    const c = s[j]!;
+    if (q) {
+      if (c === q) q = null;
+      else if (c === "\\" && q === '"') j++;
+    } else if (c === "'" || c === '"') q = c;
+    else if (c === "\\") j++;
+    else if (c === "(") depth++;
+    else if (c === ")") depth--;
+    j++;
+  }
+  return { inner: s.slice(i + 2, j - 1), end: j };
+}
+
+/** Shell words and operators. q marks text that is never expanded; a substitution is kept as its own piece with its command. A heredoc's body joins its command as one more word. */
 function lex(s: string): Tok[] {
   const out: Tok[] = [];
   const heredocs: string[] = [];
@@ -97,8 +131,13 @@ function lex(s: string): Tok[] {
   const push = (t: string, q: boolean) => {
     const w = (cur ??= []);
     const last = w[w.length - 1];
-    if (last && last.q === q) last.t += t;
+    if (last && last.q === q && last.sub === undefined) last.t += t;
     else w.push({ t, q });
+  };
+  const sub = (i: number): number => {
+    const r = substitution(s, i);
+    (cur ??= []).push({ t: s.slice(i, r.end), q: true, sub: r.inner });
+    return r.end;
   };
   const flush = () => {
     if (cur) out.push({ word: cur });
@@ -113,16 +152,22 @@ function lex(s: string): Tok[] {
       push(s.slice(i + 1, end), true);
       i = end + 1;
     } else if (c === '"') {
+      push("", false);
       let j = i + 1;
-      let t = "";
       while (j < s.length && s[j] !== '"') {
-        if (s[j] === "\\" && '"\\$`'.includes(s[j + 1] ?? "")) {
-          t += s[j + 1];
+        const d = s[j]!;
+        if (d === "\\" && '"\\$`'.includes(s[j + 1] ?? "")) {
+          push(s[j + 1]!, true);
           j += 2;
-        } else t += s[j++];
+        } else if ((d === "$" && s[j + 1] === "(") || d === "`") j = sub(j);
+        else {
+          push(d, false);
+          j++;
+        }
       }
-      push(t, false);
       i = j + 1;
+    } else if ((c === "$" && s[i + 1] === "(") || c === "`") {
+      i = sub(i);
     } else if (c === "\\") {
       if (s[i + 1] !== "\n") push(s[i + 1] ?? "", true);
       i += 2;
@@ -187,17 +232,44 @@ function lex(s: string): Tok[] {
   return out;
 }
 
-const expand = (w: Piece[], env: Map<string, string>): string =>
-  w
-    .map((p, k) => {
-      if (p.q) return p.t;
-      const t = k === 0 && /^~(\/|$)/.test(p.t) ? HOME + p.t.slice(1) : p.t;
-      return t.replace(/\$\{([A-Za-z_]\w*)\}|\$([A-Za-z_]\w*)/g, (_, a, b) => env.get(a ?? b) ?? "");
-    })
-    .join("");
+const VAR = /\$\{([A-Za-z_]\w*)(?:(:?)([-=])([^}]*))?\}|\$([A-Za-z_]\w*)/g;
+const expandText = (t: string, env: Map<string, string>): string =>
+  t.replace(VAR, (_, name: string | undefined, colon: string | undefined, op: string | undefined, dflt: string | undefined, bare: string | undefined) => {
+    if (bare) return env.get(bare) ?? "";
+    const v = env.get(name!);
+    if (!op) return v ?? "";
+    if (colon ? v : v !== undefined) return v!;
+    const d = expandText(dflt ?? "", env);
+    if (op === "=") env.set(name!, d);
+    return d;
+  });
+
+const expand = (w: Piece[], env: Map<string, string>): string => w.map((p, k) => (p.q ? p.t : expandText(k === 0 && /^~(\/|$)/.test(p.t) ? HOME + p.t.slice(1) : p.t, env))).join("");
+
+/** The files an interpreter's inline code opens for writing, as written in the code; every run.json it names when a target is not a literal. */
+function writeTargets(code: string): string[] {
+  const lits = new Map<string, string>();
+  for (const m of code.matchAll(/\b([A-Za-z_]\w*)\s*=\s*(['"])([^'"]*)\2/g)) lits.set(m[1]!, m[3]!);
+  const value = (x: string) => {
+    const t = x.trim();
+    const q = /^(['"])(.*)\1$/.exec(t);
+    return q ? q[2]! : (lits.get(t) ?? null);
+  };
+  const targets: (string | null)[] = [];
+  for (const m of code.matchAll(/\bopen\(\s*([^,()]+?)\s*,\s*(?:mode\s*=\s*)?['"]([^'"]*)['"]/g)) if (/[wax+]/.test(m[2]!)) targets.push(value(m[1]!));
+  for (const m of code.matchAll(/\b(?:writeFileSync|writeFile|appendFileSync|appendFile|Bun\.write)\(\s*([^,()]+?)\s*,/g)) targets.push(value(m[1]!));
+  for (const m of code.matchAll(/\bPath\(\s*([^()]+?)\s*\)\.(?:write_text|write_bytes)/g)) targets.push(value(m[1]!));
+  for (const m of code.matchAll(/\b(?:os\.replace|os\.rename|shutil\.copy\w*|shutil\.move|renameSync|copyFileSync)\(\s*[^,()]+?\s*,\s*([^,()]+?)\s*[,)]/g)) targets.push(value(m[1]!));
+  const named = code.match(/[^\s'"(),=]*run\.json/g) ?? [];
+  return targets.flatMap((t) => (t === null ? named : [t]));
+}
 
 const EDITS = ["Write", "Edit", "MultiEdit", "NotebookEdit"];
 const INTERPRETERS = new Set(["python", "python3", "node", "bun", "perl", "ruby"]);
+const WRAPPERS = new Set(["command", "exec", "nohup", "time", "builtin", "sudo", "nice"]);
+const SHELLS = new Set(["bash", "sh", "zsh", "dash"]);
+/** The gstack-autoplan verbs that start a run from a plan file. */
+const STARTS = new Set(["next", "run"]);
 
 export interface CommandLog {
   /** Each gstack-autoplan call: its verb and its --out and --plan as absolute paths in the session. */
@@ -206,31 +278,57 @@ export interface CommandLog {
   writes: Set<string>;
 }
 
+interface Ctx {
+  cwd: string;
+  env: Map<string, string>;
+}
+
 /** The session's command log under the rule above. */
 export function commandLog(transcript: string): CommandLog {
   const log: CommandLog = { calls: [], writes: new Set() };
-  let cwd = WORK;
-  const at = (p: string) => posix.resolve(cwd, p);
-  const simple = (raw: Piece[][], env: Map<string, string>) => {
+  const child = (c: Ctx): Ctx => ({ cwd: c.cwd, env: new Map(c.env) });
+  const simple = (raw: Piece[][], ctx: Ctx, depth: number) => {
     const ws: string[] = [];
     for (const w of raw) {
+      for (const p of w) if (p.sub !== undefined) shell(p.sub, child(ctx), depth + 1);
       const m = !ws.length && !w[0]!.q ? /^([A-Za-z_]\w*)=/.exec(w[0]!.t) : null;
-      if (m) env.set(m[1]!, expand([{ t: w[0]!.t.slice(m[0].length), q: false }, ...w.slice(1)], env));
-      else ws.push(expand(w, env));
+      if (m) ctx.env.set(m[1]!, expand([{ t: w[0]!.t.slice(m[0].length), q: false }, ...w.slice(1)], ctx.env));
+      else ws.push(expand(w, ctx.env));
     }
-    const [cmd, ...args] = ws;
+    let k = 0;
+    for (;;) {
+      const name = posix.basename(ws[k] ?? "");
+      if (WRAPPERS.has(name)) {
+        k++;
+        while ((ws[k] ?? "").startsWith("-")) k++;
+      } else if (name === "env") {
+        k++;
+        while (k < ws.length && (ws[k]!.startsWith("-") || /^[A-Za-z_]\w*=/.test(ws[k]!))) k++;
+      } else if (name === "timeout") {
+        k++;
+        while ((ws[k] ?? "").startsWith("-")) k++;
+        k++;
+      } else break;
+    }
+    const [cmd, ...args] = ws.slice(k);
     if (!cmd) return;
     const name = posix.basename(cmd);
+    const at = (p: string) => posix.resolve(ctx.cwd, p);
     const paths = args.filter((a) => !a.startsWith("-"));
     if (name === "export") {
-      for (const a of args) if (/^[A-Za-z_]\w*=/.test(a)) env.set(a.slice(0, a.indexOf("=")), a.slice(a.indexOf("=") + 1));
+      for (const a of args) if (/^[A-Za-z_]\w*=/.test(a)) ctx.env.set(a.slice(0, a.indexOf("=")), a.slice(a.indexOf("=") + 1));
     } else if (name === "cd") {
-      if (paths[0] !== undefined || !args.length) cwd = at(paths[0] ?? HOME);
+      if (paths[0] !== undefined || !args.length) ctx.cwd = at(paths[0] ?? HOME);
+    } else if (name === "eval") {
+      shell(args.join(" "), ctx, depth + 1);
+    } else if (SHELLS.has(name)) {
+      const c = args.findIndex((a) => /^-[a-z]*c$/.test(a));
+      if (c >= 0 && args[c + 1] !== undefined) shell(args[c + 1]!, child(ctx), depth + 1);
     } else if (name === "gstack-autoplan") {
       const flag = (f: string) => {
-        for (let k = 0; k < args.length; k++) {
-          if (args[k] === f) return args[k + 1] ?? null;
-          if (args[k]!.startsWith(f + "=")) return args[k]!.slice(f.length + 1);
+        for (let j = 0; j < args.length; j++) {
+          if (args[j] === f) return args[j + 1] ?? null;
+          if (args[j]!.startsWith(f + "=")) return args[j]!.slice(f.length + 1);
         }
         return null;
       };
@@ -246,37 +344,52 @@ export function commandLog(transcript: string): CommandLog {
     } else if (name === "dd") {
       for (const a of args) if (a.startsWith("of=")) log.writes.add(at(a.slice(3)));
     } else if (INTERPRETERS.has(name)) {
-      const code = args.join(" ");
-      if (/\bopen\([^)]*['"][wax]\+?['"]|write_text|write_bytes|writeFile|\.write\(|json\.dump\(/.test(code)) for (const p of code.match(/[^\s'"(),=]*run\.json/g) ?? []) log.writes.add(at(p));
+      for (const t of writeTargets(args.join(" "))) log.writes.add(at(t));
     }
   };
+  const shell = (command: string, top: Ctx, depth: number): void => {
+    if (depth > 8) return;
+    const scopes: Ctx[] = [];
+    let ctx = top;
+    let raw: Piece[][] = [];
+    let redirect: string | null = null;
+    const end = () => {
+      simple(raw, ctx, depth);
+      raw = [];
+      redirect = null;
+    };
+    for (const tok of lex(command)) {
+      if ("op" in tok) {
+        if (tok.op === ">" || tok.op === ">>" || tok.op === "<") {
+          redirect = tok.op;
+          continue;
+        }
+        end();
+        if (tok.op === "(") {
+          scopes.push(ctx);
+          ctx = child(ctx);
+        } else if (tok.op === ")" && scopes.length) ctx = scopes.pop()!;
+      } else if (redirect) {
+        if (redirect !== "<") log.writes.add(posix.resolve(ctx.cwd, expand(tok.word, ctx.env)));
+        redirect = null;
+      } else raw.push(tok.word);
+    }
+    end();
+  };
+  const cwds = new Map<string, string>();
   for (const m of readTranscript(transcript)) {
     if (m.type !== "assistant" || !Array.isArray(m.message?.content)) continue;
+    const agent = String(m.parent_tool_use_id ?? "");
     for (const b of m.message.content as Record<string, any>[]) {
       if (b?.type !== "tool_use") continue;
+      const ctx: Ctx = { cwd: cwds.get(agent) ?? WORK, env: new Map() };
       if (EDITS.includes(b.name)) {
         const p = b.input?.file_path ?? b.input?.notebook_path;
-        if (typeof p === "string") log.writes.add(at(p));
-        continue;
+        if (typeof p === "string") log.writes.add(posix.resolve(ctx.cwd, p));
+      } else if (b.name === "Bash" && typeof b.input?.command === "string") {
+        shell(b.input.command, ctx, 0);
+        cwds.set(agent, ctx.cwd);
       }
-      if (b.name !== "Bash" || typeof b.input?.command !== "string") continue;
-      const env = new Map<string, string>();
-      let raw: Piece[][] = [];
-      let redirect: string | null = null;
-      for (const tok of lex(b.input.command)) {
-        if ("op" in tok) {
-          if (tok.op === ">" || tok.op === ">>" || tok.op === "<") redirect = tok.op;
-          else {
-            simple(raw, env);
-            raw = [];
-            redirect = null;
-          }
-        } else if (redirect) {
-          if (redirect !== "<") log.writes.add(at(expand(tok.word, env)));
-          redirect = null;
-        } else raw.push(tok.word);
-      }
-      simple(raw, env);
     }
   }
   return log;
@@ -297,8 +410,8 @@ export function findRun(roots: RunRoot[], transcript: string): RunSearch {
       const why =
         r.body?.plan_input !== PLAN
           ? "plan_input " + JSON.stringify(r.body?.plan_input ?? null) + ", not " + PLAN
-          : !log.calls.some((c) => c.out === folder && c.plan === PLAN)
-            ? "no gstack-autoplan call with --out " + folder + " and --plan " + PLAN + " in the session's command log"
+          : !log.calls.some((c) => STARTS.has(c.verb) && c.out === folder && c.plan === PLAN)
+            ? "no gstack-autoplan next or run call with --out " + folder + " and --plan " + PLAN + " in the session's command log"
             : log.writes.has(s)
               ? "edited by hand in the session's command log"
               : null;
