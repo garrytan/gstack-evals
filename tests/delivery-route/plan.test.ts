@@ -9,6 +9,7 @@ import { plannedCells, type Plan } from "../../quick/laneb/l1/l1.ts";
 import { appendRow, readRows, toMicros } from "../../quick/laneb/runner/ledger.ts";
 import { check, wrappers } from "../../lanes/delivery-route/arms.ts";
 import { approve, capOf, launchGuard, markDone, needsRerun } from "../../lanes/delivery-route/money.ts";
+import { guardParts } from "../../lanes/delivery-route/cli.ts";
 import { ARM_NAMES, ARMS, CAPS_USD, CLOSING, drawnTasks, ITEM_NAMES, loadBundle, REPO, SMOKE_TASKS, sha256 } from "../../lanes/delivery-route/pins.ts";
 import { B1_PROFILE, itemPlan } from "../../lanes/delivery-route/plans.ts";
 import { b1Row, safetyStop, stepsSeen } from "../../lanes/delivery-route/table.ts";
@@ -101,6 +102,21 @@ describe("money", () => {
     const over = launchGuard("b1-opus", { "b1-opus": readRows(f) }, { "b1-opus": { parts: opus, finished: [] } }, { as_of: "t", usd: 0 });
     expect([over.ok, over.why.some((w) => w.includes("passes its cap $170.00"))]).toEqual([false, true]);
     expect(launchGuard("b1-opus", { "b1-opus": readRows(f) }, { "b1-opus": { parts: opus, finished: opus.map((p) => p.name) } }, { as_of: "t", usd: 0 }).ok).toBe(true);
+  });
+  test("a relaunch is projected before it starts: with $150 settled, relaunching the last part projects $216.40 and refuses", () => {
+    const f = join(d(), "b1-opus.jsonl"), work = d(), opus = itemPlan("b1-opus", draw.run).parts, last = opus.at(-1)!.name;
+    approve(f, "b1-opus", 170, "test");
+    appendRow(f, { ts: "t", item: "b1-opus", kind: "reserve", id: "s1", usd_micros: toMicros(150) });
+    appendRow(f, { ts: "t", item: "b1-opus", kind: "settle", id: "s1", usd_micros: toMicros(150) });
+    for (const p of opus) writeFileSync(join(work, p.name + ".result.json"), "{}");
+    const g = (parts: ReturnType<typeof guardParts>) => launchGuard("b1-opus", { "b1-opus": readRows(f) }, { "b1-opus": parts }, { as_of: "t", usd: 0 });
+    const done = g(guardParts(work, opus)), relaunch = g(guardParts(work, opus, last));
+    expect([done.ok, relaunch.ok, relaunch.why.some((w) => w.includes("$216.40"))]).toEqual([true, false, true]);
+    mkdirSync(join(work, last + "-relaunch"));
+    writeFileSync(join(work, last + "-relaunch", "l1-part.json"), JSON.stringify({ ...opus.at(-1)!, name: last + "-relaunch", relaunch_of: last }));
+    expect(g(guardParts(work, opus)).ok).toBe(false);
+    writeFileSync(join(work, last + "-relaunch.result.json"), "{}");
+    expect(g(guardParts(work, opus)).ok).toBe(true);
   });
 });
 

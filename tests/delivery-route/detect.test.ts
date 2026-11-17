@@ -323,3 +323,35 @@ describe("a cd the parser can't resolve leaves the folder unknown", () => {
     expect(read(detect(log([bash('cd "$REPO"', ""), bash("cd /testbed", ""), bash("sed -i s/a/b/ pkg/mod.py", ""), ...tail]), PATCH))).toEqual([false, 0]);
   });
 });
+
+describe("the failing and passing runs are runs of the same written test", () => {
+  const UNIT_OK = "     1\t.\n     2\t----------------------------------------------------------------------\n     3\tRan 1 test in 0.001s\n     4\t\n     5\tOK";
+  const passedBy = (command: string, result = PASSED) => detect(log([write(TEST), bash("pytest tests/test_mod.py", FAILED, true), edit("/testbed/pkg/mod.py"), bash(command, result)]), PATCH).followed;
+  test("a runner's every operand is a selection: another folder, or tox passing one after --, does not select the test", () => {
+    expect(["pytest integration -q", "tox -e py311 -- integration", "pytest $TESTS -q"].map((c) => passedBy(c))).toEqual([false, false, false]);
+    expect(["pytest tests -q", "pytest -n auto -q", "pytest --timeout 60 tests/test_mod.py", "tox -e py311", "tox -e py311 -- tests"].map((c) => passedBy(c))).toEqual([true, true, true, true, true]);
+    expect(passedBy("cd tests && python -m unittest test_mod", "Ran 1 test in 0.001s\n\nOK")).toBe(true);
+  });
+  test("a pass on one written test after a fail on another is not followed, and a pass on the failed one is", () => {
+    const A = "/testbed/tests/test_a.py", B = "/testbed/tests/test_b.py", patch = diff("pkg/mod.py");
+    const run = (passOn: string) => detect(log([write(A), write(B), bash("pytest tests/test_a.py", failedIn("tests/test_a.py"), true), edit("/testbed/pkg/mod.py"), bash("pytest " + passOn + " -q", PASSED)]), patch);
+    expect([run("tests/test_b.py").followed, run("tests/test_b.py").failing_before_source, run("tests/test_a.py").followed, run("tests").followed]).toEqual([false, true, true, true]);
+  });
+  test("a background unittest run read through Read is read without its line numbers, passing or failing", () => {
+    const launch = { ...bash("python -m unittest tests.test_mod", "Command running in background with ID: bg3. Output is being written to: /tmp/tasks/bg3.output"), input: { command: "python -m unittest tests.test_mod", run_in_background: true } };
+    const read = (out: string) => detect(log([write(TEST), bash("pytest tests/test_mod.py", FAILED, true), edit("/testbed/pkg/mod.py"), launch, { name: "Read", input: { file_path: "/tmp/tasks/bg3.output" }, result: out }]), PATCH);
+    const ok = read(UNIT_OK), bad = read(UNIT_OK.replace("\tOK", "\tFAILED (failures=1)"));
+    expect([ok.followed, ok.unread_background, bad.followed, bad.passing_after_source]).toEqual([true, 0, false, false]);
+  });
+});
+
+describe("a relative write from a folder a cd left unknown stays unknown whatever its .. segments", () => {
+  const tail = [write(TEST), bash("pytest tests/test_mod.py", FAILED, true), edit("/testbed/pkg/mod.py"), bash("pytest tests/test_mod.py -q", PASSED)];
+  const read = (command: string) => { const d = detect(log([bash(command, ""), ...tail]), PATCH); return [d.followed, d.unresolved_writes]; };
+  test("a write that climbs out with .. is a write no parser can name, and one from a known folder is read as written", () => {
+    expect(read('cd "$WORK" && printf fix > ../pkg/mod.py')).toEqual([true, 1]);
+    expect(read('cd "$WORK" && sed -i s/a/b/ ../../../../../../pkg/mod.py')).toEqual([true, 1]);
+    expect(read('cd "$WORK" && sed -i s/a/b/ ../pkg/$F')[1]).toBe(1);
+    expect(read("cd /testbed/src && printf fix > ../pkg/mod.py")).toEqual([false, 0]);
+  });
+});

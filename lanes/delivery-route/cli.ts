@@ -4,7 +4,7 @@
 // (plans.ts B1_PROFILE), with L1's exit codes; host-up, launch and relaunch pass the launch guard first.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { l1Main } from "../../quick/laneb/l1/l1.ts";
+import { l1Main, type PartPlan } from "../../quick/laneb/l1/l1.ts";
 import { readRows, type Row } from "../../quick/laneb/runner/ledger.ts";
 import { parseLog } from "../../quick/laneb/l1/probes.ts";
 import { checkRows, report } from "./analyze.ts";
@@ -20,10 +20,19 @@ const USAGE = "E_USAGE usage: b1 arms sources|build|check ... | sessions run --o
 const LAUNCHER = ["prepare", "host-up", "launch", "attach", "relaunch", "rerun", "recover", "host-down"];
 const GUARDED = ["host-up", "launch", "relaunch"];
 
-// The launch guard's inputs: the work dir's plan and finished parts (a prepared attempt 2 counts as a part), the item's own
+/** The parts the launch guard projects and those finished: the plan's parts and every prepared attempt 2 or relaunch, a part
+ *  finished once its result is written. A relaunch is projected before it starts: the part it replaces (relaunching) counts
+ *  as unfinished, at its planned spend, parallel allowance and VM reserve, though its result is already written. */
+export function guardParts(work: string, planned: PartPlan[], relaunching?: string): { parts: PartPlan[]; finished: string[] } {
+  const prepared = planned.flatMap((p) => [p.name + "-a2", p.name + "-relaunch"]).map((n) => join(work, n, "l1-part.json")).filter((f) => existsSync(f)).map((f) => JSON.parse(readFileSync(f, "utf8")) as PartPlan);
+  const parts = [...planned, ...prepared];
+  return { parts, finished: parts.map((p) => p.name).filter((n) => n !== relaunching && existsSync(join(work, n + ".result.json"))) };
+}
+
+// The launch guard's inputs: the work dir's plan and its parts (guardParts), the item's own
 // ledger (LEDGER, or the host mirror l1.ts keeps while the ledger is on the host), every other item's ledger as
 // B1_LEDGERS/<item>.jsonl, and B1_CREW, the crew file written from this thread's counter.
-function guard(work: string) {
+function guard(work: string, relaunching?: string) {
   const plan = JSON.parse(readFileSync(join(work, "plan.json"), "utf8"));
   const dir = process.env.B1_LEDGERS ?? "", crewPath = process.env.B1_CREW ?? "", own = process.env.LEDGER ?? "";
   if (!dir || !crewPath || !existsSync(crewPath)) throw new Error("E_USAGE b1 launch guard: set B1_LEDGERS to the folder of item ledgers (<item>.jsonl) and B1_CREW to the crew file");
@@ -32,9 +41,7 @@ function guard(work: string) {
   for (const i of ITEM_NAMES) if (existsSync(join(dir, i + ".jsonl"))) ledgers[i] = readRows(join(dir, i + ".jsonl"));
   const mirror = join(work, "host/ledger.jsonl");
   ledgers[plan.item as Item] = own && existsSync(own) ? readRows(own) : existsSync(mirror) ? readRows(mirror) : ledgers[plan.item as Item] ?? [];
-  const parts = [...plan.parts, ...plan.parts.map((p: any) => join(work, p.name + "-a2", "l1-part.json")).filter((f: string) => existsSync(f)).map((f: string) => JSON.parse(readFileSync(f, "utf8")))];
-  const finished = parts.map((p: any) => p.name).filter((n: string) => existsSync(join(work, n + ".result.json")));
-  const g = launchGuard(plan.item, ledgers, { [plan.item]: { parts, finished } }, JSON.parse(readFileSync(crewPath, "utf8")) as Crew);
+  const g = launchGuard(plan.item, ledgers, { [plan.item]: guardParts(work, plan.parts, relaunching) }, JSON.parse(readFileSync(crewPath, "utf8")) as Crew);
   for (const l of g.lines) console.log(l);
   if (!g.ok) throw new Error("E_B1_LAUNCH " + plan.item + ": " + g.why.join("; ") + "; take it to the Captain before launching");
 }
@@ -80,7 +87,7 @@ export async function main(argv: string[]): Promise<number> {
     }
     if (cmd === "guard") { if (!rest[0]) throw new Error(USAGE); guard(resolve(rest[0])); return 0; }
     if (cmd && LAUNCHER.includes(cmd)) {
-      if (GUARDED.includes(cmd)) { if (!rest[0]) throw new Error(USAGE); guard(resolve(rest[0])); }
+      if (GUARDED.includes(cmd)) { if (!rest[0] || (cmd === "relaunch" && !opt("part"))) throw new Error(USAGE); guard(resolve(rest[0]), cmd === "relaunch" ? opt("part") : undefined); }
       l1Main(argv, B1_PROFILE);
       if (cmd === "prepare") {
         const work = resolve(rest[0]!), plan = JSON.parse(readFileSync(join(work, "plan.json"), "utf8"));

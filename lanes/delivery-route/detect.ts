@@ -39,7 +39,8 @@ const EDITS = /\b(?:sed|perl)\s+(?:-\S+\s+)*-[a-zA-Z]*i|\bopen\([^)]*,\s*['"][wa
 const PATHLIKE = /[^\s'"`=(),;&|<>{}[\]]+\.[A-Za-z0-9]+(?![\w.])/g;
 /** A word no parser can name a file from: a variable, a command substitution, a glob, or find's {}. */
 const OPEN_WORD = /[$`*?]|^\{\}$/;
-/** Stands in for a folder a cd left unknown (cd "$DIR", cd ~, cd -): a relative write there is a write no parser can name. */
+/** Stands in for a folder a cd left unknown (cd "$DIR", cd ~, cd -): a relative write there is resolved under it, at a depth
+ *  past every .. the command and the session's scripts hold, so it stays under it and is a write no parser can name. */
 const UNKNOWN_CWD = "/\0cwd";
 const WRITE_REDIRECT = /^(?:\d*>>?|\d*>\||&>>?)$/;
 const IN_PLACE = /\b(?:g?sed|perl)\s+(?:-\S+\s+)*-[a-zA-Z]*i|--in-place/;
@@ -103,7 +104,7 @@ const diffTargets = (diff: string) => [...diff.matchAll(/^\+\+\+ (\S+)/gm)].map(
  *  parser can name (open). Reads, output to stdout, /dev paths and fd duplications are never writes. A relative write in a
  *  folder a cd left unknown is read under UNKNOWN_CWD and counted as open, never resolved against /. */
 function commandWrites(c: ShellCommand, scripts: Map<string, string>, root: string, depth = 0): { files: string[]; open: boolean } {
-  const cwd = c.cwd ?? UNKNOWN_CWD, files: string[] = [];
+  const cwd = c.cwd ?? UNKNOWN_CWD + "/\0".repeat(1 + [c.text, ...c.heredocs, ...scripts.values()].reduce((n, x) => n + x.split("..").length - 1, 0)), files: string[] = [];
   let open = false;
   const unnamed = (w: string) => OPEN_WORD.test(w) && !outsideTree(w, cwd, root);
   const name = posix.basename(c.words[0] ?? ""), args = c.words.slice(1);
@@ -274,7 +275,7 @@ function writesOf(us: Use[], root: string, cwds: Map<number, Cwd>): { writes: Wr
 
 /** Each Bash run's result where the session saw it: a background run is seen where its output is read (a Read of its
  *  output file, a later Bash command that names the file, such as a tail or rg of it, or TaskOutput or BashOutput naming
- *  its id), never at its launch. */
+ *  its id), never at its launch, with a Read's line numbers taken off its output. */
 function runsOf(us: Use[], root: string, cwds: Map<number, Cwd>): { runs: Run[]; unread: number } {
   let unread = 0;
   const runs = us.filter((u) => u.name === "Bash" && typeof u.input.command === "string").flatMap((b): Run[] => {
@@ -282,7 +283,7 @@ function runsOf(us: Use[], root: string, cwds: Map<number, Cwd>): { runs: Run[];
     const command = String(b.input.command), cwd = cwds.get(b.at)?.cwd ?? root;
     if (!bg) return [{ at: b.at, ok: b.ok, result: b.result, command, cwd, later: false }];
     const [, id, file] = bg;
-    const reads = us.filter((u) => u.at > b.at && ((u.name === "Read" && u.input.file_path === file) || (u.name === "Bash" && typeof u.input.command === "string" && u.input.command.includes(file!)) || ((u.name === "TaskOutput" || u.name === "BashOutput") && Object.values(u.input ?? {}).includes(id)))).map((u) => ({ at: u.at, ok: true, result: u.result, command, cwd, later: true }));
+    const reads = us.filter((u) => u.at > b.at && ((u.name === "Read" && u.input.file_path === file) || (u.name === "Bash" && typeof u.input.command === "string" && u.input.command.includes(file!)) || ((u.name === "TaskOutput" || u.name === "BashOutput") && Object.values(u.input ?? {}).includes(id)))).map((u) => ({ at: u.at, ok: true, result: resultLines(u.result).join("\n"), command, cwd, later: true }));
     if (!reads.length) unread++;
     return reads;
   });
@@ -291,14 +292,16 @@ function runsOf(us: Use[], root: string, cwds: Map<number, Cwd>): { runs: Run[];
 
 const RUNNER = /^(?:pytest|py\.test|tox|nox)$/;
 const MODULE = /^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+$/;
+/** A module a runner may be given: a dotted name, or one name (unittest's test_calc, run from the test's folder). */
+const MODULE_ARG = /^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*$/;
 /** pytest and unittest options whose value is the next word. */
-const VALUED = new Set(["-k", "-m", "-c", "-p", "-o", "-W", "--ignore", "--ignore-glob", "--deselect", "--rootdir", "--junitxml", "--basetemp", "--confcutdir", "--cov-config"]);
+const VALUED = new Set(["-k", "-m", "-c", "-p", "-o", "-W", "-n", "--numprocesses", "--ignore", "--ignore-glob", "--deselect", "--rootdir", "--junitxml", "--basetemp", "--confcutdir", "--cov", "--cov-config", "--cov-report", "--maxfail", "--timeout", "--tb", "--durations", "--capture", "--import-mode", "--log-level", "--log-cli-level", "--dist", "--reruns", "--count"]);
 /** Whether a runner's path argument selects a test file: a path to the file or to a directory above it, or a dotted module
  *  name (unittest's tests.test_calc, or tests.test_calc.AddTest.test_add) for the file or a test inside it. */
 function selects(arg: string, cwd: string, test: string): boolean {
   const dir = posix.resolve(cwd, arg.split("::")[0]!).replace(/\/+$/, "");
   if (test === dir || test.startsWith(dir + "/")) return true;
-  if (!MODULE.test(arg) || /\.py$/.test(arg)) return false;
+  if (!MODULE_ARG.test(arg) || /\.py$/.test(arg)) return false;
   const mod = posix.resolve(cwd, arg.replace(/\./g, "/")), file = test.replace(/\.py$/, "");
   return file === mod || mod.startsWith(file + "/") || test.startsWith(mod + "/");
 }
@@ -364,18 +367,21 @@ function selectsTest(r: Run, test: string): boolean {
     return !!u && isModule(u[1]!, test);
   });
 }
-/** Whether one command of a run selects the test file by its words: it starts the file, it is a test runner whose path
- *  argument is a folder above the file or that has none, or it is an inline script that names the file and calls
+/** Whether one command of a run selects the test file by its words: it starts the file, it is a test runner one of whose
+ *  operands (every word that is no option or option value; for tox and nox, the words after --) is the file, a test in it, its
+ *  module or a folder above it, or that has none, or it is an inline script that names the file and calls
  *  pytest.main or unittest.main. */
 function commandSelects(c: ShellCommand, cwd: string, test: string): boolean {
   if (startsFile(c, cwd, test)) return true;
   const at = runnerAt(c);
   if (at >= 0) {
-    const rest = c.words.slice(at + 1), args: string[] = [];
+    const runner = posix.basename(c.words[at]!), unit = runner === "unittest", args: string[] = [];
+    let rest = c.words.slice(at + 1);
+    if (runner === "tox" || runner === "nox") rest = rest.includes("--") ? rest.slice(rest.indexOf("--") + 1) : [];
     for (let k = 0; k < rest.length; k++) {
       const a = rest[k]!;
-      if (VALUED.has(a)) k++;
-      else if (!a.startsWith("-") && /[/.]/.test(a) && a !== "unittest") args.push(a);
+      if (VALUED.has(a) || (unit && /^-[st]$/.test(a))) k++;
+      else if (!a.startsWith("-") && !(unit && a === "discover")) args.push(a);
     }
     if (!args.length || args.some((a) => selects(a, cwd, test))) return true;
   }
@@ -383,8 +389,9 @@ function commandSelects(c: ShellCommand, cwd: string, test: string): boolean {
   return /\b(?:pytest|unittest)\.main\b/.test(code) && code.includes(posix.basename(test));
 }
 /** The passing run of a test: a run that succeeds, shows a test outcome with no failing count, reports no failed test in the
- *  session's test files and selects one of them, so an unrelated green run does not count. */
-const passing = (r: Run, tests: string[]) => r.ok && showsOutcome(r.result) && !showsFailure(r.result) && !resultLines(r.result).some((l) => { const f = failedTest(l); return f !== null && tests.some((t) => failedHere(f, t)); }) && tests.some((t) => selectsTest(r, t));
+ *  session's test files and selects one the failing runs reported failing (covered), so an unrelated green run, or a pass on
+ *  another written test, does not count. */
+const passing = (r: Run, tests: string[], covered: string[]) => r.ok && showsOutcome(r.result) && !showsFailure(r.result) && !resultLines(r.result).some((l) => { const f = failedTest(l); return f !== null && tests.some((t) => failedHere(f, t)); }) && covered.some((t) => selectsTest(r, t));
 
 type Sequence = { items: { kind: "cmd" | "and" | "or" | "bg"; pipeline: number }[]; at: number[] };
 const MARKS = new Map<string, "and" | "or" | "bg">([["__b1_and__", "and"], ["__b1_or__", "or"], ["__b1_bg__", "bg"]]);
@@ -435,9 +442,11 @@ function read(ws: Write[], runs: Run[], fix: Set<string>, seqAt: (at: number) =>
   const tests = ws.filter((w) => TEST_PATH.test(w.path) && !NOT_SOURCE.test(w.path) && !fix.has(w.path) && (!source || first(w, source)));
   const test = tests[0], paths = tests.map((t) => t.path);
   const place = (r: Run) => ({ at: r.at, ks: r.later ? [] : shellCommands(r.command, r.cwd).flatMap((c, k) => (paths.some((t) => commandSelects(c, c.cwd ?? r.cwd, t)) ? [k] : [])) });
-  const before = test && source ? runs.find((r) => { const p = place(r), seen = tests.filter((t) => first(t, p)); return seen.length > 0 && first(p, source, false) && failing(r, seen.map((t) => t.path)); }) : undefined;
-  const after = test && source ? runs.find((r) => first(source, place(r)) && passing(r, paths)) : undefined;
-  return { source, test, before, after, followed: !!(test && source && before && after) };
+  const fails = test && source ? runs.flatMap((r) => { const p = place(r); return first(p, source, false) ? tests.filter((t) => first(t, p) && failing(r, [t.path])).map((t) => ({ r, path: t.path })) : []; }) : [];
+  const covered = fails.map((f) => f.path), before = fails[0]?.r;
+  const passes = (covers: string[]) => (test && source ? runs.find((r) => first(source, place(r)) && passing(r, paths, covers)) : undefined);
+  const after = passes(paths), closes = covered.length ? passes(covered) : undefined;
+  return { source, test, before, after, followed: !!(test && source && before && closes) };
 }
 
 /** B1's detection for one session: its SDK records, its final patch and the repository root (the session's cwd). */
