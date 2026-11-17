@@ -120,7 +120,7 @@ Every arm runs Claude Opus 5.5 in Claude Code at the pinned driver, with the cla
 
 - **N (no gstack).** Writes the base plan. No gstack, no drive and no state root anywhere in its container.
 - **D (day-one pass, no gstack).** Reviews the base plan with one extra paragraph.
-- **A (gstack /autoplan).** Reviews the base plan with /autoplan --full on gstack at 5b4fa9ea335e3ba743a36e3269da95980b77b32d (1.99.5.0), unattended as the factory runs it, its second voice on GPT-6 Astra (section 7). --full, because the factory's Capy default (lean) drops the second voice, a main intention.
+- **A (gstack /autoplan).** Reviews the base plan with /autoplan --full on gstack at 5b4fa9ea335e3ba743a36e3269da95980b77b32d (version 1.99.5.0), unattended as the factory runs it, its second voice on GPT-6 Astra (section 7). --full, because the factory's Capy default (lean) drops the second voice, a main intention.
 
 Each arm's whole first message is built from these texts (lanes/day-one/frozen.ts armPrompt). N gets the common ask, a blank line and the owner notice. D gets the review ask, the day-one pass and the owner notice, each after a blank line. A gets the /autoplan line, the review ask and the owner notice, each after a blank line.
 
