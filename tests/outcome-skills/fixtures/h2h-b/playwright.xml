@@ -1,0 +1,78 @@
+<testsuites id="" name="" tests="4" failures="2" skipped="0" errors="0" time="1.2816889999999999">
+<testsuite name="page.spec.ts" timestamp="2026-11-15T04:19:49.542Z" hostname="chromium" tests="2" failures="1" skipped="0" time="0.646" errors="0">
+<testcase name="page › sets content" classname="page.spec.ts" time="0.101">
+</testcase>
+<testcase name="page › fails" classname="page.spec.ts" time="0.545">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|../test-results/page-page-fails-chromium/error-context.md]]
+]]>
+</system-out>
+<failure message="expect(locator).toHaveText(expected) failed" type="expect.toHaveText">
+<![CDATA[  [chromium] › page.spec.ts:3:3 › page › fails ─────────────────────────────────────────────────────
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  locator('#x')
+    Expected: "bye"
+    Received: "hi"
+    Timeout:  500ms
+
+    Call log:
+      - Expect "toHaveText" locator('#x') with timeout 500ms
+      - waiting for locator('#x')
+        6 × locator resolved to <p id="x">hi</p>
+          - unexpected value "hi"
+
+
+      1 | import { test, expect } from '@playwright/test';
+      2 | test.describe('page', () => { test('sets content', async ({ page }) => { await page.setContent('<p id=x>hi</p>'); await expect(page.locator('#x')).toHaveText('hi'); });
+    > 3 |   test('fails', async ({ page }) => { await page.setContent('<p id=x>hi</p>'); await expect(page.locator('#x')).toHaveText('bye', { timeout: 500 }); }); });
+        |                                                                                                                 ^
+      4 |
+        at /testbed/e2e/page.spec.ts:3:113
+
+    Error Context: ../test-results/page-page-fails-chromium/error-context.md
+]]>
+</failure>
+</testcase>
+</testsuite>
+<testsuite name="page.spec.ts" timestamp="2026-11-15T04:19:49.542Z" hostname="mobile" tests="2" failures="1" skipped="0" time="0.65" errors="0">
+<testcase name="page › sets content" classname="page.spec.ts" time="0.101">
+</testcase>
+<testcase name="page › fails" classname="page.spec.ts" time="0.549">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|../test-results/page-page-fails-mobile/error-context.md]]
+]]>
+</system-out>
+<failure message="expect(locator).toHaveText(expected) failed" type="expect.toHaveText">
+<![CDATA[  [mobile] › page.spec.ts:3:3 › page › fails ───────────────────────────────────────────────────────
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  locator('#x')
+    Expected: "bye"
+    Received: "hi"
+    Timeout:  500ms
+
+    Call log:
+      - Expect "toHaveText" locator('#x') with timeout 500ms
+      - waiting for locator('#x')
+        6 × locator resolved to <p id="x">hi</p>
+          - unexpected value "hi"
+
+
+      1 | import { test, expect } from '@playwright/test';
+      2 | test.describe('page', () => { test('sets content', async ({ page }) => { await page.setContent('<p id=x>hi</p>'); await expect(page.locator('#x')).toHaveText('hi'); });
+    > 3 |   test('fails', async ({ page }) => { await page.setContent('<p id=x>hi</p>'); await expect(page.locator('#x')).toHaveText('bye', { timeout: 500 }); }); });
+        |                                                                                                                 ^
+      4 |
+        at /testbed/e2e/page.spec.ts:3:113
+
+    Error Context: ../test-results/page-page-fails-mobile/error-context.md
+]]>
+</failure>
+</testcase>
+</testsuite>
+</testsuites>

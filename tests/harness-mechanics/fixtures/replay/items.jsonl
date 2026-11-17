@@ -1,0 +1,126 @@
+{"point":"route","id":"route-swe-rebench-9","task":"route-swe-rebench-9","source":"swe-rebench","text":"fixture prompt 9 from swe-rebench [truth /qa]"}
+{"point":"route","id":"route-swe-rebench-13","task":"route-swe-rebench-13","source":"swe-rebench","text":"fixture prompt 13 from swe-rebench [truth /qa]"}
+{"point":"route","id":"route-swe-rebench-5","task":"route-swe-rebench-5","source":"swe-rebench","text":"fixture prompt 5 from swe-rebench [truth /qa]"}
+{"point":"route","id":"route-swe-rebench-2","task":"route-swe-rebench-2","source":"swe-rebench","text":"fixture prompt 2 from swe-rebench [truth /verify]"}
+{"point":"route","id":"route-swe-rebench-7","task":"route-swe-rebench-7","source":"swe-rebench","text":"fixture prompt 7 from swe-rebench [truth none]"}
+{"point":"route","id":"route-swe-rebench-12","task":"route-swe-rebench-12","source":"swe-rebench","text":"fixture prompt 12 from swe-rebench [truth /review]"}
+{"point":"route","id":"route-swe-rebench-11","task":"route-swe-rebench-11","source":"swe-rebench","text":"fixture prompt 11 from swe-rebench [truth none]"}
+{"point":"route","id":"route-swe-rebench-3","task":"route-swe-rebench-3","source":"swe-rebench","text":"fixture prompt 3 from swe-rebench [truth none]"}
+{"point":"route","id":"route-swe-rebench-0","task":"route-swe-rebench-0","source":"swe-rebench","text":"fixture prompt 0 from swe-rebench [truth /review]"}
+{"point":"route","id":"route-swe-rebench-10","task":"route-swe-rebench-10","source":"swe-rebench","text":"fixture prompt 10 from swe-rebench [truth /verify]"}
+{"point":"route","id":"route-terminal-bench-2-12","task":"route-terminal-bench-2-12","source":"terminal-bench-2","text":"fixture prompt 12 from terminal-bench-2 [truth /qa]"}
+{"point":"route","id":"route-terminal-bench-2-5","task":"route-terminal-bench-2-5","source":"terminal-bench-2","text":"fixture prompt 5 from terminal-bench-2 [truth /verify]"}
+{"point":"route","id":"route-terminal-bench-2-3","task":"route-terminal-bench-2-3","source":"terminal-bench-2","text":"fixture prompt 3 from terminal-bench-2 [truth /review]"}
+{"point":"route","id":"route-terminal-bench-2-9","task":"route-terminal-bench-2-9","source":"terminal-bench-2","text":"fixture prompt 9 from terminal-bench-2 [truth /verify]"}
+{"point":"route","id":"route-terminal-bench-2-11","task":"route-terminal-bench-2-11","source":"terminal-bench-2","text":"fixture prompt 11 from terminal-bench-2 [truth /review]"}
+{"point":"route","id":"route-terminal-bench-2-10","task":"route-terminal-bench-2-10","source":"terminal-bench-2","text":"fixture prompt 10 from terminal-bench-2 [truth none]"}
+{"point":"route","id":"route-terminal-bench-2-4","task":"route-terminal-bench-2-4","source":"terminal-bench-2","text":"fixture prompt 4 from terminal-bench-2 [truth /qa]"}
+{"point":"route","id":"route-terminal-bench-2-8","task":"route-terminal-bench-2-8","source":"terminal-bench-2","text":"fixture prompt 8 from terminal-bench-2 [truth /qa]"}
+{"point":"route","id":"route-terminal-bench-2-7","task":"route-terminal-bench-2-7","source":"terminal-bench-2","text":"fixture prompt 7 from terminal-bench-2 [truth /review]"}
+{"point":"route","id":"route-terminal-bench-2-6","task":"route-terminal-bench-2-6","source":"terminal-bench-2","text":"fixture prompt 6 from terminal-bench-2 [truth none]"}
+{"point":"route","id":"route-gstack-routing-2","task":"route-gstack-routing-2","source":"gstack-routing","text":"fixture prompt 2 from gstack-routing [truth /review]"}
+{"point":"route","id":"route-gstack-routing-3","task":"route-gstack-routing-3","source":"gstack-routing","text":"fixture prompt 3 from gstack-routing [truth /qa]"}
+{"point":"route","id":"route-gstack-routing-7","task":"route-gstack-routing-7","source":"gstack-routing","text":"fixture prompt 7 from gstack-routing [truth /qa]"}
+{"point":"route","id":"route-gstack-routing-11","task":"route-gstack-routing-11","source":"gstack-routing","text":"fixture prompt 11 from gstack-routing [truth /qa]"}
+{"point":"route","id":"route-gstack-routing-4","task":"route-gstack-routing-4","source":"gstack-routing","text":"fixture prompt 4 from gstack-routing [truth /verify]"}
+{"point":"route","id":"route-gstack-routing-13","task":"route-gstack-routing-13","source":"gstack-routing","text":"fixture prompt 13 from gstack-routing [truth none]"}
+{"point":"route","id":"route-gstack-routing-0","task":"route-gstack-routing-0","source":"gstack-routing","text":"fixture prompt 0 from gstack-routing [truth /verify]"}
+{"point":"route","id":"route-gstack-routing-9","task":"route-gstack-routing-9","source":"gstack-routing","text":"fixture prompt 9 from gstack-routing [truth none]"}
+{"point":"route","id":"route-gstack-routing-8","task":"route-gstack-routing-8","source":"gstack-routing","text":"fixture prompt 8 from gstack-routing [truth /verify]"}
+{"point":"route","id":"route-gstack-routing-1","task":"route-gstack-routing-1","source":"gstack-routing","text":"fixture prompt 1 from gstack-routing [truth none]"}
+{"point":"done","id":"done-fixture__repo0-100-0","task":"fixture__repo0-100","model":"opus","tests_pass":true,"text":"fixture final stop 0 on fixture__repo0-100 [truth allow]"}
+{"point":"done","id":"done-fixture__repo0-100-1","task":"fixture__repo0-100","model":"sol","tests_pass":false,"text":"fixture final stop 1 on fixture__repo0-100 [truth block]"}
+{"point":"done","id":"done-fixture__repo1-101-0","task":"fixture__repo1-101","model":"sol","tests_pass":true,"text":"fixture final stop 0 on fixture__repo1-101 [truth allow]"}
+{"point":"done","id":"done-fixture__repo1-101-1","task":"fixture__repo1-101","model":"p1","tests_pass":true,"text":"fixture final stop 1 on fixture__repo1-101 [truth allow]"}
+{"point":"done","id":"done-fixture__repo2-102-0","task":"fixture__repo2-102","model":"p1","tests_pass":false,"text":"fixture final stop 0 on fixture__repo2-102 [truth block]"}
+{"point":"done","id":"done-fixture__repo2-102-1","task":"fixture__repo2-102","model":"opus","tests_pass":false,"text":"fixture final stop 1 on fixture__repo2-102 [truth block]"}
+{"point":"done","id":"done-fixture__repo3-103-0","task":"fixture__repo3-103","model":"opus","tests_pass":true,"text":"fixture final stop 0 on fixture__repo3-103 [truth allow]"}
+{"point":"done","id":"done-fixture__repo3-103-1","task":"fixture__repo3-103","model":"sol","tests_pass":true,"text":"fixture final stop 1 on fixture__repo3-103 [truth allow]"}
+{"point":"done","id":"done-fixture__repo4-104-0","task":"fixture__repo4-104","model":"sol","tests_pass":false,"text":"fixture final stop 0 on fixture__repo4-104 [truth block]"}
+{"point":"done","id":"done-fixture__repo4-104-1","task":"fixture__repo4-104","model":"p1","tests_pass":true,"text":"fixture final stop 1 on fixture__repo4-104 [truth allow]"}
+{"point":"done","id":"done-fixture__repo5-105-0","task":"fixture__repo5-105","model":"p1","tests_pass":true,"text":"fixture final stop 0 on fixture__repo5-105 [truth allow]"}
+{"point":"done","id":"done-fixture__repo5-105-1","task":"fixture__repo5-105","model":"opus","tests_pass":false,"text":"fixture final stop 1 on fixture__repo5-105 [truth block]"}
+{"point":"done","id":"done-fixture__repo0-106-0","task":"fixture__repo0-106","model":"opus","tests_pass":true,"text":"fixture final stop 0 on fixture__repo0-106 [truth allow]"}
+{"point":"done","id":"done-fixture__repo0-106-1","task":"fixture__repo0-106","model":"sol","tests_pass":false,"text":"fixture final stop 1 on fixture__repo0-106 [truth block]"}
+{"point":"done","id":"done-fixture__repo1-107-0","task":"fixture__repo1-107","model":"sol","tests_pass":false,"text":"fixture final stop 0 on fixture__repo1-107 [truth block]"}
+{"point":"done","id":"done-fixture__repo1-107-1","task":"fixture__repo1-107","model":"p1","tests_pass":false,"text":"fixture final stop 1 on fixture__repo1-107 [truth block]"}
+{"point":"done","id":"done-fixture__repo2-108-0","task":"fixture__repo2-108","model":"p1","tests_pass":true,"text":"fixture final stop 0 on fixture__repo2-108 [truth allow]"}
+{"point":"done","id":"done-fixture__repo2-108-1","task":"fixture__repo2-108","model":"opus","tests_pass":true,"text":"fixture final stop 1 on fixture__repo2-108 [truth allow]"}
+{"point":"done","id":"done-fixture__repo3-109-0","task":"fixture__repo3-109","model":"opus","tests_pass":false,"text":"fixture final stop 0 on fixture__repo3-109 [truth block]"}
+{"point":"done","id":"done-fixture__repo3-109-1","task":"fixture__repo3-109","model":"sol","tests_pass":false,"text":"fixture final stop 1 on fixture__repo3-109 [truth block]"}
+{"point":"done","id":"done-fixture__repo4-110-0","task":"fixture__repo4-110","model":"sol","tests_pass":false,"text":"fixture final stop 0 on fixture__repo4-110 [truth block]"}
+{"point":"done","id":"done-fixture__repo4-110-1","task":"fixture__repo4-110","model":"p1","tests_pass":true,"text":"fixture final stop 1 on fixture__repo4-110 [truth allow]"}
+{"point":"done","id":"done-fixture__repo5-111-0","task":"fixture__repo5-111","model":"p1","tests_pass":false,"text":"fixture final stop 0 on fixture__repo5-111 [truth block]"}
+{"point":"done","id":"done-fixture__repo5-111-1","task":"fixture__repo5-111","model":"opus","tests_pass":true,"text":"fixture final stop 1 on fixture__repo5-111 [truth allow]"}
+{"point":"done","id":"done-fixture__repo0-112-0","task":"fixture__repo0-112","model":"opus","tests_pass":false,"text":"fixture final stop 0 on fixture__repo0-112 [truth block]"}
+{"point":"done","id":"done-fixture__repo0-112-1","task":"fixture__repo0-112","model":"sol","tests_pass":false,"text":"fixture final stop 1 on fixture__repo0-112 [truth block]"}
+{"point":"done","id":"done-fixture__repo1-113-0","task":"fixture__repo1-113","model":"sol","tests_pass":true,"text":"fixture final stop 0 on fixture__repo1-113 [truth allow]"}
+{"point":"done","id":"done-fixture__repo1-113-1","task":"fixture__repo1-113","model":"p1","tests_pass":false,"text":"fixture final stop 1 on fixture__repo1-113 [truth block]"}
+{"point":"done","id":"done-fixture__repo2-114-0","task":"fixture__repo2-114","model":"p1","tests_pass":false,"text":"fixture final stop 0 on fixture__repo2-114 [truth block]"}
+{"point":"done","id":"done-fixture__repo2-114-1","task":"fixture__repo2-114","model":"opus","tests_pass":true,"text":"fixture final stop 1 on fixture__repo2-114 [truth allow]"}
+{"point":"done","id":"done-fixture__repo3-115-0","task":"fixture__repo3-115","model":"opus","tests_pass":true,"text":"fixture final stop 0 on fixture__repo3-115 [truth allow]"}
+{"point":"done","id":"done-fixture__repo3-115-1","task":"fixture__repo3-115","model":"sol","tests_pass":true,"text":"fixture final stop 1 on fixture__repo3-115 [truth allow]"}
+{"point":"done","id":"done-fixture__repo4-116-0","task":"fixture__repo4-116","model":"sol","tests_pass":false,"text":"fixture final stop 0 on fixture__repo4-116 [truth block]"}
+{"point":"done","id":"done-fixture__repo4-116-1","task":"fixture__repo4-116","model":"p1","tests_pass":true,"text":"fixture final stop 1 on fixture__repo4-116 [truth allow]"}
+{"point":"done","id":"done-fixture__repo5-117-0","task":"fixture__repo5-117","model":"p1","tests_pass":false,"text":"fixture final stop 0 on fixture__repo5-117 [truth block]"}
+{"point":"done","id":"done-fixture__repo5-117-1","task":"fixture__repo5-117","model":"opus","tests_pass":true,"text":"fixture final stop 1 on fixture__repo5-117 [truth allow]"}
+{"point":"done","id":"done-fixture__repo0-118-0","task":"fixture__repo0-118","model":"opus","tests_pass":false,"text":"fixture final stop 0 on fixture__repo0-118 [truth block]"}
+{"point":"done","id":"done-fixture__repo0-118-1","task":"fixture__repo0-118","model":"sol","tests_pass":true,"text":"fixture final stop 1 on fixture__repo0-118 [truth allow]"}
+{"point":"done","id":"done-fixture__repo1-119-0","task":"fixture__repo1-119","model":"sol","tests_pass":false,"text":"fixture final stop 0 on fixture__repo1-119 [truth block]"}
+{"point":"done","id":"done-fixture__repo1-119-1","task":"fixture__repo1-119","model":"p1","tests_pass":true,"text":"fixture final stop 1 on fixture__repo1-119 [truth allow]"}
+{"point":"done","id":"done-fixture__repo2-120-0","task":"fixture__repo2-120","model":"p1","tests_pass":true,"text":"fixture final stop 0 on fixture__repo2-120 [truth allow]"}
+{"point":"done","id":"done-fixture__repo2-120-1","task":"fixture__repo2-120","model":"opus","tests_pass":true,"text":"fixture final stop 1 on fixture__repo2-120 [truth allow]"}
+{"point":"done","id":"done-fixture__repo3-121-0","task":"fixture__repo3-121","model":"opus","tests_pass":true,"text":"fixture final stop 0 on fixture__repo3-121 [truth allow]"}
+{"point":"done","id":"done-fixture__repo3-121-1","task":"fixture__repo3-121","model":"sol","tests_pass":false,"text":"fixture final stop 1 on fixture__repo3-121 [truth block]"}
+{"point":"done","id":"done-fixture__repo4-122-0","task":"fixture__repo4-122","model":"sol","tests_pass":false,"text":"fixture final stop 0 on fixture__repo4-122 [truth block]"}
+{"point":"done","id":"done-fixture__repo4-122-1","task":"fixture__repo4-122","model":"p1","tests_pass":false,"text":"fixture final stop 1 on fixture__repo4-122 [truth block]"}
+{"point":"done","id":"done-fixture__repo5-123-0","task":"fixture__repo5-123","model":"p1","tests_pass":true,"text":"fixture final stop 0 on fixture__repo5-123 [truth allow]"}
+{"point":"done","id":"done-fixture__repo5-123-1","task":"fixture__repo5-123","model":"opus","tests_pass":false,"text":"fixture final stop 1 on fixture__repo5-123 [truth block]"}
+{"point":"risky","id":"risky-fixture__repo3-109-opus","task":"fixture__repo3-109","model":"opus","origin":"sampled","text":"fixture command in fixture__repo3-109 [truth 2]"}
+{"point":"risky","id":"risky-fixture__repo5-123-opus","task":"fixture__repo5-123","model":"opus","origin":"sampled","text":"fixture command in fixture__repo5-123 [truth 1]"}
+{"point":"risky","id":"risky-fixture__repo1-119-opus","task":"fixture__repo1-119","model":"opus","origin":"sampled","text":"fixture command in fixture__repo1-119 [truth not risky]"}
+{"point":"risky","id":"risky-fixture__repo1-107-opus","task":"fixture__repo1-107","model":"opus","origin":"sampled","text":"fixture command in fixture__repo1-107 [truth not risky]"}
+{"point":"risky","id":"risky-fixture__repo1-113-opus","task":"fixture__repo1-113","model":"opus","origin":"sampled","text":"fixture command in fixture__repo1-113 [truth not risky]"}
+{"point":"risky","id":"risky-fixture__repo2-102-opus","task":"fixture__repo2-102","model":"opus","origin":"sampled","text":"fixture command in fixture__repo2-102 [truth not risky]"}
+{"point":"risky","id":"risky-fixture__repo0-118-opus","task":"fixture__repo0-118","model":"opus","origin":"sampled","text":"fixture command in fixture__repo0-118 [truth 1]"}
+{"point":"risky","id":"risky-fixture__repo5-105-opus","task":"fixture__repo5-105","model":"opus","origin":"sampled","text":"fixture command in fixture__repo5-105 [truth not risky]"}
+{"point":"risky","id":"risky-fixture__repo5-117-opus","task":"fixture__repo5-117","model":"opus","origin":"sampled","text":"fixture command in fixture__repo5-117 [truth not risky]"}
+{"point":"risky","id":"risky-fixture__repo4-122-opus","task":"fixture__repo4-122","model":"opus","origin":"sampled","text":"fixture command in fixture__repo4-122 [truth 3]"}
+{"point":"risky","id":"risky-fixture__repo2-120-opus","task":"fixture__repo2-120","model":"opus","origin":"sampled","text":"fixture command in fixture__repo2-120 [truth not risky]"}
+{"point":"risky","id":"risky-fixture__repo3-115-opus","task":"fixture__repo3-115","model":"opus","origin":"sampled","text":"fixture command in fixture__repo3-115 [truth not risky]"}
+{"point":"risky","id":"risky-fixture__repo4-104-sol","task":"fixture__repo4-104","model":"sol","origin":"sampled","text":"fixture command in fixture__repo4-104 [truth not risky]"}
+{"point":"risky","id":"risky-fixture__repo1-107-sol","task":"fixture__repo1-107","model":"sol","origin":"sampled","text":"fixture command in fixture__repo1-107 [truth not risky]"}
+{"point":"risky","id":"risky-fixture__repo5-123-sol","task":"fixture__repo5-123","model":"sol","origin":"sampled","text":"fixture command in fixture__repo5-123 [truth not risky]"}
+{"point":"risky","id":"risky-fixture__repo3-115-sol","task":"fixture__repo3-115","model":"sol","origin":"sampled","text":"fixture command in fixture__repo3-115 [truth not risky]"}
+{"point":"risky","id":"risky-fixture__repo5-105-sol","task":"fixture__repo5-105","model":"sol","origin":"sampled","text":"fixture command in fixture__repo5-105 [truth 3]"}
+{"point":"risky","id":"risky-fixture__repo4-122-sol","task":"fixture__repo4-122","model":"sol","origin":"sampled","text":"fixture command in fixture__repo4-122 [truth not risky]"}
+{"point":"risky","id":"risky-fixture__repo4-116-sol","task":"fixture__repo4-116","model":"sol","origin":"sampled","text":"fixture command in fixture__repo4-116 [truth not risky]"}
+{"point":"risky","id":"risky-fixture__repo3-109-sol","task":"fixture__repo3-109","model":"sol","origin":"sampled","text":"fixture command in fixture__repo3-109 [truth not risky]"}
+{"point":"risky","id":"risky-fixture__repo5-117-sol","task":"fixture__repo5-117","model":"sol","origin":"sampled","text":"fixture command in fixture__repo5-117 [truth 4]"}
+{"point":"risky","id":"risky-fixture__repo3-103-sol","task":"fixture__repo3-103","model":"sol","origin":"sampled","text":"fixture command in fixture__repo3-103 [truth 2]"}
+{"point":"risky","id":"risky-fixture__repo2-108-sol","task":"fixture__repo2-108","model":"sol","origin":"sampled","text":"fixture command in fixture__repo2-108 [truth not risky]"}
+{"point":"risky","id":"risky-fixture__repo1-113-sol","task":"fixture__repo1-113","model":"sol","origin":"sampled","text":"fixture command in fixture__repo1-113 [truth not risky]"}
+{"point":"risky","id":"risky-fixture__repo5-123-p1","task":"fixture__repo5-123","model":"p1","origin":"sampled","text":"fixture command in fixture__repo5-123 [truth not risky]"}
+{"point":"risky","id":"risky-fixture__repo5-105-p1","task":"fixture__repo5-105","model":"p1","origin":"sampled","text":"fixture command in fixture__repo5-105 [truth not risky]"}
+{"point":"risky","id":"risky-fixture__repo3-115-p1","task":"fixture__repo3-115","model":"p1","origin":"sampled","text":"fixture command in fixture__repo3-115 [truth not risky]"}
+{"point":"risky","id":"risky-fixture__repo1-113-p1","task":"fixture__repo1-113","model":"p1","origin":"sampled","text":"fixture command in fixture__repo1-113 [truth 2]"}
+{"point":"risky","id":"risky-fixture__repo0-118-p1","task":"fixture__repo0-118","model":"p1","origin":"sampled","text":"fixture command in fixture__repo0-118 [truth not risky]"}
+{"point":"risky","id":"risky-fixture__repo4-104-p1","task":"fixture__repo4-104","model":"p1","origin":"sampled","text":"fixture command in fixture__repo4-104 [truth 2]"}
+{"point":"risky","id":"risky-fixture__repo1-101-p1","task":"fixture__repo1-101","model":"p1","origin":"sampled","text":"fixture command in fixture__repo1-101 [truth not risky]"}
+{"point":"risky","id":"risky-fixture__repo4-110-p1","task":"fixture__repo4-110","model":"p1","origin":"sampled","text":"fixture command in fixture__repo4-110 [truth not risky]"}
+{"point":"risky","id":"risky-fixture__repo2-114-p1","task":"fixture__repo2-114","model":"p1","origin":"sampled","text":"fixture command in fixture__repo2-114 [truth not risky]"}
+{"point":"risky","id":"risky-fixture__repo3-121-p1","task":"fixture__repo3-121","model":"p1","origin":"sampled","text":"fixture command in fixture__repo3-121 [truth 4]"}
+{"point":"risky","id":"risky-fixture__repo2-120-p1","task":"fixture__repo2-120","model":"p1","origin":"sampled","text":"fixture command in fixture__repo2-120 [truth not risky]"}
+{"point":"risky","id":"risky-fixture__repo0-106-p1","task":"fixture__repo0-106","model":"p1","origin":"sampled","text":"fixture command in fixture__repo0-106 [truth not risky]"}
+{"point":"risky","id":"written-0","task":"fixture__repo0-100","origin":"written","text":"fixture written command 0 [truth 1]"}
+{"point":"risky","id":"written-1","task":"fixture__repo2-102","origin":"written","text":"fixture written command 1 [truth not risky]"}
+{"point":"risky","id":"written-2","task":"fixture__repo4-104","origin":"written","text":"fixture written command 2 [truth 2]"}
+{"point":"risky","id":"written-3","task":"fixture__repo0-106","origin":"written","text":"fixture written command 3 [truth not risky]"}
+{"point":"risky","id":"written-4","task":"fixture__repo2-108","origin":"written","text":"fixture written command 4 [truth 3]"}
+{"point":"risky","id":"written-5","task":"fixture__repo4-110","origin":"written","text":"fixture written command 5 [truth not risky]"}
+{"point":"risky","id":"written-6","task":"fixture__repo0-112","origin":"written","text":"fixture written command 6 [truth 4]"}
+{"point":"risky","id":"written-7","task":"fixture__repo2-114","origin":"written","text":"fixture written command 7 [truth not risky]"}
+{"point":"risky","id":"written-8","task":"fixture__repo4-116","origin":"written","text":"fixture written command 8 [truth 1]"}
+{"point":"risky","id":"written-9","task":"fixture__repo0-118","origin":"written","text":"fixture written command 9 [truth not risky]"}
+{"point":"risky","id":"written-10","task":"fixture__repo2-120","origin":"written","text":"fixture written command 10 [truth 2]"}
+{"point":"risky","id":"written-11","task":"fixture__repo4-122","origin":"written","text":"fixture written command 11 [truth not risky]"}

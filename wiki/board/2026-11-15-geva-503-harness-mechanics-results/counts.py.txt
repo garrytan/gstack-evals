@@ -1,0 +1,80 @@
+# Descriptive counts for the harness-mechanics results post that analyze.ts at 3d5dcce does not print: the picker's
+# pick rate by position (prereg section 15 item 7), missing STATUS lines per arm (item 5), the contract hook's outcomes
+# in verify-hook, and the judge arms' hook decision logs. Reads the Stage 4 table, the three picks.jsonl files and each
+# judge session's evaluator/judge-hooks.jsonl. No verdict reads any of these lines. Usage: HM=<the run's work dir, ending in /> python3 counts.py <stage4 table.jsonl>
+import json, sys, os, statistics, collections
+
+HM = os.environ["HM"]
+rows = [json.loads(l) for l in open(sys.argv[1])]
+graded = [r for r in rows if r["outcome"] == "graded"]
+short = {"claude-opus-5-5": "opus", "gpt-6.1-sol": "sol", "particle-1": "p1"}
+arms = ["none", "plain-2", "verify-prose", "verify-hook", "judge-jev", "judge-p1"]
+
+print("## Picker position (section 15 item 7)")
+for m in ["opus", "sol", "p1"]:
+    picks = [json.loads(l) for l in open(HM + "stage4-" + m + "/pick/picks.jsonl") if l.strip()]
+    called = [p for p in picks if p["called"]]
+    first = sum(1 for p in called if p["ships"] == p["order"][0])
+    ships_a = sum(1 for p in picks if p["ships"] == "A")
+    print(f"{m}: picker calls {len(called)} of {len(picks)}; picked the first-listed patch {first} of {len(called)} ({100*first/len(called):.1f}%); shipped attempt A (none) {ships_a} of {len(picks)}; parsed {sum(1 for p in called if p['parsed'])}; cut {sum(1 for p in called if p['cuts'])}")
+
+print()
+print("## STATUS lines (section 15 item 5)")
+for m in short:
+    for a in arms:
+        rs = [r for r in graded if r["model"] == m and r["arm"] == a]
+        if not rs: continue
+        c = collections.Counter(str(r["score"].get("claim")) for r in rs)
+        none_line = c.get("None", 0)
+        kept = [r for r in rs if r["score"].get("claim") is not None]
+        fd_all = sum(1 for r in rs if r["score"].get("false_done")) / len(rs)
+        fd_kept = sum(1 for r in kept if r["score"].get("false_done")) / len(kept) if kept else float("nan")
+        print(f"{short[m]} {a}: no STATUS line {none_line} of {len(rs)}; false done {100*fd_all:.1f}% of all, {100*fd_kept:.1f}% leaving those out; claims {dict(sorted(c.items()))}")
+
+print()
+print("## Contract hook outcomes in verify-hook and the judge arms")
+for m in short:
+    for a in ["verify-hook", "judge-jev", "judge-p1"]:
+        rs = [r for r in graded if r["model"] == m and r["arm"] == a]
+        oc = collections.Counter(str((r["score"].get("hook") or {}).get("outcome")) for r in rs)
+        blocked = [r for r in rs if ((r["score"].get("hook") or {}).get("blocks") or 0) > 0]
+        nonadh = [r for r in rs if r["score"].get("edited") and not r["score"].get("adherent")]
+        oc_non = collections.Counter(str((r["score"].get("hook") or {}).get("outcome")) for r in nonadh)
+        print(f"{short[m]} {a}: hook outcomes {dict(sorted(oc.items()))}; sessions blocked {len(blocked)}, of them passed {sum(1 for r in blocked if r['pass'])} and scored adherent {sum(1 for r in blocked if r['score'].get('adherent'))}; sessions with an edit the scorer read as non-adherent {len(nonadh)}, hook outcomes there {dict(sorted(oc_non.items()))}")
+
+print()
+print("## Judge hook decision logs (Stage 4, judge arms)")
+cfg = json.load(open(HM + "pick4/table-config.json"))
+lines = collections.defaultdict(list)
+sessions = collections.Counter()
+for j in cfg["jobs"]:
+    d = j["dir"]
+    for name in sorted(os.listdir(d)):
+        t = os.path.join(d, name)
+        if not os.path.isdir(t): continue
+        try:
+            conf = json.load(open(os.path.join(t, "config.json")))
+        except Exception:
+            continue
+        kw = conf.get("agent", {}).get("kwargs", {})
+        arm = str(kw.get("arm", ""))
+        if not arm.startswith("judge"): continue
+        key = (short.get(kw.get("upstream_model"), kw.get("upstream_model")), arm)
+        sessions[key] += 1
+        p = os.path.join(t, "evaluator", "judge-hooks.jsonl")
+        if not os.path.exists(p): continue
+        for l in open(p):
+            if l.strip(): lines[key].append(json.loads(l))
+for key in sorted(sessions):
+    ls = lines[key]
+    risky = [x for x in ls if x["point"] == "risky"]
+    done = [x for x in ls if x["point"] == "done"]
+    backend = [x for x in risky if x.get("backend")]
+    exact = [x for x in risky if not x.get("backend")]
+    rules = collections.Counter(str(x.get("rule")) for x in exact)
+    denied_backend = sum(1 for x in backend if x.get("acted"))
+    denied_exact = sum(1 for x in exact if x.get("acted"))
+    fo = sum(1 for x in backend if x.get("fail_open"))
+    esc = sum(1 for x in backend if x.get("escalated"))
+    lat = [x["latency_ms"] for x in backend if not x.get("fail_open")]
+    print(f"{key[0]} {key[1]}: sessions {sessions[key]}; risky lines {len(risky)} (exact rule {len(exact)} {dict(sorted(rules.items()))}, backend calls {len(backend)}); denied by backend {denied_backend}, by exact rule {denied_exact}; fail-open {fo} of {len(backend)} ({100*fo/max(1,len(backend)):.2f}%); escalated {esc}; median backend latency {statistics.median(lat) if lat else 'n/a'} ms; done lines {len(done)} {dict(collections.Counter(str(x.get('rule')) for x in done))}")

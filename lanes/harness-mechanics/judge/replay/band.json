@@ -1,0 +1,29 @@
+{
+  "route": {
+    "band": [
+      0.47,
+      0.72
+    ],
+    "dev_ba": 0.8485714285714285,
+    "dev_escalation": 0.24022346368715083,
+    "p1_dev_ba": 0.8871428571428571,
+    "reached": false,
+    "dev_items": 179
+  },
+  "done": {
+    "band": null,
+    "dev_ba": 0.5394736842105263,
+    "dev_escalation": 0,
+    "p1_dev_ba": 0.5361842105263158,
+    "reached": true,
+    "dev_items": 228
+  },
+  "risky": {
+    "band": null,
+    "dev_ba": 0.9191395477109763,
+    "dev_escalation": 0,
+    "p1_dev_ba": 0.9224489795918367,
+    "reached": true,
+    "dev_items": 282
+  }
+}

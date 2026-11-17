@@ -31,7 +31,7 @@ import { PV_LENS } from "./product-value.ts";
 import { pvMain } from "./pv-cli.ts";
 import { ER_LENS } from "./eng-review.ts";
 import { erMain } from "./er-cli.ts";
-import { TOLD_COMMANDS, TOLD_PREFIX, TOLD_SHA256, toldArmOf, toldSkill } from "./told.ts";
+import { prTextProblem, TOLD_COMMANDS, TOLD_PR_SHA256, TOLD_PREFIX, TOLD_SHA256, toldArmOf, toldSkill } from "./told.ts";
 import { buildUnitRepo, buildUnitTree, DEFAULT_BRANCHES, DEFAULT_INSTALL, historyProblems, UnitError, unitTaskId, type UnitRepo } from "./unit.ts";
 
 type Env = Record<string, string | undefined>;
@@ -49,6 +49,7 @@ export const REVIEW_UNITS_HELP = [
   "    [--plan <lens> [--arm-models <arm>=<model>[,<model>]...]] [--sealed-root <dir>]",
   "    [--system-prompt <arm>=sdk-default|claude-code-preset]... [--told-prefix <arm>=<file>]... [--render <arm>=interactive|unattended]...",
   "    [--max-turns <n>] [--session-kind unattended | --arm-session-kind <arm>=unattended...] [--cap-stops] [--reader-map <file>] [--background-wait <s>]",
+  "    [--pr-context <dir>]",
   "",
   "--plan ceo runs plan units (a plan suite): arms none, lens, placebo, gstack=<repo>@<sha>, gstack-<suffix>=<repo>@<sha> (a second",
   "gstack arm, which needs a --told-prefix) and gstack-auto=<repo>@<sha>, each with its plan line and the frozen plan output",
@@ -84,9 +85,15 @@ export const REVIEW_UNITS_HELP = [
   "the session ends as a missing cell, E_BACKGROUND_DEADLINE, which is a coverage gap, never the arm finding nothing. A",
   "completed session that waited and whose last turn has no json block is scored from its latest turn with a findings",
   "block. run.json records the wait.",
+  "",
+  "--pr-context, code units only, shows every arm the PR's title and first description: <dir>/<unit id with / # and @ as _>/pr.md,",
+  "the layout harness-evals' scripts/review-bugs/build-unit.ts writes, goes after the told prompt's first paragraph (told.ts",
+  "TOLD_PR_TEMPLATE), the same for every arm. Every selected unit needs a pr.md with no control character but line feeds and",
+  "tabs, or the run is refused. The session key, arm.json's told record and units.json carry the template's and each pr.md's",
+  "sha256; left out, every prompt and record is today's.",
 ].join("\n");
 
-const VALUE = new Set(["--suite", "--passes", "--out", "--ledger", "--record", "--item", "--spend-cap", "--repair", "--parallel", "--timeout", "--allowance", "--severity-map", "--policy", "--date", "--plan", "--sealed-root", "--max-turns", "--session-kind", "--reader-map", "--background-wait"]);
+const VALUE = new Set(["--suite", "--passes", "--out", "--ledger", "--record", "--item", "--spend-cap", "--repair", "--parallel", "--timeout", "--allowance", "--severity-map", "--policy", "--date", "--plan", "--sealed-root", "--max-turns", "--session-kind", "--reader-map", "--background-wait", "--pr-context"]);
 const LIST = new Set(["--units", "--arms", "--models", "--source", "--base-branch", "--install", "--test", "--arm-models", "--system-prompt", "--told-prefix", "--render", "--arm-session-kind"]);
 const BOOL = new Set(["--resume", "--dry-run", "--cap-stops"]);
 
@@ -267,6 +274,22 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   if (readerMap && lens) throw new Usage("--reader-map runs on code units, not with --plan");
   const capStops = flags.has("--cap-stops");
   if (capStops && lens) throw new Usage("--cap-stops runs on code units, not with --plan");
+  const prDir = one("--pr-context");
+  if (prDir !== null && lens) throw new Usage("--pr-context runs on code units, not with --plan");
+  const prTexts = new Map<string, string>();
+  const prRefused: string[] = [];
+  for (const u of prDir === null ? [] : units) {
+    const file = join(prDir!, u.id.replace(/[/#@]/g, "_"), "pr.md");
+    try {
+      const text = readFileSync(file, "utf8");
+      const problem = prTextProblem(text);
+      if (problem) prRefused.push(u.id + ": " + file + ": " + problem);
+      else prTexts.set(u.id, text);
+    } catch (e) {
+      prRefused.push(u.id + ": " + (e as Error).message);
+    }
+  }
+  if (prRefused.length) throw new Usage("--pr-context " + prDir + " gives every selected unit its PR text or none, and " + prRefused.length + " of " + units.length + " units cannot take it:\n  " + prRefused.join("\n  ") + "\n  fix: build each unit's pr.md with build-unit.ts, or leave out --pr-context to run every unit without it");
   if (readerMap && "map" in readerMap) for (const a of specs) {
     if (a.kind !== "stack" || toldArmOf(a) !== "gstack") continue;
     const command = (prefixes.get(a.name) ?? TOLD_PREFIX.gstack).split(" ")[0];
@@ -370,6 +393,7 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
     if (maxTurns !== MAX_TURNS || sessionKind) io.out("max turns " + maxTurns + "; session kind " + (sessionKind ?? "not set"));
     io.out("background wait " + backgroundWaitS + " s: a session idle with background work it started still out ends at that deadline as a missing cell, E_BACKGROUND_DEADLINE");
     if (capStops) io.out("cap stops: a code session the turn cap or the allowance ends is recorded as turn_cap or allowance_stop and scored on the findings it wrote before the stop");
+    if (prDir !== null) io.out("pr context " + resolve(prDir) + ": each unit's pr.md after the told prompt's first paragraph; told pr template sha256 " + TOLD_PR_SHA256);
     if (mapPin) io.out("reader map " + mapPin.file + " (sha256 " + mapPin.sha256 + ", gstack " + mapPin.gstack.repo + "@" + mapPin.gstack.sha + ")");
     io.out("worst case at the allowance: " + usd(arms.reduce((s, a) => s + modelsOf(a.name).reduce((t, m) => t + perSession(m) * units.length * passes, 0), 0)) + "; spend cap " + (cap === null ? "none" : usd(cap)));
     io.out("out " + out + (resume ? " (resume)" : ""));
@@ -402,7 +426,7 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
         const kept = JSON.parse(readFileSync(join(root, "unit.json"), "utf8")) as { repo: UnitRepo; check: PreparedUnit["check"]; retained: PreparedUnit["retained"] };
         const hp = historyProblems(tree, kept.repo);
         if (hp.length) throw new UnitError("E_UNIT_REPO", hp.map((p) => u.id + ": " + p));
-        prepared.push({ unit: u, task, base_branch: kept.repo.base_branch, merge_base: kept.repo.merge_base, tree, tree_sha256: dirTreeSha256(tree), instructions: kept.repo.instructions, retained: kept.retained, check: kept.check });
+        prepared.push({ unit: u, task, base_branch: kept.repo.base_branch, merge_base: kept.repo.merge_base, tree, tree_sha256: dirTreeSha256(tree), instructions: kept.repo.instructions, retained: kept.retained, check: kept.check, ...(prTexts.has(u.id) ? { pr_text: prTexts.get(u.id)! } : {}) });
         continue;
       }
       rmSync(root, { recursive: true, force: true });
@@ -414,7 +438,7 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
       if (built.problems.length) throw new UnitError("E_UNIT_IMAGE", built.problems.map((p) => u.id + ": " + p));
       const check = built.install && built.test ? { install: built.install.command, test: built.test.command, passed: built.test.passed } : null;
       writeFileSync(join(root, "unit.json"), JSON.stringify({ repo, check, retained: built.retained }, null, 2) + "\n");
-      prepared.push({ unit: u, task, base_branch: repo.base_branch, merge_base: repo.merge_base, tree, tree_sha256: built.tree_sha256, instructions: repo.instructions, retained: built.retained, check });
+      prepared.push({ unit: u, task, base_branch: repo.base_branch, merge_base: repo.merge_base, tree, tree_sha256: built.tree_sha256, instructions: repo.instructions, retained: built.retained, check, ...(prTexts.has(u.id) ? { pr_text: prTexts.get(u.id)! } : {}) });
     } catch (e) {
       if (!(e instanceof UnitError)) throw e;
       problems.push(...e.problems.map((p) => e.code + " " + p));

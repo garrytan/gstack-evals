@@ -9,6 +9,7 @@
 # from that VM fail; SHORT_PULL=<vm> makes each pull from that VM exit 0 one file short; FAIL_PULL_MATCH=<text> makes each pull of a path containing it fail; SLOW_PULL=<sec> slows each pull from a part VM; UBI_FAKE_SSH_LIMIT=<sec> plays the
 # runner's idle watchdog, ending an ssh command and its process group after that long (a setsid -f child survives);
 # FAIL_SSH_MATCH=<text> makes an ssh command containing it exit 255, after running it when FAIL_SSH_RUN=1.
+# UP_NEVER_RUNNING=1 makes a part VM's up fail the way the real runner's capacity wait does, with its message.
 # Like the real runner, down drops the VM's local state and its recovery bundles once the VM is gone.
 # Like the real runner's list --mine, list prints "<location>  <name>" for each VM of the caller's owner that is not destroyed
 # (a dead VM is still listed, as the API still has it); FAIL_LIST=1 makes it fail, as the real one does when the API can't be read.
@@ -24,6 +25,7 @@ case "$cmd" in
     size=standard-16
     while [ $# -gt 0 ]; do case $1 in -s) size=$2; shift 2 ;; *) shift ;; esac; done
     [ -z "${FAIL_UP:-}" ] || exit 1
+    if [ -n "${UP_NEVER_RUNNING:-}" ] && [ "$size" != standard-2 ]; then echo "ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)" >&2; exit 1; fi
     n=$(( $(cat "$UBI_FAKE/counter" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$UBI_FAKE/counter"
     if [ "$size" = standard-2 ]; then name=host-$n; else name=vm-$n; fi
     if [ "${UBI_COUNTED:-}" = 1 ] && [ -z "${UBI_RECOVERY_DIR:-}" ]; then echo "UBI_RECOVERY_REQUIRED" >&2; exit 1; fi

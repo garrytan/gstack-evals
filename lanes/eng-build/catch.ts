@@ -19,9 +19,9 @@ import { classifyFile } from "../real-outcome/task/region.ts";
 import { verifyTree } from "../real-outcome/task/verify.ts";
 import { EbError } from "./errors.ts";
 import { FROZEN } from "./frozen.ts";
-import { ecoOfFile } from "./recipes.ts";
+import { ecoOfFile, scorableFail } from "./recipes.ts";
 import type { CaseClass, Ecosystem } from "./types.ts";
-import { buildUnit, EB_PROTECT, readUnit, scopesOf, targetOfFile, treeGrid, treePatch, type EbTask, type Grid, type UnitSpec } from "./unit.ts";
+import { buildUnit, EB_PROTECT, readUnit, scopesOf, targetOfFile, treeGrid, treePatch, type EbTask, type Grid, type Sandbox, type UnitSpec } from "./unit.ts";
 
 const EB_CONFIG = EB_PROTECT.map((p) => new RegExp(p));
 
@@ -142,14 +142,14 @@ function overlaySet(unitDir: string, setDir: string, to: string, split: BuildSpl
   writeFileSync(join(to, "regions.list"), regions.join("\n") + (regions.length ? "\n" : ""));
 }
 
-/** Whether a build's own cases catch a bug: some case fails at assertion level in every merged run and passes in every
- * fixed run, with all runs present. */
+/** Whether a build's own cases catch a bug: some case fails at assertion level (or by the planted read's crash class) in
+ * every merged run and passes in every fixed run, with all runs present. */
 export function caught(merged: Grid, fixed: Grid, runs: number): boolean {
-  return Object.keys(merged).some((id) => merged[id].length === runs && merged[id].every((c) => c === "assert") && fixed[id]?.length === runs && fixed[id].every((c) => c === "pass"));
+  return Object.keys(merged).some((id) => merged[id].length === runs && merged[id].every(scorableFail) && fixed[id]?.length === runs && fixed[id].every((c) => c === "pass"));
 }
 
 /** Whether the build's own tests compiled and ran on a tree: some own case reached a result in every run. */
-const RAN: CaseClass[] = ["pass", "assert", "missing_name"];
+const RAN: CaseClass[] = ["pass", "assert", "crash", "missing_name"];
 export const compiledOn = (grid: Grid, runs: number): boolean =>
   Array.from({ length: runs }, (_, i) => i).every((i) => Object.values(grid).some((r) => RAN.includes(r[i])));
 
@@ -173,6 +173,9 @@ export interface CatchOptions {
   runs?: number;
   seed?: number;
   cpus?: number;
+  /** Planted units (GEVA-537 plan section 2, rule 2): a crash-class failure on the merged tree counts like an assertion. */
+  crash?: boolean;
+  sandbox?: Sandbox;
 }
 
 /** Real-bug catch for one build on one unit. */
@@ -230,6 +233,7 @@ export function catchBuild(o: CatchOptions): CatchResult {
             beforeRuns: (p) => {
               if (p.patch !== "failed" && p.cold && p.cold.changed.length > 0) throw new EbError("E_EB_TRANSPLANT", "product_changed");
             },
+            ...(o.sandbox ? { sandbox: o.sandbox } : {}),
           });
           if (tree.prepare.patch === "failed") why = "real_tree_patch_failed";
         } catch (error) {
@@ -241,7 +245,7 @@ export function catchBuild(o: CatchOptions): CatchResult {
           result.drops.push({ code: "E_EB_TRANSPLANT", unit: eb.unit.id, step: label + "#" + gi, cls: why ?? "no_result" });
           return null;
         }
-        for (const [id, r] of Object.entries(treeGrid(tree, g.runner.kind, scopes))) {
+        for (const [id, r] of Object.entries(treeGrid(tree, g.runner.kind, scopes, [], o.crash))) {
           grid[id] = r;
           seen.add(id);
         }

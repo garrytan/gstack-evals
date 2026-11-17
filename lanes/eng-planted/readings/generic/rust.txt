@@ -1,0 +1,31 @@
+# Common Rust edge cases, written before any unit was seen (prereg 2026-11-15-geva-537 section 5). One per line.
+unwrap on None or Err value
+empty vector or empty slice input
+empty or whitespace only string input
+integer overflow in arithmetic
+casting between integer types truncating values
+index out of bounds on a slice
+string sliced at a non char boundary
+unicode characters versus bytes in length
+off by one at range bounds
+division by zero
+error propagated without context
+partial read or short write on io
+end of file reached before the expected input
+file not found or permission denied
+duplicate keys in a map
+iteration order of a hash map
+sorting stability with equal elements
+floating point nan comparisons
+maximum and minimum integer values
+negative numbers or zero as a count
+very large input size or allocation
+trailing slash or empty segment in a path
+case sensitivity in string comparison
+leading zeros or sign characters when parsing numbers
+option field missing from a struct
+borrowed data outliving its owner
+lock poisoned after a panic
+deadlock when taking two locks
+timeout or cancellation of an async task
+invalid utf-8 bytes in input

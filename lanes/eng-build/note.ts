@@ -64,6 +64,14 @@ export function publicNames(repo: string, a: string, b: string): PublicName[] {
   return [...out.values()].sort((x, y) => x.file.localeCompare(y.file) || x.name.localeCompare(y.name));
 }
 
+/** Planted units (GEVA-537 plan section 2, rule 4): a merge adds no public name, so the note is written keylessly from
+ * base, where every region function's body is a stub. It names each region function with its signature as base declares
+ * it, and so no definition nested in a removed body. One paragraph, the same in every arm. */
+export function plantedNote(functions: Pick<PublicName, "file" | "name" | "signature">[]): string {
+  const list = functions.map((f) => f.name + " in " + f.file + ", declared as `" + f.signature + "`").join("; ");
+  return "The plan's functions are stubs in the code today; implement each with the signature it already has: " + list + ".";
+}
+
 /** Names later fixes declare that the merged tree never mentions: a note that names one gives the fix away. */
 export function fixOnlyNames(repo: string, merge: string, fixes: string[]): string[] {
   const names = new Set(fixes.flatMap((f) => publicNames(repo, f + "^1", f).map((n) => n.name)));

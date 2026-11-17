@@ -1,10 +1,11 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // The eng phase arm's opening (prereg 2026-11-08-geva-405, section 5, gate answer A1), rendered per unit from gstack at
-// ER_ENGPHASE_GSTACK (garrytan/gstack 199931029, VERSION 1.98.0.0). The session holds what an autoplan session holds
-// when it enters Phase 3 with no earlier phase run. The rules, with the build-time choices this file makes:
+// ER_ENGPHASE_GSTACK (garrytan/gstack 199931029, VERSION 1.98.0.0) unless the caller passes another pin (the planted-unit
+// read renders at its restore pin, prereg 2026-11-15-geva-537 section 4). The session holds what an autoplan session
+// holds when it enters Phase 3 with no earlier phase run. The rules, with the build-time choices this file makes:
 //
-// - The checkout must be at the pin: HEAD is the pinned commit, VERSION reads 1.98.0.0 and no tracked file has a local
-//   change. Anything else is refused with E_USAGE.
+// - The checkout must be at the pin: HEAD is the pinned commit, VERSION reads the pin's version and no tracked file has a
+//   local change. Anything else, or a pin with no commit, is refused with E_USAGE.
 // - From autoplan/SKILL.md the opening carries, verbatim and found by their headings, "## The 6 Decision Principles"
 //   (the whole section, so the eng phase's tiebreaker line comes with the other phases' lines beside it), "## Decision
 //   Classification", "## What "Auto-Decide" Means" and, from "### Step 3: Locate review skills; load each at phase
@@ -45,6 +46,13 @@ import { removeTree } from "../../src/trial/cleanup.ts";
 
 export const ER_ENGPHASE_GSTACK = { repo: "garrytan/gstack", sha: "199931029e9fe9808554a4863c960d4b9b663a60", version: "1.98.0.0" };
 
+/** A gstack commit an opening renders at: ER_ENGPHASE_GSTACK by default. */
+export interface EngPhasePin {
+  repo: string;
+  sha: string;
+  version: string;
+}
+
 export const MOUNT_DIR = "/work/autoplan";
 const PLAN_MOUNT = "/work/plan.md";
 const SKILLS_HOME = "~/.claude/skills/gstack";
@@ -73,11 +81,12 @@ function git(dir: string, args: string[]): string {
   return r.stdout.trim();
 }
 
-function checkPin(gstack: string): void {
+function checkPin(gstack: string, pin: EngPhasePin): void {
+  if (!/^[0-9a-f]{40}$/.test(pin.sha) || !pin.version) throw fail("E_USAGE", "the eng phase pin names no full commit and VERSION (" + JSON.stringify(pin.sha) + ", " + JSON.stringify(pin.version) + "); nothing renders at an empty pin");
   const head = git(gstack, ["rev-parse", "HEAD"]);
-  if (head !== ER_ENGPHASE_GSTACK.sha) throw fail("E_USAGE", "gstack checkout is at " + head + ", not the eng phase pin " + ER_ENGPHASE_GSTACK.sha);
+  if (head !== pin.sha) throw fail("E_USAGE", "gstack checkout is at " + head + ", not the eng phase pin " + pin.sha);
   const version = existsSync(join(gstack, "VERSION")) ? readFileSync(join(gstack, "VERSION"), "utf8").trim() : "(none)";
-  if (version !== ER_ENGPHASE_GSTACK.version) throw fail("E_USAGE", "gstack checkout VERSION is " + version + ", not " + ER_ENGPHASE_GSTACK.version);
+  if (version !== pin.version) throw fail("E_USAGE", "gstack checkout VERSION is " + version + ", not " + pin.version);
   const dirty = git(gstack, ["status", "--porcelain", "--untracked-files=no"]);
   if (dirty) throw fail("E_USAGE", "gstack checkout has local changes: " + dirty.split("\n").slice(0, 3).join("; "));
 }
@@ -131,9 +140,10 @@ function mapStrings(v: unknown, f: (s: string) => string): any {
   return v;
 }
 
-export function renderEngPhase(o: { gstack: string; plan: string; out: string }): EngPhaseOpening {
+export function renderEngPhase(o: { gstack: string; plan: string; out: string; pin?: EngPhasePin }): EngPhaseOpening {
+  const pin = o.pin ?? ER_ENGPHASE_GSTACK;
   if (insideRepo(o.out)) throw fail("E_USAGE", "out dir " + o.out + " is inside the gstack-evals repository; render outside it");
-  checkPin(o.gstack);
+  checkPin(o.gstack, pin);
   const skill = readFileSync(join(o.gstack, "autoplan", "SKILL.md"), "utf8");
   const parts = [section(skill, "## The 6 Decision Principles"), section(skill, "## Decision Classification"), section(skill, '## What "Auto-Decide" Means'), skipList(skill)];
   const engPhase = readFileSync(join(o.gstack, "autoplan", "sections", "eng-phase.md"), "utf8");
@@ -207,7 +217,7 @@ export function renderEngPhase(o: { gstack: string; plan: string; out: string })
     const text = [
       "# /autoplan Phase 3 (Eng Review + Dual Voices), entered with no earlier phase run",
       "",
-      "This session holds what an /autoplan session holds when it enters Phase 3, at gstack " + ER_ENGPHASE_GSTACK.sha.slice(0, 9) + " (VERSION " + ER_ENGPHASE_GSTACK.version + "). It is autoplan's eng phase without its other phases or its gate. The build already ran this phase's snapshot tool steps and mounted their outputs read-only under " + MOUNT_DIR + "/.",
+      "This session holds what an /autoplan session holds when it enters Phase 3, at gstack " + pin.sha.slice(0, 9) + " (VERSION " + pin.version + "). It is autoplan's eng phase without its other phases or its gate. The build already ran this phase's snapshot tool steps and mounted their outputs read-only under " + MOUNT_DIR + "/.",
       "",
       "## Phase state",
       "",

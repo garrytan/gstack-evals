@@ -1,0 +1,6551 @@
+{
+ "schema": "h2h-o-frame.v1",
+ "source": {
+  "dataset": "SWE-bench-Live/MultiLang",
+  "revision": "eb09c2e5db6e4c5a95e01c903c8fd1d5da33c4f3",
+  "rows": 1077,
+  "head": {
+   "sha": "eb09c2e5db6e4c5a95e01c903c8fd1d5da33c4f3",
+   "last_modified": "2026-11-03T21:30:50.000Z",
+   "read_at": "2026-11-15T06:06:20.674Z"
+  }
+ },
+ "freeze_date": "2026-11-15",
+ "window": {
+  "from": "2026-03-01",
+  "walk_back_to": "2025-01-01"
+ },
+ "gate_order": [
+  "window",
+  "exclusion",
+  "licence",
+  "harness_screen",
+  "told",
+  "image_digest"
+ ],
+ "licences_sha256": "58a0f5bc99a940695c4a1004b6909d2241773fcdde16b5e45449f05194fd7ebb",
+ "counts": {
+  "rows": 1077,
+  "in_window": 1071,
+  "excluded_by_pattern": {
+   "garrytan/*": 0,
+   "obra/*": 0,
+   "addyosmani/agent-skills": 0,
+   "open-gsd/*": 5,
+   "gsd-build/*": 7,
+   "cursor/plugins": 0,
+   "t3dotgg/*": 0,
+   "AyanbekDos/*": 0,
+   "DietrichGebert/ponytail": 0,
+   "yc-software/*": 0,
+   "openclaw/*": 0
+  },
+  "licence_out_by_spdx": {
+   "NOASSERTION:unmatched": 140,
+   "GPL-3.0": 54,
+   "LGPL-3.0": 6,
+   "GPL-2.0": 3,
+   "EPL-2.0": 7,
+   "CC-BY-4.0": 2,
+   "MPL-2.0": 5,
+   "none:no_file": 8,
+   "CC0-1.0": 4,
+   "LGPL-2.1": 1,
+   "AGPL-3.0": 4,
+   "EUPL-1.2": 1,
+   "EPL-1.0": 2
+  },
+  "drops_by_gate": {
+   "exclusion": 12,
+   "licence": 237,
+   "harness_screen": 154,
+   "told": 24,
+   "image_digest": 2
+  },
+  "drops_by_rule": {
+   "told:fix_lines": 10,
+   "licence:NOASSERTION:unmatched": 140,
+   "licence:GPL-3.0": 54,
+   "harness_screen:fix_source_files_1_to_6": 113,
+   "told:diff_block": 4,
+   "licence:LGPL-3.0": 6,
+   "harness_screen:pass_to_pass": 33,
+   "licence:GPL-2.0": 3,
+   "licence:EPL-2.0": 7,
+   "told:issue_short": 10,
+   "harness_screen:mixed_test_hunk": 5,
+   "licence:CC-BY-4.0": 2,
+   "licence:MPL-2.0": 5,
+   "licence:none:no_file": 8,
+   "licence:CC0-1.0": 4,
+   "licence:LGPL-2.1": 1,
+   "licence:AGPL-3.0": 4,
+   "licence:EUPL-1.2": 1,
+   "exclusion:gsd-build/*": 7,
+   "exclusion:open-gsd/*": 5,
+   "harness_screen:split_base_file": 3,
+   "licence:EPL-1.0": 2,
+   "image_digest:image_digest": 2
+  },
+  "eligible": 642,
+  "eligible_from_window_start": 394,
+  "licence_second_read": {
+   "repos": 76,
+   "eligible_repos": 15,
+   "eligible_units": 13
+  },
+  "by_month": {
+   "2025-07": 120,
+   "2025-08": 88,
+   "2026-03": 96,
+   "2026-04": 111,
+   "2025-06": 28,
+   "2026-06": 38,
+   "2026-07": 143,
+   "2026-05": 6,
+   "2025-05": 3,
+   "2026-02": 2,
+   "2025-10": 1,
+   "2025-11": 2,
+   "2025-02": 1,
+   "2026-01": 2,
+   "2025-03": 1
+  },
+  "by_language": {
+   "java": 122,
+   "rust": 102,
+   "js": 64,
+   "csharp": 104,
+   "cpp": 53,
+   "ts": 66,
+   "c": 28,
+   "go": 103
+  },
+  "by_entry": {
+   "bug": 590,
+   "feature": 52
+  }
+ },
+ "units": [
+  {
+   "id": "AutoMQ__automq-2699",
+   "repo": "AutoMQ/automq",
+   "month": "2025-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:62bcb6a45c1631ca9ceeb3b678aab5a0312fdc7743551c36ccd02fd3dc48e0bc"
+  },
+  {
+   "id": "Automattic__harper-1737",
+   "repo": "Automattic/harper",
+   "month": "2025-08",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:eaef7ba0ef5457fa570c93d08d042a8afd9dfddfb0655503e694d0180d5d7582"
+  },
+  {
+   "id": "Automattic__harper-2962",
+   "repo": "Automattic/harper",
+   "month": "2026-03",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:4fde2979f998a0dc6752b60a73d45a835412d597db749bacfce099eae15aec3f"
+  },
+  {
+   "id": "Automattic__harper-2973",
+   "repo": "Automattic/harper",
+   "month": "2026-03",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:a1903a85d27c7bf98072f6d1266ebb0df708211242d4e311f6b1369d1bcfa57a"
+  },
+  {
+   "id": "Automattic__harper-2976",
+   "repo": "Automattic/harper",
+   "month": "2026-03",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:feaeb768f3fd6e32f418f4284af8d55a006101c1f29a718b3e504b3558aa4cd1"
+  },
+  {
+   "id": "Automattic__harper-3150",
+   "repo": "Automattic/harper",
+   "month": "2026-04",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:dfeb1bd88d860d66f6129d1348f667aa3bc09a642babbb70d8ac563c6f69775a"
+  },
+  {
+   "id": "Automattic__mongoose-15492",
+   "repo": "Automattic/mongoose",
+   "month": "2025-06",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:b03c3b6553bc2a9b4ebcef19b9190a5f6d70536e14ef1a7a690fb788c8ab6e06"
+  },
+  {
+   "id": "Automattic__mongoose-15534",
+   "repo": "Automattic/mongoose",
+   "month": "2025-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:1eead02dfad5f2c4d368676bfb631c6828e930088bd504bbd0f7f744f4762140"
+  },
+  {
+   "id": "AvaloniaUI__Avalonia-20964",
+   "repo": "AvaloniaUI/Avalonia",
+   "month": "2026-03",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:48cd3160e01834e98953ee6136a16dce4f6793e55af628defd983492c536a119"
+  },
+  {
+   "id": "AvaloniaUI__Avalonia-20978",
+   "repo": "AvaloniaUI/Avalonia",
+   "month": "2026-03",
+   "language": "csharp",
+   "entry": "feature",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:711ac442cb314655a22c4be596a8880b069635fbb337eaf7299f4b8302bc1ce2"
+  },
+  {
+   "id": "Azure__azure-mcp-533",
+   "repo": "Azure/azure-mcp",
+   "month": "2025-07",
+   "language": "csharp",
+   "entry": "feature",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:2420670d9a942b43a59332c3cf8ca291ba959eccae18018ef4ce4c5775122229"
+  },
+  {
+   "id": "Azure__azure-mcp-604",
+   "repo": "Azure/azure-mcp",
+   "month": "2025-07",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:368d67c58a6793702e48bcb9910e008be95112f9a89bc9d5a31a512b0cabf139"
+  },
+  {
+   "id": "Azure__azure-sdk-for-net-57616",
+   "repo": "Azure/azure-sdk-for-net",
+   "month": "2026-03",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:b95dfd2c089461995d57ee517a226eca3fa8891eb5dfeb42a7a85ef3e29fd052"
+  },
+  {
+   "id": "Azure__azure-sdk-for-net-58482",
+   "repo": "Azure/azure-sdk-for-net",
+   "month": "2026-04",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:d251c881db0b711d0090340153b9f00482b3f381adf33945e2d94627d4cdffb9"
+  },
+  {
+   "id": "ChaiScript__ChaiScript-648",
+   "repo": "ChaiScript/ChaiScript",
+   "month": "2026-04",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "BSD-3-Clause",
+   "licence_from": "files",
+   "digest": "sha256:17e3986fce6f1d492fdb094cb9cef893676ecc0f35c5ffd9d7311ad3edbae11a"
+  },
+  {
+   "id": "ChainSafe__lodestar-8203",
+   "repo": "ChainSafe/lodestar",
+   "month": "2025-08",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:34f8bc2a2dc091b204fb873293f90c0ccb5c5b92964f62fca9b7de6a27c85786"
+  },
+  {
+   "id": "ClickHouse__ClickHouse-100579",
+   "repo": "ClickHouse/ClickHouse",
+   "month": "2026-03",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:8724836fb23e055247af5d7491e0feca49966978a0946d3171baef920267c3ca"
+  },
+  {
+   "id": "DeusData__codebase-memory-mcp-632",
+   "repo": "DeusData/codebase-memory-mcp",
+   "month": "2026-06",
+   "language": "c",
+   "entry": "feature",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:039ac6075929ecde87989a574217bfb22f0de9c15b5acc3a8b4273ccd352907a"
+  },
+  {
+   "id": "DioxusLabs__dioxus-5384",
+   "repo": "DioxusLabs/dioxus",
+   "month": "2026-03",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:e8d50ee7931e964419472d48f6c4a6c5dc257211696e68bfa4f40f9a4e8cc370"
+  },
+  {
+   "id": "DioxusLabs__dioxus-5464",
+   "repo": "DioxusLabs/dioxus",
+   "month": "2026-04",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:dedb01945bc8dd5666673b20ee2e010f410145577d2e7e0b93bd491969b780a5"
+  },
+  {
+   "id": "ErikEJ__EFCorePowerTools-3417",
+   "repo": "ErikEJ/EFCorePowerTools",
+   "month": "2026-04",
+   "language": "csharp",
+   "entry": "feature",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:230ec15acfb35694a42b1dcadd9b006e7575028f21737be8e677c5a5e4e30c49"
+  },
+  {
+   "id": "ErikEJ__EFCorePowerTools-3418",
+   "repo": "ErikEJ/EFCorePowerTools",
+   "month": "2026-04",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:d35afbc7fd8901718948fbd4fd806392f01e9305f9cc1da5e12a644e4942aa65"
+  },
+  {
+   "id": "FastLED__FastLED-2691",
+   "repo": "FastLED/FastLED",
+   "month": "2026-06",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:d21c8661d37d05378a13faa497877152dfcbef66cac8e6853a3d9732405e0793"
+  },
+  {
+   "id": "FasterXML__jackson-databind-5837",
+   "repo": "FasterXML/jackson-databind",
+   "month": "2026-03",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:543de59e92eab96d2e8f220de84ad7ec8883440272765593f0bbc639abf71f7f"
+  },
+  {
+   "id": "FasterXML__jackson-databind-5928",
+   "repo": "FasterXML/jackson-databind",
+   "month": "2026-04",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:b25b06dde356083ba891831f57e1a6980689db0308b32dd25f1b8b4dbef6684d"
+  },
+  {
+   "id": "Finbuckle__Finbuckle.MultiTenant-994",
+   "repo": "Finbuckle/Finbuckle.MultiTenant",
+   "month": "2025-08",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:c778f796684734bec032f7f0f5ed7e064e36a4a6c1809ec8a847c7fa928b3fac"
+  },
+  {
+   "id": "Gentleman-Programming__gentle-ai-50",
+   "repo": "Gentleman-Programming/gentle-ai",
+   "month": "2026-03",
+   "language": "go",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:8f897cdebf51a4d7499df1e1e1e300a4e15809adb13077a62f9b21b1d75e161f"
+  },
+  {
+   "id": "GladysAssistant__Gladys-2504",
+   "repo": "GladysAssistant/Gladys",
+   "month": "2026-03",
+   "language": "js",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:7ce9170dfbc256fe67fee4c2efb4ea3d87956076f0b6d298fe01560b7a6751e0"
+  },
+  {
+   "id": "GothenburgBitFactory__taskwarrior-3911",
+   "repo": "GothenburgBitFactory/taskwarrior",
+   "month": "2025-07",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:8e9966d0d43b5802c3b26e7ed0a372f8df12f8d6960424d23b6c0bdda5daf22e"
+  },
+  {
+   "id": "IBM__sarama-3258",
+   "repo": "IBM/sarama",
+   "month": "2025-08",
+   "language": "go",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:bd73906343e4d0efd35ac0b225175a8c965f1d1fa3c59d172a4cdfa8752a2b30"
+  },
+  {
+   "id": "J-F-Liu__lopdf-481",
+   "repo": "J-F-Liu/lopdf",
+   "month": "2026-03",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:596ae839c3c51d1eeb3ed170cf77b0447e2f0c75b05e3f3d8c75fb78e99daa2d"
+  },
+  {
+   "id": "JasperFx__marten-5080",
+   "repo": "JasperFx/marten",
+   "month": "2026-07",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:547bf2111b5b2b8ff5e66dad29f05b9eb81460747c87276d00a0f50888273a89"
+  },
+  {
+   "id": "JasperFx__wolverine-2930",
+   "repo": "JasperFx/wolverine",
+   "month": "2026-05",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:23be011053f10e17feaafb530d51a4c1b182bb70f0babd4cda215357c2648f7b"
+  },
+  {
+   "id": "JasperFx__wolverine-2934",
+   "repo": "JasperFx/wolverine",
+   "month": "2026-05",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:9f20e949ed0ce05329a08c97a37b0a4da5eaa9742a72688b2010bd60189ca5e6"
+  },
+  {
+   "id": "JasperFx__wolverine-3066",
+   "repo": "JasperFx/wolverine",
+   "month": "2026-06",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:276e4e5d67342134fb91993d6a1eab8cb256c32f3e56fbdb70dfcacab374e21e"
+  },
+  {
+   "id": "JasperFx__wolverine-3162",
+   "repo": "JasperFx/wolverine",
+   "month": "2026-06",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:1b0ba8c02787981d577c1c793262aaf3cd3618df4cce2bb26690d295a271faee"
+  },
+  {
+   "id": "JasperFx__wolverine-3233",
+   "repo": "JasperFx/wolverine",
+   "month": "2026-06",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:8aa4afb37b6432d7989878aa1ce84b3e5b689402e3248a4fcdc605b78b2f5236"
+  },
+  {
+   "id": "JasperFx__wolverine-3241",
+   "repo": "JasperFx/wolverine",
+   "month": "2026-06",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:da3f2708035c466e73fb9a65f541768018a1f11187e024ee02b80fce121865b2"
+  },
+  {
+   "id": "JasperFx__wolverine-3456",
+   "repo": "JasperFx/wolverine",
+   "month": "2026-07",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:f6d9e96facd846a8cbdf069aa7987371f7a0db2e282bddae5e951782d25bd2cc"
+  },
+  {
+   "id": "JasperFx__wolverine-3488",
+   "repo": "JasperFx/wolverine",
+   "month": "2026-07",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:1e287249316d4c92eea888501c88940724c58878bd04f1b0a2e6419e5d6a4e61"
+  },
+  {
+   "id": "JasperFx__wolverine-3523",
+   "repo": "JasperFx/wolverine",
+   "month": "2026-07",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:7f7cec2c9f00627b2568c870ec44ea6c98c5bbf6f40a46a250e99f2bb284467c"
+  },
+  {
+   "id": "JasperFx__wolverine-3582",
+   "repo": "JasperFx/wolverine",
+   "month": "2026-07",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:b0780f6c38e64f3a791d63a162c31721e6b1295820fe823f3488fcad898c812a"
+  },
+  {
+   "id": "JasperFx__wolverine-3608",
+   "repo": "JasperFx/wolverine",
+   "month": "2026-07",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:2293d7f04f0ae189ff1bb6f770adbdf4af95617c143143f7310df8e76971e69d"
+  },
+  {
+   "id": "JasperFx__wolverine-3612",
+   "repo": "JasperFx/wolverine",
+   "month": "2026-07",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:f3abb1da494bf020d2dc877ee09d23ae2753378aae36913bf53850b86647fb62"
+  },
+  {
+   "id": "JasperFx__wolverine-3642",
+   "repo": "JasperFx/wolverine",
+   "month": "2026-07",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:663255a61c770b0745b14b9b86d9db6a5b7fff268f634a2968b5136a53ce5ac7"
+  },
+  {
+   "id": "JasperFx__wolverine-3695",
+   "repo": "JasperFx/wolverine",
+   "month": "2026-07",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:b461a998cffe7dd32230c6417461359aec1fa935a3b4ba519ae01fd7766420d4"
+  },
+  {
+   "id": "KSP-CKAN__CKAN-4556",
+   "repo": "KSP-CKAN/CKAN",
+   "month": "2026-04",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "files",
+   "digest": "sha256:9fdaaef189f6f241b469d2cd9541b704cd4e1e5502030076f81cd16000e58024"
+  },
+  {
+   "id": "KSP-CKAN__CKAN-4561",
+   "repo": "KSP-CKAN/CKAN",
+   "month": "2026-04",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "files",
+   "digest": "sha256:e985e1ff03ddf9a758581f8d386b0100bc028caf145037aa1233450906bd6121"
+  },
+  {
+   "id": "Milkdown__milkdown-2041",
+   "repo": "Milkdown/milkdown",
+   "month": "2025-07",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:3890e335bac2c1dcce60ec46a361708c2380d42b66c655f24bb31da91e2646db"
+  },
+  {
+   "id": "MudBlazor__MudBlazor-12775",
+   "repo": "MudBlazor/MudBlazor",
+   "month": "2026-03",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:0f9b593519d325551726b9d8652b339988424275f6ef96db8277c4e47ae123c8"
+  },
+  {
+   "id": "MudBlazor__MudBlazor-12817",
+   "repo": "MudBlazor/MudBlazor",
+   "month": "2026-03",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:e2d4d67df4ba058014eea9eb7b3de9e4f7bc0d90db4b17a17425766d0c70140a"
+  },
+  {
+   "id": "MudBlazor__MudBlazor-12907",
+   "repo": "MudBlazor/MudBlazor",
+   "month": "2026-03",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:97027f39daa29b5a07073cc9284fcef6de25c91ab5f665504d2684c8bd9c6fb1"
+  },
+  {
+   "id": "MudBlazor__MudBlazor-12908",
+   "repo": "MudBlazor/MudBlazor",
+   "month": "2026-03",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:df13fa1766dd526d25d3b772245c4c836cf6ed09b95c1184958a6994a7f271f6"
+  },
+  {
+   "id": "MudBlazor__MudBlazor-12915",
+   "repo": "MudBlazor/MudBlazor",
+   "month": "2026-03",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:99e70020addb880ecfb60f916aaaa0705eaf64fdc25cb4d7a446e1969a9b5375"
+  },
+  {
+   "id": "MudBlazor__MudBlazor-12918",
+   "repo": "MudBlazor/MudBlazor",
+   "month": "2026-03",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:898b21a17008d4f8f3dfadf90c5c87d10b4f3a1ee66e0f12ca8d81dd6eec0cc4"
+  },
+  {
+   "id": "MudBlazor__MudBlazor-12920",
+   "repo": "MudBlazor/MudBlazor",
+   "month": "2026-03",
+   "language": "csharp",
+   "entry": "feature",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:fd66c1531bb73e91f16fa9de44bb7f49dee43a4a6d4cf2b484215eb62afe8d28"
+  },
+  {
+   "id": "MudBlazor__MudBlazor-12957",
+   "repo": "MudBlazor/MudBlazor",
+   "month": "2026-04",
+   "language": "csharp",
+   "entry": "feature",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:bfb540d92e818cacd3652207e4f80cd97236befc6d144e53412f58f64045f7eb"
+  },
+  {
+   "id": "MudBlazor__MudBlazor-12958",
+   "repo": "MudBlazor/MudBlazor",
+   "month": "2026-04",
+   "language": "csharp",
+   "entry": "feature",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:6f28dc45f5b870802148155406014e3d0d719e25e00eff9fc3e77d2385429172"
+  },
+  {
+   "id": "MudBlazor__MudBlazor-13039",
+   "repo": "MudBlazor/MudBlazor",
+   "month": "2026-04",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:242915c1be6979bd4df81db54265e8a2a37e700763829bd9dc599439797d7d49"
+  },
+  {
+   "id": "MudBlazor__MudBlazor-13044",
+   "repo": "MudBlazor/MudBlazor",
+   "month": "2026-04",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:fd1acac22583b05cc70db23e49f7027dbf7ec1ee6f600ff8aafeb5952a367662"
+  },
+  {
+   "id": "MudBlazor__MudBlazor-13063",
+   "repo": "MudBlazor/MudBlazor",
+   "month": "2026-04",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:3d9415a41a9bf76f9c6115d329b594c88a03cf91e0a333a18c1225caa35216af"
+  },
+  {
+   "id": "MudBlazor__MudBlazor-13097",
+   "repo": "MudBlazor/MudBlazor",
+   "month": "2026-04",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:897b63974a4ad98cd850bc7751e5714bae43582a64ec5ffa63ba57fe365bbb4e"
+  },
+  {
+   "id": "MudBlazor__MudBlazor-13104",
+   "repo": "MudBlazor/MudBlazor",
+   "month": "2026-04",
+   "language": "csharp",
+   "entry": "feature",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:a38ba732a17134b6b545370f5d9ac4d86a0f25efe545ce437c541eed980cd5d6"
+  },
+  {
+   "id": "MudBlazor__MudBlazor-13109",
+   "repo": "MudBlazor/MudBlazor",
+   "month": "2026-04",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:790e2925d01c1092fd7ce7c277db89dc5d822fe62a834b87920930a8c31b55c8"
+  },
+  {
+   "id": "NVIDIA__NemoClaw-330",
+   "repo": "NVIDIA/NemoClaw",
+   "month": "2026-03",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:bb3d74b5ead952b4f55d7a88881bbe96d1e8512f67e1ed533cd1ac34851f7087"
+  },
+  {
+   "id": "NVIDIA__OpenShell-695",
+   "repo": "NVIDIA/OpenShell",
+   "month": "2026-03",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:fcb245dc16b0c21f1510396b24a5d713cd15c8f861b1e7d8159a2b287bf1209b"
+  },
+  {
+   "id": "NVIDIA__OpenShell-810",
+   "repo": "NVIDIA/OpenShell",
+   "month": "2026-04",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:cd5ebc7e27e045adc758c37a361c87edea4c6c8e46ae25bdc086d91aa8090d0a"
+  },
+  {
+   "id": "NVIDIA__gpu-operator-2258",
+   "repo": "NVIDIA/gpu-operator",
+   "month": "2026-03",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:37b5198b7904dccd97cd9c1dac2f06c0e6117bc7e65d31a29bfb593565fe95fb"
+  },
+  {
+   "id": "NVIDIA__stdexec-2002",
+   "repo": "NVIDIA/stdexec",
+   "month": "2026-04",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:4ec0bb10f7542e2e8aa75bdd4799766c43a3a3e167eb0fa4856c1ae93625a008"
+  },
+  {
+   "id": "OpenAPITools__openapi-generator-21579",
+   "repo": "OpenAPITools/openapi-generator",
+   "month": "2025-07",
+   "language": "java",
+   "entry": "feature",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:957991bcebc82d6d4121a97489f980fbfb45e87ce9fa7eb66177562fed3ab875"
+  },
+  {
+   "id": "OpenAPITools__openapi-generator-21734",
+   "repo": "OpenAPITools/openapi-generator",
+   "month": "2025-08",
+   "language": "java",
+   "entry": "feature",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:1a66464e3160271594ef3099f0a4c5055513aad4f7dd6660ccb5592ca429f734"
+  },
+  {
+   "id": "OpenLineage__OpenLineage-3921",
+   "repo": "OpenLineage/OpenLineage",
+   "month": "2025-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:e863561e0fa18e22e46a3aa2f4cb5a5feb5349b8673002b5e1cbb742f95f2431"
+  },
+  {
+   "id": "OrchardCMS__OrchardCore-19169",
+   "repo": "OrchardCMS/OrchardCore",
+   "month": "2026-04",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "BSD-3-Clause",
+   "licence_from": "graphql",
+   "digest": "sha256:5cd8c4c3efb8f837f0878048791c93d4b5821c261142d09fb378b1557f77d585"
+  },
+  {
+   "id": "OrchardCMS__OrchardCore-19492",
+   "repo": "OrchardCMS/OrchardCore",
+   "month": "2026-07",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "BSD-3-Clause",
+   "licence_from": "graphql",
+   "digest": "sha256:7c7291c15606b006658c4908eb204de46df53e5807b7120760d2ab3390514f60"
+  },
+  {
+   "id": "QwenLM__qwen-code-3310",
+   "repo": "QwenLM/qwen-code",
+   "month": "2026-04",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:60eb919e17aab38a581ee1c9384dbe57989f2b78c9616131d7ab605fd60967fa"
+  },
+  {
+   "id": "QwenLM__qwen-code-349",
+   "repo": "QwenLM/qwen-code",
+   "month": "2025-08",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:07fde9d1467d6cd94552815bcd06b8c91677ff2c9166cbc93158970e92473a77"
+  },
+  {
+   "id": "RocketChat__Rocket.Chat.ReactNative-6382",
+   "repo": "RocketChat/Rocket.Chat.ReactNative",
+   "month": "2025-05",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:51c419270a01d21804e0fb31bf84d5c01c2099a0f16412e9e18a1b5ce0990445"
+  },
+  {
+   "id": "RooCodeInc__Roo-Code-12135",
+   "repo": "RooCodeInc/Roo-Code",
+   "month": "2026-04",
+   "language": "ts",
+   "entry": "feature",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:fc2ce867c793648f39394c54c73428a396eba9dcea01a1d92087761748b9c4ca"
+  },
+  {
+   "id": "Shopify__hydrogen-3008",
+   "repo": "Shopify/hydrogen",
+   "month": "2025-07",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:4f5481437d606a51604c113de634ab6cdc3bd78b8178445034b0609469691df4"
+  },
+  {
+   "id": "Shopify__hydrogen-3072",
+   "repo": "Shopify/hydrogen",
+   "month": "2025-08",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:45458e9898918f241012efb938bba26e822455ed47e35151e4a48d7a2217f4ef"
+  },
+  {
+   "id": "SubtitleEdit__subtitleedit-10411",
+   "repo": "SubtitleEdit/subtitleedit",
+   "month": "2026-03",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:208bb8dea2222d076f27e02b6dee1190c49b12186badc2e918b77bf645271b35"
+  },
+  {
+   "id": "SubtitleEdit__subtitleedit-10419",
+   "repo": "SubtitleEdit/subtitleedit",
+   "month": "2026-03",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:996b318382b38d338771f102b85e2fba7187b3b52692cd6fa876103cd841c7ef"
+  },
+  {
+   "id": "SubtitleEdit__subtitleedit-11851",
+   "repo": "SubtitleEdit/subtitleedit",
+   "month": "2026-06",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:6622ba9bc11df8c5dea896e866d7ae11ae1b63eb49955ec13abb2af8ed3f408f"
+  },
+  {
+   "id": "SubtitleEdit__subtitleedit-11916",
+   "repo": "SubtitleEdit/subtitleedit",
+   "month": "2026-06",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:50e79e41c8b362cbb9eca3ef018241a4cbca79526fb240729f5a8191ae6f1c75"
+  },
+  {
+   "id": "SubtitleEdit__subtitleedit-11957",
+   "repo": "SubtitleEdit/subtitleedit",
+   "month": "2026-06",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:7444700e81109d14e595db3f9d59f518063818a782aa7e4b9053a8bcf98780d2"
+  },
+  {
+   "id": "SubtitleEdit__subtitleedit-12151",
+   "repo": "SubtitleEdit/subtitleedit",
+   "month": "2026-07",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:43ae652785e52a12352aacb673e0f1a1a54e52e90f0538b396a8e3c76a3b354c"
+  },
+  {
+   "id": "SubtitleEdit__subtitleedit-12685",
+   "repo": "SubtitleEdit/subtitleedit",
+   "month": "2026-07",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:5ef8d1cdb02b09f7013795c18bcb8c30e363f598614628b917e652b2fe42c728"
+  },
+  {
+   "id": "SubtitleEdit__subtitleedit-12763",
+   "repo": "SubtitleEdit/subtitleedit",
+   "month": "2026-07",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:aeabe5cb0e41594f49b333c7eef3862fd847355c2c7e1a67ca419fa069ed3ba6"
+  },
+  {
+   "id": "SubtitleEdit__subtitleedit-12895",
+   "repo": "SubtitleEdit/subtitleedit",
+   "month": "2026-07",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:4b1c6c09f93e0e516bc47ce6273b6eec1d96980c0d9b46461a20af74e7c82601"
+  },
+  {
+   "id": "TanStack__form-1620",
+   "repo": "TanStack/form",
+   "month": "2025-07",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:4a7566a3078741115b7ad2f907b16efb5c9f0e881a13861f477e5e1cb4d90401"
+  },
+  {
+   "id": "TanStack__form-1664",
+   "repo": "TanStack/form",
+   "month": "2025-08",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:8f28c0ebc5c95e7e6605b44438358806ac3669760f9da4f713d36e4f92b7360d"
+  },
+  {
+   "id": "TanStack__router-4611",
+   "repo": "TanStack/router",
+   "month": "2025-07",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:f51124f61605fe404738296d1a53354e03dcda962fee1e83a213e2dac10bacca"
+  },
+  {
+   "id": "TanStack__router-4629",
+   "repo": "TanStack/router",
+   "month": "2025-07",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:285dc358b8127707d9f307c40a127945ba68f48a9eae414e58ccac1593999c4a"
+  },
+  {
+   "id": "TanStack__router-4685",
+   "repo": "TanStack/router",
+   "month": "2025-07",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:08f905d6297cdc222f4094f55a502a6ff97bced58bdcd402df89c9767da84b95"
+  },
+  {
+   "id": "TanStack__router-4716",
+   "repo": "TanStack/router",
+   "month": "2025-07",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:e21e96f80f71d3a2b4d1f32c9fa43ae375318b8efaa19752a23783b7100d8954"
+  },
+  {
+   "id": "TanStack__router-4751",
+   "repo": "TanStack/router",
+   "month": "2025-07",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:eb20f4020823338f1895edecb2c49cfb5ba4c157f63da3370c2162f0bcd31dfc"
+  },
+  {
+   "id": "TanStack__router-4915",
+   "repo": "TanStack/router",
+   "month": "2025-08",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:0536be58c095979c4a5fcf83226dc8123f0acd6769aeb24229b13bcf1233f6c2"
+  },
+  {
+   "id": "TanStack__router-5033",
+   "repo": "TanStack/router",
+   "month": "2025-08",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:21dd73b7b38ef24824c8eab09d60112dbd6ed22c7efce84fbf4210d6d8d68722"
+  },
+  {
+   "id": "TecharoHQ__anubis-881",
+   "repo": "TecharoHQ/anubis",
+   "month": "2025-07",
+   "language": "go",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:867e85dc27c8309b2b21106e153099508a8d2dfb7bcbd70cd91725b8aae0dde5"
+  },
+  {
+   "id": "TryGhost__Ghost-24345",
+   "repo": "TryGhost/Ghost",
+   "month": "2025-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:181649d2ee127fac4dbb56c91e45fcdc98850c786ff8b56a1b45e954177405dd"
+  },
+  {
+   "id": "UglyToad__PdfPig-1350",
+   "repo": "UglyToad/PdfPig",
+   "month": "2026-06",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:41e813d5a22b4a45158871e5b177e91e0076017d1a1429a8204c013f244e9429"
+  },
+  {
+   "id": "WasmEdge__WasmEdge-4764",
+   "repo": "WasmEdge/WasmEdge",
+   "month": "2026-04",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:2fd6b06237c6b3c70eef233ae61bd53f15478088a174861503c5daf976e02bc1"
+  },
+  {
+   "id": "WasmEdge__WasmEdge-4772",
+   "repo": "WasmEdge/WasmEdge",
+   "month": "2026-04",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:4d28373d6c2e2a5e995d2a8466ceeedfcdf7fcb22253513bb159861cd16db65b"
+  },
+  {
+   "id": "WasmEdge__WasmEdge-4788",
+   "repo": "WasmEdge/WasmEdge",
+   "month": "2026-04",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:7a27351b4236fa9cdf78d7e431ad13bf8a817aaf3c72bf669408d323e9a47be4"
+  },
+  {
+   "id": "a-h__templ-1213",
+   "repo": "a-h/templ",
+   "month": "2025-07",
+   "language": "go",
+   "entry": "feature",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:707a0f92016ed66c890db7fc0c033cf469a631790326bb8c8ea498b5e5984d13"
+  },
+  {
+   "id": "actor-framework__actor-framework-2300",
+   "repo": "actor-framework/actor-framework",
+   "month": "2026-03",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "BSD-3-Clause",
+   "licence_from": "graphql",
+   "digest": "sha256:b8ecab28b03d762c7daea89edf0682f5c42ebc16ec537a8fe8f0c73388410bf0"
+  },
+  {
+   "id": "agentgateway__agentgateway-2313",
+   "repo": "agentgateway/agentgateway",
+   "month": "2026-06",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:c04dd16bc8ccc7b9d8c8b6007499b27820bf0d5a128ff3a4a8a053c246cff770"
+  },
+  {
+   "id": "agentscope-ai__agentscope-java-2189",
+   "repo": "agentscope-ai/agentscope-java",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:c586f537a2d6c5f54b84936b5f77f23fbd212b10742c8164ae07593434dbfab0"
+  },
+  {
+   "id": "agentscope-ai__agentscope-java-2260",
+   "repo": "agentscope-ai/agentscope-java",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:e55bcc648c093cbfc3f438fc1f9616e3216d0f7e5e56ce83b98e7a7d416f0826"
+  },
+  {
+   "id": "agentscope-ai__agentscope-java-2343",
+   "repo": "agentscope-ai/agentscope-java",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:1a0a4ace5bc18406fd805a05853331a3eca48ec7b9685218a644de021a79f164"
+  },
+  {
+   "id": "akuity__kargo-4687",
+   "repo": "akuity/kargo",
+   "month": "2025-07",
+   "language": "go",
+   "entry": "feature",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:f3988c8bb6c458f6a1cf665a62f6702c30983521f162545b7dba42d4c6c2c2cd"
+  },
+  {
+   "id": "akuity__kargo-5990",
+   "repo": "akuity/kargo",
+   "month": "2026-03",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:2faa78ebe267ebc6b3a93ba26b839127ba5c8ed677f63191fac1c3244a3fc2d1"
+  },
+  {
+   "id": "alibaba__nacos-13539",
+   "repo": "alibaba/nacos",
+   "month": "2025-06",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:9aa7fb546885547fef413198718eb2c0daa00a604c38c361e1f9cfc414c6aadf"
+  },
+  {
+   "id": "alibaba__nacos-13650",
+   "repo": "alibaba/nacos",
+   "month": "2025-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:8d6573696e4f4247c781c4e26c5b86b01bad49fbfa8167e5fea7ac3ea44b0f5f"
+  },
+  {
+   "id": "alibaba__nacos-14778",
+   "repo": "alibaba/nacos",
+   "month": "2026-03",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:7ccdffd80a7245f8d7d592491a72eec0c0cd0e558cf3bf2a6c6458dd88c4db57"
+  },
+  {
+   "id": "alibaba__nacos-14917",
+   "repo": "alibaba/nacos",
+   "month": "2026-04",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:4952856bf1db6ae22a30c36727a088758e97a478bb5cf47aaa287c3dd2785ce1"
+  },
+  {
+   "id": "alibaba__yalantinglibs-1002",
+   "repo": "alibaba/yalantinglibs",
+   "month": "2025-06",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:1f8477f8d7e971906670e939b54680222f10c1d81d5fc714f9633fd8b2983454"
+  },
+  {
+   "id": "amir20__dozzle-4612",
+   "repo": "amir20/dozzle",
+   "month": "2026-04",
+   "language": "go",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:e1ced7c7c18632acfa757f74add3e2a6e33a608411a871d49052b91bc0d6e822"
+  },
+  {
+   "id": "angularsen__UnitsNet-1698",
+   "repo": "angularsen/UnitsNet",
+   "month": "2026-07",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT-0",
+   "licence_from": "graphql",
+   "digest": "sha256:2fbd1df453e425e973d9380a914438e8cb3e76759add57a9be5d7fea17b0ba1b"
+  },
+  {
+   "id": "antvis__G2-7021",
+   "repo": "antvis/G2",
+   "month": "2025-07",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:841a55deee5835e66e420a9a536aac047d6059c6ae4ffa8c44f7687dab759cc0"
+  },
+  {
+   "id": "antvis__G2-7076",
+   "repo": "antvis/G2",
+   "month": "2025-08",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:89a8b5b8b8a5f8b26e99556366f1d8e09fa73b0dc1ae0543c1c3648d2beeaac1"
+  },
+  {
+   "id": "apache__accumulo-5763",
+   "repo": "apache/accumulo",
+   "month": "2025-07",
+   "language": "java",
+   "entry": "feature",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:0c037495320ff46638717ae7efb893ff6112701cf93129663f69c2c5fbd60418"
+  },
+  {
+   "id": "apache__datafusion-16610",
+   "repo": "apache/datafusion",
+   "month": "2025-06",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:7f715e384a24d5e757a82251afb75ad7642aa8585f5192bee5c8afaa80a0aa00"
+  },
+  {
+   "id": "apache__datafusion-16726",
+   "repo": "apache/datafusion",
+   "month": "2025-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:d4ae8d12c844c6394af5bea6354c6bd5c40cbb264298e07bcb7e1285d49d92c7"
+  },
+  {
+   "id": "apache__datafusion-17139",
+   "repo": "apache/datafusion",
+   "month": "2025-08",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:860daf84e3a70fd2a354ee83a31828d31d1500a8772e3f9f1aebc5dea5d7cfa0"
+  },
+  {
+   "id": "apache__datafusion-17201",
+   "repo": "apache/datafusion",
+   "month": "2025-08",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:28313118ed88d69450410b2e3dba01c86b3feda59820bb84f63b1ae10c78f7a9"
+  },
+  {
+   "id": "apache__datafusion-17233",
+   "repo": "apache/datafusion",
+   "month": "2025-08",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:7c5221608f3da48967a007de2c6bf6222275098a6e010affb3afc6b620559d1e"
+  },
+  {
+   "id": "apache__inlong-11946",
+   "repo": "apache/inlong",
+   "month": "2025-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:686a44e7868bdeea7fdb7907602b3ebcd01556ba0bf5fa8d8276f0390187d9e3"
+  },
+  {
+   "id": "apache__inlong-11947",
+   "repo": "apache/inlong",
+   "month": "2025-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:112b337c15c429772c4fc09117ed2ffaa2c85083e01143c0fcca80320d445c1d"
+  },
+  {
+   "id": "apache__jena-3324",
+   "repo": "apache/jena",
+   "month": "2025-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:46b1751432674f2654024067e4d75ab068dc928e10cdfdade4fbf3986007170d"
+  },
+  {
+   "id": "apache__kvrocks-3084",
+   "repo": "apache/kvrocks",
+   "month": "2025-07",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:7156d9b76cefbb48dc91fd099cd6a1ca7ade74bf017c0fc9d991dadfe22aaf54"
+  },
+  {
+   "id": "apache__lucene-14932",
+   "repo": "apache/lucene",
+   "month": "2025-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:af409f9245f58c54a2b938750c093e294bad096a4b1101f3b88432a1dce1cde5"
+  },
+  {
+   "id": "apache__paimon-8536",
+   "repo": "apache/paimon",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:79cbd3a9c8266b82b73750671fbcc853ddf14175ad43c20c65b161fdd478b644"
+  },
+  {
+   "id": "apache__paimon-8874",
+   "repo": "apache/paimon",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:f4793e63a2dbabfea5be4d88912d9ed872483535a107b26e22bbc86c12ea8c32"
+  },
+  {
+   "id": "apache__parquet-java-3638",
+   "repo": "apache/parquet-java",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:60cf1e4e7881718539fe97858b588ab011b312e309c099ae9570d22ba0040806"
+  },
+  {
+   "id": "apache__parquet-java-3642",
+   "repo": "apache/parquet-java",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:60cf1e4e7881718539fe97858b588ab011b312e309c099ae9570d22ba0040806"
+  },
+  {
+   "id": "apache__parquet-java-3645",
+   "repo": "apache/parquet-java",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:60cf1e4e7881718539fe97858b588ab011b312e309c099ae9570d22ba0040806"
+  },
+  {
+   "id": "apache__parquet-java-3669",
+   "repo": "apache/parquet-java",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:2905d2797f03c72ca00c24a31d7cb09a80effd6c5f3eff879cdcbaa4eed127c5"
+  },
+  {
+   "id": "apache__pinot-16421",
+   "repo": "apache/pinot",
+   "month": "2025-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:dcc095af8b15eaddcd2d73d5548f46966cdc3793dac73c2b2ec203b73cc161af"
+  },
+  {
+   "id": "apache__rocketmq-10573",
+   "repo": "apache/rocketmq",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "feature",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:b53f7ace7ba78691c3ba77f92250c05abf3ac9d927e11b99a3ba1db0ecf04b26"
+  },
+  {
+   "id": "apache__rocketmq-10614",
+   "repo": "apache/rocketmq",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:fb48f75a3a9dcd7f311d63c5b559df4d60d5b6b8494b482ada13685ef4484c62"
+  },
+  {
+   "id": "apache__rocketmq-10662",
+   "repo": "apache/rocketmq",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "feature",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:ac54dff4384d6fedf45358c7103c0bc31b190e13acc52ab1fe8b707d6e8382d2"
+  },
+  {
+   "id": "apache__shardingsphere-38622",
+   "repo": "apache/shardingsphere",
+   "month": "2026-04",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:5d1708ebc8b4fa5e695f689fc1dd634fa150fd4fcafa4374179d61bad9e3e1f9"
+  },
+  {
+   "id": "apache__shardingsphere-39072",
+   "repo": "apache/shardingsphere",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:71c5c29035c8f6991e216995e8142230fbeb9412880cfb3e2beda2f89ea4a954"
+  },
+  {
+   "id": "apache__shardingsphere-39104",
+   "repo": "apache/shardingsphere",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:3675efbd7429db5010dab3ac8a7bace7c3840a57e47f82f87ca6d904bc1b0482"
+  },
+  {
+   "id": "apache__shardingsphere-39126",
+   "repo": "apache/shardingsphere",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:42195e60265aed7b1138b2a1dded093a31e3b305490109f0d0ed7669e7399b28"
+  },
+  {
+   "id": "apache__shardingsphere-39137",
+   "repo": "apache/shardingsphere",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:564c7cf32e055dcd89d70e27cdef27cecc62f8eee7fd0bc9d8b24b63f141c96d"
+  },
+  {
+   "id": "apache__shardingsphere-39237",
+   "repo": "apache/shardingsphere",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:5aace758c7c92c131ab303a0659f4eb2c10caf3d42ebba3818d755ecf9b3e0cd"
+  },
+  {
+   "id": "apple__pkl-1126",
+   "repo": "apple/pkl",
+   "month": "2025-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:82fd4f52652e54ad561b1a8b113d82cc18d9bdfd18c172065aa801b253c508a1"
+  },
+  {
+   "id": "apple__pkl-1165",
+   "repo": "apple/pkl",
+   "month": "2025-08",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:b70f86ecebc33f2ee3d0f8de7c8525bc82e8134cec3dce7e3caf8695c81a2e30"
+  },
+  {
+   "id": "apple__pkl-1187",
+   "repo": "apple/pkl",
+   "month": "2025-08",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:759c630d62d9576737c4680c08ef4255d8ac507fb50aa74f9c32569a6885126b"
+  },
+  {
+   "id": "argoproj__argo-rollouts-4305",
+   "repo": "argoproj/argo-rollouts",
+   "month": "2025-06",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:a202c2ac3eae6b367af32cf613c47d955a553a01485e999b54661727c79ab831"
+  },
+  {
+   "id": "astral-sh__uv-18976",
+   "repo": "astral-sh/uv",
+   "month": "2026-04",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:715eafb20edc5b71b71812c96bd98db02365ea39fe1aa9f3cea42e04a956acf2"
+  },
+  {
+   "id": "aws-amplify__amplify-ui-6665",
+   "repo": "aws-amplify/amplify-ui",
+   "month": "2025-08",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:286709f7bd8ced14bfaf6d8b76b504824078b4784763d4afa1e41647e60f17c3"
+  },
+  {
+   "id": "aws__s2n-tls-5481",
+   "repo": "aws/s2n-tls",
+   "month": "2025-08",
+   "language": "c",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:c5adc325459e75cc9738ab484ac44ceb5ae10f1a38f15335b63e474acc2b579f"
+  },
+  {
+   "id": "better-auth__better-auth-4175",
+   "repo": "better-auth/better-auth",
+   "month": "2025-08",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:1196b3b9eb082ff77070620461fdfab93afeadf5c6cdc6c3d51ce455f8d8b35d"
+  },
+  {
+   "id": "biomejs__biome-10767",
+   "repo": "biomejs/biome",
+   "month": "2026-06",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:14d5db5296a05c222eab250bf6e2022b71871226b3729ffddf66cd5828d2d912"
+  },
+  {
+   "id": "biomejs__biome-10773",
+   "repo": "biomejs/biome",
+   "month": "2026-06",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:d9795807f7251c1282ba76459659e4d64ec91caa66aba49b79e3b60dfd13912a"
+  },
+  {
+   "id": "biomejs__biome-10827",
+   "repo": "biomejs/biome",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:94ed068bb1bf65ee54f5e329fc29bc81b2b45e5c811d73c73f9d7ec571c35970"
+  },
+  {
+   "id": "biomejs__biome-10853",
+   "repo": "biomejs/biome",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:0aca5d790079fc4ba95a4eb5eb4911e51d6cf636cf6849494fb050848a14e94d"
+  },
+  {
+   "id": "biomejs__biome-10875",
+   "repo": "biomejs/biome",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:e6aba077b6781fe67e48bd9efec769893a4cca2376a3613c129060a6c8f12a0f"
+  },
+  {
+   "id": "biomejs__biome-10886",
+   "repo": "biomejs/biome",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:35242defdc08f92743136a4ba4f7971c7301052bee99fe11a8e7709732422e84"
+  },
+  {
+   "id": "biomejs__biome-9995",
+   "repo": "biomejs/biome",
+   "month": "2026-04",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:b51f28830b88628c0ef3974af7b5f12dc0dbe58074e98e6a10e4ad45688ff1e8"
+  },
+  {
+   "id": "btraceio__btrace-894",
+   "repo": "btraceio/btrace",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:7d47cb833614809046e0ea46a752714302bb05bc04ec6b68e90fc3b1859a8741"
+  },
+  {
+   "id": "btraceio__btrace-898",
+   "repo": "btraceio/btrace",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:5647d1f38028ad9b00255b258c29ef99ea4d77879919049d3436052f2da0197f"
+  },
+  {
+   "id": "btraceio__btrace-899",
+   "repo": "btraceio/btrace",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:357e157f6b4455b84cc9c16245dbdf2dfe5e4fe6f503f90a5c30755981010824"
+  },
+  {
+   "id": "btraceio__btrace-910",
+   "repo": "btraceio/btrace",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:8cf09f2585d309388959d84a89db367f664bdc197577cd2df0c8f9c73420fec2"
+  },
+  {
+   "id": "c-ares__c-ares-1189",
+   "repo": "c-ares/c-ares",
+   "month": "2026-07",
+   "language": "c",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:3958a570e195a081d40b68df43fddd33541f1e7d34e693833904287c813532e0"
+  },
+  {
+   "id": "c-ares__c-ares-1190",
+   "repo": "c-ares/c-ares",
+   "month": "2026-07",
+   "language": "c",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:ee14f068ca371f19f5d9ec5b75de0feb8fbb1f40ad2e981d1c82f2a3e197c151"
+  },
+  {
+   "id": "c-ares__c-ares-1197",
+   "repo": "c-ares/c-ares",
+   "month": "2026-07",
+   "language": "c",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:f3a26285a6a1e7fd4b369cc250acf958481f63e1b454b3a154f264688b1a5768"
+  },
+  {
+   "id": "caddyserver__caddy-7189",
+   "repo": "caddyserver/caddy",
+   "month": "2025-08",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:1e260d1197199dc993781ff8def00de985044e1a3aa7966ad437c71a24cb5dff"
+  },
+  {
+   "id": "caddyserver__caddy-7567",
+   "repo": "caddyserver/caddy",
+   "month": "2026-03",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:97e93641e98207b200c4d7294e98408ce74bf787b865628b4d32106f9bc1017f"
+  },
+  {
+   "id": "cadence-workflow__cadence-7182",
+   "repo": "cadence-workflow/cadence",
+   "month": "2025-08",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:f2df1d6fa9f1c153fde4bc573ce473dd4d3c96969bee479c1e6fec77e870c9cb"
+  },
+  {
+   "id": "camunda__camunda-modeler-5121",
+   "repo": "camunda/camunda-modeler",
+   "month": "2025-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:f853da5595a32eac176f05dd5ed2578be5cdce646c5706b761f3b740cfff1f23"
+  },
+  {
+   "id": "can1357__oh-my-pi-489",
+   "repo": "can1357/oh-my-pi",
+   "month": "2026-03",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:2ef9d30f5f7bda6228eeec1891711a24181c96a29c6fa112ed073c9cadf75ab8"
+  },
+  {
+   "id": "casbin__casbin-1512",
+   "repo": "casbin/casbin",
+   "month": "2025-08",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:952df67d0f6eeaf81ba680855010ef845d8cc56b18dc4e6e666881b9c1ac0eac"
+  },
+  {
+   "id": "cc65__cc65-2761",
+   "repo": "cc65/cc65",
+   "month": "2025-07",
+   "language": "c",
+   "entry": "bug",
+   "licence": "Zlib",
+   "licence_from": "graphql",
+   "digest": "sha256:45f38756197922e1b031cc6dae23fb2bc5ecd0c1d243349509ef81784cf2f928"
+  },
+  {
+   "id": "cc65__cc65-2791",
+   "repo": "cc65/cc65",
+   "month": "2025-07",
+   "language": "c",
+   "entry": "bug",
+   "licence": "Zlib",
+   "licence_from": "graphql",
+   "digest": "sha256:3380e07d96cddea356596788bea83c81ca87368c56bd2df25157bf812d1eafb0"
+  },
+  {
+   "id": "cc65__cc65-2941",
+   "repo": "cc65/cc65",
+   "month": "2026-03",
+   "language": "c",
+   "entry": "bug",
+   "licence": "Zlib",
+   "licence_from": "graphql",
+   "digest": "sha256:28d07f1dbf8c35b85bcd6fab2e64f365c615908451b2bca1d41ec7d44d4ec4ac"
+  },
+  {
+   "id": "centrifugal__centrifugo-1129",
+   "repo": "centrifugal/centrifugo",
+   "month": "2026-04",
+   "language": "go",
+   "entry": "feature",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:f4c3d2ffa5137771382b421f3ac8795db5d8ace5be15a12631303a15f6eb495c"
+  },
+  {
+   "id": "charmbracelet__crush-766",
+   "repo": "charmbracelet/crush",
+   "month": "2025-08",
+   "language": "go",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "files",
+   "digest": "sha256:3c4d1ec25ce87f1fe517658c75e27c98555c3dcf2d8d8f20f73306da7a9ff897"
+  },
+  {
+   "id": "chimurai__http-proxy-middleware-1163",
+   "repo": "chimurai/http-proxy-middleware",
+   "month": "2026-02",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:6979401b0683b37c99235c6c4340e0037e5533f519a5d04e920bd22ac432521d"
+  },
+  {
+   "id": "clap-rs__clap-6068",
+   "repo": "clap-rs/clap",
+   "month": "2025-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:075d5143e84166ffb49bd833456bff8a45c337c9f30aad5614329bab3926e9bb"
+  },
+  {
+   "id": "cloudflare__workers-sdk-10032",
+   "repo": "cloudflare/workers-sdk",
+   "month": "2025-07",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:1503258fb4e5384077805cc85ec9abe097f4efc64111406896f48763980fc6e5"
+  },
+  {
+   "id": "codeceptjs__CodeceptJS-5072",
+   "repo": "codeceptjs/CodeceptJS",
+   "month": "2025-08",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:23cab8cbdbae99dac3c812a0f126abe28a4b462be460618d41483c3172e4483a"
+  },
+  {
+   "id": "coze-dev__coze-loop-462",
+   "repo": "coze-dev/coze-loop",
+   "month": "2026-03",
+   "language": "go",
+   "entry": "feature",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:0b9a4c139c4aea6839618057f7c99900e3c80679a6b5e81e9cfa6e281de3404f"
+  },
+  {
+   "id": "crowdsecurity__crowdsec-3744",
+   "repo": "crowdsecurity/crowdsec",
+   "month": "2025-07",
+   "language": "go",
+   "entry": "feature",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:802be1110bb3484e38e818a68c362769a1aa181f06d02e7849277a0601c0d9a5"
+  },
+  {
+   "id": "cthackers__adm-zip-559",
+   "repo": "cthackers/adm-zip",
+   "month": "2025-06",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:2ec4440b65103f1ac37c77fad8ed33c8af37e032698c36f13220ad766913f84a"
+  },
+  {
+   "id": "cucumber__godog-695",
+   "repo": "cucumber/godog",
+   "month": "2025-07",
+   "language": "go",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:f7de6b72d2aeccdd82f50eb28f6323e2568e446837f31b3bf6ebbc6eb6601c67"
+  },
+  {
+   "id": "cytoscape__cytoscape.js-3396",
+   "repo": "cytoscape/cytoscape.js",
+   "month": "2025-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:f64836e37d2721a9a257ebf85283f8b848831e8ff473e31b843ce0e2d8ba28f3"
+  },
+  {
+   "id": "danielmiessler__Fabric-2098",
+   "repo": "danielmiessler/Fabric",
+   "month": "2026-04",
+   "language": "go",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:4b57f534fcb2b03679f477cb32b5f790eb1f6d50f98e01a7d4a73c7126b86385"
+  },
+  {
+   "id": "decaporg__decap-cms-7495",
+   "repo": "decaporg/decap-cms",
+   "month": "2025-06",
+   "language": "js",
+   "entry": "feature",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:9b66dae277cd1f1ee2282af5bd3656c95966323ea3d4290044d4270248d59958"
+  },
+  {
+   "id": "delta-io__delta-rs-4357",
+   "repo": "delta-io/delta-rs",
+   "month": "2026-04",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:d74a4632f5434d0ea8b96fd4da28d8c0d5c232192e469b5ba53b649d64f9f23f"
+  },
+  {
+   "id": "denoland__std-6775",
+   "repo": "denoland/std",
+   "month": "2025-07",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:592c4ea77276c4dd908b49eb02e7dfef51ba46322fdad719c72a4f906a6a4dc4"
+  },
+  {
+   "id": "diffplug__spotless-2520",
+   "repo": "diffplug/spotless",
+   "month": "2025-06",
+   "language": "java",
+   "entry": "feature",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:a22159590890f954f4312822095f0a980e75ea013fc0bff293be7367f813ae28"
+  },
+  {
+   "id": "dlvhdr__gh-dash-813",
+   "repo": "dlvhdr/gh-dash",
+   "month": "2026-03",
+   "language": "go",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:78c967d2ed2e97dc33eec8f9632d905f2daac2a4af26f953806cab21aa42767b"
+  },
+  {
+   "id": "docsifyjs__docsify-2595",
+   "repo": "docsifyjs/docsify",
+   "month": "2025-08",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:64b1855381f36f505a5279f63fbd8b901dfd452ad37c12d515110a66ee344136"
+  },
+  {
+   "id": "dotnet__aspnetcore-62868",
+   "repo": "dotnet/aspnetcore",
+   "month": "2025-07",
+   "language": "csharp",
+   "entry": "feature",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:059e637138b616ad79afe69226aab6fb7d7e92b2d0157872ff3a73957e86c50f"
+  },
+  {
+   "id": "dotnet__command-line-api-2708",
+   "repo": "dotnet/command-line-api",
+   "month": "2025-10",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:808977203d85c4a1430e8064e245437ca6bd021c6336f9610bd832da23f6b650"
+  },
+  {
+   "id": "dotnet__command-line-api-2781",
+   "repo": "dotnet/command-line-api",
+   "month": "2026-03",
+   "language": "csharp",
+   "entry": "feature",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:b71d817b29652800d0fbae6629086f7cd540fc0532ece419598ba9374c88c846"
+  },
+  {
+   "id": "dotnet__command-line-api-2790",
+   "repo": "dotnet/command-line-api",
+   "month": "2026-04",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:96050d4b04bb9672926087d46f4180f17aa97160202b49115063bd8491803521"
+  },
+  {
+   "id": "dotnet__command-line-api-2793",
+   "repo": "dotnet/command-line-api",
+   "month": "2026-04",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:898b291bfad2db491361d8725eec04d163eaf4db0b3d9d4bb742f4f5158b4b51"
+  },
+  {
+   "id": "dotnet__efcore-36159",
+   "repo": "dotnet/efcore",
+   "month": "2025-05",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:f340d753bf5cff652f55dfa3bdc87a89dfffbd82fe4ad7f64103a2f26a6a17b4"
+  },
+  {
+   "id": "dotnet__efcore-36620",
+   "repo": "dotnet/efcore",
+   "month": "2025-08",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:48c1df1ed955bb8b4d91724a8c756bdb3ba91d0f6474feceaadd2835448cdc21"
+  },
+  {
+   "id": "dotnet__efcore-36664",
+   "repo": "dotnet/efcore",
+   "month": "2025-08",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:75e61f601862c2c5aa2fb167b9d0b63435f16d36df96b5cd43d68c3196eddd9e"
+  },
+  {
+   "id": "dotnet__machinelearning-7494",
+   "repo": "dotnet/machinelearning",
+   "month": "2025-08",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:0b9e6005fc959af6146a7d2e2939725db5752e2bcb37abc7f03e48f7b6b77bcc"
+  },
+  {
+   "id": "dotnet__orleans-9605",
+   "repo": "dotnet/orleans",
+   "month": "2025-07",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:bdf701ac540c5f88b334b56fdbc94ab426b156c05802bb99644f399c7590397d"
+  },
+  {
+   "id": "dotnet__runtime-118239",
+   "repo": "dotnet/runtime",
+   "month": "2025-07",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:7479a7b0422ef39ac814b100f9d818e6250b462fb36c3275bc6128d3e0437451"
+  },
+  {
+   "id": "dotnet__runtime-126719",
+   "repo": "dotnet/runtime",
+   "month": "2026-04",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:6a2dda7bb0ccfe32bf14b98ae08edc134342c8842dfec16a5c0ebd48ddbce412"
+  },
+  {
+   "id": "dotnet__winforms-13797",
+   "repo": "dotnet/winforms",
+   "month": "2025-08",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:58542ef438f39a62a5d5a699db2bfb33ad4a5f2a5194365176004319e9aa17a7"
+  },
+  {
+   "id": "dotnetcore__BootstrapBlazor-6338",
+   "repo": "dotnetcore/BootstrapBlazor",
+   "month": "2025-07",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:e5ee147027402bc3cf7af66d57266de788661ddf8db8dc4534286c6d6d671836"
+  },
+  {
+   "id": "dotnetcore__BootstrapBlazor-6376",
+   "repo": "dotnetcore/BootstrapBlazor",
+   "month": "2025-07",
+   "language": "csharp",
+   "entry": "feature",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:b246f899ec9b967b786cac3d4fa222a786f0b87cf34f82701aff371064ded19f"
+  },
+  {
+   "id": "dotnetcore__BootstrapBlazor-6540",
+   "repo": "dotnetcore/BootstrapBlazor",
+   "month": "2025-08",
+   "language": "csharp",
+   "entry": "feature",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:7a9b3e2dc0948514f92d7c5224c1958ad40457cefdee0e87ad850b405ba3f823"
+  },
+  {
+   "id": "dotnetcore__BootstrapBlazor-6551",
+   "repo": "dotnetcore/BootstrapBlazor",
+   "month": "2025-08",
+   "language": "csharp",
+   "entry": "feature",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:62fcde15d872f0db67bf889fdd0beb407444eee3d626180e49c479812c92bfe5"
+  },
+  {
+   "id": "dotnetcore__BootstrapBlazor-6663",
+   "repo": "dotnetcore/BootstrapBlazor",
+   "month": "2025-08",
+   "language": "csharp",
+   "entry": "feature",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:317d3d66f9b7f58d671bc7caa825f3672eea5596f0ddff205807250a54686342"
+  },
+  {
+   "id": "dotnetcore__BootstrapBlazor-8073",
+   "repo": "dotnetcore/BootstrapBlazor",
+   "month": "2026-05",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:8eb65c277ad7d618816fef4284306e375e0fd7559f896425bb16943b21f78400"
+  },
+  {
+   "id": "dotnetcore__BootstrapBlazor-8113",
+   "repo": "dotnetcore/BootstrapBlazor",
+   "month": "2026-06",
+   "language": "csharp",
+   "entry": "feature",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:1a4ef6aae3bb55562aeb9d51d1840d3babc6850a8764231c6890d8584e72d65d"
+  },
+  {
+   "id": "dsherret__ts-morph-1663",
+   "repo": "dsherret/ts-morph",
+   "month": "2025-11",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:df0ac3aea57ff0c0c406330729ffebc94849cb1922ca2704d6f3dce3fc1aac74"
+  },
+  {
+   "id": "duckdb__duckdb-22152",
+   "repo": "duckdb/duckdb",
+   "month": "2026-04",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:9ca14a0190cb62239fb40caa571f14264b55c21ce1b3070921b65d77c44b0f0c"
+  },
+  {
+   "id": "duckdb__duckdb-23280",
+   "repo": "duckdb/duckdb",
+   "month": "2026-06",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:bf7fd9bb4c634eb06c70c185c24fc7b91deab4097651f801a02570d891639bab"
+  },
+  {
+   "id": "duckdb__duckdb-23413",
+   "repo": "duckdb/duckdb",
+   "month": "2026-06",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:6ce73f90188bf2437e11bde5d201a0750e33f389318410e884a9be353efa4592"
+  },
+  {
+   "id": "duckdb__duckdb-23422",
+   "repo": "duckdb/duckdb",
+   "month": "2026-06",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:6889737bcfa62f36986cb7928bd30a462557947e412e1fd13698d41c68c59d86"
+  },
+  {
+   "id": "duckdb__duckdb-23491",
+   "repo": "duckdb/duckdb",
+   "month": "2026-06",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:311cf03b48ef7b8c3def623913651a8eb1e5fcc678c0d550eb8504c9399752c3"
+  },
+  {
+   "id": "duckdb__duckdb-23538",
+   "repo": "duckdb/duckdb",
+   "month": "2026-06",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:233f5879da7d3abc92f9a42d3507c723a6756b29326bf7658b42991b0c5413e7"
+  },
+  {
+   "id": "duckdb__duckdb-23569",
+   "repo": "duckdb/duckdb",
+   "month": "2026-07",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:2646fa843beaefe1c66bc70200154da47d8d643de762839160b1dabe172c38fb"
+  },
+  {
+   "id": "duckdb__duckdb-23604",
+   "repo": "duckdb/duckdb",
+   "month": "2026-07",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:efa10c69c782e33dc621b98ebebee923d4ba47831a72b86cac222bffdf00a142"
+  },
+  {
+   "id": "duckdb__duckdb-23615",
+   "repo": "duckdb/duckdb",
+   "month": "2026-07",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:efa10c69c782e33dc621b98ebebee923d4ba47831a72b86cac222bffdf00a142"
+  },
+  {
+   "id": "duckdb__duckdb-23618",
+   "repo": "duckdb/duckdb",
+   "month": "2026-07",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:efa10c69c782e33dc621b98ebebee923d4ba47831a72b86cac222bffdf00a142"
+  },
+  {
+   "id": "duckdb__duckdb-23624",
+   "repo": "duckdb/duckdb",
+   "month": "2026-07",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:efa10c69c782e33dc621b98ebebee923d4ba47831a72b86cac222bffdf00a142"
+  },
+  {
+   "id": "duckdb__duckdb-23628",
+   "repo": "duckdb/duckdb",
+   "month": "2026-07",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:efa10c69c782e33dc621b98ebebee923d4ba47831a72b86cac222bffdf00a142"
+  },
+  {
+   "id": "duckdb__duckdb-23634",
+   "repo": "duckdb/duckdb",
+   "month": "2026-07",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:5fd9f2a8989ff81bee8b4cb0d1d88d17e6b4919d57205bdb1bcd9944aade1a25"
+  },
+  {
+   "id": "duckdb__duckdb-23637",
+   "repo": "duckdb/duckdb",
+   "month": "2026-07",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:273b60eceed25ca427c27a0a3a86bb65c7eed1c03fddaff29bc3ee5be6d01370"
+  },
+  {
+   "id": "duckdb__duckdb-24011",
+   "repo": "duckdb/duckdb",
+   "month": "2026-07",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:27b04471389b07758a276af25f04b8455358c6c2c852d0b52fafa191b122c8fb"
+  },
+  {
+   "id": "duckdb__duckdb-24018",
+   "repo": "duckdb/duckdb",
+   "month": "2026-07",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:b8c16b4624002bd2fe6ad9196bd68503b19227a2650fd9a8752eb3c4045e8825"
+  },
+  {
+   "id": "duckdb__duckdb-24074",
+   "repo": "duckdb/duckdb",
+   "month": "2026-07",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:43d16b24efbcaed0ecc4ec68a14f8c01e163984f45d69575a157bf8f2848fb14"
+  },
+  {
+   "id": "duckdb__duckdb-24100",
+   "repo": "duckdb/duckdb",
+   "month": "2026-07",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:b7617c2f866a63419b8148d0c48573a3cb985e805b9706ccc8e02acde7d5afbc"
+  },
+  {
+   "id": "duckdb__duckdb-24101",
+   "repo": "duckdb/duckdb",
+   "month": "2026-07",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:cd06723c891186391ca042f0d93ba9377a838f24ce45db2cd5326a955d3f05e0"
+  },
+  {
+   "id": "duckdb__duckdb-24105",
+   "repo": "duckdb/duckdb",
+   "month": "2026-07",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:306017d28778164db67ad53133f1b46841f6b2c5524e48ede39c94df9a891a59"
+  },
+  {
+   "id": "duckdb__duckdb-24150",
+   "repo": "duckdb/duckdb",
+   "month": "2026-07",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:b7617c2f866a63419b8148d0c48573a3cb985e805b9706ccc8e02acde7d5afbc"
+  },
+  {
+   "id": "duckdb__duckdb-24181",
+   "repo": "duckdb/duckdb",
+   "month": "2026-07",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:a7269b92e42446292975ac00a51b784c050b4a9c99c7008ad0f3374aeb2e3cca"
+  },
+  {
+   "id": "duckdb__duckdb-24211",
+   "repo": "duckdb/duckdb",
+   "month": "2026-07",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:c01104ffa7b2dbc9ee32bb98b79a4cb303cb7a23ed4e3115a7daf194a1c20593"
+  },
+  {
+   "id": "duckdb__duckdb-24266",
+   "repo": "duckdb/duckdb",
+   "month": "2026-07",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:306017d28778164db67ad53133f1b46841f6b2c5524e48ede39c94df9a891a59"
+  },
+  {
+   "id": "duckdb__duckdb-24290",
+   "repo": "duckdb/duckdb",
+   "month": "2026-07",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:c01104ffa7b2dbc9ee32bb98b79a4cb303cb7a23ed4e3115a7daf194a1c20593"
+  },
+  {
+   "id": "duckdb__duckdb-24318",
+   "repo": "duckdb/duckdb",
+   "month": "2026-07",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:01a191813fa2dfa34a4995fb169707504575b7d67123d44dad019b1b264bdab9"
+  },
+  {
+   "id": "duckdb__ducklake-1224",
+   "repo": "duckdb/ducklake",
+   "month": "2026-06",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:60f1d7dd1ccf3daa255bd948123f05e9c41fb8dabdfb1de8de48b72b50eda02d"
+  },
+  {
+   "id": "duckdb__ducklake-1339",
+   "repo": "duckdb/ducklake",
+   "month": "2026-07",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:e5bda7e10db7db5fb091fdc39d4414102527732d7f51ff94eca254e1acda5fcb"
+  },
+  {
+   "id": "duckdb__ducklake-1340",
+   "repo": "duckdb/ducklake",
+   "month": "2026-07",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:e5bda7e10db7db5fb091fdc39d4414102527732d7f51ff94eca254e1acda5fcb"
+  },
+  {
+   "id": "elsa-workflows__elsa-core-7711",
+   "repo": "elsa-workflows/elsa-core",
+   "month": "2026-06",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:fdf7e9daf1b1fb4d4b74efcd903894b6b27b7262eeeb6bbcc5df28abda6c58f8"
+  },
+  {
+   "id": "elsa-workflows__elsa-core-7714",
+   "repo": "elsa-workflows/elsa-core",
+   "month": "2026-06",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:8867df5256bf7cb57f9f1721b0f3f5ae60dcc48b7096b4835bf7497b0652de8a"
+  },
+  {
+   "id": "ember-cli__ember-cli-10776",
+   "repo": "ember-cli/ember-cli",
+   "month": "2025-08",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:57fdae146252da6e6b9f39f7b710797bc199f27b73c7235723cb81d2bf059e4f"
+  },
+  {
+   "id": "envoyproxy__gateway-6372",
+   "repo": "envoyproxy/gateway",
+   "month": "2025-06",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:055299943ea8859dc74894d130d6653d02a7e401f15e5772ec660cba52f4a925"
+  },
+  {
+   "id": "envoyproxy__gateway-8521",
+   "repo": "envoyproxy/gateway",
+   "month": "2026-03",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:262f3482c9227fd77f7c932f47c761ec765d2461a716ba07bcd4bf99318b6118"
+  },
+  {
+   "id": "ether__etherpad-7445",
+   "repo": "ether/etherpad",
+   "month": "2026-04",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:22835ebeeda4c7c46ff74bdafc750f9a793177ce5404b181508087da32aa12ff"
+  },
+  {
+   "id": "evcc-io__evcc-28765",
+   "repo": "evcc-io/evcc",
+   "month": "2026-04",
+   "language": "go",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:098da281e23185ddbd7644b6d67aa43c984a10b72ff89c23202fd39068fdfc22"
+  },
+  {
+   "id": "excalidraw__excalidraw-9760",
+   "repo": "excalidraw/excalidraw",
+   "month": "2025-07",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:3d1f625fc83fdc1ca832cacce1fc414e7d328b2755ee530acb5eb602577e26a1"
+  },
+  {
+   "id": "facebook__stylex-1209",
+   "repo": "facebook/stylex",
+   "month": "2025-08",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:ea3631b509e778472cbfc05c94bc9cc11f4a897fc6df88c2459ce41ddbcc3615"
+  },
+  {
+   "id": "fastify__fastify-5985",
+   "repo": "fastify/fastify",
+   "month": "2025-02",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:d9e649fb2c5c3d01222a4c44b930288a5eaa8d890e6ea50637d23dfa5515327a"
+  },
+  {
+   "id": "floci-io__floci-112",
+   "repo": "floci-io/floci",
+   "month": "2026-03",
+   "language": "java",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:7f7a9048d3fbe0b8b3f19a1a451ba518cd6d5f1cfef95d916287468e6c5cabb3"
+  },
+  {
+   "id": "floci-io__floci-153",
+   "repo": "floci-io/floci",
+   "month": "2026-04",
+   "language": "java",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:7b2b61efd13d17c3b33c4d62c7ebbeb28946e3c6b7b54e1227de4585a4273bee"
+  },
+  {
+   "id": "floci-io__floci-164",
+   "repo": "floci-io/floci",
+   "month": "2026-04",
+   "language": "java",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:d00a4e5f715ab7f2c554c6e7e44c691c0f5d0c4bccb75ac65809997a6cad68be"
+  },
+  {
+   "id": "floci-io__floci-1837",
+   "repo": "floci-io/floci",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:681b6fe2734120fae19185328510f5a990294d186c8400ab5933806da6d2e0f5"
+  },
+  {
+   "id": "floci-io__floci-1838",
+   "repo": "floci-io/floci",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:681b6fe2734120fae19185328510f5a990294d186c8400ab5933806da6d2e0f5"
+  },
+  {
+   "id": "floci-io__floci-1870",
+   "repo": "floci-io/floci",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:0d99d52400e268ee72627eecfe66d86c3de78d3cbc96f9fcdccaf9a3e189e36c"
+  },
+  {
+   "id": "floci-io__floci-1895",
+   "repo": "floci-io/floci",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:1bd0dd51712534bf4b7e85c7dd1ad163816fdc29ab5d5d34f7d4e6838a93a576"
+  },
+  {
+   "id": "floci-io__floci-1908",
+   "repo": "floci-io/floci",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:1bd0dd51712534bf4b7e85c7dd1ad163816fdc29ab5d5d34f7d4e6838a93a576"
+  },
+  {
+   "id": "floci-io__floci-1931",
+   "repo": "floci-io/floci",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:8dd8098eb30cb82b9e95b3bfd80d78f6488e7b5fad511364ee51d197e21f8206"
+  },
+  {
+   "id": "floci-io__floci-1932",
+   "repo": "floci-io/floci",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:8dd8098eb30cb82b9e95b3bfd80d78f6488e7b5fad511364ee51d197e21f8206"
+  },
+  {
+   "id": "floci-io__floci-2031",
+   "repo": "floci-io/floci",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:0249a31d97b2509f828273981d38dcb4e341065cd7650b72294689840d91714a"
+  },
+  {
+   "id": "floci-io__floci-210",
+   "repo": "floci-io/floci",
+   "month": "2026-04",
+   "language": "java",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:d35ae2ff5cb975327be1e74c3e640bb14c026b2ab482469ec08920e6044fce31"
+  },
+  {
+   "id": "floci-io__floci-248",
+   "repo": "floci-io/floci",
+   "month": "2026-04",
+   "language": "java",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:65a77548c222ff81001641e4bbd412e03b2e20265eb1444a8af463b3fe7f5ce9"
+  },
+  {
+   "id": "floci-io__floci-26",
+   "repo": "floci-io/floci",
+   "month": "2026-03",
+   "language": "java",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:4e53bee206c9a9c17fd6a2b4df97687a4ed9ab0f65a6605c512fcae60b60d817"
+  },
+  {
+   "id": "floci-io__floci-299",
+   "repo": "floci-io/floci",
+   "month": "2026-04",
+   "language": "java",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:598a610df27b48182a9a0d167fe71887b39b1af956c2e664f1845bb7a24292ff"
+  },
+  {
+   "id": "floci-io__floci-309",
+   "repo": "floci-io/floci",
+   "month": "2026-04",
+   "language": "java",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:a97fc3603dfcb2805edd77caf77d772334dde991bfe071354879fb2f55637ffd"
+  },
+  {
+   "id": "floci-io__floci-352",
+   "repo": "floci-io/floci",
+   "month": "2026-04",
+   "language": "java",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:58374f7f240a890689f13282f634bb9b216e7d02e8e3be38f931257e50f28926"
+  },
+  {
+   "id": "floci-io__floci-420",
+   "repo": "floci-io/floci",
+   "month": "2026-04",
+   "language": "java",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:96bc73efb15556d6b75a770e25e2551245c563e5a92d5833aaa857e99e26b632"
+  },
+  {
+   "id": "floci-io__floci-463",
+   "repo": "floci-io/floci",
+   "month": "2026-04",
+   "language": "java",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:848658c72a387fb47526e0b37b3bb4fc63fc9365a0584b562e1bb2dbecac8b93"
+  },
+  {
+   "id": "floci-io__floci-54",
+   "repo": "floci-io/floci",
+   "month": "2026-03",
+   "language": "java",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:775674e36d6249d6f13d0dedb0eae4325c5514ca660fa6b3b6a3a16567f10dd6"
+  },
+  {
+   "id": "floci-io__floci-57",
+   "repo": "floci-io/floci",
+   "month": "2026-03",
+   "language": "java",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:2553641e7f65874a9d2557017530c57ac152f5d1701ff547d5bc5875e452ee94"
+  },
+  {
+   "id": "floci-io__floci-88",
+   "repo": "floci-io/floci",
+   "month": "2026-03",
+   "language": "java",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:4c6268aca77f013a806a3d4d2cadff034ef71bafcf3bab7d685775e7e5842794"
+  },
+  {
+   "id": "fluent__fluent-bit-10563",
+   "repo": "fluent/fluent-bit",
+   "month": "2025-07",
+   "language": "c",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:1d45795e0ef03f78d0c22e78138a87325ac0880051d2a7396769612b93aa370d"
+  },
+  {
+   "id": "fluent__fluent-bit-10767",
+   "repo": "fluent/fluent-bit",
+   "month": "2025-08",
+   "language": "c",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:a368bf615a9bff53a414e2c499b97d2663b2ef49f7b065483c8ee3a3b366ea34"
+  },
+  {
+   "id": "fluent__fluent-bit-11677",
+   "repo": "fluent/fluent-bit",
+   "month": "2026-04",
+   "language": "c",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:21cfb5cff9dce485ba551a8a4685704765c3df7bc2492f18de0c46985ee2c3f2"
+  },
+  {
+   "id": "fluent__fluent-bit-11722",
+   "repo": "fluent/fluent-bit",
+   "month": "2026-04",
+   "language": "c",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:0bb29e11bdd843ff6f60e06188f96b5ec0082dbd792391b882cae542f3795e8d"
+  },
+  {
+   "id": "fluent__fluent-bit-12029",
+   "repo": "fluent/fluent-bit",
+   "month": "2026-07",
+   "language": "c",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:b44bc0ce79843fa2d50a4d8c89c5b0029907ce8256c2c0cc8e4b98d837ad7b9d"
+  },
+  {
+   "id": "fluentmigrator__fluentmigrator-2086",
+   "repo": "fluentmigrator/fluentmigrator",
+   "month": "2025-06",
+   "language": "csharp",
+   "entry": "feature",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:c5c5672bc6ac852bf10fc3fe7a46c003e59b7ed2a07de958301f309776b3f712"
+  },
+  {
+   "id": "fmtlib__fmt-4490",
+   "repo": "fmtlib/fmt",
+   "month": "2025-07",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:9e53e79675091a35e9cd90da5cdcad72f2267824c62e5d57253055e6cdd2e11d"
+  },
+  {
+   "id": "fortio__fortio-1081",
+   "repo": "fortio/fortio",
+   "month": "2025-08",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:1e88180ca0f37354b4939ec9fe22f6f103e8a78a000d33e2d16275075f2de6ba"
+  },
+  {
+   "id": "gastownhall__beads-2992",
+   "repo": "gastownhall/beads",
+   "month": "2026-04",
+   "language": "go",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:77e4872f4a042f4adca015988ef460cb4c163cba95b9dbb6123f89c819a2035c"
+  },
+  {
+   "id": "getgauge__gauge-2836",
+   "repo": "getgauge/gauge",
+   "month": "2026-03",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:6e0124af67bed5a43e3e44bb249b2f3c4f823cd4f077eed44d21acd0332d1e09"
+  },
+  {
+   "id": "gfx-rs__wgpu-9298",
+   "repo": "gfx-rs/wgpu",
+   "month": "2026-03",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:93089990cfee1bb7f409a62f33d1ea8cfc63aa5dd9b02992df92e248969c35c5"
+  },
+  {
+   "id": "gfx-rs__wgpu-9367",
+   "repo": "gfx-rs/wgpu",
+   "month": "2026-04",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:2bfa5ded46923dc34fbeec44e487f5c88a20252032320b664d12cfd0b92876cc"
+  },
+  {
+   "id": "gitbutlerapp__gitbutler-14920",
+   "repo": "gitbutlerapp/gitbutler",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "files",
+   "digest": "sha256:c7a9f2096deeb95e5c5f9044f463b02dcc6eccbb0e0c4e9608e13666bdebed2b"
+  },
+  {
+   "id": "github__gh-aw-23146",
+   "repo": "github/gh-aw",
+   "month": "2026-03",
+   "language": "go",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:de282a7d947a4fe114b168cf569cacacc0c77a9429298645acd96ef41a9b6fe6"
+  },
+  {
+   "id": "github__gh-aw-23348",
+   "repo": "github/gh-aw",
+   "month": "2026-03",
+   "language": "go",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:e4e1c6924c0b3a1b14ee970da95fdb2e681aa85c5b2f1f3da15ec2fedab47a72"
+  },
+  {
+   "id": "github__gh-aw-23870",
+   "repo": "github/gh-aw",
+   "month": "2026-04",
+   "language": "go",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:6d9ad92bcc2179dc73a56e1fac9d5ef86af9c7e450ba108786b28f438430decb"
+  },
+  {
+   "id": "github__gh-aw-24043",
+   "repo": "github/gh-aw",
+   "month": "2026-04",
+   "language": "go",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:14e2adce0c5b076abe59f34eeecf16af241ac78f991e369dbe69834ca117a7ad"
+  },
+  {
+   "id": "github__gh-aw-26689",
+   "repo": "github/gh-aw",
+   "month": "2026-04",
+   "language": "go",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:9a688b26c828c020c65af0c9a687c68fe419f8f0854c00529022988e90507d15"
+  },
+  {
+   "id": "github__github-mcp-server-869",
+   "repo": "github/github-mcp-server",
+   "month": "2025-08",
+   "language": "go",
+   "entry": "feature",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:0e0177f305170fc50aed2043a81e512ef8d558e749693e49bf08ab6e123a9e71"
+  },
+  {
+   "id": "gitlab4j__gitlab4j-api-1266",
+   "repo": "gitlab4j/gitlab4j-api",
+   "month": "2025-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:e051b0e2dd66ac2cadc4ddfddce3c8289d8539a2c6dd8a59a8ece03bb4b66f73"
+  },
+  {
+   "id": "gleam-lang__gleam-4854",
+   "repo": "gleam-lang/gleam",
+   "month": "2025-08",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:6948c6bedf92436b96e47c3bc7e0a19ec5595d86c80e1a6690615b88de1d4e4d"
+  },
+  {
+   "id": "gleam-lang__gleam-5482",
+   "repo": "gleam-lang/gleam",
+   "month": "2026-03",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:a91c46b5e9ccb6d6da9b6a45f0505e94acfeead1da5612e939d6257947cf20f3"
+  },
+  {
+   "id": "gleam-lang__gleam-5493",
+   "repo": "gleam-lang/gleam",
+   "month": "2026-03",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:fdd50f8de520f71f6a567734d4003e6ceb645f40d7f1b3ebd4ed7415895d1e45"
+  },
+  {
+   "id": "gleam-lang__gleam-5510",
+   "repo": "gleam-lang/gleam",
+   "month": "2026-03",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:e3cbdcf779931b5adfc5c510960a15a34ef794e0915ecef8c5d9551e8579477b"
+  },
+  {
+   "id": "gleam-lang__gleam-5532",
+   "repo": "gleam-lang/gleam",
+   "month": "2026-03",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:e4a63da11c026c2f06b7633242229776fa65ad5ae0ddb5185de037bed08260bb"
+  },
+  {
+   "id": "gleam-lang__gleam-5938",
+   "repo": "gleam-lang/gleam",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:b18caa21bd5f4bcb251a72b42baa4e01abb2aa7d352e0cc0673968110418f5fc"
+  },
+  {
+   "id": "gleam-lang__gleam-5958",
+   "repo": "gleam-lang/gleam",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:2634eae2a62a1b9da1be5ac8bb4a3a08985b5750b9d469ad266c1e7f552e8149"
+  },
+  {
+   "id": "gleam-lang__gleam-5971",
+   "repo": "gleam-lang/gleam",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:e66b6e9a4e4bbb252af9d31b9e9d19a9318ec089456e12e962b99051461ac41b"
+  },
+  {
+   "id": "gleam-lang__gleam-5982",
+   "repo": "gleam-lang/gleam",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:2278368f484e8b0e69204152d442127fc3c26f46d8e021e4ad707eb317f6a49b"
+  },
+  {
+   "id": "gleam-lang__gleam-6021",
+   "repo": "gleam-lang/gleam",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:88c928c6c16e86b6079f0310adcc87d4d542ae4383509875707ad6299337c030"
+  },
+  {
+   "id": "gleam-lang__gleam-6030",
+   "repo": "gleam-lang/gleam",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:f4c79c963b56960660c0f2d0eb2b66b5d4499a59858cf47da0d848fef7985704"
+  },
+  {
+   "id": "gleam-lang__gleam-6049",
+   "repo": "gleam-lang/gleam",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:f407542bd57057e82b48c564e936f61705a54d426ac92dd466b8b759b256f15a"
+  },
+  {
+   "id": "go-task__task-2716",
+   "repo": "go-task/task",
+   "month": "2026-03",
+   "language": "go",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:83effbd7baf67c0df4e0f1bdbc48a628de794b08ca166606b60faf8cb8f7afc7"
+  },
+  {
+   "id": "gohugoio__hugo-14657",
+   "repo": "gohugoio/hugo",
+   "month": "2026-03",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:a43258574e38a9ff14d6344ecef9447a925989eed7f8e85241a4c4a7cca7792b"
+  },
+  {
+   "id": "gohugoio__hugo-14685",
+   "repo": "gohugoio/hugo",
+   "month": "2026-03",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:33492e39726a9c289c1adcb9cbe85875b120f38ac3c7ad4ee30912be5f8c4a60"
+  },
+  {
+   "id": "gohugoio__hugo-14733",
+   "repo": "gohugoio/hugo",
+   "month": "2026-04",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:6c039a4318786da3e16989628418e175bbf52759a0f9f91b8d042724aac194f1"
+  },
+  {
+   "id": "gohugoio__hugo-14741",
+   "repo": "gohugoio/hugo",
+   "month": "2026-04",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:a62a40f81ce5b977a462262a12bd8f917e699948156ac2bd124b022f571ee59e"
+  },
+  {
+   "id": "gohugoio__hugo-14742",
+   "repo": "gohugoio/hugo",
+   "month": "2026-04",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:436a9a9b8779cd420bd825966fdeb133d4b40601a8d1a32bc52a82c98aeb2f20"
+  },
+  {
+   "id": "gohugoio__hugo-14757",
+   "repo": "gohugoio/hugo",
+   "month": "2026-04",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:8c8f83fa20f6b18a51fa2cf51ae0e98cc2e9f2634a6d9add30581f2173e82a1e"
+  },
+  {
+   "id": "golang-jwt__jwt-456",
+   "repo": "golang-jwt/jwt",
+   "month": "2025-08",
+   "language": "go",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:210f453c9adf1955ddc4f2138ac822849884cbe113dbd2dc331059c50a71794d"
+  },
+  {
+   "id": "google__go-github-3653",
+   "repo": "google/go-github",
+   "month": "2025-07",
+   "language": "go",
+   "entry": "bug",
+   "licence": "BSD-3-Clause",
+   "licence_from": "graphql",
+   "digest": "sha256:6681411176a1bd72956135de69f57c36f7b675aa104466a9f8ae07117b3ac86d"
+  },
+  {
+   "id": "google__starlark-go-599",
+   "repo": "google/starlark-go",
+   "month": "2025-07",
+   "language": "go",
+   "entry": "bug",
+   "licence": "BSD-3-Clause",
+   "licence_from": "graphql",
+   "digest": "sha256:e02112e2ca164b50d733eac8af044af88ac827e5d293180e31c800fceb7c98fe"
+  },
+  {
+   "id": "google__zx-1317",
+   "repo": "google/zx",
+   "month": "2025-08",
+   "language": "js",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:2f3a00fb6a302819b74f837b70d024eceba932af84b42b9c70e73d2ba43f7517"
+  },
+  {
+   "id": "gpbl__react-day-picker-2816",
+   "repo": "gpbl/react-day-picker",
+   "month": "2025-08",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:627ba40a2ba4805270e407b39126fe6121f42c3abb2ad202ab3e51ad604e6378"
+  },
+  {
+   "id": "graphql-go__graphql-727",
+   "repo": "graphql-go/graphql",
+   "month": "2025-07",
+   "language": "go",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:c0cb2bf23846cfba43494469397d6306d0def2c3b0517a867d74a3d384ba2d78"
+  },
+  {
+   "id": "grommet__grommet-7709",
+   "repo": "grommet/grommet",
+   "month": "2025-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:0a39b789a56d4ca9628a6f5350dc71c6f9e2d86eb39012226ca5ef9225d70eb2"
+  },
+  {
+   "id": "grommet__grommet-7712",
+   "repo": "grommet/grommet",
+   "month": "2025-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:8b7800baa1b14e567d567a5d720dd784f5252e033f874e0b48a2dcaf15013579"
+  },
+  {
+   "id": "grpc__grpc-java-12735",
+   "repo": "grpc/grpc-java",
+   "month": "2026-03",
+   "language": "java",
+   "entry": "feature",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:9e9d6733c625f2d2e99973fce070ce67fe6e27b2042524c3323f4bb306110285"
+  },
+  {
+   "id": "gruntwork-io__cloud-nuke-1085",
+   "repo": "gruntwork-io/cloud-nuke",
+   "month": "2026-03",
+   "language": "go",
+   "entry": "feature",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:c544b53c3b46c006f5e35f88f2c11f3e68643bb8599a9fb471db340a5356a7d6"
+  },
+  {
+   "id": "gui-cs__Terminal.Gui-4841",
+   "repo": "gui-cs/Terminal.Gui",
+   "month": "2026-03",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:f3bf64c68810f4b7c27b885e54c83ee25c92de245bff6dba60c9a9deb4c01fd1"
+  },
+  {
+   "id": "gui-cs__Terminal.Gui-4860",
+   "repo": "gui-cs/Terminal.Gui",
+   "month": "2026-03",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:d9bacf28ad5029ccdefa39dbc37cbe894ce4fe9b62e5d02cfd563d886affd6c0"
+  },
+  {
+   "id": "gui-cs__Terminal.Gui-4982",
+   "repo": "gui-cs/Terminal.Gui",
+   "month": "2026-04",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:f64660766467eb76223f975f148fe7bd109eff346308100018e8c6c274dbfde3"
+  },
+  {
+   "id": "h4ckf0r0day__obscura-413",
+   "repo": "h4ckf0r0day/obscura",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:00f3f47eeaab49b55252f84f20210be0e2d1348885e4ca9d4771335287725247"
+  },
+  {
+   "id": "h4ckf0r0day__obscura-414",
+   "repo": "h4ckf0r0day/obscura",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:d81c8dfbb8728a06113de85bc5f06b64cddd472372111181936176622f5804c4"
+  },
+  {
+   "id": "h4ckf0r0day__obscura-447",
+   "repo": "h4ckf0r0day/obscura",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:e8df3174ef184aa4b0f5e288a36f807358db5814c18d2104a63f8f308f4d1d8e"
+  },
+  {
+   "id": "h4ckf0r0day__obscura-477",
+   "repo": "h4ckf0r0day/obscura",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:c27d5e6be3cfe7262efb779fa0cebfc27423f82665fdd818907359ccbb2ba962"
+  },
+  {
+   "id": "haraka__Haraka-3535",
+   "repo": "haraka/Haraka",
+   "month": "2026-03",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:ab6b73fc6e52de7d5b74a2ba4d01bbc027207463620309949aaa61749d5d2700"
+  },
+  {
+   "id": "helidon-io__helidon-11386",
+   "repo": "helidon-io/helidon",
+   "month": "2026-03",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:d8094629e5a425324fefc49363474d10e64f61ce77dc6ad70ecf264ee9345d7c"
+  },
+  {
+   "id": "helidon-io__helidon-11407",
+   "repo": "helidon-io/helidon",
+   "month": "2026-03",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:f710bdfa92bd68affec91c4324803cbb9b12b1a4d7f3bc13d2e3302c99f9fce1"
+  },
+  {
+   "id": "helidon-io__helidon-11434",
+   "repo": "helidon-io/helidon",
+   "month": "2026-03",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:1a6075636a9b5da4f4d8cf964fb97bca22fe888791e20d8a5fec133b8db0c901"
+  },
+  {
+   "id": "honojs__hono-4249",
+   "repo": "honojs/hono",
+   "month": "2025-06",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:8539f5caf24c9db913f053365fb301f298d1857aa81bf563f3cb243ad567191c"
+  },
+  {
+   "id": "honojs__hono-4269",
+   "repo": "honojs/hono",
+   "month": "2025-07",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:92cab939de48f9c3082465abef040036344138051f45032b3473a91471077d28"
+  },
+  {
+   "id": "honojs__hono-4329",
+   "repo": "honojs/hono",
+   "month": "2025-07",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:fc8a482b7266cc35dc5030ffd40893f268fca91a68eb622f680d136692f73ddc"
+  },
+  {
+   "id": "hyperledger__besu-8929",
+   "repo": "hyperledger/besu",
+   "month": "2025-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:0996a4f71984db48edaccf98c9b6f7974d819c9acaecb991eddc051de99b8022"
+  },
+  {
+   "id": "iflytek__skillhub-253",
+   "repo": "iflytek/skillhub",
+   "month": "2026-04",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:8553c828d6567f21c2468e6c1363674447f2ddd358190ea09f5ed378bb7da60d"
+  },
+  {
+   "id": "influxdata__telegraf-18556",
+   "repo": "influxdata/telegraf",
+   "month": "2026-03",
+   "language": "go",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:f33151e710a3f81816257bbb51a0f48e1c199451b22345c730b3763bdda6f32d"
+  },
+  {
+   "id": "influxdata__telegraf-18640",
+   "repo": "influxdata/telegraf",
+   "month": "2026-03",
+   "language": "go",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:7dc3376c8b95b437ac69707b3268dbfdc34bca67012156c5fb5caffdd34df9ed"
+  },
+  {
+   "id": "influxdata__telegraf-18686",
+   "repo": "influxdata/telegraf",
+   "month": "2026-04",
+   "language": "go",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:1d4d5a58c3bd905b2a5899100e51ccded4def7a3a68a6390896070f974b9c3a7"
+  },
+  {
+   "id": "istio__istio-56962",
+   "repo": "istio/istio",
+   "month": "2025-07",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:b1a37a35d26fe26958a5c620718cfc156351698f82a19016343910864833a4eb"
+  },
+  {
+   "id": "jestjs__jest-15714",
+   "repo": "jestjs/jest",
+   "month": "2025-07",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:cbef638bc69ae7a5fe0c34cab72252f211155aae31315c24a3dfb7665f5f3371"
+  },
+  {
+   "id": "jhlywa__chess.js-546",
+   "repo": "jhlywa/chess.js",
+   "month": "2025-07",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "BSD-2-Clause",
+   "licence_from": "graphql",
+   "digest": "sha256:0a7dfabca36bd89bab5a1bac8465ace770faf1f4998fd34d31c24d426481f1be"
+  },
+  {
+   "id": "jj-vcs__jj-7269",
+   "repo": "jj-vcs/jj",
+   "month": "2025-08",
+   "language": "rust",
+   "entry": "feature",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:90d49366d167663d95a7f96b9806e51b6723e1e95a89f047ba8cb54509cbe524"
+  },
+  {
+   "id": "jsonata-js__jsonata-809",
+   "repo": "jsonata-js/jsonata",
+   "month": "2026-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:a808a69585a95aa97e98cb51c159df350afa024f0d44709048cf85bac8a814a7"
+  },
+  {
+   "id": "jsonata-js__jsonata-814",
+   "repo": "jsonata-js/jsonata",
+   "month": "2026-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:b73b0d91f32dd999d6074ca76a09d3d4166901e4866ae36e83661b727b78ce08"
+  },
+  {
+   "id": "jsonata-js__jsonata-817",
+   "repo": "jsonata-js/jsonata",
+   "month": "2026-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:2c40a51435fd9d9fe06c24c156b247fc11a663f560c2163ac451ef186fb220aa"
+  },
+  {
+   "id": "karmada-io__karmada-7365",
+   "repo": "karmada-io/karmada",
+   "month": "2026-04",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:827c55298e784fc54e13faad95164bc0434ae82039678065b9d1b7b5ba40c6d1"
+  },
+  {
+   "id": "kedacore__keda-6888",
+   "repo": "kedacore/keda",
+   "month": "2025-07",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:522c0a2f5f23429add05b2c2b9506fad90e6a2cf5ebf571aa0ae2e4811df3e20"
+  },
+  {
+   "id": "kedacore__keda-7642",
+   "repo": "kedacore/keda",
+   "month": "2026-04",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:05a97cdb6a73256692de9ea2f51eb6008b2811f2cc4f22a5424ff02ff5275a54"
+  },
+  {
+   "id": "kepano__defuddle-243",
+   "repo": "kepano/defuddle",
+   "month": "2026-04",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:39365bfa215db9b775c2e95af29840e99cb6361de78512a7c859107b846835e4"
+  },
+  {
+   "id": "kestra-io__kestra-10698",
+   "repo": "kestra-io/kestra",
+   "month": "2025-08",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:cc661035b0feb67f6b6c67f7ecfa710e1a9f6fd6550cfcb3d1d290ecc98cfe85"
+  },
+  {
+   "id": "kestra-io__kestra-15267",
+   "repo": "kestra-io/kestra",
+   "month": "2026-03",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:7590939244d244d10c026f07c69283e2da25e41c2d4eb0933b1d0e1971dc9035"
+  },
+  {
+   "id": "knative__eventing-8611",
+   "repo": "knative/eventing",
+   "month": "2025-06",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:0112a220d727d56655a4049838aebfaac3d837f708302529bcf100ed97af3e2c"
+  },
+  {
+   "id": "kube-vip__kube-vip-1505",
+   "repo": "kube-vip/kube-vip",
+   "month": "2026-04",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:78792d3c6a2b06e7e6d8357811ef1aaa38428e5d8a091ca1acebd4f1af5de6a7"
+  },
+  {
+   "id": "kubernetes-sigs__controller-runtime-3247",
+   "repo": "kubernetes-sigs/controller-runtime",
+   "month": "2025-06",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:3084c33601d060b28dabefb9322b164c426f5d6678e3caa31f5327d5a168aafc"
+  },
+  {
+   "id": "kubernetes-sigs__controller-runtime-3494",
+   "repo": "kubernetes-sigs/controller-runtime",
+   "month": "2026-04",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:236ef40451c0d397242dfc4c32ecf6b651d7e39bf20499873458447002b5b756"
+  },
+  {
+   "id": "kubernetes-sigs__kubebuilder-5559",
+   "repo": "kubernetes-sigs/kubebuilder",
+   "month": "2026-03",
+   "language": "go",
+   "entry": "feature",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:cee7af3313a2fe131e23a00b81ea79e16391fbd660ef886bd68fd75d8cb1138c"
+  },
+  {
+   "id": "kubernetes-sigs__kueue-6381",
+   "repo": "kubernetes-sigs/kueue",
+   "month": "2025-08",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:0ea6cc3dff59ada37b406c03c641278adee17ce413a5cad5b609647b6367ccb8"
+  },
+  {
+   "id": "kubernetes-sigs__kueue-9866",
+   "repo": "kubernetes-sigs/kueue",
+   "month": "2026-03",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:a6628af60ca70703a853de09ca35e1049007871ef789e60ad79dfd205e0dc482"
+  },
+  {
+   "id": "kubernetes__kops-17519",
+   "repo": "kubernetes/kops",
+   "month": "2025-07",
+   "language": "go",
+   "entry": "feature",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:53ee26151330a149e926a946ef825a361409f6d57df0e82d4ba222c669c1e7fd"
+  },
+  {
+   "id": "kubernetes__kops-18146",
+   "repo": "kubernetes/kops",
+   "month": "2026-04",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:01033c267ca0dab631622f696bcbc94e256dcced7fcecf091152442571c98daa"
+  },
+  {
+   "id": "kubernetes__kube-state-metrics-2926",
+   "repo": "kubernetes/kube-state-metrics",
+   "month": "2026-04",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:1a44a9bd665c951faede01f9b296cd446a033818f73646c0a4bac1e4d5c9208c"
+  },
+  {
+   "id": "kumahq__kuma-15918",
+   "repo": "kumahq/kuma",
+   "month": "2026-03",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:92f9d0e83790e0b2efa7d4a007a87f37d71ec4c59d4758cbe9cc85530aa11f80"
+  },
+  {
+   "id": "kvcache-ai__Mooncake-2892",
+   "repo": "kvcache-ai/Mooncake",
+   "month": "2026-07",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:8627fe4fa479b91e33d6c306a9856209fd24cc0e67ca8fc97c7404cc8464f50a"
+  },
+  {
+   "id": "kvcache-ai__Mooncake-2964",
+   "repo": "kvcache-ai/Mooncake",
+   "month": "2026-07",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:719d0cfed320d3ced3b45fa6a312a24a1abfc74b8514e050f1c7e93e9ee649d0"
+  },
+  {
+   "id": "kyverno__kyverno-15561",
+   "repo": "kyverno/kyverno",
+   "month": "2026-03",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:1b32341595d8f22b425a2292901dabc837835c80c8c84b0cd7ac408604cf3a84"
+  },
+  {
+   "id": "lakehq__sail-2292",
+   "repo": "lakehq/sail",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:b11737a18a3112482cf88ad6a2031b7ffaeea5636cce9eb3e0a7bb50f002f166"
+  },
+  {
+   "id": "lance-format__lance-7545",
+   "repo": "lance-format/lance",
+   "month": "2026-06",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:c1142d25a69fd719fdd17999f98204f1a3618b6f5d96649dbf34614462bb96a9"
+  },
+  {
+   "id": "lance-format__lance-7565",
+   "repo": "lance-format/lance",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:fdd147a42f42da222f97a426dfdee01729f3ed42f294b4f8243adf753818c0da"
+  },
+  {
+   "id": "lance-format__lance-7618",
+   "repo": "lance-format/lance",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:d6c6a6468c24f32600ea218714e7e08845ce40acfab8534a124ca77f8b452390"
+  },
+  {
+   "id": "lance-format__lance-7835",
+   "repo": "lance-format/lance",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:2af444238122afd1c7e637c0a9b8ed711ca00bd781d832a37dcf27fce86e3ca9"
+  },
+  {
+   "id": "lance-format__lance-8049",
+   "repo": "lance-format/lance",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:3f41376c290bcc4d316ae24e65b3fa0e4b2842c50f347bf2d2561acfdc6ea59a"
+  },
+  {
+   "id": "langchain4j__langchain4j-4734",
+   "repo": "langchain4j/langchain4j",
+   "month": "2026-03",
+   "language": "java",
+   "entry": "feature",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:1fd0d5aeb2cc7ce4d70b32f72ff1e0af5c2ccd595d2be0113b2c468807054e7c"
+  },
+  {
+   "id": "langchain4j__langchain4j-4809",
+   "repo": "langchain4j/langchain4j",
+   "month": "2026-03",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:68f7005de55d674847c1f71dba581aa6fb469abe5609e97a75fbc1c3a617d23c"
+  },
+  {
+   "id": "langchain4j__langchain4j-4847",
+   "repo": "langchain4j/langchain4j",
+   "month": "2026-04",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:e036679770380daf0e7bf63ac0f4c1cde386dddbad9df5380d0642f0513e32ea"
+  },
+  {
+   "id": "langchain4j__langchain4j-4872",
+   "repo": "langchain4j/langchain4j",
+   "month": "2026-04",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:3b085b1ef3b0fd81199db75616233ebf22fb7cf76a7ffc27416afe469e27e1d9"
+  },
+  {
+   "id": "langchain4j__langchain4j-4876",
+   "repo": "langchain4j/langchain4j",
+   "month": "2026-04",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:c46fe8480a0a899c6ae80ca24e466beb19ee505171b119efb0a32f7bded1b9e8"
+  },
+  {
+   "id": "langchain4j__langchain4j-4890",
+   "repo": "langchain4j/langchain4j",
+   "month": "2026-04",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:ced3740c6eb5705e3733e206208f95a3c2e02e868d140065c071c50d3e6ca459"
+  },
+  {
+   "id": "langchain4j__langchain4j-5752",
+   "repo": "langchain4j/langchain4j",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:34bcfe3892443485b3fca7926b12451c1931fb893e84b0146430a12d80701b75"
+  },
+  {
+   "id": "langchain4j__langchain4j-5755",
+   "repo": "langchain4j/langchain4j",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:34bcfe3892443485b3fca7926b12451c1931fb893e84b0146430a12d80701b75"
+  },
+  {
+   "id": "langchain4j__langchain4j-5757",
+   "repo": "langchain4j/langchain4j",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:34bcfe3892443485b3fca7926b12451c1931fb893e84b0146430a12d80701b75"
+  },
+  {
+   "id": "langchain4j__langchain4j-5788",
+   "repo": "langchain4j/langchain4j",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:277376fc23f9353899c5016480da0cbabe5ab933fae854b844b999c73d37fe89"
+  },
+  {
+   "id": "langchain4j__langchain4j-5790",
+   "repo": "langchain4j/langchain4j",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:277376fc23f9353899c5016480da0cbabe5ab933fae854b844b999c73d37fe89"
+  },
+  {
+   "id": "langchain4j__langchain4j-5792",
+   "repo": "langchain4j/langchain4j",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:277376fc23f9353899c5016480da0cbabe5ab933fae854b844b999c73d37fe89"
+  },
+  {
+   "id": "langchain4j__langchain4j-5799",
+   "repo": "langchain4j/langchain4j",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:015c69e671d37202ad9cb10143a93acba63837c5a8cb47ce1baaa4458499b90f"
+  },
+  {
+   "id": "langchain4j__langchain4j-5806",
+   "repo": "langchain4j/langchain4j",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:015c69e671d37202ad9cb10143a93acba63837c5a8cb47ce1baaa4458499b90f"
+  },
+  {
+   "id": "langchain4j__langchain4j-5807",
+   "repo": "langchain4j/langchain4j",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:015c69e671d37202ad9cb10143a93acba63837c5a8cb47ce1baaa4458499b90f"
+  },
+  {
+   "id": "langchain4j__langchain4j-5809",
+   "repo": "langchain4j/langchain4j",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:015c69e671d37202ad9cb10143a93acba63837c5a8cb47ce1baaa4458499b90f"
+  },
+  {
+   "id": "langchain4j__langchain4j-5817",
+   "repo": "langchain4j/langchain4j",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:c54807dbd8bac9282cc64863c08b0d9b5d0f32f836efaa02877dcd7c54dd8191"
+  },
+  {
+   "id": "langchain4j__langchain4j-5847",
+   "repo": "langchain4j/langchain4j",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:2eb9a5e6a27c36937ac2d18a3bab80aaecc287b0cac0fd18364d0e7ea88183e3"
+  },
+  {
+   "id": "langchain4j__langchain4j-5848",
+   "repo": "langchain4j/langchain4j",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:2c95fc03fb1fa7313ca40f09a6a25914a52a769ca7c42e3cebdb553f00d9284a"
+  },
+  {
+   "id": "langchain4j__langchain4j-5850",
+   "repo": "langchain4j/langchain4j",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:2eb9a5e6a27c36937ac2d18a3bab80aaecc287b0cac0fd18364d0e7ea88183e3"
+  },
+  {
+   "id": "langchain4j__langchain4j-5861",
+   "repo": "langchain4j/langchain4j",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:4b8b57671adc8f10e48021c11244e597081f0318cb56153cfddde9b458326523"
+  },
+  {
+   "id": "langchain4j__langchain4j-5864",
+   "repo": "langchain4j/langchain4j",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:4b8b57671adc8f10e48021c11244e597081f0318cb56153cfddde9b458326523"
+  },
+  {
+   "id": "langchain4j__langchain4j-5869",
+   "repo": "langchain4j/langchain4j",
+   "month": "2026-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:4868cafece383b888b68bc1238a38f8650e60650ea5877df179f74654b037d0d"
+  },
+  {
+   "id": "less__less.js-4349",
+   "repo": "less/less.js",
+   "month": "2025-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:7b76d613652dba5ab2db516911cc641e158bb8f30be59a510f303a7e25aa2f9d"
+  },
+  {
+   "id": "less__less.js-4363",
+   "repo": "less/less.js",
+   "month": "2025-08",
+   "language": "js",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:cbc98a2df3b4dec55e3a3d466ee7f478b4592880b969165eddb4f98dfdc84cb7"
+  },
+  {
+   "id": "libp2p__go-libp2p-3306",
+   "repo": "libp2p/go-libp2p",
+   "month": "2025-06",
+   "language": "go",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:ed1dd82a36d1277bfb004301ed5136c74e9df9de5d72aa7170da7ed75cc51967"
+  },
+  {
+   "id": "lightdash__lightdash-15838",
+   "repo": "lightdash/lightdash",
+   "month": "2025-07",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "files",
+   "digest": "sha256:6837fafb3e1422fa0591cb3cf4b8b8d4cb69da2c39ca66549308b3774707074a"
+  },
+  {
+   "id": "lima-vm__lima-4803",
+   "repo": "lima-vm/lima",
+   "month": "2026-04",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:aaaf19cb831d2be93671621c621fc471eaffc5ba2866f2c3b489d20a3acdaf98"
+  },
+  {
+   "id": "line__armeria-6325",
+   "repo": "line/armeria",
+   "month": "2025-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:5bdc0e47be0f8fa89a817d0e65df7a904eebedefdea5cab7a9905175bfb27f76"
+  },
+  {
+   "id": "linebender__vello-1100",
+   "repo": "linebender/vello",
+   "month": "2025-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:9f1793ee3938cdde0d64edeed4cc8e1daa1eaa2f9d4ec27e9c0a8705d9ad4fa5"
+  },
+  {
+   "id": "linebender__vello-1132",
+   "repo": "linebender/vello",
+   "month": "2025-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:8b8c86fa283e95f9e834362116fa756279ee97b59063be41a569104a4937daef"
+  },
+  {
+   "id": "luau-lang__luau-2209",
+   "repo": "luau-lang/luau",
+   "month": "2026-01",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:8951e5f923dfaff0c7258ba1ab53bba799d2f42304a1c3447b65116fc5e39df8"
+  },
+  {
+   "id": "luau-lang__luau-2506",
+   "repo": "luau-lang/luau",
+   "month": "2026-07",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:ac1d6a435c26b0ca15a2f692df076526c8cc27c267b72aca66a9fa4f5be09f61"
+  },
+  {
+   "id": "magefile__mage-544",
+   "repo": "magefile/mage",
+   "month": "2026-03",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:9134a01daefbd092d4afdc75ab69e09b99d1f300115a3d1ec8eddb7879532c65"
+  },
+  {
+   "id": "magefree__mage-14628",
+   "repo": "magefree/mage",
+   "month": "2026-03",
+   "language": "java",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:e1e968986de5079f2f93ee9397e3bb848002c0314e52704f8dffbd670e1ded96"
+  },
+  {
+   "id": "magefree__mage-14655",
+   "repo": "magefree/mage",
+   "month": "2026-04",
+   "language": "java",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:33af81fccd67fa6c1391f7fedd35d48e8fe0cb2a49458101d39e1892a2e31942"
+  },
+  {
+   "id": "magefree__mage-14755",
+   "repo": "magefree/mage",
+   "month": "2026-04",
+   "language": "java",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:ce74a6a851247d056dd10c4f042a8208e5089b4e905af47da711822e1a9cb071"
+  },
+  {
+   "id": "maplibre__maplibre-gl-js-6216",
+   "repo": "maplibre/maplibre-gl-js",
+   "month": "2025-08",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "BSD-3-Clause",
+   "licence_from": "files",
+   "digest": "sha256:cd75397a7eab160690c176ca49214f6e7140ee1584f9ffe150141d7b02c3359f"
+  },
+  {
+   "id": "maplibre__maplibre-gl-js-6266",
+   "repo": "maplibre/maplibre-gl-js",
+   "month": "2025-08",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "BSD-3-Clause",
+   "licence_from": "files",
+   "digest": "sha256:f2af007ce04265cf320a6a07fcdb46f715354545732c07e8a5f4397459e55d75"
+  },
+  {
+   "id": "marko-js__marko-2793",
+   "repo": "marko-js/marko",
+   "month": "2025-08",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:12733edc673158e7ddbe011f835a2be7b2f360b95b71fd5eb5be1e470bf5d39c"
+  },
+  {
+   "id": "matrix-org__matrix-rust-sdk-5395",
+   "repo": "matrix-org/matrix-rust-sdk",
+   "month": "2025-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:9aae56e314ee7cc412fd06014eb23470acbdb512b3db46a94a309f8ce6aab83b"
+  },
+  {
+   "id": "mgechev__revive-1686",
+   "repo": "mgechev/revive",
+   "month": "2026-03",
+   "language": "go",
+   "entry": "feature",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:0a9d67ec920c7c8de267526996bd77260c6d0da14ac975b8b180c8533c1ac4e3"
+  },
+  {
+   "id": "micrometer-metrics__micrometer-6593",
+   "repo": "micrometer-metrics/micrometer",
+   "month": "2025-08",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:290f22fcbab2438837fc9a4b1f4288d9fa1984f986141bf210e5336713ac4901"
+  },
+  {
+   "id": "microsoft__playwright-java-1825",
+   "repo": "microsoft/playwright-java",
+   "month": "2025-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:c4e2ac9119ad42c86a3c465239976be6c1955968cf7d8404f8e1269fd039723e"
+  },
+  {
+   "id": "mikro-orm__mikro-orm-7464",
+   "repo": "mikro-orm/mikro-orm",
+   "month": "2026-04",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:b872587a4d7d8bb0f4cdcaa695c1d280150a8687f6e2ed67cee808842ff599fc"
+  },
+  {
+   "id": "ml-explore__mlx-3604",
+   "repo": "ml-explore/mlx",
+   "month": "2026-05",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:9f451dce3cf46dff8963a55e6cd5159efd4d64298725e026617f85ad6a806118"
+  },
+  {
+   "id": "ml-explore__mlx-3635",
+   "repo": "ml-explore/mlx",
+   "month": "2026-06",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:0780697de00896ccbe4d6dfa08690a497c31ccba1dbeda0fa4df8917a7743e73"
+  },
+  {
+   "id": "mnfst__manifest-1635",
+   "repo": "mnfst/manifest",
+   "month": "2026-04",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:3cf3a921fc36e31980a2dbc18137ebfa7fcdd9fdad7ebfb83b4a673a23ff6bfc"
+  },
+  {
+   "id": "moby__moby-50281",
+   "repo": "moby/moby",
+   "month": "2025-06",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:6773139592ae5d44bc4dfec63e437f0cfc391e62e9bcf1aae70395a45d48925e"
+  },
+  {
+   "id": "moment__luxon-1720",
+   "repo": "moment/luxon",
+   "month": "2025-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:e36581906039d610a4f3ad57e5ffdb453922b8e9c0043e288d119f6fa4ec6a33"
+  },
+  {
+   "id": "monero-project__monero-10747",
+   "repo": "monero-project/monero",
+   "month": "2026-06",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "files",
+   "digest": "sha256:0c7c8a4a2212e2fae77ab0443eb7234b3105235c79f4a7f40697cb5a1093d8b3"
+  },
+  {
+   "id": "monero-project__monero-10858",
+   "repo": "monero-project/monero",
+   "month": "2026-07",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "files",
+   "digest": "sha256:9a1f0049195fac338703894d2d4b6c08959e6d40b39c87df6650714831a48076"
+  },
+  {
+   "id": "moonD4rk__HackBrowserData-571",
+   "repo": "moonD4rk/HackBrowserData",
+   "month": "2026-04",
+   "language": "go",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:4b28d81bb5454465b5ce8ba6f0c015187fe46502b6d631571d254af57c6c23eb"
+  },
+  {
+   "id": "mozilla__pdf.js-20160",
+   "repo": "mozilla/pdf.js",
+   "month": "2025-08",
+   "language": "js",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:92d5ef623842022e7a885c90847a8482154fceca87028c4c1f5e8331a1361c56"
+  },
+  {
+   "id": "mui__base-ui-2231",
+   "repo": "mui/base-ui",
+   "month": "2025-07",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:a1e6fd3982ed5452f5fb1e4218c1d2a6969de708403ac51c2ebc5a8edb50ecbc"
+  },
+  {
+   "id": "mui__base-ui-2290",
+   "repo": "mui/base-ui",
+   "month": "2025-07",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:e7721f28fe190ed4ccc364c95ce289c803058121ca71b089325f1f07776dcfa9"
+  },
+  {
+   "id": "mui__base-ui-2493",
+   "repo": "mui/base-ui",
+   "month": "2025-08",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:a453ef1e2aaa8f58e06c802e451a8858253b719a5f443e0981a7ecf4859d3fbf"
+  },
+  {
+   "id": "mui__base-ui-2591",
+   "repo": "mui/base-ui",
+   "month": "2025-08",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:c1445a087f1fbacad6836b20d771951df1c05059d205c97ababef6c04c42ee6e"
+  },
+  {
+   "id": "nats-io__nats-server-7089",
+   "repo": "nats-io/nats-server",
+   "month": "2025-07",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:68a438fded96eb2d617bef3d5bfb819b732c82971a48b0403c57ca49baf4cad0"
+  },
+  {
+   "id": "nats-io__nats-server-7175",
+   "repo": "nats-io/nats-server",
+   "month": "2025-08",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:3ce830bb336fe55211f276ebd39e4590f975d6a762d26e5192de07df024d4933"
+  },
+  {
+   "id": "naudio__NAudio-1316",
+   "repo": "naudio/NAudio",
+   "month": "2026-05",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:51aff278c348173bcc49ef2573066ec6ad34edb21203ba697e62fa365fbaccb0"
+  },
+  {
+   "id": "naudio__NAudio-1352",
+   "repo": "naudio/NAudio",
+   "month": "2026-06",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:c3bc0f3b68f172cdabcb6838f621d20696c7f402de740ad89e1a3402a725e604"
+  },
+  {
+   "id": "naudio__NAudio-1372",
+   "repo": "naudio/NAudio",
+   "month": "2026-06",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:60782f2981ac4a48eaee610d98f64ae93ac2650636d9dacc13cdf1641e7d7d8c"
+  },
+  {
+   "id": "netbirdio__netbird-3970",
+   "repo": "netbirdio/netbird",
+   "month": "2025-06",
+   "language": "go",
+   "entry": "bug",
+   "licence": "BSD-3-Clause",
+   "licence_from": "files",
+   "digest": "sha256:8f122589314e28f1810c2ce2af444bb1ce88f4f05bbd1a0eaeaab9a6918aa830"
+  },
+  {
+   "id": "ninja-build__ninja-2749",
+   "repo": "ninja-build/ninja",
+   "month": "2026-03",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:59b8b87e99fe31754ccb9c2e009dce10f4c22eadc159d9f4d60e52f91a5a9fec"
+  },
+  {
+   "id": "nissl-lab__npoi-1781",
+   "repo": "nissl-lab/npoi",
+   "month": "2026-04",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:6815ea26a5765e665970e0bf9c994cc3737dcc166ecfaac9d6197c8450a4946e"
+  },
+  {
+   "id": "nock__nock-2880",
+   "repo": "nock/nock",
+   "month": "2025-06",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:3f6c2786a61359811fdafec31bae31d72b569c032dc3a8fc3c96dc414b86410f"
+  },
+  {
+   "id": "nodejs__undici-4453",
+   "repo": "nodejs/undici",
+   "month": "2025-08",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:f561002347fbe42e23c94017c7e42ecfda0d006b48b70dc8b1524d236800bb5a"
+  },
+  {
+   "id": "nodejs__undici-5000",
+   "repo": "nodejs/undici",
+   "month": "2026-04",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:5442b5ebe3147e41e974ebcf9acc0ed11da726b80af52796aed7e0f8d80d7ec2"
+  },
+  {
+   "id": "nodejs__undici-5011",
+   "repo": "nodejs/undici",
+   "month": "2026-04",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:7d4be82fa7b23b9eec145b74ca6f48d5dff632990212bc983f9f25d7692a72ab"
+  },
+  {
+   "id": "noir-lang__noir-9323",
+   "repo": "noir-lang/noir",
+   "month": "2025-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:f7987b757ad6f4c6d824c46fb2db3c990f050dfe03be0337866272b67c9d4177"
+  },
+  {
+   "id": "notionnext-org__NotionNext-4253",
+   "repo": "notionnext-org/NotionNext",
+   "month": "2026-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:c8d92020dc612a04a4e71c1fc93be98d3938cc7edce425f4461d5c777ba32195"
+  },
+  {
+   "id": "notionnext-org__NotionNext-4290",
+   "repo": "notionnext-org/NotionNext",
+   "month": "2026-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:829bdabb6644af68e68da4c4a7410bd3356a80c6848e058abd85ad12ae0db2e0"
+  },
+  {
+   "id": "nunit__nunit-5351",
+   "repo": "nunit/nunit",
+   "month": "2026-07",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:f42d1f9087cddc357c082fc1017dddc670d2bafc3b2040307fa18e15df6f034d"
+  },
+  {
+   "id": "oauth2-proxy__oauth2-proxy-3374",
+   "repo": "oauth2-proxy/oauth2-proxy",
+   "month": "2026-03",
+   "language": "go",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:17d8c5753b2e5849819e4d27ff785f2727a3c93dc9120be352aec36ca8c14708"
+  },
+  {
+   "id": "ollama__ollama-11509",
+   "repo": "ollama/ollama",
+   "month": "2025-07",
+   "language": "go",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:d49458f6c5ddc11098fb34a15eb223388b0d18a80872d6732ebc891bd47ff6ed"
+  },
+  {
+   "id": "open-telemetry__opentelemetry-collector-contrib-40522",
+   "repo": "open-telemetry/opentelemetry-collector-contrib",
+   "month": "2025-06",
+   "language": "go",
+   "entry": "feature",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:337bfa7796e67bdbb2d3632f913f3460ad7004ebae99a9fc7828d0c9feef5993"
+  },
+  {
+   "id": "open-telemetry__opentelemetry-collector-contrib-42164",
+   "repo": "open-telemetry/opentelemetry-collector-contrib",
+   "month": "2025-08",
+   "language": "go",
+   "entry": "feature",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:4fa6f7a85dc48f09a30a65b2ea576fecd772ce3f4a33461aab136cf9ae30f872"
+  },
+  {
+   "id": "open-telemetry__opentelemetry-collector-contrib-46272",
+   "repo": "open-telemetry/opentelemetry-collector-contrib",
+   "month": "2026-02",
+   "language": "go",
+   "entry": "feature",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:c973f50496c09afe6c5bf493a5683c9c1fc19929133c30fbd9d069159d08cc56"
+  },
+  {
+   "id": "open-telemetry__opentelemetry-collector-contrib-47408",
+   "repo": "open-telemetry/opentelemetry-collector-contrib",
+   "month": "2026-04",
+   "language": "go",
+   "entry": "feature",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:9285cfb62537abd13d7445fd1d78f0a46a6299c5b54ca36351a36e3a6f124ffa"
+  },
+  {
+   "id": "open-telemetry__opentelemetry-go-6393",
+   "repo": "open-telemetry/opentelemetry-go",
+   "month": "2025-03",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:adda59cd8e89c86210c04af6e90a5d5347dcb353b279d1e05d2fe8191a81a438"
+  },
+  {
+   "id": "open-telemetry__opentelemetry-go-8133",
+   "repo": "open-telemetry/opentelemetry-go",
+   "month": "2026-04",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:85bcb559932918e101f80b5fbc63518b2478f83336d6505a1e9336729fc4f712"
+  },
+  {
+   "id": "open-telemetry__opentelemetry-java-instrumentation-16697",
+   "repo": "open-telemetry/opentelemetry-java-instrumentation",
+   "month": "2026-03",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:3871256f95d3f0fe3366a44749acaef32bc56070010eddbba875845505150e5c"
+  },
+  {
+   "id": "open-telemetry__opentelemetry-operator-4118",
+   "repo": "open-telemetry/opentelemetry-operator",
+   "month": "2025-06",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:8940865b314fed57ab5e00dc399ca1485d2b4f06f407c93883b39f5ddf75170e"
+  },
+  {
+   "id": "open-telemetry__opentelemetry-operator-4245",
+   "repo": "open-telemetry/opentelemetry-operator",
+   "month": "2025-08",
+   "language": "go",
+   "entry": "feature",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:0f7b9a29f466a7e8182e84bfe03bd989021497a682553836e808fbd5e177d877"
+  },
+  {
+   "id": "openai__codex-plugin-cc-83",
+   "repo": "openai/codex-plugin-cc",
+   "month": "2026-04",
+   "language": "js",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:bc34772f2b415c0c5fee686fa2613f21a688c52db5caaf9689f6b11342380465"
+  },
+  {
+   "id": "openai__openai-agents-js-156",
+   "repo": "openai/openai-agents-js",
+   "month": "2025-06",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:f1707a56946a20e388b6061c107299e4b44b23eac91125804531a7831f3848a5"
+  },
+  {
+   "id": "openai__openai-agents-js-205",
+   "repo": "openai/openai-agents-js",
+   "month": "2025-07",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:3ccdd0997eac5a64454c042a59e7be86da171fb322a635201300134796fd3cc6"
+  },
+  {
+   "id": "openai__openai-agents-js-318",
+   "repo": "openai/openai-agents-js",
+   "month": "2025-08",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:4f7d09d18f790704ca5b09aefa775e62a3e3267395cee1563b824b7215cd8aed"
+  },
+  {
+   "id": "openai__openai-agents-js-340",
+   "repo": "openai/openai-agents-js",
+   "month": "2025-08",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:497375280c6b0439957cf9772e7bf567983085352459c41928e6ae6a9194cdb8"
+  },
+  {
+   "id": "openai__openai-agents-js-375",
+   "repo": "openai/openai-agents-js",
+   "month": "2025-08",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:5fff20368729ec9e332c856f21241f574a0c92804349737cdf1a64b6cfa6a889"
+  },
+  {
+   "id": "openapi-ts__openapi-typescript-2365",
+   "repo": "openapi-ts/openapi-typescript",
+   "month": "2025-06",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:912798fc58e5868354098664f97b90e7cf628e5220a8d9dd341d2777129393ab"
+  },
+  {
+   "id": "opendataloader-project__opendataloader-pdf-383",
+   "repo": "opendataloader-project/opendataloader-pdf",
+   "month": "2026-04",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:84489ef637186360c1e3ccf1e0e1a380dccb8428411c5606087a4402d0320803"
+  },
+  {
+   "id": "opendataloader-project__opendataloader-pdf-386",
+   "repo": "opendataloader-project/opendataloader-pdf",
+   "month": "2026-04",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:088716303b8c90b3466e98421375b8bd656000c35a27744055f8bf680673afe0"
+  },
+  {
+   "id": "openfga__openfga-2598",
+   "repo": "openfga/openfga",
+   "month": "2025-07",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:aa5a3c29d66fb0cd7258fe460878737a32c3cc18d8c735f78cdf7e4c0013ef3a"
+  },
+  {
+   "id": "openrewrite__rewrite-7286",
+   "repo": "openrewrite/rewrite",
+   "month": "2026-04",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:92762ff4904a177ffa966609796c95b607effba4ba43a0be09697cc537cd170b"
+  },
+  {
+   "id": "openrewrite__rewrite-7287",
+   "repo": "openrewrite/rewrite",
+   "month": "2026-04",
+   "language": "java",
+   "entry": "feature",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:c537a1d0745c1a28e9bd41151a89741dabc148eb2c8e5f386bf130b786c45f8c"
+  },
+  {
+   "id": "orval-labs__orval-2328",
+   "repo": "orval-labs/orval",
+   "month": "2025-08",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:0850b4a932328304c101319585276aaaa872d22b90a46bfa022e008fd9d34e54"
+  },
+  {
+   "id": "ossf__scorecard-4728",
+   "repo": "ossf/scorecard",
+   "month": "2025-07",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:077ffb4038b860ea868d11076eb3b2d51e8ccd1b9b23f3f58017e28ccaca3d9d"
+  },
+  {
+   "id": "oxc-project__oxc-20810",
+   "repo": "oxc-project/oxc",
+   "month": "2026-03",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:dd5e3053bb8494bc955091b38d44b34b596ecf9130075fc2c87f29b85fb0cc77"
+  },
+  {
+   "id": "oxc-project__oxc-20857",
+   "repo": "oxc-project/oxc",
+   "month": "2026-03",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:14013750243821ead02afce3f96bfdedd7419d1f1d7d94a0855884c42bf06e4f"
+  },
+  {
+   "id": "oxc-project__oxc-20976",
+   "repo": "oxc-project/oxc",
+   "month": "2026-04",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:6e63106888b0399e12258f9fc6f9717567d73d69e50c8dd407ac41f61bcdcc1e"
+  },
+  {
+   "id": "oxc-project__oxc-21163",
+   "repo": "oxc-project/oxc",
+   "month": "2026-04",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:503c18253b5b735de207f4e809ac556963e12496bb4579ffc462eac0888af621"
+  },
+  {
+   "id": "oxc-project__oxc-21546",
+   "repo": "oxc-project/oxc",
+   "month": "2026-04",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:01a0a7ee42af6681dd57ee8d76adf5a0aaf19a01797f011fe71bd33c2c0f8ff8"
+  },
+  {
+   "id": "pelletier__go-toml-996",
+   "repo": "pelletier/go-toml",
+   "month": "2025-08",
+   "language": "go",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "files",
+   "digest": "sha256:e2df2a08ccf79909263891f60be3038c4f2f1d4246bea5c78e2aa6f2d46091ea"
+  },
+  {
+   "id": "php__php-src-19154",
+   "repo": "php/php-src",
+   "month": "2025-07",
+   "language": "c",
+   "entry": "bug",
+   "licence": "BSD-3-Clause",
+   "licence_from": "graphql",
+   "digest": "sha256:891dc73054b6da3ec97c2ae57baa5f0d5d3f84085b230a9c304a500cb16232ab"
+  },
+  {
+   "id": "php__php-src-19215",
+   "repo": "php/php-src",
+   "month": "2025-07",
+   "language": "c",
+   "entry": "bug",
+   "licence": "BSD-3-Clause",
+   "licence_from": "graphql",
+   "digest": "sha256:272a789a73c3776c0e648d345bf7cd6660f52bfaba0128841fdee910892e7bdb"
+  },
+  {
+   "id": "php__php-src-19297",
+   "repo": "php/php-src",
+   "month": "2025-07",
+   "language": "c",
+   "entry": "bug",
+   "licence": "BSD-3-Clause",
+   "licence_from": "graphql",
+   "digest": "sha256:52d595edc99fe42afaa58c206c644ef0fa1ba26d63ae9e9e15057f6ef3175171"
+  },
+  {
+   "id": "php__php-src-19316",
+   "repo": "php/php-src",
+   "month": "2025-07",
+   "language": "c",
+   "entry": "bug",
+   "licence": "BSD-3-Clause",
+   "licence_from": "graphql",
+   "digest": "sha256:59f7c000ab2e58fab2984559a54adef855b38ee29d6f9615570773835e3ff65c"
+  },
+  {
+   "id": "php__php-src-19478",
+   "repo": "php/php-src",
+   "month": "2025-08",
+   "language": "c",
+   "entry": "bug",
+   "licence": "BSD-3-Clause",
+   "licence_from": "graphql",
+   "digest": "sha256:a2e2c789136752fe2a36eb9064f5dbba8304cbf675884c871ab059adb5bc4c73"
+  },
+  {
+   "id": "php__php-src-19611",
+   "repo": "php/php-src",
+   "month": "2025-08",
+   "language": "c",
+   "entry": "bug",
+   "licence": "BSD-3-Clause",
+   "licence_from": "graphql",
+   "digest": "sha256:8907cb265d26bb1478839de4939c065d94c89a3e0df997c7a16f5d1406546f6f"
+  },
+  {
+   "id": "playcanvas__engine-9000",
+   "repo": "playcanvas/engine",
+   "month": "2026-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:caf2d3065d05fe2ee74a131b0bee664a9308fa78a1824b26cebe4572370a0cd6"
+  },
+  {
+   "id": "playcanvas__engine-9002",
+   "repo": "playcanvas/engine",
+   "month": "2026-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:18b687e8915927075d2956ed222b3ecce4a36cb0898b9852e78c8806c070bd0c"
+  },
+  {
+   "id": "playcanvas__engine-9066",
+   "repo": "playcanvas/engine",
+   "month": "2026-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:bd17609b780e78570c4483f0c9af456b2d39e0c80b311c50e07780c177a30043"
+  },
+  {
+   "id": "pnpm__pnpm-12888",
+   "repo": "pnpm/pnpm",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:27ab5a07b65d10c427a3d4e952f3e655a813b1abc995cc64871b74be81a923f9"
+  },
+  {
+   "id": "pnpm__pnpm-12935",
+   "repo": "pnpm/pnpm",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:f6067cb560579c1a3c8091a3cb6952035ad569fff12f3a91e024acccd9093e4f"
+  },
+  {
+   "id": "pola-rs__polars-28484",
+   "repo": "pola-rs/polars",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:ef6e4258bacbae88e7111ba59f5b249b0d72f0d5ba5e71b53071a737c1a1a70d"
+  },
+  {
+   "id": "ppy__osu-38107",
+   "repo": "ppy/osu",
+   "month": "2026-06",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:0850ac5813d922412dd42c884c30559b3a9e77ee3127fb7d8dfbb79cc4fd01ab"
+  },
+  {
+   "id": "preactjs__preact-4880",
+   "repo": "preactjs/preact",
+   "month": "2025-08",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:65b567f2836b106f61587770b23288eeb0ed0db35a36cc2a5469f987424dc835"
+  },
+  {
+   "id": "prefix-dev__pixi-5850",
+   "repo": "prefix-dev/pixi",
+   "month": "2026-04",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "BSD-3-Clause",
+   "licence_from": "graphql",
+   "digest": "sha256:fb3d3ca1f3ef0366679c6a654178fa7d4f94c7dcb51b4ec6d61029c9914b483d"
+  },
+  {
+   "id": "prefix-dev__pixi-6335",
+   "repo": "prefix-dev/pixi",
+   "month": "2026-06",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "BSD-3-Clause",
+   "licence_from": "graphql",
+   "digest": "sha256:690e616d6bf474696407affab5774ccd439f6f2ab999860e48be01654cad4960"
+  },
+  {
+   "id": "prefix-dev__pixi-6457",
+   "repo": "prefix-dev/pixi",
+   "month": "2026-06",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "BSD-3-Clause",
+   "licence_from": "graphql",
+   "digest": "sha256:ea717f1acf286cc55292d9652149eaa29b70fb0b0ad7ed81059c5870ce629c9f"
+  },
+  {
+   "id": "prefix-dev__pixi-6518",
+   "repo": "prefix-dev/pixi",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "BSD-3-Clause",
+   "licence_from": "graphql",
+   "digest": "sha256:1143def2d5673b4c8e50ac584bc98a88a08dcd235fd9221b7e5064b1f3422a66"
+  },
+  {
+   "id": "prefix-dev__pixi-6529",
+   "repo": "prefix-dev/pixi",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "BSD-3-Clause",
+   "licence_from": "graphql",
+   "digest": "sha256:eff0c991ad4bd4d32f5e7a39238354b683932f8db42f5ad3bcf92749940fbd64"
+  },
+  {
+   "id": "primefaces__primefaces-14032",
+   "repo": "primefaces/primefaces",
+   "month": "2025-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:f8c94a58f129046031cb34d8c7696ad0752483feb78e4b1d5826fe1c98704926"
+  },
+  {
+   "id": "prometheus__alertmanager-4478",
+   "repo": "prometheus/alertmanager",
+   "month": "2025-07",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:2330ab63f61b9389bb58f2ea687a04a904ef4cc407454820e9be3c2115b2f4b4"
+  },
+  {
+   "id": "puppeteer__puppeteer-14826",
+   "repo": "puppeteer/puppeteer",
+   "month": "2026-04",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:f4299eeacc856d301c8664d61c38aeda911c7b5dbd0aff8fe03cbf7bc1627ba0"
+  },
+  {
+   "id": "quarkusio__quarkus-48907",
+   "repo": "quarkusio/quarkus",
+   "month": "2025-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:d4ddeab6b3bdd7a9dcf915cddac893ceda9f354b296573d4e8901a18ce7ea1d1"
+  },
+  {
+   "id": "quarkusio__quarkus-49065",
+   "repo": "quarkusio/quarkus",
+   "month": "2025-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:c0750e494104e2021941672939b8e6a73b43b1d01509549fd004fa42a1727735"
+  },
+  {
+   "id": "quarkusio__quarkus-49661",
+   "repo": "quarkusio/quarkus",
+   "month": "2025-08",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:4ec7d659763c2939ed35d430a533c2ffffeb95a552f75c63d2ed65d2f54acca8"
+  },
+  {
+   "id": "quartznet__quartznet-2921",
+   "repo": "quartznet/quartznet",
+   "month": "2026-03",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:354dfd07b7c425e6d46bfd98bdd85635d58a1a8e0db444bff7af8cc09e951c05"
+  },
+  {
+   "id": "quartznet__quartznet-2932",
+   "repo": "quartznet/quartznet",
+   "month": "2026-03",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:a3e976ce10736f7330c4ddb855c9f2fecb19372637c6148ce80ff3e5bdc52238"
+  },
+  {
+   "id": "quartznet__quartznet-2934",
+   "repo": "quartznet/quartznet",
+   "month": "2026-03",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:e04d7d2d646c16a0c555bad5c5d823588ace58e29647f104d5e276bef798a72f"
+  },
+  {
+   "id": "quartznet__quartznet-2942",
+   "repo": "quartznet/quartznet",
+   "month": "2026-03",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:33757e9b4271f21b558832a71814e7c2e291a6208ed8bcc4f4c99339e99132ef"
+  },
+  {
+   "id": "quartznet__quartznet-2944",
+   "repo": "quartznet/quartznet",
+   "month": "2026-03",
+   "language": "csharp",
+   "entry": "feature",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:9d838a17f8eb7bd00d29136f37a9adeedc89e14d92e96478ee83368b872cb7de"
+  },
+  {
+   "id": "quartznet__quartznet-2955",
+   "repo": "quartznet/quartznet",
+   "month": "2026-03",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:8814d12f8146c29c64bbff800422e8e208d60a1211be87027222c7fcab1f09de"
+  },
+  {
+   "id": "quickjs-ng__quickjs-1113",
+   "repo": "quickjs-ng/quickjs",
+   "month": "2025-06",
+   "language": "c",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:fbfff851ecdd6dd9c66cc26db75a943014c2372e265543d84a769bab398d8224"
+  },
+  {
+   "id": "react-hook-form__react-hook-form-12983",
+   "repo": "react-hook-form/react-hook-form",
+   "month": "2025-07",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:968968cf21e23b216f9dda62b7afcd8080358050d7d91cfd4f96d560d6fd82b3"
+  },
+  {
+   "id": "react-hook-form__react-hook-form-12990",
+   "repo": "react-hook-form/react-hook-form",
+   "month": "2025-07",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:c9ba4def6ddf905963982344a6dc48e6c4bdfac767cf5078a8fe99cbbfeb9c77"
+  },
+  {
+   "id": "recharts__recharts-6068",
+   "repo": "recharts/recharts",
+   "month": "2025-07",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:6d17ca979d9fb6b769dbcea40cf00e1322ddc0bdcfdaa1c480059723c53802f8"
+  },
+  {
+   "id": "recharts__recharts-6070",
+   "repo": "recharts/recharts",
+   "month": "2025-07",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:ed36b5fc74d9055651f29c9ad0e938926bf8678c4d2d0fda5794977303435cb0"
+  },
+  {
+   "id": "riok__mapperly-2207",
+   "repo": "riok/mapperly",
+   "month": "2026-03",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:f224d034ffde7f63e4e394b3797226bcfebf5a8bcf55a12d00fb17da7e70d73d"
+  },
+  {
+   "id": "riok__mapperly-2232",
+   "repo": "riok/mapperly",
+   "month": "2026-04",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:3757ea25376989492d3e5b6a5ce7345ee7d97a153bee6d79d47d9c6a88a46ce6"
+  },
+  {
+   "id": "riok__mapperly-2332",
+   "repo": "riok/mapperly",
+   "month": "2026-06",
+   "language": "csharp",
+   "entry": "feature",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:ef0089f4ea93d72b439974bad8c918b4d6ef4219dd42dc286973d6d6e16b82e6"
+  },
+  {
+   "id": "riok__mapperly-2339",
+   "repo": "riok/mapperly",
+   "month": "2026-06",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:6cfd520d1bac8387200b69da50700abd7dcfdd6761f6494152195d4ce08560f1"
+  },
+  {
+   "id": "riok__mapperly-2341",
+   "repo": "riok/mapperly",
+   "month": "2026-06",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:42d8f5175ac06f04c0b73f39d1db779db130ff68f2758f281a557902f44991cb"
+  },
+  {
+   "id": "riok__mapperly-2355",
+   "repo": "riok/mapperly",
+   "month": "2026-07",
+   "language": "csharp",
+   "entry": "feature",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:8457f2dc5828437cefde29c35b909dc9fbdd225c7ea5f4d4ef019152cb558c0b"
+  },
+  {
+   "id": "rook__rook-16087",
+   "repo": "rook/rook",
+   "month": "2025-07",
+   "language": "go",
+   "entry": "feature",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:a0583db6e106d96679d084be5ea8cdedf51b4d101e60530945ceb62cdf01d90e"
+  },
+  {
+   "id": "rook__rook-16336",
+   "repo": "rook/rook",
+   "month": "2025-08",
+   "language": "go",
+   "entry": "feature",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:82c1164945f9b05c76a26fda0c539aa64e892cad53fe2cc0058b8c8a56e89607"
+  },
+  {
+   "id": "rqlite__rqlite-2182",
+   "repo": "rqlite/rqlite",
+   "month": "2025-07",
+   "language": "go",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:350b9909aa3ae55489b4bd87abbbc966626762562fedc5abe00434874b32f876"
+  },
+  {
+   "id": "rqlite__rqlite-2190",
+   "repo": "rqlite/rqlite",
+   "month": "2025-07",
+   "language": "go",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:aeec9a954e293327a86a972c67b203f627de7cb913256558d8cf5f7ccc388a35"
+  },
+  {
+   "id": "rqlite__rqlite-2197",
+   "repo": "rqlite/rqlite",
+   "month": "2025-08",
+   "language": "go",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:7f43d78c38b6adb975e7ed3e1f7d01d5b2655f80e4383113276dd7c148f56551"
+  },
+  {
+   "id": "rui314__mold-1546",
+   "repo": "rui314/mold",
+   "month": "2026-01",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:c5f6370b80ef7eea9a7575a49220de875deec5d79cabe38ae1d876daa69156dc"
+  },
+  {
+   "id": "rust-lang__rust-analyzer-20185",
+   "repo": "rust-lang/rust-analyzer",
+   "month": "2025-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:def6d7e4f2c0bf30fa5ea06f41ef5d23139f31cc74993e60121dfce0e953f750"
+  },
+  {
+   "id": "rust-lang__rust-analyzer-20381",
+   "repo": "rust-lang/rust-analyzer",
+   "month": "2025-08",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:d362b4803f40c4ebc7dde7cb676837664578d2a4429e6af2bc536e1bebc6eb0e"
+  },
+  {
+   "id": "rust-lang__rust-analyzer-22046",
+   "repo": "rust-lang/rust-analyzer",
+   "month": "2026-04",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:7d08396b992e808e44b7c197352ee2d7b17c8262f2c1bb368e2f3d3ff985035e"
+  },
+  {
+   "id": "rust-lang__rust-analyzer-22751",
+   "repo": "rust-lang/rust-analyzer",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:696f2310f26a5ae8997e8a0f5bc551fd17841bae00cb081a262e1172f69fdcbd"
+  },
+  {
+   "id": "rust-lang__rust-analyzer-22789",
+   "repo": "rust-lang/rust-analyzer",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:9ca002fb73f9ab7bed057eaa33517caa07dc62befe94d6624d24b545ab4cac54"
+  },
+  {
+   "id": "rust-lang__rust-analyzer-22804",
+   "repo": "rust-lang/rust-analyzer",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:6ea64b83a60ed16244d5a5bb82427d2cd7e0392bf569d1eee0888feff56c9c79"
+  },
+  {
+   "id": "rust-lang__rust-analyzer-22822",
+   "repo": "rust-lang/rust-analyzer",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:1120cc33d5fa10251e35a59005295981a661a853d1caced4d07ec2c02879841f"
+  },
+  {
+   "id": "rust-lang__rust-analyzer-22827",
+   "repo": "rust-lang/rust-analyzer",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:1b914fbd3c630374232df12cafd1c660c1605e6cfb9b5e4867ca1aa3f0a5b7ae"
+  },
+  {
+   "id": "rust-lang__rust-analyzer-22849",
+   "repo": "rust-lang/rust-analyzer",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:298d6700c1f98558706c1846f5fb893d4910921cfa75312a179b06c80bf41a0b"
+  },
+  {
+   "id": "rust-lang__rust-analyzer-22855",
+   "repo": "rust-lang/rust-analyzer",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:b25522c401246478f0980a858c0c1d9076b3c9c34796b38104e797eb86e7b49c"
+  },
+  {
+   "id": "rust-lang__rust-bindgen-3382",
+   "repo": "rust-lang/rust-bindgen",
+   "month": "2026-06",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "BSD-3-Clause",
+   "licence_from": "graphql",
+   "digest": "sha256:948d1d7763dfa5c6e1b2bdfe7ce5b18fb73f1a2dd9e6befb20c7ba3e617efba6"
+  },
+  {
+   "id": "rust-lang__rust-bindgen-3390",
+   "repo": "rust-lang/rust-bindgen",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "BSD-3-Clause",
+   "licence_from": "graphql",
+   "digest": "sha256:e7c4c8f2a8612d1cffa95e431a0bba11f1cc57ece306738bb15a72c395703c0f"
+  },
+  {
+   "id": "rust-lang__rustfmt-6840",
+   "repo": "rust-lang/rustfmt",
+   "month": "2026-03",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:ba7346b7e1ff261f8c8aaabee572afa9f16afb7f56f9329dac5f60831257fa2b"
+  },
+  {
+   "id": "saghul__txiki.js-881",
+   "repo": "saghul/txiki.js",
+   "month": "2026-03",
+   "language": "c",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:731e655a53ff742fa48ecdbd43b2e5834ee446b1bd53a6f783edfd84ee99605d"
+  },
+  {
+   "id": "shaka-project__shaka-player-8835",
+   "repo": "shaka-project/shaka-player",
+   "month": "2025-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:29418e65777b89af23a927a0ac4d16f8479ec52610d59e4b689892e4247c335f"
+  },
+  {
+   "id": "shimat__opencvsharp-1860",
+   "repo": "shimat/opencvsharp",
+   "month": "2026-04",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:b7ff526b140102f81e59a0324c37cf84f2cc58842b261d182edb3a5c02f1557e"
+  },
+  {
+   "id": "siimon__prom-client-679",
+   "repo": "siimon/prom-client",
+   "month": "2025-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:599e51e627d7226f089ed184aeb0b6018771d6c36abb0f31c850888176d0a2aa"
+  },
+  {
+   "id": "slack-go__slack-1471",
+   "repo": "slack-go/slack",
+   "month": "2025-08",
+   "language": "go",
+   "entry": "bug",
+   "licence": "BSD-2-Clause",
+   "licence_from": "graphql",
+   "digest": "sha256:f708c6e81c1bf22ac142ef981e58f50299218beb7608081b4705175d2d590766"
+  },
+  {
+   "id": "slatedb__slatedb-1461",
+   "repo": "slatedb/slatedb",
+   "month": "2026-03",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:e50bd3a7e84be7d2c6d1b8322dec48b1d77abbe4f97725bfe3bb3aea5f1c8b01"
+  },
+  {
+   "id": "smithy-lang__smithy-3038",
+   "repo": "smithy-lang/smithy",
+   "month": "2026-04",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:fc56553c3c4feb723b0111edc23090ae42e30c0fc0257d451517578c77bc46cf"
+  },
+  {
+   "id": "smithy-lang__smithy-3058",
+   "repo": "smithy-lang/smithy",
+   "month": "2026-04",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:fd9863b2b608a64fb4f3339e599ca443ce9155ea4be8cf72bd6faff7ca92af3d"
+  },
+  {
+   "id": "sofastack__sofa-jraft-1249",
+   "repo": "sofastack/sofa-jraft",
+   "month": "2026-04",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:2e5d0d9a1d3cf56eb569ca83b7882694f8e6334b2f449c08bc067ce23cc74fd6"
+  },
+  {
+   "id": "spectreconsole__spectre.console-2077",
+   "repo": "spectreconsole/spectre.console",
+   "month": "2026-04",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:7f3f0af13f7c4e1a5d1541a6d72fdc38533f5b2bbe72e593f050f4e5d72db4ff"
+  },
+  {
+   "id": "spectreconsole__spectre.console-2082",
+   "repo": "spectreconsole/spectre.console",
+   "month": "2026-04",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:879f2dd90b21ea71a3b1a10bce2a68a1fdbd9f6b706ba009b0c61e33b69884f8"
+  },
+  {
+   "id": "spring-projects__spring-boot-50119",
+   "repo": "spring-projects/spring-boot",
+   "month": "2026-04",
+   "language": "java",
+   "entry": "feature",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:f9c5b241c8655d4de929f105ca4edcabd9055063b9eb56110c117246aeb7473d"
+  },
+  {
+   "id": "spring-projects__spring-framework-35808",
+   "repo": "spring-projects/spring-framework",
+   "month": "2025-11",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:fa3a3ee52f339272cd1eb4b152ee232156971b36ced2157ace2e046f0af54fb3"
+  },
+  {
+   "id": "spring-projects__spring-framework-36550",
+   "repo": "spring-projects/spring-framework",
+   "month": "2026-03",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:721d31785031c0bcaf3fe5dff9c12fb225f25893eaf4c8e5840efcbd777e7c68"
+  },
+  {
+   "id": "spring-projects__spring-security-18938",
+   "repo": "spring-projects/spring-security",
+   "month": "2026-03",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:5278ee40d3462fd9a09e9d7bf4c197ab215920e8c155e6bda2103ee29296045a"
+  },
+  {
+   "id": "springdoc__springdoc-openapi-3051",
+   "repo": "springdoc/springdoc-openapi",
+   "month": "2025-08",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:6dbd18ebb788438a5e2932fe9ab7759d98625b3a969c83263b739fcaafd36303"
+  },
+  {
+   "id": "sqlc-dev__sqlc-4383",
+   "repo": "sqlc-dev/sqlc",
+   "month": "2026-04",
+   "language": "go",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:fe65ac4a5a8567ec8f69cebc381b4ad2500f163f2b8bf5c3e15d7d163a19f11c"
+  },
+  {
+   "id": "stephenberry__glaze-2604",
+   "repo": "stephenberry/glaze",
+   "month": "2026-06",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:219dfffe9698ec91fff0c1d61a98f3b5e1ae9a855b74f0cfbb99f39fa101d546"
+  },
+  {
+   "id": "stephenberry__glaze-2611",
+   "repo": "stephenberry/glaze",
+   "month": "2026-06",
+   "language": "cpp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:4f1d202e374bb277f377bd8d5d00e6c160d7bda837fb4143501cb3d694ac01f5"
+  },
+  {
+   "id": "strimzi__strimzi-kafka-operator-11510",
+   "repo": "strimzi/strimzi-kafka-operator",
+   "month": "2025-06",
+   "language": "java",
+   "entry": "feature",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:00baa0a8809af2fdec9aedfefe57fe2cedbd34a474388a568966eac0bc188fb2"
+  },
+  {
+   "id": "strimzi__strimzi-kafka-operator-12590",
+   "repo": "strimzi/strimzi-kafka-operator",
+   "month": "2026-04",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:11df1faa880679bf2978600c4cbf8d2d71baa08d0e30c9921c3c4c017c6ed2c0"
+  },
+  {
+   "id": "stripe__stripe-cli-1352",
+   "repo": "stripe/stripe-cli",
+   "month": "2025-07",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:9f568cb782763388859f1020765b0447619bf69ad51c1bda8491d28dafd5654c"
+  },
+  {
+   "id": "surveyjs__survey-library-11137",
+   "repo": "surveyjs/survey-library",
+   "month": "2026-04",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:b842640cfc9e29450723f642eb7f8c3565b2876c40c417af7f071514bcc87826"
+  },
+  {
+   "id": "sustainable-computing-io__kepler-2277",
+   "repo": "sustainable-computing-io/kepler",
+   "month": "2025-08",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:b18164dc89686ae1195cd154ab0a29e4082a5b05eac3cde69e653618c5828307"
+  },
+  {
+   "id": "sveltejs__svelte-16248",
+   "repo": "sveltejs/svelte",
+   "month": "2025-06",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:0bd2acf89d22f6186ccc5c858068a98bbdf14363509cf6856efa08ca9c9f2309"
+  },
+  {
+   "id": "sveltejs__svelte-16278",
+   "repo": "sveltejs/svelte",
+   "month": "2025-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:36853b79631f6214ec44518e6e24bf1efa31a916f3421894d0bcb3b806c6a90a"
+  },
+  {
+   "id": "sveltejs__svelte-16309",
+   "repo": "sveltejs/svelte",
+   "month": "2025-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:3b9ed445594a239aa36ff59356eff921300977c1f66a51e3cdf7f2c1adc720de"
+  },
+  {
+   "id": "sveltejs__svelte-16341",
+   "repo": "sveltejs/svelte",
+   "month": "2025-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:d33ffb376bc0cf6d27d51fb795f00faa6d53751cd06482779ab83ee2dccc5534"
+  },
+  {
+   "id": "sveltejs__svelte-16389",
+   "repo": "sveltejs/svelte",
+   "month": "2025-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:25449c3c9554557a1ac1a9d8003e6a4189fcd34d5c515163e1b329a04a8a0af9"
+  },
+  {
+   "id": "sveltejs__svelte-16405",
+   "repo": "sveltejs/svelte",
+   "month": "2025-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:d7431df54ccdc4c8001980aff81d2e809ab4d5687fb2d2d97b12463fef37e1b1"
+  },
+  {
+   "id": "sveltejs__svelte-16417",
+   "repo": "sveltejs/svelte",
+   "month": "2025-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:15af6c71c25ebdb11df5869e2ed4c1af65d371cbaf7aad7939f4f454acd2a3a0"
+  },
+  {
+   "id": "sveltejs__svelte-16449",
+   "repo": "sveltejs/svelte",
+   "month": "2025-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:ea3db8db1b66b3c16fb60969d377b4a69a1fac7830802406dcf1f4a7c02bbd8c"
+  },
+  {
+   "id": "sveltejs__svelte-16466",
+   "repo": "sveltejs/svelte",
+   "month": "2025-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:1288672cb774ac82807e7c395f81589798aa27fcbc9b68430370d784d5a3d63a"
+  },
+  {
+   "id": "sveltejs__svelte-16482",
+   "repo": "sveltejs/svelte",
+   "month": "2025-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:eef55726ed7c3b19c2c0c60ffae4ca201a31424282b28e2604b1e742d9523919"
+  },
+  {
+   "id": "sveltejs__svelte-16502",
+   "repo": "sveltejs/svelte",
+   "month": "2025-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:bcc7e40d723001b4b8d440d52efdcf9ca2d1f27c6f903ff4028ec854080f88ee"
+  },
+  {
+   "id": "sveltejs__svelte-16504",
+   "repo": "sveltejs/svelte",
+   "month": "2025-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:5bae0e34f819422adffd0c751829b058b5615010c230ff855c3668997ea29146"
+  },
+  {
+   "id": "sveltejs__svelte-16509",
+   "repo": "sveltejs/svelte",
+   "month": "2025-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:ab3e9e731b4f64acbe0f7d81b86bf9a828af0cdf179b10f8d69055eb2b07fcc8"
+  },
+  {
+   "id": "sveltejs__svelte-16526",
+   "repo": "sveltejs/svelte",
+   "month": "2025-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:d8b1a473bf8d3c60422cbe9683aa58c463c434d1c3813c073b24b05c6e34cd65"
+  },
+  {
+   "id": "sveltejs__svelte-16570",
+   "repo": "sveltejs/svelte",
+   "month": "2025-08",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:dd77621f7955433df5715cf285327c9939a50a2832402dd034b8f2c9f7a19deb"
+  },
+  {
+   "id": "sveltejs__svelte-16592",
+   "repo": "sveltejs/svelte",
+   "month": "2025-08",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:79169842171086d29fdf081e1edd8230eb27a4f7e86678325eac079920254167"
+  },
+  {
+   "id": "sveltejs__svelte-16601",
+   "repo": "sveltejs/svelte",
+   "month": "2025-08",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:525f284a119998e37abd6b1bf01eedc56314480ecabf124500ccb909fd0cca99"
+  },
+  {
+   "id": "sveltejs__svelte-16619",
+   "repo": "sveltejs/svelte",
+   "month": "2025-08",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:9dcd546be50649f7811737a907405cb6ca08803177e1fbc9ac55f281d536e584"
+  },
+  {
+   "id": "sveltejs__svelte-16622",
+   "repo": "sveltejs/svelte",
+   "month": "2025-08",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:c67271680eca37b1ccfeaa6ecdd1c0478417ae4b9689604545df800cf9759013"
+  },
+  {
+   "id": "sveltejs__svelte-16649",
+   "repo": "sveltejs/svelte",
+   "month": "2025-08",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:fe53f229943bf613a6f41ccbf2dcc60b7ae78167c3fbe0d793484e35ae7c0e73"
+  },
+  {
+   "id": "sveltejs__svelte-16666",
+   "repo": "sveltejs/svelte",
+   "month": "2025-08",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:59157806b10be2ff9bb36c7f9236e26354cf4b310eee6645c97d399bc47817ce"
+  },
+  {
+   "id": "sveltejs__svelte-16668",
+   "repo": "sveltejs/svelte",
+   "month": "2025-08",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:cc9bc02acb7b8ee859609f1c1259cd4b6d1885c8b675e1a3dec522a3a1d2803c"
+  },
+  {
+   "id": "sveltejs__svelte-18039",
+   "repo": "sveltejs/svelte",
+   "month": "2026-03",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:0a4a73da74f94ab1c5cc5305befebbe3cc86fa82c7b8e7a754c426ffd78cde28"
+  },
+  {
+   "id": "taiga-family__taiga-ui-11501",
+   "repo": "taiga-family/taiga-ui",
+   "month": "2025-07",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:edf4ddd1d817fd470065797f0f468d54d716506b885558d5a13935c3a5b2a6e5"
+  },
+  {
+   "id": "tailwindlabs__tailwindcss-18718",
+   "repo": "tailwindlabs/tailwindcss",
+   "month": "2025-08",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:e6f16b33bfda940835317f98d1ecf4637bd4f60b8cafa6d93d9ff201b2cdd2b0"
+  },
+  {
+   "id": "thlorenz__doctoc-328",
+   "repo": "thlorenz/doctoc",
+   "month": "2026-03",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:841bf511377e788d214af748e16d7ed2df47959399ab4cbd16a33dbdf73c729a"
+  },
+  {
+   "id": "thlorenz__doctoc-329",
+   "repo": "thlorenz/doctoc",
+   "month": "2026-03",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:c2bcd85de2ed9d9bd321965794e730718b5a68d45f4999250714bd401093e5af"
+  },
+  {
+   "id": "tikv__pd-9472",
+   "repo": "tikv/pd",
+   "month": "2025-07",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:6c7be3a7fbf3561484f70827dc59fda2a24c1229843e0432e962ea1b3a003b0c"
+  },
+  {
+   "id": "tikv__pd-9618",
+   "repo": "tikv/pd",
+   "month": "2025-08",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:7116b3d1977ee5bc632d9d8f9b336babc19e2a33ccb16d2f0701cebe78902e6e"
+  },
+  {
+   "id": "tmc__langchaingo-1350",
+   "repo": "tmc/langchaingo",
+   "month": "2025-08",
+   "language": "go",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:b9524042a5f28a88495cb9cdb24fbf588e882b52e9976395b6619f062a53047e"
+  },
+  {
+   "id": "tui-cs__Terminal.Gui-5431",
+   "repo": "tui-cs/Terminal.Gui",
+   "month": "2026-05",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:5eb6d7c66f97ab286cd166570ad37a452c7e9ad9acc4d8d436b48b56b058551a"
+  },
+  {
+   "id": "tui-cs__Terminal.Gui-5487",
+   "repo": "tui-cs/Terminal.Gui",
+   "month": "2026-06",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:74ef1b39e11f292690d506459d5256345d45d915e5e6ac91347a24fd604b7c3a"
+  },
+  {
+   "id": "tursodatabase__turso-8102",
+   "repo": "tursodatabase/turso",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:b4db147580b187d268ced241cc66a0518088eeda6f3504890b34b6616fc21370"
+  },
+  {
+   "id": "twpayne__chezmoi-4978",
+   "repo": "twpayne/chezmoi",
+   "month": "2026-03",
+   "language": "go",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:0f3005fa3a5dcf45ebf2903b3161038e286d9a0b00c910858562617d35ea4cd1"
+  },
+  {
+   "id": "twpayne__chezmoi-5001",
+   "repo": "twpayne/chezmoi",
+   "month": "2026-04",
+   "language": "go",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:1c008c7adce9307e40d44f9bceede530dd22c27624d7a1b0295e5d0ee2408703"
+  },
+  {
+   "id": "twpayne__chezmoi-5016",
+   "repo": "twpayne/chezmoi",
+   "month": "2026-04",
+   "language": "go",
+   "entry": "feature",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:b587f76e6fa3aeced71a176e3c6cede8372f81dd2683053fb527dc06bcc70b8b"
+  },
+  {
+   "id": "unoplatform__uno-22978",
+   "repo": "unoplatform/uno",
+   "month": "2026-04",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:20915c405900cbde7ef931dd54a3c92828041b8650d4fa46545d906d7642ef57"
+  },
+  {
+   "id": "unplugin__unplugin-vue-components-858",
+   "repo": "unplugin/unplugin-vue-components",
+   "month": "2025-07",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:4d32e0cdf4da2593124aac13e033304167a80febc88d18f49568c4359f358195"
+  },
+  {
+   "id": "usebruno__bruno-7620",
+   "repo": "usebruno/bruno",
+   "month": "2026-03",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:1441aa42b9016868dfc3a83501292a7edb5a2c8f8c4bd892b4de0713dae616f1"
+  },
+  {
+   "id": "uutils__coreutils-8149",
+   "repo": "uutils/coreutils",
+   "month": "2025-06",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:0d6f88d2abd596aba538b7af42bcaf01f35e0cc4b324976cb984a4bbfcd17bea"
+  },
+  {
+   "id": "uutils__coreutils-8197",
+   "repo": "uutils/coreutils",
+   "month": "2025-06",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:1edb28a84b350e3941dc8044117fbd787321689dda62c1fa9414d6c6438bb06d"
+  },
+  {
+   "id": "uutils__coreutils-8310",
+   "repo": "uutils/coreutils",
+   "month": "2025-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:b580c2e6ed23bfc1dd891ec7fe54ba9e1f4a431946b16dc8515f807c08ba763f"
+  },
+  {
+   "id": "uutils__coreutils-8336",
+   "repo": "uutils/coreutils",
+   "month": "2025-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:cea81b89678db9cce1484f68862fee1cd38803cd7f2d9ced9cca51b0161704c2"
+  },
+  {
+   "id": "uutils__coreutils-8433",
+   "repo": "uutils/coreutils",
+   "month": "2025-08",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:7b9920e72290d0c79d6f5a839e60f96261fe69265a3f6b297ae739484549a3ea"
+  },
+  {
+   "id": "uutils__coreutils-8447",
+   "repo": "uutils/coreutils",
+   "month": "2025-08",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:e21033a03a990b678183b37bf3ab97951bd239683ba8d5623edd6040aba70611"
+  },
+  {
+   "id": "uutils__coreutils-8528",
+   "repo": "uutils/coreutils",
+   "month": "2025-08",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:27275f3f50de91f131e36f0be54d2c286bfeeb7714de96ef56865dad99b15e6a"
+  },
+  {
+   "id": "valkey-io__valkey-2277",
+   "repo": "valkey-io/valkey",
+   "month": "2025-06",
+   "language": "c",
+   "entry": "bug",
+   "licence": "BSD-3-Clause",
+   "licence_from": "graphql",
+   "digest": "sha256:e3249f82020ec43863af6b6b10ff2ac7c15b4fb91464a146f1a0f86183bd450b"
+  },
+  {
+   "id": "valkey-io__valkey-2287",
+   "repo": "valkey-io/valkey",
+   "month": "2025-06",
+   "language": "c",
+   "entry": "bug",
+   "licence": "BSD-3-Clause",
+   "licence_from": "graphql",
+   "digest": "sha256:28b047e658e803ef25cbe9d6efa3378b82c397ff6137eed5cd25618833db182d"
+  },
+  {
+   "id": "valkey-io__valkey-2370",
+   "repo": "valkey-io/valkey",
+   "month": "2025-07",
+   "language": "c",
+   "entry": "bug",
+   "licence": "BSD-3-Clause",
+   "licence_from": "graphql",
+   "digest": "sha256:a19bd9c340b58443b3988fd65f712b6c4ba28956b46cd716cd8df2d51ba27409"
+  },
+  {
+   "id": "valkey-io__valkey-2431",
+   "repo": "valkey-io/valkey",
+   "month": "2025-08",
+   "language": "c",
+   "entry": "bug",
+   "licence": "BSD-3-Clause",
+   "licence_from": "graphql",
+   "digest": "sha256:b30b37375b18b5bf76aefc6d7ac832ea6f1843f2da8d7e80118bbadfbbb62a15"
+  },
+  {
+   "id": "valkey-io__valkey-2553",
+   "repo": "valkey-io/valkey",
+   "month": "2025-08",
+   "language": "c",
+   "entry": "bug",
+   "licence": "BSD-3-Clause",
+   "licence_from": "graphql",
+   "digest": "sha256:ee816f7b564bfee2ddb1809f2beeaaf4d16a7c143874a67d9432bd5994dca804"
+  },
+  {
+   "id": "varnishcache__varnish-cache-4370",
+   "repo": "varnishcache/varnish-cache",
+   "month": "2025-07",
+   "language": "c",
+   "entry": "bug",
+   "licence": "BSD-2-Clause",
+   "licence_from": "files",
+   "digest": "sha256:e8bba814ee0b91450160b9fdeefd304f6629ebc355e186519996bfa21f38ee68"
+  },
+  {
+   "id": "velero-io__velero-9653",
+   "repo": "velero-io/velero",
+   "month": "2026-03",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:ec7f9bcf75eca7a3325847ad0673d1d7a65b7d056e8e40bfdc13e3c375ed01e4"
+  },
+  {
+   "id": "vercel__turborepo-12516",
+   "repo": "vercel/turborepo",
+   "month": "2026-03",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:6d0dcfda5dc93fc94de2c065ac199f2f34233c7601faf66b5bb73ac49d69548b"
+  },
+  {
+   "id": "vercel__turborepo-12599",
+   "repo": "vercel/turborepo",
+   "month": "2026-04",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:30a42d7ce216fbf86e669a1b3421d4008ba7af9b39a0c94c9e3d599635b3c1ed"
+  },
+  {
+   "id": "vmware-tanzu__velero-9059",
+   "repo": "vmware-tanzu/velero",
+   "month": "2025-07",
+   "language": "go",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:5cdeedf663a17a9575ab014902adf900f3136da82ee5acc095f84e7efe839e34"
+  },
+  {
+   "id": "vueuse__vueuse-5336",
+   "repo": "vueuse/vueuse",
+   "month": "2026-03",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:388a836e9b445aff6f9479119a0899fd6cac30c99ba5533ac1347b1adef5ae0e"
+  },
+  {
+   "id": "wasm-bindgen__wasm-bindgen-5051",
+   "repo": "wasm-bindgen/wasm-bindgen",
+   "month": "2026-03",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:ff809c352cfb3a0898351fba589bfae543abb5128240f2b95898be4217e6381f"
+  },
+  {
+   "id": "web-infra-dev__rspack-14794",
+   "repo": "web-infra-dev/rspack",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:6ec84e7658a517f40b00a3ef095be95d0e21adb9a13941711a9e47c43f8eaabe"
+  },
+  {
+   "id": "web-infra-dev__rspack-14803",
+   "repo": "web-infra-dev/rspack",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:7c8fea1f09f135f2133a8f1c2f9368193ab424e61d24f408cd196c52abc18e3e"
+  },
+  {
+   "id": "web-infra-dev__rspack-14806",
+   "repo": "web-infra-dev/rspack",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:43045761c82ed0caf318a52b698fc03546c1e85597241f11d5c5151eee441412"
+  },
+  {
+   "id": "web-infra-dev__rspack-14882",
+   "repo": "web-infra-dev/rspack",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:7d163a26115c63da6e72ac935e50e9dc8e151c8ee116632072a163262cc830d8"
+  },
+  {
+   "id": "webdriverio__webdriverio-14672",
+   "repo": "webdriverio/webdriverio",
+   "month": "2025-07",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:5a13a6a5efd3b1ad11b23114d5bca18328d0478dc23f9469b12a5621aa9fd858"
+  },
+  {
+   "id": "wiremock__wiremock-3130",
+   "repo": "wiremock/wiremock",
+   "month": "2025-08",
+   "language": "java",
+   "entry": "feature",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:1592104fddfab3fe915b1135f203c9c88f509818d487df15b8ced6c7c41fc2a3"
+  },
+  {
+   "id": "withastro__starlight-3293",
+   "repo": "withastro/starlight",
+   "month": "2025-07",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:27e37305158c1da29ca933e942432213bb36c0f10f0693825c848c632b5f66cd"
+  },
+  {
+   "id": "withastro__starlight-3306",
+   "repo": "withastro/starlight",
+   "month": "2025-07",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:47cd5005543a3cde7ec7e45b8843c794df51ca25241d805d6f08025b0ac14ed4"
+  },
+  {
+   "id": "wxt-dev__wxt-2267",
+   "repo": "wxt-dev/wxt",
+   "month": "2026-04",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:2a74853befbc729042b37f5d939a7858823b93e1a7083fd6d4b0d0dbb284b213"
+  },
+  {
+   "id": "yvgude__lean-ctx-1168",
+   "repo": "yvgude/lean-ctx",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:1f8884a5d81a88faf2e1f89fd2956a574d75ad0378cc3ab66e3330047c899aea"
+  },
+  {
+   "id": "yvgude__lean-ctx-1179",
+   "repo": "yvgude/lean-ctx",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:4c2ad055d8b7fcd58fb463441027693fcf12d9ac4a2b93d3cb1ab2399527da20"
+  },
+  {
+   "id": "yvgude__lean-ctx-1180",
+   "repo": "yvgude/lean-ctx",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:4c2ad055d8b7fcd58fb463441027693fcf12d9ac4a2b93d3cb1ab2399527da20"
+  },
+  {
+   "id": "yvgude__lean-ctx-632",
+   "repo": "yvgude/lean-ctx",
+   "month": "2026-06",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "licence_from": "graphql",
+   "digest": "sha256:87d1f9a66626df30bd43709d5e6db3987516972ee3751ff98e6b5224aed8f3e4"
+  },
+  {
+   "id": "zmkfirmware__zmk-2942",
+   "repo": "zmkfirmware/zmk",
+   "month": "2025-05",
+   "language": "c",
+   "entry": "bug",
+   "licence": "MIT",
+   "licence_from": "graphql",
+   "digest": "sha256:f401e0f95daa2c64c66f8889d82b90a0fe41b3dcc75d29313511594f5205a24d"
+  }
+ ]
+}

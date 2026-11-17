@@ -1,6 +1,12 @@
 {
   "bump": "never",
   "min_gstack_version": "1.99.0.0",
+  "review_exclude_paths": [
+    "wiki/plans/*/*-frame.json",
+    "wiki/plans/*/*-repos.json",
+    "wiki/plans/*/*-licences.json",
+    "tests/harness-mechanics/fixtures/arms/**"
+  ],
   "docs_only": {
     "allow": [
       "wiki/board/*-*-*-*.md",

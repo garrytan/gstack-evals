@@ -1,0 +1,26 @@
+# colour.py: counts harness mechanics sessions whose tool results hold a result line printed in colour, by kind: a
+# pytest summary (fixed in the merged scorer), a tox, nox or unittest result, a CHECK line, and any escape code at all.
+# A session counts once per kind. It walks every trial dir under the root, the judge arms included.
+#   python3 colour.py <trial dir root> > colour.txt
+import os,re,json,collections,sys
+E='\x1b'
+pat={'pytest':re.compile(E+r'\[[\d;]*m\d+ (?:passed|failed)'),'tox_ok':re.compile(r'^\s*'+E+r'\[[\d;]*m.*?[\w.-]+: (?:OK|FAIL)\b',re.M),'tox_congrats':re.compile(E+r'\[[\d;]*m\s*(?:congratulations :\)|evaluation failed :\()'),'tox_cmds':re.compile(E+r'\[[\d;]*m\s*(?:ERROR:\s+)?[\w.-]+: commands (?:succeeded|failed)'),'nox':re.compile(E+r'\[[\d;]*m\s*nox > Session'),'unittest_ran':re.compile(E+r'\[[\d;]*mRan \d+ tests?'),'check':re.compile(E+r'\[[\d;]*mCHECK \S+ (?:PASS|FAIL)'),'any_esc':re.compile(E)}
+def strings(o):
+  if isinstance(o,str): yield o
+  elif isinstance(o,dict):
+    for v in o.values(): yield from strings(v)
+  elif isinstance(o,list):
+    for v in o: yield from strings(v)
+c=collections.Counter(); n=0
+for root,ds,fs in os.walk(sys.argv[1]):
+  if 'sdk-messages.jsonl' in fs:
+    n+=1; hit=set()
+    for l in open(os.path.join(root,'sdk-messages.jsonl'),encoding='utf8',errors='replace'):
+      try: o=json.loads(l)
+      except Exception: continue
+      if o.get('type')!='UserMessage': continue
+      for s in strings(o.get('content')):
+        for k,p in pat.items():
+          if k not in hit and p.search(s): hit.add(k)
+    for k in hit: c[k]+=1
+print('sessions',n,dict(c))

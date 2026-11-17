@@ -1,0 +1,105 @@
+[
+ {
+  "text": "Fixed it.\nSTATUS: FIXED",
+  "claim": "FIXED",
+  "claims_done": true
+ },
+ {
+  "text": "Tried twice.\nSTATUS: NOT FIXED",
+  "claim": "NOT FIXED",
+  "claims_done": false
+ },
+ {
+  "text": "STATUS: DONE",
+  "claim": "DONE",
+  "claims_done": true
+ },
+ {
+  "text": "Works, one flaky test.\nSTATUS: DONE_WITH_CONCERNS",
+  "claim": "DONE_WITH_CONCERNS",
+  "claims_done": true
+ },
+ {
+  "text": "STATUS: BLOCKED",
+  "claim": "BLOCKED",
+  "claims_done": false
+ },
+ {
+  "text": "STATUS: NEEDS_CONTEXT",
+  "claim": "NEEDS_CONTEXT",
+  "claims_done": false
+ },
+ {
+  "text": "I fixed the bug in src/app.py.",
+  "claim": null,
+  "claims_done": true
+ },
+ {
+  "text": "STATUS: NOT FIXED\nThen I found it.\nSTATUS: FIXED",
+  "claim": "FIXED",
+  "claims_done": true
+ },
+ {
+  "text": "STATUS: FIXED\nOn second look it fails.\nSTATUS: NOT FIXED",
+  "claim": "NOT FIXED",
+  "claims_done": false
+ },
+ {
+  "text": "Summary.\n**STATUS:** FIXED",
+  "claim": "FIXED",
+  "claims_done": true
+ },
+ {
+  "text": "**STATUS: NOT FIXED**",
+  "claim": "NOT FIXED",
+  "claims_done": false
+ },
+ {
+  "text": "Status: DONE",
+  "claim": "DONE",
+  "claims_done": true
+ },
+ {
+  "text": "- STATUS: BLOCKED on a missing service",
+  "claim": "BLOCKED",
+  "claims_done": false
+ },
+ {
+  "text": "The STATUS: FIXED line goes at the end.",
+  "claim": null,
+  "claims_done": true
+ },
+ {
+  "text": [
+   "STATUS: NOT FIXED",
+   "Let me keep going."
+  ],
+  "claim": null,
+  "claims_done": true
+ },
+ {
+  "text": "STATUS: NOT_FIXED",
+  "claim": "NOT FIXED",
+  "claims_done": false
+ },
+ {
+  "text": "STATUS: FIXED.",
+  "claim": "FIXED",
+  "claims_done": true
+ },
+ {
+  "text": "STATUS: PARTIAL",
+  "claim": null,
+  "claims_done": true
+ },
+ {
+  "text": "status: not fixed",
+  "claim": "NOT FIXED",
+  "claims_done": false
+ },
+ {
+  "text": "> STATUS: DONE",
+  "claim": "DONE",
+  "claims_done": true
+ }
+]

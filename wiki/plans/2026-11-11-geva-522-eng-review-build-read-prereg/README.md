@@ -7,7 +7,7 @@ author: GEVA-522
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
 date: 2026-11-11
-status: open
+status: superseded
 supersedes:
   - 2026-11-08-geva-405-eng-review-intentions-prereg
 links:

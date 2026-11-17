@@ -4,7 +4,9 @@
 // an in-process metering proxy, one slot per call. Replies are cached on disk by model and request digest, so a resumed
 // run never pays twice for the same request (section 7: judge calls are cached by model, version, prompt and packet).
 // OpenRouter replies name the provider that served them; a provider other than the route's pin stops the run with
-// E_PV_PROVIDER_DRIFT (section 17, rule 6).
+// E_PV_PROVIDER_DRIFT (section 17, rule 6). An OpenRouter request may also carry a system text, a chat in place of the
+// one prompt, a temperature and a seed (the office-hours founder eval's simulator); a request without them keeps its body
+// and cache key byte for byte.
 import { createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -19,7 +21,7 @@ import type { Provider } from "../../src/runner/pricing/prices.ts";
 import { MeteringProxy, reconcileJournal, type RetryBudget } from "../../src/runner/proxy/metering-proxy.ts";
 import { rigAdmission } from "../../src/rig/admission.ts";
 
-export type ModelKey = "opus" | "astra" | "sol" | "particle" | "gemini";
+export type ModelKey = "opus" | "astra" | "sol" | "particle" | "gemini" | "carbon";
 
 /** The models the eval calls directly, on the routes the price table lists. OpenRouter rows carry their provider pin in prices.ts. */
 export const MODELS: Readonly<Record<ModelKey, { provider: Provider; id: string; served_by?: RegExp }>> = {
@@ -28,6 +30,7 @@ export const MODELS: Readonly<Record<ModelKey, { provider: Provider; id: string;
   sol: { provider: "openrouter", id: "openai/gpt-6.1-sol", served_by: /^openai$/i },
   particle: { provider: "openrouter", id: "particle-ai/particle-1", served_by: /^particle/i },
   gemini: { provider: "openrouter", id: "google/gemini-4-argon", served_by: /^google/i },
+  carbon: { provider: "openrouter", id: "google/gemini-4-carbon", served_by: /^google/i },
 };
 
 const ROUTE: Record<Provider, string> = { anthropic: "/v1/messages", openai: "/v1/responses", openrouter: "/v1/chat/completions" };
@@ -48,7 +51,21 @@ export interface CallRequest {
   effort?: string | null;
   /** A label for the journal's cell (never prompt text). */
   label: string;
+  /** OpenRouter only: a system text sent as a first system message. */
+  system?: string;
+  /** OpenRouter only: the chat to send in place of the one user prompt. */
+  messages?: ChatMessage[];
+  /** OpenRouter only: sent top-level. */
+  temperature?: number;
+  seed?: number;
 }
+
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+type ChatFields = Pick<CallRequest, "system" | "messages" | "temperature" | "seed">;
 
 export interface CallResult {
   text: string | null;
@@ -59,11 +76,15 @@ export interface CallResult {
   served_by: string | null;
 }
 
-export function requestBody(m: { provider: Provider; id: string }, prompt: string, maxTokens: number, effort: string | null | undefined): Record<string, unknown> {
-  const messages = [{ role: "user", content: prompt }];
+/** A request's body. The chat fields are sent only when set, so a request without them keeps its body and cache key. */
+export function requestBody(m: { provider: Provider; id: string }, prompt: string, maxTokens: number, effort: string | null | undefined, chat: ChatFields = {}): Record<string, unknown> {
+  const { system, temperature, seed } = chat;
+  const set = system !== undefined || chat.messages !== undefined || temperature !== undefined || seed !== undefined;
+  if (set && m.provider !== "openrouter") throw new MeterError("E_USAGE", "system, messages, temperature and seed are sent only on OpenRouter, not to " + m.provider);
+  const messages = [...(system !== undefined ? [{ role: "system", content: system }] : []), ...(chat.messages ?? [{ role: "user", content: prompt }])];
   if (m.provider === "openai") return judgeRequest("openai", m.id, prompt, maxTokens, effort ?? undefined);
   if (m.provider === "anthropic") return { model: m.id, max_tokens: maxTokens, messages, ...(effort ? { output_config: { effort } } : {}) };
-  return { model: m.id, max_tokens: maxTokens, messages, ...(effort ? { reasoning: { effort } } : {}) };
+  return { model: m.id, max_tokens: maxTokens, messages, ...(effort ? { reasoning: { effort } } : {}), ...(temperature !== undefined ? { temperature } : {}), ...(seed !== undefined ? { seed } : {}) };
 }
 
 export const sha256 = (s: string | Buffer) => createHash("sha256").update(s).digest("hex");
@@ -131,7 +152,7 @@ export async function openMeter(o: MeterOptions): Promise<Meter> {
       if (closed) throw new MeterError("E_USAGE", "the meter is closed");
       const m = MODELS[req.model];
       if (req.maxTokens > o.maxOutputTokens) throw new MeterError("E_USAGE", "a " + req.maxTokens + "-token request is above this meter's output cap of " + o.maxOutputTokens);
-      const body = requestBody(m, req.prompt, req.maxTokens, req.effort);
+      const body = requestBody(m, req.prompt, req.maxTokens, req.effort, req);
       const file = join(o.cacheDir, cacheKey(req.model, body) + ".json");
       if (existsSync(file)) {
         const hit = JSON.parse(readFileSync(file, "utf8")) as CallResult;

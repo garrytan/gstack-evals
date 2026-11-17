@@ -9,6 +9,7 @@ import { leakNeedles } from "../../lanes/eng-build/leak.ts";
 import { fixOnlyNames, NOTE_MODELS, noteRequest, publicNames, refusal, writeNote } from "../../lanes/eng-build/note.ts";
 import { aftermathCases, anchorCases, attributed, baseOutcome, ebProtected, goSubtest, imageEnv, inScope, treeGrid, renderEbDockerfile, repoLabel, rustModule, scopesOf, targetOfFile, testChanges, writeSet, type Grid } from "../../lanes/eng-build/unit.ts";
 import { recipeFor } from "../../lanes/eng-build/recipes.ts";
+import { VERIFIER_DIR } from "../../lanes/real-outcome/task/format.ts";
 import { buildRepo, MIT, tempDir } from "../real/fixture.ts";
 
 const CALC_GO = "package calc\n\nfunc Add(a, b int) int {\n\treturn a + b\n}\n";
@@ -49,6 +50,8 @@ describe("what moves into a graded tree", () => {
     expect(readFileSync(join(dir, "restore/calc_test.go"), "utf8")).toContain("TestMulZero");
     expect(readFileSync(join(dir, "regions.list"), "utf8")).toBe("src/lib.rs\n");
     for (const f of ["prepare.sh", "vrun.py", "cold.sh", "node-reporter.mjs", "vitest.none.cjs", "vitest.none.mjs", "protect.ere"]) expect(existsSync(join(dir, f))).toBe(true);
+    expect(readFileSync(join(dir, "vrun.py"), "utf8")).toBe(readFileSync(join(VERIFIER_DIR, "vrun-where.py"), "utf8"));
+    expect(readFileSync(join(dir, "vrun.py"), "utf8")).toContain("where=where");
     expect(ebProtected(".cargo/config.toml")).toBe(true);
     expect(ebProtected("jest.config.ts")).toBe(true);
     expect(ebProtected("src/lib.rs")).toBe(false);
