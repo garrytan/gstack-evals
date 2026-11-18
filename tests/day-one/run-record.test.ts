@@ -419,3 +419,50 @@ describe("a start call's run, from when gstack-autoplan created it", () => {
       expect(findRun(roots, pwd).run?.seen).toBe(MAIN + "/run.json");
     }));
 });
+
+// Value: protects=the completion condition (pin change, section 11): a gstack session is exposed when every applicable phase closed and its run is complete or waits at its final gate, the gate gstack wrote after the run's last phase closed, and the frozen reading (complete only) is kept beside it; fails_when=a run waiting at its final gate reads unexposed, a run waiting for an amendment, back in review after a gate, waiting with a phase open or with a phase closed after its gate, or with no matched run reads exposed, or the frozen reading counts a waiting run
+describe("where the run stands when the session ends", () => {
+  const ORDER = ["ceo", "design", "dx", "eng"];
+  const shut = (t: string) => ({ closed_at: "2026-11-17T18:" + t + ":00Z", native: { status: "completed" }, outside: { status: "completed" } });
+  const phases = { ceo: shut("10"), design: shut("15"), dx: shut("20"), eng: shut("30") };
+  const waiting = (o: Record<string, unknown> = {}) => body({ status: "gate_pending", gate_rev: 3, gate: { rev: 3, items: 62, written_at: "2026-11-17T18:40:00Z" }, phase_order: ORDER, phases, ...o });
+  const read = (b: object | null) => {
+    let r: ReturnType<typeof readExposure> | undefined;
+    withDir((dir) => {
+      const work = join(dir, "work");
+      mkdirSync(work, { recursive: true });
+      if (b) put(work, WORK, RUN, b);
+      r = readExposure(findRun([{ dir: work, seen: WORK }], tx([{ command: SCAFFOLD }])), 2);
+    });
+    return r!;
+  };
+
+  test("a complete run and a run waiting at its final gate are exposed; only the complete one under the frozen reading", () => {
+    expect(read(body({ gate_rev: 3, gate: { rev: 3, written_at: "2026-11-17T18:40:00Z", answered_at: "2026-11-17T18:45:00Z", plan: "b" }, phase_order: ORDER, phases }))).toMatchObject({ exposed: true, final_gate: false, exposed_frozen: true });
+    const final = read(waiting());
+    expect(final).toMatchObject({ exposed: true, final_gate: true, exposed_frozen: false });
+    expect(final.why).toContain("final gate");
+    expect(final.voice).toBe("astra");
+    expect(read(waiting({ phases: { ...phases, design: { skipped: "no UI scope" } } }))).toMatchObject({ exposed: true, final_gate: true, exposed_frozen: false });
+    expect(read(waiting({ phases: { ...phases, eng: { ...shut("30"), closed_at: "2026-11-17T18:40:00Z" } } }))).toMatchObject({ exposed: true, final_gate: true });
+  });
+
+  test("a run waiting for an amendment, back in review after a gate, with a phase open, at a gate older than a phase's close, or never matched is not exposed", () => {
+    const cases: Record<string, object | null> = {
+      "waiting at an amend gate": waiting({ status: "amend_pending", amendments: [{ decision: "r-g3-d1", status: "pending", gate_rev: 3 }] }),
+      "back in review after a gate": waiting({ status: "awaiting_result", phases: { ...phases, eng: { opened_at: "2026-11-17T18:45:00Z", native: { status: "dispatched" }, outside: { status: "dispatched" } } } }),
+      "a phase the frozen read skips left open": waiting({ phases: { ...phases, dx: { opened_at: "2026-11-17T18:16:00Z", native: { status: "completed" }, outside: { status: "completed" } } } }),
+      "eng left open": waiting({ phases: { ...phases, eng: { opened_at: "2026-11-17T18:25:00Z", native: { status: "completed" }, outside: { status: "completed" } } } }),
+      "a phase in the order with no record": waiting({ phases: { ceo: shut("10"), design: shut("15"), eng: shut("30") } }),
+      "a phase closed after the gate was written": waiting({ phases: { ...phases, eng: shut("50") } }),
+      "a gate with no written time": waiting({ gate: { rev: 3, items: 62 } }),
+      "no matched run": null,
+    };
+    for (const [name, b] of Object.entries(cases)) {
+      const r = read(b);
+      expect([name, r.exposed, r.final_gate, r.exposed_frozen]).toEqual([name, false, false, false]);
+    }
+    expect(read(cases["waiting at an amend gate"]!).why).toContain("amend_pending");
+  });
+});
+

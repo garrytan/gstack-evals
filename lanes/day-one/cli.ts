@@ -372,6 +372,7 @@ function readings(f: Map<string, string[]>, io: Io): number {
       implied: [...u.list!.tasks].sort((a, b) => a.rank - b.rank).map((t) => t.from === "implied"),
       obvious: u.list!.obvious,
       exposed: pr.exposure ? pr.exposure.exposed : null,
+      exposed_frozen: pr.exposure ? pr.exposure.exposed_frozen : null,
       voice: pr.exposure ? pr.exposure.voice : null,
       plan_words: pr.plan?.words ?? null,
       answers: pr.owner ? { ...pr.owner.counts } : null,

@@ -25,7 +25,11 @@
 //   eval and bash or sh -c strings are read as commands too. A relative path
 //   resolves against the folder the last cd left in that agent's shell (/work/app at first); a cd inside a subshell,
 //   a substitution or a child shell does not leave it.
-// - Exposed: the run's status is complete (the gate was answered and applied); CEO and Eng closed; Design closed or
+// - Exposed (dated change of 2026-11-18, pin change 1, section 11): the run is complete (the gate was answered and
+//   applied) or waits at its final gate: status gate_pending, with the gate written at or after the close of every phase
+//   in the run's phase order, each closed or skipped. A run waiting for an amendment (amend_pending), back in review
+//   after a gate, or at a gate written before a phase's last close is not. The frozen reading, complete only, is kept
+//   as exposed_frozen and printed beside it. CEO and Eng closed; Design closed or
 //   skipped by autoplan's own scope rule; every closed phase's native voice completed; and every closed phase's outside
 //   voice ended (completed, or recorded unavailable or failed). An outside voice that is disabled (the config turned it
 //   off) or skipped never ran, so its session is not exposed, with that reason. Anything less is not exposed: reported,
@@ -58,6 +62,10 @@ export interface Exposure {
   phases: Record<"ceo" | "design" | "eng", PhaseRead>;
   outside_model: string | null;
   exposed: boolean;
+  /** The run waits at the gate gstack wrote after its last phase closed. */
+  final_gate: boolean;
+  /** The frozen reading: exposed with the run complete. */
+  exposed_frozen: boolean;
   voice: "astra" | "fallback";
   why: string;
   /** Start calls in the session's command log that are for no run.json the scan found. */
@@ -529,16 +537,27 @@ const phaseRead = (p: any): PhaseRead => {
   return { state: p.closed_at ? "closed" : "open", native: p.native?.status ?? null, outside: p.outside?.status ?? null };
 };
 
+const atFinalGate = (b: any): boolean => {
+  const written = Date.parse(b.gate?.written_at);
+  if (b.status !== "gate_pending" || Number.isNaN(written)) return false;
+  const names = new Set<string>([...(Array.isArray(b.phase_order) ? b.phase_order : []), ...Object.keys(b.phases ?? {})]);
+  return [...names].every((k) => {
+    const p = b.phases?.[k];
+    return !!p && (!!p.skipped || Date.parse(p.closed_at) <= written);
+  });
+};
+
 /** The session's exposure, read from the run findRun counted. */
 export function readExposure(found: RunSearch, voiceRequests: number): Exposure {
   const r = found.run;
   const empty: PhaseRead = { state: "absent", native: null, outside: null };
-  if (!r) return { run: null, status: null, phases: { ceo: empty, design: empty, eng: empty }, outside_model: null, exposed: false, voice: "fallback", why: "no autoplan run.json that the session's own gstack-autoplan calls wrote" + (found.passed.length ? " (passed over: " + found.passed.join("; ") + ")" : ""), unmatched: found.unmatched };
+  if (!r) return { run: null, status: null, phases: { ceo: empty, design: empty, eng: empty }, outside_model: null, exposed: false, final_gate: false, exposed_frozen: false, voice: "fallback", why: "no autoplan run.json that the session's own gstack-autoplan calls wrote" + (found.passed.length ? " (passed over: " + found.passed.join("; ") + ")" : ""), unmatched: found.unmatched };
   const b = r.body;
   const phases = { ceo: phaseRead(b.phases?.ceo), design: phaseRead(b.phases?.design), eng: phaseRead(b.phases?.eng) };
   const closed = Object.entries(phases).filter(([, p]) => p.state === "closed");
+  const final_gate = atFinalGate(b);
   const gaps: string[] = [];
-  if (b.status !== "complete") gaps.push("run status " + JSON.stringify(b.status ?? null) + ", not complete");
+  if (b.status !== "complete" && !final_gate) gaps.push("run status " + JSON.stringify(b.status ?? null) + ", neither complete nor waiting at its final gate");
   for (const k of ["ceo", "eng"] as const) if (phases[k].state !== "closed") gaps.push(k + " " + phases[k].state);
   if (phases.design.state !== "closed" && phases.design.state !== "skipped") gaps.push("design " + phases.design.state);
   for (const [k, p] of closed) {
@@ -547,7 +566,9 @@ export function readExposure(found: RunSearch, voiceRequests: number): Exposure 
     else if (!["completed", "unavailable", "failed"].includes(String(p.outside))) gaps.push(k + " outside voice " + p.outside);
   }
   const astra = voiceRequests > 0 && closed.length > 0 && closed.every(([, p]) => p.outside === "completed");
-  return { run: r.seen, status: b.status ?? null, phases, outside_model: b.outside_model ?? null, exposed: gaps.length === 0, voice: astra ? "astra" : "fallback", why: gaps.length ? gaps.join("; ") : "every phase closed and the gate answered", unmatched: found.unmatched };
+  const exposed = gaps.length === 0;
+  const why = gaps.length ? gaps.join("; ") : final_gate ? "every phase closed and the run waits at its final gate" : "every phase closed and the gate answered";
+  return { run: r.seen, status: b.status ?? null, phases, outside_model: b.outside_model ?? null, exposed, final_gate, exposed_frozen: exposed && b.status === "complete", voice: astra ? "astra" : "fallback", why, unmatched: found.unmatched };
 }
 
 /** The arm's plan text under the rule above. */

@@ -171,6 +171,15 @@ On both strengthened arms, the day-one block ("## Day one first (before any othe
 
 The blocks sit 47 to 56 bytes later than before, because the descriptions above them grew. This table is now the reference the strengthened arms stop on. A mismatch at the smoke stops both strengthened arms before they spend.
 
+**The 18 autoplan lines, per pin.** Added 2026-11-18. S-dayone's commit adds 18 lines to autoplan/SKILL.md over A. The table counts how many of those 18 lines each pin's autoplan/SKILL.md holds, read from gstack's git tree. The SKILL.md installed in each arm's image gives the same counts, and so does the first request of a no-spend capture of `/autoplan --full plan.md` in each image.
+
+| | A (e671a531) | S-dayone (a2a421ba) | S-full (798782ae) |
+|---|---|---|---|
+| Of the 18 lines, present | 0 | 18 | 17 |
+| autoplan/SKILL.md sha256, first 12 hex | 1be1f29fbec9 | c1f3dc823b93 | 3f2ae726e5c6 |
+
+S-full lacks one line: the CEO row of autoplan's required-outputs table (line 619 at 798782ae). S-full's row is S-dayone's row without "Error & Rescue and Failure Modes registries (or N/A with reason); ". That accounts for the 66 bytes between the two arms' autoplan SKILL.md figures above (45,358 and 45,292). The line is missing from gstack's source at the pin, not from the capture. S-full is tested as its maintainers wrote it, and nothing is re-pinned.
+
 ## 4. What rep 3 of the smoke must show
 
 Rep 3 runs on day1-smoke, inside its cap, after a green rig admission at the head that spends:

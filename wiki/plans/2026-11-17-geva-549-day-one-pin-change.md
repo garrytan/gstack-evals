@@ -218,3 +218,26 @@ The tests are in tests/day-one/run-record.test.ts. On the tree before the final 
 > b: approve without it
 
 So A as pinned is "/autoplan with a day-one gate item". In the smoke, every A session's first gate held this item, and all six A plans came out with a `### Day one` heading. Five of them hold a table, three with all seven columns and two with four. No S session's gate held it, because each S plan already had its day-one page by then. S-dayone minus A measures the day-one block on top of that item, and S-full minus A measures what S-full adds over gstack as it ships today, not over /autoplan without a day-one step. D minus N does not involve A.
+
+## 11. When a gstack session counts as exposed (2026-11-18)
+
+Dated 2026-11-18, after the rep-4 reruns of the strengthened arms and before any counted session. It changes one thing in the preregistration's section 8: the completion condition. Everything else in that section stands.
+
+**The change.** Section 8 needs the run to be complete, which means the owner's answer at the gate was recorded and applied. A gstack session now counts as exposed when every applicable phase closed and the run is either complete or waiting at its final gate. The applicable phases are the ones section 8 names: CEO and Eng closed, and Design closed or skipped by /autoplan's own scope rule.
+
+**Why.** In the rep-4 S-full rerun every phase closed with both voices. The owner was asked at the live gate, two gates were answered, and the plan was amended twice. At the third gate the session would not record the owner's reply. It cited the line in autoplan's SKILL.md that says an unattended run never approves, and it ended its turn there. Under the frozen rule that session is not exposed, although it ran the whole procedure up to the owner's approval. The pins do not change.
+
+**The final gate, from gstack's own run state.** gstack writes a gate only after every phase in the run's phase order has closed or been skipped, and then sets the status to gate_pending. The harness reads a run as waiting at its final gate when all of these hold:
+
+- the status is gate_pending;
+- the gate has a written time;
+- every phase in the run's phase order, and every phase the record holds, was skipped or closed at or before that time.
+
+These do not count: a run waiting for an amendment (status amend_pending: the owner accepted changes that the plan has not absorbed yet), a run back in review after a gate (running or awaiting_result), and a gate written before a phase's last close.
+
+**What stays as it was.** Voices are read as before. Exposure still needs each closed phase's native voice to have completed and its outside voice to have ended. Astra or fallback stays its own field, under the frozen rule and its 20% guard. Both voices completing is not part of exposure.
+
+**The frozen reading is kept and printed.** Each session's record carries exposed (this rule), final_gate (the run waits at its final gate) and exposed_frozen (the frozen rule: complete only). The reading prints both for every arm, and it prints A minus N on A's exposed sessions under each rule (a_n_exposed and a_n_exposed_frozen). The frozen reading is a sensitivity line beside the main one.
+
+The code is lanes/day-one/exposure.ts (readExposure), lanes/day-one/analysis.ts and lanes/day-one/cli.ts. The tests are in tests/day-one/run-record.test.ts and tests/day-one/cli.test.ts. They cover a complete run, a run waiting at its final gate (also with Design skipped, and with Eng closed at the same moment the gate was written), a run waiting for an amendment, a run back in review, a phase left open (one the frozen read skips, and Eng), a phase in the order with no record, a phase closed after the gate was written, a gate with no written time, and no matched run. On the tree before the change, all four new tests fail. Twelve mutants each fail at least one test: no run ever at its final gate, any status with a written gate, the record's phases without the phase order, a close at any time, a close strictly before the gate, no skipped phase allowed, the frozen reading equal to the new one, the frozen rule kept, final_gate always false, each arm's frozen count taken from the new reading, the frozen interval taken from the new reading, and the reading's rows without the frozen field. The day-one dry run drives the rule in its exposure case: a run waiting at its final gate is exposed and not under the frozen reading, and a run waiting for an amendment is not exposed.
+

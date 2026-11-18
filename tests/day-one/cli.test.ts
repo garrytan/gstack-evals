@@ -73,6 +73,23 @@ describe.skipIf(!onShm)("day-one read", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  test("a reading carries each session's frozen exposure reading from its review row", async () => {
+    const dir = mkdtempSync("/dev/shm/day-one-read-");
+    try {
+      const units = join(dir, "units");
+      fixtureUnit(units, "cccccc", 2);
+      const out = join(dir, "out");
+      stageDir(out, "base-counted", [planRow("base", "cccccc", "n", 100)]);
+      stageDir(out, "review-counted", [{ ...planRow("review", "cccccc", "d", 100), exposure: { exposed: true, final_gate: true, exposed_frozen: false, voice: "astra" } }]);
+      stageDir(out, "check-counted", [checkRow("cccccc", "n", [true, false, false, false, false]), checkRow("cccccc", "d", [true, true, false, false, false])], { units: ["cccccc"], reps: [1] });
+      const c = JSON.parse((await run(["read", "--out", out, "--units-dir", units, "--tag", "counted", "--arms", "n", "d"])).out);
+      expect(c.arms.d.exposed).toEqual({ yes: 1, no: 0 });
+      expect(c.arms.d.exposed_frozen).toEqual({ yes: 0, no: 1 });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("day-one stage", () => {
@@ -189,6 +206,15 @@ test("a reading counts each arm's builds whose app never started", () => {
   const r = read([build("n", false), build("n", true), build("a", true), build("a", null)], ["n", "a"]);
   expect(r.arms.n!.not_started).toBe(1);
   expect(r.arms.a!.not_started).toBe(0);
+});
+
+test("a reading prints the frozen exposure reading beside the one sessions are exposed under", () => {
+  const build = (arm: "n" | "a", unit: string, exposed: boolean | null, exposed_frozen: boolean | null): ScoredBuild => ({ unit, rep: 1, arm, done: [unit !== "u3", false, false, false, false], empty_plan: false, contaminated: false, implied: [false, false, false, false, false], obvious: false, exposed, exposed_frozen });
+  const r = read([build("n", "u1", null, null), build("n", "u2", null, null), build("n", "u3", null, null), build("a", "u1", true, true), build("a", "u2", true, false), build("a", "u3", false, false)], ["n", "a"]);
+  expect(r.arms.a!.exposed).toEqual({ yes: 2, no: 1 });
+  expect(r.arms.a!.exposed_frozen).toEqual({ yes: 1, no: 2 });
+  expect(r.a_n_exposed!.briefs).toBe(2);
+  expect(r.a_n_exposed_frozen!.briefs).toBe(1);
 });
 
 describe.skipIf(!onShm)("day-one validate with the strengthened arms in the wave", () => {
