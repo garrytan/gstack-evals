@@ -355,3 +355,70 @@ describe("a relative write from a folder a cd left unknown stays unknown whateve
     expect(read("cd /testbed/src && printf fix > ../pkg/mod.py")).toEqual([false, 0]);
   });
 });
+
+describe("deviation D1: the passing run is read per test-runner command", () => {
+  const failing = bash("pytest tests/test_mod.py", FAILED, true);
+  const heredocFix = "python - <<'EOF'\np='pkg/mod.py'\ns=open(p).read()\nopen(p,'w').write(s.replace('a','b'))\nEOF";
+  const cut = (d: ReturnType<typeof detect>) => [d.test_before_source, d.failing_before_source, d.passing_after_source, d.followed, d.followed_as_merged];
+  test("both smoke sequences that found it read as followed, and as merged they did not", () => {
+    // A pass of the test's own run beside another suite's collection errors in the same call (Opus, command arm, smoke).
+    const otherSuite = detect(log([bash("cat >> tests/test_mod.py <<'EOF'\ndef test_x():\n    assert f() == 1\nEOF", ""), failing, bash(heredocFix, ""),
+      bash("pytest -q tests/ tests/core | tail -3; pytest -q tests/test_mod.py -k x | tail -1", "ERROR tests/core/test_utils.py\n!!!!!!!!!!!!!!!!!!! Interrupted: 4 errors during collection !!!!!!!!!!!!!!!!!!!\n4 warnings, 4 errors in 1.10s\n1 passed, 94 deselected in 0.62s")]), PATCH);
+    // The fix, its passing run and a linter that is not installed, in one call that exits 127 (Opus, gstack-shaped arm, smoke).
+    const missingLinter = detect(log([edit(TEST), failing, bash("sed -i 's/a/b/' pkg/mod.py; git diff pkg/; pytest -q tests/ 2>&1 | tail -3; ruff check pkg tests/test_mod.py; ruff format --check pkg", "Exit code 127\ndiff --git a/pkg/mod.py b/pkg/mod.py\n178 passed in 6.21s\n/bin/bash: line 1: ruff: command not found\n/bin/bash: line 1: ruff: command not found", true)]), PATCH);
+    expect([cut(otherSuite), cut(missingLinter)]).toEqual([[true, true, true, true, false], [true, true, true, true, false]]);
+  });
+  test("a full suite that fails on another test after the test's own green run passes, as two runners and two summaries", () => {
+    const d = detect(log([write(TEST), failing, edit("/testbed/pkg/mod.py"), bash("pytest -q tests/test_mod.py && pytest -q", "1 passed in 0.16s\nFAILED tests/test_other.py::test_y - assert 1\n1 failed, 9649 passed in 20.85s", true)]), PATCH);
+    expect([d.followed, d.followed_as_merged]).toEqual([true, false]);
+  });
+  test("when the selected test's own runner reports a failure next to another command's pass, the session is not followed", () => {
+    const after = (command: string, result: string) => detect(log([write(TEST), failing, edit("/testbed/pkg/mod.py"), bash(command, result, true)]), PATCH);
+    const runs = [after("pytest -q tests/test_mod.py | tail -1; pytest -q tests/test_other.py | tail -1", "1 failed in 0.02s\n3 passed in 0.10s"),
+      after("pytest -q tests/test_other.py | tail -1; pytest -q tests/test_mod.py | tail -1", "3 passed in 0.10s\n1 failed in 0.02s"),
+      after("python -m unittest tests.test_other; python -m unittest tests.test_mod", "...\n----------------------------------------------------------------------\nRan 3 tests in 0.001s\n\nOK\nF\n----------------------------------------------------------------------\nRan 1 test in 0.001s\n\nFAILED (failures=1)")];
+    expect(runs.map((d) => [d.passing_after_source, d.followed])).toEqual([[false, false], [false, false], [false, false]]);
+  });
+  test("a result that reports a failed test in the test file is no passing run, even when another runner's selection of it passed", () => {
+    const d = detect(log([write(TEST), failing, edit("/testbed/pkg/mod.py"), bash("pytest -q tests/ | tail -2; pytest -q tests/test_mod.py -k x | tail -1", "FAILED tests/test_mod.py::test_y - assert 0 == 1\n1 failed, 3 passed in 0.10s\n1 passed, 1 deselected in 0.01s")]), PATCH);
+    expect([d.passing_after_source, d.followed]).toEqual([false, false]);
+  });
+  test("a pass before the fix and a fail after it, in one call, is no passing run", () => {
+    const d = detect(log([write(TEST), failing, bash("pytest -q tests/test_mod.py | tail -1; sed -i 's/a/b/' pkg/mod.py; pytest -q tests/test_mod.py | tail -1", "1 passed in 0.01s\n1 failed in 0.02s", true)]), PATCH);
+    expect([d.passing_after_source, d.followed]).toEqual([false, false]);
+  });
+  test("when runner commands and summaries don't pair one to one, the call is read whole, as merged", () => {
+    const after = (command: string, result: string, error = true) => detect(log([write(TEST), failing, edit("/testbed/pkg/mod.py"), bash(command, result, error)]), PATCH);
+    // A script that runs pytest itself is no runner command, so its summary leaves two summaries for one runner.
+    const script = after("python scripts/check.py; pytest -q tests/test_mod.py | tail -1; ruff check pkg", "2 passed in 0.10s\n1 failed in 0.02s\n/bin/bash: line 1: ruff: command not found");
+    // The second runner never ran after the first failed, so one summary for two runners.
+    const shortCircuit = after("pytest -q tests/test_other.py && pytest -q tests/test_mod.py; ruff check pkg", "1 passed in 0.01s\n/bin/bash: line 1: ruff: command not found");
+    // A green call whose summaries don't pair still passes under the whole-call rule, as before.
+    const whole = after("python scripts/check.py && pytest -q tests/test_mod.py", "2 passed in 0.10s\n1 passed in 0.01s", false);
+    expect([script.followed, shortCircuit.followed, whole.followed, whole.followed_as_merged]).toEqual([false, false, true, true]);
+  });
+  test("summaries pair with runners only when nothing else in the call can print one or print them out of order", () => {
+    const after = (command: string, result: string) => detect(log([write(TEST), failing, edit("/testbed/pkg/mod.py"), bash(command, result, true)]), PATCH);
+    const tail = "\nruff: command not found";
+    const runs = [
+      // Two runners run at once: the other test's OK prints first and the test's own failure second.
+      after("pytest -q tests/test_mod.py | tail -1 & pytest -q tests/test_other.py | tail -1", "3 passed in 0.10s\n1 failed in 0.20s"),
+      after("python -m unittest tests.test_mod 2>&1 | tail -4 & python -m unittest tests.test_other 2>&1 | tail -4; wait", "Ran 1 test in 0.000s\n\nOK\nRan 1 test in 0.201s\n\nFAILED (failures=1)"),
+      // The test's own summary is cut off, and a script nobody counts as a runner prints one.
+      after("python -m unittest tests.test_mod 2>&1 | head -1; python tests/test_other.py 2>&1; ruff check pkg", "F\n.\nRan 1 test in 0.000s\n\nOK" + tail),
+      after("for t in tests/test_other.py tests/test_x.py; do pytest -q $t | tail -1; done; pytest -q tests/test_mod.py | head -1; ruff check pkg", "3 passed in 0.10s\n2 passed in 0.10s\nF" + tail),
+      after("tox -e py310,py311 -- tests/test_other.py; pytest -q tests/test_mod.py | head -1; ruff check pkg", "3 passed in 0.10s\n3 passed in 0.10s\nF" + tail),
+      after("pytest -q tests/test_mod.py | head -1; cat /tmp/earlier.log; ruff check pkg", "F\n1 passed in 0.01s" + tail),
+      after('C="$HOME/bin/checks"; pytest -q tests/test_mod.py | head -1; "$C" run', "F\n1 passed in 0.01s\nNOT_READY"),
+      after("pytest -q tests/test_mod.py | tail -1; ruff check pkg", "0 passed in 0.10s" + tail),
+    ];
+    expect(runs.map((d) => d.followed)).toEqual([false, false, false, false, false, false, false, false]);
+    const kept = after("source .venv/bin/activate && cd /testbed && PYTHONPATH=. timeout 600 python -m pytest -q tests/test_mod.py 2>&1 | tail -1; git diff --stat; ruff check pkg", "1 passed in 0.01s\n pkg/mod.py | 2 +-" + tail);
+    expect([kept.followed, kept.followed_as_merged]).toEqual([true, false]);
+  });
+  test("the failing-first step reads exactly as before", () => {
+    const before = (run: Step) => detect(log([write(TEST), run, edit("/testbed/pkg/mod.py"), bash("pytest -q tests/test_mod.py | tail -1; ruff check pkg", "1 passed in 0.01s\nruff: command not found", true)]), PATCH);
+    const runs = [bash("pytest -q tests/test_mod.py | tail -1; pytest -q tests/test_other.py | tail -1", "1 failed in 0.02s\n3 passed in 0.10s", true), bash("pytest -q tests/test_other.py; ruff check tests/test_mod.py", "1 passed in 0.01s\nruff: command not found", true), bash("pytest tests/", FAILED, true)];
+    expect(runs.map((r) => [before(r).failing_before_source, before(r).followed, before(r).followed_as_merged])).toEqual([[true, true, false], [false, false, false], [true, true, false]]);
+  });
+});

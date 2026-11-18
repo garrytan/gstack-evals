@@ -45,6 +45,60 @@ The table config is the harness mechanics one: {"jobs": [{"dir": "<pulled>/jobs/
 
 `report` refuses a table that holds a row whose task is not one of the 60 drawn tasks, or two graded rows for one model, arm and task. It prints one E_USAGE line per problem and exits 2. Infra and cap-stop rows never count as repeats, so an attempt 2 or a relaunch is read.
 
+## Deviation D1, 2026-11-17, before any counted session
+
+Section 6 of the preregistration reads a passing run as "after the source edit, a successful result that shows a test outcome (a pytest summary, unittest's Ran N tests, a tox or nox result) with no failing count and no line reporting a failed test in the test file, from a run that selects the test." The detector as merged applied that to the whole Bash call: the call's exit status and every count anywhere in its result.
+
+A hand reading of the smoke sessions found two Opus 5.5 sessions on getmoto__moto-9590 that followed the steps and were scored as not followed:
+
+- command arm, trial getmoto__moto-9590__6Q4dqEV: one call ran the fix, the test's folder and two ruff checks, and exited 127 because ruff is not installed. The next ran the test's folder with tests/test_core, whose collection printed "4 errors" with or without the fix, and then the test's own run, which printed "1 passed".
+- gstack-shaped arm, trial getmoto__moto-9590__z8o4DSr: one call ran the fix, the test's folder ("178 passed") and two ruff checks, and exited 127 because ruff is not installed.
+
+A linter or another suite chained after the test says nothing about whether the steps were followed. So the detector now also reads the passing run per test-runner command, where that is safe. When a call's test-runner commands and its result's test summaries (pytest's summary line, passing only with a passed count above 0; unittest's Ran line with the OK or FAILED after it) pair one to one in order, each runner command's outcome is its own summary, and a runner command that selects the test, comes after the source edit and whose own summary passed is a passing run. Pairing is used only when nothing else in the call can print a summary or print them out of order: the call has no &; every runner is pytest or unittest behind nothing but an interpreter, options and known wrappers (timeout, env, uv run, coverage run and the like); and every other command is an assignment, a filter reading a pipe, an in-place sed or perl, a virtualenv's activate script, or one of cd, pwd, export, unset, echo, printf, true, false, sleep, ls, git, cp, mv, rm, mkdir, touch, ruff, black, pyink, isort, flake8, mypy, pyright and pylint. A result that reports a failed test in the session's test files is never a passing run. Any other call is read whole, as before. The failing run is unchanged.
+
+A second-model read of the first version of this change found two ways it could read a pass that did not happen: runners started together with &, whose summaries print out of order, and a runner whose summary was cut off (head -1) paired with a summary that a script printed. The conditions above close both, and the tests cover each.
+
+The rule as merged stays in every table row as followed_as_merged, and the report prints it beside each arm's primary as a sensitivity line ("as merged, before D1"), with the decision reading under that rule.
+
+Admission (section 10), rerun over the same 1,200 sessions: the merged detector reproduces admission.txt on every count, and D1 changes 2 sessions, both GPT-6.1 Sol, each from not followed to followed (passing-after and tool-only move with them):
+
+- none arm, collective__icalendar-921: the test's own run printed "43 passed", and the whole suite, run after it with &&, failed one timezone test in another file ("1 failed, 9649 passed").
+- verify-prose arm, google__adk-python-3088 (one of the 60 run tasks): the test's run printed "99 passed", and a pyink format check chained after it exited 1.
+
+Seven more Sol verify-prose sessions pass their test the same way but chain /verify's own `"$C" status` (gstack-checks, named by a variable), so they are read whole and stay not followed.
+
+Section 10 numbers that move: Sol's none arm from 151 to 152 of 200 (unchanged at 48 of the 60 run tasks) and Sol's verify-prose arm from 144 to 145 of 200 and from 47 to 48 of the 60. Opus 5.5 and particle-1 don't move. Over the 24 smoke sessions only the two Opus sessions above change.
+
+## B1b: the skill named in prose
+
+B1b runs B1's gstack-shaped prove-it skill on B1's 60 tasks and plain prompt, untyped, in two arms: claude-md (gstack's CLAUDE.md routing block naming /prove-it, at /root/.claude/CLAUDE.md) and hook (gstack's prompt-routing hook, printing its line naming /prove-it on every prompt). Opus 5.5 only. The primary is whether the skill loaded. The plan, the decision table and the frozen numbers are in [its preregistration](../../wiki/plans/2026-11-18-capy-b1b-prose-route-prereg/README.md). B1's files stay as merged; table.ts reads B1b's arm names and fake-model.ts gains a `load` mode.
+
+| File | What it does |
+|---|---|
+| b1b-pins.ts | Frozen values: the two arms, the gstack commit and the git blob of every route file, the routing block's one changed line, the hook's one change, the items, caps and all-in stop, and B1's run whose none arm is reused |
+| arms/b1b/ | The route files, regenerated from gstack at the pin; TypeScript files are kept as `<name>.ts.txt` |
+| b1b.ts | Sources, tars and manifests (quick/laneb/arms/manifests/b1b), the route table, four keyless scripted sessions, the plan, caps and launch guard, the none arm's reuse check, the load detector, the table, and the report with its decision reading and reasons.tsv |
+
+```
+bun lanes/delivery-route/cli.ts b1b arms sources --gstack <checkout at the pin> [--check]
+bun lanes/delivery-route/cli.ts b1b arms build [--out <dir>] [--manifests]
+bun lanes/delivery-route/cli.ts b1b arms check
+bun lanes/delivery-route/cli.ts b1b sessions run --out <dir> [--cut tests/delivery-route/fixtures/b1b-sessions]
+bun lanes/delivery-route/cli.ts b1b routes --export <SWE-rebench export> [--out <tsv>]
+bun lanes/delivery-route/cli.ts b1b plan
+bun lanes/delivery-route/cli.ts b1b reuse [--head <commit>]
+bun lanes/delivery-route/cli.ts b1b approve --ledger <jsonl> --item <item> --usd <cap> --approved-by <who>
+bun lanes/delivery-route/cli.ts b1b prepare <work> --item <item>
+bun lanes/delivery-route/cli.ts b1b host-up|attach|recover|host-down <work>
+bun lanes/delivery-route/cli.ts b1b launch|relaunch|rerun <work> --part <part>
+bun lanes/delivery-route/cli.ts b1b guard <work>
+bun lanes/delivery-route/cli.ts b1b done --ledger <jsonl> --item <item>
+bun lanes/delivery-route/cli.ts b1b table <config.json> <out.jsonl>
+bun lanes/delivery-route/cli.ts b1b report <table.jsonl> [--out <dir>]
+```
+
+The launcher commands are L1's under B1b's profile: host root ~/b1b, ledger port 9948, ARMS holding claude-md.tar and hook.tar. The launch guard reads B1B_LEDGERS and B1B_CREW the way B1's reads B1_LEDGERS and B1_CREW, and also refuses when the run commit's harness differs from B1's (`b1b reuse`). `routes` needs bun and an export holding each task's instruction.md; `sessions run` needs Docker and the hm-session image, as B1's does. Neither makes a model call.
+
 ## Credits
 
-The Prove-It steps, the /test front matter and the test-driven-development description are from [agent-skills](https://github.com/addyosmani/agent-skills) by Addy Osmani (MIT). The gstack-shaped setup text is gstack's own /verify setup. NOTICE.md has both rows.
+The Prove-It steps, the /test front matter and the test-driven-development description are from [agent-skills](https://github.com/addyosmani/agent-skills) by Addy Osmani (MIT). The gstack-shaped setup text is gstack's own /verify setup. B1b's routing block and prompt-routing hook are gstack's own, at bbf48aa7ef19. NOTICE.md has the rows.
