@@ -4,7 +4,9 @@
 // checked from top to bottom and the first whose condition holds decides; every row's condition is still computed and
 // returned. The pooled primary (Opus 5.5 and Sol) decides; per-model rows act only through row 2's loss guard. Beside
 // every outcome go section 10's two readings: new minus none not shown to beat no gstack by the bar, and current minus
-// none wholly below zero.
+// none wholly below zero. The second attempt (its section 3, items 8 to 10) gives row 1 its stops from stops.ts: every
+// cap stop in a launch's stops.json or a ledger item's record, authoring's projection stop or any authoring stop before
+// calibration and comparison were full, and a stop the command line adds.
 import { DECISION } from "../frozen.ts";
 import type { ModelId, ScoredSession } from "../types.ts";
 import { builderRightCall, keptWhole, type KeptWholeReading, type RightCallReading } from "./builder.ts";
@@ -21,8 +23,8 @@ export interface DecisionInput {
   rows: readonly ScoredSession[];
   /** Section 12's admission after at most one repair (admission.ts admissionState). */
   admission: "admitted" | "repair" | "fix-method";
-  /** A ledger item stopped on its cap. */
-  cap_stop: boolean;
+  /** Every stop that reads row 1 (stops.ts readStops), one line each naming its source. */
+  stops: readonly string[];
   /** Each production judge's check. */
   judge_checks: { astra: boolean; opus: boolean };
   /** G1's hand reads of every new-arm builder session the detector flagged. */
@@ -36,7 +38,7 @@ export interface Decision {
   row: Row;
   outcome: Outcome;
   conditions: {
-    row1: { holds: boolean; admission: DecisionInput["admission"]; cap_stop: boolean; missing_limit: boolean; judge_check_failed: boolean };
+    row1: { holds: boolean; admission: DecisionInput["admission"]; stops: readonly string[]; missing_limit: boolean; judge_check_failed: boolean };
     row2: { holds: boolean; pooled_loss: boolean; opus_loss: boolean; sol_loss: boolean; kept_whole_harm: boolean; builder_right_call_loss: boolean; guardrail_broken: boolean };
     row3: { holds: boolean; hi: number | null };
     row4: { holds: boolean; estimate: number | null; lo: number | null; bar: number };
@@ -69,12 +71,12 @@ export function decide(x: DecisionInput): Decision {
   const kw = keptWhole(x.rows), brc = builderRightCall(x.rows), g = guardrails(x.rows, x.hand_reads), miss = missingLimits(x.rows);
   const nc = c.new_current;
 
-  const r1 = { admission: x.admission, cap_stop: x.cap_stop, missing_limit: miss.broken, judge_check_failed: !(x.judge_checks.astra && x.judge_checks.opus) };
+  const r1 = { admission: x.admission, stops: x.stops, missing_limit: miss.broken, judge_check_failed: !(x.judge_checks.astra && x.judge_checks.opus) };
   const r2 = { pooled_loss: below0(nc), opus_loss: below0(c.new_current_opus), sol_loss: below0(c.new_current_sol), kept_whole_harm: kw.state === "broken", builder_right_call_loss: brc.state === "broken", guardrail_broken: g.broken };
   const row4 = nc.estimate !== null && nc.lo !== null && ge(nc.estimate, DECISION.bar) && gt(nc.lo, 0);
   const row5 = nc.estimate !== null && nc.lo !== null && nc.hi !== null && lt(nc.estimate, DECISION.bar) && (gt(nc.lo, 0) || lt(nc.hi, DECISION.bar));
   const above = {
-    row1: { holds: r1.admission !== "admitted" || r1.cap_stop || r1.missing_limit || r1.judge_check_failed, ...r1 },
+    row1: { holds: r1.admission !== "admitted" || r1.stops.length > 0 || r1.missing_limit || r1.judge_check_failed, ...r1 },
     row2: { holds: Object.values(r2).some(Boolean), ...r2 },
     row3: { holds: below0(c.new_none), hi: c.new_none.hi },
     row4: { holds: row4, estimate: nc.estimate, lo: nc.lo, bar: DECISION.bar },

@@ -22,6 +22,8 @@ import { gitReader, loadScreen } from "./author/screens.ts";
 import { GOLD_EFFORT, JUDGE_EFFORT, REUSE_PLAINTEXT_SHA256, SEED } from "./frozen.ts";
 import { admission, admissionState, type AdmissionReading } from "./read/admission.ts";
 import { decide } from "./read/decision.ts";
+import { authoringEnd, readStops } from "./read/stops.ts";
+import { SPLIT } from "./ledger.ts";
 import type { HandRead } from "./read/guards.ts";
 import { leadTable, rates } from "./read/report.ts";
 import { rowsCommand, runCommand } from "./run/cli.ts";
@@ -294,7 +296,7 @@ async function judgeCheckCommand(argv: string[], io: Io, env: Env): Promise<numb
 
 const READ_USAGE = [
   "gstack-evals ohr read admission --scored <stage 1 scored.json> --launch <stage 1 out dir>... --audit <audit record.json> --judge-check <check.json> --label-usd <dollars a session> --out <new file> [--prior <earlier admission.json>]",
-  "gstack-evals ohr read decision --scored <stage 2 scored.json> --admission <admission.json>... --judge-check <check.json> --hand-reads <file> --out <new file> [--cap-stop]",
+  "gstack-evals ohr read decision --scored <stage 2 scored.json> --admission <admission.json>... --judge-check <check.json> --hand-reads <file> --launch <launch out dir>... --record <ledger record dir> --authoring <sealed authoring output> --identity <age identity file> --out <new file> [--cap-stop]",
   "gstack-evals ohr read report --scored <scored.json> --out <new file>",
 ].join("\n");
 
@@ -320,10 +322,13 @@ function read(argv: string[], io: Io): number {
     return state === "admitted" ? 0 : 2;
   }
   if (sub === "decision") {
-    const f = flags(rest, { one: ["--scored", "--judge-check", "--hand-reads", "--out"], many: ["--admission"], bool: ["--cap-stop"] });
-    need(f, "ohr read decision", ["--scored", "--admission", "--judge-check", "--hand-reads", "--out"]);
+    const f = flags(rest, { one: ["--scored", "--judge-check", "--hand-reads", "--record", "--authoring", "--identity", "--out"], many: ["--admission", "--launch"], bool: ["--cap-stop"] });
+    need(f, "ohr read decision", ["--scored", "--admission", "--judge-check", "--hand-reads", "--launch", "--record", "--authoring", "--identity", "--out"]);
     const out = fresh("--out", one(f, "--out")!);
-    const d = decide({ rows: readJson<ScoredSession[]>(outside("--scored", one(f, "--scored")!)), admission: admissionState(f.get("--admission")!.map((p) => readJson<AdmissionReading>(p))), cap_stop: f.has("--cap-stop"), judge_checks: passed(outside("--judge-check", one(f, "--judge-check")!)), hand_reads: readJson<HandRead[]>(outside("--hand-reads", one(f, "--hand-reads")!)) });
+    const authoring = authoringEnd(outside("--authoring", one(f, "--authoring")!), ageDecrypter(resolve(one(f, "--identity")!)));
+    const stops = readStops({ launches: f.get("--launch")!.map((d) => outside("--launch", d)), record: resolve(one(f, "--record")!), items: [...new Set(SPLIT.map((p) => p.item))], authoring, flag: f.has("--cap-stop") });
+    for (const s of stops) io.out("ohr read decision: row 1 stop: " + s);
+    const d = decide({ rows: readJson<ScoredSession[]>(outside("--scored", one(f, "--scored")!)), admission: admissionState(f.get("--admission")!.map((p) => readJson<AdmissionReading>(p))), stops, judge_checks: passed(outside("--judge-check", one(f, "--judge-check")!)), hand_reads: readJson<HandRead[]>(outside("--hand-reads", one(f, "--hand-reads")!)) });
     writeJson(out, d);
     io.out("ohr read decision: row " + d.row + ", " + d.outcome);
     return 0;

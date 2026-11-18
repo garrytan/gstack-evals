@@ -129,7 +129,7 @@ export async function scorePass(o: { out: string; briefsDir: string }): Promise<
     }
     check("admission takes the scored rows and the run rows, and refuses stage 1 without its 8 calibration briefs", /^E_OHR_READ_INPUT/.test(refused), refused.split("\n")[0] || "no refusal");
     const stage2 = scored.map((s) => ({ ...s, stage: 2 as const, set: "comparison" as const }));
-    const d = decide({ rows: stage2, admission: "admitted", cap_stop: false, judge_checks: { astra: false, opus: false }, hand_reads: stage2.filter((s) => s.arm === "new" && (s.kept_whole?.startup_only.length ?? 0) > 0).map((s) => ({ brief: s.brief, model: s.model, confirmed: false })) });
+    const d = decide({ rows: stage2, admission: "admitted", stops: [], judge_checks: { astra: false, opus: false }, hand_reads: stage2.filter((s) => s.arm === "new" && (s.kept_whole?.startup_only.length ?? 0) > 0).map((s) => ({ brief: s.brief, model: s.model, confirmed: false })) });
     check("the decision table reads the scored rows: row 1, INCOMPLETE, since the judge checks did not pass", d.row === 1 && d.outcome === "INCOMPLETE" && d.conditions.row1.judge_check_failed, "row " + d.row + " " + d.outcome + ", new minus current " + d.contrasts.new_current.estimate);
   } finally {
     rmSync(W, { recursive: true, force: true });

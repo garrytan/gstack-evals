@@ -3,14 +3,21 @@
 // wiki/plans/2026-11-17-geva-552-office-hours-rewrite-prereg, section 12 stage 1's dry run: every row of section 10 on
 // planted data, and every gate on planted known-good and known-bad cases). Each seam drives one frozen rule on one side
 // of its edge through this area's code, on invented rows that are never eval briefs. The fixture builders are exported
-// for tests/ohr/read.
+// for tests/ohr/read. The second attempt adds the stops.json read (its section 3, items 9 and 10): planted launch stops
+// and ledger records, read with no flag.
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { openLease, recordApproval, recordStop } from "../../../src/runner/ledger/ledger.ts";
 import { ARMS, MODELS, PRIMARY_MODELS } from "../frozen.ts";
+import { SPLIT } from "../ledger.ts";
 import type { ArmId, EndState, KeptWhole, ModelId, ScoredSession, Seam, SessionRow } from "../types.ts";
 import { admission, admissionState, type AdmissionId } from "./admission.ts";
 import { builderRightCall, keptWhole, type State } from "./builder.ts";
 import { decide, type Decision, type DecisionInput } from "./decision.ts";
 import { g1, g2, g3, missingLimits, type HandRead } from "./guards.ts";
 import { correctedNewcombe, newcombe, tInterval, type KeptPair } from "./stats.ts";
+import { readStops, type AuthoringEnd } from "./stops.ts";
 
 // ---- Fixtures ----
 
@@ -137,7 +144,7 @@ export interface Planted {
   builder?: Parameters<typeof builderRows>[0];
   reads?: HandRead[];
   admission?: DecisionInput["admission"];
-  cap_stop?: boolean;
+  stops?: string[];
   judge_checks?: DecisionInput["judge_checks"];
 }
 
@@ -163,10 +170,10 @@ export const PLANTED: Record<string, Planted> = {
   "harm-over-cut": { row: 2, also: [3, 5], founder: { R: by({ current: () => true, none: () => true }) } },
   "incomplete-unrepaired": { row: 1, also: [4], founder: { R: by(MERGE) }, admission: "repair" },
   "incomplete-fix-method": { row: 1, also: [4], founder: { R: by(MERGE) }, admission: "fix-method" },
-  "incomplete-cap-stop": { row: 1, also: [4], founder: { R: by(MERGE) }, cap_stop: true },
+  "incomplete-cap-stop": { row: 1, also: [4], founder: { R: by(MERGE) }, stops: ["ledger item ohr-s2-arms: CAP_STOP planted"] },
   "incomplete-missing-limit": { row: 1, also: [4], founder: { R: by(MERGE), end: (arm, j, m) => (arm === "none" && m === "opus" && j < 3 ? "contaminated" : undefined) } },
   "incomplete-judge-check": { row: 1, also: [4], founder: { R: by(MERGE) }, judge_checks: { astra: true, opus: false } },
-  "incomplete-over-harm": { row: 1, also: [2], founder: { R: by({ current: (c) => c < 8, new: (c) => c < 3 }) }, cap_stop: true },
+  "incomplete-over-harm": { row: 1, also: [2], founder: { R: by({ current: (c) => c < 8, new: (c) => c < 3 }) }, stops: ["ledger item ohr-s2-arms: CAP_STOP planted"] },
 };
 
 export function plant(name: string): DecisionInput {
@@ -175,7 +182,7 @@ export function plant(name: string): DecisionInput {
   return {
     rows: [...founderRows(p.founder), ...builderRows(p.builder ?? {})],
     admission: p.admission ?? "admitted",
-    cap_stop: p.cap_stop ?? false,
+    stops: p.stops ?? [],
     judge_checks: p.judge_checks ?? { astra: true, opus: true },
     hand_reads: p.reads ?? [],
   };
@@ -259,4 +266,41 @@ const admissionSeams: Seam[] = [
   }),
 ];
 
-export const seams: Seam[] = [...statSeams, ...rowSeams, ...gateSeams, ...admissionSeams];
+/** The lane's ledger items, each read for a recorded cap stop. */
+export const ITEMS = [...new Set(SPLIT.map((p) => p.item))];
+/** A planted stop record in a fresh temp folder: one launch's stops.json, and a ledger record whose named items each hold a cap stop. */
+export function plantStops(o: { launch: { code: string; message: string }[]; capped: readonly string[] }): { launch: string; record: string; done: () => void } {
+  const dir = mkdtempSync(join(tmpdir(), "ohr-stops-"));
+  const launch = join(dir, "launch");
+  mkdirSync(launch);
+  writeFileSync(join(launch, "stops.json"), JSON.stringify({ stops: o.launch, unrun: [] }) + "\n");
+  const record = join(dir, "record");
+  for (const item of o.capped) {
+    recordApproval(record, { action: "init", item, cap_micros: 1_000_000, quotes: [{ words: "a planted stop on a temporary ledger, not an approval", by: "lanes/office-hours-rewrite/read/seams.ts", source: "the second attempt's section 3, item 10" }], admission: "warn" });
+    recordStop(record, openLease(record, null, { item, run_id: "ohr-seam-" + item, amount_micros: 1_000_000 }).lease_id, item + ":planted");
+  }
+  return { launch, record, done: () => rmSync(dir, { recursive: true, force: true }) };
+}
+const FILLED: AuthoringEnd = { stopped: "quotas", full: true };
+const stopSeam = (name: string, o: { launch?: { code: string; message: string }[]; capped?: string[]; authoring?: AuthoringEnd; flag?: boolean }, want: { stops: number; row: 1 | 4 }) =>
+  seam("stops: " + name, () => {
+    const p = plantStops({ launch: o.launch ?? [], capped: o.capped ?? [] });
+    try {
+      const stops = readStops({ launches: [p.launch], record: p.record, items: ITEMS, authoring: o.authoring ?? FILLED, flag: o.flag ?? false });
+      const d = decide({ ...plant("merge"), stops });
+      return [stops.length === want.stops && d.row === want.row, "row " + d.row + "; " + (stops.join("; ") || "no stops")];
+    } finally {
+      p.done();
+    }
+  });
+const stopSeams: Seam[] = [
+  stopSeam("a CAP_STOP in a launch's stops.json reads row 1 with no flag", { launch: [{ code: "CAP_STOP", message: "s2-0042: the ledger refused the round" }] }, { stops: 1, row: 1 }),
+  stopSeam("a launch's stop that is not about money adds none, and MERGE stands", { launch: [{ code: "E_OHR_MODEL_DRIFT", message: "s2-0042: a reply named another model" }] }, { stops: 0, row: 4 }),
+  stopSeam("a ledger item's recorded cap stop reads row 1 with no flag", { capped: ["ohr-s2-arms"] }, { stops: 1, row: 1 }),
+  stopSeam("authoring's cap stop after all 88 calibration and comparison briefs were placed does not count", { capped: ["ohr-author"], authoring: { stopped: "cap", full: true } }, { stops: 0, row: 4 }),
+  stopSeam("authoring's cap stop before they were placed counts, from the ledger and from authoring's end", { capped: ["ohr-author"], authoring: { stopped: "cap", full: false } }, { stops: 2, row: 1 }),
+  stopSeam("authoring's projection stop reads row 1", { authoring: { stopped: "projection", full: false } }, { stops: 1, row: 1 }),
+  stopSeam("--cap-stop adds a stop", { flag: true }, { stops: 1, row: 1 }),
+];
+
+export const seams: Seam[] = [...statSeams, ...rowSeams, ...gateSeams, ...admissionSeams, ...stopSeams];

@@ -43,7 +43,11 @@ lease on one ledger item, the product-value meter and its metering proxy. The pr
 the Opus judge, the gold pass, the unanimous key and the simulator auditor, so wire.ts sends every "astra" request to the
 meter's "astra-6.2" key (openai/gpt-6.2-astra); the meter's "astra" key stays GPT-6 Astra for other lanes.
 
-Warning: `ohr read decision` learns of a cap stop only from its `--cap-stop` flag. It does not read a launch's stops.json, so never read a stage that stopped at its cap without `--cap-stop`. A rerun's build fixes this. It is the one review finding that pull request 368 defers.
+`ohr read decision` takes every cap stop from each launch's stops.json and from each ledger item's record, and reads
+authoring's end from the sealed authoring summary: an authoring cap stop after all 88 calibration and comparison
+briefs were placed ends authoring only, and any other authoring end before that reads INCOMPLETE. `--cap-stop` can add
+a stop but never remove one. This is the second attempt's fix for the one review finding that pull request 368
+deferred.
 
 ## The no-model preflight on a VM
 

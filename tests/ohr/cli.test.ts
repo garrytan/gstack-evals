@@ -76,6 +76,19 @@ describe("gstack-evals ohr", () => {
     expect(t.err.join("\n")).toContain("is not under /dev/shm");
   });
 
+  test("ohr read decision needs every launch, the ledger record and the sealed authoring output, so no cap stop is read from a flag alone", async () => {
+    const t = io();
+    expect(await main(["read", "decision", "--scored", "/dev/shm/s.json", "--admission", "/dev/shm/a.json", "--judge-check", "/dev/shm/c.json", "--hand-reads", "/dev/shm/h.json", "--out", "/dev/shm/ohr-never.json", "--cap-stop"], t.io, {})).toBe(2);
+    expect(t.err.join("\n")).toContain("ohr read decision needs --launch");
+    for (const flag of ["--record", "--authoring", "--identity"]) {
+      const u = io();
+      const argv = ["read", "decision", "--scored", "/dev/shm/s.json", "--admission", "/dev/shm/a.json", "--judge-check", "/dev/shm/c.json", "--hand-reads", "/dev/shm/h.json", "--launch", "/dev/shm/l", "--record", "/dev/shm/r", "--authoring", "/dev/shm/a.age", "--identity", "k", "--out", "/dev/shm/ohr-never.json"];
+      argv.splice(argv.indexOf(flag), 2);
+      expect(await main(argv, u.io, {})).toBe(2);
+      expect(u.err.join("\n")).toContain("ohr read decision needs " + flag);
+    }
+  });
+
   test("ohr author takes one of --reuse, for a new run, and --resume, for a stopped one, before it reads or spends", async () => {
     const base = ["author", "--work", "/dev/shm/ohr-w", "--out", "/dev/shm/ohr-never.age", "--recipients", "r", "--identity", "k", "--gstack", "g", "--item", "i", "--spend-cap", "1"];
     for (const extra of [[], ["--reuse", "/dev/shm/first.age", "--resume", "/dev/shm/c/checkpoint-000010.age"]]) {
