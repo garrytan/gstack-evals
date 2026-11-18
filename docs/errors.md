@@ -424,6 +424,26 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_OHR_PILOT_OPEN](#e_ohr_pilot_open) | 2 | U20 |
 | [E_OHR_SUPPLY_SHORT](#e_ohr_supply_short) | 2 | U20 |
 | [E_OHR_CUSTODY](#e_ohr_custody) | 2 | U20 |
+| [E_OHR_SIM_RULES](#e_ohr_sim_rules) | 2 | U20 |
+| [E_OHR_SIM_GUARD](#e_ohr_sim_guard) | 2 | U20 |
+| [E_OHR_SIM_CHECK](#e_ohr_sim_check) | 2 | U20 |
+| [E_OHR_SIM_CALL](#e_ohr_sim_call) | 2 | U20 |
+| [E_OHR_SIM_AUDIT](#e_ohr_sim_audit) | 2 | U20 |
+| [E_OHR_NO_READ](#e_ohr_no_read) | 2 | U20 |
+| [E_OHR_PIN_MISMATCH](#e_ohr_pin_mismatch) | 2 | U20 |
+| [E_OHR_NEW_PIN_UNSET](#e_ohr_new_pin_unset) | 2 | U20 |
+| [E_OHR_SAFETY_STOP](#e_ohr_safety_stop) | 2 | U20 |
+| [E_OHR_GSTACK_READ](#e_ohr_gstack_read) | 2 | U20 |
+| [E_OHR_NO_BLOCK](#e_ohr_no_block) | 2 | U20 |
+| [E_OHR_ARM_STOP](#e_ohr_arm_stop) | 2 | U20 |
+| [E_OHR_SESSION_KIND](#e_ohr_session_kind) | 2 | U20 |
+| [E_OHR_INFRA_MISSING](#e_ohr_infra_missing) | 2 | U20 |
+| [E_OHR_T8_SEED](#e_ohr_t8_seed) | 2 | U20 |
+| [E_OHR_MANIFEST](#e_ohr_manifest) | 2 | U20 |
+| [E_OHR_RESERVE](#e_ohr_reserve) | 2 | U20 |
+| [E_OHR_CAP_LINE](#e_ohr_cap_line) | 2 | U20 |
+| [E_OHR_BUILD_COMMIT](#e_ohr_build_commit) | 2 | U20 |
+| [E_OHR_E2E_FAIL](#e_ohr_e2e_fail) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -3252,6 +3272,166 @@ Office-hours rewrite eval (prereg section 3, Sealing): a custody path was refuse
 Fix: Pass a work directory under /dev/shm and a sealed output path outside the repository, or fix the age recipients file; then start a new run.
 
 Exit 2. Side effects: None when a path is refused. When sealing fails the plaintext work directory stays in /dev/shm: delete it before anything else. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OHR_SIM_RULES
+
+The office-hours rewrite eval's simulator rules text (pre-run change 1, item 4e) does not match frozen.SIM_RULES_SHA256 for the brief's kind, so no simulator call was sent.
+
+Fix: Restore sim-rules-founder.txt or sim-rules-builder.txt to the bytes pre-run change 1 attaches. Never edit the digest to match.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OHR_SIM_GUARD
+
+Office-hours rewrite eval (pre-run change 1, item 4b): a simulator turn still listed more than two revealed facts on its third model call. It is a guard failure: in an arm session the session takes its one retry and then scores missing; in the audit it counts as failed.
+
+Fix: Nothing to retry by hand. A high rate goes to the Captain with the failing turns.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_OHR_SIM_CHECK
+
+Office-hours rewrite eval (pre-run change 1, item 4b): a simulator turn failed the json, ids or words check on its third model call (a missing or non-boolean done fails the json check). In an arm session the session takes its one retry and then scores missing.
+
+Fix: Nothing to retry by hand. A high rate goes to the Captain with the failing checks.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_OHR_SIM_CALL
+
+Office-hours rewrite eval: a simulator call failed on the session's simulator allowance or at the provider. The session takes its one retry and then scores missing (section 8).
+
+Fix: Read the call's detail. A steady provider failure goes to the Captain.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_OHR_SIM_AUDIT
+
+Office-hours rewrite eval (section 12 stage 3, pre-run change 1, item 4b): the fixed-script simulator audit failed: more than 5% of audited turns were marked by both auditors or failed their guard or checks, or guard failures passed 5% of all script turns. Admission A3 fails.
+
+Fix: Make the one admission repair by a dated change to the plan, or end the eval with FIX-METHOD on the instrument.
+
+Exit 2. Side effects: The run finished and its spend is settled in the ledger. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_OHR_NO_READ
+
+Office-hours rewrite eval (section 12 stage 3): the fixed-script simulator audit has fewer than 40 auditable turns, so it reads NO READ and admission A3 fails.
+
+Fix: Take the counts to the Captain. Never rerun the audit to change the read.
+
+Exit 2. Side effects: The run finished and its spend is settled in the ledger. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_OHR_PIN_MISMATCH
+
+Office-hours rewrite eval (section 2, pre-run change 1, item 1): a skill arm's installed gstack tree does not hold the pin's VERSION or a file whose sha256 the pin freezes. The launch is refused, or, found inside a container, the launch halts.
+
+Fix: Install gstack at the pin's sha from a full clone under the state directory's sources/ and launch again. Never edit a pin to match a tree.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_OHR_NEW_PIN_UNSET
+
+Office-hours rewrite eval (pre-run change 1, items 1 and 6): the manifest holds a session on the new arm, and frozen.PINS.new is null until a later pre-run change pins the content change's ready head.
+
+Fix: Wait for the pre-run change that pins the new arm, then launch again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OHR_SAFETY_STOP
+
+Office-hours rewrite eval (section 8): the provider stopped the session with a safety filter (a main-agent reply with stop_reason refusal or content_filter, or Claude Code's model_refusal_no_fallback or model_refusal_fallback notice). The session scores R = 0 and is counted as its own outcome.
+
+Fix: Nothing to retry: a safety stop is a result. Report the count beside the verdict.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_OHR_GSTACK_READ
+
+Office-hours rewrite eval (section 8): a none-arm session's tool calls read a gstack file. The session is contaminated, scored missing and counted toward the 2% contamination limit.
+
+Fix: Nothing to retry. A rate past 2% makes the run INCOMPLETE.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_OHR_NO_BLOCK
+
+Office-hours rewrite eval (section 4 step 4): the replies to two closing messages held no DECISION, NEXT ACTION and WHY block. The session scores R = 0.
+
+Fix: Nothing to retry: no block is a result.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_OHR_ARM_STOP
+
+Office-hours rewrite eval: the arm's own limit (60 agent turns a reply, 120 minutes, the session allowance or the context window) stopped the session on its retry, before a block. The session scores as no block (R = 0).
+
+Fix: Nothing to retry: the arm's own stop is a result.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_OHR_SESSION_KIND
+
+Office-hours rewrite eval (section 4 step 2, admission A7): a skill session printed a SESSION_KIND other than interactive, a harness fault. The session takes its one retry and then scores missing.
+
+Fix: Check that the arm environment leaves GSTACK_SESSION_KIND, OPENCLAW_SESSION, GSTACK_HEADLESS, CI and GITHUB_ACTIONS unset.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_OHR_INFRA_MISSING
+
+Office-hours rewrite eval (section 8): an upstream, provider or harness failure ended the session after its one retry, or the ledger never admitted it. The session scores missing.
+
+Fix: Read the attempts in rows.ndjson. A steady failure goes to the Captain.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_OHR_T8_SEED
+
+Office-hours rewrite eval (section 4 step 6): a T8 brief's prior session cannot seed the skill arm's state root: prior.json is missing or malformed, or its test date falls after the session's UTC day.
+
+Fix: Fix the brief's prior.json in custody and record the brief's new digest. Never move the session's date.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_OHR_MANIFEST
+
+Office-hours rewrite eval (section 12 stages 4 and 5, pre-run change 1, item 5): the launch's manifest cannot freeze or does not match the one frozen in its out dir byte for byte (stage, models, arms, brief digests, pins, simulator rules digests, build commit or entries), or the briefs cannot fill the stage.
+
+Fix: Launch with the same briefs, pins and build commit, or start a new out dir after a dated change to the plan.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_OHR_RESERVE
+
+Office-hours rewrite eval (section 3): a dropped comparison brief cannot be replaced: a stage 2 session already ran on it, or no reserve of the same kind (a pair only by a pair) is left in draw order.
+
+Fix: Take the shortfall to the Captain with the MDD at the count that can fill.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OHR_CAP_LINE
+
+Office-hours rewrite eval (section 13, pre-run change 1, item 4a): the launch's arm and simulator spend caps together pass the frozen cap of its ledger line, or name a line the stage does not use.
+
+Fix: Pass caps whose sum fits the line in frozen.CAPS.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_OHR_BUILD_COMMIT
+
+Office-hours rewrite eval: the launch cannot name the build commit it runs (no git checkout, or tracked files changed since HEAD), so it cannot freeze a manifest that pins it.
+
+Fix: Commit or discard the change and launch from a clean checkout of the build commit.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_OHR_E2E_FAIL
+
+Office-hours rewrite eval: a check in the run area's keyless end to end failed. The message names each failed check.
+
+Fix: Read the FAIL lines, fix the code and run the end to end again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 
 ## Exit 3: calibration failed (INCOMPLETE)
 
