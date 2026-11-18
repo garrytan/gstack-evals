@@ -9,11 +9,15 @@
 //   stops.json holds a cap stop is refused: a cap stop is an incomplete run and is never resumed.
 // - At rig open each skill arm's installed tree must hold its pin's VERSION and every pinned file hash, or the launch
 //   is refused (E_OHR_PIN_MISMATCH); each session's container checks its own copy again when it stops.
-// - A round (one brief and model, its arms adjacent) starts only when twice each session's arm allowance fits what the
-//   arm item may still spend and twice the simulator allowance fits the simulator item; otherwise the launch cap-stops.
-//   A ledger cap stop inside a session does the same. Sessions already running finish, and no new one starts.
-// - Each session takes at most two attempts (one retry). An attempt's marker (attempt.json) is written before its
-//   launch, so a relaunch that finds a marker with no row counts that attempt as an unknown harness failure.
+// - A round (one brief and model, its arms adjacent) starts only when each session's arm allowance, once, fits what the
+//   arm item may still spend after the spend so far and the allowances held for attempts in flight, and the simulator
+//   allowance, once a session, fits the simulator item the same way (roundReserve; pre-run change 4); otherwise the
+//   launch cap-stops. A ledger cap stop inside a session does the same. Sessions already running finish, and no new one
+//   starts.
+// - Each session takes at most two attempts (one retry). The retry runs only when its arm and simulator allowances
+//   still fit what the launch has left; otherwise the session ends as a cap stop and the launch stops (pre-run change 4).
+//   An attempt's marker (attempt.json) is written before its launch, so a relaunch that finds a marker with no row counts
+//   that attempt as an unknown harness failure.
 // - dockerLaunch is one attempt: a proxy slot at the session's allowance, the arm's sandbox wrapped by the probe (env
 //   names, the ARM_ENV_UNSET names, mounts, egress, and on skill arms the container's pin check), a fresh work repo with
 //   no instruction file (seeded on a skill arm of a T8 brief), the driver with the claude-code-preset system prompt,
@@ -60,6 +64,11 @@ export const ALLOWANCES: Allowances = { arm: { none: ALLOWANCE.none, current: AL
 const D = 1_000_000;
 const armMicros = (a: Allowances, e: ManifestEntry) => Math.round(a.arm[e.arm][e.model] * D);
 const simMicros = (a: Allowances) => Math.round(a.sim * D);
+
+/** What a round holds before it starts, in micros: each session's arm allowance and the simulator allowance, once each (pre-run change 4). */
+export function roundReserve(a: Allowances, round: readonly ManifestEntry[]): { arms: number; sim: number } {
+  return { arms: round.reduce((s, e) => s + armMicros(a, e), 0), sim: round.length * simMicros(a) };
+}
 
 /** One attempt's simulator call and its settled spend. */
 export interface SimSlot {
@@ -268,12 +277,18 @@ export async function runLaunch(o: RunInput, deps: RunDeps): Promise<RunResult> 
   const rig = await deps.openRig();
   if (rig.recovery) writeFileSync(join(o.out, "rig.json"), JSON.stringify(rig.recovery, null, 2) + "\n");
   let halted = false;
+  const held = { arms: 0, sim: 0 };
+  const fits = (arms: number, sim: number) => result.spent_micros + held.arms + arms <= o.cap && result.sim_micros + held.sim + sim <= o.simCap;
+  const hold = (e: ManifestEntry, sign: 1 | -1) => {
+    held.arms += sign * armMicros(o.allowances, e);
+    held.sim += sign * simMicros(o.allowances);
+  };
   try {
     const trees = manifest.arms.filter(isSkillArm).flatMap((a) => (deps.treeProblems ?? hostTree)(rig, a, o.pins[a]!).map((p) => a + ": " + p));
     if (trees.length) throw new Error("E_OHR_PIN_MISMATCH the installed gstack trees are not the pins: " + trees.join("; "));
     const session = async (e: ManifestEntry): Promise<void> => {
       const id = entryId(e);
-      if (halted) return;
+      if (halted) return hold(e, -1);
       const b = meta.get(e.brief)!;
       const dir = join(o.briefsDir, e.brief);
       const sheet = loadPerson(dir, b.kind);
@@ -282,6 +297,15 @@ export async function runLaunch(o: RunInput, deps: RunDeps): Promise<RunResult> 
       const records: RowLine["attempts"] = [];
       let end: Outcome | null = null;
       for (let attempt = 1; attempt <= 2 && !end; attempt++) {
+        if (attempt === 2) {
+          if (!fits(armMicros(o.allowances, e), simMicros(o.allowances))) {
+            halted = true;
+            result.stops.push({ code: "CAP_STOP", message: id + ": its retry's allowances (" + usd(armMicros(o.allowances, e)) + " arms, " + usd(simMicros(o.allowances)) + " simulator) do not fit what this launch has left (" + usd(o.cap - result.spent_micros - held.arms) + " and " + usd(o.simCap - result.sim_micros - held.sim) + ")" });
+            result.unrun.push({ id, how: "stopped" });
+            return;
+          }
+          hold(e, 1);
+        }
         const adir = join(o.out, "sessions", id, "a" + attempt);
         let read: AttemptRead;
         if (existsSync(join(adir, "attempt.json"))) {
@@ -296,6 +320,7 @@ export async function runLaunch(o: RunInput, deps: RunDeps): Promise<RunResult> 
           const got = await launch({ rig, policy: o.policy, entry: e, attempt, dir: adir, prompt, nextUser: loop.nextUser, allowanceMicros: armMicros(o.allowances, e), runId: o.runId, docker: o.docker, pin: isSkillArm(e.arm) ? o.pins[e.arm] : null, prior: isSkillArm(e.arm) ? priors.get(e.brief) ?? null : null, day: o.day });
           read = { ...got, loop: loop.state, sim_micros: slot.spent() };
         }
+        hold(e, -1);
         result.spent_micros += read.micros;
         result.sim_micros += read.sim_micros;
         attempts.push(read);
@@ -330,12 +355,12 @@ export async function runLaunch(o: RunInput, deps: RunDeps): Promise<RunResult> 
     for (let i = 0; i < rounds.length && !halted; i++) {
       const round = rounds[i]!.filter((e) => !done.has(entryId(e)));
       if (!round.length) continue;
-      const worst = round.reduce((s, e) => s + 2 * armMicros(o.allowances, e), 0);
-      const simWorst = round.length * 2 * simMicros(o.allowances);
-      if (result.spent_micros + worst > o.cap || result.sim_micros + simWorst > o.simCap) {
-        result.stops.push({ code: "CAP_STOP", message: "round " + (i + 1) + "'s worst case (" + usd(worst) + " arms, " + usd(simWorst) + " simulator) does not fit what this launch may still spend (" + usd(o.cap - result.spent_micros) + " and " + usd(o.simCap - result.sim_micros) + ")" });
+      const reserve = roundReserve(o.allowances, round);
+      if (!fits(reserve.arms, reserve.sim)) {
+        result.stops.push({ code: "CAP_STOP", message: "round " + (i + 1) + "'s reservation, one attempt a session (" + usd(reserve.arms) + " arms, " + usd(reserve.sim) + " simulator), does not fit what this launch may still spend (" + usd(o.cap - result.spent_micros) + " and " + usd(o.simCap - result.sim_micros) + ")" });
         break;
       }
+      for (const e of round) hold(e, 1);
       await pool(Math.min(o.parallel, round.length), round.map((e) => () => session(e)));
     }
     const seen = new Set([...done.keys(), ...result.rows.map((r) => r.id), ...result.unrun.map((u) => u.id)]);
