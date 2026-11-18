@@ -1,0 +1,48 @@
+$ b1c power
+B1b hook rows as published: 58 of 60 loaded; margin 15 points
+true rate	matches	middle	clearly loses
+1.000	1.000	0.000	0.000
+0.967	0.958	0.042	0.000
+0.950	0.836	0.164	0.000
+0.933	0.651	0.349	0.000
+0.900	0.298	0.702	0.000
+0.850	0.051	0.948	0.001
+0.800	0.005	0.978	0.017
+0.750	0.000	0.877	0.123
+0.700	0.000	0.612	0.388
+0.650	0.000	0.296	0.704
+0.600	0.000	0.093	0.907
+0.500	0.000	0.002	0.998
+0.333	0.000	0.000	1.000
+matches with 80% power from a true rate of 94.7% (2.0 points under the hook's observed rate)
+clearly loses with 80% power from a true rate of 63.0% down (a shortfall of 33.7 points)
+observed loads, with the project block also missing the hook's 2 misses	difference [95% interval]	band
+58	+0.0 [-6.4, +6.4]	matches
+57	-1.7 [-9.2, +5.0]	matches
+56	-3.3 [-11.6, +3.6]	matches
+55	-5.0 [-13.9, +2.3]	matches
+54	-6.7 [-16.1, +1.0]	middle
+53	-8.3 [-18.2, -0.3]	middle
+52	-10.0 [-20.3, -1.6]	middle
+51	-11.7 [-22.3, -2.9]	middle
+50	-13.3 [-24.2, -4.2]	middle
+49	-15.0 [-26.2, -5.5]	middle
+48	-16.7 [-28.1, -6.8]	middle
+47	-18.3 [-29.9, -8.1]	middle
+46	-20.0 [-31.8, -9.5]	middle
+45	-21.7 [-33.6, -10.8]	middle
+44	-23.3 [-35.4, -12.2]	middle
+43	-25.0 [-37.2, -13.6]	middle
+42	-26.7 [-39.0, -15.0]	middle
+41	-28.3 [-40.7, -16.4]	clearly loses
+40	-30.0 [-42.4, -17.8]	clearly loses
+39	-31.7 [-44.2, -19.2]	clearly loses
+38	-33.3 [-45.9, -20.7]	clearly loses
+37	-35.0 [-47.5, -22.1]	clearly loses
+36	-36.7 [-49.2, -23.6]	clearly loses
+35	-38.3 [-50.9, -25.1]	clearly loses
+34	-40.0 [-52.5, -26.6]	clearly loses
+33	-41.7 [-54.1, -28.1]	clearly loses
+32	-43.3 [-55.8, -29.6]	clearly loses
+31	-45.0 [-57.4, -31.1]	clearly loses
+30	-46.7 [-58.9, -32.6]	clearly loses

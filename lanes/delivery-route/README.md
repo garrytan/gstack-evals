@@ -101,6 +101,36 @@ bun lanes/delivery-route/cli.ts b1b report <table.jsonl> [--out <dir>]
 
 The launcher commands are L1's under B1b's profile: host root ~/b1b, ledger port 9948, ARMS holding claude-md.tar and hook.tar. The launch guard reads B1B_LEDGERS and B1B_CREW the way B1's reads B1_LEDGERS and B1_CREW, and also refuses when the run commit's harness differs from B1's (`b1b reuse`). `routes` needs bun and an export holding each task's instruction.md; `sessions run` needs Docker and the hm-session image, as B1's does. Neither makes a model call.
 
+## B1c: the routing block in the project CLAUDE.md
+
+B1c runs B1b's claude-md arm with one change: the routing block sits in the task's project CLAUDE.md (/testbed/CLAUDE.md), placed and committed the way gstack's project install writes it, instead of in the user's CLAUDE.md. One arm, project-md, on Opus 5.5. B1b's hook and claude-md arms are read from B1b's published rows as controls, and B1's none arm as the no-gstack arm. The primary is whether the skill loaded, paired against B1b's hook arm with a 15-point margin. The plan, the decision table and the frozen numbers are in [its preregistration](../../wiki/plans/2026-11-18-capy-b1c-project-route-prereg/README.md). B1's and B1b's files stay as merged; table.ts reads B1c's arm name.
+
+The arm reaches the project through the rig's one pre-session command at the working directory (`checks_trust=true`, laneb_hooks.py CHECKS_TRUST, unchanged): its tar carries the block and arms/b1c/place-block at that command's path, and the script creates /testbed/CLAUDE.md, commits it with gstack's message and removes itself before the session starts.
+
+| File | What it does |
+|---|---|
+| b1c-pins.ts | Frozen values: the arm and its spec, the placement (paths, gstack's message and install lines, the block's digest), the items, caps, all-in stop and margin, and B1b's run whose arms are the controls |
+| arms/b1c/place-block | The placement script the arm's tar carries |
+| b1c.ts | The tar and manifest (quick/laneb/arms/manifests/b1c), the plan, caps and launch guard, the controls' reuse check, the session rows (placed, loaded, why not), the report with its band, the power table and three keyless scripted sessions |
+
+```
+bun lanes/delivery-route/cli.ts b1c arms sources --gstack <checkout at B1b's gstack pin>
+bun lanes/delivery-route/cli.ts b1c arms build [--out <dir>] [--manifest]
+bun lanes/delivery-route/cli.ts b1c arms check
+bun lanes/delivery-route/cli.ts b1c sessions run --out <dir> [--cut tests/delivery-route/fixtures/b1c-sessions]
+bun lanes/delivery-route/cli.ts b1c plan | power | reuse [--head <commit>]
+bun lanes/delivery-route/cli.ts b1c approve --ledger <jsonl> --item <item> --usd <cap> --approved-by <who>
+bun lanes/delivery-route/cli.ts b1c prepare <work> --item <item>
+bun lanes/delivery-route/cli.ts b1c host-up|attach|recover|host-down <work>
+bun lanes/delivery-route/cli.ts b1c launch|relaunch|rerun <work> --part <part>
+bun lanes/delivery-route/cli.ts b1c guard <work>
+bun lanes/delivery-route/cli.ts b1c done --ledger <jsonl> --item <item>
+bun lanes/delivery-route/cli.ts b1c table <config.json> <out.jsonl>
+bun lanes/delivery-route/cli.ts b1c report <table.jsonl> [--out <dir>]
+```
+
+The launcher commands are L1's under B1c's profile: host root ~/b1c, ledger port 9949, ARMS holding project-md.tar. The launch guard reads B1C_LEDGERS and B1C_CREW the way B1b's reads its pair, and refuses when the run commit's or the checkout's harness differs from B1b's run or B1's (`b1c reuse`) or the checkout holds uncommitted changes to those paths. `sessions run` needs Docker and the hm-session image, as B1b's does, and makes no model call.
+
 ## Credits
 
 The Prove-It steps, the /test front matter and the test-driven-development description are from [agent-skills](https://github.com/addyosmani/agent-skills) by Addy Osmani (MIT). The gstack-shaped setup text is gstack's own /verify setup. B1b's routing block and prompt-routing hook are gstack's own, at bbf48aa7ef19. NOTICE.md has the rows.
