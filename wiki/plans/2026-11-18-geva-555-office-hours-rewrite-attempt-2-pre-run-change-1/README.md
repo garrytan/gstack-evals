@@ -1,8 +1,8 @@
 ---
 id: 2026-11-18-geva-555-office-hours-rewrite-attempt-2-pre-run-change-1
 kind: plan
-title: "Pre-run change 1 to the second office-hours rewrite eval: no projection stop, agent use checked after the last item opens, halts that resume, resume after a lost meter, and the build"
-summary: "Drops authoring's projection stop, which at a bound of 30 cost verdicts; checks agent use at every phase; a money stop is final and a drift or lease halt resumes; names the build and ledger split."
+title: "Pre-run change 1 to the second office-hours rewrite eval: no projection stop, agent use checked after the last item opens, halts that resume, resume after a lost meter, guards on stops and custody, and the build"
+summary: "Drops authoring's projection stop, which cost verdicts at a bound of 30; checks agent use at each phase; makes a money stop final; guards resumes and custody; names the build and ledger split."
 author: GEVA-555
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
@@ -23,7 +23,8 @@ links:
 - Agent use is read at every phase. Once the last paid item has opened, if agent use would push the all-in past $2,737, the eval stops there and is written up as INCOMPLETE.
 - A money stop is final. A provider drift, a model drift, the empty-reply bound, a closed lease or a lost machine halts a run without a verdict; after a dated fix, each with one advisory read, the run resumes from its sealed log.
 - A resume works when the machine lost its meter folder.
-- Every paid run runs at the commit that adds this post. Its code is the build commit b83e0a86d5660ba2c1c42901b16b9d7e1d8c2239.
+- Seven guards close holes that an advisory read and the build's own tests found: a cap stop can't be resumed, a resume can't move to another ledger item or overlap a live run, calls of unknown outcome count as spent, and no plaintext or sealed recovery copy can land in the wrong place.
+- Every paid run runs at the commit on the results branch that last changes this post. Its code is the build commit 5ad03c2a38bb6eeb2d655c874612885a9df8f700.
 
 This change governs where it and the plan differ. It changes no arm, model, judge, measure, threshold, admission condition or item cap, and no decision row except row 1 as section 1 says. The eval's owner made calls A to C below on 2026-11-18, before any paid call.
 
@@ -69,9 +70,24 @@ A machine that dies or sleeps empties its memory-backed storage, and with it the
 
 Drafts in flight at the loss are paid once more, because their replies went with the cache. If the local ledger file is lost too, a new lease stays refused until the dead lease is reconciled. The test kills a run between a sealed draft record and the next batch seal, deletes its meter folder, resumes at another concurrency on a fake provider and a temporary ledger, and asserts that no sealed draft is requested again, that the item never passes its cap and that the resumed run's committed spend equals the ledger's.
 
-## 6. The build, the ledger split and the checks
+## 6. Guards on stops, resumes and custody
 
-**Build commit.** b83e0a86d5660ba2c1c42901b16b9d7e1d8c2239 on the results branch, which adds sections 3 to 5 of the plan, the decision read of its section 3, item 10, and sections 1 and 5 of this change, each with a test that fails before it.
+One advisory read of sections 1 and 5 found six holes in that code. Each is fixed with a test that fails before the fix:
+
+1. **A cap stop can't be resumed.** If a batch hits a cap stop and another stop at once, the run ends on the cap stop and records every stop code. The run writes a checkpoint before each batch and one at the end that records how it stopped, and a resume refuses a run that ended on a cap stop. The ledger closes that lease as a cap stop and opens no later lease on the item. Before, a resume could spend room that a draft freed by settling below its reservation, and an earlier drift in the same batch could hide the cap stop.
+2. **A resume stays on its ledger item.** Every checkpoint records its item, and a resume refuses any other. Before, a resume on another approved item would have started its committed spend at zero.
+3. **Calls of unknown outcome count as spent.** When a request went out and its reply broke or carried no usage, this launch's spend counts it at its reservation, as the ledger commits it at close. Batch sizing and the projection's room count it too. Before, both left it out, though the ledger's own reservation check still held the item cap.
+4. **A resume can't overlap a live run.** The author holds a lock on its checkpoints folder for as long as it runs, and a resume takes the same lock before it reads the sealed log or takes a lease, and refuses while it's held. Before, a resume could pay again for a draft that the live run sealed in between.
+5. **Custody checks follow links.** The work, meter and decrypt folders are checked by where their nearest existing parent really resolves, so a path under /dev/shm that links to disk is refused.
+6. **The sealed output stays off memory-backed storage.** An output under /dev/shm, by its path or through a link, is refused, so the checkpoints beside it survive the reboot that section 5 handles.
+
+The build's own tests found a seventh: when decrypting a sealed file fails partway, the decrypt folder is now deleted before the error surfaces. Before, a truncated sealed file left part of its plaintext in /dev/shm.
+
+None of the seven changes an arm, model, judge, measure, threshold, cap or decision row. They get no further advisory read, and the results pull request's review reads them.
+
+## 7. The build, the ledger split and the checks
+
+**Build commit.** 5ad03c2a38bb6eeb2d655c874612885a9df8f700 on the results branch, which adds sections 3 to 5 of the plan, the decision read of its section 3, item 10, and sections 1, 5 and 6 of this change, each with a test that fails before it.
 
 **Other build choices.**
 - A run stops after 10,000 drafts, and a slot stops before its 1,000th first-twin or unpaired draft, so draw numbers never reach the next slot's. At a bound of 30, $409 buys more drafts than the first attempt's limit of 1,000 allowed.
@@ -89,7 +105,7 @@ Drafts in flight at the loss are paid once more, because their replies went with
 | 6 Stage 2, particle-1 | $130 | ohr-s2p-arms $77, ohr-s2p-sim $32, ohr-s2p-labels $21 |
 | 7 Hosts | $19 | ohr-hosts $19 |
 
-**Checks at the build commit.** bun test tests/ohr gives 540 pass, 8 skip and 0 fail; typecheck, errors:check and wiki:check are clean; ohr dryrun gives 314 PASS, 0 FAIL and 0 SKIP. The no-model preflight passed on a fresh runner VM with no model key (8 vCPUs, about 10 VM-minutes, destroyed afterwards): 6 PASS and 0 FAIL, covering both pins' commits, VERSION and every frozen file hash, Docker, the dry run, and the keyless end to end with its scoring pass (46 PASS).
+**Checks at the build commit.** bun test tests/ohr gives 550 pass, 8 skip and 0 fail; typecheck, errors:check and wiki:check are clean; ohr dryrun gives 314 PASS, 0 FAIL and 0 SKIP. CI runs the whole suite at the commit that last changes this post, and a paid run is admitted only on that green run. The no-model preflight passed at b83e0a86d5660ba2c1c42901b16b9d7e1d8c2239 on a fresh runner VM with no model key (8 vCPUs, about 10 VM-minutes, destroyed afterwards): 6 PASS and 0 FAIL, covering both pins' commits, VERSION and every frozen file hash, Docker, the dry run, and the keyless end to end with its scoring pass (46 PASS). The guards in section 6 change no pin, Docker file or frozen file, so it was not run again.
 
 **Model and provider terms.** The first attempt's dated re-read (its pre-run change 3, 2026-11-18) covers the same models and providers on the same date, and holds.
 
