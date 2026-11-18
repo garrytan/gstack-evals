@@ -348,8 +348,11 @@ export async function runSchedule<C>(o: RunInput & { entries: ManifestEntry[] },
     const ran = new Set([...done.keys(), ...result.rows.map((r) => r.id), ...result.unrun.map((u) => u.id)]);
     result.unrun.push(...entries.map(entryId).filter((id) => !ran.has(id)).map((id) => ({ id, how: "unstarted" as const })));
   } finally {
-    result.closed = await rig.close();
-    writeFileSync(stopsFile, JSON.stringify({ stops: result.stops, unrun: result.unrun, ...(earlier.length ? { earlier } : {}), ...(o.cell === "stage2" ? { interim: result.interim } : {}) }, null, 2) + "\n");
+    try {
+      result.closed = await rig.close();
+    } finally {
+      writeFileSync(stopsFile, JSON.stringify({ stops: result.stops, unrun: result.unrun, ...(earlier.length ? { earlier } : {}), ...(o.cell === "stage2" ? { interim: result.interim } : {}) }, null, 2) + "\n");
+    }
   }
   return result;
 }

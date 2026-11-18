@@ -2,7 +2,8 @@
 // Value: protects=the run loop's records and stops: every ended session writes one row that parses and holds together, a cap stop writes no row and starts nothing more, a halt writes its row as missing and stops the launch, and a resumed launch reconciles an attempt that has a marker and no row as an infrastructure failure before its retry; fails_when=a cap-stopped session gets a row or a retry, a halt lets new sessions start, or a crashed attempt is run again from scratch or forgotten; why_new=the run area's run loop; seam=runSchedule with a scripted launch, readRows, rowProblems, rowsReport; no_claim=the Docker launch, which the e2e covers
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { BLOCK_REPLY, scriptedRun } from "../../../lanes/office-hours-founder/run/seams.ts";
 import { contentDigest, readManifest, type Manifest } from "../../../lanes/office-hours-founder/run/manifest.ts";
@@ -63,6 +64,14 @@ describe("stops", () => {
     const stops = readFileSync(join(first.out, "stops.json"), "utf8");
     await expect(scriptedRun({ entries: all(["none"]), units: 3, scripts: new Map(), out: first.out })).rejects.toThrow(/E_USAGE .*cap stop/);
     expect(readFileSync(join(first.out, "stops.json"), "utf8")).toBe(stops);
+  });
+
+  test("a cap stop survives a rig.close() that throws: stops.json keeps CAP_STOP and a relaunch is refused", async () => {
+    const out = join(mkdtempSync(join(tmpdir(), "of-run-close-")), "out");
+    const scripts = new Map([["fixture-calibration-1/none", [{ replies: [["Q?"]], termination: { kind: "cap_stop" } as never }]]]);
+    await expect(scriptedRun({ entries: all(["none"]), units: 2, scripts, out, close: async () => { throw new Error("E_INTERNAL the proxy would not stop"); } })).rejects.toThrow("the proxy would not stop");
+    expect(JSON.parse(readFileSync(join(out, "stops.json"), "utf8")).stops.map((s: { code: string }) => s.code)).toEqual(["CAP_STOP"]);
+    await expect(scriptedRun({ entries: all(["none"]), units: 2, scripts: new Map(), out })).rejects.toThrow(/E_USAGE .*cap stop/);
   });
 
   test("a launch after a halt keeps the halt in stops.json under earlier", async () => {

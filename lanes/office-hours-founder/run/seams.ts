@@ -78,12 +78,12 @@ export function fixtureUnits(dir: string, n: number, set: UnitMeta["set"] = "cal
 export const fixtureFounder = (fail?: FounderResult) => async (): Promise<FounderResult> => fail ?? { kind: "reply", reply: "Six members asked for it.", revealed: ["f1"], rules: [3], attempts: 1 };
 
 /** runSchedule on fixture units with a scripted launch, a stand-in rig and the stand-in simulator. */
-export async function scriptedRun(o: { entries: (ids: string[]) => ManifestEntry[]; scripts: Map<string, ScriptedAttempt[]>; units?: number; founder?: FounderResult; cap?: number; openRig?: (out: string) => void; out?: string; cell?: Cell; exposed?: (id: string) => boolean | null; simRules?: string }): Promise<{ run: RunResult; calls: string[]; out: string; ids: string[] }> {
+export async function scriptedRun(o: { entries: (ids: string[]) => ManifestEntry[]; scripts: Map<string, ScriptedAttempt[]>; units?: number; founder?: FounderResult; cap?: number; openRig?: (out: string) => void; out?: string; cell?: Cell; exposed?: (id: string) => boolean | null; simRules?: string; close?: HostRig["close"] }): Promise<{ run: RunResult; calls: string[]; out: string; ids: string[] }> {
   const root = mkdtempSync(join(tmpdir(), "of-run-seam-"));
   const ids = fixtureUnits(join(root, "units"), o.units ?? 2);
   const out = o.out ?? join(root, "out");
   const calls: string[] = [];
-  const rig = { recovery: null, close: async () => ({ committed: 0, unknown: 0, lease_id: null }) } as unknown as HostRig;
+  const rig = { recovery: null, close: o.close ?? (async () => ({ committed: 0, unknown: 0, lease_id: null })) } as unknown as HostRig;
   const run = await runSchedule({ cell: o.cell ?? "stage1", unitsDir: join(root, "units"), out, runId: "seam", models: ["opus"], arms: ["none", "lens", "office-hours"], repairs: [], simRules: o.simRules ?? rulesSha256(), allowances: PRE_SMOKE, cap: o.cap ?? 1000 * D, simCap: 1000 * D, parallel: 1, policy: loadPolicy(DEFAULT_POLICY) as LoadedPolicy, ledger: null, docker: "docker", log: () => {}, entries: o.entries(ids) }, {
     openRig: () => (o.openRig?.(out), rig),
     simSlot: () => ({ call: null, spent: () => 0 }),
