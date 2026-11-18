@@ -21,8 +21,8 @@ links:
   - lanes/office-hours-rewrite/
   - garrytan/gstack#4468
 attachments:
-  - ab362c855ae210e5e2e7d67ed254b60b7fa4f6f5872372be48c3c38d6d09ee71  sizing.py
-  - 469c36d974262cf72b0169beccfbab5bec7b0cde8a635ad954447829efbdd220  sizing.txt
+  - cbed977cd397138539a3df6c98e09c3eb1fb5b111b6205c8cc80a97811bfa1b6  sizing.py
+  - a079f191bb22f918a3c25811ce2c324590a4f63a59715d776508ff258b6d5070  sizing.txt
 ---
 
 # Preregistration, second attempt: does the rewritten office-hours skill make the right call more often than the current one?
@@ -32,7 +32,7 @@ attachments:
 - This eval decides whether gstack's office-hours content change (gstack pull request 4468, pinned at 4afa7f2b3e291758f6a7842dd066cde22606fca1) merges. MERGE lands it. Every other outcome keeps it held and sends the result back to the project owner.
 - It is the first attempt's eval at the smallest size that still answers the 15-point question: four skins of founder briefs (56 briefs in 32 opening clusters) and all 24 builder briefs, with the same arms, models, judges, decision table and thresholds. The pooled MDD is 0.14 to 0.15 (0.09 to 0.10 at the founder lane's other correlation).
 - At this size a rewrite that truly gains 15 points reads MERGE only about 0.46 of the time on the founder rows (0.46 in the first attempt's sizing, 0.48 here), and about 0.37 once the builder check is counted. A true 20-point gain reads MERGE on the founder rows about 0.82 of the time. So a HOLD below the bar here does not show that the rewrite gains less than 15 points.
-- The first attempt stopped during authoring with 19 of 110 briefs placed and lost $155 to restarts. This one reuses those 19 sealed briefs and changes how authoring draws: each slot's drafts no longer depend on concurrency, a run resumes from its own outcome log, a top-up twin gets at most 3 draws per partner, a pilot samples every brief type first, and authoring stops early when even an optimistic projection of its cost cannot fit its cap. The line is $2,737 all-in at caps, with no raise.
+- The first attempt stopped during authoring with 19 of 110 briefs placed and lost $155 to restarts. This one reuses those 19 sealed briefs and changes how authoring draws: each slot's drafts no longer depend on concurrency, a run resumes from its own outcome log, a top-up twin gets at most 30 draws per partner, a pilot samples every brief type first, and authoring stops early when even an optimistic projection of its cost cannot fit its cap. The line is $2,737 all-in at caps, with no raise.
 
 ## 1. The decision this result changes
 
@@ -69,7 +69,7 @@ Everything in the first preregistration (wiki/plans/2026-11-17-geva-552-office-h
 | 3 | Every brief authored in this eval | The 19 briefs the first attempt placed are reused (section 4) | They passed the same screens under the same prompts, and every check bound their digests. |
 | 4 | Draws numbered as made; slots picked first-open from a shuffled list | Each slot's drafts follow a fixed sequence that no concurrency or restart changes (section 5.1) | The first attempt lost $155.42 of $233.59 to restarts at new concurrencies. |
 | 5 | Placed briefs held in memory until the end | Every settled draft's record is sealed as it settles, the whole log after every batch, and a resume starts from them (section 5.2) | A stop loses at most the drafts in flight. |
-| 6 | No bound on top-up twins | At most 3 second-twin draws per partner; then the partner drops and its slot draws a new pair (section 5.3) | Two partners took 166 draws and never matched. |
+| 6 | No bound on top-up twins | At most 30 second-twin draws per partner; then the partner drops and its slot draws a new pair (section 5.3). The brief for this plan set the bound at 3; the eval's owner set it at 30 on 2026-11-18 | In the first attempt, matched partners matched on draws 1, 1, 1, 2, 19 and 26, and two partners never matched, after 46 and 120 draws. A bound of 3 would have thrown away the matches on draws 19 and 26, and a partner that never matches costs about $2.79 at 30 draws of $0.093. |
 | 7 | A pilot of pair slots only, read at 16 and 32 second-twin draws (pre-run change 1, item 4d) | A pilot that samples every pair type, T7, T8 and builders before the rest (section 5.4) | The pair-only pilot could not see unpaired supply, which turned out to be 7 of 82. |
 | 8 | A projection past the cap went to the Captain | An optimistic projection of the cost to fill calibration and comparison, at the pilot's end and after every batch; past the room left, authoring stops and the eval reads INCOMPLETE (section 5.5) | There is no raise on this eval, so a projection past the cap can only end in a cap stop. Stopping early spends less. |
 | 9 | Reserves drawn in the same order as everything else; any shortfall stopped the eval | Reserves are drawn after calibration and comparison are full. A cap stop on authoring after that ends authoring only, and the eval goes on with the reserves placed (section 5.6) | A short reserve set loses only replacements; a drop with no reserve left counts as missing under section 8's limits. |
@@ -127,7 +127,7 @@ Every settled draft goes to an outcome log, with its slot, role, numbers, author
 
 ### 5.3 Top-up twins
 
-A partner (a first twin that passed) gets at most 3 second-twin draws. When all 3 fail, the partner drops, its first twin is not placed, and its slot starts its next pair with a new first twin. A pair is placed only when both twins pass, and a partner still open when authoring ends drops, so pairs stay whole.
+A partner (a first twin that passed) gets at most 30 second-twin draws. When all 30 fail, the partner drops, its first twin is not placed, and its slot starts its next pair with a new first twin. A pair is placed only when both twins pass, and a partner still open when authoring ends drops, so pairs stay whole.
 
 ### 5.4 The pilot
 
@@ -136,15 +136,15 @@ After the 19 reused briefs are placed, the pilot draws on open calibration and c
 - for each pair type T1 to T6, its first two open slots, each until it has settled one partner (matched, or dropped at the bound) or drafted 3 first twins;
 - 8 drafts each of T7, T8 and builders, on that kind's open slots in seeded order, or fewer when the kind runs out of open slots.
 
-Pilot briefs that pass are placed like any other. At the first attempt's cost per draft the pilot costs about $31. It replaces pre-run change 1's pair-only pilot and its 16 and 32 draw reads.
+Pilot briefs that pass are placed like any other. At the first attempt's cost per draft and rates the pilot costs about $43 on average, and about $48 if T1 and T4 are hard by type (sizing.txt, Part D). It replaces pre-run change 1's pair-only pilot and its 16 and 32 draw reads.
 
 ### 5.5 The projection stop
 
 At the pilot's end, and after every later batch until calibration and comparison are full, the run projects the cost to place every open calibration and comparison slot. A slot with a partner waiting is costed as a fresh pair.
 
-- A pair of type t costs (c1 / f + m_t × D × c2 + (1 - m_t) × 3 × c2) / m_t, the first attempt's resize.py formula.
+- A pair of type t costs (c1 / f + m_t × D × c2 + (1 - m_t) × 30 × c2) / m_t, the first attempt's resize.py formula with its bound of 3 set to 30.
 - An unpaired brief of kind u (T7, T8 or builder) costs cu / y_u.
-- f is the first-twin pass rate over all pair types, m_t the share of type t's settled partners that matched within 3 draws, and y_u the pass rate of kind u. Each counts the first attempt's final path (resize.py, Part A, and the partners table in section 3 of the first attempt's results) plus this run, and enters at the 0.95 quantile of its Jeffreys posterior, Beta(k + 0.5, n - k + 0.5). So the projection is optimistic, and authoring stops only when even that cannot fit.
+- f is the first-twin pass rate over all pair types, m_t the share of type t's settled partners that matched within 30 draws, and y_u the pass rate of kind u. Each counts the first attempt's final path (resize.py's counts and partner list, and the partners table in section 3 of the first attempt's results) plus this run, and enters at the 0.95 quantile of its Jeffreys posterior, Beta(k + 0.5, n - k + 0.5). So the projection is optimistic, and authoring stops only when even that cannot fit.
 - D is the mean number of draws a matched partner took, over both attempts.
 - c1, c2 and cu are the first attempt's costs per draft ($0.887 a first twin, $0.093 a second twin and $0.545 an unpaired draft), scaled by this run's spend over what those figures predict for the drafts it has made.
 
@@ -154,10 +154,10 @@ Authoring stops when the projection passes the item's cap less its committed spe
 
 | Reading | With the stop | Without it |
 |---|---|---|
-| Hardness sits with half the partners, as measured | fills 0.992, stops falsely 0.008 | fills 0.999 |
-| T1 and T4 are hard by type | stops 0.985, after $270 on average | stops at the cap 0.946, after $406 |
+| Hardness sits with half the partners, as measured | fills 0.977, stops 0.024, after $282 on average | fills 0.999 |
+| T1 and T4 are hard by type | fills 0.655, stops 0.344, after $326 on average | fills 0.871, stops at the cap 0.129, after $406 |
 
-So when T1 and T4 are hard by type, as none of their three partners in the first attempt matched within 3 draws, the rule ends authoring about $136 sooner on average, and it stops about 1 run in 100 that would have filled. These shares come from a model of authoring, not from data, and the first projection at the first attempt's counts alone reads $113.56 against $350 of room.
+So at a bound of 30 the stop ends more runs than the cap would. When T1 and T4 are hard by type it stops about 1 run in 3, after $326 on average; without it, about 1 run in 5 more would fill, and 0.129 would stop at the cap after $406. At the measured rates it stops about 2 runs in 100 that would have filled. These shares come from a model of authoring, not from data, and the first projection at the first attempt's counts alone reads $127.52 against $337.83 of room after a $43.17 pilot.
 
 ### 5.6 Order and the end of authoring
 
@@ -206,7 +206,7 @@ After stage 1, power.py reruns at the observed control rates, as the first prere
 | 7 Hosts | runner VMs | $13.18 | $19 |
 | **Paid total** | | **$1,619.91** | **$2,347** |
 
-Agent use is planned at $390: the first attempt's planning figure of $350, plus the $40 line item its resize.py carries for harness fixes, which here pays for the changes in section 3. That gives $2,010 all-in at central and $2,737 at caps. Authoring's 95% range at the first attempt's yields is $175 to $762, so all-in at caps could run $2,593 to $3,385 if authoring were allowed past its cap. It is not: a cap stop ends its item. If T1 and T4 are hard by type, authoring alone needs about $395 more at central (resize.txt), which does not fit, and section 5.5 stops it early.
+Agent use is planned at $390: the first attempt's planning figure of $350, plus the $40 line item its resize.py carries for harness fixes, which here pays for the changes in section 3. That gives $2,010 all-in at central and $2,737 at caps. Authoring's 95% range at the first attempt's yields is $175 to $762, so all-in at caps could run $2,593 to $3,385 if authoring were allowed past its cap. It is not: a cap stop ends its item. resize.txt's authoring figures in this section assume a bound of 3. At this plan's bound of 30, a pair costs $3.48 at the first attempt's counts (resize.txt: $3.05 at 3), and a pair of a type whose every partner matches at 0.0095 a draw costs $15.13 (resize.txt: $56.92 at 3 and $11.10 with no bound; sizing.txt, Part D). Section 5.5's table gives the odds that authoring fills if T1 and T4 are hard by type. The caps do not change.
 
 **Agent use** counts every agent thread working on this eval and its subagents at the list-price meter, plus every paid call and every runner VM.
 
@@ -245,5 +245,5 @@ The results post leads with the first preregistration's section 11 table, pooled
 - The interval's coverage was simulated at 40 clusters in the first preregistration, not again at 32.
 - The 19 reused briefs came from the first attempt's draw path, which restarts changed. No brief was chosen by its outcome, and every one passed every screen.
 - T8 supply is unmeasured: the first attempt never drafted a T8 slot.
-- The bound of 3 saves money when hardness sits with some partners, and costs money when it sits with a whole type. The first attempt cannot tell which; the pilot and section 5.5 read it as the run goes.
+- The bound of 30 keeps late matches like the first attempt's on draws 19 and 26, and limits a partner that never matches to about $2.79. A tighter bound saves money only when hardness sits with single partners, and costs far more when it sits with a whole type. The first attempt cannot tell which; the pilot and section 5.5 read it as the run goes.
 - Section 5.5's shares come from a simple model of authoring: fixed pass rates, partners easy or hard by chance, and sequential batches.

@@ -30,17 +30,19 @@ for rho in (0.5, 0.843):
         row.append("d %.2f excludes zero %.3f MERGE %.3f" % (d, (lo > 0).mean(), ((m >= BAR - 1e-12) & (lo > 0)).mean()))
     print("rho %.3f | %s" % (rho, " | ".join(row)), flush=True)
 
-print("Part D. The projection stop (section 5.5): rates at the 0.95 quantile of their Jeffreys posterior; 2000 simulated authoring runs a row, sequential batches of 16, item cap $409")
+print("Part D. The projection stop (section 5.5): rates at the 0.95 quantile of their Jeffreys posterior; 2000 simulated authoring runs a row, sequential batches of 16, item cap $409, at most 30 second-twin draws a partner")
 # Still to place in calibration and comparison (section 4): pairs by type, then unpaired kinds.
 OPEN_PAIRS = {"T1": 4, "T2": 3, "T3": 3, "T4": 3, "T5": 4, "T6": 3}
 OPEN_UNPAIRED = {"T7": 3, "T8": 5, "builder": 21}
-# First attempt's final-path counts: first twins, settled partners within 3 draws by type, mean draws when matched, unpaired.
+# First attempt's final-path counts: first twins, settled partners matched within 30 draws by type (the two open T5
+# partners left out), draws when matched (1, 1, 1, 2, 19 and 26), unpaired.
 A1_FIRST = (10, 15)
-A1_PARTNERS = {"T1": (0, 1), "T2": (1, 1), "T3": (1, 1), "T4": (0, 2), "T5": (1, 1), "T6": (1, 2)}
-A1_D = (5, 4)
+A1_PARTNERS = {"T1": (0, 1), "T2": (1, 1), "T3": (1, 1), "T4": (1, 2), "T5": (1, 1), "T6": (2, 2)}
+A1_D = (50, 6)
 A1_UNPAIRED = {"T7": (2, 41), "T8": (0, 0), "builder": (5, 41)}
 C1, C2, CU = 0.887, 0.093, 0.545
 CAP, PAR, ALLOW, BATCH = 409.0, 8, 3.50, 16
+BOUND, HARD = 30, 0.0095
 from scipy import stats as S
 jm = lambda k, n: S.beta.ppf(0.95, k + 0.5, n - k + 0.5)
 
@@ -50,17 +52,21 @@ def projection(first, partners, dsum, unpaired, open_pairs, open_unpaired, scale
     cost = 0.0
     for t, n in open_pairs.items():
         m = jm(*partners[t])
-        cost += n * (C1 / f + m * d * C2 + (1 - m) * 3 * C2) / m
+        cost += n * (C1 / f + m * d * C2 + (1 - m) * BOUND * C2) / m
     for u, n in open_unpaired.items():
         cost += n * CU / jm(*unpaired[u])
     return cost * scale
 
+f0, m0, d0 = A1_FIRST[0] / A1_FIRST[1], sum(k for k, n in A1_PARTNERS.values()) / sum(n for k, n in A1_PARTNERS.values()), A1_D[0] / A1_D[1]
+print("pair at the first attempt's counts with plain shares (first twins %d of %d, partners matched within %d draws %d of %d, %.2f draws when matched): $%.2f a pair" % (A1_FIRST[0], A1_FIRST[1], BOUND, sum(k for k, n in A1_PARTNERS.values()), sum(n for k, n in A1_PARTNERS.values()), d0, (C1 / f0 + m0 * d0 * C2 + (1 - m0) * BOUND * C2) / m0))
+hard_cost = lambda b: (C1 / f0 + C2 * (1 - (1 - HARD) ** b) / HARD) / (1 - (1 - HARD) ** b)
+print("pair of a type whose every partner matches at %.4f a draw: %.4f within %d draws, $%.2f a pair; the same formula gives $%.2f at 3 draws and $%.2f with no bound" % (HARD, 1 - (1 - HARD) ** BOUND, BOUND, hard_cost(BOUND), hard_cost(3), C1 / f0 + C2 / HARD))
 a1_t8 = dict(A1_UNPAIRED, T8=A1_UNPAIRED["T7"])
-print("projection at the first attempt's counts alone, T8 planned at T7's counts: $%.2f, against room after a $31 pilot of $%.2f" % (projection(A1_FIRST, A1_PARTNERS, A1_D, a1_t8, OPEN_PAIRS, OPEN_UNPAIRED, 1.0), CAP - 31 - PAR * ALLOW))
 
 def simulate(hard_types, sims, rng, stop=True):
     out = {"filled": 0, "projection": 0, "cap": 0}
     spend_end = []
+    pilot = []
     for _ in range(sims):
         slots = [("pair", t) for t, n in OPEN_PAIRS.items() for _ in range(n)] + [("unpaired", u) for u, n in OPEN_UNPAIRED.items() for _ in range(n)]
         order = list(rng.permutation(len(slots)))
@@ -82,14 +88,14 @@ def simulate(hard_types, sims, rng, stop=True):
                 ok = rng.random() < 0.667
                 first[1] += 1; first[0] += ok
                 if ok:
-                    s["partner"] = 0.0095 if (t in hard_types or rng.random() < 0.5) else 0.8
+                    s["partner"] = HARD if (t in hard_types or rng.random() < 0.5) else 0.8
                     s["seconds"] = 0
                 return
             spent[0] += C2; predicted[0] += C2; s["seconds"] += 1
             if rng.random() < s["partner"]:
                 partners[t][0] += 1; partners[t][1] += 1; dsum[0] += s["seconds"]; dsum[1] += 1
                 s["placed"] = True; s["partner"] = None
-            elif s["seconds"] == 3:
+            elif s["seconds"] == BOUND:
                 partners[t][1] += 1; s["partner"] = None
         def open_counts():
             op = {t: 0 for t in OPEN_PAIRS}; ou = {u: 0 for u in OPEN_UNPAIRED}
@@ -114,6 +120,7 @@ def simulate(hard_types, sims, rng, stop=True):
                 for j in cands:
                     if made >= 8: break
                     draft(j); made += 1
+        pilot.append(spent[0])
         end = None
         while end is None:
             op, ou = open_counts()
@@ -129,9 +136,12 @@ def simulate(hard_types, sims, rng, stop=True):
                 draft(j)
         out[end] += 1
         spend_end.append((end, spent[0]))
-    return out, spend_end
+    return out, spend_end, sum(pilot) / sims
 
+pilots = []
 for name, hard, stop in (("first attempt's rates, with the stop", (), True), ("first attempt's rates, no stop", (), False), ("T1 and T4 hard by type, with the stop", ("T1", "T4"), True), ("T1 and T4 hard by type, no stop", ("T1", "T4"), False)):
-    out, se = simulate(hard, 2000, rng, stop)
+    out, se, pm = simulate(hard, 2000, rng, stop)
+    pilots.append(pm)
     def mean(end): xs = [s for e, s in se if e == end]; return ("$%.0f" % (sum(xs) / len(xs))) if xs else "none"
-    print("%-40s filled %.3f (mean spend %s)  projection stop %.3f (%s)  cap stop before full %.3f (%s)" % (name, out["filled"] / 2000, mean("filled"), out["projection"] / 2000, mean("projection"), out["cap"] / 2000, mean("cap")), flush=True)
+    print("%-40s pilot $%.0f  filled %.3f (mean spend %s)  projection stop %.3f (%s)  cap stop before full %.3f (%s)" % (name, pm, out["filled"] / 2000, mean("filled"), out["projection"] / 2000, mean("projection"), out["cap"] / 2000, mean("cap")), flush=True)
+print("projection at the first attempt's counts alone, T8 planned at T7's counts: $%.2f, against room after a $%.2f pilot (its mean at the first attempt's rates) of $%.2f" % (projection(A1_FIRST, A1_PARTNERS, A1_D, a1_t8, OPEN_PAIRS, OPEN_UNPAIRED, 1.0), pilots[0], CAP - pilots[0] - PAR * ALLOW))
