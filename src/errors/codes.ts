@@ -3724,6 +3724,15 @@ export const CODES = {
     resumable: true,
     owner: "U20",
   },
+  E_OHR_UNRUN: {
+    exit: 2,
+    meaning: "Office-hours rewrite eval (section 8): the launch's frozen manifest schedules a session that has no row in rows.ndjson, because a stop ended the launch before the session ran or the launch never finished. ohr score sessions scores it missing, so the missing limits count it.",
+    fix: "Read the launch's stops.json. A launch that ended in a cap stop is incomplete and is never resumed.",
+    side_effects: "None: the missing row exists only in the scored output.",
+    retry_safe: false,
+    resumable: false,
+    owner: "U20",
+  },
   E_OHR_T8_SEED: {
     exit: 2,
     meaning: "Office-hours rewrite eval (section 4 step 6): a T8 brief's prior session cannot seed the skill arm's state root: prior.json is missing or malformed, or its test date falls after the session's UTC day.",

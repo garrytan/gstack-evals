@@ -25,7 +25,7 @@ import type { HandRead } from "./read/guards.ts";
 import { leadTable, rates } from "./read/report.ts";
 import { rowsCommand, runCommand } from "./run/cli.ts";
 import { buildCommit, loadBriefs } from "./run/manifest.ts";
-import { readRows } from "./run/rows.ts";
+import { readRows, scheduledRows } from "./run/rows.ts";
 import { parseBlock } from "./score/block.ts";
 import { judgeCheck, type CheckResult } from "./score/check.ts";
 import { judgePackets, labeller, type JudgedLabel } from "./score/judge.ts";
@@ -202,7 +202,7 @@ async function score(argv: string[], io: Io, env: Env): Promise<number> {
     need(f, "ohr score sessions", ["--briefs-dir", "--launch", "--map", "--labels", "--out"]);
     const out = fresh("--out", one(f, "--out")!);
     const briefs = readBriefs(outside("--briefs-dir", one(f, "--briefs-dir")!));
-    const rows = launchRows(f.get("--launch")!.map((d) => outside("--launch", d)));
+    const rows = f.get("--launch")!.map((d) => outside("--launch", d)).flatMap(scheduledRows);
     const maps = f.get("--map")!.map((p) => readJson<PacketMap>(p));
     const labels = f.get("--labels")!.flatMap((p) => ndjson<JudgedLabel>(p));
     const scored = scoreSessions({ rows, briefs, maps, labels });

@@ -2,17 +2,20 @@
 // The rewrite eval's scorer (prereg section 5's R1 to R3, section 8's failure table, section 7's builder right call) and
 // pre-run change 1's delivered-replies rule for R1.
 import { afterAll, describe, expect, test } from "bun:test";
-import { rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SEED } from "../../../lanes/office-hours-rewrite/frozen.ts";
 import { BRIEFS, allRows, blockOf, row, stateRoot, stubCaller, transcript, turn } from "../../../lanes/office-hours-rewrite/score/fixtures.ts";
 import { judgePackets, type JudgedLabel } from "../../../lanes/office-hours-rewrite/score/judge.ts";
 import { buildLabelPackets } from "../../../lanes/office-hours-rewrite/score/packets.ts";
 import { combine, r1, scoreSessions, stockCredits } from "../../../lanes/office-hours-rewrite/score/score.ts";
-import { readBriefs } from "../../../lanes/office-hours-rewrite/cli.ts";
+import { main, readBriefs } from "../../../lanes/office-hours-rewrite/cli.ts";
+import { missingLimits } from "../../../lanes/office-hours-rewrite/read/guards.ts";
 import { readRows } from "../../../lanes/office-hours-rewrite/run/rows.ts";
 import { fixtureBriefs, scriptedRun } from "../../../lanes/office-hours-rewrite/run/seams.ts";
-import { loadBriefs } from "../../../lanes/office-hours-rewrite/run/manifest.ts";
+import { loadBriefs, readManifest } from "../../../lanes/office-hours-rewrite/run/manifest.ts";
+import type { ScoredSession } from "../../../lanes/office-hours-rewrite/types.ts";
 import type { SessionRow } from "../../../lanes/office-hours-rewrite/types.ts";
 
 const roots: string[] = [];
@@ -134,6 +137,27 @@ describe("missing sessions with no transcript (section 8)", () => {
     expect(out2.map((s) => [s.R, s.compliance, s.questions])).toEqual(rows.map(() => [null, null, 0]));
     expect(rows.every((r) => r.end === "missing" && r.transcript === null)).toBe(true);
     expect(() => scoreSessions({ rows: [{ ...rows[0]!, transcript: join(out, "lost.ndjson") }], briefs: readBriefs(briefs), maps: [], labels: [] })).toThrow(/ENOENT/);
+  });
+});
+
+describe("unrun sessions (section 8)", () => {
+  test("ohr score sessions scores every session the launch's manifest schedules, so one a stop left unrun is missing and the missing limits count it", async () => {
+    const briefs = fixtureBriefs();
+    const { out, run } = await scriptedRun({ launch: "stage2", briefs, cap: 1_000_000 });
+    expect(run.stops.map((s) => s.code)).toEqual(["CAP_STOP"]);
+    expect(run.rows).toHaveLength(0);
+    const dir = mkdtempSync(join(tmpdir(), "ohr-score-unrun-"));
+    writeFileSync(join(dir, "map.json"), JSON.stringify({ version: 1, kind: "label", stage: 2, seed: SEED, packets: {} }));
+    writeFileSync(join(dir, "labels.ndjson"), "");
+    const lines: string[] = [];
+    const code = await main(["score", "sessions", "--briefs-dir", briefs, "--launch", out, "--map", join(dir, "map.json"), "--labels", join(dir, "labels.ndjson"), "--out", join(dir, "scored.json")], { out: (t) => lines.push(t), err: (t) => lines.push(t) }, {});
+    expect(code).toBe(0);
+    const scored = JSON.parse(readFileSync(join(dir, "scored.json"), "utf8")) as ScoredSession[];
+    const scheduled = readManifest(join(out, "manifest.json")).entries.length;
+    expect(scheduled).toBeGreaterThan(0);
+    expect(scored).toHaveLength(scheduled);
+    expect(scored.every((s) => s.end === "missing" && s.R === null)).toBe(true);
+    expect(missingLimits(scored).broken).toBe(true);
   });
 });
 

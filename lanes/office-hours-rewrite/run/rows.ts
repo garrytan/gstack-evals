@@ -3,13 +3,14 @@
 // <out>/rows.ndjson per session the launch ran to an end, each a types.ts SessionRow with every attempt's outcome and the
 // failed simulator turns beside it. The row's founder turns are the scored attempt's, each with its delivered flag and
 // its rejected draws; guard failures are summed over both attempts; dollars are summed over both attempts. A session a
-// cap stop left unrun has no row: stops.json lists it. The founder lane's ndjson reader handles a torn last line.
+// cap stop left unrun has no row: stops.json lists it, and ohr score sessions scores it missing (E_OHR_UNRUN). The
+// founder lane's ndjson reader handles a torn last line.
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ndjson } from "../../office-hours-founder/run/rows.ts";
 import { ARMS, CLOSING_SENDS, FOUNDER_REPLIES, MODELS } from "../frozen.ts";
 import type { EndState, ManifestEntry, SessionRow } from "../types.ts";
-import { entryId, type LaunchName, type Manifest } from "./manifest.ts";
+import { entryId, readManifest, type LaunchName, type Manifest } from "./manifest.ts";
 import type { AttemptRead, LoopState, Outcome } from "./session.ts";
 
 export { ndjson };
@@ -70,6 +71,19 @@ export function readRows(out: string, onTorn?: (torn: { text: string; at: number
   if (torn) onTorn!(torn);
   for (const line of lines) rows.set(line.id, line);
   return rows;
+}
+
+/** A session the frozen manifest schedules and the launch never ran: missing (E_OHR_UNRUN), with nothing logged. */
+export const unrunRow = (e: ManifestEntry): SessionRow => ({ ...e, end: "missing", code: "E_OHR_UNRUN", block: null, founder_turns: [], closings: 0, founder_done: false, replies: 0, session_kind: null, guard_failures: 0, gstack_reads: [], usd: 0, sim_usd: 0, attempts: 0, transcript: null, state_root: null });
+
+/** Every session a launch's frozen manifest schedules, in its order: the session's row, or an unrun row. A row the manifest does not schedule is refused. */
+export function scheduledRows(out: string): SessionRow[] {
+  const rows = readRows(out);
+  const entries = readManifest(join(out, "manifest.json")).entries;
+  const scheduled = new Set(entries.map(entryId));
+  const extra = [...rows.keys()].filter((id) => !scheduled.has(id));
+  if (extra.length) throw new Error("E_OHR_SCORE_INPUT " + out + " holds rows its frozen manifest does not schedule: " + extra.join(", "));
+  return entries.map((e) => rows.get(entryId(e))?.row ?? unrunRow(e));
 }
 
 /** The rows command's report: every problem, the end-state counts per model and arm, and the manifest's sessions with no row. */

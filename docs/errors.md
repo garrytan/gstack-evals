@@ -439,6 +439,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_OHR_ARM_STOP](#e_ohr_arm_stop) | 2 | U20 |
 | [E_OHR_SESSION_KIND](#e_ohr_session_kind) | 2 | U20 |
 | [E_OHR_INFRA_MISSING](#e_ohr_infra_missing) | 2 | U20 |
+| [E_OHR_UNRUN](#e_ohr_unrun) | 2 | U20 |
 | [E_OHR_T8_SEED](#e_ohr_t8_seed) | 2 | U20 |
 | [E_OHR_MANIFEST](#e_ohr_manifest) | 2 | U20 |
 | [E_OHR_RESERVE](#e_ohr_reserve) | 2 | U20 |
@@ -3396,6 +3397,14 @@ Office-hours rewrite eval (section 8): an upstream, provider or harness failure 
 Fix: Read the attempts in rows.ndjson. A steady failure goes to the Captain.
 
 Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_OHR_UNRUN
+
+Office-hours rewrite eval (section 8): the launch's frozen manifest schedules a session that has no row in rows.ndjson, because a stop ended the launch before the session ran or the launch never finished. ohr score sessions scores it missing, so the missing limits count it.
+
+Fix: Read the launch's stops.json. A launch that ended in a cap stop is incomplete and is never resumed.
+
+Exit 2. Side effects: None: the missing row exists only in the scored output. Retry safe: no. Resumable: no. Owner: U20.
 
 ### E_OHR_T8_SEED
 
