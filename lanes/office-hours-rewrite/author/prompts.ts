@@ -30,7 +30,7 @@ export const sides = (t: FounderType): readonly [string, string] => {
 };
 
 /**
- * The founder anti-patterns the rewrite names (build-time choice: read from office-hours/ at gstack 0787a1e, sections
+ * The founder anti-patterns the rewrite names (build-time choice: read from office-hours/ at gstack 0787a1e and confirmed at the new pin 4afa7f2, sections
  * phase-2a-startup-diagnostic, phase-2c-pivot-discovery and design-and-handoff). Each opening carries one as its surface.
  * surface is the only part an author sees: our own words, never the skill's. source cites where the rewrite names it.
  */

@@ -3,7 +3,7 @@
 // lane's screen). It bars any 5-word sequence from the questions both skills ask and from the arms' lens line, and each
 // of the founder lane's six named terms, in a brief's opening, persona, facts, key and prior session. Its sources are a
 // build-time choice, each read from a gstack checkout at its commit and refused on any other sha256: the six forcing
-// questions ("Ask:" lines) of phase-2a at the current pin and at the content change's head 0787a1e, the quoted questions
+// questions ("Ask:" lines) of phase-2a at the current pin and at the new pin (pre-run change 2), the quoted questions
 // of that head's reality check, and the quoted questions of its pivot flow (phase-2c). Words are compared the founder
 // lane's way: lowercased, with every run of other characters one space.
 import { spawnSync } from "node:child_process";
@@ -15,8 +15,8 @@ import { NAMED_TERMS } from "./prompts.ts";
 
 export type { Hits, Screen };
 
-/** The content change's head the anti-pattern list and the screen read (pre-run change 1 item 1). */
-export const REWRITE_HEAD = "0787a1e01f2d847f8e915a680e7f6afec777be88";
+/** The content change's ready head the anti-pattern list and the screen read: the new pin (pre-run change 2). */
+export const REWRITE_HEAD = PINS.new!.sha;
 const PHASE_2A = "office-hours/sections/phase-2a-startup-diagnostic.md";
 const PHASE_2C = "office-hours/sections/phase-2c-pivot-discovery.md";
 
@@ -31,8 +31,8 @@ export function quotedIn(text: string, heading: string): string[] {
 
 export const SCREEN_SOURCES: readonly { commit: string; path: string; sha256: string; extract: (text: string) => string[] }[] = [
   { commit: PINS.current!.sha, path: PHASE_2A, sha256: PINS.current!.files[PHASE_2A]!, extract: forcingQuestions },
-  { commit: REWRITE_HEAD, path: PHASE_2A, sha256: "d7bd048ae599489b9f59930ae06dcc22e451a33423ab8843c98b66bf99e26065", extract: (t) => [...forcingQuestions(t), ...quotedIn(t, "### Reality Check (ask first, at every stage)")] },
-  { commit: REWRITE_HEAD, path: PHASE_2C, sha256: "ecc038d71572f999979cb9f66e303961a0583636fb4ab60fa232292aa9dbb9fc", extract: (t) => quotedIn(t, "### Pivot flow") },
+  { commit: REWRITE_HEAD, path: PHASE_2A, sha256: PINS.new!.files[PHASE_2A]!, extract: (t) => [...forcingQuestions(t), ...quotedIn(t, "### Reality Check (ask first, at every stage)")] },
+  { commit: REWRITE_HEAD, path: PHASE_2C, sha256: PINS.new!.files[PHASE_2C]!, extract: (t) => quotedIn(t, "### Pivot flow") },
 ];
 
 const grams = (w: readonly string[]): string[] => Array.from({ length: Math.max(0, w.length - 4) }, (_, i) => w.slice(i, i + 5).join(" "));

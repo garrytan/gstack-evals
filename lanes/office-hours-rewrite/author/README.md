@@ -49,7 +49,7 @@ constructed.ts), the sets (slots instead of type minimums) and the fixed-seed fa
 2. A skin is one voice with an industry per founder type and a project domain per builder goal, because section 3 says skins differ by industry and voice but not how many industries.
 3. Builder slots are 24 of the 25 goal-and-skin pairs, seeded, so each goal gets 4 or 5 and each skin 4 or 5.
 4. Calibration and reserves take two seeded paired types and two seeded goals each, never the same ones, plus T7 and T8.
-5. The anti-pattern list (21 entries) is our reading of the rewrite at 0787a1e's phase-2a, phase-2c and design-and-handoff; authors get only our surface phrase.
+5. The anti-pattern list (21 entries) is our reading of the rewrite's phase-2a, phase-2c and design-and-handoff, first at 0787a1e and confirmed unchanged at the new pin 4afa7f2 (pre-run change 2); authors get only our surface phrase.
 6. Anti-patterns go round a seeded order of the list over the comparison openings first, then calibration and reserves, so each appears in at least one comparison opening; builders carry none.
 7. A pair's first twin takes a seeded side of its contrast.
 8. Author prompts are pairPrompt, twinPrompt, unpairedPrompt and builderPrompt, modelled on the founder lane's author prompt.
@@ -67,7 +67,7 @@ constructed.ts), the sets (slots instead of type minimums) and the fixed-seed fa
 20. The give-away screen drops a brief when any validator's decision cell is credited; the action cell is not read.
 21. A validator with no block, or a cell the rule reads left unlabelled, is asked once more with twice the tokens; a second miss drops the brief.
 22. Audit checks (a) to (f), by Opus and the other author family at high effort; (f) checks the opening carries its surface trait. An unreadable audit fails every check.
-23. The vocabulary screen bars 5-word sequences from the Ask lines of phase-2a at the current pin and at 0787a1e, 0787a1e's quoted reality-check questions, its quoted pivot-flow questions, and the lens line, plus the founder lane's six named terms, each source refused on any other sha256.
+23. The vocabulary screen bars 5-word sequences from the Ask lines of phase-2a at the current pin and at the new pin, the new pin's quoted reality-check questions, its quoted pivot-flow questions, and the lens line, plus the founder lane's six named terms, each source refused on any other sha256.
 24. The generic screen labels the rewrite's three stock rows with Astra and Opus; any credited cell drops the brief; an unlabelled cell is counted.
 25. Check order: twin check, vocabulary, unanimous, give-away (unpaired only), audit, probe, generic. Vocabulary, audit and probe failures take the one rewrite; the others drop.
 26. The pilot runs pair slots only, launches exactly as many second-twin drafts as the read needs, and its first-pass rate is its first twins' pass rate; its cost per draw is the lease's spend over all its drafts.
@@ -79,7 +79,7 @@ constructed.ts), the sets (slots instead of type minimums) and the fixed-seed fa
 ## Contract requests
 
 - The product-value meter routes model "astra" to gpt-6-astra, while the prereg's unanimous key names GPT-6.2 Astra (frozen.ts JUDGE_MODEL_KEYS). The wire must map the authoring caller's "astra" to openai/gpt-6.2-astra.
-- The screen and the anti-pattern list read the content change at 0787a1e. If the new pin lands at another head, the pre-run change that pins it should confirm or update both.
+- The screen reads the new pin's files, and pre-run change 2 confirms the anti-pattern list at that pin.
 
 ## Limits
 

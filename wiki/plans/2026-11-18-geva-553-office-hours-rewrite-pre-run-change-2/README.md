@@ -78,7 +78,7 @@ The inventory was read at 0787a1e01f2d847f8e915a680e7f6afec777be88. The commits 
 | The commitment entry's command tells the model to escape the test text. | DH:234 | N6 reads the same. |
 | docs/skills.md describes the reality check, the memo and the kill line. | docs/skills.md | The skill does not load this file. |
 
-SKILL.md, its template and every builder file are byte-identical between the two heads. So the inventory's counts stand: 18 main intentions, the current skill's 10 with eight changed, plus N1 to N8. No main intention is newly unscored or unlisted, so section 6's untested list is unchanged.
+SKILL.md, its template and every builder file are byte-identical between the two heads. The quoted questions and the named pushback patterns in phase-2a, phase-2c and design-and-handoff are the same at both heads, apart from the kill check's slug argument, so authoring's anti-pattern list stands and its vocabulary screen reads the new pin's files. So the inventory's counts stand: 18 main intentions, the current skill's 10 with eight changed, plus N1 to N8. No main intention is newly unscored or unlisted, so section 6's untested list is unchanged.
 
 Neither the inventory nor change 1 has merged, and no paid call has run, so the inventory is amended in place to read at 4afa7f2 instead of by a new post. Change 1's section 6 said a new post would carry it. This change replaces that line.
 
