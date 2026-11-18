@@ -240,6 +240,12 @@ export function reuseCheck(head: string, repo = REPO): { same: boolean; lines: s
   lines.push("REUSE " + (same ? "PASS" : "FAIL") + ": B1's run " + B1_RUN.commit.slice(0, 12) + " and " + head.slice(0, 12) + "; model " + MODELS.opus.id + " on both");
   return { same, lines };
 }
+/** The checkout's uncommitted changes to any path that decides a session: L1's host-up syncs the live quick/laneb folder. */
+export function harnessDirty(repo = REPO): string[] {
+  const r = git(repo, ["status", "--porcelain", "--", ...B1_RUN.harness]);
+  if (r.status !== 0) pinErr("git status failed in " + repo + ": " + (r.stderr ?? "").trim());
+  return r.stdout.split("\n").filter(Boolean);
+}
 
 // ---- Session rows: did the skill load, did the hook line arrive, and why a graded session didn't load.
 const SKILL_MD = "/.claude/skills/" + SKILL + "/SKILL.md";
@@ -309,7 +315,7 @@ export function b1bStats(rows: B1bRow[], planned: number): Stat[] {
       arm, planned, graded: g.length, gaps, cap_stops: all.filter((r) => r.outcome === "cap_stop").length, incomplete, loaded: k, ci: g.length ? wilson(k, g.length) : null, reaches: !incomplete && k >= barCount(g.length),
       steps_seen: g.filter((r) => r.steps_seen).length, followed: f, followed_ci: g.length ? wilson(f, g.length) : null, followed_as_merged: g.filter((r) => r.detect.followed_as_merged).length, followed_loaded: g.filter((r) => r.load.loaded && r.detect.followed).length,
       route_marked: g.filter((r) => r.route_mark === true).length, route_logged: g.filter((r) => r.route_logged === true).length, passes: g.filter((r) => r.pass).length,
-      cost_usd: all.reduce((x, r) => x + (r.cost_usd ?? 0), 0), safety_stops: g.filter((r) => r.safety_stop).length, audit_sessions: all.filter((r) => r.audit_hits.length).length,
+      cost_usd: all.reduce((x, r) => x + (r.cost_usd ?? 0), 0), safety_stops: all.filter((r) => r.safety_stop).length, audit_sessions: all.filter((r) => r.audit_hits.length).length,
       why: Object.fromEntries(WHY_NOT.map((w) => [w, g.filter((r) => r.why_not === w).length])),
     };
   });
@@ -349,10 +355,10 @@ export function b1References(): B1Row[] {
   if (sha256(text) !== want) pinErr(B1_RUN.results + "/sessions.jsonl hashes to " + sha256(text) + ", not its front matter's " + want);
   return text.toString("utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as B1Row).filter((r) => r.model === MODELS.opus.id);
 }
-export function b1bReport(rows: B1bRow[], refs: B1Row[] = b1References(), planned: number = B1.tasks) {
+export function b1bReport(rows: B1bRow[], refs: B1Row[] = b1References(), planned: number = B1.tasks, smoke = false) {
   const stats = b1bStats(rows, planned), arm = (a: string) => rows.filter((r) => r.arm === a), ref = (a: string) => refs.filter((r) => r.arm === a);
   const loaded: Pick = (r: any) => r.load?.loaded, followed: Pick = (r: any) => r.detect?.followed;
-  const hc = paired(arm("hook"), arm("claude-md"), loaded, loaded), reading = b1bReading(stats, hc);
+  const hc = paired(arm("hook"), arm("claude-md"), loaded, loaded), reading = smoke ? null : b1bReading(stats, hc);
   const lines = ["== " + MODELS.opus.id + ", B1b prose routes (" + planned + " tasks an arm)"];
   for (const s of stats) lines.push("  " + s.arm + ": loaded " + s.loaded + "/" + s.graded + " " + pct(s.loaded, s.graded) + ci(s.ci) + (s.reaches ? " REACHES" : "") + (s.incomplete ? " INCOMPLETE" : "") + "; steps seen " + s.steps_seen + ", followed " + s.followed + "/" + s.graded + ci(s.followed_ci) + " (as merged " + s.followed_as_merged + "), followed among loaded " + s.followed_loaded + "/" + s.loaded + "; gaps " + s.gaps + ", cap stops " + s.cap_stops + ", safety stops " + s.safety_stops + ", audit " + s.audit_sessions + (s.arm === "hook" ? ", hook line in the first request " + s.route_marked + " (proxy), routed in the hook's log " + s.route_logged : "") + ", passes " + s.passes + " (descriptive), cost $" + s.cost_usd.toFixed(2) + " ($" + (s.graded ? s.cost_usd / s.graded : 0).toFixed(3) + " a graded session)");
   for (const s of stats) lines.push("  " + s.arm + " not loaded, by reason: " + WHY_NOT.map((w) => w + " " + s.why[w]).join(", "));
@@ -363,7 +369,7 @@ export function b1bReport(rows: B1bRow[], refs: B1Row[] = b1References(), planne
     lines.push("  reference, B1 " + r + (r === "none" ? " (reused no-gstack arm)" : " (typed, descriptive)") + ": followed " + g.filter((x) => x.detect.followed).length + "/" + g.length + ", steps seen " + g.filter((x) => x.steps_seen).length);
     for (const a of B1B_ARM_NAMES) lines.push(c("followed, " + a + " - B1 " + r, paired(arm(a), ref(r), followed, followed)));
   }
-  lines.push("  reading: " + reading.text);
+  if (reading) lines.push("  reading: " + reading.text);
   return { lines, stats, reading, hook_minus_claude_md: hc };
 }
 export function checkB1bRows(rows: B1bRow[], tasks: string[]): string[] {
@@ -488,7 +494,7 @@ export async function runB1bSessions(out: string) {
 }
 
 // ---- CLI.
-const USAGE = "E_USAGE usage: b1b arms sources --gstack <checkout> [--check] | arms build [--out <dir>] [--manifests] | arms check | sessions run --out <dir> [--cut <dir>] | routes --export <swe-rebench export> [--out <tsv>] | plan | reuse [--head <commit>] | approve --ledger <jsonl> --item <item> --usd <cap> --approved-by <who> | done --ledger <jsonl> --item <item> | guard <work> | prepare <work> --item <item> | host-up|attach|recover|host-down <work> | launch|relaunch|rerun <work> --part <part> | table <config.json> <out.jsonl> | report <table.jsonl> [--out <dir>]";
+const USAGE = "usage: b1b arms sources --gstack <checkout> [--check] | arms build [--out <dir>] [--manifests] | arms check | sessions run --out <dir> [--cut <dir>] | routes --export <swe-rebench export> [--out <tsv>] | plan | reuse [--head <commit>] | approve --ledger <jsonl> --item <item> --usd <cap> --approved-by <who> | done --ledger <jsonl> --item <item> | guard <work> | prepare <work> --item <item> | host-up|attach|recover|host-down <work> | launch|relaunch|rerun <work> --part <part> | table <config.json> <out.jsonl> | report <table.jsonl> [--out <dir>]";
 const LAUNCHER = ["prepare", "host-up", "launch", "attach", "relaunch", "rerun", "recover", "host-down"], GUARDED = ["host-up", "launch", "relaunch"];
 function guardWork(work: string, relaunching?: string) {
   const plan = JSON.parse(readFileSync(join(work, "plan.json"), "utf8"));
@@ -496,6 +502,10 @@ function guardWork(work: string, relaunching?: string) {
   const reuse = reuseCheck(plan.git_head);
   for (const l of reuse.lines) console.log(l);
   if (!reuse.same) throw new Error("E_B1_LAUNCH " + plan.item + ": the run commit's harness differs from B1's, so B1's none arm can't be reused; take it to the Captain before launching");
+  const live = reuseCheck("HEAD");
+  if (!live.same) throw new Error("E_B1_LAUNCH " + plan.item + ": the checkout's head differs from B1's harness (" + live.lines.filter((l) => l.startsWith("DIFFERENT ")).join("; ") + "); take it to the Captain before launching");
+  const dirty = harnessDirty();
+  if (dirty.length) throw new Error("E_B1_LAUNCH " + plan.item + ": the checkout holds uncommitted changes to harness paths (" + dirty.join("; ") + "); take it to the Captain before launching");
   const dir = process.env.B1B_LEDGERS ?? "", crewPath = process.env.B1B_CREW ?? "", own = process.env.LEDGER ?? "";
   if (!dir || !crewPath || !existsSync(crewPath)) usage("b1b launch guard: set B1B_LEDGERS to the folder of item ledgers (<item>.jsonl) and B1B_CREW to the crew file");
   const ledgers: Partial<Record<B1bItem, Row[]>> = {};
@@ -593,7 +603,7 @@ export async function b1bMain(argv: string[]): Promise<number> {
     const rows = readFileSync(rest[0], "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as B1bRow), smoke = rows.every((r) => SMOKE_TASKS.includes(r.task));
     const bad = checkB1bRows(rows, smoke ? [...SMOKE_TASKS] : drawnTasks(loadBundle()).run);
     if (bad.length) { for (const b of bad) console.error("E_USAGE b1b report: " + b); return 2; }
-    const r = b1bReport(rows, b1References(), smoke ? SMOKE_TASKS.length : B1.tasks);
+    const r = b1bReport(rows, b1References(), smoke ? SMOKE_TASKS.length : B1.tasks, smoke);
     for (const l of r.lines) console.log(l);
     const out = opt("out");
     if (out) { mkdirSync(out, { recursive: true }); writeFileSync(join(out, "report.txt"), r.lines.join("\n") + "\n"); writeFileSync(join(out, "reasons.tsv"), reasonsTsv(rows)); }

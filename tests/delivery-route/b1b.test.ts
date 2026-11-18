@@ -5,8 +5,9 @@
 import { describe, expect, test } from "bun:test";
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { spawnSync } from "node:child_process";
 import { join } from "node:path";
-import { B1B_CASES, b1bApprove, b1bCap, b1bCaseProblems, b1bCheck, b1bDone, b1bGuard, b1bReading, b1bReport, b1bRow, b1bStats, checkB1bRows, loadB1bCaptured, loadsOf, paired, READINGS, reuseCheck, whyNot, type B1bRow, type Load } from "../../lanes/delivery-route/b1b.ts";
+import { B1B_CASES, b1bApprove, b1bCap, b1bCaseProblems, b1bCheck, b1bDone, b1bGuard, b1bReading, b1bReport, b1bRow, b1bStats, checkB1bRows, harnessDirty, loadB1bCaptured, loadsOf, paired, READINGS, reuseCheck, whyNot, type B1bRow, type Load } from "../../lanes/delivery-route/b1b.ts";
 import { B1B_BUNDLE, B1B_CAPS_USD, HOOK_SUBSTITUTIONS, ROUTING, type B1bArm } from "../../lanes/delivery-route/b1b-pins.ts";
 import { ARM_SOURCES, REPO } from "../../lanes/delivery-route/pins.ts";
 import { b1Row, type B1Row } from "../../lanes/delivery-route/table.ts";
@@ -90,11 +91,23 @@ describe("the decision table", () => {
     const rep = b1bReport(r);
     expect(rep.lines.find((l) => l.includes("reference, B1 none"))).toBe("  reference, B1 none (reused no-gstack arm): followed 0/60, steps seen 0");
     expect(rep.lines.find((l) => l.includes("reference, B1 gstack-shaped"))).toContain("steps seen 60");
-    expect(rep.reading.key).toBe("neither");
+    expect(rep.reading?.key).toBe("neither");
   });
   test("rows the report reads: a task outside the draw, another model, or two graded rows for one cell", () => {
     const r = [row("hook", "t0", true), row("hook", "t0", false), { ...row("claude-md", "t1", true), model: "gpt-6.1-sol" }, row("claude-md", "zz", true)];
     expect(checkB1bRows(r, ["t0", "t1"]).sort()).toEqual(["t1__claude-md ran gpt-6.1-sol, not claude-opus-5-5", "two graded rows for hook t0", "zz__claude-md is task zz, not one of the planned tasks"]);
+  });
+  test("a smoke-only table prints its stats and no reading", () => {
+    const r = (["claude-md", "hook"] as B1bArm[]).flatMap((a) => ["yt-project__unyt-628", "getmoto__moto-9590"].map((t) => row(a, t, true)));
+    const rep = b1bReport(r, [], 2, true);
+    expect(rep.reading).toBeNull();
+    expect(rep.lines.some((l) => l.startsWith("  reading:"))).toBe(false);
+    expect(rep.lines.some((l) => l.startsWith("  hook: loaded 2/2"))).toBe(true);
+    expect(b1bReport(r, [], 2).reading?.key).toBe("both");
+  });
+  test("safety stops count every row of the arm, ungraded ones included, as B1's report does", () => {
+    const r = [...rows({ "claude-md": 0, hook: 0 }), { ...row("hook", "t59", false, false, "infra"), trial: "t59__hook-a2", safety_stop: true }];
+    expect(b1bStats(r, 60).map((s) => [s.arm, s.safety_stops])).toEqual([["claude-md", 0], ["hook", 1]]);
   });
 });
 
@@ -132,6 +145,22 @@ describe("the none arm's reuse", () => {
     const r = reuseCheck("HEAD");
     expect(r.lines.filter((l) => !l.startsWith("SAME "))).toEqual([expect.stringMatching(/^REUSE PASS/)]);
     expect(r.same).toBe(true);
+  });
+  test("the launch guard's dirty check refuses an uncommitted change to a harness path and passes a clean one", () => {
+    const repo = mkdtempSync(join(tmpdir(), "b1b-dirty-"));
+    try {
+      const sh = (args: string[]) => expect(spawnSync("git", ["-C", repo, ...args], { encoding: "utf8" }).status).toBe(0);
+      sh(["init", "-q"]);
+      mkdirSync(join(repo, "quick/laneb/runner"), { recursive: true });
+      writeFileSync(join(repo, "quick/laneb/runner/a.py"), "x = 1\n");
+      writeFileSync(join(repo, "notes.txt"), "a\n");
+      sh(["add", "-A"]);
+      sh(["-c", "user.name=b1b", "-c", "user.email=b1b@example.invalid", "commit", "-qm", "snapshot"]);
+      writeFileSync(join(repo, "notes.txt"), "b\n");
+      expect(harnessDirty(repo)).toEqual([]);
+      writeFileSync(join(repo, "quick/laneb/runner/a.py"), "x = 2\n");
+      expect(harnessDirty(repo)).toEqual([" M quick/laneb/runner/a.py"]);
+    } finally { rmSync(repo, { recursive: true, force: true }); }
   });
 });
 
