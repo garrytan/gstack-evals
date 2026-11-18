@@ -4,11 +4,13 @@ import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { CAPS, CHANGE_1, CLOSING, LENS_LINE, PINS, PREREG, REVEAL_NOTE, SEED, SIM_ADDED_RULES, SIM_RULES_FILES, SIM_RULES_SHA256, SKILL_PREFIX, attemptLine, firstMessage } from "../../lanes/office-hours-rewrite/frozen.ts";
+import { CAPS, CHANGE_1, CHANGE_2, CLOSING, LENS_LINE, PINS, PREREG, REVEAL_NOTE, SEED, SIM_ADDED_RULES, SIM_RULES_FILES, SIM_RULES_SHA256, SKILL_PREFIX, attemptLine, firstMessage } from "../../lanes/office-hours-rewrite/frozen.ts";
 
 const root = join(import.meta.dir, "..", "..");
 const prereg = readFileSync(join(root, PREREG), "utf8");
 const change1 = readFileSync(join(root, CHANGE_1), "utf8");
+const change2 = readFileSync(join(root, CHANGE_2), "utf8");
+const pinTable = (file: string) => Object.fromEntries(readFileSync(join(root, CHANGE_2, "..", "..", file), "utf8").trim().split("\n").slice(1).map((l) => l.split("\t")).map((r) => [r[0], { bytes: Number(r[1]), sha256: r[2] }]));
 
 describe("frozen values match the posts", () => {
   test("first messages", () => {
@@ -43,9 +45,21 @@ describe("frozen values match the posts", () => {
     const tsv = readFileSync(join(root, CHANGE_1, "..", "pin-current.tsv"), "utf8").trim().split("\n").slice(1).map((l) => l.split("\t"));
     const rows = Object.fromEntries(tsv.map((r) => [r[0], r[2]]));
     const { VERSION: _v, ...files } = rows;
-    expect(files).toEqual({ ...pin.files });
+    const added = /bin\/gstack-design-doc-find at the current pin: 2648 bytes, sha256 ([0-9a-f]{64})/.exec(change2);
+    expect(added).not.toBeNull();
+    expect({ ...files, "bin/gstack-design-doc-find": added![1] }).toEqual({ ...pin.files });
     expect(change1).toContain("| VERSION | " + pin.version + " |");
-    expect(PINS.new).toBeNull();
+  });
+  test("the new pin, its file hashes and its byte counts", () => {
+    const pin = PINS.new!;
+    expect(change2).toContain("garrytan/gstack " + pin.sha);
+    expect(change2).toContain("| VERSION | " + pin.version + " |");
+    const table = pinTable("2026-11-18-geva-553-office-hours-rewrite-pre-run-change-2/pin-new.tsv");
+    const { VERSION: _v, ...files } = table;
+    expect(Object.fromEntries(Object.entries(files).map(([k, v]) => [k, v.sha256]))).toEqual({ ...pin.files });
+    expect(Object.keys(pin.files).sort()).toEqual([...Object.keys(PINS.current!.files), "office-hours/sections/landscape.md", "office-hours/sections/landscape.md.tmpl", "office-hours/sections/phase-2c-pivot-discovery.md", "office-hours/sections/phase-2c-pivot-discovery.md.tmpl"].sort());
+    for (const [path, v] of Object.entries(files)) if (path.startsWith("office-hours/") && !path.endsWith(".json")) expect(change2).toContain("| " + path + " | " + v.bytes + " |");
+    expect(change2).toContain("returns " + PINS.current!.sha + ", the current pin");
   });
   test("caps and seed", () => {
     for (const [name, cap] of [["1 Authoring", CAPS.authoring], ["2 Simulator audit", CAPS.simulator_audit], ["3 Stage 1", CAPS.stage1], ["4 Judge check", CAPS.judge_check], ["5 Stage 2, Opus and Sol", CAPS.stage2], ["6 Stage 2, particle-1", CAPS.stage2_particle], ["7 Hosts", CAPS.hosts]] as const)

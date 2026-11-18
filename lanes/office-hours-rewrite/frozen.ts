@@ -7,6 +7,7 @@ import type { ArmId, BuilderGoal, FounderType, JudgeKey, ModelId, SkillArm } fro
 
 export const PREREG = "wiki/plans/2026-11-17-geva-552-office-hours-rewrite-prereg/README.md";
 export const CHANGE_1 = "wiki/plans/2026-11-18-geva-553-office-hours-rewrite-pre-run-change-1/README.md";
+export const CHANGE_2 = "wiki/plans/2026-11-18-geva-553-office-hours-rewrite-pre-run-change-2/README.md";
 
 /** Every seeded draw, order and sample in the eval (pre-run change 1, item 5). */
 export const SEED = 20261117;
@@ -37,9 +38,10 @@ export const ARM_ENV: Readonly<Record<string, string>> = { CLAUDE_CODE_DISABLE_B
 export const SESSION_KIND_LINE = "SESSION_KIND: interactive";
 
 /**
- * Section 2's pins. current is the commit the content change is built on (its merge base with gstack main, pre-run
- * change 1, item 1). new waits for the content change's ready head (pre-run change 2) and the run refuses a null pin.
- * VERSION is 1.100.0.0 at both commits, so only the file hashes tell the pins apart; each container checks every one.
+ * Section 2's pins. current is the commit the content change is built on, its merge base with gstack main (pre-run
+ * change 1, item 1, confirmed by pre-run change 2). new is the content change's ready head (pre-run change 2). Both
+ * check the same helper paths; bin/gstack-design-doc-find at the current pin comes from change 2, section 1. VERSION is
+ * 1.100.0.0 at both commits, so only the file hashes tell the pins apart; each container checks every one.
  */
 export interface Pin {
   sha: string;
@@ -67,6 +69,7 @@ export const PINS: Readonly<Record<SkillArm, Pin | null>> = {
     "office-hours/sections/visual-design.md": "fdd31b99d7f19fbe08d7d2407112f81e1a242f4d90d321e69007e15633378595",
     "office-hours/sections/visual-design.md.tmpl": "98e49e16af227c7199dc3e4b84790f2aef22a857b20563dfe2f2a1625c9d2b30",
     "bin/gstack-builder-profile": "11e99f40f65190986b6c95a93db9058b16e9556227e23f99adf03a9f915b9ae7",
+    "bin/gstack-design-doc-find": "78823ce7660281ed57e20f91bf9b84bf8bb7365d00eb02bc09ba964758358f7b",
     "bin/gstack-developer-profile": "d7a3d1dd787658f0c018075d40b41c3830e7b44622c019beaa61b4ceee43f4f8",
     "bin/gstack-founder-resources": "ba9d03881e6edf087b84b4c45868a2bd9b3cdc6b1483f7917fdede5ed8ef97cb",
     "bin/gstack-session-kind": "408a168892c0f088accfc580c08b294724edd826db31436d655e76dacec8ce90",
@@ -74,7 +77,37 @@ export const PINS: Readonly<Record<SkillArm, Pin | null>> = {
     "lib/founder-resources.ts": "788aa18d9ae400d6ab81ad51126030be8869ffb66001f28ccb68d906aadb37ad",
     },
   },
-  new: null,
+  new: {
+    sha: "4afa7f2b3e291758f6a7842dd066cde22606fca1",
+    version: "1.100.0.0",
+    files: {
+      "office-hours/SKILL.md": "8ff8e76098282f8a526aeb78640b975241db8fe0c0c557ac149075ed6c8f78ff",
+      "office-hours/SKILL.md.tmpl": "791e0793abae78ce2c7e847e85b32b60f22cd0b5d4b0d42edaece4375489fc03",
+      "office-hours/sections/design-and-handoff.md": "445b87a9cc6b949c37ed2517dc0e2ed321035486a1e01dd8e1c63eab9e8951a8",
+      "office-hours/sections/design-and-handoff.md.tmpl": "573730dcbbb4b8af473d4972657a300335644d450919cf469fa124d9417d4468",
+      "office-hours/sections/landscape.md": "6c70b6eaac271fc27951268dd8062b6ec3b1d502b4ef6b9ddb690c3d24419c61",
+      "office-hours/sections/landscape.md.tmpl": "b051290a583a1f8e5545f00beec57126b22120e869186615ead83abe8750ed09",
+      "office-hours/sections/manifest.json": "17b6d1a986189272b5f7715d4d603952d8170f79ee4cf6679a62b4f5de591fcb",
+      "office-hours/sections/phase-2a-startup-diagnostic.md": "003fe35de1cef3e984ef3bb63250d35c3b1c806968adebf1ab502577fdca20db",
+      "office-hours/sections/phase-2a-startup-diagnostic.md.tmpl": "fd07f7d132f4905824097b4954c1f3eecf89bf7f85ea258f44e9cd16fd9c1c13",
+      "office-hours/sections/phase-2b-builder-brainstorm.md": "05251d190b32f1da63165e8339211404963556ef5b9cf4c3e46361cbc51027e2",
+      "office-hours/sections/phase-2b-builder-brainstorm.md.tmpl": "604794b75cb79230ce728a70cab9bf02747cb2deafbcd6899ade0c39bc550f3e",
+      "office-hours/sections/phase-2c-pivot-discovery.md": "58dde49ca9f8bc81d23dd36213a4f782c783cc71ef6885f2c5f1ff7824a2e32f",
+      "office-hours/sections/phase-2c-pivot-discovery.md.tmpl": "c7326044be0065f77ba6a51b9a2c9737bf03e1e725a0b556abc8cefb0a5d4891",
+      "office-hours/sections/preamble.md": "188d404f839d5abb390dd96f716fa965a0d8b2d2a40619fd2ff75f4d6ba7f001",
+      "office-hours/sections/second-opinion.md": "0ef8cc1c5ce9e614b1ea7d0fadce66128c43855c48d50104898900fb7590aa62",
+      "office-hours/sections/second-opinion.md.tmpl": "c5714e290efb8b2a117f79c180d01595e6c2445860dbff70beaad0d3359070a4",
+      "office-hours/sections/visual-design.md": "fdd31b99d7f19fbe08d7d2407112f81e1a242f4d90d321e69007e15633378595",
+      "office-hours/sections/visual-design.md.tmpl": "98e49e16af227c7199dc3e4b84790f2aef22a857b20563dfe2f2a1625c9d2b30",
+      "bin/gstack-builder-profile": "11e99f40f65190986b6c95a93db9058b16e9556227e23f99adf03a9f915b9ae7",
+      "bin/gstack-design-doc-find": "e7e2fc8cca965453303f7c3a9104d20ec4c1c9fbcf6672dd86a7c141c7e39951",
+      "bin/gstack-developer-profile": "0320009508bae043a9d5dce5082a26e294698257f89cc63bbcf5a103ebf5f905",
+      "bin/gstack-founder-resources": "ba9d03881e6edf087b84b4c45868a2bd9b3cdc6b1483f7917fdede5ed8ef97cb",
+      "bin/gstack-session-kind": "408a168892c0f088accfc580c08b294724edd826db31436d655e76dacec8ce90",
+      "bin/gstack-skill-start": "22ddd3eac3aa605a928551664b4c96c1215debefbd57097b2580db275f1ff7a0",
+      "lib/founder-resources.ts": "788aa18d9ae400d6ab81ad51126030be8869ffb66001f28ccb68d906aadb37ad",
+    },
+  },
 };
 
 export const ARMS: readonly ArmId[] = ["none", "current", "new"];
