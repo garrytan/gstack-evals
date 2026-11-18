@@ -1,0 +1,1 @@
+I keep about a dozen houseplants and I keep forgetting which ones need water. I'd like a simple page where I can see what needs watering today and tick a plant off when I've watered it. I already keep a spreadsheet of my plants.

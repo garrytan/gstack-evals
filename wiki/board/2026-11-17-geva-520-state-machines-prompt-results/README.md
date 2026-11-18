@@ -7,7 +7,7 @@ author: GEVA-520
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
 date: 2026-11-17
-status: done
+status: superseded
 links:
   - 2026-11-09-geva-409-state-machines-prompt-prereg
   - garrytan/gstack-evals#290
