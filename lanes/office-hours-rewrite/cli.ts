@@ -168,6 +168,7 @@ async function score(argv: string[], io: Io, env: Env): Promise<number> {
   if (sub === "packets" || sub === "check-packets") {
     const f = flags(rest, { one: ["--stage", "--briefs-dir", "--answers", "--packets", "--map"], many: ["--launch", "--taken"] });
     need(f, "ohr score " + sub, ["--briefs-dir", "--launch", "--packets", "--map", ...(sub === "packets" ? ["--stage"] : ["--answers", "--taken"])]);
+    const packetsDir = fresh("--packets", one(f, "--packets")!), mapPath = fresh("--map", one(f, "--map")!);
     const briefs = readBriefs(outside("--briefs-dir", one(f, "--briefs-dir")!));
     const rows = launchRows(f.get("--launch")!.map((d) => outside("--launch", d)));
     const taken = (f.get("--taken") ?? []).map((p) => readJson<PacketMap>(p));
@@ -177,17 +178,17 @@ async function score(argv: string[], io: Io, env: Env): Promise<number> {
       if (stage !== 1 && stage !== 2) usage("--stage takes 1 or 2");
       built = buildLabelPackets({ stage: stage as 1 | 2, seed: SEED, briefs, rows, taken });
     } else built = buildCheckPackets({ seed: SEED, briefs, rows, answers: readJson<CheckAnswer[]>(outside("--answers", one(f, "--answers")!)), taken });
-    writePackets(built, fresh("--packets", one(f, "--packets")!), fresh("--map", one(f, "--map")!));
+    writePackets(built, packetsDir, mapPath);
     io.out("ohr score " + sub + ": " + built.packets.length + " packets, " + built.packets.reduce((n, p) => n + p.blocks.length, 0) + " blocks");
     return 0;
   }
   if (sub === "judges") {
     const f = flags(rest, { one: ["--packets", "--map", "--item", "--spend-cap", "--out", "--record", "--ledger"] });
     need(f, "ohr score judges", ["--packets", "--map", "--item", "--spend-cap", "--out"]);
+    const out = fresh("--out", one(f, "--out")!);
     const map = readJson<PacketMap>(outside("--map", one(f, "--map")!));
     if (map.kind !== "label") usage("ohr score judges labels a label map; a check map goes through ohr judge-check");
     const packets = readPackets(outside("--packets", one(f, "--packets")!));
-    const out = fresh("--out", one(f, "--out")!);
     return withWire({ dir: out + ".meter", item: one(f, "--item")!, cap: one(f, "--spend-cap"), label: "ohr-labels-s" + map.stage, record: one(f, "--record"), ledger: one(f, "--ledger"), env, io, cmd: "ohr score judges" }, async (w) => {
       const r = await judgePackets({ map, packets, call: w.judge, effort: JUDGE_EFFORT });
       writeFileSync(out, r.labels.map((l) => JSON.stringify(l)).join("\n") + "\n", { mode: 0o600 });
@@ -199,12 +200,12 @@ async function score(argv: string[], io: Io, env: Env): Promise<number> {
   if (sub === "sessions") {
     const f = flags(rest, { one: ["--briefs-dir", "--out"], many: ["--launch", "--map", "--labels"] });
     need(f, "ohr score sessions", ["--briefs-dir", "--launch", "--map", "--labels", "--out"]);
+    const out = fresh("--out", one(f, "--out")!);
     const briefs = readBriefs(outside("--briefs-dir", one(f, "--briefs-dir")!));
     const rows = launchRows(f.get("--launch")!.map((d) => outside("--launch", d)));
     const maps = f.get("--map")!.map((p) => readJson<PacketMap>(p));
     const labels = f.get("--labels")!.flatMap((p) => ndjson<JudgedLabel>(p));
     const scored = scoreSessions({ rows, briefs, maps, labels });
-    const out = fresh("--out", one(f, "--out")!);
     writeJson(out, scored);
     const stock = stockCredits(maps, labels);
     io.out("ohr score sessions: " + scored.length + " scored rows; stock rows " + stock.rows + ", credited " + stock.credited + ", unlabelled " + stock.unlabelled);
@@ -232,9 +233,9 @@ export function readCheck(map: PacketMap, gold: readonly JudgedLabel[], labels: 
 async function judgeCheckCommand(argv: string[], io: Io, env: Env): Promise<number> {
   const f = flags(argv, { one: ["--packets", "--map", "--out", "--item", "--spend-cap", "--record", "--ledger", "--gold", "--labels"] });
   need(f, "ohr judge-check", ["--map", "--out"]);
+  const out = fresh("--out", one(f, "--out")!);
   const map = readJson<PacketMap>(outside("--map", one(f, "--map")!));
   if (map.kind !== "check") usage("ohr judge-check reads a check map; build it with ohr score check-packets. Usage: " + CHECK_USAGE);
-  const out = fresh("--out", one(f, "--out")!);
   const report = (gold: JudgedLabel[], labels: JudgedLabel[], probes: unknown) => {
     const result = readCheck(map, gold, labels);
     writeJson(join(out, "check.json"), { probes, ...result });
@@ -283,12 +284,13 @@ function read(argv: string[], io: Io): number {
   if (sub === "admission") {
     const f = flags(rest, { one: ["--scored", "--audit", "--judge-check", "--label-usd", "--out", "--prior"], many: ["--launch"] });
     need(f, "ohr read admission", ["--scored", "--launch", "--audit", "--judge-check", "--label-usd", "--out"]);
+    const out = fresh("--out", one(f, "--out")!);
     const label_usd = Number(one(f, "--label-usd"));
     if (!(label_usd >= 0)) usage("--label-usd is the measured label dollars a session");
     const reading = admission({ rows: readJson<ScoredSession[]>(outside("--scored", one(f, "--scored")!)), sessions: launchRows(f.get("--launch")!.map((d) => outside("--launch", d))), audit: { pass: readJson<{ read: string }>(outside("--audit", one(f, "--audit")!)).read === "pass" }, judges: passed(outside("--judge-check", one(f, "--judge-check")!)), label_usd });
     const reads = [...(f.has("--prior") ? [readJson<AdmissionReading>(one(f, "--prior")!)] : []), reading];
     const state = admissionState(reads);
-    writeJson(fresh("--out", one(f, "--out")!), { ...reading, state });
+    writeJson(out, { ...reading, state });
     for (const c of reading.conditions) io.out(c.id + " " + (c.pass ? "pass" : "FAIL") + " " + JSON.stringify(c.values));
     io.out("ohr read admission: " + state);
     return state === "admitted" ? 0 : 2;
@@ -296,16 +298,18 @@ function read(argv: string[], io: Io): number {
   if (sub === "decision") {
     const f = flags(rest, { one: ["--scored", "--judge-check", "--hand-reads", "--out"], many: ["--admission"], bool: ["--cap-stop"] });
     need(f, "ohr read decision", ["--scored", "--admission", "--judge-check", "--hand-reads", "--out"]);
+    const out = fresh("--out", one(f, "--out")!);
     const d = decide({ rows: readJson<ScoredSession[]>(outside("--scored", one(f, "--scored")!)), admission: admissionState(f.get("--admission")!.map((p) => readJson<AdmissionReading>(p))), cap_stop: f.has("--cap-stop"), judge_checks: passed(outside("--judge-check", one(f, "--judge-check")!)), hand_reads: readJson<HandRead[]>(outside("--hand-reads", one(f, "--hand-reads")!)) });
-    writeJson(fresh("--out", one(f, "--out")!), d);
+    writeJson(out, d);
     io.out("ohr read decision: row " + d.row + ", " + d.outcome);
     return 0;
   }
   if (sub === "report") {
     const f = flags(rest, { one: ["--scored", "--out"] });
     need(f, "ohr read report", ["--scored", "--out"]);
+    const out = fresh("--out", one(f, "--out")!);
     const rows = readJson<ScoredSession[]>(outside("--scored", one(f, "--scored")!));
-    writeJson(fresh("--out", one(f, "--out")!), { lead: leadTable(rows), founder: rates(rows, "founder"), builder: rates(rows, "builder") });
+    writeJson(out, { lead: leadTable(rows), founder: rates(rows, "founder"), builder: rates(rows, "builder") });
     io.out("ohr read report: written");
     return 0;
   }
