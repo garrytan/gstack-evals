@@ -2,7 +2,7 @@
 id: 2026-11-18-geva-553-office-hours-rewrite-pre-run-change-3
 kind: plan
 title: "Pre-run change 3 to the office-hours rewrite eval: the ledger items, the GPT-6.2 Astra route and the preflight"
-summary: "Freezes how each approved cap splits into ledger items, routes every GPT-6.2 Astra call to its own priced meter key, and records the no-model preflight and the terms re-read."
+summary: "Freezes the ledger items, routes GPT-6.2 Astra calls to their own priced meter key, records the preflight and terms re-read, and names the build commit for authoring."
 author: GEVA-553
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
@@ -66,3 +66,17 @@ It took four VMs and about 28 VM-minutes in all, which count against item 7. The
 Section 12, step 1, also asks for a dated re-read of model and provider terms. On 2026-11-18 we re-read the terms that cover every model and route this eval uses: Anthropic's commercial terms and usage policy, the Claude Code legal page, OpenAI's services agreement and usage policies, Google Cloud's service terms and generative AI use policy, OpenRouter's terms, and Particle's terms.
 
 None bars using model outputs to evaluate a model or a skill, and none bars a model playing an invented founder who stands for no real person. OpenAI's updated usage policies take force on 2026-11-20, during this run, and name "model evaluation and benchmarking" as allowed. Since the founder eval's read on 2026-11-12, Anthropic's usage policy shows a new effective date (2026-11-12) and the Claude Code legal page moved address with the same text. Nothing else changed.
+
+## 5. The build commit for authoring
+
+Change 1, section 6, asks for the build commit every paid run pins before authoring. Authoring runs at gstack-evals commit c9d59370b572fbdb1e88dd21173c1a01d72a6437, a clean checkout of the commit that first adds this post, with a green CI run at that commit as its admission proof. It runs as one uninterrupted command, with no pilot-only stop, so the pilot's draws and the full run share one run and one ledger item.
+
+An advisory read of changes 2 and 3 and the build, before any paid call, found four holes in code that authoring does not use. Before the simulator audit and stage 1, a further pre-run change names the build commit for those runs, and it may add only these fixes:
+
+- each stage launch reserves money round by round, and the ledger items must hold every launch's whole schedule; the split above for stage 1 and particle-1's simulator does not, so those items are re-split within the same approved caps;
+- a reply whose reported model differs from the pinned model must not count, for judges, auditors, the simulated person and arm sessions alike;
+- the simulator audit must stop when the simulated person's provider drifts, as arm sessions already do;
+- a ledger refusal (a cap stop or a closed lease) must end a judge, audit or scoring command as a cap stop, which reads INCOMPLETE, never as a missing label or an empty answer.
+
+Wording fixes to changes 2 and 3 and to the rewrite's inventory may come with it. None of these changes a measure, arm, model, threshold or decision row.
+
