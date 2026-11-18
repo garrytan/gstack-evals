@@ -183,8 +183,10 @@ export async function openMeter(o: MeterOptions): Promise<Meter> {
         return { text: null, status, micros, cached: false, problem, served_by: null };
       }
       const servedBy = m.provider === "openrouter" ? (typeof parsed?.provider === "string" ? parsed.provider : null) : m.provider;
+      const answer = parsed ? judgeAnswer(m.provider, parsed) : null;
+      if (!answer) return { text: null, status, micros, cached: false, problem: parsed ? "the reply carries no answer" + (servedBy === null ? " and names no provider" : "") : "the reply is not JSON", served_by: servedBy, model: null };
       if (m.served_by && (servedBy === null || !m.served_by.test(servedBy))) throw new MeterError("E_PV_PROVIDER_DRIFT", m.id + " was served by " + (servedBy ?? "an unnamed provider") + ", not its pinned provider; stop this model's items and ask the Captain");
-      const result: CallResult = { text: parsed ? judgeAnswer(m.provider, parsed) : null, status, micros, cached: false, problem: parsed ? null : "the reply is not JSON", served_by: servedBy, model: typeof parsed?.model === "string" ? parsed.model : null };
+      const result: CallResult = { text: answer, status, micros, cached: false, problem: null, served_by: servedBy, model: typeof parsed?.model === "string" ? parsed.model : null };
       if (result.text !== null) {
         writeFileSync(file + ".tmp", JSON.stringify(result), { mode: 0o600 });
         renameSync(file + ".tmp", file);
