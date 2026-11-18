@@ -1,13 +1,15 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // Value: protects=the run loop's records and stops: every ended session writes one row that parses and holds together, a cap stop writes no row and starts nothing more, a halt writes its row as missing and stops the launch, and a resumed launch reconciles an attempt that has a marker and no row as an infrastructure failure before its retry; fails_when=a cap-stopped session gets a row or a retry, a halt lets new sessions start, or a crashed attempt is run again from scratch or forgotten; why_new=the run area's run loop; seam=runSchedule with a scripted launch, readRows, rowProblems, rowsReport; no_claim=the Docker launch, which the e2e covers
 import { describe, expect, test } from "bun:test";
-import { existsSync, readFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import { BLOCK_REPLY, scriptedRun } from "../../../lanes/office-hours-founder/run/seams.ts";
-import { readManifest, type Manifest } from "../../../lanes/office-hours-founder/run/manifest.ts";
+import { contentDigest, readManifest, type Manifest } from "../../../lanes/office-hours-founder/run/manifest.ts";
 import { readRows, rowProblems, rowsReport } from "../../../lanes/office-hours-founder/run/rows.ts";
 import { meterSlot } from "../../../lanes/office-hours-founder/run/run.ts";
-import { SIM_CALL, worstCase } from "../../../lanes/office-hours-founder/sim/founder.ts";
+import { FOUNDER_RULES, SIM_CALL, worstCase } from "../../../lanes/office-hours-founder/sim/founder.ts";
 import type { ManifestEntry } from "../../../lanes/office-hours-founder/types.ts";
 import type { Meter } from "../../../lanes/product-value/meter.ts";
 
@@ -48,12 +50,28 @@ describe("stops", () => {
     expect(run.unrun.map((u) => u.how).sort()).toEqual(["stopped", "unstarted", "unstarted"]);
   });
 
+  test("a simulator call the ledger's cap refuses is a cap stop: no row, no retry, the rest unrun", async () => {
+    const { run, calls } = await scriptedRun({ entries: all(["none"]), units: 2, scripts: new Map([["fixture-calibration-1/none", [{ replies: [["Q?"]] }]]]), founder: { kind: "call-failed", reason: "cap", detail: "CAP_STOP: the simulator item's cap" } as never });
+    expect(calls).toHaveLength(1);
+    expect(run.rows).toEqual([]);
+    expect(run.stops.map((s) => s.code)).toEqual(["CAP_STOP"]);
+    expect(run.unrun.map((u) => u.how).sort()).toEqual(["stopped", "unstarted"]);
+  });
+
   test("a launch on an out dir that ended in a cap stop is refused, and its stops.json stands", async () => {
     const scripts = () => new Map([["fixture-calibration-1/none", [{ replies: [["Q?"]], termination: { kind: "cap_stop" } as never }]]]);
     const first = await scriptedRun({ entries: all(["none"]), units: 3, scripts: scripts() });
     const stops = readFileSync(join(first.out, "stops.json"), "utf8");
     await expect(scriptedRun({ entries: all(["none"]), units: 3, scripts: new Map(), out: first.out })).rejects.toThrow(/E_USAGE .*cap stop/);
     expect(readFileSync(join(first.out, "stops.json"), "utf8")).toBe(stops);
+  });
+
+  test("a cap stop survives a rig.close() that throws: stops.json keeps CAP_STOP and a relaunch is refused", async () => {
+    const out = join(mkdtempSync(join(tmpdir(), "of-run-close-")), "out");
+    const scripts = new Map([["fixture-calibration-1/none", [{ replies: [["Q?"]], termination: { kind: "cap_stop" } as never }]]]);
+    await expect(scriptedRun({ entries: all(["none"]), units: 2, scripts, out, close: async () => { throw new Error("E_INTERNAL the proxy would not stop"); } })).rejects.toThrow("the proxy would not stop");
+    expect(JSON.parse(readFileSync(join(out, "stops.json"), "utf8")).stops.map((s: { code: string }) => s.code)).toEqual(["CAP_STOP"]);
+    await expect(scriptedRun({ entries: all(["none"]), units: 2, scripts: new Map(), out })).rejects.toThrow(/E_USAGE .*cap stop/);
   });
 
   test("a launch after a halt keeps the halt in stops.json under earlier", async () => {
@@ -138,11 +156,67 @@ describe("resume", () => {
     expect(l!.attempts[0]!.why).toContain("an unknown outcome, reconciled");
   });
 
+  test("a torn last line in rows.ndjson is dropped and recorded, and its session is reconciled and retried", async () => {
+    const first = await scriptedRun({ entries: all(["none"]), units: 2, scripts: new Map() });
+    const file = join(first.out, "rows.ndjson");
+    const text = readFileSync(file, "utf8");
+    const cut = text.slice(0, text.lastIndexOf("\n", text.length - 2) + 1 + 40);
+    writeFileSync(file, cut);
+    const again = await scriptedRun({ entries: all(["none"]), units: 2, scripts: new Map(), out: first.out });
+    expect(again.calls).toEqual([first.ids[1] + "/none/a2"]);
+    expect(readRows(first.out).size).toBe(2);
+    const torn = readFileSync(join(first.out, "torn.ndjson"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    expect(torn).toHaveLength(1);
+    expect(torn[0].text).toBe(cut.slice(cut.lastIndexOf("\n", cut.length - 1) + 1));
+  });
+
+  test("a torn line in rows.ndjson that is not the last still fails the resume", async () => {
+    const first = await scriptedRun({ entries: all(["none"]), units: 2, scripts: new Map() });
+    const file = join(first.out, "rows.ndjson");
+    const [a, b] = readFileSync(file, "utf8").trim().split("\n");
+    writeFileSync(file, a!.slice(0, 40) + "\n" + b + "\n");
+    await expect(scriptedRun({ entries: all(["none"]), units: 2, scripts: new Map(), out: first.out })).rejects.toThrow();
+  });
+
+  test("a torn last line in an attempt's transcript.ndjson is dropped and recorded when the attempt is reconciled", async () => {
+    const first = await scriptedRun({ entries: all(["none"]), units: 1, scripts: new Map() });
+    rmSync(join(first.out, "rows.ndjson"));
+    const host = join(first.out, "sessions", "arm/opus/none/" + first.ids[0] + "/p1", "a1", "host");
+    mkdirSync(host, { recursive: true });
+    writeFileSync(join(host, "transcript.ndjson"), JSON.stringify({ type: "assistant" }) + "\n" + '{"type":"resu');
+    const again = await scriptedRun({ entries: all(["none"]), units: 1, scripts: new Map(), out: first.out });
+    expect(again.calls).toEqual([first.ids[0] + "/none/a2"]);
+    const rec = JSON.parse(readFileSync(join(host, "..", "reconcile.json"), "utf8"));
+    expect(rec).toMatchObject({ session_log_lines: 1, last_message: "assistant", torn_last_line: '{"type":"resu' });
+  });
+
+  test("a torn line in a transcript.ndjson that is not the last still fails the resume", async () => {
+    const first = await scriptedRun({ entries: all(["none"]), units: 1, scripts: new Map() });
+    rmSync(join(first.out, "rows.ndjson"));
+    const host = join(first.out, "sessions", "arm/opus/none/" + first.ids[0] + "/p1", "a1", "host");
+    mkdirSync(host, { recursive: true });
+    writeFileSync(join(host, "transcript.ndjson"), '{"type":"assi' + "\n" + JSON.stringify({ type: "result" }) + "\n");
+    await expect(scriptedRun({ entries: all(["none"]), units: 1, scripts: new Map(), out: first.out })).rejects.toThrow();
+  });
+
   test("a session that already has a row is not run again", async () => {
     const first = await scriptedRun({ entries: all(["none"]), units: 2, scripts: new Map() });
     const again = await scriptedRun({ entries: all(["none"]), units: 2, scripts: new Map(), out: first.out });
     expect(again.calls).toEqual([]);
     expect(readRows(first.out).size).toBe(2);
+  });
+
+  test("the frozen manifest holds each unit's digest hashed from its files, not the digest unit.json declares", async () => {
+    const { out, ids } = await scriptedRun({ entries: all(["none"]), units: 2, scripts: new Map() });
+    const units = join(dirname(out), "units");
+    expect(readManifest(join(out, "manifest.json")).units).toEqual(Object.fromEntries(ids.map((id) => [id, contentDigest(units, id)])));
+  });
+
+  test("the frozen manifest binds the simulator rules' sha256, and a launch under other rules on its out dir is refused", async () => {
+    const first = await scriptedRun({ entries: all(["none"]), units: 1, scripts: new Map() });
+    expect(readManifest(join(first.out, "manifest.json")).sim_rules).toBe(createHash("sha256").update(FOUNDER_RULES).digest("hex"));
+    const other = createHash("sha256").update("other rules").digest("hex");
+    await expect(scriptedRun({ entries: all(["none"]), units: 1, scripts: new Map(), out: first.out, simRules: other })).rejects.toThrow(/E_USAGE/);
   });
 
   test("a launch whose schedule differs from the frozen manifest is refused", async () => {

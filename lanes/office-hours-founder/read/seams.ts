@@ -107,7 +107,7 @@ export function stage2Fixture(o: { w: (e: ManifestEntry) => 0 | 1; edit?: (s: Sc
     sessions: [...sessions, ...pitchManifest.map((e) => session({ ...e, W: 0 })), ...(o.extra ?? [])],
     units: COMPARISON.map((id) => unitMeta(id)),
     stage1: { band: bandDecide(0.375, 0.8125, false), untested: { opus: [], sol: [], particle: [] }, smoke_drop: { opus: false, sol: false, particle: false }, repairs: [] },
-    stock: [],
+    stock: MODELS.flatMap((model) => COMPARISON.map((unit) => ({ stage: 2 as const, model, judge: "astra" as const, row: 1 as const, unit, W: 0 as const, N: 0 as const }))),
     gold: { opus: gold, sol: gold, particle: gold },
     voided: false,
     stopped: o.stopped ?? false,
