@@ -6,7 +6,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Caller } from "../../product-value/judge.ts";
-import type { Block, BriefMeta, FounderTurn, Key, SessionRow } from "../types.ts";
+import type { Block, BriefMeta, Key, SessionRow, Turn } from "../types.ts";
 import { parseBlock, renderBlock } from "./block.ts";
 import type { CheckInput } from "./check.ts";
 import type { JudgedLabel } from "./judge.ts";
@@ -28,7 +28,7 @@ export const blockOf = (decision: string, next_action: string, why = "It fits.")
   return p;
 };
 
-export const turn = (n: number, revealed: string[] = []): FounderTurn => ({ turn: n, reply: "ok", revealed, rules: [], attempts: 1 });
+export const turn = (n: number, revealed: string[] = []): Turn => ({ turn: n, reply: "ok", revealed, rules: [], attempts: 1, delivered: false, done: false, rejected_draws: [] });
 
 export function row(o: Partial<SessionRow> & Pick<SessionRow, "brief">): SessionRow {
   const k = BRIEFS.get(o.brief)!.key;

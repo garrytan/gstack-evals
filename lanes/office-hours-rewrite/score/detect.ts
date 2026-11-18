@@ -17,7 +17,7 @@ import { readTranscript } from "../../../src/trial/review/readers.ts";
 import { replies } from "../../office-hours-founder/parse.ts";
 import { isQuestion, sentences } from "../../office-hours-founder/score/counters.ts";
 import { SESSION_KIND_LINE } from "../frozen.ts";
-import type { Block, Compliance, Exposure, FounderTurn, KeptWhole, SkillArm } from "../types.ts";
+import type { Block, Compliance, Exposure, KeptWhole, SkillArm, Turn } from "../types.ts";
 
 type Patterns = Readonly<Record<string, RegExp>>;
 export interface Markers {
@@ -91,7 +91,7 @@ export const loadMarkers = (pin: SkillArm): Markers => markersFrom(json(pin));
 export const loadCompliance = (): ComplianceMarkers => complianceFrom(json("compliance"));
 
 /** Founder replies the adviser received before the first closing message (pre-run change 1: delivered only). */
-export const delivered = (turns: readonly FounderTurn[]): FounderTurn[] => turns.filter((t) => (t as FounderTurn & { delivered?: boolean }).delivered === true);
+export const delivered = (turns: readonly Turn[]): Turn[] => turns.filter((t) => t.delivered === true);
 
 type Rec = Record<string, any>;
 const resultText = (c: unknown): string => (typeof c === "string" ? c : Array.isArray(c) ? c.map((b) => (typeof b?.text === "string" ? b.text : "")).join("\n") : "");
@@ -152,7 +152,7 @@ export function docs(stateRoot: string | null, m: Pick<Markers, "deliverables"> 
 const DEFAULT_DOCS = { deliverables: { design: /-design-[^/]*\.md$/, memo: /-memo-[^/]*\.md$/ } };
 
 /** Section 12's exposure detector for one skill session. */
-export function exposure(o: { transcript: string; stateRoot: string | null; sessionKind: string | null; turns: readonly FounderTurn[]; markers: Markers }): Exposure {
+export function exposure(o: { transcript: string; stateRoot: string | null; sessionKind: string | null; turns: readonly Turn[]; markers: Markers }): Exposure {
   const { uses, userText } = toolsOf(o.transcript);
   const sl = o.markers.skill_loaded;
   const read_skill = readOk(uses, sl.reads) || uses.some((u) => u.ok && u.name === "Skill" && JSON.stringify(u.input).includes(sl.skill_tool)) || sl.texts.some((t) => userText.includes(t));
@@ -195,7 +195,7 @@ export function questionsAsked(transcript: string, closings: number): number {
 }
 
 /** G3: founder replies the adviser received before the closing message. */
-export const founderReplies = (turns: readonly FounderTurn[]): number => delivered(turns).length;
+export const founderReplies = (turns: readonly Turn[]): number => delivered(turns).length;
 
 /** True when an action holds a date and, outside the date, a number. */
 export function datedAndNumbered(action: string, c: ComplianceMarkers): boolean {

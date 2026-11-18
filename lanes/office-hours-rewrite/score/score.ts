@@ -15,7 +15,7 @@
 //   transcript; G2 questions and G3 delivered founder replies on every session.
 import { readFileSync } from "node:fs";
 import { JUDGE_EFFORT, JUDGE_FOR } from "../frozen.ts";
-import type { FounderTurn, Key, ScoredSession, SessionRow } from "../types.ts";
+import type { Key, ScoredSession, SessionRow, Turn } from "../types.ts";
 import { compliance, delivered, exposure, founderReplies, keptWhole, loadCompliance, loadMarkers, questionsAsked, type ComplianceMarkers, type ComplianceReport, type Markers } from "./detect.ts";
 import type { JudgedLabel } from "./judge.ts";
 import { sessionKey, type Brief, type PacketMap } from "./packets.ts";
@@ -27,7 +27,7 @@ export interface Scored extends ScoredSession {
   compliance: ComplianceReport | null;
 }
 
-export const r1 = (turns: readonly FounderTurn[], key: Pick<Key, "decisive">): 0 | 1 => (delivered(turns).some((t) => t.revealed.some((f) => key.decisive.includes(f))) ? 1 : 0);
+export const r1 = (turns: readonly Turn[], key: Pick<Key, "decisive">): 0 | 1 => (delivered(turns).some((t) => t.revealed.some((f) => key.decisive.includes(f))) ? 1 : 0);
 
 export const combine = (bits: readonly Bit[]): Bit => (bits.includes(0) ? 0 : bits.includes(null) ? null : 1);
 
