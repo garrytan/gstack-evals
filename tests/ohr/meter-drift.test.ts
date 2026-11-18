@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { recordApproval } from "../../src/runner/ledger/ledger.ts";
 import { openWire, type Wire } from "../../lanes/office-hours-rewrite/wire.ts";
+import { DRAIN_MS } from "../../lanes/product-value/meter.ts";
 
 const D = 1_000_000;
 const KEYS = { OPENAI_API_KEY: "stub-not-a-key", ANTHROPIC_API_KEY: "stub-not-a-key", OPENROUTER_API_KEY: "stub-not-a-key" };
@@ -15,13 +16,13 @@ const errored = () => Response.json({ id: "gen-1", error: { code: 524, message: 
 const SIM_TEXT = JSON.stringify({ reply: "Two services pay me.", revealed: ["f1"], rules: [3], done: false });
 
 /** A wire on a temporary ledger whose upstream answers each Argon call with the next reply in turn. */
-async function withArgon<T>(replies: (() => Response | Promise<Response>)[], body: (w: Wire) => Promise<T>, dir = mkdtempSync(join(tmpdir(), "ohr-drift-"))): Promise<T> {
+async function withArgon<T>(replies: (() => Response | Promise<Response>)[], body: (w: Wire) => Promise<T>, dir = mkdtempSync(join(tmpdir(), "ohr-drift-")), drainMs?: number): Promise<T> {
   const record = join(dir, "record");
   try {
     recordApproval(record, { action: "init", item: "ohr-drift-test", cap_micros: 20 * D, quotes: [{ words: "drift test on a temporary ledger, not an approval", by: "tests/ohr/meter-drift.test.ts", source: "pre-run change 5" }], admission: "warn" });
   } catch {}
   let i = 0;
-  const w = await openWire({ dir: join(dir, "wire"), item: "ohr-drift-test", capMicros: 5 * D, label: "ohr-drift-test", record, ledger: join(dir, "ledger.sqlite"), env: KEYS, io: { out: () => {}, err: () => {} }, upstream: (async () => await replies[i++]!()) as unknown as typeof fetch });
+  const w = await openWire({ dir: join(dir, "wire"), item: "ohr-drift-test", capMicros: 5 * D, label: "ohr-drift-test", record, ledger: join(dir, "ledger.sqlite"), env: KEYS, io: { out: () => {}, err: () => {} }, upstream: (async () => await replies[i++]!()) as unknown as typeof fetch, drainMs });
   try {
     return await body(w);
   } finally {
@@ -149,3 +150,19 @@ test("when a stop ends the command, calls still in flight finish and their paid 
   const kept = cacheFiles(dir).map((f) => JSON.parse(readFileSync(join(dir, "wire", "cache", f), "utf8")).text);
   expect(kept).toEqual(["slow answer"]);
 });
+
+test("closing waits for a hung call only up to its time limit, so a stop never stalls", async () => {
+  expect(DRAIN_MS).toBe(310_000);
+  const hang = () => new Promise<Response>(() => {});
+  const t0 = performance.now();
+  const stopped = await withArgon([hang, answered("ok", "Azure")], async (w) => {
+    void w.call({ model: "gemini", prompt: "Hangs.", maxTokens: 200, effort: null, label: "hang" }).catch(() => {});
+    await Bun.sleep(50);
+    return w.call({ model: "gemini", prompt: "Fast one.", maxTokens: 200, effort: null, label: "fast" }).then(() => null, (e: { code?: string }) => e.code);
+  }, undefined, 300);
+  const took = performance.now() - t0;
+  expect(stopped).toBe("E_PV_PROVIDER_DRIFT");
+  expect(took).toBeGreaterThanOrEqual(300);
+  expect(took).toBeLessThan(5_000);
+});
+

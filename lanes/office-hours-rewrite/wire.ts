@@ -77,6 +77,8 @@ export interface WireOptions {
   io: Io;
   /** Test-only: the fetch the meter's proxy sends upstream with. */
   upstream?: typeof fetch;
+  /** Test-only: how long closing waits for calls in flight (the meter's DRAIN_MS by default). */
+  drainMs?: number;
 }
 
 export interface Wire {
@@ -102,7 +104,7 @@ export async function openWire(o: WireOptions): Promise<Wire> {
   const vdir = join(cacheDir, "versions");
   mkdirSync(vdir, { recursive: true, mode: 0o700 });
   writeFileSync(runFile, JSON.stringify({ run_id: runId, spent_micros: before, ...commit }) + "\n");
-  const meter = await openMeter({ item: o.item, runId, out: join(o.dir, "meter"), cacheDir, maxOutputTokens: 32_000, amountMicros: o.capMicros, emptyBound: EMPTY_BOUND, record: o.record, ledger: o.ledger, env: o.env, fetch: versionTap(o.upstream ?? fetch, vdir), warn: (code, m) => o.io.err(code + " " + m) });
+  const meter = await openMeter({ item: o.item, runId, out: join(o.dir, "meter"), cacheDir, maxOutputTokens: 32_000, amountMicros: o.capMicros, emptyBound: EMPTY_BOUND, drainMs: o.drainMs, record: o.record, ledger: o.ledger, env: o.env, fetch: versionTap(o.upstream ?? fetch, vdir), warn: (code, m) => o.io.err(code + " " + m) });
   const call: Caller = async (req) => {
     const model = routed(req.model);
     const res = await meter.call({ ...req, model });
