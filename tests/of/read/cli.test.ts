@@ -141,6 +141,7 @@ describe("of stage2 and of headline", () => {
     mkdirSync(dir, { recursive: true });
     const path = join(dir, "manifest.json");
     freezeManifest(path, { schema: 1, cell, models: [...MODELS], arms: ["none", "lens", "office-hours"], repairs: [], units: {}, entries: [...entries] });
+    writeFileSync(join(dir, "stops.json"), JSON.stringify({ stops: [], unrun: [] }) + "\n");
     return path;
   };
   const primary = launch("stage2", s2.manifest);
@@ -178,6 +179,18 @@ describe("of stage2 and of headline", () => {
     expect(ok.code).toBe(0);
     expect(ok.out).toContain("untested on Opus: simulator: the stage 2 fidelity audit voided the stage. The next attempt changes: a stage 2 rerun under a repaired simulator.");
     expect((await run("headline", ["--stage2", path, "--next", "haiku=x"])).err).toContain("--next takes <model>=");
+  });
+  test("a launch with no stops.json beside its manifest is refused, never read as complete", async () => {
+    const dir = join(root, "launch-no-stops");
+    mkdirSync(dir, { recursive: true });
+    const path = join(dir, "manifest.json");
+    freezeManifest(path, { schema: 1, cell: "stage2", models: [...MODELS], arms: ["none", "lens", "office-hours"], repairs: [], units: {}, entries: [...s2.manifest] });
+    const a = args(join(root, "s2-no-stops"));
+    a[a.indexOf(primary)] = path;
+    const r = await run("stage2", a);
+    expect(r.code).toBe(2);
+    expect(r.err).toStartWith("E_USAGE of stage2: ");
+    expect(r.err).toContain("stops.json");
   });
   test("refuses a stage 1 audit outcome and an unknown flag", async () => {
     expect((await run("stage2", args(join(root, "s2-bad"), "repair"))).err).toContain("stage 1 outcome");
