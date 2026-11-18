@@ -3,11 +3,11 @@
 // against B1b's published hook rows, the power table, the caps and launch guard, the controls' reuse check, the session rows
 // and the three scripted sessions' captures.
 import { describe, expect, test } from "bun:test";
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
-import { B1C_CASES, b1bControls, b1cApprove, b1cCap, b1cCaseProblems, b1cCheck, b1cDone, b1cGuard, b1cReading, b1cReport, b1cRow, b1cStats, bandOdds, checkB1cRows, harnessDirty, loadB1cCaptured, placementReading, powerLines, READINGS, reuseB1b, whyNot, type B1cRow } from "../../lanes/delivery-route/b1c.ts";
+import { B1C_CASES, b1bControls, b1cApprove, b1cCap, b1cCaseProblems, b1cCheck, b1cDone, b1cGuard, b1cMain, b1cPlan, b1cReading, b1cReport, b1cRow, b1cStats, bandOdds, checkB1cRows, harnessDirty, loadB1cCaptured, placementReading, powerLines, READINGS, reuseB1b, whyNot, type B1cRow } from "../../lanes/delivery-route/b1c.ts";
 import { B1C, B1C_CAPS_USD, B1C_SPEC, PLACEMENT } from "../../lanes/delivery-route/b1c-pins.ts";
 import { B1B_ARMS } from "../../lanes/delivery-route/b1b-pins.ts";
 import { paired, reuseCheck, type Load } from "../../lanes/delivery-route/b1b.ts";
@@ -164,6 +164,29 @@ describe("money", () => {
     expect(g.ok).toBe(false);
     expect(g.why[0]).toMatch(/^all-in \$150\.01 passes the \$150\.00 stop$/);
   });
+  test("the launch command's guard reads the work dir's ledger mirror before B1C_LEDGERS, and refuses a bad or missing crew file", async () => {
+    const root = mkdtempSync(join(tmpdir(), "b1c-guard-")), work = join(root, "work"), ledgers = join(root, "ledgers"), crew = join(root, "crew.json"), mirror = join(work, "host/ledger.jsonl");
+    const saved = { B1C_LEDGERS: process.env.B1C_LEDGERS, B1C_CREW: process.env.B1C_CREW, LEDGER: process.env.LEDGER };
+    const guard = () => b1cMain(["guard", work]);
+    try {
+      mkdirSync(join(work, "host"), { recursive: true }); mkdirSync(ledgers);
+      writeFileSync(join(work, "plan.json"), JSON.stringify({ item: "b1c-opus", git_head: "HEAD", parts: b1cPlan("b1c-opus", drawnTasks(loadBundle()).run).parts }));
+      b1cApprove(join(ledgers, "b1c-opus.jsonl"), "b1c-opus", 80, "the Captain");
+      writeFileSync(crew, JSON.stringify({ as_of: "2026-11-18", usd: 0 }));
+      Object.assign(process.env, { B1C_LEDGERS: ledgers, B1C_CREW: crew }); delete process.env.LEDGER;
+      expect(await guard()).toBe(0);
+      copyFileSync(join(ledgers, "b1c-opus.jsonl"), mirror);
+      for (const kind of ["reserve", "settle"]) appendFileSync(mirror, JSON.stringify({ ts: "2026-11-18T00:00:00Z", item: "b1c-opus", kind, id: "model-1", usd_micros: 30_000_000 }) + "\n");
+      await expect(guard()).rejects.toThrow(/^E_B1_LAUNCH b1c-opus: b1c-opus's projection \$[\d.]+ passes its cap \$80\.00/);
+      writeFileSync(crew, JSON.stringify({ as_of: "2026-11-18", usd: -1 }));
+      await expect(guard()).rejects.toThrow(/^E_USAGE b1c launch guard: the crew file needs/);
+      delete process.env.B1C_CREW;
+      await expect(guard()).rejects.toThrow(/^E_USAGE b1c launch guard: set B1C_LEDGERS/);
+    } finally {
+      for (const [k, v] of Object.entries(saved)) if (v === undefined) delete process.env[k]; else process.env[k] = v;
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, 60_000);
 });
 
 describe("the controls' reuse", () => {
