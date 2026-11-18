@@ -184,3 +184,24 @@ The harness does not parse the session's question for options or a marked recomm
 The tests are in tests/day-one/gate-default.test.ts. On the tree before the change, four of the six fail: the reply and its log type, its count toward the limit, the gate-default count with no gate pending, and the by-arm test, which runs the same planted waiting gate and the same answer through the stage runner for all six arms. Each guard was checked with a mutant: no gate condition, no SOURCE: unknown condition, any "I don't know", the reply logged as recommended, the reply not counted, and the live gate check passed to every arm. Each mutant fails at least one test. The day-one dry run drives the rule in its owner-channel check.
 
 The rest of rep 4 (A on the other two briefs, S-dayone and S-full on the first) runs on this change. Rep 4's first A session ran before it and keeps its row under the frozen rule. One cross-family advisory read of the change runs alongside. If it moves a classification, the rows are re-scored from their records with no new sessions.
+
+## 10. A change after the rest of rep 4 (2026-11-18)
+
+**A start call is tied to the run gstack-autoplan reported for it** (lanes/day-one/exposure.ts). In the rest of rep 4, both S sessions named their run folder through a command substitution. S-dayone set `RUN=.gstack/tmp/autoplan/main-$(date +%Y%m%d-%H%M%S)` and called `next --out "$RUN"`. S-full built `--out /work/app/.gstack/tmp/autoplan/run-$R` from `R=$(date ...)`. The command log cannot run `date`, so it never matched either --out to the folder gstack-autoplan created. Both records were passed over, and the live gate check, which reads the same record, saw no waiting gate. Each run reached gate_pending with both voices completed in all four phases, but neither session's owner was asked at the gate, and neither session ran `answer`.
+
+The rule now also asks gstack-autoplan which run a call made. A call is for a run folder when its --out is that folder, as before. It is also for that folder when its Bash command holds no other gstack-autoplan call and its own output reports that run: an `ATTEMPT: <run id>-a<n>` line with the run id from the folder's run.json, or a `GSTACK_RESULT: ... run=<folder>` line. This covers any --out the log cannot spell out, whether a command substitution, backticks, or a variable set in another Bash call. Everything else in sections 7 and 8 still holds. The run must start from the first next or run call for the folder that names a --plan, that --plan must be /work/app/plan.md, and a hand-edited record never counts. The live gate check reads the same record.
+
+These are still passed over:
+
+- a call whose command holds a second gstack-autoplan call, when its --out does not match;
+- a run id printed by a command with no start call in it;
+- another run's id, including a longer id that begins with this one;
+- a start call that names another plan file.
+
+Every start call (next or run naming a --plan) that is for no run.json the scan found is now counted in each row as `unmatched`. The results report the unmatched count per arm as a harness-health line. In the wave, an unmatched start call in the first batch stops the run for a ruling.
+
+One form is still unhandled: a start call whose output the session threw away (`> /dev/null`) and whose --out the log cannot spell out. Its record is passed over, and the call counts as unmatched, so the harness-health line shows it.
+
+The tests are in tests/day-one/run-record.test.ts. On the tree before the change, all three new tests fail. Six mutants each fail at least one test: any number of calls in the command, an id prefix match, any Bash call's output, the --out text alone, unmatched counted only when no run counts, and any line naming the folder. The day-one dry run drives the rule in its exposure check. Read through the new rule with no spend, every rep-3 and rep-4 review record reads as it did at the previous head except the two rep-4 S records. Both are now found at gate_pending with voice astra, still not exposed, and the live check would have seen their waiting gate. Every session's unmatched count is 0. Because neither gate was answered, both S sessions run again on this change.
+
+**S-dayone keeps its pin.** A check after rep 4 found that each session gets the whole of autoplan's SKILL.md from the `/autoplan` command that opens it. The transcript does not record that text. Each session's first step is the SKILL.md preamble's own `gstack-skill-start --skill "autoplan"` call, made before it reads any file. The day-one block sits above that preamble. In both reps, S-dayone's plan holds the `### Day one` table with the block's columns. The smoke's earlier count of S-dayone's day-one lines read only tool output, so it missed this channel. The sessions then follow SKILL.md's own unattended route to DRIVER.md and the CLI, because the harness sets GSTACK_SESSION_KIND=unattended for every gstack arm.

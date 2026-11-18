@@ -3,8 +3,12 @@
 // never from what the model said.
 // - The run (pin change 2, item A): a run.json anywhere in the session's work tree, the state root included, down to
 //   12 folders below /work/app, counts only when the session's own command log holds the gstack-autoplan call that
-//   wrote it: the first next or run call whose --out is that run.json's folder and that names a --plan names
-//   /work/app/plan.md. The record's plan_input is /work/app/plan.md or (rep 3 of the smoke) a regular file, reached
+//   wrote it: the first next or run call for that run.json's folder that names a --plan names /work/app/plan.md.
+//   A call is for a folder when its --out is that folder, or (rep 4 of the smoke) when its Bash command holds no
+//   other gstack-autoplan call and its own output reports that run: an ATTEMPT line with the run.json's run id, or a
+//   GSTACK_RESULT line with run=<folder>. So a --out the log cannot spell out (a command substitution, a variable set
+//   in another shell) still ties the call to the run gstack-autoplan made for it. A start call (next or run naming a
+//   --plan) that is for no run.json the scan found is counted as unmatched. The record's plan_input is /work/app/plan.md or (rep 3 of the smoke) a regular file, reached
 //   through no symlink, inside that folder or /work/app that the session's own gstack-autoplan revise call with the
 //   same --out named as its --plan. Flags are read as gstack-autoplan reads them: the first separate --out or --plan.
 //   A record that the command log touched any other way is hand-edited and never counts: a Write, Edit, MultiEdit or
@@ -54,6 +58,8 @@ export interface Exposure {
   exposed: boolean;
   voice: "astra" | "fallback";
   why: string;
+  /** Start calls in the session's command log that are for no run.json the scan found. */
+  unmatched: number;
 }
 
 /** A host folder and the path the session saw it at. */
@@ -71,6 +77,7 @@ export interface FoundRun {
 export interface RunSearch {
   run: FoundRun | null;
   passed: string[];
+  unmatched: number;
 }
 
 /** Every run.json under dir, a root the session saw at seen, down to 12 folders below /work/app wherever the root starts. */
@@ -293,8 +300,10 @@ const SHELLS = new Set(["bash", "sh", "zsh", "dash"]);
 const STARTS = new Set(["next", "run"]);
 
 export interface CommandLog {
-  /** Each gstack-autoplan call: its verb and its --out and --plan as absolute paths in the session. */
-  calls: { verb: string; out: string | null; plan: string | null }[];
+  /** Each gstack-autoplan call: its verb, its --out and --plan as absolute paths in the session, and its Bash call's id. */
+  calls: { verb: string; out: string | null; plan: string | null; use: string }[];
+  /** Each Bash call's output, by its id. */
+  outputs: Map<string, string>;
   /** Every path the log wrote other than through gstack-autoplan. */
   writes: Set<string>;
   /** Every folder a recursive copy, mv or rsync may have filled or replaced; a record under one is edited by hand. */
@@ -315,7 +324,8 @@ interface Ctx {
 
 /** The session's command log under the rule above. */
 export function commandLog(transcript: string): CommandLog {
-  const log: CommandLog = { calls: [], writes: new Set(), trees: new Set() };
+  const log: CommandLog = { calls: [], writes: new Set(), trees: new Set(), outputs: new Map() };
+  let use = "";
   const child = (c: Ctx): Ctx => ({ cwd: c.cwd, env: new Map(c.env) });
   const simple = (raw: Piece[][], ctx: Ctx, depth: number) => {
     const ws: string[] = [];
@@ -361,7 +371,7 @@ export function commandLog(transcript: string): CommandLog {
       };
       const out = flag("--out");
       const plan = flag("--plan");
-      log.calls.push({ verb: args[0] ?? "", out: out === null ? null : at(out), plan: plan === null ? null : at(plan) });
+      log.calls.push({ verb: args[0] ?? "", out: out === null ? null : at(out), plan: plan === null ? null : at(plan), use });
     } else if (name === "tee" || name === "truncate" || (name === "sed" && args.some((a) => /^(-[a-zA-Z]*i|--in-place)/.test(a)))) {
       for (const p of paths) log.writes.add(at(p));
     } else if (["cp", "mv", "install", "ln"].includes(name) && paths.length > 1) {
@@ -412,6 +422,13 @@ export function commandLog(transcript: string): CommandLog {
   };
   const cwds = new Map<string, string>();
   for (const m of readTranscript(transcript)) {
+    if (m.type === "user" && Array.isArray(m.message?.content)) {
+      for (const b of m.message.content as Record<string, any>[]) {
+        if (b?.type !== "tool_result" || typeof b.tool_use_id !== "string") continue;
+        const c = b.content;
+        log.outputs.set(b.tool_use_id, typeof c === "string" ? c : Array.isArray(c) ? c.map((x: any) => (typeof x?.text === "string" ? x.text : "")).join("\n") : "");
+      }
+    }
     if (m.type !== "assistant" || !Array.isArray(m.message?.content)) continue;
     const agent = String(m.parent_tool_use_id ?? "");
     for (const b of m.message.content as Record<string, any>[]) {
@@ -421,6 +438,7 @@ export function commandLog(transcript: string): CommandLog {
         const p = b.input?.file_path ?? b.input?.notebook_path;
         if (typeof p === "string") log.writes.add(posix.resolve(ctx.cwd, p));
       } else if (b.name === "Bash" && typeof b.input?.command === "string") {
+        use = String(b.id ?? "");
         shell(b.input.command, ctx, 0);
         cwds.set(agent, ctx.cwd);
       }
@@ -432,7 +450,19 @@ export function commandLog(transcript: string): CommandLog {
 /** The session's autoplan run under the rule above, from the roots in order (a run two roots both hold is read from the first). */
 export function findRun(roots: RunRoot[], transcript: string): RunSearch {
   const log = commandLog(transcript);
+  const perUse = new Map<string, number>();
+  for (const c of log.calls) perUse.set(c.use, (perUse.get(c.use) ?? 0) + 1);
+  const reports = (c: CommandLog["calls"][number], folder: string, id: unknown) =>
+    perUse.get(c.use) === 1 &&
+    (log.outputs.get(c.use) ?? "").split("\n").some((l) => {
+      const t = l.trim();
+      if (typeof id === "string" && id && t.startsWith("ATTEMPT: " + id + "-a")) return /^\d+(\s|$)/.test(t.slice(("ATTEMPT: " + id + "-a").length));
+      return t.startsWith("GSTACK_RESULT: ") && t.split(/\s+/).includes("run=" + folder);
+    });
+  const isFor = (c: CommandLog["calls"][number], folder: string, id: unknown) => c.out === folder || reports(c, folder, id);
+  const isStart = (c: CommandLog["calls"][number]) => STARTS.has(c.verb) && c.plan !== null;
   const seen = new Set<string>();
+  const scanned: { folder: string; id: unknown }[] = [];
   const ok: FoundRun[] = [];
   const passed: string[] = [];
   for (const root of roots) {
@@ -441,13 +471,15 @@ export function findRun(roots: RunRoot[], transcript: string): RunSearch {
       if (seen.has(s)) continue;
       seen.add(s);
       const folder = posix.dirname(s);
+      const id = r.body?.run;
+      scanned.push({ folder, id });
       const input = r.body?.plan_input;
       const revised =
         typeof input === "string" &&
         (input.startsWith(folder + "/") || input.startsWith(WORK + "/")) &&
-        log.calls.some((c) => c.verb === "revise" && c.out === folder && c.plan === input) &&
+        log.calls.some((c) => c.verb === "revise" && isFor(c, folder, id) && c.plan === input) &&
         regularFile(roots, input) !== null;
-      const start = log.calls.find((c) => STARTS.has(c.verb) && c.out === folder && c.plan !== null);
+      const start = log.calls.find((c) => isStart(c) && isFor(c, folder, id));
       const why =
         input !== PLAN && !revised
           ? "plan_input " + JSON.stringify(input ?? null) + ", not " + PLAN + " or a regular file inside " + folder + " or " + WORK + " that the session's own gstack-autoplan revise --out " + folder + " --plan named"
@@ -463,7 +495,8 @@ export function findRun(roots: RunRoot[], transcript: string): RunSearch {
     }
   }
   ok.sort((a, b) => String(b.body?.updated_at ?? "").localeCompare(String(a.body?.updated_at ?? "")));
-  return { run: ok[0] ?? null, passed };
+  const unmatched = log.calls.filter((c) => isStart(c) && !scanned.some((x) => isFor(c, x.folder, x.id))).length;
+  return { run: ok[0] ?? null, passed, unmatched };
 }
 
 /** Whether the session's run in its live work dir waits at its gate: the record exposure reads, from the transcript so far. */
@@ -481,7 +514,7 @@ const phaseRead = (p: any): PhaseRead => {
 export function readExposure(found: RunSearch, voiceRequests: number): Exposure {
   const r = found.run;
   const empty: PhaseRead = { state: "absent", native: null, outside: null };
-  if (!r) return { run: null, status: null, phases: { ceo: empty, design: empty, eng: empty }, outside_model: null, exposed: false, voice: "fallback", why: "no autoplan run.json that the session's own gstack-autoplan calls wrote" + (found.passed.length ? " (passed over: " + found.passed.join("; ") + ")" : "") };
+  if (!r) return { run: null, status: null, phases: { ceo: empty, design: empty, eng: empty }, outside_model: null, exposed: false, voice: "fallback", why: "no autoplan run.json that the session's own gstack-autoplan calls wrote" + (found.passed.length ? " (passed over: " + found.passed.join("; ") + ")" : ""), unmatched: found.unmatched };
   const b = r.body;
   const phases = { ceo: phaseRead(b.phases?.ceo), design: phaseRead(b.phases?.design), eng: phaseRead(b.phases?.eng) };
   const closed = Object.entries(phases).filter(([, p]) => p.state === "closed");
@@ -495,7 +528,7 @@ export function readExposure(found: RunSearch, voiceRequests: number): Exposure 
     else if (!["completed", "unavailable", "failed"].includes(String(p.outside))) gaps.push(k + " outside voice " + p.outside);
   }
   const astra = voiceRequests > 0 && closed.length > 0 && closed.every(([, p]) => p.outside === "completed");
-  return { run: r.seen, status: b.status ?? null, phases, outside_model: b.outside_model ?? null, exposed: gaps.length === 0, voice: astra ? "astra" : "fallback", why: gaps.length ? gaps.join("; ") : "every phase closed and the gate answered" };
+  return { run: r.seen, status: b.status ?? null, phases, outside_model: b.outside_model ?? null, exposed: gaps.length === 0, voice: astra ? "astra" : "fallback", why: gaps.length ? gaps.join("; ") : "every phase closed and the gate answered", unmatched: found.unmatched };
 }
 
 /** The arm's plan text under the rule above. */

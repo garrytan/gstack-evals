@@ -587,6 +587,14 @@ export const CASES: Record<string, Case> = {
       must(unavailable.exposed && unavailable.voice === "fallback", "an unavailable outside voice did not read exposed on the fallback");
       const planted = run("completed", "");
       must(!planted.exposed && planted.run === null, "a run.json that no gstack-autoplan call wrote read exposed");
+      const dated = join(dir, "dated");
+      mkdirSync(join(dated, "r-1"), { recursive: true });
+      writeFileSync(join(dated, "r-1", "run.json"), JSON.stringify({ status: "gate_pending", run: "r-1-x", plan_input: PLAN, updated_at: "2026-11-17T00:00:00Z" }));
+      const start = JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: "b2", name: "Bash", input: { command: "R=r-$(date +%s); gstack-autoplan next --out " + WORK + '/"$R" --plan ' + PLAN } }] } }) + "\n";
+      const said = JSON.stringify({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "b2", content: "ATTEMPT: r-1-x-a1 phase=ceo" }] } }) + "\n";
+      const byOutput = findRun([{ dir: dated, seen: WORK }], start + said);
+      const silent = findRun([{ dir: dated, seen: WORK }], start);
+      must(byOutput.run !== null && byOutput.unmatched === 0 && silent.run === null && silent.unmatched === 1, "a start call's own output did not tie it to its run, or a start with no run was not counted");
       const state = join(dir, "state");
       mkdirSync(join(state, "r"), { recursive: true });
       mkdirSync(join(dir, "work"), { recursive: true });
@@ -597,7 +605,7 @@ export const CASES: Record<string, Case> = {
         return armPlan(join(dir, "work"), "base", findRun([{ dir: state, seen: WORK }], call).run).text;
       };
       must(plan("r/inside.md") === "INSIDE plan" && !plan("../outside.md").includes("OUTSIDE") && !plan("/a/b/outside.md", "/a/b/c/d").includes("OUTSIDE"), "an autoplan plan outside the state root was read, or one inside it was not");
-      return "both voices: exposed, astra; a disabled or skipped outside voice: not exposed, with the reason; unavailable: exposed on the fallback; a run.json no gstack-autoplan call wrote: not exposed";
+      return "both voices: exposed, astra; a disabled or skipped outside voice: not exposed, with the reason; unavailable: exposed on the fallback; a run.json no gstack-autoplan call wrote: not exposed; a --out from $(date) ties through the call's own output, and a start with no run counts as unmatched";
     }),
   "checker session setup": () =>
     withTmp(async (dir) => {

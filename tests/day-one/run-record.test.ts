@@ -301,3 +301,77 @@ describe("the command log's shell shapes", () => {
       expect(gatePending(work, viaAlias)).toBe(false);
     }));
 });
+
+const txo = (calls: { command: string; output?: string }[]) =>
+  calls
+    .map((c, i) => JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: "o" + i, name: "Bash", input: { command: c.command } }] } }) + "\n" + (c.output === undefined ? "" : JSON.stringify({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "o" + i, content: c.output }] } }) + "\n"))
+    .join("");
+const attempt = (id: string, folder: string) => "PHASE: ceo snapshot=aa order=ceo,design,dx,eng\nATTEMPT: " + id + "-a1 phase=ceo voice=native prompt=" + folder + "/ceo-native-prompt.md result=" + folder + "/ceo-native.a1.md\nGSTACK_RESULT: skill=autoplan status=awaiting_result run=" + folder + "\n";
+
+// Value: protects=the run-record rule's start match (rep 4 of the smoke): a start call whose --out the command log cannot spell out (a command substitution, a variable from another shell) is tied to the run gstack-autoplan itself reported for that call, by the run id on its ATTEMPT lines or the folder on its GSTACK_RESULT line, and the live gate check reads the same record; every start call that matches no record is counted; fails_when=a run started from --out "$RUN" with RUN=...$(date ...) is passed over, or a record is tied to a call through output that call did not produce, through a command that holds two gstack-autoplan calls, or through another run's id
+describe("a start call's run, from what gstack-autoplan reported for it", () => {
+  const MAIN = WORK + "/.gstack/tmp/autoplan/main-20261118-054759";
+  const ID = "main-20261118-054759-yayiqy-20261118054759";
+  const pending = (folder: string, id: string, o: Record<string, unknown> = {}) => body({ status: "gate_pending", out: folder, run: id, active_plan: folder + "/plan-active.md", ...o });
+
+  test("a run whose --out the log cannot spell out is found from its start call's own output, and the live gate check reads it", () =>
+    withDir((dir) => {
+      const work = join(dir, "work");
+      const roots: RunRoot[] = [{ dir: work, seen: WORK }];
+      put(work, WORK, MAIN, pending(MAIN, ID));
+      const forms: [string, { command: string; output?: string }[]][] = [
+        ["a substitution in a variable", [{ command: "cd /work/app; RUN=.gstack/tmp/autoplan/main-$(date +%Y%m%d-%H%M%S); mkdir -p .gstack/tmp/autoplan; echo RUN=$RUN; " + BIN + ' next --out "$RUN" --plan /work/app/plan.md --full 2>&1', output: "RUN=.gstack/tmp/autoplan/main-20261118-054759\n" + attempt(ID, MAIN) }]],
+        ["a substitution inside --out", [{ command: "mkdir -p .gstack/tmp && R=$(date +%Y%m%d-%H%M%S) && " + BIN + " next --out /work/app/.gstack/tmp/autoplan/main-$R --plan /work/app/plan.md --full 2>&1", output: attempt(ID, MAIN) }]],
+        ["a relative variable", [{ command: "OUT=main-$(date +%Y%m%d-%H%M%S); cd .gstack/tmp/autoplan && " + BIN + ' next --out "$OUT" --plan /work/app/plan.md 2>&1 | tail -40', output: attempt(ID, MAIN) }]],
+        ["backticks", [{ command: "cd /work/app; " + BIN + " next --out .gstack/tmp/autoplan/main-`date +%Y%m%d-%H%M%S` --plan plan.md --full", output: attempt(ID, MAIN) }]],
+        ["a variable another shell set", [{ command: "RUN=.gstack/tmp/autoplan/main-20261118-054759; echo $RUN", output: ".gstack/tmp/autoplan/main-20261118-054759\n" }, { command: "cd /work/app; " + BIN + ' next --out "$RUN" --plan /work/app/plan.md --full 2>&1', output: attempt(ID, MAIN) }]],
+        ["only the GSTACK_RESULT line kept", [{ command: "cd /work/app; RUN=.gstack/tmp/autoplan/main-$(date +%s); " + BIN + ' next --out "$RUN" --plan /work/app/plan.md --full 2>&1 | grep GSTACK_RESULT', output: "GSTACK_RESULT: skill=autoplan status=awaiting_result run=" + MAIN + "\n" }]],
+      ];
+      for (const [name, calls] of forms) {
+        const t = txo(calls);
+        const f = findRun(roots, t);
+        expect([name, f.run?.seen, f.unmatched]).toEqual([name, MAIN + "/run.json", 0]);
+        expect([name, gatePending(work, t)]).toEqual([name, true]);
+        expect([name, readExposure(f, 1).unmatched]).toEqual([name, 0]);
+      }
+    }));
+
+  test("output a start call did not produce, a command with two gstack-autoplan calls, another run's id and a hand edit tie nothing", () =>
+    withDir((dir) => {
+      const work = join(dir, "work");
+      const roots: RunRoot[] = [{ dir: work, seen: WORK }];
+      put(work, WORK, MAIN, pending(MAIN, ID));
+      const start = "cd /work/app; RUN=.gstack/tmp/autoplan/main-$(date +%s); " + BIN + ' next --out "$RUN" --plan /work/app/plan.md --full 2>&1';
+      const cases: [string, { command: string; output?: string }[]][] = [
+        ["another plan file", [{ command: "cd /work/app; RUN=.gstack/tmp/autoplan/main-$(date +%s); " + BIN + ' next --out "$RUN" --plan /work/app/notes.md --full', output: attempt(ID, MAIN) }]],
+        ["two calls in one command", [{ command: "cd /work/app; A=x-$(date +%s); B=y-$(date +%s); " + BIN + ' next --out "$A" --plan /work/app/plan.md; ' + BIN + ' next --out "$B" --plan /work/app/plan.md', output: attempt(ID, MAIN) }]],
+        ["the id printed by a command with no start call", [{ command: start, output: "Error: no plan\n" }, { command: "cat " + MAIN + "/attempts.jsonl; echo 'ATTEMPT: " + ID + "-a1'", output: attempt(ID, MAIN) }]],
+        ["another run's id", [{ command: start, output: attempt(ID + "x", MAIN + "x") }]],
+        ["a longer id that starts with this one", [{ command: start, output: "ATTEMPT: " + ID + "-alt-a1 phase=ceo\n" }]],
+      ];
+      for (const [name, calls] of cases) {
+        const f = findRun(roots, txo(calls));
+        expect([name, f.run]).toEqual([name, null]);
+        expect([name, gatePending(work, txo(calls))]).toEqual([name, false]);
+      }
+      const edited = txo([{ command: start, output: attempt(ID, MAIN) }]) + tx([{ name: "Write", input: { file_path: MAIN + "/run.json", content: "{}" } }]);
+      expect(findRun(roots, edited).run).toBeNull();
+      expect(findRun(roots, edited).passed.join(" ")).toContain("edited by hand");
+    }));
+
+  test("every start call that matches no record is counted", () =>
+    withDir((dir) => {
+      const work = join(dir, "work");
+      const roots: RunRoot[] = [{ dir: work, seen: WORK }];
+      put(work, WORK, MAIN, pending(MAIN, ID));
+      const lost = { command: "cd /work/app; " + BIN + " next --out .gstack/tmp/autoplan/gone --plan /work/app/plan.md --full", output: "error: something failed\n" };
+      const found = { command: "cd /work/app; RUN=.gstack/tmp/autoplan/main-$(date +%s); " + BIN + ' next --out "$RUN" --plan /work/app/plan.md --full', output: attempt(ID, MAIN) };
+      const silent = { command: "cd /work/app; RUN=.gstack/tmp/autoplan/main-$(date +%s); " + BIN + ' next --out "$RUN" --plan /work/app/plan.md --full > /dev/null 2>&1', output: "" };
+      expect(findRun(roots, txo([lost, found])).unmatched).toBe(1);
+      expect(findRun(roots, txo([found, { command: "cd /work/app; " + BIN + " next --out " + MAIN }])).unmatched).toBe(0);
+      const none = findRun(roots, txo([silent]));
+      expect([none.run, none.unmatched]).toEqual([null, 1]);
+      expect(readExposure(none, 0).unmatched).toBe(1);
+      expect(findRun(roots, tx([{ command: SCAFFOLD }])).unmatched).toBe(1);
+    }));
+});
