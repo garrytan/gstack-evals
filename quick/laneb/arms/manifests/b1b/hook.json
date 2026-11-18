@@ -1,0 +1,93 @@
+{
+  "arm": "hook",
+  "claude_code": "2.1.312",
+  "typed": false,
+  "spec": "hook:tar=hook:system_prompt=claude-code-preset:gstack_hooks=copy:strip_snapshot=true:closing_line=hm-status",
+  "steps": {
+    "sha256": "47bfc31f877aef8938dfabc4984a759eaaa1f8f7588a408c542199bde6e34557",
+    "bytes": 203,
+    "source": "https://github.com/addyosmani/agent-skills 39b723ceebf81474d0557c1fecd01eddab585563 .claude/commands/test.md lines 13-18"
+  },
+  "carrier": {
+    "file": "gstack-shaped-SKILL.md",
+    "bytes": 9343,
+    "before": 9140,
+    "after": 0,
+    "path": ".claude/skills/prove-it/SKILL.md"
+  },
+  "route": {
+    "gstack": "bbf48aa7ef195459afcf7d7840af7073cd050734 (1.100.0.0)",
+    "files": [
+      {
+        "path": ".claude/settings.json",
+        "sha256": "9ccd5915dad899c5f537138d734ae830667eb20cc821bad0779946c9b1dc0cfb"
+      },
+      {
+        "path": ".gstack/config.yaml",
+        "sha256": "e3d2dc0c29c8b041a4ddbaa8dbfe23cfe362fce2995ca918f27dcf9b86dd9bd6"
+      },
+      {
+        "path": ".claude/skills/gstack/hosts/claude/hooks/skill-route-hook",
+        "sha256": "27e255325a97ca830e3947a100c93446501548bb46abc2ca247efac0c3223673"
+      },
+      {
+        "path": ".claude/skills/gstack/hosts/claude/hooks/skill-route-hook.ts",
+        "sha256": "ba2948a927722b7cd1e72de9caade85a0adf18408760b941f25f42d7cd633d9d"
+      },
+      {
+        "path": ".claude/skills/gstack/lib/skill-route.ts",
+        "sha256": "fbe1525ead3a4cf2c8eea77cbec3d57fddb1553ba95db9137c74a0c0ac67f15d"
+      },
+      {
+        "path": ".claude/skills/gstack/lib/skill-contract.ts",
+        "sha256": "e5732d2317f7dc1b9751fbd96374e9c7120d7b4fd882f761840ac1f449464624"
+      },
+      {
+        "path": ".claude/skills/gstack/lib/fs-atomic.ts",
+        "sha256": "f5ac4c7463c3ce047737001dca3d5ee46cd413db068872f09627dde93427a4c2"
+      },
+      {
+        "path": ".claude/skills/gstack/lib/skill-triggers.ts",
+        "sha256": "b2a492f2ec3d7713d228e439902791f91421d4f7d7dd49a1ce5d344ff13464b0"
+      },
+      {
+        "path": ".claude/skills/gstack/lib/state-root.ts",
+        "sha256": "de62fe6e635cdeec878936c880ecbb73152339dd573a0d3328dbd9a48fcf246a"
+      }
+    ]
+  },
+  "tar_command": "tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner --format=gnu -cf <arm>.tar <top folders> (tar (GNU tar) 1.35)",
+  "tar": {
+    "file": "hook.tar",
+    "bytes": 122880,
+    "sha256": "1a1f9c63dbe7f1417f5099a6fdb2a42f30d5c50a0e2639db7323b3ebdc23ab19"
+  },
+  "tree": {
+    "files": 13,
+    "symlinks": 0,
+    "dirs": 10,
+    "bytes": 98111,
+    "digest": "6d57fdc2341276c4049aae86592b844eba31f70c458130432c769ebc585ebf72"
+  },
+  "skills": {
+    "count": 1,
+    "tree_digest": "6416bc8edb49de92f8212a240c4d0c4660d88774b2a3d3568f3f825654160926",
+    "skill_md_digest": "4176b10ed0b16029089b374538f4ddd2afc2bc0e7721d777feef435cf84d2e5f",
+    "names": [
+      "prove-it"
+    ]
+  },
+  "settings": {
+    "sha256": "9ccd5915dad899c5f537138d734ae830667eb20cc821bad0779946c9b1dc0cfb",
+    "hooks": [
+      {
+        "event": "UserPromptSubmit",
+        "matcher": "",
+        "command": "/root/.claude/skills/gstack/hosts/claude/hooks/skill-route-hook",
+        "timeout": 5,
+        "source": null
+      }
+    ]
+  },
+  "inventory_sha256": "4e3cb2c99602406b2af627921720eff69332671f0e11e1915c6080a190856111"
+}

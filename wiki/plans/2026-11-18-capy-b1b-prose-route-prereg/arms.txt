@@ -1,0 +1,23 @@
+$ b1b arms sources --gstack <gstack checkout at bbf48aa7ef19> --check
+every B1b arm source matches gstack bbf48aa7ef19
+
+$ sha256sum lanes/delivery-route/arms/b1b/** (the route files, as committed)
+2f2016daef2b8bf2542b0998d028087000c123ad4725db42e2a90d47870b750d  b1b/CLAUDE.md
+e3d2dc0c29c8b041a4ddbaa8dbfe23cfe362fce2995ca918f27dcf9b86dd9bd6  b1b/config.yaml
+27e255325a97ca830e3947a100c93446501548bb46abc2ca247efac0c3223673  b1b/gstack/hosts/claude/hooks/skill-route-hook
+ba2948a927722b7cd1e72de9caade85a0adf18408760b941f25f42d7cd633d9d  b1b/gstack/hosts/claude/hooks/skill-route-hook.ts.txt
+f5ac4c7463c3ce047737001dca3d5ee46cd413db068872f09627dde93427a4c2  b1b/gstack/lib/fs-atomic.ts.txt
+e5732d2317f7dc1b9751fbd96374e9c7120d7b4fd882f761840ac1f449464624  b1b/gstack/lib/skill-contract.ts.txt
+fbe1525ead3a4cf2c8eea77cbec3d57fddb1553ba95db9137c74a0c0ac67f15d  b1b/gstack/lib/skill-route.ts.txt
+b2a492f2ec3d7713d228e439902791f91421d4f7d7dd49a1ce5d344ff13464b0  b1b/gstack/lib/skill-triggers.ts.txt
+de62fe6e635cdeec878936c880ecbb73152339dd573a0d3328dbd9a48fcf246a  b1b/gstack/lib/state-root.ts.txt
+9ccd5915dad899c5f537138d734ae830667eb20cc821bad0779946c9b1dc0cfb  b1b/settings.json
+
+$ b1b arms check
+claude-md: tar d27acf6f0a949bcda4d62a5315d000b193926293a8033756d377e6039074b5f8 rebuilt byte for byte, 5 files: B1's gstack-shaped 4 plus .claude/CLAUDE.md (CLAUDE.md)
+hook: tar 1a1f9c63dbe7f1417f5099a6fdb2a42f30d5c50a0e2639db7323b3ebdc23ab19 rebuilt byte for byte, 13 files: B1's gstack-shaped 4 plus .claude/settings.json (settings.json), .gstack/config.yaml (config.yaml), .claude/skills/gstack/hosts/claude/hooks/skill-route-hook (skill-route-hook), .claude/skills/gstack/hosts/claude/hooks/skill-route-hook.ts (skill-route-hook.ts.txt), .claude/skills/gstack/lib/skill-route.ts (skill-route.ts.txt), .claude/skills/gstack/lib/skill-contract.ts (skill-contract.ts.txt), .claude/skills/gstack/lib/fs-atomic.ts (fs-atomic.ts.txt), .claude/skills/gstack/lib/skill-triggers.ts (skill-triggers.ts.txt), .claude/skills/gstack/lib/state-root.ts (state-root.ts.txt)
+B1B ARMS PASS
+
+$ cat quick/laneb/arms/manifests/b1b/*.json | the tar and route lines
+claude-md tar d27acf6f0a949bcda4d62a5315d000b193926293a8033756d377e6039074b5f8 files 5 claude_code 2.1.312
+hook tar 1a1f9c63dbe7f1417f5099a6fdb2a42f30d5c50a0e2639db7323b3ebdc23ab19 files 13 claude_code 2.1.312

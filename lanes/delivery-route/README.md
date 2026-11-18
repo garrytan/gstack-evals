@@ -69,6 +69,36 @@ Seven more Sol verify-prose sessions pass their test the same way but chain /ver
 
 Section 10 numbers that move: Sol's none arm from 151 to 152 of 200 (unchanged at 48 of the 60 run tasks) and Sol's verify-prose arm from 144 to 145 of 200 and from 47 to 48 of the 60. Opus 5.5 and particle-1 don't move. Over the 24 smoke sessions only the two Opus sessions above change.
 
+## B1b: the skill named in prose
+
+B1b runs B1's gstack-shaped prove-it skill on B1's 60 tasks and plain prompt, untyped, in two arms: claude-md (gstack's CLAUDE.md routing block naming /prove-it, at /root/.claude/CLAUDE.md) and hook (gstack's prompt-routing hook, printing its line naming /prove-it on every prompt). Opus 5.5 only. The primary is whether the skill loaded. The plan, the decision table and the frozen numbers are in [its preregistration](../../wiki/plans/2026-11-18-capy-b1b-prose-route-prereg/README.md). B1's files stay as merged; table.ts reads B1b's arm names and fake-model.ts gains a `load` mode.
+
+| File | What it does |
+|---|---|
+| b1b-pins.ts | Frozen values: the two arms, the gstack commit and the git blob of every route file, the routing block's one changed line, the hook's one change, the items, caps and all-in stop, and B1's run whose none arm is reused |
+| arms/b1b/ | The route files, regenerated from gstack at the pin; TypeScript files are kept as `<name>.ts.txt` |
+| b1b.ts | Sources, tars and manifests (quick/laneb/arms/manifests/b1b), the route table, four keyless scripted sessions, the plan, caps and launch guard, the none arm's reuse check, the load detector, the table, and the report with its decision reading and reasons.tsv |
+
+```
+bun lanes/delivery-route/cli.ts b1b arms sources --gstack <checkout at the pin> [--check]
+bun lanes/delivery-route/cli.ts b1b arms build [--out <dir>] [--manifests]
+bun lanes/delivery-route/cli.ts b1b arms check
+bun lanes/delivery-route/cli.ts b1b sessions run --out <dir> [--cut tests/delivery-route/fixtures/b1b-sessions]
+bun lanes/delivery-route/cli.ts b1b routes --export <SWE-rebench export> [--out <tsv>]
+bun lanes/delivery-route/cli.ts b1b plan
+bun lanes/delivery-route/cli.ts b1b reuse [--head <commit>]
+bun lanes/delivery-route/cli.ts b1b approve --ledger <jsonl> --item <item> --usd <cap> --approved-by <who>
+bun lanes/delivery-route/cli.ts b1b prepare <work> --item <item>
+bun lanes/delivery-route/cli.ts b1b host-up|attach|recover|host-down <work>
+bun lanes/delivery-route/cli.ts b1b launch|relaunch|rerun <work> --part <part>
+bun lanes/delivery-route/cli.ts b1b guard <work>
+bun lanes/delivery-route/cli.ts b1b done --ledger <jsonl> --item <item>
+bun lanes/delivery-route/cli.ts b1b table <config.json> <out.jsonl>
+bun lanes/delivery-route/cli.ts b1b report <table.jsonl> [--out <dir>]
+```
+
+The launcher commands are L1's under B1b's profile: host root ~/b1b, ledger port 9948, ARMS holding claude-md.tar and hook.tar. The launch guard reads B1B_LEDGERS and B1B_CREW the way B1's reads B1_LEDGERS and B1_CREW, and also refuses when the run commit's harness differs from B1's (`b1b reuse`). `routes` needs bun and an export holding each task's instruction.md; `sessions run` needs Docker and the hm-session image, as B1's does. Neither makes a model call.
+
 ## Credits
 
-The Prove-It steps, the /test front matter and the test-driven-development description are from [agent-skills](https://github.com/addyosmani/agent-skills) by Addy Osmani (MIT). The gstack-shaped setup text is gstack's own /verify setup. NOTICE.md has both rows.
+The Prove-It steps, the /test front matter and the test-driven-development description are from [agent-skills](https://github.com/addyosmani/agent-skills) by Addy Osmani (MIT). The gstack-shaped setup text is gstack's own /verify setup. B1b's routing block and prompt-routing hook are gstack's own, at bbf48aa7ef19. NOTICE.md has the rows.

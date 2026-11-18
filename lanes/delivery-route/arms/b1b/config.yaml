@@ -1,0 +1,270 @@
+# gstack configuration — edit freely, changes take effect on next skill run.
+# Docs: https://github.com/garrytan/gstack
+#
+# ─── Behavior ────────────────────────────────────────────────────────
+# proactive: core           # core = auto-invoke only /office-hours, /review, /qa and /ship
+#                           # when your request matches one; every other skill waits
+#                           # for you to type it. all = auto-invoke any matching skill.
+#                           # off = only run skills you type explicitly.
+#                           # (true and false still work: true means all, false means off.)
+#
+# routing_declined: false   # Set to true to skip the CLAUDE.md routing injection
+#                           # prompt. Set back to false to be asked again.
+#
+# ─── Telemetry ───────────────────────────────────────────────────────
+# telemetry: off            # off | anonymous | community
+#                           #   off       — no data sent, no local analytics (default)
+#                           #   anonymous — counter only, no device ID
+#                           #   community — usage data + stable device ID
+#                           # Opted in, each skill run is also logged locally to
+#                           # analytics/skill-usage.jsonl under this state root
+#                           # with the repo name and branch; those two fields are
+#                           # stripped before upload. Off logs nothing there.
+#
+# ─── Session markers (local functional state, not telemetry) ─────────
+# sessions/<pid>            # One empty file per live agent session, touched at
+#                           #   skill start and deleted after 120 minutes. The
+#                           #   count tells skills when several sessions share a
+#                           #   machine. Never sent anywhere; not gated on
+#                           #   telemetry.
+#
+# ─── Updates ─────────────────────────────────────────────────────────
+# auto_upgrade: false       # true = silently upgrade on session start
+# update_check: true        # false = suppress version check notifications
+# update_channel: auto      # auto   = stable when team_mode is true, else main
+#                           # stable = the weekly tagged release (refs/heads/stable)
+#                           # main   = every merge to main (docs/releases.md)
+#
+# ─── Skill naming ────────────────────────────────────────────────────
+# skill_prefix: false       # true = namespace skills as /gstack-qa, /gstack-ship
+#                           # false = short names /qa, /ship
+# disabled_skills:          # comma-separated skills to leave unregistered,
+#                           # e.g. make-pdf,pair-agent ("" = all enabled)
+#
+# ─── Writing style (V1) ──────────────────────────────────────────────
+# explain_level: default    # default = jargon-glossed, outcome-framed prose
+#                           #           (V1 default — more accessible for everyone)
+#                           # terse   = V0 prose style, no glosses, no outcome-framing layer
+#                           #           (for power users who know the terms)
+#                           # Unknown values default to "default" with a warning.
+#                           # See docs/designs/PLAN_TUNING_V1.md for rationale.
+# plan_mode_preamble: on    # on  = every skill carries the plan-mode preamble
+#                           # off = rendered skills omit the "Plan Mode Safe
+#                           #       Operations" and "Skill Invocation During
+#                           #       Plan Mode" sections (~1.8 KB each), for
+#                           #       users who never enter plan mode
+#                           # Applies on the next ./setup run. Unknown values
+#                           # default to "on" with a warning.
+#
+# ─── Artifacts sync (renamed from gbrain_sync_mode in v1.27.0.0) ─────
+# artifacts_sync_mode: off  # off | artifacts-only | full
+#                           #   off            — no sync (default)
+#                           #   artifacts-only — sync plans/designs/retros/learnings only
+#                           #                    (skip behavioral data: question-log,
+#                           #                    developer-profile, timeline)
+#                           #   full           — sync everything allowlisted
+#                           # Set by the first-run privacy stop-gate. See docs/gbrain-sync.md.
+#
+# artifacts_sync_mode_prompted: false
+#                           # Set to true once the privacy gate has asked the user.
+#                           # Flip back to false to be re-prompted.
+#
+# artifacts_sync_removals: off  # on | off — on: each sync also publishes the
+#                           #   removal of synced files gone from disk; more than
+#                           #   20 at once is held for gstack-brain-sync
+#                           #   --publish-removals. See docs/gbrain-sync.md.
+#
+# ─── Transcript ingest (gbrain memory) ───────────────────────────────
+# transcript_ingest_mode: off  # recent | all | off | new@<UTC> — consent for
+#                           #   /sync-gbrain to ingest Claude Code and Codex
+#                           #   session transcripts (every project repo policy
+#                           #   allows) into your brain (local or Supabase).
+#                           #   recent — last 90 days
+#                           #   all    — all history
+#                           #   new@2026-10-03T17:00:00Z — only sessions that
+#                           #            start after that UTC time
+#                           #   off    — never (other memory still syncs)
+#                           # A +repos suffix is kept automatically while
+#                           # transcript_repos is set.
+#                           # Absent, legacy (A-E, incremental) or unknown
+#                           # values are not consent: transcripts are skipped
+#                           # and /sync-gbrain asks once. An invalid value is
+#                           # REJECTED and the stored value kept.
+# transcript_repos:         # comma-separated git remotes; only transcripts
+#                           #   from these repos are ingested. Clear it with
+#                           #   `gstack-config unset transcript_repos`.
+#                           # Docs: setup-gbrain/memory.md#transcripts
+#
+# ─── Timeline Stop hook ──────────────────────────────────────────────
+# timeline_stop_hook: yes   # Controls whether ./setup registers the timeline
+#                           #   Stop hook (closes dangling session entries).
+#                           #   yes — register on every setup (default)
+#                           #   no  — never register; setup also removes a
+#                           #         live registration (persistent opt-out;
+#                           #         --no-team stays a one-shot teardown, #2677)
+#
+# ─── Plan-tune hooks ─────────────────────────────────────────────────
+# plan_tune_hooks: prompt   # Controls whether ./setup installs the plan-tune
+#                           #   Claude Code hooks (PostToolUse capture +
+#                           #   PreToolUse preference enforcement).
+#                           #   prompt — ask on a real TTY, skip otherwise (default)
+#                           #   yes    — install non-interactively
+#                           #   no     — skip non-interactively
+#                           # Override per-run: ./setup --plan-tune-hooks /
+#                           #   --no-plan-tune-hooks, or env GSTACK_PLAN_TUNE_HOOKS.
+#
+# ─── Memorable recall bridge (opt-in, third party) ──────────────────
+# memorable_recall: off     # The gstack-side consent gate for the Memorable
+#                           #   UserPromptSubmit bridge (bin/gstack-memorable).
+#                           #   off — the hook does nothing, spawns nothing (default)
+#                           #   on  — the hook hands each prompt to the local
+#                           #         `memorable` CLI, receipted as memorable-recall
+#                           # Written by `gstack-memorable enable|disable`. An
+#                           # invalid value is REJECTED and the stored value kept:
+#                           # a typo must never flip a third-party consent.
+#                           # The vendor capture consent (`memorable enable`)
+#                           # is separate; gstack never sets it.
+#
+# ─── Claude skill overlay ────────────────────────────────────────────
+# claude_overlay_model: claude  # Claude model ID whose skill overlay ./setup
+#                           #   renders (e.g. claude-opus-4-8). Absent = the
+#                           #   generic claude overlay. Set it with
+#                           #   ./setup --claude-model <id>, which validates the
+#                           #   ID and re-renders; ./setup --claude-model claude
+#                           #   returns to the generic overlay.
+#
+# ─── Model policy (gstack-models shows the effective choices) ───────
+# Plan review tier: frontier | smart | host. host delegates to the CLI settings;
+# GSTACK_CLAUDE_MODEL / GSTACK_CODEX_MODEL still win.
+# plan_review_tier: frontier
+# Implementation recommendation: frontier | smart. Never switches your session.
+# implementation_tier: smart
+# Optional pins: model_frontier_claude, model_frontier_openai,
+# model_smart_claude and model_smart_openai. Leave pins absent for catalog defaults;
+# empty pins are invalid. gstack-models list prints copyable set/unset commands.
+# agent_model: the model for gstack agents (lanes, subagents, reviewers): host,
+# a family (opus, fable, sonnet, haiku, astra, sol, luna, terra) or <provider>/<model>.
+# Absent = host. A preference, not a policy: gstack-models resolve --role agent.
+# Invalid writes are rejected and preserve the stored value.
+# codex_effort:             # Codex reasoning effort for outside reviews and /codex:
+#                           #   minimal | low | medium | high | xhigh | max | ultra.
+#                           #   Absent = every gate keeps its effort. GSTACK_CODEX_EFFORT
+#                           #   overrides it per run, /codex --effort per request;
+#                           #   /spec keeps medium (120 s budget).
+# review_effort_tiers: on   # on | off. on: audits, trail reviewers and watchers
+#                           #   (nothing that can block a ship) run at light effort on
+#                           #   the same model; every reviewer keeps full.
+# Docs: docs/model-policy.md
+#
+# harness_start_hook:       # on | off. on: ./setup and gstack-harness add the
+#                           #   gstack-start plugin to OpenClaw and Hermes registrations
+#                           #   (a one-line note on every turn to run the start
+#                           #   command of a skill; edits openclaw.json or config.yaml via the
+#                           #   harness CLI). off: takes it out. Absent = each
+#                           #   registration keeps its saved choice (default off).
+#                           #   GSTACK_HARNESS_START_HOOK=1|0 overrides it. Docs: docs/hosts.md
+#
+# ─── Advanced ────────────────────────────────────────────────────────
+# codex_reviews: enabled    # Outside review (Codex or Claude Code by harness): sends
+#                           #   the review prompt and repository content to that model.
+#                           #   enabled (default; the first send prints a notice once):
+#                           #   the outside voice of every workflow may run.
+#                           #   disabled: the send binaries refuse (not_run,
+#                           #   consent_missing) and start no CLI and make no API call;
+#                           #   /review, /ship, /autoplan keep native passes; plan and
+#                           #   document reviews skip the extra step. Covers design
+#                           #   review, /ship design-lite, office hours and /spec.
+#                           #   /codex and /claude-code still run when you ask by name.
+#                           #   An unreadable config counts as disabled.
+#                           #   Invalid values preserve the old value.
+# autoplan_shadow: off      # Shadow mode for the CEO-only decider (gstack-autoplan
+#                           #   driver runs): on gives every gate one hidden model
+#                           #   prediction, recorded before the owner answers, for
+#                           #   taste-replay R2. Sends the reviewed plan and the gate
+#                           #   to that model on your own API key, about $0.07 per
+#                           #   gate, counted against --spend-cap. Read at the first
+#                           #   next of each run only. GSTACK_AUTOPLAN_SHADOW=1|0
+#                           #   overrides.
+#                           #   Invalid values are rejected, the old value kept.
+# autoplan_shadow_model: claude-opus-5-5  # The model the shadow decider runs on.
+#                           #   Docs: docs/unattended.md#shadow-mode
+# browse_extension_id:      # Forks and self-built extensions: the 32-letter (a-p)
+#                           #   Chrome extension ID the browse sidebar terminal accepts.
+#                           #   Empty = the gstack extension. "" clears it.
+# design_detector_install_prompted: false
+#                           #   true once you answered the one-time offer from the
+#                           #   design skills to download the impeccable engine with
+#                           #   "never ask again"; flip back to false to be asked again.
+# design_detector: auto     # Deterministic design pre-pass through a user-installed
+#                           #   impeccable engine (/design-review, /review, /ship,
+#                           #   /design-html). auto = use the engine when the probe
+#                           #   finds one (gstack never installs or downloads it);
+#                           #   off = no probe, no scan, no hint, no /impeccable
+#                           #   handoff lines. An invalid value is REJECTED (existing
+#                           #   value preserved) so a typo cannot silently disable it.
+# plan_record:              # off | warn | require. The plan check on this machine
+#                           #   (docs/ship-policy.md#plan-record) for a repo that
+#                           #   commits no .gstack/ship-policy.json; a tracked
+#                           #   plan_record of warn or require wins, and
+#                           #   GSTACK_PLAN_RECORD wins over this. Unset: warn in
+#                           #   a Capy session, else off.
+# gstack_contributor: false # true = file field reports when gstack misbehaves
+# skip_eng_review: false    # true = skip eng review gate in /ship (not recommended)
+#
+# ─── Browser extension ───────────────────────────────────────────────
+# browse_extension_id:      # Chrome extension ID the browse daemon trusts for
+#                           #   /extension-token and the terminal-agent /ws
+#                           #   (32 letters a-p). Empty = the published gstack
+#                           #   extension. Set it only for a fork or a
+#                           #   self-built extension; no environment variable
+#                           #   or project .env can change it. An invalid value
+#                           #   is REJECTED and the stored value kept.
+#
+# ─── /ship measure-then-fix loop ─────────────────────────────────────
+# A red eval case is measured alone before the full gate reruns
+# (scripts/ship-measure.ts; docs/TESTING_INTERNALS.md#ship-measure).
+# Bar (scripts/lib/measure-bar.ts): MEETS at 9/10 of the trials, MEETS-qualified
+# at 8/10 with every red qualifying, EXTEND at 7/10 (one more batch, pooled).
+# ship_measure_rule_trials: 10        # rule cases: trials per batch (MEETS 9 of 10)
+# ship_measure_behavior_panels: 4     # behavior cases: panels of 3 per batch
+#                           #   (12 trials; MEETS 11 of 12)
+# ship_measure_judge_outputs: 10      # judge cases: outputs per batch, each scored
+#                           #   by its median 3-sample panel (MEETS 9 of 10)
+# ship_measure_ask_per_trial_usd: 2   # ask first above this estimated cost per trial
+# ship_measure_budget_usd: 25         # estimated admission budget per red case
+#                           #   (baseline, extension, redispatch, repair rounds)
+# ship_measure_max_rounds: 3          # repair rounds before a named-red stop
+# ship_measure_sweep_cases: 5         # weekly off-ship sweep: cases measured (K)
+# ship_measure_sweep_budget_usd: 150  # weekly off-ship sweep: spend cap per 7 days
+# ship_rerun_backend: local # local | ubicloud — where free-suite flake reruns
+#                           #   run; ubicloud also needs UBICLOUD_API_KEY.
+#                           #   Invalid values are REJECTED (value kept).
+# test_backend: local       # local | ubicloud — where the full unit and E2E
+#                           #   tiers run (plan E2). The gstack-doctor cores row
+#                           #   recommends ubicloud under 8 cores; ubicloud
+#                           #   needs UBICLOUD_API_KEY and scripts/ubicloud/.
+#                           #   Invalid values are REJECTED (value kept).
+# ship_greptile_early: true # true | false — when the repo uses Greptile, /ship
+#                           #   pushes and opens a draft PR after its free tests
+#                           #   so Greptile reviews in parallel (a public repo
+#                           #   asks once). false keeps the old order.
+#                           #   Invalid values are REJECTED (value kept).
+# pr_wait_gating_bots: greptile,macroscope  # review bots gstack-pr-wait
+#                           #   --until ready waits for (comma-separated; a
+#                           #   bot owns logins starting with its name and
+#                           #   checks mentioning it).
+# pr_wait_advisory_bots: coderabbit  # review bots gstack-pr-wait reports but
+#                           #   never waits for. /review and /ship triage the
+#                           #   comments of every bot in both lists (e.g.
+#                           #   coderabbit,copilot). Both lists: lowercase names,
+#                           #   letters, digits, . _ - only; none empties a list.
+#                           #   Invalid values are REJECTED (value kept).
+#
+# ─── Workspace-aware ship ────────────────────────────────────────────
+# workspace_root: $HOME/conductor/workspaces  # Where /ship looks for sibling
+#                           # Conductor worktrees when picking a VERSION slot.
+#                           # Set to "null" to disable sibling scanning entirely.
+#                           # Non-Conductor users can point this at any directory
+#                           # that holds parallel worktrees of the same repo.
+#
+skill_routing: on
