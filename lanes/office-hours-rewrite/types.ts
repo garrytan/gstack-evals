@@ -77,6 +77,17 @@ export interface PriorSession {
   condition: string;
 }
 
+/**
+ * One simulator turn as the session records it (pre-run change 1, item 4c). delivered is true when the adviser received
+ * the reply; a reply the closing message replaced is false. done is the simulator's done field (item 4e). Draws the checks
+ * rejected are kept in rejected_draws and never count toward R1, G3 or the reply cap.
+ */
+export interface Turn extends FounderTurn {
+  delivered: boolean;
+  done: boolean;
+  rejected_draws: { revealed: string[]; checks: string[] }[];
+}
+
 /** The closing block (section 4 step 4), after the parser's cut of each line to 40 words. */
 export interface Block {
   decision: string;
@@ -110,7 +121,7 @@ export interface SessionRow extends ManifestEntry {
   /** The reason code behind any end other than block. */
   code: string | null;
   block: BlockParse | null;
-  founder_turns: FounderTurn[];
+  founder_turns: Turn[];
   /** Closing messages sent: 0, 1 or 2. */
   closings: number;
   /** The founder set done (as opposed to the reply cap sending the closing message). */
@@ -208,6 +219,10 @@ export interface Compliance {
   kill_line: boolean;
   wrote_code: boolean;
   approved_on_disk: boolean;
+  /** Pre-run change 1, item 4f, descriptive: a startup design doc carries a SUCCESS line. */
+  success_line: boolean;
+  /** Pre-run change 1, item 4f, descriptive: the new arm wrote a commitment entry; null outside new-arm founder sessions. */
+  commitment: boolean | null;
 }
 
 /** One session after scoring: what the readings consume. A null bit is missing or unscored. */

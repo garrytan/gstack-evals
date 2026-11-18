@@ -75,7 +75,7 @@ function parse(argv: readonly string[]): Map<string, string[]> {
 
 /** A launch's settings after every refusal that needs no Docker. */
 export interface RunPlan {
-  input: Omit<RunInput, "log" | "policy" | "runId" | "ledger" | "docker">;
+  input: Omit<RunInput, "log" | "policy" | "runId" | "ledger" | "docker" | "simRules">;
   item: string;
   simItem: string;
   ledger: string | undefined;
@@ -129,7 +129,7 @@ export function planRun(argv: readonly string[], env: Env): RunPlan {
 }
 
 /** gstack-evals of run: one cell's launch, with the simulator the parent wires in. */
-export async function runCommand(argv: string[], io: Io, env: Env, wire: { founderTurn: FounderTurnFn<PersonSheet, Call>; exposed: RunDeps<Call>["exposed"] }): Promise<number> {
+export async function runCommand(argv: string[], io: Io, env: Env, wire: { founderTurn: FounderTurnFn<PersonSheet, Call>; exposed: RunDeps<Call>["exposed"]; simRules: string }): Promise<number> {
   if (argv.includes("--help")) {
     io.out(RUN_HELP);
     return 0;
@@ -162,7 +162,7 @@ export async function runCommand(argv: string[], io: Io, env: Env, wire: { found
   const meter = await openMeter({ item: plan.simItem, runId, out: join(out, "sim-meter"), cacheDir: join(out, "sim-cache"), maxOutputTokens: 1200, amountMicros: plan.input.simCap, record: record.path, ledger: ledger.path, env });
   let failed = false;
   try {
-    const run = await runCells({ ...plan.input, runId, policy: policy as LoadedPolicy, ledger: ledger.path, docker: env.GSTACK_EVALS_DOCKER_BIN || "docker", log: (l) => io.err(l) }, {
+    const run = await runCells({ ...plan.input, simRules: wire.simRules, runId, policy: policy as LoadedPolicy, ledger: ledger.path, docker: env.GSTACK_EVALS_DOCKER_BIN || "docker", log: (l) => io.err(l) }, {
       openRig: async () => {
         const rig = dockerRig({ host: "claude", arms: { arms: specs, base: null, skill: null, notes: [] }, tasks: join(out, "fixtures", "tasks.json"), out: { path: out, rule: "--out" }, ledger, record, item: plan.item, runId, models: plan.input.models.map((m) => MODEL_KEYS[m]), policy: policy as LoadedPolicy }, { env, skill: null, skills: { "office-hours": "office-hours" }, nonce: randomBytes(6).toString("hex"), cap: plan.input.cap, voice: false });
         const version = rig.arms["office-hours"] ? gstackVersion(gstackDir(rig.arms["office-hours"])) : GSTACK.version;

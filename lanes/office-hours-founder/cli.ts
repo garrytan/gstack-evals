@@ -2,7 +2,6 @@
 // gstack-evals of: the office-hours founder eval's commands (prereg 2026-11-09-geva-418). Each subcommand lives in its
 // area; this file wires the simulator into the run area's launch and the scoring step into its end to end.
 import { readFileSync } from "node:fs";
-import { createHash } from "node:crypto";
 import { CODES, docAnchor, isReasonCode, type ReasonCode } from "../../src/errors/codes.ts";
 import { scoreE2e } from "./e2e-score.ts";
 import { commands as auditCommands } from "./audit.ts";
@@ -10,6 +9,7 @@ import { commands as authorCommands } from "./author/cli.ts";
 import { commands as readCommands } from "./read/cli.ts";
 import { e2eCommand, rowsCommand, runCommand } from "./run/cli.ts";
 import { commands as scoreCommands } from "./score/cli.ts";
+import { rulesSha256 } from "./sim/founder.ts";
 import { rowExposed, simFounder } from "./wire.ts";
 
 interface Io {
@@ -19,16 +19,16 @@ interface Io {
 type Env = Record<string, string | undefined>;
 type Run = (argv: string[], io: Io, env: Env) => Promise<number> | number;
 
-/** of run takes --sim-rules <file> only under the sim-prompt repair: the recorded rule-wording repair of section 4's prompt. */
+/** of run takes --sim-rules <file> only under the sim-prompt repair: the recorded rule-wording repair of section 4's prompt. The launch's frozen manifest binds the rules' sha256. */
 function runWithSimulator(argv: string[], io: Io, env: Env): Promise<number> {
   const at = argv.indexOf("--sim-rules");
   const repaired = argv.includes("sim-prompt");
   if (at >= 0 && !argv[at + 1]) throw Object.assign(new Error("--sim-rules needs a file"), { code: "E_USAGE" });
   if ((at >= 0) !== repaired) throw Object.assign(new Error(repaired ? "the sim-prompt repair needs --sim-rules <file> with the recorded wording" : "--sim-rules is only for the sim-prompt repair"), { code: "E_USAGE" });
   const rules = at >= 0 ? readFileSync(argv[at + 1]!, "utf8") : undefined;
-  if (rules !== undefined) io.err("of run: simulator prompt repaired, sha256 " + createHash("sha256").update(rules).digest("hex"));
+  if (rules !== undefined) io.err("of run: simulator prompt repaired, sha256 " + rulesSha256(rules));
   const rest = at >= 0 ? [...argv.slice(0, at), ...argv.slice(at + 2)] : argv;
-  return runCommand(rest, io, env, { founderTurn: simFounder(rules), exposed: rowExposed });
+  return runCommand(rest, io, env, { founderTurn: simFounder(rules), exposed: rowExposed, simRules: rulesSha256(rules) });
 }
 
 export const SUBCOMMANDS: Record<string, { summary: string; run: Run }> = {

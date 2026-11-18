@@ -315,7 +315,8 @@ function stage2Command(f: Flags, io: Io, python: Python): number {
   const launches = f.many("--manifest").map((p) => {
     const path = readInput(p, "--manifest").path;
     const stops = join(dirname(path), "stops.json");
-    return { m: readManifest(path), stopped: existsSync(stops) && (JSON.parse(readFileSync(stops, "utf8")) as { stops: unknown[] }).stops.length > 0 };
+    if (!existsSync(stops)) refuse("--manifest " + path + " has no stops.json beside it, so its launch never ended; resume it to an end before reading");
+    return { m: readManifest(path), stopped: (JSON.parse(readFileSync(stops, "utf8")) as { stops: unknown[] }).stops.length > 0 };
   });
   const entries = (cell: Cell) => cellRounds(cell, launches.filter((l) => l.m.cell === cell).flatMap((l) => l.m.entries)).flat();
   const primary = entries("stage2");

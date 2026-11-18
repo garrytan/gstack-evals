@@ -1,0 +1,50 @@
+{
+  "note": "Section 11's compliance markers, read from both pins' templates and Important Rules; pin-independent. Stage 1 transcripts freeze the final set.",
+  "kill_line": "KILL/CONTINUE[^\\S\\n]*(?:[—–:-][^\\S\\n]*)?(?:\\n[^\\S\\n]*)*By\\b",
+  "success_line": "\\bSUCCESS[^\\S\\n]*[—–:-][^\\S\\n]*By\\b",
+  "startup_doc_mode": "^Mode:[ \\t]*Startup\\b",
+  "approved": "^Status:[ \\t]*APPROVED\\b",
+  "date": "\\b(?:mon|tues|wednes|thurs|fri|satur|sun)day\\b|\\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\\.?\\s+\\d{1,2}(?:st|nd|rd|th)?\\b|\\b\\d{1,2}(?:st|nd|rd|th)?\\s+(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\\b|\\b\\d{4}-\\d{2}-\\d{2}\\b|\\b\\d{1,2}/\\d{1,2}(?:/\\d{2,4})?\\b|\\b(?:today|tonight|tomorrow)\\b|\\b(?:this|next) (?:week|weekend|month)\\b|\\bend of (?:the )?(?:day|week|month)\\b|\\b(?:within|in) (?:\\d+|one|two|three|four|five|six|seven|ten|fourteen|thirty) (?:days?|weeks?)\\b",
+  "number": "\\b\\d+(?:[.,]\\d+)?\\b|\\b(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|forty|fifty|hundred|dozen)\\b",
+  "code_tools": [
+    "Write",
+    "Edit",
+    "MultiEdit",
+    "NotebookEdit"
+  ],
+  "code_extensions": [
+    "ts",
+    "tsx",
+    "js",
+    "jsx",
+    "mjs",
+    "cjs",
+    "py",
+    "rb",
+    "go",
+    "rs",
+    "java",
+    "kt",
+    "swift",
+    "c",
+    "cc",
+    "cpp",
+    "h",
+    "hpp",
+    "cs",
+    "php",
+    "sh",
+    "bash",
+    "html",
+    "css",
+    "scss",
+    "vue",
+    "svelte",
+    "sql",
+    "ipynb"
+  ],
+  "profile_files": [
+    "developer-profile.json",
+    "builder-profile.jsonl"
+  ]
+}
