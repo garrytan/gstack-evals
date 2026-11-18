@@ -71,7 +71,9 @@ Section 10 numbers that move: Sol's none arm from 151 to 152 of 200 (unchanged a
 
 ## B1b: the skill named in prose
 
-B1b runs B1's gstack-shaped prove-it skill on B1's 60 tasks and plain prompt, untyped, in two arms: claude-md (gstack's CLAUDE.md routing block naming /prove-it, at /root/.claude/CLAUDE.md) and hook (gstack's prompt-routing hook, printing its line naming /prove-it on every prompt). Opus 5.5 only. The primary is whether the skill loaded. The plan, the decision table and the frozen numbers are in [its preregistration](../../wiki/plans/2026-11-18-capy-b1b-prose-route-prereg/README.md). B1's files stay as merged; table.ts reads B1b's arm names and fake-model.ts gains a `load` mode.
+B1b runs B1's gstack-shaped prove-it skill on B1's 60 tasks and plain prompt, untyped, in two arms: claude-md (gstack's CLAUDE.md routing block naming /prove-it, at /root/.claude/CLAUDE.md) and hook (gstack's prompt-routing hook, printing its line naming /prove-it on every prompt). Opus 5.5 only. The primary is whether the skill loaded. The plan, the decision table and the frozen numbers are in [its preregistration](../../wiki/plans/2026-11-18-capy-b1b-prose-route-prereg/README.md). B1's files stay as merged; table.ts reads B1b's arm names and fake-model.ts gains a `load` mode. The results are in [the results post](../../wiki/board/2026-11-18-capy-b1b-prose-route-results/README.md).
+
+Dated change, 2026-11-18, after the counted runs: the load detector reads the model's text blocks as the SDK log writes them, with no type field. Before, it read no model text, so every first text in reasons.tsv was blank and a session that named the skill only in its text read "never named". Loads and followed don't read the model's text, so they are unchanged.
 
 | File | What it does |
 |---|---|

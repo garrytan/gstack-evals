@@ -142,6 +142,10 @@ These results have no numbers here, because they haven't yet had both checks the
 - **EQUAL AT EQUAL SPEND**, the same three models: /verify against a second plain attempt, with a model from the other family picking the better patch, at the same spend. Neither solved more tasks than a single plain attempt once both plain setups are counted. [Results](../wiki/board/2026-11-15-geva-503-harness-mechanics-results/README.md), [correction](../wiki/board/2026-11-15-geva-542-harness-mechanics-correction.md)
 - **JEV MATCHES AND IS FASTER**, the same three models: Jev, a fast decision model, against particle-1 behind a gstack hook that judges every shell command. Jev solved as many tasks within the margin fixed in advance, with measurably less hook time. [Results](../wiki/board/2026-11-15-geva-503-harness-mechanics-results/README.md), [correction](../wiki/board/2026-11-15-geva-542-harness-mechanics-correction.md)
 
+**Naming a skill in prose instead of typing it**
+
+- **Helps (opens only), the hook line over CLAUDE.md routing**, Opus 5.5: on 60 SWE-rebench bug tasks where nobody typed the skill's name, a line from gstack's prompt-routing hook naming the skill got it opened in nearly every session, and the same route in CLAUDE.md in about one in three. As shipped, gstack's hook would not name this skill on these tasks, and with the skill added to its list it would fire on about a third of them, so its matcher needs fixing before a hook default pays off. Relying on CLAUDE.md routing to start a skill nobody types is a cut candidate. [Results](../wiki/board/2026-11-18-capy-b1b-prose-route-results/README.md)
+
 ## Corrections
 
 Some posts still print the verdict they had when they merged, because a merged post never changes. These lines are the current reading.
