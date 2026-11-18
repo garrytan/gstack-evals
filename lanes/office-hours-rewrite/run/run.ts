@@ -111,6 +111,8 @@ export interface RunInput {
   /** The sessions' UTC day (YYYY-MM-DD), for T8 seeding. */
   day: string;
   log: (line: string) => void;
+  /** The keyless end to end's own schedule in place of the launch's; no command passes it. */
+  entries?: readonly ManifestEntry[];
 }
 
 export type SimTurnFn = (o: { kind: BriefKind; sheet: PersonSheet; transcript: Line[]; call: SimCall }) => Promise<SimOutcome>;
@@ -243,7 +245,7 @@ export async function runLaunch(o: RunInput, deps: RunDeps): Promise<RunResult> 
   const ran = new Set([...done.values()].filter((l) => l.row.stage === 2).map((l) => l.row.brief));
   let manifest;
   try {
-    manifest = makeManifest({ launch: o.launch, briefsDir: o.briefsDir, models: o.models, arms: o.arms, pins: o.pins, buildCommit: o.buildCommit, dropped: o.dropped, ran });
+    manifest = makeManifest({ launch: o.launch, briefsDir: o.briefsDir, models: o.models, arms: o.arms, pins: o.pins, buildCommit: o.buildCommit, dropped: o.dropped, ran, ...(o.entries ? { entries: o.entries } : {}) });
   } catch (e) {
     const m = (e as Error).message;
     throw new Error(/^E_[A-Z_]+ /.test(m) ? m : "E_OHR_MANIFEST " + m);

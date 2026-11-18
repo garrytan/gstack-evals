@@ -149,16 +149,16 @@ export function buildCommit(root: string = REPO_ROOT): string {
   return head.stdout.trim();
 }
 
-/** The launch's manifest, after every check that needs no rig. */
-export function makeManifest(o: { launch: LaunchName; briefsDir: string; models: readonly ModelId[]; arms: readonly ArmId[]; pins: Pins; buildCommit: string; dropped: readonly string[]; ran?: ReadonlySet<string> }): Manifest {
+/** The launch's manifest, after every check that needs no rig. entries replaces the launch's schedule for the keyless end to end only; no command passes it. */
+export function makeManifest(o: { launch: LaunchName; briefsDir: string; models: readonly ModelId[]; arms: readonly ArmId[]; pins: Pins; buildCommit: string; dropped: readonly string[]; ran?: ReadonlySet<string>; entries?: readonly ManifestEntry[] }): Manifest {
   const briefs = loadBriefs(o.briefsDir);
   const L = LAUNCHES[o.launch];
-  const set = L.set === "calibration" ? { ids: briefs.filter((b) => b.set === "calibration").map((b) => b.id), replaced: [] } : comparisonSet(briefs, o.dropped, o.ran);
+  const set = o.entries ? { ids: [...new Set(o.entries.map((e) => e.brief))], replaced: [] } : L.set === "calibration" ? { ids: briefs.filter((b) => b.set === "calibration").map((b) => b.id), replaced: [] } : comparisonSet(briefs, o.dropped, o.ran);
   if (L.set === "calibration" && o.dropped.length) throw new Error("E_OHR_RESERVE stage 1 takes no drops; reserves replace comparison briefs only");
-  const problem = launchProblem(o.launch, briefs, set.ids);
+  const problem = o.entries ? null : launchProblem(o.launch, briefs, set.ids);
   if (problem) throw new Error("E_OHR_MANIFEST " + problem);
   for (const k of ["founder", "builder"] as const) simRules(k);
-  const entries = launchRounds(o.launch, briefs, set.ids, o.arms, o.models).flat();
+  const entries = o.entries ? [...o.entries] : launchRounds(o.launch, briefs, set.ids, o.arms, o.models).flat();
   return {
     schema: 1, launch: o.launch, stage: L.stage, models: L.models.filter((m) => o.models.includes(m)), arms: ARMS.filter((a) => o.arms.includes(a)),
     briefs: Object.fromEntries([...set.ids].sort().map((id) => [id, briefDigest(o.briefsDir, id)])),
