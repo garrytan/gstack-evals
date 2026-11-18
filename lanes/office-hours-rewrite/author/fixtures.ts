@@ -7,7 +7,7 @@ import type { CallRequest } from "../../product-value/meter.ts";
 import { stubCaller } from "../../office-hours-founder/author/fixtures.ts";
 import type { Block, BlockParser, BuilderGoal, Cells, Fact, Labeller, Sheet } from "../types.ts";
 import type { BriefFiles } from "./files.ts";
-import { PRIOR_DATES } from "./prompts.ts";
+import { GOAL_PHRASE, GOAL_WORDS, PRIOR_DATES } from "./prompts.ts";
 import type { Screen } from "../../office-hours-founder/author/screens.ts";
 import { buildScreen } from "./screens.ts";
 
@@ -140,4 +140,45 @@ export function happy(briefs: Readonly<Record<string, BriefFiles>>, twinCalls: R
     if (/:(author|rewrite)/.test(l)) return authorReply(b, { opening: !/b$/.test(id), twinCall: twinCalls[id] });
     return null;
   };
+}
+
+/** The builder fixture for any goal: its goal fact names that goal. */
+export const builderFor = (goal: BuilderGoal): BriefFiles => ({ ...BUILDER, sheet: { ...BUILDER.sheet, facts: BUILDER.sheet.facts.map((f) => (f.id === "F1" ? { ...f, text: "My goal for this project is " + GOAL_WORDS[goal][0] + "." } : f)) } });
+
+/**
+ * A caller for whole runs: it answers each author prompt with the fixture of its kind (a builder of the prompt's goal, T8,
+ * a first twin, a flipped twin, or T7), remembers which brief each id holds, and answers that brief's validators. Second
+ * twins fail the twin check (they repeat the partner's call) when secondFails(n) holds for the n-th second-twin draft.
+ * drafts counts author calls, so spent can charge a fixed amount a draft.
+ */
+export function runCaller(o: { secondFails?: (n: number) => boolean } = {}) {
+  const byId = new Map<string, BriefFiles>();
+  let seconds = 0;
+  const state = { drafts: 0 };
+  const call = stubCaller((req) => {
+    const l = req.label;
+    const id = l.split(":")[0]!.replace(/\.\d+$/, "");
+    if (/:judge:/.test(l)) return '{"matches": []}';
+    if (/:probe:/.test(l)) return "I don't know.";
+    if (/:audit:/.test(l)) return PASS_ALL;
+    if (/:(author|rewrite):/.test(l)) {
+      if (/:author:1$/.test(l)) state.drafts++;
+      if (req.prompt.includes("Write this founder's twin")) {
+        const fail = /:author:1$/.test(l) && o.secondFails?.(++seconds);
+        const b = fail ? { ...SECOND, key: { ...SECOND.key, call: FIRST.key.call } } : SECOND;
+        byId.set(id, b);
+        return authorReply(b, { opening: false });
+      }
+      const goal = (Object.keys(GOAL_PHRASE) as BuilderGoal[]).find((g) => req.prompt.includes("Invent a person building " + GOAL_PHRASE[g] + " "));
+      const b = goal ? builderFor(goal) : req.prompt.includes("set a test due") ? T8 : req.prompt.includes("has a twin") ? FIRST : T7;
+      byId.set(id, b);
+      return authorReply(b, { twinCall: b === FIRST ? FIRST_TWIN_CALL : undefined });
+    }
+    const b = byId.get(id);
+    if (!b) return null;
+    if (/:unanimous:/.test(l)) return blockReply(b.key.call, b.key.actions[0]!);
+    if (/:give-away:/.test(l)) return blockReply(b.key.wrong_call ?? "Keep going as planned", "keep going as planned");
+    return null;
+  });
+  return Object.assign(call, { state });
 }
