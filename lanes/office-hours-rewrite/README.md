@@ -25,11 +25,32 @@ simulator (src/persona-sim), the judge client, custody, and the paired statistic
 | run/ and sim/ | The arm sessions with two pins and none, the closing loop, the simulated person with its added rules and reveal guard, and the fixed-script audit |
 | score/ | The block parser, packets, the judge prompt and labeller, the judge check, the detectors and the scorer |
 | read/ | The cluster t interval, Newcombe's method 10 with the design effect, the missing limits, admission and the decision table |
-| wire.ts, cli.ts | How the areas connect, and the `gstack-evals ohr` commands |
-| dryrun.ts | The keyless dry run over every area's seams |
+| wire.ts, cli.ts | How the areas connect to the metered client, and the `gstack-evals ohr` commands |
+| ledger.ts | The proposed split of each approved item cap into ledger items, and the check that each split fits |
+| dryrun.ts | The keyless dry run over every area's seams, the ledger split and one lease per ledger item |
+| e2e-score.ts | The keyless Docker end to end, then a planted scoring pass through score and read |
+| preflight.ts, vm-bootstrap.sh | Section 12's no-model preflight, and the setup of a fresh runner VM for it |
 
 Each area exports its dry-run seams from `<area>/seams.ts` as `Seam[]`. Tests live under tests/ohr/. Error codes
 start with E_OHR_.
+
+## Commands
+
+`gstack-evals ohr --help` lists them: author, audit, run, rows, score (packets, check-packets, judges, sessions),
+judge-check, read (admission, decision, report), dryrun, e2e and preflight. Every model call goes through wire.ts: one
+lease on one ledger item, the product-value meter and its metering proxy. The preregistration names GPT-6.2 Astra for
+the Opus judge, the gold pass, the unanimous key and the simulator auditor, so wire.ts sends every "astra" request to the
+meter's "astra-6.2" key (openai/gpt-6.2-astra); the meter's "astra" key stays GPT-6 Astra for other lanes.
+
+## The no-model preflight on a VM
+
+On a fresh Ubuntu 24.04 VM with no model key: run vm-bootstrap.sh (Docker CE from get.docker.com, since Ubuntu's
+docker.io buildx refuses the rig's rewrite-timestamp export, and Bun 1.4.4), then create ~/.capy/work before anything
+else and put a full gstack clone holding both pins at ~/.capy/work/gstack-evals/sources/gstack. The end to end creates
+~/.capy/work, which moves the state root (src/trial/image.ts stateRoot) away from ~/.local/state, so a doctor run
+before it pins the trial image where the end to end does not look. Then `bin/gstack-evals doctor --host claude` builds
+the trial image (its claude CLI, key and gstack-approvals lines fail on a keyless VM and do not matter here), and
+`bin/gstack-evals ohr preflight` checks the pins, Docker, the dry run and the end to end.
 
 ## Custody
 

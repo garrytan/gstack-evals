@@ -21,12 +21,13 @@ import type { Provider } from "../../src/runner/pricing/prices.ts";
 import { MeteringProxy, reconcileJournal, type RetryBudget } from "../../src/runner/proxy/metering-proxy.ts";
 import { rigAdmission } from "../../src/rig/admission.ts";
 
-export type ModelKey = "opus" | "astra" | "sol" | "particle" | "gemini" | "carbon";
+export type ModelKey = "opus" | "astra" | "astra-6.2" | "sol" | "particle" | "gemini" | "carbon";
 
 /** The models the eval calls directly, on the routes the price table lists. OpenRouter rows carry their provider pin in prices.ts. */
 export const MODELS: Readonly<Record<ModelKey, { provider: Provider; id: string; served_by?: RegExp }>> = {
   opus: { provider: "anthropic", id: "claude-opus-5-5" },
   astra: { provider: "openai", id: "gpt-6-astra" },
+  "astra-6.2": { provider: "openai", id: "gpt-6.2-astra" },
   sol: { provider: "openrouter", id: "openai/gpt-6.1-sol", served_by: /^openai$/i },
   particle: { provider: "openrouter", id: "particle-ai/particle-1", served_by: /^particle/i },
   gemini: { provider: "openrouter", id: "google/gemini-4-argon", served_by: /^google/i },
