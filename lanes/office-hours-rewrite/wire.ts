@@ -69,6 +69,8 @@ export interface WireOptions {
   capMicros: number;
   /** A run id prefix for a new run; a dir with run.json resumes its run id. */
   label: string;
+  /** The gstack-evals commit the run is built from (run/manifest.ts buildCommit), recorded in run.json; a resume on another commit is refused. */
+  buildCommit?: string;
   record?: string;
   ledger?: string;
   env: Env;
@@ -91,13 +93,15 @@ export async function openWire(o: WireOptions): Promise<Wire> {
   if (insideRepo(o.dir)) throw new MeterError("E_USAGE", o.dir + " is inside the repo, and the meter's cache holds model output");
   mkdirSync(o.dir, { recursive: true, mode: 0o700 });
   const runFile = join(o.dir, "run.json");
-  const prior = existsSync(runFile) ? (JSON.parse(readFileSync(runFile, "utf8")) as { run_id: string; spent_micros: number }) : null;
+  const prior = existsSync(runFile) ? (JSON.parse(readFileSync(runFile, "utf8")) as { run_id: string; spent_micros: number; build_commit?: string }) : null;
+  if (prior && o.buildCommit && prior.build_commit !== o.buildCommit) throw new MeterError("E_OHR_BUILD_COMMIT", runFile + " records build commit " + (prior.build_commit ?? "none") + ", and this checkout is " + o.buildCommit + "; a run resumes only on the commit it started on");
   const runId = prior?.run_id ?? newRunId(o.label);
   const before = prior?.spent_micros ?? 0;
+  const commit = o.buildCommit ? { build_commit: o.buildCommit } : {};
   const cacheDir = join(o.dir, "cache");
   const vdir = join(cacheDir, "versions");
   mkdirSync(vdir, { recursive: true, mode: 0o700 });
-  writeFileSync(runFile, JSON.stringify({ run_id: runId, spent_micros: before }) + "\n");
+  writeFileSync(runFile, JSON.stringify({ run_id: runId, spent_micros: before, ...commit }) + "\n");
   const meter = await openMeter({ item: o.item, runId, out: join(o.dir, "meter"), cacheDir, maxOutputTokens: 32_000, amountMicros: o.capMicros, record: o.record, ledger: o.ledger, env: o.env, fetch: versionTap(o.upstream ?? fetch, vdir), warn: (code, m) => o.io.err(code + " " + m) });
   const call: Caller = async (req) => {
     const model = routed(req.model);
@@ -130,7 +134,7 @@ export async function openWire(o: WireOptions): Promise<Wire> {
     spent: () => (before + meter.spent()) / 1e6,
     async close(cmd) {
       const c = await meter.close();
-      writeFileSync(runFile, JSON.stringify({ run_id: runId, spent_micros: before + c.spent_micros }) + "\n");
+      writeFileSync(runFile, JSON.stringify({ run_id: runId, spent_micros: before + c.spent_micros, ...commit }) + "\n");
       o.io.out(cmd + ": settled " + (c.spent_micros / 1e6).toFixed(4) + " dollars on " + o.item + (c.unknown_micros ? ", " + (c.unknown_micros / 1e6).toFixed(4) + " unknown" : ""));
       return c.spent_micros;
     },

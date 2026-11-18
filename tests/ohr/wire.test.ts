@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // Value: protects=pre-run change 4's wire rules on the real meter and metering proxy with a stub upstream: a judge, auditor or simulator reply counts only when it names its pinned model (or that model's dated snapshot), and a ledger refusal on a judge or auditor call stops the command as a cap stop; fails_when=a reply from another model is labelled or audited, or a cap stop turns into a missing label or an empty auditor answer.
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { recordApproval } from "../../src/runner/ledger/ledger.ts";
@@ -47,6 +47,19 @@ const thrown = async (f: () => Promise<unknown>): Promise<{ code?: string; messa
     return e as { code?: string; message: string };
   }
 };
+
+describe("the wire's build commit (pre-run change 4's build rule)", () => {
+  test("run.json records the build commit, and a resume on another commit is refused", async () => {
+    const W = mkdtempSync(join(tmpdir(), "ohr-wire-commit-"));
+    const record = join(W, "record");
+    recordApproval(record, { action: "init", item: "ohr-wire-commit", cap_micros: 20 * D, quotes: [{ words: "wire test on a temporary ledger, not an approval", by: "tests/ohr/wire.test.ts", source: "pre-run change 4" }], admission: "warn" });
+    const open = (commit: string) => openWire({ dir: join(W, "wire"), item: "ohr-wire-commit", capMicros: 20 * D, label: "ohr-wire-commit", record, ledger: join(W, "ledger.sqlite"), env: KEYS, io: { out: () => {}, err: () => {} }, upstream: upstream((m) => m), buildCommit: commit });
+    await (await open("a".repeat(40))).close("wire test");
+    expect(JSON.parse(readFileSync(join(W, "wire", "run.json"), "utf8")).build_commit).toBe("a".repeat(40));
+    expect((await thrown(() => open("b".repeat(40))))?.code).toBe("E_OHR_BUILD_COMMIT");
+    await (await open("a".repeat(40))).close("wire test");
+  });
+});
 
 describe("the wire's counted replies (pre-run change 4)", () => {
   test("judge, auditor and simulator replies that name their pin, or a dated snapshot of it, count", async () => {
