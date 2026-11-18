@@ -41,11 +41,14 @@ export const SESSION_KIND_LINE = "SESSION_KIND: interactive";
  * Section 2's pins. current is the commit the content change is built on, its merge base with gstack main (pre-run
  * change 1, item 1, confirmed by pre-run change 2). new is the content change's ready head (pre-run change 2). Both
  * check the same helper paths; bin/gstack-design-doc-find at the current pin comes from change 2, section 1. VERSION is
- * 1.100.0.0 at both commits, so only the file hashes tell the pins apart; each container checks every one.
+ * 1.100.0.0 at both commits, so only the file hashes tell the pins apart; each container checks every one. VERSION's
+ * own sha256 is the one pin-current.tsv and pin-new.tsv list, and it is checked beside the trimmed text (pre-run change 4).
  */
 export interface Pin {
   sha: string;
   version: string;
+  /** sha256 of the VERSION file's bytes, as the pin tables list it. */
+  version_sha256: string;
   files: Readonly<Record<string, string>>;
 }
 export const GSTACK_REPO = "garrytan/gstack";
@@ -53,6 +56,7 @@ export const PINS: Readonly<Record<SkillArm, Pin | null>> = {
   current: {
     sha: "fc5c285035b58ce0552d25cf7cb71749795b6d30",
     version: "1.100.0.0",
+    version_sha256: "5ba97c87510c945bd4cfe74f8a55254eeaa620c837062653bc12f23042b7a3a4",
     files: {
     "office-hours/SKILL.md": "0e898ac8d2eb8bf022ef9b344a29c93d1fb0139f2e93afd7ff7fd34ddfc27963",
     "office-hours/SKILL.md.tmpl": "7779f7336ae38965380545c3c973a06cee176ae5ce3f17d53ebe1548ecbf4d51",
@@ -80,6 +84,7 @@ export const PINS: Readonly<Record<SkillArm, Pin | null>> = {
   new: {
     sha: "4afa7f2b3e291758f6a7842dd066cde22606fca1",
     version: "1.100.0.0",
+    version_sha256: "5ba97c87510c945bd4cfe74f8a55254eeaa620c837062653bc12f23042b7a3a4",
     files: {
       "office-hours/SKILL.md": "8ff8e76098282f8a526aeb78640b975241db8fe0c0c557ac149075ed6c8f78ff",
       "office-hours/SKILL.md.tmpl": "791e0793abae78ce2c7e847e85b32b60f22cd0b5d4b0d42edaece4375489fc03",

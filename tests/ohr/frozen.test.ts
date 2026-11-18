@@ -49,13 +49,15 @@ describe("frozen values match the posts", () => {
     expect(added).not.toBeNull();
     expect({ ...files, "bin/gstack-design-doc-find": added![1] } as Record<string, string>).toEqual({ ...pin.files });
     expect(change1).toContain("| VERSION | " + pin.version + " |");
+    expect(pin.version_sha256).toBe(rows.VERSION!);
   });
   test("the new pin, its file hashes and its byte counts", () => {
     const pin = PINS.new!;
     expect(change2).toContain("garrytan/gstack " + pin.sha);
     expect(change2).toContain("| VERSION | " + pin.version + " |");
     const table = pinTable("2026-11-18-geva-553-office-hours-rewrite-pre-run-change-2/pin-new.tsv");
-    const { VERSION: _v, ...files } = table;
+    const { VERSION: version, ...files } = table;
+    expect(pin.version_sha256).toBe((version as { sha256: string }).sha256);
     expect(Object.fromEntries(Object.entries(files).map(([k, v]) => [k, (v as { sha256: string }).sha256]))).toEqual({ ...pin.files });
     expect(Object.keys(pin.files).sort()).toEqual([...Object.keys(PINS.current!.files), "office-hours/sections/landscape.md", "office-hours/sections/landscape.md.tmpl", "office-hours/sections/phase-2c-pivot-discovery.md", "office-hours/sections/phase-2c-pivot-discovery.md.tmpl"].sort());
     for (const [path, v] of Object.entries(files)) if (path.startsWith("office-hours/") && !path.endsWith(".json")) expect(change2).toContain("| " + path + " | " + v.bytes + " |");
