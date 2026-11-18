@@ -5,7 +5,7 @@
 // of its edge through this area's code, on invented rows that are never eval briefs. The fixture builders are exported
 // for tests/ohr/read.
 import { ARMS, MODELS, PRIMARY_MODELS } from "../frozen.ts";
-import type { ArmId, KeptWhole, ModelId, ScoredSession, Seam } from "../types.ts";
+import type { ArmId, EndState, KeptWhole, ModelId, ScoredSession, Seam } from "../types.ts";
 
 // ---- Fixtures ----
 
@@ -32,6 +32,33 @@ export function builderRows(o: { lost?: string[]; wrong?: string[]; leak?: strin
       const R = isNew && o.wrong?.includes(brief) ? 0 : 1;
       out.push(row({ brief, cluster: brief, kind: "builder", model, arm, R, R2: R, kept_whole: arm === "none" ? null : kept(!(isNew && o.lost?.includes(brief)), isNew && o.leak?.includes(brief) ? ["the payment test"] : []) }));
     }
+  }
+  return out;
+}
+
+type Bit = 0 | 1;
+export interface FounderPlan {
+  /** R per arm, brief index j (0 to 39; twins j and j+1 for even j share cluster c = floor(j / 2)) and model. Defaults to 1. */
+  R?: (arm: ArmId, j: number, model: ModelId) => Bit;
+  questions?: (arm: ArmId, j: number) => number;
+  replies?: (arm: ArmId, j: number) => number;
+  traction?: (j: number) => boolean;
+  /** An end other than block; missing and contaminated rows carry no bits. */
+  end?: (arm: ArmId, j: number, model: ModelId) => EndState | undefined;
+  stage?: 1 | 2;
+}
+
+/** 40 founder briefs f01 to f40 in 20 twin clusters c01 to c20, on every arm and model, 5 questions and 5 founder replies each. */
+export function founderRows(p: FounderPlan): ScoredSession[] {
+  const out: ScoredSession[] = [];
+  for (let j = 0; j < 40; j++) for (const model of MODELS) for (const arm of ARMS) {
+    const end = p.end?.(arm, j, model) ?? "block";
+    const gone = end === "missing" || end === "contaminated";
+    const R = gone ? null : (p.R?.(arm, j, model) ?? 1);
+    out.push(row({
+      stage: p.stage ?? 2, brief: "f" + pad(j + 1), cluster: "c" + pad(Math.floor(j / 2) + 1), model, arm, end, traction: p.traction?.(j) ?? false,
+      R, R1: gone ? null : 1, R2: R, R3: gone ? null : 1, questions: 5 + (p.questions?.(arm, j) ?? 0), founder_replies: 5 + (p.replies?.(arm, j) ?? 0),
+    }));
   }
   return out;
 }
