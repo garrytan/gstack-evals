@@ -1,7 +1,15 @@
 // Value: protects=section 10's read order and its AN-2 prints: which stage 1 reading ends the eval, which only marks a model untested, and what prints beside the band.
 import { describe, expect, test } from "bun:test";
 import { CALIBRATION, session, stage1Fixture } from "../../../lanes/office-hours-founder/read/seams.ts";
-import { band, readStage1, referenceReads, smokeCount } from "../../../lanes/office-hours-founder/read/stage1.ts";
+import { band, readStage1, referenceReads, smokeCount, stockCheck } from "../../../lanes/office-hours-founder/read/stage1.ts";
+
+describe("stockCheck", () => {
+  test("a judge with no stock rows fails, and a judge with clean rows passes", () => {
+    const credits = ([1, 2, 3] as const).flatMap((row) => CALIBRATION.map((unit) => ({ stage: 1 as const, model: "opus" as const, judge: "astra" as const, row, unit, W: 0 as const, N: 0 as const })));
+    expect(stockCheck(credits, 1, CALIBRATION).fail).toEqual({ opus: false, sol: true, particle: true });
+    expect(stockCheck([], 1, CALIBRATION).fail).toEqual({ opus: true, sol: true, particle: true });
+  });
+});
 
 describe("readStage1", () => {
   test("the fixture reads HEADROOM with every reading printed in order", () => {

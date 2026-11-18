@@ -13,6 +13,7 @@ The layout from plan v3.2, "Repository layout and reuse". Each folder names the 
 | adapters/_fake/ | The keyless fake host | U7 |
 | arms/ | Arm resolution: overlays, placebo, loadouts; stack installs (install.ts), the pstack and tstack kinds (stacks.ts) and per-cell settings (cells.ts) | not assigned; the arm-spec grammar (U7) is its first user |
 | usersim/ | The user simulator; classifier.ts is U5's | U10 |
+| persona-sim/ | A simulated person who holds facts an assistant must draw out: one checked person turn (sim.ts) and the two-auditor turn audit (audit.ts), with the caller's rules and model call; the office-hours founder eval is its first user | GEVA-418 |
 | grade/ | Scoring and blinded adjudication | U10 |
 | runner/proxy/ | The metering proxy, vendored from harness-evals | U3 |
 | runner/ledger/ | The budget ledger, written new: write-once approvals and leases, local SQLite reservations, settle and reconcile | U4 |

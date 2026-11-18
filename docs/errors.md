@@ -410,6 +410,8 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_B1_PIN](#e_b1_pin) | 2 | U20 |
 | [E_B1_INPUT](#e_b1_input) | 2 | U20 |
 | [E_B1_LAUNCH](#e_b1_launch) | 2 | U20 |
+| [E_OHR_READ_INPUT](#e_ohr_read_input) | 2 | U20 |
+| [E_OHR_READ_POWER](#e_ohr_read_power) | 2 | U20 |
 | [E_OHR_PACKET_INPUT](#e_ohr_packet_input) | 2 | U20 |
 | [E_OHR_ID_CLASH](#e_ohr_id_clash) | 2 | U20 |
 | [E_OHR_JUDGE_INPUT](#e_ohr_judge_input) | 2 | U20 |
@@ -3158,6 +3160,22 @@ A delivery route launch was refused before it started (lanes/delivery-route/mone
 Fix: Take the line to the Captain before launching. A cap raise needs the Captain's record and a new approval row; nothing launches until the guard passes.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_OHR_READ_INPUT
+
+Office-hours rewrite eval (lanes/office-hours-rewrite/read): the readings refused their input. Two scored rows share a stage, brief, model and arm; one brief's rows disagree on its kind, cluster, set or traction flag; a G1 hand read names a session that is not a new-arm builder session or a detector hit has no hand read; an admission or decision input is missing a flag; or a statistic was asked for outside its range. The message names the row or flag.
+
+Fix: Fix the scorer's output or the named flag and run the reading again. Never edit a row by hand to make it read.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OHR_READ_POWER
+
+Office-hours rewrite eval (lanes/office-hours-rewrite/read/reread.ts): the rerun of the preregistration's power.py at stage 1's observed control rates (section 9) failed or printed something other than its JSON result.
+
+Fix: Run the printed command by hand (uv with power.py's pinned numpy and scipy), fix the environment, and rerun. power.py itself is frozen and is never edited.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 
 ### E_OHR_PACKET_INPUT
 
