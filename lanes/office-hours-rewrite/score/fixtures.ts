@@ -8,7 +8,9 @@ import { join } from "node:path";
 import type { Caller } from "../../product-value/judge.ts";
 import type { Block, BriefMeta, FounderTurn, Key, SessionRow } from "../types.ts";
 import { parseBlock, renderBlock } from "./block.ts";
-import type { Brief } from "./packets.ts";
+import type { CheckInput } from "./check.ts";
+import type { JudgedLabel } from "./judge.ts";
+import type { BlockRef, Brief, PacketMap } from "./packets.ts";
 
 const meta = (id: string, o: Partial<BriefMeta>): BriefMeta => ({ id, kind: "founder", type: "T1", skin: 0, cluster: id, set: "calibration", draw: 1, author: "sol", twin_of: null, traction: false, anti_pattern: "launch anxiety", industry: "bakery supply", pilot: false, digest: "0".repeat(64), ...o });
 
@@ -89,3 +91,33 @@ export function stubCaller(o: { garble?: number; skip?: (blockText: string) => b
 
 export const block = (decision: string, next_action: string, why = ""): Block => ({ decision, next_action, why });
 export type { Key };
+
+/** A check map for section 12's judge check: n session blocks, answer blocks, oracles, near-misses and stock rows, in one packet. */
+export function plantCheck(o: { session: number; answer?: number; oracle?: number; near?: number; stock?: number }): { map: PacketMap; ids: Record<string, string[]> } {
+  const blocks: Record<string, BlockRef> = {};
+  const ids: Record<string, string[]> = { session: [], answer: [], oracle: [], near: [], stock: [] };
+  const add = (k: string, n: number, ref: BlockRef) => {
+    for (let i = 0; i < n; i++) {
+      blocks[k + i] = ref;
+      ids[k]!.push(k + i);
+    }
+  };
+  add("session", o.session, { kind: "session", session: { stage: 1, brief: "a", model: "opus", arm: "none" } });
+  add("answer", o.answer ?? 0, { kind: "answer", author: "sol", source: "full" });
+  add("oracle", o.oracle ?? 0, { kind: "oracle" });
+  add("near", o.near ?? 0, { kind: "near-miss" });
+  add("stock", o.stock ?? 0, { kind: "stock", row: 1 });
+  return { map: { version: 1, kind: "check", stage: 1, seed: 1, packets: { P: { id: "P", role: "check", stage: 1, brief: "a", model: "opus", judges: ["astra", "opus"], blocks } } }, ids };
+}
+export const judgedLabel = (judge: "astra" | "opus", block: string, decision: boolean | null, action: boolean | null, effort: "max" | "medium"): JudgedLabel => ({ packet: "P", block, brief: "a", judge, model_id: judge, model_version: "v", effort, decision, action });
+/** Gold: both judges agree at max effort, block i credited on both cells when i is even. */
+const goldFor = (ids: string[]) => ids.flatMap((b, i) => (["astra", "opus"] as const).map((j) => judgedLabel(j, b, i % 2 === 0, i % 2 === 0, "max")));
+export type Says = (block: string, i: number, kind: string) => [boolean | null, boolean | null];
+/** A judge that matches gold, credits oracles and credits no near-miss or stock row. */
+export const faithful: Says = (_b, i, kind) => (kind === "session" || kind === "answer" ? [i % 2 === 0, i % 2 === 0] : kind === "oracle" ? [true, true] : [false, false]);
+export function checkInput(o: Parameters<typeof plantCheck>[0], says: Says): CheckInput {
+  const { map, ids } = plantCheck(o);
+  const gold = [...goldFor(ids.session!), ...goldFor(ids.answer!)];
+  const labels = Object.entries(ids).flatMap(([kind, list]) => list.map((b, i) => judgedLabel("astra", b, ...says(b, i, kind), "medium")));
+  return { map, gold, labels, judge: "astra" };
+}

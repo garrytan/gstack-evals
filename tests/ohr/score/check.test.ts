@@ -2,9 +2,8 @@
 // The rewrite eval's judge check (prereg section 12, frozen.JUDGE_CHECK), with Cohen's kappa pinned to published examples.
 import { describe, expect, test } from "bun:test";
 import { kappa } from "../../../lanes/product-value/stats.ts";
-import { goldCells, judgeCheck, type CheckInput } from "../../../lanes/office-hours-rewrite/score/check.ts";
-import type { JudgedLabel } from "../../../lanes/office-hours-rewrite/score/judge.ts";
-import type { BlockRef, PacketMap } from "../../../lanes/office-hours-rewrite/score/packets.ts";
+import { goldCells, judgeCheck } from "../../../lanes/office-hours-rewrite/score/check.ts";
+import { checkInput as input, faithful, judgedLabel as lab, plantCheck as plant } from "../../../lanes/office-hours-rewrite/score/fixtures.ts";
 
 const pairs = (a: number, b: number, c: number, d: number): Array<[boolean, boolean]> => [
   ...Array.from({ length: a }, () => [true, true] as [boolean, boolean]),
@@ -23,36 +22,6 @@ describe("Cohen's kappa against published worked examples", () => {
     expect(kappa([[true, true]])).toBeNull();
   });
 });
-
-/** A check map with n session blocks, n answer blocks, oracles, near-misses and stock rows, in one packet each. */
-function plant(o: { session: number; answer?: number; oracle?: number; near?: number; stock?: number }): { map: PacketMap; ids: Record<string, string[]> } {
-  const blocks: Record<string, BlockRef> = {};
-  const ids: Record<string, string[]> = { session: [], answer: [], oracle: [], near: [], stock: [] };
-  const add = (k: string, n: number, ref: BlockRef) => {
-    for (let i = 0; i < n; i++) {
-      const id = k + i;
-      blocks[id] = ref;
-      ids[k]!.push(id);
-    }
-  };
-  add("session", o.session, { kind: "session", session: { stage: 1, brief: "a", model: "opus", arm: "none" } });
-  add("answer", o.answer ?? 0, { kind: "answer", author: "sol", source: "full" });
-  add("oracle", o.oracle ?? 0, { kind: "oracle" });
-  add("near", o.near ?? 0, { kind: "near-miss" });
-  add("stock", o.stock ?? 0, { kind: "stock", row: 1 });
-  return { map: { version: 1, kind: "check", stage: 1, seed: 1, packets: { P: { id: "P", role: "check", stage: 1, brief: "a", model: "opus", judges: ["astra", "opus"], blocks } } }, ids };
-}
-const lab = (judge: "astra" | "opus", block: string, decision: boolean | null, action: boolean | null, effort: "max" | "medium"): JudgedLabel => ({ packet: "P", block, brief: "a", judge, model_id: judge, model_version: "v", effort, decision, action });
-/** Gold: both judges agree, session i credited on both cells when i is even. */
-const goldFor = (ids: string[]) => ids.flatMap((b, i) => (["astra", "opus"] as const).map((j) => lab(j, b, i % 2 === 0, i % 2 === 0, "max")));
-
-function input(o: Parameters<typeof plant>[0], judgeSays: (block: string, i: number, kind: string) => [boolean | null, boolean | null]): CheckInput {
-  const { map, ids } = plant(o);
-  const gold = [...goldFor(ids.session!), ...goldFor(ids.answer!)];
-  const labels = Object.entries(ids).flatMap(([kind, list]) => list.map((b, i) => lab("astra", b, ...judgeSays(b, i, kind), "medium")));
-  return { map, gold, labels, judge: "astra" };
-}
-const faithful = (_b: string, i: number, kind: string): [boolean | null, boolean | null] => (kind === "session" || kind === "answer" ? [i % 2 === 0, i % 2 === 0] : kind === "oracle" ? [true, true] : [false, false]);
 
 describe("judge check", () => {
   test("a faithful judge passes with enough gold, near-misses and stock rows", () => {
