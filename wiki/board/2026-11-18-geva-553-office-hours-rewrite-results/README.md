@@ -160,14 +160,14 @@ These sizings are inputs for whoever decides on a rerun, not a recommendation to
 - Session, simulator, label, audit and judge costs are the preregistration's planning figures, since stage 1 never ran.
 - Caps follow the current rule: 1.35 times central, plus what the item's parallel calls hold at open (8 drafts at $3.50, and one round of an Opus skill, skill and none session at $15, $15 and $3 with $2 of simulator each). Stage 1 and the judge check keep their approved caps.
 - Agent use is the preregistration's planning figure of $350.
-- A line item of $40 of agent use, also a planning figure, fixes five harness bugs that this pull request's review found and deferred to a rerun's build:
-  - `ohr read decision` learns of a cap stop only from a flag;
-  - unrun sessions drop out of the completeness checks;
-  - a missing transcript aborts scoring;
-  - a crashed attempt's spend reads as $0 in its session row;
-  - the judge check returns the wrong exit code.
+- A line item of $40 of agent use, also a planning figure, covers five harness bugs that this pull request's review found. Four of the five were fixed in this pull request, so in a rerun the line item pays to re-verify them, and the first is deferred to a rerun's build:
+  - `ohr read decision` learns of a cap stop only from a flag (deferred);
+  - unrun sessions drop out of the completeness checks (fixed here);
+  - a missing transcript aborts scoring (fixed here);
+  - a crashed attempt's spend reads as $0 in its session row (fixed here for the arm's spend; the simulator's share of that attempt stays on the simulator item's lease);
+  - the judge check returns the wrong exit code (fixed here).
 
-  None of them touches this result, because no session ran.
+  None of them touches this result, because no session ran. resize.py and resize.txt still name the line item as fixing the five deferred findings, as they read when the sizings ran.
 - The authoring range comes from drawing every yield from its Jeffreys interval at once.
 
 | Design | Briefs | Founder clusters | Pooled MDD, rho 0.5 (0.843) | A true 15-point lift: interval above zero / MERGE | Authoring, central (95% range) | All-in central | All-in at caps (range from authoring) |
