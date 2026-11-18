@@ -3553,6 +3553,42 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_OHR_PILOT_STOP: {
+    exit: 2,
+    meaning: "Office-hours rewrite eval (pre-run change 1 item 4d): the authoring pilot stops authoring. Either the second-twin yield's 90% Wilson upper bound is below the line recomputed from the pilot's cost per draw and first-pass rate, or the first twins and unpaired briefs alone would use up the authoring cap at those figures, so there is no line. The message gives the counts, the reads, the line and its inputs.",
+    fix: "Take the numbers to the Captain. Any change to the author prompts or screens voids the pilot's briefs and needs a dated change to the plan.",
+    side_effects: "Spend so far stays on the authoring lease; the pilot's drafts and summary are written under custody.",
+    retry_safe: false,
+    resumable: false,
+    owner: "U20",
+  },
+  E_OHR_PILOT_OPEN: {
+    exit: 2,
+    meaning: "Office-hours rewrite eval (pre-run change 1 item 4d): after 32 second-twin draws the authoring pilot's yield interval still straddles the line, so it can neither continue nor stop on its own. The message gives the counts, both reads, the line and its inputs.",
+    fix: "Take the numbers to the Captain, who decides whether authoring continues.",
+    side_effects: "Spend so far stays on the authoring lease; the pilot's drafts and summary are written under custody.",
+    retry_safe: false,
+    resumable: false,
+    owner: "U20",
+  },
+  E_OHR_SUPPLY_SHORT: {
+    exit: 2,
+    meaning: "Office-hours rewrite eval (prereg section 3, Supply): authoring stopped (its cap, its draft bound or a pilot cap stop) before all 110 briefs were placed. The set is never shrunk quietly; the message gives the count placed per set, the comparison founder briefs and the MDD there.",
+    fix: "Take the shortfall and its MDD to the Captain before stage 1.",
+    side_effects: "Spend so far stays on the authoring lease; every placed brief and every draft's outcome are written under custody.",
+    retry_safe: false,
+    resumable: false,
+    owner: "U20",
+  },
+  E_OHR_CUSTODY: {
+    exit: 2,
+    meaning: "Office-hours rewrite eval (prereg section 3, Sealing): a custody path was refused or sealing failed. Briefs are written only into a fresh work directory under /dev/shm, sealed with age to an output outside the repository that does not exist yet, and decrypted only into /dev/shm.",
+    fix: "Pass a work directory under /dev/shm and a sealed output path outside the repository, or fix the age recipients file; then start a new run.",
+    side_effects: "None when a path is refused. When sealing fails the plaintext work directory stays in /dev/shm: delete it before anything else.",
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
+  },
 } as const satisfies Record<string, CodeInfo>;
 
 export type ReasonCode = keyof typeof CODES;

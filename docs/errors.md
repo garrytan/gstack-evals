@@ -420,6 +420,10 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_OHR_JUDGE_CHECK_NO_READ](#e_ohr_judge_check_no_read) | 3 | U20 |
 | [E_OHR_MARKERS](#e_ohr_markers) | 2 | U20 |
 | [E_OHR_SCORE_INPUT](#e_ohr_score_input) | 2 | U20 |
+| [E_OHR_PILOT_STOP](#e_ohr_pilot_stop) | 2 | U20 |
+| [E_OHR_PILOT_OPEN](#e_ohr_pilot_open) | 2 | U20 |
+| [E_OHR_SUPPLY_SHORT](#e_ohr_supply_short) | 2 | U20 |
+| [E_OHR_CUSTODY](#e_ohr_custody) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -3216,6 +3220,38 @@ Office-hours rewrite eval (sections 5 and 8): the scorer was refused. A row name
 Fix: Score with the stage's label maps and the routed judge's medium-effort labels. A block row the packets left out means the packets were built from other rows; rebuild them.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OHR_PILOT_STOP
+
+Office-hours rewrite eval (pre-run change 1 item 4d): the authoring pilot stops authoring. Either the second-twin yield's 90% Wilson upper bound is below the line recomputed from the pilot's cost per draw and first-pass rate, or the first twins and unpaired briefs alone would use up the authoring cap at those figures, so there is no line. The message gives the counts, the reads, the line and its inputs.
+
+Fix: Take the numbers to the Captain. Any change to the author prompts or screens voids the pilot's briefs and needs a dated change to the plan.
+
+Exit 2. Side effects: Spend so far stays on the authoring lease; the pilot's drafts and summary are written under custody. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_OHR_PILOT_OPEN
+
+Office-hours rewrite eval (pre-run change 1 item 4d): after 32 second-twin draws the authoring pilot's yield interval still straddles the line, so it can neither continue nor stop on its own. The message gives the counts, both reads, the line and its inputs.
+
+Fix: Take the numbers to the Captain, who decides whether authoring continues.
+
+Exit 2. Side effects: Spend so far stays on the authoring lease; the pilot's drafts and summary are written under custody. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_OHR_SUPPLY_SHORT
+
+Office-hours rewrite eval (prereg section 3, Supply): authoring stopped (its cap, its draft bound or a pilot cap stop) before all 110 briefs were placed. The set is never shrunk quietly; the message gives the count placed per set, the comparison founder briefs and the MDD there.
+
+Fix: Take the shortfall and its MDD to the Captain before stage 1.
+
+Exit 2. Side effects: Spend so far stays on the authoring lease; every placed brief and every draft's outcome are written under custody. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_OHR_CUSTODY
+
+Office-hours rewrite eval (prereg section 3, Sealing): a custody path was refused or sealing failed. Briefs are written only into a fresh work directory under /dev/shm, sealed with age to an output outside the repository that does not exist yet, and decrypted only into /dev/shm.
+
+Fix: Pass a work directory under /dev/shm and a sealed output path outside the repository, or fix the age recipients file; then start a new run.
+
+Exit 2. Side effects: None when a path is refused. When sealing fails the plaintext work directory stays in /dev/shm: delete it before anything else. Retry safe: yes. Resumable: no. Owner: U20.
 
 ## Exit 3: calibration failed (INCOMPLETE)
 
