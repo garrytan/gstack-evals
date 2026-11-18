@@ -50,6 +50,11 @@ const share = (ids: ReadonlySet<string>, of: readonly string[]): number | null =
 function index(maps: readonly PacketMap[], labels: readonly ScoreLabel[]) {
   const byBlock = new Map<string, ScoreLabel>();
   const sessions = new Map<string, { true?: string; shuffled?: string; key_unit?: string }>();
+  const ids = new Set<string>();
+  for (const p of maps.flatMap((m) => Object.values(m.packets))) {
+    if (ids.has(p.id)) throw new Error("E_USAGE packet id " + p.id + " is in more than one label map, so its labels could score either map's blocks");
+    ids.add(p.id);
+  }
   for (const map of maps)
     for (const p of Object.values(map.packets)) {
       if (!["label", "shuffled", "reference", "pitch"].includes(p.role)) continue;

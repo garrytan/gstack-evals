@@ -62,12 +62,36 @@ export function rowProblems(l: RowLine): string[] {
   return p;
 }
 
-/** The launch's rows, by session id; the last line for an id wins. */
-export function readRows(out: string): Map<string, RowLine> {
+/** An ndjson file's lines, parsed. A last line that does not parse (a write cut short) comes back as torn, with the offset it starts at; any other line that does not parse throws. */
+export function ndjson<T>(text: string, name: string): { lines: T[]; torn: { text: string; at: number } | null } {
+  const raw = text.split("\n");
+  let last = raw.length - 1;
+  while (last >= 0 && !raw[last]!.trim()) last--;
+  const lines: T[] = [];
+  let at = 0;
+  for (const [i, line] of raw.entries()) {
+    const start = at;
+    at += line.length + 1;
+    if (!line.trim()) continue;
+    try {
+      lines.push(JSON.parse(line) as T);
+    } catch (error) {
+      if (i === last) return { lines, torn: { text: line, at: start } };
+      throw new Error("E_USAGE " + name + " line " + (i + 1) + " does not parse, and only its last line may be torn: " + (error as Error).message);
+    }
+  }
+  return { lines, torn: null };
+}
+
+/** The launch's rows, by session id; the last line for an id wins. A torn last line goes to onTorn, and without it fails. */
+export function readRows(out: string, onTorn?: (torn: { text: string; at: number }) => void): Map<string, RowLine> {
   const file = join(out, "rows.ndjson");
   const rows = new Map<string, RowLine>();
   if (!existsSync(file)) return rows;
-  for (const line of readFileSync(file, "utf8").split("\n")) if (line.trim()) rows.set((JSON.parse(line) as RowLine).id, JSON.parse(line) as RowLine);
+  const { lines, torn } = ndjson<RowLine>(readFileSync(file, "utf8"), file);
+  if (torn && !onTorn) throw new Error("E_USAGE " + file + "'s last line is torn; resume the launch, which drops and records it");
+  if (torn) onTorn!(torn);
+  for (const line of lines) rows.set(line.id, line);
   return rows;
 }
 

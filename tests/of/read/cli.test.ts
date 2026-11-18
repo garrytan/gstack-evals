@@ -140,13 +140,14 @@ describe("of stage2 and of headline", () => {
     const dir = join(root, "launch-" + cell);
     mkdirSync(dir, { recursive: true });
     const path = join(dir, "manifest.json");
-    freezeManifest(path, { schema: 1, cell, models: [...MODELS], arms: ["none", "lens", "office-hours"], repairs: [], units: {}, entries: [...entries] });
+    freezeManifest(path, { schema: 1, cell, models: [...MODELS], arms: ["none", "lens", "office-hours"], repairs: [], units: {}, sim_rules: "s0", entries: [...entries] });
+    writeFileSync(join(dir, "stops.json"), JSON.stringify({ stops: [], unrun: [] }) + "\n");
     return path;
   };
   const primary = launch("stage2", s2.manifest);
   const pitch = launch("pitch", manifest(COMPARISON, { kind: "pitch", real: false, cuts: [] }));
   const scored2 = file("scored2.ndjson", lines(s2.sessions));
-  const stock2 = file("stock2.ndjson", "");
+  const stock2 = file("stock2.ndjson", lines(s2.stock));
   const goldMap: PacketMap = { version: 1, kind: "label", stage: 2, seed: 1, packets: Object.fromEntries(MODELS.map((m) => ["g" + m, packet("g" + m, "gold", m, blocks("g" + m, m), Array.from({ length: 40 }, (_, k) => ({ block: "g" + m + k, item: "customer" as const, gold: k < 20, oracle: false })))])) };
   const goldLabels = file("gold-labels.ndjson", lines(MODELS.flatMap((m) => Array.from({ length: 40 }, (_, k) => cells("g" + m, "g" + m + k, PRODUCTION_LABEL[m], k < 20, false)))));
   const est = Object.fromEntries(MODELS.map((m) => [m, { model: m, units: 16, sessions: 48, p0: 0.375, rho: 0.99, s: 0.01 }]));
@@ -178,6 +179,18 @@ describe("of stage2 and of headline", () => {
     expect(ok.code).toBe(0);
     expect(ok.out).toContain("untested on Opus: simulator: the stage 2 fidelity audit voided the stage. The next attempt changes: a stage 2 rerun under a repaired simulator.");
     expect((await run("headline", ["--stage2", path, "--next", "haiku=x"])).err).toContain("--next takes <model>=");
+  });
+  test("a launch with no stops.json beside its manifest is refused, never read as complete", async () => {
+    const dir = join(root, "launch-no-stops");
+    mkdirSync(dir, { recursive: true });
+    const path = join(dir, "manifest.json");
+    freezeManifest(path, { schema: 1, cell: "stage2", models: [...MODELS], arms: ["none", "lens", "office-hours"], repairs: [], units: {}, sim_rules: "s0", entries: [...s2.manifest] });
+    const a = args(join(root, "s2-no-stops"));
+    a[a.indexOf(primary)] = path;
+    const r = await run("stage2", a);
+    expect(r.code).toBe(2);
+    expect(r.err).toStartWith("E_USAGE of stage2: ");
+    expect(r.err).toContain("stops.json");
   });
   test("refuses a stage 1 audit outcome and an unknown flag", async () => {
     expect((await run("stage2", args(join(root, "s2-bad"), "repair"))).err).toContain("stage 1 outcome");
