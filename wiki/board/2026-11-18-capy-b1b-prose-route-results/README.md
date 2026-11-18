@@ -25,7 +25,7 @@ attachments:
 
 We learned that a one-line hint added to the prompt gets Opus 5.5 to load a skill, and the same route written into CLAUDE.md mostly doesn't. On 60 SWE-rebench bug tasks, gstack's prompt-routing hook line ("this request fits /prove-it. Run /prove-it with the Skill tool before you start") got the prove-it skill loaded in 58 sessions, each time at the first tool call. The same route in the user's CLAUDE.md ("Bugs/errors → invoke /prove-it") got it loaded in 20. The paired difference is 63.3 points (95% interval 48.6 to 74.1). You should put a skill route on the prompt it applies to when you need the skill to start.
 
-We learned that CLAUDE.md routing is not a dependable way to start a skill in an unattended Opus session. In the 40 sessions where the skill didn't load, Opus never wrote its name: not in its text, its logged thinking or any tool call. You should not count on CLAUDE.md routing to start a skill when nobody types it.
+We learned that CLAUDE.md routing is not a dependable way to start a skill in an unattended Opus session. In the 40 sessions where the skill didn't load, Opus never wrote its name, in its text or in any tool call. You should not count on CLAUDE.md routing to start a skill when nobody types it.
 
 We learned that gstack's hook, as shipped, would not have delivered that line on these bugs. At gstack 1.100.0.0 the hook routes only /review, /qa and /verify, so it names prove-it on none of the 60 prompts. With prove-it added to its list, its matcher would fire on 22 of the 60. So the 58 of 60 is what the line does when it fires. End to end, with prove-it listed, the hook would load the skill in about 35% of these sessions (96.7% times 22 of 60). You should fix the matcher so it fires on bug reports before a hook default can buy the rate the line shows.
 
@@ -108,7 +108,7 @@ Hand reading. Two smoke sessions and four counted sessions were read by hand fro
 | hook | $24.18 | $0.403 | 38.3M |
 | claude-md | $22.18 | $0.370 | 35.2M |
 
-B1's none arm averaged $0.307 a session and its typed gstack-shaped arm $0.477. The whole run, machines included, cost $49.66: $48.673 for the 120 sessions ($46.358 model, $2.315 machines) and $0.987 for the smoke.
+B1's none arm averaged $0.307 a session and its typed gstack-shaped arm $0.477. The whole run, machines included, cost $49.66 on the plan's ledgers, which are not attached: $48.673 for the 120 sessions ($46.358 model, $2.315 machines) and $0.987 for the smoke.
 
 Prices, as metered on 2026-11-18 from the metering proxy's table (quick/laneb/config/proxy.json, unchanged since 2026-11-09). Claude Opus 5.5, per million tokens: input $4, output $20, cache write $5 (5 minutes) or $8 (1 hour), cache read $0.20. Machines: $0.08 an hour for the host and $0.60 an hour for each part's 16-core machine.
 
