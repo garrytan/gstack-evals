@@ -338,7 +338,8 @@ export async function runLaunch(o: RunInput, deps: RunDeps): Promise<RunResult> 
       const halt = end!.state === "halt";
       const scored = halt ? { state: "missing" as const, code: (end as { code: ReasonCode }).code } : (end as { state: Exclude<Outcome["state"], "retry" | "cap" | "halt">; code: ReasonCode | null });
       const last = join(o.out, "sessions", id, "a" + attempts.length, "host");
-      const row = sessionRow({ entry: e, end: scored, attempts, transcript: join(last, "transcript.ndjson"), state_root: isSkillArm(e.arm) ? join(last, "gstack-state") : null });
+      const logged = join(last, "transcript.ndjson");
+      const row = sessionRow({ entry: e, end: scored, attempts, transcript: existsSync(logged) ? logged : null, state_root: isSkillArm(e.arm) ? join(last, "gstack-state") : null });
       const line: RowLine = { id, launch: o.launch, row, why: end!.why, attempts: records };
       appendFileSync(join(o.out, "rows.ndjson"), JSON.stringify(line) + "\n");
       result.rows.push(line);

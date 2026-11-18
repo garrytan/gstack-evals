@@ -9,6 +9,10 @@ import { BRIEFS, allRows, blockOf, row, stateRoot, stubCaller, transcript, turn 
 import { judgePackets, type JudgedLabel } from "../../../lanes/office-hours-rewrite/score/judge.ts";
 import { buildLabelPackets } from "../../../lanes/office-hours-rewrite/score/packets.ts";
 import { combine, r1, scoreSessions, stockCredits } from "../../../lanes/office-hours-rewrite/score/score.ts";
+import { readBriefs } from "../../../lanes/office-hours-rewrite/cli.ts";
+import { readRows } from "../../../lanes/office-hours-rewrite/run/rows.ts";
+import { fixtureBriefs, scriptedRun } from "../../../lanes/office-hours-rewrite/run/seams.ts";
+import { loadBriefs } from "../../../lanes/office-hours-rewrite/run/manifest.ts";
 import type { SessionRow } from "../../../lanes/office-hours-rewrite/types.ts";
 
 const roots: string[] = [];
@@ -115,6 +119,21 @@ describe("detectors in the scored row", () => {
     expect(none.compliance).not.toBeNull();
     const noTranscript = (await scored([deliveredRow({ brief: "a", arm: "new" })])).out[0]!;
     expect([noTranscript.exposure, noTranscript.compliance]).toEqual([null, null]);
+  });
+});
+
+describe("missing sessions with no transcript (section 8)", () => {
+  test("a session that failed before its transcript existed records none, scores null and lets scoring go on; a lost transcript still throws", async () => {
+    const briefs = fixtureBriefs();
+    const id = loadBriefs(briefs).filter((b) => b.set === "calibration").sort((a, b) => a.draw - b.draw)[0]!.id;
+    const upstream = { replies: [], termination: { kind: "missing" as const, code: "UPSTREAM" as const } };
+    const { out } = await scriptedRun({ briefs, scripts: new Map([[id + "/none", [upstream, upstream]]]), only: (e) => e.brief === id && e.arm === "none" });
+    const rows = [...readRows(out).values()].map((l) => l.row);
+    expect(rows.length).toBeGreaterThan(0);
+    const out2 = scoreSessions({ rows, briefs: readBriefs(briefs), maps: [], labels: [] });
+    expect(out2.map((s) => [s.R, s.compliance, s.questions])).toEqual(rows.map(() => [null, null, 0]));
+    expect(rows.every((r) => r.end === "missing" && r.transcript === null)).toBe(true);
+    expect(() => scoreSessions({ rows: [{ ...rows[0]!, transcript: join(out, "lost.ndjson") }], briefs: readBriefs(briefs), maps: [], labels: [] })).toThrow(/ENOENT/);
   });
 });
 
