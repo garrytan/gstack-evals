@@ -10,6 +10,8 @@
 //   slot or a pair's first twin that fails is drawn again, and a pair whose second twin fails gets a newly authored twin
 //   against the same partner. A pair is placed only when both twins pass; a partner still unmatched at the end drops.
 // - A batch never starts more drafts than the cap less the spend so far covers at one $3.50 allowance each.
+// - A stop a label call throws (a ledger refusal, a closed lease, a model drift or the empty-reply bound) ends the run like
+//   a cap stop once the batch's drafts settle, and the run carries it as its halt, so ohr author still seals what placed.
 // Pilot briefs are placed like any other, through the same checks and slots; when the run continues from an earlier
 // pilot whose prompts or screen differ from the current ones (its frozen-inputs digest), no pilot brief is placed.
 import { sha256 } from "../../office-hours-founder/author/files.ts";
@@ -68,12 +70,25 @@ export interface AuthorRun {
   /** First twins still waiting for a passing second twin when authoring ended; they drop. */
   unmatched: string[];
   stopped: "quotas" | "cap" | "schedule" | "pilot";
+  /** The stop a label call threw, which ended the run; null when none did. */
+  halt: AuthorError | null;
 }
 
 interface SlotState {
   placed: Outcome[] | null;
   partner: Outcome | null;
   seconds: number;
+}
+
+/** The stops a label call may throw (wire.ts); any other error is a bug and still rejects the run. */
+const STOPS: ReadonlySet<string> = new Set(["CAP_STOP", "E_LEASE_CLOSED", "E_OHR_MODEL_DRIFT", "E_PV_EMPTY_REPLIES"]);
+
+/** Waits for every draft in the batch, then returns the first stop one threw, or null; any other error is rethrown. */
+async function settleBatch(batch: Promise<void>[]): Promise<AuthorError | null> {
+  const errors = (await Promise.allSettled(batch)).flatMap((x) => (x.status === "rejected" ? [x.reason] : []));
+  const other = errors.find((e) => !STOPS.has(e?.code));
+  if (other) throw other;
+  return errors.length ? new AuthorError(errors[0].code, String(errors[0].message).slice(errors[0].code.length + 1)) : null;
 }
 
 export async function authorRun(deps: Deps & { spent: () => number }, o: { cap: number; concurrency: number; pilotOnly?: boolean; pilot?: PilotRecord }): Promise<AuthorRun> {
@@ -83,6 +98,7 @@ export async function authorRun(deps: Deps & { spent: () => number }, o: { cap: 
   const outcomes: Outcome[] = [];
   let draw = 0;
   let inPilot = !o.pilot;
+  let halt: AuthorError | null = null;
 
   const settle = (slot: Slot, out: Outcome) => {
     outcomes.push(out);
@@ -145,7 +161,11 @@ export async function authorRun(deps: Deps & { spent: () => number }, o: { cap: 
           pilot = pilotStop("schedule", [], null);
           break;
         }
-        await Promise.all(batch);
+        halt = await settleBatch(batch);
+        if (halt) {
+          pilot = pilotStop("cap", [], null);
+          break;
+        }
       }
       if (pilot) break;
       const seconds = outcomes.filter((x) => x.role === "second");
@@ -162,7 +182,7 @@ export async function authorRun(deps: Deps & { spent: () => number }, o: { cap: 
   const pilotPlaced = !o.pilot || o.pilot.digest === digest;
   const finish = (stopped: AuthorRun["stopped"]): AuthorRun => {
     const members: Member[] = slots.flatMap((s) => (st.get(s.slot)!.placed ?? []).map((x) => memberOf(s, x)));
-    return { pilot: pilot!, pilot_placed: pilotPlaced, outcomes: [...outcomes], sets: placeSets(members), unmatched: slots.flatMap((s) => (st.get(s.slot)!.partner ? [st.get(s.slot)!.partner!.id] : [])), stopped };
+    return { pilot: pilot!, pilot_placed: pilotPlaced, outcomes: [...outcomes], sets: placeSets(members), unmatched: slots.flatMap((s) => (st.get(s.slot)!.partner ? [st.get(s.slot)!.partner!.id] : [])), stopped, halt };
   };
   if (pilot.verdict !== "go" || o.pilotOnly) return finish("pilot");
 
@@ -172,7 +192,8 @@ export async function authorRun(deps: Deps & { spent: () => number }, o: { cap: 
     if (size <= 0) return finish("cap");
     if (outcomes.length >= MAX_DRAFTS) return finish("schedule");
     const batch = slots.filter(open).slice(0, size).map((s) => (st.get(s.slot)!.partner ? second(s) : first(s)));
-    await Promise.all(batch);
+    halt = await settleBatch(batch);
+    if (halt) return finish("cap");
   }
 }
 
@@ -186,10 +207,11 @@ const needed = QUOTA.founder + QUOTA.builder + QUOTA.calibration + QUOTA.reserve
 export const placedCount = (r: AuthorRun): number => r.sets.calibration.length + r.sets.comparison.length + r.sets.reserve.length;
 
 /**
- * The halt a run owes after its files are written: a pilot that read stop or stayed open, a missing line or a pilot cap
+ * The halt a run owes after its files are written: a stop a label call threw, a pilot that read stop or stayed open, a missing line or a pilot cap
  * stop, or a shortfall below the 110 briefs. Null when every brief is placed or --pilot asked for the pilot alone.
  */
 export function haltOf(r: AuthorRun, mdd: (comparisonFounderBriefs: number) => number | null, pilotOnly = false): AuthorError | null {
+  if (r.halt) return new AuthorError(r.halt.code, r.halt.message.slice(r.halt.code.length + 1) + "; authoring stopped there with " + placedCount(r) + " briefs placed, all written and sealed under custody");
   const p = r.pilot;
   const nums = "after " + p.second_draws + " second-twin draws, " + p.second_passed + " passed; reads " + (p.reads.map((x) => x.k + "/" + x.n + " [" + x.lo.toFixed(3) + ", " + x.hi.toFixed(3) + "]").join(", ") || "none") + "; line " + (p.line === null ? "none" : p.line.toFixed(3)) + " from " + p.draw_usd.toFixed(2) + " a draw and a first-pass rate of " + p.first_pass.toFixed(3) + " (" + p.first_passed + " of " + p.first_draws + "); spent " + p.spent.toFixed(2);
   if (p.verdict === "stop" || p.verdict === "no-line") return new AuthorError("E_OHR_PILOT_STOP", "the authoring pilot stops authoring: " + (p.verdict === "no-line" ? "the first twins and unpaired briefs alone would use up the cap, so there is no line; " : "the yield's upper bound is below the line; ") + nums);

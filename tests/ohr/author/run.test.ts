@@ -5,6 +5,7 @@ import { FIXTURE_SCREEN, fixtureParser, runCaller, wordLabeller } from "../../..
 import { buildScreen } from "../../../lanes/office-hours-rewrite/author/screens.ts";
 import { CAPS, QUOTA } from "../../../lanes/office-hours-rewrite/frozen.ts";
 import { line, pilotRead } from "../../../lanes/office-hours-rewrite/author/pilot.ts";
+import { MeterError } from "../../../lanes/product-value/meter.ts";
 
 const mdd = () => 0.13;
 function go(o: { secondFails?: (n: number) => boolean; usd?: number; cap?: number; screen?: typeof FIXTURE_SCREEN; pilotOnly?: boolean; pilot?: AuthorRun["pilot"] } = {}) {
@@ -137,3 +138,48 @@ describe("answers for the judge check", () => {
     expect(Object.keys(a[0]!.block).sort()).toEqual(["decision", "next_action", "why"]);
   });
 });
+
+describe("a stop thrown by a label call", () => {
+  const throwsAt = (k: number, err: () => Error) => {
+    const base = wordLabeller();
+    let n = 0;
+    return async (req: Parameters<typeof base>[0]) => {
+      if (++n === k) throw err();
+      return base(req);
+    };
+  };
+  const goWith = (label: ReturnType<typeof throwsAt>) => {
+    const call = runCaller({});
+    return authorRun({ call, label, parse: fixtureParser, screen: FIXTURE_SCREEN, spent: () => call.state.drafts * 1.04 }, { cap: CAPS.authoring, concurrency: 8 });
+  };
+  test("a ledger stop after the pilot ends authoring with every settled draft kept, so ohr author still seals the placed briefs", async () => {
+    const r = await goWith(throwsAt(400, () => new MeterError("CAP_STOP", "brief label: the ledger refused the call")));
+    expect([r.pilot.verdict, r.stopped]).toEqual(["go", "cap"]);
+    expect(r.halt!.code).toBe("CAP_STOP");
+    expect(total(r)).toBeGreaterThan(0);
+    expect(total(r)).toBeLessThan(110);
+    const e = haltOf(r, mdd)!;
+    expect(e.code).toBe("CAP_STOP");
+    expect(e.message).toContain("the ledger refused the call");
+    expect(e.message).toContain(total(r) + " briefs placed");
+  });
+  test("a model drift during the pilot ends the pilot on a cap read and halts with the drift", async () => {
+    const r = await goWith(throwsAt(50, () => new MeterError("E_OHR_MODEL_DRIFT", "brief label: the reply names another model")));
+    expect([r.pilot.verdict, r.stopped]).toEqual(["cap", "pilot"]);
+    expect(r.pilot.outcomes.length).toBeGreaterThan(0);
+    expect(haltOf(r, mdd)!.code).toBe("E_OHR_MODEL_DRIFT");
+  });
+  test("an empty-replies stop and a closed lease halt the same way", async () => {
+    for (const code of ["E_PV_EMPTY_REPLIES", "E_LEASE_CLOSED"] as const) {
+      const r = await goWith(throwsAt(400, () => new MeterError(code, "brief label: stopped")));
+      expect([r.stopped, r.halt!.code]).toEqual(["cap", code]);
+    }
+  });
+  test("any other error still rejects the run", async () => {
+    await expect(goWith(throwsAt(400, () => new TypeError("not a stop")))).rejects.toThrow("not a stop");
+  });
+  test("a run with no stop carries no halt", async () => {
+    expect((await go()).halt).toBeNull();
+  });
+});
+
