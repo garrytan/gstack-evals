@@ -100,6 +100,7 @@ export async function runE2e(o: E2eOptions = {}): Promise<{ checks: Check[]; dir
     writeFileSync(join(unitsDir, id, "sheet.json"), JSON.stringify(u.sheet, null, 2) + "\n");
     const meta: UnitMeta = { id, stratum: "constructed", set: "calibration", draw: ++draw, author: "sol", shape: "s1", type: "other", industry: "fixture", primary: ["customer"], mentioned: [], generic: [], founder_stage: "pre-product", digest: sha256(u.opening + JSON.stringify(u.sheet)) };
     writeFileSync(join(unitsDir, id, "unit.json"), JSON.stringify(meta, null, 2) + "\n");
+    writeFileSync(join(unitsDir, id, "key.json"), "{}\n");
   }
   const entries: ManifestEntry[] = [
     { stage: 1, kind: "arm", unit: "fx-answer", model: "opus", arm: "none", pass: 1 },

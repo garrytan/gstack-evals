@@ -68,6 +68,7 @@ export function fixtureUnits(dir: string, n: number, set: UnitMeta["set"] = "cal
     writeFileSync(join(dir, id, "sheet.json"), JSON.stringify({ persona: "A club volunteer.", facts: [{ id: "f1", text: "Six members asked for it.", reveal_when: "Asked who wants it.", kind: "demand" }, { id: "f2", text: "We use a paper sheet.", reveal_when: "Asked what they do today.", kind: "status-quo" }] }));
     const meta: UnitMeta = { id, stratum: set === "real" ? "real" : "constructed", set, draw: i + 1, author: "sol", shape: "s1", type: "other", industry: "fixture", primary: ["customer"], mentioned: [], generic: [], founder_stage: "pre-product", digest: "d" + i };
     writeFileSync(join(dir, id, "unit.json"), JSON.stringify(meta));
+    writeFileSync(join(dir, id, "key.json"), "{}\n");
   }
   return ids;
 }

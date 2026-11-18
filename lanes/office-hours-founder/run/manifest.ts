@@ -114,7 +114,7 @@ export interface Manifest {
   models: ModelId[];
   arms: ArmId[];
   repairs: Repair[];
-  /** Each unit's digest (UnitMeta.digest) at freeze time. */
+  /** Each unit's content digest (contentDigest over its files) at freeze time. */
   units: Record<string, string>;
   entries: ManifestEntry[];
 }

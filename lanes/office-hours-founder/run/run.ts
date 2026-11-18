@@ -42,7 +42,7 @@ import { INTERIM, interimStops } from "../read/stage2.ts";
 import { AGENT_TURNS_PER_REPLY, MODEL_KEYS, PRE_SMOKE_ALLOWANCE, PRE_SMOKE_SIM_ALLOWANCE, SESSION_MINUTES, SYSTEM_PROMPT } from "../frozen.ts";
 import type { ArmId, ManifestEntry, ModelId, Sheet, UnitMeta } from "../types.ts";
 import { departures, gstackReads, probed, TASK, workRepo, type Probe } from "./contain.ts";
-import { cellEntries, cellProblem, cellRounds, entryId, freezeManifest, loadUnits, type Cell, type Manifest } from "./manifest.ts";
+import { cellEntries, cellProblem, cellRounds, contentDigest, entryId, freezeManifest, loadUnits, type Cell, type Manifest } from "./manifest.ts";
 import { readRows, sessionRow, type RowLine } from "./rows.ts";
 import { attemptOutcome, firstUserMessage, founderLimit, founderLoop, settle, type AttemptRead, type FounderTurnFn, type Outcome, type PersonSheet, type Repair } from "./session.ts";
 
@@ -228,7 +228,7 @@ export async function runCells<C>(o: RunInput, deps: RunDeps<C>): Promise<RunRes
 export async function runSchedule<C>(o: RunInput & { entries: ManifestEntry[] }, deps: RunDeps<C>): Promise<RunResult> {
   const entries = o.entries;
   const meta = new Map<string, UnitMeta>(loadUnits(o.unitsDir).map((u) => [u.id, u]));
-  const manifest: Manifest = { schema: 1, cell: o.cell, models: [...o.models], arms: [...o.arms], repairs: [...o.repairs], units: Object.fromEntries([...new Set(entries.map((e) => e.unit))].sort().map((id) => [id, meta.get(id)!.digest])), entries };
+  const manifest: Manifest = { schema: 1, cell: o.cell, models: [...o.models], arms: [...o.arms], repairs: [...o.repairs], units: Object.fromEntries([...new Set(entries.map((e) => e.unit))].sort().map((id) => [id, contentDigest(o.unitsDir, id)])), entries };
   mkdirSync(o.out, { recursive: true });
   const stopsFile = join(o.out, "stops.json");
   const before = existsSync(stopsFile) ? (JSON.parse(readFileSync(stopsFile, "utf8")) as { stops: RunResult["stops"]; earlier?: RunResult["stops"] }) : null;

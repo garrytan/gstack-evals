@@ -2,9 +2,9 @@
 // Value: protects=the run loop's records and stops: every ended session writes one row that parses and holds together, a cap stop writes no row and starts nothing more, a halt writes its row as missing and stops the launch, and a resumed launch reconciles an attempt that has a marker and no row as an infrastructure failure before its retry; fails_when=a cap-stopped session gets a row or a retry, a halt lets new sessions start, or a crashed attempt is run again from scratch or forgotten; why_new=the run area's run loop; seam=runSchedule with a scripted launch, readRows, rowProblems, rowsReport; no_claim=the Docker launch, which the e2e covers
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { BLOCK_REPLY, scriptedRun } from "../../../lanes/office-hours-founder/run/seams.ts";
-import { readManifest, type Manifest } from "../../../lanes/office-hours-founder/run/manifest.ts";
+import { contentDigest, readManifest, type Manifest } from "../../../lanes/office-hours-founder/run/manifest.ts";
 import { readRows, rowProblems, rowsReport } from "../../../lanes/office-hours-founder/run/rows.ts";
 import { meterSlot } from "../../../lanes/office-hours-founder/run/run.ts";
 import { SIM_CALL, worstCase } from "../../../lanes/office-hours-founder/sim/founder.ts";
@@ -143,6 +143,12 @@ describe("resume", () => {
     const again = await scriptedRun({ entries: all(["none"]), units: 2, scripts: new Map(), out: first.out });
     expect(again.calls).toEqual([]);
     expect(readRows(first.out).size).toBe(2);
+  });
+
+  test("the frozen manifest holds each unit's digest hashed from its files, not the digest unit.json declares", async () => {
+    const { out, ids } = await scriptedRun({ entries: all(["none"]), units: 2, scripts: new Map() });
+    const units = join(dirname(out), "units");
+    expect(readManifest(join(out, "manifest.json")).units).toEqual(Object.fromEntries(ids.map((id) => [id, contentDigest(units, id)])));
   });
 
   test("a launch whose schedule differs from the frozen manifest is refused", async () => {
