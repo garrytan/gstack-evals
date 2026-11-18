@@ -2,7 +2,7 @@
 // Value: protects=the run loop's records and stops: every ended session writes one row that parses and holds together, a cap stop writes no row and starts nothing more, a halt writes its row as missing and stops the launch, and a resumed launch reconciles an attempt that has a marker and no row as an infrastructure failure before its retry; fails_when=a cap-stopped session gets a row or a retry, a halt lets new sessions start, or a crashed attempt is run again from scratch or forgotten; why_new=the run area's run loop; seam=runSchedule with a scripted launch, readRows, rowProblems, rowsReport; no_claim=the Docker launch, which the e2e covers
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { BLOCK_REPLY, scriptedRun } from "../../../lanes/office-hours-founder/run/seams.ts";
 import { contentDigest, readManifest, type Manifest } from "../../../lanes/office-hours-founder/run/manifest.ts";
@@ -145,6 +145,49 @@ describe("resume", () => {
     expect(l!.row.end).toBe("block");
     expect(l!.row.attempts).toBe(2);
     expect(l!.attempts[0]!.why).toContain("an unknown outcome, reconciled");
+  });
+
+  test("a torn last line in rows.ndjson is dropped and recorded, and its session is reconciled and retried", async () => {
+    const first = await scriptedRun({ entries: all(["none"]), units: 2, scripts: new Map() });
+    const file = join(first.out, "rows.ndjson");
+    const text = readFileSync(file, "utf8");
+    const cut = text.slice(0, text.lastIndexOf("\n", text.length - 2) + 1 + 40);
+    writeFileSync(file, cut);
+    const again = await scriptedRun({ entries: all(["none"]), units: 2, scripts: new Map(), out: first.out });
+    expect(again.calls).toEqual([first.ids[1] + "/none/a2"]);
+    expect(readRows(first.out).size).toBe(2);
+    const torn = readFileSync(join(first.out, "torn.ndjson"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    expect(torn).toHaveLength(1);
+    expect(torn[0].text).toBe(cut.slice(cut.lastIndexOf("\n", cut.length - 1) + 1));
+  });
+
+  test("a torn line in rows.ndjson that is not the last still fails the resume", async () => {
+    const first = await scriptedRun({ entries: all(["none"]), units: 2, scripts: new Map() });
+    const file = join(first.out, "rows.ndjson");
+    const [a, b] = readFileSync(file, "utf8").trim().split("\n");
+    writeFileSync(file, a!.slice(0, 40) + "\n" + b + "\n");
+    await expect(scriptedRun({ entries: all(["none"]), units: 2, scripts: new Map(), out: first.out })).rejects.toThrow();
+  });
+
+  test("a torn last line in an attempt's transcript.ndjson is dropped and recorded when the attempt is reconciled", async () => {
+    const first = await scriptedRun({ entries: all(["none"]), units: 1, scripts: new Map() });
+    rmSync(join(first.out, "rows.ndjson"));
+    const host = join(first.out, "sessions", "arm/opus/none/" + first.ids[0] + "/p1", "a1", "host");
+    mkdirSync(host, { recursive: true });
+    writeFileSync(join(host, "transcript.ndjson"), JSON.stringify({ type: "assistant" }) + "\n" + '{"type":"resu');
+    const again = await scriptedRun({ entries: all(["none"]), units: 1, scripts: new Map(), out: first.out });
+    expect(again.calls).toEqual([first.ids[0] + "/none/a2"]);
+    const rec = JSON.parse(readFileSync(join(host, "..", "reconcile.json"), "utf8"));
+    expect(rec).toMatchObject({ session_log_lines: 1, last_message: "assistant", torn_last_line: '{"type":"resu' });
+  });
+
+  test("a torn line in a transcript.ndjson that is not the last still fails the resume", async () => {
+    const first = await scriptedRun({ entries: all(["none"]), units: 1, scripts: new Map() });
+    rmSync(join(first.out, "rows.ndjson"));
+    const host = join(first.out, "sessions", "arm/opus/none/" + first.ids[0] + "/p1", "a1", "host");
+    mkdirSync(host, { recursive: true });
+    writeFileSync(join(host, "transcript.ndjson"), '{"type":"assi' + "\n" + JSON.stringify({ type: "result" }) + "\n");
+    await expect(scriptedRun({ entries: all(["none"]), units: 1, scripts: new Map(), out: first.out })).rejects.toThrow();
   });
 
   test("a session that already has a row is not run again", async () => {
