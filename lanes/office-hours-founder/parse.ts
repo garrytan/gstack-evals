@@ -23,6 +23,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { assistantText } from "../../src/adapters/claude-code/driver.ts";
 import { fencedBlocks } from "../../src/trial/review/findings.ts";
 import { readTranscript } from "../../src/trial/review/readers.ts";
 import { CUTS, FENCE, MAX_OTHER_MOVES } from "./frozen.ts";
@@ -115,10 +116,12 @@ export function parseFirstMove(texts: readonly string[]): MoveParse {
 
 type Message = Record<string, any>;
 
-const mainTexts = (m: Message): string[] =>
-  m.type === "assistant" && !m.parent_tool_use_id && !m.error && !m.is_api_error_message && Array.isArray(m.message?.content)
-    ? m.message.content.filter((b: { type?: unknown; text?: unknown }) => b?.type === "text" && typeof b.text === "string" && b.text.trim()).map((b: { text: string }) => b.text)
-    : [];
+/** A main-agent message's text, joined as the driver joins it for nextUser, so the auditor and scorer read what the simulator saw. */
+const mainTexts = (m: Message): string[] => {
+  if (m.type !== "assistant" || m.parent_tool_use_id || m.error || m.is_api_error_message || !Array.isArray(m.message?.content)) return [];
+  const text = assistantText(m);
+  return text.trim() ? [text] : [];
+};
 
 /** A transcript.ndjson's replies: the main agent's texts between turn results, one array per reply, in order. A trailing reply with no result yet is kept. */
 export function replies(transcript: string): string[][] {

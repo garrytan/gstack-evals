@@ -97,8 +97,8 @@ export interface StockRow {
 
 /**
  * Per production judge, from its own labels: any one row credited W on more than one unit in eight of the stage's
- * units (more than 2 of 16 in stage 1, more than 8 of 64 in stage 2) is STOCK FAIL for the model it serves. Every
- * row's W and N credits print.
+ * units (more than 2 of 16 in stage 1, more than 8 of 64 in stage 2) is STOCK FAIL for the model it serves, and so is a
+ * judge with no stock credits at all. Every row's W and N credits print.
  */
 export function stockCheck(credits: readonly StockCredit[], stage: 1 | 2, units: readonly string[]): { limit: number; rows: StockRow[]; fail: Record<ModelId, boolean> } {
   const limit = Math.floor(units.length / 8);
@@ -112,7 +112,7 @@ export function stockCheck(credits: readonly StockCredit[], stage: 1 | 2, units:
       const w = count((c) => c.W === 1);
       rows.push({ model, row, W: w, N: count((c) => c.N === 1), unlabelled: mine.filter((c) => c.W === null).length, fail: w > limit });
     }
-  const fail = Object.fromEntries(MODELS.map((m) => [m, rows.some((r) => r.model === m && r.fail)])) as Record<ModelId, boolean>;
+  const fail = Object.fromEntries(MODELS.map((m) => [m, !rows.some((r) => r.model === m) || rows.some((r) => r.model === m && r.fail)])) as Record<ModelId, boolean>;
   return { limit, rows, fail };
 }
 

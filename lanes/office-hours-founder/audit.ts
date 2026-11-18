@@ -19,7 +19,7 @@ import { insideRepo } from "../review-noloss/suite.ts";
 import { SEED } from "./frozen.ts";
 import { renderBlock, replies } from "./parse.ts";
 import { readRows, type RowLine } from "./run/rows.ts";
-import { entryId } from "./run/manifest.ts";
+import { entryId, readManifest } from "./run/manifest.ts";
 import { AUDIT_EFFORT, auditOutcome, drawAudit, repairRecord, runAudit, type AuditorKey } from "./sim/fidelity.ts";
 import { FOUNDER_RULES } from "./sim/founder.ts";
 import type { Sheet } from "./types.ts";
@@ -99,6 +99,12 @@ export async function audit(argv: string[], io: Io, env: Env): Promise<number> {
   const launches = f.get("--launch")!.map((l) => outside("--launch", l));
   const rules = f.has("--sim-rules") ? readFileSync(f.get("--sim-rules")![0]!, "utf8") : FOUNDER_RULES;
   const repair = f.has("--sim-rules") ? repairRecord(rules) : null;
+  for (const l of launches) {
+    const path = join(l, "manifest.json");
+    if (!existsSync(path)) usage("--launch " + l + " has no manifest.json, so the simulator rules it ran under are unknown");
+    const frozen = readManifest(path).sim_rules;
+    if (frozen !== sha256(rules)) usage("--launch " + l + " froze simulator rules sha256 " + frozen + ", and this audit reads the founders under " + sha256(rules) + "; give --sim-rules the file the launch ran under");
+  }
   const lines = launchRows(launches).filter((l) => l.row.stage === stage);
   const byId = new Map(lines.map((l) => [entryId(l.row), l]));
   const draw = drawAudit(stage as 1 | 2, lines.map((l) => l.row));
