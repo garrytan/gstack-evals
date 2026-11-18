@@ -4,11 +4,13 @@
 // - The run (pin change 2, item A): a run.json anywhere in the session's work tree, the state root included, down to
 //   12 folders below /work/app, counts only when the session's own command log holds the gstack-autoplan call that
 //   wrote it: the first next or run call for that run.json's folder that names a --plan names /work/app/plan.md.
-//   A call is for a folder when its --out is that folder, or (rep 4 of the smoke) when its Bash command holds no
-//   other gstack-autoplan call and its own output reports that run: an ATTEMPT line with the run.json's run id, or a
-//   GSTACK_RESULT line with run=<folder>. So a --out the log cannot spell out (a command substitution, a variable set
-//   in another shell) still ties the call to the run gstack-autoplan made for it. A start call (next or run naming a
-//   --plan) that is for no run.json the scan found is counted as unmatched. The record's plan_input is /work/app/plan.md or (rep 3 of the smoke) a regular file, reached
+//   A call is for a folder when its --out is that folder, or (rep 4 of the smoke) when it is a start call (next or
+//   run naming a --plan) and gstack-autoplan created that run during it: the run.json's created_at lies between the
+//   transcript's timestamps on the message that made the Bash call and on the one that returned its result, no other
+//   start call (in that Bash call or another) spans that time, and no other run the scan found was created in that
+//   span. So a --out the log cannot spell out (a command substitution, a variable set in
+//   another shell) still ties the start to the run it made. A start call that is for no record that counts is
+//   counted as unmatched. The record's plan_input is /work/app/plan.md or (rep 3 of the smoke) a regular file, reached
 //   through no symlink, inside that folder or /work/app that the session's own gstack-autoplan revise call with the
 //   same --out named as its --plan. Flags are read as gstack-autoplan reads them: the first separate --out or --plan.
 //   A record that the command log touched any other way is hand-edited and never counts: a Write, Edit, MultiEdit or
@@ -154,7 +156,7 @@ function substitution(s: string, i: number): { inner: string; end: number } {
 /** Shell words and operators. q marks text that is never expanded; a substitution is kept as its own piece with its command. A heredoc's body joins its command as one more word. */
 function lex(s: string): Tok[] {
   const out: Tok[] = [];
-  const heredocs: string[] = [];
+  const heredocs: { d: string; body: Piece }[] = [];
   let cur: Piece[] | null = null;
   const push = (t: string, q: boolean) => {
     const w = (cur ??= []);
@@ -208,7 +210,7 @@ function lex(s: string): Tok[] {
       flush();
       i++;
       while (heredocs.length) {
-        const d = heredocs.shift()!;
+        const { d, body: at } = heredocs.shift()!;
         const body: string[] = [];
         while (i < s.length) {
           const e = s.indexOf("\n", i);
@@ -217,7 +219,7 @@ function lex(s: string): Tok[] {
           if (line.trim() === d) break;
           body.push(line);
         }
-        out.push({ word: [{ t: body.join("\n"), q: true, here: true }] });
+        at.t = body.join("\n");
       }
       out.push({ op: c });
     } else if (";|&()".includes(c)) {
@@ -241,7 +243,10 @@ function lex(s: string): Tok[] {
         while (s[i] === " ") i++;
         let d = "";
         while (i < s.length && !/[\s;&|<>()]/.test(s[i]!)) d += s[i++];
-        heredocs.push(d.replace(/['"\\]/g, ""));
+        flush();
+        const body: Piece = { t: "", q: true, here: true };
+        out.push({ word: [body] });
+        heredocs.push({ d: d.replace(/['"\\]/g, ""), body });
         continue;
       }
       if (s[i] === "&") {
@@ -261,27 +266,18 @@ function lex(s: string): Tok[] {
 }
 
 const VAR = /\$\{([A-Za-z_]\w*)(?:(:?)([-=])([^}]*))?\}|\$([A-Za-z_]\w*)/g;
-const expandText = (t: string, env: Map<string, string>, unset = ""): string =>
+const expandText = (t: string, env: Map<string, string>): string =>
   t.replace(VAR, (_, name: string | undefined, colon: string | undefined, op: string | undefined, dflt: string | undefined, bare: string | undefined) => {
-    if (bare) return env.get(bare) ?? unset;
+    if (bare) return env.get(bare) ?? "";
     const v = env.get(name!);
-    if (!op) return v ?? unset;
+    if (!op) return v ?? "";
     if (colon ? v : v !== undefined) return v!;
-    const d = expandText(dflt ?? "", env, unset);
+    const d = expandText(dflt ?? "", env);
     if (op === "=") env.set(name!, d);
     return d;
   });
 
 const expand = (w: Piece[], env: Map<string, string>): string => w.map((p, k) => (p.q ? p.t : expandText(k === 0 && /^~(\/|$)/.test(p.t) ? HOME + p.t.slice(1) : p.t, env))).join("");
-
-/** Stands for text the log cannot know: a command substitution's output or a variable the session set elsewhere. */
-const ANY = "\u0000";
-/** A word as expand() spells it, with ANY for each part the log cannot know. */
-const shape = (w: Piece[], env: Map<string, string>): string =>
-  w
-    .map((p, k) => (p.q ? p.t : expandText(k === 0 && /^~(\/|$)/.test(p.t) ? HOME + p.t.slice(1) : p.t, env, ANY)))
-    .join("")
-    .replace(/\$\([^()]*\)|`[^`]*`/g, ANY);
 
 /** The files an interpreter's inline code opens for writing, as written in the code; every run.json it names when a target is not a literal. */
 function writeTargets(code: string): string[] {
@@ -309,10 +305,10 @@ const SHELLS = new Set(["bash", "sh", "zsh", "dash"]);
 const STARTS = new Set(["next", "run"]);
 
 export interface CommandLog {
-  /** Each gstack-autoplan call: its verb, its --out and --plan as absolute paths in the session, its --out with ANY where the log cannot know the text, and its Bash call's id. */
-  calls: { verb: string; out: string | null; plan: string | null; outShape: string | null; use: string }[];
-  /** Each Bash call's output, by its id. */
-  outputs: Map<string, string>;
+  /** Each gstack-autoplan call: its verb, its --out and --plan as absolute paths in the session, and its Bash call's id. */
+  calls: { verb: string; out: string | null; plan: string | null; use: string }[];
+  /** Each Bash call's span: the transcript's timestamp on the message that made the call and on the message that returned its result. */
+  spans: Map<string, { from: number; to: number }>;
   /** Every path the log wrote other than through gstack-autoplan. */
   writes: Set<string>;
   /** Every folder a recursive copy, mv or rsync may have filled or replaced; a record under one is edited by hand. */
@@ -333,11 +329,10 @@ interface Ctx {
 
 /** The session's command log under the rule above. */
 export function commandLog(transcript: string): CommandLog {
-  const log: CommandLog = { calls: [], writes: new Set(), trees: new Set(), outputs: new Map() };
+  const log: CommandLog = { calls: [], writes: new Set(), trees: new Set(), spans: new Map() };
   let use = "";
   const child = (c: Ctx): Ctx => ({ cwd: c.cwd, env: new Map(c.env) });
   const simple = (raw: Piece[][], ctx: Ctx, depth: number) => {
-    ctx.env.set("PWD", ctx.cwd);
     const ws: string[] = [];
     const words: Piece[][] = [];
     for (const w of raw) {
@@ -373,12 +368,13 @@ export function commandLog(transcript: string): CommandLog {
     if (name === "export") {
       for (const a of args) if (/^[A-Za-z_]\w*=/.test(a)) ctx.env.set(a.slice(0, a.indexOf("=")), a.slice(a.indexOf("=") + 1));
     } else if (name === "cd") {
-      if (paths[0] !== undefined || !args.length) ctx.cwd = at(paths[0] ?? HOME);
+      if (paths[0] !== undefined || !args.length) ctx.env.set("PWD", (ctx.cwd = at(paths[0] ?? HOME)));
     } else if (name === "eval") {
       shell(args.join(" "), ctx, depth + 1);
     } else if (SHELLS.has(name)) {
       const c = args.findIndex((a) => /^-[a-z]*c$/.test(a));
       const here = argWords.find((w) => w.length === 1 && w[0]!.here);
+      if (args.includes("-n")) return;
       if (c >= 0 && args[c + 1] !== undefined) shell(args[c + 1]!, child(ctx), depth + 1);
       else if (here) shell(here[0]!.t, child(ctx), depth + 1);
     } else if (name === "gstack-autoplan") {
@@ -388,9 +384,7 @@ export function commandLog(transcript: string): CommandLog {
       };
       const out = flag("--out");
       const plan = flag("--plan");
-      const o = args.indexOf("--out");
-      const s = o >= 0 && argWords[o + 1] ? shape(argWords[o + 1]!, ctx.env) : null;
-      log.calls.push({ verb: args[0] ?? "", out: out === null ? null : at(out), plan: plan === null ? null : at(plan), outShape: s === null ? null : s.startsWith(ANY) ? s : at(s), use });
+      log.calls.push({ verb: args[0] ?? "", out: out === null ? null : at(out), plan: plan === null ? null : at(plan), use });
     } else if (name === "tee" || name === "truncate" || (name === "sed" && args.some((a) => /^(-[a-zA-Z]*i|--in-place)/.test(a)))) {
       for (const p of paths) log.writes.add(at(p));
     } else if (["cp", "mv", "install", "ln"].includes(name) && paths.length > 1) {
@@ -440,12 +434,13 @@ export function commandLog(transcript: string): CommandLog {
     end();
   };
   const cwds = new Map<string, string>();
+  const made = new Map<string, number>();
   for (const m of readTranscript(transcript)) {
+    const when = Date.parse(String(m.timestamp ?? ""));
     if (m.type === "user" && Array.isArray(m.message?.content)) {
       for (const b of m.message.content as Record<string, any>[]) {
-        if (b?.type !== "tool_result" || typeof b.tool_use_id !== "string") continue;
-        const c = b.content;
-        log.outputs.set(b.tool_use_id, typeof c === "string" ? c : Array.isArray(c) ? c.map((x: any) => (typeof x?.text === "string" ? x.text : "")).join("\n") : "");
+        const from = made.get(b?.tool_use_id);
+        if (b?.type === "tool_result" && from !== undefined && when >= from) log.spans.set(b.tool_use_id, { from, to: when });
       }
     }
     if (m.type !== "assistant" || !Array.isArray(m.message?.content)) continue;
@@ -458,6 +453,7 @@ export function commandLog(transcript: string): CommandLog {
         if (typeof p === "string") log.writes.add(posix.resolve(ctx.cwd, p));
       } else if (b.name === "Bash" && typeof b.input?.command === "string") {
         use = String(b.id ?? "");
+        if (!Number.isNaN(when)) made.set(use, when);
         shell(b.input.command, ctx, 0);
         cwds.set(agent, ctx.cwd);
       }
@@ -469,42 +465,41 @@ export function commandLog(transcript: string): CommandLog {
 /** The session's autoplan run under the rule above, from the roots in order (a run two roots both hold is read from the first). */
 export function findRun(roots: RunRoot[], transcript: string): RunSearch {
   const log = commandLog(transcript);
-  const perUse = new Map<string, number>();
-  for (const c of log.calls) perUse.set(c.use, (perUse.get(c.use) ?? 0) + 1);
-  const fits = (shape: string | null, folder: string) =>
-    shape === null || new RegExp("^" + shape.split(ANY).map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*") + "$").test(folder);
-  const reports = (c: CommandLog["calls"][number], folder: string, id: unknown) => {
-    if (perUse.get(c.use) !== 1 || !fits(c.outShape, folder)) return false;
-    const named: string[] = [];
-    for (const l of (log.outputs.get(c.use) ?? "").split("\n")) {
-      const t = l.trim();
-      const a = /^ATTEMPT: (\S+)-a\d+(\s|$)/.exec(t);
-      if (a) named.push("id " + a[1]);
-      if (t.startsWith("GSTACK_RESULT: ")) for (const w of t.split(/\s+/)) if (w.startsWith("run=")) named.push("run " + w.slice(4));
-    }
-    return named.length > 0 && named.every((n) => n === "run " + folder || (typeof id === "string" && id !== "" && n === "id " + id));
-  };
-  const isFor = (c: CommandLog["calls"][number], folder: string, id: unknown) => c.out === folder || reports(c, folder, id);
-  const isStart = (c: CommandLog["calls"][number]) => STARTS.has(c.verb) && c.plan !== null;
+  type Call = CommandLog["calls"][number];
+  const isStart = (c: Call) => STARTS.has(c.verb) && c.plan !== null;
+  const starts = log.calls.filter(isStart);
+  const scanned: { s: string; folder: string; created: number; r: { path: string; body: any }; root: RunRoot }[] = [];
   const seen = new Set<string>();
-  const scanned: { folder: string; id: unknown }[] = [];
-  const ok: FoundRun[] = [];
-  const passed: string[] = [];
   for (const root of roots) {
     for (const r of runs(root.dir, root.seen)) {
       const s = posix.join(root.seen, relative(root.dir, r.path).split(sep).join("/"));
       if (seen.has(s)) continue;
       seen.add(s);
-      const folder = posix.dirname(s);
-      const id = r.body?.run;
-      scanned.push({ folder, id });
+      scanned.push({ s, folder: posix.dirname(s), created: Date.parse(String(r.body?.created_at ?? "")), r, root });
+    }
+  }
+  const within = (use: string, at: number) => {
+    const w = log.spans.get(use);
+    return w !== undefined && w.from <= at && at <= w.to;
+  };
+  const maker = new Map<string, Call>();
+  for (const x of scanned) {
+    const by = starts.filter((c) => within(c.use, x.created));
+    if (by.length !== 1) continue;
+    const c = by[0]!;
+    if (scanned.filter((y) => within(c.use, y.created)).length === 1) maker.set(x.folder, c);
+  }
+  const isFor = (c: Call, folder: string) => c.out === folder || maker.get(folder) === c;
+  const ok: FoundRun[] = [];
+  const passed: string[] = [];
+  for (const { s, folder, r, root } of scanned) {
       const input = r.body?.plan_input;
       const revised =
         typeof input === "string" &&
         (input.startsWith(folder + "/") || input.startsWith(WORK + "/")) &&
-        log.calls.some((c) => c.verb === "revise" && isFor(c, folder, id) && c.plan === input) &&
+        log.calls.some((c) => c.verb === "revise" && isFor(c, folder) && c.plan === input) &&
         regularFile(roots, input) !== null;
-      const start = log.calls.find((c) => isStart(c) && isFor(c, folder, id));
+      const start = log.calls.find((c) => isStart(c) && isFor(c, folder));
       const why =
         input !== PLAN && !revised
           ? "plan_input " + JSON.stringify(input ?? null) + ", not " + PLAN + " or a regular file inside " + folder + " or " + WORK + " that the session's own gstack-autoplan revise --out " + folder + " --plan named"
@@ -515,12 +510,11 @@ export function findRun(roots: RunRoot[], transcript: string): RunSearch {
               : log.writes.has(s) || [...log.trees].some((t) => s.startsWith(t + "/"))
                 ? "edited by hand in the session's command log"
                 : null;
-      if (why) passed.push(s + ": " + why);
-      else ok.push({ path: r.path, seen: s, root, body: r.body });
-    }
+    if (why) passed.push(s + ": " + why);
+    else ok.push({ path: r.path, seen: s, root, body: r.body });
   }
   ok.sort((a, b) => String(b.body?.updated_at ?? "").localeCompare(String(a.body?.updated_at ?? "")));
-  const unmatched = log.calls.filter((c) => isStart(c) && !scanned.some((x) => isFor(c, x.folder, x.id))).length;
+  const unmatched = starts.filter((c) => !ok.some((x) => isFor(c, posix.dirname(x.seen)))).length;
   return { run: ok[0] ?? null, passed, unmatched };
 }
 
