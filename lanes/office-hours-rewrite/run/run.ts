@@ -34,7 +34,7 @@ import type { Termination } from "../../../src/types.ts";
 import { departures, gstackReads, probe, TASK, workRepo } from "../../office-hours-founder/run/contain.ts";
 import { copyReceipts, receiptsAfter } from "../../office-hours-founder/run/run.ts";
 import { SYSTEM_PROMPT } from "../../office-hours-founder/frozen.ts";
-import { founderCall, type SimOutcome } from "../sim/founder.ts";
+import { pinnedCall, type SimOutcome } from "../sim/founder.ts";
 import { pool, type Meter } from "../../product-value/meter.ts";
 import { pvOutcome } from "../../product-value/parse.ts";
 import { AGENT_TURNS_PER_REPLY, ALLOWANCE, MODEL_KEYS, SESSION_MINUTES, SIM_ALLOWANCE, type Pin } from "../frozen.ts";
@@ -43,6 +43,7 @@ import { capProblem, entryId, freezeManifest, loadBriefs, makeManifest, type Lau
 import { armEnvProblems, containerPinCommand, containerPinProblems, containerRoot, isSkillArm, nullPinProblem, pinProblems, type Pins } from "./pins.ts";
 import { readRows, sessionRow, type RowLine } from "./rows.ts";
 import { priorProblem, seedPrior } from "./seed.ts";
+import { offPin } from "../pinned.ts";
 import { attemptOutcome, closingLoop, firstMessage, safetyStop, sessionKindOf, settle, type AttemptRead, type Line, type Outcome } from "./session.ts";
 import type { PersonSheet, SimCall } from "../../../src/persona-sim/sim.ts";
 import { loadPerson } from "../sim/founder.ts";
@@ -66,10 +67,10 @@ export interface SimSlot {
   spent(): number;
 }
 
-/** The simulator slot over the simulator item's meter: the founder lane's founderCall on a fresh per-attempt allowance. */
+/** The simulator slot over the simulator item's meter: the founder lane's founderCall on a fresh per-attempt allowance, with a reply naming another model than Argon read as a drift (sim/founder.ts pinnedCall). */
 export const meterSim = (meter: Pick<Meter, "call">) => (label: string, allowanceMicros: number): SimSlot => {
   const session = { allowance_micros: allowanceMicros, spent_micros: 0 };
-  return { call: founderCall({ meter, session, label }), spent: () => session.spent_micros };
+  return { call: pinnedCall({ meter, session, label }), spent: () => session.spent_micros };
 };
 
 /** One attempt as a launch takes it. */
@@ -179,7 +180,7 @@ export function ohrProbed(sandbox: Sandbox, o: { docker: string; home: string; p
 export const dockerLaunch: Launch = async (o) => {
   const model = MODEL_KEYS[o.entry.model];
   const provider = providerOf(o.policy, model) as ClaudeProvider;
-  const none = { gstack_reads: [], contained: [], pin: [], overflow: false, safety: null, session_kind: null, micros: 0 };
+  const none = { gstack_reads: [], contained: [], pin: [], overflow: false, safety: null, session_kind: null, off_pin: [], micros: 0 };
   let binding: Awaited<ReturnType<HostRig["bind"]>>;
   try {
     binding = await o.rig.bind({ cell: { run_id: o.runId, arm: o.entry.arm, task: entryId(o.entry), model, trial: 1, attempt: o.attempt }, models: slotModels(o.policy, model, null), allowance_micros: o.allowanceMicros });
@@ -212,7 +213,7 @@ export const dockerLaunch: Launch = async (o) => {
   const transcript = existsSync(path) ? readFileSync(path, "utf8") : "";
   const read = pvOutcome(termination, transcript).outcome;
   const contained = found.contained === null ? null : [...found.contained, ...envProblems.map((e) => "agent env: " + e)];
-  return { termination, gstack_reads: skillArm ? [] : gstackReads(transcript), contained, pin: found.pin, overflow: read.state === "infra" && read.reason === "context overflow", safety: safetyStop(transcript), session_kind: sessionKindOf(transcript), micros: meter.micros };
+  return { termination, gstack_reads: skillArm ? [] : gstackReads(transcript), contained, pin: found.pin, overflow: read.state === "infra" && read.reason === "context overflow", safety: safetyStop(transcript), session_kind: sessionKindOf(transcript), off_pin: offPin(transcript, model), micros: meter.micros };
 };
 
 /** An attempt a crash left with a marker and no row: an unknown harness failure, recorded in reconcile.json. */
@@ -222,7 +223,7 @@ function reconcile(dir: string, parse: BlockParser): AttemptRead {
   const lines = existsSync(transcript) ? readFileSync(transcript, "utf8").split("\n").filter(Boolean).length : 0;
   writeFileSync(join(dir, "reconcile.json"), JSON.stringify({ meter, session_log_lines: lines, reconciled_at: new Date().toISOString() }, null, 2) + "\n");
   const loop = closingLoop({ parse, founder: async () => ({ kind: "call-failed", reason: "provider", detail: "", rejected: [], requests: [] }) }).state;
-  return { termination: { kind: "infra", incident: "an unknown outcome, reconciled" }, loop, gstack_reads: [], contained: [], pin: [], overflow: false, safety: null, session_kind: null, micros: 0, sim_micros: 0 };
+  return { termination: { kind: "infra", incident: "an unknown outcome, reconciled" }, loop, gstack_reads: [], contained: [], pin: [], overflow: false, safety: null, session_kind: null, off_pin: [], micros: 0, sim_micros: 0 };
 }
 
 const hostTree = (rig: HostRig, arm: ArmId, pin: Pin): string[] => pinProblems(gstackDir(rig.arms[arm] ?? { gstack: null }), pin);

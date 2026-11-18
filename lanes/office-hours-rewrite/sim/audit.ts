@@ -11,7 +11,8 @@
 //   (40) reads NO READ. A guard-failed or check-failed sampled turn counts as failed and never goes to the auditors.
 // - GPT-6.2 Astra and Opus 5.5, at maximum effort, read each other sampled turn. The audit passes when at most 5% of
 //   audited turns fail (both auditors mark one) and guard failures are at most 5% of all script turns that ran.
-// - A cap stop on any call ends the audit INCOMPLETE (CAP_STOP). A simulator reply from a provider or model other than
+// - A cap stop on any call, a simulator call or an auditor call (the wire throws CAP_STOP), ends the audit INCOMPLETE
+//   (CAP_STOP), never an empty auditor answer. A simulator reply from a provider or model other than
 //   its pin ends it too, as a halt (E_PV_PROVIDER_DRIFT, or E_OHR_MODEL_DRIFT for a reply that reports another model),
 //   so a drifted turn can never drop out of the sample while the audit passes. Either stop ends every sheet's script at
 //   its next turn. The record binds both rules digests, the script's digest, the persona-sim and founder.ts file
@@ -139,12 +140,21 @@ export async function runScriptAudit(o: { sheets: readonly AuditSheet[]; call: (
   if (stop.cap) return { ...base, ...empty, read: "incomplete", code: "CAP_STOP", reasons: ["a cap stop on the simulator: " + stop.cap] };
   if (base.auditable < AUDIT.no_read_below) return { ...base, ...empty, read: "no-read", code: "E_OHR_NO_READ", reasons: [base.auditable + " auditable script turns, under " + AUDIT.no_read_below] };
   const sheetOf = new Map(sheets.map((s) => [s.brief, s.sheet]));
-  const sampled = await pool(o.parallel ?? 8, drawSample(turns).map((turn) => async (): Promise<AuditedTurn> => {
-    if (turn.outcome !== "reply") return { turn, reads: null, verdict: "fail" };
-    const input = { sheet: sheetOf.get(turn.brief)!, last: AUDIT_SCRIPT[turn.turn - 1]!, reply: turn.reply!, logged: turn.revealed };
-    const [astra, opus] = await Promise.all(AUDIT.auditors.map((a) => auditTurn(VIOLATIONS, input, o.auditors[a])));
-    return { turn, reads: { astra: astra!, opus: opus! }, verdict: combine(astra!, opus!) };
-  }));
+  let sampled: AuditedTurn[];
+  try {
+    sampled = await pool(o.parallel ?? 8, drawSample(turns).map((turn) => async (): Promise<AuditedTurn> => {
+      if (turn.outcome !== "reply") return { turn, reads: null, verdict: "fail" };
+      const input = { sheet: sheetOf.get(turn.brief)!, last: AUDIT_SCRIPT[turn.turn - 1]!, reply: turn.reply!, logged: turn.revealed };
+      const [astra, opus] = await Promise.all(AUDIT.auditors.map((a) => auditTurn(VIOLATIONS, input, o.auditors[a])));
+      return { turn, reads: { astra: astra!, opus: opus! }, verdict: combine(astra!, opus!) };
+    }));
+  } catch (err) {
+    const code = (err as { code?: unknown }).code;
+    const why = (err as Error).message;
+    if (code === "CAP_STOP") return { ...base, ...empty, read: "incomplete", code, reasons: ["a cap stop on an auditor: " + why] };
+    if (code === "E_OHR_MODEL_DRIFT") return { ...base, ...empty, read: "halt", code, reasons: ["an auditor's reply named another model, so the audit stops for the Captain: " + why] };
+    throw err;
+  }
   const failing = sampled.filter((t) => t.verdict === "fail").length;
   const reasons: string[] = [];
   if (!within(failing, sampled.length)) reasons.push(failing + " of " + sampled.length + " audited turns failed, over " + AUDIT.pass_max_share * 100 + "%");

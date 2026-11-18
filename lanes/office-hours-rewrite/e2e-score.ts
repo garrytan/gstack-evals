@@ -54,8 +54,8 @@ function stubJudges(seen: string[]): typeof fetch {
     const prompt = String((body.input ?? body.messages)?.[0]?.content ?? "");
     const anthropic = u.includes("anthropic");
     const text = (await judge({ judge: anthropic ? "opus" : "astra", prompt, effort: "medium", maxTokens: 0, label: "e2e" })).text ?? "";
-    if (anthropic) return Response.json({ id: "msg_1", type: "message", role: "assistant", model: body.model + "-stub", content: [{ type: "text", text }], stop_reason: "end_turn", usage: { input_tokens: 1000, output_tokens: 200, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } });
-    return Response.json({ id: "resp_1", object: "response", model: body.model + "-stub", status: "completed", output: [{ type: "message", content: [{ type: "output_text", text }] }], usage: { input_tokens: 1000, input_tokens_details: { cached_tokens: 0 }, output_tokens: 200, output_tokens_details: { reasoning_tokens: 0 }, total_tokens: 1200 } });
+    if (anthropic) return Response.json({ id: "msg_1", type: "message", role: "assistant", model: body.model + "-20261101", content: [{ type: "text", text }], stop_reason: "end_turn", usage: { input_tokens: 1000, output_tokens: 200, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } });
+    return Response.json({ id: "resp_1", object: "response", model: body.model + "-2026-11-01", status: "completed", output: [{ type: "message", content: [{ type: "output_text", text }] }], usage: { input_tokens: 1000, input_tokens_details: { cached_tokens: 0 }, output_tokens: 200, output_tokens_details: { reasoning_tokens: 0 }, total_tokens: 1200 } });
   }) as typeof fetch;
 }
 

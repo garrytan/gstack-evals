@@ -25,6 +25,7 @@ import type { BriefMeta, ManifestEntry, PriorSession, Seam, SessionRow } from ".
 import { capProblem, comparisonSet, entryId, LEDGER_LINES, loadBriefs, makeManifest, type LaunchName } from "./manifest.ts";
 import { armEnvProblems, armSpecs, containerPinProblems, nullPinProblem, pinProblems, type Pins } from "./pins.ts";
 import { ALLOWANCES, runLaunch, type Launch, type RunResult, type SimTurnFn } from "./run.ts";
+import { offPin, reportsPin } from "../pinned.ts";
 import { readRows } from "./rows.ts";
 import { priorEntries, seedPrior } from "./seed.ts";
 import { attemptOutcome, closingLoop, delivered, firstMessage, safetyStop, sessionKindOf, type AttemptRead, type LoopState } from "./session.ts";
@@ -78,6 +79,7 @@ export interface ScriptedAttempt {
   pin?: string[] | null;
   safety?: string | null;
   session_kind?: string | null;
+  off_pin?: string[];
   overflow?: boolean;
   micros?: number;
 }
@@ -95,7 +97,7 @@ export const scriptedLaunch = (scripts: Map<string, ScriptedAttempt[]>, calls: s
     }
     if ("end" in next) break;
   }
-  return { termination: a.termination ?? ended, gstack_reads: a.gstack_reads ?? [], contained: a.contained === undefined ? [] : a.contained, pin: a.pin === undefined ? [] : a.pin, overflow: a.overflow ?? false, safety: a.safety ?? null, session_kind: a.session_kind === undefined ? (o.entry.arm === "none" ? null : "interactive") : a.session_kind, micros: a.micros ?? 0 };
+  return { termination: a.termination ?? ended, gstack_reads: a.gstack_reads ?? [], contained: a.contained === undefined ? [] : a.contained, pin: a.pin === undefined ? [] : a.pin, overflow: a.overflow ?? false, safety: a.safety ?? null, session_kind: a.session_kind === undefined ? (o.entry.arm === "none" ? null : "interactive") : a.session_kind, off_pin: a.off_pin ?? [], micros: a.micros ?? 0 };
 };
 
 const reply = (o: Partial<Extract<SimOutcome, { kind: "reply" }>> = {}): SimOutcome => ({ kind: "reply", reply: "Six members asked for it.", revealed: ["f1"], rules: [3], done: false, attempts: 1, rejected: [], requests: [], ...o });
@@ -112,7 +114,7 @@ export async function scriptedRun(o: { launch?: LaunchName; scripts?: Map<string
   const calls: string[] = [];
   const rig = { recovery: null, arms: {}, close: async () => ({ committed: 0, unknown: 0, lease_id: null }) } as unknown as HostRig;
   const inner = scriptedLaunch(o.scripts ?? new Map(), calls);
-  const launch: Launch = async (x) => (o.only && !o.only(x.entry) ? { termination: { kind: "missing", code: "E_LEDGER_UNAVAILABLE" }, gstack_reads: [], contained: [], pin: [], overflow: false, safety: null, session_kind: null, micros: 0 } : inner(x));
+  const launch: Launch = async (x) => (o.only && !o.only(x.entry) ? { termination: { kind: "missing", code: "E_LEDGER_UNAVAILABLE" }, gstack_reads: [], contained: [], pin: [], overflow: false, safety: null, session_kind: null, off_pin: [], micros: 0 } : inner(x));
   const run = await runLaunch({ launch: o.launch ?? "stage1", briefsDir: briefs, out, runId: "seam", models: ["opus"], arms: o.arms ?? [...ARMS], pins: o.pins ?? PINS, buildCommit: o.buildCommit ?? "b".repeat(40), dropped: o.dropped ?? [], allowances: ALLOWANCES, cap: o.cap ?? 100 * D, simCap: o.simCap ?? 50 * D, parallel: 1, policy: loadPolicy(DEFAULT_POLICY) as LoadedPolicy, docker: "docker", day: o.day ?? DAY, log: () => {} }, {
     openRig: () => (o.opened?.(), rig),
     simSlot: () => ({ call: async () => ({ kind: "text", text: "" }), spent: () => 0 }),
@@ -165,7 +167,7 @@ const tx = (...m: object[]) => m.map((x) => JSON.stringify(x)).join("\n") + "\n"
 
 function attempt(o: Partial<AttemptRead>): AttemptRead {
   const loop = closingLoop({ parse: parseBlock, founder: async () => reply() }).state;
-  return { termination: { kind: "completed" }, loop, gstack_reads: [], contained: [], pin: [], overflow: false, safety: null, session_kind: null, micros: 0, sim_micros: 0, ...o };
+  return { termination: { kind: "completed" }, loop, gstack_reads: [], contained: [], pin: [], overflow: false, safety: null, session_kind: null, off_pin: [], micros: 0, sim_micros: 0, ...o };
 }
 
 export const seams: Seam[] = [
@@ -217,6 +219,9 @@ export const seams: Seam[] = [
   end("end: a check failure retries once and then scores missing", [{ replies: [TALK] }, { replies: [TALK] }], { end: "missing", code: "E_OHR_SIM_CHECK", attempts: 2 }, "none", [{ kind: "check-failed", checks: ["json"], attempts: 3, rejected: [], requests: [] }]),
   end("end: a skill session that prints SESSION_KIND: headless retries and then scores missing", [{ replies: [TALK, TALK, [BLOCK]], session_kind: "headless" }, { replies: [TALK, TALK, [BLOCK]], session_kind: "headless" }], { end: "missing", code: "E_OHR_SESSION_KIND", attempts: 2 }, "new", [reply(), reply({ done: true })]),
   end("end: the arm's own stop retries and then scores no-block", [{ replies: [TALK], termination: { kind: "turn_cap" } }, { replies: [TALK], termination: { kind: "timeout" } }], { end: "no-block", code: "E_OHR_ARM_STOP", attempts: 2 }),
+  end("end: an arm reply that names another model than the pin halts the launch and scores missing, with no retry (E_OHR_MODEL_DRIFT)", [{ replies: [TALK, TALK, [BLOCK]], off_pin: ["claude-sonnet-5-5"] }], { end: "missing", code: "E_OHR_MODEL_DRIFT", attempts: 1 }, "none", [reply(), reply({ done: true })]),
+  end("end: a simulator reply that names another model than Argon halts the launch and scores missing (E_OHR_MODEL_DRIFT)", [{ replies: [TALK] }], { end: "missing", code: "E_OHR_MODEL_DRIFT", attempts: 1 }, "none", [{ kind: "call-failed", reason: "drift", detail: "E_OHR_MODEL_DRIFT the simulated person asked for google/gemini-4-argon and the reply reports google/gemini-4-hydrogen", rejected: [], requests: [] }]),
+  { name: "models: offPin reads every assistant message's model, accepts the pin and its dated snapshot, and skips Claude Code's <synthetic> frames", run: () => { const t = tx({ type: "assistant", message: { model: "claude-opus-5-5", content: [] } }, { type: "assistant", message: { model: "claude-opus-5-5-20261101", content: [] } }, { type: "assistant", message: { model: "<synthetic>", content: [] } }, { type: "assistant", parent_tool_use_id: "t1", message: { model: "claude-haiku-5-5", content: [] } }, { type: "user", message: { content: [] } }); const got = offPin(t, "claude-opus-5-5"); const clean = offPin(tx({ type: "assistant", message: { model: "openai/gpt-6.1-sol-2026-10-30" } }), "openai/gpt-6.1-sol"); const nameless = offPin(tx({ type: "assistant", message: {} }), "claude-opus-5-5"); return { ok: got.join() === "claude-haiku-5-5" && clean.length === 0 && nameless.join() === "(no model)" && !reportsPin("claude-opus-5-5", "claude-opus-5-5-preview") && !reportsPin("openai/gpt-6.1-sol", "openai/gpt-6.1-sol-mini"), detail: got.join() + " | " + nameless.join() }; } },
   end("end: a session the ledger never admitted is missing with no retry", [{ termination: { kind: "missing", code: "E_LEDGER_UNAVAILABLE" } }], { end: "missing", code: "E_OHR_INFRA_MISSING", attempts: 1 }),
   { name: "end: the row records session_kind, closings, founder_done and delivered turns", run: async () => { const briefs = fixtureBriefs(); const id = firstCal(briefs); const { run } = await scriptedRun({ briefs, scripts: new Map([[id + "/current", [{ replies: [TALK, TALK, [BLOCK]] }]]]), only: (e) => e.brief === id && e.arm === "current", sim: fixtureSim([reply(), reply({ done: true })]) }); const r = run.rows.find((l) => l.row.brief === id && l.row.arm === "current")?.row; return { ok: r?.session_kind === "interactive" && r.closings === 1 && r.founder_done && r.founder_turns.map((t) => t.delivered).join() === "true,false" && r.state_root !== null, detail: JSON.stringify(r && { k: r.session_kind, c: r.closings }) }; } },
   // Cap stops and relaunch (section 13; change 1, item 4a).
