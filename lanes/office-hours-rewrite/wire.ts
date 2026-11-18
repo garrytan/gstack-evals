@@ -88,6 +88,8 @@ export interface Wire {
   auditor: (who: (typeof AUDIT.auditors)[number]) => AuditCall;
   /** Settled spend on this run so far, in dollars, earlier launches of the same run included. */
   spent: () => number;
+  /** Dollars this launch's calls took for one brief: calls labelled <brief>[.<attempt>]:..., as authoring labels them. */
+  spentOn: (brief: string) => number;
   close: (cmd: string) => Promise<number>;
 }
 
@@ -105,9 +107,12 @@ export async function openWire(o: WireOptions): Promise<Wire> {
   mkdirSync(vdir, { recursive: true, mode: 0o700 });
   writeFileSync(runFile, JSON.stringify({ run_id: runId, spent_micros: before, ...commit }) + "\n");
   const meter = await openMeter({ item: o.item, runId, out: join(o.dir, "meter"), cacheDir, maxOutputTokens: 32_000, amountMicros: o.capMicros, emptyBound: EMPTY_BOUND, drainMs: o.drainMs, record: o.record, ledger: o.ledger, env: o.env, fetch: versionTap(o.upstream ?? fetch, vdir), warn: (code, m) => o.io.err(code + " " + m) });
+  const byBrief = new Map<string, number>();
   const call: Caller = async (req) => {
     const model = routed(req.model);
     const res = await meter.call({ ...req, model });
+    const brief = req.label.split(":")[0]!.replace(/\.\d+$/, "");
+    byBrief.set(brief, (byBrief.get(brief) ?? 0) + (res.micros ?? 0));
     if (model === "gemini" && res.text !== null && !VERTEX.test(res.served_by ?? "")) throw new MeterError("E_PV_PROVIDER_DRIFT", MODELS.gemini.id + " was served by " + (res.served_by ?? "an unnamed provider") + ", not Google Vertex; stop and ask the Captain");
     return res;
   };
@@ -134,6 +139,7 @@ export async function openWire(o: WireOptions): Promise<Wire> {
     sim,
     auditor,
     spent: () => (before + meter.spent()) / 1e6,
+    spentOn: (brief) => (byBrief.get(brief) ?? 0) / 1e6,
     async close(cmd) {
       const c = await meter.close();
       writeFileSync(runFile, JSON.stringify({ run_id: runId, spent_micros: before + c.spent_micros, ...commit }) + "\n");

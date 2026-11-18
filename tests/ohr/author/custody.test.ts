@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { authorToCustody, openCustody, sealCustody, unsealTo, writeAuthoring } from "../../../lanes/office-hours-rewrite/author/custody.ts";
 import { authorRun } from "../../../lanes/office-hours-rewrite/author/run.ts";
-import { FIXTURE_SCREEN, fixtureParser, runCaller, wordLabeller } from "../../../lanes/office-hours-rewrite/author/fixtures.ts";
+import { answersOf, fakeMeter, FIXTURE_SCREEN, fixtureParser, plantedFirstAttempt, runCaller, wordLabeller } from "../../../lanes/office-hours-rewrite/author/fixtures.ts";
 import { CAPS } from "../../../lanes/office-hours-rewrite/frozen.ts";
 import { REPO_ROOT } from "../../../lanes/product-value/io.ts";
 
@@ -47,23 +47,27 @@ describe("custody paths", () => {
 });
 
 describe("writing a run", () => {
-  test("writes the briefs in types.ts's layout, seals them and deletes the plaintext", async () => {
-    const call = runCaller();
-    const run = await authorRun({ call, label: wordLabeller(), parse: fixtureParser, screen: FIXTURE_SCREEN, spent: () => call.state.drafts * 1.04 }, { cap: CAPS.authoring, concurrency: 8 });
+  test("writes the 96 placed briefs, reused ones included, in types.ts's layout, with the outcome log, the reused outcomes and the summary, seals them and deletes the plaintext", async () => {
+    const placed = await plantedFirstAttempt();
+    const m = fakeMeter(runCaller());
+    const run = await authorRun({ call: m.call, label: wordLabeller(), parse: fixtureParser, screen: FIXTURE_SCREEN, spent: m.spent, spentOn: m.spentOn }, { cap: CAPS.authoring, concurrency: 8, reuse: { placed, answers: answersOf(placed), failed: [] } });
     const work = shm();
     const sink = openCustody(work, outside());
     writeAuthoring(sink, run);
     const briefs = readdirSync(join(sink, "briefs"));
-    expect(briefs).toHaveLength(110);
+    expect(briefs).toHaveLength(96);
+    expect(placed.every((x) => briefs.includes(x.id))).toBe(true);
     const t8 = briefs.find((id) => JSON.parse(readFileSync(join(sink, "briefs", id, "brief.json"), "utf8")).type === "T8")!;
     expect(readdirSync(join(sink, "briefs", t8)).sort()).toEqual(["brief.json", "key.json", "opening.md", "prior.json", "sheet.json"]);
-    const pair = JSON.parse(readFileSync(join(sink, "briefs", "d1a", "key.json"), "utf8"));
+    const pair = JSON.parse(readFileSync(join(sink, "briefs", briefs.find((id) => /^d\d+a$/.test(id))!, "key.json"), "utf8"));
     expect(Object.keys(pair).sort()).toEqual(["actions", "call", "decisive", "traction", "twin", "wrong_call"]);
+    expect(readdirSync(join(sink, "authoring")).sort()).toEqual(["outcomes.jsonl", "reused.jsonl", "summary.json"]);
+    expect(readFileSync(join(sink, "authoring", "reused.jsonl"), "utf8").trim().split("\n")).toHaveLength(placed.length);
     rmSync(sink, { recursive: true, force: true });
     const out = outside();
     const summary = authorToCustody(run, { work: shm(), out, sealer: fakeSealer });
     expect(readFileSync(out, "utf8")).toBe("sealed:authoring,briefs");
-    expect(summary.placed).toBe(110);
+    expect(summary.placed).toBe(96);
     expect(JSON.stringify(summary)).not.toContain(run.outcomes[0]!.files!.opening.slice(0, 30));
   });
 });

@@ -48,7 +48,7 @@ const RESERVE_SKIN = 6;
 /** The first attempt's 76 slots in seeded draw order. */
 export function fullSchedule(): Slot[] {
   const rng = seededRandom(SEED);
-  const out: Omit<Slot, "anti_pattern" | "side">[] = [];
+  const out: Omit<Slot, "anti_pattern" | "side" | "p">[] = [];
   const add = (set: SetName, skin: number, skinIndex: number, type: FounderType | BuilderGoal) => {
     const kind: SlotKind = (BUILDER_GOALS as readonly string[]).includes(type) ? "builder" : (PAIRED_TYPES as readonly string[]).includes(type) ? "pair" : "founder";
     const s = SKINS[skinIndex]!;

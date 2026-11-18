@@ -3,8 +3,16 @@
 // an unpaired T7 founder, a T8 founder with its prior session and a builder, a scripted caller that answers by request
 // label, a block parser for the three-line block, and a labeller that credits a decision holding the key's call and an
 // action holding one of its actions. None of it is an eval brief, and no call leaves the process.
+import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { dirname, join, relative } from "node:path";
 import type { CallRequest } from "../../product-value/meter.ts";
+import type { Caller } from "../../office-hours-founder/author/files.ts";
 import { stubCaller } from "../../office-hours-founder/author/fixtures.ts";
+import { PROJECTION, REUSED_SLOTS } from "../frozen.ts";
+import type { CheckAnswer } from "../score/packets.ts";
+import { runDraft, type Outcome } from "./brief.ts";
+import { schedule } from "./draws.ts";
+import { keyJson, priorJson, sheetJson } from "./files.ts";
 import type { Block, BlockParser, BuilderGoal, Cells, Fact, Labeller, Sheet } from "../types.ts";
 import type { BriefFiles } from "./files.ts";
 import { GOAL_PHRASE, GOAL_WORDS, PRIOR_DATES } from "./prompts.ts";
@@ -145,26 +153,30 @@ export function happy(briefs: Readonly<Record<string, BriefFiles>>, twinCalls: R
 /** The builder fixture for any goal: its goal fact names that goal. */
 export const builderFor = (goal: BuilderGoal): BriefFiles => ({ ...BUILDER, sheet: { ...BUILDER.sheet, facts: BUILDER.sheet.facts.map((f) => (f.id === "F1" ? { ...f, text: "My goal for this project is " + GOAL_WORDS[goal][0] + "." } : f)) } });
 
+const roleOf = (prompt: string): "first" | "second" | "unpaired" => (prompt.includes("Write this founder's twin") ? "second" : prompt.includes("has a twin") ? "first" : "unpaired");
+
 /**
  * A caller for whole runs: it answers each author prompt with the fixture of its kind (a builder of the prompt's goal, T8,
- * a first twin, a flipped twin, or T7), remembers which brief each id holds, and answers that brief's validators. Second
- * twins fail the twin check (they repeat the partner's call) when secondFails(n) holds for the n-th second-twin draft.
- * drafts counts author calls, so spent can charge a fixed amount a draft.
+ * a first twin, a flipped twin, or T7), remembers which brief each id holds, and answers that brief's validators. A draft
+ * whose reference fails(ref) names fails, so the outcome depends only on the request: a second twin fails the twin check
+ * (it repeats the partner's call) and any other draft gets no author reply. A call whose label hang(label) names never
+ * answers, as a draft in flight when a run stops. drafts counts author calls.
  */
-export function runCaller(o: { secondFails?: (n: number) => boolean } = {}) {
+export function runCaller(o: { fails?: (ref: string) => boolean; hang?: (label: string) => boolean } = {}) {
   const byId = new Map<string, BriefFiles>();
-  let seconds = 0;
   const state = { drafts: 0 };
-  const call = stubCaller((req) => {
+  const stub = stubCaller((req) => {
     const l = req.label;
-    const id = l.split(":")[0]!.replace(/\.\d+$/, "");
+    const ref = l.split(":")[0]!;
+    const id = ref.replace(/\.\d+$/, "");
     if (/:judge:/.test(l)) return '{"matches": []}';
     if (/:probe:/.test(l)) return "I don't know.";
     if (/:audit:/.test(l)) return PASS_ALL;
     if (/:(author|rewrite):/.test(l)) {
       if (/:author:1$/.test(l)) state.drafts++;
+      const fail = /:author:/.test(l) && (o.fails?.(ref) ?? false);
+      if (fail && roleOf(req.prompt) !== "second") return null;
       if (req.prompt.includes("Write this founder's twin")) {
-        const fail = /:author:1$/.test(l) && o.secondFails?.(++seconds);
         const b = fail ? { ...SECOND, key: { ...SECOND.key, call: FIRST.key.call } } : SECOND;
         byId.set(id, b);
         return authorReply(b, { opening: false });
@@ -180,5 +192,75 @@ export function runCaller(o: { secondFails?: (n: number) => boolean } = {}) {
     if (/:give-away:/.test(l)) return blockReply(b.key.wrong_call ?? "Keep going as planned", "keep going as planned");
     return null;
   });
-  return Object.assign(call, { state });
+  const call = ((req: CallRequest) => (o.hang?.(req.label) ? new Promise<never>(() => {}) : stub(req))) as typeof stub;
+  return Object.assign(call, { calls: stub.calls, state });
+}
+
+/** A fake meter over a caller: each draft's first author call costs the first attempt's figure for its role, every other call nothing, settled by brief. */
+export function fakeMeter(call: Caller, usd: (role: "first" | "second" | "unpaired") => number = (r) => PROJECTION.usd[r]) {
+  let total = 0;
+  const by = new Map<string, number>();
+  const metered: Caller = async (req) => {
+    const r = await call(req);
+    const cost = /:author:1$/.test(req.label) ? usd(roleOf(req.prompt)) : 0;
+    const brief = req.label.split(":")[0]!.replace(/\.\d+$/, "");
+    total += cost;
+    by.set(brief, (by.get(brief) ?? 0) + cost);
+    return { ...r, micros: Math.round(cost * 1e6) };
+  };
+  return { call: metered, spent: () => total, spentOn: (brief: string) => by.get(brief) ?? 0 };
+}
+
+const tree = (dir: string): string[] => readdirSync(dir).flatMap((n) => (statSync(join(dir, n)).isDirectory() ? tree(join(dir, n)) : [join(dir, n)]));
+/** A stand-in for age in tests: the sealed file is the work directory's files as JSON, so fakeDecrypter can restore them. */
+export const fakeSealer = (work: string, out: string): void => writeFileSync(out, JSON.stringify(Object.fromEntries(tree(work).map((f) => [relative(work, f), readFileSync(f, "utf8")]))));
+export const fakeDecrypter = (sealed: string, dir: string): void => {
+  mkdirSync(dir, { recursive: true });
+  for (const [name, text] of Object.entries(JSON.parse(readFileSync(sealed, "utf8")) as Record<string, string>)) {
+    mkdirSync(dirname(join(dir, name)), { recursive: true });
+    writeFileSync(join(dir, name), text);
+  }
+};
+
+
+/** The first attempt's 19 placed briefs as a planted stand-in: one whole brief or pair in each reused slot, numbered as the first attempt numbered its draws. */
+export async function plantedFirstAttempt(): Promise<Outcome[]> {
+  const deps = { call: runCaller(), label: wordLabeller(), parse: fixtureParser, screen: FIXTURE_SCREEN };
+  const out: Outcome[] = [];
+  let draw = 0;
+  for (const s of schedule().filter((x) => REUSED_SLOTS.includes(x.slot))) {
+    const author = ++draw % 2 ? "sol" : "argon";
+    if (s.kind !== "pair") {
+      out.push(await runDraft(s, "unpaired", { draw, attempt: 1, author, pilot: false, partner: null }, deps));
+      continue;
+    }
+    const a = await runDraft(s, "first", { draw, attempt: 1, author, pilot: true, partner: null }, deps);
+    out.push(a, await runDraft(s, "second", { draw, attempt: 1, author, pilot: true, partner: { id: a.id, files: a.files!, twin_call: a.twin_call! } }, deps));
+  }
+  return out;
+}
+
+/** The full-information and opening-only answers a placed outcome's validators gave, as authoring/check-answers.json holds them. */
+export const answersOf = (xs: readonly Outcome[]): CheckAnswer[] =>
+  xs.flatMap((x) => {
+    const v = x.record.validators as { unanimous: Record<string, { block: CheckAnswer["block"] } | null>; opening_only: Record<string, { block: CheckAnswer["block"] } | null> | null };
+    return ([["full", v.unanimous], ["opening", v.opening_only]] as const).flatMap(([source, got]) => Object.entries(got ?? {}).flatMap(([author, a]) => (a ? [{ brief: x.id, author, source, block: a.block }] : [])));
+  });
+
+/** Writes placed outcomes in the first attempt's sealed authoring layout: briefs/<id>/, authoring/outcomes.jsonl and authoring/check-answers.json. */
+export function writeFirstAttempt(dir: string, placed: readonly Outcome[], meta: (x: Outcome) => unknown, dropped: readonly Outcome[] = []): void {
+  const put = (name: string, text: string) => {
+    mkdirSync(dirname(join(dir, name)), { recursive: true });
+    writeFileSync(join(dir, name), text);
+  };
+  for (const x of placed) {
+    const f = x.files!;
+    put(join("briefs", x.id, "opening.md"), f.opening);
+    put(join("briefs", x.id, "sheet.json"), sheetJson(f.sheet));
+    put(join("briefs", x.id, "key.json"), keyJson(f.key));
+    put(join("briefs", x.id, "brief.json"), keyJson(meta(x)));
+    if (f.prior) put(join("briefs", x.id, "prior.json"), priorJson(f.prior));
+  }
+  put("authoring/outcomes.jsonl", [...placed, ...dropped].map((x) => JSON.stringify(x) + "\n").join(""));
+  put("authoring/check-answers.json", JSON.stringify(answersOf(placed), null, 2) + "\n");
 }

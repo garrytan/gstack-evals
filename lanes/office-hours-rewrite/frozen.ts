@@ -200,9 +200,11 @@ export const QUOTA = { skins: 4, founder: 56, builder: 24, calibration: 8, reser
 export const DROPPED_SLOTS: readonly string[] = ["com1-T1", "com1-T2", "com1-T3", "com1-T4", "com1-T5", "com1-T6", "com1-T7", "com5-T8"];
 /** Section 4: the slots of the 19 briefs the first attempt placed, which this run reuses. */
 export const REUSED_SLOTS: readonly string[] = ["cal0-research", "com2-T4", "com2-T6", "com3-T2", "com3-T3", "com4-T6", "com5-T5", "com4-T7", "com5-T7", "com2-fun", "com2-open-source", "com3-open-source", "com5-fun"];
+/** Section 4: the sha256 of the plaintext (the tar stream age wraps) of the first attempt's sealed authoring output. */
+export const REUSE_PLAINTEXT_SHA256 = "971ec21b83e6b6be65c5e54b7f5fd2aec0cca805fea1bbea2c0a908a0e15cfea";
 
-/** Section 5.3: the second-twin draws a partner gets; when all fail, the partner drops and its slot starts a new pair. */
-export const TOP_UP_BOUND = 3;
+/** Section 5.3, as the Captain ruled on 2026-11-18: the second-twin draws a partner gets; when all fail, the partner drops and its slot starts a new pair. */
+export const TOP_UP_BOUND = 30;
 
 /** Section 5.4: the first two open slots of each pair type, each until it settles one partner or drafts 3 first twins, and 8 drafts each of T7, T8 and builders. */
 export const PILOT = { pair_slots: 2, first_twins: 3, unpaired_drafts: 8 } as const;
@@ -213,8 +215,9 @@ export const BRIEF_ALLOWANCE = 3.5;
 /**
  * Section 5.5's projection stop: rates at the 0.95 quantile of their Jeffreys posterior, the first attempt's costs a
  * draft, room for the drafts in flight (8 at the brief allowance), and the first attempt's final-path counts as sizing.py,
- * Part D, lists them: first twins passed of drafted, each pair type's partners matched within 3 draws of settled, the
- * draws matched partners took over how many matched, and each unpaired kind's passes of drafts.
+ * Part D, lists them: first twins passed of drafted, each pair type's partners matched within the bound's 30 draws of
+ * settled, the draws matched partners took (1, 1, 1, 2, 19 and 26) over how many matched, and each unpaired kind's
+ * passes of drafts.
  */
 export const PROJECTION = {
   quantile: 0.95,
@@ -222,8 +225,8 @@ export const PROJECTION = {
   held: 8,
   attempt1: {
     first: [10, 15],
-    partners: { T1: [0, 1], T2: [1, 1], T3: [1, 1], T4: [0, 2], T5: [1, 1], T6: [1, 2] },
-    matched_draws: [5, 4],
+    partners: { T1: [0, 1], T2: [1, 1], T3: [1, 1], T4: [1, 2], T5: [1, 1], T6: [2, 2] },
+    matched_draws: [50, 6],
     unpaired: { T7: [2, 41], T8: [0, 0], builder: [5, 41] },
   },
 } as const;

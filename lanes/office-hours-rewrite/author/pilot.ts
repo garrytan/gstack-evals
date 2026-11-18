@@ -1,52 +1,88 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
-// The office-hours rewrite eval's authoring pilot gate (pre-run change 1 item 4d, with section 3's "Supply" and section
-// 13's authoring line). After 16 second-twin draws the gate reads the yield with a two-sided 90% Wilson interval against
-// the line recomputed from the pilot's own cost per draw and first-pass rate, with pilot.py's line(): go when the lower
-// bound is at or above the line, stop when the upper bound is below it, and otherwise read once more at 32. A second read
-// still open halts authoring for the Captain, and so does a missing line (the first twins and unpaired briefs alone would
-// use up the cap). The Wilson interval is the autoplan audit's, pinned to Newcombe's 1998 worked examples in the tests.
-import { wilson } from "../../autoplan-audit/stats.ts";
-import { CAPS, PILOT, QUOTA } from "../frozen.ts";
+// The office-hours rewrite eval's projection stop (the second attempt's section 5.5). At the pilot's end, and after
+// every later batch until calibration and comparison are full, authoring projects the cost to place every open
+// calibration and comparison slot, costing a slot with a partner waiting as a fresh pair:
+// - a pair of type t costs (c1 / f + m_t * D * c2 + (1 - m_t) * B * c2) / m_t, the first attempt's resize.py formula at
+//   the top-up bound B, 30 second twins a partner (the Captain's ruling of 2026-11-18);
+// - an unpaired brief of kind u (T7, T8 or builder) costs cu / y_u.
+// f is the first-twin pass rate over all pair types, m_t the share of type t's settled partners that matched within the
+// bound and y_u kind u's pass rate, each counting the first attempt's final path (frozen.PROJECTION.attempt1) plus this
+// run, at the 0.95 quantile of its Jeffreys posterior, Beta(k + 0.5, n - k + 0.5), so the projection is optimistic. D is
+// the plain mean of the draws a matched partner took, over both attempts. c1, c2 and cu are the first attempt's costs a
+// draft, scaled by this run's spend over what they predict for the drafts it has made. Authoring stops when the
+// projection passes the item's cap less its committed spend less 8 drafts at the $3.50 brief allowance. The 16 and 32
+// draw reads of pre-run change 1, item 4d, are gone with the pair-only pilot they read.
+import { BRIEF_ALLOWANCE, PAIRED_TYPES, PROJECTION, TOP_UP_BOUND } from "../frozen.ts";
+import { betaQuantile } from "../read/stats.ts";
+import type { Role } from "./files.ts";
 
-/** Section 13's planning inputs, as pilot.py states them: $129.19 over 124 draws, and 96 in 124 passing first time. */
-export const PLANNING = { draw_usd: 129.19 / 124, first_pass: 96 / 124 } as const;
-/** Section 13: one allowance for the authoring item's costliest unit, $3.50 for a brief. */
-export const BRIEF_ALLOWANCE = 3.5;
+export type UnpairedKind = "T7" | "T8" | "builder";
+export const UNPAIRED_KINDS: readonly UnpairedKind[] = ["T7", "T8", "builder"];
 
-/** pilot.py's line(): the second-twin yield the cap less one allowance can carry, or null when there is no room. */
-export function line(drawUsd: number, firstPass: number): number | null {
-  if (!(drawUsd > 0) || !(firstPass > 0)) return null;
-  const room = (CAPS.authoring - BRIEF_ALLOWANCE) / drawUsd - (QUOTA.pairs + QUOTA.unpaired) / firstPass;
-  return room > 0 ? QUOTA.pairs / room : null;
+/** A pass count over a draw count, or for matched_draws the draws matched partners took over how many matched. */
+export type KN = readonly [number, number];
+export interface Counts {
+  first: KN;
+  /** Per pair type T1 to T6: partners matched within the bound over partners settled. */
+  partners: Readonly<Record<string, KN>>;
+  matched_draws: KN;
+  unpaired: Readonly<Record<UnpairedKind, KN>>;
+}
+/** Open calibration and comparison slots: pairs by type, unpaired by kind. */
+export interface Open {
+  pairs: Readonly<Record<string, number>>;
+  unpaired: Readonly<Record<UnpairedKind, number>>;
 }
 
-/** pilot.py's cost(): authoring's projected cost at a yield. */
-export const projectedCost = (drawUsd: number, firstPass: number, yieldRate: number): number => ((QUOTA.pairs + QUOTA.unpaired) / firstPass + QUOTA.pairs / yieldRate) * drawUsd;
+export const ATTEMPT_1: Counts = PROJECTION.attempt1;
 
-export const wilson90 = (k: number, n: number): [number, number] => wilson(k, n, PILOT.z);
+/** The 0.95 quantile of k of n's Jeffreys posterior. */
+export const jeffreys = (k: number, n: number): number => betaQuantile(PROJECTION.quantile, k + 0.5, n - k + 0.5);
 
-export type Read = "go" | "stop" | "open";
-/** One read of k passing second twins in n draws against the line; no line reads stop. */
-export function readAt(k: number, n: number, l: number | null): Read {
-  if (l === null) return "stop";
-  const [lo, hi] = wilson90(k, n);
-  if (lo >= l) return "go";
-  if (hi < l) return "stop";
-  return "open";
+const add = (a: KN, b: KN): KN => [a[0] + b[0], a[1] + b[1]];
+export const plus = (a: Counts, b: Counts): Counts => ({
+  first: add(a.first, b.first),
+  partners: Object.fromEntries(PAIRED_TYPES.map((t) => [t, add(a.partners[t] ?? [0, 0], b.partners[t] ?? [0, 0])])),
+  matched_draws: add(a.matched_draws, b.matched_draws),
+  unpaired: { T7: add(a.unpaired.T7, b.unpaired.T7), T8: add(a.unpaired.T8, b.unpaired.T8), builder: add(a.unpaired.builder, b.unpaired.builder) },
+});
+
+/** The projected dollars to place every open calibration and comparison slot. */
+export function projection(c: Counts, open: Open, scale: number): number {
+  const { first, second, unpaired } = PROJECTION.usd;
+  const f = jeffreys(...c.first);
+  const d = c.matched_draws[0] / c.matched_draws[1];
+  let cost = 0;
+  for (const t of PAIRED_TYPES) {
+    const m = jeffreys(...(c.partners[t] ?? [0, 0]));
+    cost += (open.pairs[t] ?? 0) * ((first / f + m * d * second + (1 - m) * TOP_UP_BOUND * second) / m);
+  }
+  for (const u of UNPAIRED_KINDS) cost += (open.unpaired[u] ?? 0) * (unpaired / jeffreys(...c.unpaired[u]));
+  return cost * scale;
 }
 
-export interface ReadRecord {
-  k: number;
-  n: number;
-  lo: number;
-  hi: number;
-  read: Read;
+/** What the first attempt's costs a draft predict for a draft of this role. */
+export const predicted = (role: Role): number => PROJECTION.usd[role];
+
+/** The room the projection must fit: the cap less the committed spend less the drafts in flight at the brief allowance. */
+export const roomLeft = (cap: number, committed: number): number => cap - committed - PROJECTION.held * BRIEF_ALLOWANCE;
+
+export interface ProjectionRead {
+  /** Drafts settled when the read was taken. */
+  drafts: number;
+  committed: number;
+  scale: number;
+  projection: number;
+  room: number;
+  stop: boolean;
+  counts: Counts;
+  open: Open;
 }
 
-/** The two-step gate over the reads taken so far: more means draw on to the second read. */
-export function pilotRead(reads: readonly { k: number; n: number }[], l: number | null): { verdict: "go" | "stop" | "more" | "open"; reads: ReadRecord[] } {
-  const recs = reads.map((r) => ({ ...r, lo: wilson90(r.k, r.n)[0], hi: wilson90(r.k, r.n)[1], read: readAt(r.k, r.n, l) }));
-  const last = recs.at(-1)!;
-  if (last.read !== "open") return { verdict: last.read, reads: recs };
-  return { verdict: recs.length === 1 ? "more" : "open", reads: recs };
+export function readProjection(o: { counts: Counts; open: Open; spend: number; predicted: number; cap: number; committed: number; drafts: number }): ProjectionRead {
+  const scale = o.predicted > 0 ? o.spend / o.predicted : 1;
+  const counts = plus(ATTEMPT_1, o.counts);
+  const p = projection(counts, o.open, scale);
+  const room = roomLeft(o.cap, o.committed);
+  return { drafts: o.drafts, committed: o.committed, scale, projection: p, room, stop: p > room, counts, open: o.open };
 }

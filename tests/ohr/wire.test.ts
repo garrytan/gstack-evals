@@ -61,6 +61,20 @@ describe("the wire's build commit (pre-run change 4's build rule)", () => {
   });
 });
 
+describe("the wire's spend by brief (the second attempt's section 5.2)", () => {
+  test("spentOn sums the calls labelled for one brief, every attempt of it included, and the brief's calls add up to the settled spend", async () => {
+    await withWire({}, async (w) => {
+      const ask = (label: string) => w.call({ model: "opus", prompt: "Reply with the one word ok, for " + label + ".", maxTokens: 2000, effort: "medium", label });
+      for (const label of ["d1001b.2:author:1", "d1001b:generic:opus", "d2001a:author:1"]) await ask(label);
+      const one = w.spentOn("d1001b"), two = w.spentOn("d2001a");
+      expect(one).toBeGreaterThan(two);
+      expect(two).toBeGreaterThan(0);
+      expect(w.spentOn("d1001b.2")).toBe(0);
+      expect(one + two).toBeCloseTo(w.spent(), 9);
+    });
+  });
+});
+
 describe("the wire's counted replies (pre-run change 4)", () => {
   test("judge, auditor and simulator replies that name their pin, or a dated snapshot of it, count", async () => {
     await withWire({}, async (w) => {

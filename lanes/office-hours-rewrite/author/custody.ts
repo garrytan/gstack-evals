@@ -4,14 +4,30 @@
 // then sealed with age to an output path outside the repository and the work directory is deleted. Decryption goes only
 // into /dev/shm. Every refusal raises E_OHR_CUSTODY before anything is written. The repository and the printed summary
 // get counts and digests only. The sealer and the decrypter are injected so tests need no age binary.
+// The second attempt (its sections 4 and 5.2) adds three readers and writers over the same custody:
+// - sealedJournal seals each settled draft's record to draft-<seq>.age as it settles, and after every batch the outcome
+//   log, the reused briefs, the projection reads and every placed brief to checkpoint-<drafts>.age, each a new path in
+//   the run's checkpoints folder.
+// - readJournal decrypts a checkpoint and every draft record sealed after it into /dev/shm, refuses a gap or a brief
+//   whose files no longer match its digest, deletes the plaintext and returns the state a resume starts from.
+// - plaintextSha256 hashes a sealed file's plaintext as age streams it, so the command can check the first attempt's
+//   output against the digest section 4 records before reading it.
+// - readReuse decrypts the first attempt's sealed authoring output into /dev/shm and takes its placed briefs
+//   (briefs/<id>/, authoring/outcomes.jsonl and authoring/check-answers.json). A brief is reused only when its slot is one
+//   of the 13 reused slots and its files on disk, its outcome and its brief.json name one digest; a pair only with both
+//   twins. Every other brief is listed as failed, and its slot is drafted again.
 import { spawnSync } from "node:child_process";
-import { existsSync, rmSync } from "node:fs";
-import { join, resolve, sep } from "node:path";
+import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { basename, dirname, join, resolve, sep } from "node:path";
 import { realOf, REPO_ROOT } from "../../product-value/io.ts";
 import { AuthorError, keyJson, openSink, writeSealed } from "../../office-hours-founder/author/files.ts";
+import { REUSED_SLOTS } from "../frozen.ts";
+import type { CheckAnswer } from "../score/packets.ts";
+import type { BriefMeta, PriorSession, Sheet } from "../types.ts";
+import type { Outcome } from "./brief.ts";
 import { schedule } from "./draws.ts";
-import { priorJson, sheetJson } from "./files.ts";
-import { metaOf, summaryOf, type AuthorRun } from "./run.ts";
+import { digestOf, priorJson, sheetJson, type BriefFiles } from "./files.ts";
+import { metaOf, summaryOf, type AuthorRun, type Checkpoint, type Journal, type LogEntry, type Reuse } from "./run.ts";
 
 export const SHM = "/dev/shm";
 
@@ -51,6 +67,12 @@ export const ageDecrypter = (identity: string): Decrypter => (sealed, dir) => {
   const r = spawnSync("bash", ["-o", "pipefail", "-c", 'mkdir -m 700 "$3" && age -d -i "$2" "$1" | tar -C "$3" -xf -', "unseal", sealed, identity, dir], { encoding: "utf8" });
   if (r.status !== 0) throw new AuthorError("E_OHR_CUSTODY", "decrypting with age failed (exit " + r.status + ")");
 };
+/** The sha256 of a sealed file's plaintext, hashed from age's output stream so the plaintext never reaches a disk. */
+export function plaintextSha256(sealed: string, identity: string): string {
+  const r = spawnSync("bash", ["-o", "pipefail", "-c", 'age -d -i "$2" "$1" | sha256sum', "digest", sealed, identity], { encoding: "utf8" });
+  if (r.status !== 0) throw new AuthorError("E_OHR_CUSTODY", "decrypting with age failed (exit " + r.status + ")");
+  return r.stdout.split(" ")[0]!;
+}
 export function unsealTo(sealed: string, dir: string, decrypt: Decrypter): string {
   if (!inShm(dir)) throw new AuthorError("E_OHR_CUSTODY", dir + " is not under " + SHM + "; sealed briefs are decrypted only into memory-backed storage");
   if (existsSync(dir)) throw new AuthorError("E_OHR_CUSTODY", dir + " already exists");
@@ -58,21 +80,28 @@ export function unsealTo(sealed: string, dir: string, decrypt: Decrypter): strin
   return dir;
 }
 
-/** Writes the placed briefs in types.ts's layout, every draft's outcome and the summary under an open sink; returns the summary. */
-export function writeAuthoring(sink: string, run: AuthorRun) {
+const jsonl = (xs: readonly unknown[]) => xs.map((x) => JSON.stringify(x) + "\n").join("");
+const readJsonl = <T>(p: string): T[] => readFileSync(p, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as T);
+
+/** Writes placed briefs in types.ts's layout under an open sink. */
+function writeBriefs(sink: string, placed: readonly Outcome[]): void {
   const slots = new Map(schedule().map((s) => [s.slot, s]));
-  const byId = new Map(run.outcomes.filter((x) => x.status === "pass").map((x) => [x.id, x]));
-  for (const set of ["calibration", "comparison", "reserve"] as const) {
-    for (const m of run.sets[set]) {
-      const x = byId.get(m.id)!, f = x.files!, dir = join("briefs", m.id);
-      writeSealed(sink, join(dir, "opening.md"), f.opening);
-      writeSealed(sink, join(dir, "sheet.json"), sheetJson(f.sheet));
-      writeSealed(sink, join(dir, "key.json"), keyJson(f.key));
-      writeSealed(sink, join(dir, "brief.json"), keyJson(metaOf(slots.get(x.slot)!, x)));
-      if (f.prior) writeSealed(sink, join(dir, "prior.json"), priorJson(f.prior));
-    }
+  for (const x of placed) {
+    const f = x.files!, dir = join("briefs", x.id);
+    writeSealed(sink, join(dir, "opening.md"), f.opening);
+    writeSealed(sink, join(dir, "sheet.json"), sheetJson(f.sheet));
+    writeSealed(sink, join(dir, "key.json"), keyJson(f.key));
+    writeSealed(sink, join(dir, "brief.json"), keyJson(metaOf(slots.get(x.slot)!, x)));
+    if (f.prior) writeSealed(sink, join(dir, "prior.json"), priorJson(f.prior));
   }
-  writeSealed(sink, "authoring/outcomes.jsonl", run.outcomes.map((x) => JSON.stringify(x)).join("\n") + "\n");
+}
+
+/** Writes the placed briefs, this run's outcome log, the reused briefs' outcomes and the summary under an open sink; returns the summary. */
+export function writeAuthoring(sink: string, run: AuthorRun) {
+  const ids = new Set([...run.sets.calibration, ...run.sets.comparison, ...run.sets.reserve].map((m) => m.id));
+  writeBriefs(sink, [...run.reuse.placed, ...run.outcomes].filter((x) => x.status === "pass" && ids.has(x.id)));
+  writeSealed(sink, "authoring/outcomes.jsonl", jsonl(run.outcomes));
+  writeSealed(sink, "authoring/reused.jsonl", jsonl(run.reuse.placed));
   const summary = summaryOf(run);
   writeSealed(sink, "authoring/summary.json", keyJson(summary));
   return summary;
@@ -84,4 +113,90 @@ export function authorToCustody(run: AuthorRun, o: { work: string; out: string; 
   const summary = writeAuthoring(sink, run);
   sealCustody(sink, o.out, o.sealer);
   return summary;
+}
+
+
+const pad = (n: number) => String(n).padStart(6, "0");
+const DRAFT = /^draft-(\d{6})\.age$/;
+const CHECKPOINT = /^checkpoint-(\d{6})\.age$/;
+
+/** The journal authorRun writes through: one sealed file a settled draft, and a checkpoint after every batch, each a new path in dir. Plaintext goes only into fresh directories beside work under /dev/shm. */
+export function sealedJournal(o: { dir: string; work: string; sealer: Sealer }): Journal {
+  const seal = (name: string, write: (sink: string) => void) => {
+    const out = join(o.dir, name);
+    const sink = openCustody(o.work + "." + name.replace(/\.age$/, ""), out);
+    write(sink);
+    sealCustody(sink, out, o.sealer);
+  };
+  return {
+    record: (e) => seal("draft-" + pad(e.seq) + ".age", (sink) => writeSealed(sink, "record.json", JSON.stringify(e) + "\n")),
+    checkpoint: (c, placed) => {
+      const name = "checkpoint-" + pad(c.log.length) + ".age";
+      if (existsSync(join(o.dir, name))) return;
+      seal(name, (sink) => {
+        writeBriefs(sink, placed);
+        writeSealed(sink, "authoring/log.jsonl", jsonl(c.log));
+        writeSealed(sink, "authoring/reuse.json", JSON.stringify(c.reuse) + "\n");
+        writeSealed(sink, "authoring/reads.json", JSON.stringify(c.reads) + "\n");
+      });
+    },
+  };
+}
+
+/** Decrypts one sealed file into a new directory under /dev/shm, reads it and deletes the plaintext. */
+function opened<T>(sealed: string, dir: string, decrypt: Decrypter, read: (d: string) => T): T {
+  const d = unsealTo(sealed, dir, decrypt);
+  try {
+    return read(d);
+  } finally {
+    rmSync(d, { recursive: true, force: true });
+  }
+}
+
+/** A resume's state: a sealed checkpoint and every draft record sealed after it in the same folder, in order. */
+export function readJournal(checkpoint: string, decrypt: Decrypter, work: string): Checkpoint {
+  const at = CHECKPOINT.exec(basename(checkpoint));
+  if (!at) throw new AuthorError("E_OHR_RESUME", checkpoint + " is not a sealed checkpoint (checkpoint-<drafts>.age)");
+  const c = opened(checkpoint, work + ".open-checkpoint", decrypt, (d): Checkpoint => ({ log: readJsonl<LogEntry>(join(d, "authoring", "log.jsonl")), reuse: JSON.parse(readFileSync(join(d, "authoring", "reuse.json"), "utf8")) as Reuse, reads: JSON.parse(readFileSync(join(d, "authoring", "reads.json"), "utf8")) }));
+  if (c.log.length !== Number(at[1])) throw new AuthorError("E_OHR_RESUME", checkpoint + " names " + Number(at[1]) + " drafts and its log holds " + c.log.length);
+  const dir = dirname(checkpoint);
+  const after = readdirSync(dir).flatMap((n) => (DRAFT.test(n) ? [Number(DRAFT.exec(n)![1])] : [])).filter((n) => n > c.log.length).sort((a, b) => a - b);
+  after.forEach((n, i) => {
+    if (n !== c.log.length + 1 + i) throw new AuthorError("E_OHR_RESUME", dir + " holds draft record " + n + " but not draft " + (c.log.length + 1 + i) + "; a sealed draft is missing, so the run cannot resume without paying for it twice");
+  });
+  for (const n of after) c.log.push(opened(join(dir, "draft-" + pad(n) + ".age"), work + ".open-draft-" + pad(n), decrypt, (d) => JSON.parse(readFileSync(join(d, "record.json"), "utf8")) as LogEntry));
+  c.log.forEach((e, i) => {
+    if (e.seq !== i + 1) throw new AuthorError("E_OHR_RESUME", "draft record " + (i + 1) + " names place " + e.seq);
+    if (e.status === "pass" && digestOf(e.files!) !== e.digest) throw new AuthorError("E_OHR_RESUME", "draft " + e.id + "'s files no longer match its digest");
+  });
+  return c;
+}
+
+const fileOf = (dir: string, name: string) => (existsSync(join(dir, name)) ? readFileSync(join(dir, name), "utf8") : null);
+
+/** The first attempt's placed briefs, each checked against its recorded digest and its slot against the reused slots. */
+export function readReuse(sealed: string, decrypt: Decrypter, work: string): Reuse {
+  const kept = new Set(schedule().map((s) => s.slot));
+  return opened(sealed, work + ".open-reuse", decrypt, (d): Reuse => {
+    const passed = readJsonl<Outcome>(join(d, "authoring", "outcomes.jsonl")).filter((x) => x.status === "pass" && existsSync(join(d, "briefs", x.id)));
+    const answers = JSON.parse(readFileSync(join(d, "authoring", "check-answers.json"), "utf8")) as CheckAnswer[];
+    const failed: Reuse["failed"] = [];
+    const ok: Outcome[] = [];
+    for (const x of passed) {
+      const dir = join(d, "briefs", x.id);
+      const opening = fileOf(dir, "opening.md"), sheet = fileOf(dir, "sheet.json"), key = fileOf(dir, "key.json"), meta = fileOf(dir, "brief.json"), prior = fileOf(dir, "prior.json");
+      const files: BriefFiles | null = opening !== null && sheet !== null && key !== null ? { opening, sheet: JSON.parse(sheet) as Sheet, key: JSON.parse(key) as BriefFiles["key"], prior: prior === null ? null : (JSON.parse(prior) as PriorSession) } : null;
+      const why = !REUSED_SLOTS.includes(x.slot) || !kept.has(x.slot) ? "its slot " + x.slot + " is not one of the reused slots" : !files || meta === null ? "a file is missing" : digestOf(files) !== x.digest || (JSON.parse(meta) as BriefMeta).digest !== x.digest ? "its files do not match its recorded digest" : null;
+      if (why) failed.push({ id: x.id, slot: x.slot, why });
+      else ok.push({ ...x, files });
+    }
+    const placed = ok.filter((x) => {
+      const twin = x.files!.key.twin;
+      if (twin === null || ok.some((y) => y.id === twin)) return true;
+      failed.push({ id: x.id, slot: x.slot, why: "its twin " + twin + " failed the check" });
+      return false;
+    });
+    const ids = new Set(placed.map((x) => x.id));
+    return { placed, answers: answers.filter((a) => ids.has(a.brief)), failed };
+  });
 }

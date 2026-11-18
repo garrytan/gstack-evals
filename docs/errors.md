@@ -424,6 +424,9 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_OHR_PILOT_STOP](#e_ohr_pilot_stop) | 2 | U20 |
 | [E_OHR_PILOT_OPEN](#e_ohr_pilot_open) | 2 | U20 |
 | [E_OHR_SUPPLY_SHORT](#e_ohr_supply_short) | 2 | U20 |
+| [E_OHR_PROJECTION_STOP](#e_ohr_projection_stop) | 2 | U20 |
+| [E_OHR_RESUME](#e_ohr_resume) | 2 | U20 |
+| [E_OHR_REUSE](#e_ohr_reuse) | 2 | U20 |
 | [E_OHR_CUSTODY](#e_ohr_custody) | 2 | U20 |
 | [E_OHR_SIM_RULES](#e_ohr_sim_rules) | 2 | U20 |
 | [E_OHR_SIM_GUARD](#e_ohr_sim_guard) | 2 | U20 |
@@ -3277,6 +3280,30 @@ Office-hours rewrite eval (prereg section 3, Supply): authoring stopped (its cap
 Fix: Take the shortfall and its MDD to the Captain before stage 1.
 
 Exit 2. Side effects: Spend so far stays on the authoring lease; every placed brief and every draft's outcome are written under custody. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_OHR_PROJECTION_STOP
+
+Office-hours rewrite eval, second attempt (its section 5.5): authoring's projection stop. Even an optimistic projection of the cost to place every open calibration and comparison slot, with each rate at the 0.95 quantile of its Jeffreys posterior, passes the authoring cap less its committed spend less 8 drafts at $3.50. The eval reads INCOMPLETE. The message gives the projection, the room, the scale, the counts behind it and the briefs placed.
+
+Fix: None within this eval: it has no raise, and a cap stop is never retried to change a verdict. Report the projection, its counts and the briefs placed in the results post.
+
+Exit 2. Side effects: Spend so far stays on the authoring lease; every placed brief and every draft's outcome are written and sealed under custody. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_OHR_RESUME
+
+Office-hours rewrite eval, second attempt (its section 5.2): ohr author --resume cannot rebuild the run from its sealed checkpoint and draft records. The file is not a checkpoint, its log does not match its name, a draft record after it is missing, a record sits out of place, or a brief's files no longer match its digest.
+
+Fix: Point --resume at a checkpoint-&lt;drafts>.age in the run's checkpoints folder with every draft-&lt;seq>.age sealed after it beside it. A missing record would pay for a settled draft twice, so restore it from custody rather than resuming without it.
+
+Exit 2. Side effects: None: the decrypted checkpoint and records are deleted from /dev/shm before the refusal, and no call is made. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OHR_REUSE
+
+Office-hours rewrite eval, second attempt (its section 4): authoring was handed reused briefs that are not one whole brief or pair in one of the 13 reused slots. ohr author --reuse checks each first-attempt brief against its recorded digest and slot and drafts a failing one again, so this is a bug in what was passed to the run.
+
+Fix: Pass the first attempt's sealed authoring output to --reuse and let readReuse check it; never hand-place a brief.
+
+Exit 2. Side effects: None: the run stops before any draft. Retry safe: no. Resumable: no. Owner: U20.
 
 ### E_OHR_CUSTODY
 

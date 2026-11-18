@@ -4,7 +4,7 @@ import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { BRIEF_ALLOWANCE, CAPS, CHANGE_1, CHANGE_2, CLOSING, DROPPED_SLOTS, LENS_LINE, PILOT, PINS, PREREG, PREREG_1, PROJECTION, QUOTA, REUSED_SLOTS, REVEAL_NOTE, SEED, SIM_ADDED_RULES, SIM_RULES_FILES, SIM_RULES_SHA256, SKILL_PREFIX, TOP_UP_BOUND, attemptLine, firstMessage } from "../../lanes/office-hours-rewrite/frozen.ts";
+import { BRIEF_ALLOWANCE, CAPS, CHANGE_1, CHANGE_2, CLOSING, DROPPED_SLOTS, LENS_LINE, PILOT, PINS, PREREG, PREREG_1, PROJECTION, QUOTA, REUSE_PLAINTEXT_SHA256, REUSED_SLOTS, REVEAL_NOTE, SEED, SIM_ADDED_RULES, SIM_RULES_FILES, SIM_RULES_SHA256, SKILL_PREFIX, TOP_UP_BOUND, attemptLine, firstMessage } from "../../lanes/office-hours-rewrite/frozen.ts";
 
 const root = join(import.meta.dir, "..", "..");
 const prereg = readFileSync(join(root, PREREG_1), "utf8");
@@ -85,19 +85,20 @@ describe("the second attempt's frozen values (its sections 3 to 7)", () => {
     expect([...DROPPED_SLOTS]).toEqual(["com1-T1", "com1-T2", "com1-T3", "com1-T4", "com1-T5", "com1-T6", "com1-T7", "com5-T8"]);
     expect([...REUSED_SLOTS]).toEqual(["cal0-research", "com2-T4", "com2-T6", "com3-T2", "com3-T3", "com4-T6", "com5-T5", "com4-T7", "com5-T7", "com2-fun", "com2-open-source", "com3-open-source", "com5-fun"]);
     expect(REUSED_SLOTS.filter((s) => DROPPED_SLOTS.includes(s))).toEqual([]);
+    expect(REUSE_PLAINTEXT_SHA256).toBe("971ec21b83e6b6be65c5e54b7f5fd2aec0cca805fea1bbea2c0a908a0e15cfea");
   });
-  test("sections 5.3 and 5.4: the bound and the pilot", () => {
-    expect(TOP_UP_BOUND).toBe(3);
+  test("sections 5.3 and 5.4: the bound, as the Captain ruled on 2026-11-18, and the pilot", () => {
+    expect(TOP_UP_BOUND).toBe(30);
     expect({ ...PILOT }).toEqual({ pair_slots: 2, first_twins: 3, unpaired_drafts: 8 });
   });
-  test("section 5.5's projection inputs, the first attempt's counts exactly as sizing.py Part D lists them", () => {
+  test("section 5.5's projection inputs, the first attempt's counts within the bound of 30, as sizing.py Part D lists them", () => {
     expect(PROJECTION.quantile).toBe(0.95);
     expect({ ...PROJECTION.usd }).toEqual({ first: 0.887, second: 0.093, unpaired: 0.545 });
     expect([PROJECTION.held, BRIEF_ALLOWANCE]).toEqual([8, 3.5]);
     expect(JSON.parse(JSON.stringify(PROJECTION.attempt1))).toEqual({
       first: [10, 15],
-      partners: { T1: [0, 1], T2: [1, 1], T3: [1, 1], T4: [0, 2], T5: [1, 1], T6: [1, 2] },
-      matched_draws: [5, 4],
+      partners: { T1: [0, 1], T2: [1, 1], T3: [1, 1], T4: [1, 2], T5: [1, 1], T6: [2, 2] },
+      matched_draws: [50, 6],
       unpaired: { T7: [2, 41], T8: [0, 0], builder: [5, 41] },
     });
   });
