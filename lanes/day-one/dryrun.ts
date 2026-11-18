@@ -197,7 +197,12 @@ export const CASES: Record<string, Case> = {
     const dq = await ownerLoop({ ask: async () => fail("the responder was called with the channel dropped"), dropped: true }).nextUser(["Which day do you bake?"]);
     must("reply" in dg && dg.reply === GATE_REPLY && dropped.state.turns[0]!.source === "recommended" && dropped.state.turns[0]!.gate, "a dropped channel did not answer the gate with the fixed reply, logged as recommended");
     must("end" in dq, "a dropped channel answered a question");
-    return "answer with its source cut, closing at the limit, gate question, no question ends, failed call stops, the whole asking reply up to " + QUESTION_CHARS + " characters; dropped: the gate gets \"" + GATE_REPLY + "\" as recommended and a question ends";
+    const undecided = { text: "I don't know, use your judgment.\nSOURCE: unknown" };
+    const gd = ownerLoop({ ask: async () => undecided, gatePending: () => true });
+    const gdr = await gd.nextUser(["Reply approve or build it. Which do you want?"]);
+    const nogate = await ownerLoop({ ask: async () => undecided }).nextUser(["Reply approve or build it. Which do you want?"]);
+    must("reply" in gdr && gdr.reply === GATE_REPLY && gd.state.turns[0]!.source === "gate-default" && "reply" in nogate && nogate.reply !== GATE_REPLY, "an undecided options ask at a waiting gate did not get the gate default, or one with no gate did");
+    return "answer with its source cut, closing at the limit, gate question, no question ends, failed call stops, the whole asking reply up to " + QUESTION_CHARS + " characters; an undecided options ask at a waiting gate gets \"" + GATE_REPLY + "\" as gate-default; dropped: the gate gets \"" + GATE_REPLY + "\" as recommended and a question ends";
   },
   "session outcomes": () => {
     const base: AttemptRead = { termination: { kind: "completed" }, web: 0, gstack_reads: [], contained: [], micros: 0, voice: null, out: "/x" };

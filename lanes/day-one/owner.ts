@@ -12,6 +12,10 @@
 //   request per question, no transcript.
 // - With the channel dropped (a failed fidelity bar), no question is answered and the session ends, except at
 //   /autoplan's waiting gate, which gets GATE_REPLY, logged as recommended.
+// - Gate default (a dated change to section 4, after rep 4 of the smoke): on a gstack arm whose run waits at its gate,
+//   an answer from the persona rules' last branch (an options question, none marked recommended, none the profile
+//   supports: "I don't know, use your judgment." tagged unknown) is replaced by GATE_REPLY, logged as gate-default with
+//   the persona's own answer beside it, and counted toward OWNER_REPLIES.
 // - The responder ends its answer with a SOURCE line (profile, recommended or unknown). The line is cut before the
 //   answer goes back; a missing or unreadable line logs untagged. Question counts and sources are logged by arm.
 // - After OWNER_REPLIES answers, OWNER_CLOSING goes instead, and the reply to it ends the session whatever it holds.
@@ -20,7 +24,7 @@ import { personaPrompt } from "../../src/usersim/persona.ts";
 import { proseQuestion } from "../../src/usersim/classifier.ts";
 import { GATE_REPLY, OWNER_CLOSING, OWNER_HEAD, OWNER_REPLIES, OWNER_RULES, QUESTION_CHARS } from "./frozen.ts";
 
-export type AnswerSource = "profile" | "recommended" | "unknown" | "untagged";
+export type AnswerSource = "profile" | "recommended" | "unknown" | "untagged" | "gate-default";
 
 export interface OwnerTurn {
   n: number;
@@ -30,6 +34,8 @@ export interface OwnerTurn {
   source: AnswerSource;
   /** The question came from autoplan's waiting gate rather than a question mark. */
   gate: boolean;
+  /** With source gate-default, the persona's own answer, which GATE_REPLY replaced. */
+  persona?: string;
 }
 
 /** What ask returns: the responder's raw text, or why the call failed. */
@@ -51,6 +57,10 @@ export const ownerPrompt = (profile: string, question: string): string => person
 
 const SOURCE = /\n?[ \t]*SOURCE:[ \t]*(profile|recommended|unknown)[ \t.]*$/i;
 const ANY_SOURCE = /\n?[ \t]*SOURCE:[^\n]*$/i;
+const LAST_BRANCH = /^i don't know,? use your judge?ment\.?$/;
+
+/** The answer is the persona rules' last branch: an options question with none marked recommended and none the profile supports. */
+const lastBranch = (answer: string, source: AnswerSource) => source === "unknown" && LAST_BRANCH.test(answer.replace(/\u2019/g, "'").replace(/\s+/g, " ").trim().toLowerCase());
 
 /** Splits the responder's text into the answer the agent sees and its source tag. */
 export function splitSource(text: string): { answer: string; source: AnswerSource } {
@@ -98,6 +108,10 @@ export function ownerLoop(o: { ask: (question: string) => Promise<OwnerReply>; g
       return { stop: { kind: "missing", code: "E_DAYONE_OWNER" } };
     }
     const { answer, source } = splitSource(r.text);
+    if (q.gate && lastBranch(answer, source)) {
+      state.turns.push({ n: state.turns.length + 1, question: q.question, answer: GATE_REPLY, source: "gate-default", gate: true, persona: answer });
+      return { reply: GATE_REPLY };
+    }
     const text = answer || "I don't know.";
     state.turns.push({ n: state.turns.length + 1, question: q.question, answer: text, source, gate: q.gate });
     return { reply: text };
@@ -107,7 +121,7 @@ export function ownerLoop(o: { ask: (question: string) => Promise<OwnerReply>; g
 
 /** Counts by source, for the per-arm table beside every score. */
 export function sourceCounts(turns: readonly OwnerTurn[]): Record<AnswerSource, number> & { questions: number; gate: number } {
-  const c = { profile: 0, recommended: 0, unknown: 0, untagged: 0, questions: turns.length, gate: 0 };
+  const c = { profile: 0, recommended: 0, unknown: 0, untagged: 0, "gate-default": 0, questions: turns.length, gate: 0 };
   for (const t of turns) {
     c[t.source]++;
     if (t.gate) c.gate++;
