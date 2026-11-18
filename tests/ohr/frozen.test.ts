@@ -47,7 +47,7 @@ describe("frozen values match the posts", () => {
     const { VERSION: _v, ...files } = rows;
     const added = /bin\/gstack-design-doc-find at the current pin: 2648 bytes, sha256 ([0-9a-f]{64})/.exec(change2);
     expect(added).not.toBeNull();
-    expect({ ...files, "bin/gstack-design-doc-find": added![1] }).toEqual({ ...pin.files });
+    expect({ ...files, "bin/gstack-design-doc-find": added![1] } as Record<string, string>).toEqual({ ...pin.files });
     expect(change1).toContain("| VERSION | " + pin.version + " |");
   });
   test("the new pin, its file hashes and its byte counts", () => {
