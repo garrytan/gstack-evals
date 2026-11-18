@@ -160,6 +160,101 @@ describe("a plan the session revised under another name", () => {
     }));
 });
 
+// Value: protects=the widened run-record rule against the advisory read's seven cases; fails_when=a run whose first planned start named another file counts after a later next names plan.md, a run folder replaced by a recursive copy or rsync counts, a plan_input reached through a symlink counts (inside or outside the tree), a revise or start through the sandbox's own GSTACK_STATE_ROOT is missed, a --plan=x token is read where gstack-autoplan reads the next separate --plan, or the live work-tree scan and the copied state-root scan disagree on a deep run; why_new=the cross-family advisory read of the widened rule, which built each case; seam=commandLog, findRun, gatePending and armPlan; no_claim=a start that failed before it wrote run.json, archive tools (tar, unzip), and a recursive copy into the run folder that leaves run.json alone, which is refused anyway
+describe("the widened rule against the advisory read's cases", () => {
+  const V2 = RUN + "/plan-v2.md";
+  const REVISE = (plan: string, out = RUN) => BIN + " revise --out " + out + " --plan " + plan + " --incorporates r-d1";
+  const setup = (dir: string, input: string) => {
+    const work = join(dir, "work");
+    put(work, WORK, RUN, body({ status: "gate_pending", plan_input: input }));
+    writeFileSync(join(work, "plan.md"), "# Plan, amended\n");
+    if (input.startsWith(WORK + "/") && !input.endsWith("alias.md") && !input.endsWith("linked.md")) {
+      mkdirSync(join(work, input.slice(WORK.length), ".."), { recursive: true });
+      writeFileSync(join(work, input.slice(WORK.length)), "## Implementation plan\n# Plan, amended\n");
+    }
+    return work;
+  };
+
+  test("a run whose first planned start named another file does not count after a later next names plan.md", () =>
+    withDir((dir) => {
+      const work = setup(dir, WORK + "/wrapped.md");
+      const t = tx([{ command: BIN + " next --out " + RUN + " --plan /work/app/notes.md --full" }, { command: REVISE("/work/app/wrapped.md") }, { command: BIN + " next --out " + RUN + " --plan /work/app/plan.md" }]);
+      expect(findRun([{ dir: work, seen: WORK }], t).run).toBeNull();
+      expect(gatePending(work, t)).toBe(false);
+      const planless = tx([{ command: BIN + " next --out " + RUN }, { command: SCAFFOLD }, { command: REVISE("/work/app/wrapped.md") }]);
+      expect(findRun([{ dir: work, seen: WORK }], planless).run?.seen).toBe(RUN + "/run.json");
+    }));
+
+  test("a run folder replaced by a recursive copy or rsync does not count", () =>
+    withDir((dir) => {
+      const work = setup(dir, V2);
+      for (const how of ["cp -r /work/app/save/. " + RUN + "/", "cp -a /work/app/save " + RUN, "rsync -a /work/app/save/ " + RUN + "/", "mv /work/app/save " + RUN]) {
+        const t = tx([{ command: SCAFFOLD }, { command: REVISE("$O/plan-v2.md".replace("$O", RUN)) }, { command: how }]);
+        expect([how, findRun([{ dir: work, seen: WORK }], t).run]).toEqual([how, null]);
+      }
+      const ok = tx([{ command: SCAFFOLD }, { command: "cp /work/app/plan.md " + RUN + "/" }, { command: REVISE(V2) }]);
+      expect(findRun([{ dir: work, seen: WORK }], ok).run?.seen).toBe(RUN + "/run.json");
+    }));
+
+  test("a plan_input reached through a symlink does not count, inside the tree or out of it, and the build then reads plan.md", () =>
+    withDir((dir) => {
+      const outside = join(dir, "outside.md");
+      writeFileSync(outside, "# Somewhere else\n");
+      for (const [name, target] of [["linked.md", outside], ["alias.md", "wrapped.md"]] as const) {
+        const input = WORK + "/" + name;
+        const work = setup(dir, input);
+        writeFileSync(join(work, "wrapped.md"), "## Implementation plan\n# Plan, wrapped\n");
+        rmSync(join(work, name), { force: true });
+        symlinkSync(target, join(work, name));
+        const t = tx([{ command: SCAFFOLD }, { command: REVISE(input) }]);
+        const f = findRun([{ dir: work, seen: WORK }], t);
+        expect([name, f.run]).toEqual([name, null]);
+        expect([name, gatePending(work, t)]).toEqual([name, false]);
+        expect(armPlan(work, "# Plan\n", f.run)).toEqual({ text: "# Plan, amended\n", from: "plan.md" });
+      }
+    }));
+
+  test("a start and a revise through the sandbox's GSTACK_STATE_ROOT are read, and a --plan=x token is skipped as gstack-autoplan skips it", () =>
+    withDir((dir) => {
+      const root = WORK + "/" + STATE_ROOT_DIR;
+      const sr = root + "/runs/r1";
+      const work = join(dir, "work");
+      const state = join(dir, "gstack-state");
+      for (const [d, seen] of [[work, WORK], [state, root]] as const) {
+        put(d, seen, sr, body({ status: "gate_pending", out: sr, plan_input: sr + "/wrapped.md" }));
+        writeFileSync(join(d, (sr + "/wrapped.md").slice(seen.length)), "## Implementation plan\n# Plan, amended\n");
+      }
+      const t = tx([{ command: BIN + ' next --out "$GSTACK_STATE_ROOT/runs/r1" --plan /work/app/plan.md --full' }, { command: BIN + ' revise --out "$GSTACK_STATE_ROOT/runs/r1" --plan "$GSTACK_STATE_ROOT/runs/r1/wrapped.md"' }]);
+      expect(findRun([{ dir: work, seen: WORK }], t).run?.seen).toBe(sr + "/run.json");
+      expect(findRun([{ dir: state, seen: root }], t).run?.seen).toBe(sr + "/run.json");
+      expect(gatePending(work, t)).toBe(true);
+      const w2 = setup(dir, WORK + "/wrapped.md");
+      const eq = tx([{ command: SCAFFOLD }, { command: BIN + " revise --out " + RUN + " --plan=/work/app/old.md --plan /work/app/wrapped.md" }]);
+      expect(findRun([{ dir: w2, seen: WORK }], eq).run?.seen).toBe(RUN + "/run.json");
+    }));
+
+  test("the live work-tree scan and the copied state-root scan agree on deep runs", () =>
+    withDir((dir) => {
+      const root = WORK + "/" + STATE_ROOT_DIR;
+      const work = join(dir, "work");
+      const state = join(dir, "gstack-state");
+      for (const sub of ["a/b/c/d/e/f/g/run", "a/b/c/d/e/f/g/h/i/j/k/l/run"]) {
+        const seen = root + "/" + sub;
+        put(work, WORK, seen, body({ out: seen }));
+        put(state, root, seen, body({ out: seen }));
+        const t = tx([{ command: BIN + " next --out " + seen + " --plan " + PLAN + " --full" }]);
+        const live = findRun([{ dir: work, seen: WORK }], t).run?.seen ?? null;
+        const copied = findRun([{ dir: state, seen: root }], t).run?.seen ?? null;
+        expect([sub, live]).toEqual([sub, copied]);
+        rmSync(work, { recursive: true, force: true });
+        rmSync(state, { recursive: true, force: true });
+      }
+      const shallow = root + "/a/b/c/d/e/f/g/run";
+      put(work, WORK, shallow, body({ out: shallow }));
+      expect(findRun([{ dir: work, seen: WORK }], tx([{ command: BIN + " next --out " + shallow + " --plan " + PLAN }])).run?.seen).toBe(shallow + "/run.json");
+    }));
+});
+
 // Value: protects=the run-record rule against the shell shapes a session writes: wrapper commands, command substitution, default expansion, child shells, subshell and subagent cwd, and interpreter code that only reads the record; fails_when=a real call in one of these shapes is missed, a read-only command refuses the record, an edit through env, eval or a child shell is missed, a call that only asks for help counts, or a cd in a subshell or a subagent moves the main agent's folder; why_new=the cross-family advisory read of the rule, which reproduced each shape; seam=commandLog through findRun; no_claim=a full shell, so a write through a path the code builds at run time is not seen
 describe("the command log's shell shapes", () => {
   const C = BIN + " next --out " + RUN + " --plan " + PLAN + " --full";

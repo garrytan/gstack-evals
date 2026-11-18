@@ -1,18 +1,22 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // What a gstack arm session actually ran (prereg section 8, R48's procedure gate), read from autoplan's own run record,
 // never from what the model said.
-// - The run (pin change 2, item A): a run.json anywhere in the session's work tree, the state root included, counts
-//   only when the session's own command log holds the gstack-autoplan call that wrote it, a next or run call whose
-//   --out is that run.json's folder and whose --plan is /work/app/plan.md, and the record's plan_input is
-//   /work/app/plan.md or (rep 3 of the smoke) a file inside that folder or /work/app that the session's own
-//   gstack-autoplan revise call with the same --out named as its --plan. A record that the command log touched any
-//   other way is hand-edited and never counts: a Write, Edit, MultiEdit or NotebookEdit call on it, a shell redirect
-//   into it, tee, sed -i, cp, mv, install, ln, dd or truncate onto it, or an interpreter's inline code that opens it
-//   for writing (a target the code builds at run time counts every run.json the code names). Of the records that count, the latest updated_at wins. Exposure and the live
-//   gate check (gatePending) read this one record. The scan never follows a symlink, as the copy-out does not.
-// - The command log is every Bash call in the transcript, subagents included, read as shell: variables a command sets
-//   are expanded (with ${X:-default}), ~ is HOME, wrappers (env, command, exec, nohup, time, timeout, sudo, nice) are
-//   stripped, and command substitutions, eval and bash or sh -c strings are read as commands too. A relative path
+// - The run (pin change 2, item A): a run.json anywhere in the session's work tree, the state root included, down to
+//   12 folders below /work/app, counts only when the session's own command log holds the gstack-autoplan call that
+//   wrote it: the first next or run call whose --out is that run.json's folder and that names a --plan names
+//   /work/app/plan.md. The record's plan_input is /work/app/plan.md or (rep 3 of the smoke) a regular file, reached
+//   through no symlink, inside that folder or /work/app that the session's own gstack-autoplan revise call with the
+//   same --out named as its --plan. Flags are read as gstack-autoplan reads them: the first separate --out or --plan.
+//   A record that the command log touched any other way is hand-edited and never counts: a Write, Edit, MultiEdit or
+//   NotebookEdit call on it, a shell redirect into it, tee, sed -i, cp, mv, install, ln, dd or truncate onto it, a
+//   recursive copy, mv or rsync onto a folder above it, or an interpreter's inline code that opens it for writing (a
+//   target the code builds at run time counts every run.json the code names). Of the records that count, the latest
+//   updated_at wins. Exposure and the live gate check (gatePending) read this one record. The scan never follows a
+//   symlink, as the copy-out does not.
+// - The command log is every Bash call in the transcript, subagents included, read as shell: variables a command sets,
+//   and HOME, GSTACK_STATE_ROOT and GSTACK_HOME as the sandbox sets them, are expanded (with ${X:-default}), ~ is
+//   HOME, wrappers (env, command, exec, nohup, time, timeout, sudo, nice) are stripped, and command substitutions,
+//   eval and bash or sh -c strings are read as commands too. A relative path
 //   resolves against the folder the last cd left in that agent's shell (/work/app at first); a cd inside a subshell,
 //   a substitution or a child shell does not leave it.
 // - Exposed: the run's status is complete (the gate was answered and applied); CEO and Eng closed; Design closed or
@@ -31,6 +35,7 @@
 import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, join, posix, relative, sep } from "node:path";
 import { readTranscript } from "../../src/trial/review/readers.ts";
+import { STATE_ROOT_DIR } from "../../src/trial/state-root.ts";
 
 export const WORK = "/work/app";
 export const PLAN = WORK + "/plan.md";
@@ -68,11 +73,11 @@ export interface RunSearch {
   passed: string[];
 }
 
-/** Every run.json under dir, with its parsed body. */
-function runs(dir: string): { path: string; body: any }[] {
+/** Every run.json under dir, a root the session saw at seen, down to 12 folders below /work/app wherever the root starts. */
+function runs(dir: string, seen: string): { path: string; body: any }[] {
   const out: { path: string; body: any }[] = [];
   const walk = (d: string, depth: number) => {
-    if (depth > 8 || !existsSync(d)) return;
+    if (depth > 12 || !existsSync(d)) return;
     let names: string[];
     try {
       names = readdirSync(d);
@@ -94,8 +99,22 @@ function runs(dir: string): { path: string; body: any }[] {
       }
     }
   };
-  walk(dir, 0);
+  walk(dir, seen.startsWith(WORK + "/") ? seen.slice(WORK.length + 1).split("/").length : 0);
   return out;
+}
+
+/** The host path of a session path inside one of the roots, when it is a regular file reached through no symlink. */
+function regularFile(roots: RunRoot[], p: string): string | null {
+  for (const r of roots) {
+    if (!p.startsWith(r.seen + "/")) continue;
+    const host = join(r.dir, p.slice(r.seen.length));
+    try {
+      if (statSync(host).isFile() && realpathSync(host) === join(realpathSync(r.dir), p.slice(r.seen.length))) return host;
+    } catch {
+      continue;
+    }
+  }
+  return null;
 }
 
 type Piece = { t: string; q: boolean; sub?: string };
@@ -278,7 +297,16 @@ export interface CommandLog {
   calls: { verb: string; out: string | null; plan: string | null }[];
   /** Every path the log wrote other than through gstack-autoplan. */
   writes: Set<string>;
+  /** Every folder a recursive copy, mv or rsync may have filled or replaced; a record under one is edited by hand. */
+  trees: Set<string>;
 }
+
+/** What the sandbox sets before the session's first command (src/trial/state-root.ts and the agent's HOME). */
+const SANDBOX_ENV: [string, string][] = [
+  ["HOME", HOME],
+  ["GSTACK_STATE_ROOT", WORK + "/" + STATE_ROOT_DIR],
+  ["GSTACK_HOME", WORK + "/" + STATE_ROOT_DIR],
+];
 
 interface Ctx {
   cwd: string;
@@ -287,7 +315,7 @@ interface Ctx {
 
 /** The session's command log under the rule above. */
 export function commandLog(transcript: string): CommandLog {
-  const log: CommandLog = { calls: [], writes: new Set() };
+  const log: CommandLog = { calls: [], writes: new Set(), trees: new Set() };
   const child = (c: Ctx): Ctx => ({ cwd: c.cwd, env: new Map(c.env) });
   const simple = (raw: Piece[][], ctx: Ctx, depth: number) => {
     const ws: string[] = [];
@@ -328,11 +356,8 @@ export function commandLog(transcript: string): CommandLog {
       if (c >= 0 && args[c + 1] !== undefined) shell(args[c + 1]!, child(ctx), depth + 1);
     } else if (name === "gstack-autoplan") {
       const flag = (f: string) => {
-        for (let j = 0; j < args.length; j++) {
-          if (args[j] === f) return args[j + 1] ?? null;
-          if (args[j]!.startsWith(f + "=")) return args[j]!.slice(f.length + 1);
-        }
-        return null;
+        const i = args.indexOf(f);
+        return i >= 0 ? (args[i + 1] ?? null) : null;
       };
       const out = flag("--out");
       const plan = flag("--plan");
@@ -341,8 +366,15 @@ export function commandLog(transcript: string): CommandLog {
       for (const p of paths) log.writes.add(at(p));
     } else if (["cp", "mv", "install", "ln"].includes(name) && paths.length > 1) {
       const to = paths[paths.length - 1]!;
+      const whole = name === "mv" || (name === "cp" && args.some((a) => /^(-[a-zA-Z]*[rRa][a-zA-Z]*|--recursive|--archive)$/.test(a)));
       log.writes.add(at(to));
-      for (const from of paths.slice(0, -1)) log.writes.add(at(posix.join(to, posix.basename(from))));
+      for (const from of paths.slice(0, -1)) {
+        const into = at(posix.join(to, posix.basename(from)));
+        log.writes.add(into);
+        if (whole && !/\.\w+$/.test(from)) log.trees.add(at(to)).add(into);
+      }
+    } else if (name === "rsync" && paths.length > 1) {
+      log.trees.add(at(paths[paths.length - 1]!));
     } else if (name === "dd") {
       for (const a of args) if (a.startsWith("of=")) log.writes.add(at(a.slice(3)));
     } else if (INTERPRETERS.has(name)) {
@@ -384,7 +416,7 @@ export function commandLog(transcript: string): CommandLog {
     const agent = String(m.parent_tool_use_id ?? "");
     for (const b of m.message.content as Record<string, any>[]) {
       if (b?.type !== "tool_use") continue;
-      const ctx: Ctx = { cwd: cwds.get(agent) ?? WORK, env: new Map() };
+      const ctx: Ctx = { cwd: cwds.get(agent) ?? WORK, env: new Map(SANDBOX_ENV) };
       if (EDITS.includes(b.name)) {
         const p = b.input?.file_path ?? b.input?.notebook_path;
         if (typeof p === "string") log.writes.add(posix.resolve(ctx.cwd, p));
@@ -404,7 +436,7 @@ export function findRun(roots: RunRoot[], transcript: string): RunSearch {
   const ok: FoundRun[] = [];
   const passed: string[] = [];
   for (const root of roots) {
-    for (const r of runs(root.dir)) {
+    for (const r of runs(root.dir, root.seen)) {
       const s = posix.join(root.seen, relative(root.dir, r.path).split(sep).join("/"));
       if (seen.has(s)) continue;
       seen.add(s);
@@ -413,15 +445,19 @@ export function findRun(roots: RunRoot[], transcript: string): RunSearch {
       const revised =
         typeof input === "string" &&
         (input.startsWith(folder + "/") || input.startsWith(WORK + "/")) &&
-        log.calls.some((c) => c.verb === "revise" && c.out === folder && c.plan === input);
+        log.calls.some((c) => c.verb === "revise" && c.out === folder && c.plan === input) &&
+        regularFile(roots, input) !== null;
+      const start = log.calls.find((c) => STARTS.has(c.verb) && c.out === folder && c.plan !== null);
       const why =
         input !== PLAN && !revised
-          ? "plan_input " + JSON.stringify(input ?? null) + ", not " + PLAN + " or a file inside " + folder + " or " + WORK + " that the session's own gstack-autoplan revise --out " + folder + " --plan named"
-          : !log.calls.some((c) => STARTS.has(c.verb) && c.out === folder && c.plan === PLAN)
+          ? "plan_input " + JSON.stringify(input ?? null) + ", not " + PLAN + " or a regular file inside " + folder + " or " + WORK + " that the session's own gstack-autoplan revise --out " + folder + " --plan named"
+          : start === undefined
             ? "no gstack-autoplan next or run call with --out " + folder + " and --plan " + PLAN + " in the session's command log"
-            : log.writes.has(s)
-              ? "edited by hand in the session's command log"
-              : null;
+            : start.plan !== PLAN
+              ? "the first gstack-autoplan next or run call with --out " + folder + " and a --plan names " + start.plan + ", not " + PLAN
+              : log.writes.has(s) || [...log.trees].some((t) => s.startsWith(t + "/"))
+                ? "edited by hand in the session's command log"
+                : null;
       if (why) passed.push(s + ": " + why);
       else ok.push({ path: r.path, seen: s, root, body: r.body });
     }
@@ -475,9 +511,8 @@ export function armPlan(out: string, base: string | null, run: FoundRun | null):
   };
   const input = run?.body?.plan_input;
   if (run && typeof input === "string" && input !== PLAN) {
-    const t =
-      (input.startsWith(run.root.seen + "/") ? within(run.root.dir, join(run.root.dir, input.slice(run.root.seen.length))) : "") ||
-      (input.startsWith(WORK + "/") ? within(out, join(out, input.slice(WORK.length))) : "");
+    const p = regularFile([run.root, { dir: out, seen: WORK }], input);
+    const t = p ? read(p) : "";
     if (t.trim()) return { text: t, from: "autoplan" };
   }
   const plan = read(join(out, "plan.md"));
