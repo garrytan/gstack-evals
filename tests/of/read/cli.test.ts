@@ -140,7 +140,7 @@ describe("of stage2 and of headline", () => {
     const dir = join(root, "launch-" + cell);
     mkdirSync(dir, { recursive: true });
     const path = join(dir, "manifest.json");
-    freezeManifest(path, { schema: 1, cell, models: [...MODELS], arms: ["none", "lens", "office-hours"], repairs: [], units: {}, entries: [...entries] });
+    freezeManifest(path, { schema: 1, cell, models: [...MODELS], arms: ["none", "lens", "office-hours"], repairs: [], units: {}, sim_rules: "s0", entries: [...entries] });
     writeFileSync(join(dir, "stops.json"), JSON.stringify({ stops: [], unrun: [] }) + "\n");
     return path;
   };
@@ -184,7 +184,7 @@ describe("of stage2 and of headline", () => {
     const dir = join(root, "launch-no-stops");
     mkdirSync(dir, { recursive: true });
     const path = join(dir, "manifest.json");
-    freezeManifest(path, { schema: 1, cell: "stage2", models: [...MODELS], arms: ["none", "lens", "office-hours"], repairs: [], units: {}, entries: [...s2.manifest] });
+    freezeManifest(path, { schema: 1, cell: "stage2", models: [...MODELS], arms: ["none", "lens", "office-hours"], repairs: [], units: {}, sim_rules: "s0", entries: [...s2.manifest] });
     const a = args(join(root, "s2-no-stops"));
     a[a.indexOf(primary)] = path;
     const r = await run("stage2", a);

@@ -87,6 +87,8 @@ export interface RunInput {
   models: readonly ModelId[];
   arms: readonly ArmId[];
   repairs: readonly Repair[];
+  /** The sha256 of the simulator rules the founder turns run under (sim/founder.ts rulesSha256); the manifest freezes it. */
+  simRules: string;
   allowances: Allowances;
   /** Micro-dollars this launch may spend on the runs item and on the simulator item. */
   cap: number;
@@ -228,7 +230,7 @@ export async function runCells<C>(o: RunInput, deps: RunDeps<C>): Promise<RunRes
 export async function runSchedule<C>(o: RunInput & { entries: ManifestEntry[] }, deps: RunDeps<C>): Promise<RunResult> {
   const entries = o.entries;
   const meta = new Map<string, UnitMeta>(loadUnits(o.unitsDir).map((u) => [u.id, u]));
-  const manifest: Manifest = { schema: 1, cell: o.cell, models: [...o.models], arms: [...o.arms], repairs: [...o.repairs], units: Object.fromEntries([...new Set(entries.map((e) => e.unit))].sort().map((id) => [id, contentDigest(o.unitsDir, id)])), entries };
+  const manifest: Manifest = { schema: 1, cell: o.cell, models: [...o.models], arms: [...o.arms], repairs: [...o.repairs], units: Object.fromEntries([...new Set(entries.map((e) => e.unit))].sort().map((id) => [id, contentDigest(o.unitsDir, id)])), sim_rules: o.simRules, entries };
   mkdirSync(o.out, { recursive: true });
   const stopsFile = join(o.out, "stops.json");
   const before = existsSync(stopsFile) ? (JSON.parse(readFileSync(stopsFile, "utf8")) as { stops: RunResult["stops"]; earlier?: RunResult["stops"] }) : null;

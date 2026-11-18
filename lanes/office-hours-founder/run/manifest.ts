@@ -13,8 +13,8 @@
 // units in draw order; stage 2, the pitch cell and the real stratum take them in one seeded order (seed 20261109). Rounds
 // run pass by pass, then 4-unit group by group, then model by model (Opus, Sol, particle-1), then kind.
 // Before a cell's first lease its manifest is frozen to <out>/manifest.json with the sha256 of its body: every entry, the
-// models and arms the launch kept, the repairs in force and each unit's digest. A later launch on the same out dir must
-// match it byte for byte, or it is refused before any lease.
+// models and arms the launch kept, the repairs in force, each unit's digest and the simulator rules' sha256. A later
+// launch on the same out dir must match it byte for byte, or it is refused before any lease.
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -116,6 +116,8 @@ export interface Manifest {
   repairs: Repair[];
   /** Each unit's content digest (contentDigest over its files) at freeze time. */
   units: Record<string, string>;
+  /** The sha256 of the simulator rules in force (sim/founder.ts rulesSha256): section 4's prompt, or the sim-prompt repair's file. */
+  sim_rules: string;
   entries: ManifestEntry[];
 }
 
@@ -135,7 +137,7 @@ export function freezeManifest(path: string, m: Manifest): { sha256: string; wro
     return { problem: path + " is not JSON" };
   }
   if (!frozen.manifest || frozen.sha256 !== manifestSha256(frozen.manifest)) return { problem: path + "'s sha256 does not match its body, so the frozen manifest was changed after it froze" };
-  if (frozen.sha256 !== sha) return { problem: path + " froze manifest " + frozen.sha256 + ", and this launch schedules " + sha + " (cell, models, arms, repairs, unit digests or entries differ)" };
+  if (frozen.sha256 !== sha) return { problem: path + " froze manifest " + frozen.sha256 + ", and this launch schedules " + sha + " (cell, models, arms, repairs, unit digests, simulator rules or entries differ)" };
   return { sha256: sha, wrote: false };
 }
 

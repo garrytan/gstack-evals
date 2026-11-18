@@ -78,7 +78,7 @@ describe("rounds", () => {
 });
 
 describe("freeze", () => {
-  const m: Manifest = { schema: 1, cell: "smoke", models: ["opus"], arms: ["lens"], repairs: [], units: { a: "d0" }, entries: [{ stage: 1, kind: "arm", unit: "a", model: "opus", arm: "lens", pass: 1 }] };
+  const m: Manifest = { schema: 1, cell: "smoke", models: ["opus"], arms: ["lens"], repairs: [], units: { a: "d0" }, sim_rules: "s0", entries: [{ stage: 1, kind: "arm", unit: "a", model: "opus", arm: "lens", pass: 1 }] };
 
   test("freezes once, then matches the same schedule and refuses another", () => {
     const path = join(root, "m1.json");

@@ -15,6 +15,7 @@
 //   the ledger refusing the reserve (CAP_STOP), a cap stop; any other failed call is a provider failure. The run side
 //   scores an allowance refusal and a check failure as missing, ends the launch on a cap stop and stops the simulator's
 //   items on a drift.
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { chatPrice, openRouterRouting, priceRequest, reservationMicros } from "../../../src/runner/pricing/prices.ts";
@@ -41,6 +42,9 @@ export const FOUNDER_RULES = [
   "",
   "Reply with a JSON object only: {\"reply\": \"<what you say>\", \"revealed\": [\"<fact id>\", ...], \"rules\": [<the rule numbers you applied>]}. List in revealed every hidden fact your reply states or clearly implies, and no other.",
 ].join("\n");
+
+/** The sha256 of the simulator rules in force, which a launch's frozen manifest binds. */
+export const rulesSha256 = (rules: string = FOUNDER_RULES): string => createHash("sha256").update(rules).digest("hex");
 
 /** Section 4's call settings for every simulator call. */
 export const SIM_CALL = { model: "gemini", effort: "medium", temperature: 0, seed: SEED, maxTokens: 1200 } as const;

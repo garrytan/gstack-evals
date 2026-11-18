@@ -1,13 +1,14 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // Value: protects=the run loop's records and stops: every ended session writes one row that parses and holds together, a cap stop writes no row and starts nothing more, a halt writes its row as missing and stops the launch, and a resumed launch reconciles an attempt that has a marker and no row as an infrastructure failure before its retry; fails_when=a cap-stopped session gets a row or a retry, a halt lets new sessions start, or a crashed attempt is run again from scratch or forgotten; why_new=the run area's run loop; seam=runSchedule with a scripted launch, readRows, rowProblems, rowsReport; no_claim=the Docker launch, which the e2e covers
 import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { BLOCK_REPLY, scriptedRun } from "../../../lanes/office-hours-founder/run/seams.ts";
 import { contentDigest, readManifest, type Manifest } from "../../../lanes/office-hours-founder/run/manifest.ts";
 import { readRows, rowProblems, rowsReport } from "../../../lanes/office-hours-founder/run/rows.ts";
 import { meterSlot } from "../../../lanes/office-hours-founder/run/run.ts";
-import { SIM_CALL, worstCase } from "../../../lanes/office-hours-founder/sim/founder.ts";
+import { FOUNDER_RULES, SIM_CALL, worstCase } from "../../../lanes/office-hours-founder/sim/founder.ts";
 import type { ManifestEntry } from "../../../lanes/office-hours-founder/types.ts";
 import type { Meter } from "../../../lanes/product-value/meter.ts";
 
@@ -157,6 +158,13 @@ describe("resume", () => {
     const { out, ids } = await scriptedRun({ entries: all(["none"]), units: 2, scripts: new Map() });
     const units = join(dirname(out), "units");
     expect(readManifest(join(out, "manifest.json")).units).toEqual(Object.fromEntries(ids.map((id) => [id, contentDigest(units, id)])));
+  });
+
+  test("the frozen manifest binds the simulator rules' sha256, and a launch under other rules on its out dir is refused", async () => {
+    const first = await scriptedRun({ entries: all(["none"]), units: 1, scripts: new Map() });
+    expect(readManifest(join(first.out, "manifest.json")).sim_rules).toBe(createHash("sha256").update(FOUNDER_RULES).digest("hex"));
+    const other = createHash("sha256").update("other rules").digest("hex");
+    await expect(scriptedRun({ entries: all(["none"]), units: 1, scripts: new Map(), out: first.out, simRules: other })).rejects.toThrow(/E_USAGE/);
   });
 
   test("a launch whose schedule differs from the frozen manifest is refused", async () => {
