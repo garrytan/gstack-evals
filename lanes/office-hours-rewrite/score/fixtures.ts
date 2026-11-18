@@ -75,9 +75,10 @@ export function stubCaller(o: { garble?: number; skip?: (blockText: string) => b
       garbled++;
       return { text: "not json", model_id: "stub-" + req.judge, version: "v1", problem: null };
     }
-    const call = /^Call: (.*)$/m.exec(req.prompt)![1]!;
-    const actions = [...req.prompt.matchAll(/^Action \d+: (.*)$/gm)].map((m) => m[1]!);
-    const labels = [...req.prompt.matchAll(/^Block (\S+)\nDECISION: (.*)\nNEXT ACTION: (.*)\nWHY: .*$/gm)]
+    const packet = req.prompt.slice(req.prompt.lastIndexOf("KEY ITEMS\nCall: "));
+    const call = /^Call: (.*)$/m.exec(packet)![1]!;
+    const actions = [...packet.matchAll(/^Action \d+: (.*)$/gm)].map((m) => m[1]!);
+    const labels = [...packet.matchAll(/^Block (\S+)\nDECISION: (.*)\nNEXT ACTION: (.*)\nWHY: .*$/gm)]
       .filter((m) => !o.skip?.(m[2]! + " " + m[3]!))
       .map((m) => ({ block: m[1], decision: m[2] === call, action: actions.includes(m[3]!) }));
     return { text: JSON.stringify({ labels }), model_id: "stub-" + req.judge, version: "v1", problem: null };
