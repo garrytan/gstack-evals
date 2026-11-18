@@ -410,6 +410,16 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_B1_PIN](#e_b1_pin) | 2 | U20 |
 | [E_B1_INPUT](#e_b1_input) | 2 | U20 |
 | [E_B1_LAUNCH](#e_b1_launch) | 2 | U20 |
+| [E_OHR_READ_INPUT](#e_ohr_read_input) | 2 | U20 |
+| [E_OHR_READ_POWER](#e_ohr_read_power) | 2 | U20 |
+| [E_OHR_PACKET_INPUT](#e_ohr_packet_input) | 2 | U20 |
+| [E_OHR_ID_CLASH](#e_ohr_id_clash) | 2 | U20 |
+| [E_OHR_JUDGE_INPUT](#e_ohr_judge_input) | 2 | U20 |
+| [E_OHR_LABEL_MISSING](#e_ohr_label_missing) | warning | U20 |
+| [E_OHR_JUDGE_CHECK_FAIL](#e_ohr_judge_check_fail) | 3 | U20 |
+| [E_OHR_JUDGE_CHECK_NO_READ](#e_ohr_judge_check_no_read) | 3 | U20 |
+| [E_OHR_MARKERS](#e_ohr_markers) | 2 | U20 |
+| [E_OHR_SCORE_INPUT](#e_ohr_score_input) | 2 | U20 |
 | [E_OHR_SIM_RULES](#e_ohr_sim_rules) | 2 | U20 |
 | [E_OHR_SIM_GUARD](#e_ohr_sim_guard) | 2 | U20 |
 | [E_OHR_SIM_CHECK](#e_ohr_sim_check) | 2 | U20 |
@@ -3171,6 +3181,62 @@ Fix: Take the line to the Captain before launching. A cap raise needs the Captai
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
 
+### E_OHR_READ_INPUT
+
+Office-hours rewrite eval (lanes/office-hours-rewrite/read): the readings refused their input. Two scored rows share a stage, brief, model and arm; one brief's rows disagree on its kind, cluster, set or traction flag; a G1 hand read names a session that is not a new-arm builder session or a detector hit has no hand read; an admission or decision input is missing a flag; or a statistic was asked for outside its range. The message names the row or flag.
+
+Fix: Fix the scorer's output or the named flag and run the reading again. Never edit a row by hand to make it read.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OHR_READ_POWER
+
+Office-hours rewrite eval (lanes/office-hours-rewrite/read/reread.ts): the rerun of the preregistration's power.py at stage 1's observed control rates (section 9) failed or printed something other than its JSON result.
+
+Fix: Run the printed command by hand (uv with power.py's pinned numpy and scipy), fix the environment, and rerun. power.py itself is frozen and is never edited.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OHR_PACKET_INPUT
+
+Office-hours rewrite eval (section 5): a packet build was refused before any judge call. A session row or answer names a brief outside the briefs, a brief's twin is missing, an unpaired brief has no wrong call for its near-miss row, two sessions of one arm share a brief and model, a scripted block does not parse, or a packets folder or map path sits inside the repository or the map sits inside the packets folder.
+
+Fix: Fix the named input or path and build again into a new folder. Never edit a sealed key to make it fit.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OHR_ID_CLASH
+
+Office-hours rewrite eval (section 5): a packet id or block id appears twice across the packet maps a stage uses, so a label could be joined to the wrong block.
+
+Fix: Rebuild the later map passing the earlier maps as taken, so its seeded ids skip every id they hold.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OHR_JUDGE_INPUT
+
+Office-hours rewrite eval (sections 5 and 12): a judge run or a judge check was refused. The judge prompt does not match its pinned sha256, a label map was asked for an effort other than medium, a packet in the map is missing from the folder, or the judge check got another judge's labels, labels at the wrong effort, labels for blocks its map does not hold, duplicate labels or a map that is not a check map.
+
+Fix: Run the command with the frozen prompt, the map's own effort and the judge's own labels. Never edit the prompt to match.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OHR_MARKERS
+
+Office-hours rewrite eval (sections 7, 11 and 12): a detector marker set was refused. Its pin is not current or new, its sha is not a full commit sha, a pattern list is empty, a pattern is not a string or does not compile, or a list holds an empty entry.
+
+Fix: Fix the marker file under lanes/office-hours-rewrite/score/markers. After stage 1 freezes the markers, a change needs a dated change to the plan.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OHR_SCORE_INPUT
+
+Office-hours rewrite eval (sections 5 and 8): the scorer was refused. A row names a brief outside the briefs, a block row has no label packet or carries no block, a session sits in two label packets or has two labels, a label came from a judge other than frozen.JUDGE_FOR or at an effort other than medium, or a map is not a label map.
+
+Fix: Score with the stage's label maps and the routed judge's medium-effort labels. A block row the packets left out means the packets were built from other rows; rebuild them.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
 ### E_OHR_SIM_RULES
 
 The office-hours rewrite eval's simulator rules text (pre-run change 1, item 4e) does not match frozen.SIM_RULES_SHA256 for the brief's kind, so no simulator call was sent.
@@ -3380,6 +3446,22 @@ An egress probe to a non-model host succeeded, so the trial network is not locke
 Fix: Fix the trial network so its only exit is the proxy, and run no trials until this passes.
 
 Exit 3. Side effects: Calibration sessions are charged; no task cell ran. Retry safe: yes. Resumable: no. Owner: U10.
+
+### E_OHR_JUDGE_CHECK_FAIL
+
+Office-hours rewrite eval (section 12): a judge failed its check. Kappa against gold is under 0.6 overall or on real session blocks, near-miss accuracy is under 0.8 or there is no near-miss cell, a stock row was credited or left unlabelled, or the check map holds no stock row. Admission A4 fails.
+
+Fix: Admission's one repair, by a dated change to the plan, under stage 1's remaining cap. The judge's production numbers do not count.
+
+Exit 3. Side effects: The check's metered spend stays on its lease. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_OHR_JUDGE_CHECK_NO_READ
+
+Office-hours rewrite eval (section 12): a judge's check could not be read. It has fewer than 40 gold outputs from 40 blocks, or a kappa has fewer than 10 gold cells of either class or is undefined. Admission A4 fails.
+
+Fix: Admission's one repair, by a dated change to the plan, under stage 1's remaining cap.
+
+Exit 3. Side effects: The check's metered spend stays on its lease. Retry safe: no. Resumable: no. Owner: U20.
 
 ## Warnings: attach to any verdict, never change the exit code
 
@@ -3764,5 +3846,13 @@ Warning. Owner: U20.
 Ask replay eval: an arm and model cell has more than 3% MISSING samples, so that model's decision rows read as inconclusive.
 
 Fix: None: report it with the MISSING counts by kind.
+
+Warning. Owner: U20.
+
+### E_OHR_LABEL_MISSING
+
+Office-hours rewrite eval (sections 5 and 12): a judge left a cell unlabelled after its one resend. In production the cell is null, so the session's R is null unless another part is 0; in the judge check the cell counts against the judge.
+
+Fix: Nothing to retry past the one resend. Read the count beside coverage in the results.
 
 Warning. Owner: U20.
