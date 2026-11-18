@@ -3466,6 +3466,24 @@ export const CODES = {
     resumable: true,
     owner: "U20",
   },
+  E_OHR_READ_INPUT: {
+    exit: 2,
+    meaning: "Office-hours rewrite eval (lanes/office-hours-rewrite/read): the readings refused their input. Two scored rows share a stage, brief, model and arm; one brief's rows disagree on its kind, cluster, set or traction flag; a G1 hand read names a session that is not a new-arm builder session or a detector hit has no hand read; an admission or decision input is missing a flag; or a statistic was asked for outside its range. The message names the row or flag.",
+    fix: "Fix the scorer's output or the named flag and run the reading again. Never edit a row by hand to make it read.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
+  },
+  E_OHR_READ_POWER: {
+    exit: 2,
+    meaning: "Office-hours rewrite eval (lanes/office-hours-rewrite/read/reread.ts): the rerun of the preregistration's power.py at stage 1's observed control rates (section 9) failed or printed something other than its JSON result.",
+    fix: "Run the printed command by hand (uv with power.py's pinned numpy and scipy), fix the environment, and rerun. power.py itself is frozen and is never edited.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
+  },
 } as const satisfies Record<string, CodeInfo>;
 
 export type ReasonCode = keyof typeof CODES;
