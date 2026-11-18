@@ -89,7 +89,7 @@ export const JUDGE_MODEL_KEYS: Readonly<Record<"astra" | "opus", string>> = { as
 export const JUDGE_EFFORT = "medium";
 export const GOLD_EFFORT = "max";
 
-/** Section 4 step 3: the four rules this plan adds to the founder lane's repaired simulator rules. */
+/** Section 4 step 3: the four rules this plan adds to the founder lane's repaired simulator rules (rules 11 to 14 in item 4e's files). */
 export const SIM_ADDED_RULES = [
   "Answer from the fact sheet whenever it covers the question, the goal or mode question included. Otherwise take the option the adviser marks as recommended.",
   "Decline optional extras in one line: a second opinion, founder resources, starting another review, a YC application.",
@@ -97,8 +97,20 @@ export const SIM_ADDED_RULES = [
   "Set done when the adviser has given advice and a next step and asks nothing that needs an answer.",
 ] as const;
 
-/** Pre-run change 1, item 4b: a reply logging more than two reveals is redrawn at most twice, then fails the guard. */
-export const REVEAL_GUARD = { max_reveals: 2, retries: 2 } as const;
+/**
+ * Pre-run change 1, item 4b: every check on a simulator reply (format, ids, length and this guard) shares one budget of
+ * three model calls. A resend adds the note for each failed check, then the attempt line, after the rules.
+ */
+export const REVEAL_GUARD = { max_reveals: 2, calls_per_reply: 3 } as const;
+export const REVEAL_NOTE = "Your last answer listed more than two facts in revealed. Reveal at most two hidden facts in one reply.";
+export const attemptLine = (n: number): string => "This is attempt " + n + " of " + REVEAL_GUARD.calls_per_reply + ".";
+
+/** Pre-run change 1, item 4e: the simulator's whole rules text per brief kind, attached to the change; the manifest binds each sha256. */
+export const SIM_RULES_FILES = { founder: "sim-rules-founder.txt", builder: "sim-rules-builder.txt" } as const;
+export const SIM_RULES_SHA256 = {
+  founder: "4e57be24062e90d7871162561b5749728e2e3f2d527e29532212e53d8874aa40",
+  builder: "8bf2b16592b3c3bb8fd56658e106298a988cfba57bb0c8d292d778ee2b8f9aff",
+} as const;
 
 /** Section 12 stage 3: the fixed-script simulator audit. */
 export const AUDIT = { sample: 80, pass_max_share: 0.05, no_read_below: 40, effort: "max", auditors: ["astra", "opus"] as const } as const;

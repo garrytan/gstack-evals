@@ -12,9 +12,11 @@ links:
   - wiki/plans/2026-11-17-geva-552-office-hours-rewrite-prereg/README.md
   - wiki/research/2026-11-17-geva-552-office-hours-intentions-inventory/README.md
 attachments:
-  - 739716fc82b608cc5538d699b4ce77664a232f9cc9f34aebf60c42707a18d3c7  pilot.py
-  - eeb382bc5581afa45b6e5e80f4fdf097836c69082a367d5c95b2fa7d6696d86a  pilot.txt
+  - 2ebf39be43cb58e5a161e291350579c75367287c92e5555f3779599d876ceb3b  pilot.py
+  - 64fcf9400f5ac0c956a2c95fff0a735377eaa6fc09f77c8d292ab25b470b7898  pilot.txt
   - a218f50a5b919cee1810bbf9e43b05fbfaf012393e3450934214f582e0ce8b85  pin-current.tsv
+  - 8bf2b16592b3c3bb8fd56658e106298a988cfba57bb0c8d292d778ee2b8f9aff  sim-rules-builder.txt
+  - 4e57be24062e90d7871162561b5749728e2e3f2d527e29532212e53d8874aa40  sim-rules-founder.txt
 ---
 
 # Pre-run change 1 to the office-hours rewrite eval: the current skill's pin, its inventory check and the run checklist
@@ -23,9 +25,9 @@ attachments:
 
 - The current arm runs gstack at fc5c285035b58ce0552d25cf7cb71749795b6d30, the commit gstack's office-hours content change is built on. The current skill's intentions inventory, read at da98d0a, holds there unchanged. The only cited file that moved is the founder-resource list, which left the skill's text for a lookup command.
 - The new arm waits for the content change's ready head. A later pre-run change pins it, adds the rewrite's inventory and re-checks the current pin, before stage 1. Authoring and the simulator audit never load either skill, so they may run first.
-- The run checklist is settled. Stage 1's cap covers one admission repair. A simulator reply that reveals too much is redrawn at most twice. Each arm's first message and the closing message are fixed byte for byte. The authoring pilot reads twin yield after 16 second-twin draws and, if that read is open, after 32. The plan's 4 pairs could never show a yield below the line.
+- The run checklist is settled. Stage 1's cap covers one admission repair. A simulator reply that reveals too much is redrawn at most twice. Each arm's first message, the closing message and the simulator's rules are fixed byte for byte, and builder briefs get a simulator that is not told it runs a startup. Only founder replies the adviser actually received count toward the right call. The authoring pilot reads twin yield after 16 second-twin draws and, if that read is open, after 32. The plan's 4 pairs could never show a yield below the line.
 
-This change governs where it and the preregistration differ. It changes no measure, arm, model, threshold or decision row.
+This change governs where it and the preregistration differ. It changes no scored measure, arm, model or decision-table row. It adds one condition to admission A3 (item 4b) and two descriptive checks to the report (item 4g).
 
 ## 1. The current pin
 
@@ -82,10 +84,10 @@ Paid calls at caps total $2,416, and all-in at caps is $2,766 against $2,800 app
 
 Section 12 adds a keyless guard that redraws any simulator reply whose log lists more than two revealed facts, with no bound. The bound:
 
-- A reply is redrawn at most twice. Each redraw sends the same request with one fixed note added after the simulator's rules, so a cached temperature-0 reply cannot come back.
-- If the third draw still lists more than two facts, the turn is a guard failure.
-- In the simulator audit, a guard-failed turn that the seeded sample draws counts as failed, as if both auditors marked it, and is not sent to them. The audit also fails when guard failures pass 5% of all script turns.
-- In an arm session, a guard failure is a simulator failure: the session takes its one retry and then scores missing (section 8).
+- Every check on a simulator reply shares one budget of three model calls a reply: the founder lane's format, id and length checks, and this guard. A resend adds, after the simulator's rules, the fixed note for each failed check and then the line "This is attempt N of 3.", so no two requests in one turn are the same and a cached temperature-0 reply cannot come back. The guard's note is: "Your last answer listed more than two facts in revealed. Reveal at most two hidden facts in one reply."
+- If the third call still lists more than two facts, the turn is a guard failure. If it fails another check, the turn is a check failure, as in the founder lane.
+- In the simulator audit, a guard-failed turn that the seeded sample draws counts as failed, as if both auditors marked it, and is not sent to them. Admission A3 also fails when guard failures pass 5% of all script turns. This is the one condition this change adds to admission.
+- In an arm session, a guard failure or a check failure is a simulator failure: the session takes its one retry and then scores missing (section 8).
 
 Spend stays bounded at three simulator calls a reply, at the founder lane's $0.0064 a reply, inside items 2, 3, 5 and 6.
 
@@ -116,6 +118,8 @@ WHY: up to three facts from our talk.
 
 When the founder sets done, the closing message replaces that founder reply. When the reply to it holds no block, it goes once more.
 
+Only delivered founder replies count. R1 reads revealed facts only from founder replies the adviser received before the first closing message. A founder reply the closing message replaced, and every draw the checks rejected, is logged apart and never counts toward R1, guardrail G3 or the 20-reply cap. The dry run plants a decisive fact that appears only in a replaced reply and only in a rejected draw, and checks that neither credits R1.
+
 ### 4d. An authoring pilot that can resolve its yield line
 
 Authoring fills inside its cap only when the second-twin yield is at least 0.244 (pilot.txt, from section 13's planning figures and the $251 cap less one $3.50 allowance). With the plan's 4 pairs, even 0 passing twins leaves the yield's upper bound at 0.40, above the line, so the pilot could stop authoring only on a point projection after no twin passed. The pilot is now:
@@ -125,9 +129,26 @@ Authoring fills inside its cap only when the second-twin yield is at least 0.244
 - Lower bound at or above the line: authoring continues, re-projected at the measured yield.
 - Upper bound below the line: authoring stops, and the measured numbers go to the Captain.
 - Otherwise authoring draws on to 32 second-twin draws and reads once more the same way. A read still open goes to the Captain.
-- Pilot briefs count toward the 110 placed briefs, and pilot pairs toward the 34, when no author prompt or screen changes after the pilot. If one changes, no pilot brief is placed.
+- Pilot briefs count toward the 110 placed briefs, and pilot pairs toward the 34, when no author prompt or screen changes after the pilot. If one changes, no pilot brief is placed. A placed pilot brief meets every section 3 rule any other brief meets: the same screens with their one rewrite, the same seals, the same type and skin quotas, and pairs placed only whole.
+- If the first twins and unpaired briefs alone would use up the cap at the pilot's measured cost per draw and first-pass rate, there is no line to read and authoring stops with the numbers.
 
-At the planning yield of 0.44, authoring continues in 0.85 of simulated pilots and stops to ask in 0.15. At 0.50 it continues in 0.95. At 0.20 it continues in 0.036 (pilot.txt, part B). A pilot that stops costs at most about 32 second-twin draws and their partners, inside item 1's cap. A low yield still fails closed through the cap and the supply rule.
+At the planning inputs ($1.04 a draw, a first-pass rate of 96 in 124), the line is 0.244, and at the planning yield of 0.44 authoring continues in 0.85 of simulated pilots and stops to ask in 0.15. At 0.50 it continues in 0.95. At 0.20 it continues in 0.036 (pilot.txt, part B). These shares hold the line at its planning value; the run recomputes it from measured inputs. A pilot that stops costs at most about 32 second-twin draws and their partners, inside item 1's cap. A low yield still fails closed through the cap and the supply rule.
+
+### 4e. The simulator's rules, byte for byte
+
+Section 4 keeps the founder lane's ten repaired rules and adds four. Two attachments hold the whole rules text the simulator gets, and the run binds each file's sha256 in its frozen manifest:
+
+- sim-rules-founder.txt, for founder briefs: the founder lane's repaired rules, then the four added rules as rules 11 to 14, then the format line.
+- sim-rules-builder.txt, for builder briefs. The founder lane's rule 9 says "You are building a startup, not a side project, a hobby or an internal project at a company." On a builder brief that rule fights the sheet and can push a builder session into startup mode, which section 7 scores as a builder harm. So the builder file changes two lines: the first line plays a builder with a project, and rule 9 says the builder works toward the goal the sheet states, not a startup, and gives that goal when asked. Every other line is the founder file's.
+
+The format line adds a done field, which rule 14 sets, and the harness reads it to send the closing message.
+
+### 4f. Two added descriptive checks
+
+The rewrite's inventory (wiki/research/2026-11-18-geva-553-office-hours-rewrite-intentions-inventory) reads two parts of its main intentions that section 11's compliance checks do not list. The report adds them as descriptive checks, never scored:
+
+- whether a startup-mode design doc carries a SUCCESS line when the founder has paid;
+- whether a new-arm founder session wrote the approved line to the profile as a commitment entry.
 
 ## 5. One seed
 
@@ -138,4 +159,4 @@ Every seeded draw, order and sample in the run (draw order, the stage 2 session 
 Each is pushed before the paid item it governs:
 
 - before authoring: the build commit every paid run pins;
-- before stage 1: the new pin (commit, VERSION and file hashes) at the content change's ready head, the rewrite's intentions inventory as its own post with any main intention section 6 neither scores nor lists added to the untested list, and a re-check of the current pin.
+- before stage 1: the new pin (commit, VERSION and file hashes) at the content change's ready head, and a re-check of the current pin. The rewrite's intentions inventory is already written at 0787a1e, the content change's head on 2026-11-17. If the ready head differs, that change diffs the two heads over office-hours/ and every helper the inventory cites, and amends the inventory by a new post. Any main intention section 6 neither scores nor lists then goes onto the untested list.

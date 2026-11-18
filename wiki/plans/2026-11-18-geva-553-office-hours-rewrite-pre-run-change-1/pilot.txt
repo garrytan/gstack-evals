@@ -1,6 +1,7 @@
 draws outside second twins: 98.2; second-twin draws the cap admits: 139.4
 yield threshold: 0.244 (cost at the threshold 247.50, cap less one allowance 247.50)
 authoring cost at yields 0.30, 0.44, 0.50: 220.35, 182.78, 173.12
+line at a measured 1.04 a draw and a first-pass rate of 0.30: None (None: the cap is used up before any second twin, so authoring stops)
 
 A. One read after n second-twin draws: share of runs reading go (lower bound at or above the threshold) and stop (upper bound below it)
 n    y=0.10 go/stop  y=0.15 go/stop  y=0.20 go/stop  y=0.24 go/stop  y=0.30 go/stop  y=0.35 go/stop  y=0.44 go/stop  y=0.50 go/stop
@@ -14,7 +15,7 @@ n    y=0.10 go/stop  y=0.15 go/stop  y=0.20 go/stop  y=0.24 go/stop  y=0.30 go/s
 
 Wilson bounds at n = 4: 0/4 upper 0.403; 4/4 lower 0.597
 
-B. Frozen two-step pilot: read after 16 second-twin draws; if open, draw to 32 and read once more; still open goes to the Captain
+B. Frozen two-step pilot: read after 16 second-twin draws; if open, draw to 32 and read once more; still open goes to the Captain. The line is held at its planning value 0.244
 yield  go     stop   Captain(open)  mean second-twin draws in the pilot
 0.10   0.001  0.682  0.317          23.8
 0.15   0.006  0.380  0.614          27.4

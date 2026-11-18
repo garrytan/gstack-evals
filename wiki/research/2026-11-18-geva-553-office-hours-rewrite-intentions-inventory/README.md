@@ -2,7 +2,7 @@
 id: 2026-11-18-geva-553-office-hours-rewrite-intentions-inventory
 kind: research
 title: What gstack's rewritten office-hours skill is meant to do, intention by intention, at a pinned commit
-summary: "The rewrite keeps the current skill's 10 main intentions, changes six, and adds eight: a reality check first, a dated memo for founders with no outcome, a pivot flow and a test follow-up."
+summary: "The rewrite keeps the current skill's 10 main intentions, changes eight, and adds eight: a reality check first, a dated memo for founders with no outcome, a pivot flow and a test follow-up."
 author: GEVA-553
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
@@ -16,7 +16,7 @@ links: [wiki/research/2026-11-17-geva-552-office-hours-intentions-inventory/READ
 ## Takeaways
 
 - We learned that the rewrite makes one new promise on top of the old one: before any advice, find out whether the startup has produced one real outcome, and if it hasn't, leave the founder with a one-page memo holding one dated, numbered action and a line that says when to change direction. You should score that promise by whether the session drew out the founder's real situation and ended with the call that situation supports, which is what the eval's primary measure does.
-- We learned that the rewrite keeps every main intention of the current skill. It changes six of them (the deliverable can now be a memo, the action now carries a date and a number, and memo sessions skip the second opinion, the landscape search, the visual step and the spec review), and adds eight main ones. You should read the current skill's inventory first and this one as its difference.
+- We learned that the rewrite keeps every main intention of the current skill. It changes eight of them (the evidence questions go deeper, the deliverable can now be a memo, the action now carries a date and a number, and memo sessions skip the second opinion, the landscape search, the visual step and the spec review), and adds eight main ones. You should read the current skill's inventory first and this one as its difference.
 - We learned that builder mode is byte-identical, so any builder harm would have to come from shared text: the mode question's new Pivot option, the closing, or a startup question leaking into a builder session. You should keep the builder guardrails as frozen.
 
 ## Commit and files read
@@ -25,7 +25,7 @@ Pinned at garrytan/gstack 0787a1e01f2d847f8e915a680e7f6afec777be88, the head of 
 
 This read is provisional on the head. If the content change's ready head differs, the pre-run change that pins it diffs 0787a1e against that head and amends this post before the results merge.
 
-Citation keys (paths relative to the gstack repo root; line numbers at 0787a1e): T = office-hours/SKILL.md.tmpl; 2A = office-hours/sections/phase-2a-startup-diagnostic.md.tmpl; 2C = office-hours/sections/phase-2c-pivot-discovery.md.tmpl; LS = office-hours/sections/landscape.md.tmpl; DH = office-hours/sections/design-and-handoff.md.tmpl; DP = bin/gstack-developer-profile. Each generated .md is its template plus a 2-line header, as in the current skill's inventory.
+Citation keys (paths relative to the gstack repo root; line numbers at 0787a1e): T = office-hours/SKILL.md.tmpl; 2A = office-hours/sections/phase-2a-startup-diagnostic.md.tmpl; 2C = office-hours/sections/phase-2c-pivot-discovery.md.tmpl; LS = office-hours/sections/landscape.md.tmpl; DH = office-hours/sections/design-and-handoff.md.tmpl; DP = bin/gstack-developer-profile. Every citation is to a template. For 2A, 2C and LS the generated .md is the template plus a 2-line header. T and DH expand resolvers, so their generated line numbers differ from the template's.
 
 | File | Bytes | sha256 | Read |
 |---|---|---|---|
@@ -72,24 +72,27 @@ Columns as in the current skill's inventory. **Status** says how the intention s
 | ID | Intention | S/I | Citation | What met looks like | Where | 1 session | This eval |
 |---|---|---|---|---|---|---|---|
 | N1 | Ask for ground truth first at every startup stage: one paying user, or one person who used it this week unasked, by name. Ask once more on a weak answer; skip only when the opening names a person and what they did or paid; never skipped by the escape hatch or a fully formed plan. | Stated | 2A:1-14, 2A:188; T:353 | The first startup question is the reality check, or the opening named a payer. A weak answer gets the conversation-count follow-up. | SESSION | yes | R1 for the check; the skip is untested (no opening names a payer) |
-| N2 | A founder with no real outcome, or deciding a pivot, gets a one-page decision memo: what we learned, the decision, one action with a date and a number, a KILL/CONTINUE line, the first week. Every startup session also ends with a dated test: KILL/CONTINUE with no payment yet, SUCCESS with a date when there is traction. | Stated | 2A:11; 2C:28-30; DH:174-207; T:351-352 | A memo file with Status, The decision, The one action (a date and a number) and a KILL/CONTINUE line; a SUCCESS line in a traction founder's design doc. | DOC | yes | R2 and R3 for content; the format, kill and success lines are reported compliance checks |
-| N3 | Keep the design doc for builders and for founders with a real outcome; a named payer or user is never sent to the memo route because they have talked to few people. | Stated | 2A:11; T:112; DH:109-113 | Traction founders and builders get a design doc, not a memo. | DOC | yes | compliance check; builder kept-whole decides |
+| N2 | A founder with no real outcome, or deciding a pivot, gets a one-page decision memo: what we learned, the decision, one action with a date and a number, a KILL/CONTINUE line, the first week. Every startup session also ends with a dated test, keyed to payment: KILL/CONTINUE when nobody has paid yet (a founder with a user but no payer included), SUCCESS with a date once someone has paid. | Stated | 2A:11; 2C:28-30; DH:174-207; T:351-352 | A memo file with Status, The decision, The one action (a date and a number) and a KILL/CONTINUE line; in a design doc, a SUCCESS line when someone has paid and a KILL/CONTINUE line otherwise. | DOC | yes | R2 and R3 for content; the format, kill and success lines are reported compliance checks |
+| N3 | Keep the design doc for builders and for founders with a real outcome (one paying user, or one person who used it this week unasked); a named payer or user is never sent to the memo route because they have talked to few people. A pivot goes to the memo route whatever the traction. | Stated | 2A:7, 2A:11; 2C:1; T:112 | Builders and non-pivot founders with a real outcome get a design doc, not a memo. | DOC | yes | compliance check; builder kept-whole decides |
 | N4 | A pivot flow that first asks whether the worry is love or size; on size, a ceiling check of reachable buyers times a defensible price against the founder's goal; then sunk cost out, a commitment test, churn as validation, a kill criterion and a landing signal. | Stated | 2C:3-14 | The love-or-size question asked first; a ceiling computed when the worry is size; the kill criterion in the memo. | SESSION; DOC | yes | T6 and T4 pairs |
 | N5 | Rank evidence on a ladder, and treat an unpriced LOI as almost nothing: ask for a priced contract or a payment link. | Stated | 2A:21 | The session asks whether a cited commitment carries a price or payment, and the decision follows the rung. | SESSION | yes | T2 pair |
-| N6 | Follow up on the founder's own test: record the approved kill or success line (a commitment entry in the profile), and open the next session on that project with it once its date has passed, applying the founder's own rule first. | Stated | 2A:3; DH:233-234; DH:246; DP:494-507 | The commitment entry written after approval; on return with KILL_DUE: yes, the first question is the founder's own test. | SESSION; AFTER (the return) | the return, with a seeded prior session | T8 |
+| N6 | Follow up on the founder's own test: record the approved kill or success line (a commitment entry in the profile), and open the next session on that project with it once its date arrives (on the due date itself, by UTC date), applying the founder's own rule first. | Stated | 2A:3; DH:233-234; DH:246; DP:494-507 | The commitment entry written after approval; on return with KILL_DUE: yes, the first question is the founder's own test. | SESSION; AFTER (the return) | the return, with a seeded prior session | T8 |
 | N7 | Push back on focus and hiring, and on pre-launch strategy and hand-built services posing as products, always leaving a concrete next action. | Stated | 2A:81-89; 2C:20-26 | Pushback on the anti-pattern, then a next action. | SESSION | yes | T5 and T7; launch anxiety and a consultancy in disguise appear only as opening surfaces |
 | N8 | Leave builders alone: builder mode's text is unchanged, and a builder merely stuck on a build stays in builder mode. | Implied | 2C:1; 2B unchanged | No startup-only question in a builder session; a builder design doc approved. | SESSION; DOC | yes | builder kept-whole and guardrail G1 |
 
-Counts: main 18 (the current skill's 10, six of them changed, plus N1 to N8).
+Counts: main 18 (the current skill's 10, eight of them changed, plus N1 to N8).
 
 ## Secondary intentions
 
-Unchanged from the current skill's inventory: S5 to S13, B2 to B5, X6 to X8, X12, X14, X16, X17, X19, X20, X22, X23, X25 to X28. Their readings stand, with the line moves the new sections cause.
+Unchanged from the current skill's inventory: S6 to S8, S11 to S13, B2 to B5, X7, X8, X12, X14, X16, X17, X19, X20, X22, X23, X25 to X28. Their readings stand, with the line moves the new sections cause.
 
 Changed:
 
 | ID | Change | Citation |
 |---|---|---|
+| S5 | The status-quo question also asks what users pay for the workaround today. | 2A:125 |
+| S9 | The reframe check runs after the first diagnostic answer, not the first Q1 answer, because Q1 may be skipped. | 2A:115 |
+| S10 | Pre-product routing skips Q1 when the reality check found no outcome, and the escape hatch never skips the reality check. | 2A:100, 2A:188 |
 | X6 | The goal question gains a seventh option, Pivot, which maps to startup mode and then runs the pivot flow. | T:105, T:111-112 |
 | X9 | The landscape search moved to its own section with the same text; memo sessions skip it. | T:171-181; LS:1-28; 2C:30 |
 | X10, X11, X13 | Memo sessions skip the second opinion, the visual step and the spec review. | 2C:30; DH:209 |
@@ -110,7 +113,7 @@ New:
 
 ## Conflicts and notes at this read
 
-- The kill check compares the commitment's date with today's date as a string (DP:506), so a seeded prior session must set its date in the past and its project slug to the slug the session computes, or the return path never fires.
+- The kill check compares the commitment's date with today's UTC date as a string and fires on the due date itself (DP:506), so a seeded prior session must set its date on or before the session's day and its project slug to the slug the session computes, or the return path never fires.
 - The memo template opens with Status: DRAFT, and the approval step that sets APPROVED is shared with the design doc. The success check still tests only that a non-empty file exists (T:331), so the current skill's note on DRAFT docs passing the check holds for memos too.
 - The kill or success line is required in startup and memo sessions (T:352), but the design doc template's section for it says KILL/CONTINUE when nobody has paid and SUCCESS otherwise (DH:112-113), while the memo template has only KILL/CONTINUE (DH:194-195). A pivot memo for a founder with paying customers therefore has no place for a SUCCESS line.
 - Smart routing now skips Q1 for pre-product founders when the reality check found no outcome (2A:100), and the memo route runs Q2 and Q3 (2A:11). The forcing-question count a memo session reaches is therefore lower by design, which the exposure definition (two questions, one at a time) still admits.
@@ -120,8 +123,8 @@ New:
 
 The preregistration's section 6 lists N1 to N8 from the rewrite's approved plan. This read confirms that list, with two amendments that change no measure:
 
-- N2 also covers the SUCCESS line in a traction founder's design doc. Section 11's compliance checks report it beside the kill line on no-outcome twins.
-- N6 also covers recording the approved line as a commitment entry. The compliance checks report whether a new-arm founder session wrote one.
+- N2 also covers the SUCCESS line in the design doc of a founder who has paying customers. Section 11 does not list it, so pre-run change 1 (item 4f) adds it as a descriptive check.
+- N6 also covers recording the approved line as a commitment entry. Pre-run change 1 (item 4f) adds whether a new-arm founder session wrote one as a descriptive check.
 
 The carried main intentions (S1 to S4, B1, X1 to X5) are read exactly as section 6 reads them for the current skill. No main intention here is left both unscored and unlisted. Section 6's untested list stands, and this read adds no main intention to it.
 
