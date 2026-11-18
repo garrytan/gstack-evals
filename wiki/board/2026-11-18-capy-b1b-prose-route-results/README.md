@@ -134,7 +134,7 @@ CLAUDE.md routing:
 - Power and headroom. The bar separates a route near 85% (which reaches it 89% of the time) from one near 70% (6%). At 20 of 60, with an upper bound of 45.9%, the block is far below both. There is no ceiling: B1's none arm followed the steps in 0 of 60.
 - Does the model do it unaided? No. B1's none arm never followed the steps, and B1's skill found only by its description never loaded.
 
-Verdict, CLAUDE.md routing as the way gstack starts a skill in an unattended Opus session: CUT-CANDIDATE. In plain words, gstack should stop relying on its CLAUDE.md routing block to start skills nobody types. On Opus it worked about one time in three, and when it didn't, Opus never mentioned the skill. The block here sat in the user's CLAUDE.md, not a project's, so the one test that could change this verdict is the same block in a project CLAUDE.md.
+Verdict, CLAUDE.md routing as the way gstack starts a skill in an unattended Opus session: CUT-CANDIDATE. In plain words, gstack should stop relying on its CLAUDE.md routing block to start skills nobody types. On Opus it worked about one time in three, and when it didn't, Opus never wrote its name in its text or in any tool call. The block here sat in the user's CLAUDE.md, not a project's, so the one test that could change this verdict is the same block in a project CLAUDE.md.
 
 gstack's hook as shipped:
 
