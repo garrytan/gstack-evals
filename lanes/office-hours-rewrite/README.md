@@ -26,8 +26,9 @@ simulator (src/persona-sim), the judge client, custody, and the paired statistic
 | score/ | The block parser, packets, the judge prompt and labeller, the judge check, the detectors and the scorer |
 | read/ | The cluster t interval, Newcombe's method 10 with the design effect, the missing limits, admission and the decision table |
 | wire.ts, cli.ts | How the areas connect to the metered client, and the `gstack-evals ohr` commands |
-| ledger.ts | The proposed split of each approved item cap into ledger items, and the check that each split fits |
-| dryrun.ts | The keyless dry run over every area's seams, the ledger split and one lease per ledger item |
+| ledger.ts | The split of each approved item cap into ledger items (pre-run change 4), and the schedule check that walks every launch's rounds against its items |
+| pinned.ts | The rule that a reply counts only when it names its pinned model, or a dated snapshot of it (pre-run change 4) |
+| dryrun.ts | The keyless dry run over every area's seams, the ledger split, the schedule check and one lease per ledger item |
 | e2e-score.ts | The keyless Docker end to end, then a planted scoring pass through score and read |
 | preflight.ts, vm-bootstrap.sh | Section 12's no-model preflight, and the setup of a fresh runner VM for it |
 

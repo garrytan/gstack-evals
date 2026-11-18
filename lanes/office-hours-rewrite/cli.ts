@@ -24,7 +24,7 @@ import { decide } from "./read/decision.ts";
 import type { HandRead } from "./read/guards.ts";
 import { leadTable, rates } from "./read/report.ts";
 import { rowsCommand, runCommand } from "./run/cli.ts";
-import { loadBriefs } from "./run/manifest.ts";
+import { buildCommit, loadBriefs } from "./run/manifest.ts";
 import { readRows } from "./run/rows.ts";
 import { parseBlock } from "./score/block.ts";
 import { judgeCheck, type CheckResult } from "./score/check.ts";
@@ -97,8 +97,8 @@ export function readBriefs(dir: string): Map<string, Brief> {
 /** Every row of the named launch folders. */
 export const launchRows = (dirs: readonly string[]): SessionRow[] => dirs.flatMap((d) => [...readRows(d).values()].map((l) => l.row));
 
-async function withWire<T>(o: { dir: string; item: string; cap: string | undefined; label: string; record?: string; ledger?: string; env: Env; io: Io; cmd: string }, body: (w: Wire) => Promise<T>): Promise<T> {
-  const w = await openWire({ dir: o.dir, item: o.item, capMicros: dollars(o.cap, "--spend-cap"), label: o.label, record: o.record, ledger: o.ledger, env: o.env, io: o.io });
+async function withWire<T>(o: { dir: string; item: string; cap: string | undefined; label: string; record?: string; ledger?: string; env: Env; io: Io; cmd: string; buildCommit?: string }, body: (w: Wire) => Promise<T>): Promise<T> {
+  const w = await openWire({ dir: o.dir, item: o.item, capMicros: dollars(o.cap, "--spend-cap"), label: o.label, record: o.record, ledger: o.ledger, env: o.env, io: o.io, buildCommit: o.buildCommit });
   try {
     return await body(w);
   } finally {
@@ -106,11 +106,11 @@ async function withWire<T>(o: { dir: string; item: string; cap: string | undefin
   }
 }
 
-const AUTHOR_USAGE = "gstack-evals ohr author --work <new dir under /dev/shm> --out <new sealed path> --recipients <age recipients file> --gstack <clone holding both pins> --item <ledger item> --spend-cap <usd> [--pilot-only] [--concurrency <n>] [--record <dir>] [--ledger <path>]";
+const AUTHOR_USAGE = "gstack-evals ohr author --work <new dir under /dev/shm> --out <new sealed path> --recipients <age recipients file> --gstack <clone holding both pins> --item <ledger item> --spend-cap <usd> [--concurrency <n>] [--record <dir>] [--ledger <path>]";
 
 /** ohr author: authorRun, then the placed briefs, every outcome and the judge check's answers sealed with age. */
 async function author(argv: string[], io: Io, env: Env): Promise<number> {
-  const f = flags(argv, { one: ["--work", "--out", "--recipients", "--gstack", "--item", "--spend-cap", "--concurrency", "--record", "--ledger"], bool: ["--pilot-only"] });
+  const f = flags(argv, { one: ["--work", "--out", "--recipients", "--gstack", "--item", "--spend-cap", "--concurrency", "--record", "--ledger"] });
   need(f, "ohr author", ["--work", "--out", "--recipients", "--gstack", "--item", "--spend-cap"]);
   const work = resolve(one(f, "--work")!);
   if (!work.startsWith(SHM + "/")) usage("--work " + work + " is not under " + SHM + "; plaintext briefs live only in memory-backed storage. Usage: " + AUTHOR_USAGE);
@@ -118,18 +118,17 @@ async function author(argv: string[], io: Io, env: Env): Promise<number> {
   const out = fresh("--out", one(f, "--out")!);
   const concurrency = Number(one(f, "--concurrency") ?? "4");
   if (!Number.isSafeInteger(concurrency) || concurrency < 1) usage("--concurrency is a whole number of at least 1");
-  const pilotOnly = f.has("--pilot-only");
   const screen = loadScreen(gitReader(resolve(one(f, "--gstack")!)));
   const cap = dollars(one(f, "--spend-cap"), "--spend-cap") / 1e6;
   return withWire({ dir: work + ".meter", item: one(f, "--item")!, cap: one(f, "--spend-cap"), label: "ohr-author", record: one(f, "--record"), ledger: one(f, "--ledger"), env, io, cmd: "ohr author" }, async (w) => {
-    const run = await authorRun({ call: w.call, label: labeller(w.judge), parse: parseBlock, screen, spent: w.spent }, { cap, concurrency, pilotOnly });
+    const run = await authorRun({ call: w.call, label: labeller(w.judge), parse: parseBlock, screen, spent: w.spent }, { cap, concurrency });
     const sink = openCustody(work, out);
     const summary = writeAuthoring(sink, run);
     writeSealed(sink, "authoring/check-answers.json", JSON.stringify(checkAnswers(run), null, 2) + "\n");
     sealCustody(sink, out, ageSealer(resolve(one(f, "--recipients")!)));
     io.out(JSON.stringify(summary, null, 2));
     io.out("ohr author: sealed to " + out + "; the meter's cache stays in " + work + ".meter");
-    const halt = haltOf(run, () => null, pilotOnly);
+    const halt = haltOf(run, () => null);
     if (halt) io.err(halt.message);
     return halt ? 2 : 0;
   });
@@ -147,9 +146,10 @@ async function audit(argv: string[], io: Io, env: Env): Promise<number> {
   if (!Number.isSafeInteger(parallel) || parallel < 1) usage("--parallel is a whole number of at least 1. Usage: " + AUDIT_USAGE);
   const sheets: AuditSheet[] = loadBriefs(dir).map((m) => ({ brief: m.id, kind: m.kind, sheet: loadPerson(join(dir, m.id), m.kind) }));
   if (!sheets.length) usage("--briefs-dir " + dir + " holds no briefs");
-  return withWire({ dir: out + ".meter", item: one(f, "--item")!, cap: one(f, "--spend-cap"), label: "ohr-audit", record: one(f, "--record"), ledger: one(f, "--ledger"), env, io, cmd: "ohr audit" }, async (w) => {
+  const commit = buildCommit();
+  return withWire({ dir: out + ".meter", item: one(f, "--item")!, cap: one(f, "--spend-cap"), label: "ohr-audit", record: one(f, "--record"), ledger: one(f, "--ledger"), env, io, cmd: "ohr audit", buildCommit: commit }, async (w) => {
     const rec = await runScriptAudit({ sheets, call: (s) => w.sim("audit:" + s.brief), auditors: { astra: w.auditor("astra"), opus: w.auditor("opus") }, parallel });
-    writeJson(out, rec);
+    writeJson(out, { ...rec, build_commit: commit });
     io.out("ohr audit: " + rec.sheets + " sheets, " + rec.script_turns + " script turns, " + rec.guard_failures + " guard failures, " + rec.audited + " audited, " + rec.failing + " failing, read " + rec.read);
     if (rec.code) io.err(rec.code + " ohr audit: " + rec.reasons.join("; "));
     return rec.read === "pass" ? 0 : 2;
@@ -189,7 +189,7 @@ async function score(argv: string[], io: Io, env: Env): Promise<number> {
     const map = readJson<PacketMap>(outside("--map", one(f, "--map")!));
     if (map.kind !== "label") usage("ohr score judges labels a label map; a check map goes through ohr judge-check");
     const packets = readPackets(outside("--packets", one(f, "--packets")!));
-    return withWire({ dir: out + ".meter", item: one(f, "--item")!, cap: one(f, "--spend-cap"), label: "ohr-labels-s" + map.stage, record: one(f, "--record"), ledger: one(f, "--ledger"), env, io, cmd: "ohr score judges" }, async (w) => {
+    return withWire({ dir: out + ".meter", item: one(f, "--item")!, cap: one(f, "--spend-cap"), label: "ohr-labels-s" + map.stage, record: one(f, "--record"), ledger: one(f, "--ledger"), env, io, cmd: "ohr score judges", buildCommit: buildCommit() }, async (w) => {
       const r = await judgePackets({ map, packets, call: w.judge, effort: JUDGE_EFFORT });
       writeFileSync(out, r.labels.map((l) => JSON.stringify(l)).join("\n") + "\n", { mode: 0o600 });
       io.out("ohr score judges: " + r.labels.length + " labels from " + r.calls.length + " calls");
@@ -251,7 +251,7 @@ async function judgeCheckCommand(argv: string[], io: Io, env: Env): Promise<numb
   }
   need(f, "ohr judge-check", ["--packets", "--item", "--spend-cap"]);
   const packets = readPackets(outside("--packets", one(f, "--packets")!));
-  return withWire({ dir: out + ".meter", item: one(f, "--item")!, cap: one(f, "--spend-cap"), label: "ohr-judge-check", record: one(f, "--record"), ledger: one(f, "--ledger"), env, io, cmd: "ohr judge-check" }, async (w) => {
+  return withWire({ dir: out + ".meter", item: one(f, "--item")!, cap: one(f, "--spend-cap"), label: "ohr-judge-check", record: one(f, "--record"), ledger: one(f, "--ledger"), env, io, cmd: "ohr judge-check", buildCommit: buildCommit() }, async (w) => {
     const probes = await probe(w);
     for (const p of probes) io.out("ohr judge-check: probe " + p.judge + " " + (p.ok ? "answered" : "failed") + " (" + p.model_id + ", " + (p.version ?? "no version") + ")");
     if (probes.some((p) => !p.ok)) {

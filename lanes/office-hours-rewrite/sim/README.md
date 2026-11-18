@@ -25,6 +25,9 @@ its fakeMeter. Nothing is copied.
   orders the sample, not the provider call.
 - In the audit, a script turn with no delivered reply ends that script, since later turns would answer a turn that
   never happened.
+- A cap stop ends the audit INCOMPLETE (CAP_STOP), and a simulator reply from another provider or model halts it
+  (E_PV_PROVIDER_DRIFT, or E_OHR_MODEL_DRIFT), as arm sessions halt their launch (pre-run change 4). Either one ends
+  every sheet's script at its next turn, so a drifted turn never drops out of the sample while the audit passes.
 - A sampled turn whose draws all failed a check counts as failed, like a guard failure (fail closed).
 - The guard share's denominator is the script turns that ran.
 - The audit sample is the auditable turns sorted by brief and turn, shuffled with SEED, first 80.

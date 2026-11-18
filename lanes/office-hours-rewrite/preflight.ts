@@ -33,8 +33,10 @@ export function pinSource(arm: SkillArm, sources: readonly string[]): { source: 
   for (const src of sources) {
     if (git(src, ["cat-file", "-e", pin.sha + "^{commit}"]).status !== 0) continue;
     const problems: string[] = [];
-    const version = git(src, ["show", pin.sha + ":VERSION"]).stdout.toString().trim();
+    const raw = git(src, ["show", pin.sha + ":VERSION"]).stdout;
+    const version = raw.toString().trim();
     if (version !== pin.version) problems.push("VERSION " + (version || "missing") + ", not " + pin.version);
+    else if (createHash("sha256").update(raw).digest("hex") !== pin.version_sha256) problems.push("VERSION " + createHash("sha256").update(raw).digest("hex").slice(0, 12));
     for (const [path, sha] of Object.entries(pin.files)) {
       const r = git(src, ["show", pin.sha + ":" + path]);
       const got = r.status === 0 ? createHash("sha256").update(r.stdout).digest("hex") : "missing";

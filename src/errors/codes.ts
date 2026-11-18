@@ -3787,6 +3787,15 @@ export const CODES = {
     resumable: true,
     owner: "U20",
   },
+  E_OHR_MODEL_DRIFT: {
+    exit: 2,
+    meaning: "Office-hours rewrite eval (pre-run change 4): a reply named a model other than the one its call pinned, or a dated snapshot of it. A judge, auditor or simulator reply stops its command; an arm session whose assistant messages name another model halts its launch and reads missing, so it is never counted.",
+    fix: "Keep the journal and the transcript that show the reported model, and send the question to the Captain. Never retry the item on another model or route.",
+    side_effects: PARTIAL,
+    retry_safe: false,
+    resumable: false,
+    owner: "U20",
+  },
 } as const satisfies Record<string, CodeInfo>;
 
 export type ReasonCode = keyof typeof CODES;

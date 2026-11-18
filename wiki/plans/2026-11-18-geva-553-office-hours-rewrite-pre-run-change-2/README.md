@@ -62,7 +62,7 @@ VERSION reads 1.100.0.0 at both pins, so each container checks every file hash a
 
 ## 2. The current pin is the merge base
 
-`git merge-base 4afa7f2b3e291758f6a7842dd066cde22606fca1 origin/main` in a gstack clone fetched on 2026-11-18 returns fc5c285035b58ce0552d25cf7cb71749795b6d30, the current pin. gstack main has moved one commit past it since (a /ship change outside office-hours), and the content change has not merged main again. So the current pin stands, and change 1's inventory check of the current skill holds as written.
+`git merge-base 4afa7f2b3e291758f6a7842dd066cde22606fca1 origin/main` in a gstack clone fetched on 2026-11-18 returns fc5c285035b58ce0552d25cf7cb71749795b6d30, the current pin. In that clone, main (cbd21f942) was four first-parent commits past it, the first d3d35019a; none of the four touches office-hours/ or a helper either pin checks, and the content change has not merged main again. So the current pin stands, and change 1's inventory check of the current skill holds as written.
 
 ## 3. The rewrite's inventory at the new head
 

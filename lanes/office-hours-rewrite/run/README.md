@@ -45,7 +45,12 @@ Copied and adapted, because the shapes differ:
   allows one open lease; the launch refuses caps whose sum passes the frozen line (E_OHR_CAP_LINE).
 - Stage 2's order sorts the comparison ids and shuffles them with SEED; each brief's models follow MODELS order and the
   arms of each brief and model are shuffled from the same stream. Stage 1 runs in draw order with a fixed arm order.
-- A round is one brief and model with its arms; it starts only when its worst case fits what the launch may still spend.
+- A round is one brief and model with its arms; it starts only when one attempt's allowance for each of its sessions
+  fits what the launch may still spend, after the allowances held for attempts in flight (pre-run change 4). A retry
+  runs only when its own allowance still fits; otherwise the session ends as a cap stop and the launch stops.
+- A reply whose model is not the session's pin (or that model's dated snapshot) halts the launch with
+  E_OHR_MODEL_DRIFT, and the session reads missing. The check reads every assistant message in the transcript; the
+  proxy already refuses any request for another model, since the slot's allowlist holds only the pin.
 - A brief's digest is sha256 over opening.md, sheet.json, key.json, brief.json and, when present, prior.json, joined
   with a NUL byte.
 - The manifest is compared as exact JSON text.

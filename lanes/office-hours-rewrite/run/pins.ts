@@ -4,7 +4,8 @@
 // - armSpecs: none is a bare arm (no gstack install, no skills folder, no drive); current and new are gstack stack arms at
 //   their pin's sha, which the rig installs from a full clone under the state directory's sources/, as the founder
 //   lane's e2e does.
-// - pinProblems: a gstack tree holds the pin's VERSION and every file whose sha256 frozen.PINS[arm].files freezes. The
+// - pinProblems: a gstack tree holds the pin's VERSION (its trimmed text and its sha256, pre-run change 4) and every
+//   file whose sha256 frozen.PINS[arm].files freezes. The
 //   rig open checks the host-side tree of each skill arm, and each session's container checks its own copy
 //   (containerPinCommand), so any mismatch refuses the launch or halts it (E_OHR_PIN_MISMATCH).
 // - nullPinProblem: a manifest that holds a session on an arm whose pin is null refuses (E_OHR_NEW_PIN_UNSET). Both pins
@@ -50,8 +51,10 @@ export function armSpecs(arms: readonly ArmId[], pins: Pins = PINS): ArmSpec[] {
 export function pinProblems(dir: string | null, pin: Pin): string[] {
   if (!dir || !existsSync(dir)) return ["no gstack tree at " + dir];
   const p: string[] = [];
-  const version = existsSync(join(dir, "VERSION")) ? readFileSync(join(dir, "VERSION"), "utf8").trim() : null;
+  const bytes = existsSync(join(dir, "VERSION")) ? readFileSync(join(dir, "VERSION")) : null;
+  const version = bytes ? bytes.toString("utf8").trim() : null;
   if (version !== pin.version) p.push("VERSION reads " + version + ", and the pin is " + pin.version);
+  else if (sha256(bytes!) !== pin.version_sha256) p.push("VERSION hashes to " + sha256(bytes!) + ", and the pin freezes " + pin.version_sha256);
   for (const [f, want] of Object.entries(pin.files)) {
     const got = existsSync(join(dir, f)) ? sha256(readFileSync(join(dir, f))) : null;
     if (got !== want) p.push(f + (got ? " hashes to " + got : " is missing") + ", and the pin freezes " + want);
@@ -59,9 +62,9 @@ export function pinProblems(dir: string | null, pin: Pin): string[] {
   return p;
 }
 
-/** The shell step a container runs to report its own tree: VERSION, then sha256sum of every pinned file. */
+/** The shell step a container runs to report its own tree: VERSION, then sha256sum of VERSION and every pinned file. */
 export const containerPinCommand = (root: string, pin: Pin): string =>
-  "cd " + JSON.stringify(root) + " && printf 'VERSION %s\\n' \"$(cat VERSION 2>/dev/null)\" && for f in " + Object.keys(pin.files).map((f) => JSON.stringify(f)).join(" ") + "; do if [ -f \"$f\" ]; then sha256sum \"$f\"; else echo \"missing $f\"; fi; done";
+  "cd " + JSON.stringify(root) + " && printf 'VERSION %s\\n' \"$(cat VERSION 2>/dev/null)\" && for f in VERSION " + Object.keys(pin.files).map((f) => JSON.stringify(f)).join(" ") + "; do if [ -f \"$f\" ]; then sha256sum \"$f\"; else echo \"missing $f\"; fi; done";
 
 /** Mismatches in what containerPinCommand printed. */
 export function containerPinProblems(printed: string, pin: Pin): string[] {
@@ -70,6 +73,7 @@ export function containerPinProblems(printed: string, pin: Pin): string[] {
   const hashes = new Map(lines.flatMap((l) => { const m = /^([0-9a-f]{64})\s+(.+)$/.exec(l); return m ? [[m[2]!, m[1]!] as const] : []; }));
   const p: string[] = [];
   if (version !== pin.version) p.push("VERSION reads " + version + " in the container, and the pin is " + pin.version);
+  else if (hashes.get("VERSION") !== pin.version_sha256) p.push("VERSION in the container " + (hashes.has("VERSION") ? "hashes to " + hashes.get("VERSION") : "is missing") + ", and the pin freezes " + pin.version_sha256);
   for (const [f, want] of Object.entries(pin.files)) if (hashes.get(f) !== want) p.push(f + " in the container " + (hashes.has(f) ? "hashes to " + hashes.get(f) : "is missing"));
   return p;
 }

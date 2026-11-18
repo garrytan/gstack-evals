@@ -446,6 +446,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_OHR_E2E_FAIL](#e_ohr_e2e_fail) | 2 | U20 |
 | [E_OHR_DRYRUN_FAIL](#e_ohr_dryrun_fail) | 2 | U20 |
 | [E_OHR_PREFLIGHT_FAIL](#e_ohr_preflight_fail) | 2 | U20 |
+| [E_OHR_MODEL_DRIFT](#e_ohr_model_drift) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -3450,6 +3451,14 @@ Office-hours rewrite eval: the no-model preflight (prereg section 12, step 1) fo
 Fix: Read the FAIL lines, fix what they name and run gstack-evals ohr preflight again. The preflight never calls a model.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_OHR_MODEL_DRIFT
+
+Office-hours rewrite eval (pre-run change 4): a reply named a model other than the one its call pinned, or a dated snapshot of it. A judge, auditor or simulator reply stops its command; an arm session whose assistant messages name another model halts its launch and reads missing, so it is never counted.
+
+Fix: Keep the journal and the transcript that show the reported model, and send the question to the Captain. Never retry the item on another model or route.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
 
 ## Exit 3: calibration failed (INCOMPLETE)
 

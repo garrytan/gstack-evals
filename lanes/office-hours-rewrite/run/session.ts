@@ -19,7 +19,10 @@
 //   is refusal (Anthropic, and Claude Code's own error frame for it) or content_filter (OpenRouter's finish reason, if
 //   its Anthropic route passes it through), or Claude Code's model_refusal_no_fallback or model_refusal_fallback
 //   notice. The loop checks it before every simulator turn, and the attempt's outcome checks it before any upstream
-//   reading, since Claude Code's error frame for a refusal otherwise reads as UPSTREAM. No provider signal in this
+//   reading, since Claude Code's error frame for a refusal otherwise reads as UPSTREAM.
+// - Pre-run change 4: an assistant message that names a model other than the session's pin (pinned.ts offPin) halts the
+//   launch (E_OHR_MODEL_DRIFT), and the session reads missing, so it is never counted; so does a simulator reply that
+//   names another model than Argon. No provider signal in this
 //   harness marks a reply as a refusal apart from these, so the build never writes the end state refusal; a model that
 //   declines in prose reads no-block, or fails R2 at judging.
 import type { NextUser } from "../../../src/adapters/claude-code/driver.ts";
@@ -104,7 +107,7 @@ export function closingLoop(o: { parse: BlockParser; founder: (transcript: Line[
     state.sim =
       r.kind === "guard-failed" ? { code: "E_OHR_SIM_GUARD", reason: "guard", detail: "more than two revealed ids on all " + r.attempts + " calls" }
       : r.kind === "check-failed" ? { code: "E_OHR_SIM_CHECK", reason: "check", detail: r.checks.join("; ") }
-      : { code: r.reason === "drift" ? "E_OF_PROVIDER_DRIFT" : r.reason === "cap" ? "CAP_STOP" : "E_OHR_SIM_CALL", reason: r.reason, detail: r.detail };
+      : { code: r.reason === "drift" ? (r.detail.startsWith("E_OHR_MODEL_DRIFT") ? "E_OHR_MODEL_DRIFT" : "E_OF_PROVIDER_DRIFT") : r.reason === "cap" ? "CAP_STOP" : "E_OHR_SIM_CALL", reason: r.reason, detail: r.detail };
     return { stop: state.sim.reason === "cap" ? { kind: "cap_stop" } : { kind: "missing", code: state.sim.code } };
   };
   return { state, nextUser };
@@ -148,6 +151,8 @@ export interface AttemptRead {
   overflow: boolean;
   safety: string | null;
   session_kind: string | null;
+  /** Models the session's assistant messages name that are not its pin (pinned.ts offPin); any one halts the launch. */
+  off_pin: string[];
   micros: number;
   sim_micros: number;
 }
@@ -166,7 +171,8 @@ export function attemptOutcome(a: AttemptRead, arm: ArmId): Outcome {
   const sim = a.loop.sim;
   if (t.kind === "cap_stop") return { state: "cap", why: "the ledger item's cap stopped the session" };
   if (sim?.reason === "cap") return { state: "cap", why: "the ledger item's cap refused a simulator call: " + sim.detail };
-  if (sim?.reason === "drift") return { state: "halt", code: "E_OF_PROVIDER_DRIFT", why: "the simulator's provider drifted: " + sim.detail };
+  if (sim?.reason === "drift") return { state: "halt", code: sim.code, why: "the simulator drifted from its pin: " + sim.detail };
+  if (a.off_pin.length) return { state: "halt", code: "E_OHR_MODEL_DRIFT", why: "the arm's replies name another model than its pin: " + a.off_pin.join(", ") };
   if (a.pin?.length) return { state: "halt", code: "E_OHR_PIN_MISMATCH", why: "the container's gstack tree is not the " + arm + " pin: " + a.pin.join("; ") };
   if (a.contained?.length) return { state: "halt", code: "E_OF_LEAK", why: "the containment probe found " + a.contained.join("; ") };
   if (t.kind === "credentials_rejected") return { state: "halt", code: "E_KEY_REJECTED", why: "the provider rejected the proxy's credentials" };

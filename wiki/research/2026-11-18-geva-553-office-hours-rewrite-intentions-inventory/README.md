@@ -15,7 +15,7 @@ links: [wiki/research/2026-11-17-geva-552-office-hours-intentions-inventory/READ
 
 ## Takeaways
 
-- We learned that the rewrite makes one new promise on top of the old one: before any advice, find out whether the startup has produced one real outcome, and if it hasn't, leave the founder with a one-page memo holding one dated, numbered action and a line that says when to change direction. You should score that promise by whether the session drew out the founder's real situation and ended with the call that situation supports, which is what the eval's primary measure does.
+- We learned that the rewrite makes one new promise on top of the old one: before any advice (and right after an overdue returning founder's own test), find out whether the startup has produced one real outcome, and if it hasn't, leave the founder with a one-page memo holding one dated, numbered action and a line that says when to change direction. You should score that promise by whether the session drew out the founder's real situation and ended with the call that situation supports, which is what the eval's primary measure does.
 - We learned that the rewrite keeps every main intention of the current skill. It changes eight of them (the evidence questions go deeper, the deliverable can now be a memo, the action now carries a date and a number, and memo sessions skip the second opinion, the landscape search, the visual step and the spec review), and adds eight main ones. You should read the current skill's inventory first and this one as its difference.
 - We learned that builder mode is byte-identical, so any builder harm would have to come from shared text: the mode question's new Pivot option, the closing, or a startup question leaking into a builder session. You should keep the builder guardrails as frozen.
 
@@ -25,7 +25,7 @@ Pinned at garrytan/gstack 4afa7f2b3e291758f6a7842dd066cde22606fca1, the content 
 
 This post was first read at 0787a1e01f2d847f8e915a680e7f6afec777be88, an earlier head, and amended in place before any paid call. Pre-run change 2 lists what the three commits between the two heads changed.
 
-Citation keys (paths relative to the gstack repo root; line numbers at 4afa7f2): T = office-hours/SKILL.md.tmpl; 2A = office-hours/sections/phase-2a-startup-diagnostic.md.tmpl; 2C = office-hours/sections/phase-2c-pivot-discovery.md.tmpl; LS = office-hours/sections/landscape.md.tmpl; DH = office-hours/sections/design-and-handoff.md.tmpl; DP = bin/gstack-developer-profile. Every citation is to a template. For 2A, 2C and LS the generated .md is the template plus a 2-line header. T and DH expand resolvers, so their generated line numbers differ from the template's.
+Citation keys (paths relative to the gstack repo root; line numbers at 4afa7f2): T = office-hours/SKILL.md.tmpl; 2A = office-hours/sections/phase-2a-startup-diagnostic.md.tmpl; 2C = office-hours/sections/phase-2c-pivot-discovery.md.tmpl; LS = office-hours/sections/landscape.md.tmpl; DH = office-hours/sections/design-and-handoff.md.tmpl; DP = bin/gstack-developer-profile. Every citation is to a template, except DP and bin/gstack-design-doc-find, which are executables cited at their own lines. For 2A, 2C and LS the generated .md is the template plus a 2-line header. T and DH expand resolvers, so their generated line numbers differ from the template's.
 
 | File | Bytes | sha256 | Read |
 |---|---|---|---|
@@ -72,7 +72,7 @@ Columns as in the current skill's inventory. **Status** says how the intention s
 
 | ID | Intention | S/I | Citation | What met looks like | Where | 1 session | This eval |
 |---|---|---|---|---|---|---|---|
-| N1 | Ask for ground truth first at every startup stage: one paying user, or one person who used it this week unasked, by name. Ask once more on a weak answer; skip only when the opening names a person and what they did or paid; never skipped by the escape hatch or a fully formed plan. | Stated | 2A:1-14, 2A:188; T:353 | The first startup question is the reality check, or the opening named a payer. A weak answer gets the conversation-count follow-up. | SESSION | yes | R1 for the check; the skip is untested (no opening names a payer) |
+| N1 | Ask for ground truth first at every startup stage, after an overdue returning founder's own test (N6): one paying user, or one person who used it this week unasked, by name. Ask once more on a weak answer; skip only when the opening names a person and what they did or paid; never skipped by the escape hatch or a fully formed plan. | Stated | 2A:1-14, 2A:188; T:353 | The first startup question is the reality check, or the opening named a payer. A weak answer gets the conversation-count follow-up. | SESSION | yes | R1 for the check; the skip is untested (no opening names a payer) |
 | N2 | A founder with no real outcome, or deciding a pivot, gets a one-page decision memo: what we learned, the decision, one action with a date and a number, a KILL/CONTINUE line, the first week. Every startup session also ends with a dated test, keyed to payment: KILL/CONTINUE when nobody has paid yet (a founder with a user but no payer included), SUCCESS with a date once someone has paid. | Stated | 2A:11; 2C:28-30; DH:174-207; T:351-352 | A memo file with Status, The decision, The one action (a date and a number) and a KILL/CONTINUE line; in a design doc, a SUCCESS line when someone has paid and a KILL/CONTINUE line otherwise. | DOC | yes | R2 and R3 for content; the format, kill and success lines are reported compliance checks |
 | N3 | Keep the design doc for builders and for founders with a real outcome (one paying user, or one person who used it this week unasked): "a founder with a named payer or user never takes the memo route." A pivot goes to the memo route whatever the traction (see the conflicts below). | Stated | 2A:7, 2A:11; 2C:1; T:112 | Builders and non-pivot founders with a real outcome get a design doc, not a memo. | DOC | yes | compliance check; builder kept-whole decides |
 | N4 | A pivot flow that first asks whether the worry is love or size; on size, a ceiling check of reachable buyers times a defensible price against the founder's goal; then sunk cost out, a commitment test, churn as validation, a kill criterion and a landing signal. | Stated | 2C:3-14 | The love-or-size question asked first; a ceiling computed when the worry is size; the kill criterion in the memo. | SESSION; DOC | yes | T6 and T4 pairs |
@@ -95,9 +95,9 @@ Changed:
 | S9 | The reframe check runs after the first diagnostic answer, not the first Q1 answer, because Q1 may be skipped. | 2A:115 |
 | S10 | Pre-product routing skips Q1 when the reality check found no outcome, and the escape hatch never skips the reality check. | 2A:100, 2A:188 |
 | X6 | The goal question gains a seventh option, Pivot, which maps to startup mode and then runs the pivot flow. | T:105, T:111-112 |
-| X9 | The landscape search moved to its own section with the same text; memo sessions skip it. | T:171-181; LS:1-28; 2C:30 |
+| X9 | The landscape search steps moved to their own section; the privacy gate stays in the skill file, and the new section rewords two lines to point at the skeleton's Aside block. Memo sessions skip it. | T:171-181; LS:1-28; 2C:30 |
 | X10, X11, X13 | Memo sessions skip the second opinion, the visual step and the spec review. | 2C:30; DH:209 |
-| X15 | The repo copy names customers by role or initials and leaves out deal amounts; a memo's copy goes under docs/memos/. | DH:21, DH:39-41; 2A:13 |
+| X15 | The repo copy names customers by role or initials and leaves out deal amounts unless the founder says they can be shared; a memo's copy goes under docs/memos/. | DH:21, DH:39-41; 2A:13 |
 | X18 | After a memo, the closing first restates the one action and its date and says to come back on that date. | DH:246 |
 | X21 | After a memo, the next-review recommendation is skipped. | DH:246 |
 | X24 | A memo session logs its memo path in memo, not design_doc, and the success check accepts a memo path. | T:304, T:331 |
@@ -109,7 +109,7 @@ New:
 | N9 | After the first diagnostic answer, get a two-sentence version (what it does; the proof), and when positioning blocks, make the assignment include an outsider repeating it back. | 2A:115-119 | yes for asking; the repeat-back is after |
 | N10 | A discovery flow for no real usage: pick the unresolved experiment, set a conversation quota with the math (20 to 50, a 14-day window), open calls broad, test severity, propose a real price to the payment link, ship the smallest demoable wedge, deliver by hand first. | 2C:16-26 | yes |
 | N11 | For intrapreneurs, the reality check asks for one internal user or the sponsor's committed yes. | 2A:12 | yes when the goal is intrapreneurship |
-| N12 | Keep customer names and prices in the private copy only. | 2A:13; DH:39-41 | yes, on the repo copy |
+| N12 | Keep customer names and prices in the private copy; the repo copy shares deal amounts only when the founder says they can be shared. | 2A:13; DH:39-41 | yes, on the repo copy |
 | N13 | When the branch already has an approved memo whose action was a build, write a minimal design doc for that wedge instead of a second memo. | 2C:30 | no in one fresh session |
 
 ## Conflicts and notes at this read

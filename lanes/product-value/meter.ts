@@ -6,7 +6,8 @@
 // OpenRouter replies name the provider that served them; a provider other than the route's pin stops the run with
 // E_PV_PROVIDER_DRIFT (section 17, rule 6). An OpenRouter request may also carry a system text, a chat in place of the
 // one prompt, a temperature and a seed (the office-hours founder eval's simulator); a request without them keeps its body
-// and cache key byte for byte.
+// and cache key byte for byte. Each result also carries the model the reply names, for a caller that checks it against
+// its pin (the office-hours rewrite eval's wire); the meter itself does not judge it.
 import { createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -75,6 +76,8 @@ export interface CallResult {
   cached: boolean;
   problem: string | null;
   served_by: string | null;
+  /** The model the reply names (its top-level model field), null when it names none; absent on a result cached before this field. */
+  model?: string | null;
 }
 
 /** A request's body. The chat fields are sent only when set, so a request without them keeps its body and cache key. */
@@ -181,7 +184,7 @@ export async function openMeter(o: MeterOptions): Promise<Meter> {
       }
       const servedBy = m.provider === "openrouter" ? (typeof parsed?.provider === "string" ? parsed.provider : null) : m.provider;
       if (m.served_by && (servedBy === null || !m.served_by.test(servedBy))) throw new MeterError("E_PV_PROVIDER_DRIFT", m.id + " was served by " + (servedBy ?? "an unnamed provider") + ", not its pinned provider; stop this model's items and ask the Captain");
-      const result: CallResult = { text: parsed ? judgeAnswer(m.provider, parsed) : null, status, micros, cached: false, problem: parsed ? null : "the reply is not JSON", served_by: servedBy };
+      const result: CallResult = { text: parsed ? judgeAnswer(m.provider, parsed) : null, status, micros, cached: false, problem: parsed ? null : "the reply is not JSON", served_by: servedBy, model: typeof parsed?.model === "string" ? parsed.model : null };
       if (result.text !== null) {
         writeFileSync(file + ".tmp", JSON.stringify(result), { mode: 0o600 });
         renameSync(file + ".tmp", file);

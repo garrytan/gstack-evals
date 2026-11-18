@@ -13,16 +13,32 @@
 // - Outcomes: reply (with revealed, rules, done, attempts), guard-failed (the third draw failed only the guard),
 //   check-failed (the third draw failed another check) and call-failed (allowance, cap, provider or drift). Every
 //   outcome carries the rejected draws apart from the reply, and the request digests.
+// - pinnedCall is the call every paid run uses (the audit through wire.ts, the stage launches through run.ts): the
+//   founder lane's founderCall, plus a drift when a reply names a model other than Gemini 4 Argon (pinned.ts), whose
+//   detail starts with E_OHR_MODEL_DRIFT. founderCall itself is unchanged.
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { NOTES, readOutput, renderSystem, toMessages, type CallFailure, type Check, type PersonSheet, type SimCall, type VisibleTurn } from "../../../src/persona-sim/sim.ts";
-import { founderCall } from "../../office-hours-founder/sim/founder.ts";
+import { founderCall, type SimSession } from "../../office-hours-founder/sim/founder.ts";
+import { MODELS, type Meter } from "../../product-value/meter.ts";
+import { modelDrift } from "../pinned.ts";
 import { attemptLine, CHANGE_1, REVEAL_GUARD, REVEAL_NOTE, SIM_RULES_FILES, SIM_RULES_SHA256 } from "../frozen.ts";
 import type { BriefKind, Sheet } from "../types.ts";
 
 export { founderCall };
+
+/** founderCall on a meter, with a reply that names another model than Argon read as a drift (E_OHR_MODEL_DRIFT). */
+export function pinnedCall(o: { meter: Pick<Meter, "call">; session: SimSession; label: string }): SimCall {
+  let drift: string | null = null;
+  const inner = founderCall({ ...o, meter: { call: async (req) => { const res = await o.meter.call(req); if (res.text !== null && res.model !== undefined) drift = modelDrift(MODELS[req.model].id, res.model, "the simulated person (" + o.label + ")"); return res; } } });
+  return async (req) => {
+    drift = null;
+    const out = await inner(req);
+    return drift ? { kind: "call-failed", reason: "drift", detail: drift } : out;
+  };
+}
 export type { PersonSheet, SimCall, VisibleTurn };
 
 const sha256 = (t: string) => createHash("sha256").update(t).digest("hex");
