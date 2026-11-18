@@ -1,15 +1,18 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
-// Value: protects=the lane's entry files: src/cli.ts reaches lanes/office-hours-rewrite/cli.ts by a path string, so this test imports the cli, wire, dry run, e2e and preflight directly; every sealed path is refused inside the repo; Astra routes to GPT-6.2 Astra at its priced row; fails_when=a file stops loading, the help loses a command, a command takes an output path inside the repo, or an "astra" call reaches gpt-6-astra.
+// Value: protects=the lane's entry files: src/cli.ts reaches lanes/office-hours-rewrite/cli.ts by a path string, so this test imports the cli, wire, dry run, e2e and preflight directly; every sealed path is refused inside the repo; Astra routes to GPT-6.2 Astra at its priced row; fails_when=a file stops loading, the help loses a command, a command takes an output path inside the repo, an "astra" call reaches gpt-6-astra, or judge-check's exit stops matching its codes' exit 3 on a FAIL or NO READ.
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { COMMANDS } from "../../src/cli.ts";
+import { CODES } from "../../src/errors/codes.ts";
 import { chatPrice } from "../../src/runner/pricing/prices.ts";
 import { main, outside, SUBCOMMANDS } from "../../lanes/office-hours-rewrite/cli.ts";
 import { dryRun } from "../../lanes/office-hours-rewrite/dryrun.ts";
 import { PLANTED_KEYS, scorePass } from "../../lanes/office-hours-rewrite/e2e-score.ts";
 import { JUDGE_MODEL_KEYS } from "../../lanes/office-hours-rewrite/frozen.ts";
 import { pinSource } from "../../lanes/office-hours-rewrite/preflight.ts";
+import { checkInput, faithful, type Says } from "../../lanes/office-hours-rewrite/score/fixtures.ts";
 import { ASTRA, routed } from "../../lanes/office-hours-rewrite/wire.ts";
 import { MODELS } from "../../lanes/product-value/meter.ts";
 
@@ -78,6 +81,29 @@ describe("gstack-evals ohr", () => {
     expect("openai/" + MODELS[ASTRA].id).toBe(JUDGE_MODEL_KEYS.astra);
     expect(MODELS.astra.id).toBe("gpt-6-astra");
     expect(chatPrice("openai:gpt-6.2-astra")).toMatchObject({ input: 8, output: 40, cache_read: 0.4, cache_write: 10, long: { above_input_tokens: 272_000, input: 16, output: 60 } });
+  });
+
+  test("ohr judge-check exits 0 when both judges pass, and 3, its codes' exit, on a FAIL or a NO READ", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "ohr-judge-check-"));
+    const check = async (name: string, o: Parameters<typeof checkInput>[0], says: Says) => {
+      const { map, gold, labels } = checkInput(o, says);
+      const nd = (rows: readonly unknown[]) => rows.map((l) => JSON.stringify(l)).join("\n") + "\n";
+      const files = { map: join(dir, name + "-map.json"), gold: join(dir, name + "-gold.ndjson"), labels: join(dir, name + "-labels.ndjson") };
+      writeFileSync(files.map, JSON.stringify(map));
+      writeFileSync(files.gold, nd(gold));
+      writeFileSync(files.labels, nd([...labels, ...labels.map((l) => ({ ...l, judge: "opus", model_id: "opus" }))]));
+      const t = io();
+      const code = await main(["judge-check", "--map", files.map, "--out", join(dir, name + "-out"), "--gold", files.gold, "--labels", files.labels], t.io, {});
+      return { code, err: t.err.join("\n") };
+    };
+    expect((await check("pass", { session: 40, near: 4, stock: 3 }, faithful)).code).toBe(0);
+    const failed = await check("fail", { session: 40, near: 4, stock: 3 }, (b, i, kind) => (kind === "stock" ? [true, true] : faithful(b, i, kind)));
+    expect(failed.err).toContain("E_OHR_JUDGE_CHECK_FAIL");
+    expect(failed.code).toBe(CODES.E_OHR_JUDGE_CHECK_FAIL.exit);
+    const unread = await check("unread", { session: 10, near: 4, stock: 3 }, faithful);
+    expect(unread.err).toContain("E_OHR_JUDGE_CHECK_NO_READ");
+    expect(unread.code).toBe(CODES.E_OHR_JUDGE_CHECK_NO_READ.exit);
+    expect([CODES.E_OHR_JUDGE_CHECK_FAIL.exit, CODES.E_OHR_JUDGE_CHECK_NO_READ.exit]).toEqual([3, 3]);
   });
 
   test("the e2e scoring pass, the dry run and the preflight load", () => {

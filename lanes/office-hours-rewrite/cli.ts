@@ -243,7 +243,7 @@ async function judgeCheckCommand(argv: string[], io: Io, env: Env): Promise<numb
       io.out("ohr judge-check: " + r.judge + " " + r.verdict + ", " + r.outputs + " outputs from " + r.blocks + " blocks, kappa " + r.kappa + ", on real blocks " + r.kappa_real + ", near-miss " + r.near_miss + ", stock credited " + r.stock_credited + " of " + r.stock_rows);
       if (r.code) io.err(r.code + " ohr judge-check: " + r.judge + ": " + r.reasons.join("; "));
     }
-    return Object.values(result).every((r) => r.verdict === "PASS") ? 0 : 2;
+    return Object.values(result).every((r) => r.verdict === "PASS") ? 0 : 3;
   };
   if (f.has("--gold") || f.has("--labels")) {
     need(f, "ohr judge-check", ["--gold", "--labels"]);
