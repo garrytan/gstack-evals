@@ -22,7 +22,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { NOTES, readOutput, renderSystem, toMessages, type CallFailure, type Check, type PersonSheet, type SimCall, type VisibleTurn } from "../../../src/persona-sim/sim.ts";
 import { founderCall, type SimSession } from "../../office-hours-founder/sim/founder.ts";
-import { MODELS, type Meter } from "../../product-value/meter.ts";
+import { MeterError, MODELS, type Meter } from "../../product-value/meter.ts";
 import { modelDrift } from "../pinned.ts";
 import { attemptLine, CHANGE_1, REVEAL_GUARD, REVEAL_NOTE, SIM_RULES_FILES, SIM_RULES_SHA256 } from "../frozen.ts";
 import type { BriefKind, Sheet } from "../types.ts";
@@ -35,7 +35,13 @@ export function pinnedCall(o: { meter: Pick<Meter, "call">; session: SimSession;
   const inner = founderCall({ ...o, meter: { call: async (req) => { const res = await o.meter.call(req); if (res.text !== null && res.model !== undefined) drift = modelDrift(MODELS[req.model].id, res.model, "the simulated person (" + o.label + ")"); return res; } } });
   return async (req) => {
     drift = null;
-    const out = await inner(req);
+    let out;
+    try {
+      out = await inner(req);
+    } catch (e) {
+      if (e instanceof MeterError && e.code === "E_PV_EMPTY_REPLIES") return { kind: "call-failed", reason: "drift", detail: e.message.startsWith("E_PV_EMPTY_REPLIES") ? e.message : "E_PV_EMPTY_REPLIES " + e.message };
+      throw e;
+    }
     return drift ? { kind: "call-failed", reason: "drift", detail: drift } : out;
   };
 }

@@ -199,3 +199,6 @@ export const SIM_ALLOWANCE = 2;
 
 /** The item caps recorded on 2026-11-17 after the prereg merged (pre-run change 1, item 4a). */
 export const CAPS = { authoring: 251, simulator_audit: 41, stage1: 220, judge_check: 123, stage2: 1620, stage2_particle: 139, hosts: 22 } as const;
+
+/** Pre-run change 5: the bound on empty replies (status 200, no answer) for every metered run of this eval. */
+export const EMPTY_BOUND = { streak: 3, share: 0.01, floor: 100 } as const;

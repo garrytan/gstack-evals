@@ -1781,6 +1781,15 @@ export const CODES = {
     fix: "Nothing to rerun. Check the cutoff the build recorded from the provider's published documentation and the unit's plan date, and report the count per model.",
     owner: "U20",
   },
+  E_PV_EMPTY_REPLIES: {
+    exit: 2,
+    meaning: "A metered run whose meter sets a bound on empty replies got too many: replies with status 200 and no answer (an error body, an empty reply or a cut-off one), three in a row or more than 1% of the run's calls over at least 100 calls in the office-hours rewrite eval (pre-run change 5). The command stops.",
+    fix: "Bring the counts in the message to the Captain. Paid replies stay in the run's reply cache, so a resume on the same run replays them at no cost once the Captain rules.",
+    side_effects: "Calls already sent on the lease stay on its journal and its spend; empty replies are not cached.",
+    retry_safe: false,
+    resumable: true,
+    owner: "U20",
+  },
   E_PV_PROVIDER_DRIFT: {
     exit: 2,
     meaning: "Product-value eval (section 17, rule 6): a call through OpenRouter was served by a provider other than the one its route pins (OpenAI for GPT-6.1 Sol, the recorded serving provider for particle-1 and Gemini), or the provider's recorded terms changed. That model's items stop for the Captain.",

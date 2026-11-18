@@ -20,7 +20,7 @@ import { dockerRig } from "../../../src/skill-eval/cli/run-host.ts";
 import { receiptsSink } from "../../../src/trial/durable.ts";
 import { insideRepo } from "../../review-noloss/suite.ts";
 import { openMeter } from "../../product-value/meter.ts";
-import { ARMS, MODEL_KEYS, PINS } from "../frozen.ts";
+import { ARMS, EMPTY_BOUND, MODEL_KEYS, PINS } from "../frozen.ts";
 import { parseBlock } from "../score/block.ts";
 import { simTurn } from "../sim/founder.ts";
 import type { ArmId, ModelId } from "../types.ts";
@@ -154,7 +154,7 @@ export async function runCommand(argv: string[], io: Io, env: Env): Promise<numb
   const specs = armSpecs(arms.includes("none") ? arms : ["none", ...arms]);
   const ledger = ledgerPath(plan.ledger, env);
   const record = recordPath(plan.record, env);
-  const meter = await openMeter({ item: plan.simItem, runId, out: join(out, "sim-meter"), cacheDir: join(out, "sim-cache"), maxOutputTokens: 1200, amountMicros: plan.input.simCap, record: record.path, ledger: ledger.path, env });
+  const meter = await openMeter({ item: plan.simItem, runId, out: join(out, "sim-meter"), cacheDir: join(out, "sim-cache"), maxOutputTokens: 1200, amountMicros: plan.input.simCap, emptyBound: EMPTY_BOUND, record: record.path, ledger: ledger.path, env });
   let failed = false;
   try {
     const run = await runLaunch({ ...plan.input, runId, pins: PINS, buildCommit: commit, allowances: ALLOWANCES, policy: policy as LoadedPolicy, docker: env.GSTACK_EVALS_DOCKER_BIN || "docker", day: today(), log: (l) => io.err(l) }, {

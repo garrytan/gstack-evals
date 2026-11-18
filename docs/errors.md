@@ -220,6 +220,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_PV_EXPOSURE_FALLBACK](#e_pv_exposure_fallback) | warning | U20 |
 | [E_PV_EXPOSURE_STOP](#e_pv_exposure_stop) | warning | U20 |
 | [E_PV_LEAK_EXPOSED](#e_pv_leak_exposed) | warning | U20 |
+| [E_PV_EMPTY_REPLIES](#e_pv_empty_replies) | 2 | U20 |
 | [E_PV_PROVIDER_DRIFT](#e_pv_provider_drift) | 2 | U20 |
 | [E_PV_SUPPLY_SHORT](#e_pv_supply_short) | 2 | U20 |
 | [E_SM_UNIT](#e_sm_unit) | 2 | U20 |
@@ -1923,6 +1924,14 @@ Decision routing: the controller found its STOP file, so it launched no new sess
 Fix: Remove the STOP file once the reason for it is dealt with, then relaunch the same plan; the controller reconciles open leases first and runs only the sessions that never launched.
 
 Exit 2. Side effects: Partial: sessions that ran keep their spend and results; every lease is settled. Retry safe: yes. Resumable: yes. Owner: U6.
+
+### E_PV_EMPTY_REPLIES
+
+A metered run whose meter sets a bound on empty replies got too many: replies with status 200 and no answer (an error body, an empty reply or a cut-off one), three in a row or more than 1% of the run's calls over at least 100 calls in the office-hours rewrite eval (pre-run change 5). The command stops.
+
+Fix: Bring the counts in the message to the Captain. Paid replies stay in the run's reply cache, so a resume on the same run replays them at no cost once the Captain rules.
+
+Exit 2. Side effects: Calls already sent on the lease stay on its journal and its spend; empty replies are not cached. Retry safe: no. Resumable: yes. Owner: U20.
 
 ### E_PV_PROVIDER_DRIFT
 
