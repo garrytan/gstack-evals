@@ -32,7 +32,7 @@ We learned that a model follows a short procedure when the procedure is put in f
 
 We learned that putting the steps first did not help. The typed command holds the steps alone. The gstack-shaped skill puts about 9 KB of setup before the same steps. The command did no better on any model, and on Opus it was 11.7 points lower (95% interval -24.1 to +1.1). You should not rewrite gstack's routed skills to move the checkable steps to the top on this evidence.
 
-We learned that on Opus neither route clearly reaches the 80% bar that decides this eval, so the reading is the plan's "no route reaches the bar: keep hooks for steps that must run, and stop spending on wording". That call is close. A blind hand reading found the scorer misses some follows and counts some it shouldn't, and it puts both routes near the bar (gstack-shaped about 47 of 60, command 44 to 48). You should treat the bar call as undecided and the comparison between routes as settled: steps first was not better.
+We learned that on Opus neither route clearly reaches the 80% bar that decides this eval, so the reading is the plan's "no route reaches the bar: keep hooks for steps that must run, and stop spending on wording". That call is close. A blind hand reading found the scorer misses some follows and counts some it shouldn't, and it puts both routes near the bar (gstack-shaped about 47 of 60, command 44 to 48). You should treat the bar call as undecided. Steps first still was not better: the scorer puts command 7 sessions below gstack-shaped, and by hand the two routes are within a few sessions of each other (command 3.3 lower under one reader, 0.6 higher under the other).
 
 What didn't work: the route where the agent must find the skill by its description. Opus never loaded it (0 of 60), so that route is untested on Opus, not a loss. GPT-6.1 Sol loaded it in all 60 sessions and followed the steps in 59. Sol already follows the steps unprompted in 48 of 60, at the bar, so Sol can't show what a route adds here.
 
@@ -115,7 +115,7 @@ The hand estimate is the primary, plus the near-follows read as followed, minus 
 What it says:
 
 - On Opus, the scorer errs both ways. It missed 6 gstack-shaped and 9 command follows, mostly passing runs chained with grep, a python -c check, a linter or another suite in one call, plus one fix written by a python heredoc. It also counted one gstack-shaped session that both readers read as not followed.
-- So the bar call on gstack-shaped sits inside the scorer's error: about 47 of 60 by hand against 46 by the rule, with the bar at 48. Command didn't beat gstack-shaped under either reading (44.1 to 48.0 against 47.4). Beside the decision reading this line adds "undecided on the bar".
+- So the bar call on gstack-shaped sits inside the scorer's error: about 47 of 60 by hand against 46 by the rule, with the bar at 48. Command showed no clear gain over gstack-shaped under either reading: the scorer puts it 7 sessions lower, and by hand which route is ahead depends on the reader (command 3.3 sessions lower under reader B, 0.6 higher under reader A). Beside the decision reading this line adds "undecided on the bar".
 - Every Sol sample session read as not followed is a "can't tell" at step 2: the excerpt cut the failing run's output. So those numbers bound what the excerpts show, not the scorer's error.
 - The over-count estimates rest on 10 sessions each, so each carries wide uncertainty (1 of 10 has a 95% interval of about 2% to 40%).
 
@@ -138,7 +138,8 @@ Verdicts:
 ## Limits and threats
 
 - One procedure on one task family. Five short steps on bug fixes may not carry over to a long procedure.
-- The bar call on Opus sits inside the scorer's error (above). The comparison between routes does not depend on it.
+- The bar call on Opus sits inside the scorer's error (above). The route comparison has a clear direction only on the scorer: by hand the two routes are within a few sessions, and which is ahead depends on the reader.
+- D1's per-command reading has two holes a reviewer found. A test runner wrapped in xargs reads as one plain run, and a filter after a pipe that reads its own file (such as `| cat old.log`) can supply another run's summary. No counted reading rests on either: D1 changed two readings, and both were checked by hand (a plain pytest run, and a test file run alone after another suite's collection error). The fix belongs with the next eval's scorer.
 - The hand reading is post hoc, its over-count side rests on 10-session samples, and its excerpts can cut a failing run's output.
 - The described arm can't tell a description's wording from Claude Code's listing mechanism, and on Opus it never got past the listing.
 - The gstack-shaped arm uses one gstack setup block (/verify's, at 1.99.5.0), not every skill's.
