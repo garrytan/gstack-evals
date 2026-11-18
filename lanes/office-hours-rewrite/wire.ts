@@ -27,7 +27,7 @@ import { VERTEX } from "../office-hours-founder/sim/founder.ts";
 import { versionTap, type Caller as JudgeCaller } from "../product-value/judge.ts";
 import { MeterError, MODELS, openMeter, sha256, type CallRequest, type CallResult, type ModelKey } from "../product-value/meter.ts";
 import { insideRepo } from "../review-noloss/suite.ts";
-import { AUDIT } from "./frozen.ts";
+import { AUDIT, EMPTY_BOUND } from "./frozen.ts";
 import { modelDrift } from "./pinned.ts";
 import { pinnedCall } from "./sim/founder.ts";
 import type { JudgeKey } from "./types.ts";
@@ -102,7 +102,7 @@ export async function openWire(o: WireOptions): Promise<Wire> {
   const vdir = join(cacheDir, "versions");
   mkdirSync(vdir, { recursive: true, mode: 0o700 });
   writeFileSync(runFile, JSON.stringify({ run_id: runId, spent_micros: before, ...commit }) + "\n");
-  const meter = await openMeter({ item: o.item, runId, out: join(o.dir, "meter"), cacheDir, maxOutputTokens: 32_000, amountMicros: o.capMicros, record: o.record, ledger: o.ledger, env: o.env, fetch: versionTap(o.upstream ?? fetch, vdir), warn: (code, m) => o.io.err(code + " " + m) });
+  const meter = await openMeter({ item: o.item, runId, out: join(o.dir, "meter"), cacheDir, maxOutputTokens: 32_000, amountMicros: o.capMicros, emptyBound: EMPTY_BOUND, record: o.record, ledger: o.ledger, env: o.env, fetch: versionTap(o.upstream ?? fetch, vdir), warn: (code, m) => o.io.err(code + " " + m) });
   const call: Caller = async (req) => {
     const model = routed(req.model);
     const res = await meter.call({ ...req, model });

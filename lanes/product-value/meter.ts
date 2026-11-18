@@ -109,6 +109,12 @@ export interface MeterOptions {
   env?: Record<string, string | undefined>;
   fetch?: typeof fetch;
   warn?: (code: ReasonCode, message: string) => void;
+  /**
+   * Stops the command (E_PV_EMPTY_REPLIES) when replies come back with no answer: streak of them in a row, or more than
+   * share of the run's calls, counted over at least floor calls. Counts persist in <out>/empty.json, so a resume keeps
+   * them. Cache hits are not counted again. Without it, no bound applies.
+   */
+  emptyBound?: { streak: number; share: number; floor: number };
 }
 
 export interface Meter {
@@ -147,6 +153,17 @@ export async function openMeter(o: MeterOptions): Promise<Meter> {
     throw e;
   }
   const p = proxy;
+  const emptyFile = join(out, "empty.json");
+  const empties = existsSync(emptyFile) ? (JSON.parse(readFileSync(emptyFile, "utf8")) as { calls: number; empty: number; streak: number }) : { calls: 0, empty: 0, streak: 0 };
+  const tally = (empty: boolean | null, label: string) => {
+    const b = o.emptyBound;
+    if (!b) return;
+    empties.calls += 1;
+    if (empty === true) empties.empty += 1;
+    if (empty !== null) empties.streak = empty ? empties.streak + 1 : 0;
+    writeFileSync(emptyFile, JSON.stringify(empties) + "\n");
+    if (empty && (empties.streak >= b.streak || empties.empty > b.share * Math.max(empties.calls, b.floor))) throw new MeterError("E_PV_EMPTY_REPLIES", label + ": " + empties.empty + " of " + empties.calls + " calls on " + o.item + " came back with no answer, " + empties.streak + " in a row; the bound is " + b.streak + " in a row or more than " + b.share * 100 + "% of at least " + b.floor + " calls, so the command stops for the Captain");
+  };
   const reserved = () => readItem(record, o.item).leases.find((l) => l.lease.lease_id === leaseId)!.lease.reserved_micros;
   let closed = false;
   return {
@@ -180,12 +197,17 @@ export async function openMeter(o: MeterOptions): Promise<Meter> {
       } catch {}
       if (status !== 200) {
         const problem = typeof parsed?.code === "string" ? parsed.code + ": " + (parsed.detail ?? "") : "HTTP " + status;
+        tally(null, req.label);
         return { text: null, status, micros, cached: false, problem, served_by: null };
       }
       const servedBy = m.provider === "openrouter" ? (typeof parsed?.provider === "string" ? parsed.provider : null) : m.provider;
       const answer = parsed ? judgeAnswer(m.provider, parsed) : null;
-      if (!answer) return { text: null, status, micros, cached: false, problem: parsed ? "the reply carries no answer" + (servedBy === null ? " and names no provider" : "") : "the reply is not JSON", served_by: servedBy, model: null };
+      if (!answer) {
+        tally(true, req.label);
+        return { text: null, status, micros, cached: false, problem: parsed ? "the reply carries no answer" + (servedBy === null ? " and names no provider" : "") : "the reply is not JSON", served_by: servedBy, model: null };
+      }
       if (m.served_by && (servedBy === null || !m.served_by.test(servedBy))) throw new MeterError("E_PV_PROVIDER_DRIFT", m.id + " was served by " + (servedBy ?? "an unnamed provider") + ", not its pinned provider; stop this model's items and ask the Captain");
+      tally(false, req.label);
       const result: CallResult = { text: answer, status, micros, cached: false, problem: null, served_by: servedBy, model: typeof parsed?.model === "string" ? parsed.model : null };
       if (result.text !== null) {
         writeFileSync(file + ".tmp", JSON.stringify(result), { mode: 0o600 });
