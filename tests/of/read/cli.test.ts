@@ -147,7 +147,7 @@ describe("of stage2 and of headline", () => {
   const primary = launch("stage2", s2.manifest);
   const pitch = launch("pitch", manifest(COMPARISON, { kind: "pitch", real: false, cuts: [] }));
   const scored2 = file("scored2.ndjson", lines(s2.sessions));
-  const stock2 = file("stock2.ndjson", "");
+  const stock2 = file("stock2.ndjson", lines(s2.stock));
   const goldMap: PacketMap = { version: 1, kind: "label", stage: 2, seed: 1, packets: Object.fromEntries(MODELS.map((m) => ["g" + m, packet("g" + m, "gold", m, blocks("g" + m, m), Array.from({ length: 40 }, (_, k) => ({ block: "g" + m + k, item: "customer" as const, gold: k < 20, oracle: false })))])) };
   const goldLabels = file("gold-labels.ndjson", lines(MODELS.flatMap((m) => Array.from({ length: 40 }, (_, k) => cells("g" + m, "g" + m + k, PRODUCTION_LABEL[m], k < 20, false)))));
   const est = Object.fromEntries(MODELS.map((m) => [m, { model: m, units: 16, sessions: 48, p0: 0.375, rho: 0.99, s: 0.01 }]));
