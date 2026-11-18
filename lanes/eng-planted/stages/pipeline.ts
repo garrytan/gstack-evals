@@ -19,14 +19,17 @@
 // "<seed>/<unit>/<arm>/<rep>"); the pilot's plain reviews and builds are the comparison item's first cells and count in
 // the plain cells; the interim exposure stop counts an arm's records in that order, stopping at its first unrecorded
 // cell.
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { stripBase } from "../../eng-build/build-stage.ts";
 import { prepareReviewTree, type Attempt } from "../../eng-build/review-stage.ts";
 import { addSpend } from "../../eng-build/spend.ts";
 import type { ReviewLeft, ReviewSession, ReviewUnit } from "../../eng-build/pipeline.ts";
 import { erExposure } from "../../eng-review/exposure.ts";
+import { PROJECT_CONFIG } from "../../real-outcome/sandbox/sidecar.ts";
 import type { DigestPin } from "../../../src/trial/review/eng-review.ts";
 import { fail } from "../errors.ts";
 import { FROZEN, SIZE } from "../frozen.ts";
@@ -90,6 +93,39 @@ export function drawFile(run: string, src: UnitSource, seed: string = mintSeed()
   const d: DrawFile = { seed, order: seededOrder(src.units().map((u) => ({ id: u.id, repo: u.repo })), seed) };
   writeJson(file, d);
   return d;
+}
+
+/**
+ * The paths a unit's B still shows the sandbox once the frozen strip has run: stripBase on a scratch copy, then the
+ * sidecar's own check (PROJECT_CONFIG) over every path the base commit tracks, the list it reads when a trial opens. The
+ * strip only takes paths out, so a B that tracks no such path before it is not copied.
+ */
+export function configLeft(base: string): string[] {
+  const refused = (repo: string) => {
+    const r = spawnSync("git", ["-C", repo, "ls-tree", "-r", "--name-only", "-z", "HEAD"], { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
+    if (r.status !== 0) fail("E_USAGE", repo + ": git could not list the base commit (" + r.stderr.trim() + ")");
+    return r.stdout.split("\0").filter((p) => PROJECT_CONFIG.test(p));
+  };
+  if (!refused(base).length) return [];
+  const scratch = mkdtempSync(join(tmpdir(), "ep-config-"));
+  try {
+    const repo = join(scratch, "repo");
+    cpSync(base, repo, { recursive: true });
+    stripBase(repo);
+    return refused(repo);
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+}
+
+/** The seeded order less every unit whose stripped B the sandbox would refuse (dated deviation, 2026-11-17): each leaves
+ * before any outcome, and log names it with the number of paths it still tracks. */
+export function poolOrder(run: string, src: UnitSource, seed?: string, log?: (line: string) => void): Candidate[] {
+  return drawFile(run, src, seed).order.filter((c) => {
+    const left = configLeft(src.base(c.id)).length;
+    if (left) log?.("excluded " + c.id + " before any outcome: its stripped tree still tracks " + left + " project-local Claude Code config path(s), which the sandbox refuses");
+    return !left;
+  });
 }
 
 const authorDir = (run: string, id: string) => join(run, "author", id);
@@ -179,14 +215,14 @@ export type AuthorStep = "calls" | "hinted" | "draw" | "none";
 export async function authorStep(o: { run: string; src: UnitSource; batch: 1 | 2; step: AuthorStep; seed?: string; chunk?: number; first?: readonly string[]; call?: AuthorCall; session?: PlantedSession; grader?: PlantedGrader; gate?: ItemGate; parallel?: number; earlier?: (cell: string) => number; log?: (line: string) => void }): Promise<{ draw: Draw; line: string }> {
   const log = o.log ?? (() => {});
   if (o.batch === 2) requireSteps(o.run, "authoring batch 2", ["author-batch1", "exposure-gate", "admission", "start-rule"]);
-  const df = drawFile(o.run, o.src, o.seed);
+  const order = poolOrder(o.run, o.src, o.seed, log);
   const want = wantOf(o.batch);
-  const draw = () => drawSets(df.order, authoredMap(o.run, df.order), want);
+  const draw = () => drawSets(order, authoredMap(o.run, order), want);
   if (o.step === "calls") {
     const gate = o.gate ?? fail("E_USAGE", "the calls step runs under the authoring item's gate");
     const call = o.call ?? fail("E_USAGE", "the calls step needs its model calls");
     const d = draw();
-    const chunk = nextToAuthor(o.run, df.order, d, o.chunk ?? Math.max(1, Math.ceil(1.5 * missing(want, d))));
+    const chunk = nextToAuthor(o.run, order, d, o.chunk ?? Math.max(1, Math.ceil(1.5 * missing(want, d))));
     const lead = o.first ?? [];
     const outside = lead.filter((id) => !chunk.includes(id));
     if (outside.length) fail("E_USAGE", "--first orders the chunk and never adds to it: " + outside.join(", ") + " is not among the next " + chunk.length + " units to author");
@@ -214,7 +250,7 @@ export async function authorStep(o: { run: string; src: UnitSource; batch: 1 | 2
   }
   if (o.step === "hinted") {
     const gate = o.gate ?? fail("E_USAGE", "the hinted step runs under the authoring item's gate");
-    await runAuthoringBuilds({ ...o, gate, arm: "hinted", ids: hintedTodo(o.run, df.order), log });
+    await runAuthoringBuilds({ ...o, gate, arm: "hinted", ids: hintedTodo(o.run, order), log });
   }
   const d = draw();
   writeJson(join(o.run, "draw-batch" + o.batch + ".json"), d);

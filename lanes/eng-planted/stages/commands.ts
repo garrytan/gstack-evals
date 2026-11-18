@@ -34,7 +34,7 @@ import { allInProjection, checkAllIn, ITEMS, itemOf, ItemGate, runSteps, settleT
 import { ALLOWANCE_USD, AUTHOR_MAX_TOKENS, AUTHOR_MODELS, CARBON_MAX_TOKENS, EP_PROGRAM, EP_RUN, EP_SKILL, JUDGE_MAX_TOKENS, readStep, type AuthorRole } from "./local.ts";
 import { PIN_COMMAND } from "./pin.ts";
 import { driverCells, owedOnRefusal, setAsideRefusedGaps, stagePlan } from "./rerun-log.ts";
-import { authorStep, batchDraw, buildCells, buildsStage, bundleInput, comparisonPlanned, comparisonUnits, drawFile, gateArms, hintedTodo, reviewsStage, runRecords, smokeStage, unitFolders, type AuthorStep, type UnitSource } from "./pipeline.ts";
+import { authorStep, batchDraw, buildCells, buildsStage, bundleInput, comparisonPlanned, comparisonUnits, gateArms, hintedTodo, poolOrder, reviewsStage, runRecords, smokeStage, unitFolders, type AuthorStep, type UnitSource } from "./pipeline.ts";
 import { bundleSet } from "../readings/judge.ts";
 
 export { CASES as DRY_CASES } from "./cases.ts";
@@ -265,7 +265,7 @@ export function stagesCommands(seams: Seams = REAL): Record<string, Command> {
     }
     const grader = await seams.grader({ work: need(a, "--work"), log });
     const d = step === "none" ? batchDraw(run, o.batch) : null;
-    const ids = step === "hinted" ? hintedTodo(run, drawFile(run, src).order) : d ? [...d.calibration, ...d.comparison, ...d.reserve] : [];
+    const ids = step === "hinted" ? hintedTodo(run, poolOrder(run, src)) : d ? [...d.calibration, ...d.comparison, ...d.reserve] : [];
     const opened = driverCells(buildDriver(run), EP_RUN);
     const cells = ids.map((id) => buildKey(id, step === "hinted" ? "hinted" : "none", null, 1));
     io.out((await paidStage(p, seams.build({ out: join(run, "builds", "authoring", "rig"), driver: buildDriver(run), src, units: need(a, "--units"), repos: need(a, "--repos"), ids, reviewed: false, cells, a }), (session) => authorStep({ ...o, session, grader, gate, earlier: (cell) => opened.get(cell)?.opens ?? 0 }))).line);
