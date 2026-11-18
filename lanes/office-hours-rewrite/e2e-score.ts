@@ -59,9 +59,9 @@ function stubJudges(seen: string[]): typeof fetch {
   }) as typeof fetch;
 }
 
-/** Twelve authoring answers per brief, alternating the key's call and action with a wrong call and a stock action. */
+/** Twenty authoring answers per brief, alternating the key's call and action with a wrong call and a stock action, so the check passes its 40-block floor. */
 function plantedAnswers(briefs: ReadonlyMap<string, Brief>): CheckAnswer[] {
-  return [...briefs.entries()].flatMap(([brief, b]) => Array.from({ length: 12 }, (_, i): CheckAnswer => ({
+  return [...briefs.entries()].flatMap(([brief, b]) => Array.from({ length: 20 }, (_, i): CheckAnswer => ({
     brief,
     author: "v" + String(i).padStart(2, "0"),
     source: i % 3 === 0 ? "opening" : "full",
