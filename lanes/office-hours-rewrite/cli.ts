@@ -106,11 +106,11 @@ async function withWire<T>(o: { dir: string; item: string; cap: string | undefin
   }
 }
 
-const AUTHOR_USAGE = "gstack-evals ohr author --work <new dir under /dev/shm> --out <new sealed path> --recipients <age recipients file> --gstack <clone holding both pins> --item <ledger item> --spend-cap <usd> [--pilot-only] [--concurrency <n>] [--record <dir>] [--ledger <path>]";
+const AUTHOR_USAGE = "gstack-evals ohr author --work <new dir under /dev/shm> --out <new sealed path> --recipients <age recipients file> --gstack <clone holding both pins> --item <ledger item> --spend-cap <usd> [--concurrency <n>] [--record <dir>] [--ledger <path>]";
 
 /** ohr author: authorRun, then the placed briefs, every outcome and the judge check's answers sealed with age. */
 async function author(argv: string[], io: Io, env: Env): Promise<number> {
-  const f = flags(argv, { one: ["--work", "--out", "--recipients", "--gstack", "--item", "--spend-cap", "--concurrency", "--record", "--ledger"], bool: ["--pilot-only"] });
+  const f = flags(argv, { one: ["--work", "--out", "--recipients", "--gstack", "--item", "--spend-cap", "--concurrency", "--record", "--ledger"] });
   need(f, "ohr author", ["--work", "--out", "--recipients", "--gstack", "--item", "--spend-cap"]);
   const work = resolve(one(f, "--work")!);
   if (!work.startsWith(SHM + "/")) usage("--work " + work + " is not under " + SHM + "; plaintext briefs live only in memory-backed storage. Usage: " + AUTHOR_USAGE);
@@ -118,18 +118,17 @@ async function author(argv: string[], io: Io, env: Env): Promise<number> {
   const out = fresh("--out", one(f, "--out")!);
   const concurrency = Number(one(f, "--concurrency") ?? "4");
   if (!Number.isSafeInteger(concurrency) || concurrency < 1) usage("--concurrency is a whole number of at least 1");
-  const pilotOnly = f.has("--pilot-only");
   const screen = loadScreen(gitReader(resolve(one(f, "--gstack")!)));
   const cap = dollars(one(f, "--spend-cap"), "--spend-cap") / 1e6;
   return withWire({ dir: work + ".meter", item: one(f, "--item")!, cap: one(f, "--spend-cap"), label: "ohr-author", record: one(f, "--record"), ledger: one(f, "--ledger"), env, io, cmd: "ohr author" }, async (w) => {
-    const run = await authorRun({ call: w.call, label: labeller(w.judge), parse: parseBlock, screen, spent: w.spent }, { cap, concurrency, pilotOnly });
+    const run = await authorRun({ call: w.call, label: labeller(w.judge), parse: parseBlock, screen, spent: w.spent }, { cap, concurrency });
     const sink = openCustody(work, out);
     const summary = writeAuthoring(sink, run);
     writeSealed(sink, "authoring/check-answers.json", JSON.stringify(checkAnswers(run), null, 2) + "\n");
     sealCustody(sink, out, ageSealer(resolve(one(f, "--recipients")!)));
     io.out(JSON.stringify(summary, null, 2));
     io.out("ohr author: sealed to " + out + "; the meter's cache stays in " + work + ".meter");
-    const halt = haltOf(run, () => null, pilotOnly);
+    const halt = haltOf(run, () => null);
     if (halt) io.err(halt.message);
     return halt ? 2 : 0;
   });

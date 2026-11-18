@@ -59,6 +59,12 @@ describe("gstack-evals ohr", () => {
     });
   }
 
+  test("ohr author has no pilot-only stop: the flag is refused before it reads or spends", async () => {
+    const t = io();
+    expect(await main(["author", "--work", "/dev/shm/ohr-w", "--out", "/dev/shm/ohr-sealed.age", "--recipients", "r", "--gstack", "g", "--item", "i", "--spend-cap", "1", "--pilot-only"], t.io, {})).toBe(2);
+    expect(t.err.join("\n")).toContain('unknown argument "--pilot-only"');
+  });
+
   test("ohr author keeps plaintext briefs under /dev/shm", async () => {
     const t = io();
     expect(await main(["author", "--work", "/tmp/ohr-w", "--out", "/dev/shm/x.age", "--recipients", "r", "--gstack", "g", "--item", "i", "--spend-cap", "1"], t.io, {})).toBe(2);
