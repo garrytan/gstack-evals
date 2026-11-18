@@ -1,0 +1,107 @@
+resize.py; counts from authoring's final path; planning costs from the preregistration's cost.py
+Part A. Measured yields, each with its 95% Wilson interval, and cost a draft
+first twin passes every screen   10 of  15  0.667  (0.417 to 0.848)  $0.887 a draft
+second twin passes, per draw       6 of 218  0.028  (0.013 to 0.059)  $0.093 a draw
+partner matches within 3 draws     4 of   8  0.500  (0.215 to 0.785)  matched partners took 1.25 draws on average; 2 partners still open are left out
+partners past 3 draws, per draw    2 of 211  0.0095  (0.0026 to 0.0339)
+T7 unpaired founder passes         2 of  41  0.049  (0.013 to 0.161)  $0.545 a draft (all unpaired drafts)
+builder passes                     5 of  41  0.122  (0.053 to 0.255)
+T8 returning founder              never drafted; planned here at T7's count, 2 of 41
+Part B. Authoring cost to place one brief, at the measured rate and at each interval's ends (low yield, high yield)
+pair (both twins)    $  3.05   ($ 11.01 to $  1.52)
+T7 or T8 founder     $ 11.17   ($ 40.42 to $  3.38)
+builder              $  4.47   ($ 10.24 to $  2.13)
+pair of a type whose partners all match at the past-3 rate: 0.0282 within 3 draws, $56.92 a pair; with no bound, $11.10 a pair
+Part C. Designs. Caps follow the amended rule: 1.35 times central plus what the item's parallel calls hold at open (8 drafts at $3.50; one Opus round of 2 skill and 1 none session at $15, $15 and $3, with $2 of simulator each and $1 of labels; one particle-1 round at $3, $3 and $1 with the same simulator and labels). Stage 1 and the judge check keep their approved caps. Reuse counts the 19 briefs already placed: 6 pairs, 2 T7 founders and 5 builders.
+frozen design, 5 skins (for reference): 110 briefs (34 pairs, 14 unpaired founders, 28 builders), 94 in stage 2, 8 in stage 1; still to author 28 pairs, 12 unpaired founders, 23 builders
+  authoring                                  central $  322.31  cap $  464
+  simulator audit                            central $   29.34  cap $   41
+  stage 1 (approved cap, holds one repair)   central $  109.68  cap $  220
+  judge check (approved cap)                 central $   89.80  cap $  123
+  stage 2, Opus and Sol                      central $ 1188.16  cap $ 1645
+  stage 2, particle-1                        central $  100.58  cap $  150
+  hosts                                      central $   15.28  cap $   22
+  paid total                                 central $ 1855.14  cap $ 2665
+  all-in with $350 of agent use                central $ 2205.14  cap $ 3015
+  authoring at Jeffreys draws of every yield: 95% range $200 to $881, so all-in at caps $2850 to $3768
+design 1, 4 skins, builders kept: 96 briefs (28 pairs, 12 unpaired founders, 28 builders), 80 in stage 2, 8 in stage 1; still to author 22 pairs, 10 unpaired founders, 23 builders
+  authoring                                  central $  281.64  cap $  409
+  simulator audit                            central $   28.81  cap $   40
+  stage 1 (approved cap, holds one repair)   central $  109.68  cap $  220
+  judge check (approved cap)                 central $   89.80  cap $  123
+  stage 2, Opus and Sol                      central $ 1011.20  cap $ 1406
+  stage 2, particle-1                        central $   85.60  cap $  130
+  hosts                                      central $   13.18  cap $   19
+  paid total                                 central $ 1619.91  cap $ 2347
+  all-in with $350 of agent use                central $ 1969.91  cap $ 2697
+  authoring at Jeffreys draws of every yield: 95% range $175 to $762, so all-in at caps $2553 to $3345
+  if T1 and T4 partners all match at the past-3 rate (none of their 3 partners matched within 3 draws), and a third of the 22 pairs still to place are T1 or T4: authoring adds $395 central and $534 at caps
+design 1b, pairs-only founders and builders kept; narrows the claim to six types, not counted: 92 briefs (32 pairs, 0 unpaired founders, 28 builders), 76 in stage 2, 8 in stage 1; still to author 26 pairs, 0 unpaired founders, 23 builders
+  authoring                                  central $  182.16  cap $  274
+  simulator audit                            central $   28.65  cap $   40
+  stage 1 (approved cap, holds one repair)   central $  109.68  cap $  220
+  judge check (approved cap)                 central $   89.80  cap $  123
+  stage 2, Opus and Sol                      central $  960.64  cap $ 1337
+  stage 2, particle-1                        central $   81.32  cap $  124
+  hosts                                      central $   12.58  cap $   18
+  paid total                                 central $ 1464.83  cap $ 2136
+  all-in with $350 of agent use                central $ 1814.83  cap $ 2486
+  authoring at Jeffreys draws of every yield: 95% range $115 to $401, so all-in at caps $2396 to $2782
+option 2, founder pairs only, 12 pairs: 36 briefs (18 pairs, 0 unpaired founders, 0 builders), 24 in stage 2, 8 in stage 1; still to author 18 pairs, 0 unpaired founders, 0 builders
+  authoring                                  central $   54.97  cap $  103
+  simulator audit                            central $   26.50  cap $   37
+  stage 1 (approved cap, holds one repair)   central $  109.68  cap $  220
+  judge check (approved cap)                 central $   89.80  cap $  123
+  stage 2, Opus and Sol                      central $  303.36  cap $  450
+  stage 2, particle-1                        central $   25.68  cap $   49
+  hosts                                      central $    4.79  cap $    8
+  paid total                                 central $  614.78  cap $  990
+  all-in with $350 of agent use                central $  964.78  cap $ 1340
+  authoring at Jeffreys draws of every yield: 95% range $31 to $155, so all-in at caps $1308 to $1475
+option 2, founder pairs only, 16 pairs: 44 briefs (22 pairs, 0 unpaired founders, 0 builders), 32 in stage 2, 8 in stage 1; still to author 22 pairs, 0 unpaired founders, 0 builders
+  authoring                                  central $   67.18  cap $  119
+  simulator audit                            central $   26.81  cap $   38
+  stage 1 (approved cap, holds one repair)   central $  109.68  cap $  220
+  judge check (approved cap)                 central $   89.80  cap $  123
+  stage 2, Opus and Sol                      central $  404.48  cap $  587
+  stage 2, particle-1                        central $   34.24  cap $   61
+  hosts                                      central $    5.99  cap $   10
+  paid total                                 central $  738.18  cap $ 1158
+  all-in with $350 of agent use                central $ 1088.18  cap $ 1508
+  authoring at Jeffreys draws of every yield: 95% range $38 to $190, so all-in at caps $1469 to $1675
+option 2, founder pairs only, 24 pairs: 60 briefs (30 pairs, 0 unpaired founders, 0 builders), 48 in stage 2, 8 in stage 1; still to author 30 pairs, 0 unpaired founders, 0 builders
+  authoring                                  central $   91.61  cap $  152
+  simulator audit                            central $   27.42  cap $   39
+  stage 1 (approved cap, holds one repair)   central $  109.68  cap $  220
+  judge check (approved cap)                 central $   89.80  cap $  123
+  stage 2, Opus and Sol                      central $  606.72  cap $  860
+  stage 2, particle-1                        central $   51.36  cap $   84
+  hosts                                      central $    8.39  cap $   13
+  paid total                                 central $  984.98  cap $ 1491
+  all-in with $350 of agent use                central $ 1334.98  cap $ 1841
+  authoring at Jeffreys draws of every yield: 95% range $52 to $259, so all-in at caps $1788 to $2067
+Part D. MDD and decision shares, from power.py's model unchanged: one session a brief, arm and model, pooled over Opus and Sol, paired t over opening clusters
+filled set           clusters  8  rho 0.500  pooled MDD at p0 0.25 0.34, 0.40 0.34, 0.55 0.33
+filled set           clusters  8  rho 0.843  pooled MDD at p0 0.25 0.33, 0.40 not reached by 0.45, 0.55 not reached by 0.39
+filled set           p0 0.40 rho 0.500 | d 0.00 excludes zero 0.022 MERGE 0.018 | d 0.10 excludes zero 0.132 MERGE 0.126 | d 0.15 excludes zero 0.263 MERGE 0.254 | d 0.20 excludes zero 0.395 MERGE 0.388
+filled set           p0 0.40 rho 0.843 | d 0.00 excludes zero 0.002 MERGE 0.001 | d 0.10 excludes zero 0.098 MERGE 0.090 | d 0.15 excludes zero 0.229 MERGE 0.221 | d 0.20 excludes zero 0.375 MERGE 0.370
+design 1, 4 skins    clusters 32  rho 0.500  pooled MDD at p0 0.25 0.14, 0.40 0.15, 0.55 0.15
+design 1, 4 skins    clusters 32  rho 0.843  pooled MDD at p0 0.25 0.09, 0.40 0.09, 0.55 0.09
+design 1, 4 skins    p0 0.40 rho 0.500 | d 0.00 excludes zero 0.021 MERGE 0.001 | d 0.10 excludes zero 0.502 MERGE 0.143 | d 0.15 excludes zero 0.821 MERGE 0.463 | d 0.20 excludes zero 0.974 MERGE 0.829
+design 1, 4 skins    p0 0.40 rho 0.843 | d 0.00 excludes zero 0.021 MERGE 0.000 | d 0.10 excludes zero 0.868 MERGE 0.079 | d 0.15 excludes zero 0.992 MERGE 0.458 | d 0.20 excludes zero 1.000 MERGE 0.821
+design 1b, 26 pairs  clusters 26  rho 0.500  pooled MDD at p0 0.25 0.14, 0.40 0.15, 0.55 0.15
+design 1b, 26 pairs  clusters 26  rho 0.843  pooled MDD at p0 0.25 0.10, 0.40 0.10, 0.55 0.10
+design 1b, 26 pairs  p0 0.40 rho 0.500 | d 0.00 excludes zero 0.028 MERGE 0.001 | d 0.10 excludes zero 0.494 MERGE 0.156 | d 0.15 excludes zero 0.821 MERGE 0.493 | d 0.20 excludes zero 0.970 MERGE 0.840
+design 1b, 26 pairs  p0 0.40 rho 0.843 | d 0.00 excludes zero 0.016 MERGE 0.000 | d 0.10 excludes zero 0.850 MERGE 0.100 | d 0.15 excludes zero 0.986 MERGE 0.502 | d 0.20 excludes zero 1.000 MERGE 0.871
+option 2, 12 pairs   clusters 12  rho 0.500  pooled MDD at p0 0.25 0.23, 0.40 0.24, 0.55 0.23
+option 2, 12 pairs   clusters 12  rho 0.843  pooled MDD at p0 0.25 0.21, 0.40 0.21, 0.55 0.21
+option 2, 12 pairs   p0 0.40 rho 0.500 | d 0.00 excludes zero 0.023 MERGE 0.011 | d 0.10 excludes zero 0.228 MERGE 0.166 | d 0.15 excludes zero 0.440 MERGE 0.369 | d 0.20 excludes zero 0.696 MERGE 0.637
+option 2, 12 pairs   p0 0.40 rho 0.843 | d 0.00 excludes zero 0.010 MERGE 0.001 | d 0.10 excludes zero 0.293 MERGE 0.120 | d 0.15 excludes zero 0.583 MERGE 0.402 | d 0.20 excludes zero 0.771 MERGE 0.662
+option 2, 16 pairs   clusters 16  rho 0.500  pooled MDD at p0 0.25 0.18, 0.40 0.20, 0.55 0.19
+option 2, 16 pairs   clusters 16  rho 0.843  pooled MDD at p0 0.25 0.16, 0.40 0.15, 0.55 0.15
+option 2, 16 pairs   p0 0.40 rho 0.500 | d 0.00 excludes zero 0.026 MERGE 0.008 | d 0.10 excludes zero 0.320 MERGE 0.209 | d 0.15 excludes zero 0.613 MERGE 0.482 | d 0.20 excludes zero 0.836 MERGE 0.753
+option 2, 16 pairs   p0 0.40 rho 0.843 | d 0.00 excludes zero 0.017 MERGE 0.000 | d 0.10 excludes zero 0.511 MERGE 0.152 | d 0.15 excludes zero 0.808 MERGE 0.470 | d 0.20 excludes zero 0.944 MERGE 0.789
+option 2, 24 pairs   clusters 24  rho 0.500  pooled MDD at p0 0.25 0.14, 0.40 0.15, 0.55 0.15
+option 2, 24 pairs   clusters 24  rho 0.843  pooled MDD at p0 0.25 0.10, 0.40 0.10, 0.55 0.10
+option 2, 24 pairs   p0 0.40 rho 0.500 | d 0.00 excludes zero 0.026 MERGE 0.001 | d 0.10 excludes zero 0.472 MERGE 0.165 | d 0.15 excludes zero 0.802 MERGE 0.498 | d 0.20 excludes zero 0.963 MERGE 0.819
+option 2, 24 pairs   p0 0.40 rho 0.843 | d 0.00 excludes zero 0.022 MERGE 0.000 | d 0.10 excludes zero 0.816 MERGE 0.090 | d 0.15 excludes zero 0.979 MERGE 0.469 | d 0.20 excludes zero 0.999 MERGE 0.845
