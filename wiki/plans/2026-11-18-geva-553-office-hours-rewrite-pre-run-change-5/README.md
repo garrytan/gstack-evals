@@ -46,4 +46,4 @@ The authoring item, ohr-author, has $33.95 committed of its $251 cap over three 
 
 ## 4. The build commit
 
-Every paid run from here on, authoring's continuation included, runs at the gstack-evals commit that adds this post, or a later commit whose lanes/, src/ and tests/ trees are byte-identical to it. Each run's admission still needs a green CI run at the exact commit it checks out. Authoring's replies from before the stop replay from its cache unchanged.
+Every paid run from here on, authoring's continuation included, runs at gstack-evals commit c109b2a258c1869f2d61fbaf3bd8f8b3201d1c6f, the merge that brings this change into the results branch, or at a later commit whose lanes/, src/ and tests/ trees are byte-identical to it. This replaces change 4's build commit. Each run's admission still needs a green CI run at the exact commit it checks out. Authoring's replies from before the stop replay from its cache unchanged.
