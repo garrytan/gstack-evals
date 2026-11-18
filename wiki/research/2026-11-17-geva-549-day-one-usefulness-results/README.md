@@ -12,7 +12,7 @@ links:
   - 2026-11-17-geva-549-day-one-pin-change
   - lanes/day-one
 attachments:
-  - 264b8ba2da9f4305b52f40762f041619324675882e2633e277a45fac709ed366  run-record.md
+  - ce3242dfbef30d7d44a716183c4cbc5a3e1dbaeb1f56b14ccbc0ee91ba3a8b5c  run-record.md
 ---
 
 # Day-one usefulness eval: results (in progress)
