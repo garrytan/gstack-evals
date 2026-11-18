@@ -85,8 +85,8 @@ reason code. The commands print counts, readings and the sha256 of what they wro
    bar.
 9. STOCK FAIL's limit is one unit in eight of the stage's units, rounded down: the calibration units in stage 1 and the
    manifest's units in stage 2. Credits count distinct units per row and production judge.
-10. The stage 2 gold re-check reads Cohen's kappa over its labelled cells. With no labelled cell, or chance agreement
-    of one, there is no kappa, and the model reads untested (judge).
+10. The stage 2 gold re-check reads Cohen's kappa over all its gold cells, and an unlabelled cell counts as wrong. With no
+    gold cell, or chance agreement of one, there is no kappa, and the model reads untested (judge).
 11. Incomplete needs the run side to say the stage stopped. Unrun entries without a stop count as missing. The interim
     stop stops only its arm, so that arm's unrun Opus cells don't make Opus incomplete.
 12. The interim stop and the run order follow the manifest's order, and count only sessions the exposure detector read.
