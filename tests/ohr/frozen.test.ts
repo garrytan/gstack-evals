@@ -1,9 +1,10 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // The office-hours rewrite eval's frozen strings, checked byte for byte against the preregistration and its pre-run changes.
 import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { CAPS, CHANGE_1, CLOSING, LENS_LINE, PINS, PREREG, SEED, SIM_ADDED_RULES, SKILL_PREFIX, firstMessage } from "../../lanes/office-hours-rewrite/frozen.ts";
+import { CAPS, CHANGE_1, CLOSING, LENS_LINE, PINS, PREREG, REVEAL_NOTE, SEED, SIM_ADDED_RULES, SIM_RULES_FILES, SIM_RULES_SHA256, SKILL_PREFIX, attemptLine, firstMessage } from "../../lanes/office-hours-rewrite/frozen.ts";
 
 const root = join(import.meta.dir, "..", "..");
 const prereg = readFileSync(join(root, PREREG), "utf8");
@@ -25,6 +26,16 @@ describe("frozen values match the posts", () => {
   });
   test("the simulator's added rules", () => {
     for (const rule of SIM_ADDED_RULES) expect(prereg).toContain("   - " + rule + "\n");
+  });
+  test("the simulator's rules files and the guard's notes", () => {
+    for (const kind of ["founder", "builder"] as const) {
+      const text = readFileSync(join(root, CHANGE_1, "..", SIM_RULES_FILES[kind]), "utf8");
+      expect(createHash("sha256").update(text).digest("hex")).toBe(SIM_RULES_SHA256[kind]);
+      expect(change1).toContain(SIM_RULES_SHA256[kind] + "  " + SIM_RULES_FILES[kind]);
+      SIM_ADDED_RULES.forEach((rule, i) => expect(text).toContain("\n" + (11 + i) + ". " + rule + "\n"));
+    }
+    expect(change1).toContain('"' + REVEAL_NOTE + '"');
+    expect(change1).toContain('"' + attemptLine(0).replace("0", "N") + '"');
   });
   test("the current pin and its file hashes", () => {
     const pin = PINS.current!;

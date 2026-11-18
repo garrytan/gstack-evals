@@ -8,9 +8,14 @@ PAIRS, UNPAIRED = 34, 42
 CAP, ALLOWANCE = 251, 3.50
 Z = 1.6448536269514722  # two-sided 90% Wilson, so each bound is one-sided 95%
 
+def line(draw_usd, first_pass):
+    room = (CAP - ALLOWANCE) / draw_usd - (PAIRS + UNPAIRED) / first_pass
+    return PAIRS / room if room > 0 else None
+
+
 fixed_draws = PAIRS / PASS + UNPAIRED / PASS
 max_twin_draws = (CAP - ALLOWANCE) / DRAW_USD - fixed_draws
-THRESHOLD = PAIRS / max_twin_draws
+THRESHOLD = line(DRAW_USD, PASS)
 
 
 def cost(y):
@@ -41,6 +46,7 @@ def read(k, n):
 print(f"draws outside second twins: {fixed_draws:.1f}; second-twin draws the cap admits: {max_twin_draws:.1f}")
 print(f"yield threshold: {THRESHOLD:.3f} (cost at the threshold {cost(THRESHOLD):.2f}, cap less one allowance {CAP - ALLOWANCE:.2f})")
 print(f"authoring cost at yields 0.30, 0.44, 0.50: {cost(0.30):.2f}, {cost(0.44):.2f}, {cost(0.50):.2f}")
+print(f"line at a measured 1.04 a draw and a first-pass rate of 0.30: {line(1.04, 0.30)} (None: the cap is used up before any second twin, so authoring stops)")
 print()
 print("A. One read after n second-twin draws: share of runs reading go (lower bound at or above the threshold) and stop (upper bound below it)")
 YIELDS = [0.10, 0.15, 0.20, 0.24, 0.30, 0.35, 0.44, 0.50]
@@ -56,7 +62,7 @@ print()
 print("Wilson bounds at n = 4: 0/4 upper", f"{wilson(0, 4)[1]:.3f};", "4/4 lower", f"{wilson(4, 4)[0]:.3f}")
 print()
 N1, N2 = 16, 32
-print(f"B. Frozen two-step pilot: read after {N1} second-twin draws; if open, draw to {N2} and read once more; still open goes to the Captain")
+print(f"B. Frozen two-step pilot: read after {N1} second-twin draws; if open, draw to {N2} and read once more; still open goes to the Captain. The line is held at its planning value {THRESHOLD:.3f}")
 print("yield  go     stop   Captain(open)  mean second-twin draws in the pilot")
 for y in YIELDS:
     go = st = op = 0.0
