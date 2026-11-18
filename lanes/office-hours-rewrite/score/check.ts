@@ -47,6 +47,8 @@ export interface CheckInput {
 export interface CheckResult {
   judge: JudgeKey;
   verdict: "PASS" | "FAIL" | "NO READ";
+  /** The reason code a report prints first: null on PASS. */
+  code: "E_OHR_JUDGE_CHECK_FAIL" | "E_OHR_JUDGE_CHECK_NO_READ" | null;
   reasons: string[];
   outputs: number;
   blocks: number;
@@ -136,6 +138,7 @@ export function judgeCheck(inp: CheckInput): CheckResult {
   return {
     judge: inp.judge,
     verdict: fails ? "FAIL" : noRead ? "NO READ" : "PASS",
+    code: fails ? "E_OHR_JUDGE_CHECK_FAIL" : noRead ? "E_OHR_JUDGE_CHECK_NO_READ" : null,
     reasons,
     outputs,
     blocks,

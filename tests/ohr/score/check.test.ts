@@ -58,6 +58,7 @@ describe("judge check", () => {
   test("a faithful judge passes with enough gold, near-misses and stock rows", () => {
     const r = judgeCheck(input({ session: 40, near: 4, stock: 3 }, faithful));
     expect(r.verdict).toBe("PASS");
+    expect(r.code).toBeNull();
     expect(r.kappa).toBe(1);
     expect(r.kappa_real).toBe(1);
     expect(r.near_miss).toBe(1);
@@ -81,7 +82,9 @@ describe("judge check", () => {
     expect(r.anchors_credited).toBe(40);
   });
   test("under 40 outputs or 40 blocks reads NO READ", () => {
-    expect(judgeCheck(input({ session: 19, near: 4, stock: 3 }, faithful)).verdict).toBe("NO READ");
+    const r = judgeCheck(input({ session: 19, near: 4, stock: 3 }, faithful));
+    expect(r.verdict).toBe("NO READ");
+    expect(r.code).toBe("E_OHR_JUDGE_CHECK_NO_READ");
   });
   test("each kappa needs 10 gold cells of each class, else NO READ", () => {
     const one = (o: Parameters<typeof plant>[0]) => {
@@ -99,6 +102,7 @@ describe("judge check", () => {
     const r = judgeCheck(input({ session: 40, near: 4, stock: 3 }, (b, i, k) => (k === "session" && i < 12 ? [i % 2 !== 0, i % 2 !== 0] : faithful(b, i, k))));
     expect(r.kappa!).toBeLessThan(0.6);
     expect(r.verdict).toBe("FAIL");
+    expect(r.code).toBe("E_OHR_JUDGE_CHECK_FAIL");
     const real = judgeCheck(input({ session: 20, answer: 40, near: 4, stock: 3 }, (b, i, k) => (k === "session" && i < 7 ? [i % 2 !== 0, i % 2 !== 0] : faithful(b, i, k))));
     expect(real.kappa!).toBeGreaterThanOrEqual(0.6);
     expect(real.kappa_real!).toBeLessThan(0.6);

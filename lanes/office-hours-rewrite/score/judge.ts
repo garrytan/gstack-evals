@@ -11,6 +11,7 @@
 //   medium for the judge's own check labels.
 // - A packet with a missing or unparsable cell is resent once, whole, with the product-value eval's fixed note so the
 //   cache is not read; the resend's answer replaces the first. A cell still missing is null (unlabelled).
+// - judgePackets returns the count of unlabelled cells; a command prints it on one E_OHR_LABEL_MISSING line and goes on.
 // - labeller() implements types.ts Labeller on the same prompt, so authoring's screens label the way production does.
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -79,7 +80,7 @@ async function labelOnce(p: Pick<PacketFile, "id" | "items" | "blocks">, judge: 
 }
 
 /** Runs every packet of a map with its judges, one at a time in id order. */
-export async function judgePackets(o: { map: PacketMap; packets: ReadonlyMap<string, PacketFile>; call: Caller; effort: Effort }): Promise<{ labels: JudgedLabel[]; calls: CallLog[] }> {
+export async function judgePackets(o: { map: PacketMap; packets: ReadonlyMap<string, PacketFile>; call: Caller; effort: Effort }): Promise<{ labels: JudgedLabel[]; calls: CallLog[]; unlabelled: number }> {
   if (o.map.kind === "label" && o.effort !== JUDGE_EFFORT) throw new Error("E_OHR_JUDGE_INPUT a label map runs at " + JUDGE_EFFORT + " effort, not " + o.effort);
   if (o.effort !== JUDGE_EFFORT && o.effort !== GOLD_EFFORT) throw new Error("E_OHR_JUDGE_INPUT effort " + o.effort + " is neither " + JUDGE_EFFORT + " nor " + GOLD_EFFORT);
   const calls: CallLog[] = [];
@@ -93,7 +94,7 @@ export async function judgePackets(o: { map: PacketMap; packets: ReadonlyMap<str
       for (const b of p.blocks) labels.push({ packet: id, block: b.id, brief: meta.brief, judge, model_id: a.reply.model_id, model_version: a.reply.version, effort: o.effort, ...a.cells.get(b.id)! });
     }
   }
-  return { labels, calls };
+  return { labels, calls, unlabelled: labels.reduce((n, l) => n + (l.decision === null ? 1 : 0) + (l.action === null ? 1 : 0), 0) };
 }
 
 /** types.ts's Labeller on the frozen prompt: a block with no cell labelled after the one resend is a null entry. */

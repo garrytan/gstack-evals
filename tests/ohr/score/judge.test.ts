@@ -64,6 +64,9 @@ describe("judge", () => {
     const out = await lab({ judge: "opus", brief: "a", items: itemsOf("a", BRIEFS), blocks: [{ id: "k1", block: block("x", "y") }], effort: "max", label: "t" });
     expect(call.calls).toBe(2);
     expect(out.get("k1")).toBeNull();
+    const built = buildLabelPackets({ stage: 1, seed: SEED, briefs: BRIEFS, rows: allRows("opus").slice(0, 1) });
+    const run = await judgePackets({ map: built.map, packets: new Map(built.packets.map((p) => [p.id, p])), call: stubCaller({ garble: 2 }), effort: "medium" });
+    expect(run.unlabelled).toBe(10);
     const partial = labeller(stubCaller({ skip: (t) => t.startsWith("skip") }));
     const two = await partial({ judge: "opus", brief: "a", items: itemsOf("a", BRIEFS), blocks: [{ id: "k1", block: block("skip", "y") }, { id: "k2", block: block("x", "y") }], effort: "medium", label: "t" });
     expect(two.get("k1")).toBeNull();
