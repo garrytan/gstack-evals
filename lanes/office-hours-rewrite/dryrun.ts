@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // gstack-evals ohr dryrun (prereg section 12, step 1): the keyless dry run. It runs every area's seams, each driving one
 // frozen rule through the area's real code on one side of its edge, checks the ledger split (ledger.ts) on both sides,
+// walks every launch's schedule against its ledger items at 1.0 and 1.35 times central (pre-run change 4),
 // then opens and settles one ledger lease per ledger item, at that item's cap, on a temporary ledger, and checks that an
 // item that served one run refuses a second. It prints one PASS, FAIL or SKIP line per check and exits 1 on any FAIL or
 // SKIP: a SKIP is never a pass. The keyless end to end through the real Docker rig is its own command, ohr e2e.
@@ -11,7 +12,7 @@ import { openLease, recordApproval, settleLease } from "../../src/runner/ledger/
 import { openLocalLedger } from "../../src/runner/ledger/local.ts";
 import { ledgerPath } from "../../src/runner/ledger/paths.ts";
 import { CAPS } from "./frozen.ts";
-import { SPLIT, splitProblems } from "./ledger.ts";
+import { finishesUpTo, SCHEDULES, SPLIT, splitProblems, walkSchedule, type ScheduleRead } from "./ledger.ts";
 import type { Seam } from "./types.ts";
 
 interface Io {
@@ -54,13 +55,28 @@ async function seamLines(): Promise<Line[]> {
 function splitLines(): Line[] {
   const held = splitProblems();
   const over = splitProblems(SPLIT.map((p) => (p.item === "ohr-s2-arms" ? { ...p, cap: p.cap + CAPS.stage2 } : p)));
-  const thin = splitProblems(SPLIT.map((p) => (p.item === "ohr-s1-sim" ? { ...p, cap: 7 } : p)));
+  const thin = splitProblems(SPLIT.map((p) => (p.item === "ohr-audit" ? { ...p, cap: 39 } : p)));
+  const short = splitProblems(SPLIT.map((p) => (p.item === "ohr-s1-sim" ? { ...p, cap: 13 } : p)));
   const sums = (Object.keys(CAPS) as (keyof typeof CAPS)[]).map((l) => l + " $" + SPLIT.filter((p) => p.line === l).reduce((t, p) => t + p.cap, 0) + "/$" + CAPS[l]).join(", ");
   return [
     { name: "ledger split: every approved item's ledger items sum to at most its cap, and each keeps 1.35 times central plus its allowance | holds", state: held.length ? "FAIL" : "PASS", detail: held.join("; ") || sums },
     { name: "ledger split: a part that pushes an approved item past its cap is refused | breaks", state: over.some((p) => p.startsWith("stage2's ledger items sum")) ? "PASS" : "FAIL", detail: over[0] ?? "no refusal" },
-    { name: "ledger split: a part under 1.35 times its central figure is refused | breaks", state: thin.some((p) => p.startsWith("ohr-s1-sim")) ? "PASS" : "FAIL", detail: thin[0] ?? "no refusal" },
+    { name: "ledger split: a one-run part under 1.35 times its central figure is refused | breaks", state: thin.some((p) => p.startsWith("ohr-audit")) ? "PASS" : "FAIL", detail: thin[0] ?? "no refusal" },
+    { name: "ledger split: a launch item too small for its schedule is refused | breaks", state: short.some((p) => p.startsWith("stage1: does not finish at 1.35") && p.includes("ohr-s1-sim")) ? "PASS" : "FAIL", detail: short[0] ?? "no refusal" },
   ];
+}
+
+const readLine = (r: ScheduleRead) => "at " + r.at + ": " + r.started + " of " + r.rounds + " rounds start" + (r.stops_on ? ", stops on " + r.stops_on : ", finishes") + "; needs $" + r.need.arms + " arms, $" + r.need.sim + " simulator, $" + r.need.labels + " labels of $" + r.caps.arms + ", $" + r.caps.sim + ", $" + r.caps.labels;
+
+/** Pre-run change 4's schedule check, one line a launch, with its reads at 1.0 and 1.35 times central. */
+export function scheduleLines(): Line[] {
+  return SCHEDULES.map((s) => {
+    const at1 = walkSchedule(s, 1), at135 = walkSchedule(s, 1.35);
+    const detail = readLine(at1) + " | " + readLine(at135) + (s.finish === null ? "" : " | finishes up to " + finishesUpTo(s) + " times central");
+    if (s.finish === null) return { name: "ledger schedule: " + s.name + " starts at least its first round (one brief on Opus) at 1.35 times central on " + s.items.arms + " and " + s.items.sim, state: at135.started >= 1 && at1.started >= 1 ? "PASS" : "FAIL", detail };
+    const r = s.finish === 1 ? at1 : at135;
+    return { name: "ledger schedule: " + s.name + " finishes at " + s.finish + " times central on " + s.items.arms + ", " + s.items.sim + " and " + s.items.labels, state: r.stops_on === null ? "PASS" : "FAIL", detail };
+  });
 }
 
 function ledgerLines(): Line[] {
@@ -102,7 +118,7 @@ function ledgerLines(): Line[] {
 }
 
 export async function dryRun(o: { ledger: boolean }): Promise<Line[]> {
-  return [...(await seamLines()), ...splitLines(), ...(o.ledger ? ledgerLines() : [])];
+  return [...(await seamLines()), ...splitLines(), ...scheduleLines(), ...(o.ledger ? ledgerLines() : [])];
 }
 
 export async function run(argv: string[], io: Io): Promise<number> {
