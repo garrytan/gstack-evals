@@ -2,7 +2,7 @@
 id: 2026-11-18-geva-553-office-hours-rewrite-pre-run-change-3
 kind: plan
 title: "Pre-run change 3 to the office-hours rewrite eval: the ledger items, the GPT-6.2 Astra route and the preflight"
-summary: "Freezes the ledger items, routes GPT-6.2 Astra calls to their own priced meter key, records the preflight and terms re-read, and names the build commit for authoring."
+summary: "Freezes the ledger items, routes GPT-6.2 Astra calls to their own priced meter key, and records the preflight and terms re-read. Change 4 names the build commit."
 author: GEVA-553
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
@@ -67,9 +67,9 @@ Section 12, step 1, also asks for a dated re-read of model and provider terms. O
 
 None bars using model outputs to evaluate a model or a skill, and none bars a model playing an invented founder who stands for no real person. OpenAI's updated usage policies take force on 2026-11-20, during this run, and name "model evaluation and benchmarking" as allowed. Since the founder eval's read on 2026-11-12, Anthropic's usage policy shows a new effective date (2026-11-12) and the Claude Code legal page moved address with the same text. Nothing else changed.
 
-## 5. The build commit for authoring
+## 5. The build commit
 
-Change 1, section 6, asks for the build commit every paid run pins before authoring. Authoring runs at gstack-evals commit c9d59370b572fbdb1e88dd21173c1a01d72a6437, a clean checkout of the commit that first adds this post, with a green CI run at that commit as its admission proof. It runs as one uninterrupted command, with no pilot-only stop, so the pilot's draws and the full run share one run and one ledger item.
+Change 1, section 6, asks for the build commit every paid run pins before authoring. Authoring was first set to run at gstack-evals commit c9d59370b572fbdb1e88dd21173c1a01d72a6437, the commit that first adds this post. CI at that commit failed one documentation test (two new exit 3 reason codes were not listed in docs/skill-eval.md), so authoring did not start there and nothing was spent. Authoring now runs at the build commit pre-run change 4 names for every paid run, with a green CI run at that commit as its admission proof. It runs as one uninterrupted command, with no pilot-only stop, so the pilot's draws and the full run share one run and one ledger item.
 
 An advisory read of changes 2 and 3 and the build, before any paid call, found four holes in code that authoring does not use. Before the simulator audit and stage 1, a further pre-run change names the build commit for those runs, and it may add only these fixes:
 

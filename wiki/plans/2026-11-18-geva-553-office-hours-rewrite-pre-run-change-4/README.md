@@ -25,7 +25,7 @@ attachments:
 - A judge, auditor or simulator reply counts only when it names the model the call pinned, or a dated snapshot of that model. An arm session whose replies name another model halts its launch and is not counted.
 - The simulator audit halts when the simulated person's provider or model drifts, instead of dropping the turn.
 - A ledger refusal on a judge, auditor or label call ends the command as a cap stop, which reads INCOMPLETE, never as a missing label or an empty answer.
-- Every paid run after authoring runs at the commit that adds this post (section 7).
+- Every paid run, authoring included, runs at the commit that adds this post (section 7).
 
 This change governs where it and the earlier posts differ. It is one of the fixes change 3, section 5, allows, with the wording fixes it names. It changes no measure, arm, model, threshold or decision row, and no approved cap.
 
@@ -110,8 +110,8 @@ These posts are not merged, so they are amended in place:
 - Change 2, section 2: in the gstack clone fetched on 2026-11-18, main (cbd21f942) was four first-parent commits past the current pin, the first d3d35019a, not one. None of the four touches office-hours/ or a helper either pin checks. The merge base fc5c285035b58ce0552d25cf7cb71749795b6d30 stands.
 - The rewrite's intentions inventory: two cited files are executables, not templates; the landscape section rewords two lines; the repo copy may carry deal amounts when the founder says they can be shared; and an overdue returning founder's own test comes before the reality check (N6). No scored intention changes.
 
-The authoring screen (author/screens.ts) is unchanged and already runs at the authoring build commit. It takes every double-quoted string in the new pin's "Reality Check" and "Pivot flow" sections, not only their questions: twelve strings, among them a gstack-slug shell line, a founder's example words, a worked market-size line and two adviser lines. lanes/office-hours-rewrite/author/README.md now says so.
+The authoring screen (author/screens.ts) is unchanged from the commit change 3 first named. It takes every double-quoted string in the new pin's "Reality Check" and "Pivot flow" sections, not only their questions: twelve strings, among them a gstack-slug shell line, a founder's example words, a worked market-size line and two adviser lines. lanes/office-hours-rewrite/author/README.md now says so.
 
-## 7. The build commit for the paid runs after authoring
+## 7. The build commit for every paid run
 
-Every paid run after authoring (the simulator audit, stage 1 and its repair, its labels, the judge check, stage 2 and particle-1) runs at the gstack-evals commit that adds this post, or a later commit whose lanes/, src/ and tests/ trees are byte-identical to it, and each run's manifest records its commit. Authoring stays at c9d59370b572fbdb1e88dd21173c1a01d72a6437, as change 3 names.
+Every paid run (authoring, the simulator audit, stage 1 and its repair, its labels, the judge check, stage 2 and particle-1) runs at the gstack-evals commit that adds this post, or a later commit whose lanes/, src/ and tests/ trees are byte-identical to it, and each run's manifest records its commit. Authoring did not start at c9d59370b572fbdb1e88dd21173c1a01d72a6437, the commit change 3 first named, because CI there failed one documentation test; it runs under this rule instead. A later commit that changes only docs/ or wiki/ keeps the rule, and each run's admission still needs a green CI run at the exact commit it checks out.
