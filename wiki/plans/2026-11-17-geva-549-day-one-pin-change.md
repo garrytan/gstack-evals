@@ -140,3 +140,17 @@ Three limits remain, kept as notes:
 - An edit made through a symlinked path is not seen.
 
 A held session whose RAM-backed mount fills still retries as an infrastructure failure. The full mount may be why its work never finished.
+
+## 8. A change after rep 3 of the smoke (2026-11-18)
+
+**The run-record rule now follows a plan the session revised under another name** (lanes/day-one/exposure.ts). In rep 3, `gstack-autoplan revise` refused plan.md because it had no `## Implementation plan` section, though the first `next` had accepted it. One A session then wrote plan.md under that heading to `<run folder>/plan-v2.md` and revised that file, so gstack recorded the copy as the run's plan_input. The rule in section 7 counted a record only when its plan_input was /work/app/plan.md, so it passed this one over. The live gate check reads the same record, so it saw no waiting gate after round 2. The owner was never asked, and the session read as not exposed, though Astra completed in all four phases.
+
+The rule now also counts a record whose plan_input is a file inside the run folder or /work/app, when the session's own `gstack-autoplan revise` call, with the record's folder as its --out, named that file as its --plan. Everything else in section 7 still holds: the run must start from a next or run call with --plan /work/app/plan.md, and a hand-edited record never counts. The rule does not depend on the arm. These are still passed over:
+
+- a plan_input outside both the run folder and /work/app;
+- a run that did not start from /work/app/plan.md;
+- a file named by anything but the session's own revise call for that folder, such as a copy, a next call, or a revise call for another folder or another file.
+
+**The arm's plan follows the same file.** The build reads the arm's plan, and the plan-amended check compares it with the base plan. When a counted record's plan_input is a revised file other than plan.md, the arm's plan is now that file as it stands at the session's end. Before, it was plan.md whenever plan.md differed from the base. In rep 3's third A session the two agree: plan.md held the 58 changes accepted at the round-1 gate, and plan-v2.md is the heading followed by that same text, so its build would have read the amended plan either way. A session that edited only the wrapped copy would have been built from a stale plan.md. A wrapped copy differs from the base by its added heading even when nothing else changed, so for such a session the smoke's plan-amended check compares the text under that heading with the base plan.
+
+The new tests are in tests/day-one/run-record.test.ts. On the tree before the change, the wrapped-plan test fails. Each still-passed-over case fails when the rule is widened past it: with no folder check, with no revise check, with any call that names the file, or with no start check. One cross-family advisory read of this change runs alongside rep 4 of the smoke. Exposure is read from the records, so if the read moves a classification, rep 4's rows are re-scored from their records with no new sessions.

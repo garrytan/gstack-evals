@@ -110,6 +110,56 @@ describe("the session's autoplan run record", () => {
     }));
 });
 
+// Value: protects=the widened run-record rule (rep 3 of the smoke): a record whose plan_input is a file the session's own gstack-autoplan revise --out <run folder> --plan named, inside the run folder or /work/app, counts when the run started from /work/app/plan.md, and the arm's plan (the build's input) is that last-revised file; fails_when=a plan the session wrapped and revised is passed over, so its later gate is never asked, or the build reads a file the review did not revise last, or a plan_input outside the run folder and /work/app, a run that did not start from /work/app/plan.md, or a file named by anything other than the session's own revise call counts; why_new=rep 3's third A session, which wrapped plan.md under an Implementation plan heading as <run>/plan-v2.md after revise refused plan.md, so the rule passed its record over and the round-2 gate was never asked; seam=findRun, gatePending, readExposure and armPlan; no_claim=gstack's own plan-shape check
+describe("a plan the session revised under another name", () => {
+  const V2 = RUN + "/plan-v2.md";
+  const wrap = (to: string, out = RUN) => "cd /work/app; O=" + out + "; { echo; echo \"## Implementation plan\"; cat plan.md; } > " + to + "; " + BIN + " revise --out $O --plan " + to + " --incorporates r-d1,r-d2 2>&1 | tail -6";
+
+  test("counts when the session's own revise call named it inside the run folder or /work/app, and the build reads it", () =>
+    withDir((dir) => {
+      const work = join(dir, "work");
+      const roots: RunRoot[] = [{ dir: work, seen: WORK }];
+      put(work, WORK, RUN, body({ status: "gate_pending", plan_input: V2 }));
+      writeFileSync(join(work, "plan.md"), "# Plan, amended once\n");
+      writeFileSync(join(work, ".gstack/tmp/autoplan/run/plan-v2.md"), "\n## Implementation plan\n# Plan, amended twice\n");
+      const t = tx([{ command: SCAFFOLD }, { command: wrap("$O/plan-v2.md") }]);
+      const f = findRun(roots, t);
+      expect(f.run?.seen).toBe(RUN + "/run.json");
+      expect(gatePending(work, t)).toBe(true);
+      expect(readExposure(f, 2)).toMatchObject({ run: RUN + "/run.json", status: "gate_pending", exposed: false });
+      expect(armPlan(work, "# Plan\n", f.run)).toEqual({ text: "\n## Implementation plan\n# Plan, amended twice\n", from: "autoplan" });
+      const atWork = WORK + "/plan-wrapped.md";
+      put(work, WORK, RUN, body({ plan_input: atWork }));
+      writeFileSync(join(work, "plan-wrapped.md"), "## Implementation plan\n# Plan, wrapped\n");
+      const w = tx([{ command: SCAFFOLD }, { command: wrap(atWork) }]);
+      expect(readExposure(findRun(roots, w), 2)).toMatchObject({ run: RUN + "/run.json", exposed: true, voice: "fallback" });
+      expect(armPlan(work, "# Plan\n", findRun(roots, w).run)).toEqual({ text: "## Implementation plan\n# Plan, wrapped\n", from: "autoplan" });
+    }));
+
+  test("is still passed over outside the run folder and /work/app, without a start from /work/app/plan.md, or when anything but the session's own revise named it", () =>
+    withDir((dir) => {
+      const work = join(dir, "work");
+      const roots: RunRoot[] = [{ dir: work, seen: WORK }];
+      const OTHER = WORK + "/.gstack/tmp/autoplan/other";
+      const cases: [string, string, string][] = [
+        ["a revise call naming a file outside the run folder and /work/app", "/tmp/plan-v2.md", tx([{ command: SCAFFOLD }, { command: wrap("/tmp/plan-v2.md") }])],
+        ["a revise call through .. out of /work/app", "/work/plan-v2.md", tx([{ command: SCAFFOLD }, { command: wrap("/work/app/../plan-v2.md") }])],
+        ["a run started from the wrapped file, not /work/app/plan.md", V2, tx([{ command: BIN + " next --out " + RUN + " --plan " + V2 + " --full" }, { command: wrap("$O/plan-v2.md") }])],
+        ["a restart that names the file with next", V2, tx([{ command: SCAFFOLD }, { command: BIN + " next --out " + RUN + " --plan " + V2 }])],
+        ["a copy with no revise call", V2, tx([{ command: SCAFFOLD }, { command: "cp /work/app/plan.md " + V2 }])],
+        ["a revise call for another run folder", V2, tx([{ command: SCAFFOLD }, { command: wrap(V2, OTHER) }])],
+        ["a revise call naming another file", V2, tx([{ command: SCAFFOLD }, { command: wrap("$O/plan-v3.md") }])],
+      ];
+      for (const [how, input, t] of cases) {
+        put(work, WORK, RUN, body({ status: "gate_pending", plan_input: input }));
+        const f = findRun(roots, t);
+        expect([how, f.run]).toEqual([how, null]);
+        expect([how, gatePending(work, t)]).toEqual([how, false]);
+        expect(readExposure(f, 2).why).toContain(RUN + "/run.json");
+      }
+    }));
+});
+
 // Value: protects=the run-record rule against the shell shapes a session writes: wrapper commands, command substitution, default expansion, child shells, subshell and subagent cwd, and interpreter code that only reads the record; fails_when=a real call in one of these shapes is missed, a read-only command refuses the record, an edit through env, eval or a child shell is missed, a call that only asks for help counts, or a cd in a subshell or a subagent moves the main agent's folder; why_new=the cross-family advisory read of the rule, which reproduced each shape; seam=commandLog through findRun; no_claim=a full shell, so a write through a path the code builds at run time is not seen
 describe("the command log's shell shapes", () => {
   const C = BIN + " next --out " + RUN + " --plan " + PLAN + " --full";

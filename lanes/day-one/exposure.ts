@@ -4,10 +4,11 @@
 // - The run (pin change 2, item A): a run.json anywhere in the session's work tree, the state root included, counts
 //   only when the session's own command log holds the gstack-autoplan call that wrote it, a next or run call whose
 //   --out is that run.json's folder and whose --plan is /work/app/plan.md, and the record's plan_input is
-//   /work/app/plan.md. A record that the command log touched any other way is hand-edited and never counts: a Write,
-//   Edit, MultiEdit or NotebookEdit call on it, a shell redirect into it, tee, sed -i, cp, mv, install, ln, dd or
-//   truncate onto it, or an interpreter's inline code that opens it for writing (a target the code builds at run time
-//   counts every run.json the code names). Of the records that count, the latest updated_at wins. Exposure and the live
+//   /work/app/plan.md or (rep 3 of the smoke) a file inside that folder or /work/app that the session's own
+//   gstack-autoplan revise call with the same --out named as its --plan. A record that the command log touched any
+//   other way is hand-edited and never counts: a Write, Edit, MultiEdit or NotebookEdit call on it, a shell redirect
+//   into it, tee, sed -i, cp, mv, install, ln, dd or truncate onto it, or an interpreter's inline code that opens it
+//   for writing (a target the code builds at run time counts every run.json the code names). Of the records that count, the latest updated_at wins. Exposure and the live
 //   gate check (gatePending) read this one record. The scan never follows a symlink, as the copy-out does not.
 // - The command log is every Bash call in the transcript, subagents included, read as shell: variables a command sets
 //   are expanded (with ${X:-default}), ~ is HOME, wrappers (env, command, exec, nohup, time, timeout, sudo, nice) are
@@ -21,9 +22,10 @@
 //   never a loss.
 // - Voice: astra when the voice slot sent at least one request and every closed phase's outside voice completed;
 //   otherwise fallback (E_DAYONE_VOICE), logged per session.
-// - The arm's plan: plan.md at the session's end when it differs from the base plan; otherwise the run's active plan
-//   (run.json active_plan, or the exported plan.md artifact, read only inside the root the run was found in) when that
-//   differs from the base; otherwise plan.md as is.
+// - The arm's plan, which the build reads: the file a counted record's plan_input names when the session revised a
+//   file other than plan.md, read at the session's end; else plan.md at the session's end when it differs from the
+//   base plan; otherwise the run's active plan (run.json active_plan, or the exported plan.md artifact, read only
+//   inside the root the run was found in) when that differs from the base; otherwise plan.md as is.
 // - loadedSkills: every Skill tool call and every Read of a SKILL.md or skill reference file in the transcript,
 //   subagents included, with its path, for the loaded-skill log. On an arm with no gstack any entry marks the session.
 import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
@@ -407,9 +409,14 @@ export function findRun(roots: RunRoot[], transcript: string): RunSearch {
       if (seen.has(s)) continue;
       seen.add(s);
       const folder = posix.dirname(s);
+      const input = r.body?.plan_input;
+      const revised =
+        typeof input === "string" &&
+        (input.startsWith(folder + "/") || input.startsWith(WORK + "/")) &&
+        log.calls.some((c) => c.verb === "revise" && c.out === folder && c.plan === input);
       const why =
-        r.body?.plan_input !== PLAN
-          ? "plan_input " + JSON.stringify(r.body?.plan_input ?? null) + ", not " + PLAN
+        input !== PLAN && !revised
+          ? "plan_input " + JSON.stringify(input ?? null) + ", not " + PLAN + " or a file inside " + folder + " or " + WORK + " that the session's own gstack-autoplan revise --out " + folder + " --plan named"
           : !log.calls.some((c) => STARTS.has(c.verb) && c.out === folder && c.plan === PLAN)
             ? "no gstack-autoplan next or run call with --out " + folder + " and --plan " + PLAN + " in the session's command log"
             : log.writes.has(s)
@@ -458,18 +465,25 @@ export function readExposure(found: RunSearch, voiceRequests: number): Exposure 
 /** The arm's plan text under the rule above. */
 export function armPlan(out: string, base: string | null, run: FoundRun | null): { text: string; from: "plan.md" | "autoplan" | "none" } {
   const read = (p: string) => (existsSync(p) && statSync(p).isFile() ? readFileSync(p, "utf8") : "");
+  const within = (dir: string, p: string) => {
+    try {
+      const real = realpathSync(p);
+      return real.startsWith(realpathSync(dir) + sep) ? read(real) : "";
+    } catch {
+      return "";
+    }
+  };
+  const input = run?.body?.plan_input;
+  if (run && typeof input === "string" && input !== PLAN) {
+    const t =
+      (input.startsWith(run.root.seen + "/") ? within(run.root.dir, join(run.root.dir, input.slice(run.root.seen.length))) : "") ||
+      (input.startsWith(WORK + "/") ? within(out, join(out, input.slice(WORK.length))) : "");
+    if (t.trim()) return { text: t, from: "autoplan" };
+  }
   const plan = read(join(out, "plan.md"));
   if (plan.trim() && (base === null || plan !== base)) return { text: plan, from: "plan.md" };
-  if (run && base !== null && existsSync(run.root.dir)) {
-    const root = realpathSync(run.root.dir);
-    const readInside = (p: string) => {
-      try {
-        const real = realpathSync(p);
-        return real.startsWith(root + sep) ? read(real) : "";
-      } catch {
-        return "";
-      }
-    };
+  if (run && base !== null) {
+    const readInside = (p: string) => within(run.root.dir, p);
     const host = (c: string) => (c === run.root.seen || c.startsWith(run.root.seen + "/") ? join(run.root.dir, c.slice(run.root.seen.length)) : c.startsWith("/") ? null : join(run.root.dir, c));
     for (const c of [run.body?.active_plan, run.body?.artifacts?.["plan.md"]?.path].filter((p): p is string => typeof p === "string")) {
       const p = host(c);
