@@ -11,8 +11,11 @@
 //   (40) reads NO READ. A guard-failed or check-failed sampled turn counts as failed and never goes to the auditors.
 // - GPT-6.2 Astra and Opus 5.5, at maximum effort, read each other sampled turn. The audit passes when at most 5% of
 //   audited turns fail (both auditors mark one) and guard failures are at most 5% of all script turns that ran.
-// - A cap stop on any call ends the audit INCOMPLETE. The record binds both rules digests, the script's digest, the
-//   persona-sim and founder.ts file digests, the seed and every sheet's digest.
+// - A cap stop on any call ends the audit INCOMPLETE (CAP_STOP). A simulator reply from a provider or model other than
+//   its pin ends it too, as a halt (E_PV_PROVIDER_DRIFT, or E_OHR_MODEL_DRIFT for a reply that reports another model),
+//   so a drifted turn can never drop out of the sample while the audit passes. Either stop ends every sheet's script at
+//   its next turn. The record binds both rules digests, the script's digest, the persona-sim and founder.ts file
+//   digests, the seed and every sheet's digest.
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -58,8 +61,8 @@ export interface AuditedTurn {
 }
 
 export interface AuditRecord {
-  read: "pass" | "fail" | "no-read" | "incomplete";
-  code: "E_OHR_SIM_AUDIT" | "E_OHR_NO_READ" | "CAP_STOP" | null;
+  read: "pass" | "fail" | "no-read" | "incomplete" | "halt";
+  code: "E_OHR_SIM_AUDIT" | "E_OHR_NO_READ" | "CAP_STOP" | "E_PV_PROVIDER_DRIFT" | "E_OHR_MODEL_DRIFT" | null;
   reasons: string[];
   binds: { rules_sha256: typeof SIM_RULES_SHA256; script_sha256: string; persona_sim_sha256: string; founder_sha256: string; seed: number; effort: string; sheets: Record<string, string> };
   sheets: number;
@@ -81,18 +84,25 @@ export function scriptTranscript(replies: readonly string[], n: number): Visible
   return AUDIT_SCRIPT.slice(0, n + 1).flatMap((m, i): VisibleTurn[] => [{ role: "assistant", text: m }, ...(i < n ? [{ role: "person" as const, text: replies[i]! }] : [])]);
 }
 
-/** Runs the script over one sheet; stops at the first turn with no delivered reply. */
-export async function runScript(s: AuditSheet, call: SimCall): Promise<{ turns: ScriptTurn[]; cap: string | null }> {
+/** What ends the whole audit: a cap stop or a drift on any sheet. Every sheet checks it before its next turn. */
+export interface AuditStop {
+  cap: string | null;
+  drift: string | null;
+}
+
+/** Runs the script over one sheet; stops at the first turn with no delivered reply, or once any sheet has stopped the audit. */
+export async function runScript(s: AuditSheet, call: SimCall, stop: AuditStop = { cap: null, drift: null }): Promise<{ turns: ScriptTurn[] }> {
   const replies: string[] = [];
   const turns: ScriptTurn[] = [];
-  for (let n = 0; n < AUDIT_SCRIPT.length; n++) {
+  for (let n = 0; n < AUDIT_SCRIPT.length && !stop.cap && !stop.drift; n++) {
     const out = await simTurn({ kind: s.kind, sheet: s.sheet, transcript: scriptTranscript(replies, n), call });
     turns.push({ brief: s.brief, turn: n + 1, outcome: out.kind, reply: out.kind === "reply" ? out.reply : null, revealed: out.kind === "reply" ? out.revealed : [], attempts: "attempts" in out ? out.attempts : out.requests.length });
-    if (out.kind === "call-failed" && out.reason === "cap") return { turns, cap: out.detail };
+    if (out.kind === "call-failed" && out.reason === "cap") stop.cap ??= s.brief + ": " + out.detail;
+    if (out.kind === "call-failed" && out.reason === "drift") stop.drift ??= s.brief + ": " + out.detail;
     if (out.kind !== "reply") break;
     replies.push(out.reply);
   }
-  return { turns, cap: null };
+  return { turns };
 }
 
 const auditable = (t: ScriptTurn) => t.outcome === "reply" || t.outcome === "guard-failed" || t.outcome === "check-failed";
@@ -118,14 +128,15 @@ export async function runScriptAudit(o: { sheets: readonly AuditSheet[]; call: (
     effort: AUDIT.effort,
     sheets: Object.fromEntries(sheets.map((s) => [s.brief, sha256(JSON.stringify(s.sheet))])),
   };
-  const runs = await pool(o.parallel ?? 8, sheets.map((s) => () => runScript(s, o.call(s))));
+  const stop: AuditStop = { cap: null, drift: null };
+  const runs = await pool(o.parallel ?? 8, sheets.map((s) => () => runScript(s, o.call(s), stop)));
   const turns = runs.flatMap((r) => r.turns);
   const outcomes = { reply: 0, "guard-failed": 0, "check-failed": 0, "call-failed": 0 } as Record<SimOutcome["kind"], number>;
   for (const t of turns) outcomes[t.outcome]++;
   const base = { binds, sheets: sheets.length, script_turns: turns.length, outcomes, guard_failures: outcomes["guard-failed"], auditable: turns.filter(auditable).length, turns };
   const empty = { audited: 0, failing: 0, disputed: 0, sampled: [] as AuditedTurn[] };
-  const caps = runs.flatMap((r) => (r.cap ? [r.cap] : []));
-  if (caps.length) return { ...base, ...empty, read: "incomplete", code: "CAP_STOP", reasons: ["a cap stop on the simulator: " + caps[0]] };
+  if (stop.drift) return { ...base, ...empty, read: "halt", code: stop.drift.includes("E_OHR_MODEL_DRIFT") ? "E_OHR_MODEL_DRIFT" : "E_PV_PROVIDER_DRIFT", reasons: ["the simulator drifted from its pin, so the audit stops for the Captain: " + stop.drift] };
+  if (stop.cap) return { ...base, ...empty, read: "incomplete", code: "CAP_STOP", reasons: ["a cap stop on the simulator: " + stop.cap] };
   if (base.auditable < AUDIT.no_read_below) return { ...base, ...empty, read: "no-read", code: "E_OHR_NO_READ", reasons: [base.auditable + " auditable script turns, under " + AUDIT.no_read_below] };
   const sheetOf = new Map(sheets.map((s) => [s.brief, s.sheet]));
   const sampled = await pool(o.parallel ?? 8, drawSample(turns).map((turn) => async (): Promise<AuditedTurn> => {

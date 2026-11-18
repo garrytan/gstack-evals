@@ -47,12 +47,13 @@ const wordsOf = (n: number) => Array.from({ length: n }, (_, i) => "w" + i).join
 const notesOf = (system: string) => system.slice(0, system.indexOf("\n\nThe sheet:\n"));
 
 /** A simulator for the audit: turn k of a sheet replies "reply <brief> <k>", or fails as plan says. */
-export function auditCall(brief: string, plan: (turn: number) => "reply" | "guard" | "provider" | "cap" = () => "reply"): SimCall {
+export function auditCall(brief: string, plan: (turn: number) => "reply" | "guard" | "provider" | "cap" | "drift" = () => "reply"): SimCall {
   return async (req) => {
     const k = req.messages.filter((m) => m.role === "user").length;
     const p = plan(k);
     if (p === "provider") return { kind: "call-failed", reason: "provider", detail: "HTTP 503" };
     if (p === "cap") return { kind: "call-failed", reason: "cap", detail: "CAP_STOP the item's cap" };
+    if (p === "drift") return { kind: "call-failed", reason: "drift", detail: "E_OF_PROVIDER_DRIFT google/gemini-4-argon was served by Google AI Studio, not Google Vertex" };
     return { kind: "text", text: out("reply " + brief + " " + k, p === "guard" ? ["f1", "f2", "f3"] : ["f1"]) };
   };
 }
@@ -130,5 +131,6 @@ export const seams: Seam[] = [
   { name: "audit: 4 guard failures in 94 script turns keep the guard share under 5%", run: async () => { const r = await auditGuard(4); return { ok: r.script_turns === 94 && r.guard_failures === 4 && !r.reasons.some((x) => x.includes(GUARD_REASON)), detail: r.reasons.join("; ") || r.read }; } },
   { name: "audit: 5 guard failures in 95 script turns fail the audit", run: async () => { const r = await auditGuard(5); return { ok: r.script_turns === 95 && r.read === "fail" && r.reasons.some((x) => x.includes(GUARD_REASON)), detail: r.reasons.join("; ") }; } },
   { name: "audit: a cap stop ends the audit incomplete", run: async () => { const r = await runScriptAudit({ sheets: auditSheets(8), call: (s) => auditCall(s.brief, (k) => (s.brief === "b003" && k === 2 ? "cap" : "reply")), auditors: auditors(new Set()).auditors }); return { ok: r.read === "incomplete" && r.code === "CAP_STOP" && r.audited === 0, detail: r.read }; } },
+  { name: "audit: a provider drift on one turn halts the audit (E_PV_PROVIDER_DRIFT) instead of dropping the turn and passing", run: async () => { const r = await runScriptAudit({ sheets: auditSheets(14), call: (s) => auditCall(s.brief, (k) => (s.brief === "b003" && k === 2 ? "drift" : "reply")), auditors: auditors(new Set()).auditors, parallel: 1 }); return { ok: r.read === "halt" && r.code === "E_PV_PROVIDER_DRIFT" && r.audited === 0 && r.reasons[0]!.includes("b003") && !r.turns.some((t) => t.brief > "b003"), detail: r.read + " " + r.code }; } },
   { name: "audit: the record binds both rules digests and the script", run: async () => { const r = await auditShort(40); return { ok: r.binds.rules_sha256.founder === SIM_RULES_SHA256.founder && r.binds.rules_sha256.builder === SIM_RULES_SHA256.builder && /^[0-9a-f]{64}$/.test(r.binds.script_sha256) && Object.keys(r.binds.sheets).length === 7, detail: r.binds.script_sha256 }; } },
 ];
