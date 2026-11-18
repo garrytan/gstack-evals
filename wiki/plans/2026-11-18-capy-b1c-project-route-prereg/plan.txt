@@ -1,0 +1,4 @@
+$ b1c plan
+b1c-smoke: smoke-opus (2); expected $0.82, open-session reserve $10.00, VM $7.20, cap $20 (recorded $20)
+b1c-opus: b1c-1 (20), b1c-2 (20), b1c-3 (20); expected $24.60, open-session reserve $30.00, VM $14.88, cap $80 (recorded $80)
+all-in stop $150

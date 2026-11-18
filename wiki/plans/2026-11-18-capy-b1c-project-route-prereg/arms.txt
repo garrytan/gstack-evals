@@ -1,0 +1,15 @@
+$ b1c arms sources --gstack <gstack checkout at bbf48aa7ef19>
+gstack bbf48aa7ef19 bin/gstack-skill-start holds each install line once, and the block is B1b's route file 2f2016daef2b8bf2542b0998d028087000c123ad4725db42e2a90d47870b750d
+
+$ sha256sum of the arm files, as committed
+2f2016daef2b8bf2542b0998d028087000c123ad4725db42e2a90d47870b750d  b1b/CLAUDE.md
+30be001ab82de19aee67c03d45716a72626aa531f793062146f951e2bf1c3783  b1c/place-block
+
+$ b1c arms check
+project-md: tar 69da649d839da7607d5594d53e66549e89a0e0ef3d121a497063538977fe7331 rebuilt byte for byte, 6 files: B1's gstack-shaped 4 plus .b1c/CLAUDE.md (b1b/CLAUDE.md), .claude/skills/gstack/bin/gstack-checks (b1c/place-block)
+B1C ARMS PASS
+
+$ the tar, spec and Claude Code lines of quick/laneb/arms/manifests/b1c/project-md.json
+project-md tar 69da649d839da7607d5594d53e66549e89a0e0ef3d121a497063538977fe7331 files 6 claude_code 2.1.312
+spec project-md:tar=project-md:system_prompt=claude-code-preset:gstack_hooks=copy:strip_snapshot=true:closing_line=hm-status:checks_trust=true
+route {"gstack": "bbf48aa7ef195459afcf7d7840af7073cd050734 (1.100.0.0)", "files": [{"path": ".b1c/CLAUDE.md", "sha256": "2f2016daef2b8bf2542b0998d028087000c123ad4725db42e2a90d47870b750d"}, {"path": ".claude/skills/gstack/bin/gstack-checks", "sha256": "30be001ab82de19aee67c03d45716a72626aa531f793062146f951e2bf1c3783"}], "placed_at": "/testbed/CLAUDE.md"}
