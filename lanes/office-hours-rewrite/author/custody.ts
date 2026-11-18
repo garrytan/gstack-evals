@@ -85,7 +85,12 @@ export function plaintextSha256(sealed: string, identity: string): string {
 export function unsealTo(sealed: string, dir: string, decrypt: Decrypter): string {
   if (!inShm(dir)) throw new AuthorError("E_OHR_CUSTODY", dir + " is not under " + SHM + "; sealed briefs are decrypted only into memory-backed storage");
   if (existsSync(dir)) throw new AuthorError("E_OHR_CUSTODY", dir + " already exists");
-  decrypt(sealed, dir);
+  try {
+    decrypt(sealed, dir);
+  } catch (e) {
+    rmSync(dir, { recursive: true, force: true });
+    throw e;
+  }
   return dir;
 }
 

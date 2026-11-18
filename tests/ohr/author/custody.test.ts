@@ -1,9 +1,11 @@
 // Value: protects=section 3's sealing: plaintext only in /dev/shm, sealed output outside the repo, plaintext deleted after the seal, decryption only into /dev/shm, and a summary of counts and digests.
 import { afterAll, describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { authorToCustody, openCustody, sealCustody, unsealTo, writeAuthoring } from "../../../lanes/office-hours-rewrite/author/custody.ts";
+import { ageDecrypter, authorToCustody, openCustody, sealCustody, unsealTo, writeAuthoring } from "../../../lanes/office-hours-rewrite/author/custody.ts";
 import { authorRun } from "../../../lanes/office-hours-rewrite/author/run.ts";
 import { answersOf, fakeMeter, FIXTURE_SCREEN, fixtureParser, plantedFirstAttempt, runCaller, wordLabeller } from "../../../lanes/office-hours-rewrite/author/fixtures.ts";
 import { CAPS } from "../../../lanes/office-hours-rewrite/frozen.ts";
@@ -79,5 +81,18 @@ describe("custody paths follow links (pre-run change 1)", () => {
     symlinkSync(disk, link);
     expect(() => openCustody(join(link, "w"), outside())).toThrow("E_OHR_CUSTODY");
     expect(() => unsealTo(join(disk, "x.age"), join(link, "d"), () => {})).toThrow("E_OHR_CUSTODY");
+  });
+  test("a truncated sealed file leaves nothing it decrypted in /dev/shm, and age's failure still surfaces", () => {
+    const keys = temp(join(tmpdir(), "ohr-age-"));
+    const plain = temp(join(tmpdir(), "ohr-plain-"));
+    writeFileSync(join(plain, "brief.md"), randomBytes(256 * 1024).toString("hex"));
+    const sealed = join(keys, "sealed.age");
+    const made = spawnSync("bash", ["-o", "pipefail", "-c", 'age-keygen -o "$1/key.txt" 2>/dev/null && tar -C "$2" -cf - . | age -r "$(age-keygen -y "$1/key.txt")" -o "$3"', "seal", keys, plain, sealed]);
+    expect(made.status).toBe(0);
+    const whole = readFileSync(sealed);
+    writeFileSync(sealed, whole.subarray(0, whole.length >> 1));
+    const dir = "/dev/shm/ohr-w-" + randomBytes(4).toString("hex") + ".open-checkpoint";
+    expect(() => unsealTo(sealed, dir, ageDecrypter(join(keys, "key.txt")))).toThrow("decrypting with age failed");
+    expect(readdirSync("/dev/shm").filter((n) => n.startsWith("ohr-w-"))).toEqual([]);
   });
 });
