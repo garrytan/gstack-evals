@@ -36,6 +36,13 @@ describe("the load detector", () => {
     expect(loadsOf([text("I will use prove-it here."), call("a", "Read", { file_path: "/testbed/calc.py" }), result("a", "x")] as any)).toMatchObject({ loaded: false, named: true, first_text: "I will use prove-it here." });
     expect(loadsOf([call("a", "Grep", { pattern: "prove-it" }), result("a", "")] as any)).toMatchObject({ loaded: false, named: true });
   });
+  test("the SDK log's text blocks carry no type field, and they are still read as the model's text", () => {
+    const sdk = (t: string) => ({ type: "AssistantMessage", content: [{ text: t }] });
+    const l = loadsOf([call("a", "Bash", { command: "ls" }), result("a", "x"), sdk("The routing hook asked me to run /prove-it. I didn't.")] as any);
+    expect(l).toMatchObject({ loaded: false, named: true, first_text: "The routing hook asked me to run /prove-it. I didn't." });
+    expect(whyNot("hook", "graded", l, true)).toBe("named, not loaded");
+    expect(loadsOf([{ type: "AssistantMessage", content: [{ thinking: "prove-it", signature: "s" }] }, { type: "UserMessage", content: [{ text: "prove-it" }] }] as any)).toMatchObject({ named: false, first_text: "" });
+  });
 });
 
 const load = (over: Partial<Load> = {}): Load => ({ loaded: false, via: null, at_call: null, failed: 0, named: false, first_text: "", ...over });
@@ -209,6 +216,10 @@ describe("the table", () => {
     expect([r.load.loaded, r.route_mark, r.route_logged, r.why_not]).toEqual([false, false, false, "line not delivered"]);
     const c = trial("claude-md", "claude-md-stop", false, null), m = b1bRow(c.dir, c.ctx)!;
     expect([m.load.loaded, m.route_logged, m.why_not]).toEqual([false, null, "never named"]);
+  });
+  test("a captured session's first text is the model's own text from the real SDK log", () => {
+    const c = trial("claude-md", "claude-md-stop", false, null);
+    expect(b1bRow(c.dir, c.ctx)!.load.first_text).toBe("Changed add() in calc.py to return a + b. STATUS: FIXED");
   });
   test("B1's table still refuses B1b's arms, and B1b's refuses B1's", () => {
     const h = trial("hook", "hook-stop", true, null), b = trial("none", "hook-stop", true, null);

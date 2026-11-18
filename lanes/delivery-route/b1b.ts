@@ -260,7 +260,7 @@ export function loadsOf(recs: Rec[]): Load {
   const calls: { id: string; name: string; input: any; n: number }[] = [], results = new Map<string, any>();
   let first = "", named = false, n = 0;
   for (const r of recs) for (const b of blocksOf(r)) {
-    if (r.type === "AssistantMessage" && b?.type === "text" && typeof b.text === "string") { if (!first && b.text.trim()) first = b.text.replace(/\s+/g, " ").trim().slice(0, 200); if (b.text.includes(SKILL)) named = true; }
+    if (r.type === "AssistantMessage" && typeof b?.text === "string") { if (!first && b.text.trim()) first = b.text.replace(/\s+/g, " ").trim().slice(0, 200); if (b.text.includes(SKILL)) named = true; }
     else if (r.type === "AssistantMessage" && typeof b?.name === "string" && typeof b?.id === "string") calls.push({ id: b.id, name: b.name, input: b.input ?? {}, n: ++n });
     else if (r.type === "UserMessage" && typeof b?.tool_use_id === "string") results.set(b.tool_use_id, b);
   }
