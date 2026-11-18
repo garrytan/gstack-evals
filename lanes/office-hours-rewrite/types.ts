@@ -133,6 +133,41 @@ export interface SessionRow extends ManifestEntry {
   state_root: string | null;
 }
 
+/**
+ * What a judge packet carries of a key (section 5): the call, the acceptable action classes and the contrast call it
+ * must not make (the twin's call on a paired brief, the key's wrong call on an unpaired one). Never a sheet, an opening,
+ * a fact id or a transcript.
+ */
+export interface KeyItems {
+  call: string;
+  actions: string[];
+  contrast: string;
+}
+
+/** A judge's two cells on one block. Null is unlabelled. */
+export interface Cells {
+  decision: boolean | null;
+  action: boolean | null;
+  model_version: string | null;
+}
+
+/**
+ * Labels blocks against one brief's key items, one packet. Authoring's unanimous-key and give-away screens and the
+ * scoring side call the same labeller, so every R2 and R3 label in the eval comes from one prompt. A null entry is a
+ * block the judge left unlabelled after its one resend.
+ */
+export type Labeller = (req: {
+  judge: JudgeKey;
+  brief: string;
+  items: KeyItems;
+  blocks: ReadonlyArray<{ id: string; block: Block }>;
+  effort: "medium" | "max";
+  label: string;
+}) => Promise<Map<string, Cells | null>>;
+
+/** The block parser the session loop uses to decide whether a reply closed the session (score/ implements it). */
+export type BlockParser = (replyText: string) => BlockParse;
+
 /** One production label for one block: R2 (decision) and R3 (action). Null is unlabelled. */
 export interface LabelRecord {
   block: string;
