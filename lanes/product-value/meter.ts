@@ -30,7 +30,7 @@ export const MODELS: Readonly<Record<ModelKey, { provider: Provider; id: string;
   astra: { provider: "openai", id: "gpt-6-astra" },
   "astra-6.2": { provider: "openai", id: "gpt-6.2-astra" },
   sol: { provider: "openrouter", id: "openai/gpt-6.1-sol", served_by: /^openai$/i },
-  particle: { provider: "openrouter", id: "particle-ai/particle-1", served_by: /^particle/i },
+  particle: { provider: "openrouter", id: "particle-ai/particle-1", served_by: /^particle( ai)?$/i },
   gemini: { provider: "openrouter", id: "google/gemini-4-argon", served_by: /^google/i },
   carbon: { provider: "openrouter", id: "google/gemini-4-carbon", served_by: /^google/i },
 };
@@ -153,6 +153,7 @@ export async function openMeter(o: MeterOptions): Promise<Meter> {
     throw e;
   }
   const p = proxy;
+  const inflight = new Set<Promise<void>>();
   const emptyFile = join(out, "empty.json");
   const empties = existsSync(emptyFile) ? (JSON.parse(readFileSync(emptyFile, "utf8")) as { calls: number; empty: number; streak: number }) : { calls: 0, empty: 0, streak: 0 };
   const tally = (empty: boolean | null, label: string) => {
@@ -177,47 +178,23 @@ export async function openMeter(o: MeterOptions): Promise<Meter> {
       const file = join(o.cacheDir, cacheKey(req.model, body) + ".json");
       if (existsSync(file)) {
         const hit = JSON.parse(readFileSync(file, "utf8")) as CallResult;
+        if (m.served_by && (typeof hit.served_by !== "string" || !m.served_by.test(hit.served_by))) throw new MeterError("E_PV_PROVIDER_DRIFT", m.id + "'s cached reply names " + (hit.served_by ?? "no provider") + ", not its pinned provider; stop this model's items and ask the Captain");
         return { ...hit, cached: true, micros: 0 };
       }
-      const b = p.bind({ cell: { run_id: o.runId, arm: "pv", task: req.label, model: m.id, trial: 1, attempt: 1 }, models: [m.provider + ":" + m.id], allowance_micros: reserved() });
-      let status = 0;
-      let text = "";
+      let done = () => {};
+      const settled = new Promise<void>((r) => (done = r));
+      inflight.add(settled);
       try {
-        const res = await fetch("http://127.0.0.1:" + p.port + "/" + b.slot + "/" + m.provider + ROUTE[m.provider], { method: "POST", headers: { authorization: "Bearer " + b.token, "content-type": "application/json" }, body: JSON.stringify(body), timeout: false } as RequestInit);
-        status = res.status;
-        text = await res.text();
+        return await send(req, m, body, file);
       } finally {
-        await p.finalize(b.meter_id);
-        p.unbind(b.slot);
+        inflight.delete(settled);
+        done();
       }
-      const micros = local.meters(leaseId).get(b.meter_id)?.spent_micros ?? null;
-      let parsed: any = null;
-      try {
-        parsed = JSON.parse(text);
-      } catch {}
-      if (status !== 200) {
-        const problem = typeof parsed?.code === "string" ? parsed.code + ": " + (parsed.detail ?? "") : "HTTP " + status;
-        tally(null, req.label);
-        return { text: null, status, micros, cached: false, problem, served_by: null };
-      }
-      const servedBy = m.provider === "openrouter" ? (typeof parsed?.provider === "string" ? parsed.provider : null) : m.provider;
-      const answer = parsed ? judgeAnswer(m.provider, parsed) : null;
-      if (!answer) {
-        tally(true, req.label);
-        return { text: null, status, micros, cached: false, problem: parsed ? "the reply carries no answer" + (servedBy === null ? " and names no provider" : "") : "the reply is not JSON", served_by: servedBy, model: null };
-      }
-      if (m.served_by && (servedBy === null || !m.served_by.test(servedBy))) throw new MeterError("E_PV_PROVIDER_DRIFT", m.id + " was served by " + (servedBy ?? "an unnamed provider") + ", not its pinned provider; stop this model's items and ask the Captain");
-      tally(false, req.label);
-      const result: CallResult = { text: answer, status, micros, cached: false, problem: null, served_by: servedBy, model: typeof parsed?.model === "string" ? parsed.model : null };
-      if (result.text !== null) {
-        writeFileSync(file + ".tmp", JSON.stringify(result), { mode: 0o600 });
-        renameSync(file + ".tmp", file);
-      }
-      return result;
     },
     async close() {
       if (closed) throw new MeterError("E_USAGE", "the meter is already closed");
       closed = true;
+      await Promise.allSettled([...inflight]);
       p.stop();
       try {
         await reconcileJournal(journal, local);
@@ -228,7 +205,47 @@ export async function openMeter(o: MeterOptions): Promise<Meter> {
       }
     },
   };
+
+  async function send(req: CallRequest, m: (typeof MODELS)[ModelKey], body: Record<string, unknown>, file: string): Promise<CallResult> {
+    const b = p.bind({ cell: { run_id: o.runId, arm: "pv", task: req.label, model: m.id, trial: 1, attempt: 1 }, models: [m.provider + ":" + m.id], allowance_micros: reserved() });
+    let status = 0;
+    let text = "";
+    try {
+      const res = await fetch("http://127.0.0.1:" + p.port + "/" + b.slot + "/" + m.provider + ROUTE[m.provider], { method: "POST", headers: { authorization: "Bearer " + b.token, "content-type": "application/json" }, body: JSON.stringify(body), timeout: false } as RequestInit);
+      status = res.status;
+      text = await res.text();
+    } finally {
+      await p.finalize(b.meter_id);
+      p.unbind(b.slot);
+    }
+    const micros = local.meters(leaseId).get(b.meter_id)?.spent_micros ?? null;
+    let parsed: any = null;
+    try {
+      parsed = JSON.parse(text);
+    } catch {}
+    if (status !== 200) {
+      const problem = typeof parsed?.code === "string" ? parsed.code + ": " + (parsed.detail ?? "") : "HTTP " + status;
+      tally(null, req.label);
+      return { text: null, status, micros, cached: false, problem, served_by: null };
+    }
+    const servedBy = m.provider === "openrouter" ? (typeof parsed?.provider === "string" ? parsed.provider : null) : m.provider;
+    const answer = parsed ? judgeAnswer(m.provider, parsed) : "";
+    if (!answer && (!completion(m.provider, parsed) || servedBy === null)) {
+      tally(true, req.label);
+      return { text: null, status, micros, cached: false, problem: parsed ? "the reply carries no answer" + (servedBy === null ? " and names no provider" : "") : "the reply is not JSON", served_by: servedBy, model: null };
+    }
+    if (m.served_by && (servedBy === null || !m.served_by.test(servedBy))) throw new MeterError("E_PV_PROVIDER_DRIFT", m.id + " was served by " + (servedBy ?? "an unnamed provider") + ", not its pinned provider; stop this model's items and ask the Captain");
+    const result: CallResult = { text: answer, status, micros, cached: false, problem: null, served_by: servedBy, model: typeof parsed?.model === "string" ? parsed.model : null };
+    writeFileSync(file + ".tmp", JSON.stringify(result), { mode: 0o600 });
+    renameSync(file + ".tmp", file);
+    tally(false, req.label);
+    return result;
+  }
 }
+
+/** True when a 200 body is a completed reply in the provider's shape, even one whose answer is empty or a refusal. */
+const completion = (provider: Provider, body: any): boolean =>
+  provider === "anthropic" ? Array.isArray(body?.content) : provider === "openai" ? Array.isArray(body?.output) && body.output.length > 0 : Array.isArray(body?.choices) && body.choices.length > 0;
 
 /** Runs jobs with at most n in flight; the first thrown error stops new jobs and is rethrown after the rest settle. */
 export async function pool<T>(n: number, jobs: Array<() => Promise<T>>): Promise<T[]> {
