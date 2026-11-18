@@ -75,6 +75,7 @@ constructed.ts), the sets (slots instead of type minimums) and the fixed-seed fa
 28. The pilot's frozen-inputs digest covers every slot's first prompt, the twin prompt's text, the screen's sequences and the fixed notes. A continuation from a pilot with another digest places none of its briefs.
 29. A reserve takes the dropped brief's skin; kind means pair, unpaired founder or builder, and type is not matched.
 30. checkAnswers hands the judge check every placed brief's full-information blocks and every unpaired brief's opening-only blocks, with author naming the validator.
+31. A stop that a draft or label call throws (CAP_STOP, E_LEASE_CLOSED, E_OHR_MODEL_DRIFT, E_PV_PROVIDER_DRIFT or E_PV_EMPTY_REPLIES) ends the run like a cap stop once the batch's drafts settle. The run carries it as its halt, so the briefs already placed are still written and sealed, and haltOf returns that stop's code. Any other error still rejects the run.
 
 ## Contract requests
 
