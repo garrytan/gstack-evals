@@ -1,11 +1,16 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // The office-hours rewrite eval's cross-cutting frozen values (prereg wiki/plans/2026-11-17-geva-552-office-hours-rewrite-prereg
-// and its dated pre-run changes). Strings quoted in the prereg or a pre-run change appear there byte for byte, and
+// and its dated pre-run changes, as the second attempt's prereg wiki/plans/2026-11-18-geva-555-office-hours-rewrite-attempt-2-prereg
+// changes them in its section 3: the slot set, the quotas, the reused briefs, authoring's draws, bound, pilot and
+// projection stop, and the item caps). Strings quoted in the prereg or a pre-run change appear there byte for byte, and
 // tests/ohr/frozen.test.ts checks each one against those posts. Area-specific frozen text (author prompts, the judge
 // prompt, detector markers) lives in its area and is listed in the lane README as a build-time choice.
 import type { ArmId, BuilderGoal, FounderType, JudgeKey, ModelId, SkillArm } from "./types.ts";
 
-export const PREREG = "wiki/plans/2026-11-17-geva-552-office-hours-rewrite-prereg/README.md";
+/** The first attempt's preregistration: everything its second attempt does not change still holds from it. */
+export const PREREG_1 = "wiki/plans/2026-11-17-geva-552-office-hours-rewrite-prereg/README.md";
+/** The second attempt's preregistration, which this build serves. */
+export const PREREG = "wiki/plans/2026-11-18-geva-555-office-hours-rewrite-attempt-2-prereg/README.md";
 export const CHANGE_1 = "wiki/plans/2026-11-18-geva-553-office-hours-rewrite-pre-run-change-1/README.md";
 export const CHANGE_2 = "wiki/plans/2026-11-18-geva-553-office-hours-rewrite-pre-run-change-2/README.md";
 
@@ -185,10 +190,43 @@ export const DECISION = { bar: 0.15, builder_margin: -0.15, g2_questions: 1, g3_
 export const PAIRED_TYPES: readonly FounderType[] = ["T1", "T2", "T3", "T4", "T5", "T6"];
 export const UNPAIRED_TYPES: readonly FounderType[] = ["T7", "T8"];
 export const BUILDER_GOALS: readonly BuilderGoal[] = ["hackathon", "open-source", "research", "learning", "fun"];
-export const QUOTA = { skins: 5, founder: 70, builder: 24, calibration: 8, reserve: 8, pairs: 34, unpaired: 42 } as const;
+/**
+ * The second attempt's section 3, item 1: four comparison skins, 56 founder briefs (24 pairs and 8 unpaired, 32
+ * clusters) and the same 24 builders, 8 calibration and 8 reserve briefs, 96 in all, from 28 pair slots and 40 unpaired.
+ */
+export const QUOTA = { skins: 4, founder: 56, builder: 24, calibration: 8, reserve: 8, pairs: 28, unpaired: 40 } as const;
 
-/** Pre-run change 1, item 4d: the two-step authoring pilot. */
-export const PILOT = { first_read: 16, second_read: 32, z: 1.6448536269514722 } as const;
+/** The second attempt's section 4: the 8 comparison founder slots of the first attempt's schedule it drops. */
+export const DROPPED_SLOTS: readonly string[] = ["com1-T1", "com1-T2", "com1-T3", "com1-T4", "com1-T5", "com1-T6", "com1-T7", "com5-T8"];
+/** Section 4: the slots of the 19 briefs the first attempt placed, which this run reuses. */
+export const REUSED_SLOTS: readonly string[] = ["cal0-research", "com2-T4", "com2-T6", "com3-T2", "com3-T3", "com4-T6", "com5-T5", "com4-T7", "com5-T7", "com2-fun", "com2-open-source", "com3-open-source", "com5-fun"];
+
+/** Section 5.3: the second-twin draws a partner gets; when all fail, the partner drops and its slot starts a new pair. */
+export const TOP_UP_BOUND = 3;
+
+/** Section 5.4: the first two open slots of each pair type, each until it settles one partner or drafts 3 first twins, and 8 drafts each of T7, T8 and builders. */
+export const PILOT = { pair_slots: 2, first_twins: 3, unpaired_drafts: 8 } as const;
+
+/** Section 13's allowance for authoring's costliest unit, a brief. */
+export const BRIEF_ALLOWANCE = 3.5;
+
+/**
+ * Section 5.5's projection stop: rates at the 0.95 quantile of their Jeffreys posterior, the first attempt's costs a
+ * draft, room for the drafts in flight (8 at the brief allowance), and the first attempt's final-path counts as sizing.py,
+ * Part D, lists them: first twins passed of drafted, each pair type's partners matched within 3 draws of settled, the
+ * draws matched partners took over how many matched, and each unpaired kind's passes of drafts.
+ */
+export const PROJECTION = {
+  quantile: 0.95,
+  usd: { first: 0.887, second: 0.093, unpaired: 0.545 },
+  held: 8,
+  attempt1: {
+    first: [10, 15],
+    partners: { T1: [0, 1], T2: [1, 1], T3: [1, 1], T4: [0, 2], T5: [1, 1], T6: [1, 2] },
+    matched_draws: [5, 4],
+    unpaired: { T7: [2, 41], T8: [0, 0], builder: [5, 41] },
+  },
+} as const;
 
 /** Section 4 step 5: per-session dollar allowances at the metering proxy, until stage 1 measures them (A6). */
 export const ALLOWANCE: Readonly<Record<"none" | "skill", Readonly<Record<ModelId, number>>>> = {
@@ -197,8 +235,8 @@ export const ALLOWANCE: Readonly<Record<"none" | "skill", Readonly<Record<ModelI
 };
 export const SIM_ALLOWANCE = 2;
 
-/** The item caps recorded on 2026-11-17 after the prereg merged (pre-run change 1, item 4a). */
-export const CAPS = { authoring: 251, simulator_audit: 41, stage1: 220, judge_check: 123, stage2: 1620, stage2_particle: 139, hosts: 22 } as const;
+/** The second attempt's section 7: each item's cap, 1.35 times central plus what its parallel calls hold at open. */
+export const CAPS = { authoring: 409, simulator_audit: 40, stage1: 220, judge_check: 123, stage2: 1406, stage2_particle: 130, hosts: 19 } as const;
 
 /** Pre-run change 5: the bound on empty replies (status 200, no answer) for every metered run of this eval. */
 export const EMPTY_BOUND = { streak: 3, share: 0.01, floor: 100 } as const;
