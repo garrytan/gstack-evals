@@ -46,7 +46,7 @@ describe("the projection (section 5.5)", () => {
     expect(projection(c, { pairs: {}, unpaired: { T7: 3, T8: 0, builder: 1 } }, 1)).toBeCloseTo((3 * cu) / jeffreys(1, 6) + cu / jeffreys(4, 10), 10);
     expect(projection(c, { pairs: { T2: 2 }, unpaired: { T7: 3, T8: 0, builder: 1 } }, 2.5)).toBeCloseTo(2.5 * projection(c, { pairs: { T2: 2 }, unpaired: { T7: 3, T8: 0, builder: 1 } }, 1), 10);
   });
-  test("at the first attempt's counts within the bound, T8 at T7's, it is $127.524047, what sizing.py's projection gives under scipy at the bound of 30", () => {
+  test("at the first attempt's counts within the bound, T8 at T7's, it is $127.524047: sizing.txt's $127.52, and what sizing.py's projection gives under scipy at the bound of 30", () => {
     const open = { pairs: { T1: 4, T2: 3, T3: 3, T4: 3, T5: 4, T6: 3 }, unpaired: { T7: 3, T8: 5, builder: 21 } };
     expect(projection({ ...ATTEMPT_1, unpaired: { ...ATTEMPT_1.unpaired, T8: ATTEMPT_1.unpaired.T7 } }, open, 1)).toBeCloseTo(127.524047, 6);
   });
@@ -55,8 +55,8 @@ describe("the projection (section 5.5)", () => {
     expect(plus(ATTEMPT_1, run)).toEqual({ first: [14, 20], partners: { T1: [0, 3], T2: [1, 1], T3: [1, 1], T4: [1, 2], T5: [1, 1], T6: [3, 3] }, matched_draws: [53, 7], unpaired: { T7: [3, 49], T8: [2, 8], builder: [8, 49] } });
     expect(plus(NONE, NONE).partners).toEqual({ T1: [0, 0], T2: [0, 0], T3: [0, 0], T4: [0, 0], T5: [0, 0], T6: [0, 0] });
   });
-  test("its room is the cap less the committed spend less 8 drafts at $3.50: $350.00 after a $31 pilot under the $409 cap, as sizing.txt prints", () => {
-    expect(roomLeft(409, 31).toFixed(2)).toBe("350.00");
+  test("its room is the cap less the committed spend less 8 drafts at $3.50: $337.83 after a $43.17 pilot under the $409 cap, as sizing.txt prints", () => {
+    expect(roomLeft(409, 43.17).toFixed(2)).toBe("337.83");
     expect([PROJECTION.held, predicted("first"), predicted("second"), predicted("unpaired")]).toEqual([8, 0.887, 0.093, 0.545]);
   });
   test("it stops only when the projection passes the room, and costs scale by spend over what the first attempt's figures predict", () => {

@@ -216,10 +216,10 @@ export const seams: Seam[] = [
     },
   },
   {
-    name: "projection: the first attempt's counts within the bound, T8 at T7's, give $127.52 against $350.00 of room after a $31 pilot",
+    name: "projection: the first attempt's counts within the bound, T8 at T7's, give sizing.txt's $127.52 against $337.83 of room after a $43.17 pilot",
     run: () => {
       const p = projection({ ...ATTEMPT_1, unpaired: { ...ATTEMPT_1.unpaired, T8: ATTEMPT_1.unpaired.T7 } }, { pairs: { T1: 4, T2: 3, T3: 3, T4: 3, T5: 4, T6: 3 }, unpaired: { T7: 3, T8: 5, builder: 21 } }, 1);
-      return say(p.toFixed(2) === "127.52" && roomLeft(409, 31).toFixed(2) === "350.00", "$" + p.toFixed(2) + " against $" + roomLeft(409, 31).toFixed(2));
+      return say(p.toFixed(2) === "127.52" && roomLeft(409, 43.17).toFixed(2) === "337.83", "$" + p.toFixed(2) + " against $" + roomLeft(409, 43.17).toFixed(2));
     },
   },
   {
