@@ -52,7 +52,9 @@ describe("gstack-evals ohr", () => {
     [["score", "judges", "--packets", "/dev/shm/p", "--map", join(REPO, "map.json"), "--item", "i", "--spend-cap", "1", "--out", "/dev/shm/l.ndjson"], "--map"],
     [["judge-check", "--map", join(REPO, "check.json"), "--out", "/dev/shm/c"], "--map"],
     [["read", "report", "--scored", "/dev/shm/s.json", "--out", join(REPO, "report.json")], "--out"],
-    [["author", "--work", "/dev/shm/ohr-w", "--out", join(REPO, "sealed.age"), "--recipients", "r", "--gstack", "g", "--item", "i", "--spend-cap", "1"], "--out"],
+    [["author", "--work", "/dev/shm/ohr-w", "--out", join(REPO, "sealed.age"), "--recipients", "r", "--identity", "k", "--reuse", "/dev/shm/first.age", "--gstack", "g", "--item", "i", "--spend-cap", "1"], "--out"],
+    [["author", "--work", "/dev/shm/ohr-w", "--out", "/dev/shm/ohr-never.age", "--recipients", "r", "--identity", "k", "--resume", join(REPO, "checkpoint-000010.age"), "--gstack", "g", "--item", "i", "--spend-cap", "1"], "--resume"],
+    [["author", "--work", "/dev/shm/ohr-w", "--out", "/dev/shm/ohr-never.age", "--recipients", "r", "--identity", "k", "--reuse", join(REPO, "first.age"), "--gstack", "g", "--item", "i", "--spend-cap", "1"], "--reuse"],
   ] as const) {
     test("ohr " + argv[0] + (argv[0] === "score" || argv[0] === "read" ? " " + argv[1] : "") + " refuses " + flag + " inside the repo before it reads or spends", async () => {
       const t = io();
@@ -64,14 +66,26 @@ describe("gstack-evals ohr", () => {
 
   test("ohr author has no pilot-only stop: the flag is refused before it reads or spends", async () => {
     const t = io();
-    expect(await main(["author", "--work", "/dev/shm/ohr-w", "--out", "/dev/shm/ohr-sealed.age", "--recipients", "r", "--gstack", "g", "--item", "i", "--spend-cap", "1", "--pilot-only"], t.io, {})).toBe(2);
+    expect(await main(["author", "--work", "/dev/shm/ohr-w", "--out", "/dev/shm/ohr-sealed.age", "--recipients", "r", "--identity", "k", "--reuse", "/dev/shm/first.age", "--gstack", "g", "--item", "i", "--spend-cap", "1", "--pilot-only"], t.io, {})).toBe(2);
     expect(t.err.join("\n")).toContain('unknown argument "--pilot-only"');
   });
 
   test("ohr author keeps plaintext briefs under /dev/shm", async () => {
     const t = io();
-    expect(await main(["author", "--work", "/tmp/ohr-w", "--out", "/dev/shm/x.age", "--recipients", "r", "--gstack", "g", "--item", "i", "--spend-cap", "1"], t.io, {})).toBe(2);
+    expect(await main(["author", "--work", "/tmp/ohr-w", "--out", "/dev/shm/x.age", "--recipients", "r", "--identity", "k", "--reuse", "/dev/shm/first.age", "--gstack", "g", "--item", "i", "--spend-cap", "1"], t.io, {})).toBe(2);
     expect(t.err.join("\n")).toContain("is not under /dev/shm");
+  });
+
+  test("ohr author takes one of --reuse, for a new run, and --resume, for a stopped one, before it reads or spends", async () => {
+    const base = ["author", "--work", "/dev/shm/ohr-w", "--out", "/dev/shm/ohr-never.age", "--recipients", "r", "--identity", "k", "--gstack", "g", "--item", "i", "--spend-cap", "1"];
+    for (const extra of [[], ["--reuse", "/dev/shm/first.age", "--resume", "/dev/shm/c/checkpoint-000010.age"]]) {
+      const t = io();
+      expect(await main([...base, ...extra], t.io, {})).toBe(2);
+      expect(t.err.join("\n")).toContain("takes one of --reuse, for a new run, and --resume, for a stopped one");
+    }
+    const t = io();
+    expect(await main([...base, "--reuse", "/dev/shm/first.age", "--meter", "/tmp/ohr-meter"], t.io, {})).toBe(2);
+    expect(t.err.join("\n")).toContain("is not an existing meter directory under /dev/shm");
   });
 
   test("every astra request goes to GPT-6.2 Astra, which has its own price row; the meter's astra key is unchanged", () => {

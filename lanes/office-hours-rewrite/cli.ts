@@ -15,10 +15,11 @@ import { dirname, join, resolve } from "node:path";
 import { CODES, docAnchor, isReasonCode, type ReasonCode } from "../../src/errors/codes.ts";
 import { writeSealed } from "../office-hours-founder/author/files.ts";
 import { insideRepo } from "../review-noloss/suite.ts";
-import { ageSealer, openCustody, sealCustody, SHM, writeAuthoring } from "./author/custody.ts";
-import { authorRun, checkAnswers, haltOf } from "./author/run.ts";
+import { AuthorError } from "../office-hours-founder/author/files.ts";
+import { ageDecrypter, ageSealer, openCustody, plaintextSha256, readJournal, readReuse, sealCustody, sealedJournal, SHM, writeAuthoring } from "./author/custody.ts";
+import { authorRun, checkAnswers, haltOf, type Checkpoint, type Reuse } from "./author/run.ts";
 import { gitReader, loadScreen } from "./author/screens.ts";
-import { GOLD_EFFORT, JUDGE_EFFORT, SEED } from "./frozen.ts";
+import { GOLD_EFFORT, JUDGE_EFFORT, REUSE_PLAINTEXT_SHA256, SEED } from "./frozen.ts";
 import { admission, admissionState, type AdmissionReading } from "./read/admission.ts";
 import { decide } from "./read/decision.ts";
 import type { HandRead } from "./read/guards.ts";
@@ -106,28 +107,51 @@ async function withWire<T>(o: { dir: string; item: string; cap: string | undefin
   }
 }
 
-const AUTHOR_USAGE = "gstack-evals ohr author --work <new dir under /dev/shm> --out <new sealed path> --recipients <age recipients file> --gstack <clone holding both pins> --item <ledger item> --spend-cap <usd> [--concurrency <n>] [--record <dir>] [--ledger <path>]";
+const AUTHOR_USAGE = "gstack-evals ohr author --work <new dir under /dev/shm> --out <new sealed path> --recipients <age recipients file> --identity <age identity file> (--reuse <the first attempt's sealed authoring output> | --resume <a sealed checkpoint-<drafts>.age>) --gstack <clone holding both pins> --item <ledger item> --spend-cap <usd> [--meter <the stopped run's meter dir under /dev/shm>] [--concurrency <n>] [--record <dir>] [--ledger <path>]";
 
-/** ohr author: authorRun, then the placed briefs, every outcome and the judge check's answers sealed with age. */
+/**
+ * ohr author: authorRun from the reused briefs (a new run) or from a sealed checkpoint and the draft records sealed after
+ * it (a stopped run), sealing every settled draft and a checkpoint after every batch into the checkpoints folder (the
+ * new run's <out>.checkpoints, or the checkpoint's own folder), then the placed briefs, every outcome and the judge
+ * check's answers sealed with age. A resume given the stopped run's meter dir keeps its run id, its spend and its reply
+ * cache.
+ */
 async function author(argv: string[], io: Io, env: Env): Promise<number> {
-  const f = flags(argv, { one: ["--work", "--out", "--recipients", "--gstack", "--item", "--spend-cap", "--concurrency", "--record", "--ledger"] });
-  need(f, "ohr author", ["--work", "--out", "--recipients", "--gstack", "--item", "--spend-cap"]);
+  const f = flags(argv, { one: ["--work", "--out", "--recipients", "--identity", "--reuse", "--resume", "--meter", "--gstack", "--item", "--spend-cap", "--concurrency", "--record", "--ledger"] });
+  need(f, "ohr author", ["--work", "--out", "--recipients", "--identity", "--gstack", "--item", "--spend-cap"]);
+  if (f.has("--reuse") === f.has("--resume")) usage("ohr author takes one of --reuse, for a new run, and --resume, for a stopped one. Usage: " + AUTHOR_USAGE);
   const work = resolve(one(f, "--work")!);
   if (!work.startsWith(SHM + "/")) usage("--work " + work + " is not under " + SHM + "; plaintext briefs live only in memory-backed storage. Usage: " + AUTHOR_USAGE);
   if (existsSync(work)) usage("--work " + work + " exists; every run writes into a new work directory");
   const out = fresh("--out", one(f, "--out")!);
   const concurrency = Number(one(f, "--concurrency") ?? "4");
   if (!Number.isSafeInteger(concurrency) || concurrency < 1) usage("--concurrency is a whole number of at least 1");
+  const meter = resolve(one(f, "--meter") ?? work + ".meter");
+  if (f.has("--meter") && (!meter.startsWith(SHM + "/") || !existsSync(meter))) usage("--meter " + meter + " is not an existing meter directory under " + SHM);
+  const identity = resolve(one(f, "--identity")!);
+  const resumeFrom = f.has("--resume") ? outside("--resume", one(f, "--resume")!) : null;
+  const checkpoints = resumeFrom ? dirname(resumeFrom) : fresh("--out", out + ".checkpoints");
+  let reuse: Reuse | undefined, resume: Checkpoint | undefined;
+  if (resumeFrom) resume = readJournal(resumeFrom, ageDecrypter(identity), work);
+  else {
+    const sealed = outside("--reuse", one(f, "--reuse")!);
+    const sha = plaintextSha256(sealed, identity);
+    if (sha !== REUSE_PLAINTEXT_SHA256) throw new AuthorError("E_OHR_REUSE", sealed + "'s plaintext has sha256 " + sha + ", not the " + REUSE_PLAINTEXT_SHA256 + " section 4 records for the first attempt's authoring output");
+    reuse = readReuse(sealed, ageDecrypter(identity), work);
+    for (const x of reuse.failed) io.err("E_OHR_REUSE " + x.id + " in slot " + x.slot + " is not reused: " + x.why + "; its slot is drafted again");
+    mkdirSync(checkpoints, { recursive: true, mode: 0o700 });
+  }
   const screen = loadScreen(gitReader(resolve(one(f, "--gstack")!)));
   const cap = dollars(one(f, "--spend-cap"), "--spend-cap") / 1e6;
-  return withWire({ dir: work + ".meter", item: one(f, "--item")!, cap: one(f, "--spend-cap"), label: "ohr-author", record: one(f, "--record"), ledger: one(f, "--ledger"), env, io, cmd: "ohr author" }, async (w) => {
-    const run = await authorRun({ call: w.call, label: labeller(w.judge), parse: parseBlock, screen, spent: w.spent }, { cap, concurrency });
+  const sealer = ageSealer(resolve(one(f, "--recipients")!));
+  return withWire({ dir: meter, item: one(f, "--item")!, cap: one(f, "--spend-cap"), label: "ohr-author", record: one(f, "--record"), ledger: one(f, "--ledger"), env, io, cmd: "ohr author" }, async (w) => {
+    const run = await authorRun({ call: w.call, label: labeller(w.judge), parse: parseBlock, screen, spent: w.spent, spentOn: w.spentOn }, { cap, concurrency, reuse, resume, journal: sealedJournal({ dir: checkpoints, work, sealer }) });
     const sink = openCustody(work, out);
     const summary = writeAuthoring(sink, run);
     writeSealed(sink, "authoring/check-answers.json", JSON.stringify(checkAnswers(run), null, 2) + "\n");
-    sealCustody(sink, out, ageSealer(resolve(one(f, "--recipients")!)));
+    sealCustody(sink, out, sealer);
     io.out(JSON.stringify(summary, null, 2));
-    io.out("ohr author: sealed to " + out + "; the meter's cache stays in " + work + ".meter");
+    io.out("ohr author: sealed to " + out + "; every draft record and checkpoint is sealed in " + checkpoints + "; the meter's cache stays in " + meter);
     const halt = haltOf(run, () => null);
     if (halt) io.err(halt.message);
     return halt ? 2 : 0;
