@@ -2,8 +2,7 @@
 // The office-hours rewrite eval's ledger items: how each approved item cap (frozen.CAPS, pre-run change 1 item 4a) splits
 // into the ledger items its runs lease. One ledger item serves one run, a launch leases two (arms through the rig,
 // simulator through the meter), and a stage's production labels are their own run inside the stage's approved item.
-// This table is the build's proposal until a pre-run change freezes it; it lives here, not in frozen.ts, because
-// frozen.ts holds only values a merged post states.
+// Pre-run change 3 freezes this table as its split.tsv, and tests/ohr/ledger.test.ts holds the two equal.
 //
 // Each part's cap is 1.35 times its central figure from the preregistration's cost.py plus one allowance (the item's
 // costliest unit on the arms part, $1 on the others), rounded up to the dollar. Where those parts sum past the approved

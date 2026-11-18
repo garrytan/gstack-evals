@@ -1,0 +1,17 @@
+item	approved_item	central_usd	allowance_usd	cap_usd	what
+ohr-author	authoring	183.24	3.5	251	the pilot and every draw after it, one run
+ohr-audit	simulator_audit	29.34	1	41	the fixed script's simulator calls and both auditors, one run
+ohr-s1-arms	stage1	99.6	15	150	stage 1's arm sessions, all three models
+ohr-s1-sim	stage1	5.76	1	9	stage 1's simulator
+ohr-s1-labels	stage1	4.32	1	7	stage 1's production labels
+ohr-s1-repair-arms	stage1			48	the one admission repair's arm sessions
+ohr-s1-repair-sim	stage1			3	the one admission repair's simulator
+ohr-s1-repair-labels	stage1			3	the one admission repair's labels
+ohr-judge-check	judge_check	89.8	1	123	the live judge probes, the gold pass and the check labels, one run
+ohr-s2-arms	stage2	1109.2	13.58	1511	stage 2's Opus and Sol arm sessions
+ohr-s2-sim	stage2	45.12	1	62	stage 2's Opus and Sol simulator
+ohr-s2-labels	stage2	33.84	1	47	stage 2's Opus and Sol production labels
+ohr-s2p-arms	stage2_particle	61.1	0.51	83	stage 2's particle-1 arm sessions
+ohr-s2p-sim	stage2_particle	22.56	1	32	stage 2's particle-1 simulator
+ohr-s2p-labels	stage2_particle	16.92	1	24	stage 2's particle-1 production labels
+ohr-hosts	hosts	15.28	1	22	the runner VMs
