@@ -115,6 +115,8 @@ export interface MeterOptions {
    * them. Cache hits are not counted again. Without it, no bound applies.
    */
   emptyBound?: { streak: number; share: number; floor: number };
+  /** How long close() waits for calls in flight before it closes regardless; past the proxy's 300-second upstream timeout by default. */
+  drainMs?: number;
 }
 
 export interface Meter {
@@ -194,7 +196,9 @@ export async function openMeter(o: MeterOptions): Promise<Meter> {
     async close() {
       if (closed) throw new MeterError("E_USAGE", "the meter is already closed");
       closed = true;
-      await Promise.allSettled([...inflight]);
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([Promise.allSettled([...inflight]), new Promise<void>((r) => (timer = setTimeout(r, o.drainMs ?? DRAIN_MS)))]);
+      clearTimeout(timer);
       p.stop();
       try {
         await reconcileJournal(journal, local);
@@ -242,6 +246,9 @@ export async function openMeter(o: MeterOptions): Promise<Meter> {
     return result;
   }
 }
+
+/** close() waits this long for calls in flight: the metering proxy's 300-second upstream timeout plus 10 seconds. */
+export const DRAIN_MS = 310_000;
 
 /** True when a 200 body is a completed reply in the provider's shape, even one whose answer is empty or a refusal. */
 const completion = (provider: Provider, body: any): boolean =>
