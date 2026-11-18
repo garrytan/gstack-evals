@@ -444,6 +444,8 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_OHR_CAP_LINE](#e_ohr_cap_line) | 2 | U20 |
 | [E_OHR_BUILD_COMMIT](#e_ohr_build_commit) | 2 | U20 |
 | [E_OHR_E2E_FAIL](#e_ohr_e2e_fail) | 2 | U20 |
+| [E_OHR_DRYRUN_FAIL](#e_ohr_dryrun_fail) | 2 | U20 |
+| [E_OHR_PREFLIGHT_FAIL](#e_ohr_preflight_fail) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -3432,6 +3434,22 @@ Office-hours rewrite eval: a check in the run area's keyless end to end failed. 
 Fix: Read the FAIL lines, fix the code and run the end to end again.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OHR_DRYRUN_FAIL
+
+Office-hours rewrite eval: a dry-run check printed FAIL or SKIP: a frozen rule did not hold on its fixtures, the ledger split does not fit an approved cap, or a ledger lease did not open and settle. A SKIP is never a pass.
+
+Fix: Read the FAIL or SKIP line, fix the rule's code or give the container seams Docker, and run the dry run again before any spend.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_OHR_PREFLIGHT_FAIL
+
+Office-hours rewrite eval: the no-model preflight (prereg section 12, step 1) found a missing pin commit, no Docker, a key variable set, or a failed dry run or end to end.
+
+Fix: Read the FAIL lines, fix what they name and run gstack-evals ohr preflight again. The preflight never calls a model.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
 
 ## Exit 3: calibration failed (INCOMPLETE)
 

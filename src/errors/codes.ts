@@ -3769,6 +3769,24 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_OHR_DRYRUN_FAIL: {
+    exit: 2,
+    meaning: "Office-hours rewrite eval: a dry-run check printed FAIL or SKIP: a frozen rule did not hold on its fixtures, the ledger split does not fit an approved cap, or a ledger lease did not open and settle. A SKIP is never a pass.",
+    fix: "Read the FAIL or SKIP line, fix the rule's code or give the container seams Docker, and run the dry run again before any spend.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: true,
+    owner: "U20",
+  },
+  E_OHR_PREFLIGHT_FAIL: {
+    exit: 2,
+    meaning: "Office-hours rewrite eval: the no-model preflight (prereg section 12, step 1) found a missing pin commit, no Docker, a key variable set, or a failed dry run or end to end.",
+    fix: "Read the FAIL lines, fix what they name and run gstack-evals ohr preflight again. The preflight never calls a model.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: true,
+    owner: "U20",
+  },
 } as const satisfies Record<string, CodeInfo>;
 
 export type ReasonCode = keyof typeof CODES;
