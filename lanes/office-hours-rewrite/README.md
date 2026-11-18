@@ -43,6 +43,8 @@ lease on one ledger item, the product-value meter and its metering proxy. The pr
 the Opus judge, the gold pass, the unanimous key and the simulator auditor, so wire.ts sends every "astra" request to the
 meter's "astra-6.2" key (openai/gpt-6.2-astra); the meter's "astra" key stays GPT-6 Astra for other lanes.
 
+Warning: `ohr read decision` learns of a cap stop only from its `--cap-stop` flag. It does not read a launch's stops.json, and its missing-data limits count only the rows that exist, so never read a stage that stopped at its cap without `--cap-stop`. A rerun's build fixes this, with the other findings deferred in pull request 368.
+
 ## The no-model preflight on a VM
 
 On a fresh Ubuntu 24.04 VM with no model key: run vm-bootstrap.sh (Docker CE from get.docker.com, since Ubuntu's

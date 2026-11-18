@@ -22,8 +22,9 @@ frozen design, 5 skins (for reference): 110 briefs (34 pairs, 14 unpaired founde
   stage 2, particle-1                        central $  100.58  cap $  150
   hosts                                      central $   15.28  cap $   22
   paid total                                 central $ 1855.14  cap $ 2665
-  all-in with $350 of agent use                central $ 2205.14  cap $ 3015
-  authoring at Jeffreys draws of every yield: 95% range $200 to $881, so all-in at caps $2850 to $3768
+  fixing the five deferred harness findings  agent use $   40
+  all-in with $350 of agent use and the fixes  central $ 2245.14  cap $ 3055
+  authoring at Jeffreys draws of every yield: 95% range $200 to $881, so all-in at caps $2890 to $3808
 design 1, 4 skins, builders kept: 96 briefs (28 pairs, 12 unpaired founders, 28 builders), 80 in stage 2, 8 in stage 1; still to author 22 pairs, 10 unpaired founders, 23 builders
   authoring                                  central $  281.64  cap $  409
   simulator audit                            central $   28.81  cap $   40
@@ -33,8 +34,9 @@ design 1, 4 skins, builders kept: 96 briefs (28 pairs, 12 unpaired founders, 28 
   stage 2, particle-1                        central $   85.60  cap $  130
   hosts                                      central $   13.18  cap $   19
   paid total                                 central $ 1619.91  cap $ 2347
-  all-in with $350 of agent use                central $ 1969.91  cap $ 2697
-  authoring at Jeffreys draws of every yield: 95% range $175 to $762, so all-in at caps $2553 to $3345
+  fixing the five deferred harness findings  agent use $   40
+  all-in with $350 of agent use and the fixes  central $ 2009.91  cap $ 2737
+  authoring at Jeffreys draws of every yield: 95% range $175 to $762, so all-in at caps $2593 to $3385
   if T1 and T4 partners all match at the past-3 rate (none of their 3 partners matched within 3 draws), and a third of the 22 pairs still to place are T1 or T4: authoring adds $395 central and $534 at caps
 design 1b, pairs-only founders and builders kept; narrows the claim to six types, not counted: 92 briefs (32 pairs, 0 unpaired founders, 28 builders), 76 in stage 2, 8 in stage 1; still to author 26 pairs, 0 unpaired founders, 23 builders
   authoring                                  central $  182.16  cap $  274
@@ -45,8 +47,9 @@ design 1b, pairs-only founders and builders kept; narrows the claim to six types
   stage 2, particle-1                        central $   81.32  cap $  124
   hosts                                      central $   12.58  cap $   18
   paid total                                 central $ 1464.83  cap $ 2136
-  all-in with $350 of agent use                central $ 1814.83  cap $ 2486
-  authoring at Jeffreys draws of every yield: 95% range $115 to $401, so all-in at caps $2396 to $2782
+  fixing the five deferred harness findings  agent use $   40
+  all-in with $350 of agent use and the fixes  central $ 1854.83  cap $ 2526
+  authoring at Jeffreys draws of every yield: 95% range $115 to $401, so all-in at caps $2436 to $2822
 option 2, founder pairs only, 12 pairs: 36 briefs (18 pairs, 0 unpaired founders, 0 builders), 24 in stage 2, 8 in stage 1; still to author 18 pairs, 0 unpaired founders, 0 builders
   authoring                                  central $   54.97  cap $  103
   simulator audit                            central $   26.50  cap $   37
@@ -56,8 +59,9 @@ option 2, founder pairs only, 12 pairs: 36 briefs (18 pairs, 0 unpaired founders
   stage 2, particle-1                        central $   25.68  cap $   49
   hosts                                      central $    4.79  cap $    8
   paid total                                 central $  614.78  cap $  990
-  all-in with $350 of agent use                central $  964.78  cap $ 1340
-  authoring at Jeffreys draws of every yield: 95% range $31 to $155, so all-in at caps $1308 to $1475
+  fixing the five deferred harness findings  agent use $   40
+  all-in with $350 of agent use and the fixes  central $ 1004.78  cap $ 1380
+  authoring at Jeffreys draws of every yield: 95% range $31 to $155, so all-in at caps $1348 to $1515
 option 2, founder pairs only, 16 pairs: 44 briefs (22 pairs, 0 unpaired founders, 0 builders), 32 in stage 2, 8 in stage 1; still to author 22 pairs, 0 unpaired founders, 0 builders
   authoring                                  central $   67.18  cap $  119
   simulator audit                            central $   26.81  cap $   38
@@ -67,8 +71,9 @@ option 2, founder pairs only, 16 pairs: 44 briefs (22 pairs, 0 unpaired founders
   stage 2, particle-1                        central $   34.24  cap $   61
   hosts                                      central $    5.99  cap $   10
   paid total                                 central $  738.18  cap $ 1158
-  all-in with $350 of agent use                central $ 1088.18  cap $ 1508
-  authoring at Jeffreys draws of every yield: 95% range $38 to $190, so all-in at caps $1469 to $1675
+  fixing the five deferred harness findings  agent use $   40
+  all-in with $350 of agent use and the fixes  central $ 1128.18  cap $ 1548
+  authoring at Jeffreys draws of every yield: 95% range $38 to $190, so all-in at caps $1509 to $1715
 option 2, founder pairs only, 24 pairs: 60 briefs (30 pairs, 0 unpaired founders, 0 builders), 48 in stage 2, 8 in stage 1; still to author 30 pairs, 0 unpaired founders, 0 builders
   authoring                                  central $   91.61  cap $  152
   simulator audit                            central $   27.42  cap $   39
@@ -78,8 +83,9 @@ option 2, founder pairs only, 24 pairs: 60 briefs (30 pairs, 0 unpaired founders
   stage 2, particle-1                        central $   51.36  cap $   84
   hosts                                      central $    8.39  cap $   13
   paid total                                 central $  984.98  cap $ 1491
-  all-in with $350 of agent use                central $ 1334.98  cap $ 1841
-  authoring at Jeffreys draws of every yield: 95% range $52 to $259, so all-in at caps $1788 to $2067
+  fixing the five deferred harness findings  agent use $   40
+  all-in with $350 of agent use and the fixes  central $ 1374.98  cap $ 1881
+  authoring at Jeffreys draws of every yield: 95% range $52 to $259, so all-in at caps $1828 to $2107
 Part D. MDD and decision shares, from power.py's model unchanged: one session a brief, arm and model, pooled over Opus and Sol, paired t over opening clusters
 filled set           clusters  8  rho 0.500  pooled MDD at p0 0.25 0.34, 0.40 0.34, 0.55 0.33
 filled set           clusters  8  rho 0.843  pooled MDD at p0 0.25 0.33, 0.40 not reached by 0.45, 0.55 not reached by 0.39

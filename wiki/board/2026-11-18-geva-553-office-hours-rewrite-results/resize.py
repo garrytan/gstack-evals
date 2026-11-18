@@ -30,6 +30,7 @@ PARTNERS = [("T3", 1, True), ("T5", 1, True), ("T6", 2, True), ("T6", 26, True),
 BOUND = 3
 DRAFT_ALLOWANCE, PARALLEL_DRAFTS = 3.50, 8
 AGENT_USE = 350
+FIX_DEFERRED = 40
 
 C1 = FIRST_USD / FIRST_N
 C2 = SECOND_USD / SECOND_N
@@ -120,8 +121,10 @@ def design(name, cmp, cal, res, reuse, rng):
     for r in rows:
         print("  %-42s central $%8.2f  cap $%5d" % r)
     print("  paid total                                 central $%8.2f  cap $%5d" % (c, k))
-    print("  all-in with $%d of agent use                central $%8.2f  cap $%5d" % (AGENT_USE, c + AGENT_USE, k + AGENT_USE))
-    print("  authoring at Jeffreys draws of every yield: 95%% range $%.0f to $%.0f, so all-in at caps $%d to $%d" % (a_lo, a_hi, k + AGENT_USE - rows[0][2] + ceil(1.35 * a_lo + PARALLEL_DRAFTS * DRAFT_ALLOWANCE), k + AGENT_USE - rows[0][2] + a_cap_hi))
+    extra = AGENT_USE + FIX_DEFERRED
+    print("  fixing the five deferred harness findings  agent use $%5d" % FIX_DEFERRED)
+    print("  all-in with $%d of agent use and the fixes  central $%8.2f  cap $%5d" % (AGENT_USE, c + extra, k + extra))
+    print("  authoring at Jeffreys draws of every yield: 95%% range $%.0f to $%.0f, so all-in at caps $%d to $%d" % (a_lo, a_hi, k + extra - rows[0][2] + ceil(1.35 * a_lo + PARALLEL_DRAFTS * DRAFT_ALLOWANCE), k + extra - rows[0][2] + a_cap_hi))
     return need
 
 rng = np.random.default_rng(SEED)

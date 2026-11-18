@@ -20,15 +20,15 @@ links:
   - lanes/office-hours-rewrite/
   - garrytan/gstack#4468
 attachments:
-  - b9fa30c131ac1426081a7136a68d84225e492ac164d9c38b454cafb70598aa13  resize.py
-  - 8c05e83eda3f30d0aebf3e712029d2abc7b8102fd8ee97cb26545136dc2f2d03  resize.txt
+  - 0de4cefc7abdd2f34051343b50577aa74f5c7a9f2c8dc2f5f5073db04c7314a7  resize.py
+  - 3f5d94fdc6e8f7d6966a6e477eb57e1fa12bb3db2a79c8749109fe902dd7ed23  resize.txt
 ---
 
 # The office-hours rewrite eval stopped INCOMPLETE during authoring: 19 of 110 sealed briefs placed, so gstack's content change gets no verdict
 
 - We learned that a strict three-model screen leaves very few unpaired briefs. Only 7 of 82 unpaired drafts passed (8.5%, 95% interval 4.2% to 16.6%). The rule that drops a brief when any of three models can make its call from the opening alone dropped 47 of the 82 (57%). You should pilot unpaired supply on its own before you size an authoring cap, because a pilot of pairs says nothing about it.
 - We learned that restarting a paid authoring run at a different concurrency threw away two thirds of its spend: $155.42 of $233.59 went to drafts the final run never used. You should fix each slot's draw order so it does not depend on concurrency, and bound how many times a twin is redrawn, before a long paid run starts.
-- This eval tested nothing. No arm ran a session, so it says nothing about whether the rewritten office-hours skill helps, and gstack's content change (gstack pull request 4468, head 4afa7f2b) gets no MERGE or HOLD verdict from it. The verdict is INCOMPLETE, the preregistration's cap-stop row. There is no "Why null?" cycle, because there is no null. A rerun that answers the 15-point question would cost about $1,970 all-in at central and $2,700 at caps at the yields we measured (section 7).
+- This eval tested nothing. No arm ran a session, so it says nothing about whether the rewritten office-hours skill helps, and gstack's content change (gstack pull request 4468, head 4afa7f2b) gets no MERGE or HOLD verdict from it. The verdict is INCOMPLETE, the preregistration's cap-stop row. There is no "Why null?" cycle, because there is no null. A rerun that answers the 15-point question would cost about $2,010 all-in at central and $2,740 at caps at the yields we measured (section 7).
 
 ## 1. What worked
 
@@ -160,15 +160,23 @@ These sizings are inputs for whoever decides on a rerun, not a recommendation to
 - Session, simulator, label, audit and judge costs are the preregistration's planning figures, since stage 1 never ran.
 - Caps follow the current rule: 1.35 times central, plus what the item's parallel calls hold at open (8 drafts at $3.50, and one round of an Opus skill, skill and none session at $15, $15 and $3 with $2 of simulator each). Stage 1 and the judge check keep their approved caps.
 - Agent use is the preregistration's planning figure of $350.
+- A line item of $40 of agent use, also a planning figure, fixes five harness bugs that this pull request's review found and deferred to a rerun's build:
+  - `ohr read decision` learns of a cap stop only from a flag;
+  - unrun sessions drop out of the completeness checks;
+  - a missing transcript aborts scoring;
+  - a crashed attempt's spend reads as $0 in its session row;
+  - the judge check returns the wrong exit code.
+
+  None of them touches this result, because no session ran.
 - The authoring range comes from drawing every yield from its Jeffreys interval at once.
 
 | Design | Briefs | Founder clusters | Pooled MDD, rho 0.5 (0.843) | A true 15-point lift: interval above zero / MERGE | Authoring, central (95% range) | All-in central | All-in at caps (range from authoring) |
 |---|---|---|---|---|---|---|---|
-| The preregistered 5 skins, for reference | 110 | 40 | 0.12 to 0.13 (0.08) | 0.54 MERGE (the plan's own table) | $322 ($200 to $881) | $2,205 | $3,015 ($2,850 to $3,768) |
-| **1. Cheapest full answer: 4 skins** | 96 | 32 | 0.14 to 0.15 (0.09) | 0.82 / 0.46 (0.99 / 0.46) | $282 ($175 to $762) | $1,970 | $2,697 ($2,553 to $3,345) |
-| 2. Founder pairs only, 12 pairs | 36 | 12 | 0.23 to 0.24 (0.21) | 0.44 / 0.37 (0.58 / 0.40) | $55 ($31 to $155) | $965 | $1,340 ($1,308 to $1,475) |
-| 2. Founder pairs only, 16 pairs | 44 | 16 | 0.18 to 0.20 (0.15 to 0.16) | 0.61 / 0.48 (0.81 / 0.47) | $67 ($38 to $190) | $1,088 | $1,508 ($1,469 to $1,675) |
-| 2. Founder pairs only, 24 pairs | 60 | 24 | 0.14 to 0.15 (0.10) | 0.80 / 0.50 (0.98 / 0.47) | $92 ($52 to $259) | $1,335 | $1,841 ($1,788 to $2,067) |
+| The preregistered 5 skins, for reference | 110 | 40 | 0.12 to 0.13 (0.08) | 0.54 MERGE (the plan's own table) | $322 ($200 to $881) | $2,245 | $3,055 ($2,890 to $3,808) |
+| **1. Cheapest full answer: 4 skins** | 96 | 32 | 0.14 to 0.15 (0.09) | 0.82 / 0.46 (0.99 / 0.46) | $282 ($175 to $762) | $2,010 | $2,737 ($2,593 to $3,385) |
+| 2. Founder pairs only, 12 pairs | 36 | 12 | 0.23 to 0.24 (0.21) | 0.44 / 0.37 (0.58 / 0.40) | $55 ($31 to $155) | $1,005 | $1,380 ($1,348 to $1,515) |
+| 2. Founder pairs only, 16 pairs | 44 | 16 | 0.18 to 0.20 (0.15 to 0.16) | 0.61 / 0.48 (0.81 / 0.47) | $67 ($38 to $190) | $1,128 | $1,548 ($1,509 to $1,715) |
+| 2. Founder pairs only, 24 pairs | 60 | 24 | 0.14 to 0.15 (0.10) | 0.80 / 0.50 (0.98 / 0.47) | $92 ($52 to $259) | $1,375 | $1,881 ($1,828 to $2,107) |
 
 MDDs cover a control rate of 0.25 to 0.55. The lift shares are at a control rate of 0.40. MERGE means the preregistration's founder bar: a pooled estimate of at least 15 points with its interval above zero. Simulated figures move by about 0.01 from one seed to another.
 
@@ -184,7 +192,7 @@ Its builder guard is the preregistration's: when builders are unharmed, it passe
 
 Three cheaper changes are left out because they narrow the question:
 
-- **Dropping the unpaired types for pairs.** 26 pairs plus the builders reaches the same MDD (0.14 to 0.15) for $1,815 central and $2,486 at caps, about $155 and $211 less. But it drops two of the eight situations, including T8, the returning founder, which tests the dated follow-up the rewrite adds.
+- **Dropping the unpaired types for pairs.** 26 pairs plus the builders reaches the same MDD (0.14 to 0.15) for $1,855 central and $2,526 at caps, about $155 and $211 less. But it drops two of the eight situations, including T8, the returning founder, which tests the dated follow-up the rewrite adds.
 - **Dropping particle-1.** That saves $86 central and $130 at caps, but the project's rules require a low-cost model in every gstack eval.
 - **Cutting builder briefs.** That removes the harm guard, so option 2 covers it instead.
 
