@@ -3600,8 +3600,8 @@ export const CODES = {
   },
   E_OHR_RESUME: {
     exit: 2,
-    meaning: "Office-hours rewrite eval, second attempt (its section 5.2): ohr author --resume cannot rebuild the run from its sealed checkpoint and draft records. The file is not a checkpoint, its log does not match its name, a draft record after it is missing, a record sits out of place, or a brief's files no longer match its digest.",
-    fix: "Point --resume at a checkpoint-<drafts>.age in the run's checkpoints folder with every draft-<seq>.age sealed after it beside it. A missing record would pay for a settled draft twice, so restore it from custody rather than resuming without it.",
+    meaning: "Office-hours rewrite eval, second attempt (its section 5.2): ohr author --resume cannot rebuild the run from its sealed checkpoint and draft records. The file is not a checkpoint, its log does not match its name, a draft record after it is missing, a record sits out of place, a brief's files no longer match its digest, a checkpoint or record carries no run id or names another run, or the --meter dir or checkpoints folder's run.json names another run than the checkpoint.",
+    fix: "Point --resume at a checkpoint-<drafts>.age in the run's checkpoints folder with every draft-<seq>.age sealed after it beside it. A missing record would pay for a settled draft twice, so restore it from custody rather than resuming without it. Pass --meter only with the same run's meter dir, or leave it out: the resume continues the checkpoint's run id on the ledger item either way.",
     side_effects: "None: the decrypted checkpoint and records are deleted from /dev/shm before the refusal, and no call is made.",
     retry_safe: true,
     resumable: false,

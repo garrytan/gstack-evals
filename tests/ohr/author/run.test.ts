@@ -1,7 +1,7 @@
 // Value: protects=the second attempt's authoring (its sections 4 and 5) as driven on a fake provider: each slot's fixed draw sequence, the top-up bound, the pilot, the projection stop pinned to sizing.txt and on planted yields that go and that stop, reserves last, the cap stop's two sides, the outcome log sealed draft by draft and batch by batch, a resume at another concurrency that requests no sealed draft again, and the reuse check on a planted bundle.
 import { afterAll, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdtempSync, readdirSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { authorRun, checkAnswers, countsOf, haltOf, kindOf, metaOf, SLOT_DRAWS, summaryOf, type AuthorDeps, type AuthorRun, type Checkpoint, type Journal, type LogEntry, type Reuse } from "../../../lanes/office-hours-rewrite/author/run.ts";
@@ -190,7 +190,7 @@ describe("order and the end of authoring (section 5.6)", () => {
 const r0 = new Set<string>();
 
 describe("the outcome log and resume (section 5.2)", () => {
-  const journalTo = (dir: string) => sealedJournal({ dir, work: join(temp("/dev/shm/ohr-journal-"), "w"), sealer: fakeSealer });
+  const journalTo = (dir: string, runId = "ohr-author-test") => sealedJournal({ dir, work: join(temp("/dev/shm/ohr-journal-"), "w"), sealer: fakeSealer, runId });
   test("every settled draft is sealed with its spend before the run counts it, and the log and placed briefs after every batch", async () => {
     const dir = temp(join(tmpdir(), "ohr-ckpt-"));
     const sealed: number[] = [];
@@ -204,6 +204,8 @@ describe("the outcome log and resume (section 5.2)", () => {
     expect(names).toContain("checkpoint-" + String(r.outcomes.length).padStart(6, "0") + ".age");
     const back = readJournal(join(dir, "checkpoint-000000.age"), fakeDecrypter, join(temp("/dev/shm/ohr-open-"), "w"));
     expect(back.log.map((x) => x.id)).toEqual(r.outcomes.map((x) => x.id));
+    expect(back.run_id).toBe("ohr-author-test");
+    expect(readFileSync(join(dir, "run.json"), "utf8")).toBe(JSON.stringify({ run_id: "ohr-author-test" }) + "\n");
     expect(back.reuse.placed).toHaveLength(19);
     expect(readdirSync("/dev/shm").some((n) => n.includes(".open-"))).toBe(false);
   });
@@ -240,6 +242,14 @@ describe("the outcome log and resume (section 5.2)", () => {
     await go({ fails: SOME, journal: journalTo(dir) });
     unlinkSync(join(dir, "draft-000005.age"));
     expect(() => readJournal(join(dir, "checkpoint-000000.age"), fakeDecrypter, join(temp("/dev/shm/ohr-open-"), "w"))).toThrow("E_OHR_RESUME");
+  });
+  test("a checkpoints folder serves one run, and a resume refuses a draft record of another run", async () => {
+    const dir = temp(join(tmpdir(), "ohr-ckpt-"));
+    const r = await go({ fails: SOME, journal: journalTo(dir) });
+    expect(() => journalTo(dir, "ohr-author-other")).toThrow("E_OHR_RESUME");
+    unlinkSync(join(dir, "run.json"));
+    journalTo(dir, "ohr-author-other").record({ ...r.outcomes.at(-1)!, seq: r.outcomes.length + 1 });
+    expect(() => readJournal(join(dir, "checkpoint-000000.age"), fakeDecrypter, join(temp("/dev/shm/ohr-open-"), "w"))).toThrow("belongs to run ohr-author-other");
   });
 });
 

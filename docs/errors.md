@@ -3291,9 +3291,9 @@ Exit 2. Side effects: Spend so far stays on the authoring lease; every placed br
 
 ### E_OHR_RESUME
 
-Office-hours rewrite eval, second attempt (its section 5.2): ohr author --resume cannot rebuild the run from its sealed checkpoint and draft records. The file is not a checkpoint, its log does not match its name, a draft record after it is missing, a record sits out of place, or a brief's files no longer match its digest.
+Office-hours rewrite eval, second attempt (its section 5.2): ohr author --resume cannot rebuild the run from its sealed checkpoint and draft records. The file is not a checkpoint, its log does not match its name, a draft record after it is missing, a record sits out of place, a brief's files no longer match its digest, a checkpoint or record carries no run id or names another run, or the --meter dir or checkpoints folder's run.json names another run than the checkpoint.
 
-Fix: Point --resume at a checkpoint-&lt;drafts>.age in the run's checkpoints folder with every draft-&lt;seq>.age sealed after it beside it. A missing record would pay for a settled draft twice, so restore it from custody rather than resuming without it.
+Fix: Point --resume at a checkpoint-&lt;drafts>.age in the run's checkpoints folder with every draft-&lt;seq>.age sealed after it beside it. A missing record would pay for a settled draft twice, so restore it from custody rather than resuming without it. Pass --meter only with the same run's meter dir, or leave it out: the resume continues the checkpoint's run id on the ledger item either way.
 
 Exit 2. Side effects: None: the decrypted checkpoint and records are deleted from /dev/shm before the refusal, and no call is made. Retry safe: yes. Resumable: no. Owner: U20.
 

@@ -270,7 +270,7 @@ export const seams: Seam[] = [
         const unbroken = await done({ fails: SOME });
         const target = unbroken.outcomes[60]!;
         let hung = false;
-        const journal = (n: string) => sealedJournal({ dir, work: join(shm, n), sealer: fakeSealer });
+        const journal = (n: string) => sealedJournal({ dir, work: join(shm, n), sealer: fakeSealer, runId: "ohr-author-seams" });
         void (await whole({ fails: SOME, hang: (l) => l === REF(target) + ":author:1" && (hung = true), journal: journal("a") })).run;
         while (!hung) await new Promise((r) => setTimeout(r, 1));
         await new Promise((r) => setTimeout(r, 50));
@@ -283,7 +283,7 @@ export const seams: Seam[] = [
         const asked = again.call.calls.filter((c) => /:author:1$/.test(c.label)).map((c) => c.label.split(":")[0]!);
         const twice = asked.filter((ref) => sealedRefs.has(ref));
         const between = names.filter((n) => n.startsWith("draft-")).length > Number(/(\d{6})/.exec(newest)![1]);
-        return say(between && twice.length === 0 && asked.includes(REF(target)) && placedSet(r) === placedSet(unbroken), resumed.log.length + " sealed drafts resumed from " + newest + "; sealed drafts requested again: " + (twice.join(", ") || "none"));
+        return say(between && twice.length === 0 && asked.includes(REF(target)) && placedSet(r) === placedSet(unbroken) && resumed.run_id === "ohr-author-seams", resumed.log.length + " sealed drafts of run " + resumed.run_id + " resumed from " + newest + "; sealed drafts requested again: " + (twice.join(", ") || "none"));
       }),
   },
   {

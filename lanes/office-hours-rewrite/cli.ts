@@ -100,8 +100,8 @@ export function readBriefs(dir: string): Map<string, Brief> {
 /** Every row of the named launch folders. */
 export const launchRows = (dirs: readonly string[]): SessionRow[] => dirs.flatMap((d) => [...readRows(d).values()].map((l) => l.row));
 
-async function withWire<T>(o: { dir: string; item: string; cap: string | undefined; label: string; record?: string; ledger?: string; env: Env; io: Io; cmd: string; buildCommit?: string }, body: (w: Wire) => Promise<T>): Promise<T> {
-  const w = await openWire({ dir: o.dir, item: o.item, capMicros: dollars(o.cap, "--spend-cap"), label: o.label, record: o.record, ledger: o.ledger, env: o.env, io: o.io, buildCommit: o.buildCommit });
+async function withWire<T>(o: { dir: string; item: string; cap: string | undefined; label: string; runId?: string; record?: string; ledger?: string; env: Env; io: Io; cmd: string; buildCommit?: string }, body: (w: Wire) => Promise<T>): Promise<T> {
+  const w = await openWire({ dir: o.dir, item: o.item, capMicros: dollars(o.cap, "--spend-cap"), label: o.label, runId: o.runId, record: o.record, ledger: o.ledger, env: o.env, io: o.io, buildCommit: o.buildCommit });
   try {
     return await body(w);
   } finally {
@@ -109,14 +109,15 @@ async function withWire<T>(o: { dir: string; item: string; cap: string | undefin
   }
 }
 
-const AUTHOR_USAGE = "gstack-evals ohr author --work <new dir under /dev/shm> --out <new sealed path> --recipients <age recipients file> --identity <age identity file> (--reuse <the first attempt's sealed authoring output> | --resume <a sealed checkpoint-<drafts>.age>) --gstack <clone holding both pins> --item <ledger item> --spend-cap <usd> [--meter <the stopped run's meter dir under /dev/shm>] [--concurrency <n>] [--record <dir>] [--ledger <path>]";
+const AUTHOR_USAGE = "gstack-evals ohr author --work <new dir under /dev/shm> --out <new sealed path> --recipients <age recipients file> --identity <age identity file> (--reuse <the first attempt's sealed authoring output> | --resume <a sealed checkpoint-<drafts>.age>) --gstack <clone holding both pins> --item <ledger item> --spend-cap <usd> [--meter <the stopped run's meter dir under /dev/shm, if it survived>] [--concurrency <n>] [--record <dir>] [--ledger <path>]";
 
 /**
  * ohr author: authorRun from the reused briefs (a new run) or from a sealed checkpoint and the draft records sealed after
  * it (a stopped run), sealing every settled draft and a checkpoint after every batch into the checkpoints folder (the
  * new run's <out>.checkpoints, or the checkpoint's own folder), then the placed briefs, every outcome and the judge
- * check's answers sealed with age. A resume given the stopped run's meter dir keeps its run id, its spend and its reply
- * cache.
+ * check's answers sealed with age. A resume continues the run id its checkpoint records on the same ledger item, with
+ * or without the stopped run's meter dir; that dir only adds its reply cache. Spend and the cap's room come from the
+ * ledger item, and the projection's scale from the sealed records' per-draft spend.
  */
 async function author(argv: string[], io: Io, env: Env): Promise<number> {
   const f = flags(argv, { one: ["--work", "--out", "--recipients", "--identity", "--reuse", "--resume", "--meter", "--gstack", "--item", "--spend-cap", "--concurrency", "--record", "--ledger"] });
@@ -133,7 +134,7 @@ async function author(argv: string[], io: Io, env: Env): Promise<number> {
   const identity = resolve(one(f, "--identity")!);
   const resumeFrom = f.has("--resume") ? outside("--resume", one(f, "--resume")!) : null;
   const checkpoints = resumeFrom ? dirname(resumeFrom) : fresh("--out", out + ".checkpoints");
-  let reuse: Reuse | undefined, resume: Checkpoint | undefined;
+  let reuse: Reuse | undefined, resume: (Checkpoint & { run_id: string }) | undefined;
   if (resumeFrom) resume = readJournal(resumeFrom, ageDecrypter(identity), work);
   else {
     const sealed = outside("--reuse", one(f, "--reuse")!);
@@ -146,8 +147,8 @@ async function author(argv: string[], io: Io, env: Env): Promise<number> {
   const screen = loadScreen(gitReader(resolve(one(f, "--gstack")!)));
   const cap = dollars(one(f, "--spend-cap"), "--spend-cap") / 1e6;
   const sealer = ageSealer(resolve(one(f, "--recipients")!));
-  return withWire({ dir: meter, item: one(f, "--item")!, cap: one(f, "--spend-cap"), label: "ohr-author", record: one(f, "--record"), ledger: one(f, "--ledger"), env, io, cmd: "ohr author" }, async (w) => {
-    const run = await authorRun({ call: w.call, label: labeller(w.judge), parse: parseBlock, screen, spent: w.spent, spentOn: w.spentOn }, { cap, concurrency, reuse, resume, journal: sealedJournal({ dir: checkpoints, work, sealer }) });
+  return withWire({ dir: meter, item: one(f, "--item")!, cap: one(f, "--spend-cap"), label: "ohr-author", runId: resume?.run_id, record: one(f, "--record"), ledger: one(f, "--ledger"), env, io, cmd: "ohr author" }, async (w) => {
+    const run = await authorRun({ call: w.call, label: labeller(w.judge), parse: parseBlock, screen, spent: w.spent, spentOn: w.spentOn }, { cap, concurrency, reuse, resume, journal: sealedJournal({ dir: checkpoints, work, sealer, runId: w.runId }) });
     const sink = openCustody(work, out);
     const summary = writeAuthoring(sink, run);
     writeSealed(sink, "authoring/check-answers.json", JSON.stringify(checkAnswers(run), null, 2) + "\n");

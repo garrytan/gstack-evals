@@ -2,7 +2,9 @@
 // Invented, neutral fixtures for the rewrite lane's authoring tests and dry-run seams (prereg section 3): a matched pair,
 // an unpaired T7 founder, a T8 founder with its prior session and a builder, a scripted caller that answers by request
 // label, a block parser for the three-line block, and a labeller that credits a decision holding the key's call and an
-// action holding one of its actions. None of it is an eval brief, and no call leaves the process.
+// action holding one of its actions, and a fake provider for the real meter. None of it is an eval brief, and no call
+// leaves the process.
+import { createHash } from "node:crypto";
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import type { CallRequest } from "../../product-value/meter.ts";
@@ -210,6 +212,35 @@ export function fakeMeter(call: Caller, usd: (role: "first" | "second" | "unpair
   };
   return { call: metered, spent: () => total, spentOn: (brief: string) => by.get(brief) ?? 0 };
 }
+
+/** Planted yields that a run fills on: about one draft in five fails, by its reference alone. */
+export const plantedFails = (ref: string): boolean => createHash("sha256").update(ref).digest()[0]! < 52;
+
+/**
+ * A fake provider behind the real meter and metering proxy: each provider's reply shape naming the asked model, with
+ * OpenRouter naming the provider the meter's pin wants (OpenAI, Google or Particle by the model's prefix), 100 input tokens and at most
+ * 1,000 output tokens, never more than the request allows. A request whose body hold matches gets no answer.
+ */
+export function providerStub(hold: (body: string) => boolean = () => false): typeof fetch {
+  return (async (url: string | URL | Request, init?: RequestInit) => {
+    const raw = String(init?.body ?? "{}");
+    if (hold(raw)) return new Promise<never>(() => {});
+    const body = JSON.parse(raw) as { model: string; max_tokens?: number; max_output_tokens?: number; max_completion_tokens?: number };
+    const out = Math.min(1000, body.max_tokens ?? body.max_output_tokens ?? body.max_completion_tokens ?? 1000);
+    const u = String(url);
+    if (u.includes("anthropic")) return Response.json({ id: "msg_1", type: "message", role: "assistant", model: body.model, content: [{ type: "text", text: "ok" }], stop_reason: "end_turn", usage: { input_tokens: 100, output_tokens: out, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } });
+    if (u.includes("openrouter")) return Response.json({ id: "gen-1", provider: { openai: "OpenAI", google: "Google", "particle-ai": "Particle" }[body.model.split("/")[0]!], model: body.model, choices: [{ index: 0, message: { role: "assistant", content: "ok" }, finish_reason: "stop" }], usage: { prompt_tokens: 100, completion_tokens: out, total_tokens: 100 + out } });
+    return Response.json({ id: "resp_1", object: "response", model: body.model, status: "completed", output: [{ type: "message", content: [{ type: "output_text", text: "ok" }] }], usage: { input_tokens: 100, input_tokens_details: { cached_tokens: 0 }, output_tokens: out, output_tokens_details: { reasoning_tokens: 0 }, total_tokens: 100 + out } });
+  }) as typeof fetch;
+}
+
+/** A caller that pays for each request through metered and answers it from script: the script's reply at metered's price, or metered's refusal. */
+export const meteredScript =
+  (metered: Caller, script: Caller): Caller =>
+  async (req) => {
+    const m = await metered(req);
+    return m.text === null ? m : { ...(await script(req)), micros: m.micros };
+  };
 
 const tree = (dir: string): string[] => readdirSync(dir).flatMap((n) => (statSync(join(dir, n)).isDirectory() ? tree(join(dir, n)) : [join(dir, n)]));
 /** A stand-in for age in tests: the sealed file is the work directory's files as JSON, so fakeDecrypter can restore them. */
