@@ -10,7 +10,7 @@ const root = join(import.meta.dir, "..", "..");
 const prereg = readFileSync(join(root, PREREG), "utf8");
 const change1 = readFileSync(join(root, CHANGE_1), "utf8");
 const change2 = readFileSync(join(root, CHANGE_2), "utf8");
-const pinTable = (file: string) => Object.fromEntries(readFileSync(join(root, CHANGE_2, "..", "..", file), "utf8").trim().split("\n").slice(1).map((l) => l.split("\t")).map((r) => [r[0], { bytes: Number(r[1]), sha256: r[2] }]));
+const pinTable = (file: string): Record<string, { bytes: number; sha256: string }> => Object.fromEntries(readFileSync(join(root, CHANGE_2, "..", "..", file), "utf8").trim().split("\n").slice(1).map((l) => l.split("\t")).map((r) => [r[0], { bytes: Number(r[1]), sha256: r[2] }]));
 
 describe("frozen values match the posts", () => {
   test("first messages", () => {
@@ -56,7 +56,7 @@ describe("frozen values match the posts", () => {
     expect(change2).toContain("| VERSION | " + pin.version + " |");
     const table = pinTable("2026-11-18-geva-553-office-hours-rewrite-pre-run-change-2/pin-new.tsv");
     const { VERSION: _v, ...files } = table;
-    expect(Object.fromEntries(Object.entries(files).map(([k, v]) => [k, v.sha256]))).toEqual({ ...pin.files });
+    expect(Object.fromEntries(Object.entries(files).map(([k, v]) => [k, (v as { sha256: string }).sha256]))).toEqual({ ...pin.files });
     expect(Object.keys(pin.files).sort()).toEqual([...Object.keys(PINS.current!.files), "office-hours/sections/landscape.md", "office-hours/sections/landscape.md.tmpl", "office-hours/sections/phase-2c-pivot-discovery.md", "office-hours/sections/phase-2c-pivot-discovery.md.tmpl"].sort());
     for (const [path, v] of Object.entries(files)) if (path.startsWith("office-hours/") && !path.endsWith(".json")) expect(change2).toContain("| " + path + " | " + v.bytes + " |");
     expect(change2).toContain("returns " + PINS.current!.sha + ", the current pin");
