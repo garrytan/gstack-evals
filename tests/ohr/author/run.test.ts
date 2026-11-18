@@ -1,4 +1,4 @@
-// Value: protects=the second attempt's authoring (its sections 4 and 5) as driven on a fake provider: each slot's fixed draw sequence, the top-up bound, the pilot, the projection stop pinned to sizing.txt and on planted yields that go and that stop, reserves last, the cap stop's two sides, the outcome log sealed draft by draft and batch by batch, a resume at another concurrency that requests no sealed draft again, and the reuse check on a planted bundle.
+// Value: protects=the second attempt's authoring (its sections 4 and 5) as driven on a fake provider: each slot's fixed draw sequence, the top-up bound, the pilot, the projection read pinned to sizing.txt, recorded after every batch and never stopping a run on planted yields that go or hard ones, reserves last, the cap stop's two sides, the outcome log sealed draft by draft and batch by batch, a resume at another concurrency that requests no sealed draft again, and the reuse check on a planted bundle.
 import { afterAll, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { mkdtempSync, readdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
@@ -9,7 +9,7 @@ import { answersOf, fakeDecrypter, fakeMeter, fakeSealer, FIXTURE_SCREEN, fixtur
 import { drawOf, familyOf, schedule } from "../../../lanes/office-hours-rewrite/author/draws.ts";
 import { ATTEMPT_1, projection, readProjection } from "../../../lanes/office-hours-rewrite/author/pilot.ts";
 import { readJournal, readReuse, sealedJournal } from "../../../lanes/office-hours-rewrite/author/custody.ts";
-import { CAPS, PAIRED_TYPES, PILOT, REUSED_SLOTS, TOP_UP_BOUND } from "../../../lanes/office-hours-rewrite/frozen.ts";
+import { BRIEF_ALLOWANCE, CAPS, PAIRED_TYPES, PILOT, REUSED_SLOTS, TOP_UP_BOUND } from "../../../lanes/office-hours-rewrite/frozen.ts";
 import { MeterError } from "../../../lanes/product-value/meter.ts";
 import type { Outcome } from "../../../lanes/office-hours-rewrite/author/brief.ts";
 
@@ -115,7 +115,14 @@ describe("the pilot (section 5.4)", () => {
   });
 });
 
-describe("the projection stop (section 5.5)", () => {
+describe("the projection read (section 5.5, descriptive since the Captain's ruling of 2026-11-18)", () => {
+  /** Reads at the pilot's end and after every later batch: one per batch of at most 8 drafts, the last after the last draft. */
+  const readEveryBatch = (r: AuthorRun) => {
+    expect(r.reads[0]!.drafts).toBe(r.outcomes.filter((x) => x.pilot).length);
+    expect(r.reads.at(-1)!.drafts).toBe(r.outcomes.length);
+    for (let i = 1; i < r.reads.length; i++) expect(r.reads[i]!.drafts - r.reads[i - 1]!.drafts).toBeOneOf([1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(summaryOf(r).projections.map((p) => [p.drafts, p.over])).toEqual(r.reads.map((p) => [p.drafts, p.over]));
+  };
   test("at the first attempt's counts alone, T8 at T7's counts and scale 1, the first projection is sizing.txt's $127.52", () => {
     const open = { pairs: { T1: 4, T2: 3, T3: 3, T4: 3, T5: 4, T6: 3 }, unpaired: { T7: 3, T8: 5, builder: 21 } };
     expect(projection({ ...ATTEMPT_1, unpaired: { ...ATTEMPT_1.unpaired, T8: ATTEMPT_1.unpaired.T7 } }, open, 1).toFixed(2)).toBe("127.52");
@@ -131,23 +138,27 @@ describe("the projection stop (section 5.5)", () => {
     expect(one.scale).toBe(2);
     expect(one.projection).toBeCloseTo(2 * readProjection({ counts, open, spend: 1, predicted: 1, cap: 409, committed: 31, drafts: 4 }).projection, 10);
   });
-  test("planted yields that go: every read fits, and calibration, comparison and then reserves fill", async () => {
+  test("planted yields that go: every read fits, every read is recorded, and calibration, comparison and then reserves fill", async () => {
     const r = await go({ fails: SOME });
     expect(r.reads.length).toBeGreaterThan(1);
-    expect(r.reads.every((x) => !x.stop)).toBe(true);
+    expect(r.reads.every((x) => !x.over)).toBe(true);
+    readEveryBatch(r);
     expect([r.stopped, r.full, all(r).length, haltOf(r, mdd)]).toEqual(["quotas", true, 96, null]);
   });
-  test("planted yields that stop: T1 and T4 never match and unpaired briefs rarely pass, so the projection ends authoring INCOMPLETE before the cap", async () => {
-    const r = await go({ fails: (ref) => (twinOf(ref) && ["T1", "T4"].includes(slotOfRef(ref).type)) || (unpairedOf(ref) && hashed(ref, 200)) });
-    const last = r.reads.at(-1)!;
-    expect([r.stopped, r.full, last.stop]).toEqual(["projection", false, true]);
-    expect(last.projection).toBeGreaterThan(last.room);
-    expect(r.reads.slice(0, -1).every((x) => !x.stop)).toBe(true);
+  test("planted hard yields: T1 and T4 never match and unpaired briefs rarely pass, the projection passes its room, and authoring still goes on to its cap, a final cap stop before the 88 required briefs", async () => {
+    const { deps } = depsOf({ fails: (ref) => (twinOf(ref) && ["T1", "T4"].includes(slotOfRef(ref).type)) || (unpairedOf(ref) && hashed(ref, 200)) });
+    const r = await authorRun(deps, { cap: CAPS.authoring, concurrency: 8, reuse: REUSE });
+    const over = r.reads.findIndex((x) => x.over);
+    expect(over).toBeGreaterThanOrEqual(0);
+    expect(r.reads[over]!.projection).toBeGreaterThan(r.reads[over]!.room);
+    expect(r.reads.length - over).toBeGreaterThan(1);
+    readEveryBatch(r);
+    expect([r.stopped, r.full]).toEqual(["cap", false]);
+    expect(deps.spent()).toBeLessThanOrEqual(CAPS.authoring);
+    expect(CAPS.authoring - deps.spent()).toBeLessThan(BRIEF_ALLOWANCE);
     const e = haltOf(r, mdd)!;
-    expect(e.code).toBe("E_OHR_PROJECTION_STOP");
-    expect(e.message).toContain("partners matched T1 0/");
-    expect(e.message).toContain(all(r).length + " of 96 briefs placed");
-    expect(last.committed).toBeLessThan(CAPS.authoring - 28);
+    expect(e.code).toBe("E_OHR_SUPPLY_SHORT");
+    expect(e.message).toContain("authoring stopped at cap with " + all(r).length + " of 96 briefs placed");
   });
 });
 

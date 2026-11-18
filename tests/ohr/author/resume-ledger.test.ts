@@ -96,9 +96,11 @@ test("a run killed between a draft's sealed record and its batch's checkpoint, i
   expect((JSON.parse(readFileSync(join(shm, "meter-2", "run.json"), "utf8")) as { spent_micros: number }).spent_micros).toBe(end.committed_micros);
 
   const read = r.reads[resumed.reads.length]!;
-  const sealed = r.outcomes.slice(0, read.drafts);
-  expect(read.drafts).toBe(resumed.log.length);
-  expect(read.scale).toBe(sealed.reduce((t, x) => t + x.spend, 0) / sealed.reduce((t, x) => t + predicted(x.role), 0));
-  expect(Math.round(read.committed * D)).toBe(earlier);
+  const upTo = r.outcomes.slice(0, read.drafts);
+  expect(read.drafts - resumed.log.length).toBeOneOf([1, 2, 3]);
+  expect(r.outcomes.slice(0, resumed.log.length)).toEqual(resumed.log);
+  expect(resumed.log.reduce((t, x) => t + x.spend, 0)).toBeGreaterThan(0);
+  expect(read.scale).toBe(upTo.reduce((t, x) => t + x.spend, 0) / upTo.reduce((t, x) => t + predicted(x.role), 0));
+  expect(Math.round(read.committed * D)).toBeGreaterThan(earlier);
   expect(readdirSync("/dev/shm").some((n) => n.includes(".open-"))).toBe(false);
 }, 180_000);

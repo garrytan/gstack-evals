@@ -13,8 +13,10 @@
 // - The pilot (section 5.4) comes first: the first two open calibration and comparison slots of each pair type, each
 //   until it settles one partner or has drafted 3 first twins, and 8 drafts each of T7, T8 and builders, one a slot in
 //   turn over that kind's open slots in seeded order. Its briefs are placed like any other.
-// - Then every open calibration and comparison slot draws in seeded order, with the projection stop (pilot.ts) read
-//   before each batch until they are full, and then the reserves draw in seeded order (section 5.6).
+// - Then every open calibration and comparison slot draws in seeded order, and then the reserves (section 5.6). The
+//   projection (pilot.ts) is read at the pilot's end and after every later batch and recorded in the summary. It is a
+//   descriptive read only: since the Captain's ruling of 2026-11-18 it never stops authoring, which ends only at its
+//   quotas, its cap, a stop that is not about money, or the draft limit.
 // - Every settled draft, with the dollars its calls took on the meter, goes through the journal before the run counts
 //   it, and after every batch the journal seals the outcome log and the placed briefs (section 5.2). A run resumes from
 //   a checkpoint and the drafts sealed after it: each slot's state is rebuilt from the log, so a settled draft is never
@@ -80,7 +82,7 @@ export interface AuthorRun {
   sets: Sets;
   /** First twins still waiting for a passing second twin when authoring ended; they drop. */
   unmatched: string[];
-  stopped: "quotas" | "cap" | "projection" | "schedule" | "halt";
+  stopped: "quotas" | "cap" | "schedule" | "halt";
   /** Calibration and comparison were full when authoring ended. */
   full: boolean;
   /** The stop a draft or label call threw, which ended the run; null when none did. */
@@ -220,16 +222,12 @@ export async function authorRun(deps: AuthorDeps, o: { cap: number; concurrency:
     const pilot = pilotWants();
     const wants = pilot.length ? pilot : main.some(open) ? main.filter(open) : reserves.filter(open);
     if (!wants.length) return finish("quotas", null);
-    if (!pilot.length && main.some(open)) {
-      const read = readProjection({ counts: countsOf(log), open: openOf(), spend: log.reduce((t, x) => t + x.spend, 0), predicted: log.reduce((t, x) => t + predicted(x.role), 0), cap: o.cap, committed: deps.spent(), drafts: log.length });
-      reads.push(read);
-      if (read.stop) return finish("projection", null);
-    }
     const size = Math.min(o.concurrency, Math.floor((o.cap - deps.spent()) / BRIEF_ALLOWANCE));
     if (size <= 0) return finish("cap", null);
     const batch = wants.slice(0, size);
     if (log.length >= MAX_DRAFTS || batch.some((s) => st.get(s.slot)!.k >= SLOT_DRAWS)) return finish("schedule", null);
     const halt = await settleBatch(batch.map((s) => start(s, pilot.length > 0)));
+    if (!pilotWants().length) reads.push(readProjection({ counts: countsOf(log), open: openOf(), spend: log.reduce((t, x) => t + x.spend, 0), predicted: log.reduce((t, x) => t + predicted(x.role), 0), cap: o.cap, committed: deps.spent(), drafts: log.length }));
     checkpoint();
     if (halt) return finish(halt.code === "CAP_STOP" ? "cap" : "halt", halt);
   }
@@ -244,20 +242,14 @@ export const metaOf = (s: Slot, x: Outcome): BriefMeta => ({ id: x.id, kind: s.k
 const needed = QUOTA.founder + QUOTA.builder + QUOTA.calibration + QUOTA.reserve;
 export const placedCount = (r: AuthorRun): number => r.sets.calibration.length + r.sets.comparison.length + r.sets.reserve.length;
 const placedLine = (r: AuthorRun) => placedCount(r) + " of " + needed + " briefs placed (calibration " + r.sets.calibration.length + ", comparison " + r.sets.comparison.length + ", reserve " + r.sets.reserve.length + ", " + r.reuse.placed.length + " of them reused)";
-const kn = (x: KN) => x[0] + "/" + x[1];
-
-/** A projection read in one line: the dollars, the room, the scale and the counts behind them. */
-export const readLine = (p: ProjectionRead): string =>
-  "projection $" + p.projection.toFixed(2) + " against room $" + p.room.toFixed(2) + " (committed $" + p.committed.toFixed(2) + ", scale " + p.scale.toFixed(3) + ", after " + p.drafts + " drafts); first twins " + kn(p.counts.first) + ", partners matched " + PAIRED_TYPES.map((t) => t + " " + kn(p.counts.partners[t]!)).join(", ") + ", draws a matched partner " + kn(p.counts.matched_draws) + ", unpaired " + UNPAIRED_KINDS.map((u) => u + " " + kn(p.counts.unpaired[u])).join(", ") + "; open pairs " + PAIRED_TYPES.map((t) => t + " " + p.open.pairs[t]).join(", ") + ", open unpaired " + UNPAIRED_KINDS.map((u) => u + " " + p.open.unpaired[u]).join(", ");
 
 /**
  * The halt a run owes after its files are written: a stop a draft or label call threw (a cap stop only before
- * calibration and comparison are full), a projection stop, or a shortfall before calibration and comparison are full.
+ * calibration and comparison are full), or a shortfall before calibration and comparison are full.
  * Null when they are full and authoring ended on its quotas or on a cap stop.
  */
 export function haltOf(r: AuthorRun, mdd: (comparisonFounderBriefs: number) => number | null): AuthorError | null {
   if (r.halt && !(r.halt.code === "CAP_STOP" && r.full)) return new AuthorError(r.halt.code, r.halt.message.slice(r.halt.code.length + 1) + "; authoring stopped there with " + placedCount(r) + " briefs placed, all written and sealed under custody");
-  if (r.stopped === "projection") return new AuthorError("E_OHR_PROJECTION_STOP", "authoring's projection stop: even an optimistic projection of the cost to fill calibration and comparison cannot fit the cap; " + readLine(r.reads.at(-1)!) + "; " + placedLine(r));
   if (r.full && r.stopped !== "schedule") return null;
   const founders = r.sets.comparison.filter((m) => m.kind !== "builder").length;
   const m = mdd(founders);
@@ -297,7 +289,7 @@ export function summaryOf(r: AuthorRun) {
     pilot: { drafts: pilot.length, passed: pilot.filter((x) => x.status === "pass").length, by_kind: Object.fromEntries(["pair", "founder", "builder"].map((k) => [k, pilot.filter((x) => slots.get(x.slot)!.kind === k).length])) },
     second_twins: { draws: seconds.length, passed: seconds.filter((x) => x.status === "pass").length, dropped_at_bound: seconds.filter((x) => x.status !== "pass" && x.attempt === TOP_UP_BOUND).length },
     reused: { placed: r.reuse.placed.length, failed: r.reuse.failed.map((f) => ({ id: f.id, slot: f.slot, why: f.why })) },
-    projections: r.reads.map((p) => ({ drafts: p.drafts, projection: Math.round(p.projection * 100) / 100, room: Math.round(p.room * 100) / 100, scale: Math.round(p.scale * 1000) / 1000, stop: p.stop })),
+    projections: r.reads.map((p) => ({ drafts: p.drafts, projection: Math.round(p.projection * 100) / 100, room: Math.round(p.room * 100) / 100, scale: Math.round(p.scale * 1000) / 1000, over: p.over })),
     unmatched: r.unmatched.length,
     placed: placedCount(r),
     sets: { calibration: setRecord(r.sets.calibration), comparison: setRecord(r.sets.comparison), reserve: setRecord(r.sets.reserve) },

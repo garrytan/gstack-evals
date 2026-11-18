@@ -424,7 +424,6 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_OHR_PILOT_STOP](#e_ohr_pilot_stop) | 2 | U20 |
 | [E_OHR_PILOT_OPEN](#e_ohr_pilot_open) | 2 | U20 |
 | [E_OHR_SUPPLY_SHORT](#e_ohr_supply_short) | 2 | U20 |
-| [E_OHR_PROJECTION_STOP](#e_ohr_projection_stop) | 2 | U20 |
 | [E_OHR_RESUME](#e_ohr_resume) | 2 | U20 |
 | [E_OHR_REUSE](#e_ohr_reuse) | 2 | U20 |
 | [E_OHR_CUSTODY](#e_ohr_custody) | 2 | U20 |
@@ -3280,14 +3279,6 @@ Office-hours rewrite eval (prereg section 3, Supply): authoring stopped (its cap
 Fix: Take the shortfall and its MDD to the Captain before stage 1.
 
 Exit 2. Side effects: Spend so far stays on the authoring lease; every placed brief and every draft's outcome are written under custody. Retry safe: no. Resumable: no. Owner: U20.
-
-### E_OHR_PROJECTION_STOP
-
-Office-hours rewrite eval, second attempt (its section 5.5): authoring's projection stop. Even an optimistic projection of the cost to place every open calibration and comparison slot, with each rate at the 0.95 quantile of its Jeffreys posterior, passes the authoring cap less its committed spend less 8 drafts at $3.50. The eval reads INCOMPLETE. The message gives the projection, the room, the scale, the counts behind it and the briefs placed.
-
-Fix: None within this eval: it has no raise, and a cap stop is never retried to change a verdict. Report the projection, its counts and the briefs placed in the results post.
-
-Exit 2. Side effects: Spend so far stays on the authoring lease; every placed brief and every draft's outcome are written and sealed under custody. Retry safe: no. Resumable: no. Owner: U20.
 
 ### E_OHR_RESUME
 

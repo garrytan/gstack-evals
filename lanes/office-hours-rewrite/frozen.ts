@@ -213,9 +213,9 @@ export const PILOT = { pair_slots: 2, first_twins: 3, unpaired_drafts: 8 } as co
 export const BRIEF_ALLOWANCE = 3.5;
 
 /**
- * Section 5.5's projection stop: rates at the 0.95 quantile of their Jeffreys posterior, the first attempt's costs a
- * draft, room for the drafts in flight (8 at the brief allowance), and the first attempt's final-path counts as sizing.py,
- * Part D, lists them: first twins passed of drafted, each pair type's partners matched within the bound's 30 draws of
+ * Section 5.5's projection, a descriptive read since the Captain's ruling of 2026-11-18: rates at the 0.95 quantile of
+ * their Jeffreys posterior, the first attempt's costs a draft, room for the drafts in flight (8 at the brief allowance),
+ * and the first attempt's final-path counts as sizing.py, Part D, lists them: first twins passed of drafted, each pair type's partners matched within the bound's 30 draws of
  * settled, the draws matched partners took (1, 1, 1, 2, 19 and 26) over how many matched, and each unpaired kind's
  * passes of drafts.
  */

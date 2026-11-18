@@ -18,10 +18,10 @@ are written only into /dev/shm and sealed with age to a path outside the reposit
 - screens.ts: the vocabulary screen and its pinned sources.
 - checks.ts: the unanimous key, the give-away screen, the blind audit, the recognition probe and the generic screen.
 - brief.ts: one draft from the author call through every check, with the one rewrite.
-- pilot.ts: the projection stop: the Jeffreys 0.95 quantile, the cost to fill calibration and comparison at the top-up
+- pilot.ts: the projection read: the Jeffreys 0.95 quantile, the cost to fill calibration and comparison at the top-up
   bound of 30, its room and its scale.
-- run.ts: the reused briefs, the pilot, then calibration and comparison with the projection stop read before each batch,
-  then the reserves; the outcome log and resume; the halts; the judge check's answers.
+- run.ts: the reused briefs, the pilot, then calibration and comparison with the projection read after each batch, then
+  the reserves; the outcome log and resume; the halts; the judge check's answers.
 - sets.ts: placing briefs into sets with pairs whole, and reserve replacement.
 - custody.ts: the /dev/shm work directory, the age seal, decryption into /dev/shm only, the brief layout, the sealed
   outcome log (one record a settled draft, one checkpoint a batch) and its resume reader, and the reuse reader.
@@ -76,7 +76,7 @@ constructed.ts), the sets (slots instead of type minimums) and the fixed-seed fa
 23. The vocabulary screen bars 5-word sequences from the Ask lines of phase-2a at the current pin and at the new pin, every double-quoted string in the new pin's "Reality Check" section of phase-2a and in its "Pivot flow" section of phase-2c, and the lens line, plus the founder lane's six named terms, each source refused on any other sha256. The quoted strings are not only questions: at the new pin the reality-check section gives six (three questions, a gstack-slug shell line, a founder's example words and an adviser's line) and the pivot flow six (four questions, a worked market-size line and an adviser's line). The shell line's five-word sequences are path pieces ("claude skills gstack bin gstack"), so it bars nothing a brief would say (pre-run change 4).
 24. The generic screen labels the rewrite's three stock rows with Astra and Opus; any credited cell drops the brief; an unlabelled cell is counted.
 25. Check order: twin check, vocabulary, unanimous, give-away (unpaired only), audit, probe, generic. Vocabulary, audit and probe failures take the one rewrite; the others drop.
-26. The pilot (the second attempt's section 5.4) takes the first two open slots of each pair type, each until it settles one partner or has drafted 3 first twins, and 8 drafts each of T7, T8 and builders, one a slot in turn. The projection stop is read at its end and before every later batch until calibration and comparison are full; the reserves draw last.
+26. The pilot (the second attempt's section 5.4) takes the first two open slots of each pair type, each until it settles one partner or has drafted 3 first twins, and 8 drafts each of T7, T8 and builders, one a slot in turn. The projection is read at its end and after every later batch, and every read goes into the summary. Since the Captain's ruling of 2026-11-18 it is descriptive only and never stops authoring, which ends at its quotas, its cap, a stop that is not about money, or the draft limit. The reserves draw last.
 27. A batch starts no more drafts than the cap less the spend covers at $3.50 each (section 13's brief allowance), and authoring stops after 10,000 drafts, or before a slot's 1,000th first-twin or unpaired draft, whose draw number would reach the next slot's.
 28. Every settled draft is sealed with its spend as it settles, and a checkpoint of the log and the placed briefs after every batch. A resume rebuilds each slot's state from the newest checkpoint and the records after it, so no sealed draft is requested again. Every sealed file carries the run id, also kept in plain run.json beside them, and a resume continues that run on the same ledger item whether or not the stopped run's meter dir survived: its lease reserves the spend cap less what the item has committed, once the meter settles the dead lease from the local ledger, and the projection's scale comes from the sealed records' per-draft spend. The first attempt's pilot continuation and its frozen-inputs digest are gone.
 29. A reserve takes the dropped brief's skin; kind means pair, unpaired founder or builder, and type is not matched.

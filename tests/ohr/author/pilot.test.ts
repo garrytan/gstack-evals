@@ -1,4 +1,4 @@
-// Value: protects=the second attempt's projection stop (its section 5.5): the Jeffreys 0.95 quantile against scipy's beta.ppf, as sizing.py takes it, the projection formula at the top-up bound of 30, its room and its scale. The 16 and 32 draw pilot read of pre-run change 1, item 4d, is gone with the pilot it read, and so are its tests.
+// Value: protects=the second attempt's projection read (its section 5.5, descriptive since the Captain's ruling of 2026-11-18): the Jeffreys 0.95 quantile against scipy's beta.ppf, as sizing.py takes it, the projection formula at the top-up bound of 30, its room and its scale. The 16 and 32 draw pilot read of pre-run change 1, item 4d, is gone with the pilot it read, and so are its tests.
 import { describe, expect, test } from "bun:test";
 import { PROJECTION, TOP_UP_BOUND } from "../../../lanes/office-hours-rewrite/frozen.ts";
 import { ATTEMPT_1, jeffreys, plus, predicted, projection, readProjection, roomLeft, type Counts } from "../../../lanes/office-hours-rewrite/author/pilot.ts";
@@ -59,15 +59,15 @@ describe("the projection (section 5.5)", () => {
     expect(roomLeft(409, 43.17).toFixed(2)).toBe("337.83");
     expect([PROJECTION.held, predicted("first"), predicted("second"), predicted("unpaired")]).toEqual([8, 0.887, 0.093, 0.545]);
   });
-  test("it stops only when the projection passes the room, and costs scale by spend over what the first attempt's figures predict", () => {
+  test("a read is over only when the projection passes the room, and costs scale by spend over what the first attempt's figures predict", () => {
     const counts: Counts = { ...NONE, partners: { T3: [1, 2] } };
     const open = { ...NO_OPEN, pairs: { T3: 1 } };
     const at = (cap: number, spend = 1) => readProjection({ counts, open, spend, predicted: 1, cap, committed: 10, drafts: 3 });
     const p = at(409).projection;
-    expect(at(p + 10 + 28 + 0.01).stop).toBe(false);
-    expect(at(p + 10 + 28 - 0.01).stop).toBe(true);
+    expect(at(p + 10 + 28 + 0.01).over).toBe(false);
+    expect(at(p + 10 + 28 - 0.01).over).toBe(true);
     const edge = at(p + 10 + 28);
-    expect(edge.stop).toBe(edge.projection > edge.room);
+    expect(edge.over).toBe(edge.projection > edge.room);
     expect(at(409, 3).projection).toBeCloseTo(3 * p, 10);
     expect(readProjection({ counts, open, spend: 0, predicted: 0, cap: 409, committed: 0, drafts: 0 }).scale).toBe(1);
   });

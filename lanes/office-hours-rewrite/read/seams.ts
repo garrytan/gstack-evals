@@ -299,7 +299,7 @@ const stopSeams: Seam[] = [
   stopSeam("a ledger item's recorded cap stop reads row 1 with no flag", { capped: ["ohr-s2-arms"] }, { stops: 1, row: 1 }),
   stopSeam("authoring's cap stop after all 88 calibration and comparison briefs were placed does not count", { capped: ["ohr-author"], authoring: { stopped: "cap", full: true } }, { stops: 0, row: 4 }),
   stopSeam("authoring's cap stop before they were placed counts, from the ledger and from authoring's end", { capped: ["ohr-author"], authoring: { stopped: "cap", full: false } }, { stops: 2, row: 1 }),
-  stopSeam("authoring's projection stop reads row 1", { authoring: { stopped: "projection", full: false } }, { stops: 1, row: 1 }),
+  stopSeam("authoring that ended on a halt reads row 1, even with calibration and comparison full", { authoring: { stopped: "halt", full: true } }, { stops: 1, row: 1 }),
   stopSeam("--cap-stop adds a stop", { flag: true }, { stops: 1, row: 1 }),
 ];
 

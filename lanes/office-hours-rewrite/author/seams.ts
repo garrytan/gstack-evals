@@ -4,7 +4,7 @@
 // of its edge through this area's real code, with invented fixtures, a scripted caller, the fixture block parser and a
 // word labeller, so the lane's dry run prints PASS or FAIL per edge and makes no model call. The second attempt's
 // sections 4 and 5 add the driven seams its build step names: each slot's fixed draws, the bound, the pilot, the
-// projection stop on planted yields that go and that stop, the reserve order, both sides of the cap stop, a restart at a
+// projection read on planted yields that go and on hard ones it never stops, the reserve order, both sides of the cap stop, a restart at a
 // new concurrency on a fake provider, and the reuse check on a planted digest mismatch. The 16 and 32 draw pilot read is
 // gone, and its seams with it.
 import { createHash } from "node:crypto";
@@ -14,7 +14,7 @@ import { join } from "node:path";
 import type { CallRequest } from "../../product-value/meter.ts";
 import { MeterError } from "../../product-value/meter.ts";
 import { REPO_ROOT } from "../../product-value/io.ts";
-import { CAPS, PAIRED_TYPES, PILOT, QUOTA, REUSED_SLOTS, TOP_UP_BOUND } from "../frozen.ts";
+import { BRIEF_ALLOWANCE, CAPS, PAIRED_TYPES, PILOT, QUOTA, REUSED_SLOTS, TOP_UP_BOUND } from "../frozen.ts";
 import type { Seam } from "../types.ts";
 import { runDraft, type Outcome, type Partner } from "./brief.ts";
 import { openCustody, readJournal, readReuse, sealedJournal } from "./custody.ts";
@@ -223,19 +223,19 @@ export const seams: Seam[] = [
     },
   },
   {
-    name: "projection stop, driven: planted yields that go fill calibration, comparison and then the reserves, and no read stops",
+    name: "projection read, driven: planted yields that go fill calibration, comparison and then the reserves, a read after every batch and none over its room",
     run: async () => {
       const r = await done({ fails: SOME });
-      return say(r.reads.length > 1 && r.reads.every((x) => !x.stop) && r.full && total(r) === 96 && haltOf(r, () => 0.14) === null, r.reads.length + " reads, placed " + total(r));
+      return say(r.reads.length > 1 && r.reads.every((x) => !x.over) && r.reads.at(-1)!.drafts === r.outcomes.length && r.full && total(r) === 96 && haltOf(r, () => 0.14) === null, r.reads.length + " reads, placed " + total(r));
     },
   },
   {
-    name: "projection stop, driven: T1 and T4 never matching and unpaired briefs rarely passing end authoring with E_OHR_PROJECTION_STOP before the cap",
+    name: "projection read, driven: T1 and T4 never matching and unpaired briefs rarely passing put the projection over its room, and authoring goes on to its cap, a final E_OHR_SUPPLY_SHORT",
     run: async () => {
       const r = await done({ fails: (ref) => (/^d\d+b/.test(ref) && ["T1", "T4"].includes(slotOfRef(ref).type)) || (/^d\d+(\.\d+)?$/.test(ref) && hashed(ref, 200)) });
-      const last = r.reads.at(-1)!;
+      const over = r.reads.findIndex((x) => x.over);
       const e = haltOf(r, () => 0.14);
-      return say(r.stopped === "projection" && !r.full && last.stop && last.committed < CAPS.authoring - 28 && e?.code === "E_OHR_PROJECTION_STOP", e?.message.slice(0, 160) ?? "no halt");
+      return say(over >= 0 && over < r.reads.length - 1 && r.reads.at(-1)!.drafts === r.outcomes.length && r.stopped === "cap" && !r.full && CAPS.authoring - r.reads.at(-1)!.committed < BRIEF_ALLOWANCE && e?.code === "E_OHR_SUPPLY_SHORT", r.reads.filter((x) => x.over).length + " of " + r.reads.length + " reads over the room; " + (e?.message.slice(0, 120) ?? "no halt"));
     },
   },
   {

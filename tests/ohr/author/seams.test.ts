@@ -13,7 +13,7 @@ test("every authoring seam passes", async () => {
 
 test("seam names are unique and the rules have both sides", () => {
   expect(new Set(seams.map((s) => s.name)).size).toBe(seams.length);
-  for (const rule of ["unanimous key", "give-away screen", "blind audit", "recognition probe", "generic screen", "one rewrite", "twins", "draws", "projection stop, driven", "cap stop", "reserves", "custody", "vocabulary screen", "builder goal fact"]) {
+  for (const rule of ["unanimous key", "give-away screen", "blind audit", "recognition probe", "generic screen", "one rewrite", "twins", "draws", "projection read, driven", "cap stop", "reserves", "custody", "vocabulary screen", "builder goal fact"]) {
     expect(seams.filter((s) => s.name.startsWith(rule + ":")).length).toBeGreaterThanOrEqual(2);
   }
 });

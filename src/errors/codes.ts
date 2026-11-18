@@ -3589,15 +3589,6 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
-  E_OHR_PROJECTION_STOP: {
-    exit: 2,
-    meaning: "Office-hours rewrite eval, second attempt (its section 5.5): authoring's projection stop. Even an optimistic projection of the cost to place every open calibration and comparison slot, with each rate at the 0.95 quantile of its Jeffreys posterior, passes the authoring cap less its committed spend less 8 drafts at $3.50. The eval reads INCOMPLETE. The message gives the projection, the room, the scale, the counts behind it and the briefs placed.",
-    fix: "None within this eval: it has no raise, and a cap stop is never retried to change a verdict. Report the projection, its counts and the briefs placed in the results post.",
-    side_effects: "Spend so far stays on the authoring lease; every placed brief and every draft's outcome are written and sealed under custody.",
-    retry_safe: false,
-    resumable: false,
-    owner: "U20",
-  },
   E_OHR_RESUME: {
     exit: 2,
     meaning: "Office-hours rewrite eval, second attempt (its section 5.2): ohr author --resume cannot rebuild the run from its sealed checkpoint and draft records. The file is not a checkpoint, its log does not match its name, a draft record after it is missing, a record sits out of place, a brief's files no longer match its digest, a checkpoint or record carries no run id or names another run, or the --meter dir or checkpoints folder's run.json names another run than the checkpoint.",

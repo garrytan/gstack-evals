@@ -1,4 +1,4 @@
-// Value: protects=the second attempt's decision read of row 1's stops (its section 3, items 8 to 10): every CAP_STOP in a launch's stops.json and every ledger item's recorded cap stop count with no flag, an authoring cap stop counts unless the sealed authoring summary records it after all 88 calibration and comparison briefs were placed, the projection stop counts, and --cap-stop adds a stop but never removes one.
+// Value: protects=the second attempt's decision read of row 1's stops (its section 3, items 8 to 10): every CAP_STOP in a launch's stops.json and every ledger item's recorded cap stop count with no flag, an authoring cap stop counts unless the sealed authoring summary records it after all 88 calibration and comparison briefs were placed, a halt or the draft limit counts, and --cap-stop adds a stop but never removes one.
 import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -96,8 +96,8 @@ describe("authoring's stops (items 8 and 9)", () => {
   test("with no summary to say otherwise, a cap stop on the authoring item counts", () => {
     expect(read(planted({ launch: [], capped: [AUTHOR_ITEM] }))).toHaveLength(1);
   });
-  test("the projection stop, a halt and the draft limit read row 1", () => {
-    for (const authoring of [{ stopped: "projection", full: false }, { stopped: "halt", full: true }, { stopped: "schedule", full: false }] as const) {
+  test("a halt and the draft limit read row 1", () => {
+    for (const authoring of [{ stopped: "halt", full: false }, { stopped: "halt", full: true }, { stopped: "schedule", full: false }] as const) {
       const stops = read(planted({ launch: [], capped: [] }), authoring);
       expect(stops).toHaveLength(1);
       expect(decide({ ...plant("merge"), stops }).row).toBe(1);

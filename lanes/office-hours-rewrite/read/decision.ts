@@ -5,8 +5,8 @@
 // returned. The pooled primary (Opus 5.5 and Sol) decides; per-model rows act only through row 2's loss guard. Beside
 // every outcome go section 10's two readings: new minus none not shown to beat no gstack by the bar, and current minus
 // none wholly below zero. The second attempt (its section 3, items 8 to 10) gives row 1 its stops from stops.ts: every
-// cap stop in a launch's stops.json or a ledger item's record, authoring's projection stop or any authoring stop before
-// calibration and comparison were full, and a stop the command line adds.
+// cap stop in a launch's stops.json or a ledger item's record, authoring that ended any way but on its quotas or on a
+// cap stop after calibration and comparison were full, and a stop the command line adds.
 import { DECISION } from "../frozen.ts";
 import type { ModelId, ScoredSession } from "../types.ts";
 import { builderRightCall, keptWhole, type KeptWholeReading, type RightCallReading } from "./builder.ts";

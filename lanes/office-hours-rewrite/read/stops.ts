@@ -3,8 +3,8 @@
 // takes every cap stop from each launch's stops.json and from each ledger item's record, and --cap-stop can add a stop
 // but never remove one. The one cap stop that does not count is authoring's, when the sealed authoring summary records
 // that it came after all 88 calibration and comparison briefs were placed: that stop ends authoring only. Authoring
-// that ended any other way than on its quotas or on such a cap stop (the projection stop, a cap stop before calibration
-// and comparison were full, a halt or the draft limit) counts too. A launch with no stops.json is refused, since a
+// that ended any other way than on its quotas or on such a cap stop (a cap stop before calibration and comparison were
+// full, a halt or the draft limit) counts too. A launch with no stops.json is refused, since a
 // missing file must not hide a stop.
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
