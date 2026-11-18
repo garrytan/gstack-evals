@@ -157,7 +157,7 @@ export async function runCommand(argv: string[], io: Io, env: Env): Promise<numb
   const meter = await openMeter({ item: plan.simItem, runId, out: join(out, "sim-meter"), cacheDir: join(out, "sim-cache"), maxOutputTokens: 1200, amountMicros: plan.input.simCap, emptyBound: EMPTY_BOUND, record: record.path, ledger: ledger.path, env });
   let failed = false;
   try {
-    const run = await runLaunch({ ...plan.input, runId, pins: PINS, buildCommit: commit, allowances: ALLOWANCES, policy: policy as LoadedPolicy, docker: env.GSTACK_EVALS_DOCKER_BIN || "docker", day: today(), log: (l) => io.err(l) }, {
+    const run = await runLaunch({ ...plan.input, runId, pins: PINS, buildCommit: commit, allowances: ALLOWANCES, policy: policy as LoadedPolicy, docker: env.GSTACK_EVALS_DOCKER_BIN || "docker", day: today(), ledger: ledger.path, log: (l) => io.err(l) }, {
       openRig: () => dockerRig({ host: "claude", arms: { arms: specs, base: null, skill: null, notes: [] }, tasks: join(out, "fixtures", "tasks.json"), out: { path: out, rule: "--out" }, ledger, record, item: plan.item, runId, models: plan.input.models.map((m) => MODEL_KEYS[m]), policy: policy as LoadedPolicy }, { env, skill: null, skills: { current: "office-hours", new: "office-hours" }, nonce: randomBytes(6).toString("hex"), cap: plan.input.cap, voice: false }),
       simSlot: meterSim(meter),
       simTurn,

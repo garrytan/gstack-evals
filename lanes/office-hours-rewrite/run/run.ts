@@ -30,6 +30,7 @@ import { claudeCodeDriver, claudeCodeEnv, type ClaudeProvider, type NextUser } f
 import type { ReasonCode } from "../../../src/errors/codes.ts";
 import { armNamespaces, slotModels, type HostRig } from "../../../src/skill-eval/cli/run-host.ts";
 import { providerOf, type LoadedPolicy } from "../../../src/skill-eval/cli/policy.ts";
+import { openLocalLedger } from "../../../src/runner/ledger/local.ts";
 import { gstackDir } from "../../../src/trial/review/plan.ts";
 import type { AgentSession, Sandbox } from "../../../src/trial/sandbox.ts";
 import { STATE_ROOT_DIR } from "../../../src/trial/state-root.ts";
@@ -123,6 +124,8 @@ export interface RunInput {
   log: (line: string) => void;
   /** The keyless end to end's own schedule in place of the launch's; no command passes it. */
   entries?: readonly ManifestEntry[];
+  /** The local ledger the arm item's leases sit on, where a crashed attempt's spend is read back; null reads none. */
+  ledger?: string | null;
 }
 
 export type SimTurnFn = (o: { kind: BriefKind; sheet: PersonSheet; transcript: Line[]; call: SimCall }) => Promise<SimOutcome>;
@@ -225,14 +228,25 @@ export const dockerLaunch: Launch = async (o) => {
   return { termination, gstack_reads: skillArm ? [] : gstackReads(transcript), contained, pin: found.pin, overflow: read.state === "infra" && read.reason === "context overflow", safety: safetyStop(transcript), session_kind: sessionKindOf(transcript), off_pin: offPin(transcript, model), micros: meter.micros };
 };
 
-/** An attempt a crash left with a marker and no row: an unknown harness failure, recorded in reconcile.json. */
-function reconcile(dir: string, parse: BlockParser): AttemptRead {
+/** An attempt a crash left with a marker and no row: an unknown harness failure at the settled and unknown spend its ledger meter holds, recorded in reconcile.json. */
+function reconcile(dir: string, parse: BlockParser, ledger: string | null): AttemptRead {
   const meter = existsSync(join(dir, "meter.json")) ? readFileSync(join(dir, "meter.json"), "utf8") : null;
+  const bound = meter ? (JSON.parse(meter) as { meter_id: string; lease_id: string | null }) : null;
+  let spent: number | null = null;
+  if (bound?.lease_id && ledger && existsSync(ledger)) {
+    const local = openLocalLedger({ path: ledger, rule: "the run's local ledger" });
+    try {
+      const m = local.meters(bound.lease_id).get(bound.meter_id);
+      spent = m ? m.spent_micros + m.unknown_micros : null;
+    } finally {
+      local.close();
+    }
+  }
   const transcript = join(dir, "host", "transcript.ndjson");
   const lines = existsSync(transcript) ? readFileSync(transcript, "utf8").split("\n").filter(Boolean).length : 0;
-  writeFileSync(join(dir, "reconcile.json"), JSON.stringify({ meter, session_log_lines: lines, reconciled_at: new Date().toISOString() }, null, 2) + "\n");
+  writeFileSync(join(dir, "reconcile.json"), JSON.stringify({ meter, ledger_micros: spent, session_log_lines: lines, reconciled_at: new Date().toISOString() }, null, 2) + "\n");
   const loop = closingLoop({ parse, founder: async () => ({ kind: "call-failed", reason: "provider", detail: "", rejected: [], requests: [] }) }).state;
-  return { termination: { kind: "infra", incident: "an unknown outcome, reconciled" }, loop, gstack_reads: [], contained: [], pin: [], overflow: false, safety: null, session_kind: null, off_pin: [], micros: 0, sim_micros: 0 };
+  return { termination: { kind: "infra", incident: "an unknown outcome, reconciled" }, loop, gstack_reads: [], contained: [], pin: [], overflow: false, safety: null, session_kind: null, off_pin: [], micros: spent ?? 0, sim_micros: 0 };
 }
 
 const hostTree = (rig: HostRig, arm: ArmId, pin: Pin): string[] => pinProblems(gstackDir(rig.arms[arm] ?? { gstack: null }), pin);
@@ -309,7 +323,7 @@ export async function runLaunch(o: RunInput, deps: RunDeps): Promise<RunResult> 
         const adir = join(o.out, "sessions", id, "a" + attempt);
         let read: AttemptRead;
         if (existsSync(join(adir, "attempt.json"))) {
-          read = reconcile(adir, deps.parse);
+          read = reconcile(adir, deps.parse, o.ledger ?? null);
           o.log(id + ": attempt " + attempt + " has a marker and no row; counted as an unknown harness failure");
         } else {
           mkdirSync(adir, { recursive: true });

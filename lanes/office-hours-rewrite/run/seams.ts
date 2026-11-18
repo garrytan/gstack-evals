@@ -108,14 +108,14 @@ export const fixtureSim = (outs: SimOutcome[] = [reply()]): SimTurnFn & { calls:
 };
 
 /** runLaunch on the fixture briefs with a scripted launch and a stand-in rig. */
-export async function scriptedRun(o: { launch?: LaunchName; scripts?: Map<string, ScriptedAttempt[]>; only?: (e: ManifestEntry) => boolean; sim?: SimTurnFn; pins?: Pins; cap?: number; simCap?: number; out?: string; briefs?: string; buildCommit?: string; dropped?: string[]; tree?: string[]; day?: string; arms?: ManifestEntry["arm"][]; opened?: () => void }): Promise<{ run: RunResult; calls: string[]; out: string; briefs: string }> {
+export async function scriptedRun(o: { launch?: LaunchName; scripts?: Map<string, ScriptedAttempt[]>; only?: (e: ManifestEntry) => boolean; sim?: SimTurnFn; pins?: Pins; cap?: number; simCap?: number; out?: string; briefs?: string; ledger?: string; buildCommit?: string; dropped?: string[]; tree?: string[]; day?: string; arms?: ManifestEntry["arm"][]; opened?: () => void }): Promise<{ run: RunResult; calls: string[]; out: string; briefs: string }> {
   const briefs = o.briefs ?? fixtureBriefs();
   const out = o.out ?? join(mkdtempSync(join(tmpdir(), "ohr-run-")), "out");
   const calls: string[] = [];
   const rig = { recovery: null, arms: {}, close: async () => ({ committed: 0, unknown: 0, lease_id: null }) } as unknown as HostRig;
   const inner = scriptedLaunch(o.scripts ?? new Map(), calls);
   const launch: Launch = async (x) => (o.only && !o.only(x.entry) ? { termination: { kind: "missing", code: "E_LEDGER_UNAVAILABLE" }, gstack_reads: [], contained: [], pin: [], overflow: false, safety: null, session_kind: null, off_pin: [], micros: 0 } : inner(x));
-  const run = await runLaunch({ launch: o.launch ?? "stage1", briefsDir: briefs, out, runId: "seam", models: ["opus"], arms: o.arms ?? [...ARMS], pins: o.pins ?? PINS, buildCommit: o.buildCommit ?? "b".repeat(40), dropped: o.dropped ?? [], allowances: ALLOWANCES, cap: o.cap ?? 100 * D, simCap: o.simCap ?? 50 * D, parallel: 1, policy: loadPolicy(DEFAULT_POLICY) as LoadedPolicy, docker: "docker", day: o.day ?? DAY, log: () => {} }, {
+  const run = await runLaunch({ launch: o.launch ?? "stage1", briefsDir: briefs, out, runId: "seam", models: ["opus"], arms: o.arms ?? [...ARMS], pins: o.pins ?? PINS, buildCommit: o.buildCommit ?? "b".repeat(40), dropped: o.dropped ?? [], allowances: ALLOWANCES, cap: o.cap ?? 100 * D, simCap: o.simCap ?? 50 * D, parallel: 1, policy: loadPolicy(DEFAULT_POLICY) as LoadedPolicy, docker: "docker", day: o.day ?? DAY, ledger: o.ledger ?? null, log: () => {} }, {
     openRig: () => (o.opened?.(), rig),
     simSlot: () => ({ call: async () => ({ kind: "text", text: "" }), spent: () => 0 }),
     simTurn: o.sim ?? fixtureSim(),
@@ -226,6 +226,35 @@ export const seams: Seam[] = [
   end("end: a session the ledger never admitted is missing with no retry", [{ termination: { kind: "missing", code: "E_LEDGER_UNAVAILABLE" } }], { end: "missing", code: "E_OHR_INFRA_MISSING", attempts: 1 }),
   { name: "end: the row records session_kind, closings, founder_done and delivered turns", run: async () => { const briefs = fixtureBriefs(); const id = firstCal(briefs); const { run } = await scriptedRun({ briefs, scripts: new Map([[id + "/current", [{ replies: [TALK, TALK, [BLOCK]] }]]]), only: (e) => e.brief === id && e.arm === "current", sim: fixtureSim([reply(), reply({ done: true })]) }); const r = run.rows.find((l) => l.row.brief === id && l.row.arm === "current")?.row; return { ok: r?.session_kind === "interactive" && r.closings === 1 && r.founder_done && r.founder_turns.map((t) => t.delivered).join() === "true,false" && r.state_root !== null, detail: JSON.stringify(r && { k: r.session_kind, c: r.closings }) }; } },
   // Cap stops and relaunch (section 13; change 1, item 4a).
+  { name: "relaunch: an attempt a crash left with a marker and no row is reconciled at its ledger meter's settled and unknown spend, then retried once", run: async () => {
+    const briefs = fixtureBriefs();
+    const id = firstCal(briefs);
+    const root = mkdtempSync(join(tmpdir(), "ohr-reconcile-"));
+    const out = join(root, "out");
+    const ledger = join(root, "ledger.sqlite");
+    const record = join(root, "record");
+    const adir = join(out, "sessions", "s1", "opus", "none", id, "a1");
+    const local = openLocalLedger({ path: ledger, rule: "seam" });
+    try {
+      recordApproval(record, { action: "init", item: "ohr-seam-reconcile", cap_micros: 10 * D, quotes: [{ words: "dry run on a temporary ledger, not an approval", by: "ohr run seams", source: "lanes/office-hours-rewrite/run/seams.ts" }], admission: "warn" });
+      const lease_id = openLease(record, local, { item: "ohr-seam-reconcile", run_id: "seam-reconcile", amount_micros: 10 * D }).lease_id;
+      const cell = { run_id: "seam", arm: "none", task: "s1/opus/none/" + id, model: "opus", trial: 1, attempt: 1, meter_id: "m-crashed" };
+      const paid = await local.reserve({ idempotency_key: "k-paid", lease_id, cell, max_micros: 4 * D });
+      if (!paid.ok) return { ok: false, detail: paid.message };
+      await local.settle(paid.reservation.reservation_id, { kind: "spent", spent_micros: 2.5 * D, usage: { input: 1, output: 1, reasoning: 0, cache_read: 0, cache_write: 0 } });
+      await local.reserve({ idempotency_key: "k-open", lease_id, cell, max_micros: D });
+      mkdirSync(adir, { recursive: true });
+      writeFileSync(join(adir, "attempt.json"), JSON.stringify({ id: "s1/opus/none/" + id, attempt: 1 }) + "\n");
+      writeFileSync(join(adir, "meter.json"), JSON.stringify({ meter_id: "m-crashed", lease_id, journal: null }) + "\n");
+    } finally {
+      local.close();
+    }
+    const upstream = { termination: { kind: "missing" as const, code: "UPSTREAM" as const } };
+    const { run, calls } = await scriptedRun({ briefs, out, ledger, scripts: new Map([[id + "/none", [{}, upstream]]]), only: (e) => e.brief === id && e.arm === "none" });
+    const line = run.rows.find((l) => l.id === "s1/opus/none/" + id);
+    const rec = existsSync(join(adir, "reconcile.json")) ? (JSON.parse(readFileSync(join(adir, "reconcile.json"), "utf8")) as { ledger_micros: number | null }) : null;
+    return { ok: !!line && line.attempts.length === 2 && line.attempts[0]!.usd === 3.5 && line.row.usd === 3.5 && rec?.ledger_micros === 3.5 * D && run.spent_micros === 3.5 * D && calls.join() === "s1/opus/none/" + id + "/a2", detail: JSON.stringify({ attempts: line?.attempts.map((a) => a.usd), usd: line?.row.usd, ledger_micros: rec?.ledger_micros, spent: run.spent_micros, calls }) };
+  } },
   { name: "cap: a ledger cap stop ends the launch with no row for that session, and a relaunch is refused", run: async () => { const briefs = fixtureBriefs(); const id = firstCal(briefs); const out = join(mkdtempSync(join(tmpdir(), "ohr-run-")), "out"); const { run } = await scriptedRun({ briefs, out, scripts: new Map([[id + "/none", [{ termination: { kind: "cap_stop" } }]]]) }); let err = ""; try { await scriptedRun({ briefs, out }); } catch (e) { err = (e as Error).message; } return { ok: run.stops[0]?.code === "CAP_STOP" && run.rows.length === 0 && JSON.parse(readFileSync(join(out, "stops.json"), "utf8")).stops[0].code === "CAP_STOP" && err.startsWith("E_OHR_MANIFEST") && err.includes("cap stop"), detail: err.slice(0, 90) }; } },
   { name: "cap: a round holds one attempt a session; an Opus round needs $33 of arms and $6 of simulator, and a cent less of either is a cap stop before it starts", run: async () => { const briefs = fixtureBriefs(); const id = firstCal(briefs); const one = (cap: number, simCap: number) => scriptedRun({ briefs, cap, simCap, only: (e) => e.brief === id }); const [arms, sim, fits] = await Promise.all([one(33 * D - 1, 6 * D), one(33 * D, 6 * D - 1), one(33 * D, 6 * D)]); return { ok: arms.calls.length === 0 && arms.run.stops[0]?.code === "CAP_STOP" && arms.run.stops[0]!.message.includes("one attempt a session") && sim.calls.length === 0 && sim.run.stops[0]?.code === "CAP_STOP" && fits.calls.filter((c) => c.endsWith("/a1")).length === 3, detail: [arms, sim, fits].map((r) => r.calls.length).join(", ") + "; " + (arms.run.stops[0]?.message ?? "") }; } },
   { name: "cap: a retry runs only when its allowance still fits what the launch has left; otherwise the session ends as a cap stop", run: async () => { const briefs = fixtureBriefs(); const id = firstCal(briefs); const failing = new Map([[id + "/none", [{ replies: [TALK], termination: { kind: "missing" as const, code: "UPSTREAM" as const }, micros: D }]]]); const tight = await scriptedRun({ briefs, cap: 33 * D, simCap: 6 * D, scripts: failing }); const roomy = await scriptedRun({ briefs, cap: 34 * D, simCap: 6 * D, scripts: failing }); const stop = tight.run.stops[0]; return { ok: stop?.code === "CAP_STOP" && stop.message.startsWith("s1/opus/none/" + id + ": its retry's allowances") && tight.calls.join() === "s1/opus/none/" + id + "/a1" && tight.run.rows.length === 0 && tight.run.unrun.some((u) => u.how === "stopped") && roomy.calls.slice(0, 2).join() === "s1/opus/none/" + id + "/a1,s1/opus/none/" + id + "/a2", detail: (stop?.message ?? "no stop") + " | roomy " + roomy.calls.slice(0, 3).join() }; } },
