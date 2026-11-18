@@ -1,6 +1,6 @@
 // Value: protects=section 3's supply and pre-run change 1 item 4d's pilot as driven: the pilot's planted outcomes at both reads, a missing line, the cap, top-up twins, pairs placed whole, unmatched partners, 110 briefs placed, and pilot briefs placed only under unchanged inputs.
 import { describe, expect, test } from "bun:test";
-import { authorRun, haltOf, inputsDigest, summaryOf, type AuthorRun } from "../../../lanes/office-hours-rewrite/author/run.ts";
+import { authorRun, checkAnswers, haltOf, inputsDigest, summaryOf, type AuthorRun } from "../../../lanes/office-hours-rewrite/author/run.ts";
 import { FIXTURE_SCREEN, fixtureParser, runCaller, wordLabeller } from "../../../lanes/office-hours-rewrite/author/fixtures.ts";
 import { buildScreen } from "../../../lanes/office-hours-rewrite/author/screens.ts";
 import { CAPS, QUOTA } from "../../../lanes/office-hours-rewrite/frozen.ts";
@@ -123,5 +123,17 @@ describe("placement", () => {
   test("a continuation refuses a pilot that did not read go", async () => {
     const p = await go({ secondFails: () => true });
     await expect(go({ pilot: p.pilot })).rejects.toThrow("read stop");
+  });
+});
+
+describe("answers for the judge check", () => {
+  test("every placed brief hands over its three full-information blocks, and unpaired briefs their three opening-only blocks", async () => {
+    const r = await go();
+    const a = checkAnswers(r);
+    const unpaired = [...r.sets.calibration, ...r.sets.comparison, ...r.sets.reserve].filter((m) => m.kind !== "pair").length;
+    expect(a.filter((x) => x.source === "full")).toHaveLength(110 * 3);
+    expect(a.filter((x) => x.source === "opening")).toHaveLength(unpaired * 3);
+    expect(new Set(a.map((x) => x.author))).toEqual(new Set(["opus", "sol", "astra"]));
+    expect(Object.keys(a[0]!.block).sort()).toEqual(["decision", "next_action", "why"]);
   });
 });

@@ -23,6 +23,8 @@ import { BRIEF_ALLOWANCE, line, pilotRead, projectedCost, type ReadRecord } from
 import { ANSWER_NOW, AUDIT_CHECKS, FACTS_LINE, NAMED_TERMS, REQUEST, REWRITE_NOTE, twinPrompt } from "./prompts.ts";
 import { placeSets, setRecord, type Member, type Sets } from "./sets.ts";
 import type { Screen } from "./screens.ts";
+import type { CheckAnswer } from "../score/packets.ts";
+import type { Validation, Validator } from "./checks.ts";
 
 /** More drafts than any run can make inside its cap. */
 export const MAX_DRAFTS = 1000;
@@ -199,6 +201,21 @@ export function haltOf(r: AuthorRun, mdd: (comparisonFounderBriefs: number) => n
     return new AuthorError("E_OHR_SUPPLY_SHORT", "authoring placed " + placed + " of " + needed + " briefs (calibration " + r.sets.calibration.length + ", comparison " + r.sets.comparison.length + ", reserve " + r.sets.reserve.length + ") before it stopped at " + (p.verdict !== "go" ? "the pilot's " + p.verdict : r.stopped) + "; the comparison set holds " + founders + " founder briefs, MDD " + (m === null ? "not defined" : m.toFixed(3)) + " there; " + r.unmatched.length + " unmatched twins dropped");
   }
   return null;
+}
+
+/**
+ * Section 12's judge check reads authoring's full-information and opening-only answers in block form: one per validator
+ * and source on every placed brief, in score/packets.ts's CheckAnswer shape. author names the validator that answered.
+ */
+export function checkAnswers(r: AuthorRun): CheckAnswer[] {
+  const placed = new Set([...r.sets.calibration, ...r.sets.comparison, ...r.sets.reserve].map((m) => m.id));
+  const out: CheckAnswer[] = [];
+  for (const x of r.outcomes) {
+    if (x.status !== "pass" || !placed.has(x.id)) continue;
+    const v = x.record.validators as { unanimous: Record<Validator, Validation | null>; opening_only: Record<Validator, Validation | null> | null };
+    for (const [source, got] of [["full", v.unanimous], ["opening", v.opening_only]] as const) for (const [author, a] of Object.entries(got ?? {})) if (a) out.push({ brief: x.id, author, source, block: a.block });
+  }
+  return out;
 }
 
 /** The run's printable record: counts and digests only. */
