@@ -5,7 +5,7 @@
 // of its edge through this area's code, on invented rows that are never eval briefs. The fixture builders are exported
 // for tests/ohr/read.
 import { ARMS, MODELS, PRIMARY_MODELS } from "../frozen.ts";
-import type { ArmId, EndState, KeptWhole, ModelId, ScoredSession, Seam } from "../types.ts";
+import type { ArmId, EndState, KeptWhole, ModelId, ScoredSession, Seam, SessionRow } from "../types.ts";
 
 // ---- Fixtures ----
 
@@ -61,6 +61,57 @@ export function founderRows(p: FounderPlan): ScoredSession[] {
     }));
   }
   return out;
+}
+
+/** One run row as the run side hands it in, a block in an interactive skill session (or a clean none session). */
+export const sessionRow = (o: Partial<SessionRow>): SessionRow => ({
+  stage: 1, brief: "k01", model: "opus", arm: "none", end: "block", code: null, block: null, founder_turns: [], closings: 1, founder_done: true, replies: 6,
+  session_kind: (o.arm ?? "none") === "none" ? null : "interactive", guard_failures: 0, gstack_reads: [], usd: 1, sim_usd: 0.1, attempts: 1, transcript: null, state_root: null, ...o,
+});
+
+/** Stage 1's calibration briefs: twins k01 and k02, twins k03 and k04, unpaired founders k05 and k06, builders k07 and k08. */
+export const CALIBRATION = ["k01", "k02", "k03", "k04", "k05", "k06", "k07", "k08"] as const;
+const CAL_CLUSTER: Record<string, string> = { k01: "kp1", k02: "kp1", k03: "kp2", k04: "kp2" };
+const PLANNED_USD: Record<"none" | "skill", Record<ModelId, number>> = { none: { opus: 1, sol: 1, particle: 0.05 }, skill: { opus: 1, sol: 1, particle: 0.3 } };
+
+export interface Stage1Plan {
+  /** Exposed sessions of 8 in one skill cell; every other skill session is exposed. */
+  exposed?: { arm: ArmId; model: ModelId; count: number };
+  /** Every founder session of one cell gets this many founder replies; the rest get 5. */
+  replies?: { arm: ArmId; model: ModelId; value: number };
+  /** Current-arm right calls among the 12 Opus and Sol calibration founder sessions; defaults to 8. */
+  currentRight?: number;
+  /** Measured dollars per session in one cell. */
+  usd?: { arm: ArmId; model: ModelId; value: number };
+  /** One skill session's printed session kind; missing makes the session end missing. */
+  kind?: { brief: string; arm: ArmId; model: ModelId; value: string | null; missing?: boolean };
+  /** One none-arm session that read a gstack file. */
+  read?: { brief: string; model: ModelId };
+}
+
+/** A stage 1 that admits: every condition passes, 0.3 to 1 dollars a session, 6 cents of labels a session. */
+export function stage1Input(p: Stage1Plan): { rows: ScoredSession[]; sessions: SessionRow[]; audit: { pass: boolean }; judges: { astra: boolean; opus: boolean }; label_usd: number } {
+  const rows: ScoredSession[] = [], sessions: SessionRow[] = [];
+  const right = p.currentRight ?? 8;
+  let k = 0;
+  for (const model of MODELS) for (const arm of ARMS) CALIBRATION.forEach((brief, j) => {
+    const founder = j < 6;
+    const is = <T extends { arm: ArmId; model: ModelId }>(c: T | undefined) => c !== undefined && c.arm === arm && c.model === model;
+    const usd = is(p.usd) ? p.usd!.value : PLANNED_USD[arm === "none" ? "none" : "skill"][model];
+    const exposed = arm !== "none" && (!is(p.exposed) || j < p.exposed!.count);
+    let R: 0 | 1 = 1;
+    if (arm === "current" && founder && PRIMARY_MODELS.includes(model)) R = k++ < right ? 1 : 0;
+    const kindHere = p.kind && p.kind.brief === brief && is(p.kind);
+    const readHere = arm === "none" && p.read?.brief === brief && p.read.model === model;
+    rows.push(row({
+      stage: 1, set: "calibration", brief, cluster: CAL_CLUSTER[brief] ?? brief, kind: founder ? "founder" : "builder", model, arm, R, R2: R, usd,
+      founder_replies: founder && is(p.replies) ? p.replies!.value : 5,
+      exposure: arm === "none" ? null : { read_skill: true, interactive: true, questions_one_at_a_time: exposed ? 3 : 0, wrote_deliverable: exposed, exposed },
+      end: readHere ? "contaminated" : kindHere && p.kind!.missing ? "missing" : "block",
+    }));
+    sessions.push(sessionRow({ brief, model, arm, usd, gstack_reads: readHere ? ["/root/.claude/skills/gstack/office-hours/SKILL.md"] : [], ...(kindHere ? { session_kind: p.kind!.value, end: p.kind!.missing ? "missing" : "block" } : {}) }));
+  });
+  return { rows, sessions, audit: { pass: true }, judges: { astra: true, opus: true }, label_usd: 0.06 };
 }
 
 export const seams: Seam[] = [];
