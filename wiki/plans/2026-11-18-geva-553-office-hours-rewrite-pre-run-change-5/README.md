@@ -58,4 +58,4 @@ Four notes ship as they stand. The empty-reply streak is not reset by an HTTP er
 
 ## 5. The build commit
 
-Every paid run from here on, authoring's continuation included, runs at gstack-evals commit c109b2a258c1869f2d61fbaf3bd8f8b3201d1c6f, the merge that brings this change into the results branch, or at a later commit whose lanes/, src/ and tests/ trees are byte-identical to it. This replaces change 4's build commit. Each run's admission still needs a green CI run at the exact commit it checks out. Authoring's replies from before the stop replay from its cache unchanged.
+Every paid run from here on, authoring's continuation included, runs at gstack-evals commit 23c149a51103120d9e5a4557276a256aacc0eb8e, the merge that brings this change and its advisory read's fixes into the results branch, or at a later commit whose lanes/, src/ and tests/ trees are byte-identical to it. This replaces change 4's build commit. Each run's admission still needs a green CI run at the exact commit it checks out. Authoring's replies from before the stop replay from its cache unchanged.
