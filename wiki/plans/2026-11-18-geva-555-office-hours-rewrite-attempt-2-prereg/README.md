@@ -73,7 +73,7 @@ Everything in the first preregistration (wiki/plans/2026-11-17-geva-552-office-h
 | 7 | A pilot of pair slots only, read at 16 and 32 second-twin draws (pre-run change 1, item 4d) | A pilot that samples every pair type, T7, T8 and builders before the rest (section 5.4) | The pair-only pilot could not see unpaired supply, which turned out to be 7 of 82. |
 | 8 | A projection past the cap went to the Captain | An optimistic projection of the cost to fill calibration and comparison, at the pilot's end and after every batch; past the room left, authoring stops and the eval reads INCOMPLETE (section 5.5) | There is no raise on this eval, so a projection past the cap can only end in a cap stop. Stopping early spends less. |
 | 9 | Reserves drawn in the same order as everything else; any shortfall stopped the eval | Reserves are drawn after calibration and comparison are full. A cap stop on authoring after that ends authoring only, and the eval goes on with the reserves placed (section 5.6) | A short reserve set loses only replacements; a drop with no reserve left counts as missing under section 8's limits. |
-| 10 | `ohr read decision` learned of a cap stop only from a flag | The decision read takes every cap stop from each launch's stops.json and each ledger item, and a flag can add a stop but never remove one | The first attempt's one deferred review finding. |
+| 10 | `ohr read decision` learned of a cap stop only from a flag | The decision read takes every cap stop from each launch's stops.json and each ledger item, and a flag can add a stop but never remove one, except that an authoring cap stop the sealed authoring summary records as coming after all 88 calibration and comparison briefs were placed ends authoring only (item 9) | The first attempt's one deferred review finding. |
 | 11 | $2,360 paid at caps under the first cap rule | Item caps from the first attempt's resize.py, design 1, under the amended cap rule; $2,737 all-in at caps with no raise, and a money check before each item opens (section 7) | The approved line. |
 | 12 | Sizing at 40 clusters | Sizing at 32 clusters (section 6, sizing.txt) | Fewer clusters. |
 | 13 | Pins set by a dated pre-run change after the plan merged | The pins are named here; one dated pre-run change on the results branch names the build commit and the ledger split before the first paid call | The pins were already fixed by the first attempt's pre-run changes 1 and 2. |
@@ -164,7 +164,7 @@ So when T1 and T4 are hard by type, as none of their three partners in the first
 - The pilot comes first (section 5.4).
 - Then every open calibration and comparison slot draws in seeded order until all are placed.
 - Then reserve slots draw in seeded order until they are placed or the cap stops them.
-- A cap stop, a projection stop or any other stop before calibration and comparison are full ends the eval INCOMPLETE.
+- A cap stop, a projection stop or any other stop before the 88 required briefs (8 calibration and 80 comparison) are placed ends the eval INCOMPLETE. Only the 8 reserves may run short.
 - A cap stop after calibration and comparison are full ends authoring only. Reserves left unplaced are reported, and a comparison brief that drops later with no reserve of its kind counts as missing.
 - A stop that is not about money (a provider or model drift, the empty-reply bound, a closed lease) halts the run. A resume after a dated pre-run fix continues from the log and pays nothing twice.
 
