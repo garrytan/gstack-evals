@@ -75,6 +75,12 @@ describe("founderCall through the metered client", () => {
     }
   });
 
+  test("a metered 402 that is not E_ALLOWANCE is the ledger's cap stop, never a provider failure", async () => {
+    const meter = { call: async () => ({ text: null, status: 402, micros: 0, cached: false, problem: "CAP_STOP: the line item's cap cannot hold this call", served_by: null }) };
+    const r = await founderCall({ meter, session: { allowance_micros: 2_000_000, spent_micros: 0 }, label: "u1" })({ system: "x", messages: [{ role: "user", content: "q" }] });
+    expect(r).toMatchObject({ kind: "call-failed", reason: "cap", detail: expect.stringContaining("CAP_STOP") });
+  });
+
   test("an upstream failure is a provider failure, and the allowance refuses before any request", async () => {
     const bodies: any[] = [];
     const meter = await meterWith(upstream("Google", bodies, 400));

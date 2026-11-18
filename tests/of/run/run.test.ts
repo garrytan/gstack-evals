@@ -48,6 +48,14 @@ describe("stops", () => {
     expect(run.unrun.map((u) => u.how).sort()).toEqual(["stopped", "unstarted", "unstarted"]);
   });
 
+  test("a simulator call the ledger's cap refuses is a cap stop: no row, no retry, the rest unrun", async () => {
+    const { run, calls } = await scriptedRun({ entries: all(["none"]), units: 2, scripts: new Map([["fixture-calibration-1/none", [{ replies: [["Q?"]] }]]]), founder: { kind: "call-failed", reason: "cap", detail: "CAP_STOP: the simulator item's cap" } as never });
+    expect(calls).toHaveLength(1);
+    expect(run.rows).toEqual([]);
+    expect(run.stops.map((s) => s.code)).toEqual(["CAP_STOP"]);
+    expect(run.unrun.map((u) => u.how).sort()).toEqual(["stopped", "unstarted"]);
+  });
+
   test("a launch on an out dir that ended in a cap stop is refused, and its stops.json stands", async () => {
     const scripts = () => new Map([["fixture-calibration-1/none", [{ replies: [["Q?"]], termination: { kind: "cap_stop" } as never }]]]);
     const first = await scriptedRun({ entries: all(["none"]), units: 3, scripts: scripts() });
