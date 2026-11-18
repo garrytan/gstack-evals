@@ -6,6 +6,10 @@ import { buildScreen } from "../../../lanes/office-hours-rewrite/author/screens.
 import { CAPS, QUOTA } from "../../../lanes/office-hours-rewrite/frozen.ts";
 import { line, pilotRead } from "../../../lanes/office-hours-rewrite/author/pilot.ts";
 import { MeterError } from "../../../lanes/product-value/meter.ts";
+import { authorToCustody } from "../../../lanes/office-hours-rewrite/author/custody.ts";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const mdd = () => 0.13;
 function go(o: { secondFails?: (n: number) => boolean; usd?: number; cap?: number; screen?: typeof FIXTURE_SCREEN; pilotOnly?: boolean; pilot?: AuthorRun["pilot"] } = {}) {
@@ -139,7 +143,7 @@ describe("answers for the judge check", () => {
   });
 });
 
-describe("a stop thrown by a label call", () => {
+describe("a stop thrown by a draft or label call", () => {
   const throwsAt = (k: number, err: () => Error) => {
     const base = wordLabeller();
     let n = 0;
@@ -173,6 +177,27 @@ describe("a stop thrown by a label call", () => {
     for (const code of ["E_PV_EMPTY_REPLIES", "E_LEASE_CLOSED"] as const) {
       const r = await goWith(throwsAt(400, () => new MeterError(code, "brief label: stopped")));
       expect([r.stopped, r.halt!.code]).toEqual(["cap", code]);
+    }
+  });
+  test("a provider drift on a draft call halts the run, and every placed brief is sealed", async () => {
+    const call = runCaller({});
+    let n = 0;
+    const drifting = (async (req: Parameters<typeof call>[0]) => {
+      if (++n === 2500) throw new MeterError("E_PV_PROVIDER_DRIFT", "brief draft: served by another provider than its pin");
+      return call(req);
+    }) as typeof call;
+    const r = await authorRun({ call: drifting, label: wordLabeller(), parse: fixtureParser, screen: FIXTURE_SCREEN, spent: () => call.state.drafts * 1.04 }, { cap: CAPS.authoring, concurrency: 8 });
+    expect([r.pilot.verdict, r.stopped, r.halt!.code]).toEqual(["go", "cap", "E_PV_PROVIDER_DRIFT"]);
+    expect(total(r)).toBeGreaterThan(0);
+    expect(haltOf(r, mdd)!.code).toBe("E_PV_PROVIDER_DRIFT");
+    const shm = mkdtempSync("/dev/shm/ohr-run-"), dir = mkdtempSync(join(tmpdir(), "ohr-out-")), out = join(dir, "briefs.tar.age");
+    try {
+      const summary = authorToCustody(r, { work: join(shm, "work"), out, sealer: (w, o) => writeFileSync(o, String(readdirSync(join(w, "briefs")).length)) });
+      expect(summary.placed).toBe(total(r));
+      expect(Number(readFileSync(out, "utf8"))).toBe(total(r));
+    } finally {
+      rmSync(shm, { recursive: true, force: true });
+      rmSync(dir, { recursive: true, force: true });
     }
   });
   test("any other error still rejects the run", async () => {

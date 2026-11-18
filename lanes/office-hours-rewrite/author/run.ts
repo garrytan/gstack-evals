@@ -10,8 +10,9 @@
 //   slot or a pair's first twin that fails is drawn again, and a pair whose second twin fails gets a newly authored twin
 //   against the same partner. A pair is placed only when both twins pass; a partner still unmatched at the end drops.
 // - A batch never starts more drafts than the cap less the spend so far covers at one $3.50 allowance each.
-// - A stop a label call throws (a ledger refusal, a closed lease, a model drift or the empty-reply bound) ends the run like
-//   a cap stop once the batch's drafts settle, and the run carries it as its halt, so ohr author still seals what placed.
+// - A stop a draft or label call throws (a ledger refusal, a closed lease, a model or provider drift, or the empty-reply
+//   bound) ends the run like a cap stop once the batch's drafts settle, and the run carries it as its halt, so ohr author
+//   still seals what placed.
 // Pilot briefs are placed like any other, through the same checks and slots; when the run continues from an earlier
 // pilot whose prompts or screen differ from the current ones (its frozen-inputs digest), no pilot brief is placed.
 import { sha256 } from "../../office-hours-founder/author/files.ts";
@@ -70,7 +71,7 @@ export interface AuthorRun {
   /** First twins still waiting for a passing second twin when authoring ended; they drop. */
   unmatched: string[];
   stopped: "quotas" | "cap" | "schedule" | "pilot";
-  /** The stop a label call threw, which ended the run; null when none did. */
+  /** The stop a draft or label call threw, which ended the run; null when none did. */
   halt: AuthorError | null;
 }
 
@@ -80,8 +81,8 @@ interface SlotState {
   seconds: number;
 }
 
-/** The stops a label call may throw (wire.ts); any other error is a bug and still rejects the run. */
-const STOPS: ReadonlySet<string> = new Set(["CAP_STOP", "E_LEASE_CLOSED", "E_OHR_MODEL_DRIFT", "E_PV_EMPTY_REPLIES"]);
+/** The stops a draft or label call may throw (wire.ts, meter.ts); any other error is a bug and still rejects the run. */
+const STOPS: ReadonlySet<string> = new Set(["CAP_STOP", "E_LEASE_CLOSED", "E_OHR_MODEL_DRIFT", "E_PV_PROVIDER_DRIFT", "E_PV_EMPTY_REPLIES"]);
 
 /** Waits for every draft in the batch, then returns the first stop one threw, or null; any other error is rethrown. */
 async function settleBatch(batch: Promise<void>[]): Promise<AuthorError | null> {
@@ -207,7 +208,7 @@ const needed = QUOTA.founder + QUOTA.builder + QUOTA.calibration + QUOTA.reserve
 export const placedCount = (r: AuthorRun): number => r.sets.calibration.length + r.sets.comparison.length + r.sets.reserve.length;
 
 /**
- * The halt a run owes after its files are written: a stop a label call threw, a pilot that read stop or stayed open, a missing line or a pilot cap
+ * The halt a run owes after its files are written: a stop a draft or label call threw, a pilot that read stop or stayed open, a missing line or a pilot cap
  * stop, or a shortfall below the 110 briefs. Null when every brief is placed or --pilot asked for the pilot alone.
  */
 export function haltOf(r: AuthorRun, mdd: (comparisonFounderBriefs: number) => number | null, pilotOnly = false): AuthorError | null {
