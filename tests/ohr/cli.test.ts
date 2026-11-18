@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // Value: protects=the lane's entry files: src/cli.ts reaches lanes/office-hours-rewrite/cli.ts by a path string, so this test imports the cli, wire, dry run, e2e and preflight directly; every sealed path is refused inside the repo; Astra routes to GPT-6.2 Astra at its priced row; fails_when=a file stops loading, the help loses a command, a command takes an output path inside the repo, an "astra" call reaches gpt-6-astra, or judge-check's exit stops matching its codes' exit 3 on a FAIL or NO READ.
-import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { afterAll, describe, expect, test } from "bun:test";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { COMMANDS } from "../../src/cli.ts";
@@ -17,6 +17,7 @@ import { ASTRA, routed } from "../../lanes/office-hours-rewrite/wire.ts";
 import { MODELS } from "../../lanes/product-value/meter.ts";
 
 const REPO = join(import.meta.dir, "..", "..");
+const NEVER = join(tmpdir(), "ohr-never-" + process.pid + ".age");
 const io = () => {
   const out: string[] = [], err: string[] = [];
   return { out, err, io: { out: (t: string) => out.push(t), err: (t: string) => err.push(t) } };
@@ -53,8 +54,8 @@ describe("gstack-evals ohr", () => {
     [["judge-check", "--map", join(REPO, "check.json"), "--out", "/dev/shm/c"], "--map"],
     [["read", "report", "--scored", "/dev/shm/s.json", "--out", join(REPO, "report.json")], "--out"],
     [["author", "--work", "/dev/shm/ohr-w", "--out", join(REPO, "sealed.age"), "--recipients", "r", "--identity", "k", "--reuse", "/dev/shm/first.age", "--gstack", "g", "--item", "i", "--spend-cap", "1"], "--out"],
-    [["author", "--work", "/dev/shm/ohr-w", "--out", "/dev/shm/ohr-never.age", "--recipients", "r", "--identity", "k", "--resume", join(REPO, "checkpoint-000010.age"), "--gstack", "g", "--item", "i", "--spend-cap", "1"], "--resume"],
-    [["author", "--work", "/dev/shm/ohr-w", "--out", "/dev/shm/ohr-never.age", "--recipients", "r", "--identity", "k", "--reuse", join(REPO, "first.age"), "--gstack", "g", "--item", "i", "--spend-cap", "1"], "--reuse"],
+    [["author", "--work", "/dev/shm/ohr-w", "--out", NEVER, "--recipients", "r", "--identity", "k", "--resume", join(REPO, "checkpoint-000010.age"), "--gstack", "g", "--item", "i", "--spend-cap", "1"], "--resume"],
+    [["author", "--work", "/dev/shm/ohr-w", "--out", NEVER, "--recipients", "r", "--identity", "k", "--reuse", join(REPO, "first.age"), "--gstack", "g", "--item", "i", "--spend-cap", "1"], "--reuse"],
   ] as const) {
     test("ohr " + argv[0] + (argv[0] === "score" || argv[0] === "read" ? " " + argv[1] : "") + " refuses " + flag + " inside the repo before it reads or spends", async () => {
       const t = io();
@@ -90,7 +91,7 @@ describe("gstack-evals ohr", () => {
   });
 
   test("ohr author takes one of --reuse, for a new run, and --resume, for a stopped one, before it reads or spends", async () => {
-    const base = ["author", "--work", "/dev/shm/ohr-w", "--out", "/dev/shm/ohr-never.age", "--recipients", "r", "--identity", "k", "--gstack", "g", "--item", "i", "--spend-cap", "1"];
+    const base = ["author", "--work", "/dev/shm/ohr-w", "--out", NEVER, "--recipients", "r", "--identity", "k", "--gstack", "g", "--item", "i", "--spend-cap", "1"];
     for (const extra of [[], ["--reuse", "/dev/shm/first.age", "--resume", "/dev/shm/c/checkpoint-000010.age"]]) {
       const t = io();
       expect(await main([...base, ...extra], t.io, {})).toBe(2);
@@ -143,5 +144,51 @@ describe("gstack-evals ohr", () => {
   test("the pregate runs this test when an entry file changes", () => {
     const deps = (JSON.parse(readFileSync(join(REPO, ".gstack", "pregate.json"), "utf8")) as { dependencies: Record<string, string[]> }).dependencies;
     expect(deps["lanes/office-hours-rewrite/**"]).toContain("tests/ohr/cli.test.ts");
+  });
+});
+
+describe("ohr author's custody and lock (pre-run change 1)", () => {
+  const made: string[] = [];
+  const temp = (prefix: string) => (made.push(mkdtempSync(prefix)), made.at(-1)!);
+  afterAll(() => made.forEach((d) => rmSync(d, { recursive: true, force: true })));
+  const author = (extra: string[]) => ["author", "--recipients", "r", "--identity", "k", "--gstack", "g", "--item", "i", "--spend-cap", "1", ...extra];
+  const work = "/dev/shm/ohr-w-" + process.pid;
+  const err = async (argv: string[]) => {
+    const t = io();
+    expect(await main(argv, t.io, {})).toBe(2);
+    return t.err.join("\n");
+  };
+  test("--work or --meter under a /dev/shm folder that links to disk is refused", async () => {
+    const disk = temp(join(tmpdir(), "ohr-disk-"));
+    const link = join(temp("/dev/shm/ohr-link-"), "to-disk");
+    symlinkSync(disk, link);
+    mkdirSync(join(disk, "m"));
+    expect(await err(author(["--work", join(link, "w"), "--out", NEVER, "--reuse", "/dev/shm/first.age"]))).toContain("is not under /dev/shm");
+    expect(await err(author(["--work", work, "--out", NEVER, "--reuse", "/dev/shm/first.age", "--meter", join(link, "m")]))).toContain("is not an existing meter directory under /dev/shm");
+  });
+  test("--out on memory-backed storage, by its path or through a link, is refused", async () => {
+    const shm = temp("/dev/shm/ohr-out-");
+    const disk = temp(join(tmpdir(), "ohr-disk-"));
+    symlinkSync(shm, join(disk, "to-shm"));
+    for (const out of [join(shm, "sealed.age"), join(disk, "to-shm", "sealed.age")]) {
+      const e = await err(author(["--work", work, "--out", out, "--reuse", "/dev/shm/first.age"]));
+      expect(e).toContain("--out " + out);
+      expect(e).toContain("survives a reboot");
+    }
+  });
+  test("--resume refuses while another process holds the run's checkpoints folder, before it reads or leases", async () => {
+    const dir = temp(join(tmpdir(), "ohr-lock-"));
+    const custody = join(REPO, "lanes", "office-hours-rewrite", "author", "custody.ts");
+    const child = Bun.spawn([process.execPath, "-e", "const { lockCheckpoints } = await import(" + JSON.stringify(custody) + "); lockCheckpoints(" + JSON.stringify(dir) + "); console.log('locked'); await Bun.sleep(60_000);"], { stdout: "pipe", stderr: "ignore" });
+    try {
+      await child.stdout.getReader().read();
+      const record = join(temp(join(tmpdir(), "ohr-lock-record-")), "record");
+      const e = await err(author(["--work", work, "--out", NEVER, "--resume", join(dir, "checkpoint-000010.age"), "--record", record]));
+      expect(e).toContain("E_OHR_RESUME");
+      expect(e).toContain("is locked by another ohr author process");
+      expect(existsSync(record)).toBe(false);
+    } finally {
+      child.kill();
+    }
   });
 });

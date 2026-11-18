@@ -201,7 +201,7 @@ describe("order and the end of authoring (section 5.6)", () => {
 const r0 = new Set<string>();
 
 describe("the outcome log and resume (section 5.2)", () => {
-  const journalTo = (dir: string, runId = "ohr-author-test") => sealedJournal({ dir, work: join(temp("/dev/shm/ohr-journal-"), "w"), sealer: fakeSealer, runId });
+  const journalTo = (dir: string, runId = "ohr-author-test", item = "ohr-author") => sealedJournal({ dir, work: join(temp("/dev/shm/ohr-journal-"), "w"), sealer: fakeSealer, runId, item });
   test("every settled draft is sealed with its spend before the run counts it, and the log and placed briefs after every batch", async () => {
     const dir = temp(join(tmpdir(), "ohr-ckpt-"));
     const sealed: number[] = [];
@@ -213,10 +213,11 @@ describe("the outcome log and resume (section 5.2)", () => {
     expect(names.filter((n) => n.startsWith("draft-"))).toHaveLength(r.outcomes.length);
     expect(names).toContain("checkpoint-000000.age");
     expect(names).toContain("checkpoint-" + String(r.outcomes.length).padStart(6, "0") + ".age");
-    const back = readJournal(join(dir, "checkpoint-000000.age"), fakeDecrypter, join(temp("/dev/shm/ohr-open-"), "w"));
+    const back = readJournal(join(dir, "checkpoint-000000.age"), fakeDecrypter, join(temp("/dev/shm/ohr-open-"), "w"), "ohr-author");
     expect(back.log.map((x) => x.id)).toEqual(r.outcomes.map((x) => x.id));
     expect(back.run_id).toBe("ohr-author-test");
-    expect(readFileSync(join(dir, "run.json"), "utf8")).toBe(JSON.stringify({ run_id: "ohr-author-test" }) + "\n");
+    expect(back.item).toBe("ohr-author");
+    expect(JSON.parse(readFileSync(join(dir, "run.json"), "utf8"))).toEqual({ run_id: "ohr-author-test", item: "ohr-author", end: { stopped: r.stopped, codes: [] } });
     expect(back.reuse.placed).toHaveLength(19);
     expect(readdirSync("/dev/shm").some((n) => n.includes(".open-"))).toBe(false);
   });
@@ -235,7 +236,7 @@ describe("the outcome log and resume (section 5.2)", () => {
     const checkpoints = names.filter((n) => n.startsWith("checkpoint-")).sort();
     const newest = Number(/(\d{6})/.exec(checkpoints.at(-1)!)![1]);
     expect(records).toBeGreaterThan(newest);
-    const resumed = readJournal(join(dir, checkpoints.at(-1)!), fakeDecrypter, join(temp("/dev/shm/ohr-open-"), "w"));
+    const resumed = readJournal(join(dir, checkpoints.at(-1)!), fakeDecrypter, join(temp("/dev/shm/ohr-open-"), "w"), "ohr-author");
     expect(resumed.log).toHaveLength(records);
     const sealedRefs = new Set(resumed.log.map((x) => x.id + (x.attempt > 1 ? "." + x.attempt : "")));
     expect(sealedRefs.has(hungRef)).toBe(false);
@@ -252,7 +253,7 @@ describe("the outcome log and resume (section 5.2)", () => {
     const dir = temp(join(tmpdir(), "ohr-ckpt-"));
     await go({ fails: SOME, journal: journalTo(dir) });
     unlinkSync(join(dir, "draft-000005.age"));
-    expect(() => readJournal(join(dir, "checkpoint-000000.age"), fakeDecrypter, join(temp("/dev/shm/ohr-open-"), "w"))).toThrow("E_OHR_RESUME");
+    expect(() => readJournal(join(dir, "checkpoint-000000.age"), fakeDecrypter, join(temp("/dev/shm/ohr-open-"), "w"), "ohr-author")).toThrow("E_OHR_RESUME");
   });
   test("a checkpoints folder serves one run, and a resume refuses a draft record of another run", async () => {
     const dir = temp(join(tmpdir(), "ohr-ckpt-"));
@@ -260,7 +261,8 @@ describe("the outcome log and resume (section 5.2)", () => {
     expect(() => journalTo(dir, "ohr-author-other")).toThrow("E_OHR_RESUME");
     unlinkSync(join(dir, "run.json"));
     journalTo(dir, "ohr-author-other").record({ ...r.outcomes.at(-1)!, seq: r.outcomes.length + 1 });
-    expect(() => readJournal(join(dir, "checkpoint-000000.age"), fakeDecrypter, join(temp("/dev/shm/ohr-open-"), "w"))).toThrow("belongs to run ohr-author-other");
+    unlinkSync(join(dir, "run.json"));
+    expect(() => readJournal(join(dir, "checkpoint-000000.age"), fakeDecrypter, join(temp("/dev/shm/ohr-open-"), "w"), "ohr-author")).toThrow("belongs to run ohr-author-other");
   });
 });
 
@@ -309,5 +311,36 @@ describe("answers for the judge check", () => {
     const s = summaryOf(await go());
     expect(s.placed).toBe(96);
     expect(JSON.stringify(s)).not.toContain("bridal");
+  });
+});
+
+describe("a cap stop is final, and a run resumes only on its own ledger item (pre-run change 1)", () => {
+  const journalTo = (dir: string, runId = "ohr-author-test", item = "ohr-author") => sealedJournal({ dir, work: join(temp("/dev/shm/ohr-journal-"), "w"), sealer: fakeSealer, runId, item });
+  const open = (p: string, item = "ohr-author") => readJournal(p, fakeDecrypter, join(temp("/dev/shm/ohr-open-"), "w"), item);
+  const last = (dir: string) => join(dir, readdirSync(dir).filter((n) => n.startsWith("checkpoint-")).sort().at(-1)!);
+  const drift = () => throwsOn((l) => l.includes(":unanimous:"), () => new MeterError("E_OHR_MODEL_DRIFT", "brief label: the reply names another model"));
+  test("a batch with a cap stop and another stop ends on the cap stop, and the run records both codes", async () => {
+    let n = 0;
+    const r = await go({ label: throwsOn((l) => l.endsWith(":unanimous:opus:1") && ++n <= 2, () => (n === 1 ? new MeterError("E_OHR_MODEL_DRIFT", "brief label: the reply names another model") : new MeterError("CAP_STOP", "brief label: the ledger refused the call"))) });
+    expect([r.stopped, r.halt?.code, r.codes]).toEqual(["cap", "CAP_STOP", ["E_OHR_MODEL_DRIFT", "CAP_STOP"]]);
+    expect(summaryOf(r).codes).toEqual(["E_OHR_MODEL_DRIFT", "CAP_STOP"]);
+  });
+  test("a run that ends on a cap stop records it, and --resume refuses its checkpoints", async () => {
+    const dir = temp(join(tmpdir(), "ohr-ckpt-"));
+    expect((await go({ cap: 3, journal: journalTo(dir) })).stopped).toBe("cap");
+    expect(JSON.parse(readFileSync(join(dir, "run.json"), "utf8")).end).toEqual({ stopped: "cap", codes: [] });
+    for (const p of [join(dir, "checkpoint-000000.age"), last(dir)]) expect(() => open(p)).toThrow("ended on a cap stop");
+    unlinkSync(join(dir, "run.json"));
+    expect(() => open(last(dir))).toThrow("ended on a cap stop");
+    const halted = temp(join(tmpdir(), "ohr-ckpt-"));
+    expect((await go({ label: drift(), journal: journalTo(halted) })).stopped).toBe("halt");
+    expect(open(last(halted)).end).toEqual({ stopped: "halt", codes: ["E_OHR_MODEL_DRIFT"] });
+  });
+  test("a checkpoint resumes only on the ledger item it records, and its folder takes no other item", async () => {
+    const dir = temp(join(tmpdir(), "ohr-ckpt-"));
+    await go({ label: drift(), journal: journalTo(dir) });
+    expect(open(last(dir)).item).toBe("ohr-author");
+    expect(() => open(last(dir), "ohr-author-2")).toThrow("belongs to ledger item ohr-author, not --item ohr-author-2");
+    expect(() => journalTo(dir, "ohr-author-test", "ohr-author-2")).toThrow("E_OHR_RESUME");
   });
 });

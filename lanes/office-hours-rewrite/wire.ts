@@ -20,7 +20,8 @@
 // runId when that dir was lost (a resume names the run its sealed checkpoint records). Its lease reserves the spend cap
 // less what the item has already committed, after the meter settles the dead launch's lease from the local ledger, and
 // spent() reads committed spend from the item: earlier leases' closes, an earlier lease still open at its whole
-// reservation, and this launch's metered spend.
+// reservation, and this launch's metered spend with its unknown calls held at their reservation. A command that ends on
+// a cap stop closes with it, so the item admits no later lease.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AuditCall } from "../../src/persona-sim/audit.ts";
@@ -96,11 +97,12 @@ export interface Wire {
   sim: (label: string) => SimCall;
   auditor: (who: (typeof AUDIT.auditors)[number]) => AuditCall;
   runId: string;
-  /** Committed spend on the ledger item so far, in dollars: earlier launches' closes and open leases, and this launch's metered spend. */
+  /** Committed spend on the ledger item so far, in dollars: earlier launches' closes and open leases, and this launch's metered spend and unknown calls. */
   spent: () => number;
   /** Dollars this launch's calls took for one brief: calls labelled <brief>[.<attempt>]:..., as authoring labels them. */
   spentOn: (brief: string) => number;
-  close: (cmd: string) => Promise<number>;
+  /** Settles the lease; capStop, the scope of a cap stop the command ended on, makes it final on the item. */
+  close: (cmd: string, capStop?: string) => Promise<number>;
 }
 
 export async function openWire(o: WireOptions): Promise<Wire> {
@@ -151,10 +153,10 @@ export async function openWire(o: WireOptions): Promise<Wire> {
     sim,
     auditor,
     runId,
-    spent: () => (earlier + meter.spent()) / 1e6,
+    spent: () => (earlier + meter.spent() + meter.unknown()) / 1e6,
     spentOn: (brief) => (byBrief.get(brief) ?? 0) / 1e6,
-    async close(cmd) {
-      const c = await meter.close();
+    async close(cmd, capStop) {
+      const c = await meter.close(capStop);
       writeFileSync(runFile, JSON.stringify({ run_id: runId, spent_micros: readItem(record, o.item).committed_micros, ...commit }) + "\n");
       o.io.out(cmd + ": settled " + (c.spent_micros / 1e6).toFixed(4) + " dollars on " + o.item + (c.unknown_micros ? ", " + (c.unknown_micros / 1e6).toFixed(4) + " unknown" : ""));
       return c.spent_micros;

@@ -270,13 +270,13 @@ export const seams: Seam[] = [
         const unbroken = await done({ fails: SOME });
         const target = unbroken.outcomes[60]!;
         let hung = false;
-        const journal = (n: string) => sealedJournal({ dir, work: join(shm, n), sealer: fakeSealer, runId: "ohr-author-seams" });
+        const journal = (n: string) => sealedJournal({ dir, work: join(shm, n), sealer: fakeSealer, runId: "ohr-author-seams", item: "ohr-author" });
         void (await whole({ fails: SOME, hang: (l) => l === REF(target) + ":author:1" && (hung = true), journal: journal("a") })).run;
         while (!hung) await new Promise((r) => setTimeout(r, 1));
         await new Promise((r) => setTimeout(r, 50));
         const names = readdirSync(dir);
         const newest = names.filter((n) => n.startsWith("checkpoint-")).sort().at(-1)!;
-        const resumed = readJournal(join(dir, newest), fakeDecrypter, join(shm, "open"));
+        const resumed = readJournal(join(dir, newest), fakeDecrypter, join(shm, "open"), "ohr-author");
         const sealedRefs = new Set(resumed.log.map(REF));
         const again = await whole({ fails: SOME, concurrency: 3, resume: resumed, journal: journal("b") });
         const r = await again.run;

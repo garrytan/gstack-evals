@@ -16,7 +16,7 @@ import { CODES, docAnchor, isReasonCode, type ReasonCode } from "../../src/error
 import { writeSealed } from "../office-hours-founder/author/files.ts";
 import { insideRepo } from "../review-noloss/suite.ts";
 import { AuthorError } from "../office-hours-founder/author/files.ts";
-import { ageDecrypter, ageSealer, openCustody, plaintextSha256, readJournal, readReuse, sealCustody, sealedJournal, SHM, writeAuthoring } from "./author/custody.ts";
+import { ageDecrypter, ageSealer, inShm, lockCheckpoints, openCustody, plaintextSha256, readJournal, readReuse, sealCustody, sealedJournal, SHM, writeAuthoring } from "./author/custody.ts";
 import { authorRun, checkAnswers, haltOf, type Checkpoint, type Reuse } from "./author/run.ts";
 import { gitReader, loadScreen } from "./author/screens.ts";
 import { GOLD_EFFORT, JUDGE_EFFORT, REUSE_PLAINTEXT_SHA256, SEED } from "./frozen.ts";
@@ -100,12 +100,14 @@ export function readBriefs(dir: string): Map<string, Brief> {
 /** Every row of the named launch folders. */
 export const launchRows = (dirs: readonly string[]): SessionRow[] => dirs.flatMap((d) => [...readRows(d).values()].map((l) => l.row));
 
-async function withWire<T>(o: { dir: string; item: string; cap: string | undefined; label: string; runId?: string; record?: string; ledger?: string; env: Env; io: Io; cmd: string; buildCommit?: string }, body: (w: Wire) => Promise<T>): Promise<T> {
+/** Runs body on an open wire and closes it, with the scope of a cap stop the body ended on, which makes that stop final on the item. */
+async function withWire<T>(o: { dir: string; item: string; cap: string | undefined; label: string; runId?: string; record?: string; ledger?: string; env: Env; io: Io; cmd: string; buildCommit?: string }, body: (w: Wire, capStop: (scope: string) => void) => Promise<T>): Promise<T> {
   const w = await openWire({ dir: o.dir, item: o.item, capMicros: dollars(o.cap, "--spend-cap"), label: o.label, runId: o.runId, record: o.record, ledger: o.ledger, env: o.env, io: o.io, buildCommit: o.buildCommit });
+  let scope: string | undefined;
   try {
-    return await body(w);
+    return await body(w, (s) => (scope = s));
   } finally {
-    await w.close(o.cmd);
+    await w.close(o.cmd, scope);
   }
 }
 
@@ -117,38 +119,47 @@ const AUTHOR_USAGE = "gstack-evals ohr author --work <new dir under /dev/shm> --
  * new run's <out>.checkpoints, or the checkpoint's own folder), then the placed briefs, every outcome and the judge
  * check's answers sealed with age. A resume continues the run id its checkpoint records on the same ledger item, with
  * or without the stopped run's meter dir; that dir only adds its reply cache. Spend and the cap's room come from the
- * ledger item, and the projection's scale from the sealed records' per-draft spend.
+ * ledger item, and the projection's scale from the sealed records' per-draft spend. The command holds a flock on the
+ * run's checkpoints folder from before it reads the journal or leases until it exits, a resume refuses a run that ended
+ * on a cap stop or another --item, a run that ends on a cap stop closes its lease with it, and --out, whose folder holds
+ * the checkpoints, stays off /dev/shm so a reboot keeps them.
  */
 async function author(argv: string[], io: Io, env: Env): Promise<number> {
   const f = flags(argv, { one: ["--work", "--out", "--recipients", "--identity", "--reuse", "--resume", "--meter", "--gstack", "--item", "--spend-cap", "--concurrency", "--record", "--ledger"] });
   need(f, "ohr author", ["--work", "--out", "--recipients", "--identity", "--gstack", "--item", "--spend-cap"]);
   if (f.has("--reuse") === f.has("--resume")) usage("ohr author takes one of --reuse, for a new run, and --resume, for a stopped one. Usage: " + AUTHOR_USAGE);
   const work = resolve(one(f, "--work")!);
-  if (!work.startsWith(SHM + "/")) usage("--work " + work + " is not under " + SHM + "; plaintext briefs live only in memory-backed storage. Usage: " + AUTHOR_USAGE);
+  if (!inShm(work)) usage("--work " + work + " is not under " + SHM + "; plaintext briefs live only in memory-backed storage. Usage: " + AUTHOR_USAGE);
   if (existsSync(work)) usage("--work " + work + " exists; every run writes into a new work directory");
   const out = fresh("--out", one(f, "--out")!);
+  if (inShm(out)) usage("--out " + out + " is under " + SHM + "; the sealed output and the checkpoints beside it go on storage that survives a reboot");
   const concurrency = Number(one(f, "--concurrency") ?? "4");
   if (!Number.isSafeInteger(concurrency) || concurrency < 1) usage("--concurrency is a whole number of at least 1");
   const meter = resolve(one(f, "--meter") ?? work + ".meter");
-  if (f.has("--meter") && (!meter.startsWith(SHM + "/") || !existsSync(meter))) usage("--meter " + meter + " is not an existing meter directory under " + SHM);
+  if (f.has("--meter") && (!inShm(meter) || !existsSync(meter))) usage("--meter " + meter + " is not an existing meter directory under " + SHM);
   const identity = resolve(one(f, "--identity")!);
   const resumeFrom = f.has("--resume") ? outside("--resume", one(f, "--resume")!) : null;
   const checkpoints = resumeFrom ? dirname(resumeFrom) : fresh("--out", out + ".checkpoints");
-  let reuse: Reuse | undefined, resume: (Checkpoint & { run_id: string }) | undefined;
-  if (resumeFrom) resume = readJournal(resumeFrom, ageDecrypter(identity), work);
-  else {
+  const item = one(f, "--item")!;
+  let reuse: Reuse | undefined, resume: (Checkpoint & { run_id: string; item: string }) | undefined;
+  if (resumeFrom) {
+    lockCheckpoints(checkpoints);
+    resume = readJournal(resumeFrom, ageDecrypter(identity), work, item);
+  } else {
     const sealed = outside("--reuse", one(f, "--reuse")!);
     const sha = plaintextSha256(sealed, identity);
     if (sha !== REUSE_PLAINTEXT_SHA256) throw new AuthorError("E_OHR_REUSE", sealed + "'s plaintext has sha256 " + sha + ", not the " + REUSE_PLAINTEXT_SHA256 + " section 4 records for the first attempt's authoring output");
     reuse = readReuse(sealed, ageDecrypter(identity), work);
     for (const x of reuse.failed) io.err("E_OHR_REUSE " + x.id + " in slot " + x.slot + " is not reused: " + x.why + "; its slot is drafted again");
     mkdirSync(checkpoints, { recursive: true, mode: 0o700 });
+    lockCheckpoints(checkpoints);
   }
   const screen = loadScreen(gitReader(resolve(one(f, "--gstack")!)));
   const cap = dollars(one(f, "--spend-cap"), "--spend-cap") / 1e6;
   const sealer = ageSealer(resolve(one(f, "--recipients")!));
-  return withWire({ dir: meter, item: one(f, "--item")!, cap: one(f, "--spend-cap"), label: "ohr-author", runId: resume?.run_id, record: one(f, "--record"), ledger: one(f, "--ledger"), env, io, cmd: "ohr author" }, async (w) => {
-    const run = await authorRun({ call: w.call, label: labeller(w.judge), parse: parseBlock, screen, spent: w.spent, spentOn: w.spentOn }, { cap, concurrency, reuse, resume, journal: sealedJournal({ dir: checkpoints, work, sealer, runId: w.runId }) });
+  return withWire({ dir: meter, item, cap: one(f, "--spend-cap"), label: "ohr-author", runId: resume?.run_id, record: one(f, "--record"), ledger: one(f, "--ledger"), env, io, cmd: "ohr author" }, async (w, capStop) => {
+    const run = await authorRun({ call: w.call, label: labeller(w.judge), parse: parseBlock, screen, spent: w.spent, spentOn: w.spentOn }, { cap, concurrency, reuse, resume, journal: sealedJournal({ dir: checkpoints, work, sealer, runId: w.runId, item }) });
+    if (run.stopped === "cap") capStop("ohr author: authoring's cap stop (" + (run.codes.join(", ") || "the cap less the spend held no brief allowance") + ")");
     const sink = openCustody(work, out);
     const summary = writeAuthoring(sink, run);
     writeSealed(sink, "authoring/check-answers.json", JSON.stringify(checkAnswers(run), null, 2) + "\n");

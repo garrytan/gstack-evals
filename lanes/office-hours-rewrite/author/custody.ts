@@ -7,10 +7,16 @@
 // The second attempt (its sections 4 and 5.2) adds three readers and writers over the same custody:
 // - sealedJournal seals each settled draft's record to draft-<seq>.age as it settles, and after every batch the outcome
 //   log, the reused briefs, the projection reads and every placed brief to checkpoint-<drafts>.age, each a new path in
-//   the run's checkpoints folder. Each sealed file carries the run id, which also sits in plain run.json beside them.
+//   the run's checkpoints folder. Each sealed file carries the run id and the ledger item, which also sit in plain
+//   run.json beside them; the last checkpoint and run.json also record why the run ended.
 // - readJournal decrypts a checkpoint and every draft record sealed after it into /dev/shm, refuses a gap, a record of
-//   another run or a brief whose files no longer match its digest, deletes the plaintext and returns the state a resume
-//   starts from, with the run id it continues on the same ledger item.
+//   another run or item, a run that ended on a cap stop (final), a resume on another ledger item or a brief whose files
+//   no longer match its digest, deletes the plaintext and returns the state a resume starts from, with the run id it
+//   continues on the same ledger item.
+// - lockCheckpoints holds a flock on a run's checkpoints folder for the process's life, so two authors never write one
+//   run's journal or lease its item at once.
+// Every /dev/shm check reads the realpath of the path's nearest existing ancestor, so a symlinked parent cannot point
+// plaintext outside memory-backed storage.
 // - plaintextSha256 hashes a sealed file's plaintext as age streams it, so the command can check the first attempt's
 //   output against the digest section 4 records before reading it.
 // - readReuse decrypts the first attempt's sealed authoring output into /dev/shm and takes its placed briefs
@@ -18,7 +24,8 @@
 //   of the 13 reused slots and its files on disk, its outcome and its brief.json name one digest; a pair only with both
 //   twins. Every other brief is listed as failed, and its slot is drafted again.
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { dlopen, FFIType } from "bun:ffi";
+import { closeSync, existsSync, openSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { realOf, REPO_ROOT } from "../../product-value/io.ts";
 import { AuthorError, keyJson, openSink, writeSealed } from "../../office-hours-founder/author/files.ts";
@@ -28,7 +35,7 @@ import type { BriefMeta, PriorSession, Sheet } from "../types.ts";
 import type { Outcome } from "./brief.ts";
 import { schedule } from "./draws.ts";
 import { digestOf, priorJson, sheetJson, type BriefFiles } from "./files.ts";
-import { metaOf, summaryOf, type AuthorRun, type Checkpoint, type Journal, type LogEntry, type Reuse } from "./run.ts";
+import { metaOf, summaryOf, type AuthorRun, type Checkpoint, type End, type Journal, type LogEntry, type Reuse } from "./run.ts";
 
 export const SHM = "/dev/shm";
 
@@ -36,7 +43,8 @@ const inRepo = (p: string) => {
   const real = realOf(p), root = realOf(REPO_ROOT);
   return real === root || real.startsWith(root + sep);
 };
-const inShm = (p: string) => resolve(p).startsWith(SHM + sep);
+/** The path, followed through the realpath of its nearest existing ancestor, lies under /dev/shm. */
+export const inShm = (p: string): boolean => realOf(p).startsWith(realOf(SHM) + sep);
 
 /** Refuses a work directory outside /dev/shm or already there, and a sealed output inside the repository or already there. */
 export function openCustody(work: string, out: string): string {
@@ -119,32 +127,52 @@ export function authorToCustody(run: AuthorRun, o: { work: string; out: string; 
 
 const pad = (n: number) => String(n).padStart(6, "0");
 const DRAFT = /^draft-(\d{6})\.age$/;
-const CHECKPOINT = /^checkpoint-(\d{6})\.age$/;
+const CHECKPOINT = /^checkpoint-(\d{6})(?:_\d+)?\.age$/;
+
+/** What each sealed file's run.json and the plain run.json beside them hold. */
+interface RunFile {
+  run_id: string;
+  item: string;
+  end?: End;
+}
+
+let libc: { symbols: { flock: (fd: number, operation: number) => number } } | null = null;
+/** Holds an exclusive flock on dir until this process exits; refuses at once while another process holds it. */
+export function lockCheckpoints(dir: string): void {
+  libc ??= dlopen(process.platform === "darwin" ? "libc.dylib" : "libc.so.6", { flock: { args: [FFIType.i32, FFIType.i32], returns: FFIType.i32 } });
+  const fd = openSync(dir, "r");
+  if (libc.symbols.flock(fd, 2 | 4) === 0) return;
+  closeSync(fd);
+  throw new AuthorError("E_OHR_RESUME", dir + " is locked by another ohr author process; one process writes a run's journal and leases its item at a time");
+}
 
 /** The journal authorRun writes through: one sealed file a settled draft, and a checkpoint after every batch, each a new path in dir. Plaintext goes only into fresh directories beside work under /dev/shm. */
-export function sealedJournal(o: { dir: string; work: string; sealer: Sealer; runId: string }): Journal {
-  const run = JSON.stringify({ run_id: o.runId }) + "\n";
+export function sealedJournal(o: { dir: string; work: string; sealer: Sealer; runId: string; item: string }): Journal {
+  const run: RunFile = { run_id: o.runId, item: o.item };
   const plain = join(o.dir, "run.json");
-  if (existsSync(plain) && readFileSync(plain, "utf8") !== run) throw new AuthorError("E_OHR_RESUME", plain + " names another run than " + o.runId + "; a checkpoints folder serves one run");
-  writeFileSync(plain, run);
+  const prior = existsSync(plain) ? (JSON.parse(readFileSync(plain, "utf8")) as RunFile) : null;
+  if (prior && (prior.run_id !== o.runId || prior.item !== o.item)) throw new AuthorError("E_OHR_RESUME", plain + " names run " + prior.run_id + " on " + prior.item + ", not " + o.runId + " on " + o.item + "; a checkpoints folder serves one run on one ledger item");
+  writeFileSync(plain, JSON.stringify(run) + "\n");
   const seal = (name: string, write: (sink: string) => void) => {
     const out = join(o.dir, name);
     const sink = openCustody(o.work + "." + name.replace(/\.age$/, ""), out);
     write(sink);
-    writeSealed(sink, "run.json", run);
+    writeSealed(sink, "run.json", JSON.stringify(run) + "\n");
     sealCustody(sink, out, o.sealer);
   };
   return {
     record: (e) => seal("draft-" + pad(e.seq) + ".age", (sink) => writeSealed(sink, "record.json", JSON.stringify(e) + "\n")),
     checkpoint: (c, placed) => {
-      const name = "checkpoint-" + pad(c.log.length) + ".age";
-      if (existsSync(join(o.dir, name))) return;
+      let name = "checkpoint-" + pad(c.log.length) + ".age";
+      for (let k = 2; existsSync(join(o.dir, name)); k++) name = "checkpoint-" + pad(c.log.length) + "_" + k + ".age";
       seal(name, (sink) => {
         writeBriefs(sink, placed);
         writeSealed(sink, "authoring/log.jsonl", jsonl(c.log));
         writeSealed(sink, "authoring/reuse.json", JSON.stringify(c.reuse) + "\n");
         writeSealed(sink, "authoring/reads.json", JSON.stringify(c.reads) + "\n");
+        if (c.end) writeSealed(sink, "authoring/end.json", JSON.stringify(c.end) + "\n");
       });
+      if (c.end) writeFileSync(plain, JSON.stringify({ ...run, end: c.end }) + "\n");
     },
   };
 }
@@ -159,19 +187,31 @@ function opened<T>(sealed: string, dir: string, decrypt: Decrypter, read: (d: st
   }
 }
 
-const runOf = (d: string, what: string): string => {
-  const id = existsSync(join(d, "run.json")) ? (JSON.parse(readFileSync(join(d, "run.json"), "utf8")) as { run_id?: unknown }).run_id : undefined;
-  if (typeof id !== "string" || !id) throw new AuthorError("E_OHR_RESUME", what + " carries no run id, so a resume cannot continue its run on the ledger item");
-  return id;
+const runOf = (d: string, what: string): RunFile => {
+  const r = existsSync(join(d, "run.json")) ? (JSON.parse(readFileSync(join(d, "run.json"), "utf8")) as Partial<RunFile>) : {};
+  if (typeof r.run_id !== "string" || !r.run_id || typeof r.item !== "string" || !r.item) throw new AuthorError("E_OHR_RESUME", what + " carries no run id and ledger item, so a resume cannot continue its run on the item");
+  return { run_id: r.run_id, item: r.item };
+};
+const capped = (what: string, run: string, end: End | undefined) => {
+  if (end?.stopped === "cap") throw new AuthorError("E_OHR_RESUME", what + " records that run " + run + " ended on a cap stop (" + (end.codes.join(", ") || "the cap less the spend held no brief allowance") + "); a cap stop is final, so the run never resumes");
 };
 
-/** A resume's state: a sealed checkpoint and every draft record sealed after it in the same folder, in order, with the run they belong to. */
-export function readJournal(checkpoint: string, decrypt: Decrypter, work: string): Checkpoint & { run_id: string } {
+/** A resume's state: a sealed checkpoint and every draft record sealed after it in the same folder, in order, with the run they belong to; item is the ledger item the resume leases. */
+export function readJournal(checkpoint: string, decrypt: Decrypter, work: string, item: string): Checkpoint & { run_id: string; item: string } {
   const at = CHECKPOINT.exec(basename(checkpoint));
   if (!at) throw new AuthorError("E_OHR_RESUME", checkpoint + " is not a sealed checkpoint (checkpoint-<drafts>.age)");
-  const c = opened(checkpoint, work + ".open-checkpoint", decrypt, (d) => ({ run_id: runOf(d, checkpoint), log: readJsonl<LogEntry>(join(d, "authoring", "log.jsonl")), reuse: JSON.parse(readFileSync(join(d, "authoring", "reuse.json"), "utf8")) as Reuse, reads: JSON.parse(readFileSync(join(d, "authoring", "reads.json"), "utf8")) as Checkpoint["reads"] }));
-  if (c.log.length !== Number(at[1])) throw new AuthorError("E_OHR_RESUME", checkpoint + " names " + Number(at[1]) + " drafts and its log holds " + c.log.length);
   const dir = dirname(checkpoint);
+  const plain = join(dir, "run.json");
+  const side = existsSync(plain) ? (JSON.parse(readFileSync(plain, "utf8")) as RunFile) : null;
+  if (side) capped(plain, side.run_id, side.end);
+  const c = opened(checkpoint, work + ".open-checkpoint", decrypt, (d) => {
+    const end = join(d, "authoring", "end.json");
+    return { ...runOf(d, checkpoint), log: readJsonl<LogEntry>(join(d, "authoring", "log.jsonl")), reuse: JSON.parse(readFileSync(join(d, "authoring", "reuse.json"), "utf8")) as Reuse, reads: JSON.parse(readFileSync(join(d, "authoring", "reads.json"), "utf8")) as Checkpoint["reads"], ...(existsSync(end) ? { end: JSON.parse(readFileSync(end, "utf8")) as End } : {}) };
+  });
+  capped(checkpoint, c.run_id, c.end);
+  if (c.item !== item) throw new AuthorError("E_OHR_RESUME", checkpoint + " belongs to ledger item " + c.item + ", not --item " + item + "; a run resumes only on its own item");
+  if (side && (side.run_id !== c.run_id || side.item !== c.item)) throw new AuthorError("E_OHR_RESUME", plain + " names run " + side.run_id + " on " + side.item + ", and " + checkpoint + " run " + c.run_id + " on " + c.item);
+  if (c.log.length !== Number(at[1])) throw new AuthorError("E_OHR_RESUME", checkpoint + " names " + Number(at[1]) + " drafts and its log holds " + c.log.length);
   const after = readdirSync(dir).flatMap((n) => (DRAFT.test(n) ? [Number(DRAFT.exec(n)![1])] : [])).filter((n) => n > c.log.length).sort((a, b) => a - b);
   after.forEach((n, i) => {
     if (n !== c.log.length + 1 + i) throw new AuthorError("E_OHR_RESUME", dir + " holds draft record " + n + " but not draft " + (c.log.length + 1 + i) + "; a sealed draft is missing, so the run cannot resume without paying for it twice");
@@ -180,8 +220,8 @@ export function readJournal(checkpoint: string, decrypt: Decrypter, work: string
     const name = join(dir, "draft-" + pad(n) + ".age");
     c.log.push(
       opened(name, work + ".open-draft-" + pad(n), decrypt, (d) => {
-        const id = runOf(d, name);
-        if (id !== c.run_id) throw new AuthorError("E_OHR_RESUME", name + " belongs to run " + id + ", and " + checkpoint + " to run " + c.run_id);
+        const r = runOf(d, name);
+        if (r.run_id !== c.run_id || r.item !== c.item) throw new AuthorError("E_OHR_RESUME", name + " belongs to run " + r.run_id + " on " + r.item + ", and " + checkpoint + " to run " + c.run_id + " on " + c.item);
         return JSON.parse(readFileSync(join(d, "record.json"), "utf8")) as LogEntry;
       }),
     );

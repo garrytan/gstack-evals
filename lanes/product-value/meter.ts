@@ -129,7 +129,10 @@ export interface Meter {
   call(req: CallRequest): Promise<CallResult>;
   /** Settled spend on this lease so far, in micros, from the local ledger. */
   spent(): number;
-  close(): Promise<{ spent_micros: number; unknown_micros: number }>;
+  /** Calls on this lease whose outcome is unknown, held at their reservation, in micros, from the local ledger. */
+  unknown(): number;
+  /** Settles the lease; a cap stop's scope goes into the close, so the item admits no later lease. */
+  close(capStop?: string): Promise<{ spent_micros: number; unknown_micros: number }>;
 }
 
 /** Leases the item for the run (settling this run's own stale lease first), starts the proxy and returns the client. */
@@ -178,6 +181,7 @@ export async function openMeter(o: MeterOptions): Promise<Meter> {
   return {
     leaseId,
     spent: () => [...local.meters(leaseId).values()].reduce((a, m) => a + m.spent_micros, 0),
+    unknown: () => [...local.meters(leaseId).values()].reduce((a, m) => a + m.unknown_micros, 0),
     async call(req) {
       if (closed) throw new MeterError("E_USAGE", "the meter is closed");
       const m = MODELS[req.model];
@@ -199,7 +203,7 @@ export async function openMeter(o: MeterOptions): Promise<Meter> {
         done();
       }
     },
-    async close() {
+    async close(capStop) {
       if (closed) throw new MeterError("E_USAGE", "the meter is already closed");
       closed = true;
       let timer: ReturnType<typeof setTimeout> | undefined;
@@ -208,7 +212,7 @@ export async function openMeter(o: MeterOptions): Promise<Meter> {
       p.stop();
       try {
         await reconcileJournal(journal, local);
-        const c = settleLease(record, local, leaseId, warn);
+        const c = settleLease(record, local, leaseId, warn, capStop);
         return { spent_micros: c.spent_micros, unknown_micros: c.unknown_micros };
       } finally {
         local.close();

@@ -54,7 +54,7 @@ test("a run killed between a draft's sealed record and its batch's checkpoint, i
   expect(dead.committed_micros).toBe(CAP);
   rmSync(o.meter, { recursive: true, force: true });
 
-  const resumed = readJournal(join(o.checkpoints, newest), fakeDecrypter, join(shm, "open"));
+  const resumed = readJournal(join(o.checkpoints, newest), fakeDecrypter, join(shm, "open"), o.item);
   expect(resumed.run_id).toBe(runId);
   expect(resumed.log).toHaveLength(records);
   const sealedRefs = new Set(resumed.log.map(refOf));
@@ -78,7 +78,7 @@ test("a run killed between a draft's sealed record and its batch's checkpoint, i
     return w.spent();
   };
   const script = runCaller({ fails: plantedFails });
-  const journal = sealedJournal({ dir: o.checkpoints, work: join(shm, "w2"), sealer: fakeSealer, runId: w.runId });
+  const journal = sealedJournal({ dir: o.checkpoints, work: join(shm, "w2"), sealer: fakeSealer, runId: w.runId, item: o.item });
   const r = await authorRun({ call: meteredScript(w.call, script), label: wordLabeller(), parse: fixtureParser, screen: FIXTURE_SCREEN, spent, spentOn: w.spentOn }, { cap: CAPS.authoring, concurrency: 3, resume: resumed, journal });
   const committed = w.spent();
   await w.close("resume test");

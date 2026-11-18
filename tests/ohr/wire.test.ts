@@ -101,6 +101,27 @@ describe("the wire's relaunches on one ledger item (the second attempt's section
     expect(Math.round(spent * D)).toBe(end);
     expect(JSON.parse(readFileSync(join(W, "lost", "run.json"), "utf8")).spent_micros).toBe(end);
   });
+  test("a close on a cap stop records it on the item, and no later launch opens a lease there", async () => {
+    const { record, open } = setup();
+    const a = await open("wire");
+    await ask(a);
+    await a.close("wire test", "ohr author: authoring's cap stop (test)");
+    expect(readItem(record, item).leases[0]!.close!.cap_stop).toBe("ohr author: authoring's cap stop (test)");
+    expect((await thrown(() => open("wire")))?.code).toBe("CAP_STOP");
+    expect((await thrown(() => open("lost", a.runId)))?.code).toBe("CAP_STOP");
+  });
+  test("spent() holds this launch's calls of unknown outcome at their reservation, as the close commits them", async () => {
+    const W = mkdtempSync(join(tmpdir(), "ohr-wire-unknown-"));
+    const record = join(W, "record");
+    recordApproval(record, { action: "init", item, cap_micros: 20 * D, quotes: [{ words: "wire test on a temporary ledger, not an approval", by: "tests/ohr/wire.test.ts", source: "pre-run change 1" }], admission: "warn" });
+    const noUsage = (async (_u: string | URL | Request, init?: RequestInit) => Response.json({ id: "msg_1", type: "message", role: "assistant", model: JSON.parse(String(init?.body)).model, content: [{ type: "text", text: "ok" }], stop_reason: "end_turn" })) as typeof fetch;
+    const w = await openWire({ dir: join(W, "wire"), item, capMicros: 20 * D, label: item, record, ledger: join(W, "ledger.sqlite"), env: KEYS, io: { out: () => {}, err: () => {} }, upstream: noUsage });
+    await thrown(() => ask(w));
+    const spent = w.spent();
+    expect(spent).toBeGreaterThan(0);
+    await w.close("wire test");
+    expect(Math.round(spent * D)).toBe(readItem(record, item).committed_micros);
+  });
 });
 
 describe("the wire's spend by brief (the second attempt's section 5.2)", () => {

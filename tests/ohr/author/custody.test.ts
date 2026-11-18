@@ -1,6 +1,6 @@
 // Value: protects=section 3's sealing: plaintext only in /dev/shm, sealed output outside the repo, plaintext deleted after the seal, decryption only into /dev/shm, and a summary of counts and digests.
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { authorToCustody, openCustody, sealCustody, unsealTo, writeAuthoring } from "../../../lanes/office-hours-rewrite/author/custody.ts";
@@ -69,5 +69,15 @@ describe("writing a run", () => {
     expect(readFileSync(out, "utf8")).toBe("sealed:authoring,briefs");
     expect(summary.placed).toBe(96);
     expect(JSON.stringify(summary)).not.toContain(run.outcomes[0]!.files!.opening.slice(0, 30));
+  });
+});
+
+describe("custody paths follow links (pre-run change 1)", () => {
+  test("a work or decrypt directory under a /dev/shm folder that links to disk is refused", () => {
+    const disk = temp(join(tmpdir(), "ohr-disk-"));
+    const link = join(temp("/dev/shm/ohr-link-"), "to-disk");
+    symlinkSync(disk, link);
+    expect(() => openCustody(join(link, "w"), outside())).toThrow("E_OHR_CUSTODY");
+    expect(() => unsealTo(join(disk, "x.age"), join(link, "d"), () => {})).toThrow("E_OHR_CUSTODY");
   });
 });

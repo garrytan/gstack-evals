@@ -99,6 +99,7 @@ function stubRig(closed: { n: number }): HostRig {
 const ownerMeter = (calls: string[]): PvMeter => ({
   leaseId: "owner",
   spent: () => 0,
+  unknown: () => 0,
   close: async () => ({ spent_micros: 0, unknown_micros: 0 }),
   call: async (req) => {
     calls.push(req.prompt);

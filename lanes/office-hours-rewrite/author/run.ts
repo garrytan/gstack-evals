@@ -18,7 +18,8 @@
 //   descriptive read only: since the Captain's ruling of 2026-11-18 it never stops authoring, which ends only at its
 //   quotas, its cap, a stop that is not about money, or the draft limit.
 // - Every settled draft, with the dollars its calls took on the meter, goes through the journal before the run counts
-//   it, and after every batch the journal seals the outcome log and the placed briefs (section 5.2). A run resumes from
+//   it, and after every batch, before the next starts, the journal seals the outcome log and the placed briefs (section
+//   5.2); the run's last checkpoint also holds why it ended. A run resumes from
 //   a checkpoint and the drafts sealed after it: each slot's state is rebuilt from the log, so a settled draft is never
 //   requested again and a draft that was in flight is drawn again as the same request.
 // - A batch never starts more drafts than the cap less the spend so far covers at one $3.50 allowance each. Authoring
@@ -27,7 +28,9 @@
 // - A cap stop (that batch rule, or CAP_STOP thrown by a call) before calibration and comparison are full halts
 //   authoring; after, it ends authoring with the reserves it placed. A stop that is not about money (a closed lease, a
 //   model or provider drift, the empty-reply bound) halts the run in any phase. A thrown stop ends the run once the
-//   batch's drafts settle, so the briefs already placed are still written and sealed.
+//   batch's drafts settle, so the briefs already placed are still written and sealed; a cap stop thrown in a batch
+//   takes precedence over any other stop there, and the run keeps every stop code the batch threw. A cap stop is final:
+//   the journal records it, and a resume refuses its run (custody.ts readJournal).
 import { AuthorError } from "../../office-hours-founder/author/files.ts";
 import { BRIEF_ALLOWANCE, PAIRED_TYPES, PILOT, QUOTA, REUSED_SLOTS, TOP_UP_BOUND } from "../frozen.ts";
 import type { BriefMeta } from "../types.ts";
@@ -58,11 +61,18 @@ export interface Reuse {
 }
 export const NO_REUSE: Reuse = { placed: [], answers: [], failed: [] };
 
-/** What a checkpoint holds and a resume starts from. */
+/** Why a run ended: how it stopped, and every stop code its last batch threw. */
+export interface End {
+  stopped: AuthorRun["stopped"];
+  codes: string[];
+}
+
+/** What a checkpoint holds and a resume starts from; the run's last checkpoint also holds its end. */
 export interface Checkpoint {
   log: LogEntry[];
   reuse: Reuse;
   reads: ProjectionRead[];
+  end?: End;
 }
 
 /** Seals each settled draft before the run counts it, and the outcome log with every placed brief after a batch (custody.ts sealedJournal). */
@@ -85,8 +95,10 @@ export interface AuthorRun {
   stopped: "quotas" | "cap" | "schedule" | "halt";
   /** Calibration and comparison were full when authoring ended. */
   full: boolean;
-  /** The stop a draft or label call threw, which ended the run; null when none did. */
+  /** The stop a draft or label call threw, which ended the run (a cap stop before any other); null when none did. */
   halt: AuthorError | null;
+  /** Every stop code the last batch threw. */
+  codes: string[];
 }
 
 interface SlotState {
@@ -101,12 +113,13 @@ interface SlotState {
 /** The stops a draft or label call may throw (wire.ts, meter.ts); any other error is a bug and still rejects the run. */
 const STOPS: ReadonlySet<string> = new Set(["CAP_STOP", "E_LEASE_CLOSED", "E_OHR_MODEL_DRIFT", "E_PV_PROVIDER_DRIFT", "E_PV_EMPTY_REPLIES"]);
 
-/** Waits for every draft in the batch, then returns the first stop one threw, or null; any other error is rethrown. */
-async function settleBatch(batch: Promise<void>[]): Promise<AuthorError | null> {
+/** Waits for every draft in the batch, then returns its stop (a cap stop before any other) with every stop code, or null; any other error is rethrown. */
+async function settleBatch(batch: Promise<void>[]): Promise<{ halt: AuthorError; codes: string[] } | null> {
   const errors = (await Promise.allSettled(batch)).flatMap((x) => (x.status === "rejected" ? [x.reason] : []));
   const other = errors.find((e) => !STOPS.has(e?.code));
   if (other) throw other;
-  return errors.length ? new AuthorError(errors[0].code, String(errors[0].message).slice(errors[0].code.length + 1)) : null;
+  const e = errors.find((x) => x.code === "CAP_STOP") ?? errors[0];
+  return e ? { halt: new AuthorError(e.code, String(e.message).slice(e.code.length + 1)), codes: [...new Set(errors.map((x) => String(x.code)))] } : null;
 }
 
 export const kindOf = (s: Pick<Slot, "kind" | "type">): UnpairedKind | null => (s.kind === "builder" ? "builder" : s.kind === "founder" ? (s.type as UnpairedKind) : null);
@@ -205,19 +218,19 @@ export async function authorRun(deps: AuthorDeps, o: { cap: number; concurrency:
     return { pairs, unpaired: { T7: n("T7"), T8: n("T8"), builder: n("builder") } };
   };
   const placedOutcomes = () => slots.flatMap((s) => st.get(s.slot)!.placed ?? []);
-  const checkpoint = () => {
-    if (log.length === checkpointed) return;
+  const checkpoint = (end?: End) => {
+    if (log.length === checkpointed && !end) return;
     checkpointed = log.length;
-    o.journal?.checkpoint({ log: [...log], reuse, reads: [...reads] }, placedOutcomes());
+    o.journal?.checkpoint({ log: [...log], reuse, reads: [...reads], ...(end ? { end } : {}) }, placedOutcomes());
   };
-  const finish = (stopped: AuthorRun["stopped"], halt: AuthorError | null): AuthorRun => {
-    checkpoint();
+  const finish = (stopped: AuthorRun["stopped"], stop: { halt: AuthorError; codes: string[] } | null): AuthorRun => {
+    const codes = stop?.codes ?? [];
+    checkpoint({ stopped, codes });
     const members: Member[] = slots.flatMap((s) => (st.get(s.slot)!.placed ?? []).map((x) => memberOf(s, x)));
-    return { outcomes: [...log], reuse, reads: [...reads], sets: placeSets(members), unmatched: slots.flatMap((s) => (st.get(s.slot)!.partner ? [st.get(s.slot)!.partner!.id] : [])), stopped, full: main.every((s) => !open(s)), halt };
+    return { outcomes: [...log], reuse, reads: [...reads], sets: placeSets(members), unmatched: slots.flatMap((s) => (st.get(s.slot)!.partner ? [st.get(s.slot)!.partner!.id] : [])), stopped, full: main.every((s) => !open(s)), halt: stop?.halt ?? null, codes };
   };
 
-  if (!o.resume) checkpoint();
-  else checkpointed = log.length;
+  if (o.resume) checkpointed = log.length;
   for (;;) {
     const pilot = pilotWants();
     const wants = pilot.length ? pilot : main.some(open) ? main.filter(open) : reserves.filter(open);
@@ -226,10 +239,10 @@ export async function authorRun(deps: AuthorDeps, o: { cap: number; concurrency:
     if (size <= 0) return finish("cap", null);
     const batch = wants.slice(0, size);
     if (log.length >= MAX_DRAFTS || batch.some((s) => st.get(s.slot)!.k >= SLOT_DRAWS)) return finish("schedule", null);
-    const halt = await settleBatch(batch.map((s) => start(s, pilot.length > 0)));
-    if (!pilotWants().length) reads.push(readProjection({ counts: countsOf(log), open: openOf(), spend: log.reduce((t, x) => t + x.spend, 0), predicted: log.reduce((t, x) => t + predicted(x.role), 0), cap: o.cap, committed: deps.spent(), drafts: log.length }));
     checkpoint();
-    if (halt) return finish(halt.code === "CAP_STOP" ? "cap" : "halt", halt);
+    const stop = await settleBatch(batch.map((s) => start(s, pilot.length > 0)));
+    if (!pilotWants().length) reads.push(readProjection({ counts: countsOf(log), open: openOf(), spend: log.reduce((t, x) => t + x.spend, 0), predicted: log.reduce((t, x) => t + predicted(x.role), 0), cap: o.cap, committed: deps.spent(), drafts: log.length }));
+    if (stop) return finish(stop.halt.code === "CAP_STOP" ? "cap" : "halt", stop);
   }
 }
 
@@ -281,6 +294,7 @@ export function summaryOf(r: AuthorRun) {
   return {
     stopped: r.stopped,
     full: r.full,
+    codes: r.codes,
     drafts: r.outcomes.length,
     passed: r.outcomes.length - drops.length,
     rewritten: r.outcomes.filter((x) => x.rewrites).length,

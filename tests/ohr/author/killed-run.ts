@@ -31,7 +31,7 @@ if (import.meta.main) {
   const w = await openWire({ dir: o.meter, item: o.item, capMicros: CAPS.authoring * 1e6, label: "ohr-author", record: o.record, ledger: o.ledger, env: STUB_KEYS, io: { out: () => {}, err: (t) => process.stderr.write(t + "\n") }, upstream });
   await authorRun(
     { call: meteredScript(w.call, runCaller({ fails: plantedFails })), label: wordLabeller(), parse: fixtureParser, screen: FIXTURE_SCREEN, spent: w.spent, spentOn: w.spentOn },
-    { cap: CAPS.authoring, concurrency: 8, reuse: { placed, answers: answersOf(placed), failed: [] }, journal: sealedJournal({ dir: o.checkpoints, work: o.work, sealer: fakeSealer, runId: w.runId }) },
+    { cap: CAPS.authoring, concurrency: 8, reuse: { placed, answers: answersOf(placed), failed: [] }, journal: sealedJournal({ dir: o.checkpoints, work: o.work, sealer: fakeSealer, runId: w.runId, item: o.item }) },
   );
   process.stderr.write("the run finished without reaching the held draft\n");
   process.exit(3);
