@@ -38,7 +38,7 @@ describe("admission", () => {
   test("A6: the projection at stage 1's measured cost fits item 5 and item 6, or not", () => {
     const fits = cond(stage1Input({}), "A6");
     expect(fits.pass).toBe(true);
-    expect(fits.values.item5).toEqual({ projection: 654.24, cap: 1620 });
+    expect(fits.values.item5).toEqual({ projection: 556.8, cap: 1406 });
     expect(cond(stage1Input({ usd: { arm: "new", model: "opus", value: 12 } }), "A6").pass).toBe(false);
     expect(cond(stage1Input({ usd: { arm: "new", model: "particle", value: 1.5 } }), "A6").pass).toBe(false);
   });

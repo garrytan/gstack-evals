@@ -1,9 +1,10 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
-// The office-hours rewrite eval's ledger items: how each approved item cap (frozen.CAPS, pre-run change 1 item 4a) splits
-// into the ledger items its runs lease, and the schedule check that says whether each launch finishes inside them. One
-// ledger item serves one run, a launch leases two (arms through the rig, simulator through the meter), and a stage's
+// The office-hours rewrite eval's ledger items: how each approved item cap (frozen.CAPS, the second attempt's section
+// 7) splits into the ledger items its runs lease, and the schedule check that says whether each launch finishes inside
+// them. One ledger item serves one run, a launch leases two (arms through the rig, simulator through the meter), and a stage's
 // production labels are their own run inside the stage's approved item. Pre-run change 4 freezes this table as its
-// split.tsv (replacing change 3's), and tests/ohr/ledger.test.ts holds the two equal.
+// split.tsv (replacing change 3's). The second attempt's split, below, goes into the pre-run change that names its build
+// commit, and tests/ohr/ledger.test.ts holds it as written.
 //
 // The schedule check (pre-run change 4, fix 1) walks each launch's real round order from the manifest builder
 // (run/manifest.ts launchRounds) at a multiple of cost.py's central figure a session (CENTRAL), and applies the launch
@@ -15,11 +16,13 @@
 // - Stage 1 must finish at 1.35 times central. Its one admission repair (change 1, item 4a; prereg section 12 stage 4)
 //   reruns only what failed, which is at most the whole of stage 1, so it is checked as a launch over stage 1's rounds
 //   on the remainder of stage 1's cap, and must start at least its first round (one brief on Opus, the costliest).
-// - Stage 2 and particle-1's stage 2 must finish at central. Their approved caps cannot hold their schedules at 1.35
-//   times central under this rule, whatever the split; admission A6 holds their projections to their caps after stage 1.
-// Items that are not launches (authoring, the audit, the judge check, hosts) and stage 2's items, which change 4 does not
-// re-split, keep change 3's rule: a cap of at least 1.35 times central plus the stated allowance.
-import { CAPS } from "./frozen.ts";
+// - Stage 2 and particle-1's stage 2 must finish at 1.35 times central. The second attempt sized their caps at 1.35
+//   times central plus what a round holds at open (its section 7), so each launch's items take what its schedule needs
+//   at 1.35 times central, rounded up to the dollar, and its arms item takes what is left of the approved cap; admission
+//   A6 still holds their projections to their caps after stage 1.
+// Items that are not launches (authoring, the audit, the judge check, hosts) keep change 3's rule: a cap of at least 1.35
+// times central plus the stated allowance, which for authoring is the 8 drafts in flight at $3.50.
+import { CAPS, QUOTA } from "./frozen.ts";
 import { capProblem, launchRounds, LAUNCHES, type LaunchName } from "./run/manifest.ts";
 import { ALLOWANCES, roundReserve } from "./run/run.ts";
 import type { BriefMeta, ManifestEntry, ModelId } from "./types.ts";
@@ -38,8 +41,8 @@ export interface LedgerPart {
 }
 
 export const SPLIT: readonly LedgerPart[] = [
-  { item: "ohr-author", line: "authoring", what: "the pilot and every draw after it, one run", central: 183.24, allowance: 3.5, cap: 251 },
-  { item: "ohr-audit", line: "simulator_audit", what: "the fixed script's simulator calls and both auditors, one run", central: 29.34, allowance: 1, cap: 41 },
+  { item: "ohr-author", line: "authoring", what: "the pilot and every draw after it, one run", central: 281.64, allowance: 28, cap: 409 },
+  { item: "ohr-audit", line: "simulator_audit", what: "the fixed script's simulator calls and both auditors, one run", central: 28.81, allowance: 1, cap: 40 },
   { item: "ohr-s1-arms", line: "stage1", what: "stage 1's arm sessions, all three models", central: 99.6, allowance: null, cap: 151 },
   { item: "ohr-s1-sim", line: "stage1", what: "stage 1's simulator", central: 5.76, allowance: null, cap: 14 },
   { item: "ohr-s1-labels", line: "stage1", what: "stage 1's production labels", central: 4.32, allowance: null, cap: 7 },
@@ -47,13 +50,13 @@ export const SPLIT: readonly LedgerPart[] = [
   { item: "ohr-s1-repair-sim", line: "stage1", what: "the one admission repair's simulator", central: null, allowance: null, cap: 7 },
   { item: "ohr-s1-repair-labels", line: "stage1", what: "the one admission repair's labels", central: null, allowance: null, cap: 3 },
   { item: "ohr-judge-check", line: "judge_check", what: "the live judge probes, the gold pass and the check labels, one run", central: 89.8, allowance: 1, cap: 123 },
-  { item: "ohr-s2-arms", line: "stage2", what: "stage 2's Opus and Sol arm sessions", central: 1109.2, allowance: 13.58, cap: 1511 },
-  { item: "ohr-s2-sim", line: "stage2", what: "stage 2's Opus and Sol simulator", central: 45.12, allowance: 1, cap: 62 },
-  { item: "ohr-s2-labels", line: "stage2", what: "stage 2's Opus and Sol production labels", central: 33.84, allowance: 1, cap: 47 },
-  { item: "ohr-s2p-arms", line: "stage2_particle", what: "stage 2's particle-1 arm sessions", central: 61.1, allowance: null, cap: 83 },
-  { item: "ohr-s2p-sim", line: "stage2_particle", what: "stage 2's particle-1 simulator", central: 22.56, allowance: null, cap: 34 },
-  { item: "ohr-s2p-labels", line: "stage2_particle", what: "stage 2's particle-1 production labels", central: 16.92, allowance: null, cap: 22 },
-  { item: "ohr-hosts", line: "hosts", what: "the runner VMs", central: 15.28, allowance: 1, cap: 22 },
+  { item: "ohr-s2-arms", line: "stage2", what: "stage 2's Opus and Sol arm sessions", central: 944, allowance: null, cap: 1308 },
+  { item: "ohr-s2-sim", line: "stage2", what: "stage 2's Opus and Sol simulator", central: 38.4, allowance: null, cap: 58 },
+  { item: "ohr-s2-labels", line: "stage2", what: "stage 2's Opus and Sol production labels", central: 28.8, allowance: null, cap: 40 },
+  { item: "ohr-s2p-arms", line: "stage2_particle", what: "stage 2's particle-1 arm sessions", central: 52, allowance: null, cap: 77 },
+  { item: "ohr-s2p-sim", line: "stage2_particle", what: "stage 2's particle-1 simulator", central: 19.2, allowance: null, cap: 32 },
+  { item: "ohr-s2p-labels", line: "stage2_particle", what: "stage 2's particle-1 production labels", central: 14.4, allowance: null, cap: 21 },
+  { item: "ohr-hosts", line: "hosts", what: "the runner VMs", central: 13.18, allowance: 1, cap: 19 },
 ];
 
 /** Each paid launch's two items: arms through the rig's lease and the simulator through the meter. */
@@ -85,8 +88,8 @@ export interface Schedule {
 export const SCHEDULES: readonly Schedule[] = [
   { name: "stage1", launch: "stage1", items: { ...LAUNCH_ITEMS.stage1, labels: "ohr-s1-labels" }, finish: 1.35 },
   { name: "stage1-repair", launch: "stage1", items: { arms: "ohr-s1-repair-arms", sim: "ohr-s1-repair-sim", labels: "ohr-s1-repair-labels" }, finish: null },
-  { name: "stage2", launch: "stage2", items: { ...LAUNCH_ITEMS.stage2, labels: "ohr-s2-labels" }, finish: 1 },
-  { name: "stage2-particle", launch: "stage2-particle", items: { ...LAUNCH_ITEMS["stage2-particle"], labels: "ohr-s2p-labels" }, finish: 1 },
+  { name: "stage2", launch: "stage2", items: { ...LAUNCH_ITEMS.stage2, labels: "ohr-s2-labels" }, finish: 1.35 },
+  { name: "stage2-particle", launch: "stage2-particle", items: { ...LAUNCH_ITEMS["stage2-particle"], labels: "ohr-s2p-labels" }, finish: 1.35 },
 ];
 
 const D = 1_000_000;
@@ -95,7 +98,7 @@ const dollars = (micros: number) => Math.round(micros / 10_000) / 100;
 
 /** Stand-in briefs with the frozen set sizes: launchRounds reads only their ids and draws, and every brief costs the same. */
 function scheduleBriefs(launch: LaunchName): { briefs: BriefMeta[]; ids: string[] } {
-  const n = LAUNCHES[launch].set === "calibration" ? 8 : 94;
+  const n = LAUNCHES[launch].set === "calibration" ? QUOTA.calibration : QUOTA.founder + QUOTA.builder;
   const briefs = Array.from({ length: n }, (_, i) => ({ id: "s-" + String(i).padStart(3, "0"), draw: i + 1, set: LAUNCHES[launch].set }) as BriefMeta);
   return { briefs, ids: briefs.map((b) => b.id) };
 }
