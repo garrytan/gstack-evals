@@ -124,7 +124,7 @@ function regularFile(roots: RunRoot[], p: string): string | null {
   return null;
 }
 
-type Piece = { t: string; q: boolean; sub?: string };
+type Piece = { t: string; q: boolean; sub?: string; here?: boolean };
 type Tok = { op: string } | { word: Piece[] };
 
 /** The command substitution that opens at s[i] ("$(" or a backtick): its inner text and the index after it. */
@@ -217,7 +217,7 @@ function lex(s: string): Tok[] {
           if (line.trim() === d) break;
           body.push(line);
         }
-        out.push({ word: [{ t: body.join("\n"), q: true }] });
+        out.push({ word: [{ t: body.join("\n"), q: true, here: true }] });
       }
       out.push({ op: c });
     } else if (";|&()".includes(c)) {
@@ -261,18 +261,27 @@ function lex(s: string): Tok[] {
 }
 
 const VAR = /\$\{([A-Za-z_]\w*)(?:(:?)([-=])([^}]*))?\}|\$([A-Za-z_]\w*)/g;
-const expandText = (t: string, env: Map<string, string>): string =>
+const expandText = (t: string, env: Map<string, string>, unset = ""): string =>
   t.replace(VAR, (_, name: string | undefined, colon: string | undefined, op: string | undefined, dflt: string | undefined, bare: string | undefined) => {
-    if (bare) return env.get(bare) ?? "";
+    if (bare) return env.get(bare) ?? unset;
     const v = env.get(name!);
-    if (!op) return v ?? "";
+    if (!op) return v ?? unset;
     if (colon ? v : v !== undefined) return v!;
-    const d = expandText(dflt ?? "", env);
+    const d = expandText(dflt ?? "", env, unset);
     if (op === "=") env.set(name!, d);
     return d;
   });
 
 const expand = (w: Piece[], env: Map<string, string>): string => w.map((p, k) => (p.q ? p.t : expandText(k === 0 && /^~(\/|$)/.test(p.t) ? HOME + p.t.slice(1) : p.t, env))).join("");
+
+/** Stands for text the log cannot know: a command substitution's output or a variable the session set elsewhere. */
+const ANY = "\u0000";
+/** A word as expand() spells it, with ANY for each part the log cannot know. */
+const shape = (w: Piece[], env: Map<string, string>): string =>
+  w
+    .map((p, k) => (p.q ? p.t : expandText(k === 0 && /^~(\/|$)/.test(p.t) ? HOME + p.t.slice(1) : p.t, env, ANY)))
+    .join("")
+    .replace(/\$\([^()]*\)|`[^`]*`/g, ANY);
 
 /** The files an interpreter's inline code opens for writing, as written in the code; every run.json it names when a target is not a literal. */
 function writeTargets(code: string): string[] {
@@ -300,8 +309,8 @@ const SHELLS = new Set(["bash", "sh", "zsh", "dash"]);
 const STARTS = new Set(["next", "run"]);
 
 export interface CommandLog {
-  /** Each gstack-autoplan call: its verb, its --out and --plan as absolute paths in the session, and its Bash call's id. */
-  calls: { verb: string; out: string | null; plan: string | null; use: string }[];
+  /** Each gstack-autoplan call: its verb, its --out and --plan as absolute paths in the session, its --out with ANY where the log cannot know the text, and its Bash call's id. */
+  calls: { verb: string; out: string | null; plan: string | null; outShape: string | null; use: string }[];
   /** Each Bash call's output, by its id. */
   outputs: Map<string, string>;
   /** Every path the log wrote other than through gstack-autoplan. */
@@ -328,12 +337,17 @@ export function commandLog(transcript: string): CommandLog {
   let use = "";
   const child = (c: Ctx): Ctx => ({ cwd: c.cwd, env: new Map(c.env) });
   const simple = (raw: Piece[][], ctx: Ctx, depth: number) => {
+    ctx.env.set("PWD", ctx.cwd);
     const ws: string[] = [];
+    const words: Piece[][] = [];
     for (const w of raw) {
       for (const p of w) if (p.sub !== undefined) shell(p.sub, child(ctx), depth + 1);
       const m = !ws.length && !w[0]!.q ? /^([A-Za-z_]\w*)=/.exec(w[0]!.t) : null;
       if (m) ctx.env.set(m[1]!, expand([{ t: w[0]!.t.slice(m[0].length), q: false }, ...w.slice(1)], ctx.env));
-      else ws.push(expand(w, ctx.env));
+      else {
+        ws.push(expand(w, ctx.env));
+        words.push(w);
+      }
     }
     let k = 0;
     for (;;) {
@@ -352,6 +366,7 @@ export function commandLog(transcript: string): CommandLog {
     }
     const [cmd, ...args] = ws.slice(k);
     if (!cmd) return;
+    const argWords = words.slice(k + 1);
     const name = posix.basename(cmd);
     const at = (p: string) => posix.resolve(ctx.cwd, p);
     const paths = args.filter((a) => !a.startsWith("-"));
@@ -363,7 +378,9 @@ export function commandLog(transcript: string): CommandLog {
       shell(args.join(" "), ctx, depth + 1);
     } else if (SHELLS.has(name)) {
       const c = args.findIndex((a) => /^-[a-z]*c$/.test(a));
+      const here = argWords.find((w) => w.length === 1 && w[0]!.here);
       if (c >= 0 && args[c + 1] !== undefined) shell(args[c + 1]!, child(ctx), depth + 1);
+      else if (here) shell(here[0]!.t, child(ctx), depth + 1);
     } else if (name === "gstack-autoplan") {
       const flag = (f: string) => {
         const i = args.indexOf(f);
@@ -371,7 +388,9 @@ export function commandLog(transcript: string): CommandLog {
       };
       const out = flag("--out");
       const plan = flag("--plan");
-      log.calls.push({ verb: args[0] ?? "", out: out === null ? null : at(out), plan: plan === null ? null : at(plan), use });
+      const o = args.indexOf("--out");
+      const s = o >= 0 && argWords[o + 1] ? shape(argWords[o + 1]!, ctx.env) : null;
+      log.calls.push({ verb: args[0] ?? "", out: out === null ? null : at(out), plan: plan === null ? null : at(plan), outShape: s === null ? null : s.startsWith(ANY) ? s : at(s), use });
     } else if (name === "tee" || name === "truncate" || (name === "sed" && args.some((a) => /^(-[a-zA-Z]*i|--in-place)/.test(a)))) {
       for (const p of paths) log.writes.add(at(p));
     } else if (["cp", "mv", "install", "ln"].includes(name) && paths.length > 1) {
@@ -452,13 +471,19 @@ export function findRun(roots: RunRoot[], transcript: string): RunSearch {
   const log = commandLog(transcript);
   const perUse = new Map<string, number>();
   for (const c of log.calls) perUse.set(c.use, (perUse.get(c.use) ?? 0) + 1);
-  const reports = (c: CommandLog["calls"][number], folder: string, id: unknown) =>
-    perUse.get(c.use) === 1 &&
-    (log.outputs.get(c.use) ?? "").split("\n").some((l) => {
+  const fits = (shape: string | null, folder: string) =>
+    shape === null || new RegExp("^" + shape.split(ANY).map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*") + "$").test(folder);
+  const reports = (c: CommandLog["calls"][number], folder: string, id: unknown) => {
+    if (perUse.get(c.use) !== 1 || !fits(c.outShape, folder)) return false;
+    const named: string[] = [];
+    for (const l of (log.outputs.get(c.use) ?? "").split("\n")) {
       const t = l.trim();
-      if (typeof id === "string" && id && t.startsWith("ATTEMPT: " + id + "-a")) return /^\d+(\s|$)/.test(t.slice(("ATTEMPT: " + id + "-a").length));
-      return t.startsWith("GSTACK_RESULT: ") && t.split(/\s+/).includes("run=" + folder);
-    });
+      const a = /^ATTEMPT: (\S+)-a\d+(\s|$)/.exec(t);
+      if (a) named.push("id " + a[1]);
+      if (t.startsWith("GSTACK_RESULT: ")) for (const w of t.split(/\s+/)) if (w.startsWith("run=")) named.push("run " + w.slice(4));
+    }
+    return named.length > 0 && named.every((n) => n === "run " + folder || (typeof id === "string" && id !== "" && n === "id " + id));
+  };
   const isFor = (c: CommandLog["calls"][number], folder: string, id: unknown) => c.out === folder || reports(c, folder, id);
   const isStart = (c: CommandLog["calls"][number]) => STARTS.has(c.verb) && c.plan !== null;
   const seen = new Set<string>();

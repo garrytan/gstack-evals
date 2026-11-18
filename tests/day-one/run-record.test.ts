@@ -375,3 +375,51 @@ describe("a start call's run, from what gstack-autoplan reported for it", () => 
       expect(findRun(roots, tx([{ command: SCAFFOLD }])).unmatched).toBe(1);
     }));
 });
+
+// Value: protects=the start match against output other commands printed (advisory read of the start match): a call's output ties it to a run only when every run marker in that output names that run and the run folder fits what the call's --out allows, with ANY for a substitution or a variable the log cannot know; a start inside a child shell's heredoc is read; $PWD is the session's working directory; fails_when=another run's log printed in the same Bash call wins the record, a start in bash <<'SH' is missed even by the unmatched count, or --plan "$PWD/plan.md" names /plan.md
+describe("a start call's output, when other commands in its Bash call printed too", () => {
+  const MAIN = WORK + "/.gstack/tmp/autoplan/main-20261118-054759";
+  const ID = "main-20261118-054759-yayiqy-20261118054759";
+  const B = WORK + "/.gstack/tmp/autoplan/run-20261118-062142";
+  const BID = "run-20261118-062142-qkzvbn-20261118062142";
+  const later = { updated_at: "2026-11-18T07:00:00Z" };
+  const setup = (work: string) => {
+    put(work, WORK, MAIN, body({ status: "gate_pending", out: MAIN, run: ID }));
+    put(work, WORK, B, body({ out: B, run: BID, ...later }));
+  };
+
+  test("another run's markers in the same output never tie that run, and leave a dynamic --out unmatched", () =>
+    withDir((dir) => {
+      const work = join(dir, "work");
+      const roots: RunRoot[] = [{ dir: work, seen: WORK }];
+      setup(work);
+      const literal = txo([{ command: "cd /work/app; " + BIN + " next --out .gstack/tmp/autoplan/main-20261118-054759 --plan plan.md --full; tail -20 /tmp/b.log", output: attempt(ID, MAIN) + attempt(BID, B) }]);
+      const f = findRun(roots, literal);
+      expect([f.run?.seen, f.unmatched]).toEqual([MAIN + "/run.json", 0]);
+      expect(f.passed.join(" ")).toContain(B + "/run.json: no gstack-autoplan next or run call");
+      expect(gatePending(work, literal)).toBe(true);
+      const dynamic = txo([{ command: "cd /work/app; RUN=.gstack/tmp/autoplan/main-$(date +%Y%m%d-%H%M%S); " + BIN + ' next --out "$RUN" --plan plan.md --full; tail -20 /tmp/b.log', output: attempt(ID, MAIN) + attempt(BID, B) }]);
+      const d = findRun(roots, dynamic);
+      expect([d.run, d.unmatched]).toEqual([null, 1]);
+      expect(gatePending(work, dynamic)).toBe(false);
+      const discarded = txo([{ command: "cd /work/app; RUN=.gstack/tmp/autoplan/main-$(date +%Y%m%d-%H%M%S); " + BIN + ' next --out "$RUN" --plan plan.md --full > /dev/null; tail -20 /tmp/b.log', output: attempt(BID, B) }]);
+      const x = findRun(roots, discarded);
+      expect([x.run, x.unmatched]).toEqual([null, 1]);
+      const result = txo([{ command: "cd /work/app; R=$(date +%s); " + BIN + " next --out .gstack/tmp/autoplan/main-$R --plan plan.md; cat /tmp/b.result", output: "GSTACK_RESULT: skill=autoplan status=complete run=" + B + "\n" }]);
+      expect(findRun(roots, result).run).toBeNull();
+    }));
+
+  test("a start in a child shell's heredoc is read and counted, and $PWD is the session's working directory", () =>
+    withDir((dir) => {
+      const work = join(dir, "work");
+      const roots: RunRoot[] = [{ dir: work, seen: WORK }];
+      setup(work);
+      const here = txo([{ command: "cd /work/app; bash <<'SH'\n" + BIN + " next --out .gstack/tmp/autoplan/main-20261118-054759 --plan plan.md --full\nSH", output: "" }]);
+      expect(findRun(roots, here).run?.seen).toBe(MAIN + "/run.json");
+      const lost = txo([{ command: "cd /work/app; bash -s <<'SH'\n" + BIN + " next --out .gstack/tmp/autoplan/gone --plan plan.md\nSH", output: "" }]);
+      expect(findRun(roots, lost).unmatched).toBe(1);
+      const pwd = txo([{ command: 'cd /work/app; ' + BIN + ' next --out "$PWD/.gstack/tmp/autoplan/main-20261118-054759" --plan "$PWD/plan.md" --full', output: "" }]);
+      expect(findRun(roots, pwd).run?.seen).toBe(MAIN + "/run.json");
+    }));
+});
+
