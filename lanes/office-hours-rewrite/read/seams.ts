@@ -6,6 +6,11 @@
 // for tests/ohr/read.
 import { ARMS, MODELS, PRIMARY_MODELS } from "../frozen.ts";
 import type { ArmId, EndState, KeptWhole, ModelId, ScoredSession, Seam, SessionRow } from "../types.ts";
+import { admission, admissionState, type AdmissionId } from "./admission.ts";
+import { builderRightCall, keptWhole, type State } from "./builder.ts";
+import { decide, type Decision, type DecisionInput } from "./decision.ts";
+import { g1, g2, g3, missingLimits, type HandRead } from "./guards.ts";
+import { correctedNewcombe, newcombe, tInterval, type KeptPair } from "./stats.ts";
 
 // ---- Fixtures ----
 
@@ -114,4 +119,144 @@ export function stage1Input(p: Stage1Plan): { rows: ScoredSession[]; sessions: S
   return { rows, sessions, audit: { pass: true }, judges: { astra: true, opus: true }, label_usd: 0.06 };
 }
 
-export const seams: Seam[] = [];
+// ---- Section 10 on planted data ----
+
+type ByArm = Partial<Record<ArmId, (c: number, j: number, model: ModelId) => boolean>>;
+/** R from one predicate per arm over cluster c (0 to 19), brief index j and model; an arm with no predicate scores 0. */
+const by = (f: ByArm) => (arm: ArmId, j: number, model: ModelId): Bit => (f[arm]?.(Math.floor(j / 2), j, model) ? 1 : 0);
+/** New-arm extras of 2 or 3 on alternate clusters (breaks G2 and G3), or 0 or 1 (holds). */
+export const extra = (step: number) => (arm: ArmId, j: number) => (arm === "new" ? step + (Math.floor(j / 2) % 2) : 0);
+
+const MERGE: ByArm = { current: (c) => c < 8, new: (c) => c < 14 };
+
+export interface Planted {
+  row: 1 | 2 | 3 | 4 | 5 | 6;
+  /** Lower rows whose conditions also hold, so the order decides. */
+  also?: Array<1 | 2 | 3 | 4 | 5 | 6>;
+  founder: FounderPlan;
+  builder?: Parameters<typeof builderRows>[0];
+  reads?: HandRead[];
+  admission?: DecisionInput["admission"];
+  cap_stop?: boolean;
+  judge_checks?: DecisionInput["judge_checks"];
+}
+
+/**
+ * Founder rows are 20 twin clusters; builders are 24 briefs kept whole and right unless named. MERGE plants current right
+ * on 8 clusters and new on 14 (+0.30, lower bound above 0), with none never right.
+ */
+export const PLANTED: Record<string, Planted> = {
+  "merge": { row: 4, founder: { R: by(MERGE) } },
+  "merge-at-bar": { row: 4, founder: { R: by({ current: (c) => c < 8, new: (c, j) => c < 8 || (c < 14 && j % 2 === 0) }) } },
+  "below-bar-lo": { row: 5, founder: { R: by({ current: (c) => c < 8, new: (c, j) => c < 8 || (c < 13 && j % 2 === 0) }) } },
+  "below-bar-hi": { row: 5, founder: { R: by({ current: (c) => c < 8, new: (c) => c < 8, none: (c) => c < 8 }) } },
+  "inconclusive": { row: 6, founder: { R: by({ current: (c) => c < 8, new: (c) => c < 10 }) } },
+  "cut": { row: 3, also: [5], founder: { R: by({ none: () => true }) } },
+  "harm-pooled": { row: 2, founder: { R: by({ current: (c) => c < 8, new: (c) => c < 3 }) } },
+  "harm-opus": { row: 2, founder: { R: by({ current: (c) => c < 8, new: (c, _j, m) => (m === "opus" ? c < 3 : c < 13) }) } },
+  "harm-sol": { row: 2, founder: { R: by({ current: (c) => c < 8, new: (c, _j, m) => (m === "sol" ? c < 3 : c < 13) }) } },
+  "harm-kept-whole": { row: 2, also: [4], founder: { R: by(MERGE) }, builder: { lost: ["b01"] } },
+  "harm-builder-right-call": { row: 2, also: [4], founder: { R: by(MERGE) }, builder: { wrong: ["b01", "b02", "b03", "b04", "b05", "b06", "b07", "b08"] } },
+  "harm-g1": { row: 2, also: [4], founder: { R: by(MERGE) }, builder: { leak: ["b03"] }, reads: [{ brief: "b03", model: "opus", confirmed: true }, { brief: "b03", model: "sol", confirmed: false }, { brief: "b03", model: "particle", confirmed: false }] },
+  "harm-g2": { row: 2, also: [4], founder: { R: by(MERGE), traction: (j) => j % 2 === 0, questions: extra(2) } },
+  "harm-g3": { row: 2, also: [4], founder: { R: by(MERGE), replies: extra(2) } },
+  "harm-over-cut": { row: 2, also: [3, 5], founder: { R: by({ current: () => true, none: () => true }) } },
+  "incomplete-unrepaired": { row: 1, also: [4], founder: { R: by(MERGE) }, admission: "repair" },
+  "incomplete-fix-method": { row: 1, also: [4], founder: { R: by(MERGE) }, admission: "fix-method" },
+  "incomplete-cap-stop": { row: 1, also: [4], founder: { R: by(MERGE) }, cap_stop: true },
+  "incomplete-missing-limit": { row: 1, also: [4], founder: { R: by(MERGE), end: (arm, j, m) => (arm === "none" && m === "opus" && j < 3 ? "contaminated" : undefined) } },
+  "incomplete-judge-check": { row: 1, also: [4], founder: { R: by(MERGE) }, judge_checks: { astra: true, opus: false } },
+  "incomplete-over-harm": { row: 1, also: [2], founder: { R: by({ current: (c) => c < 8, new: (c) => c < 3 }) }, cap_stop: true },
+};
+
+export function plant(name: string): DecisionInput {
+  const p = PLANTED[name];
+  if (!p) throw new Error("E_OHR_READ_INPUT no planted case named " + name);
+  return {
+    rows: [...founderRows(p.founder), ...builderRows(p.builder ?? {})],
+    admission: p.admission ?? "admitted",
+    cap_stop: p.cap_stop ?? false,
+    judge_checks: p.judge_checks ?? { astra: true, opus: true },
+    hand_reads: p.reads ?? [],
+  };
+}
+
+// ---- Seams ----
+
+const seam = (name: string, check: () => [boolean, string]): Seam => ({ name, run: () => { const [ok, detail] = check(); return { ok, detail }; } });
+const f4 = (x: number | null) => (x === null ? "none" : x.toFixed(4));
+
+const SLEEP = { g1: [0.7, -1.6, -0.2, -1.2, -0.1, 3.4, 3.7, 0.8, 0.0, 2.0], g2: [1.9, 0.8, 1.1, 0.1, -0.1, 4.4, 5.5, 1.6, 4.6, 3.4] };
+const sameBriefLost = (): KeptPair[] => Array.from({ length: 48 }, (_, k) => ({ cluster: "b" + Math.floor(k / 2), model: k % 2 ? "sol" : "opus", y1: k >= 2, y0: true }));
+
+const statSeams: Seam[] = [
+  seam("stats: paired t over clusters reproduces Student's sleep data", () => {
+    const t = tInterval(SLEEP.g2.map((v, k) => v - SLEEP.g1[k]!));
+    return [Math.abs(t.mean! - 1.58) < 1e-12 && Math.abs(t.lo! - 0.7001142) < 1e-7 && Math.abs(t.hi! - 2.4598858) < 1e-7, "mean " + t.mean!.toFixed(7) + ", " + t.lo!.toFixed(7) + " to " + t.hi!.toFixed(7)];
+  }),
+  seam("stats: method 10 reproduces Altman's worked example", () => {
+    const r = newcombe(14, 5, 0, 22);
+    const s = [r.diff, r.lo, r.hi].map((x) => x.toFixed(4)).join(" ");
+    return [s === "0.1220 0.0115 0.2265", s];
+  }),
+  seam("stats: section 7's example reads -0.140 uncorrected and -0.202 corrected", () => {
+    const r = correctedNewcombe(sameBriefLost());
+    return [r.naive.lo.toFixed(3) === "-0.140" && r.lo.toFixed(3) === "-0.202" && r.design_effect === 2, "naive " + f4(r.naive.lo) + ", corrected " + f4(r.lo) + ", design effect " + r.design_effect];
+  }),
+];
+
+const rowSeams: Seam[] = Object.entries(PLANTED).map(([name, p]) => seam("section 10: " + name + " reads row " + p.row + (p.also?.length ? " over rows " + p.also.join(" and ") : ""), () => {
+  const d = decide(plant(name));
+  const others = (p.also ?? []).every((r) => d.conditions[("row" + r) as keyof Decision["conditions"]].holds);
+  return [d.row === p.row && others, "row " + d.row + " " + d.outcome + "; new minus current " + f4(d.conditions.row4.estimate) + " (" + f4(d.conditions.row4.lo) + " to " + f4(d.conditions.row5.hi) + ")"];
+}));
+
+const both = (name: string, held: () => State, broken: () => State): Seam[] => [
+  seam(name + ": known-good holds", () => { const s = held(); return [s === "held", s]; }),
+  seam(name + ": known-bad breaks", () => { const s = broken(); return [s === "broken", s]; }),
+];
+const leakReads = (confirmed: boolean): HandRead[] => [{ brief: "b03", model: "opus", confirmed }, { brief: "b03", model: "sol", confirmed: false }];
+const lim = (end: FounderPlan["end"]) => missingLimits(founderRows({ end }));
+const dropRange = (arm: ArmId, model: ModelId, from: number, to: number, e: EndState = "missing") => (a: ArmId, j: number, m: ModelId): EndState | undefined => (a === arm && m === model && j >= from && j < to ? e : undefined);
+const anyOf = (...fs: Array<ReturnType<typeof dropRange>>) => (a: ArmId, j: number, m: ModelId) => fs.map((f) => f(a, j, m)).find((x) => x !== undefined);
+const EIGHT = [dropRange("new", "opus", 0, 3), dropRange("new", "sol", 0, 3), dropRange("current", "opus", 3, 5)];
+
+const gateSeams: Seam[] = [
+  ...both("G1 hand-confirmed startup-only question", () => g1(builderRows({ leak: ["b03"], models: PRIMARY_MODELS }), leakReads(false)).state, () => g1(builderRows({ leak: ["b03"], models: PRIMARY_MODELS }), leakReads(true)).state),
+  ...both("G2 questions on traction briefs", () => g2(founderRows({ traction: (j) => j % 2 === 0, questions: extra(0) })).state, () => g2(founderRows({ traction: (j) => j % 2 === 0, questions: extra(2) })).state),
+  ...both("G3 founder replies", () => g3(founderRows({ replies: extra(0) })).state, () => g3(founderRows({ replies: extra(2) })).state),
+  ...both("builder kept-whole non-inferiority", () => keptWhole(builderRows({})).state, () => keptWhole(builderRows({ lost: ["b01"] })).state),
+  ...both("builder right call", () => builderRightCall(builderRows({ wrong: ["b01"] })).state, () => builderRightCall(builderRows({ wrong: ["b01", "b02", "b03", "b04", "b05", "b06", "b07", "b08"] })).state),
+  ...both("missing limit: founder differences (8 of 80, 9 of 80)", () => lim(anyOf(...EIGHT)).founder_differences.state, () => lim(anyOf(...EIGHT, dropRange("current", "sol", 39, 40))).founder_differences.state),
+  ...both("missing limit: an arm-and-model cell (4 of 40, 5 of 40)", () => lim(dropRange("none", "opus", 0, 4)).cells_state, () => lim(dropRange("none", "opus", 0, 5)).cells_state),
+  ...both("missing limit: none-arm contamination (1 of 80, 2 of 80)", () => lim(dropRange("none", "opus", 0, 1, "contaminated")).contamination.state, () => lim(dropRange("none", "opus", 0, 2, "contaminated")).contamination.state),
+];
+
+type Plan1 = Stage1Plan & { audit?: boolean; judges?: { astra: boolean; opus: boolean } };
+const admit = (p: Plan1, id: AdmissionId) => {
+  const x = stage1Input(p);
+  return admission({ ...x, audit: { pass: p.audit ?? true }, judges: p.judges ?? x.judges }).conditions.find((c) => c.id === id)!.pass;
+};
+const ADMIT: Array<[AdmissionId, string, Plan1, Plan1]> = [
+  ["A1", "6 of 8 exposed, 5 of 8", { exposed: { arm: "new", model: "opus", count: 6 } }, { exposed: { arm: "new", model: "opus", count: 5 } }],
+  ["A2", "founder median of 3 replies, 2", { replies: { arm: "new", model: "sol", value: 3 } }, { replies: { arm: "new", model: "sol", value: 2 } }],
+  ["A3", "simulator audit passed, failed", { audit: true }, { audit: false }],
+  ["A4", "both judge checks passed, Astra failed", {}, { judges: { astra: false, opus: true } }],
+  ["A5", "current right on 9 of 12, 10 of 12", { currentRight: 9 }, { currentRight: 10 }],
+  ["A6", "Opus new at $1 a session, $12", { usd: { arm: "new", model: "opus", value: 1 } }, { usd: { arm: "new", model: "opus", value: 12 } }],
+  ["A7", "interactive and clean, a headless skill session", {}, { kind: { brief: "k02", arm: "new", model: "opus", value: "headless" } }],
+  ["A7", "interactive and clean, a none-arm gstack read", {}, { read: { brief: "k02", model: "sol" } }],
+];
+const admissionSeams: Seam[] = [
+  ...ADMIT.flatMap(([id, what, good, bad]) => [
+    seam("admission " + id + " (" + what + "): known-good passes", () => { const ok = admit(good, id); return [ok, ok ? "pass" : "fail"]; }),
+    seam("admission " + id + " (" + what + "): known-bad fails", () => { const ok = admit(bad, id); return [!ok, ok ? "pass" : "fail"]; }),
+  ]),
+  seam("admission: one repair, then FIX-METHOD", () => {
+    const bad = admission(stage1Input({ currentRight: 12 })), ok = admission(stage1Input({}));
+    const s = [admissionState([bad]), admissionState([bad, ok]), admissionState([bad, bad])];
+    return [s.join(" ") === "repair admitted fix-method", s.join(", ")];
+  }),
+];
+
+export const seams: Seam[] = [...statSeams, ...rowSeams, ...gateSeams, ...admissionSeams];
