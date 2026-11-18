@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // Value: protects=the meter's provider-drift stop and its empty-reply bound (pre-run change 5): only a reply that carries an answer can show which provider served it, so an empty, error or cut-off reply is a failed call, an answer from another provider or from an unnamed one still stops the command, and empty replies stop the run at three in a row or past 1% of its calls; fails_when=a timed-out or error reply stops a run as a provider drift, an answer with missing or wrong provenance is counted, or empty replies pile up without a stop.
 import { expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { recordApproval } from "../../src/runner/ledger/ledger.ts";
@@ -10,18 +10,18 @@ import { openWire, type Wire } from "../../lanes/office-hours-rewrite/wire.ts";
 const D = 1_000_000;
 const KEYS = { OPENAI_API_KEY: "stub-not-a-key", ANTHROPIC_API_KEY: "stub-not-a-key", OPENROUTER_API_KEY: "stub-not-a-key" };
 const usage = { prompt_tokens: 40, completion_tokens: 30, total_tokens: 70 };
-const answered = (content: string, provider: string | null = "Google") => () => Response.json({ id: "gen-1", ...(provider === null ? {} : { provider }), model: "google/gemini-4-argon", choices: [{ index: 0, message: { role: "assistant", content }, finish_reason: "stop" }], usage });
+const answered = (content: string, provider: string | null = "Google", model = "google/gemini-4-argon") => () => Response.json({ id: "gen-1", ...(provider === null ? {} : { provider }), model, choices: [{ index: 0, message: { role: "assistant", content }, finish_reason: "stop" }], usage });
 const errored = () => Response.json({ id: "gen-1", error: { code: 524, message: "upstream timed out" }, usage });
 const SIM_TEXT = JSON.stringify({ reply: "Two services pay me.", revealed: ["f1"], rules: [3], done: false });
 
 /** A wire on a temporary ledger whose upstream answers each Argon call with the next reply in turn. */
-async function withArgon<T>(replies: (() => Response)[], body: (w: Wire) => Promise<T>, dir = mkdtempSync(join(tmpdir(), "ohr-drift-"))): Promise<T> {
+async function withArgon<T>(replies: (() => Response | Promise<Response>)[], body: (w: Wire) => Promise<T>, dir = mkdtempSync(join(tmpdir(), "ohr-drift-"))): Promise<T> {
   const record = join(dir, "record");
   try {
     recordApproval(record, { action: "init", item: "ohr-drift-test", cap_micros: 20 * D, quotes: [{ words: "drift test on a temporary ledger, not an approval", by: "tests/ohr/meter-drift.test.ts", source: "pre-run change 5" }], admission: "warn" });
   } catch {}
   let i = 0;
-  const w = await openWire({ dir: join(dir, "wire"), item: "ohr-drift-test", capMicros: 5 * D, label: "ohr-drift-test", record, ledger: join(dir, "ledger.sqlite"), env: KEYS, io: { out: () => {}, err: () => {} }, upstream: (async () => replies[i++]!()) as unknown as typeof fetch });
+  const w = await openWire({ dir: join(dir, "wire"), item: "ohr-drift-test", capMicros: 5 * D, label: "ohr-drift-test", record, ledger: join(dir, "ledger.sqlite"), env: KEYS, io: { out: () => {}, err: () => {} }, upstream: (async () => await replies[i++]!()) as unknown as typeof fetch });
   try {
     return await body(w);
   } finally {
@@ -32,14 +32,15 @@ async function withArgon<T>(replies: (() => Response)[], body: (w: Wire) => Prom
 let n = 0;
 const ask = (w: Wire) => w.call({ model: "gemini", prompt: "Say ok " + n++ + ".", maxTokens: 200, effort: null, label: "drift" }).then((r) => ({ r, code: null as string | null, message: "" }), (e: { code?: string; message: string }) => ({ r: null, code: e.code ?? "thrown", message: e.message }));
 const one = (reply: () => Response) => withArgon([reply], ask);
+const cacheFiles = (dir: string) => readdirSync(join(dir, "wire", "cache")).filter((f) => f.endsWith(".json"));
 
 test("an errored, empty or cut-off reply with no answer is a failed call, not a provider drift", async () => {
   const err = await one(errored);
   expect(err.code).toBeNull();
   expect(err.r?.text).toBeNull();
   expect(err.r?.problem).toBe("the reply carries no answer and names no provider");
-  const empty = await one(answered(""));
-  expect([empty.code, empty.r?.text, empty.r?.problem]).toEqual([null, null, "the reply carries no answer"]);
+  const empty = await one(answered("", null));
+  expect([empty.code, empty.r?.text, empty.r?.problem]).toEqual([null, null, "the reply carries no answer and names no provider"]);
   const cut = await one(() => new Response('{"id":"gen-1","choices":[{"mess', { status: 200, headers: { "content-type": "application/json" } }));
   expect([cut.code, cut.r?.problem]).toEqual([null, "the reply is not JSON"]);
 });
@@ -97,4 +98,54 @@ test("on the simulated person's path, the bound halts like a drift, so the audit
   expect(out.map((o) => (o.kind === "call-failed" ? o.reason : o.kind))).toEqual(["provider", "drift"]);
   const last = out[1]!;
   expect(last.kind === "call-failed" && last.detail.startsWith("E_PV_EMPTY_REPLIES")).toBe(true);
+});
+
+test("a served reply whose answer is empty or a refusal is kept: provenance-checked, cached and not counted as empty", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "ohr-drift-"));
+  const refusal = () => Response.json({ id: "resp_1", object: "response", model: "gpt-6.2-astra", status: "completed", output: [{ type: "message", content: [{ type: "refusal", refusal: "I can't help with that." }] }], usage: { input_tokens: 100, input_tokens_details: { cached_tokens: 0 }, output_tokens: 9, output_tokens_details: { reasoning_tokens: 0 }, total_tokens: 109 } });
+  const got = await withArgon([refusal, answered("", "Google")], async (w) => {
+    const a = await w.call({ model: "astra", prompt: "Label this.", maxTokens: 200, effort: null, label: "refusal" });
+    const again = await w.call({ model: "astra", prompt: "Label this.", maxTokens: 200, effort: null, label: "refusal" });
+    const g = await w.call({ model: "gemini", prompt: "Say nothing.", maxTokens: 200, effort: null, label: "empty" });
+    return [a.text, a.problem, again.cached, g.text, g.problem];
+  }, dir);
+  expect(got).toEqual(["", null, true, "", null]);
+  expect(cacheFiles(dir).length).toBe(2);
+  expect(JSON.parse(readFileSync(join(dir, "wire", "meter", "empty.json"), "utf8"))).toEqual({ calls: 2, empty: 0, streak: 0 });
+  expect((await one(answered("", "Azure"))).code).toBe("E_PV_PROVIDER_DRIFT");
+});
+
+test("particle-1 counts only from Particle itself (Particle or Particle AI), not from another provider whose name starts the same", async () => {
+  const p = (provider: string | null) => withArgon([answered("ok", provider, "particle-ai/particle-1")], (w) => w.call({ model: "particle", prompt: "Say ok.", maxTokens: 200, effort: null, label: "p" }).then((r) => r.text, (e: { code?: string }) => e.code));
+  expect(await p("Particle AI")).toBe("ok");
+  expect(await p("Particle-Other")).toBe("E_PV_PROVIDER_DRIFT");
+  expect(await p(null)).toBe("E_PV_PROVIDER_DRIFT");
+});
+
+test("a cached reply is checked again on replay: one that names the wrong provider or none stops the command", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "ohr-drift-"));
+  const same = (w: Wire) => w.call({ model: "particle", prompt: "Same prompt.", maxTokens: 200, effort: null, label: "replay" }).then((r) => r.text, (e: { code?: string }) => e.code);
+  expect(await withArgon([answered("ok", "Particle AI", "particle-ai/particle-1")], same, dir)).toBe("ok");
+  const f = join(dir, "wire", "cache", cacheFiles(dir)[0]!);
+  writeFileSync(f, JSON.stringify({ ...JSON.parse(readFileSync(f, "utf8")), served_by: "Azure" }));
+  expect(await withArgon([], same, dir)).toBe("E_PV_PROVIDER_DRIFT");
+  writeFileSync(f, JSON.stringify({ ...JSON.parse(readFileSync(f, "utf8")), served_by: null }));
+  expect(await withArgon([], same, dir)).toBe("E_PV_PROVIDER_DRIFT");
+});
+
+test("when a stop ends the command, calls still in flight finish and their paid answers are cached before the meter closes", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "ohr-drift-"));
+  const slow = async () => {
+    await Bun.sleep(400);
+    return answered("slow answer")();
+  };
+  const stopped = await withArgon([slow, answered("ok", "Azure")], async (w) => {
+    const a = w.call({ model: "gemini", prompt: "Slow one.", maxTokens: 200, effort: null, label: "slow" });
+    await Bun.sleep(50);
+    const b = w.call({ model: "gemini", prompt: "Fast one.", maxTokens: 200, effort: null, label: "fast" });
+    return Promise.all([a, b]).then(() => null, (e: { code?: string }) => e.code);
+  }, dir);
+  expect(stopped).toBe("E_PV_PROVIDER_DRIFT");
+  const kept = cacheFiles(dir).map((f) => JSON.parse(readFileSync(join(dir, "wire", "cache", f), "utf8")).text);
+  expect(kept).toEqual(["slow answer"]);
 });

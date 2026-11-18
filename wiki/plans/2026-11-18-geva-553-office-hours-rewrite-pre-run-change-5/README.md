@@ -2,7 +2,7 @@
 id: 2026-11-18-geva-553-office-hours-rewrite-pre-run-change-5
 kind: plan
 title: "Pre-run change 5 to the office-hours rewrite eval: an empty reply is a failed call, not a provider drift"
-summary: "A false provider drift stopped authoring when one reply came back empty. The meter now checks the provider only on answers, and bounds empty replies at three in a row or 1% of calls."
+summary: "A false provider drift stopped authoring on one empty reply. The meter now checks the provider only on completed replies, keeps paid answers at a stop, and bounds empty replies."
 author: GEVA-553
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
@@ -44,6 +44,18 @@ The tests fail first, both ways. On the code before this change, the empty-reply
 
 The authoring item, ohr-author, has $33.95 committed of its $251 cap over three leases. That includes $3.23 counted at full reservation for 20 calls cut short by the two restarts and this stop, since a call cut short is settled at its reservation.
 
-## 4. The build commit
+## 4. What the one advisory read found, and the fixes
+
+One narrow advisory read of this change, on GPT-6.2 Astra, asked two questions: can a reply from the wrong provider now count, and can a paid reply now be lost? It found five ways, all fixed before any paid call ran on this change. Each fix has a test that fails on the change as first merged (c109b2a) and passes now.
+
+- **A refusal or an empty answer from the right provider was dropped.** Treating every reply with no answer as a failed call also caught completed replies whose answer is empty or a refusal. Those were paid, were no longer cached, and counted toward the empty-reply bound. Now a reply in the provider's completed shape is kept: its provider is checked, it is cached and it is not counted as empty. Only a reply that is not a completed reply, or names no provider, is a failed call.
+- **Calls in flight were lost when a stop ended the command.** A stop closed the meter while other calls were still running, so their paid answers never reached the cache. The meter now refuses new calls once it starts closing, and lets the calls in flight finish and cache their answers first. The drift stop that started this change cut 5 calls short this way.
+- **particle-1 accepted any provider whose name starts with "Particle".** It now accepts only Particle or Particle AI, the name OpenRouter reports. This predates change 5.
+- **A cached reply was not checked again on replay.** Only Gemini's replies were rechecked, in the wire. The meter now checks every cached reply's provider before it returns it. The meter never writes a reply that fails the check, so this guards against a damaged cache, not a known path.
+- **The empty-reply count was written before the answer was cached.** A failed write could have lost a paid answer. The answer is now cached first.
+
+Four notes ship as they stand. The empty-reply streak is not reset by an HTTP error between two empty replies, so the bound can stop a run sooner than a strict reading of "in a row". Authoring's resume starts its counts by hand from the ledger (1,769 calls, one empty). On the simulated person's path the bound is recorded with the reason drift, and its detail names E_PV_EMPTY_REPLIES. The fourth confirms that the provider checks cover every path.
+
+## 5. The build commit
 
 Every paid run from here on, authoring's continuation included, runs at gstack-evals commit c109b2a258c1869f2d61fbaf3bd8f8b3201d1c6f, the merge that brings this change into the results branch, or at a later commit whose lanes/, src/ and tests/ trees are byte-identical to it. This replaces change 4's build commit. Each run's admission still needs a green CI run at the exact commit it checks out. Authoring's replies from before the stop replay from its cache unchanged.
