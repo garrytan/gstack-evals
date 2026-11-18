@@ -84,6 +84,7 @@ Sensitivity lines from the report:
 
 - Writes no parser can name and spec-folder writes, scored both ways: Opus gstack-shaped 43 to 50 (the report says the bar reading rests on them) and command 31 to 42. Sol none is 44 to 48 (rests on them), and particle-1 command is 46 to 50 (rests on them).
 - Only Write and Edit seen as writes: Opus gstack-shaped 8, command 7.
+- Sessions with a Bash run sent to the background and never read (the plan's section 6 asks for these; report.txt leaves them out, so they are counted from sessions.jsonl): Opus 3, 4, 4 and 5 across none, described, gstack-shaped and command; Sol 6, 30, 33 and 38; particle-1 1, 3, 1 and 2.
 - The rule as merged, before deviation D1: Opus gstack-shaped 44, every other cell unchanged, with the same readings.
 - Passes (verifier reward 1, descriptive): Opus 35, 34, 38 and 38 across none, described, gstack-shaped and command; Sol 34, 32, 31 and 32; particle-1 34, 36, 32 and 32. Following the steps did not visibly change how many bugs got fixed, which this eval does not measure.
 
@@ -139,7 +140,7 @@ Verdicts:
 
 - One procedure on one task family. Five short steps on bug fixes may not carry over to a long procedure.
 - The bar call on Opus sits inside the scorer's error (above). The route comparison has a clear direction only on the scorer: by hand the two routes are within a few sessions, and which is ahead depends on the reader.
-- D1's per-command reading has two holes a reviewer found. A test runner wrapped in xargs reads as one plain run, and a filter after a pipe that reads its own file (such as `| cat old.log`) can supply another run's summary. No counted reading rests on either: D1 changed two readings, and both were checked by hand (a plain pytest run, and a test file run alone after another suite's collection error). The fix belongs with the next eval's scorer.
+- D1's per-command reading has two holes a reviewer found. A test runner wrapped in xargs reads as one plain run, and a filter after a pipe that reads its own file (such as `| cat old.log`) can supply another run's summary. D1 changed two counted readings, both Opus gstack-shaped, and both were read by hand from the full call during the run. In newton-1582 (trial JKG2ZNX), the test passed after the fix ("1 passed, 9 deselected"), then the call stashed the fix and ran the test again ("1 failed"). The rule as merged let that second count hide a real pass. In sdk-python-1719 (trial PppoKQb), a run of tests/strands with -x stopped on a collection error, then the test file alone printed "21 passed", then mypy and ruff ran. Both read as followed, so neither changed reading rests on these holes. Their transcripts are not in this bundle, and these two checks are not part of the blind reading. The fix belongs with the next eval's scorer.
 - The hand reading is post hoc, its over-count side rests on 10-session samples, and its excerpts can cut a failing run's output.
 - The described arm can't tell a description's wording from Claude Code's listing mechanism, and on Opus it never got past the listing.
 - The gstack-shaped arm uses one gstack setup block (/verify's, at 1.99.5.0), not every skill's.
