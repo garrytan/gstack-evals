@@ -35,7 +35,7 @@ We learned that gstack's prompt-routing hook, now on by default, starts a skill 
 
 We learned that the hook as shipped at 5afef04 does not yet replace gstack's CLAUDE.md routing block. It named prove-it on only 40 of B1's 60 prompts. On 7 of those it named /verify first, and Opus took /verify on 4 of them. End to end, prove-it loaded in 32 of 60 (53.3%, 95% interval 40.9 to 65.4), under gstack's owner's bar of 39. By the plan's rule, the block stays and the result goes to gstack's owner. On the held-out set the hook did better (39 of 60), but B1c's block in the project CLAUDE.md loaded more there (45 of 60). You should fix the matcher, so it names the skill on more bug reports and stops putting /verify ahead of prove-it, before cutting the block.
 
-We learned that loading the skill didn't raise passes in this run. On the held-out set, the no-gstack arm passed 46 of 60, the same as gstack main, and the two block arms passed 43 and 45. Passes are descriptive here and the run isn't powered for them, but nothing in it shows a pass gain from loading prove-it.
+We learned that this run shows no pass gain from loading the skill. No arm passed more often than the no-gstack arm: on the held-out set it passed 46 of 60, the same as gstack main, and the two block arms passed 43 and 45. Passes are descriptive here and the run isn't powered for them, so it can't rule a gain in or out. You should measure passes in their own powered run before claiming prove-it raises them.
 
 ## How it works
 
@@ -49,7 +49,7 @@ B1's 60 tasks are "in-sample for routing": gstack's matcher was tuned with them 
 - Tasks: B1's 60 SWE-rebench tasks, drawn as bug fixes, 7 of them interface tasks that ask for new code (in-sample). A held-out 60 drawn from B1's screened pool minus B1's repositories, one task per repository, 6 of them interface tasks.
 - Model: Claude Opus 5.5 only.
 - Sessions: 60 in-sample and 240 held-out, all graded. No reruns, gaps, cap stops, provider safety stops or read-audit hits. An 8-session pilot ran first on two calibration tasks and never enters a reading.
-- Run code: 709dae5 on this pull request's branch: the plan as merged (594c96f) plus one commit, listed under deviations. Runs: pilot 4681829b01a2429c, in-sample 719776bf4ff7d87a and held-out 0bbfd009283d113b, each in parts of 20 tasks.
+- Run code: 709dae5 on this pull request's branch: the plan as merged (594c96f) plus one commit, listed under deviations. Runs: pilot 4681829b01a2429c, in-sample 719776bf4ff7d87a and held-out 0bbfd009283d113b, the counted runs in parts of 20 tasks and the pilot in one part of two.
 - Controls: B1c's published project-md rows for the in-sample comparison (ran 2026-11-18), and B1's none arm for followed. On the held-out set every arm ran in this run.
 
 ## Result
@@ -59,6 +59,8 @@ B1's 60 tasks are "in-sample for routing": gstack's matcher was tuned with them 
 | Arm | Loaded (primary) | At first call | /verify loaded | Followed | Passes (descriptive) |
 |---|---|---|---|---|---|
 | gstack main | 32/60 53.3% [40.9, 65.4] | 31 | 4 | 17/60 [18.5, 40.8] | 39 |
+
+Followed among sessions that loaded: 17 of 32.
 
 Against the bar: 32 is 7 short of 39.
 
@@ -92,6 +94,8 @@ Keyless coverage first: at the pin, the hook names prove-it alone on 39 of these
 | project-md | 45/60 75.0% [62.8, 84.2] | 45 | 0 | 18/60 [19.9, 42.5] | 43 |
 | project-md-noescape | 47/60 78.3% [66.4, 86.9] | 47 | 0 | 23/60 [27.1, 51.0] | 45 |
 | none | 0/60 0.0% [0.0, 6.0] | 0 | 0 | 0/60 [0.0, 6.0] | 46 |
+
+Followed among sessions that loaded: gstack main 15 of 39, project-md 18 of 45, project-md-noescape 23 of 47. Every session that followed the steps had loaded the skill.
 
 Why gstack main didn't load on 21: the hook didn't name prove-it on 11; Opus loaded /verify instead on 5; on 3 it wrote prove-it's name and didn't load it; on 2 it never named it. The block arms' misses are all "never named" (15 and 13); no block went unplaced.
 
@@ -134,11 +138,11 @@ Prices, as metered on 2026-11-19 from the metering proxy's table (quick/laneb/co
 
 ## Checks on the run's records
 
-1. Completeness. Every part's result file lists no cap stop, no loss and nothing unclassified, with one exception: the first launch of the held-out set's third part never got a machine (the provider reported "waiting for capacity" for 10 minutes), its ledger holds no session row, and no trial started. It was relaunched once and that relaunch ran all 80 sessions. No cell owed a rerun.
+1. Completeness. Every part's result file lists no cap stop, no loss and nothing unclassified, with one exception: the first launch of the held-out set's third part never got a machine (the provider reported "waiting for capacity" for 10 minutes), its ledger holds no session row, and no trial started. It was relaunched once and that relaunch ran all 80 sessions. No cell owed a rerun. One held-out gstack-main session, pyjanitor-1593, hit the agent's time limit (AgentTimeoutError). Under the plan's rule it was graded on its shipped diff, as a fail, and it counts as graded in every number above.
 2. Hook logs. Every gstack-main session has its hook log, so "hook log missing" is 0 in both sets and no miss rests on a missing log.
 3. The sealed route table. Before the held-out report, the held-out route table was rebuilt from the held-out list at 709dae5 (`b1d routes --sealed`). It matched the sealed copy byte for byte (sha256 19c3376a...). The report also checks its coverage against the counts committed before the run.
 4. The draw. `draw.py seed.txt <out>` with the attached seed reproduces heldout-list.txt exactly, and both committed digests match.
-5. Hand reading. Four counted gstack-main sessions were read by hand from their transcripts and hook logs: schemathesis-3933 and virtualizarr-97, where the hook named prove-it alone and the Skill call came first; ophyd-async-1164, where the hook named prove-it alone and none of the model's 12 tool calls was a Skill call; and smolvm-172, where the hook named /verify first and the first call loaded /verify. All four agree with the load detector, the /verify reader and the hook log.
+5. Hand reading. Four counted gstack-main sessions were read by hand from their transcripts and hook logs: schemathesis-3933 and virtualizarr-979, where the hook named prove-it alone and the Skill call came first; ophyd-async-1164, where the hook named prove-it alone and none of the model's 12 tool calls was a Skill call; and smolvm-172, where the hook named /verify first and the first call loaded /verify. All four agree with the load detector, the /verify reader and the hook log.
 6. Reproduction. Both reports and both reason files rebuild byte for byte from the attached session rows.
 
 ## The decision table, with this result
