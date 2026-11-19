@@ -992,8 +992,20 @@
    "rule": "R113",
    "applies_when": "stage 2 is planned above $500 paid after re-pricing or a raised line; planned under $400 paid (sessions $336, judging about $29, part of the $40 VM)",
    "at": "half of stage 2's units in the seeded order",
-   "stop_for_difference_abs_z": 2.8,
-   "final_look_z": 1.98,
+   "bounds": {
+    "method": "O'Brien-Fleming two-look bounds at each contrast's Holm level, keeping the frozen family error rate",
+    "first_alpha_two_sided": 0.025,
+    "first": {
+     "interim_abs_z": 3.18,
+     "final_abs_z": 2.25
+    },
+    "after_one_rejected_alpha_two_sided": 0.05,
+    "second": {
+     "interim_abs_z": 2.8,
+     "final_abs_z": 1.98
+    },
+    "derivation": "c solves P(|Z1| >= c*sqrt(2) or |Z2| >= c) = alpha with corr(Z1, Z2) = sqrt(0.5); c = 2.2505 at 0.025 and 1.9774 at 0.05"
+   },
    "futility": "a contrast stops when its conditional power under a 19-point effect (section 13's MDD at planning size) falls below 10%",
    "early_stop_report": "says so and reports the estimate as possibly overstated",
    "other_looks": "none count",
