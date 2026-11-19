@@ -1,0 +1,49 @@
+{
+  "arm": "claude-md",
+  "claude_code": "2.1.312",
+  "typed": false,
+  "spec": "claude-md:tar=claude-md:system_prompt=claude-code-preset:gstack_hooks=copy:strip_snapshot=true:closing_line=hm-status",
+  "steps": {
+    "sha256": "47bfc31f877aef8938dfabc4984a759eaaa1f8f7588a408c542199bde6e34557",
+    "bytes": 203,
+    "source": "https://github.com/addyosmani/agent-skills 39b723ceebf81474d0557c1fecd01eddab585563 .claude/commands/test.md lines 13-18"
+  },
+  "carrier": {
+    "file": "gstack-shaped-SKILL.md",
+    "bytes": 9343,
+    "before": 9140,
+    "after": 0,
+    "path": ".claude/skills/prove-it/SKILL.md"
+  },
+  "route": {
+    "gstack": "bbf48aa7ef195459afcf7d7840af7073cd050734 (1.100.0.0)",
+    "files": [
+      {
+        "path": ".claude/CLAUDE.md",
+        "sha256": "2f2016daef2b8bf2542b0998d028087000c123ad4725db42e2a90d47870b750d"
+      }
+    ]
+  },
+  "tar_command": "tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner --format=gnu -cf <arm>.tar <top folders> (tar (GNU tar) 1.35)",
+  "tar": {
+    "file": "claude-md.tar",
+    "bytes": 20480,
+    "sha256": "d27acf6f0a949bcda4d62a5315d000b193926293a8033756d377e6039074b5f8"
+  },
+  "tree": {
+    "files": 5,
+    "symlinks": 0,
+    "dirs": 5,
+    "bytes": 11998,
+    "digest": "371ea6e9a0f280787c8e2397ffdcf58d04bb37850ae12f320a374318f7494e84"
+  },
+  "skills": {
+    "count": 1,
+    "tree_digest": "95187945a0ecdcf0d9d2bc5f9a576dfd843c153f2243c38515395e3a59462a3c",
+    "skill_md_digest": "4176b10ed0b16029089b374538f4ddd2afc2bc0e7721d777feef435cf84d2e5f",
+    "names": [
+      "prove-it"
+    ]
+  },
+  "inventory_sha256": "347f12a76b8b304f60283c53f91a4e638a54af3a6813a7c7d1ffecea8d5b1f10"
+}

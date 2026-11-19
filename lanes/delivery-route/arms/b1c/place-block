@@ -1,0 +1,23 @@
+#!/bin/sh
+# Copyright (c) 2026 Garry Tan. MIT License.
+# B1c's placement step (lanes/delivery-route/b1c.ts). The rig runs it once before the session, at the task's working
+# directory with HOME=/root, as the pre-session command it runs after the arm tar (CHECKS_TRUST in
+# quick/laneb/runner/agent/laneb_hooks.py). It does what gstack's project install does when the user takes its routing
+# offer (bin/gstack-skill-start): with no CLAUDE.md in the project root, create one holding the routing section, then
+# commit it with gstack's message. The snapshot strip has already removed every CLAUDE.md, so the file holds the block
+# alone. -f adds the file even where a repo's .gitignore names it, --no-verify keeps a repo's own commit hooks out, and
+# the commit takes only CLAUDE.md. Then it deletes the block's copy and itself, so /root holds B1's gstack-shaped files
+# and nothing else when the session starts. Its one output line goes in the session's arm info.
+set -eu
+top=$(git rev-parse --show-toplevel)
+if [ -e "$top/CLAUDE.md" ] || [ -L "$top/CLAUDE.md" ]; then
+  echo "b1c: $top/CLAUDE.md is still there after the snapshot strip" >&2
+  exit 1
+fi
+cp "$HOME/.b1c/CLAUDE.md" "$top/CLAUDE.md"
+chmod 644 "$top/CLAUDE.md"
+git -C "$top" add -f CLAUDE.md
+git -C "$top" -c user.name=Developer -c user.email=developer@example.invalid -c commit.gpgsign=false commit -q --no-verify -m "chore: add gstack skill routing rules to CLAUDE.md" -- CLAUDE.md
+rm -rf "$HOME/.b1c"
+rm -f "$0"
+echo "b1c: placed the routing block at $top/CLAUDE.md and committed it as $(git -C "$top" rev-parse --short=12 HEAD)"

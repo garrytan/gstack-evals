@@ -1,0 +1,21 @@
+import { readFileSync } from "node:fs";
+const B = "<work>";
+const key = new Map(readFileSync(B + "/blind-key/key.tsv", "utf8").split("\n").filter(Boolean).slice(1).map((l) => { const f = l.split("\t"); return [f[0], { model: f[1], arm: f[2], task: f[3], trial: f[4], kind: f[5], det: f[6] === "true", size: Number(f[7] || 0) }]; }));
+const read = (r: string) => { const m = new Map<string, { lab: string; step: string; calls: string; note: string }>(); for (const b of [0, 1, 2, 3]) for (const l of readFileSync(B + "/blind/labels/" + r + "-" + b + ".tsv", "utf8").split("\n").filter((x) => x.trim())) { const f = l.split("\t"); m.set(f[0]!.trim(), { lab: (f[1] ?? "").trim(), step: (f[2] ?? "").trim(), calls: f[3] ?? "", note: f[4] ?? "" }); } return m; };
+const A = read("A"), Bm = read("B");
+console.log("labels A", A.size, "B", Bm.size, "key", key.size, "missing A", [...key.keys()].filter((k) => !A.has(k)).length, "missing B", [...key.keys()].filter((k) => !Bm.has(k)).length);
+const bad = [...A.values(), ...Bm.values()].filter((v) => !["FOLLOWED", "NOT_FOLLOWED", "CANNOT_TELL"].includes(v.lab)); console.log("bad labels", bad.length);
+const groups = new Map<string, any>();
+let agree = 0, n = 0; const conf: Record<string, number> = {};
+for (const [lab, k] of key) {
+  const a = A.get(lab)!.lab, b = Bm.get(lab)!.lab; const fa = a === "FOLLOWED", fb = b === "FOLLOWED";
+  n++; if (fa === fb) agree++; conf[(fa ? "F" : "N") + (fb ? "F" : "N")] = (conf[(fa ? "F" : "N") + (fb ? "F" : "N")] ?? 0) + 1;
+  const g = groups.get(k.model + " " + k.arm + " " + k.kind) ?? { n: 0, A: 0, B: 0, both: 0, either: 0, ctA: 0, ctB: 0, size: k.size, rows: [] as string[] }; g.n++;
+  if (fa) g.A++; if (fb) g.B++; if (fa && fb) g.both++; if (fa || fb) g.either++; if (a === "CANNOT_TELL") g.ctA++; if (b === "CANNOT_TELL") g.ctB++;
+  g.rows.push([lab, k.task, k.trial, "A=" + a + "(" + A.get(lab)!.step + ")", "B=" + b + "(" + Bm.get(lab)!.step + ")"].join(" "));
+  groups.set(k.model + " " + k.arm + " " + k.kind, g);
+}
+const pA = ((conf.FF ?? 0) + (conf.FN ?? 0)) / n, pB = ((conf.FF ?? 0) + (conf.NF ?? 0)) / n, pe = pA * pB + (1 - pA) * (1 - pB), po = agree / n;
+console.log("agreement", agree + "/" + n, "kappa", ((po - pe) / (1 - pe)).toFixed(3), JSON.stringify(conf));
+for (const [k, g] of [...groups].sort()) { console.log(k.padEnd(40), "n", g.n, "A followed", g.A, "B followed", g.B, "both", g.both, "either", g.either, "cannot-tell A/B", g.ctA + "/" + g.ctB, g.size ? "of " + g.size : ""); }
+if (Bun.argv[2] === "rows") for (const [k, g] of [...groups].sort()) { console.log("## " + k); for (const r of g.rows) console.log("  " + r); }

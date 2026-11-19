@@ -36,7 +36,7 @@ export interface Line {
 export type FounderResult =
   | { kind: "reply"; reply: string; revealed: string[]; rules: number[]; attempts: number }
   | { kind: "check-failed"; checks: string[]; attempts: number }
-  | { kind: "call-failed"; reason: "allowance" | "provider" | "drift"; detail: string };
+  | { kind: "call-failed"; reason: "allowance" | "provider" | "drift" | "cap"; detail: string };
 
 /** The simulator area's interface: the person sheet, the visible transcript and the metered call it spends through. */
 export type FounderTurnFn<S = PersonSheet, C = unknown> = (o: { sheet: S; transcript: Line[]; call: C }) => Promise<FounderResult>;
@@ -74,7 +74,7 @@ export interface LoopState {
   /** The parse of the last reply the loop saw. */
   parse: MoveParse | null;
   ended: "block" | "closing" | null;
-  sim: { code: ReasonCode; reason: "check" | "allowance" | "provider" | "drift"; detail: string } | null;
+  sim: { code: ReasonCode; reason: "check" | "allowance" | "provider" | "drift" | "cap"; detail: string } | null;
 }
 
 /** The driver's nextUser for one attempt, and the state it fills. */
@@ -102,8 +102,8 @@ export function founderLoop(limit: number, founder: (transcript: Line[]) => Prom
       state.transcript.push({ role: "person", text: r.reply });
       return { reply: r.reply };
     }
-    state.sim = r.kind === "check-failed" ? { code: "E_OF_SIM_TURN", reason: "check", detail: r.checks.join("; ") } : { code: r.reason === "drift" ? "E_OF_PROVIDER_DRIFT" : "E_OF_INFRA_MISSING", reason: r.reason, detail: r.detail };
-    return { stop: { kind: "missing", code: state.sim.code } };
+    state.sim = r.kind === "check-failed" ? { code: "E_OF_SIM_TURN", reason: "check", detail: r.checks.join("; ") } : { code: r.reason === "drift" ? "E_OF_PROVIDER_DRIFT" : r.reason === "cap" ? "CAP_STOP" : "E_OF_INFRA_MISSING", reason: r.reason, detail: r.detail };
+    return { stop: state.sim.reason === "cap" ? { kind: "cap_stop" } : { kind: "missing", code: state.sim.code } };
   };
   return { state, nextUser };
 }
@@ -138,6 +138,7 @@ const ARM_STOPS: Partial<Record<Termination["kind"], string>> = { turn_cap: "tur
 export function attemptOutcome(a: AttemptRead, arm: ArmId): Outcome {
   const t = a.termination;
   if (t.kind === "cap_stop") return { state: "cap", why: "the ledger item's cap stopped the session" };
+  if (a.loop.sim?.reason === "cap") return { state: "cap", why: "the ledger item's cap refused a simulator call: " + a.loop.sim.detail };
   if (a.loop.sim?.reason === "drift") return { state: "halt", code: "E_OF_PROVIDER_DRIFT", why: "the simulator's provider drifted: " + a.loop.sim.detail };
   if (a.contained?.length) return { state: "halt", code: "E_OF_LEAK", why: "the containment probe found " + a.contained.join("; ") };
   if (t.kind === "credentials_rejected") return { state: "halt", code: "E_KEY_REJECTED", why: "the provider rejected the proxy's credentials" };

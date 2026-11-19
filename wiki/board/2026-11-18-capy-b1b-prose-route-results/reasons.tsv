@@ -1,0 +1,43 @@
+arm	task	trial	outcome	reason	load_failed	named	first_text
+claude-md	AbsaOSS__generate-release-notes-207	AbsaOSS__generate-release-notes__mvmshwD	graded	never named	0	false	I removed every place where TLS certificate checking was turned off, which is what the scanner flagged (CWE-295). The 266 unit tests pass. I didn't run the integration test: it is skipped unless `GITH
+claude-md	aeye-lab__pymovements-1408	aeye-lab__pymovements-1408__f2qzRPx	graded	never named	0	false	I added an `event_name` argument to `main_sequence_plot()`, and it now plots only the events with that name. It defaults to `'saccade'`, so existing calls behave as before. It works the same way as `e
+claude-md	astropy__astropy-18681	astropy__astropy-18681__iMztaRU	graded	never named	0	false	The checksum passed (the error is just a numpy printing quirk, unrelated). Let me print differently and run tests.
+claude-md	aws__bedrock-agentcore-sdk-python-279_interface	aws__bedrock-agentcore-sdk-pytho__6M99ER5	graded	never named	0	false	That one failure (`test_initialize_basic_functionality`) also happens without my changes, so it's not related. I'll add a short README note.
+claude-md	BerriAI__litellm-15753	BerriAI__litellm-15753__kLarmpu	graded	never named	0	false	That test asserted the buggy behavior; updating it to the correct value.
+claude-md	bluesky__ophyd-async-1164	bluesky__ophyd-async-1164__tZeJzBd	graded	never named	0	false	The default Python has no pytest, so I'm running the tests with the project's own `.venv`.
+claude-md	Cambridge-ICCS__TCTrack-118	Cambridge-ICCS__TCTrack-118__7yuzNs6	graded	never named	0	false	Only the metadata comment needs changing (docstrings about great-circle distance are correct).
+claude-md	con__nwb2bids-347_interface	con__nwb2bids-347_interface__k9aDHyg	graded	never named	0	false	Existing tests expect no extra column when sanitization is off, so I'll add the column only when the matching sanitization option is enabled.
+claude-md	delgan__loguru-1451	delgan__loguru-1451__XFm46xK	graded	never named	0	false	Works. Run the test suite and add a test.
+claude-md	deltares__hydrolib-core-1049_interface	deltares__hydrolib-core-1049_int__fasLQKK	graded	never named	0	false	Use a `Union[Literal[""], Path]`-style type via a before-validator would still coerce after; simplest is changing the type to accept empty strings first.
+claude-md	DiamondLightSource__mx-bluesky-1519	DiamondLightSource__mx-bluesky-1__tM3jq6J	graded	never named	0	false	Add a `sample_id` field to `DataCollectionInfo`, populate it, and serialize it.
+claude-md	docling-project__docling-2998	docling-project__docling-2998__v8A6bat	graded	never named	0	false	I'll add a shared helper that skips degenerate segments (with a warning) and use it in both models.
+claude-md	facelessuser__pymdown-extensions-2807	facelessuser__pymdown-extensions__g7QBKcJ	graded	never named	0	false	Fixed the reported case and all arithmatex tests pass. Adding a regression test:
+claude-md	gitpython-developers__GitPython-2075	gitpython-developers__GitPython__Qbc4EHU	graded	never named	0	false	`get_values(default=[])` would return `[[]]`, and it converts values to other types. I'll switch to reading the raw strings directly.
+claude-md	google__adk-python-3088	google__adk-python-3088__idCtapW	graded	never named	0	false	Now add enum handling to schema parsing.
+claude-md	graphistry__pygraphistry-1107_interface	graphistry__pygraphistry-1107_in__BJW4sm6	graded	never named	0	false	Now create the package files.
+claude-md	harumiweb__exstruct-113	harumiweb__exstruct-113__PWfGDRv	graded	never named	0	false	Now I'll edit engine.py to swap the heavy imports for lazy wrappers.
+claude-md	hiero-ledger__hiero-sdk-python-2007_interface	hiero-ledger__hiero-sdk-python-2__dqFKxu3	graded	never named	0	false	Now edit.
+claude-md	hkuds__openharness-217	hkuds__openharness-217__K5Zamok	graded	never named	0	false	Now add regression tests.
+claude-md	huggingface__huggingface_hub-4056	huggingface__huggingface_hub-405__tGsMykU	graded	never named	0	false	A custom `tqdm_class` passed to `hf_hub_download()` now tracks progress in non-TTY environments. Previously `update()` did nothing there and `self.n` stayed at 0. **Change:** in `_get_progress_bar_con
+claude-md	ImperialCollegeLondon__virtual_ecosystem-1232	ImperialCollegeLondon__virtual_e__g3pApYP	graded	never named	0	false	Plan: mirror the abiotic model — run `run_simple_microclimate` at time index 0 inside `_setup` and update the variable metadata.
+claude-md	keras-team__keras-22138	keras-team__keras-22138__LF5EjWw	graded	never named	0	false	I'll add a helper and call it in both the constructors and the functions.
+claude-md	narwhals-dev__narwhals-3251	narwhals-dev__narwhals-3251__JEjDew5	graded	never named	0	false	Fix `is_close` to be robust to unnamed series by aliasing to a temporary name and restoring the original name.
+claude-md	ncar__geocat-comp-811	ncar__geocat-comp-811__gA3c7Ay	graded	never named	0	false	Now a reproduction test, mimicking `open_mfdataset` (coefficients with a `time` dim, dask‑backed):
+claude-md	newton-physics__newton-1582	newton-physics__newton-1582__X8YrfQH	graded	never named	0	false	`add_body` adds free joints automatically, so I'll use `add_link` instead.
+claude-md	optuna__optuna-6428	optuna__optuna-6428__RMD2x3T	graded	never named	0	false	Fixed. The bug was in `TPESampler`, not in `PartialFixedSampler`. **Cause:** When TPE runs with `group=True`, its `sample_relative` method ignored the search space it was given. It sampled from its ow
+claude-md	psf__black-4952	psf__black-4952__QmbXXKk	graded	never named	0	false	Wrap the rest of the function in try/finally so the manager is shut down.
+claude-md	pydata__xarray-10863	pydata__xarray-10863__5Nb4L66	graded	never named	0	false	Simplify the code a bit and add a test.
+claude-md	pyinfra-dev__pyinfra-1679_interface	pyinfra-dev__pyinfra-1679_interf__X7Z6a3J	graded	never named	0	false	Now add a test for the timeout propagation.
+claude-md	pymc-devs__pytensor-1668	pymc-devs__pytensor-1668__yA3yrkf	graded	never named	0	false	The Python backend now returns the complex eigenvalues. Numba isn't installed here, so I'll read through the numba dispatch to check it by hand.
+claude-md	python-scim__scim2-models-126	python-scim__scim2-models-126__gqcYgSB	graded	never named	0	false	Add `json_schema_input_schema=core_schema.str_schema()` (pydantic ≥2.10) or `__get_pydantic_json_schema__`. Check pydantic version.
+claude-md	raullenchai__rapid-mlx-227	raullenchai__rapid-mlx-227__fzz5zEX	graded	never named	0	false	The router now handles Qwen3's think tags. There's no network access here, so I can't load a real Qwen3 tokenizer. The tests use Qwen3's known token IDs instead. Adding them now.
+claude-md	run-llama__llama_index-20748_interface	run-llama__llama_index-20748_int__UioZQER	graded	never named	0	false	Nothing was written; rerun with the assertion relaxed.
+claude-md	scrapy__scrapy-7255	scrapy__scrapy-7255__pwXTLvG	graded	never named	0	false	Now fix both runners so that an exception raised during crawl startup marks `bootstrap_failed`.
+claude-md	sigstore__sigstore-python-1652	sigstore__sigstore-python-1652__iSC7WMC	graded	never named	0	false	Let me check the message_signature/message_digest types and Hashed.
+claude-md	spacetelescope__jwst-9967	spacetelescope__jwst-9967__rHFziMu	graded	never named	0	false	The same 15 step tests fail with and without my change, so the failures were already there. Checking why:
+claude-md	sqlfluff__sqlfluff-7622	sqlfluff__sqlfluff-7622__ZMNYABK	graded	never named	0	false	Now the rule changes.
+claude-md	strands-agents__sdk-python-1719	strands-agents__sdk-python-1719__BGjHnAc	graded	never named	0	false	Now implement.
+claude-md	sympy__sympy-28454	sympy__sympy-28454__oGoTQCE	graded	never named	0	false	Fix in `_eval_scalar_mul`/`_eval_scalar_rmul`: when the scalar may be non-finite, the sparse representation would skip zero entries, so fall back to elementwise multiplication.
+claude-md	zauberzeug__nicegui-5914	zauberzeug__nicegui-5914__YwCYHck	graded	never named	0	false	Capture the client once in `refresh` and `_handle_open`.
+hook	graphistry__pygraphistry-1107_interface	graphistry__pygraphistry-1107_in__c25kNgj	graded	named, not loaded	0	true	The hook suggested /prove-it, but this is a feature skeleton, not a bug fix, so I'm skipping it and going straight to the work.
+hook	run-llama__llama_index-20748_interface	run-llama__llama_index-20748_int__3NHjcas	graded	named, not loaded	0	true	Now edit the file with a Python script for the multiple replacements.

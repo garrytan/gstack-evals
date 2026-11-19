@@ -324,7 +324,7 @@ export interface Stage2Input {
   units: readonly UnitMeta[];
   stage1: Pick<Stage1Reading, "band" | "untested" | "smoke_drop" | "repairs">;
   stock: readonly StockCredit[];
-  /** The stage 2 gold re-check: each production judge's labels of the 40 gold cells inserted in its packets. */
+  /** The stage 2 gold re-check: each production judge's labels of the 40 gold cells inserted in its packets; an unlabelled cell counts as wrong. */
   gold: Readonly<Record<ModelId, ReadonlyArray<{ gold: boolean; judged: boolean | null }>>>;
   /** The stage 2 fidelity audit failed. */
   voided: boolean;
@@ -357,7 +357,7 @@ export function readStage2(i: Stage2Input): Stage2Reading {
   const stock = stockCheck(i.stock, 2, [...new Set(i.manifest.map((e) => e.unit))]);
   const interim = interimStop(rows);
   const metas = new Map(i.units.map((u) => [u.id, u]));
-  const gold_kappa = Object.fromEntries(MODELS.map((m) => [m, kappa(i.gold[m].filter((c) => c.judged !== null).map((c) => [c.gold, c.judged!] as const))])) as Record<ModelId, number | null>;
+  const gold_kappa = Object.fromEntries(MODELS.map((m) => [m, kappa(i.gold[m].map((c) => [c.gold, c.judged ?? !c.gold] as const))])) as Record<ModelId, number | null>;
   const codes: string[] = [];
   if (interim.stop) codes.push("E_OF_EXPOSURE_STOP");
   if (i.voided) codes.push("E_OF_SIM_AUDIT");

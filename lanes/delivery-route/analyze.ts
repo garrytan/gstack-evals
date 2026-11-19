@@ -2,7 +2,8 @@
 // B1's report from the session table: per model and arm, the share of graded sessions that followed the Prove-It steps
 // (detect.ts) with its Wilson 95% interval, the 80% bar and the gap rule; the paired contrasts between arms on the tasks
 // graded in both, with Newcombe's interval for paired proportions; and the decision reading (prereg section 8), on Opus,
-// with Sol and particle-1 read the same way and reported as descriptive. Passes are descriptive only.
+// with Sol and particle-1 read the same way and reported as descriptive. Passes are descriptive only. Beside each arm's
+// primary it prints the reading under the rule as merged, before deviation D1 (detect.ts followed_as_merged).
 import { ARM_NAMES, B1, MODEL_KEYS, MODELS, type B1Arm, type ModelKey } from "./pins.ts";
 import type { B1Row } from "./table.ts";
 
@@ -103,19 +104,25 @@ export function reading(stats: ArmStat[], contrasts: Contrast[], guard = true): 
 
 const pct = (x: number | null) => (x === null ? "n/a" : (100 * x).toFixed(1) + "%");
 const pts = (x: number) => (x >= 0 ? "+" : "") + (100 * x).toFixed(1);
+/** The rows with the primary under the rule as merged, before deviation D1, for the report's sensitivity lines. */
+export const asMerged = (rows: B1Row[]): B1Row[] => rows.map((r) => ({ ...r, detect: { ...r.detect, followed: r.detect.followed_as_merged } }));
+type ModelReport = { stats: ArmStat[]; contrasts: Contrast[]; reading: Reading };
 export function report(rows: B1Row[], planned = B1.tasks) {
   const lines: string[] = [];
-  const out: Record<string, { stats: ArmStat[]; contrasts: Contrast[]; reading: Reading }> = {};
+  const out: Record<string, ModelReport & { as_merged: ModelReport }> = {};
   for (const m of MODEL_KEYS) {
     const mine = rows.filter((r) => r.model === MODELS[m].id);
     if (!mine.length) continue;
     const stats = armStats(mine, planned), contrasts = CONTRASTS.map(([a, b]) => contrast(mine, a, b)), r = reading(stats, contrasts);
-    out[m] = { stats, contrasts, reading: r };
+    const merged = asMerged(mine), mStats = armStats(merged, planned), mContrasts = CONTRASTS.map(([a, b]) => contrast(merged, a, b));
+    out[m] = { stats, contrasts, reading: r, as_merged: { stats: mStats, contrasts: mContrasts, reading: reading(mStats, mContrasts) } };
     lines.push("== " + MODELS[m].id + (m === "opus" ? " (decision model)" : " (descriptive)"));
     for (const s of stats) lines.push("  " + s.arm + ": followed " + s.followed + "/" + s.graded + " " + pct(s.rate) + (s.ci ? " [" + pct(s.ci[0]) + ", " + pct(s.ci[1]) + "]" : "") + (s.reaches ? " REACHES" : "") + (s.incomplete ? " INCOMPLETE" : "") + "; gaps " + s.gaps + ", cap stops " + s.cap_stops + ", tool-only " + s.followed_tool_only + ", bash-only source " + s.bash_only_source + ", unseen source " + s.source_write_unseen + ", steps seen " + s.steps_seen + ", loaded " + s.loaded + ", safety stops " + s.safety_stops + ", audit " + s.audit_sessions + ", passes " + s.passes + " (descriptive)");
     for (const s of stats) lines.push("  " + s.arm + " sensitivity: " + s.unresolved_writes + " Bash writes no parser can name, in " + s.unresolved_sessions + " sessions; " + s.spec_folder_sessions + " sessions write a non-spec file under a spec folder; followed " + s.followed_low + "/" + s.graded + " with those sessions scored not followed, " + s.followed_high + "/" + s.graded + " scored followed" + (s.graded && !s.incomplete && (s.followed_low >= barCount(s.graded)) !== (s.followed_high >= barCount(s.graded)) ? "; the bar reading rests on them" : ""));
+    for (const s of mStats) lines.push("  " + s.arm + " as merged, before D1: followed " + s.followed + "/" + s.graded + " " + pct(s.rate) + (s.ci ? " [" + pct(s.ci[0]) + ", " + pct(s.ci[1]) + "]" : "") + (s.reaches ? " REACHES" : ""));
     for (const c of contrasts) lines.push("  " + c.a + " - " + c.b + ": " + pts(c.diff) + " points [" + pts(c.lo) + ", " + pts(c.hi) + "] on " + c.pairs + " paired tasks (" + c.a_only + " vs " + c.b_only + " discordant)");
     lines.push("  reading: " + r.text);
+    lines.push("  reading as merged, before D1: " + out[m].as_merged.reading.text);
   }
-  return { lines, models: out as Partial<Record<ModelKey, { stats: ArmStat[]; contrasts: Contrast[]; reading: Reading }>> };
+  return { lines, models: out as Partial<Record<ModelKey, ModelReport & { as_merged: ModelReport }>> };
 }

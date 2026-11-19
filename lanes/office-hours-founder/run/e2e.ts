@@ -28,6 +28,7 @@ import { readJournalLines } from "../../../src/trial/review/cost.ts";
 import type { ArmSpec } from "../../../src/types.ts";
 import { openMeter, type CallRequest, type CallResult } from "../../product-value/meter.ts";
 import { CLOSING, DENIED_TOOLS, FIRST_LINE, GSTACK, MODEL_KEYS } from "../frozen.ts";
+import { rulesSha256 } from "../sim/founder.ts";
 import type { ManifestEntry, Sheet, UnitMeta } from "../types.ts";
 import { meterSlot, PRE_SMOKE, runSchedule, type RunDeps, type RunResult } from "./run.ts";
 import { readRows, rowProblems } from "./rows.ts";
@@ -100,6 +101,7 @@ export async function runE2e(o: E2eOptions = {}): Promise<{ checks: Check[]; dir
     writeFileSync(join(unitsDir, id, "sheet.json"), JSON.stringify(u.sheet, null, 2) + "\n");
     const meta: UnitMeta = { id, stratum: "constructed", set: "calibration", draw: ++draw, author: "sol", shape: "s1", type: "other", industry: "fixture", primary: ["customer"], mentioned: [], generic: [], founder_stage: "pre-product", digest: sha256(u.opening + JSON.stringify(u.sheet)) };
     writeFileSync(join(unitsDir, id, "unit.json"), JSON.stringify(meta, null, 2) + "\n");
+    writeFileSync(join(unitsDir, id, "key.json"), "{}\n");
   }
   const entries: ManifestEntry[] = [
     { stage: 1, kind: "arm", unit: "fx-answer", model: "opus", arm: "none", pass: 1 },
@@ -176,7 +178,7 @@ export async function runE2e(o: E2eOptions = {}): Promise<{ checks: Check[]; dir
   const rigSeen: { egress: { open: boolean; detail: string } | null; journal: string } = { egress: null, journal: "" };
   let run: RunResult | null = null;
   try {
-    run = await runSchedule({ cell: "smoke", unitsDir, out, runId, models: ["opus"], arms: ["none", "lens", "office-hours"], repairs: [], allowances: PRE_SMOKE, cap: 100 * D, simCap: 20 * D, parallel: 1, policy, ledger, docker: env.GSTACK_EVALS_DOCKER_BIN || "docker", log, entries }, {
+    run = await runSchedule({ cell: "smoke", unitsDir, out, runId, models: ["opus"], arms: ["none", "lens", "office-hours"], repairs: [], simRules: rulesSha256(), allowances: PRE_SMOKE, cap: 100 * D, simCap: 20 * D, parallel: 1, policy, ledger, docker: env.GSTACK_EVALS_DOCKER_BIN || "docker", log, entries }, {
       openRig: (): HostRig => {
         const rig = dockerRig({ host: "claude", arms: { arms, base: null, skill: null, notes: [] }, tasks: join(W, "fixtures", "tasks.json"), out: { path: out, rule: "--out" }, ledger: ledgerPath(ledger, {}), record: recordPath(record, {}), item: items.runs, runId, models: [MODEL_KEYS.opus], policy }, { env, skill: null, skills: { "office-hours": "office-hours" }, nonce: randomBytes(6).toString("hex"), cap: 100 * D, voice: false, upstream: "http://host.docker.internal:" + stub.port });
         const install = rig.arms["office-hours"]!;

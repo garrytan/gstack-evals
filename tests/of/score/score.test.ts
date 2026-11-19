@@ -35,6 +35,10 @@ describe("W", () => {
     const swapped = labels.map((l) => ({ ...l, judge: "opus" as const }));
     expect(scoreSessions({ rows: [row({ unit: "a" })], units, maps: [built.map], labels: swapped })[0]!.W).toBeNull();
   });
+  test("a packet id that two label maps both use is refused, so one map's labels never score the other's blocks", async () => {
+    const { built, labels } = await judged(new Map([twin("a")]), [row({ unit: "a" })]);
+    expect(() => scoreSessions({ rows: [row({ unit: "a" })], units: new Map([twin("a")]), maps: [built.map, { ...built.map, seed: built.map.seed + 1 }], labels })).toThrow(/^E_USAGE .*packet/);
+  });
   test("W_shuffled reads the partner's key, and is null when its cells are incomplete while W stands", async () => {
     const units = new Map([twin("a"), twin("b", { key: { customer: "Teachers at rural schools", wedge: "A lesson pack" } })]);
     const rows = [row({ unit: "a" }), row({ unit: "b" })];

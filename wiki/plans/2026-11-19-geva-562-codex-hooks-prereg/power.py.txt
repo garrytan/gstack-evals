@@ -1,0 +1,96 @@
+# Power and smallest detectable differences for the Codex hooks eval (GEVA-562).
+# Exact two-sided McNemar (binomial on discordant pairs) at alpha 0.05, 80% power.
+# Run: python3 power.py  (standard library only; no network, no keys)
+from math import comb, sqrt, erf, exp, pi
+
+ALPHA, POWER = 0.05, 0.80
+
+def binom_pmf(k, n, p):
+    return comb(n, k) * p**k * (1 - p)**(n - k)
+
+def reject_table(n):
+    # for each discordant count D, the smallest G (gains) that rejects two-sided at ALPHA in the gain direction
+    out = {}
+    for D in range(n + 1):
+        cdf, need = 0.0, None
+        tail = [0.0] * (D + 2)
+        for g in range(D, -1, -1):
+            tail[g] = tail[g + 1] + binom_pmf(g, D, 0.5)
+        for g in range(D + 1):
+            if g > D / 2 and 2 * tail[g] <= ALPHA:
+                need = g
+                break
+        out[D] = need
+    return out
+
+def power_paired(n, disc, diff):
+    # disc: share of pairs that disagree; diff: (gains - losses) / n; gains share = (disc + diff) / 2
+    if diff > disc or diff <= 0:
+        return 0.0
+    pg = (disc + diff) / (2 * disc)
+    rt = reject_table(n)
+    pw = 0.0
+    for D in range(n + 1):
+        need = rt[D]
+        if need is None:
+            continue
+        pD = binom_pmf(D, n, disc)
+        if pD < 1e-12:
+            continue
+        pw += pD * sum(binom_pmf(g, D, pg) for g in range(need, D + 1))
+    return pw
+
+def mdd(n, disc):
+    d = 0.005
+    while d <= disc + 1e-9:
+        if power_paired(n, disc, d) >= POWER:
+            return round(100 * d, 1)
+        d += 0.005
+    return None
+
+def mdd_gain_loss(n, loss):
+    # within-session: losses at a fixed share; smallest net gain (gain - loss) with 80% power
+    g = 0.005
+    while g <= 0.6:
+        disc = g + loss
+        if power_paired(n, disc, g - loss) >= POWER:
+            return round(100 * (g - loss), 1)
+        g += 0.005
+    return None
+
+print("== Routing primary: tasks where the hook names prove-it (paired, r-on minus r-off)")
+for n in (20, 30, 40, 50, 60):
+    print("  n=%d: " % n + ", ".join("%d%% disagree -> %s" % (int(q * 100), (str(mdd(n, q)) + " points") if mdd(n, q) else "none fits") for q in (0.2, 0.3, 0.5, 0.7)))
+
+DEFF = 1.2
+n_bp = 84
+n_eff = int(n_bp / DEFF)
+print("\n== Contract primary, within session: %d blocker-passes, design effect %.1f, effective n %d" % (n_bp, DEFF, n_eff))
+for loss in (0.0, 0.02, 0.05):
+    print("  losses %.0f%% of blocker-passes -> net gain detectable at %s points" % (100 * loss, mdd_gain_loss(n_eff, loss)))
+
+print("\n== Between arms (c-on minus c-off, c-high minus c-on, gstack minus none): %d blocker-passes, effective n %d" % (n_bp, n_eff))
+for q in (0.1, 0.2, 0.3, 0.4):
+    m = mdd(n_eff, q)
+    print("  %d%% of blocker-passes disagree -> %s" % (int(q * 100), (str(m) + " points") if m else "none fits"))
+
+print("\n== O'Brien-Fleming two-look bounds, two-sided alpha 0.05, look at half the information (R113, used only if a counted run is planned above $500 paid)")
+rho = sqrt(0.5)
+Phi = lambda x: 0.5 * (1 + erf(x / sqrt(2)))
+phi = lambda x: exp(-x * x / 2) / sqrt(2 * pi)
+def inside(a, b, steps=4000):
+    s, h, k = 0.0, 2 * a / steps, sqrt(1 - rho * rho)
+    for i in range(steps + 1):
+        z = -a + i * h
+        w = 1 if i in (0, steps) else (4 if i % 2 else 2)
+        s += w * phi(z) * (Phi((b - rho * z) / k) - Phi((-b - rho * z) / k))
+    return s * h / 3
+lo, hi = 1.9, 2.2
+for _ in range(60):
+    mid = (lo + hi) / 2
+    if 1 - inside(mid * sqrt(2), mid) > ALPHA:
+        lo = mid
+    else:
+        hi = mid
+c = (lo + hi) / 2
+print("  interim |z| >= %.3f, final |z| >= %.3f" % (c * sqrt(2), c))

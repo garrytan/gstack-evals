@@ -220,6 +220,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_PV_EXPOSURE_FALLBACK](#e_pv_exposure_fallback) | warning | U20 |
 | [E_PV_EXPOSURE_STOP](#e_pv_exposure_stop) | warning | U20 |
 | [E_PV_LEAK_EXPOSED](#e_pv_leak_exposed) | warning | U20 |
+| [E_PV_EMPTY_REPLIES](#e_pv_empty_replies) | 2 | U20 |
 | [E_PV_PROVIDER_DRIFT](#e_pv_provider_drift) | 2 | U20 |
 | [E_PV_SUPPLY_SHORT](#e_pv_supply_short) | 2 | U20 |
 | [E_SM_UNIT](#e_sm_unit) | 2 | U20 |
@@ -411,6 +412,44 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_B1_PIN](#e_b1_pin) | 2 | U20 |
 | [E_B1_INPUT](#e_b1_input) | 2 | U20 |
 | [E_B1_LAUNCH](#e_b1_launch) | 2 | U20 |
+| [E_OHR_READ_INPUT](#e_ohr_read_input) | 2 | U20 |
+| [E_OHR_READ_POWER](#e_ohr_read_power) | 2 | U20 |
+| [E_OHR_PACKET_INPUT](#e_ohr_packet_input) | 2 | U20 |
+| [E_OHR_ID_CLASH](#e_ohr_id_clash) | 2 | U20 |
+| [E_OHR_JUDGE_INPUT](#e_ohr_judge_input) | 2 | U20 |
+| [E_OHR_LABEL_MISSING](#e_ohr_label_missing) | warning | U20 |
+| [E_OHR_JUDGE_CHECK_FAIL](#e_ohr_judge_check_fail) | 3 | U20 |
+| [E_OHR_JUDGE_CHECK_NO_READ](#e_ohr_judge_check_no_read) | 3 | U20 |
+| [E_OHR_MARKERS](#e_ohr_markers) | 2 | U20 |
+| [E_OHR_SCORE_INPUT](#e_ohr_score_input) | 2 | U20 |
+| [E_OHR_PILOT_STOP](#e_ohr_pilot_stop) | 2 | U20 |
+| [E_OHR_PILOT_OPEN](#e_ohr_pilot_open) | 2 | U20 |
+| [E_OHR_SUPPLY_SHORT](#e_ohr_supply_short) | 2 | U20 |
+| [E_OHR_CUSTODY](#e_ohr_custody) | 2 | U20 |
+| [E_OHR_SIM_RULES](#e_ohr_sim_rules) | 2 | U20 |
+| [E_OHR_SIM_GUARD](#e_ohr_sim_guard) | 2 | U20 |
+| [E_OHR_SIM_CHECK](#e_ohr_sim_check) | 2 | U20 |
+| [E_OHR_SIM_CALL](#e_ohr_sim_call) | 2 | U20 |
+| [E_OHR_SIM_AUDIT](#e_ohr_sim_audit) | 2 | U20 |
+| [E_OHR_NO_READ](#e_ohr_no_read) | 2 | U20 |
+| [E_OHR_PIN_MISMATCH](#e_ohr_pin_mismatch) | 2 | U20 |
+| [E_OHR_NEW_PIN_UNSET](#e_ohr_new_pin_unset) | 2 | U20 |
+| [E_OHR_SAFETY_STOP](#e_ohr_safety_stop) | 2 | U20 |
+| [E_OHR_GSTACK_READ](#e_ohr_gstack_read) | 2 | U20 |
+| [E_OHR_NO_BLOCK](#e_ohr_no_block) | 2 | U20 |
+| [E_OHR_ARM_STOP](#e_ohr_arm_stop) | 2 | U20 |
+| [E_OHR_SESSION_KIND](#e_ohr_session_kind) | 2 | U20 |
+| [E_OHR_INFRA_MISSING](#e_ohr_infra_missing) | 2 | U20 |
+| [E_OHR_UNRUN](#e_ohr_unrun) | 2 | U20 |
+| [E_OHR_T8_SEED](#e_ohr_t8_seed) | 2 | U20 |
+| [E_OHR_MANIFEST](#e_ohr_manifest) | 2 | U20 |
+| [E_OHR_RESERVE](#e_ohr_reserve) | 2 | U20 |
+| [E_OHR_CAP_LINE](#e_ohr_cap_line) | 2 | U20 |
+| [E_OHR_BUILD_COMMIT](#e_ohr_build_commit) | 2 | U20 |
+| [E_OHR_E2E_FAIL](#e_ohr_e2e_fail) | 2 | U20 |
+| [E_OHR_DRYRUN_FAIL](#e_ohr_dryrun_fail) | 2 | U20 |
+| [E_OHR_PREFLIGHT_FAIL](#e_ohr_preflight_fail) | 2 | U20 |
+| [E_OHR_MODEL_DRIFT](#e_ohr_model_drift) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -890,9 +929,9 @@ Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing
 
 ### E_INTERACTIVE_HOST
 
-A task declared interactive was sent to --host codex, which runs only non-interactive tasks in v1.
+A task declared interactive was sent to --host codex with a model the pinned Codex offers no request_user_input_async. Codex answers its own request_user_input itself, so that model's questions would never reach the user simulator.
 
-Fix: Use --host claude, or --tasks-only with the other ids. The message names the interactive task ids. Do not --resume.
+Fix: Use --host claude, a Codex model in the adapter's ASYNC_QUESTION_MODELS list, or --tasks-only the non-interactive tasks. Do not --resume.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U7.
 
@@ -1887,6 +1926,14 @@ Decision routing: the controller found its STOP file, so it launched no new sess
 Fix: Remove the STOP file once the reason for it is dealt with, then relaunch the same plan; the controller reconciles open leases first and runs only the sessions that never launched.
 
 Exit 2. Side effects: Partial: sessions that ran keep their spend and results; every lease is settled. Retry safe: yes. Resumable: yes. Owner: U6.
+
+### E_PV_EMPTY_REPLIES
+
+A metered run whose meter sets a bound on empty replies got too many: replies with status 200 and no answer (an error body, an empty reply or a cut-off one), three in a row or more than 1% of the run's calls over at least 100 calls in the office-hours rewrite eval (pre-run change 5). The command stops.
+
+Fix: Bring the counts in the message to the Captain. Paid replies stay in the run's reply cache, so a resume on the same run replays them at no cost once the Captain rules.
+
+Exit 2. Side effects: Calls already sent on the lease stay on its journal and its spend; empty replies are not cached. Retry safe: no. Resumable: yes. Owner: U20.
 
 ### E_PV_PROVIDER_DRIFT
 
@@ -3160,6 +3207,286 @@ Fix: Take the line to the Captain before launching. A cap raise needs the Captai
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
 
+### E_OHR_READ_INPUT
+
+Office-hours rewrite eval (lanes/office-hours-rewrite/read): the readings refused their input. Two scored rows share a stage, brief, model and arm; one brief's rows disagree on its kind, cluster, set or traction flag; a G1 hand read names a session that is not a new-arm builder session or a detector hit has no hand read; an admission or decision input is missing a flag; or a statistic was asked for outside its range. The message names the row or flag.
+
+Fix: Fix the scorer's output or the named flag and run the reading again. Never edit a row by hand to make it read.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OHR_READ_POWER
+
+Office-hours rewrite eval (lanes/office-hours-rewrite/read/reread.ts): the rerun of the preregistration's power.py at stage 1's observed control rates (section 9) failed or printed something other than its JSON result.
+
+Fix: Run the printed command by hand (uv with power.py's pinned numpy and scipy), fix the environment, and rerun. power.py itself is frozen and is never edited.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OHR_PACKET_INPUT
+
+Office-hours rewrite eval (section 5): a packet build was refused before any judge call. A session row or answer names a brief outside the briefs, a brief's twin is missing, an unpaired brief has no wrong call for its near-miss row, two sessions of one arm share a brief and model, a scripted block does not parse, or a packets folder or map path sits inside the repository or the map sits inside the packets folder.
+
+Fix: Fix the named input or path and build again into a new folder. Never edit a sealed key to make it fit.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OHR_ID_CLASH
+
+Office-hours rewrite eval (section 5): a packet id or block id appears twice across the packet maps a stage uses, so a label could be joined to the wrong block.
+
+Fix: Rebuild the later map passing the earlier maps as taken, so its seeded ids skip every id they hold.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OHR_JUDGE_INPUT
+
+Office-hours rewrite eval (sections 5 and 12): a judge run or a judge check was refused. The judge prompt does not match its pinned sha256, a label map was asked for an effort other than medium, a packet in the map is missing from the folder, or the judge check got another judge's labels, labels at the wrong effort, labels for blocks its map does not hold, duplicate labels or a map that is not a check map.
+
+Fix: Run the command with the frozen prompt, the map's own effort and the judge's own labels. Never edit the prompt to match.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OHR_MARKERS
+
+Office-hours rewrite eval (sections 7, 11 and 12): a detector marker set was refused. Its pin is not current or new, its sha is not a full commit sha, a pattern list is empty, a pattern is not a string or does not compile, or a list holds an empty entry.
+
+Fix: Fix the marker file under lanes/office-hours-rewrite/score/markers. After stage 1 freezes the markers, a change needs a dated change to the plan.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OHR_SCORE_INPUT
+
+Office-hours rewrite eval (sections 5 and 8): the scorer was refused. A row names a brief outside the briefs, a block row has no label packet or carries no block, a session sits in two label packets or has two labels, a label came from a judge other than frozen.JUDGE_FOR or at an effort other than medium, or a map is not a label map.
+
+Fix: Score with the stage's label maps and the routed judge's medium-effort labels. A block row the packets left out means the packets were built from other rows; rebuild them.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OHR_PILOT_STOP
+
+Office-hours rewrite eval (pre-run change 1 item 4d): the authoring pilot stops authoring. Either the second-twin yield's 90% Wilson upper bound is below the line recomputed from the pilot's cost per draw and first-pass rate, or the first twins and unpaired briefs alone would use up the authoring cap at those figures, so there is no line. The message gives the counts, the reads, the line and its inputs.
+
+Fix: Take the numbers to the Captain. Any change to the author prompts or screens voids the pilot's briefs and needs a dated change to the plan.
+
+Exit 2. Side effects: Spend so far stays on the authoring lease; the pilot's drafts and summary are written under custody. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_OHR_PILOT_OPEN
+
+Office-hours rewrite eval (pre-run change 1 item 4d): after 32 second-twin draws the authoring pilot's yield interval still straddles the line, so it can neither continue nor stop on its own. The message gives the counts, both reads, the line and its inputs.
+
+Fix: Take the numbers to the Captain, who decides whether authoring continues.
+
+Exit 2. Side effects: Spend so far stays on the authoring lease; the pilot's drafts and summary are written under custody. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_OHR_SUPPLY_SHORT
+
+Office-hours rewrite eval (prereg section 3, Supply): authoring stopped (its cap, its draft bound or a pilot cap stop) before all 110 briefs were placed. The set is never shrunk quietly; the message gives the count placed per set, the comparison founder briefs and the MDD there.
+
+Fix: Take the shortfall and its MDD to the Captain before stage 1.
+
+Exit 2. Side effects: Spend so far stays on the authoring lease; every placed brief and every draft's outcome are written under custody. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_OHR_CUSTODY
+
+Office-hours rewrite eval (prereg section 3, Sealing): a custody path was refused or sealing failed. Briefs are written only into a fresh work directory under /dev/shm, sealed with age to an output outside the repository that does not exist yet, and decrypted only into /dev/shm.
+
+Fix: Pass a work directory under /dev/shm and a sealed output path outside the repository, or fix the age recipients file; then start a new run.
+
+Exit 2. Side effects: None when a path is refused. When sealing fails the plaintext work directory stays in /dev/shm: delete it before anything else. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OHR_SIM_RULES
+
+The office-hours rewrite eval's simulator rules text (pre-run change 1, item 4e) does not match frozen.SIM_RULES_SHA256 for the brief's kind, so no simulator call was sent.
+
+Fix: Restore sim-rules-founder.txt or sim-rules-builder.txt to the bytes pre-run change 1 attaches. Never edit the digest to match.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OHR_SIM_GUARD
+
+Office-hours rewrite eval (pre-run change 1, item 4b): a simulator turn still listed more than two revealed facts on its third model call. It is a guard failure: in an arm session the session takes its one retry and then scores missing; in the audit it counts as failed.
+
+Fix: Nothing to retry by hand. A high rate goes to the Captain with the failing turns.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_OHR_SIM_CHECK
+
+Office-hours rewrite eval (pre-run change 1, item 4b): a simulator turn failed the json, ids or words check on its third model call (a missing or non-boolean done fails the json check). In an arm session the session takes its one retry and then scores missing.
+
+Fix: Nothing to retry by hand. A high rate goes to the Captain with the failing checks.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_OHR_SIM_CALL
+
+Office-hours rewrite eval: a simulator call failed on the session's simulator allowance or at the provider. The session takes its one retry and then scores missing (section 8).
+
+Fix: Read the call's detail. A steady provider failure goes to the Captain.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_OHR_SIM_AUDIT
+
+Office-hours rewrite eval (section 12 stage 3, pre-run change 1, item 4b): the fixed-script simulator audit failed: more than 5% of audited turns were marked by both auditors or failed their guard or checks, or guard failures passed 5% of all script turns. Admission A3 fails.
+
+Fix: Make the one admission repair by a dated change to the plan, or end the eval with FIX-METHOD on the instrument.
+
+Exit 2. Side effects: The run finished and its spend is settled in the ledger. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_OHR_NO_READ
+
+Office-hours rewrite eval (section 12 stage 3): the fixed-script simulator audit has fewer than 40 auditable turns, so it reads NO READ and admission A3 fails.
+
+Fix: Take the counts to the Captain. Never rerun the audit to change the read.
+
+Exit 2. Side effects: The run finished and its spend is settled in the ledger. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_OHR_PIN_MISMATCH
+
+Office-hours rewrite eval (section 2, pre-run change 1, item 1): a skill arm's installed gstack tree does not hold the pin's VERSION or a file whose sha256 the pin freezes. The launch is refused, or, found inside a container, the launch halts.
+
+Fix: Install gstack at the pin's sha from a full clone under the state directory's sources/ and launch again. Never edit a pin to match a tree.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_OHR_NEW_PIN_UNSET
+
+Office-hours rewrite eval (pre-run change 1, items 1 and 6): the manifest holds a session on the new arm, and frozen.PINS.new is null until a later pre-run change pins the content change's ready head.
+
+Fix: Wait for the pre-run change that pins the new arm, then launch again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OHR_SAFETY_STOP
+
+Office-hours rewrite eval (section 8): the provider stopped the session with a safety filter (a main-agent reply with stop_reason refusal or content_filter, or Claude Code's model_refusal_no_fallback or model_refusal_fallback notice). The session scores R = 0 and is counted as its own outcome.
+
+Fix: Nothing to retry: a safety stop is a result. Report the count beside the verdict.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_OHR_GSTACK_READ
+
+Office-hours rewrite eval (section 8): a none-arm session's tool calls read a gstack file. The session is contaminated, scored missing and counted toward the 2% contamination limit.
+
+Fix: Nothing to retry. A rate past 2% makes the run INCOMPLETE.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_OHR_NO_BLOCK
+
+Office-hours rewrite eval (section 4 step 4): the replies to two closing messages held no DECISION, NEXT ACTION and WHY block. The session scores R = 0.
+
+Fix: Nothing to retry: no block is a result.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_OHR_ARM_STOP
+
+Office-hours rewrite eval: the arm's own limit (60 agent turns a reply, 120 minutes, the session allowance or the context window) stopped the session on its retry, before a block. The session scores as no block (R = 0).
+
+Fix: Nothing to retry: the arm's own stop is a result.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_OHR_SESSION_KIND
+
+Office-hours rewrite eval (section 4 step 2, admission A7): a skill session printed a SESSION_KIND other than interactive, a harness fault. The session takes its one retry and then scores missing.
+
+Fix: Check that the arm environment leaves GSTACK_SESSION_KIND, OPENCLAW_SESSION, GSTACK_HEADLESS, CI and GITHUB_ACTIONS unset.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_OHR_INFRA_MISSING
+
+Office-hours rewrite eval (section 8): an upstream, provider or harness failure ended the session after its one retry, or the ledger never admitted it. The session scores missing.
+
+Fix: Read the attempts in rows.ndjson. A steady failure goes to the Captain.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_OHR_UNRUN
+
+Office-hours rewrite eval (section 8): the launch's frozen manifest schedules a session that has no row in rows.ndjson, because a stop ended the launch before the session ran or the launch never finished. ohr score sessions scores it missing, so the missing limits count it.
+
+Fix: Read the launch's stops.json. A launch that ended in a cap stop is incomplete and is never resumed.
+
+Exit 2. Side effects: None: the missing row exists only in the scored output. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_OHR_T8_SEED
+
+Office-hours rewrite eval (section 4 step 6): a T8 brief's prior session cannot seed the skill arm's state root: prior.json is missing or malformed, or its test date falls after the session's UTC day.
+
+Fix: Fix the brief's prior.json in custody and record the brief's new digest. Never move the session's date.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_OHR_MANIFEST
+
+Office-hours rewrite eval (section 12 stages 4 and 5, pre-run change 1, item 5): the launch's manifest cannot freeze or does not match the one frozen in its out dir byte for byte (stage, models, arms, brief digests, pins, simulator rules digests, build commit or entries), or the briefs cannot fill the stage.
+
+Fix: Launch with the same briefs, pins and build commit, or start a new out dir after a dated change to the plan.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_OHR_RESERVE
+
+Office-hours rewrite eval (section 3): a dropped comparison brief cannot be replaced: a stage 2 session already ran on it, or no reserve of the same kind (a pair only by a pair) is left in draw order.
+
+Fix: Take the shortfall to the Captain with the MDD at the count that can fill.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OHR_CAP_LINE
+
+Office-hours rewrite eval (section 13, pre-run change 1, item 4a): the launch's arm and simulator spend caps together pass the frozen cap of its ledger line, or name a line the stage does not use.
+
+Fix: Pass caps whose sum fits the line in frozen.CAPS.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_OHR_BUILD_COMMIT
+
+Office-hours rewrite eval: the launch cannot name the build commit it runs (no git checkout, or tracked files changed since HEAD), so it cannot freeze a manifest that pins it.
+
+Fix: Commit or discard the change and launch from a clean checkout of the build commit.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_OHR_E2E_FAIL
+
+Office-hours rewrite eval: a check in the run area's keyless end to end failed. The message names each failed check.
+
+Fix: Read the FAIL lines, fix the code and run the end to end again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OHR_DRYRUN_FAIL
+
+Office-hours rewrite eval: a dry-run check printed FAIL or SKIP: a frozen rule did not hold on its fixtures, the ledger split does not fit an approved cap, or a ledger lease did not open and settle. A SKIP is never a pass.
+
+Fix: Read the FAIL or SKIP line, fix the rule's code or give the container seams Docker, and run the dry run again before any spend.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_OHR_PREFLIGHT_FAIL
+
+Office-hours rewrite eval: the no-model preflight (prereg section 12, step 1) found a missing pin commit, no Docker, a key variable set, or a failed dry run or end to end.
+
+Fix: Read the FAIL lines, fix what they name and run gstack-evals ohr preflight again. The preflight never calls a model.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_OHR_MODEL_DRIFT
+
+Office-hours rewrite eval (pre-run change 4): a reply named a model other than the one its call pinned, or a dated snapshot of it. A judge, auditor or simulator reply stops its command; an arm session whose assistant messages name another model halts its launch and reads missing, so it is never counted.
+
+Fix: Keep the journal and the transcript that show the reported model, and send the question to the Captain. Never retry the item on another model or route.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
 ## Exit 3: calibration failed (INCOMPLETE)
 
 ### CALIBRATION_SKILL
@@ -3209,6 +3536,22 @@ An egress probe to a non-model host succeeded, so the trial network is not locke
 Fix: Fix the trial network so its only exit is the proxy, and run no trials until this passes.
 
 Exit 3. Side effects: Calibration sessions are charged; no task cell ran. Retry safe: yes. Resumable: no. Owner: U10.
+
+### E_OHR_JUDGE_CHECK_FAIL
+
+Office-hours rewrite eval (section 12): a judge failed its check. Kappa against gold is under 0.6 overall or on real session blocks, near-miss accuracy is under 0.8 or there is no near-miss cell, a stock row was credited or left unlabelled, or the check map holds no stock row. Admission A4 fails.
+
+Fix: Admission's one repair, by a dated change to the plan, under stage 1's remaining cap. The judge's production numbers do not count.
+
+Exit 3. Side effects: The check's metered spend stays on its lease. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_OHR_JUDGE_CHECK_NO_READ
+
+Office-hours rewrite eval (section 12): a judge's check could not be read. It has fewer than 40 gold outputs from 40 blocks, or a kappa has fewer than 10 gold cells of either class or is undefined. Admission A4 fails.
+
+Fix: Admission's one repair, by a dated change to the plan, under stage 1's remaining cap.
+
+Exit 3. Side effects: The check's metered spend stays on its lease. Retry safe: no. Resumable: no. Owner: U20.
 
 ## Warnings: attach to any verdict, never change the exit code
 
@@ -3593,5 +3936,13 @@ Warning. Owner: U20.
 Ask replay eval: an arm and model cell has more than 3% MISSING samples, so that model's decision rows read as inconclusive.
 
 Fix: None: report it with the MISSING counts by kind.
+
+Warning. Owner: U20.
+
+### E_OHR_LABEL_MISSING
+
+Office-hours rewrite eval (sections 5 and 12): a judge left a cell unlabelled after its one resend. In production the cell is null, so the session's R is null unless another part is 0; in the judge check the cell counts against the judge.
+
+Fix: Nothing to retry past the one resend. Read the count beside coverage in the results.
 
 Warning. Owner: U20.

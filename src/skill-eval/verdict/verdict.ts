@@ -76,6 +76,7 @@ function armBlock(records: readonly TrialRecord[], outcomes: readonly (boolean |
     excluded: records.filter((r) => r.termination.kind === "infra").length,
     loaded_bytes_per_run: mean(records.map((r) => r.loaded_bytes)),
     wall_s_per_run: wall === null ? null : wall / 1000,
+    unanswered_questions: records.reduce((n, r) => n + (r.unanswered ?? 0), 0),
   };
 }
 

@@ -202,6 +202,9 @@ export type NextUser = { reply: string } | { end: true } | { stop: Termination }
 
 // The slice of the Agent SDK this adapter uses, typed loosely so a test can stand one in.
 type SdkMessage = Record<string, any>;
+
+/** One assistant message's text as nextUser and the turn's text read it: its text blocks joined with nothing between them. */
+export const assistantText = (m: SdkMessage): string => (m.message?.content ?? []).filter((b: SdkMessage) => b.type === "text").map((b: SdkMessage) => b.text ?? "").join("");
 type QueryFn = (args: { prompt: AsyncIterable<SdkMessage>; options: Record<string, unknown> }) => AsyncIterable<SdkMessage>;
 
 /** The agent env the adapter adds: proxy, bearer, model purity and host settings. Every name is on U9's agent allowlist. */
@@ -606,7 +609,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
               if (scheduled && r?.stopped === true) wakeup = null;
               else if (scheduled && typeof r?.scheduledFor === "number") wakeup = { set_at: new Date().toISOString(), delay_s: typeof r.clampedDelaySeconds === "number" ? r.clampedDelaySeconds : Math.round((r.scheduledFor - Date.now()) / 1000), fires_at: new Date(r.scheduledFor).toISOString(), running: running() };
             } else if (m.type === "assistant") {
-              const text = (m.message?.content ?? []).filter((b: SdkMessage) => b.type === "text").map((b: SdkMessage) => b.text ?? "").join("");
+              const text = assistantText(m);
               if (!m.parent_tool_use_id && idleSince !== null) {
                 waited += performance.now() - idleSince;
                 idleSince = null;

@@ -1,9 +1,12 @@
 // Value: protects=the fidelity audit and arm-guess commands: the draw over real launch rows, both auditors through the metered client on a ledger item, the cache-proof resend of an unreadable answer, the outcome stage1 reads, and the arm-guess tally.
 import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { armGuess, audit, RESEND } from "../../lanes/office-hours-founder/audit.ts";
 import { normalizeBlock } from "../../lanes/office-hours-founder/parse.ts";
+import { freezeManifest } from "../../lanes/office-hours-founder/run/manifest.ts";
+import { FOUNDER_RULES } from "../../lanes/office-hours-founder/sim/founder.ts";
 import type { ArmId } from "../../lanes/office-hours-founder/types.ts";
 import { ENV, ledgerWith, tmp } from "../pv/fixtures.ts";
 
@@ -29,6 +32,7 @@ function launch(dir: string, sessions: { arm: ArmId; turns: number; stage?: 1 | 
     return JSON.stringify({ id: ["arm", "opus", s.arm, "u1", "p" + (i + 1)].join("/"), cell: stage === 1 ? "stage1" : "stage2", row, why: "", transcript: t, state_root: null, attempts: [{ attempt: 1, outcome: row.end, why: "", usd: 0, sim_usd: 0, contained: [] }] });
   });
   writeFileSync(join(out, "rows.ndjson"), lines.join("\n") + "\n");
+  freezeManifest(join(out, "manifest.json"), { schema: 1, cell: "stage1", models: ["opus"], arms: ["none", "lens", "office-hours"], repairs: [], units: {}, sim_rules: createHash("sha256").update(FOUNDER_RULES).digest("hex"), entries: [] });
   return { units, out };
 }
 
@@ -97,6 +101,18 @@ describe("of audit", () => {
     expect(JSON.parse(readFileSync(join(dir2, "audit.json"), "utf8")).read).toBe("no-read");
     expect(prompts.length).toBe(0);
     expect(c2.err.join("\n")).toContain("E_OF_NO_READ");
+  });
+
+  test("--sim-rules other than the rules a launch's manifest froze is refused before any call", async () => {
+    const dir = tmp();
+    const { units, out } = launch(dir, [{ arm: "none", turns: 6 }, { arm: "office-hours", turns: 6 }, { arm: "none", turns: 6 }, { arm: "lens", turns: 6 }]);
+    const { record, ledger } = ledgerWith(dir, ["of-s1-audit"]);
+    const rules = join(dir, "rules.md");
+    writeFileSync(rules, "Other rules.\n");
+    const prompts: string[] = [];
+    const run = withFetch(upstream(() => '{"marked": []}', prompts), () => audit(["--stage", "1", "--launch", out, "--units", units, "--item", "of-s1-audit", "--spend-cap", "20", "--out", join(dir, "res", "audit.json"), "--sim-rules", rules, "--record", record, "--ledger", ledger], io().io, ENV));
+    await expect(run).rejects.toMatchObject({ code: "E_USAGE", message: expect.stringContaining("simulator rules") });
+    expect(prompts).toEqual([]);
   });
 
   test("an out path inside the repo is refused", async () => {

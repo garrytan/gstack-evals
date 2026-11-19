@@ -1,0 +1,87 @@
+// Blind excerpt builder for hand criterion H1 (scratch, not committed). Usage:
+//   bun build.ts select <out-key-dir> <table.jsonl:jobsdir>...   draws the set, writes key.tsv and seed
+//   bun build.ts excerpt <trialdir> <patchsource> <outfile>      one excerpt (used by select, and for checks)
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
+const BAN = /gstack|prove-it|prove_it|ARGUMENTS|\.claude|\bskills?\b|SKILL/i;
+const OUTCOME = /\b\d+ (?:passed|failed|errors?|error|skipped|deselected)\b|FAILED|ERROR|PASSED|^Ran \d|^OK\b|Traceback|assert|Exit code|Error\b|Interrupted/;
+const TESTRUN = /\b(?:pytest|py\.test|unittest|tox|nox|make|coverage)\b|\bbash\s+\S+\.sh\b|\bsh\s+\S+\.sh\b|\.\/\S+\.sh\b|python[\d.]*\s+(?:-\S+\s+)*\S*test\S*\.py/;
+const strip = (s: string) => s.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "");
+function writes(cmd: string): boolean {
+  const c = cmd.replace(/\d*>&\d/g, "").replace(/&>\s*\/dev\/null/g, "").replace(/\d*>>?\s*\/dev\/null/g, "");
+  return /(?:^|\s)(?:g?sed|perl)\s+(?:-\S+\s+)*-[a-zA-Z]*i|--in-place|>|\btee\b|\bopen\([^)]*['"][wax]|write_text|write_bytes|\bshutil\.|os\.(?:remove|rename|replace)|(?:^|[\s;&|])(?:cp|mv)\s|<<|\bgit\s+(?:apply|stash|checkout|restore|am|reset)\b|(?:^|\s)patch\s/.test(c);
+}
+function clean(cmd: string): string {
+  return cmd.split("\n").map((line) => line.split(/(\s*(?:&&|\|\||;)\s*)/).reduce((acc: string[], part, i, arr) => {
+    if (i % 2 === 1) return acc;
+    if (BAN.test(part)) return acc;
+    if (acc.length) acc.push(arr[i - 1] ?? "; ");
+    acc.push(part); return acc;
+  }, []).join("")).filter((l) => l.trim() && !BAN.test(l)).join("\n");
+}
+function resultText(c: any): string { return strip(typeof c.content === "string" ? c.content : (c.content ?? []).map((x: any) => x.text ?? "").join("\n")); }
+function trimResult(t: string): string {
+  const ls = t.split("\n").filter((l) => !BAN.test(l));
+  const keep = new Set<number>(); ls.forEach((l, i) => { if (OUTCOME.test(l)) keep.add(i); }); for (let i = Math.max(0, ls.length - 6); i < ls.length; i++) keep.add(i);
+  let out = [...keep].sort((a, b) => a - b).map((i) => ls[i]!.slice(0, 200)).join("\n");
+  if (out.length > 1200) out = out.slice(0, 500) + "\n[...cut...]\n" + out.slice(-700);
+  return out;
+}
+const cut = (s: string, n: number) => (s.length > n ? s.slice(0, n) + " [...cut]" : s);
+const rel = (p: string) => String(p).replace(/^\/testbed\//, "");
+export function excerpt(dir: string, patch: string, label: string): string {
+  const files = [...patch.matchAll(/^diff --git a\/(\S+) b\//gm)].map((m) => m[1]!);
+  const isTest = (f: string) => /(^|\/)(tests?|testing)\//.test(f) || /(^|\/)test_[^/]*\.py$|_test\.py$/.test(f);
+  const src = files.filter((f) => !isTest(f) && /\.py$/.test(f) && !BAN.test(f)), tst = files.filter((f) => isTest(f) && !BAN.test(f)), oth = files.filter((f) => !isTest(f) && !/\.py$/.test(f) && !BAN.test(f));
+  const lines: string[] = ["# Excerpt " + label, "", "Files the final patch changes. Source: " + (src.join(", ") || "none") + ". Test: " + (tst.join(", ") || "none") + ". Other: " + (oth.join(", ") || "none") + ".", ""];
+  const msgs = readFileSync(join(dir, "evaluator", "sdk-messages.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return {}; } });
+  const kept = new Map<string, number>(); let n = 0;
+  for (const m of msgs) for (const c of Array.isArray(m.content) ? m.content : []) {
+    if (c.name && c.input) {
+      const inp = c.input;
+      if (c.name === "Edit" || c.name === "MultiEdit" || c.name === "Write") {
+        const body = c.name === "Write" ? "content:\n" + cut(String(inp.content ?? ""), 800) : c.name === "Edit" ? "old:\n" + cut(String(inp.old_string ?? ""), 300) + "\nnew:\n" + cut(String(inp.new_string ?? ""), 500) : cut(JSON.stringify(inp.edits ?? []), 800);
+        if (BAN.test(String(inp.file_path))) continue;
+        n++; kept.set(c.id, n); lines.push("## " + n + ". " + c.name + " " + rel(inp.file_path), "", "```", body.split("\n").filter((l) => !BAN.test(l)).join("\n"), "```", "");
+      } else if (c.name === "Bash" && typeof inp.command === "string") {
+        const cmd = clean(inp.command);
+        if (!cmd.trim() || !(TESTRUN.test(cmd) || writes(cmd))) continue;
+        n++; kept.set(c.id, n); lines.push("## " + n + ". Bash" + (inp.run_in_background ? " (run in background)" : ""), "", "```", cut(cmd, 900), "```", "");
+      }
+    } else if (c.tool_use_id && kept.has(c.tool_use_id)) {
+      lines.push("Result of " + kept.get(c.tool_use_id) + (c.is_error ? " (the tool reported an error)" : "") + ":", "", "```", trimResult(resultText(c)), "```", "");
+    }
+  }
+  return lines.join("\n");
+}
+const [mode, ...args] = Bun.argv.slice(2);
+if (mode === "excerpt") { const [dir, pp, out] = args; writeFileSync(out!, excerpt(dir!, existsSync(pp!) ? readFileSync(pp!, "utf8") : "", "TEST")); }
+if (mode === "rebuild") {
+  const [keyDir, exDir, ...tables] = args; const dirs = new Map<string, string>();
+  for (const t of tables) { const [tab, jobs] = t.split(":"); for (const l of readFileSync(tab!, "utf8").split("\n").filter(Boolean)) { const r = JSON.parse(l); dirs.set(r.model + "|" + r.trial, join(jobs!, r.trial)); } }
+  const rows = readFileSync(join(keyDir!, "key.tsv"), "utf8").split("\n").filter(Boolean).slice(1).map((l) => l.split("\t"));
+  for (const [lab, model, , , trial] of rows) { const dir = dirs.get(model + "|" + trial)!; const pp = join(dir, "artifacts", "logs", "artifacts", "model.patch"); writeFileSync(join(exDir!, lab + ".md"), excerpt(dir, existsSync(pp) ? readFileSync(pp, "utf8") : "", lab!)); }
+  console.log("rebuilt", rows.length);
+}
+if (mode === "select") {
+  const [keyDir, exDir, ...tables] = args; mkdirSync(keyDir!, { recursive: true }); mkdirSync(exDir!, { recursive: true });
+  const seed = new Uint32Array(1); crypto.getRandomValues(seed);
+  let s = seed[0]!; const rnd = () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; };
+  type Row = { model: string; arm: string; task: string; trial: string; dir: string; kind: string; followed: boolean };
+  const all: Row[] = [];
+  for (const t of tables) { const [tab, jobs] = t.split(":"); for (const l of readFileSync(tab!, "utf8").split("\n").filter(Boolean)) { const r = JSON.parse(l); if (r.outcome !== "graded") continue; const d = r.detect; all.push({ model: r.model, arm: r.arm, task: r.task, trial: r.trial, dir: join(jobs!, r.trial), kind: d.failing_before_source && !d.passing_after_source ? "near" : d.followed ? "followed" : "other", followed: d.followed }); } }
+  const pick: Row[] = all.filter((r) => r.kind === "near");
+  const groups = new Map<string, Row[]>(); for (const r of all.filter((r) => r.kind === "followed")) { const k = r.model + "|" + r.arm; groups.set(k, [...(groups.get(k) ?? []), r]); }
+  for (const [, g] of groups) { const a = [...g]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j]!, a[i]!]; } pick.push(...a.slice(0, 10)); }
+  for (let i = pick.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [pick[i], pick[j]] = [pick[j]!, pick[i]!]; }
+  const used = new Set<string>(); const key: string[] = ["label\tmodel\tarm\ttask\ttrial\tkind\tdetector_followed\tgroup_size"];
+  for (const r of pick) {
+    let lab = ""; do { const b = new Uint8Array(3); crypto.getRandomValues(b); lab = "E" + [...b].map((x) => x.toString(16).padStart(2, "0")).join(""); } while (used.has(lab)); used.add(lab);
+    const pp = join(r.dir, "artifacts", "logs", "artifacts", "model.patch");
+    writeFileSync(join(exDir!, lab + ".md"), excerpt(r.dir, existsSync(pp) ? readFileSync(pp, "utf8") : "", lab));
+    key.push([lab, r.model, r.arm, r.task, r.trial, r.kind, r.followed, r.kind === "followed" ? groups.get(r.model + "|" + r.arm)!.length : ""].join("\t"));
+  }
+  writeFileSync(join(keyDir!, "key.tsv"), key.join("\n") + "\n"); writeFileSync(join(keyDir!, "seed.txt"), "xorshift32 seed from crypto.getRandomValues: " + seed[0] + "\n");
+  const cnt: Record<string, number> = {}; for (const r of pick) { const k = r.model + " " + r.arm + " " + r.kind; cnt[k] = (cnt[k] ?? 0) + 1; }
+  console.log("excerpts", pick.length, JSON.stringify(cnt));
+}

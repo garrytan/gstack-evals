@@ -4,7 +4,7 @@ A simulated person for evals where an assistant talks with someone who holds fac
 
 ## Modules
 
-- **sim.ts** runs one person turn. `personTurn({ sheet, transcript, call })` renders the system prompt (the caller's rules text, then the sheet), maps the transcript to chat messages, calls the injected `SimCall` and checks the output. It returns one of three outcomes: `reply` (the reply, the revealed ids, the rules applied, the attempts and the request digests), `check-failed` (the checks the second attempt failed) or `call-failed` (the call itself failed: `allowance`, `provider` or `drift`). `SIM_SHA256` is the sha256 of the file, so the rendering, the checks and the retry notes travel with every logged turn.
+- **sim.ts** runs one person turn. `personTurn({ sheet, transcript, call })` renders the system prompt (the caller's rules text, then the sheet), maps the transcript to chat messages, calls the injected `SimCall` and checks the output. It returns one of three outcomes: `reply` (the reply, the revealed ids, the rules applied, the attempts and the request digests), `check-failed` (the checks the second attempt failed) or `call-failed` (the call itself failed: `allowance`, `provider`, `drift` or `cap`, the ledger's cap refusing the call). `SIM_SHA256` is the sha256 of the file, so the rendering, the checks and the retry notes travel with every logged turn.
 - **audit.ts** audits one turn. `auditPrompt` renders the auditor prompt from the caller's violation definitions, the sheet, the assistant's last message, the reply and the logged ids. `auditTurn` sends it through an injected `AuditCall` and reads the codes marked. `combine` turns two auditors' reads into `fail`, `disputed` or `clean`.
 
 ## Build-time choices

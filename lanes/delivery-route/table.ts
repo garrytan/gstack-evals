@@ -11,13 +11,16 @@ import { join } from "node:path";
 import { readSessionRows, sessionsByTrial, type SessionRow } from "../../quick/laneb/analysis/analyze.ts";
 import { parseLog, runProbes, type Rec } from "../../quick/laneb/l1/probes.ts";
 import { detect, type Detection } from "./detect.ts";
+import { isB1bArm, ROUTING, type B1bArm } from "./b1b-pins.ts";
+import { isB1cArm, type B1cArm } from "./b1c-pins.ts";
+import { isB1dArm, type B1dArm } from "./b1d-pins.ts";
 import { ARM_NAMES, ARM_SOURCES, DESCRIBED_SKILL, isArm, REPO, SKILL, type B1Arm } from "./pins.ts";
 
 export type B1Row = {
   schema: "b1-session/1";
   model: string;
   part: string | null;
-  arm: B1Arm;
+  arm: B1Arm | B1bArm | B1cArm | B1dArm;
   task: string;
   trial: string;
   outcome: "graded" | "cap_stop" | "infra";
@@ -42,8 +45,8 @@ export type B1Row = {
 export type B1TableConfig = { jobs: { dir: string; part?: string }[]; sessions: string[]; home?: string };
 
 const readJson = (p: string) => { try { return JSON.parse(readFileSync(p, "utf8")); } catch { return null; } };
-const OWN: Record<B1Arm, string[]> = { none: [], described: ["/.claude/skills/" + DESCRIBED_SKILL], "gstack-shaped": ["/.claude/skills/" + SKILL, "/.claude/skills/gstack"], command: [] };
-const ownSkill: Record<B1Arm, string | null> = { none: null, described: DESCRIBED_SKILL, "gstack-shaped": SKILL, command: null };
+const OWN: Record<B1Arm | B1bArm | B1cArm | B1dArm, string[]> = { none: [], described: ["/.claude/skills/" + DESCRIBED_SKILL], "gstack-shaped": ["/.claude/skills/" + SKILL, "/.claude/skills/gstack"], command: [], "claude-md": ["/.claude/skills/" + SKILL, "/.claude/skills/gstack", "/" + ROUTING.path], hook: ["/.claude/skills/" + SKILL, "/.claude/skills/gstack", "/.gstack"], "project-md": ["/.claude/skills/" + SKILL, "/.claude/skills/gstack"], "gstack-main": ["/.claude/skills", "/.gstack"], "project-md-noescape": ["/.claude/skills/" + SKILL, "/.claude/skills/gstack"] };
+const ownSkill: Record<B1Arm | B1bArm | B1cArm | B1dArm, string | null> = { none: null, described: DESCRIBED_SKILL, "gstack-shaped": SKILL, command: null, "claude-md": SKILL, hook: SKILL, "project-md": SKILL, "gstack-main": SKILL, "project-md-noescape": SKILL };
 let stepsText: string | null = null;
 const stepsNeedle = () => (stepsText ??= JSON.stringify(readFileSync(join(REPO, ARM_SOURCES, "steps.md"), "utf8").trimEnd()).slice(1, -1));
 
@@ -60,13 +63,14 @@ export function safetyStop(transcript: string): boolean {
 }
 export const skillLoads = (recs: Rec[], skill: string | null) => (skill ? recs.filter((r) => r.type === "AssistantMessage").flatMap((r) => (Array.isArray(r.content) ? r.content : [])).filter((b: any) => b?.name === "Skill" && String(b.input?.skill ?? "").replace(/^\//, "") === skill).length : 0);
 
-export function b1Row(dir: string, ctx: { part: string | null; sessions: Map<string, SessionRow[]>; home: string }): B1Row | null {
+export function b1Row(dir: string, ctx: { part: string | null; sessions: Map<string, SessionRow[]>; home: string; arms?: readonly string[] }): B1Row | null {
   const config = readJson(join(dir, "config.json"));
   if (!config || config.agent?.name !== "laneb-claude-code") return null;
   const result = readJson(join(dir, "result.json"));
   const kwargs = config.agent.kwargs ?? {};
   const arm = String(kwargs.arm ?? "");
-  if (!isArm(arm)) throw new Error("E_USAGE b1 table: " + dir + " has arm " + JSON.stringify(kwargs.arm) + ", not one of " + ARM_NAMES.join(", "));
+  const arms = ctx.arms ?? ARM_NAMES;
+  if (!arms.includes(arm) || !(isArm(arm) || isB1bArm(arm) || isB1cArm(arm) || isB1dArm(arm))) throw new Error("E_USAGE b1 table: " + dir + " has arm " + JSON.stringify(kwargs.arm) + ", not one of " + arms.join(", "));
   const task = String(config.task?.path ?? result?.task_name ?? "").split("/").filter(Boolean).at(-1) ?? "?";
   const trial = String(result?.trial_name ?? dir.split("/").filter(Boolean).at(-1));
   const msgs = join(dir, "evaluator", "sdk-messages.jsonl");

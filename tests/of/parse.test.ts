@@ -1,6 +1,7 @@
 // Value: protects=section 6's parser, its one lenient parse and the normalizer, which decide W's no-block rows and what every judge reads.
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
+import { assistantText } from "../../src/adapters/claude-code/driver.ts";
 import { ANSWER_NOW, CLOSING, EVERYTHING_ELSE, FIRST_LINE, FORCED_LINE, PREREG, STOCK_ROWS, TEMPLATE, firstMessage, fullInformation } from "../../lanes/office-hours-founder/frozen.ts";
 import { normalizeBlock, parseFirstMove, renderBlock, replies, sessionParse } from "../../lanes/office-hours-founder/parse.ts";
 
@@ -65,5 +66,11 @@ describe("replies", () => {
     const t = [text("Who pays?"), line({ type: "result", subtype: "success" }), text("sub", "toolu_1"), text(fence("first-move", JSON.stringify(full))), line({ type: "result", subtype: "success" })].join("\n");
     expect(replies(t)).toEqual([["Who pays?"], [fence("first-move", JSON.stringify(full))]]);
     expect(sessionParse(t).kind).toBe("block");
+  });
+  test("one assistant message's text blocks join as the driver joins them for the simulator, so the auditor reads the same message", () => {
+    const m = { type: "assistant", message: { content: [{ type: "text", text: "Who pays" }, { type: "text", text: " " }, { type: "tool_use", id: "toolu_1", name: "Bash", input: {} }, { type: "text", text: "today?" }] } };
+    const t = JSON.stringify(m) + "\n" + JSON.stringify({ type: "result", subtype: "success" }) + "\n";
+    expect(replies(t)).toEqual([["Who pays today?"]]);
+    expect(replies(t)).toEqual([[assistantText(m)]]);
   });
 });

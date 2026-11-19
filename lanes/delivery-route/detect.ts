@@ -14,6 +14,8 @@
 // every Bash call that writes somewhere no parser can name (unresolved_writes), so the report can score those sessions
 // both ways. A relative write after a cd the parser can't resolve is one of those. Inside one Bash call, writes and runs
 // are ordered by the place of their commands (sequence).
+// Deviation D1 (2026-11-17, before any counted session): a passing run is also read per test-runner command when a call's
+// runners and test summaries pair one to one (passingOwn), and the rule as merged is kept as followed_as_merged.
 import { posix } from "node:path";
 import { showsFailure, showsOutcome, toTranscript } from "../harness-mechanics/score.ts";
 import type { TranscriptEvent } from "../harness-mechanics/vendor/gstack/lib/skill-contract.ts";
@@ -178,6 +180,9 @@ export interface Detection {
   followed: boolean;
   /** The same rule with only Write and Edit seen as writes (the head-to-head's known limit), for the sensitivity line. */
   followed_tool_only: boolean;
+  /** The primary under the rule as merged, before deviation D1: the passing run read on the whole Bash call, its exit status
+   *  and every count in its result. The report prints it beside the primary as a sensitivity line. */
+  followed_as_merged: boolean;
   test_before_source: boolean;
   failing_before_source: boolean;
   passing_after_source: boolean;
@@ -388,10 +393,57 @@ function commandSelects(c: ShellCommand, cwd: string, test: string): boolean {
   const code = INTERPRETER.test(posix.basename(c.words[0] ?? "")) ? codeOf(c, new Map()).join("\n") : "";
   return /\b(?:pytest|unittest)\.main\b/.test(code) && code.includes(posix.basename(test));
 }
-/** The passing run of a test: a run that succeeds, shows a test outcome with no failing count, reports no failed test in the
- *  session's test files and selects one the failing runs reported failing (covered), so an unrelated green run, or a pass on
- *  another written test, does not count. */
-const passing = (r: Run, tests: string[], covered: string[]) => r.ok && showsOutcome(r.result) && !showsFailure(r.result) && !resultLines(r.result).some((l) => { const f = failedTest(l); return f !== null && tests.some((t) => failedHere(f, t)); }) && covered.some((t) => selectsTest(r, t));
+const reportsFailed = (r: Run, tests: string[]) => resultLines(r.result).some((l) => { const f = failedTest(l); return f !== null && tests.some((t) => failedHere(f, t)); });
+/** The passing run of a test, read on the whole call (the rule as merged): a run that succeeds, shows a test outcome with no
+ *  failing count, reports no failed test in the session's test files and selects one the failing runs reported failing
+ *  (covered), so an unrelated green run, or a pass on another written test, does not count. */
+const passing = (r: Run, tests: string[], covered: string[]) => r.ok && showsOutcome(r.result) && !showsFailure(r.result) && !reportsFailed(r, tests) && covered.some((t) => selectsTest(r, t));
+/** A result's test summaries in order, each true when it passed: pytest's summary line (a passed, failed or error count with
+ *  its time; passed when it holds a passed count above 0 and no failed or error count) and unittest's Ran line (passed when it
+ *  ran a test and the next line opens with OK). */
+function summaries(s: string): boolean[] {
+  const ls = resultLines(s), out: boolean[] = [];
+  ls.forEach((l, i) => {
+    if (/\b\d+ (?:passed|failed|errors?)\b.*\bin \d+(?:\.\d+)?s\b/.test(l) && !/no tests ran/.test(l)) out.push(/\b[1-9]\d* passed\b/.test(l) && !/\b\d+ (?:failed|errors?)\b/.test(l));
+    else if (/^Ran \d+ tests? in /.test(l)) out.push(!/^Ran 0 /.test(l) && /^OK\b/.test(ls.slice(i + 1).find((x) => x.trim())?.trim() ?? ""));
+  });
+  return out;
+}
+const WRAPPER = /^(?:[A-Za-z_]\w*=.*|-\S*|\d+(?:\.\d+)?[smhd]?|timeout|env|nice|time|exec|uv|poetry|pdm|hatch|rye|run|coverage)$/;
+/** A runner command that runs its tests once: pytest or unittest, with only an interpreter, options and known wrappers
+ *  (timeout, env, uv run, coverage run and the like) before it. */
+const soleRun = (c: ShellCommand) => { const i = runnerAt(c); return i >= 0 && /^(?:pytest|py\.test|unittest)$/.test(posix.basename(c.words[i]!)) && c.words.slice(0, i).every((w) => WRAPPER.test(w) || INTERPRETER.test(posix.basename(w))); };
+const QUIET = /^(?:cd|pwd|export|unset|echo|printf|true|false|sleep|ls|git|cp|mv|rm|mkdir|touch|ruff|black|pyink|isort|flake8|mypy|pyright|pylint)$/;
+const FILTER = /^(?:tail|head|grep|egrep|rg|sed|awk|cut|sort|uniq|tr|wc|tee|cat)$/;
+/** A command that prints no test summary of its own: a plain assignment, a filter reading a pipe, an in-place sed or perl,
+ *  sourcing a virtualenv's activate script, or a command on a short list (cd, echo, git, ls, file moves, linters and
+ *  formatters). An interpreter, a shell, a script, make, pip, a command named by a variable or a reader given a file could
+ *  print one, so any of those leaves the call to be read whole. */
+function printsNoSummary(c: ShellCommand, piped: boolean): boolean {
+  const w = c.words.filter((x) => !/^[A-Za-z_]\w*=/.test(x)), name = posix.basename(w[0] ?? "");
+  if (!w.length || QUIET.test(name) || (piped && FILTER.test(name))) return true;
+  if (/^(?:g?sed|perl)$/.test(name)) return IN_PLACE.test(c.text);
+  return /^(?:source|\.)$/.test(name) && w.length === 2 && /\/activate$/.test(w[1]!);
+}
+/** Deviation D1 (2026-11-17, before any counted session): the passing run read per test-runner command. When a Bash call's
+ *  test-runner commands and its result's test summaries pair one to one, in order, each runner command's outcome is its own
+ *  summary, so a missing linter or another suite's failure in the same call no longer hides the test's own pass. Returns the
+ *  places of the runner commands that select a covered test and whose summary passed. It returns none, and the call is then
+ *  read whole as merged, for a background run read later, a result that reports a failed test in the session's test files,
+ *  or a call whose runners and summaries don't pair. Summaries pair with runners only when nothing else can print one or
+ *  print them out of order, so it also returns none for a call the parser can't order or with a &, a runner other than
+ *  pytest or unittest (tox and nox print one summary an environment) or behind anything but an interpreter, options and
+ *  known wrappers (so xargs, find -exec and a loop's body don't count), or any other command that could print a summary,
+ *  a loop's own words included (printsNoSummary). */
+function passingOwn(r: Run, tests: string[], covered: string[]): number[] {
+  if (r.later || reportsFailed(r, tests)) return [];
+  const seq = sequence(r.command);
+  if (!seq || seq.items.some((it) => it.kind === "bg")) return [];
+  const cs = shellCommands(r.command, r.cwd), runners = cs.flatMap((c, k) => (runnerAt(c) >= 0 ? [k] : [])), s = summaries(r.result);
+  if (!runners.length || runners.length !== s.length) return [];
+  if (!runners.every((k) => soleRun(cs[k]!)) || !cs.every((c, k) => runners.includes(k) || printsNoSummary(c, k > 0 && cs[k - 1]!.pipeline === c.pipeline))) return [];
+  return runners.filter((k, i) => s[i] && covered.some((t) => commandSelects(cs[k]!, cs[k]!.cwd ?? r.cwd, t)));
+}
 
 type Sequence = { items: { kind: "cmd" | "and" | "or" | "bg"; pipeline: number }[]; at: number[] };
 const MARKS = new Map<string, "and" | "or" | "bg">([["__b1_and__", "and"], ["__b1_or__", "or"], ["__b1_bg__", "bg"]]);
@@ -432,7 +484,7 @@ function ordered(s: Sequence, i: number, j: number, ok: boolean): boolean {
 /** The steps in order. One thing comes before another when its tool call is earlier or, in the same Bash call, when one of
  *  its commands is ordered before one of the other's (a failing run as a command that failed). A run's commands are those that select one of the session's tests; a
  *  background run read later has none, so it is never ordered inside the call that reads it. */
-function read(ws: Write[], runs: Run[], fix: Set<string>, seqAt: (at: number) => Sequence | null) {
+function read(ws: Write[], runs: Run[], fix: Set<string>, seqAt: (at: number) => Sequence | null, asMerged = false) {
   const first = (a: { at: number; ks: number[] }, b: { at: number; ks: number[] }, ok = true) => {
     if (a.at !== b.at) return a.at < b.at;
     const s = seqAt(a.at);
@@ -444,7 +496,12 @@ function read(ws: Write[], runs: Run[], fix: Set<string>, seqAt: (at: number) =>
   const place = (r: Run) => ({ at: r.at, ks: r.later ? [] : shellCommands(r.command, r.cwd).flatMap((c, k) => (paths.some((t) => commandSelects(c, c.cwd ?? r.cwd, t)) ? [k] : [])) });
   const fails = test && source ? runs.flatMap((r) => { const p = place(r); return first(p, source, false) ? tests.filter((t) => first(t, p) && failing(r, [t.path])).map((t) => ({ r, path: t.path })) : []; }) : [];
   const covered = fails.map((f) => f.path), before = fails[0]?.r;
-  const passes = (covers: string[]) => (test && source ? runs.find((r) => first(source, place(r)) && passing(r, paths, covers)) : undefined);
+  const passesAfter = (r: Run, covers: string[]) => {
+    if (first(source!, place(r)) && passing(r, paths, covers)) return true;
+    const own = asMerged ? [] : passingOwn(r, paths, covers);
+    return own.length > 0 && first(source!, { at: r.at, ks: own });
+  };
+  const passes = (covers: string[]) => (test && source ? runs.find((r) => passesAfter(r, covers)) : undefined);
   const after = passes(paths), closes = covered.length ? passes(covered) : undefined;
   return { source, test, before, after, followed: !!(test && source && before && closes) };
 }
@@ -462,12 +519,13 @@ export function detect(recs: Rec[], patch: string, rootIn?: string): Detection {
   const bash = new Map(us.flatMap((u) => (u.name === "Bash" && typeof u.input.command === "string" ? [[u.at, u.input.command] as const] : [])));
   const seqs = new Map<number, Sequence | null>();
   const seqAt = (at: number) => { if (!seqs.has(at)) seqs.set(at, bash.has(at) ? sequence(bash.get(at)!) : null); return seqs.get(at) ?? null; };
-  const all = read(ws, runs, fix, seqAt);
+  const all = read(ws, runs, fix, seqAt), merged = read(ws, runs, fix, seqAt, true);
   const tool = read(ws.filter((w) => w.via === "tool"), runs, fix, seqAt);
   const fixWrites = ws.filter((w) => fix.has(w.path));
   return {
     followed: all.followed,
     followed_tool_only: tool.followed,
+    followed_as_merged: merged.followed,
     test_before_source: !!(all.test && all.source),
     failing_before_source: !!all.before,
     passing_after_source: !!all.after,

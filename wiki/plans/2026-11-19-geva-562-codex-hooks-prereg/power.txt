@@ -1,0 +1,20 @@
+== Routing primary: tasks where the hook names prove-it (paired, r-on minus r-off)
+  n=20: 20% disagree -> none fits, 30% disagree -> none fits, 50% disagree -> 43.5 points, 70% disagree -> 52.5 points
+  n=30: 20% disagree -> none fits, 30% disagree -> 27.5 points, 50% disagree -> 36.5 points, 70% disagree -> 43.5 points
+  n=40: 20% disagree -> none fits, 30% disagree -> 24.5 points, 50% disagree -> 32.0 points, 70% disagree -> 38.5 points
+  n=50: 20% disagree -> 18.0 points, 30% disagree -> 22.0 points, 50% disagree -> 29.0 points, 70% disagree -> 34.0 points
+  n=60: 20% disagree -> 16.5 points, 30% disagree -> 20.5 points, 50% disagree -> 26.5 points, 70% disagree -> 31.0 points
+
+== Contract primary, within session: 84 blocker-passes, design effect 1.2, effective n 70
+  losses 0% of blocker-passes -> net gain detectable at 11.5 points
+  losses 2% of blocker-passes -> net gain detectable at 15.0 points
+  losses 5% of blocker-passes -> net gain detectable at 18.5 points
+
+== Between arms (c-on minus c-off, c-high minus c-on, gstack minus none): 84 blocker-passes, effective n 70
+  10% of blocker-passes disagree -> none fits
+  20% of blocker-passes disagree -> 15.5 points
+  30% of blocker-passes disagree -> 19.0 points
+  40% of blocker-passes disagree -> 22.0 points
+
+== O'Brien-Fleming two-look bounds, two-sided alpha 0.05, look at half the information (R113, used only if a counted run is planned above $500 paid)
+  interim |z| >= 2.797, final |z| >= 1.977
