@@ -26,9 +26,9 @@ attachments:
 
 We learned that where a routing block sits changes how often Opus 5.5 acts on it. gstack's CLAUDE.md routing block, with its bug line naming the prove-it skill, got the skill loaded in 20 of 60 bug fixes from the user's CLAUDE.md (an earlier run, B1b). The same bytes in the task's project CLAUDE.md, where gstack's project install writes them, got it loaded in 39 of 60. Every task that loaded from the user file loaded here too, and 19 more did: +31.7 points, 95% interval +18.8 to +42.6. You should put routing text in the project's CLAUDE.md, not the user's.
 
-We learned that even in the project file, a CLAUDE.md block is not a dependable way to start a skill. gstack's prompt-routing hook line loaded the skill in 58 of 60 on the same tasks. The paired difference is -31.7 points (95% interval -44.2 to -19.2), wholly below the plan's -15 point margin, so the plan's reading is "clearly loses". In all 21 sessions where the block didn't load the skill, Opus never wrote its name, in text, thinking or any tool call. You should start a skill with a route on the prompt, such as gstack's hook line, and not count on CLAUDE.md to do it.
+We learned that even in the project file, a CLAUDE.md block is not a dependable way to start a skill. gstack's prompt-routing hook line loaded the skill in 58 of 60 on the same tasks. The paired difference is -31.7 points (95% interval -44.2 to -19.2), wholly below the plan's -15 point margin, so the plan's reading is "clearly loses". In all 21 sessions where the block didn't load the skill, Opus never wrote its name in its text or any tool call, nor in the little thinking the logs keep. You should start a skill with a route on the prompt, such as gstack's hook line, and not count on CLAUDE.md to do it.
 
-We learned that the hook can't take the block's place yet. B1b found that gstack's hook, as shipped, names prove-it on none of these 60 prompts, and with prove-it added to its list its matcher would fire on 22. So on these bugs the project block loads the skill more often end to end (39 of 60) than the listed hook would (22 of 60, counted directly). You should fix the hook's matcher before gstack drops the block.
+We learned that the hook can't take the block's place yet. B1b found that gstack's hook, as shipped, names prove-it on none of these 60 prompts, and with prove-it added to its list its matcher would fire on 22. So on these bugs the project block loads the skill more often end to end (39 of 60) than the listed hook would (22 of 60, counted directly). That count assumes, as B1b did, that a prompt with no hook line doesn't load the skill; no arm tests that, and B1's skill found only by its description loaded in 0 of 60. You should fix the hook's matcher before gstack drops the block.
 
 The plan's reading is that CLAUDE.md routing is a CUT-CANDIDATE wherever it sits: gstack stops relying on its routing block to start skills. The caveat above applies to how it stops: relying on the hook instead pays off only once the matcher fires on bug reports.
 
@@ -69,7 +69,7 @@ Paired contrasts on the 60 tasks, with Newcombe's interval (method 10):
 
 The project block never loaded the skill on a task where the hook line didn't. Its 39 loads include all 20 of the user-file block's loads. Every load came through the Skill tool at the first tool call.
 
-Why sessions didn't load (reasons.tsv lists each with the model's first text): all 21 are "never named". None had the block missing or a failed load. The 21 name prove-it nowhere in the model's text, thinking or tool calls. The only mention in their logs is Claude Code's own skill list at the start.
+Why sessions didn't load (reasons.tsv lists each with the model's first text): all 21 are "never named". None had the block missing or a failed load. The 21 name prove-it nowhere in the model's text or tool calls, nor in the little thinking their logs keep. The only mention in their logs is Claude Code's own skill list at the start.
 
 Placement. All 60 sessions carry the placement line, and every session's Claude Code transcript holds the block's bug line under the project-instructions label. None shows a user CLAUDE.md. In 10 sessions the repo tracked its own root CLAUDE.md, which the strip removed and the block replaced; 8 of those 10 loaded. No shipped diff names the root CLAUDE.md.
 
@@ -117,7 +117,7 @@ The plan's table (section 1). The caveat on the bold row comes from B1b's as-shi
 
 The project block falls short of the hook line by 31.7 points.
 
-- Exposure. The block reached every session: all 60 carry the placement line, and every transcript holds the block under Claude Code's project-instructions label. When the skill didn't load, the model never named it. So the block was read and not acted on, rather than missing.
+- Exposure. The block reached every session: all 60 carry the placement line, and every transcript holds the block under Claude Code's project-instructions label. When the skill didn't load, the model never named it. So the block reached the model's context and was not acted on, rather than missing.
 - Task fit. The tasks are SWE-rebench issues drawn as bugs, and the block's line is about bugs. Seven are interface tasks that ask for new code; the block loaded on none of them. On the other 53 it loaded on 39, still 14 short of the hook line's 53.
 - Power and headroom. The plan's rule detects a true load rate of 63% or less as "clearly loses" 80% of the time. The upper end of the interval, -19.2, clears the margin by 4.2 points. There is no ceiling: B1's none arm followed the steps in 0 of 60.
 - Does the model do it unaided? No. B1's none arm never followed the steps, and B1's skill found only by its description never loaded.
