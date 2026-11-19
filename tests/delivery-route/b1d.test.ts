@@ -123,6 +123,24 @@ describe("the decision", () => {
       expect(errs).toContain("E_USAGE b1d report --in: gstack-main__ho0 is task ho0, not one of the planned tasks");
     } finally { console.error = err; rmSync(dir, { recursive: true, force: true }); }
   });
+  test("report --item b1d-ho refuses a --routes table whose held-out coverage is not the committed one, before the held-out list is read", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "b1d-report-")), inPath = join(dir, "in.jsonl"), tsv = join(dir, "routes.tsv"), errs: string[] = [], err = console.error, env = process.env[HELDOUT.env];
+    const table = (c: { only: number; first: number; second: number; none: number }) => ["kind\ttask\tprompt_sha256\tchars\tlib_routes\thook_names\tagree\tprove_it\tline_sha256",
+      ...([["only", "prove-it", c.only], ["first of two", "prove-it,verify", c.first], ["second of two", "verify,prove-it", c.second], ["not named", "-", c.none]] as const).flatMap(([pos, names, k]) => Array.from({ length: k }, (_, i) => ["heldout", pos + i, "-", "100", names, names, "true", pos, "-"].join("\t")))].join("\n") + "\n";
+    writeFileSync(inPath, mainRows(39).map((r) => JSON.stringify(r)).join("\n") + "\n");
+    console.error = (m: string) => { errs.push(m); };
+    delete process.env[HELDOUT.env];
+    try {
+      writeFileSync(tsv, table({ ...HELDOUT.coverage, only: HELDOUT.coverage.only + 1, none: HELDOUT.coverage.none - 1 }));
+      expect(await b1dMain(["report", inPath, "--item", "b1d-ho", "--in", inPath, "--routes", tsv])).toBe(2);
+      expect(errs).toEqual(["E_USAGE b1d report --routes: " + tsv + "'s held-out coverage is not the committed " + JSON.stringify(HELDOUT.coverage)]);
+      writeFileSync(tsv, table(HELDOUT.coverage));
+      await expect(b1dMain(["report", inPath, "--item", "b1d-ho", "--in", inPath, "--routes", tsv])).rejects.toThrow(/set B1D_HELDOUT/);
+    } finally {
+      console.error = err; rmSync(dir, { recursive: true, force: true });
+      if (env !== undefined) process.env[HELDOUT.env] = env;
+    }
+  });
   test("the reason a gstack-main session didn't load prove-it, first that applies", () => {
     const r = (over: Partial<B1dRow>) => whyNot({ ...row(B1D_ARM, "t", false), ...over });
     const got = [r({ named: null }), r({ named: ["verify"] }), r({ route_mark: "quoted" }), r({ verify: { loaded: true, via: "Skill", at_call: 1 } }), r({ load: load({ failed: 1, named: true }) }), r({ load: load({ named: true }) }), r({})];
@@ -133,6 +151,7 @@ describe("the decision", () => {
   });
   test("namedOf reads the hook's last routed line, and splitLines counts sessions with no log", () => {
     expect(namedOf(null)).toBeNull();
+    expect([namedOf(""), namedOf("gstack hook started\n")]).toEqual([null, null]);
     expect(namedOf("x event=no-route reason=below-threshold\n")).toEqual([]);
     expect(namedOf("x event=routed skill=verify score=1 also=prove-it also_score=1\n")).toEqual(["verify", "prove-it"]);
     expect(splitLines([row(B1D_ARM, "t", true, { named: null, position: null })])[4]).toBe("  hook log missing (1 sessions): prove-it loaded 1");
@@ -222,6 +241,14 @@ describe("the table", () => {
     expect([r.named, r.position, r.why_not]).toEqual([null, null, null]);
     const lost = trial(B1D_ARM, "main-none", { hookLog: false }), q = b1dRow(lost.dir, lost.ctx)!;
     expect([q.named, q.why_not]).toEqual([null, "hook log missing"]);
+    const contracts = trial(B1D_ARM, "main-none", { hookLog: false });
+    mkdirSync(join(contracts.dir, "evaluator/gstack-hooks/skill-contracts"), { recursive: true });
+    writeFileSync(join(contracts.dir, "evaluator/gstack-hooks/skill-contracts/s.json"), "{}\n");
+    const c = b1dRow(contracts.dir, contracts.ctx)!;
+    expect([c.named, c.position, c.why_not]).toEqual([null, null, "hook log missing"]);
+    mkdirSync(join(contracts.dir, "evaluator/gstack-hooks/hooks"), { recursive: true });
+    writeFileSync(join(contracts.dir, "evaluator/gstack-hooks/hooks/skill-route.log"), "gstack hook started\n");
+    expect(b1dRow(contracts.dir, contracts.ctx)!.why_not).toBe("hook log missing");
     const cap = loadB1dCaptured(join(FIX, "noescape-stop")), u = trial(NOESCAPE.arm, "noescape-stop", { info: cap.arm_info! }), s = b1dRow(u.dir, u.ctx)!;
     expect([s.arm, s.placed, s.named, s.route_mark, s.why_not]).toEqual([NOESCAPE.arm, true, null, null, "never named"]);
   });

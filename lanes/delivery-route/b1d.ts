@@ -209,6 +209,8 @@ export function routeCounts(rows: string[][]) {
   }
   return n;
 }
+/** Whether a route table's held-out counts are the committed draw's coverage. */
+export const isHeldoutCoverage = (n: ReturnType<typeof routeCounts>) => n.only === HELDOUT.coverage.only && n["first of two"] === HELDOUT.coverage.first && n["second of two"] === HELDOUT.coverage.second && n["not named"] === HELDOUT.coverage.none;
 /** Each task's keyless route and prompt length, from a route table: the strata the report splits loads by. */
 export type TaskRoute = { position: Position; chars: number };
 export const routesByTask = (rows: string[][]) => new Map(rows.map((r) => [r[1]!, { position: r[7] as Position, chars: Number(r[3]) }]));
@@ -373,9 +375,10 @@ export function verifyLoadOf(recs: Rec[]): VerifyLoad {
   return { loaded: !!hit, via: (hit?.name as VerifyLoad["via"]) ?? null, at_call: hit?.n ?? null };
 }
 /** The skills the hook named in a session, from its own log (gstack-hooks/hooks/skill-route.log, copied out after the
- *  session): the routed line's skill= and also=. null when the copy failed or the arm has no hook. */
+ *  session): the routed line's skill= and also=. null when the copy failed, the arm has no hook, or the log holds no
+ *  event= line (the hook logs one on every prompt, routed or not, so such a log is no evidence it ran). */
 export function namedOf(log: string | null): string[] | null {
-  if (log === null) return null;
+  if (log === null || !/\bevent=/.test(log)) return null;
   const line = log.split("\n").filter((l) => /\bevent=routed\b/.test(l)).at(-1);
   if (!line) return [];
   return [/\bskill=(\S+)/.exec(line)?.[1], /\balso=(\S+)/.exec(line)?.[1]].filter((x): x is string => !!x);
@@ -398,7 +401,7 @@ export function b1dRow(dir: string, ctx: Parameters<typeof b1Row>[1]): B1dRow | 
   const msgs = join(dir, "evaluator", "sdk-messages.jsonl"), recs = existsSync(msgs) ? parseLog(readFileSync(msgs, "utf8")) : [];
   const load = loadsOf(recs), verify = verifyLoadOf(recs), main = row.arm === B1D_ARM;
   const last: any = ctx.sessions.get(row.trial)?.at(-1), log = join(dir, "evaluator", "gstack-hooks", "hooks", "skill-route.log");
-  const named = main ? namedOf(existsSync(join(dir, "evaluator", "gstack-hooks")) ? (existsSync(log) ? readFileSync(log, "utf8") : "") : null) : null;
+  const named = main ? namedOf(existsSync(log) ? readFileSync(log, "utf8") : null) : null;
   const placed = row.arm === "project-md" || row.arm === NOESCAPE.arm ? (armInfo(dir).checks_trust ?? "").startsWith(PLACEMENT.placed) : null;
   const out = { ...row, arm: row.arm, load, verify, named, position: named ? positionOf(named) : null, route_mark: main ? (last ? (last.route_mark_before_output ?? false) : null) : null, placed, first_call: load.loaded && load.at_call === 1, why_not: null as string | null };
   out.why_not = whyNot(out);
@@ -820,8 +823,7 @@ export async function b1dMain(argv: string[]): Promise<number> {
       const ho = await routeTable(tree, P("heldout", heldoutTasks())), n = routeCounts(ho);
       if (opt("sealed")) writeFileSync(opt("sealed")!, routeTsv(ho));
       console.log("heldout " + JSON.stringify(n));
-      const h = HELDOUT.coverage;
-      if (n.only !== h.only || n["first of two"] !== h.first || n["second of two"] !== h.second || n["not named"] !== h.none) probs.push("the held-out coverage is not the committed " + JSON.stringify(h));
+      if (!isHeldoutCoverage(n)) probs.push("the held-out coverage is not the committed " + JSON.stringify(HELDOUT.coverage));
     }
     for (const p of probs) console.error("E_B1_PIN " + p);
     return probs.length ? 1 : 0;
@@ -875,11 +877,14 @@ export async function b1dMain(argv: string[]): Promise<number> {
   if (cmd === "report") {
     const it = opt("item") ?? "", read = (f: string) => readFileSync(f, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as B1dRow);
     if (!rest[0] || rest[0].startsWith("--") || !isB1dItem(it)) return usage(USAGE);
-    let inRows: B1dRow[] = [];
+    let inRows: B1dRow[] = [], hoRoutes = new Map<string, TaskRoute>();
     if (it === "b1d-ho") {
       inRows = read(opt("in") ?? usage("b1d report --item b1d-ho needs --in <in-sample table.jsonl>"));
       const inBad = checkB1dRows(inRows, drawnTasks(loadBundle()).run, [B1D_ARM]);
       if (inBad.length) { for (const b of inBad) console.error("E_USAGE b1d report --in: " + b); return 2; }
+      const sealed = opt("routes") ?? usage("b1d report --item b1d-ho needs --routes <the sealed held-out route table>"), ho = readRouteTsv(readFileSync(sealed, "utf8")).filter((r) => r[0] === "heldout");
+      if (!isHeldoutCoverage(routeCounts(ho))) { console.error("E_USAGE b1d report --routes: " + sealed + "'s held-out coverage is not the committed " + JSON.stringify(HELDOUT.coverage)); return 2; }
+      hoRoutes = routesByTask(ho);
     }
     const rows = read(rest[0]), tasks = it === "b1d-smoke" ? [...B1D_SMOKE] : it === "b1d-in" ? drawnTasks(loadBundle()).run : heldoutTasks(), arms = it === "b1d-ho" ? [...B1D_ARM_NAMES] : [B1D_ARM];
     const bad = checkB1dRows(rows, tasks, arms);
@@ -888,10 +893,8 @@ export async function b1dMain(argv: string[]): Promise<number> {
     if (it === "b1d-smoke") lines = ["== B1d smoke", statLine(b1dStats(rows, B1D_ARM, tasks.length)), ...splitLines(rows)];
     else if (it === "b1d-in") lines = inReport(rows, inSampleRoutes()).lines;
     else {
-      const sealed = opt("routes") ?? usage("b1d report --item b1d-ho needs --routes <the sealed held-out route table>");
-      const routes = routesByTask(readRouteTsv(readFileSync(sealed, "utf8")).filter((r) => r[0] === "heldout"));
-      if (tasks.some((t) => !routes.has(t)) || routes.size !== tasks.length) return usage("b1d report: " + sealed + " is not the held-out route table");
-      lines = hoReport(rows, inReading(b1dStats(inRows, B1D_ARM, B1.tasks)), routes, tasks).lines;
+      if (tasks.some((t) => !hoRoutes.has(t)) || hoRoutes.size !== tasks.length) return usage("b1d report: " + opt("routes") + " is not the held-out route table");
+      lines = hoReport(rows, inReading(b1dStats(inRows, B1D_ARM, B1.tasks)), hoRoutes, tasks).lines;
     }
     for (const l of lines) console.log(l);
     const out = opt("out");
