@@ -22,12 +22,12 @@ import { manifest } from "../../quick/laneb/arms/tree.ts";
 import { sdkPython, SESSION_IMAGE } from "../harness-mechanics/sessions.ts";
 import { maxGaps, newcombe, wilson } from "./analyze.ts";
 import { build as b1Build, LAYOUT, TAR_ARGS, wrappers } from "./arms.ts";
-import { b1References, loadsOf, paired, promptOf, reuseCheck, type Load } from "./b1b.ts";
+import { b1References, loadsOf, paired, reuseCheck, type Load } from "./b1b.ts";
 import { armInfo, b1cBuild, whyNot as blockWhyNot } from "./b1c.ts";
 import { PLACEMENT } from "./b1c-pins.ts";
 import { B1C_RUN, B1D, B1D_ARM, B1D_ARM_NAMES, B1D_ARMS, B1D_BUNDLE, B1D_CAPS_USD, B1D_ITEMS, B1D_SMOKE, B1D_SPEC, COPIED_MANIFESTS, GSTACK_ARM, HELDOUT, isB1dArm, isB1dItem, NOESCAPE, NOESCAPE_SPEC, PROVE_IT, type B1dArm, type B1dItem } from "./b1d-pins.ts";
 import { blockUsd, infraRerun, needsRerun } from "./money.ts";
-import { AGENT_SKILLS, ARM_SOURCES, B1, drawnTasks, frontMatterDigests, loadBundle, MODELS, REPO, sha256, SKILL, TASK_SETUP, VM_HOURS_PER_SESSION } from "./pins.ts";
+import { AGENT_SKILLS, ARM_SOURCES, B1, CLOSING, drawnTasks, frontMatterDigests, loadBundle, MODELS, REPO, sha256, SKILL, TASK_SETUP, VM_HOURS_PER_SESSION } from "./pins.ts";
 import { b1Row, pulledInputs, type B1Row, type B1TableConfig } from "./table.ts";
 import { BASE, CLAUDE_LISTED, LISTING } from "./sessions.ts";
 
@@ -167,8 +167,11 @@ export function armsCheck(out = ARMS_DIR()): { pass: boolean; lines: string[] } 
 }
 
 // ---- The keyless route table: gstack's own matcher (lib/skill-route.ts) and its real hook, from the built arm tree, on each
-// task's prompt as the rig sends it (b1b.ts promptOf). The hook runs with HOME at a scratch folder that links the tree's
+// task's prompt as the rig sends it (rigPromptOf). The hook runs with HOME at a scratch folder that links the tree's
 // .claude and holds a copy of its .gstack, so its log never lands in the tree.
+/** A task's prompt as the rig builds it (quick/laneb/runner/agent/prompt_builder.py): Python's str.replace fills the wrapper,
+ *  so "$$" or "$`" in an instruction reaches the prompt as written, where JavaScript's String.replace would expand it. */
+export const rigPromptOf = (instruction: string) => { const p = readFileSync(join(REPO, "quick/laneb/runner/prompt-wrapper.md"), "utf8").split("{instruction}").join(instruction); return p + (p.endsWith("\n") ? "\n" : "\n\n") + CLOSING.text + "\n"; };
 export const HOOK = ".claude/skills/gstack/hosts/claude/hooks/skill-route-hook";
 export const LINE = /this request fits \/([\w:-]+)(?: or \/([\w:-]+))?\./;
 export type Position = "only" | "first of two" | "second of two" | "not named";
@@ -312,12 +315,14 @@ export function b1dDone(path: string, name: B1dItem) {
 }
 /** The launch guard: the item's spend so far plus its unfinished parts at planned spend, the open-session reserve and the VM
  *  share, against its cap; and every item (a done item at its settled spend, any other at the larger of its spend and its
- *  projection) plus this lane's counter, against the all-in stop. */
-export function b1dGuard(name: B1dItem, ledgers: Partial<Record<B1dItem, Row[]>>, plans: Partial<Record<B1dItem, { parts: PartPlan[]; finished: string[] }>>, crewUsd: number) {
+ *  projection) plus this lane's counter, against the all-in stop. A relaunch counts its item at its ledger spend alone: it
+ *  launches only the lost part's unstarted cells, whose sessions the ledger's reserve stops at the cap, and each later part
+ *  meets this guard at its own launch, so the salvage a relaunch starts with is never refused for the item's cap. */
+export function b1dGuard(name: B1dItem, ledgers: Partial<Record<B1dItem, Row[]>>, plans: Partial<Record<B1dItem, { parts: PartPlan[]; finished: string[] }>>, crewUsd: number, relaunching?: string) {
   const why: string[] = [];
   const all = B1D_ITEMS.map((i) => {
     const t = b1dTotals(ledgers[i] ?? [], i), plan = plans[i] ?? { parts: b1dPlan(i, drawnTasks(loadBundle()).run, null).parts, finished: [] };
-    const left = plan.parts.filter((p) => !plan.finished.includes(p.name)), proj = left.map(partProjection);
+    const left = i === name && relaunching ? [] : plan.parts.filter((p) => !plan.finished.includes(p.name)), proj = left.map(partProjection);
     const model = t.settled - t.vmSettled + t.open - t.vmOpen + proj.reduce((x, p) => x + p.model, 0) + toMicros(parallelUsd(left));
     const host = !t.hostOpen && left.length ? toMicros(hostTtlHours(left.length) * L1.host.usdPerHour) : 0;
     const total = model + t.vmSettled + t.vmOpen + host + proj.reduce((x, p) => x + p.vm, 0);
@@ -796,7 +801,7 @@ function guardWork(work: string, relaunching?: string) {
   if (typeof crew?.as_of !== "string" || typeof crew.usd !== "number" || !(crew.usd >= 0)) usage("b1d launch guard: the crew file needs as_of and usd, a number of at least 0");
   const prepared = (plan.parts as PartPlan[]).flatMap((p) => [p.name + "-a2", p.name + "-relaunch"]).map((n) => join(work, n, "l1-part.json")).filter((x) => existsSync(x)).map((x) => JSON.parse(readFileSync(x, "utf8")) as PartPlan);
   const parts = [...plan.parts, ...prepared], finished = parts.map((p) => p.name).filter((n) => n !== relaunching && existsSync(join(work, n + ".result.json")));
-  const g = b1dGuard(plan.item, ledgers, { [plan.item]: { parts, finished } }, crew.usd);
+  const g = b1dGuard(plan.item, ledgers, { [plan.item]: { parts, finished } }, crew.usd, relaunching);
   for (const l of g.lines) console.log(l);
   if (!g.ok) throw new Error("E_B1_LAUNCH " + plan.item + ": " + g.why.join("; ") + "; take it to the Captain before launching");
 }
@@ -835,7 +840,7 @@ export async function b1dMain(argv: string[]): Promise<number> {
   }
   if (cmd === "routes") {
     const ex = opt("export") ?? usage(USAGE), tree = resolve(opt("tree") ?? join(ARMS_DIR(), "trees", B1D_ARM)), t = drawnTasks(loadBundle());
-    const P = (kind: string, list: string[]) => list.map((task) => ({ kind, task, prompt: promptOf(readFileSync(join(ex, task, "instruction.md"), "utf8")) }));
+    const P = (kind: string, list: string[]) => list.map((task) => ({ kind, task, prompt: rigPromptOf(readFileSync(join(ex, task, "instruction.md"), "utf8")) }));
     const rows = await routeTable(tree, [...P("run", t.run), ...P("calibration", calibrationTasks())]), text = routeTsv(rows);
     if (opt("out")) writeFileSync(opt("out")!, text);
     const probs: string[] = [];

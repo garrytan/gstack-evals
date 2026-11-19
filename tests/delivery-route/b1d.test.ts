@@ -7,13 +7,13 @@ import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
-import { B1D_CASES, b1cRows, b1dMain, inSampleRoutes, powerLines, b1dApprove, b1dCap, b1dCaseProblems, b1dDone, b1dGuard, b1dPlan, b1dRow, b1dStats, band, checkB1dRows, clearOdds, hoMdd, hoReading, hoReport, inReading, listingFacts, loadB1dCaptured, namedOf, noescapeBlock, pilotCheck, positionOf, readRouteTsv, reuseB1c, routeCounts, routeFile, routesByTask, smokeOf, splitLines, tertiles, WHY_NOT_MAIN, whyNot, type B1dRow, type InReading } from "../../lanes/delivery-route/b1d.ts";
+import { B1D_CASES, b1cRows, b1dMain, inSampleRoutes, powerLines, b1dApprove, b1dCap, b1dCaseProblems, b1dDone, b1dGuard, b1dPlan, b1dRow, b1dStats, band, checkB1dRows, clearOdds, hoMdd, hoReading, hoReport, inReading, listingFacts, loadB1dCaptured, namedOf, noescapeBlock, pilotCheck, positionOf, readRouteTsv, reuseB1c, rigPromptOf, routeCounts, routeFile, routesByTask, smokeOf, splitLines, tertiles, WHY_NOT_MAIN, whyNot, type B1dRow, type InReading } from "../../lanes/delivery-route/b1d.ts";
 import { B1D, B1D_ARM, B1D_ARM_NAMES, B1D_CAPS_USD, B1D_SMOKE, GSTACK_ARM, HELDOUT, NOESCAPE } from "../../lanes/delivery-route/b1d-pins.ts";
 import { PLACEMENT } from "../../lanes/delivery-route/b1c-pins.ts";
-import { reuseCheck, type Load } from "../../lanes/delivery-route/b1b.ts";
+import { promptOf, reuseCheck, type Load } from "../../lanes/delivery-route/b1b.ts";
 import { ARM_SOURCES, drawnTasks, loadBundle, REPO, sha256 } from "../../lanes/delivery-route/pins.ts";
 import { b1Row } from "../../lanes/delivery-route/table.ts";
-import { readRows } from "../../quick/laneb/runner/ledger.ts";
+import { readRows, type Row } from "../../quick/laneb/runner/ledger.ts";
 
 const RUN = drawnTasks(loadBundle()).run;
 
@@ -34,6 +34,12 @@ describe("the route table", () => {
     expect(run.map((r) => r[1])).toEqual(RUN);
     expect(routeCounts(run)).toMatchObject({ tasks: 60, only: 33, "first of two": 0, "second of two": 7, "not named": 20, verify: 9, nothing: 18, disagree: 0 });
     expect(routeCounts(rows.filter((r) => r[0] === "calibration"))).toMatchObject({ tasks: 10, only: 6, "second of two": 2, "not named": 2, disagree: 0 });
+  });
+  test("prompts fill the wrapper as the rig's Python str.replace does, so $$ and $` in an instruction stay as written", () => {
+    expect(rigPromptOf("Fix it.\n")).toBe(promptOf("Fix it.\n"));
+    expect(rigPromptOf("a $$ b $` c $& d")).toContain("a $$ b $` c $& d");
+    expect(promptOf("a $$ b")).not.toContain("a $$ b");
+    expect(rows.find((r) => r[1] === "facelessuser__pymdown-extensions-2807")!.slice(3, 8)).toEqual(["1523", "prove-it", "prove-it", "true", "only"]);
   });
   test("the smoke rule picks the first calibration task named prove-it alone and the first named nothing", () => {
     expect(smokeOf(rows)).toEqual([...B1D_SMOKE]);
@@ -235,6 +241,15 @@ describe("money", () => {
     const g = b1dGuard("b1d-in", {}, {}, B1D.stopUsd - all + 0.01);
     expect(g.ok).toBe(false);
     expect(g.why[0]).toBe("all-in $340.01 passes the $340.00 stop");
+  });
+  test("a relaunch counts its item at its ledger spend, so a lost part's salvage runs, and a fresh launch past the cap still refuses", () => {
+    const M = (u: number) => Math.round(u * 1e6), ts = "2026-11-19T00:00:00Z", parts = b1dPlan("b1d-in", RUN, null).parts;
+    const ledger = (spent: number) => [{ ts, item: "b1d-in", kind: "approval", id: "approval", usd_micros: M(90) }, { ts, item: "b1d-in", kind: "reserve", id: "b1d-in-1/s1", usd_micros: M(spent) }, { ts, item: "b1d-in", kind: "settle", id: "b1d-in-1/s1", usd_micros: M(spent) }, { ts, item: "b1d-in", kind: "reserve", id: "host-1", usd_micros: M(7.68) }, { ts, item: "b1d-in", kind: "reserve", id: "b1d-in-1/vm", usd_micros: M(2.4) }] as Row[];
+    const lost = { "b1d-in": { parts, finished: [] } };
+    expect(b1dGuard("b1d-in", { "b1d-in": ledger(20) }, lost, 0).lines[0]).toMatch(/^B1D_LAUNCH REFUSE b1d-in: .*; b1d-in \$96\.08 of cap \$90\.00/);
+    expect(b1dGuard("b1d-in", { "b1d-in": ledger(20) }, lost, 0, "b1d-in-1").lines[0]).toMatch(/^B1D_LAUNCH PASS b1d-in: .*; b1d-in \$30\.08 of cap \$90\.00/);
+    const next = b1dGuard("b1d-in", { "b1d-in": ledger(60) }, { "b1d-in": { parts, finished: ["b1d-in-1"] } }, 0);
+    expect([next.ok, next.why[0]]).toEqual([false, "b1d-in's projection $124.08 passes its cap $90.00"]);
   });
 });
 
