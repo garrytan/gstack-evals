@@ -8,7 +8,8 @@
 // - read: the readings over the check stages' rows (analysis.ts), "not counted" until the checker validation and the
 //   fixtures with the real checker have passing receipts.
 // - validate draw / validate score: the checker validation (R78): a seeded, blinded draw of builds for hand labelling,
-//   then kappa on done against the checker's verdicts, written to <out>/validation.json.
+//   then kappa on done against the checker's verdicts, written to <out>/validation.json with the check tags it scored;
+//   --exclude leaves out an earlier draw's builds, and a reading counts only on a validation of its own check tags.
 // - probe: the fidelity probe's frozen questions to the responder on practice profiles.
 // - dryrun: the keyless dry run (dryrun.ts).
 // - fixtures: the keyless checker fixtures, placeholder and reference app, on Docker (fixtures.ts); fixtures-real: the
@@ -66,7 +67,7 @@ const HELP = [
   "gstack-evals day-one controls --units-dir <dir> --labels <labels.ndjson>",
   "gstack-evals day-one gold --labels <labels.ndjson> --gold <gold.ndjson>",
   "gstack-evals day-one read --out <dir> --units-dir <dir> --tag <check tag>... --arms <arm>... [--validation-receipt <file>] [--fixtures-receipt <file>]",
-  "gstack-evals day-one validate draw --out <dir> --units-dir <dir> --tag <check tag>... --dest <new dir> --key <file> [--count <n>]",
+  "gstack-evals day-one validate draw --out <dir> --units-dir <dir> --tag <check tag>... --dest <new dir> --key <file> [--count <n>] [--exclude <earlier key>]",
   "gstack-evals day-one validate score --out <dir> --tag <check tag>... --key <file> --labels <hand labels.ndjson>",
   "gstack-evals day-one probe --units-dir <dir> --units <id>... --count <n> --out <dir> --item <item> --spend-cap <usd> [--ledger <path>] [--record <dir>]",
   "gstack-evals day-one dryrun",
@@ -386,7 +387,9 @@ function readings(f: Map<string, string[]>, io: Io): number {
     return existsSync(p) ? JSON.parse(readFileSync(p, "utf8")) : null;
   };
   const blocked: string[] = [];
-  if (receipt("--validation-receipt", "validation.json")?.admitted !== true) blocked.push("the checker validation (section 6) has no passing receipt");
+  const validation = receipt("--validation-receipt", "validation.json");
+  if (validation?.admitted !== true) blocked.push("the checker validation (section 6) has no passing receipt");
+  else if (Array.isArray(validation.tags) && !validation.tags.every((t: string) => tagsOf(f).includes(t))) blocked.push("the checker validation scored " + validation.tags.join(", ") + ", not this reading's check stages");
   if (receipt("--fixtures-receipt", FIXTURES_RECEIPT)?.passed !== true) blocked.push("the fixtures with the real checker have no passing receipt");
   io.out(JSON.stringify(read(builds, arms, blocked), null, 2));
   return 0;
@@ -420,8 +423,10 @@ function validateDraw(f: Map<string, string[]>, io: Io): number {
   if (existsSync(dest) || existsSync(keyFile)) refuse("--dest and --key must not exist yet; a draw is written once");
   const count = Number(opt(f, "--count") ?? String(VALIDATION.builds));
   if (!Number.isInteger(count) || count < 1) refuse("--count is a whole number from 1");
+  const exclude = opt(f, "--exclude");
+  const earlier = new Set(exclude ? Object.values(JSON.parse(readFileSync(sealedPath(exclude, "--exclude"), "utf8")) as Record<string, { unit: string; rep: number; arm: string }>).map((c) => c.unit + "/r" + c.rep + "/" + c.arm) : []);
   const { rows } = checkRows(out, tagsOf(f));
-  const scored = rows.filter((r) => r.state === "scored" && r.check?.started && r.check.parse?.kind === "ok").sort((a, b) => a.id.localeCompare(b.id));
+  const scored = rows.filter((r) => r.state === "scored" && r.check?.started && r.check.parse?.kind === "ok" && !earlier.has(r.cell.unit + "/r" + r.cell.rep + "/" + r.cell.arm)).sort((a, b) => a.id.localeCompare(b.id));
   const order = shuffle(scored, seededRandom(SEED));
   const arms = [...new Set(order.map((r) => r.cell.arm))].sort();
   const firsts = new Set(["n", "d", "r", "a"].flatMap((a) => order.filter((r) => r.cell.arm === a).slice(0, VALIDATION.per_arm).map((r) => r.id)));
@@ -485,7 +490,7 @@ function validateScore(f: Map<string, string[]>, io: Io): number {
   const k = kappa(pairs);
   const armsShort = ["n", "d", "r", "a"].filter((a) => (perArm[a] ?? 0) < VALIDATION.per_arm);
   const admitted = pairs.length >= VALIDATION.verdicts && k !== null && k >= VALIDATION.kappa && armsShort.length === 0;
-  const receipt = { schema: "day-one.validation.v1", builds: labels.length, per_arm: perArm, pairs: pairs.length, kappa: k, admitted };
+  const receipt = { schema: "day-one.validation.v1", tags, builds: labels.length, per_arm: perArm, pairs: pairs.length, kappa: k, admitted };
   writeFileSync(join(out, "validation.json"), JSON.stringify(receipt, null, 2) + "\n");
   io.out(JSON.stringify(receipt));
   if (!admitted) io.err("E_DAYONE_VALIDATION day-one validate: " + pairs.length + " verdicts, kappa " + k + (armsShort.length ? ", under " + VALIDATION.per_arm + " builds for " + armsShort.join(", ") : "") + "; no category 2 number counts");

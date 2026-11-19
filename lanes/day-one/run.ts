@@ -39,7 +39,7 @@ import { meterSlot } from "../office-hours-founder/run/run.ts";
 import type { Meter } from "../product-value/meter.ts";
 import { startApp, stopApp, type AppRun, type AppWrite } from "./app.ts";
 import { armPlan, findRun, gatePending, loadedSkills, readExposure, WORK, type Exposure, type SkillLoad } from "./exposure.ts";
-import { armPrompt, BUILD_PROMPT, GSTACK_ARMS, LIMITS, MODELS, type PlanArm } from "./frozen.ts";
+import { armPrompt, BUILD_PROMPT, CHECKER_SHA256, GSTACK_ARMS, LIMITS, MODELS, type PlanArm } from "./frozen.ts";
 import { ownerLoop, ownerPrompt, sourceCounts, type OwnerTurn } from "./owner.ts";
 import { attemptOutcome, browserAnswered, endLoop, launchSession, micros, settle, type AttemptRead, type LaunchInput, type Outcome } from "./sessions.ts";
 import { buildSeed, copySamples, planSeed, type Unit } from "./units.ts";
@@ -284,7 +284,7 @@ export async function runStage(o: StageInput, deps: StageDeps): Promise<StageRes
   if (before?.stops.some((s) => s.code === "CAP_STOP")) throw new Error("E_USAGE " + dir + " ended in a cap stop, an incomplete run that is never resumed; its stops.json stands");
   const halt = before?.stops.find((s) => s.code !== "E_DAYONE_ADMISSION");
   if (halt) throw new Error("E_USAGE " + dir + " halted (" + halt.code + ": " + halt.message + "); no session starts in it again until the Captain clears it, and its stops.json stands");
-  const frozen = freeze(join(dir, "manifest.json"), { schema: "day-one.stage.v1", stage: o.stage, units: o.units.map((u) => u.id).sort(), reps: o.reps, arms: o.arms, cells: cells.map(cellId), cap_micros: o.cap, owner_cap_micros: o.ownerCap, voice_cap_micros: o.voiceCap, owner_channel: o.ownerChannel, limits: LIMITS, models: MODELS });
+  const frozen = freeze(join(dir, "manifest.json"), { schema: "day-one.stage.v1", stage: o.stage, units: o.units.map((u) => u.id).sort(), reps: o.reps, arms: o.arms, cells: cells.map(cellId), cap_micros: o.cap, owner_cap_micros: o.ownerCap, voice_cap_micros: o.voiceCap, owner_channel: o.ownerChannel, limits: LIMITS, models: MODELS, ...(o.stage === "check" ? { checker_sha256: CHECKER_SHA256 } : {}) });
   if ("problem" in frozen) throw new Error("E_USAGE " + frozen.problem);
   const done = readRows(dir, (cut) => o.log(join(dir, "rows.ndjson") + " ended in a cut-off row of " + cut.length + " bytes; removed, so its cell's pending file adopts it by digest or its attempt marker reconciles it"), () => deps.crash?.("repair", dir));
   const haltRow = [...done.values()].find((r) => r.state === "halt");

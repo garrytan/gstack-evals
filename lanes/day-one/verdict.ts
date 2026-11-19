@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // The checklist run's verdict parser and per-build score (prereg section 6; gate-class under the Captain's D1 ruling).
-// - The checker's first message is CHECK_HEADER, one block per hidden task in rank order (id, what the owner tries,
-//   what counts as done, and the sample file when the task names one), then CHECK_FOOTER.
+// - The checker's first message is CHECK_HEADER, then CHECK_REPAIR, one block per hidden task in rank order (id, what
+//   the owner tries, what counts as done, and the sample file when the task names one), then CHECK_FOOTER.
 // - parseVerdicts reads the main agent's texts of the checker's last reply and takes the last fenced block labelled
 //   verdicts. It must be a JSON object whose tasks list names every task id exactly once and nothing else, each with a
 //   boolean done. Anything else is unparsable: the check runs once more in a fresh browser container, and a second
@@ -9,7 +9,7 @@
 // - scoreBuild: an app that never answers on its port scores no task done. Otherwise each task is done exactly when
 //   the parsed verdict says so. share is done over the list's length; nothing_useful is true when none of the top
 //   three tasks is done (or the app never started).
-import { CHECK_FOOTER, CHECK_HEADER, VERDICT_FENCE } from "./frozen.ts";
+import { CHECK_FOOTER, CHECK_HEADER, CHECK_REPAIR, VERDICT_FENCE } from "./frozen.ts";
 import type { HiddenList, Task } from "./units.ts";
 
 export interface Verdict {
@@ -24,7 +24,7 @@ export const taskBlock = (t: Pick<Task, "id" | "task" | "success" | "data">): st
   "Task " + t.id + ": " + t.task.trim() + "\nDone when: " + t.success.trim() + (t.data ? "\nFile: /samples/" + t.data.replace(/^samples\//, "") : "");
 
 /** The checker's whole first message for one hidden list. */
-export const checkPrompt = (list: Pick<HiddenList, "tasks">): string => [CHECK_HEADER, ...[...list.tasks].sort((a, b) => a.rank - b.rank).map(taskBlock), CHECK_FOOTER].join("\n\n");
+export const checkPrompt = (list: Pick<HiddenList, "tasks">): string => [CHECK_HEADER, CHECK_REPAIR, ...[...list.tasks].sort((a, b) => a.rank - b.rank).map(taskBlock), CHECK_FOOTER].join("\n\n");
 
 const FENCE = new RegExp("```[ \\t]*" + VERDICT_FENCE + "[ \\t]*\\n([\\s\\S]*?)\\n[ \\t]*```", "g");
 

@@ -74,6 +74,28 @@ describe.skipIf(!onShm)("day-one read", () => {
     }
   });
 
+  test("a passing validation counts a reading only when it scored that reading's check stages", async () => {
+    const dir = mkdtempSync("/dev/shm/day-one-read-");
+    try {
+      const units = join(dir, "units");
+      fixtureUnit(units, "cccccc", 2);
+      const out = join(dir, "out");
+      stageDir(out, "base-counted", [planRow("base", "cccccc", "n", 100)]);
+      stageDir(out, "review-counted", [planRow("review", "cccccc", "d", 100)]);
+      stageDir(out, "check-counted", [checkRow("cccccc", "n", [true, false, false, false, false]), checkRow("cccccc", "d", [true, true, false, false, false])], { units: ["cccccc"], reps: [1] });
+      writeFileSync(join(out, "fixtures-real.json"), JSON.stringify({ passed: true }));
+      const argv = ["read", "--out", out, "--units-dir", units, "--tag", "counted", "--arms", "n", "d"];
+      writeFileSync(join(out, "validation.json"), JSON.stringify({ admitted: true, tags: ["repaired"] }));
+      const other = JSON.parse((await run(argv)).out);
+      expect(other.counted).toBe(false);
+      expect(other.blocked).toEqual(["the checker validation scored repaired, not this reading's check stages"]);
+      writeFileSync(join(out, "validation.json"), JSON.stringify({ admitted: true, tags: ["counted"] }));
+      expect(JSON.parse((await run(argv)).out).counted).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test("a reading carries each session's frozen exposure reading from its review row", async () => {
     const dir = mkdtempSync("/dev/shm/day-one-read-");
     try {
@@ -170,6 +192,35 @@ describe.skipIf(!onShm)("day-one validate", () => {
       const conflict = await run(["validate", "score", "--out", out, "--tag", "wave", "--key", key, "--labels", join(shm, "conflict.ndjson")]);
       expect(conflict.code).not.toBe(0);
       expect(conflict.err).toContain("labelled both done and not done");
+    } finally {
+      rmSync(shm, { recursive: true, force: true });
+    }
+  });
+
+  test("a second draw with --exclude leaves out the first draw's builds, and the receipt names its check tags", async () => {
+    const shm = mkdtempSync("/dev/shm/day-one-validate-");
+    try {
+      const units = join(shm, "units");
+      const out = join(shm, "out");
+      const ids = ["aaaaaa", "bbbbbb", "cccccc", "dddddd"];
+      for (const id of ids) fixtureUnit(units, id, 2);
+      const rows = ids.flatMap((u, i) => ["n", "d", "r", "a"].map((a, j) => checkRow(u, a, [true, (i + j) % 2 === 0, j > 1, false, i === 2])));
+      stageDir(out, "check-wave", rows, { units: ids, reps: [1] });
+      for (const r of rows) mkdirSync(join(out, "builds", r.cell.unit, "r1", r.cell.arm, "tree"), { recursive: true });
+      const first = join(shm, "key1.json");
+      expect((await run(["validate", "draw", "--out", out, "--units-dir", units, "--tag", "wave", "--dest", join(shm, "d1"), "--key", first, "--count", "8"])).code).toBe(0);
+      const second = join(shm, "key2.json");
+      const drawn = await run(["validate", "draw", "--out", out, "--units-dir", units, "--tag", "wave", "--dest", join(shm, "d2"), "--key", second, "--count", "8", "--exclude", first]);
+      expect(drawn.code).toBe(0);
+      expect(drawn.out).toContain("drew 8 of 8 scored builds");
+      const cells = (k: string) => Object.values(JSON.parse(readFileSync(k, "utf8")) as Record<string, { unit: string; arm: string }>).map((c) => c.unit + "/" + c.arm);
+      expect(cells(second).length).toBe(8);
+      expect(cells(second).filter((c) => cells(first).includes(c))).toEqual([]);
+      const k = JSON.parse(readFileSync(second, "utf8")) as Record<string, { row: string }>;
+      const byId = new Map(rows.map((r) => [r.id, r]));
+      writeFileSync(join(shm, "agree.ndjson"), Object.keys(k).map((l) => JSON.stringify({ label: l, tasks: byId.get(k[l]!.row)!.check.parse.tasks.map((t) => ({ id: t.id, done: t.done })) })).join("\n") + "\n");
+      await run(["validate", "score", "--out", out, "--tag", "wave", "--key", second, "--labels", join(shm, "agree.ndjson")]);
+      expect(JSON.parse(readFileSync(join(out, "validation.json"), "utf8"))).toMatchObject({ tags: ["wave"], builds: 8, pairs: 40, kappa: 1 });
     } finally {
       rmSync(shm, { recursive: true, force: true });
     }

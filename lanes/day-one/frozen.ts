@@ -64,6 +64,11 @@ export const CHECK_HEADER =
 export const CHECK_FOOTER =
   'When you have tried every task, end your reply with one fenced block labelled verdicts that holds a JSON object {"tasks": [{"id": "t1", "done": true, "why": "at most 30 words on what you saw"}, ...]} with every task id exactly once. Only this block is scored.';
 export const VERDICT_FENCE = "verdicts";
+/** The checker repair (REPAIR_CHANGE, section 14): a paragraph between CHECK_HEADER and the tasks, added after the first checker validation failed. */
+export const CHECK_REPAIR =
+  "If a click or a save seems to do nothing, take a new snapshot, try again with the element's exact name, and reload the page before you decide a task is not done. " +
+  "If the app will not let you begin until you do something it asks for first, such as an import that a later task names, do that first and then carry on in order.";
+export const REPAIR_CHANGE = "wiki/plans/2026-11-17-geva-549-day-one-pin-change.md";
 
 /** The owner responder (H1): the profile, then these rules; usersim's persona prompt wraps the whole text per question. */
 export const OWNER_RULES =
@@ -159,6 +164,8 @@ export const UNIT_SETS = {
 } as const;
 export type UnitSet = keyof typeof UNIT_SETS;
 
+/** The checker's own texts, which each check stage's manifest records. */
+export const CHECKER_SHA256 = sha256(JSON.stringify([CHECK_HEADER, CHECK_REPAIR, CHECK_FOOTER]));
 export const PROMPTS_SHA256 = sha256(JSON.stringify([COMMON_ASK, REVIEW_ASK, DAY_ONE_PASS, AUTOPLAN_LINE, OWNER_NOTICE, PLATFORM, BUILD_PROMPT, CHECK_HEADER, CHECK_FOOTER, OWNER_HEAD, OWNER_RULES, OWNER_CLOSING, GATE_REPLY, ...PROBE_QUESTIONS]));
 
 /** Each planning arm's first message, its bytes and its sha256, as the prereg lists them. */

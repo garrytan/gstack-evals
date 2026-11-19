@@ -270,3 +270,32 @@ To reach 40, 2 category 2 plans join the set. They are drawn with the frozen see
 **Admission.** The judge needs kappa of at least 0.6 on covered and on usable over the full 49 pairs, as section 9 freezes. The gold report adds a second line: kappa over the 37 real pairs alone. Category 1 is judged on real briefs, so if the full set passes but either real-only kappa is below 0.6, that goes to the eval's approver before any category 1 judge number counts.
 
 **How gold is labelled.** As section 9 says: Claude Opus 5.5 and Gemini 4 Argon label independently, blind to source, and a fresh Opus 5.5 settles the disagreements. Each labeller is a fresh-context agent that reads the judge's own rendered packets: judge.md's instructions, the brief, the plan under a random label and the checks in a seeded order. Its answers are parsed with the judge's own parser. The settler sees only the items the two labellers disagreed on, without their labels.
+
+## 14. A repair to the checker after its validation failed (2026-11-19)
+
+Dated 2026-11-19, after the checker validation failed and before any new check runs. It adds a paragraph to the checker's first message (section 6), adds one more validation on fresh builds, and repeats the fixtures with the real checker. The eval's approver made the change on 2026-11-19, after seeing the failed score, and the results say so.
+
+**The trigger.** The checker validation (section 6) scored kappa 0.444 on done over 70 task verdicts, under the 0.6 it needs, so no category 2 number from the frozen checker counts. Of the 11 disagreements, 10 are tasks the checker marked not done and the labeller saw done. All 11 fall in 3 builds, 2 from D and 1 from R: 8 of 18 D tasks and 3 of 17 R tasks, against none of the 35 N and A tasks.
+
+**What the repair rests on.** Only counts were read: the 2 by 2 table, disagreement counts per arm and per build, task ranks, and counts of keywords (such as load, reload, import, could not and persist) in the checker's short reasons on the disagreeing tasks. The labeller's own report on its tools, made before the score ran, adds what it hit. No task, page or reason text was read. From those counts, about 7 disagreements look like the checker giving up on a click or save that seemed to do nothing, where the labeller got through by trying again with the element's exact name and reloading. 3 sit in one build whose app would not begin until the owner's file was imported; the labeller did the import first, and the checker kept to the task order. 1 is probably a task whose condition sits in a downloaded file.
+
+**The repair.** The checker's first message gains one paragraph, after the frozen header and before the tasks (CHECK_REPAIR in lanes/day-one/frozen.ts):
+
+> If a click or a save seems to do nothing, take a new snapshot, try again with the element's exact name, and reload the page before you decide a task is not done. If the app will not let you begin until you do something it asks for first, such as an import that a later task names, do that first and then carry on in order.
+
+The hand labeller's brief carries the same paragraph word for word. The frozen header, the footer and every other frozen text are unchanged. Each check stage's manifest now records the sha256 of the checker's header, repair and footer.
+
+**One more validation, once.**
+
+1. All 90 category 2 builds are checked again with the repaired message under new tags: wave-check2 for N, D, R and A (60 builds) and wave-check2-s for S-dayone and S-full (30), on day1-checks, with the flags of the first checks.
+2. The fixtures with the real checker run again with the repaired message (fixtures-real, on day1-smoke) and must pass as before: the placeholder scores 0 with does-nothing-useful set, and the reference scores 5 of 5.
+3. 12 builds, 3 each from N, D, R and A, are drawn with the frozen seed from wave-check2's scored builds, leaving out the 12 in the first draw (day-one validate draw --exclude).
+4. A new fresh-context labeller, blind to arm, key and verdicts, labels them. Its labels are sealed into the custody store before day-one validate score runs.
+5. The repaired checker counts only if kappa on done reaches at least 0.6 over at least 40 verdicts. If it does not, no category 2 number counts, and there is no third attempt.
+
+**What is published.** The frozen checker's readings, its kappa of 0.444 and the D and R skew are published beside the result as a sensitivity line, never counted. The validation receipt now names the check tags it scored, and a reading counts only on a validation of its own check stages (lanes/day-one/cli.ts).
+
+## 15. Category 1's usable share (2026-11-19)
+
+Dated 2026-11-19, after the gold check and before category 1. Over all 49 gold pairs, the judge scored kappa 0.835 on covered and 0.738 on usable, so it is admitted. Over the 37 real pairs alone, it scored 0.727 on covered and 0.416 on usable. On the real pairs the judge marks 4 pairs usable where gold marks 8; the 12 drawn category 2 pairs all agree. Category 1 is judged on real briefs, so under section 13 this went to the eval's approver, who ruled on 2026-11-19: category 1 runs as planned, its covered share counts as section 10's descriptive read, and its usable share prints as not counted, with the real-pair kappa of 0.416 and its direction (the judge is stricter than gold).
+

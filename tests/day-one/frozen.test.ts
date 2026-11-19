@@ -6,6 +6,7 @@ import { main } from "../../lanes/day-one/cli.ts";
 import * as F from "../../lanes/day-one/frozen.ts";
 import { ALL_IN_USD, ITEMS, ledgerCapUsd, projectionUsd } from "../../lanes/day-one/ledger.ts";
 import { UNIT_ID } from "../../lanes/day-one/units.ts";
+import { checkPrompt } from "../../lanes/day-one/verdict.ts";
 
 const prereg = readFileSync(join(import.meta.dir, "../..", F.PREREG), "utf8");
 const TEXTS = { COMMON_ASK: F.COMMON_ASK, REVIEW_ASK: F.REVIEW_ASK, DAY_ONE_PASS: F.DAY_ONE_PASS, AUTOPLAN_LINE: F.AUTOPLAN_LINE, OWNER_NOTICE: F.OWNER_NOTICE, PLATFORM: F.PLATFORM, BUILD_PROMPT: F.BUILD_PROMPT, CHECK_HEADER: F.CHECK_HEADER, CHECK_FOOTER: F.CHECK_FOOTER, OWNER_HEAD: F.OWNER_HEAD, OWNER_RULES: F.OWNER_RULES, OWNER_CLOSING: F.OWNER_CLOSING, GATE_REPLY: F.GATE_REPLY, LIMITS: F.limitsTable(), ...Object.fromEntries(F.PROBE_QUESTIONS.map((q, i) => ["PROBE_" + (i + 1), q])) };
@@ -45,6 +46,14 @@ describe("the day-one prereg holds the frozen values", () => {
     for (const pin of Object.values(F.GSTACK_PINS)) expect(change).toContain(pin.sha!);
     expect(change).toContain("2026-11-17-geva-546-day-one-usefulness-prereg");
     expect(prereg).toContain(F.BROWSER_IMAGE.split("@")[1]!);
+  });
+  test("the checker repair is in its dated change and sits between the frozen header and the tasks", () => {
+    const change = readFileSync(join(import.meta.dir, "../..", F.REPAIR_CHANGE), "utf8");
+    expect(change).toContain(F.CHECK_REPAIR);
+    expect(prereg).not.toContain(F.CHECK_REPAIR);
+    const list = { tasks: [{ id: "t1", rank: 1, task: "Add a plant", success: "It shows after a reload", data: null }] } as unknown as Parameters<typeof checkPrompt>[0];
+    expect(checkPrompt(list).startsWith(F.CHECK_HEADER + "\n\n" + F.CHECK_REPAIR + "\n\nTask t1: ")).toBe(true);
+    expect(checkPrompt(list).endsWith(F.CHECK_FOOTER)).toBe(true);
   });
   test("the caps total the all-in stop and day1-plans' ledger cap carries the voice", () => {
     expect(ITEMS.reduce((a, i) => a + i.capUsd, 0)).toBe(ALL_IN_USD);
