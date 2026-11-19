@@ -39,7 +39,7 @@ Outside tests point the same way, from single authors with small sets. [Spence](
 
 **Trigger words in the request.** gstack's CLAUDE.md block worked mostly on the 22 prompts where gstack's hook matcher would fire if prove-it were in its list (the `routable_if_listed` column of [the route table](https://github.com/garrytan/gstack-evals/blob/main/wiki/plans/2026-11-18-capy-b1b-prose-route-prereg/route-table.tsv)). From the user's CLAUDE.md the block loaded 12 of 22 such prompts and 8 of the other 38 (Fisher p = 0.0113). From the project's CLAUDE.md it loaded 19 of 22 and 20 of 38 (p = 0.0112).
 
-**Listing room on Opus.** Claude Code lists every gstack skill on Opus 5.5 in full. That isn't the problem (see "What we ruled out").
+**Listing room, at a 1,000,000-token window.** At the window Claude Code's model table gives Opus 5.5, every gstack skill is listed in full. At a 200,000-token window, 28 of the 64 are not (see "The listing budget follows the context window" under Mechanics).
 
 ## What doesn't work
 
@@ -73,9 +73,9 @@ The user file and the project file differ in two ways at Claude Code 2.1.312. Bo
 
 ## What we ruled out
 
-Four suspected causes don't hold at Claude Code 2.1.312 with gstack 1.100.0.0 and 1.101.0.0.
+Four suspected causes don't explain B1, B1b or B1c, which ran Claude Code 2.1.312.
 
-- **The listing budget.** Claude Code's listing budget is `SLASH_COMMAND_TOOL_CHAR_BUDGET` if set, otherwise the context window × 4 characters per token × `skillListingBudgetFraction` (default 0.01). Each entry is capped at 1,536 characters. Opus 5.5's model data gives a 1,000,000-token window, so the budget is 40,000 characters. A real gstack install (`./setup --host claude`) lists 64 entries in 9,972 characters on Opus 5.5 and on Sonnet 5.5, with no entry cut. Older versions were tighter: a fixed 15,000 characters at 2.0.20, and a 250-character cap per entry at 2.1.86 and 2.1.100. That is why older reports such as [anthropics/claude-code#68135](https://github.com/anthropics/claude-code/issues/68135) blame truncation.
+- **The listing budget, on B1's rig.** B1, B1b and B1c installed one or two skills, so their listings ran 332 to 923 characters (`tests/delivery-route/fixtures/`). That is far under even the smallest budget below, so the budget can't explain their numbers. It is ruled out on that rig only. For a full gstack install, the budget depends on the context window Claude Code assumes (see Mechanics). Older versions were tighter for everyone: a fixed 15,000 characters at 2.0.20, and a 250-character cap per entry at 2.1.86 and 2.1.100. That is why older reports such as [anthropics/claude-code#68135](https://github.com/anthropics/claude-code/issues/68135) blame truncation.
 - **The "may or may not be relevant" disclaimer** ([anthropics/claude-code#22309](https://github.com/anthropics/claude-code/issues/22309), [anthropics/claude-code#7571](https://github.com/anthropics/claude-code/issues/7571)). Captures show it on the CLAUDE.md block at 2.1.100, 2.1.150, 2.1.200 and 2.1.250. It was gone from the CLAUDE.md block by 2.1.280, and gone from every block at 2.1.300, 2.1.312 and 2.1.328. It can't explain B1b or B1c.
 - **A tool-search filter hiding the Skill tool** ([anthropics/claude-code#38588](https://github.com/anthropics/claude-code/issues/38588), seen at 2.1.83). At 2.1.312 the Skill tool is among the 12 tools in the first request.
 - **Headless mode blocking skills** ([anthropics/claude-code#32184](https://github.com/anthropics/claude-code/issues/32184) and [anthropics/claude-code#34648](https://github.com/anthropics/claude-code/issues/34648) report 0% in `-p` runs). Sol's 60 of 60 and the hook line's 58 of 60 ran in the same SDK harness.
@@ -84,7 +84,14 @@ Four suspected causes don't hold at Claude Code 2.1.312 with gstack 1.100.0.0 an
 
 **Where the listing sits.** At 2.1.312 the skill listing arrives as a system-role message after the user's prompt, beside "# Environment". It opens "The following skills are available for use with the Skill tool:". The Skill tool's own description tells the model that "Available skills appear in a system-reminder listing with one-line descriptions." When the listing is over budget, Claude Code logs a warning and keeps bundled skills in full. It sorts the rest by recent use (every skill ties at zero in a fresh eval home), and they keep their descriptions only while room remains. The others shrink to a bare name. `skillOverrides` can set a skill to on, off, name-only or user-invocable-only, and `disable-model-invocation` removes a skill from the listing. The [skills docs](https://code.claude.com/docs/en/skills) describe the budget as scaling "at 1% of the model's context window". 2.1.328 has the same constants.
 
-**A model id Claude Code doesn't know gets a smaller listing.** Run with `--model gpt-6.1-sol`, which is how this repo's pins name Sol (`lanes/delivery-route/pins.ts`), Claude Code falls back to a 200,000-token window and an 8,000-character budget. Then 28 of gstack's 64 entries show as a bare name, in 6,082 characters. B1 listed only two skills, so it wasn't affected. Any Sol run with all of gstack installed sees a thinner list than Opus does. Setting `SLASH_COMMAND_TOOL_CHAR_BUDGET` or `skillListingBudgetFraction` evens it out. We haven't confirmed which model id paid Sol sessions pass to Claude Code (unverified).
+**The listing budget follows the context window.** The budget is `SLASH_COMMAND_TOOL_CHAR_BUDGET` if set, otherwise the context window × 4 characters per token × `skillListingBudgetFraction` (default 0.01), and each entry is capped at 1,536 characters. The window depends on the model id and the session's settings:
+
+- At 1,000,000 tokens the budget is 40,000 characters. Claude Code's model table declares that window for Opus 5.5. A real gstack install (`./setup --host claude`) then lists 64 entries in 9,972 characters, with none cut, on Opus 5.5 and on Sonnet 5.5.
+- At 200,000 tokens the budget is 8,000 characters, and 28 of gstack's 64 entries show as a bare name. Our run with a model id Claude Code doesn't know (`--model gpt-6.1-sol`, the id this repo's pins use for Sol in `lanes/delivery-route/pins.ts`) used 6,082 characters. Another lane's keyless captures with the 1M window switched off used 5,963 characters, byte-identical across Opus 5.5, Sol and particle-1.
+
+Two things put a session at 200,000 tokens: a model id Claude Code doesn't know, and `CLAUDE_CODE_DISABLE_1M_CONTEXT=1`. This repo's Claude Code driver can set the second (`src/adapters/claude-code/driver.ts`), and several lanes do. So the smaller listing isn't a Sol problem. It reaches any session at 200,000 tokens, Opus included. For the people using Opus 5.5 day to day: the model table declares 1,000,000 tokens, and our session with an API key against the stub got the 40,000-character budget. A signed-in subscription session also fetches account settings at startup, and we couldn't check whether they change its window (unverified). Setting `SLASH_COMMAND_TOOL_CHAR_BUDGET` evens the listing out on any rig.
+
+**Effort differs by model.** Claude Code sends `output_config.effort` "medium" for Opus 5.5, the default in its model table, and "high" for a model id it doesn't know. Our stub captures show medium for Opus and Sonnet 5.5 and high for `gpt-6.1-sol`. Another lane's captures show high for particle-1 too. So B1 compared Opus at medium effort with Sol at high. Whether effort changes how often a model consults a skill is untested (unverified).
 
 **A skill named `verify` gets special handling.** With gstack's `verify` skill installed, Claude Code adds "Always run `/verify` right before the `commit` command (never for docs or tests)" to the Bash tool's description. The [changelog](https://code.claude.com/docs/en/changelog) for 2.1.215 says "Claude no longer runs the /verify and /code-review skills on its own". Whether that line covers gstack's own `verify` skill is unverified.
 
@@ -108,7 +115,8 @@ All of these were keyless. They used a local stub of the Anthropic API that reco
 | Check | How | Result |
 | --- | --- | --- |
 | What the listing holds | gstack's real setup into temporary homes at [bbf48aa](https://github.com/garrytan/gstack/tree/bbf48aa7ef195459afcf7d7840af7073cd050734) (1.100.0.0) and [f79a890](https://github.com/garrytan/gstack/tree/f79a8905c75fbc7e436e274d0cdbac8ecdeec458) (1.101.0.0), then Claude Code 2.1.312 against the stub | 64 entries (63 gstack plus plugin-authoring), 9,972 characters, none cut, on Opus 5.5 and Sonnet 5.5. Descriptions: median 149 characters, max 266 |
-| A model id Claude Code doesn't know | The same, with `--model gpt-6.1-sol` | 8,000-character budget, 6,082 characters used, 28 of 64 entries as a bare name |
+| A 200,000-token window | The same, with `--model gpt-6.1-sol`, an id Claude Code doesn't know | 8,000-character budget, 6,082 characters used, 28 of 64 entries as a bare name |
+| Effort per model | The same stub captures | `output_config.effort` medium for Opus 5.5 and Sonnet 5.5, high for `gpt-6.1-sol` |
 | The budget rules | Strings of the 2.1.312 and 2.1.328 binaries | The formula and constants above |
 | The CLAUDE.md wrapper over time | Stub captures at 2.0.20, 2.1.0, 2.1.100, 2.1.150, 2.1.200, 2.1.250, 2.1.280, 2.1.300, 2.1.312 and 2.1.328 | The disclaimer left the CLAUDE.md block between 2.1.250 and 2.1.280. At 2.1.312 both files get the same wrapper |
 | B1's listing | `tests/delivery-route/fixtures/sessions/` | The described skill listed with its full description |
@@ -120,7 +128,7 @@ All of these were keyless. They used a local stub of the Anthropic API that reco
 
 ## What this changes for gstack
 
-**Skill descriptions.** For Opus, wording won't get a procedure skill loaded on a task Opus thinks it can do. Keep descriptions short, with triggers first. They still matter for Sol and for direct prompts (Romanov measured +5.2 points). Don't grow them: on a model id Claude Code doesn't know, 28 of 64 gstack entries already lose their descriptions.
+**Skill descriptions.** For Opus, wording won't get a procedure skill loaded on a task Opus thinks it can do. Keep descriptions short, with triggers first. They still matter for Sol and for direct prompts (Romanov measured +5.2 points). Don't grow them: at a 200,000-token window, 28 of 64 gstack entries already lose their descriptions.
 
 **The hook default.** The hook line is the only route that loaded reliably, so it should stay on by default. What limits it is coverage, not obedience: it can load only the skills its matcher names, and on B1b's prompts that was none as shipped and 22 of 60 with prove-it added. Count its follow-through as well as its loads (36 of 58).
 
@@ -128,7 +136,7 @@ All of these were keyless. They used a local stub of the Anthropic API that reco
 
 **How /autoplan starts.** Take the first step out of the model's hands. Lines such as `` !`gstack-skill-start --skill autoplan` `` and one that prints the preamble would deliver both with the skill body. We haven't tested this, and it has costs. Dynamic injection works only in Claude Code (the docs say it doesn't work in claude.ai or through the API), so gstack's other hosts need the current text. `gstack-skill-start`'s side effects would run on every load. And when a re-invoked skill's output differs, Claude Code appends the full content again: at least the 42,973 bytes of autoplan's SKILL.md, plus whatever it injects. Two smaller fixes go with it. gstack's session-kind check should read Agent SDK runs as spawned. And start blocks that ask the model to say something and wait should not print in a `-p` run.
 
-**Eval rigs.** A loop that runs autoplan unattended should not treat a text-only turn as the end of the task. Anthropic's guide suggests a continuation message that names the open items, at most two or three times. This repo's day-one owner loop (`lanes/day-one/owner.ts`) continues only when autoplan waits at its gate. Whether day-one's gstack sessions end on such a turn is unverified.
+**Eval rigs.** A loop that runs autoplan unattended should not treat a text-only turn as the end of the task. Anthropic's guide suggests a continuation message that names the open items, at most two or three times. This repo's day-one owner loop (`lanes/day-one/owner.ts`) continues only when autoplan waits at its gate. Whether day-one's gstack sessions end on such a turn is unverified. A rig that sets `CLAUDE_CODE_DISABLE_1M_CONTEXT=1` shows Opus 28 of 64 gstack skills as bare names, so its gstack results measure that thinner listing. Such a rig should set `SLASH_COMMAND_TOOL_CHAR_BUDGET` or report the listing it sent.
 
 ## What this changes for the next routing test
 
@@ -142,16 +150,17 @@ Two smaller probes are on hold: description variants on B1's prompts, and swappi
 
 ## Unverified claims and open questions
 
-1. That B1's paid Opus sessions got the 40,000-character budget. We inferred it from stub runs of the same binary and model with a custom base URL. The paid session records carry no listing.
+1. Whether a signed-in subscription session of Opus 5.5 runs at the 1,000,000-token window, as an API-key session does.
 2. Which model id paid Sol sessions pass to Claude Code.
-3. The causes of the head-to-head's 5 of 10 sessions that never started autoplan, and whether the other 5 ran autoplan's review. No transcripts were read.
-4. Whether the head-to-head rig set `GSTACK_SESSION_KIND` or seeded gstack state.
-5. Whether the label or the commit message drives the user file's 20 against the project file's 39.
-6. Why longer prompts load more often.
-7. Behounek's full Opus 5 results.
-8. What a Claude Code feature flag (`tengu_typed_pebble`) that touches the default context window does.
-9. A low-confidence guess: that empty `end_turn` stops, which Anthropic's [stop-reasons page](https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons) ties to "Adding text blocks immediately after tool results", play a part in early stops.
-10. Whether Claude Code 2.1.215's /verify change covers gstack's own `verify` skill.
+3. Whether effort (medium for Opus, high for Sol) plays a part in how often each consults a skill.
+4. The causes of the head-to-head's 5 of 10 sessions that never started autoplan, and whether the other 5 ran autoplan's review. No transcripts were read.
+5. Whether the head-to-head rig set `GSTACK_SESSION_KIND` or seeded gstack state.
+6. Whether the label or the commit message drives the user file's 20 against the project file's 39.
+7. Why longer prompts load more often.
+8. Behounek's full Opus 5 results.
+9. What a Claude Code feature flag (`tengu_typed_pebble`) that touches the default context window does.
+10. A low-confidence guess: that empty `end_turn` stops, which Anthropic's [stop-reasons page](https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons) ties to "Adding text blocks immediately after tool results", play a part in early stops.
+11. Whether Claude Code 2.1.215's /verify change covers gstack's own `verify` skill.
 
 ## Sources and how solid they are
 
