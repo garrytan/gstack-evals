@@ -1,0 +1,28 @@
+== claude-opus-5-5, B1d held-out: 60 tasks, four arms
+  keyless coverage (the hook at the pin on each prompt): prove-it only 39, first of two 3, second of two 7, not named 11
+  gstack-main: loaded 39/60 65.0% [52.4, 75.8]; at the first call 39; /verify loaded 5; followed 15/60 [15.8, 37.2]; gaps 0, cap stops 0, safety stops 0, audit 0, passes 46 (descriptive), cost $21.92 ($0.365 a graded session); not loaded: hook log missing 0, hook did not name prove-it 11, line not delivered 0, loaded /verify instead 5, load failed 0, named, not loaded 3, never named 2
+  project-md: loaded 45/60 75.0% [62.8, 84.2]; at the first call 45; /verify loaded 0; followed 18/60 [19.9, 42.5]; gaps 0, cap stops 0, safety stops 0, audit 0, passes 43 (descriptive), cost $19.88 ($0.331 a graded session); not loaded: block not placed 0, load failed 0, named, not loaded 0, never named 15
+  project-md-noescape: loaded 47/60 78.3% [66.4, 86.9]; at the first call 47; /verify loaded 0; followed 23/60 [27.1, 51.0]; gaps 0, cap stops 0, safety stops 0, audit 0, passes 45 (descriptive), cost $19.30 ($0.322 a graded session); not loaded: block not placed 0, load failed 0, named, not loaded 0, never named 13
+  none: loaded 0/60 0.0% [0.0, 6.0]; at the first call 0; /verify loaded 0; followed 0/60 [0.0, 6.0]; gaps 0, cap stops 0, safety stops 0, audit 0, passes 46 (descriptive), cost $15.80 ($0.263 a graded session)
+  hook put prove-it only (39 sessions): prove-it loaded 35, /verify loaded 0, neither 4
+  hook put prove-it first of two (3 sessions): prove-it loaded 3, /verify loaded 0, neither 0
+  hook put prove-it second of two (7 sessions): prove-it loaded 1, /verify loaded 5, neither 1
+  hook put prove-it not named (11 sessions): prove-it loaded 0, /verify loaded 0, neither 11
+  hook log missing (0 sessions): prove-it loaded 0
+  hook line before the first output (proxy): 49 of 60, quoted 0
+  loaded, gstack-main - project-md: -10.0 points [-21.3, +1.5] on 60 paired tasks (3 vs 9 discordant) (disagreement when the difference is at or below -26 points: no)
+  loaded, project-md - gstack-main: +10.0 points [-1.5, +21.3] on 60 paired tasks (9 vs 3 discordant): matches
+  loaded, project-md-noescape - gstack-main: +13.3 points [+2.0, +24.5] on 60 paired tasks (10 vs 2 discordant): matches
+  loaded, project-md-noescape - project-md (the escape clause): +3.3 points [-4.3, +11.2] on 60 paired tasks (3 vs 1 discordant)
+  followed, gstack-main - none: +25.0 points [+14.0, +37.2] on 60 paired tasks (15 vs 0 discordant)
+  followed, project-md - none: +30.0 points [+18.2, +42.5] on 60 paired tasks (18 vs 0 discordant)
+  followed, project-md-noescape - none: +38.3 points [+25.6, +51.0] on 60 paired tasks (23 vs 0 discordant)
+  hook names prove-it (49 tasks): gstack-main 39/49, project-md 41/49, project-md-noescape 42/49, none 0/49
+  hook does not name prove-it (11 tasks): gstack-main 0/11, project-md 4/11, project-md-noescape 5/11, none 0/11
+  _interface tasks (6 tasks): gstack-main 1/6, project-md 4/6, project-md-noescape 4/6, none 0/6
+  other tasks (54 tasks): gstack-main 38/54, project-md 41/54, project-md-noescape 43/54, none 0/54
+  length tertile 1 (496 to 1563 characters) (20 tasks): gstack-main 11/20, project-md 11/20, project-md-noescape 13/20, none 0/20
+  length tertile 2 (1613 to 2808 characters) (20 tasks): gstack-main 14/20, project-md 18/20, project-md-noescape 18/20, none 0/20
+  length tertile 3 (2965 to 28973 characters) (20 tasks): gstack-main 14/20, project-md 16/20, project-md-noescape 16/20, none 0/20
+  R48 for CLAUDE.md routing: no R48 verdict for CLAUDE.md routing: the current block matches the hook on the held-out set, so it is not a losing part, and whether it is cut as redundant rests on Garry's rule on the 60
+  decision: the block stays and the result goes to Garry

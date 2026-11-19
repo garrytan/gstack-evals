@@ -235,12 +235,24 @@ describe("money", () => {
       expect(b1dGuard("b1d-in", { "b1d-in": readRows(path) }, {}, 0).why).toContain("b1d-in is marked done; a done item never launches again");
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
-  test("the launch guard counts every item's projection and this lane's counter against the $340 stop", () => {
+  test("the launch guard counts every item's projection and this lane's counter against the $400 stop", () => {
     const g0 = b1dGuard("b1d-in", {}, {}, 0), all = Number(/all-in \$([\d.]+)/.exec(g0.lines[0]!)![1]);
     expect(b1dGuard("b1d-in", {}, {}, B1D.stopUsd - all).ok).toBe(true);
     const g = b1dGuard("b1d-in", {}, {}, B1D.stopUsd - all + 0.01);
     expect(g.ok).toBe(false);
-    expect(g.why[0]).toBe("all-in $340.01 passes the $340.00 stop");
+    expect(g.why[0]).toBe("all-in $400.01 passes the $400.00 stop");
+  });
+  test("a relaunch past the all-in stop runs anyway and prints the overshoot, and a fresh launch past the $400 stop still refuses", () => {
+    const M = (u: number) => Math.round(u * 1e6), ts = "2026-11-19T00:00:00Z", parts = b1dPlan("b1d-in", RUN, null).parts, lost = { "b1d-in": { parts, finished: [] } };
+    const ledger = [{ ts, item: "b1d-in", kind: "approval", id: "approval", usd_micros: M(90) }, { ts, item: "b1d-in", kind: "reserve", id: "b1d-in-1/s1", usd_micros: M(20) }, { ts, item: "b1d-in", kind: "settle", id: "b1d-in-1/s1", usd_micros: M(20) }, { ts, item: "b1d-in", kind: "reserve", id: "host-1", usd_micros: M(7.68) }, { ts, item: "b1d-in", kind: "reserve", id: "b1d-in-1/vm", usd_micros: M(2.4) }] as Row[];
+    const at = (crew: number) => b1dGuard("b1d-in", { "b1d-in": ledger }, lost, crew, "b1d-in-1"), all = Number(/all-in \$([\d.]+)/.exec(at(0).lines[0]!)![1]);
+    const over = at(B1D.stopUsd - all + 0.01);
+    expect([over.ok, over.why]).toEqual([true, []]);
+    expect(over.lines[0]).toMatch(/^B1D_LAUNCH OVERSHOOT b1d-in: all-in \$400\.01 of \$400\.00/);
+    expect(over.lines[1]).toBe("  relaunch of b1d-in-1 runs anyway, salvage first; report to the Captain at once: all-in $400.01 passes the $400.00 stop");
+    const g0 = b1dGuard("b1d-in", { "b1d-in": ledger }, { "b1d-in": { parts, finished: ["b1d-in-1"] } }, 0), fresh = Number(/all-in \$([\d.]+)/.exec(g0.lines[0]!)![1]);
+    const refused = b1dGuard("b1d-in", { "b1d-in": ledger }, { "b1d-in": { parts, finished: ["b1d-in-1"] } }, B1D.stopUsd - fresh + 0.01);
+    expect([refused.ok, refused.why]).toEqual([false, ["all-in $400.01 passes the $400.00 stop"]]);
   });
   test("a relaunch counts its item at its ledger spend, so a lost part's salvage runs, and a fresh launch past the cap still refuses", () => {
     const M = (u: number) => Math.round(u * 1e6), ts = "2026-11-19T00:00:00Z", parts = b1dPlan("b1d-in", RUN, null).parts;
@@ -250,6 +262,14 @@ describe("money", () => {
     expect(b1dGuard("b1d-in", { "b1d-in": ledger(20) }, lost, 0, "b1d-in-1").lines[0]).toMatch(/^B1D_LAUNCH PASS b1d-in: .*; b1d-in \$30\.08 of cap \$90\.00/);
     const next = b1dGuard("b1d-in", { "b1d-in": ledger(60) }, { "b1d-in": { parts, finished: ["b1d-in-1"] } }, 0);
     expect([next.ok, next.why[0]]).toEqual([false, "b1d-in's projection $124.08 passes its cap $90.00"]);
+  });
+  test("a relaunch past its item cap runs anyway and prints the cap overshoot", () => {
+    const M = (u: number) => Math.round(u * 1e6), ts = "2026-11-19T00:00:00Z", parts = b1dPlan("b1d-in", RUN, null).parts;
+    const ledger = [{ ts, item: "b1d-in", kind: "approval", id: "approval", usd_micros: M(90) }, { ts, item: "b1d-in", kind: "reserve", id: "b1d-in-1/s1", usd_micros: M(85) }, { ts, item: "b1d-in", kind: "settle", id: "b1d-in-1/s1", usd_micros: M(85) }, { ts, item: "b1d-in", kind: "reserve", id: "host-1", usd_micros: M(7.68) }, { ts, item: "b1d-in", kind: "reserve", id: "b1d-in-1/vm", usd_micros: M(2.4) }] as Row[];
+    const g = b1dGuard("b1d-in", { "b1d-in": ledger }, { "b1d-in": { parts, finished: [] } }, 0, "b1d-in-1");
+    expect([g.ok, g.why]).toEqual([true, []]);
+    expect(g.lines[0]).toMatch(/^B1D_LAUNCH OVERSHOOT b1d-in: .*; b1d-in \$95\.08 of cap \$90\.00/);
+    expect(g.lines[1]).toBe("  relaunch of b1d-in-1 runs anyway, salvage first; report to the Captain at once: b1d-in's projection $95.08 passes its cap $90.00");
   });
 });
 

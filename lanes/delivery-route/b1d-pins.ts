@@ -89,9 +89,10 @@ export const B1D_SMOKE = ["aallan__vera-662_interface", "imperialcollegelondon__
 
 // Items, caps and the all-in stop. Planning rates per session (B1D_ARMS): gstack-main at B1's gstack-shaped Opus mean ($0.4773)
 // rounded up, the two project-file arms at B1c's measured mean ($0.4143) rounded up, none at B1's Opus none mean ($0.3072)
-// rounded up. The caps are the ones the Captain recorded.
+// rounded up. The caps are the ones the Captain recorded. The all-in stop went from $340 to $400 on 2026-11-19, before the
+// pilot, measured on the whole thread's counter (a dated pre-data change the results list).
 export const B1D = {
-  stopUsd: 340,
+  stopUsd: 400,
   hostRoot: "b1d",
   ledgerPort: "9950",
   armManifests: "arms/manifests/b1d",
