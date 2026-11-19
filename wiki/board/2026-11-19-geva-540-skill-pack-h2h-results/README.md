@@ -44,9 +44,9 @@ attachments:
 
 ## What we found
 
-We learned that one plain sentence made a coding agent write about half as much code for the same results, at the lowest cost per verified fix we measured. With gstack installed and "Make the smallest change that fixes the issue, and nothing more." added to its instructions, Claude Opus 5.5 changed 0.44 times as many non-test lines as gstack alone on the units both fixed (95% interval 0.37 to 0.53), fixed 61 of 100 ordinary units, and cost $0.46 per verified fix, against $0.65 for gstack alone and $0.63 with no pack. ponystack, a plugin built for the same goal, cut lines to 0.65 times (0.57 to 0.74) and fixed 63; that was not measurably more correct than gstack's 58. You should try the one sentence before a minimal-code plugin. We've proposed it for gstack's next eval wave.
+We learned that one plain sentence made a coding agent write less than half as much code on the units it fixed, at the lowest cost per verified fix we measured. With gstack installed and "Make the smallest change that fixes the issue, and nothing more." added to its instructions, Claude Opus 5.5 changed 0.44 times as many non-test lines as gstack alone on the units both fixed (95% interval 0.37 to 0.53), fixed 61 of 100 ordinary units, and cost $0.46 per verified fix, against $0.65 for gstack alone and $0.63 with no pack. ponystack, a plugin built for the same goal, cut lines to 0.65 times (0.57 to 0.74) and fixed 63; that was not measurably more correct than gstack's 58. You should try the one sentence before a minimal-code plugin. We've proposed it for gstack's next eval wave.
 
-We learned that gstack did not make Opus 5.5 fix more ordinary bugs and features, and that it cost more per verified fix. With gstack, Opus fixed 58 of 100. With no pack, it fixed 61 of the 99 that scored (61.6%). The paired difference is -4.0 points (95% interval -11.0 to +2.2), so a gain larger than about 2 points is ruled out on these units. gstack's procedure ran in 95% of its sessions, and the no-pack rate is far from a ceiling. gstack cost about the same per session ($0.38 against $0.39) and fixed fewer, so its cost per verified fix was higher: $0.652 against $0.631. On 60 security fixes from GitHub advisories (B2), both setups fixed 29 (48.3%; difference 0.0, interval -6.8 to +6.7), and gstack cost $0.504 per verified fix against $0.421. You should not expect gstack to make Opus 5.5 fix more everyday bugs. We've asked gstack's maintainers to remove the generic-coding claims from its README.
+We learned that gstack did not make Opus 5.5 fix more ordinary bugs and features, and that it cost more per verified fix. With gstack, Opus fixed 58 of 100. With no pack, it fixed 61 of the 99 that scored (61.6%). The paired difference is -4.0 points (95% interval -11.0 to +2.2), so a gain larger than about 2 points is ruled out on these units. gstack's procedure ran in 95% of its sessions, and the no-pack rate is far from a ceiling. gstack cost about as much per session ($0.38 against $0.39) and fixed fewer, so its cost per verified fix was higher: $0.652 against $0.631. On 60 security fixes from GitHub advisories (B2), both setups fixed 29 (48.3%; difference 0.0, interval -6.8 to +6.7), and gstack cost $0.504 per verified fix against $0.421. You should not expect gstack to make Opus 5.5 fix more everyday bugs. We've asked gstack's maintainers to remove the generic-coding claims from its README.
 
 We learned that most other packs did not run their own procedure when handed a plain bug or feature. By the detectors frozen before the run, Superpowers ran its procedure in 0% of sessions, pstack in 0%, GSD in 1% or less, agent-skills in 28% (ordinary) and 32% (security), and tstack in 84% and 67%. So seven of the ten gstack-against-pack contrasts read "pack not exercised as designed" and are published with no claim either way, Superpowers' two are published as run, with that failure disclosed, and only tstack on ordinary units was exercised (no difference larger than about 14 points shown). Measured against no pack, no pack fixed measurably more on either class. You should start a pack's procedure by name when you want it to run, and you should not read these rows as packs winning or losing.
 
@@ -155,6 +155,30 @@ Dollars per verified fix are point estimates with no interval; the frozen rule r
 - Tokens: missing (see Cost).
 - Safety-filter stops: 0 in every arm. Allowance stops and cap stops: 0.
 - Continuations: 6 in agent-skills on O features (5 of them spurious, by the frozen rule), 0 elsewhere. Questions asked: GSD 10 and agent-skills 4, all in O feature sessions, and tstack 6.
+- Read audit (any file read from another pack): it flagged 3 sessions and no others, pstack O 0819, GSD O 0823 and tstack B 1200. In each, the flagged call listed Playwright's browser cache (`ls ~/.cache/ms-playwright`) while setting up a test. The no-pack arm had none.
+- Reservation-bound refusals: 0 in every arm. The worktree secondary had nothing to score: no session in any arm left a worktree for it to check. Planning files, counted apart from source lines: only agent-skills wrote any, in 5 O sessions.
+- Every pack pair (20 contrasts, descriptive, no correction) is in [stage2-analysis.json](stage2-analysis.json) under pack_pairs. One of the 20 intervals excludes 0: on O, pstack minus GSD, -6.0 points [-12.1, -0.9]. With 20 uncorrected 95% intervals, about one is expected to exclude 0 by chance alone.
+
+More secondaries per arm, from stage2-analysis.json. The reading without the new-test rule drops the rule that no new test file the arm added may fail. The adapted reading keeps the arm's own test edits when every stable test still exists and no skip marker was added; it has no result where its scorer reported a gap, so its denominators are smaller. An arm's test file at a hidden test's path is dropped before scoring.
+
+| Class | Arm | Median wall time (s) | Verified without the new-test rule | Adapted reading, fixed of scored | Sessions with an arm test file dropped |
+|---|---|---|---|---|---|
+| O | none | 217 | 61.6% | 51 of 74 | 3 |
+| O | gstack | 238 | 58.0% | 52 of 76 | 3 |
+| O | Superpowers | 223 | 61.0% | 49 of 75 | 3 |
+| O | agent-skills | 288 | 62.0% | 51 of 80 | 5 |
+| O | GSD | 240 | 62.0% | 48 of 71 | 3 |
+| O | pstack | 253 | 56.0% | 45 of 78 | 8 |
+| O | tstack | 287 | 56.1% | 42 of 74 | 8 |
+| O | gstack-pony | 234 | 63.0% | 50 of 73 | 4 |
+| O | gstack-oneline | 180 | 61.0% | 59 of 92 | 2 |
+| B | none | 138 | 50.0% | 20 of 37 | 2 |
+| B | gstack | 153 | 50.0% | 21 of 39 | 2 |
+| B | Superpowers | 142 | 50.0% | 23 of 41 | 2 |
+| B | agent-skills | 178 | 51.7% | 20 of 35 | 4 |
+| B | GSD | 166 | 51.7% | 22 of 37 | 3 |
+| B | pstack | 169 | 48.3% | 16 of 30 | 4 |
+| B | tstack | 180 | 50.0% | 19 of 37 | 3 |
 
 **Exposure for agent-skills, both ways.** The frozen detector, not repaired (deviation rulings of 2026-11-16 and 2026-11-17): O 28 of 100 (bugs 27 of 90, features 1 of 10), B 19 of 60. Counting a bug session whose source edits all went through Bash as having run the procedure, the upper bound is O 68 of 100 and B 56 of 60 (93%). Under that upper bound the B row would read "no difference shown" (-1.7 [-5.1, 0.0]), and the O row stays below 80%. B1's merged detector (b5d89f2), run read-only and descriptively over the same bug sessions: the full Prove-It sequence was followed in 0 of 150; a test was written before the first source edit in 77 of 90 O bugs and 58 of 60 B; a failing run before the source edit was seen in 1 and 0. Files: [agent-skills-b1det.json](agent-skills-b1det.json), [agent-skills-b1det.tsv](agent-skills-b1det.tsv).
 
@@ -192,7 +216,7 @@ Dollars per verified fix are point estimates with no interval; the frozen rule r
 - Ten feature units. Nothing here measures what /autoplan does to correctness.
 - The packs were run as their READMEs install them, entered the way their docs describe, with no prompt naming a procedure on plain tasks. A user who starts a pack's procedure by name may see different behaviour.
 - Superpowers ran as published with Claude Code's todo tools on, and its procedure (the "Using <skill>" announcement with a todo per checklist item) never ran; see obra/superpowers#2676 and #2386.
-- Public tasks may be in the model's training data. The July 2026 stratum (18 units) is after Opus 5.5's published cutoff and shows the same picture.
+- Public tasks may be in the model's training data. On the 18 units from July 2026 on, after Opus 5.5's published cutoff, each of the seven arms in the primary family fixed 65% to 83%, more than it fixed on the full set, so we see no sign that older, possibly memorised units raised the rates. 18 units are too few to compare arms on.
 - Three gaps, all on the h2h-opus item, none over 10% of a cell (below). There were no safety-filter stops.
 - No model judge: the hidden tests decide. Dollars per fix carry no interval.
 
@@ -254,4 +278,8 @@ Mechanics, for anyone rerunning:
 
 ## Disclosures
 
-gstack is Garry Tan's own project, and his team ran this eval. The other packs' authors were not contacted at any point. Superpowers, agent-skills, GSD, pstack, tstack and ponystack are their authors' work, credited above; we have no relationship with any of them.
+gstack is Garry Tan's own project, and his team ran this eval. The other packs' authors were not contacted at any point. Superpowers, agent-skills, GSD, pstack, tstack and ponystack are their authors' work, credited above.
+
+Disclosure: Y Combinator, which Garry Tan runs, is an investor in T3 Chat (Ping Labs), the company of tstack's author, Theo Browne.
+
+On 2026-11-19 we checked the public YC company directory and each author's public profiles for a connection to Y Combinator or Garry Tan. We found the T3 Chat connection above, and none for Jesse Vincent (Prime Radiant), Addy Osmani, Open GSD or Aianback. Lauren Tan and Cursor were checked this way on 2026-11-09, and none was found. This says what we checked, not that no other connection exists.
