@@ -1062,7 +1062,7 @@
   "shows": [
    "for cso, section 8's detectors on the arm's own sessions: the skill loaded and the helper started a daily run with default scope",
    "supply: before stage 0 the unit build fills every usable position the plan can use (134), or the count goes to the Captain before any paid call",
-   "judge: section 7's R78 check on stage 0 and stage 1 reports together (about 19% of each arm's planned spend, since R78 needs at least 40 labelled reports), before any stage 2 session"
+   "judge: section 7's R78 check on stage 0 and stage 1 reports together (about 19% of each arm's planned spend, since R78 needs at least 40 labelled reports), before any stage 2 session; an arm that fails stage 0's part-ran or supply check stops before stage 1 spends anything on it"
   ],
   "failing_arm": "one named harness repair and a rerun; still failing, it is left out before stage 2 and reported as left out with the reason, and its contrast reads Incomplete",
   "sol_stage": "the Codex smoke is each Sol arm's pilot"
