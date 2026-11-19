@@ -90,22 +90,22 @@ Most other packs are procedures the agent has to choose to follow. Given a bare 
 
 ## Result
 
-The preregistered primary family, verbatim from [stage2-report.txt](stage2-report.txt): gstack minus each other arm, paired on units, verified-correct rate in points, repository-clustered bootstrap intervals, Holm over 12.
+The preregistered primary family, from [stage2-report.txt](stage2-report.txt): gstack minus each other arm, paired on units, verified-correct rate in points, repository-clustered bootstrap intervals, the clustered McNemar test that decides each row with the exact McNemar p beside it, and Holm over 12.
 
-| Class | gstack minus | n | Other arm's rate | gstack's rate | Difference | 95% interval | Holm p | MDD | Other arm's procedure rate | State |
-|---|---|---|---|---|---|---|---|---|---|---|
-| O | none | 99 | 61.6 | 57.6 | -4.0 | [-11.0, 2.2] | 1 | none fits | n/a | no difference shown |
-| O | Superpowers | 100 | 61.0 | 58.0 | -3.0 | [-9.5, 3.2] | 1 | none fits | 0% | run as published, failure disclosed |
-| O | agent-skills | 100 | 61.0 | 58.0 | -3.0 | [-9.7, 3.2] | 1 | none fits | 28% | pack not exercised as designed |
-| O | GSD | 100 | 62.0 | 58.0 | -4.0 | [-10.9, 2.2] | 1 | none fits | 1% | pack not exercised as designed |
-| O | pstack | 100 | 56.0 | 58.0 | +2.0 | [-3.4, 7.7] | 1 | none fits | 0% | pack not exercised as designed |
-| O | tstack | 98 | 56.1 | 58.2 | +2.0 | [-5.4, 9.5] | 1 | 14 | 84% | no difference larger than about 14 points shown |
-| B | none | 60 | 48.3 | 48.3 | 0.0 | [-6.8, 6.7] | 1 | none fits | n/a | no difference shown |
-| B | Superpowers | 60 | 48.3 | 48.3 | 0.0 | [-6.8, 6.7] | 1 | none fits | 0% | run as published, failure disclosed |
-| B | agent-skills | 60 | 50.0 | 48.3 | -1.7 | [-5.1, 0.0] | 1 | none fits | 32% | pack not exercised as designed |
-| B | GSD | 60 | 50.0 | 48.3 | -1.7 | [-9.0, 5.5] | 1 | none fits | 0% | pack not exercised as designed |
-| B | pstack | 60 | 46.7 | 48.3 | +1.7 | [-3.6, 7.3] | 1 | none fits | 0% | pack not exercised as designed |
-| B | tstack | 60 | 48.3 | 48.3 | 0.0 | [-5.0, 4.8] | 1 | none fits | 67% | pack not exercised as designed |
+| Class | gstack minus | n | Other arm's rate | gstack's rate | Difference | 95% interval | p, clustered McNemar | p, exact McNemar | Holm p | MDD | Other arm's procedure rate | State |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| O | none | 99 | 61.6 | 57.6 | -4.0 | [-11.0, 2.2] | 0.2440 | 0.3438 | 1 | none fits | n/a | no difference shown |
+| O | Superpowers | 100 | 61.0 | 58.0 | -3.0 | [-9.5, 3.2] | 0.3670 | 0.5488 | 1 | none fits | 0% | run as published, failure disclosed |
+| O | agent-skills | 100 | 61.0 | 58.0 | -3.0 | [-9.7, 3.2] | 0.3617 | 0.5488 | 1 | none fits | 28% | pack not exercised as designed |
+| O | GSD | 100 | 62.0 | 58.0 | -4.0 | [-10.9, 2.2] | 0.2407 | 0.3438 | 1 | none fits | 1% | pack not exercised as designed |
+| O | pstack | 100 | 56.0 | 58.0 | +2.0 | [-3.4, 7.7] | 0.4810 | 0.7266 | 1 | none fits | 0% | pack not exercised as designed |
+| O | tstack | 98 | 56.1 | 58.2 | +2.0 | [-5.4, 9.5] | 0.5937 | 0.7905 | 1 | 14 | 84% | no difference larger than about 14 points shown |
+| B | none | 60 | 48.3 | 48.3 | 0.0 | [-6.8, 6.7] | 1.0000 | 1.0000 | 1 | none fits | n/a | no difference shown |
+| B | Superpowers | 60 | 48.3 | 48.3 | 0.0 | [-6.8, 6.7] | 1.0000 | 1.0000 | 1 | none fits | 0% | run as published, failure disclosed |
+| B | agent-skills | 60 | 50.0 | 48.3 | -1.7 | [-5.1, 0.0] | 0.3046 | 1.0000 | 1 | none fits | 32% | pack not exercised as designed |
+| B | GSD | 60 | 50.0 | 48.3 | -1.7 | [-9.0, 5.5] | 0.6571 | 1.0000 | 1 | none fits | 0% | pack not exercised as designed |
+| B | pstack | 60 | 46.7 | 48.3 | +1.7 | [-3.6, 7.3] | 0.5634 | 1.0000 | 1 | none fits | 0% | pack not exercised as designed |
+| B | tstack | 60 | 48.3 | 48.3 | 0.0 | [-5.0, 4.8] | 1.0000 | 1.0000 | 1 | none fits | 67% | pack not exercised as designed |
 
 Reading the table:
 
