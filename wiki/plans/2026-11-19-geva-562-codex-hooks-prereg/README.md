@@ -65,12 +65,13 @@ Each part has its own primary and its own decision. No decision reads another's 
 | False blocks in more than 5% of contract-on sessions (section 5.6) | The contract ships off by default on Codex, and its Codex transcript reader gets FIX-METHOD, whatever the primary shows. |
 | The contract blocked in fewer than 7 of 66 contract-on sessions | Sol on Codex already runs the adversarial pass and writes the report, so the contract had almost nothing to act on. That is no evidence it helps (R56), and not a loss. The contract ships off by default on Codex. Verdict FIX-METHOD (ceiling), with the R61 attempt as its own quick look on harder reviews. |
 | Primary above 0: the contract adds known bugs to what ships | The contract stays on by default for Codex. Verdict KEEP. |
-| Primary includes 0 | The contract ships off by default on Codex. CUT-CANDIDATE when the interval's upper bound is under the MDD (11.5 points at no losses), otherwise FIX-METHOD (power). Garry hears a cut candidate in plain words. |
+| Primary includes 0: its bootstrap interval includes 0 | The contract ships off by default on Codex. CUT-CANDIDATE when the interval's upper bound is under the MDD (11.5 points at no losses), otherwise FIX-METHOD (power). Garry hears a cut candidate in plain words. |
+| Primary not shown: its interval lies wholly above or wholly below 0, but the sign-flip test gives p of 0.05 or more | The contract ships off by default on Codex. Verdict FIX-METHOD (power), never CUT-CANDIDATE, and the results give the direction. |
 | Primary below 0 | The hold makes the delivered review worse. Off by default on Codex; CUT-CANDIDATE. |
 
 If the check on the within-session design fails (section 5.4, check A), the between-arm contrast, contract on minus contract off, takes the primary's place in this table, and the results say why.
 
-In this table, the E3 table below and every between-arm contrast of part C, a reading is above 0 or below 0 only when both hold: its bootstrap interval excludes 0, and the exact two-sided pull-request-clustered sign-flip test (section 5.4) gives p < 0.05. Otherwise it includes 0. Part R's readings use Newcombe's interval alone (section 4.8).
+In this table, the E3 table below and every between-arm contrast of part C, a reading is above 0 or below 0 only when both hold: its bootstrap interval excludes 0, and the exact two-sided pull-request-clustered sign-flip test (section 5.4) gives p < 0.05. When its interval excludes 0 but the sign-flip test gives p of 0.05 or more, the reading is not shown: it takes the contract table's not-shown row, and in the E3 table it reads as including 0, so E2 stands. Otherwise it includes 0. When check A swaps in c-on minus c-off, the same rows apply to it. Part R's readings use Newcombe's interval alone (section 4.8).
 
 **E3 against E2** (plan item E). The effort contrast is contract-on /review at high against the same arm at low (Codex's default for Sol), on the same units.
 
@@ -173,7 +174,7 @@ B1's rules. A session is graded when it has a verifier reward, a model response 
 
 **Primary.** On the covered tasks graded in both r-on and r-off: r-on's loaded minus r-off's, paired by task, with Newcombe's interval for paired proportions (method 10).
 
-Beside it: the same contrast on all 60 tasks (end to end, which is what the default buys); each arm's loads with Wilson intervals; the split; first-call loads; /verify loads; the reasons; and passes, r-on minus r-off and each gstack arm minus r-none, paired, with Newcombe's interval. The routing table in section 1 is read on the primary. The passes guard in its KEEP row is the only other number that can send the result to the Captain.
+Beside it: the same contrast on all 60 tasks (end to end, which is what the default buys); each arm's loads with Wilson intervals; the split; first-call loads; /verify loads; the reasons; and passes, r-on minus r-off and each gstack arm minus r-none, paired, with Newcombe's interval. The primary is also given again with the loads that count only under rule (b) left out (section 4.5); that line is descriptive and decides nothing. The routing table in section 1 is read on the primary. The passes guard in its KEEP row is the only other number that can send the result to the Captain.
 
 The routing in gstack's Codex hook comes from the matcher GSTA-36 tuned on these 60 prompts for Claude Code (B1d, section 5). If PR 1 reuses it, the coverage count is in-sample. Follow-through, what Sol does when the line arrives, is not tuned.
 
@@ -208,7 +209,7 @@ The template is stacks round 1's review told text (`TOLD_TEMPLATE` in src/trial/
 
 **Primary (the contract).** In c-on, over the 84 bug-passes: found in the final state minus found in the first-stop state, in points, with a 95% interval from R2's pull-request-clustered bootstrap (10,000 resamples, seed 20261119). It is the change the contract made to what ships, measured inside each session. It is zero in every session the contract didn't block. Gains and losses are both counted: a final report that drops a bug the first-stop message named is a loss.
 
-**The sign-flip test.** For each pull-request cluster, sum its bug-passes' paired differences (+1 gained, -1 lost, 0 unchanged). The statistic is the total. Under the null, each cluster's sum is as likely to have either sign, so the test flips the signs of the cluster sums and counts the flips whose total is at least as far from 0 as the observed one. It uses every sign flip over the clusters whose sum is not 0, or 10,000 seeded flips (seed 20261119) when more than 20 clusters changed. Four gains in four clusters with no losses give p = 0.125 and read as including 0. The same test, on the same pairs, goes with check A, E3 and every between-arm contrast.
+**The sign-flip test.** For each pull-request cluster, sum its bug-passes' paired differences (+1 gained, -1 lost, 0 unchanged). The statistic is the total. Under the null, each cluster's sum is as likely to have either sign, so the test flips the signs of the cluster sums and counts the flips whose total is at least as far from 0 as the observed one. It always enumerates every sign flip over the clusters whose sum is not 0, at most 2^26, with no random draw. Four gains in four clusters with no losses give p = 0.125, so with a bootstrap interval above 0 they read as not shown (section 1). The same test, on the same pairs, goes with check A, E3 and every between-arm contrast.
 
 Why inside the session: until its first block, a c-on session gets exactly what a c-off session gets. A registered hook changes nothing the model sees until it fires (probes.txt, section 4), and routing skips these prompts. So the first-stop state is what that same session would have delivered with the contract off, and the between-session noise drops out. This is what lets 66 sessions see an 11.5-point gain (section 10).
 
@@ -287,7 +288,7 @@ An arm's pilot passes when: every task or unit is supplied (its image builds, it
 
 ## 10. Power and the smallest detectable difference
 
-power.txt is printed by power.py (attached; standard library only). Exact two-sided McNemar at 0.05 and 80% power. Part C uses a design effect of 1.2 for the 26 pull-request clusters, so 84 bug-passes count as 70. Part C's MDDs come from exact McNemar with that design effect, and approximate the clustered sign-flip test that part C's readings use (section 5.4).
+power.txt is printed by power.py (attached; standard library only). Exact two-sided McNemar at 0.05 and 80% power. Part C uses a design effect of 1.2 for the 26 pull-request clusters, so 84 bug-passes count as 70. Part C's MDDs come from exact McNemar with that design effect, and approximate the clustered sign-flip test that part C's readings use (section 5.4). The exact test can't reach p < 0.05 with fewer than 6 changed clusters (its smallest p over k clusters is 2/2^k, 0.0625 at 5), so when gains cluster the McNemar MDDs are a lower bound on what part C can detect.
 
 | Comparison | Pairs | MDD in points |
 |---|---|---|
@@ -299,7 +300,7 @@ power.txt is printed by power.py (attached; standard library only). Exact two-si
 
 So the routing part sees large changes in loads, which is what B1b and B1c saw (Opus moved 38 points between routes). The contract part sees a gain of about 12 to 19 points of the known bugs from the hold. The effort arm sees only a gain of about 19 to 22 points; a smaller effort gain reads "not shown", and E2 stands. R2 on Opus, at the same 2 passes, reported an MDD of 24.5 by its own admission rule.
 
-**R113.** Neither counted run is planned above $500 paid at the prices in section 11: part R's counted sessions come to $93 and part C's, the effort arm, its judging and VM shares included, to about $490. So neither takes an interim look. If the pilot's re-pricing puts a counted run above $500 before it starts, a dated change before its first counted session adds R113's one look at half its units, in seeded unit order: O'Brien-Fleming two-look bounds for this plan's two-sided 0.05 per decision, |z| of at least 2.797 at the look and 1.977 at the end (power.txt), a futility stop when conditional power under the planned effect (the MDD above) falls below 10%, an early stop flagged as possibly overstated, and no other look at any primary. An arm stops only when every decision that reads it has stopped.
+**R113.** Neither counted run is planned above $500 paid at the prices in section 11: part R's counted sessions come to $93 and part C's, the effort arm, its judging and VM shares included, to about $490. So neither takes an interim look. If the pilot's re-pricing puts a counted run above $500 before it starts, a dated change before its first counted session adds R113's one look at half its units, in seeded unit order: O'Brien-Fleming two-look bounds computed at this plan's own alpha, two-sided 0.05 per decision with no correction across decisions (section 1), as power.py derives them: |z| of at least 2.797 at the look and 1.977 at the end (power.txt), a futility stop when conditional power under the planned effect (the MDD above) falls below 10%, an early stop flagged as possibly overstated, and no other look at any primary. An arm stops only when every decision that reads it has stopped.
 
 ## 11. Money
 
@@ -320,7 +321,7 @@ Caps follow the crew's rule for parallel ledgers: 1.35 times central, plus the p
 
 **Crew model use,** not in the items above: this prereg and its review, about $60; building the harness and the scorer with a gate-class /ship, about $130; running, judging and the results post, about $60. About $250, with a stop at $350 that comes to the Captain.
 
-**All-in:** about $890 at planning prices with the effort arm, and about $660 without it (paid $416, caps $700). The plan's estimate of $250 to $400 all-in can't buy two parts with R44's no-gstack arms, R111's pilots and R78's gold labels; both versions pass the Captain's $600 line, and both sit under R71's $2,000 guideline. Without the effort arm, this eval says plainly that it can't decide E3, and E2 stands by default.
+**All-in:** about $890 at planning prices with the effort arm, and about $660 without it (paid $416, caps $700). The plan's estimate of $250 to $400 all-in can't buy two parts with R44's no-gstack arms, R111's pilots and R78's gold labels; both versions pass the Captain's $600 line, and both sit under R71's $2,000 guideline. The Captain chose the full design, with the effort arm, on 2026-11-19. The figures without the effort arm are given for information only.
 
 ## 12. Harness plan
 
@@ -333,7 +334,7 @@ Built on one branch and landed before the counted runs, after this post merges (
 5. **The route table** command, keyless.
 6. **Reason codes** in src/errors/codes.ts for every new gap and stop.
 
-**Tests before any paid call,** with fixtures built from real Codex 0.170 rollouts captured against the stub: a direct read, a code-mode read, a read that names the path and fails, a grep that prints only the description line (not a load), a code-mode cell that reads prove-it and gstack's verify and passes on only verify's text (not a load), a read of gstack's verify that must not count, an injected skill item, and a sub-agent's thread file; a hook line delivered and one missing; a contract block, a met session, a fail-open and a false block; a first-stop message with and without a JSON block; check A's switch, on the interval and on the sign-flip test; 4 gains in 4 clusters with no losses, which must not read KEEP; and every row of section 1's three tables, each in both directions. The dry run opens and settles one ledger lease per item on a temporary ledger.
+**Tests before any paid call,** with fixtures built from real Codex 0.170 rollouts captured against the stub: a direct read, a code-mode read, a read that names the path and fails, a grep that prints only the description line (not a load), a code-mode cell that reads prove-it and gstack's verify and passes on only verify's text (not a load), a read of gstack's verify that must not count, an injected skill item, and a sub-agent's thread file; a hook line delivered and one missing; a contract block, a met session, a fail-open and a false block; a first-stop message with and without a JSON block; check A's switch, on the interval and on the sign-flip test; 4 gains in 4 clusters with no losses, which reads FIX-METHOD (power), not KEEP and not CUT-CANDIDATE; and every row of section 1's three tables, each in both directions. The dry run opens and settles one ledger lease per item on a temporary ledger.
 
 ## 13. Order, machines and timing
 
@@ -353,7 +354,7 @@ Keyless checks and the pin post; then r-pilot, c-pilot and h-pilot, and the pilo
 ## 15. Departures from the brief
 
 - **Effort.** The brief and the plan say to match Sol's effort to a Claude arm. This eval has none, so the main arms run at Codex's default (low), and one arm runs /review at high to inform E3.
-- **Cost.** Over the plan's $250 to $400 (section 11); the Captain decides.
+- **Cost.** Over the plan's $250 to $400 (section 11). The Captain chose the full design, with the effort arm, on 2026-11-19.
 - **Infrastructure.** Part R needs a Codex agent in Lane B, beyond the driver pull request the brief relies on.
 - **The driver.** It drops `--ephemeral`, which the shared driver passes today, because the contract hook and the load detector both need the rollout.
 - **Model.** GPT-6.1 Sol, as R54 names it, not GPT-6.2 Sol, which Codex lists first.
