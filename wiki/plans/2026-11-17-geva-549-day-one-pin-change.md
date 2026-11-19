@@ -253,3 +253,20 @@ Dated 2026-11-19, after category 2's reviews and before any category 1 session. 
 **Why.** Category 2's 15 A sessions spent $144.85 on the Astra voice, $9.66 a session against the $8 the table assumed, which left $50.15 for category 1's six A sessions (the two real briefs at three replicates). On the smoke's practice briefs, which carry a codebase as the real briefs do, an exposed A session spent $10.21 on the voice, so six sessions need about $58 to $61. Admission also holds $30 of voice room before each cell starts, so even one cell at a time, only three of the six would have started. With $110.15 left, all six start as long as the first five average no more than $16.03 each.
 
 **What stays as it was.** Every admission bound per cell, the rule that a launch's voice cap is at most what day1-voice has left, every other line and the all-in total. day1-plans' own line had $135.93 committed when the change was made.
+
+## 13. Gold before category 1, and its pairs (2026-11-19)
+
+Dated 2026-11-19, after category 2's wave and before any judge call. It changes the order in the preregistration's section 14 and the gold set in its section 9. The eval's approver made both changes on 2026-11-19.
+
+**The order.** Section 14's step 5, gold labelling with a check-in at gold admission, was meant to run before the category 2 wave. It was skipped, and the wave ran without it. No judge call has run, so gold is still labelled before the judge runs, as R78 needs. Gold now runs after the checker validation (step 7) and before category 1 (step 8), and category 1 does not start until gold passes admission.
+
+**The pairs.** The real plan versions behind the two real briefs give 37 distinct (plan, check) pairs, under the 40 that section 9 and R78 need:
+
+- The GHome brief has 7 distinct plan texts: its v0 design, its v0 plan, its v1 plan, the three follow-up issue texts its later builds were planned from, and its approved day-one plan. Against its 5 checks, that is 35 pairs. A fourth plan file, the plan as it stood at /autoplan's gate, is byte-identical to the v0 plan and counts once.
+- The secret-drop brief has 1 plan version, its approved plan with the review changes it accepted. Against its 2 checks, that is 2 pairs. Its gate text is not a plan version: it is the text of /autoplan's approval gate as the owner saw it, the decisions put to the owner, and the plan it led to is the approved plan already in the set.
+
+To reach 40, 2 category 2 plans join the set. They are drawn with the frozen seed (20261117) from all 90 category 2 plans (15 briefs by 6 arms, listed by brief label and then arm in the order N, D, R, A, S-dayone, S-full), blind to arm, and each is paired with its brief's hidden tasks. That adds 12 pairs, for 49 in all.
+
+**Admission.** The judge needs kappa of at least 0.6 on covered and on usable over the full 49 pairs, as section 9 freezes. The gold report adds a second line: kappa over the 37 real pairs alone. Category 1 is judged on real briefs, so if the full set passes but either real-only kappa is below 0.6, that goes to the eval's approver before any category 1 judge number counts.
+
+**How gold is labelled.** As section 9 says: Claude Opus 5.5 and Gemini 4 Argon label independently, blind to source, and a fresh Opus 5.5 settles the disagreements. Each labeller is a fresh-context agent that reads the judge's own rendered packets: judge.md's instructions, the brief, the plan under a random label and the checks in a seeded order. Its answers are parsed with the judge's own parser. The settler sees only the items the two labellers disagreed on, without their labels.
