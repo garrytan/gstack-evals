@@ -689,6 +689,8 @@
   "line_window": 10,
   "wide_range_lines": 40,
   "excerpt_lines": 20,
+  "excerpt_rule": "each excerpt is the cited line plus or minus 20 lines (41 lines)",
+  "path_normalization": "Before excerpts are cut and before the location and phantom checks, every arm's cited paths are normalized the same way: a leading helper snapshot root is stripped, so a snapshot-relative path counts as the same path in the audited tree, and a helper handle is resolved to its path from that run's helper records. A handle that doesn't resolve leaves that finding without a location. Stage 0 checks that /cso's citations resolve after this, and the share of cso findings cited by handle is reported.",
   "cwe_families": {
    "path-traversal": [
     22,
@@ -890,6 +892,7 @@
    710
   ],
   "broad_rule": "When every CWE on the advisory is broad, the class part of a hit is decided by whether the finding names the same missing check or broken protection the advisory text describes.",
+  "broad_family_rule": "when every advisory CWE is broad, the broad text rule decides class and the family map is not used",
   "redaction": [
    "gstack-cso-launcher",
    "gstack-cso",
@@ -954,7 +957,7 @@
   "check_reports_min": 40,
   "check_findings_min": 40,
   "class_min": 10,
-  "anchor_share_max": 0.25,
+  "anchor_share_max": 0.3,
   "passes": {
    "A": "key-blind: the redacted scored text only; returns the atomized finding list in the order rule (one weakness at one location per finding; a table row and its later evidence block are one finding; duplicates merged)",
    "B": "key-aware: pass A's first 10 findings with their text and evidence excerpts, the advisory, CWE families, pre-fix hunks and known open advisories; returns the labels"
@@ -985,7 +988,7 @@
    "CUT-CANDIDATE rules, every condition at its gap bound; the null path also needs the validity label validated",
    "otherwise FIX-METHOD: on gaps when a CUT-CANDIDATE condition held on complete pairs but not at its gap bound, else on power, stated with the interval"
   ],
-  "gap_bounds": "complete-pair estimates drop a unit with a gap in either arm; every verdict condition is also read at its gap bound, on the full paired contrast with each gap session filled with the value least favourable to the verdict tested: for named, not named in the arm the verdict favours and named in the other; for a per-session count (supported or unsupported findings), 0 in the arm the condition needs high and the largest count that model and arm showed in stage 2 in the arm the condition needs low; for Ahead and KEEP cso gaps count against cso, for Behind and CUT-CANDIDATE the reverse; both bounds are reported for every contrast; a verdict stands only when every condition it uses holds at its gap bound"
+  "gap_bounds": "complete-pair estimates drop a unit with a gap in either arm; every verdict condition is also read at its gap bound, on the full paired contrast with each gap session filled with the value least favourable to the verdict tested: for named, not named in the arm the verdict favours and named in the other; for a per-session count (supported or unsupported findings), 0 in the arm the condition needs high and 10, the counted-findings cap in the arm the condition needs low; for Ahead and KEEP cso gaps count against cso, for Behind and CUT-CANDIDATE the reverse; both bounds are reported for every contrast; a verdict stands only when every condition it uses holds at its gap bound"
  },
  "stage1_release": [
   "none arm named count per model",

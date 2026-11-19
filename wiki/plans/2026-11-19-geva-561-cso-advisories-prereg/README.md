@@ -14,7 +14,7 @@ links:
   - https://github.com/github/advisory-database/tree/a91f5a514f4697f0303f547c9b50a12eb07fa70f
   - lanes/outcome-skills/h2h/
 attachments:
-  - e3c959d81e1bccec9975d79810e396b5bc51b693444a24144f27df47df66765a  prereg.json
+  - c42b5d6b6fd6964768259d28528445b8e7c35e70ee99e8afb45f1256d2b11294  prereg.json
   - e2287aed35ac5703e117e608eb552d273ef36b5f6b4a47bfdf6de8fd90636758  power.txt
 ---
 
@@ -114,7 +114,7 @@ These rules are written, and were attacked by a second-model review (section 18)
 
 **A hit** on the advisory needs all four:
 - Location: the finding names one of the fix's non-test source files that exists at the parent (a basename counts when it is unique in the tree), and it points into the vulnerable code. That means a cited line range of at most 40 lines that overlaps, or lies within 10 lines of, a pre-fix hunk in that file; or a named function, method or type whose definition contains a pre-fix hunk; or the function, endpoint or code path the advisory text names as vulnerable. A range wider than 40 lines never satisfies this.
-- Class: the finding's weakness is in the same CWE family as one of the advisory's CWE ids, by the frozen family map in prereg.json. When every CWE on the advisory is broad (CWE-20, 74, 284, 664, 668, 682, 691, 693, 707 or 710), the class part holds when the finding names the same missing check or broken protection the advisory text describes. A CWE outside the map matches only itself and the advisory text's description.
+- Class: the finding's weakness is in the same CWE family as one of the advisory's CWE ids, by the frozen family map in prereg.json. When every CWE on the advisory is broad (CWE-20, 74, 284, 664, 668, 682, 691, 693, 707 or 710), the class part holds when the finding names the same missing check or broken protection the advisory text describes. In that case the family map is not used, even for a broad CWE that also sits in a family (CWE-284 in authorization). A CWE outside the map matches only itself and the advisory text's description.
 - Same defect: the finding describes the advisory's flaw, not another bug that happens to sit nearby with the same class.
 - Grounding: the finding's own words state the mechanism (what input reaches which code, and which check is missing or wrong), and at least one of its cited locations resolves in the audited tree. The judge may not supply a mechanism the finding leaves out, even though it can see the advisory.
 
@@ -126,6 +126,7 @@ These rules are written, and were attacked by a second-model review (section 18)
 - Known-real precision: counted findings that hit the advisory or match a known open advisory of the repository (all four hit rules), over counted findings.
 - Judged validity of each counted finding: supported (the cited code exists and does what the finding says, an outside party plausibly controls the input it names, and the impact follows), unsupported (the code isn't there or doesn't do that, the input isn't attacker-controlled in any plausible use, or the impact doesn't follow), or can't tell. A hit, or a match to a known open advisory, is supported. Reported: supported findings per session, unsupported findings per session (the false-positive count), the supported share among supported and unsupported findings, and the can't-tell share.
 - Phantom locations per session, checked by code: a cited path that isn't in the tree, or a line past the file's end.
+- Before excerpts are cut and before the location and phantom checks, every arm's cited paths are normalized the same way: a leading helper snapshot root is stripped, so a snapshot-relative path counts as the same path in the audited tree, and a helper handle is resolved to its path from that run's helper records. A handle that doesn't resolve leaves that finding without a location. Stage 0 checks that /cso's citations resolve after this, and the share of cso findings cited by handle is reported.
 - Findings per session, all of them.
 - Cost per session and per named advisory, wall time, input, output and cached tokens.
 
@@ -155,10 +156,10 @@ These rules are written, and were attacked by a second-model review (section 18)
 
 **The check, before any judged number counts.**
 - Gold labels come from a separate pass by GPT-6.2 Astra and Opus 5.5 at high effort, given pass A's list and pass B's packet. Astra's prompt frames the task as a read-only correctness review of whether a report matches a published, fixed advisory, with no attacker role-play and no reproduction (the org's handoff on review refusals). Gold is every item where both agree; neither is the production judge's family.
-- The check set is every stage 0 and stage 1 session's report (70), plus anchors: one oracle report per stage 1 unit written by the harness from the advisory and its hunk (a known hit) and one stock report (a known miss). Anchors are at most a quarter of the set.
+- The check set is every stage 0 and stage 1 session's report (70), plus anchors: one oracle report per stage 1 unit written by the harness from the advisory and its hunk (a known hit) and one stock report (a known miss). Anchors are at most 30% of the check set as sent (24 of 94 at full size).
 - A judge route scores only when all four hold: kappa of at least 0.6 on named per report (at least 40 gold reports, at least 10 in each class); on gold reports, its disagreement rate on named in cso reports and in none reports (models pooled) differs by at most 10 points; on format variants, for 10 stage 1 units the harness writes the oracle finding as a table row and as a prose paragraph, plus two near misses (right file with the wrong class, and right class 30 lines from every hunk), and the judge gives each pair the same named label in at least 9 of 10 and scores no near miss as a hit in at least 18 of 20; and it refuses no more than 5% of check-set reports.
 - Validity is checked the same way per finding (at least 40 gold findings, supported against unsupported, can't-tell excluded, at least 10 in each class, kappa of at least 0.6). If only validity fails, the validity secondaries print "judge not validated" instead of numbers, and the KEEP path that rests on them is closed.
-- If gold is short of a minimum, seeded extra findings or anchors fill it, still under the quarter cap.
+- If gold is short of a minimum, seeded extra findings or anchors fill it, still under that cap.
 - Fallback when Carbon fails any named condition: GPT-6.2 Astra on the Opus and particle-1 cells, with gold relabelled by Opus 5.5 and Gemini 4 Argon. For Sol cells the fallback is Opus 5.5, with gold by Astra and Argon. Each is checked the same way. If no route passes, stage 2 doesn't start and the Captain decides.
 - The Sol stage runs its own check on at least 40 Sol reports from its smoke and pilot before any Sol number counts.
 - One live call down each judge and labeller route at its frozen model, effort and output cap runs before stage 0's sessions, to check that text comes back.
@@ -181,7 +182,7 @@ Frozen detectors, tested on fixtures in the build and checked on stage 0's trans
 - Infra failure: one rerun; a second is a gap.
 - A cap stop ends its item incomplete. Sessions run unit by unit with arms interleaved, so a stop leaves at most one unit unpaired.
 - A unit with a gap in either arm of a contrast leaves that contrast's complete-pair estimate. A cell with gaps on more than 10% of its units is incomplete and gets no verdict.
-- Gap bounds. Every verdict condition in section 10 is also read at its gap bound: on the full paired contrast, each gap session is filled with the value least favourable to the verdict being tested. For the named rate, that is not named in the arm the verdict favours and named in the other arm. For a per-session count (supported or unsupported findings), it is 0 in the arm the condition needs high, and the largest count that model and arm showed in stage 2 in the arm the condition needs low. So for Ahead and KEEP, cso gaps count against cso and none gaps for none; for Behind and CUT-CANDIDATE, the reverse. Both bounds are reported for every contrast. A verdict stands only when every condition it uses holds at its gap bound; section 10 says what happens when one holds only on complete pairs.
+- Gap bounds. Every verdict condition in section 10 is also read at its gap bound: on the full paired contrast, each gap session is filled with the value least favourable to the verdict being tested. For the named rate, that is not named in the arm the verdict favours and named in the other arm. For a per-session count (supported or unsupported findings), it is 0 in the arm the condition needs high, and 10, the counted-findings cap (section 5), in the arm the condition needs low. So for Ahead and KEEP, cso gaps count against cso and none gaps for none; for Behind and CUT-CANDIDATE, the reverse. Both bounds are reported for every contrast. A verdict stands only when every condition it uses holds at its gap bound; section 10 says what happens when one holds only on complete pairs.
 
 ## 10. Analysis and verdicts
 
@@ -293,7 +294,7 @@ Built on one branch and landed with the results (R77: two merged PRs, this one a
 - One flaw per unit: a report that finds other real flaws gets no main-score credit for them; the validity and known-advisory secondaries carry that.
 - The judge sees excerpts, not running code, so its validity label is a reading, not a reproduction.
 - Contamination: every unit is after Opus's stated cutoff; particle-1's is unknown.
-- Supply after the gates is unmeasured; part 2 holds 451 rows behind the 68 head-to-head units, far more than the at most 122 needed.
+- Supply after the gates is unmeasured; part 2 holds 451 rows behind the 68 head-to-head units, far more than the at most 134 needed (2 smoke, 12 pilot, 12 for one re-pilot, up to 100 in stage 2 and 8 reserves).
 - Planning costs are guesses until stage 1.
 
 ## 18. Changes after review
