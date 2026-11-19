@@ -89,11 +89,11 @@ Four suspected causes don't explain B1, B1b or B1c, which ran Claude Code 2.1.31
 - At 1,000,000 tokens the budget is 40,000 characters. Claude Code's model table declares that window for Opus 5.5. A real gstack install (`./setup --host claude`) then lists 64 entries in 9,972 characters, with none cut, on Opus 5.5 and on Sonnet 5.5.
 - At 200,000 tokens the budget is 8,000 characters, and 28 of gstack's 64 entries show as a bare name. Our run with a model id Claude Code doesn't know (`--model gpt-6.1-sol`, the id this repo's pins use for Sol in `lanes/delivery-route/pins.ts`) used 6,082 characters. Another lane's keyless captures with the 1M window switched off used 5,963 characters, byte-identical across Opus 5.5, Sol and particle-1.
 
-Two things put a session at 200,000 tokens: a model id Claude Code doesn't know, and `CLAUDE_CODE_DISABLE_1M_CONTEXT=1`. This repo's Claude Code driver can set the second (`src/adapters/claude-code/driver.ts`), and several lanes do. So the smaller listing isn't a Sol problem. It reaches any session at 200,000 tokens, Opus included. For the people using Opus 5.5 day to day: the model table declares 1,000,000 tokens, and our session with an API key against the stub got the 40,000-character budget. A signed-in subscription session also fetches account settings at startup, and we couldn't check whether they change its window (unverified). Setting `SLASH_COMMAND_TOOL_CHAR_BUDGET` evens the listing out on any rig.
+Two things put a session at 200,000 tokens: a model id Claude Code doesn't know, and `CLAUDE_CODE_DISABLE_1M_CONTEXT=1`. This repo's Claude Code driver can set the second (`src/adapters/claude-code/driver.ts`), and several lanes do. So the smaller listing isn't a Sol problem. It reaches any session at 200,000 tokens, Opus included. For the people using Opus 5.5 day to day: the model table declares 1,000,000 tokens, and our session with an API key against the stub got the 40,000-character budget. Signed-in sessions read two server-side flags that API-key sessions like ours don't. One can set a model's window anywhere between 200,000 and 1,000,000 tokens. The other (`tengu_typed_pebble`) can raise the listing budget to as much as 100,000 characters, but never lower it. Their values come per account, and we couldn't read them without signing in, so the window subscription users get is unverified. Setting `SLASH_COMMAND_TOOL_CHAR_BUDGET` evens the listing out on any rig.
 
 **Effort differs by model.** Claude Code sends `output_config.effort` "medium" for Opus 5.5, the default in its model table, and "high" for a model id it doesn't know. Our stub captures show medium for Opus and Sonnet 5.5 and high for `gpt-6.1-sol`. Another lane's captures show high for particle-1 too. So B1 compared Opus at medium effort with Sol at high. Whether effort changes how often a model consults a skill is untested (unverified).
 
-**A skill named `verify` gets special handling.** With gstack's `verify` skill installed, Claude Code adds "Always run `/verify` right before the `commit` command (never for docs or tests)" to the Bash tool's description. The [changelog](https://code.claude.com/docs/en/changelog) for 2.1.215 says "Claude no longer runs the /verify and /code-review skills on its own". Whether that line covers gstack's own `verify` skill is unverified.
+**A skill named `verify` gets special handling.** When any skill named `verify` is installed, gstack's included, Claude Code adds "Always run `/verify` right before the `commit` command (never for docs or tests)" to the Bash tool's description. gstack's maintainers checked this on the real binary against a stub API at 2.1.311, 2.1.312 and 2.1.328, and the [changelog](https://code.claude.com/docs/en/changelog) dates the line to 2.1.286. Our own stub capture at 2.1.312 shows the same line. It doesn't stop the model from calling gstack's /verify: in the maintainers' one paid run, Opus called gstack's /verify on its own before `git commit`. So the 2.1.215 changelog line "Claude no longer runs the /verify and /code-review skills on its own" did not stop it there. One run is a single observation.
 
 **How the listing changed over time**, from the changelog and from strings in each version's binary:
 
@@ -150,7 +150,7 @@ Two smaller probes are on hold: description variants on B1's prompts, and swappi
 
 ## Unverified claims and open questions
 
-1. Whether a signed-in subscription session of Opus 5.5 runs at the 1,000,000-token window, as an API-key session does.
+1. Whether a signed-in subscription session of Opus 5.5 runs at the 1,000,000-token window, as an API-key session does, or a server-side flag lowers it.
 2. Which model id paid Sol sessions pass to Claude Code.
 3. Whether effort (medium for Opus, high for Sol) plays a part in how often each consults a skill.
 4. The causes of the head-to-head's 5 of 10 sessions that never started autoplan, and whether the other 5 ran autoplan's review. No transcripts were read.
@@ -158,9 +158,9 @@ Two smaller probes are on hold: description variants on B1's prompts, and swappi
 6. Whether the label or the commit message drives the user file's 20 against the project file's 39.
 7. Why longer prompts load more often.
 8. Behounek's full Opus 5 results.
-9. What a Claude Code feature flag (`tengu_typed_pebble`) that touches the default context window does.
+9. The value of `tengu_typed_pebble`, which can raise a signed-in session's listing budget to as much as 100,000 characters.
 10. A low-confidence guess: that empty `end_turn` stops, which Anthropic's [stop-reasons page](https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons) ties to "Adding text blocks immediately after tool results", play a part in early stops.
-11. Whether Claude Code 2.1.215's /verify change covers gstack's own `verify` skill.
+11. How often Opus calls gstack's /verify on its own before a commit. gstack's maintainers saw it once, in one paid run.
 
 ## Sources and how solid they are
 
