@@ -69,6 +69,15 @@ export const PROVIDER_ID = "gstack_evals_proxy";
 /** The tool a model asks the user through in exec's Default mode: it answers {"accepted":true} at once and takes any reply as the next user message. */
 export const ASYNC_QUESTION = "request_user_input_async";
 
+/** Codex's own question tool, which Codex answers itself on every model ("request_user_input is unavailable in Default mode"); its questions are recorded unanswered. */
+export const SYNC_QUESTION = "request_user_input";
+
+/** The models codex 0.166.0 offers ASYNC_QUESTION, read from the tool names in the first request body the pinned binary sends to a recording server for each CATALOG_EFFORT model, particle-1 and DeepSeek V4.1 Flash; every other model gets only SYNC_QUESTION. */
+export const ASYNC_QUESTION_MODELS: ReadonlySet<string> = new Set(["gpt-6-astra", "gpt-6-luna", "gpt-6-sol", "gpt-6.1-sol", "gpt-6.1-terra"]);
+
+/** Whether the pinned CLI offers a model ASYNC_QUESTION, by its slug or the slug after a provider prefix, as catalogEffort matches it. */
+export const offersAsyncQuestion = (model: string): boolean => ASYNC_QUESTION_MODELS.has(model) || ASYNC_QUESTION_MODELS.has(model.slice(model.lastIndexOf("/") + 1));
+
 /** default_reasoning_level of each listed model in codex 0.166.0's own catalog (codex debug models; docker/host-cli.json's pin). */
 export const CATALOG_EFFORT: Readonly<Record<string, string>> = {
   "gpt-6-astra": "low", "gpt-6.1-sol": "low", "gpt-6.1-terra": "low", "gpt-6-sol": "medium", "gpt-6-luna": "medium",
@@ -138,9 +147,9 @@ export interface CodexQuestion {
   options?: string[];
 }
 
-/** The ASYNC_QUESTION calls a session's rollout holds, in order, each with the questions its arguments carry. */
-export function codexQuestions(rollout: string): { call_id: string; questions: CodexQuestion[] }[] {
-  const out: { call_id: string; questions: CodexQuestion[] }[] = [];
+/** The ASYNC_QUESTION and SYNC_QUESTION calls a session's rollout holds, in order, each with the questions its arguments carry; a SYNC_QUESTION call is marked sync. */
+export function codexQuestions(rollout: string): { call_id: string; questions: CodexQuestion[]; sync?: true }[] {
+  const out: { call_id: string; questions: CodexQuestion[]; sync?: true }[] = [];
   for (const line of rollout.split("\n")) {
     let d: { type?: string; payload?: { type?: string; name?: string; call_id?: string; arguments?: string } };
     try {
@@ -149,17 +158,18 @@ export function codexQuestions(rollout: string): { call_id: string; questions: C
       continue;
     }
     const p = d?.type === "response_item" ? d.payload : undefined;
-    if (p?.type !== "function_call" || p.name !== ASYNC_QUESTION) continue;
+    if (p?.type !== "function_call" || (p.name !== ASYNC_QUESTION && p.name !== SYNC_QUESTION)) continue;
     let args: { questions?: unknown };
     try {
       args = JSON.parse(p.arguments ?? "");
     } catch {
       args = {};
     }
-    const questions = (Array.isArray(args?.questions) ? (args.questions as { title?: unknown; options?: unknown }[]) : [])
-      .filter((q) => typeof q?.title === "string" && q.title.trim())
-      .map((q) => ({ title: q.title as string, ...(Array.isArray(q.options) ? { options: q.options.map(String) } : {}) }));
-    out.push({ call_id: String(p.call_id), questions });
+    const questions = (Array.isArray(args?.questions) ? (args.questions as { title?: unknown; question?: unknown; options?: unknown }[]) : [])
+      .map((q) => ({ title: typeof q?.title === "string" ? q.title : q?.question, options: q?.options }))
+      .filter((q): q is { title: string; options: unknown } => typeof q.title === "string" && q.title.trim() !== "")
+      .map((q) => ({ title: q.title, ...(Array.isArray(q.options) ? { options: q.options.map((x: { label?: unknown }) => (typeof x?.label === "string" ? x.label : String(x))) } : {}) }));
+    out.push({ call_id: String(p.call_id), questions, ...(p.name === SYNC_QUESTION ? { sync: true as const } : {}) });
   }
   return out;
 }
@@ -308,7 +318,9 @@ export function codexDriver(o: CodexOptions): CodexDriver {
         }
         const fresh = codexQuestions(rollout).filter((q) => !seen.has(q.call_id) && q.questions.length);
         for (const q of fresh) seen.add(q.call_id);
-        const asks: AskQuestion[] = fresh.flatMap((q) => q.questions.map((x) => ({ question: x.title, ...(x.options ? { options: x.options.map((label) => ({ label })) } : {}) })));
+        const ask = (x: CodexQuestion): AskQuestion => ({ question: x.title, ...(x.options ? { options: x.options.map((label) => ({ label })) } : {}) });
+        for (const q of fresh.filter((q) => q.sync)) for (const x of q.questions) classified.push(classifyAsk(ask(x)).category);
+        const asks: AskQuestion[] = fresh.filter((q) => !q.sync).flatMap((q) => q.questions.map(ask));
         let next: NextUser | { end: string };
         if (o.nextUser || (asks.length && o.entry?.user === undefined)) {
           for (const a of asks) classified.push(classifyAsk(a).category);
@@ -318,7 +330,7 @@ export function codexDriver(o: CodexOptions): CodexDriver {
           next = "answers" in r ? { reply: asks.length === 1 ? r.answers[asks[0]!.question!]! : asks.map((a) => a.question + "\n" + r.answers[a.question!]).join("\n\n") } : { end: "no_user_replies" };
         } else next = await sim.afterTurn(texts.at(-1) ?? "");
         const answer = "reply" in next ? next.reply : null;
-        questions.push(...fresh.map((q) => ({ call_id: q.call_id, turn, questions: q.questions, answer, unanswered: answer === null })));
+        questions.push(...fresh.map((q) => ({ call_id: q.call_id, turn, questions: q.questions, answer: q.sync ? null : answer, unanswered: q.sync === true || answer === null })));
         records();
         if (personaStop) termination = personaStop;
         else if ("stop" in next) termination = next.stop;

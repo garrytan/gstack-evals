@@ -928,9 +928,9 @@ Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing
 
 ### E_INTERACTIVE_HOST
 
-No longer raised. It named a task declared interactive sent to --host codex while the Codex adapter ran non-interactive tasks only; the adapter now answers a Codex session's questions, so --host codex runs every task. The code stays so older run records still read.
+A task declared interactive was sent to --host codex with a model the pinned Codex offers no request_user_input_async. Codex answers its own request_user_input itself, so that model's questions would never reach the user simulator.
 
-Fix: Nothing to fix now: start a new run on --host codex. Do not --resume.
+Fix: Use --host claude, a Codex model in the adapter's ASYNC_QUESTION_MODELS list, or --tasks-only the non-interactive tasks. Do not --resume.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U7.
 

@@ -356,8 +356,8 @@ export const CODES = {
   },
   E_INTERACTIVE_HOST: {
     exit: 2,
-    meaning: "No longer raised. It named a task declared interactive sent to --host codex while the Codex adapter ran non-interactive tasks only; the adapter now answers a Codex session's questions, so --host codex runs every task. The code stays so older run records still read.",
-    fix: "Nothing to fix now: start a new run on --host codex. Do not --resume.",
+    meaning: "A task declared interactive was sent to --host codex with a model the pinned Codex offers no request_user_input_async. Codex answers its own request_user_input itself, so that model's questions would never reach the user simulator.",
+    fix: "Use --host claude, a Codex model in the adapter's ASYNC_QUESTION_MODELS list, or --tasks-only the non-interactive tasks. Do not --resume.",
     side_effects: NO_SPEND,
     retry_safe: true,
     resumable: false,

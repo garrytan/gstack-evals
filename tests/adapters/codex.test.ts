@@ -147,6 +147,20 @@ describe.skipIf(!HAS_CODEX_CLI)("Codex adapter on codex exec --json, against a f
     expect(r.responses().length).toBe(1);
   }, 180_000);
 
+  // Value: protects=a sync request_user_input call, which Codex answers itself ("unavailable in Default mode") on every model, is recorded as an unanswered question in asked, questions.json and the outcome's count, with no resume; fails_when=the adapter reads only request_user_input_async, so the question disappears and the trial reports nothing unanswered; why_new=the read-only final review's red-team finding on sync questions; seam=codexQuestions, codexDriver's question loop; no_claim=which models are offered the async tool (preflight's allowlist test covers that)
+  test("a sync request_user_input question is recorded unanswered, with no resume", async () => {
+    const script: ResponsesScript = ({ outputs, users }) => {
+      if (users.length === 1 && !outputs.has("call_s")) return [{ type: "call", id: "call_s", name: "request_user_input", args: { questions: [{ id: "q1", header: "Approach", question: QUESTION.title, options: [{ label: "Approach A", description: "a" }, { label: "Approach B", description: "b" }] }] } }];
+      return [{ type: "message", text: "FINAL: picked Approach A myself." }];
+    };
+    const r = await run(script, { entry: { user: { replies: { approach: "Approach B" } } } });
+    expect(r.outcome.termination).toEqual({ kind: "completed" });
+    expect(r.outcome.asked).toEqual(["approach"]);
+    expect(r.outcome.unanswered).toBe(1);
+    expect(r.read("questions.json")).toEqual([{ call_id: "call_s", turn: 1, questions: [QUESTION], answer: null, unanswered: true }]);
+    expect(r.read("init.json").resume_argv).toEqual([]);
+  }, 60_000);
+
   // Value: protects=a question in a task that declared no user replies gets no answer: it lands in asked and in questions.json marked unanswered, the outcome counts it, nothing resumes and the session ends completed and is graded as before (the eval owner's ruling 1B: Codex keeps its behaviour, and the count reports the host difference from Claude Code's E_USER_TURNS_MISSING); fails_when=the question is answered, the session resumes or becomes a missing cell, or the question goes uncounted; why_new=1B; seam=codexDriver's question loop; no_claim=none beyond protects
   test("a question in a task with no user replies is recorded unanswered, and the session ends completed with no resume", async () => {
     const r = await run(asking);
