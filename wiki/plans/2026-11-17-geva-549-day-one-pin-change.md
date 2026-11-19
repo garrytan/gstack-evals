@@ -244,3 +244,12 @@ The code is lanes/day-one/exposure.ts (readExposure), lanes/day-one/analysis.ts 
 
 **What it reads in the smoke.** Re-read under the new rule with no spend, six smoke sessions change from not exposed to exposed, each waiting at its final gate: A on two practice briefs in rep 2 and on one in rep 3, rep 4's first S-dayone and S-full sessions, and rep 4's S-full rerun. None changes the other way, and every complete run reads exposed under both rules. A's rep-4 session on the first practice brief still reads not exposed: its newest run waits at its final gate, but that run skipped CEO and its outside voice was disabled. Rep 4's first S sessions ended at their first gate without the owner being asked, because the harness then missed runs named through `$(date)`. The rule reads the run, not the owner channel, so the per-arm counts of approvals recorded and owner turns sit beside it in the results.
 
+## 12. day1-voice's line before category 1 (2026-11-19)
+
+Dated 2026-11-19, after category 2's reviews and before any category 1 session. It changes two rows of the preregistration's section 13 money table. The eval's approver made the change on 2026-11-19, and the approvals record carries it.
+
+**The change.** $60 moves from day1-plans' own line to day1-voice. day1-plans' own cap goes from $825 to $765, and day1-voice's cap goes from $195 to $255. day1-plans' ledger cap stays at $1,020, because the voice rides its lease, and the all-in total does not change.
+
+**Why.** Category 2's 15 A sessions spent $144.85 on the Astra voice, $9.66 a session against the $8 the table assumed, which left $50.15 for category 1's six A sessions (the two real briefs at three replicates). On the smoke's practice briefs, which carry a codebase as the real briefs do, an exposed A session spent $10.21 on the voice, so six sessions need about $58 to $61. Admission also holds $30 of voice room before each cell starts, so even one cell at a time, only three of the six would have started. With $110.15 left, all six start as long as the first five average no more than $16.03 each.
+
+**What stays as it was.** Every admission bound per cell, the rule that a launch's voice cap is at most what day1-voice has left, every other line and the all-in total. day1-plans' own line had $135.93 committed when the change was made.

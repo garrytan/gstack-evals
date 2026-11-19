@@ -376,3 +376,9 @@ The one text-only final turn is A's 5ot0udw1 in batch 1. Its run waits at its fi
 - **S checks (wave-check-s, 05:33:21Z to 05:58:07Z): 30 cells ended, 0 unrun, 0 stops.** 9.35 dollars on day1-strengthened.
 - **wave-bc2's first start (05:58:36Z) stopped at once on E_USAGE**: the 03:10 launch had already created its receipts sink, and the stage refuses a sink that exists. Nothing ran and nothing was spent. The old sink was moved aside (wave-build-p5-proxyfail-0310, kept), and wave-bc2.sh was relaunched unchanged at 06:00:19Z. Its build stage reuses the 03:10 launch's stage manifest, which the stage accepts only because the flags are identical.
 - Lesson for the next driver: a stage that fails before its first cell still leaves its receipts sink, so a relaunch under the same name needs that sink moved aside first.
+
+### day1-voice's line moved before category 1 (2026-11-19)
+
+- After category 2's reviews, day1-voice had 50.15 dollars left of 195 for category 1's six A sessions. At the smoke's 10.21 dollars of voice per exposed A session, six need about 58 to 61, and admission's 30 dollars of voice room per cell would start only three of them at --parallel 1.
+- Ruled on 2026-11-19, before any category 1 session: 60 dollars moves from day1-plans' own line (825 to 765) to day1-voice (195 to 255). day1-plans' ledger cap stays 1,020 and the all-in total is unchanged. Logged as section 12 of the first pin change. Category 1's A launch takes a voice cap of at most 110.15 dollars.
+- Admissions: every line runs admission in warn mode. A renewal at 07:05Z returned "already admitted" for each line (expiring about 10:50Z), so they are renewed once they lapse.
