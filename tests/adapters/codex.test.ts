@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, truncateSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { NextUser } from "../../src/adapters/claude-code/driver.ts";
 import { catalogEffort, codexArgs, codexConfig, codexDriver, codexEnv, readRollout, type CodexOptions } from "../../src/adapters/codex/driver.ts";
@@ -304,6 +305,23 @@ describe("Codex rollout read", () => {
     expect(await readRollout(session, "thread", 300)).toBeNull();
     expect(performance.now() - t0).toBeLessThan(5_000);
   });
+
+  // Value: protects=a regular rollout file too large to hold (a sparse file the agent leaves under a rollout's name) ends the read at its byte cap and returns null, which the driver maps to a missing cell (E_INFRA_FAILURE) instead of exhausting the evaluator's memory; fails_when=the read keeps every byte it is sent; why_new=the decision-trail read's finding on the rollout read's missing byte limit; seam=readRollout; no_claim=the 60-second timer (the test above covers it)
+  test("a rollout larger than 256 MiB returns null instead of being read whole", async () => {
+    const home = mkdtempSync(join(tmpdir(), "codex-rollout-"));
+    try {
+      const dir = join(home, "sessions", "2000", "01", "01");
+      mkdirSync(dir, { recursive: true });
+      const file = join(dir, "rollout-x-thread.jsonl");
+      writeFileSync(file, "");
+      truncateSync(file, 256 * 1024 * 1024 + 1024 * 1024);
+      const session = { spawn: (argv: string[]) => spawn(argv[0]!, argv.slice(1), { stdio: ["pipe", "pipe", "pipe"], env: { ...process.env, CODEX_HOME: home } }), exec: () => { throw new Error("unused"); }, stop: () => {} } as unknown as AgentSession;
+      const text = await readRollout(session, "thread");
+      expect(text === null ? null : text.length).toBeNull();
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  }, 60_000);
 });
 
 describe("Codex adapter pieces", () => {

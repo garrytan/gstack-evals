@@ -172,7 +172,10 @@ const tokens = (u: Record<string, number>): TokenUsage => ({ input: Math.max(0, 
 /** How long the evaluator waits for a session's rollout before it counts as unreadable. */
 export const ROLLOUT_READ_MS = 60_000;
 
-/** A session's rollout as the agent's session holds it, or null when it cannot be read within ms. Only regular files count, never a symlink, FIFO or device the agent left under a rollout's name. */
+/** The most rollout bytes the evaluator holds; a larger rollout counts as unreadable instead of filling its memory. */
+const ROLLOUT_MAX_BYTES = 256 * 1024 * 1024;
+
+/** A session's rollout as the agent's session holds it, or null when it cannot be read within ms or runs past ROLLOUT_MAX_BYTES. Only regular files count, never a symlink, FIFO or device the agent left under a rollout's name. */
 export const readRollout = (session: AgentSession, thread: string, ms = ROLLOUT_READ_MS): Promise<string | null> =>
   new Promise((done) => {
     let child: ReturnType<AgentSession["spawn"]>;
@@ -186,7 +189,16 @@ export const readRollout = (session: AgentSession, thread: string, ms = ROLLOUT_
       done(null);
     }, ms);
     let text = "";
-    child.stdout?.on("data", (d: Buffer) => (text += d.toString("utf8")));
+    let bytes = 0;
+    child.stdout?.on("data", (d: Buffer) => {
+      bytes += d.length;
+      if (bytes > ROLLOUT_MAX_BYTES) {
+        clearTimeout(timer);
+        child.kill("SIGKILL");
+        return done(null);
+      }
+      text += d.toString("utf8");
+    });
     child.on("error", () => {
       clearTimeout(timer);
       done(null);
