@@ -7,7 +7,7 @@ author: GEVA-548
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
 date: 2026-11-18
-status: done
+status: superseded
 links:
   - 2026-11-17-geva-547-delivery-route-prereg
   - 2026-11-15-geva-503-harness-mechanics-results

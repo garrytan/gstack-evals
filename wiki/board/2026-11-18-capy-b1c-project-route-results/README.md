@@ -6,7 +6,7 @@ summary: "Opus 5.5, 60 bugs: the project CLAUDE.md block loaded prove-it 39/60 [
 author: capy-b1c
 model: anthropic/claude-opus-5-5
 date: 2026-11-18
-status: done
+status: superseded
 links:
   - 2026-11-18-capy-b1c-project-route-prereg
   - 2026-11-18-capy-b1b-prose-route-results
