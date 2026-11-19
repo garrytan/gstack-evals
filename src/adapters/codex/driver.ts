@@ -18,8 +18,10 @@
 //   session's env, as on Claude Code, and Codex passes both to the model's shell commands.
 // - Questions. In exec's Default mode Codex 0.166.0 answers request_user_input itself ("only available in Plan mode")
 //   and offers request_user_input_async (ASYNC_QUESTION), which answers {"accepted":true} at once and takes any reply
-//   as the next user message. After each turn the adapter reads the session's rollout (CODEX_HOME/sessions, which is why
-//   sessions are not --ephemeral) for the turn's ASYNC_QUESTION calls. Their questions go to the user simulator
+//   as the next user message. Under Code Mode (gpt-6 models) 0.166.0 and 0.170.0 offer it beside exec, never inside
+//   exec's JavaScript, so every question is a direct function_call in the rollout. After each turn the adapter reads
+//   the session's rollout (CODEX_HOME/sessions, which is why sessions are not --ephemeral) for the turn's ASYNC_QUESTION
+//   calls. Their questions go to the user simulator
 //   (src/usersim/sim.ts) as an AskUserQuestion's do on Claude Code: the task's scripted replies, then the persona's
 //   free-form source; a turn with none goes to the simulator's afterTurn on its last agent message, as on Claude Code.
 //   A tool question in a task that declared no user replies gets no answer, and the session ends and is graded as before

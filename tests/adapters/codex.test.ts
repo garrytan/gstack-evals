@@ -112,6 +112,26 @@ describe.skipIf(!HAS_CODEX_CLI)("Codex adapter on codex exec --json, against a f
     expect(events.filter((e) => e.kind === "ask").map((e) => [e.question, e.reply, e.source])).toEqual([["Which approach should we take?", "Approach B", "scripted"]]);
   }, 180_000);
 
+  // Value: protects=on a gpt-6 model the pinned CLI runs Code Mode, and a question still reaches the user simulator: request_user_input_async is offered as a top-level tool beside exec, not inside exec's JavaScript, so a question asked from exec fails in the script and only the direct call asks, which the rollout records as a function_call the adapter reads; fails_when=the pinned CLI starts offering the question tool inside Code Mode, where the adapter's rollout filter would miss it, or a direct call after a Code Mode call is missed; why_new=a review finding on Code Mode question capture, checked keyless on codex 0.166.0 and 0.170.0; seam=codexDriver's question loop, codexQuestions, the CLI's Code Mode tool layout; no_claim=which form a real model picks
+  test("under Code Mode the question tool sits beside exec, a call from exec's JavaScript fails, and the direct call gets the simulated answer", async () => {
+    let nested = "";
+    const viaCode: ResponsesScript = (turn) => {
+      if (turn.users.length === 1 && !turn.outputs.has("call_cm")) return [{ type: "code", id: "call_cm", js: "const r = await tools.request_user_input_async(" + JSON.stringify({ questions: [QUESTION] }) + ");\ntext(JSON.stringify(r));" }];
+      nested ||= turn.outputs.get("call_cm") ?? "";
+      return asking(turn);
+    };
+    const r = await run(viaCode, { entry: { user: { replies: { approach: "Approach B" } } } });
+    expect(nested).toContain("tools.request_user_input_async is not a function");
+    const offered = (r.responses()[0]!.body.input ?? []).find((it: any) => it.type === "additional_tools")?.tools ?? [];
+    const top = offered.find((ns: any) => ns.name === "functions")?.tools.map((t: any) => t.name);
+    expect(top).toEqual(expect.arrayContaining(["exec", "request_user_input_async"]));
+    expect(r.outcome.termination).toEqual({ kind: "completed" });
+    expect(r.outcome.asked).toEqual(["approach"]);
+    expect(r.outcome.turns.at(-1)).toBe("FINAL: going with Approach B");
+    expect(r.read("questions.json")).toEqual([{ call_id: "call_q", turn: 1, questions: [QUESTION], answer: "Approach B", unanswered: false }]);
+    expect(r.outcome.unanswered).toBe(0);
+  }, 180_000);
+
   // Value: protects=a session whose model asks nothing runs one exec, ends completed and asks nothing, with an empty questions.json; fails_when=the driver resumes a session with nothing to answer or records a question; why_new=interactive tasks on Codex (the other direction); seam=codexDriver's question loop; no_claim=none beyond protects
   test("a session with no question ends after one exec, completed, asking nothing", async () => {
     const r = await run(final, { entry: { user: { replies: { approach: "Approach B" } } } });
