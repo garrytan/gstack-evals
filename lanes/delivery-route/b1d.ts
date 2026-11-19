@@ -317,7 +317,8 @@ export function b1dDone(path: string, name: B1dItem) {
  *  share, against its cap; and every item (a done item at its settled spend, any other at the larger of its spend and its
  *  projection) plus this lane's counter, against the all-in stop. A relaunch counts its item at its ledger spend alone: it
  *  launches only the lost part's unstarted cells, whose sessions the ledger's reserve stops at the cap, and each later part
- *  meets this guard at its own launch, so the salvage a relaunch starts with is never refused for the item's cap. */
+ *  meets this guard at its own launch. A relaunch is never refused on money: a cap or all-in overshoot prints OVERSHOOT and its
+ *  reasons for the Captain, and the relaunch salvages first. */
 export function b1dGuard(name: B1dItem, ledgers: Partial<Record<B1dItem, Row[]>>, plans: Partial<Record<B1dItem, { parts: PartPlan[]; finished: string[] }>>, crewUsd: number, relaunching?: string) {
   const why: string[] = [];
   const all = B1D_ITEMS.map((i) => {
@@ -330,10 +331,12 @@ export function b1dGuard(name: B1dItem, ledgers: Partial<Record<B1dItem, Row[]>>
   });
   const own = all.find((x) => x.item === name)!, usd = (m: number) => "$" + fromMicros(m).toFixed(2);
   if (own.done) why.push(name + " is marked done; a done item never launches again");
-  if (own.total > own.cap) why.push(name + "'s projection " + usd(own.total) + " passes its cap " + usd(own.cap));
-  const sum = all.reduce((x, i) => x + i.counted, 0) + toMicros(crewUsd), stop = toMicros(B1D.stopUsd);
-  if (sum > stop) why.push("all-in " + usd(sum) + " passes the " + usd(stop) + " stop");
-  const lines = ["B1D_LAUNCH " + (why.length ? "REFUSE" : "PASS") + " " + name + ": all-in " + usd(sum) + " of " + usd(stop) + "; " + name + " " + usd(own.total) + " of cap " + usd(own.cap) + " (" + own.left + " parts to run)", ...all.map((i) => "  " + i.item + (i.done ? " done" : "") + ": settled " + usd(i.settled) + ", open " + usd(i.open) + ", counted " + usd(i.counted)), "  crew " + usd(toMicros(crewUsd))];
+  const money: string[] = [], sum = all.reduce((x, i) => x + i.counted, 0) + toMicros(crewUsd), stop = toMicros(B1D.stopUsd);
+  if (own.total > own.cap) money.push(name + "'s projection " + usd(own.total) + " passes its cap " + usd(own.cap));
+  if (sum > stop) money.push("all-in " + usd(sum) + " passes the " + usd(stop) + " stop");
+  if (!relaunching) why.push(...money);
+  const over = !why.length && money.length ? ["  relaunch of " + relaunching + " runs anyway, salvage first; report to the Captain at once: " + money.join("; ")] : [];
+  const lines = ["B1D_LAUNCH " + (why.length ? "REFUSE" : over.length ? "OVERSHOOT" : "PASS") + " " + name + ": all-in " + usd(sum) + " of " + usd(stop) + "; " + name + " " + usd(own.total) + " of cap " + usd(own.cap) + " (" + own.left + " parts to run)", ...over, ...all.map((i) => "  " + i.item + (i.done ? " done" : "") + ": settled " + usd(i.settled) + ", open " + usd(i.open) + ", counted " + usd(i.counted)), "  crew " + usd(toMicros(crewUsd))];
   return { ok: !why.length, why, lines };
 }
 
