@@ -283,6 +283,7 @@ describe.skipIf(!HAS_CLAUDE_CLI || !HAS_CODEX_CLI)("the run loop on a real host'
     const hello = run.input.records.filter((r) => r.task === "hello");
     expect(hello.map((r) => [r.arm, r.termination.kind, r.asked.length])).toEqual([["before", "completed", 1], ["after", "completed", 1], ["none", "completed", 1]]);
     expect(hello.every((r) => r.turns.at(-1) === "HELLO, you bake: Mostly sourdough.")).toBe(true);
+    expect(hello.map((r) => r.unanswered)).toEqual([0, 0, 0]);
     expect(readFileSync(join(root, "out", "usersim.ndjson"), "utf8").trim().split("\n")).toHaveLength(3);
     const inits = readdirSync(join(root, "out"), { recursive: true }).map(String).filter((p) => p.endsWith("host/init.json")).map((p) => JSON.parse(readFileSync(join(root, "out", p), "utf8")));
     expect(inits.length).toBeGreaterThan(3);

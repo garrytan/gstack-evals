@@ -22,11 +22,13 @@
 //   sessions are not --ephemeral) for the turn's ASYNC_QUESTION calls. Their questions go to the user simulator
 //   (src/usersim/sim.ts) as an AskUserQuestion's do on Claude Code: the task's scripted replies, then the persona's
 //   free-form source; a turn with none goes to the simulator's afterTurn on its last agent message, as on Claude Code.
-//   A question in a task that declared no user replies ends the cell as a missing cell, E_USER_TURNS_MISSING, naming it.
-//   nextUser replaces that step: after each completed turn it gets the turn's agent messages and returns the next user
-//   message, an end, or a termination; the turn's tool questions are still recorded. A reply goes back as the next user
-//   message by codex exec resume <thread>, and the session ends at the first turn with nothing to answer. Every tool
-//   question lands in the outcome's asked and in questions.json with the answer that went back.
+//   A tool question in a task that declared no user replies gets no answer, and the session ends and is graded as before
+//   (the eval owner's ruling 1B; Claude Code makes that case a missing cell, E_USER_TURNS_MISSING, so the count below is
+//   the host difference). nextUser replaces the simulator: after each completed turn it gets the turn's agent messages
+//   and returns the next user message, an end, or a termination; the turn's tool questions are still recorded. A reply
+//   goes back as the next user message by codex exec resume <thread>, and the session ends at the first turn with
+//   nothing to answer. Every tool question lands in the outcome's asked and in questions.json with the answer that went
+//   back; a call whose turn sent no answer is marked unanswered there, and the outcome's unanswered counts its questions.
 // - The session's timeout counts the CLI's own time only, summed over its execs: the simulator, the persona and
 //   nextUser run between execs, off the clock, as Claude Code's adapter pauses its clock for them.
 // - The prompt and each later user message go in on stdin. The adapter writes the evaluator's records beside the trial,
@@ -199,14 +201,13 @@ export function codexDriver(o: CodexOptions): CodexDriver {
       });
       const sim = new UserSim({ task: task.id, script: o.entry?.user, log: join(o.out, "usersim.ndjson"), ...(freeform ? { freeform } : {}) });
       const events: unknown[] = [];
-      const questions: { call_id: string; turn: number; questions: CodexQuestion[]; answer: string | null }[] = [];
-      const hookAsked: (Category | null)[] = [];
+      const questions: { call_id: string; turn: number; questions: CodexQuestion[]; answer: string | null; unanswered: boolean }[] = [];
+      const classified: (Category | null)[] = [];
       const seen = new Set<string>();
       const resumes: string[][] = [];
       let first: string[] = [];
       let thread: string | null = null;
       let usage: TokenUsage | null = null;
-      let missingQuestion: string | null = null;
       let left = timeoutMs;
       let message = task.prompt;
       let termination: Termination = { kind: "completed" };
@@ -279,18 +280,15 @@ export function codexDriver(o: CodexOptions): CodexDriver {
         for (const q of fresh) seen.add(q.call_id);
         const asks: AskQuestion[] = fresh.flatMap((q) => q.questions.map((x) => ({ question: x.title, ...(x.options ? { options: x.options.map((label) => ({ label })) } : {}) })));
         let next: NextUser | { end: string };
-        if (o.nextUser) {
-          for (const a of asks) hookAsked.push(classifyAsk(a).category);
-          next = await o.nextUser(texts);
+        if (o.nextUser || (asks.length && o.entry?.user === undefined)) {
+          for (const a of asks) classified.push(classifyAsk(a).category);
+          next = o.nextUser ? await o.nextUser(texts) : { end: "no_user_replies" };
         } else if (asks.length) {
           const r = await sim.answerAsk(asks);
-          if ("missing" in r) {
-            missingQuestion = r.missing;
-            termination = { kind: "missing", code: "E_USER_TURNS_MISSING" };
-          }
-          next = "missing" in r ? { end: "missing" } : { reply: asks.length === 1 ? r.answers[asks[0]!.question!]! : asks.map((a) => a.question + "\n" + r.answers[a.question!]).join("\n\n") };
+          next = "answers" in r ? { reply: asks.length === 1 ? r.answers[asks[0]!.question!]! : asks.map((a) => a.question + "\n" + r.answers[a.question!]).join("\n\n") } : { end: "no_user_replies" };
         } else next = await sim.afterTurn(texts.at(-1) ?? "");
-        questions.push(...fresh.map((q) => ({ call_id: q.call_id, turn, questions: q.questions, answer: "reply" in next ? next.reply : null })));
+        const answer = "reply" in next ? next.reply : null;
+        questions.push(...fresh.map((q) => ({ call_id: q.call_id, turn, questions: q.questions, answer, unanswered: answer === null })));
         records();
         if (personaStop) termination = personaStop;
         else if ("stop" in next) termination = next.stop;
@@ -299,7 +297,7 @@ export function codexDriver(o: CodexOptions): CodexDriver {
       }
       const { turns, calls, outputs } = parseCodex(events);
       const use = skillUse(calls, o.skill, outputs);
-      writeFileSync(join(o.out, "calls.json"), JSON.stringify({ calls, opened: use.opened, files_read: use.files, missing_question: missingQuestion }, null, 2) + "\n");
+      writeFileSync(join(o.out, "calls.json"), JSON.stringify({ calls, opened: use.opened, files_read: use.files }, null, 2) + "\n");
       const size = (f: string) => {
         try {
           return o.skill?.dir ? statSync(join(o.skill.dir, f)).size : 0;
@@ -308,7 +306,7 @@ export function codexDriver(o: CodexOptions): CodexDriver {
         }
       };
       return {
-        turns, termination, opened: o.skill ? use.opened : null, files_read: use.files, asked: [...sim.asked, ...hookAsked], usage, cost_micros: null, agent_turns: null,
+        turns, termination, opened: o.skill ? use.opened : null, files_read: use.files, asked: [...sim.asked, ...classified], unanswered: questions.filter((q) => q.unanswered).reduce((n, q) => n + q.questions.length, 0), usage, cost_micros: null, agent_turns: null,
         loaded_bytes: o.skill?.dir ? use.files.reduce((s, f) => s + size(f), 0) : null,
       };
     },

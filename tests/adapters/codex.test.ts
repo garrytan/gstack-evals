@@ -106,7 +106,8 @@ describe.skipIf(!HAS_CODEX_CLI)("Codex adapter on codex exec --json, against a f
     expect(init.argv).not.toContain("--ephemeral");
     expect(init.resume_argv.length).toBe(1);
     expect(init.resume_argv[0].slice(-3, -1)).toEqual(["resume", init.thread_id]);
-    expect(r.read("questions.json")).toEqual([{ call_id: "call_q", turn: 1, questions: [QUESTION], answer: "Approach B" }]);
+    expect(r.read("questions.json")).toEqual([{ call_id: "call_q", turn: 1, questions: [QUESTION], answer: "Approach B", unanswered: false }]);
+    expect(r.outcome.unanswered).toBe(0);
     const events = readFileSync(join(r.h.dir, "host", "usersim.ndjson"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
     expect(events.filter((e) => e.kind === "ask").map((e) => [e.question, e.reply, e.source])).toEqual([["Which approach should we take?", "Approach B", "scripted"]]);
   }, 180_000);
@@ -119,17 +120,20 @@ describe.skipIf(!HAS_CODEX_CLI)("Codex adapter on codex exec --json, against a f
     expect(r.outcome.turns).toEqual(["FINAL: summarized."]);
     expect(r.read("init.json").resume_argv).toEqual([]);
     expect(r.read("questions.json")).toEqual([]);
+    expect(r.outcome.unanswered).toBe(0);
     expect(r.responses().length).toBe(1);
   }, 180_000);
 
-  // Value: protects=a question in a task that declared no user replies ends the cell as a missing cell, E_USER_TURNS_MISSING, naming the question, as an AskUserQuestion does on Claude Code, and nothing resumes; fails_when=the question is answered with a fallback or the session reads as completed; why_new=the same simulated-user path as Claude Code; seam=UserSim.answerAsk; no_claim=none beyond protects
-  test("a question in a task with no user replies is a missing cell, E_USER_TURNS_MISSING", async () => {
+  // Value: protects=a question in a task that declared no user replies gets no answer: it lands in asked and in questions.json marked unanswered, the outcome counts it, nothing resumes and the session ends completed and is graded as before (the eval owner's ruling 1B: Codex keeps its behaviour, and the count reports the host difference from Claude Code's E_USER_TURNS_MISSING); fails_when=the question is answered, the session resumes or becomes a missing cell, or the question goes uncounted; why_new=1B; seam=codexDriver's question loop; no_claim=none beyond protects
+  test("a question in a task with no user replies is recorded unanswered, and the session ends completed with no resume", async () => {
     const r = await run(asking);
-    expect(r.outcome.termination).toEqual({ kind: "missing", code: "E_USER_TURNS_MISSING" });
+    expect(r.outcome.termination).toEqual({ kind: "completed" });
     expect(r.outcome.asked).toEqual(["approach"]);
-    expect(r.calls().missing_question).toBe("Which approach should we take?");
+    expect(r.outcome.unanswered).toBe(1);
+    expect(r.read("questions.json")).toEqual([{ call_id: "call_q", turn: 1, questions: [QUESTION], answer: null, unanswered: true }]);
     expect(r.read("init.json").resume_argv).toEqual([]);
-    expect(r.responses().every((u) => !userTexts(u.body).includes("Approach B"))).toBe(true);
+    expect(r.responses().length).toBe(2);
+    expect(existsSync(join(r.h.dir, "host", "usersim.ndjson"))).toBe(false);
   }, 180_000);
 
   // Value: protects=nextUser runs after every turn with that turn's agent texts, as on Claude Code, and its reply goes back by exec resume; a tool question still lands in asked and questions.json while the hook gives the answer; fails_when=the hook is skipped, gets the wrong texts, or the simulator answers in its place; why_new=a lane runs its own simulated user after every turn; seam=codexDriver nextUser; no_claim=none beyond protects
@@ -145,7 +149,7 @@ describe.skipIf(!HAS_CODEX_CLI)("Codex adapter on codex exec --json, against a f
     expect(seen[0]!.at(-1)).toBe("I asked which approach you want; I will wait for your answer.");
     expect(seen[1]).toEqual(["FINAL: going with Approach A, please."]);
     expect(r.outcome.asked).toEqual(["approach"]);
-    expect(r.read("questions.json")).toEqual([{ call_id: "call_q", turn: 1, questions: [QUESTION], answer: "Approach A, please." }]);
+    expect(r.read("questions.json")).toEqual([{ call_id: "call_q", turn: 1, questions: [QUESTION], answer: "Approach A, please.", unanswered: false }]);
     expect(existsSync(join(r.h.dir, "host", "usersim.ndjson"))).toBe(false);
   }, 180_000);
 
