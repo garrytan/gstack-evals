@@ -1,11 +1,20 @@
 {
   "bump": "never",
-  "min_gstack_version": "1.99.0.0",
+  "min_gstack_version": "1.102.0.0",
   "review_exclude_paths": [
     "wiki/plans/*/*-frame.json",
     "wiki/plans/*/*-repos.json",
     "wiki/plans/*/*-licences.json",
-    "tests/harness-mechanics/fixtures/arms/**"
+    "tests/harness-mechanics/fixtures/arms/**",
+    "wiki/board/2026-11-19-geva-540-skill-pack-h2h-session-data/diffs/**",
+    "wiki/board/2026-11-19-geva-540-skill-pack-h2h-session-data/licences/**",
+    "wiki/board/2026-11-19-geva-540-skill-pack-h2h-session-data/MANIFEST.sha256",
+    "wiki/board/2026-11-19-geva-540-skill-pack-h2h-session-data/*.jsonl"
+  ],
+  "review_content_patterns": [
+    "wiki/board/2026-11-19-geva-540-skill-pack-h2h-session-data/diffs/*.patch",
+    "wiki/board/2026-11-19-geva-540-skill-pack-h2h-session-data/licences/**",
+    "wiki/board/2026-11-19-geva-540-skill-pack-h2h-session-data/MANIFEST.sha256"
   ],
   "docs_only": {
     "allow": [
