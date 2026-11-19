@@ -14,7 +14,7 @@ links:
   - https://github.com/github/advisory-database/tree/a91f5a514f4697f0303f547c9b50a12eb07fa70f
   - lanes/outcome-skills/h2h/
 attachments:
-  - c42b5d6b6fd6964768259d28528445b8e7c35e70ee99e8afb45f1256d2b11294  prereg.json
+  - 882bcd8f98586fb7c655db066a25a3fb0fd1e35aafe6aa88ac5f8a4ea2a036e7  prereg.json
   - e2287aed35ac5703e117e608eb552d273ef36b5f6b4a47bfdf6de8fd90636758  power.txt
 ---
 
@@ -22,7 +22,7 @@ attachments:
 
 ## Approval
 
-The project owner approved preregistering this eval on 2026-11-19, with the paid stage after 2026-11-21 06:00 UTC at about $300 to $500. This plan's central cost is about $570, above that range by about $70 to buy power (section 14); the Captain can set the target back to $500 before merge, which makes stage 2 48 units. No paid call runs until this preregistration merges and the Captain records each item's cap. Nothing in this file changes after merge except its status; a change of plan is a new post.
+The project owner approved preregistering this eval on 2026-11-19, with the paid stage after 2026-11-21 06:00 UTC at about $300 to $500. This plan's central cost is about $600, with $923 at caps plus the $90 reserve, about $100 over that range to buy power (section 14). The Captain can lower the target before merge; at $500, stage 2 would fall under its 48-unit floor, which section 12 sends back to the Captain. No paid call runs until this preregistration merges and the Captain records each item's cap. Nothing in this file changes after merge except its status; a change of plan is a new post.
 
 ## Plain summary
 
@@ -227,7 +227,7 @@ Frozen detectors, tested on fixtures in the build and checked on stage 0's trans
 - MOST, none names 7 to 9 of 12: the readout tells the Captain plainly that plain Opus already names most advisories, before stage 2 spends. Stage 2 goes ahead unless the Captain stops it for headroom.
 - EXPOSURE, cso's procedure ran in under 10 of 12 Opus sessions: a harness cause gets a named repair and a re-pilot of the cso cells; a skill cause goes to the Captain before stage 2, since the Opus verdict would read FIX-METHOD whatever stage 2 shows.
 - INFRA, gaps on more than 10% of a cell's units: named harness repairs, then a re-pilot of that cell.
-- COST: measured costs re-price the program. n2 becomes the largest multiple of 4 from 48 to 100 whose re-priced program (stage 0 and 1 at actual spend; stage 2 sessions and judging at stage 1's measured central costs; the VM) is at most $570. Below 48, it goes to the Captain; the only options are a raised line, a smaller n2 with the MDDs restated, or stopping. Every arm and model stays.
+- COST: measured costs re-price the program. n2 becomes the largest multiple of 4 from 48 to 100 whose re-priced program (stage 0 and 1 at actual spend; stage 2 sessions and judging at stage 1's measured central costs; the VM) is at most $600. Below 48, it goes to the Captain; the only options are a raised line, a smaller n2 with the MDDs restated, or stopping. Every arm and model stays.
 - JUDGE: no route passes section 7's check.
 
 **Stage 2: confirmatory,** n2 units, Opus none and cso, particle-1 none and cso, one session each, in a seeded order (order_seed) that interleaves arms within each unit. Then section 10's analysis and the opening of stage 1's sealed file, with its digest checked.
@@ -249,17 +249,17 @@ The first figure is at alpha 0.025, the stricter Holm step; the bracket is at 0.
 
 ## 14. Money
 
-Planning prices, replaced by stage 1's measured costs. Per session on Opus: none $1.00, cso $3.00, untold $1.50; particle-1 at 0.4 of Opus (the crew's measured ratio). These are guesses scaled from the head-to-head's security sessions, where plain Opus spent $0.20 on a fix (mean of 60); an audit reads far more code, and /cso adds helper calls and up to three challenge reviewers. Judging per session: pass A about $0.03 and pass B about $0.09 on Carbon; gold labels about $0.44 a report on Astra and $0.22 on Opus. Model prices from src/runner/pricing/prices.ts, per million tokens: Opus 5.5 $4 input, $20 output, $0.20 cache read, $5 cache write; particle-1 $0.10 and $1; Gemini 4 Carbon $2 and $10; GPT-6.2 Astra $8 and $40.
+Planning prices, replaced by stage 1's measured costs. Per session on Opus: none $1.00, cso $3.00, untold $1.50; particle-1 at 0.4 of Opus (the crew's measured ratio). These are guesses scaled from the head-to-head's security sessions, where plain Opus spent $0.20 on a fix (mean of 60); an audit reads far more code, and /cso adds helper calls and up to three challenge reviewers. Judging per session: pass A about $0.03 and pass B about $0.09 on Carbon; gold labels about $0.74 a report on Astra and $0.37 on Opus (a key-blind extraction call and a labelling call each). Model prices from src/runner/pricing/prices.ts, per million tokens: Opus 5.5 $4 input, $20 output, $0.20 cache read, $5 cache write; particle-1 $0.10 and $1; Gemini 4 Carbon $2 and $10; GPT-6.2 Astra $8 and $40.
 
 | Item | What it pays for | Central | Cap |
 |---|---|---|---|
 | cso-smoke | 10 sessions and the live judge probes | $15 | $62 |
 | cso-pilot | 60 sessions (Opus 12 x $5.50, particle-1 12 x $1.60) | $85 | $147 |
-| cso-judge | gold labels on 70 reports by Astra and Opus ($46); Carbon passes A and B on about 310 sessions plus anchors and format variants, with retries ($46) | $92 | $131 |
+| cso-judge | gold labels on 70 reports by Astra and Opus, two calls each ($78); Carbon passes A and B on about 310 sessions plus anchors and format variants, with retries ($46) | $124 | $174 |
 | cso-main | stage 2 at n2 = 60 (Opus 60 x $4.00, particle-1 60 x $1.60) | $336 | $486 |
 | cso-vm | one Ubicloud standard-16 for unit builds, sessions and judging, about 72 hours | $40 | $54 |
 | cso-reserve | a raise re-pilot, a judge fallback relabel or reruns, moved only on the Captain's word for a named repair | | $90 |
-| Total | | $568 | $880, plus the $90 reserve |
+| Total | | $600 | $923, plus the $90 reserve |
 
 Caps follow the crew's rule for parallel ledgers: 1.35 times central plus parallel sessions times the per-session reserve. Session items run 4 at once with Opus's $8 allowance as the reserve ($32); the smoke's cap is raised to $62 so all ten of its sessions fit at full allowance with the probes. The judge item runs 4 calls at once with Astra's largest call (40,000 tokens in and 32,000 out, about $1.60) as the reserve (about $6.40). The VM item is 1.35 times central. After stage 1, the run thread sends the Captain re-priced stage 2 caps by the same rule (with a doubled allowance if section 4 doubled it), and the Captain records them before the first stage 2 lease. A cap stop ends that part incomplete and is never retried to change a verdict.
 

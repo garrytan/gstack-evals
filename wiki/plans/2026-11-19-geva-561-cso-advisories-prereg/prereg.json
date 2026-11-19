@@ -670,7 +670,7 @@
    "stage2": "the unused usable positions from 3 upward, in order, skipping every stage 0, stage 1 and re-pilot position, until stage 2 has n2 units",
    "reserve": "the next 8 unused usable positions after stage 2's last, used only to replace a unit that drops before any model run, in every cell at once",
    "n2_planning": 60,
-   "n2_rule": "after stage 1, n2 is the largest multiple of 4 from 48 to 100 whose re-priced program (stage 0 and 1 at actual spend, stage 2 sessions and judging at stage 1's measured central costs, VM included) is at most $570; under 48 the COST rule goes to the Captain",
+   "n2_rule": "after stage 1, n2 is the largest multiple of 4 from 48 to 100 whose re-priced program (stage 0 and 1 at actual spend, stage 2 sessions and judging at stage 1's measured central costs, VM included) is at most $600; under 48 the COST rule goes to the Captain",
    "pooling": "never: stage 1 and stage 0 units and sessions are never pooled into the confirmatory analysis"
   },
   "post_cutoff_from": "2026-07-01",
@@ -1014,8 +1014,8 @@
    "cap": 147
   },
   "cso-judge": {
-   "central": 92,
-   "cap": 131
+   "central": 124,
+   "cap": 174
   },
   "cso-main": {
    "central": 336,
@@ -1043,5 +1043,5 @@
   "yc-software/*",
   "openclaw/*"
  ],
- "program_target_central_usd": 570
+ "program_target_central_usd": 600
 }
