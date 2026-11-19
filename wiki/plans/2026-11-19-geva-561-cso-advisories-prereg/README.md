@@ -14,7 +14,7 @@ links:
   - https://github.com/github/advisory-database/tree/a91f5a514f4697f0303f547c9b50a12eb07fa70f
   - lanes/outcome-skills/h2h/
 attachments:
-  - b14b3f880917c42dea62203befdd286bc6acd5106f2422c86ba08fe56cd058f6  prereg.json
+  - f46bcf0aa3f82139e9891aefd473f75e0e6d8e5cc5d43f9227dc656aeba7b2ff  prereg.json
   - e2287aed35ac5703e117e608eb552d273ef36b5f6b4a47bfdf6de8fd90636758  power.txt
 ---
 
@@ -180,7 +180,7 @@ Frozen detectors, tested on fixtures in the build and checked on stage 0's trans
 - Upstream end (a provider or proxy error): one retry of the whole session from a fresh container; a second is a gap.
 - Infra failure: one rerun; a second is a gap.
 - A cap stop ends its item incomplete. Sessions run unit by unit with arms interleaved, so a stop leaves at most one unit unpaired.
-- A unit with a gap in either arm of a contrast leaves that contrast. A cell with gaps on more than 10% of its units is incomplete and gets no verdict. Both bounds are reported on the full paired contrast: cso gaps as not named and none gaps as named, and the reverse. Ahead or Behind stands only when it holds at the bound unfavourable to that direction.
+- A unit with a gap in either arm of a contrast leaves that contrast. A cell with gaps on more than 10% of its units is incomplete and gets no verdict. Both bounds are reported on the full paired contrast: cso gaps as not named and none gaps as named, and the reverse. Ahead or Behind stands only when it holds at the bound unfavourable to that direction. Section 10's interval conditions are read the same way: KEEP's non-inferiority bound at the bound unfavourable to cso (cso gaps as not named, none gaps as named), and CUT-CANDIDATE's 15-point bound at the bound favourable to cso (the reverse). The precision secondaries pair complete units only. A verdict whose condition holds on complete pairs but fails at its gap bound becomes FIX-METHOD on gaps.
 
 ## 10. Analysis and verdicts
 
@@ -194,9 +194,9 @@ Frozen detectors, tested on fixtures in the build and checked on stage 0's trans
 
 **Verdicts (R48),** decided on Opus 5.5 and applied in this order. particle-1's row gets its own line by the same rules, and where the two disagree the verdict names the split.
 1. FIX-METHOD when the Opus row is Incomplete, Skill not exercised as designed, or Judge not validated on named, or when headroom failed after its raise.
-2. KEEP when the Opus row is Ahead. Or when all of these hold: the 95% interval for cso minus none on named has its lower bound above minus 10 points (the non-inferiority margin); cso's unsupported findings per session are lower than none's with a 95% interval that excludes 0; cso's supported findings per session are not lower by more than 0.5 (the interval's lower bound above minus 0.5); and the validity label passed its check. That second path is /cso's "supported findings only" claim holding at no real cost in hits.
-3. CUT-CANDIDATE when the Opus row is Behind with the procedure run in at least 80% of cso sessions; the verdict names what /cso got wrong from the miss anatomy and the strata. Or, after the Why-null cycle, when the row shows no difference, the procedure ran in at least 80%, headroom was admitted, the 95% interval's upper bound is below plus 15 points (the claim margin: smaller gains wouldn't change what we do), and the KEEP precision path doesn't hold.
-4. Otherwise FIX-METHOD on power: the eval couldn't tell, and the post says so with the interval and the next step (more units or harder ones).
+2. KEEP when the Opus row is Ahead. Or when all of these hold: the 95% interval for cso minus none on named has its lower bound above minus 10 points (the non-inferiority margin) at the gap bound unfavourable to cso (section 9); cso's unsupported findings per session are lower than none's with a 95% interval that excludes 0; cso's supported findings per session are not lower by more than 0.5 (the interval's lower bound above minus 0.5); and the validity label passed its check. That second path is /cso's "supported findings only" claim holding at no real cost in hits.
+3. CUT-CANDIDATE when the Opus row is Behind with the procedure run in at least 80% of cso sessions; the verdict names what /cso got wrong from the miss anatomy and the strata. Or, after the Why-null cycle, when the row shows no difference, the procedure ran in at least 80%, headroom was admitted, the 95% interval's upper bound is below plus 15 points (the claim margin: smaller gains wouldn't change what we do) at the gap bound favourable to cso, and the KEEP precision path doesn't hold.
+4. Otherwise FIX-METHOD: on gaps when a KEEP or CUT-CANDIDATE condition held on complete pairs but failed at its gap bound (section 9), else on power: the eval couldn't tell, and the post says so with the interval and the next step (more units or harder ones).
 - Why null, for every null and loss: exposure, task fit (libraries against services), power and headroom, and whether Opus already does it unaided.
 
 ## 11. What we do with each result
@@ -206,7 +206,7 @@ Frozen detectors, tested on fixtures in the build and checked on stage 0's trans
 | KEEP | /cso stays. The results page says how many more advisories it named, its false-alarm counts and its cost. A follow-up eval of `--comprehensive` on qualified Node and Python units becomes worth pricing. |
 | CUT-CANDIDATE, Behind | The project owner hears it in plain words, with what /cso got wrong. gstack's maintainer decides cut or fix; a fix gets a before-and-after rerun of the cso arm on these units at its own small line. |
 | CUT-CANDIDATE, null | The same, with the cost per session beside it: /cso costs more and names no more, and the interval rules out a gain of 15 points or more. |
-| FIX-METHOD | No verdict on /cso. The post names the gap (exposure, headroom, judge or power) and the one next step. |
+| FIX-METHOD | No verdict on /cso. The post names the gap (exposure, headroom, judge, missing sessions or power) and the one next step. |
 | untold differs from none | Evidence for gstack's maintainer on whether routing should offer /cso for audit requests, beside the routing evals. |
 | particle-1 splits from Opus | Reported as a low-cost-model note under R56; the verdict still rests on Opus. |
 
@@ -298,9 +298,11 @@ Built on one branch and landed with the results (R77: two merged PRs, this one a
 
 Before this pull request opened, a second-model review (GPT-6.2 Sol at high effort) attacked the scoring, stage and cap rules of the first draft and found 8 High and 4 Medium problems. All were taken: stage 1 is never pooled and releases no discordance (it could reveal direction); KEEP's second path needs a non-inferiority margin and a supported-findings check, the verdicts have a fixed order and a default, and CUT-CANDIDATE on a null needs the interval to rule out a 15-point gain; the scored text holds every assistant message, not only the last; the judge's check adds a per-arm gate and format-variant anchors; a hit needs the mechanism in the finding's own words; stage 2 and reserve positions skip every pilot and smoke position; the smoke cap covers its sessions at full allowance and caps are re-priced if the allowance doubles; gap bounds run both ways; findings are atomized key-blind before labelling and redaction removes only names, run ids and the helper's status block; known-advisory matches need the full hit rules; fallback routes for Sol use gold from outside the judge's family and every route must pass the refusal limit; and the judge line counts every call it pays for. Stage 2's planning size rose from 48 to 60 units to keep power after dropping the pooling.
 
+After the pull request opened, its automated review found one Medium problem, also taken: KEEP's non-inferiority path and CUT-CANDIDATE's null path ignored the gap bounds that guard Ahead and Behind, so a cell with up to 10% missing sessions could reach either verdict on complete pairs alone. Both now must hold at their unfavourable bound, or the verdict is FIX-METHOD on gaps (sections 9 and 10).
+
 ## Review record
 
-One second-model review (GPT-6.2 Sol, high effort) read the first draft's scoring, stage and cap rules before the pull request opened: 12 findings (8 High, 4 Medium), all taken (section 18). The pull request's own review, run by gstack's /ship at its final head, is recorded in the pull request body.
+One second-model review (GPT-6.2 Sol, high effort) read the first draft's scoring, stage and cap rules before the pull request opened: 12 findings (8 High, 4 Medium), all taken (section 18). The pull request's first automated review found one Medium problem in the verdict rules, also taken (section 18). The pull request's own review, run by gstack's /ship at its final head, is recorded in the pull request body.
 
 ## Disclosures
 
