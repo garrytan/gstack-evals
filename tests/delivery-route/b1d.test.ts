@@ -7,7 +7,7 @@ import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
-import { B1D_CASES, b1cRows, inSampleRoutes, powerLines, b1dApprove, b1dCap, b1dCaseProblems, b1dDone, b1dGuard, b1dPlan, b1dRow, b1dStats, band, checkB1dRows, clearOdds, hoMdd, hoReading, hoReport, inReading, listingFacts, loadB1dCaptured, namedOf, noescapeBlock, positionOf, readRouteTsv, reuseB1c, routeCounts, routeFile, routesByTask, smokeOf, splitLines, tertiles, WHY_NOT_MAIN, whyNot, type B1dRow, type InReading } from "../../lanes/delivery-route/b1d.ts";
+import { B1D_CASES, b1cRows, b1dMain, inSampleRoutes, powerLines, b1dApprove, b1dCap, b1dCaseProblems, b1dDone, b1dGuard, b1dPlan, b1dRow, b1dStats, band, checkB1dRows, clearOdds, hoMdd, hoReading, hoReport, inReading, listingFacts, loadB1dCaptured, namedOf, noescapeBlock, positionOf, readRouteTsv, reuseB1c, routeCounts, routeFile, routesByTask, smokeOf, splitLines, tertiles, WHY_NOT_MAIN, whyNot, type B1dRow, type InReading } from "../../lanes/delivery-route/b1d.ts";
 import { B1D, B1D_ARM, B1D_ARM_NAMES, B1D_CAPS_USD, B1D_SMOKE, GSTACK_ARM, HELDOUT, NOESCAPE } from "../../lanes/delivery-route/b1d-pins.ts";
 import { PLACEMENT } from "../../lanes/delivery-route/b1c-pins.ts";
 import { reuseCheck, type Load } from "../../lanes/delivery-route/b1b.ts";
@@ -110,6 +110,18 @@ describe("the decision", () => {
   test("the row check refuses a stray task, another arm, another model and a repeat", () => {
     const r = [row(B1D_ARM, "t0", true), row(B1D_ARM, "t0", false), { ...row(B1D_ARM, "t1", true), model: "gpt-6.1-sol" }, row("none", "t1", false), row(B1D_ARM, "zz", true)];
     expect(checkB1dRows(r, ["t0", "t1"], [B1D_ARM]).sort()).toEqual(["gstack-main__t1 ran gpt-6.1-sol, not claude-opus-5-5", "gstack-main__zz is task zz, not one of the planned tasks", "none__t1 is arm none, not one of gstack-main", "two graded rows for gstack-main t0"]);
+  });
+  test("report --item b1d-ho refuses an --in table that is not the in-sample gstack-main table", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "b1d-report-")), ho = join(dir, "ho.jsonl"), tsv = join(dir, "routes.tsv"), errs: string[] = [], err = console.error;
+    writeFileSync(ho, ["ho0", "ho1"].flatMap((t) => B1D_ARM_NAMES.map((a) => JSON.stringify(row(a, t, false)))).join("\n") + "\n");
+    writeFileSync(tsv, "");
+    console.error = (m: string) => { errs.push(m); };
+    try {
+      expect(await b1dMain(["report", ho, "--item", "b1d-ho", "--in", ho, "--routes", tsv])).toBe(2);
+      expect(errs.length).toBeGreaterThan(0);
+      expect(errs.every((m) => m.startsWith("E_USAGE b1d report --in: "))).toBe(true);
+      expect(errs).toContain("E_USAGE b1d report --in: gstack-main__ho0 is task ho0, not one of the planned tasks");
+    } finally { console.error = err; rmSync(dir, { recursive: true, force: true }); }
   });
   test("the reason a gstack-main session didn't load prove-it, first that applies", () => {
     const r = (over: Partial<B1dRow>) => whyNot({ ...row(B1D_ARM, "t", false), ...over });

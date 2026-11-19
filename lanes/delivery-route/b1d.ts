@@ -875,6 +875,12 @@ export async function b1dMain(argv: string[]): Promise<number> {
   if (cmd === "report") {
     const it = opt("item") ?? "", read = (f: string) => readFileSync(f, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as B1dRow);
     if (!rest[0] || rest[0].startsWith("--") || !isB1dItem(it)) return usage(USAGE);
+    let inRows: B1dRow[] = [];
+    if (it === "b1d-ho") {
+      inRows = read(opt("in") ?? usage("b1d report --item b1d-ho needs --in <in-sample table.jsonl>"));
+      const inBad = checkB1dRows(inRows, drawnTasks(loadBundle()).run, [B1D_ARM]);
+      if (inBad.length) { for (const b of inBad) console.error("E_USAGE b1d report --in: " + b); return 2; }
+    }
     const rows = read(rest[0]), tasks = it === "b1d-smoke" ? [...B1D_SMOKE] : it === "b1d-in" ? drawnTasks(loadBundle()).run : heldoutTasks(), arms = it === "b1d-ho" ? [...B1D_ARM_NAMES] : [B1D_ARM];
     const bad = checkB1dRows(rows, tasks, arms);
     if (bad.length) { for (const b of bad) console.error("E_USAGE b1d report: " + b); return 2; }
@@ -882,7 +888,7 @@ export async function b1dMain(argv: string[]): Promise<number> {
     if (it === "b1d-smoke") lines = ["== B1d smoke", statLine(b1dStats(rows, B1D_ARM, tasks.length)), ...splitLines(rows)];
     else if (it === "b1d-in") lines = inReport(rows, inSampleRoutes()).lines;
     else {
-      const inRows = read(opt("in") ?? usage("b1d report --item b1d-ho needs --in <in-sample table.jsonl>")), sealed = opt("routes") ?? usage("b1d report --item b1d-ho needs --routes <the sealed held-out route table>");
+      const sealed = opt("routes") ?? usage("b1d report --item b1d-ho needs --routes <the sealed held-out route table>");
       const routes = routesByTask(readRouteTsv(readFileSync(sealed, "utf8")).filter((r) => r[0] === "heldout"));
       if (tasks.some((t) => !routes.has(t)) || routes.size !== tasks.length) return usage("b1d report: " + sealed + " is not the held-out route table");
       lines = hoReport(rows, inReading(b1dStats(inRows, B1D_ARM, B1.tasks)), routes, tasks).lines;
