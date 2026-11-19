@@ -334,6 +334,151 @@ export function checkImmutable(root: string, baseFiles: Map<string, Buffer>, pro
   }
 }
 
+export type EvalKind = "prereg" | "quick-look" | "results";
+
+export function evalKind(e: Entry): EvalKind | null {
+  const title = str(e, "title");
+  if (e.id.endsWith("-quick-look") || /^quick look\b/i.test(title)) return "quick-look";
+  if (e.id.endsWith("-prereg") || /^preregistration\b/i.test(title)) return "prereg";
+  if (e.id.endsWith("-results")) return "results";
+  return null;
+}
+
+function bodyLines(text: string): string[] {
+  const lines = text.split("\n");
+  const close = lines[0] === "---" ? lines.indexOf("---", 1) : -1;
+  return lines.slice(close + 1);
+}
+
+function sectionLines(lines: string[], name: string): string[] | null {
+  const head = new RegExp("^## +(?:\\d+[.)]? +)?" + name + "(?: *\\(.*\\))? *$", "i");
+  const start = lines.findIndex((l) => head.test(l));
+  if (start < 0) return null;
+  const end = lines.findIndex((l, i) => i > start && /^#{1,2} /.test(l));
+  return lines.slice(start + 1, end < 0 ? lines.length : end);
+}
+
+function labelled(lines: string[], name: string): string[] {
+  const re = new RegExp("^(?:[-*] )?" + name + ": *(.*)$", "i");
+  return lines.flatMap((l) => {
+    const m = l.match(re);
+    return m ? [m[1].trim()] : [];
+  });
+}
+
+function tableRows(lines: string[]): string[][] {
+  const rows: string[][] = [];
+  let inBody = false;
+  for (const l of lines) {
+    if (!l.startsWith("|")) inBody = false;
+    else if (/^\|(?:\s*:?-+:?\s*\|)+\s*$/.test(l)) inBody = true;
+    else if (inBody) rows.push(l.trim().replace(/^\||\|$/g, "").split(/(?<!\\)\|/).map((c) => c.trim()));
+  }
+  return rows;
+}
+
+const dollars = (s: string | undefined) => {
+  const m = (s ?? "").match(/\$ *(\d[\d,]*(?:\.\d+)?)/);
+  return m ? Number(m[1].replaceAll(",", "")) : null;
+};
+const blank = (s: string | undefined) => !s || /^(?:-|none|n\/a)$/i.test(s.trim());
+const HOW = " (wiki/README.md, Eval plans and results, gives the format)";
+
+function checkPrereg(lines: string[], p: (message: string) => void) {
+  const decision = sectionLines(lines, "Decisions?");
+  if (!decision) p('practice 1: no "## Decision" section naming what we do for each way the result could come out' + HOW);
+  else {
+    const outcomes = decision.filter((l) => /^[-*] If \S.*?: \S/.test(l)).length + tableRows(decision).filter((r) => r.filter((c) => c).length >= 2).length;
+    if (outcomes < 2) p('practice 1: "## Decision" names ' + outcomes + ' outcome(s); give at least two, as "- If <outcome>: <what we do>" lines or table rows' + HOW);
+  }
+
+  const judge = sectionLines(lines, "Judge check");
+  const judges = judge ? labelled(judge, "Judge") : [];
+  const hasJudge = judges.some((j) => !blank(j));
+  if (!judge) p('practice 5: no "## Judge check" section; write "Judge: none" there when no model judge scores the run' + HOW);
+  else if (!judges.length) p('practice 5: "## Judge check" has no "Judge:" line; write "Judge: none" when no model judge scores the run' + HOW);
+  else if (hasJudge) {
+    for (const j of judges) {
+      const m = j.match(/^([^\s/]+)\/\S+ scores (.+)$/);
+      if (!m) {
+        p('practice 5: judge line "' + j + '" must read "<lab>/<model> scores <lab>/<model>[, ...]"' + HOW);
+        continue;
+      }
+      for (const scored of m[2].split(",").map((s) => s.trim())) {
+        const lab = scored.match(/^([^\s/]+)\/\S+$/)?.[1];
+        if (!lab) p('practice 5: scored model "' + scored + '" must be written <lab>/<model>' + HOW);
+        else if (lab.toLowerCase() === m[1].toLowerCase()) p('practice 5: judge "' + j.split(" ")[0] + '" is from the same model family as "' + scored + '" it scores; use a judge from another lab');
+      }
+    }
+    const labels = Number(labelled(judge, "Labelled outputs")[0]?.match(/^\d+/)?.[0] ?? NaN);
+    if (!(labels >= 40)) p('practice 5: "Labelled outputs:" must give at least 40 labelled outputs for the judge check' + HOW);
+    const kappa = Number(labelled(judge, "Kappa at least")[0]?.match(/^\d*\.?\d+/)?.[0] ?? NaN);
+    if (!(kappa >= 0.6)) p('practice 5: "Kappa at least:" must be 0.6 or more' + HOW);
+    if (!/^per arm\b/i.test(labelled(judge, "Errors read")[0] ?? "")) p('practice 5: "Errors read: per arm" is missing; the judge\'s errors are read per arm, not pooled' + HOW);
+  }
+
+  const pilots = sectionLines(lines, "Pilots");
+  const rows = pilots ? tableRows(pilots) : [];
+  if (!pilots) p('practice 3: no "## Pilots" section with one row per arm' + HOW);
+  else if (!rows.length) p('practice 3: "## Pilots" has no table rows; give one row per arm: Arm | Budget | Pilot cap | Part ran | Judge check | Supply' + HOW);
+  for (const r of rows) {
+    if (r.length !== 6) {
+      p('practice 3: pilot row "' + r.join(" | ") + '" needs six cells: Arm | Budget | Pilot cap | Part ran | Judge check | Supply' + HOW);
+      continue;
+    }
+    const [arm, budgetCell, pilotCell, ran, judged, supply] = r;
+    const budget = dollars(budgetCell);
+    const pilot = dollars(pilotCell);
+    if (budget === null || pilot === null) p('practice 3: arm "' + arm + '" needs its budget and pilot cap in dollars, such as $400 and $40');
+    else if (pilot * 10 > budget + 1e-9) p('practice 3: arm "' + arm + '" pilot cap $' + pilot + " is more than a tenth of its budget $" + budget);
+    if (blank(ran)) p('practice 3: arm "' + arm + '" does not say how its pilot shows the part under test ran');
+    if (blank(supply)) p('practice 3: arm "' + arm + '" does not say how its pilot shows the tasks can be supplied at the planned rate');
+    if (hasJudge && blank(judged)) p('practice 3: arm "' + arm + '" does not say how its pilot shows the judge passes its check on this arm\'s outputs');
+  }
+
+  const look = sectionLines(lines, "Interim look");
+  if (!look) {
+    p('practice 6: no "## Interim look" section with a "Planned paid spend:" line' + HOW);
+    return;
+  }
+  const spend = dollars(labelled(look, "Planned paid spend")[0]);
+  if (spend === null) p('practice 6: "## Interim look" needs "Planned paid spend: $<n>", the largest counted run\'s planned paid spend' + HOW);
+  else if (spend > 500) {
+    if (!/\bhalf\b/i.test(labelled(look, "At")[0] ?? "")) p('practice 6: a run planned above $500 paid needs "At: half the units ..." for its one look' + HOW);
+    if (blank(labelled(look, "Stop bounds")[0])) p('practice 6: a run planned above $500 paid needs "Stop bounds:" fixed in the plan' + HOW);
+    if (!/^none\b/i.test(labelled(look, "Other looks")[0] ?? "")) p('practice 6: a run planned above $500 paid needs "Other looks: none"' + HOW);
+  }
+}
+
+function checkQuickLook(lines: string[], p: (message: string) => void) {
+  const q = sectionLines(lines, "Quick look");
+  if (!q) {
+    p('quick look: no "## Quick look" section with its three-line plan (Question, Decision, Stop rule)' + HOW);
+    return;
+  }
+  for (const name of ["Question", "Decision", "Stop rule"]) if (blank(labelled(q, name)[0])) p('quick look: "' + name + ':" line is missing or empty' + HOW);
+  const cap = dollars(labelled(q, "Paid cap")[0]);
+  if (cap === null) p('quick look: "Paid cap: $<n>" is missing' + HOW);
+  else if (cap > 100) p("quick look: paid cap $" + cap + " is above $100, so this is a counted run and needs a preregistration (id ending -prereg)");
+  const days = Number(labelled(q, "Days")[0]?.match(/^\d*\.?\d+/)?.[0] ?? NaN);
+  if (!(days > 0)) p('quick look: "Days: 1" is missing' + HOW);
+  else if (days > 1) p("quick look: " + days + " days is longer than one day, so this is a counted run and needs a preregistration (id ending -prereg)");
+}
+
+const COST_AND_CALL = /^Cost and call: paid \$\d[\d,]*(?:\.\d+)?, meter \$\d[\d,]*(?:\.\d+)?; settled: \S/;
+
+export function checkPractices(root: string, entries: Entry[], baseFiles: Map<string, Buffer>, problems: Problem[]) {
+  for (const e of entries) {
+    const kind = evalKind(e);
+    if (!kind || baseFiles.has(e.path)) continue;
+    const lines = bodyLines(readFileSync(join(root, e.path), "utf8"));
+    const p = (message: string) => problems.push({ file: e.path, message });
+    if (kind === "prereg") checkPrereg(lines, p);
+    else if (kind === "quick-look") checkQuickLook(lines, p);
+    else if (!lines.some((l) => COST_AND_CALL.test(l))) p('practice 12: no "Cost and call: paid $<n>, meter $<n>; settled: <the ship-or-kill call, or none>" line' + HOW);
+  }
+}
+
 export function renderIndex(entries: Entry[]): string {
   const byId = new Map(entries.map((e) => [e.id, e]));
   const by = { supersedes: new Map<string, string[]>(), answers: new Map<string, string[]>() };
@@ -384,7 +529,10 @@ export function checkWiki(root: string, opts: { baseFiles?: Map<string, Buffer> 
   } else if (tracked.out.toString().trim()) {
     problems.push({ file: "wiki/INDEX.md", message: "generated, so it must not be committed; run git rm --cached wiki/INDEX.md" });
   }
-  if (opts.baseFiles) checkImmutable(root, opts.baseFiles, problems);
+  if (opts.baseFiles) {
+    checkImmutable(root, opts.baseFiles, problems);
+    checkPractices(root, entries, opts.baseFiles, problems);
+  }
   return { entries, problems };
 }
 

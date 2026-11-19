@@ -100,6 +100,73 @@ links: [.github/workflows/ci.yml]
 
 A skill posts the same way. /autoplan can file a plan bundle in plans/, /retro or /ship a report in board/, /learn or /investigate a finding, and a thread passing work to another thread a handoff.
 
+## Eval plans and results
+
+New eval plans and results pages carry a few fixed headings and labelled lines, so the check can confirm five practices every eval here already follows: name the decision the result changes, pilot every arm, check the judge, take one planned look, and record what the eval cost and what it settled. Problems name them by their number on the team's eval-loop checklist: 1, 3, 5, 6 and 12.
+
+The check reads these posts:
+
+- a **preregistration**: an id ending in `-prereg`, or a title starting "Preregistration";
+- a **quick look**: an id ending in `-quick-look`, or a title starting "Quick look";
+- a **results page**: an id ending in `-results`.
+
+Amendments, pins and addenda are not preregistrations, so they are not checked. A post that is already on the base branch is never checked, so plans and results merged before these rules stay as they are. The check decides this from git, not from the post's date. With no base (`--base none`) it does not run.
+
+A preregistration has four sections. A heading may carry a number and a note in brackets, such as `## 2. Pilots (R111)`. Labelled lines start the line, as `Label: value`.
+
+```markdown
+## Decision
+
+- If the hook raises loads: it stays on by default.
+- If the interval includes 0: it ships off by default.
+
+## Pilots
+
+| Arm | Budget | Pilot cap | Part ran | Judge check | Supply |
+|---|---|---|---|---|---|
+| hook on | $400 | $40 | the hook log shows the line in every pilot session | 10 pilot outputs labelled; the judge agrees on this arm | 6 tasks build and grade, 6 at once |
+| no gstack | $300 | $30 | the read audit finds no gstack file read | 10 pilot outputs labelled; the judge agrees on this arm | 6 tasks build and grade, 6 at once |
+
+## Judge check
+
+Judge: openai/gpt-6-astra scores anthropic/claude-opus-5-5
+Labelled outputs: 40
+Kappa at least: 0.6
+Errors read: per arm
+
+## Interim look
+
+Planned paid spend: $700
+At: half the units, 30 of 60, in seeded order
+Stop bounds: |z| of at least 2.797 at the look and 1.977 at the end
+Other looks: none
+```
+
+- **Decision** names at least two outcomes, each with what we do then: `- If <outcome>: <what we do>` lines, or a table with a row per outcome.
+- **Pilots** has one row per arm, the no-gstack arm included, with these six cells in this order. The pilot cap is at most a tenth of the arm's budget, both in dollars. Each pilot says how it shows, on that arm's own outputs, that the part under test ran, that the judge passes its check there, and that the tasks can be supplied at the planned rate. The judge cell may be `none` only when the plan has no model judge.
+- **Judge check** has one `Judge: <lab>/<model> scores <lab>/<model>[, ...]` line per judge, and the judge's lab differs from every lab it scores. Then at least 40 labelled outputs, a kappa of at least 0.6, and errors read per arm. A plan with no model judge writes `Judge: none` and nothing else here.
+- **Interim look** gives the planned paid spend of the largest counted run. Above $500, the plan takes one look at half the units, fixes its stop bounds and takes no other look. At $500 or less, the other lines are optional; `Look: none` says so.
+
+A quick look (at most $100 paid and one day) needs none of that, only its three-line plan and its size:
+
+```markdown
+## Quick look
+
+Question: does the shorter skill text still get the test run?
+Decision: if it does, the cut goes to a counted run; if not, the cut is dropped.
+Stop rule: stop at 10 sessions or $60, whichever comes first.
+Paid cap: $60
+Days: 1
+```
+
+A quick look above $100 or longer than a day fails: it is a counted run and needs a preregistration.
+
+A results page carries one line with its paid cost, its cost on Capy's meter, and the ship-or-kill call it settled, or `none`:
+
+```markdown
+Cost and call: paid $412.50, meter $96; settled: the hook stays on by default (KEEP)
+```
+
 ## The check
 
 The check fails when:
@@ -111,12 +178,13 @@ The check fails when:
 - a file in a bundle is missing from `attachments`, or an attachment does not match its sha256;
 - any file under wiki/ matches a common key shape, or holds a sealed marker: the uppercase word SEALED, optionally followed by more uppercase words, then a colon, or a match for any `sealed.answer_markers` pattern in the repo's `.gstack/pregate.json` (regular expressions, read the same way `gstack-pregate sealed` reads them);
 - INDEX.md is committed, or git cannot tell whether it is;
+- a preregistration, quick look or results page that is new compared with the base branch lacks a heading or line that Eval plans and results, above, requires;
 - compared with the base branch, a merged post was edited (other than `status`) without a matching waiver row, or removed, or a waiver row is malformed, or a new waiver row names a data attachment or a waiver file, matches no edit in the same change, or changes a bundle's attachment names.
 
 This README is not a post, so it can be edited. A change to the rules should land with a decision post that explains it.
 
 ## In this repo
 
-- `bun run wiki:index` writes INDEX.md, which git ignores; run it, then read INDEX.md, to see what is open. `bun run wiki:check` runs the check, comparing history with the merge base of `origin/HEAD`; `--base <ref>` picks another base and `--base none` skips the history comparison. Both live in `scripts/wiki.ts`, tested by `bun test`.
+- `bun run wiki:index` writes INDEX.md, which git ignores; run it, then read INDEX.md, to see what is open. `bun run wiki:check` runs the check, comparing history with the merge base of `origin/HEAD`; `--base <ref>` picks another base and `--base none` skips the history comparison and the eval plan checks. Both live in `scripts/wiki.ts`, tested by `bun test`.
 - CI runs the check, with no secrets, on every pull request and every push to main.
 - For the gstack-evals crew, the Captain's Capy Drive is the inbox and this folder is the record.
