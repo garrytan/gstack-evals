@@ -137,16 +137,31 @@ function regularFile(roots: RunRoot[], p: string): string | null {
 type Piece = { t: string; q: boolean; sub?: string; here?: boolean };
 type Tok = { op: string } | { word: Piece[] };
 
-/** The command substitution that opens at s[i] ("$(" or a backtick): its inner text and the index after it. */
+/** The index after the "))" that closes an arithmetic command opening at s[i] ("(("), or -1 when the parens close as two nested subshells. */
+function arithmeticEnd(s: string, i: number): number {
+  let depth = 2;
+  for (let j = i + 2; j < s.length; j++) {
+    if (s[j] === "(") depth++;
+    else if (s[j] === ")" && --depth === 1) return s[j + 1] === ")" ? j + 2 : -1;
+  }
+  return -1;
+}
+
+/** The command substitution that opens at s[i] ("$(" or a backtick): its inner text and the index after it. A heredoc's body inside it is skipped, so its quotes and parens do not count. */
 function substitution(s: string, i: number): { inner: string; end: number } {
   if (s[i] === "`") {
     let j = i + 1;
     while (j < s.length && s[j] !== "`") j += s[j] === "\\" ? 2 : 1;
     return { inner: s.slice(i + 1, j), end: j + 1 };
   }
+  if (s[i + 2] === "(") {
+    const e = arithmeticEnd(s, i + 1);
+    if (e > 0) return { inner: s.slice(i + 2, e - 1), end: e };
+  }
   let depth = 1;
   let j = i + 2;
   let q: string | null = null;
+  const heredocs: string[] = [];
   while (j < s.length && depth) {
     const c = s[j]!;
     if (q) {
@@ -154,8 +169,38 @@ function substitution(s: string, i: number): { inner: string; end: number } {
       else if (c === "\\" && q === '"') j++;
     } else if (c === "'" || c === '"') q = c;
     else if (c === "\\") j++;
-    else if (c === "(") depth++;
-    else if (c === ")") depth--;
+    else if (c === "(") {
+      const e = s[j + 1] === "(" ? arithmeticEnd(s, j) : -1;
+      if (e > 0) {
+        j = e;
+        continue;
+      }
+      depth++;
+    } else if (c === ")") depth--;
+    else if (c === "<" && s[j + 1] === "<") {
+      if (s[j + 2] === "<") {
+        j += 3;
+        continue;
+      }
+      j += 2;
+      if (s[j] === "-") j++;
+      while (s[j] === " ") j++;
+      let d = "";
+      while (j < s.length && !/[\s;&|<>()]/.test(s[j]!)) d += s[j++];
+      heredocs.push(d.replace(/['"\\]/g, ""));
+      continue;
+    } else if (c === "\n" && heredocs.length) {
+      j++;
+      for (const d of heredocs.splice(0)) {
+        while (j < s.length) {
+          const e = s.indexOf("\n", j);
+          const line = s.slice(j, e < 0 ? s.length : e);
+          j = e < 0 ? s.length : e + 1;
+          if (line.trim() === d) break;
+        }
+      }
+      continue;
+    }
     j++;
   }
   return { inner: s.slice(i + 2, j - 1), end: j };
@@ -232,6 +277,11 @@ function lex(s: string): Tok[] {
       out.push({ op: c });
     } else if (";|&()".includes(c)) {
       flush();
+      const arithmetic = c === "(" && s[i + 1] === "(" ? arithmeticEnd(s, i) : -1;
+      if (arithmetic > 0) {
+        i = arithmetic;
+        continue;
+      }
       const two = s.slice(i, i + 2);
       const op = two === "&&" || two === "||" ? two : c;
       out.push({ op });
@@ -245,6 +295,11 @@ function lex(s: string): Tok[] {
       if (s[i] === c) {
         op += c;
         i++;
+      }
+      if (op === "<<" && s[i] === "<") {
+        i++;
+        out.push({ op: "<" });
+        continue;
       }
       if (op === "<<") {
         if (s[i] === "-") i++;

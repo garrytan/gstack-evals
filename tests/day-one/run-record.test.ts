@@ -319,6 +319,23 @@ describe("the command log's shell shapes", () => {
       expect(findRun(roots, viaAlias).run).toBeNull();
       expect(gatePending(work, viaAlias)).toBe(false);
     }));
+
+  test("a here-string, a heredoc inside a substitution or an arithmetic shift does not hide a call on a later line", () =>
+    withDir((dir) => {
+      const work = join(dir, "work");
+      const roots: RunRoot[] = [{ dir: work, seen: WORK }];
+      put(work, WORK, RUN, body({ status: "gate_pending" }));
+      const before: Record<string, string> = {
+        "a here-string": 'grep -q x <<< "$v"',
+        "a heredoc inside a substitution": "NOTE=\"$(cat <<'EOF'\nthe owner's first task\nEOF\n)\"",
+        "an arithmetic shift": "(( n <<= 1 ))",
+      };
+      for (const [how, first] of Object.entries(before)) {
+        const calls = tx([{ command: first + "\n" + C }]);
+        expect([how, findRun(roots, calls).run?.seen]).toEqual([how, RUN + "/run.json"]);
+        expect([how, gatePending(work, calls)]).toEqual([how, true]);
+      }
+    }));
 });
 
 type Step = { command: string; at?: string; done?: string };
