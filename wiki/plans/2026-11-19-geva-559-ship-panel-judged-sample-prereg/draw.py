@@ -62,11 +62,12 @@ def trailer_items(clones, R):
     return items
 
 
-TOKEN = re.compile(r"(?<![\w/#-])((?:[a-z0-9-]+/)?([a-z][a-z-]*(?:/[a-z-]+)?)#\d+)")
+FINDING_ID = re.compile(r"(?<![\w/#-])((?:[a-z0-9-]+/)?([a-z][a-z-]*(?:/[a-z-]+)?)#\d+)")
 
 
 def receipts_total(body):
-    total, seen = 0, 0
+    # (fixed + noted + deferred, noted + deferred) summed over every receipt that records a review loop, or None
+    total, unfixed, seen = 0, 0, 0
     for m in re.finditer(r"```gstack-ship-receipt\s*(\{.*?\})\s*```", body, re.S):
         try:
             loop = json.loads(m.group(1)).get("review_loop")
@@ -74,13 +75,14 @@ def receipts_total(body):
             continue
         if isinstance(loop, dict):
             total += sum(int(loop.get(k) or 0) for k in ("fixed", "noted", "deferred"))
+            unfixed += sum(int(loop.get(k) or 0) for k in ("noted", "deferred"))
             seen += 1
-    return total if seen else None
+    return (total, unfixed) if seen else None
 
 
 def shown_ids(body, trailer_ids, readers):
     ids = set(trailer_ids)
-    for m in TOKEN.finditer(body):
+    for m in FINDING_ID.finditer(body):
         if m.group(2) in readers or m.group(2).split("/")[-1] in readers:
             ids.add(m.group(1))
     return ids
@@ -100,9 +102,10 @@ def complete_prs(clones, items, bodies):
     count_ok = {}
     for (repo, pr), its in sorted(by.items()):
         body = bodies.get((repo, pr), "")
-        total = receipts_total(body)
-        ids = shown_ids(body, {i["finding"] for i in its}, readers)
-        if total is not None and len(ids) >= total:
+        counts = receipts_total(body)
+        trailer_ids = {i["finding"] for i in its}
+        ids = shown_ids(body, trailer_ids, readers)
+        if counts is not None and len(ids) >= counts[0] and len(ids - trailer_ids) >= counts[1]:
             count_ok[(repo, pr)] = its
     for repo in sorted({r for r, _ in count_ok}):
         git = Path(clones) / f"{repo.split('/')[1]}.git"
