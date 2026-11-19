@@ -980,11 +980,12 @@
   "supported_yield_margin": 0.5,
   "precedence": [
    "Incomplete, Skill not exercised as designed, or Judge not validated: FIX-METHOD",
-   "KEEP rules",
-   "CUT-CANDIDATE rules",
-   "otherwise FIX-METHOD: on gaps when a KEEP or CUT-CANDIDATE condition held on complete pairs but failed at its gap bound, else on power, stated with the interval"
+   "KEEP rules, every condition at its gap bound",
+   "FIX-METHOD on gaps when either KEEP path holds on complete pairs but not at its gap bounds",
+   "CUT-CANDIDATE rules, every condition at its gap bound; the null path also needs the validity label validated",
+   "otherwise FIX-METHOD: on gaps when a CUT-CANDIDATE condition held on complete pairs but not at its gap bound, else on power, stated with the interval"
   ],
-  "gap_bounds": "both bounds are reported on the full paired contrast: cso gaps as not named and none gaps as named, and the reverse; Ahead or Behind stands only when it holds at the bound unfavourable to that direction; KEEP's non-inferiority condition is read at the bound unfavourable to cso (cso gaps as not named, none gaps as named) and CUT-CANDIDATE's null condition at the bound favourable to cso (the reverse); the precision secondaries pair complete units only; a verdict whose condition holds on complete pairs but fails at its gap bound becomes FIX-METHOD on gaps"
+  "gap_bounds": "complete-pair estimates drop a unit with a gap in either arm; every verdict condition is also read at its gap bound, on the full paired contrast with each gap session filled with the value least favourable to the verdict tested: for named, not named in the arm the verdict favours and named in the other; for a per-session count (supported or unsupported findings), 0 in the arm the condition needs high and the largest count that model and arm showed in stage 2 in the arm the condition needs low; for Ahead and KEEP cso gaps count against cso, for Behind and CUT-CANDIDATE the reverse; both bounds are reported for every contrast; a verdict stands only when every condition it uses holds at its gap bound"
  },
  "stage1_release": [
   "none arm named count per model",
