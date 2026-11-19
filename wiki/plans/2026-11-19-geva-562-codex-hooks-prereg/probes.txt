@@ -1,0 +1,93 @@
+Keyless Codex probes for the Codex hooks eval (GEVA-562), 2026-11-19 UTC
+No model call and no key: Codex CLI 0.170.0 (npm @openai/codex@0.170.0) against a local stub of the
+Responses API on 127.0.0.1. $P below is a scratch folder on the probe machine.
+
+== 1. --ephemeral and the rollout
+
+Command, run twice, once with --ephemeral and once without, each in a fresh HOME and CODEX_HOME holding one
+skill ($CODEX_HOME/skills/prove-it/SKILL.md, a four-line stand-in) and a hooks.json with a UserPromptSubmit hook
+(adds the context "ROUTE-MARK: this request fits /prove-it.") and a Stop hook (blocks once with the reason
+"CONTRACT-MARK: print the report"). The hook script logs every payload it receives.
+
+  codex exec --json --strict-config --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox \
+    --dangerously-bypass-hook-trust [--ephemeral] --color never -m gpt-6.1-sol \
+    -c model_provider="probe" -c model_providers.probe.base_url="http://127.0.0.1:<port>/v1" \
+    -c model_providers.probe.wire_api="responses" -c model_providers.probe.env_key="OPENAI_API_KEY" \
+    -c model_providers.probe.request_max_retries=0 -c model_providers.probe.stream_max_retries=0 \
+    -c skills.bundled.enabled=false -c model_reasoning_effort="low" - <<< "Fix the failing test in this repo."
+
+The stub answers the first request with one tool call that reads the skill file, and every later request with a
+final message.
+
+Result:
+  with --ephemeral:    exit 0; no file under $CODEX_HOME/sessions; the hook payloads' transcript_path is null
+                       for UserPromptSubmit and both Stop events.
+  without --ephemeral: exit 0; one rollout file, $CODEX_HOME/sessions/2026/11/19/rollout-<time>-<thread id>.jsonl;
+                       every hook payload's transcript_path names it.
+  Both: the UserPromptSubmit hook ran once, Stop ran twice (stop_hook_active false, then true), and every request
+  carried reasoning.effort "low". The bypass flag's warning appears as two "error" items on codex exec's event
+  stream and in no request body (0 matches for "bypass-hook-trust" in the request log).
+
+== 2. What the rollout records (the run without --ephemeral)
+
+One JSON object a line, {timestamp, type, payload}:
+  session_meta     source "exec", originator "codex_exec", cli_version, model_provider, context_window, git
+  response_item    message (developer, user, assistant), function_call, function_call_output,
+                   custom_tool_call, custom_tool_call_output, additional_tools
+  event_msg        task_started, item_completed (UserMessage, CommandExecution, AgentMessage, HookPrompt),
+                   token_count, task_complete (with last_agent_message)
+  turn_context, world_state, token_usage_record
+
+The routing hook's context arrives as a developer message right after the user's prompt:
+  response_item message developer "ROUTE-MARK: this request fits /prove-it."
+A Stop block arrives as a user message, and as a HookPrompt item:
+  response_item message user "<hook_prompt hook_run_id="stop:1:<CODEX_HOME>/hooks.json">CONTRACT-MARK: print the report</hook_prompt>"
+A direct read:
+  response_item function_call exec_command {"cmd": "cat ~/.codex/skills/prove-it/SKILL.md"}
+  response_item function_call_output "Chunk ID: ...\nWall time: ...\nProcess exited with code 0\nOriginal token count: 43\nOutput:\n---\nname: prove-it\n..."
+
+== 3. Code mode
+
+For gpt-6.1-sol, Codex 0.170 offers no top-level shell tool. The model-visible tools are a code-mode "exec"
+custom tool (JavaScript that calls nested tools such as tools.exec_command), "wait", request_user_input,
+request_user_input_async, clock.sleep, and the collaboration tools (spawn_agent, wait_agent, send_message,
+followup_task, interrupt_agent, list_agents). A second probe had the stub call exec with
+  const r = await tools.exec_command({cmd: 'sed -n 1,20p ~/.codex/skills/prove-it/SKILL.md'}); text(r.output ?? r);
+The rollout recorded:
+  response_item custom_tool_call exec, input = the JavaScript above
+  event_msg item_completed CommandExecution, command ["/bin/bash", "-lc", "sed -n 1,20p ..."]
+  response_item custom_tool_call_output, output = [{input_text "Script completed\nWall time 0.1 seconds\nOutput:\n"},
+                                                   {input_text "---\nname: prove-it\n..."}]
+Only the custom_tool_call_output reaches the model: a nested command's output arrives only through what the
+script passes to text(). codex exec's own event stream (--json) carries command_execution and agent_message
+items, but neither the hook context nor the code-mode output.
+
+== 4. Hooks leave the prompt unchanged
+
+codex debug prompt-input -c model="gpt-6.1-sol" -c skills.bundled.enabled=false "fix this bug", run in the probe
+home with hooks.json and in a copy without it: 9 model-visible parts (7 input items plus the tools), with
+identical text and tool definitions once the home path is normalised. A registered hook changes what the model
+sees only when it fires.
+
+== 5. Sol in Codex's catalog (codex debug models)
+
+gpt-6.1-sol: default_reasoning_level low, levels low to ultra, shell_type unified_exec, context_window 500000,
+max_context_window 872000, multi_agent_version v2, priority 4. gpt-6.2-sol: the same settings, priority 1.
+
+== 6. Duplicate skills at gstack main b7022438597edd2b877449608f7449f5c13c3511 (1.101.0.0)
+
+git archive of that commit; ./setup --host codex --no-browser into a fresh HOME (exit 0, "gstack ready (codex)");
+no hooks.json written; 63 entries under $CODEX_HOME/skills. codex debug prompt-input as in 4 lists 66 skills in
+30,496 characters. Three names are listed twice, each from two paths:
+  gstack-upgrade       r0/gstack-upgrade/SKILL.md and r0/gstack/gstack-upgrade/SKILL.md
+  office-hours         r0/gstack-office-hours/SKILL.md and r0/gstack/office-hours/SKILL.md
+  plan-design-review   r0/gstack-plan-design-review/SKILL.md and r0/gstack/plan-design-review/SKILL.md
+review, verify and qa are each listed once.
+
+== Stub and hook used
+
+stub.py: an http.server that logs each request body and streams response.created, response.output_item.added,
+response.output_item.done and response.completed for one item: a tool call when the request holds no tool
+output, otherwise an assistant message.
+hook.py: reads the payload on stdin, appends it to a log, prints hookSpecificOutput.additionalContext for
+UserPromptSubmit, and {"decision": "block", "reason": ...} for Stop while stop_hook_active is false.

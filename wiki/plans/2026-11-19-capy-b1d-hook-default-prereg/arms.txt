@@ -1,0 +1,38 @@
+$ lanes/delivery-route/b1d-build.sh   (gstack fetched by sha, ./setup in quick/laneb/arms/Dockerfile target gstack-l1-tar, then B1 prove-it added)
+gstack 5afef04e31de1cb30c727c7f827bdd729d04713e 1.101.0.0 git archive sha256 1699efd312947ed5547935a45f0b5e74bf4a0f59125ae295d770ca06e5a5b8f1
+setup: ./setup --host claude --no-browser --loadout full
+tar ee58dd16b7516d1b865527cd79bb5906ca6097b2c41a68360689ea2a88ab81eb 1370961920 bytes; tar.gz e3550e78186dd8667d9d8d1d73a855ef377e971199b9b248a839d19837d0ddbc
+tree 14582 files, 9 symlinks, 1720 dirs, digest d77679d22d87d6399786276ca5a2f62378e05392bac57022305aea837c42890a
+skills 65 folders under .claude/skills (prove-it among them); 2 set disable-model-invocation (land-and-deploy, modernize)
+settings.json 50464312bcbed69140e18c9cfc42de124c3848129406b22379dc34d18d1ee05e registers 4 hooks:
+   Stop (all) timeline-stop-hook timeout 5
+   Stop (all) skill-contract-stop-hook timeout 10
+   UserPromptSubmit (all) skill-route-hook timeout 5
+   PreToolUse Bash|PowerShell destructive-guard-hook timeout 10
+gstack-config: skill_routing on, skill_contracts on; config.yaml update_check false, routing_declined true
+loadout lock sha256 d8cc7b629e07af625f89c8bb55fe56de2fdb0a7190f38208b5cfb6d6f90bfe21
+   38a9b4fd49d2a4b5007850290bbebd02ff8b4d659868dd5a20a37562ebf53033 .claude/skills/gstack/lib/skill-route.ts
+   b2a492f2ec3d7713d228e439902791f91421d4f7d7dd49a1ce5d344ff13464b0 .claude/skills/gstack/lib/skill-triggers.ts
+   27e255325a97ca830e3947a100c93446501548bb46abc2ca247efac0c3223673 .claude/skills/gstack/hosts/claude/hooks/skill-route-hook
+   eb7e3fefd91aef622fa2919626c8b32763aa85fd4ee21c78816cda4a2ef51fb1 .claude/skills/gstack/hosts/claude/hooks/skill-route-hook.ts
+   94681b1aa3662cf91b932d4c74e2169f500dc6b03ce9c98d377397e7415bb952 .claude/skills/gstack/hosts/claude/hooks/destructive-guard-hook
+   1b132eb5f4d22a27cd2d8d02b4d56c60c52ccd7c093ada30a6072521b82e2cda .claude/skills/gstack/bin/gstack-skill-start
+   6e8cc0e4a6bb35d8ce329509b41cc2e9c213c2f3d29404c88e54cccf8d08af28 .claude/skills/gstack/bin/gstack-config
+   408a168892c0f088accfc580c08b294724edd826db31436d655e76dacec8ce90 .claude/skills/gstack/bin/gstack-session-kind
+   6a5dec178acc8cd0dd839963f121bdd3679a2c77c97f8601d6488312df4473ce .claude/skills/gstack/setup
+
+$ sha256sum of the arm files, as committed
+2f2016daef2b8bf2542b0998d028087000c123ad4725db42e2a90d47870b750d  b1b/CLAUDE.md
+ad1523dfeeb23da8043862c7052600f0161d3af8b89fab60c716d41a367b46e1  b1d/CLAUDE-noescape.md
+30be001ab82de19aee67c03d45716a72626aa531f793062146f951e2bf1c3783  b1c/place-block
+
+$ b1d arms check
+project-md: manifest is arms/manifests/b1c/project-md.json byte for byte
+none: manifest is arms/manifests/b1/none.json byte for byte
+project-md-noescape: block is B1b's with "; answer directly for quick questions or small scoped edits." replaced by ".", sha256 ad1523dfeeb23da8043862c7052600f0161d3af8b89fab60c716d41a367b46e1
+none: tar 8bab483364e4153a832c0995d6bc06d2953af805f32ae70a2e40788965a6764e rebuilt byte for byte
+project-md: tar 69da649d839da7607d5594d53e66549e89a0e0ef3d121a497063538977fe7331 rebuilt byte for byte
+project-md-noescape: tar 9edfdc0755143fea34cff5242c2328b6a316511373ba9260f5b6f40c336df63e rebuilt byte for byte
+gstack-main: tar.gz e3550e78186dd8667d9d8d1d73a855ef377e971199b9b248a839d19837d0ddbc unpacks to the manifest's tar ee58dd16b7516d1b865527cd79bb5906ca6097b2c41a68360689ea2a88ab81eb
+gstack-main: the tree holds prove-it byte for byte, gstack 5afef04e31de's files at their blobs, 4 hook registrations and the seeded user
+B1D ARMS PASS

@@ -1,0 +1,58 @@
+{
+  "arm": "project-md-noescape",
+  "claude_code": "2.1.312",
+  "typed": false,
+  "spec": "project-md-noescape:tar=project-md-noescape:system_prompt=claude-code-preset:gstack_hooks=copy:strip_snapshot=true:closing_line=hm-status:checks_trust=true",
+  "steps": {
+    "sha256": "47bfc31f877aef8938dfabc4984a759eaaa1f8f7588a408c542199bde6e34557",
+    "bytes": 203,
+    "source": "https://github.com/addyosmani/agent-skills 39b723ceebf81474d0557c1fecd01eddab585563 .claude/commands/test.md lines 13-18"
+  },
+  "carrier": {
+    "file": "gstack-shaped-SKILL.md",
+    "bytes": 9343,
+    "before": 9140,
+    "after": 0,
+    "path": ".claude/skills/prove-it/SKILL.md"
+  },
+  "route": {
+    "from": "B1c's project-md arm",
+    "block_change": {
+      "removed": "; answer directly for quick questions or small scoped edits.",
+      "put": "."
+    },
+    "files": [
+      {
+        "path": ".b1c/CLAUDE.md",
+        "sha256": "ad1523dfeeb23da8043862c7052600f0161d3af8b89fab60c716d41a367b46e1"
+      },
+      {
+        "path": ".claude/skills/gstack/bin/gstack-checks",
+        "sha256": "30be001ab82de19aee67c03d45716a72626aa531f793062146f951e2bf1c3783"
+      }
+    ],
+    "placed_at": "/testbed/CLAUDE.md"
+  },
+  "tar_command": "tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner --format=gnu -cf <arm>.tar <top folders> (tar (GNU tar) 1.35)",
+  "tar": {
+    "file": "project-md-noescape.tar",
+    "bytes": 30720,
+    "sha256": "9edfdc0755143fea34cff5242c2328b6a316511373ba9260f5b6f40c336df63e"
+  },
+  "tree": {
+    "files": 6,
+    "symlinks": 0,
+    "dirs": 6,
+    "bytes": 13534,
+    "digest": "aca28fecc85def2370001d2d291d5f8d3312483bc0b7764de3c1c830debf96de"
+  },
+  "skills": {
+    "count": 1,
+    "tree_digest": "9530f878d121e166f550daf7e4cbcc8d5a2c5d129f7af7331cf4da565c857cbe",
+    "skill_md_digest": "4176b10ed0b16029089b374538f4ddd2afc2bc0e7721d777feef435cf84d2e5f",
+    "names": [
+      "prove-it"
+    ]
+  },
+  "inventory_sha256": "b147ba8901a3b96babf2c9f78792e6fc164f87ad94b8c1d817bf5eb3567d39e3"
+}

@@ -929,9 +929,9 @@ Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing
 
 ### E_INTERACTIVE_HOST
 
-A task declared interactive was sent to --host codex, which runs only non-interactive tasks in v1.
+A task declared interactive was sent to --host codex with a model the pinned Codex offers no request_user_input_async. Codex answers its own request_user_input itself, so that model's questions would never reach the user simulator.
 
-Fix: Use --host claude, or --tasks-only with the other ids. The message names the interactive task ids. Do not --resume.
+Fix: Use --host claude, a Codex model in the adapter's ASYNC_QUESTION_MODELS list, or --tasks-only the non-interactive tasks. Do not --resume.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U7.
 

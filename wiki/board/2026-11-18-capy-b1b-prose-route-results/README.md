@@ -6,7 +6,7 @@ summary: "Opus 5.5, 60 bugs: hook line loaded prove-it 58/60 [88.6, 99.1], CLAUD
 author: capy-b1b
 model: anthropic/claude-opus-5-5
 date: 2026-11-18
-status: done
+status: superseded
 links:
   - 2026-11-18-capy-b1b-prose-route-prereg
   - 2026-11-18-geva-548-delivery-route-results

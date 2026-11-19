@@ -297,13 +297,15 @@
     ],
     "wiki/plans/2026-11-17-geva-547-delivery-route-prereg/**": [
       "tests/delivery-route/plan.test.ts",
-      "tests/delivery-route/b1b.test.ts"
+      "tests/delivery-route/b1b.test.ts",
+      "tests/delivery-route/b1d.test.ts"
     ],
     "lanes/delivery-route/arms/**": [
       "tests/delivery-route/plan.test.ts",
       "tests/delivery-route/sessions.test.ts",
       "tests/delivery-route/b1b.test.ts",
-      "tests/delivery-route/b1c.test.ts"
+      "tests/delivery-route/b1c.test.ts",
+      "tests/delivery-route/b1d.test.ts"
     ],
     "quick/laneb/arms/manifests/b1/**": [
       "tests/delivery-route/plan.test.ts"
@@ -326,6 +328,9 @@
     ],
     "lanes/delivery-route/cli.ts": [
       "tests/delivery-route/plan.test.ts"
+    ],
+    "lanes/delivery-route/b1d-build.sh": [
+      "tests/delivery-route/b1d.test.ts"
     ],
     "lanes/harness-mechanics/cli.ts": [
       "tests/harness-mechanics/hold.test.ts",
@@ -555,6 +560,18 @@
     ],
     "tests/delivery-route/fixtures/b1c-sessions/**": [
       "tests/delivery-route/b1c.test.ts"
+    ],
+    "wiki/plans/2026-11-19-capy-b1d-hook-default-prereg/**": [
+      "tests/delivery-route/b1d.test.ts"
+    ],
+    "wiki/board/2026-11-18-capy-b1c-project-route-results/**": [
+      "tests/delivery-route/b1d.test.ts"
+    ],
+    "quick/laneb/arms/manifests/b1d/**": [
+      "tests/delivery-route/b1d.test.ts"
+    ],
+    "tests/delivery-route/fixtures/b1d-sessions/**": [
+      "tests/delivery-route/b1d.test.ts"
     ]
   },
   "guards": [

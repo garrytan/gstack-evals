@@ -1,0 +1,20 @@
+$ b1d sessions run --out <dir> --cut tests/delivery-route/fixtures/b1d-sessions
+main-one listing {"chars":9746,"entries":64,"bare":0,"prove_it":"full"}
+main-setup listing {"chars":9746,"entries":64,"bare":0,"prove_it":"full"}
+main-two listing {"chars":9746,"entries":64,"bare":0,"prove_it":"full"}
+main-none listing {"chars":9746,"entries":64,"bare":0,"prove_it":"full"}
+main-guard listing {"chars":9746,"entries":64,"bare":0,"prove_it":"full"}
+noescape-stop listing {"chars":426,"entries":2,"bare":0,"prove_it":"full"}
+project-md-stop listing {"chars":426,"entries":2,"bare":0,"prove_it":"full"}
+none-stop listing {"chars":332,"entries":1,"bare":0,"prove_it":"absent"}
+B1D SESSIONS PASS 8 cases
+
+What each scripted session delivered (from the cut captures; Claude Code 2.1.312, stub model):
+main-one (gstack-main, script load, prompt fix): hook names ["prove-it"]; hook lines in the first request 1; prove-it loaded true via Skill at call 1; /verify loaded false
+main-setup (gstack-main, script setup, prompt fix): hook names ["prove-it"]; hook lines in the first request 1; prove-it loaded false; /verify loaded false; gstack-skill-start printed SKILL_START_PROTO: 1 true
+main-two (gstack-main, script verify, prompt two): hook names ["verify","prove-it"]; hook lines in the first request 1; prove-it loaded false; /verify loaded true
+main-none (gstack-main, script stop, prompt plain): hook names []; hook lines in the first request 0; prove-it loaded false; /verify loaded false
+main-guard (gstack-main, script guard, prompt plain): hook names []; hook lines in the first request 0; prove-it loaded false; /verify loaded false; guard ask, reset ran true, files left changed 0
+noescape-stop (project-md-noescape, script stop, prompt plain): hook names n/a (no hook); hook lines in the first request 0; prove-it loaded false; /verify loaded false; CLAUDE.md sha256 ad1523dfeeb2, last commit "chore: add gstack skill routing rules to CLAUDE.md" (2 commits)
+project-md-stop (project-md, script stop, prompt plain): hook names n/a (no hook); hook lines in the first request 0; prove-it loaded false; /verify loaded false; CLAUDE.md sha256 2f2016daef2b, last commit "chore: add gstack skill routing rules to CLAUDE.md" (2 commits)
+none-stop (none, script stop, prompt plain): hook names n/a (no hook); hook lines in the first request 0; prove-it loaded false; /verify loaded false

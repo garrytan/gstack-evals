@@ -20,7 +20,7 @@
 // output proves nothing when the call's own input quotes the sentinel (an echo) or the call launched a subagent, whose
 // result is that agent's own text.
 //
-// Codex (`codex exec --json`) runs non-interactive tasks only. Its turns are its agent messages, the last being the final
+// Codex (`codex exec --json`, then `codex exec resume` for each later user message). Its turns are its agent messages, the last being the final
 // answer; reasoning is not a turn. Its calls are its shell commands (ok on exit 0), file changes and MCP calls, so the
 // skill opens only on a shell read under one of the skill's roots that exits 0.
 import type { AskQuestion } from "../usersim/classifier.ts";
