@@ -140,6 +140,13 @@ describe("practice 5: the judge check", () => {
     expect(check(prereg(noJudge))).toEqual([]);
   });
 
+  test("a bare, dash or n/a judge line fails", () => {
+    for (const line of ["Judge:", "Judge: -", "Judge: n/a"]) {
+      const problems = check(prereg(noJudge.replace("Judge: none", line)));
+      expect(problems).toEqual([PREREG + ': practice 5: "Judge:" line is empty; write "Judge: none" or "<lab>/<model> scores <lab>/<model>" (wiki/README.md, Eval plans and results, gives the format)']);
+    }
+  });
+
   test("a prereg with no judge check section fails", () => {
     const problems = check(prereg(swap(/## Judge check\n[\s\S]*?(?=## Interim look)/, "")));
     expect(has(problems, 'practice 5: no "## Judge check" section')).toBe(true);
@@ -207,6 +214,12 @@ describe("practice 12: the results line", () => {
 
   test("a call of none passes", () => {
     expect(check({ [RESULTS]: post(RESULTS_ID, "finding", "Cost and call: paid $0, meter $12.40; settled: none\n") })).toEqual([]);
+  });
+
+  test("a results page titled Quick look is checked as a results page", () => {
+    const quickResults = (body: string) => ({ [RESULTS]: post(RESULTS_ID, "finding", body, "Quick look 4 results") });
+    expect(has(check(quickResults("# Quick look 4 results\n\nIt cost $40.\n")), 'practice 12: no "Cost and call: paid $<n>, meter $<n>; settled:')).toBe(true);
+    expect(check(quickResults(PASSING_RESULTS))).toEqual([]);
   });
 
   test("a results page without the line fails", () => {

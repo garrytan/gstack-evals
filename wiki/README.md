@@ -108,7 +108,7 @@ The check reads these posts:
 
 - a **preregistration**: an id ending in `-prereg`, or a title starting "Preregistration";
 - a **quick look**: an id ending in `-quick-look`, or a title starting "Quick look";
-- a **results page**: an id ending in `-results`.
+- a **results page**: an id ending in `-results`, whatever its title says.
 
 Amendments, pins and addenda are not preregistrations, so they are not checked. A post that is already on the base branch is never checked, so plans and results merged before these rules stay as they are. The check decides this from git, not from the post's date. With no base (`--base none`) it does not run.
 
@@ -144,7 +144,7 @@ Other looks: none
 
 - **Decision** names at least two outcomes, each with what we do then: `- If <outcome>: <what we do>` lines, or a table with a row per outcome.
 - **Pilots** has one row per arm, the no-gstack arm included, with these six cells in this order. The pilot cap is at most a tenth of the arm's budget, both in dollars. Each pilot says how it shows, on that arm's own outputs, that the part under test ran, that the judge passes its check there, and that the tasks can be supplied at the planned rate. The judge cell may be `none` only when the plan has no model judge.
-- **Judge check** has one `Judge: <lab>/<model> scores <lab>/<model>[, ...]` line per judge, and the judge's lab differs from every lab it scores. Then at least 40 labelled outputs, a kappa of at least 0.6, and errors read per arm. A plan with no model judge writes `Judge: none` and nothing else here.
+- **Judge check** has one `Judge: <lab>/<model> scores <lab>/<model>[, ...]` line per judge, and the judge's lab differs from every lab it scores. Then at least 40 labelled outputs, a kappa of at least 0.6, and errors read per arm. A plan with no model judge writes `Judge: none` and nothing else here; an empty `Judge:` line fails.
 - **Interim look** gives the planned paid spend of the largest counted run. Above $500, the plan takes one look at half the units, fixes its stop bounds and takes no other look. At $500 or less, the other lines are optional; `Look: none` says so.
 
 A quick look (at most $100 paid and one day) needs none of that, only its three-line plan and its size:
