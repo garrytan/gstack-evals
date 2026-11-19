@@ -20,7 +20,7 @@ attachments:
   - ef43f5922698f89db7d9b4db3267ba83bdc154400ccd5a251983a5d2e344407b  arms.txt
   - 196abeec6850fc36288c6f1e3b18163de27fe3f75c1c76fd853260543e1413c8  draw.py
   - 25409663db64f243055b51c88873abedf37961d98a523e7f25271b119f108704  heldout.txt
-  - 690de600e2b1f7f77218a21337ab3af9b41973bd11c14506d789e1eb30dedbe0  plan.txt
+  - 709bfafebcd99396313864d1087c92a03f5f726ee9b7f484a443c5d554452822  plan.txt
   - 86aacff0bfc9f9d9970bc4f66986c0fe9b0b578750f6c7885a8c098a93b8c440  power.txt
   - 744e994ca03fdff3e7b0db3e56dcb8f3208852d94cc9940bf951e0dc71ca5e7b  reuse.txt
   - eda0c168d58bf30f0c30e2951b7d7d670e716efdac2994acd707942434d5e93c  route-table.tsv
@@ -98,7 +98,7 @@ The prompt is B1's plain prompt, as B1b and B1c sent it. It never opens with `/p
 
 **Held-out.** 60 tasks drawn from a pool none of B1's tasks share a repository with (section 6). The list stays sealed until every held-out arm finishes.
 
-**Smoke.** Two calibration tasks from B1's screened list, outside B1's 62 tasks' repositories and outside the held-out pool (it holds scored tasks only), picked before any session by their keyless route: in sorted order, the first the hook names prove-it alone on (aallan__vera-662_interface) and the first it names nothing on (imperialcollegelondon__pyrealm-593). B1's own two smoke tasks are both named nothing at the pin, so they could not show the hook's line reaching a session.
+**Smoke.** Two calibration tasks from B1's screened list, outside B1's 62 tasks' repositories and outside the held-out pool (it holds scored tasks only), picked before any session by their keyless route: in sorted order, the first the hook names prove-it alone on (aallan__vera-662_interface) and the first it names nothing on (imperialcollegelondon__pyrealm-593). B1's own two smoke tasks are both named nothing at the pin, so they could not show the hook's line reaching a session. The smoke tasks are also the pilot's: every arm runs both before any counted run (section 13).
 
 ## 4. The arms
 
@@ -230,15 +230,17 @@ Keyless, before this preregistration merged:
 - Eight scripted sessions in the real Claude Code 2.1.312 image against a stub model, through the rig's own agent code with the strip on (`b1d sessions run`, fixtures under tests/delivery-route/fixtures/b1d-sessions, sessions.txt). On gstack-main: a "Fix this bug:" prompt gets one hook line naming /prove-it alone, and a Skill load of prove-it reads as a load at the first call; a "Fix this bug and make the tests pass:" prompt gets the two-name line with /verify first, and a /verify load reads as "loaded /verify instead"; the plain prompt gets no line and the reason "hook did not name prove-it"; prove-it's preamble runs against gstack's real scripts (gstack-skill-start prints SKILL_START_PROTO: 1); and gstack's destructive-command check answers "ask" on `cd /testbed && git reset --hard`, which the rig's permission callback allows, so the reset runs unattended and leaves the tree clean. On project-md-noescape and project-md: the first request holds the block as the project CLAUDE.md, with and without the escape clause, the file is the block byte for byte and the last commit is gstack's routing commit on the snapshot. On none: Claude Code's plugin-authoring is the only skill listed. Each arm's listing size is in section 4 and sessions.txt; B1b's and B1c's arms listed 2 skills in 426 characters, as project-md and project-md-noescape do here.
 - `b1d reuse`: both reuse checks pass at main (reuse.txt).
 - `b1d plan` and `b1d power`: plan.txt and power.txt.
-- Tests (tests/delivery-route/b1d.test.ts): the noescape block, the route table's counts and smoke rule, the bar at its edge with INCOMPLETE and a cap stop, every held-out stop and every R48 row, the reasons in order, the power numbers, the plans, caps, approval rows and launch guard, both reuse checks, the session rows on captured sessions, and the eight captures, each also changed so a check must fail.
+- Tests (tests/delivery-route/b1d.test.ts): the noescape block, the route table's counts and smoke rule, the bar at its edge with INCOMPLETE and a cap stop, every held-out stop and every R48 row, the reasons in order, the power numbers, the plans, caps, approval rows and launch guard, the pilot's pass rules per arm, both reuse checks, the session rows on captured sessions, and the eight captures, each also changed so a check must fail.
 
-Paid, after merge and before the in-sample run: the smoke item, the two smoke tasks on gstack-main. It passes when both sessions are graded or rerun to graded, both hook logs are copied, the hook named prove-it alone on the first and nothing on the second (as the route table says), neither session holds an audit hit, and a hand reading of both agrees with the readers. Its cost per session feeds the launch guard. A smoke failure goes to the Captain before the in-sample run; smoke sessions never enter a reading.
+Paid, after merge and before any counted run: the pilot, which is the smoke item. Both smoke tasks run on all four arms, eight sessions, and each arm is checked on its own outputs; `b1d report --item b1d-smoke` prints a PASS or FAIL line per arm. Every arm needs both its sessions graded, or rerun to graded inside the item, which shows its tasks can be supplied, and no audit hit in either. Each arm must also show that its part under test ran. On gstack-main, both hook logs are copied and the hook named prove-it alone on the first task and nothing on the second, as the route table says. On project-md and project-md-noescape, the block was placed as the project CLAUDE.md in both sessions. none has no part beyond the absence of gstack, which the audit covers. A hand reading of all eight sessions agrees with the readers. No arm has a model judge, so there is no judge check.
+
+An arm that fails its pilot is fixed or left out of the counted runs, and a left-out arm is reported as left out. It is never rerun quietly into a counted run: every failure goes to the Captain before the in-sample run, and a fix comes back as a dated change to this plan with its own pilot. Pilot sessions never enter a reading. The pilot's cost per session feeds the launch guard. No pilot runs on sealed tasks, so the held-out list stays unseen: the held-out arms run the same task set on the same rig, every pool task ran on this rig in the harness mechanics eval (section 6), and `b1d reuse` shows the rig unchanged (section 7).
 
 Before the results are written, at least four counted gstack-main sessions are read by hand from their transcripts, two that loaded and two that didn't where the run has them, and checked against the load detector, the /verify reader and the hook log.
 
 ## 14. Order and machines
 
-b1d-smoke; then b1d-in's three parts of 20 (B1's 60 run tasks in draw order, gstack-main only); then b1d-ho's three parts of 80 (the held-out list in draw order, 20 tasks a part, all four arms of each task in its part). Each part runs in L1's seeded order with B1's seed. One awake host (standard-2) and one part VM (standard-16) at a time, under the shared project's free-capacity rule. Every VM is destroyed when its work ends.
+b1d-smoke, the pilot (both smoke tasks on all four arms); then b1d-in's three parts of 20 (B1's 60 run tasks in draw order, gstack-main only); then b1d-ho's three parts of 80 (the held-out list in draw order, 20 tasks a part, all four arms of each task in its part). Each part runs in L1's seeded order with B1's seed. One awake host (standard-2) and one part VM (standard-16) at a time, under the shared project's free-capacity rule. Every VM is destroyed when its work ends.
 
 ## 15. Limits
 
@@ -258,6 +260,7 @@ b1d-smoke; then b1d-in's three parts of 20 (B1's 60 run tasks in draw order, gst
 - **In-sample label and the held-out set.** The primary keeps gstack's owner's bar on the 60, labelled in-sample for routing with its tuning history (section 5). The held-out set of 60, its four arms, its MDD and its disagreement rule are added (sections 1, 6 and 11).
 - **The noescape arm.** Added on the held-out set, with the rewrite rule and the R48 wording in section 1. b1d-ho's cap went from $150 to $185 and the all-in stop from $300 to $340.
 - **The smoke.** Two calibration tasks replace B1's smoke tasks, which the hook names nothing on (section 3).
+- **The pilot.** Our eval rules now ask for a pilot before each arm's counted run: a small paid run that shows, on that arm's own outputs, that its part under test ran and its tasks can be supplied. The smoke item became that pilot for all four arms, eight sessions instead of two, with the pass rules in section 13. b1d-smoke's cap went from $20 to $50, so the recorded caps sum to $325; the all-in stop stays $340.
 - **The commit cue** was checked against gstack at the pin and stays (section 4).
 - **Strata** on the held-out set (section 8).
 - **quick/laneb/arms/Dockerfile.** Its last step, which runs after the tar is written, moved setup's render folder aside and back unconditionally; a full-loadout setup renders nothing there, so the step now moves it only when it exists. No tar changes, and a lite setup's path is the same.
@@ -273,11 +276,11 @@ Money runs on the Lane B ledger, one item per run, each opened with its approval
 
 | Item | Sessions | Expected model spend | Open-session reserve | VM share | Formula cap | Recorded cap |
 |---|---|---|---|---|---|---|
-| b1d-smoke | 2 | 0.96 | 10.00 | 7.20 | 20 | 20 |
+| b1d-smoke | 8 | 3.26 | 30.00 | 7.20 | 50 | 50 |
 | b1d-in | 60 | 28.80 | 30.00 | 14.88 | 90 | 90 |
 | b1d-ho | 240 | 97.80 | 30.00 | 14.88 | 180 | 185 |
 
-Dollars. Expected spend is sessions at each arm's planning rate: gstack-main 0.48 (B1's measured mean for its gstack-shaped arm on Opus, above B1b's hook arm at 0.403, to cover the larger listing and gstack's full install), project-md and project-md-noescape 0.42 (B1c's measured 0.414, rounded up), none 0.31 (B1's measured none-arm mean). Each formula cap is ceil10(1.35 x expected + the open-session reserve + VM share): the reserve is the $5 allowance times the sessions that can be open at once (six, or fewer when a part holds fewer), and the VM share is the host's reserve for its TTL at 0.08 an hour plus each part VM's 4-hour blocks at 0.60 an hour (b1d.ts b1dCap; plan.txt). b1d-ho's recorded cap is the Captain's $185, above its formula. The recorded caps sum to 295. Before each launch the guard refuses when the item's projection passes its cap, when either reuse check fails (section 7), when the checkout holds uncommitted harness changes, or when every item's projection plus this lane's own counter passes 340 all-in; a refusal goes to the Captain.
+Dollars. Expected spend is sessions at each arm's planning rate: gstack-main 0.48 (B1's measured mean for its gstack-shaped arm on Opus, above B1b's hook arm at 0.403, to cover the larger listing and gstack's full install), project-md and project-md-noescape 0.42 (B1c's measured 0.414, rounded up), none 0.31 (B1's measured none-arm mean). Each formula cap is ceil10(1.35 x expected + the open-session reserve + VM share): the reserve is the $5 allowance times the sessions that can be open at once (six, or fewer when a part holds fewer), and the VM share is the host's reserve for its TTL at 0.08 an hour plus each part VM's 4-hour blocks at 0.60 an hour (b1d.ts b1dCap; plan.txt). b1d-ho's recorded cap is the Captain's $185, above its formula. The recorded caps sum to 325. Before each launch the guard refuses when the item's projection passes its cap, when either reuse check fails (section 7), when the checkout holds uncommitted harness changes, or when every item's projection plus this lane's own counter passes 340 all-in; a refusal goes to the Captain.
 
 </details>
 

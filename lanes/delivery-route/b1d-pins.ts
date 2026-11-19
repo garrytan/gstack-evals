@@ -104,7 +104,7 @@ export const B1D = {
   // paired tasks detect with 80% power, in whole points.
   hoMdd: 0.26,
 } as const;
-export const B1D_CAPS_USD = { "b1d-smoke": 20, "b1d-in": 90, "b1d-ho": 185 } as const;
+export const B1D_CAPS_USD = { "b1d-smoke": 50, "b1d-in": 90, "b1d-ho": 185 } as const;
 export type B1dItem = keyof typeof B1D_CAPS_USD;
 export const B1D_ITEMS = Object.keys(B1D_CAPS_USD) as B1dItem[];
 export const isB1dItem = (x: string): x is B1dItem => Object.hasOwn(B1D_CAPS_USD, x);

@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
-// B1d (lanes/delivery-route/b1d.ts): the noescape block and the small tars, the route table and the smoke rule, Garry's bar
+// B1d (lanes/delivery-route/b1d.ts): the noescape block and the small tars, the route table, the smoke rule and the pilot, Garry's bar
 // and the held-out readings, the power table, the caps and launch guard, the controls' reuse check, the session rows and the
 // eight scripted sessions' captures.
 import { describe, expect, test } from "bun:test";
@@ -7,7 +7,7 @@ import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
-import { B1D_CASES, b1cRows, b1dMain, inSampleRoutes, powerLines, b1dApprove, b1dCap, b1dCaseProblems, b1dDone, b1dGuard, b1dPlan, b1dRow, b1dStats, band, checkB1dRows, clearOdds, hoMdd, hoReading, hoReport, inReading, listingFacts, loadB1dCaptured, namedOf, noescapeBlock, positionOf, readRouteTsv, reuseB1c, routeCounts, routeFile, routesByTask, smokeOf, splitLines, tertiles, WHY_NOT_MAIN, whyNot, type B1dRow, type InReading } from "../../lanes/delivery-route/b1d.ts";
+import { B1D_CASES, b1cRows, b1dMain, inSampleRoutes, powerLines, b1dApprove, b1dCap, b1dCaseProblems, b1dDone, b1dGuard, b1dPlan, b1dRow, b1dStats, band, checkB1dRows, clearOdds, hoMdd, hoReading, hoReport, inReading, listingFacts, loadB1dCaptured, namedOf, noescapeBlock, pilotCheck, positionOf, readRouteTsv, reuseB1c, routeCounts, routeFile, routesByTask, smokeOf, splitLines, tertiles, WHY_NOT_MAIN, whyNot, type B1dRow, type InReading } from "../../lanes/delivery-route/b1d.ts";
 import { B1D, B1D_ARM, B1D_ARM_NAMES, B1D_CAPS_USD, B1D_SMOKE, GSTACK_ARM, HELDOUT, NOESCAPE } from "../../lanes/delivery-route/b1d-pins.ts";
 import { PLACEMENT } from "../../lanes/delivery-route/b1c-pins.ts";
 import { reuseCheck, type Load } from "../../lanes/delivery-route/b1b.ts";
@@ -169,9 +169,44 @@ describe("power", () => {
   test("the held-out MDD at B1c's 39 of 60 is the frozen 26 points", () => expect(hoMdd(39 / 60)).toBe(B1D.hoMdd));
 });
 
+describe("the pilot", () => {
+  const routes = readRouteTsv(readFileSync(routeFile(), "utf8")), [named, nothing] = B1D_SMOKE;
+  const pilot = (over: (r: B1dRow) => Partial<B1dRow> = () => ({})) => B1D_ARM_NAMES.flatMap((a) => B1D_SMOKE.map((t) => { const r = row(a, t, false, a === B1D_ARM && t === nothing ? { named: [], position: "not named" } : {}); return { ...r, ...over(r) }; }));
+  const failed = (over: (r: B1dRow) => Partial<B1dRow>) => pilotCheck(pilot(over), routes).failed;
+  test("every arm passes on its own outputs: graded, no audit hit, the hook's names as the route table gives them, the block placed", () => {
+    expect(pilotCheck(pilot(), routes)).toEqual({ lines: B1D_ARM_NAMES.map((a) => "  pilot PASS " + a), failed: [] });
+  });
+  test("a missing grade, an audit hit, a wrong or lost hook line or an unplaced block fails only its own arm", () => {
+    expect(failed((r) => (r.arm === "none" && r.task === nothing ? { outcome: "infra" } : {}))).toEqual(["none"]);
+    expect(pilotCheck([...pilot(), row("none", nothing, false)], routes).failed).toEqual(["none"]);
+    expect(failed((r) => (r.arm === NOESCAPE.arm && r.task === named ? { audit_hits: ["/root/.claude/skills/gstack/SKILL.md"] } : {}))).toEqual([NOESCAPE.arm]);
+    expect(failed((r) => (r.arm === B1D_ARM && r.task === nothing ? { named: ["prove-it"] } : {}))).toEqual([B1D_ARM]);
+    expect(failed((r) => (r.arm === "project-md" && r.task === nothing ? { placed: false } : {}))).toEqual(["project-md"]);
+    const lost = pilotCheck(pilot((r) => (r.arm === B1D_ARM && r.task === named ? { named: null, position: null } : {})), routes);
+    expect(lost.failed).toEqual([B1D_ARM]);
+    expect(lost.lines[0]).toBe("  pilot FAIL " + B1D_ARM + ": " + named + ": the hook named nothing (no hook log), the route table [prove-it]");
+    expect(pilotCheck(pilot(), routes.filter((r) => r[1] !== nothing)).failed).toEqual([B1D_ARM]);
+  });
+  test("report --item b1d-smoke checks all four arms and prints each arm's pilot line", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "b1d-report-")), path = join(dir, "smoke.jsonl"), out: string[] = [], log = console.log, err = console.error;
+    console.log = (m: string) => { out.push(m); };
+    console.error = () => {};
+    try {
+      writeFileSync(path, pilot().map((r) => JSON.stringify(r)).join("\n") + "\n");
+      expect(await b1dMain(["report", path, "--item", "b1d-smoke"])).toBe(0);
+      expect(out.filter((l) => l.startsWith("  pilot "))).toEqual(B1D_ARM_NAMES.map((a) => "  pilot PASS " + a));
+      expect(B1D_ARM_NAMES.every((a) => out.some((l) => l.startsWith("  " + a + ": loaded 0/2 ")))).toBe(true);
+      writeFileSync(path, [...pilot(), row(B1D_ARM, "zz", false)].map((r) => JSON.stringify(r)).join("\n") + "\n");
+      expect(await b1dMain(["report", path, "--item", "b1d-smoke"])).toBe(2);
+    } finally { console.log = log; console.error = err; rmSync(dir, { recursive: true, force: true }); }
+  });
+});
+
 describe("money", () => {
-  test("the plans: 2 smoke sessions, 60 in-sample, 240 held-out in three parts of 80 with every arm of a task in its part", () => {
-    expect(b1dPlan("b1d-smoke", RUN, null).sessions).toBe(2);
+  test("the plans: an 8-session pilot (both smoke tasks on all four arms), 60 in-sample, 240 held-out in three parts of 80 with every arm of a task in its part", () => {
+    const pilot = b1dPlan("b1d-smoke", RUN, null);
+    expect([pilot.sessions, pilot.parts.length]).toEqual([8, 1]);
+    expect(pilot.parts[0]!.rects.flatMap((r) => r.arms).sort()).toEqual([...B1D_ARM_NAMES].sort());
     expect(b1dPlan("b1d-in", RUN, null).sessions).toBe(60);
     const ho = b1dPlan("b1d-ho", RUN, null);
     expect([ho.sessions, ho.parts.length]).toEqual([240, 3]);

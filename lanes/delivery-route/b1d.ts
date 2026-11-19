@@ -215,10 +215,13 @@ export const isHeldoutCoverage = (n: ReturnType<typeof routeCounts>) => n.only =
 export type TaskRoute = { position: Position; chars: number };
 export const routesByTask = (rows: string[][]) => new Map(rows.map((r) => [r[1]!, { position: r[7] as Position, chars: Number(r[3]) }]));
 export const routeFile = () => join(REPO, B1D_BUNDLE, "route-table.tsv");
-export function inSampleRoutes(): Map<string, TaskRoute> {
+function committedRouteRows(): string[][] {
   const want = frontMatterDigests(readFileSync(join(REPO, B1D_BUNDLE, "README.md"), "utf8")).get("route-table.tsv"), text = readFileSync(routeFile(), "utf8");
   if (sha256(text) !== want) pinErr(B1D_BUNDLE + "/route-table.tsv hashes to " + sha256(text) + ", not its front matter's " + want);
-  return routesByTask(readRouteTsv(text).filter((r) => r[0] === "run" || r[0] === "calibration"));
+  return readRouteTsv(text);
+}
+export function inSampleRoutes(): Map<string, TaskRoute> {
+  return routesByTask(committedRouteRows().filter((r) => r[0] === "run" || r[0] === "calibration"));
 }
 
 // ---- The held-out list: read from B1D_HELDOUT, refused unless it is the committed draw.
@@ -232,7 +235,7 @@ export function heldoutTasks(path = process.env[HELDOUT.env] ?? ""): string[] {
 // ---- Plan, profile and money.
 const item = (capUsd: number): ItemDef => ({ capUsd, taskSet: "swerebench-r3a4", cells: MODELS.opus.cells, allowanceUsd: MODELS.opus.allowanceUsd, model: MODELS.opus.id });
 export const B1D_ITEM_DEFS = Object.fromEntries(B1D_ITEMS.map((i) => [i, item(B1D_CAPS_USD[i])])) as Record<B1dItem, ItemDef>;
-/** b1d-smoke: the two smoke tasks, gstack-main, one part. b1d-in: B1's 60 run tasks in draw order, gstack-main, 20 a part.
+/** b1d-smoke: the pilot, the two smoke tasks on all four arms, one part. b1d-in: B1's 60 run tasks in draw order, gstack-main, 20 a part.
  *  b1d-ho: the 60 held-out tasks in draw order, all four arms, 20 tasks a part with every arm of a task in its part. Each
  *  part's cells run in the order L1's seeded() gives with B1's seed. A held-out list of null plans placeholder names, for
  *  counts and caps only. */
@@ -240,7 +243,7 @@ export function b1dPlan(name: string, run: string[], heldout: string[] | null): 
   const part = (p: string, rects: Rect[]): PartPlan => ({ name: p, prefix: prefixOf(name, p), rects: seeded(rects, B1.seed) });
   const split = (tasks: string[], arms: string[], tag: string) => Array.from({ length: Math.ceil(tasks.length / B1D.partTasks) }, (_, i) => part(tag + "-" + (i + 1), [{ tasks: tasks.slice(i * B1D.partTasks, (i + 1) * B1D.partTasks), arms, attempts: 1 }]));
   let parts: PartPlan[];
-  if (name === "b1d-smoke") parts = [part("smoke-opus", [{ tasks: [...B1D_SMOKE], arms: [B1D_ARM], attempts: 1 }])];
+  if (name === "b1d-smoke") parts = [part("smoke-opus", [{ tasks: [...B1D_SMOKE], arms: [...B1D_ARM_NAMES], attempts: 1 }])];
   else if (name === "b1d-in") parts = split(run, [B1D_ARM], "b1d-in");
   else if (name === "b1d-ho") parts = split(heldout ?? Array.from({ length: HELDOUT.tasks }, (_, k) => "held-out-" + k), [...B1D_ARM_NAMES], "b1d-ho");
   else return usage("unknown item " + name + "; one of " + B1D_ITEMS.join(", "));
@@ -517,6 +520,26 @@ export function hoReport(rows: B1dRow[], inR: InReading, routes: Map<string, Tas
     ...([B1D_ARM, "project-md", NOESCAPE.arm] as B1dArm[]).map((a) => pairLine("followed, " + a + " - none", paired(of(a), of("none"), followed, followed))), ...strataLines(rows, B1D_ARM_NAMES, routes, tasks),
     "  R48 for CLAUDE.md routing: " + reading.verdict, "  decision: " + reading.decision];
   return { lines, stats: st, reading };
+}
+/** The pilot on the smoke tasks, per arm: each task has one graded row (its task can be supplied) with no audit hit, the
+ *  gstack-main hook named what the route table's hook_names gives for the task, and each project-file arm's block was placed.
+ *  One PASS or FAIL line per arm, and the arms that failed. */
+export function pilotCheck(rows: B1dRow[], routeRows: string[][], tasks: string[] = [...B1D_SMOKE]): { lines: string[]; failed: B1dArm[] } {
+  const lines: string[] = [], failed: B1dArm[] = [];
+  for (const arm of B1D_ARM_NAMES) {
+    const why: string[] = [];
+    for (const t of tasks) {
+      const g = rows.filter((r) => r.arm === arm && r.task === t && r.outcome === "graded");
+      if (g.length !== 1) { why.push(t + " has " + g.length + " graded rows"); continue; }
+      const r = g[0]!, route = routeRows.find((x) => x[1] === t), want = route ? (route[5] === "-" ? [] : route[5]!.split(",")) : null;
+      if (r.audit_hits.length) why.push(t + " has " + r.audit_hits.length + " audit hits");
+      if (arm === B1D_ARM && (want === null || JSON.stringify(r.named) !== JSON.stringify(want))) why.push(t + ": the hook named " + (r.named === null ? "nothing (no hook log)" : "[" + r.named.join(",") + "]") + ", the route table " + (want === null ? "has no row" : "[" + want.join(",") + "]"));
+      if ((arm === "project-md" || arm === NOESCAPE.arm) && r.placed !== true) why.push(t + ": the block was not placed");
+    }
+    if (why.length) failed.push(arm);
+    lines.push("  pilot " + (why.length ? "FAIL " + arm + ": " + why.join("; ") : "PASS " + arm));
+  }
+  return { lines, failed };
 }
 export function checkB1dRows(rows: B1dRow[], tasks: string[], arms: B1dArm[]): string[] {
   const bad: string[] = [], seen = new Set<string>();
@@ -886,11 +909,11 @@ export async function b1dMain(argv: string[]): Promise<number> {
       if (!isHeldoutCoverage(routeCounts(ho))) { console.error("E_USAGE b1d report --routes: " + sealed + "'s held-out coverage is not the committed " + JSON.stringify(HELDOUT.coverage)); return 2; }
       hoRoutes = routesByTask(ho);
     }
-    const rows = read(rest[0]), tasks = it === "b1d-smoke" ? [...B1D_SMOKE] : it === "b1d-in" ? drawnTasks(loadBundle()).run : heldoutTasks(), arms = it === "b1d-ho" ? [...B1D_ARM_NAMES] : [B1D_ARM];
+    const rows = read(rest[0]), tasks = it === "b1d-smoke" ? [...B1D_SMOKE] : it === "b1d-in" ? drawnTasks(loadBundle()).run : heldoutTasks(), arms = it === "b1d-in" ? [B1D_ARM] : [...B1D_ARM_NAMES];
     const bad = checkB1dRows(rows, tasks, arms);
     if (bad.length) { for (const b of bad) console.error("E_USAGE b1d report: " + b); return 2; }
     let lines: string[];
-    if (it === "b1d-smoke") lines = ["== B1d smoke", statLine(b1dStats(rows, B1D_ARM, tasks.length)), ...splitLines(rows)];
+    if (it === "b1d-smoke") lines = ["== B1d pilot: the two smoke tasks, four arms", ...B1D_ARM_NAMES.map((a) => statLine(b1dStats(rows, a, tasks.length))), ...splitLines(rows), ...pilotCheck(rows, committedRouteRows()).lines];
     else if (it === "b1d-in") lines = inReport(rows, inSampleRoutes()).lines;
     else {
       if (tasks.some((t) => !hoRoutes.has(t)) || hoRoutes.size !== tasks.length) return usage("b1d report: " + opt("routes") + " is not the held-out route table");
