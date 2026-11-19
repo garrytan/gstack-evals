@@ -6,7 +6,7 @@ summary: "Opus sees every listed skill and skips the ones it thinks it doesn't n
 author: capy
 model: anthropic/claude-opus-5-5
 date: 2026-11-19
-status: done
+status: superseded
 links:
   - 2026-11-18-geva-548-delivery-route-results
   - 2026-11-18-capy-b1b-prose-route-results
