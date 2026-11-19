@@ -30,7 +30,7 @@ export interface FlagSpec {
 export const SKILL_EVAL_FLAGS: readonly FlagSpec[] = [
   { name: "--arms", kind: "list", default: null, summary: "Arms as name=<dir>, name=<repo>@<sha>, name=<loadout.json>, none, placebo or bare; before and after are required.", owner: "U7", built: true },
   { name: "--tasks", kind: "path", default: null, summary: "The contract tasks file (a bare JSON array), usually test/fixtures/skill-evals/<skill>/tasks.json.", owner: "U5", built: true },
-  { name: "--host", kind: "enum", values: ["claude", "codex"], default: null, summary: "The host CLI that runs every session: claude for every task, codex for non-interactive tasks.", owner: "U10", built: true },
+  { name: "--host", kind: "enum", values: ["claude", "codex"], default: null, summary: "The host CLI that runs every session: claude or codex, for every task.", owner: "U10", built: true },
   { name: "--model", kind: "list", default: null, summary: "Models under test, comma-separated; one verdict per model.", owner: "U7", built: true },
   { name: "--trials", aliases: ["--runs"], kind: "int", default: 3, summary: "Trials per task in each arm.", owner: "U7", built: true },
   { name: "--spend-cap", kind: "usd", default: null, summary: "The run's spend limit in dollars, required on any call that can spend; at most the approved cap on record.", owner: "U4", built: true },
