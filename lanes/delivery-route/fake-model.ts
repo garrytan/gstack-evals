@@ -3,7 +3,9 @@
 // [b1-script <mode>] marker in the task text. The task is calc.py's add(), which returns a - b. Each script is a fixed list
 // of tool calls, sent one per turn until each has a result, then a closing STATUS line. The scripts drive the detector both
 // ways on real Claude Code output (prove, bash, background: followed; stop, late, nofail: not), run the gstack-shaped
-// preamble's three gstack commands as the skill writes them (setup), and open the described skill through the Skill tool (skill), or B1b's prove-it skill (load). It logs every request body it answers,
+// preamble's three gstack commands as the skill writes them (setup), and open the described skill through the Skill tool (skill), or B1b's prove-it skill (load).
+// B1d adds two: open gstack's /verify through the Skill tool (verify), and run a git reset --hard that gstack's destructive
+// guard asks about, between an edit and a status count (guard). It logs every request body it answers,
 // so a session's first request can be checked. It never sees a key.
 //
 //   bun lanes/delivery-route/fake-model.ts <port> <request log> <body log>
@@ -11,7 +13,7 @@ import { appendFileSync } from "node:fs";
 import { startFakeUpstream, toolResults, type Block } from "../../quick/laneb/runner/fake_upstream.ts";
 import { DESCRIBED_SKILL, SKILL } from "./pins.ts";
 
-export const MODES = ["stop", "prove", "bash", "late", "nofail", "background", "setup", "skill", "load"] as const;
+export const MODES = ["stop", "prove", "bash", "late", "nofail", "background", "setup", "skill", "load", "verify", "guard"] as const;
 export type Mode = (typeof MODES)[number];
 const T = "/testbed";
 const TEST = T + "/tests/test_calc.py";
@@ -36,6 +38,8 @@ export const SCRIPTS: Record<Mode, Step[]> = {
     bash("~/.claude/skills/gstack/bin/gstack-skill-end --skill \"" + SKILL + "\" --outcome success --session-id \"b1-session\" --tel-start \"$(date +%s)\" --used-browse no --error-message \"\" --failed-step \"\" 2>/dev/null || true")],
   skill: [{ name: "Skill", input: { skill: DESCRIBED_SKILL } }],
   load: [{ name: "Skill", input: { skill: SKILL } }],
+  verify: [{ name: "Skill", input: { skill: "verify" } }],
+  guard: [bash("cd " + T + " && echo '# b1d' >> calc.py"), bash("cd " + T + " && git reset --hard"), bash("cd " + T + " && git status --porcelain | wc -l")],
 };
 const textOf = (m: any): string => (typeof m?.content === "string" ? m.content : (m?.content ?? []).map((b: any) => b.text ?? "").join("\n"));
 
