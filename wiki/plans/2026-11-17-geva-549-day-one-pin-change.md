@@ -287,8 +287,8 @@ The hand labeller's brief carries the same paragraph word for word. The frozen h
 
 **One more validation, once.**
 
-1. All 90 category 2 builds are checked again with the repaired message under new tags: wave-check2 for N, D, R and A (60 builds) and wave-check2-s for S-dayone and S-full (30), on day1-checks, with the flags of the first checks.
-2. The fixtures with the real checker run again with the repaired message (fixtures-real, on day1-smoke) and must pass as before: the placeholder scores 0 with does-nothing-useful set, and the reference scores 5 of 5.
+1. All 90 category 2 builds are checked again with the repaired message under new tags: wave-check2 for N, D, R and A (60 builds, on day1-checks) and wave-check2-s for S-dayone and S-full (30, on day1-strengthened, as the first S checks were). The flags are the first checks' flags, apart from the tags and the spend caps (day1-checks $190, day1-strengthened $100).
+2. The fixtures with the real checker run again with the repaired message (fixtures-real, on day1-smoke, spend cap $20) and must pass as before: the placeholder scores 0 with does-nothing-useful set, and the reference scores 5 of 5.
 3. 12 builds, 3 each from N, D, R and A, are drawn with the frozen seed from wave-check2's scored builds, leaving out the 12 in the first draw (day-one validate draw --exclude).
 4. A new fresh-context labeller, blind to arm, key and verdicts, labels them. Its labels are sealed into the custody store before day-one validate score runs.
 5. The repaired checker counts only if kappa on done reaches at least 0.6 over at least 40 verdicts. If it does not, no category 2 number counts, and there is no third attempt.
