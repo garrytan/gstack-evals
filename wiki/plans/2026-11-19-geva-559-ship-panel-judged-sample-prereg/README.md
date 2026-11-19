@@ -16,8 +16,8 @@ links:
 attachments:
   - b81d9508538e490031435ffd0f5222123de525093d524ab01b4222e4503a4e38  draw.py
   - f52bdf6af5c64f8f562fc92d609f608c7a082d24387597c484a4fa81e40e85f3  draw.txt
-  - 7df60380dbec2228e101d19fd6f86888b8ae9d0a0cc5c4d48151ab1d77c5ffec  power.py
-  - 7b80e3f36637839f34ce90adbe903139e35d1ed1c0c0d86d12b72c5fe8729eba  power.txt
+  - 142972f59cf7d3de511ed7ab92b546b25483872542eba71eeef9d624c0ba71ff  power.py
+  - ae93236026d1197e45146a633bb75528d4ac79edecd75cfbbf46436dfb914430  power.txt
   - 2c45bfef7b270593f76d1a93e5d06c9f9d2e8b7bf51a57d563c28c1731062a2e  prompts.md
 ---
 
@@ -82,7 +82,7 @@ The 120 merged PRs with full 7-day exposure whose added lines a later PR changed
 
 Built keyless from local clones; a PR's head commits come from \`git fetch origin refs/pull/<n>/head\`, which is git, not the API.
 
-**Call A1 (every part A item).** FINDING: every line of the PR description holding the finding id as a whole token, in order; if there is none, the message of each head commit whose trailers include the id, trailers removed. FIX: the diff of each head commit whose trailers include the id; if no head commit carries it, the squash commit's diff for the files the finding names, or the whole squash diff when it names none. TITLE: the PR title. In FINDING and commit messages, finding ids become [id], and reviewer words become [reviewer]: red team, adversarial, outside voice, second-model, cross-family, specialist, batched, the trailer reader names, Codex, Sol, GPT, Opus, Claude, Gemini and Astra, case-insensitive. FIX keeps at most 60,000 characters: files the finding names first, then the rest by lines changed, largest first, cut at a hunk boundary with the cut marked.
+**Call A1 (every part A item).** FINDING: every line of the PR description holding the finding id as a whole token, in order; if there is none, the message of each head commit whose trailers include the id, trailers removed. FIX: the diff of each head commit whose trailers include the id; if no head commit carries it, the squash commit's diff for the files the finding names, or the whole squash diff when it names none. TITLE: the PR title. In FINDING and commit messages, finding ids become [id], and reviewer words become [reviewer]: red team, adversarial, outside voice, second-model, cross-family, specialist, batched, the trailer reader names, Codex, Sol, GPT, Opus, Claude, Gemini and Astra, as whole words, case-insensitive. Three first-pass reader names are also ordinary words (core, testing and security); they are masked only as reader labels, in a finding id or after reader=, never in prose. FIX keeps at most 60,000 characters: files the finding names first, then the rest by lines changed, largest first, cut at a hunk boundary with the cut marked.
 
 **Call A2 (RT, AD and SM items).** The finding unmasked, the head commits that fix it with every trailer they carry, and FIRST PASS: every first-pass finding of the same PR (each trailer whose reader is in the FR stratum, and each id token in the description whose reader part is a first-pass reader), with its id, its text (description lines holding the id, else its fix commit's message) and whether it has a trailer.
 
@@ -117,6 +117,8 @@ Weights are the public frame counts (RT 326, AD 170, SM 208, FR 225), so the rea
 
 - E = sum over s of weight(s) x (only + unknown x only/(only + also)) / n, where the fraction is that stratum's known split (the pooled split of the three extra strata when the stratum has no known items). This is the estimated number of blockers only an extra voice raised.
 - A = the same sum for "also, listed", with unknowns split the same way.
+
+When no extra-voice blocker has a known trail, both pooled splits are 0 and unknowns count in neither E nor A; that happens only when the trail-too-thin row in section 1 already withholds the reading.
 - D = weight(FR) x (FR blockers / FR scorable items).
 - U = E / (E + D + A).
 
@@ -137,14 +139,14 @@ Per depth: PRs read, corrections judged real (corrects yes), real blockers, bloc
 
 ## 9. Power
 
-power.py, output in power.txt: 200 simulated samples on the drawn sample's 103 PR clusters for each scenario, 1,000 bootstrap replicates each. The 95% interval for U is about 7 points wide when U is near 2%, 20 to 30 points near 17%, and 23 to 37 points near 35%. When the true U is 0.35, the sample reads "keep" in 53% to 82% of samples; at 0.54, in 99% to 100%. When the true U is 0.024, it reads "backs #486" in 73% to 93%; at 0.059, in 46% to 66%. A true U near 0.17 reads inconclusive in 92% to 95% of samples. So the sample separates "the extra voices carry a large share" from "almost none", and the space between reads inconclusive.
+power.py, output in power.txt: 200 simulated samples on the drawn sample's 103 PR clusters for each scenario, 1,000 bootstrap replicates each. The 95% interval for U is about 7 points wide when U is near 2%, 20 to 30 points near 17%, and 23 to 37 points near 35%. Each simulated sample meets section 1's trail-too-thin row first: when fewer than 50% of its extra-voice blockers have a known first-pass trail, it gives no reading of U. Scenarios set the known share at 50%, 65% and 80%. At 65% and 80% the row withholds the reading in 0% to 3% of samples. Then a true U of 0.35 reads "keep" in 68% to 85% of samples, and 0.54 in 98% to 100%; a true U of 0.024 reads "backs #486" in 79% to 95%, and 0.059 in 47% to 61%; a true U near 0.17 reads inconclusive in 91% to 96%. At 50% the row withholds the reading in 43% to 54% of samples in every scenario, and the rest shrink with it: "keep" in 39% at 0.35 and 46% to 56% at 0.54, "backs #486" in 38% to 46% at 0.024 and 22% to 28% at 0.059. So when most trails are known, the sample separates "the extra voices carry a large share" from "almost none" and the space between reads inconclusive; when only about half are known, about half the samples give no reading.
 
 ## 10. Pilot (R111)
 
 Within a tenth of the cap, $30 of paid calls on its own ledger item:
 
 1. Labels: both labellers on the 40 gold items, settled as in section 5, sha256 posted.
-2. Judge: the 40 gold items, plus the pilot batch: order 6 of each part A stratum (4) and part B's 4 batch items, all private. With A2 on the extra-voice items, 48 A1 or B calls and 18 A2 calls.
+2. Judge: the 40 gold items, plus the pilot batch: order 6 of each part A stratum (4, public) and part B's 4 batch items (private). With A2 on the extra-voice items, 48 A1 or B calls and 18 A2 calls.
 
 It passes when:
 
