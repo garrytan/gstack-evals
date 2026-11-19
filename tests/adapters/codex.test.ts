@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { NextUser } from "../../src/adapters/claude-code/driver.ts";
-import { catalogEffort, codexArgs, codexConfig, codexDriver, codexEnv, type CodexOptions } from "../../src/adapters/codex/driver.ts";
+import { catalogEffort, codexArgs, codexConfig, codexDriver, codexEnv, readRollout, type CodexOptions } from "../../src/adapters/codex/driver.ts";
 import { hostDriver } from "../../src/adapters/host.ts";
 import type { SidecarTask } from "../../src/skill-eval/contract/sidecar.ts";
+import type { AgentSession } from "../../src/trial/sandbox.ts";
 import { trialEnv } from "../../src/trial/env.ts";
 import { seedStateRoot } from "../../src/trial/state-root.ts";
 import type { PersonaAnswer } from "../../src/usersim/persona.ts";
@@ -255,6 +257,53 @@ describe.skipIf(!HAS_CODEX_CLI)("Codex adapter on codex exec --json, against a f
       expect(u.body.provider).toEqual({ only: ["particle-ai"], allow_fallbacks: false, data_collection: "deny", max_price: { prompt: 0.1, completion: 1, request: 0, image: 0 } });
     }
   }, 180_000);
+});
+
+describe.skipIf(!HAS_CODEX_CLI)("Codex adapter across exec resume, on the real CLI", () => {
+  // Value: protects=a tool call in a resumed exec never replaces one from an earlier exec, so a skill read before a question still counts after the answer; fails_when=calls are keyed by Codex's item ids, which restart at item_0 in every exec, so a command after the reply overwrites the skill read and opened, files_read and loaded_bytes go wrong; why_new=a review finding (second-model voice) on multi-exec sessions; seam=codexDriver's event loop, parseCodex, skillUse; no_claim=how a real model behaves
+  test("a skill read in the first exec and a command after the reply both stay in calls, and the skill counts as opened", async () => {
+    let root = "";
+    const script: ResponsesScript = ({ outputs, users }) => {
+      if (users.length === 1 && !outputs.has("call_read")) return [{ type: "shell", id: "call_read", cmd: "cat " + join(root, "SKILL.md") }];
+      if (users.length === 1 && !outputs.has("call_q")) return [{ type: "call", id: "call_q", name: "request_user_input_async", args: { questions: [QUESTION] } }];
+      if (users.length === 1) return [{ type: "message", text: "Waiting for your answer." }];
+      if (!outputs.has("call_after")) return [{ type: "shell", id: "call_after", cmd: "echo after-the-reply" }];
+      return [{ type: "message", text: "FINAL: read it and went with " + users.at(-1) }];
+    };
+    const install = (home: string) => {
+      root = join(home, ".codex", "skills", "demo");
+      mkdirSync(root, { recursive: true });
+      writeFileSync(join(root, "SKILL.md"), "---\nname: demo\ndescription: A demo skill for the adapter test.\n---\n# Demo\n");
+    };
+    const r = await run(script, { setupHome: install, skill: (home) => ({ name: "demo", roots: [join(home, ".codex", "skills", "demo")], dir: join(home, ".codex", "skills", "demo") }), entry: { user: { replies: { approach: "Approach B" } } } });
+    expect(r.outcome.termination).toEqual({ kind: "completed" });
+    expect(r.read("init.json").resume_argv.length).toBe(1);
+    expect(r.calls().calls.map((c: { tool: string; input: { command?: string }; ok: boolean }) => [c.tool, c.ok, String(c.input.command ?? "").includes("SKILL.md")])).toEqual([["shell", true, true], ["shell", true, false]]);
+    expect([r.outcome.opened, r.outcome.files_read, r.outcome.loaded_bytes]).toEqual([true, ["SKILL.md"], statSync(join(root, "SKILL.md")).size]);
+  }, 180_000);
+
+  // Value: protects=the evaluator reads only a regular rollout file, so a FIFO the agent leaves under a rollout's name cannot stall the read and the session runs on with its question answered; fails_when=the read opens the FIFO and blocks forever (no timer covers it, so the trial and its run hang); why_new=a review finding (second-model voice) on the unbounded rollout read; seam=readRollout; no_claim=a hung docker exec (the next test covers the timer)
+  test("a FIFO named like the session's rollout is skipped, and the question still gets its answer", async () => {
+    const fifo = 'd="${CODEX_HOME:-$HOME/.codex}/sessions"; f=$(ls "$d"/*/*/*/rollout-*.jsonl | head -1); t=$(basename "$f" | sed -E "s/.*-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}[.]jsonl)$/\\1/"); mkdir -p "$d/2000/01/01" && mkfifo "$d/2000/01/01/rollout-x-$t" && echo made';
+    const script: ResponsesScript = ({ outputs, users }) => {
+      if (users.length === 1 && !outputs.has("call_fifo")) return [{ type: "shell", id: "call_fifo", cmd: fifo }];
+      return asking({ outputs, users, body: {} });
+    };
+    const r = await run(script, { entry: { user: { replies: { approach: "Approach B" } } } });
+    expect(r.calls().calls.map((c: { tool: string; ok: boolean }) => [c.tool, c.ok])[0]).toEqual(["shell", true]);
+    expect(r.outcome.termination).toEqual({ kind: "completed" });
+    expect(r.read("questions.json")).toEqual([{ call_id: "call_q", turn: 1, questions: [QUESTION], answer: "Approach B", unanswered: false }]);
+  }, 60_000);
+});
+
+describe("Codex rollout read", () => {
+  // Value: protects=a rollout read that never ends (a wedged docker exec) gives up at its timer and returns null, which the driver maps to a missing cell (E_INFRA_FAILURE) instead of hanging the run; fails_when=the read has no timer; why_new=review findings (red team, native adversarial, second-model voice) on the unbounded read; seam=readRollout; no_claim=docker's own behaviour when its client is killed
+  test("a read that never finishes returns null at its timer", async () => {
+    const session = { spawn: () => spawn("sleep", ["30"], { stdio: ["pipe", "pipe", "pipe"] }), exec: () => { throw new Error("unused"); }, stop: () => {} } as unknown as AgentSession;
+    const t0 = performance.now();
+    expect(await readRollout(session, "thread", 300)).toBeNull();
+    expect(performance.now() - t0).toBeLessThan(5_000);
+  });
 });
 
 describe("Codex adapter pieces", () => {

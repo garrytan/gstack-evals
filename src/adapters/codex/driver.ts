@@ -20,8 +20,8 @@
 //   and offers request_user_input_async (ASYNC_QUESTION), which answers {"accepted":true} at once and takes any reply
 //   as the next user message. Under Code Mode (gpt-6 models) 0.166.0 and 0.170.0 offer it beside exec, never inside
 //   exec's JavaScript, so every question is a direct function_call in the rollout. After each turn the adapter reads
-//   the session's rollout (CODEX_HOME/sessions, which is why sessions are not --ephemeral) for the turn's ASYNC_QUESTION
-//   calls. Their questions go to the user simulator
+//   the session's rollout (CODEX_HOME/sessions, which is why sessions are not --ephemeral; only a regular file counts,
+//   and the read gets ROLLOUT_READ_MS) for the turn's ASYNC_QUESTION calls. Their questions go to the user simulator
 //   (src/usersim/sim.ts) as an AskUserQuestion's do on Claude Code: the task's scripted replies, then the persona's
 //   free-form source; a turn with none goes to the simulator's afterTurn on its last agent message, as on Claude Code.
 //   A tool question in a task that declared no user replies gets no answer, and the session ends and is graded as before
@@ -33,6 +33,8 @@
 //   back; a call whose turn sent no answer is marked unanswered there, and the outcome's unanswered counts its questions.
 // - The session's timeout counts the CLI's own time only, summed over its execs: the simulator, the persona and
 //   nextUser run between execs, off the clock, as Claude Code's adapter pauses its clock for them.
+// - Codex numbers a turn's items from item_0 in every exec, resume included, so the adapter prefixes each item id with
+//   its turn (`<turn>:<id>`) before parseCodex: a call after a reply never replaces one from an earlier exec.
 // - The prompt and each later user message go in on stdin. The adapter writes the evaluator's records beside the trial,
 //   never into the work dir: every event of every exec (transcript.ndjson), the settings, effort, thread and each exec's
 //   command line (init.json), calls[] (calls.json), the tool questions (questions.json), the user simulator's event log
@@ -162,24 +164,37 @@ export function codexQuestions(rollout: string): { call_id: string; questions: C
   return out;
 }
 
-type CodexEvent = { type?: string; thread_id?: string; message?: string; error?: { message?: string }; usage?: Record<string, number>; item?: { type?: string; text?: string } };
+type CodexEvent = { type?: string; thread_id?: string; message?: string; error?: { message?: string }; usage?: Record<string, number>; item?: { id?: string; type?: string; text?: string } };
 
 /** Codex's input_tokens include its cached input and its output_tokens include reasoning; TokenUsage keeps each class apart. */
 const tokens = (u: Record<string, number>): TokenUsage => ({ input: Math.max(0, (u.input_tokens ?? 0) - (u.cached_input_tokens ?? 0) - (u.cache_write_input_tokens ?? 0)), output: Math.max(0, (u.output_tokens ?? 0) - (u.reasoning_output_tokens ?? 0)), reasoning: u.reasoning_output_tokens ?? 0, cache_read: u.cached_input_tokens ?? 0, cache_write: u.cache_write_input_tokens ?? 0 });
 
-/** A session's rollout as the agent's session holds it, or null when it cannot be read. */
-const readRollout = (session: AgentSession, thread: string): Promise<string | null> =>
+/** How long the evaluator waits for a session's rollout before it counts as unreadable. */
+export const ROLLOUT_READ_MS = 60_000;
+
+/** A session's rollout as the agent's session holds it, or null when it cannot be read within ms. Only regular files count, never a symlink, FIFO or device the agent left under a rollout's name. */
+export const readRollout = (session: AgentSession, thread: string, ms = ROLLOUT_READ_MS): Promise<string | null> =>
   new Promise((done) => {
     let child: ReturnType<AgentSession["spawn"]>;
     try {
-      child = session.spawn(["sh", "-c", 'cat "${CODEX_HOME:-$HOME/.codex}"/sessions/*/*/*/rollout-*-"$1".jsonl', "sh", thread]);
+      child = session.spawn(["sh", "-c", 'n=0; for f in "${CODEX_HOME:-$HOME/.codex}"/sessions/*/*/*/rollout-*-"$1".jsonl; do if [ -f "$f" ] && [ ! -h "$f" ]; then cat -- "$f" || exit 1; n=1; fi; done; [ "$n" = 1 ]', "sh", thread]);
     } catch {
       return done(null);
     }
+    const timer = setTimeout(() => {
+      child.kill("SIGKILL");
+      done(null);
+    }, ms);
     let text = "";
     child.stdout?.on("data", (d: Buffer) => (text += d.toString("utf8")));
-    child.on("error", () => done(null));
-    child.on("close", (code) => done(code === 0 ? text : null));
+    child.on("error", () => {
+      clearTimeout(timer);
+      done(null);
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      done(code === 0 ? text : null);
+    });
     child.stdin?.end();
   });
 
@@ -252,6 +267,7 @@ export function codexDriver(o: CodexOptions): CodexDriver {
             } catch {
               continue;
             }
+            if (typeof ev.item?.id === "string") ev.item.id = turn + ":" + ev.item.id;
             events.push(ev);
             if (ev.type === "thread.started" && typeof ev.thread_id === "string") thread ??= ev.thread_id;
             else if (ev.type === "item.completed" && ev.item?.type === "agent_message" && ev.item.text?.trim()) texts.push(ev.item.text);
