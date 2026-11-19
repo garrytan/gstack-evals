@@ -9,7 +9,7 @@ EXTRA = ("RT", "AD", "SM")
 
 
 def estimate(items, unknown="impute"):
-    # items: dicts with stratum, pr, floor (bool) and, for extra strata, cf in {"only", "also-fixed", "also-noted", "unknown"}
+    # items: dicts with stratum, pr, floor (bool), k (section 6, default 1) and, for extra strata, cf in {"only", "also-fixed", "also-noted", "unknown"}
     by = collections.defaultdict(list)
     for i in items:
         by[i["stratum"]].append(i)
@@ -17,23 +17,25 @@ def estimate(items, unknown="impute"):
         return None
     E = A = 0.0
     pooled = [i for s in EXTRA for i in by[s] if i["floor"] and i["cf"] != "unknown"]
-    pooled_only = sum(i["cf"] == "only" for i in pooled) / len(pooled) if pooled else 0.0
-    pooled_noted = sum(i["cf"] == "also-noted" for i in pooled) / len(pooled) if pooled else 0.0
+    w = lambda i: 1 / i.get("k", 1)
+    pooled_w = sum(w(i) for i in pooled)
+    pooled_only = sum(w(i) for i in pooled if i["cf"] == "only") / pooled_w if pooled else 0.0
+    pooled_noted = sum(w(i) for i in pooled if i["cf"] == "also-noted") / pooled_w if pooled else 0.0
     for s in EXTRA:
         n = len(by[s])
         f = [i for i in by[s] if i["floor"]]
-        only = sum(i["cf"] == "only" for i in f)
-        noted = sum(i["cf"] == "also-noted" for i in f)
-        fixed = sum(i["cf"] == "also-fixed" for i in f)
-        unk = sum(i["cf"] == "unknown" for i in f)
+        only = sum(w(i) for i in f if i["cf"] == "only")
+        noted = sum(w(i) for i in f if i["cf"] == "also-noted")
+        fixed = sum(w(i) for i in f if i["cf"] == "also-fixed")
+        unk = sum(w(i) for i in f if i["cf"] == "unknown")
         known = only + noted + fixed
         share = only / known if known else pooled_only
         u_only = {"impute": unk * share, "low": 0, "high": unk}[unknown]
         u_noted = {"impute": unk * (noted / known if known else pooled_noted), "low": unk, "high": 0}[unknown]
         E += FRAME[s] * (only + u_only) / n
         A += FRAME[s] * (noted + u_noted) / n
-    D = FRAME["FR"] * sum(i["floor"] for i in by["FR"]) / len(by["FR"])
-    return E / (E + D + A) if E + D + A else 0.0
+    D = FRAME["FR"] * sum(w(i) for i in by["FR"] if i["floor"]) / len(by["FR"])
+    return E / (E + D + A) if E + D + A else None
 
 
 def interval(items, unknown="impute", reps=10000, seed=559):
@@ -49,7 +51,10 @@ def interval(items, unknown="impute", reps=10000, seed=559):
         if u is not None:
             vals.append(u)
     vals.sort()
-    return vals[int(0.025 * len(vals))], vals[int(0.975 * len(vals)) - 1]
+    skipped = reps - len(vals)
+    if not vals:
+        return None, None, skipped
+    return vals[int(0.025 * len(vals))], vals[int(0.975 * len(vals)) - 1], skipped
 
 
 def trail_known(items):
@@ -60,6 +65,8 @@ def trail_known(items):
 
 
 def reading(u, lo, hi):
+    if u is None:
+        return "no-reading"
     if u >= 0.30 and lo >= 0.15:
         return "keep"
     if hi < 0.15:
@@ -79,8 +86,8 @@ def sample_clusters(path):
 def main(path, sims=200, reps=1000):
     clusters = sample_clusters(path)
     print(f"# {len(clusters)} sampled findings in {len({p for _, p in clusters})} PRs; frame weights {FRAME}")
-    print("# scenario: floor share in every stratum, share of extra-voice floor findings only an extra voice raised, share of those with a known first-pass trail")
-    print("# floor\tonly\tknown\ttrue_U\tmean_U\tmean_ci_width\tP(keep)\tP(backs-486)\tP(inconclusive)\tP(trail-thin)")
+    print("# scenario: floor share in every stratum, share of extra-voice floor findings only an extra voice raised, share of those with a known first-pass trail; k = 1 for every item")
+    print("# floor\tonly\tknown\ttrue_U\tmean_U\tmean_ci_width\tP(keep)\tP(backs-486)\tP(inconclusive)\tP(trail-thin)\tP(no-reading)\tskipped_replicates")
     rng = random.Random(7)
     for floor in (0.4, 0.6):
         for only in (0.02, 0.05, 0.15, 0.35, 0.6):
@@ -88,7 +95,7 @@ def main(path, sims=200, reps=1000):
                 E = sum(FRAME[s] * floor * only for s in EXTRA)
                 A = sum(FRAME[s] * floor * (1 - only) * 0.5 for s in EXTRA)
                 true_u = E / (E + FRAME["FR"] * floor + A)
-                res, us, widths = collections.Counter(), [], []
+                res, us, widths, skipped = collections.Counter(), [], [], 0
                 for _ in range(sims):
                     items = []
                     for s, p in clusters:
@@ -96,13 +103,16 @@ def main(path, sims=200, reps=1000):
                         cf = "unknown" if rng.random() > known else "only" if rng.random() < only else rng.choice(["also-fixed", "also-noted"])
                         items.append({"stratum": s, "pr": p, "floor": fl, "cf": cf})
                     u = estimate(items)
-                    lo, hi = interval(items, reps=reps, seed=rng.randrange(10**9))
+                    lo, hi, sk = interval(items, reps=reps, seed=rng.randrange(10**9))
+                    skipped += sk
                     tk = trail_known(items)
                     res["trail-thin" if tk is not None and tk < 0.5 else reading(u, lo, hi)] += 1
-                    us.append(u)
-                    widths.append(hi - lo)
-                print(f"{floor}\t{only}\t{known}\t{true_u:.3f}\t{sum(us) / sims:.3f}\t{sum(widths) / sims:.3f}\t"
-                      f"{res['keep'] / sims:.2f}\t{res['backs-486'] / sims:.2f}\t{res['inconclusive'] / sims:.2f}\t{res['trail-thin'] / sims:.2f}")
+                    if u is not None and lo is not None:
+                        us.append(u)
+                        widths.append(hi - lo)
+                print(f"{floor}\t{only}\t{known}\t{true_u:.3f}\t{sum(us) / len(us):.3f}\t{sum(widths) / len(widths):.3f}\t"
+                      f"{res['keep'] / sims:.2f}\t{res['backs-486'] / sims:.2f}\t{res['inconclusive'] / sims:.2f}\t{res['trail-thin'] / sims:.2f}\t"
+                      f"{res['no-reading'] / sims:.2f}\t{skipped}")
 
 
 if __name__ == "__main__":

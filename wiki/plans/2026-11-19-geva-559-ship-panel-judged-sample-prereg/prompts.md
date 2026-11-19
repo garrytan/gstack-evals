@@ -24,13 +24,13 @@ The labellers' system text adds one paragraph before the answer line:
 
 > You also see what happened to these lines afterwards, under LATER. Use it as evidence: a later change that undoes or repairs the fix, or a test that later fails on these lines, bears on your answer.
 
-## Call A2: did the first pass raise the same defect? (judge and both labellers, red team, adversarial and second-model findings only)
+## Call A2: did another finding on the pull request describe the same defect? (judge and both labellers, every part A item)
 
 System text:
 
-> You are given one finding raised on a pull request by a reviewer that runs after or beside the first pass, and the findings the first pass raised on the same pull request. The first pass is the lead review and its specialist readers (testing, security, state machines, API contract, claim checks and similar). Each first-pass finding has an id. Say whether any first-pass finding describes the same defect: the same wrong behaviour at the same place, even in other words. A finding about another symptom, another place, or a broad area that merely contains this defect does not count.
+> You are given one finding raised on a pull request, the change that fixed it, and two lists of the other findings raised on the same pull request. FIRST PASS lists the first pass's findings: the lead review and its specialist readers (testing, security, state machines, API contract, claim checks and similar). LATER VOICES lists the findings of the reviewers that run after or beside the first pass: the red team, the adversarial reader and the second-model review. Each listed finding has an id and says whether it has a trailer. For each list, say which findings describe the same defect as this one: the same wrong behaviour at the same place, even in other words. A finding about another symptom, another place, or a broad area that merely contains this defect does not count.
 >
-> Answer with one JSON object: {"item": "<item id from the packet>", "same_as": "<a first-pass id>" | "none", "reason": "<at most 40 words>"}
+> Answer with one JSON object: {"item": "<item id from the packet>", "same_first": "<the first-pass id that best matches>" | "none", "same_later": [<every later-voice id that matches; empty when none>], "reason": "<at most 40 words>"}
 
 ## Call B: did a later pull request correct a defect in this one? (judge and both labellers)
 
