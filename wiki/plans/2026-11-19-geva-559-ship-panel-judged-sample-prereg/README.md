@@ -14,11 +14,11 @@ links:
   - harness-evals#486
   - https://openrouter.ai/api/v1/models
 attachments:
-  - b81d9508538e490031435ffd0f5222123de525093d524ab01b4222e4503a4e38  draw.py
-  - f52bdf6af5c64f8f562fc92d609f608c7a082d24387597c484a4fa81e40e85f3  draw.txt
-  - 3a571f47fcb38f27e70b1ced3cf22a84db9fe6a0df48270ba5076feed91a4f57  power.py
-  - 9666079718979c6fe7afbf10d73488c3a618d54f650105e7619cb65d153191ec  power.txt
-  - 37429f58d53bb049ec86ae86908e61c44a985466d43faad026d519bdb110f48c  prompts.md
+  - e76b94f5c9e14bb025e4c84f15cdf4a1af65c31bf1271d99b222eb49c5180869  draw.py
+  - 0b7d0b0083d7bd51a2158cfb7dcf4bcff026fd5853f97ef41498122164a91a4c  draw.txt
+  - 6314f08f95c50b88522d9a8123285f1970100bed2cacce1ecd4869e9989bd13f  power.py
+  - 5e716bc0a47d8e948468f80b67e8390ec83a6f0e73c56714889ef4783b709b6a  power.txt
+  - a4525ca6b7c31938a90288484840ca93672908d5053095c39690b8b464adc391  prompts.md
 ---
 
 # Preregistration: do /ship's extra review voices find real defects the first pass misses?
@@ -29,7 +29,7 @@ Garry said "do it" on 2026-11-19 to reading /ship's review panel from our own PR
 
 ## Plain summary
 
-When /ship reviews a large or risky change, it runs a first pass (a lead review plus specialist readers such as testing and security) and three more voices: a red team, a native adversarial reader and a second-model review on another model family. gstack records which reader each fix answered, in a Review-Finding line on the merged commit. We take 40 fixed findings from each of the four sources on our five public repositories, and a model from a third family (Gemini 4 Carbon) judges each one blind to who raised it: was it a real defect, and would it have failed a test, broken production or lost data? For each finding, it also checks whether another finding on the same PR describes the same defect: for the three extra voices, whether the first pass raised it, and for every source, whether it was fixed under more than one Review-Finding line, so each defect counts once. A real defect only an extra voice found is what the extra voices add.
+When /ship reviews a large or risky change, it runs a first pass (a lead review plus specialist readers such as testing and security) and three more voices: a red team, a native adversarial reader and a second-model review on another model family. gstack records which reader each fix answered, in a Review-Finding line on the merged commit. We take 40 fixed findings from each of the four sources on our five public repositories, from PRs whose description and commits show every finding the first pass raised, and a model from a third family (Gemini 4 Carbon) judges each one blind to who raised it: was it a real defect, and would it have failed a test, broken production or lost data? For each finding, it also checks whether another finding on the same PR describes the same defect: for the three extra voices, whether the first pass raised it, and for every source, whether it was fixed under more than one Review-Finding line, so each defect counts once. A real defect only an extra voice found is what the extra voices add.
 
 What it decides: whether gstack should keep the three extra voices at gate class. Harness Evals' merged harness-evals#486 already recommends replacing /ship's panel with /review. /review runs the same three voices, so that switch doesn't settle whether they earn their place; this sample does, on the defects our own reviews actually fixed.
 
@@ -37,7 +37,7 @@ What it doesn't decide: how many defects any voice missed (unfixed and unraised 
 
 ## 1. Question and decision (R97)
 
-**Question.** Of the distinct real blocking defects fixed during /ship review on full-depth PRs, what share did only an extra voice (red team, adversarial, second-model review) raise? Call it U.
+**Question.** Of the distinct real blocking defects fixed during /ship review on full-depth PRs whose record shows every first-pass finding (section 2), what share did only an extra voice (red team, adversarial, second-model review) raise? Call it U.
 
 **What #486 found, and what it leaves open.** On 54 outside bugs on Opus 5.5, /ship's panel as Harness Evals' rig ran it found fewer bugs than /review: 37.0% against 44.4% of blocking bugs (-7.4 points, -15.1 to 0.0) and 62.0% against 72.2% at any severity (-10.2, -20.4 to -0.9). Its map reads "replace the panel with /review". The panel cost $3.10 a review against /review's $4.13, so the switch raises review cost by about a third. In that rig the second-model review never ran (no bubblewrap in the trial image), and its preregistration planned 2.8 readers a unit for the panel against 6.6 for /review's Review Army. /review at gstack 5afef04e runs a red team (when the diff passes 200 lines or a specialist finds a CRITICAL), an always-on native adversarial pass and a second-model review when Codex is available. So #486 compared two ways of running many readers. It did not ask whether gate class needs the three extra voices at all, which is where the cost of the switch could be paid back.
 
@@ -46,7 +46,6 @@ What it doesn't decide: how many defects any voice missed (unfixed and unraised 
 | Reading | When | Advice |
 |---|---|---|
 | Judge check fails | Section 5's check fails or is void | No judged number. FIX-METHOD on the instrument. #486's map stands alone. |
-| Trail too thin | Fewer than 50% of extra-voice findings judged blockers have a known first-pass trail (section 6) | No reading of U. FIX-METHOD on gstack's record: every Review-Finding line should name every reader that raised the finding, not only the one the fix answered. #486's map stands alone. |
 | No blockers | E + D + A is 0: no stratum's contribution counts a blocker (section 7) | No reading of U. No change from this sample; #486's map stands alone. |
 | Keep the extra voices | U is at least 30% and its 95% lower bound at least 15% | Keep red team, adversarial and second-model review running at gate class, whichever review /ship uses. If the panel is replaced by /review as #486 recommends, /review must run all three at gate class, including the red team on diffs under 200 lines and the second-model review as a required voice. A voice whose own count of only-it blockers has an interval that includes zero is named as not shown to carry its weight. Ask Harness Evals for the fair test #486 couldn't run: gate-class units with the second-model review running. |
 | Backs #486 | U's 95% upper bound is under 15% | On our own merged fixes the extra voices rarely found a blocker the first pass missed. Replace the panel with /review as #486 says, and gstack may drop red team, adversarial and second-model review at gate class to pay for the switch. This is a CUT-CANDIDATE for those voices at gate class after one Why-null cycle (R48), and Garry hears it in plain words. |
@@ -62,16 +61,20 @@ So a high U argues for keeping the extra voices at gate class and narrows #486's
 
 **Strata.** Full depth only (full/gate and full/code), by the trailer's reader:
 
-| Stratum | Readers | Frame (public) | Frame (private) |
+| Stratum | Readers | Public full-depth findings | On complete-list PRs (the frame) |
 |---|---|---|---|
-| RT red team | red-team | 326 | 39 |
-| AD native adversarial | adversarial-native | 170 | 35 |
-| SM second-model review | outside-voice, cross-family-audit, gpt-6.1-sol | 208 | 38 |
-| FR first pass | core, specialist-batched, specialist, testing, security, state-machines, api-contract, claim-check | 225 | 40 |
+| RT red team | red-team | 326 | 108 |
+| AD native adversarial | adversarial-native | 170 | 66 |
+| SM second-model review | outside-voice, cross-family-audit, gpt-6.1-sol | 208 | 86 |
+| FR first pass | core, specialist-batched, specialist, testing, security, state-machines, api-contract, claim-check | 225 | 68 |
+
+Private repositories hold 152 more full-depth findings in these strata; part A doesn't draw them.
+
+**Complete first-pass lists.** A2 can only say the first pass didn't raise a finding when the PR shows everything the first pass raised, so part A draws only from PRs whose list is complete: every finding id the PR shows has text, and the PR shows at least as many distinct ids as its /ship receipts counted. A PR shows an id when a trailer carries it or its description holds a token `[<pass>/]<reader>#<n>` whose reader is one the trailers use. An id has text when a description line holds it as a whole token, or one of the PR's own head commits (from refs/pull/<n>/head) carries it in a trailer. The count to meet is the fixed, noted and deferred counts summed over every /ship receipt in the description that records them; a PR with no such receipt is not complete. draw.py checks this keyless. Of the 215 public full-depth PRs with trailers, 76 (35%) have a complete list.
 
 Left out: targeted readers (22 public full-depth findings, too few for a stratum), fix-check, QA, Capy's automatic review and six findings from one PR whose trailers carry no reader= field. One private repository that belongs to another team is never sent to any model (section 11); its findings are left out of the frame.
 
-**Draw.** Seed 1149397022422259893 (the first 16 hex digits of sha256 of this post's id). Per stratum, public findings sorted by item id (sha256 of repo, PR and finding id) and shuffled with the seed plus the stratum's index, then private findings the same way. The first 40 are the sample; the rest are the reserve, in order. Every stratum fills its 40 from public repositories, so part A sends no private finding: 160 findings in 103 PRs. draw.txt lists orders 1 to 80 of each stratum and digests of the private orders. Orders 1 to 5 are gold (section 5), order 6 is the pilot batch (section 10), orders 7 to 40 are main.
+**Draw.** Seed 1149397022422259893 (the first 16 hex digits of sha256 of this post's id). Per stratum, the frame's findings sorted by item id (sha256 of repo, PR and finding id) and shuffled with the seed plus the stratum's index. The first 40 are the sample; the rest are the reserve, in order. Part A sends no private finding: 160 findings in 59 PRs. draw.txt lists every order of each stratum. Orders 1 to 5 are gold (section 5), order 6 is the pilot batch (section 10), orders 7 to 40 are main.
 
 **Replacement.** An item is unscorable when its packet can't be built (no finding text, no fix diff) or the judge says the text is not one finding this change fixes (one_finding false). Its stratum's next reserve item takes its place, up to 20 a stratum; a stratum that needs more stops for the Captain. Every replacement and its reason is reported.
 
@@ -103,39 +106,33 @@ Built keyless from local clones; a PR's head commits come from \`git fetch origi
 
 **A1.** blocker counts as a real blocking defect. should, nit, not_defect and cant_tell don't.
 
-**First-pass trail (the Captain's second requirement).** For each RT, AD and SM item judged a blocker, A2's answer gives:
+**First-pass trail (the Captain's second requirement).** Every sampled PR has a complete first-pass list (section 2), so for each RT, AD and SM item judged a blocker, A2's same_first gives one of:
 
-- also, fixed: same_first names a first-pass finding with a trailer. The first pass found it, and it is counted once, under the first pass.
-- also, listed: same_first names a first-pass finding with no trailer (raised, not fixed under its own id). The first pass found it; it adds to the distinct total, not to the extra voices.
-- only: same_first is "none" and the PR's first-pass list is complete.
-- unknown: same_first is "none" and the list is not complete, or A2 was unscorable.
+- also, fixed: same_first names at least one first-pass finding with a trailer. The first pass found it, and it is counted once, under the first pass.
+- also, listed: same_first names first-pass findings, none with a trailer (raised, not fixed under their own ids). The first pass found it; it adds to the distinct total, not to the extra voices.
+- only: same_first is empty.
 
-**Same defect fixed more than once (k).** Each part A item gets k = 1 + the number of findings with a trailer in its own group that A2 names as the same defect. For an RT, AD or SM item the group is same_later; for an FR item it is same_first, which there names another first-pass finding. k comes from the PR's full trail, sampled or not. Section 7 counts each item as 1/k wherever it counts, so a defect fixed under k trailers counts once in total.
+An item whose A2 answer is unscorable is unscorable, and the next reserve item takes its place (section 2).
 
-A PR's list is complete when every finding id it shows (trailers and description id tokens, all readers) has text, and it shows at least as many distinct ids as the fixed, noted and deferred counts summed over every /ship receipt in its description. Completeness is keyless and computed before any call.
+**Same defect fixed more than once (k).** Each part A item gets k = 1 + the number of findings with a trailer in its own group that A2 names as the same defect. For an RT, AD or SM item the group is same_later; for an FR item it is same_first, which there lists the other first-pass findings with the same defect. k comes from the PR's full trail, sampled or not. Section 7 counts each item as 1/k wherever it counts, so a defect fixed under k trailers counts once in total.
 
 ## 7. Reading part A
 
-Weights are the public frame counts (RT 326, AD 170, SM 208, FR 225), so the reading covers full-depth fixes on the five public repositories. For each extra stratum s with n scorable items:
+Weights are the frame counts (RT 108, AD 66, SM 86, FR 68), so the reading covers full-depth fixes on complete-list PRs in the five public repositories. With n the scorable items of a stratum, and every count summing 1/k over its items (section 6), not 1 per item:
 
-- E = sum over s of weight(s) x (only + unknown x only/(only + also)) / n, where the fraction is that stratum's known split (the pooled split of the three extra strata when the stratum has no known items). This is the estimated number of blockers only an extra voice raised.
-- A = the same sum for "also, listed", with unknowns split the same way.
-
-When no extra-voice blocker has a known trail, both pooled splits are 0 and unknowns count in neither E nor A; that happens only when the trail-too-thin row in section 1 already withholds the reading.
-- D = weight(FR) x (FR blockers / FR scorable items).
+- E = sum over RT, AD and SM of weight x (blockers that are only) / n. This is the estimated number of distinct blockers only an extra voice raised.
+- A = the same sum over blockers that are "also, listed".
+- D = weight(FR) x (FR blockers) / n(FR).
 - U = E / (E + D + A). When E + D + A is 0 there is no reading (section 1).
 
-Every count above sums 1/k over its items (section 6), not 1 per item: only, unknown, also, the known splits and FR blockers.
-
-Bounds: U low counts every unknown as "also, listed"; U high counts every unknown as only. Interval: a bootstrap over the sampled PRs (all strata together, so findings from one PR stay together), 10,000 replicates, seed 559, percentile 95%; a replicate where E + D + A is 0 is skipped, and the number skipped is printed. power.py's estimate() and interval() are this code. The reading uses U and its interval; when U low or U high falls on the other side of a threshold, the report says the reading rests on unknown trails.
+Interval: a bootstrap over the sampled PRs (all strata together, so findings from one PR stay together), 10,000 replicates, seed 559, percentile 95%; a replicate where E + D + A is 0 is skipped, and the number skipped is printed. power.py's estimate() and interval() are this code.
 
 Printed with it:
 
 - Per voice: E for that voice with its interval, and its blocker share with a Wilson interval.
 - Per stratum: the share judged not_defect and nit, that is, fixes spent on findings that weren't defects or were minor.
-- The trail-known share: known first-pass trails over extra-voice blockers, by stratum and pooled.
 - U with should counted as real (a real bug below the floor), as a secondary reading.
-- Only-extra blockers per 100 public full-depth PRs with trailers.
+- Only-extra blockers per 100 complete-list PRs.
 - Replacements, unscorable calls and provider safety stops, per stratum.
 
 ## 8. Reading part B (descriptive)
@@ -144,7 +141,7 @@ Per depth: PRs read, corrections judged real (corrects yes), real blockers, bloc
 
 ## 9. Power
 
-power.py, output in power.txt: 200 simulated samples on the drawn sample's 103 PR clusters for each scenario, 1,000 bootstrap replicates each. The simulation sets k = 1 for every item; no simulated sample reaches the no-blockers row, and no bootstrap replicate is skipped. The 95% interval for U is about 7 points wide when U is near 2%, 20 to 30 points near 17%, and 23 to 37 points near 35%. Each simulated sample meets section 1's trail-too-thin row first: when fewer than 50% of its extra-voice blockers have a known first-pass trail, it gives no reading of U. Scenarios set the known share at 50%, 65% and 80%. At 65% and 80% the row withholds the reading in 0% to 3% of samples. Then a true U of 0.35 reads "keep" in 68% to 85% of samples, and 0.54 in 98% to 100%; a true U of 0.024 reads "backs #486" in 79% to 95%, and 0.059 in 47% to 61%; a true U near 0.17 reads inconclusive in 91% to 96%. At 50% the row withholds the reading in 43% to 54% of samples in every scenario, and the rest shrink with it: "keep" in 39% at 0.35 and 46% to 56% at 0.54, "backs #486" in 38% to 46% at 0.024 and 22% to 28% at 0.059. So when most trails are known, the sample separates "the extra voices carry a large share" from "almost none" and the space between reads inconclusive; when only about half are known, about half the samples give no reading.
+power.py, output in power.txt: 200 simulated samples on the drawn sample's 59 PR clusters for each scenario, 1,000 bootstrap replicates each. Each simulated extra-voice blocker is "only" with the scenario's share and otherwise "also, fixed" or "also, listed" at even odds, as section 6 defines them on complete lists. The simulation sets k = 1 for every item; no simulated sample reaches the no-blockers row, and no bootstrap replicate is skipped. The 95% interval for U is about 6 to 7 points wide when U is near 3%, 19 to 23 points near 18%, and 22 to 27 points near 37%. A true U of 0.37 reads "keep" in 81% to 89% of samples, and 0.57 in 100%. A true U of 0.026 reads "backs #486" in 89% to 97%, and 0.064 in 54% to 66%. A true U near 0.18 reads inconclusive in 95% to 97%. So the sample separates "the extra voices carry a large share" from "almost none", and the space between reads inconclusive.
 
 ## 10. Pilot (R111)
 
@@ -173,7 +170,9 @@ A failure stops for the Captain; a failing part is fixed by a dated change post 
 ## 12. Limits
 
 - Only fixed findings are read. A defect a voice raised and nobody fixed, or that nobody raised, is outside U.
-- A trailer names the reader whose finding the fix answered, not every reader that raised it; A2 reads the trail for the rest, and unknowns are bounded.
+- A trailer names the reader whose finding the fix answered, not every reader that raised it; A2 reads the PR's listed findings for the rest.
+- Part A reads only PRs whose first-pass list is complete: 76 of the 215 public full-depth PRs with trailers (35%). The result holds for those PRs. Carrying it to the rest assumes they split between "only" and "also" the same way, and they may not: a PR that shows every finding may come from a more careful run, or from one that noted fewer findings.
+- Two trailers of one defect are judged in separate A2 calls and can get different answers, one "only" and one "also"; nothing here reconciles them.
 - The first pass and the red team run side by side in one step, so "only an extra voice raised it" is about who raised it, not about order.
 - Part A covers five public repositories, mostly gstack and gstack-evals: eval harnesses, tooling and skills, not product code. Reviews ran on gstack 1.91 to 1.101 and on the models of their day.
 - One judge family. A1 masks reviewer names, but a finding's style can still hint at its source.
@@ -187,11 +186,14 @@ A failure stops for the Captain; a failing part is fixed by a dated change post 
 - Targeted readers are not a stratum.
 - The second labeller is GPT-6.2 Astra, the newest Astra, not GPT-6 Astra.
 - No fallback judge. The proposal named Astra and Opus as fallbacks, but they are the labellers.
-- The trail-too-thin row, the no-blockers row, the keyless completeness rule and the 1/k count for a defect fixed under several trailers are new.
+- Part A draws only from PRs whose first-pass list is complete, so no trail is unknown and nothing is imputed (section 2). An earlier draft imputed unknown trails from the known ones; review showed that biased U down, because on an incomplete list a match is still found while a miss reads unknown.
+- The no-blockers row, the keyless completeness rule and the 1/k count for a defect fixed under several trailers are new.
 - One private repository is never sent to a model.
 
 <details>
 <summary>Agent notes</summary>
+
+**Third review round (Captain, 2026-11-19).** Option D: part A draws only from complete-list PRs, because every stratum fills its 40 there (RT 108, AD 66, SM 86, FR 68), so nothing is imputed.
 
 **Captain's requirements (A1, 2026-11-19).** (1) R97 map: section 1. (2) First-pass counterfactual: sections 4 and 6. (3) R78 labellers: section 5. (4) R111 pilot within $30, private items scored without their text reaching this repo: sections 10 and 11; R113 doesn't apply.
 

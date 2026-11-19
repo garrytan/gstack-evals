@@ -3,7 +3,10 @@
 # Part A: fixed review findings named by gstack's Review-Finding commit trailers on merged PRs.
 # Part B: PRs a later PR corrected within 7 days (phase 1 rows).
 # Keyless and deterministic. Prints public items by repo, PR and finding id, and private items as counts and digests.
-# Usage: draw.py <bare-clones-dir> <phase-1-7-day-rows-dir> <private-repos.json>
+# Usage: draw.py <bare-clones-dir> <phase-1-7-day-rows-dir> <private-repos.json> <pr-dumps-dir>
+# pr-dumps-dir holds one JSON line per PR (gh pr list --json number,url,body,...) per repository, as the keyless read wrote them.
+# Part A draws only from PRs whose first-pass list is complete (README section 2); checking that fetches each candidate PR's
+# refs/pull/<n>/head into the bare clone with git (no API call).
 # private-repos.json maps clone names to owner/repo for the private repositories, with a "not_sent" list. It is kept
 # outside this repository so no private repository is named here; draw.txt prints its sha256.
 import collections, hashlib, json, random, re, subprocess, sys
@@ -59,16 +62,70 @@ def trailer_items(clones, R):
     return items
 
 
-def draw_a(items):
+TOKEN = re.compile(r"(?<![\w/#-])((?:[a-z0-9-]+/)?([a-z][a-z-]*(?:/[a-z-]+)?)#\d+)")
+
+
+def receipts_total(body):
+    total, seen = 0, 0
+    for m in re.finditer(r"```gstack-ship-receipt\s*(\{.*?\})\s*```", body, re.S):
+        try:
+            loop = json.loads(m.group(1)).get("review_loop")
+        except ValueError:
+            continue
+        if isinstance(loop, dict):
+            total += sum(int(loop.get(k) or 0) for k in ("fixed", "noted", "deferred"))
+            seen += 1
+    return total if seen else None
+
+
+def shown_ids(body, trailer_ids, readers):
+    ids = set(trailer_ids)
+    for m in TOKEN.finditer(body):
+        if m.group(2) in readers or m.group(2).split("/")[-1] in readers:
+            ids.add(m.group(1))
+    return ids
+
+
+def in_body(fid, lines):
+    rx = re.compile(r"(?<![\w/#-])" + re.escape(fid) + r"(?!\d)")
+    return any(rx.search(ln) for ln in lines)
+
+
+def complete_prs(clones, items, bodies):
+    readers = {i["reader"] for i in items}
+    by = collections.defaultdict(list)
+    for i in items:
+        if i["public"] and i["tier"] in FULL:
+            by[(i["repo"], i["number"])].append(i)
+    count_ok = {}
+    for (repo, pr), its in sorted(by.items()):
+        body = bodies.get((repo, pr), "")
+        total = receipts_total(body)
+        ids = shown_ids(body, {i["finding"] for i in its}, readers)
+        if total is not None and len(ids) >= total:
+            count_ok[(repo, pr)] = its
+    for repo in sorted({r for r, _ in count_ok}):
+        git = Path(clones) / f"{repo.split('/')[1]}.git"
+        specs = [f"+refs/pull/{pr}/head:refs/pull/{pr}/head" for r, pr in sorted(count_ok) if r == repo]
+        subprocess.run(["git", "-C", str(git), "fetch", "-q", "origin", *specs], check=True)
+    complete = set()
+    for (repo, pr), its in sorted(count_ok.items()):
+        git = Path(clones) / f"{repo.split('/')[1]}.git"
+        msgs = subprocess.run(["git", "-C", str(git), "log", f"refs/pull/{pr}/head", "--not", f"{its[0]['squash']}^", "--format=%B"],
+                              capture_output=True, text=True, check=True).stdout
+        carried = set(re.findall(r"^Review-Finding:\s*(\S+)", msgs, re.M))
+        lines = bodies.get((repo, pr), "").split("\n")
+        if all(in_body(i["finding"], lines) or i["finding"] in carried for i in its):
+            complete.add((repo, pr))
+    return len(by), len(count_ok), complete
+
+
+def draw_a(items, complete):
     picked = []
     for k, s in enumerate(ORDER):
-        pool = [i for i in items if i["stratum"] == s and i["tier"] in FULL and i["repo"] not in NOT_SENT]
-        pub = sorted((i for i in pool if i["public"]), key=lambda i: i["id"])
-        priv = sorted((i for i in pool if not i["public"]), key=lambda i: i["id"])
-        rng = random.Random(SEED + k)
-        rng.shuffle(pub)
-        rng.shuffle(priv)
-        for n, i in enumerate(pub + priv, 1):
+        pool = sorted((i for i in items if i["stratum"] == s and (i["repo"], i["number"]) in complete), key=lambda i: i["id"])
+        random.Random(SEED + k).shuffle(pool)
+        for n, i in enumerate(pool, 1):
             role = "reserve" if n > PER_STRATUM else "gold" if n <= 5 else "batch" if n == 6 else "main"
             picked.append(dict(i, order=n, role=role))
     return picked
@@ -97,7 +154,7 @@ def digest(lines):
     return hashlib.sha256("\n".join(lines).encode()).hexdigest()
 
 
-def main(clones, rows_dir, private_path):
+def main(clones, rows_dir, private_path, dumps_dir):
     raw = open(private_path, "rb").read()
     private = json.loads(raw)
     REPOS.update(private["repos"])
@@ -118,21 +175,23 @@ def main(clones, rows_dir, private_path):
     c = collections.Counter((i["reader"], i["stratum"] or "-", i["tier"], "public" if i["public"] else "private") for i in items)
     for k in sorted(c):
         print("\t".join(k) + f"\t{c[k]}")
-    A = draw_a(items)
-    print("# part A: full/gate and full/code, the not-sent repository left out; 40 a stratum, public first")
+    bodies = {}
+    for f in sorted(Path(dumps_dir).glob("*.jsonl")):
+        for line in open(f):
+            p = json.loads(line)
+            bodies[("/".join(p["url"].split("/")[3:5]), p["number"])] = p.get("body") or ""
+    n_prs, n_count, complete = complete_prs(clones, items, bodies)
+    print(f"# part A: public full-depth PRs with trailers {n_prs}; enough finding ids for their receipts {n_count}; "
+          f"complete first-pass list {len(complete)}")
+    A = draw_a(items, complete)
     for s in ORDER:
         pool = [i for i in A if i["stratum"] == s]
-        pub = sum(i["public"] for i in pool)
-        print(f"# {s}: frame {len(pool)} ({pub} public, {len(pool) - pub} private)")
-    print(f"# public findings at orders 1 to {2 * PER_STRATUM} (orders 41 on are the reserve, in order)")
+        allpub = sum(1 for i in items if i["stratum"] == s and i["public"] and i["tier"] in FULL)
+        print(f"# {s}: {allpub} public full-depth findings, {len(pool)} on complete-list PRs; sample {min(PER_STRATUM, len(pool))}")
+    print(f"# part A sample: {sum(i['role'] != 'reserve' for i in A)} findings in {len({(i['repo'], i['number']) for i in A if i['role'] != 'reserve'})} PRs; orders 41 on are the reserve, in order")
     print("# stratum\torder\trole\trepo\tpr\tfinding\treader\ttier\titem")
     for i in A:
-        if i["public"] and i["order"] <= 2 * PER_STRATUM:
-            print(f"{i['stratum']}\t{i['order']}\t{i['role']}\t{i['repo']}\t{i['number']}\t{i['finding']}\t{i['reader']}\t{i['tier']}\t{i['id']}")
-    for s in ORDER:
-        priv = [i for i in A if i["stratum"] == s and not i["public"]]
-        roles = collections.Counter(i["role"] for i in priv)
-        print(f"# {s} private: {len(priv)} findings, roles {dict(sorted(roles.items()))}, sha256 {digest(f'{i['order']} {i['id']}' for i in priv)}")
+        print(f"{i['stratum']}\t{i['order']}\t{i['role']}\t{i['repo']}\t{i['number']}\t{i['finding']}\t{i['reader']}\t{i['tier']}\t{i['id']}")
     B = draw_b(R)
     print(f"# part B: PRs a later PR corrected within 7 days (full 7-day exposure, blame ok): {len(B)}; seed {SEED + 10}")
     cb = collections.Counter((c["tier"], "public" if c["public"] else "private", c["role"]) for c in B)

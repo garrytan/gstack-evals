@@ -30,7 +30,7 @@ System text:
 
 > You are given one finding raised on a pull request, the change that fixed it, and two lists of the other findings raised on the same pull request. FIRST PASS lists the first pass's findings: the lead review and its specialist readers (testing, security, state machines, API contract, claim checks and similar). LATER VOICES lists the findings of the reviewers that run after or beside the first pass: the red team, the adversarial reader and the second-model review. Each listed finding has an id and says whether it has a trailer. For each list, say which findings describe the same defect as this one: the same wrong behaviour at the same place, even in other words. A finding about another symptom, another place, or a broad area that merely contains this defect does not count.
 >
-> Answer with one JSON object: {"item": "<item id from the packet>", "same_first": "<the first-pass id that best matches>" | "none", "same_later": [<every later-voice id that matches; empty when none>], "reason": "<at most 40 words>"}
+> Answer with one JSON object: {"item": "<item id from the packet>", "same_first": [<every first-pass id that matches; empty when none>], "same_later": [<every later-voice id that matches; empty when none>], "reason": "<at most 40 words>"}
 
 ## Call B: did a later pull request correct a defect in this one? (judge and both labellers)
 
