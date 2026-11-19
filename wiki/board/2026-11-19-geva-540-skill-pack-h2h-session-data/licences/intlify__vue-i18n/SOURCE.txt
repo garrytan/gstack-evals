@@ -1,0 +1,3 @@
+https://github.com/intlify/vue-i18n at cb0515b8f3fa4c110a7fa47736aec38c7ef3d072
+Licence at the freeze-date read (prereg o-, b1- and b2-licences.json): MIT
+Root licence and notice files at that commit: LICENSE

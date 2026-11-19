@@ -1,0 +1,208 @@
+diff --git a/src/Finbuckle.MultiTenant/DependencyInjection/ServiceCollectionExtensions.cs b/src/Finbuckle.MultiTenant/DependencyInjection/ServiceCollectionExtensions.cs
+index c17514d..45bc98d 100644
+--- a/src/Finbuckle.MultiTenant/DependencyInjection/ServiceCollectionExtensions.cs
++++ b/src/Finbuckle.MultiTenant/DependencyInjection/ServiceCollectionExtensions.cs
+@@ -59,69 +59,77 @@ public static class FinbuckleServiceCollectionExtensions
+         return services.AddMultiTenant<TTenantInfo>(_ => { });
+     }
+ 
+-    // TODO: better document and extract
++    /// <summary>
++    /// Decorates all existing registrations of <typeparamref name="TService"/> with <typeparamref name="TImpl"/>.
++    /// Each registration is decorated in place, preserving its lifetime and position in the service collection.
++    /// </summary>
++    /// <typeparam name="TService">The service type to decorate.</typeparam>
++    /// <typeparam name="TImpl">The decorator type. Its constructor must accept the inner service as the first
++    /// parameter.</typeparam>
++    /// <param name="services">The <see cref="IServiceCollection"/> instance.</param>
++    /// <param name="parameters">Additional constructor parameters for the decorator.</param>
++    /// <returns><c>true</c> if at least one registration was decorated.</returns>
++    /// <exception cref="ArgumentException">Thrown if no registration of <typeparamref name="TService"/> exists.</exception>
+     public static bool DecorateService<TService, TImpl>(this IServiceCollection services, params object[] parameters)
+     {
+-        var existingService = services.SingleOrDefault(s => s.ServiceType == typeof(TService));
+-        if (existingService is null)
+-            throw new ArgumentException($"No service of type {typeof(TService).Name} found.");
++        var existingServices = services
++            .Where(s => s.ServiceType == typeof(TService) && !s.IsKeyedService)
++            .ToList();
+ 
+-        ServiceDescriptor? newService;
++        if (existingServices.Count == 0)
++            throw new ArgumentException($"No service of type {typeof(TService).Name} found.");
+ 
+-        if (existingService.ImplementationType is not null)
++        foreach (var existingService in existingServices)
+         {
+-            newService = new ServiceDescriptor(existingService.ServiceType,
+-                sp =>
+-                {
+-                    TService inner =
+-                        (TService)ActivatorUtilities.CreateInstance(sp, existingService.ImplementationType);
++            var newService = CreateDecoratedDescriptor<TService, TImpl>(existingService, parameters);
++            var index = services.IndexOf(existingService);
++            services[index] = newService;
++        }
+ 
+-                    if (inner is null)
+-                        throw new Exception(
+-                            $"Unable to instantiate decorated type via implementation type {existingService.ImplementationType.Name}.");
++        return true;
++    }
+ 
+-                    var parameters2 = new object[parameters.Length + 1];
+-                    Array.Copy(parameters, 0, parameters2, 1, parameters.Length);
+-                    parameters2[0] = inner;
++    private static ServiceDescriptor CreateDecoratedDescriptor<TService, TImpl>(ServiceDescriptor existingService,
++        object[] parameters)
++    {
++        Func<IServiceProvider, object> innerFactory;
+ 
+-                    return ActivatorUtilities.CreateInstance<TImpl>(sp, parameters2)!;
+-                },
+-                existingService.Lifetime);
++        if (existingService.ImplementationType is not null)
++        {
++            var implType = existingService.ImplementationType;
++            innerFactory = sp => ActivatorUtilities.CreateInstance(sp, implType) ??
++                                 throw new Exception(
++                                     $"Unable to instantiate decorated type via implementation type {implType.Name}.");
+         }
+         else if (existingService.ImplementationInstance is not null)
+         {
+-            newService = new ServiceDescriptor(existingService.ServiceType,
+-                sp =>
+-                {
+-                    TService inner = (TService)existingService.ImplementationInstance;
+-                    return ActivatorUtilities.CreateInstance<TImpl>(sp, inner, parameters)!;
+-                },
+-                existingService.Lifetime);
++            var instance = existingService.ImplementationInstance;
++            innerFactory = _ => instance;
+         }
+         else if (existingService.ImplementationFactory is not null)
+         {
+-            newService = new ServiceDescriptor(existingService.ServiceType,
+-                sp =>
+-                {
+-                    TService inner = (TService)existingService.ImplementationFactory(sp);
+-                    if (inner is null)
+-                        throw new Exception(
+-                            "Unable to instantiate decorated type via implementation factory.");
+-
+-                    return ActivatorUtilities.CreateInstance<TImpl>(sp, inner, parameters)!;
+-                },
+-                existingService.Lifetime);
++            var factory = existingService.ImplementationFactory;
++            innerFactory = sp => factory(sp) ??
++                                 throw new Exception(
++                                     "Unable to instantiate decorated type via implementation factory.");
+         }
+         else
+         {
+-            throw new Exception(
+-                "Unable to instantiate decorated type.");
++            throw new Exception("Unable to instantiate decorated type.");
+         }
+ 
+-        services.Remove(existingService);
+-        services.Add(newService);
++        return new ServiceDescriptor(existingService.ServiceType,
++            sp =>
++            {
++                var inner = (TService)innerFactory(sp);
+ 
+-        return true;
++                var allParameters = new object[parameters.Length + 1];
++                allParameters[0] = inner!;
++                Array.Copy(parameters, 0, allParameters, 1, parameters.Length);
++
++                return ActivatorUtilities.CreateInstance<TImpl>(sp, allParameters)!;
++            },
++            existingService.Lifetime);
+     }
+ 
+     /// <summary>
+diff --git a/test/Finbuckle.MultiTenant.AspNetCore.Test/Extensions/MultiTenantBuilderExtensionsShould.cs b/test/Finbuckle.MultiTenant.AspNetCore.Test/Extensions/MultiTenantBuilderExtensionsShould.cs
+index 78157f3..1b39e9a 100644
+--- a/test/Finbuckle.MultiTenant.AspNetCore.Test/Extensions/MultiTenantBuilderExtensionsShould.cs
++++ b/test/Finbuckle.MultiTenant.AspNetCore.Test/Extensions/MultiTenantBuilderExtensionsShould.cs
+@@ -611,6 +611,27 @@ public class MultiTenantBuilderExtensionsShould
+             Assert.Equal(defaultValue, options.AccessDeniedPath);
+         }
+ 
++    [Fact]
++    public void WithPerTenantAuthentication_DecorateMultipleIAuthenticationSchemeProviders()
++    {
++        var services = new ServiceCollection();
++        services.AddLogging();
++        services.AddAuthentication().AddCookie();
++        // Simulate a library (e.g. Duende.BFF v4) registering an additional scheme provider.
++        services.AddTransient<IAuthenticationSchemeProvider, AuthenticationSchemeProvider>();
++
++        services.AddMultiTenant<TenantInfo>()
++            .WithPerTenantAuthentication();
++
++        var descriptors = services.Where(s => s.ServiceType == typeof(IAuthenticationSchemeProvider)).ToList();
++        Assert.Equal(2, descriptors.Count);
++
++        var sp = services.BuildServiceProvider();
++        var providers = sp.GetServices<IAuthenticationSchemeProvider>().ToList();
++        Assert.Equal(2, providers.Count);
++        Assert.All(providers, p => Assert.IsType<MultiTenantAuthenticationSchemeProvider>(p));
++    }
++
+     [Fact]
+     public void WithPerTenantAuthentication_ThrowIfCantDecorateIAuthenticationService()
+     {
+diff --git a/test/Finbuckle.MultiTenant.Test/DependencyInjection/ServiceCollectionExtensionsShould.cs b/test/Finbuckle.MultiTenant.Test/DependencyInjection/ServiceCollectionExtensionsShould.cs
+index 18fd2b3..c5e309f 100644
+--- a/test/Finbuckle.MultiTenant.Test/DependencyInjection/ServiceCollectionExtensionsShould.cs
++++ b/test/Finbuckle.MultiTenant.Test/DependencyInjection/ServiceCollectionExtensionsShould.cs
+@@ -125,4 +125,45 @@ public class ServiceCollectionExtensionsShould
+             Assert.Single(config);
+             Assert.Null(config.Select(c => (ConfigureNamedOptions<TestOptions, IMultiTenantContextAccessor<TenantInfo>>)c).Single().Name);
+         }
++
++    public interface IDecorateTestService { string Name { get; } }
++    public class DecorateTestServiceA : IDecorateTestService { public string Name => "A"; }
++    public class DecorateTestServiceB : IDecorateTestService { public string Name => "B"; }
++    public class DecorateTestDecorator(IDecorateTestService inner, string suffix) : IDecorateTestService
++    {
++        public IDecorateTestService Inner { get; } = inner;
++        public string Name => Inner.Name + suffix;
++    }
++
++    [Fact]
++    public void DecorateService_DecorateAllRegistrations()
++    {
++        var services = new ServiceCollection();
++        services.AddTransient<IDecorateTestService, DecorateTestServiceA>();
++        services.AddSingleton<IDecorateTestService>(new DecorateTestServiceB());
++        services.AddScoped<IDecorateTestService>(_ => new DecorateTestServiceA());
++
++        services.DecorateService<IDecorateTestService, DecorateTestDecorator>("-decorated");
++
++        var descriptors = services.Where(s => s.ServiceType == typeof(IDecorateTestService)).ToList();
++        Assert.Equal(3, descriptors.Count);
++        Assert.Equal(ServiceLifetime.Transient, descriptors[0].Lifetime);
++        Assert.Equal(ServiceLifetime.Singleton, descriptors[1].Lifetime);
++        Assert.Equal(ServiceLifetime.Scoped, descriptors[2].Lifetime);
++
++        using var sp = services.BuildServiceProvider();
++        using var scope = sp.CreateScope();
++        var resolved = scope.ServiceProvider.GetServices<IDecorateTestService>().ToList();
++        Assert.All(resolved, s => Assert.IsType<DecorateTestDecorator>(s));
++        Assert.Equal(["A-decorated", "B-decorated", "A-decorated"], resolved.Select(s => s.Name));
++        Assert.Equal("A-decorated", scope.ServiceProvider.GetRequiredService<IDecorateTestService>().Name);
++    }
++
++    [Fact]
++    public void DecorateService_ThrowIfNoRegistration()
++    {
++        var services = new ServiceCollection();
++        Assert.Throws<ArgumentException>(() =>
++            services.DecorateService<IDecorateTestService, DecorateTestDecorator>("x"));
++    }
+ }
+\ No newline at end of file

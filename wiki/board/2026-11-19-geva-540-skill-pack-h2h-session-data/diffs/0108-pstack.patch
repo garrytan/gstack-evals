@@ -1,0 +1,70 @@
+diff --git a/crates/hir-def/src/macro_expansion_tests/mbe.rs b/crates/hir-def/src/macro_expansion_tests/mbe.rs
+index 9a46ddb..7cf6832 100644
+--- a/crates/hir-def/src/macro_expansion_tests/mbe.rs
++++ b/crates/hir-def/src/macro_expansion_tests/mbe.rs
+@@ -238,6 +238,36 @@ fn foo() {
+     );
+ }
+ 
++#[test]
++fn float_without_dot_field_access_macro_output() {
++    check(
++        r#"
++macro_rules! foo {
++    ($a:tt) => {
++        fn foo() {
++            s.$a;
++        }
++    };
++}
++// +errors
++foo!(00E+10);
++"#,
++        expect![[r#"
++macro_rules! foo {
++    ($a:tt) => {
++        fn foo() {
++            s.$a;
++        }
++    };
++}
++/* parse error: illegal float literal */
++fn foo() {
++    s.00E+10;
++}
++"#]],
++    );
++}
++
+ #[test]
+ fn mbe_smoke_test() {
+     check(
+diff --git a/crates/syntax-bridge/src/lib.rs b/crates/syntax-bridge/src/lib.rs
+index 0dcf18a..63e82df 100644
+--- a/crates/syntax-bridge/src/lib.rs
++++ b/crates/syntax-bridge/src/lib.rs
+@@ -903,7 +903,23 @@ impl TtTreeSink<'_> {
+                 }
+                 self.text_pos += TextSize::of(text);
+             }
+-            None => unreachable!(),
++            None => {
++                // A float without a dot (like `1e0`) is not a valid field name.
++                self.inner.error("illegal float literal".to_owned(), self.text_pos);
++                self.inner.start_node(SyntaxKind::ERROR);
++                self.inner.token(SyntaxKind::FLOAT_NUMBER, text);
++                self.inner.finish_node();
++                self.text_pos += TextSize::of(text);
++                self.token_map.push(self.text_pos, span);
++
++                // here we move the exit up, the original exit has been deleted in process
++                self.inner.finish_node();
++
++                if !has_pseudo_dot {
++                    // the parser creates an unbalanced start node, we are required to close it here
++                    self.inner.finish_node();
++                }
++            }
+         }
+         self.cursor.bump();
+     }

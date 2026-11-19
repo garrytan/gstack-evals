@@ -1,0 +1,499 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index afecebb..1d55299 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -84,6 +84,7 @@ Bottom level categories:
+ - Zero-size `Queue::write_buffer` now returns an error if the offset is invalid or the buffer lacks `COPY_DST`. By @39ali in [#9374](https://github.com/gfx-rs/wgpu/pull/9374).
+ - `Buffer::get_mapped_range` and variants now return `Result<_, MapRangeError>>` instead of panicking, in line with WebGPU spec. By @atlv24 in [#9281](https://github.com/gfx-rs/wgpu/pull/9281).
+ - Passthrough shaders now require a list of entry points when being created. by @inner-daemons in [#9064](https://github.com/gfx-rs/wgpu/pull/9064).
++- Using `binding_array` in WGSL now requires `enable wgpu_binding_array;` at the top of the shader, consistent with other WGPU-specific features such as `wgpu_mesh_shader` and `wgpu_ray_query`.
+ 
+ #### Validation
+ 
+diff --git a/benches/benches/wgpu-benchmark/computepass-bindless.wgsl b/benches/benches/wgpu-benchmark/computepass-bindless.wgsl
+index 402ff94..3e04939 100644
+--- a/benches/benches/wgpu-benchmark/computepass-bindless.wgsl
++++ b/benches/benches/wgpu-benchmark/computepass-bindless.wgsl
+@@ -1,3 +1,5 @@
++enable wgpu_binding_array;
++
+ @group(0) @binding(0)
+ var tex: binding_array<texture_2d<f32>>;
+ 
+diff --git a/benches/benches/wgpu-benchmark/renderpass-bindless.wgsl b/benches/benches/wgpu-benchmark/renderpass-bindless.wgsl
+index 0277ef6..2cce0c5 100644
+--- a/benches/benches/wgpu-benchmark/renderpass-bindless.wgsl
++++ b/benches/benches/wgpu-benchmark/renderpass-bindless.wgsl
+@@ -1,3 +1,5 @@
++enable wgpu_binding_array;
++
+ @group(0) @binding(0)
+ var tex: binding_array<texture_2d<f32>>;
+ 
+diff --git a/examples/features/src/big_compute_buffers/shader.wgsl b/examples/features/src/big_compute_buffers/shader.wgsl
+index 253e763..936f129 100644
+--- a/examples/features/src/big_compute_buffers/shader.wgsl
++++ b/examples/features/src/big_compute_buffers/shader.wgsl
+@@ -1,3 +1,5 @@
++enable wgpu_binding_array;
++
+ const OFFSET: u32 = 1u << 8u;
+ const BUFFER_MAX_ELEMENTS: u32 = 1u << 25u; // Think `buffer.len()`
+ const NUM_BUFFERS: u32 = 8u;
+diff --git a/examples/features/src/texture_arrays/indexing.wgsl b/examples/features/src/texture_arrays/indexing.wgsl
+index aad090c..2517c3c 100644
+--- a/examples/features/src/texture_arrays/indexing.wgsl
++++ b/examples/features/src/texture_arrays/indexing.wgsl
+@@ -1,3 +1,5 @@
++enable wgpu_binding_array;
++
+ struct VertexInput {
+     @location(0) position: vec2<f32>,
+     @location(1) tex_coord: vec2<f32>,
+diff --git a/examples/features/src/texture_arrays/non_uniform_indexing.wgsl b/examples/features/src/texture_arrays/non_uniform_indexing.wgsl
+index 7fb30e7..2351871 100644
+--- a/examples/features/src/texture_arrays/non_uniform_indexing.wgsl
++++ b/examples/features/src/texture_arrays/non_uniform_indexing.wgsl
+@@ -1,3 +1,5 @@
++enable wgpu_binding_array;
++
+ struct FragmentInput {
+     @location(0) tex_coord: vec2<f32>,
+     @location(1) index: i32,
+diff --git a/naga/src/back/wgsl/writer.rs b/naga/src/back/wgsl/writer.rs
+index 17d8a7e..c8674a9 100644
+--- a/naga/src/back/wgsl/writer.rs
++++ b/naga/src/back/wgsl/writer.rs
+@@ -297,6 +297,7 @@ impl<W: Write> Writer<W> {
+             draw_index: bool,
+             ray_tracing_pipeline: bool,
+             per_vertex: bool,
++            binding_array: bool,
+         }
+         let mut needed = RequiredEnabled {
+             mesh_shaders: module.uses_mesh_shaders(),
+@@ -364,6 +365,9 @@ impl<W: Write> Writer<W> {
+                 TypeInner::CooperativeMatrix { .. } => {
+                     needed.cooperative_matrix = true;
+                 }
++                TypeInner::BindingArray { .. } => {
++                    needed.binding_array = true;
++                }
+                 TypeInner::AccelerationStructure { .. } => {
+                     needed.ray_tracing_pipeline = true;
+                 }
+@@ -461,6 +465,10 @@ impl<W: Write> Writer<W> {
+             writeln!(self.out, "enable wgpu_per_vertex;")?;
+             any_written = true;
+         }
++        if needed.binding_array {
++            writeln!(self.out, "enable wgpu_binding_array;")?;
++            any_written = true;
++        }
+         if any_written {
+             // Empty line for readability
+             writeln!(self.out)?;
+diff --git a/naga/src/front/wgsl/parse/conv.rs b/naga/src/front/wgsl/parse/conv.rs
+index 6270d4b..9fb003d 100644
+--- a/naga/src/front/wgsl/parse/conv.rs
++++ b/naga/src/front/wgsl/parse/conv.rs
+@@ -583,6 +583,9 @@ pub fn map_predeclared_type(
+         PredeclaredType::TypeGenerator(TypeGenerator::CooperativeMatrix { .. }) => {
+             Some(&[ImplementedEnableExtension::WgpuCooperativeMatrix])
+         }
++        PredeclaredType::TypeGenerator(TypeGenerator::BindingArray) => {
++            Some(&[ImplementedEnableExtension::WgpuBindingArray])
++        }
+         _ => None,
+     };
+     if let Some(extensions_needed) = extensions_needed {
+diff --git a/naga/src/front/wgsl/parse/directive/enable_extension.rs b/naga/src/front/wgsl/parse/directive/enable_extension.rs
+index a6d7285..e057d2b 100644
+--- a/naga/src/front/wgsl/parse/directive/enable_extension.rs
++++ b/naga/src/front/wgsl/parse/directive/enable_extension.rs
+@@ -11,6 +11,7 @@ use alloc::boxed::Box;
+ #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+ pub(crate) struct EnableExtensions {
+     wgpu_mesh_shader: bool,
++    wgpu_binding_array: bool,
+     wgpu_ray_query: bool,
+     wgpu_ray_query_vertex_return: bool,
+     wgpu_ray_tracing_pipelines: bool,
+@@ -28,6 +29,7 @@ impl EnableExtensions {
+     pub(crate) const fn empty() -> Self {
+         Self {
+             wgpu_mesh_shader: false,
++            wgpu_binding_array: false,
+             wgpu_ray_query: false,
+             wgpu_ray_query_vertex_return: false,
+             wgpu_ray_tracing_pipelines: false,
+@@ -45,6 +47,7 @@ impl EnableExtensions {
+     pub(crate) const fn add(&mut self, ext: ImplementedEnableExtension) {
+         let field = match ext {
+             ImplementedEnableExtension::WgpuMeshShader => &mut self.wgpu_mesh_shader,
++            ImplementedEnableExtension::WgpuBindingArray => &mut self.wgpu_binding_array,
+             ImplementedEnableExtension::WgpuRayQuery => &mut self.wgpu_ray_query,
+             ImplementedEnableExtension::WgpuRayQueryVertexReturn => {
+                 &mut self.wgpu_ray_query_vertex_return
+@@ -67,6 +70,7 @@ impl EnableExtensions {
+     pub(crate) const fn contains(&self, ext: ImplementedEnableExtension) -> bool {
+         match ext {
+             ImplementedEnableExtension::WgpuMeshShader => self.wgpu_mesh_shader,
++            ImplementedEnableExtension::WgpuBindingArray => self.wgpu_binding_array,
+             ImplementedEnableExtension::WgpuRayQuery => self.wgpu_ray_query,
+             ImplementedEnableExtension::WgpuRayQueryVertexReturn => {
+                 self.wgpu_ray_query_vertex_return
+@@ -124,6 +128,7 @@ impl EnableExtension {
+     const CLIP_DISTANCES: &'static str = "clip_distances";
+     const DUAL_SOURCE_BLENDING: &'static str = "dual_source_blending";
+     const MESH_SHADER: &'static str = "wgpu_mesh_shader";
++    const BINDING_ARRAY: &'static str = "wgpu_binding_array";
+     const RAY_QUERY: &'static str = "wgpu_ray_query";
+     const RAY_QUERY_VERTEX_RETURN: &'static str = "wgpu_ray_query_vertex_return";
+     const RAY_TRACING_PIPELINE: &'static str = "wgpu_ray_tracing_pipeline";
+@@ -142,6 +147,7 @@ impl EnableExtension {
+                 Self::Implemented(ImplementedEnableExtension::DualSourceBlending)
+             }
+             Self::MESH_SHADER => Self::Implemented(ImplementedEnableExtension::WgpuMeshShader),
++            Self::BINDING_ARRAY => Self::Implemented(ImplementedEnableExtension::WgpuBindingArray),
+             Self::RAY_QUERY => Self::Implemented(ImplementedEnableExtension::WgpuRayQuery),
+             Self::RAY_QUERY_VERTEX_RETURN => {
+                 Self::Implemented(ImplementedEnableExtension::WgpuRayQueryVertexReturn)
+@@ -165,6 +171,7 @@ impl EnableExtension {
+         match self {
+             Self::Implemented(kind) => match kind {
+                 ImplementedEnableExtension::WgpuMeshShader => Self::MESH_SHADER,
++                ImplementedEnableExtension::WgpuBindingArray => Self::BINDING_ARRAY,
+                 ImplementedEnableExtension::WgpuRayQuery => Self::RAY_QUERY,
+                 ImplementedEnableExtension::WgpuRayQueryVertexReturn => {
+                     Self::RAY_QUERY_VERTEX_RETURN
+@@ -209,6 +216,8 @@ pub enum ImplementedEnableExtension {
+     ClipDistances,
+     /// Enables the `wgpu_mesh_shader` extension, native only
+     WgpuMeshShader,
++    /// Enables the `wgpu_binding_array` extension, allowing the `binding_array` type, native only.
++    WgpuBindingArray,
+     /// Enables the `wgpu_ray_query` extension, native only.
+     WgpuRayQuery,
+     /// Enables the `wgpu_ray_query_vertex_return` extension, native only.
+@@ -236,6 +245,7 @@ impl ImplementedEnableExtension {
+         Self::DualSourceBlending,
+         Self::ClipDistances,
+         Self::WgpuMeshShader,
++        Self::WgpuBindingArray,
+         Self::WgpuRayQuery,
+         Self::WgpuRayQueryVertexReturn,
+         Self::WgpuRayTracingPipeline,
+@@ -250,7 +260,9 @@ impl ImplementedEnableExtension {
+         Self::VARIANTS
+     }
+ 
+-    /// Returns the capability required for this enable extension.
++    /// Returns the capabilities that permit this enable extension.
++    ///
++    /// The extension is supported if any one of the returned capabilities is present.
+     pub const fn capability(self) -> crate::valid::Capabilities {
+         use crate::valid::Capabilities as C;
+         match self {
+@@ -258,6 +270,11 @@ impl ImplementedEnableExtension {
+             Self::DualSourceBlending => C::DUAL_SOURCE_BLENDING,
+             Self::ClipDistances => C::CLIP_DISTANCES,
+             Self::WgpuMeshShader => C::MESH_SHADER,
++            Self::WgpuBindingArray => C::TEXTURE_AND_SAMPLER_BINDING_ARRAY
++                .union(C::BUFFER_BINDING_ARRAY)
++                .union(C::STORAGE_TEXTURE_BINDING_ARRAY)
++                .union(C::STORAGE_BUFFER_BINDING_ARRAY)
++                .union(C::ACCELERATION_STRUCTURE_BINDING_ARRAY),
+             Self::WgpuRayQuery => C::RAY_QUERY,
+             Self::WgpuRayQueryVertexReturn => C::RAY_HIT_VERTEX_POSITION,
+             Self::WgpuCooperativeMatrix => C::COOPERATIVE_MATRIX,
+diff --git a/naga/src/front/wgsl/parse/mod.rs b/naga/src/front/wgsl/parse/mod.rs
+index 5f503ef..2acfe3c 100644
+--- a/naga/src/front/wgsl/parse/mod.rs
++++ b/naga/src/front/wgsl/parse/mod.rs
+@@ -2273,7 +2273,7 @@ impl Parser {
+                             };
+                             // Check if the required capability is supported
+                             let required_capability = extension.capability();
+-                            if !options.capabilities.contains(required_capability) {
++                            if !options.capabilities.intersects(required_capability) {
+                                 return Err(Box::new(Error::EnableExtensionNotSupported {
+                                     kind,
+                                     span,
+diff --git a/naga/src/valid/mod.rs b/naga/src/valid/mod.rs
+index cbc10ce..989c27e 100644
+--- a/naga/src/valid/mod.rs
++++ b/naga/src/valid/mod.rs
+@@ -238,6 +238,11 @@ impl Capabilities {
+             Self::COOPERATIVE_MATRIX => Some(Ext::WgpuCooperativeMatrix),
+             Self::RAY_TRACING_PIPELINE => Some(Ext::WgpuRayTracingPipeline),
+             Self::PER_VERTEX => Some(Ext::PerVertex),
++            Self::TEXTURE_AND_SAMPLER_BINDING_ARRAY
++            | Self::BUFFER_BINDING_ARRAY
++            | Self::STORAGE_TEXTURE_BINDING_ARRAY
++            | Self::STORAGE_BUFFER_BINDING_ARRAY
++            | Self::ACCELERATION_STRUCTURE_BINDING_ARRAY => Some(Ext::WgpuBindingArray),
+             _ => None,
+         }
+     }
+diff --git a/naga/tests/in/wgsl/binding-arrays.wgsl b/naga/tests/in/wgsl/binding-arrays.wgsl
+index d1bf121..0f7e955 100644
+--- a/naga/tests/in/wgsl/binding-arrays.wgsl
++++ b/naga/tests/in/wgsl/binding-arrays.wgsl
+@@ -1,3 +1,5 @@
++enable wgpu_binding_array;
++
+ struct UniformIndex {
+     index: u32
+ };
+diff --git a/naga/tests/in/wgsl/binding-buffer-arrays.wgsl b/naga/tests/in/wgsl/binding-buffer-arrays.wgsl
+index fb25623..7a8748c 100644
+--- a/naga/tests/in/wgsl/binding-buffer-arrays.wgsl
++++ b/naga/tests/in/wgsl/binding-buffer-arrays.wgsl
+@@ -1,3 +1,5 @@
++enable wgpu_binding_array;
++
+ struct UniformIndex {
+     index: u32
+ }
+diff --git a/naga/tests/naga/wgsl_errors.rs b/naga/tests/naga/wgsl_errors.rs
+index 97bed72..dbe87b0 100644
+--- a/naga/tests/naga/wgsl_errors.rs
++++ b/naga/tests/naga/wgsl_errors.rs
+@@ -3317,7 +3317,7 @@ fn global_initialization_type_mismatch() {
+ #[test]
+ fn binding_array_local() {
+     check_validation! {
+-        "fn f() { var x: binding_array<sampler, 4>; }":
++        "enable wgpu_binding_array; fn f() { var x: binding_array<sampler, 4>; }":
+         Err(_)
+     }
+ }
+@@ -3325,7 +3325,7 @@ fn binding_array_local() {
+ #[test]
+ fn binding_array_private() {
+     check_validation! {
+-        "var<private> x: binding_array<sampler, 4>;":
++        "enable wgpu_binding_array; var<private> x: binding_array<sampler, 4>;":
+         Err(_)
+     }
+ }
+@@ -3333,7 +3333,7 @@ fn binding_array_private() {
+ #[test]
+ fn binding_array_non_struct() {
+     check_validation! {
+-        "var<storage> x: binding_array<i32, 4>;":
++        "enable wgpu_binding_array; var<storage> x: binding_array<i32, 4>;":
+         Err(naga::valid::ValidationError::Type {
+             source: naga::valid::TypeError::BindingArrayBaseTypeNotStruct(_),
+             ..
+@@ -3342,6 +3342,7 @@ fn binding_array_non_struct() {
+ 
+     check_validation! {
+         r#"
++            enable wgpu_binding_array;
+             enable wgpu_ray_query;
+             @group(0) @binding(0)
+             var<storage> ray_query_array: binding_array<ray_query, 10>;
+@@ -4697,6 +4698,7 @@ fn ray_query_vertex_return_enable_extension() {
+ fn binding_array_requires_capability() {
+     check_validation! {
+         r#"
++            enable wgpu_binding_array;
+             struct Buffer { data: u32 }
+             @group(0) @binding(0)
+             var<storage> storage_array: binding_array<Buffer, 10>;
+@@ -4711,6 +4713,7 @@ fn binding_array_requires_capability() {
+ 
+     check_validation! {
+         r#"
++            enable wgpu_binding_array;
+             struct Buffer { data: u32 }
+             @group(0) @binding(0)
+             var<uniform> uniform_array: binding_array<Buffer, 10>;
+@@ -4725,6 +4728,7 @@ fn binding_array_requires_capability() {
+ 
+     check_validation! {
+         r#"
++            enable wgpu_binding_array;
+             @group(0) @binding(0)
+             var storage_texture_array: binding_array<texture_storage_2d<rgba8unorm, write>, 10>;
+         "#:
+@@ -4738,6 +4742,7 @@ fn binding_array_requires_capability() {
+ 
+     check_validation! {
+         r#"
++            enable wgpu_binding_array;
+             @group(0) @binding(0)
+             var sampled_texture_array: binding_array<texture_2d<f32>, 10>;
+         "#:
+@@ -4751,6 +4756,7 @@ fn binding_array_requires_capability() {
+ 
+     check_validation! {
+         r#"
++            enable wgpu_binding_array;
+             @group(0) @binding(0)
+             var sampler_array: binding_array<sampler, 10>;
+         "#:
+@@ -4765,6 +4771,7 @@ fn binding_array_requires_capability() {
+     // Binding arrays of external textures are not yet supported.
+     check_validation! {
+         r#"
++            enable wgpu_binding_array;
+             @group(0) @binding(0)
+             var external_texture_array: binding_array<texture_external, 10>;
+         "#:
+@@ -4778,6 +4785,7 @@ fn binding_array_requires_capability() {
+     // Binding arrays of acceleration structures require a capability.
+     check_validation! {
+         r#"
++            enable wgpu_binding_array;
+             enable wgpu_ray_query;
+             @group(0) @binding(0)
+             var acc_struct_array: binding_array<acceleration_structure, 10>;
+@@ -4792,6 +4800,31 @@ fn binding_array_requires_capability() {
+     }
+ }
+ 
++#[test]
++fn binding_array_enable_extension() {
++    check_extension_validation!(
++        Capabilities::TEXTURE_AND_SAMPLER_BINDING_ARRAY,
++        r#"@group(0) @binding(0)
++var samplers: binding_array<sampler, 10>;
++"#,
++        r#"error: the `wgpu_binding_array` enable extension is not enabled
++  ┌─ wgsl:2:15
++  │
++2 │ var samplers: binding_array<sampler, 10>;
++  │               ^^^^^^^^^^^^^ the `wgpu_binding_array` "Enable Extension" is needed for this functionality, but it is not currently enabled.
++  │
++  = note: You can enable this extension by adding `enable wgpu_binding_array;` at the top of the shader, before any other items.
++
++"#,
++        Err(naga::valid::ValidationError::GlobalVariable {
++            source: naga::valid::GlobalVariableError::UnsupportedCapability(
++                Capabilities::TEXTURE_AND_SAMPLER_BINDING_ARRAY
++            ),
++            ..
++        })
++    );
++}
++
+ #[test]
+ fn cooperative_matrix_enable_extension() {
+     for ty in ["coop_mat8x8", "coop_mat16x16"] {
+diff --git a/naga/tests/out/wgsl/spv-binding-arrays.dynamic.wgsl b/naga/tests/out/wgsl/spv-binding-arrays.dynamic.wgsl
+index bb277d3..43d8594 100644
+--- a/naga/tests/out/wgsl/spv-binding-arrays.dynamic.wgsl
++++ b/naga/tests/out/wgsl/spv-binding-arrays.dynamic.wgsl
+@@ -1,3 +1,5 @@
++enable wgpu_binding_array;
++
+ @group(0) @binding(0) 
+ var global: binding_array<texture_2d<f32>>;
+ @group(0) @binding(1) 
+diff --git a/naga/tests/out/wgsl/spv-binding-arrays.runtime.wgsl b/naga/tests/out/wgsl/spv-binding-arrays.runtime.wgsl
+index 72b8244..d673183 100644
+--- a/naga/tests/out/wgsl/spv-binding-arrays.runtime.wgsl
++++ b/naga/tests/out/wgsl/spv-binding-arrays.runtime.wgsl
+@@ -1,3 +1,5 @@
++enable wgpu_binding_array;
++
+ var<private> input_u002e_texture_coordinates_1: vec2<f32>;
+ var<private> input_u002e_texture_index_1: u32;
+ @group(0) @binding(0) 
+diff --git a/naga/tests/out/wgsl/spv-binding-arrays.static.wgsl b/naga/tests/out/wgsl/spv-binding-arrays.static.wgsl
+index f0a89c6..9c58221 100644
+--- a/naga/tests/out/wgsl/spv-binding-arrays.static.wgsl
++++ b/naga/tests/out/wgsl/spv-binding-arrays.static.wgsl
+@@ -1,3 +1,5 @@
++enable wgpu_binding_array;
++
+ @group(0) @binding(0) 
+ var global: binding_array<texture_2d<f32>, 256>;
+ @group(0) @binding(1) 
+diff --git a/naga/tests/out/wgsl/wgsl-binding-arrays.wgsl b/naga/tests/out/wgsl/wgsl-binding-arrays.wgsl
+index f82561c..0b38fc7 100644
+--- a/naga/tests/out/wgsl/wgsl-binding-arrays.wgsl
++++ b/naga/tests/out/wgsl/wgsl-binding-arrays.wgsl
+@@ -1,3 +1,5 @@
++enable wgpu_binding_array;
++
+ struct UniformIndex {
+     index: u32,
+ }
+diff --git a/naga/tests/out/wgsl/wgsl-binding-buffer-arrays.wgsl b/naga/tests/out/wgsl/wgsl-binding-buffer-arrays.wgsl
+index b30a75c..cdf5197 100644
+--- a/naga/tests/out/wgsl/wgsl-binding-buffer-arrays.wgsl
++++ b/naga/tests/out/wgsl/wgsl-binding-buffer-arrays.wgsl
+@@ -1,3 +1,5 @@
++enable wgpu_binding_array;
++
+ struct UniformIndex {
+     index: u32,
+ }
+diff --git a/tests/tests/wgpu-gpu/binding_array/buffers.rs b/tests/tests/wgpu-gpu/binding_array/buffers.rs
+index 61ba386..a51ef34 100644
+--- a/tests/tests/wgpu-gpu/binding_array/buffers.rs
++++ b/tests/tests/wgpu-gpu/binding_array/buffers.rs
+@@ -107,6 +107,8 @@ async fn binding_array_buffers(
+     };
+ 
+     let shader = r#"
++        enable wgpu_binding_array;
++
+         struct ImAU32 {
+             value: u32,
+             _padding: u32,
+diff --git a/tests/tests/wgpu-gpu/binding_array/sampled_textures.rs b/tests/tests/wgpu-gpu/binding_array/sampled_textures.rs
+index 9f664d2..abb4673 100644
+--- a/tests/tests/wgpu-gpu/binding_array/sampled_textures.rs
++++ b/tests/tests/wgpu-gpu/binding_array/sampled_textures.rs
+@@ -65,6 +65,8 @@ static PARTIAL_BINDING_ARRAY_SAMPLED_TEXTURES: GpuTestConfiguration = GpuTestCon
+ /// output due to non-native support for non-uniform indexing within a WARP.
+ async fn binding_array_sampled_textures(ctx: TestingContext, partially_bound: bool) {
+     let shader = r#"
++        enable wgpu_binding_array;
++
+         @group(0) @binding(0)
+         var textures: binding_array<texture_2d<f32>>;
+ 
+diff --git a/tests/tests/wgpu-gpu/binding_array/samplers.rs b/tests/tests/wgpu-gpu/binding_array/samplers.rs
+index 8098e76..b3fe1e0 100644
+--- a/tests/tests/wgpu-gpu/binding_array/samplers.rs
++++ b/tests/tests/wgpu-gpu/binding_array/samplers.rs
+@@ -58,6 +58,8 @@ static PARTIAL_BINDING_ARRAY_SAMPLERS: GpuTestConfiguration = GpuTestConfigurati
+ 
+ async fn binding_array_samplers(ctx: TestingContext, partially_bound: bool) {
+     let shader = r#"
++        enable wgpu_binding_array;
++
+         @group(0) @binding(0)
+         var samplers: binding_array<sampler>;
+         @group(0) @binding(1)
+diff --git a/tests/tests/wgpu-gpu/binding_array/storage_textures.rs b/tests/tests/wgpu-gpu/binding_array/storage_textures.rs
+index cec6a83..17335d8 100644
+--- a/tests/tests/wgpu-gpu/binding_array/storage_textures.rs
++++ b/tests/tests/wgpu-gpu/binding_array/storage_textures.rs
+@@ -52,6 +52,8 @@ static PARTIAL_BINDING_ARRAY_STORAGE_TEXTURES: GpuTestConfiguration = GpuTestCon
+ 
+ async fn binding_array_storage_textures(ctx: TestingContext, partially_bound: bool) {
+     let shader = r#"
++        enable wgpu_binding_array;
++
+         @group(0) @binding(0)
+         var textures: binding_array<texture_storage_2d<rgba8unorm, read_write> >;
+ 
+diff --git a/tests/tests/wgpu-gpu/binding_array/tlas.rs b/tests/tests/wgpu-gpu/binding_array/tlas.rs
+index 566f604..f44f6dd 100644
+--- a/tests/tests/wgpu-gpu/binding_array/tlas.rs
++++ b/tests/tests/wgpu-gpu/binding_array/tlas.rs
+@@ -39,6 +39,7 @@ async fn binding_array_tlas(ctx: TestingContext) {
+     // Creating a `ray_query` and initializing it against element 0 forces the binding to be used.
+     let shader = r#"
+         enable wgpu_ray_query;
++        enable wgpu_binding_array;
+ 
+         @group(0) @binding(0)
+         var tlas_array: binding_array<acceleration_structure>;

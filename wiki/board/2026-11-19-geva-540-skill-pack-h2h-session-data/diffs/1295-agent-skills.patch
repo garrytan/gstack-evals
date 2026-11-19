@@ -1,0 +1,126 @@
+diff --git a/pkg/kube/proxy.go b/pkg/kube/proxy.go
+index c346704..e40536a 100644
+--- a/pkg/kube/proxy.go
++++ b/pkg/kube/proxy.go
+@@ -3,9 +3,11 @@ package kube
+ import (
+ 	"context"
+ 	"errors"
++	"fmt"
+ 	"io"
+ 	"net/http"
+ 	"net/url"
++	"strings"
+ 
+ 	"github.com/gin-gonic/gin"
+ 	"k8s.io/client-go/rest"
+@@ -60,11 +62,52 @@ func HandleProxy(c *gin.Context, client *K8sClient, kind, namespace, name, proxy
+ 	}
+ }
+ 
++// validateProxySegment ensures a value is a single, non-traversing path segment.
++func validateProxySegment(field, value string) error {
++	if value == "" {
++		return fmt.Errorf("invalid %s: must not be empty", field)
++	}
++	if value == "." || value == ".." || strings.ContainsAny(value, "/\\") {
++		return fmt.Errorf("invalid %s", field)
++	}
++	return nil
++}
++
++// validateProxyPath rejects dot segments that would let url.JoinPath escape the proxy prefix.
++func validateProxyPath(path string) error {
++	for _, segment := range strings.FieldsFunc(path, func(r rune) bool { return r == '/' || r == '\\' }) {
++		if segment == "." || segment == ".." {
++			return errors.New("invalid proxy path: dot segments are not allowed")
++		}
++	}
++	return nil
++}
++
+ func buildProxyURL(host, kind, namespace, name, path, rawQuery string) (string, error) {
+-	path, err := url.JoinPath(host, "api/v1/namespaces", namespace, kind, name, "proxy", path)
++	if err := validateProxySegment("kind", kind); err != nil {
++		return "", err
++	}
++	if err := validateProxySegment("namespace", namespace); err != nil {
++		return "", err
++	}
++	if err := validateProxySegment("name", name); err != nil {
++		return "", err
++	}
++	if err := validateProxyPath(path); err != nil {
++		return "", err
++	}
++
++	base, err := url.JoinPath(host, "api/v1/namespaces", namespace, kind, name, "proxy")
+ 	if err != nil {
+ 		return "", err
+ 	}
++	path, err = url.JoinPath(base, path)
++	if err != nil {
++		return "", err
++	}
++	if path != base && !strings.HasPrefix(path, base+"/") {
++		return "", errors.New("invalid proxy path")
++	}
+ 
+ 	query, err := url.ParseQuery(rawQuery)
+ 	if err != nil {
+diff --git a/pkg/kube/proxy_test.go b/pkg/kube/proxy_test.go
+index 617963d..f3f6d74 100644
+--- a/pkg/kube/proxy_test.go
++++ b/pkg/kube/proxy_test.go
+@@ -64,6 +64,51 @@ func TestBuildProxyURL(t *testing.T) {
+ 	}
+ }
+ 
++func TestBuildProxyURLRejectsTraversal(t *testing.T) {
++	t.Parallel()
++
++	tests := []struct {
++		name      string
++		namespace string
++		resource  string
++		path      string
++	}{
++		{name: "dot dot in proxy path", namespace: "default", resource: "nginx", path: "/../../../../kube-system/secrets"},
++		{name: "single dot dot in proxy path", namespace: "default", resource: "nginx", path: "/.."},
++		{name: "dot dot in middle of proxy path", namespace: "default", resource: "nginx", path: "/a/../../b"},
++		{name: "backslash dot dot in proxy path", namespace: "default", resource: "nginx", path: "/..\\..\\secrets"},
++		{name: "dot dot resource name", namespace: "default", resource: "..", path: "/"},
++		{name: "dot resource name", namespace: "default", resource: ".", path: "/"},
++		{name: "slash in resource name", namespace: "default", resource: "../../../kube-system/secrets/x", path: ""},
++		{name: "slash in resource name no dots", namespace: "default", resource: "a/b", path: ""},
++		{name: "empty resource name", namespace: "default", resource: "", path: ""},
++		{name: "slash in namespace", namespace: "default/../kube-system", resource: "nginx", path: ""},
++		{name: "dot dot namespace", namespace: "..", resource: "nginx", path: ""},
++	}
++
++	for _, tt := range tests {
++		t.Run(tt.name, func(t *testing.T) {
++			t.Parallel()
++			got, err := buildProxyURL("https://example.com", "pods", tt.namespace, tt.resource, tt.path, "")
++			if err == nil {
++				t.Fatalf("expected error, got url %q", got)
++			}
++		})
++	}
++}
++
++func TestBuildProxyURLAllowsDotsInsideSegments(t *testing.T) {
++	t.Parallel()
++	got, err := buildProxyURL("https://example.com", "services", "default", "my.svc:http", "/static/app..min.js", "")
++	if err != nil {
++		t.Fatalf("unexpected error: %v", err)
++	}
++	want := "https://example.com/api/v1/namespaces/default/services/my.svc:http/proxy/static/app..min.js"
++	if got != want {
++		t.Fatalf("buildProxyURL() = %q, want %q", got, want)
++	}
++}
++
+ func TestCloneHeader(t *testing.T) {
+ 	t.Parallel()
+ 

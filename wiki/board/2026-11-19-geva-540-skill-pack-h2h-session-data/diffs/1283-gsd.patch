@@ -1,0 +1,265 @@
+diff --git a/pkg/testing/ca/ca.go b/pkg/testing/ca/ca.go
+index 3e476a4..e7057fd 100644
+--- a/pkg/testing/ca/ca.go
++++ b/pkg/testing/ca/ca.go
+@@ -318,6 +318,12 @@ func (ca *VirtualSigstore) SignAtTimeWithVersion(identity, issuer string, artifa
+ }
+ 
+ func (ca *VirtualSigstore) GenerateTlogEntry(leafCert *x509.Certificate, envelope *dsse.Envelope, sig []byte, integratedTime int64, generateInclusionProof bool) (*tlog.Entry, error) {
++	return ca.GenerateTlogEntryWithLogIndex(leafCert, envelope, sig, integratedTime, 0, generateInclusionProof)
++}
++
++// GenerateTlogEntryWithLogIndex is like GenerateTlogEntry, but allows setting
++// the log index of the generated entry.
++func (ca *VirtualSigstore) GenerateTlogEntryWithLogIndex(leafCert *x509.Certificate, envelope *dsse.Envelope, sig []byte, integratedTime int64, logIndex int64, generateInclusionProof bool) (*tlog.Entry, error) {
+ 	leafCertPem, err := cryptoutils.MarshalCertificateToPEM(leafCert)
+ 	if err != nil {
+ 		return nil, err
+@@ -342,8 +348,6 @@ func (ca *VirtualSigstore) GenerateTlogEntry(leafCert *x509.Certificate, envelop
+ 		return nil, err
+ 	}
+ 
+-	logIndex := int64(0)
+-
+ 	b := createRekorBundle(rekorLogID, integratedTime, logIndex, rekorBody)
+ 	set, err := ca.RekorSignPayload(*b)
+ 	if err != nil {
+diff --git a/pkg/verify/sct.go b/pkg/verify/sct.go
+index bf447c2..0157870 100644
+--- a/pkg/verify/sct.go
++++ b/pkg/verify/sct.go
+@@ -50,9 +50,15 @@ func VerifySignedCertificateTimestamp(chains [][]*x509.Certificate, threshold in
+ 		return err
+ 	}
+ 
+-	verified := 0
++	// Count verified SCTs per CT log authority (log key ID), rather than per
++	// SCT or per chain, so that a single compromised CT log cannot satisfy a
++	// multi-log threshold.
++	verifiedLogs := make(map[string]struct{})
+ 	for _, sct := range scts {
+ 		encodedKeyID := hex.EncodeToString(sct.LogID.KeyID[:])
++		if _, seen := verifiedLogs[encodedKeyID]; seen {
++			continue
++		}
+ 		key, ok := ctlogs[encodedKeyID]
+ 		if !ok {
+ 			// skip entries the trust root cannot verify
+@@ -87,13 +93,14 @@ func VerifySignedCertificateTimestamp(chains [][]*x509.Certificate, threshold in
+ 
+ 			err = ctutil.VerifySCT(key.PublicKey, fulcioChain, sct, true)
+ 			if err == nil {
+-				verified++
++				verifiedLogs[encodedKeyID] = struct{}{}
++				break
+ 			}
+ 		}
+ 	}
+ 
+-	if verified < threshold {
+-		return fmt.Errorf("only able to verify %d SCT entries; unable to meet threshold of %d", verified, threshold)
++	if len(verifiedLogs) < threshold {
++		return fmt.Errorf("only able to verify SCTs from %d unique CT logs; unable to meet threshold of %d", len(verifiedLogs), threshold)
+ 	}
+ 
+ 	return nil
+diff --git a/pkg/verify/sct_test.go b/pkg/verify/sct_test.go
+index 1121e4a..0826359 100644
+--- a/pkg/verify/sct_test.go
++++ b/pkg/verify/sct_test.go
+@@ -67,10 +67,13 @@ func TestVerifySignedCertificateTimestamp(t *testing.T) {
+ 	if err != nil {
+ 		t.Fatal(err)
+ 	}
++	// a second, distinct CT log authority (different log ID)
++	secondLogID := sha256.Sum256([]byte("second ct log"))
+ 	tests := []struct {
+ 		name            string
+ 		getCertFn       func() *x509.Certificate
+ 		chain           []*x509.Certificate // only intermediate and root
++		extraChains     [][]*x509.Certificate
+ 		threshold       int
+ 		trustedMaterial root.TrustedMaterial
+ 		wantErr         bool
+@@ -383,13 +386,82 @@ func TestVerifySignedCertificateTimestamp(t *testing.T) {
+ 					},
+ 				},
+ 			},
++			// both SCTs come from the same log, so they only count once
++			wantErr: true,
++		},
++		{
++			name: "threshold of 2 with 2 valid scts from distinct logs",
++			getCertFn: func() *x509.Certificate {
++				return embedSCTs(t, privateKey, skid, createBaseCert(t, privateKey, skid, big.NewInt(1)), []ct.SignedCertificateTimestamp{
++					{
++						SCTVersion: ct.V1,
++						Timestamp:  12345,
++						LogID:      ct.LogID{KeyID: logID},
++					},
++					{
++						SCTVersion: ct.V1,
++						Timestamp:  99,
++						LogID:      ct.LogID{KeyID: secondLogID},
++					},
++				})
++			},
++			chain:     []*x509.Certificate{caCert},
++			threshold: 2,
++			trustedMaterial: &fakeTrustedMaterial{
++				transparencyLog: map[string]*root.TransparencyLog{
++					hex.EncodeToString(logID[:]): {
++						PublicKey: &privateKey.PublicKey,
++					},
++					hex.EncodeToString(secondLogID[:]): {
++						PublicKey: &privateKey.PublicKey,
++					},
++				},
++				cas: []root.CertificateAuthority{
++					&root.FulcioCertificateAuthority{
++						Root: caCert,
++					},
++				},
++			},
++		},
++		{
++			name: "threshold of 2 with 1 sct verified across multiple chains",
++			getCertFn: func() *x509.Certificate {
++				return embedSCTs(t, privateKey, skid, createBaseCert(t, privateKey, skid, big.NewInt(1)), []ct.SignedCertificateTimestamp{
++					{
++						SCTVersion: ct.V1,
++						Timestamp:  12345,
++						LogID:      ct.LogID{KeyID: logID},
++					},
++				})
++			},
++			chain:       []*x509.Certificate{caCert},
++			extraChains: [][]*x509.Certificate{{caCert}},
++			threshold:   2,
++			trustedMaterial: &fakeTrustedMaterial{
++				transparencyLog: map[string]*root.TransparencyLog{
++					hex.EncodeToString(logID[:]): {
++						PublicKey: &privateKey.PublicKey,
++					},
++				},
++				cas: []root.CertificateAuthority{
++					&root.FulcioCertificateAuthority{
++						Root: caCert,
++					},
++				},
++			},
++			wantErr: true,
+ 		},
+ 	}
+ 	for _, test := range tests {
+ 		t.Run(test.name, func(t *testing.T) {
+-			chain := []*x509.Certificate{test.getCertFn()}
++			leaf := test.getCertFn()
++			chain := []*x509.Certificate{leaf}
+ 			chain = append(chain, test.chain...)
+-			err = VerifySignedCertificateTimestamp([][]*x509.Certificate{chain}, test.threshold, test.trustedMaterial)
++			chains := [][]*x509.Certificate{chain}
++			for _, extra := range test.extraChains {
++				chains = append(chains, append([]*x509.Certificate{leaf}, extra...))
++			}
++			err = VerifySignedCertificateTimestamp(chains, test.threshold, test.trustedMaterial)
+ 			if test.wantErr {
+ 				assert.Error(t, err)
+ 			} else {
+diff --git a/pkg/verify/tlog.go b/pkg/verify/tlog.go
+index a7babc1..9ca1a72 100644
+--- a/pkg/verify/tlog.go
++++ b/pkg/verify/tlog.go
+@@ -35,8 +35,8 @@ import (
+ // VerifyTlogEntry verifies that the given entity has been logged
+ // in the transparency log and that the log entry is valid.
+ //
+-// The threshold parameter is the number of unique transparency log entries
+-// that must be verified.
++// The threshold parameter is the number of unique transparency logs
++// (identified by log key ID) that must have a verified entry.
+ func VerifyTlogEntry(entity SignedEntity, trustedMaterial root.TrustedMaterial, logThreshold int, trustIntegratedTime bool) ([]root.Timestamp, error) { //nolint:revive
+ 	entries, err := entity.TlogEntries()
+ 	if err != nil {
+@@ -70,7 +70,10 @@ func VerifyTlogEntry(entity SignedEntity, trustedMaterial root.TrustedMaterial,
+ 	}
+ 
+ 	verifiedTimestamps := []root.Timestamp{}
+-	logEntriesVerified := 0
++	// Track verified entries per log authority (log key ID) rather than per
++	// entry, so that a single compromised log cannot satisfy a multi-log
++	// threshold by producing multiple entries with different indices.
++	verifiedLogs := make(map[string]struct{})
+ 
+ 	for _, entry := range entries {
+ 		err := tlog.ValidateEntry(entry)
+@@ -193,11 +196,11 @@ func VerifyTlogEntry(entity SignedEntity, trustedMaterial root.TrustedMaterial,
+ 		}
+ 
+ 		// successful log entry verification
+-		logEntriesVerified++
++		verifiedLogs[hex64Key] = struct{}{}
+ 	}
+ 
+-	if logEntriesVerified < logThreshold {
+-		return nil, fmt.Errorf("not enough verified log entries from transparency log: %d < %d", logEntriesVerified, logThreshold)
++	if len(verifiedLogs) < logThreshold {
++		return nil, fmt.Errorf("not enough verified log entries from transparency log: %d < %d unique logs", len(verifiedLogs), logThreshold)
+ 	}
+ 
+ 	return verifiedTimestamps, nil
+diff --git a/pkg/verify/tlog_test.go b/pkg/verify/tlog_test.go
+index 25859ae..37ad1d5 100644
+--- a/pkg/verify/tlog_test.go
++++ b/pkg/verify/tlog_test.go
+@@ -196,6 +196,50 @@ func TestDuplicateTlogEntries(t *testing.T) {
+ 	assert.ErrorContains(t, err, "duplicate tlog entries found") // duplicate tlog entries should fail to verify
+ }
+ 
++type sameLogMultipleEntriesEntity struct {
++	*ca.TestEntity
++	extra *tlog.Entry
++}
++
++func (e *sameLogMultipleEntriesEntity) TlogEntries() ([]*tlog.Entry, error) {
++	entries, err := e.TestEntity.TlogEntries()
++	if err != nil {
++		return nil, err
++	}
++	return append(entries, e.extra), nil
++}
++
++// A single (possibly compromised) log must not be able to satisfy a
++// multi-log threshold by producing multiple entries with different indices.
++func TestMultipleEntriesFromSameLogCountOnce(t *testing.T) {
++	virtualSigstore, err := ca.NewVirtualSigstore()
++	assert.NoError(t, err)
++
++	statement := []byte(`{"_type":"https://in-toto.io/Statement/v0.1","predicateType":"customFoo","subject":[{"name":"subject","digest":{"sha256":"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"}}],"predicate":{}}`)
++	entity, err := virtualSigstore.Attest("foo@example.com", "issuer", statement)
++	assert.NoError(t, err)
++
++	vc, err := entity.VerificationContent()
++	assert.NoError(t, err)
++	sigContent, err := entity.SignatureContent()
++	assert.NoError(t, err)
++	entries, err := entity.TlogEntries()
++	assert.NoError(t, err)
++
++	extra, err := virtualSigstore.GenerateTlogEntryWithLogIndex(vc.Certificate(), sigContent.EnvelopeContent().RawEnvelope(), sigContent.Signature(), entries[0].IntegratedTime().Unix(), 1, false)
++	assert.NoError(t, err)
++
++	multi := &sameLogMultipleEntriesEntity{TestEntity: entity, extra: extra}
++
++	// both entries are individually valid
++	_, err = verify.VerifyTlogEntry(multi, virtualSigstore, 1, true)
++	assert.NoError(t, err)
++
++	// but they come from the same log, so they must only count once
++	_, err = verify.VerifyTlogEntry(multi, virtualSigstore, 2, true)
++	assert.ErrorContains(t, err, "not enough verified log entries from transparency log")
++}
++
+ type tooManyTlogEntriesEntity struct {
+ 	*ca.TestEntity
+ }

@@ -1,0 +1,109 @@
+diff --git a/modules/caddytls/tls.go b/modules/caddytls/tls.go
+index 34ffbf6..ec00b08 100644
+--- a/modules/caddytls/tls.go
++++ b/modules/caddytls/tls.go
+@@ -570,7 +570,7 @@ func (t *TLS) Manage(subjects map[string]struct{}) error {
+ 		// prefer using that over individual certs for its subdomains;
+ 		// but users can disable this and force getting a certificate for
+ 		// subdomains by adding the name to the 'automate' cert loader
+-		if t.managingWildcardFor(subj, subjects) {
++		if t.managingWildcardFor(subj, subjects) != "" {
+ 			if _, ok := t.automateNames[subj]; !ok {
+ 				continue
+ 			}
+@@ -611,11 +611,11 @@ func (t *TLS) Manage(subjects map[string]struct{}) error {
+ 	return nil
+ }
+ 
+-// managingWildcardFor returns true if the app is managing a certificate that covers that
+-// subject name (including consideration of wildcards), either from its internal list of
++// managingWildcardFor returns the name of the certificate the app is managing that covers
++// that subject name (including consideration of wildcards), either from its internal list of
+ // names that it IS managing certs for, or from the otherSubjsToManage which includes names
+-// that WILL be managed.
+-func (t *TLS) managingWildcardFor(subj string, otherSubjsToManage map[string]struct{}) bool {
++// that WILL be managed. It returns an empty string if there is no such name.
++func (t *TLS) managingWildcardFor(subj string, otherSubjsToManage map[string]struct{}) string {
+ 	// TODO: we could also consider manually-loaded certs using t.HasCertificateForSubject(),
+ 	// but that does not account for how manually-loaded certs may be restricted as to which
+ 	// hostnames or ClientHellos they can be used with by tags, etc; I don't *think* anyone
+@@ -625,8 +625,10 @@ func (t *TLS) managingWildcardFor(subj string, otherSubjsToManage map[string]str
+ 
+ 	// IP addresses must match exactly
+ 	if ip := net.ParseIP(subj); ip != nil {
+-		_, managing := t.managing[subj]
+-		return managing
++		if _, managing := t.managing[subj]; managing {
++			return subj
++		}
++		return ""
+ 	}
+ 
+ 	// replace labels of the domain with wildcards until we get a match
+@@ -638,14 +640,14 @@ func (t *TLS) managingWildcardFor(subj string, otherSubjsToManage map[string]str
+ 		labels[i] = "*"
+ 		candidate := strings.Join(labels, ".")
+ 		if _, ok := t.managing[candidate]; ok {
+-			return true
++			return candidate
+ 		}
+ 		if _, ok := otherSubjsToManage[candidate]; ok {
+-			return true
++			return candidate
+ 		}
+ 	}
+ 
+-	return false
++	return ""
+ }
+ 
+ // RegisterServerNames registers the provided DNS names with the TLS app.
+@@ -764,6 +766,15 @@ func (t *TLS) AddAutomationPolicy(ap *AutomationPolicy) error {
+ 
+ func (t *TLS) getConfigForName(name string) *certmagic.Config {
+ 	ap := t.getAutomationPolicyForName(name)
++	// if this name is not managed itself because a managed wildcard covers
++	// it (see Manage), use the wildcard's policy instead, otherwise settings
++	// like on-demand TLS and external cert managers (get_certificate) would
++	// not apply to the subdomain even though the wildcard is meant to serve it
++	if _, managed := t.managing[name]; !managed && ap.magic.OnDemand == nil {
++		if wildcard := t.managingWildcardFor(name, nil); wildcard != "" && wildcard != name {
++			ap = t.getAutomationPolicyForName(wildcard)
++		}
++	}
+ 	return ap.magic
+ }
+ 
+diff --git a/modules/caddytls/tls_test.go b/modules/caddytls/tls_test.go
+new file mode 100644
+index 0000000..93ee302
+--- /dev/null
++++ b/modules/caddytls/tls_test.go
+@@ -0,0 +1,27 @@
++package caddytls
++
++import (
++	"testing"
++
++	"github.com/caddyserver/certmagic"
++)
++
++// Subdomains skipped by Manage because a managed wildcard covers them must
++// use the wildcard's policy at handshake time (e.g. for get_certificate).
++func TestGetConfigForNameUsesCoveringWildcardPolicy(t *testing.T) {
++	sub := &AutomationPolicy{subjects: []string{"wiki.example.com"}, magic: &certmagic.Config{}}
++	wild := &AutomationPolicy{subjects: []string{"*.example.com"}, magic: &certmagic.Config{OnDemand: &certmagic.OnDemandConfig{}}}
++	tlsApp := &TLS{
++		Automation: &AutomationConfig{Policies: []*AutomationPolicy{sub, wild}},
++		managing:   map[string]string{"*.example.com": ""},
++	}
++
++	if got := tlsApp.getConfigForName("wiki.example.com"); got != wild.magic {
++		t.Error("expected covering wildcard's config for unmanaged subdomain")
++	}
++
++	tlsApp.managing["wiki.example.com"] = ""
++	if got := tlsApp.getConfigForName("wiki.example.com"); got != sub.magic {
++		t.Error("expected subdomain's own config when it is managed itself")
++	}
++}

@@ -1,0 +1,3 @@
+https://github.com/dlvhdr/gh-dash at d34aadb4eac18e56f112d45f3a9694549bc0dbda
+Licence at the freeze-date read (prereg o-, b1- and b2-licences.json): MIT
+Root licence and notice files at that commit: LICENSE.txt

@@ -1,0 +1,129 @@
+diff --git a/src/Finbuckle.MultiTenant/DependencyInjection/ServiceCollectionExtensions.cs b/src/Finbuckle.MultiTenant/DependencyInjection/ServiceCollectionExtensions.cs
+index c17514d..e462b2f 100644
+--- a/src/Finbuckle.MultiTenant/DependencyInjection/ServiceCollectionExtensions.cs
++++ b/src/Finbuckle.MultiTenant/DependencyInjection/ServiceCollectionExtensions.cs
+@@ -59,18 +59,39 @@ public static class FinbuckleServiceCollectionExtensions
+         return services.AddMultiTenant<TTenantInfo>(_ => { });
+     }
+ 
+-    // TODO: better document and extract
++    /// <summary>
++    /// Decorates all existing registrations of <typeparamref name="TService"/> with <typeparamref name="TImpl"/>.
++    /// If multiple registrations exist (e.g. added by other libraries), each one is decorated in place.
++    /// </summary>
++    /// <typeparam name="TService">The service type to decorate.</typeparam>
++    /// <typeparam name="TImpl">The decorator implementation type.</typeparam>
++    /// <param name="services">The <c>IServiceCollection</c> instance the extension method applies to.</param>
++    /// <param name="parameters">Additional constructor parameters for the decorator.</param>
++    /// <returns>True if at least one service was decorated.</returns>
++    /// <exception cref="ArgumentException">Thrown if no registration of <typeparamref name="TService"/> exists.</exception>
+     public static bool DecorateService<TService, TImpl>(this IServiceCollection services, params object[] parameters)
+     {
+-        var existingService = services.SingleOrDefault(s => s.ServiceType == typeof(TService));
+-        if (existingService is null)
++        var existingServices = services
++            .Where(s => s.ServiceType == typeof(TService) && !s.IsKeyedService)
++            .ToList();
++        if (existingServices.Count == 0)
+             throw new ArgumentException($"No service of type {typeof(TService).Name} found.");
+ 
+-        ServiceDescriptor? newService;
++        foreach (var existingService in existingServices)
++        {
++            var index = services.IndexOf(existingService);
++            services[index] = CreateDecoratedDescriptor<TService, TImpl>(existingService, parameters);
++        }
++
++        return true;
++    }
+ 
++    private static ServiceDescriptor CreateDecoratedDescriptor<TService, TImpl>(ServiceDescriptor existingService,
++        object[] parameters)
++    {
+         if (existingService.ImplementationType is not null)
+         {
+-            newService = new ServiceDescriptor(existingService.ServiceType,
++            return new ServiceDescriptor(existingService.ServiceType,
+                 sp =>
+                 {
+                     TService inner =
+@@ -88,9 +109,10 @@ public static class FinbuckleServiceCollectionExtensions
+                 },
+                 existingService.Lifetime);
+         }
+-        else if (existingService.ImplementationInstance is not null)
++
++        if (existingService.ImplementationInstance is not null)
+         {
+-            newService = new ServiceDescriptor(existingService.ServiceType,
++            return new ServiceDescriptor(existingService.ServiceType,
+                 sp =>
+                 {
+                     TService inner = (TService)existingService.ImplementationInstance;
+@@ -98,9 +120,10 @@ public static class FinbuckleServiceCollectionExtensions
+                 },
+                 existingService.Lifetime);
+         }
+-        else if (existingService.ImplementationFactory is not null)
++
++        if (existingService.ImplementationFactory is not null)
+         {
+-            newService = new ServiceDescriptor(existingService.ServiceType,
++            return new ServiceDescriptor(existingService.ServiceType,
+                 sp =>
+                 {
+                     TService inner = (TService)existingService.ImplementationFactory(sp);
+@@ -112,16 +135,9 @@ public static class FinbuckleServiceCollectionExtensions
+                 },
+                 existingService.Lifetime);
+         }
+-        else
+-        {
+-            throw new Exception(
+-                "Unable to instantiate decorated type.");
+-        }
+-
+-        services.Remove(existingService);
+-        services.Add(newService);
+ 
+-        return true;
++        throw new Exception(
++            "Unable to instantiate decorated type.");
+     }
+ 
+     /// <summary>
+diff --git a/test/Finbuckle.MultiTenant.AspNetCore.Test/Extensions/MultiTenantBuilderExtensionsShould.cs b/test/Finbuckle.MultiTenant.AspNetCore.Test/Extensions/MultiTenantBuilderExtensionsShould.cs
+index 78157f3..968f875 100644
+--- a/test/Finbuckle.MultiTenant.AspNetCore.Test/Extensions/MultiTenantBuilderExtensionsShould.cs
++++ b/test/Finbuckle.MultiTenant.AspNetCore.Test/Extensions/MultiTenantBuilderExtensionsShould.cs
+@@ -322,6 +322,30 @@ public class MultiTenantBuilderExtensionsShould
+             Assert.IsType<MultiTenantAuthenticationSchemeProvider>(schemeProvider);
+         }
+ 
++    private class AdditionalAuthenticationSchemeProvider(IOptions<AuthenticationOptions> options)
++        : AuthenticationSchemeProvider(options);
++
++    [Fact]
++    public void ConfigurePerTenantAuthenticationCore_SupportMultipleSchemeProviderRegistrations()
++    {
++            // Libraries such as Duende.BFF v4 register an additional IAuthenticationSchemeProvider.
++            var services = new ServiceCollection();
++            services.AddAuthentication();
++            services.AddTransient<IAuthenticationSchemeProvider, AdditionalAuthenticationSchemeProvider>();
++            services.AddLogging();
++            services.AddMultiTenant<TestTenantInfo>()
++                .WithPerTenantAuthenticationCore();
++
++            var sp = services.BuildServiceProvider();
++
++            var schemeProvider = sp.GetRequiredService<IAuthenticationSchemeProvider>();
++            Assert.IsType<MultiTenantAuthenticationSchemeProvider>(schemeProvider);
++
++            var allProviders = sp.GetServices<IAuthenticationSchemeProvider>().ToList();
++            Assert.Equal(2, allProviders.Count);
++            Assert.All(allProviders, p => Assert.IsType<MultiTenantAuthenticationSchemeProvider>(p));
++        }
++
+     [Fact]
+     public void AddRemoteAuthenticationCallbackStrategy()
+     {

@@ -1,0 +1,389 @@
+diff --git a/docs/book/src/cronjob-tutorial/testdata/project/Makefile b/docs/book/src/cronjob-tutorial/testdata/project/Makefile
+index ba1ccce..442c7e5 100644
+--- a/docs/book/src/cronjob-tutorial/testdata/project/Makefile
++++ b/docs/book/src/cronjob-tutorial/testdata/project/Makefile
+@@ -8,6 +8,10 @@ else
+ GOBIN=$(shell go env GOBIN)
+ endif
+ 
++# YEAR is used to replace the YEAR placeholder in the boilerplate file (hack/boilerplate.go.txt)
++# when generating code. It can be overridden, e.g. make generate YEAR=2024
++YEAR ?= $(shell date +%Y)
++
+ # CONTAINER_TOOL defines the container tool to be used for building images.
+ # Be aware that the target commands are only tested with Docker which is
+ # scaffolded by default. However, you might want to replace it to use other
+@@ -51,7 +55,7 @@ manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and Cust
+ 
+ .PHONY: generate
+ generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
+-	"$(CONTROLLER_GEN)" object:headerFile="hack/boilerplate.go.txt" paths="./..."
++	"$(CONTROLLER_GEN)" object:headerFile="hack/boilerplate.go.txt",year=$(YEAR) paths="./..."
+ 
+ .PHONY: fmt
+ fmt: ## Run go fmt against code.
+diff --git a/docs/book/src/cronjob-tutorial/testdata/project/hack/boilerplate.go.txt b/docs/book/src/cronjob-tutorial/testdata/project/hack/boilerplate.go.txt
+index 7917ef1..6bd3b72 100644
+--- a/docs/book/src/cronjob-tutorial/testdata/project/hack/boilerplate.go.txt
++++ b/docs/book/src/cronjob-tutorial/testdata/project/hack/boilerplate.go.txt
+@@ -1,5 +1,5 @@
+ /*
+-Copyright 2026 The Kubernetes authors.
++Copyright YEAR The Kubernetes authors.
+ 
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+diff --git a/docs/book/src/getting-started/testdata/project/Makefile b/docs/book/src/getting-started/testdata/project/Makefile
+index 832989f..ce37321 100644
+--- a/docs/book/src/getting-started/testdata/project/Makefile
++++ b/docs/book/src/getting-started/testdata/project/Makefile
+@@ -8,6 +8,10 @@ else
+ GOBIN=$(shell go env GOBIN)
+ endif
+ 
++# YEAR is used to replace the YEAR placeholder in the boilerplate file (hack/boilerplate.go.txt)
++# when generating code. It can be overridden, e.g. make generate YEAR=2024
++YEAR ?= $(shell date +%Y)
++
+ # CONTAINER_TOOL defines the container tool to be used for building images.
+ # Be aware that the target commands are only tested with Docker which is
+ # scaffolded by default. However, you might want to replace it to use other
+@@ -47,7 +51,7 @@ manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and Cust
+ 
+ .PHONY: generate
+ generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
+-	"$(CONTROLLER_GEN)" object:headerFile="hack/boilerplate.go.txt" paths="./..."
++	"$(CONTROLLER_GEN)" object:headerFile="hack/boilerplate.go.txt",year=$(YEAR) paths="./..."
+ 
+ .PHONY: fmt
+ fmt: ## Run go fmt against code.
+diff --git a/docs/book/src/getting-started/testdata/project/hack/boilerplate.go.txt b/docs/book/src/getting-started/testdata/project/hack/boilerplate.go.txt
+index 7917ef1..6bd3b72 100644
+--- a/docs/book/src/getting-started/testdata/project/hack/boilerplate.go.txt
++++ b/docs/book/src/getting-started/testdata/project/hack/boilerplate.go.txt
+@@ -1,5 +1,5 @@
+ /*
+-Copyright 2026 The Kubernetes authors.
++Copyright YEAR The Kubernetes authors.
+ 
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+diff --git a/docs/book/src/multiversion-tutorial/testdata/project/Makefile b/docs/book/src/multiversion-tutorial/testdata/project/Makefile
+index ba1ccce..442c7e5 100644
+--- a/docs/book/src/multiversion-tutorial/testdata/project/Makefile
++++ b/docs/book/src/multiversion-tutorial/testdata/project/Makefile
+@@ -8,6 +8,10 @@ else
+ GOBIN=$(shell go env GOBIN)
+ endif
+ 
++# YEAR is used to replace the YEAR placeholder in the boilerplate file (hack/boilerplate.go.txt)
++# when generating code. It can be overridden, e.g. make generate YEAR=2024
++YEAR ?= $(shell date +%Y)
++
+ # CONTAINER_TOOL defines the container tool to be used for building images.
+ # Be aware that the target commands are only tested with Docker which is
+ # scaffolded by default. However, you might want to replace it to use other
+@@ -51,7 +55,7 @@ manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and Cust
+ 
+ .PHONY: generate
+ generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
+-	"$(CONTROLLER_GEN)" object:headerFile="hack/boilerplate.go.txt" paths="./..."
++	"$(CONTROLLER_GEN)" object:headerFile="hack/boilerplate.go.txt",year=$(YEAR) paths="./..."
+ 
+ .PHONY: fmt
+ fmt: ## Run go fmt against code.
+diff --git a/docs/book/src/multiversion-tutorial/testdata/project/hack/boilerplate.go.txt b/docs/book/src/multiversion-tutorial/testdata/project/hack/boilerplate.go.txt
+index 7917ef1..6bd3b72 100644
+--- a/docs/book/src/multiversion-tutorial/testdata/project/hack/boilerplate.go.txt
++++ b/docs/book/src/multiversion-tutorial/testdata/project/hack/boilerplate.go.txt
+@@ -1,5 +1,5 @@
+ /*
+-Copyright 2026 The Kubernetes authors.
++Copyright YEAR The Kubernetes authors.
+ 
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+diff --git a/pkg/machinery/boilerplate.go b/pkg/machinery/boilerplate.go
+new file mode 100644
+index 0000000..25ffb70
+--- /dev/null
++++ b/pkg/machinery/boilerplate.go
+@@ -0,0 +1,34 @@
++/*
++Copyright 2026 The Kubernetes Authors.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++*/
++
++package machinery
++
++import (
++	"strconv"
++	"strings"
++	"time"
++)
++
++// YearPlaceholder is the placeholder that can be used in boilerplate files (e.g. hack/boilerplate.go.txt)
++// and that is replaced by the current year when the boilerplate is used to scaffold files.
++// This matches the behavior of gengo and controller-gen.
++const YearPlaceholder = "YEAR"
++
++// ReplaceYearPlaceholder replaces every occurrence of YearPlaceholder in the given boilerplate
++// with the current year.
++func ReplaceYearPlaceholder(boilerplate string) string {
++	return strings.ReplaceAll(boilerplate, YearPlaceholder, strconv.Itoa(time.Now().Year()))
++}
+diff --git a/pkg/machinery/scaffold.go b/pkg/machinery/scaffold.go
+index 018803b..ffea597 100644
+--- a/pkg/machinery/scaffold.go
++++ b/pkg/machinery/scaffold.go
+@@ -108,10 +108,11 @@ func WithConfig(cfg config.Config) ScaffoldOption {
+ 	}
+ }
+ 
+-// WithBoilerplate provides the boilerplate to the Scaffold
++// WithBoilerplate provides the boilerplate to the Scaffold.
++// Any YEAR placeholder in the boilerplate is replaced with the current year.
+ func WithBoilerplate(boilerplate string) ScaffoldOption {
+ 	return func(s *Scaffold) {
+-		s.injector.boilerplate = boilerplate
++		s.injector.boilerplate = ReplaceYearPlaceholder(boilerplate)
+ 	}
+ }
+ 
+diff --git a/pkg/machinery/scaffold_test.go b/pkg/machinery/scaffold_test.go
+index 84f5c42..fbe142c 100644
+--- a/pkg/machinery/scaffold_test.go
++++ b/pkg/machinery/scaffold_test.go
+@@ -17,6 +17,8 @@ package machinery
+ import (
+ 	"errors"
+ 	"os"
++	"strconv"
++	"time"
+ 
+ 	. "github.com/onsi/ginkgo/v2"
+ 	. "github.com/onsi/gomega"
+@@ -87,6 +89,15 @@ var _ = Describe("Scaffold", func() {
+ 			Expect(s.injector.resource).To(BeNil())
+ 		})
+ 
++		It("should replace the YEAR placeholder in the boilerplate with the current year", func() {
++			const boilerplate = "/*\nCopyright YEAR The Kubernetes Authors.\n*/"
++			year := strconv.Itoa(time.Now().Year())
++
++			s := NewScaffold(Filesystem{FS: afero.NewMemMapFs()}, WithBoilerplate(boilerplate))
++			Expect(s.injector.boilerplate).To(Equal("/*\nCopyright " + year + " The Kubernetes Authors.\n*/"))
++			Expect(s.injector.boilerplate).NotTo(ContainSubstring(YearPlaceholder))
++		})
++
+ 		It("should succeed with resource option", func() {
+ 			res := &resource.Resource{GVK: resource.GVK{
+ 				Group:   "group",
+diff --git a/pkg/plugins/golang/v4/scaffolds/init_integration_test.go b/pkg/plugins/golang/v4/scaffolds/init_integration_test.go
+index 4fae13e..de4b491 100644
+--- a/pkg/plugins/golang/v4/scaffolds/init_integration_test.go
++++ b/pkg/plugins/golang/v4/scaffolds/init_integration_test.go
+@@ -21,7 +21,9 @@ package scaffolds
+ import (
+ 	"os"
+ 	"path/filepath"
++	"strconv"
+ 	"strings"
++	"time"
+ 
+ 	. "github.com/onsi/ginkgo/v2"
+ 	. "github.com/onsi/gomega"
+@@ -89,6 +91,21 @@ var _ = Describe("Init Scaffolding Integration Test", func() {
+ 			mainContent := string(content)
+ 			Expect(mainContent).NotTo(ContainSubstring("func getWatchNamespace()"))
+ 			Expect(mainContent).NotTo(ContainSubstring("func setupCacheNamespaces"))
++
++			By("verifying hack/boilerplate.go.txt uses the YEAR placeholder")
++			content, err = os.ReadFile(filepath.Join(kbc.Dir, "hack", "boilerplate.go.txt"))
++			Expect(err).NotTo(HaveOccurred())
++			Expect(string(content)).To(ContainSubstring("Copyright YEAR"))
++
++			By("verifying scaffolded Go files have the YEAR placeholder resolved to the current year")
++			Expect(mainContent).To(ContainSubstring("Copyright " + strconv.Itoa(time.Now().Year())))
++			Expect(mainContent).NotTo(ContainSubstring("Copyright YEAR"))
++
++			By("verifying the Makefile passes year to controller-gen")
++			content, err = os.ReadFile(filepath.Join(kbc.Dir, "Makefile"))
++			Expect(err).NotTo(HaveOccurred())
++			Expect(string(content)).To(ContainSubstring("YEAR ?= $(shell date +%Y)"))
++			Expect(string(content)).To(ContainSubstring(`object:headerFile="hack/boilerplate.go.txt",year=$(YEAR)`))
+ 		})
+ 	})
+ 
+diff --git a/pkg/plugins/golang/v4/scaffolds/internal/templates/hack/boilerplate.go b/pkg/plugins/golang/v4/scaffolds/internal/templates/hack/boilerplate.go
+index b200fca..c3de83c 100644
+--- a/pkg/plugins/golang/v4/scaffolds/internal/templates/hack/boilerplate.go
++++ b/pkg/plugins/golang/v4/scaffolds/internal/templates/hack/boilerplate.go
+@@ -19,7 +19,6 @@ package hack
+ import (
+ 	"fmt"
+ 	"path/filepath"
+-	"time"
+ 
+ 	"sigs.k8s.io/kubebuilder/v4/pkg/machinery"
+ )
+@@ -43,7 +42,9 @@ type Boilerplate struct {
+ 	// Owner is the copyright owner - e.g. "The Kubernetes Authors"
+ 	Owner string
+ 
+-	// Year is the copyright year
++	// Year is the copyright year. Defaults to the YEAR placeholder, which is
++	// substituted with the current year by kubebuilder, gengo and controller-gen
++	// when the boilerplate is used.
+ 	Year string
+ }
+ 
+@@ -80,7 +81,7 @@ func (f *Boilerplate) SetTemplateDefaults() error {
+ 	}
+ 
+ 	if f.Year == "" {
+-		f.Year = fmt.Sprintf("%v", time.Now().Year())
++		f.Year = machinery.YearPlaceholder
+ 	}
+ 
+ 	// Boilerplate given
+diff --git a/pkg/plugins/golang/v4/scaffolds/internal/templates/makefile.go b/pkg/plugins/golang/v4/scaffolds/internal/templates/makefile.go
+index 49253d2..d67ad23 100644
+--- a/pkg/plugins/golang/v4/scaffolds/internal/templates/makefile.go
++++ b/pkg/plugins/golang/v4/scaffolds/internal/templates/makefile.go
+@@ -83,6 +83,10 @@ else
+ GOBIN=$(shell go env GOBIN)
+ endif
+ 
++# YEAR is used to replace the YEAR placeholder in the boilerplate file (hack/boilerplate.go.txt)
++# when generating code. It can be overridden, e.g. make generate YEAR=2024
++YEAR ?= $(shell date +%Y)
++
+ # CONTAINER_TOOL defines the container tool to be used for building images.
+ # Be aware that the target commands are only tested with Docker which is
+ # scaffolded by default. However, you might want to replace it to use other
+@@ -123,7 +127,7 @@ manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and Cust
+ .PHONY: generate
+ generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
+ 	{{ if .BoilerplatePath -}}
+-	"$(CONTROLLER_GEN)" object:headerFile={{printf "%q" .BoilerplatePath}} paths="./..."
++	"$(CONTROLLER_GEN)" object:headerFile={{printf "%q" .BoilerplatePath}},year=$(YEAR) paths="./..."
+ 	{{- else -}}
+ 	"$(CONTROLLER_GEN)" object paths="./..."
+ 	{{- end }}
+diff --git a/testdata/project-v4-multigroup/Makefile b/testdata/project-v4-multigroup/Makefile
+index bd456b5..f751fc4 100644
+--- a/testdata/project-v4-multigroup/Makefile
++++ b/testdata/project-v4-multigroup/Makefile
+@@ -8,6 +8,10 @@ else
+ GOBIN=$(shell go env GOBIN)
+ endif
+ 
++# YEAR is used to replace the YEAR placeholder in the boilerplate file (hack/boilerplate.go.txt)
++# when generating code. It can be overridden, e.g. make generate YEAR=2024
++YEAR ?= $(shell date +%Y)
++
+ # CONTAINER_TOOL defines the container tool to be used for building images.
+ # Be aware that the target commands are only tested with Docker which is
+ # scaffolded by default. However, you might want to replace it to use other
+@@ -47,7 +51,7 @@ manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and Cust
+ 
+ .PHONY: generate
+ generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
+-	"$(CONTROLLER_GEN)" object:headerFile="hack/boilerplate.go.txt" paths="./..."
++	"$(CONTROLLER_GEN)" object:headerFile="hack/boilerplate.go.txt",year=$(YEAR) paths="./..."
+ 
+ .PHONY: fmt
+ fmt: ## Run go fmt against code.
+diff --git a/testdata/project-v4-multigroup/hack/boilerplate.go.txt b/testdata/project-v4-multigroup/hack/boilerplate.go.txt
+index 7917ef1..6bd3b72 100644
+--- a/testdata/project-v4-multigroup/hack/boilerplate.go.txt
++++ b/testdata/project-v4-multigroup/hack/boilerplate.go.txt
+@@ -1,5 +1,5 @@
+ /*
+-Copyright 2026 The Kubernetes authors.
++Copyright YEAR The Kubernetes authors.
+ 
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+diff --git a/testdata/project-v4-with-plugins/Makefile b/testdata/project-v4-with-plugins/Makefile
+index ab2fefe..ebfe9cd 100644
+--- a/testdata/project-v4-with-plugins/Makefile
++++ b/testdata/project-v4-with-plugins/Makefile
+@@ -8,6 +8,10 @@ else
+ GOBIN=$(shell go env GOBIN)
+ endif
+ 
++# YEAR is used to replace the YEAR placeholder in the boilerplate file (hack/boilerplate.go.txt)
++# when generating code. It can be overridden, e.g. make generate YEAR=2024
++YEAR ?= $(shell date +%Y)
++
+ # CONTAINER_TOOL defines the container tool to be used for building images.
+ # Be aware that the target commands are only tested with Docker which is
+ # scaffolded by default. However, you might want to replace it to use other
+@@ -47,7 +51,7 @@ manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and Cust
+ 
+ .PHONY: generate
+ generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
+-	"$(CONTROLLER_GEN)" object:headerFile="hack/boilerplate.go.txt" paths="./..."
++	"$(CONTROLLER_GEN)" object:headerFile="hack/boilerplate.go.txt",year=$(YEAR) paths="./..."
+ 
+ .PHONY: fmt
+ fmt: ## Run go fmt against code.
+diff --git a/testdata/project-v4-with-plugins/hack/boilerplate.go.txt b/testdata/project-v4-with-plugins/hack/boilerplate.go.txt
+index 7917ef1..6bd3b72 100644
+--- a/testdata/project-v4-with-plugins/hack/boilerplate.go.txt
++++ b/testdata/project-v4-with-plugins/hack/boilerplate.go.txt
+@@ -1,5 +1,5 @@
+ /*
+-Copyright 2026 The Kubernetes authors.
++Copyright YEAR The Kubernetes authors.
+ 
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+diff --git a/testdata/project-v4/Makefile b/testdata/project-v4/Makefile
+index a365c8a..c736e54 100644
+--- a/testdata/project-v4/Makefile
++++ b/testdata/project-v4/Makefile
+@@ -8,6 +8,10 @@ else
+ GOBIN=$(shell go env GOBIN)
+ endif
+ 
++# YEAR is used to replace the YEAR placeholder in the boilerplate file (hack/boilerplate.go.txt)
++# when generating code. It can be overridden, e.g. make generate YEAR=2024
++YEAR ?= $(shell date +%Y)
++
+ # CONTAINER_TOOL defines the container tool to be used for building images.
+ # Be aware that the target commands are only tested with Docker which is
+ # scaffolded by default. However, you might want to replace it to use other
+@@ -47,7 +51,7 @@ manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and Cust
+ 
+ .PHONY: generate
+ generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
+-	"$(CONTROLLER_GEN)" object:headerFile="hack/boilerplate.go.txt" paths="./..."
++	"$(CONTROLLER_GEN)" object:headerFile="hack/boilerplate.go.txt",year=$(YEAR) paths="./..."
+ 
+ .PHONY: fmt
+ fmt: ## Run go fmt against code.
+diff --git a/testdata/project-v4/hack/boilerplate.go.txt b/testdata/project-v4/hack/boilerplate.go.txt
+index 7917ef1..6bd3b72 100644
+--- a/testdata/project-v4/hack/boilerplate.go.txt
++++ b/testdata/project-v4/hack/boilerplate.go.txt
+@@ -1,5 +1,5 @@
+ /*
+-Copyright 2026 The Kubernetes authors.
++Copyright YEAR The Kubernetes authors.
+ 
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.

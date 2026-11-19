@@ -1,0 +1,109 @@
+diff --git a/src/Quartz.Tests.Unit/Impl/Triggers/DailyTimeIntervalTriggerImplTest.cs b/src/Quartz.Tests.Unit/Impl/Triggers/DailyTimeIntervalTriggerImplTest.cs
+index 6454bda..47c5793 100644
+--- a/src/Quartz.Tests.Unit/Impl/Triggers/DailyTimeIntervalTriggerImplTest.cs
++++ b/src/Quartz.Tests.Unit/Impl/Triggers/DailyTimeIntervalTriggerImplTest.cs
+@@ -1087,6 +1087,66 @@ public class DailyTimeIntervalTriggerImplTest
+         Assert.That(first, Is.EqualTo(new DateTimeOffset(2019, 11, 4, 22, 0, 0, TimeSpan.Zero)));
+     }
+ 
++    [Test]
++    public void TestDayLightSavingEndWithDailyHourInterval()
++    {
++        var timeZoneInfo = TZConvert.GetTimeZoneInfo("Central European Standard Time");
++
++        // 2020-10-25 is a 25 hour day in CET (DST ends at 03:00 local time)
++        var trigger = (IOperableTrigger) TriggerBuilder.Create()
++            .WithIdentity("id")
++            .ForJob("job")
++            .StartAt(new DateTimeOffset(2020, 10, 25, 0, 1, 5, TimeSpan.FromHours(2)))
++            .WithDailyTimeIntervalSchedule(x => x
++                .OnEveryDay()
++                .WithIntervalInHours(24)
++                .StartingDailyAt(new TimeOfDay(0, 1, 5))
++                .EndingDailyAt(new TimeOfDay(23, 59, 59))
++                .InTimeZone(timeZoneInfo)
++                .WithMisfireHandlingInstructionDoNothing())
++            .Build();
++
++        var start = new DateTimeOffset(2020, 10, 25, 0, 0, 0, TimeSpan.FromHours(2));
++        var fireTimes = TriggerUtils.ComputeFireTimesBetween(trigger, null, start, start.AddDays(3));
++
++        Assert.That(fireTimes, Is.EqualTo(new[]
++        {
++            new DateTimeOffset(2020, 10, 25, 0, 1, 5, TimeSpan.FromHours(2)),
++            new DateTimeOffset(2020, 10, 26, 0, 1, 5, TimeSpan.FromHours(1)),
++            new DateTimeOffset(2020, 10, 27, 0, 1, 5, TimeSpan.FromHours(1)),
++        }));
++    }
++
++    [Test]
++    public void TestDayLightSavingStartWithHourIntervalKeepsWallClockSchedule()
++    {
++        var timeZoneInfo = TZConvert.GetTimeZoneInfo("Central European Standard Time");
++
++        // 2020-03-29 is a 23 hour day in CET (DST starts at 02:00 local time)
++        var trigger = (IOperableTrigger) TriggerBuilder.Create()
++            .WithIdentity("id")
++            .ForJob("job")
++            .StartAt(new DateTimeOffset(2020, 3, 29, 0, 0, 0, TimeSpan.FromHours(1)))
++            .WithDailyTimeIntervalSchedule(x => x
++                .OnEveryDay()
++                .WithIntervalInHours(6)
++                .StartingDailyAt(new TimeOfDay(0, 0))
++                .EndingDailyAt(new TimeOfDay(23, 59, 59))
++                .InTimeZone(timeZoneInfo))
++            .Build();
++
++        var start = new DateTimeOffset(2020, 3, 29, 0, 0, 0, TimeSpan.FromHours(1));
++        var fireTimes = TriggerUtils.ComputeFireTimesBetween(trigger, null, start, start.AddHours(22));
++
++        Assert.That(fireTimes, Is.EqualTo(new[]
++        {
++            new DateTimeOffset(2020, 3, 29, 0, 0, 0, TimeSpan.FromHours(1)),
++            new DateTimeOffset(2020, 3, 29, 6, 0, 0, TimeSpan.FromHours(2)),
++            new DateTimeOffset(2020, 3, 29, 12, 0, 0, TimeSpan.FromHours(2)),
++            new DateTimeOffset(2020, 3, 29, 18, 0, 0, TimeSpan.FromHours(2)),
++        }));
++    }
++
+     [Test]
+     [Explicit]
+     public void TestPassingMidnight()
+diff --git a/src/Quartz/Impl/Triggers/DailyTimeIntervalTriggerImpl.cs b/src/Quartz/Impl/Triggers/DailyTimeIntervalTriggerImpl.cs
+index 7627b0a..a416246 100644
+--- a/src/Quartz/Impl/Triggers/DailyTimeIntervalTriggerImpl.cs
++++ b/src/Quartz/Impl/Triggers/DailyTimeIntervalTriggerImpl.cs
+@@ -764,13 +764,29 @@ public sealed class DailyTimeIntervalTriggerImpl : AbstractTrigger, IDailyTimeIn
+         }
+         else if (repeatUnit == IntervalUnit.Hour)
+         {
+-            jumpCount = secondsAfterStart / (repeatLong * 60L * 60L);
+-            if (secondsAfterStart % (repeatLong * 60L * 60L) != 0)
++            // hour intervals follow the wall clock of the trigger's time zone, so that a DST
++            // transition (23 or 25 hour day) does not shift or add fire times within the day
++            DateTime startOfDayLocal = fireTimeStartDate.DateTime;
++            DateTimeOffset afterTimeLocal = TimeZoneUtil.ConvertTime(fireTime.Value, TimeZone);
++            long wallSecondsAfterStart = Math.Max(0L, (long) (afterTimeLocal.DateTime - startOfDayLocal).TotalSeconds);
++            jumpCount = wallSecondsAfterStart / (repeatLong * 60L * 60L);
++            if (wallSecondsAfterStart % (repeatLong * 60L * 60L) != 0)
+             {
+                 jumpCount++;
+             }
+-            sTime = sTime.AddHours(RepeatInterval * (int) jumpCount);
+-            fireTime = TimeZoneUtil.ConvertTime(sTime, TimeZone);
++
++            DateTimeOffset candidate;
++            while (true)
++            {
++                DateTime candidateLocal = startOfDayLocal.AddHours(RepeatInterval * (double) jumpCount);
++                candidate = new DateTimeOffset(candidateLocal, TimeZoneUtil.GetUtcOffset(candidateLocal, TimeZone));
++                if (candidate >= afterTimeLocal)
++                {
++                    break;
++                }
++                jumpCount++;
++            }
++            fireTime = TimeZoneUtil.ConvertTime(candidate, TimeZone);
+         }
+ 
+         // g. Check if we've exceeded the per-day repeat count.

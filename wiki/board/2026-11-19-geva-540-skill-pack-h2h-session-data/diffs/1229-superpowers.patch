@@ -1,0 +1,48 @@
+diff --git a/internal/app/handler.go b/internal/app/handler.go
+index 9c6c2ec..8bd93f9 100644
+--- a/internal/app/handler.go
++++ b/internal/app/handler.go
+@@ -111,8 +111,12 @@ func (a *App) validatedRefererRedirect(r *http.Request, referrer string) (string
+ 	}
+ 
+ 	redirectTarget := refURL.EscapedPath()
+-	if redirectTarget == "" {
+-		redirectTarget = "/"
++	// Collapse leading slashes/backslashes so the target cannot be interpreted
++	// by browsers as a protocol-relative URL (e.g. "//evil.com" or "/\evil.com")
++	redirectTarget = "/" + strings.TrimLeft(redirectTarget, "/\\")
++	if strings.HasPrefix(strings.ToLower(redirectTarget), "/%5c") || strings.HasPrefix(redirectTarget, "/%2f") ||
++		strings.HasPrefix(redirectTarget, "/%2F") {
++		return "", false
+ 	}
+ 	if refURL.RawQuery != "" {
+ 		redirectTarget += "?" + refURL.RawQuery
+diff --git a/internal/app/tests/fragment_test.go b/internal/app/tests/fragment_test.go
+index 2852e2f..61b2131 100644
+--- a/internal/app/tests/fragment_test.go
++++ b/internal/app/tests/fragment_test.go
+@@ -6,6 +6,7 @@ package app_test
+ import (
+ 	"net/http"
+ 	"net/http/httptest"
++	"strings"
+ 	"testing"
+ 
+ 	"github.com/openrundev/openrun/internal/testutil"
+@@ -347,4 +348,16 @@ def handler(req):
+ 	// Non-rooted relative referer is ignored and falls back to rendering the page.
+ 	testutil.AssertEqualsInt(t, "code", http.StatusOK, response.Code)
+ 	testutil.AssertEqualsString(t, "body", "Template main myvalue.  fragdata myvalue2 ", response.Body.String())
++
++	// Same-origin referer with a protocol-relative path must not redirect off-site.
++	for _, ref := range []string{"http://example.com//evil.com", "http://example.com///evil.com/x", "//evil.com", "/\\evil.com"} {
++		request = httptest.NewRequest("POST", "/test/abc/frag", nil)
++		request.Header.Set("Referer", ref)
++		response = httptest.NewRecorder()
++		a.ServeHTTP(response, request)
++		loc := response.Header().Get("Location")
++		if strings.HasPrefix(loc, "//") || strings.HasPrefix(loc, "/\\") || strings.Contains(loc, "\\") {
++			t.Errorf("referer %q produced unsafe redirect %q", ref, loc)
++		}
++	}
+ }

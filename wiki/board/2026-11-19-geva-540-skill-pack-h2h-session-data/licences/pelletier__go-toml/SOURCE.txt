@@ -1,0 +1,3 @@
+https://github.com/pelletier/go-toml at 01f53e2017f86dcd3c7e464aba0293f4af3e7207
+Licence at the freeze-date read (prereg o-, b1- and b2-licences.json): NOASSERTION
+Root licence and notice files at that commit: LICENSE

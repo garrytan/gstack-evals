@@ -1,0 +1,38 @@
+diff --git a/internal/app/handler.go b/internal/app/handler.go
+index 9c6c2ec..80d2f5f 100644
+--- a/internal/app/handler.go
++++ b/internal/app/handler.go
+@@ -114,6 +114,11 @@ func (a *App) validatedRefererRedirect(r *http.Request, referrer string) (string
+ 	if redirectTarget == "" {
+ 		redirectTarget = "/"
+ 	}
++	// Paths like "//host" or "/\\host" are treated by browsers as protocol-relative
++	// URLs pointing to an external host, reject them to prevent open redirects
++	if strings.HasPrefix(redirectTarget, "//") || strings.HasPrefix(redirectTarget, "/\\") {
++		return "", false
++	}
+ 	if refURL.RawQuery != "" {
+ 		redirectTarget += "?" + refURL.RawQuery
+ 	}
+diff --git a/internal/app/tests/fragment_test.go b/internal/app/tests/fragment_test.go
+index 2852e2f..3101a77 100644
+--- a/internal/app/tests/fragment_test.go
++++ b/internal/app/tests/fragment_test.go
+@@ -347,4 +347,17 @@ def handler(req):
+ 	// Non-rooted relative referer is ignored and falls back to rendering the page.
+ 	testutil.AssertEqualsInt(t, "code", http.StatusOK, response.Code)
+ 	testutil.AssertEqualsString(t, "body", "Template main myvalue.  fragdata myvalue2 ", response.Body.String())
++
++	// Protocol-relative paths (//host) must not be used as redirect targets, since
++	// browsers treat them as external URLs.
++	for _, ref := range []string{"http://example.com//evil.com", "http://example.com//evil.com/x?q=1",
++		"//evil.com", "http://example.com///evil.com"} {
++		request = httptest.NewRequest("POST", "/test/abc/frag", nil)
++		request.Header.Set("Referer", ref)
++		response = httptest.NewRecorder()
++		a.ServeHTTP(response, request)
++
++		testutil.AssertEqualsInt(t, "code "+ref, http.StatusOK, response.Code)
++		testutil.AssertEqualsString(t, "location "+ref, "", response.Header().Get("Location"))
++	}
+ }

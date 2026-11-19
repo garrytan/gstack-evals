@@ -1,0 +1,353 @@
+diff --git a/api/projects/project.go b/api/projects/project.go
+index 749ff17..5f85289 100644
+--- a/api/projects/project.go
++++ b/api/projects/project.go
+@@ -46,14 +46,15 @@ func ProjectMiddleware(next http.Handler) http.Handler {
+ 
+ 		permissions := roleSlug.GetPermissions()
+ 
+-		role, err := helpers.Store(r).GetProjectOrGlobalRoleBySlug(projectID, string(projectUser.Role))
++		if !roleSlug.IsValid() {
++			role, err := helpers.Store(r).GetProjectOrGlobalRoleBySlug(projectID, string(roleSlug))
+ 
+-		if err == nil {
+-			roleSlug = db.ProjectUserRole(role.Slug)
+-			permissions = role.Permissions
+-		} else if !errors.Is(err, db.ErrNotFound) {
+-			helpers.WriteError(w, err)
+-			return
++			if err == nil {
++				permissions = role.Permissions
++			} else if !errors.Is(err, db.ErrNotFound) {
++				helpers.WriteError(w, err)
++				return
++			}
+ 		}
+ 
+ 		if helpers.HasParam("template_id", r) {
+diff --git a/api/projects/project_role_test.go b/api/projects/project_role_test.go
+new file mode 100644
+index 0000000..f276f18
+--- /dev/null
++++ b/api/projects/project_role_test.go
+@@ -0,0 +1,81 @@
++package projects
++
++import (
++	"encoding/json"
++	"net/http"
++	"net/http/httptest"
++	"strconv"
++	"testing"
++
++	"github.com/gorilla/mux"
++	"github.com/semaphoreui/semaphore/api/helpers"
++	"github.com/semaphoreui/semaphore/db"
++	"github.com/semaphoreui/semaphore/db/bolt"
++)
++
++func resolvedPermissions(t *testing.T, store db.Store, user *db.User, projectID int) db.ProjectUserPermission {
++	t.Helper()
++	req := httptest.NewRequest(http.MethodGet, "/api/project/"+strconv.Itoa(projectID)+"/role", nil)
++	req = mux.SetURLVars(req, map[string]string{"project_id": strconv.Itoa(projectID)})
++	req = helpers.SetContextValue(req, "store", store)
++	req = helpers.SetContextValue(req, "user", user)
++
++	rec := httptest.NewRecorder()
++	ProjectMiddleware(http.HandlerFunc(GetUserRole)).ServeHTTP(rec, req)
++	if rec.Code != http.StatusOK {
++		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
++	}
++	var body struct {
++		Permissions db.ProjectUserPermission `json:"permissions"`
++	}
++	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
++		t.Fatal(err)
++	}
++	return body.Permissions
++}
++
++func TestProjectMiddleware_StoredRoleCannotOverrideBuiltInRole(t *testing.T) {
++	store := bolt.CreateTestStore()
++
++	project, err := store.CreateProject(db.Project{Name: "p"})
++	if err != nil {
++		t.Fatal(err)
++	}
++	manager, err := store.CreateUserWithoutPassword(db.User{Username: "mgr", Name: "mgr", Email: "mgr@example.com"})
++	if err != nil {
++		t.Fatal(err)
++	}
++	if _, err = store.CreateProjectUser(db.ProjectUser{ProjectID: project.ID, UserID: manager.ID, Role: db.ProjectManager}); err != nil {
++		t.Fatal(err)
++	}
++	if _, err = store.CreateRole(db.Role{Slug: "manager", Name: "pwn", Permissions: 15, ProjectID: &project.ID}); err != nil {
++		t.Fatal(err)
++	}
++
++	if got := resolvedPermissions(t, store, &manager, project.ID); got != db.ProjectManager.GetPermissions() {
++		t.Fatalf("manager permissions = %d, want %d", got, db.ProjectManager.GetPermissions())
++	}
++}
++
++func TestProjectMiddleware_CustomRoleResolvesFromStore(t *testing.T) {
++	store := bolt.CreateTestStore()
++
++	project, err := store.CreateProject(db.Project{Name: "p"})
++	if err != nil {
++		t.Fatal(err)
++	}
++	user, err := store.CreateUserWithoutPassword(db.User{Username: "dep", Name: "dep", Email: "dep@example.com"})
++	if err != nil {
++		t.Fatal(err)
++	}
++	if _, err = store.CreateRole(db.Role{Slug: "deployer", Name: "Deployer", Permissions: db.CanRunProjectTasks | db.CanUpdateProject, ProjectID: &project.ID}); err != nil {
++		t.Fatal(err)
++	}
++	if _, err = store.CreateProjectUser(db.ProjectUser{ProjectID: project.ID, UserID: user.ID, Role: "deployer"}); err != nil {
++		t.Fatal(err)
++	}
++
++	if got := resolvedPermissions(t, store, &user, project.ID); got != db.CanRunProjectTasks|db.CanUpdateProject {
++		t.Fatalf("custom role permissions = %d", got)
++	}
++}
+diff --git a/api/router.go b/api/router.go
+index 1399073..8ba269a 100644
+--- a/api/router.go
++++ b/api/router.go
+@@ -351,12 +351,9 @@ func Route(
+ 
+ 	projectUserAPI.Path("/roles").HandlerFunc(rolesController.GetProjectRoles).Methods("GET", "HEAD")
+ 	projectUserAPI.Path("/roles/all").HandlerFunc(rolesController.GetProjectAndGlobalRoles).Methods("GET", "HEAD")
+-	projectUserAPI.Path("/roles").HandlerFunc(rolesController.AddProjectRole).Methods("POST")
+ 
+ 	projectRolesAPI := projectUserAPI.PathPrefix("/roles").Subrouter()
+ 	projectRolesAPI.Path("/{role_slug}").HandlerFunc(rolesController.GetProjectRole).Methods("GET", "HEAD")
+-	projectRolesAPI.Path("/{role_slug}").HandlerFunc(rolesController.UpdateProjectRole).Methods("PUT", "POST")
+-	projectRolesAPI.Path("/{role_slug}").HandlerFunc(rolesController.DeleteProjectRole).Methods("DELETE")
+ 
+ 	//
+ 	// Updating and deleting project
+@@ -380,6 +377,11 @@ func Route(
+ 	projectAdminUsersAPI.Use(projects.ProjectMiddleware, projects.GetMustCanMiddleware(db.CanManageProjectUsers))
+ 	projectAdminUsersAPI.Path("/users").HandlerFunc(projects.AddUser).Methods("POST")
+ 
++	// Role definitions grant arbitrary permission bits, so editing them is owner-only.
++	projectAdminUsersAPI.Path("/roles").HandlerFunc(rolesController.AddProjectRole).Methods("POST")
++	projectAdminUsersAPI.Path("/roles/{role_slug}").HandlerFunc(rolesController.UpdateProjectRole).Methods("PUT", "POST")
++	projectAdminUsersAPI.Path("/roles/{role_slug}").HandlerFunc(rolesController.DeleteProjectRole).Methods("DELETE")
++
+ 	projectUserManagement := projectAdminUsersAPI.PathPrefix("/users").Subrouter()
+ 	projectUserManagement.Use(projects.UserMiddleware)
+ 
+diff --git a/db/ProjectUser.go b/db/ProjectUser.go
+index e796e51..d0954ba 100644
+--- a/db/ProjectUser.go
++++ b/db/ProjectUser.go
+@@ -19,8 +19,10 @@ const (
+ 	CanManageProjectUsers
+ )
+ 
++const allProjectUserPermissions = CanRunProjectTasks | CanUpdateProject | CanManageProjectResources | CanManageProjectUsers
++
+ var rolePermissions = map[ProjectUserRole]ProjectUserPermission{
+-	ProjectOwner:      CanRunProjectTasks | CanManageProjectResources | CanUpdateProject | CanManageProjectUsers,
++	ProjectOwner:      allProjectUserPermissions,
+ 	ProjectManager:    CanRunProjectTasks | CanManageProjectResources,
+ 	ProjectTaskRunner: CanRunProjectTasks,
+ 	ProjectGuest:      0,
+diff --git a/db/Role.go b/db/Role.go
+index a322acc..55c62dd 100644
+--- a/db/Role.go
++++ b/db/Role.go
+@@ -11,6 +11,15 @@ func ValidateRole(role Role) error {
+ 	if role.Name == "" {
+ 		return &ValidationError{Message: "Role name cannot be empty"}
+ 	}
++	if role.Slug == "" {
++		return &ValidationError{Message: "Role slug cannot be empty"}
++	}
++	if ProjectUserRole(role.Slug).IsValid() {
++		return &ValidationError{Message: "Role slug is reserved for a built-in role"}
++	}
++	if role.Permissions&^allProjectUserPermissions != 0 {
++		return &ValidationError{Message: "Role permissions contain unknown bits"}
++	}
+ 	return nil
+ }
+ 
+diff --git a/db/Role_test.go b/db/Role_test.go
+new file mode 100644
+index 0000000..bbb9c16
+--- /dev/null
++++ b/db/Role_test.go
+@@ -0,0 +1,28 @@
++package db
++
++import "testing"
++
++func TestValidateRole(t *testing.T) {
++	cases := []struct {
++		name    string
++		role    Role
++		wantErr bool
++	}{
++		{"custom role", Role{Slug: "deployer", Name: "Deployer", Permissions: CanRunProjectTasks}, false},
++		{"full custom role", Role{Slug: "lead", Name: "Lead", Permissions: allProjectUserPermissions}, false},
++		{"empty name", Role{Slug: "deployer"}, true},
++		{"empty slug", Role{Name: "Deployer"}, true},
++		{"owner slug", Role{Slug: "owner", Name: "x"}, true},
++		{"manager slug", Role{Slug: "manager", Name: "pwn", Permissions: 15}, true},
++		{"task_runner slug", Role{Slug: "task_runner", Name: "x"}, true},
++		{"guest slug", Role{Slug: "guest", Name: "x"}, true},
++		{"unknown bits", Role{Slug: "deployer", Name: "x", Permissions: 1 << 10}, true},
++		{"negative bits", Role{Slug: "deployer", Name: "x", Permissions: -1}, true},
++	}
++	for _, c := range cases {
++		err := ValidateRole(c.role)
++		if (err != nil) != c.wantErr {
++			t.Errorf("%s: ValidateRole() err = %v, wantErr %v", c.name, err, c.wantErr)
++		}
++	}
++}
+diff --git a/db/bolt/role.go b/db/bolt/role.go
+index 87e9942..368b469 100644
+--- a/db/bolt/role.go
++++ b/db/bolt/role.go
+@@ -1,6 +1,8 @@
+ package bolt
+ 
+ import (
++	"errors"
++
+ 	"github.com/semaphoreui/semaphore/db"
+ )
+ 
+@@ -77,20 +79,12 @@ func (d *BoltDb) GetProjectRole(projectID int, slug string) (db.Role, error) {
+ }
+ 
+ func (d *BoltDb) GetProjectOrGlobalRoleBySlug(projectID int, slug string) (db.Role, error) {
+-	var roles []db.Role
+-
+-	err := d.getObjects(0, db.RoleProps, db.RetrieveQueryParams{}, func(i any) bool {
+-		role := i.(db.Role)
+-		return role.Slug == slug
+-	}, &roles)
+-
+-	if err != nil {
+-		return db.Role{}, err
++	role, err := d.GetProjectRole(projectID, slug)
++	if err == nil {
++		return role, nil
+ 	}
+-
+-	if len(roles) == 0 {
+-		return db.Role{}, db.ErrNotFound
++	if !errors.Is(err, db.ErrNotFound) {
++		return db.Role{}, err
+ 	}
+-
+-	return roles[0], nil
++	return d.GetGlobalRoleBySlug(slug)
+ }
+diff --git a/db/bolt/role_test.go b/db/bolt/role_test.go
+new file mode 100644
+index 0000000..c7b3627
+--- /dev/null
++++ b/db/bolt/role_test.go
+@@ -0,0 +1,32 @@
++package bolt
++
++import (
++	"errors"
++	"testing"
++
++	"github.com/semaphoreui/semaphore/db"
++)
++
++func TestGetProjectOrGlobalRoleBySlug_ScopedToProject(t *testing.T) {
++	store := CreateTestStore()
++
++	projectA := 1
++	if _, err := store.CreateRole(db.Role{Slug: "lead", Name: "Lead", Permissions: 15, ProjectID: &projectA}); err != nil {
++		t.Fatal(err)
++	}
++	if _, err := store.CreateRole(db.Role{Slug: "viewer", Name: "Viewer", Permissions: 0}); err != nil {
++		t.Fatal(err)
++	}
++
++	if role, err := store.GetProjectOrGlobalRoleBySlug(projectA, "lead"); err != nil || role.Permissions != 15 {
++		t.Fatalf("own project role not resolved: %v %v", role, err)
++	}
++
++	if _, err := store.GetProjectOrGlobalRoleBySlug(2, "lead"); !errors.Is(err, db.ErrNotFound) {
++		t.Fatalf("role from another project leaked: err = %v", err)
++	}
++
++	if _, err := store.GetProjectOrGlobalRoleBySlug(2, "viewer"); err != nil {
++		t.Fatalf("global role not resolved: %v", err)
++	}
++}
+diff --git a/db/sql/role.go b/db/sql/role.go
+index cefe760..54bad53 100644
+--- a/db/sql/role.go
++++ b/db/sql/role.go
+@@ -58,6 +58,10 @@ func (d *SqlDb) GetProjectRole(projectID int, slug string) (db.Role, error) {
+ 
+ func (d *SqlDb) GetProjectOrGlobalRoleBySlug(projectID int, slug string) (db.Role, error) {
+ 	var role db.Role
+-	err := d.selectOne(&role, "select * from `role` where slug=?", slug)
++	err := d.selectOne(
++		&role,
++		"select * from `role` where slug=? and (project_id=? or project_id is null) order by project_id is null limit 1",
++		slug,
++		projectID)
+ 	return role, err
+ }
+diff --git a/db/sql/role_test.go b/db/sql/role_test.go
+new file mode 100644
+index 0000000..1071a5a
+--- /dev/null
++++ b/db/sql/role_test.go
+@@ -0,0 +1,40 @@
++package sql
++
++import (
++	"errors"
++	"testing"
++
++	"github.com/semaphoreui/semaphore/db"
++)
++
++func TestGetProjectOrGlobalRoleBySlug_ScopedToProject(t *testing.T) {
++	store := CreateTestStore()
++
++	projectA, err := store.CreateProject(db.Project{Name: "a"})
++	if err != nil {
++		t.Fatal(err)
++	}
++	projectB, err := store.CreateProject(db.Project{Name: "b"})
++	if err != nil {
++		t.Fatal(err)
++	}
++
++	if _, err = store.CreateRole(db.Role{Slug: "lead", Name: "Lead", Permissions: 15, ProjectID: &projectA.ID}); err != nil {
++		t.Fatal(err)
++	}
++	if _, err = store.CreateRole(db.Role{Slug: "viewer", Name: "Viewer", Permissions: 0}); err != nil {
++		t.Fatal(err)
++	}
++
++	if role, err := store.GetProjectOrGlobalRoleBySlug(projectA.ID, "lead"); err != nil || role.Permissions != 15 {
++		t.Fatalf("own project role not resolved: %v %v", role, err)
++	}
++
++	if _, err := store.GetProjectOrGlobalRoleBySlug(projectB.ID, "lead"); !errors.Is(err, db.ErrNotFound) {
++		t.Fatalf("role from another project leaked: err = %v", err)
++	}
++
++	if _, err := store.GetProjectOrGlobalRoleBySlug(projectB.ID, "viewer"); err != nil {
++		t.Fatalf("global role not resolved: %v", err)
++	}
++}

@@ -1,0 +1,93 @@
+diff --git a/.changeset/stale-blockers-const.md b/.changeset/stale-blockers-const.md
+new file mode 100644
+index 0000000..8ba7fa5
+--- /dev/null
++++ b/.changeset/stale-blockers-const.md
+@@ -0,0 +1,5 @@
++---
++'svelte': patch
++---
++
++fix: wait for blockers of `{@const}` declarations in nested `{#if}` blocks
+diff --git a/packages/svelte/src/compiler/phases/nodes.js b/packages/svelte/src/compiler/phases/nodes.js
+index 2e54f33..9085922 100644
+--- a/packages/svelte/src/compiler/phases/nodes.js
++++ b/packages/svelte/src/compiler/phases/nodes.js
+@@ -95,19 +95,18 @@ export class ExpressionMetadata {
+ 	 */
+ 	references = new Set();
+ 
+-	/** @type {null | Set<Expression>} */
+-	#blockers = null;
+-
+ 	#get_blockers() {
+-		if (!this.#blockers) {
+-			this.#blockers = new Set();
+-
+-			for (const d of this.dependencies) {
+-				if (d.blocker) this.#blockers.add(d.blocker);
+-			}
++		// Not cached: blockers for some bindings (e.g. `{@const ...}` declarations)
++		// are only assigned during the transform phase, after this may have been
++		// called during analysis
++		/** @type {Set<Expression>} */
++		const blockers = new Set();
++
++		for (const d of this.dependencies) {
++			if (d.blocker) blockers.add(d.blocker);
+ 		}
+ 
+-		return this.#blockers;
++		return blockers;
+ 	}
+ 
+ 	blockers() {
+@@ -144,7 +143,6 @@ export class ExpressionMetadata {
+ 		this.has_await ||= source.has_await;
+ 		this.has_member_expression ||= source.has_member_expression;
+ 		this.has_assignment ||= source.has_assignment;
+-		this.#blockers = null; // so that blockers are recalculated
+ 
+ 		for (const r of source.references) this.references.add(r);
+ 		for (const b of source.dependencies) this.dependencies.add(b);
+diff --git a/packages/svelte/tests/runtime-runes/samples/async-const-destructure-blockers/_config.js b/packages/svelte/tests/runtime-runes/samples/async-const-destructure-blockers/_config.js
+new file mode 100644
+index 0000000..74f34ae
+--- /dev/null
++++ b/packages/svelte/tests/runtime-runes/samples/async-const-destructure-blockers/_config.js
+@@ -0,0 +1,13 @@
++import { tick } from 'svelte';
++import { test } from '../../test';
++
++export default test({
++	mode: ['async-server', 'client', 'hydrate'],
++	ssrHtml: `<p>The Data: hello</p>`,
++
++	async test({ assert, target }) {
++		await tick();
++
++		assert.htmlEqual(target.innerHTML, `<p>The Data: hello</p>`);
++	}
++});
+diff --git a/packages/svelte/tests/runtime-runes/samples/async-const-destructure-blockers/main.svelte b/packages/svelte/tests/runtime-runes/samples/async-const-destructure-blockers/main.svelte
+new file mode 100644
+index 0000000..c0ff988
+--- /dev/null
++++ b/packages/svelte/tests/runtime-runes/samples/async-const-destructure-blockers/main.svelte
+@@ -0,0 +1,16 @@
++<script>
++	let d = $derived(await Promise.resolve({ data: 'hello', hasData: true }));
++	let showFetchCta = $derived(d.hasData);
++</script>
++
++{#if d}
++	{@const { data, hasData } = d}
++
++	{#if hasData}
++		<p>The Data: {data}</p>
++	{:else if showFetchCta}
++		<p>Fetch now</p>
++	{:else}
++		<p>No data</p>
++	{/if}
++{/if}

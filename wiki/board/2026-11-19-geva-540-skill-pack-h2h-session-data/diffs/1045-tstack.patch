@@ -1,0 +1,252 @@
+diff --git a/client/pull.go b/client/pull.go
+index 41d8941..0777b6c 100644
+--- a/client/pull.go
++++ b/client/pull.go
+@@ -279,7 +279,7 @@ func (c *Client) fetch(ctx context.Context, rCtx *RemoteContext, ref string, lim
+ 	}
+ 
+ 	dispatchCtx, dispatchSpan := tracing.StartSpan(ctx, tracing.Name(pullSpanPrefix, "dispatch"))
+-	err = images.Dispatch(dispatchCtx, handler, limiter, desc)
++	err = images.DispatchUnique(dispatchCtx, handler, limiter, desc)
+ 	dispatchSpan.SetStatus(err)
+ 	dispatchSpan.End()
+ 	if err != nil {
+diff --git a/core/images/handlers.go b/core/images/handlers.go
+index a60835f..27bdf95 100644
+--- a/core/images/handlers.go
++++ b/core/images/handlers.go
+@@ -99,8 +99,24 @@ func Handlers(handlers ...Handler) HandlerFunc {
+ //
+ // This differs from dispatch in that each sibling resource is considered
+ // synchronously.
++//
++// Each call is limited to 10,000 references, including duplicates.
++// Exceeding this limit returns an error wrapping
++// [errdefs.ErrResourceExhausted].
+ func Walk(ctx context.Context, handler Handler, descs ...ocispec.Descriptor) error {
++	var referenceCount int
++	return walk(ctx, handler, &referenceCount, descs)
++}
++
++func walk(ctx context.Context, handler Handler, referenceCount *int, descs []ocispec.Descriptor) error {
++	if *referenceCount+len(descs) > maxReferences {
++		return fmt.Errorf("too many descriptors (limit %d): %w", maxReferences, errdefs.ErrResourceExhausted)
++	}
++	*referenceCount += len(descs)
+ 	for _, desc := range descs {
++		if err := ctx.Err(); err != nil {
++			return err
++		}
+ 
+ 		children, err := handler.Handle(ctx, desc)
+ 		if err != nil {
+@@ -111,7 +127,7 @@ func Walk(ctx context.Context, handler Handler, descs ...ocispec.Descriptor) err
+ 		}
+ 
+ 		if len(children) > 0 {
+-			if err := Walk(ctx, handler, children...); err != nil {
++			if err := walk(ctx, handler, referenceCount, children); err != nil {
+ 				return err
+ 			}
+ 		}
+@@ -169,6 +185,25 @@ func WalkNotEmpty(ctx context.Context, handler Handler, descs ...ocispec.Descrip
+ // Exceeding this limit returns an error wrapping
+ // [errdefs.ErrResourceExhausted].
+ func Dispatch(ctx context.Context, handler Handler, limiter *semaphore.Weighted, descs ...ocispec.Descriptor) error {
++	return dispatch(ctx, handler, limiter, false, descs)
++}
++
++// DispatchUnique works like [Dispatch], except that the handler is only run
++// once for each distinct descriptor (identified by digest and media type).
++// Repeated references to the same descriptor still count towards the
++// reference limit, but are neither handled again nor have their children
++// traversed again. This prevents descriptor graphs with heavily shared
++// nodes from amplifying the work done by the handler.
++func DispatchUnique(ctx context.Context, handler Handler, limiter *semaphore.Weighted, descs ...ocispec.Descriptor) error {
++	return dispatch(ctx, handler, limiter, true, descs)
++}
++
++type descriptorKey struct {
++	digest    string
++	mediaType string
++}
++
++func dispatch(ctx context.Context, handler Handler, limiter *semaphore.Weighted, unique bool, descs []ocispec.Descriptor) error {
+ 	if len(descs) == 0 {
+ 		return nil
+ 	}
+@@ -184,7 +219,11 @@ func Dispatch(ctx context.Context, handler Handler, limiter *semaphore.Weighted,
+ 		mu             sync.Mutex
+ 		next           []ocispec.Descriptor
+ 		referenceCount int
++		seen           map[descriptorKey]struct{}
+ 	)
++	if unique {
++		seen = make(map[descriptorKey]struct{})
++	}
+ 
+ 	admit := func(descs []ocispec.Descriptor) error {
+ 		mu.Lock()
+@@ -193,7 +232,18 @@ func Dispatch(ctx context.Context, handler Handler, limiter *semaphore.Weighted,
+ 			return fmt.Errorf("too many descriptors (limit %d): %w", maxReferences, errdefs.ErrResourceExhausted)
+ 		}
+ 		referenceCount += len(descs)
+-		next = append(next, descs...)
++		if !unique {
++			next = append(next, descs...)
++			return nil
++		}
++		for _, desc := range descs {
++			key := descriptorKey{digest: desc.Digest.String(), mediaType: desc.MediaType}
++			if _, ok := seen[key]; ok {
++				continue
++			}
++			seen[key] = struct{}{}
++			next = append(next, desc)
++		}
+ 		return nil
+ 	}
+ 
+diff --git a/core/images/handlers_test.go b/core/images/handlers_test.go
+index 5c4e54e..eed9bc3 100644
+--- a/core/images/handlers_test.go
++++ b/core/images/handlers_test.go
+@@ -105,6 +105,12 @@ func TestDispatchRepeatedReferences(t *testing.T) {
+ 			wantTotalCalls:  5,
+ 			wantSharedCalls: 2,
+ 		},
++		{
++			name:            "DispatchUnique visits each descriptor once",
++			dispatch:        DispatchUnique,
++			wantTotalCalls:  4,
++			wantSharedCalls: 1,
++		},
+ 	}
+ 
+ 	for _, tt := range tests {
+@@ -345,6 +351,7 @@ func TestDispatchDuplicateRoots(t *testing.T) {
+ 		wantCalls int32
+ 	}{
+ 		{"Dispatch visits each root", Dispatch, 2},
++		{"DispatchUnique visits root once", DispatchUnique, 1},
+ 	}
+ 
+ 	for _, tt := range tests {
+@@ -383,6 +390,91 @@ func TestDispatchCountsDuplicateReferences(t *testing.T) {
+ 	require.ErrorIs(t, Dispatch(context.Background(), cyclic, nil, a), errdefs.ErrResourceExhausted)
+ }
+ 
++func TestDispatchUniqueGraphAmplification(t *testing.T) {
++	// Each level references the next level fanout times, which produces
++	// fanout^depth paths through only depth+1 distinct descriptors.
++	const (
++		depth  = 20
++		fanout = 100
++	)
++	levels := make([]ocispec.Descriptor, depth+1)
++	for i := range levels {
++		levels[i] = newDesc(fmt.Sprintf("level-%d", i))
++	}
++	graph := map[digest.Digest][]ocispec.Descriptor{}
++	for i := 0; i < depth; i++ {
++		children := make([]ocispec.Descriptor, fanout)
++		for j := range children {
++			children[j] = levels[i+1]
++		}
++		graph[levels[i].Digest] = children
++	}
++	var calls atomic.Int32
++	handler := HandlerFunc(func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
++		calls.Add(1)
++		return graph[desc.Digest], nil
++	})
++
++	require.NoError(t, DispatchUnique(context.Background(), handler, nil, levels[0]))
++	assert.Equal(t, int32(depth+1), calls.Load())
++
++	// Repeated references still count towards the limit.
++	dup := newDesc("dup")
++	root := newDesc("root")
++	children := make([]ocispec.Descriptor, maxReferences+1)
++	for i := range children {
++		children[i] = dup
++	}
++	fan := HandlerFunc(func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
++		if desc.Digest == root.Digest {
++			return children, nil
++		}
++		return nil, nil
++	})
++	require.ErrorIs(t, DispatchUnique(context.Background(), fan, nil, root), errdefs.ErrResourceExhausted)
++}
++
++func TestWalkReferenceLimit(t *testing.T) {
++	const (
++		depth  = 20
++		fanout = 100
++	)
++	levels := make([]ocispec.Descriptor, depth+1)
++	for i := range levels {
++		levels[i] = newDesc(fmt.Sprintf("level-%d", i))
++	}
++	graph := map[digest.Digest][]ocispec.Descriptor{}
++	for i := 0; i < depth; i++ {
++		children := make([]ocispec.Descriptor, fanout)
++		for j := range children {
++			children[j] = levels[i+1]
++		}
++		graph[levels[i].Digest] = children
++	}
++	var calls int
++	handler := HandlerFunc(func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
++		calls++
++		return graph[desc.Digest], nil
++	})
++	require.ErrorIs(t, Walk(context.Background(), handler, levels[0]), errdefs.ErrResourceExhausted)
++	assert.LessOrEqual(t, calls, maxReferences)
++
++	a, b := newDesc("a"), newDesc("b")
++	cycle := map[digest.Digest][]ocispec.Descriptor{a.Digest: {b}, b.Digest: {a}}
++	cyclic := HandlerFunc(func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
++		return cycle[desc.Digest], nil
++	})
++	require.ErrorIs(t, Walk(context.Background(), cyclic, a), errdefs.ErrResourceExhausted)
++
++	small := HandlerFunc(func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
++		if desc.Digest == a.Digest {
++			return []ocispec.Descriptor{b, b}, nil
++		}
++		return nil, nil
++	})
++	require.NoError(t, Walk(context.Background(), small, a))
++}
++
+ func TestDispatchErrorPropagation(t *testing.T) {
+ 	root := newDesc("root")
+ 	child1 := newDesc("child1")
+diff --git a/core/transfer/local/pull.go b/core/transfer/local/pull.go
+index 712e81e..fa76b44 100644
+--- a/core/transfer/local/pull.go
++++ b/core/transfer/local/pull.go
+@@ -233,7 +233,7 @@ func (ts *localTransferService) pull(ctx context.Context, ir transfer.ImageFetch
+ 		}
+ 	}
+ 
+-	if err := images.Dispatch(ctx, handler, nil, desc); err != nil {
++	if err := images.DispatchUnique(ctx, handler, nil, desc); err != nil {
+ 		if unpacker != nil {
+ 			// wait for unpacker to cleanup
+ 			unpacker.Wait()
+diff --git a/internal/cri/opts/container.go b/internal/cri/opts/container.go
+index 563d2a9..ff2379b 100644
+--- a/internal/cri/opts/container.go
++++ b/internal/cri/opts/container.go
+@@ -97,7 +97,7 @@ func unpackImage(ctx context.Context, client *containerd.Client, i containerd.Im
+ 		h = snpkg.AppendInfoHandlerWrapper(i.Name())(h)
+ 	}
+ 
+-	if err := images.Dispatch(ctx, u.Unpack(h), nil, i.Target()); err != nil {
++	if err := images.DispatchUnique(ctx, u.Unpack(h), nil, i.Target()); err != nil {
+ 		_, _ = u.Wait()
+ 		return err
+ 	}

@@ -1,0 +1,585 @@
+diff --git a/Terminal.Gui/ViewBase/Adornment/AdornmentView.cs b/Terminal.Gui/ViewBase/Adornment/AdornmentView.cs
+index 61f1fde..e5eb2a4 100644
+--- a/Terminal.Gui/ViewBase/Adornment/AdornmentView.cs
++++ b/Terminal.Gui/ViewBase/Adornment/AdornmentView.cs
+@@ -151,7 +151,13 @@ public class AdornmentView : View, IAdornmentView, IDesignable
+             Adornment.Thickness.Draw (Driver, ViewportToScreen (Viewport), Diagnostics, ToString ());
+         }
+ 
+-        SetNeedsDraw ();
++        // Drawing the thickness overwrote any SubViews of this adornment; ensure they get redrawn.
++        // Only the SubViews are invalidated (not this AdornmentView itself, which is already drawing), to
++        // avoid needless redraw churn propagating back up to the Parent.
++        foreach (View subview in InternalSubViews.Snapshot ())
++        {
++            subview.SetNeedsDraw ();
++        }
+ 
+         return true;
+     }
+diff --git a/Terminal.Gui/ViewBase/View.Drawing.Adornments.cs b/Terminal.Gui/ViewBase/View.Drawing.Adornments.cs
+index 689c164..9c84674 100644
+--- a/Terminal.Gui/ViewBase/View.Drawing.Adornments.cs
++++ b/Terminal.Gui/ViewBase/View.Drawing.Adornments.cs
+@@ -99,7 +99,15 @@ public partial class View
+         }
+     }
+ 
+-    internal void DoDrawAdornments (Region? originalClip)
++    internal void DoDrawAdornments (Region? originalClip) => DoDrawAdornments (originalClip, NeedsDraw);
++
++    /// <param name="originalClip">The clip to restore/intersect with.</param>
++    /// <param name="selfNeedsDraw">
++    ///     <see langword="true"/> if this View itself needs a full redraw. When <see langword="false"/> the View is only
++    ///     participating in the draw pass because a SubView is dirty, and <see cref="NeedsDrawRect"/> is NOT escalated to
++    ///     the full <see cref="Viewport"/> (which would force clearing the viewport and redrawing text/content).
++    /// </param>
++    internal void DoDrawAdornments (Region? originalClip, bool selfNeedsDraw)
+     {
+         if (this is AdornmentView)
+         {
+@@ -135,8 +143,10 @@ public partial class View
+ 
+         // Ensure NeedsDraw is true for the rest of the draw pipeline (DoClearViewport, DoDrawText, etc.)
+         // When adornment Views are null (lightweight), their NeedsDraw doesn't contribute to the parent's
+-        // NeedsDraw property. But if we're here, the parent IS drawing, so we must set NeedsDrawRect.
+-        if (NeedsDrawRect == Rectangle.Empty)
++        // NeedsDraw property. If the parent itself needs drawing, we must set NeedsDrawRect.
++        // If the parent is only drawing because a SubView is dirty, do NOT escalate: that would turn a
++        // child-only redraw into a full redraw of the parent (and fan out to overlapped SubViews).
++        if (selfNeedsDraw && NeedsDrawRect == Rectangle.Empty)
+         {
+             NeedsDrawRect = Viewport;
+         }
+diff --git a/Terminal.Gui/ViewBase/View.Drawing.cs b/Terminal.Gui/ViewBase/View.Drawing.cs
+index e17a052..857715d 100644
+--- a/Terminal.Gui/ViewBase/View.Drawing.cs
++++ b/Terminal.Gui/ViewBase/View.Drawing.cs
+@@ -91,16 +91,20 @@ public partial class View // Drawing APIs
+ 
+         Region? originalClip = GetClip ();
+ 
+-        // TODO: This can be further optimized by checking NeedsDraw below and only
+-        // TODO: clearing, drawing text, drawing content, etc. if it is true.
+         if (NeedsDraw || SubViewNeedsDraw)
+         {
++            // Determine whether THIS view needs a full redraw (clear viewport, text, content), as opposed to
++            // merely participating in the draw pass because a SubView is dirty (SubViewNeedsDraw).
++            // This must be captured BEFORE DoDrawAdornments, which marks the adornment views as needing draw
++            // (which would otherwise make NeedsDraw true).
++            bool selfNeedsDraw = NeedsDraw || SubViewRequiresSuperViewRedraw ();
++
+             // ------------------------------------
+             // Draw the Border and Padding Adornments.
+             // Note: Margin with a Shadow is special-cased and drawn in a separate pass to support
+             // transparent shadows.
+             Trace.Draw (this.ToIdentifyingString (), "Adornments");
+-            DoDrawAdornments (originalClip);
++            DoDrawAdornments (originalClip, selfNeedsDraw);
+             SetClip (originalClip);
+ 
+             // ------------------------------------
+@@ -123,7 +127,11 @@ public partial class View // Drawing APIs
+             _localDrawContext = new DrawContext ();
+ 
+             SetAttributeForRole (Enabled ? VisualRole.Normal : VisualRole.Disabled);
+-            DoClearViewport (context);
++
++            if (selfNeedsDraw)
++            {
++                DoClearViewport (context);
++            }
+ 
+             // ------------------------------------
+             // Draw the SubViews first (order matters: SubViews, Text, Content)
+@@ -145,13 +153,17 @@ public partial class View // Drawing APIs
+             // ------------------------------------
+             // Draw the text — tracked in both shared (clip exclusion) and local (hit-testing) contexts
+             Trace.Draw (this.ToIdentifyingString (), "Text");
+-            SetAttributeForRole (Enabled ? VisualRole.Normal : VisualRole.Disabled);
+-            DoDrawText (_localDrawContext);
++            // Skipped when only a SubView is dirty — the view's own text was not invalidated.
++            if (selfNeedsDraw)
++            {
++                SetAttributeForRole (Enabled ? VisualRole.Normal : VisualRole.Disabled);
++                DoDrawText (_localDrawContext);
+ 
+-            // ------------------------------------
+-            // Draw the content — tracked in both shared (clip exclusion) and local (hit-testing) contexts
+-            Trace.Draw (this.ToIdentifyingString (), "Content");
+-            DoDrawContent (_localDrawContext);
++                // ------------------------------------
++                // Draw the content — tracked in both shared (clip exclusion) and local (hit-testing) contexts
++                Trace.Draw (this.ToIdentifyingString (), "Content");
++                DoDrawContent (_localDrawContext);
++            }
+ 
+             // Merge this view's own draws into the shared context so the SuperView
+             // can track the aggregate for clip exclusion.
+@@ -198,6 +210,56 @@ public partial class View // Drawing APIs
+         // a clip with "holes" where this view (and any SubViews drawn before it) are located.
+     }
+ 
++    /// <summary>
++    ///     If this View's <see cref="Border"/> is transparent, its content changing (e.g. Title or tab header layout)
++    ///     exposes cells owned by the SuperView, so the SuperView must redraw beneath it.
++    /// </summary>
++    internal void SetSuperViewNeedsDrawIfTransparentBorder ()
++    {
++        if (Border.Thickness != Thickness.Empty && Border.ViewportSettings.FastHasFlags (ViewportSettingsFlags.Transparent))
++        {
++            SuperView?.SetNeedsDraw ();
++        }
++    }
++
++    /// <summary>
++    ///     Returns <see langword="true"/> if any visible, dirty SubView has transparency (in its Viewport or any of its
++    ///     adornments). Such SubViews do not fully repaint the cells they cover, so the SuperView must clear and redraw
++    ///     its own content underneath them; otherwise stale glyphs would remain visible through the transparent areas.
++    /// </summary>
++    private bool SubViewRequiresSuperViewRedraw ()
++    {
++        if (!SubViewNeedsDraw)
++        {
++            return false;
++        }
++
++        foreach (View subview in InternalSubViews)
++        {
++            if (!subview.Visible || (!subview.NeedsDraw && !subview.SubViewNeedsDraw))
++            {
++                continue;
++            }
++
++            // NOTE: A transparent Border (e.g. Tab-mode borders) is intentionally NOT considered here. Its glyphs only
++            // change when the Title or the Border's layout changes, and those paths invalidate the SuperView directly
++            // (see Title setter and SetSuperViewNeedsDrawIfTransparentBorder). Including it would cause every redraw of
++            // a Tab page to fully redraw the Tabs container and all other (overlapped) pages.
++            if (subview.ViewportSettings.FastHasFlags (ViewportSettingsFlags.Transparent)
++                || IsTransparentAdornment (subview.Margin)
++                || IsTransparentAdornment (subview.Padding))
++            {
++                return true;
++            }
++        }
++
++        return false;
++
++        // Margin is Transparent by default; only adornments that actually occupy cells matter.
++        static bool IsTransparentAdornment (AdornmentImpl adornment) =>
++            adornment.Thickness != Thickness.Empty && adornment.ViewportSettings.FastHasFlags (ViewportSettingsFlags.Transparent);
++    }
++
+     // DrawAdornments region (DoDrawAdornmentsSubViews, DoDrawAdornments, DrawAdornments,
+     // OnDrawingAdornments) is in View.Drawing.Adornments.cs.
+ 
+@@ -501,7 +563,7 @@ public partial class View // Drawing APIs
+ 
+     internal void DoDrawSubViews (DrawContext? context = null)
+     {
+-        if (!NeedsDraw || OnDrawingSubViews (context))
++        if ((!NeedsDraw && !SubViewNeedsDraw) || OnDrawingSubViews (context))
+         {
+             return;
+         }
+@@ -611,7 +673,7 @@ public partial class View // Drawing APIs
+     private void DoRenderLineCanvas (DrawContext? context)
+     {
+         // TODO: Add context to OnRenderingLineCanvas
+-        if (!NeedsDraw || OnRenderingLineCanvas ())
++        if ((!NeedsDraw && !SubViewNeedsDraw) || OnRenderingLineCanvas ())
+         {
+             return;
+         }
+diff --git a/Terminal.Gui/ViewBase/View.Layout.cs b/Terminal.Gui/ViewBase/View.Layout.cs
+index e234499..551b7bc 100644
+--- a/Terminal.Gui/ViewBase/View.Layout.cs
++++ b/Terminal.Gui/ViewBase/View.Layout.cs
+@@ -736,6 +736,13 @@ public partial class View // Layout APIs
+             if (SuperView is { })
+             {
+                 SuperView?.SetNeedsDraw ();
++
++                // A geometry change inside a transparent Border (e.g. a Tab header TitleView) exposes cells
++                // owned by the Border's Parent's SuperView.
++                if (SuperView is BorderView { Adornment.Parent: { } borderParent })
++                {
++                    borderParent.SetSuperViewNeedsDrawIfTransparentBorder ();
++                }
+             }
+             else
+             {
+diff --git a/Terminal.Gui/ViewBase/View.cs b/Terminal.Gui/ViewBase/View.cs
+index 8f690f6..257c94b 100644
+--- a/Terminal.Gui/ViewBase/View.cs
++++ b/Terminal.Gui/ViewBase/View.cs
+@@ -558,6 +558,7 @@ public partial class View : IDisposable, ISupportInitializeNotification
+             SetTitleTextFormatterSize ();
+             SetHotKeyFromTitle ();
+             SetNeedsDraw ();
++            SetSuperViewNeedsDrawIfTransparentBorder ();
+ 
+             OnTitleChanged ();
+             TitleChanged?.Invoke (this, new EventArgs<string> (in _title));
+diff --git a/Tests/UnitTestsParallelizable/ViewBase/Draw/SubViewOnlyRedrawTests.cs b/Tests/UnitTestsParallelizable/ViewBase/Draw/SubViewOnlyRedrawTests.cs
+new file mode 100644
+index 0000000..e9f036c
+--- /dev/null
++++ b/Tests/UnitTestsParallelizable/ViewBase/Draw/SubViewOnlyRedrawTests.cs
+@@ -0,0 +1,318 @@
++using UnitTests;
++
++namespace ViewBaseTests.Drawing;
++
++/// <summary>
++///     Regression tests: a SubView-only redraw request (<see cref="View.SubViewNeedsDraw"/>) must not escalate into a
++///     full redraw (clear viewport, text, content) of the SuperView.
++/// </summary>
++[Trait ("Category", "Output")]
++public class SubViewOnlyRedrawTests (ITestOutputHelper output) : TestDriverBase
++{
++    private sealed class Counts
++    {
++        public int Cleared;
++        public int Text;
++        public int Content;
++
++        public void Reset () => Cleared = Text = Content = 0;
++    }
++
++    private static Counts Track (View view)
++    {
++        Counts c = new ();
++        view.ClearedViewport += (_, _) => c.Cleared++;
++        view.DrawingText += (_, _) => c.Text++;
++        view.DrawingContent += (_, _) => c.Content++;
++
++        return c;
++    }
++
++    /// <summary>Mimics an application iteration: reset the clip to the screen and draw the top view.</summary>
++    private static void Redraw (View top)
++    {
++        top.Layout ();
++        top.Driver!.Clip = new Region (top.Driver.Screen);
++        View.Draw ([top], false);
++    }
++
++    private static string Snapshot (IDriver driver)
++    {
++        Cell [,] contents = driver.Contents!;
++        System.Text.StringBuilder sb = new ();
++
++        for (var r = 0; r < contents.GetLength (0); r++)
++        {
++            for (var c = 0; c < contents.GetLength (1); c++)
++            {
++                sb.Append (contents [r, c].Grapheme);
++                sb.Append (contents [r, c].Attribute?.ToString ());
++            }
++
++            sb.AppendLine ();
++        }
++
++        return sb.ToString ();
++    }
++
++    [Theory]
++    [InlineData (false)]
++    [InlineData (true)]
++    public void ChildOnlyDirty_Parent_Does_Not_Clear_Or_Redraw_Text_Or_Content (bool parentHasBorder)
++    {
++        IDriver driver = CreateTestDriver (20, 10);
++        View parent = new () { Driver = driver, Width = Dim.Fill (), Height = Dim.Fill (), Text = "Parent" };
++
++        if (parentHasBorder)
++        {
++            parent.BorderStyle = LineStyle.Single;
++        }
++
++        View child1 = new () { X = 1, Y = 1, Width = 5, Height = 1, Text = "one" };
++        View child2 = new () { X = 1, Y = 3, Width = 5, Height = 1, Text = "two" };
++        parent.Add (child1, child2);
++
++        Counts parentCounts = Track (parent);
++        Counts child1Counts = Track (child1);
++        Counts child2Counts = Track (child2);
++
++        Redraw (parent);
++        Assert.Equal (1, parentCounts.Cleared);
++        Assert.False (parent.NeedsDraw);
++        Assert.False (parent.SubViewNeedsDraw);
++
++        parentCounts.Reset ();
++        child1Counts.Reset ();
++        child2Counts.Reset ();
++
++        child1.SetNeedsDraw ();
++        Assert.False (parent.NeedsDraw);
++        Assert.True (parent.SubViewNeedsDraw);
++
++        Redraw (parent);
++
++        Assert.Equal (0, parentCounts.Cleared);
++        Assert.Equal (0, parentCounts.Text);
++        Assert.Equal (0, parentCounts.Content);
++        Assert.Equal (1, child1Counts.Cleared);
++        Assert.Equal (1, child1Counts.Text);
++        Assert.Equal (0, child2Counts.Cleared);
++        Assert.Equal (0, child2Counts.Text);
++        Assert.False (parent.NeedsDraw);
++        Assert.False (parent.SubViewNeedsDraw);
++        Assert.False (child1.NeedsDraw);
++
++        parent.Dispose ();
++        driver.Dispose ();
++    }
++
++    [Fact]
++    public void ParentDirty_Still_Clears_And_Redraws ()
++    {
++        IDriver driver = CreateTestDriver (20, 10);
++        View parent = new () { Driver = driver, Width = Dim.Fill (), Height = Dim.Fill (), Text = "Parent" };
++        View child = new () { X = 1, Y = 1, Width = 5, Height = 1, Text = "one" };
++        parent.Add (child);
++        Counts parentCounts = Track (parent);
++        Counts childCounts = Track (child);
++
++        Redraw (parent);
++        parentCounts.Reset ();
++        childCounts.Reset ();
++
++        parent.SetNeedsDraw ();
++        Redraw (parent);
++
++        Assert.Equal (1, parentCounts.Cleared);
++        Assert.Equal (1, parentCounts.Text);
++        Assert.Equal (1, parentCounts.Content);
++        Assert.Equal (1, childCounts.Cleared);
++
++        parent.Dispose ();
++        driver.Dispose ();
++    }
++
++    [Fact]
++    public void ChildOnlyDirty_Rendered_Output_Is_Correct ()
++    {
++        IDriver driver = CreateTestDriver (12, 3);
++        View parent = new () { Driver = driver, Width = Dim.Fill (), Height = Dim.Fill (), Text = "PPPPPPPPPPPP" };
++        View child = new () { X = 2, Y = 1, Width = 5, Height = 1, Text = "abcde" };
++        parent.Add (child);
++
++        Redraw (parent);
++
++        child.Text = "xy";
++        Redraw (parent);
++
++        DriverAssert.AssertDriverContentsAre (
++                                              """
++                                              PPPPPPPPPPPP
++                                                xy
++                                              """,
++                                              output,
++                                              driver);
++
++        // Validate at the IOutput level as well (not only Driver.Contents)
++        IOutput o = driver.GetOutput ();
++        o.Write (driver.GetOutputBuffer ());
++        string ansi = o.GetLastOutput ();
++        Assert.Contains ("xy", ansi);
++        Assert.DoesNotContain ("abcde", ansi);
++
++        parent.Dispose ();
++        driver.Dispose ();
++    }
++
++    [Fact]
++    public void Transparent_Child_Dirty_Forces_Parent_Redraw_So_No_Stale_Glyphs ()
++    {
++        IDriver driver = CreateTestDriver (12, 3);
++        View parent = new () { Driver = driver, Width = Dim.Fill (), Height = Dim.Fill (), Text = "PPPPPPPPPPPP" };
++        View child = new ()
++        {
++            X = 0, Y = 0, Width = 6, Height = 1, Text = "abcdef",
++            ViewportSettings = ViewportSettingsFlags.Transparent
++        };
++        parent.Add (child);
++        Counts parentCounts = Track (parent);
++
++        Redraw (parent);
++        parentCounts.Reset ();
++
++        child.Text = "xy";
++        Redraw (parent);
++
++        // The parent must redraw beneath the transparent child to erase "cdef".
++        Assert.Equal (1, parentCounts.Cleared);
++
++        DriverAssert.AssertDriverContentsAre ("xyPPPPPPPPPP", output, driver);
++
++        parent.Dispose ();
++        driver.Dispose ();
++    }
++
++    [Fact]
++    public void Shadowed_Child_Redraw_Renders_Same_As_Full_Redraw ()
++    {
++        IDriver driver = CreateTestDriver (20, 6);
++        View parent = new () { Driver = driver, Width = Dim.Fill (), Height = Dim.Fill (), Text = "PPPPPPPPPPPPPPPPPPPP" };
++        View child = new () { X = 1, Y = 1, Width = 8, Height = 3, Text = "child", ShadowStyle = ShadowStyles.Opaque, BorderStyle = LineStyle.Single };
++        parent.Add (child);
++
++        Redraw (parent);
++        string full = Snapshot (driver);
++
++        child.SetNeedsDraw ();
++        Redraw (parent);
++        string partial = Snapshot (driver);
++
++        Assert.Equal (full, partial);
++
++        parent.Dispose ();
++        driver.Dispose ();
++    }
++
++    [Fact]
++    public void Overlapped_Tabs_ActiveTabScroll_Does_Not_Redraw_Inactive_Pages ()
++    {
++        IDriver driver = CreateTestDriver (40, 12);
++        View root = new () { Driver = driver, CanFocus = true, Width = Dim.Fill (), Height = Dim.Fill () };
++        Tabs tabs = new () { Width = Dim.Fill (), Height = Dim.Fill () };
++        root.Add (tabs);
++
++        View [] pages = new View [3];
++        Counts [] counts = new Counts [3];
++
++        for (var i = 0; i < pages.Length; i++)
++        {
++            pages [i] = new View
++            {
++                Title = $"Tab{i}",
++                CanFocus = true,
++                Width = Dim.Fill (),
++                Height = Dim.Fill (),
++                Text = string.Join ('\n', Enumerable.Range (0, 40).Select (n => $"Tab{i} line {n}"))
++            };
++            pages [i].SetContentSize (new Size (30, 40));
++            tabs.Add (pages [i]);
++            counts [i] = Track (pages [i]);
++        }
++
++        Counts tabsCounts = Track (tabs);
++
++        Redraw (root);
++
++        View active = (View)tabs.Value!;
++        Assert.Same (pages [0], active);
++
++        foreach (Counts c in counts)
++        {
++            c.Reset ();
++        }
++
++        tabsCounts.Reset ();
++
++        for (var y = 1; y <= 3; y++)
++        {
++            active.Viewport = active.Viewport with { Y = y };
++            Redraw (root);
++        }
++
++        Assert.Equal (3, counts [0].Cleared);
++        Assert.Equal (3, counts [0].Text);
++
++        for (var i = 1; i < pages.Length; i++)
++        {
++            Assert.Equal (0, counts [i].Cleared);
++            Assert.Equal (0, counts [i].Text);
++            Assert.Equal (0, counts [i].Content);
++        }
++
++        Assert.Equal (0, tabsCounts.Cleared);
++        Assert.Equal (0, tabsCounts.Content);
++
++        // Rendering is correct: active tab content visible at the scrolled position.
++        IOutput o = driver.GetOutput ();
++        o.Write (driver.GetOutputBuffer ());
++        Assert.Contains ("Tab0 line 3", o.GetLastOutput ());
++        Assert.DoesNotContain ("Tab1 line", o.GetLastOutput ());
++
++        root.Dispose ();
++        driver.Dispose ();
++    }
++
++    [Fact]
++    public void Tab_Title_Change_With_Transparent_Border_Renders_Same_As_Full_Redraw ()
++    {
++        IDriver driver = CreateTestDriver (40, 8);
++        View root = new () { Driver = driver, CanFocus = true, Width = Dim.Fill (), Height = Dim.Fill () };
++        Tabs tabs = new () { Width = Dim.Fill (), Height = Dim.Fill () };
++        root.Add (tabs);
++
++        View [] pages = new View [3];
++
++        for (var i = 0; i < pages.Length; i++)
++        {
++            pages [i] = new View { Title = $"LongTabTitle{i}", CanFocus = true, Width = Dim.Fill (), Height = Dim.Fill (), Text = $"Page {i}" };
++            tabs.Add (pages [i]);
++        }
++
++        Redraw (root);
++
++        pages [0].Title = "A";
++        pages [1].Title = "B";
++        Redraw (root);
++        string partial = Snapshot (driver);
++
++        root.SetNeedsDraw ();
++        Redraw (root);
++        string full = Snapshot (driver);
++
++        Assert.Equal (full, partial);
++        Assert.DoesNotContain ("LongTabTitle0", partial);
++
++        root.Dispose ();
++        driver.Dispose ();
++    }
++}
+diff --git a/Tests/UnitTestsParallelizable/Views/TabView/TabsFanOutDiagnosticTests.cs b/Tests/UnitTestsParallelizable/Views/TabView/TabsFanOutDiagnosticTests.cs
+index 5792502..f3ed977 100644
+--- a/Tests/UnitTestsParallelizable/Views/TabView/TabsFanOutDiagnosticTests.cs
++++ b/Tests/UnitTestsParallelizable/Views/TabView/TabsFanOutDiagnosticTests.cs
+@@ -283,10 +283,9 @@ public class TabsFanOutDiagnosticTests (ITestOutputHelper output) : TestDriverBa
+         output.WriteLine ($"Sum of inactive ClearedViewport: {inactiveClears}");
+         output.WriteLine ($"Sum of inactive DrawingContent:  {inactiveContentDraws}");
+ 
+-        // CURRENT BEHAVIOR (issue #4973): inactive tabs receive full draw passes when active scrolls.
+-        // DrawComplete is the widget-agnostic signal — it always fires once per call to Draw(),
+-        // regardless of whether the view overrides OnClearingViewport / OnDrawingContent (as Code does).
+-        // After #4973 is fixed, flip this to `Assert.Equal (0, inactiveDraws)`.
++        // NOTE: DrawComplete fires once per call to Draw() even when the view has nothing to draw
++        // (it is outside the NeedsDraw guard), so inactive tabs still record it. It is therefore not a
++        // measure of actual redraw work; see SubViewOnlyRedrawTests for clear/text/content-level assertions.
+         Assert.True (
+                      inactiveDraws > 0,
+                      $"Documents issue #4973 draw fan-out: inactive_total DrawComplete={inactiveDraws}, " +
+@@ -294,13 +293,13 @@ public class TabsFanOutDiagnosticTests (ITestOutputHelper output) : TestDriverBa
+ 
+         // ClearedViewport / DrawingContent on Code instances will be 0 because Code overrides those
+         // handlers and returns true (suppressing the events). The Tabs container still fires them,
+-        // so they remain useful as a secondary diagnostic — recorded in the report above but not
+-        // asserted at the per-tab level.
++        // so they remain useful as a secondary diagnostic.
++        // Since #4973 (child-only redraws no longer escalate to a full parent redraw), the Tabs
++        // container is only entered via SubViewNeedsDraw when the active tab scrolls, so it must
++        // NOT clear its own viewport (which would fan redraw out to all overlapped tab pages).
+         ViewActivityCounters.Counts tabsCounts = counters.Get (tabs);
+-        Assert.True (
+-                     tabsCounts.ClearedViewport > 0,
+-                     $"Tabs container must register clear activity (got {tabsCounts.ClearedViewport}); " +
+-                     "this confirms the lower-level draw pipeline is being exercised.");
++        Assert.Equal (0, tabsCounts.ClearedViewport);
++        Assert.Equal (0, tabsCounts.DrawingContent);
+ 
+         root.Dispose ();
+         driver.Dispose ();

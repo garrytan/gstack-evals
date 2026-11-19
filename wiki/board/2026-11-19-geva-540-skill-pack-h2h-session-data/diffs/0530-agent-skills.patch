@@ -1,0 +1,143 @@
+diff --git a/pkg/cli/copilot_agent_logs.go b/pkg/cli/copilot_agent_logs.go
+index 0bd39af..38ed10b 100644
+--- a/pkg/cli/copilot_agent_logs.go
++++ b/pkg/cli/copilot_agent_logs.go
+@@ -8,13 +8,27 @@ import (
+ )
+ 
+ var (
+-	agentTurnPattern     = regexp.MustCompile(`(?i)task.*iteration|agent.*turn|step.*\d+`)
+-	agentToolCallPattern = regexp.MustCompile(`(?i)tool.*call|executing.*tool|calling.*(\w+)`)
+-	toolNamePatterns     = []*regexp.Regexp{
+-		regexp.MustCompile(`(?i)tool[:\s]+([a-zA-Z0-9_-]+)`),
+-		regexp.MustCompile(`(?i)calling[:\s]+([a-zA-Z0-9_-]+)`),
+-		regexp.MustCompile(`(?i)executing[:\s]+([a-zA-Z0-9_-]+)`),
+-		regexp.MustCompile(`(?i)using[:\s]+tool[:\s]+([a-zA-Z0-9_-]+)`),
++	agentTurnPattern = regexp.MustCompile(`(?i)task.*iteration|agent.*turn|step.*\d+`)
++
++	// toolNamePatterns match explicit tool-invocation markers only. Each pattern requires
++	// a structural delimiter (a colon, or the "Calling <name> tool" form) so that free-form
++	// prose such as "every tool calls the server" is never mistaken for a tool call.
++	toolNamePatterns = []*regexp.Regexp{
++		// "Tool: x", "Tool call: x", "Using tool: x", "Executing tool: x", "Calling tool: x"
++		regexp.MustCompile(`(?i)\btool(?:\s+call)?:\s*([a-zA-Z0-9_.-]+)`),
++		// "Calling: x", "Executing: x"
++		regexp.MustCompile(`(?i)\b(?:calling|executing):\s*([a-zA-Z0-9_.-]+)`),
++		// "Calling x tool"
++		regexp.MustCompile(`(?i)\bcalling\s+([a-zA-Z0-9_.-]+)\s+tool\b`),
++	}
++
++	// proseStopWords are common English words that can never be valid tool names.
++	// They act as a safety net if a pattern above still captures prose.
++	proseStopWords = map[string]bool{
++		"a": true, "an": true, "the": true, "to": true, "for": true, "or": true, "and": true,
++		"on": true, "in": true, "of": true, "with": true, "since": true, "from": true,
++		"by": true, "is": true, "it": true, "this": true, "that": true, "call": true,
++		"calls": true, "tool": true, "tools": true, "some": true, "any": true, "each": true,
+ 	}
+ )
+ 
+@@ -48,24 +62,22 @@ func ParseCopilotCodingAgentLogMetrics(logContent string, verbose bool) workflow
+ 		}
+ 
+ 		// Extract tool calls from agent logs
+-		if matches := agentToolCallPattern.FindStringSubmatch(line); len(matches) > 1 {
+-			toolName := extractToolName(line)
+-			if toolName != "" {
+-				// Track tool call
+-				if _, exists := toolCallMap[toolName]; !exists {
+-					toolCallMap[toolName] = &workflow.ToolCallInfo{
+-						Name:      toolName,
+-						CallCount: 0,
+-					}
++		toolName := extractToolName(line)
++		if toolName != "" {
++			// Track tool call
++			if _, exists := toolCallMap[toolName]; !exists {
++				toolCallMap[toolName] = &workflow.ToolCallInfo{
++					Name:      toolName,
++					CallCount: 0,
+ 				}
+-				toolCallMap[toolName].CallCount++
++			}
++			toolCallMap[toolName].CallCount++
+ 
+-				// Add to current sequence
+-				currentSequence = append(currentSequence, toolName)
++			// Add to current sequence
++			currentSequence = append(currentSequence, toolName)
+ 
+-				if verbose {
+-					copilotCodingAgentLog.Printf("Found tool call: %s", toolName)
+-				}
++			if verbose {
++				copilotCodingAgentLog.Printf("Found tool call: %s", toolName)
+ 			}
+ 		}
+ 
+@@ -105,7 +117,11 @@ func extractToolName(line string) string {
+ 	// Try to extract tool name from various patterns
+ 	for _, pattern := range toolNamePatterns {
+ 		if matches := pattern.FindStringSubmatch(line); len(matches) > 1 {
+-			return strings.TrimSpace(matches[1])
++			name := strings.TrimSpace(matches[1])
++			if name == "" || proseStopWords[strings.ToLower(name)] {
++				continue
++			}
++			return name
+ 		}
+ 	}
+ 
+diff --git a/pkg/cli/copilot_agent_test.go b/pkg/cli/copilot_agent_test.go
+index 2829182..889c74e 100644
+--- a/pkg/cli/copilot_agent_test.go
++++ b/pkg/cli/copilot_agent_test.go
+@@ -341,3 +341,48 @@ ERROR: Test error
+ 		t.Error("Expected tool calls to be extracted")
+ 	}
+ }
++
++func TestParseCopilotCodingAgentLogMetrics_IgnoresProseWords(t *testing.T) {
++	logContent := `
++Task iteration 1: Starting analysis
++The agent calls a tool to fetch data; every tool calls the server since it launches.
++Each tool call for the server is logged, or the tool on disk with misuse is rejected.
++Calling for help with the unified tool since the tool to use is unknown.
++Executing the plan with care
++Calling: startHttpServer
++Tool call: noop
++Using tool: label_agent
++`
++	metrics := ParseCopilotCodingAgentLogMetrics(logContent, false)
++
++	got := make(map[string]int)
++	for _, tc := range metrics.ToolCalls {
++		got[tc.Name] = tc.CallCount
++	}
++	want := map[string]int{"startHttpServer": 1, "noop": 1, "label_agent": 1}
++	if len(got) != len(want) {
++		t.Fatalf("Expected exactly tools %v, got %v", want, got)
++	}
++	for name, count := range want {
++		if got[name] != count {
++			t.Errorf("Expected %s to have %d calls, got %d (all: %v)", name, count, got[name], got)
++		}
++	}
++}
++
++func TestExtractToolName_RejectsProse(t *testing.T) {
++	lines := []string{
++		"every tool calls the server",
++		"the tool to use",
++		"Calling for help",
++		"each tool call for the server",
++		"Executing the plan",
++		"the tool since it launches",
++		"calling the tool",
++	}
++	for _, line := range lines {
++		if got := extractToolName(line); got != "" {
++			t.Errorf("extractToolName(%q) = %q, want empty", line, got)
++		}
++	}
++}

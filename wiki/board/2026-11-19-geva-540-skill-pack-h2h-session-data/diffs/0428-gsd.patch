@@ -1,0 +1,114 @@
+diff --git a/Core/Relationships/RelationshipResolver.cs b/Core/Relationships/RelationshipResolver.cs
+index 0c1314a..fe2a86f 100644
+--- a/Core/Relationships/RelationshipResolver.cs
++++ b/Core/Relationships/RelationshipResolver.cs
+@@ -289,9 +289,29 @@ namespace CKAN
+                 catch
+                 when (soft_resolve || options.proceed_with_inconsistencies)
+                 {
+-                    log.InfoFormat("{0} is recommended/suggested but it is not listed in the index, or not available for your game version.",
+-                                   descriptor);
+-                    continue;
++                    // If we're tolerating inconsistencies, candidates that conflict with
++                    // mods already in the changeset should still be considered,
++                    // so the conflict can be recorded and shown to the user
++                    // instead of the module silently disappearing
++                    if (options.proceed_with_inconsistencies)
++                    {
++                        try
++                        {
++                            candidates = resolved.Candidates(descriptor, Array.Empty<CkanModule>(),
++                                                             registry, game);
++                            log.DebugFormat("Got {0} conflicting candidates for {1}",
++                                            candidates.Count, descriptor);
++                        }
++                        catch
++                        {
++                        }
++                    }
++                    if (candidates == null)
++                    {
++                        log.InfoFormat("{0} is recommended/suggested but it is not listed in the index, or not available for your game version.",
++                                       descriptor);
++                        continue;
++                    }
+                 }
+ 
+                 if (candidates.Count > 1)
+diff --git a/Tests/Core/IO/ModuleInstallerTests.cs b/Tests/Core/IO/ModuleInstallerTests.cs
+index d7e5e99..03e47d5 100644
+--- a/Tests/Core/IO/ModuleInstallerTests.cs
++++ b/Tests/Core/IO/ModuleInstallerTests.cs
+@@ -837,6 +837,72 @@ namespace Tests.Core.IO
+             }
+         }
+ 
++        [Test]
++        public void FindRecommendations_WithConflictingRecommendations_AllRecommendedConflictsUnchecked()
++        {
++            // Arrange
++            var crit = new GameVersionCriteria(new GameVersion(1, 12, 5));
++            using (var repo     = new TemporaryRepository(
++                                      Relationships.RelationshipResolverTests.MergeWithDefaults(
++                                          @"{
++                                              ""identifier"": ""Modpack"",
++                                              ""kind"": ""metapackage"",
++                                              ""recommends"": [
++                                                  { ""name"": ""Kcalbeloh"" },
++                                                  { ""name"": ""JNSQ""      },
++                                                  { ""name"": ""GPP""       },
++                                                  { ""name"": ""OPM""       }
++                                              ]
++                                          }",
++                                          @"{ ""identifier"": ""Kcalbeloh"" }",
++                                          @"{
++                                              ""identifier"": ""JNSQ"",
++                                              ""conflicts"": [ { ""name"": ""GPP"" }, { ""name"": ""OPM"" } ]
++                                          }",
++                                          @"{
++                                              ""identifier"": ""GPP"",
++                                              ""conflicts"": [ { ""name"": ""JNSQ"" } ]
++                                          }",
++                                          @"{
++                                              ""identifier"": ""OPM"",
++                                              ""conflicts"": [ { ""name"": ""JNSQ"" } ]
++                                          }")
++                                          .ToArray()))
++            using (var repoData = new TemporaryRepositoryData(nullUser, repo.repo))
++            using (var inst     = new DisposableKSP())
++            {
++                var registry = new CKAN.Registry(repoData.Manager, repo.repo);
++                var toInstall = new CkanModule[]
++                {
++                    registry.LatestAvailable("Modpack", inst.KSP.StabilityToleranceConfig, crit)!,
++                };
++
++                // Act
++                var result = ModuleInstaller.FindRecommendations(
++                                 inst.KSP, toInstall,
++                                 toInstall,
++                                 Array.Empty<CkanModule>(),
++                                 Array.Empty<CkanModule>(),
++                                 registry,
++                                 out Dictionary<CkanModule, Tuple<bool, List<string>>> recommendations,
++                                 out Dictionary<CkanModule, List<string>> suggestions,
++                                 out Dictionary<CkanModule, HashSet<string>> supporters);
++
++                // Assert
++                Assert.IsTrue(result);
++                CollectionAssert.AreEquivalent(new string[] { "Kcalbeloh", "JNSQ", "GPP", "OPM" },
++                                               recommendations.Keys.Select(m => m.identifier),
++                                               "Conflicting recommendations should all be listed");
++                Assert.IsTrue(recommendations.Single(kvp => kvp.Key.identifier == "Kcalbeloh").Value.Item1,
++                              "Non-conflicting recommendation should be checked");
++                foreach (var ident in new string[] { "JNSQ", "GPP", "OPM" })
++                {
++                    Assert.IsFalse(recommendations.Single(kvp => kvp.Key.identifier == ident).Value.Item1,
++                                   $"Conflicting recommendation {ident} should not be checked");
++                }
++            }
++        }
++
+         [Test]
+         public void FindRecommendations_WithSuggestionsAndSupporters_Found()
+         {

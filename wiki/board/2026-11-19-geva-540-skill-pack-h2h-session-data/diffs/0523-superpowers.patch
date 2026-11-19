@@ -1,0 +1,173 @@
+diff --git a/pkg/cli/copilot_agent_logs.go b/pkg/cli/copilot_agent_logs.go
+index 0bd39af..482fe6a 100644
+--- a/pkg/cli/copilot_agent_logs.go
++++ b/pkg/cli/copilot_agent_logs.go
+@@ -8,14 +8,27 @@ import (
+ )
+ 
+ var (
+-	agentTurnPattern     = regexp.MustCompile(`(?i)task.*iteration|agent.*turn|step.*\d+`)
+-	agentToolCallPattern = regexp.MustCompile(`(?i)tool.*call|executing.*tool|calling.*(\w+)`)
+-	toolNamePatterns     = []*regexp.Regexp{
+-		regexp.MustCompile(`(?i)tool[:\s]+([a-zA-Z0-9_-]+)`),
+-		regexp.MustCompile(`(?i)calling[:\s]+([a-zA-Z0-9_-]+)`),
+-		regexp.MustCompile(`(?i)executing[:\s]+([a-zA-Z0-9_-]+)`),
+-		regexp.MustCompile(`(?i)using[:\s]+tool[:\s]+([a-zA-Z0-9_-]+)`),
+-	}
++	agentTurnPattern = regexp.MustCompile(`(?i)task.*iteration|agent.*turn|step.*\d+`)
++
++	// agentToolCallLinePattern matches structured tool invocation log lines such as:
++	//
++	//	Tool call: github_search
++	//	Using tool: bash
++	//	Executing tool: read
++	//	Calling: write_file
++	//	2024-01-15T10:00:00.000Z [INFO] Tool call: github_search
++	//
++	// The pattern is anchored to the start of the line (after an optional timestamp and
++	// log level) and requires an explicit "<keyword>:" delimiter. This prevents natural
++	// language prose (e.g. "the agent's tool calls to ...", "calling for ...") from being
++	// mistaken for tool invocations and polluting tool usage metrics with English words.
++	agentToolCallLinePattern = regexp.MustCompile(
++		`^\s*` +
++			`(?:\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?\s+)?` + // optional timestamp
++			`(?:\[?(?i:TRACE|DEBUG|INFO|WARN|WARNING|ERROR)\]?:?\s+)?` + // optional log level
++			`(?i:tool\s+call|using\s+tool|executing\s+tool|calling\s+tool|calling|executing|tool)` +
++			`\s*:\s*` +
++			`([a-zA-Z0-9_][a-zA-Z0-9_.\-/]*)`)
+ )
+ 
+ // ParseCopilotCodingAgentLogMetrics extracts metrics from GitHub Copilot coding agent logs
+@@ -48,24 +61,22 @@ func ParseCopilotCodingAgentLogMetrics(logContent string, verbose bool) workflow
+ 		}
+ 
+ 		// Extract tool calls from agent logs
+-		if matches := agentToolCallPattern.FindStringSubmatch(line); len(matches) > 1 {
+-			toolName := extractToolName(line)
+-			if toolName != "" {
+-				// Track tool call
+-				if _, exists := toolCallMap[toolName]; !exists {
+-					toolCallMap[toolName] = &workflow.ToolCallInfo{
+-						Name:      toolName,
+-						CallCount: 0,
+-					}
++		toolName := extractToolName(line)
++		if toolName != "" {
++			// Track tool call
++			if _, exists := toolCallMap[toolName]; !exists {
++				toolCallMap[toolName] = &workflow.ToolCallInfo{
++					Name:      toolName,
++					CallCount: 0,
+ 				}
+-				toolCallMap[toolName].CallCount++
++			}
++			toolCallMap[toolName].CallCount++
+ 
+-				// Add to current sequence
+-				currentSequence = append(currentSequence, toolName)
++			// Add to current sequence
++			currentSequence = append(currentSequence, toolName)
+ 
+-				if verbose {
+-					copilotCodingAgentLog.Printf("Found tool call: %s", toolName)
+-				}
++			if verbose {
++				copilotCodingAgentLog.Printf("Found tool call: %s", toolName)
+ 			}
+ 		}
+ 
+@@ -102,11 +113,10 @@ func ParseCopilotCodingAgentLogMetrics(logContent string, verbose bool) workflow
+ 
+ // extractToolName extracts a tool name from a log line
+ func extractToolName(line string) string {
+-	// Try to extract tool name from various patterns
+-	for _, pattern := range toolNamePatterns {
+-		if matches := pattern.FindStringSubmatch(line); len(matches) > 1 {
+-			return strings.TrimSpace(matches[1])
+-		}
++	// Only structured "<keyword>: <name>" lines at the start of a log entry are
++	// treated as tool calls; free-form prose is ignored.
++	if matches := agentToolCallLinePattern.FindStringSubmatch(line); len(matches) > 1 {
++		return strings.TrimSpace(matches[1])
+ 	}
+ 
+ 	return ""
+diff --git a/pkg/cli/copilot_agent_test.go b/pkg/cli/copilot_agent_test.go
+index 2829182..b1a4f55 100644
+--- a/pkg/cli/copilot_agent_test.go
++++ b/pkg/cli/copilot_agent_test.go
+@@ -231,6 +231,41 @@ func TestExtractToolName(t *testing.T) {
+ 			line:     "Just a regular log line",
+ 			expected: "",
+ 		},
++		{
++			name:     "extracts with timestamp and log level prefix",
++			line:     "2024-01-15T10:00:00.000Z [INFO] Tool call: github_search",
++			expected: "github_search",
++		},
++		{
++			name:     "extracts executing tool pattern",
++			line:     "Executing tool: startHttpServer",
++			expected: "startHttpServer",
++		},
++		{
++			name:     "ignores prose mentioning tool calls",
++			line:     "The agent makes tool calls to the safe outputs server",
++			expected: "",
++		},
++		{
++			name:     "ignores prose with calling",
++			line:     "It is calling for a unified approach since the tool launches a command",
++			expected: "",
++		},
++		{
++			name:     "ignores prose with executing",
++			line:     "Before executing on the plan, check for misuse",
++			expected: "",
++		},
++		{
++			name:     "ignores keyword in the middle of a line",
++			line:     "We discussed this: Tool call: bash",
++			expected: "",
++		},
++		{
++			name:     "ignores tool keyword without colon",
++			line:     "tool with no delimiter",
++			expected: "",
++		},
+ 	}
+ 
+ 	for _, tt := range tests {
+@@ -243,6 +278,32 @@ func TestExtractToolName(t *testing.T) {
+ 	}
+ }
+ 
++func TestParseCopilotCodingAgentLogMetrics_IgnoresProse(t *testing.T) {
++	logContent := `
++The agent calls a command and the tool calls to the server since it launches.
++Calling for help with unified output or misuse on the tool, since the call failed.
++Tool call: startHttpServer
++Executing tool: noop
++Using tool: label_agent
++Tool calls are made with care, one call to each tool.
++`
++	metrics := ParseCopilotCodingAgentLogMetrics(logContent, false)
++
++	got := make(map[string]int)
++	for _, tc := range metrics.ToolCalls {
++		got[tc.Name] = tc.CallCount
++	}
++	expected := map[string]int{"startHttpServer": 1, "noop": 1, "label_agent": 1}
++	if len(got) != len(expected) {
++		t.Fatalf("Expected tools %v, got %v", expected, got)
++	}
++	for name, count := range expected {
++		if got[name] != count {
++			t.Errorf("Expected %s to have %d calls, got %d (all: %v)", name, count, got[name], got)
++		}
++	}
++}
++
+ func TestIntegration_CopilotCodingAgentWithAudit(t *testing.T) {
+ 	// Create a temporary directory that simulates a GitHub Copilot coding agent run
+ 	// NOTE: GitHub Copilot coding agent runs do NOT have aw_info.json (that's for agentic workflows)

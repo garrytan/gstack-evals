@@ -1,0 +1,69 @@
+diff --git a/execution/rerun/rerun.go b/execution/rerun/rerun.go
+index 9ac1725..7b7aaf7 100644
+--- a/execution/rerun/rerun.go
++++ b/execution/rerun/rerun.go
+@@ -70,6 +70,17 @@ func (m *failedMetadata) addFailedItem(itemName string, item string) {
+ 	m.failedItemsMap[itemName][item] = true
+ }
+ 
++func (m *failedMetadata) removeFailedItem(itemName string, item string) {
++	items, ok := m.failedItemsMap[itemName]
++	if !ok {
++		return
++	}
++	delete(items, item)
++	if len(items) == 0 {
++		delete(m.failedItemsMap, itemName)
++	}
++}
++
+ // ListenFailedScenarios listens to execution events and writes the failed scenarios to JSON file
+ func ListenFailedScenarios(wg *sync.WaitGroup, specDirs []string) {
+ 	ch := make(chan event.ExecutionEvent)
+@@ -97,10 +108,15 @@ func ListenFailedScenarios(wg *sync.WaitGroup, specDirs []string) {
+ }
+ 
+ func prepareScenarioFailedMetadata(res *result.ScenarioResult, sce *gauge.Scenario, executionInfo *gauge_messages.ExecutionInfo) {
++	specPath := executionInfo.GetCurrentSpec().GetFileName()
++	failedScenario := util.RelPathToProjectRoot(specPath)
++	item := fmt.Sprintf("%s:%v", failedScenario, sce.Span.Start)
+ 	if res.GetFailed() {
+-		specPath := executionInfo.GetCurrentSpec().GetFileName()
+-		failedScenario := util.RelPathToProjectRoot(specPath)
+-		failedMeta.addFailedItem(specPath, fmt.Sprintf("%s:%v", failedScenario, sce.Span.Start))
++		failedMeta.addFailedItem(specPath, item)
++	} else {
++		// A scenario may be executed multiple times (e.g. with --max-retries-count).
++		// If a later attempt passes, it should no longer be considered failed.
++		failedMeta.removeFailedItem(specPath, item)
+ 	}
+ }
+ 
+diff --git a/execution/rerun/rerun_test.go b/execution/rerun/rerun_test.go
+index 922f25c..da30610 100644
+--- a/execution/rerun/rerun_test.go
++++ b/execution/rerun/rerun_test.go
+@@ -62,6 +62,23 @@ func (s *MySuite) TestGetScenarioFailedMetadata(c *C) {
+ 	c.Assert(failedMeta.failedItemsMap[spec1Abs][spec1Rel+":2"], Equals, true)
+ }
+ 
++func (s *MySuite) TestScenarioPassingOnRetryIsNotMarkedFailed(c *C) {
++	spec1Rel := filepath.Join("specs", "example1.spec")
++	spec1Abs := filepath.Join(config.ProjectRoot, spec1Rel)
++	sce := &gauge.Scenario{Span: &gauge.Span{Start: 2}}
++	info := &gauge_messages.ExecutionInfo{CurrentSpec: &gauge_messages.SpecInfo{FileName: spec1Abs}}
++	failed := &result.ScenarioResult{ProtoScenario: &gauge_messages.ProtoScenario{ExecutionStatus: gauge_messages.ExecutionStatus_FAILED}}
++	passed := &result.ScenarioResult{ProtoScenario: &gauge_messages.ProtoScenario{ExecutionStatus: gauge_messages.ExecutionStatus_PASSED}}
++
++	prepareScenarioFailedMetadata(failed, sce, info)
++	prepareScenarioFailedMetadata(passed, sce, info)
++
++	_, ok := failedMeta.failedItemsMap[spec1Abs]
++	c.Assert(ok, Equals, false)
++	failedMeta.aggregateFailedItems()
++	c.Assert(len(failedMeta.FailedItems), Equals, 0)
++}
++
+ func (s *MySuite) TestAddSpecPreHookFailedMetadata(c *C) {
+ 	spec1Rel := filepath.Join("specs", "example1.spec")
+ 	spec1Abs := filepath.Join(config.ProjectRoot, spec1Rel)

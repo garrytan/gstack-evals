@@ -1,0 +1,145 @@
+diff --git a/echo.go b/echo.go
+index f22d2dd..4cd218b 100644
+--- a/echo.go
++++ b/echo.go
+@@ -588,6 +588,13 @@ func (e *Echo) StaticFS(pathPrefix string, filesystem fs.FS, middleware ...Middl
+ func StaticDirectoryHandler(fileSystem fs.FS, disablePathUnescaping bool) HandlerFunc {
+ 	return func(c *Context) error {
+ 		p := c.Param("*")
++		// Security: router matches routes against the escaped path (URL.RawPath), so an encoded path separator
++		// (`%2F` or `%5C`) is seen by the router as part of a single path segment. Unescaping it here would let
++		// a request like `/admin%2Fsecret.txt` resolve to file `admin/secret.txt` while bypassing middlewares
++		// registered for `/admin/*` routes. Such paths are rejected.
++		if HasEncodedPathSeparator(p) || HasEncodedPathSeparator(c.Request().URL.RawPath) {
++			return ErrNotFound
++		}
+ 		if !disablePathUnescaping { // when router is already unescaping we do not want to do is twice
+ 			tmpPath, err := url.PathUnescape(p)
+ 			if err != nil {
+@@ -613,6 +620,23 @@ func StaticDirectoryHandler(fileSystem fs.FS, disablePathUnescaping bool) Handle
+ 	}
+ }
+ 
++// HasEncodedPathSeparator checks if given (escaped) path contains percent-encoded path separator (`%2F` for `/` or
++// `%5C` for `\`) in any letter case.
++func HasEncodedPathSeparator(p string) bool {
++	for i := 0; i+2 < len(p); i++ {
++		if p[i] != '%' {
++			continue
++		}
++		switch {
++		case p[i+1] == '2' && (p[i+2] == 'f' || p[i+2] == 'F'):
++			return true
++		case p[i+1] == '5' && (p[i+2] == 'c' || p[i+2] == 'C'):
++			return true
++		}
++	}
++	return false
++}
++
+ // FileFS registers a new route with path to serve file from the provided file system.
+ //
+ // Avoid using the leading `/` slash as most of the Go standard library fs.FS implementations require relative paths for
+diff --git a/echo_test.go b/echo_test.go
+index 17d9b4a..07b756d 100644
+--- a/echo_test.go
++++ b/echo_test.go
+@@ -263,9 +263,8 @@ func TestEcho_StaticFS(t *testing.T) {
+ 			givenPrefix:          "/",
+ 			givenFs:              os.DirFS("_fixture/"),
+ 			whenURL:              "/open.redirect.hackercom%2f..",
+-			expectStatus:         http.StatusMovedPermanently,
+-			expectHeaderLocation: "/open.redirect.hackercom/../", // location starting with `//open` would be very bad
+-			expectBodyStartsWith: "",
++			expectStatus:         http.StatusNotFound, // encoded path separators are rejected, so no redirect at all
++			expectBodyStartsWith: "{\"message\":\"Not Found\"}\n",
+ 		},
+ 	}
+ 
+@@ -1278,3 +1277,42 @@ func BenchmarkEchoGitHubAPIMisses(b *testing.B) {
+ func BenchmarkEchoParseAPI(b *testing.B) {
+ 	benchmarkEchoRoutes(b, parseAPI)
+ }
++
++func TestEcho_StaticFS_encodedSlashDoesNotBypassRouteProtection(t *testing.T) {
++	var testCases = []struct {
++		name                   string
++		whenURL                string
++		whenUnescapePathParams bool
++		expectCode             int
++	}{
++		{name: "protected route is protected", whenURL: "/folder/index.html", expectCode: http.StatusForbidden},
++		{name: "encoded slash lowercase", whenURL: "/folder%2findex.html", expectCode: http.StatusNotFound},
++		{name: "encoded slash uppercase", whenURL: "/folder%2Findex.html", expectCode: http.StatusNotFound},
++		{name: "encoded backslash", whenURL: "/folder%5Cindex.html", expectCode: http.StatusNotFound},
++		{name: "encoded slash, router unescapes params", whenURL: "/folder%2Findex.html", whenUnescapePathParams: true, expectCode: http.StatusNotFound},
++		{name: "normal static file still served", whenURL: "/index.html", expectCode: http.StatusOK},
++	}
++	for _, tc := range testCases {
++		t.Run(tc.name, func(t *testing.T) {
++			e := New()
++			if tc.whenUnescapePathParams {
++				e.router = NewRouter(RouterConfig{UnescapePathParamValues: true})
++			}
++			deny := func(next HandlerFunc) HandlerFunc {
++				return func(c *Context) error { return ErrForbidden }
++			}
++			g := e.Group("/folder", deny)
++			g.GET("/*", func(c *Context) error { return c.String(http.StatusOK, "secret") })
++			e.StaticFS("/", os.DirFS("_fixture"))
++
++			req := httptest.NewRequest(http.MethodGet, tc.whenURL, nil)
++			rec := httptest.NewRecorder()
++			e.ServeHTTP(rec, req)
++
++			assert.Equal(t, tc.expectCode, rec.Code)
++			if tc.expectCode != http.StatusOK {
++				assert.NotContains(t, rec.Body.String(), "<html")
++			}
++		})
++	}
++}
+diff --git a/middleware/static.go b/middleware/static.go
+index 152dded..3104a1f 100644
+--- a/middleware/static.go
++++ b/middleware/static.go
+@@ -204,6 +204,11 @@ func (config StaticConfig) ToMiddleware() (echo.MiddlewareFunc, error) {
+ 				p = c.Param("*")
+ 				pathUnescape = !config.DisablePathUnescaping // because router could already do PathUnescape
+ 			}
++			// Security: router matches routes against escaped path, so encoded path separators (`%2F`, `%5C`) must
++			// not be turned into real separators here, as that could bypass middlewares of other routes.
++			if echo.HasEncodedPathSeparator(p) || echo.HasEncodedPathSeparator(c.Request().URL.RawPath) {
++				return next(c)
++			}
+ 			if pathUnescape {
+ 				p, err = url.PathUnescape(p)
+ 				if err != nil {
+diff --git a/middleware/static_test.go b/middleware/static_test.go
+index c31e1a4..e603fdc 100644
+--- a/middleware/static_test.go
++++ b/middleware/static_test.go
+@@ -506,3 +506,23 @@ func TestStatic_DirectoryBrowsing(t *testing.T) {
+ 		})
+ 	}
+ }
++
++func TestStatic_encodedSlashDoesNotBypassRouteProtection(t *testing.T) {
++	for _, whenURL := range []string{"/folder%2Findex.html", "/folder%2findex.html"} {
++		t.Run(whenURL, func(t *testing.T) {
++			e := echo.New()
++			e.Use(StaticWithConfig(StaticConfig{Root: "../_fixture"}))
++			g := e.Group("/folder", func(next echo.HandlerFunc) echo.HandlerFunc {
++				return func(c *echo.Context) error { return echo.ErrForbidden }
++			})
++			g.GET("/*", func(c *echo.Context) error { return c.String(http.StatusOK, "secret") })
++
++			req := httptest.NewRequest(http.MethodGet, whenURL, nil)
++			rec := httptest.NewRecorder()
++			e.ServeHTTP(rec, req)
++
++			assert.Equal(t, http.StatusNotFound, rec.Code)
++			assert.NotContains(t, rec.Body.String(), "<html")
++		})
++	}
++}

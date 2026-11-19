@@ -1,0 +1,45 @@
+diff --git a/Terminal.Gui/Views/Selectors/SelectorBase.cs b/Terminal.Gui/Views/Selectors/SelectorBase.cs
+index 04f4315..418f3b7 100644
+--- a/Terminal.Gui/Views/Selectors/SelectorBase.cs
++++ b/Terminal.Gui/Views/Selectors/SelectorBase.cs
+@@ -379,6 +379,7 @@ public abstract class SelectorBase : View, IOrientation, IValue<int?>
+             }
+             field = value;
+             CreateSubViews ();
++            UpdateChecked ();
+         }
+     }
+ 
+@@ -535,7 +536,7 @@ public abstract class SelectorBase : View, IOrientation, IValue<int?>
+         // total width via PosAlign.CalculateMinDimension, which reads Frame.Width.
+         // Without this, newly-created subviews have Frame.Width == 0 on the first
+         // layout pass, causing the selector to be sized too narrow.
+-        if (Orientation != Orientation.Horizontal || SubViews.Count <= 0)
++        if (Orientation != Orientation.Horizontal || SubViews.Count == 0)
+         {
+             return;
+         }
+diff --git a/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs b/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs
+index d22b41f..bd0d0e1 100644
+--- a/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs
++++ b/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs
+@@ -1072,3 +1072,19 @@ public class OptionSelectorTests
+ 
+     #endregion
+ }
++
++public class OptionSelectorTEnumInitTests
++{
++    [InlineData (null)]
++    [InlineData (TabBehavior.NoStop)]
++    [Theory]
++    public void Generic_New_FirstCheckBox_IsChecked (TabBehavior? tabBehavior)
++    {
++        OptionSelector<Orientation> selector = new () { TabBehavior = tabBehavior };
++
++        Assert.Equal (Orientation.Horizontal, selector.Value);
++        CheckBox [] cbs = selector.SubViews.OfType<CheckBox> ().ToArray ();
++        Assert.Equal (CheckState.Checked, cbs [0].Value);
++        Assert.Equal (CheckState.UnChecked, cbs [1].Value);
++    }
++}

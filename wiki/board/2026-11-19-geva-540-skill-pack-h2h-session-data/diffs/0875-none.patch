@@ -1,0 +1,240 @@
+diff --git a/.changeset/fix-inlined-fn-const-assign.md b/.changeset/fix-inlined-fn-const-assign.md
+new file mode 100644
+index 0000000..3a80156
+--- /dev/null
++++ b/.changeset/fix-inlined-fn-const-assign.md
+@@ -0,0 +1,5 @@
++---
++"@marko/runtime-tags": patch
++---
++
++Fix "Cannot assign to constant" error when an inlined (unregistered) function assigns to a `<let>` binding read within an intersection.
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-cast-closure-assign/__snapshots__/.name-cache.json b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-cast-closure-assign/__snapshots__/.name-cache.json
+new file mode 100644
+index 0000000..db413fa
+--- /dev/null
++++ b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-cast-closure-assign/__snapshots__/.name-cache.json
+@@ -0,0 +1,5 @@
++{
++  "vars": {
++    "props": {}
++  }
++}
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-cast-closure-assign/__snapshots__/csr-sanitized.expected.md b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-cast-closure-assign/__snapshots__/csr-sanitized.expected.md
+new file mode 100644
+index 0000000..ba2aa26
+--- /dev/null
++++ b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-cast-closure-assign/__snapshots__/csr-sanitized.expected.md
+@@ -0,0 +1 @@
++# Render
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-cast-closure-assign/__snapshots__/csr.expected.md b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-cast-closure-assign/__snapshots__/csr.expected.md
+new file mode 100644
+index 0000000..973d070
+--- /dev/null
++++ b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-cast-closure-assign/__snapshots__/csr.expected.md
+@@ -0,0 +1,5 @@
++# Render
++# Mutations
++```
++INSERT #text
++```
+\ No newline at end of file
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-cast-closure-assign/__snapshots__/dom.expected/template.hydrate.js b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-cast-closure-assign/__snapshots__/dom.expected/template.hydrate.js
+new file mode 100644
+index 0000000..3eb9cd7
+--- /dev/null
++++ b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-cast-closure-assign/__snapshots__/dom.expected/template.hydrate.js
+@@ -0,0 +1 @@
++// size: 0
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-cast-closure-assign/__snapshots__/dom.expected/template.js b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-cast-closure-assign/__snapshots__/dom.expected/template.js
+new file mode 100644
+index 0000000..6107eee
+--- /dev/null
++++ b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-cast-closure-assign/__snapshots__/dom.expected/template.js
+@@ -0,0 +1,24 @@
++export const $template = "";
++export const $walks = "";
++import * as _$ from "@marko/runtime-tags/debug/dom";
++const $reset = /* @__PURE__ */_$.value("reset", _$.tagVarSignal);
++const $expr_input_timer = /* @__PURE__ */_$.intersection(3, $scope => {
++  let {
++    input,
++    timer
++  } = $scope;
++  $reset($scope, () => {
++    if (timer) {
++      clearTimeout(timer);
++    }
++    $timer($scope, timer = setTimeout(() => {
++      input.value();
++    }, input.duration));
++  });
++});
++const $timer = /* @__PURE__ */_$.state("timer/2", $expr_input_timer);
++export function $setup($scope) {
++  $timer($scope, 0);
++}
++export const $input = /* @__PURE__ */_$.value("input", $expr_input_timer);
++export default /* @__PURE__ */_$.createTemplate("__tests__/template.marko", $template, $walks, $setup, $input);
+\ No newline at end of file
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-cast-closure-assign/__snapshots__/html.expected/template.js b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-cast-closure-assign/__snapshots__/html.expected/template.js
+new file mode 100644
+index 0000000..6152efb
+--- /dev/null
++++ b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-cast-closure-assign/__snapshots__/html.expected/template.js
+@@ -0,0 +1,23 @@
++import * as _$ from "@marko/runtime-tags/debug/html";
++export default _$.createTemplate("__tests__/template.marko", input => {
++  const $scope0_id = _$.nextScopeId();
++  let timer = 0;
++  const reset = () => {
++    if (timer) {
++      clearTimeout(timer);
++    }
++    timer = setTimeout(() => {
++      input.value();
++    }, input.duration);
++  };
++  const $return = reset;
++  _$.writeScope($scope0_id, {
++    input,
++    timer
++  }, "__tests__/template.marko", 0, {
++    input: 0,
++    timer: "6:6"
++  });
++  _$.resumeClosestBranch($scope0_id);
++  return $return;
++});
+\ No newline at end of file
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-cast-closure-assign/__snapshots__/resume-sanitized.expected.md b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-cast-closure-assign/__snapshots__/resume-sanitized.expected.md
+new file mode 100644
+index 0000000..ba2aa26
+--- /dev/null
++++ b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-cast-closure-assign/__snapshots__/resume-sanitized.expected.md
+@@ -0,0 +1 @@
++# Render
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-cast-closure-assign/__snapshots__/resume.expected.md b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-cast-closure-assign/__snapshots__/resume.expected.md
+new file mode 100644
+index 0000000..9332c2d
+--- /dev/null
++++ b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-cast-closure-assign/__snapshots__/resume.expected.md
+@@ -0,0 +1,17 @@
++# Render
++```html
++<html>
++  <head>
++    <script>
++      WALKER_RUNTIME("M")("_");
++      M._.r = [_ =&gt; (_.a = [0,
++      {
++        input:
++        {},
++        timer: 0
++      }])]
++    </script>
++  </head>
++  <body />
++</html>
++```
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-cast-closure-assign/__snapshots__/ssr-sanitized.expected.md b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-cast-closure-assign/__snapshots__/ssr-sanitized.expected.md
+new file mode 100644
+index 0000000..ef85d03
+--- /dev/null
++++ b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-cast-closure-assign/__snapshots__/ssr-sanitized.expected.md
+@@ -0,0 +1 @@
++# Render End
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-cast-closure-assign/__snapshots__/ssr.expected.md b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-cast-closure-assign/__snapshots__/ssr.expected.md
+new file mode 100644
+index 0000000..4698d45
+--- /dev/null
++++ b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-cast-closure-assign/__snapshots__/ssr.expected.md
+@@ -0,0 +1,31 @@
++# Write
++```html
++  <script>WALKER_RUNTIME("M")("_");M._.r=[_=>(_.a=[0,{input:{},timer:0}])]</script>
++```
++
++# Render End
++```html
++<html>
++  <head>
++    <script>
++      WALKER_RUNTIME("M")("_");
++      M._.r = [_ =&gt; (_.a = [0,
++      {
++        input:
++        {},
++        timer: 0
++      }])]
++    </script>
++  </head>
++  <body />
++</html>
++```
++
++# Mutations
++```
++INSERT html
++INSERT html/head
++INSERT html/head/script
++INSERT html/head/script/#text
++INSERT html/body
++```
+\ No newline at end of file
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-cast-closure-assign/template.marko b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-cast-closure-assign/template.marko
+new file mode 100644
+index 0000000..af048e6
+--- /dev/null
++++ b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-cast-closure-assign/template.marko
+@@ -0,0 +1,18 @@
++export interface Input {
++  duration: number;
++  value: () => void;
++}
++
++<let/timer=(0 as unknown as ReturnType<typeof setTimeout>)>
++
++<const/reset=() => {
++  if (timer) {
++    clearTimeout(timer);
++  }
++
++  timer = setTimeout(() => {
++    input.value();
++  }, input.duration);
++}>
++
++<return=reset>
+diff --git a/packages/runtime-tags/src/translator/util/signals.ts b/packages/runtime-tags/src/translator/util/signals.ts
+index 1d72221..71031e3 100644
+--- a/packages/runtime-tags/src/translator/util/signals.ts
++++ b/packages/runtime-tags/src/translator/util/signals.ts
+@@ -505,12 +505,21 @@ export function getSignalFn(signal: Signal): t.Expression {
+ 
+   if (isIntersection && signal.renderReferencedBindings) {
+     signal.render.unshift(
+-      t.variableDeclaration("const", [
+-        t.variableDeclarator(
+-          createScopeReadPattern(section, signal.renderReferencedBindings),
+-          scopeIdentifier,
+-        ),
+-      ]),
++      t.variableDeclaration(
++        // Inlined functions may assign to these locals (eg `x = 1` in a handler).
++        find(
++          signal.renderReferencedBindings,
++          (binding) => !!binding.assignmentSections,
++        )
++          ? "let"
++          : "const",
++        [
++          t.variableDeclarator(
++            createScopeReadPattern(section, signal.renderReferencedBindings),
++            scopeIdentifier,
++          ),
++        ],
++      ),
+     );
+   }
+ 

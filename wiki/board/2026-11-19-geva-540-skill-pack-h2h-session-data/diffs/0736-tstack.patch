@@ -1,0 +1,45 @@
+diff --git a/src/linker-script.cc b/src/linker-script.cc
+index 51144b3..cb46e7f 100644
+--- a/src/linker-script.cc
++++ b/src/linker-script.cc
+@@ -249,9 +249,17 @@ std::string_view Script<E>::get_script_output_type() {
+   }
+ 
+   if (tok.size() >= 3 && (tok[0] == "INPUT" || tok[0] == "GROUP") &&
+-      tok[1] == "(")
+-    if (MappedFile *mf = resolve_path(tok[2], false))
+-      return get_machine_type(ctx, rctx, mf);
++      tok[1] == "(") {
++    tok = tok.subspan(2);
++
++    // Skip `AS_NEEDED (` to find the first file name.
++    while (tok.size() >= 2 && tok[0] == "AS_NEEDED" && tok[1] == "(")
++      tok = tok.subspan(2);
++
++    if (!tok.empty() && tok[0] != ")")
++      if (MappedFile *mf = resolve_path(tok[0], false))
++        return get_machine_type(ctx, rctx, mf);
++  }
+   return "";
+ }
+ 
+diff --git a/test/linker-script7.sh b/test/linker-script7.sh
+new file mode 100755
+index 0000000..3c9017e
+--- /dev/null
++++ b/test/linker-script7.sh
+@@ -0,0 +1,14 @@
++#!/bin/bash
++. $(dirname $0)/common.inc
++
++cat <<EOF | $CC -shared -o $t/libfoo.so -Wl,-soname,libfoo.so -xc -
++void foo() {}
++EOF
++
++cat <<EOF > $t/b.script
++INPUT(AS_NEEDED(-lfoo))
++EOF
++
++# The linker script is the only input file, so mold has to look into
++# it to detect the target machine type.
++./mold -shared -o $t/c.so -L$t $t/b.script

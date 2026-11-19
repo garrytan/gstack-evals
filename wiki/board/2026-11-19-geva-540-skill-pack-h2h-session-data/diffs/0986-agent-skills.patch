@@ -1,0 +1,137 @@
+diff --git a/docs/guide/essentials/syntax.md b/docs/guide/essentials/syntax.md
+index 376ac0b..b722bc1 100644
+--- a/docs/guide/essentials/syntax.md
++++ b/docs/guide/essentials/syntax.md
+@@ -513,6 +513,7 @@ When the escape parameter option is enabled:
+ - The final translated HTML is sanitized to prevent XSS attacks:
+   - Dangerous characters in HTML attribute values are escaped
+   - Event handler attributes (`onclick`, `onerror`, etc.) are neutralized
++  - `srcdoc` attributes (e.g. `<iframe srcdoc="...">`) are neutralized, since their value is parsed as an HTML document
+   - JavaScript URLs in href, src, action, formaction, and style attributes are disabled
+ 
+ #### Example
+diff --git a/packages/core-base/test/translate.test.ts b/packages/core-base/test/translate.test.ts
+index 9687393..1af929e 100644
+--- a/packages/core-base/test/translate.test.ts
++++ b/packages/core-base/test/translate.test.ts
+@@ -689,6 +689,27 @@ describe('escapeParameter', () => {
+     )
+   })
+ 
++  test('neutralize srcdoc in message and parameters', () => {
++    const ctx = context({
++      locale: 'en',
++      warnHtmlMessage: false,
++      escapeParameter: true,
++      messages: {
++        en: {
++          message: '<iframe srcdoc="<b>x</b>"></iframe>',
++          param: '<iframe srcdoc="{content}"></iframe>'
++        }
++      }
++    })
++
++    expect(translate(ctx, 'message')).toEqual(
++      '<iframe &#115;rcdoc="&lt;b&gt;x&lt;/b&gt;"></iframe>'
++    )
++    expect(
++      translate(ctx, 'param', { content: '<script>alert(1)</script>' })
++    ).not.toMatch(/(^|[\s"'<>/])srcdoc\s*=/i)
++  })
++
+   test('override with params', () => {
+     const ctx = context({
+       locale: 'en',
+diff --git a/packages/shared/src/sanitize.ts b/packages/shared/src/sanitize.ts
+index 6167007..5e7a92b 100644
+--- a/packages/shared/src/sanitize.ts
++++ b/packages/shared/src/sanitize.ts
+@@ -29,6 +29,7 @@ const colonCharacterReferencePattern = /&colon;?/gi
+ const controlOrWhitespacePattern = /[\u0000-\u0020\u007f-\u009f]/g
+ const eventHandlerPattern = /(?:^|[\s"'<>/])on\w+\s*=\s*["']?[^"'>]+["']?/i
+ const eventHandlerAttributePattern = /(^|[\s"'<>/])on(\w+\s*=)/gi
++const srcdocAttributePattern = /(^|[\s"'<>/])srcdoc(\s*=)/gi
+ const unquotedUrlAttributePattern =
+   /(^|[\s"'<>/])((?:href|src|action|formaction)\s*=\s*)([^\s"'=<>`]+)/gi
+ 
+@@ -151,6 +152,20 @@ export function sanitizeTranslatedHtml(html: string): string {
+     html = html.replace(eventHandlerAttributePattern, '$1&#111;n$2')
+   }
+ 
++  // Neutralize `srcdoc` attributes.
++  // The value of `srcdoc` is parsed as a nested HTML document after character
++  // references are decoded, so escaping its value cannot make it safe.
++  if (srcdocAttributePattern.test(html)) {
++    if (__DEV__) {
++      warn(
++        'Potentially dangerous `srcdoc` attribute detected in translation. ' +
++          'Consider removing srcdoc from your translation messages.'
++      )
++    }
++    srcdocAttributePattern.lastIndex = 0
++    html = html.replace(srcdocAttributePattern, '$1&#115;rcdoc$2')
++  }
++
+   // Disable javascript: URLs in unquoted attributes
+   html = html.replace(
+     unquotedUrlAttributePattern,
+diff --git a/packages/shared/test/sanitize.test.ts b/packages/shared/test/sanitize.test.ts
+index ec8a086..e13d34b 100644
+--- a/packages/shared/test/sanitize.test.ts
++++ b/packages/shared/test/sanitize.test.ts
+@@ -244,7 +244,7 @@ describe('sanitizeTranslatedHtml', () => {
+     const html = '<iframe srcdoc="<script>alert(1)</script>">Test</iframe>'
+     const result = sanitizeTranslatedHtml(html)
+     expect(result).toBe(
+-      '<iframe srcdoc="&lt;script&gt;alert(1)&lt;/script&gt;">Test</iframe>'
++      '<iframe &#115;rcdoc="&lt;script&gt;alert(1)&lt;/script&gt;">Test</iframe>'
+     )
+   })
+ 
+@@ -372,4 +372,46 @@ describe('sanitizeTranslatedHtml', () => {
+       '<div aria-live="polite" aria-label="Status: &lt;b&gt;Active&lt;/b&gt;">Status</div>'
+     )
+   })
++
++  describe('srcdoc attribute', () => {
++    test('neutralize double-quoted srcdoc', () => {
++      const html = '<iframe srcdoc="<b>x</b>"></iframe>'
++      const result = sanitizeTranslatedHtml(html)
++      expect(result).toBe(
++        '<iframe &#115;rcdoc="&lt;b&gt;x&lt;/b&gt;"></iframe>'
++      )
++    })
++
++    test('neutralize single-quoted srcdoc', () => {
++      const html = "<iframe srcdoc='<img src=x onerror=alert(1)>'></iframe>"
++      const result = sanitizeTranslatedHtml(html)
++      expect(result).not.toMatch(/[\s<]srcdoc\s*=/i)
++      expect(result).toContain('&#115;rcdoc=')
++    })
++
++    test('neutralize unquoted srcdoc', () => {
++      const html = '<iframe srcdoc=&lt;script&gt;alert(1)&lt;/script&gt;></iframe>'
++      const result = sanitizeTranslatedHtml(html)
++      expect(result).toBe(
++        '<iframe &#115;rcdoc=&lt;script&gt;alert(1)&lt;/script&gt;></iframe>'
++      )
++    })
++
++    test('neutralize srcdoc case-insensitively and with whitespace', () => {
++      const html = '<iframe\nSrcDoc = "x"></iframe><iframe/srcdoc="y"></iframe>'
++      const result = sanitizeTranslatedHtml(html)
++      expect(result).not.toMatch(/srcdoc\s*=/i)
++    })
++
++    test('neutralize srcdoc containing escaped parameter', () => {
++      const html = `<iframe srcdoc="${escapeHtml('<script>alert(1)</script>')}"></iframe>`
++      const result = sanitizeTranslatedHtml(html)
++      expect(result).not.toMatch(/(^|[\s"'<>/])srcdoc\s*=/i)
++    })
++
++    test('do not touch attributes merely containing srcdoc', () => {
++      const html = '<div data-srcdoc="x">srcdoc</div>'
++      expect(sanitizeTranslatedHtml(html)).toBe(html)
++    })
++  })
+ })

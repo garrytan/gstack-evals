@@ -1,0 +1,140 @@
+diff --git a/lib/setup-sandbox.js b/lib/setup-sandbox.js
+index b85885f..e837d58 100644
+--- a/lib/setup-sandbox.js
++++ b/lib/setup-sandbox.js
+@@ -2306,7 +2306,12 @@ function sanitizeHostOwnProps(e) {
+ 		if (!sealed) {
+ 			return new LocalError(safeMsg);
+ 		}
+-		if (isPrim && k !== 'message' && v !== undefined) {
++		// SECURITY (GHSA-x6m4-chr9-cg97): never carry a host-formatted
++		// `stack` across. It is produced by the host-realm formatter and
++		// embeds absolute host paths / host function names. The rebuilt
++		// sandbox-realm carrier gets its own stack from the sandbox
++		// formatter instead.
++		if (isPrim && k !== 'message' && k !== 'stack' && v !== undefined) {
+ 			carryKeys[carryKeys.length] = k;
+ 			carryVals[carryVals.length] = v;
+ 		}
+@@ -2826,6 +2831,42 @@ function throwAsync() {
+ 	return new VMError('Async not available');
+ }
+ 
++// SECURITY (GHSA-x6m4-chr9-cg97): `host.transformAndCheck` runs in the host
++// realm, so any error it throws (SyntaxError from the acorn-based transformer,
++// VMError for disallowed async) carries a host-formatted `stack` containing
++// absolute host paths (lib/transformer.js, lib/vm.js, node internals, the
++// embedding application). Forwarding it via `bridge.from(e)` let sandbox code
++// read that string through the bridge, bypassing the sandbox-side
++// prepareStackTrace redaction. Rebuild the error in the sandbox realm from its
++// primitive name/message only, so `.stack` is produced by the sandbox
++// formatter and no host reference crosses the boundary.
++function rebuildTransformError(hostErr) {
++	let name = '';
++	let message = '';
++	let isVMError = false;
++	try {
++		const e = bridge.from(hostErr);
++		try {
++			const n = e.name;
++			if (typeof n === 'string') name = n;
++		} catch (_) { /* fall back to Error */ }
++		try {
++			const m = e.message;
++			if (typeof m === 'string') message = m;
++		} catch (_) { /* empty message */ }
++		try {
++			isVMError = e instanceof VMError;
++		} catch (_) { /* not a VMError */ }
++	} catch (_) { /* unexpected value — produce plain Error */ }
++	if (isVMError) return new VMError(message);
++	const Ctor = localErrorCtorForName(name);
++	try {
++		return new Ctor(message);
++	} catch (_) {
++		return new LocalError(message);
++	}
++}
++
+ function makeFunction(inputArgs, isAsync, isGenerator) {
+ 	const lastArgs = inputArgs.length - 1;
+ 	let code = lastArgs >= 0 ? `${inputArgs[lastArgs]}` : '';
+@@ -2836,7 +2877,7 @@ function makeFunction(inputArgs, isAsync, isGenerator) {
+ 	try {
+ 		code = host.transformAndCheck(args, code, isAsync, isGenerator, allowAsync);
+ 	} catch (e) {
+-		throw bridge.from(e);
++		throw rebuildTransformError(e);
+ 	}
+ 	return localEval(code);
+ }
+@@ -2859,7 +2900,7 @@ const EvalHandler = {
+ 		try {
+ 			code = host.transformAndCheck(null, code, false, false, allowAsync);
+ 		} catch (e) {
+-			throw bridge.from(e);
++			throw rebuildTransformError(e);
+ 		}
+ 		return localEval(code);
+ 	},
+diff --git a/test/ghsa/GHSA-x6m4-chr9-cg97/repro.js b/test/ghsa/GHSA-x6m4-chr9-cg97/repro.js
+new file mode 100644
+index 0000000..3582bda
+--- /dev/null
++++ b/test/ghsa/GHSA-x6m4-chr9-cg97/repro.js
+@@ -0,0 +1,55 @@
++'use strict';
++
++/**
++ * GHSA-x6m4-chr9-cg97 — host path disclosure via transformer error stack
++ *
++ * Sandbox `eval` / `Function` route source through the host-realm
++ * transformer. A malformed source makes it throw a host-realm SyntaxError
++ * whose `.stack` was formatted by the host and contained absolute host paths.
++ * Errors must be rebuilt in the sandbox realm so `.stack` is sandbox-formatted.
++ */
++
++const assert = require('assert');
++const { VM, NodeVM } = require('../../../lib/main.js');
++
++const HOST_PATH = /transformer\.js|setup-sandbox\.js|vm\.js:\d|node:|\(\//;
++
++describe('GHSA-x6m4-chr9-cg97 (transformer error stack leak)', () => {
++	const cases = {
++		'eval': 'eval("@@@ catch")',
++		'Function': 'Function("@@@ catch")',
++		'new Function': 'new Function("a", "@@@ catch")',
++	};
++	for (const name of Object.keys(cases)) {
++		it(`VM ${name} does not leak host paths`, () => {
++			const r = new VM().run(`var r; try { ${cases[name]} } catch (e) { r = [e instanceof SyntaxError, e.message, String(e.stack)] } r;`);
++			assert.strictEqual(r[0], true);
++			assert.strictEqual(r[1], "Unexpected character '@'");
++			assert.ok(!HOST_PATH.test(r[2]), r[2]);
++		});
++	}
++
++	it('VM with eval disabled does not leak host paths', () => {
++		const s = new VM({ eval: false }).run('var s; try { eval("@@@ catch") } catch (e) { s = String(e.stack) } s;');
++		assert.ok(!HOST_PATH.test(s), s);
++	});
++
++	it('NodeVM does not leak host paths', () => {
++		const s = new NodeVM().run('var s; try { eval("@@@ catch") } catch (e) { s = String(e.stack) } module.exports = s;');
++		assert.ok(!HOST_PATH.test(s), s);
++	});
++
++	it('async-disallowed VMError stays a VMError without host stack', () => {
++		const r = new VM({ allowAsync: false }).run('var r; try { Function("async function f(){}") } catch (e) { r = [e instanceof VMError, e.message, String(e.stack)] } r;');
++		assert.strictEqual(r[0], true);
++		assert.strictEqual(r[1], 'Async not available');
++		assert.ok(!HOST_PATH.test(r[2]), r[2]);
++	});
++
++	it('host-thrown errors caught in the sandbox do not carry host stack', () => {
++		const vm = new VM({ sandbox: { f() { throw new Error('boom'); } } });
++		const s = vm.run('var s; try { f() } catch (e) { s = String(e.stack) } s;');
++		assert.ok(/boom/.test(s));
++		assert.ok(!HOST_PATH.test(s), s);
++	});
++});

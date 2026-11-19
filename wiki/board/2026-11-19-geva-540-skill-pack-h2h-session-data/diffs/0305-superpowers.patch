@@ -1,0 +1,66 @@
+diff --git a/src/main/java/io/github/hectorvent/floci/services/cognito/CognitoJsonHandler.java b/src/main/java/io/github/hectorvent/floci/services/cognito/CognitoJsonHandler.java
+index fcc4c74..4b59e80 100644
+--- a/src/main/java/io/github/hectorvent/floci/services/cognito/CognitoJsonHandler.java
++++ b/src/main/java/io/github/hectorvent/floci/services/cognito/CognitoJsonHandler.java
+@@ -152,7 +152,7 @@ public class CognitoJsonHandler {
+         List<UserPoolClient> clients = service.listUserPoolClients(request.path("UserPoolId").asText());
+         ObjectNode response = objectMapper.createObjectNode();
+         ArrayNode items = response.putArray("UserPoolClients");
+-        clients.forEach(c -> items.add(clientToNode(c)));
++        clients.forEach(c -> items.add(clientDescriptionToNode(c)));
+         return Response.ok(response).build();
+     }
+ 
+@@ -465,6 +465,14 @@ public class CognitoJsonHandler {
+         return node;
+     }
+ 
++    private ObjectNode clientDescriptionToNode(UserPoolClient c) {
++        ObjectNode node = objectMapper.createObjectNode();
++        node.put("ClientId", c.getClientId());
++        node.put("UserPoolId", c.getUserPoolId());
++        node.put("ClientName", c.getClientName());
++        return node;
++    }
++
+     private ObjectNode clientToNode(UserPoolClient c) {
+         ObjectNode node = objectMapper.createObjectNode();
+         node.put("ClientId", c.getClientId());
+diff --git a/src/test/java/io/github/hectorvent/floci/services/cognito/CognitoJsonHandlerTest.java b/src/test/java/io/github/hectorvent/floci/services/cognito/CognitoJsonHandlerTest.java
+index 5788026..8b2ab78 100644
+--- a/src/test/java/io/github/hectorvent/floci/services/cognito/CognitoJsonHandlerTest.java
++++ b/src/test/java/io/github/hectorvent/floci/services/cognito/CognitoJsonHandlerTest.java
+@@ -100,4 +100,33 @@ class CognitoJsonHandlerTest {
+         assertNotNull(pool.get("AccountRecoverySetting"));
+         assertEquals("ESSENTIALS", pool.get("UserPoolTier").asText());
+     }
++
++    @Test
++    void listUserPoolClientsReturnsOnlyClientDescriptions() {
++        ObjectNode poolReq = mapper.createObjectNode();
++        poolReq.put("PoolName", "list-clients-pool");
++        JsonNode poolBody = (JsonNode) handler.handle("CreateUserPool", poolReq, "us-east-1").getEntity();
++        String poolId = poolBody.get("UserPool").get("Id").asText();
++
++        ObjectNode clientReq = mapper.createObjectNode();
++        clientReq.put("UserPoolId", poolId);
++        clientReq.put("ClientName", "list-client");
++        clientReq.put("GenerateSecret", true);
++        JsonNode clientBody = (JsonNode) handler.handle("CreateUserPoolClient", clientReq, "us-east-1").getEntity();
++        String clientId = clientBody.get("UserPoolClient").get("ClientId").asText();
++
++        ObjectNode listReq = mapper.createObjectNode();
++        listReq.put("UserPoolId", poolId);
++        Response response = handler.handle("ListUserPoolClients", listReq, "us-east-1");
++        assertEquals(200, response.getStatus());
++
++        JsonNode clients = ((JsonNode) response.getEntity()).get("UserPoolClients");
++        assertEquals(1, clients.size());
++        JsonNode client = clients.get(0);
++        assertEquals(3, client.size());
++        assertEquals(clientId, client.get("ClientId").asText());
++        assertEquals("list-client", client.get("ClientName").asText());
++        assertEquals(poolId, client.get("UserPoolId").asText());
++        assertFalse(client.has("ClientSecret"));
++    }
+ }

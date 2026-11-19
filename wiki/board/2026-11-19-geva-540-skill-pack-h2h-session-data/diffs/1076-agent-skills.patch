@@ -1,0 +1,263 @@
+diff --git a/docs/content/routing/entrypoints.md b/docs/content/routing/entrypoints.md
+index 75f7632..df8e1a4 100644
+--- a/docs/content/routing/entrypoints.md
++++ b/docs/content/routing/entrypoints.md
+@@ -499,6 +499,9 @@ Setting them has no effect for UDP entryPoints.
+ 
+     `readTimeout` is the maximum duration for reading the entire request, including the body.
+ 
++    It also applies to HTTP/3 requests (when `http3` is enabled on the entryPoint),
++    where it bounds the time spent reading the request body.
++
+     If zero, no timeout exists.  
+     Can be provided in a format supported by [time.ParseDuration](https://golang.org/pkg/time/#ParseDuration) or as raw values (digits).
+     If no units are provided, the value is parsed assuming seconds.
+diff --git a/pkg/server/server_entrypoint_tcp_http3.go b/pkg/server/server_entrypoint_tcp_http3.go
+index b971d97..f770808 100644
+--- a/pkg/server/server_entrypoint_tcp_http3.go
++++ b/pkg/server/server_entrypoint_tcp_http3.go
+@@ -5,9 +5,13 @@ import (
+ 	"crypto/tls"
+ 	"errors"
+ 	"fmt"
++	"io"
+ 	"net"
+ 	"net/http"
++	"os"
+ 	"sync"
++	"sync/atomic"
++	"time"
+ 
+ 	"github.com/quic-go/quic-go"
+ 	"github.com/quic-go/quic-go/http3"
+@@ -51,11 +55,12 @@ func newHTTP3Server(ctx context.Context, configuration *static.EntryPoint, https
+ 	h3.Server = &http3.Server{
+ 		Addr:      configuration.GetAddress(),
+ 		Port:      configuration.HTTP3.AdvertisedPort,
+-		Handler:   httpsServer.Server.(*http.Server).Handler,
++		Handler:   withReadTimeout(httpsServer.Server.(*http.Server).Handler, time.Duration(configuration.Transport.RespondingTimeouts.ReadTimeout)),
+ 		TLSConfig: &tls.Config{GetConfigForClient: h3.getTLSConfigForClient},
+ 		QUICConfig: &quic.Config{
+ 			Allow0RTT: false,
+ 		},
++		IdleTimeout: time.Duration(configuration.Transport.RespondingTimeouts.IdleTimeout),
+ 		ConnContext: func(ctx context.Context, c *quic.Conn) context.Context {
+ 			tlsOptionsName, err := h3.getTLSOptionsName(c)
+ 			if err != nil {
+@@ -120,3 +125,69 @@ func (e *http3server) getTLSOptionsName(c *quic.Conn) (string, error) {
+ 	_, name, err := e.getter(connData)
+ 	return name, err
+ }
++
++// withReadTimeout enforces the respondingTimeouts.readTimeout on HTTP/3 requests.
++// On TCP, the read timeout is applied as a deadline on the connection,
++// which does not exist for QUIC streams, so it has to be enforced on the request body.
++func withReadTimeout(next http.Handler, timeout time.Duration) http.Handler {
++	if timeout <= 0 {
++		return next
++	}
++
++	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
++		if req.Body != nil && req.Body != http.NoBody {
++			body := newDeadlineBody(req.Body, timeout)
++			defer body.stop()
++
++			req.Body = body
++		}
++
++		next.ServeHTTP(rw, req)
++	})
++}
++
++// deadlineBody is a request body which fails reads with os.ErrDeadlineExceeded once the timeout has elapsed.
++// On expiry, the underlying body is closed, which cancels the QUIC stream read and unblocks any pending Read.
++type deadlineBody struct {
++	io.ReadCloser
++
++	timer    *time.Timer
++	timedOut atomic.Bool
++}
++
++func newDeadlineBody(body io.ReadCloser, timeout time.Duration) *deadlineBody {
++	b := &deadlineBody{ReadCloser: body}
++	b.timer = time.AfterFunc(timeout, func() {
++		b.timedOut.Store(true)
++		_ = b.ReadCloser.Close()
++	})
++
++	return b
++}
++
++func (b *deadlineBody) Read(p []byte) (int, error) {
++	if b.timedOut.Load() {
++		return 0, os.ErrDeadlineExceeded
++	}
++
++	n, err := b.ReadCloser.Read(p)
++	if err != nil && b.timedOut.Load() {
++		return n, os.ErrDeadlineExceeded
++	}
++
++	if errors.Is(err, io.EOF) {
++		// The whole body has been read, the deadline does not apply anymore.
++		b.stop()
++	}
++
++	return n, err
++}
++
++func (b *deadlineBody) Close() error {
++	b.stop()
++	return b.ReadCloser.Close()
++}
++
++func (b *deadlineBody) stop() {
++	b.timer.Stop()
++}
+diff --git a/pkg/server/server_entrypoint_tcp_http3_test.go b/pkg/server/server_entrypoint_tcp_http3_test.go
+index 9adc1d4..3387385 100644
+--- a/pkg/server/server_entrypoint_tcp_http3_test.go
++++ b/pkg/server/server_entrypoint_tcp_http3_test.go
+@@ -4,13 +4,18 @@ import (
+ 	"bufio"
+ 	"crypto/tls"
+ 	"crypto/x509"
++	"io"
+ 	"net/http"
++	"os"
++	"strings"
+ 	"testing"
+ 	"time"
+ 
+ 	"github.com/quic-go/quic-go"
++	"github.com/quic-go/quic-go/http3"
+ 	"github.com/stretchr/testify/assert"
+ 	"github.com/stretchr/testify/require"
++	ptypes "github.com/traefik/paerser/types"
+ 	"github.com/traefik/traefik/v2/pkg/config/static"
+ 	tcprouter "github.com/traefik/traefik/v2/pkg/server/router/tcp"
+ 	traefiktls "github.com/traefik/traefik/v2/pkg/tls"
+@@ -215,6 +220,95 @@ func TestHTTP30RTT(t *testing.T) {
+ 	assert.False(t, earlyConnection.ConnectionState().Used0RTT)
+ }
+ 
++func TestHTTP3ReadTimeout(t *testing.T) {
++	certContent, err := localhostCert.Read()
++	require.NoError(t, err)
++
++	keyContent, err := localhostKey.Read()
++	require.NoError(t, err)
++
++	tlsCert, err := tls.X509KeyPair(certContent, keyContent)
++	require.NoError(t, err)
++
++	epConfig := &static.EntryPointsTransport{}
++	epConfig.SetDefaults()
++	epConfig.RespondingTimeouts.ReadTimeout = ptypes.Duration(time.Second)
++
++	entryPoint, err := NewTCPEntryPoint(t.Context(), &static.EntryPoint{
++		Address:          "127.0.0.1:8091",
++		Transport:        epConfig,
++		ForwardedHeaders: &static.ForwardedHeaders{},
++		HTTP2:            &static.HTTP2Config{},
++		HTTP3:            &static.HTTP3Config{},
++	}, nil)
++	require.NoError(t, err)
++
++	router, err := tcprouter.NewRouter()
++	require.NoError(t, err)
++
++	readErr := make(chan error, 1)
++	router.AddHTTPTLSConfig("example.com", &tls.Config{
++		Certificates: []tls.Certificate{tlsCert},
++	}, traefiktls.DefaultTLSConfigName)
++	router.SetHTTPSHandler(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
++		_, err := io.ReadAll(req.Body)
++		readErr <- err
++		if err != nil {
++			rw.WriteHeader(http.StatusRequestTimeout)
++			return
++		}
++		rw.WriteHeader(http.StatusOK)
++	}), nil)
++
++	ctx := t.Context()
++	go entryPoint.Start(ctx)
++	entryPoint.SwitchRouter(router)
++
++	// We are racing with the http3Server readiness happening in the goroutine starting the entrypoint.
++	time.Sleep(time.Second)
++
++	certPool := x509.NewCertPool()
++	certPool.AppendCertsFromPEM(certContent)
++
++	transport := &http3.Transport{
++		TLSClientConfig: &tls.Config{
++			RootCAs:    certPool,
++			ServerName: "example.com",
++		},
++	}
++
++	// The body sends one byte and then stalls, like a slow-body client.
++	bodyReader, bodyWriter := io.Pipe()
++
++	t.Cleanup(func() {
++		_ = bodyWriter.Close()
++		_ = transport.Close()
++		entryPoint.Shutdown(ctx)
++	})
++
++	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://127.0.0.1:8091/", bodyReader)
++	require.NoError(t, err)
++
++	go func() {
++		_, _ = bodyWriter.Write([]byte("x"))
++	}()
++
++	go func() {
++		resp, err := transport.RoundTrip(req)
++		if err == nil {
++			_ = resp.Body.Close()
++		}
++	}()
++
++	select {
++	case err := <-readErr:
++		require.Error(t, err)
++		assert.ErrorIs(t, err, os.ErrDeadlineExceeded)
++	case <-time.After(5 * time.Second):
++		t.Fatal("HTTP/3 request body read was not bounded by readTimeout")
++	}
++}
++
+ type clientSessionCache struct {
+ 	cache tls.ClientSessionCache
+ 
+@@ -242,3 +336,27 @@ func (c *clientSessionCache) Put(sessionKey string, cs *tls.ClientSessionState)
+ 	c.cache.Put(sessionKey, cs)
+ 	c.puts <- sessionKey
+ }
++
++func TestDeadlineBody(t *testing.T) {
++	t.Run("body read before the deadline", func(t *testing.T) {
++		body := newDeadlineBody(io.NopCloser(strings.NewReader("hello")), time.Second)
++		t.Cleanup(func() { _ = body.Close() })
++
++		content, err := io.ReadAll(body)
++		require.NoError(t, err)
++		assert.Equal(t, "hello", string(content))
++	})
++
++	t.Run("stalled body is unblocked at the deadline", func(t *testing.T) {
++		reader, writer := io.Pipe()
++		t.Cleanup(func() { _ = writer.Close() })
++
++		body := newDeadlineBody(reader, 100*time.Millisecond)
++		t.Cleanup(func() { _ = body.Close() })
++
++		start := time.Now()
++		_, err := io.ReadAll(body)
++		assert.ErrorIs(t, err, os.ErrDeadlineExceeded)
++		assert.Less(t, time.Since(start), 2*time.Second)
++	})
++}

@@ -1,0 +1,84 @@
+diff --git a/.changeset/action-location-open-redirect.md b/.changeset/action-location-open-redirect.md
+new file mode 100644
+index 0000000..8e76fd2
+--- /dev/null
++++ b/.changeset/action-location-open-redirect.md
+@@ -0,0 +1,5 @@
++---
++'@sveltejs/kit': patch
++---
++
++fix: prevent open redirect via enhanced form actions on paths beginning with `//`
+diff --git a/packages/kit/src/runtime/client/client.js b/packages/kit/src/runtime/client/client.js
+index 1929168..10b9962 100644
+--- a/packages/kit/src/runtime/client/client.js
++++ b/packages/kit/src/runtime/client/client.js
+@@ -3017,7 +3017,9 @@ export function is_current_location(value) {
+ 
+ 	const destination = resolve_url(value);
+ 	const current = new URL(location.href);
+-	if (destination.pathname !== current.pathname) return false;
++	if (destination.origin !== current.origin || destination.pathname !== current.pathname) {
++		return false;
++	}
+ 
+ 	const keys = new Set([...destination.searchParams.keys(), ...current.searchParams.keys()]);
+ 	for (const key of keys) {
+@@ -3044,6 +3046,11 @@ export function is_current_location(value) {
+  * @returns {Promise<void>}
+  */
+ export function apply_action_navigation(location, result, refresh_all) {
++	// non-redirect action results must never navigate away from the current origin
++	if (resolve_url(location).origin !== origin) {
++		return applyAction(result);
++	}
++
+ 	return _goto(location, {
+ 		type: 'form',
+ 		refreshAll: refresh_all,
+diff --git a/packages/kit/src/runtime/server/page/actions.js b/packages/kit/src/runtime/server/page/actions.js
+index 210cae6..fda8af9 100644
+--- a/packages/kit/src/runtime/server/page/actions.js
++++ b/packages/kit/src/runtime/server/page/actions.js
+@@ -81,7 +81,13 @@ export function get_action_location(url) {
+ 		}
+ 	}
+ 
+-	return location.pathname + location.search;
++	// a pathname starting with `//` would be interpreted as a protocol-relative URL,
++	// so prefix it with `/.` which resolves back to the same pathname
++	const pathname = location.pathname.startsWith('//')
++		? `/.${location.pathname}`
++		: location.pathname;
++
++	return pathname + location.search;
+ }
+ 
+ /**
+diff --git a/packages/kit/src/runtime/server/page/actions.spec.js b/packages/kit/src/runtime/server/page/actions.spec.js
+index 08f2793..a49c1dc 100644
+--- a/packages/kit/src/runtime/server/page/actions.spec.js
++++ b/packages/kit/src/runtime/server/page/actions.spec.js
+@@ -8,7 +8,8 @@ import { init_transport } from '#app/internal/transport';
+ vi.stubGlobal('__SVELTEKIT_DEV__', false);
+ init_transport({});
+ 
+-const { handle_action_request, uneval_action_response } = await import('./actions.js');
++const { handle_action_request, uneval_action_response, get_action_location } =
++	await import('./actions.js');
+ 
+ /** @param {string} [search] */
+ function create_event(search = '') {
+@@ -126,3 +127,12 @@ test('explains that actions cannot return a Response', () => {
+ 		{ contains: ['/a'], cause: expect.any(Error) }
+ 	);
+ });
++
++test('get_action_location does not produce protocol-relative URLs', () => {
++	const location = get_action_location(new URL('https://app.example//evil.example/x?/login&a=1'));
++	const resolved = new URL(location, 'https://app.example/');
++	expect(resolved.origin).toBe('https://app.example');
++	expect(resolved.pathname).toBe('//evil.example/x');
++	expect(resolved.search).toBe('?a=1');
++	expect(get_action_location(new URL('https://app.example/a/b?/x'))).toBe('/a/b');
++});

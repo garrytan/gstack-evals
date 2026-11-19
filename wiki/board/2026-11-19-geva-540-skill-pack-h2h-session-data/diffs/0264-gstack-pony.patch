@@ -1,0 +1,157 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 34e6c10..757aebe 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -12,6 +12,10 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
+ 
+ - Add `ByteSlice` and `ByteSliceValue` functions for new `BYTESLICE` attribute type in `go.opentelemetry.io/otel/attribute`. (#7948)
+ 
++### Changed
++
++- `ErrorType` in `go.opentelemetry.io/otel/semconv/v1.40.0` now unwraps errors created by `fmt.Errorf` with a single `%w` verb before deriving the type from reflection, instead of reporting `*fmt.wrapError`. (#8100)
++
+ <!-- Released section -->
+ <!-- Don't change this section unless doing release -->
+ 
+diff --git a/internal/tools/semconvkit/templates/error_type.go.tmpl b/internal/tools/semconvkit/templates/error_type.go.tmpl
+index 193c43a..44c9bdc 100644
+--- a/internal/tools/semconvkit/templates/error_type.go.tmpl
++++ b/internal/tools/semconvkit/templates/error_type.go.tmpl
+@@ -5,6 +5,7 @@ package semconv // import "go.opentelemetry.io/otel/semconv/{{.TagVer}}"
+ 
+ import (
+ 	"errors"
++	"fmt"
+ 	"reflect"
+ 
+ 	"go.opentelemetry.io/otel/attribute"
+@@ -22,7 +23,9 @@ import (
+ // the returned attribute has that method's return value. If multiple errors in
+ // the chain implement this method, the value from the first match found by
+ // [errors.As] is used. Otherwise, the returned attribute has a value derived
+-// from the concrete type of err.
++// from the concrete type of err. Errors created by [fmt.Errorf] wrapping a
++// single error with the %w verb are unwrapped first, so the value is derived
++// from the type of the first error in the chain not created this way.
+ //
+ // The key of the returned attribute is [ErrorTypeKey].
+ func ErrorType(err error) attribute.KeyValue {
+@@ -50,6 +53,15 @@ func errorType(err error) string {
+ 		// Fallback to reflection if the ErrorType method is not supported or
+ 		// returns an empty value.
+ 
++		// Skip fmt.Errorf("...%w...", err) wrappers, their type is not useful.
++		for reflect.TypeOf(err) == fmtWrapErrorType {
++			next := errors.Unwrap(err)
++			if next == nil {
++				break
++			}
++			err = next
++		}
++
+ 		t := reflect.TypeOf(err)
+ 		pkg, name := t.PkgPath(), t.Name()
+ 		if pkg != "" && name != "" {
+@@ -64,3 +76,7 @@ func errorType(err error) string {
+ 	}
+ 	return s
+ }
++
++// fmtWrapErrorType is the type returned by fmt.Errorf when wrapping a single
++// error with the %w verb.
++var fmtWrapErrorType = reflect.TypeOf(fmt.Errorf("%w", errors.New("")))
+diff --git a/internal/tools/semconvkit/templates/error_type_test.go.tmpl b/internal/tools/semconvkit/templates/error_type_test.go.tmpl
+index 1d8a82f..0f483db 100644
+--- a/internal/tools/semconvkit/templates/error_type_test.go.tmpl
++++ b/internal/tools/semconvkit/templates/error_type_test.go.tmpl
+@@ -5,6 +5,7 @@ package semconv // import "go.opentelemetry.io/otel/semconv/{{.TagVer}}"
+ 
+ import (
+ 	"errors"
++	"fmt"
+ 	"testing"
+ )
+ 
+@@ -18,6 +19,11 @@ func TestErrorType(t *testing.T) {
+ 	check(t, custom(""), pkg+".ErrCustomType")                     // empty ErrorType, use concrete type.
+ 	check(t, wrapped(custom("wrapped-aborted")), "wrapped-aborted")
+ 	check(t, wrapped(custom("")), pkg+".wrappedErr") // empty ErrorType in chain, use concrete top-level type.
++	check(t, fmt.Errorf("a: %w", fmt.Errorf("b: %w", errors.New("msg"))), "*errors.errorString")
++	check(t, fmt.Errorf("a: %w", wrapped(errors.New("msg"))), pkg+".wrappedErr")
++	check(t, fmt.Errorf("a: %w", custom("")), pkg+".ErrCustomType")
++	check(t, fmt.Errorf("a: %w, %w", errors.New("x"), errors.New("y")), "*fmt.wrapErrors")
++	check(t, fmt.Errorf("a: %v", errors.New("msg")), "*errors.errorString")
+ }
+ 
+ func check(t *testing.T, err error, want string) {
+diff --git a/semconv/v1.40.0/error_type.go b/semconv/v1.40.0/error_type.go
+index 6d26e52..efd5091 100644
+--- a/semconv/v1.40.0/error_type.go
++++ b/semconv/v1.40.0/error_type.go
+@@ -5,6 +5,7 @@ package semconv // import "go.opentelemetry.io/otel/semconv/v1.40.0"
+ 
+ import (
+ 	"errors"
++	"fmt"
+ 	"reflect"
+ 
+ 	"go.opentelemetry.io/otel/attribute"
+@@ -22,7 +23,9 @@ import (
+ // the returned attribute has that method's return value. If multiple errors in
+ // the chain implement this method, the value from the first match found by
+ // [errors.As] is used. Otherwise, the returned attribute has a value derived
+-// from the concrete type of err.
++// from the concrete type of err. Errors created by [fmt.Errorf] wrapping a
++// single error with the %w verb are unwrapped first, so the value is derived
++// from the type of the first error in the chain not created this way.
+ //
+ // The key of the returned attribute is [ErrorTypeKey].
+ func ErrorType(err error) attribute.KeyValue {
+@@ -50,6 +53,15 @@ func errorType(err error) string {
+ 		// Fallback to reflection if the ErrorType method is not supported or
+ 		// returns an empty value.
+ 
++		// Skip fmt.Errorf("...%w...", err) wrappers, their type is not useful.
++		for reflect.TypeOf(err) == fmtWrapErrorType {
++			next := errors.Unwrap(err)
++			if next == nil {
++				break
++			}
++			err = next
++		}
++
+ 		t := reflect.TypeOf(err)
+ 		pkg, name := t.PkgPath(), t.Name()
+ 		if pkg != "" && name != "" {
+@@ -64,3 +76,7 @@ func errorType(err error) string {
+ 	}
+ 	return s
+ }
++
++// fmtWrapErrorType is the type returned by fmt.Errorf when wrapping a single
++// error with the %w verb.
++var fmtWrapErrorType = reflect.TypeOf(fmt.Errorf("%w", errors.New("")))
+diff --git a/semconv/v1.40.0/error_type_test.go b/semconv/v1.40.0/error_type_test.go
+index b01ea79..15103f1 100644
+--- a/semconv/v1.40.0/error_type_test.go
++++ b/semconv/v1.40.0/error_type_test.go
+@@ -5,6 +5,7 @@ package semconv // import "go.opentelemetry.io/otel/semconv/v1.40.0"
+ 
+ import (
+ 	"errors"
++	"fmt"
+ 	"testing"
+ )
+ 
+@@ -18,6 +19,11 @@ func TestErrorType(t *testing.T) {
+ 	check(t, custom(""), pkg+".ErrCustomType")                     // empty ErrorType, use concrete type.
+ 	check(t, wrapped(custom("wrapped-aborted")), "wrapped-aborted")
+ 	check(t, wrapped(custom("")), pkg+".wrappedErr") // empty ErrorType in chain, use concrete top-level type.
++	check(t, fmt.Errorf("a: %w", fmt.Errorf("b: %w", errors.New("msg"))), "*errors.errorString")
++	check(t, fmt.Errorf("a: %w", wrapped(errors.New("msg"))), pkg+".wrappedErr")
++	check(t, fmt.Errorf("a: %w", custom("")), pkg+".ErrCustomType")
++	check(t, fmt.Errorf("a: %w, %w", errors.New("x"), errors.New("y")), "*fmt.wrapErrors")
++	check(t, fmt.Errorf("a: %v", errors.New("msg")), "*errors.errorString")
+ }
+ 
+ func check(t *testing.T, err error, want string) {

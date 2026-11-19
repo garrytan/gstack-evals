@@ -1,0 +1,3 @@
+https://github.com/qax-os/excelize at 7ecf80fe61509ffcc2f7611a49e0ff96588d6ce7
+Licence at the freeze-date read (prereg o-, b1- and b2-licences.json): BSD-3-Clause
+Root licence and notice files at that commit: LICENSE

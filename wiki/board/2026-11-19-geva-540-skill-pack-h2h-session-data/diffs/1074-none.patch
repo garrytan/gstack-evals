@@ -1,0 +1,199 @@
+diff --git a/internal/web/events.go b/internal/web/events.go
+index 676b25c..46840f0 100644
+--- a/internal/web/events.go
++++ b/internal/web/events.go
+@@ -38,6 +38,29 @@ func (h *handler) streamEvents(w http.ResponseWriter, r *http.Request) {
+ 
+ 	allContainers, errors := h.hostService.ListAllContainers(userLabels)
+ 
++	// When a label filter applies, only forward stats and events for containers
++	// visible to this user. visible is keyed by container ID.
++	filtered := userLabels.Exists()
++	visible := make(map[string]struct{})
++	for _, c := range allContainers {
++		visible[c.ID] = struct{}{}
++	}
++	isVisible := func(id string) bool {
++		if !filtered {
++			return true
++		}
++		_, ok := visible[id]
++		return ok
++	}
++	refreshVisible := func(containers []container.Container) {
++		if !filtered {
++			return
++		}
++		for _, c := range containers {
++			visible[c.ID] = struct{}{}
++		}
++	}
++
+ 	for _, err := range errors {
+ 		log.Warn().Err(err).Msg("error listing containers")
+ 		if hostNotAvailableError, ok := err.(*docker_support.HostUnavailableError); ok {
+@@ -61,6 +84,9 @@ func (h *handler) streamEvents(w http.ResponseWriter, r *http.Request) {
+ 				return
+ 			}
+ 		case stat := <-stats:
++			if !isVisible(stat.ID) {
++				continue
++			}
+ 			if err := sseWriter.Event("container-stat", stat); err != nil {
+ 				log.Error().Err(err).Msg("error writing event to event stream")
+ 				return
+@@ -74,6 +100,7 @@ func (h *handler) streamEvents(w http.ResponseWriter, r *http.Request) {
+ 			case "start", "die", "destroy", "rename", "pause", "unpause":
+ 				if event.Name == "start" || event.Name == "rename" {
+ 					if containers, err := h.hostService.ListContainersForHost(event.Host, userLabels); err == nil {
++						refreshVisible(containers)
+ 						log.Debug().Str("host", event.Host).Int("count", len(containers)).Msg("updating containers for host")
+ 						if err := sseWriter.Event("containers-changed", containers); err != nil {
+ 							log.Error().Err(err).Msg("error writing containers to event stream")
+@@ -82,17 +109,38 @@ func (h *handler) streamEvents(w http.ResponseWriter, r *http.Request) {
+ 					}
+ 				}
+ 
++				if filtered && !isVisible(event.ActorID) && (event.Name == "start" || event.Name == "rename") {
++					// Fall back to a label-aware lookup in case the host listing failed
++					if _, err := h.hostService.FindContainer(event.Host, event.ActorID, userLabels); err == nil {
++						visible[event.ActorID] = struct{}{}
++					}
++				}
++
++				if !isVisible(event.ActorID) {
++					continue
++				}
++
+ 				if err := sseWriter.Event("container-event", event); err != nil {
+ 					log.Error().Err(err).Msg("error writing event to event stream")
+ 					return
+ 				}
+ 
++				if event.Name == "destroy" && filtered {
++					delete(visible, event.ActorID)
++				}
++
+ 			case "update":
++				if !isVisible(event.ActorID) {
++					continue
++				}
+ 				if err := sseWriter.Event("container-updated", event.Container); err != nil {
+ 					log.Error().Err(err).Msg("error writing event to event stream")
+ 					return
+ 				}
+ 			case "health_status: healthy", "health_status: unhealthy":
++				if !isVisible(event.ActorID) {
++					continue
++				}
+ 				healthy := "unhealthy"
+ 				if event.Name == "health_status: healthy" {
+ 					healthy = "healthy"
+diff --git a/internal/web/events_filter_test.go b/internal/web/events_filter_test.go
+new file mode 100644
+index 0000000..81c8ff2
+--- /dev/null
++++ b/internal/web/events_filter_test.go
+@@ -0,0 +1,102 @@
++package web
++
++import (
++	"context"
++	"fmt"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"testing"
++	"time"
++
++	"github.com/amir20/dozzle/internal/container"
++	container_support "github.com/amir20/dozzle/internal/support/container"
++	"github.com/stretchr/testify/require"
++)
++
++type filteringHostService struct {
++	HostService
++	containers []container.Container
++	events     []container.ContainerEvent
++	stats      []container.ContainerStat
++}
++
++func (f *filteringHostService) matching(labels container.ContainerLabels) []container.Container {
++	var result []container.Container
++	for _, c := range f.containers {
++		if !labels.Exists() || c.Labels["visible"] == "yes" {
++			result = append(result, c)
++		}
++	}
++	return result
++}
++
++func (f *filteringHostService) ListAllContainers(labels container.ContainerLabels) ([]container.Container, []error) {
++	return f.matching(labels), nil
++}
++
++func (f *filteringHostService) ListContainersForHost(host string, labels container.ContainerLabels) ([]container.Container, error) {
++	return f.matching(labels), nil
++}
++
++func (f *filteringHostService) FindContainer(host string, id string, labels container.ContainerLabels) (*container_support.ContainerService, error) {
++	return nil, fmt.Errorf("not found")
++}
++
++func (f *filteringHostService) SubscribeAvailableHosts(ctx context.Context, hosts chan<- container.Host) {}
++
++func (f *filteringHostService) SubscribeEventsAndStats(ctx context.Context, events chan<- container.ContainerEvent, stats chan<- container.ContainerStat) {
++	go func() {
++		for _, s := range f.stats {
++			stats <- s
++		}
++		for _, e := range f.events {
++			events <- e
++		}
++	}()
++}
++
++func Test_handler_streamEvents_filtersByLabels(t *testing.T) {
++	ctx, cancel := context.WithCancel(context.Background())
++	defer cancel()
++
++	svc := &filteringHostService{
++		containers: []container.Container{
++			{ID: "visible00001", Name: "visible", Host: "localhost", Labels: map[string]string{"visible": "yes"}},
++			{ID: "secret000001", Name: "secret", Host: "localhost", Labels: map[string]string{"secretproject": "acme"}},
++		},
++		stats: []container.ContainerStat{
++			{ID: "secret000001", CPUPercent: 42},
++			{ID: "visible00001", CPUPercent: 1},
++		},
++		events: []container.ContainerEvent{
++			{Name: "start", Host: "localhost", ActorID: "secret000001", ActorAttributes: map[string]string{"secretproject": "acme"}},
++			{Name: "die", Host: "localhost", ActorID: "secret000001"},
++			{Name: "health_status: healthy", Host: "localhost", ActorID: "secret000001"},
++			{Name: "update", Host: "localhost", ActorID: "secret000001"},
++			{Name: "start", Host: "localhost", ActorID: "visible00001"},
++		},
++	}
++
++	labels, err := container.ParseContainerFilter("visible=yes")
++	require.NoError(t, err)
++
++	h := &handler{hostService: svc, config: &Config{Base: "/", NoAnalytics: true, Labels: labels, Authorization: Authorization{Provider: NONE}}}
++
++	req, err := http.NewRequestWithContext(ctx, "GET", "/api/events/stream", nil)
++	require.NoError(t, err)
++	rr := httptest.NewRecorder()
++
++	go func() {
++		time.Sleep(200 * time.Millisecond)
++		cancel()
++	}()
++	h.streamEvents(rr, req)
++
++	body := rr.Body.String()
++	require.NotContains(t, body, "secret000001")
++	require.NotContains(t, body, "acme")
++	require.Contains(t, body, "event: container-stat")
++	require.Contains(t, body, "visible00001")
++	require.Equal(t, 1, strings.Count(body, "event: container-event"))
++}

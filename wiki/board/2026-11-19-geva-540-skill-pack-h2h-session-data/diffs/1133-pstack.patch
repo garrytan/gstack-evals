@@ -1,0 +1,63 @@
+diff --git a/connection.go b/connection.go
+index c0df8b7..b0e5d31 100644
+--- a/connection.go
++++ b/connection.go
+@@ -1323,6 +1323,7 @@ func tlsConfigFromURI(uri URI) (*tls.Config, error) {
+ 		return &tls.Config{
+ 			RootCAs:    certPool,
+ 			ServerName: uri.ServerName,
++			MinVersion: tls.VersionTLS12,
+ 		}, nil
+ 	}
+ 
+@@ -1335,6 +1336,7 @@ func tlsConfigFromURI(uri URI) (*tls.Config, error) {
+ 		Certificates: []tls.Certificate{certificate},
+ 		RootCAs:      certPool,
+ 		ServerName:   uri.ServerName,
++		MinVersion:   tls.VersionTLS12,
+ 	}, nil
+ }
+ 
+diff --git a/tls_test.go b/tls_test.go
+index 17203b2..9f9fc20 100644
+--- a/tls_test.go
++++ b/tls_test.go
+@@ -11,6 +11,7 @@ import (
+ 	"errors"
+ 	"fmt"
+ 	"net"
++	"os"
+ 	"testing"
+ 	"time"
+ )
+@@ -108,6 +109,30 @@ func TestTlsConfigFromUriPushdownServerNameIndication(t *testing.T) {
+ 	}
+ }
+ 
++func TestTlsConfigFromUriEnforcesMinimumTLS12(t *testing.T) {
++	dir := t.TempDir()
++	certFile, keyFile := dir+"/client.pem", dir+"/client.key"
++	if err := os.WriteFile(certFile, []byte(clientCert), 0o600); err != nil {
++		t.Fatal(err)
++	}
++	if err := os.WriteFile(keyFile, []byte(clientKey), 0o600); err != nil {
++		t.Fatal(err)
++	}
++
++	for name, uri := range map[string]URI{
++		"server auth only": {Scheme: "amqps", Host: "example.com"},
++		"mutual TLS":       {Scheme: "amqps", Host: "example.com", CertFile: certFile, KeyFile: keyFile},
++	} {
++		tlsConf, err := tlsConfigFromURI(uri)
++		if err != nil {
++			t.Fatalf("%s: expected tlsConfigFromURI to succeed, got error: %s", name, err)
++		}
++		if tlsConf.MinVersion != tls.VersionTLS12 {
++			t.Fatalf("%s: expected MinVersion TLS 1.2, got %#x", name, tlsConf.MinVersion)
++		}
++	}
++}
++
+ // Tests opening a connection of a TLS enabled socket server
+ func TestTLSHandshake(t *testing.T) {
+ 	srv := startTLSServer(t, tlsServerConfig(t))

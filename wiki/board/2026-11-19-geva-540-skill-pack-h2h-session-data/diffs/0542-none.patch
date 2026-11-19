@@ -1,0 +1,17 @@
+diff --git a/common/socket/src/main/java/io/helidon/common/socket/NioSocket.java b/common/socket/src/main/java/io/helidon/common/socket/NioSocket.java
+index c3ff018..36a1e3d 100644
+--- a/common/socket/src/main/java/io/helidon/common/socket/NioSocket.java
++++ b/common/socket/src/main/java/io/helidon/common/socket/NioSocket.java
+@@ -144,7 +144,11 @@ public sealed class NioSocket implements HelidonSocket permits TlsNioSocket {
+                 writeBuffer.clear();
+                 buffer.writeTo(writeBuffer, buffer.available());
+                 writeBuffer.flip();
+-                delegate.write(writeBuffer);
++                // channel write may be partial (e.g. when socket send buffer is full),
++                // we must write all bytes before reusing the buffer
++                while (writeBuffer.hasRemaining()) {
++                    delegate.write(writeBuffer);
++                }
+             }
+         } catch (IOException e) {
+             throw new UncheckedIOException(e);

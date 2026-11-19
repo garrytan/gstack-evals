@@ -1,0 +1,64 @@
+diff --git a/.changeset/preserve-session-config-update-agent.md b/.changeset/preserve-session-config-update-agent.md
+new file mode 100644
+index 0000000..567d1b2
+--- /dev/null
++++ b/.changeset/preserve-session-config-update-agent.md
+@@ -0,0 +1,5 @@
++---
++'@openai/agents-realtime': patch
++---
++
++fix: preserve session config (e.g. audio formats) when calling `updateAgent` or during handoffs
+diff --git a/packages/agents-realtime/src/realtimeSession.ts b/packages/agents-realtime/src/realtimeSession.ts
+index 3c4f22e..ece453f 100644
+--- a/packages/agents-realtime/src/realtimeSession.ts
++++ b/packages/agents-realtime/src/realtimeSession.ts
+@@ -313,10 +313,13 @@ export class RealtimeSession<
+       );
+     }
+ 
++    // Start from the session's configured options (e.g. audio formats, turn detection) so that
++    // subsequent session updates (agent updates, handoffs) don't revert them to the defaults.
+     return {
++      ...(this.options.config ?? {}),
+       instructions,
+-      voice: this.#currentAgent.voice,
+-      model: this.options.model,
++      voice: this.#currentAgent.voice ?? this.options.config?.voice,
++      model: this.options.model ?? this.options.config?.model,
+       tools: this.#currentTools,
+       tracing: tracingConfig,
+       ...additionalConfig,
+diff --git a/packages/agents-realtime/test/realtimeSession.test.ts b/packages/agents-realtime/test/realtimeSession.test.ts
+index e39df37..93793e7 100644
+--- a/packages/agents-realtime/test/realtimeSession.test.ts
++++ b/packages/agents-realtime/test/realtimeSession.test.ts
+@@ -265,6 +265,28 @@ describe('RealtimeSession', () => {
+     );
+   });
+ 
++  it('preserves session config (e.g. audio formats) when updating the agent', async () => {
++    const t = new FakeTransport();
++    const agent = new RealtimeAgent({ name: 'A', handoffs: [] });
++    const s = new RealtimeSession(agent, {
++      transport: t,
++      config: {
++        inputAudioFormat: 'g711_ulaw',
++        outputAudioFormat: 'g711_ulaw',
++        voice: 'alloy',
++      },
++    });
++    await s.connect({ apiKey: 'test' });
++    await s.updateAgent(
++      agent.clone({ name: 'Bob', instructions: 'You are Bob.' }),
++    );
++    const last = t.updateSessionConfigCalls.at(-1)!;
++    expect(last.inputAudioFormat).toBe('g711_ulaw');
++    expect(last.outputAudioFormat).toBe('g711_ulaw');
++    expect(last.voice).toBe('alloy');
++    expect(last.instructions).toBe('You are Bob.');
++  });
++
+   it('handles usage and audio interrupted events', () => {
+     const usage = new Usage({ totalTokens: 5 });
+     transport.emit('usage_update', usage);

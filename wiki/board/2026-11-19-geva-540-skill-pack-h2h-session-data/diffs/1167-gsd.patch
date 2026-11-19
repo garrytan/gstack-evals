@@ -1,0 +1,80 @@
+diff --git a/js/node_helper.js b/js/node_helper.js
+index 833c90a..b3f1a21 100644
+--- a/js/node_helper.js
++++ b/js/node_helper.js
+@@ -1,6 +1,5 @@
+ const express = require("express");
+ const Log = require("logger");
+-const { replaceSecretPlaceholder } = require("#server_functions");
+ 
+ class NodeHelper {
+ 	init () {
+@@ -88,17 +87,14 @@ class NodeHelper {
+ 		io.of(this.name).on("connection", (socket) => {
+ 			// register catch all.
+ 			socket.onAny((notification, payload) => {
+-				if (config?.hideConfigSecrets && payload && typeof payload === "object") {
+-					try {
+-						const payloadStr = replaceSecretPlaceholder(JSON.stringify(payload));
+-						this.socketNotificationReceived(notification, JSON.parse(payloadStr));
+-					} catch (e) {
+-						Log.error("Error substituting variables in payload: ", e);
+-						this.socketNotificationReceived(notification, payload);
+-					}
+-				} else {
+-					this.socketNotificationReceived(notification, payload);
+-				}
++
++				/*
++				 * Inbound socket payloads are client-controlled and must never be
++				 * treated as authority to resolve `**SECRET_*` placeholders into real
++				 * environment values (see GHSA-q4gh-4ffp-5cg8). Payloads are passed
++				 * through unchanged.
++				 */
++				this.socketNotificationReceived(notification, payload);
+ 			});
+ 		});
+ 	}
+diff --git a/tests/unit/classes/node_helper_secrets_spec.js b/tests/unit/classes/node_helper_secrets_spec.js
+new file mode 100644
+index 0000000..5564ec1
+--- /dev/null
++++ b/tests/unit/classes/node_helper_secrets_spec.js
+@@ -0,0 +1,37 @@
++const NodeHelper = require("../../../js/node_helper");
++
++describe("NodeHelper socket payload handling", () => {
++	const originalConfig = global.config;
++
++	beforeEach(() => {
++		global.config = { hideConfigSecrets: true, cors: "disabled" };
++		process.env.SECRET_TEST = "super-secret-value";
++	});
++
++	afterEach(() => {
++		global.config = originalConfig;
++		delete process.env.SECRET_TEST;
++	});
++
++	it("does not expand SECRET_* placeholders in inbound socket payloads", () => {
++		const helper = new NodeHelper();
++		helper.setName("testmodule");
++		const received = [];
++		helper.socketNotificationReceived = (notification, payload) => received.push({ notification, payload });
++
++		let onAny;
++		const fakeIo = {
++			of: () => ({
++				on: (_event, cb) => cb({ onAny: (fn) => { onAny = fn; } })
++			})
++		};
++		helper.setSocketIO(fakeIo);
++
++		const payload = { instanceId: "**SECRET_TEST**", nested: { url: "https://x/?k=**SECRET_TEST**" } };
++		onAny("SOME_NOTIFICATION", payload);
++
++		expect(received).toHaveLength(1);
++		expect(received[0].payload).toStrictEqual({ instanceId: "**SECRET_TEST**", nested: { url: "https://x/?k=**SECRET_TEST**" } });
++		expect(JSON.stringify(received)).not.toContain("super-secret-value");
++	});
++});

@@ -1,0 +1,168 @@
+diff --git a/src/NAudio.Core/Wave/WaveStreams/BlockAlignReductionStream.cs b/src/NAudio.Core/Wave/WaveStreams/BlockAlignReductionStream.cs
+index 3eba574..ccd79e0 100644
+--- a/src/NAudio.Core/Wave/WaveStreams/BlockAlignReductionStream.cs
++++ b/src/NAudio.Core/Wave/WaveStreams/BlockAlignReductionStream.cs
+@@ -24,7 +24,9 @@ public class BlockAlignReductionStream : WaveStream
+     public BlockAlignReductionStream(WaveStream sourceStream)
+     {
+         this.sourceStream = sourceStream;
+-        circularBuffer = new CircularBuffer(sourceStream.WaveFormat.AverageBytesPerSecond * 4);
++        // must be able to hold several source blocks so reads can always make progress
++        circularBuffer = new CircularBuffer(Math.Max(sourceStream.WaveFormat.AverageBytesPerSecond * 4,
++            sourceStream.BlockAlign * 4));
+     }
+ 
+     private byte[] GetSourceBuffer(int size)
+@@ -126,43 +128,71 @@ public class BlockAlignReductionStream : WaveStream
+     /// </summary>
+     public override int Read(Span<byte> buffer)
+     {
+-        int count = buffer.Length;
+         lock (lockObject)
+         {
+-            // 1. attempt to fill the circular buffer with enough data to meet our request
+-            while (BufferEndPosition < position + count)
++            // Requests larger than the circular buffer (e.g. the 128KB buffers Stream.CopyTo
++            // rents on .NET Core) are served in chunks, so that we never read more from the
++            // source than we have room to store - otherwise the excess would be silently lost.
++            // Leave room for the partial source blocks either side of the requested range.
++            int maxChunkSize = circularBuffer.MaxLength - 2 * sourceStream.BlockAlign;
++            int totalRead = 0;
++            while (totalRead < buffer.Length)
+             {
+-                int sourceReadCount = count;
+-                if (sourceReadCount % sourceStream.BlockAlign != 0)
++                int chunkSize = Math.Min(buffer.Length - totalRead, maxChunkSize);
++                int read = ReadChunk(buffer.Slice(totalRead, chunkSize));
++                totalRead += read;
++                if (read < chunkSize)
+                 {
+-                    sourceReadCount = (count + sourceStream.BlockAlign) - (count % sourceStream.BlockAlign);
++                    break; // end of source
+                 }
++            }
++            return totalRead;
++        }
++    }
+ 
+-                byte[] sourceBuf = GetSourceBuffer(sourceReadCount);
+-                int sourceRead = sourceStream.Read(sourceBuf, 0, sourceReadCount);
+-                circularBuffer.Write(sourceBuf.AsSpan(0, sourceRead));
+-                if (sourceRead == 0)
+-                {
+-                    // assume we have run out of data
+-                    break;
+-                }
++    private int ReadChunk(Span<byte> buffer)
++    {
++        int count = buffer.Length;
++        int sourceBlockAlign = sourceStream.BlockAlign;
++        // 1. attempt to fill the circular buffer with enough data to meet our request
++        while (BufferEndPosition < position + count)
++        {
++            // read only what we still need (rounded up to whole source blocks),
++            // and never more than will fit in the circular buffer
++            int needed = (int)(position + count - BufferEndPosition);
++            int sourceReadCount = needed + (sourceBlockAlign - needed % sourceBlockAlign) % sourceBlockAlign;
++            int freeSpace = circularBuffer.MaxLength - circularBuffer.Count;
++            freeSpace -= freeSpace % sourceBlockAlign;
++            sourceReadCount = Math.Min(sourceReadCount, freeSpace);
++            if (sourceReadCount == 0)
++            {
++                break;
+             }
+ 
+-            // 2. discard any unnecessary stuff from the start
+-            if (bufferStartPosition < position)
++            byte[] sourceBuf = GetSourceBuffer(sourceReadCount);
++            int sourceRead = sourceStream.Read(sourceBuf, 0, sourceReadCount);
++            circularBuffer.Write(sourceBuf.AsSpan(0, sourceRead));
++            if (sourceRead == 0)
+             {
+-                circularBuffer.Advance((int)(position - bufferStartPosition));
+-                bufferStartPosition = position;
++                // assume we have run out of data
++                break;
+             }
++        }
+ 
+-            // 3. now whatever is in the buffer we can return
+-            int bytesRead = circularBuffer.Read(buffer);
+-            position += bytesRead;
+-            // anything left in buffer is at start position
++        // 2. discard any unnecessary stuff from the start
++        if (bufferStartPosition < position)
++        {
++            circularBuffer.Advance((int)(position - bufferStartPosition));
+             bufferStartPosition = position;
+-
+-            return bytesRead;
+         }
++
++        // 3. now whatever is in the buffer we can return
++        int bytesRead = circularBuffer.Read(buffer);
++        position += bytesRead;
++        // anything left in buffer is at start position
++        bufferStartPosition = position;
++
++        return bytesRead;
+     }
+ 
+     /// <summary>
+diff --git a/tests/NAudio.Core.Tests/WaveStreams/BlockAlignmentReductionStreamTests.cs b/tests/NAudio.Core.Tests/WaveStreams/BlockAlignmentReductionStreamTests.cs
+index 54e8e95..aedaa7e 100644
+--- a/tests/NAudio.Core.Tests/WaveStreams/BlockAlignmentReductionStreamTests.cs
++++ b/tests/NAudio.Core.Tests/WaveStreams/BlockAlignmentReductionStreamTests.cs
+@@ -22,8 +22,8 @@ public class BlockAlignmentReductionStreamTests
+     public void CanReadNonBlockAlignedLengths()
+     {
+         BlockAlignedWaveStream inputStream = new BlockAlignedWaveStream(726, 80000);
+-        BlockAlignReductionStream blockStream = new BlockAlignReductionStream(inputStream);
+-
++        BlockAlignReductionStream blockStream = new BlockAlignReductionStream(inputStream);
++
+         byte[] inputBuffer = new byte[1024];
+         int read = blockStream.Read(inputBuffer, 0, 1024);
+         Assert.That(read, Is.EqualTo(1024), "bytes read 1");
+@@ -101,6 +101,41 @@ public class BlockAlignmentReductionStreamTests
+         Assert.Throws<ArgumentException>(() => blockStream.Position = 1001);
+     }
+ 
++    [Test]
++    public void ReadLargerThanInternalBufferDoesNotLoseData()
++    {
++        // Reproduces "Converting WAV to MP3 truncates file length": on .NET Core
++        // Stream.CopyTo rents a 128KB buffer, and AudioFileReader (float output from
++        // 16-bit mono) asks this stream for 64KB - more than the internal circular
++        // buffer (4 seconds = 64000 bytes at 16000 bytes/sec). The excess source data
++        // was silently discarded, truncating the output.
++        const int totalLength = 726 * 1000;
++        var inputStream = new BlockAlignedWaveStream(726, totalLength);
++        var blockStream = new BlockAlignReductionStream(inputStream);
++
++        var readBuffer = new byte[65536];
++        long totalRead = 0;
++        int read;
++        while ((read = blockStream.Read(readBuffer, 0, readBuffer.Length)) > 0)
++        {
++            CheckReadBuffer(readBuffer, read, (int)totalRead);
++            totalRead += read;
++        }
++        Assert.That(totalRead, Is.EqualTo(totalLength));
++        Assert.That(blockStream.Position, Is.EqualTo(totalLength));
++    }
++
++    [Test]
++    public void CopyToTransfersAllData()
++    {
++        const int totalLength = 726 * 1000;
++        var blockStream = new BlockAlignReductionStream(new BlockAlignedWaveStream(726, totalLength));
++        var output = new System.IO.MemoryStream();
++        blockStream.CopyTo(output, 131072);
++        Assert.That(output.Length, Is.EqualTo(totalLength));
++        CheckReadBuffer(output.ToArray(), totalLength, 0);
++    }
++
+     private void CheckReadBuffer(byte[] readBuffer, int count, int startPosition)
+     {
+         for (int n = 0; n < count; n++)

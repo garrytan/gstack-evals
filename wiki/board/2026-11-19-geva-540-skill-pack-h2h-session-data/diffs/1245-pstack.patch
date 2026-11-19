@@ -1,0 +1,123 @@
+diff --git a/content/file/utils.go b/content/file/utils.go
+index bd1f4af..a8a5cb7 100644
+--- a/content/file/utils.go
++++ b/content/file/utils.go
+@@ -191,11 +191,10 @@ func extractTarDirectory(dirPath, dirName string, r io.Reader, buf []byte, prese
+ 				err = os.Link(target, filePath)
+ 			}
+ 		case tar.TypeSymlink:
+-			var target string
+-			target, err = ensureLinkPath(dirPath, dirName, filePath, header.Linkname)
+-			if err != nil {
++			if _, err = ensureLinkPath(dirPath, dirName, filePath, header.Linkname); err != nil {
+ 				return err
+ 			}
++			target := header.Linkname
+ 			if err = os.Symlink(target, filePath); err != nil {
+ 				if !errors.Is(err, fs.ErrExist) {
+ 					return err
+@@ -260,7 +259,9 @@ func resolveRelToBase(baseAbs, baseRel, target string) (string, error) {
+ }
+ 
+ // ensureLinkPath ensures the target path pointed by the link is in the base
+-// path. It returns target path if validated.
++// path. It returns the target path resolved against the directory of the link,
++// so that callers such as os.Link do not resolve a relative target against the
++// process working directory.
+ func ensureLinkPath(baseAbs, baseRel, link, target string) (string, error) {
+ 	// resolve link
+ 	path := target
+@@ -271,7 +272,7 @@ func ensureLinkPath(baseAbs, baseRel, link, target string) (string, error) {
+ 	if _, err := resolveRelToBase(baseAbs, baseRel, path); err != nil {
+ 		return "", err
+ 	}
+-	return target, nil
++	return path, nil
+ }
+ 
+ // writeFile writes content to the file specified by the `path` parameter.
+diff --git a/content/file/utils_test.go b/content/file/utils_test.go
+index a379ff5..713ec1e 100644
+--- a/content/file/utils_test.go
++++ b/content/file/utils_test.go
+@@ -189,13 +189,13 @@ func Test_ensureLinkPath(t *testing.T) {
+ 			name:   "valid case (depth 1)",
+ 			link:   "hello world/foo/bar",
+ 			target: "fun",
+-			want:   "fun",
++			want:   "hello world/foo/fun",
+ 		},
+ 		{
+ 			name:   "valid case (depth 2)",
+ 			link:   "hello world/foo/bar/fun",
+ 			target: "../fun",
+-			want:   "../fun",
++			want:   "hello world/foo/fun",
+ 		},
+ 		{
+ 			name:    "invalid prefix",
+@@ -213,7 +213,7 @@ func Test_ensureLinkPath(t *testing.T) {
+ 			name:   "valid traversal",
+ 			link:   "hello world/foo/../foo/bar/../bar", // hello world/foo/bar
+ 			target: "../foo/../foo/fun",
+-			want:   "../foo/../foo/fun",
++			want:   "hello world/foo/fun",
+ 		},
+ 		{
+ 			name:    "complex traversal",
+@@ -376,6 +376,55 @@ func Test_extractTarDirectory_HardLink(t *testing.T) {
+ 			t.Error("extractTarDirectory() error = nil, wantErr = true")
+ 		}
+ 	})
++
++	t.Run("hard link with a relative path should not resolve against the working directory", func(t *testing.T) {
++		cwd := t.TempDir()
++		t.Chdir(cwd)
++		sentinelPath := filepath.Join(cwd, "sentinel.txt")
++		if err := os.WriteFile(sentinelPath, []byte("secret"), 0600); err != nil {
++			t.Fatal(err)
++		}
++
++		dirName := "base"
++		dirPath := filepath.Join(t.TempDir(), dirName)
++		buf := make([]byte, 1024)
++
++		tarData := createTar(t, []tarEntry{
++			{name: "base/", mode: os.ModeDir | 0777},
++			{name: "base/escape", linkname: "sentinel.txt", mode: 0666, isHardLink: true},
++		})
++
++		if err := extractTarDirectory(dirPath, dirName, bytes.NewReader(tarData), buf, false); err == nil {
++			t.Error("extractTarDirectory() error = nil, wantErr = true")
++		}
++		if _, err := os.Lstat(filepath.Join(dirPath, "escape")); !os.IsNotExist(err) {
++			t.Errorf("hard link to working directory file was created: %v", err)
++		}
++	})
++
++	t.Run("hard link with a relative path inside the base should be extracted", func(t *testing.T) {
++		dirName := "base"
++		dirPath := filepath.Join(t.TempDir(), dirName)
++		fileContent := "hello world"
++		buf := make([]byte, 1024)
++
++		tarData := createTar(t, []tarEntry{
++			{name: "base/", mode: os.ModeDir | 0777},
++			{name: "base/test.txt", content: fileContent, mode: 0666},
++			{name: "base/test_hardlink", linkname: "test.txt", mode: 0666, isHardLink: true},
++		})
++
++		if err := extractTarDirectory(dirPath, dirName, bytes.NewReader(tarData), buf, false); err != nil {
++			t.Fatalf("extractTarDirectory() error = %v", err)
++		}
++		gotContent, err := os.ReadFile(filepath.Join(dirPath, "test_hardlink"))
++		if err != nil {
++			t.Fatal(err)
++		}
++		if string(gotContent) != fileContent {
++			t.Errorf("file content = %s, want %s", gotContent, fileContent)
++		}
++	})
+ }
+ 
+ type tarEntry struct {

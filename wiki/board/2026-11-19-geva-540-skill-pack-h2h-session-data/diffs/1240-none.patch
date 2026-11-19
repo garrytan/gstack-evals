@@ -1,0 +1,53 @@
+diff --git a/pkg/utils/utils.go b/pkg/utils/utils.go
+index 72b57f2..f613ae0 100644
+--- a/pkg/utils/utils.go
++++ b/pkg/utils/utils.go
+@@ -301,8 +301,17 @@ func SanitizeFilePath(path string, safedir string) (string, error) {
+ 	if normalizedPath != path {
+ 		return "", errors.New("invalid path")
+ 	}
+-	// check if the path is under the safe directory
+-	if !strings.HasPrefix(normalizedPath, safedir) {
++	// check if the path is under the safe directory, enforcing a path
++	// separator boundary so that sibling directories sharing the same
++	// prefix (e.g. /packages-extra vs /packages) are rejected.
++	cleanSafeDir := filepath.Clean(safedir)
++	rel, err := filepath.Rel(cleanSafeDir, normalizedPath)
++	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) ||
++		filepath.IsAbs(rel) {
++		return "", fmt.Errorf("path %s is not under the safe directory %s", normalizedPath, safedir)
++	}
++	if normalizedPath != cleanSafeDir &&
++		!strings.HasPrefix(normalizedPath, strings.TrimSuffix(cleanSafeDir, string(filepath.Separator))+string(filepath.Separator)) {
+ 		return "", fmt.Errorf("path %s is not under the safe directory %s", normalizedPath, safedir)
+ 	}
+ 	return normalizedPath, nil
+diff --git a/pkg/utils/utils_test.go b/pkg/utils/utils_test.go
+index be4cf74..326f8af 100644
+--- a/pkg/utils/utils_test.go
++++ b/pkg/utils/utils_test.go
+@@ -250,3 +250,24 @@ func TestDownloadUrl_OverwriteAllowed(t *testing.T) {
+ 		t.Fatalf("mode after overwrite: got %#o, want 0600", mode)
+ 	}
+ }
++
++func TestSanitizeFilePathBoundary(t *testing.T) {
++	cases := []struct {
++		path, safe string
++		ok         bool
++	}{
++		{"/packages/foo", "/packages", true},
++		{"/packages/a/b", "/packages/", true},
++		{"/packages", "/packages", true},
++		{"/packages-extra/evil", "/packages", false},
++		{"/packagesevil", "/packages", false},
++		{"/other/x", "/packages", false},
++		{"/x", "/", true},
++	}
++	for _, c := range cases {
++		_, err := SanitizeFilePath(c.path, c.safe)
++		if (err == nil) != c.ok {
++			t.Errorf("SanitizeFilePath(%q, %q) err=%v, want ok=%v", c.path, c.safe, err, c.ok)
++		}
++	}
++}

@@ -1,0 +1,60 @@
+diff --git a/src/items.rs b/src/items.rs
+index 775c763..dbaf913 100644
+--- a/src/items.rs
++++ b/src/items.rs
+@@ -2586,13 +2586,15 @@ fn rewrite_fn_base(
+             .map_or(false, |last_line| last_line.contains("//"));
+ 
+         if context.config.style_edition() >= StyleEdition::Edition2024 {
+-            if closing_paren_overflow_max_width {
+-                result.push(')');
++            if params_last_line_contains_comment {
++                // The closing paren must go on a new line, otherwise it would be
++                // commented out.
+                 result.push_str(&indent.to_string_with_newline(context.config));
++                result.push(')');
+                 no_params_and_over_max_width = true;
+-            } else if params_last_line_contains_comment {
+-                result.push_str(&indent.to_string_with_newline(context.config));
++            } else if closing_paren_overflow_max_width {
+                 result.push(')');
++                result.push_str(&indent.to_string_with_newline(context.config));
+                 no_params_and_over_max_width = true;
+             } else {
+                 result.push(')');
+diff --git a/tests/source/fn_param_comment_long_ret_type.rs b/tests/source/fn_param_comment_long_ret_type.rs
+new file mode 100644
+index 0000000..89c8243
+--- /dev/null
++++ b/tests/source/fn_param_comment_long_ret_type.rs
+@@ -0,0 +1,13 @@
++// rustfmt-style_edition: 2024
++
++pub async fn foo(
++    // OriginalUri(original_uri): OriginalUri,
++) -> Option<Option<Option<Option<String>>>> {
++    None
++}
++
++pub async fn bar(
++    // OriginalUri(original_uri): OriginalUri,
++) -> Option<String> {
++    None
++}
+diff --git a/tests/target/fn_param_comment_long_ret_type.rs b/tests/target/fn_param_comment_long_ret_type.rs
+new file mode 100644
+index 0000000..504ce01
+--- /dev/null
++++ b/tests/target/fn_param_comment_long_ret_type.rs
+@@ -0,0 +1,11 @@
++// rustfmt-style_edition: 2024
++
++pub async fn foo(// OriginalUri(original_uri): OriginalUri,
++) -> Option<Option<Option<Option<String>>>> {
++    None
++}
++
++pub async fn bar(// OriginalUri(original_uri): OriginalUri,
++) -> Option<String> {
++    None
++}

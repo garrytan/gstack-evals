@@ -1,0 +1,76 @@
+diff --git a/agentscope-harness/src/main/java/io/agentscope/harness/agent/filesystem/remote/RemoteFilesystem.java b/agentscope-harness/src/main/java/io/agentscope/harness/agent/filesystem/remote/RemoteFilesystem.java
+index 9c34f07..742aad2 100644
+--- a/agentscope-harness/src/main/java/io/agentscope/harness/agent/filesystem/remote/RemoteFilesystem.java
++++ b/agentscope-harness/src/main/java/io/agentscope/harness/agent/filesystem/remote/RemoteFilesystem.java
+@@ -425,8 +425,19 @@ public class RemoteFilesystem implements AbstractFilesystem {
+                                         + (effectivePattern.startsWith("**")
+                                                 ? effectivePattern
+                                                 : "**/" + effectivePattern));
+-        PathMatcher directMatcher =
+-                FileSystems.getDefault().getPathMatcher("glob:" + effectivePattern);
++        // Java NIO's PathMatcher requires at least one separator for `**/<x>`, so files at the
++        // search root (e.g. "hello.txt") never satisfy patterns like `**/hello.txt` or `**/*`.
++        // Mirror LocalFilesystem/CompositeFilesystem: strip the leading `**/` for the direct
++        // matcher so depth-1 entries match too.
++        String directExpr;
++        if (effectivePattern.startsWith("**/")) {
++            directExpr = effectivePattern.substring(3);
++        } else if (effectivePattern.equals("**")) {
++            directExpr = "*";
++        } else {
++            directExpr = effectivePattern;
++        }
++        PathMatcher directMatcher = FileSystems.getDefault().getPathMatcher("glob:" + directExpr);
+ 
+         // Fast path: index has entries for this prefix
+         if (index != null && index.hasPrefix(normalizedPath)) {
+diff --git a/agentscope-harness/src/test/java/io/agentscope/harness/agent/filesystem/FilesystemGlobTest.java b/agentscope-harness/src/test/java/io/agentscope/harness/agent/filesystem/FilesystemGlobTest.java
+index 7121d67..64214d7 100644
+--- a/agentscope-harness/src/test/java/io/agentscope/harness/agent/filesystem/FilesystemGlobTest.java
++++ b/agentscope-harness/src/test/java/io/agentscope/harness/agent/filesystem/FilesystemGlobTest.java
+@@ -76,4 +76,45 @@ class FilesystemGlobTest {
+                 Set.of("/agents/demo-session.log.jsonl", "/agents/sub/demo-session.log.jsonl"),
+                 paths);
+     }
++
++    @Test
++    void remote_glob_recursivePattern_matchesFileAtSearchRoot() {
++        InMemoryStore store = new InMemoryStore();
++        List<String> ns = List.of("test-ns");
++        RemoteFilesystem fs = new RemoteFilesystem(store, ns);
++        assertTrue(fs.write(RT, "/hello.txt", "hello").isSuccess());
++        assertTrue(fs.write(RT, "/reports/hello.txt", "hello").isSuccess());
++        assertTrue(fs.write(RT, "/reports/archive/hello.txt", "hello").isSuccess());
++        assertTrue(fs.write(RT, "/reports/report.txt", "report").isSuccess());
++        assertTrue(fs.write(RT, "/reports/notes.md", "notes").isSuccess());
++
++        assertEquals(
++                Set.of("/hello.txt", "/reports/hello.txt", "/reports/archive/hello.txt"),
++                globPaths(fs.glob(RT, "**/hello.txt", "/")));
++        assertEquals(
++                Set.of(
++                        "/hello.txt",
++                        "/reports/hello.txt",
++                        "/reports/archive/hello.txt",
++                        "/reports/report.txt"),
++                globPaths(fs.glob(RT, "**/*.txt", "/")));
++        assertEquals(
++                Set.of("/reports/hello.txt", "/reports/archive/hello.txt"),
++                globPaths(fs.glob(RT, "**/hello.txt", "/reports")));
++        assertEquals(
++                Set.of(
++                        "/hello.txt",
++                        "/reports/hello.txt",
++                        "/reports/archive/hello.txt",
++                        "/reports/report.txt",
++                        "/reports/notes.md"),
++                globPaths(fs.glob(RT, "**", "/")));
++    }
++
++    private static Set<String> globPaths(GlobResult result) {
++        assertTrue(result.isSuccess());
++        return result.matches().stream()
++                .map(fi -> fi.path().replace('\\', '/'))
++                .collect(Collectors.toSet());
++    }
+ }

@@ -1,0 +1,95 @@
+diff --git a/unmarshaler.go b/unmarshaler.go
+index 189be52..634cdb9 100644
+--- a/unmarshaler.go
++++ b/unmarshaler.go
+@@ -62,8 +62,11 @@ func (d *Decoder) DisallowUnknownFields() *Decoder {
+ // that don't have a straightforward TOML representation to provide their own
+ // decoding logic.
+ //
+-// Currently, types can only decode from a single value. Tables and array tables
+-// are not supported.
++// When the target of a value implements the interface, UnmarshalTOML receives
++// that value's node. When the document root, a table, or an array table element
++// implements it, UnmarshalTOML is called once per key-value expression of that
++// table, in document order, with the KeyValue node (see Node.Key and
++// Node.Value).
+ //
+ // *Unstable:* This method does not follow the compatibility guarantees of
+ // semver. It can be changed or removed without a new major version being
+@@ -1036,6 +1039,12 @@ func (d *decoder) unmarshalString(value *unstable.Node, v reflect.Value) error {
+ }
+ 
+ func (d *decoder) handleKeyValue(expr *unstable.Node, v reflect.Value) (reflect.Value, error) {
++	if d.unmarshalerInterface && v.CanAddr() && v.Addr().CanInterface() {
++		if outi, ok := v.Addr().Interface().(unstable.Unmarshaler); ok {
++			return reflect.Value{}, outi.UnmarshalTOML(expr)
++		}
++	}
++
+ 	d.strict.EnterKeyValue(expr)
+ 
+ 	v, err := d.handleKeyValueInner(expr.Key(), expr.Value(), v)
+diff --git a/unmarshaler_test.go b/unmarshaler_test.go
+index 6ee6636..b7f0642 100644
+--- a/unmarshaler_test.go
++++ b/unmarshaler_test.go
+@@ -3998,3 +3998,59 @@ foo = "bar"`,
+ 		})
+ 	}
+ }
++
++type orderedKeys struct {
++	Keys []string
++}
++
++func (o *orderedKeys) UnmarshalTOML(value *unstable.Node) error {
++	if value.Kind != unstable.KeyValue {
++		return fmt.Errorf("expected KeyValue node, got %s", value.Kind)
++	}
++	var parts []string
++	for it := value.Key(); it.Next(); {
++		parts = append(parts, string(it.Node().Data))
++	}
++	o.Keys = append(o.Keys, strings.Join(parts, ".")+"="+string(value.Value().Data))
++	return nil
++}
++
++func TestUnmarshal_CustomUnmarshalerTables(t *testing.T) {
++	t.Run("root", func(t *testing.T) {
++		var d orderedKeys
++		err := toml.NewDecoder(strings.NewReader("z = 1\na.b = \"x\"\nm = 2")).
++			EnableUnmarshalerInterface().Decode(&d)
++		assert.NoError(t, err)
++		assert.Equal(t, []string{"z=1", "a.b=x", "m=2"}, d.Keys)
++	})
++
++	t.Run("table and array table", func(t *testing.T) {
++		var d struct {
++			T   orderedKeys
++			Arr []orderedKeys
++			N   int
++		}
++		doc := "n = 3\n[t]\nb = 1\na = 2\n[[arr]]\ny = 1\n[[arr]]\nx = 2\n"
++		err := toml.NewDecoder(strings.NewReader(doc)).
++			EnableUnmarshalerInterface().Decode(&d)
++		assert.NoError(t, err)
++		assert.Equal(t, 3, d.N)
++		assert.Equal(t, []string{"b=1", "a=2"}, d.T.Keys)
++		assert.Equal(t, 2, len(d.Arr))
++		assert.Equal(t, []string{"y=1"}, d.Arr[0].Keys)
++		assert.Equal(t, []string{"x=2"}, d.Arr[1].Keys)
++	})
++
++	t.Run("value node error is returned", func(t *testing.T) {
++		err := toml.NewDecoder(strings.NewReader("a = [1]")).
++			EnableUnmarshalerInterface().Decode(&struct{ A orderedKeys }{})
++		assert.Error(t, err)
++	})
++
++	t.Run("disabled", func(t *testing.T) {
++		var d orderedKeys
++		err := toml.NewDecoder(strings.NewReader("keys = [\"a\"]")).Decode(&d)
++		assert.NoError(t, err)
++		assert.Equal(t, []string{"a"}, d.Keys)
++	})
++}

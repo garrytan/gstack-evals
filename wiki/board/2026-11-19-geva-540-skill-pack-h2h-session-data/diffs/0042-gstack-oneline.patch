@@ -1,0 +1,32 @@
+diff --git a/agentscope-core/src/main/java/io/agentscope/core/ReActAgent.java b/agentscope-core/src/main/java/io/agentscope/core/ReActAgent.java
+index 6778e17..c06b150 100644
+--- a/agentscope-core/src/main/java/io/agentscope/core/ReActAgent.java
++++ b/agentscope-core/src/main/java/io/agentscope/core/ReActAgent.java
+@@ -3550,6 +3550,7 @@ public class ReActAgent extends AgentBase implements AutoCloseable {
+                             AssistantMessage.builder()
+                                     .name(getName())
+                                     .content(TextBlock.builder().text(recoveryText).build())
++                                    .generateReason(GenerateReason.INTERRUPTED)
+                                     .build();
+                     scope.state.contextMutable().add(recoveryMsg);
+                     return saveStateToSession(scope)
+diff --git a/agentscope-core/src/test/java/io/agentscope/core/agent/ReActAgentPerSessionStateTest.java b/agentscope-core/src/test/java/io/agentscope/core/agent/ReActAgentPerSessionStateTest.java
+index 5d88b1f..3e8292e 100644
+--- a/agentscope-core/src/test/java/io/agentscope/core/agent/ReActAgentPerSessionStateTest.java
++++ b/agentscope-core/src/test/java/io/agentscope/core/agent/ReActAgentPerSessionStateTest.java
+@@ -26,6 +26,7 @@ import io.agentscope.core.event.AgentEndEvent;
+ import io.agentscope.core.event.AgentEvent;
+ import io.agentscope.core.event.AgentStartEvent;
+ import io.agentscope.core.message.ContentBlock;
++import io.agentscope.core.message.GenerateReason;
+ import io.agentscope.core.message.Msg;
+ import io.agentscope.core.message.MsgRole;
+ import io.agentscope.core.message.TextBlock;
+@@ -145,6 +146,7 @@ class ReActAgentPerSessionStateTest {
+         assertEquals(
+                 "I noticed that you have interrupted me. What can I do for you?",
+                 reply.getTextContent());
++        assertEquals(GenerateReason.INTERRUPTED, reply.getGenerateReason());
+ 
+         ReActAgent reborn = agent(store);
+         List<String> texts = allText(reborn.getAgentState("u1", "sessA"));

@@ -1,0 +1,16 @@
+set -euo pipefail
+R=~/h2h/run/geva540-s2-7700a8f
+cd $R
+mkdir -p rerun
+rm -rf rerun/ledger-host && mkdir -p rerun/ledger-host && cp -a ~/h2h/record ~/h2h/ledger rerun/ledger-host/
+{
+  while read -r s; do echo "out/sessions/$s/tree.tar"; done < analysis/rerun-sample.txt
+  find out/sessions -type f ! -name tree.tar
+  find out/records out/scores out/workers stage analysis driver rerun/ledger-host -type f
+  find pub -type f ! -path "pub/rows/*" ! -path "pub/log/*"
+  ls out/plan.json out/journal.jsonl serve-urls.txt
+} | sort -u > rerun/FILES
+xargs -a rerun/FILES -d '\n' -P 32 -n 64 sha256sum | sort -k2 > rerun/MANIFEST.sha256
+echo rerun/FILES >> /dev/null
+wc -l rerun/FILES rerun/MANIFEST.sha256
+du -ch $(cat rerun/FILES) 2>/dev/null | tail -1

@@ -1,0 +1,117 @@
+diff --git a/Terminal.Gui/Views/Selectors/OptionSelectorTEnum.cs b/Terminal.Gui/Views/Selectors/OptionSelectorTEnum.cs
+index 56bcb96..1e5b534 100644
+--- a/Terminal.Gui/Views/Selectors/OptionSelectorTEnum.cs
++++ b/Terminal.Gui/Views/Selectors/OptionSelectorTEnum.cs
+@@ -10,7 +10,25 @@ public sealed class OptionSelector<TEnum> : OptionSelector, IValue where TEnum :
+     /// <summary>
+     ///     Initializes a new instance of the <see cref="OptionSelector{TEnum}"/> class.
+     /// </summary>
+-    public OptionSelector () => Labels = Enum.GetValues<TEnum> ().Select (f => f.ToString ()).ToArray ();
++    public OptionSelector ()
++    {
++        TEnum [] enumValues = Enum.GetValues<TEnum> ();
++        int [] values = enumValues.Select (f => Convert.ToInt32 (f)).ToArray ();
++
++        // Use the actual enum values (not 0..N-1) so non-contiguous enums map correctly.
++        // Note: this.Values setter throws by design; set the base property directly.
++        base.Values = values;
++
++        // The base constructor defaults Value to 0, which may not be a member of TEnum.
++        if (base.Value is { } current && !values.Contains (current))
++        {
++            base.Value = values.Length > 0 ? values [0] : null;
++        }
++
++        // Setting Labels creates the CheckBoxes and updates their checked state so that a
++        // freshly-constructed selector reflects Value without requiring UpdateChecked ().
++        Labels = enumValues.Select (f => f.ToString ()).ToArray ();
++    }
+ 
+     /// <summary>
+     ///     Gets or sets the value of the selected option.
+diff --git a/Terminal.Gui/Views/Selectors/SelectorBase.cs b/Terminal.Gui/Views/Selectors/SelectorBase.cs
+index 04f4315..418f3b7 100644
+--- a/Terminal.Gui/Views/Selectors/SelectorBase.cs
++++ b/Terminal.Gui/Views/Selectors/SelectorBase.cs
+@@ -379,6 +379,7 @@ public abstract class SelectorBase : View, IOrientation, IValue<int?>
+             }
+             field = value;
+             CreateSubViews ();
++            UpdateChecked ();
+         }
+     }
+ 
+@@ -535,7 +536,7 @@ public abstract class SelectorBase : View, IOrientation, IValue<int?>
+         // total width via PosAlign.CalculateMinDimension, which reads Frame.Width.
+         // Without this, newly-created subviews have Frame.Width == 0 on the first
+         // layout pass, causing the selector to be sized too narrow.
+-        if (Orientation != Orientation.Horizontal || SubViews.Count <= 0)
++        if (Orientation != Orientation.Horizontal || SubViews.Count == 0)
+         {
+             return;
+         }
+diff --git a/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs b/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs
+index d22b41f..298bf6f 100644
+--- a/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs
++++ b/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs
+@@ -1072,3 +1072,60 @@ public class OptionSelectorTests
+ 
+     #endregion
+ }
++
++public class OptionSelectorTEnumInitialCheckedTests
++{
++    private enum TestEnum
++    {
++        Zero,
++        One,
++        Two
++    }
++
++    private enum NonZeroEnum
++    {
++        Ten = 10,
++        Twenty = 20
++    }
++
++    [Fact]
++    public void New_GenericOptionSelector_Checks_CheckBox_For_Default_Value ()
++    {
++        OptionSelector<TestEnum> selector = new ();
++
++        Assert.Equal (TestEnum.Zero, selector.Value);
++        CheckBox [] checkBoxes = selector.SubViews.OfType<CheckBox> ().ToArray ();
++        Assert.Equal (3, checkBoxes.Length);
++        Assert.Equal (CheckState.Checked, checkBoxes [0].Value);
++        Assert.Equal (CheckState.UnChecked, checkBoxes [1].Value);
++        Assert.Equal (CheckState.UnChecked, checkBoxes [2].Value);
++    }
++
++    [Fact]
++    public void New_GenericOptionSelector_NonZeroEnum_Checks_First ()
++    {
++        OptionSelector<NonZeroEnum> selector = new ();
++
++        Assert.Equal (NonZeroEnum.Ten, selector.Value);
++        CheckBox [] checkBoxes = selector.SubViews.OfType<CheckBox> ().ToArray ();
++        Assert.Equal (CheckState.Checked, checkBoxes [0].Value);
++        Assert.Equal (CheckState.UnChecked, checkBoxes [1].Value);
++
++        selector.Value = NonZeroEnum.Twenty;
++        Assert.Equal (CheckState.UnChecked, checkBoxes [0].Value);
++        Assert.Equal (CheckState.Checked, checkBoxes [1].Value);
++    }
++
++    [Fact]
++    public void Changing_TabBehavior_Preserves_Checked_State ()
++    {
++        OptionSelector<TestEnum> selector = new () { Value = TestEnum.Two };
++
++        selector.TabBehavior = TabBehavior.NoStop;
++
++        CheckBox [] checkBoxes = selector.SubViews.OfType<CheckBox> ().ToArray ();
++        Assert.Equal (CheckState.UnChecked, checkBoxes [0].Value);
++        Assert.Equal (CheckState.UnChecked, checkBoxes [1].Value);
++        Assert.Equal (CheckState.Checked, checkBoxes [2].Value);
++    }
++}

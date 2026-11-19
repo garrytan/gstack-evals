@@ -1,0 +1,60 @@
+diff --git a/.chloggen/k8sattributes-service-name-rbac.yaml b/.chloggen/k8sattributes-service-name-rbac.yaml
+new file mode 100644
+index 0000000..95d1f09
+--- /dev/null
++++ b/.chloggen/k8sattributes-service-name-rbac.yaml
+@@ -0,0 +1,5 @@
++change_type: enhancement
++component: collector
++note: Add automatic RBAC for `replicasets` when the k8sattributes processor extracts `service.name`.
++issues: [4000]
++subtext: The `service.name` attribute may be derived from `k8s.deployment.name`, which requires access to replicasets.
+diff --git a/internal/components/processors/k8sattribute.go b/internal/components/processors/k8sattribute.go
+index 84a76c3..3e84d1d 100644
+--- a/internal/components/processors/k8sattribute.go
++++ b/internal/components/processors/k8sattribute.go
+@@ -53,7 +53,7 @@ func GenerateK8SAttrRbacRules(_ logr.Logger, config K8sAttributeConfig) ([]rbacv
+ 	addedReplicasetPolicy := false
+ 	for _, m := range config.Extract.Metadata {
+ 		metadataField := fmt.Sprint(m)
+-		if (metadataField == "k8s.deployment.uid" || metadataField == "k8s.deployment.name") && !addedReplicasetPolicy {
++		if (metadataField == "k8s.deployment.uid" || metadataField == "k8s.deployment.name" || metadataField == "service.name") && !addedReplicasetPolicy {
+ 			prs = append(prs, replicasetPolicy)
+ 			addedReplicasetPolicy = true
+ 		} else if strings.Contains(metadataField, "k8s.node") {
+diff --git a/internal/components/processors/k8sattribute_test.go b/internal/components/processors/k8sattribute_test.go
+index 95db1c1..a76e018 100644
+--- a/internal/components/processors/k8sattribute_test.go
++++ b/internal/components/processors/k8sattribute_test.go
+@@ -73,6 +73,31 @@ func TestGenerateK8SAttrRbacRules(t *testing.T) {
+ 			},
+ 			wantErr: assert.NoError,
+ 		},
++		{
++			name: "config with service.name metadata",
++			args: args{
++				config: map[string]interface{}{
++					"extract": map[string]interface{}{
++						"metadata":    []string{"service.name"},
++						"labels":      []interface{}{},
++						"annotations": []interface{}{},
++					},
++				},
++			},
++			want: []rbacv1.PolicyRule{
++				{
++					APIGroups: []string{""},
++					Resources: []string{"pods", "namespaces"},
++					Verbs:     []string{"get", "watch", "list"},
++				},
++				{
++					APIGroups: []string{"apps"},
++					Resources: []string{"replicasets"},
++					Verbs:     []string{"get", "watch", "list"},
++				},
++			},
++			wantErr: assert.NoError,
++		},
+ 		{
+ 			name: "config with node metadata",
+ 			args: args{

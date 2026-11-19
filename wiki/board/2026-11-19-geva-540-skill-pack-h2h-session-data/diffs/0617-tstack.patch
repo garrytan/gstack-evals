@@ -1,0 +1,108 @@
+diff --git a/aws/resources/backup_vault.go b/aws/resources/backup_vault.go
+index 02410ec..f283f59 100644
+--- a/aws/resources/backup_vault.go
++++ b/aws/resources/backup_vault.go
+@@ -18,6 +18,7 @@ type BackupVaultAPI interface {
+ 	DeleteRecoveryPoint(ctx context.Context, params *backup.DeleteRecoveryPointInput, optFns ...func(*backup.Options)) (*backup.DeleteRecoveryPointOutput, error)
+ 	ListBackupVaults(ctx context.Context, params *backup.ListBackupVaultsInput, optFns ...func(*backup.Options)) (*backup.ListBackupVaultsOutput, error)
+ 	ListRecoveryPointsByBackupVault(ctx context.Context, params *backup.ListRecoveryPointsByBackupVaultInput, optFns ...func(*backup.Options)) (*backup.ListRecoveryPointsByBackupVaultOutput, error)
++	ListTags(ctx context.Context, params *backup.ListTagsInput, optFns ...func(*backup.Options)) (*backup.ListTagsOutput, error)
+ }
+ 
+ // NewBackupVault creates a new BackupVault resource using the generic resource pattern.
+@@ -48,9 +49,15 @@ func listBackupVaults(ctx context.Context, client BackupVaultAPI, scope resource
+ 		}
+ 
+ 		for _, backupVault := range page.BackupVaultList {
++			tags, err := getBackupVaultTags(ctx, client, backupVault.BackupVaultArn)
++			if err != nil {
++				return nil, err
++			}
++
+ 			if cfg.ShouldInclude(config.ResourceValue{
+ 				Name: backupVault.BackupVaultName,
+ 				Time: backupVault.CreationDate,
++				Tags: tags,
+ 			}) {
+ 				names = append(names, backupVault.BackupVaultName)
+ 			}
+@@ -60,6 +67,23 @@ func listBackupVaults(ctx context.Context, client BackupVaultAPI, scope resource
+ 	return names, nil
+ }
+ 
++// getBackupVaultTags retrieves all tags of a backup vault.
++func getBackupVaultTags(ctx context.Context, client BackupVaultAPI, arn *string) (map[string]string, error) {
++	tags := make(map[string]string)
++	paginator := backup.NewListTagsPaginator(client, &backup.ListTagsInput{ResourceArn: arn})
++	for paginator.HasMorePages() {
++		page, err := paginator.NextPage(ctx)
++		if err != nil {
++			logging.Debugf("[Failed] listing tags of backup vault %s: %v", aws.ToString(arn), err)
++			return nil, err
++		}
++		for k, v := range page.Tags {
++			tags[k] = v
++		}
++	}
++	return tags, nil
++}
++
+ // nukeRecoveryPoints deletes all recovery points in a backup vault.
+ func nukeRecoveryPoints(ctx context.Context, client BackupVaultAPI, name *string) error {
+ 	vaultName := aws.ToString(name)
+diff --git a/aws/resources/backup_vault_test.go b/aws/resources/backup_vault_test.go
+index 0d59726..a6de642 100644
+--- a/aws/resources/backup_vault_test.go
++++ b/aws/resources/backup_vault_test.go
+@@ -24,6 +24,13 @@ type mockBackupVaultClient struct {
+ 	ListRecoveryPointsPages  []backup.ListRecoveryPointsByBackupVaultOutput
+ 	listRecoveryPointsIndex  int
+ 	DeleteRecoveryPointCount atomic.Int32
++
++	// Tags keyed by backup vault ARN
++	Tags map[string]map[string]string
++}
++
++func (m *mockBackupVaultClient) ListTags(ctx context.Context, params *backup.ListTagsInput, optFns ...func(*backup.Options)) (*backup.ListTagsOutput, error) {
++	return &backup.ListTagsOutput{Tags: m.Tags[aws.ToString(params.ResourceArn)]}, nil
+ }
+ 
+ func (m *mockBackupVaultClient) DeleteBackupVault(ctx context.Context, params *backup.DeleteBackupVaultInput, optFns ...func(*backup.Options)) (*backup.DeleteBackupVaultOutput, error) {
+@@ -84,6 +91,20 @@ func TestListBackupVaults(t *testing.T) {
+ 				}},
+ 			expected: []string{},
+ 		},
++		"tagExclusionFilter": {
++			configObj: config.ResourceType{
++				ExcludeRule: config.FilterRule{
++					Tags: map[string]config.Expression{"foo": {RE: *regexp.MustCompile("bar")}},
++				}},
++			expected: []string{testName2},
++		},
++		"tagInclusionFilter": {
++			configObj: config.ResourceType{
++				IncludeRule: config.FilterRule{
++					Tags: map[string]config.Expression{"foo": {RE: *regexp.MustCompile("bar")}},
++				}},
++			expected: []string{testName1},
++		},
+ 	}
+ 
+ 	for name, tc := range tests {
+@@ -92,11 +113,14 @@ func TestListBackupVaults(t *testing.T) {
+ 				ListBackupVaultsPages: []backup.ListBackupVaultsOutput{
+ 					{
+ 						BackupVaultList: []types.BackupVaultListMember{
+-							{BackupVaultName: aws.String(testName1), CreationDate: aws.Time(now)},
+-							{BackupVaultName: aws.String(testName2), CreationDate: aws.Time(now.Add(1))},
++							{BackupVaultName: aws.String(testName1), BackupVaultArn: aws.String("arn1"), CreationDate: aws.Time(now)},
++							{BackupVaultName: aws.String(testName2), BackupVaultArn: aws.String("arn2"), CreationDate: aws.Time(now.Add(1))},
+ 						},
+ 					},
+ 				},
++				Tags: map[string]map[string]string{
++					"arn1": {"foo": "bar"},
++				},
+ 			}
+ 
+ 			names, err := listBackupVaults(context.Background(), mock, resource.Scope{}, tc.configObj)

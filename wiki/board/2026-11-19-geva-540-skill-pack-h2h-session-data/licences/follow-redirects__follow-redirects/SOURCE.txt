@@ -1,0 +1,3 @@
+https://github.com/follow-redirects/follow-redirects at ba44187feb68e8bdc7f293f557022019217967ac
+Licence at the freeze-date read (prereg o-, b1- and b2-licences.json): MIT
+Root licence and notice files at that commit: LICENSE

@@ -1,0 +1,97 @@
+diff --git a/rule/use_waitgroup_go.go b/rule/use_waitgroup_go.go
+index 6f04fd6..1e47eab 100644
+--- a/rule/use_waitgroup_go.go
++++ b/rule/use_waitgroup_go.go
+@@ -98,15 +98,8 @@ func (w *lintUseWaitGroupGo) analyzeBlock(b *ast.BlockStmt) {
+ 		// we will iterate from the (i+1)-th statement up to the last statement of block.List
+ 		for i++; i < len(stmts); i++ {
+ 			stmt := stmts[i]
+-			// looking for a go statement
+-			goStmt, ok := stmt.(*ast.GoStmt)
+-			if !ok {
+-				continue // not a go statement
+-			}
+-
+-			// here we found a the go statement
+-			// now let's check is the go statement is applied to a function literal that contains a wg.Done
+-			if !w.hasCallToWgDone(goStmt) {
++			// looking for a go statement, or a loop whose body contains such a go statement
++			if !w.isGoWithWgDone(stmt) && !w.isLoopWithGoWithWgDone(stmt) {
+ 				continue
+ 			}
+ 
+@@ -122,6 +115,36 @@ func (w *lintUseWaitGroupGo) analyzeBlock(b *ast.BlockStmt) {
+ 	}
+ }
+ 
++// isGoWithWgDone returns true if the given statement is a go statement
++// running a function literal containing a call to wg.Done, false otherwise.
++func (w *lintUseWaitGroupGo) isGoWithWgDone(stmt ast.Stmt) bool {
++	goStmt, ok := stmt.(*ast.GoStmt)
++	return ok && w.hasCallToWgDone(goStmt)
++}
++
++// isLoopWithGoWithWgDone returns true if the given statement is a for or range loop
++// whose body contains (as a direct statement) a go statement running a function literal
++// containing a call to wg.Done, false otherwise.
++func (w *lintUseWaitGroupGo) isLoopWithGoWithWgDone(stmt ast.Stmt) bool {
++	var body *ast.BlockStmt
++	switch loop := stmt.(type) {
++	case *ast.ForStmt:
++		body = loop.Body
++	case *ast.RangeStmt:
++		body = loop.Body
++	default:
++		return false
++	}
++
++	for _, s := range body.List {
++		if w.isGoWithWgDone(s) {
++			return true
++		}
++	}
++
++	return false
++}
++
+ // hasCallToWgDone returns true if the given go statement
+ // calls to a function literal containing a call to wg.Done, false otherwise.
+ func (*lintUseWaitGroupGo) hasCallToWgDone(goStmt *ast.GoStmt) bool {
+diff --git a/testdata/go1.25/use_waitgroup_go.go b/testdata/go1.25/use_waitgroup_go.go
+index a827a49..d6ceff5 100644
+--- a/testdata/go1.25/use_waitgroup_go.go
++++ b/testdata/go1.25/use_waitgroup_go.go
+@@ -50,4 +50,33 @@ func useWaitGroupGo() {
+ 		}
+ 	}()
+ 	wg.Wait()
++
++	// from https://github.com/kubernetes-sigs/kueue/pull/9892
++	wg.Add(int(jobs)) // MATCH /replace wg.Add()...go {...wg.Done()...} with wg.Go(...)/
++
++	for range int(jobs) {
++		go func() {
++			defer wg.Done()
++			doSomething()
++		}()
++	}
++
++	wg.Wait()
++
++	wg.Add(n) // MATCH /replace wg.Add()...go {...wg.Done()...} with wg.Go(...)/
++	for i := 0; i < n; i++ {
++		go func() {
++			defer wg.Done()
++			doSomething()
++		}()
++	}
++
++	wg.Wait()
++
++	wg.Add(n)
++	for range n {
++		doSomething()
++	}
++
++	wg.Wait()
+ }

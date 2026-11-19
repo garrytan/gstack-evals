@@ -1,0 +1,28 @@
+diff --git a/src/Spectre.Console/Prompts/TextPrompt.cs b/src/Spectre.Console/Prompts/TextPrompt.cs
+index 5418ef8..cfe4f58 100644
+--- a/src/Spectre.Console/Prompts/TextPrompt.cs
++++ b/src/Spectre.Console/Prompts/TextPrompt.cs
+@@ -175,7 +175,8 @@ public sealed class TextPrompt<T> : IPrompt<T>, IHasCulture
+                 T? result;
+                 if (Choices.Count > 0)
+                 {
+-                    if (choiceMap.TryGetValue(input, out result) && result != null)
++                    if ((choiceMap.TryGetValue(input, out result) ||
++                        (_comparer == null && TryGetChoiceIgnoreCase(choiceMap, input, out result))) && result != null)
+                     {
+                         ClearPromptLine(console);
+                         return result;
+@@ -208,6 +209,13 @@ public sealed class TextPrompt<T> : IPrompt<T>, IHasCulture
+         }).ConfigureAwait(false);
+     }
+ 
++    private static bool TryGetChoiceIgnoreCase(Dictionary<string, T> choiceMap, string input, out T? result)
++    {
++        var matches = choiceMap.Where(c => string.Equals(c.Key, input, StringComparison.OrdinalIgnoreCase)).ToList();
++        result = matches.Count == 1 ? matches[0].Value : default;
++        return matches.Count == 1;
++    }
++
+     /// <summary>
+     /// Writes the prompt to the console.
+     /// </summary>

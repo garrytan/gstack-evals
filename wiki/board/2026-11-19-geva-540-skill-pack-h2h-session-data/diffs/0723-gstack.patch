@@ -1,0 +1,116 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 5d740cb..aab05a8 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -11,6 +11,8 @@
+ 
+ ## Changes since v7.15.0
+ 
++- fix: skip real IP lookup for trusted IP check when no trusted IPs are configured or when listening on a unix socket without reverse proxy mode
++
+ # V7.15.0
+ 
+ - [#3382](https://github.com/oauth2-proxy/oauth2-proxy/pull/3382) chore(deps): update gomod and golangci/golangci-lint to v2.11.4 (@tuunit)
+diff --git a/oauthproxy.go b/oauthproxy.go
+index dc3f8b5..8609cad 100644
+--- a/oauthproxy.go
++++ b/oauthproxy.go
+@@ -183,7 +183,10 @@ func NewOAuthProxy(opts *options.Options, validator func(string) bool) (*OAuthPr
+ 
+ 	logger.Printf("Cookie settings: name:%s secure(https):%v httponly:%v expiry:%s domains:%s path:%s samesite:%s refresh:%s", opts.Cookie.Name, opts.Cookie.Secure, opts.Cookie.HTTPOnly, opts.Cookie.Expire, strings.Join(opts.Cookie.Domains, ","), opts.Cookie.Path, opts.Cookie.SameSite, refresh)
+ 
+-	trustedIPs := ip.NewNetSet()
++	var trustedIPs *ip.NetSet
++	if len(opts.TrustedIPs) > 0 {
++		trustedIPs = ip.NewNetSet()
++	}
+ 	for _, ipStr := range opts.TrustedIPs {
+ 		if ipNet := ip.ParseIPNet(ipStr); ipNet != nil {
+ 			trustedIPs.AddIPNet(*ipNet)
+@@ -613,9 +616,16 @@ func (p *OAuthProxy) isAPIPath(req *http.Request) bool {
+ 
+ // isTrustedIP is used to check if a request comes from a trusted client IP address.
+ func (p *OAuthProxy) isTrustedIP(req *http.Request) bool {
++	// No trusted IPs configured, nothing to check
++	if p.trustedIPs == nil {
++		return false
++	}
++
+ 	// RemoteAddr @ means unix socket
+ 	// https://github.com/golang/go/blob/0fa53e41f122b1661d0678a6d36d71b7b5ad031d/src/syscall/syscall_linux.go#L506-L511
+-	if p.trustedIPs == nil && req.RemoteAddr != "@" {
++	// Without a real client IP parser (reverse proxy mode), there is no client
++	// IP available for requests received over a unix socket.
++	if p.realClientIPParser == nil && req.RemoteAddr == "@" {
+ 		return false
+ 	}
+ 
+diff --git a/oauthproxy_test.go b/oauthproxy_test.go
+index 38cdcca..e572a91 100644
+--- a/oauthproxy_test.go
++++ b/oauthproxy_test.go
+@@ -2150,6 +2150,46 @@ func TestTrustedIPs(t *testing.T) {
+ 			}(),
+ 			expectTrusted: false,
+ 		},
++		// Check unix socket without trusted IPs.
++		{
++			name:               "UnixSocketWithoutTrustedIPs",
++			trustedIPs:         nil,
++			reverseProxy:       false,
++			realClientIPHeader: "X-Real-IP",
++			req: func() *http.Request {
++				req, _ := http.NewRequest("GET", "/", nil)
++				req.RemoteAddr = "@"
++				return req
++			}(),
++			expectTrusted: false,
++		},
++		// Check unix socket with trusted IPs but no reverse proxy.
++		{
++			name:               "UnixSocketWithTrustedIPs",
++			trustedIPs:         []string{"127.0.0.1"},
++			reverseProxy:       false,
++			realClientIPHeader: "X-Real-IP",
++			req: func() *http.Request {
++				req, _ := http.NewRequest("GET", "/", nil)
++				req.RemoteAddr = "@"
++				return req
++			}(),
++			expectTrusted: false,
++		},
++		// Check unix socket with trusted IPs in reverse proxy mode.
++		{
++			name:               "UnixSocketWithTrustedIPsInReverseProxyMode",
++			trustedIPs:         []string{"127.0.0.1"},
++			reverseProxy:       true,
++			realClientIPHeader: "X-Real-IP",
++			req: func() *http.Request {
++				req, _ := http.NewRequest("GET", "/", nil)
++				req.RemoteAddr = "@"
++				req.Header.Add("X-Real-IP", "127.0.0.1")
++				return req
++			}(),
++			expectTrusted: true,
++		},
+ 		// Check using req.RemoteAddr (Options.ReverseProxy == false).
+ 		{
+ 			name:               "WithRemoteAddr",
+diff --git a/pkg/validation/allowlist.go b/pkg/validation/allowlist.go
+index a74f4ae..367052c 100644
+--- a/pkg/validation/allowlist.go
++++ b/pkg/validation/allowlist.go
+@@ -25,6 +25,13 @@ func validateAllowlists(o *options.Options) []string {
+ 		}
+ 	}
+ 
++	if len(o.TrustedIPs) > 0 && !o.ReverseProxy && strings.HasPrefix(strings.ToLower(o.Server.BindAddress), "unix://") {
++		_, err := fmt.Fprintln(os.Stderr, "WARNING: --trusted-ip has no effect when listening on a unix socket unless --reverse-proxy is enabled, as there is no client IP address available")
++		if err != nil {
++			panic(err)
++		}
++	}
++
+ 	return msgs
+ }
+ 

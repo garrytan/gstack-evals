@@ -1,0 +1,44 @@
+diff --git a/src/MudBlazor.UnitTests/Components/DialogTests.cs b/src/MudBlazor.UnitTests/Components/DialogTests.cs
+index 0e855c1..78ee76f 100644
+--- a/src/MudBlazor.UnitTests/Components/DialogTests.cs
++++ b/src/MudBlazor.UnitTests/Components/DialogTests.cs
+@@ -1203,6 +1203,26 @@ namespace MudBlazor.UnitTests.Components
+             dialogInstance.Instance.Options.BackgroundClass.Should().BeNull();
+         }
+ 
++        [Test]
++        public async Task GlobalBackgroundClass_ShouldApply_WhenNotSetInOptions()
++        {
++            var provider = Context.Render<MudDialogProvider>(p => p.Add(x => x.BackgroundClass, "global-bg"));
++            var service = Context.Services.GetRequiredService<IDialogService>();
++
++            await provider.InvokeAsync(async () => await service.ShowAsync(typeof(DialogOkCancel)));
++            provider.Find(".mud-overlay-dialog").ClassList.Should().Contain("global-bg");
++            await provider.InvokeAsync(() => ((IMudDialogInstance)provider.FindComponent<MudDialogContainer>().Instance).Close());
++
++            _ = provider.InvokeAsync(() => service.ShowMessageBoxAsync("Title", "Message"));
++            provider.WaitForAssertion(() => provider.Find(".mud-overlay-dialog").ClassList.Should().Contain("global-bg"));
++            await provider.InvokeAsync(() => ((IMudDialogInstance)provider.FindComponent<MudDialogContainer>().Instance).Close());
++
++            await provider.InvokeAsync(async () => await service.ShowAsync(typeof(DialogOkCancel), "t", new DialogOptions { BackgroundClass = "local-bg" }));
++            var classes = provider.Find(".mud-overlay-dialog").ClassList;
++            classes.Should().Contain("local-bg");
++            classes.Should().NotContain("global-bg");
++        }
++
+         [Test]
+         public async Task ShowAsync_ShouldProvideDefaultOptions_WhenOverloadIsCalled()
+         {
+diff --git a/src/MudBlazor/Components/Dialog/MudDialogContainer.razor.cs b/src/MudBlazor/Components/Dialog/MudDialogContainer.razor.cs
+index 01ccad6..918c6c1 100644
+--- a/src/MudBlazor/Components/Dialog/MudDialogContainer.razor.cs
++++ b/src/MudBlazor/Components/Dialog/MudDialogContainer.razor.cs
+@@ -125,7 +125,7 @@ namespace MudBlazor
+             new CssBuilder("mud-overlay-dialog")
+                 .AddClass($"mud-skip-overlay-section") // dialog overlay remains outside of Section
+                 .AddClass("mud-skip-overlay-positioning") // popovers try to position the overlay by zindex, this skips that behavior if a user puts the dialog provider above the popover provider
+-                .AddClass(GetDialogOptionsOrDefault.BackgroundClass)
++                .AddClass(GetDialogOptionsOrDefault.BackgroundClass ?? GlobalDialogOptions.BackgroundClass)
+                 .Build();
+ 
+         protected override async Task OnAfterRenderAsync(bool firstRender)

@@ -1,0 +1,225 @@
+diff --git a/docs/src/content/docs/reference/engines.md b/docs/src/content/docs/reference/engines.md
+index 94f851c..5770a99 100644
+--- a/docs/src/content/docs/reference/engines.md
++++ b/docs/src/content/docs/reference/engines.md
+@@ -83,6 +83,23 @@ engine:
+ 
+ Pinning is useful when you need reproducible builds or want to avoid breakage from a new CLI release while testing. Remember to update the pinned version periodically to pick up bug fixes and new features.
+ 
++`version` also accepts a GitHub Actions expression, so reusable `workflow_call` workflows can let callers choose the engine version:
++
++```yaml wrap
++on:
++  workflow_call:
++    inputs:
++      engine-version:
++        type: string
++        default: latest
++
++engine:
++  id: copilot
++  version: ${{ inputs.engine-version }}
++```
++
++Expression values are passed to the installation step through an environment variable rather than interpolated into the shell command, so the evaluated value cannot inject shell commands.
++
+ ### Copilot Custom Configuration
+ 
+ For the Copilot engine, you can specify a specialized prompt to be used whenever the coding agent is invoked. This is called a "custom agent" in Copilot vocabulary. You specify this using the `agent` field. This references a file located in the `.github/agents/` directory:
+diff --git a/pkg/parser/schemas/main_workflow_schema.json b/pkg/parser/schemas/main_workflow_schema.json
+index 628d14a..c35e3b0 100644
+--- a/pkg/parser/schemas/main_workflow_schema.json
++++ b/pkg/parser/schemas/main_workflow_schema.json
+@@ -9026,8 +9026,8 @@
+             },
+             "version": {
+               "type": ["string", "number"],
+-              "description": "Optional version of the AI engine action (e.g., 'beta', 'stable', 20). Has sensible defaults and can typically be omitted. Numeric values are automatically converted to strings at runtime.",
+-              "examples": ["beta", "stable", 20, 3.11]
++              "description": "Optional version of the AI engine action (e.g., 'beta', 'stable', 20). Has sensible defaults and can typically be omitted. Numeric values are automatically converted to strings at runtime. GitHub Actions expressions (e.g., '${{ inputs.engine-version }}') are supported and are passed to installation steps via an environment variable to prevent shell injection.",
++              "examples": ["beta", "stable", 20, 3.11, "${{ inputs.engine-version }}"]
+             },
+             "model": {
+               "type": "string",
+diff --git a/pkg/workflow/copilot_installer.go b/pkg/workflow/copilot_installer.go
+index 70ebb94..83c9ab7 100644
+--- a/pkg/workflow/copilot_installer.go
++++ b/pkg/workflow/copilot_installer.go
+@@ -1,6 +1,8 @@
+ package workflow
+ 
+ import (
++	"fmt"
++
+ 	"github.com/github/gh-aw/pkg/constants"
+ 	"github.com/github/gh-aw/pkg/logger"
+ )
+@@ -24,6 +26,19 @@ func GenerateCopilotInstallerSteps(version, stepName string) []GitHubActionStep
+ 	// and does not use gh CLI, so GH_HOST does not affect the download. No step-level
+ 	// GH_HOST override is needed here; the correct host is already set in GITHUB_ENV
+ 	// by configure_gh_for_ghe.sh (or by the Derive GH_HOST step when DIFC proxy is active).
++	if isEngineVersionExpression(version) {
++		// Expression-based versions (e.g. ${{ inputs.engine-version }}) are passed via an
++		// environment variable so the evaluated value is never interpolated into the shell
++		// command, preventing shell injection.
++		stepLines := []string{
++			"      - name: " + stepName,
++			"        run: ${RUNNER_TEMP}/gh-aw/actions/install_copilot_cli.sh \"${" + engineVersionEnvVar + "}\"",
++			"        env:",
++			fmt.Sprintf("          %s: %q", engineVersionEnvVar, version),
++		}
++		return []GitHubActionStep{GitHubActionStep(stepLines)}
++	}
++
+ 	stepLines := []string{
+ 		"      - name: " + stepName,
+ 		"        run: ${RUNNER_TEMP}/gh-aw/actions/install_copilot_cli.sh " + version,
+diff --git a/pkg/workflow/engine_version_expression_test.go b/pkg/workflow/engine_version_expression_test.go
+new file mode 100644
+index 0000000..7b31501
+--- /dev/null
++++ b/pkg/workflow/engine_version_expression_test.go
+@@ -0,0 +1,95 @@
++//go:build !integration
++
++package workflow
++
++import (
++	"strings"
++	"testing"
++
++	"github.com/stretchr/testify/assert"
++	"github.com/stretchr/testify/require"
++)
++
++// TestEngineVersionExpressionInstallSteps verifies that engine.version values containing
++// GitHub Actions expressions are passed to installation steps via an environment variable
++// rather than interpolated directly into shell commands (injection safety).
++func TestEngineVersionExpressionInstallSteps(t *testing.T) {
++	const expr = "${{ inputs.engine-version }}"
++
++	tests := []struct {
++		name          string
++		engine        CodingAgentEngine
++		expectedRun   string
++		literalRunFmt string
++	}{
++		{
++			name:          "copilot",
++			engine:        NewCopilotEngine(),
++			expectedRun:   `run: ${RUNNER_TEMP}/gh-aw/actions/install_copilot_cli.sh "${ENGINE_VERSION}"`,
++			literalRunFmt: "run: ${RUNNER_TEMP}/gh-aw/actions/install_copilot_cli.sh 1.2.3",
++		},
++		{
++			name:          "claude",
++			engine:        NewClaudeEngine(),
++			expectedRun:   `run: npm install -g @anthropic-ai/claude-code@"${ENGINE_VERSION}"`,
++			literalRunFmt: "run: npm install -g @anthropic-ai/claude-code@1.2.3",
++		},
++		{
++			name:          "codex",
++			engine:        NewCodexEngine(),
++			expectedRun:   `run: npm install -g @openai/codex@"${ENGINE_VERSION}"`,
++			literalRunFmt: "run: npm install -g @openai/codex@1.2.3",
++		},
++		{
++			name:          "gemini",
++			engine:        NewGeminiEngine(),
++			expectedRun:   `run: npm install -g @google/gemini-cli@"${ENGINE_VERSION}"`,
++			literalRunFmt: "run: npm install -g @google/gemini-cli@1.2.3",
++		},
++	}
++
++	render := func(steps []GitHubActionStep) string {
++		var sb strings.Builder
++		for _, step := range steps {
++			sb.WriteString(strings.Join(step, "\n"))
++			sb.WriteString("\n")
++		}
++		return sb.String()
++	}
++
++	for _, tt := range tests {
++		t.Run(tt.name+"/expression", func(t *testing.T) {
++			data := &WorkflowData{Name: "test", EngineConfig: &EngineConfig{ID: tt.name, Version: expr}}
++			out := render(tt.engine.GetInstallationSteps(data))
++
++			assert.Contains(t, out, tt.expectedRun, "install command should reference env var")
++			assert.Contains(t, out, `ENGINE_VERSION: "${{ inputs.engine-version }}"`, "expression should be set via env")
++			for line := range strings.SplitSeq(out, "\n") {
++				if strings.Contains(line, "run:") {
++					assert.NotContains(t, line, "${{", "expression must not appear in a run command: %s", line)
++				}
++			}
++		})
++
++		t.Run(tt.name+"/literal", func(t *testing.T) {
++			data := &WorkflowData{Name: "test", EngineConfig: &EngineConfig{ID: tt.name, Version: "1.2.3"}}
++			out := render(tt.engine.GetInstallationSteps(data))
++
++			assert.Contains(t, out, tt.literalRunFmt, "literal versions should remain inline")
++			assert.NotContains(t, out, "ENGINE_VERSION", "literal versions should not use env var")
++		})
++	}
++}
++
++func TestExtractEngineConfigVersionExpression(t *testing.T) {
++	compiler := NewCompiler()
++	frontmatter := map[string]any{
++		"engine": map[string]any{
++			"id":      "copilot",
++			"version": "${{ inputs.engine-version }}",
++		},
++	}
++	_, config := compiler.ExtractEngineConfig(frontmatter)
++	require.NotNil(t, config)
++	assert.Equal(t, "${{ inputs.engine-version }}", config.Version)
++}
+diff --git a/pkg/workflow/nodejs.go b/pkg/workflow/nodejs.go
+index 1dae06c..1188955 100644
+--- a/pkg/workflow/nodejs.go
++++ b/pkg/workflow/nodejs.go
+@@ -2,6 +2,7 @@ package workflow
+ 
+ import (
+ 	"fmt"
++	"strings"
+ 
+ 	"github.com/github/gh-aw/pkg/constants"
+ 	"github.com/github/gh-aw/pkg/logger"
+@@ -52,6 +53,20 @@ func GenerateNpmInstallStepsWithScope(packageName, version, stepName, cacheKeyPr
+ 	if isGlobal {
+ 		globalFlag = "-g "
+ 	}
++	// When the version is a GitHub Actions expression (e.g. ${{ inputs.engine-version }}),
++	// pass it through an environment variable instead of interpolating it into the shell
++	// command. This prevents shell injection via the evaluated expression value.
++	if isEngineVersionExpression(version) {
++		installCmd := fmt.Sprintf("npm install %s%s@\"${%s}\"", globalFlag, packageName, engineVersionEnvVar)
++		steps = append(steps, GitHubActionStep{
++			"      - name: " + stepName,
++			"        run: " + installCmd,
++			"        env:",
++			fmt.Sprintf("          %s: %q", engineVersionEnvVar, version),
++		})
++		return steps
++	}
++
+ 	installCmd := fmt.Sprintf("npm install %s%s@%s", globalFlag, packageName, version)
+ 	steps = append(steps, GitHubActionStep{
+ 		"      - name: " + stepName,
+@@ -60,3 +75,14 @@ func GenerateNpmInstallStepsWithScope(packageName, version, stepName, cacheKeyPr
+ 
+ 	return steps
+ }
++
++// engineVersionEnvVar is the environment variable used to pass an expression-based
++// engine version to installation steps without interpolating it into shell commands.
++const engineVersionEnvVar = "ENGINE_VERSION"
++
++// isEngineVersionExpression reports whether the engine version contains a GitHub Actions
++// expression (e.g. "${{ inputs.engine-version }}"). Such values are resolved at runtime
++// and must never be interpolated directly into a shell command.
++func isEngineVersionExpression(version string) bool {
++	return strings.Contains(version, "${{")
++}

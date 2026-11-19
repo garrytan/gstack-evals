@@ -1,0 +1,99 @@
+diff --git a/.changeset/phone-number-redos.md b/.changeset/phone-number-redos.md
+new file mode 100644
+index 0000000..456d5eb
+--- /dev/null
++++ b/.changeset/phone-number-redos.md
+@@ -0,0 +1,7 @@
++---
++'graphql-scalars': patch
++---
++
++PhoneNumber: guard against regular expression denial of service (GHSA-x8rm-f576-gq67). Inputs
++longer than an E.164 number are rejected before matching, and regression tests ensure the pattern
++stays linear-time.
+diff --git a/src/scalars/PhoneNumber.ts b/src/scalars/PhoneNumber.ts
+index 7111608..b12ff38 100644
+--- a/src/scalars/PhoneNumber.ts
++++ b/src/scalars/PhoneNumber.ts
+@@ -1,7 +1,17 @@
+ import { GraphQLScalarType, Kind } from 'graphql';
+ import { createGraphQLError } from '../error.js';
+ 
++// Keep this pattern free of nested/ambiguous quantifiers: it runs on untrusted
++// input during document validation (parseLiteral) and variable coercion
++// (parseValue), so super-linear backtracking would be a ReDoS vector
++// (see GHSA-x8rm-f576-gq67).
+ const PHONE_NUMBER_REGEX = /^\+[1-9]\d{6,14}$/;
++// "+" followed by at most 15 digits (E.164). Longer values are rejected without
++// running the regular expression at all.
++const PHONE_NUMBER_MAX_LENGTH = 16;
++
++const isValidPhoneNumber = (value: string): boolean =>
++  value.length <= PHONE_NUMBER_MAX_LENGTH && PHONE_NUMBER_REGEX.test(value);
+ 
+ export const GraphQLPhoneNumber = /*#__PURE__*/ new GraphQLScalarType({
+   name: 'PhoneNumber',
+@@ -14,7 +24,7 @@ export const GraphQLPhoneNumber = /*#__PURE__*/ new GraphQLScalarType({
+       throw createGraphQLError(`Value is not string: ${value}`);
+     }
+ 
+-    if (!PHONE_NUMBER_REGEX.test(value)) {
++    if (!isValidPhoneNumber(value)) {
+       throw createGraphQLError(
+         `Value is not a valid phone number of the form +17895551234 (7-15 digits): ${value}`,
+       );
+@@ -28,7 +38,7 @@ export const GraphQLPhoneNumber = /*#__PURE__*/ new GraphQLScalarType({
+       throw createGraphQLError(`Value is not string: ${value}`);
+     }
+ 
+-    if (!PHONE_NUMBER_REGEX.test(value)) {
++    if (!isValidPhoneNumber(value)) {
+       throw createGraphQLError(
+         `Value is not a valid phone number of the form +17895551234 (7-15 digits): ${value}`,
+       );
+@@ -45,7 +55,7 @@ export const GraphQLPhoneNumber = /*#__PURE__*/ new GraphQLScalarType({
+       );
+     }
+ 
+-    if (!PHONE_NUMBER_REGEX.test(ast.value)) {
++    if (!isValidPhoneNumber(ast.value)) {
+       throw createGraphQLError(
+         `Value is not a valid phone number of the form +17895551234 (7-15 digits): ${ast.value}`,
+         { nodes: ast },
+diff --git a/tests/PhoneNumber.test.ts b/tests/PhoneNumber.test.ts
+index e26c8e7..e468501 100644
+--- a/tests/PhoneNumber.test.ts
++++ b/tests/PhoneNumber.test.ts
+@@ -137,4 +137,32 @@ describe('PhoneNumber', () => {
+       });
+     });
+   });
++
++  describe('ReDoS (GHSA-x8rm-f576-gq67)', () => {
++    const payloads = [
++      '1'.repeat(40) + 'x',
++      '+' + '1'.repeat(40) + 'x',
++      '+1 ' + '1 '.repeat(20) + 'x',
++      '+1-' + '1-'.repeat(20) + 'x',
++      '+1 (' + '1'.repeat(40) + 'x',
++      '+' + '1'.repeat(1_000_000) + 'x',
++    ];
++    const expectFast = (fn: () => unknown) => {
++      const start = performance.now();
++      expect(fn).toThrow(/^Value is not a valid phone number/);
++      expect(performance.now() - start).toBeLessThan(100);
++    };
++
++    test.each(payloads)('serialize rejects quickly (%#)', payload => {
++      expectFast(() => GraphQLPhoneNumber.serialize(payload));
++    });
++
++    test.each(payloads)('parseValue rejects quickly (%#)', payload => {
++      expectFast(() => GraphQLPhoneNumber.parseValue(payload));
++    });
++
++    test.each(payloads)('parseLiteral rejects quickly (%#)', payload => {
++      expectFast(() => GraphQLPhoneNumber.parseLiteral({ value: payload, kind: Kind.STRING }, {}));
++    });
++  });
+ });

@@ -1,0 +1,84 @@
+diff --git a/js/node_helper.js b/js/node_helper.js
+index 833c90a..b6870ae 100644
+--- a/js/node_helper.js
++++ b/js/node_helper.js
+@@ -1,6 +1,5 @@
+ const express = require("express");
+ const Log = require("logger");
+-const { replaceSecretPlaceholder } = require("#server_functions");
+ 
+ class NodeHelper {
+ 	init () {
+@@ -88,17 +87,13 @@ class NodeHelper {
+ 		io.of(this.name).on("connection", (socket) => {
+ 			// register catch all.
+ 			socket.onAny((notification, payload) => {
+-				if (config?.hideConfigSecrets && payload && typeof payload === "object") {
+-					try {
+-						const payloadStr = replaceSecretPlaceholder(JSON.stringify(payload));
+-						this.socketNotificationReceived(notification, JSON.parse(payloadStr));
+-					} catch (e) {
+-						Log.error("Error substituting variables in payload: ", e);
+-						this.socketNotificationReceived(notification, payload);
+-					}
+-				} else {
+-					this.socketNotificationReceived(notification, payload);
+-				}
++
++				/*
++				 * Inbound payloads come from untrusted socket clients. Never expand
++				 * `**SECRET_*` placeholders here: doing so would let any client
++				 * retrieve environment secrets that `hideConfigSecrets` redacts.
++				 */
++				this.socketNotificationReceived(notification, payload);
+ 			});
+ 		});
+ 	}
+diff --git a/tests/unit/classes/node_helper_spec.js b/tests/unit/classes/node_helper_spec.js
+new file mode 100644
+index 0000000..e1abaa0
+--- /dev/null
++++ b/tests/unit/classes/node_helper_spec.js
+@@ -0,0 +1,42 @@
++const NodeHelper = require("../../../js/node_helper");
++
++describe("NodeHelper socket dispatcher", () => {
++	let originalConfig;
++
++	beforeEach(() => {
++		originalConfig = global.config;
++		process.env.SECRET_NODE_HELPER_TEST = "super-secret-value";
++	});
++
++	afterEach(() => {
++		global.config = originalConfig;
++		delete process.env.SECRET_NODE_HELPER_TEST;
++	});
++
++	it("does not expand SECRET_* placeholders in inbound socket payloads", () => {
++		global.config = { hideConfigSecrets: true, cors: "disabled" };
++
++		const helper = new NodeHelper();
++		helper.setName("test_module");
++		const received = [];
++		helper.socketNotificationReceived = (notification, payload) => received.push({ notification, payload });
++
++		let onAny;
++		const fakeIo = {
++			of () {
++				return {
++					on (_event, cb) {
++						cb({ onAny (fn) { onAny = fn; } });
++					}
++				};
++			}
++		};
++		helper.setSocketIO(fakeIo);
++
++		onAny("TEST", { value: "**SECRET_NODE_HELPER_TEST**" });
++
++		expect(received).toHaveLength(1);
++		expect(received[0].payload.value).toBe("**SECRET_NODE_HELPER_TEST**");
++		expect(JSON.stringify(received)).not.toContain("super-secret-value");
++	});
++});

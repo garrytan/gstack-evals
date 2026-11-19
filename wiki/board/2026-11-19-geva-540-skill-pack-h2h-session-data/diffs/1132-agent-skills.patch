@@ -1,0 +1,83 @@
+diff --git a/connection.go b/connection.go
+index c0df8b7..9692c4c 100644
+--- a/connection.go
++++ b/connection.go
+@@ -1302,6 +1302,8 @@ func (c *Connection) openComplete() error {
+ // tlsConfigFromURI tries to create TLS configuration based on query parameters.
+ // Returns default (empty) config in case no suitable client cert and/or client key not provided.
+ // Returns error in case certificates can not be parsed.
++// The returned config always enforces TLS 1.2 as the minimum protocol version,
++// independent of the Go toolchain's default.
+ func tlsConfigFromURI(uri URI) (*tls.Config, error) {
+ 	var certPool *x509.CertPool
+ 	if uri.CACertFile != "" {
+@@ -1323,6 +1325,7 @@ func tlsConfigFromURI(uri URI) (*tls.Config, error) {
+ 		return &tls.Config{
+ 			RootCAs:    certPool,
+ 			ServerName: uri.ServerName,
++			MinVersion: tls.VersionTLS12,
+ 		}, nil
+ 	}
+ 
+@@ -1335,6 +1338,7 @@ func tlsConfigFromURI(uri URI) (*tls.Config, error) {
+ 		Certificates: []tls.Certificate{certificate},
+ 		RootCAs:      certPool,
+ 		ServerName:   uri.ServerName,
++		MinVersion:   tls.VersionTLS12,
+ 	}, nil
+ }
+ 
+diff --git a/tls_test.go b/tls_test.go
+index 17203b2..621b737 100644
+--- a/tls_test.go
++++ b/tls_test.go
+@@ -11,6 +11,8 @@ import (
+ 	"errors"
+ 	"fmt"
+ 	"net"
++	"os"
++	"path/filepath"
+ 	"testing"
+ 	"time"
+ )
+@@ -108,6 +110,40 @@ func TestTlsConfigFromUriPushdownServerNameIndication(t *testing.T) {
+ 	}
+ }
+ 
++func TestTlsConfigFromUriSetsExplicitMinVersion(t *testing.T) {
++	writeTemp := func(name, content string) string {
++		p := filepath.Join(t.TempDir(), name)
++		if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
++			t.Fatalf("write %s: %v", name, err)
++		}
++		return p
++	}
++
++	tests := map[string]URI{
++		"server auth only": {Scheme: "amqps", Host: "example.com", Port: 5671},
++		"mutual TLS": {
++			Scheme:     "amqps",
++			Host:       "example.com",
++			Port:       5671,
++			CACertFile: writeTemp("ca.pem", caCert),
++			CertFile:   writeTemp("cert.pem", clientCert),
++			KeyFile:    writeTemp("key.pem", clientKey),
++		},
++	}
++
++	for name, uri := range tests {
++		t.Run(name, func(t *testing.T) {
++			cfg, err := tlsConfigFromURI(uri)
++			if err != nil {
++				t.Fatalf("expected tlsConfigFromURI to succeed, got error: %s", err)
++			}
++			if cfg.MinVersion < tls.VersionTLS12 {
++				t.Fatalf("expected MinVersion >= TLS 1.2 (%#x), got %#x", tls.VersionTLS12, cfg.MinVersion)
++			}
++		})
++	}
++}
++
+ // Tests opening a connection of a TLS enabled socket server
+ func TestTLSHandshake(t *testing.T) {
+ 	srv := startTLSServer(t, tlsServerConfig(t))

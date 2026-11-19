@@ -1,0 +1,106 @@
+diff --git a/agentscope-harness/src/main/java/io/agentscope/harness/agent/filesystem/remote/RemoteFilesystem.java b/agentscope-harness/src/main/java/io/agentscope/harness/agent/filesystem/remote/RemoteFilesystem.java
+index 9c34f07..c75d97e 100644
+--- a/agentscope-harness/src/main/java/io/agentscope/harness/agent/filesystem/remote/RemoteFilesystem.java
++++ b/agentscope-harness/src/main/java/io/agentscope/harness/agent/filesystem/remote/RemoteFilesystem.java
+@@ -425,8 +425,18 @@ public class RemoteFilesystem implements AbstractFilesystem {
+                                         + (effectivePattern.startsWith("**")
+                                                 ? effectivePattern
+                                                 : "**/" + effectivePattern));
+-        PathMatcher directMatcher =
+-                FileSystems.getDefault().getPathMatcher("glob:" + effectivePattern);
++        // Java's PathMatcher requires at least one separator for `**/<x>`, so files directly
++        // under the search root never satisfy patterns like `**/hello.txt` or `**/*.txt`.
++        // Strip the leading `**/` so the direct matcher catches root-level files too.
++        String directExpr;
++        if (effectivePattern.startsWith("**/")) {
++            directExpr = effectivePattern.substring(3);
++        } else if (effectivePattern.equals("**")) {
++            directExpr = "*";
++        } else {
++            directExpr = effectivePattern;
++        }
++        PathMatcher directMatcher = FileSystems.getDefault().getPathMatcher("glob:" + directExpr);
+ 
+         // Fast path: index has entries for this prefix
+         if (index != null && index.hasPrefix(normalizedPath)) {
+diff --git a/agentscope-harness/src/test/java/io/agentscope/harness/agent/filesystem/RemoteFilesystemGlobTest.java b/agentscope-harness/src/test/java/io/agentscope/harness/agent/filesystem/RemoteFilesystemGlobTest.java
+new file mode 100644
+index 0000000..7ec80b1
+--- /dev/null
++++ b/agentscope-harness/src/test/java/io/agentscope/harness/agent/filesystem/RemoteFilesystemGlobTest.java
+@@ -0,0 +1,75 @@
++/*
++ * Copyright 2024-2026 the original author or authors.
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package io.agentscope.harness.agent.filesystem;
++
++import static org.junit.jupiter.api.Assertions.assertEquals;
++import static org.junit.jupiter.api.Assertions.assertTrue;
++
++import io.agentscope.core.agent.RuntimeContext;
++import io.agentscope.harness.agent.filesystem.model.FileInfo;
++import io.agentscope.harness.agent.filesystem.model.GlobResult;
++import io.agentscope.harness.agent.filesystem.remote.RemoteFilesystem;
++import io.agentscope.harness.agent.filesystem.remote.store.InMemoryStore;
++import java.util.List;
++import org.junit.jupiter.api.Test;
++
++class RemoteFilesystemGlobTest {
++
++    private static final RuntimeContext RT = RuntimeContext.empty();
++
++    private RemoteFilesystem newFs() {
++        RemoteFilesystem fs = new RemoteFilesystem(new InMemoryStore(), List.of("test"));
++        assertTrue(fs.write(RT, "/hello.txt", "hello").isSuccess());
++        assertTrue(fs.write(RT, "/reports/hello.txt", "hello").isSuccess());
++        assertTrue(fs.write(RT, "/reports/report.txt", "r").isSuccess());
++        assertTrue(fs.write(RT, "/reports/archive/hello.txt", "hello").isSuccess());
++        assertTrue(fs.write(RT, "/notes.md", "n").isSuccess());
++        return fs;
++    }
++
++    private static List<String> paths(GlobResult r) {
++        assertTrue(r.isSuccess());
++        return r.matches().stream().map(FileInfo::path).toList();
++    }
++
++    @Test
++    void recursiveGlobMatchesFileAtRoot() {
++        RemoteFilesystem fs = newFs();
++        assertEquals(
++                List.of("/hello.txt", "/reports/archive/hello.txt", "/reports/hello.txt"),
++                paths(fs.glob(RT, "**/hello.txt", "/")));
++    }
++
++    @Test
++    void recursiveWildcardGlobMatchesFileAtRoot() {
++        RemoteFilesystem fs = newFs();
++        assertEquals(
++                List.of(
++                        "/hello.txt",
++                        "/reports/archive/hello.txt",
++                        "/reports/hello.txt",
++                        "/reports/report.txt"),
++                paths(fs.glob(RT, "**/*.txt", "/")));
++    }
++
++    @Test
++    void recursiveGlobMatchesFileAtSubdirectoryRoot() {
++        RemoteFilesystem fs = newFs();
++        assertEquals(
++                List.of("/reports/archive/hello.txt", "/reports/hello.txt"),
++                paths(fs.glob(RT, "**/hello.txt", "/reports")));
++    }
++}

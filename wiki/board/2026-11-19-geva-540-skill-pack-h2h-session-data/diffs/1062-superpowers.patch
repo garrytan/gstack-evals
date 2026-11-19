@@ -1,0 +1,100 @@
+diff --git a/pkg/proxy/authheaders/authheaders.go b/pkg/proxy/authheaders/authheaders.go
+index 5736989..a32f629 100644
+--- a/pkg/proxy/authheaders/authheaders.go
++++ b/pkg/proxy/authheaders/authheaders.go
+@@ -36,12 +36,10 @@ import (
+ // This mirrors k8s.io/client-go/transport.SetAuthProxyHeaders and the upstream
+ // requestheader authenticator's ClearAuthenticationHeaders.
+ func SetAuthHeaders(header http.Header, user userinfo.Info, userHeader, groupHeader, extraHeaderPrefix string) {
+-	header.Del(userHeader)
+-	header.Del(groupHeader)
+-	for key := range header {
+-		if strings.HasPrefix(strings.ToLower(key), strings.ToLower(extraHeaderPrefix)) {
+-			header.Del(key)
+-		}
++	StripAuthHeaders(header, userHeader, groupHeader, extraHeaderPrefix)
++
++	if user == nil {
++		return
+ 	}
+ 
+ 	header.Set(userHeader, user.GetName())
+@@ -59,3 +57,21 @@ func SetAuthHeaders(header http.Header, user userinfo.Info, userHeader, groupHea
+ 		}
+ 	}
+ }
++
++// StripAuthHeaders removes all inbound identity headers (user, group and any
++// header with the extra prefix) from the given header set. It must be called
++// unconditionally on every request a proxy forwards to a backend that trusts
++// request-header authentication, regardless of whether the request carries an
++// authenticated user, so client-supplied values can never be forwarded.
++func StripAuthHeaders(header http.Header, userHeader, groupHeader, extraHeaderPrefix string) {
++	header.Del(userHeader)
++	header.Del(groupHeader)
++	lowerPrefix := strings.ToLower(extraHeaderPrefix)
++	for key := range header {
++		lowerKey := strings.ToLower(key)
++		if lowerKey == strings.ToLower(userHeader) || lowerKey == strings.ToLower(groupHeader) ||
++			(lowerPrefix != "" && strings.HasPrefix(lowerKey, lowerPrefix)) {
++			delete(header, key)
++		}
++	}
++}
+diff --git a/pkg/proxy/authheaders/authheaders_test.go b/pkg/proxy/authheaders/authheaders_test.go
+index 258c208..8b2ff1d 100644
+--- a/pkg/proxy/authheaders/authheaders_test.go
++++ b/pkg/proxy/authheaders/authheaders_test.go
+@@ -142,3 +142,24 @@ func TestSetAuthHeaders_RealExtraIsEncodedAndForwarded(t *testing.T) {
+ 		t.Errorf("encoded extra header %q = %v, want [root:org:ws]; full headers=%v", encoded, got, h)
+ 	}
+ }
++
++func TestStripAuthHeaders_RemovesAllIdentityHeaders(t *testing.T) {
++	t.Parallel()
++	h := http.Header{
++		userHeader:           {"system:admin"},
++		groupHeader:          {"system:masters"},
++		warrantHeader:        {"{}"},
++		scopesHeader:         {"cluster:root"},
++		"x-remote-extra-foo": {"bar"},
++		"Accept":             {"application/json"},
++	}
++	StripAuthHeaders(h, userHeader, groupHeader, extraPrefix)
++	for k := range h {
++		if k != "Accept" {
++			t.Errorf("header %q not stripped: %v", k, h[k])
++		}
++	}
++	if h.Get("Accept") != "application/json" {
++		t.Errorf("unrelated header removed")
++	}
++}
+diff --git a/pkg/proxy/proxy.go b/pkg/proxy/proxy.go
+index 7ba4cee..817e5e0 100644
+--- a/pkg/proxy/proxy.go
++++ b/pkg/proxy/proxy.go
+@@ -58,6 +58,9 @@ func newTransport(clientCert, clientKeyFile, caFile string) (*http.Transport, er
+ // passing them through access headers to the shard.
+ func WithProxyAuthHeaders(delegate http.Handler, userHeader, groupHeader string, extraHeaderPrefix string) http.HandlerFunc {
+ 	return func(w http.ResponseWriter, r *http.Request) {
++		// Always strip client-supplied identity headers, even if no user is
++		// present, so forged values are never forwarded to the backend.
++		authheaders.StripAuthHeaders(r.Header, userHeader, groupHeader, extraHeaderPrefix)
+ 		if u, ok := request.UserFrom(r.Context()); ok {
+ 			authheaders.SetAuthHeaders(r.Header, u, userHeader, groupHeader, extraHeaderPrefix)
+ 		}
+diff --git a/pkg/server/localproxy.go b/pkg/server/localproxy.go
+index 1a64aa3..b424df8 100644
+--- a/pkg/server/localproxy.go
++++ b/pkg/server/localproxy.go
+@@ -323,6 +323,9 @@ func newInsecureTransport() (*http.Transport, error) {
+ // passing them through access headers to the shard.
+ func withProxyAuthHeaders(delegate http.Handler, userHeader, groupHeader string, extraHeaderPrefix string) http.HandlerFunc {
+ 	return func(w http.ResponseWriter, r *http.Request) {
++		// Always strip client-supplied identity headers, even if no user is
++		// present, so forged values are never forwarded to the backend.
++		authheaders.StripAuthHeaders(r.Header, userHeader, groupHeader, extraHeaderPrefix)
+ 		if u, ok := request.UserFrom(r.Context()); ok {
+ 			authheaders.SetAuthHeaders(r.Header, u, userHeader, groupHeader, extraHeaderPrefix)
+ 		}

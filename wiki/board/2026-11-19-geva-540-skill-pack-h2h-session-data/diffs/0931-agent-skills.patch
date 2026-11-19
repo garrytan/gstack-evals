@@ -1,0 +1,63 @@
+diff --git a/.changeset/escape-cache-control-meta.md b/.changeset/escape-cache-control-meta.md
+new file mode 100644
+index 0000000..1365010
+--- /dev/null
++++ b/.changeset/escape-cache-control-meta.md
+@@ -0,0 +1,5 @@
++---
++'@sveltejs/kit': patch
++---
++
++fix: escape `cache-control` header value when inserting it into a `<meta http-equiv>` tag on prerendered pages
+diff --git a/packages/kit/src/runtime/server/page/render.js b/packages/kit/src/runtime/server/page/render.js
+index f3504cb..56f947b 100644
+--- a/packages/kit/src/runtime/server/page/render.js
++++ b/packages/kit/src/runtime/server/page/render.js
+@@ -9,6 +9,7 @@ import { hash } from '../../../utils/hash.js';
+ import { serialize_data } from './serialize_data.js';
+ import { s } from '../../../utils/misc.js';
+ import { Csp } from './csp.js';
++import { escape_html } from '../../../utils/escape.js';
+ import { uneval_action_response } from './actions.js';
+ import { SCHEME } from '../../../utils/url.js';
+ import {
+@@ -586,7 +587,7 @@ export async function render_response({
+ 
+ 		if (state.prerendering?.cache) {
+ 			head.add_http_equiv(
+-				`<meta http-equiv="cache-control" content="${state.prerendering.cache}">`
++				`<meta http-equiv="cache-control" content="${escape_html(state.prerendering.cache, true)}">`
+ 			);
+ 		}
+ 	} else {
+diff --git a/packages/kit/test/prerendering/basics/src/routes/max-age-escaped/+page.js b/packages/kit/test/prerendering/basics/src/routes/max-age-escaped/+page.js
+new file mode 100644
+index 0000000..72eb8ca
+--- /dev/null
++++ b/packages/kit/test/prerendering/basics/src/routes/max-age-escaped/+page.js
+@@ -0,0 +1,6 @@
++/** @type {import('@sveltejs/kit').Load} */
++export function load({ setHeaders }) {
++	setHeaders({
++		'cache-control': 'max-age=300"><script>alert(1)</script>'
++	});
++}
+diff --git a/packages/kit/test/prerendering/basics/test/tests.spec.js b/packages/kit/test/prerendering/basics/test/tests.spec.js
+index 3ce7f07..5ccb55d 100644
+--- a/packages/kit/test/prerendering/basics/test/tests.spec.js
++++ b/packages/kit/test/prerendering/basics/test/tests.spec.js
+@@ -101,6 +101,14 @@ test('inserts http-equiv tag for cache-control headers', () => {
+ 	expect(content).toMatch('<meta http-equiv="cache-control" content="max-age=300">');
+ });
+ 
++test('escapes cache-control header in http-equiv meta tag', () => {
++	const content = read('max-age-escaped.html');
++	expect(content).toMatch(
++		'<meta http-equiv="cache-control" content="max-age=300&quot;><script>alert(1)</script>">'
++	);
++	expect(content).not.toMatch('content="max-age=300"><script>');
++});
++
+ test('renders page with data from endpoint', () => {
+ 	const content = read('fetch-endpoint/buffered.html');
+ 	expect(content).toMatch('<h1>the answer is 42</h1>');

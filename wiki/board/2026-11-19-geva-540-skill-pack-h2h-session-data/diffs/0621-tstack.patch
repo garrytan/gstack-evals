@@ -1,0 +1,91 @@
+diff --git a/Terminal.Gui/Views/Selectors/SelectorBase.cs b/Terminal.Gui/Views/Selectors/SelectorBase.cs
+index f1f7ed1..c675814 100644
+--- a/Terminal.Gui/Views/Selectors/SelectorBase.cs
++++ b/Terminal.Gui/Views/Selectors/SelectorBase.cs
+@@ -529,6 +529,19 @@ public abstract class SelectorBase : View, IOrientation, IValue<int?>
+                 SubViews.ElementAt (i).Width = Dim.Auto ();
+             }
+         }
++
++        if (Orientation == Orientation.Horizontal)
++        {
++            // DimAuto sizes Pos.Align'd SubViews using their current Frames. Ensure those Frames reflect
++            // the new SubViews (and their Margins) so our Dim.Auto width is correct, even when Labels/Values
++            // are set after the first layout pass.
++            foreach (View subView in SubViews)
++            {
++                subView.SetRelativeLayout (App?.Screen.Size ?? new Size (2048, 2048));
++            }
++        }
++
++        SetNeedsLayout ();
+     }
+ 
+     /// <summary>
+diff --git a/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs b/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs
+index f84b0da..12d843d 100644
+--- a/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs
++++ b/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs
+@@ -1069,4 +1069,62 @@ public class OptionSelectorTests
+     }
+ 
+     #endregion
++
++    [Fact]
++    public void Horizontal_Labels_Set_After_Construction_Width_Fits_Content ()
++    {
++        VirtualTimeProvider time = new ();
++        using IApplication app = Application.Create (time);
++        app.Init (DriverRegistry.Names.ANSI);
++        Window win = new ();
++
++        OptionSelector selector = new () { Y = 2, Orientation = Orientation.Horizontal };
++        selector.Labels = ["IMDb (Recommended)", "TMDb"];
++        selector.Values = [0, 1];
++
++        win.Add (selector);
++        app.Begin (win);
++
++        CheckBox [] cbs = selector.SubViews.OfType<CheckBox> ().ToArray ();
++        Assert.Equal (2, cbs.Length);
++        Assert.Equal (cbs [1].Frame.Right, selector.Viewport.Width);
++        Assert.Equal ("TMDb".Length + 2, cbs [1].Frame.Width);
++        win.Dispose ();
++    }
++
++    // Claude - Opus 5.5
++    /// <summary>
++    ///     Regression: Labels/Values set after the first layout pass (e.g. reactive binding) must cause the
++    ///     Dim.Auto width to include all labels (and the HorizontalSpace margins).
++    /// </summary>
++    [Theory]
++    [InlineData (false)]
++    [InlineData (true)]
++    public void Horizontal_Labels_Set_After_Layout_Width_Fits_Content (bool hidden)
++    {
++        VirtualTimeProvider time = new ();
++        using IApplication app = Application.Create (time);
++        app.Init (DriverRegistry.Names.ANSI);
++        Window win = new ();
++
++        OptionSelector selector = new () { Y = 2, Orientation = Orientation.Horizontal };
++        if (hidden)
++        {
++            selector.Visible = false;
++        }
++
++        win.Add (selector);
++        app.Begin (win);
++        app.LayoutAndDraw ();
++
++        selector.Labels = ["IMDb (Recommended)", "TMDb"];
++        selector.Values = [0, 1];
++        selector.Visible = true;
++        app.LayoutAndDraw ();
++
++        CheckBox [] cbs = selector.SubViews.OfType<CheckBox> ().ToArray ();
++        Assert.Equal (cbs [1].Frame.Right, selector.Viewport.Width);
++        Assert.Equal ("TMDb".Length + 2, cbs [1].Frame.Width);
++        win.Dispose ();
++    }
+ }

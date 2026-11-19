@@ -1,0 +1,121 @@
+diff --git a/src/main/java/io/github/hectorvent/floci/services/s3/S3Controller.java b/src/main/java/io/github/hectorvent/floci/services/s3/S3Controller.java
+index 891cf2c..b7a797d 100644
+--- a/src/main/java/io/github/hectorvent/floci/services/s3/S3Controller.java
++++ b/src/main/java/io/github/hectorvent/floci/services/s3/S3Controller.java
+@@ -69,6 +69,9 @@ import org.jboss.logging.Logger;
+ public class S3Controller {
+ 
+     private static final Logger LOG = Logger.getLogger(S3Controller.class);
++    private static final java.util.List<String> UNMODELLED_BUCKET_SUBRESOURCES = java.util.List.of(
++            "analytics", "inventory", "metrics", "intelligent-tiering",
++            "metadataConfiguration", "metadataTable");
+     private static final DateTimeFormatter ISO_FORMAT = DateTimeFormatter
+             .ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'")
+             .withZone(ZoneId.of("UTC"));
+@@ -314,6 +317,18 @@ public class S3Controller {
+                 s3Service.deleteBucketOwnershipControls(bucket);
+                 return Response.noContent().build();
+             }
++            if (hasQueryParam(uriInfo, "replication")) {
++                s3Service.deleteBucketReplication(bucket);
++                return Response.noContent().build();
++            }
++            // Any other sub-resource-qualified DELETE (analytics, inventory, metrics,
++            // intelligent-tiering, ...) must never fall through to DeleteBucket.
++            for (String subResource : UNMODELLED_BUCKET_SUBRESOURCES) {
++                if (hasQueryParam(uriInfo, subResource)) {
++                    s3Service.headBucket(bucket); // validates bucket existence only
++                    return Response.noContent().build();
++                }
++            }
+             s3Service.deleteBucket(bucket);
+             return Response.noContent().build();
+         } catch (AwsException e) {
+diff --git a/src/main/java/io/github/hectorvent/floci/services/s3/S3Service.java b/src/main/java/io/github/hectorvent/floci/services/s3/S3Service.java
+index c60cc0f..0b484dd 100644
+--- a/src/main/java/io/github/hectorvent/floci/services/s3/S3Service.java
++++ b/src/main/java/io/github/hectorvent/floci/services/s3/S3Service.java
+@@ -1201,6 +1201,18 @@ public class S3Service implements Resettable {
+         LOG.infov("Deleted website configuration for bucket: {0}", bucketName);
+     }
+ 
++    /**
++     * Removes the replication configuration from a bucket. Replication is not
++     * modelled, so this only validates that the bucket exists. It must never
++     * delete the bucket itself.
++     */
++    public void deleteBucketReplication(String bucketName) {
++        bucketStore.get(bucketName)
++                .orElseThrow(() -> new AwsException("NoSuchBucket",
++                        "The specified bucket does not exist.", 404));
++        LOG.debugv("Deleted replication configuration for bucket: {0}", bucketName);
++    }
++
+     public void deleteBucketTagging(String bucketName) {
+         Bucket bucket = bucketStore.get(bucketName)
+                 .orElseThrow(() -> new AwsException("NoSuchBucket",
+diff --git a/src/test/java/io/github/hectorvent/floci/services/s3/S3DeleteBucketReplicationIntegrationTest.java b/src/test/java/io/github/hectorvent/floci/services/s3/S3DeleteBucketReplicationIntegrationTest.java
+new file mode 100644
+index 0000000..a3c562b
+--- /dev/null
++++ b/src/test/java/io/github/hectorvent/floci/services/s3/S3DeleteBucketReplicationIntegrationTest.java
+@@ -0,0 +1,59 @@
++package io.github.hectorvent.floci.services.s3;
++
++import io.quarkus.test.junit.QuarkusTest;
++import org.junit.jupiter.api.MethodOrderer;
++import org.junit.jupiter.api.Order;
++import org.junit.jupiter.api.Test;
++import org.junit.jupiter.api.TestMethodOrder;
++
++import static io.restassured.RestAssured.given;
++import static org.hamcrest.Matchers.containsString;
++
++@QuarkusTest
++@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
++class S3DeleteBucketReplicationIntegrationTest {
++
++    private static final String BUCKET = "delete-replication-int-test";
++
++    @Test
++    @Order(1)
++    void createBucket() {
++        given().when().put("/" + BUCKET).then().statusCode(200);
++    }
++
++    @Test
++    @Order(2)
++    void deleteBucketReplicationReturns204() {
++        given().when().delete("/" + BUCKET + "?replication").then().statusCode(204);
++    }
++
++    @Test
++    @Order(3)
++    void bucketStillExistsAfterDeleteReplication() {
++        given().when().head("/" + BUCKET).then().statusCode(200);
++    }
++
++    @Test
++    @Order(4)
++    void otherUnmodelledSubResourceDeletesDoNotDeleteBucket() {
++        for (String q : new String[]{"analytics&id=a", "inventory&id=i", "metrics&id=m",
++                "intelligent-tiering&id=t", "metadataTable"}) {
++            given().when().delete("/" + BUCKET + "?" + q).then().statusCode(204);
++        }
++        given().when().head("/" + BUCKET).then().statusCode(200);
++    }
++
++    @Test
++    @Order(5)
++    void deleteBucketReplicationOnMissingBucketReturns404() {
++        given().when().delete("/no-such-bucket-replication-test?replication")
++            .then().statusCode(404).body(containsString("NoSuchBucket"));
++    }
++
++    @Test
++    @Order(6)
++    void deleteBucket() {
++        given().when().delete("/" + BUCKET).then().statusCode(204);
++        given().when().head("/" + BUCKET).then().statusCode(404);
++    }
++}

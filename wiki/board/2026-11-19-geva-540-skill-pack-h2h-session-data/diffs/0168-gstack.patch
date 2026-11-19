@@ -1,0 +1,232 @@
+diff --git a/rust/src/tools/ctx_edit.rs b/rust/src/tools/ctx_edit.rs
+index 7aff71f..801b718 100644
+--- a/rust/src/tools/ctx_edit.rs
++++ b/rust/src/tools/ctx_edit.rs
+@@ -280,6 +280,14 @@ pub fn run_io(params: &EditParams, last_mode: &str) -> (String, CacheEffect) {
+         }
+     }
+ 
++    // Recovery for text copied out of a compressed / line-numbered `ctx_read`
++    // view: the agent's old_string may still carry `N| ` gutters (lines mode) or
++    // be missing blank lines the view stripped. Only applied when the exact
++    // match failed, and only on a unique match.
++    if let Some(res) = try_stripped_view_match(path, &pre, params, cap, content, uses_crlf) {
++        return res;
++    }
++
+     if content.contains(new_str) {
+         return (
+             format!(
+@@ -662,6 +670,148 @@ fn find_original_span(content: &str, normalized_needle: &str) -> Option<String>
+     None
+ }
+ 
++/// Strips `ctx_read` line-number gutters (`  12| code`, `12|code`) from every
++/// line of `s`. Returns `None` unless *every* non-blank line carries a gutter,
++/// so real source that merely contains `|` is never touched.
++fn strip_line_number_gutters(s: &str) -> Option<String> {
++    let mut any = false;
++    let mut out = Vec::new();
++    for line in s.lines() {
++        if line.trim().is_empty() {
++            out.push(String::new());
++            continue;
++        }
++        let rest = line.trim_start();
++        let digits = rest.bytes().take_while(u8::is_ascii_digit).count();
++        if digits == 0 {
++            return None;
++        }
++        let after = rest[digits..].strip_prefix('|')?;
++        let body = after.strip_prefix(' ').unwrap_or(after);
++        out.push(body.to_string());
++        any = true;
++    }
++    any.then(|| out.join("\n"))
++}
++
++/// Locates `needle` in `content` ignoring blank lines and trailing whitespace on
++/// both sides. Returns the content line range `[start, end)` of the unique match
++/// plus, for each needle line, the content line index it matched. `None` when
++/// there is no match or more than one.
++fn find_blank_insensitive(content: &[&str], needle: &[&str]) -> Option<(usize, usize, Vec<usize>)> {
++    let needle: Vec<&str> = needle
++        .iter()
++        .map(|l| l.trim_end())
++        .filter(|l| !l.is_empty())
++        .collect();
++    if needle.is_empty() {
++        return None;
++    }
++    let nonblank: Vec<usize> = (0..content.len())
++        .filter(|&i| !content[i].trim().is_empty())
++        .collect();
++    let mut found: Option<Vec<usize>> = None;
++    for w in nonblank.windows(needle.len()) {
++        if w.iter().zip(&needle).all(|(&ci, nl)| content[ci].trim_end() == *nl) {
++            if found.is_some() {
++                return None; // ambiguous
++            }
++            found = Some(w.to_vec());
++        }
++    }
++    let idx = found?;
++    Some((idx[0], idx[idx.len() - 1] + 1, idx))
++}
++
++/// Rebuilds the replacement text for a blank-insensitive match: the agent's
++/// `new_lines` are aligned against its (blank-stripped) `old_lines`, and the
++/// blank lines the file had between matched lines are re-inserted after the
++/// corresponding line so the edit does not silently delete them.
++fn reinsert_blank_gaps(old_lines: &[&str], new_lines: &[&str], gaps: &[usize]) -> Vec<String> {
++    use similar::{ChangeTag, TextDiff};
++    let old_text = old_lines.join("\n") + "\n";
++    let new_text = new_lines.join("\n") + "\n";
++    let diff = TextDiff::from_lines(&old_text, &new_text);
++    let mut out = Vec::new();
++    let mut old_idx = 0usize;
++    // The gap after an old line is deferred until the next old line is
++    // consumed, so replacement (inserted) lines land before it.
++    let mut pending = 0usize;
++    for change in diff.iter_all_changes() {
++        let line = change.value().trim_end_matches(['\n', '\r']).to_string();
++        match change.tag() {
++            ChangeTag::Insert => out.push(line),
++            tag => {
++                out.extend(std::iter::repeat_n(String::new(), pending));
++                if tag == ChangeTag::Equal {
++                    out.push(line);
++                }
++                pending = gaps.get(old_idx).copied().unwrap_or(0);
++                old_idx += 1;
++            }
++        }
++    }
++    out.extend(std::iter::repeat_n(String::new(), pending));
++    out
++}
++
++fn try_stripped_view_match(
++    path: &Path,
++    pre: &FilePreimage,
++    params: &EditParams,
++    cap: usize,
++    content: &str,
++    uses_crlf: bool,
++) -> Option<(String, CacheEffect)> {
++    let line_sep = if uses_crlf { "\r\n" } else { "\n" };
++    let raw_old = params.old_string.replace("\r\n", "\n");
++    let raw_new = params.new_string.replace("\r\n", "\n");
++
++    // Gutter stripping: old_string first; new_string only if it is gutted too.
++    let (old_norm, new_norm) = match strip_line_number_gutters(&raw_old) {
++        Some(o) => (o, strip_line_number_gutters(&raw_new).unwrap_or(raw_new)),
++        None => (raw_old, raw_new),
++    };
++
++    let content_lines: Vec<&str> = content.lines().collect();
++    let old_lines: Vec<&str> = old_norm.lines().collect();
++    let (start, end, matched) = find_blank_insensitive(&content_lines, &old_lines)?;
++
++    let original = content_lines[start..end].join(line_sep);
++    let occ = content.matches(&original).count();
++    if occ != 1 && !params.replace_all {
++        return None;
++    }
++
++    let old_nonblank: Vec<&str> = old_lines
++        .iter()
++        .copied()
++        .filter(|l| !l.trim().is_empty())
++        .collect();
++    let gaps: Vec<usize> = matched.windows(2).map(|w| w[1] - w[0] - 1).collect();
++    let new_lines: Vec<&str> = new_norm.lines().collect();
++    let new_nonblank_equal = new_lines.iter().all(|l| !l.trim().is_empty());
++    let replacement = if new_nonblank_equal && gaps.iter().any(|&g| g > 0) {
++        reinsert_blank_gaps(&old_nonblank, &new_lines, &gaps).join(line_sep)
++    } else {
++        adapt_new_string_to_line_sep(&new_norm, line_sep)
++    };
++    if replacement == original {
++        return None;
++    }
++
++    let args = ReplaceArgs {
++        content,
++        old_str: &original,
++        new_str: &replacement,
++        occurrences: occ,
++        replace_all: params.replace_all,
++        old_tokens: count_tokens(&params.old_string),
++        new_tokens: count_tokens(&params.new_string),
++    };
++    Some(do_replace(path, pre, params, cap, &args))
++}
++
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+@@ -1008,6 +1158,63 @@ mod tests {
+         );
+     }
+ 
++    #[test]
++    fn stripped_blank_lines_in_old_string_still_match() {
++        let f = make_temp("fn a() {\n    let x = 1;\n\n    let y = 2;\n}\n\nfn b() {}\n");
++        let mut cache = SessionCache::new();
++        let result = handle(
++            &mut cache,
++            &mk_params(
++                f.path(),
++                "    let x = 1;\n    let y = 2;\n}",
++                "    let x = 10;\n    let y = 2;\n}",
++                false,
++                false,
++            ),
++        );
++        assert!(result.contains("✓"), "blank-stripped old_string should match: {result}");
++        assert_eq!(
++            std::fs::read_to_string(f.path()).unwrap(),
++            "fn a() {\n    let x = 10;\n\n    let y = 2;\n}\n\nfn b() {}\n",
++            "original blank line must be preserved"
++        );
++    }
++
++    #[test]
++    fn stripped_blank_lines_ambiguous_is_rejected() {
++        let f = make_temp("a\n\nb\nx\na\nb\n");
++        let mut cache = SessionCache::new();
++        let result = handle(&mut cache, &mk_params(f.path(), "a\n b", "z", false, false));
++        assert!(result.contains("ERROR"), "{result}");
++        let result = handle(&mut cache, &mk_params(f.path(), "x\na\n\n\nb", "z", false, false));
++        assert!(result.contains("✓"), "{result}");
++        assert_eq!(std::fs::read_to_string(f.path()).unwrap(), "a\n\nb\nz\n");
++        let f = make_temp("a\n\nb\nx\na\n\n\nb\n");
++        let result = handle(&mut cache, &mk_params(f.path(), "a\nb\n", "z\n", false, false));
++        assert!(result.contains("ERROR"), "ambiguous match must not edit: {result}");
++    }
++
++    #[test]
++    fn line_number_gutters_are_stripped() {
++        let f = make_temp("fn main() {\n    let x = 42;\n}\n");
++        let mut cache = SessionCache::new();
++        let result = handle(
++            &mut cache,
++            &mk_params(
++                f.path(),
++                "   1| fn main() {\n   2|     let x = 42;",
++                "   1| fn main() {\n   2|     let x = 7;",
++                false,
++                false,
++            ),
++        );
++        assert!(result.contains("✓"), "{result}");
++        assert_eq!(
++            std::fs::read_to_string(f.path()).unwrap(),
++            "fn main() {\n    let x = 7;\n}\n"
++        );
++    }
++
+     #[test]
+     fn trailing_whitespace_tolerance() {
+         let f = make_temp("  let x = 1;  \n  let y = 2;\n");

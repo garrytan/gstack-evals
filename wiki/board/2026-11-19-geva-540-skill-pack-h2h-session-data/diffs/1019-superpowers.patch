@@ -1,0 +1,411 @@
+diff --git a/openapi3/schema.go b/openapi3/schema.go
+index e3be0df..60e4172 100644
+--- a/openapi3/schema.go
++++ b/openapi3/schema.go
+@@ -1949,6 +1949,29 @@ func (schema *Schema) VisitJSON(value any, opts ...SchemaValidationOption) error
+ }
+ 
+ func (schema *Schema) visitJSON(settings *schemaValidationSettings, value any) (err error) {
++	// Guard against circular allOf/anyOf/oneOf/not chains: applying a schema to a
++	// value while that same schema is already being applied to that very value
++	// adds no new constraints and would otherwise recurse without bound.
++	for _, s := range settings.visitStack {
++		if s == schema {
++			return nil
++		}
++	}
++	settings.visitStack = append(settings.visitStack, schema)
++	defer func() { settings.visitStack = settings.visitStack[:len(settings.visitStack)-1] }()
++	return schema.visitJSONValue(settings, value)
++}
++
++// visitJSONChild applies schema to a value nested inside the value currently
++// being validated (e.g. an array item or an object property).
++func (schema *Schema) visitJSONChild(settings *schemaValidationSettings, value any) error {
++	saved := settings.visitStack
++	settings.visitStack = nil
++	defer func() { settings.visitStack = saved }()
++	return schema.visitJSON(settings, value)
++}
++
++func (schema *Schema) visitJSONValue(settings *schemaValidationSettings, value any) (err error) {
+ 	switch value := value.(type) {
+ 	case nil:
+ 		// Don't use VisitJSONNull, as we still want to reach 'visitXOFOperations', since
+@@ -2877,7 +2900,7 @@ func (schema *Schema) visitJSONArray(settings *schemaValidationSettings, value [
+ 		if prefixItemSchema == nil {
+ 			return newUnresolvedRef(prefixItemRef.Ref, prefixItemRef.Origin)
+ 		}
+-		if err := prefixItemSchema.visitJSON(settings, value[i]); err != nil {
++		if err := prefixItemSchema.visitJSONChild(settings, value[i]); err != nil {
+ 			err = markSchemaErrorIndex(err, i)
+ 			if !settings.multiError {
+ 				return err
+@@ -2898,7 +2921,7 @@ func (schema *Schema) visitJSONArray(settings *schemaValidationSettings, value [
+ 			return newUnresolvedRef(itemSchemaRef.Ref, itemSchemaRef.Origin)
+ 		}
+ 		for i := len(schema.PrefixItems); i < len(value); i++ {
+-			if err := itemSchema.visitJSON(settings, value[i]); err != nil {
++			if err := itemSchema.visitJSONChild(settings, value[i]); err != nil {
+ 				err = markSchemaErrorIndex(err, i)
+ 				if !settings.multiError {
+ 					return err
+@@ -3008,7 +3031,7 @@ func (schema *Schema) visitJSONObject(settings *schemaValidationSettings, value
+ 				if p == nil {
+ 					return newUnresolvedRef(propertyRef.Ref, propertyRef.Origin)
+ 				}
+-				if err := p.visitJSON(settings, v); err != nil {
++				if err := p.visitJSONChild(settings, v); err != nil {
+ 					if settings.failfast {
+ 						return errSchema
+ 					}
+@@ -3027,7 +3050,7 @@ func (schema *Schema) visitJSONObject(settings *schemaValidationSettings, value
+ 		}
+ 		if allowed := schema.AdditionalProperties.Has; allowed == nil || *allowed {
+ 			if additionalProperties != nil {
+-				if err := additionalProperties.visitJSON(settings, v); err != nil {
++				if err := additionalProperties.visitJSONChild(settings, v); err != nil {
+ 					if settings.failfast {
+ 						return errSchema
+ 					}
+diff --git a/openapi3/schema_circular_xof_test.go b/openapi3/schema_circular_xof_test.go
+new file mode 100644
+index 0000000..3717834
+--- /dev/null
++++ b/openapi3/schema_circular_xof_test.go
+@@ -0,0 +1,50 @@
++package openapi3
++
++import (
++	"context"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++)
++
++func TestVisitJSONCircularXOF(t *testing.T) {
++	for _, kind := range []string{"allOf", "anyOf", "oneOf"} {
++		t.Run(kind, func(t *testing.T) {
++			s := &Schema{
++				Type:       &Types{"object"},
++				Properties: Schemas{"name": {Value: &Schema{Type: &Types{"string"}}}},
++			}
++			refs := SchemaRefs{{Value: s}}
++			switch kind {
++			case "allOf":
++				s.AllOf = refs
++			case "anyOf":
++				s.AnyOf = refs
++			case "oneOf":
++				s.OneOf = refs
++			}
++			require.NoError(t, s.Validate(context.Background()))
++			require.NoError(t, s.VisitJSON(map[string]any{"name": "test"}))
++			require.Error(t, s.VisitJSON(map[string]any{"name": 42}))
++			require.Error(t, s.VisitJSON("not an object"))
++		})
++	}
++
++	t.Run("indirect", func(t *testing.T) {
++		a := &Schema{Type: &Types{"string"}}
++		b := &Schema{AllOf: SchemaRefs{{Value: a}}}
++		a.AnyOf = SchemaRefs{{Value: b}}
++		require.NoError(t, a.VisitJSON("x"))
++		require.Error(t, a.VisitJSON(1.0))
++	})
++
++	t.Run("recursive data structure still validated", func(t *testing.T) {
++		node := &Schema{Type: &Types{"object"}}
++		node.Properties = Schemas{
++			"value": {Value: &Schema{Type: &Types{"integer"}}},
++			"next":  {Value: &Schema{AllOf: SchemaRefs{{Value: node}}}},
++		}
++		require.NoError(t, node.VisitJSON(map[string]any{"value": 1.0, "next": map[string]any{"value": 2.0}}))
++		require.Error(t, node.VisitJSON(map[string]any{"value": 1.0, "next": map[string]any{"value": "x"}}))
++	})
++}
+diff --git a/openapi3/schema_validation_settings.go b/openapi3/schema_validation_settings.go
+index 205d95d..3b33ac2 100644
+--- a/openapi3/schema_validation_settings.go
++++ b/openapi3/schema_validation_settings.go
+@@ -34,6 +34,12 @@ type schemaValidationSettings struct {
+ 	stringFormats  map[string]StringFormatValidator
+ 	numberFormats  map[string]NumberFormatValidator
+ 	integerFormats map[string]IntegerFormatValidator
++
++	// visitStack holds the schemas currently being applied to the same JSON value
++	// (through allOf/anyOf/oneOf/not). It is used to detect circular combinator
++	// chains, which would otherwise recurse forever. It is reset whenever
++	// validation descends into a child value (array item, object property).
++	visitStack []*Schema
+ }
+ 
+ // FailFast returns schema validation errors quicker.
+diff --git a/openapi3filter/circular_xof_test.go b/openapi3filter/circular_xof_test.go
+new file mode 100644
+index 0000000..369b4dd
+--- /dev/null
++++ b/openapi3filter/circular_xof_test.go
+@@ -0,0 +1,83 @@
++package openapi3filter
++
++import (
++	"context"
++	"net/http"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++
++	"github.com/getkin/kin-openapi/openapi3"
++	"github.com/getkin/kin-openapi/routers/gorillamux"
++)
++
++func TestValidateRequestCircularXOF(t *testing.T) {
++	for _, kind := range []string{"allOf", "anyOf", "oneOf"} {
++		for _, typ := range []string{"object", "string", "array"} {
++			t.Run(kind+"/"+typ, func(t *testing.T) {
++				extra := ""
++				if typ == "object" {
++					extra = "\n      properties:\n        name: { type: string }"
++				}
++				if typ == "array" {
++					extra = "\n      items: { $ref: '#/components/schemas/Recursive' }"
++				}
++				spec := `
++openapi: '3.0.0'
++info: { title: t, version: '1.0' }
++paths:
++  /test:
++    get:
++      parameters:
++        - name: data
++          in: query
++          schema: { $ref: '#/components/schemas/Recursive' }
++        - name: deep
++          in: query
++          style: deepObject
++          schema: { $ref: '#/components/schemas/Recursive' }
++      responses: { '200': { description: OK } }
++components:
++  schemas:
++    Recursive:
++      type: ` + typ + `
++      ` + kind + `:
++        - $ref: '#/components/schemas/Recursive'` + extra + `
++`
++				loader := openapi3.NewLoader()
++				doc, err := loader.LoadFromData([]byte(spec))
++				require.NoError(t, err)
++				require.NoError(t, doc.Validate(loader.Context))
++				router, err := gorillamux.NewRouter(doc)
++				require.NoError(t, err)
++
++				for _, q := range []string{"data=x", "deep[name]=x", "data=a,b"} {
++					req, err := http.NewRequest(http.MethodGet, "http://example.com/test?"+q, nil)
++					require.NoError(t, err)
++					route, pathParams, err := router.FindRoute(req)
++					require.NoError(t, err)
++					// Must return (error or not) rather than overflowing the stack.
++					_ = ValidateRequest(context.Background(), &RequestValidationInput{
++						Request: req, PathParams: pathParams, Route: route,
++					})
++				}
++			})
++		}
++	}
++}
++
++func TestDecodeCircularXOFHelpers(t *testing.T) {
++	s := &openapi3.Schema{}
++	s.AnyOf = openapi3.SchemaRefs{{Value: s}}
++	ref := &openapi3.SchemaRef{Value: s}
++
++	d := &urlValuesDecoder{}
++	_, err := d.parseValue("x", ref)
++	require.ErrorIs(t, err, errCircularSchemaRef)
++
++	_, err = buildResObj(map[string]any{"a": "x"}, nil, "a", ref)
++	require.ErrorIs(t, err, errCircularSchemaRef)
++
++	_, _, err = decodeValue(&urlValuesDecoder{}, "a", &openapi3.SerializationMethod{Style: "form", Explode: true}, ref, false)
++	require.ErrorIs(t, err, errCircularSchemaRef)
++}
+diff --git a/openapi3filter/req_resp_decoder.go b/openapi3filter/req_resp_decoder.go
+index e1d17b1..9378da5 100644
+--- a/openapi3filter/req_resp_decoder.go
++++ b/openapi3filter/req_resp_decoder.go
+@@ -267,19 +267,40 @@ func decodeStyledParameter(param *openapi3.Parameter, input *RequestValidationIn
+ 	return decodeValue(dec, param.Name, sm, param.Schema, param.Required)
+ }
+ 
++// errCircularSchemaRef is returned when decoding encounters a circular
++// allOf/anyOf/oneOf chain that would otherwise recurse without bound.
++var errCircularSchemaRef = errors.New("circular schema reference detected while decoding")
++
++// pushSchemaStack appends schema to stack, returning an error if it is already present.
++func pushSchemaStack(stack []*openapi3.Schema, schema *openapi3.Schema) ([]*openapi3.Schema, error) {
++	if slices.Contains(stack, schema) {
++		return stack, errCircularSchemaRef
++	}
++	return append(stack, schema), nil
++}
++
+ func decodeValue(dec valueDecoder, param string, sm *openapi3.SerializationMethod, schema *openapi3.SchemaRef, required bool) (any, bool, error) {
++	return decodeValueWithStack(dec, param, sm, schema, required, nil)
++}
++
++func decodeValueWithStack(dec valueDecoder, param string, sm *openapi3.SerializationMethod, schema *openapi3.SchemaRef, required bool, stack []*openapi3.Schema) (any, bool, error) {
+ 	var found bool
+ 
+-	if schema == nil {
++	if schema == nil || schema.Value == nil {
+ 		return nil, false, nil
+ 	}
+ 
++	stack, err := pushSchemaStack(stack, schema.Value)
++	if err != nil {
++		return nil, false, err
++	}
++
+ 	if len(schema.Value.AllOf) > 0 {
+ 		var value any
+ 		var err error
+ 		for _, sr := range schema.Value.AllOf {
+ 			var f bool
+-			value, f, err = decodeValue(dec, param, sm, sr, required)
++			value, f, err = decodeValueWithStack(dec, param, sm, sr, required, stack)
+ 			found = found || f
+ 			if value == nil || err != nil {
+ 				break
+@@ -290,7 +311,10 @@ func decodeValue(dec valueDecoder, param string, sm *openapi3.SerializationMetho
+ 
+ 	if len(schema.Value.AnyOf) > 0 {
+ 		for _, sr := range schema.Value.AnyOf {
+-			value, f, _ := decodeValue(dec, param, sm, sr, required)
++			value, f, err := decodeValueWithStack(dec, param, sm, sr, required, stack)
++			if errors.Is(err, errCircularSchemaRef) {
++				return nil, found, err
++			}
+ 			found = found || f
+ 			if value != nil {
+ 				return value, found, nil
+@@ -306,7 +330,10 @@ func decodeValue(dec valueDecoder, param string, sm *openapi3.SerializationMetho
+ 		isMatched := 0
+ 		var value any
+ 		for _, sr := range schema.Value.OneOf {
+-			v, f, _ := decodeValue(dec, param, sm, sr, required)
++			v, f, err := decodeValueWithStack(dec, param, sm, sr, required, stack)
++			if errors.Is(err, errCircularSchemaRef) {
++				return nil, found, err
++			}
+ 			found = found || f
+ 			if v != nil {
+ 				value = v
+@@ -606,11 +633,23 @@ func (d *urlValuesDecoder) parseArray(raw []string, schemaRef *openapi3.SchemaRe
+ }
+ 
+ func (d *urlValuesDecoder) parseValue(v string, schema *openapi3.SchemaRef) (any, error) {
++	return d.parseValueWithStack(v, schema, nil)
++}
++
++func (d *urlValuesDecoder) parseValueWithStack(v string, schema *openapi3.SchemaRef, stack []*openapi3.Schema) (any, error) {
++	if schema == nil || schema.Value == nil {
++		return nil, nil
++	}
++	stack, err := pushSchemaStack(stack, schema.Value)
++	if err != nil {
++		return nil, err
++	}
++
+ 	if len(schema.Value.AllOf) > 0 {
+ 		var value any
+ 		var err error
+ 		for _, sr := range schema.Value.AllOf {
+-			value, err = d.parseValue(v, sr)
++			value, err = d.parseValueWithStack(v, sr, stack)
+ 			if value == nil || err != nil {
+ 				break
+ 			}
+@@ -622,9 +661,12 @@ func (d *urlValuesDecoder) parseValue(v string, schema *openapi3.SchemaRef) (any
+ 		var value any
+ 		var err error
+ 		for _, sr := range schema.Value.AnyOf {
+-			if value, err = d.parseValue(v, sr); err == nil {
++			if value, err = d.parseValueWithStack(v, sr, stack); err == nil {
+ 				return value, nil
+ 			}
++			if errors.Is(err, errCircularSchemaRef) {
++				return nil, err
++			}
+ 		}
+ 
+ 		return nil, err
+@@ -635,7 +677,10 @@ func (d *urlValuesDecoder) parseValue(v string, schema *openapi3.SchemaRef) (any
+ 		var value any
+ 		var err error
+ 		for _, sr := range schema.Value.OneOf {
+-			result, err := d.parseValue(v, sr)
++			result, err := d.parseValueWithStack(v, sr, stack)
++			if errors.Is(err, errCircularSchemaRef) {
++				return nil, err
++			}
+ 			if err == nil {
+ 				value = result
+ 				isMatched++
+@@ -1019,6 +1064,25 @@ func sliceMapToSlice(m map[string]any) ([]any, error) {
+ 
+ // buildResObj constructs an object based on a given schema and param values
+ func buildResObj(params map[string]any, parentKeys []string, key string, schema *openapi3.SchemaRef) (any, error) {
++	return buildResObjWithStack(params, parentKeys, key, schema, nil)
++}
++
++// buildResObjWithStack is buildResObj with a stack of the schemas currently
++// being applied to the same key (through anyOf/oneOf/allOf), used to detect
++// circular combinator chains.
++func buildResObjWithStack(params map[string]any, parentKeys []string, key string, schema *openapi3.SchemaRef, stack []*openapi3.Schema) (any, error) {
++	if schema == nil || schema.Value == nil {
++		return nil, nil
++	}
++	stack, err := pushSchemaStack(stack, schema.Value)
++	if err != nil {
++		keys := slices.Clip(parentKeys)
++		if key != "" {
++			keys = append(keys, key)
++		}
++		return nil, &ParseError{path: pathFromKeys(keys), Kind: KindOther, Cause: err}
++	}
++
+ 	mapKeys := parentKeys
+ 	if key != "" {
+ 		mapKeys = append(mapKeys, key)
+@@ -1092,11 +1156,11 @@ func buildResObj(params map[string]any, parentKeys []string, key string, schema
+ 
+ 		return resultMap, nil
+ 	case len(schema.Value.AnyOf) > 0:
+-		return buildFromSchemas(schema.Value.AnyOf, params, parentKeys, key)
++		return buildFromSchemas(schema.Value.AnyOf, params, parentKeys, key, stack)
+ 	case len(schema.Value.OneOf) > 0:
+-		return buildFromSchemas(schema.Value.OneOf, params, parentKeys, key)
++		return buildFromSchemas(schema.Value.OneOf, params, parentKeys, key, stack)
+ 	case len(schema.Value.AllOf) > 0:
+-		return buildFromSchemas(schema.Value.AllOf, params, parentKeys, key)
++		return buildFromSchemas(schema.Value.AllOf, params, parentKeys, key, stack)
+ 	default:
+ 		val, ok := deepGet(params, mapKeys...)
+ 		if !ok {
+@@ -1117,10 +1181,13 @@ func buildResObj(params map[string]any, parentKeys []string, key string, schema
+ }
+ 
+ // buildFromSchemas decodes params with anyOf, oneOf, allOf schemas.
+-func buildFromSchemas(schemas openapi3.SchemaRefs, params map[string]any, mapKeys []string, key string) (any, error) {
++func buildFromSchemas(schemas openapi3.SchemaRefs, params map[string]any, mapKeys []string, key string, stack []*openapi3.Schema) (any, error) {
+ 	resultMap := make(map[string]any)
+ 	for _, s := range schemas {
+-		val, err := buildResObj(params, mapKeys, key, s)
++		val, err := buildResObjWithStack(params, mapKeys, key, s, stack)
++		if errors.Is(err, errCircularSchemaRef) {
++			return nil, err
++		}
+ 		if err == nil && val != nil {
+ 
+ 			if m, ok := val.(map[string]any); ok {

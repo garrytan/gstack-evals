@@ -1,0 +1,117 @@
+diff --git a/.changeset/fix-astro-shorthand-unused.md b/.changeset/fix-astro-shorthand-unused.md
+new file mode 100644
+index 00000000..a3d8965d
+--- /dev/null
++++ b/.changeset/fix-astro-shorthand-unused.md
+@@ -0,0 +1,5 @@
++---
++"@biomejs/biome": patch
++---
++
++Fixed a regression where [`noUnusedVariables`](https://biomejs.dev/linter/rules/no-unused-variables/) reported variables used only in Astro shorthand attributes, such as `<MyComponent {text} />`, as unused.
+diff --git a/crates/biome_cli/tests/cases/handle_astro_files.rs b/crates/biome_cli/tests/cases/handle_astro_files.rs
+index 7f259a9c..c9427579 100644
+--- a/crates/biome_cli/tests/cases/handle_astro_files.rs
++++ b/crates/biome_cli/tests/cases/handle_astro_files.rs
+@@ -988,3 +988,45 @@ fn return_in_template_expression_should_error() {
+         result,
+     ));
+ }
++
++#[test]
++fn no_unused_variables_with_shorthand_attribute() {
++    let fs = MemoryFileSystem::default();
++    let mut console = BufferConsole::default();
++
++    fs.insert(
++        "biome.json".into(),
++        r#"{ "html": { "linter": {"enabled": true}, "experimentalFullSupportEnabled": true }, "linter": { "rules": { "correctness": { "noUnusedVariables": "error" } } } }"#
++            .as_bytes(),
++    );
++
++    let astro_file_path = Utf8Path::new("file.astro");
++    fs.insert(
++        astro_file_path.into(),
++        r#"---
++import MyComponent from './my-component.astro';
++
++const text = "abc";
++---
++
++<MyComponent {text} />
++"#
++        .as_bytes(),
++    );
++
++    let (fs, result) = run_cli(
++        fs,
++        &mut console,
++        Args::from(["lint", astro_file_path.as_str()].as_slice()),
++    );
++
++    assert!(result.is_ok(), "run_cli returned {result:?}");
++
++    assert_cli_snapshot(SnapshotPayload::new(
++        module_path!(),
++        "no_unused_variables_with_shorthand_attribute",
++        fs,
++        console,
++        result,
++    ));
++}
+diff --git a/crates/biome_cli/tests/snapshots/main_cases_handle_astro_files/no_unused_variables_with_shorthand_attribute.snap b/crates/biome_cli/tests/snapshots/main_cases_handle_astro_files/no_unused_variables_with_shorthand_attribute.snap
+new file mode 100644
+index 00000000..3fa2a653
+--- /dev/null
++++ b/crates/biome_cli/tests/snapshots/main_cases_handle_astro_files/no_unused_variables_with_shorthand_attribute.snap
+@@ -0,0 +1,28 @@
++---
++source: crates/biome_cli/tests/snap_test.rs
++expression: redactor(content)
++---
++## `biome.json`
++
++```json
++{ "html": { "linter": {"enabled": true}, "experimentalFullSupportEnabled": true }, "linter": { "rules": { "correctness": { "noUnusedVariables": "error" } } } }
++```
++
++## `file.astro`
++
++```astro
++---
++import MyComponent from './my-component.astro';
++
++const text = "abc";
++---
++
++<MyComponent {text} />
++
++```
++
++# Emitted Messages
++
++```block
++Checked 1 file in <TIME>. No fixes applied.
++```
+diff --git a/crates/biome_service/src/file_handlers/html/parse_embedded_nodes.rs b/crates/biome_service/src/file_handlers/html/parse_embedded_nodes.rs
+index fd963b9a..e4883b2d 100644
+--- a/crates/biome_service/src/file_handlers/html/parse_embedded_nodes.rs
++++ b/crates/biome_service/src/file_handlers/html/parse_embedded_nodes.rs
+@@ -130,6 +130,17 @@ pub(crate) fn parse_embedded_nodes(params: ParseEmbeddedParams) -> ParseEmbedRes
+                     ctx.parse_and_push(&candidate, &doc_file_source, None, &mut nodes);
+                 }
+ 
++                // Shorthand attributes: <Component {prop} />
++                if let Some(attr) = HtmlAttributeSingleTextExpression::cast_ref(&element)
++                    && !attr.syntax().parent().is_some_and(|parent| {
++                        HtmlAttributeInitializerClause::can_cast(parent.kind())
++                    })
++                    && let Ok(expression) = attr.expression()
++                    && let Some(candidate) = build_text_expression_candidate(&expression)
++                {
++                    ctx.parse_and_push(&candidate, &doc_file_source, None, &mut nodes);
++                }
++
+                 // Spread attributes: <input {...props}>
+                 if let Some(spread) = HtmlSpreadAttribute::cast_ref(&element)
+                     && let Ok(expression) = spread.argument()

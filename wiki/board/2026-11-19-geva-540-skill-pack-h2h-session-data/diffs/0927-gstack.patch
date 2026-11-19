@@ -1,0 +1,47 @@
+diff --git a/lib/resolver-compat.js b/lib/resolver-compat.js
+index c00d1bf..4418a44 100644
+--- a/lib/resolver-compat.js
++++ b/lib/resolver-compat.js
+@@ -109,7 +109,9 @@ class LegacyResolver extends CustomResolver {
+ 	constructor(fileSystem, globalPaths, builtinModules, rootPaths, pathContext, customResolver, hostRequire, compiler, strict, externals, allowTransitive) {
+ 		super(fileSystem, globalPaths, builtinModules, rootPaths, pathContext, customResolver, hostRequire, compiler, strict);
+ 		this.externals = externals.map(makeExternalMatcher);
+-		this.externalCache = externals.map(pattern => new RegExp(makeExternalMatcherRegex(pattern)));
++		// SECURITY: Anchor to full package-name boundaries so that e.g. 'left-pad'
++		// does not also allow 'evil-left-pad' or 'left-pad-backdoor'. GHSA-c48m-32m9-vx93.
++		this.externalCache = externals.map(pattern => new RegExp(`^${makeExternalMatcherRegex(pattern)}(?:[\\\\/].*)?$`));
+ 		this.currMod = undefined;
+ 		this.trustedMods = new WeakMap();
+ 		this.allowTransitive = allowTransitive;
+@@ -192,7 +194,7 @@ class LegacyResolver extends CustomResolver {
+ 			return this.loadAsFileOrDirectory(resolved, extList);
+ 		}
+ 		const {module=x, path: resolvedPath} = resolved;
+-		this.externals.push(new RegExp('^' + escapeRegExp(resolvedPath)));
++		this.externals.push(new RegExp('^' + escapeRegExp(resolvedPath) + '(?:[\\\\/]|$)'));
+ 		return this.loadNodeModules(module, [resolvedPath], extList);
+ 	}
+ 
+diff --git a/test/nodevm.js b/test/nodevm.js
+index 97467c2..197cff3 100644
+--- a/test/nodevm.js
++++ b/test/nodevm.js
+@@ -276,6 +276,18 @@ describe('modules', () => {
+ 		assert.ok(vm.run("require('my-module')", __filename));
+ 	});
+ 
++	it('custom resolver does not allow packages that merely contain an allowed name (GHSA-c48m-32m9-vx93)', () => {
++		const vm = new NodeVM({
++			require: {
++				external: ['module'],
++				resolve: moduleName => path.resolve(__dirname, 'additional-modules', moduleName)
++			}
++		});
++
++		assert.throws(() => vm.run("require('my-module')", __filename), /Cannot find module/);
++		assert.throws(() => vm.run("require('my-es-module')", __filename), /Cannot find module/);
++	});
++
+ 	it('can resolve conditional exports with a custom resolver', () => {
+ 		const vm = new NodeVM({
+ 			require: {

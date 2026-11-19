@@ -1,0 +1,122 @@
+diff --git a/packages/core-base/test/translate.test.ts b/packages/core-base/test/translate.test.ts
+index 9687393..48861a8 100644
+--- a/packages/core-base/test/translate.test.ts
++++ b/packages/core-base/test/translate.test.ts
+@@ -723,6 +723,34 @@ describe('escapeParameter', () => {
+     )
+   })
+ 
++  test('srcdoc attribute is neutralized with escapeParameter', () => {
++    const originalWarn = console.warn
++    console.warn = vi.fn()
++
++    const ctx = context({
++      locale: 'en',
++      warnHtmlMessage: false,
++      escapeParameter: true,
++      messages: {
++        en: {
++          param: '<iframe srcdoc="{content}"></iframe>',
++          markup: '<iframe srcdoc="<b>x</b>"></iframe>'
++        }
++      }
++    })
++
++    expect(
++      translate(ctx, 'param', { content: '<img src=x onerror=alert(1)>' })
++    ).toEqual(
++      '<iframe &#115;rcdoc="&lt;img src&#x3D;x onerror&#x3D;alert(1)&gt;"></iframe>'
++    )
++    expect(translate(ctx, 'markup')).toEqual(
++      '<iframe &#115;rcdoc="&lt;b&gt;x&lt;/b&gt;"></iframe>'
++    )
++
++    console.warn = originalWarn
++  })
++
+   test('vulnerable case from GHSA report - img onerror attack', () => {
+     // Mock console.warn to suppress warnings for this test
+     const originalWarn = console.warn
+diff --git a/packages/shared/src/sanitize.ts b/packages/shared/src/sanitize.ts
+index 6167007..44d2175 100644
+--- a/packages/shared/src/sanitize.ts
++++ b/packages/shared/src/sanitize.ts
+@@ -29,6 +29,8 @@ const colonCharacterReferencePattern = /&colon;?/gi
+ const controlOrWhitespacePattern = /[\u0000-\u0020\u007f-\u009f]/g
+ const eventHandlerPattern = /(?:^|[\s"'<>/])on\w+\s*=\s*["']?[^"'>]+["']?/i
+ const eventHandlerAttributePattern = /(^|[\s"'<>/])on(\w+\s*=)/gi
++const srcdocPattern = /(?:^|[\s"'<>/])srcdoc\s*=/i
++const srcdocAttributePattern = /(^|[\s"'<>/])s(rcdoc\s*=)/gi
+ const unquotedUrlAttributePattern =
+   /(^|[\s"'<>/])((?:href|src|action|formaction)\s*=\s*)([^\s"'=<>`]+)/gi
+ 
+@@ -151,6 +153,20 @@ export function sanitizeTranslatedHtml(html: string): string {
+     html = html.replace(eventHandlerAttributePattern, '$1&#111;n$2')
+   }
+ 
++  // Detect and neutralize `srcdoc` attributes.
++  // The value of `srcdoc` is parsed as an HTML document after character
++  // references are decoded, so escaping its value is not enough.
++  if (srcdocPattern.test(html)) {
++    if (__DEV__) {
++      warn(
++        'Potentially dangerous `srcdoc` attribute detected in translation. ' +
++          'Consider removing srcdoc from your translation messages.'
++      )
++    }
++    // Neutralize srcdoc attributes by escaping 's'
++    html = html.replace(srcdocAttributePattern, '$1&#115;$2')
++  }
++
+   // Disable javascript: URLs in unquoted attributes
+   html = html.replace(
+     unquotedUrlAttributePattern,
+diff --git a/packages/shared/test/sanitize.test.ts b/packages/shared/test/sanitize.test.ts
+index ec8a086..d38bac8 100644
+--- a/packages/shared/test/sanitize.test.ts
++++ b/packages/shared/test/sanitize.test.ts
+@@ -70,6 +70,35 @@ describe('escapeHtml', () => {
+ })
+ 
+ describe('sanitizeTranslatedHtml', () => {
++  test('neutralize srcdoc attributes', () => {
++    expect(sanitizeTranslatedHtml('<iframe srcdoc="<b>x</b>"></iframe>')).toBe(
++      '<iframe &#115;rcdoc="&lt;b&gt;x&lt;/b&gt;"></iframe>'
++    )
++    expect(
++      sanitizeTranslatedHtml(
++        "<iframe SRCDOC='&lt;img src=x onerror=alert(1)&gt;'></iframe>"
++      )
++    ).toBe(
++      "<iframe &#115;RCDOC='&lt;img src=x &#111;nerror=alert(1)&gt;'></iframe>"
++    )
++    expect(sanitizeTranslatedHtml('<iframe srcdoc = x></iframe>')).toBe(
++      '<iframe &#115;rcdoc = x></iframe>'
++    )
++    expect(sanitizeTranslatedHtml('<iframe/srcdoc="x"></iframe>')).toBe(
++      '<iframe/&#115;rcdoc="x"></iframe>'
++    )
++  })
++
++  test('keep srcdoc inert after DOM parsing', () => {
++    const dom = new JSDOM(
++      sanitizeTranslatedHtml(
++        '<iframe srcdoc="&lt;img src=x onerror=alert(1)&gt;"></iframe>'
++      )
++    )
++    const iframe = dom.window.document.querySelector('iframe')!
++    expect(iframe.hasAttribute('srcdoc')).toBe(false)
++  })
++
+   test('neutralize event handlers', () => {
+     const html = '<a href="#" onclick="alert(1)">Click</a>'
+     const result = sanitizeTranslatedHtml(html)
+@@ -244,7 +273,7 @@ describe('sanitizeTranslatedHtml', () => {
+     const html = '<iframe srcdoc="<script>alert(1)</script>">Test</iframe>'
+     const result = sanitizeTranslatedHtml(html)
+     expect(result).toBe(
+-      '<iframe srcdoc="&lt;script&gt;alert(1)&lt;/script&gt;">Test</iframe>'
++      '<iframe &#115;rcdoc="&lt;script&gt;alert(1)&lt;/script&gt;">Test</iframe>'
+     )
+   })
+ 

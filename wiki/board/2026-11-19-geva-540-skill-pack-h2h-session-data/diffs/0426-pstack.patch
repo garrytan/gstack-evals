@@ -1,0 +1,119 @@
+diff --git a/Core/Relationships/RelationshipResolver.cs b/Core/Relationships/RelationshipResolver.cs
+index 0c1314a..6721374 100644
+--- a/Core/Relationships/RelationshipResolver.cs
++++ b/Core/Relationships/RelationshipResolver.cs
+@@ -289,9 +289,17 @@ namespace CKAN
+                 catch
+                 when (soft_resolve || options.proceed_with_inconsistencies)
+                 {
+-                    log.InfoFormat("{0} is recommended/suggested but it is not listed in the index, or not available for your game version.",
+-                                   descriptor);
+-                    continue;
++                    // Candidates excludes mods that conflict with the changeset,
++                    // but we need them to report the conflict
++                    candidates = options.proceed_with_inconsistencies
++                                     ? CandidatesIgnoringChangeset(descriptor)
++                                     : null;
++                    if (candidates == null)
++                    {
++                        log.InfoFormat("{0} is recommended/suggested but it is not listed in the index, or not available for your game version.",
++                                       descriptor);
++                        continue;
++                    }
+                 }
+ 
+                 if (candidates.Count > 1)
+@@ -373,6 +381,18 @@ namespace CKAN
+             }
+         }
+ 
++        private IReadOnlyList<CkanModule>? CandidatesIgnoringChangeset(RelationshipDescriptor descriptor)
++        {
++            try
++            {
++                return resolved.Candidates(descriptor, Array.Empty<CkanModule>(), registry, game);
++            }
++            catch
++            {
++                return null;
++            }
++        }
++
+         private string conflictingModDescription(CkanModule? mod, CkanModule? parent)
+             => mod == null
+                 ? Properties.Resources.RelationshipResolverAnUnmanaged
+diff --git a/Tests/Core/IO/ModuleInstallerTests.cs b/Tests/Core/IO/ModuleInstallerTests.cs
+index d7e5e99..84c8cd4 100644
+--- a/Tests/Core/IO/ModuleInstallerTests.cs
++++ b/Tests/Core/IO/ModuleInstallerTests.cs
+@@ -897,6 +897,70 @@ namespace Tests.Core.IO
+             }
+         }
+ 
++        [Test]
++        public void FindRecommendations_WithConflictingRecommendationsAndSuggestions_AllFound()
++        {
++            // Arrange
++            using (var inst     = new DisposableKSP())
++            using (var repo     = new TemporaryRepository(
++                                      Relationships.RelationshipResolverTests.MergeWithDefaults(
++                                          @"{
++                                              ""identifier"": ""InstallingMod"",
++                                              ""recommends"": [
++                                                  { ""name"": ""RecA"" },
++                                                  { ""name"": ""RecB"" },
++                                                  { ""name"": ""RecC"" }
++                                              ],
++                                              ""suggests"": [
++                                                  { ""name"": ""SugA"" },
++                                                  { ""name"": ""SugB"" }
++                                              ]
++                                          }",
++                                          @"{ ""identifier"": ""RecA"" }",
++                                          @"{
++                                              ""identifier"": ""RecB"",
++                                              ""conflicts"": [ { ""name"": ""RecA"" } ]
++                                          }",
++                                          @"{ ""identifier"": ""RecC"" }",
++                                          @"{ ""identifier"": ""SugA"" }",
++                                          @"{
++                                              ""identifier"": ""SugB"",
++                                              ""conflicts"": [ { ""name"": ""SugA"" } ]
++                                          }")
++                                          .ToArray()))
++            using (var repoData = new TemporaryRepositoryData(nullUser, repo.repo))
++            using (var regMgr   = RegistryManager.Instance(inst.KSP, repoData.Manager,
++                                                           new Repository[] { repo.repo }))
++            {
++                var registry = regMgr.registry;
++                CkanModule Latest(string ident)
++                    => registry.LatestAvailable(ident,
++                                                inst.KSP.StabilityToleranceConfig,
++                                                inst.KSP.VersionCriteria())!;
++                var toInstall = new CkanModule[] { Latest("InstallingMod") };
++
++                // Act
++                ModuleInstaller.FindRecommendations(
++                    inst.KSP, toInstall,
++                    toInstall,
++                    Array.Empty<CkanModule>(),
++                    Array.Empty<CkanModule>(),
++                    registry,
++                    out Dictionary<CkanModule, Tuple<bool, List<string>>> recommendations,
++                    out Dictionary<CkanModule, List<string>> suggestions,
++                    out Dictionary<CkanModule, HashSet<string>> supporters);
++
++                // Assert
++                CollectionAssert.AreEquivalent(new string[] { "RecA", "RecB", "RecC" },
++                                               recommendations.Keys.Select(m => m.identifier));
++                CollectionAssert.AreEquivalent(new string[] { "SugA", "SugB" },
++                                               suggestions.Keys.Select(m => m.identifier));
++                Assert.IsFalse(recommendations[Latest("RecA")].Item1);
++                Assert.IsFalse(recommendations[Latest("RecB")].Item1);
++                Assert.IsTrue(recommendations[Latest("RecC")].Item1);
++            }
++        }
++
+         [Test]
+         public void FindRecommendations_ReplaceParallaxWithParallaxContinued_1ThousandRecommendationsNotIncluded()
+         {

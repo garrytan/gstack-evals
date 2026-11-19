@@ -1,0 +1,146 @@
+diff --git a/.changeset/quiet-consts-wait.md b/.changeset/quiet-consts-wait.md
+new file mode 100644
+index 0000000..9d46e8c
+--- /dev/null
++++ b/.changeset/quiet-consts-wait.md
+@@ -0,0 +1,5 @@
++---
++'svelte': patch
++---
++
++fix: wait for async `{@const}` declarations referenced in `{#if}` conditions
+diff --git a/packages/svelte/src/compiler/phases/3-transform/client/visitors/IfBlock.js b/packages/svelte/src/compiler/phases/3-transform/client/visitors/IfBlock.js
+index b0cd51c..46816b6 100644
+--- a/packages/svelte/src/compiler/phases/3-transform/client/visitors/IfBlock.js
++++ b/packages/svelte/src/compiler/phases/3-transform/client/visitors/IfBlock.js
+@@ -15,7 +15,6 @@ export function IfBlock(node, context) {
+ 	const statements = [];
+ 
+ 	const has_await = node.metadata.expression.has_await;
+-	const has_blockers = node.metadata.expression.has_blockers();
+ 	const expression = build_expression(context, node.test, node.metadata.expression);
+ 
+ 	// Build the if/else-if/else chain
+@@ -110,13 +109,27 @@ export function IfBlock(node, context) {
+ 
+ 	statements.push(add_svelte_meta(b.call('$.if', ...args), node, 'if'));
+ 
++	// Blockers are collected after visiting the branches, and include those of flattened
++	// else-if branches (whose tests are evaluated inside the same `$.if`), because some
++	// blockers (e.g. those of async `{@const ...}` declarations) are only known now
++	/** @type {Set<Expression>} */
++	const blockers = new Set();
++
++	for (const branch of [node, ...(node.metadata.flattened ?? [])]) {
++		for (const blocker of branch.metadata.expression.blockers().elements) {
++			blockers.add(/** @type {Expression} */ (blocker));
++		}
++	}
++
++	const has_blockers = blockers.size > 0;
++
+ 	if (has_await || has_blockers) {
+ 		context.state.init.push(
+ 			b.stmt(
+ 				b.call(
+ 					'$.async',
+ 					context.state.node,
+-					node.metadata.expression.blockers(),
++					b.array([...blockers]),
+ 					has_await ? b.array([b.thunk(expression, true)]) : b.void0,
+ 					b.arrow(
+ 						has_await ? [context.state.node, b.id('$$condition')] : [context.state.node],
+diff --git a/packages/svelte/src/compiler/phases/nodes.js b/packages/svelte/src/compiler/phases/nodes.js
+index 2e54f33..f4f3de4 100644
+--- a/packages/svelte/src/compiler/phases/nodes.js
++++ b/packages/svelte/src/compiler/phases/nodes.js
+@@ -95,19 +95,19 @@ export class ExpressionMetadata {
+ 	 */
+ 	references = new Set();
+ 
+-	/** @type {null | Set<Expression>} */
+-	#blockers = null;
+-
++	/**
++	 * Not memoized, because `binding.blocker` can change after analysis
++	 * (e.g. async `{@const ...}` bindings get their blocker during transformation)
++	 */
+ 	#get_blockers() {
+-		if (!this.#blockers) {
+-			this.#blockers = new Set();
++		/** @type {Set<Expression>} */
++		const blockers = new Set();
+ 
+-			for (const d of this.dependencies) {
+-				if (d.blocker) this.#blockers.add(d.blocker);
+-			}
++		for (const d of this.dependencies) {
++			if (d.blocker) blockers.add(d.blocker);
+ 		}
+ 
+-		return this.#blockers;
++		return blockers;
+ 	}
+ 
+ 	blockers() {
+@@ -122,8 +122,10 @@ export class ExpressionMetadata {
+ 	 * @param {ExpressionMetadata} other
+ 	 */
+ 	has_more_blockers_than(other) {
++		const other_blockers = other.#get_blockers();
++
+ 		for (const blocker of this.#get_blockers()) {
+-			if (!other.#get_blockers().has(blocker)) {
++			if (!other_blockers.has(blocker)) {
+ 				return true;
+ 			}
+ 		}
+@@ -144,7 +146,6 @@ export class ExpressionMetadata {
+ 		this.has_await ||= source.has_await;
+ 		this.has_member_expression ||= source.has_member_expression;
+ 		this.has_assignment ||= source.has_assignment;
+-		this.#blockers = null; // so that blockers are recalculated
+ 
+ 		for (const r of source.references) this.references.add(r);
+ 		for (const b of source.dependencies) this.dependencies.add(b);
+diff --git a/packages/svelte/tests/runtime-runes/samples/async-const-destructure-if/_config.js b/packages/svelte/tests/runtime-runes/samples/async-const-destructure-if/_config.js
+new file mode 100644
+index 0000000..ecceda8
+--- /dev/null
++++ b/packages/svelte/tests/runtime-runes/samples/async-const-destructure-if/_config.js
+@@ -0,0 +1,13 @@
++import { tick } from 'svelte';
++import { test } from '../../test';
++
++export default test({
++	mode: ['async-server', 'client', 'hydrate'],
++	ssrHtml: `<p>No data</p>`,
++
++	async test({ assert, target }) {
++		await tick();
++
++		assert.htmlEqual(target.innerHTML, `<p>No data</p>`);
++	}
++});
+diff --git a/packages/svelte/tests/runtime-runes/samples/async-const-destructure-if/main.svelte b/packages/svelte/tests/runtime-runes/samples/async-const-destructure-if/main.svelte
+new file mode 100644
+index 0000000..c4a89f7
+--- /dev/null
++++ b/packages/svelte/tests/runtime-runes/samples/async-const-destructure-if/main.svelte
+@@ -0,0 +1,16 @@
++<script>
++	let d = $derived(await Promise.resolve({ data: 'hello', hasData: false }));
++	let showFetchCta = $derived(d.hasData);
++</script>
++
++{#if d}
++	{@const { data, hasData } = d}
++
++	{#if hasData}
++		<p>The Data: {data}</p>
++	{:else if showFetchCta}
++		<p>Fetch now</p>
++	{:else}
++		<p>No data</p>
++	{/if}
++{/if}

@@ -1,0 +1,65 @@
+diff --git a/.changeset/keep-session-config-on-update.md b/.changeset/keep-session-config-on-update.md
+new file mode 100644
+index 0000000..e84085d
+--- /dev/null
++++ b/.changeset/keep-session-config-on-update.md
+@@ -0,0 +1,5 @@
++---
++'@openai/agents-realtime': patch
++---
++
++fix: preserve the session config (e.g. audio formats) when calling `updateAgent` or during handoffs
+diff --git a/packages/agents-realtime/src/realtimeSession.ts b/packages/agents-realtime/src/realtimeSession.ts
+index 3c4f22e..52cc12e 100644
+--- a/packages/agents-realtime/src/realtimeSession.ts
++++ b/packages/agents-realtime/src/realtimeSession.ts
+@@ -313,9 +313,13 @@ export class RealtimeSession<
+       );
+     }
+ 
++    // Always start from the user-provided session config so that subsequent
++    // session updates (e.g. agent updates or handoffs) don't revert settings
++    // like the audio formats or turn detection back to the transport defaults.
+     return {
++      ...(this.options.config ?? {}),
+       instructions,
+-      voice: this.#currentAgent.voice,
++      voice: this.#currentAgent.voice ?? this.options.config?.voice,
+       model: this.options.model,
+       tools: this.#currentTools,
+       tracing: tracingConfig,
+diff --git a/packages/agents-realtime/test/realtimeSession.test.ts b/packages/agents-realtime/test/realtimeSession.test.ts
+index e39df37..6e204c9 100644
+--- a/packages/agents-realtime/test/realtimeSession.test.ts
++++ b/packages/agents-realtime/test/realtimeSession.test.ts
+@@ -300,4 +300,30 @@ describe('RealtimeSession', () => {
+     } as any);
+     expect(startEvents).toBe(2);
+   });
++
++  it('preserves session config (e.g. audio formats) when updating the agent', async () => {
++    const t = new FakeTransport();
++    const agent = new RealtimeAgent({ name: 'A', handoffs: [] });
++    const s = new RealtimeSession(agent, {
++      transport: t,
++      config: {
++        inputAudioFormat: 'g711_ulaw',
++        outputAudioFormat: 'g711_ulaw',
++        turnDetection: { type: 'semantic_vad' },
++      },
++    });
++    await s.connect({ apiKey: 'test' });
++    expect(t.connectCalls[0]?.initialSessionConfig?.inputAudioFormat).toBe(
++      'g711_ulaw',
++    );
++
++    await s.updateAgent(
++      agent.clone({ name: 'Bob', instructions: 'You are now Bob.' }),
++    );
++    const update = t.updateSessionConfigCalls.at(-1)!;
++    expect(update.inputAudioFormat).toBe('g711_ulaw');
++    expect(update.outputAudioFormat).toBe('g711_ulaw');
++    expect(update.turnDetection).toEqual({ type: 'semantic_vad' });
++    expect(update.instructions).toBe('You are now Bob.');
++  });
+ });

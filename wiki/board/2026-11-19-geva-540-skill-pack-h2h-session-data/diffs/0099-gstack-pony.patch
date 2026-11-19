@@ -1,0 +1,118 @@
+diff --git a/src/libuilogic/SpellCheck/SpellChecker.cs b/src/libuilogic/SpellCheck/SpellChecker.cs
+index 447d912..2cb2f9d 100644
+--- a/src/libuilogic/SpellCheck/SpellChecker.cs
++++ b/src/libuilogic/SpellCheck/SpellChecker.cs
+@@ -114,6 +114,8 @@ public class SpellChecker : ISpellChecker, IDoSpell
+ 
+         if (!File.Exists(dictionaryFile))
+         {
++            _hunspellWeCantSpell = null; // don't keep spell checking with a previously loaded language
++            WordLists = null;
+             return false;
+         }
+ 
+diff --git a/src/seconv/Core/FixCommonErrorsRunner.cs b/src/seconv/Core/FixCommonErrorsRunner.cs
+index dfbc1b1..47b029f 100644
+--- a/src/seconv/Core/FixCommonErrorsRunner.cs
++++ b/src/seconv/Core/FixCommonErrorsRunner.cs
+@@ -130,7 +130,7 @@ internal static class FixCommonErrorsRunner
+     /// <summary>
+     /// Applies the OCR-fix engine (OCR replace lists + Hunspell spell-check guessing) to every line,
+     /// the headless equivalent of the GUI's "Fix common OCR errors". No-op when no dictionary folder
+-    /// is configured or no Hunspell dictionary matches the detected language. (#11744)
++    /// is configured; without a matching Hunspell dictionary only the OCR replace list is applied. (#11744)
+     /// </summary>
+     private static void RunOcrFix(Subtitle subtitle, string twoLetterLanguage)
+     {
+@@ -148,11 +148,8 @@ internal static class FixCommonErrorsRunner
+ 
+         var spellChecker = new SpellChecker();
+         var dictionary = spellChecker.GetDictionaryLanguages(folder)
+-            .FirstOrDefault(d => d.GetThreeLetterCode() == threeLetter);
+-        if (dictionary == null)
+-        {
+-            return;
+-        }
++            .FirstOrDefault(d => d.GetThreeLetterCode() == threeLetter)
++            ?? new SpellCheckDictionaryDisplay(); // no Hunspell dictionary: still apply the OCR replace list
+ 
+         IOcrFixEngine engine = new OcrFixEngine(spellChecker);
+         engine.Initialize(subtitle, threeLetter, dictionary);
+diff --git a/src/ui/Features/Tools/FixCommonErrors/FixCommonOcrErrors.cs b/src/ui/Features/Tools/FixCommonErrors/FixCommonOcrErrors.cs
+index 7d4063b..d7906ed 100644
+--- a/src/ui/Features/Tools/FixCommonErrors/FixCommonOcrErrors.cs
++++ b/src/ui/Features/Tools/FixCommonErrors/FixCommonOcrErrors.cs
+@@ -33,11 +33,9 @@ namespace Nikse.SubtitleEdit.Core.Forms.FixCommonErrors
+ 
+             var spellCheckManager = new SpellCheckManager();
+             var spellCheckers = spellCheckManager.GetDictionaryLanguages(Se.DictionariesFolder);
+-            var spellChecker = spellCheckers.FirstOrDefault(x => x.GetThreeLetterCode() == threeLetterCode);
+-            if (spellChecker == null)
+-            {
+-                return;
+-            }
++            // The OCR replace list does not need Hunspell - without a dictionary, run the replace list only.
++            var spellChecker = spellCheckers.FirstOrDefault(x => x.GetThreeLetterCode() == threeLetterCode)
++                               ?? new SpellCheckDictionaryDisplay();
+ 
+             OcrFixEngine.Initialize(subtitle, threeLetterCode, spellChecker);
+ 
+diff --git a/tests/UI/Features/Tools/FixCommonErrors/FixCommonOcrErrorsNoHunspellTests.cs b/tests/UI/Features/Tools/FixCommonErrors/FixCommonOcrErrorsNoHunspellTests.cs
+new file mode 100644
+index 0000000..07ebc1d
+--- /dev/null
++++ b/tests/UI/Features/Tools/FixCommonErrors/FixCommonOcrErrorsNoHunspellTests.cs
+@@ -0,0 +1,53 @@
++using Nikse.SubtitleEdit.Core.Common;
++using Nikse.SubtitleEdit.Core.Forms.FixCommonErrors;
++using Nikse.SubtitleEdit.Features.Ocr.FixEngine;
++using Nikse.SubtitleEdit.Features.SpellCheck;
++using Nikse.SubtitleEdit.Logic.Config;
++using System;
++using System.IO;
++
++namespace UITests.Features.Tools.FixCommonErrors;
++
++// After a config reset the dictionaries folder holds only the bundled XML lists (no Hunspell .dic),
++// and "Fix common OCR errors" silently did nothing - the OCR replace list must still be applied.
++public class FixCommonOcrErrorsNoHunspellTests : IDisposable
++{
++    private readonly string _originalDictionariesFolder = Se.DictionariesFolder;
++    private readonly Func<string> _originalSpellCheckDictionariesFolder = SpellCheckConfig.DictionariesFolder;
++    private readonly string _temp = Path.Combine(Path.GetTempPath(), "SeOcrNoHunspell_" + Guid.NewGuid().ToString("N"));
++
++    public FixCommonOcrErrorsNoHunspellTests()
++    {
++        Directory.CreateDirectory(_temp);
++        File.WriteAllText(Path.Combine(_temp, "spa_OCRFixReplaceList.xml"),
++            "<OCRFixReplaceList><WholeWords>" +
++            "<Word from=\"aca\" to=\"acá\" /><Word from=\"Adios\" to=\"Adiós\" /><Word from=\"Algun\" to=\"Algún\" />" +
++            "<Word from=\"dia\" to=\"día\" /><Word from=\"volvere\" to=\"volveré\" />" +
++            "</WholeWords></OCRFixReplaceList>");
++        Se.DictionariesFolder = _temp;
++        SpellCheckConfig.DictionariesFolder = () => _temp;
++    }
++
++    [Fact]
++    public void ReplaceList_IsApplied_WithoutHunspellDictionary()
++    {
++        var subtitle = new Subtitle();
++        subtitle.Paragraphs.Add(new Paragraph("Hola, aca estoy.", 0, 1000));
++        subtitle.Paragraphs.Add(new Paragraph("Adios.", 2000, 3000));
++        subtitle.Paragraphs.Add(new Paragraph("Algun dia volvere.", 4000, 5000));
++
++        FixCommonOcrErrors.OcrFixEngine = new OcrFixEngine(new SpellCheckManager());
++        new FixCommonOcrErrors().Fix(subtitle, new EmptyFixCallback { Language = "es" });
++
++        Assert.Equal("Hola, acá estoy.", subtitle.Paragraphs[0].Text);
++        Assert.Equal("Adiós.", subtitle.Paragraphs[1].Text);
++        Assert.Equal("Algún día volveré.", subtitle.Paragraphs[2].Text);
++    }
++
++    public void Dispose()
++    {
++        Se.DictionariesFolder = _originalDictionariesFolder;
++        SpellCheckConfig.DictionariesFolder = _originalSpellCheckDictionariesFolder;
++        try { Directory.Delete(_temp, recursive: true); } catch { /* best effort */ }
++    }
++}

@@ -1,0 +1,245 @@
+diff --git a/Terminal.Gui/Views/DialogTResult.cs b/Terminal.Gui/Views/DialogTResult.cs
+index 94f4d99..412b8ef 100644
+--- a/Terminal.Gui/Views/DialogTResult.cs
++++ b/Terminal.Gui/Views/DialogTResult.cs
+@@ -91,7 +91,9 @@ public class Dialog<TResult> : Runnable<TResult>, IDesignable
+         BorderStyle = Dialog.DefaultBorderStyle;
+         base.ShadowStyle = Dialog.DefaultShadow;
+ 
+-        SchemeName = SchemeManager.SchemesToSchemeName (Schemes.Dialog);
++        // The Runnable/View base constructors set SchemeName; those are defaults, not explicit choices.
++        // SetStyle (below) picks Base while embedded and Dialog while running.
++        _schemeNameExplicitlySet = false;
+ 
+         CommandsToBubbleUp = [Command.Accept];
+ 
+@@ -344,9 +346,43 @@ public class Dialog<TResult> : Runnable<TResult>, IDesignable
+     {
+         base.OnIsRunningChanged (newIsModal);
+ 
+-        if (newIsModal)
++        SetStyle ();
++    }
++
++    // True once SchemeName has been set by anything other than SetStyle (e.g. by the developer, or by
++    // MessageBox choosing the Error scheme). When true, SetStyle leaves SchemeName alone.
++    private bool _schemeNameExplicitlySet;
++
++    // True while SetStyle is changing SchemeName, so that change is not mistaken for an explicit one.
++    private bool _settingStyleSchemeName;
++
++    /// <inheritdoc/>
++    protected override void OnSchemeNameChanged (ValueChangedEventArgs<string?> args)
++    {
++        base.OnSchemeNameChanged (args);
++
++        if (!_settingStyleSchemeName)
++        {
++            _schemeNameExplicitlySet = true;
++        }
++    }
++
++    private void SetStyleSchemeName (Schemes scheme)
++    {
++        if (_schemeNameExplicitlySet)
++        {
++            return;
++        }
++
++        _settingStyleSchemeName = true;
++
++        try
++        {
++            SchemeName = SchemeManager.SchemesToSchemeName (scheme);
++        }
++        finally
+         {
+-            SetStyle ();
++            _settingStyleSchemeName = false;
+         }
+     }
+ 
+@@ -354,11 +390,12 @@ public class Dialog<TResult> : Runnable<TResult>, IDesignable
+     {
+         if (IsRunning)
+         {
++            SetStyleSchemeName (Schemes.Dialog);
+             Arrangement |= ViewArrangement.Movable | ViewArrangement.Resizable | ViewArrangement.Overlapped;
+         }
+         else
+         {
+-            SchemeName = SchemeManager.SchemesToSchemeName (Schemes.Base);
++            SetStyleSchemeName (Schemes.Base);
+ 
+             // strip out movable and resizable
+             Arrangement &= ~(ViewArrangement.Movable | ViewArrangement.Resizable);
+diff --git a/Tests/UnitTestsParallelizable/Views/DialogSchemeTests.cs b/Tests/UnitTestsParallelizable/Views/DialogSchemeTests.cs
+new file mode 100644
+index 0000000..fba4d7c
+--- /dev/null
++++ b/Tests/UnitTestsParallelizable/Views/DialogSchemeTests.cs
+@@ -0,0 +1,164 @@
++#nullable enable
++using UnitTests;
++
++namespace ViewsTests;
++
++/// <summary>
++///     Tests that <see cref="Dialog{TResult}"/> (and the views derived from it) use the <see cref="Schemes.Dialog"/>
++///     scheme while running, and <see cref="Schemes.Base"/> when embedded (not running), without clobbering a
++///     <see cref="View.SchemeName"/> explicitly set by the caller.
++/// </summary>
++public class DialogSchemeTests
++{
++    private static readonly string DialogSchemeName = SchemeManager.SchemesToSchemeName (Schemes.Dialog)!;
++    private static readonly string BaseSchemeName = SchemeManager.SchemesToSchemeName (Schemes.Base)!;
++    private static readonly string ErrorSchemeName = SchemeManager.SchemesToSchemeName (Schemes.Error)!;
++
++    private static IApplication CreateApp ()
++    {
++        IApplication app = Application.Create ();
++        app.Init (DriverRegistry.Names.ANSI);
++        app.Driver!.SetScreenSize (40, 15);
++
++        return app;
++    }
++
++    [Fact]
++    public void NotRunning_Dialog_Uses_Base_Scheme ()
++    {
++        using Dialog dialog = new ();
++
++        Assert.False (dialog.IsRunning);
++        Assert.Equal (BaseSchemeName, dialog.SchemeName);
++    }
++
++    [Fact]
++    public void Running_Dialog_SchemeName_Is_Dialog ()
++    {
++        using IApplication app = CreateApp ();
++        using Dialog dialog = new ();
++
++        app.Begin (dialog);
++
++        Assert.True (dialog.IsRunning);
++        Assert.Equal (DialogSchemeName, dialog.SchemeName);
++    }
++
++    [Fact]
++    public void Running_Dialog_GetScheme_Returns_Dialog_Scheme ()
++    {
++        using IApplication app = CreateApp ();
++        using Dialog dialog = new ();
++
++        app.Begin (dialog);
++
++        Assert.Equal (SchemeManager.GetScheme (Schemes.Dialog), dialog.GetScheme ());
++        Assert.Equal (SchemeManager.GetScheme (Schemes.Dialog).Normal, dialog.GetAttributeForRole (VisualRole.Normal));
++    }
++
++    [Fact]
++    public void Running_Dialog_Draws_Viewport_And_Border_With_Dialog_Scheme ()
++    {
++        using IApplication app = CreateApp ();
++        using Dialog dialog = new () { Title = "T", Width = 10, Height = 5 };
++
++        app.Begin (dialog);
++        app.LayoutAndDraw ();
++
++        Attribute expected = SchemeManager.GetScheme (Schemes.Dialog).Normal;
++        Rectangle frame = dialog.FrameToScreen ();
++
++        // Top-left border corner and an interior (viewport) cell
++        Assert.Equal (expected, app.Driver!.Contents! [frame.Y, frame.X].Attribute);
++        Point interior = dialog.ViewportToScreen (Point.Empty);
++        Assert.Equal (expected, app.Driver.Contents [interior.Y, interior.X].Attribute);
++    }
++
++    [Fact]
++    public void Running_Dialog_SubView_Inherits_Dialog_Scheme ()
++    {
++        using IApplication app = CreateApp ();
++        using Dialog dialog = new ();
++        Label label = new () { Text = "Lbl" };
++        dialog.Add (label);
++
++        app.Begin (dialog);
++        app.LayoutAndDraw ();
++
++        Attribute expected = SchemeManager.GetScheme (Schemes.Dialog).Normal;
++        Assert.Equal (expected, label.GetAttributeForRole (VisualRole.Normal));
++
++        Point labelOrigin = label.ViewportToScreen (Point.Empty);
++        Assert.Equal (expected, app.Driver!.Contents! [labelOrigin.Y, labelOrigin.X].Attribute);
++    }
++
++    [Fact]
++    public void Running_Dialog_Preserves_Explicit_SchemeName ()
++    {
++        using IApplication app = CreateApp ();
++        using Dialog dialog = new () { SchemeName = ErrorSchemeName };
++
++        app.Begin (dialog);
++
++        Assert.Equal (ErrorSchemeName, dialog.SchemeName);
++    }
++
++    [Fact]
++    public void Dialog_Reverts_To_Base_Scheme_When_No_Longer_Running ()
++    {
++        using IApplication app = CreateApp ();
++        using Dialog dialog = new ();
++
++        SessionToken? token = app.Begin (dialog);
++        Assert.Equal (DialogSchemeName, dialog.SchemeName);
++
++        app.End (token!);
++
++        Assert.False (dialog.IsRunning);
++        Assert.Equal (BaseSchemeName, dialog.SchemeName);
++    }
++
++    [Fact]
++    public void Running_Prompt_Uses_Dialog_Scheme ()
++    {
++        using IApplication app = CreateApp ();
++        using Prompt<TextField, string> prompt = new ();
++
++        app.Begin (prompt);
++
++        Assert.Equal (DialogSchemeName, prompt.SchemeName);
++    }
++
++    [Fact]
++    public void Running_OpenDialog_Uses_Dialog_Scheme ()
++    {
++        using IApplication app = CreateApp ();
++        using OpenDialog openDialog = new ();
++
++        app.Begin (openDialog);
++
++        Assert.Equal (DialogSchemeName, openDialog.SchemeName);
++    }
++
++    [Fact]
++    public void Running_SaveDialog_Uses_Dialog_Scheme ()
++    {
++        using IApplication app = CreateApp ();
++        using SaveDialog saveDialog = new ();
++
++        app.Begin (saveDialog);
++
++        Assert.Equal (DialogSchemeName, saveDialog.SchemeName);
++    }
++
++    [Fact]
++    public void Running_Wizard_Uses_Dialog_Scheme ()
++    {
++        using IApplication app = CreateApp ();
++        using Wizard wizard = new ();
++
++        app.Begin (wizard);
++
++        Assert.Equal (DialogSchemeName, wizard.SchemeName);
++    }
++}

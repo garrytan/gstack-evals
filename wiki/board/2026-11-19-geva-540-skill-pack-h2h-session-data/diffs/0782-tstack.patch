@@ -1,0 +1,117 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index f725bf8..9c4f59f 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -130,6 +130,9 @@
+ 
+ ### Bug fixes
+ 
++- Fixed a bug where inlining could produce invalid code when an inlined
++  variable was used in the arguments of a record update.
++
+ - Fixed a bug where `echo` could crash on JavaScript if the module contains
+   record variants with the same name as some built-in JavaScript objects.
+   ([Louis Pilfold](https://github.com/lpil))
+diff --git a/compiler-core/src/erlang/tests/inlining.rs b/compiler-core/src/erlang/tests/inlining.rs
+index df9ef86..cd97198 100644
+--- a/compiler-core/src/erlang/tests/inlining.rs
++++ b/compiler-core/src/erlang/tests/inlining.rs
+@@ -312,3 +312,23 @@ fn divide(a, b) {
+ "
+     );
+ }
++
++#[test]
++fn inlining_works_properly_with_record_updates() {
++    assert_erl!(
++        ("gleam_stdlib", "gleam/result", RESULT_MODULE),
++        "
++import gleam/result
++
++pub type Wibble {
++  Wibble(a: Int, b: Int)
++}
++
++pub fn main() {
++  let w = Wibble(1, 2)
++  use b <- result.map(Ok(3))
++  Wibble(..w, b:)
++}
++"
++    );
++}
+diff --git a/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__inlining_works_properly_with_record_updates.snap b/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__inlining_works_properly_with_record_updates.snap
+new file mode 100644
+index 0000000..d459eda
+--- /dev/null
++++ b/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__inlining_works_properly_with_record_updates.snap
+@@ -0,0 +1,41 @@
++---
++source: compiler-core/src/erlang/tests/inlining.rs
++assertion_line: 319
++expression: "\nimport gleam/result\n\npub type Wibble {\n  Wibble(a: Int, b: Int)\n}\n\npub fn main() {\n  let w = Wibble(1, 2)\n  use b <- result.map(Ok(3))\n  Wibble(..w, b:)\n}\n"
++snapshot_kind: text
++---
++----- SOURCE CODE
++
++import gleam/result
++
++pub type Wibble {
++  Wibble(a: Int, b: Int)
++}
++
++pub fn main() {
++  let w = Wibble(1, 2)
++  use b <- result.map(Ok(3))
++  Wibble(..w, b:)
++}
++
++
++----- COMPILED ERLANG
++-module(my@mod).
++-compile([no_auto_import, nowarn_unused_vars, nowarn_unused_function, nowarn_nomatch, inline]).
++-define(FILEPATH, "project/test/my/mod.gleam").
++-export([main/0]).
++-export_type([wibble/0]).
++
++-type wibble() :: {wibble, integer(), integer()}.
++
++-file("project/test/my/mod.gleam", 8).
++-spec main() -> {ok, wibble()} | {error, any()}.
++main() ->
++    W = {wibble, 1, 2},
++    case {ok, 3} of
++        {ok, Value} ->
++            {ok, {wibble, erlang:element(2, W), Value}};
++
++        {error, Error} ->
++            {error, Error}
++    end.
+diff --git a/compiler-core/src/inline.rs b/compiler-core/src/inline.rs
+index 81df9e9..969bbbd 100644
+--- a/compiler-core/src/inline.rs
++++ b/compiler-core/src/inline.rs
+@@ -479,7 +479,22 @@ impl Inliner<'_> {
+                 record_assignment: record_assignment
+                     .map(|assignment| Box::new(self.assignment(*assignment))),
+                 constructor: self.boxed_expression(constructor),
+-                arguments,
++                arguments: arguments
++                    .into_iter()
++                    .map(
++                        |TypedCallArg {
++                             label,
++                             location,
++                             value,
++                             implicit,
++                         }| TypedCallArg {
++                            label,
++                            location,
++                            value: self.expression(value),
++                            implicit,
++                        },
++                    )
++                    .collect(),
+             },
+         }
+     }

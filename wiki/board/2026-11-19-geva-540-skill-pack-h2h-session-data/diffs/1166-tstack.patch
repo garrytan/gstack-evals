@@ -1,0 +1,136 @@
+diff --git a/js/node_helper.js b/js/node_helper.js
+index 833c90a..ab74bd6 100644
+--- a/js/node_helper.js
++++ b/js/node_helper.js
+@@ -90,8 +90,7 @@ class NodeHelper {
+ 			socket.onAny((notification, payload) => {
+ 				if (config?.hideConfigSecrets && payload && typeof payload === "object") {
+ 					try {
+-						const payloadStr = replaceSecretPlaceholder(JSON.stringify(payload));
+-						this.socketNotificationReceived(notification, JSON.parse(payloadStr));
++						this.socketNotificationReceived(notification, this.expandTrustedSecrets(payload));
+ 					} catch (e) {
+ 						Log.error("Error substituting variables in payload: ", e);
+ 						this.socketNotificationReceived(notification, payload);
+@@ -103,6 +102,56 @@ class NodeHelper {
+ 		});
+ 	}
+ 
++	/**
++	 * Collects the string values of the server-side (trusted) configuration of
++	 * all instances of this module, grouped by their property name.
++	 * @returns {Map<string, Set<string>>} property name -> set of trusted values
++	 */
++	getTrustedConfigValues () {
++		const trusted = new Map();
++		const walk = (value, key) => {
++			if (typeof value === "string") {
++				if (key === undefined) return;
++				if (!trusted.has(key)) trusted.set(key, new Set());
++				trusted.get(key).add(value);
++			} else if (Array.isArray(value)) {
++				value.forEach((item) => walk(item, key));
++			} else if (value && typeof value === "object") {
++				Object.entries(value).forEach(([k, v]) => walk(v, k));
++			}
++		};
++		const modules = Array.isArray(config?.modules) ? config.modules : [];
++		modules.filter((m) => m && m.module === this.name).forEach((m) => walk(m.config, undefined));
++		return trusted;
++	}
++
++	/**
++	 * Replaces `**SECRET_*` placeholders in an inbound socket payload, but only
++	 * where the expanded value matches a value of the same property in this
++	 * module's server-side config. Placeholders anywhere else are left
++	 * untouched, so clients can't use the server to resolve arbitrary secrets.
++	 * @param {object} payload the inbound socket payload
++	 * @returns {object} a copy of the payload with trusted secrets expanded
++	 */
++	expandTrustedSecrets (payload) {
++		const trusted = this.getTrustedConfigValues();
++		const expand = (value, key) => {
++			if (typeof value === "string") {
++				if (key === undefined || !value.includes("**SECRET_")) return value;
++				const candidate = replaceSecretPlaceholder(value);
++				return trusted.get(key)?.has(candidate) ? candidate : value;
++			}
++			if (Array.isArray(value)) return value.map((item) => expand(item, key));
++			if (value && typeof value === "object") {
++				const result = {};
++				for (const [k, v] of Object.entries(value)) result[k] = expand(v, k);
++				return result;
++			}
++			return value;
++		};
++		return expand(JSON.parse(JSON.stringify(payload)), undefined);
++	}
++
+ 	/**
+ 	 * Check the status of a fetch response.
+ 	 * @param {Response} response The fetch response.
+diff --git a/tests/unit/classes/node_helper_spec.js b/tests/unit/classes/node_helper_spec.js
+new file mode 100644
+index 0000000..2f53adb
+--- /dev/null
++++ b/tests/unit/classes/node_helper_spec.js
+@@ -0,0 +1,59 @@
++const NodeHelper = require("../../../js/node_helper");
++
++/**
++ * Creates a helper whose socket catch-all handler can be invoked directly.
++ * @param {string} name module name
++ * @returns {{helper: object, received: Array, send: (notification: string, payload: object) => void}} test harness
++ */
++function createHelper (name) {
++	const helper = new NodeHelper();
++	helper.setName(name);
++	const received = [];
++	helper.socketNotificationReceived = (notification, payload) => received.push({ notification, payload });
++	let onAny;
++	const fakeIo = { of: () => ({ on: (_event, cb) => cb({ onAny: (fn) => (onAny = fn) }) }) };
++	helper.setSocketIO(fakeIo);
++	return { helper, received, send: (notification, payload) => onAny(notification, payload) };
++}
++
++describe("NodeHelper socket secret placeholder handling", () => {
++	let originalConfig;
++
++	beforeEach(() => {
++		originalConfig = global.config;
++		process.env.SECRET_TEST_KEY = "real-secret-value";
++		process.env.SECRET_OTHER = "other-secret-value";
++		global.config = {
++			hideConfigSecrets: true,
++			cors: "disabled",
++			modules: [
++				{ module: "testmod", config: { apiKey: "real-secret-value", calendars: [{ url: "https://example.com/?k=real-secret-value" }] } },
++				{ module: "othermod", config: { token: "other-secret-value" } }
++			]
++		};
++	});
++
++	afterEach(() => {
++		global.config = originalConfig;
++		delete process.env.SECRET_TEST_KEY;
++		delete process.env.SECRET_OTHER;
++	});
++
++	it("expands placeholders that match the module's server-side config", () => {
++		const { received, send } = createHelper("testmod");
++		send("INIT", { apiKey: "**SECRET_TEST_KEY**", url: "https://example.com/?k=**SECRET_TEST_KEY**" });
++		expect(received[0].payload).toEqual({ apiKey: "real-secret-value", url: "https://example.com/?k=real-secret-value" });
++	});
++
++	it("does not expand placeholders in arbitrary payload fields", () => {
++		const { received, send } = createHelper("testmod");
++		send("INIT", { instanceId: "**SECRET_TEST_KEY**", nested: { id: "**SECRET_TEST_KEY**" } });
++		expect(received[0].payload).toEqual({ instanceId: "**SECRET_TEST_KEY**", nested: { id: "**SECRET_TEST_KEY**" } });
++	});
++
++	it("does not expand secrets belonging to other modules", () => {
++		const { received, send } = createHelper("testmod");
++		send("INIT", { token: "**SECRET_OTHER**", apiKey: "**SECRET_OTHER**" });
++		expect(received[0].payload).toEqual({ token: "**SECRET_OTHER**", apiKey: "**SECRET_OTHER**" });
++	});
++});

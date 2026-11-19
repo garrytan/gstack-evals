@@ -1,0 +1,133 @@
+diff --git a/packages/core/src/utils/EntityComparator.ts b/packages/core/src/utils/EntityComparator.ts
+index 7b81203..d97338f 100644
+--- a/packages/core/src/utils/EntityComparator.ts
++++ b/packages/core/src/utils/EntityComparator.ts
+@@ -634,21 +634,29 @@ export class EntityComparator {
+     if (object) {
+       ret += `${padding}if (${nullCond}) ret${dataKey} = null;\n`;
+     } else {
+-      ret += `${padding}if (${nullCond}) {\n`;
+-      ret +=
++      // nested inline embeddables have no column of their own, so we need to null out their leaf columns recursively
++      const nullifyChildren = (parent: EntityProperty<T>, parentDataKey: string): string[] =>
+         meta.props
+           .filter(
+             p =>
+-              p.embedded?.[0] === prop.name &&
++              p.embedded?.[0] === parent.name &&
+               // object for JSON embeddable
+               (p.object || p.persist !== false),
+           )
+-          .map(childProp => {
++          .flatMap(childProp => {
+             const childDataKey =
+-              meta.embeddable || prop.object ? dataKey + this.wrap(childProp.embedded![1]) : this.wrap(childProp.name);
+-            return `${padding}  ret${childDataKey} = null;`;
+-          })
+-          .join('\n') + `\n`;
++              meta.embeddable || prop.object
++                ? parentDataKey + this.wrap(childProp.embedded![1])
++                : this.wrap(childProp.name);
++
++            if (childProp.kind === ReferenceKind.EMBEDDED && !childProp.object && !meta.embeddable && !prop.object) {
++              return nullifyChildren(childProp, childDataKey);
++            }
++
++            return [`${padding}  ret${childDataKey} = null;`];
++          });
++      ret += `${padding}if (${nullCond}) {\n`;
++      ret += nullifyChildren(prop, dataKey).join('\n') + `\n`;
+       ret += `${padding}}\n`;
+     }
+ 
+diff --git a/tests/features/embeddables/__snapshots__/polymorphic-embedded-entities.sqlite.test.ts.snap b/tests/features/embeddables/__snapshots__/polymorphic-embedded-entities.sqlite.test.ts.snap
+index 6001207..63b03c7 100644
+--- a/tests/features/embeddables/__snapshots__/polymorphic-embedded-entities.sqlite.test.ts.snap
++++ b/tests/features/embeddables/__snapshots__/polymorphic-embedded-entities.sqlite.test.ts.snap
+@@ -602,7 +602,8 @@ exports[`polymorphic embeddables in sqlite > diffing 2`] = `
+     ret.pet_type = null;
+     ret.pet_name = null;
+     ret.pet_canMeow = null;
+-    ret.pet_food = null;
++    ret.pet_food_cats = null;
++    ret.pet_food_mice = null;
+   }
+   if (entity.pet != null) {
+     if (typeof entity.pet.canBark !== 'undefined') ret.pet_canBark = clone(entity.pet.canBark);
+diff --git a/tests/features/embeddables/nested-inline-embeddable-null-parent.test.ts b/tests/features/embeddables/nested-inline-embeddable-null-parent.test.ts
+new file mode 100644
+index 0000000..79e1860
+--- /dev/null
++++ b/tests/features/embeddables/nested-inline-embeddable-null-parent.test.ts
+@@ -0,0 +1,71 @@
++import { MikroORM } from '@mikro-orm/sqlite';
++import { Embeddable, Embedded, Entity, PrimaryKey, Property, ReflectMetadataProvider } from '@mikro-orm/decorators/legacy';
++
++@Embeddable()
++class Inner {
++  @Property({ nullable: true })
++  value?: string;
++}
++
++@Embeddable()
++class Outer {
++  @Property({ nullable: true })
++  name?: string;
++
++  @Embedded(() => Inner, { nullable: true })
++  inner?: Inner | null;
++}
++
++@Entity()
++class Parent {
++  @PrimaryKey()
++  id!: number;
++
++  @Embedded(() => Outer, { nullable: true })
++  outer?: Outer | null;
++}
++
++let orm: MikroORM;
++const queries: string[] = [];
++
++beforeAll(async () => {
++  orm = await MikroORM.init({
++    metadataProvider: ReflectMetadataProvider,
++    entities: [Parent],
++    dbName: ':memory:',
++    debug: ['query'],
++    logger: msg => queries.push(msg),
++  });
++  await orm.schema.create();
++});
++
++afterAll(() => orm.close(true));
++beforeEach(() => queries.length = 0);
++
++test('insert with null parent embeddable', async () => {
++  const p = orm.em.create(Parent, { outer: null });
++  await orm.em.flush();
++  orm.em.clear();
++  expect(queries.join('\n')).not.toMatch(/`inner`/);
++  const loaded = await orm.em.findOneOrFail(Parent, p.id);
++  expect(loaded.outer).toBeNull();
++});
++
++test('update parent embeddable to null', async () => {
++  const outer = new Outer();
++  outer.name = 'n';
++  outer.inner = new Inner();
++  outer.inner.value = 'v';
++  const p = orm.em.create(Parent, { outer });
++  await orm.em.flush();
++  queries.length = 0;
++  p.outer = null;
++  await orm.em.flush();
++  orm.em.clear();
++  expect(queries.join('\n')).toMatch(/set `outer_name` = \?, `outer_inner_value` = \?/);
++  expect(queries.join('\n')).not.toMatch(/`outer_inner`[^_]/);
++  const row = await orm.em.getConnection().execute('select * from parent where id = ?', [p.id], 'get');
++  expect(row).toMatchObject({ outer_name: null, outer_inner_value: null });
++  const loaded = await orm.em.findOneOrFail(Parent, p.id);
++  expect(loaded.outer).toBeNull();
++});

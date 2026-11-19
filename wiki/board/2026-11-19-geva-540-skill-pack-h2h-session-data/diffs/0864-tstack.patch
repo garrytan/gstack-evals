@@ -1,0 +1,401 @@
+diff --git a/unmarshaler.go b/unmarshaler.go
+index 189be52..a5adc0b 100644
+--- a/unmarshaler.go
++++ b/unmarshaler.go
+@@ -249,6 +249,12 @@ func (d *decoder) FromParser(v interface{}) error {
+ }
+ 
+ func (d *decoder) fromParser(root reflect.Value) error {
++	if d.unmarshalerInterface && root.CanAddr() && root.Addr().CanInterface() {
++		if u, ok := root.Addr().Interface().(unstable.Unmarshaler); ok {
++			return d.unmarshalRoot(u)
++		}
++	}
++
+ 	for d.nextExpr() {
+ 		err := d.handleRootExpression(d.expr(), root)
+ 		if err != nil {
+@@ -259,6 +265,25 @@ func (d *decoder) fromParser(root reflect.Value) error {
+ 	return d.p.Error()
+ }
+ 
++// unmarshalRoot assembles the whole document into a single InlineTable node
++// and passes it to the root target's UnmarshalTOML method.
++func (d *decoder) unmarshalRoot(u unstable.Unmarshaler) error {
++	var doc unstable.DocumentBuilder
++	for d.nextExpr() {
++		expr := d.expr()
++		if _, err := d.seen.CheckExpression(expr); err != nil {
++			return err
++		}
++		if err := doc.Add(expr); err != nil {
++			return unstable.NewParserError(d.p.Raw(expr.Raw), "%w", err)
++		}
++	}
++	if err := d.p.Error(); err != nil {
++		return err
++	}
++	return u.UnmarshalTOML(doc.Node())
++}
++
+ /*
+ Rules for the unmarshal code:
+ 
+diff --git a/unmarshaler_test.go b/unmarshaler_test.go
+index 6ee6636..e4d529c 100644
+--- a/unmarshaler_test.go
++++ b/unmarshaler_test.go
+@@ -3998,3 +3998,130 @@ foo = "bar"`,
+ 		})
+ 	}
+ }
++
++// rootUnmarshaler records the document it receives as a string, preserving
++// key order.
++type rootUnmarshaler struct {
++	calls int
++	repr  string
++}
++
++func dumpNode(n *unstable.Node) string {
++	switch n.Kind {
++	case unstable.InlineTable:
++		s := "{"
++		it := n.Children()
++		first := true
++		for it.Next() {
++			kv := it.Node()
++			if !first {
++				s += ", "
++			}
++			first = false
++			k := kv.Key()
++			for k.Next() {
++				s += string(k.Node().Data)
++			}
++			s += "=" + dumpNode(kv.Value())
++		}
++		return s + "}"
++	case unstable.Array:
++		s := "["
++		it := n.Children()
++		first := true
++		for it.Next() {
++			if !first {
++				s += ", "
++			}
++			first = false
++			s += dumpNode(it.Node())
++		}
++		return s + "]"
++	default:
++		return string(n.Data)
++	}
++}
++
++func (r *rootUnmarshaler) UnmarshalTOML(value *unstable.Node) error {
++	r.calls++
++	r.repr = dumpNode(value)
++	return nil
++}
++
++func TestUnmarshal_RootCustomUnmarshaler(t *testing.T) {
++	examples := []struct {
++		desc     string
++		input    string
++		expected string
++		err      bool
++	}{
++		{desc: "empty", input: ``, expected: "{}"},
++		{desc: "simple", input: `foo = "bar"`, expected: "{foo=bar}"},
++		{
++			desc: "order, dotted keys, tables and array tables",
++			input: `z = 1
++a.b = 2
++inline = {x = 1, y = [1, 2]}
++
++[t2]
++k = "v"
++
++[t1.sub]
++k = 3
++
++[t2.deep]
++q = true
++
++[[arr]]
++n = 1
++
++[[arr]]
++n = 2
++
++[arr.sub]
++m = 3
++`,
++			expected: "{z=1, a={b=2}, inline={x=1, y=[1, 2]}, t2={k=v, deep={q=true}}, t1={sub={k=3}}, arr=[{n=1}, {n=2, sub={m=3}}]}",
++		},
++		{desc: "duplicate key", input: "a = 1\na = 2", err: true},
++		{desc: "duplicate table", input: "[a]\n[a]", err: true},
++	}
++
++	for _, e := range examples {
++		e := e
++		t.Run(e.desc, func(t *testing.T) {
++			var r rootUnmarshaler
++			err := toml.NewDecoder(bytes.NewReader([]byte(e.input))).
++				EnableUnmarshalerInterface().
++				Decode(&r)
++			if e.err {
++				assert.Error(t, err)
++				return
++			}
++			assert.NoError(t, err)
++			assert.Equal(t, 1, r.calls)
++			assert.Equal(t, e.expected, r.repr)
++		})
++	}
++
++	t.Run("not called when interface disabled", func(t *testing.T) {
++		var r rootUnmarshaler
++		err := toml.NewDecoder(bytes.NewReader([]byte(`calls = 5`))).Decode(&r)
++		assert.NoError(t, err)
++		assert.Equal(t, 0, r.calls)
++	})
++
++	t.Run("error is propagated", func(t *testing.T) {
++		var r errRootUnmarshaler
++		err := toml.NewDecoder(bytes.NewReader([]byte(`a = 1`))).
++			EnableUnmarshalerInterface().
++			Decode(&r)
++		assert.Error(t, err)
++	})
++}
++
++type errRootUnmarshaler struct{}
++
++func (errRootUnmarshaler) UnmarshalTOML(*unstable.Node) error {
++	return fmt.Errorf("boom")
++}
+diff --git a/unstable/document.go b/unstable/document.go
+new file mode 100644
+index 0000000..7ffed8b
+--- /dev/null
++++ b/unstable/document.go
+@@ -0,0 +1,217 @@
++package unstable
++
++import "fmt"
++
++// DocumentBuilder accumulates the root expressions of a TOML document (as
++// returned by Parser.Expression) and assembles them into a single InlineTable
++// node representing the whole document.
++//
++// Tables become nested InlineTable values, arrays of tables become Arrays of
++// InlineTable values, and dotted keys are expanded into nested tables. Every
++// KeyValue of the resulting tree has a single Key part. Leaf values are deep
++// copies of the parsed nodes and keep their Raw ranges; synthesized nodes have
++// an empty Raw range.
++//
++// DocumentBuilder does not check the document for semantic errors (such as
++// duplicate keys); callers are expected to do so before calling Add.
++type DocumentBuilder struct {
++	b       builder
++	root    *docTable
++	current *docTable
++}
++
++type docTable struct {
++	order   []*docEntry
++	entries map[string]*docEntry
++}
++
++type docEntryKind int
++
++const (
++	docLeaf docEntryKind = iota
++	docTableEntry
++	docArrayTable
++)
++
++type docEntry struct {
++	key    []byte
++	kind   docEntryKind
++	leaf   reference
++	table  *docTable
++	tables []*docTable
++}
++
++func newDocTable() *docTable {
++	return &docTable{entries: map[string]*docEntry{}}
++}
++
++func (t *docTable) get(key []byte) *docEntry {
++	return t.entries[string(key)]
++}
++
++func (t *docTable) put(e *docEntry) {
++	t.entries[string(e.key)] = e
++	t.order = append(t.order, e)
++}
++
++// subTable returns the table at key in t, creating it if needed. When key
++// refers to an array of tables, its last element is returned.
++func (t *docTable) subTable(key []byte) (*docTable, error) {
++	e := t.get(key)
++	if e == nil {
++		e = &docEntry{key: copyBytes(key), kind: docTableEntry, table: newDocTable()}
++		t.put(e)
++	}
++	switch e.kind {
++	case docTableEntry:
++		return e.table, nil
++	case docArrayTable:
++		return e.tables[len(e.tables)-1], nil
++	default:
++		return nil, fmt.Errorf("toml: key %s is already defined as a value", string(key))
++	}
++}
++
++func copyBytes(b []byte) []byte {
++	return append([]byte(nil), b...)
++}
++
++func (d *DocumentBuilder) init() {
++	if d.root == nil {
++		d.root = newDocTable()
++		d.current = d.root
++	}
++}
++
++// Add records a root expression (KeyValue, Table, or ArrayTable). The node is
++// copied, so it may be invalidated after Add returns.
++func (d *DocumentBuilder) Add(expr *Node) error {
++	d.init()
++
++	switch expr.Kind {
++	case KeyValue:
++		t := d.current
++		it := expr.Key()
++		for it.Next() {
++			k := it.Node().Data
++			if it.IsLast() {
++				if t.get(k) != nil {
++					return fmt.Errorf("toml: key %s is already defined", string(k))
++				}
++				t.put(&docEntry{key: copyBytes(k), kind: docLeaf, leaf: d.copyTree(expr.Value())})
++				return nil
++			}
++			var err error
++			t, err = t.subTable(k)
++			if err != nil {
++				return err
++			}
++		}
++	case Table:
++		t := d.root
++		it := expr.Key()
++		for it.Next() {
++			var err error
++			t, err = t.subTable(it.Node().Data)
++			if err != nil {
++				return err
++			}
++		}
++		d.current = t
++	case ArrayTable:
++		t := d.root
++		it := expr.Key()
++		for it.Next() {
++			k := it.Node().Data
++			if it.IsLast() {
++				e := t.get(k)
++				if e == nil {
++					e = &docEntry{key: copyBytes(k), kind: docArrayTable}
++					t.put(e)
++				} else if e.kind != docArrayTable {
++					return fmt.Errorf("toml: key %s is not an array of tables", string(k))
++				}
++				nt := newDocTable()
++				e.tables = append(e.tables, nt)
++				d.current = nt
++				return nil
++			}
++			var err error
++			t, err = t.subTable(k)
++			if err != nil {
++				return err
++			}
++		}
++	case Comment:
++		// ignored
++	default:
++		return fmt.Errorf("toml: unexpected expression of kind %s at document root", expr.Kind)
++	}
++	return nil
++}
++
++// Node returns the InlineTable node representing the whole document. The
++// builder must not be used after calling Node.
++func (d *DocumentBuilder) Node() *Node {
++	d.init()
++	ref := d.emitTable(d.root)
++	return d.b.NodeAt(ref)
++}
++
++func (d *DocumentBuilder) copyTree(n *Node) reference {
++	c := *n
++	c.next = 0
++	c.child = 0
++	ref := d.b.Push(c)
++
++	prev := invalidReference
++	it := n.Children()
++	for it.Next() {
++		cref := d.copyTree(it.Node())
++		if prev.Valid() {
++			d.b.Chain(prev, cref)
++		} else {
++			d.b.AttachChild(ref, cref)
++		}
++		prev = cref
++	}
++	return ref
++}
++
++func (d *DocumentBuilder) emitTable(t *docTable) reference {
++	ref := d.b.Push(Node{Kind: InlineTable})
++	prev := invalidReference
++	for _, e := range t.order {
++		kv := d.b.Push(Node{Kind: KeyValue})
++		var value reference
++		switch e.kind {
++		case docLeaf:
++			value = e.leaf
++		case docTableEntry:
++			value = d.emitTable(e.table)
++		case docArrayTable:
++			value = d.b.Push(Node{Kind: Array})
++			prevElem := invalidReference
++			for _, at := range e.tables {
++				elem := d.emitTable(at)
++				if prevElem.Valid() {
++					d.b.Chain(prevElem, elem)
++				} else {
++					d.b.AttachChild(value, elem)
++				}
++				prevElem = elem
++			}
++		}
++		key := d.b.Push(Node{Kind: Key, Data: e.key})
++		d.b.AttachChild(kv, value)
++		d.b.Chain(value, key)
++
++		if prev.Valid() {
++			d.b.Chain(prev, kv)
++		} else {
++			d.b.AttachChild(ref, kv)
++		}
++		prev = kv
++	}
++	return ref
++}

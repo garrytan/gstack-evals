@@ -1,0 +1,3 @@
+https://github.com/gohugoio/hugo at fe3b497c34352e28ff27c46c3f47a9964a0ff53f
+Licence at the freeze-date read (prereg o-, b1- and b2-licences.json): Apache-2.0
+Root licence and notice files at that commit: LICENSE

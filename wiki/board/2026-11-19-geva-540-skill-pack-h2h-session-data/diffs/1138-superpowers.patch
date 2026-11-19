@@ -1,0 +1,229 @@
+diff --git a/internal/openchoreo-api/api/handlers/exec.go b/internal/openchoreo-api/api/handlers/exec.go
+index 64ec651..54961ec 100644
+--- a/internal/openchoreo-api/api/handlers/exec.go
++++ b/internal/openchoreo-api/api/handlers/exec.go
+@@ -78,6 +78,33 @@ func (h *ExecHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+ 	logger := h.logger.With("namespace", namespace, "component", componentName)
+ 	logger.Info("Exec request received", "env", envName, "pod", podName, "container", container)
+ 
++	// Resolve the target component first and authorize against its real owning
++	// project. The caller-supplied `project` query parameter must never be trusted
++	// for authorization, otherwise a grant on one project could be used to exec
++	// into components owned by another project in the same namespace.
++	comp := &openchoreov1alpha1.Component{}
++	if err := h.k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: componentName}, comp); err != nil {
++		if apierrors.IsNotFound(err) {
++			http.Error(w, fmt.Sprintf("component %q not found in namespace %q", componentName, namespace), http.StatusNotFound)
++			return
++		}
++		logger.Error("Failed to look up component for exec", "error", err)
++		http.Error(w, "failed to look up component", http.StatusServiceUnavailable)
++		return
++	}
++	ownerProject := comp.Spec.Owner.ProjectName
++	if ownerProject == "" {
++		logger.Error("Component has no owning project")
++		http.Error(w, fmt.Sprintf("component %q has no owning project", componentName), http.StatusBadRequest)
++		return
++	}
++	if project != "" && project != ownerProject {
++		logger.Warn("Exec request project does not match component owner", "requestedProject", project)
++		http.Error(w, fmt.Sprintf("component %q not found in project %q", componentName, project), http.StatusNotFound)
++		return
++	}
++	project = ownerProject
++
+ 	// Resolve the target environment before authorizing so per-environment exec
+ 	// conditions are evaluated against it (`env` may be omitted by the client).
+ 	effectiveEnv, err := h.resolveEnvName(ctx, namespace, project, envName)
+diff --git a/internal/openchoreo-api/api/handlers/exec_test.go b/internal/openchoreo-api/api/handlers/exec_test.go
+index d9ab2ec..27aba27 100644
+--- a/internal/openchoreo-api/api/handlers/exec_test.go
++++ b/internal/openchoreo-api/api/handlers/exec_test.go
+@@ -30,13 +30,22 @@ func newExecHandler(t *testing.T, pdp *testutil.CapturingPDP, objs ...client.Obj
+ 	}
+ }
+ 
++func execComponent(namespace, name, project string) *openchoreov1alpha1.Component {
++	return &openchoreov1alpha1.Component{
++		ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: name},
++		Spec: openchoreov1alpha1.ComponentSpec{
++			Owner: openchoreov1alpha1.ComponentOwner{ProjectName: project},
++		},
++	}
++}
++
+ // These tests assert the exec authz check carries the target environment in its
+-// ABAC context. The fake client has no Component, so the request fails right
++// ABAC context. The fake client has no Environment, so the request fails right
+ // after the check — but by then the PDP has captured the evaluate request.
+ 
+ func TestExecHandler_AuthzEnvironmentContext_ExplicitEnv(t *testing.T) {
+ 	pdp := testutil.AllowPDP()
+-	h := newExecHandler(t, pdp)
++	h := newExecHandler(t, pdp, execComponent("default", "greeter-service", "default"))
+ 
+ 	req := httptest.NewRequest(http.MethodGet,
+ 		"/exec/namespaces/default/components/greeter-service?env=development&project=default",
+@@ -72,7 +81,7 @@ func TestExecHandler_AuthzEnvironmentContext_DerivedEnv(t *testing.T) {
+ 			}},
+ 		},
+ 	}
+-	h := newExecHandler(t, pdp, proj, pipeline)
++	h := newExecHandler(t, pdp, proj, pipeline, execComponent("default", "greeter-service", "default"))
+ 
+ 	req := httptest.NewRequest(http.MethodGet,
+ 		"/exec/namespaces/default/components/greeter-service?project=default",
+@@ -85,3 +94,48 @@ func TestExecHandler_AuthzEnvironmentContext_DerivedEnv(t *testing.T) {
+ 		pdp.Captured[0].Context.Resource.Environment,
+ 		"pipeline-derived environment must reach the ABAC context when env is omitted")
+ }
++
++// Authorization must be evaluated against the component's real owning project,
++// not the caller-supplied `project` query parameter.
++func TestExecHandler_AuthzUsesOwningProject_WhenProjectOmitted(t *testing.T) {
++	pdp := testutil.AllowPDP()
++	h := newExecHandler(t, pdp, execComponent("default", "greeter-service", "team-b"))
++
++	req := httptest.NewRequest(http.MethodGet,
++		"/exec/namespaces/default/components/greeter-service?env=development",
++		nil).WithContext(testutil.AuthzContext())
++	h.ServeHTTP(httptest.NewRecorder(), req)
++
++	require.Len(t, pdp.Captured, 1)
++	testutil.RequireEvalRequest(t, pdp.Captured[0],
++		authz.ActionExecComponent, "component", "greeter-service",
++		authz.ResourceHierarchy{Namespace: "default", Project: "team-b", Component: "greeter-service"})
++}
++
++func TestExecHandler_CrossProjectRejected(t *testing.T) {
++	pdp := testutil.AllowPDP()
++	h := newExecHandler(t, pdp, execComponent("default", "greeter-service", "team-b"))
++
++	req := httptest.NewRequest(http.MethodGet,
++		"/exec/namespaces/default/components/greeter-service?env=development&project=team-a",
++		nil).WithContext(testutil.AuthzContext())
++	rec := httptest.NewRecorder()
++	h.ServeHTTP(rec, req)
++
++	require.Equal(t, http.StatusNotFound, rec.Code)
++	require.Empty(t, pdp.Captured, "authz must not be evaluated against a caller-supplied project")
++}
++
++func TestExecHandler_UnknownComponentRejected(t *testing.T) {
++	pdp := testutil.AllowPDP()
++	h := newExecHandler(t, pdp)
++
++	req := httptest.NewRequest(http.MethodGet,
++		"/exec/namespaces/default/components/greeter-service?env=development&project=default",
++		nil).WithContext(testutil.AuthzContext())
++	rec := httptest.NewRecorder()
++	h.ServeHTTP(rec, req)
++
++	require.Equal(t, http.StatusNotFound, rec.Code)
++	require.Empty(t, pdp.Captured)
++}
+diff --git a/internal/openchoreo-api/api/handlers/wirelogs.go b/internal/openchoreo-api/api/handlers/wirelogs.go
+index 8d322cc..3f32203 100644
+--- a/internal/openchoreo-api/api/handlers/wirelogs.go
++++ b/internal/openchoreo-api/api/handlers/wirelogs.go
+@@ -17,6 +17,7 @@ import (
+ 	"strings"
+ 	"time"
+ 
++	apierrors "k8s.io/apimachinery/pkg/api/errors"
+ 	"sigs.k8s.io/controller-runtime/pkg/client"
+ 
+ 	openchoreov1alpha1 "github.com/openchoreo/openchoreo/api/v1alpha1"
+@@ -120,6 +121,28 @@ func (h *WirelogsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+ 		http.Error(w, "authorization not configured", http.StatusInternalServerError)
+ 		return
+ 	}
++	// When filtering by component, authorize against the component's real owning
++	// project rather than the caller-supplied `project` query parameter.
++	if component != "" {
++		comp := &openchoreov1alpha1.Component{}
++		if err := h.k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: component}, comp); err != nil {
++			if apierrors.IsNotFound(err) {
++				http.Error(w, fmt.Sprintf("component %q not found in namespace %q", component, namespace), http.StatusNotFound)
++				return
++			}
++			logger.Error("Failed to look up component for wirelogs", "error", err)
++			http.Error(w, "failed to look up component", http.StatusServiceUnavailable)
++			return
++		}
++		if comp.Spec.Owner.ProjectName == "" || comp.Spec.Owner.ProjectName != project {
++			logger.Warn("Wirelogs request project does not match component owner",
++				"ownerProject", comp.Spec.Owner.ProjectName)
++			http.Error(w, fmt.Sprintf("component %q not found in project %q", component, project), http.StatusNotFound)
++			return
++		}
++		project = comp.Spec.Owner.ProjectName
++	}
++
+ 	if err := h.authzChecker.Check(ctx, wirelogsCheckRequest(namespace, environment, project, component)); err != nil {
+ 		if errors.Is(err, svcpkg.ErrForbidden) {
+ 			http.Error(w, "you do not have permission to view wirelogs for this scope", http.StatusForbidden)
+diff --git a/internal/openchoreo-api/api/handlers/wirelogs_test.go b/internal/openchoreo-api/api/handlers/wirelogs_test.go
+index a1ad417..01b0d8d 100644
+--- a/internal/openchoreo-api/api/handlers/wirelogs_test.go
++++ b/internal/openchoreo-api/api/handlers/wirelogs_test.go
+@@ -103,6 +103,7 @@ func TestWirelogsHandler_Forbidden(t *testing.T) {
+ 		Return(&authz.Decision{Decision: false, Context: &authz.DecisionContext{Reason: "no wirelogs:view"}}, nil)
+ 
+ 	h := &WirelogsHandler{
++		k8sClient:    newWirelogsK8sClient(t, wirelogsComponent("ns-a", "checkout", "demo")),
+ 		authzChecker: svcpkg.NewAuthzChecker(pdp, slog.Default()),
+ 		logger:       slog.Default(),
+ 	}
+@@ -128,6 +129,7 @@ func captureAuthzRequest(t *testing.T, path string) *authz.EvaluateRequest {
+ 		})
+ 
+ 	h := &WirelogsHandler{
++		k8sClient:    newWirelogsK8sClient(t, wirelogsComponent("ns-a", "checkout", "demo")),
+ 		authzChecker: svcpkg.NewAuthzChecker(pdp, slog.Default()),
+ 		logger:       slog.Default(),
+ 	}
+@@ -504,3 +506,42 @@ func TestNewWirelogsHandler_InitialisesHTTPClient(t *testing.T) {
+ 	assert.NotZero(t, tr.ResponseHeaderTimeout, "ResponseHeaderTimeout must be set so a stuck gateway can't block before the stream starts")
+ 	assert.NotNil(t, tr.DialContext, "DialContext must be set to bound TCP connect")
+ }
++
++func wirelogsComponent(namespace, name, project string) *openchoreov1alpha1.Component {
++	return &openchoreov1alpha1.Component{
++		ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: name},
++		Spec: openchoreov1alpha1.ComponentSpec{
++			Owner: openchoreov1alpha1.ComponentOwner{ProjectName: project},
++		},
++	}
++}
++
++// A caller must not be able to read a component's wirelogs by naming a project
++// they have access to while the component is owned by a different project.
++func TestWirelogsHandler_CrossProjectComponentRejected(t *testing.T) {
++	pdp := authzmocks.NewMockPDP(t) // no Evaluate expected: rejected before authz
++	h := &WirelogsHandler{
++		k8sClient:    newWirelogsK8sClient(t, wirelogsComponent("ns-a", "checkout", "other-project")),
++		authzChecker: svcpkg.NewAuthzChecker(pdp, slog.Default()),
++		logger:       slog.Default(),
++	}
++
++	rec := httptest.NewRecorder()
++	h.ServeHTTP(rec, wirelogsRequest(t, "/api/v1/namespaces/ns-a/environments/development/wirelogs?project=demo&component=checkout"))
++
++	assert.Equal(t, http.StatusNotFound, rec.Code)
++}
++
++func TestWirelogsHandler_UnknownComponentRejected(t *testing.T) {
++	pdp := authzmocks.NewMockPDP(t)
++	h := &WirelogsHandler{
++		k8sClient:    newWirelogsK8sClient(t),
++		authzChecker: svcpkg.NewAuthzChecker(pdp, slog.Default()),
++		logger:       slog.Default(),
++	}
++
++	rec := httptest.NewRecorder()
++	h.ServeHTTP(rec, wirelogsRequest(t, "/api/v1/namespaces/ns-a/environments/development/wirelogs?project=demo&component=checkout"))
++
++	assert.Equal(t, http.StatusNotFound, rec.Code)
++}

@@ -1,0 +1,117 @@
+diff --git a/src/cc65/codeoptutil.c b/src/cc65/codeoptutil.c
+index 0d3dba9..b81c819 100644
+--- a/src/cc65/codeoptutil.c
++++ b/src/cc65/codeoptutil.c
+@@ -1207,6 +1207,18 @@ void RemoveRegLoads (StackOpData* D, LoadInfo* LI)
+ void RemoveRemainders (StackOpData* D)
+ /* Remove the code that is unnecessary after translation of the sequence */
+ {
++    /* If a rhs reg isn't changed after the push, its load info is carried
++    ** over from the lhs, and the entries it refers to belong to the lhs.
++    ** These must not be removed as part of the rhs; if they are removable at
++    ** all, the lhs removal takes care of it.
++    */
++    if (D->Rhs.A.ChgIndex >= 0 && D->Rhs.A.ChgIndex < D->PushIndex) {
++        D->Rhs.A.Flags &= ~LI_REMOVE;
++    }
++    if (D->Rhs.X.ChgIndex >= 0 && D->Rhs.X.ChgIndex < D->PushIndex) {
++        D->Rhs.X.Flags &= ~LI_REMOVE;
++    }
++
+     /* Remove the register loads for lhs and rhs if nothing prevents that */
+     RemoveRegLoads (D, &D->Lhs);
+     RemoveRegLoads (D, &D->Rhs);
+diff --git a/src/cc65/coptstop.c b/src/cc65/coptstop.c
+index 7a9416b..354ac62 100644
+--- a/src/cc65/coptstop.c
++++ b/src/cc65/coptstop.c
+@@ -1373,8 +1373,11 @@ static unsigned Opt_a_tossub (StackOpData* D)
+     /* Inline the sbc */
+     D->IP = D->OpIndex+1;
+ 
+-    /* Must be true because of OP_RHS_LOAD */
+-    CHECK ((D->Rhs.A.Flags & D->Rhs.X.Flags & LI_DIRECT) != 0);
++    /* Must be true because of OP_RHS_LOAD. Note: in the 8-bit case, only the
++    ** low byte (A) of the RHS is checked by the preconditions, as the high
++    ** byte (X) is not used here and might not even have a load insn.
++    */
++    CHECK ((D->Rhs.A.Flags & LI_DIRECT) != 0);
+ 
+     /* sec */
+     X = NewCodeEntry (OP65_SEC, AM65_IMP, 0, 0, D->OpEntry->LI);
+diff --git a/test/val/bug2946.c b/test/val/bug2946.c
+new file mode 100644
+index 0000000..554aa3a
+--- /dev/null
++++ b/test/val/bug2946.c
+@@ -0,0 +1,70 @@
++/* bug #2946: Incomplete, non-removable Rhs asserts in OptStackOps */
++
++#include <stdio.h>
++#include <stdlib.h>
++
++unsigned char a, b = 0;
++unsigned char c = 10;
++unsigned char d = 1;
++int i;
++
++unsigned failures;
++
++void check(int got, int expected, const char* what)
++{
++    if (got != expected) {
++        printf("%s: got %d, expected %d\n", what, got, expected);
++        ++failures;
++    }
++}
++
++int main(void) {
++    /* 'if' needed to produce a label below, moved by OptJumpTarget3  */
++    if (b != 0) {
++        /* Operation not important; it only affects the removal of one LDX #$00 */
++        b = 0;
++    }
++
++    /* d >= 0 is const, A/X=1 (Warning: Result of comparison is always true) */
++    a = c - (d >= 0);
++    check(a, 9, "c - (d >= 0)");
++
++    /* Same issue with other 8-bit stack op replacements */
++    if (b != 0) {
++        b = 0;
++    }
++    a = c ^ (d >= 0);
++    check(a, 11, "c ^ (d >= 0)");
++
++    if (b != 0) {
++        b = 0;
++    }
++    a = c | (d >= 0);
++    check(a, 11, "c | (d >= 0)");
++
++    if (b != 0) {
++        b = 0;
++    }
++    a = c & (d >= 0);
++    check(a, 0, "c & (d >= 0)");
++
++    if (b != 0) {
++        b = 0;
++    }
++    i = c - (d >= 0);
++    check(i, 9, "int c - (d >= 0)");
++
++    if (b != 0) {
++        b = 0;
++    }
++    i = c ^ (d >= 0);
++    check(i, 11, "int c ^ (d >= 0)");
++
++    if (b != 0) {
++        b = 0;
++    }
++    i = c + (d >= 0);
++    check(i, 11, "int c + (d >= 0)");
++
++    return failures != 0;
++}

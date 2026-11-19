@@ -1,0 +1,168 @@
+diff --git a/registry/remote/pagination_ssrf_test.go b/registry/remote/pagination_ssrf_test.go
+new file mode 100644
+index 0000000..19df5a0
+--- /dev/null
++++ b/registry/remote/pagination_ssrf_test.go
+@@ -0,0 +1,91 @@
++/*
++Copyright The ORAS Authors.
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++*/
++
++package remote
++
++import (
++	"context"
++	"encoding/json"
++	"net/http"
++	"net/http/httptest"
++	"net/url"
++	"sync/atomic"
++	"testing"
++
++	"github.com/opencontainers/go-digest"
++	"github.com/opencontainers/image-spec/specs-go"
++	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
++)
++
++// Test_Pagination_CrossHostLink ensures that a malicious registry cannot make
++// the client issue requests to another host via the Link header (SSRF).
++func Test_Pagination_CrossHostLink(t *testing.T) {
++	var internalHits int32
++	internal := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		atomic.AddInt32(&internalHits, 1)
++		w.WriteHeader(http.StatusOK)
++	}))
++	defer internal.Close()
++
++	evil := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		w.Header().Set("Link", "<"+internal.URL+"/admin>; rel=\"next\"")
++		switch r.URL.Path {
++		case "/v2/test/tags/list":
++			json.NewEncoder(w).Encode(map[string][]string{"tags": {"v1"}})
++		case "/v2/_catalog":
++			json.NewEncoder(w).Encode(map[string][]string{"repositories": {"test"}})
++		default:
++			w.Header().Set("Content-Type", ocispec.MediaTypeImageIndex)
++			json.NewEncoder(w).Encode(ocispec.Index{
++				Versioned: specs.Versioned{SchemaVersion: 2},
++				MediaType: ocispec.MediaTypeImageIndex,
++				Manifests: []ocispec.Descriptor{},
++			})
++		}
++	}))
++	defer evil.Close()
++	u, err := url.Parse(evil.URL)
++	if err != nil {
++		t.Fatal(err)
++	}
++	ctx := context.Background()
++
++	repo, err := NewRepository(u.Host + "/test")
++	if err != nil {
++		t.Fatal(err)
++	}
++	repo.PlainHTTP = true
++	if err := repo.Tags(ctx, "", func([]string) error { return nil }); err == nil {
++		t.Error("Tags() expected error for cross-host Link")
++	}
++	repo.SetReferrersCapability(true)
++	subject := ocispec.Descriptor{MediaType: ocispec.MediaTypeImageManifest, Digest: digest.FromString("x"), Size: 1}
++	if err := repo.Referrers(ctx, subject, "", func([]ocispec.Descriptor) error { return nil }); err == nil {
++		t.Error("Referrers() expected error for cross-host Link")
++	}
++
++	reg, err := NewRegistry(u.Host)
++	if err != nil {
++		t.Fatal(err)
++	}
++	reg.PlainHTTP = true
++	if err := reg.Repositories(ctx, "", func([]string) error { return nil }); err == nil {
++		t.Error("Repositories() expected error for cross-host Link")
++	}
++
++	if n := atomic.LoadInt32(&internalHits); n != 0 {
++		t.Errorf("internal server received %d requests, want 0", n)
++	}
++}
+diff --git a/registry/remote/utils.go b/registry/remote/utils.go
+index 797169f..3e3411a 100644
+--- a/registry/remote/utils.go
++++ b/registry/remote/utils.go
+@@ -51,10 +51,17 @@ func parseLink(resp *http.Response) (string, error) {
+ 		link = link[1:i]
+ 	}
+ 
+-	linkURL, err := resp.Request.URL.Parse(link)
++	baseURL := resp.Request.URL
++	linkURL, err := baseURL.Parse(link)
+ 	if err != nil {
+ 		return "", err
+ 	}
++	// Prevent SSRF: the next page must be served by the same registry
++	// (same scheme and host, including port) as the current page.
++	if linkURL.Scheme != baseURL.Scheme || linkURL.Host != baseURL.Host {
++		return "", fmt.Errorf("invalid next link %q: scheme and host must match the current request %s://%s",
++			linkURL.Redacted(), baseURL.Scheme, baseURL.Host)
++	}
+ 	return linkURL.String(), nil
+ }
+ 
+diff --git a/registry/remote/utils_test.go b/registry/remote/utils_test.go
+index ef36434..1687949 100644
+--- a/registry/remote/utils_test.go
++++ b/registry/remote/utils_test.go
+@@ -46,10 +46,40 @@ func Test_parseLink(t *testing.T) {
+ 			want:   "https://localhost:5000/v2/hello-world/tags/list?last=latest&n=1",
+ 		},
+ 		{
+-			name:   "other domain",
++			name:   "same host absolute url",
+ 			url:    "https://localhost:5000/v2/_catalog",
+-			header: `<https://localhost:5001/v2/_catalog?last=alpine&n=1>; rel="next"`,
+-			want:   "https://localhost:5001/v2/_catalog?last=alpine&n=1",
++			header: `<https://localhost:5000/v2/_catalog?last=alpine&n=1>; rel="next"`,
++			want:   "https://localhost:5000/v2/_catalog?last=alpine&n=1",
++		},
++		{
++			name:    "other port",
++			url:     "https://localhost:5000/v2/_catalog",
++			header:  `<https://localhost:5001/v2/_catalog?last=alpine&n=1>; rel="next"`,
++			wantErr: true,
++		},
++		{
++			name:    "other domain",
++			url:     "https://registry.example.com/v2/hello-world/tags/list",
++			header:  `<http://169.254.169.254/latest/meta-data/>; rel="next"`,
++			wantErr: true,
++		},
++		{
++			name:    "scheme downgrade",
++			url:     "https://localhost:5000/v2/_catalog",
++			header:  `<http://localhost:5000/v2/_catalog?last=alpine&n=1>; rel="next"`,
++			wantErr: true,
++		},
++		{
++			name:    "protocol-relative url to other host",
++			url:     "https://localhost:5000/v2/_catalog",
++			header:  `<//evil.example.com/v2/_catalog>; rel="next"`,
++			wantErr: true,
++		},
++		{
++			name:    "unsupported scheme",
++			url:     "https://localhost:5000/v2/_catalog",
++			header:  `<file:///etc/passwd>; rel="next"`,
++			wantErr: true,
+ 		},
+ 		{
+ 			name:    "invalid header, missing <",

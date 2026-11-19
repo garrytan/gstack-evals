@@ -1,0 +1,63 @@
+diff --git a/pkl-core/src/test/kotlin/org/pkl/core/ReplServerTest.kt b/pkl-core/src/test/kotlin/org/pkl/core/ReplServerTest.kt
+index 6eef308..c9fb915 100644
+--- a/pkl-core/src/test/kotlin/org/pkl/core/ReplServerTest.kt
++++ b/pkl-core/src/test/kotlin/org/pkl/core/ReplServerTest.kt
+@@ -190,6 +190,12 @@ class ReplServerTest {
+     assertThat(result4).contains("Expected value of type `String`, but got type `Int`.")
+   }
+ 
++  @Test
++  fun `unterminated quoted identifier`() {
++    val result = makeFailingEvalRequest("`")
++    assertThat(result).contains("Unexpected end of file")
++  }
++
+   private fun makeEvalRequest(text: String): String {
+     val responses = server.handleRequest(ReplRequest.Eval("id", text, false, false))
+ 
+diff --git a/pkl-parser/src/main/java/org/pkl/parser/Lexer.java b/pkl-parser/src/main/java/org/pkl/parser/Lexer.java
+index 5b7ee93..988c4fc 100644
+--- a/pkl-parser/src/main/java/org/pkl/parser/Lexer.java
++++ b/pkl-parser/src/main/java/org/pkl/parser/Lexer.java
+@@ -489,11 +489,13 @@ public class Lexer {
+   }
+ 
+   private void lexQuotedIdentifier() {
+-    while (lookahead != '`' && lookahead != '\n' && lookahead != '\r') {
++    while (lookahead != '`' && lookahead != '\n' && lookahead != '\r' && lookahead != EOF) {
+       nextChar();
+     }
+     if (lookahead == '`') {
+       nextChar();
++    } else if (lookahead == EOF) {
++      throw unexpectedEndOfFile();
+     } else {
+       throw unexpectedChar(lookahead, "backquote");
+     }
+diff --git a/pkl-parser/src/test/kotlin/org/pkl/parser/LexerTest.kt b/pkl-parser/src/test/kotlin/org/pkl/parser/LexerTest.kt
+index 6cd9fbf..e5bb3ac 100644
+--- a/pkl-parser/src/test/kotlin/org/pkl/parser/LexerTest.kt
++++ b/pkl-parser/src/test/kotlin/org/pkl/parser/LexerTest.kt
+@@ -16,6 +16,7 @@
+ package org.pkl.parser
+ 
+ import org.assertj.core.api.Assertions.assertThat
++import org.assertj.core.api.Assertions.assertThatThrownBy
+ import org.junit.jupiter.api.Test
+ 
+ class LexerTest {
+@@ -46,4 +47,14 @@ class LexerTest {
+     assertThat(Lexer.maybeQuoteIdentifier("this")).isEqualTo("`this`")
+     assertThat(Lexer.maybeQuoteIdentifier("😀")).isEqualTo("`😀`")
+   }
++
++  @Test
++  fun `unterminated quoted identifier at end of input`() {
++    for (input in listOf("`", "`foo")) {
++      val lexer = Lexer(input)
++      assertThatThrownBy { lexer.next() }
++        .isInstanceOf(ParserError::class.java)
++        .hasMessageContaining("Unexpected end of file")
++    }
++  }
+ }

@@ -1,0 +1,114 @@
+diff --git a/modules/caddytls/tls.go b/modules/caddytls/tls.go
+index 34ffbf6..cd940ac 100644
+--- a/modules/caddytls/tls.go
++++ b/modules/caddytls/tls.go
+@@ -637,10 +637,9 @@ func (t *TLS) managingWildcardFor(subj string, otherSubjsToManage map[string]str
+ 		}
+ 		labels[i] = "*"
+ 		candidate := strings.Join(labels, ".")
+-		if _, ok := t.managing[candidate]; ok {
+-			return true
+-		}
+-		if _, ok := otherSubjsToManage[candidate]; ok {
++		_, managing := t.managing[candidate]
++		_, willManage := otherSubjsToManage[candidate]
++		if (managing || willManage) && !t.wildcardIsOnDemand(candidate) {
+ 			return true
+ 		}
+ 	}
+@@ -648,6 +647,23 @@ func (t *TLS) managingWildcardFor(subj string, otherSubjsToManage map[string]str
+ 	return false
+ }
+ 
++// wildcardIsOnDemand returns true if the automation policy for the given
++// wildcard name gets its certificates on-demand (i.e. during TLS handshakes,
++// via on-demand issuance or external cert managers / get_certificate). In
++// that case, no certificate for the wildcard is obtained up front, and the
++// subdomains might be served by a different automation policy (without
++// on-demand), so the wildcard cannot be relied upon to cover them.
++func (t *TLS) wildcardIsOnDemand(wildcard string) bool {
++	if t.Automation == nil {
++		return false
++	}
++	ap := t.getAutomationPolicyForName(wildcard)
++	if ap == nil {
++		return false
++	}
++	return ap.OnDemand || len(ap.Managers) > 0
++}
++
+ // RegisterServerNames registers the provided DNS names with the TLS app.
+ // This is currently used to auto-publish Encrypted ClientHello (ECH)
+ // configurations, if enabled. Use of this function by apps using the TLS
+diff --git a/modules/caddytls/tls_test.go b/modules/caddytls/tls_test.go
+new file mode 100644
+index 0000000..9275021
+--- /dev/null
++++ b/modules/caddytls/tls_test.go
+@@ -0,0 +1,66 @@
++package caddytls
++
++import (
++	"testing"
++
++	"github.com/caddyserver/certmagic"
++)
++
++func TestManagingWildcardFor(t *testing.T) {
++	newApp := func(policies ...*AutomationPolicy) *TLS {
++		for _, ap := range policies {
++			ap.subjects = ap.SubjectsRaw
++		}
++		return &TLS{
++			Automation: &AutomationConfig{Policies: policies},
++			managing:   make(map[string]string),
++		}
++	}
++
++	t.Run("regular wildcard covers subdomain", func(t *testing.T) {
++		app := newApp(
++			&AutomationPolicy{SubjectsRaw: []string{"wiki.example.com"}},
++			&AutomationPolicy{SubjectsRaw: []string{"*.example.com"}},
++		)
++		subjs := map[string]struct{}{"*.example.com": {}, "wiki.example.com": {}}
++		if !app.managingWildcardFor("wiki.example.com", subjs) {
++			t.Error("expected wildcard to cover subdomain")
++		}
++		app.managing["*.example.com"] = ""
++		if !app.managingWildcardFor("wiki.example.com", nil) {
++			t.Error("expected already-managed wildcard to cover subdomain")
++		}
++	})
++
++	// regression test: a wildcard whose certificate comes from get_certificate
++	// (a Manager) is not obtained up front, so it must not prevent its
++	// subdomains from being managed normally
++	t.Run("wildcard with managers does not cover subdomain", func(t *testing.T) {
++		app := newApp(
++			&AutomationPolicy{SubjectsRaw: []string{"wiki.example.com"}},
++			&AutomationPolicy{
++				SubjectsRaw: []string{"*.example.com"},
++				Managers:    []certmagic.Manager{Tailscale{}},
++			},
++		)
++		subjs := map[string]struct{}{"*.example.com": {}, "wiki.example.com": {}}
++		if app.managingWildcardFor("wiki.example.com", subjs) {
++			t.Error("wildcard with external managers should not cover subdomain")
++		}
++		app.managing["*.example.com"] = ""
++		if app.managingWildcardFor("wiki.example.com", nil) {
++			t.Error("managed wildcard with external managers should not cover subdomain")
++		}
++	})
++
++	t.Run("on-demand wildcard does not cover subdomain", func(t *testing.T) {
++		app := newApp(
++			&AutomationPolicy{SubjectsRaw: []string{"wiki.example.com"}},
++			&AutomationPolicy{SubjectsRaw: []string{"*.example.com"}, OnDemand: true},
++		)
++		subjs := map[string]struct{}{"*.example.com": {}, "wiki.example.com": {}}
++		if app.managingWildcardFor("wiki.example.com", subjs) {
++			t.Error("on-demand wildcard should not cover subdomain")
++		}
++	})
++}

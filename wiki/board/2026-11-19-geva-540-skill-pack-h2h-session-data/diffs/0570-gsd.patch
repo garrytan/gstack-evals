@@ -1,0 +1,126 @@
+diff --git a/RULES_DESCRIPTIONS.md b/RULES_DESCRIPTIONS.md
+index f73ee66..345b9a4 100644
+--- a/RULES_DESCRIPTIONS.md
++++ b/RULES_DESCRIPTIONS.md
+@@ -1754,6 +1754,8 @@ _Configuration_: N/A
+ _Description_: Since Go 1.25 the `sync` package proposes the [`WaitGroup.Go`](https://pkg.go.dev/sync#WaitGroup.Go) method.
+ This method is a shorter and safer replacement for the idiom `wg.Add ... go { ... wg.Done ... }`.
+ The rule proposes to replace these legacy idioms with calls to the new method.
++It also detects the idiom when the goroutines are launched from a `for`/`range` loop following the `wg.Add` call
++(e.g. `wg.Add(n); for range n { go func() { defer wg.Done(); ... }() }`).
+ 
+ _Limitations_: The rule doesn't rely on type information but on variable names to identify waitgroups.
+ This means the rule search for `wg` (the defacto standard name for wait groups);
+diff --git a/rule/use_waitgroup_go.go b/rule/use_waitgroup_go.go
+index 6f04fd6..ba58c74 100644
+--- a/rule/use_waitgroup_go.go
++++ b/rule/use_waitgroup_go.go
+@@ -97,16 +97,9 @@ func (w *lintUseWaitGroupGo) analyzeBlock(b *ast.BlockStmt) {
+ 		// wg.Add is the i-th statement of block.List
+ 		// we will iterate from the (i+1)-th statement up to the last statement of block.List
+ 		for i++; i < len(stmts); i++ {
+-			stmt := stmts[i]
+-			// looking for a go statement
+-			goStmt, ok := stmt.(*ast.GoStmt)
+-			if !ok {
+-				continue // not a go statement
+-			}
+-
+-			// here we found a the go statement
+-			// now let's check is the go statement is applied to a function literal that contains a wg.Done
+-			if !w.hasCallToWgDone(goStmt) {
++			// looking for a go statement (possibly within a loop)
++			// that runs a function literal containing a wg.Done
++			if !w.isGoStmtWithWgDone(stmts[i]) {
+ 				continue
+ 			}
+ 
+@@ -122,6 +115,49 @@ func (w *lintUseWaitGroupGo) analyzeBlock(b *ast.BlockStmt) {
+ 	}
+ }
+ 
++// isGoStmtWithWgDone returns true if the given statement is either
++//   - a go statement running a function literal that calls wg.Done, or
++//   - a for/range loop whose body directly contains such a go statement
++//
++// The latter covers idioms like:
++//
++//	wg.Add(n)
++//	for range n {
++//		go func() {
++//			defer wg.Done()
++//			...
++//		}()
++//	}
++func (w *lintUseWaitGroupGo) isGoStmtWithWgDone(stmt ast.Stmt) bool {
++	switch s := stmt.(type) {
++	case *ast.GoStmt:
++		return w.hasCallToWgDone(s)
++	case *ast.RangeStmt:
++		return w.loopBodyHasGoStmtWithWgDone(s.Body)
++	case *ast.ForStmt:
++		return w.loopBodyHasGoStmtWithWgDone(s.Body)
++	default:
++		return false
++	}
++}
++
++// loopBodyHasGoStmtWithWgDone returns true if the given loop body
++// directly contains a go statement running a function literal that calls wg.Done.
++func (w *lintUseWaitGroupGo) loopBodyHasGoStmtWithWgDone(body *ast.BlockStmt) bool {
++	if body == nil {
++		return false
++	}
++
++	for _, stmt := range body.List {
++		goStmt, ok := stmt.(*ast.GoStmt)
++		if ok && w.hasCallToWgDone(goStmt) {
++			return true
++		}
++	}
++
++	return false
++}
++
+ // hasCallToWgDone returns true if the given go statement
+ // calls to a function literal containing a call to wg.Done, false otherwise.
+ func (*lintUseWaitGroupGo) hasCallToWgDone(goStmt *ast.GoStmt) bool {
+diff --git a/testdata/go1.25/use_waitgroup_go.go b/testdata/go1.25/use_waitgroup_go.go
+index a827a49..8090479 100644
+--- a/testdata/go1.25/use_waitgroup_go.go
++++ b/testdata/go1.25/use_waitgroup_go.go
+@@ -50,4 +50,34 @@ func useWaitGroupGo() {
+ 		}
+ 	}()
+ 	wg.Wait()
++
++	// from kubernetes-sigs/kueue (PR #9892)
++	wg.Add(int(jobs)) // MATCH /replace wg.Add()...go {...wg.Done()...} with wg.Go(...)/
++
++	for range int(jobs) {
++		go func() {
++			defer wg.Done()
++			doSomething()
++		}()
++	}
++
++	wg.Wait()
++
++	wg.Add(n) // MATCH /replace wg.Add()...go {...wg.Done()...} with wg.Go(...)/
++	for i := 0; i < n; i++ {
++		go func() {
++			doSomething(i)
++			wg.Done()
++		}()
++	}
++
++	wg.Wait()
++
++	// no wg.Done in the goroutine launched in the loop
++	wg.Add(n)
++	for range n {
++		go func() {
++			doSomething()
++		}()
++	}
+ }

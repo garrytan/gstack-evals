@@ -1,0 +1,31 @@
+diff --git a/packages/react/src/menu/popup/MenuPopup.tsx b/packages/react/src/menu/popup/MenuPopup.tsx
+index cf3d523..6fda11c 100644
+--- a/packages/react/src/menu/popup/MenuPopup.tsx
++++ b/packages/react/src/menu/popup/MenuPopup.tsx
+@@ -101,6 +101,11 @@ export const MenuPopup = React.forwardRef(function MenuPopup(
+   if (parent.type === 'menubar' && lastOpenChangeReason !== 'outside-press') {
+     returnFocus = true;
+   }
++  // When only the submenu is dismissed with Escape (`closeParentOnEsc={false}`),
++  // the parent menu stays open, so focus should go back to the submenu trigger.
++  if (parent.type === 'menu' && parent.context.open && lastOpenChangeReason === 'escape-key') {
++    returnFocus = true;
++  }
+ 
+   return (
+     <FloatingFocusManager
+diff --git a/packages/react/src/menu/root/MenuRoot.test.tsx b/packages/react/src/menu/root/MenuRoot.test.tsx
+index d6b697f..eb5958e 100644
+--- a/packages/react/src/menu/root/MenuRoot.test.tsx
++++ b/packages/react/src/menu/root/MenuRoot.test.tsx
+@@ -837,6 +837,10 @@ describe('<Menu.Root />', () => {
+       });
+ 
+       expect(menus[0].id).to.equal('parent-menu');
++
++      await waitFor(() => {
++        expect(getByRole('menuitem', { name: '2' })).toHaveFocus();
++      });
+     });
+   });
+ 

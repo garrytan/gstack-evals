@@ -1,0 +1,50 @@
+diff --git a/agentscope-harness/src/main/java/io/agentscope/harness/agent/filesystem/remote/RemoteFilesystem.java b/agentscope-harness/src/main/java/io/agentscope/harness/agent/filesystem/remote/RemoteFilesystem.java
+index 9c34f07..39dfe67 100644
+--- a/agentscope-harness/src/main/java/io/agentscope/harness/agent/filesystem/remote/RemoteFilesystem.java
++++ b/agentscope-harness/src/main/java/io/agentscope/harness/agent/filesystem/remote/RemoteFilesystem.java
+@@ -425,8 +425,14 @@ public class RemoteFilesystem implements AbstractFilesystem {
+                                         + (effectivePattern.startsWith("**")
+                                                 ? effectivePattern
+                                                 : "**/" + effectivePattern));
++        // "**/x" requires at least one directory in java's glob syntax; also match "x" at root
+         PathMatcher directMatcher =
+-                FileSystems.getDefault().getPathMatcher("glob:" + effectivePattern);
++                FileSystems.getDefault()
++                        .getPathMatcher(
++                                "glob:"
++                                        + (effectivePattern.startsWith("**/")
++                                                ? effectivePattern.substring(3)
++                                                : effectivePattern));
+ 
+         // Fast path: index has entries for this prefix
+         if (index != null && index.hasPrefix(normalizedPath)) {
+diff --git a/agentscope-harness/src/test/java/io/agentscope/harness/agent/filesystem/FilesystemGlobTest.java b/agentscope-harness/src/test/java/io/agentscope/harness/agent/filesystem/FilesystemGlobTest.java
+index 7121d67..11ae0bf 100644
+--- a/agentscope-harness/src/test/java/io/agentscope/harness/agent/filesystem/FilesystemGlobTest.java
++++ b/agentscope-harness/src/test/java/io/agentscope/harness/agent/filesystem/FilesystemGlobTest.java
+@@ -76,4 +76,25 @@ class FilesystemGlobTest {
+                 Set.of("/agents/demo-session.log.jsonl", "/agents/sub/demo-session.log.jsonl"),
+                 paths);
+     }
++
++    @Test
++    void remote_glob_recursivePattern_matchesFilesAtSearchRoot() {
++        InMemoryStore store = new InMemoryStore();
++        List<String> ns = List.of("test-ns");
++        store.put(ns, "/hello.txt", Map.of("content", "root"));
++        store.put(ns, "/reports/hello.txt", Map.of("content", "nested"));
++        store.put(ns, "/reports/archive/hello.txt", Map.of("content", "deep"));
++
++        RemoteFilesystem fs = new RemoteFilesystem(store, ns);
++        for (String pattern : List.of("**/hello.txt", "**/*.txt")) {
++            GlobResult result = fs.glob(RT, pattern, "/");
++            assertTrue(result.isSuccess());
++            Set<String> paths =
++                    result.matches().stream().map(fi -> fi.path()).collect(Collectors.toSet());
++            assertEquals(
++                    Set.of("/hello.txt", "/reports/hello.txt", "/reports/archive/hello.txt"),
++                    paths,
++                    pattern);
++        }
++    }
+ }

@@ -1,0 +1,284 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index f725bf8..17bd4fd 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -130,6 +130,10 @@
+ 
+ ### Bug fixes
+ 
++- Fixed a bug where inlining could generate code referencing an unbound
++  variable when a parameter of an inlined function was used in a case clause
++  guard or a bit array pattern size.
++
+ - Fixed a bug where `echo` could crash on JavaScript if the module contains
+   record variants with the same name as some built-in JavaScript objects.
+   ([Louis Pilfold](https://github.com/lpil))
+diff --git a/compiler-core/src/erlang/tests/inlining.rs b/compiler-core/src/erlang/tests/inlining.rs
+index df9ef86..707996d 100644
+--- a/compiler-core/src/erlang/tests/inlining.rs
++++ b/compiler-core/src/erlang/tests/inlining.rs
+@@ -312,3 +312,39 @@ fn divide(a, b) {
+ "
+     );
+ }
++
++#[test]
++fn parameter_used_in_case_guard_is_not_inlined() {
++    assert_erl!(
++        ("gleam_stdlib", "gleam/result", RESULT_MODULE),
++        "
++import gleam/result
++
++pub fn main(x, y) {
++  use ssl <- result.map(x)
++  case y {
++    _ if ssl -> 1
++    _ -> 2
++  }
++}
++"
++    );
++}
++
++#[test]
++fn parameter_used_in_bit_array_pattern_size_is_not_inlined() {
++    assert_erl!(
++        ("gleam_stdlib", "gleam/result", RESULT_MODULE),
++        "
++import gleam/result
++
++pub fn main(x, y) {
++  use size <- result.map(x)
++  case y {
++    <<a:size(size)>> -> a
++    _ -> 2
++  }
++}
++"
++    );
++}
+diff --git a/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__parameter_used_in_bit_array_pattern_size_is_not_inlined.snap b/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__parameter_used_in_bit_array_pattern_size_is_not_inlined.snap
+new file mode 100644
+index 0000000..d36355e
+--- /dev/null
++++ b/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__parameter_used_in_bit_array_pattern_size_is_not_inlined.snap
+@@ -0,0 +1,45 @@
++---
++source: compiler-core/src/erlang/tests/inlining.rs
++expression: "\nimport gleam/result\n\npub fn main(x, y) {\n  use size <- result.map(x)\n  case y {\n    <<a:size(size)>> -> a\n    _ -> 2\n  }\n}\n"
++snapshot_kind: text
++---
++----- SOURCE CODE
++
++import gleam/result
++
++pub fn main(x, y) {
++  use size <- result.map(x)
++  case y {
++    <<a:size(size)>> -> a
++    _ -> 2
++  }
++}
++
++
++----- COMPILED ERLANG
++-module(my@mod).
++-compile([no_auto_import, nowarn_unused_vars, nowarn_unused_function, nowarn_nomatch, inline]).
++-define(FILEPATH, "project/test/my/mod.gleam").
++-export([main/2]).
++
++-file("project/test/my/mod.gleam", 4).
++-spec main({ok, integer()} | {error, AT}, bitstring()) -> {ok, integer()} |
++    {error, AT}.
++main(X, Y) ->
++    case X of
++        {ok, Value} ->
++            {ok,
++                begin
++                    Size = Value,
++                    case Y of
++                        <<A:Size>> ->
++                            A;
++
++                        _ ->
++                            2
++                    end
++                end};
++
++        {error, Error} ->
++            {error, Error}
++    end.
+diff --git a/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__parameter_used_in_case_guard_is_not_inlined.snap b/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__parameter_used_in_case_guard_is_not_inlined.snap
+new file mode 100644
+index 0000000..873e080
+--- /dev/null
++++ b/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__parameter_used_in_case_guard_is_not_inlined.snap
+@@ -0,0 +1,45 @@
++---
++source: compiler-core/src/erlang/tests/inlining.rs
++expression: "\nimport gleam/result\n\npub fn main(x, y) {\n  use ssl <- result.map(x)\n  case y {\n    _ if ssl -> 1\n    _ -> 2\n  }\n}\n"
++snapshot_kind: text
++---
++----- SOURCE CODE
++
++import gleam/result
++
++pub fn main(x, y) {
++  use ssl <- result.map(x)
++  case y {
++    _ if ssl -> 1
++    _ -> 2
++  }
++}
++
++
++----- COMPILED ERLANG
++-module(my@mod).
++-compile([no_auto_import, nowarn_unused_vars, nowarn_unused_function, nowarn_nomatch, inline]).
++-define(FILEPATH, "project/test/my/mod.gleam").
++-export([main/2]).
++
++-file("project/test/my/mod.gleam", 4).
++-spec main({ok, boolean()} | {error, AT}, any()) -> {ok, integer()} |
++    {error, AT}.
++main(X, Y) ->
++    case X of
++        {ok, Value} ->
++            {ok,
++                begin
++                    Ssl = Value,
++                    case Y of
++                        _ when Ssl ->
++                            1;
++
++                        _ ->
++                            2
++                    end
++                end};
++
++        {error, Error} ->
++            {error, Error}
++    end.
+diff --git a/compiler-core/src/inline.rs b/compiler-core/src/inline.rs
+index 81df9e9..b4de4df 100644
+--- a/compiler-core/src/inline.rs
++++ b/compiler-core/src/inline.rs
+@@ -960,6 +960,15 @@ enum FunctionPosition {
+ }
+ 
+ impl FindInlinableParameters {
++    /// Marks a parameter as not inlinable. This is used for references in
++    /// positions that the inliner does not rewrite, such as case clause guards
++    /// and bit array pattern sizes. If we inlined a parameter referenced there,
++    /// the assignment would be removed but the reference would remain, leaving
++    /// an unbound variable in the generated code.
++    fn register_non_inlinable_reference(&mut self, name: &EcoString, location: SrcSpan) {
++        _ = self.parameters.remove(&(name.clone(), location));
++    }
++
+     fn register_reference(&mut self, name: &EcoString, location: SrcSpan) {
+         let key = (name.clone(), location);
+ 
+@@ -1004,7 +1013,7 @@ impl<'ast> Visit<'ast> for FindInlinableParameters {
+         _type_: &'ast Arc<Type>,
+         location: &'ast SrcSpan,
+     ) {
+-        self.register_reference(name, *location);
++        self.register_non_inlinable_reference(name, *location);
+     }
+ 
+     fn visit_typed_bit_array_size_variable(
+@@ -1019,7 +1028,7 @@ impl<'ast> Visit<'ast> for FindInlinableParameters {
+             None => return,
+         };
+         if let ValueConstructorVariant::LocalVariable { location, .. } = variant {
+-            self.register_reference(name, *location);
++            self.register_non_inlinable_reference(name, *location);
+         }
+     }
+ 
+@@ -1364,6 +1373,13 @@ impl FunctionToInlinable {
+     }
+ 
+     fn clause(&mut self, clause: &TypedClause) -> Option<InlinableClause> {
++        // Guards and alternative patterns are not represented in inlinable
++        // clauses, so we cannot inline functions which use them without
++        // changing their behaviour.
++        if clause.guard.is_some() || !clause.alternative_patterns.is_empty() {
++            return None;
++        }
++
+         let pattern = clause
+             .pattern
+             .iter()
+diff --git a/compiler-core/src/javascript/tests/inlining.rs b/compiler-core/src/javascript/tests/inlining.rs
+index 3b691ce..b1e2ec9 100644
+--- a/compiler-core/src/javascript/tests/inlining.rs
++++ b/compiler-core/src/javascript/tests/inlining.rs
+@@ -312,3 +312,21 @@ fn divide(a, b) {
+ "
+     );
+ }
++
++#[test]
++fn parameter_used_in_case_guard_is_not_inlined() {
++    assert_js!(
++        ("gleam_stdlib", "gleam/result", RESULT_MODULE),
++        "
++import gleam/result
++
++pub fn main(x, y) {
++  use ssl <- result.map(x)
++  case y {
++    _ if ssl -> 1
++    _ -> 2
++  }
++}
++"
++    );
++}
+diff --git a/compiler-core/src/javascript/tests/snapshots/gleam_core__javascript__tests__inlining__parameter_used_in_case_guard_is_not_inlined.snap b/compiler-core/src/javascript/tests/snapshots/gleam_core__javascript__tests__inlining__parameter_used_in_case_guard_is_not_inlined.snap
+new file mode 100644
+index 0000000..40ff9cb
+--- /dev/null
++++ b/compiler-core/src/javascript/tests/snapshots/gleam_core__javascript__tests__inlining__parameter_used_in_case_guard_is_not_inlined.snap
+@@ -0,0 +1,39 @@
++---
++source: compiler-core/src/javascript/tests/inlining.rs
++expression: "\nimport gleam/result\n\npub fn main(x, y) {\n  use ssl <- result.map(x)\n  case y {\n    _ if ssl -> 1\n    _ -> 2\n  }\n}\n"
++snapshot_kind: text
++---
++----- SOURCE CODE
++
++import gleam/result
++
++pub fn main(x, y) {
++  use ssl <- result.map(x)
++  case y {
++    _ if ssl -> 1
++    _ -> 2
++  }
++}
++
++
++----- COMPILED JAVASCRIPT
++import * as $result from "../../gleam_stdlib/gleam/result.mjs";
++import { Ok } from "../gleam.mjs";
++
++export function main(x, y) {
++  if (x instanceof Ok) {
++    let value = x[0];
++    return new Ok(
++      (() => {
++        let ssl = value;
++        if (ssl) {
++          return 1;
++        } else {
++          return 2;
++        }
++      })(),
++    );
++  } else {
++    return x;
++  }
++}

@@ -1,0 +1,105 @@
+diff --git a/src/rules_core/smartquotes.ts b/src/rules_core/smartquotes.ts
+index 61979cb..97280b5 100644
+--- a/src/rules_core/smartquotes.ts
++++ b/src/rules_core/smartquotes.ts
+@@ -14,6 +14,15 @@ interface Replacement {
+   ch: string
+ }
+ 
++interface StackItem {
++  token: number
++  pos: number
++  single: boolean
++  level: number
++  lastSingle: number
++  lastDouble: number
++}
++
+ type ReplacementMap = Record<string, Replacement[]>
+ 
+ function addReplacement (
+@@ -48,7 +57,7 @@ function applyReplacements (str: string, replacements: Replacement[]) {
+ function process_inlines (tokens: Token[], state: StateCore) {
+   let j
+ 
+-  const stack = []
++  const stack: StackItem[] = []
+   // token index -> list of replacements in the original token content
+   const replacements: ReplacementMap = {}
+ 
+@@ -68,8 +77,6 @@ function process_inlines (tokens: Token[], state: StateCore) {
+     let pos = 0
+     const max = text.length
+ 
+-    /* eslint no-labels:0,block-scoped-var:0 */
+-    OUTER:
+     while (pos < max) {
+       QUOTE_RE.lastIndex = pos
+       const t = QUOTE_RE.exec(text)
+@@ -164,12 +171,14 @@ function process_inlines (tokens: Token[], state: StateCore) {
+       }
+ 
+       if (canClose) {
+-        // this could be a closing quote, rewind the stack to get a match
+-        for (j = stack.length - 1; j >= 0; j--) {
+-          let item = stack[j]
+-          if (stack[j].level < thisLevel) { break }
+-          if (item.single === isSingle && stack[j].level === thisLevel) {
+-            item = stack[j]
++        // this could be a closing quote, find the nearest opener of the same
++        // type in O(1) using per-entry links (avoids quadratic rescans)
++        if (stack.length > 0) {
++          const top = stack[stack.length - 1]
++          j = isSingle ? top.lastSingle : top.lastDouble
++
++          if (j >= 0 && stack[j].level === thisLevel) {
++            const item = stack[j]
+ 
+             let openQuote
+             let closeQuote
+@@ -185,17 +194,22 @@ function process_inlines (tokens: Token[], state: StateCore) {
+             addReplacement(replacements, item.token, item.pos, openQuote)
+ 
+             stack.length = j
+-            continue OUTER
++            continue
+           }
+         }
+       }
+ 
+       if (canOpen) {
++        const idx = stack.length
++        const prev = idx > 0 ? stack[idx - 1] : null
+         stack.push({
+           token: i,
+           pos: t.index,
+           single: isSingle,
+-          level: thisLevel
++          level: thisLevel,
++          // index of the nearest entry (including this one) of each quote type
++          lastSingle: isSingle ? idx : (prev ? prev.lastSingle : -1),
++          lastDouble: isSingle ? (prev ? prev.lastDouble : -1) : idx
+         })
+       } else if (canClose && isSingle) {
+         addReplacement(replacements, i, t.index, APOSTROPHE)
+diff --git a/test/fixtures/markdown-it/smartquotes.txt b/test/fixtures/markdown-it/smartquotes.txt
+index afab445..a2d000d 100644
+--- a/test/fixtures/markdown-it/smartquotes.txt
++++ b/test/fixtures/markdown-it/smartquotes.txt
+@@ -190,3 +190,16 @@ Should not replace entities:
+ <p>&quot;foo&quot;</p>
+ <p>&quot;foo&quot;</p>
+ .
++
++Should match closers across openers of the other quote type:
++.
++"a 'b" c'
++
++"a "b 'c' d" e"
++
++"a b' c' d"
++.
++<p>“a 'b” c’</p>
++<p>“a “b ‘c’ d” e”</p>
++<p>“a b’ c’ d”</p>
++.

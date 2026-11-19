@@ -1,0 +1,213 @@
+diff --git a/src/main/java/io/github/hectorvent/floci/services/s3/S3Controller.java b/src/main/java/io/github/hectorvent/floci/services/s3/S3Controller.java
+index 891cf2c..6a0a919 100644
+--- a/src/main/java/io/github/hectorvent/floci/services/s3/S3Controller.java
++++ b/src/main/java/io/github/hectorvent/floci/services/s3/S3Controller.java
+@@ -69,6 +69,8 @@ import org.jboss.logging.Logger;
+ public class S3Controller {
+ 
+     private static final Logger LOG = Logger.getLogger(S3Controller.class);
++    private static final List<String> UNSUPPORTED_BUCKET_DELETE_SUBRESOURCES = List.of(
++            "analytics", "intelligent-tiering", "inventory", "metrics", "metadataTable", "metadataConfiguration");
+     private static final DateTimeFormatter ISO_FORMAT = DateTimeFormatter
+             .ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'")
+             .withZone(ZoneId.of("UTC"));
+@@ -242,6 +244,10 @@ public class S3Controller {
+                 s3Service.putBucketOwnershipControls(bucket, new String(body, StandardCharsets.UTF_8));
+                 return Response.ok().build();
+             }
++            if (hasQueryParam(uriInfo, "replication")) {
++                s3Service.putBucketReplication(bucket, new String(body, StandardCharsets.UTF_8));
++                return Response.ok().build();
++            }
+             if (hasQueryParam(uriInfo, "requestPayment")) {
+                 s3Service.putBucketRequestPayment(bucket, new String(body, StandardCharsets.UTF_8));
+                 return Response.ok().build();
+@@ -314,6 +320,16 @@ public class S3Controller {
+                 s3Service.deleteBucketOwnershipControls(bucket);
+                 return Response.noContent().build();
+             }
++            if (hasQueryParam(uriInfo, "replication")) {
++                s3Service.deleteBucketReplication(bucket);
++                return Response.noContent().build();
++            }
++            for (String subresource : UNSUPPORTED_BUCKET_DELETE_SUBRESOURCES) {
++                if (hasQueryParam(uriInfo, subresource)) {
++                    throw new AwsException("NotImplemented",
++                            "DELETE ?" + subresource + " is not implemented.", 501);
++                }
++            }
+             s3Service.deleteBucket(bucket);
+             return Response.noContent().build();
+         } catch (AwsException e) {
+@@ -409,6 +425,10 @@ public class S3Controller {
+                 s3Service.authorizeBucketRead(bucket, "s3:GetBucketOwnershipControls", authorization);
+                 return Response.ok(s3Service.getBucketOwnershipControls(bucket)).build();
+             }
++            if (hasQueryParam(uriInfo, "replication")) {
++                s3Service.authorizeBucketRead(bucket, "s3:GetReplicationConfiguration", authorization);
++                return Response.ok(s3Service.getBucketReplication(bucket)).build();
++            }
+             if (hasQueryParam(uriInfo, "requestPayment")) {
+                 s3Service.authorizeBucketRead(bucket, "s3:GetBucketRequestPayment", authorization);
+                 return Response.ok(s3Service.getBucketRequestPayment(bucket)).build();
+diff --git a/src/main/java/io/github/hectorvent/floci/services/s3/S3Service.java b/src/main/java/io/github/hectorvent/floci/services/s3/S3Service.java
+index c60cc0f..6bb0af4 100644
+--- a/src/main/java/io/github/hectorvent/floci/services/s3/S3Service.java
++++ b/src/main/java/io/github/hectorvent/floci/services/s3/S3Service.java
+@@ -1829,6 +1829,34 @@ public class S3Service implements Resettable {
+         bucketStore.put(bucketName, bucket);
+     }
+ 
++    public String getBucketReplication(String bucketName) {
++        Bucket bucket = bucketStore.get(bucketName)
++                .orElseThrow(() -> new AwsException("NoSuchBucket", "The specified bucket does not exist.", 404));
++        if (bucket.getReplicationConfiguration() == null) {
++            throw new AwsException("ReplicationConfigurationNotFoundError",
++                    "The replication configuration was not found", 404);
++        }
++        return bucket.getReplicationConfiguration();
++    }
++
++    public void putBucketReplication(String bucketName, String replicationXml) {
++        Bucket bucket = bucketStore.get(bucketName)
++                .orElseThrow(() -> new AwsException("NoSuchBucket", "The specified bucket does not exist.", 404));
++        if (!bucket.isVersioningEnabled()) {
++            throw new AwsException("InvalidRequest",
++                    "Versioning must be 'Enabled' on the bucket to apply a replication configuration", 400);
++        }
++        bucket.setReplicationConfiguration(replicationXml);
++        bucketStore.put(bucketName, bucket);
++    }
++
++    public void deleteBucketReplication(String bucketName) {
++        Bucket bucket = bucketStore.get(bucketName)
++                .orElseThrow(() -> new AwsException("NoSuchBucket", "The specified bucket does not exist.", 404));
++        bucket.setReplicationConfiguration(null);
++        bucketStore.put(bucketName, bucket);
++    }
++
+     /**
+      * Stores the bucket Request Payment configuration. AWS only allows the values
+      * {@code BucketOwner} and {@code Requester}; we accept either and reject anything
+diff --git a/src/main/java/io/github/hectorvent/floci/services/s3/model/Bucket.java b/src/main/java/io/github/hectorvent/floci/services/s3/model/Bucket.java
+index 5d168a4..9d6c0b1 100644
+--- a/src/main/java/io/github/hectorvent/floci/services/s3/model/Bucket.java
++++ b/src/main/java/io/github/hectorvent/floci/services/s3/model/Bucket.java
+@@ -27,6 +27,7 @@ public class Bucket {
+     private String encryptionConfiguration; // XML string
+     private String publicAccessBlockConfiguration; // XML string
+     private String ownershipControlsConfiguration; // XML string
++    private String replicationConfiguration; // XML string
+     private String requestPaymentPayer; // "BucketOwner" (default) or "Requester"; null until first PUT
+     private String region;
+     private WebsiteConfiguration websiteConfiguration;
+@@ -105,6 +106,11 @@ public class Bucket {
+         this.ownershipControlsConfiguration = ownershipControlsConfiguration;
+     }
+ 
++    public String getReplicationConfiguration() { return replicationConfiguration; }
++    public void setReplicationConfiguration(String replicationConfiguration) {
++        this.replicationConfiguration = replicationConfiguration;
++    }
++
+     public String getRequestPaymentPayer() { return requestPaymentPayer; }
+     public void setRequestPaymentPayer(String requestPaymentPayer) { this.requestPaymentPayer = requestPaymentPayer; }
+ 
+diff --git a/src/test/java/io/github/hectorvent/floci/services/s3/S3ReplicationIntegrationTest.java b/src/test/java/io/github/hectorvent/floci/services/s3/S3ReplicationIntegrationTest.java
+new file mode 100644
+index 0000000..518fa55
+--- /dev/null
++++ b/src/test/java/io/github/hectorvent/floci/services/s3/S3ReplicationIntegrationTest.java
+@@ -0,0 +1,92 @@
++package io.github.hectorvent.floci.services.s3;
++
++import io.quarkus.test.junit.QuarkusTest;
++import org.junit.jupiter.api.MethodOrderer;
++import org.junit.jupiter.api.Order;
++import org.junit.jupiter.api.Test;
++import org.junit.jupiter.api.TestMethodOrder;
++
++import static io.restassured.RestAssured.given;
++import static org.hamcrest.Matchers.containsString;
++
++@QuarkusTest
++@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
++class S3ReplicationIntegrationTest {
++
++    private static final String BUCKET = "replication-int-test";
++    private static final String REPLICATION_XML = """
++            <ReplicationConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
++                <Role>arn:aws:iam::000000000000:role/replication</Role>
++                <Rule>
++                    <ID>rule-1</ID>
++                    <Status>Enabled</Status>
++                    <Prefix></Prefix>
++                    <Destination><Bucket>arn:aws:s3:::replication-dest</Bucket></Destination>
++                </Rule>
++            </ReplicationConfiguration>
++            """;
++
++    @Test
++    @Order(1)
++    void createBucket() {
++        given().when().put("/" + BUCKET).then().statusCode(200);
++    }
++
++    @Test
++    @Order(2)
++    void deleteReplicationWithoutConfigKeepsBucket() {
++        given().when().delete("/" + BUCKET + "?replication").then().statusCode(204);
++        given().when().head("/" + BUCKET).then().statusCode(200);
++    }
++
++    @Test
++    @Order(3)
++    void getReplicationBeforePutReturns404() {
++        given().when().get("/" + BUCKET + "?replication")
++        .then()
++            .statusCode(404)
++            .body(containsString("ReplicationConfigurationNotFoundError"));
++    }
++
++    @Test
++    @Order(4)
++    void putReplicationRequiresVersioning() {
++        given().body(REPLICATION_XML).when().put("/" + BUCKET + "?replication")
++        .then()
++            .statusCode(400)
++            .body(containsString("InvalidRequest"));
++    }
++
++    @Test
++    @Order(5)
++    void putReplicationOnVersionedBucketIsStored() {
++        given()
++            .body("<VersioningConfiguration><Status>Enabled</Status></VersioningConfiguration>")
++        .when().put("/" + BUCKET + "?versioning").then().statusCode(200);
++
++        given().body(REPLICATION_XML).when().put("/" + BUCKET + "?replication").then().statusCode(200);
++
++        given().when().get("/" + BUCKET + "?replication")
++        .then()
++            .statusCode(200)
++            .body(containsString("<ID>rule-1</ID>"));
++    }
++
++    @Test
++    @Order(6)
++    void deleteReplicationRemovesOnlyConfig() {
++        given().when().delete("/" + BUCKET + "?replication").then().statusCode(204);
++        given().when().head("/" + BUCKET).then().statusCode(200);
++        given().when().get("/" + BUCKET + "?replication")
++        .then()
++            .statusCode(404)
++            .body(containsString("ReplicationConfigurationNotFoundError"));
++    }
++
++    @Test
++    @Order(7)
++    void unsupportedDeleteSubresourceKeepsBucket() {
++        given().when().delete("/" + BUCKET + "?metrics&id=m1").then().statusCode(501);
++        given().when().head("/" + BUCKET).then().statusCode(200);
++    }
++}

@@ -1,0 +1,707 @@
+diff --git a/internal/codegen/golang/result.go b/internal/codegen/golang/result.go
+index 0820488..009bf20 100644
+--- a/internal/codegen/golang/result.go
++++ b/internal/codegen/golang/result.go
+@@ -268,8 +268,12 @@ func buildQueries(req *plugin.GenerateRequest, options *opts.Options, structs []
+ 			c := query.Columns[0]
+ 			name := columnName(c, 0)
+ 			name = strings.Replace(name, "$", "_", -1)
++			retName := escape(name)
++			if retName == gq.Arg.Name {
++				retName = escape(name + "_2")
++			}
+ 			gq.Ret = QueryValue{
+-				Name:      escape(name),
++				Name:      retName,
+ 				DBName:    name,
+ 				Typ:       goType(req, options, c),
+ 				SQLDriver: sqlpkg,
+diff --git a/internal/codegen/golang/templates/pgx/queryCode.tmpl b/internal/codegen/golang/templates/pgx/queryCode.tmpl
+index 59a88c8..8b3d457 100644
+--- a/internal/codegen/golang/templates/pgx/queryCode.tmpl
++++ b/internal/codegen/golang/templates/pgx/queryCode.tmpl
+@@ -33,9 +33,7 @@ func (q *Queries) {{.MethodName}}(ctx context.Context, db DBTX, {{.Arg.Pair}}) (
+ func (q *Queries) {{.MethodName}}(ctx context.Context, {{.Arg.Pair}}) ({{.Ret.DefineType}}, error) {
+ 	row := q.db.QueryRow(ctx, {{.ConstantName}}, {{.Arg.Params}})
+ {{- end}}
+-	{{- if or (ne .Arg.Pair .Ret.Pair) (ne .Arg.DefineType .Ret.DefineType) }}
+ 	var {{.Ret.Name}} {{.Ret.Type}}
+-	{{- end}}
+ 	err := row.Scan({{.Ret.Scan}})
+ 	{{- if $.WrapErrors}}
+ 	if err != nil {
+diff --git a/internal/codegen/golang/templates/stdlib/queryCode.tmpl b/internal/codegen/golang/templates/stdlib/queryCode.tmpl
+index 1e7f4e2..f838198 100644
+--- a/internal/codegen/golang/templates/stdlib/queryCode.tmpl
++++ b/internal/codegen/golang/templates/stdlib/queryCode.tmpl
+@@ -24,9 +24,7 @@ type {{.Ret.Type}} struct { {{- range .Ret.Struct.Fields}}
+ {{end -}}
+ func (q *Queries) {{.MethodName}}(ctx context.Context, {{ dbarg }} {{.Arg.Pair}}) ({{.Ret.DefineType}}, error) {
+     {{- template "queryCodeStdExec" . }}
+-	{{- if or (ne .Arg.Pair .Ret.Pair) (ne .Arg.DefineType .Ret.DefineType) }}
+ 	var {{.Ret.Name}} {{.Ret.Type}}
+-	{{- end}}
+ 	err := row.Scan({{.Ret.Scan}})
+ 	{{- if $.WrapErrors}}
+ 	if err != nil {
+diff --git a/internal/endtoend/testdata/output_file_names/pgx/v4/go/batch_gen.go b/internal/endtoend/testdata/output_file_names/pgx/v4/go/batch_gen.go
+index a3d8e17..1c80f57 100644
+--- a/internal/endtoend/testdata/output_file_names/pgx/v4/go/batch_gen.go
++++ b/internal/endtoend/testdata/output_file_names/pgx/v4/go/batch_gen.go
+@@ -56,11 +56,11 @@ func (b *UsersBBatchResults) Query(f func(int, []int64, error)) {
+ 			}
+ 			defer rows.Close()
+ 			for rows.Next() {
+-				var id int64
+-				if err := rows.Scan(&id); err != nil {
++				var id_2 int64
++				if err := rows.Scan(&id_2); err != nil {
+ 					return err
+ 				}
+-				items = append(items, id)
++				items = append(items, id_2)
+ 			}
+ 			return rows.Err()
+ 		}()
+diff --git a/internal/endtoend/testdata/output_file_names/pgx/v5/go/batch_gen.go b/internal/endtoend/testdata/output_file_names/pgx/v5/go/batch_gen.go
+index a59e22a..0a97276 100644
+--- a/internal/endtoend/testdata/output_file_names/pgx/v5/go/batch_gen.go
++++ b/internal/endtoend/testdata/output_file_names/pgx/v5/go/batch_gen.go
+@@ -56,11 +56,11 @@ func (b *UsersBBatchResults) Query(f func(int, []int64, error)) {
+ 			}
+ 			defer rows.Close()
+ 			for rows.Next() {
+-				var id int64
+-				if err := rows.Scan(&id); err != nil {
++				var id_2 int64
++				if err := rows.Scan(&id_2); err != nil {
+ 					return err
+ 				}
+-				items = append(items, id)
++				items = append(items, id_2)
+ 			}
+ 			return rows.Err()
+ 		}()
+diff --git a/internal/endtoend/testdata/pattern_matching/mysql/go/query.sql.go b/internal/endtoend/testdata/pattern_matching/mysql/go/query.sql.go
+index 447ffb9..e48c572 100644
+--- a/internal/endtoend/testdata/pattern_matching/mysql/go/query.sql.go
++++ b/internal/endtoend/testdata/pattern_matching/mysql/go/query.sql.go
+@@ -22,11 +22,11 @@ func (q *Queries) PetsByName(ctx context.Context, name sql.NullString) ([]sql.Nu
+ 	defer rows.Close()
+ 	var items []sql.NullString
+ 	for rows.Next() {
+-		var name sql.NullString
+-		if err := rows.Scan(&name); err != nil {
++		var name_2 sql.NullString
++		if err := rows.Scan(&name_2); err != nil {
+ 			return nil, err
+ 		}
+-		items = append(items, name)
++		items = append(items, name_2)
+ 	}
+ 	if err := rows.Close(); err != nil {
+ 		return nil, err
+diff --git a/internal/endtoend/testdata/pattern_matching/postgresql/go/query.sql.go b/internal/endtoend/testdata/pattern_matching/postgresql/go/query.sql.go
+index 2c8760f..fd335cf 100644
+--- a/internal/endtoend/testdata/pattern_matching/postgresql/go/query.sql.go
++++ b/internal/endtoend/testdata/pattern_matching/postgresql/go/query.sql.go
+@@ -22,11 +22,11 @@ func (q *Queries) PetsByName(ctx context.Context, name sql.NullString) ([]sql.Nu
+ 	defer rows.Close()
+ 	var items []sql.NullString
+ 	for rows.Next() {
+-		var name sql.NullString
+-		if err := rows.Scan(&name); err != nil {
++		var name_2 sql.NullString
++		if err := rows.Scan(&name_2); err != nil {
+ 			return nil, err
+ 		}
+-		items = append(items, name)
++		items = append(items, name_2)
+ 	}
+ 	if err := rows.Close(); err != nil {
+ 		return nil, err
+diff --git a/internal/endtoend/testdata/schema_scoped_enum/pgx/v4/go/query.sql.go b/internal/endtoend/testdata/schema_scoped_enum/pgx/v4/go/query.sql.go
+index 3f490bb..9eedcf1 100644
+--- a/internal/endtoend/testdata/schema_scoped_enum/pgx/v4/go/query.sql.go
++++ b/internal/endtoend/testdata/schema_scoped_enum/pgx/v4/go/query.sql.go
+@@ -21,11 +21,11 @@ func (q *Queries) ListUsersByRole(ctx context.Context, role NullFooTypeUserRole)
+ 	defer rows.Close()
+ 	var items []NullFooTypeUserRole
+ 	for rows.Next() {
+-		var role NullFooTypeUserRole
+-		if err := rows.Scan(&role); err != nil {
++		var role_2 NullFooTypeUserRole
++		if err := rows.Scan(&role_2); err != nil {
+ 			return nil, err
+ 		}
+-		items = append(items, role)
++		items = append(items, role_2)
+ 	}
+ 	if err := rows.Err(); err != nil {
+ 		return nil, err
+diff --git a/internal/endtoend/testdata/schema_scoped_enum/pgx/v5/go/query.sql.go b/internal/endtoend/testdata/schema_scoped_enum/pgx/v5/go/query.sql.go
+index 3f490bb..9eedcf1 100644
+--- a/internal/endtoend/testdata/schema_scoped_enum/pgx/v5/go/query.sql.go
++++ b/internal/endtoend/testdata/schema_scoped_enum/pgx/v5/go/query.sql.go
+@@ -21,11 +21,11 @@ func (q *Queries) ListUsersByRole(ctx context.Context, role NullFooTypeUserRole)
+ 	defer rows.Close()
+ 	var items []NullFooTypeUserRole
+ 	for rows.Next() {
+-		var role NullFooTypeUserRole
+-		if err := rows.Scan(&role); err != nil {
++		var role_2 NullFooTypeUserRole
++		if err := rows.Scan(&role_2); err != nil {
+ 			return nil, err
+ 		}
+-		items = append(items, role)
++		items = append(items, role_2)
+ 	}
+ 	if err := rows.Err(); err != nil {
+ 		return nil, err
+diff --git a/internal/endtoend/testdata/schema_scoped_enum/stdlib/go/query.sql.go b/internal/endtoend/testdata/schema_scoped_enum/stdlib/go/query.sql.go
+index b20ca17..4eb29db 100644
+--- a/internal/endtoend/testdata/schema_scoped_enum/stdlib/go/query.sql.go
++++ b/internal/endtoend/testdata/schema_scoped_enum/stdlib/go/query.sql.go
+@@ -21,11 +21,11 @@ func (q *Queries) ListUsersByRole(ctx context.Context, role NullFooTypeUserRole)
+ 	defer rows.Close()
+ 	var items []NullFooTypeUserRole
+ 	for rows.Next() {
+-		var role NullFooTypeUserRole
+-		if err := rows.Scan(&role); err != nil {
++		var role_2 NullFooTypeUserRole
++		if err := rows.Scan(&role_2); err != nil {
+ 			return nil, err
+ 		}
+-		items = append(items, role)
++		items = append(items, role_2)
+ 	}
+ 	if err := rows.Close(); err != nil {
+ 		return nil, err
+diff --git a/internal/endtoend/testdata/schema_scoped_filter/mysql/go/query.sql.go b/internal/endtoend/testdata/schema_scoped_filter/mysql/go/query.sql.go
+index 40c7da8..f5c475f 100644
+--- a/internal/endtoend/testdata/schema_scoped_filter/mysql/go/query.sql.go
++++ b/internal/endtoend/testdata/schema_scoped_filter/mysql/go/query.sql.go
+@@ -21,11 +21,11 @@ func (q *Queries) SchemaScopedFilter(ctx context.Context, id uint64) ([]uint64,
+ 	defer rows.Close()
+ 	var items []uint64
+ 	for rows.Next() {
+-		var id uint64
+-		if err := rows.Scan(&id); err != nil {
++		var id_2 uint64
++		if err := rows.Scan(&id_2); err != nil {
+ 			return nil, err
+ 		}
+-		items = append(items, id)
++		items = append(items, id_2)
+ 	}
+ 	if err := rows.Close(); err != nil {
+ 		return nil, err
+diff --git a/internal/endtoend/testdata/schema_scoped_filter/postgresql/pgx/v4/go/query.sql.go b/internal/endtoend/testdata/schema_scoped_filter/postgresql/pgx/v4/go/query.sql.go
+index 304d360..5ae3640 100644
+--- a/internal/endtoend/testdata/schema_scoped_filter/postgresql/pgx/v4/go/query.sql.go
++++ b/internal/endtoend/testdata/schema_scoped_filter/postgresql/pgx/v4/go/query.sql.go
+@@ -21,11 +21,11 @@ func (q *Queries) SchemaScopedFilter(ctx context.Context, id int32) ([]int32, er
+ 	defer rows.Close()
+ 	var items []int32
+ 	for rows.Next() {
+-		var id int32
+-		if err := rows.Scan(&id); err != nil {
++		var id_2 int32
++		if err := rows.Scan(&id_2); err != nil {
+ 			return nil, err
+ 		}
+-		items = append(items, id)
++		items = append(items, id_2)
+ 	}
+ 	if err := rows.Err(); err != nil {
+ 		return nil, err
+diff --git a/internal/endtoend/testdata/schema_scoped_filter/postgresql/pgx/v5/go/query.sql.go b/internal/endtoend/testdata/schema_scoped_filter/postgresql/pgx/v5/go/query.sql.go
+index 304d360..5ae3640 100644
+--- a/internal/endtoend/testdata/schema_scoped_filter/postgresql/pgx/v5/go/query.sql.go
++++ b/internal/endtoend/testdata/schema_scoped_filter/postgresql/pgx/v5/go/query.sql.go
+@@ -21,11 +21,11 @@ func (q *Queries) SchemaScopedFilter(ctx context.Context, id int32) ([]int32, er
+ 	defer rows.Close()
+ 	var items []int32
+ 	for rows.Next() {
+-		var id int32
+-		if err := rows.Scan(&id); err != nil {
++		var id_2 int32
++		if err := rows.Scan(&id_2); err != nil {
+ 			return nil, err
+ 		}
+-		items = append(items, id)
++		items = append(items, id_2)
+ 	}
+ 	if err := rows.Err(); err != nil {
+ 		return nil, err
+diff --git a/internal/endtoend/testdata/schema_scoped_filter/postgresql/stdlib/go/query.sql.go b/internal/endtoend/testdata/schema_scoped_filter/postgresql/stdlib/go/query.sql.go
+index 3d11584..d7b45a2 100644
+--- a/internal/endtoend/testdata/schema_scoped_filter/postgresql/stdlib/go/query.sql.go
++++ b/internal/endtoend/testdata/schema_scoped_filter/postgresql/stdlib/go/query.sql.go
+@@ -21,11 +21,11 @@ func (q *Queries) SchemaScopedFilter(ctx context.Context, id int32) ([]int32, er
+ 	defer rows.Close()
+ 	var items []int32
+ 	for rows.Next() {
+-		var id int32
+-		if err := rows.Scan(&id); err != nil {
++		var id_2 int32
++		if err := rows.Scan(&id_2); err != nil {
+ 			return nil, err
+ 		}
+-		items = append(items, id)
++		items = append(items, id_2)
+ 	}
+ 	if err := rows.Close(); err != nil {
+ 		return nil, err
+diff --git a/internal/endtoend/testdata/single_param_conflict/mysql/go/query.sql.go b/internal/endtoend/testdata/single_param_conflict/mysql/go/query.sql.go
+index e3ba139..44385a7 100644
+--- a/internal/endtoend/testdata/single_param_conflict/mysql/go/query.sql.go
++++ b/internal/endtoend/testdata/single_param_conflict/mysql/go/query.sql.go
+@@ -32,8 +32,9 @@ LIMIT   1
+ 
+ func (q *Queries) GetAuthorIDByID(ctx context.Context, id int64) (int64, error) {
+ 	row := q.db.QueryRowContext(ctx, getAuthorIDByID, id)
+-	err := row.Scan(&id)
+-	return id, err
++	var id_2 int64
++	err := row.Scan(&id_2)
++	return id_2, err
+ }
+ 
+ const getUser = `-- name: GetUser :one
+@@ -45,6 +46,7 @@ LIMIT   1
+ 
+ func (q *Queries) GetUser(ctx context.Context, sub string) (string, error) {
+ 	row := q.db.QueryRowContext(ctx, getUser, sub)
+-	err := row.Scan(&sub)
+-	return sub, err
++	var sub_2 string
++	err := row.Scan(&sub_2)
++	return sub_2, err
+ }
+diff --git a/internal/endtoend/testdata/single_param_conflict/postgresql/pgx/v4/go/query.sql.go b/internal/endtoend/testdata/single_param_conflict/postgresql/pgx/v4/go/query.sql.go
+index 1912659..05f0540 100644
+--- a/internal/endtoend/testdata/single_param_conflict/postgresql/pgx/v4/go/query.sql.go
++++ b/internal/endtoend/testdata/single_param_conflict/postgresql/pgx/v4/go/query.sql.go
+@@ -34,8 +34,9 @@ LIMIT   1
+ 
+ func (q *Queries) GetAuthorIDByID(ctx context.Context, id int64) (int64, error) {
+ 	row := q.db.QueryRow(ctx, getAuthorIDByID, id)
+-	err := row.Scan(&id)
+-	return id, err
++	var id_2 int64
++	err := row.Scan(&id_2)
++	return id_2, err
+ }
+ 
+ const getUser = `-- name: GetUser :one
+@@ -47,8 +48,9 @@ LIMIT   1
+ 
+ func (q *Queries) GetUser(ctx context.Context, sub uuid.UUID) (uuid.UUID, error) {
+ 	row := q.db.QueryRow(ctx, getUser, sub)
+-	err := row.Scan(&sub)
+-	return sub, err
++	var sub_2 uuid.UUID
++	err := row.Scan(&sub_2)
++	return sub_2, err
+ }
+ 
+ const setDefaultName = `-- name: SetDefaultName :one
+@@ -62,6 +64,7 @@ RETURNING id
+ // https://github.com/sqlc-dev/sqlc/issues/1235
+ func (q *Queries) SetDefaultName(ctx context.Context, id int64) (int64, error) {
+ 	row := q.db.QueryRow(ctx, setDefaultName, id)
+-	err := row.Scan(&id)
+-	return id, err
++	var id_2 int64
++	err := row.Scan(&id_2)
++	return id_2, err
+ }
+diff --git a/internal/endtoend/testdata/single_param_conflict/postgresql/pgx/v5/go/query.sql.go b/internal/endtoend/testdata/single_param_conflict/postgresql/pgx/v5/go/query.sql.go
+index daa903d..6db0c09 100644
+--- a/internal/endtoend/testdata/single_param_conflict/postgresql/pgx/v5/go/query.sql.go
++++ b/internal/endtoend/testdata/single_param_conflict/postgresql/pgx/v5/go/query.sql.go
+@@ -34,8 +34,9 @@ LIMIT   1
+ 
+ func (q *Queries) GetAuthorIDByID(ctx context.Context, id int64) (int64, error) {
+ 	row := q.db.QueryRow(ctx, getAuthorIDByID, id)
+-	err := row.Scan(&id)
+-	return id, err
++	var id_2 int64
++	err := row.Scan(&id_2)
++	return id_2, err
+ }
+ 
+ const getUser = `-- name: GetUser :one
+@@ -47,8 +48,9 @@ LIMIT   1
+ 
+ func (q *Queries) GetUser(ctx context.Context, sub pgtype.UUID) (pgtype.UUID, error) {
+ 	row := q.db.QueryRow(ctx, getUser, sub)
+-	err := row.Scan(&sub)
+-	return sub, err
++	var sub_2 pgtype.UUID
++	err := row.Scan(&sub_2)
++	return sub_2, err
+ }
+ 
+ const setDefaultName = `-- name: SetDefaultName :one
+@@ -62,6 +64,7 @@ RETURNING id
+ // https://github.com/sqlc-dev/sqlc/issues/1235
+ func (q *Queries) SetDefaultName(ctx context.Context, id int64) (int64, error) {
+ 	row := q.db.QueryRow(ctx, setDefaultName, id)
+-	err := row.Scan(&id)
+-	return id, err
++	var id_2 int64
++	err := row.Scan(&id_2)
++	return id_2, err
+ }
+diff --git a/internal/endtoend/testdata/single_param_conflict/postgresql/stdlib/go/query.sql.go b/internal/endtoend/testdata/single_param_conflict/postgresql/stdlib/go/query.sql.go
+index 0b99078..4f4bd17 100644
+--- a/internal/endtoend/testdata/single_param_conflict/postgresql/stdlib/go/query.sql.go
++++ b/internal/endtoend/testdata/single_param_conflict/postgresql/stdlib/go/query.sql.go
+@@ -34,8 +34,9 @@ LIMIT   1
+ 
+ func (q *Queries) GetAuthorIDByID(ctx context.Context, id int64) (int64, error) {
+ 	row := q.db.QueryRowContext(ctx, getAuthorIDByID, id)
+-	err := row.Scan(&id)
+-	return id, err
++	var id_2 int64
++	err := row.Scan(&id_2)
++	return id_2, err
+ }
+ 
+ const getUser = `-- name: GetUser :one
+@@ -47,8 +48,9 @@ LIMIT   1
+ 
+ func (q *Queries) GetUser(ctx context.Context, sub uuid.UUID) (uuid.UUID, error) {
+ 	row := q.db.QueryRowContext(ctx, getUser, sub)
+-	err := row.Scan(&sub)
+-	return sub, err
++	var sub_2 uuid.UUID
++	err := row.Scan(&sub_2)
++	return sub_2, err
+ }
+ 
+ const setDefaultName = `-- name: SetDefaultName :one
+@@ -62,6 +64,7 @@ RETURNING id
+ // https://github.com/sqlc-dev/sqlc/issues/1235
+ func (q *Queries) SetDefaultName(ctx context.Context, id int64) (int64, error) {
+ 	row := q.db.QueryRowContext(ctx, setDefaultName, id)
+-	err := row.Scan(&id)
+-	return id, err
++	var id_2 int64
++	err := row.Scan(&id_2)
++	return id_2, err
+ }
+diff --git a/internal/endtoend/testdata/single_param_conflict/sqlite/go/query.sql.go b/internal/endtoend/testdata/single_param_conflict/sqlite/go/query.sql.go
+index e3ba139..44385a7 100644
+--- a/internal/endtoend/testdata/single_param_conflict/sqlite/go/query.sql.go
++++ b/internal/endtoend/testdata/single_param_conflict/sqlite/go/query.sql.go
+@@ -32,8 +32,9 @@ LIMIT   1
+ 
+ func (q *Queries) GetAuthorIDByID(ctx context.Context, id int64) (int64, error) {
+ 	row := q.db.QueryRowContext(ctx, getAuthorIDByID, id)
+-	err := row.Scan(&id)
+-	return id, err
++	var id_2 int64
++	err := row.Scan(&id_2)
++	return id_2, err
+ }
+ 
+ const getUser = `-- name: GetUser :one
+@@ -45,6 +46,7 @@ LIMIT   1
+ 
+ func (q *Queries) GetUser(ctx context.Context, sub string) (string, error) {
+ 	row := q.db.QueryRowContext(ctx, getUser, sub)
+-	err := row.Scan(&sub)
+-	return sub, err
++	var sub_2 string
++	err := row.Scan(&sub_2)
++	return sub_2, err
+ }
+diff --git a/internal/endtoend/testdata/sqlc_narg/mysql/go/query.sql.go b/internal/endtoend/testdata/sqlc_narg/mysql/go/query.sql.go
+index 1cba711..a66da24 100644
+--- a/internal/endtoend/testdata/sqlc_narg/mysql/go/query.sql.go
++++ b/internal/endtoend/testdata/sqlc_narg/mysql/go/query.sql.go
+@@ -22,11 +22,11 @@ func (q *Queries) IdentOnNonNullable(ctx context.Context, bar sql.NullString) ([
+ 	defer rows.Close()
+ 	var items []string
+ 	for rows.Next() {
+-		var bar string
+-		if err := rows.Scan(&bar); err != nil {
++		var bar_2 string
++		if err := rows.Scan(&bar_2); err != nil {
+ 			return nil, err
+ 		}
+-		items = append(items, bar)
++		items = append(items, bar_2)
+ 	}
+ 	if err := rows.Close(); err != nil {
+ 		return nil, err
+@@ -76,11 +76,11 @@ func (q *Queries) StringOnNonNullable(ctx context.Context, bar sql.NullString) (
+ 	defer rows.Close()
+ 	var items []string
+ 	for rows.Next() {
+-		var bar string
+-		if err := rows.Scan(&bar); err != nil {
++		var bar_2 string
++		if err := rows.Scan(&bar_2); err != nil {
+ 			return nil, err
+ 		}
+-		items = append(items, bar)
++		items = append(items, bar_2)
+ 	}
+ 	if err := rows.Close(); err != nil {
+ 		return nil, err
+diff --git a/internal/endtoend/testdata/sqlc_narg/postgresql/pgx/v4/go/query.sql.go b/internal/endtoend/testdata/sqlc_narg/postgresql/pgx/v4/go/query.sql.go
+index a2cff4e..451f31d 100644
+--- a/internal/endtoend/testdata/sqlc_narg/postgresql/pgx/v4/go/query.sql.go
++++ b/internal/endtoend/testdata/sqlc_narg/postgresql/pgx/v4/go/query.sql.go
+@@ -22,11 +22,11 @@ func (q *Queries) IdentOnNonNullable(ctx context.Context, bar sql.NullString) ([
+ 	defer rows.Close()
+ 	var items []string
+ 	for rows.Next() {
+-		var bar string
+-		if err := rows.Scan(&bar); err != nil {
++		var bar_2 string
++		if err := rows.Scan(&bar_2); err != nil {
+ 			return nil, err
+ 		}
+-		items = append(items, bar)
++		items = append(items, bar_2)
+ 	}
+ 	if err := rows.Err(); err != nil {
+ 		return nil, err
+@@ -70,11 +70,11 @@ func (q *Queries) StringOnNonNullable(ctx context.Context, bar sql.NullString) (
+ 	defer rows.Close()
+ 	var items []string
+ 	for rows.Next() {
+-		var bar string
+-		if err := rows.Scan(&bar); err != nil {
++		var bar_2 string
++		if err := rows.Scan(&bar_2); err != nil {
+ 			return nil, err
+ 		}
+-		items = append(items, bar)
++		items = append(items, bar_2)
+ 	}
+ 	if err := rows.Err(); err != nil {
+ 		return nil, err
+diff --git a/internal/endtoend/testdata/sqlc_narg/postgresql/pgx/v5/go/query.sql.go b/internal/endtoend/testdata/sqlc_narg/postgresql/pgx/v5/go/query.sql.go
+index 21e8482..270e11c 100644
+--- a/internal/endtoend/testdata/sqlc_narg/postgresql/pgx/v5/go/query.sql.go
++++ b/internal/endtoend/testdata/sqlc_narg/postgresql/pgx/v5/go/query.sql.go
+@@ -23,11 +23,11 @@ func (q *Queries) IdentOnNonNullable(ctx context.Context, bar pgtype.Text) ([]st
+ 	defer rows.Close()
+ 	var items []string
+ 	for rows.Next() {
+-		var bar string
+-		if err := rows.Scan(&bar); err != nil {
++		var bar_2 string
++		if err := rows.Scan(&bar_2); err != nil {
+ 			return nil, err
+ 		}
+-		items = append(items, bar)
++		items = append(items, bar_2)
+ 	}
+ 	if err := rows.Err(); err != nil {
+ 		return nil, err
+@@ -71,11 +71,11 @@ func (q *Queries) StringOnNonNullable(ctx context.Context, bar pgtype.Text) ([]s
+ 	defer rows.Close()
+ 	var items []string
+ 	for rows.Next() {
+-		var bar string
+-		if err := rows.Scan(&bar); err != nil {
++		var bar_2 string
++		if err := rows.Scan(&bar_2); err != nil {
+ 			return nil, err
+ 		}
+-		items = append(items, bar)
++		items = append(items, bar_2)
+ 	}
+ 	if err := rows.Err(); err != nil {
+ 		return nil, err
+diff --git a/internal/endtoend/testdata/sqlc_narg/postgresql/stdlib/go/query.sql.go b/internal/endtoend/testdata/sqlc_narg/postgresql/stdlib/go/query.sql.go
+index f83af91..7c179b3 100644
+--- a/internal/endtoend/testdata/sqlc_narg/postgresql/stdlib/go/query.sql.go
++++ b/internal/endtoend/testdata/sqlc_narg/postgresql/stdlib/go/query.sql.go
+@@ -22,11 +22,11 @@ func (q *Queries) IdentOnNonNullable(ctx context.Context, bar sql.NullString) ([
+ 	defer rows.Close()
+ 	var items []string
+ 	for rows.Next() {
+-		var bar string
+-		if err := rows.Scan(&bar); err != nil {
++		var bar_2 string
++		if err := rows.Scan(&bar_2); err != nil {
+ 			return nil, err
+ 		}
+-		items = append(items, bar)
++		items = append(items, bar_2)
+ 	}
+ 	if err := rows.Close(); err != nil {
+ 		return nil, err
+@@ -76,11 +76,11 @@ func (q *Queries) StringOnNonNullable(ctx context.Context, bar sql.NullString) (
+ 	defer rows.Close()
+ 	var items []string
+ 	for rows.Next() {
+-		var bar string
+-		if err := rows.Scan(&bar); err != nil {
++		var bar_2 string
++		if err := rows.Scan(&bar_2); err != nil {
+ 			return nil, err
+ 		}
+-		items = append(items, bar)
++		items = append(items, bar_2)
+ 	}
+ 	if err := rows.Close(); err != nil {
+ 		return nil, err
+diff --git a/internal/endtoend/testdata/sqlc_narg/postgresql/stdlib/go_strict/query.sql.go b/internal/endtoend/testdata/sqlc_narg/postgresql/stdlib/go_strict/query.sql.go
+index a9126fa..0853266 100644
+--- a/internal/endtoend/testdata/sqlc_narg/postgresql/stdlib/go_strict/query.sql.go
++++ b/internal/endtoend/testdata/sqlc_narg/postgresql/stdlib/go_strict/query.sql.go
+@@ -22,11 +22,11 @@ func (q *Queries) IdentOnNonNullable(ctx context.Context, bar sql.NullString) ([
+ 	defer rows.Close()
+ 	var items []string
+ 	for rows.Next() {
+-		var bar string
+-		if err := rows.Scan(&bar); err != nil {
++		var bar_2 string
++		if err := rows.Scan(&bar_2); err != nil {
+ 			return nil, err
+ 		}
+-		items = append(items, bar)
++		items = append(items, bar_2)
+ 	}
+ 	if err := rows.Close(); err != nil {
+ 		return nil, err
+@@ -76,11 +76,11 @@ func (q *Queries) StringOnNonNullable(ctx context.Context, bar sql.NullString) (
+ 	defer rows.Close()
+ 	var items []string
+ 	for rows.Next() {
+-		var bar string
+-		if err := rows.Scan(&bar); err != nil {
++		var bar_2 string
++		if err := rows.Scan(&bar_2); err != nil {
+ 			return nil, err
+ 		}
+-		items = append(items, bar)
++		items = append(items, bar_2)
+ 	}
+ 	if err := rows.Close(); err != nil {
+ 		return nil, err
+diff --git a/internal/endtoend/testdata/sqlc_narg/sqlite/go/query.sql.go b/internal/endtoend/testdata/sqlc_narg/sqlite/go/query.sql.go
+index c603bcd..a2a739b 100644
+--- a/internal/endtoend/testdata/sqlc_narg/sqlite/go/query.sql.go
++++ b/internal/endtoend/testdata/sqlc_narg/sqlite/go/query.sql.go
+@@ -22,11 +22,11 @@ func (q *Queries) IdentOnNonNullable(ctx context.Context, bar sql.NullString) ([
+ 	defer rows.Close()
+ 	var items []string
+ 	for rows.Next() {
+-		var bar string
+-		if err := rows.Scan(&bar); err != nil {
++		var bar_2 string
++		if err := rows.Scan(&bar_2); err != nil {
+ 			return nil, err
+ 		}
+-		items = append(items, bar)
++		items = append(items, bar_2)
+ 	}
+ 	if err := rows.Close(); err != nil {
+ 		return nil, err
+@@ -76,11 +76,11 @@ func (q *Queries) StringOnNonNullable(ctx context.Context, bar sql.NullString) (
+ 	defer rows.Close()
+ 	var items []string
+ 	for rows.Next() {
+-		var bar string
+-		if err := rows.Scan(&bar); err != nil {
++		var bar_2 string
++		if err := rows.Scan(&bar_2); err != nil {
+ 			return nil, err
+ 		}
+-		items = append(items, bar)
++		items = append(items, bar_2)
+ 	}
+ 	if err := rows.Close(); err != nil {
+ 		return nil, err
+diff --git a/internal/endtoend/testdata/sqlite_skip_todo/db/query.sql.go b/internal/endtoend/testdata/sqlite_skip_todo/db/query.sql.go
+index 5bc1ee7..a9aac06 100644
+--- a/internal/endtoend/testdata/sqlite_skip_todo/db/query.sql.go
++++ b/internal/endtoend/testdata/sqlite_skip_todo/db/query.sql.go
+@@ -23,11 +23,11 @@ func (q *Queries) GetFoo(ctx context.Context, bar sql.NullString) ([]sql.NullStr
+ 	defer rows.Close()
+ 	var items []sql.NullString
+ 	for rows.Next() {
+-		var bar sql.NullString
+-		if err := rows.Scan(&bar); err != nil {
++		var bar_2 sql.NullString
++		if err := rows.Scan(&bar_2); err != nil {
+ 			return nil, err
+ 		}
+-		items = append(items, bar)
++		items = append(items, bar_2)
+ 	}
+ 	if err := rows.Close(); err != nil {
+ 		return nil, err
+diff --git a/internal/endtoend/testdata/vet_explain/mysql/db/query.sql.go b/internal/endtoend/testdata/vet_explain/mysql/db/query.sql.go
+index cef6fbf..9a11dd5 100644
+--- a/internal/endtoend/testdata/vet_explain/mysql/db/query.sql.go
++++ b/internal/endtoend/testdata/vet_explain/mysql/db/query.sql.go
+@@ -438,6 +438,7 @@ WHERE id = ? LIMIT 1
+ 
+ func (q *Queries) SelectById(ctx context.Context, id int64) (int64, error) {
+ 	row := q.db.QueryRowContext(ctx, selectById, id)
+-	err := row.Scan(&id)
+-	return id, err
++	var id_2 int64
++	err := row.Scan(&id_2)
++	return id_2, err
+ }
+diff --git a/internal/endtoend/testdata/virtual_table/sqlite/go/query.sql.go b/internal/endtoend/testdata/virtual_table/sqlite/go/query.sql.go
+index dab27d2..b0da2ab 100644
+--- a/internal/endtoend/testdata/virtual_table/sqlite/go/query.sql.go
++++ b/internal/endtoend/testdata/virtual_table/sqlite/go/query.sql.go
+@@ -45,11 +45,11 @@ func (q *Queries) SelectAllColsFt(ctx context.Context, b string) ([]string, erro
+ 	defer rows.Close()
+ 	var items []string
+ 	for rows.Next() {
+-		var b string
+-		if err := rows.Scan(&b); err != nil {
++		var b_2 string
++		if err := rows.Scan(&b_2); err != nil {
+ 			return nil, err
+ 		}
+-		items = append(items, b)
++		items = append(items, b_2)
+ 	}
+ 	if err := rows.Close(); err != nil {
+ 		return nil, err
+@@ -163,11 +163,11 @@ func (q *Queries) SelectOneColFt(ctx context.Context, b string) ([]string, error
+ 	defer rows.Close()
+ 	var items []string
+ 	for rows.Next() {
+-		var b string
+-		if err := rows.Scan(&b); err != nil {
++		var b_2 string
++		if err := rows.Scan(&b_2); err != nil {
+ 			return nil, err
+ 		}
+-		items = append(items, b)
++		items = append(items, b_2)
+ 	}
+ 	if err := rows.Close(); err != nil {
+ 		return nil, err
+@@ -218,11 +218,11 @@ func (q *Queries) SelectSnippetFunc(ctx context.Context, snippet int64) ([]strin
+ 	defer rows.Close()
+ 	var items []string
+ 	for rows.Next() {
+-		var snippet string
+-		if err := rows.Scan(&snippet); err != nil {
++		var snippet_2 string
++		if err := rows.Scan(&snippet_2); err != nil {
+ 			return nil, err
+ 		}
+-		items = append(items, snippet)
++		items = append(items, snippet_2)
+ 	}
+ 	if err := rows.Close(); err != nil {
+ 		return nil, err

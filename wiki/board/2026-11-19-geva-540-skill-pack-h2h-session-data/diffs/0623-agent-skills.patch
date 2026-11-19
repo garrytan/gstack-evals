@@ -1,0 +1,114 @@
+diff --git a/Terminal.Gui/Views/Selectors/SelectorBase.cs b/Terminal.Gui/Views/Selectors/SelectorBase.cs
+index f1f7ed1..258dd3c 100644
+--- a/Terminal.Gui/Views/Selectors/SelectorBase.cs
++++ b/Terminal.Gui/Views/Selectors/SelectorBase.cs
+@@ -529,6 +529,19 @@ public abstract class SelectorBase : View, IOrientation, IValue<int?>
+                 SubViews.ElementAt (i).Width = Dim.Auto ();
+             }
+         }
++
++        // Dim.Auto (DimAutoStyle.Content) sizes this view using the Frames of the Pos.Align'd SubViews
++        // (see PosAlign.CalculateMinDimension). Newly created SubViews (e.g. when Labels/Values are set after
++        // construction) or SubViews whose Margin/Width just changed have stale Frames, so refresh them now
++        // and ensure this view (and its SuperView) re-layout.
++        Size layoutSize = App?.Screen.Size ?? new Size (2048, 2048);
++
++        foreach (View subView in SubViews)
++        {
++            subView.SetRelativeLayout (layoutSize);
++        }
++
++        SetNeedsLayout ();
+     }
+ 
+     /// <summary>
+diff --git a/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs b/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs
+index f84b0da..438fc68 100644
+--- a/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs
++++ b/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs
+@@ -115,6 +115,85 @@ public class OptionSelectorTests
+         }
+     }
+ 
++    // Issue: Dim.Auto width not recalculated when Labels/Values set after construction
++    [Theory]
++    [InlineData (false)]
++    [InlineData (true)]
++    public void Horizontal_Labels_And_Values_Set_After_Construction_Width_Fits_All_Labels (bool setValuesFirst)
++    {
++        View superView = new () { Width = 80, Height = 10 };
++
++        OptionSelector selector = new () { Y = 2, Orientation = Orientation.Horizontal };
++
++        if (setValuesFirst)
++        {
++            selector.Values = [0, 1];
++            selector.Labels = ["IMDb (Recommended)", "TMDb"];
++        }
++        else
++        {
++            selector.Labels = ["IMDb (Recommended)", "TMDb"];
++            selector.Values = [0, 1];
++        }
++
++        superView.Add (selector);
++        superView.Layout ();
++
++        List<CheckBox> checkBoxes = selector.SubViews.OfType<CheckBox> ().ToList ();
++        Assert.Equal (2, checkBoxes.Count);
++
++        // Each checkbox is fully sized: glyph + space + text (+ right margin for all but the last)
++        Assert.Equal ("IMDb (Recommended)".Length + 2 + 2, checkBoxes [0].Frame.Width);
++        Assert.Equal ("TMDb".Length + 2, checkBoxes [1].Frame.Width);
++
++        // The selector must be wide enough to show the last checkbox in full
++        Assert.Equal (checkBoxes [1].Frame.Right, selector.Viewport.Width);
++        Assert.Equal (("IMDb (Recommended)".Length + 2) + 2 + ("TMDb".Length + 2), selector.Frame.Width);
++
++        superView.Dispose ();
++    }
++
++    [Fact]
++    public void Horizontal_Labels_Set_While_Hidden_Width_Fits_All_Labels_When_Shown ()
++    {
++        View superView = new () { Width = 80, Height = 10 };
++
++        OptionSelector selector = new () { Orientation = Orientation.Horizontal, Visible = false };
++        superView.Add (selector);
++        superView.Layout ();
++
++        selector.Labels = ["IMDb (Recommended)", "TMDb"];
++        selector.Values = [0, 1];
++        selector.Visible = true;
++        superView.Layout ();
++
++        List<CheckBox> checkBoxes = selector.SubViews.OfType<CheckBox> ().ToList ();
++        Assert.Equal (checkBoxes [1].Frame.Right, selector.Viewport.Width);
++        Assert.Equal ("TMDb".Length + 2, checkBoxes [1].Frame.Width);
++
++        superView.Dispose ();
++    }
++
++    [Fact]
++    public void Horizontal_Labels_Changed_After_Layout_Width_Updates ()
++    {
++        View superView = new () { Width = 80, Height = 10 };
++
++        OptionSelector selector = new () { Orientation = Orientation.Horizontal, Labels = ["A", "B"] };
++        superView.Add (selector);
++        superView.Layout ();
++
++        selector.Labels = ["IMDb (Recommended)", "TMDb"];
++        selector.Values = [0, 1];
++        superView.Layout ();
++
++        List<CheckBox> checkBoxes = selector.SubViews.OfType<CheckBox> ().ToList ();
++        Assert.Equal (checkBoxes [1].Frame.Right, selector.Viewport.Width);
++        Assert.Equal ("TMDb".Length + 2, checkBoxes [1].Frame.Width);
++
++        superView.Dispose ();
++    }
++
+     [Fact]
+     public void HotKey_No_Value_Selects_First ()
+     {

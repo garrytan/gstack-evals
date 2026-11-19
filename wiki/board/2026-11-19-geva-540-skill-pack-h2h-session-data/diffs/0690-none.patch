@@ -1,0 +1,81 @@
+diff --git a/src/cc65/codeoptutil.c b/src/cc65/codeoptutil.c
+index 0d3dba9..00966af 100644
+--- a/src/cc65/codeoptutil.c
++++ b/src/cc65/codeoptutil.c
+@@ -136,7 +136,7 @@ void AdjustLoadRegInfo (LoadRegInfo* LRI, int Index, int Change)
+             LRI->LoadEntry = 0;
+         }
+         if (Index < LRI->LoadYIndex) {
+-            --LRI->LoadIndex;
++            --LRI->LoadYIndex;
+         } else if (Index == LRI->LoadYIndex) {
+             /* Has been removed */
+             LRI->LoadYIndex = -1;
+@@ -1165,7 +1165,11 @@ void RemoveRegLoads (StackOpData* D, LoadInfo* LI)
+             (LI->A.LoadYEntry->Flags & CEF_DONT_REMOVE) == 0) {
+             DelEntry (D, LI->A.LoadYIndex);
+         }
++        /* The change entry may also be a label-tracking placeholder that
++        ** doesn't really change the register, so check that it does.
++        */
+         if (LI->A.ChgIndex >= 0 &&
++            (LI->A.ChgEntry->Chg & REG_A) != 0 &&
+             (LI->A.ChgEntry->Flags & CEF_DONT_REMOVE) == 0) {
+             DelEntry (D, LI->A.ChgIndex);
+         }
+@@ -1188,7 +1192,11 @@ void RemoveRegLoads (StackOpData* D, LoadInfo* LI)
+             (LI->X.LoadYEntry->Flags & CEF_DONT_REMOVE) == 0) {
+             DelEntry (D, LI->X.LoadYIndex);
+         }
++        /* The change entry may also be a label-tracking placeholder that
++        ** doesn't really change the register, so check that it does.
++        */
+         if (LI->X.ChgIndex >= 0 &&
++            (LI->X.ChgEntry->Chg & REG_X) != 0 &&
+             (LI->X.ChgEntry->Flags & CEF_DONT_REMOVE) == 0) {
+             DelEntry (D, LI->X.ChgIndex);
+         }
+diff --git a/src/cc65/coptstop.c b/src/cc65/coptstop.c
+index 7a9416b..c2b8525 100644
+--- a/src/cc65/coptstop.c
++++ b/src/cc65/coptstop.c
+@@ -1373,8 +1373,10 @@ static unsigned Opt_a_tossub (StackOpData* D)
+     /* Inline the sbc */
+     D->IP = D->OpIndex+1;
+ 
+-    /* Must be true because of OP_RHS_LOAD */
+-    CHECK ((D->Rhs.A.Flags & D->Rhs.X.Flags & LI_DIRECT) != 0);
++    /* Must be true because of OP_RHS_LOAD_DIRECT. Note that RegAPreCondOk
++    ** checks only the low byte, as only the A register load is used here.
++    */
++    CHECK ((D->Rhs.A.Flags & LI_DIRECT) != 0);
+ 
+     /* sec */
+     X = NewCodeEntry (OP65_SEC, AM65_IMP, 0, 0, D->OpEntry->LI);
+diff --git a/test/val/bug2946.c b/test/val/bug2946.c
+new file mode 100644
+index 0000000..d6074b2
+--- /dev/null
++++ b/test/val/bug2946.c
+@@ -0,0 +1,21 @@
++/* bug #2946: Incomplete, non-removable Rhs asserts in OptStackOps */
++
++#include <stdio.h>
++#include <stdlib.h>
++
++unsigned char a, b = 0;
++unsigned char c = 10;
++unsigned char d = 1;
++
++int main(void) {
++    /* 'if' needed to produce a label below, moved by OptJumpTarget3  */
++    if (b != 0) {
++        /* Operation not important; it only affects the removal of one LDX #$00 */
++        b = 0;
++    }
++
++    /* d >= 0 is const, A/X=1 (Warning: Result of comparison is always true) */
++    a = c - (d >= 0);
++
++    return !(a == 9);
++}

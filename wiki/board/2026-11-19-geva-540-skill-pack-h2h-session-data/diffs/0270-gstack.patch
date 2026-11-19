@@ -1,0 +1,81 @@
+diff --git a/ooxml/XSSF/Streaming/SXSSFRow.cs b/ooxml/XSSF/Streaming/SXSSFRow.cs
+index d020cee..5172af0 100644
+--- a/ooxml/XSSF/Streaming/SXSSFRow.cs
++++ b/ooxml/XSSF/Streaming/SXSSFRow.cs
+@@ -235,6 +235,22 @@ namespace NPOI.XSSF.Streaming
+         {
+             CheckBounds(column);
+             SXSSFCell cell = new SXSSFCell(this, type);
++            if (IsFormatted)
++            {
++                cell.CellStyle = RowStyle;
++            }
++            else
++            {
++                IColumn xcolumn = _sheet._sh.GetColumn(column);
++                if (xcolumn != null && xcolumn.IsFormatted)
++                {
++                    ICellStyle columnStyle = xcolumn.ColumnStyle;
++                    if (columnStyle != null)
++                    {
++                        cell.CellStyle = columnStyle;
++                    }
++                }
++            }
+             _cells[column] = cell;
+             _sortedCellCache = null;
+             UpdateIndexWhenAdd(column);
+diff --git a/ooxml/XSSF/UserModel/XSSFRow.cs b/ooxml/XSSF/UserModel/XSSFRow.cs
+index c196e1b..d94f9db 100644
+--- a/ooxml/XSSF/UserModel/XSSFRow.cs
++++ b/ooxml/XSSF/UserModel/XSSFRow.cs
+@@ -381,6 +381,18 @@ namespace NPOI.XSSF.UserModel
+             {
+                 xcell.CellStyle = RowStyle;
+             }
++            else
++            {
++                IColumn column = _sheet.GetColumn(columnIndex);
++                if (column != null && column.IsFormatted)
++                {
++                    ICellStyle columnStyle = column.ColumnStyle;
++                    if (columnStyle != null)
++                    {
++                        xcell.CellStyle = columnStyle;
++                    }
++                }
++            }
+ 
+             _cells[columnIndex] = xcell;
+             UpdateCacheOnAdd(columnIndex);
+diff --git a/testcases/ooxml/XSSF/Streaming/TestSXSSFSheet.cs b/testcases/ooxml/XSSF/Streaming/TestSXSSFSheet.cs
+index f4a6562..cfe9e1f 100644
+--- a/testcases/ooxml/XSSF/Streaming/TestSXSSFSheet.cs
++++ b/testcases/ooxml/XSSF/Streaming/TestSXSSFSheet.cs
+@@ -111,8 +111,10 @@ namespace TestCases.XSSF.Streaming
+             // properties on Cells...
+         }
+ 
+-        public override void DefaultColumnStyle() {
+-            //TODO column styles are not yet supported by XSSF
++        [Test]
++        public override void DefaultColumnStyle()
++        {
++            base.DefaultColumnStyle();
+         }
+ 
+         [Test]
+diff --git a/testcases/ooxml/XSSF/UserModel/TestXSSFSheet.cs b/testcases/ooxml/XSSF/UserModel/TestXSSFSheet.cs
+index 75e1be8..ed39c02 100644
+--- a/testcases/ooxml/XSSF/UserModel/TestXSSFSheet.cs
++++ b/testcases/ooxml/XSSF/UserModel/TestXSSFSheet.cs
+@@ -51,8 +51,7 @@ namespace TestCases.XSSF.UserModel
+ 
+         }
+ 
+-        //[Test]
+-        //TODO column styles are not yet supported by XSSF
++        [Test]
+         public override void DefaultColumnStyle()
+         {
+             base.DefaultColumnStyle();

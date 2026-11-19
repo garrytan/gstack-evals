@@ -1,0 +1,183 @@
+diff --git a/compiler-core/src/erlang/tests/inlining.rs b/compiler-core/src/erlang/tests/inlining.rs
+index df9ef86..122c8b5 100644
+--- a/compiler-core/src/erlang/tests/inlining.rs
++++ b/compiler-core/src/erlang/tests/inlining.rs
+@@ -312,3 +312,41 @@ fn divide(a, b) {
+ "
+     );
+ }
++
++// Regression test: pog failed to compile with `Ssl` unbound
++#[test]
++fn inline_variable_in_record_update() {
++    assert_erl!(
++        ("gleam_stdlib", "gleam/result", RESULT_MODULE),
++        "
++import gleam/result
++
++pub type Config {
++  Config(ssl: Int, port: Int)
++}
++
++pub fn set_ssl(config: Config, value: Result(Int, Nil)) -> Result(Config, Nil) {
++  use ssl <- result.try(value)
++  Ok(Config(..config, ssl:))
++}
++"
++    );
++}
++
++#[test]
++fn do_not_inline_variable_used_in_guard() {
++    assert_erl!(
++        ("gleam_stdlib", "gleam/result", RESULT_MODULE),
++        "
++import gleam/result
++
++pub fn main(value: Result(Int, Nil), other: Int) -> Result(Int, Nil) {
++  use x <- result.try(value)
++  case other {
++    _ if x > 1 -> Ok(1)
++    _ -> Ok(2)
++  }
++}
++"
++    );
++}
+diff --git a/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__do_not_inline_variable_used_in_guard.snap b/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__do_not_inline_variable_used_in_guard.snap
+new file mode 100644
+index 0000000..9d4132b
+--- /dev/null
++++ b/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__do_not_inline_variable_used_in_guard.snap
+@@ -0,0 +1,43 @@
++---
++source: compiler-core/src/erlang/tests/inlining.rs
++assertion_line: 338
++expression: "\nimport gleam/result\n\npub fn main(value: Result(Int, Nil), other: Int) -> Result(Int, Nil) {\n  use x <- result.try(value)\n  case other {\n    _ if x > 1 -> Ok(1)\n    _ -> Ok(2)\n  }\n}\n"
++snapshot_kind: text
++---
++----- SOURCE CODE
++
++import gleam/result
++
++pub fn main(value: Result(Int, Nil), other: Int) -> Result(Int, Nil) {
++  use x <- result.try(value)
++  case other {
++    _ if x > 1 -> Ok(1)
++    _ -> Ok(2)
++  }
++}
++
++
++----- COMPILED ERLANG
++-module(my@mod).
++-compile([no_auto_import, nowarn_unused_vars, nowarn_unused_function, nowarn_nomatch, inline]).
++-define(FILEPATH, "project/test/my/mod.gleam").
++-export([main/2]).
++
++-file("project/test/my/mod.gleam", 4).
++-spec main({ok, integer()} | {error, nil}, integer()) -> {ok, integer()} |
++    {error, nil}.
++main(Value, Other) ->
++    case Value of
++        {ok, Value@1} ->
++            X = Value@1,
++            case Other of
++                _ when X > 1 ->
++                    {ok, 1};
++
++                _ ->
++                    {ok, 2}
++            end;
++
++        {error, Error} ->
++            {error, Error}
++    end.
+diff --git a/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__inline_variable_in_record_update.snap b/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__inline_variable_in_record_update.snap
+new file mode 100644
+index 0000000..3542216
+--- /dev/null
++++ b/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__inline_variable_in_record_update.snap
+@@ -0,0 +1,40 @@
++---
++source: compiler-core/src/erlang/tests/inlining.rs
++assertion_line: 319
++expression: "\nimport gleam/result\n\npub type Config {\n  Config(ssl: Int, port: Int)\n}\n\npub fn set_ssl(config: Config, value: Result(Int, Nil)) -> Result(Config, Nil) {\n  use ssl <- result.try(value)\n  Ok(Config(..config, ssl:))\n}\n"
++snapshot_kind: text
++---
++----- SOURCE CODE
++
++import gleam/result
++
++pub type Config {
++  Config(ssl: Int, port: Int)
++}
++
++pub fn set_ssl(config: Config, value: Result(Int, Nil)) -> Result(Config, Nil) {
++  use ssl <- result.try(value)
++  Ok(Config(..config, ssl:))
++}
++
++
++----- COMPILED ERLANG
++-module(my@mod).
++-compile([no_auto_import, nowarn_unused_vars, nowarn_unused_function, nowarn_nomatch, inline]).
++-define(FILEPATH, "project/test/my/mod.gleam").
++-export([set_ssl/2]).
++-export_type([config/0]).
++
++-type config() :: {config, integer(), integer()}.
++
++-file("project/test/my/mod.gleam", 8).
++-spec set_ssl(config(), {ok, integer()} | {error, nil}) -> {ok, config()} |
++    {error, nil}.
++set_ssl(Config, Value) ->
++    case Value of
++        {ok, Value@1} ->
++            {ok, {config, Value@1, erlang:element(3, Config)}};
++
++        {error, Error} ->
++            {error, Error}
++    end.
+diff --git a/compiler-core/src/inline.rs b/compiler-core/src/inline.rs
+index 81df9e9..e777e3f 100644
+--- a/compiler-core/src/inline.rs
++++ b/compiler-core/src/inline.rs
+@@ -479,7 +479,13 @@ impl Inliner<'_> {
+                 record_assignment: record_assignment
+                     .map(|assignment| Box::new(self.assignment(*assignment))),
+                 constructor: self.boxed_expression(constructor),
+-                arguments,
++                arguments: arguments
++                    .into_iter()
++                    .map(|argument| CallArg {
++                        value: self.expression(argument.value),
++                        ..argument
++                    })
++                    .collect(),
+             },
+         }
+     }
+@@ -1004,7 +1010,9 @@ impl<'ast> Visit<'ast> for FindInlinableParameters {
+         _type_: &'ast Arc<Type>,
+         location: &'ast SrcSpan,
+     ) {
+-        self.register_reference(name, *location);
++        // Guards are not traversed by the inliner and cannot hold arbitrary
++        // expressions, so a parameter referenced here can never be inlined.
++        _ = self.parameters.remove(&(name.clone(), *location));
+     }
+ 
+     fn visit_typed_bit_array_size_variable(
+@@ -1018,8 +1026,10 @@ impl<'ast> Visit<'ast> for FindInlinableParameters {
+             Some(constructor) => &constructor.variant,
+             None => return,
+         };
++        // Pattern size variables cannot be replaced with arbitrary expressions,
++        // so a parameter referenced here can never be inlined.
+         if let ValueConstructorVariant::LocalVariable { location, .. } = variant {
+-            self.register_reference(name, *location);
++            _ = self.parameters.remove(&(name.clone(), *location));
+         }
+     }
+ 

@@ -1,0 +1,31 @@
+diff --git a/crates/hir-ty/src/infer.rs b/crates/hir-ty/src/infer.rs
+index ebcc0bd..64d0e2a 100644
+--- a/crates/hir-ty/src/infer.rs
++++ b/crates/hir-ty/src/infer.rs
+@@ -1994,7 +1994,7 @@ impl<'body, 'db> InferenceContext<'body, 'db> {
+ 
+     fn identity_args(&self) -> GenericArgs<'db> {
+         *self.identity_args.get_or_init(|| {
+-            GenericArgs::identity_for_item(self.interner(), self.store_owner.into())
++            GenericArgs::identity_for_item(self.interner(), self.generic_def.into())
+         })
+     }
+ 
+diff --git a/crates/hir-ty/src/tests/regression.rs b/crates/hir-ty/src/tests/regression.rs
+index dc88231..6aafe49 100644
+--- a/crates/hir-ty/src/tests/regression.rs
++++ b/crates/hir-ty/src/tests/regression.rs
+@@ -2993,3 +2993,13 @@ fn f() {[_; || ()]}
+     "#,
+     );
+ }
++
++#[test]
++fn enum_discriminant_closure() {
++    check(
++        r#"
++enum Enum { X = || {} }
++             // ^^^^^ expected isize, got impl Fn()
++    "#,
++    );
++}
