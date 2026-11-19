@@ -64,7 +64,7 @@
         "wiki/board/2026-11-19-geva-540-skill-pack-h2h-session-data/diffs/1149-superpowers.patch",
         "wiki/board/2026-11-19-geva-540-skill-pack-h2h-session-data/diffs/1150-gstack.patch"
       ],
-      "pattern": "https://user:pass@localhost:5000/v2/_catalog",
+      "pattern": "https://user:pass\\x40localhost:5000/v2/_catalog",
       "reason": "a placeholder registry URL on localhost in a test in a published session diff of the skill-pack head-to-head, not a credential"
     }
   ],
