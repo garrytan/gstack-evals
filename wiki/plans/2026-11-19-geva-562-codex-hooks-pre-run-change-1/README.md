@@ -2,7 +2,7 @@
 id: 2026-11-19-geva-562-codex-hooks-pre-run-change-1
 kind: plan
 title: "Pre-run change 1 to the Codex hooks eval: the gstack pin, its keyless checks, the route table and the pilot draw"
-summary: "Pins gstack 18e24a2e for both parts, records the five keyless checks (all pass), the route table (40 of 60 covered), the pilot tasks, the sleep-tool setting and four host facts."
+summary: "Pins gstack v1.102.0.0 (a0534ce6) for both parts, records the five keyless checks (all pass), the route table (40 of 60 covered), the pilot tasks, the sleep-tool setting and four host facts."
 author: GEVA-562
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
@@ -14,7 +14,7 @@ links:
   - 2026-11-17-geva-547-delivery-route-prereg
   - GST-3174
 attachments:
-  - b153c6d20c6dcd2d1d887cd09d8ee4bef4b6292a57f423309f221def031e83ed  checks.txt
+  - 0a759f2dea8ac701e1665ec9bb5c3725a6025df263af5c8f4994cf6fd3034af5  checks.txt
   - 5dae5c05a32e0c71df273387e7649a239a41341d0a9c99fdd6cf56303e754b25  route-table.tsv
 ---
 
@@ -22,8 +22,8 @@ attachments:
 
 ## In short
 
-- Both parts run gstack at 18e24a2ee90d16b61e38b55f36eb1a620e047cde. It is the first gstack main commit that holds the routing and destructive-command hooks (gstack pull request 4512), the /review contract hook (4522) and the fix that lets the contract see GPT-6.1 Sol's adversarial pass (4526).
-- All five keyless checks of the preregistration's section 3 pass there (checks.txt). Before the fix, at 4522's merge, the contract blocked a Sol session that had run the pass and written the report, so the pin moved.
+- Both parts run gstack's release tag v1.102.0.0, commit a0534ce6db39a8da1f3c23ec070aac2479e44be9. It holds the routing and destructive-command hooks (gstack pull request 4512), the /review contract hook (4522), the fix that lets the contract see GPT-6.1 Sol's adversarial pass (4526) and the fix to how the contract counts a shell read of a skill file (4528).
+- All five keyless checks of the preregistration's section 3 pass there (checks.txt). At 4522's merge the contract blocked a Sol session that had run the pass and written the report, and before 4528 it counted reads that failed. So the pin moved twice.
 - prove-it is covered on 40 of the 60 prompts, so part R clears its gate (30). The four extra pilot tasks are drawn here by a rule the preregistration left unstated.
 - Every arm turns Codex's sleep tool off. Four host facts are stated for every result.
 
@@ -33,16 +33,18 @@ This change governs where it and the preregistration differ. It changes no arm, 
 
 | Field | Value |
 |---|---|
-| gstack | garrytan/gstack 18e24a2ee90d16b61e38b55f36eb1a620e047cde, VERSION 1.101.0.0 |
-| What it holds | 944b41e (pull request 4512: routing and the destructive-command check on Codex), b0f865c (4522: the /review contract Stop hook on Codex) and 18e24a2 (4526: the Codex contract reader counts a started spawn_agent by agent_id or by task_name, in either namespace) |
+| gstack | garrytan/gstack tag v1.102.0.0, a0534ce6db39a8da1f3c23ec070aac2479e44be9, VERSION 1.102.0.0 |
+| What it holds | 944b41e (pull request 4512: routing and the destructive-command check on Codex), b0f865c (4522: the /review contract Stop hook on Codex), 18e24a2 (4526: the Codex contract reader counts a started spawn_agent by agent_id or by task_name, in either namespace) and 9610ba4 (4528: the reader splits a shell line only outside quotes and drops reads that failed or never ran) |
 | Codex CLI | 0.170.0, as the preregistration's section 2 states |
 | Driver | gstack-evals main at b5f80f06 (pull request 379): no `--ephemeral`, the rollout read after each turn |
 
 Why not b0f865c, the first commit with both planned pull requests. On gpt-6.1-sol, Codex 0.170 serves spawn_agent in its `collaboration` namespace with `task_name` required, and a started agent's call output is `{"task_name":"/root/<name>"}`, with no `agent_id`. gstack's reader at b0f865c counted a dispatch only by an `agent_id`, so section 3's check 2 failed: a session that ran the pass and wrote the report was blocked ("missing adversarial-pass"). Section 3 holds a part whose check fails until gstack fixes it. gstack fixed it in 4526, and one pin for both parts keeps the contract hook the same in part R's arms.
 
+Why not 18e24a2, where all five checks also passed. 4528 changes how the contract reader counts a shell command that reads a gstack skill's SKILL.md (checks.txt, "Reader shapes"). At 18e24a2 the reader split `sed -n '1,200p;201q' <file>` at the `;` inside the quotes, so it missed that read; this is the shape gstack's GSTA-651 names. It also counted three reads that failed or never ran: a one-file `cat` or `sed` that exited non-zero with no error text, and a read behind a `cd` that failed under `&&`. At the tag the sed read counts and those three don't. Between 18e24a2 and the tag, the only other change to code these arms run is 4525, which tightens the destructive-command check's command parser; the host-fact probes in section 6 give the same output at both. The Captain chose the release tag over the bare commit.
+
 ## 2. The keyless checks (preregistration section 3)
 
-checks.txt has the commands and outputs. Each ran against a local stub of the Responses API, with the trust bypass, in a home set up by `./setup --host codex --no-browser` at the pin.
+checks.txt has the commands and outputs. Each ran against a local stub of the Responses API, with the trust bypass, in a home set up by `./setup --host codex --no-browser` at the tag.
 
 1. **hooks.json.** It registers routing on UserPromptSubmit, the contract on Stop and the destructive-command check on PreToolUse for Bash. Setup wrote no config.toml. Pass.
 2. **The hooks.** The routing line arrives as a developer message naming prove-it. A `$review` session with no spawn_agent and no report is blocked once, then logged as a miss. A session with the marked spawn_agent and the report is logged met and not blocked. `skill_routing off` and `skill_contracts off` each stop their hook. Pass.
@@ -60,7 +62,7 @@ route-table.tsv holds one row per prompt: B1's prompt for each of the 62 tasks, 
 | Second of two, after verify | 7 |
 | Not named | 20 (18 with no line, 2 routed to verify alone) |
 
-40 of 60 are covered, so the gate clears and part R runs. The `gstack-prove-it` install variant in section 4.4 is not needed, because gstack's Codex router scans every skill under `$CODEX_HOME/skills`, not only gstack's. Neither smoke task is named.
+40 of 60 are covered, so the gate clears and part R runs. The table is byte-identical at b0f865c, 18e24a2 and the tag. The `gstack-prove-it` install variant in section 4.4 is not needed, because gstack's Codex router scans every skill under `$CODEX_HOME/skills`, not only gstack's. Neither smoke task is named.
 
 ## 4. The pilot draw (preregistration section 9)
 
@@ -89,7 +91,12 @@ Section 9 asked for four extra part R pilot tasks covered by the route table at 
 
 Each part C pilot session in c-on and c-high also reports:
 
-- **SKILL.md read shapes.** Every read of a SKILL.md, by tool (a direct command or a code-mode cell) and command shape. A read of /review's SKILL.md through a sed range that quits early (`sed -n '1,200p;201q'`, the shape gstack's GSTA-651 says the reader misses) is flagged. In part C the skill loads through `$review`, which the contract counts (check 3), so this shape can't hide the load. The check stays because the Captain asked for it.
+- **SKILL.md read shapes.** Every read of a SKILL.md, by tool (a direct command or a code-mode cell) and command shape. Three shapes are flagged:
+  - a sed range that quits early (`sed -n '1,200p;201q'`, GSTA-651's shape), which the reader at the tag counts and the reader before 4528 missed;
+  - a read inside `bash -lc "..."` (or `sh -c`) whose call exits non-zero with no error text;
+  - a read through `<` (`cat < <file>`) whose call exits non-zero with no error text.
+
+  The last two still count as loads at the tag although the read may have failed (checks.txt, "Reader shapes"). In part C the skill loads through `$review`, which the contract counts (check 3), and in a one-prompt session the reader treats a later read of the same skill as part of that load, so none of these shapes can change whether /review loaded. The check stays because the Captain asked for it, and the flags show how often each shape occurs.
 - **Unknown-namespace spawns.** Every spawn_agent call in a namespace other than `multi_agent_v1` or `collaboration`, or with none, is flagged. On gpt-6.1-sol, Codex 0.170 serves it in `collaboration`.
 
 If either flag fires on more than one c-on or c-high pilot session, the Captain hears it before c-main spends anything.
