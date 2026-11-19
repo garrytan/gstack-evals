@@ -70,6 +70,8 @@ Each part has its own primary and its own decision. No decision reads another's 
 
 If the check on the within-session design fails (section 5.4, check A), the between-arm contrast, contract on minus contract off, takes the primary's place in this table, and the results say why.
 
+In this table, the E3 table below and every between-arm contrast of part C, a reading is above 0 or below 0 only when both hold: its bootstrap interval excludes 0, and the exact two-sided pull-request-clustered sign-flip test (section 5.4) gives p < 0.05. Otherwise it includes 0. Part R's readings use Newcombe's interval alone (section 4.8).
+
 **E3 against E2** (plan item E). The effort contrast is contract-on /review at high against the same arm at low (Codex's default for Sol), on the same units.
 
 | Result | What gstack does |
@@ -144,7 +146,7 @@ In Codex, nothing like Claude Code's Skill tool call exists: the model reads a S
 A session loaded prove-it when any of these holds:
 
 - **(a) Text unique to prove-it arrived.** A model-visible tool result, a `response_item` of type `function_call_output` or `custom_tool_call_output` (its output string, or its `input_text` parts joined), holds a line of prove-it's SKILL.md below its front matter, at least 40 characters long, that appears in no other file under `$CODEX_HOME/skills`.
-- **(b) A read of prove-it's file arrived.** A tool result holds any line of prove-it's SKILL.md at least 40 characters long, and its call (the `function_call` arguments or the `custom_tool_call` input with the same `call_id`) names prove-it's SKILL.md by any path form: absolute, `~/.codex/...`, `$CODEX_HOME/...` or relative to the skills root.
+- **(b) A read of prove-it's file arrived.** A tool result holds a line of prove-it's SKILL.md below its front matter, at least 40 characters long, and its call (the `function_call` arguments or the `custom_tool_call` input with the same `call_id`) names prove-it's SKILL.md by any path form: absolute, `~/.codex/...`, `$CODEX_HOME/...` or relative to the skills root. (b) applies only when the call names no other file under `$CODEX_HOME/skills` and holds no wildcard path. prove-it shares its setup lines with gstack's skills, and a code-mode cell can read two files and pass on only one (probes.txt, section 3), so a call that reads another skill file counts only under (a).
 - **(c) Codex injected it.** A user message holds `<skill>` with `<name>prove-it</name>`. No prompt here names the skill, so this should never happen; any case is reported.
 
 A call that names prove-it's SKILL.md and whose result holds no such line is a failed load. Whether a command exited 0 doesn't matter: the text arrived or it didn't. The listing in the developer message is not a tool result, so a listing never counts as a load.
@@ -190,7 +192,7 @@ R2's suite, stacks-r1 (wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stack
 | c-high | the same as c-on | the same as c-on | high | the same |
 | c-none | none | none | low | the template only |
 
-The template is stacks round 1's review told text (`TOLD_TEMPLATE` in src/trial/review/told.ts, sha256 16862a34212cd2eddbcedbc5654b26cb92b0dad50e3d501686770e6bc3d088ad, pinned by tests/trial/review/told.test.ts): review the branch against its base, don't change the code under review, and end with one fenced JSON block of findings. The prefix, frozen here, is: "Report findings only; do not make Fix-First edits. Writes to gstack's own state (its learnings, timeline and review log) are allowed." It says nothing about the adversarial pass or the report, because the contract exists to enforce them; R2's prefix told Opus to run the full procedure, and that would leave the contract nothing to do. Routing is on in every gstack arm, as shipped, and skips prompts that start with `$`.
+The template is stacks round 1's review told text (`TOLD_TEMPLATE` in src/trial/review/told.ts, sha256 16862a34212cd2eddbcedbc5654b26cb92b0dad50e3d501686770e6bc3d088ad, pinned by tests/trial/review/told.test.ts): review the branch against its base, don't change the code under review, and end with one fenced JSON block of findings. The prefix, frozen here, is: "Report findings only; do not make Fix-First edits. Writes to gstack's own state (its learnings, timeline and review log) are allowed. If a stop hook blocks your reply, end your next reply again with the complete fenced json block." The last sentence is R2's, word for word (2026-11-03-geva-255-r2-after-pin-amendment, section 7). It says nothing about the adversarial pass or the report, because the contract exists to enforce them; R2's prefix told Opus to run the full procedure, and that would leave the contract nothing to do. Routing is on in every gstack arm, as shipped, and skips prompts that start with `$`.
 
 ### 5.3 What is scored
 
@@ -200,17 +202,19 @@ The template is stacks round 1's review told text (`TOLD_TEMPLATE` in src/trial/
 
 **Found** (the outcome): one of a state's counted findings matches the known bug, by R2's matching rules and #108's judge brief (wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/judge-brief.md, sha256 ef33d5ca0f802e49e18d1f3e4b16f989bcbd48fa4c46f339bc0533dfb1364427), at any severity. **Blocking**, as a secondary: found and labelled blocking under R2's severity maps (severity-map.json and R2's after-pin gstack-full entry), so Sol's numbers line up with R2's on Opus.
 
-**False findings**, secondary: counted findings that match no known bug and that R2's adjudication batch rules not a defect, per session.
+**Unmatched findings**, secondary: counted findings at any severity that the matching batch matches to no known bug, per state. The matching batch reads every counted finding, so this counts the same findings that can earn primary credit. Beside it, R2's adjudication of unmatched blocking findings gives new blockers and false blockers per state, as in R2. Adjudication covers blocking findings only, and these numbers decide nothing.
 
 ### 5.4 The primary and its checks
 
 **Primary (the contract).** In c-on, over the 84 bug-passes: found in the final state minus found in the first-stop state, in points, with a 95% interval from R2's pull-request-clustered bootstrap (10,000 resamples, seed 20261119). It is the change the contract made to what ships, measured inside each session. It is zero in every session the contract didn't block. Gains and losses are both counted: a final report that drops a bug the first-stop message named is a loss.
 
+**The sign-flip test.** For each pull-request cluster, sum its bug-passes' paired differences (+1 gained, -1 lost, 0 unchanged). The statistic is the total. Under the null, each cluster's sum is as likely to have either sign, so the test flips the signs of the cluster sums and counts the flips whose total is at least as far from 0 as the observed one. It uses every sign flip over the clusters whose sum is not 0, or 10,000 seeded flips (seed 20261119) when more than 20 clusters changed. Four gains in four clusters with no losses give p = 0.125 and read as including 0. The same test, on the same pairs, goes with check A, E3 and every between-arm contrast.
+
 Why inside the session: until its first block, a c-on session gets exactly what a c-off session gets. A registered hook changes nothing the model sees until it fires (probes.txt, section 4), and routing skips these prompts. So the first-stop state is what that same session would have delivered with the contract off, and the between-session noise drops out. This is what lets 66 sessions see an 11.5-point gain (section 10).
 
-**Check A.** c-on's first-stop found rate minus c-off's final found rate, paired by bug-pass, with the same bootstrap. They estimate the same thing, so they should agree. If the interval excludes 0, the within-session design is not trusted: the contract's row in section 1 reads c-on minus c-off instead, and the results say so.
+**Check A.** c-on's first-stop found rate minus c-off's final found rate, paired by bug-pass, with the same bootstrap. They estimate the same thing, so they should agree. Check A is a guard, so it leans toward distrust: if the interval excludes 0 or the sign-flip test gives p < 0.05, the within-session design is not trusted: the contract's row in section 1 reads c-on minus c-off instead, and the results say so.
 
-**Between arms, reported beside the primary**, each paired by bug-pass with the same bootstrap: c-on minus c-off (the plain on against off), each gstack arm minus c-none (R44), and blocking and false findings for each.
+**Between arms, reported beside the primary**, each paired by bug-pass with the same bootstrap: c-on minus c-off (the plain on against off), each gstack arm minus c-none (R44), and blocking, unmatched findings and false blockers for each.
 
 **Effort primary (E3).** c-high's final found rate minus c-on's final found rate, paired by bug-pass, same bootstrap. The cost per session and per found bug of each arm is given beside it.
 
@@ -237,14 +241,14 @@ A session is scored when a model response reached the agent and its rollout was 
 ## 6. Attacks on the scoring rules, and the answers
 
 1. *A load by listing.* Codex lists every skill with its description in a developer message. That isn't a tool result, so it can't satisfy (a) or (b), and front-matter lines are left out of (a)'s unique lines.
-2. *A read of gstack's verify counted as prove-it.* prove-it's setup text is gstack's /verify setup, so shared lines prove nothing. (a) needs a line in no other installed skill file; (b) needs the call to name prove-it's own path.
-3. *Code mode hides the read.* Sol in Codex 0.170 runs commands inside JavaScript `exec` cells, whose nested command output reaches the model only if the script passes it on (probes.txt, section 3). The detector reads what reached the model, the `custom_tool_call_output`, not what a nested command printed.
+2. *A read of gstack's verify counted as prove-it.* prove-it's setup text is gstack's /verify setup, so shared lines prove nothing. (a) needs a line in no other installed skill file; (b) needs the call to name prove-it's own path and no other skill file.
+3. *Code mode hides the read.* Sol in Codex 0.170 runs commands inside JavaScript `exec` cells, whose nested command output reaches the model only if the script passes it on (probes.txt, section 3). The detector reads what reached the model, the `custom_tool_call_output`, not what a nested command printed. A cell that reads prove-it and another skill file and passes on only one counts only under (a), which needs text unique to prove-it.
 4. *A grep that prints one long line.* A `grep -r` that happens to print a unique body line of prove-it counts under (a). The text did arrive. This is rare, and loads at the first call are reported beside all loads.
 5. *An injected skill.* Covered by (c); never expected here and reported if seen.
 6. *A load that arrives too late to matter.* Loads anywhere count, as in B1b; first-call loads are reported beside them, and steps arrived.
 7. *The contract graded on its own exposure.* The primary is known bugs named in the delivered review, not whether the adversarial pass ran or the report appeared. Those are section 5.6's exposure numbers.
-8. *A block that only reformats.* A first-stop message with no JSON block gets its findings extracted from its text, the same rule every arm and state gets, so printing the block after a hold adds nothing unless the findings are new.
-9. *Volume.* A hold that makes the model list every doubt could catch bugs by chance. Only the first 15 findings count, the false-findings count is reported per arm and state, and gains come with their false findings beside them.
+8. *A block that only reformats.* A first-stop message with no JSON block gets its findings extracted from its text, the same rule every arm and state gets, so printing the block after a hold adds nothing unless the findings are new. The prefix's last sentence, asking for the complete block again after a block, shapes only the format and does nothing in c-off, where nothing blocks. A final reply that still only refers back to earlier findings scores as written, and those sessions are counted per arm.
+9. *Volume.* A hold that makes the model list every doubt could catch bugs by chance. Only the first 15 findings count, and the counted and unmatched findings at any severity, the same findings that can earn primary credit, are reported per arm and state beside every gain. Unmatched findings include real defects outside the key as well as false claims, so they overstate noise, which works against the contract. Adjudication rules only on blocking findings (R2's pipeline), so no not-defect ruling is claimed for the rest.
 10. *Losses hidden.* A final report that drops a bug the first-stop message named is a loss and lowers the primary.
 11. *The first-stop state isn't what c-off would deliver.* The hook changes nothing the model sees before it fires (probes.txt, section 4), and check A tests the claim on the data. If check A fails, the between-arm contrast decides.
 12. *The judge knows which state is which.* Packets hide arm, state and pass. The first-stop and final states of one session reach the judge as separate packets in seeded order.
@@ -283,7 +287,7 @@ An arm's pilot passes when: every task or unit is supplied (its image builds, it
 
 ## 10. Power and the smallest detectable difference
 
-power.txt is printed by power.py (attached; standard library only). Exact two-sided McNemar at 0.05 and 80% power. Part C uses a design effect of 1.2 for the 26 pull-request clusters, so 84 bug-passes count as 70.
+power.txt is printed by power.py (attached; standard library only). Exact two-sided McNemar at 0.05 and 80% power. Part C uses a design effect of 1.2 for the 26 pull-request clusters, so 84 bug-passes count as 70. Part C's MDDs come from exact McNemar with that design effect, and approximate the clustered sign-flip test that part C's readings use (section 5.4).
 
 | Comparison | Pairs | MDD in points |
 |---|---|---|
@@ -295,7 +299,7 @@ power.txt is printed by power.py (attached; standard library only). Exact two-si
 
 So the routing part sees large changes in loads, which is what B1b and B1c saw (Opus moved 38 points between routes). The contract part sees a gain of about 12 to 19 points of the known bugs from the hold. The effort arm sees only a gain of about 19 to 22 points; a smaller effort gain reads "not shown", and E2 stands. R2 on Opus, at the same 2 passes, reported an MDD of 24.5 by its own admission rule.
 
-**R113.** Neither counted run is planned above $500 paid at the prices in section 11: part R's counted sessions come to $93 and part C's, the effort arm and its judging included, to about $470. So neither takes an interim look. If the pilot's re-pricing puts a counted run above $500 before it starts, a dated change before its first counted session adds R113's one look at half its units, in seeded unit order: O'Brien-Fleming two-look bounds for this plan's two-sided 0.05 per decision, |z| of at least 2.797 at the look and 1.977 at the end (power.txt), a futility stop when conditional power under the planned effect (the MDD above) falls below 10%, an early stop flagged as possibly overstated, and no other look at any primary. An arm stops only when every decision that reads it has stopped.
+**R113.** Neither counted run is planned above $500 paid at the prices in section 11: part R's counted sessions come to $93 and part C's, the effort arm, its judging and VM shares included, to about $490. So neither takes an interim look. If the pilot's re-pricing puts a counted run above $500 before it starts, a dated change before its first counted session adds R113's one look at half its units, in seeded unit order: O'Brien-Fleming two-look bounds for this plan's two-sided 0.05 per decision, |z| of at least 2.797 at the look and 1.977 at the end (power.txt), a futility stop when conditional power under the planned effect (the MDD above) falls below 10%, an early stop flagged as possibly overstated, and no other look at any primary. An arm stops only when every decision that reads it has stopped.
 
 ## 11. Money
 
@@ -329,7 +333,7 @@ Built on one branch and landed before the counted runs, after this post merges (
 5. **The route table** command, keyless.
 6. **Reason codes** in src/errors/codes.ts for every new gap and stop.
 
-**Tests before any paid call,** with fixtures built from real Codex 0.170 rollouts captured against the stub: a direct read, a code-mode read, a read that names the path and fails, a grep that prints only the description line, a read of gstack's verify that must not count, an injected skill item, and a sub-agent's thread file; a hook line delivered and one missing; a contract block, a met session, a fail-open and a false block; a first-stop message with and without a JSON block; check A's switch; and every row of section 1's three tables, each in both directions. The dry run opens and settles one ledger lease per item on a temporary ledger.
+**Tests before any paid call,** with fixtures built from real Codex 0.170 rollouts captured against the stub: a direct read, a code-mode read, a read that names the path and fails, a grep that prints only the description line (not a load), a code-mode cell that reads prove-it and gstack's verify and passes on only verify's text (not a load), a read of gstack's verify that must not count, an injected skill item, and a sub-agent's thread file; a hook line delivered and one missing; a contract block, a met session, a fail-open and a false block; a first-stop message with and without a JSON block; check A's switch, on the interval and on the sign-flip test; 4 gains in 4 clusters with no losses, which must not read KEEP; and every row of section 1's three tables, each in both directions. The dry run opens and settles one ledger lease per item on a temporary ledger.
 
 ## 13. Order, machines and timing
 
