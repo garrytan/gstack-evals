@@ -300,7 +300,7 @@ Before this pull request opened, a second-model review (GPT-6.2 Sol at high effo
 
 ## Review record
 
-To be filled before merge from this pull request's review.
+One second-model review (GPT-6.2 Sol, high effort) read the first draft's scoring, stage and cap rules before the pull request opened: 12 findings (8 High, 4 Medium), all taken (section 18). The pull request's own review, run by gstack's /ship at its final head, is recorded in the pull request body.
 
 ## Disclosures
 
