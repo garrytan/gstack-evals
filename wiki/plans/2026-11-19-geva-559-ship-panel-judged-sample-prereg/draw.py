@@ -80,11 +80,18 @@ def receipts_total(body):
     return (total, unfixed) if seen else None
 
 
-def shown_ids(body, trailer_ids, readers):
+def shown_ids(body, number, trailer_ids, readers):
+    # a line that cites another PR or issue number is skipped; a token that is another id with a pass prefix added or
+    # dropped is the same finding, so it is counted once, as the trailer's spelling when there is one
+    toks = set()
+    for line in body.split("\n"):
+        if any(int(n) != number for n in re.findall(r"(?:#|/pull/|/issues/)(\d+)", FINDING_ID.sub("", line))):
+            continue
+        toks |= {m.group(1) for m in FINDING_ID.finditer(line) if m.group(2) in readers or m.group(2).split("/")[-1] in readers}
     ids = set(trailer_ids)
-    for m in FINDING_ID.finditer(body):
-        if m.group(2) in readers or m.group(2).split("/")[-1] in readers:
-            ids.add(m.group(1))
+    for tok in sorted(toks, key=lambda t: (-len(t), t)):
+        if not any(tok == i or tok.endswith("/" + i) or i.endswith("/" + tok) for i in ids):
+            ids.add(tok)
     return ids
 
 
@@ -104,7 +111,7 @@ def complete_prs(clones, items, bodies):
         body = bodies.get((repo, pr), "")
         counts = receipts_total(body)
         trailer_ids = {i["finding"] for i in its}
-        ids = shown_ids(body, trailer_ids, readers)
+        ids = shown_ids(body, pr, trailer_ids, readers)
         if counts is not None and len(ids) >= counts[0] and len(ids - trailer_ids) >= counts[1]:
             count_ok[(repo, pr)] = its
     for repo in sorted({r for r, _ in count_ok}):

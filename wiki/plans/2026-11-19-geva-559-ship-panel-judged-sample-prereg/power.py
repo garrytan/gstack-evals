@@ -4,7 +4,7 @@
 # Usage: power.py <draw.txt>
 import collections, random, sys
 
-FRAME = {"RT": 81, "AD": 38, "SM": 45, "FR": 50}
+FRAME = {"RT": 69, "AD": 32, "SM": 33, "FR": 40}
 EXTRA = ("RT", "AD", "SM")
 
 
