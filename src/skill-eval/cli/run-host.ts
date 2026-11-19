@@ -23,13 +23,16 @@
 // - Arms on a real host are loose skill folders, a gstack base at a sha with the target skill overlaid or removed, stacks,
 //   placebo, none and bare. A loadout arm has no installer yet; hostReadiness refuses it with E_USAGE before anything is
 //   spent.
-// - A task with a persona gets one usersim slot per session on Claude Code, bound at its first free-form question under
+// - A task with a persona gets one usersim slot per session, bound at its first free-form question under
 //   the run's lease for the call's usersim model (src/usersim/persona.ts). Each answer is one request with no tools from
 //   the judge's sandbox, its meter adds to the run's spend and to <out>/usersim.ndjson, and a round's worst case counts a
 //   usersim allowance per persona session. The usersim model comes from the policy, whose sha256 is in the session key.
 // - A stack arm runs in its cell for each model (src/arms/cells.ts): the cell's image (pstack's model rule), its gstack
 //   config appended to the state root, the Codex config for its cross-family voice, and a proxy slot that admits the
 //   session's model and that voice only. The cell's tree is the session key's arm tree.
+// - Each Codex session runs at the reasoning effort codex 0.166.0's own catalog gives its model (catalogEffort), the
+//   default it ran on before, now written explicitly; a model the catalog lacks gets none, as before. Neither the call
+//   nor the policy carries an effort.
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -37,7 +40,7 @@ import { dirname, join, posix, resolve } from "node:path";
 import { calibrationProbes, judgeCalibration, sentinelFor, withSentinel, type CalibrationFailure, type ProbeRun } from "../../adapters/calibration.ts";
 import { dockerInstaller, installArms, releaseInstalls, runHold, sentinelLayer, stackSources, type ArmInstall, type Layer } from "../../arms/install.ts";
 import { cellFor, cellSettings, type CellSettings } from "../../arms/cells.ts";
-import type { CodexProvider } from "../../adapters/codex/driver.ts";
+import { catalogEffort, type CodexProvider } from "../../adapters/codex/driver.ts";
 import { hostDriver, skillRoot, type HostDriverOptions } from "../../adapters/host.ts";
 import type { Call as HostCall } from "../../grade/transcript.ts";
 import { openLease, settleLease } from "../../runner/ledger/ledger.ts";
@@ -333,7 +336,7 @@ export async function runOnHost(o: HostRunInput, rig: HostRig, log: (line: strin
       },
     };
   };
-  const hasPersona = (taskId: string) => o.host === "claude" && o.entries[taskId]?.user?.persona !== undefined;
+  const hasPersona = (taskId: string) => o.entries[taskId]?.user?.persona !== undefined;
 
   const session = async (s: SessionSpec): Promise<TrialRun & { calls: HostCall[] }> => {
     const provider = providerOf(o.policy, s.model)!;
@@ -349,7 +352,7 @@ export async function runOnHost(o: HostRunInput, rig: HostRig, log: (line: strin
     const skill = o.skill && s.arm && (holds || s.watchSkill) ? { name: o.skill, roots: installed ? installed.roots.map((r) => posix.join(home, r)) : [skillRoot(s.host, home, o.skill)], home, dir: installed?.dir ?? null, ...(s.sentinel ? { sentinel: s.sentinel } : {}), namespaces: armInstall ? armNamespaces(armInstall) : [] } : null;
     const proxy = { baseUrl: rig.baseUrl, slot: binding.slot, token: binding.token };
     const usersim = s.arm !== null && hasPersona(s.task.id) ? persona(s, armName) : null;
-    const agent = s.arm === null ? judgeDriver({ provider, model: s.model, proxy, effort: JUDGE_REASONING_EFFORT }) : (rig.driver ?? hostDriver)({ host: s.host, model: s.model, provider, proxy, interactive: s.interactive, skill, out: join(s.dir, "host"), ...(s.entry ? { entry: s.entry } : {}), ...(usersim ? { freeform: usersim.answer } : {}), ...(plugins.length ? { plugins } : {}), ...(codex ? { codex } : {}) });
+    const agent = s.arm === null ? judgeDriver({ provider, model: s.model, proxy, effort: JUDGE_REASONING_EFFORT }) : (rig.driver ?? hostDriver)({ host: s.host, model: s.model, provider, proxy, interactive: s.interactive, skill, out: join(s.dir, "host"), ...(s.host === "codex" ? { effort: catalogEffort(s.model) } : {}), ...(s.entry ? { entry: s.entry } : {}), ...(usersim ? { freeform: usersim.answer } : {}), ...(plugins.length ? { plugins } : {}), ...(codex ? { codex } : {}) });
     const stateConfig = cell && Object.keys(cell.gstack_config).length ? { stateConfig: cell.gstack_config } : {};
     const run = await runTrial({ cell: { model: s.model, arm: armName, round: s.round, trial: s.trial }, task: s.task, ...(s.entry ? { entry: s.entry } : {}), tasksDir: s.tasksDir, sandbox: s.sandbox, agent, dir: s.dir, timeoutS: o.timeoutS, network: rig.network, ...stateConfig });
     const meter = await rig.finalize(binding.meter_id);

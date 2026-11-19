@@ -164,7 +164,7 @@ describe.skipIf(!DOCKER)("trial and arm images (Docker tier, GSTACK_EVALS_DOCKER
 
   // Value: protects=a Codex trial on a gpt-6 model can run a tool: codex 0.166 offers gpt-6 models Code Mode only and spawns codex-code-mode-host from its own directory; fails_when=the trial image lacks the host, so the tool call fails closed with "Code Mode is unavailable" while the turn still completes; why_new=GST-360 (U11's Codex calibration failed silently on main's image); seam=docker/trial.Dockerfile, codexArgs; no_claim=a real model choosing the tool, or Codex's own sandbox, which the adapter bypasses
   test("a Code Mode tool call runs in the trial image under the adapter's own flags and returns its output", () => {
-    const argv = codexArgs({ model: "gpt-6.1-sol", provider: "openai", proxy: { baseUrl: "http://127.0.0.1:8080", slot: "s", token: "t" } });
+    const argv = codexArgs({ model: "gpt-6.1-sol", provider: "openai", proxy: { baseUrl: "http://127.0.0.1:8080", slot: "s", token: "t" }, effort: "low" });
     const serve = "bun /fake/responses.ts /tmp/ready & for i in $(seq 100); do [ -e /tmp/ready ] && break; sleep 0.1; done; echo 'Run echo.' | timeout 60 codex \"$@\"";
     const server = join(import.meta.dir, "fixtures", "code-mode-responses.ts");
     const r = spawnSync("docker", ["run", "--rm", "--network", "none", "--user", "1000:1000", "-v", server + ":/fake/responses.ts:ro", "-e", "OPENAI_API_KEY=t", trial, "sh", "-c", serve, "sh", ...argv], { encoding: "utf8", timeout: 120_000 });

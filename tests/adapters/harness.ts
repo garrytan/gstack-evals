@@ -76,12 +76,14 @@ function parse(messages: any[]): Pick<Turn, "results" | "users"> {
   return { results, users };
 }
 
-/** One item of a scripted Responses answer: an assistant message, or a shell call Codex runs as exec_command. */
-export type Item = { type: "message"; text: string } | { type: "shell"; id: string; cmd: string };
+/** One item of a scripted Responses answer: an assistant message, a shell call Codex runs as exec_command, a call to any other tool by name, or a Code Mode exec call whose input is JavaScript. */
+export type Item = { type: "message"; text: string } | { type: "shell"; id: string; cmd: string } | { type: "call"; id: string; name: string; args: Record<string, unknown> } | { type: "code"; id: string; js: string };
 
 export interface ResponsesTurn {
-  /** Tool outputs so far, by call id. */
+  /** Tool outputs so far, by call id, Code Mode exec outputs included. */
   outputs: Map<string, string>;
+  /** The user's own messages so far, in order: the prompt, then each later message; text Codex injects (it starts with "<") is left out. */
+  users: string[];
   body: Record<string, any>;
 }
 
@@ -96,7 +98,9 @@ export function responsesResponse(body: Record<string, any>, items: Item[]): Res
   const output = items.map((it, i) =>
     it.type === "message"
       ? { type: "message", id: "msg_" + i, role: "assistant", status: "completed", content: [{ type: "output_text", text: it.text, annotations: [] }] }
-      : { type: "function_call", id: "fc_" + i, call_id: it.id, name: "exec_command", arguments: JSON.stringify({ cmd: it.cmd }), status: "completed" },
+      : it.type === "code"
+      ? { type: "custom_tool_call", id: "ctc_" + i, call_id: it.id, name: "exec", input: it.js, status: "completed" }
+      : { type: "function_call", id: "fc_" + i, call_id: it.id, name: it.type === "shell" ? "exec_command" : it.name, arguments: JSON.stringify(it.type === "shell" ? { cmd: it.cmd } : it.args), status: "completed" },
   );
   if (!body.stream) return Response.json({ id, object: "response", model: body.model, status: "completed", output, usage: RESPONSES_USAGE });
   const events: [string, unknown][] = [["response.created", { type: "response.created", response: { id, object: "response", model: body.model, status: "in_progress", output: [] } }]];
@@ -110,8 +114,13 @@ export function responsesResponse(body: Record<string, any>, items: Item[]): Res
 
 function parseResponses(body: Record<string, any>): ResponsesTurn {
   const outputs = new Map<string, string>();
-  for (const it of body.input ?? []) if (it.type === "function_call_output") outputs.set(it.call_id, typeof it.output === "string" ? it.output : JSON.stringify(it.output));
-  return { outputs, body };
+  const users: string[] = [];
+  for (const it of body.input ?? []) {
+    if (it.type === "function_call_output" || it.type === "custom_tool_call_output") outputs.set(it.call_id, typeof it.output === "string" ? it.output : JSON.stringify(it.output));
+    const text = it.type === "message" && it.role === "user" ? (it.content ?? []).map((c: { text?: string }) => c.text ?? "").join("") : "";
+    if (text && !text.startsWith("<")) users.push(text);
+  }
+  return { outputs, users, body };
 }
 
 const USAGE = { input_tokens: 100, output_tokens: 0, cache_read_input_tokens: 2000, cache_creation_input_tokens: 500 };
