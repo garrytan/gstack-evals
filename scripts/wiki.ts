@@ -399,7 +399,7 @@ function checkPrereg(lines: string[], p: (message: string) => void) {
   if (!judge) p('practice 5: no "## Judge check" section; write "Judge: none" there when no model judge scores the run' + HOW);
   else if (!judges.length) p('practice 5: "## Judge check" has no "Judge:" line; write "Judge: none" when no model judge scores the run' + HOW);
   if (judges.some(emptyJudge)) p('practice 5: "Judge:" line is empty; write "Judge: none" or "<lab>/<model> scores <lab>/<model>"' + HOW);
-  if (hasJudge) {
+  if (judge && hasJudge) {
     for (const j of judges.filter((j) => !emptyJudge(j))) {
       const m = j.match(/^([^\s/]+)\/\S+ scores (.+)$/);
       if (!m) {
