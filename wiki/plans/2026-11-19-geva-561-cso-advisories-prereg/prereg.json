@@ -79,14 +79,6 @@
    "cso": {
     "gstack": true,
     "entry": "Use the cso skill from gstack for this. "
-   },
-   "untold": {
-    "gstack": true,
-    "entry": "",
-    "stages": [
-     "stage0",
-     "stage1"
-    ]
    }
   }
  },
@@ -682,7 +674,8 @@
    "pooling": "never: stage 1 and stage 0 units and sessions are never pooled into the confirmatory analysis"
   },
   "post_cutoff_from": "2026-07-01",
-  "strict_stratum_from": "2026-10-01"
+  "strict_stratum_from": "2026-10-01",
+  "answer_key_rule": "at least one of the fix's non-test source files exists at the parent and loses, changes or gains at least one line of code; whitespace-only changes, blank lines and comment-only lines don't count; an insert-only hunk's pre-fix hunk is the two parent lines around the insertion point, and pass B gets its inserted lines marked as added"
  },
  "scoring": {
   "first_k": 10,
@@ -690,7 +683,7 @@
   "wide_range_lines": 40,
   "excerpt_lines": 20,
   "excerpt_rule": "each excerpt is the cited line plus or minus 20 lines (41 lines)",
-  "path_normalization": "Before excerpts are cut and before the location and phantom checks, every arm's cited paths are normalized the same way: a leading helper snapshot root is stripped, so a snapshot-relative path counts as the same path in the audited tree, and a helper handle is resolved to its path from that run's helper records. A handle that doesn't resolve leaves that finding without a location. Stage 0 checks that /cso's citations resolve after this, and the share of cso findings cited by handle is reported.",
+  "path_normalization": "Before redaction, before excerpts are cut and before the location and phantom checks, every arm's cited paths are normalized the same way: a leading helper snapshot root is stripped, so a snapshot-relative path counts as the same path in the audited tree, and a helper handle is resolved to its path from that run's helper records (the snapshot root and handles as the pinned helper prints them in its start and read output, recorded per run). A handle that doesn't resolve leaves that finding without a location. Stage 0 gates on this, and the share of cso findings cited by handle is reported.",
   "cwe_families": {
    "path-traversal": [
     22,
@@ -897,7 +890,7 @@
    "gstack-cso-launcher",
    "gstack-cso",
    "gstack",
-   "/cso",
+   "/cso\\b",
    "\\bcso\\b",
    "\\bCSO\\b",
    "\\b\\d{13}-[0-9a-f]{16}\\b",
@@ -917,7 +910,9 @@
   "order_rule": "findings in order of first appearance in the final message, then findings that appear only in earlier messages, in the order they appeared",
   "evidence_excerpts_per_finding": 2,
   "grounding": "a hit also needs the finding's own words to state the mechanism (what input reaches which code, and which check is missing or wrong) and a cited location that resolves in the audited tree",
-  "known_advisory_rule": "a known open advisory match needs the same location, class, same-defect and grounding rules as a hit"
+  "known_advisory_rule": "a known open advisory match needs the same location, class, same-defect and grounding rules as a hit",
+  "redaction_rule": "runs after path_normalization; no term is applied inside a cited path; /cso matches only as a whole command",
+  "stage0_citation_gate": "for cso, every citation that uses a helper snapshot root or handle must resolve after path normalization; one that doesn't gets a named repair to the normalization, never to the skill, and a rerun"
  },
  "judge": {
   "production": {
@@ -965,9 +960,12 @@
   "per_arm_gate": "on gold reports, the production judge's disagreement rate on named in cso reports and in none reports (models pooled) differ by at most 10 points",
   "format_variants": "for 10 stage 1 units the harness writes the oracle finding as a table row and as a prose paragraph, plus two near misses (right file and wrong class; right class 30 lines from every hunk); the judge must give each pair the same named label in at least 9 of 10 pairs and score no near miss as a hit in at least 18 of 20",
   "refusal_max": 0.05,
-  "route_rule": "a judge route scores only after it passes named kappa, the per-arm gate, the format variants and the refusal limit",
+  "route_rule": "a judge route scores only after it passes named kappa (on all gold and again on non-anchor gold), the per-arm gate, the format variants and the refusal limit",
   "sol_check": "the Sol stage runs its own check on at least 40 Sol reports from its smoke and pilot before any Sol number counts",
-  "max_input_tokens": 40000
+  "max_input_tokens": 40000,
+  "gold_rule": "each gold labeller makes two calls per report: a key-blind extraction of its own finding list from the redacted scored text by pass A's rules, then pass B's packet for its own first 10 findings and pass A's first 10, returning hit labels for its own findings and validity labels for pass A's; gold named comes from each labeller's own findings, so the check covers extraction as well as labelling; validity gold stays on pass A's findings",
+  "kappa_non_anchor_min": 0.6,
+  "over_cap_rule": "a pass B packet over max_input_tokens, gold's included, is trimmed in order until it fits: known open advisories to their summaries and file lists, then each fix hunk beyond its first 100 lines, largest file first; findings and excerpts are never trimmed; a production packet still over is a judge gap, a gold packet still over leaves that report out of gold"
  },
  "analysis": {
   "primary_family": [
@@ -988,7 +986,7 @@
    "CUT-CANDIDATE rules, every condition at its gap bound; the null path also needs the validity label validated",
    "otherwise FIX-METHOD: on gaps when a CUT-CANDIDATE condition held on complete pairs but not at its gap bound, else on power, stated with the interval"
   ],
-  "gap_bounds": "complete-pair estimates drop a unit with a gap in either arm; every verdict condition is also read at its gap bound, on the full paired contrast with each gap session filled with the value least favourable to the verdict tested: for named, not named in the arm the verdict favours and named in the other; for a per-session count (supported or unsupported findings), 0 in the arm the condition needs high and 10, the counted-findings cap in the arm the condition needs low; for Ahead and KEEP cso gaps count against cso, for Behind and CUT-CANDIDATE the reverse; both bounds are reported for every contrast; a verdict stands only when every condition it uses holds at its gap bound"
+  "gap_bounds": "complete-pair estimates drop a unit with a gap in either arm; every verdict condition is also read at its gap bound, on the full paired contrast with each gap session filled with the value least favourable to the verdict tested: for named, not named in the arm the verdict favours and named in the other; for a per-session count (supported or unsupported findings), 0 in the arm the condition needs high and 10, the counted-findings cap, in the arm the condition needs low; for Ahead and KEEP cso gaps count against cso, for Behind and CUT-CANDIDATE the reverse; both bounds are reported for every contrast; a verdict stands only when every condition it uses holds at its gap bound"
  },
  "stage1_release": [
   "none arm named count per model",
@@ -1002,7 +1000,9 @@
   "floor_max": 1,
   "ceiling_min": 10,
   "of": 12,
-  "size_split_files": 300
+  "size_split_files": 300,
+  "floor_raise": "restrict units to repositories with at most size_split_files non-test source files at the parent; re-pilot on the next 12 unused usable units that meet it",
+  "ceiling_raise": "restrict units to repositories with more than size_split_files such files; re-pilot the same way"
  },
  "items": {
   "cso-smoke": {
