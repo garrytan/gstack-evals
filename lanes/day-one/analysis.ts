@@ -37,6 +37,8 @@ export interface ScoredBuild {
   obvious: boolean;
   /** Descriptive: A's exposure and voice (null on other arms), the plan's words, the owner's answers by type, the cell's dollars (plan, voice, responder, build and check), whether the app wrote to a file that already held data at hand-off, and whether its app started for the checker (null with no check row). */
   exposed?: boolean | null;
+  /** The frozen exposure reading (run complete only), printed beside exposed. */
+  exposed_frozen?: boolean | null;
   voice?: "astra" | "fallback" | null;
   plan_words?: number | null;
   answers?: Record<string, number> | null;
@@ -154,6 +156,7 @@ export interface ArmRead {
   cost_per_brief: number | null;
   voice: { astra: number; fallback: number };
   exposed: { yes: number; no: number };
+  exposed_frozen: { yes: number; no: number };
   prefilled: number;
   /** Descriptive: checked builds whose app never answered ("does not start", scored no task done). */
   not_started: number;
@@ -165,6 +168,7 @@ export interface Reading {
   arms: Record<string, ArmRead>;
   comparisons: Record<string, Interval>;
   a_n_exposed: Interval | null;
+  a_n_exposed_frozen: Interval | null;
   mdd: number;
   mdd_observed: number | null;
   r107: R107 | "not counted";
@@ -201,6 +205,7 @@ export function read(builds: readonly ScoredBuild[], arms: readonly PlanArm[], b
       cost_per_brief: meanOr(mine.flatMap((b) => (typeof b.usd === "number" ? [b.usd] : []))),
       voice: { astra: mine.filter((b) => b.voice === "astra").length, fallback: mine.filter((b) => b.voice === "fallback").length },
       exposed: { yes: mine.filter((b) => b.exposed === true).length, no: mine.filter((b) => b.exposed === false).length },
+      exposed_frozen: { yes: mine.filter((b) => b.exposed_frozen === true).length, no: mine.filter((b) => b.exposed_frozen === false).length },
       prefilled: mine.filter((b) => b.prefilled === true).length,
       not_started: mine.filter((b) => b.started === false).length,
     };
@@ -220,6 +225,7 @@ export function read(builds: readonly ScoredBuild[], arms: readonly PlanArm[], b
     arms: armsOut,
     comparisons,
     a_n_exposed: arms.includes("a") && arms.includes("n") ? paired(briefScores(builds.filter((b) => b.arm !== "a" || b.exposed === true), "a"), sc.n) : null,
+    a_n_exposed_frozen: arms.includes("a") && arms.includes("n") ? paired(briefScores(builds.filter((b) => b.arm !== "a" || b.exposed_frozen === true), "a"), sc.n) : null,
     mdd: mddFor(an?.briefs ?? 0),
     mdd_observed: an?.sd ? r4((2.8 * an.sd) / Math.sqrt(an.briefs)) : null,
     r107: gate(decide(an, comparisons["d-n"], comparisons["a-d"])),

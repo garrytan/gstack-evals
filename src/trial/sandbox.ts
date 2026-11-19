@@ -38,8 +38,8 @@ export interface StepOptions {
 }
 
 export interface AgentSession {
-  /** Runs one shell step in the agent's environment, in the work dir. */
-  exec(command: string, timeoutMs: number): StepResult;
+  /** Runs one shell step in the agent's environment, in the work dir; input, when given, is the step's stdin, so a value the step needs never rides in its arguments. */
+  exec(command: string, timeoutMs: number, input?: string): StepResult;
   /**
    * Starts one long-lived process in the agent's environment, in the work dir, with stdin, stdout and stderr piped: the
    * host CLI a driver streams to. env adds non-credential names on top of the session's env. The caller kills it.
@@ -118,11 +118,11 @@ export function dockerSandbox(opts: { trialImage: string; armImage?: string; doc
       const start = dockerStep(docker, ["-d", "--network", o.network ?? "none", "--user", uid(), ...HARDENING, ...ram, "-v", o.work + ":" + path, ...ro, "-w", path], ["--entrypoint", "sleep", image, "infinity"], name, o.env, 120_000);
       if (start.exitCode !== 0) throw new IsolationError("could not start the agent container: " + start.stderr.trim().split("\n").slice(-1)[0]);
       if (o.ram) {
-        const home = spawnSync(docker, ["run", "--rm", "--network", "none", ...HARDENING, "--entrypoint", "tar", image, "-C", "/home/agent", "-cf", "-", "."], { timeout: 120_000, maxBuffer: 1024 * 1024 * 1024 });
-        const seeded = home.status === 0 ? spawnSync(docker, ["exec", "-i", name, "tar", "-C", "/home/agent", "-xf", "-"], { input: home.stdout, timeout: 120_000, maxBuffer: STEP_BUFFER }) : null;
-        if (seeded?.status !== 0) {
+        const seed = 'set -o pipefail; d=$1 img=$2 n=$3; shift 3; "$d" run --rm --network none "$@" --entrypoint tar "$img" -C /home/agent -cf - . | "$d" exec -i "$n" tar -C /home/agent -xf -';
+        const seeded = spawnSync("bash", ["-c", seed, "seed", docker, image, name, ...HARDENING], { timeout: 120_000, encoding: "utf8", maxBuffer: STEP_BUFFER });
+        if (seeded.status !== 0) {
           spawnSync(docker, ["rm", "-f", name], { stdio: "ignore" });
-          throw new IsolationError("could not seed the agent's RAM-backed home: " + String((seeded ?? home).stderr ?? "").trim().split("\n").slice(-1)[0]);
+          throw new IsolationError("could not seed the agent's RAM-backed home: " + String(seeded.stderr ?? seeded.error?.message ?? "").trim().split("\n").slice(-1)[0]);
         }
       }
       let stopped = false;
@@ -132,8 +132,8 @@ export function dockerSandbox(opts: { trialImage: string; armImage?: string; doc
           const client = Object.fromEntries(["PATH", "HOME", "DOCKER_HOST", "DOCKER_CONFIG", "DOCKER_CONTEXT", "XDG_RUNTIME_DIR"].flatMap((k) => (process.env[k] ? [[k, process.env[k]!]] : [])));
           return spawn(docker, ["exec", "-i", "-w", path, ...envArgs, name, ...argv], { env: { ...client, ...clientEnv }, stdio: ["pipe", "pipe", "pipe"] });
         },
-        exec: (command, timeoutMs) => {
-          const r = result(spawnSync(docker, ["exec", "-w", path, name, "sh", "-c", command], { timeout: timeoutMs, encoding: "utf8", maxBuffer: STEP_BUFFER }));
+        exec: (command, timeoutMs, input) => {
+          const r = result(spawnSync(docker, ["exec", ...(input === undefined ? [] : ["-i"]), "-w", path, name, "sh", "-c", command], { timeout: timeoutMs, encoding: "utf8", maxBuffer: STEP_BUFFER, input }));
           if (r.timedOut) spawnSync(docker, ["exec", name, "sh", "-c", "kill -9 -1"], { stdio: "ignore" });
           return r;
         },
@@ -187,7 +187,7 @@ export function processSandbox(opts: { bwrap?: string } = {}): Sandbox {
       if (!home) throw new IsolationError("the agent's env has no HOME to bind into its bubblewrap session");
       if (o.root || o.mounts?.length) throw new IsolationError("a session with a work root or read-only mounts runs under --isolation docker");
       return {
-        exec: (command, timeoutMs) => result(spawnSync(bwrap, bwrapArgs(o.work, home, command), { env: o.env, timeout: timeoutMs, encoding: "utf8", maxBuffer: STEP_BUFFER })),
+        exec: (command, timeoutMs, input) => result(spawnSync(bwrap, bwrapArgs(o.work, home, command), { env: o.env, timeout: timeoutMs, encoding: "utf8", maxBuffer: STEP_BUFFER, input })),
         spawn: (argv, env = {}) => spawn(bwrap, bwrapArgv(o.work, home, argv), { env: { ...o.env, ...env }, stdio: ["pipe", "pipe", "pipe"] }),
         stop: () => {},
       };

@@ -8,6 +8,9 @@
 //   /work/app; the checker's is empty.
 // - Planning sessions take the owner loop (owner.ts) as nextUser. Builds and checks take a loop that ends the session
 //   at its first reply.
+// - Planning sessions of every arm hold (pin change 2, item B): when a turn ends with background work the session started
+//   still running, the driver keeps the session open for it, in all at most the session's minutes. A session that
+//   reaches that limit while held is a gap row, E_DAYONE_BACKGROUND, with no retry. Builds and checks do not hold.
 // - gstack arms: the arm's gstack at its pin, a fresh state root copied out to host/gstack-state, GSTACK_SESSION_KIND
 //   unattended, and GPT-6 Astra as the Codex voice on its own slot (C2): its own meter and allowance, OPENAI_API_KEY in the
 //   container set to that slot's bearer and never the provider key, and GSTACK_CODEX_NO_SANDBOX=1. Every other arm has
@@ -16,8 +19,12 @@
 //   MCP server and may call only BROWSER_TOOLS.
 // - Containment: each container is probed just before it stops (the founder lane's probe). A departure is a key-like
 //   env name other than the session's bearers (ANTHROPIC_AUTH_TOKEN, and OPENAI_API_KEY on a gstack arm, whose value
-//   must equal the voice slot's bearer), or a mount other than the work dir, HOME and, on builds, the node volume.
+//   must equal the voice slot's bearer), or a mount other than the work dir, HOME and, on builds, the node volume. The
+//   bearer reaches that comparison on the exec's stdin, never in its arguments.
 // - The work tree is copied out to out/ after the session, and plan.md is read from there.
+// - The gstack-read check (section 8) runs on N, D and R planning sessions only, and counts their skill loads (exposure.ts
+//   loadedSkills) with their gstack reads: a build or check session that names gstack while it reads an /autoplan plan
+//   has not read gstack.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, posix } from "node:path";
 import { claudeCodeDriver, type ClaudeProvider, type NextUser } from "../../src/adapters/claude-code/driver.ts";
@@ -32,7 +39,8 @@ import { webUses } from "../product-value/parse.ts";
 import { readTranscript } from "../../src/trial/review/readers.ts";
 import { gstackReads, probe, type Probe } from "../office-hours-founder/run/contain.ts";
 import { NODE_BIN, NODE_DIR, RAM_SIZE } from "./app.ts";
-import { SYSTEM_PROMPT } from "./frozen.ts";
+import { loadedSkills } from "./exposure.ts";
+import { PLAN_ARMS, SYSTEM_PROMPT } from "./frozen.ts";
 
 /** The gstack arms' state root config: readers on the session's model, the Codex voice on. */
 export const GSTACK_CONFIG: Readonly<Record<string, string>> = { agent_model: "host", codex_reviews: "enabled" };
@@ -45,6 +53,8 @@ const PATH = "/usr/local/bin:/usr/bin:/bin";
 export const BROWSER_SERVER = "browser";
 /** Prints each RAM-backed mount with under 1 MiB free; any output means it filled. */
 export const RAM_FULL_CHECK = "df -Pk /home/agent /tmp | awk 'NR > 1 && $4 < 1024 { print $6 }'";
+/** Reads the voice slot's bearer from stdin and compares it with the container's OPENAI_API_KEY, so no form of it is in an exec argument. */
+export const VOICE_BEARER_CHECK = 'IFS= read -r t && [ -n "$t" ] && [ "$OPENAI_API_KEY" = "$t" ] && echo voice-bearer';
 export const BROWSER_TOOLS: readonly string[] = ["browser_navigate", "browser_navigate_back", "browser_snapshot", "browser_click", "browser_type", "browser_fill_form", "browser_select_option", "browser_press_key", "browser_hover", "browser_drag", "browser_drop", "browser_file_upload", "browser_handle_dialog", "browser_tabs", "browser_wait_for", "browser_take_screenshot", "browser_resize", "browser_find"].map((t) => "mcp__" + BROWSER_SERVER + "__" + t);
 
 export interface LaunchInput {
@@ -73,11 +83,14 @@ export interface LaunchInput {
   nodeVolume?: string;
   /** Checks: the browser container's MCP URL. */
   mcpUrl?: string;
+  /** Planning sessions: held open while background work the session started still runs, up to the session's minutes. */
+  hold?: true;
 }
 
 export interface AttemptRead {
   termination: Termination;
   web: number;
+  /** N, D and R planning sessions: each gstack read and each skill load (section 8); empty on every other session. */
   gstack_reads: string[];
   /** Containment departures; null when the probe could not run. */
   contained: string[] | null;
@@ -122,7 +135,10 @@ export async function launchSession(o: LaunchInput, deps: { driver?: typeof clau
             const full = session.exec(RAM_FULL_CHECK, 30_000).stdout.trim();
             if (full) ramFull = full.split("\n").join(", ");
             found = probe(session, o.docker, [base.workPath(opts.work, task, opts.root), home, ...mounts.map((m) => m.path)]);
-            if (voice) tokenOk = session.exec('[ "$OPENAI_API_KEY" = "' + voice.token + '" ] && echo voice-bearer', 30_000).stdout.trim() === "voice-bearer";
+            if (voice) {
+              const r = session.exec(VOICE_BEARER_CHECK, 30_000, voice.token + "\n");
+              tokenOk = r.exitCode === 0 && !r.timedOut && r.stdout.trim() === "voice-bearer";
+            }
           }
           session.stop();
         },
@@ -143,6 +159,7 @@ export async function launchSession(o: LaunchInput, deps: { driver?: typeof clau
     disable1mContext: true,
     denyAsk: true,
     nextUser: o.nextUser,
+    ...(o.hold ? { backgroundWaitMs: o.minutes * 60_000 } : {}),
     ...(o.gstack && voice ? { sessionKind: "unattended" as const, codex: { provider: "openai" as const, model: o.gstack.voiceModel, proxy: { slot: voice.slot, token: voice.token } }, codexNoSandbox: true } : {}),
     ...(o.mcpUrl ? { mcpServers: { [BROWSER_SERVER]: { type: "http" as const, url: o.mcpUrl } }, onlyTools: BROWSER_TOOLS } : {}),
   });
@@ -187,7 +204,7 @@ export async function launchSession(o: LaunchInput, deps: { driver?: typeof clau
   return {
     termination,
     web: webUses(transcript).length,
-    gstack_reads: o.gstack ? [] : gstackReads(transcript),
+    gstack_reads: (PLAN_ARMS as readonly string[]).includes(o.arm) && !o.gstack ? [...new Set([...gstackReads(transcript), ...loadedSkills(transcript).map((s) => s.tool + " " + s.target)])] : [],
     contained: departures,
     micros: meter.micros,
     voice: vmeter ? { micros: vmeter.micros, requests: vmeter.requests, refused: vmeter.refused } : null,
@@ -229,7 +246,8 @@ export function attemptOutcome(a: AttemptRead, owner: OwnerFailure): Outcome {
   if (owner?.reason === "allowance") return { state: "missing", code: "E_DAYONE_OWNER", why: "the responder's allowance refused a call: " + owner.detail };
   if (a.web > 0) return { state: "contaminated", code: "E_DAYONE_CONTAMINATED", why: a.web + " web tool result(s)" };
   if (a.gstack_reads.length) return { state: "contaminated", code: "E_DAYONE_CONTAMINATED", why: "read " + a.gstack_reads.slice(0, 3).join(", ") };
-  if (a.contained === null) return { state: "retry", why: "the containment probe could not run" };
+  if (t.kind === "missing" && t.code === "E_BACKGROUND_DEADLINE") return { state: "missing", code: "E_DAYONE_BACKGROUND", why: "background work the session started still ran at its time limit" };
+  if (a.contained === null) return { state: "retry", why: "the containment probe could not run" + (t.kind === "infra" && t.incident ? ": " + t.incident : "") };
   if (owner?.reason === "provider") return { state: "retry", why: "a responder provider failure: " + owner.detail };
   if (t.kind === "completed" || t.kind === "turn_cap" || t.kind === "timeout" || t.kind === "allowance_stop") return { state: "ended", how: t.kind };
   return { state: "retry", why: "an upstream or infrastructure failure: " + t.kind + ("code" in t ? " " + t.code : "incident" in t ? " " + t.incident : "") };

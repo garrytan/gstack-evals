@@ -102,8 +102,8 @@ export interface MeterOptions {
   /** Holds the reply cache; it carries model output, so it sits on tmpfs for sealed work. */
   cacheDir: string;
   maxOutputTokens: number;
-  /** The most the lease reserves, in micros; without it the lease reserves what the item's cap has left. */
-  amountMicros?: number;
+  /** The most the lease reserves, in micros, or a function that gives it, called after this run's stale lease is settled; without it the lease reserves what the item's cap has left. */
+  amountMicros?: number | (() => number);
   record?: string;
   ledger?: string;
   env?: Record<string, string | undefined>;
@@ -146,7 +146,7 @@ export async function openMeter(o: MeterOptions): Promise<Meter> {
     }
     const open = readItem(record, o.item).open;
     if (open && open.run_id === o.runId && local.getLease(open.lease_id)) settleLease(record, local, open.lease_id, warn);
-    leaseId = openLease(record, local, { item: o.item, run_id: o.runId, amount_micros: o.amountMicros, warn, requireAdmission: rigAdmission({ proof: "direct" }) }).lease_id;
+    leaseId = openLease(record, local, { item: o.item, run_id: o.runId, amount_micros: typeof o.amountMicros === "function" ? o.amountMicros() : o.amountMicros, warn, requireAdmission: rigAdmission({ proof: "direct" }) }).lease_id;
     proxy = new MeteringProxy({ ledger: local, leaseId, host: "127.0.0.1", managementSocket: join(tmpdir(), "pv-" + randomBytes(6).toString("hex") + ".sock"), managementToken: randomBytes(24).toString("hex"), journal, retry: RETRY, env, fetch: o.fetch, maxOutputTokens: o.maxOutputTokens });
     proxy.start();
   } catch (e) {

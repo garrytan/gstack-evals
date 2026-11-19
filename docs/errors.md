@@ -394,6 +394,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_EP_DRYRUN_FAIL](#e_ep_dryrun_fail) | 2 | U20 |
 | [E_DAYONE_OWNER](#e_dayone_owner) | 2 | U20 |
 | [E_DAYONE_APP](#e_dayone_app) | 2 | U20 |
+| [E_DAYONE_BACKGROUND](#e_dayone_background) | 2 | U20 |
 | [E_DAYONE_GAP](#e_dayone_gap) | 2 | U20 |
 | [E_DAYONE_LEAK](#e_dayone_leak) | 2 | U20 |
 | [E_DAYONE_CONTAMINATED](#e_dayone_contaminated) | 2 | U20 |
@@ -3061,6 +3062,14 @@ Day-one eval (section 6): the browser container or the node volume could not be 
 Fix: Read the line's docker output, fix the host, and run the stage again with --resume.
 
 Exit 2. Side effects: No spend: the checker's session has not started. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_DAYONE_BACKGROUND
+
+Day-one eval (pin change 2, item B): a planning session held open for background work it started (a background Bash or Agent task, or a pending ScheduleWakeup) reached its time limit with that work still running, so its cell is a recorded gap with that cause and no retry. Every arm's planning sessions hold the same way, at most the stage's minutes; builds and checks do not hold.
+
+Fix: Nothing to retry: report the gap beside the arm's result. The session's host/cli-stderr.log names the work still out.
+
+Exit 2. Side effects: The session's metered spend stays on the lease. Retry safe: no. Resumable: yes. Owner: U20.
 
 ### E_DAYONE_GAP
 
