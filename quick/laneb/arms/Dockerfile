@@ -198,9 +198,9 @@ RUN set -eu; \
 # settings.json each time it registers a hook, as settings.json.bak.<time>.<pid>.<random>,
 # and points settings.json.bak-latest at the newest; those rollback copies go.
 # After the tar is written, so nothing here can change it: gstack-config's view
-# of both switches, and the lite lock from the pin's own gstack-modules render
-# at setup's render path (setup's render is moved aside and put back, as
-# GEVA-254's install-pin.sh did).
+# of both switches, and the loadout's lock from the pin's own gstack-modules
+# render at setup's render path (a lite setup's render is moved aside and put
+# back, as GEVA-254's install-pin.sh did; a full setup renders nothing there).
 RUN set -eu; \
     mapfile -d '' links < <(find /root/.claude -type l -lname '/*' -not -path '*/node_modules/*' -print0); \
     for link in "${links[@]}"; do \
@@ -222,10 +222,10 @@ RUN set -eu; \
       -C /root -cf /out/arm.tar .claude .gstack; \
     g=/root/.claude/skills/gstack; render=/root/.gstack/render/claude; \
     for k in skill_routing skill_contracts; do printf '%s\t%s\n' "$k" "$("$g/bin/gstack-config" get "$k")"; done > /out/gstack-config.tsv; \
-    mv "$render" "$render.setup"; \
+    if [ -e "$render" ]; then mv "$render" "$render.setup"; fi; \
     (cd "$g" && bin/gstack-modules render --host claude --loadout "$GSTACK_LOADOUT" --out-dir "$render" > /dev/null); \
     cp "$render/loadout.lock.json" /out/loadout.lock.json; \
-    rm -rf "$render"; mv "$render.setup" "$render"
+    rm -rf "$render"; if [ -e "$render.setup" ]; then mv "$render.setup" "$render"; fi
 
 FROM scratch AS gstack-l1-tar
 COPY --from=gstack-l1-build /out/ /

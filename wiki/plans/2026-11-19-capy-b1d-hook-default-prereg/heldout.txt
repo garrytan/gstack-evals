@@ -1,0 +1,6 @@
+$ python3 draw.py <seed file> <out file>   (run once, on 2026-11-19, after draw.py with its SEED_SHA256 was pushed)
+pool 89 tasks from 77 repositories, sorted sha256 36c7b92de330e618c4560b121f987c32491bf8bac6b0bd5de07b85c0951fecf7
+run 60 tasks from 60 repositories, sorted sha256 918664d3b44dcb0bb9480d8cc30bc4293be832f625fdf1d998e1257e655f12c0 draw-order sha256 c12ff26d9fd21cd7c8615e0615cd8d036763462a3808092da5c5882e56868cd5
+
+$ B1D_HELDOUT=<out file> b1d routes --export <SWE-rebench export> --sealed <sealed route table>   (held-out line only)
+heldout: prove-it named alone 39, first of two 3, second of two 7, not named 11; /verify named 10; nothing named 11; lib and hook disagree 0
