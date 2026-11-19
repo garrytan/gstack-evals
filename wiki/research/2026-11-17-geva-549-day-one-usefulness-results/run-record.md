@@ -184,3 +184,195 @@ What ran, in order, with the command and what it showed. Times are UTC. Sealed p
 - **Re-projection on the smoke's prices** (section 14 step 4). Per session: an N plan 0.26 dollars, a D or R review 0.28 to 0.34, an exposed A session 9.48 plus 10.21 on the voice, an S session about 25 with its voice, an N or D build 2.2 to 2.4, an A build from an amended plan 4.9 to 6.0, a check 0.23 to 0.31, and the responder about 0.01. On those prices, with category 1 at the same per-session prices, the smoke's 287.16 dollars spent, and the judge, host and crew lines at their projections, the whole run projects to about 2,410 dollars, or about 2,840 with the 431 dollars of admission headroom. That is under the 4,680-dollar total, so the shrink order does not apply. One line runs tight: A's voice at 10.21 a session puts its 21 sessions at about 214 dollars against day1-voice's 195. Category 2's 15 A sessions fit; the 6 in category 1 go to the Captain before they run.
 - **Admission read** (section 11): neither the floor nor the ceiling, as recorded after rep 3 (N on the first practice brief 0 of 6, the other four builds at 6 of 6). The wave starts.
 - **Category 2 wave, batch 1, started 11:30:44Z from ea6d346** (driver wave-b1.sh, sha256 01919330a07249d6dd484d86441b3a37483fa54ecede8a556b0d8d5d60b418de, out root /dev/shm/d1/wave). It runs N's base plans on all 15 set briefs, then the reviews on the first 5 set briefs in sorted label order: D and R, then A (voice cap 195), then S-dayone and S-full on day1-strengthened (voice cap 240), each at --parallel 5 with the owner channel on. It stops after batch 1's reviews for the first-batch read.
+
+### Category 2 wave, batch 1 (2026-11-18)
+
+The batch 1 driver (wave-b1.sh, sha256 01919330a07249d6dd484d86441b3a37483fa54ecede8a556b0d8d5d60b418de) ran detached on the runner VM from ea6d346, 11:30:44Z to 15:06:26Z, with no stop. Every cell ended and was scored; none was left unrun.
+
+| Stage | Cells | On the item | Of it, voice |
+|---|---|---|---|
+| wave-base (N on all 15 set briefs) | 15 | $3.01 | |
+| wave-b1-dr (D and R) | 10 | $2.53 | |
+| wave-b1-a (A) | 5 | $90.81 | $50.87 |
+| wave-b1-s (S-dayone and S-full, on day1-strengthened) | 10 | $226.02 | $108.10 |
+
+Batch 1 units: 2y3gmr5w 5ot0udw1 5v114qvs 5znd40o7 8yulj3nw.
+
+#### First-batch read
+
+| | A | S-dayone | S-full | D | R |
+|---|---|---|---|---|---|
+| Exposed (C2) | 4 of 5 | 4 of 5 | 5 of 5 | | |
+| Exposed (frozen reading) | 3 | 4 | 4 | | |
+| Waiting at the final gate | 1 | 0 | 1 | | |
+| Complete | 4 | 4 | 4 | | |
+| Approval recorded | 4 | 4 | 4 | | |
+| Voice: Astra in every phase, or fallback | 4 / 1 | 3 / 2 | 3 / 2 | | |
+| Unmatched start calls | 0 | 0 | 0 | | |
+| Owner questions | 44 | 19 | 48 | 4 | 4 |
+| "I don't know" rate | 0.43 | 0.26 | 0.54 | 0.25 | 0.25 |
+| Owner turns that answer a status line | 18 | 0 | 25 | 0 | 0 |
+| Gate-default acceptances | 3 | 0 | 4 | | |
+| Cost after the final gate, share of the arm's session cost | 2.6% ($2.39 of $90.81) | 0 | 1.8% ($2.22 of $120.57) | | |
+| Largest single session's share of its own cost | 19.8% (5ot0udw1) | | 8.6% (8yulj3nw) | | |
+
+Both arms with turns after the final gate stay under the 10% line read per arm. Read per session, A's 5ot0udw1 passes it: it waits at gate_rev 1 with 30 owner turns, 18 of them answering a status line, and the owner's reply was never recorded as an approval.
+
+#### S-dayone 5ot0udw1: not exposed, the session's own path
+
+The reader passed over this session's run.json because it carried no plan_input. The session's tool calls (names, paths and times only) show why:
+
+- It never called gstack's run driver (`gstack-autoplan next`). Every other gstack planning session so far did, in the smoke and in this batch. It ran the four phases itself with gstack's snapshot tool (init, methodology, create, amend-input, prepare-close) and the timing tool, with one native reviewer per phase.
+- At the end it read a gstack test fixture's reference run, wrote its own script that built a run.json in that shape at a path the driver does not use, and validated it with `gstack-artifact validate`, which accepted it.
+- It ended its turn with the owner brief. The brief's tail held no question mark, so the simulated owner ended the session (no_question), the same class as the smoke's original r4b sessions.
+
+So the not-exposed outcome is the arm's own, under the frozen reading and under C2. The session cost $21.30 on the item, ran 442 agent turns and left the largest plan.md in the batch.
+
+#### One harness-caused voice loss
+
+On the path this session took, gstack's Codex probe refused the voice: with a custom Codex provider (the harness's metering proxy) it requires a plan-review model id in gstack's own config or GSTACK_CODEX_MODEL, and the harness sets the model only in Codex's config.toml. gstack's outside-voice runner, which the run driver uses, accepts the same config, so no session on the driver path lost its voice this way. Across the 89 session transcripts on the VM, the refusal appears in this one session only. It is recorded as a harness-caused fallback and goes to the Captain with the batch.
+
+#### Voice fallback by cause
+
+| Session | Arm | Cause | Voice spend |
+|---|---|---|---|
+| 5ot0udw1 | S-dayone | Astra never ran: the Codex probe refused the proxy provider on the session's own manual path (harness-caused) | $0 |
+| 2y3gmr5w | S-dayone | Astra ran in all 8 attempts, and every result file held only Astra's closing summary, so gstack marked each phase's voice unavailable (missing_markers) | $9.78 |
+| 2y3gmr5w | S-full | Astra accepted in ceo, design and dx; the last eng reopen hit the session's $15 voice allowance (402 E_ALLOWANCE) | $12.73 |
+| 5znd40o7 | S-full | Astra accepted in ceo, design and dx; the last eng reopen hit the $15 voice allowance | $13.15 |
+| 8yulj3nw | A | Astra accepted in 6 of 8 phase runs over two rounds (one closing-summary-only result, one $15 allowance stop); a third round passed gstack's round cap of 2, so every phase of it was skipped, which is the final state the reader reads | $12.88 |
+
+Three of the five trace to the frozen $15 per-session voice allowance, one to Astra's output, one to the harness.
+
+#### Batches 2 and 3, D and R
+
+wave-b23-dr.sh (sha256 a50f957543237e6fe9588f517fcbaed0cf30dbfe9cc0ab13f139ebf87263c484) started detached at 15:29:39Z from ea6d346 under batch 1's flags: D and R on batch 2 (ac4e9kq5 bws1no38 bxiyw7sv i4w8io8d j3ss8n04), then on batch 3 (p3u7o8nk pdq7hbat t7g3hawp u2pg3s93 xd8xqv6n). A and S for these batches wait for the harness ruling.
+
+#### Handling note
+
+One read during this check printed the session's last turn, which quotes its plan, into the operator's console. Nothing from it is in the repo, the wiki or any report.
+
+### Rulings after the first-batch read, and batches 2 and 3 A and S (2026-11-18)
+
+Rulings for the rest of the wave:
+
+- The harness-caused voice loss counts apart from the arm's own fallback. Nothing changes mid-wave. Two more sessions hitting the same probe refusal reopen the question.
+- Turns after the final gate are read per arm against the 10% line.
+- The $15 per-session voice allowance stays frozen. It is the eval's cost control, not part of gstack, and it hits S-full harder because S-full uses more voice. Three things follow. The results split voice fallback by cause per arm: the allowance, gstack's result mismatch, the harness path and the model's own choice. Each S minus A comparison gets a sensitivity line on sessions with no allowance-caused fallback, beside the primary. If an S arm's allowance-caused fallback rate passes 20% at the end of the wave, its merge-rule reading carries that caveat: a miss there cannot read as a clean loss and reads FIX-METHOD (harness budget).
+- Category 1's A sessions wait for a projection of the voice line against what it has left.
+
+wave-b23-as.sh (sha256 8741d2ab6c716a38ca64f927f1718de81b937e8fb0281fe6f3b379e4ec364f71) was launched detached at 15:34:58Z from ea6d346. It waits for the D and R driver, because every planning launch leases day1-owner, then runs batch 2's A (voice cap $144.13, what day1-voice has left, at --parallel 4), batch 2's S-dayone and S-full (voice cap $240, --parallel 5), then batch 3's A and S. Batch 3's A voice cap is $144.13 less batch 2's A voice, at the largest --parallel up to 4 whose round worst case ($30 of voice a cell) fits it. The driver stops instead of starting batch 3's A if that cap holds less than one cell.
+
+Reading session records from here on prints lengths, hashes and labels only.
+
+### Batches 2 and 3 D and R, and batch 2's A (2026-11-18)
+
+| Stage | Cells | Window (UTC) | On the item | Of it, voice |
+|---|---|---|---|---|
+| wave-b2-dr | 10 | 15:29:39 to 15:35:02 | $3.48 | |
+| wave-b3-dr | 10 | 15:35:02 to 15:40:31 | $3.28 | |
+| wave-b2-a (--parallel 4, voice cap $144.13) | 5 | 15:40:53 to 17:23:16 | $90.59 | $49.36 |
+
+Batch 2's A, all 5 scored, no stop, 0 unmatched start calls: exposed 4 of 5 under C2 (3 under the frozen reading), complete 3, waiting at the final gate 1 (bxiyw7sv, 30 owner turns, 21 of them status lines), 45 owner questions, "I don't know" rate 0.49, 5 gate-default acceptances. Cost after the final gate: 0.7% of the arm's session cost, largest single session 3.3%.
+
+Voice fallback in batch 2's A, by cause:
+
+- j3ss8n04: gstack's result mismatch. Every Astra result was marked missing_markers.
+- bws1no38: the model's own choice. Astra was accepted in all 8 phase runs over two rounds. A third round opened after the owner's gate answers, and the session ended its turn without running it and without a question, so the simulated owner ended the session with the run awaiting a result. Not exposed.
+
+The harness-path probe refusal has still appeared in only one session (batch 1's S-dayone 5ot0udw1).
+
+D's "I don't know" rate was 0.75 and R's 0.80 in batch 2 (4 and 5 questions).
+
+### Batch 2's S-dayone and S-full (2026-11-18)
+
+wave-b2-s ran 17:23:16Z to 19:50:52Z at --parallel 5 with no stop: 10 cells scored, $197.85 on day1-strengthened ($99.68 voice). Unmatched start calls: 0 in both arms.
+
+| | S-dayone | S-full |
+|---|---|---|
+| Exposed (C2) / frozen reading | 5 / 5 | 3 / 3 |
+| Complete, approval recorded | 5 | 3 |
+| Waiting at the final gate | 0 | 0 |
+| Voice fallback | 1 | 3 |
+| Owner questions | 32 | 17 |
+| "I don't know" rate | 0.12 | 0.18 |
+| Status-line turns | 1 | 0 |
+| Gate-default acceptances | 5 | 0 |
+
+Sessions that were not exposed, or fell back, by cause (labels and error codes only):
+
+- S-full bxiyw7sv: the model's own choice. In 2 agent turns and 189 seconds ($0.16) it read the brief and the plan, ran gstack's skill preamble, then ended its turn with a short message and no question, so the simulated owner ended the session. It never called gstack's run driver. Not exposed, Astra never ran. This is the second gstack planning session so far that never called the run driver.
+- S-full i4w8io8d: the model's own choice. Its last `gstack-autoplan next` dispatched the dx phase, and the session ended its turn without running the dx reviewers and without a question, so the run was left awaiting a result. Not exposed. ceo's and design's Astra results in its final round were also marked missing_markers.
+- S-full j3ss8n04: gstack's result mismatch. Exposed and complete, and every phase's Astra result was marked missing_markers.
+- S-dayone ac4e9kq5: the allowance. Astra was accepted in both of the first two rounds. In the third round, design and dx hit the $15 voice allowance (402 E_ALLOWANCE in the voice's event log). gstack labelled eng's voice "Codex authentication failed", with no attempt logged. Exposed and complete.
+
+The harness-path probe refusal still appears in only one session (batch 1's S-dayone 5ot0udw1).
+
+wave-b3-a started at 19:50:52Z at --parallel 3 with a voice cap of $94.77, which is $144.13 less batch 2's A voice of $49.36.
+
+### Rulings after batch 2 (2026-11-18)
+
+- S-full bxiyw7sv counts as S-full's own session that was not exposed, cause "model's own choice".
+- The results add one descriptive line per arm with two counts: sessions that never called the run driver, and sessions that ended their turn right after a dispatch. After batches 1 and 2: A 0 and 1, S-dayone 1 and 0, S-full 1 and 1. If S-full reaches 4 of 15 or more on the two combined by the end of category 2, that goes back for a ruling before category 1, because at that point it shapes S-full's verdict.
+- Both counts come from structured fields only (earlyend.sh on the VM). Driver calls are counted with jq over Bash tool_use inputs and only the count is printed. The dispatch state comes from the gstack-written run.json's status and each phase's native and outside status, and the session end from the trial record's session_end.cause.
+- Session logs are read only through structured fields from now on: jq on event type, error code and status. A needed field that is not structured gets counted, never printed.
+
+### Batch 3, the category 2 review totals, and the start of builds (2026-11-19)
+
+wave-b3-a ran at --parallel 3 from 19:50:52Z. Its last two cells hit the admission stop, because their $60 of voice worst case passed the $56.46 left under the cap, so the driver relaunched them at --parallel 1. It ended at 22:14:02Z: 5 cells, $87.08 on day1-plans, $44.62 of it voice. wave-b3-s ran 22:14:02Z to 00:49:33Z: 10 cells, $224.17 on day1-strengthened, $98.76 of it voice. No stops, nothing unrun, 0 unmatched start calls.
+
+| Batch 3 | A | S-dayone | S-full |
+|---|---|---|---|
+| Exposed (C2) / frozen reading | 5 / 4 | 3 / 3 | 4 / 4 |
+| Complete | 4 | 3 | 4 |
+| Waiting at the final gate | 1 | 0 | 0 |
+| Voice fallback | 1 | 1 | 2 |
+| "I don't know" rate | 0.39 | 0.30 | 0.11 |
+| Status-line turns | 14 | 0 | 0 |
+
+A's turns after the final gate cost 2.8% of the arm's batch 3 session cost.
+
+Category 2 reviews, all 15 briefs per arm:
+
+| | A | S-dayone | S-full |
+|---|---|---|---|
+| Exposed (C2) | 13 | 12 | 12 |
+| Exposed (frozen reading) | 10 | 12 | 11 |
+| Never called the run driver | 0 | 1 | 2 |
+| Ended the turn right after a dispatch | 1 | 2 | 1 |
+| Voice fallback | 4 | 4 | 7 |
+| of it: the $15 allowance | 1 | 1 | 3 |
+| of it: gstack's result mismatch | 2 | 2 | 1 |
+| of it: the harness path | 0 | 1 | 0 |
+| of it: the model's own choice | 1 | 0 | 3 |
+
+Both early-ending counts and every cause come from structured fields (earlyend2.sh and causes.sh on the VM). When a session has more than one cause, it takes the first in this order: harness path, allowance, model's own choice, gstack's result mismatch. The first count script matched "gstack-autoplan next" inside a longer token, which counted S-full pdq7hbat as calling the driver. The recount matches the exact subcommand. pdq7hbat never ran the driver, wrote its own run.json and skipped the voice in every phase.
+
+S-full's allowance-caused fallback is 3 of 15, which is 20.0%: at the line, not over it.
+
+Spend on the category 2 reviews: N base $3.01; D and R $9.29; A $268.48, of it voice $144.85; S-dayone and S-full $648.04, of it voice $306.54. day1-voice has $50.15 left.
+
+The runner machine that holds this record lost DNS from about 00:50Z to 03:05Z. The VM's drivers were not affected.
+
+Builds and checks. wave-bc.sh (sha256 6b7d8820861581ab6beab848cb55977f617954f82b7c2477b3ebd7047aa4e43c) and wave-bcs.sh (sha256 43cd77c0f2c14733c17c64354ff2bd3f698bf1b4c94d362981c43bfc20c61c87) were launched together at 03:10:17Z: builds then checks on all 15 set briefs at --parallel 5, N, D, R and A on day1-builds and day1-checks, and S-dayone and S-full on day1-strengthened. The S stage started its proxy. The other stage stopped 9 seconds later with E_INTERNAL "the proxy container did not come up", having spent nothing, and its lease settled at $0. The rig runs one proxy at a time on a host. wave-bc2.sh (sha256 35bae9400de171358043b3ed9687f74c5fafc38083adea2dc8b73889667789ff), launched at 03:11:38Z, waits for the S driver to finish, then runs the N, D, R and A builds and checks under the same flags and tags.
+
+### Text-only final turns (2026-11-19)
+
+This is a descriptive count added beside the two early-ending counts. It changes no trigger or gate. For each category 2 review session in a gstack arm, the final turn is the span between the SDK's last two result events. A final turn is text-only when it holds no tool call and at least one text block. Every gstack session called gstack-skill-start. The counts come from event types and tool-call counts only (finalturn.sh and finalturn.jq on the VM), and no text was printed.
+
+| | A | S-dayone | S-full |
+|---|---|---|---|
+| Sessions with a skill-start call | 15 | 15 | 15 |
+| Final turn text-only | 1 | 0 | 0 |
+| of those, run neither complete nor waiting at its final gate | 0 | 0 | 0 |
+
+The one text-only final turn is A's 5ot0udw1 in batch 1. Its run waits at its final gate, and its last turn answered the owner with text only. The sessions that ended early (the never-called-the-driver and ended-after-a-dispatch counts) all made tool calls in their final turn before the closing text, so this count does not pick them up.
+
+### Category 2 builds and checks (2026-11-19)
+
+- **Two stage drivers at once can't share the runner.** wave-bc.sh (N, D, R and A builds, then checks; sha256 6b7d8820861581ab6beab848cb55977f617954f82b7c2477b3ebd7047aa4e43c) and wave-bcs.sh (S-dayone and S-full builds, then checks, on day1-strengthened; sha256 43cd77c0f2c14733c17c64354ff2bd3f698bf1b4c94d362981c43bfc20c61c87) were launched together at 03:10:17Z from ea6d346. wave-bc stopped 9 seconds later at its first stage with E_INTERNAL "the proxy container did not come up", because the rig runs one metering proxy per host and wave-bcs's proxy already held it. It ran no cell, and the day1-builds lease settled at 0 dollars.
+- **wave-bc2.sh** (sha256 35bae9400de171358043b3ed9687f74c5fafc38083adea2dc8b73889667789ff), launched 03:11:38Z, waits for wave-bcs to finish and then runs the same two N, D, R and A stages with flags identical to wave-bc.sh's.
+- **S builds (wave-build-s, 03:10:18Z to 05:33:21Z): 30 cells ended, 0 unrun, 0 stops.** 126.12 dollars on day1-strengthened, 0 on the voice, 0 on the responder.
+- **S checks (wave-check-s, 05:33:21Z to 05:58:07Z): 30 cells ended, 0 unrun, 0 stops.** 9.35 dollars on day1-strengthened.
+- **wave-bc2's first start (05:58:36Z) stopped at once on E_USAGE**: the 03:10 launch had already created its receipts sink, and the stage refuses a sink that exists. Nothing ran and nothing was spent. The old sink was moved aside (wave-build-p5-proxyfail-0310, kept), and wave-bc2.sh was relaunched unchanged at 06:00:19Z. Its build stage reuses the 03:10 launch's stage manifest, which the stage accepts only because the flags are identical.
+- Lesson for the next driver: a stage that fails before its first cell still leaves its receipts sink, so a relaunch under the same name needs that sink moved aside first.
