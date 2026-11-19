@@ -329,6 +329,9 @@
     "lanes/delivery-route/cli.ts": [
       "tests/delivery-route/plan.test.ts"
     ],
+    "lanes/delivery-route/b1d-build.sh": [
+      "tests/delivery-route/b1d.test.ts"
+    ],
     "lanes/harness-mechanics/cli.ts": [
       "tests/harness-mechanics/hold.test.ts",
       "tests/harness-mechanics/judge-wiring.test.ts"
