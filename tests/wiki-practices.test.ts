@@ -61,7 +61,7 @@ Days: 1
 
 const PASSING_RESULTS = `# The hook raised loads
 
-Cost and call: paid $412.50, meter $96; settled: the hook stays on by default (KEEP)
+Call settled: the hook stays on by default (KEEP)
 `;
 
 function check(files: Record<string, string>, baseFiles: Map<string, Buffer> | null = new Map()): string[] {
@@ -127,6 +127,13 @@ describe("practice 3: a pilot for every arm", () => {
     expect(has(problems, 'arm "hook on" does not say how its pilot shows the judge passes')).toBe(true);
   });
 
+  test("plain, comma and k dollar figures parse; a glued unit fails closed", () => {
+    const row = (budget: string, cap: string) => check(prereg(swap("| $300 | $30 |", "| " + budget + " | " + cap + " |")));
+    expect(row("$700", "$700")).toEqual([PREREG + ': practice 3: arm "no gstack" pilot cap $700 is more than a tenth of its budget $700']);
+    expect(row("$1,200", "$1.2k")).toEqual([PREREG + ': practice 3: arm "no gstack" pilot cap $1200 is more than a tenth of its budget $1200']);
+    expect(row("$300USD", "$30")).toEqual([PREREG + ': practice 3: arm "no gstack" needs its budget and pilot cap in dollars, such as $400 and $40']);
+  });
+
   test("a pilot row with the wrong number of cells fails", () => {
     const problems = check(prereg(swap("| $300 | $30 |", "| $300 |")));
     expect(has(problems, 'pilot row "no gstack | $300 |')).toBe(true);
@@ -177,6 +184,13 @@ describe("practice 6: one planned look above $500 paid", () => {
     expect(has(problems, 'practice 6: a run planned above $500 paid needs "At: half the units')).toBe(true);
   });
 
+  test("a spend with a unit glued on or spelled out fails closed", () => {
+    for (const spend of ["$700USD", "$1.2kUSD", "$1.5 million"]) {
+      const problems = check(prereg(swap(/Planned paid spend: \$700\n[\s\S]*$/, "Planned paid spend: " + spend + "\n")));
+      expect(has(problems, 'practice 6: "## Interim look" needs "Planned paid spend: $<n>"')).toBe(true);
+    }
+  });
+
   test("a prereg with no interim look section fails", () => {
     const problems = check(prereg(swap(/## Interim look\n[\s\S]*$/, "")));
     expect(has(problems, 'practice 6: no "## Interim look" section')).toBe(true);
@@ -211,6 +225,11 @@ describe("code fences", () => {
     expect(check(prereg(swap("## Pilots\n", "## Pilots\n\n```bash\n# run the pilot\n```\n")))).toEqual([]);
   });
 
+  test("a line opening with an inline code span is prose, not a fence", () => {
+    const problems = check(prereg(swap("Judge: openai/gpt-6-astra scores anthropic/claude-opus-5-5\n", "Judge: openai/gpt-6-astra scores anthropic/claude-opus-5-5\n```inline``` code opens this prose line\nJudge: anthropic/claude-opus-5-5 scores anthropic/claude-sonnet-5-5\n")));
+    expect(has(problems, 'practice 5: judge "anthropic/claude-opus-5-5" is from the same model family')).toBe(true);
+  });
+
   test("a fenced results line does not count", () => {
     const problems = check({ [RESULTS]: post(RESULTS_ID, "finding", "# Results\n\n```\n" + PASSING_RESULTS + "```\n") });
     expect(has(problems, "practice 12")).toBe(true);
@@ -235,23 +254,28 @@ describe("the quick-look exemption", () => {
 });
 
 describe("practice 12: the results line", () => {
-  test("a results page with its cost and call line passes", () => {
+  test("a results page with its call line passes", () => {
     expect(check({ [RESULTS]: post(RESULTS_ID, "finding", PASSING_RESULTS) })).toEqual([]);
   });
 
   test("a call of none passes", () => {
-    expect(check({ [RESULTS]: post(RESULTS_ID, "finding", "Cost and call: paid $0, meter $12.40; settled: none\n") })).toEqual([]);
+    expect(check({ [RESULTS]: post(RESULTS_ID, "finding", "Call settled: none\n") })).toEqual([]);
   });
 
   test("a results page titled Quick look is checked as a results page", () => {
     const quickResults = (body: string) => ({ [RESULTS]: post(RESULTS_ID, "finding", body, "Quick look 4 results") });
-    expect(has(check(quickResults("# Quick look 4 results\n\nIt cost $40.\n")), 'practice 12: no "Cost and call: paid $<n>, meter $<n>; settled:')).toBe(true);
+    expect(has(check(quickResults("# Quick look 4 results\n\nIt cost $40.\n")), 'practice 12: no "Call settled: <the ship-or-kill call, or none>" line')).toBe(true);
     expect(check(quickResults(PASSING_RESULTS))).toEqual([]);
+  });
+
+  test("the old cost and call line no longer counts", () => {
+    const problems = check({ [RESULTS]: post(RESULTS_ID, "finding", "Cost and call: paid $412.50, meter $96; settled: KEEP\n") });
+    expect(has(problems, 'practice 12: no "Call settled:')).toBe(true);
   });
 
   test("a results page without the line fails", () => {
     const problems = check({ [RESULTS]: post(RESULTS_ID, "finding", "# The hook raised loads\n\nIt cost $412.50.\n") });
-    expect(has(problems, 'practice 12: no "Cost and call: paid $<n>, meter $<n>; settled:')).toBe(true);
+    expect(has(problems, 'practice 12: no "Call settled: <the ship-or-kill call, or none>" line')).toBe(true);
   });
 });
 

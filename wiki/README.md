@@ -102,7 +102,7 @@ A skill posts the same way. /autoplan can file a plan bundle in plans/, /retro o
 
 ## Eval plans and results
 
-New eval plans and results pages carry a few fixed headings and labelled lines, so the check can confirm five practices every eval here already follows: name the decision the result changes, pilot every arm, check the judge, take one planned look, and record what the eval cost and what it settled. Problems name them by their number on the team's eval-loop checklist: 1, 3, 5, 6 and 12.
+New eval plans and results pages carry a few fixed headings and labelled lines, so the check can confirm five practices every eval here already follows: name the decision the result changes, pilot every arm, check the judge, take one planned look, and record what the eval settled. Problems name them by their number on the team's eval-loop checklist: 1, 3, 5, 6 and 12.
 
 The check reads these posts:
 
@@ -161,10 +161,10 @@ Days: 1
 
 A quick look above $100 or longer than a day fails: it is a counted run and needs a preregistration.
 
-A results page carries one line with its paid cost, its cost on Capy's meter, and the ship-or-kill call it settled, or `none`:
+A results page carries one line with the ship-or-kill call it settled, or `none`. Its paid and meter cost go in the experiment's private registry row, not on the page:
 
 ```markdown
-Cost and call: paid $412.50, meter $96; settled: the hook stays on by default (KEEP)
+Call settled: the hook stays on by default (KEEP)
 ```
 
 ## The check

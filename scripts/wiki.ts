@@ -351,7 +351,7 @@ function bodyLines(text: string): string[] {
   return lines.slice(close + 1).filter((l) => {
     const f = l.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
     if (!fence) {
-      if (!f) return true;
+      if (!f || (f[1][0] === "`" && f[2].includes("`"))) return true;
       fence = f[1];
       return false;
     }
@@ -388,8 +388,8 @@ function tableRows(lines: string[]): string[][] {
 }
 
 const dollars = (s: string | undefined) => {
-  const m = (s ?? "").match(/\$ *(\d[\d,]*(?:\.\d+)?)([kKmM])?(?![a-zA-Z])/);
-  return m ? Number(m[1].replaceAll(",", "")) * (m[2] ? (/k/i.test(m[2]) ? 1e3 : 1e6) : 1) : null;
+  const m = (s ?? "").match(/\$ *(\d[\d,]*(?:\.\d+)?)([km])?(?![\d.,]*(?:[a-z]|\s+(?:thousand|million|billion)\b))/i);
+  return m ? Number(m[1].replaceAll(",", "")) * (m[2] ? (m[2].toLowerCase() === "k" ? 1e3 : 1e6) : 1) : null;
 };
 const blank = (s: string | undefined) => !s || /^(?:-|none|n\/a)$/i.test(s.trim());
 const HOW = " (wiki/README.md, Eval plans and results, gives the format)";
@@ -477,7 +477,7 @@ function checkQuickLook(lines: string[], p: (message: string) => void) {
   else if (days > 1) p("quick look: " + days + " days is longer than one day, so this is a counted run and needs a preregistration (id ending -prereg)");
 }
 
-const COST_AND_CALL = /^Cost and call: paid \$\d[\d,]*(?:\.\d+)?, meter \$\d[\d,]*(?:\.\d+)?; settled: \S/;
+const CALL_SETTLED = /^Call settled: \S/;
 
 export function checkPractices(root: string, entries: Entry[], baseFiles: Map<string, Buffer>, problems: Problem[]) {
   for (const e of entries) {
@@ -487,7 +487,7 @@ export function checkPractices(root: string, entries: Entry[], baseFiles: Map<st
     const p = (message: string) => problems.push({ file: e.path, message });
     if (kind === "prereg") checkPrereg(lines, p);
     else if (kind === "quick-look") checkQuickLook(lines, p);
-    else if (!lines.some((l) => COST_AND_CALL.test(l))) p('practice 12: no "Cost and call: paid $<n>, meter $<n>; settled: <the ship-or-kill call, or none>" line' + HOW);
+    else if (!lines.some((l) => CALL_SETTLED.test(l))) p('practice 12: no "Call settled: <the ship-or-kill call, or none>" line' + HOW);
   }
 }
 

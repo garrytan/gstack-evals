@@ -2,7 +2,7 @@
 id: 2026-11-19-geva-564-eval-plan-check
 kind: decision
 title: The wiki check refuses a new preregistration or results page that skips the eval-loop practices
-summary: "New preregistrations must name the decision, pilot every arm, check the judge and plan one look above $500; quick looks carry a three-line plan; results pages carry a cost and call line."
+summary: "New preregistrations must name the decision, pilot every arm, check the judge and plan one look above $500; quick looks carry a three-line plan; results pages carry the call they settled."
 author: GEVA-564
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
@@ -25,7 +25,7 @@ Garry asked that every eval follow the team's eval-loop practices, and that the 
 3. when a model judge scores the run, its check: at least 40 labelled outputs, a kappa of at least 0.6, a judge from another lab than the models it scores, and its errors read per arm;
 4. when the largest counted run is planned above $500 paid, one look at half the units, with stop bounds fixed in the plan and no other look.
 
-A quick look (at most $100 paid, one day) is exempt, but must carry its question, decision and stop rule. A new results page must carry one line with its paid cost, its meter cost and the ship-or-kill call it settled, or "none".
+A quick look (at most $100 paid, one day) is exempt, but must carry its question, decision and stop rule. A new results page must carry one line with the ship-or-kill call it settled, or "none". Its paid and meter cost go in the experiment's private registry row, not on the public page.
 
 The format is in wiki/README.md, under "Eval plans and results": four headings and a few labelled lines. The check reads only those, never free prose.
 
