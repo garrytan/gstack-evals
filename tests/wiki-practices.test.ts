@@ -157,6 +157,10 @@ describe("practice 5: the judge check", () => {
     expect(has(problems, 'practice 5: judge "anthropic/claude-opus-5-5" is from the same model family as "anthropic/claude-opus-5-5"')).toBe(true);
   });
 
+  test("a label count written with a thousands comma is read whole", () => {
+    expect(check(prereg(swap("Labelled outputs: 40", "Labelled outputs: 1,000")))).toEqual([]);
+  });
+
   test("fewer than 40 labels, a kappa under 0.6 or pooled errors fail", () => {
     const problems = check(prereg(swap("Labelled outputs: 40\nKappa at least: 0.6\nErrors read: per arm", "Labelled outputs: 39\nKappa at least: 0.5\nErrors read: pooled")));
     expect(problems.filter((p) => p.includes("practice 5"))).toHaveLength(3);
@@ -166,6 +170,11 @@ describe("practice 5: the judge check", () => {
 describe("practice 6: one planned look above $500 paid", () => {
   test("a run planned at $500 paid or less needs no look", () => {
     expect(check(prereg(swap(/Planned paid spend: \$700\n[\s\S]*$/, "Planned paid spend: $500\nLook: none, at or under $500\n")))).toEqual([]);
+  });
+
+  test("a planned spend written with a k suffix is read in thousands and needs the look", () => {
+    const problems = check(prereg(swap(/Planned paid spend: \$700\n[\s\S]*$/, "Planned paid spend: $1.2k\n")));
+    expect(has(problems, 'practice 6: a run planned above $500 paid needs "At: half the units')).toBe(true);
   });
 
   test("a prereg with no interim look section fails", () => {
@@ -187,6 +196,24 @@ describe("which posts are checked", () => {
 
   test("an amendment that is not a preregistration is not checked", () => {
     expect(check(prereg("# Amendment\n", "2026-11-20-geva-9-hook-prereg-addendum", "Addendum 1 to the hook preregistration"))).toEqual([]);
+  });
+});
+
+describe("code fences", () => {
+  test("a fenced copy of the template does not count as the plan", () => {
+    for (const fence of ["```", "~~~"]) {
+      const problems = check(prereg("# Plan\n\nThis is only an example, not the plan.\n\n" + fence + "markdown\n" + PASSING_PREREG + fence + "\n"));
+      expect(problems.filter((p) => p.includes("practice"))).toHaveLength(4);
+    }
+  });
+
+  test("a heading-like comment inside a fence does not end the section around it", () => {
+    expect(check(prereg(swap("## Pilots\n", "## Pilots\n\n```bash\n# run the pilot\n```\n")))).toEqual([]);
+  });
+
+  test("a fenced results line does not count", () => {
+    const problems = check({ [RESULTS]: post(RESULTS_ID, "finding", "# Results\n\n```\n" + PASSING_RESULTS + "```\n") });
+    expect(has(problems, "practice 12")).toBe(true);
   });
 });
 

@@ -347,7 +347,17 @@ export function evalKind(e: Entry): EvalKind | null {
 function bodyLines(text: string): string[] {
   const lines = text.split("\n");
   const close = lines[0] === "---" ? lines.indexOf("---", 1) : -1;
-  return lines.slice(close + 1);
+  let fence = "";
+  return lines.slice(close + 1).filter((l) => {
+    const f = l.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
+    if (!fence) {
+      if (!f) return true;
+      fence = f[1];
+      return false;
+    }
+    if (f && f[1][0] === fence[0] && f[1].length >= fence.length && !f[2].trim()) fence = "";
+    return false;
+  });
 }
 
 function sectionLines(lines: string[], name: string): string[] | null {
@@ -378,8 +388,8 @@ function tableRows(lines: string[]): string[][] {
 }
 
 const dollars = (s: string | undefined) => {
-  const m = (s ?? "").match(/\$ *(\d[\d,]*(?:\.\d+)?)/);
-  return m ? Number(m[1].replaceAll(",", "")) : null;
+  const m = (s ?? "").match(/\$ *(\d[\d,]*(?:\.\d+)?)([kKmM])?(?![a-zA-Z])/);
+  return m ? Number(m[1].replaceAll(",", "")) * (m[2] ? (/k/i.test(m[2]) ? 1e3 : 1e6) : 1) : null;
 };
 const blank = (s: string | undefined) => !s || /^(?:-|none|n\/a)$/i.test(s.trim());
 const HOW = " (wiki/README.md, Eval plans and results, gives the format)";
@@ -412,7 +422,7 @@ function checkPrereg(lines: string[], p: (message: string) => void) {
         else if (lab.toLowerCase() === m[1].toLowerCase()) p('practice 5: judge "' + j.split(" ")[0] + '" is from the same model family as "' + scored + '" it scores; use a judge from another lab');
       }
     }
-    const labels = Number(labelled(judge, "Labelled outputs")[0]?.match(/^\d+/)?.[0] ?? NaN);
+    const labels = Number(labelled(judge, "Labelled outputs")[0]?.replaceAll(",", "").match(/^\d+/)?.[0] ?? NaN);
     if (!(labels >= 40)) p('practice 5: "Labelled outputs:" must give at least 40 labelled outputs for the judge check' + HOW);
     const kappa = Number(labelled(judge, "Kappa at least")[0]?.match(/^\d*\.?\d+/)?.[0] ?? NaN);
     if (!(kappa >= 0.6)) p('practice 5: "Kappa at least:" must be 0.6 or more' + HOW);
