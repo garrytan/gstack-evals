@@ -424,3 +424,9 @@ The one text-only final turn is A's 5ot0udw1 in batch 1. Its run waits at its fi
 - **The judge on category 2 plans** (secondary read; ruled 2026-11-19: once, with its own controls): N plans with the controls (45 packets), the other 75 plans without, every cell labelled. Controls: stock covered 0 of 45 primary checks (2 allowed), volume 0.989 on 89 pairs, passed. The read counts as section 10's descriptive read.
 - **Readings** (day-one read over each checker's stages, and a structured-field read of the judge's labels): in the results README. Had they counted, both checkers' readings would read cut under section 10, the source reading neither, and the strengthened variants' rule day-one pass only.
 
+
+### After the results pull request opened (2026-11-19)
+
+- **The pull request's first review found two gaps in the lane's code and one overstated custody sentence.** All three are fixed in one commit. The command reader now reads a command inside an if, while, for or brace body (it had taken the reserved word as the command's name). A reading now counts only when every check stage in it ran the checker its validation scored: the validation receipt records that checker's text hash, and read compares it with each stage's manifest. The results page now names the four disk copies of gold-packet reads.
+- **Neither code gap changes a reading.** The new command reader was compared with the one that ran on all 340 session transcripts on the runner, with no spend. No session gains or loses an autoplan start or revise call. The only added calls are one recommend and one release, neither of which starts a run, and no added write or folder touches a run record in a counted session. Run attribution is unchanged in all 63 A and S review sessions. The read gate never admitted a reading, because neither validation passed.
+

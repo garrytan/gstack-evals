@@ -93,6 +93,25 @@ describe("the session's autoplan run record", () => {
       expect(gatePending(work, tx([{ command: SCAFFOLD }]))).toBe(true);
     }));
 
+  test("a call or a hand edit inside an if, while, for or brace body is read like any other command", () =>
+    withDir((dir) => {
+      const work = join(dir, "work");
+      const roots: RunRoot[] = [{ dir: work, seen: WORK }];
+      put(work, WORK, RUN, body({ status: "gate_pending" }));
+      const wrapped = tx([{ command: "cd /work/app; if command -v codex >/dev/null; then " + BIN + " next --out " + RUN + " --plan /work/app/plan.md --full; fi" }]);
+      expect(findRun(roots, wrapped).run?.seen).toBe(RUN + "/run.json");
+      expect(gatePending(work, wrapped)).toBe(true);
+      const looped = tx([{ command: "cd /work/app; for i in 1; do ! " + BIN + " next --out " + RUN + " --plan /work/app/plan.md --full; done" }]);
+      expect(findRun(roots, looped).run?.seen).toBe(RUN + "/run.json");
+      const assigned = tx([{ command: "cd /work/app; if true; then R=.gstack/tmp/autoplan/run; B=~/.claude/skills/gstack/bin; { $B/gstack-autoplan next --out $R --plan plan.md --full; }; fi" }]);
+      expect(findRun(roots, assigned).run?.seen).toBe(RUN + "/run.json");
+      const edited = tx([{ command: SCAFFOLD }, { command: "if [ -f " + RUN + "/run.json ]; then sed -i 's/gate_pending/complete/' " + RUN + "/run.json; fi" }]);
+      expect(findRun(roots, edited).run).toBeNull();
+      expect(gatePending(work, edited)).toBe(false);
+      const quoted = tx([{ command: "cd /work/app; 'then' " + BIN + " next --out " + RUN + " --plan /work/app/plan.md --full" }]);
+      expect(findRun(roots, quoted).run).toBeNull();
+    }));
+
   test("a record for a different plan_input is ignored, even when it is newer", () =>
     withDir((dir) => {
       const work = join(dir, "work");

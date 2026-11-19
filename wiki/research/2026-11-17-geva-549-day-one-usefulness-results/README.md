@@ -13,7 +13,7 @@ links:
   - 2026-11-17-geva-549-day-one-second-pin-change
   - lanes/day-one
 attachments:
-  - ef111919e170c124bd169626fe139c8f064610f7705a834208738434d7beb9aa  run-record.md
+  - a924081c6231a71e0b1efe70cc5317852130a2cbc746befbe7fd535ee90880c2  run-record.md
 ---
 
 # Day-one usefulness eval: no counted result
@@ -41,7 +41,7 @@ Each arm reviews the same plain Opus plan for a small new web app (N, the plain 
 
 Usable on day one equals covered in every arm. The plain plan covers 92% of all hidden tasks. D, R and A add at most 2.2 points. The two strengthened variants cover 9.6 and 12.2 points less of all tasks than the plain plan they reviewed, and 6.7 and 8.9 points less of the top three. Their plans are also about 9 and 7 times as long (mean 12,853 and 10,165 words, against 1,388 for N), and the judge's own volume control on the real briefs shows it gets stricter on longer plans, so part of that gap may be the judge.
 
-**The run itself was clean.** All 270 category 2 cells (90 plans, 90 builds, 90 checks) and the 90 re-checks ended with no stop and nothing unrun. Every build started, and no category 2 plan was excluded or contaminated. No sealed text left RAM-backed storage, and every opening and slip is in the custody record.
+**The run itself was clean.** All 270 category 2 cells (90 plans, 90 builds, 90 checks) and the 90 re-checks ended with no stop and nothing unrun. Every build started, and no category 2 plan was excluded or contaminated. On the runner, sealed text stayed in RAM-backed storage. On the crew's own machine, one tool kept disk copies of four long reads of gold packets, and the copies were deleted unopened within minutes. Every opening and slip, these included, is in the custody record.
 
 ## What did not work
 

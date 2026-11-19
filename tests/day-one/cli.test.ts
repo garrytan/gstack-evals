@@ -24,7 +24,7 @@ const onShm = (() => {
 const planRow = (stage: "base" | "review", unit: string, arm: "n" | "d", words: number) => ({ id: stage + "/" + unit + "/r1/" + arm, cell: { stage, unit, rep: 1, arm }, state: "scored", usd: 1, voice_usd: 0, owner_usd: 0, plan: { sha256: "x", words, from: "plan.md" } });
 const verdicts = (done: boolean[]) => ({ kind: "ok", tasks: done.map((d, i) => ({ id: "t" + (i + 1), done: d, why: "seen" })) });
 const checkRow = (unit: string, arm: string, done: boolean[]) => ({ id: "check/" + unit + "/r1/" + arm, cell: { stage: "check", unit, rep: 1, arm }, state: "scored", usd: 3, check: { started: true, parse: verdicts(done), score: { done }, app_writes: [] } });
-const stageDir = (out: string, name: string, rows: unknown[], manifest?: { units: string[]; reps: number[] }) => {
+const stageDir = (out: string, name: string, rows: unknown[], manifest?: { units: string[]; reps: number[]; checker_sha256?: string }) => {
   mkdirSync(join(out, name), { recursive: true });
   writeFileSync(join(out, name, "rows.ndjson"), rows.map((r) => JSON.stringify(r) + "\n").join(""));
   if (manifest) writeFileSync(join(out, name, "manifest.json"), JSON.stringify(manifest));
@@ -82,15 +82,42 @@ describe.skipIf(!onShm)("day-one read", () => {
       const out = join(dir, "out");
       stageDir(out, "base-counted", [planRow("base", "cccccc", "n", 100)]);
       stageDir(out, "review-counted", [planRow("review", "cccccc", "d", 100)]);
-      stageDir(out, "check-counted", [checkRow("cccccc", "n", [true, false, false, false, false]), checkRow("cccccc", "d", [true, true, false, false, false])], { units: ["cccccc"], reps: [1] });
+      stageDir(out, "check-counted", [checkRow("cccccc", "n", [true, false, false, false, false]), checkRow("cccccc", "d", [true, true, false, false, false])], { units: ["cccccc"], reps: [1], checker_sha256: "repaired" });
       writeFileSync(join(out, "fixtures-real.json"), JSON.stringify({ passed: true }));
       const argv = ["read", "--out", out, "--units-dir", units, "--tag", "counted", "--arms", "n", "d"];
-      writeFileSync(join(out, "validation.json"), JSON.stringify({ admitted: true, tags: ["repaired"] }));
+      writeFileSync(join(out, "validation.json"), JSON.stringify({ admitted: true, tags: ["repaired"], checker_sha256: "repaired" }));
       const other = JSON.parse((await run(argv)).out);
       expect(other.counted).toBe(false);
       expect(other.blocked).toEqual(["the checker validation scored repaired, not this reading's check stages"]);
-      writeFileSync(join(out, "validation.json"), JSON.stringify({ admitted: true, tags: ["counted"] }));
+      writeFileSync(join(out, "validation.json"), JSON.stringify({ admitted: true, tags: ["counted"], checker_sha256: "repaired" }));
       expect(JSON.parse((await run(argv)).out).counted).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a passing validation counts a reading only when every check stage in it ran the checker that was validated", async () => {
+    const dir = mkdtempSync("/dev/shm/day-one-read-");
+    try {
+      const units = join(dir, "units");
+      fixtureUnit(units, "cccccc", 2);
+      const out = join(dir, "out");
+      stageDir(out, "base-counted", [planRow("base", "cccccc", "n", 100)]);
+      stageDir(out, "review-counted", [planRow("review", "cccccc", "d", 100)]);
+      stageDir(out, "check-frozen", [checkRow("cccccc", "n", [false, false, false, false, false]), checkRow("cccccc", "d", [false, false, false, false, false])], { units: ["cccccc"], reps: [1] });
+      stageDir(out, "check-counted", [checkRow("cccccc", "n", [true, false, false, false, false]), checkRow("cccccc", "d", [true, true, false, false, false])], { units: ["cccccc"], reps: [1], checker_sha256: "repaired" });
+      stageDir(out, "check-counted-s", [], { units: ["cccccc"], reps: [1], checker_sha256: "repaired" });
+      writeFileSync(join(out, "fixtures-real.json"), JSON.stringify({ passed: true }));
+      const argv = (...tags: string[]) => ["read", "--out", out, "--units-dir", units, "--tag", ...tags, "--arms", "n", "d"];
+      writeFileSync(join(out, "validation.json"), JSON.stringify({ admitted: true, tags: ["counted"], checker_sha256: "repaired" }));
+      const mixed = JSON.parse((await run(argv("frozen", "counted"))).out);
+      expect(mixed.counted).toBe(false);
+      expect(mixed.blocked).toEqual(["the checker validation scored checker repaired, and this reading's check stages ran none, repaired"]);
+      const shared = JSON.parse((await run(argv("counted", "counted-s"))).out);
+      expect(shared.counted).toBe(true);
+      expect(shared.arms.d.share).toBe(0.4);
+      writeFileSync(join(out, "validation.json"), JSON.stringify({ admitted: true, tags: ["counted"] }));
+      expect(JSON.parse((await run(argv("counted"))).out).blocked).toEqual(["the checker validation scored checker none, and this reading's check stages ran repaired"]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -205,7 +232,7 @@ describe.skipIf(!onShm)("day-one validate", () => {
       const ids = ["aaaaaa", "bbbbbb", "cccccc", "dddddd"];
       for (const id of ids) fixtureUnit(units, id, 2);
       const rows = ids.flatMap((u, i) => ["n", "d", "r", "a"].map((a, j) => checkRow(u, a, [true, (i + j) % 2 === 0, j > 1, false, i === 2])));
-      stageDir(out, "check-wave", rows, { units: ids, reps: [1] });
+      stageDir(out, "check-wave", rows, { units: ids, reps: [1], checker_sha256: "repaired" });
       for (const r of rows) mkdirSync(join(out, "builds", r.cell.unit, "r1", r.cell.arm, "tree"), { recursive: true });
       const first = join(shm, "key1.json");
       expect((await run(["validate", "draw", "--out", out, "--units-dir", units, "--tag", "wave", "--dest", join(shm, "d1"), "--key", first, "--count", "8"])).code).toBe(0);
@@ -220,7 +247,7 @@ describe.skipIf(!onShm)("day-one validate", () => {
       const byId = new Map(rows.map((r) => [r.id, r]));
       writeFileSync(join(shm, "agree.ndjson"), Object.keys(k).map((l) => JSON.stringify({ label: l, tasks: byId.get(k[l]!.row)!.check.parse.tasks.map((t) => ({ id: t.id, done: t.done })) })).join("\n") + "\n");
       await run(["validate", "score", "--out", out, "--tag", "wave", "--key", second, "--labels", join(shm, "agree.ndjson")]);
-      expect(JSON.parse(readFileSync(join(out, "validation.json"), "utf8"))).toMatchObject({ tags: ["wave"], builds: 8, pairs: 40, kappa: 1 });
+      expect(JSON.parse(readFileSync(join(out, "validation.json"), "utf8"))).toMatchObject({ tags: ["wave"], checker_sha256: "repaired", builds: 8, pairs: 40, kappa: 1 });
     } finally {
       rmSync(shm, { recursive: true, force: true });
     }

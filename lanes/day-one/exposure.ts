@@ -309,6 +309,9 @@ const EDITS = ["Write", "Edit", "MultiEdit", "NotebookEdit"];
 const INTERPRETERS = new Set(["python", "python3", "node", "bun", "perl", "ruby"]);
 const WRAPPERS = new Set(["command", "exec", "nohup", "time", "builtin", "sudo", "nice"]);
 const SHELLS = new Set(["bash", "sh", "zsh", "dash"]);
+/** Reserved words that open or continue a compound command; the command they lead still runs. */
+const RESERVED = new Set(["if", "then", "else", "elif", "do", "while", "until", "!", "{"]);
+const reserved = (w: Piece[] | undefined) => w !== undefined && w.length === 1 && !w[0]!.q && RESERVED.has(w[0]!.t);
 /** The gstack-autoplan verbs that start a run from a plan file. */
 const STARTS = new Set(["next", "run"]);
 
@@ -345,7 +348,7 @@ export function commandLog(transcript: string): CommandLog {
     const words: Piece[][] = [];
     for (const w of raw) {
       for (const p of w) if (p.sub !== undefined) shell(p.sub, child(ctx), depth + 1);
-      const m = !ws.length && !w[0]!.q ? /^([A-Za-z_]\w*)=/.exec(w[0]!.t) : null;
+      const m = words.every(reserved) && !w[0]!.q ? /^([A-Za-z_]\w*)=/.exec(w[0]!.t) : null;
       if (m) ctx.env.set(m[1]!, expand([{ t: w[0]!.t.slice(m[0].length), q: false }, ...w.slice(1)], ctx.env));
       else {
         ws.push(expand(w, ctx.env));
@@ -355,7 +358,8 @@ export function commandLog(transcript: string): CommandLog {
     let k = 0;
     for (;;) {
       const name = posix.basename(ws[k] ?? "");
-      if (WRAPPERS.has(name)) {
+      if (reserved(words[k])) k++;
+      else if (WRAPPERS.has(name)) {
         k++;
         while ((ws[k] ?? "").startsWith("-")) k++;
       } else if (name === "env") {

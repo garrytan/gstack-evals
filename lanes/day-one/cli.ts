@@ -8,8 +8,9 @@
 // - read: the readings over the check stages' rows (analysis.ts), "not counted" until the checker validation and the
 //   fixtures with the real checker have passing receipts.
 // - validate draw / validate score: the checker validation (R78): a seeded, blinded draw of builds for hand labelling,
-//   then kappa on done against the checker's verdicts, written to <out>/validation.json with the check tags it scored;
-//   --exclude leaves out an earlier draw's builds, and a reading counts only on a validation of its own check tags.
+//   then kappa on done against the checker's verdicts, written to <out>/validation.json with the check tags it scored and
+//   the checker they ran; --exclude leaves out an earlier draw's builds, and a reading counts only on a validation of its
+//   own check tags whose checker every one of the reading's check stages ran.
 // - probe: the fidelity probe's frozen questions to the responder on practice profiles.
 // - dryrun: the keyless dry run (dryrun.ts).
 // - fixtures: the keyless checker fixtures, placeholder and reference app, on Docker (fixtures.ts); fixtures-real: the
@@ -329,16 +330,18 @@ function gold(f: Map<string, string[]>, io: Io): number {
 }
 
 /** The rows of the named check stages, and the units and replicates their manifests name. */
-function checkRows(out: string, tags: readonly string[]): { rows: Row[]; selected: Set<string> } {
+function checkRows(out: string, tags: readonly string[]): { rows: Row[]; selected: Set<string>; checkers: (string | null)[] } {
   const selected = new Set<string>();
+  const checkers: (string | null)[] = [];
   const rows = tags.flatMap((t) => {
     const dir = join(out, "check-" + t);
     if (!existsSync(join(dir, "manifest.json"))) refuse("--tag " + t + ": no check stage manifest at " + join(dir, "manifest.json"));
-    const m = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8")) as { units: string[]; reps: number[] };
+    const m = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8")) as { units: string[]; reps: number[]; checker_sha256?: string };
     for (const u of m.units) for (const r of m.reps) selected.add(u + "/r" + r);
+    checkers.push(m.checker_sha256 ?? null);
     return existsSync(join(dir, "rows.ndjson")) ? (readNd(join(dir, "rows.ndjson")) as Row[]) : [];
   });
-  return { rows, selected };
+  return { rows, selected, checkers };
 }
 
 const stageRows = (out: string, prefixes: readonly string[]): Row[] => readdirSync(out).filter((d) => prefixes.some((p) => d.startsWith(p))).flatMap((d) => (existsSync(join(out, d, "rows.ndjson")) ? (readNd(join(out, d, "rows.ndjson")) as Row[]) : []));
@@ -347,7 +350,7 @@ function readings(f: Map<string, string[]>, io: Io): number {
   const out = sealedPath(one(f, "--out"), "--out");
   const unitsDir = sealedPath(one(f, "--units-dir"), "--units-dir");
   const arms = (f.get("--arms") ?? refuse("missing --arms")) as PlanArm[];
-  const { rows, selected } = checkRows(out, tagsOf(f));
+  const { rows, selected, checkers } = checkRows(out, tagsOf(f));
   const planRows = stageRows(out, ["base-", "review-"]);
   const buildRows = stageRows(out, ["build-"]);
   const same = (a: Row, b: Row) => a.cell.unit === b.cell.unit && a.cell.rep === b.cell.rep && a.cell.arm === b.cell.arm;
@@ -390,6 +393,7 @@ function readings(f: Map<string, string[]>, io: Io): number {
   const validation = receipt("--validation-receipt", "validation.json");
   if (validation?.admitted !== true) blocked.push("the checker validation (section 6) has no passing receipt");
   else if (Array.isArray(validation.tags) && !validation.tags.every((t: string) => tagsOf(f).includes(t))) blocked.push("the checker validation scored " + validation.tags.join(", ") + ", not this reading's check stages");
+  else if (Array.isArray(validation.tags) && (typeof validation.checker_sha256 !== "string" || checkers.some((c) => c !== validation.checker_sha256))) blocked.push("the checker validation scored checker " + (validation.checker_sha256 ?? "none") + ", and this reading's check stages ran " + [...new Set(checkers.map((c) => c ?? "none"))].join(", "));
   if (receipt("--fixtures-receipt", FIXTURES_RECEIPT)?.passed !== true) blocked.push("the fixtures with the real checker have no passing receipt");
   io.out(JSON.stringify(read(builds, arms, blocked), null, 2));
   return 0;
@@ -459,7 +463,7 @@ function validateScore(f: Map<string, string[]>, io: Io): number {
   const tags = tagsOf(f);
   const key = JSON.parse(readFileSync(sealedPath(one(f, "--key"), "--key"), "utf8")) as Record<string, { row: string; arm: PlanArm }>;
   const labels = readNd(sealedPath(one(f, "--labels"), "--labels")) as { label: string; tasks: { id: string; done: boolean }[] }[];
-  const { rows } = checkRows(out, tags);
+  const { rows, checkers } = checkRows(out, tags);
   const byId = new Map(rows.map((r) => [r.id, r]));
   const pairs: [boolean, boolean][] = [];
   const perArm: Record<string, number> = {};
@@ -490,7 +494,8 @@ function validateScore(f: Map<string, string[]>, io: Io): number {
   const k = kappa(pairs);
   const armsShort = ["n", "d", "r", "a"].filter((a) => (perArm[a] ?? 0) < VALIDATION.per_arm);
   const admitted = pairs.length >= VALIDATION.verdicts && k !== null && k >= VALIDATION.kappa && armsShort.length === 0;
-  const receipt = { schema: "day-one.validation.v1", tags, builds: labels.length, per_arm: perArm, pairs: pairs.length, kappa: k, admitted };
+  const checker = checkers.every((c) => c !== null && c === checkers[0]) ? checkers[0]! : null;
+  const receipt = { schema: "day-one.validation.v1", tags, checker_sha256: checker, builds: labels.length, per_arm: perArm, pairs: pairs.length, kappa: k, admitted };
   writeFileSync(join(out, "validation.json"), JSON.stringify(receipt, null, 2) + "\n");
   io.out(JSON.stringify(receipt));
   if (!admitted) io.err("E_DAYONE_VALIDATION day-one validate: " + pairs.length + " verdicts, kappa " + k + (armsShort.length ? ", under " + VALIDATION.per_arm + " builds for " + armsShort.join(", ") : "") + "; no category 2 number counts");
