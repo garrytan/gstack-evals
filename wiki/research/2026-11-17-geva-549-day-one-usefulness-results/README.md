@@ -24,7 +24,7 @@ We learned that a model-driven browser checker can pass its fixtures and still f
 
 We learned that the plan judge got stricter as a plan got longer on the real briefs: appending a generic plan to a base plan turned 3 of the 15 GHome pairs from covered to not covered. If your judge compares plans of very different lengths, give it a length control and read it before you trust the comparison.
 
-**Call settled:** none. No reading counts, so the factory's interim rule for new app builds (a one-page day-one plan instead of /autoplan's review chain) stays as it is.
+Call settled: none. No reading counts, so the factory's interim rule for new app builds (a one-page day-one plan instead of /autoplan's review chain) stays as it is.
 
 ## What the eval asked
 
