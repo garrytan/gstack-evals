@@ -17,6 +17,8 @@ export interface TestResult {
   name?: string;
   exc?: string;
   msg?: string;
+  /** The failure's innermost frame (path:line), where the runner reports one. */
+  where?: string;
 }
 
 export type Results = Record<string, TestResult>;
@@ -48,6 +50,7 @@ interface PyEvent {
   xfail?: boolean;
   exc?: string | null;
   msg?: string | null;
+  where?: string | null;
   ids?: string[];
   code?: number;
 }
@@ -84,7 +87,7 @@ export function parsePytest(jsonl: string): Parsed {
       const text = (e.msg ?? "") + "";
       const name = missingName(text);
       const cls: FailClass = e.when !== "call" ? (name ? "missing_name" : "load") : LOAD_EXC.has(e.exc ?? "") ? (name ? "missing_name" : "load") : name && (e.exc === "AttributeError" || e.exc === "NameError") ? "missing_name" : "assert";
-      if (r.status !== "fail") results[e.id] = { status: "fail", cls, ...(cls === "missing_name" ? { name: name! } : {}), exc: e.exc ?? undefined, msg: text.slice(0, 300) };
+      if (r.status !== "fail") results[e.id] = { status: "fail", cls, ...(cls === "missing_name" ? { name: name! } : {}), exc: e.exc ?? undefined, msg: text.slice(0, 300), ...(e.where ? { where: e.where } : {}) };
     } else if (e.outcome === "skipped") {
       if (r.status !== "fail") results[e.id] = { status: "skip", msg: e.xfail ? "xfail" : (e.msg ?? "").slice(0, 300) };
     } else passed.get(e.id)!.add(e.when ?? "");
@@ -297,7 +300,7 @@ export function parseNodeEvents(jsonl: string, repo = "/testbed"): Parsed {
   const notes: string[] = [];
   for (const line of jsonl.split("\n")) {
     if (!line.trim()) continue;
-    let e: { event?: string; path?: string[]; file?: string; skip?: boolean; todo?: boolean; exc?: string | null; msg?: string };
+    let e: { event?: string; path?: string[]; file?: string; skip?: boolean; todo?: boolean; exc?: string | null; msg?: string; where?: string | null };
     try {
       e = JSON.parse(line);
     } catch {
@@ -315,7 +318,7 @@ export function parseNodeEvents(jsonl: string, repo = "/testbed"): Parsed {
     const id = file + "::" + path.join(" > ");
     seen.push(id);
     if (results[id]?.status === "fail") continue;
-    results[id] = e.skip || e.todo ? { status: "skip" } : jsResult(e.event === "test:pass" ? "passed" : "failed", text);
+    results[id] = e.skip || e.todo ? { status: "skip" } : { ...jsResult(e.event === "test:pass" ? "passed" : "failed", text), ...(e.event === "test:fail" && e.where ? { where: e.where } : {}) };
   }
   return { results, seen, notes };
 }

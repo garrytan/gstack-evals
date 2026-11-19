@@ -15,6 +15,7 @@ import { cpSync, existsSync, lstatSync, mkdtempSync, readdirSync, readFileSync, 
 import { tmpdir } from "node:os";
 import { isAbsolute, join, posix, relative, resolve } from "node:path";
 import { docker } from "../../real-outcome/task/docker.ts";
+import { followOnFiles, strippedPaths } from "./history.ts";
 import { runName } from "./testrun.ts";
 import { smFail, type SmUnit } from "./unit.ts";
 
@@ -46,7 +47,7 @@ echo "COMMITS $(git rev-list --all --count)"
 echo "HEAD $(git rev-parse HEAD)"
 `;
 
-export interface SessionImage { image_id: string; tag: string; runtime_id: string; volume: string; commits: number; head: string; home: "none" | "qa"; tree_patch_sha256: string | null; qa_home: QaHome | null }
+export interface SessionImage { image_id: string; tag: string; runtime_id: string; volume: string; commits: number; head: string; home: "none" | "qa"; tree_patch_sha256: string | null; qa_home: QaHome | null; removed: string[] }
 
 /** The session's home, where the image build puts A3's /qa install, and the home paths real_agent's family SM check lists
  *  (real_agent.py SM_CHECK), relative to it. */
@@ -112,7 +113,8 @@ export function runtimeId(u: SmUnit): string {
   return runtime && /^sha256:[0-9a-f]{64}$/.test(runtime) ? runtime : smFail("E_SM_INFRA_GAP", "unit " + u.id + " has no runtime image id; run its oracle first");
 }
 
-/** Builds one session's image. treePatch (follow-on only) is the first stage's full-tree patch, "" for S0. qaHome (A3 only) is the host dir qa-install.sh filled. */
+/** Builds one session's image. treePatch (follow-on only) is the first stage's full-tree patch, "" for S0, applied less what
+ *  section 4's strip removes (returned as removed). qaHome (A3 only) is the host dir qa-install.sh filled. */
 export function buildSessionImage(u: SmUnit, o: { volume: string; stage: "first" | "followon"; treePatch?: string; qaHome?: string }): SessionImage {
   const runtime = runtimeId(u);
   if ((o.stage === "followon") !== (o.treePatch !== undefined)) return smFail("E_SM_ARM", "a follow-on image takes the first stage's tree patch, and only a follow-on does");
@@ -124,7 +126,7 @@ export function buildSessionImage(u: SmUnit, o: { volume: string; stage: "first"
   const name = runName("session-image-" + u.id);
   try {
     if (o.treePatch !== undefined) {
-      writeFileSync(join(inDir, "tree.patch"), o.treePatch);
+      for (const [f, body] of Object.entries(followOnFiles(o.treePatch, u.repo_dir))) writeFileSync(join(inDir, f), body);
       writeFileSync(join(inDir, "followon.sh"), readFileSync(join(SH, "followon.sh")));
       writeFileSync(join(inDir, "second"), "");
     }
@@ -142,7 +144,7 @@ export function buildSessionImage(u: SmUnit, o: { volume: string; stage: "first"
     if (!/^sha256:[0-9a-f]{64}$/.test(id)) return smFail("E_SM_INFRA_GAP", "the session image " + tag + " has no id");
     const entry = docker(["image", "inspect", "--format", "{{json .Config.Entrypoint}}", tag], { timeoutMs: 30_000 }).stdout.trim();
     if (JSON.stringify(cfg.Entrypoint?.length ? cfg.Entrypoint : null) !== entry) return smFail("E_SM_INFRA_GAP", "the session image " + tag + " has entrypoint " + entry + ", not the runtime image's");
-    return { image_id: id, tag, runtime_id: runtime, volume: o.volume, commits, head: got.HEAD!, home: o.qaHome ? "qa" : "none", tree_patch_sha256: o.treePatch === undefined ? null : createHash("sha256").update(o.treePatch).digest("hex"), qa_home: qa };
+    return { image_id: id, tag, runtime_id: runtime, volume: o.volume, commits, head: got.HEAD!, home: o.qaHome ? "qa" : "none", tree_patch_sha256: o.treePatch === undefined ? null : createHash("sha256").update(o.treePatch).digest("hex"), qa_home: qa, removed: strippedPaths(r.stderr) };
   } finally {
     docker(["rm", "-f", "-v", name], { timeoutMs: 60_000 });
     rmSync(inDir, { recursive: true, force: true });

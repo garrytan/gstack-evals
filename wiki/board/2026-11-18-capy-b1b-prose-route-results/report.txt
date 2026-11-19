@@ -1,0 +1,17 @@
+== claude-opus-5-5, B1b prose routes (60 tasks an arm)
+  claude-md: loaded 20/60 33.3% [22.7, 45.9]; steps seen 20, followed 9/60 [8.1, 26.1] (as merged 9), followed among loaded 9/20; gaps 0, cap stops 0, safety stops 0, audit 0, passes 34 (descriptive), cost $22.18 ($0.370 a graded session)
+  hook: loaded 58/60 96.7% [88.6, 99.1] REACHES; steps seen 58, followed 36/60 [47.4, 71.4] (as merged 34), followed among loaded 36/58; gaps 0, cap stops 0, safety stops 0, audit 0, hook line in the first request 60 (proxy), routed in the hook's log 60, passes 36 (descriptive), cost $24.18 ($0.403 a graded session)
+  claude-md not loaded, by reason: line not delivered 0, load failed 0, named, not loaded 0, never named 40
+  hook not loaded, by reason: line not delivered 0, load failed 0, named, not loaded 2, never named 0
+  loaded, hook - claude-md: +63.3 points [+48.6, +74.1] on 60 paired tasks (38 vs 0 discordant)
+  followed, hook - claude-md: +45.0 points [+29.9, +57.1] on 60 paired tasks (28 vs 1 discordant)
+  reference, B1 none (reused no-gstack arm): followed 0/60, steps seen 0
+  followed, claude-md - B1 none: +15.0 points [+5.8, +26.1] on 60 paired tasks (9 vs 0 discordant)
+  followed, hook - B1 none: +60.0 points [+46.0, +71.4] on 60 paired tasks (36 vs 0 discordant)
+  reference, B1 gstack-shaped (typed, descriptive): followed 46/60, steps seen 60
+  followed, claude-md - B1 gstack-shaped: -61.7 points [-72.6, -45.8] on 60 paired tasks (1 vs 38 discordant)
+  followed, hook - B1 gstack-shaped: -16.7 points [-30.3, -2.1] on 60 paired tasks (5 vs 15 discordant)
+  reference, B1 command (typed, descriptive): followed 39/60, steps seen 60
+  followed, claude-md - B1 command: -50.0 points [-62.8, -33.2] on 60 paired tasks (3 vs 33 discordant)
+  followed, hook - B1 command: -5.0 points [-17.6, +7.8] on 60 paired tasks (6 vs 9 discordant)
+  reading: only the hook line loads the skill: gstack turns on its prompt-routing hook, destructive-command check and start hook by default for OpenClaw and Hermes, and stops relying on CLAUDE.md routing

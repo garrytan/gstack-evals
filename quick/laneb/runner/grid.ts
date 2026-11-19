@@ -32,12 +32,18 @@ export type BatchSpec = {
 export const PROCEDURE_LINES = { "investigate-phases": "Work through /investigate's phases in order, and finish with its DEBUG REPORT." };
 // closing_line names a fixed line any arm's prompt ends with, after a blank line and after a told arm's procedure line
 // (R3 amendment 6, section 7: R3c's ROOT CAUSE FILES block). CLOSING_LINES must equal prompt_builder.py's and
-// r3/r3c-rules.ts R3C.closingLine, byte for byte (a keyless test checks).
-export const CLOSING_LINES = { "r3c-root-cause-files": "When you are done, end your last message with a ROOT CAUSE FILES block: a line that reads ROOT CAUSE FILES, then up to three file paths relative to the repository root, one per line, the file most likely to hold the root cause first." };
+// r3/r3c-rules.ts R3C.closingLine, byte for byte (a keyless test checks). hm-status is the harness mechanics eval's
+// STATUS line (lanes/harness-mechanics/pins.ts CLOSING).
+export const CLOSING_LINES = { "r3c-root-cause-files": "When you are done, end your last message with a ROOT CAUSE FILES block: a line that reads ROOT CAUSE FILES, then up to three file paths relative to the repository root, one per line, the file most likely to hold the root cause first.", "hm-status": "When you finish, end your final message with one line: STATUS: FIXED or STATUS: NOT FIXED." };
 // gstack_hooks=copy runs the arm on laneb_hooks.LanebHooksAgent, which copies the gstack hook state out after the session
 // (R3 amendment 5 section 9 item 2); it is not an agent kwarg.
-export const AGENT_OPTIONS = { system_prompt: ["sdk-default", "claude-code-preset"], session_kind: ["unattended"], procedure_line: Object.keys(PROCEDURE_LINES), closing_line: Object.keys(CLOSING_LINES), gstack_hooks: ["copy"] };
-export type AgentOptions = { system_prompt?: string; session_kind?: string; told?: string; procedure_line?: string; closing_line?: string; gstack_hooks?: string; tar_name?: string };
+// backend (harness mechanics) names a judge arm's judgment-hook backend, jev or p1. It maps to the judge_backend kwarg
+// (laneb_hooks.LanebHooksOptions), which picks HM_JUDGE_CONFIG = /root/.hm/judge/judge-<backend>.json, and is emitted only
+// when set, so a non-judge arm's kwargs and job.json stay byte-identical.
+export const AGENT_OPTIONS = { system_prompt: ["sdk-default", "claude-code-preset"], session_kind: ["unattended"], procedure_line: Object.keys(PROCEDURE_LINES), closing_line: Object.keys(CLOSING_LINES), gstack_hooks: ["copy"], strip_snapshot: ["true"], checks_trust: ["true"], backend: ["jev", "p1"] };
+// markers_dir is not a grid dimension or a spec option (it never comes from an arms csv entry); prepare-run.ts injects it
+// onto a judge arm so jobConfig can emit the markers_dir kwarg. It is left out of AGENT_OPTIONS so a spec cannot set it.
+export type AgentOptions = { system_prompt?: string; session_kind?: string; told?: string; procedure_line?: string; closing_line?: string; gstack_hooks?: string; strip_snapshot?: string; checks_trust?: string; tar_name?: string; backend?: string; markers_dir?: string };
 const SKILL_NAME = /^[a-z0-9][a-z0-9_-]*$/;
 
 // One entry of prepare-run's arms list: <arm>[:<option>=<value>]..., for example
@@ -93,6 +99,10 @@ export function jobConfig(b: BatchSpec) {
         ...(a.told ? { told_skill: a.told } : {}),
         ...(a.procedure_line ? { procedure_line: a.procedure_line } : {}),
         ...(a.closing_line ? { closing_line: a.closing_line } : {}),
+        ...(a.strip_snapshot === "true" ? { strip_snapshot: true } : {}),
+        ...(a.checks_trust === "true" ? { checks_trust: true } : {}),
+        ...(a.backend ? { judge_backend: a.backend } : {}),
+        ...(a.markers_dir ? { markers_dir: a.markers_dir } : {}),
         ...(b.repo_dir ? { repo_dir: b.repo_dir } : {}),
         ...(b.sdk_max_turns ? { sdk_max_turns: b.sdk_max_turns } : {}),
       },

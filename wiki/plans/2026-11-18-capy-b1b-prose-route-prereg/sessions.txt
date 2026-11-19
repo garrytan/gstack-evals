@@ -1,0 +1,18 @@
+$ b1b sessions run --out <dir> --cut tests/delivery-route/fixtures/b1b-sessions
+B1B SESSIONS PASS 4 cases
+
+What each scripted session delivered (from the cut captures):
+claude-md-stop: listing prove-it, plugin-authoring; gstack files 4; routing block in the first request: True, under "Contents of /root/.claude/CLAUDE.md (user's private global instructions for all projects):"
+  hook lines in the first request: 0
+  skill loaded: no
+claude-md-load: listing prove-it, plugin-authoring; gstack files 4; routing block in the first request: True, under "Contents of /root/.claude/CLAUDE.md (user's private global instructions for all projects):"
+  hook lines in the first request: 0
+  skill loaded: Base directory for this skill: /root/.claude/skills/prove-it
+hook-stop: listing prove-it, plugin-authoring; gstack files 5; routing block in the first request: False
+  hook lines in the first request: 1: 'gstack skill routing (UserPromptSubmit hook; matched the installed /prove-it trigger "fix this bug"; off: gstack-config set skill_routing off): this request fits /prove-it. Run /prove-it with the Skill tool before you start, and tell the user in one sentence that gstack routed this to /prove-it.'
+  hook log: 2026-11-18T12:59:10.277Z session=<id> event=routed skill=prove-it score=0.5 variant=name
+  skill loaded: no
+hook-load: listing prove-it, plugin-authoring; gstack files 5; routing block in the first request: False
+  hook lines in the first request: 1: 'gstack skill routing (UserPromptSubmit hook; matched the installed /prove-it trigger "fix this bug"; off: gstack-config set skill_routing off): this request fits /prove-it. Run /prove-it with the Skill tool before you start, and tell the user in one sentence that gstack routed this to /prove-it.'
+  hook log: 2026-11-18T12:59:12.452Z session=<id> event=routed skill=prove-it score=0.5 variant=name
+  skill loaded: Base directory for this skill: /root/.claude/skills/prove-it

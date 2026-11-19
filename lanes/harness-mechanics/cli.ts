@@ -1,0 +1,216 @@
+// Copyright (c) 2026 Garry Tan. MIT License.
+// bun lanes/harness-mechanics/cli.ts <command>: the harness mechanics eval (lanes/harness-mechanics/README.md).
+// prepare, host-up, launch, attach, relaunch, rerun, recover and host-down run on L1's host and part machinery under this lane's
+// profile (plans.ts HM_PROFILE), with L1's exit codes.
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { l1Main } from "../../quick/laneb/l1/l1.ts";
+import { admission, readFitRows, report, type HmRowIn, type ReportConfig } from "./analyze.ts";
+import { dryrun } from "./dryrun.ts";
+import { harborEnvRecord, judgeTarCheck, manifestOf } from "./arms.ts";
+import { CLOSING, JUDGE, REPO, section11Excluded, sha256, SMOKE_PART } from "./pins.ts";
+import { HM_PROFILE } from "./plans.ts";
+import { patternsCommand } from "./score.ts";
+import { approve, doneCheck, isItem, launchGuard, markDone, type HmCrew, type Item } from "./money.ts";
+import { readRows } from "../../quick/laneb/runner/ledger.ts";
+import { fit, fitTasks, fitVm } from "./fit.ts";
+import { buildCheckCommand } from "./build-check.ts";
+import { screenCommand, screenVm } from "./screen.ts";
+import { buildHmTable } from "./table.ts";
+import { countProblems, itemsFromEnv, replayReport, runReplay } from "./replay.ts";
+
+const USAGE = "E_USAGE usage: hm dryrun --out <dir> | prepare <work> --item <item> | host-up|attach|recover|host-down <work> | launch|relaunch|rerun <work> --part <part> | approve --ledger <jsonl> --item <item> --usd <cap> --approved-by <who> | done --ledger <jsonl> --item <item> [--work <work>] | guard <work> | judge-tar <judge.tar.gz> [--manifest <json>] | screen --out <dir> | fit --out <dir> [--only <task>] | build-check --out <dir> [--list calibration|scored] [--shard k/n] | fit-vm start|status|finish <work> | screen-vm start|finish <work> | table <config.json> <out.jsonl> | patterns <job dir>... | judge-custody <work> | judge-check <work> | admission <stage1 table.jsonl> [--fit <fit rows.jsonl> --fit-sha256 <sha256>] [--out <dir>] | report <table.jsonl> <config.json> <out dir> | replay items | replay build --config <json> --out <file> | replay run --clients <module.ts> --start <file> --ledger <jsonl> --out <dir> | replay report <out dir>";
+const readTable = (p: string) => readFileSync(p, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as HmRowIn);
+// HM_SIMS cuts power.py's Monte Carlo for keyless tests; the report runs power.py's own 2,000 without it.
+const sims = () => (process.env.HM_SIMS ? Number(process.env.HM_SIMS) : undefined);
+
+// The launch guard's inputs: the work dir's plan and finished parts (a prepared attempt 2 counts as a part), the item's own ledger (LEDGER, or the host mirror
+// l1.ts keeps while the ledger is on the host), every other item's ledger as HM_LEDGERS/<item>.jsonl, and HM_CREW.
+function guard(work: string) {
+  const plan = JSON.parse(readFileSync(join(work, "plan.json"), "utf8"));
+  const dir = process.env.HM_LEDGERS ?? "", crewPath = process.env.HM_CREW ?? "", own = process.env.LEDGER ?? "";
+  if (!dir || !crewPath || !existsSync(crewPath)) throw new Error("E_USAGE hm launch guard: set HM_LEDGERS to the folder of item ledgers (<item>.jsonl) and HM_CREW to the crew file");
+  const ledgers: Partial<Record<Item, any[]>> = {};
+  for (const f of Object.keys(HM_PROFILE.items).concat(["stage2-replay", "stage2-replay-2", "stage2-replay-3", "vms"])) if (isItem(f) && existsSync(join(dir, f + ".jsonl"))) ledgers[f] = readRows(join(dir, f + ".jsonl"));
+  const mirror = join(work, "host/ledger.jsonl");
+  ledgers[plan.item as Item] = own && existsSync(own) ? readRows(own) : existsSync(mirror) ? readRows(mirror) : ledgers[plan.item as Item] ?? [];
+  const parts = [...plan.parts, ...plan.parts.map((p: any) => join(work, p.name + "-a2", "l1-part.json")).filter((f: string) => existsSync(f)).map((f: string) => JSON.parse(readFileSync(f, "utf8")))];
+  const finished = parts.map((p: any) => p.name).filter((n: string) => existsSync(join(work, n + ".result.json")));
+  const g = launchGuard(plan.item, ledgers, JSON.parse(readFileSync(crewPath, "utf8")) as HmCrew, parts, finished);
+  for (const l of g.lines) console.log(l);
+  if (!g.ok) throw new Error("E_HM_LAUNCH " + plan.item + ": " + g.why.join("; ") + "; take it to the Captain before launching");
+}
+// D14 (item 14): host-up, launch and relaunch refuse a judge part whose judge tar.gz fails the launcher check (arms.ts
+// judgeTarCheck, against the committed judge manifest, or HM_JUDGE_MANIFEST in keyless tests). host-up checks every
+// planned judge part's own copy, launch the named part's, and relaunch the ARMS copy its relaunch part is prepared from.
+function judgeTars(cmd: string, work: string, part: string | undefined) {
+  const plan = JSON.parse(readFileSync(join(work, "plan.json"), "utf8"));
+  const rectsOf = (name: string) => { const own = join(work, name, "l1-part.json"); return (existsSync(own) ? JSON.parse(readFileSync(own, "utf8")) : plan.parts.find((x: any) => x.name === name))?.rects ?? []; };
+  const judged = (name: string) => rectsOf(name).some((r: any) => r.arms.some((a: string) => (JUDGE as string[]).includes(a)));
+  const names: string[] = cmd === "host-up" ? plan.parts.map((x: any) => x.name) : part ? [part] : [];
+  const arms = () => process.env.ARMS ?? (() => { throw new Error("E_USAGE hm relaunch: set ARMS to the arm tar directory"); })();
+  const tars = new Set(names.filter(judged).map((n) => (cmd === "relaunch" ? join(arms(), "judge.tar.gz") : join(work, n, "arms/judge.tar.gz"))));
+  for (const t of tars) {
+    const c = judgeTarCheck(t, process.env.HM_JUDGE_MANIFEST || manifestOf("judge"));
+    console.log(c.line);
+    if (!c.pass) throw new Error("E_HM_JUDGE_BUILD " + plan.item + ": the judge tar " + t + " fails the launcher check (" + c.problems.join("; ") + "); rebuild the judge tar with build.sh hm-judge and prepare again");
+  }
+}
+const GUARDED = ["host-up", "launch", "relaunch"];
+const LAUNCHER = ["prepare", "host-up", "launch", "attach", "relaunch", "rerun", "recover", "host-down"];
+
+export async function main(argv: string[]): Promise<number> {
+  const [cmd, ...rest] = argv;
+  const opt = (k: string) => { const i = rest.indexOf("--" + k); return i >= 0 ? rest[i + 1] : undefined; };
+  try {
+    if (cmd === "dryrun") {
+      const r = dryrun(resolve(opt("out") ?? (() => { throw new Error(USAGE); })()));
+      for (const l of r.lines) console.log(l);
+      return r.pass ? 0 : 1;
+    }
+    if (cmd === "approve" || cmd === "done") {
+      const ledger = opt("ledger"), item = opt("item") ?? "";
+      if (!ledger) throw new Error(USAGE);
+      if (cmd === "done") { if (!isItem(item)) throw new Error(USAGE); const work = opt("work"); doneCheck(item, work ? resolve(work) : undefined); markDone(resolve(ledger), item); console.log(item + " marked done on " + ledger); return 0; }
+      const usd = opt("usd") ?? "";
+      if (!/^\d+(\.\d+)?$/.test(usd)) throw new Error(USAGE);
+      approve(resolve(ledger), item, Number(usd), opt("approved-by") ?? "");
+      console.log("approved " + item + " at $" + usd + " on " + ledger);
+      return 0;
+    }
+    if (cmd === "guard") { if (!rest[0]) throw new Error(USAGE); guard(resolve(rest[0])); return 0; }
+    if (cmd === "judge-tar") {
+      if (!rest[0] || rest[0].startsWith("--")) throw new Error(USAGE);
+      const c = judgeTarCheck(resolve(rest[0]), resolve(opt("manifest") ?? manifestOf("judge")));
+      console.log(c.line);
+      if (!c.pass) console.error("E_HM_JUDGE_BUILD hm judge-tar: " + c.problems.join("; "));
+      return c.pass ? 0 : 2;
+    }
+    if (cmd === "screen") { const out = opt("out"); if (!out) throw new Error(USAGE); for (const l of screenCommand(resolve(out), () => {}).lines) console.log(l); return 0; }
+    if (cmd === "fit") { const out = opt("out"); if (!out) throw new Error(USAGE); const rows = fit(resolve(out), fitTasks(opt("only"))); console.log("fit " + rows.length + " rows in " + join(resolve(out), "fit.jsonl") + ", summary in fit.md"); return 0; }
+    if (cmd === "build-check") {
+      const out = opt("out"), list = opt("list") ?? "calibration";
+      if (!out || (list !== "calibration" && list !== "scored")) throw new Error(USAGE);
+      return await buildCheckCommand(resolve(out), list, opt("shard"));
+    }
+    if (cmd === "fit-vm") { if (!rest[0] || !rest[1]) throw new Error(USAGE); return fitVm(rest[0], resolve(rest[1])); }
+    if (cmd === "screen-vm") { if (!rest[0] || !rest[1]) throw new Error(USAGE); return screenVm(rest[0], resolve(rest[1])); }
+    if (cmd && LAUNCHER.includes(cmd)) {
+      if (GUARDED.includes(cmd)) { if (!rest[0]) throw new Error(USAGE); guard(resolve(rest[0])); judgeTars(cmd, resolve(rest[0]), opt("part")); }
+      l1Main(argv, HM_PROFILE);
+      if (cmd === "prepare") {
+        const work = resolve(rest[0]!), plan = JSON.parse(readFileSync(join(work, "plan.json"), "utf8"));
+        const sessions = plan.parts.reduce((a: number, x: any) => a + x.rects.reduce((b: number, r: any) => b + r.tasks.length * r.arms.length * r.attempts, 0), 0);
+        const tasks = (a: string) => new Set(plan.parts.flatMap((x: any) => x.rects.filter((r: any) => r.arms.includes(a)).flatMap((r: any) => r.tasks)));
+        const plain = tasks("plain-2");
+        writeFileSync(join(work, "hm.json"), JSON.stringify({ item: plan.item, sessions, picker_calls: [...tasks("none")].filter((x) => plain.has(x)).length, closing_line: CLOSING, screened_sha256: plan.inputs.screened, harbor_env: harborEnvRecord(readFileSync(join(REPO, "quick/laneb/runner/vm-run.sh"), "utf8")) }, null, 2) + "\n");
+      }
+      return 0;
+    }
+    if (cmd === "pick") return await (await import("./picker.ts")).pickRun(rest);
+    if (cmd === "replay") {
+      const sub = rest[0];
+      if (sub === "items") {
+        const { items, sha256 } = itemsFromEnv(), bad = countProblems(items);
+        console.log("replay items " + sha256 + ": " + items.length + " items" + (bad.length ? "" : " at the preregistered counts"));
+        if (bad.length) throw new Error("E_HM_REPLAY counts: " + bad.join("; "));
+        return 0;
+      }
+      if (sub === "run") {
+        const clients = opt("clients"), start = opt("start"), ledger = opt("ledger"), out = opt("out");
+        if (!clients || !start || !ledger || !out) throw new Error(USAGE);
+        const { items, sha256 } = itemsFromEnv(), mod = await import(resolve(clients));
+        if (typeof mod.replayClients !== "function") throw new Error("E_USAGE hm replay run: " + clients + " exports no replayClients()");
+        const r = await runReplay({ items, itemsSha256: sha256, clients: mod.replayClients(), out: resolve(out), start: resolve(start), ledger: resolve(ledger) });
+        console.log("wrote " + join(resolve(out), "report.md") + "; h3_admission " + JSON.stringify(r.h3_admission));
+        return 0;
+      }
+      if (sub === "report" && rest[1]) { console.log("h3_admission " + JSON.stringify(replayReport(resolve(rest[1])).h3_admission)); return 0; }
+      if (sub === "build") {
+        const config = opt("config"), out = opt("out");
+        if (!config || !out) throw new Error(USAGE);
+        const { buildItemsFromConfig } = await import("./replay-items.ts");
+        const items = buildItemsFromConfig(JSON.parse(readFileSync(resolve(config), "utf8")));
+        const bad = countProblems(items);
+        if (bad.length) throw new Error("E_HM_REPLAY counts: " + bad.join("; "));
+        const text = items.map((i) => JSON.stringify(i)).join("\n") + "\n";
+        writeFileSync(resolve(out), text);
+        console.log("wrote " + resolve(out) + ": " + items.length + " items at the preregistered counts, sha256 " + sha256(text));
+        return 0;
+      }
+      throw new Error(USAGE);
+    }
+    if (cmd === "table") {
+      const [cfg, out] = rest;
+      if (!cfg || !out) throw new Error(USAGE);
+      const all = buildHmTable(JSON.parse(readFileSync(cfg, "utf8"))), rows = all.filter((r) => !section11Excluded(r.part)), smoke = all.length - rows.length;
+      writeFileSync(out, rows.map((r) => JSON.stringify(r)).join("\n") + (rows.length ? "\n" : ""));
+      console.log("wrote " + rows.length + " rows to " + out + (smoke ? "; left out " + smoke + " row(s) from the smoke part " + SMOKE_PART + ", which are not pilot cells and never a section 11 input" : ""));
+      return 0;
+    }
+    if (cmd === "patterns") {
+      for (const l of patternsCommand(rest)) console.log(l);
+      return 0;
+    }
+    if (cmd === "judge-custody") {
+      // The custody check (prepare-run.ts builds each judge batch's per-task markers on every prepare path): every prepared
+      // judge part, relaunch and attempt 2 in the work dir has each task's markers file, and its canary is the label
+      // store's. Docker-free; run it after prepare and before host-up.
+      const work = rest[0];
+      if (!work || work.startsWith("--")) throw new Error(USAGE);
+      const { checkJudgeCustody } = await import("./judge-custody.ts");
+      const c = checkJudgeCustody(resolve(work));
+      for (const p of c.problems) console.log("judge-custody problem: " + p);
+      console.log("judge-custody " + (c.pass ? "pass" : "FAIL") + ": " + c.tasks + " judge task(s) across " + c.parts.length + " prepared judge part(s)" + (c.parts.length ? " (" + c.parts.join(", ") + ")" : "") + (c.problems.length ? "; " + c.problems.length + " problem(s)" : ""));
+      if (!c.parts.length) console.error("E_HM_INPUT judge-custody: " + work + " holds no prepared judge part");
+      else if (!c.pass) console.error("E_HM_INPUT judge-custody: a judge task's custody is missing or does not match the label store; prepare the part again");
+      return c.pass && c.parts.length ? 0 : 2;
+    }
+    if (cmd === "judge-check") {
+      // The judge run's leak and version checks, per launched judge part: journalCheck over the part's judge metering proxy
+      // journal (pulled/out/judge-journal.ndjson), jevChanges across its judge sessions' hook logs, and its judge spend.
+      const work = rest[0];
+      if (!work || work.startsWith("--")) throw new Error(USAGE);
+      const { judgePartsCheck } = await import("./judge-check.ts");
+      const r = judgePartsCheck(resolve(work));
+      const money = (x: number) => "$" + x.toFixed(2);
+      for (const c of r.parts) console.log("JUDGE CHECK " + c.part + " " + (c.pass ? "pass" : "FAIL") + ": custody_hits " + c.custody_hits + " (must be 0), marker_hits " + c.marker_hits + ", jevChanges in " + c.jev_changes.length + " of " + c.sessions + " judge session(s); judge spend measured " + money(c.measured_usd) + ", unknown " + c.unknown_count + " (" + money(c.unknown_usd) + " at their reserved maximum)" + (c.section11 ? "" : "; " + SMOKE_PART + " is the smoke part, never a section 11 input") + "; " + c.detail);
+      if (r.unlaunched.length) console.log("JUDGE CHECK not launched: " + r.unlaunched.join(", "));
+      const s11 = r.parts.filter((c) => c.section11).map((c) => c.part), out11 = r.parts.filter((c) => !c.section11).map((c) => c.part);
+      console.log("JUDGE CHECK section 11 inputs: " + (s11.join(", ") || "none yet") + (out11.length ? " (left out: " + out11.join(", ") + ")" : ""));
+      console.log("JUDGE CHECK: " + (r.pass ? "pass" : "FAIL") + (r.detail ? " (" + r.detail + ")" : ""));
+      if (r.parts.some((c) => c.jev_changes.length)) console.error("E_HM_JEV_VERSION judge-check: a judge session's hook log carried a jevChanges line; the judge arms are stopped");
+      return r.pass ? 0 : 2;
+    }
+    if (cmd === "admission") {
+      if (!rest[0] || rest[0].startsWith("--")) throw new Error(USAGE);
+      const fit = opt("fit"), fitSha = opt("fit-sha256");
+      if (!fit !== !fitSha) throw new Error(USAGE);
+      const a = admission(readTable(rest[0]), { sims: sims(), fit: fit && fitSha ? readFitRows(fit, fitSha) : undefined });
+      for (const l of a.lines) console.log(l);
+      if (!fit) console.log("STAGE1 FIT not printed: pass --fit <calibration fit rows> --fit-sha256 <their frozen sha256>");
+      const out = opt("out");
+      if (out) {
+        mkdirSync(out, { recursive: true });
+        writeFileSync(join(out, "admission.json"), JSON.stringify(a, null, 2) + "\n");
+        writeFileSync(join(out, "admission.md"), a.lines.join("\n") + "\n");
+      }
+      return 0;
+    }
+    if (cmd === "report") {
+      const [table, cfgPath, out] = rest;
+      if (!table || !cfgPath || !out || [table, cfgPath, out].some((x) => x.startsWith("--"))) throw new Error(USAGE);
+      const cfg = JSON.parse(readFileSync(cfgPath, "utf8")) as ReportConfig;
+      if (!cfg.stage1 && cfg.stage1_table) cfg.stage1 = admission(readTable(resolve(dirname(cfgPath), cfg.stage1_table)), { sims: sims() });
+      for (const l of report(readTable(table), cfg, { out: resolve(out), sims: sims() }).lines) console.log(l);
+      return 0;
+    }
+    throw new Error(USAGE);
+  } catch (e) {
+    const m = (e as Error).message;
+    console.error(m.startsWith("E_") ? m : "E_INTERNAL " + m);
+    return m.startsWith("E_") ? 2 : 1;
+  }
+}
+
+if (import.meta.main) process.exit(await main(Bun.argv.slice(2)));

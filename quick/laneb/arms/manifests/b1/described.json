@@ -1,0 +1,40 @@
+{
+  "arm": "described",
+  "claude_code": "2.1.312",
+  "typed": false,
+  "spec": "described:tar=described:system_prompt=claude-code-preset:gstack_hooks=copy:strip_snapshot=true:closing_line=hm-status",
+  "steps": {
+    "sha256": "47bfc31f877aef8938dfabc4984a759eaaa1f8f7588a408c542199bde6e34557",
+    "bytes": 203,
+    "source": "https://github.com/addyosmani/agent-skills 39b723ceebf81474d0557c1fecd01eddab585563 .claude/commands/test.md lines 13-18"
+  },
+  "carrier": {
+    "file": "described-SKILL.md",
+    "bytes": 819,
+    "before": 616,
+    "after": 0,
+    "path": ".claude/skills/test-driven-development/SKILL.md"
+  },
+  "tar_command": "tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner --format=gnu -cf <arm>.tar .claude (tar (GNU tar) 1.35)",
+  "tar": {
+    "file": "described.tar",
+    "bytes": 10240,
+    "sha256": "72a22074c8e66136ad16ad28defb9c42454ad5dd5e138f94e110a6554aa30c12"
+  },
+  "tree": {
+    "files": 1,
+    "symlinks": 0,
+    "dirs": 3,
+    "bytes": 819,
+    "digest": "9c307143ac51b4a1b9af946e21dd48aac3699e9952fcea7cf58845562ef97204"
+  },
+  "skills": {
+    "count": 1,
+    "tree_digest": "5dc3d53e6599fe62a7873a3907444e9eee9d952ffd61d62716f17a75794dc035",
+    "skill_md_digest": "5dc3d53e6599fe62a7873a3907444e9eee9d952ffd61d62716f17a75794dc035",
+    "names": [
+      "test-driven-development"
+    ]
+  },
+  "inventory_sha256": "54d3ef35509493349bb36cf8d9e965069da77f9258b358fefb2b8831ed330013"
+}

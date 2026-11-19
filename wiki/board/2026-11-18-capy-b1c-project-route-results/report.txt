@@ -1,0 +1,15 @@
+== claude-opus-5-5, B1c the routing block in the project CLAUDE.md (60 tasks)
+  project-md: loaded 39/60 65.0% [52.4, 75.8] (80% bar, descriptive: short); steps seen 39, followed 23/60 [27.1, 51.0] (as merged 22), followed among loaded 23/39; gaps 0, cap stops 0, safety stops 0, audit 0, block placed 60, passes 39 (descriptive), cost $24.86 ($0.414 a graded session)
+  project-md not loaded, by reason: block not placed 0, load failed 0, named, not loaded 0, never named 21
+  the strip removed a root CLAUDE.md in 10 graded sessions and any instruction file in 19; the shipped diff names CLAUDE.md in 0
+  control, B1b hook (the hook line): loaded 58/60, followed 36/60
+  control, B1b claude-md (the block in the user CLAUDE.md): loaded 20/60, followed 9/60
+  loaded, project-md - B1b hook (primary, margin -15): -31.7 points [-44.2, -19.2] on 60 paired tasks (0 vs 19 discordant)
+  loaded, project-md - B1b claude-md (placement): +31.7 points [+18.8, +42.6] on 60 paired tasks (19 vs 0 discordant): the project placement loads more than the user placement
+  followed, project-md - B1b hook: -21.7 points [-36.1, -5.6] on 60 paired tasks (6 vs 19 discordant)
+  followed, project-md - B1b claude-md: +23.3 points [+10.0, +35.8] on 60 paired tasks (16 vs 2 discordant)
+  reference, B1 none (reused no-gstack arm): followed 0/60
+  followed, project-md - B1 none: +38.3 points [+25.6, +51.0] on 60 paired tasks (23 vs 0 discordant)
+  reference, B1 gstack-shaped (typed, descriptive): followed 46/60
+  followed, project-md - B1 gstack-shaped: -38.3 points [-52.7, -20.8] on 60 paired tasks (5 vs 28 discordant)
+  reading: the project block clearly loses to the hook line (the whole 95% interval of loads, project block minus hook line, sits below -15 points): CLAUDE.md routing is a CUT-CANDIDATE wherever it sits, and gstack stops relying on it to start skills

@@ -33,6 +33,19 @@ const record = (s: Sample): SampleRecord => ({ sample: s, draw: 1, attempts: 1, 
 /** Sealed labeller records for one kind on items, each labeller giving cls(item), each carrying the count its shard scheduled. */
 const labels = (kind: LabelKind, on: readonly AskItem[], cls: (it: AskItem) => Label = (it) => it.label, scheduled = on.length) => (["opus", "astra"] as const).flatMap((m) => on.map((it) => labelRecord(labelId(it.item, kind, m), it.item, m, { class: cls(it), repeats_of: null, answer_judgement: [], reason: "r" }, scheduled)));
 
+/** A complete pilot on 24 needless and 16 must-ask items, written to dir for score's --pilot-items and --pilot-replies. Its (b) sends every needless item, so the readout's k is the frozen k; with k3, (b) sends half of them on one replicate, so the readout asks for k = 3. */
+function pilotArgs(dir: string, k3 = false): string[] {
+  const its = [...items.filter(needless).slice(0, 24), ...items.filter((i) => !needless(i)).slice(0, 16)];
+  writeFileSync(join(dir, "pilot.jsonl"), its.map((i) => JSON.stringify(i)).join("\n") + "\n");
+  mkdirSync(join(dir, "pilot"));
+  for (const s of (["opus", "sol"] as const).flatMap((m) => schedule(its, m, FROZEN.pilot.arms as Partial<Record<Arm, number>>, 3))) {
+    const it = its.find((i) => i.item === s.item)!;
+    const a: Action = k3 && s.arm === "b" && needless(it) && !(s.replicate === 1 && its.indexOf(it) % 2 === 0) ? "FOLD" : "SEND";
+    writeFileSync(join(dir, "pilot", s.id + ".ask.json"), JSON.stringify({ ...record(s), agent_action: a, final_action: a }));
+  }
+  return ["--pilot-items", join(dir, "pilot.jsonl"), "--pilot-replies", join(dir, "pilot")];
+}
+
 describe("per-sample codings (section 8)", () => {
   const dupAnswered = { label: "DUPLICATE" as const, answered_dup: true };
   const dupOpen = { label: "DUPLICATE" as const, answered_dup: false };
@@ -156,7 +169,7 @@ describe("a partial run", () => {
 });
 
 describe("score's completeness guard", () => {
-  const its = items.slice(0, 4);
+  const its = items.slice(0, 40);
   const shard = (m: ModelKey) => schedule(its, m, FROZEN.replicates.k, 7);
   const standing = () => labels("audit", its);
   async function score(samples: Sample[], labelRecords: SampleRecord[] | null = standing()) {
@@ -169,7 +182,7 @@ describe("score's completeness guard", () => {
       for (const r of labelRecords ?? []) writeFileSync(join(dir, "labels", r.sample.id + ".ask.json"), JSON.stringify(r));
       const out: string[] = [];
       const err: string[] = [];
-      const code = await main(["score", "--items", join(dir, "items.jsonl"), "--replies", join(dir, "replies"), ...(labelRecords ? ["--labels", join(dir, "labels")] : []), "--draws", "20", "--keyless"], { out: (t) => out.push(t), err: (t) => err.push(t) });
+      const code = await main(["score", "--items", join(dir, "items.jsonl"), "--replies", join(dir, "replies"), ...(labelRecords ? ["--labels", join(dir, "labels")] : []), ...pilotArgs(dir), "--keyless"], { out: (t) => out.push(t), err: (t) => err.push(t) });
       return { code, out: JSON.parse(out.join("\n")), err: err.join("\n") };
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -179,7 +192,8 @@ describe("score's completeness guard", () => {
     const r = await score(shard("opus"));
     expect(r.code).toBe(2);
     expect(r.err).toContain("E_ASK_INCOMPLETE");
-    expect(r.out.absent_by_model_arm.sol).toEqual({ a: 8, b: 8, c: 8, d: 8 });
+    const n = its.length * FROZEN.replicates.k;
+    expect(r.out.absent_by_model_arm.sol).toEqual({ a: n, b: n, c: n, d: n });
     expect(r.out.decision).toBeUndefined();
   });
   test("a particle-1 cap stop reads as untested and the decision rows still print", async () => {
@@ -211,23 +225,54 @@ describe("the pilot readout (sections 9 and 10)", () => {
     expect(r.models.sol!.mdd_k2).toBeGreaterThan(FROZEN.pilot.k3_when_projected_mdd_above);
     expect(r.k).toBe(FROZEN.replicates.k_after_pilot_rule);
   });
+  async function pilot(samples: Sample[]) {
+    const dir = mkdtempSync(join(tmpdir(), "ask-pilot-"));
+    try {
+      writeFileSync(join(dir, "items.jsonl"), pilotItems.map((i) => JSON.stringify(i)).join("\n") + "\n");
+      mkdirSync(join(dir, "replies"));
+      for (const s of samples) writeFileSync(join(dir, "replies", s.id + ".ask.json"), JSON.stringify(record(s)));
+      const out: string[] = [];
+      const err: string[] = [];
+      const code = await main(["pilot", "--items", join(dir, "items.jsonl"), "--replies", join(dir, "replies")], { out: (t) => out.push(t), err: (t) => err.push(t) });
+      return { code, out: JSON.parse(out.join("\n")), err: err.join("\n") };
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+  const scheduled = () => (["opus", "sol"] as const).flatMap((m) => schedule(pilotItems, m, FROZEN.pilot.arms as Partial<Record<Arm, number>>, 3));
+  test("the pilot command refuses a pilot with a scheduled sample absent (E_ASK_INCOMPLETE): absent counts, no admission decision and no k", async () => {
+    const gap = scheduled().filter((s) => !(s.model === "sol" && s.arm === "b" && s.replicate === 2 && s.item === pilotItems[0]!.item));
+    const r = await pilot(gap);
+    expect(r.code).toBe(2);
+    expect(r.err).toContain("E_ASK_INCOMPLETE");
+    expect(r.out).toEqual({ incomplete: true, absent: 1, absent_by_model_arm: { sol: { b: 1 } } });
+    const none = await pilot([]);
+    expect(none.code).toBe(2);
+    expect(none.out.absent_by_model_arm).toEqual({ opus: { a: 40, b: 80 }, sol: { a: 40, b: 80 } });
+  });
+  test("the pilot command reads a complete pilot: the admission decision and k", async () => {
+    const r = await pilot(scheduled());
+    expect(r.code).toBe(0);
+    expect(r.err).toBe("");
+    expect(r.out).toMatchObject({ items: 40, needless: 24, must_ask: 16, admit: true, k: FROZEN.replicates.k });
+  });
 });
 
 describe("score's label guard (section 7)", () => {
-  const its = items.slice(0, 4);
+  const its = items.slice(0, 44);
   const all = () => (["opus", "sol"] as const).flatMap((m) => schedule(its, m, FROZEN.replicates.k, 7));
   const flip = (it: AskItem): Label => (it.label === "DECISION" ? "DUPLICATE" : "DECISION");
-  async function score(labelRecords: SampleRecord[] | null) {
+  async function score(labelRecords: SampleRecord[] | null, o: { extra?: string[]; replies?: Sample[]; k3?: boolean; noPilot?: boolean } = {}) {
     const dir = mkdtempSync(join(tmpdir(), "ask-score-labels-"));
     try {
       writeFileSync(join(dir, "items.jsonl"), its.map((i) => JSON.stringify(i)).join("\n") + "\n");
       mkdirSync(join(dir, "replies"));
-      for (const s of all()) writeFileSync(join(dir, "replies", s.id + ".ask.json"), JSON.stringify(record(s)));
+      for (const s of o.replies ?? all()) writeFileSync(join(dir, "replies", s.id + ".ask.json"), JSON.stringify(record(s)));
       mkdirSync(join(dir, "labels"));
       for (const r of labelRecords ?? []) writeFileSync(join(dir, "labels", r.sample.id + ".ask.json"), JSON.stringify(r));
       const out: string[] = [];
       const err: string[] = [];
-      const code = await main(["score", "--items", join(dir, "items.jsonl"), "--replies", join(dir, "replies"), ...(labelRecords ? ["--labels", join(dir, "labels")] : []), "--draws", "20", "--keyless"], { out: (t) => out.push(t), err: (t) => err.push(t) });
+      const code = await main(["score", "--items", join(dir, "items.jsonl"), "--replies", join(dir, "replies"), ...(labelRecords ? ["--labels", join(dir, "labels")] : []), ...(o.noPilot ? [] : pilotArgs(dir, o.k3)), "--keyless", ...(o.extra ?? [])], { out: (t) => out.push(t), err: (t) => err.push(t) });
       return { code, out: JSON.parse(out.join("\n")), err: err.join("\n") };
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -261,8 +306,8 @@ describe("score's label guard (section 7)", () => {
     expect(typeof r.out.decision.row).toBe("string");
   });
   test("a failed audit withholds the decision until the contingency on the items outside the audit is complete, then the agreement labels decide", async () => {
-    const audited = its.slice(0, 2);
-    const rest = its.slice(2);
+    const audited = its.slice(0, 40);
+    const rest = its.slice(40);
     const failed = labels("audit", audited, flip);
     const r = await score(failed);
     withheld(r);
@@ -272,5 +317,65 @@ describe("score's label guard (section 7)", () => {
     expect(done.code).toBe(0);
     expect(done.out.labels).toMatchObject({ contingency_complete: true, primary_labels: "the labellers' agreement", decision_withheld: null });
     expect(typeof done.out.decision.row).toBe("string");
+  });
+  test("a --draws other than the frozen count prints the readout with no decision rows and says why", async () => {
+    const r = await score(labels("audit", its), { extra: ["--draws", "20"] });
+    expect(r.code).toBe(0);
+    expect(r.out.decision).toBeNull();
+    expect(r.out.decision_withheld).toBe("--draws 20 replaces the frozen " + FROZEN.stats.bootstrap_draws + " bootstrap draws, so score prints no decision rows");
+    expect(r.out.label_views).toEqual([]);
+    expect(r.out.models.opus.primary.needless["c-b"]).not.toBeNull();
+  });
+  test("the frozen draw count, by default or given, prints the decision rows", async () => {
+    for (const extra of [[], ["--draws", String(FROZEN.stats.bootstrap_draws)]]) {
+      const r = await score(labels("audit", its), { extra });
+      expect(r.code).toBe(0);
+      expect(typeof r.out.decision.row).toBe("string");
+      expect(r.out.decision_withheld).toBeUndefined();
+    }
+  });
+  test("fewer than 40 audit items with both labels cannot stand: unparsed audit labels with a complete contingency, or 39 standing pairs, withhold the decision", async () => {
+    const unparsed = labels("audit", its.slice(0, 40)).map((l) => ({ ...l, label: null }));
+    withheld(await score([...unparsed, ...labels("contingency", its.slice(40))]));
+    const r = await score(labels("audit", its.slice(0, 39)));
+    withheld(r);
+    expect(r.out.decision_withheld).toContain("fewer than 40");
+  });
+  test("40 standing audit pairs release the decision", async () => {
+    const r = await score(labels("audit", its.slice(0, 40)));
+    expect(r.code).toBe(0);
+    expect(typeof r.out.decision.row).toBe("string");
+  });
+  test("a failed audit whose complete contingency pairs no labels withholds the decision", async () => {
+    const r = await score([...labels("audit", its.slice(0, 40), flip), ...labels("contingency", its.slice(40)).map((l) => ({ ...l, label: null }))]);
+    withheld(r);
+    expect(r.out.labels).toMatchObject({ contingency_complete: true, contingency: 0 });
+  });
+  const dups = its.filter((i) => i.label === "DUPLICATE");
+  const linkRecords = (on: readonly AskItem[]) => on.map((it) => labelRecord(labelId(it.item, "link", "opus"), it.item, "opus", { class: "DUPLICATE", repeats_of: null, answer_judgement: [], reason: "r" }, dups.length));
+  test("a link run with scheduled link labels unsealed withholds the decision instead of using partial chains", async () => {
+    const r = await score([...labels("audit", its), ...linkRecords(dups.slice(0, 1))]);
+    withheld(r);
+    expect(r.out.decision_withheld).toContain("link run");
+  });
+  test("a complete link run releases the decision on its chains", async () => {
+    const r = await score([...labels("audit", its), ...linkRecords(dups)]);
+    expect(r.code).toBe(0);
+    expect(r.out.links).toBe("Opus links");
+    expect(typeof r.out.decision.row).toBe("string");
+  });
+  test("a main run whose k is not the pilot rule's k, differs between Opus and Sol, or has no pilot to check withholds the decision", async () => {
+    const r = await score(labels("audit", its), { k3: true });
+    withheld(r);
+    expect(r.out.decision_withheld).toBe("the main run's k (2) is not the pilot rule's k (3)");
+    withheld(await score(labels("audit", its), { replies: [...schedule(its, "opus", 3, 7), ...schedule(its, "sol", 2, 7)], k3: true }));
+    const none = await score(labels("audit", its), { noPilot: true });
+    withheld(none);
+    expect(none.out.decision_withheld).toContain("no --pilot-items");
+  });
+  test("a main run at the pilot rule's k releases the decision", async () => {
+    const r = await score(labels("audit", its), { replies: (["opus", "sol"] as const).flatMap((m) => schedule(its, m, 3, 7)), k3: true });
+    expect(r.code).toBe(0);
+    expect(typeof r.out.decision.row).toBe("string");
   });
 });

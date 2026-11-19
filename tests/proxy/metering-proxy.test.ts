@@ -694,7 +694,7 @@ describe("OpenRouter route", () => {
     expect(routable("openrouter", `${PARTICLE}:online`)).toBe(false);
     expect(routable("openrouter", "claude-opus-5-5")).toBe(false);
     expect(routable("gemini", "gemini-4-argon")).toBe(false);
-    expect(Object.keys(CHAT_PRICES).filter(id => id.startsWith("openrouter:"))).toEqual([`openrouter:${PARTICLE}`, `openrouter:${DEEPSEEK}`, "openrouter:openai/gpt-6.1-sol", "openrouter:google/gemini-4-argon"]);
+    expect(Object.keys(CHAT_PRICES).filter(id => id.startsWith("openrouter:"))).toEqual([`openrouter:${PARTICLE}`, `openrouter:${DEEPSEEK}`, "openrouter:openai/gpt-6.1-sol", "openrouter:google/gemini-4-argon", "openrouter:google/gemini-4-carbon"]);
   });
 
   // Value: protects=Claude Code's token counts on OpenRouter's Messages route are answered by the proxy, as Lane B's proxy answers them, instead of refused into review-units' degraded share, and still pass the slot's model check; fails_when=a count is refused, sent upstream, reserved or charged, or a model off the slot gets a count; why_new=GST-1019 (GEVA-89: all 106 of particle-1's refusals were token counts); seam=forward's estimate route; no_claim=how Claude Code uses the count
@@ -725,6 +725,7 @@ describe("OpenRouter route", () => {
 
   const SOL = "openai/gpt-6.1-sol";
   const ARGON = "google/gemini-4-argon";
+  const CARBON = "google/gemini-4-carbon";
   /** The routing bytes main sent at 5a01538 for every OpenRouter row that lists no image price. */
   const MAIN_ROUTING: Record<string, string> = {
     [PARTICLE]: '{"only":["particle-ai"],"allow_fallbacks":false,"data_collection":"deny","max_price":{"prompt":0.1,"completion":1,"request":0,"image":0}}',
@@ -744,10 +745,20 @@ describe("OpenRouter route", () => {
     expect(t.calls.map(c => c.raw)).toEqual([`{"model":"${ARGON}","messages":[{"role":"user","content":"Hello"}],"max_tokens":1,"provider":${argon},"usage":{"include":true}}`]);
   });
 
-  // Value: protects=every OpenRouter model but Argon routes exactly as before the image price fix; fails_when=the fix changes max_price, its key order or any other routing byte for a row that lists no image price; why_new=the Argon fix touches the routing every OpenRouter call shares; seam=openRouterRouting and the proxy's outgoing body; no_claim=OpenRouter's live filtering
-  test("every OpenRouter row but Argon lists no image price and sends main's routing bytes, Sol, particle-1 and DeepSeek included", async () => {
+  // Value: protects=a Carbon send reaches the same google-vertex/global endpoint at the same max_price as Argon, image price included; fails_when=the Carbon row drifts from the endpoint read its comment cites, or routes without the image price Argon needed; why_new=GEVA-537's rater and second gold labeller call Carbon through the product-value meter; seam=the Carbon row, openRouterRouting and the proxy's outgoing body; no_claim=OpenRouter's live endpoint list after the cited read
+  test("Carbon's routing carries the same provider, max_price and image price as Argon's, in the proxy's outgoing body too", async () => {
+    const carbon = '{"only":["google-vertex"],"allow_fallbacks":false,"data_collection":"deny","max_price":{"prompt":2,"completion":10,"request":0,"image":0.000002}}';
+    expect(JSON.stringify(openRouterRouting(CHAT_PRICES[`openrouter:${CARBON}`]!))).toBe(carbon);
+    const t = setup(() => ok({ prompt_tokens: 32, completion_tokens: 1, cost: 0.00007326 }));
+    const a = t.bind({ models: [`openrouter:${CARBON}`] });
+    expect((await t.call(a.slot, a.token, PATH, { model: CARBON, messages: [{ role: "user", content: "Hello" }], max_tokens: 1 })).status).toBe(200);
+    expect(t.calls.map(c => c.raw)).toEqual([`{"model":"${CARBON}","messages":[{"role":"user","content":"Hello"}],"max_tokens":1,"provider":${carbon},"usage":{"include":true}}`]);
+  });
+
+  // Value: protects=every OpenRouter model but Argon and Carbon routes exactly as before the image price fix; fails_when=the fix changes max_price, its key order or any other routing byte for a row that lists no image price; why_new=the Argon fix touches the routing every OpenRouter call shares; seam=openRouterRouting and the proxy's outgoing body; no_claim=OpenRouter's live filtering
+  test("every OpenRouter row but Argon and Carbon lists no image price and sends main's routing bytes, Sol, particle-1 and DeepSeek included", async () => {
     const rows = Object.entries(CHAT_PRICES).filter(([id]) => id.startsWith("openrouter:")).map(([id, row]) => [id.slice("openrouter:".length), row] as const);
-    const others = rows.filter(([id]) => id !== ARGON);
+    const others = rows.filter(([id]) => id !== ARGON && id !== CARBON);
     expect(others.map(([id]) => id).sort()).toEqual(Object.keys(MAIN_ROUTING).sort());
     for (const [id, row] of others) {
       expect(row.image).toBeUndefined();
@@ -1019,6 +1030,74 @@ describe("retries", () => {
 });
 
 describe("unknown sends and reconcile", () => {
+  test("a client that gives up aborts the upstream send, so a slow call is not bought twice when the client retries", async () => {
+    let completed = 0;
+    let aborted = 0;
+    let n = 0;
+    const t = setup((_url, init) => {
+      if (++n > 1) return (completed++, ok({ input_tokens: 10, output_tokens: 5 }));
+      return new Promise<Response>((resolve, reject) => {
+        const timer = setTimeout(() => (completed++, resolve(ok({ input_tokens: 10, output_tokens: 5 }))), 500);
+        init.signal?.addEventListener("abort", () => (clearTimeout(timer), aborted++, reject(init.signal!.reason)));
+      });
+    });
+    const a = t.bind();
+    const send = (signal?: AbortSignal) => fetch(`http://127.0.0.1:${t.proxy.port}/${a.slot}/anthropic/v1/messages`, { method: "POST", headers: { authorization: `Bearer ${a.token}` }, body: JSON.stringify({ model: "claude-opus-5-5", max_tokens: 100, messages: [{ role: "user", content: "hi" }] }), signal });
+    await expect(send(AbortSignal.timeout(100))).rejects.toThrow();
+    expect((await send()).status).toBe(200);
+    await Bun.sleep(700);
+    expect(aborted).toBe(1);
+    expect(completed).toBe(1);
+    expect(t.ledger.settles.map(([, o]) => o.kind).sort()).toEqual(["spent", "unknown"]);
+  });
+
+  test("a call that answers before its client gives up is untouched: its upstream send is never aborted and it settles spent", async () => {
+    let signal: AbortSignal | undefined;
+    const t = setup((_url, init) => ((signal = init.signal ?? undefined), new Promise<Response>(r => setTimeout(() => r(ok({ input_tokens: 10, output_tokens: 5 })), 50))));
+    const a = t.bind();
+    const res = await fetch(`http://127.0.0.1:${t.proxy.port}/${a.slot}/anthropic/v1/messages`, { method: "POST", headers: { authorization: `Bearer ${a.token}` }, body: JSON.stringify({ model: "claude-opus-5-5", max_tokens: 100, messages: [{ role: "user", content: "hi" }] }), signal: AbortSignal.timeout(5_000) });
+    expect(res.status).toBe(200);
+    expect(signal?.aborted).toBe(false);
+    expect(t.calls).toHaveLength(1);
+    expect(t.ledger.settles.map(([, o]) => o.kind)).toEqual(["spent"]);
+  });
+
+  test("a client that drops a stream after its headers leaves the proxy's own read alone: the call settles spent at its usage", async () => {
+    const enc = new TextEncoder();
+    let release!: () => void;
+    const gate = new Promise<void>(r => (release = r));
+    const t = setup((_url, init) =>
+      new Response(
+        new ReadableStream({
+          async start(c) {
+            init.signal?.addEventListener("abort", () => c.error(init.signal!.reason));
+            c.enqueue(enc.encode(`data: ${JSON.stringify({ type: "message_start", message: { usage: { input_tokens: 10, output_tokens: 1 } } })}
+
+`));
+            await gate;
+            if (init.signal?.aborted) return;
+            c.enqueue(enc.encode(`data: ${JSON.stringify({ type: "message_delta", usage: { output_tokens: 5 } })}
+
+`));
+            c.close();
+          },
+        }),
+        { headers: { "content-type": "text/event-stream" } },
+      ),
+    );
+    const a = t.bind();
+    const client = new AbortController();
+    const res = await fetch(`http://127.0.0.1:${t.proxy.port}/${a.slot}/anthropic/v1/messages`, { method: "POST", headers: { authorization: `Bearer ${a.token}` }, body: JSON.stringify({ model: "claude-opus-5-5", stream: true, max_tokens: 1000, messages: [] }), signal: client.signal });
+    expect(res.status).toBe(200);
+    await res.body!.getReader().read();
+    client.abort();
+    await Bun.sleep(100);
+    release();
+    const meter = await t.proxy.finalize(a.meter_id);
+    expect(t.ledger.settles.map(([, o]) => o.kind)).toEqual(["spent"]);
+    expect(meter.micros).toBe(10 * 4 + 5 * 20);
+  });
+
   test("a lost send keeps its charge, is not resent, and its error carries no bearer or key", async () => {
     const t = setup(() => Promise.reject(new Error("socket hang up", { cause: new Error(`TLS reset while sending x-api-key=${KEY}`) })));
     const a = t.bind();

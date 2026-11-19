@@ -1,0 +1,27 @@
+draws outside second twins: 98.2; second-twin draws the cap admits: 139.4
+yield threshold: 0.244 (cost at the threshold 247.50, cap less one allowance 247.50)
+authoring cost at yields 0.30, 0.44, 0.50: 220.35, 182.78, 173.12
+line at a measured 1.04 a draw and a first-pass rate of 0.30: None (None: the cap is used up before any second twin, so authoring stops)
+
+A. One read after n second-twin draws: share of runs reading go (lower bound at or above the threshold) and stop (upper bound below it)
+n    y=0.10 go/stop  y=0.15 go/stop  y=0.20 go/stop  y=0.24 go/stop  y=0.30 go/stop  y=0.35 go/stop  y=0.44 go/stop  y=0.50 go/stop
+4    0.004/0.000    0.012/0.000    0.027/0.000    0.045/0.000    0.084/0.000    0.126/0.000    0.228/0.000    0.312/0.000  
+8    0.005/0.000    0.021/0.000    0.056/0.000    0.100/0.000    0.194/0.000    0.294/0.000    0.500/0.000    0.637/0.000  
+12   0.001/0.282    0.005/0.142    0.019/0.069    0.045/0.037    0.118/0.014    0.213/0.006    0.445/0.001    0.613/0.000  
+16   0.001/0.515    0.006/0.284    0.027/0.141    0.066/0.075    0.175/0.026    0.312/0.010    0.603/0.001    0.773/0.000  
+24   0.000/0.564    0.001/0.280    0.013/0.115    0.042/0.050    0.153/0.012    0.313/0.003    0.666/0.000    0.846/0.000  
+32   0.000/0.600    0.002/0.272    0.017/0.093    0.062/0.033    0.228/0.005    0.449/0.001    0.820/0.000    0.945/0.000  
+48   0.000/0.800    0.000/0.406    0.009/0.129    0.050/0.038    0.251/0.004    0.530/0.000    0.912/0.000    0.985/0.000  
+
+Wilson bounds at n = 4: 0/4 upper 0.403; 4/4 lower 0.597
+
+B. Frozen two-step pilot: read after 16 second-twin draws; if open, draw to 32 and read once more; still open goes to the Captain. The line is held at its planning value 0.244
+yield  go     stop   Captain(open)  mean second-twin draws in the pilot
+0.10   0.001  0.682  0.317          23.8
+0.15   0.006  0.380  0.614          27.4
+0.20   0.036  0.177  0.786          29.3
+0.24   0.099  0.089  0.812          29.7
+0.30   0.288  0.029  0.684          28.8
+0.35   0.507  0.010  0.483          26.9
+0.44   0.847  0.001  0.152          22.3
+0.50   0.954  0.000  0.046          19.6

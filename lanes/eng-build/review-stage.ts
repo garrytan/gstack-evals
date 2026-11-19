@@ -19,6 +19,7 @@ import { erExposure, type ErEvidence } from "../eng-review/exposure.ts";
 import { isSkillArm, REVIEW_ARMS } from "./arms.ts";
 import { prepareTree } from "./build-stage.ts";
 import type { Bundle } from "./bundle.ts";
+import { fail } from "./errors.ts";
 import type { Arm, ReviewRecord, Reviewer, SessionOutcome } from "./types.ts";
 
 /** How one attempt ended, from the driver's termination. */
@@ -68,13 +69,15 @@ export const prepareReviewTree = (repo: string): string[] => prepareTree(repo);
  * The arm as the install layer (src/arms/install.ts) takes it, exactly as arms.ts's table says: none runs no session,
  * plain is bare (no gstack), pre-cut and the eng phase are gstack at their pins with the default install, and the
  * candidate is gstack at its pin with "./setup --host claude". Never er-cli's specs, which give every skill arm the
- * default install.
+ * default install. pin moves a skill arm to another commit with the same install (the planted-unit read's restore pin);
+ * a pin with no full commit is refused.
  */
-export function reviewArmSpec(arm: Arm): ArmSpec | null {
+export function reviewArmSpec(arm: Arm, pin?: { sha: string }): ArmSpec | null {
   const a = REVIEW_ARMS[arm];
   if (!a.session) return null;
   if (!a.gstack) return { name: arm, kind: "bare" };
-  return { name: arm, kind: "stack", stack: { repo: a.gstack.repo, sha: a.gstack.sha }, install: a.gstack.install === "default" ? {} : { claude: a.gstack.install } };
+  if (pin && !/^[0-9a-f]{40}$/.test(pin.sha)) return fail("E_USAGE", "arm " + arm + ": the pin " + JSON.stringify(pin.sha) + " names no full gstack commit, so the arm installs nothing");
+  return { name: arm, kind: "stack", stack: { repo: a.gstack.repo, sha: pin ? pin.sha : a.gstack.sha }, install: a.gstack.install === "default" ? {} : { claude: a.gstack.install } };
 }
 
 /** The command the install layer runs for the arm on claude, resolved the way src/arms/install.ts resolves a stack arm; null when the arm installs nothing. */

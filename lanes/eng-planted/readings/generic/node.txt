@@ -1,0 +1,31 @@
+# Common Node and TypeScript edge cases, written before any unit was seen (prereg 2026-11-15-geva-537 section 5). One per line.
+undefined versus null argument
+property read on undefined object
+empty array or empty object input
+empty or whitespace only string input
+number parsed from a string with NaN result
+floating point rounding in arithmetic
+integer beyond the safe integer range
+unhandled promise rejection
+await missing inside a loop or callback
+error thrown inside an async callback
+timeout or abort signal fired
+array index out of range
+mutation of a shared object or default parameter
+regular expression special characters left unescaped
+unicode surrogate pairs and string length
+case sensitivity in string comparison
+trailing slash or empty segment in a url or path
+duplicate keys or entries in the input
+sorting with the default string comparator
+date parsing across time zones
+json parse of malformed input
+circular reference when serializing
+optional field missing from an options object
+negative numbers or zero as a count
+very large input size
+file not found or permission denied
+falsy zero or empty string treated as missing
+iteration order of object keys
+event listener added twice or never removed
+encoding mismatch between buffer and string

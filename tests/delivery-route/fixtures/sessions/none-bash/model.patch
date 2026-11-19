@@ -1,0 +1,51 @@
+diff --git a/__pycache__/calc.cpython-312.pyc b/__pycache__/calc.cpython-312.pyc
+new file mode 100644
+index 0000000000000000000000000000000000000000..2de8901105c7d3a98946889fdce77f2b4b27ea01
+GIT binary patch
+literal 227
+zcmX@j%ge<81P7%5WGMjY#~=<2FhUuhK}x1Gq%gEFL@`t{YBD7=!IS`L5Stl@Kl1>I
+z=?patHH=k2RxpDmqu)vfO{QCniMJS&ib2X06n+Wlm!uY#B&DY4Cnx44>lIYqVopp+
+zDPjl8f~+g%1`-VnH@JB^3Oh|3d_DuY41Su7U<E}WYl=8P1RId}#bJ}1pHiBWYFESw
+W<bt(>T>62Tk&*E;6C<M_SS<h;k|>)1
+
+literal 0
+HcmV?d00001
+
+diff --git a/calc.py b/calc.py
+index 12ee743..4693ad3 100644
+--- a/calc.py
++++ b/calc.py
+@@ -1,2 +1,2 @@
+ def add(a, b):
+-    return a - b
++    return a + b
+diff --git a/tests/__pycache__/test_calc.cpython-312.pyc b/tests/__pycache__/test_calc.cpython-312.pyc
+new file mode 100644
+index 0000000000000000000000000000000000000000..d7bf3edc45d3244f991a1d00a342b5b52548ae39
+GIT binary patch
+literal 614
+zcmYjOJxc>Y5S`t-m_?H)DiRUV%5Y8m13^#`J3+9zW;t(9G+g|+y%Z4(ixmEY2wJ2S
+z|Af7jg(xdlR_TP(Ml77U%MrJD^Jd=c?wj4ma(NtZJuLh-uP}a4lCQ#$BpXP2pg^$@
+zT#7toE$(s#9JWDOT~Kxa&9QvrDBfEcckK>y3Ij@Z9A+#}DSy-jz=laOjid(wxJ-e|
+z73+d)b+}`h;<{3MfsXyWm3GjLbVJfW=)nav|EpM|6%RcC`d9p(XH{k8j6nw+duKqx
+zfO-csxWmnar*#m;TW4)Aj7UJ|whqDrO}8xnEUd<8Xg^SC)G12e3;p_O#|Y9S&UrpH
+zbY9OZ<XTq|F5y*_UPSdtRBvalcl+#SzQ6t~Rua_koopkdJoZ|FlxAGY)`@C|#7k0=
+zrA&#+*n0<21w&LKAonQ{(M5zVB%Bp$Sx-7#!HD+pQB01EO_tO7jM&4%riW9fhtOw?
+s4*n61%)(kUhXTEUUPSn`7-MfR`3|#RW1Q8l4qqxuPnD%_z$D%N2YqmU2LJ#7
+
+literal 0
+HcmV?d00001
+
+diff --git a/tests/test_calc.py b/tests/test_calc.py
+new file mode 100644
+index 0000000..a92eacc
+--- /dev/null
++++ b/tests/test_calc.py
+@@ -0,0 +1,7 @@
++import unittest
++from calc import add
++
++
++class AddTest(unittest.TestCase):
++    def test_add(self):
++        self.assertEqual(add(2, 3), 5)

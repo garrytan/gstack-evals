@@ -2,7 +2,7 @@
 // Keyless tests of the eng-review build read's recipes, parsers and case classifier (lanes/eng-build/recipes.ts) and
 // the verifier's new record parsers (lanes/real-outcome/task/record.ts). Synthetic records only; no Docker.
 import { describe, expect, test } from "bun:test";
-import { parseCargo, parseJestJson, parseMochaJson, parseNodeEvents, resultFor } from "../../lanes/real-outcome/task/record.ts";
+import { parseCargo, parseJestJson, parseMochaJson, parseNodeEvents, parsePytest, resultFor } from "../../lanes/real-outcome/task/record.ts";
 import { caseClass, classifyLog, ecoOfFile, findProject, needRecipe, nodeRunner, parsePytestJunit, recipeFor, runClasses, runnable, screenTest, verifierRunner } from "../../lanes/eng-build/recipes.ts";
 import { EbError } from "../../lanes/eng-build/errors.ts";
 import { parseRecord } from "../../lanes/real-outcome/task/verify.ts";
@@ -15,6 +15,17 @@ const code = (f: () => unknown): string => {
   }
   return "none";
 };
+
+describe("innermost frames from the verifiers", () => {
+  test("a failed pytest phase and a failed node:test event keep their where frame; a pass carries none", () => {
+    const py = parsePytest([JSON.stringify({ event: "phase", id: "tests/test_a.py::test_x", when: "call", outcome: "failed", exc: "ZeroDivisionError", msg: "ZeroDivisionError: division by zero", where: "/testbed/pkg/ops.py:12" }), JSON.stringify({ event: "phase", id: "tests/test_a.py::test_y", when: "call", outcome: "passed", where: null })].join("\n"));
+    expect(py.results["tests/test_a.py::test_x"]).toMatchObject({ status: "fail", where: "/testbed/pkg/ops.py:12" });
+    expect(py.results["tests/test_a.py::test_y"]?.where).toBeUndefined();
+    const js = parseNodeEvents([JSON.stringify({ event: "test:fail", path: ["adds"], file: "/testbed/t/m.test.js", exc: "TypeError", msg: "boom", where: "/testbed/src/calc.js:3" }), JSON.stringify({ event: "test:pass", path: ["subs"], file: "/testbed/t/m.test.js", where: "/testbed/src/calc.js:9" })].join("\n"));
+    expect(js.results["t/m.test.js::adds"]).toMatchObject({ status: "fail", where: "/testbed/src/calc.js:3" });
+    expect(js.results["t/m.test.js::subs"]?.where).toBeUndefined();
+  });
+});
 
 describe("detection and recipes", () => {
   test("files map to ecosystems, and only Go, Node, Python and Rust have a recipe", () => {

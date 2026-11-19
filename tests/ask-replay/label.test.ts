@@ -144,11 +144,11 @@ describe("the label readout", () => {
   });
   test("decision rows wait for a complete audit that stands, or a failed audit plus a complete contingency on the other items", () => {
     const flip = (it: AskItem) => reply(it, it.label === "DECISION" ? "DUPLICATE" : "DECISION");
-    const half = items.slice(0, 30);
-    const rest = items.slice(30);
+    const half = items.slice(0, 40);
+    const rest = items.slice(40);
     const audit = [...recs("audit", "opus", half), ...recs("audit", "astra", half)];
     expect(labelReadout(items, audit).summary).toMatchObject({ audit_complete: true, decision_withheld: null });
-    expect(labelReadout(items, audit.slice(1)).summary).toMatchObject({ audit_complete: false, sealed: { "audit.opus": { sealed: 29, scheduled: 30 } } });
+    expect(labelReadout(items, audit.slice(1)).summary).toMatchObject({ audit_complete: false, sealed: { "audit.opus": { sealed: 39, scheduled: 40 } } });
     expect(labelReadout(items, audit.slice(1)).summary.decision_withheld).toContain("incomplete");
     expect(labelReadout(items, recs("audit", "opus", half)).summary.audit_complete).toBe(false);
     const failed = [...recs("audit", "opus", half, flip), ...recs("audit", "astra", half, flip)];

@@ -1,0 +1,4 @@
+$ b1b plan
+b1b-smoke: smoke-opus (4); expected $1.92, parallel $30.00, VM $7.20, cap $40 (recorded $40)
+b1b-opus: b1b-1 (40), b1b-2 (40), b1b-3 (40); expected $57.60, parallel $30.00, VM $14.88, cap $130 (recorded $130)
+all-in stop $250

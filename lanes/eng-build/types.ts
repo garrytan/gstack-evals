@@ -9,8 +9,10 @@ export type UnitType = "mobile" | "consumer" | "server" | "devtools";
 export type Ecosystem = "go" | "node" | "python" | "rust";
 export type UnitSet = "comparison" | "reserve" | "calibration" | "new";
 
-/** A test case's class in one verifier run (prereg section 3). Only "assert" is a scorable failure. */
-export type CaseClass = "pass" | "assert" | "missing_name" | "load" | "compile" | "timeout" | "no_result";
+/** A test case's class in one verifier run (prereg section 3). Only "assert" is a scorable failure in eng-build's own
+ * grading. "crash" is the planted-unit read's runtime error in product code (GEVA-537 plan section 2, rule 2): only the
+ * planted grader and catch rule emit it, and they count it as a failure like "assert". */
+export type CaseClass = "pass" | "assert" | "crash" | "missing_name" | "load" | "compile" | "timeout" | "no_result";
 
 /** One case's class in each of the verifier's runs. */
 export interface CaseRuns {

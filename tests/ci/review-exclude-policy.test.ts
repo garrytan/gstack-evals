@@ -5,13 +5,15 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 // .gstack/ship-policy.json's review_exclude_paths takes a preregistration's frozen data files (its frame, repository and
-// licence lists under wiki/plans) out of the diff /ship's model reviewers read, so a post with megabytes of frozen rows
-// stays under gstack's 2 MB reviewer ceiling. gstack applies each pattern as a git glob pathspec, so these checks ask git
-// which paths the patterns match: every tracked file here, and a scratch repository of near misses. A pattern that reached
-// outside wiki/plans, or matched anything but a .json file, would hide code or prose from review.
+// licence lists under wiki/plans) and the harness mechanics eval's recorded session fixtures (transcripts, SDK logs,
+// first-request captures and hook records under tests/harness-mechanics/fixtures/arms) out of the diff /ship's model
+// reviewers read, so a post with megabytes of frozen rows or recordings stays under gstack's 2 MB reviewer ceiling. gstack
+// applies each pattern as a git glob pathspec, so these checks ask git which paths the patterns match: every tracked file
+// here, and a scratch repository of near misses. A pattern that reached outside those places, or matched anything but a
+// .json file under wiki/plans, would hide code or prose from review.
 const ROOT = join(import.meta.dir, "..", "..");
 const POLICY = JSON.parse(readFileSync(join(ROOT, ".gstack", "ship-policy.json"), "utf8")) as { review_exclude_paths: string[] };
-const PATTERNS = ["wiki/plans/*/*-frame.json", "wiki/plans/*/*-repos.json", "wiki/plans/*/*-licences.json"];
+const PATTERNS = ["wiki/plans/*/*-frame.json", "wiki/plans/*/*-repos.json", "wiki/plans/*/*-licences.json", "tests/harness-mechanics/fixtures/arms/**"];
 
 const scratch = mkdtempSync(join(tmpdir(), "review-exclude-policy-"));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
@@ -25,20 +27,23 @@ function matched(dir: string): string[] {
 
 /** A .json file directly inside one post folder under wiki/plans. */
 const inPlansPost = (p: string) => /^wiki\/plans\/[^/]+\/[^/]+\.json$/.test(p);
+/** A file at any depth inside the harness mechanics eval's recorded arm fixtures. */
+const inArmFixtures = (p: string) => p.startsWith("tests/harness-mechanics/fixtures/arms/");
 
 describe("review_exclude_paths in .gstack/ship-policy.json", () => {
-  test("holds exactly the three frozen data-file patterns", () => {
+  test("holds exactly the three frozen data-file patterns and the recorded arm fixtures", () => {
     expect(POLICY.review_exclude_paths).toEqual(PATTERNS);
   });
 
-  test("matches only .json files directly inside a wiki/plans post in this tree", () => {
-    expect(matched(ROOT).filter((p) => !inPlansPost(p))).toEqual([]);
+  test("matches only .json files directly inside a wiki/plans post, and the recorded arm fixtures, in this tree", () => {
+    expect(matched(ROOT).filter((p) => !inPlansPost(p) && !inArmFixtures(p))).toEqual([]);
   });
 
-  test("matches no file outside wiki/plans and no file that is not .json", () => {
+  test("matches no file but a wiki/plans post's data files and the recorded arm fixtures", () => {
     const dir = join(scratch, "repo");
     const post = "wiki/plans/2030-01-02-a-prereg";
-    const hits = [post + "/b1-frame.json", post + "/b1-repos.json", post + "/o-licences.json"];
+    const arms = "tests/harness-mechanics/fixtures/arms";
+    const hits = [post + "/b1-frame.json", post + "/b1-repos.json", post + "/o-licences.json", arms + "/hook-stop/transcript.jsonl", arms + "/hook-stop/first-request.json", arms + "/in-image/none.txt"];
     const misses = [
       "b1-frame.json",
       "wiki/b1-frame.json",
@@ -56,6 +61,12 @@ describe("review_exclude_paths in .gstack/ship-policy.json", () => {
       post + "/frame.json",
       post + "/prereg.json",
       post + "/README.md",
+      "tests/harness-mechanics/arms.test.ts",
+      "tests/harness-mechanics/fixtures/scorer/cases.json",
+      "tests/harness-mechanics/fixtures/arms.json",
+      "tests/harness-mechanics/fixtures/armsx/a.jsonl",
+      "lanes/harness-mechanics/fixtures/arms/a.jsonl",
+      "tests/fixtures/arms/a.jsonl",
     ];
     for (const p of [...hits, ...misses]) {
       mkdirSync(join(dir, dirname(p)), { recursive: true });

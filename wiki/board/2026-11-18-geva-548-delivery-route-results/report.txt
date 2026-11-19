@@ -1,0 +1,63 @@
+== claude-opus-5-5 (decision model)
+  none: followed 0/60 0.0% [0.0%, 6.0%]; gaps 0, cap stops 0, tool-only 0, bash-only source 50, unseen source 0, steps seen 0, loaded 0, safety stops 0, audit 0, passes 35 (descriptive)
+  described: followed 0/60 0.0% [0.0%, 6.0%]; gaps 0, cap stops 0, tool-only 0, bash-only source 52, unseen source 0, steps seen 0, loaded 0, safety stops 0, audit 0, passes 34 (descriptive)
+  gstack-shaped: followed 46/60 76.7% [64.6%, 85.6%]; gaps 0, cap stops 0, tool-only 8, bash-only source 35, unseen source 0, steps seen 60, loaded 0, safety stops 0, audit 0, passes 38 (descriptive)
+  command: followed 39/60 65.0% [52.4%, 75.8%]; gaps 0, cap stops 0, tool-only 7, bash-only source 38, unseen source 0, steps seen 60, loaded 0, safety stops 0, audit 0, passes 38 (descriptive)
+  none sensitivity: 8 Bash writes no parser can name, in 7 sessions; 2 sessions write a non-spec file under a spec folder; followed 0/60 with those sessions scored not followed, 9/60 scored followed
+  described sensitivity: 8 Bash writes no parser can name, in 7 sessions; 2 sessions write a non-spec file under a spec folder; followed 0/60 with those sessions scored not followed, 9/60 scored followed
+  gstack-shaped sensitivity: 5 Bash writes no parser can name, in 5 sessions; 2 sessions write a non-spec file under a spec folder; followed 43/60 with those sessions scored not followed, 50/60 scored followed; the bar reading rests on them
+  command sensitivity: 10 Bash writes no parser can name, in 9 sessions; 2 sessions write a non-spec file under a spec folder; followed 31/60 with those sessions scored not followed, 42/60 scored followed
+  none as merged, before D1: followed 0/60 0.0% [0.0%, 6.0%]
+  described as merged, before D1: followed 0/60 0.0% [0.0%, 6.0%]
+  gstack-shaped as merged, before D1: followed 44/60 73.3% [61.0%, 82.9%]
+  command as merged, before D1: followed 39/60 65.0% [52.4%, 75.8%]
+  described - none: +0.0 points [-6.0, +6.0] on 60 paired tasks (0 vs 0 discordant)
+  gstack-shaped - none: +76.7 points [+63.2, +85.6] on 60 paired tasks (46 vs 0 discordant)
+  command - none: +65.0 points [+51.0, +75.8] on 60 paired tasks (39 vs 0 discordant)
+  command - gstack-shaped: -11.7 points [-24.1, +1.1] on 60 paired tasks (4 vs 11 discordant)
+  described - gstack-shaped: -76.7 points [-85.6, -63.2] on 60 paired tasks (0 vs 46 discordant)
+  command - described: +65.0 points [+51.0, +75.8] on 60 paired tasks (39 vs 0 discordant)
+  reading: no route reaches the bar: keep hooks for steps that must run, and stop spending on wording
+  reading as merged, before D1: no route reaches the bar: keep hooks for steps that must run, and stop spending on wording
+== gpt-6.1-sol (descriptive)
+  none: followed 48/60 80.0% [68.2%, 88.2%] REACHES; gaps 0, cap stops 0, tool-only 48, bash-only source 0, unseen source 0, steps seen 0, loaded 0, safety stops 0, audit 0, passes 34 (descriptive)
+  described: followed 59/60 98.3% [91.1%, 99.7%] REACHES; gaps 0, cap stops 0, tool-only 59, bash-only source 0, unseen source 0, steps seen 60, loaded 60, safety stops 0, audit 0, passes 32 (descriptive)
+  gstack-shaped: followed 60/60 100.0% [94.0%, 100.0%] REACHES; gaps 0, cap stops 0, tool-only 60, bash-only source 0, unseen source 0, steps seen 60, loaded 0, safety stops 0, audit 0, passes 31 (descriptive)
+  command: followed 60/60 100.0% [94.0%, 100.0%] REACHES; gaps 0, cap stops 0, tool-only 60, bash-only source 0, unseen source 0, steps seen 60, loaded 0, safety stops 0, audit 0, passes 32 (descriptive)
+  none sensitivity: 7 Bash writes no parser can name, in 2 sessions; 2 sessions write a non-spec file under a spec folder; followed 44/60 with those sessions scored not followed, 48/60 scored followed; the bar reading rests on them
+  described sensitivity: 7 Bash writes no parser can name, in 3 sessions; 2 sessions write a non-spec file under a spec folder; followed 54/60 with those sessions scored not followed, 59/60 scored followed
+  gstack-shaped sensitivity: 6 Bash writes no parser can name, in 3 sessions; 2 sessions write a non-spec file under a spec folder; followed 55/60 with those sessions scored not followed, 60/60 scored followed
+  command sensitivity: 6 Bash writes no parser can name, in 3 sessions; 2 sessions write a non-spec file under a spec folder; followed 55/60 with those sessions scored not followed, 60/60 scored followed
+  none as merged, before D1: followed 48/60 80.0% [68.2%, 88.2%] REACHES
+  described as merged, before D1: followed 59/60 98.3% [91.1%, 99.7%] REACHES
+  gstack-shaped as merged, before D1: followed 60/60 100.0% [94.0%, 100.0%] REACHES
+  command as merged, before D1: followed 60/60 100.0% [94.0%, 100.0%] REACHES
+  described - none: +18.3 points [+7.1, +30.3] on 60 paired tasks (12 vs 1 discordant)
+  gstack-shaped - none: +20.0 points [+9.9, +31.8] on 60 paired tasks (12 vs 0 discordant)
+  command - none: +20.0 points [+9.9, +31.8] on 60 paired tasks (12 vs 0 discordant)
+  command - gstack-shaped: +0.0 points [-6.0, +6.0] on 60 paired tasks (0 vs 0 discordant)
+  described - gstack-shaped: -1.7 points [-8.9, +4.5] on 60 paired tasks (0 vs 1 discordant)
+  command - described: +1.7 points [-4.5, +8.9] on 60 paired tasks (1 vs 0 discordant)
+  reading: none reaches the bar: the model follows the steps unprompted, so no route can show lift here
+  reading as merged, before D1: none reaches the bar: the model follows the steps unprompted, so no route can show lift here
+== particle-1 (descriptive)
+  none: followed 1/60 1.7% [0.3%, 8.9%]; gaps 0, cap stops 0, tool-only 1, bash-only source 3, unseen source 0, steps seen 0, loaded 0, safety stops 0, audit 0, passes 34 (descriptive)
+  described: followed 4/60 6.7% [2.6%, 15.9%]; gaps 0, cap stops 0, tool-only 3, bash-only source 0, unseen source 0, steps seen 1, loaded 1, safety stops 0, audit 0, passes 36 (descriptive)
+  gstack-shaped: followed 53/60 88.3% [77.8%, 94.2%] REACHES; gaps 0, cap stops 0, tool-only 46, bash-only source 0, unseen source 0, steps seen 60, loaded 0, safety stops 0, audit 0, passes 32 (descriptive)
+  command: followed 49/60 81.7% [70.1%, 89.4%] REACHES; gaps 0, cap stops 0, tool-only 39, bash-only source 0, unseen source 0, steps seen 60, loaded 0, safety stops 0, audit 0, passes 32 (descriptive)
+  none sensitivity: 4 Bash writes no parser can name, in 2 sessions; 2 sessions write a non-spec file under a spec folder; followed 1/60 with those sessions scored not followed, 5/60 scored followed
+  described sensitivity: 7 Bash writes no parser can name, in 3 sessions; 2 sessions write a non-spec file under a spec folder; followed 3/60 with those sessions scored not followed, 8/60 scored followed
+  gstack-shaped sensitivity: 7 Bash writes no parser can name, in 4 sessions; 2 sessions write a non-spec file under a spec folder; followed 49/60 with those sessions scored not followed, 55/60 scored followed
+  command sensitivity: 2 Bash writes no parser can name, in 2 sessions; 2 sessions write a non-spec file under a spec folder; followed 46/60 with those sessions scored not followed, 50/60 scored followed; the bar reading rests on them
+  none as merged, before D1: followed 1/60 1.7% [0.3%, 8.9%]
+  described as merged, before D1: followed 4/60 6.7% [2.6%, 15.9%]
+  gstack-shaped as merged, before D1: followed 53/60 88.3% [77.8%, 94.2%] REACHES
+  command as merged, before D1: followed 49/60 81.7% [70.1%, 89.4%] REACHES
+  described - none: +5.0 points [-2.4, +14.0] on 60 paired tasks (3 vs 0 discordant)
+  gstack-shaped - none: +86.7 points [+73.9, +92.7] on 60 paired tasks (52 vs 0 discordant)
+  command - none: +80.0 points [+66.4, +87.9] on 60 paired tasks (48 vs 0 discordant)
+  command - gstack-shaped: -6.7 points [-18.8, +5.3] on 60 paired tasks (4 vs 8 discordant)
+  described - gstack-shaped: -81.7 points [-88.8, -67.7] on 60 paired tasks (0 vs 49 discordant)
+  command - described: +75.0 points [+60.5, +83.6] on 60 paired tasks (45 vs 0 discordant)
+  reading: gstack-shaped reaches the bar and so does command: the setup-first layout does not stop the steps, so no layout change
+  reading as merged, before D1: gstack-shaped reaches the bar and so does command: the setup-first layout does not stop the steps, so no layout change

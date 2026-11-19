@@ -1,0 +1,11 @@
+#!/bin/sh
+# B1's gstack-shaped arm: a stand-in for gstack 1.99.5.0's bin/gstack-skill-end (5b4fa9ea). The real script records the
+# outcome and prints this one line.
+outcome=unknown
+start=
+while [ $# -gt 0 ]; do
+  case "$1" in --outcome) outcome=$2 ;; --tel-start) start=$2 ;; esac
+  shift
+done
+case "$start" in ''|*[!0-9]*) start=$(date +%s) ;; esac
+echo "SKILL_END: recorded outcome=$outcome duration_s=$(( $(date +%s) - start ))"

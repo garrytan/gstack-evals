@@ -76,6 +76,13 @@ export const OPENROUTER_MODELS: Record<string, ChatPrice> = {
   // Max Price"); at 0.000002 the same request reached Google (probe of 2026-11-07, two calls at max_tokens 1). So the row
   // carries that image price. The tbv key writer sends text only.
   "google/gemini-4-argon": { input: 2, output: 10, cache_read: 0.1, cache_write: 0.1875, providers: ["google-vertex"], image: 0.000002 },
+  // Gemini 4 Carbon, the planted-unit read's foreseeability rater and second gold labeller (prereg 2026-11-15-geva-537).
+  // OpenRouter's endpoints API (https://openrouter.ai/api/v1/models/google/gemini-4-carbon/endpoints), read
+  // 2026-11-15T03:37Z, lists Google Vertex (google-vertex/global) at $2 input, $10 output, $0.10 cache read, $0.1875 cache
+  // write and an image price of 0.000002, the same as Argon's row. Pinned to google-vertex like Argon; max_price at $2 and
+  // $10 leaves out the dearer google-vertex/us, eu and priority endpoints ($2.20 and $3.60 input), and the image price is
+  // carried for the reason Argon's comment gives.
+  "google/gemini-4-carbon": { input: 2, output: 10, cache_read: 0.1, cache_write: 0.1875, providers: ["google-vertex"], image: 0.000002 },
 };
 
 /**
@@ -97,6 +104,12 @@ export const CHAT_PRICES: Record<string, ChatPrice> = {
   "openai:gpt-6.1-sol": { input: 2, output: 10, cache_read: 0.1, cache_write: 2.5, long: { above_input_tokens: 272_000, input: 4, output: 15, cache_read: 0.2, cache_write: 5 } },
   "openai:gpt-6-luna": { input: 0.1, output: 0.5, cache_read: 0.01, cache_write: 0.125, long: { above_input_tokens: 272_000, input: 0.2, output: 0.75, cache_read: 0.02, cache_write: 0.25 } },
   "openai:gpt-6-astra": { input: 10, output: 50, cache_read: 1, cache_write: 12.5, long: { above_input_tokens: 272_000, input: 20, output: 75, cache_read: 2, cache_write: 25 } },
+  // GPT-6.2 Astra (the office-hours rewrite eval's judge, gold pass, unanimous key and simulator auditor). OpenAI's model
+  // page (https://developers.openai.com/api/docs/models/gpt-6.2-astra) and pricing page
+  // (https://developers.openai.com/api/docs/pricing), read 2026-11-18T01:05Z, Standard tier: $8 input, $40 output, $0.40
+  // cached input and $10 a 30-minute cache write; past 272K input tokens, input and cache rates double and output is 1.5
+  // times, for the whole request ($16, $60, $0.80 and $20).
+  "openai:gpt-6.2-astra": { input: 8, output: 40, cache_read: 0.4, cache_write: 10, long: { above_input_tokens: 272_000, input: 16, output: 60, cache_read: 0.8, cache_write: 20 } },
   ...Object.fromEntries(Object.entries(OPENROUTER_MODELS).map(([id, price]) => [`openrouter:${id}`, price])),
   ...Object.fromEntries(Object.entries(TYPESAFE_MODELS).map(([id, price]) => [`typesafe:${id}`, price])),
 };

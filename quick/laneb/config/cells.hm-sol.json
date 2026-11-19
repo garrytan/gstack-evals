@@ -1,0 +1,13 @@
+{
+  "note": "Cells for the harness mechanics eval's Sol items (lanes/harness-mechanics, prereg 2026-11-09 section 22): anthropic/gpt-6.1-sol through OpenRouter inside Claude Code as L1 ran it, reserved in the item's ledger before each session and enforced by the metering proxy, and 100 turns. Deviation D8 (Captain's ruling, pre-data, before Stage 3): the per-session allowance is $6, not the $5 cells.l1-sol.json sets, because Sol's byte-based reservation over-counts input (median 2.03x, measured on Stage 1) and six concurrent holds tripped the $5 cap on real spend of ~$1-2. cells.l1-sol.json belongs to the L1 overhaul eval and stays at $5, so it is not reused; this file differs from it only in its $6 allowance.",
+  "models": [
+    {
+      "id": "gpt-6.1-sol",
+      "harbor_model": "anthropic/gpt-6.1-sol",
+      "session_cap_usd": 6
+    }
+  ],
+  "max_output_tokens": 32000,
+  "verifier_timeout_multiplier": 2,
+  "sdk_max_turns": 100
+}
