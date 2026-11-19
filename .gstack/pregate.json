@@ -17,6 +17,55 @@
       ],
       "pattern": "\\(short\\.get\\(kw\\.get\\(\"upstream_model\"\\), kw\\.get\\(\"upstream_model\"\\)\\), arm\\)\\s*$",
       "reason": "a dict key tuple in the published harness mechanics counting script, not a credential"
+    },
+    {
+      "finding": "env.kv",
+      "paths": [
+        "wiki/board/2026-11-19-geva-540-skill-pack-h2h-session-data/diffs/0460-none.patch"
+      ],
+      "pattern": "map\\[string\\]any",
+      "reason": "a Go map type in a test fixture in a published session diff of the skill-pack head-to-head, not a credential"
+    },
+    {
+      "finding": "env.kv",
+      "paths": [
+        "wiki/board/2026-11-19-geva-540-skill-pack-h2h-session-data/diffs/0815-agent-skills.patch"
+      ],
+      "pattern": "\\(Array\\.isArray\\(existing\\) \\? existing : \\[existing\\]\\)\\.concat\\(val\\)",
+      "reason": "a cookie header merge expression in source code in a published session diff of the skill-pack head-to-head, not a credential"
+    },
+    {
+      "finding": "env.kv",
+      "paths": [
+        "wiki/board/2026-11-19-geva-540-skill-pack-h2h-session-data/diffs/1090-agent-skills.patch"
+      ],
+      "pattern": "defaultURI\\.Password",
+      "reason": "a struct field copied from another struct in a test in a published session diff of the skill-pack head-to-head, not a credential"
+    },
+    {
+      "finding": "env.kv",
+      "paths": [
+        "wiki/board/2026-11-19-geva-540-skill-pack-h2h-session-data/diffs/1166-tstack.patch"
+      ],
+      "pattern": "real-secret-value",
+      "reason": "a placeholder string a test sets in a published session diff of the skill-pack head-to-head, not a credential"
+    },
+    {
+      "finding": "env.kv",
+      "paths": [
+        "wiki/board/2026-11-19-geva-540-skill-pack-h2h-session-data/diffs/1252-none.patch"
+      ],
+      "pattern": "parentACL\\.Auth",
+      "reason": "a field copied from a parent object in source code in a published session diff of the skill-pack head-to-head, not a credential"
+    },
+    {
+      "finding": "creds.basic_auth_url",
+      "paths": [
+        "wiki/board/2026-11-19-geva-540-skill-pack-h2h-session-data/diffs/1149-superpowers.patch",
+        "wiki/board/2026-11-19-geva-540-skill-pack-h2h-session-data/diffs/1150-gstack.patch"
+      ],
+      "pattern": "https://user:pass@localhost:5000/v2/_catalog",
+      "reason": "a placeholder registry URL on localhost in a test in a published session diff of the skill-pack head-to-head, not a credential"
     }
   ],
   "dependencies": {
