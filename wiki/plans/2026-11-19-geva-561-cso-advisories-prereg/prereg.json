@@ -960,12 +960,13 @@
   "per_arm_gate": "on gold reports, the production judge's disagreement rate on named in cso reports and in none reports (models pooled) differ by at most 10 points",
   "format_variants": "for 10 stage 1 units the harness writes the oracle finding as a table row and as a prose paragraph, plus two near misses (right file and wrong class; right class 30 lines from every hunk); the judge must give each pair the same named label in at least 9 of 10 pairs and score no near miss as a hit in at least 18 of 20",
   "refusal_max": 0.05,
-  "route_rule": "a judge route scores only after it passes named kappa (on all gold and again on non-anchor gold), the per-arm gate, the format variants and the refusal limit",
+  "route_rule": "a judge route scores only after it passes named kappa (on all gold and again on non-anchor gold), the per-arm gate, the format variants, the refusal limit and the over-cap gold-drop limit",
   "sol_check": "the Sol stage runs its own check on at least 40 Sol reports from its smoke and pilot before any Sol number counts",
   "max_input_tokens": 40000,
   "gold_rule": "each gold labeller makes two calls per report: a key-blind extraction of its own finding list from the redacted scored text by pass A's rules, then pass B's packet for its own first 10 findings and pass A's first 10, returning hit labels for its own findings and validity labels for pass A's; gold named comes from each labeller's own findings, so the check covers extraction as well as labelling; validity gold stays on pass A's findings",
   "kappa_non_anchor_min": 0.6,
-  "over_cap_rule": "a pass B packet over max_input_tokens, gold's included, is trimmed in order until it fits: known open advisories to their summaries and file lists, then each fix hunk beyond its first 100 lines, largest file first; findings and excerpts are never trimmed; a production packet still over is a judge gap, a gold packet still over leaves that report out of gold"
+  "over_cap_rule": "a pass B packet over max_input_tokens, gold's included, is trimmed in order until it fits: known open advisories to their summaries and file lists, then each fix hunk beyond its first 100 lines, largest file first; findings and excerpts are never trimmed; a production packet still over is a judge gap, a gold packet still over leaves that report out of gold, counted per arm and model and reported",
+  "gold_overcap_max": 0.05
  },
  "analysis": {
   "primary_family": [
@@ -986,7 +987,18 @@
    "CUT-CANDIDATE rules, every condition at its gap bound; the null path also needs the validity label validated",
    "otherwise FIX-METHOD: on gaps when a CUT-CANDIDATE condition held on complete pairs but not at its gap bound, else on power, stated with the interval"
   ],
-  "gap_bounds": "complete-pair estimates drop a unit with a gap in either arm; every verdict condition is also read at its gap bound, on the full paired contrast with each gap session filled with the value least favourable to the verdict tested: for named, not named in the arm the verdict favours and named in the other; for a per-session count (supported or unsupported findings), 0 in the arm the condition needs high and 10, the counted-findings cap, in the arm the condition needs low; for Ahead and KEEP cso gaps count against cso, for Behind and CUT-CANDIDATE the reverse; both bounds are reported for every contrast; a verdict stands only when every condition it uses holds at its gap bound"
+  "gap_bounds": "complete-pair estimates drop a unit with a gap in either arm; every verdict condition is also read at its gap bound, on the full paired contrast with each gap session filled with the value least favourable to the verdict tested: for named, not named in the arm the verdict favours and named in the other; for a per-session count (supported or unsupported findings), 0 in the arm the condition needs high and 10, the counted-findings cap, in the arm the condition needs low; for Ahead and KEEP cso gaps count against cso, for Behind and CUT-CANDIDATE the reverse; both bounds are reported for every contrast; a verdict stands only when every condition it uses holds at its gap bound",
+  "interim_look": {
+   "rule": "R113",
+   "applies_when": "stage 2 is planned above $500 paid after re-pricing or a raised line; planned under $400 paid (sessions $336, judging about $29, part of the $40 VM)",
+   "at": "half of stage 2's units in the seeded order",
+   "stop_for_difference_abs_z": 2.8,
+   "final_look_z": 1.98,
+   "futility": "a contrast stops when its conditional power under a 19-point effect (section 13's MDD at planning size) falls below 10%",
+   "early_stop_report": "says so and reports the estimate as possibly overstated",
+   "other_looks": "none count",
+   "otherwise": "no interim look"
+  }
  },
  "stage1_release": [
   "none arm named count per model",
@@ -1043,5 +1055,16 @@
   "yc-software/*",
   "openclaw/*"
  ],
- "program_target_central_usd": 600
+ "program_target_central_usd": 600,
+ "arm_pilot": {
+  "rule": "R111",
+  "pilot": "stage 0, about 3% of each counted arm's planned spend (2 of its 74 sessions)",
+  "shows": [
+   "for cso, section 8's detectors on the arm's own sessions: the skill loaded and the helper started a daily run with default scope",
+   "supply: before stage 0 the unit build fills every usable position the plan can use (134), or the count goes to the Captain before any paid call",
+   "judge: section 7's R78 check on stage 0 and stage 1 reports together (about 19% of each arm's planned spend, since R78 needs at least 40 labelled reports), before any stage 2 session"
+  ],
+  "failing_arm": "one named harness repair and a rerun; still failing, it is left out before stage 2 and reported as left out with the reason, and its contrast reads Incomplete",
+  "sol_stage": "the Codex smoke is each Sol arm's pilot"
+ }
 }
