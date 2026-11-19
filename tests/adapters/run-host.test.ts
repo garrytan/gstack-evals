@@ -269,6 +269,26 @@ describe.skipIf(!HAS_CLAUDE_CLI || !HAS_CODEX_CLI)("the run loop on a real host'
     expect([...readJournal(out).values()].every((e) => e.key.parts.adapter_sha256 !== undefined)).toBe(true);
   }, 300_000);
 
+  // Value: protects=skill-eval runs a persona task on Codex end to end: the model's request_user_input_async question goes to the policy's usersim model through its own slot, the answer comes back as the next user message, and every Codex session pins the reasoning effort codex 0.166.0's catalog gives its model (low for gpt-6.1-sol) in init.json; fails_when=a Codex persona task gets the fallback, the question is lost, or a session runs on Codex's own default effort; why_new=interactive tasks on Codex and the effort pin; seam=runOnHost's session, hostDriver, catalogEffort; no_claim=a real usersim model's answers
+  test("a persona task on Codex gets the usersim answer by exec resume, and every Codex session pins the catalog's effort", async () => {
+    const responses: ResponsesScript = (turn) => {
+      const first = firstUser(turn.body);
+      if (first.startsWith("Calibration check.")) return codexModel(turn);
+      if (first !== "Say hello.") return [{ type: "message", text: "Mostly sourdough." }];
+      if (turn.users.length === 1 && !turn.outputs.has("call_q")) return [{ type: "call", id: "call_q", name: "request_user_input_async", args: { questions: [{ title: "What do you bake most?" }] } }];
+      if (turn.users.length === 1) return [{ type: "message", text: "Waiting for your answer." }];
+      return [{ type: "message", text: "HELLO, you bake: " + turn.users.at(-1) }];
+    };
+    const { run, root } = await runHost("codex", { persona: true, responses });
+    const hello = run.input.records.filter((r) => r.task === "hello");
+    expect(hello.map((r) => [r.arm, r.termination.kind, r.asked.length])).toEqual([["before", "completed", 1], ["after", "completed", 1], ["none", "completed", 1]]);
+    expect(hello.every((r) => r.turns.at(-1) === "HELLO, you bake: Mostly sourdough.")).toBe(true);
+    expect(readFileSync(join(root, "out", "usersim.ndjson"), "utf8").trim().split("\n")).toHaveLength(3);
+    const inits = readdirSync(join(root, "out"), { recursive: true }).map(String).filter((p) => p.endsWith("host/init.json")).map((p) => JSON.parse(readFileSync(join(root, "out", p), "utf8")));
+    expect(inits.length).toBeGreaterThan(3);
+    expect(inits.every((i) => i.reasoning_effort === "low" && i.argv.includes('model_reasoning_effort="low"'))).toBe(true);
+  }, 300_000);
+
   // Value: protects=calibration passes on both hosts against the fake upstream (each skill arm quotes its own sentinel and shows the read, none answers NO-SKILL, the shell output comes back, the user simulator round trip completes on Claude Code), then the trials run in every arm, each metered, and U6's verdict reads them; fails_when=a check passes without its evidence, a session's cost is not metered, or the loop skips an arm; why_new=U10 done criterion (calibration passes on both hosts against the fake upstream); seam=runOnHost, calibrationProbes, judgeCalibration, the adapters; no_claim=a real model, Docker isolation or the egress lock, which the Docker rig covers
   for (const host of ["claude", "codex"] as const) {
     test("calibration passes and the trials run on " + host, async () => {
