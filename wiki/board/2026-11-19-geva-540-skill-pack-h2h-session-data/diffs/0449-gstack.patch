@@ -1,0 +1,486 @@
+diff --git a/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/hybrid/BackendTextSpaceRestorer.java b/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/hybrid/BackendTextSpaceRestorer.java
+new file mode 100644
+index 0000000..1d2f594
+--- /dev/null
++++ b/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/hybrid/BackendTextSpaceRestorer.java
+@@ -0,0 +1,312 @@
++/*
++ * Copyright 2025-2026 Hancom Inc.
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.opendataloader.pdf.hybrid;
++
++import org.opendataloader.pdf.processors.TextLineProcessor;
++import org.verapdf.wcag.algorithms.entities.IObject;
++import org.verapdf.wcag.algorithms.entities.SemanticTextNode;
++import org.verapdf.wcag.algorithms.entities.content.TextBlock;
++import org.verapdf.wcag.algorithms.entities.content.TextChunk;
++import org.verapdf.wcag.algorithms.entities.content.TextColumn;
++import org.verapdf.wcag.algorithms.entities.content.TextLine;
++import org.verapdf.wcag.algorithms.entities.geometry.BoundingBox;
++import org.verapdf.wcag.algorithms.entities.lists.ListItem;
++import org.verapdf.wcag.algorithms.entities.lists.PDFList;
++import org.verapdf.wcag.algorithms.entities.tables.tableBorders.TableBorder;
++import org.verapdf.wcag.algorithms.entities.tables.tableBorders.TableBorderCell;
++import org.verapdf.wcag.algorithms.entities.tables.tableBorders.TableBorderRow;
++
++import java.util.ArrayList;
++import java.util.Comparator;
++import java.util.List;
++import java.util.logging.Level;
++import java.util.logging.Logger;
++
++/**
++ * Restores inter-word spaces that are missing from hybrid backend text.
++ *
++ * <p>Some PDFs do not contain explicit space characters; words are separated only by
++ * glyph positioning. Hybrid backends (e.g. Docling) may then return text with all
++ * words concatenated ("Traditionalsearchrelieson..."). The Java extraction path
++ * detects such gaps geometrically and inserts spaces, so its text is used as a
++ * reference: each whitespace-separated backend token is located in the Java text of
++ * the same region and spaces are inserted wherever the Java text has word breaks.
++ *
++ * <p>Only spaces are inserted; backend characters are never removed or replaced.
++ * Tokens that cannot be matched exactly (on word boundaries) are left unchanged.
++ */
++public final class BackendTextSpaceRestorer {
++
++    private static final Logger LOGGER = Logger.getLogger(BackendTextSpaceRestorer.class.getCanonicalName());
++
++    /** Vertical tolerance (in points) when matching reference lines to a backend bounding box. */
++    private static final double VERTICAL_TOLERANCE = 2.0;
++
++    private BackendTextSpaceRestorer() {
++    }
++
++    /**
++     * Restores missing spaces in backend page contents using Java-extracted page contents.
++     *
++     * @param backendContents the backend-produced objects of a page (modified in place)
++     * @param javaContents    the filtered Java contents (text chunks) of the same page; not modified
++     */
++    public static void restoreSpaces(List<IObject> backendContents, List<IObject> javaContents) {
++        if (backendContents == null || backendContents.isEmpty() || javaContents == null || javaContents.isEmpty()) {
++            return;
++        }
++        List<TextLine> referenceLines;
++        try {
++            referenceLines = buildReferenceLines(javaContents);
++        } catch (RuntimeException e) {
++            LOGGER.log(Level.FINE, "Unable to build reference text lines: {0}", e.getMessage());
++            return;
++        }
++        if (referenceLines.isEmpty()) {
++            return;
++        }
++        for (IObject object : backendContents) {
++            processObject(object, null, referenceLines);
++        }
++    }
++
++    private static List<TextLine> buildReferenceLines(List<IObject> javaContents) {
++        List<IObject> copy = new ArrayList<>();
++        for (IObject object : javaContents) {
++            if (object instanceof TextChunk) {
++                copy.add(object);
++            }
++        }
++        List<TextLine> lines = new ArrayList<>();
++        for (IObject object : TextLineProcessor.processTextLines(copy)) {
++            if (object instanceof TextLine && ((TextLine) object).getBoundingBox() != null) {
++                lines.add((TextLine) object);
++            }
++        }
++        lines.sort(Comparator.comparingDouble((TextLine l) -> -l.getBoundingBox().getTopY())
++            .thenComparingDouble(l -> l.getBoundingBox().getLeftX()));
++        return lines;
++    }
++
++    private static void processObject(IObject object, BoundingBox region, List<TextLine> referenceLines) {
++        if (object instanceof SemanticTextNode) {
++            for (TextColumn column : ((SemanticTextNode) object).getColumns()) {
++                for (TextBlock block : column.getBlocks()) {
++                    processLines(block.getLines(), region, referenceLines);
++                }
++            }
++        } else if (object instanceof TableBorder) {
++            TableBorder table = (TableBorder) object;
++            // Backend cell boxes are often approximations; use the whole table as region.
++            BoundingBox tableRegion = region != null ? region : table.getBoundingBox();
++            for (int rowNumber = 0; rowNumber < table.getNumberOfRows(); rowNumber++) {
++                TableBorderRow row = table.getRow(rowNumber);
++                if (row == null) {
++                    continue;
++                }
++                for (int colNumber = 0; colNumber < table.getNumberOfColumns(); colNumber++) {
++                    TableBorderCell cell = row.getCell(colNumber);
++                    if (cell == null || cell.getRowNumber() != rowNumber || cell.getColNumber() != colNumber) {
++                        continue;
++                    }
++                    for (IObject content : cell.getContents()) {
++                        processObject(content, tableRegion, referenceLines);
++                    }
++                }
++            }
++        } else if (object instanceof PDFList) {
++            for (ListItem item : ((PDFList) object).getListItems()) {
++                processLines(item.getLines(), region, referenceLines);
++                for (IObject content : item.getContents()) {
++                    processObject(content, region, referenceLines);
++                }
++            }
++        }
++    }
++
++    private static void processLines(List<TextLine> lines, BoundingBox region, List<TextLine> referenceLines) {
++        for (TextLine line : lines) {
++            for (TextChunk chunk : line.getTextChunks()) {
++                processChunk(chunk, region, referenceLines);
++            }
++        }
++    }
++
++    private static void processChunk(TextChunk chunk, BoundingBox region, List<TextLine> referenceLines) {
++        String value = chunk.getValue();
++        if (value == null || value.isEmpty()) {
++            return;
++        }
++        BoundingBox box = region != null ? region : chunk.getBoundingBox();
++        if (box == null) {
++            return;
++        }
++        List<String> reference = new ArrayList<>();
++        for (TextLine line : referenceLines) {
++            if (isInRegion(line.getBoundingBox(), box)) {
++                reference.add(line.getValue());
++            }
++        }
++        if (reference.isEmpty()) {
++            return;
++        }
++        String restored = restoreSpaces(value, reference);
++        if (!restored.equals(value)) {
++            chunk.setValue(restored);
++            chunk.adjustSymbolEndsToBoundingBox(null);
++        }
++    }
++
++    private static boolean isInRegion(BoundingBox lineBox, BoundingBox region) {
++        if (lineBox == null) {
++            return false;
++        }
++        if (lineBox.getPageNumber() != null && region.getPageNumber() != null
++            && !lineBox.getPageNumber().equals(region.getPageNumber())) {
++            return false;
++        }
++        boolean horizontalOverlap = lineBox.getLeftX() <= region.getRightX()
++            && lineBox.getRightX() >= region.getLeftX();
++        double centerY = (lineBox.getTopY() + lineBox.getBottomY()) / 2;
++        boolean verticalInside = centerY >= region.getBottomY() - VERTICAL_TOLERANCE
++            && centerY <= region.getTopY() + VERTICAL_TOLERANCE;
++        return horizontalOverlap && verticalInside;
++    }
++
++    /**
++     * Inserts spaces into {@code text} according to word breaks found in the reference lines.
++     *
++     * @param text           backend text, possibly with missing spaces
++     * @param referenceLines reference text lines (Java extraction) covering the same region
++     * @return text with restored spaces, or the original text if nothing could be restored
++     */
++    static String restoreSpaces(String text, List<String> referenceLines) {
++        StringBuilder chars = new StringBuilder();
++        List<Boolean> breaks = new ArrayList<>();
++        for (String line : referenceLines) {
++            if (line == null) {
++                continue;
++            }
++            for (int i = 0; i < line.length(); i++) {
++                char c = line.charAt(i);
++                if (Character.isWhitespace(c) || Character.isSpaceChar(c)) {
++                    if (!breaks.isEmpty()) {
++                        breaks.set(breaks.size() - 1, Boolean.TRUE);
++                    }
++                } else {
++                    chars.append(c);
++                    breaks.add(Boolean.FALSE);
++                }
++            }
++            // Line end acts as a word break, unless the line ends with a hyphen
++            // (possible hyphenation that the backend may have joined).
++            if (!breaks.isEmpty() && chars.charAt(chars.length() - 1) != '-') {
++                breaks.set(breaks.size() - 1, Boolean.TRUE);
++            }
++        }
++        if (chars.length() == 0) {
++            return text;
++        }
++        boolean[] breakAfter = new boolean[breaks.size()];
++        for (int i = 0; i < breakAfter.length; i++) {
++            breakAfter[i] = breaks.get(i);
++        }
++        return restoreSpaces(text, chars.toString(), breakAfter);
++    }
++
++    private static String restoreSpaces(String text, String reference, boolean[] breakAfter) {
++        StringBuilder result = new StringBuilder(text.length() + 16);
++        int cursor = 0;
++        int i = 0;
++        boolean changed = false;
++        while (i < text.length()) {
++            char c = text.charAt(i);
++            if (Character.isWhitespace(c) || Character.isSpaceChar(c)) {
++                result.append(c);
++                i++;
++                continue;
++            }
++            int end = i;
++            while (end < text.length() && !Character.isWhitespace(text.charAt(end))
++                && !Character.isSpaceChar(text.charAt(end))) {
++                end++;
++            }
++            String token = text.substring(i, end);
++            int match = findOnWordBoundaries(token, reference, breakAfter, cursor);
++            if (match < 0 && cursor > 0) {
++                match = findOnWordBoundaries(token, reference, breakAfter, 0);
++            }
++            if (match >= 0) {
++                String split = splitToken(token, match, breakAfter);
++                if (split != null) {
++                    result.append(split);
++                    changed = true;
++                } else {
++                    result.append(token);
++                }
++                cursor = match + token.length();
++            } else {
++                result.append(token);
++            }
++            i = end;
++        }
++        return changed ? result.toString() : text;
++    }
++
++    private static int findOnWordBoundaries(String token, String reference, boolean[] breakAfter, int from) {
++        int index = reference.indexOf(token, from);
++        while (index >= 0) {
++            boolean startsAtWord = index == 0 || breakAfter[index - 1];
++            int last = index + token.length() - 1;
++            boolean endsAtWord = last == reference.length() - 1 || breakAfter[last];
++            if (startsAtWord && endsAtWord) {
++                return index;
++            }
++            index = reference.indexOf(token, index + 1);
++        }
++        return -1;
++    }
++
++    /**
++     * Splits token at word breaks of the matched reference region.
++     *
++     * @return split token, or null if there are no breaks or the split looks unreliable
++     *         (e.g. letter-spaced text that would be broken into single characters)
++     */
++    private static String splitToken(String token, int offset, boolean[] breakAfter) {
++        int breaksCount = 0;
++        for (int k = 0; k < token.length() - 1; k++) {
++            if (breakAfter[offset + k]) {
++                breaksCount++;
++            }
++        }
++        if (breaksCount == 0) {
++            return null;
++        }
++        // Average word length below 2 characters indicates letter-spaced text; keep as is.
++        if (token.length() < 2 * (breaksCount + 1)) {
++            return null;
++        }
++        StringBuilder split = new StringBuilder(token.length() + breaksCount);
++        for (int k = 0; k < token.length(); k++) {
++            split.append(token.charAt(k));
++            if (k < token.length() - 1 && breakAfter[offset + k]) {
++                split.append(' ');
++            }
++        }
++        return split.toString();
++    }
++}
+diff --git a/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/HybridDocumentProcessor.java b/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/HybridDocumentProcessor.java
+index 748e99c..f0aec3b 100644
+--- a/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/HybridDocumentProcessor.java
++++ b/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/HybridDocumentProcessor.java
+@@ -17,6 +17,7 @@ package org.opendataloader.pdf.processors;
+ 
+ import org.opendataloader.pdf.api.Config;
+ import org.opendataloader.pdf.containers.StaticLayoutContainers;
++import org.opendataloader.pdf.hybrid.BackendTextSpaceRestorer;
+ import org.opendataloader.pdf.hybrid.DoclingSchemaTransformer;
+ import org.opendataloader.pdf.hybrid.HancomSchemaTransformer;
+ import org.opendataloader.pdf.hybrid.HybridClient;
+@@ -180,7 +181,7 @@ public class HybridDocumentProcessor {
+         Map<Integer, List<IObject>> backendResults;
+         Set<Integer> backendFailedPages = new HashSet<>();
+         try {
+-            backendResults = processBackendPath(inputPdfName, backendPages, config, backendFailedPages);
++            backendResults = processBackendPath(inputPdfName, backendPages, config, backendFailedPages, filteredContents);
+         } catch (Exception e) {
+             LOGGER.log(Level.WARNING, "Backend processing failed: {0}", e.getMessage());
+             if (config.getHybridConfig().isFallbackToJava()) {
+@@ -356,6 +357,8 @@ public class HybridDocumentProcessor {
+      * @param backendFailedPages Output parameter: populated with 0-indexed page numbers that
+      *                           failed during backend processing (e.g., due to Invalid code point).
+      *                           These pages can be retried via the Java processing path.
++     * @param filteredContents   Filtered Java contents per page, used as reference text to restore
++     *                           inter-word spaces missing from backend output.
+      * @return Map of page number to IObject list for successfully processed pages.
+      * @throws IOException If an error occurs during processing.
+      */
+@@ -363,7 +366,8 @@ public class HybridDocumentProcessor {
+             String inputPdfName,
+             Set<Integer> pageNumbers,
+             Config config,
+-            Set<Integer> backendFailedPages) throws IOException {
++            Set<Integer> backendFailedPages,
++            Map<Integer, List<IObject>> filteredContents) throws IOException {
+ 
+         if (pageNumbers.isEmpty()) {
+             return new HashMap<>();
+@@ -443,6 +447,9 @@ public class HybridDocumentProcessor {
+                     }
+                     if (page0 < transformedContents.size()) {
+                         List<IObject> pageContents = transformedContents.get(page0);
++                        // Backends may drop inter-word spaces for PDFs without explicit space
++                        // characters; restore them using the Java-extracted text as reference.
++                        BackendTextSpaceRestorer.restoreSpaces(pageContents, filteredContents.get(page0));
+                         TextProcessor.replaceUndefinedCharacters(pageContents, config.getReplaceInvalidChars());
+                         DocumentProcessor.setIDs(pageContents);
+                         results.put(page0, pageContents);
+diff --git a/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/hybrid/BackendTextSpaceRestorerTest.java b/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/hybrid/BackendTextSpaceRestorerTest.java
+new file mode 100644
+index 0000000..8b8d2bc
+--- /dev/null
++++ b/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/hybrid/BackendTextSpaceRestorerTest.java
+@@ -0,0 +1,112 @@
++/*
++ * Copyright 2025-2026 Hancom Inc.
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.opendataloader.pdf.hybrid;
++
++import org.junit.jupiter.api.Assertions;
++import org.junit.jupiter.api.Test;
++import org.verapdf.wcag.algorithms.entities.IObject;
++import org.verapdf.wcag.algorithms.entities.SemanticParagraph;
++import org.verapdf.wcag.algorithms.entities.content.TextChunk;
++import org.verapdf.wcag.algorithms.entities.content.TextLine;
++import org.verapdf.wcag.algorithms.entities.geometry.BoundingBox;
++import org.verapdf.wcag.algorithms.semanticalgorithms.containers.StaticContainers;
++
++import java.util.ArrayList;
++import java.util.Arrays;
++import java.util.Collections;
++import java.util.List;
++
++public class BackendTextSpaceRestorerTest {
++
++    @Test
++    public void restoresSpacesInConcatenatedText() {
++        List<String> reference = Arrays.asList(
++            "Traditional search relies on keyword matching, retrieving exact keywords or phrases entered by the user, but often yields",
++            "irrelevant results if the keywords are not precise, lacking context and intent understanding.");
++        String backend = "Traditionalsearchreliesonkeywordmatching,retrievingexactkeywordsorphrasesenteredbytheuser,butoftenyields "
++            + "irrelevantresultsifthekeywordsarenotprecise,lackingcontextandintentunderstanding.";
++        Assertions.assertEquals(
++            "Traditional search relies on keyword matching, retrieving exact keywords or phrases entered by the user, but often yields "
++                + "irrelevant results if the keywords are not precise, lacking context and intent understanding.",
++            BackendTextSpaceRestorer.restoreSpaces(backend, reference));
++    }
++
++    @Test
++    public void restoresSpacesAcrossMergedLines() {
++        List<String> reference = Arrays.asList("Evolution Of Search", "Lexical Search:");
++        Assertions.assertEquals("Evolution Of Search Lexical Search:",
++            BackendTextSpaceRestorer.restoreSpaces("EvolutionOfSearch LexicalSearch:", reference));
++    }
++
++    @Test
++    public void keepsTextWithCorrectSpacesUnchanged() {
++        String text = "Lorem ipsum dolor sit amet";
++        Assertions.assertSame(text,
++            BackendTextSpaceRestorer.restoreSpaces(text, Collections.singletonList("Lorem ipsum dolor sit amet")));
++    }
++
++    @Test
++    public void doesNotSplitInsideWords() {
++        // "ab" occurs in the reference only across "a band", which does not end on a word boundary.
++        Assertions.assertEquals("ab",
++            BackendTextSpaceRestorer.restoreSpaces("ab", Collections.singletonList("a band")));
++        Assertions.assertEquals("other wise",
++            BackendTextSpaceRestorer.restoreSpaces("otherwise", Collections.singletonList("other wise")));
++    }
++
++    @Test
++    public void ignoresUnmatchedTokens() {
++        Assertions.assertEquals("Completelydifferent",
++            BackendTextSpaceRestorer.restoreSpaces("Completelydifferent", Collections.singletonList("Other words here")));
++    }
++
++    @Test
++    public void ignoresLetterSpacedReference() {
++        Assertions.assertEquals("HELLO",
++            BackendTextSpaceRestorer.restoreSpaces("HELLO", Collections.singletonList("H E L L O")));
++    }
++
++    @Test
++    public void doesNotSplitHyphenatedLineEnd() {
++        Assertions.assertEquals("under-standing",
++            BackendTextSpaceRestorer.restoreSpaces("under-standing", Arrays.asList("under-", "standing")));
++    }
++
++    @Test
++    public void restoresSpacesInBackendParagraphUsingJavaChunks() {
++        StaticContainers.setIsIgnoreCharactersWithoutUnicode(false);
++        StaticContainers.setIsDataLoader(true);
++
++        List<IObject> javaContents = new ArrayList<>();
++        double x = 72;
++        for (String word : new String[]{"Traditional", "search", "relies", "on", "keywords"}) {
++            double width = word.length() * 5.0;
++            javaContents.add(new TextChunk(new BoundingBox(0, x, 700, x + width, 711), word, 11, 702));
++            x += width + 3.0;
++        }
++
++        TextChunk backendChunk = new TextChunk(new BoundingBox(0, 70, 698, 400, 712),
++            "Traditionalsearchreliesonkeywords", 12, 12);
++        backendChunk.adjustSymbolEndsToBoundingBox(null);
++        SemanticParagraph paragraph = new SemanticParagraph();
++        paragraph.add(new TextLine(backendChunk));
++        List<IObject> backendContents = new ArrayList<>(Collections.singletonList(paragraph));
++
++        BackendTextSpaceRestorer.restoreSpaces(backendContents, javaContents);
++
++        Assertions.assertEquals("Traditional search relies on keywords", paragraph.getValue());
++    }
++}

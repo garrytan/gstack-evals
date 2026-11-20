@@ -1,0 +1,107 @@
+diff --git a/lib/resolver-compat.js b/lib/resolver-compat.js
+index c00d1bf..8459be3 100644
+--- a/lib/resolver-compat.js
++++ b/lib/resolver-compat.js
+@@ -109,7 +109,7 @@ class LegacyResolver extends CustomResolver {
+ 	constructor(fileSystem, globalPaths, builtinModules, rootPaths, pathContext, customResolver, hostRequire, compiler, strict, externals, allowTransitive) {
+ 		super(fileSystem, globalPaths, builtinModules, rootPaths, pathContext, customResolver, hostRequire, compiler, strict);
+ 		this.externals = externals.map(makeExternalMatcher);
+-		this.externalCache = externals.map(pattern => new RegExp(makeExternalMatcherRegex(pattern)));
++		this.externalCache = externals.map(pattern => new RegExp(`^${makeExternalMatcherRegex(pattern)}(?:[\\\\/].*)?$`));
+ 		this.currMod = undefined;
+ 		this.trustedMods = new WeakMap();
+ 		this.allowTransitive = allowTransitive;
+diff --git a/test/ghsa/GHSA-c48m-32m9-vx93/repro.js b/test/ghsa/GHSA-c48m-32m9-vx93/repro.js
+new file mode 100644
+index 0000000..b80acd0
+--- /dev/null
++++ b/test/ghsa/GHSA-c48m-32m9-vx93/repro.js
+@@ -0,0 +1,88 @@
++/**
++ * GHSA-c48m-32m9-vx93 — require.external substring match with a custom resolver
++ *
++ * ## Vulnerability
++ * With `require.external` plus a custom `require.resolve`, the pre-check on the
++ * bare specifier used an unanchored regex built from each external pattern, so
++ * `external: ['left-pad']` also admitted `evil-left-pad` and `left-pad-backdoor`.
++ * The resolver result was then trusted and, with `context: 'host'`, loaded via
++ * host `require()`, executing unauthorised package code in the host realm.
++ *
++ * ## Fix
++ * The specifier pre-check matches the whole package name, optionally followed
++ * by a subpath.
++ */
++
++'use strict';
++
++const assert = require('assert');
++const fs = require('fs');
++const os = require('os');
++const path = require('path');
++const { NodeVM } = require('../../../lib/main.js');
++
++let tmp;
++
++function writePackage(root, name, body) {
++	const dir = path.join(root, 'node_modules', name);
++	fs.mkdirSync(dir, { recursive: true });
++	fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name, main: 'index.js' }));
++	fs.writeFileSync(path.join(dir, 'index.js'), body);
++}
++
++function makeVM(external, root) {
++	return new NodeVM({
++		require: {
++			external,
++			builtin: [],
++			context: 'host',
++			resolve: id => require.resolve(id, { paths: [root] })
++		}
++	});
++}
++
++function requireError(vm, id) {
++	try {
++		vm.run(`module.exports = require(${JSON.stringify(id)})`, path.join(tmp, 'sandbox.js'));
++	} catch (e) {
++		return e;
++	}
++	return undefined;
++}
++
++describe('GHSA-c48m-32m9-vx93 — external allowlist substring bypass via custom resolver', () => {
++	beforeEach(() => {
++		tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'vm2-c48m-'));
++		writePackage(tmp, 'left-pad', 'module.exports = "LEFT_PAD";');
++		writePackage(tmp, 'evil-left-pad', 'module.exports = "HOST_EXEC";');
++		writePackage(tmp, 'left-pad-backdoor', 'module.exports = "HOST_EXEC";');
++		fs.writeFileSync(path.join(tmp, 'node_modules', 'left-pad', 'extra.js'), 'module.exports = "EXTRA";');
++	});
++
++	afterEach(() => {
++		fs.rmSync(tmp, { recursive: true, force: true });
++		tmp = undefined;
++	});
++
++	it('still loads the allowlisted package and its subpaths', () => {
++		const vm = makeVM(['left-pad'], tmp);
++		assert.strictEqual(vm.run('module.exports = require("left-pad")', path.join(tmp, 'sandbox.js')), 'LEFT_PAD');
++		assert.strictEqual(vm.run('module.exports = require("left-pad/extra")', path.join(tmp, 'sandbox.js')), 'EXTRA');
++	});
++
++	for (const name of ['evil-left-pad', 'left-pad-backdoor']) {
++		it(`rejects colliding package ${name}`, () => {
++			const err = requireError(makeVM(['left-pad'], tmp), name);
++			assert.ok(err, `${name} must not load`);
++			assert.strictEqual(err.code, 'ENOTFOUND');
++		});
++	}
++
++	it('keeps wildcard patterns working on whole names', () => {
++		writePackage(tmp, '@scope/pkg', 'module.exports = "SCOPED";');
++		writePackage(tmp, '@scope-evil/pkg', 'module.exports = "HOST_EXEC";');
++		const vm = makeVM(['@scope/*'], tmp);
++		assert.strictEqual(vm.run('module.exports = require("@scope/pkg")', path.join(tmp, 'sandbox.js')), 'SCOPED');
++		assert.ok(requireError(vm, '@scope-evil/pkg'), '@scope-evil/pkg must not load');
++	});
++});

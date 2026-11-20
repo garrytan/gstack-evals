@@ -1,0 +1,59 @@
+diff --git a/internal/app/handler.go b/internal/app/handler.go
+index 9c6c2ec..9c9f230 100644
+--- a/internal/app/handler.go
++++ b/internal/app/handler.go
+@@ -114,6 +114,10 @@ func (a *App) validatedRefererRedirect(r *http.Request, referrer string) (string
+ 	if redirectTarget == "" {
+ 		redirectTarget = "/"
+ 	}
++	// Browsers resolve "//host" as a protocol-relative URL to another origin
++	if strings.HasPrefix(redirectTarget, "//") {
++		return "", false
++	}
+ 	if refURL.RawQuery != "" {
+ 		redirectTarget += "?" + refURL.RawQuery
+ 	}
+diff --git a/internal/app/referer_redirect_test.go b/internal/app/referer_redirect_test.go
+new file mode 100644
+index 0000000..77ae011
+--- /dev/null
++++ b/internal/app/referer_redirect_test.go
+@@ -0,0 +1,38 @@
++// Copyright (c) ClaceIO, LLC
++// SPDX-License-Identifier: Apache-2.0
++
++package app
++
++import (
++	"net/http/httptest"
++	"testing"
++
++	"github.com/openrundev/openrun/internal/types"
++)
++
++func TestValidatedRefererRedirect(t *testing.T) {
++	a := &App{serverConfig: &types.ServerConfig{}}
++	tests := []struct {
++		referrer string
++		want     string
++		ok       bool
++	}{
++		{"http://127.0.0.1:25222/app/page?x=1#f", "/app/page?x=1#f", true},
++		{"http://127.0.0.1:25222", "/", true},
++		{"/app/page", "/app/page", true},
++		{"http://evil.com/app", "", false},
++		{"http://127.0.0.1:25222//evil.com", "", false},
++		{"http://127.0.0.1:25222//evil.com/path", "", false},
++		{"//evil.com", "", false},
++		{"///evil.com", "", false},
++		{"/\\evil.com", "/%5Cevil.com", true},
++		{"http://127.0.0.1:25222/\\evil.com", "/%5Cevil.com", true},
++	}
++	for _, tt := range tests {
++		r := httptest.NewRequest("POST", "http://127.0.0.1:25222/app/abc", nil)
++		got, ok := a.validatedRefererRedirect(r, tt.referrer)
++		if got != tt.want || ok != tt.ok {
++			t.Errorf("referrer %q: got (%q, %v), want (%q, %v)", tt.referrer, got, ok, tt.want, tt.ok)
++		}
++	}
++}

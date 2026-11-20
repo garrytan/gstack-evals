@@ -1,0 +1,99 @@
+diff --git a/src/libse/Common/DialogSplitMerge.cs b/src/libse/Common/DialogSplitMerge.cs
+index 92e710d..a9a0736 100644
+--- a/src/libse/Common/DialogSplitMerge.cs
++++ b/src/libse/Common/DialogSplitMerge.cs
+@@ -13,18 +13,58 @@ namespace Nikse.SubtitleEdit.Core.Common
+         public bool SkipLineEndingCheck { get; set; }
+ 
+         public static char GetDashChar() => '-';
+-        public static char GetAlternateDashChar() => '‐'; // Unicode En Dash (\u2010)
++        public static char GetAlternateDashChar() => '‐'; // Unicode Hyphen (\u2010)
++
++        private static readonly char[] NonAsciiDialogDashes = { '‐', '–' }; // Hyphen, En Dash
+ 
+         public string FixDashesAndSpaces(string input)
+         {
++            var normalized = NormalizeStartDashes(input);
++            if (normalized != input && IsDialog(normalized.SplitToLines()))
++            {
++                input = normalized;
++            }
++
+             return FixSpaces(FixDashes(input));
+         }
+ 
+         public string FixDashesAndSpaces(string input, Paragraph p, Paragraph prev)
+         {
++            var normalized = NormalizeStartDashes(input);
++            if (normalized != input && IsDialog(normalized.SplitToLines(), p, prev))
++            {
++                input = normalized;
++            }
++
+             return FixSpaces(FixDashes(input, p, prev));
+         }
+ 
++        /// <summary>
++        /// Replace non-ASCII dashes (hyphen/en dash) at the start of lines with a normal ASCII dash.
++        /// </summary>
++        private static string NormalizeStartDashes(string input)
++        {
++            if (string.IsNullOrEmpty(input) || input.IndexOfAny(NonAsciiDialogDashes) < 0)
++            {
++                return input;
++            }
++
++            var lines = input.SplitToLines();
++            for (var i = 0; i < lines.Count; i++)
++            {
++                var line = lines[i];
++                var pre = GetStartTags(line);
++                var rest = line.Remove(0, pre.Length);
++                var trimmed = rest.TrimStart();
++                if (trimmed.Length > 0 && Array.IndexOf(NonAsciiDialogDashes, trimmed[0]) >= 0)
++                {
++                    lines[i] = pre + rest.Substring(0, rest.Length - trimmed.Length) + GetDashChar() + trimmed.Substring(1);
++                }
++            }
++
++            return string.Join(Environment.NewLine, lines);
++        }
++
+         public string FixSpaces(string input)
+         {
+             var lines = input.SplitToLines();
+diff --git a/tests/libse/Core/DialogTypeTest.cs b/tests/libse/Core/DialogTypeTest.cs
+index f88b3e9..21af56b 100644
+--- a/tests/libse/Core/DialogTypeTest.cs
++++ b/tests/libse/Core/DialogTypeTest.cs
+@@ -209,4 +209,30 @@ public class DialogTypeTest
+         var result = splitMerge.FixDashesAndSpaces(p.Text, p, prev);
+         Assert.Equal($"- you can't talk either.{Environment.NewLine}That's what I said.", result);
+     }
++
++    [Fact]
++    public void FixDashesAndSpacesEnDash()
++    {
++        var splitMerge = new DialogSplitMerge { DialogStyle = DialogType.DashBothLinesWithSpace };
++        var result = splitMerge.FixDashesAndSpaces($"\u2013How are you?{Environment.NewLine}\u2013I'm fine.");
++        Assert.Equal($"- How are you?{Environment.NewLine}- I'm fine.", result);
++    }
++
++    [Fact]
++    public void FixDashesAndSpacesEnDashWithParagraph()
++    {
++        var splitMerge = new DialogSplitMerge { DialogStyle = DialogType.DashSecondLineWithoutSpace };
++        var p = new Paragraph($"<i>\u2013 How are you?</i>{Environment.NewLine}<i>\u2013 I'm fine.</i>", 4000, 7000);
++        var result = splitMerge.FixDashesAndSpaces(p.Text, p, null);
++        Assert.Equal($"<i>How are you?</i>{Environment.NewLine}<i>-I'm fine.</i>", result);
++    }
++
++    [Fact]
++    public void FixDashesAndSpacesEnDashNotDialog()
++    {
++        var splitMerge = new DialogSplitMerge { DialogStyle = DialogType.DashBothLinesWithSpace };
++        var input = $"How are you{Environment.NewLine}\u2013 I'm fine.";
++        var result = splitMerge.FixDashesAndSpaces(input);
++        Assert.Equal(input, result);
++    }
+ }

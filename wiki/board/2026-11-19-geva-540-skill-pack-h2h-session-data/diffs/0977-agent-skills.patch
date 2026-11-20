@@ -1,0 +1,124 @@
+diff --git a/src/rules_core/smartquotes.ts b/src/rules_core/smartquotes.ts
+index 61979cb..e28afe0 100644
+--- a/src/rules_core/smartquotes.ts
++++ b/src/rules_core/smartquotes.ts
+@@ -14,6 +14,16 @@ interface Replacement {
+   ch: string
+ }
+ 
++interface StackItem {
++  token: number
++  pos: number
++  single: boolean
++  level: number
++  // index of the nearest item below this one with single / double quote
++  prevSingle: number
++  prevDouble: number
++}
++
+ type ReplacementMap = Record<string, Replacement[]>
+ 
+ function addReplacement (
+@@ -48,7 +58,7 @@ function applyReplacements (str: string, replacements: Replacement[]) {
+ function process_inlines (tokens: Token[], state: StateCore) {
+   let j
+ 
+-  const stack = []
++  const stack: StackItem[] = []
+   // token index -> list of replacements in the original token content
+   const replacements: ReplacementMap = {}
+ 
+@@ -164,38 +174,52 @@ function process_inlines (tokens: Token[], state: StateCore) {
+       }
+ 
+       if (canClose) {
+-        // this could be a closing quote, rewind the stack to get a match
+-        for (j = stack.length - 1; j >= 0; j--) {
+-          let item = stack[j]
+-          if (stack[j].level < thisLevel) { break }
+-          if (item.single === isSingle && stack[j].level === thisLevel) {
+-            item = stack[j]
+-
+-            let openQuote
+-            let closeQuote
+-            if (isSingle) {
+-              openQuote = state.md.options.quotes[2]
+-              closeQuote = state.md.options.quotes[3]
+-            } else {
+-              openQuote = state.md.options.quotes[0]
+-              closeQuote = state.md.options.quotes[1]
+-            }
+-
+-            addReplacement(replacements, i, t.index, closeQuote)
+-            addReplacement(replacements, item.token, item.pos, openQuote)
+-
+-            stack.length = j
+-            continue OUTER
++        // This could be a closing quote; find the nearest opener of the same
++        // type. Stack levels are non-decreasing, so we can jump directly to
++        // the last same-type opener via per-item links instead of scanning
++        // the whole stack (which is quadratic for many mismatched quotes).
++        j = stack.length - 1
++        if (j >= 0 && stack[j].single !== isSingle) {
++          j = isSingle ? stack[j].prevSingle : stack[j].prevDouble
++        }
++
++        if (j >= 0 && stack[j].level === thisLevel) {
++          const item = stack[j]
++
++          let openQuote
++          let closeQuote
++          if (isSingle) {
++            openQuote = state.md.options.quotes[2]
++            closeQuote = state.md.options.quotes[3]
++          } else {
++            openQuote = state.md.options.quotes[0]
++            closeQuote = state.md.options.quotes[1]
+           }
++
++          addReplacement(replacements, i, t.index, closeQuote)
++          addReplacement(replacements, item.token, item.pos, openQuote)
++
++          stack.length = j
++          continue OUTER
+         }
+       }
+ 
+       if (canOpen) {
++        const top = stack.length - 1
++        let prevSingle = -1
++        let prevDouble = -1
++        if (top >= 0) {
++          prevSingle = stack[top].single ? top : stack[top].prevSingle
++          prevDouble = stack[top].single ? stack[top].prevDouble : top
++        }
++
+         stack.push({
+           token: i,
+           pos: t.index,
+           single: isSingle,
+-          level: thisLevel
++          level: thisLevel,
++          prevSingle,
++          prevDouble
+         })
+       } else if (canClose && isSingle) {
+         addReplacement(replacements, i, t.index, APOSTROPHE)
+diff --git a/test/markdown-it/pathological.test.mjs b/test/markdown-it/pathological.test.mjs
+index 2aac22c..2f3988d 100644
+--- a/test/markdown-it/pathological.test.mjs
++++ b/test/markdown-it/pathological.test.mjs
+@@ -164,5 +164,13 @@ describe('Pathological sequences speed', () => {
+     it('a lot of smartquotes', async () => {
+       await test_pattern('"'.repeat(160000), { typographer: true })
+     })
++
++    it('smartquotes openers with unmatched closers of other type', async () => {
++      await test_pattern('"a '.repeat(100000) + "b' ".repeat(100000), { typographer: true })
++    })
++
++    it('smartquotes openers with unmatched closers of other type (reversed)', async () => {
++      await test_pattern("'a ".repeat(100000) + 'b" '.repeat(100000), { typographer: true })
++    })
+   })
+ })

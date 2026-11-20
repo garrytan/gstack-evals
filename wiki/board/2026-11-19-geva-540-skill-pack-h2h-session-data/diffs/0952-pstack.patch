@@ -1,0 +1,101 @@
+diff --git a/.changeset/enhance-open-redirect.md b/.changeset/enhance-open-redirect.md
+new file mode 100644
+index 0000000..ad81be4
+--- /dev/null
++++ b/.changeset/enhance-open-redirect.md
+@@ -0,0 +1,5 @@
++---
++'@sveltejs/kit': patch
++---
++
++fix: prevent `use:enhance` from navigating to another origin when the action path begins with `//`
+diff --git a/packages/kit/src/runtime/app/forms/client.js b/packages/kit/src/runtime/app/forms/client.js
+index 67a67c1..b4f2bc8 100644
+--- a/packages/kit/src/runtime/app/forms/client.js
++++ b/packages/kit/src/runtime/app/forms/client.js
+@@ -9,6 +9,7 @@ import {
+ 	handle_error,
+ 	is_current_location
+ } from '../../client/client.js';
++import { resolve_url } from '../../client/utils.js';
+ import { notify_version } from '#app/state/client';
+ import { deserialize } from './shared.js';
+ import * as e from '../../../messages/client-errors.js';
+@@ -86,7 +87,10 @@ export function enhance(form_element, submit = noop) {
+ 		}
+ 
+ 		const destination =
+-			navigate && result.type !== 'redirect' && !is_current_location(result.location)
++			navigate &&
++			result.type !== 'redirect' &&
++			!is_current_location(result.location) &&
++			resolve_url(/** @type {string} */ (result.location)).origin === location.origin
+ 				? result.location
+ 				: undefined;
+ 
+diff --git a/packages/kit/src/runtime/client/client.js b/packages/kit/src/runtime/client/client.js
+index 1929168..7ba830d 100644
+--- a/packages/kit/src/runtime/client/client.js
++++ b/packages/kit/src/runtime/client/client.js
+@@ -3017,7 +3017,9 @@ export function is_current_location(value) {
+ 
+ 	const destination = resolve_url(value);
+ 	const current = new URL(location.href);
+-	if (destination.pathname !== current.pathname) return false;
++	if (destination.origin !== current.origin || destination.pathname !== current.pathname) {
++		return false;
++	}
+ 
+ 	const keys = new Set([...destination.searchParams.keys(), ...current.searchParams.keys()]);
+ 	for (const key of keys) {
+diff --git a/packages/kit/src/runtime/server/page/actions.js b/packages/kit/src/runtime/server/page/actions.js
+index 210cae6..52db184 100644
+--- a/packages/kit/src/runtime/server/page/actions.js
++++ b/packages/kit/src/runtime/server/page/actions.js
+@@ -81,7 +81,13 @@ export function get_action_location(url) {
+ 		}
+ 	}
+ 
+-	return location.pathname + location.search;
++	// a leading `//` would make the location protocol-relative, pointing at another origin.
++	// the `/.` dot segment is removed during resolution, so the path itself is preserved
++	const pathname = location.pathname.startsWith('//')
++		? `/.${location.pathname}`
++		: location.pathname;
++
++	return pathname + location.search;
+ }
+ 
+ /**
+diff --git a/packages/kit/src/runtime/server/page/actions.spec.js b/packages/kit/src/runtime/server/page/actions.spec.js
+index 08f2793..ff1824a 100644
+--- a/packages/kit/src/runtime/server/page/actions.spec.js
++++ b/packages/kit/src/runtime/server/page/actions.spec.js
+@@ -8,7 +8,9 @@ import { init_transport } from '#app/internal/transport';
+ vi.stubGlobal('__SVELTEKIT_DEV__', false);
+ init_transport({});
+ 
+-const { handle_action_request, uneval_action_response } = await import('./actions.js');
++const { get_action_location, handle_action_request, uneval_action_response } = await import(
++	'./actions.js'
++);
+ 
+ /** @param {string} [search] */
+ function create_event(search = '') {
+@@ -126,3 +128,16 @@ test('explains that actions cannot return a Response', () => {
+ 		{ contains: ['/a'], cause: expect.any(Error) }
+ 	);
+ });
++
++test.each([
++	['http://localhost/a?/login&x=1', '/a?x=1'],
++	['http://localhost//evil.com/a?/login', '/.//evil.com/a'],
++	['http://localhost///evil.com', '/.///evil.com']
++])('action location for %s stays on the same origin', (url, expected) => {
++	const location = get_action_location(new URL(url));
++	expect(location).toBe(expected);
++
++	const resolved = new URL(location, 'http://localhost/');
++	expect(resolved.origin).toBe('http://localhost');
++	expect(resolved.pathname).toBe(new URL(url).pathname);
++});

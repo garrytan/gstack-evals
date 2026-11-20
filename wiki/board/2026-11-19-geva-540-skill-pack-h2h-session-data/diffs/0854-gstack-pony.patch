@@ -1,0 +1,60 @@
+diff --git a/examples/blp_model.conf b/examples/blp_model.conf
+new file mode 100644
+index 0000000..845ccc2
+--- /dev/null
++++ b/examples/blp_model.conf
+@@ -0,0 +1,11 @@
++[request_definition]
++r = sub, sub_level, obj, obj_level, act
++
++[policy_definition]
++p = sub, obj, act
++
++[policy_effect]
++e = some(where (p.eft == allow))
++
++[matchers]
++m = (r.act == "read" && r.sub_level >= r.obj_level) || (r.act == "write" && r.sub_level <= r.obj_level)
+diff --git a/model_test.go b/model_test.go
+index 98a09e2..dfcc3fb 100644
+--- a/model_test.go
++++ b/model_test.go
+@@ -706,3 +706,38 @@ func TestReBACModel(t *testing.T) {
+ 	testEnforce(t, e, "bob", "doc3", "read", false)
+ 	testEnforce(t, e, "bob", "doc3", "write", false)
+ }
++
++func TestBLPModel(t *testing.T) {
++	e, _ := NewEnforcer("examples/blp_model.conf")
++
++	tests := []struct {
++		sub      string
++		subLevel int
++		obj      string
++		objLevel int
++		act      string
++		res      bool
++	}{
++		// read: no read up (subject level must dominate object level)
++		{"alice", 3, "data1", 1, "read", true},
++		{"bob", 2, "data2", 2, "read", true},
++		{"charlie", 1, "data1", 1, "read", true},
++		{"bob", 2, "data3", 3, "read", false},
++		{"charlie", 1, "data2", 2, "read", false},
++		// write: no write down (object level must dominate subject level)
++		{"alice", 3, "data3", 3, "write", true},
++		{"bob", 2, "data3", 3, "write", true},
++		{"charlie", 1, "data2", 2, "write", true},
++		{"alice", 3, "data1", 1, "write", false},
++		{"bob", 2, "data1", 1, "write", false},
++	}
++	for _, tt := range tests {
++		res, err := e.Enforce(tt.sub, tt.subLevel, tt.obj, tt.objLevel, tt.act)
++		if err != nil {
++			t.Fatalf("Enforce(%s, %d, %s, %d, %s): %v", tt.sub, tt.subLevel, tt.obj, tt.objLevel, tt.act, err)
++		}
++		if res != tt.res {
++			t.Errorf("Enforce(%s, %d, %s, %d, %s) = %t, want %t", tt.sub, tt.subLevel, tt.obj, tt.objLevel, tt.act, res, tt.res)
++		}
++	}
++}

@@ -1,0 +1,104 @@
+diff --git a/excelize.go b/excelize.go
+index c2fcf21..a529e28 100644
+--- a/excelize.go
++++ b/excelize.go
+@@ -416,6 +416,9 @@ func (ws *xlsxWorksheet) checkSheet() error {
+ // which cell is empty in the normal rows.
+ func (ws *xlsxWorksheet) checkSheetR0(sheetData *xlsxSheetData, rowData *xlsxRow, r0 bool) {
+ 	checkRow := func(col, row int, r0 bool, cell xlsxC) {
++		if col < 1 || col > MaxColumns || row < 1 || row > len(sheetData.Row) {
++			return
++		}
+ 		rowIdx := row - 1
+ 		columns, colIdx := len(sheetData.Row[rowIdx].C), col-1
+ 		for c := columns; c < col; c++ {
+diff --git a/excelize_test.go b/excelize_test.go
+index b4bc4f2..46e6dac 100644
+--- a/excelize_test.go
++++ b/excelize_test.go
+@@ -1795,3 +1795,26 @@ func BenchmarkOpenFile(b *testing.B) {
+ 		}
+ 	}
+ }
++
++func TestCheckSheetR0ColumnOverflow(t *testing.T) {
++	buf, err := NewFile().WriteToBuffer()
++	assert.NoError(t, err)
++	zr, _ := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
++	out := new(bytes.Buffer)
++	zw := zip.NewWriter(out)
++	for _, f := range zr.File {
++		w, _ := zw.Create(f.Name)
++		if f.Name == "xl/worksheets/sheet1.xml" {
++			w.Write([]byte(`<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="0"><c r="VGWQHXLSDVIKWV1" t="inlineStr"><is><t>pwn</t></is></c></row></sheetData></worksheet>`))
++			continue
++		}
++		r, _ := f.Open()
++		b := new(bytes.Buffer)
++		b.ReadFrom(r)
++		w.Write(b.Bytes())
++	}
++	zw.Close()
++	f, err := OpenReader(out)
++	assert.NoError(t, err)
++	assert.NotPanics(t, func() { f.GetCellValue("Sheet1", "A1") })
++}
+diff --git a/lib.go b/lib.go
+index 004ef8e..166b04a 100644
+--- a/lib.go
++++ b/lib.go
+@@ -217,21 +217,23 @@ func ColumnNameToNumber(name string) (int, error) {
+ 	if len(name) == 0 {
+ 		return -1, newInvalidColumnNameError(name)
+ 	}
+-	col := 0
+-	multi := 1
+-	for i := len(name) - 1; i >= 0; i-- {
+-		r := name[i]
+-		if r >= 'A' && r <= 'Z' {
+-			col += int(r-'A'+1) * multi
+-		} else if r >= 'a' && r <= 'z' {
+-			col += int(r-'a'+1) * multi
+-		} else {
++	for i := 0; i < len(name); i++ {
++		if r := name[i]; !(r >= 'A' && r <= 'Z') && !(r >= 'a' && r <= 'z') {
+ 			return -1, newInvalidColumnNameError(name)
+ 		}
+-		multi *= 26
+ 	}
+-	if col > MaxColumns {
+-		return -1, ErrColumnNumber
++	col := 0
++	for i := 0; i < len(name); i++ {
++		r := name[i]
++		if r >= 'a' && r <= 'z' {
++			r -= 'a' - 'A'
++		}
++		// Every digit is at least 1, so the accumulated value is strictly
++		// increasing; bounding it at each step prevents integer overflow.
++		col = col*26 + int(r-'A'+1)
++		if col > MaxColumns {
++			return -1, ErrColumnNumber
++		}
+ 	}
+ 	return col, nil
+ }
+diff --git a/lib_test.go b/lib_test.go
+index 7a9f854..643f457 100644
+--- a/lib_test.go
++++ b/lib_test.go
+@@ -81,6 +81,14 @@ func TestColumnNameToNumber_Error(t *testing.T) {
+ 	}
+ 	_, err := ColumnNameToNumber("XFE")
+ 	assert.ErrorIs(t, err, ErrColumnNumber)
++	// Column names whose value would overflow int must be rejected
++	for _, name := range []string{"VGWQHXLSDVIKWV", "vgwqhxlsdvikwv", strings.Repeat("Z", 32)} {
++		out, err := ColumnNameToNumber(name)
++		assert.ErrorIs(t, err, ErrColumnNumber, name)
++		assert.Equal(t, -1, out, name)
++	}
++	_, _, err = CellNameToCoordinates("VGWQHXLSDVIKWV1")
++	assert.Error(t, err)
+ }
+ 
+ func TestColumnNumberToName_OK(t *testing.T) {

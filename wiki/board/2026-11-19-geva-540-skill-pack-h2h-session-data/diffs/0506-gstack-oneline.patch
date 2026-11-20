@@ -1,0 +1,111 @@
+diff --git a/Terminal.Gui/Views/DialogTResult.cs b/Terminal.Gui/Views/DialogTResult.cs
+index 94f4d99..37d69ba 100644
+--- a/Terminal.Gui/Views/DialogTResult.cs
++++ b/Terminal.Gui/Views/DialogTResult.cs
+@@ -358,8 +358,6 @@ public class Dialog<TResult> : Runnable<TResult>, IDesignable
+         }
+         else
+         {
+-            SchemeName = SchemeManager.SchemesToSchemeName (Schemes.Base);
+-
+             // strip out movable and resizable
+             Arrangement &= ~(ViewArrangement.Movable | ViewArrangement.Resizable);
+         }
+diff --git a/Tests/UnitTestsParallelizable/Views/DialogSchemeTests.cs b/Tests/UnitTestsParallelizable/Views/DialogSchemeTests.cs
+new file mode 100644
+index 0000000..3a6951e
+--- /dev/null
++++ b/Tests/UnitTestsParallelizable/Views/DialogSchemeTests.cs
+@@ -0,0 +1,92 @@
++using UnitTests;
++
++namespace ViewsTests;
++
++/// <summary>
++///     Tests that <see cref="Dialog"/> and views with <c>SchemeName = "Dialog"</c> use the Dialog scheme.
++/// </summary>
++public class DialogSchemeTests (ITestOutputHelper output) : TestDriverBase
++{
++    [Fact]
++    public void Dialog_Constructor_Sets_Dialog_SchemeName ()
++    {
++        using Dialog dialog = new ();
++
++        Assert.Equal ("Dialog", dialog.SchemeName);
++    }
++
++    [Fact]
++    public void Dialog_Running_Uses_Dialog_Scheme ()
++    {
++        using IApplication app = Application.Create ();
++        app.Init (DriverRegistry.Names.ANSI);
++        app.Screen = new Rectangle (0, 0, 40, 20);
++
++        using Dialog dialog = new ();
++        dialog.AddButton (new Button { Text = "OK" });
++        app.Begin (dialog);
++
++        Assert.True (dialog.IsRunning);
++        Assert.Equal ("Dialog", dialog.SchemeName);
++        Assert.Equal (SchemeManager.GetScheme (Schemes.Dialog), dialog.GetScheme ());
++        Assert.Equal (SchemeManager.GetScheme (Schemes.Dialog).Normal, dialog.GetAttributeForRole (VisualRole.Normal));
++    }
++
++    [Fact]
++    public void Dialog_Running_SubView_Uses_Dialog_Scheme ()
++    {
++        using IApplication app = Application.Create ();
++        app.Init (DriverRegistry.Names.ANSI);
++        app.Screen = new Rectangle (0, 0, 40, 20);
++
++        using Dialog dialog = new ();
++        Label label = new () { Text = "Hi" };
++        dialog.Add (label);
++        Button button = new () { Text = "OK" };
++        dialog.AddButton (button);
++        app.Begin (dialog);
++
++        Scheme dialogScheme = SchemeManager.GetScheme (Schemes.Dialog);
++        Assert.Equal (dialogScheme.Normal, label.GetAttributeForRole (VisualRole.Normal));
++        Assert.Equal (dialogScheme, button.GetScheme ());
++    }
++
++    [Fact]
++    public void Dialog_Running_Explicit_SchemeName_Is_Preserved ()
++    {
++        using IApplication app = Application.Create ();
++        app.Init (DriverRegistry.Names.ANSI);
++        app.Screen = new Rectangle (0, 0, 40, 20);
++
++        using Dialog dialog = new () { SchemeName = "Error" };
++        dialog.AddButton (new Button { Text = "OK" });
++        app.Begin (dialog);
++
++        Assert.Equal ("Error", dialog.SchemeName);
++    }
++
++    [Fact]
++    public void View_With_Dialog_SchemeName_Draws_With_Dialog_Normal ()
++    {
++        IDriver driver = CreateTestDriver (20, 5);
++        View superView = new () { Driver = driver, Width = Dim.Fill (), Height = Dim.Fill () };
++        View view = new () { SchemeName = "Dialog", Width = 10, Height = 3, Text = "abc" };
++        View sub = new () { X = 0, Y = 1, Width = 5, Height = 1, Text = "xyz" };
++        view.Add (sub);
++        superView.Add (view);
++        superView.Layout ();
++        superView.Draw ();
++
++        Attribute expected = SchemeManager.GetScheme ("Dialog").Normal;
++        output.WriteLine (expected.ToString ());
++        output.WriteLine (driver.Contents! [0, 0].Attribute.ToString ());
++        output.WriteLine (driver.Contents! [1, 0].Attribute.ToString ());
++        output.WriteLine (driver.Contents! [0, 15].Attribute.ToString ());
++
++        Assert.Equal (expected, driver.Contents! [0, 0].Attribute);
++        Assert.Equal (expected, driver.Contents! [0, 5].Attribute);
++        Assert.Equal (expected, driver.Contents! [1, 0].Attribute);
++        Assert.Equal (expected, driver.Contents! [2, 9].Attribute);
++        Assert.Equal (expected, sub.GetAttributeForRole (VisualRole.Normal));
++    }
++}

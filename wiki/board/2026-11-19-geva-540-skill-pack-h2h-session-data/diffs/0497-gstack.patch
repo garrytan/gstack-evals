@@ -1,0 +1,161 @@
+diff --git a/slatedb/src/bytes_range.rs b/slatedb/src/bytes_range.rs
+index f05936b..c2f3176 100644
+--- a/slatedb/src/bytes_range.rs
++++ b/slatedb/src/bytes_range.rs
+@@ -43,23 +43,35 @@ impl RangeBounds<Bytes> for BytesRange {
+     }
+ }
+ 
+-fn is_bound_non_empty(bound: &Bound<Bytes>) -> bool {
++fn is_bound_empty_bytes(bound: &Bound<Bytes>) -> bool {
+     match bound {
+-        Included(b) | Excluded(b) => !b.is_empty(),
+-        Unbounded => true,
++        Included(b) | Excluded(b) => b.is_empty(),
++        Unbounded => false,
+     }
+ }
+ 
+ impl BytesRange {
++    /// Create a new range from the given bounds.
++    ///
++    /// Empty byte arrays are accepted as bounds. Since keys are never empty and the
++    /// empty byte array is the smallest possible byte string:
++    /// - an empty start bound (included or excluded) is equivalent to `Unbounded`.
++    /// - an empty end bound (included or excluded) matches no keys, so the resulting
++    ///   range is empty (see [`BytesRange::new_empty`]).
++    ///
++    /// # Panics
++    ///
++    /// Panics if the start bound is greater than the end bound (i.e. the range is empty
++    /// for reasons other than an empty end bound).
+     pub(crate) fn new(start_bound: Bound<Bytes>, end_bound: Bound<Bytes>) -> Self {
+-        assert!(
+-            is_bound_non_empty(&start_bound),
+-            "Start bound must be non-empty"
+-        );
+-        assert!(
+-            is_bound_non_empty(&end_bound),
+-            "End bound must be non-empty"
+-        );
++        if is_bound_empty_bytes(&end_bound) {
++            return Self::new_empty();
++        }
++        let start_bound = if is_bound_empty_bytes(&start_bound) {
++            Unbounded
++        } else {
++            start_bound
++        };
+         let inner = ComparableRange::new(start_bound, end_bound);
+         assert!(inner.non_empty(), "Range must be non-empty");
+         Self { inner }
+@@ -315,6 +327,53 @@ pub(crate) mod tests {
+         BytesRange::new(Unbounded, Unbounded);
+     }
+ 
++    #[test]
++    fn test_new_with_empty_start_bound_is_unbounded() {
++        let end = Bytes::from("z");
++        for start in [
++            Bound::Included(Bytes::new()),
++            Bound::Excluded(Bytes::new()),
++        ] {
++            let range = BytesRange::new(start, Bound::Excluded(end.clone()));
++            assert_eq!(range.start_bound(), Bound::Unbounded);
++            assert_eq!(range.end_bound(), Bound::Excluded(&end));
++            assert!(range.contains(&Bytes::from("a")));
++        }
++        let range = BytesRange::new(Bound::Included(Bytes::new()), Unbounded);
++        assert_eq!(range, BytesRange::new(Unbounded, Unbounded));
++    }
++
++    #[test]
++    fn test_new_with_empty_end_bound_is_empty() {
++        for start in [
++            Unbounded,
++            Bound::Included(Bytes::new()),
++            Bound::Included(Bytes::from("a")),
++        ] {
++            for end in [
++                Bound::Included(Bytes::new()),
++                Bound::Excluded(Bytes::new()),
++            ] {
++                let range = BytesRange::new(start.clone(), end);
++                assert!(range.empty());
++                assert!(!range.contains(&Bytes::from("a")));
++                assert!(range
++                    .intersect(&BytesRange::new(Unbounded, Unbounded))
++                    .is_none());
++            }
++        }
++    }
++
++    #[test]
++    fn test_from_with_empty_bounds() {
++        let range = BytesRange::from(Bytes::new()..);
++        assert_eq!(range, BytesRange::new(Unbounded, Unbounded));
++        let range = BytesRange::from(..Bytes::new());
++        assert!(range.empty());
++        let range = BytesRange::from_slice(b"".as_ref()..=b"".as_ref());
++        assert!(range.empty());
++    }
++
+     #[test]
+     #[should_panic(expected = "Range must be non-empty")]
+     fn test_new_with_start_larger_than_end_panics() {
+diff --git a/slatedb/src/db.rs b/slatedb/src/db.rs
+index 1bde64f..cd8fb45 100644
+--- a/slatedb/src/db.rs
++++ b/slatedb/src/db.rs
+@@ -924,6 +924,10 @@ impl Db {
+     ///
+     /// returns a `DbIterator`
+     ///
++    /// Empty byte arrays may be used as range bounds. Since keys are never empty,
++    /// an empty start bound is equivalent to an unbounded start, and an empty end
++    /// bound results in an empty scan.
++    ///
+     /// ## Errors
+     /// - `Error`: if there was an error scanning the range of keys
+     ///
+@@ -3121,6 +3125,40 @@ mod tests {
+         kv_store.close().await.unwrap();
+     }
+ 
++    #[tokio::test]
++    async fn test_scan_with_empty_bounds() {
++        let object_store: Arc<dyn ObjectStore> = Arc::new(InMemory::new());
++        let db = Db::open("/tmp/test_scan_with_empty_bounds", object_store)
++            .await
++            .unwrap();
++        db.put(b"a", b"1").await.unwrap();
++        db.put(b"b", b"2").await.unwrap();
++
++        // empty start bound behaves like unbounded
++        let mut iter = db.scan::<&[u8], _>(b"".as_ref()..).await.unwrap();
++        assert_eq!(iter.next().await.unwrap().unwrap().key.as_ref(), b"a");
++        assert_eq!(iter.next().await.unwrap().unwrap().key.as_ref(), b"b");
++        assert!(iter.next().await.unwrap().is_none());
++
++        let mut iter = db
++            .scan::<&[u8], _>((std::ops::Bound::Excluded(b"".as_ref()), std::ops::Bound::Excluded(b"b".as_ref())))
++            .await
++            .unwrap();
++        assert_eq!(iter.next().await.unwrap().unwrap().key.as_ref(), b"a");
++        assert!(iter.next().await.unwrap().is_none());
++
++        // empty end bound yields no keys
++        let mut iter = db.scan::<&[u8], _>(..b"".as_ref()).await.unwrap();
++        assert!(iter.next().await.unwrap().is_none());
++        let mut iter = db
++            .scan::<&[u8], _>(b"".as_ref()..=b"".as_ref())
++            .await
++            .unwrap();
++        assert!(iter.next().await.unwrap().is_none());
++
++        db.close().await.unwrap();
++    }
++
+     #[tokio::test]
+     async fn test_write_batch_with_empty_key() {
+         let mut batch = WriteBatch::new();

@@ -1,0 +1,298 @@
+diff --git a/src/libse/Common/DialogSplitMerge.cs b/src/libse/Common/DialogSplitMerge.cs
+index 92e710d..14c8dec 100644
+--- a/src/libse/Common/DialogSplitMerge.cs
++++ b/src/libse/Common/DialogSplitMerge.cs
+@@ -13,7 +13,25 @@ namespace Nikse.SubtitleEdit.Core.Common
+         public bool SkipLineEndingCheck { get; set; }
+ 
+         public static char GetDashChar() => '-';
+-        public static char GetAlternateDashChar() => '‐'; // Unicode En Dash (\u2010)
++        public static char GetAlternateDashChar() => '\u2010'; // Unicode Hyphen
++
++        /// <summary>
++        /// Non-ASCII dash characters that are also accepted as dialog dashes (and replaced with <see cref="GetDashChar"/>).
++        /// </summary>
++        public static readonly char[] AlternateDashChars =
++        {
++            '\u2010', // Hyphen
++            '\u2011', // Non-breaking hyphen
++            '\u2013', // En dash
++        };
++
++        public static readonly char[] AllDashChars = { '-', '\u2010', '\u2011', '\u2013' };
++
++        public static bool StartsWithDash(string input)
++        {
++            var s = input?.TrimStart();
++            return !string.IsNullOrEmpty(s) && Array.IndexOf(AllDashChars, s[0]) >= 0;
++        }
+ 
+         public string FixDashesAndSpaces(string input)
+         {
+@@ -213,7 +231,7 @@ namespace Nikse.SubtitleEdit.Core.Common
+                         }
+                         else if (!l.TrimStart().StartsWith(GetDashChar()))
+                         {
+-                            sb.AppendLine(pre + GetLineStartFromDashStyle(i) + l.TrimStart().TrimStart(GetAlternateDashChar()));
++                            sb.AppendLine(pre + GetLineStartFromDashStyle(i) + l.TrimStart().TrimStart(AlternateDashChars));
+                         }
+                         else
+                         {
+@@ -229,12 +247,12 @@ namespace Nikse.SubtitleEdit.Core.Common
+                             }
+                             else
+                             {
+-                                sb.AppendLine(pre + GetLineStartFromDashStyle(i) + l.TrimStart().TrimStart(GetAlternateDashChar()));
++                                sb.AppendLine(pre + GetLineStartFromDashStyle(i) + l.TrimStart().TrimStart(AlternateDashChars));
+                             }
+                         }
+-                        else if (i == 0 && l.TrimStart().StartsWith(GetDashChar()))
++                        else if (i == 0 && StartsWithDash(l))
+                         {
+-                            sb.AppendLine(pre + GetLineStartFromDashStyle(i) + l.Remove(0, l.IndexOf(GetDashChar()) + 1).TrimStart());
++                            sb.AppendLine(pre + GetLineStartFromDashStyle(i) + l.TrimStart().Substring(1).TrimStart());
+                         }
+                         else
+                         {
+@@ -248,7 +266,7 @@ namespace Nikse.SubtitleEdit.Core.Common
+                         }
+                         else if (!l.TrimStart().StartsWith(GetDashChar()))
+                         {
+-                            sb.AppendLine(pre + GetLineStartFromDashStyle(i) + l.TrimStart().TrimStart(GetAlternateDashChar()));
++                            sb.AppendLine(pre + GetLineStartFromDashStyle(i) + l.TrimStart().TrimStart(AlternateDashChars));
+                         }
+                         else
+                         {
+@@ -264,12 +282,12 @@ namespace Nikse.SubtitleEdit.Core.Common
+                             }
+                             else
+                             {
+-                                sb.AppendLine(pre + GetLineStartFromDashStyle(i) + l.TrimStart().TrimStart(GetAlternateDashChar()));
++                                sb.AppendLine(pre + GetLineStartFromDashStyle(i) + l.TrimStart().TrimStart(AlternateDashChars));
+                             }
+                         }
+-                        else if (i == 0 && l.TrimStart().StartsWith(GetDashChar()))
++                        else if (i == 0 && StartsWithDash(l))
+                         {
+-                            sb.AppendLine(pre + GetLineStartFromDashStyle(i) + l.Remove(0, l.IndexOf(GetDashChar()) + 1).TrimStart().TrimStart(GetAlternateDashChar()));
++                            sb.AppendLine(pre + GetLineStartFromDashStyle(i) + l.TrimStart().Substring(1).TrimStart().TrimStart(AlternateDashChars));
+                         }
+                         else
+                         {
+@@ -309,7 +327,7 @@ namespace Nikse.SubtitleEdit.Core.Common
+                         }
+                         else if (!l.TrimStart().StartsWith(GetDashChar()))
+                         {
+-                            sb.AppendLine(pre + GetLineStartFromDashStyle(i) + l.TrimStart().TrimStart(GetAlternateDashChar()));
++                            sb.AppendLine(pre + GetLineStartFromDashStyle(i) + l.TrimStart().TrimStart(AlternateDashChars));
+                         }
+                         else
+                         {
+@@ -325,12 +343,12 @@ namespace Nikse.SubtitleEdit.Core.Common
+                             }
+                             else
+                             {
+-                                sb.AppendLine(pre + GetLineStartFromDashStyle(i) + l.TrimStart().TrimStart(GetAlternateDashChar()));
++                                sb.AppendLine(pre + GetLineStartFromDashStyle(i) + l.TrimStart().TrimStart(AlternateDashChars));
+                             }
+                         }
+-                        else if (i == 0 && l.TrimStart().StartsWith(GetDashChar()))
++                        else if (i == 0 && StartsWithDash(l))
+                         {
+-                            sb.AppendLine(pre + GetLineStartFromDashStyle(i) + l.Remove(0, l.IndexOf(GetDashChar()) + 1).TrimStart());
++                            sb.AppendLine(pre + GetLineStartFromDashStyle(i) + l.TrimStart().Substring(1).TrimStart());
+                         }
+                         else
+                         {
+@@ -344,7 +362,7 @@ namespace Nikse.SubtitleEdit.Core.Common
+                         }
+                         else if (!l.TrimStart().StartsWith(GetDashChar()))
+                         {
+-                            sb.AppendLine(pre + GetLineStartFromDashStyle(i) + l.TrimStart().TrimStart(GetAlternateDashChar()));
++                            sb.AppendLine(pre + GetLineStartFromDashStyle(i) + l.TrimStart().TrimStart(AlternateDashChars));
+                         }
+                         else
+                         {
+@@ -360,12 +378,12 @@ namespace Nikse.SubtitleEdit.Core.Common
+                             }
+                             else
+                             {
+-                                sb.AppendLine(pre + GetLineStartFromDashStyle(i) + l.TrimStart().TrimStart(GetAlternateDashChar()));
++                                sb.AppendLine(pre + GetLineStartFromDashStyle(i) + l.TrimStart().TrimStart(AlternateDashChars));
+                             }
+                         }
+-                        else if (i == 0 && l.TrimStart().StartsWith(GetDashChar()))
++                        else if (i == 0 && StartsWithDash(l))
+                         {
+-                            sb.AppendLine(pre + GetLineStartFromDashStyle(i) + l.Remove(0, l.IndexOf(GetDashChar()) + 1).TrimStart().TrimStart(GetAlternateDashChar()));
++                            sb.AppendLine(pre + GetLineStartFromDashStyle(i) + l.TrimStart().Substring(1).TrimStart().TrimStart(AlternateDashChars));
+                         }
+                         else
+                         {
+@@ -389,9 +407,9 @@ namespace Nikse.SubtitleEdit.Core.Common
+                 return input;
+             }
+ 
+-            if (s.StartsWith(GetDashChar()))
++            if (StartsWithDash(s))
+             {
+-                s = s.TrimStart(GetDashChar());
++                s = s.TrimStart().TrimStart(AllDashChars);
+             }
+ 
+             return pre + GetLineStartFromDashStyle(lineIndex) + s.TrimStart();
+@@ -402,12 +420,12 @@ namespace Nikse.SubtitleEdit.Core.Common
+             var pre = GetStartTags(input);
+             var s = input.Remove(0, pre.Length);
+ 
+-            if (!s.TrimStart().StartsWith(GetDashChar()) && !s.TrimStart().StartsWith(GetAlternateDashChar()))
++            if (!StartsWithDash(s))
+             {
+                 return input;
+             }
+ 
+-            return pre + s.TrimStart().TrimStart(GetDashChar(), GetAlternateDashChar()).TrimStart();
++            return pre + s.TrimStart().TrimStart(AllDashChars).TrimStart();
+         }
+ 
+         public static string GetDialogStylePreview(DialogType dialogType)
+@@ -477,14 +495,14 @@ namespace Nikse.SubtitleEdit.Core.Common
+             if (lines.Count == 2)
+             {
+                 if ((l0.HasSentenceEnding(TwoLetterLanguageCode) || noLineEnding) &&
+-                    (l1.TrimStart().StartsWith(GetDashChar()) || l1.TrimStart().StartsWith(GetAlternateDashChar())))
++                    StartsWithDash(l1))
+                 {
+                     return true;
+                 }
+ 
+-                if ((l0.TrimStart().StartsWith(GetDashChar()) || l0.TrimStart().StartsWith(GetAlternateDashChar())) &&
++                if (StartsWithDash(l0) &&
+                     l0.EndsWith("--", StringComparison.Ordinal) && !l0.EndsWith("---", StringComparison.Ordinal) &&
+-                    (l1.TrimStart().StartsWith(GetDashChar()) || l1.TrimStart().StartsWith(GetAlternateDashChar())))
++                    StartsWithDash(l1))
+                 {
+                     var trimmed = l0.TrimEnd('-').TrimEnd();
+                     if (trimmed.Length > 0 && char.IsLetterOrDigit(trimmed[trimmed.Length - 1]))
+@@ -515,9 +533,9 @@ namespace Nikse.SubtitleEdit.Core.Common
+                 }
+ 
+                 if ((l0.HasSentenceEnding(TwoLetterLanguageCode) || noLineEnding) &&
+-                    (l1.TrimStart().StartsWith(GetDashChar()) || l1.TrimStart().StartsWith(GetAlternateDashChar())) &&
++                    StartsWithDash(l1) &&
+                     (l1.HasSentenceEnding(TwoLetterLanguageCode) || noLineEnding) &&
+-                    (l2.TrimStart().StartsWith(GetDashChar()) || l2.TrimStart().StartsWith(GetAlternateDashChar())))
++                    StartsWithDash(l2))
+                 {
+                     return true;
+                 }
+@@ -541,7 +559,7 @@ namespace Nikse.SubtitleEdit.Core.Common
+             if (lines.Count == 2)
+             {
+                 if ((l0.HasSentenceEnding(TwoLetterLanguageCode) || noLineEnding) &&
+-                    (l1.TrimStart().StartsWith(GetDashChar()) || l1.TrimStart().StartsWith(GetAlternateDashChar())))
++                    StartsWithDash(l1))
+                 {
+                     return true;
+                 }
+@@ -550,7 +568,7 @@ namespace Nikse.SubtitleEdit.Core.Common
+                     prev.Text.HasSentenceEnding(TwoLetterLanguageCode) ||
+                     p.StartTime.TotalMilliseconds - prev.EndTime.TotalMilliseconds > 3000;
+                 if (prevEnding &&
+-                    (l0.StartsWith(GetDashChar()) || l0.StartsWith(GetAlternateDashChar())) &&
++                    StartsWithDash(l0) &&
+                     l0.HasSentenceEnding(TwoLetterLanguageCode))
+                 {
+                     return true;
+@@ -578,9 +596,9 @@ namespace Nikse.SubtitleEdit.Core.Common
+                 }
+ 
+                 if ((l0.HasSentenceEnding(TwoLetterLanguageCode) || noLineEnding) &&
+-                    (l1.TrimStart().StartsWith(GetDashChar()) || l1.TrimStart().StartsWith(GetAlternateDashChar())) &&
++                    StartsWithDash(l1) &&
+                     (l1.HasSentenceEnding(TwoLetterLanguageCode) || noLineEnding) &&
+-                    (l2.TrimStart().StartsWith(GetDashChar()) || l2.TrimStart().StartsWith(GetAlternateDashChar())))
++                    StartsWithDash(l2))
+                 {
+                     return true;
+                 }
+@@ -592,17 +610,17 @@ namespace Nikse.SubtitleEdit.Core.Common
+         private bool IsDialogThreeLinesOneTwo(string l0, string l1, string l2)
+         {
+             return l0.HasSentenceEnding(TwoLetterLanguageCode) &&
+-                   (l1.TrimStart().StartsWith(GetDashChar()) || l1.TrimStart().StartsWith(GetAlternateDashChar())) &&
++                   StartsWithDash(l1) &&
+                    !l1.HasSentenceEnding(TwoLetterLanguageCode) &&
+-                   !(l2.TrimStart().StartsWith(GetDashChar()) || l2.TrimStart().StartsWith(GetAlternateDashChar()));
++                   !StartsWithDash(l2);
+         }
+ 
+         private bool IsDialogThreeLinesTwoOne(string l0, string l1, string l2)
+         {
+             return !l0.HasSentenceEnding(TwoLetterLanguageCode) &&
+                    l1.HasSentenceEnding(TwoLetterLanguageCode) &&
+-                   !(l1.TrimStart().StartsWith(GetDashChar()) || l1.TrimStart().StartsWith(GetAlternateDashChar())) &&
+-                   (l2.TrimStart().StartsWith(GetDashChar()) || l2.TrimStart().StartsWith(GetAlternateDashChar()));
++                   !StartsWithDash(l1) &&
++                   StartsWithDash(l2);
+         }
+ 
+         private string GetLineStartFromDashStyle(int lineIndex)
+diff --git a/src/ui/Logic/ISplitManager.cs b/src/ui/Logic/ISplitManager.cs
+index 6dd8511..154aadf 100644
+--- a/src/ui/Logic/ISplitManager.cs
++++ b/src/ui/Logic/ISplitManager.cs
+@@ -63,8 +63,8 @@ public class SplitManager : ISplitManager
+             var dialogHelper = new DialogSplitMerge { DialogStyle = Configuration.Settings.General.DialogStyle, TwoLetterLanguageCode = languageCode };
+             if (dialogHelper.IsDialog(lines))
+             {
+-                newSubtitle.Text = lines[1].TrimStart(' ', DialogSplitMerge.GetDashChar(), DialogSplitMerge.GetAlternateDashChar()).Trim();
+-                subtitle.Text = lines[0].TrimStart(' ', DialogSplitMerge.GetDashChar(), DialogSplitMerge.GetAlternateDashChar()).Trim();
++                newSubtitle.Text = lines[1].TrimStart(' ').TrimStart(DialogSplitMerge.AllDashChars).Trim();
++                subtitle.Text = lines[0].TrimStart(' ').TrimStart(DialogSplitMerge.AllDashChars).Trim();
+             }
+             else
+             {
+diff --git a/tests/libse/Core/DialogTypeTest.cs b/tests/libse/Core/DialogTypeTest.cs
+index f88b3e9..4e7a77b 100644
+--- a/tests/libse/Core/DialogTypeTest.cs
++++ b/tests/libse/Core/DialogTypeTest.cs
+@@ -209,4 +209,38 @@ public class DialogTypeTest
+         var result = splitMerge.FixDashesAndSpaces(p.Text, p, prev);
+         Assert.Equal($"- you can't talk either.{Environment.NewLine}That's what I said.", result);
+     }
++
++    [Fact]
++    public void FixDashesEnDashBothLinesWithSpace()
++    {
++        var splitMerge = new DialogSplitMerge { DialogStyle = DialogType.DashBothLinesWithSpace };
++        var result = splitMerge.FixDashesAndSpaces($"\u2013 How are you?{Environment.NewLine}\u2013 I'm fine.");
++        Assert.Equal($"- How are you?{Environment.NewLine}- I'm fine.", result);
++    }
++
++    [Fact]
++    public void FixDashesEnDashBothLinesWithoutSpace()
++    {
++        var splitMerge = new DialogSplitMerge { DialogStyle = DialogType.DashBothLinesWithoutSpace };
++        var result = splitMerge.FixDashesAndSpaces($"\u2013How are you?{Environment.NewLine}\u2013I'm fine.");
++        Assert.Equal($"-How are you?{Environment.NewLine}-I'm fine.", result);
++    }
++
++    [Fact]
++    public void FixDashesEnDashSecondLineWithSpace()
++    {
++        var splitMerge = new DialogSplitMerge { DialogStyle = DialogType.DashSecondLineWithSpace };
++        var result = splitMerge.FixDashesAndSpaces($"\u2013 How are you?{Environment.NewLine}\u2013 I'm fine.");
++        Assert.Equal($"How are you?{Environment.NewLine}- I'm fine.", result);
++    }
++
++    [Fact]
++    public void FixDashesEnDashWithParagraphBothLinesWithSpace()
++    {
++        var splitMerge = new DialogSplitMerge { DialogStyle = DialogType.DashBothLinesWithSpace };
++        var text = $"\u2013 How are you?{Environment.NewLine}\u2013 I'm fine.";
++        var p = new Paragraph(text, 10000, 12000);
++        var result = splitMerge.FixDashesAndSpaces(text, p, null);
++        Assert.Equal($"- How are you?{Environment.NewLine}- I'm fine.", result);
++    }
+ }

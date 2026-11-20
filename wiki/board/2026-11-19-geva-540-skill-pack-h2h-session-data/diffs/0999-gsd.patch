@@ -1,0 +1,132 @@
+diff --git a/src/rules_inline/html_inline.ts b/src/rules_inline/html_inline.ts
+index 5c2faef..bcc1e5c 100644
+--- a/src/rules_inline/html_inline.ts
++++ b/src/rules_inline/html_inline.ts
+@@ -1,6 +1,6 @@
+ // Process html tags
+ 
+-import { HTML_TAG_RE } from '../common/html_re.ts'
++import { HTML_OPEN_CLOSE_TAG_RE } from '../common/html_re.ts'
+ import type StateInline from './state_inline.ts'
+ 
+ function isLinkOpen (str: string) {
+@@ -16,6 +16,54 @@ function isLetter (ch: number) {
+   return (lc >= 0x61/* a */) && (lc <= 0x7a/* z */)
+ }
+ 
++// Returns the end of the first `terminator` at or after `from`, or -1.
++//
++// The position of the last occurrence of each terminator is cached on the
++// state, so a construct whose terminator is absent from the rest of the input
++// fails in O(1) instead of rescanning the remaining input. Without that, a
++// paragraph of repeated unterminated openers (`<!--<!--...`) takes quadratic
++// time. On success the scan stops at the terminator, which is then consumed.
++function findTerminator (state: StateInline, terminator: string, from: number): number {
++  let cache = state.htmlTerminators
++  if (!cache) {
++    cache = state.htmlTerminators = {}
++  }
++
++  let last = cache[terminator]
++  if (last === undefined) {
++    last = cache[terminator] = state.src.lastIndexOf(terminator)
++  }
++
++  if (last < from) { return -1 }
++
++  return state.src.indexOf(terminator, from) + terminator.length
++}
++
++// Returns the length of the HTML comment, processing instruction,
++// declaration or CDATA section at `pos`, or 0 if there is none.
++function matchSpecial (state: StateInline, pos: number): number {
++  const src = state.src
++  let end = -1
++
++  if (src.startsWith('<!--', pos)) {
++    // <!-->, <!--->, or <!-- ... -->
++    if (src.startsWith('>', pos + 4)) return 5
++    if (src.startsWith('->', pos + 4)) return 6
++    end = findTerminator(state, '-->', pos + 4)
++  } else if (src.startsWith('<![CDATA[', pos)) {
++    end = findTerminator(state, ']]>', pos + 9)
++  } else if (src.charCodeAt(pos + 1) === 0x21/* ! */) {
++    if (!isLetter(src.charCodeAt(pos + 2))) return 0
++    end = findTerminator(state, '>', pos + 3)
++  } else if (src.charCodeAt(pos + 1) === 0x3F/* ? */) {
++    end = findTerminator(state, '?>', pos + 2)
++  } else {
++    return 0
++  }
++
++  return end < 0 ? 0 : end - pos
++}
++
+ export default function html_inline (state: StateInline, silent: boolean): boolean {
+   if (!state.md.options.html) { return false }
+ 
+@@ -36,16 +84,25 @@ export default function html_inline (state: StateInline, silent: boolean): boole
+     return false
+   }
+ 
+-  const match = state.src.slice(pos).match(HTML_TAG_RE)
+-  if (!match) { return false }
++  let content: string
++
++  if (ch === 0x21/* ! */ || ch === 0x3F/* ? */) {
++    const len = matchSpecial(state, pos)
++    if (!len) { return false }
++    content = state.src.slice(pos, pos + len)
++  } else {
++    const match = state.src.slice(pos).match(HTML_OPEN_CLOSE_TAG_RE)
++    if (!match) { return false }
++    content = match[0]
++  }
+ 
+   if (!silent) {
+     const token = state.push('html_inline', '', 0)
+-    token.content = match[0]
++    token.content = content
+ 
+     if (isLinkOpen(token.content)) state.linkLevel++
+     if (isLinkClose(token.content)) state.linkLevel--
+   }
+-  state.pos += match[0].length
++  state.pos += content.length
+   return true
+ }
+diff --git a/src/rules_inline/state_inline.ts b/src/rules_inline/state_inline.ts
+index 5f64d71..b591ab6 100644
+--- a/src/rules_inline/state_inline.ts
++++ b/src/rules_inline/state_inline.ts
+@@ -37,6 +37,9 @@ class StateInline {
+   backticks: Record<number, number> = {}
+   backticksScanned = false
+ 
++  // HTML terminator => position of its last occurrence, built lazily by html_inline
++  htmlTerminators: Record<string, number> | null = null
++
+   // Counter used to disable inline linkify-it execution
+   // inside <a> and markdown links
+   linkLevel = 0
+diff --git a/test/markdown-it/pathological.test.mjs b/test/markdown-it/pathological.test.mjs
+index d88bea7..5e68d5d 100644
+--- a/test/markdown-it/pathological.test.mjs
++++ b/test/markdown-it/pathological.test.mjs
+@@ -113,6 +113,16 @@ describe('Pathological sequences speed', () => {
+       await test_pattern('</' + '<!--'.repeat(100000))
+     })
+ 
++    it('unclosed <!-- with html enabled', async () => {
++      await test_pattern('</' + '<!--'.repeat(100000), { html: true })
++    })
++
++    it('unclosed inline html constructs with html enabled', async () => {
++      for (const opener of ['<!--', '<?x', '<!A', '<![CDATA[', '<!--a--->']) {
++        await test_pattern('x ' + opener.repeat(100000), { html: true })
++      }
++    })
++
+     it('empty lines in deeply nested lists', async () => {
+       await test_pattern('- '.repeat(30000) + 'x' + '\n'.repeat(30000))
+     })

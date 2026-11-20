@@ -1,0 +1,54 @@
+diff --git a/src/lib/record/ares_dns_parse.c b/src/lib/record/ares_dns_parse.c
+index 113438f..bb5c1d3 100644
+--- a/src/lib/record/ares_dns_parse.c
++++ b/src/lib/record/ares_dns_parse.c
+@@ -60,6 +60,36 @@ static ares_status_t ares_dns_parse_and_set_dns_name(ares_buf_t    *buf,
+   return ARES_SUCCESS;
+ }
+ 
++/* Verify the name at the current position does not use compression pointers,
++ * without consuming any data */
++static ares_status_t ares_dns_name_check_uncompressed(ares_buf_t *buf)
++{
++  size_t        orig_pos = ares_buf_get_position(buf);
++  ares_status_t status;
++  unsigned char c;
++
++  while (1) {
++    status = ares_buf_fetch_bytes(buf, &c, 1);
++    if (status != ARES_SUCCESS) {
++      break;
++    }
++    if (c & 0xc0) {
++      status = ARES_EBADNAME;
++      break;
++    }
++    if (c == 0) {
++      break;
++    }
++    status = ares_buf_consume(buf, c);
++    if (status != ARES_SUCCESS) {
++      break;
++    }
++  }
++
++  ares_buf_set_position(buf, orig_pos);
++  return status;
++}
++
+ static ares_status_t ares_dns_parse_and_set_dns_str(ares_buf_t       *buf,
+                                                     size_t            max_len,
+                                                     ares_dns_rr_t    *rr,
+@@ -404,7 +434,11 @@ static ares_status_t ares_dns_parse_rr_srv(ares_buf_t *buf, ares_dns_rr_t *rr,
+     return status;
+   }
+ 
+-  /* TARGET */
++  /* TARGET: RFC 2782 prohibits name compression in this field */
++  status = ares_dns_name_check_uncompressed(buf);
++  if (status != ARES_SUCCESS) {
++    return status;
++  }
+   return ares_dns_parse_and_set_dns_name(buf, ARES_FALSE, rr,
+                                          ARES_RR_SRV_TARGET);
+ }

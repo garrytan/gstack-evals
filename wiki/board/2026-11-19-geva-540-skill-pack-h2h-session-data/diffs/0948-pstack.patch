@@ -1,0 +1,228 @@
+diff --git a/openapi3filter/array_items_nil_test.go b/openapi3filter/array_items_nil_test.go
+new file mode 100644
+index 0000000..f3684fa
+--- /dev/null
++++ b/openapi3filter/array_items_nil_test.go
+@@ -0,0 +1,132 @@
++package openapi3filter_test
++
++import (
++	"bytes"
++	"io"
++	"mime/multipart"
++	"net/http"
++	"strings"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++
++	"github.com/getkin/kin-openapi/openapi3"
++	"github.com/getkin/kin-openapi/openapi3filter"
++	"github.com/getkin/kin-openapi/routers/gorillamux"
++)
++
++func TestArraySchemaWithoutItemsDoesNotPanic(t *testing.T) {
++	const spec = `
++openapi: 3.1.0
++info: {title: t, version: 1.0.0}
++paths:
++  /form:
++    post:
++      requestBody:
++        required: true
++        content:
++          application/x-www-form-urlencoded:
++            schema:
++              type: object
++              properties:
++                tags: {type: array}
++      responses:
++        '200': {description: ok}
++  /upload:
++    post:
++      requestBody:
++        required: true
++        content:
++          multipart/form-data:
++            schema:
++              type: object
++              properties:
++                tags: {type: array}
++      responses:
++        '200': {description: ok}
++  /query:
++    get:
++      parameters:
++        - {name: tags, in: query, schema: {type: array}}
++        - {name: X-Tags, in: header, schema: {type: array}}
++        - name: deep
++          in: query
++          style: deepObject
++          explode: true
++          schema:
++            type: object
++            properties:
++              list: {type: array}
++      responses:
++        '200':
++          description: ok
++          headers:
++            X-Tags:
++              schema: {type: array}
++`
++	loader := openapi3.NewLoader()
++	doc, err := loader.LoadFromData([]byte(spec))
++	require.NoError(t, err)
++	require.NoError(t, doc.Validate(loader.Context))
++	router, err := gorillamux.NewRouter(doc)
++	require.NoError(t, err)
++
++	opts := &openapi3filter.Options{AuthenticationFunc: openapi3filter.NoopAuthenticationFunc}
++	input := func(req *http.Request) *openapi3filter.RequestValidationInput {
++		route, pathParams, err := router.FindRoute(req)
++		require.NoError(t, err)
++		return &openapi3filter.RequestValidationInput{Request: req, PathParams: pathParams, Route: route, Options: opts}
++	}
++
++	var body bytes.Buffer
++	mw := multipart.NewWriter(&body)
++	require.NoError(t, mw.WriteField("tags", "a"))
++	require.NoError(t, mw.Close())
++
++	requests := map[string]func() *http.Request{
++		"urlencoded body": func() *http.Request {
++			req, _ := http.NewRequest(http.MethodPost, "/form", strings.NewReader("tags=a"))
++			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
++			return req
++		},
++		"multipart body": func() *http.Request {
++			req, _ := http.NewRequest(http.MethodPost, "/upload", bytes.NewReader(body.Bytes()))
++			req.Header.Set("Content-Type", mw.FormDataContentType())
++			return req
++		},
++		"query param": func() *http.Request {
++			req, _ := http.NewRequest(http.MethodGet, "/query?tags=a", nil)
++			return req
++		},
++		"header param": func() *http.Request {
++			req, _ := http.NewRequest(http.MethodGet, "/query", nil)
++			req.Header.Set("X-Tags", "a,b")
++			return req
++		},
++		"deepObject param": func() *http.Request {
++			req, _ := http.NewRequest(http.MethodGet, "/query?deep[list][0]=a", nil)
++			return req
++		},
++	}
++	for name, newReq := range requests {
++		t.Run(name, func(t *testing.T) {
++			require.NotPanics(t, func() {
++				err := openapi3filter.ValidateRequest(loader.Context, input(newReq()))
++				require.ErrorContains(t, err, "array schema without items")
++			})
++		})
++	}
++
++	t.Run("response header", func(t *testing.T) {
++		req, _ := http.NewRequest(http.MethodGet, "/query", nil)
++		require.NotPanics(t, func() {
++			err := openapi3filter.ValidateResponse(loader.Context, &openapi3filter.ResponseValidationInput{
++				RequestValidationInput: input(req),
++				Status:                 http.StatusOK,
++				Header:                 http.Header{"X-Tags": []string{"a,b"}},
++				Body:                   io.NopCloser(strings.NewReader("")),
++			})
++			require.ErrorContains(t, err, "array schema without items")
++		})
++	})
++}
+diff --git a/openapi3filter/req_resp_decoder.go b/openapi3filter/req_resp_decoder.go
+index 9841747..788a616 100644
+--- a/openapi3filter/req_resp_decoder.go
++++ b/openapi3filter/req_resp_decoder.go
+@@ -557,10 +557,14 @@ func (d *urlValuesDecoder) DecodeArray(param string, sm *openapi3.SerializationM
+ // Every item is parsed as a primitive value.
+ // The function returns an error when an error happened while parse array's items.
+ func (d *urlValuesDecoder) parseArray(raw []string, schemaRef *openapi3.SchemaRef) ([]any, error) {
++	items, err := arrayItems(schemaRef)
++	if err != nil {
++		return nil, err
++	}
+ 	var value []any
+ 
+ 	for i, v := range raw {
+-		item, err := d.parseValue(v, schemaRef.Value.Items)
++		item, err := d.parseValue(v, items)
+ 		if err != nil {
+ 			if v, ok := err.(*ParseError); ok {
+ 				return nil, &ParseError{path: []any{i}, Cause: v}
+@@ -1006,9 +1010,13 @@ func buildResObj(params map[string]any, parentKeys []string, key string, schema
+ 		if err != nil {
+ 			return nil, &ParseError{path: pathFromKeys(mapKeys), Kind: KindInvalidFormat, Reason: fmt.Sprintf("could not convert value map to array: %v", err)}
+ 		}
++		items, err := arrayItems(schema)
++		if err != nil {
++			return nil, err
++		}
+ 		resultArr := make([]any /*not 0,*/, len(arr))
+ 		for i := range arr {
+-			r, err := buildResObj(params, mapKeys, strconv.Itoa(i), schema.Value.Items)
++			r, err := buildResObj(params, mapKeys, strconv.Itoa(i), items)
+ 			if err != nil {
+ 				return nil, err
+ 			}
+@@ -1124,9 +1132,13 @@ func pathFromKeys(kk []string) []any {
+ // Every item is parsed as a primitive value.
+ // The function returns an error when an error happened while parse array's items.
+ func parseArray(raw []string, schemaRef *openapi3.SchemaRef) ([]any, error) {
++	items, err := arrayItems(schemaRef)
++	if err != nil {
++		return nil, err
++	}
+ 	var value []any
+ 	for i, v := range raw {
+-		item, err := parsePrimitive(v, schemaRef.Value.Items)
++		item, err := parsePrimitive(v, items)
+ 		if err != nil {
+ 			if v, ok := err.(*ParseError); ok {
+ 				return nil, &ParseError{path: []any{i}, Cause: v}
+@@ -1144,6 +1156,15 @@ func parseArray(raw []string, schemaRef *openapi3.SchemaRef) ([]any, error) {
+ 	return value, nil
+ }
+ 
++// arrayItems returns the items schema of an array schema.
++// OpenAPI 3.1 allows omitting items, but decoding needs to know the item type.
++func arrayItems(schemaRef *openapi3.SchemaRef) (*openapi3.SchemaRef, error) {
++	if items := schemaRef.Value.Items; items != nil && items.Value != nil {
++		return items, nil
++	}
++	return nil, &ParseError{Kind: KindOther, Reason: "array schema without items is not supported for decoding"}
++}
++
+ // parsePrimitive returns a value that is created by parsing a source string to a primitive type
+ // that is specified by a schema. The function returns nil when the source string is empty and the type is not "string".
+ // The function panics when a schema has a non-primitive type.
+@@ -1418,7 +1439,11 @@ func UrlencodedBodyDecoder(body io.Reader, header http.Header, schema *openapi3.
+ 		case propType.Is("object"):
+ 			return nil, fmt.Errorf("unsupported schema of request body's property %q", propName)
+ 		case propType.Is("array"):
+-			items := propSchema.Value.Items.Value
++			itemsRef, err := arrayItems(propSchema)
++			if err != nil {
++				return nil, fmt.Errorf("unsupported schema of request body's property %q: %w", propName, err)
++			}
++			items := itemsRef.Value
+ 			if !(items.Type.Is("string") || items.Type.Is("integer") || items.Type.Is("number") || items.Type.Is("boolean")) {
+ 				return nil, fmt.Errorf("unsupported schema of request body's property %q", propName)
+ 			}
+@@ -1561,7 +1586,9 @@ func MultipartBodyDecoder(body io.Reader, header http.Header, schema *openapi3.S
+ 				}
+ 			}
+ 			if valueSchema.Value.Type.Is("array") {
+-				valueSchema = valueSchema.Value.Items
++				if valueSchema, err = arrayItems(valueSchema); err != nil {
++					return nil, &ParseError{path: []any{name}, Cause: err}
++				}
+ 			}
+ 		}
+ 

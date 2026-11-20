@@ -1,0 +1,175 @@
+diff --git a/src/BootstrapBlazor.Server/Components/Samples/Radios.razor b/src/BootstrapBlazor.Server/Components/Samples/Radios.razor
+index 2aa4a75..cb5e051 100644
+--- a/src/BootstrapBlazor.Server/Components/Samples/Radios.razor
++++ b/src/BootstrapBlazor.Server/Components/Samples/Radios.razor
+@@ -115,6 +115,9 @@
+         <div class="col-12 col-sm-6">
+             <RadioList IsButton="true" @bind-Value="@SelectedEnumItem3" Color="Color.Info" ShowLabel="true" DisplayText="Test"></RadioList>
+         </div>
++        <div class="col-12 col-sm-6">
++            <RadioList IsButton="true" IsOutline="true" @bind-Value="@SelectedEnumItem3" Color="Color.Primary" ShowLabel="true" DisplayText="Outline"></RadioList>
++        </div>
+     </div>
+ 
+     <ValidateForm Model="Model" class="mt-3">
+diff --git a/src/BootstrapBlazor.Server/Locales/en-US.json b/src/BootstrapBlazor.Server/Locales/en-US.json
+index 6ed2b91..08baca2 100644
+--- a/src/BootstrapBlazor.Server/Locales/en-US.json
++++ b/src/BootstrapBlazor.Server/Locales/en-US.json
+@@ -2976,7 +2976,7 @@
+     "RadiosColorTitle": "Color",
+     "RadiosColorIntro": "Change the component background color by setting the <code>Color</code> property",
+     "RadiosIsButtonTitle": "Button Radio",
+-    "RadiosIsButtonIntro": "Set <code>IsButton</code> to <code>True</code> make the radio item display as Button",
++    "RadiosIsButtonIntro": "Set <code>IsButton</code> to <code>True</code> make the radio item display as Button, set <code>IsOutline</code> to <code>True</code> to use the outline button style",
+     "RadiosItemTemplateTitle": "ItemTemplate",
+     "RadiosItemTemplateIntro": "Set <code>ItemTemplate</code> for customer the item UI",
+     "RadiosDisplayText": "Displays text",
+diff --git a/src/BootstrapBlazor.Server/Locales/zh-CN.json b/src/BootstrapBlazor.Server/Locales/zh-CN.json
+index aa6be40..161d885 100644
+--- a/src/BootstrapBlazor.Server/Locales/zh-CN.json
++++ b/src/BootstrapBlazor.Server/Locales/zh-CN.json
+@@ -2976,7 +2976,7 @@
+     "RadiosColorTitle": "颜色",
+     "RadiosColorIntro": "通过设置 <code>Color</code> 属性改变组件背景色",
+     "RadiosIsButtonTitle": "按钮样式",
+-    "RadiosIsButtonIntro": "通过设定 <code>IsButton</code> 值为 <code>True</code> 将候选项更改为按钮样式",
++    "RadiosIsButtonIntro": "通过设定 <code>IsButton</code> 值为 <code>True</code> 将候选项更改为按钮样式，设置 <code>IsOutline</code> 值为 <code>True</code> 使用镂空按钮样式",
+     "RadiosItemTemplateTitle": "项目模板",
+     "RadiosItemTemplateIntro": "通过设置 <code>ItemTemplate</code> 自定义显示 UI",
+     "RadiosDisplayText": "显示文字",
+diff --git a/src/BootstrapBlazor/Components/Radio/RadioList.razor.cs b/src/BootstrapBlazor/Components/Radio/RadioList.razor.cs
+index 899f1d4..9c2c316 100644
+--- a/src/BootstrapBlazor/Components/Radio/RadioList.razor.cs
++++ b/src/BootstrapBlazor/Components/Radio/RadioList.razor.cs
+@@ -31,6 +31,12 @@ public partial class RadioList<TValue>
+     [Parameter]
+     public bool AutoSelectFirstWhenValueIsNull { get; set; } = true;
+ 
++    /// <summary>
++    /// 获得/设置 按钮样式时是否为镂空样式 默认 false 仅 <see cref="IsButton"/> 为 true 时生效
++    /// </summary>
++    [Parameter]
++    public bool IsOutline { get; set; }
++
+     private string? GroupName => Id;
+ 
+     private string? ClassString => CssBuilder.Default("radio-list form-control")
+@@ -42,11 +48,14 @@ public partial class RadioList<TValue>
+     private string? ButtonClassString => CssBuilder.Default("radio-list btn-group")
+         .AddClass("disabled", IsDisabled)
+         .AddClass("btn-group-vertical", IsVertical)
++        .AddClass("is-outline", IsOutline)
+         .AddClassFromAttributes(AdditionalAttributes)
+         .Build();
+ 
+     private string? GetButtonItemClassString(SelectedItem item) => CssBuilder.Default("btn")
+-        .AddClass($"active bg-{Color.ToDescriptionString()}", CurrentValueAsString == item.Value)
++        .AddClass($"btn-outline-{Color.ToDescriptionString()}", IsOutline)
++        .AddClass("active", CurrentValueAsString == item.Value)
++        .AddClass($"bg-{Color.ToDescriptionString()}", !IsOutline && CurrentValueAsString == item.Value)
+         .Build();
+ 
+     /// <summary>
+diff --git a/src/BootstrapBlazor/Components/Radio/RadioList.razor.scss b/src/BootstrapBlazor/Components/Radio/RadioList.razor.scss
+index f60f1e5..a4b3caf 100644
+--- a/src/BootstrapBlazor/Components/Radio/RadioList.razor.scss
++++ b/src/BootstrapBlazor/Components/Radio/RadioList.razor.scss
+@@ -38,6 +38,10 @@
+             color: var(--bb-radio-group-item-active-color);
+         }
+ 
++        &.is-outline {
++            border: none;
++        }
++
+         &.disabled > span {
+             opacity: var(--bs-btn-disabled-opacity);
+ 
+diff --git a/src/BootstrapBlazor/Components/Radio/RadioListGeneric.razor.cs b/src/BootstrapBlazor/Components/Radio/RadioListGeneric.razor.cs
+index 833d8dd..c3f7d67 100644
+--- a/src/BootstrapBlazor/Components/Radio/RadioListGeneric.razor.cs
++++ b/src/BootstrapBlazor/Components/Radio/RadioListGeneric.razor.cs
+@@ -35,6 +35,12 @@ public partial class RadioListGeneric<TValue> : IModelEqualityComparer<TValue>
+     [Parameter]
+     public bool IsButton { get; set; }
+ 
++    /// <summary>
++    /// 获得/设置 按钮样式时是否为镂空样式 默认 false 仅 <see cref="IsButton"/> 为 true 时生效
++    /// </summary>
++    [Parameter]
++    public bool IsOutline { get; set; }
++
+     /// <summary>
+     /// 获得/设置 是否显示边框 默认为 true
+     /// </summary>
+@@ -98,11 +104,14 @@ public partial class RadioListGeneric<TValue> : IModelEqualityComparer<TValue>
+     private string? ButtonClassString => CssBuilder.Default("radio-list btn-group")
+         .AddClass("disabled", IsDisabled)
+         .AddClass("btn-group-vertical", IsVertical)
++        .AddClass("is-outline", IsOutline)
+         .AddClassFromAttributes(AdditionalAttributes)
+         .Build();
+ 
+     private string? GetButtonItemClassString(SelectedItem<TValue> item) => CssBuilder.Default("btn")
+-        .AddClass($"active bg-{Color.ToDescriptionString()}", Equals(Value, item.Value))
++        .AddClass($"btn-outline-{Color.ToDescriptionString()}", IsOutline)
++        .AddClass("active", Equals(Value, item.Value))
++        .AddClass($"bg-{Color.ToDescriptionString()}", !IsOutline && Equals(Value, item.Value))
+         .Build();
+ 
+     /// <summary>
+diff --git a/test/UnitTest/Components/RadioListGenericTest.cs b/test/UnitTest/Components/RadioListGenericTest.cs
+index 7d4e819..2e59d93 100644
+--- a/test/UnitTest/Components/RadioListGenericTest.cs
++++ b/test/UnitTest/Components/RadioListGenericTest.cs
+@@ -226,6 +226,22 @@ public class RadioListGenericTest : BootstrapBlazorTestBase
+         cut.Contains("btn active bg-danger");
+     }
+ 
++    [Fact]
++    public void IsOutline_Ok()
++    {
++        var cut = Context.RenderComponent<RadioListGeneric<EnumEducation>>(pb =>
++        {
++            pb.Add(a => a.IsButton, true);
++            pb.Add(a => a.IsOutline, true);
++            pb.Add(a => a.Color, Color.Danger);
++            pb.Add(a => a.Items, typeof(EnumEducation).ToSelectList<EnumEducation>());
++            pb.Add(a => a.Value, EnumEducation.Middle);
++        });
++        cut.Contains("radio-list btn-group is-outline");
++        cut.Contains("btn btn-outline-danger active");
++        cut.DoesNotContain("bg-danger");
++    }
++
+     [Fact]
+     public void ShowBorder_Ok()
+     {
+diff --git a/test/UnitTest/Components/RadioTest.cs b/test/UnitTest/Components/RadioTest.cs
+index 3cbc56d..100f846 100644
+--- a/test/UnitTest/Components/RadioTest.cs
++++ b/test/UnitTest/Components/RadioTest.cs
+@@ -217,6 +217,22 @@ public class RadioTest : BootstrapBlazorTestBase
+         cut.Contains("class=\"form-label\"");
+     }
+ 
++    [Fact]
++    public void IsOutline_Ok()
++    {
++        var cut = Context.RenderComponent<RadioList<EnumEducation>>(pb =>
++        {
++            pb.Add(a => a.IsButton, true);
++            pb.Add(a => a.IsOutline, true);
++            pb.Add(a => a.Color, Color.Danger);
++            pb.Add(a => a.Items, typeof(EnumEducation).ToSelectList());
++            pb.Add(a => a.Value, EnumEducation.Middle);
++        });
++        cut.Contains("radio-list btn-group is-outline");
++        cut.Contains("btn btn-outline-danger active");
++        cut.DoesNotContain("bg-danger");
++    }
++
+     [Fact]
+     public void IsButton_Ok()
+     {

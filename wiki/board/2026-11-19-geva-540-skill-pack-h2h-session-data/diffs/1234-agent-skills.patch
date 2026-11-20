@@ -1,0 +1,91 @@
+diff --git a/internal/app/handler.go b/internal/app/handler.go
+index 9c6c2ec..0a2b346 100644
+--- a/internal/app/handler.go
++++ b/internal/app/handler.go
+@@ -86,6 +86,28 @@ func sameOriginURL(refURL *url.URL, requestURL *url.URL) bool {
+ 		cmp.Or(requestURL.Port(), defaultPortForScheme(requestURL.Scheme))
+ }
+ 
++// isSafeLocalRedirectPath reports whether path can be used as a same-origin
++// redirect target. Browsers treat "//host" and "/\host" as protocol-relative
++// URLs (and strip tabs/newlines, normalize backslashes), so such paths would
++// allow an open redirect to an external host.
++func isSafeLocalRedirectPath(path string) bool {
++	if path == "" {
++		return true
++	}
++	if !strings.HasPrefix(path, "/") {
++		return false
++	}
++	if strings.HasPrefix(path, "//") || strings.HasPrefix(path, "/\\") {
++		return false
++	}
++	for _, c := range path {
++		if c == '\\' || c < 0x20 || c == 0x7f {
++			return false
++		}
++	}
++	return true
++}
++
+ func (a *App) validatedRefererRedirect(r *http.Request, referrer string) (string, bool) {
+ 	if referrer == "" {
+ 		return "", false
+@@ -110,6 +132,10 @@ func (a *App) validatedRefererRedirect(r *http.Request, referrer string) (string
+ 		return "", false
+ 	}
+ 
++	if !isSafeLocalRedirectPath(refURL.Path) || !isSafeLocalRedirectPath(refURL.EscapedPath()) {
++		return "", false
++	}
++
+ 	redirectTarget := refURL.EscapedPath()
+ 	if redirectTarget == "" {
+ 		redirectTarget = "/"
+diff --git a/internal/app/tests/fragment_test.go b/internal/app/tests/fragment_test.go
+index 2852e2f..e7b8635 100644
+--- a/internal/app/tests/fragment_test.go
++++ b/internal/app/tests/fragment_test.go
+@@ -6,6 +6,7 @@ package app_test
+ import (
+ 	"net/http"
+ 	"net/http/httptest"
++	"strings"
+ 	"testing"
+ 
+ 	"github.com/openrundev/openrun/internal/testutil"
+@@ -347,4 +348,34 @@ def handler(req):
+ 	// Non-rooted relative referer is ignored and falls back to rendering the page.
+ 	testutil.AssertEqualsInt(t, "code", http.StatusOK, response.Code)
+ 	testutil.AssertEqualsString(t, "body", "Template main myvalue.  fragdata myvalue2 ", response.Body.String())
++
++	// Same-origin referers whose path would be treated as protocol-relative
++	// (or backslash-normalized) by browsers must not produce an open redirect.
++	for _, ref := range []string{
++		"http://example.com//evil.com",
++		"http://example.com//evil.com/test/abc",
++		"http://example.com/%2Fevil.com",
++		"http://example.com/\\evil.com",
++		"http://example.com/%5Cevil.com",
++		"http://example.com/%5C%5Cevil.com",
++		"http://example.com/%09/evil.com",
++		"/\\evil.com",
++		"/%5Cevil.com",
++		"/%2F/evil.com",
++	} {
++		request = httptest.NewRequest("POST", "/test/abc/frag", nil)
++		request.Header.Set("Referer", ref)
++		response = httptest.NewRecorder()
++		a.ServeHTTP(response, request)
++
++		loc := response.Header().Get("Location")
++		if response.Code == http.StatusSeeOther {
++			if strings.HasPrefix(loc, "//") || strings.HasPrefix(loc, "/\\") || strings.Contains(loc, "\\") {
++				t.Errorf("referer %q produced unsafe redirect %q", ref, loc)
++			}
++		}
++		if response.Code != http.StatusOK {
++			t.Errorf("referer %q: expected 200 fallback, got %d (Location %q)", ref, response.Code, loc)
++		}
++	}
+ }

@@ -1,0 +1,530 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 292049f..5ab787f 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -8,6 +8,15 @@ as described in [VERSIONING.md](./VERSIONING.md).
+ 
+ ## [Unreleased]
+ 
++## [0.8.2] - 2026-11-19
++
++### Security
++- Fixed an arbitrary file write (GHSA-m9mq-7m7q-xc6p). `browser_download`'s `save_dir` is now confined under the download root (`~/.browse-mcp/downloads`, or `$BROWSE_MCP_HOME/downloads`), and the explicit `path` for `browser_save_state` / `browser_load_state` is confined under `~/.browse-mcp/state`. Absolute paths, `..` escapes, and symlink escapes are rejected. Download filenames are cut down to a bare basename.
++- The `force_fetch` fallback in `browser_download` now applies the `BROWSE_MCP_ALLOWED_ORIGINS` / `BROWSE_MCP_BLOCKED_ORIGINS` origin fence on every redirect hop. Before this fix a raw `fetch()` skipped the fence.
++
++### Changed
++- `save_dir` and the state `path` must now be relative to their data root. Callers that passed absolute paths must switch to relative sub-paths or move the data root with `BROWSE_MCP_HOME`.
++
+ ## [0.8.1] - 2026-06-12
+ 
+ ### Added
+diff --git a/SECURITY.md b/SECURITY.md
+index 58b857f..1e3be4d 100644
+--- a/SECURITY.md
++++ b/SECURITY.md
+@@ -146,7 +146,10 @@ If you want persistent auth for *specific* sites only — without giving every
+ agent run implicit access to everything — the `browser_save_state` and
+ `browser_load_state` tools export and reimport cookies + localStorage as a
+ JSON file you control (default `~/.browse-mcp/state/<name>.json`, written
+-with `0600` permissions where the OS supports it). Combine with
++with `0600` permissions where the OS supports it). An explicit `path` must be
++relative to `~/.browse-mcp/state`; absolute paths and `..` escapes are
++rejected, as is a `browser_download` `save_dir` outside
++`~/.browse-mcp/downloads` (both roots move with `BROWSE_MCP_HOME`). Combine with
+ `BROWSE_MCP_EPHEMERAL=1` for a profile that starts empty and gets exactly
+ the auth you load into it.
+ 
+diff --git a/package-lock.json b/package-lock.json
+index 28a073c..e596a76 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -1,12 +1,12 @@
+ {
+   "name": "browse-mcp",
+-  "version": "0.8.1",
++  "version": "0.8.2",
+   "lockfileVersion": 3,
+   "requires": true,
+   "packages": {
+     "": {
+       "name": "browse-mcp",
+-      "version": "0.8.1",
++      "version": "0.8.2",
+       "hasInstallScript": true,
+       "license": "MIT",
+       "dependencies": {
+diff --git a/package.json b/package.json
+index 03e3885..c69dd66 100644
+--- a/package.json
++++ b/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "browse-mcp",
+-  "version": "0.8.1",
++  "version": "0.8.2",
+   "description": "Headless-browser MCP server for any MCP-capable agent (Claude, Codex, Gemini CLI, Cursor, ...). Playwright-based, with accessibility-tree refs, Readability, search, annotated screenshots, and a self-improvement feedback loop. Windows, Linux, and macOS.",
+   "license": "MIT",
+   "author": "Roger Maxwell (That1Drifter) <americanemt@gmail.com>",
+diff --git a/src/download.ts b/src/download.ts
+index 234068d..973acc3 100644
+--- a/src/download.ts
++++ b/src/download.ts
+@@ -3,8 +3,10 @@ import { mkdirSync, existsSync, statSync, writeFileSync } from 'fs';
+ import { homedir } from 'os';
+ import { join, basename } from 'path';
+ import { createHash } from 'crypto';
++import { confinePath, safeBasename } from './paths.js';
++import { checkUrlAllowed, parseFenceEnv, type FenceConfig } from './fence.js';
+ 
+-const DEFAULT_DIR = process.env.BROWSE_MCP_HOME
++export const DOWNLOAD_DIR = process.env.BROWSE_MCP_HOME
+   ? join(process.env.BROWSE_MCP_HOME, 'downloads')
+   : join(homedir(), '.browse-mcp', 'downloads');
+ 
+@@ -21,6 +23,15 @@ export interface DownloadOptions {
+   forceFetch?: boolean;
+ }
+ 
++/**
++ * Resolve the caller-supplied save_dir. It is always confined under
++ * DOWNLOAD_DIR: relative sub-directories are allowed, absolute paths and
++ * `..` escapes are rejected.
++ */
++export function resolveDownloadDir(saveDir?: string): string {
++  return confinePath(DOWNLOAD_DIR, saveDir, 'save_dir');
++}
++
+ export async function downloadUrl(
+   page: Page,
+   url: string,
+@@ -38,8 +49,10 @@ export async function downloadUrl(
+     forceFetch = !!saveDirOrOpts.forceFetch;
+   }
+ 
+-  const dir = saveDir || DEFAULT_DIR;
++  const dir = resolveDownloadDir(saveDir);
+   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
++  // Re-check after creation in case a symlink raced into place.
++  resolveDownloadDir(saveDir);
+ 
+   // Set up the download listener BEFORE triggering navigation. Short timeout
+   // (3s) when force_fetch is enabled so we fall back quickly on non-attachment
+@@ -64,8 +77,16 @@ export async function downloadUrl(
+     throw new Error(`URL did not trigger a download: ${url} (${reason})`);
+   }
+ 
+-  const suggested =
+-    download.suggestedFilename() || basename(new URL(url).pathname) || 'download.bin';
++  let urlName = '';
++  try {
++    urlName = basename(new URL(url).pathname);
++  } catch {
++    /* ignore */
++  }
++  const suggested = safeBasename(
++    download.suggestedFilename() || safeBasename(urlName, ''),
++    'download.bin',
++  );
+   const outPath = join(dir, suggested);
+   await download.saveAs(outPath);
+ 
+@@ -78,8 +99,42 @@ export async function downloadUrl(
+   };
+ }
+ 
+-async function fetchFallback(url: string, dir: string): Promise<DownloadResult> {
+-  const res = await fetch(url);
++const MAX_REDIRECTS = 10;
++
++export async function fetchFallback(
++  url: string,
++  dir: string,
++  fence: FenceConfig = parseFenceEnv(),
++): Promise<DownloadResult> {
++  // Follow redirects manually so every hop is checked against the origin
++  // fence (BROWSE_MCP_ALLOWED_ORIGINS / BROWSE_MCP_BLOCKED_ORIGINS), the same
++  // policy the browser context applies to navigations.
++  let current = url;
++  let res: Response | undefined;
++  for (let hop = 0; ; hop++) {
++    let parsed: URL;
++    try {
++      parsed = new URL(current);
++    } catch {
++      throw new Error(`fetch fallback: invalid URL ${current}`);
++    }
++    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
++      throw new Error(`fetch fallback: only http(s) URLs are supported (got ${parsed.protocol})`);
++    }
++    const v = checkUrlAllowed(current, fence);
++    if (!v.allowed) {
++      throw new Error(`fetch fallback refused by origin fence: ${v.reason}`);
++    }
++    res = await fetch(current, { redirect: 'manual' });
++    const loc = res.headers.get('location');
++    if (res.status >= 300 && res.status < 400 && loc) {
++      if (hop >= MAX_REDIRECTS) throw new Error(`fetch fallback: too many redirects for ${url}`);
++      current = new URL(loc, current).toString();
++      continue;
++    }
++    break;
++  }
++  url = current;
+   if (!res.ok) {
+     throw new Error(`fetch fallback: HTTP ${res.status} for ${url}`);
+   }
+@@ -88,7 +143,7 @@ async function fetchFallback(url: string, dir: string): Promise<DownloadResult>
+ 
+   let filename = '';
+   try {
+-    filename = basename(new URL(url).pathname);
++    filename = safeBasename(decodeURIComponent(new URL(url).pathname), '');
+   } catch {
+     /* ignore */
+   }
+diff --git a/src/paths.ts b/src/paths.ts
+new file mode 100644
+index 0000000..e00c620
+--- /dev/null
++++ b/src/paths.ts
+@@ -0,0 +1,69 @@
++import { existsSync, realpathSync } from 'fs';
++import { basename, isAbsolute, relative, resolve, sep, win32, posix } from 'path';
++
++// Path confinement for caller-supplied (i.e. untrusted MCP argument) paths.
++// Everything browse-mcp writes on behalf of a tool call must stay under a
++// fixed data root (relocatable via BROWSE_MCP_HOME), never at an arbitrary
++// location chosen by the caller.
++
++function isInside(root: string, target: string): boolean {
++  const rel = relative(root, target);
++  return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
++}
++
++// Deepest existing ancestor, resolved through symlinks, with the
++// not-yet-existing tail re-appended.
++function realish(p: string): string {
++  let cur = p;
++  const tail: string[] = [];
++  while (!existsSync(cur)) {
++    const parent = resolve(cur, '..');
++    if (parent === cur) break;
++    tail.unshift(basename(cur));
++    cur = parent;
++  }
++  let real = cur;
++  try {
++    real = realpathSync(cur);
++  } catch {
++    /* keep lexical */
++  }
++  return tail.length ? resolve(real, ...tail) : real;
++}
++
++/**
++ * Resolve `sub` (relative) under `root`. Rejects absolute paths (POSIX,
++ * Windows drive, or UNC) and anything that escapes the root lexically or via
++ * an existing symlink. Returns the absolute lexical path.
++ */
++export function confinePath(root: string, sub: string | undefined, label = 'path'): string {
++  const absRoot = resolve(root);
++  if (sub === undefined || sub === null || sub === '') return absRoot;
++  if (typeof sub !== 'string') throw new Error(`${label} must be a string`);
++  if (sub.includes('\0')) throw new Error(`${label} contains a NUL byte`);
++  if (posix.isAbsolute(sub) || win32.isAbsolute(sub) || /^[A-Za-z]:/.test(sub)) {
++    throw new Error(
++      `${label} must be relative to ${absRoot}; absolute paths are not allowed (got ${JSON.stringify(sub)})`,
++    );
++  }
++  // Treat both separators as separators so "a\..\..\x" can't slip by on POSIX.
++  const normalized = sub.split(/[\\/]+/).join(sep);
++  const target = resolve(absRoot, normalized);
++  if (!isInside(absRoot, target)) {
++    throw new Error(`${label} ${JSON.stringify(sub)} would escape ${absRoot}`);
++  }
++  if (!isInside(realish(absRoot), realish(target))) {
++    throw new Error(`${label} ${JSON.stringify(sub)} would escape ${absRoot} via a symlink`);
++  }
++  return target;
++}
++
++/** Reduce an untrusted filename to a bare basename; fall back when unusable. */
++export function safeBasename(name: string | undefined | null, fallback: string): string {
++  const raw = String(name ?? '').replace(/\0/g, '');
++  if (/[\\/]$/.test(raw)) return fallback;
++  const parts = raw.split(/[\\/]+/);
++  const b = (parts[parts.length - 1] ?? '').trim();
++  if (!b || b === '.' || b === '..' || /^[A-Za-z]:$/.test(b)) return fallback;
++  return b;
++}
+diff --git a/src/state.ts b/src/state.ts
+index ab64d84..5d0d25d 100644
+--- a/src/state.ts
++++ b/src/state.ts
+@@ -1,5 +1,6 @@
+ import { homedir } from 'os';
+ import { join } from 'path';
++import { confinePath } from './paths.js';
+ 
+ // Storage-state file handling (path resolution + shape validation) for
+ // browser_save_state / browser_load_state. Pure logic lives here for tests;
+@@ -10,11 +11,19 @@ export const STATE_DIR = process.env.BROWSE_MCP_HOME
+   : join(homedir(), '.browse-mcp', 'state');
+ 
+ export function resolveStatePath(opts: { name?: string; path?: string }): string {
+-  if (opts.path) return opts.path;
++  if (opts.path) {
++    // Explicit paths are confined to STATE_DIR: the caller (an MCP client or a
++    // prompt-injected agent) must not be able to read/write arbitrary files.
++    const file = confinePath(STATE_DIR, opts.path, 'State path');
++    if (file === confinePath(STATE_DIR, undefined)) {
++      throw new Error('State path must name a file inside the state directory');
++    }
++    return file;
++  }
+   const name = (opts.name ?? 'default').trim();
+   if (!/^[A-Za-z0-9._-]+$/.test(name)) {
+     throw new Error(
+-      `Invalid state name ${JSON.stringify(name)} — use letters, digits, dot, dash, underscore, or pass an explicit path.`,
++      `Invalid state name ${JSON.stringify(name)} — use letters, digits, dot, dash, underscore, or pass a path relative to the state directory.`,
+     );
+   }
+   return join(STATE_DIR, `${name}.json`);
+diff --git a/src/tools/session.ts b/src/tools/session.ts
+index 6468f44..fe8f49a 100644
+--- a/src/tools/session.ts
++++ b/src/tools/session.ts
+@@ -54,7 +54,8 @@ export const session: ToolModule = {
+           url: { type: 'string', description: 'URL to download' },
+           save_dir: {
+             type: 'string',
+-            description: 'Optional directory (default: ~/.browse-mcp/downloads)',
++            description:
++              'Optional sub-directory, relative to the download root ~/.browse-mcp/downloads (absolute paths and .. are rejected)',
+           },
+           force_fetch: {
+             type: 'boolean',
+@@ -93,7 +94,11 @@ export const session: ToolModule = {
+         type: 'object',
+         properties: {
+           name: { type: 'string', description: 'State name (default "default")' },
+-          path: { type: 'string', description: 'Explicit file path (overrides name)' },
++          path: {
++            type: 'string',
++            description:
++              'Explicit file path relative to ~/.browse-mcp/state (overrides name; absolute paths and .. are rejected)',
++          },
+         },
+       },
+     },
+@@ -105,7 +110,11 @@ export const session: ToolModule = {
+         type: 'object',
+         properties: {
+           name: { type: 'string', description: 'State name (default "default")' },
+-          path: { type: 'string', description: 'Explicit file path (overrides name)' },
++          path: {
++            type: 'string',
++            description:
++              'Explicit file path relative to ~/.browse-mcp/state (overrides name; absolute paths and .. are rejected)',
++          },
+         },
+       },
+     },
+@@ -242,7 +251,9 @@ export const session: ToolModule = {
+       const page = await browser.getPage();
+       const context = page.context();
+       if (state.cookies.length) {
+-        await context.addCookies(state.cookies as unknown as Parameters<typeof context.addCookies>[0]);
++        await context.addCookies(
++          state.cookies as unknown as Parameters<typeof context.addCookies>[0],
++        );
+       }
+       const lines: string[] = [];
+       for (const o of state.origins) {
+diff --git a/test/download.test.ts b/test/download.test.ts
+new file mode 100644
+index 0000000..f5c9af1
+--- /dev/null
++++ b/test/download.test.ts
+@@ -0,0 +1,60 @@
++import { describe, it, expect, beforeAll, afterAll } from 'vitest';
++import { createServer, type Server } from 'http';
++import { mkdtempSync, existsSync, readdirSync } from 'fs';
++import { tmpdir } from 'os';
++import { join, dirname } from 'path';
++import { fetchFallback } from '../src/download.js';
++
++let server: Server;
++let base = '';
++
++beforeAll(async () => {
++  server = createServer((req, res) => {
++    if (req.url === '/redirect') {
++      res.writeHead(302, { location: 'http://blocked.invalid/payload.sh' });
++      return res.end();
++    }
++    if (req.url === '/redirect-local') {
++      res.writeHead(302, { location: '/..%2F..%2Fevil.sh' });
++      return res.end();
++    }
++    res.writeHead(200, { 'content-type': 'text/plain' });
++    res.end('payload');
++  });
++  await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
++  const addr = server.address() as { port: number };
++  base = `http://127.0.0.1:${addr.port}`;
++});
++
++afterAll(() => new Promise<void>((r) => server.close(() => r())));
++
++describe('fetchFallback', () => {
++  it('refuses URLs outside the origin fence', async () => {
++    const dir = mkdtempSync(join(tmpdir(), 'bmcp-dl-'));
++    await expect(
++      fetchFallback(`${base}/a.txt`, dir, { allowed: ['example.com'], blocked: [] }),
++    ).rejects.toThrow(/origin fence/i);
++    expect(readdirSync(dir)).toEqual([]);
++  });
++
++  it('refuses redirects that leave the origin fence', async () => {
++    const dir = mkdtempSync(join(tmpdir(), 'bmcp-dl-'));
++    await expect(
++      fetchFallback(`${base}/redirect`, dir, { allowed: ['127.0.0.1'], blocked: [] }),
++    ).rejects.toThrow(/origin fence/i);
++    expect(readdirSync(dir)).toEqual([]);
++  });
++
++  it('writes allowed fetches inside the target dir only', async () => {
++    const dir = mkdtempSync(join(tmpdir(), 'bmcp-dl-'));
++    const r = await fetchFallback(`${base}/a.txt`, dir, { allowed: ['127.0.0.1'], blocked: [] });
++    expect(dirname(r.path)).toBe(dir);
++    expect(existsSync(r.path)).toBe(true);
++  });
++
++  it('keeps encoded traversal in the URL path inside the target dir', async () => {
++    const dir = mkdtempSync(join(tmpdir(), 'bmcp-dl-'));
++    const r = await fetchFallback(`${base}/redirect-local`, dir, { allowed: [], blocked: [] });
++    expect(dirname(r.path)).toBe(dir);
++  });
++});
+diff --git a/test/paths.test.ts b/test/paths.test.ts
+new file mode 100644
+index 0000000..50eb559
+--- /dev/null
++++ b/test/paths.test.ts
+@@ -0,0 +1,98 @@
++import { describe, it, expect } from 'vitest';
++import { join, resolve, sep } from 'path';
++import { mkdtempSync, symlinkSync, mkdirSync } from 'fs';
++import { tmpdir } from 'os';
++import { confinePath, safeBasename } from '../src/paths.js';
++import { resolveDownloadDir, DOWNLOAD_DIR } from '../src/download.js';
++import { resolveStatePath, STATE_DIR } from '../src/state.js';
++
++describe('confinePath', () => {
++  const root = resolve(tmpdir(), 'bmcp-root');
++
++  it('returns the root when no sub-path is given', () => {
++    expect(confinePath(root, undefined)).toBe(root);
++    expect(confinePath(root, '')).toBe(root);
++  });
++
++  it('resolves relative sub-paths inside the root', () => {
++    expect(confinePath(root, 'a/b')).toBe(join(root, 'a', 'b'));
++  });
++
++  it('rejects absolute paths', () => {
++    expect(() => confinePath(root, '/etc')).toThrow(/absolute/i);
++    expect(() => confinePath(root, 'C:\\Windows')).toThrow(/absolute/i);
++    expect(() => confinePath(root, '\\\\server\\share')).toThrow(/absolute/i);
++  });
++
++  it('rejects .. escapes', () => {
++    expect(() => confinePath(root, '..')).toThrow(/escape/i);
++    expect(() => confinePath(root, '../x')).toThrow(/escape/i);
++    expect(() => confinePath(root, 'a/../../x')).toThrow(/escape/i);
++    expect(() => confinePath(root, 'a\\..\\..\\x')).toThrow(/escape/i);
++  });
++
++  it('rejects an existing symlink inside the root that points outside', () => {
++    const r = mkdtempSync(join(tmpdir(), 'bmcp-sym-'));
++    const outside = mkdtempSync(join(tmpdir(), 'bmcp-out-'));
++    mkdirSync(join(r, 'ok'));
++    symlinkSync(outside, join(r, 'link'));
++    expect(confinePath(r, 'ok')).toBe(join(r, 'ok'));
++    expect(() => confinePath(r, 'link')).toThrow(/escape/i);
++    expect(() => confinePath(r, 'link/deeper')).toThrow(/escape/i);
++  });
++});
++
++describe('safeBasename', () => {
++  it('strips directory components', () => {
++    expect(safeBasename('../../.bashrc', 'x')).toBe('.bashrc');
++    expect(safeBasename('/etc/cron.d/evil', 'x')).toBe('evil');
++    expect(safeBasename('..\\..\\evil.bat', 'x')).toBe('evil.bat');
++  });
++
++  it('falls back for empty or dot names', () => {
++    expect(safeBasename('', 'download.bin')).toBe('download.bin');
++    expect(safeBasename('..', 'download.bin')).toBe('download.bin');
++    expect(safeBasename('.', 'download.bin')).toBe('download.bin');
++    expect(safeBasename('a/', 'download.bin')).toBe('download.bin');
++  });
++});
++
++describe('resolveDownloadDir', () => {
++  it('defaults to the download root', () => {
++    expect(resolveDownloadDir(undefined)).toBe(resolve(DOWNLOAD_DIR));
++  });
++
++  it('allows sub-directories of the download root', () => {
++    expect(resolveDownloadDir('reports')).toBe(join(resolve(DOWNLOAD_DIR), 'reports'));
++  });
++
++  it('rejects arbitrary absolute save_dir', () => {
++    expect(() => resolveDownloadDir('/tmp/evil')).toThrow();
++    expect(() => resolveDownloadDir(join(DOWNLOAD_DIR, '..'))).toThrow();
++  });
++
++  it('rejects traversal out of the download root', () => {
++    expect(() => resolveDownloadDir('../../.config/autostart')).toThrow();
++  });
++});
++
++describe('resolveStatePath confinement', () => {
++  it('allows a relative path inside the state dir', () => {
++    expect(resolveStatePath({ path: 'sub/s.json' })).toBe(
++      join(resolve(STATE_DIR), 'sub', 's.json'),
++    );
++  });
++
++  it('rejects absolute paths', () => {
++    expect(() => resolveStatePath({ path: '/root/.bashrc' })).toThrow();
++    expect(() => resolveStatePath({ path: 'C:/tmp/s.json' })).toThrow();
++  });
++
++  it('rejects traversal', () => {
++    expect(() => resolveStatePath({ path: '../../.bashrc' })).toThrow();
++  });
++
++  it('rejects the state dir itself', () => {
++    expect(() => resolveStatePath({ path: '.' })).toThrow();
++  });
++});
+diff --git a/test/state.test.ts b/test/state.test.ts
+index 4bd6c5a..425f542 100644
+--- a/test/state.test.ts
++++ b/test/state.test.ts
+@@ -11,8 +11,10 @@ describe('resolveStatePath', () => {
+     expect(resolveStatePath({ name: 'work-acct' })).toMatch(/work-acct\.json$/);
+   });
+ 
+-  it('explicit path wins over name', () => {
+-    expect(resolveStatePath({ name: 'x', path: 'C:/tmp/s.json' })).toBe('C:/tmp/s.json');
++  it('explicit (relative) path wins over name', () => {
++    expect(resolveStatePath({ name: 'x', path: 's.json' })).toMatch(
++      new RegExp(`state\\${sep}s\\.json$`),
++    );
+   });
+ 
+   it('rejects names with path separators or traversal', () => {

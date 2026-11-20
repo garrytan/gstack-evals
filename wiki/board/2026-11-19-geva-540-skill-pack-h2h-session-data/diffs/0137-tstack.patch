@@ -1,0 +1,67 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 74ff973..f06f001 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -232,6 +232,7 @@
+ - Removed support for generating code for rustc versions < 1.51.
+ ## Fixed
+ - Typo in code for `--rustified-non-exhaustive-enums` (#3266)
++- Constants with builtin types (e.g. `#define`s) are no longer wrapped as `u32(0)` when the default alias style is `new_type` (regression from #3288).
+ ## Security
+ 
+ # 0.72.0 (2025-06-08)
+diff --git a/bindgen-tests/tests/expectations/tests/default-alias-style-new-type-const.rs b/bindgen-tests/tests/expectations/tests/default-alias-style-new-type-const.rs
+new file mode 100644
+index 0000000..35eaa85
+--- /dev/null
++++ b/bindgen-tests/tests/expectations/tests/default-alias-style-new-type-const.rs
+@@ -0,0 +1,6 @@
++#![allow(dead_code, non_snake_case, non_camel_case_types, non_upper_case_globals)]
++pub const FooBar: u32 = 0;
++#[repr(transparent)]
++#[derive(Debug, Default, Copy, Clone)]
++pub struct Bar(pub ::std::os::raw::c_uint);
++pub const BAR_ONE: Bar = Bar(1);
+diff --git a/bindgen-tests/tests/headers/default-alias-style-new-type-const.h b/bindgen-tests/tests/headers/default-alias-style-new-type-const.h
+new file mode 100644
+index 0000000..afa70a5
+--- /dev/null
++++ b/bindgen-tests/tests/headers/default-alias-style-new-type-const.h
+@@ -0,0 +1,6 @@
++// bindgen-flags: --default-alias-style new_type
++
++#define FooBar 0x00000000
++
++typedef unsigned int Bar;
++const Bar BAR_ONE = 1;
+diff --git a/bindgen/codegen/mod.rs b/bindgen/codegen/mod.rs
+index 5ffe088..9e15b07 100644
+--- a/bindgen/codegen/mod.rs
++++ b/bindgen/codegen/mod.rs
+@@ -811,10 +811,22 @@ impl CodeGenerator for Var {
+ 
+             if let Some(mut val) = const_expr {
+                 let var_ty_item = ctx.resolve_item(var_ty);
+-                if matches!(
+-                    var_ty_item.alias_style(ctx),
+-                    AliasVariation::NewType | AliasVariation::NewTypeDeref
+-                ) {
++                // Only wrap the value if the variable's type is actually a
++                // type alias; builtin types (e.g. for `#define`d constants)
++                // must not be wrapped even when the default alias style is
++                // `NewType`.
++                let is_alias = var_ty
++                    .into_resolver()
++                    .through_type_refs()
++                    .resolve(ctx)
++                    .as_type()
++                    .is_some_and(|t| matches!(t.kind(), TypeKind::Alias(_)));
++                if is_alias &&
++                    matches!(
++                        var_ty_item.alias_style(ctx),
++                        AliasVariation::NewType | AliasVariation::NewTypeDeref
++                    )
++                {
+                     val = quote! { #ty(#val) };
+                 }
+                 result.push(quote! {

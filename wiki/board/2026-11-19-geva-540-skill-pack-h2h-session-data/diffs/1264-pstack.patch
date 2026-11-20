@@ -1,0 +1,50 @@
+diff --git a/xoraddr.go b/xoraddr.go
+index f6c125e..4247994 100644
+--- a/xoraddr.go
++++ b/xoraddr.go
+@@ -91,6 +91,9 @@ func (a *XORMappedAddress) GetFromAs(msg *Message, attr AttrType) error {
+ 	if err != nil {
+ 		return err
+ 	}
++	if len(value) <= 4 {
++		return io.ErrUnexpectedEOF
++	}
+ 	family := bin.Uint16(value[0:2])
+ 	if family != familyIPv6 && family != familyIPv4 {
+ 		return newDecodeErr("xor-mapped address", "family",
+@@ -111,9 +114,6 @@ func (a *XORMappedAddress) GetFromAs(msg *Message, attr AttrType) error {
+ 		}
+ 	}
+ 
+-	if len(value) <= 4 {
+-		return io.ErrUnexpectedEOF
+-	}
+ 	if err := CheckOverflow(attr, len(value[4:]), len(a.IP)); err != nil {
+ 		return err
+ 	}
+diff --git a/xoraddr_test.go b/xoraddr_test.go
+index e41ced6..cf2cfce 100644
+--- a/xoraddr_test.go
++++ b/xoraddr_test.go
+@@ -95,6 +95,21 @@ func TestXORMappedAddress_GetFrom_Invalid(t *testing.T) {
+ 	assert.Error(t, addr.GetFrom(msg))
+ }
+ 
++func TestXORMappedAddress_GetFrom_Short(t *testing.T) {
++	for _, value := range [][]byte{{}, {0x00}, {0x00, 0x01}, {0x00, 0x01, 0x00, 0x00}} {
++		src := New()
++		src.Add(AttrXORMappedAddress, value)
++		src.WriteHeader()
++		raw := append([]byte(nil), src.Raw...)
++		msg := &Message{Raw: raw[:len(raw):len(raw)]}
++		assert.NoError(t, msg.Decode())
++		addr := new(XORMappedAddress)
++		assert.NotPanics(t, func() {
++			assert.ErrorIs(t, addr.GetFrom(msg), io.ErrUnexpectedEOF)
++		}, "value length %d", len(value))
++	}
++}
++
+ func TestXORMappedAddress_AddTo(t *testing.T) {
+ 	msg := New()
+ 	transactionID, err := base64.StdEncoding.DecodeString("jxhBARZwX+rsC6er")

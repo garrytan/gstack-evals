@@ -1,0 +1,123 @@
+diff --git a/Terminal.Gui/ViewBase/Layout/DimAuto.cs b/Terminal.Gui/ViewBase/Layout/DimAuto.cs
+index 038b3b1..68b6bfd 100644
+--- a/Terminal.Gui/ViewBase/Layout/DimAuto.cs
++++ b/Terminal.Gui/ViewBase/Layout/DimAuto.cs
+@@ -256,7 +256,7 @@ public record DimAuto (Dim? MaximumContentDim, Dim? MinimumContentDim, DimAutoSt
+                 foreach (int groupId in categories.AlignGroupIds)
+                 {
+                     // Convert to IReadOnlyCollection for PosAlign API
+-                    maxAlign = PosAlign.CalculateMinDimension (groupId, us.InternalSubViews.ToArray (), dimension);
++                    maxAlign = int.Max (maxAlign, PosAlign.CalculateMinDimension (groupId, us.InternalSubViews.ToArray (), dimension, superviewContentSize));
+                 }
+ 
+                 maxCalculatedSize = int.Max (maxCalculatedSize, maxAlign);
+diff --git a/Terminal.Gui/ViewBase/Layout/PosAlign.cs b/Terminal.Gui/ViewBase/Layout/PosAlign.cs
+index 9e04f1b..a1b195a 100644
+--- a/Terminal.Gui/ViewBase/Layout/PosAlign.cs
++++ b/Terminal.Gui/ViewBase/Layout/PosAlign.cs
+@@ -56,7 +56,23 @@ public record PosAlign : Pos
+     /// <param name="views"></param>
+     /// <param name="dimension"></param>
+     /// <returns></returns>
+-    public static int CalculateMinDimension (int groupId, IReadOnlyCollection<View> views, Dimension dimension)
++    public static int CalculateMinDimension (int groupId, IReadOnlyCollection<View> views, Dimension dimension) =>
++        CalculateMinDimension (groupId, views, dimension, null);
++
++    /// <summary>
++    ///     Returns the minimum size a group of views with the same <paramref name="groupId"/> can be.
++    /// </summary>
++    /// <param name="groupId"></param>
++    /// <param name="views"></param>
++    /// <param name="dimension"></param>
++    /// <param name="contentSize">
++    ///     If not <see langword="null"/>, the size of each view whose <see cref="Dim"/> does not depend on the SuperView's
++    ///     content size is calculated from its <see cref="Dim"/> rather than read from its (possibly stale)
++    ///     <see cref="View.Frame"/>, using <paramref name="contentSize"/> as the available size. This ensures correct
++    ///     results before the views have been laid out (e.g. when SubViews have just been added).
++    /// </param>
++    /// <returns></returns>
++    internal static int CalculateMinDimension (int groupId, IReadOnlyCollection<View> views, Dimension dimension, int? contentSize)
+     {
+         var dimensionsSum = 0;
+ 
+@@ -69,7 +85,18 @@ public record PosAlign : Pos
+ 
+             PosAlign? posAlign = dimension == Dimension.Width ? view.X as PosAlign : view.Y as PosAlign;
+ 
+-            if (posAlign is { })
++            if (posAlign is null)
++            {
++                continue;
++            }
++
++            Dim dim = dimension == Dimension.Width ? view.Width : view.Height;
++
++            if (contentSize is { } size && !dim.DependsOnSuperViewContentSize)
++            {
++                dimensionsSum += dim.Calculate (0, size, view, dimension);
++            }
++            else
+             {
+                 dimensionsSum += dimension == Dimension.Width ? view.Frame.Width : view.Frame.Height;
+             }
+diff --git a/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs b/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs
+index f84b0da..c913af0 100644
+--- a/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs
++++ b/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs
+@@ -1069,4 +1069,56 @@ public class OptionSelectorTests
+     }
+ 
+     #endregion
++
++    // Claude - Opus 5.5
++    [Theory]
++    [InlineData (true, true)]
++    [InlineData (true, false)]
++    [InlineData (false, true)]
++    [InlineData (false, false)]
++    public void Horizontal_Labels_Set_After_Construction_Width_Fits_All_Labels_On_First_Layout (bool setValues, bool initiallyHidden)
++    {
++        View superView = new () { Width = 80, Height = 10 };
++
++        OptionSelector selector = new () { Y = 2, Orientation = Orientation.Horizontal };
++        superView.Add (selector);
++
++        if (initiallyHidden)
++        {
++            selector.Visible = false;
++            superView.Layout ();
++        }
++
++        selector.Labels = ["IMDb (Recommended)", "TMDb"];
++
++        if (setValues)
++        {
++            selector.Values = [0, 1];
++        }
++
++        selector.Visible = true;
++        superView.Layout ();
++
++        CheckBox [] cbs = selector.SubViews.OfType<CheckBox> ().ToArray ();
++        Assert.Equal (2, cbs.Length);
++
++        // "◉ IMDb (Recommended)" (20) + 2 margin, "○ TMDb" (6)
++        Assert.Equal (22, cbs [1].Frame.X);
++        Assert.Equal (6, cbs [1].Frame.Width);
++        Assert.Equal (28, selector.Frame.Width);
++    }
++
++    // Claude - Opus 5.5
++    [Fact]
++    public void Generic_Horizontal_Width_Fits_All_Labels_On_First_Layout ()
++    {
++        View superView = new () { Width = 80, Height = 10 };
++        OptionSelector<Orientation> selector = new () { Orientation = Orientation.Horizontal };
++        superView.Add (selector);
++        superView.Layout ();
++
++        CheckBox [] cbs = selector.SubViews.OfType<CheckBox> ().ToArray ();
++        Assert.Equal (cbs [^1].Frame.Right, selector.Frame.Width);
++        Assert.Equal (24, selector.Frame.Width);
++    }
+ }

@@ -1,0 +1,97 @@
+diff --git a/openapi3filter/validation_error_encoder.go b/openapi3filter/validation_error_encoder.go
+index 4369ca6..684acc5 100644
+--- a/openapi3filter/validation_error_encoder.go
++++ b/openapi3filter/validation_error_encoder.go
+@@ -117,16 +117,20 @@ func convertParseError(e *RequestError, innerErr *ParseError) *ValidationError {
+ 		}
+ 	} else if innerErr.RootCause() != nil {
+ 		if rootErr, ok := innerErr.Cause.(*ParseError); ok &&
+-			rootErr.Kind == KindInvalidFormat && e.Parameter.In == "query" {
++			rootErr.Kind == KindInvalidFormat && e.Parameter != nil && e.Parameter.In == "query" {
+ 			return &ValidationError{
+ 				Status: http.StatusBadRequest,
+ 				Title: fmt.Sprintf("parameter %q in %s is invalid: %v is %s",
+ 					e.Parameter.Name, e.Parameter.In, rootErr.Value, rootErr.Reason),
+ 			}
+ 		}
++		title := innerErr.Reason
++		if title == "" {
++			title = innerErr.Error()
++		}
+ 		return &ValidationError{
+ 			Status: http.StatusBadRequest,
+-			Title:  innerErr.Reason,
++			Title:  title,
+ 		}
+ 	}
+ 	return nil
+diff --git a/openapi3filter/validation_error_encoder_multipart_test.go b/openapi3filter/validation_error_encoder_multipart_test.go
+new file mode 100644
+index 0000000..0f9d7a7
+--- /dev/null
++++ b/openapi3filter/validation_error_encoder_multipart_test.go
+@@ -0,0 +1,64 @@
++package openapi3filter
++
++import (
++	"bytes"
++	"context"
++	"mime/multipart"
++	"net/http"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++
++	"github.com/getkin/kin-openapi/openapi3"
++	"github.com/getkin/kin-openapi/routers/gorillamux"
++)
++
++func TestConvertErrorsMultipartInvalidScalarNoPanic(t *testing.T) {
++	const spec = `
++openapi: '3.0.3'
++info: {title: t, version: '1.0.0'}
++paths:
++  /upload:
++    post:
++      requestBody:
++        required: true
++        content:
++          multipart/form-data:
++            schema:
++              type: object
++              properties:
++                age: {type: integer}
++      responses:
++        '200': {description: ok}
++`
++	loader := openapi3.NewLoader()
++	doc, err := loader.LoadFromData([]byte(spec))
++	require.NoError(t, err)
++	require.NoError(t, doc.Validate(loader.Context))
++	router, err := gorillamux.NewRouter(doc)
++	require.NoError(t, err)
++
++	var buf bytes.Buffer
++	w := multipart.NewWriter(&buf)
++	require.NoError(t, w.WriteField("age", "notanumber"))
++	require.NoError(t, w.Close())
++
++	r, err := http.NewRequest(http.MethodPost, "/upload", &buf)
++	require.NoError(t, err)
++	r.Header.Set("Content-Type", w.FormDataContentType())
++	route, pp, err := router.FindRoute(r)
++	require.NoError(t, err)
++
++	reqErr := ValidateRequest(context.Background(), &RequestValidationInput{
++		Request: r, PathParams: pp, Route: route,
++		Options: &Options{AuthenticationFunc: NoopAuthenticationFunc},
++	})
++	require.Error(t, reqErr)
++
++	var converted error
++	require.NotPanics(t, func() { converted = ConvertErrors(reqErr) })
++	verr, ok := converted.(*ValidationError)
++	require.True(t, ok, "expected *ValidationError, got %T", converted)
++	require.Equal(t, http.StatusBadRequest, verr.Status)
++	require.NotEmpty(t, verr.Title)
++}

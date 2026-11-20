@@ -1,0 +1,66 @@
+diff --git a/cipher/cbc_hmac.go b/cipher/cbc_hmac.go
+index 00e794d..d89e5ff 100644
+--- a/cipher/cbc_hmac.go
++++ b/cipher/cbc_hmac.go
+@@ -106,6 +106,10 @@ func (ctx *cbcAEAD) Open(dst, nonce, ciphertext, data []byte) ([]byte, error) {
+ 		return nil, errors.New("go-jose/go-jose: invalid ciphertext (too short)")
+ 	}
+ 
++	if len(nonce) != ctx.NonceSize() {
++		return nil, errors.New("go-jose/go-jose: invalid nonce length")
++	}
++
+ 	offset := len(ciphertext) - ctx.authtagBytes
+ 	expectedTag := ctx.computeAuthTag(data, nonce, ciphertext[:offset])
+ 	match := subtle.ConstantTimeCompare(expectedTag, ciphertext[offset:])
+@@ -118,7 +122,7 @@ func (ctx *cbcAEAD) Open(dst, nonce, ciphertext, data []byte) ([]byte, error) {
+ 	// Make copy of ciphertext buffer, don't want to modify in place
+ 	buffer := append([]byte{}, ciphertext[:offset]...)
+ 
+-	if len(buffer)%ctx.blockCipher.BlockSize() > 0 {
++	if len(buffer) == 0 || len(buffer)%ctx.blockCipher.BlockSize() > 0 {
+ 		return nil, errors.New("go-jose/go-jose: invalid ciphertext (invalid length)")
+ 	}
+ 
+@@ -178,7 +182,7 @@ func padBuffer(buffer []byte, blockSize int) []byte {
+ 
+ // Remove padding
+ func unpadBuffer(buffer []byte, blockSize int) ([]byte, error) {
+-	if len(buffer)%blockSize != 0 {
++	if len(buffer) == 0 || len(buffer)%blockSize != 0 {
+ 		return nil, errors.New("go-jose/go-jose: invalid padding")
+ 	}
+ 
+diff --git a/cipher/cbc_hmac_test.go b/cipher/cbc_hmac_test.go
+index 88b2145..f58b028 100644
+--- a/cipher/cbc_hmac_test.go
++++ b/cipher/cbc_hmac_test.go
+@@ -528,3 +528,28 @@ func BenchmarkDecryptAES256_CBCHMAC_1MB(b *testing.B) {
+ func BenchmarkDecryptAES256_CBCHMAC_64MB(b *testing.B) {
+ 	benchDecryptCBCHMAC(b, 32, 67108864)
+ }
++
++func TestOpenEmptyCiphertextNoPanic(t *testing.T) {
++	key := make([]byte, 32)
++	aead, err := NewCBCHMAC(key, aes.NewCipher)
++	if err != nil {
++		t.Fatal(err)
++	}
++	nonce := make([]byte, aead.NonceSize())
++	aad := []byte("aad")
++
++	// Empty ciphertext with a valid tag for it.
++	tag := aead.(*cbcAEAD).computeAuthTag(aad, nonce, nil)
++	if _, err := aead.Open(nil, nonce, tag, aad); err == nil {
++		t.Error("expected error on empty ciphertext")
++	}
++
++	// Wrong nonce length must not panic.
++	if _, err := aead.Open(nil, []byte{1, 2, 3}, make([]byte, 64), aad); err == nil {
++		t.Error("expected error on bad nonce length")
++	}
++
++	if _, err := unpadBuffer(nil, 16); err == nil {
++		t.Error("expected error on empty buffer")
++	}
++}

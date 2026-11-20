@@ -1,0 +1,43 @@
+diff --git a/internal/notification/types.go b/internal/notification/types.go
+index 175c8cf..0fa18b4 100644
+--- a/internal/notification/types.go
++++ b/internal/notification/types.go
+@@ -58,11 +58,11 @@ func extractMessage(l container.LogEvent) any {
+ 	case string:
+ 		return container.StripANSI(v)
+ 	case []container.LogFragment:
+-		cleaned := make([]container.LogFragment, len(v))
++		lines := make([]string, len(v))
+ 		for i, fragment := range v {
+-			cleaned[i] = container.LogFragment{Message: container.StripANSI(fragment.Message)}
++			lines[i] = container.StripANSI(fragment.Message)
+ 		}
+-		return cleaned
++		return strings.Join(lines, "\n")
+ 	case *orderedmap.OrderedMap[string, any]:
+ 		// Convert OrderedMap to regular map for expr compatibility
+ 		result := make(map[string]any)
+diff --git a/internal/notification/types_test.go b/internal/notification/types_test.go
+index ebec716..3b6c1e8 100644
+--- a/internal/notification/types_test.go
++++ b/internal/notification/types_test.go
+@@ -368,3 +368,19 @@ func TestFromLogEvent_OrderedMapConversion(t *testing.T) {
+ 		})
+ 	}
+ }
++
++func TestFromLogEvent_GroupedFragmentsMatchAsString(t *testing.T) {
++	notificationLog := FromLogEvent(container.LogEvent{
++		Type: container.LogTypeGroup,
++		Message: []container.LogFragment{
++			{Message: "INFO lote de 1000 registros (Total: 710000)"},
++			{Message: "\x1b[32mINFO\x1b[0m lote de 1000 registros (Total: 711000)"},
++		},
++	})
++
++	assert.Equal(t, "INFO lote de 1000 registros (Total: 710000)\nINFO lote de 1000 registros (Total: 711000)", notificationLog.Message)
++
++	program, err := expr.Compile(`message contains "registros"`, expr.Env(types.NotificationLog{}), expr.AsBool())
++	require.NoError(t, err)
++	assert.True(t, (&Subscription{LogProgram: program}).MatchesLog(notificationLog))
++}

@@ -1,0 +1,3 @@
+https://github.com/gofiber/fiber at 58d8d7eebc59088ddeaf53413f02b5a55692c4bc
+Licence at the freeze-date read (prereg o-, b1- and b2-licences.json): MIT
+Root licence and notice files at that commit: LICENSE

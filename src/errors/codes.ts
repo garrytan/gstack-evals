@@ -2850,6 +2850,15 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_H2H_LABEL_INPUT: {
+    exit: 2,
+    meaning: "h2h label-send refused its units before anything was opened: the --units file is missing or lists no unit dir, a dir is not a B1 unit (source h2h-b1), a unit id can't name a file, a unit is listed twice, or a unit's label packet differs from the packet one of its calls was sent, so its two answers would not read one packet.",
+    fix: "Fix the units file. A unit whose packet changed after a call was sent goes back to the dir that call read, or leaves --units; its sent call is never sent again.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: true,
+    owner: "U20",
+  },
   // h2h, part C: O draw, scoring additions, analysis, items and the rerun command.
   E_H2H_O_SOURCE: {
     exit: 2,

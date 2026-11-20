@@ -1,0 +1,104 @@
+diff --git a/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/TextLineProcessor.java b/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/TextLineProcessor.java
+index 86cfc96..404261c 100644
+--- a/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/TextLineProcessor.java
++++ b/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/TextLineProcessor.java
+@@ -33,6 +33,15 @@ import java.util.List;
+ public class TextLineProcessor {
+ 
+     private static final double ONE_LINE_PROBABILITY = 0.75;
++    /**
++     * Minimum gap (relative to font size) between two same-style text chunks on one line for a space
++     * to be inserted. Real word spacing often falls below {@link TextChunkUtils#TEXT_LINE_SPACE_RATIO}
++     * (0.17em) for fonts with narrow spaces, condensed fonts, justified text or negative character
++     * spacing, which concatenated words. Same-style chunks closer than ~0.1em are merged earlier by
++     * {@link TextProcessor#mergeCloseTextChunks}, so a remaining gap of this size is a word boundary.
++     * Chunks with differing styles (e.g. math or syntax-highlighted code) keep the default ratio.
++     */
++    static final double SAME_STYLE_TEXT_LINE_SPACE_RATIO = 0.1;
+     private static final Comparator<TextChunk> TEXT_CHUNK_COMPARATOR =
+         Comparator.comparingDouble(o -> o.getBoundingBox().getLeftX());
+ 
+@@ -69,24 +78,26 @@ public class TextLineProcessor {
+             if (content instanceof TextLine) {
+                 TextLine textLine = (TextLine) content;
+                 textLine.getTextChunks().sort(TEXT_CHUNK_COMPARATOR);
+-                double threshold = textLine.getFontSize() * TextChunkUtils.TEXT_LINE_SPACE_RATIO;
+-                newContents.set(i, getTextLineWithSpaces(textLine, threshold));
++                newContents.set(i, getTextLineWithSpaces(textLine, textLine.getFontSize()));
+             }
+         }
+         linkTextLinesWithConnectedLineArtBullet(newContents);
+         return newContents;
+     }
+ 
+-    private static TextLine getTextLineWithSpaces(TextLine textLine, double threshold) {
++    private static TextLine getTextLineWithSpaces(TextLine textLine, double fontSize) {
+         List<TextChunk> textChunks = textLine.getTextChunks();
+         TextChunk currentTextChunk = textChunks.get(0);
+         double previousEnd = currentTextChunk.getBoundingBox().getRightX();
+         TextLine newLine = new TextLine();
+         newLine.add(currentTextChunk);
+         for (int i = 1; i < textChunks.size(); i++) {
++            TextChunk previousTextChunk = currentTextChunk;
+             currentTextChunk = textChunks.get(i);
+             double currentStart = currentTextChunk.getBoundingBox().getLeftX();
+-            if (currentStart - previousEnd > threshold) {
++            double ratio = TextChunkUtils.areTextChunksHaveSameStyle(previousTextChunk, currentTextChunk) ?
++                SAME_STYLE_TEXT_LINE_SPACE_RATIO : TextChunkUtils.TEXT_LINE_SPACE_RATIO;
++            if (currentStart - previousEnd > fontSize * ratio) {
+                 BoundingBox spaceBBox = new BoundingBox(currentTextChunk.getBoundingBox());
+                 spaceBBox.setLeftX(previousEnd);
+                 spaceBBox.setRightX(currentStart);
+diff --git a/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/processors/TextLineProcessorTest.java b/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/processors/TextLineProcessorTest.java
+index 855aa82..3cc5b68 100644
+--- a/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/processors/TextLineProcessorTest.java
++++ b/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/processors/TextLineProcessorTest.java
+@@ -47,6 +47,48 @@ public class TextLineProcessorTest {
+         Assertions.assertEquals("test", ((TextLine) contents.get(1)).getValue());
+     }
+ 
++    /**
++     * Words positioned as separate chunks with narrow word spacing (below 0.17em, e.g. condensed
++     * fonts, justified text or negative character spacing) must still be separated by a space.
++     */
++    @Test
++    public void testProcessTextLinesInsertsSpaceForNarrowWordGap() {
++        StaticContainers.setIsIgnoreCharactersWithoutUnicode(false);
++        StaticContainers.setIsDataLoader(true);
++        List<IObject> contents = new ArrayList<>();
++        // font size 10, gap of 1.5pt (0.15em) between words
++        contents.add(new TextChunk(new BoundingBox(0, 10.0, 30.0, 40.0, 40.0),
++            "Lexical", 10, 30.0));
++        contents.add(new TextChunk(new BoundingBox(0, 41.5, 30.0, 70.0, 40.0),
++            "Search:", 10, 30.0));
++        // gap of 0.5pt (0.05em) - kerning-sized gap, no space expected
++        contents.add(new TextChunk(new BoundingBox(0, 70.5, 30.0, 80.0, 40.0),
++            "s", 10, 30.0));
++        contents = TextLineProcessor.processTextLines(contents);
++        Assertions.assertEquals(1, contents.size());
++        Assertions.assertEquals("Lexical Search:s", ((TextLine) contents.get(0)).getValue());
++    }
++
++    /**
++     * Between chunks of different styles (e.g. math or syntax-highlighted code) the default 0.17em
++     * ratio still applies, so narrow gaps there do not produce spurious spaces.
++     */
++    @Test
++    public void testProcessTextLinesKeepsDefaultRatioForDifferentStyles() {
++        StaticContainers.setIsIgnoreCharactersWithoutUnicode(false);
++        StaticContainers.setIsDataLoader(true);
++        List<IObject> contents = new ArrayList<>();
++        TextChunk first = new TextChunk(new BoundingBox(0, 10.0, 30.0, 40.0, 40.0), "print", 10, 30.0);
++        first.setFontName("Courier");
++        TextChunk second = new TextChunk(new BoundingBox(0, 41.5, 30.0, 70.0, 40.0), "(f)", 10, 30.0);
++        second.setFontName("Courier-Bold");
++        contents.add(first);
++        contents.add(second);
++        contents = TextLineProcessor.processTextLines(contents);
++        Assertions.assertEquals(1, contents.size());
++        Assertions.assertEquals("print(f)", ((TextLine) contents.get(0)).getValue());
++    }
++
+     /**
+      * Regression test for issue #150: text chunks on the same line should be sorted by leftX.
+      *

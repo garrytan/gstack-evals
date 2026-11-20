@@ -1,0 +1,39 @@
+diff --git a/tests/PhoneNumber.test.ts b/tests/PhoneNumber.test.ts
+index e26c8e7..9a6d581 100644
+--- a/tests/PhoneNumber.test.ts
++++ b/tests/PhoneNumber.test.ts
+@@ -119,6 +119,34 @@ describe('PhoneNumber', () => {
+         ).toThrow(/^Value is not a valid phone number of the form \+17895551234 \(7-15 digits\)/);
+       });
+     });
++    describe('long digit run followed by an invalid character', () => {
++      const payload = '1'.repeat(40) + 'x';
++      const timeLimitMs = 100;
++
++      test('serialize', () => {
++        const start = performance.now();
++        expect(() => GraphQLPhoneNumber.serialize(payload)).toThrow(
++          /^Value is not a valid phone number/,
++        );
++        expect(performance.now() - start).toBeLessThan(timeLimitMs);
++      });
++
++      test('parseValue', () => {
++        const start = performance.now();
++        expect(() => GraphQLPhoneNumber.parseValue(payload)).toThrow(
++          /^Value is not a valid phone number/,
++        );
++        expect(performance.now() - start).toBeLessThan(timeLimitMs);
++      });
++
++      test('parseLiteral', () => {
++        const start = performance.now();
++        expect(() =>
++          GraphQLPhoneNumber.parseLiteral({ value: payload, kind: Kind.STRING }, {}),
++        ).toThrow(/^Value is not a valid phone number/);
++        expect(performance.now() - start).toBeLessThan(timeLimitMs);
++      });
++    });
+     describe('support more countries', () => {
+       test('support Singapore numbers - 10 digits', () => {
+         expect(() => {

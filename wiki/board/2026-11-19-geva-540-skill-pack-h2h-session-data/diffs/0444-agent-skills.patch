@@ -1,0 +1,68 @@
+diff --git a/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/TextProcessor.java b/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/TextProcessor.java
+index f1ea435..776a33a 100644
+--- a/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/TextProcessor.java
++++ b/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/TextProcessor.java
+@@ -155,7 +155,12 @@ public class TextProcessor {
+     }
+ 
+     private static boolean areNeighborsTextChunks(TextChunk firstTextChunk, TextChunk secondTextChunk) {
+-        return NodeUtils.areCloseNumbers(firstTextChunk.getTextEnd(), secondTextChunk.getTextStart(),
+-            NEIGHBORS_TEXT_CHUNKS_EPSILON * firstTextChunk.getBoundingBox().getHeight());
++        // The tolerance is based on bbox height, which can be much larger than the font size
++        // for fonts with tall bounding boxes. Cap it with the word-space threshold used by
++        // TextLineProcessor, so that chunks separated by a word gap are never glued together
++        // without a space (e.g. "Evolution" + "Of" -> "EvolutionOf").
++        double epsilon = Math.min(NEIGHBORS_TEXT_CHUNKS_EPSILON * firstTextChunk.getBoundingBox().getHeight(),
++            TextChunkUtils.TEXT_LINE_SPACE_RATIO * firstTextChunk.getFontSize());
++        return NodeUtils.areCloseNumbers(firstTextChunk.getTextEnd(), secondTextChunk.getTextStart(), epsilon);
+     }
+ }
+diff --git a/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/processors/TextProcessorTest.java b/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/processors/TextProcessorTest.java
+index 31a1629..1fd8e12 100644
+--- a/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/processors/TextProcessorTest.java
++++ b/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/processors/TextProcessorTest.java
+@@ -186,6 +186,44 @@ public class TextProcessorTest {
+         Assertions.assertEquals("Hello", ((TextChunk) contents.get(0)).getValue());
+     }
+ 
++    /**
++     * Regression test: words separated by a normal word space must not be glued together
++     * when the font's bounding box is much taller than the font size (e.g. fonts with large
++     * ascent/descent). Previously the neighbor tolerance scaled with bbox height, so words like
++     * "Evolution" and "Of" were merged into "EvolutionOf".
++     */
++    @Test
++    public void testMergeCloseTextChunksDoesNotMergeWordsWithTallBoundingBox() {
++        List<IObject> contents = new ArrayList<>();
++        String fontName = "Calibri";
++
++        // Font size 10, but bbox height 40 (tall font bbox). Word gap is 3pt = 0.3em.
++        TextChunk chunk1 = new TextChunk(new BoundingBox(0, 10.0, 100.0, 50.0, 140.0),
++            "Evolution", 10, 100.0);
++        chunk1.adjustSymbolEndsToBoundingBox(null);
++        chunk1.setFontName(fontName);
++        chunk1.setFontWeight(400);
++        chunk1.setTextEnd(50.0);
++
++        TextChunk chunk2 = new TextChunk(new BoundingBox(0, 53.0, 100.0, 63.0, 140.0),
++            "Of", 10, 100.0);
++        chunk2.adjustSymbolEndsToBoundingBox(null);
++        chunk2.setFontName(fontName);
++        chunk2.setFontWeight(400);
++        chunk2.setTextStart(53.0);
++
++        contents.add(chunk1);
++        contents.add(chunk2);
++
++        TextProcessor.mergeCloseTextChunks(contents);
++        contents = DocumentProcessor.removeNullObjectsFromList(contents);
++
++        Assertions.assertEquals(2, contents.size(),
++            "Words separated by a word space should not be merged");
++        Assertions.assertEquals("Evolution", ((TextChunk) contents.get(0)).getValue());
++        Assertions.assertEquals("Of", ((TextChunk) contents.get(1)).getValue());
++    }
++
+     @Test
+     public void testMeasureReplacementCharRatioAllReplacement() {
+         List<IObject> contents = new ArrayList<>();

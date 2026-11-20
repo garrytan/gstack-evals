@@ -1,0 +1,116 @@
+diff --git a/internal/plugins/ai/codex/codex.go b/internal/plugins/ai/codex/codex.go
+index b1b531f..ac3428d 100644
+--- a/internal/plugins/ai/codex/codex.go
++++ b/internal/plugins/ai/codex/codex.go
+@@ -226,6 +226,8 @@ func (c *Client) Send(ctx context.Context, msgs []*chat.ChatCompletionMessage, o
+ 
+ 	var (
+ 		builder       strings.Builder
++		doneText      strings.Builder
++		outputItems   []responses.ResponseOutputItemUnion
+ 		completedResp *responses.Response
+ 	)
+ 	for stream.Next() {
+@@ -233,6 +235,10 @@ func (c *Client) Send(ctx context.Context, msgs []*chat.ChatCompletionMessage, o
+ 		switch event.Type {
+ 		case string(constant.ResponseOutputTextDelta("").Default()):
+ 			builder.WriteString(event.AsResponseOutputTextDelta().Delta)
++		case string(constant.ResponseOutputTextDone("").Default()):
++			doneText.WriteString(event.AsResponseOutputTextDone().Text)
++		case "response.output_item.done":
++			outputItems = append(outputItems, event.AsResponseOutputItemDone().Item)
+ 		case "response.completed":
+ 			resp := event.AsResponseCompleted().Response
+ 			completedResp = &resp
+@@ -242,11 +248,30 @@ func (c *Client) Send(ctx context.Context, msgs []*chat.ChatCompletionMessage, o
+ 	if err := c.mapRequestError(stream.Err()); err != nil {
+ 		return "", err
+ 	}
++	return c.resolveSendText(completedResp, outputItems, builder.String(), doneText.String()), nil
++}
++
++// resolveSendText picks the best available final text. The Codex backend
++// frequently sends a response.completed event with an empty output array, so
++// fall back to streamed output items, then to accumulated text deltas.
++func (c *Client) resolveSendText(
++	completedResp *responses.Response, outputItems []responses.ResponseOutputItemUnion, deltaText, doneText string,
++) string {
+ 	if completedResp != nil {
+-		return c.ExtractText(completedResp), nil
++		if text := c.ExtractText(completedResp); text != "" {
++			return text
++		}
+ 	}
+-
+-	return builder.String(), nil
++	if len(outputItems) > 0 {
++		resp := responses.Response{Output: outputItems}
++		if text := c.ExtractText(&resp); text != "" {
++			return text
++		}
++	}
++	if deltaText != "" {
++		return deltaText
++	}
++	return doneText
+ }
+ 
+ // SendStream sends a request to Codex and streams the response text updates.
+diff --git a/internal/plugins/ai/codex/codex_test.go b/internal/plugins/ai/codex/codex_test.go
+index 5989956..609bf90 100644
+--- a/internal/plugins/ai/codex/codex_test.go
++++ b/internal/plugins/ai/codex/codex_test.go
+@@ -429,6 +429,53 @@ func TestSendIncludesSourcesFromAnnotatedResponse(t *testing.T) {
+ 	}
+ }
+ 
++func TestSendFallsBackWhenCompletedOutputIsEmpty(t *testing.T) {
++	cases := map[string][]map[string]any{
++		"deltas only": {
++			{"type": "response.output_text.delta", "delta": "hello "},
++			{"type": "response.output_text.delta", "delta": "from codex"},
++			{"type": "response.completed", "response": map[string]any{"output": []any{}}},
++		},
++		"output item done": {
++			{"type": "response.output_item.done", "item": map[string]any{
++				"type": "message",
++				"content": []any{
++					map[string]any{"type": "output_text", "text": "hello from codex", "annotations": []any{}},
++				},
++			}},
++			{"type": "response.completed", "response": map[string]any{"output": []any{}}},
++		},
++		"text done only": {
++			{"type": "response.output_text.done", "text": "hello from codex"},
++			{"type": "response.completed", "response": map[string]any{"output": []any{}}},
++		},
++	}
++
++	for name, events := range cases {
++		t.Run(name, func(t *testing.T) {
++			apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++				w.Header().Set("Content-Type", "text/event-stream")
++				for _, event := range events {
++					fmt.Fprintf(w, "data: %s\n\n", marshalJSON(t, event))
++				}
++				fmt.Fprint(w, "data: [DONE]\n\n")
++			}))
++			defer apiServer.Close()
++
++			client := newConfiguredTestClient(t, apiServer.URL, "acct_empty", testJWT("acct_empty", time.Now().Add(time.Hour)))
++			message, err := client.Send(context.Background(), []*chat.ChatCompletionMessage{
++				{Role: chat.ChatMessageRoleUser, Content: "Hello"},
++			}, &domain.ChatOptions{Model: "gpt-5.4"})
++			if err != nil {
++				t.Fatalf("Send() error = %v", err)
++			}
++			if message != "hello from codex" {
++				t.Fatalf("Send() = %q, want %q", message, "hello from codex")
++			}
++		})
++	}
++}
++
+ func TestSendStreamReadsCodexSSE(t *testing.T) {
+ 	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+ 		if r.URL.Path != "/responses" {

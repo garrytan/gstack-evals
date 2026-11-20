@@ -1,0 +1,3 @@
+https://github.com/sigstore/sigstore-go at 57e33d21c961d3f3093ed5791dca858f4cde2b73
+Licence at the freeze-date read (prereg o-, b1- and b2-licences.json): Apache-2.0
+Root licence and notice files at that commit: LICENSE

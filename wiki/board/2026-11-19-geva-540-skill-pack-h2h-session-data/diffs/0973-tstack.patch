@@ -1,0 +1,68 @@
+diff --git a/lib.go b/lib.go
+index 004ef8e..d009378 100644
+--- a/lib.go
++++ b/lib.go
+@@ -217,20 +217,26 @@ func ColumnNameToNumber(name string) (int, error) {
+ 	if len(name) == 0 {
+ 		return -1, newInvalidColumnNameError(name)
+ 	}
+-	col := 0
+-	multi := 1
+-	for i := len(name) - 1; i >= 0; i-- {
++	col, overflow := 0, false
++	for i := 0; i < len(name); i++ {
+ 		r := name[i]
++		var d int
+ 		if r >= 'A' && r <= 'Z' {
+-			col += int(r-'A'+1) * multi
++			d = int(r - 'A' + 1)
+ 		} else if r >= 'a' && r <= 'z' {
+-			col += int(r-'a'+1) * multi
++			d = int(r - 'a' + 1)
+ 		} else {
+ 			return -1, newInvalidColumnNameError(name)
+ 		}
+-		multi *= 26
++		// Bound the value on every digit so the accumulation can never wrap
++		// around and yield an out-of-range column number with a nil error.
++		if !overflow {
++			if col = col*26 + d; col > MaxColumns {
++				overflow = true
++			}
++		}
+ 	}
+-	if col > MaxColumns {
++	if overflow {
+ 		return -1, ErrColumnNumber
+ 	}
+ 	return col, nil
+diff --git a/lib_test.go b/lib_test.go
+index 7a9f854..1f2c949 100644
+--- a/lib_test.go
++++ b/lib_test.go
+@@ -81,6 +81,25 @@ func TestColumnNameToNumber_Error(t *testing.T) {
+ 	}
+ 	_, err := ColumnNameToNumber("XFE")
+ 	assert.ErrorIs(t, err, ErrColumnNumber)
++	// Column names whose value overflows int must not wrap into range
++	for _, name := range []string{"VGWQHXLSDVIKWV", "ZZZZZZZZZZZZZZZZZZZZ"} {
++		out, err := ColumnNameToNumber(name)
++		assert.Equal(t, -1, out, name)
++		assert.ErrorIs(t, err, ErrColumnNumber, name)
++	}
++	col, _, err := CellNameToCoordinates("VGWQHXLSDVIKWV1")
++	assert.Equal(t, -1, col)
++	assert.Error(t, err)
++}
++
++func TestColumnNameOverflowWorksheet(t *testing.T) {
++	f := NewFile()
++	f.Sheet.Delete("xl/worksheets/sheet1.xml")
++	f.Pkg.Store("xl/worksheets/sheet1.xml", []byte(`<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="0"><c r="VGWQHXLSDVIKWV1" t="inlineStr"><is><t>pwn</t></is></c></row></sheetData></worksheet>`))
++	f.checked = sync.Map{}
++	assert.NotPanics(t, func() {
++		_, _ = f.GetCellValue("Sheet1", "A1")
++	})
+ }
+ 
+ func TestColumnNumberToName_OK(t *testing.T) {

@@ -1,0 +1,3 @@
+https://github.com/marko-js/marko at d80a4f1a0459de4d2f724d5343501337068df863
+Licence at the freeze-date read (prereg o-, b1- and b2-licences.json): MIT
+Root licence and notice files at that commit: LICENSE

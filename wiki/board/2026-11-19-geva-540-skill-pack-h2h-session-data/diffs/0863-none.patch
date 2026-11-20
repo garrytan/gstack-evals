@@ -1,0 +1,39 @@
+diff --git a/pkl-core/src/main/java/org/pkl/core/util/yaml/YamlEscaper.java b/pkl-core/src/main/java/org/pkl/core/util/yaml/YamlEscaper.java
+index 29a21da..9a07cea 100644
+--- a/pkl-core/src/main/java/org/pkl/core/util/yaml/YamlEscaper.java
++++ b/pkl-core/src/main/java/org/pkl/core/util/yaml/YamlEscaper.java
+@@ -46,6 +46,6 @@ public final class YamlEscaper extends AbstractCharEscaper {
+     //noinspection UnnecessaryUnicodeEscape
+     return ch <= '\u0022'
+         ? REPLACEMENTS[ch]
+-        : ch == '\u2028' ? "\\L" : ch == '\u2029' ? "\\P" : null;
++        : ch == '\\' ? "\\\\" : ch == '\u2028' ? "\\L" : ch == '\u2029' ? "\\P" : null;
+   }
+ }
+diff --git a/pkl-core/src/test/files/LanguageSnippetTests/input/api/yamlRendererStrings.yml.pkl b/pkl-core/src/test/files/LanguageSnippetTests/input/api/yamlRendererStrings.yml.pkl
+index 5d8c5e9..88e149c 100644
+--- a/pkl-core/src/test/files/LanguageSnippetTests/input/api/yamlRendererStrings.yml.pkl
++++ b/pkl-core/src/test/files/LanguageSnippetTests/input/api/yamlRendererStrings.yml.pkl
+@@ -38,6 +38,8 @@ h3 = "\r"
+ h4 = "one\rtwo"
+ h5 = "\u{7}"
+ h6 = "one\u{7}two"
++h7 = "\t\\d"
++h8 = "one\\two\n"
+ 
+ // control characters in multiline strings
+ i1 = "one\ttwo\nthree"
+diff --git a/pkl-core/src/test/files/LanguageSnippetTests/output/api/yamlRendererStrings.yml b/pkl-core/src/test/files/LanguageSnippetTests/output/api/yamlRendererStrings.yml
+index 811c851..416f556 100644
+--- a/pkl-core/src/test/files/LanguageSnippetTests/output/api/yamlRendererStrings.yml
++++ b/pkl-core/src/test/files/LanguageSnippetTests/output/api/yamlRendererStrings.yml
+@@ -53,6 +53,9 @@ h3: "\r"
+ h4: "one\rtwo"
+ h5: "\a"
+ h6: "one\atwo"
++h7: "\t\\d"
++h8: |
++  one\two
+ i1: "one\ttwo\nthree"
+ i2: "one\rtwo\nthree"
+ i3: "one\atwo\nthree"

@@ -1,0 +1,266 @@
+diff --git a/pkg/parser/schemas/main_workflow_schema.json b/pkg/parser/schemas/main_workflow_schema.json
+index 628d14a..c9eba61 100644
+--- a/pkg/parser/schemas/main_workflow_schema.json
++++ b/pkg/parser/schemas/main_workflow_schema.json
+@@ -9026,8 +9026,8 @@
+             },
+             "version": {
+               "type": ["string", "number"],
+-              "description": "Optional version of the AI engine action (e.g., 'beta', 'stable', 20). Has sensible defaults and can typically be omitted. Numeric values are automatically converted to strings at runtime.",
+-              "examples": ["beta", "stable", 20, 3.11]
++              "description": "Optional version of the AI engine action (e.g., 'beta', 'stable', 20). Has sensible defaults and can typically be omitted. Numeric values are automatically converted to strings at runtime. Also accepts a single GitHub Actions expression (e.g., '${{ inputs.engine-version }}') so reusable workflow_call workflows can override the version at call time; expressions are passed to install steps via an environment variable to prevent shell injection.",
++              "examples": ["beta", "stable", 20, 3.11, "${{ inputs.engine-version }}"]
+             },
+             "model": {
+               "type": "string",
+diff --git a/pkg/workflow/compiler_orchestrator_engine.go b/pkg/workflow/compiler_orchestrator_engine.go
+index 6086c2e..3e9e061 100644
+--- a/pkg/workflow/compiler_orchestrator_engine.go
++++ b/pkg/workflow/compiler_orchestrator_engine.go
+@@ -37,6 +37,10 @@ func (c *Compiler) setupEngineAndImports(result *parser.FrontmatterResult, clean
+ 	// Extract AI engine setting from frontmatter
+ 	engineSetting, engineConfig := c.ExtractEngineConfig(result.Frontmatter)
+ 
++	if err := validateEngineVersion(engineConfig); err != nil {
++		return nil, err
++	}
++
+ 	// Validate and register inline engine definitions (engine.runtime sub-object).
+ 	// Must happen before catalog resolution so the inline definition is visible to Resolve().
+ 	if engineConfig != nil && engineConfig.IsInlineDefinition {
+@@ -227,6 +231,10 @@ func (c *Compiler) setupEngineAndImports(result *parser.FrontmatterResult, clean
+ 		}
+ 		engineConfig = extractedConfig
+ 
++		if err := validateEngineVersion(engineConfig); err != nil {
++			return nil, err
++		}
++
+ 		// If the imported engine is an inline definition (engine.runtime sub-object),
+ 		// validate and register it in the catalog. This mirrors the handling for inline
+ 		// definitions declared directly in the main workflow (above).
+diff --git a/pkg/workflow/copilot_installer.go b/pkg/workflow/copilot_installer.go
+index 70ebb94..1e7f828 100644
+--- a/pkg/workflow/copilot_installer.go
++++ b/pkg/workflow/copilot_installer.go
+@@ -24,6 +24,18 @@ func GenerateCopilotInstallerSteps(version, stepName string) []GitHubActionStep
+ 	// and does not use gh CLI, so GH_HOST does not affect the download. No step-level
+ 	// GH_HOST override is needed here; the correct host is already set in GITHUB_ENV
+ 	// by configure_gh_for_ghe.sh (or by the Derive GH_HOST step when DIFC proxy is active).
++	if isEngineVersionExpression(version) {
++		// Pass the expression through an env var so the evaluated value is never
++		// interpolated into the shell command (prevents shell injection).
++		stepLines := []string{
++			"      - name: " + stepName,
++			"        run: ${RUNNER_TEMP}/gh-aw/actions/install_copilot_cli.sh \"${ENGINE_VERSION}\"",
++			"        env:",
++			"          ENGINE_VERSION: " + version,
++		}
++		return []GitHubActionStep{GitHubActionStep(stepLines)}
++	}
++
+ 	stepLines := []string{
+ 		"      - name: " + stepName,
+ 		"        run: ${RUNNER_TEMP}/gh-aw/actions/install_copilot_cli.sh " + version,
+diff --git a/pkg/workflow/engine.go b/pkg/workflow/engine.go
+index 2473dd4..6fb5de1 100644
+--- a/pkg/workflow/engine.go
++++ b/pkg/workflow/engine.go
+@@ -4,6 +4,7 @@ import (
+ 	"encoding/json"
+ 	"fmt"
+ 	"strconv"
++	"strings"
+ 
+ 	"github.com/github/gh-aw/pkg/logger"
+ 	"github.com/github/gh-aw/pkg/stringutil"
+@@ -398,3 +399,12 @@ func parseRequestShape(requestObj map[string]any) *RequestShape {
+ 	}
+ 	return shape
+ }
++
++// isEngineVersionExpression reports whether an engine.version value is a GitHub Actions
++// expression (e.g. "${{ inputs.engine-version }}") that must be resolved at runtime.
++// Such values must be passed to shell steps via environment variables rather than being
++// interpolated directly into the command line.
++func isEngineVersionExpression(version string) bool {
++	trimmed := strings.TrimSpace(version)
++	return strings.HasPrefix(trimmed, "${{") && strings.HasSuffix(trimmed, "}}") && isGitHubExpression(trimmed)
++}
+diff --git a/pkg/workflow/engine_validation.go b/pkg/workflow/engine_validation.go
+index c36ed08..beb5bf2 100644
+--- a/pkg/workflow/engine_validation.go
++++ b/pkg/workflow/engine_validation.go
+@@ -251,3 +251,25 @@ func (c *Compiler) validateSingleEngineSpecification(mainEngineSetting string, i
+ 
+ 	return "", fmt.Errorf("invalid engine configuration in included file, missing or invalid 'id' field. Expected string, object with 'id' field, or inline definition with 'runtime.id'.\n\nExample (string):\nengine: copilot\n\nExample (object with id):\nengine:\n  id: copilot\n  model: gpt-4\n\nExample (inline runtime definition):\nengine:\n  runtime:\n    id: codex\n\nSee: %s", constants.DocsEnginesURL)
+ }
++
++// validateEngineVersion validates the engine.version field.
++// Plain version strings (e.g. "1.2.3", "latest") are accepted as-is. Values containing
++// GitHub Actions expression markers must consist of exactly one complete expression
++// (e.g. "${{ inputs.engine-version }}"). Expressions are passed to install steps via an
++// environment variable, so mixing literal text with an expression is rejected to keep the
++// compiled shell command injection-safe.
++func validateEngineVersion(config *EngineConfig) error {
++	if config == nil || config.Version == "" {
++		return nil
++	}
++	version := config.Version
++	if !strings.Contains(version, "${{") && !strings.Contains(version, "}}") {
++		return nil
++	}
++	trimmed := strings.TrimSpace(version)
++	if !isEngineVersionExpression(trimmed) || strings.Count(trimmed, "${{") != 1 || strings.Count(trimmed, "}}") != 1 {
++		return fmt.Errorf("invalid engine.version %q: when using a GitHub Actions expression, engine.version must be a single complete expression (e.g. \"${{ inputs.engine-version }}\").\n\nSee: %s", version, constants.DocsEnginesURL)
++	}
++	config.Version = trimmed
++	return nil
++}
+diff --git a/pkg/workflow/engine_version_expression_test.go b/pkg/workflow/engine_version_expression_test.go
+new file mode 100644
+index 0000000..51f59c9
+--- /dev/null
++++ b/pkg/workflow/engine_version_expression_test.go
+@@ -0,0 +1,116 @@
++//go:build !integration
++
++package workflow
++
++import (
++	"strings"
++	"testing"
++
++	"github.com/stretchr/testify/assert"
++	"github.com/stretchr/testify/require"
++)
++
++func TestIsEngineVersionExpression(t *testing.T) {
++	tests := []struct {
++		version string
++		want    bool
++	}{
++		{"1.2.3", false},
++		{"latest", false},
++		{"", false},
++		{"${{ inputs.engine-version }}", true},
++		{"  ${{ inputs.engine-version }}  ", true},
++		{"1.0-${{ inputs.x }}", false},
++		{"${{ inputs.x }}; rm -rf /", false},
++	}
++	for _, tt := range tests {
++		t.Run(tt.version, func(t *testing.T) {
++			assert.Equal(t, tt.want, isEngineVersionExpression(tt.version))
++		})
++	}
++}
++
++func TestValidateEngineVersion(t *testing.T) {
++	tests := []struct {
++		name    string
++		version string
++		wantErr bool
++	}{
++		{"empty", "", false},
++		{"literal", "1.2.3", false},
++		{"expression", "${{ inputs.engine-version }}", false},
++		{"mixed prefix", "v${{ inputs.engine-version }}", true},
++		{"trailing shell", "${{ inputs.v }}; echo pwned", true},
++		{"two expressions", "${{ inputs.a }}${{ inputs.b }}", true},
++		{"unbalanced", "${{ inputs.a", true},
++	}
++	for _, tt := range tests {
++		t.Run(tt.name, func(t *testing.T) {
++			err := validateEngineVersion(&EngineConfig{Version: tt.version})
++			if tt.wantErr {
++				assert.Error(t, err)
++			} else {
++				assert.NoError(t, err)
++			}
++		})
++	}
++	assert.NoError(t, validateEngineVersion(nil))
++}
++
++func TestEngineVersionExpressionInstallSteps(t *testing.T) {
++	const expr = "${{ inputs.engine-version }}"
++	engines := []CodingAgentEngine{
++		NewCopilotEngine(),
++		NewClaudeEngine(),
++		NewCodexEngine(),
++		NewGeminiEngine(),
++	}
++	for _, engine := range engines {
++		t.Run(engine.GetID(), func(t *testing.T) {
++			workflowData := &WorkflowData{
++				Name:         "test",
++				EngineConfig: &EngineConfig{ID: engine.GetID(), Version: expr},
++			}
++			steps := engine.GetInstallationSteps(workflowData)
++			require.NotEmpty(t, steps)
++
++			var all strings.Builder
++			for _, step := range steps {
++				for _, line := range step {
++					all.WriteString(line + "\n")
++					if strings.Contains(line, "run:") {
++						assert.NotContains(t, line, "${{", "expression must not be interpolated into run command: %s", line)
++					}
++				}
++			}
++			out := all.String()
++			assert.Contains(t, out, "ENGINE_VERSION: "+expr, "expression should be passed via env var")
++			assert.Contains(t, out, `"${ENGINE_VERSION}"`, "run command should reference quoted env var")
++		})
++	}
++}
++
++func TestEngineVersionLiteralInstallStepsUnchanged(t *testing.T) {
++	workflowData := &WorkflowData{
++		Name:         "test",
++		EngineConfig: &EngineConfig{ID: "claude", Version: "1.2.3"},
++	}
++	steps := NewClaudeEngine().GetInstallationSteps(workflowData)
++	var all strings.Builder
++	for _, step := range steps {
++		all.WriteString(strings.Join(step, "\n"))
++	}
++	out := all.String()
++	assert.Contains(t, out, "npm install -g @anthropic-ai/claude-code@1.2.3")
++	assert.NotContains(t, out, "ENGINE_VERSION")
++}
++
++func TestExtractEngineConfigAcceptsVersionExpression(t *testing.T) {
++	c := NewCompiler()
++	_, config := c.ExtractEngineConfig(map[string]any{
++		"engine": map[string]any{"id": "copilot", "version": "${{ inputs.engine-version }}"},
++	})
++	require.NotNil(t, config)
++	assert.Equal(t, "${{ inputs.engine-version }}", config.Version)
++	assert.NoError(t, validateEngineVersion(config))
++}
+diff --git a/pkg/workflow/nodejs.go b/pkg/workflow/nodejs.go
+index 1dae06c..2d5b0c5 100644
+--- a/pkg/workflow/nodejs.go
++++ b/pkg/workflow/nodejs.go
+@@ -52,6 +52,20 @@ func GenerateNpmInstallStepsWithScope(packageName, version, stepName, cacheKeyPr
+ 	if isGlobal {
+ 		globalFlag = "-g "
+ 	}
++	// When the version is a GitHub Actions expression (e.g. ${{ inputs.engine-version }}),
++	// never interpolate it into the shell command. Pass it via an env var instead so the
++	// evaluated value cannot inject shell syntax.
++	if isEngineVersionExpression(version) {
++		installCmd := fmt.Sprintf("npm install %s%s@\"${ENGINE_VERSION}\"", globalFlag, packageName)
++		steps = append(steps, GitHubActionStep{
++			"      - name: " + stepName,
++			"        run: " + installCmd,
++			"        env:",
++			"          ENGINE_VERSION: " + version,
++		})
++		return steps
++	}
++
+ 	installCmd := fmt.Sprintf("npm install %s%s@%s", globalFlag, packageName, version)
+ 	steps = append(steps, GitHubActionStep{
+ 		"      - name: " + stepName,

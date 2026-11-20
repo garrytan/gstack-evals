@@ -1,0 +1,501 @@
+diff --git a/app/kuma-dp/pkg/dataplane/dnsproxy/component.go b/app/kuma-dp/pkg/dataplane/dnsproxy/component.go
+index 495769a..69939ad 100644
+--- a/app/kuma-dp/pkg/dataplane/dnsproxy/component.go
++++ b/app/kuma-dp/pkg/dataplane/dnsproxy/component.go
+@@ -25,6 +25,7 @@ type Server struct {
+ 	componentDone chan struct{}
+ 	dnsMap        atomic.Pointer[dnsMap]
+ 	metrics       *metrics
++	metricLabels  atomic.Pointer[metricLabels]
+ 	// upstreamClient is used for testing purposes
+ 	upstreamClient func(msg *dns.Msg) (*dns.Msg, error)
+ 	ready          chan struct{}
+@@ -61,6 +62,7 @@ func NewServerWithCustomClient(address string, upstreamClient func(msg *dns.Msg)
+ 		upstreamClient: upstreamClient,
+ 	}
+ 	s.dnsMap.Store(&dnsMap{ARecords: make(map[string]*dnsEntry), AAAARecords: make(map[string]*dnsEntry)})
++	s.metricLabels.Store(newMetricLabels(nil))
+ 	return &s
+ }
+ 
+@@ -78,8 +80,9 @@ var _ component.GracefulComponent = &Server{}
+ 
+ func (s *Server) Handler(res dns.ResponseWriter, req *dns.Msg) {
+ 	start := time.Now()
++	labels := s.metricLabels.Load().values
+ 	defer func() {
+-		s.metrics.RequestDuration.Observe(time.Since(start).Seconds())
++		s.metrics.RequestDuration.With(labels).Observe(time.Since(start).Seconds())
+ 		if err := recover(); err != nil {
+ 			log.Error(fmt.Errorf("handler panic %v", err), "panic in DNS handler")
+ 			response := new(dns.Msg)
+@@ -113,14 +116,14 @@ func (s *Server) Handler(res dns.ResponseWriter, req *dns.Msg) {
+ 		proxyStart := time.Now()
+ 		resp, err := s.upstreamClient(req)
+ 		if err != nil {
+-			s.metrics.UpstreamRequestFailureCount.Inc()
++			s.metrics.UpstreamRequestFailureCount.With(labels).Inc()
+ 			log.Error(err, "failed to write message to upstream")
+ 			response = new(dns.Msg)
+ 			response.SetRcode(req, dns.RcodeServerFailure)
+ 		} else {
+ 			response = resp
+ 		}
+-		s.metrics.UpstreamRequestDuration.Observe(time.Since(proxyStart).Seconds())
++		s.metrics.UpstreamRequestDuration.With(labels).Observe(time.Since(proxyStart).Seconds())
+ 	}
+ 	err := res.WriteMsg(response)
+ 	if err != nil {
+@@ -214,6 +217,15 @@ func (s *Server) ReloadMap(ctx context.Context, reader io.Reader) error {
+ 	}
+ 	log.V(1).Info("DNS proxy configured", "config", res)
+ 	s.dnsMap.Store(&res)
++	s.reloadMetricLabels(configuration.Labels)
+ 
+ 	return nil
+ }
++
++func (s *Server) reloadMetricLabels(labels map[string]string) {
++	newLabels := newMetricLabels(labels)
++	oldLabels := s.metricLabels.Swap(newLabels)
++	if oldLabels != nil && !oldLabels.equal(newLabels) {
++		s.metrics.deleteSeries(oldLabels)
++	}
++}
+diff --git a/app/kuma-dp/pkg/dataplane/dnsproxy/component_test.go b/app/kuma-dp/pkg/dataplane/dnsproxy/component_test.go
+index 62468d2..3f1c11e 100644
+--- a/app/kuma-dp/pkg/dataplane/dnsproxy/component_test.go
++++ b/app/kuma-dp/pkg/dataplane/dnsproxy/component_test.go
+@@ -12,6 +12,8 @@ import (
+ 	"github.com/miekg/dns"
+ 	. "github.com/onsi/ginkgo/v2"
+ 	. "github.com/onsi/gomega"
++	"github.com/prometheus/client_golang/prometheus"
++	io_prometheus_client "github.com/prometheus/client_model/go"
+ 
+ 	"github.com/kumahq/kuma/v2/app/kuma-dp/pkg/dataplane/dnsproxy"
+ 	"github.com/kumahq/kuma/v2/pkg/test"
+@@ -151,4 +153,59 @@ var _ = Describe("components", func() {
+ 		Expect(res).To(HaveField("Rcode", Equal(dns.RcodeSuccess)))
+ 		Expect(res.Answer[0].String()).To(Equal("foo.com.\t125\tIN\tA\t17.0.0.1"))
+ 	})
++	It("adds workload labels from the DNS config to DNS metrics", func() {
++		f := func(req *dns.Msg) (*dns.Msg, error) { //nolint:unparam
++			response := new(dns.Msg)
++			response.SetRcode(req, dns.RcodeSuccess)
++			return response, nil
++		}
++		mock.Store(&f)
++
++		Expect(server.ReloadMap(context.Background(), bytes.NewBufferString(`{
++"ttl": 123,
++"records": [{"name": "example.com", "ips": ["240.0.0.1"]}],
++"labels": {
++  "kuma_workload": "kri_wl_default_zone-1_kuma-demo_demo-app_",
++  "k8s_kuma_io_namespace": "kuma-demo",
++  "mesh": "default",
++  "kuma_io_zone": "zone-1"
++}
++}`))).To(Succeed())
++
++		c := new(dns.Client)
++		for _, name := range []string{"example.com.", "upstream.com."} {
++			msg := &dns.Msg{}
++			msg.SetQuestion(name, dns.TypeA)
++			_, _, err := c.Exchange(msg, address)
++			Expect(err).ToNot(HaveOccurred())
++		}
++
++		expectedLabels := map[string]string{
++			"kuma_workload":         "kri_wl_default_zone-1_kuma-demo_demo-app_",
++			"k8s_kuma_io_namespace": "kuma-demo",
++			"mesh":                  "default",
++			"kuma_io_zone":          "zone-1",
++		}
++		families, err := prometheus.DefaultGatherer.Gather()
++		Expect(err).ToNot(HaveOccurred())
++		for _, metricName := range []string{
++			"kuma_dp_dns_request_duration_seconds",
++			"kuma_dp_dns_upstream_request_duration_seconds",
++		} {
++			Expect(families).To(ContainElement(And(
++				WithTransform((*io_prometheus_client.MetricFamily).GetName, Equal(metricName)),
++				WithTransform((*io_prometheus_client.MetricFamily).GetMetric, ContainElement(
++					WithTransform(labelsOf, Equal(expectedLabels)),
++				)),
++			)), "metric %s should carry workload labels", metricName)
++		}
++	})
+ })
++
++func labelsOf(m *io_prometheus_client.Metric) map[string]string {
++	res := map[string]string{}
++	for _, l := range m.GetLabel() {
++		res[l.GetName()] = l.GetValue()
++	}
++	return res
++}
+diff --git a/app/kuma-dp/pkg/dataplane/dnsproxy/metrics.go b/app/kuma-dp/pkg/dataplane/dnsproxy/metrics.go
+index 56b17b5..f25d144 100644
+--- a/app/kuma-dp/pkg/dataplane/dnsproxy/metrics.go
++++ b/app/kuma-dp/pkg/dataplane/dnsproxy/metrics.go
+@@ -1,39 +1,75 @@
+ package dnsproxy
+ 
+ import (
++	"sync"
++
+ 	"github.com/prometheus/client_golang/prometheus"
++
++	"github.com/kumahq/kuma/v2/pkg/dns/dpapi"
+ )
+ 
+ type metrics struct {
+-	RequestDuration             prometheus.Histogram
+-	UpstreamRequestDuration     prometheus.Histogram
+-	UpstreamRequestFailureCount prometheus.Counter
++	RequestDuration             *prometheus.HistogramVec
++	UpstreamRequestDuration     *prometheus.HistogramVec
++	UpstreamRequestFailureCount *prometheus.CounterVec
+ }
+ 
+-var m *metrics
++var (
++	m        *metrics
++	initOnce sync.Once
++)
+ 
+ func newMetrics() *metrics {
+-	if m != nil {
+-		return m
+-	}
+-	upstreamRequestDuration := prometheus.NewHistogram(prometheus.HistogramOpts{
+-		Name: "kuma_dp_dns_upstream_request_duration_seconds",
+-		Help: "The duration of the proxied requests.",
+-	})
+-	prometheus.MustRegister(upstreamRequestDuration)
+-	requestDuration := prometheus.NewHistogram(prometheus.HistogramOpts{
+-		Name: "kuma_dp_dns_request_duration_seconds",
+-		Help: "The duration of the request (inclusive of request that use internal DNS map).",
++	initOnce.Do(func() {
++		upstreamRequestDuration := prometheus.NewHistogramVec(prometheus.HistogramOpts{
++			Name: "kuma_dp_dns_upstream_request_duration_seconds",
++			Help: "The duration of the proxied requests.",
++		}, dpapi.MetricLabelNames)
++		prometheus.MustRegister(upstreamRequestDuration)
++		requestDuration := prometheus.NewHistogramVec(prometheus.HistogramOpts{
++			Name: "kuma_dp_dns_request_duration_seconds",
++			Help: "The duration of the request (inclusive of request that use internal DNS map).",
++		}, dpapi.MetricLabelNames)
++		prometheus.MustRegister(requestDuration)
++		upstreamRequestFailureCount := prometheus.NewCounterVec(prometheus.CounterOpts{
++			Name: "kuma_dp_dns_upstream_request_failure_count",
++			Help: "The total number of failed upstream requests.",
++		}, dpapi.MetricLabelNames)
++		m = &metrics{
++			RequestDuration:             requestDuration,
++			UpstreamRequestDuration:     upstreamRequestDuration,
++			UpstreamRequestFailureCount: upstreamRequestFailureCount,
++		}
+ 	})
+-	prometheus.MustRegister(requestDuration)
+-	upstreamRequestFailureCount := prometheus.NewCounter(prometheus.CounterOpts{
+-		Name: "kuma_dp_dns_upstream_request_failure_count",
+-		Help: "The total number of failed upstream requests.",
+-	})
+-	m = &metrics{
+-		RequestDuration:             requestDuration,
+-		UpstreamRequestDuration:     upstreamRequestDuration,
+-		UpstreamRequestFailureCount: upstreamRequestFailureCount,
+-	}
+ 	return m
+ }
++
++// metricLabels holds the label values attached to DNS metrics.
++type metricLabels struct {
++	values prometheus.Labels
++}
++
++func newMetricLabels(labels map[string]string) *metricLabels {
++	values := prometheus.Labels{}
++	for _, name := range dpapi.MetricLabelNames {
++		values[name] = labels[name]
++	}
++	return &metricLabels{values: values}
++}
++
++func (l *metricLabels) equal(other *metricLabels) bool {
++	for _, name := range dpapi.MetricLabelNames {
++		if l.values[name] != other.values[name] {
++			return false
++		}
++	}
++	return true
++}
++
++// deleteSeries removes series with given labels so stale label values
++// (e.g. before the DNS config with labels was received) are not exposed forever.
++func (mt *metrics) deleteSeries(l *metricLabels) {
++	mt.RequestDuration.Delete(l.values)
++	mt.UpstreamRequestDuration.Delete(l.values)
++	mt.UpstreamRequestFailureCount.Delete(l.values)
++}
+diff --git a/pkg/dns/dpapi/api.go b/pkg/dns/dpapi/api.go
+index b9eb0a2..9a0df0f 100644
+--- a/pkg/dns/dpapi/api.go
++++ b/pkg/dns/dpapi/api.go
+@@ -13,4 +13,19 @@ type DNSRecord struct {
+ type DNSProxyConfig struct {
+ 	Records []DNSRecord `json:"records"`
+ 	TTL     int         `json:"ttl"`
++	// Labels are added to every DNS metric emitted by the DNS proxy in kuma-dp
++	// so that they can be correlated with Envoy metrics of the same workload.
++	Labels map[string]string `json:"labels,omitempty"`
+ }
++
++// Metric label names attached to DNS proxy metrics. They match the labels
++// present on Envoy metrics.
++const (
++	MetricLabelWorkload  = "kuma_workload"
++	MetricLabelNamespace = "k8s_kuma_io_namespace"
++	MetricLabelMesh      = "mesh"
++	MetricLabelZone      = "kuma_io_zone"
++)
++
++// MetricLabelNames is the fixed, ordered set of labels on DNS proxy metrics.
++var MetricLabelNames = []string{MetricLabelWorkload, MetricLabelNamespace, MetricLabelMesh, MetricLabelZone}
+diff --git a/pkg/xds/generator/dns_generator.go b/pkg/xds/generator/dns_generator.go
+index ef29430..f93cb03 100644
+--- a/pkg/xds/generator/dns_generator.go
++++ b/pkg/xds/generator/dns_generator.go
+@@ -6,11 +6,15 @@ import (
+ 	"encoding/json"
+ 	"slices"
+ 
++	mesh_proto "github.com/kumahq/kuma/v2/api/mesh/v1alpha1"
++	"github.com/kumahq/kuma/v2/pkg/core/kri"
+ 	unified_naming "github.com/kumahq/kuma/v2/pkg/core/naming/unified-naming"
++	workload_api "github.com/kumahq/kuma/v2/pkg/core/resources/apis/workload/api/v1alpha1"
+ 	core_system_names "github.com/kumahq/kuma/v2/pkg/core/system_names"
+ 	core_xds "github.com/kumahq/kuma/v2/pkg/core/xds"
+ 	xds_types "github.com/kumahq/kuma/v2/pkg/core/xds/types"
+ 	"github.com/kumahq/kuma/v2/pkg/dns/dpapi"
++	k8s_metadata "github.com/kumahq/kuma/v2/pkg/plugins/runtime/k8s/metadata"
+ 	util_net "github.com/kumahq/kuma/v2/pkg/util/net"
+ 	xds_context "github.com/kumahq/kuma/v2/pkg/xds/context"
+ 	"github.com/kumahq/kuma/v2/pkg/xds/dynconf"
+@@ -53,7 +57,7 @@ func (g DNSGenerator) Generate(_ context.Context, rs *core_xds.ResourceSet, xdsC
+ 	if proxy.Metadata.HasFeature(xds_types.FeatureEmbeddedDNS) {
+ 		// This is purposefully set to 30s to avoid DNS cache stale with ExternalService and Kong Gateway see: https://github.com/kumahq/kuma/issues/13353.
+ 		// https://github.com/kumahq/kuma/issues/13463
+-		dnsInfo := dpapi.DNSProxyConfig{TTL: 30, Records: []dpapi.DNSRecord{}}
++		dnsInfo := dpapi.DNSProxyConfig{TTL: 30, Records: []dpapi.DNSRecord{}, Labels: dnsMetricLabels(proxy)}
+ 		for name, addresses := range vips {
+ 			dnsInfo.Records = append(dnsInfo.Records, dpapi.DNSRecord{
+ 				Name: name,
+@@ -102,3 +106,40 @@ func (g DNSGenerator) Generate(_ context.Context, rs *core_xds.ResourceSet, xdsC
+ 	})
+ 	return resources, nil
+ }
++
++// dnsMetricLabels returns labels that kuma-dp attaches to DNS proxy metrics.
++// They mirror the labels present on Envoy metrics so that DNS metrics can be
++// correlated with a workload without cross-metric joins.
++func dnsMetricLabels(proxy *core_xds.Proxy) map[string]string {
++	meta := proxy.Dataplane.GetMeta()
++	if meta == nil {
++		return nil
++	}
++	dpLabels := meta.GetLabels()
++	zone := dpLabels[mesh_proto.ZoneTag]
++	namespace := dpLabels[mesh_proto.KubeNamespaceTag]
++
++	labels := map[string]string{}
++	if workloadName := dpLabels[k8s_metadata.KumaWorkload]; workloadName != "" {
++		labels[dpapi.MetricLabelWorkload] = kri.Identifier{
++			ResourceType: workload_api.WorkloadType,
++			Mesh:         meta.GetMesh(),
++			Zone:         zone,
++			Namespace:    namespace,
++			Name:         workloadName,
++		}.String()
++	}
++	if namespace != "" {
++		labels[dpapi.MetricLabelNamespace] = namespace
++	}
++	if mesh := meta.GetMesh(); mesh != "" {
++		labels[dpapi.MetricLabelMesh] = mesh
++	}
++	if zone != "" {
++		labels[dpapi.MetricLabelZone] = zone
++	}
++	if len(labels) == 0 {
++		return nil
++	}
++	return labels
++}
+diff --git a/pkg/xds/generator/dns_generator_test.go b/pkg/xds/generator/dns_generator_test.go
+index 6e185fa..435f393 100644
+--- a/pkg/xds/generator/dns_generator_test.go
++++ b/pkg/xds/generator/dns_generator_test.go
+@@ -26,6 +26,7 @@ var _ = Describe("DNSGenerator", func() {
+ 		expected         string
+ 		features         map[string]bool
+ 		meshServicesMode mesh_proto.Mesh_MeshServices_Mode
++		labels           map[string]string
+ 	}
+ 
+ 	DescribeTable("Generate Envoy xDS resources",
+@@ -62,6 +63,8 @@ var _ = Describe("DNSGenerator", func() {
+ 				Dataplane: &core_mesh.DataplaneResource{
+ 					Meta: &test_model.ResourceMeta{
+ 						Version: "1",
++						Mesh:    "default",
++						Labels:  given.labels,
+ 					},
+ 					Spec: &dataplane,
+ 				},
+@@ -126,5 +129,17 @@ var _ = Describe("DNSGenerator", func() {
+ 			dataplaneFile: "6-dataplane.input.yaml",
+ 			expected:      "6-envoy-config.golden.yaml",
+ 		}),
++		Entry("07. DNS using proxy map includes workload metric labels", testCase{
++			features: map[string]bool{
++				"feature-embedded-dns": true,
++			},
++			labels: map[string]string{
++				"kuma.io/workload":      "demo-app",
++				"k8s.kuma.io/namespace": "kuma-demo",
++				"kuma.io/zone":          "zone-1",
++			},
++			dataplaneFile: "4-dataplane.input.yaml",
++			expected:      "7-envoy-config.golden.yaml",
++		}),
+ 	)
+ })
+diff --git a/pkg/xds/generator/testdata/dns/4-envoy-config.golden.yaml b/pkg/xds/generator/testdata/dns/4-envoy-config.golden.yaml
+index d568251..bd17a67 100644
+--- a/pkg/xds/generator/testdata/dns/4-envoy-config.golden.yaml
++++ b/pkg/xds/generator/testdata/dns/4-envoy-config.golden.yaml
+@@ -19,7 +19,7 @@ resources:
+             - addressPrefix: 127.0.0.1
+               prefixLen: 32
+           routeConfig:
+-            maxDirectResponseBodySizeBytes: 236
++            maxDirectResponseBodySizeBytes: 264
+             virtualHosts:
+             - domains:
+               - '*'
+@@ -31,11 +31,11 @@ resources:
+                   headers:
+                   - name: If-None-Match
+                     stringMatch:
+-                      exact: 639772d25f9c22e338f3c54ebe8be0faeae7e30c57f1acbf2d8ba5eb191007fb
++                      exact: 158cc5358be8713edb507c293fb379b05f961462d1125dc1c61f7924ae0f3ebc
+                   path: /dns
+               - directResponse:
+                   body:
+-                    inlineString: '{"records":[{"name":"backend.test-ns.svc.8080.mesh","ips":["240.0.0.0","::ffff:f000:0"]},{"name":"backend_test-ns_svc_8080.mesh","ips":["240.0.0.0","::ffff:f000:0"]},{"name":"httpbin.mesh","ips":["240.0.0.1","::ffff:f000:1"]}],"ttl":30}'
++                    inlineString: '{"records":[{"name":"backend.test-ns.svc.8080.mesh","ips":["240.0.0.0","::ffff:f000:0"]},{"name":"backend_test-ns_svc_8080.mesh","ips":["240.0.0.0","::ffff:f000:0"]},{"name":"httpbin.mesh","ips":["240.0.0.1","::ffff:f000:1"]}],"ttl":30,"labels":{"mesh":"default"}}'
+                   status: 200
+                 match:
+                   path: /dns
+@@ -43,6 +43,6 @@ resources:
+                 responseHeadersToAdd:
+                 - header:
+                     key: Etag
+-                    value: 639772d25f9c22e338f3c54ebe8be0faeae7e30c57f1acbf2d8ba5eb191007fb
++                    value: 158cc5358be8713edb507c293fb379b05f961462d1125dc1c61f7924ae0f3ebc
+           statPrefix: _kuma_dynamicconfig
+     name: _kuma:dynamicconfig
+diff --git a/pkg/xds/generator/testdata/dns/5-envoy-config.golden.yaml b/pkg/xds/generator/testdata/dns/5-envoy-config.golden.yaml
+index 452e1d8..d0351db 100644
+--- a/pkg/xds/generator/testdata/dns/5-envoy-config.golden.yaml
++++ b/pkg/xds/generator/testdata/dns/5-envoy-config.golden.yaml
+@@ -19,7 +19,7 @@ resources:
+             - addressPrefix: 127.0.0.1
+               prefixLen: 32
+           routeConfig:
+-            maxDirectResponseBodySizeBytes: 236
++            maxDirectResponseBodySizeBytes: 264
+             virtualHosts:
+             - domains:
+               - '*'
+@@ -31,12 +31,12 @@ resources:
+                   headers:
+                   - name: If-None-Match
+                     stringMatch:
+-                      exact: 639772d25f9c22e338f3c54ebe8be0faeae7e30c57f1acbf2d8ba5eb191007fb
++                      exact: 158cc5358be8713edb507c293fb379b05f961462d1125dc1c61f7924ae0f3ebc
+                   path: /dns
+                 name: system_dynamicconfig_dns_not_modified
+               - directResponse:
+                   body:
+-                    inlineString: '{"records":[{"name":"backend.test-ns.svc.8080.mesh","ips":["240.0.0.0","::ffff:f000:0"]},{"name":"backend_test-ns_svc_8080.mesh","ips":["240.0.0.0","::ffff:f000:0"]},{"name":"httpbin.mesh","ips":["240.0.0.1","::ffff:f000:1"]}],"ttl":30}'
++                    inlineString: '{"records":[{"name":"backend.test-ns.svc.8080.mesh","ips":["240.0.0.0","::ffff:f000:0"]},{"name":"backend_test-ns_svc_8080.mesh","ips":["240.0.0.0","::ffff:f000:0"]},{"name":"httpbin.mesh","ips":["240.0.0.1","::ffff:f000:1"]}],"ttl":30,"labels":{"mesh":"default"}}'
+                   status: 200
+                 match:
+                   path: /dns
+@@ -44,7 +44,7 @@ resources:
+                 responseHeadersToAdd:
+                 - header:
+                     key: Etag
+-                    value: 639772d25f9c22e338f3c54ebe8be0faeae7e30c57f1acbf2d8ba5eb191007fb
++                    value: 158cc5358be8713edb507c293fb379b05f961462d1125dc1c61f7924ae0f3ebc
+           statPrefix: system_dynamicconfig
+     name: system_dynamicconfig
+     statPrefix: system_dynamicconfig
+diff --git a/pkg/xds/generator/testdata/dns/7-envoy-config.golden.yaml b/pkg/xds/generator/testdata/dns/7-envoy-config.golden.yaml
+new file mode 100644
+index 0000000..dd676ac
+--- /dev/null
++++ b/pkg/xds/generator/testdata/dns/7-envoy-config.golden.yaml
+@@ -0,0 +1,48 @@
++resources:
++- name: _kuma:dynamicconfig
++  resource:
++    '@type': type.googleapis.com/envoy.config.listener.v3.Listener
++    address:
++      pipe:
++        path: kuma-mesh-metric-config.sock
++    filterChains:
++    - filters:
++      - name: envoy.filters.network.http_connection_manager
++        typedConfig:
++          '@type': type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
++          httpFilters:
++          - name: envoy.filters.http.router
++            typedConfig:
++              '@type': type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
++          internalAddressConfig:
++            cidrRanges:
++            - addressPrefix: 127.0.0.1
++              prefixLen: 32
++          routeConfig:
++            maxDirectResponseBodySizeBytes: 384
++            virtualHosts:
++            - domains:
++              - '*'
++              name: _kuma:dynamicconfig
++              routes:
++              - directResponse:
++                  status: 304
++                match:
++                  headers:
++                  - name: If-None-Match
++                    stringMatch:
++                      exact: c1781ac87f2c003eb827538214c7c33d137142b6cbcc9f962d264b817f3570e0
++                  path: /dns
++              - directResponse:
++                  body:
++                    inlineString: '{"records":[{"name":"backend.test-ns.svc.8080.mesh","ips":["240.0.0.0","::ffff:f000:0"]},{"name":"backend_test-ns_svc_8080.mesh","ips":["240.0.0.0","::ffff:f000:0"]},{"name":"httpbin.mesh","ips":["240.0.0.1","::ffff:f000:1"]}],"ttl":30,"labels":{"k8s_kuma_io_namespace":"kuma-demo","kuma_io_zone":"zone-1","kuma_workload":"kri_wl_default_zone-1_kuma-demo_demo-app_","mesh":"default"}}'
++                  status: 200
++                match:
++                  path: /dns
++                name: _kuma:dynamicconfig:/dns
++                responseHeadersToAdd:
++                - header:
++                    key: Etag
++                    value: c1781ac87f2c003eb827538214c7c33d137142b6cbcc9f962d264b817f3570e0
++          statPrefix: _kuma_dynamicconfig
++    name: _kuma:dynamicconfig

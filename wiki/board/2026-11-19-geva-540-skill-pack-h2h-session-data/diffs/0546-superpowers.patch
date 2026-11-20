@@ -1,0 +1,83 @@
+diff --git a/common/socket/src/main/java/io/helidon/common/socket/NioSocket.java b/common/socket/src/main/java/io/helidon/common/socket/NioSocket.java
+index c3ff018..97056fc 100644
+--- a/common/socket/src/main/java/io/helidon/common/socket/NioSocket.java
++++ b/common/socket/src/main/java/io/helidon/common/socket/NioSocket.java
+@@ -144,7 +144,11 @@ public sealed class NioSocket implements HelidonSocket permits TlsNioSocket {
+                 writeBuffer.clear();
+                 buffer.writeTo(writeBuffer, buffer.available());
+                 writeBuffer.flip();
+-                delegate.write(writeBuffer);
++                // a single write may be partial (e.g. when the socket send buffer is full),
++                // we must write all bytes before reusing the buffer, otherwise data is lost
++                while (writeBuffer.hasRemaining()) {
++                    delegate.write(writeBuffer);
++                }
+             }
+         } catch (IOException e) {
+             throw new UncheckedIOException(e);
+diff --git a/common/socket/src/test/java/io/helidon/common/socket/NioSocketTest.java b/common/socket/src/test/java/io/helidon/common/socket/NioSocketTest.java
+new file mode 100644
+index 0000000..8e8f03a
+--- /dev/null
++++ b/common/socket/src/test/java/io/helidon/common/socket/NioSocketTest.java
+@@ -0,0 +1,60 @@
++/*
++ * Copyright (c) 2026 Oracle and/or its affiliates.
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package io.helidon.common.socket;
++
++import java.io.ByteArrayOutputStream;
++import java.nio.ByteBuffer;
++import java.nio.channels.SocketChannel;
++
++import io.helidon.common.buffers.BufferData;
++
++import org.junit.jupiter.api.Test;
++
++import static org.hamcrest.CoreMatchers.is;
++import static org.hamcrest.MatcherAssert.assertThat;
++import static org.mockito.ArgumentMatchers.any;
++import static org.mockito.Mockito.mock;
++import static org.mockito.Mockito.when;
++
++class NioSocketTest {
++
++    @Test
++    void testPartialWritesDoNotLoseData() throws Exception {
++        ByteArrayOutputStream received = new ByteArrayOutputStream();
++        SocketChannel channel = mock(SocketChannel.class);
++        // simulate a channel that only accepts a few bytes per write call (full send buffer)
++        when(channel.write(any(ByteBuffer.class))).thenAnswer(invocation -> {
++            ByteBuffer buf = invocation.getArgument(0);
++            int toWrite = Math.min(buf.remaining(), 1000);
++            byte[] bytes = new byte[toWrite];
++            buf.get(bytes);
++            received.write(bytes);
++            return toWrite;
++        });
++
++        byte[] data = new byte[100_000];
++        for (int i = 0; i < data.length; i++) {
++            data[i] = (byte) i;
++        }
++
++        NioSocket socket = NioSocket.server(channel, "child", "server");
++        socket.write(BufferData.create(data));
++
++        assertThat(received.size(), is(data.length));
++        assertThat(received.toByteArray(), is(data));
++    }
++}

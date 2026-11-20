@@ -8,6 +8,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { canonical } from "../../../src/trial/cache.ts";
 import { parsePatch as fileChanges, unsafePaths } from "../mutation/diff.ts";
 import { parsePatch, section, walk } from "./fixsplit.ts";
 import { runBash } from "./history.ts";
@@ -249,10 +250,13 @@ export interface ScoreInput {
   mode?: Mode; runEmpty?: boolean; volume?: string; limitMs?: number; extra?: RunExtra;
 }
 
-/** Every id the unit's oracle reports on one base and one fixed run, cached in the unit dir as oracle-ids.json. */
+/** Every id the unit's oracle reports on one base and one fixed run, cached in the unit dir per run extra: as
+ *  oracle-ids.json for a run with no extra, as before, and as oracle-ids.<sha256 of the extra's canonical JSON>.json for a
+ *  run with one (the head-to-head's browser conditions), so ids read under one container setup never stand in for another's. */
 export function knownIds(dir: string, u: SmUnit, volume: string, mode: Mode, limitMs?: number, extra?: RunExtra): Set<string> {
-  const f = join(dir, "oracle-ids.json");
-  if (u.files["oracle-ids.json"] && existsSync(f)) return new Set(JSON.parse(readFileSync(f, "utf8")) as string[]);
+  const name = extra ? "oracle-ids." + sha(canonical(extra)) + ".json" : "oracle-ids.json";
+  const f = join(dir, name);
+  if (u.files[name] && existsSync(f)) return new Set(JSON.parse(readFileSync(f, "utf8")) as string[]);
   const image = u.image.runtime_id ?? smFail("E_SM_UNIT", u.id + " has no runtime image; run its oracle first");
   const ids = new Set<string>();
   for (const tree of ["base", "fixed"] as const) {
@@ -260,7 +264,7 @@ export function knownIds(dir: string, u: SmUnit, volume: string, mode: Mode, lim
     if (!r.parsed) smFail("E_SM_INFRA_GAP", u.id + ": the " + tree + " run for the known test ids did not parse");
     for (const id of Object.keys(r.parsed!)) ids.add(id);
   }
-  addUnitFile(dir, u, "oracle-ids.json", JSON.stringify([...ids].sort()) + "\n");
+  addUnitFile(dir, u, name, JSON.stringify([...ids].sort()) + "\n");
   saveUnit(dir, u);
   return ids;
 }

@@ -1,0 +1,111 @@
+diff --git a/NAudio.Core.Tests/WaveFormats/WaveFormatSerializeTests.cs b/NAudio.Core.Tests/WaveFormats/WaveFormatSerializeTests.cs
+new file mode 100644
+index 0000000..9b99108
+--- /dev/null
++++ b/NAudio.Core.Tests/WaveFormats/WaveFormatSerializeTests.cs
+@@ -0,0 +1,65 @@
++using System.IO;
++using NAudio.Utils;
++using NAudio.Wave;
++using NUnit.Framework;
++
++namespace NAudio.Core.Tests.WaveFormats
++{
++    [TestFixture]
++    [Category("UnitTest")]
++    public class WaveFormatSerializeTests
++    {
++        private static byte[] Serialize(WaveFormat format)
++        {
++            using (var ms = new MemoryStream())
++            using (var writer = new BinaryWriter(ms))
++            {
++                format.Serialize(writer);
++                writer.Flush();
++                return ms.ToArray();
++            }
++        }
++
++        [Test]
++        public void PcmFormatChunkHasNoExtraSizeField()
++        {
++            var bytes = Serialize(new WaveFormat(44100, 16, 2));
++            Assert.That(bytes.Length, Is.EqualTo(4 + 16));
++            using (var reader = new BinaryReader(new MemoryStream(bytes)))
++            {
++                Assert.That(reader.ReadInt32(), Is.EqualTo(16));
++                var roundTripped = WaveFormat.FromFormatChunk(reader, 16);
++                Assert.That(roundTripped, Is.EqualTo(new WaveFormat(44100, 16, 2)));
++            }
++        }
++
++        [Test]
++        public void IeeeFloatFormatChunkKeepsExtraSizeField()
++        {
++            var bytes = Serialize(WaveFormat.CreateIeeeFloatWaveFormat(44100, 2));
++            Assert.That(bytes.Length, Is.EqualTo(4 + 18));
++            using (var reader = new BinaryReader(new MemoryStream(bytes)))
++            {
++                Assert.That(reader.ReadInt32(), Is.EqualTo(18));
++            }
++        }
++
++        [Test]
++        public void PcmWaveFileHas44ByteHeaderAndReadsBack()
++        {
++            var ms = new MemoryStream();
++            var format = new WaveFormat(8000, 16, 1);
++            using (var writer = new WaveFileWriter(new IgnoreDisposeStream(ms), format))
++            {
++                writer.Write(new byte[100], 0, 100);
++            }
++            Assert.That(ms.Length, Is.EqualTo(44 + 100));
++            ms.Position = 0;
++            using (var reader = new WaveFileReader(ms))
++            {
++                Assert.That(reader.WaveFormat, Is.EqualTo(format));
++                Assert.That(reader.Length, Is.EqualTo(100));
++            }
++        }
++    }
++}
+diff --git a/NAudio.Core.Tests/WaveStreams/WaveFileWriterTests.cs b/NAudio.Core.Tests/WaveStreams/WaveFileWriterTests.cs
+index b3d3920..04e23a2 100644
+--- a/NAudio.Core.Tests/WaveStreams/WaveFileWriterTests.cs
++++ b/NAudio.Core.Tests/WaveStreams/WaveFileWriterTests.cs
+@@ -121,7 +121,7 @@ namespace NAudio.Core.Tests.WaveStreams
+             {
+                 var dataLength = Int32.MaxValue + 1001L;
+                 WaveFileWriter.CreateWaveFile(tempFile, new NullWaveStream(new WaveFormat(44100,2), dataLength));
+-                Assert.That(new FileInfo(tempFile).Length, Is.EqualTo(dataLength + 46));
++                Assert.That(new FileInfo(tempFile).Length, Is.EqualTo(dataLength + 44));
+             }
+             finally
+             {
+diff --git a/NAudio.Core/Wave/WaveFormats/WaveFormat.cs b/NAudio.Core/Wave/WaveFormats/WaveFormat.cs
+index 423e1b0..25ee4f8 100644
+--- a/NAudio.Core/Wave/WaveFormats/WaveFormat.cs
++++ b/NAudio.Core/Wave/WaveFormats/WaveFormat.cs
+@@ -302,14 +302,20 @@ namespace NAudio.Wave
+         /// <param name="writer">the output stream</param>
+         public virtual void Serialize(BinaryWriter writer)
+         {
+-            writer.Write((int)(18 + extraSize)); // wave format length
++            // Plain PCM uses a 16 byte PCMWAVEFORMAT with no cbSize field.
++            // All other formats use WAVEFORMATEX, which includes cbSize.
++            bool writeExtraSize = !(Encoding == WaveFormatEncoding.Pcm && extraSize == 0);
++            writer.Write((int)((writeExtraSize ? 18 : 16) + extraSize)); // wave format length
+             writer.Write((short)Encoding);
+             writer.Write((short)Channels);
+             writer.Write((int)SampleRate);
+             writer.Write((int)AverageBytesPerSecond);
+             writer.Write((short)BlockAlign);
+             writer.Write((short)BitsPerSample);
+-            writer.Write((short)extraSize);
++            if (writeExtraSize)
++            {
++                writer.Write((short)extraSize);
++            }
+         }
+ 
+         /// <summary>

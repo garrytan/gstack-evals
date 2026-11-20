@@ -1,0 +1,3 @@
+https://github.com/semaphoreui/semaphore at a938641bcc797e586ac82ef51446e4b05dbdfe9c
+Licence at the freeze-date read (prereg o-, b1- and b2-licences.json): MIT
+Root licence and notice files at that commit: LICENSE, THIRD-PARTY-LICENSES.md

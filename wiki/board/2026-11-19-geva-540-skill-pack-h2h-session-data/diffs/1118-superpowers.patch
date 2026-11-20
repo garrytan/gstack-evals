@@ -1,0 +1,85 @@
+diff --git a/internal/transport/http2_server.go b/internal/transport/http2_server.go
+index 63c6539..4f64fa1 100644
+--- a/internal/transport/http2_server.go
++++ b/internal/transport/http2_server.go
+@@ -511,12 +511,19 @@ func (t *http2Server) operateHeaders(ctx context.Context, frame *http2.MetaHeade
+ 
+ 	// "If :authority is missing, Host must be renamed to :authority." - A41
+ 	if len(mdata[":authority"]) == 0 {
+-		// No-op if host isn't present, no eventual :authority header is a valid
+-		// RPC.
+-		if host, ok := mdata["host"]; ok {
+-			mdata[":authority"] = host
+-			delete(mdata, "host")
++		host, ok := mdata["host"]
++		if !ok || len(host) == 0 {
++			// Requests missing both :authority and Host are rejected, consistent
++			// with other gRPC implementations.
++			errMsg := "missing :authority or host header"
++			if t.logger.V(logLevel) {
++				t.logger.Infof("Aborting the stream early: %v", errMsg)
++			}
++			t.writeEarlyAbort(streamID, s.contentSubtype, status.New(codes.Internal, errMsg), http.StatusBadRequest, !frame.StreamEnded())
++			return nil
+ 		}
++		mdata[":authority"] = host
++		delete(mdata, "host")
+ 	} else {
+ 		// "If :authority is present, Host must be discarded" - A41
+ 		delete(mdata, "host")
+diff --git a/internal/transport/transport_test.go b/internal/transport/transport_test.go
+index 825267a..d186c7a 100644
+--- a/internal/transport/transport_test.go
++++ b/internal/transport/transport_test.go
+@@ -2315,6 +2315,21 @@ func (s) TestHeadersHTTPStatusGRPCStatus(t *testing.T) {
+ 			grpcStatusWant:  "13",
+ 			grpcMessageWant: "both must only have 1 value as per HTTP/2 spec",
+ 		},
++		// Requests missing both :authority and host headers must be rejected.
++		{
++			name: "Missing :authority and host headers",
++			headers: []struct {
++				name   string
++				values []string
++			}{
++				{name: ":method", values: []string{"POST"}},
++				{name: ":path", values: []string{"foo"}},
++				{name: "content-type", values: []string{"application/grpc"}},
++			},
++			httpStatusWant:  "400",
++			grpcStatusWant:  "13",
++			grpcMessageWant: "missing :authority or host header",
++		},
+ 		// If the client sends an HTTP/2 request with a :method header with a
+ 		// value other than POST, as specified in the gRPC over HTTP/2
+ 		// specification, the server should fail the RPC.
+diff --git a/internal/xds/server/routing.go b/internal/xds/server/routing.go
+index f02a0d8..ac67811 100644
+--- a/internal/xds/server/routing.go
++++ b/internal/xds/server/routing.go
+@@ -65,7 +65,9 @@ func RouteAndProcess(ctx context.Context) error {
+ 	// the RPC gets to this point, there will be a single, unambiguous authority
+ 	// present in the header map.
+ 	authority := md.Get(":authority")
+-	// authority[0] is safe because of the guarantee mentioned above.
++	if len(authority) == 0 {
++		return rc.statusErrWithNodeID(codes.InvalidArgument, "the incoming RPC is missing the :authority header")
++	}
+ 	vh := findBestMatchingVirtualHostServer(authority[0], rc.vhs)
+ 	if vh == nil {
+ 		return rc.statusErrWithNodeID(codes.Unavailable, "the incoming RPC did not match a configured Virtual Host")
+diff --git a/test/end2end_test.go b/test/end2end_test.go
+index 410036f..6eb31cd 100644
+--- a/test/end2end_test.go
++++ b/test/end2end_test.go
+@@ -6756,7 +6756,9 @@ func (s) TestAuthorityHeader(t *testing.T) {
+ 				"content-type", "application/grpc",
+ 				"te", "trailers",
+ 			},
+-			wantAuthority: "",
++			// Such requests are rejected by the transport before reaching the
++			// interceptor.
++			wantAuthority: "missing :authority or host header",
+ 		},
+ 		// "If :authority is present, Host must be discarded." - A41
+ 		{

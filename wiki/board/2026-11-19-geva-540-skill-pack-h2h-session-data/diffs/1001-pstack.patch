@@ -1,0 +1,114 @@
+diff --git a/src/common/html_re.ts b/src/common/html_re.ts
+index 5c999d2..eddd410 100644
+--- a/src/common/html_re.ts
++++ b/src/common/html_re.ts
+@@ -13,7 +13,7 @@ const attribute = `(?:\\s+${attr_name}(?:\\s*=\\s*${attr_value})?)`
+ const open_tag = `<[A-Za-z][A-Za-z0-9\\-]*${attribute}*\\s*\\/?>`
+ 
+ const close_tag = '<\\/[A-Za-z][A-Za-z0-9\\-]*\\s*>'
+-const comment = '<!---?>|<!--(?:[^-]|-[^-]|--[^>])*-->'
++const comment = '<!---?>|<!--[\\s\\S]*?-->'
+ const processing = '<[?][\\s\\S]*?[?]>'
+ const declaration = '<![A-Za-z][^>]*>'
+ const cdata = '<!\\[CDATA\\[[\\s\\S]*?\\]\\]>'
+diff --git a/src/rules_inline/html_inline.ts b/src/rules_inline/html_inline.ts
+index 5c2faef..54e31b0 100644
+--- a/src/rules_inline/html_inline.ts
++++ b/src/rules_inline/html_inline.ts
+@@ -16,6 +16,28 @@ function isLetter (ch: number) {
+   return (lc >= 0x61/* a */) && (lc <= 0x7a/* z */)
+ }
+ 
++// Comments, processing instructions, declarations and CDATA end at the first
++// terminator after the opener, so a cached forward search decides whether
++// the regexp can match. Without it, unterminated openers rescan the rest of
++// the input each time, which is quadratic.
++function terminatorOf (src: string, pos: number): [string, number] | null {
++  if (src.startsWith('<?', pos)) return ['?>', 2]
++  if (src.startsWith('<!--', pos)) return ['-->', 2]
++  if (src.startsWith('<![CDATA[', pos)) return [']]>', 9]
++  if (src.charCodeAt(pos + 1) === 0x21/* ! */ && isLetter(src.charCodeAt(pos + 2))) return ['>', 3]
++  return null
++}
++
++function findCached (state: StateInline, terminator: string, start: number) {
++  const cached = state.htmlTerminators[terminator]
++  if (cached && cached.from <= start && (cached.at < 0 || cached.at >= start)) {
++    return cached.at
++  }
++  const at = state.src.indexOf(terminator, start)
++  state.htmlTerminators[terminator] = { from: start, at }
++  return at
++}
++
+ export default function html_inline (state: StateInline, silent: boolean): boolean {
+   if (!state.md.options.html) { return false }
+ 
+@@ -36,6 +58,11 @@ export default function html_inline (state: StateInline, silent: boolean): boole
+     return false
+   }
+ 
++  const terminator = terminatorOf(state.src, pos)
++  if (terminator && findCached(state, terminator[0], pos + terminator[1]) < 0) {
++    return false
++  }
++
+   const match = state.src.slice(pos).match(HTML_TAG_RE)
+   if (!match) { return false }
+ 
+diff --git a/src/rules_inline/state_inline.ts b/src/rules_inline/state_inline.ts
+index 5f64d71..b68bc16 100644
+--- a/src/rules_inline/state_inline.ts
++++ b/src/rules_inline/state_inline.ts
+@@ -37,6 +37,9 @@ class StateInline {
+   backticks: Record<number, number> = {}
+   backticksScanned = false
+ 
++  // html terminator => first position of it at or after `from` (-1 if absent)
++  htmlTerminators: Record<string, { from: number, at: number }> = {}
++
+   // Counter used to disable inline linkify-it execution
+   // inside <a> and markdown links
+   linkLevel = 0
+diff --git a/test/fixtures/markdown-it/commonmark_extras.txt b/test/fixtures/markdown-it/commonmark_extras.txt
+index 3307531..dde465b 100644
+--- a/test/fixtures/markdown-it/commonmark_extras.txt
++++ b/test/fixtures/markdown-it/commonmark_extras.txt
+@@ -923,3 +923,20 @@ No stripping when a code span is all spaces (CommonMark 0.31.2 6.1).
+ .
+ <p><code>   </code></p>
+ .
++
++Inline html comment ends at the first `-->`
++.
++x <!-- a ---> b
++.
++<p>x <!-- a ---> b</p>
++.
++
++Unterminated inline html constructs stay text, later ones still parse
++.
++x <!-- <? <!A <![CDATA[ y
++
++x <? a <!-- b --> c ?> <!-- d --> <![CDATA[ e ]]> <!F>
++.
++<p>x &lt;!-- &lt;? &lt;!A &lt;![CDATA[ y</p>
++<p>x <? a <!-- b --> c ?> <!-- d --> <![CDATA[ e ]]> <!F></p>
++.
+diff --git a/test/markdown-it/pathological.test.mjs b/test/markdown-it/pathological.test.mjs
+index d88bea7..08842d7 100644
+--- a/test/markdown-it/pathological.test.mjs
++++ b/test/markdown-it/pathological.test.mjs
+@@ -178,5 +178,12 @@ describe('Pathological sequences speed', () => {
+     it('reference with multiline label', async () => {
+       await test_pattern('[' + 'a\n'.repeat(300000))
+     })
++
++    it('unterminated inline html constructs with html enabled', async () => {
++      for (const opener of ['<!--', '<?x', '<!A', '<![CDATA[', '<!-- --->']) {
++        await test_pattern('x ' + opener.repeat(100000), { html: true })
++      }
++      await test_pattern('</' + '<!--'.repeat(100000), { html: true })
++    })
+   })
+ })

@@ -1,0 +1,87 @@
+diff --git a/js/node_helper.js b/js/node_helper.js
+index 833c90a..3e74fa3 100644
+--- a/js/node_helper.js
++++ b/js/node_helper.js
+@@ -1,6 +1,5 @@
+ const express = require("express");
+ const Log = require("logger");
+-const { replaceSecretPlaceholder } = require("#server_functions");
+ 
+ class NodeHelper {
+ 	init () {
+@@ -88,17 +87,14 @@ class NodeHelper {
+ 		io.of(this.name).on("connection", (socket) => {
+ 			// register catch all.
+ 			socket.onAny((notification, payload) => {
+-				if (config?.hideConfigSecrets && payload && typeof payload === "object") {
+-					try {
+-						const payloadStr = replaceSecretPlaceholder(JSON.stringify(payload));
+-						this.socketNotificationReceived(notification, JSON.parse(payloadStr));
+-					} catch (e) {
+-						Log.error("Error substituting variables in payload: ", e);
+-						this.socketNotificationReceived(notification, payload);
+-					}
+-				} else {
+-					this.socketNotificationReceived(notification, payload);
+-				}
++
++				/*
++				 * Inbound payloads are client-controlled and must never be used to
++				 * resolve `**SECRET_*` placeholders back into environment values,
++				 * otherwise any socket client could read secrets that
++				 * `hideConfigSecrets` is meant to hide.
++				 */
++				this.socketNotificationReceived(notification, payload);
+ 			});
+ 		});
+ 	}
+diff --git a/tests/unit/classes/node_helper_spec.js b/tests/unit/classes/node_helper_spec.js
+new file mode 100644
+index 0000000..a29c2e3
+--- /dev/null
++++ b/tests/unit/classes/node_helper_spec.js
+@@ -0,0 +1,44 @@
++const NodeHelper = require("../../../js/node_helper");
++
++describe("NodeHelper socket dispatcher", () => {
++	let originalConfig;
++
++	beforeEach(() => {
++		originalConfig = global.config;
++		process.env.SECRET_NODE_HELPER_TEST = "super-secret-value";
++	});
++
++	afterEach(() => {
++		global.config = originalConfig;
++		delete process.env.SECRET_NODE_HELPER_TEST;
++	});
++
++	const dispatch = (notification, payload) => {
++		const helper = new NodeHelper();
++		helper.setName("test");
++		const received = [];
++		helper.socketNotificationReceived = (n, p) => received.push({ n, p });
++		let onAny;
++		const fakeIo = {
++			of () {
++				return {
++					on (_ev, cb) {
++						cb({ onAny (fn) { onAny = fn; } });
++					}
++				};
++			}
++		};
++		helper.setSocketIO(fakeIo);
++		onAny(notification, payload);
++		return received;
++	};
++
++	it.each(["disabled", "allowWhitelist"])("does not expand secret placeholders in inbound payloads (cors=%s)", (cors) => {
++		global.config = { hideConfigSecrets: true, cors };
++		const payload = { instanceId: "**SECRET_NODE_HELPER_TEST**", nested: { url: "https://x/?k=**SECRET_NODE_HELPER_TEST**" } };
++		const received = dispatch("INIT", payload);
++		expect(received).toHaveLength(1);
++		expect(received[0].p).toStrictEqual(payload);
++		expect(JSON.stringify(received[0].p)).not.toContain("super-secret-value");
++	});
++});

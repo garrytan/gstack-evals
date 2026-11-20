@@ -1,0 +1,45 @@
+diff --git a/cipher/cbc_hmac.go b/cipher/cbc_hmac.go
+index 00e794d..22af241 100644
+--- a/cipher/cbc_hmac.go
++++ b/cipher/cbc_hmac.go
+@@ -102,7 +102,12 @@ func (ctx *cbcAEAD) Seal(dst, nonce, plaintext, data []byte) []byte {
+ 
+ // Open decrypts and authenticates the ciphertext.
+ func (ctx *cbcAEAD) Open(dst, nonce, ciphertext, data []byte) ([]byte, error) {
+-	if len(ciphertext) < ctx.authtagBytes {
++	if len(nonce) != ctx.blockCipher.BlockSize() {
++		return nil, errors.New("go-jose/go-jose: invalid nonce length")
++	}
++
++	// PKCS#7 padding guarantees at least one full block of ciphertext.
++	if len(ciphertext) < ctx.authtagBytes+ctx.blockCipher.BlockSize() {
+ 		return nil, errors.New("go-jose/go-jose: invalid ciphertext (too short)")
+ 	}
+ 
+diff --git a/cipher/cbc_hmac_test.go b/cipher/cbc_hmac_test.go
+index 88b2145..4d3b809 100644
+--- a/cipher/cbc_hmac_test.go
++++ b/cipher/cbc_hmac_test.go
+@@ -528,3 +528,22 @@ func BenchmarkDecryptAES256_CBCHMAC_1MB(b *testing.B) {
+ func BenchmarkDecryptAES256_CBCHMAC_64MB(b *testing.B) {
+ 	benchDecryptCBCHMAC(b, 32, 67108864)
+ }
++
++func TestOpenValidTagMalformedInput(t *testing.T) {
++	key := make([]byte, 32)
++	aead, _ := NewCBCHMAC(key, aes.NewCipher)
++	ctx := aead.(*cbcAEAD)
++	aad := []byte("aad")
++
++	cases := map[string]struct{ nonce, ciphertext []byte }{
++		"empty ciphertext": {make([]byte, 16), nil},
++		"short nonce":      {[]byte{}, make([]byte, 16)},
++		"long nonce":       {make([]byte, 32), make([]byte, 16)},
++	}
++	for name, c := range cases {
++		sealed := append(append([]byte{}, c.ciphertext...), ctx.computeAuthTag(aad, c.nonce, c.ciphertext)...)
++		if _, err := aead.Open(nil, c.nonce, sealed, aad); err == nil {
++			t.Errorf("%s: Open accepted malformed input", name)
++		}
++	}
++}

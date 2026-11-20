@@ -1,0 +1,80 @@
+diff --git a/.changeset/stale-bind-getter.md b/.changeset/stale-bind-getter.md
+new file mode 100644
+index 0000000..c4ebd66
+--- /dev/null
++++ b/.changeset/stale-bind-getter.md
+@@ -0,0 +1,5 @@
++---
++'svelte': patch
++---
++
++fix: update focused input if binding getter returns a stale value after setting
+diff --git a/packages/svelte/src/internal/client/dom/elements/bindings/input.js b/packages/svelte/src/internal/client/dom/elements/bindings/input.js
+index 67e6ff1..dafeeeb 100644
+--- a/packages/svelte/src/internal/client/dom/elements/bindings/input.js
++++ b/packages/svelte/src/internal/client/dom/elements/bindings/input.js
+@@ -39,6 +39,13 @@ export function bind_value(input, get, set = get) {
+ 		// In runes mode, respect any validation in accessors (doesn't apply in legacy mode,
+ 		// because we use mutable state which ensures the render effect always runs)
+ 		if (runes && value !== (value = get())) {
++			// The getter may return a stale value (e.g. if it depends on an each block item
++			// that is only updated once effects flush), so allow the render effect to
++			// update the input with the final value
++			if (current_batch !== null) {
++				batches.delete(current_batch);
++			}
++
+ 			var start = input.selectionStart;
+ 			var end = input.selectionEnd;
+ 
+diff --git a/packages/svelte/tests/runtime-runes/samples/bind-getter-setter-each-stale/_config.js b/packages/svelte/tests/runtime-runes/samples/bind-getter-setter-each-stale/_config.js
+new file mode 100644
+index 0000000..9ffd331
+--- /dev/null
++++ b/packages/svelte/tests/runtime-runes/samples/bind-getter-setter-each-stale/_config.js
+@@ -0,0 +1,23 @@
++import { flushSync } from 'svelte';
++import { test } from '../../test';
++
++export default test({
++	async test({ assert, target }) {
++		const input = /** @type {HTMLInputElement} */ (target.querySelector('input'));
++		input.focus();
++
++		input.value = 'ab';
++		input.dispatchEvent(new window.Event('input'));
++		flushSync();
++
++		assert.equal(input.value, 'ab');
++		assert.htmlEqual(target.innerHTML, `<p>ab</p><input>`);
++
++		input.value = 'abc';
++		input.dispatchEvent(new window.Event('input'));
++		flushSync();
++
++		assert.equal(input.value, 'abc');
++		assert.htmlEqual(target.innerHTML, `<p>abc</p><input>`);
++	}
++});
+diff --git a/packages/svelte/tests/runtime-runes/samples/bind-getter-setter-each-stale/main.svelte b/packages/svelte/tests/runtime-runes/samples/bind-getter-setter-each-stale/main.svelte
+new file mode 100644
+index 0000000..cf730d6
+--- /dev/null
++++ b/packages/svelte/tests/runtime-runes/samples/bind-getter-setter-each-stale/main.svelte
+@@ -0,0 +1,16 @@
++<script>
++	class MyStore {
++		items = $state([{ value: 'a' }]);
++
++		update = (x) => {
++			this.items = this.items.map(() => ({ value: x }));
++		};
++	}
++
++	const store = new MyStore();
++</script>
++
++{#each store.items as obj}
++	<p>{obj.value}</p>
++	<input bind:value={() => obj.value, (x) => store.update(x)} />
++{/each}

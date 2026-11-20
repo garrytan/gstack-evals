@@ -1,0 +1,1230 @@
+diff --git a/.changeset/brave-timers-assign.md b/.changeset/brave-timers-assign.md
+new file mode 100644
+index 0000000..d395502
+--- /dev/null
++++ b/.changeset/brave-timers-assign.md
+@@ -0,0 +1,5 @@
++---
++"@marko/runtime-tags": patch
++---
++
++Fix "Cannot assign to constant" error when a function assigns to and reads a `<let>` inside an intersection signal.
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/at-tags-for-loop-param-intersection-closure/__snapshots__/dom.expected/template.hydrate.js b/packages/runtime-tags/src/__tests__/fixtures/at-tags-for-loop-param-intersection-closure/__snapshots__/dom.expected/template.hydrate.js
+index bd8e222..a7791a4 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/at-tags-for-loop-param-intersection-closure/__snapshots__/dom.expected/template.hydrate.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/at-tags-for-loop-param-intersection-closure/__snapshots__/dom.expected/template.hydrate.js
+@@ -1,6 +1,6 @@
+-// size: 306 (min) 205 (brotli)
++// size: 304 (min) 204 (brotli)
+ const $expr_mult_item$item$content = _$.intersection(1, ($scope) => {
+-    const {
++    let {
+       _: { 3: mult },
+       5: item,
+     } = $scope;
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/at-tags-for-loop-param-intersection-closure/__snapshots__/dom.expected/template.js b/packages/runtime-tags/src/__tests__/fixtures/at-tags-for-loop-param-intersection-closure/__snapshots__/dom.expected/template.js
+index 7520d80..067c6a7 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/at-tags-for-loop-param-intersection-closure/__snapshots__/dom.expected/template.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/at-tags-for-loop-param-intersection-closure/__snapshots__/dom.expected/template.js
+@@ -3,7 +3,7 @@ export const $walks = /* over(1), beginChild, _list_walks, endChild, get, next(1
+ import * as _$ from "@marko/runtime-tags/debug/dom";
+ import { $setup as _list, $input_item as _list_input_item, $template as _list_template, $walks as _list_walks } from "./tags/list/index.marko";
+ const $expr_mult_item$item$content = /* @__PURE__ */_$.intersection(1, $scope => {
+-  const {
++  let {
+     _: {
+       mult
+     },
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/basic-counter-multiplier/__snapshots__/dom.expected/template.hydrate.js b/packages/runtime-tags/src/__tests__/fixtures/basic-counter-multiplier/__snapshots__/dom.expected/template.hydrate.js
+index 85c7afc..90cb197 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/basic-counter-multiplier/__snapshots__/dom.expected/template.hydrate.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/basic-counter-multiplier/__snapshots__/dom.expected/template.hydrate.js
+@@ -1,9 +1,9 @@
+-// size: 307 (min) 179 (brotli)
++// size: 305 (min) 181 (brotli)
+ const $multipliedCount = _$.value(7, ($scope, multipliedCount) =>
+     _$.data($scope[3], multipliedCount),
+   ),
+   $expr_count_multiplier = _$.intersection(6, ($scope) => {
+-    const { 4: count, 5: multiplier } = $scope;
++    let { 4: count, 5: multiplier } = $scope;
+     $multipliedCount($scope, count * multiplier);
+   }),
+   $count_effect = _$.effect("a0", ($scope, { 4: count }) =>
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/basic-counter-multiplier/__snapshots__/dom.expected/template.js b/packages/runtime-tags/src/__tests__/fixtures/basic-counter-multiplier/__snapshots__/dom.expected/template.js
+index b1ef538..0140e37 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/basic-counter-multiplier/__snapshots__/dom.expected/template.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/basic-counter-multiplier/__snapshots__/dom.expected/template.js
+@@ -3,7 +3,7 @@ export const $walks = /* get, next(1), over(1), replace, out(1), get, over(1), n
+ import * as _$ from "@marko/runtime-tags/debug/dom";
+ const $multipliedCount = /* @__PURE__ */_$.value("multipliedCount", ($scope, multipliedCount) => _$.data($scope["#text/3"], multipliedCount));
+ const $expr_count_multiplier = /* @__PURE__ */_$.intersection(6, $scope => {
+-  const {
++  let {
+     count,
+     multiplier
+   } = $scope;
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/basic-member-expression-computed/__snapshots__/dom.expected/template.hydrate.js b/packages/runtime-tags/src/__tests__/fixtures/basic-member-expression-computed/__snapshots__/dom.expected/template.hydrate.js
+index c4808a1..509a2e1 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/basic-member-expression-computed/__snapshots__/dom.expected/template.hydrate.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/basic-member-expression-computed/__snapshots__/dom.expected/template.hydrate.js
+@@ -1,4 +1,4 @@
+-// size: 277 (min) 192 (brotli)
++// size: 275 (min) 194 (brotli)
+ const $expr_items_index_effect = _$.effect(
+     "a0",
+     ($scope, { 3: items, 5: index }) =>
+@@ -9,7 +9,7 @@ const $expr_items_index_effect = _$.effect(
+       }),
+   ),
+   $expr_items_index = _$.intersection(6, ($scope) => {
+-    const { 3: items, 5: index } = $scope;
++    let { 3: items, 5: index } = $scope;
+     (_$.data($scope[1], items[index]), $expr_items_index_effect($scope));
+   }),
+   $items = _$.state(3, ($scope, items) => {
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/basic-member-expression-computed/__snapshots__/dom.expected/template.js b/packages/runtime-tags/src/__tests__/fixtures/basic-member-expression-computed/__snapshots__/dom.expected/template.js
+index 4515ddc..e4c8565 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/basic-member-expression-computed/__snapshots__/dom.expected/template.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/basic-member-expression-computed/__snapshots__/dom.expected/template.js
+@@ -10,7 +10,7 @@ const $expr_items_index_effect = _$.effect("__tests__/template.marko_0_items_ind
+   $index($scope, index = (index + 1) % newItems.length);
+ }));
+ const $expr_items_index = /* @__PURE__ */_$.intersection(6, $scope => {
+-  const {
++  let {
+     items,
+     index
+   } = $scope;
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/basic-nested-scope-for/__snapshots__/dom.expected/template.hydrate.js b/packages/runtime-tags/src/__tests__/fixtures/basic-nested-scope-for/__snapshots__/dom.expected/template.hydrate.js
+index abf9a0d..cee7259 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/basic-nested-scope-for/__snapshots__/dom.expected/template.hydrate.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/basic-nested-scope-for/__snapshots__/dom.expected/template.hydrate.js
+@@ -1,6 +1,6 @@
+-// size: 238 (min) 164 (brotli)
++// size: 236 (min) 169 (brotli)
+ const $expr_selected_num$for$content = _$.intersection(4, ($scope) => {
+-  const {
++  let {
+     _: { 1: selected },
+     3: num,
+   } = $scope;
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/basic-nested-scope-for/__snapshots__/dom.expected/template.js b/packages/runtime-tags/src/__tests__/fixtures/basic-nested-scope-for/__snapshots__/dom.expected/template.js
+index c90df86..dcda2e2 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/basic-nested-scope-for/__snapshots__/dom.expected/template.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/basic-nested-scope-for/__snapshots__/dom.expected/template.js
+@@ -2,7 +2,7 @@ export const $template = "<!><!><!>";
+ export const $walks = /* over(1), replace, over(2) */"b%c";
+ import * as _$ from "@marko/runtime-tags/debug/dom";
+ const $expr_selected_num$for$content = /* @__PURE__ */_$.intersection(4, $scope => {
+-  const {
++  let {
+     _: {
+       selected
+     },
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/batched-updates/__snapshots__/dom.expected/template.hydrate.js b/packages/runtime-tags/src/__tests__/fixtures/batched-updates/__snapshots__/dom.expected/template.hydrate.js
+index c53b749..6c6435a 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/batched-updates/__snapshots__/dom.expected/template.hydrate.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/batched-updates/__snapshots__/dom.expected/template.hydrate.js
+@@ -1,11 +1,11 @@
+-// size: 185 (min) 140 (brotli)
++// size: 183 (min) 142 (brotli)
+ const $expr_a_b_effect = _$.effect("a0", ($scope, { 2: a, 3: b }) =>
+     _$.on($scope[0], "click", function () {
+       ($a($scope, ++a), $b($scope, ++b));
+     }),
+   ),
+   $expr_a_b = _$.intersection(4, ($scope) => {
+-    const { 2: a, 3: b } = $scope;
++    let { 2: a, 3: b } = $scope;
+     (_$.data($scope[1], a + b), $expr_a_b_effect($scope));
+   }),
+   $a = _$.state(2, $expr_a_b),
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/batched-updates/__snapshots__/dom.expected/template.js b/packages/runtime-tags/src/__tests__/fixtures/batched-updates/__snapshots__/dom.expected/template.js
+index 2155c73..a8a5583 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/batched-updates/__snapshots__/dom.expected/template.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/batched-updates/__snapshots__/dom.expected/template.js
+@@ -9,7 +9,7 @@ const $expr_a_b_effect = _$.effect("__tests__/template.marko_0_a_b", ($scope, {
+   $b($scope, ++b)
+ }));
+ const $expr_a_b = /* @__PURE__ */_$.intersection(4, $scope => {
+-  const {
++  let {
+     a,
+     b
+   } = $scope;
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/component-attrs-import-value/__snapshots__/dom.expected/tags/counter.js b/packages/runtime-tags/src/__tests__/fixtures/component-attrs-import-value/__snapshots__/dom.expected/tags/counter.js
+index 9510510..d1b0a84 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/component-attrs-import-value/__snapshots__/dom.expected/tags/counter.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/component-attrs-import-value/__snapshots__/dom.expected/tags/counter.js
+@@ -2,7 +2,7 @@ export const $template = "<button> </button>";
+ export const $walks = /* get, next(1), get, out(1) */" D l";
+ import * as _$ from "@marko/runtime-tags/debug/dom";
+ const $expr_input_count = /* @__PURE__ */_$.intersection(5, $scope => {
+-  const {
++  let {
+     input,
+     count
+   } = $scope;
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/component-attrs-static-code/__snapshots__/dom.expected/tags/counter.js b/packages/runtime-tags/src/__tests__/fixtures/component-attrs-static-code/__snapshots__/dom.expected/tags/counter.js
+index 9510510..d1b0a84 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/component-attrs-static-code/__snapshots__/dom.expected/tags/counter.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/component-attrs-static-code/__snapshots__/dom.expected/tags/counter.js
+@@ -2,7 +2,7 @@ export const $template = "<button> </button>";
+ export const $walks = /* get, next(1), get, out(1) */" D l";
+ import * as _$ from "@marko/runtime-tags/debug/dom";
+ const $expr_input_count = /* @__PURE__ */_$.intersection(5, $scope => {
+-  const {
++  let {
+     input,
+     count
+   } = $scope;
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/component-attrs-static-code/__snapshots__/dom.expected/template.hydrate.js b/packages/runtime-tags/src/__tests__/fixtures/component-attrs-static-code/__snapshots__/dom.expected/template.hydrate.js
+index 2f1155a..10e0c34 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/component-attrs-static-code/__snapshots__/dom.expected/template.hydrate.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/component-attrs-static-code/__snapshots__/dom.expected/template.hydrate.js
+@@ -1,6 +1,6 @@
+-// size: 279 (min) 176 (brotli)
++// size: 277 (min) 175 (brotli)
+ const $expr_input_count = _$.intersection(5, ($scope) => {
+-    const { 3: input, 4: count } = $scope;
++    let { 3: input, 4: count } = $scope;
+     _$.data($scope[1], input.format(count));
+   }),
+   $count_effect = _$.effect("a0", ($scope, { 4: count }) =>
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/controllable-checked-value/__snapshots__/dom.expected/template.hydrate.js b/packages/runtime-tags/src/__tests__/fixtures/controllable-checked-value/__snapshots__/dom.expected/template.hydrate.js
+index 6638fd5..3f20258 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/controllable-checked-value/__snapshots__/dom.expected/template.hydrate.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/controllable-checked-value/__snapshots__/dom.expected/template.hydrate.js
+@@ -1,6 +1,6 @@
+-// size: 442 (min) 177 (brotli)
++// size: 440 (min) 178 (brotli)
+ const $expr_checkedValue_$checkedValueChange = _$.intersection(6, ($scope) => {
+-    const { 4: checkedValue, 5: $checkedValueChange } = $scope;
++    let { 4: checkedValue, 5: $checkedValueChange } = $scope;
+     (_$.controllable_input_checkedValue(
+       $scope,
+       0,
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/controllable-checked-value/__snapshots__/dom.expected/template.js b/packages/runtime-tags/src/__tests__/fixtures/controllable-checked-value/__snapshots__/dom.expected/template.js
+index 7e8b45d..ecd78f5 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/controllable-checked-value/__snapshots__/dom.expected/template.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/controllable-checked-value/__snapshots__/dom.expected/template.js
+@@ -2,7 +2,7 @@ export const $template = "<input type=radio><input type=radio><input type=radio>
+ export const $walks = /* get, over(1), get, over(1), get, over(1), next(1), get, out(1) */" b b bD l";
+ import * as _$ from "@marko/runtime-tags/debug/dom";
+ const $expr_checkedValue_$checkedValueChange = /* @__PURE__ */_$.intersection(6, $scope => {
+-  const {
++  let {
+     checkedValue,
+     $checkedValueChange
+   } = $scope;
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/controllable-checked-values-spread/__snapshots__/dom.expected/template.hydrate.js b/packages/runtime-tags/src/__tests__/fixtures/controllable-checked-values-spread/__snapshots__/dom.expected/template.hydrate.js
+index 6191351..1ffbaed 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/controllable-checked-values-spread/__snapshots__/dom.expected/template.hydrate.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/controllable-checked-values-spread/__snapshots__/dom.expected/template.hydrate.js
+@@ -1,11 +1,11 @@
+-// size: 413 (min) 211 (brotli)
++// size: 411 (min) 211 (brotli)
+ const $input_effect = _$.effect("a0", ($scope) => _$.attrsEvents($scope, 0)),
+   $input = _$.value(2, ($scope, input) => {
+     (_$.attrs($scope, 0, { type: "checkbox", ...input }),
+       $input_effect($scope));
+   }),
+   $expr_checkedValue_$checkedValueChange = _$.intersection(6, ($scope) => {
+-    const { 4: checkedValue, 5: $checkedValueChange } = $scope;
++    let { 4: checkedValue, 5: $checkedValueChange } = $scope;
+     ($input($scope[0], {
+       checkedValue: checkedValue,
+       checkedValueChange: $checkedValueChange,
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/controllable-checked-values-spread/__snapshots__/dom.expected/template.js b/packages/runtime-tags/src/__tests__/fixtures/controllable-checked-values-spread/__snapshots__/dom.expected/template.js
+index ffd0741..6e40d68 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/controllable-checked-values-spread/__snapshots__/dom.expected/template.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/controllable-checked-values-spread/__snapshots__/dom.expected/template.js
+@@ -3,7 +3,7 @@ export const $walks = /* beginChild, _checkbox_walks, endChild, beginChild, _che
+ import { $setup as _checkbox, $input as _checkbox_input, $template as _checkbox_template, $walks as _checkbox_walks } from "./tags/checkbox.marko";
+ import * as _$ from "@marko/runtime-tags/debug/dom";
+ const $expr_checkedValue_$checkedValueChange = /* @__PURE__ */_$.intersection(6, $scope => {
+-  const {
++  let {
+     checkedValue,
+     $checkedValueChange
+   } = $scope;
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/controllable-checked-values/__snapshots__/dom.expected/template.hydrate.js b/packages/runtime-tags/src/__tests__/fixtures/controllable-checked-values/__snapshots__/dom.expected/template.hydrate.js
+index 6638fd5..3f20258 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/controllable-checked-values/__snapshots__/dom.expected/template.hydrate.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/controllable-checked-values/__snapshots__/dom.expected/template.hydrate.js
+@@ -1,6 +1,6 @@
+-// size: 442 (min) 177 (brotli)
++// size: 440 (min) 178 (brotli)
+ const $expr_checkedValue_$checkedValueChange = _$.intersection(6, ($scope) => {
+-    const { 4: checkedValue, 5: $checkedValueChange } = $scope;
++    let { 4: checkedValue, 5: $checkedValueChange } = $scope;
+     (_$.controllable_input_checkedValue(
+       $scope,
+       0,
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/controllable-checked-values/__snapshots__/dom.expected/template.js b/packages/runtime-tags/src/__tests__/fixtures/controllable-checked-values/__snapshots__/dom.expected/template.js
+index b2c0648..049fb4e 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/controllable-checked-values/__snapshots__/dom.expected/template.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/controllable-checked-values/__snapshots__/dom.expected/template.js
+@@ -2,7 +2,7 @@ export const $template = "<input type=checkbox><input type=checkbox><input type=
+ export const $walks = /* get, over(1), get, over(1), get, over(1), next(1), get, out(1) */" b b bD l";
+ import * as _$ from "@marko/runtime-tags/debug/dom";
+ const $expr_checkedValue_$checkedValueChange = /* @__PURE__ */_$.intersection(6, $scope => {
+-  const {
++  let {
+     checkedValue,
+     $checkedValueChange
+   } = $scope;
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/controllable-select-dynamic-spread/__snapshots__/dom.expected/template.hydrate.js b/packages/runtime-tags/src/__tests__/fixtures/controllable-select-dynamic-spread/__snapshots__/dom.expected/template.hydrate.js
+index 4276e61..1e51aed 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/controllable-select-dynamic-spread/__snapshots__/dom.expected/template.hydrate.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/controllable-select-dynamic-spread/__snapshots__/dom.expected/template.hydrate.js
+@@ -1,4 +1,4 @@
+-// size: 482 (min) 239 (brotli)
++// size: 480 (min) 238 (brotli)
+ const $setup$tagselect$content_effect = _$.effect("a2", ($scope) => {
+     (_$.attrsEvents($scope, 0),
+       _$.attrsEvents($scope, 1),
+@@ -17,7 +17,7 @@ const $setup$tagselect$content_effect = _$.effect("a2", ($scope) => {
+   ),
+   $dynamicTag = _$.dynamicTag(0, $tagselect_content),
+   $expr_value_tag = _$.intersection(4, ($scope) => {
+-    const { 2: value, 3: tag } = $scope;
++    let { 2: value, 3: tag } = $scope;
+     $dynamicTag($scope, tag ? "select" : {}, () => ({
+       value: value,
+       valueChange: $valueChange($scope),
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/controllable-select-dynamic-spread/__snapshots__/dom.expected/template.js b/packages/runtime-tags/src/__tests__/fixtures/controllable-select-dynamic-spread/__snapshots__/dom.expected/template.js
+index 619aebb..fc06f92 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/controllable-select-dynamic-spread/__snapshots__/dom.expected/template.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/controllable-select-dynamic-spread/__snapshots__/dom.expected/template.js
+@@ -21,7 +21,7 @@ const $setup$tagselect$content = $scope => {
+ const $tagselect_content = _$.registerContent("__tests__/template.marko_1_renderer", "<option>A</option><option>B</option><option>C</option>", /* get, over(1), get, over(1), get, over(1) */" b b b", $setup$tagselect$content);
+ const $dynamicTag = /* @__PURE__ */_$.dynamicTag("#text/0", $tagselect_content);
+ const $expr_value_tag = /* @__PURE__ */_$.intersection(4, $scope => {
+-  const {
++  let {
+     value,
+     tag
+   } = $scope;
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/counter-intersection/__snapshots__/dom.expected/template.hydrate.js b/packages/runtime-tags/src/__tests__/fixtures/counter-intersection/__snapshots__/dom.expected/template.hydrate.js
+index 53a111e..c33fd41 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/counter-intersection/__snapshots__/dom.expected/template.hydrate.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/counter-intersection/__snapshots__/dom.expected/template.hydrate.js
+@@ -1,6 +1,6 @@
+-// size: 250 (min) 141 (brotli)
++// size: 248 (min) 141 (brotli)
+ const $expr_a_b = _$.intersection(7, ($scope) => {
+-    const { 5: a, 6: b } = $scope;
++    let { 5: a, 6: b } = $scope;
+     _$.data($scope[4], a + b);
+   }),
+   $a = _$.state(5, ($scope, a) => {
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/counter-intersection/__snapshots__/dom.expected/template.js b/packages/runtime-tags/src/__tests__/fixtures/counter-intersection/__snapshots__/dom.expected/template.js
+index 05a87a3..f4dfb79 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/counter-intersection/__snapshots__/dom.expected/template.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/counter-intersection/__snapshots__/dom.expected/template.js
+@@ -2,7 +2,7 @@ export const $template = "<div><button class=a> </button> + <button class=b> </b
+ export const $walks = /* next(1), get, next(1), get, out(1), over(1), get, next(1), get, out(1), over(1), replace, out(1) */"D D lb D lb%l";
+ import * as _$ from "@marko/runtime-tags/debug/dom";
+ const $expr_a_b = /* @__PURE__ */_$.intersection(7, $scope => {
+-  const {
++  let {
+     a,
+     b
+   } = $scope;
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/custom-tag-parameters-from-args/__snapshots__/dom.expected/tags/custom-tag.js b/packages/runtime-tags/src/__tests__/fixtures/custom-tag-parameters-from-args/__snapshots__/dom.expected/tags/custom-tag.js
+index f3e54fc..1d32fcd 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/custom-tag-parameters-from-args/__snapshots__/dom.expected/tags/custom-tag.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/custom-tag-parameters-from-args/__snapshots__/dom.expected/tags/custom-tag.js
+@@ -11,7 +11,7 @@ const $expr_x_y_effect = _$.effect("__tests__/tags/custom-tag.marko_0_x_y", ($sc
+ const $expr_x_y = /* @__PURE__ */_$.intersection(9, $expr_x_y_effect);
+ const $dynamicTag = /* @__PURE__ */_$.dynamicTag("#text/3", 0, 0, 1);
+ const $expr_input_content_x_y = /* @__PURE__ */_$.intersection(10, $scope => {
+-  const {
++  let {
+     input_content,
+     x,
+     y
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/custom-tag-parameters-from-args/__snapshots__/dom.expected/template.hydrate.js b/packages/runtime-tags/src/__tests__/fixtures/custom-tag-parameters-from-args/__snapshots__/dom.expected/template.hydrate.js
+index c9b664f..25f0613 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/custom-tag-parameters-from-args/__snapshots__/dom.expected/template.hydrate.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/custom-tag-parameters-from-args/__snapshots__/dom.expected/template.hydrate.js
+@@ -1,4 +1,4 @@
+-// size: 475 (min) 272 (brotli)
++// size: 473 (min) 270 (brotli)
+ const $expr_x_y_effect = _$.effect("a0", ($scope, { 7: x, 8: y }) =>
+     _$.on($scope[0], "click", function () {
+       ($x($scope, ++x), $y($scope, ++y));
+@@ -9,7 +9,7 @@ const $expr_x_y_effect = _$.effect("a0", ($scope, { 7: x, 8: y }) =>
+   $expr_input_content_x_y = _$.intersection(
+     10,
+     ($scope) => {
+-      const { 6: input_content, 7: x, 8: y } = $scope;
++      let { 6: input_content, 7: x, 8: y } = $scope;
+       $dynamicTag($scope, input_content, () => [x, y]);
+     },
+     2,
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/custom-tag-parameters-from-attributes/__snapshots__/dom.expected/tags/custom-tag.js b/packages/runtime-tags/src/__tests__/fixtures/custom-tag-parameters-from-attributes/__snapshots__/dom.expected/tags/custom-tag.js
+index 2d61e35..ddcfe8f 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/custom-tag-parameters-from-attributes/__snapshots__/dom.expected/tags/custom-tag.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/custom-tag-parameters-from-attributes/__snapshots__/dom.expected/tags/custom-tag.js
+@@ -3,7 +3,7 @@ export const $walks = /* get, next(1), get, out(1), replace, over(2) */" D l%c";
+ import * as _$ from "@marko/runtime-tags/debug/dom";
+ const $dynamicTag = /* @__PURE__ */_$.dynamicTag("#text/2");
+ const $expr_input_content_input_name_x = /* @__PURE__ */_$.intersection(8, $scope => {
+-  const {
++  let {
+     input_content,
+     input_name,
+     x
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/custom-tag-parameters-from-attributes/__snapshots__/dom.expected/template.hydrate.js b/packages/runtime-tags/src/__tests__/fixtures/custom-tag-parameters-from-attributes/__snapshots__/dom.expected/template.hydrate.js
+index 446eea2..41ede72 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/custom-tag-parameters-from-attributes/__snapshots__/dom.expected/template.hydrate.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/custom-tag-parameters-from-attributes/__snapshots__/dom.expected/template.hydrate.js
+@@ -1,9 +1,9 @@
+-// size: 437 (min) 287 (brotli)
++// size: 435 (min) 273 (brotli)
+ const $dynamicTag = _$.dynamicTag(2),
+   $expr_input_content_input_name_x = _$.intersection(
+     8,
+     ($scope) => {
+-      const { 5: input_content, 6: input_name, 7: x } = $scope;
++      let { 5: input_content, 6: input_name, 7: x } = $scope;
+       $dynamicTag($scope, input_content, () => ({
+         count: x,
+         name: input_name,
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/custom-tag-parameters-from-single-arg/__snapshots__/dom.expected/tags/custom-tag.js b/packages/runtime-tags/src/__tests__/fixtures/custom-tag-parameters-from-single-arg/__snapshots__/dom.expected/tags/custom-tag.js
+index c039e14..e411c75 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/custom-tag-parameters-from-single-arg/__snapshots__/dom.expected/tags/custom-tag.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/custom-tag-parameters-from-single-arg/__snapshots__/dom.expected/tags/custom-tag.js
+@@ -3,7 +3,7 @@ export const $walks = /* get, next(1), get, out(1), replace, over(2) */" D l%c";
+ import * as _$ from "@marko/runtime-tags/debug/dom";
+ const $dynamicTag = /* @__PURE__ */_$.dynamicTag("#text/2", 0, 0, 1);
+ const $expr_input_content_x = /* @__PURE__ */_$.intersection(7, $scope => {
+-  const {
++  let {
+     input_content,
+     x
+   } = $scope;
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/custom-tag-parameters-from-single-arg/__snapshots__/dom.expected/template.hydrate.js b/packages/runtime-tags/src/__tests__/fixtures/custom-tag-parameters-from-single-arg/__snapshots__/dom.expected/template.hydrate.js
+index a8c6f17..f3622b5 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/custom-tag-parameters-from-single-arg/__snapshots__/dom.expected/template.hydrate.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/custom-tag-parameters-from-single-arg/__snapshots__/dom.expected/template.hydrate.js
+@@ -1,7 +1,7 @@
+-// size: 330 (min) 227 (brotli)
++// size: 328 (min) 227 (brotli)
+ const $dynamicTag = _$.dynamicTag(2, 0, 0, 1),
+   $expr_input_content_x = _$.intersection(7, ($scope) => {
+-    const { 5: input_content, 6: x } = $scope;
++    let { 5: input_content, 6: x } = $scope;
+     $dynamicTag($scope, input_content, () => [x]);
+   }),
+   $x_effect = _$.effect("a0", ($scope, { 6: x }) =>
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/custom-tag-var-intersection/__snapshots__/dom.expected/tags/child.js b/packages/runtime-tags/src/__tests__/fixtures/custom-tag-var-intersection/__snapshots__/dom.expected/tags/child.js
+index 366506a..162d32d 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/custom-tag-var-intersection/__snapshots__/dom.expected/tags/child.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/custom-tag-var-intersection/__snapshots__/dom.expected/tags/child.js
+@@ -2,7 +2,7 @@ export const $template = "<button class=inc> </button>";
+ export const $walks = /* get, next(1), get, out(1) */" D l";
+ import * as _$ from "@marko/runtime-tags/debug/dom";
+ const $expr_input_extra_x = /* @__PURE__ */_$.intersection(6, $scope => {
+-  const {
++  let {
+     input_extra,
+     x
+   } = $scope;
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/custom-tag-var-intersection/__snapshots__/dom.expected/template.hydrate.js b/packages/runtime-tags/src/__tests__/fixtures/custom-tag-var-intersection/__snapshots__/dom.expected/template.hydrate.js
+index 05a0e43..d3342f4 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/custom-tag-var-intersection/__snapshots__/dom.expected/template.hydrate.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/custom-tag-var-intersection/__snapshots__/dom.expected/template.hydrate.js
+@@ -1,6 +1,6 @@
+-// size: 328 (min) 216 (brotli)
++// size: 326 (min) 221 (brotli)
+ const $expr_input_extra_x = _$.intersection(6, ($scope) => {
+-    const { 4: input_extra, 5: x } = $scope;
++    let { 4: input_extra, 5: x } = $scope;
+     _$.tagVarSignal($scope, x + input_extra);
+   }),
+   $x_effect = _$.effect("a0", ($scope, { 5: x }) =>
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/define-tag-render-args/__snapshots__/dom.expected/template.hydrate.js b/packages/runtime-tags/src/__tests__/fixtures/define-tag-render-args/__snapshots__/dom.expected/template.hydrate.js
+index 04d82bc..37ebec4 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/define-tag-render-args/__snapshots__/dom.expected/template.hydrate.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/define-tag-render-args/__snapshots__/dom.expected/template.hydrate.js
+@@ -1,4 +1,4 @@
+-// size: 442 (min) 250 (brotli)
++// size: 440 (min) 252 (brotli)
+ const $a$define$content = _$.value(4, ($scope, a) => _$.data($scope[0], a)),
+   $b$define$content = _$.value(5, ($scope, b) => _$.data($scope[1], b)),
+   $c$define$content = _$.value(6, ($scope, c) => _$.data($scope[2], c)),
+@@ -16,7 +16,7 @@ _$.registerContent(
+ );
+ const $dynamicTag = _$.dynamicTag(0, 0, 0, 1),
+   $expr_x_MyTag = _$.intersection(5, ($scope) => {
+-    const { 3: x, 4: MyTag } = $scope;
++    let { 3: x, 4: MyTag } = $scope;
+     $dynamicTag($scope, MyTag, () => [1, "Hello", x]);
+   }),
+   $x_effect = _$.effect("a1", ($scope, { 3: x }) =>
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/define-tag-render-args/__snapshots__/dom.expected/template.js b/packages/runtime-tags/src/__tests__/fixtures/define-tag-render-args/__snapshots__/dom.expected/template.js
+index 30324a2..4cdf4dc 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/define-tag-render-args/__snapshots__/dom.expected/template.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/define-tag-render-args/__snapshots__/dom.expected/template.js
+@@ -12,7 +12,7 @@ const $params2$define$content = /* @__PURE__ */_$.value("$params2", ($scope, $pa
+ const $define_content = _$.registerContent("__tests__/template.marko_1_renderer", "<div><!>|<!>|<!></div>", /* next(1), replace, over(2), replace, over(2), replace, out(1) */"D%c%c%l", 0, $params2$define$content);
+ const $dynamicTag = /* @__PURE__ */_$.dynamicTag("#text/0", 0, 0, 1);
+ const $expr_x_MyTag = /* @__PURE__ */_$.intersection(5, $scope => {
+-  const {
++  let {
+     x,
+     MyTag
+   } = $scope;
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/define-tag-render-attr-signal/__snapshots__/dom.expected/template.hydrate.js b/packages/runtime-tags/src/__tests__/fixtures/define-tag-render-attr-signal/__snapshots__/dom.expected/template.hydrate.js
+index fa6b1c5..cb77af0 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/define-tag-render-attr-signal/__snapshots__/dom.expected/template.hydrate.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/define-tag-render-attr-signal/__snapshots__/dom.expected/template.hydrate.js
+@@ -1,4 +1,4 @@
+-// size: 365 (min) 228 (brotli)
++// size: 363 (min) 230 (brotli)
+ const $number$define$content = _$.value(3, ($scope, number) =>
+     _$.data($scope[0], number),
+   ),
+@@ -11,7 +11,7 @@ const $number$define$content = _$.value(3, ($scope, number) =>
+ _$.registerContent("a0", "<div> </div>", "D l", 0, $params2$define$content);
+ const $dynamicTag = _$.dynamicTag(0),
+   $expr_x_MyTag = _$.intersection(5, ($scope) => {
+-    const { 3: x, 4: MyTag } = $scope;
++    let { 3: x, 4: MyTag } = $scope;
+     $dynamicTag($scope, MyTag, () => ({ number: x }));
+   }),
+   $x_effect = _$.effect("a1", ($scope, { 3: x }) =>
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/define-tag-render-attr-signal/__snapshots__/dom.expected/template.js b/packages/runtime-tags/src/__tests__/fixtures/define-tag-render-attr-signal/__snapshots__/dom.expected/template.js
+index 0c638e4..edafe3c 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/define-tag-render-attr-signal/__snapshots__/dom.expected/template.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/define-tag-render-attr-signal/__snapshots__/dom.expected/template.js
+@@ -7,7 +7,7 @@ const $temp$define$content = /* @__PURE__ */_$.value("$temp", ($scope, $temp) =>
+ const $define_content = _$.registerContent("__tests__/template.marko_1_renderer", "<div> </div>", /* next(1), get, out(1) */"D l", 0, $params2$define$content);
+ const $dynamicTag = /* @__PURE__ */_$.dynamicTag("#text/0");
+ const $expr_x_MyTag = /* @__PURE__ */_$.intersection(5, $scope => {
+-  const {
++  let {
+     x,
+     MyTag
+   } = $scope;
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/dynamic-content-attr/__snapshots__/dom.expected/template.hydrate.js b/packages/runtime-tags/src/__tests__/fixtures/dynamic-content-attr/__snapshots__/dom.expected/template.hydrate.js
+index 5d949b5..6d63ed0 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/dynamic-content-attr/__snapshots__/dom.expected/template.hydrate.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/dynamic-content-attr/__snapshots__/dom.expected/template.hydrate.js
+@@ -1,4 +1,4 @@
+-// size: 328 (min) 212 (brotli)
++// size: 326 (min) 213 (brotli)
+ let sideEffect = 3;
+ const $count$define$content = _$.dynamicClosureRead(1, ($scope, count) =>
+   _$.data($scope[0], count),
+@@ -7,7 +7,7 @@ _$.registerContent("a0", "<!> <!>", "%c%b", ($scope) => {
+   (_$.data($scope[1], sideEffect++), $count$define$content($scope));
+ });
+ const $expr_count_MyThing = _$.intersection(3, ($scope) => {
+-    const { 1: count, 2: MyThing } = $scope;
++    let { 1: count, 2: MyThing } = $scope;
+     _$.insertContent($scope, 0, MyThing);
+   }),
+   $count_closure = _$.dynamicClosure($count$define$content),
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/dynamic-content-attr/__snapshots__/dom.expected/template.js b/packages/runtime-tags/src/__tests__/fixtures/dynamic-content-attr/__snapshots__/dom.expected/template.js
+index 34fb2c8..1f2ccb6 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/dynamic-content-attr/__snapshots__/dom.expected/template.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/dynamic-content-attr/__snapshots__/dom.expected/template.js
+@@ -10,7 +10,7 @@ const $setup$define$content = $scope => {
+ const $count$define$content = /* @__PURE__ */_$.dynamicClosureRead("count", ($scope, count) => _$.data($scope["#text/0"], count));
+ const $define_content = _$.registerContent("__tests__/template.marko_1_renderer", "<!> <!>", /* replace, over(2), replace, over(1) */"%c%b", $setup$define$content);
+ const $expr_count_MyThing = /* @__PURE__ */_$.intersection(3, $scope => {
+-  const {
++  let {
+     count,
+     MyThing
+   } = $scope;
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/dynamic-native-dynamic-tag/__snapshots__/dom.expected/template.hydrate.js b/packages/runtime-tags/src/__tests__/fixtures/dynamic-native-dynamic-tag/__snapshots__/dom.expected/template.hydrate.js
+index 55e07c0..49ef070 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/dynamic-native-dynamic-tag/__snapshots__/dom.expected/template.hydrate.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/dynamic-native-dynamic-tag/__snapshots__/dom.expected/template.hydrate.js
+@@ -1,8 +1,8 @@
+-// size: 258 (min) 175 (brotli)
++// size: 256 (min) 176 (brotli)
+ const $tagName_content = _$.registerContent("a0", "body content", "b"),
+   $dynamicTag = _$.dynamicTag(0, $tagName_content),
+   $expr_tagName_className = _$.intersection(4, ($scope) => {
+-    const { 2: tagName, 3: className } = $scope;
++    let { 2: tagName, 3: className } = $scope;
+     $dynamicTag($scope, tagName, () => ({ class: className }));
+   }),
+   $tagName_effect = _$.effect("a1", ($scope, { 2: tagName }) =>
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/dynamic-native-dynamic-tag/__snapshots__/dom.expected/template.js b/packages/runtime-tags/src/__tests__/fixtures/dynamic-native-dynamic-tag/__snapshots__/dom.expected/template.js
+index 11d3442..d5af515 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/dynamic-native-dynamic-tag/__snapshots__/dom.expected/template.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/dynamic-native-dynamic-tag/__snapshots__/dom.expected/template.js
+@@ -4,7 +4,7 @@ import * as _$ from "@marko/runtime-tags/debug/dom";
+ const $tagName_content = _$.registerContent("__tests__/template.marko_1_renderer", "body content", /* over(1) */"b");
+ const $dynamicTag = /* @__PURE__ */_$.dynamicTag("#text/0", $tagName_content);
+ const $expr_tagName_className = /* @__PURE__ */_$.intersection(4, $scope => {
+-  const {
++  let {
+     tagName,
+     className
+   } = $scope;
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/dynamic-tag-custom-tags/__snapshots__/dom.expected/template.hydrate.js b/packages/runtime-tags/src/__tests__/fixtures/dynamic-tag-custom-tags/__snapshots__/dom.expected/template.hydrate.js
+index 5315790..627e10e 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/dynamic-tag-custom-tags/__snapshots__/dom.expected/template.hydrate.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/dynamic-tag-custom-tags/__snapshots__/dom.expected/template.hydrate.js
+@@ -1,4 +1,4 @@
+-// size: 499 (min) 253 (brotli)
++// size: 497 (min) 253 (brotli)
+ const $setup$1 = () => {},
+   $value$1 = _$.value(3, ($scope, value) => _$.data($scope[0], value)),
+   $input$1 = _$.value(2, ($scope, input) => $value$1($scope, input.value));
+@@ -21,7 +21,7 @@ var child2 = _$.createTemplate(
+ );
+ const $dynamicTag = _$.dynamicTag(0),
+   $expr_tagName_val = _$.intersection(4, ($scope) => {
+-    const { 2: tagName, 3: val } = $scope;
++    let { 2: tagName, 3: val } = $scope;
+     $dynamicTag($scope, tagName, () => ({ value: val }));
+   }),
+   $tagName_effect = _$.effect("c0", ($scope, { 2: tagName }) =>
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/dynamic-tag-custom-tags/__snapshots__/dom.expected/template.js b/packages/runtime-tags/src/__tests__/fixtures/dynamic-tag-custom-tags/__snapshots__/dom.expected/template.js
+index ece9c66..54a8e0f 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/dynamic-tag-custom-tags/__snapshots__/dom.expected/template.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/dynamic-tag-custom-tags/__snapshots__/dom.expected/template.js
+@@ -5,7 +5,7 @@ import child2 from "./tags/child2.marko";
+ import * as _$ from "@marko/runtime-tags/debug/dom";
+ const $dynamicTag = /* @__PURE__ */_$.dynamicTag("#text/0");
+ const $expr_tagName_val = /* @__PURE__ */_$.intersection(4, $scope => {
+-  const {
++  let {
+     tagName,
+     val
+   } = $scope;
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/dynamic-tag-input-intersection/__snapshots__/dom.expected/tags/my-tag.js b/packages/runtime-tags/src/__tests__/fixtures/dynamic-tag-input-intersection/__snapshots__/dom.expected/tags/my-tag.js
+index 64cefef..e4031bb 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/dynamic-tag-input-intersection/__snapshots__/dom.expected/tags/my-tag.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/dynamic-tag-input-intersection/__snapshots__/dom.expected/tags/my-tag.js
+@@ -4,7 +4,7 @@ import * as _$ from "@marko/runtime-tags/debug/dom";
+ const $define_content = /* @__PURE__ */_$.createContent("__tests__/tags/my-tag.marko_1_renderer", "default", /* over(1) */"b");
+ const $dynamicTag = /* @__PURE__ */_$.dynamicTag("#text/0");
+ const $expr_inputAs_inputClass_htmlInput_content = /* @__PURE__ */_$.intersection(9, $scope => {
+-  const {
++  let {
+     inputAs,
+     inputClass,
+     htmlInput,
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/dynamic-tag-input-intersection/__snapshots__/dom.expected/template.hydrate.js b/packages/runtime-tags/src/__tests__/fixtures/dynamic-tag-input-intersection/__snapshots__/dom.expected/template.hydrate.js
+index 13ea72c..5a2bff4 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/dynamic-tag-input-intersection/__snapshots__/dom.expected/template.hydrate.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/dynamic-tag-input-intersection/__snapshots__/dom.expected/template.hydrate.js
+@@ -1,9 +1,9 @@
+-// size: 250 (min) 178 (brotli)
++// size: 248 (min) 181 (brotli)
+ const $dynamicTag = _$.dynamicTag(0),
+   $expr_inputAs_inputClass_htmlInput_content = _$.intersection(
+     9,
+     ($scope) => {
+-      const { 3: inputAs, 4: inputClass, 6: htmlInput, 8: content } = $scope;
++      let { 3: inputAs, 4: inputClass, 6: htmlInput, 8: content } = $scope;
+       $dynamicTag($scope, inputAs || "div", () => ({
+         ...htmlInput,
+         class: ["foo", inputClass],
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/let-tag-controllable-dynamic-change-handler/__snapshots__/dom.expected/template.hydrate.js b/packages/runtime-tags/src/__tests__/fixtures/let-tag-controllable-dynamic-change-handler/__snapshots__/dom.expected/template.hydrate.js
+index d8de06b..b48360e 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/let-tag-controllable-dynamic-change-handler/__snapshots__/dom.expected/template.hydrate.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/let-tag-controllable-dynamic-change-handler/__snapshots__/dom.expected/template.hydrate.js
+@@ -1,4 +1,4 @@
+-// size: 346 (min) 198 (brotli)
++// size: 344 (min) 198 (brotli)
+ const $y_effect = _$.effect("a1", ($scope, { 7: y }) =>
+     _$.on($scope[0], "click", function () {
+       $y($scope, ++y);
+@@ -8,7 +8,7 @@ const $y_effect = _$.effect("a1", ($scope, { 7: y }) =>
+     (_$.data($scope[2], y), $y_effect($scope));
+   }),
+   $expr_x_yChange = _$.intersection(6, ($scope) => {
+-    const { 4: x, 5: yChange } = $scope;
++    let { 4: x, 5: yChange } = $scope;
+     $y($scope, x, yChange);
+   }),
+   $x = _$.state(4, ($scope, x) => {
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/let-tag-controllable-dynamic-change-handler/__snapshots__/dom.expected/template.js b/packages/runtime-tags/src/__tests__/fixtures/let-tag-controllable-dynamic-change-handler/__snapshots__/dom.expected/template.js
+index 263b3df..8446570 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/let-tag-controllable-dynamic-change-handler/__snapshots__/dom.expected/template.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/let-tag-controllable-dynamic-change-handler/__snapshots__/dom.expected/template.js
+@@ -11,7 +11,7 @@ const $y = /* @__PURE__ */_$.state("y/7", ($scope, y) => {
+   $y_effect($scope);
+ });
+ const $expr_x_yChange = /* @__PURE__ */_$.intersection(6, $scope => {
+-  const {
++  let {
+     x,
+     yChange
+   } = $scope;
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/let-tag-controllable-id/__snapshots__/dom.expected/template.hydrate.js b/packages/runtime-tags/src/__tests__/fixtures/let-tag-controllable-id/__snapshots__/dom.expected/template.hydrate.js
+index 09441bd..fdd7b57 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/let-tag-controllable-id/__snapshots__/dom.expected/template.hydrate.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/let-tag-controllable-id/__snapshots__/dom.expected/template.hydrate.js
+@@ -1,4 +1,4 @@
+-// size: 272 (min) 170 (brotli)
++// size: 270 (min) 170 (brotli)
+ const $y_effect = _$.effect("a1", ($scope, { 6: y }) =>
+     _$.on($scope[0], "click", function () {
+       $y($scope, ++y);
+@@ -8,7 +8,7 @@ const $y_effect = _$.effect("a1", ($scope, { 6: y }) =>
+     (_$.data($scope[2], y), $y_effect($scope));
+   }),
+   $expr_x_handler = _$.intersection(5, ($scope) => {
+-    const { 3: x, 4: handler } = $scope;
++    let { 3: x, 4: handler } = $scope;
+     $y($scope, x, handler);
+   }),
+   $x = _$.state(3, ($scope, x) => {
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/let-tag-controllable-id/__snapshots__/dom.expected/template.js b/packages/runtime-tags/src/__tests__/fixtures/let-tag-controllable-id/__snapshots__/dom.expected/template.js
+index 270104f..f45b1c6 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/let-tag-controllable-id/__snapshots__/dom.expected/template.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/let-tag-controllable-id/__snapshots__/dom.expected/template.js
+@@ -11,7 +11,7 @@ const $y = /* @__PURE__ */_$.state("y/6", ($scope, y) => {
+   $y_effect($scope);
+ });
+ const $expr_x_handler = /* @__PURE__ */_$.intersection(5, $scope => {
+-  const {
++  let {
+     x,
+     handler
+   } = $scope;
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-assign/__snapshots__/.name-cache.json b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-assign/__snapshots__/.name-cache.json
+new file mode 100644
+index 0000000..8afef7f
+--- /dev/null
++++ b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-assign/__snapshots__/.name-cache.json
+@@ -0,0 +1,14 @@
++{
++  "vars": {
++    "props": {
++      "$_$": "t",
++      "$init": "e",
++      "$$reset2_effect": "o",
++      "$$reset2": "r",
++      "$$expr_input_duration_timer_count": "a",
++      "$$timer": "m",
++      "$$count": "i",
++      "$$reset": "n"
++    }
++  }
++}
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-assign/__snapshots__/csr-sanitized.expected.md b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-assign/__snapshots__/csr-sanitized.expected.md
+new file mode 100644
+index 0000000..93c2191
+--- /dev/null
++++ b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-assign/__snapshots__/csr-sanitized.expected.md
+@@ -0,0 +1,18 @@
++# Render `{"duration":0}`
++
++```html
++<button>
++  0
++</button>
++```
++
++
++# Render
++```js
++container.querySelector("button").click();
++```
++```html
++<button>
++  0
++</button>
++```
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-assign/__snapshots__/csr.expected.md b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-assign/__snapshots__/csr.expected.md
+new file mode 100644
+index 0000000..06d792e
+--- /dev/null
++++ b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-assign/__snapshots__/csr.expected.md
+@@ -0,0 +1,22 @@
++# Render `{"duration":0}`
++
++```html
++<button>
++  0
++</button>
++```
++
++# Mutations
++```
++INSERT button
++```
++
++# Render
++```js
++container.querySelector("button").click();
++```
++```html
++<button>
++  0
++</button>
++```
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-assign/__snapshots__/dom.expected/template.hydrate.js b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-assign/__snapshots__/dom.expected/template.hydrate.js
+new file mode 100644
+index 0000000..be6089f
+--- /dev/null
++++ b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-assign/__snapshots__/dom.expected/template.hydrate.js
+@@ -0,0 +1,29 @@
++// size: 303 (min) 206 (brotli)
++const $reset2_effect = _$.effect("a1", ($scope, { 8: reset }) =>
++    _$.on($scope[0], "click", reset),
++  ),
++  $reset2 = _$.value(8, $reset2_effect),
++  $expr_input_duration_timer_count = _$.intersection(
++    7,
++    ($scope) => {
++      let { 4: input_duration, 5: timer, 6: count } = $scope;
++      $reset2($scope, $reset($scope));
++    },
++    2,
++  ),
++  $timer = _$.state(5, $expr_input_duration_timer_count),
++  $count = _$.state(6, ($scope, count) => {
++    (_$.data($scope[1], count), $expr_input_duration_timer_count($scope));
++  });
++function $reset($scope, { 4: input_duration, 5: timer, 6: count } = $scope) {
++  return () => {
++    (timer && clearTimeout(timer),
++      $timer(
++        $scope,
++        (timer = setTimeout(() => {
++          $count($scope, ++count);
++        }, input_duration)),
++      ));
++  };
++}
++(_$.register("a0", $reset), init());
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-assign/__snapshots__/dom.expected/template.js b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-assign/__snapshots__/dom.expected/template.js
+new file mode 100644
+index 0000000..64142a1
+--- /dev/null
++++ b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-assign/__snapshots__/dom.expected/template.js
+@@ -0,0 +1,42 @@
++export const $template = "<button> </button>";
++export const $walks = /* get, next(1), get, out(1) */" D l";
++import * as _$ from "@marko/runtime-tags/debug/dom";
++const $reset2_effect = _$.effect("__tests__/template.marko_0_reset", ($scope, {
++  reset
++}) => _$.on($scope["#button/0"], "click", reset));
++const $reset2 = /* @__PURE__ */_$.value("reset", $reset2_effect);
++const $expr_input_duration_timer_count = /* @__PURE__ */_$.intersection(7, $scope => {
++  let {
++    input_duration,
++    timer,
++    count
++  } = $scope;
++  $reset2($scope, $reset($scope));
++}, 2);
++const $timer = /* @__PURE__ */_$.state("timer/5", $expr_input_duration_timer_count);
++const $count = /* @__PURE__ */_$.state("count/6", ($scope, count) => {
++  _$.data($scope["#text/1"], count);
++  $expr_input_duration_timer_count($scope);
++});
++export function $setup($scope) {
++  $timer($scope, 0);
++  $count($scope, 0);
++}
++export const $input_duration = /* @__PURE__ */_$.value("input_duration", $expr_input_duration_timer_count);
++export const $input = /* @__PURE__ */_$.value("input", ($scope, input) => $input_duration($scope, input.duration));
++function $reset($scope, {
++  input_duration,
++  timer,
++  count
++} = $scope) {
++  return () => {
++    if (timer) {
++      clearTimeout(timer);
++    }
++    $timer($scope, timer = setTimeout(() => {
++      $count($scope, ++count)
++    }, input_duration));
++  };
++}
++_$.register("__tests__/template.marko_0/reset", $reset);
++export default /* @__PURE__ */_$.createTemplate("__tests__/template.marko", $template, $walks, $setup, $input);
+\ No newline at end of file
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-assign/__snapshots__/html.expected/template.js b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-assign/__snapshots__/html.expected/template.js
+new file mode 100644
+index 0000000..d2b9f09
+--- /dev/null
++++ b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-assign/__snapshots__/html.expected/template.js
+@@ -0,0 +1,28 @@
++import * as _$ from "@marko/runtime-tags/debug/html";
++export default _$.createTemplate("__tests__/template.marko", input => {
++  const $scope0_id = _$.nextScopeId();
++  let timer = 0;
++  let count = 0;
++  const reset = _$.register(() => {
++    if (timer) {
++      clearTimeout(timer);
++    }
++    timer = setTimeout(() => {
++      count++;
++    }, input.duration);
++  }, "__tests__/template.marko_0/reset", $scope0_id);
++  _$.write(`<button>${_$.escapeXML(count)}${_$.markResumeNode($scope0_id, "#text/1")}</button>${_$.markResumeNode($scope0_id, "#button/0")}`);
++  _$.writeEffect($scope0_id, "__tests__/template.marko_0_reset");
++  _$.writeScope($scope0_id, {
++    input_duration: input.duration,
++    timer,
++    count,
++    reset
++  }, "__tests__/template.marko", 0, {
++    input_duration: ["input.duration"],
++    timer: "5:6",
++    count: "6:6",
++    reset: "8:8"
++  });
++  _$.resumeClosestBranch($scope0_id);
++});
+\ No newline at end of file
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-assign/__snapshots__/resume-sanitized.expected.md b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-assign/__snapshots__/resume-sanitized.expected.md
+new file mode 100644
+index 0000000..93c2191
+--- /dev/null
++++ b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-assign/__snapshots__/resume-sanitized.expected.md
+@@ -0,0 +1,18 @@
++# Render `{"duration":0}`
++
++```html
++<button>
++  0
++</button>
++```
++
++
++# Render
++```js
++container.querySelector("button").click();
++```
++```html
++<button>
++  0
++</button>
++```
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-assign/__snapshots__/resume.expected.md b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-assign/__snapshots__/resume.expected.md
+new file mode 100644
+index 0000000..8f63e2a
+--- /dev/null
++++ b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-assign/__snapshots__/resume.expected.md
+@@ -0,0 +1,60 @@
++# Render `{"duration":0}`
++
++```html
++<html>
++  <head />
++  <body>
++    <button>
++      0
++      <!--M_*1 #text/1-->
++    </button>
++    <!--M_*1 #button/0-->
++    <script>
++      WALKER_RUNTIME("M")("_");
++      M._.r = [_ =&gt; (_.b = [0, _.a = {
++          input_duration: 0,
++          timer: 0,
++          count: 0
++        }], _.a.reset = _._[
++          "__tests__/template.marko_0/reset"
++          ](_.a), _.b),
++        "__tests__/template.marko_0_reset",
++        1
++      ];
++      M._.w()
++    </script>
++  </body>
++</html>
++```
++
++
++# Render
++```js
++container.querySelector("button").click();
++```
++```html
++<html>
++  <head />
++  <body>
++    <button>
++      0
++      <!--M_*1 #text/1-->
++    </button>
++    <!--M_*1 #button/0-->
++    <script>
++      WALKER_RUNTIME("M")("_");
++      M._.r = [_ =&gt; (_.b = [0, _.a = {
++          input_duration: 0,
++          timer: 0,
++          count: 0
++        }], _.a.reset = _._[
++          "__tests__/template.marko_0/reset"
++          ](_.a), _.b),
++        "__tests__/template.marko_0_reset",
++        1
++      ];
++      M._.w()
++    </script>
++  </body>
++</html>
++```
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-assign/__snapshots__/ssr-sanitized.expected.md b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-assign/__snapshots__/ssr-sanitized.expected.md
+new file mode 100644
+index 0000000..7245f72
+--- /dev/null
++++ b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-assign/__snapshots__/ssr-sanitized.expected.md
+@@ -0,0 +1,6 @@
++# Render End
++```html
++<button>
++  0
++</button>
++```
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-assign/__snapshots__/ssr.expected.md b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-assign/__snapshots__/ssr.expected.md
+new file mode 100644
+index 0000000..064c994
+--- /dev/null
++++ b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-assign/__snapshots__/ssr.expected.md
+@@ -0,0 +1,45 @@
++# Write
++```html
++  <button>0<!--M_*1 #text/1--></button><!--M_*1 #button/0--><script>WALKER_RUNTIME("M")("_");M._.r=[_=>(_.b=[0,_.a={input_duration:0,timer:0,count:0}],_.a.reset=_._["__tests__/template.marko_0/reset"](_.a),_.b),"__tests__/template.marko_0_reset",1];M._.w()</script>
++```
++
++# Render End
++```html
++<html>
++  <head />
++  <body>
++    <button>
++      0
++      <!--M_*1 #text/1-->
++    </button>
++    <!--M_*1 #button/0-->
++    <script>
++      WALKER_RUNTIME("M")("_");
++      M._.r = [_ =&gt; (_.b = [0, _.a = {
++          input_duration: 0,
++          timer: 0,
++          count: 0
++        }], _.a.reset = _._[
++          "__tests__/template.marko_0/reset"
++          ](_.a), _.b),
++        "__tests__/template.marko_0_reset",
++        1
++      ];
++      M._.w()
++    </script>
++  </body>
++</html>
++```
++
++# Mutations
++```
++INSERT html
++INSERT html/head
++INSERT html/body
++INSERT html/body/button
++INSERT html/body/button/#text
++INSERT html/body/button/#comment
++INSERT html/body/#comment
++INSERT html/body/script
++INSERT html/body/script/#text
++```
+\ No newline at end of file
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-assign/template.marko b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-assign/template.marko
+new file mode 100644
+index 0000000..5b91800
+--- /dev/null
++++ b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-assign/template.marko
+@@ -0,0 +1,18 @@
++export interface Input {
++  duration: number;
++}
++
++<let/timer=(0 as unknown as ReturnType<typeof setTimeout>)>
++<let/count=0>
++
++<const/reset=() => {
++  if (timer) {
++    clearTimeout(timer);
++  }
++
++  timer = setTimeout(() => {
++    count++;
++  }, input.duration);
++}>
++
++<button onClick=reset>${count}</button>
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-assign/test.ts b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-assign/test.ts
+new file mode 100644
+index 0000000..dd491c7
+--- /dev/null
++++ b/packages/runtime-tags/src/__tests__/fixtures/let-tag-ts-assign/test.ts
+@@ -0,0 +1,5 @@
++export const steps = [{ duration: 0 }, click];
++
++function click(container: Element) {
++  container.querySelector("button")!.click();
++}
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/returns-within-define-tag/__snapshots__/dom.expected/template.hydrate.js b/packages/runtime-tags/src/__tests__/fixtures/returns-within-define-tag/__snapshots__/dom.expected/template.hydrate.js
+index 2ced446..407f122 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/returns-within-define-tag/__snapshots__/dom.expected/template.hydrate.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/returns-within-define-tag/__snapshots__/dom.expected/template.hydrate.js
+@@ -1,6 +1,6 @@
+-// size: 1194 (min) 427 (brotli)
++// size: 1186 (min) 426 (brotli)
+ const $expr_value_call$define$content2 = _$.intersection(4, ($scope) => {
+-    const { 2: value, 3: call } = $scope;
++    let { 2: value, 3: call } = $scope;
+     _$.tagVarSignal($scope, $_return2($scope));
+   }),
+   $call$define$content2 = _$.state(3, $expr_value_call$define$content2),
+@@ -21,7 +21,7 @@ _$.registerContent(
+   $params3$define$content,
+ );
+ const $expr_value_call$define$content = _$.intersection(4, ($scope) => {
+-    const { 2: value, 3: call } = $scope;
++    let { 2: value, 3: call } = $scope;
+     _$.tagVarSignal($scope, $_return($scope));
+   }),
+   $call$define$content = _$.state(3, $expr_value_call$define$content),
+@@ -43,7 +43,7 @@ _$.registerContent(
+ );
+ const $dynamicTag = _$.dynamicTag(0, 0, () => $onClickOnce2),
+   $expr_Once_clickOnceCount = _$.intersection(10, ($scope) => {
+-    const { 8: Once, 9: clickOnceCount } = $scope;
++    let { 8: Once, 9: clickOnceCount } = $scope;
+     $dynamicTag($scope, Once, () => ({ value: $onClickOnce($scope) }));
+   }),
+   $clickOnceCount = _$.state(9, ($scope, clickOnceCount) => {
+@@ -51,7 +51,7 @@ const $dynamicTag = _$.dynamicTag(0, 0, () => $onClickOnce2),
+   }),
+   $dynamicTag2 = _$.dynamicTag(4, 0, () => $onClickTwice2),
+   $expr_Twice_clickTwiceCount = _$.intersection(14, ($scope) => {
+-    const { 12: Twice, 13: clickTwiceCount } = $scope;
++    let { 12: Twice, 13: clickTwiceCount } = $scope;
+     $dynamicTag2($scope, Twice, () => ({ value: $onClickTwice($scope) }));
+   }),
+   $clickTwiceCount = _$.state(13, ($scope, clickTwiceCount) => {
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/returns-within-define-tag/__snapshots__/dom.expected/template.js b/packages/runtime-tags/src/__tests__/fixtures/returns-within-define-tag/__snapshots__/dom.expected/template.js
+index b157567..1828c59 100644
+--- a/packages/runtime-tags/src/__tests__/fixtures/returns-within-define-tag/__snapshots__/dom.expected/template.js
++++ b/packages/runtime-tags/src/__tests__/fixtures/returns-within-define-tag/__snapshots__/dom.expected/template.js
+@@ -2,7 +2,7 @@ export const $template = "<!><!><button class=once> </button><!><button class=tw
+ export const $walks = /* over(1), dynamicTagWithVar, over(1), get, next(1), get, out(1), dynamicTagWithVar, over(1), get, next(1), get, out(1) */"b1b D l1b D l";
+ import * as _$ from "@marko/runtime-tags/debug/dom";
+ const $expr_value_call$define$content2 = /* @__PURE__ */_$.intersection(4, $scope => {
+-  const {
++  let {
+     value,
+     call
+   } = $scope;
+@@ -17,7 +17,7 @@ const $params3$define$content = /* @__PURE__ */_$.value("$params3", ($scope, $pa
+ const $temp2$define$content = /* @__PURE__ */_$.value("$temp2", ($scope, $temp2) => $value$define$content2($scope, $temp2.value));
+ const $define_content2 = _$.registerContent("__tests__/template.marko_2_renderer", 0, 0, $setup$define$content2, $params3$define$content);
+ const $expr_value_call$define$content = /* @__PURE__ */_$.intersection(4, $scope => {
+-  const {
++  let {
+     value,
+     call
+   } = $scope;
+@@ -33,7 +33,7 @@ const $temp$define$content = /* @__PURE__ */_$.value("$temp", ($scope, $temp) =>
+ const $define_content = _$.registerContent("__tests__/template.marko_1_renderer", 0, 0, $setup$define$content, $params2$define$content);
+ const $dynamicTag = /* @__PURE__ */_$.dynamicTag("#text/0", 0, () => $onClickOnce2);
+ const $expr_Once_clickOnceCount = /* @__PURE__ */_$.intersection(10, $scope => {
+-  const {
++  let {
+     Once,
+     clickOnceCount
+   } = $scope;
+@@ -48,7 +48,7 @@ const $clickOnceCount = /* @__PURE__ */_$.state("clickOnceCount/9", ($scope, cli
+ });
+ const $dynamicTag2 = /* @__PURE__ */_$.dynamicTag("#text/4", 0, () => $onClickTwice2);
+ const $expr_Twice_clickTwiceCount = /* @__PURE__ */_$.intersection(14, $scope => {
+-  const {
++  let {
+     Twice,
+     clickTwiceCount
+   } = $scope;
+diff --git a/packages/runtime-tags/src/translator/util/signals.ts b/packages/runtime-tags/src/translator/util/signals.ts
+index 1d72221..b99d364 100644
+--- a/packages/runtime-tags/src/translator/util/signals.ts
++++ b/packages/runtime-tags/src/translator/util/signals.ts
+@@ -505,12 +505,22 @@ export function getSignalFn(signal: Signal): t.Expression {
+ 
+   if (isIntersection && signal.renderReferencedBindings) {
+     signal.render.unshift(
+-      t.variableDeclaration("const", [
+-        t.variableDeclarator(
+-          createScopeReadPattern(section, signal.renderReferencedBindings),
+-          scopeIdentifier,
+-        ),
+-      ]),
++      // Assignments in functions which also read the binding are kept
++      // (eg `timer = x`) so the destructured value must be reassignable.
++      t.variableDeclaration(
++        find(
++          signal.renderReferencedBindings,
++          (binding) => !!binding.assignmentSections,
++        )
++          ? "let"
++          : "const",
++        [
++          t.variableDeclarator(
++            createScopeReadPattern(section, signal.renderReferencedBindings),
++            scopeIdentifier,
++          ),
++        ],
++      ),
+     );
+   }
+ 
+diff --git a/packages/translator-interop/src/__tests__/fixtures/custom-tag-parameters-from-args/__snapshots__/dom.expected/components/custom-tag.js b/packages/translator-interop/src/__tests__/fixtures/custom-tag-parameters-from-args/__snapshots__/dom.expected/components/custom-tag.js
+index 0f83ed8..549b3e5 100644
+--- a/packages/translator-interop/src/__tests__/fixtures/custom-tag-parameters-from-args/__snapshots__/dom.expected/components/custom-tag.js
++++ b/packages/translator-interop/src/__tests__/fixtures/custom-tag-parameters-from-args/__snapshots__/dom.expected/components/custom-tag.js
+@@ -11,7 +11,7 @@ const $expr_x_y_effect = _$.effect("__tests__/components/custom-tag.marko_0_x_y"
+ const $expr_x_y = /* @__PURE__ */_$.intersection(9, $expr_x_y_effect);
+ const $dynamicTag = /* @__PURE__ */_$.dynamicTag("#text/3", 0, 0, 1);
+ const $expr_input_content_x_y = /* @__PURE__ */_$.intersection(10, $scope => {
+-  const {
++  let {
+     input_content,
+     x,
+     y
+diff --git a/packages/translator-interop/src/__tests__/fixtures/interop-tag-params-class-to-tags/__snapshots__/dom.expected/components/tags-layout.js b/packages/translator-interop/src/__tests__/fixtures/interop-tag-params-class-to-tags/__snapshots__/dom.expected/components/tags-layout.js
+index cc61652..de03d32 100644
+--- a/packages/translator-interop/src/__tests__/fixtures/interop-tag-params-class-to-tags/__snapshots__/dom.expected/components/tags-layout.js
++++ b/packages/translator-interop/src/__tests__/fixtures/interop-tag-params-class-to-tags/__snapshots__/dom.expected/components/tags-layout.js
+@@ -3,7 +3,7 @@ export const $walks = /* get, next(1), get, out(1), next(1), replace, out(1) */"
+ import * as _$ from "@marko/runtime-tags/debug/dom";
+ const $dynamicTag = /* @__PURE__ */_$.dynamicTag("#text/2", 0, 0, 1);
+ const $expr_input_content_count = /* @__PURE__ */_$.intersection(7, $scope => {
+-  const {
++  let {
+     input_content,
+     count
+   } = $scope;
+diff --git a/packages/translator-interop/src/__tests__/fixtures/interop-tag-params-tags-to-class/__snapshots__/dom.expected/template.js b/packages/translator-interop/src/__tests__/fixtures/interop-tag-params-tags-to-class/__snapshots__/dom.expected/template.js
+index 644f903..9787cd2 100644
+--- a/packages/translator-interop/src/__tests__/fixtures/interop-tag-params-tags-to-class/__snapshots__/dom.expected/template.js
++++ b/packages/translator-interop/src/__tests__/fixtures/interop-tag-params-tags-to-class/__snapshots__/dom.expected/template.js
+@@ -6,7 +6,7 @@ import _classLayout from "./components/class-layout.marko";
+ _$.register("__tests__/components/class-layout.marko", _classLayout);
+ const $message$classlayout$content = /* @__PURE__ */_$.value("message", ($scope, message) => _$.data($scope["#text/0"], message));
+ const $expr_multiplier_baseCount$classlayout$content = /* @__PURE__ */_$.intersection(7, $scope => {
+-  const {
++  let {
+     _: {
+       multiplier
+     },

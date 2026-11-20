@@ -1,0 +1,52 @@
+diff --git a/internal/notification/types.go b/internal/notification/types.go
+index 175c8cf..0fa18b4 100644
+--- a/internal/notification/types.go
++++ b/internal/notification/types.go
+@@ -58,11 +58,11 @@ func extractMessage(l container.LogEvent) any {
+ 	case string:
+ 		return container.StripANSI(v)
+ 	case []container.LogFragment:
+-		cleaned := make([]container.LogFragment, len(v))
++		lines := make([]string, len(v))
+ 		for i, fragment := range v {
+-			cleaned[i] = container.LogFragment{Message: container.StripANSI(fragment.Message)}
++			lines[i] = container.StripANSI(fragment.Message)
+ 		}
+-		return cleaned
++		return strings.Join(lines, "\n")
+ 	case *orderedmap.OrderedMap[string, any]:
+ 		// Convert OrderedMap to regular map for expr compatibility
+ 		result := make(map[string]any)
+diff --git a/internal/notification/types_test.go b/internal/notification/types_test.go
+index ebec716..e7989c5 100644
+--- a/internal/notification/types_test.go
++++ b/internal/notification/types_test.go
+@@ -368,3 +368,28 @@ func TestFromLogEvent_OrderedMapConversion(t *testing.T) {
+ 		})
+ 	}
+ }
++
++func TestFromLogEvent_GroupedLogMatchesContains(t *testing.T) {
++	logEvent := container.LogEvent{
++		Type: container.LogTypeGroup,
++		Message: []container.LogFragment{
++			{Message: "2026-04-11T07:46:48.304Z  INFO 1 --- [backend] Sincronizado lote de 1000 registros (Total: 710000)"},
++			{Message: "\x1b[32m2026-04-11T07:46:48.504Z  INFO 1 --- [backend] Sincronizado lote de 1000 registros (Total: 711000)\x1b[0m"},
++		},
++	}
++
++	notificationLog := FromLogEvent(logEvent)
++	msg, ok := notificationLog.Message.(string)
++	require.True(t, ok, "grouped message should be converted to a string")
++	assert.Equal(t,
++		"2026-04-11T07:46:48.304Z  INFO 1 --- [backend] Sincronizado lote de 1000 registros (Total: 710000)\n"+
++			"2026-04-11T07:46:48.504Z  INFO 1 --- [backend] Sincronizado lote de 1000 registros (Total: 711000)",
++		msg)
++
++	for _, expression := range []string{`message contains "backend"`, `message contains "711000"`} {
++		program, err := expr.Compile(expression, expr.Env(types.NotificationLog{}), expr.AsBool())
++		require.NoError(t, err)
++		sub := &Subscription{LogProgram: program}
++		assert.True(t, sub.MatchesLog(notificationLog), expression)
++	}
++}

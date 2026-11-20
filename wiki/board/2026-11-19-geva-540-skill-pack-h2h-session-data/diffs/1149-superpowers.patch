@@ -1,0 +1,76 @@
+diff --git a/registry/remote/utils.go b/registry/remote/utils.go
+index 797169f..8d95607 100644
+--- a/registry/remote/utils.go
++++ b/registry/remote/utils.go
+@@ -51,10 +51,22 @@ func parseLink(resp *http.Response) (string, error) {
+ 		link = link[1:i]
+ 	}
+ 
+-	linkURL, err := resp.Request.URL.Parse(link)
++	baseURL := resp.Request.URL
++	linkURL, err := baseURL.Parse(link)
+ 	if err != nil {
+ 		return "", err
+ 	}
++	// prevent following the link to a different host or scheme, which could
++	// be abused for server-side request forgery (SSRF) or downgrade attacks.
++	if !strings.EqualFold(linkURL.Scheme, baseURL.Scheme) {
++		return "", fmt.Errorf("invalid next link %q: scheme %q does not match the request scheme %q", link, linkURL.Scheme, baseURL.Scheme)
++	}
++	if !strings.EqualFold(linkURL.Host, baseURL.Host) {
++		return "", fmt.Errorf("invalid next link %q: host %q does not match the request host %q", link, linkURL.Host, baseURL.Host)
++	}
++	if linkURL.User != nil {
++		return "", fmt.Errorf("invalid next link %q: user info is not allowed", link)
++	}
+ 	return linkURL.String(), nil
+ }
+ 
+diff --git a/registry/remote/utils_test.go b/registry/remote/utils_test.go
+index ef36434..2a1809f 100644
+--- a/registry/remote/utils_test.go
++++ b/registry/remote/utils_test.go
+@@ -46,10 +46,40 @@ func Test_parseLink(t *testing.T) {
+ 			want:   "https://localhost:5000/v2/hello-world/tags/list?last=latest&n=1",
+ 		},
+ 		{
+-			name:   "other domain",
++			name:   "absolute link, same host",
+ 			url:    "https://localhost:5000/v2/_catalog",
+-			header: `<https://localhost:5001/v2/_catalog?last=alpine&n=1>; rel="next"`,
+-			want:   "https://localhost:5001/v2/_catalog?last=alpine&n=1",
++			header: `<https://localhost:5000/v2/_catalog?last=alpine&n=1>; rel="next"`,
++			want:   "https://localhost:5000/v2/_catalog?last=alpine&n=1",
++		},
++		{
++			name:    "other port",
++			url:     "https://localhost:5000/v2/_catalog",
++			header:  `<https://localhost:5001/v2/_catalog?last=alpine&n=1>; rel="next"`,
++			wantErr: true,
++		},
++		{
++			name:    "other domain",
++			url:     "https://registry.example.com/v2/repo/tags/list",
++			header:  `<http://169.254.169.254/latest/meta-data/>; rel="next"`,
++			wantErr: true,
++		},
++		{
++			name:    "scheme-relative link to other domain",
++			url:     "https://registry.example.com/v2/repo/tags/list",
++			header:  `<//internal-service:8080/admin>; rel="next"`,
++			wantErr: true,
++		},
++		{
++			name:    "scheme downgrade",
++			url:     "https://localhost:5000/v2/_catalog",
++			header:  `<http://localhost:5000/v2/_catalog?last=alpine&n=1>; rel="next"`,
++			wantErr: true,
++		},
++		{
++			name:    "user info in link",
++			url:     "https://localhost:5000/v2/_catalog",
++			header:  `<https://user:pass@localhost:5000/v2/_catalog?last=alpine&n=1>; rel="next"`,
++			wantErr: true,
+ 		},
+ 		{
+ 			name:    "invalid header, missing <",

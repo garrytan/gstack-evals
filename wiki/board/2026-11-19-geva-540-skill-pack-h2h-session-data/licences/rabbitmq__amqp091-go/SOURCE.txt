@@ -1,0 +1,3 @@
+https://github.com/rabbitmq/amqp091-go at f8fd94747de318e33dd7ec37caacb9bd9594646c
+Licence at the freeze-date read (prereg o-, b1- and b2-licences.json): NOASSERTION
+Root licence and notice files at that commit: LICENSE

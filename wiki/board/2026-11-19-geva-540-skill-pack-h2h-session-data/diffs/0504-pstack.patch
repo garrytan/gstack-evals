@@ -1,0 +1,91 @@
+diff --git a/Terminal.Gui/Views/DialogTResult.cs b/Terminal.Gui/Views/DialogTResult.cs
+index 94f4d99..37d69ba 100644
+--- a/Terminal.Gui/Views/DialogTResult.cs
++++ b/Terminal.Gui/Views/DialogTResult.cs
+@@ -358,8 +358,6 @@ public class Dialog<TResult> : Runnable<TResult>, IDesignable
+         }
+         else
+         {
+-            SchemeName = SchemeManager.SchemesToSchemeName (Schemes.Base);
+-
+             // strip out movable and resizable
+             Arrangement &= ~(ViewArrangement.Movable | ViewArrangement.Resizable);
+         }
+diff --git a/Tests/UnitTestsParallelizable/Views/DialogTests.cs b/Tests/UnitTestsParallelizable/Views/DialogTests.cs
+index 5c64f21..0d11227 100644
+--- a/Tests/UnitTestsParallelizable/Views/DialogTests.cs
++++ b/Tests/UnitTestsParallelizable/Views/DialogTests.cs
+@@ -2474,4 +2474,73 @@ public class DialogTests (ITestOutputHelper output) : TestDriverBase
+     }
+ 
+     #endregion Dialog<TResult> Generic Tests
++
++    #region Scheme Tests
++
++    [Fact]
++    public void New_Dialog_SchemeName_Is_Dialog ()
++    {
++        Dialog dialog = new ();
++
++        Assert.Equal (SchemeManager.SchemesToSchemeName (Schemes.Dialog), dialog.SchemeName);
++
++        dialog.Dispose ();
++    }
++
++    [Fact]
++    public void New_Dialog_GetScheme_Returns_Dialog_Scheme ()
++    {
++        Dialog dialog = new ();
++
++        Assert.Equal (SchemeManager.GetScheme (Schemes.Dialog), dialog.GetScheme ());
++
++        dialog.Dispose ();
++    }
++
++    [Fact]
++    public void New_Generic_Dialog_GetScheme_Returns_Dialog_Scheme ()
++    {
++        Dialog<string> dialog = new ();
++
++        Assert.Equal (SchemeManager.SchemesToSchemeName (Schemes.Dialog), dialog.SchemeName);
++        Assert.Equal (SchemeManager.GetScheme (Schemes.Dialog), dialog.GetScheme ());
++
++        dialog.Dispose ();
++    }
++
++    [Theory]
++    [InlineData (VisualRole.Normal)]
++    [InlineData (VisualRole.Focus)]
++    [InlineData (VisualRole.Editable)]
++    public void Dialog_SubView_Inherits_Dialog_Scheme_Attributes (VisualRole role)
++    {
++        Dialog dialog = new ();
++        Label label = new () { Text = "Label" };
++        dialog.Add (label);
++
++        Assert.Equal (SchemeManager.GetScheme (Schemes.Dialog).GetAttributeForRole (role), label.GetAttributeForRole (role));
++
++        dialog.Dispose ();
++    }
++
++    [Fact]
++    public void Dialog_Draw_Uses_Dialog_Scheme_Normal_Attribute ()
++    {
++        IDriver driver = CreateTestDriver (20, 10);
++        driver.Clip = new Region (driver.Screen);
++
++        Dialog dialog = new () { Driver = driver, X = 0, Y = 0, Width = 10, Height = 5 };
++        dialog.BeginInit ();
++        dialog.EndInit ();
++        dialog.Layout (driver.Screen.Size);
++        dialog.Draw ();
++
++        Point inside = dialog.ContentToScreen (Point.Empty);
++
++        Assert.Equal (SchemeManager.GetScheme (Schemes.Dialog).Normal, driver.Contents! [inside.Y, inside.X].Attribute);
++
++        dialog.Dispose ();
++    }
++
++    #endregion Scheme Tests
+ }

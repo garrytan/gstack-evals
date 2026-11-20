@@ -1,0 +1,69 @@
+diff --git a/.changeset/astro-shorthand-attribute.md b/.changeset/astro-shorthand-attribute.md
+new file mode 100644
+index 00000000..b74f3513
+--- /dev/null
++++ b/.changeset/astro-shorthand-attribute.md
+@@ -0,0 +1,5 @@
++---
++"@biomejs/biome": patch
++---
++
++Fixed a regression where `noUnusedVariables` reported variables used only in Astro shorthand attributes, such as `<MyComponent {text} />`, as unused.
+diff --git a/crates/biome_js_analyze/tests/specs/correctness/noUnusedVariables/valid-astro-shorthand-attribute.astro b/crates/biome_js_analyze/tests/specs/correctness/noUnusedVariables/valid-astro-shorthand-attribute.astro
+new file mode 100644
+index 00000000..1d153782
+--- /dev/null
++++ b/crates/biome_js_analyze/tests/specs/correctness/noUnusedVariables/valid-astro-shorthand-attribute.astro
+@@ -0,0 +1,8 @@
++<!-- should not generate diagnostics -->
++---
++import MyComponent from './my-component.astro';
++
++const text = "abc";
++---
++
++<MyComponent {text} />
+diff --git a/crates/biome_js_analyze/tests/specs/correctness/noUnusedVariables/valid-astro-shorthand-attribute.astro.snap b/crates/biome_js_analyze/tests/specs/correctness/noUnusedVariables/valid-astro-shorthand-attribute.astro.snap
+new file mode 100644
+index 00000000..75aebd88
+--- /dev/null
++++ b/crates/biome_js_analyze/tests/specs/correctness/noUnusedVariables/valid-astro-shorthand-attribute.astro.snap
+@@ -0,0 +1,16 @@
++---
++source: crates/biome_js_analyze/tests/spec_tests.rs
++expression: valid-astro-shorthand-attribute.astro
++---
++# Input
++```astro
++<!-- should not generate diagnostics -->
++---
++import MyComponent from './my-component.astro';
++
++const text = "abc";
++---
++
++<MyComponent {text} />
++
++```
+diff --git a/crates/biome_service/src/file_handlers/html/parse_embedded_nodes.rs b/crates/biome_service/src/file_handlers/html/parse_embedded_nodes.rs
+index fd963b9a..e4883b2d 100644
+--- a/crates/biome_service/src/file_handlers/html/parse_embedded_nodes.rs
++++ b/crates/biome_service/src/file_handlers/html/parse_embedded_nodes.rs
+@@ -130,6 +130,17 @@ pub(crate) fn parse_embedded_nodes(params: ParseEmbeddedParams) -> ParseEmbedRes
+                     ctx.parse_and_push(&candidate, &doc_file_source, None, &mut nodes);
+                 }
+ 
++                // Shorthand attributes: <Component {prop} />
++                if let Some(attr) = HtmlAttributeSingleTextExpression::cast_ref(&element)
++                    && !attr.syntax().parent().is_some_and(|parent| {
++                        HtmlAttributeInitializerClause::can_cast(parent.kind())
++                    })
++                    && let Ok(expression) = attr.expression()
++                    && let Some(candidate) = build_text_expression_candidate(&expression)
++                {
++                    ctx.parse_and_push(&candidate, &doc_file_source, None, &mut nodes);
++                }
++
+                 // Spread attributes: <input {...props}>
+                 if let Some(spread) = HtmlSpreadAttribute::cast_ref(&element)
+                     && let Ok(expression) = spread.argument()

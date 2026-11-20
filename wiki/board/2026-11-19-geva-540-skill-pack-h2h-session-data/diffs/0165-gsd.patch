@@ -1,0 +1,390 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 11ccb2c..9712a00 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -32,6 +32,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
+     non-MCP-first sentence.
+ 
+ ### Fixed
++- **`ctx_edit` no longer fails on an `old_string` quoted from a compressed `ctx_read`
++  view.** Lossy modes (e.g. `aggressive`) strip blank lines and comments, halve the
++  indentation and merge closers (`}}`), so text the agent copied from the view never
++  occurred verbatim on disk and the edit failed with "old_string not found". `ctx_edit`
++  now falls back to a line-level match that skips the hidden lines and ignores
++  indentation (only when it is unambiguous), then patches only the changed lines:
++  hidden comments/blank lines and the file's real indentation are preserved, and
++  inserted lines are re-indented to the file's style.
+ - **The Codex `lean-ctx -c` SessionStart hook is no longer a redundant nag (#625).**
+   Codex's `PreToolUse` hook already rewrites every rewritable Bash command to
+   `lean-ctx -c "<command>"` transparently (`permissionDecision: allow` +
+diff --git a/rust/src/tools/ctx_edit.rs b/rust/src/tools/ctx_edit.rs
+index 7aff71f..e4700ac 100644
+--- a/rust/src/tools/ctx_edit.rs
++++ b/rust/src/tools/ctx_edit.rs
+@@ -280,6 +280,46 @@ pub fn run_io(params: &EditParams, last_mode: &str) -> (String, CacheEffect) {
+         }
+     }
+ 
++    // Compressed-view tolerance: an agent that only saw a lossy `ctx_read` view
++    // (e.g. mode=aggressive strips blank lines + comments and halves the
++    // indentation) quotes an `old_string` that never occurs verbatim on disk.
++    // Match it line-by-line instead, skipping the lines the view hid, and patch
++    // only the lines that actually changed so the hidden lines and the original
++    // indentation survive the edit.
++    match lossy_view_match(content, old_str, new_str, uses_crlf) {
++        LossyMatch::None => {}
++        LossyMatch::Ambiguous(n) => {
++            return (
++                format!(
++                    "ERROR: old_string found {n} times in {file_path} (ignoring blank/comment lines \
++                     and indentation hidden by a compressed read). \
++                     Provide more context to make old_string unique."
++                ),
++                CacheEffect::None,
++            );
++        }
++        LossyMatch::Found { span, replacement } => {
++            let occ = content.matches(span.as_str()).count();
++            let args = ReplaceArgs {
++                content,
++                old_str: &span,
++                new_str: &replacement,
++                occurrences: occ,
++                replace_all: params.replace_all,
++                old_tokens: count_tokens(&params.old_string),
++                new_tokens: count_tokens(&params.new_string),
++            };
++            let (mut out, effect) = do_replace(path, &pre, params, cap, &args);
++            if matches!(effect, CacheEffect::Invalidate) {
++                out.push_str(
++                    "\nnote: old_string matched ignoring blank/comment lines and indentation \
++                     (compressed read view); hidden lines and original indentation were preserved.",
++                );
++            }
++            return (out, effect);
++        }
++    }
++
+     if content.contains(new_str) {
+         return (
+             format!(
+@@ -662,6 +702,248 @@ fn find_original_span(content: &str, normalized_needle: &str) -> Option<String>
+     None
+ }
+ 
++/// Result of matching an `old_string` quoted from a lossy (compressed) read view.
++enum LossyMatch {
++    None,
++    /// Matched at several places whose original spans differ.
++    Ambiguous(usize),
++    /// `span` is the verbatim on-disk text; `replacement` is what it becomes.
++    Found { span: String, replacement: String },
++}
++
++/// Closing-delimiter lines that `aggressive_compress` merges onto one line (`}}`).
++fn is_closer_line(t: &str) -> bool {
++    matches!(t, "}" | "};" | ")" | ");" | "});")
++}
++
++/// Marks every file line a compressed `ctx_read` view may have hidden: blank
++/// lines and comment-only lines (incl. block-comment bodies). Skipping one is
++/// always safe — skipped lines are re-emitted verbatim, never deleted.
++fn hidden_line_mask(lines: &[&str]) -> Vec<bool> {
++    let mut in_block = false;
++    lines
++        .iter()
++        .map(|line| {
++            let t = line.trim();
++            if in_block {
++                if t.contains("*/") || t.contains("-->") {
++                    in_block = false;
++                }
++                return true;
++            }
++            if t.is_empty() {
++                return true;
++            }
++            if t.starts_with("/*") || t.starts_with("<!--") {
++                if !(t.contains("*/") || t.contains("-->")) {
++                    in_block = true;
++                }
++                return true;
++            }
++            t.starts_with("//")
++                || t.starts_with('#')
++                || t.starts_with('*')
++                || t.starts_with("--")
++        })
++        .collect()
++}
++
++fn leading_ws(s: &str) -> &str {
++    &s[..s.len() - s.trim_start().len()]
++}
++
++/// Tries to match `old` against `file_trim` starting exactly at line `start`.
++/// Returns, per significant `old` line, the inclusive range of file lines it
++/// covers (a collapsed `}}` line covers several closer lines).
++fn lossy_match_at(
++    file_trim: &[&str],
++    hidden: &[bool],
++    old_sig: &[&str],
++    start: usize,
++) -> Option<Vec<(usize, usize)>> {
++    let n = file_trim.len();
++    let mut ranges = Vec::with_capacity(old_sig.len());
++    let mut f = start;
++    for (k, ol) in old_sig.iter().enumerate() {
++        if k > 0 {
++            while f < n && file_trim[f] != *ol && hidden[f] {
++                f += 1;
++            }
++        }
++        if f >= n {
++            return None;
++        }
++        if file_trim[f] == *ol {
++            ranges.push((f, f));
++            f += 1;
++            continue;
++        }
++        // `}}` / `});}` in the view ← consecutive closer lines on disk.
++        let first = f;
++        let mut rest: &str = ol;
++        while !rest.is_empty() {
++            if f >= n {
++                return None;
++            }
++            let t = file_trim[f];
++            if is_closer_line(t) && rest.starts_with(t) {
++                rest = &rest[t.len()..];
++            } else if !(t.is_empty() && f > first) {
++                return None;
++            }
++            f += 1;
++        }
++        if f == first {
++            return None;
++        }
++        ranges.push((first, f - 1));
++    }
++    Some(ranges)
++}
++
++/// Maps an indentation width seen in the compressed view to the file's
++/// indentation, learned from the matched line pairs.
++struct IndentMap<'a> {
++    exact: Vec<(usize, &'a str)>,
++    ratio: Option<(usize, usize, char)>,
++}
++
++impl IndentMap<'_> {
++    fn indent_for(&self, view_ws: &str) -> String {
++        let w = view_ws.chars().count();
++        if let Some((_, file_ws)) = self.exact.iter().find(|(vw, _)| *vw == w) {
++            return (*file_ws).to_string();
++        }
++        match self.ratio {
++            Some((vw, fw, ch)) => {
++                let target = (w * fw + vw / 2) / vw;
++                std::iter::repeat_n(ch, target).collect()
++            }
++            None => view_ws.to_string(),
++        }
++    }
++}
++
++/// Matches `old` (possibly quoted from a lossy read view) against `content`
++/// ignoring hidden lines and indentation, and builds a line-level patch from
++/// `old` → `new`: unchanged lines keep their exact on-disk bytes, hidden lines
++/// inside the span are preserved, and inserted lines are re-indented to the
++/// file's style.
++fn lossy_view_match(content: &str, old: &str, new: &str, uses_crlf: bool) -> LossyMatch {
++    let old_norm = old.replace("\r\n", "\n");
++    let new_norm = new.replace("\r\n", "\n");
++    let old_lines: Vec<&str> = old_norm.lines().filter(|l| !l.trim().is_empty()).collect();
++    if old_lines.is_empty() {
++        return LossyMatch::None;
++    }
++    let old_sig: Vec<&str> = old_lines.iter().map(|l| l.trim()).collect();
++
++    // Byte offsets of each line (without its terminator).
++    let mut line_spans: Vec<(usize, usize)> = Vec::new();
++    let mut pos = 0usize;
++    for seg in content.split_inclusive('\n') {
++        let body = seg.strip_suffix('\n').unwrap_or(seg);
++        let body = body.strip_suffix('\r').unwrap_or(body);
++        line_spans.push((pos, pos + body.len()));
++        pos += seg.len();
++    }
++    let file_lines: Vec<&str> = line_spans.iter().map(|&(s, e)| &content[s..e]).collect();
++    let file_trim: Vec<&str> = file_lines.iter().map(|l| l.trim()).collect();
++    let hidden = hidden_line_mask(&file_lines);
++
++    let matches: Vec<Vec<(usize, usize)>> = (0..file_lines.len())
++        .filter_map(|i| lossy_match_at(&file_trim, &hidden, &old_sig, i))
++        .collect();
++    let Some(first) = matches.first() else {
++        return LossyMatch::None;
++    };
++    let span_of = |m: &[(usize, usize)]| {
++        let s = line_spans[m[0].0].0;
++        let e = line_spans[m[m.len() - 1].1].1;
++        &content[s..e]
++    };
++    let span = span_of(first);
++    if matches.iter().skip(1).any(|m| span_of(m) != span) {
++        return LossyMatch::Ambiguous(matches.len());
++    }
++
++    // Learn the view→file indentation mapping from the 1:1 matched lines.
++    let mut indent = IndentMap {
++        exact: Vec::new(),
++        ratio: None,
++    };
++    for (k, &(a, b)) in first.iter().enumerate() {
++        if a != b {
++            continue;
++        }
++        let vw = leading_ws(old_lines[k]);
++        let fw = leading_ws(file_lines[a]);
++        let vwn = vw.chars().count();
++        if !indent.exact.iter().any(|(w, _)| *w == vwn) {
++            indent.exact.push((vwn, fw));
++        }
++        if indent.ratio.is_none()
++            && vwn > 0
++            && let Some(ch) = fw.chars().next()
++        {
++            indent.ratio = Some((vwn, fw.chars().count(), ch));
++        }
++    }
++
++    let new_lines: Vec<&str> = new_norm.lines().collect();
++    let new_trim: Vec<&str> = new_lines.iter().map(|l| l.trim()).collect();
++    let ops = similar::capture_diff_slices(similar::Algorithm::Myers, &old_sig, &new_trim);
++
++    let mut out: Vec<String> = Vec::new();
++    let mut cursor = first[0].0;
++    let emit_insert = |out: &mut Vec<String>, j: usize| {
++        let line = new_lines[j];
++        if line.trim().is_empty() {
++            out.push(String::new());
++        } else {
++            out.push(format!(
++                "{}{}",
++                indent.indent_for(leading_ws(line)),
++                line.trim_start()
++            ));
++        }
++    };
++    for op in &ops {
++        let (tag, old_r, new_r) = op.as_tag_tuple();
++        match tag {
++            similar::DiffTag::Equal => {
++                for k in old_r {
++                    let (_, b) = first[k];
++                    out.extend(file_lines[cursor..=b].iter().map(|s| (*s).to_string()));
++                    cursor = b + 1;
++                }
++            }
++            similar::DiffTag::Delete | similar::DiffTag::Replace | similar::DiffTag::Insert => {
++                // Pair replaced lines positionally so hidden lines (comments,
++                // blanks) stay next to the line they preceded on disk.
++                let olds: Vec<usize> = old_r.collect();
++                let news: Vec<usize> = new_r.collect();
++                for i in 0..olds.len().max(news.len()) {
++                    if let Some(&k) = olds.get(i) {
++                        let (a, b) = first[k];
++                        out.extend(file_lines[cursor..a].iter().map(|s| (*s).to_string()));
++                        cursor = b + 1;
++                    }
++                    if let Some(&j) = news.get(i) {
++                        emit_insert(&mut out, j);
++                    }
++                }
++            }
++        }
++    }
++
++    let sep = if uses_crlf { "\r\n" } else { "\n" };
++    LossyMatch::Found {
++        span: span.to_string(),
++        replacement: out.join(sep),
++    }
++}
++
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+@@ -713,6 +995,70 @@ mod tests {
+         assert_eq!(content, "ccc bbb ccc\n");
+     }
+ 
++    /// Regression: `old_string` copied from a compressed `ctx_read` view
++    /// (aggressive strips blank lines + comments and halves indentation) must
++    /// still apply, and must not drop the hidden lines or the real indentation.
++    #[test]
++    fn edit_from_aggressive_view_preserves_hidden_lines() {
++        let original = "import os\n\n\ndef foo(x):\n    # compute the thing\n    y = x + 1\n\n    return y\n\n\ndef bar():\n    return foo(2)\n";
++        let view = crate::core::compressor::aggressive_compress(original, Some("py"));
++        assert!(!view.contains(original), "precondition: view is lossy");
++        let old = "def foo(x):\n  y = x + 1\n  return y";
++        assert!(view.contains(old), "precondition: old_string is in the view");
++        let f = make_temp(original);
++        let mut cache = SessionCache::new();
++        let new = "def foo(x):\n  y = x + 2\n  z = y * 3\n  return z";
++        let result = handle(&mut cache, &mk_params(f.path(), old, new, false, false));
++        assert!(result.starts_with('✓'), "edit should apply: {result}");
++        let content = std::fs::read_to_string(f.path()).unwrap();
++        assert_eq!(
++            content,
++            "import os\n\n\ndef foo(x):\n    # compute the thing\n    y = x + 2\n\n    z = y * 3\n    return z\n\n\ndef bar():\n    return foo(2)\n"
++        );
++    }
++
++    #[test]
++    fn edit_from_aggressive_view_with_collapsed_braces() {
++        let original = "fn a() {\n    if x {\n        // note\n        do_it();\n    }\n}\n\nfn b() {}\n";
++        let f = make_temp(original);
++        let mut cache = SessionCache::new();
++        let old = "  if x {\n    do_it();\n  }}";
++        let new = "  if x {\n    do_it();\n    again();\n  }}";
++        let result = handle(&mut cache, &mk_params(f.path(), old, new, false, false));
++        assert!(result.starts_with('✓'), "edit should apply: {result}");
++        let content = std::fs::read_to_string(f.path()).unwrap();
++        assert_eq!(
++            content,
++            "fn a() {\n    if x {\n        // note\n        do_it();\n        again();\n    }\n}\n\nfn b() {}\n"
++        );
++    }
++
++    #[test]
++    fn edit_missing_blank_lines_only() {
++        let original = "a = 1\n\nb = 2\n";
++        let f = make_temp(original);
++        let mut cache = SessionCache::new();
++        let result = handle(
++            &mut cache,
++            &mk_params(f.path(), "a = 1\nb = 2", "a = 1\nb = 3", false, false),
++        );
++        assert!(result.starts_with('✓'), "edit should apply: {result}");
++        assert_eq!(std::fs::read_to_string(f.path()).unwrap(), "a = 1\n\nb = 3\n");
++    }
++
++    #[test]
++    fn lossy_match_ambiguous_is_rejected() {
++        let original = "if a:\n    x()\n\nif b:\n  if a:\n      x()\n";
++        let f = make_temp(original);
++        let mut cache = SessionCache::new();
++        let result = handle(
++            &mut cache,
++            &mk_params(f.path(), "if a:\n x()", "if a:\n y()", false, false),
++        );
++        assert!(result.starts_with("ERROR"), "{result}");
++        assert_eq!(std::fs::read_to_string(f.path()).unwrap(), original);
++    }
++
+     #[test]
+     fn not_found_error() {
+         let f = make_temp("some content\n");

@@ -1,0 +1,35 @@
+diff --git a/crates/hir-def/src/expr_store/tests/body.rs b/crates/hir-def/src/expr_store/tests/body.rs
+index c7b9edf..48c45b4 100644
+--- a/crates/hir-def/src/expr_store/tests/body.rs
++++ b/crates/hir-def/src/expr_store/tests/body.rs
+@@ -141,6 +141,17 @@ fn main() {
+     );
+ }
+ 
++#[test]
++fn type_bound_with_macro_type_does_not_panic() {
++    lower(
++        r#"
++fn main() {
++    let x: vec![]+;
++}
++"#,
++    );
++}
++
+ #[test]
+ fn macro_resolve() {
+     // Regression test for a path resolution bug introduced with inner item handling.
+diff --git a/crates/syntax/src/ast/node_ext.rs b/crates/syntax/src/ast/node_ext.rs
+index 1eb658f..3bc8592 100644
+--- a/crates/syntax/src/ast/node_ext.rs
++++ b/crates/syntax/src/ast/node_ext.rs
+@@ -880,7 +880,7 @@ impl ast::TypeBound {
+         } else if let Some(lifetime) = self.lifetime() {
+             Some(TypeBoundKind::Lifetime(lifetime))
+         } else {
+-            unreachable!()
++            None
+         }
+     }
+ }

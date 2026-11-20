@@ -1,0 +1,169 @@
+diff --git a/pkg/kube/proxy.go b/pkg/kube/proxy.go
+index c346704..6e5c997 100644
+--- a/pkg/kube/proxy.go
++++ b/pkg/kube/proxy.go
+@@ -3,9 +3,11 @@ package kube
+ import (
+ 	"context"
+ 	"errors"
++	"fmt"
+ 	"io"
+ 	"net/http"
+ 	"net/url"
++	"strings"
+ 
+ 	"github.com/gin-gonic/gin"
+ 	"k8s.io/client-go/rest"
+@@ -60,8 +62,67 @@ func HandleProxy(c *gin.Context, client *K8sClient, kind, namespace, name, proxy
+ 	}
+ }
+ 
++// validateProxySegment ensures a route parameter used to build the upstream
++// URL is a single, literal path segment that cannot alter the target path.
++func validateProxySegment(field, value string) error {
++	if value == "" {
++		return fmt.Errorf("invalid %s: must not be empty", field)
++	}
++	if value == "." || value == ".." || strings.ContainsAny(value, "/\\%?#") {
++		return fmt.Errorf("invalid %s", field)
++	}
++	for _, r := range value {
++		if r < 0x20 || r == 0x7f {
++			return fmt.Errorf("invalid %s", field)
++		}
++	}
++	return nil
++}
++
++// hasDotSegment reports whether p, or any percent-decoded form of it, contains
++// "." or ".." path segments (using "/" or "\\" as separators).
++func hasDotSegment(p string) bool {
++	for i := 0; i < 5; i++ {
++		for _, seg := range strings.FieldsFunc(p, func(r rune) bool { return r == '/' || r == '\\' }) {
++			if seg == "." || seg == ".." {
++				return true
++			}
++		}
++		decoded, err := url.PathUnescape(p)
++		if err != nil {
++			// Malformed escapes are rejected to avoid ambiguity.
++			return true
++		}
++		if decoded == p {
++			return false
++		}
++		p = decoded
++	}
++	// Excessive nested encoding is treated as suspicious.
++	return true
++}
++
+ func buildProxyURL(host, kind, namespace, name, path, rawQuery string) (string, error) {
+-	path, err := url.JoinPath(host, "api/v1/namespaces", namespace, kind, name, "proxy", path)
++	if err := validateProxySegment("kind", kind); err != nil {
++		return "", err
++	}
++	if err := validateProxySegment("namespace", namespace); err != nil {
++		return "", err
++	}
++	if err := validateProxySegment("name", name); err != nil {
++		return "", err
++	}
++	if hasDotSegment(path) || strings.ContainsAny(path, "?#") {
++		return "", errors.New("invalid proxy path")
++	}
++
++	base, err := url.Parse(host)
++	if err != nil {
++		return "", err
++	}
++	prefix := strings.TrimSuffix(base.Path, "/") + "/api/v1/namespaces/" + namespace + "/" + kind + "/" + name + "/proxy"
++
++	path, err = url.JoinPath(host, "api/v1/namespaces", namespace, kind, name, "proxy", path)
+ 	if err != nil {
+ 		return "", err
+ 	}
+@@ -74,6 +135,9 @@ func buildProxyURL(host, kind, namespace, name, path, rawQuery string) (string,
+ 	if err != nil {
+ 		return "", err
+ 	}
++	if (u.Path != prefix && !strings.HasPrefix(u.Path, prefix+"/")) || hasDotSegment(u.Path) {
++		return "", errors.New("invalid proxy path")
++	}
+ 	u.RawQuery = query.Encode()
+ 	return u.String(), nil
+ }
+diff --git a/pkg/kube/proxy_test.go b/pkg/kube/proxy_test.go
+index 617963d..05b62c2 100644
+--- a/pkg/kube/proxy_test.go
++++ b/pkg/kube/proxy_test.go
+@@ -30,6 +30,69 @@ func TestBuildProxyURL(t *testing.T) {
+ 			rawQuery:  "b=2&a=1",
+ 			want:      "https://example.com/api/v1/namespaces/default/pods/nginx/proxy/logs/?a=1&b=2",
+ 		},
++		{
++			name:      "rejects traversal in path",
++			host:      "https://example.com",
++			kind:      "pods",
++			namespace: "default",
++			resource:  "nginx",
++			path:      "/../../../../kube-system/secrets",
++			wantErr:   true,
++		},
++		{
++			name:      "rejects encoded traversal in path",
++			host:      "https://example.com",
++			kind:      "pods",
++			namespace: "default",
++			resource:  "nginx",
++			path:      "/%2e%2e/%2e%2e/%2e%2e/%2e%2e/kube-system/secrets",
++			wantErr:   true,
++		},
++		{
++			name:      "rejects double encoded traversal in path",
++			host:      "https://example.com",
++			kind:      "pods",
++			namespace: "default",
++			resource:  "nginx",
++			path:      "/%252e%252e%252f%252e%252e/secrets",
++			wantErr:   true,
++		},
++		{
++			name:      "rejects traversal in name",
++			host:      "https://example.com",
++			kind:      "pods",
++			namespace: "default",
++			resource:  "../../../../kube-system/secrets",
++			path:      "",
++			wantErr:   true,
++		},
++		{
++			name:      "rejects encoded slash in name",
++			host:      "https://example.com",
++			kind:      "pods",
++			namespace: "default",
++			resource:  "..%2f..%2fsecrets",
++			path:      "",
++			wantErr:   true,
++		},
++		{
++			name:      "rejects traversal in namespace",
++			host:      "https://example.com",
++			kind:      "pods",
++			namespace: "..",
++			resource:  "nginx",
++			path:      "",
++			wantErr:   true,
++		},
++		{
++			name:      "allows service name with port",
++			host:      "https://example.com",
++			kind:      "services",
++			namespace: "default",
++			resource:  "https:svc:443",
++			path:      "/healthz",
++			want:      "https://example.com/api/v1/namespaces/default/services/https:svc:443/proxy/healthz",
++		},
+ 		{
+ 			name:      "rejects invalid query",
+ 			host:      "https://example.com",

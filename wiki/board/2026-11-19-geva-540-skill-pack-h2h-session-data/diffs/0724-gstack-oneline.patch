@@ -1,0 +1,19 @@
+diff --git a/oauthproxy.go b/oauthproxy.go
+index dc3f8b5..eb67f23 100644
+--- a/oauthproxy.go
++++ b/oauthproxy.go
+@@ -615,7 +615,13 @@ func (p *OAuthProxy) isAPIPath(req *http.Request) bool {
+ func (p *OAuthProxy) isTrustedIP(req *http.Request) bool {
+ 	// RemoteAddr @ means unix socket
+ 	// https://github.com/golang/go/blob/0fa53e41f122b1661d0678a6d36d71b7b5ad031d/src/syscall/syscall_linux.go#L506-L511
+-	if p.trustedIPs == nil && req.RemoteAddr != "@" {
++	if p.trustedIPs == nil {
++		return false
++	}
++
++	// Unix socket connections have no remote IP; only a real client IP
++	// header (reverse proxy mode) can provide one.
++	if req.RemoteAddr == "@" && p.realClientIPParser == nil {
+ 		return false
+ 	}
+ 

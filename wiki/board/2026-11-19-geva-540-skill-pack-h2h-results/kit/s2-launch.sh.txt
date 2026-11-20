@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# GEVA-540 kit (not committed): the paid stage 2 run, items h2h-opus and h2h-pony, run geva540-s2-7700a8f, k=$1 (default
+# 12). pid to launch.pid, exit to launch.exit. Relaunch after a stop: remove launch.pid and launch.exit first.
+export PATH=$HOME/.local/bin:$HOME/.bun/bin:$PATH
+K=${1:-12}
+R=$HOME/h2h/run/geva540-s2-7700a8f
+C=$(sed -n 's/^control=//p' $R/serve-urls.txt); X=$(sed -n 's/^proxy=//p' $R/serve-urls.txt)
+[ -n "$C" ] && [ -n "$X" ] || { echo "no control or proxy in $R/serve-urls.txt"; exit 3; }
+[ -e $R/launch.pid ] && { echo "launch.pid exists; not starting twice"; exit 3; }
+[ "$(git -C $HOME/h2h/repo rev-parse HEAD)" = 7700a8fff25570e7601933ad4614995d7dafbf79 ] || { echo "checkout is not 7700a8ff"; exit 3; }
+cd $HOME/h2h/repo
+setsid -f bash -c 'bun --no-env-file $HOME/kit/stage-run.ts --stage stage2 --item h2h-opus,h2h-pony --run geva540-s2-7700a8f --units "$0/stage/units.json" --unit-dirs "$0/stage/units" --homes $HOME/h2h/homes --pins $HOME/h2h/stage0/arms-pins.stage0.json --out "$0/out" --control "$1" --proxy "$2" --k "$3" >> "$0/launch.out" 2>> "$0/launch.err" & echo $! > "$0/launch.pid"; wait $!; echo "EXIT $?" > "$0/launch.exit"' "$R" "$C" "$X" "$K" < /dev/null > /dev/null 2>&1
+sleep 3; cat $R/launch.pid

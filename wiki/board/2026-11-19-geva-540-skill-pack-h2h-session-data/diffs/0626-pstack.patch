@@ -1,0 +1,80 @@
+diff --git a/Terminal.Gui/ViewBase/Layout/PosAlign.cs b/Terminal.Gui/ViewBase/Layout/PosAlign.cs
+index 9e04f1b..4fb696f 100644
+--- a/Terminal.Gui/ViewBase/Layout/PosAlign.cs
++++ b/Terminal.Gui/ViewBase/Layout/PosAlign.cs
+@@ -69,10 +69,18 @@ public record PosAlign : Pos
+ 
+             PosAlign? posAlign = dimension == Dimension.Width ? view.X as PosAlign : view.Y as PosAlign;
+ 
+-            if (posAlign is { })
++            if (posAlign is null)
+             {
+-                dimensionsSum += dimension == Dimension.Width ? view.Frame.Width : view.Frame.Height;
++                continue;
+             }
++
++            Dim dim = dimension == Dimension.Width ? view.Width : view.Height;
++
++            // Frame may be stale (e.g. a SubView added since the last layout), so measure from the Dim
++            // unless it needs the SuperView's content size, which isn't known here.
++            dimensionsSum += dim.DependsOnSuperViewContentSize
++                                 ? dimension == Dimension.Width ? view.Frame.Width : view.Frame.Height
++                                 : dim.Calculate (0, 0, view, dimension);
+         }
+ 
+         // Align
+diff --git a/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs b/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs
+index f84b0da..e81fdb0 100644
+--- a/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs
++++ b/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs
+@@ -1069,4 +1069,50 @@ public class OptionSelectorTests
+     }
+ 
+     #endregion
++
++    // Claude - Opus 5.5
++    [Theory]
++    [InlineData (true)]
++    [InlineData (false)]
++    public void Horizontal_Labels_Set_After_Construction_Width_Fits_All_Labels (bool orientationFirst)
++    {
++        View superView = new () { Width = 80, Height = 10 };
++        OptionSelector selector = new ();
++
++        if (orientationFirst)
++        {
++            selector.Orientation = Orientation.Horizontal;
++        }
++
++        selector.Labels = ["IMDb (Recommended)", "TMDb"];
++        selector.Values = [0, 1];
++
++        if (!orientationFirst)
++        {
++            selector.Orientation = Orientation.Horizontal;
++        }
++
++        superView.Add (selector);
++        superView.Layout ();
++
++        CheckBox last = selector.SubViews.OfType<CheckBox> ().Last ();
++        Assert.Equal ("TMDb", last.Title);
++        Assert.Equal (last.Frame.Right, selector.Viewport.Width);
++        Assert.Equal (28, selector.Frame.Width);
++    }
++
++    // Claude - Opus 5.5
++    [Fact]
++    public void Horizontal_Labels_Changed_After_Layout_Width_Updates ()
++    {
++        View superView = new () { Width = 80, Height = 10 };
++        OptionSelector selector = new () { Orientation = Orientation.Horizontal, Labels = ["A", "B"] };
++        superView.Add (selector);
++        superView.Layout ();
++
++        selector.Labels = ["IMDb (Recommended)", "TMDb"];
++        superView.Layout ();
++
++        Assert.Equal (28, selector.Frame.Width);
++    }
+ }

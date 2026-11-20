@@ -1,0 +1,129 @@
+diff --git a/.changeset/quiet-abort-mutation.md b/.changeset/quiet-abort-mutation.md
+new file mode 100644
+index 0000000..2a43b5e
+--- /dev/null
++++ b/.changeset/quiet-abort-mutation.md
+@@ -0,0 +1,5 @@
++---
++'svelte': patch
++---
++
++fix: don't throw `state_unsafe_mutation` when updating state in an abort signal listener
+diff --git a/packages/svelte/src/internal/client/reactivity/effects.js b/packages/svelte/src/internal/client/reactivity/effects.js
+index f44efa3..c327b84 100644
+--- a/packages/svelte/src/internal/client/reactivity/effects.js
++++ b/packages/svelte/src/internal/client/reactivity/effects.js
+@@ -406,7 +406,15 @@ export function destroy_effect_children(signal, remove_dom = false) {
+ 	signal.first = signal.last = null;
+ 
+ 	while (effect !== null) {
+-		effect.ac?.abort(STALE_REACTION);
++		const controller = effect.ac;
++
++		if (controller !== null) {
++			// abort listeners may update state, so don't run them in a reactive context
++			var previous_reaction = active_reaction;
++			set_active_reaction(null);
++			controller.abort(STALE_REACTION);
++			set_active_reaction(previous_reaction);
++		}
+ 
+ 		var next = effect.next;
+ 
+diff --git a/packages/svelte/src/internal/client/runtime.js b/packages/svelte/src/internal/client/runtime.js
+index 3d760e4..d8bf820 100644
+--- a/packages/svelte/src/internal/client/runtime.js
++++ b/packages/svelte/src/internal/client/runtime.js
+@@ -278,8 +278,11 @@ export function update_reaction(reaction) {
+ 	update_version = ++read_version;
+ 
+ 	if (reaction.ac !== null) {
++		// abort listeners may update state, so don't run them in a reactive context
++		active_reaction = null;
+ 		reaction.ac.abort(STALE_REACTION);
+ 		reaction.ac = null;
++		active_reaction = (flags & (BRANCH_EFFECT | ROOT_EFFECT)) === 0 ? reaction : null;
+ 	}
+ 
+ 	try {
+diff --git a/packages/svelte/tests/runtime-runes/samples/abort-signal-state-update/Component.svelte b/packages/svelte/tests/runtime-runes/samples/abort-signal-state-update/Component.svelte
+new file mode 100644
+index 0000000..49f7bb8
+--- /dev/null
++++ b/packages/svelte/tests/runtime-runes/samples/abort-signal-state-update/Component.svelte
+@@ -0,0 +1,23 @@
++<script>
++	import { onMount, getAbortSignal } from 'svelte';
++
++	const { test } = $props();
++
++	onMount(() => {
++		const signal = getAbortSignal();
++		test.value = true;
++		signal.addEventListener('abort', () => {
++			test.value = false;
++		});
++	});
++
++	const value = $derived.by(() => {
++		const signal = getAbortSignal();
++		signal.addEventListener('abort', () => {
++			test.value = false;
++		});
++		return test.value;
++	});
++</script>
++
++{value}
+diff --git a/packages/svelte/tests/runtime-runes/samples/abort-signal-state-update/_config.js b/packages/svelte/tests/runtime-runes/samples/abort-signal-state-update/_config.js
+new file mode 100644
+index 0000000..5030d49
+--- /dev/null
++++ b/packages/svelte/tests/runtime-runes/samples/abort-signal-state-update/_config.js
+@@ -0,0 +1,25 @@
++import { flushSync } from 'svelte';
++import { test } from '../../test';
++
++export default test({
++	html: `<button>click</button>`,
++
++	test({ assert, target, window }) {
++		/** @type {any[]} */
++		const errors = [];
++		/** @param {any} e */
++		const onerror = (e) => errors.push(e.error ?? e);
++		window.addEventListener('error', onerror);
++
++		const button = target.querySelector('button');
++
++		flushSync(() => button?.click());
++		assert.htmlEqual(target.innerHTML, `<button>click</button> false`);
++
++		flushSync(() => button?.click());
++		assert.htmlEqual(target.innerHTML, `<button>click</button>`);
++
++		window.removeEventListener('error', onerror);
++		assert.deepEqual(errors, []);
++	}
++});
+diff --git a/packages/svelte/tests/runtime-runes/samples/abort-signal-state-update/main.svelte b/packages/svelte/tests/runtime-runes/samples/abort-signal-state-update/main.svelte
+new file mode 100644
+index 0000000..7b2704b
+--- /dev/null
++++ b/packages/svelte/tests/runtime-runes/samples/abort-signal-state-update/main.svelte
+@@ -0,0 +1,15 @@
++<script>
++	import Component from './Component.svelte';
++
++	class Test {
++		value = $state(false);
++	}
++
++	const test = new Test();
++	let show = $state(false);
++</script>
++
++<button onclick={() => (show = !show)}>click</button>
++{#if show}
++	<Component {test} />
++{/if}

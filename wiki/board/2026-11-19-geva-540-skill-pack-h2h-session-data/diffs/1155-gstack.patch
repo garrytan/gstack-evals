@@ -1,0 +1,81 @@
+diff --git a/pkg/k8s/network_policy.go b/pkg/k8s/network_policy.go
+index a07c8b18..ffe95fdb 100644
+--- a/pkg/k8s/network_policy.go
++++ b/pkg/k8s/network_policy.go
+@@ -109,6 +109,10 @@ func processNamespaceSelector(ns *slim_metav1.LabelSelector) *slim_metav1.LabelS
+ }
+ 
+ func parseNetworkPolicyPeer(clusterName, namespace string, peer *slim_networkingv1.NetworkPolicyPeer) types.Selector {
++	// A peer without any label-based selector (e.g. an ipBlock-only peer)
++	// must not result in an endpoint selector. In particular, we must not
++	// instantiate an empty pod selector for it below when scoping to the
++	// local cluster, as that would select all pods in the policy namespace.
+ 	if peer == nil || (peer.PodSelector == nil && peer.NamespaceSelector == nil) {
+ 		return nil
+ 	}
+@@ -165,13 +169,18 @@ func ParseNetworkPolicy(logger *slog.Logger, clusterName string, np *slim_networ
+ 		if len(iRule.From) > 0 {
+ 			for _, rule := range iRule.From {
+ 				ingress := &types.PolicyEntry{Ingress: true, Tier: types.Normal}
+-				endpointSelector := parseNetworkPolicyPeer(clusterName, namespace, &rule)
++				// Only parse label-based selectors if the peer actually
++				// contains one. A selectorless peer (e.g. ipBlock-only) must
++				// never result in an (implicit) pod selector, as that would
++				// allow all pods in the policy's namespace.
++				if rule.NamespaceSelector != nil || rule.PodSelector != nil {
++					endpointSelector := parseNetworkPolicyPeer(clusterName, namespace, &rule)
+ 
+-				if endpointSelector != nil {
+-					ingress.L3 = append(ingress.L3, endpointSelector)
+-				} else {
+-					// No label-based selectors were in NetworkPolicyPeer.
+-					logger.Debug("NetworkPolicyPeer does not have PodSelector or NamespaceSelector", logfields.K8sNetworkPolicyName, np.Name)
++					if endpointSelector != nil {
++						ingress.L3 = append(ingress.L3, endpointSelector)
++					} else {
++						logger.Debug("NetworkPolicyPeer does not have PodSelector or NamespaceSelector", logfields.K8sNetworkPolicyName, np.Name)
++					}
+ 				}
+ 
+ 				// Parse CIDR-based parts of rule.
+diff --git a/pkg/k8s/network_policy_test.go b/pkg/k8s/network_policy_test.go
+index a9c40212..9c447697 100644
+--- a/pkg/k8s/network_policy_test.go
++++ b/pkg/k8s/network_policy_test.go
+@@ -1919,3 +1919,36 @@ func TestIPBlockToCIDRRule(t *testing.T) {
+ 		}
+ 	}
+ }
++
++// TestParseNetworkPolicyIPBlockWithClusterName ensures that ipBlock-only peers
++// do not result in an implicit pod selector (allowing all pods in the policy
++// namespace) when a local cluster name is configured. See GHSA-fm8w-2m5w-9j7r.
++func TestParseNetworkPolicyIPBlockWithClusterName(t *testing.T) {
++	np := &slim_networkingv1.NetworkPolicy{
++		ObjectMeta: slim_metav1.ObjectMeta{Name: "test-server", Namespace: "default"},
++		Spec: slim_networkingv1.NetworkPolicySpec{
++			PodSelector: slim_metav1.LabelSelector{MatchLabels: map[string]string{"app": "test-server"}},
++			PolicyTypes: []slim_networkingv1.PolicyType{slim_networkingv1.PolicyTypeIngress, slim_networkingv1.PolicyTypeEgress},
++			Ingress: []slim_networkingv1.NetworkPolicyIngressRule{{
++				From: []slim_networkingv1.NetworkPolicyPeer{{IPBlock: &slim_networkingv1.IPBlock{CIDR: "192.0.2.3/32"}}},
++			}},
++			Egress: []slim_networkingv1.NetworkPolicyEgressRule{{
++				To: []slim_networkingv1.NetworkPolicyPeer{{IPBlock: &slim_networkingv1.IPBlock{CIDR: "192.0.2.3/32"}}},
++			}},
++		},
++	}
++
++	for _, clusterName := range []string{"", "cluster1"} {
++		rules, err := ParseNetworkPolicy(hivetest.Logger(t), clusterName, np)
++		require.NoError(t, err)
++		require.Len(t, rules, 2)
++		for _, r := range rules {
++			require.Len(t, r.L3, 1, "cluster %q: unexpected L3 selectors %v", clusterName, r.L3)
++			_, isCIDR := r.L3[0].(*policytypes.CIDRSelector)
++			require.True(t, isCIDR, "cluster %q: expected CIDR selector, got %v", clusterName, r.L3[0])
++		}
++	}
++
++	require.Nil(t, parseNetworkPolicyPeer("cluster1", "default",
++		&slim_networkingv1.NetworkPolicyPeer{IPBlock: &slim_networkingv1.IPBlock{CIDR: "192.0.2.3/32"}}))
++}

@@ -1,0 +1,88 @@
+diff --git a/internal/notification/dispatcher/webhook.go b/internal/notification/dispatcher/webhook.go
+index 387c717..3ee36ac 100644
+--- a/internal/notification/dispatcher/webhook.go
++++ b/internal/notification/dispatcher/webhook.go
+@@ -29,6 +29,31 @@ var errBlockedAddress = errors.New("webhook target resolves to a blocked address
+ // zeroNetV4 covers 0.0.0.0/8 — on Linux these route to the local host.
+ var zeroNetV4 = &net.IPNet{IP: net.IP{0, 0, 0, 0}, Mask: net.CIDRMask(8, 32)}
+ 
++// IPv6 transition ranges that tunnel to an embedded IPv4 address, letting a
++// target like 2002:7f00:1:: reach 127.0.0.1. None are plausible webhook hosts.
++var blockedTransitionNets = mustParseCIDRs(
++	"2002::/16",      // 6to4 (RFC 3056)
++	"2001::/32",      // Teredo (RFC 4380)
++	"64:ff9b:1::/48", // NAT64 local-use (RFC 8215)
++	"::/96",          // IPv4-compatible (deprecated, RFC 4291)
++)
++
++// nat64WKP is allowed so IPv6-only hosts behind DNS64 can still reach public
++// webhooks, but the embedded IPv4 is checked against the same rules.
++var nat64WKP = mustParseCIDRs("64:ff9b::/96")[0]
++
++func mustParseCIDRs(cidrs ...string) []*net.IPNet {
++	nets := make([]*net.IPNet, len(cidrs))
++	for i, c := range cidrs {
++		_, n, err := net.ParseCIDR(c)
++		if err != nil {
++			panic(err)
++		}
++		nets[i] = n
++	}
++	return nets
++}
++
+ func isBlockedIP(ip net.IP) bool {
+ 	if ip.IsLoopback() ||
+ 		ip.IsLinkLocalUnicast() ||
+@@ -47,6 +72,16 @@ func isBlockedIP(ip net.IP) bool {
+ 	if ip.Equal(net.IPv4bcast) {
+ 		return true
+ 	}
++	if ip.To4() == nil && len(ip) == net.IPv6len {
++		for _, n := range blockedTransitionNets {
++			if n.Contains(ip) {
++				return true
++			}
++		}
++		if nat64WKP.Contains(ip) {
++			return isBlockedIP(net.IP(ip[12:16]))
++		}
++	}
+ 	return false
+ }
+ 
+diff --git a/internal/notification/dispatcher/webhook_test.go b/internal/notification/dispatcher/webhook_test.go
+index 7c1b4ee..c7c0ecd 100644
+--- a/internal/notification/dispatcher/webhook_test.go
++++ b/internal/notification/dispatcher/webhook_test.go
+@@ -229,6 +229,19 @@ func TestIsBlockedIP(t *testing.T) {
+ 		"0.1.2.3",       // 0.0.0.0/8 — routes to localhost on Linux
+ 		"0.255.255.255", // top of 0.0.0.0/8
+ 		"255.255.255.255", // limited broadcast
++		"2002:7f00:0001::1",
++		"2002:a9fe:a9fe::1",
++		"2002:c0a8:0132::1",
++		"64:ff9b::7f00:1",
++		"64:ff9b::a9fe:a9fe",
++		"64:ff9b::0:0",
++		"64:ff9b:1::7f00:1",
++		"2001:0000:dead:beef:0000:0000:7f00:0001",
++		"2001::1",
++		"::7f00:1",
++		"::a9fe:a9fe",
++		"::ffff:127.0.0.1",
++		"::ffff:169.254.169.254",
+ 	}
+ 	for _, s := range blocked {
+ 		ip := net.ParseIP(s)
+@@ -242,6 +255,10 @@ func TestIsBlockedIP(t *testing.T) {
+ 		"172.16.5.10",
+ 		"8.8.8.8",
+ 		"2606:4700:4700::1111",
++		"64:ff9b::808:808",
++		"64:ff9b::c0a8:132",
++		"2001:db8::1",
++		"2001:4860:4860::8888",
+ 	}
+ 	for _, s := range allowed {
+ 		ip := net.ParseIP(s)

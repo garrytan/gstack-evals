@@ -1,0 +1,138 @@
+diff --git a/lib/bridge.js b/lib/bridge.js
+index 6fb4adc..eb0815e 100644
+--- a/lib/bridge.js
++++ b/lib/bridge.js
+@@ -167,6 +167,8 @@ const thisSymbolIterator = Symbol.iterator;
+ // load, before any sandbox code runs, so they cannot be redirected.
+ const thisSymbolKeyFor = Symbol.keyFor;
+ const thisStringPrototypeStartsWith = String.prototype.startsWith;
++const thisStringPrototypeIndexOf = String.prototype.indexOf;
++const thisStringPrototypeSlice = String.prototype.slice;
+ const thisSymbolNodeJSUtilInspectCustom = Symbol.for('nodejs.util.inspect.custom');
+ const thisSymbolNodeJSRejection = Symbol.for('nodejs.rejection');
+ // SECURITY (post-GHSA-47x8 hardening): defense-in-depth — Node's util.promisify
+@@ -415,6 +417,27 @@ function thisCreateTargetObject(obj, proto) {
+ 	return base;
+ }
+ 
++// SECURITY (GHSA-x6m4-chr9-cg97): a host-realm error's `stack` was formatted
++// by the host's prepareStackTrace, so its frames carry absolute host paths and
++// host function names. Rewrite every frame line to the same `at CallSite {}`
++// form the sandbox's own formatter emits, keeping the header lines intact.
++// Uses only pristine String.prototype refs so sandbox overrides never run.
++function redactHostStack(stack) {
++	let result = '';
++	let start = 0;
++	while (true) {
++		const end = thisReflectApply(thisStringPrototypeIndexOf, stack, ['\n', start]);
++		const line = thisReflectApply(thisStringPrototypeSlice, stack, [start, end === -1 ? stack.length : end]);
++		let i = 0;
++		while (i < line.length && (line[i] === ' ' || line[i] === '\t')) i++;
++		const isFrame = i > 0 && thisReflectApply(thisStringPrototypeStartsWith, line, ['at ', i]);
++		if (start > 0) result += '\n';
++		result += isFrame ? '    at CallSite {}' : line;
++		if (end === -1) return result;
++		start = end + 1;
++	}
++}
++
+ function createBridge(otherInit, registerProxy) {
+ 	const mappingOtherToThis = new ThisWeakMap();
+ 	const protoMappings = new ThisMap();
+@@ -1668,6 +1691,7 @@ function createBridge(otherInit, registerProxy) {
+ 				// @other(unsafe)
+ 				throw thisFromOtherForThrow(e);
+ 			}
++			if (!isHost && key === 'stack' && typeof ret === 'string') return redactHostStack(ret);
+ 			return handlerFromOtherWithContext(this, ret);
+ 		}
+ 
+@@ -1908,6 +1932,25 @@ function createBridge(otherInit, registerProxy) {
+ 			if (!isHost && desc && prop === 'constructor' && desc.value && isDangerousFunctionConstructor(desc.value)) {
+ 				return undefined;
+ 			}
++			if (!isHost && desc && prop === 'stack') {
++				let value = desc.value;
++				if (desc.get || desc.set) {
++					try {
++						value = otherReflectGet(object, prop);
++					} catch (e) {
++						throw thisFromOtherForThrow(e);
++					}
++				}
++				if (typeof value === 'string') {
++					return {
++						__proto__: null,
++						value: redactHostStack(value),
++						writable: desc.writable === true || !!desc.set,
++						enumerable: desc.enumerable === true,
++						configurable: desc.configurable === true,
++					};
++				}
++			}
+ 			return desc;
+ 		}
+ 
+diff --git a/test/ghsa/GHSA-x6m4-chr9-cg97/repro.js b/test/ghsa/GHSA-x6m4-chr9-cg97/repro.js
+new file mode 100644
+index 0000000..6e74017
+--- /dev/null
++++ b/test/ghsa/GHSA-x6m4-chr9-cg97/repro.js
+@@ -0,0 +1,57 @@
++'use strict';
++
++/**
++ * GHSA-x6m4-chr9-cg97 — host error stacks leak host paths through the bridge
++ *
++ * Sandbox code that catches a host-realm error (e.g. the SyntaxError thrown by
++ * the host-side transformer on malformed `eval` input) and reads `.stack` got
++ * the host-formatted string, with absolute paths of vm2, Node internals, and
++ * the embedding application. The sandbox-side bridge now rewrites every frame
++ * of a host `stack` value to `at CallSite {}`, matching the sandbox formatter.
++ */
++
++const assert = require('assert');
++const { VM, NodeVM } = require('../../../lib/main.js');
++
++function assertRedacted(stack) {
++	assert.strictEqual(typeof stack, 'string');
++	assert.ok(stack.indexOf(__dirname) === -1, 'test file path absent: ' + stack);
++	assert.ok(!/[\\/]lib[\\/]/.test(stack), 'vm2 lib paths absent: ' + stack);
++	assert.ok(!/node:|internal\//.test(stack), 'node internals absent: ' + stack);
++	assert.ok(/^SyntaxError: /.test(stack) || /^Error: /.test(stack), 'header kept: ' + stack);
++}
++
++describe('GHSA-x6m4-chr9-cg97 (host error stack path leak)', function () {
++	const poc = 'var s; try { eval("@@@ catch") } catch (e) { s = e.stack }';
++
++	it('canonical PoC on default VM', function () {
++		assertRedacted(new VM().run(poc + '; s'));
++	});
++
++	it('VM with eval disabled', function () {
++		assertRedacted(new VM({ eval: false }).run(poc + '; s'));
++	});
++
++	it('Function constructor path', function () {
++		assertRedacted(new VM().run('var s; try { new Function("@@@ catch") } catch (e) { s = e.stack } s'));
++	});
++
++	it('default NodeVM', function () {
++		assertRedacted(new NodeVM().run(poc + '; module.exports = s'));
++	});
++
++	it('property descriptor read', function () {
++		const vm = new VM();
++		vm.setGlobal('hostError', new Error('host'));
++		assertRedacted(vm.run('Object.getOwnPropertyDescriptor(hostError, "stack").value'));
++		assertRedacted(vm.run('Object.getOwnPropertyDescriptors(hostError).stack.value'));
++	});
++
++	it('host keeps its own unredacted stack', function () {
++		const hostError = new Error('host');
++		const vm = new VM();
++		vm.setGlobal('hostError', hostError);
++		vm.run('hostError.stack');
++		assert.ok(hostError.stack.indexOf(__filename) !== -1);
++	});
++});

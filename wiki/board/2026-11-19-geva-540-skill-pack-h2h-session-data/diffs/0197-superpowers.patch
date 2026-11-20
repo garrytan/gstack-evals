@@ -1,0 +1,405 @@
+diff --git a/RELEASE_NOTES.md b/RELEASE_NOTES.md
+index 91e9e10..c9d25c4 100644
+--- a/RELEASE_NOTES.md
++++ b/RELEASE_NOTES.md
+@@ -77,6 +77,7 @@ extensive correctness work during development — see [Docs/Sampler.md](Docs/Sam
+  * `LoopStream.Read`: no longer spins at 100% CPU when the wrapped source can't satisfy a read (#1338)
+  * `Mp3FileReader`: fixed false sample-rate-change errors near end of file, and more robust MP3 frame parsing against album art / trailing metadata
+  * `MidiFile`: preserve running-status across meta events (fixes "Read too far")
++ * `BlockAlignReductionStream`: reads larger than its internal 4-second buffer no longer silently drop audio — e.g. `AudioFileReader` + `Stream.CopyTo` on modern .NET truncated 8kHz mono ACM-decoded (µ-law/A-law) WAVs to 4 seconds
+  * `BlockAlignReductionStream.Position`: validates the incoming value, so a block-aligned seek after an arbitrary read no longer wrongly throws (#368)
+  * `MmException` messages now append a human-readable `MmResult` description (#1192); `Id3v2Tag.ReadTag` no longer throws/catches for tagless MP3 streams (#265)
+  * ASIO: implemented missing `Asio64Bit` Int24LSB/Float32LSB conversions and fixed a byte-order bug in `GetSamplePosition`; `WdlResampler` backported three upstream Cockos WDL fixes
+diff --git a/src/NAudio.Core/Wave/WaveStreams/BlockAlignReductionStream.cs b/src/NAudio.Core/Wave/WaveStreams/BlockAlignReductionStream.cs
+index 3eba574..d7bd513 100644
+--- a/src/NAudio.Core/Wave/WaveStreams/BlockAlignReductionStream.cs
++++ b/src/NAudio.Core/Wave/WaveStreams/BlockAlignReductionStream.cs
+@@ -126,43 +126,82 @@ public class BlockAlignReductionStream : WaveStream
+     /// </summary>
+     public override int Read(Span<byte> buffer)
+     {
+-        int count = buffer.Length;
+         lock (lockObject)
+         {
+-            // 1. attempt to fill the circular buffer with enough data to meet our request
+-            while (BufferEndPosition < position + count)
++            // The circular buffer has a fixed capacity, so requests larger than it
++            // (e.g. Stream.CopyTo on modern .NET, which uses a 128KB pooled buffer)
++            // must be served in chunks, otherwise source data that doesn't fit in
++            // the circular buffer is silently discarded.
++            int sourceBlockAlign = sourceStream.BlockAlign;
++            // leave room for the partial source block that may precede position
++            // and for rounding source reads up to whole source blocks
++            int alignedCapacity = circularBuffer.MaxLength - (circularBuffer.MaxLength % sourceBlockAlign);
++            int maxChunk = alignedCapacity - 2 * sourceBlockAlign;
++            if (maxChunk <= 0)
+             {
+-                int sourceReadCount = count;
+-                if (sourceReadCount % sourceStream.BlockAlign != 0)
+-                {
+-                    sourceReadCount = (count + sourceStream.BlockAlign) - (count % sourceStream.BlockAlign);
+-                }
+-
+-                byte[] sourceBuf = GetSourceBuffer(sourceReadCount);
+-                int sourceRead = sourceStream.Read(sourceBuf, 0, sourceReadCount);
+-                circularBuffer.Write(sourceBuf.AsSpan(0, sourceRead));
+-                if (sourceRead == 0)
++                throw new InvalidOperationException("Source block align is too large for the internal buffer");
++            }
++            int totalRead = 0;
++            while (totalRead < buffer.Length)
++            {
++                int chunk = Math.Min(buffer.Length - totalRead, maxChunk);
++                int read = ReadChunk(buffer.Slice(totalRead, chunk), sourceBlockAlign);
++                totalRead += read;
++                if (read < chunk)
+                 {
+-                    // assume we have run out of data
++                    // end of source
+                     break;
+                 }
+             }
++            return totalRead;
++        }
++    }
+ 
+-            // 2. discard any unnecessary stuff from the start
+-            if (bufferStartPosition < position)
++    private int ReadChunk(Span<byte> buffer, int sourceBlockAlign)
++    {
++        int count = buffer.Length;
++        // 1. attempt to fill the circular buffer with enough data to meet our request
++        while (BufferEndPosition < position + count)
++        {
++            long needed = position + count - BufferEndPosition;
++            int sourceReadCount = (int)needed;
++            if (sourceReadCount % sourceBlockAlign != 0)
+             {
+-                circularBuffer.Advance((int)(position - bufferStartPosition));
+-                bufferStartPosition = position;
++                sourceReadCount += sourceBlockAlign - (sourceReadCount % sourceBlockAlign);
++            }
++            // never read more than the circular buffer can hold
++            int free = circularBuffer.MaxLength - circularBuffer.Count;
++            free -= free % sourceBlockAlign;
++            sourceReadCount = Math.Min(sourceReadCount, free);
++            if (sourceReadCount <= 0)
++            {
++                break;
+             }
+ 
+-            // 3. now whatever is in the buffer we can return
+-            int bytesRead = circularBuffer.Read(buffer);
+-            position += bytesRead;
+-            // anything left in buffer is at start position
+-            bufferStartPosition = position;
++            byte[] sourceBuf = GetSourceBuffer(sourceReadCount);
++            int sourceRead = sourceStream.Read(sourceBuf, 0, sourceReadCount);
++            circularBuffer.Write(sourceBuf.AsSpan(0, sourceRead));
++            if (sourceRead == 0)
++            {
++                // assume we have run out of data
++                break;
++            }
++        }
+ 
+-            return bytesRead;
++        // 2. discard any unnecessary stuff from the start
++        if (bufferStartPosition < position)
++        {
++            circularBuffer.Advance((int)(position - bufferStartPosition));
++            bufferStartPosition = position;
+         }
++
++        // 3. now whatever is in the buffer we can return
++        int bytesRead = circularBuffer.Read(buffer);
++        position += bytesRead;
++        // anything left in buffer is at start position
++        bufferStartPosition = position;
++
++        return bytesRead;
+     }
+ 
+     /// <summary>
+diff --git a/tests/NAudio.Core.Tests/WaveStreams/BlockAlignmentReductionStreamTests.cs b/tests/NAudio.Core.Tests/WaveStreams/BlockAlignmentReductionStreamTests.cs
+index 54e8e95..661b38d 100644
+--- a/tests/NAudio.Core.Tests/WaveStreams/BlockAlignmentReductionStreamTests.cs
++++ b/tests/NAudio.Core.Tests/WaveStreams/BlockAlignmentReductionStreamTests.cs
+@@ -1,112 +1,167 @@
+-﻿using System;
+-using NUnit.Framework;
+-using NAudio.Core.Tests.Utils;
+-using NAudio.Wave;
+-
+-namespace NAudio.Core.Tests.WaveStreams;
+-
+-[TestFixture]
+-[Category("UnitTest")]
+-public class BlockAlignmentReductionStreamTests
+-{
+-    [Test]
+-    public void CanCreateBlockAlignmentReductionStream()
+-    {
+-        BlockAlignedWaveStream inputStream = new BlockAlignedWaveStream(726, 80000);
+-        BlockAlignReductionStream blockStream = new BlockAlignReductionStream(inputStream);
+-        Assert.That(inputStream.BlockAlign, Is.EqualTo(726));
+-        Assert.That(blockStream.BlockAlign, Is.EqualTo(2));
+-    }
+-
+-    [Test]
+-    public void CanReadNonBlockAlignedLengths()
+-    {
+-        BlockAlignedWaveStream inputStream = new BlockAlignedWaveStream(726, 80000);
++﻿using System;
++using NUnit.Framework;
++using NAudio.Core.Tests.Utils;
++using NAudio.Wave;
++
++namespace NAudio.Core.Tests.WaveStreams;
++
++[TestFixture]
++[Category("UnitTest")]
++public class BlockAlignmentReductionStreamTests
++{
++    [Test]
++    public void CanCreateBlockAlignmentReductionStream()
++    {
++        BlockAlignedWaveStream inputStream = new BlockAlignedWaveStream(726, 80000);
++        BlockAlignReductionStream blockStream = new BlockAlignReductionStream(inputStream);
++        Assert.That(inputStream.BlockAlign, Is.EqualTo(726));
++        Assert.That(blockStream.BlockAlign, Is.EqualTo(2));
++    }
++
++    [Test]
++    public void CanReadNonBlockAlignedLengths()
++    {
++        BlockAlignedWaveStream inputStream = new BlockAlignedWaveStream(726, 80000);
++        BlockAlignReductionStream blockStream = new BlockAlignReductionStream(inputStream);
++
++        byte[] inputBuffer = new byte[1024];
++        int read = blockStream.Read(inputBuffer, 0, 1024);
++        Assert.That(read, Is.EqualTo(1024), "bytes read 1");
++        Assert.That(blockStream.Position, Is.EqualTo(1024));
++        CheckReadBuffer(inputBuffer, 1024, 0);
++
++        read = blockStream.Read(inputBuffer, 0, 1024);
++        Assert.That(read, Is.EqualTo(1024), "bytes read 2");
++        Assert.That(blockStream.Position, Is.EqualTo(2048), "position 2");
++        CheckReadBuffer(inputBuffer, 1024, 1024);
++    }
++
++    [Test]
++    public void CanRepositionToNonBlockAlignedPositions()
++    {
++        BlockAlignedWaveStream inputStream = new BlockAlignedWaveStream(726, 80000);
++        BlockAlignReductionStream blockStream = new BlockAlignReductionStream(inputStream);
++
++        byte[] inputBuffer = new byte[1024];
++        int read = blockStream.Read(inputBuffer, 0, 1024);
++        Assert.That(read, Is.EqualTo(1024), "bytes read 1");
++        Assert.That(blockStream.Position, Is.EqualTo(1024));
++        CheckReadBuffer(inputBuffer, 1024, 0);
++
++        read = blockStream.Read(inputBuffer, 0, 1024);
++        Assert.That(read, Is.EqualTo(1024), "bytes read 2");
++        Assert.That(blockStream.Position, Is.EqualTo(2048), "position 2");
++        CheckReadBuffer(inputBuffer, 1024, 1024);
++
++        // can reposition correctly
++        blockStream.Position = 1000;
++        read = blockStream.Read(inputBuffer, 0, 1024);
++        Assert.That(read, Is.EqualTo(1024), "bytes read 3");
++        Assert.That(blockStream.Position, Is.EqualTo(2024), "position 3");
++        CheckReadBuffer(inputBuffer, 1024, 1000);
++    }
++
++    [Test]
++    public void CanRepositionAfterNonBlockAlignedRead()
++    {
++        // Reproduces #368: an arbitrary-length read (the whole point of
++        // this helper) leaves the internal position non-block-aligned.
++        // A subsequent valid, block-aligned reposition must not throw
++        // "Position must be block aligned" - the setter must validate
++        // the incoming value, not the stale current position.
++        BlockAlignedWaveStream inputStream = new BlockAlignedWaveStream(726, 80000);
++        BlockAlignReductionStream blockStream = new BlockAlignReductionStream(inputStream);
++
++        byte[] inputBuffer = new byte[1023]; // odd -> position becomes non-block-aligned
++        int read = blockStream.Read(inputBuffer, 0, 1023);
++        Assert.That(read, Is.EqualTo(1023), "bytes read 1");
++        Assert.That(blockStream.Position, Is.EqualTo(1023), "position 1");
++        CheckReadBuffer(inputBuffer, 1023, 0);
++
++        // 2048 is a multiple of BlockAlign (2) so this must succeed even
++        // though the current position (1023) is not block aligned.
++        Assert.DoesNotThrow(() => blockStream.Position = 2048);
++        Assert.That(blockStream.Position, Is.EqualTo(2048), "position 2");
++
++        byte[] readBuffer = new byte[1024];
++        read = blockStream.Read(readBuffer, 0, 1024);
++        Assert.That(read, Is.EqualTo(1024), "bytes read 2");
++        Assert.That(blockStream.Position, Is.EqualTo(3072), "position 3");
++        CheckReadBuffer(readBuffer, 1024, 2048);
++    }
++
++    [Test]
++    public void RepositionToNonBlockAlignedPositionThrows()
++    {
++        // The setter must reject a non-block-aligned target value.
++        // BlockAlign is 2 (16-bit mono) so an odd position is invalid.
++        BlockAlignedWaveStream inputStream = new BlockAlignedWaveStream(726, 80000);
++        BlockAlignReductionStream blockStream = new BlockAlignReductionStream(inputStream);
++
++        Assert.Throws<ArgumentException>(() => blockStream.Position = 1001);
++    }
++
++    [Test]
++    public void CanReadMoreThanInternalBufferSizeInOneRead()
++    {
++        // Internal circular buffer is 4 seconds (4 * 16000 = 64000 bytes).
++        // A single read bigger than that (e.g. .NET's Stream.CopyTo, which on
++        // modern .NET uses a 128KB pooled buffer) must not drop audio.
++        const int length = 16000 * 16; // 16 seconds
++        BlockAlignedWaveStream inputStream = new BlockAlignedWaveStream(726, length);
++        BlockAlignReductionStream blockStream = new BlockAlignReductionStream(inputStream);
++
++        byte[] readBuffer = new byte[65536];
++        int read = blockStream.Read(readBuffer, 0, readBuffer.Length);
++        Assert.That(read, Is.EqualTo(readBuffer.Length), "bytes read 1");
++        Assert.That(blockStream.Position, Is.EqualTo(readBuffer.Length), "position 1");
++        CheckReadBuffer(readBuffer, read, 0);
++
++        read = blockStream.Read(readBuffer, 0, readBuffer.Length);
++        Assert.That(read, Is.EqualTo(readBuffer.Length), "bytes read 2");
++        CheckReadBuffer(readBuffer, read, 65536);
++    }
++
++    [Test]
++    public void CopyToReadsEntireStream()
++    {
++        const int length = 16000 * 16; // 16 seconds
++        BlockAlignedWaveStream inputStream = new BlockAlignedWaveStream(726, length);
++        BlockAlignReductionStream blockStream = new BlockAlignReductionStream(inputStream);
++
++        var output = new System.IO.MemoryStream();
++        blockStream.CopyTo(output, 200000);
++        Assert.That(output.Length, Is.EqualTo(length));
++        CheckReadBuffer(output.ToArray(), length, 0);
++    }
++
++    [Test]
++    public void CanReadLargeVaryingSizesAfterReposition()
++    {
++        const int length = 16000 * 16;
++        BlockAlignedWaveStream inputStream = new BlockAlignedWaveStream(726, length);
+         BlockAlignReductionStream blockStream = new BlockAlignReductionStream(inputStream);
++        blockStream.Position = 1000; // not source-block aligned
++        long expectedPos = 1000;
++        int[] sizes = { 63999, 100001, 1, 64000, 131072 };
++        foreach (var size in sizes)
++        {
++            byte[] buf = new byte[size];
++            int read = blockStream.Read(buf, 0, size);
++            int expected = (int)Math.Min(size, length - expectedPos);
++            Assert.That(read, Is.EqualTo(expected), $"read of {size}");
++            CheckReadBuffer(buf, read, (int)expectedPos);
++            expectedPos += read;
++            Assert.That(blockStream.Position, Is.EqualTo(expectedPos));
++        }
++    }
+ 
+-        byte[] inputBuffer = new byte[1024];
+-        int read = blockStream.Read(inputBuffer, 0, 1024);
+-        Assert.That(read, Is.EqualTo(1024), "bytes read 1");
+-        Assert.That(blockStream.Position, Is.EqualTo(1024));
+-        CheckReadBuffer(inputBuffer, 1024, 0);
+-
+-        read = blockStream.Read(inputBuffer, 0, 1024);
+-        Assert.That(read, Is.EqualTo(1024), "bytes read 2");
+-        Assert.That(blockStream.Position, Is.EqualTo(2048), "position 2");
+-        CheckReadBuffer(inputBuffer, 1024, 1024);
+-    }
+-
+-    [Test]
+-    public void CanRepositionToNonBlockAlignedPositions()
+-    {
+-        BlockAlignedWaveStream inputStream = new BlockAlignedWaveStream(726, 80000);
+-        BlockAlignReductionStream blockStream = new BlockAlignReductionStream(inputStream);
+-
+-        byte[] inputBuffer = new byte[1024];
+-        int read = blockStream.Read(inputBuffer, 0, 1024);
+-        Assert.That(read, Is.EqualTo(1024), "bytes read 1");
+-        Assert.That(blockStream.Position, Is.EqualTo(1024));
+-        CheckReadBuffer(inputBuffer, 1024, 0);
+-
+-        read = blockStream.Read(inputBuffer, 0, 1024);
+-        Assert.That(read, Is.EqualTo(1024), "bytes read 2");
+-        Assert.That(blockStream.Position, Is.EqualTo(2048), "position 2");
+-        CheckReadBuffer(inputBuffer, 1024, 1024);
+-
+-        // can reposition correctly
+-        blockStream.Position = 1000;
+-        read = blockStream.Read(inputBuffer, 0, 1024);
+-        Assert.That(read, Is.EqualTo(1024), "bytes read 3");
+-        Assert.That(blockStream.Position, Is.EqualTo(2024), "position 3");
+-        CheckReadBuffer(inputBuffer, 1024, 1000);
+-    }
+-
+-    [Test]
+-    public void CanRepositionAfterNonBlockAlignedRead()
+-    {
+-        // Reproduces #368: an arbitrary-length read (the whole point of
+-        // this helper) leaves the internal position non-block-aligned.
+-        // A subsequent valid, block-aligned reposition must not throw
+-        // "Position must be block aligned" - the setter must validate
+-        // the incoming value, not the stale current position.
+-        BlockAlignedWaveStream inputStream = new BlockAlignedWaveStream(726, 80000);
+-        BlockAlignReductionStream blockStream = new BlockAlignReductionStream(inputStream);
+-
+-        byte[] inputBuffer = new byte[1023]; // odd -> position becomes non-block-aligned
+-        int read = blockStream.Read(inputBuffer, 0, 1023);
+-        Assert.That(read, Is.EqualTo(1023), "bytes read 1");
+-        Assert.That(blockStream.Position, Is.EqualTo(1023), "position 1");
+-        CheckReadBuffer(inputBuffer, 1023, 0);
+-
+-        // 2048 is a multiple of BlockAlign (2) so this must succeed even
+-        // though the current position (1023) is not block aligned.
+-        Assert.DoesNotThrow(() => blockStream.Position = 2048);
+-        Assert.That(blockStream.Position, Is.EqualTo(2048), "position 2");
+-
+-        byte[] readBuffer = new byte[1024];
+-        read = blockStream.Read(readBuffer, 0, 1024);
+-        Assert.That(read, Is.EqualTo(1024), "bytes read 2");
+-        Assert.That(blockStream.Position, Is.EqualTo(3072), "position 3");
+-        CheckReadBuffer(readBuffer, 1024, 2048);
+-    }
+-
+-    [Test]
+-    public void RepositionToNonBlockAlignedPositionThrows()
+-    {
+-        // The setter must reject a non-block-aligned target value.
+-        // BlockAlign is 2 (16-bit mono) so an odd position is invalid.
+-        BlockAlignedWaveStream inputStream = new BlockAlignedWaveStream(726, 80000);
+-        BlockAlignReductionStream blockStream = new BlockAlignReductionStream(inputStream);
+-
+-        Assert.Throws<ArgumentException>(() => blockStream.Position = 1001);
+-    }
+-
+-    private void CheckReadBuffer(byte[] readBuffer, int count, int startPosition)
+-    {
+-        for (int n = 0; n < count; n++)
+-        {
+-            byte expected = (byte)((startPosition + n) % 256);
+-            Assert.That(readBuffer[n], Is.EqualTo(expected), $"Read buffer at position {startPosition + n}");
+-        }
+-    }
+-}
++    private void CheckReadBuffer(byte[] readBuffer, int count, int startPosition)
++    {
++        for (int n = 0; n < count; n++)
++        {
++            byte expected = (byte)((startPosition + n) % 256);
++            Assert.That(readBuffer[n], Is.EqualTo(expected), $"Read buffer at position {startPosition + n}");
++        }
++    }
++}

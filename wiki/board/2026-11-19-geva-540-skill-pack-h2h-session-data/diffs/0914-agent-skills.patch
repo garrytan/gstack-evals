@@ -1,0 +1,46 @@
+diff --git a/tests/PhoneNumber.test.ts b/tests/PhoneNumber.test.ts
+index e26c8e7..9a768f9 100644
+--- a/tests/PhoneNumber.test.ts
++++ b/tests/PhoneNumber.test.ts
+@@ -119,6 +119,41 @@ describe('PhoneNumber', () => {
+         ).toThrow(/^Value is not a valid phone number of the form \+17895551234 \(7-15 digits\)/);
+       });
+     });
++    describe('regular expression denial of service (GHSA-x8rm-f576-gq67)', () => {
++      const payload = '1'.repeat(40) + 'x';
++      const MAX_MS = 100;
++
++      function timed(fn: () => unknown) {
++        const start = performance.now();
++        expect(fn).toThrow(/^Value is not a valid phone number/);
++        return performance.now() - start;
++      }
++
++      test('serialize rejects a long digit run with a failing character quickly', () => {
++        expect(timed(() => GraphQLPhoneNumber.serialize(payload))).toBeLessThan(MAX_MS);
++      });
++
++      test('parseValue rejects a long digit run with a failing character quickly', () => {
++        expect(timed(() => GraphQLPhoneNumber.parseValue(payload))).toBeLessThan(MAX_MS);
++      });
++
++      test('parseLiteral rejects a long digit run with a failing character quickly', () => {
++        expect(
++          timed(() => GraphQLPhoneNumber.parseLiteral({ value: payload, kind: Kind.STRING }, {})),
++        ).toBeLessThan(MAX_MS);
++      });
++
++      test('rejects other adversarial shapes quickly', () => {
++        for (const value of [
++          '+' + '1'.repeat(40) + 'x',
++          '+1 ' + '1 '.repeat(5000) + 'x',
++          '+1-' + '1-'.repeat(5000) + 'x',
++          '+1 (' + '1'.repeat(5000) + ')x',
++        ]) {
++          expect(timed(() => GraphQLPhoneNumber.parseValue(value))).toBeLessThan(MAX_MS);
++        }
++      });
++    });
+     describe('support more countries', () => {
+       test('support Singapore numbers - 10 digits', () => {
+         expect(() => {

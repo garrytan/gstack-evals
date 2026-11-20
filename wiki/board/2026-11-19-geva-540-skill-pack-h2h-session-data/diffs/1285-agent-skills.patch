@@ -1,0 +1,66 @@
+diff --git a/.changeset/fix-proto-pollution-convert-token-data.md b/.changeset/fix-proto-pollution-convert-token-data.md
+new file mode 100644
+index 0000000..689cb98
+--- /dev/null
++++ b/.changeset/fix-proto-pollution-convert-token-data.md
+@@ -0,0 +1,5 @@
++---
++'style-dictionary': patch
++---
++
++Fix prototype pollution vulnerability in `convertTokenData` utility when converting to `object` output (GHSA-vj5c-m527-mpff). Token keys containing `__proto__` segments are now ignored, and only own properties are traversed.
+diff --git a/__tests__/utils/convertTokenData.test.js b/__tests__/utils/convertTokenData.test.js
+index f50aa0e..7cc63a5 100644
+--- a/__tests__/utils/convertTokenData.test.js
++++ b/__tests__/utils/convertTokenData.test.js
+@@ -95,4 +95,29 @@ describe('utils', () => {
+       });
+     });
+   });
++
++  describe('prototype pollution', () => {
++    afterEach(() => {
++      delete Object.prototype.foo;
++      delete Object.prototype.bar;
++    });
++
++    it('should not pollute Object.prototype via __proto__ keys', () => {
++      convertTokenData([{ key: '{__proto__.foo}', value: 'malicious' }], { output: 'object' });
++      expect({}.foo).to.be.undefined;
++    });
++
++    it('should not pollute Object.prototype via constructor.prototype keys', () => {
++      convertTokenData([{ key: '{constructor.prototype.bar}', value: 'malicious' }], {
++        output: 'object',
++      });
++      expect({}.bar).to.be.undefined;
++    });
++
++    it('should not pollute Object.prototype when converting from a Map', () => {
++      const map = new Map([['{__proto__.foo}', { key: '{__proto__.foo}', value: 'malicious' }]]);
++      convertTokenData(map, { output: 'object' });
++      expect({}.foo).to.be.undefined;
++    });
++  });
+ });
+diff --git a/lib/utils/convertTokenData.js b/lib/utils/convertTokenData.js
+index c3dabb0..ffadd79 100644
+--- a/lib/utils/convertTokenData.js
++++ b/lib/utils/convertTokenData.js
+@@ -34,9 +34,15 @@ function convertToTokenObject(tokenArray) {
+   tokenArray.forEach((token) => {
+     const { key } = token;
+     const keyArr = /** @type {string} */ (key).replace('{', '').replace('}', '').split('.');
++    // Prevent prototype pollution, e.g. a token key of "{__proto__.foo}"
++    if (keyArr.includes('__proto__')) {
++      return;
++    }
+     let slice = obj;
+     keyArr.forEach((k, i, arr) => {
+-      if (slice[k] === undefined) {
++      // only check own properties, so that keys like "constructor" do not traverse
++      // into inherited properties such as Object.prototype.constructor
++      if (!Object.prototype.hasOwnProperty.call(slice, k) || slice[k] === undefined) {
+         slice[k] = {};
+       }
+       // end

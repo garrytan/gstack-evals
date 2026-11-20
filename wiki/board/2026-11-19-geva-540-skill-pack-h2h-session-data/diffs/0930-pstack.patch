@@ -1,0 +1,32 @@
+diff --git a/.changeset/escape-cache-control-meta.md b/.changeset/escape-cache-control-meta.md
+new file mode 100644
+index 0000000..35e89db
+--- /dev/null
++++ b/.changeset/escape-cache-control-meta.md
+@@ -0,0 +1,5 @@
++---
++'@sveltejs/kit': patch
++---
++
++fix: escape `cache-control` header value when adding it to a prerendered page's `<meta http-equiv>` tag
+diff --git a/packages/kit/src/runtime/server/page/render.js b/packages/kit/src/runtime/server/page/render.js
+index f3504cb..c216aec 100644
+--- a/packages/kit/src/runtime/server/page/render.js
++++ b/packages/kit/src/runtime/server/page/render.js
+@@ -8,6 +8,7 @@ import { relative } from '$app/paths/internal/server';
+ import { hash } from '../../../utils/hash.js';
+ import { serialize_data } from './serialize_data.js';
+ import { s } from '../../../utils/misc.js';
++import { escape_html } from '../../../utils/escape.js';
+ import { Csp } from './csp.js';
+ import { uneval_action_response } from './actions.js';
+ import { SCHEME } from '../../../utils/url.js';
+@@ -586,7 +587,7 @@ export async function render_response({
+ 
+ 		if (state.prerendering?.cache) {
+ 			head.add_http_equiv(
+-				`<meta http-equiv="cache-control" content="${state.prerendering.cache}">`
++				`<meta http-equiv="cache-control" content="${escape_html(state.prerendering.cache, true)}">`
+ 			);
+ 		}
+ 	} else {

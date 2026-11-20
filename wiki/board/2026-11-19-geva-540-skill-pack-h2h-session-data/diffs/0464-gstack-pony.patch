@@ -1,0 +1,103 @@
+diff --git a/internal/chezmoi/format.go b/internal/chezmoi/format.go
+index 341ac66..ef61043 100644
+--- a/internal/chezmoi/format.go
++++ b/internal/chezmoi/format.go
+@@ -10,6 +10,7 @@ import (
+ 	"slices"
+ 	"strings"
+ 
++	burntsushitoml "github.com/BurntSushi/toml"
+ 	"github.com/goccy/go-yaml"
+ 	"github.com/pelletier/go-toml/v2"
+ 	"github.com/tailscale/hujson"
+@@ -159,9 +160,21 @@ func (formatTOML) Name() string {
+ 
+ // Unmarshal implements Format.Unmarshal.
+ func (formatTOML) Unmarshal(data []byte, value any) error {
+-	decoder := toml.NewDecoder(bytes.NewReader(data))
+-	decoder.DisallowUnknownFields()
+-	return decoder.Decode(value)
++	// Use github.com/BurntSushi/toml for decoding as it supports TOML v1.1.0.
++	metaData, err := burntsushitoml.NewDecoder(bytes.NewReader(data)).Decode(value)
++	if err != nil {
++		return err
++	}
++	switch value.(type) {
++	case *any, *map[string]any:
++		// Unknown fields are not possible, and MetaData.Undecoded incorrectly
++		// reports keys in inline tables decoded into interfaces.
++		return nil
++	}
++	if undecoded := metaData.Undecoded(); len(undecoded) > 0 {
++		return fmt.Errorf("toml: unknown field %s", undecoded[0])
++	}
++	return nil
+ }
+ 
+ // Name implements Format.Name.
+diff --git a/internal/chezmoi/format_test.go b/internal/chezmoi/format_test.go
+index f212c26..c27684b 100644
+--- a/internal/chezmoi/format_test.go
++++ b/internal/chezmoi/format_test.go
+@@ -13,6 +13,12 @@ func TestFormatJSONSingleValue(t *testing.T) {
+ 	assert.Error(t, FormatJSON.Unmarshal([]byte(`{} 1`), &value))
+ }
+ 
++func TestFormatTOMLV1_1_0(t *testing.T) {
++	var value map[string]any
++	assert.NoError(t, FormatTOML.Unmarshal([]byte("table = {\n  key = \"\\e\",\n}\n"), &value))
++	assert.Equal(t, map[string]any{"table": map[string]any{"key": "\x1b"}}, value)
++}
++
+ func TestFormats(t *testing.T) {
+ 	assert.NotZero(t, FormatsByName["json"])
+ 	assert.NotZero(t, FormatsByName["jsonc"])
+@@ -162,13 +168,13 @@ func TestFormatEdgeCases(t *testing.T) {
+ 			name:        "toml_unknown_field",
+ 			format:      FormatTOML,
+ 			data:        `unknown = "value"`,
+-			expectedErr: "strict mode: fields in the document are missing in the target struct",
++			expectedErr: "toml: unknown field unknown",
+ 		},
+ 		{
+ 			name:        "toml_unexpected_eof",
+ 			format:      FormatTOML,
+ 			data:        `[`,
+-			expectedErr: "expected key but found none",
++			expectedErr: "table names cannot be empty",
+ 		},
+ 		{
+ 			name:   "toml_whitespace",
+diff --git a/internal/cmd/testdata/scripts/data.txtar b/internal/cmd/testdata/scripts/data.txtar
+index 53eb695..be56c60 100644
+--- a/internal/cmd/testdata/scripts/data.txtar
++++ b/internal/cmd/testdata/scripts/data.txtar
+@@ -13,6 +13,15 @@ exec chezmoi data --format=yaml
+ stdout 'chezmoi:'
+ stdout 'uniqueKey: uniqueValue'
+ 
++# test that .chezmoidata TOML files support TOML v1.1.0
++exec chezmoi execute-template '{{ .toml11.table.key }}'
++stdout '^value$'
++
+ -- home/user/.config/chezmoi/chezmoi.toml --
+ [data]
+     uniqueKey = "uniqueValue"
++-- home/user/.local/share/chezmoi/.chezmoidata.toml --
++[toml11]
++table = {
++    key = "value",
++}
+diff --git a/internal/cmd/testdata/scripts/init.txtar b/internal/cmd/testdata/scripts/init.txtar
+index ebb0413..52e6767 100644
+--- a/internal/cmd/testdata/scripts/init.txtar
++++ b/internal/cmd/testdata/scripts/init.txtar
+@@ -73,7 +73,7 @@ chhome home8/user
+ # test that chezmoi init fails if the generated config is not valid
+ mkgitconfig
+ ! exec chezmoi init
+-stderr 'toml: expected character ='
++stderr 'toml: line 2 \(last key "diff"\): expected '
+ ! exists .config/chezmoi
+ 
+ chhome home/user

@@ -1,0 +1,74 @@
+diff --git a/context.go b/context.go
+index ec7fdd9..f90d057 100644
+--- a/context.go
++++ b/context.go
+@@ -165,21 +165,31 @@ func (c *Context) Scheme() string {
+ 	if c.IsTLS() {
+ 		return "https"
+ 	}
+-	if scheme := c.request.Header.Get(HeaderXForwardedProto); scheme != "" {
++	if scheme, ok := sanitizeScheme(c.request.Header.Get(HeaderXForwardedProto)); ok {
+ 		return scheme
+ 	}
+-	if scheme := c.request.Header.Get(HeaderXForwardedProtocol); scheme != "" {
++	if scheme, ok := sanitizeScheme(c.request.Header.Get(HeaderXForwardedProtocol)); ok {
+ 		return scheme
+ 	}
+ 	if ssl := c.request.Header.Get(HeaderXForwardedSsl); ssl == "on" {
+ 		return "https"
+ 	}
+-	if scheme := c.request.Header.Get(HeaderXUrlScheme); scheme != "" {
++	if scheme, ok := sanitizeScheme(c.request.Header.Get(HeaderXUrlScheme)); ok {
+ 		return scheme
+ 	}
+ 	return "http"
+ }
+ 
++// sanitizeScheme returns the normalized scheme and true only when the given
++// (client-controlled) header value is one of http, https, ws or wss.
++func sanitizeScheme(scheme string) (string, bool) {
++	switch s := strings.ToLower(strings.TrimSpace(scheme)); s {
++	case "http", "https", "ws", "wss":
++		return s, true
++	}
++	return "", false
++}
++
+ // RealIP returns the client IP address using the configured extraction strategy.
+ //
+ // If Echo#IPExtractor is set, it is used to resolve the client IP from the incoming request (typically via proxy
+diff --git a/context_test.go b/context_test.go
+index 9376f0f..a9b10a3 100644
+--- a/context_test.go
++++ b/context_test.go
+@@ -1147,6 +1147,30 @@ func TestContext_Scheme(t *testing.T) {
+ 	}
+ }
+ 
++func TestContext_Scheme_rejectsUntrustedHeaderValues(t *testing.T) {
++	var testCases = []struct {
++		name   string
++		header string
++		value  string
++		expect string
++	}{
++		{name: "proto javascript", header: HeaderXForwardedProto, value: "javascript", expect: "http"},
++		{name: "proto data", header: HeaderXForwardedProto, value: "data", expect: "http"},
++		{name: "protocol file", header: HeaderXForwardedProtocol, value: "file", expect: "http"},
++		{name: "url scheme vbscript", header: HeaderXUrlScheme, value: "vbscript", expect: "http"},
++		{name: "proto with injection", header: HeaderXForwardedProto, value: "https://evil.com/#", expect: "http"},
++		{name: "proto uppercase https", header: HeaderXForwardedProto, value: " HTTPS ", expect: "https"},
++		{name: "proto ws", header: HeaderXForwardedProto, value: "ws", expect: "ws"},
++		{name: "proto wss", header: HeaderXForwardedProto, value: "wss", expect: "wss"},
++	}
++	for _, tc := range testCases {
++		t.Run(tc.name, func(t *testing.T) {
++			c := &Context{request: &http.Request{Header: http.Header{tc.header: []string{tc.value}}}}
++			assert.Equal(t, tc.expect, c.Scheme())
++		})
++	}
++}
++
+ func TestContext_IsWebSocket(t *testing.T) {
+ 	tests := []struct {
+ 		c  *Context

@@ -11,6 +11,7 @@
 // gate whose input is not there yet stops the walk and names the unit (E_H2H_DRAW_PENDING); a frame that runs out first is
 // short (E_H2H_DRAW_SHORT). The full-size option adds units at the next usable positions after stage 0's units.
 import { seededRandom } from "../../../../src/runner/stats/paired.ts";
+import { b1Floor } from "../breadth/fallback.ts";
 import { h2hFail, type H2hPrereg } from "../prereg.ts";
 import type { Entry, Stage, UnitKind } from "../types.ts";
 
@@ -185,32 +186,103 @@ export function walkB1(p: H2hPrereg, seed: number, order: readonly DrawUnit[], g
  *  frame has not been drawn yet (B2 waits); infeasible when it still does not after the fallbacks, so B1 takes no stage
  *  and B is B2 alone. */
 export type B1Status = "usable" | "fallbacks_due" | "infeasible";
-export interface BDraw { b1: Walk; b2: Walk | null; b1_status: B1Status | null; b1_feasible: boolean | null; n_b1: number; n_b2: number; full_size: { n: number; b1_added: number; b2_added: number } | null }
+export interface BDraw { b1: Walk; b2: Walk | null; b1_status: B1Status | null; b1_feasible: boolean | null; n_b1: number; n_b2: number; full_size: { n: number; b1_added: number; b2_added: number } | null; b1_futility: B1Futility | null }
+
+/** B1's futility stop (Captain ruling A2, 2026-11-15, frozen in the GEVA-540 run record at 0 usable of 75 before any
+ *  session). k counts B1 rows with a gate result and u the usable ones among them; left counts rows with no result yet
+ *  over the frame order the fallbacks use (primary, then widened); multilang is the pinned MultiLang rows the last
+ *  fallback would add. The stop fires when u + (left + multilang) × U95 is under the usable count B1 needs (floor), with
+ *  U95 the one-sided 95% Clopper-Pearson upper bound on the pass rate. It only ends the walk early: B1 is then infeasible
+ *  at this scale and no unit that fails a gate is admitted. */
+export const B1_FUTILITY = { confidence: 0.95, multilang_rows: 8 } as const;
+export interface B1Futility { k: number; u: number; left: number; multilang: number; u95: number; projected: number; floor: number; fired: boolean; usable_ids: string[] }
+
+/** One-sided Clopper-Pearson upper bound: the pass rate p at which P(X <= u | k, p) = 1 - confidence. */
+export function cpUpper(u: number, k: number, confidence: number): number {
+  if (!(Number.isInteger(u) && Number.isInteger(k) && u >= 0 && k >= 0 && u <= k)) h2hFail("E_H2H_DRAW_INPUT", "the futility bound needs whole counts with u <= k");
+  if (u === k) return 1;
+  const alpha = 1 - confidence;
+  const cdf = (pr: number) => {
+    let t = 0;
+    for (let i = 0, c = 0; i <= u; i++) {
+      if (i > 0) c += Math.log(k - i + 1) - Math.log(i);
+      t += Math.exp(c + i * Math.log(pr) + (k - i) * Math.log1p(-pr));
+    }
+    return t;
+  };
+  let lo = 0, hi = 1;
+  for (let i = 0; i < 200; i++) {
+    const mid = (lo + hi) / 2;
+    if (cdf(mid) > alpha) lo = mid;
+    else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
+/** The futility reading over B1's whole frame in order (primary rows, then widened). A repository already holding
+ *  repo_cap usable units is skipped, as in the walk; a row whose gates are not all answered counts as left. */
+export function b1Futility(p: H2hPrereg, order: readonly DrawUnit[], gates: readonly Gate[]): B1Futility {
+  const b = p.classes.B;
+  const floor = b1Floor(p);
+  const held = new Map<string, number>();
+  const usable: string[] = [];
+  let k = 0, left = 0;
+  for (const u of order) {
+    if ((held.get(u.repo) ?? 0) >= b.repo_cap) continue;
+    let r: "ok" | "drop" | "left" = "ok";
+    for (const g of gates) {
+      const x = g.check(u.id);
+      if ("pending" in x) { r = "left"; break; }
+      if (!x.ok) { r = "drop"; break; }
+    }
+    if (r === "left") { left++; continue; }
+    k++;
+    if (r === "ok") { usable.push(u.id); held.set(u.repo, (held.get(u.repo) ?? 0) + 1); }
+  }
+  const m = B1_FUTILITY.multilang_rows;
+  const u95 = k === 0 ? 1 : cpUpper(usable.length, k, B1_FUTILITY.confidence);
+  const projected = usable.length + (left + m) * u95;
+  return { k, u: usable.length, left, multilang: m, u95, projected, floor, fired: usable.length < floor && projected < floor, usable_ids: usable };
+}
+
+/** Captain ruling B1 (2026-11-15): when B1 is infeasible, B is B2 alone and B2 fills every B stage 1 slot, continuing
+ *  prereg.json's B2 spacing (6, 12, ..., 36 becomes 6, 12, ..., 72 for B's 12 stage 1 units). */
+export function b2AloneStage1(frozen: readonly number[], count: number): number[] {
+  const step = frozen[0]!;
+  if (!frozen.every((x, i) => x === step * (i + 1))) h2hFail("E_H2H_PREREG", "B2's stage 1 positions are not evenly spaced from their first, so B2 alone has no continued spacing");
+  return Array.from({ length: count }, (_, i) => step * (i + 1));
+}
 
 /** B's two frames. B1 walks its whole frame first and fills up to half of B's n in stage 2; B2 takes the rest of n, and
  *  the repository cap counts B1's drawn units in B2. fallbacksDone says the B1 frame already holds the widening
- *  fallbacks. fullSize is an approved full B n: B1 has no positions after its stage 0 (position N), so B2 takes every
- *  added unit, after its own stage 0. */
-export function drawB(p: H2hPrereg, seed: number, b1Order: readonly DrawUnit[], b2Order: readonly DrawUnit[], g1: readonly Gate[], g2: readonly Gate[], o: { n?: number; fallbacksDone?: boolean; fullSize?: number } = {}): BDraw {
+ *  fallbacks. futility is B1's futility reading (b1Futility); once it has fired, B1 is infeasible without walking the
+ *  rest of its frame. When B1 is infeasible, B2 takes every B stage 1 slot (b2AloneStage1). fullSize is an approved
+ *  full B n: B1 has no positions after its stage 0 (position N), so B2 takes every added unit, after its own stage 0. */
+export function drawB(p: H2hPrereg, seed: number, b1Order: readonly DrawUnit[], b2Order: readonly DrawUnit[], g1: readonly Gate[], g2: readonly Gate[], o: { n?: number; fallbacksDone?: boolean; fullSize?: number; futility?: B1Futility } = {}): BDraw {
   const b = p.classes.B;
   const n = o.n ?? b.n;
   if (o.fullSize !== undefined && !(Number.isInteger(o.fullSize) && o.fullSize >= n)) h2hFail("E_H2H_DRAW_INPUT", "the full B n must be a whole number at least the core n " + n);
   const extra = o.fullSize === undefined ? 0 : o.fullSize - n;
   const w1 = walkB1(p, seed, b1Order, g1, Math.floor(n * b.b1_share_max));
   const full = o.fullSize === undefined ? null : { n: o.fullSize, b1_added: 0, b2_added: extra };
-  if (w1.pending) return { b1: w1, b2: null, b1_status: null, b1_feasible: null, n_b1: 0, n_b2: n, full_size: full };
-  let n1 = w1.units.filter((u) => u.stage === "stage2").length;
-  const status: B1Status = n1 >= b.b1_min_units ? "usable" : o.fallbacksDone ? "infeasible" : "fallbacks_due";
-  if (status === "fallbacks_due") return { b1: w1, b2: null, b1_status: status, b1_feasible: null, n_b1: n1, n_b2: n - n1, full_size: full };
+  const futility = o.futility ?? null;
+  const futile = futility?.fired === true;
+  if (w1.pending && !futile) return { b1: w1, b2: null, b1_status: null, b1_feasible: null, n_b1: 0, n_b2: n, full_size: full, b1_futility: futility };
+  let n1 = w1.pending ? 0 : w1.units.filter((u) => u.stage === "stage2").length;
+  const status: B1Status = n1 >= b.b1_min_units ? "usable" : o.fallbacksDone || futile ? "infeasible" : "fallbacks_due";
+  if (status === "fallbacks_due") return { b1: w1, b2: null, b1_status: status, b1_feasible: null, n_b1: n1, n_b2: n - n1, full_size: full, b1_futility: futility };
   if (status === "infeasible") {
-    w1.passed_unassigned = [...w1.units.map((u) => u.id), ...w1.passed_unassigned];
+    w1.passed_unassigned = w1.pending ? [...futility!.usable_ids] : [...w1.units.map((u) => u.id), ...w1.passed_unassigned];
     w1.units = [];
+    w1.pending = null;
     n1 = 0;
   }
   const caps = new Map<string, number>();
   for (const u of w1.units) caps.set(u.repo, (caps.get(u.repo) ?? 0) + 1);
-  const w2 = walk("B2", seed, b2Order, g2, planFor(p, "B2", n - n1, extra), b.repo_cap, caps);
-  return { b1: w1, b2: w2, b1_status: status, b1_feasible: status === "usable", n_b1: n1, n_b2: n - n1, full_size: full };
+  const plan = planFor(p, "B2", n - n1, extra);
+  if (status === "infeasible") plan.stage1 = b2AloneStage1(plan.stage1, b.stage1);
+  const w2 = walk("B2", seed, b2Order, g2, plan, b.repo_cap, caps);
+  return { b1: w1, b2: w2, b1_status: status, b1_feasible: status === "usable", n_b1: n1, n_b2: n - n1, full_size: full, b1_futility: futility };
 }
 
 /** Reserves replace units that drop after the draw and before any model run, in reserve order; O's stage 0 bug or feature

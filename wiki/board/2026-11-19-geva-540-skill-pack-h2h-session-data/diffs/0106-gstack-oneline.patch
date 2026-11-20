@@ -1,0 +1,19 @@
+diff --git a/src/ui/Features/Tools/FixCommonErrors/FixCommonOcrErrors.cs b/src/ui/Features/Tools/FixCommonErrors/FixCommonOcrErrors.cs
+index 7d4063b..ab0777e 100644
+--- a/src/ui/Features/Tools/FixCommonErrors/FixCommonOcrErrors.cs
++++ b/src/ui/Features/Tools/FixCommonErrors/FixCommonOcrErrors.cs
+@@ -33,11 +33,9 @@ namespace Nikse.SubtitleEdit.Core.Forms.FixCommonErrors
+ 
+             var spellCheckManager = new SpellCheckManager();
+             var spellCheckers = spellCheckManager.GetDictionaryLanguages(Se.DictionariesFolder);
+-            var spellChecker = spellCheckers.FirstOrDefault(x => x.GetThreeLetterCode() == threeLetterCode);
+-            if (spellChecker == null)
+-            {
+-                return;
+-            }
++            // The OCR replace list must still be applied when no Hunspell dictionary is installed
++            var spellChecker = spellCheckers.FirstOrDefault(x => x.GetThreeLetterCode() == threeLetterCode)
++                               ?? new SpellCheckDictionaryDisplay();
+ 
+             OcrFixEngine.Initialize(subtitle, threeLetterCode, spellChecker);
+ 

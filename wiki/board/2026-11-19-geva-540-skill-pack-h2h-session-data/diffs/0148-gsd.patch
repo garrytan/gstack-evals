@@ -1,0 +1,65 @@
+diff --git a/docs/docs/configuration/queryable-projections.mdx b/docs/docs/configuration/queryable-projections.mdx
+index 55874bd..8660020 100644
+--- a/docs/docs/configuration/queryable-projections.mdx
++++ b/docs/docs/configuration/queryable-projections.mdx
+@@ -98,8 +98,11 @@ public static partial class CarMapper
+ }
+ ```
+ 
+-If Mapperly is unable to inline a user-implemented method, `RMG068` is reported.
+-Non-inlined method invocations can lead to more data being loaded than necessary.
++If Mapperly is unable to inline a user-implemented method, the warning `RMG068` is reported.
++Non-inlined method invocations can lead to more data being loaded than necessary
++(e.g. EF Core may load all columns and related entities and evaluate the projection client-side).
++To prevent unintentional client-side evaluations, this warning can be treated as an error
++(e.g. via `dotnet_diagnostic.RMG068.severity = error` in the `.editorconfig`).
+ 
+ Ordering and aggregating collections can also be implemented with user-implemented mapping methods:
+ 
+diff --git a/src/Riok.Mapperly/AnalyzerReleases.Unshipped.md b/src/Riok.Mapperly/AnalyzerReleases.Unshipped.md
+index 17d4678..ded9d7b 100644
+--- a/src/Riok.Mapperly/AnalyzerReleases.Unshipped.md
++++ b/src/Riok.Mapperly/AnalyzerReleases.Unshipped.md
+@@ -1,2 +1,8 @@
+ ; Unshipped analyzer release
+ ; https://github.com/dotnet/roslyn-analyzers/blob/master/src/Microsoft.CodeAnalysis.Analyzers/ReleaseTrackingAnalyzers.Help.md
++
++### Changed Rules
++
++Rule ID | New Category | New Severity | Old Category | Old Severity | Notes
++--------|--------------|--------------|--------------|--------------|-------
++RMG068  | Mapper       | Warning      | Mapper       | Info         | Cannot inline user implemented queryable expression mapping
+diff --git a/src/Riok.Mapperly/Diagnostics/DiagnosticDescriptors.cs b/src/Riok.Mapperly/Diagnostics/DiagnosticDescriptors.cs
+index b59eb32..60ebaee 100644
+--- a/src/Riok.Mapperly/Diagnostics/DiagnosticDescriptors.cs
++++ b/src/Riok.Mapperly/Diagnostics/DiagnosticDescriptors.cs
+@@ -561,7 +561,7 @@ public static class DiagnosticDescriptors
+         "Cannot inline user implemented queryable expression mapping",
+         "Cannot inline user implemented queryable expression mapping",
+         DiagnosticCategories.Mapper,
+-        DiagnosticSeverity.Info,
++        DiagnosticSeverity.Warning,
+         true
+     );
+ 
+diff --git a/test/Riok.Mapperly.Tests/_snapshots/QueryableProjectionUserImplementedTest.ClassToClassNonInlinedMethod.verified.txt b/test/Riok.Mapperly.Tests/_snapshots/QueryableProjectionUserImplementedTest.ClassToClassNonInlinedMethod.verified.txt
+index da49383..a38a0d7 100644
+--- a/test/Riok.Mapperly.Tests/_snapshots/QueryableProjectionUserImplementedTest.ClassToClassNonInlinedMethod.verified.txt
++++ b/test/Riok.Mapperly.Tests/_snapshots/QueryableProjectionUserImplementedTest.ClassToClassNonInlinedMethod.verified.txt
+@@ -9,14 +9,14 @@
+ */
+  : (11,4)-(11,84),
+       Message: Cannot inline user implemented queryable expression mapping,
+-      Severity: Info,
++      Severity: Warning,
+       WarningLevel: 1,
+       Descriptor: {
+         Id: RMG068,
+         Title: Cannot inline user implemented queryable expression mapping,
+         MessageFormat: Cannot inline user implemented queryable expression mapping,
+         Category: Mapper,
+-        DefaultSeverity: Info,
++        DefaultSeverity: Warning,
+         IsEnabledByDefault: true
+       }
+     }

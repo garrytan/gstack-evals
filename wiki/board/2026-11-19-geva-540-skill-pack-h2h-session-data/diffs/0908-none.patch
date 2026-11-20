@@ -1,0 +1,226 @@
+diff --git a/lib/bridge.js b/lib/bridge.js
+index 6fb4adc..b480dfe 100644
+--- a/lib/bridge.js
++++ b/lib/bridge.js
+@@ -1437,6 +1437,65 @@ function createBridge(otherInit, registerProxy) {
+ 	//
+ 	// Only acts on sandbox-side bridge (isHost === false) and only touches the
+ 	// result directly; never walks into nested host objects.
++	// SECURITY (GHSA-x6m4-chr9-cg97): host-realm errors (e.g. the SyntaxError
++	// thrown by the host-side transformer for malformed eval/Function source,
++	// or any error thrown by host code exposed to the sandbox) have their
++	// `stack` formatted by the HOST realm's prepareStackTrace, bypassing the
++	// sandbox-side CallSite redaction. Reading `.stack` through the bridge
++	// would then disclose absolute host filesystem paths and host function
++	// names. Strip every stack frame line that references a path-like
++	// location (contains '/', '\\', or 'node:'), keeping the header and any
++	// clean sandbox frames (e.g. `vm.js:1:14`).
++	//
++	// Implemented with primitive string indexing and concatenation only so no
++	// (possibly sandbox-overridden) String.prototype / Array.prototype method
++	// is invoked.
++	function isFrameLine(line) {
++		let i = 0;
++		const len = line.length;
++		while (i < len && (line[i] === ' ' || line[i] === '\t')) i++;
++		if (i === 0) return false;
++		return i + 3 <= len && line[i] === 'a' && line[i + 1] === 't' && line[i + 2] === ' ';
++	}
++	function isHostFrameLine(line) {
++		const len = line.length;
++		for (let i = 0; i < len; i++) {
++			const c = line[i];
++			if (c === '/' || c === '\\') return true;
++			if (
++				c === 'n' &&
++				i + 5 <= len &&
++				line[i + 1] === 'o' &&
++				line[i + 2] === 'd' &&
++				line[i + 3] === 'e' &&
++				line[i + 4] === ':'
++			) {
++				return true;
++			}
++		}
++		return false;
++	}
++	function redactHostStack(stack) {
++		if (typeof stack !== 'string') return stack;
++		let result = '';
++		let first = true;
++		let line = '';
++		const len = stack.length;
++		for (let i = 0; i <= len; i++) {
++			const c = i < len ? stack[i] : '\n';
++			if (c !== '\n') {
++				line += c;
++				continue;
++			}
++			if (!(isFrameLine(line) && isHostFrameLine(line))) {
++				result = first ? line : result + '\n' + line;
++				first = false;
++			}
++			line = '';
++		}
++		return result;
++	}
++
+ 	function stripDangerousSymbolsFromHostResult(ret) {
+ 		if (isHost) return;
+ 		if (ret === null || (typeof ret !== 'object' && typeof ret !== 'function')) return;
+@@ -1668,6 +1727,7 @@ function createBridge(otherInit, registerProxy) {
+ 				// @other(unsafe)
+ 				throw thisFromOtherForThrow(e);
+ 			}
++			if (!isHost && key === 'stack') ret = redactHostStack(ret);
+ 			return handlerFromOtherWithContext(this, ret);
+ 		}
+ 
+@@ -1929,6 +1989,10 @@ function createBridge(otherInit, registerProxy) {
+ 
+ 			if (!desc) return undefined;
+ 
++			if (!isHost && prop === 'stack' && !desc.get && !desc.set) {
++				desc.value = redactHostStack(desc.value);
++			}
++
+ 			let thisDesc;
+ 			if (desc.get || desc.set) {
+ 				thisDesc = {
+diff --git a/lib/setup-sandbox.js b/lib/setup-sandbox.js
+index b85885f..c32f8cb 100644
+--- a/lib/setup-sandbox.js
++++ b/lib/setup-sandbox.js
+@@ -2826,6 +2826,38 @@ function throwAsync() {
+ 	return new VMError('Async not available');
+ }
+ 
++// SECURITY (GHSA-x6m4-chr9-cg97): errors thrown by the host-side transformer
++// (e.g. SyntaxError for malformed source, VMError for disallowed async) are
++// host-realm objects whose `stack` is formatted by the host realm and
++// contains absolute host paths. Re-create them as sandbox-realm errors
++// carrying only the name/message so the sandbox's redacting
++// prepareStackTrace formats the stack.
++function sanitizeTransformError(e) {
++	let name;
++	let message;
++	try {
++		const n = e && e.name;
++		name = typeof n === 'string' ? n : 'Error';
++		const m = e && e.message;
++		message = typeof m === 'string' ? m : '';
++	} catch (ex) {
++		name = 'Error';
++		message = '';
++	}
++	switch (name) {
++		case 'SyntaxError':
++			return new LocalSyntaxError(message);
++		case 'VMError':
++			return new VMError(message);
++		case 'TypeError':
++			return new LocalTypeError(message);
++		case 'RangeError':
++			return new LocalRangeError(message);
++		default:
++			return new LocalError(message);
++	}
++}
++
+ function makeFunction(inputArgs, isAsync, isGenerator) {
+ 	const lastArgs = inputArgs.length - 1;
+ 	let code = lastArgs >= 0 ? `${inputArgs[lastArgs]}` : '';
+@@ -2836,7 +2868,7 @@ function makeFunction(inputArgs, isAsync, isGenerator) {
+ 	try {
+ 		code = host.transformAndCheck(args, code, isAsync, isGenerator, allowAsync);
+ 	} catch (e) {
+-		throw bridge.from(e);
++		throw sanitizeTransformError(e);
+ 	}
+ 	return localEval(code);
+ }
+@@ -2859,7 +2891,7 @@ const EvalHandler = {
+ 		try {
+ 			code = host.transformAndCheck(null, code, false, false, allowAsync);
+ 		} catch (e) {
+-			throw bridge.from(e);
++			throw sanitizeTransformError(e);
+ 		}
+ 		return localEval(code);
+ 	},
+diff --git a/test/ghsa/GHSA-x6m4-chr9-cg97/repro.js b/test/ghsa/GHSA-x6m4-chr9-cg97/repro.js
+new file mode 100644
+index 0000000..7139db5
+--- /dev/null
++++ b/test/ghsa/GHSA-x6m4-chr9-cg97/repro.js
+@@ -0,0 +1,70 @@
++'use strict';
++
++/**
++ * GHSA-x6m4-chr9-cg97 — host-realm error stacks leak absolute host paths
++ *
++ * ## Vulnerability
++ * Malformed source passed to sandbox `eval` / `Function` makes the host-side
++ * transformer throw a host-realm SyntaxError. Its `stack` is formatted by the
++ * host realm's prepareStackTrace and read through the bridge, bypassing the
++ * sandbox-side CallSite redaction (GHSA-v27g-jcqj-v8rw) and exposing absolute
++ * host paths of vm2, Node internals and the embedding application.
++ *
++ * ## Fix
++ *  - `lib/setup-sandbox.js`: transformer errors are re-created as
++ *    sandbox-realm errors (name + message only).
++ *  - `lib/bridge.js`: reads of `stack` on host objects (via `get` and
++ *    `getOwnPropertyDescriptor`) strip every frame line referencing a
++ *    path-like location.
++ */
++
++const assert = require('assert');
++const { VM, NodeVM } = require('../../../lib/main.js');
++
++function assertNoHostPaths(stack) {
++	assert.strictEqual(typeof stack, 'string');
++	assert.ok(!/\/|\\|node:|transformer|setup-sandbox/.test(stack), 'stack leaks host info: ' + stack);
++}
++
++describe('GHSA-x6m4-chr9-cg97 (host error stack path leak)', () => {
++	it('eval syntax error stack does not leak host paths (VM)', () => {
++		const r = new VM().run('var s; try { eval("@@@ catch") } catch (e) { s = [e.stack, e instanceof SyntaxError, e.message] } s;');
++		assertNoHostPaths(r[0]);
++		assert.strictEqual(r[1], true);
++		assert.strictEqual(r[2], "Unexpected character '@'");
++	});
++
++	it('Function syntax error stack does not leak host paths', () => {
++		const vm = new VM();
++		assertNoHostPaths(vm.run('var s; try { new Function("@@@ catch") } catch (e) { s = e.stack } s;'));
++		assertNoHostPaths(vm.run('var s; try { Function("a", "@@@ catch") } catch (e) { s = e.stack } s;'));
++	});
++
++	it('eval syntax error stack does not leak host paths with eval disabled', () => {
++		assertNoHostPaths(new VM({ eval: false }).run('var s; try { eval("@@@ catch") } catch (e) { s = e.stack } s;'));
++	});
++
++	it('async-disallowed VMError stack does not leak host paths', () => {
++		const r = new VM({ allowAsync: false }).run('var s; try { eval("async () => 1") } catch (e) { s = [e.name, e.stack] } s;');
++		assert.strictEqual(r[0], 'VMError');
++		assertNoHostPaths(r[1]);
++	});
++
++	it('eval syntax error stack does not leak host paths (NodeVM)', () => {
++		assertNoHostPaths(new NodeVM().run('var s; try { eval("@@@ catch") } catch (e) { s = e.stack } module.exports = s;'));
++	});
++
++	it('errors thrown by host functions have host frames stripped', () => {
++		const vm = new VM({
++			sandbox: {
++				f() {
++					throw new Error('x');
++				},
++			},
++		});
++		const r = vm.run('var s; try { f() } catch (e) { s = [e.stack, Object.getOwnPropertyDescriptor(e, "stack").value] } s;');
++		assertNoHostPaths(r[0]);
++		assertNoHostPaths(r[1]);
++		assert.ok(r[0].startsWith('Error: x'));
++	});
++});

@@ -1,0 +1,81 @@
+diff --git a/pkg/server/server.go b/pkg/server/server.go
+index 86f17e8..6c2c6b3 100644
+--- a/pkg/server/server.go
++++ b/pkg/server/server.go
+@@ -861,12 +861,25 @@ func newMetricsMiddleware(reg prometheus.Registerer) func(http.Handler) http.Han
+ 			rec := statusCodeRecorder{ResponseWriter: w, statusCode: http.StatusOK}
+ 			handler.ServeHTTP(&rec, r)
+ 			path := normalizedPath(r)
+-			requests.WithLabelValues(r.Method, path, strconv.Itoa(rec.statusCode)).Inc()
+-			duration.WithLabelValues(r.Method, path).Observe(time.Since(start).Seconds())
++			method := normalizedMethod(r.Method)
++			requests.WithLabelValues(method, path, strconv.Itoa(rec.statusCode)).Inc()
++			duration.WithLabelValues(method, path).Observe(time.Since(start).Seconds())
+ 		})
+ 	}
+ }
+ 
++// normalizedMethod clamps the HTTP method to a fixed allowlist so that
++// arbitrary client-supplied methods cannot create unbounded label cardinality.
++func normalizedMethod(method string) string {
++	switch method {
++	case http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete,
++		http.MethodOptions, http.MethodHead, http.MethodConnect, http.MethodTrace:
++		return method
++	default:
++		return "other"
++	}
++}
++
+ // normalizedPath returns a normalized mux path template representation
+ func normalizedPath(r *http.Request) string {
+ 	if route := mux.CurrentRoute(r); route != nil {
+diff --git a/pkg/server/server_test.go b/pkg/server/server_test.go
+index d4c9952..db1470b 100644
+--- a/pkg/server/server_test.go
++++ b/pkg/server/server_test.go
+@@ -450,6 +450,44 @@ yopass_http_requests_total{code="404",method="GET",path="/"} 1
+ 	}
+ }
+ 
++func TestMetricsMethodLabelBounded(t *testing.T) {
++	y := newTestServer(t, &mockDB{}, 1, false)
++	h := y.HTTPHandler()
++
++	for _, m := range []string{"M1", "M2", "M3", "FOO", "get"} {
++		req, err := http.NewRequest(m, "/", nil)
++		if err != nil {
++			t.Fatal(err)
++		}
++		h.ServeHTTP(httptest.NewRecorder(), req)
++	}
++
++	n, err := testutil.GatherAndCount(y.Registry, "yopass_http_requests_total", "yopass_http_request_duration_seconds")
++	if err != nil {
++		t.Fatal(err)
++	}
++	if n != 2 {
++		t.Fatalf("Expected arbitrary methods to collapse into a single series per metric; got %d series", n)
++	}
++
++	families, err := y.Registry.Gather()
++	if err != nil {
++		t.Fatal(err)
++	}
++	for _, f := range families {
++		if !strings.HasPrefix(f.GetName(), "yopass_http_") {
++			continue
++		}
++		for _, m := range f.GetMetric() {
++			for _, l := range m.GetLabel() {
++				if l.GetName() == "method" && l.GetValue() != "other" {
++					t.Fatalf("Expected method label %q; got %q", "other", l.GetValue())
++				}
++			}
++		}
++	}
++}
++
+ func TestSecurityHeaders(t *testing.T) {
+ 	tt := []struct {
+ 		scheme       string

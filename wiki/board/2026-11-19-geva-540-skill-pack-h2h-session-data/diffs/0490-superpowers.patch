@@ -1,0 +1,99 @@
+diff --git a/src/main/java/tools/jackson/databind/deser/BeanDeserializerFactory.java b/src/main/java/tools/jackson/databind/deser/BeanDeserializerFactory.java
+index d9e438d..6ed5999 100644
+--- a/src/main/java/tools/jackson/databind/deser/BeanDeserializerFactory.java
++++ b/src/main/java/tools/jackson/databind/deser/BeanDeserializerFactory.java
+@@ -267,6 +267,12 @@ public class BeanDeserializerFactory
+                     beanDescRef, null)
+                 .withCause(e0);
+         }
++        // Local/anonymous (non-static, in-method) classes cannot be instantiated by us,
++        // but existing instances may still be updated: so allow deserializer to be
++        // constructed, just without any Creators.
++        if (ClassUtil.isLocalType(type.getRawClass(), true) != null) {
++            valueInstantiator = new ValueInstantiator.Base(type);
++        }
+         BeanDeserializerBuilder deserBuilder = constructBeanDeserializerBuilder(ctxt, beanDescRef);
+         deserBuilder.setValueInstantiator(valueInstantiator);
+          // And then setters for deserializing from JSON Object
+@@ -1048,12 +1054,10 @@ ClassUtil.name(name), ((AnnotatedParameter) m).getIndex());
+         if (ClassUtil.isProxyType(type)) {
+             throw new IllegalArgumentException("Cannot deserialize Proxy class "+type.getName()+" as a Bean");
+         }
+-        // also: can't deserialize some local classes: static are ok; in-method not;
+-        // other non-static inner classes are ok
+-        typeStr = ClassUtil.isLocalType(type, true);
+-        if (typeStr != null) {
+-            throw new IllegalArgumentException("Cannot deserialize Class "+type.getName()+" (of type "+typeStr+") as a Bean");
+-        }
++        // 18-Nov-2026: local/anonymous classes cannot be instantiated, but existing
++        //   instances may still be updated (see `readerForUpdating()`): so instead of
++        //   failing here, such types get a ValueInstantiator that cannot create instances
++        //   (see `buildBeanDeserializer()`)
+         return true;
+     }
+ 
+diff --git a/src/test/java/tools/jackson/databind/convert/UpdateLocalClassTest.java b/src/test/java/tools/jackson/databind/convert/UpdateLocalClassTest.java
+new file mode 100644
+index 0000000..f315669
+--- /dev/null
++++ b/src/test/java/tools/jackson/databind/convert/UpdateLocalClassTest.java
+@@ -0,0 +1,59 @@
++package tools.jackson.databind.convert;
++
++import org.junit.jupiter.api.Test;
++
++import tools.jackson.databind.ObjectMapper;
++import tools.jackson.databind.exc.InvalidDefinitionException;
++
++import static org.junit.jupiter.api.Assertions.*;
++
++import static tools.jackson.databind.testutil.DatabindTestUtil.newJsonMapper;
++
++/**
++ * Tests to verify that existing instances of local/anonymous classes
++ * can be updated, even though they cannot be instantiated.
++ */
++public class UpdateLocalClassTest
++{
++    private final ObjectMapper MAPPER = newJsonMapper();
++
++    @Test
++    public void testUpdateAnonymousClass() throws Exception
++    {
++        Object ob = new Object() {
++            public int value;
++
++            @Override
++            public String toString() { return String.valueOf(value); }
++        };
++        Object result = MAPPER.readerForUpdating(ob).readValue("{\"value\": 2}");
++        assertSame(ob, result);
++        assertEquals("2", ob.toString());
++    }
++
++    @Test
++    public void testUpdateLocalClass() throws Exception
++    {
++        class Local {
++            public int x;
++            public String name;
++        }
++        Local local = new Local();
++        Local result = MAPPER.readerForUpdating(local).readValue("{\"x\":3,\"name\":\"foo\"}");
++        assertSame(local, result);
++        assertEquals(3, local.x);
++        assertEquals("foo", local.name);
++    }
++
++    // But creating new instances should still fail
++    @Test
++    public void testCannotCreateLocalClass() throws Exception
++    {
++        class Local {
++            public int x;
++        }
++        InvalidDefinitionException e = assertThrows(InvalidDefinitionException.class,
++                () -> MAPPER.readValue("{\"x\":3}", Local.class));
++        assertTrue(e.getMessage().contains("Cannot construct instance"), e.getMessage());
++    }
++}

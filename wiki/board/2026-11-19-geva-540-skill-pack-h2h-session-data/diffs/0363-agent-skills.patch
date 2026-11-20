@@ -1,0 +1,62 @@
+diff --git a/src/OrchardCore.Modules/OrchardCore.Markdown/Razor/ContentRazorHelperExtensions.cs b/src/OrchardCore.Modules/OrchardCore.Markdown/Razor/ContentRazorHelperExtensions.cs
+index a700bd1..79e2afa 100644
+--- a/src/OrchardCore.Modules/OrchardCore.Markdown/Razor/ContentRazorHelperExtensions.cs
++++ b/src/OrchardCore.Modules/OrchardCore.Markdown/Razor/ContentRazorHelperExtensions.cs
+@@ -40,7 +40,7 @@ public static class ContentRazorHelperExtensions
+         var html = markdownService.ToHtml(markdown ?? string.Empty);
+ 
+         // TODO: provide context argument (optional on this helper as with the liquid helper?).
+-        html = await shortcodeService.ProcessAsync(markdown);
++        html = await shortcodeService.ProcessAsync(html);
+ 
+         if (sanitize)
+         {
+diff --git a/test/OrchardCore.Tests/Modules/OrchardCore.Markdown/MarkdownRazorHelperTests.cs b/test/OrchardCore.Tests/Modules/OrchardCore.Markdown/MarkdownRazorHelperTests.cs
+new file mode 100644
+index 0000000..f87af09
+--- /dev/null
++++ b/test/OrchardCore.Tests/Modules/OrchardCore.Markdown/MarkdownRazorHelperTests.cs
+@@ -0,0 +1,43 @@
++using OrchardCore.Markdown.Services;
++using OrchardCore.Shortcodes.Services;
++
++namespace OrchardCore.Tests.Modules.OrchardCore.Markdown;
++
++public class MarkdownRazorHelperTests
++{
++    [Fact]
++    public async Task MarkdownToHtmlAsync_ConvertsMarkdownToHtml()
++    {
++        var orchardHelper = CreateOrchardHelper();
++
++        var result = await orchardHelper.MarkdownToHtmlAsync("This _is_ a ==test== markdown.", sanitize: false);
++
++        Assert.Equal("<p>This <em>is</em> a <mark>test</mark> markdown.</p>", result.ToString().ReplaceLineEndings(string.Empty));
++    }
++
++    private static TestOrchardHelper CreateOrchardHelper()
++    {
++        var services = new ServiceCollection();
++        services.AddOptions<MarkdownPipelineOptions>();
++        services.ConfigureMarkdownPipeline(pipeline => pipeline.UseEmphasisExtras());
++        services.AddScoped<IMarkdownService, DefaultMarkdownService>();
++        services.AddScoped<IShortcodeService, ShortcodeService>();
++
++        var httpContext = new DefaultHttpContext
++        {
++            RequestServices = services.BuildServiceProvider(),
++        };
++
++        return new TestOrchardHelper(httpContext);
++    }
++
++    private sealed class TestOrchardHelper : IOrchardHelper
++    {
++        public TestOrchardHelper(HttpContext httpContext)
++        {
++            HttpContext = httpContext;
++        }
++
++        public HttpContext HttpContext { get; }
++    }
++}

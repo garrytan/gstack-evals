@@ -1,0 +1,95 @@
+diff --git a/src/framework/handlers/font.js b/src/framework/handlers/font.js
+index 3d74fde..8aeaa16 100644
+--- a/src/framework/handlers/font.js
++++ b/src/framework/handlers/font.js
+@@ -1,6 +1,8 @@
+ import { path } from '../../core/path.js';
+ import { string } from '../../core/string.js';
+ import { http } from '../../platform/net/http.js';
++import { Asset } from '../asset/asset.js';
++import { FONT_MSDF } from '../font/constants.js';
+ import { Font } from '../font/font.js';
+ import { ResourceHandler } from './handler.js';
+ 
+@@ -101,6 +103,13 @@ class FontHandler extends ResourceHandler {
+         const textures = new Array(numTextures);
+         const loader = this._loader;
+ 
++        // MSDF atlases must not be mipmapped: each mip level box-averages the R/G/B distance
++        // channels, but median(average) != average(median), so sampling a minified level yields a
++        // corrupted median (ghost / flickering artifacts on small text). The options have to be
++        // applied at texture creation time - on WebGPU the mip chain cannot be removed after the
++        // texture is created. Bitmap fonts keep their mipmaps.
++        const isMsdf = (data.type || FONT_MSDF) === FONT_MSDF;
++
+         const loadTexture = function (index) {
+             const onLoaded = function (err, texture) {
+                 if (error) return;
+@@ -119,11 +128,20 @@ class FontHandler extends ResourceHandler {
+                 }
+             };
+ 
+-            if (index === 0) {
+-                loader.load(url, 'texture', onLoaded);
+-            } else {
+-                loader.load(url.replace('.png', `${index}.png`), 'texture', onLoaded);
+-            }
++            const textureUrl = index === 0 ? url : url.replace('.png', `${index}.png`);
++
++            // texture creation options are passed to the texture handler using a transient
++            // texture asset (not added to the asset registry). Its name is the url, so the texture
++            // name stays the loader cache key (used by Font#destroy to clear the cache).
++            const textureAsset = isMsdf ? new Asset(textureUrl, 'texture', {
++                url: textureUrl,
++                filename: textureUrl
++            }, {
++                mipmaps: false,
++                minfilter: 'linear'
++            }) : undefined;
++
++            loader.load(textureUrl, 'texture', onLoaded, textureAsset);
+         };
+ 
+         for (let i = 0; i < numTextures; i++) {
+diff --git a/test/framework/handlers/font-handler.test.mjs b/test/framework/handlers/font-handler.test.mjs
+index d3fff34..32a1c8a 100644
+--- a/test/framework/handlers/font-handler.test.mjs
++++ b/test/framework/handlers/font-handler.test.mjs
+@@ -1,6 +1,7 @@
+ import { expect } from 'chai';
+ 
+ import { Asset } from '../../../src/framework/asset/asset.js';
++import { FILTER_LINEAR } from '../../../src/platform/graphics/constants.js';
+ import { createApp } from '../../app.mjs';
+ import { jsdomSetup, jsdomTeardown } from '../../jsdom.mjs';
+ 
+@@ -72,4 +73,29 @@ describe('FontHandler', function () {
+         asset.on('error', err => done(new Error(err)));
+     });
+ 
++    // MSDF atlases must not be mipmapped - box-filtered mip levels corrupt the median of the
++    // distance channels, causing ghost artifacts on minified text
++    it('creates msdf font textures without mipmaps', function (done) {
++        const asset = new Asset('arial', 'font', {
++            url: 'http://localhost:3210/test/assets/fonts/arial.json'
++        });
++
++        app.assets.add(asset);
++        app.assets.load(asset);
++
++        asset.ready(function () {
++            const font = asset.resource;
++            expect(font.type).to.equal('msdf');
++            font.textures.forEach((texture) => {
++                expect(texture.mipmaps).to.be.false;
++                expect(texture.minFilter).to.equal(FILTER_LINEAR);
++                // texture name stays the url, which is the loader cache key
++                expect(app.loader.getFromCache(texture.name, 'texture')).to.equal(texture);
++            });
++            done();
++        });
++
++        asset.on('error', err => done(new Error(err)));
++    });
++
+ });

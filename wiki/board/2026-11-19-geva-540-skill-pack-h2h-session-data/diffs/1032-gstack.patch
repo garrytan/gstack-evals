@@ -1,0 +1,45 @@
+diff --git a/index.js b/index.js
+index 8ddc89b..4c97e54 100644
+--- a/index.js
++++ b/index.js
+@@ -26,8 +26,9 @@ var UNSAFE_CHARS_REGEXP   = /[<>\/\u2028\u2029]/g;
+ // stays in script data, so only these need neutralizing. The bare-prefix form
+ // matters because the matching `>` could be supplied by a different
+ // serialized value later in the output, so escaping stops there without
+-// waiting for a closing `>`. A trailing backslash is not a delimiter here
+-// (that's a JS-level concern, not an HTML one), so this doesn't affect tagged
++// waiting for a closing `>`. The end of the body (`$`) also counts, since the
++// delimiter may come from the surrounding output (e.g. `space` newlines).
++// A trailing backslash is not a delimiter here (that's a JS-level concern, not an HTML one), so this doesn't affect tagged
+ // template literals like `String.raw`.
+ //
+ // The `[^<>]*` in the first alternative excludes `<`, which is load-bearing:
+@@ -38,7 +39,7 @@ var UNSAFE_CHARS_REGEXP   = /[<>\/\u2028\u2029]/g;
+ // longer contain a second `<`, every `</script` in the source is either the
+ // start of its own match or is followed by a non-delimiter — and the latter
+ // the tokenizer never treats as an end tag.
+-var SCRIPT_CLOSE_REGEXP = /<\/script[^<>]*>|<\/script(?=[\t\n\f\r \/>])/gi;
++var SCRIPT_CLOSE_REGEXP = /<\/script[^<>]*>|<\/script(?=[\t\n\f\r \/>]|$)/gi;
+ 
+ var RESERVED_SYMBOLS = ['*', 'async'];
+ 
+diff --git a/test/unit/serialize.js b/test/unit/serialize.js
+index 3d4de00..87743ba 100644
+--- a/test/unit/serialize.js
++++ b/test/unit/serialize.js
+@@ -160,6 +160,15 @@ describe('serialize( obj )', function () {
+             strictEqual(serialize({ fn: fn }).indexOf('</script>'), -1);
+         });
+ 
++        it('should escape a bare </script at the end of a function body', function () {
++            var f = function () {};
++            f.toString = function () { return 'function f(){ return 1 }//</script'; };
++            var g = function () {};
++            g.toString = function () { return 'function g(x){ return x } > <img src=x onerror=alert(1)>'; };
++            var out = serialize({ a: { f: f }, g: g }, { space: 2 });
++            strictEqual(/<\/script/i.test(out), false);
++        });
++
+         it('should serialize enhanced literal objects', function () {
+             var obj = {
+                 foo() { return true; },

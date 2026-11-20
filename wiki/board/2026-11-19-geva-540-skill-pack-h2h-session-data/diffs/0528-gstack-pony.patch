@@ -1,0 +1,189 @@
+diff --git a/pkg/cli/copilot_agent.go b/pkg/cli/copilot_agent.go
+index 16abf41..e5b7911 100644
+--- a/pkg/cli/copilot_agent.go
++++ b/pkg/cli/copilot_agent.go
+@@ -52,8 +52,8 @@ func (d *CopilotCodingAgentDetector) IsGitHubCopilotCodingAgent() bool {
+ 	copilotCodingAgentLog.Printf("Detecting if run is GitHub Copilot coding agent: %s", d.runDir)
+ 
+ 	// If aw_info.json exists, this is an agentic workflow, NOT a GitHub Copilot coding agent run
+-	awInfoPath := filepath.Join(d.runDir, "aw_info.json")
+-	if _, err := os.Stat(awInfoPath); err == nil {
++	// (aw_info.json may live at the root or inside the activation artifact directory)
++	if findAwInfoPath(d.runDir) != "" {
+ 		copilotCodingAgentLog.Print("Found aw_info.json - this is an agentic workflow, not a GitHub Copilot coding agent")
+ 		return false
+ 	}
+diff --git a/pkg/cli/copilot_agent_logs.go b/pkg/cli/copilot_agent_logs.go
+index 0bd39af..5bc45c9 100644
+--- a/pkg/cli/copilot_agent_logs.go
++++ b/pkg/cli/copilot_agent_logs.go
+@@ -8,14 +8,12 @@ import (
+ )
+ 
+ var (
+-	agentTurnPattern     = regexp.MustCompile(`(?i)task.*iteration|agent.*turn|step.*\d+`)
+-	agentToolCallPattern = regexp.MustCompile(`(?i)tool.*call|executing.*tool|calling.*(\w+)`)
+-	toolNamePatterns     = []*regexp.Regexp{
+-		regexp.MustCompile(`(?i)tool[:\s]+([a-zA-Z0-9_-]+)`),
+-		regexp.MustCompile(`(?i)calling[:\s]+([a-zA-Z0-9_-]+)`),
+-		regexp.MustCompile(`(?i)executing[:\s]+([a-zA-Z0-9_-]+)`),
+-		regexp.MustCompile(`(?i)using[:\s]+tool[:\s]+([a-zA-Z0-9_-]+)`),
+-	}
++	agentTurnPattern = regexp.MustCompile(`(?i)task.*iteration|agent.*turn|step.*\d+`)
++	// toolNamePattern matches structured tool-call log lines such as "Tool call: x",
++	// "Using tool: x", "Executing tool: x", "Executing: x" or "Calling: x".
++	// The colon delimiter is required so that natural-language prose
++	// (e.g. "the agent calls a tool to ...") is never parsed as a tool name.
++	toolNamePattern = regexp.MustCompile(`(?i)\b(?:tool(?:\s+call)?|executing(?:\s+tool)?|calling(?:\s+tool)?)\s*:\s*([a-zA-Z0-9_][a-zA-Z0-9_-]*)`)
+ )
+ 
+ // ParseCopilotCodingAgentLogMetrics extracts metrics from GitHub Copilot coding agent logs
+@@ -48,24 +46,21 @@ func ParseCopilotCodingAgentLogMetrics(logContent string, verbose bool) workflow
+ 		}
+ 
+ 		// Extract tool calls from agent logs
+-		if matches := agentToolCallPattern.FindStringSubmatch(line); len(matches) > 1 {
+-			toolName := extractToolName(line)
+-			if toolName != "" {
+-				// Track tool call
+-				if _, exists := toolCallMap[toolName]; !exists {
+-					toolCallMap[toolName] = &workflow.ToolCallInfo{
+-						Name:      toolName,
+-						CallCount: 0,
+-					}
++		if toolName := extractToolName(line); toolName != "" {
++			// Track tool call
++			if _, exists := toolCallMap[toolName]; !exists {
++				toolCallMap[toolName] = &workflow.ToolCallInfo{
++					Name:      toolName,
++					CallCount: 0,
+ 				}
+-				toolCallMap[toolName].CallCount++
++			}
++			toolCallMap[toolName].CallCount++
+ 
+-				// Add to current sequence
+-				currentSequence = append(currentSequence, toolName)
++			// Add to current sequence
++			currentSequence = append(currentSequence, toolName)
+ 
+-				if verbose {
+-					copilotCodingAgentLog.Printf("Found tool call: %s", toolName)
+-				}
++			if verbose {
++				copilotCodingAgentLog.Printf("Found tool call: %s", toolName)
+ 			}
+ 		}
+ 
+@@ -102,12 +97,8 @@ func ParseCopilotCodingAgentLogMetrics(logContent string, verbose bool) workflow
+ 
+ // extractToolName extracts a tool name from a log line
+ func extractToolName(line string) string {
+-	// Try to extract tool name from various patterns
+-	for _, pattern := range toolNamePatterns {
+-		if matches := pattern.FindStringSubmatch(line); len(matches) > 1 {
+-			return strings.TrimSpace(matches[1])
+-		}
++	if matches := toolNamePattern.FindStringSubmatch(line); len(matches) > 1 {
++		return matches[1]
+ 	}
+-
+ 	return ""
+ }
+diff --git a/pkg/cli/copilot_agent_test.go b/pkg/cli/copilot_agent_test.go
+index 2829182..494efb7 100644
+--- a/pkg/cli/copilot_agent_test.go
++++ b/pkg/cli/copilot_agent_test.go
+@@ -226,11 +226,36 @@ func TestExtractToolName(t *testing.T) {
+ 			line:     "Using tool: read_operation",
+ 			expected: "read_operation",
+ 		},
++		{
++			name:     "extracts from 'tool call:' pattern",
++			line:     "Tool call: github_search",
++			expected: "github_search",
++		},
++		{
++			name:     "extracts from 'executing tool:' pattern",
++			line:     "2024-01-15T10:00:00Z Executing tool: read",
++			expected: "read",
++		},
+ 		{
+ 			name:     "returns empty for no match",
+ 			line:     "Just a regular log line",
+ 			expected: "",
+ 		},
++		{
++			name:     "ignores prose mentioning tool calls",
++			line:     "The agent makes tool calls to fetch data for the report",
++			expected: "",
++		},
++		{
++			name:     "ignores prose with calling and executing",
++			line:     "Calling to the API since executing with the wrong token is a misuse",
++			expected: "",
++		},
++		{
++			name:     "ignores prose with tool word",
++			line:     "This tool launches a unified server on startup",
++			expected: "",
++		},
+ 	}
+ 
+ 	for _, tt := range tests {
+@@ -341,3 +366,39 @@ ERROR: Test error
+ 		t.Error("Expected tool calls to be extracted")
+ 	}
+ }
++
++func TestParseCopilotCodingAgentLogMetrics_IgnoresProse(t *testing.T) {
++	logContent := `
++The agent calls a command or two since it launches a unified server.
++Tool calls with misuse for on to are not tool names.
++Tool call: startHttpServer
++Executing tool: noop
++`
++	metrics := ParseCopilotCodingAgentLogMetrics(logContent, false)
++
++	names := make(map[string]int)
++	for _, tc := range metrics.ToolCalls {
++		names[tc.Name] = tc.CallCount
++	}
++	if len(names) != 2 || names["startHttpServer"] != 1 || names["noop"] != 1 {
++		t.Errorf("Expected only startHttpServer and noop tool calls, got %v", names)
++	}
++}
++
++func TestCopilotCodingAgentDetector_ActivationAwInfo(t *testing.T) {
++	tmpDir := t.TempDir()
++	if err := os.MkdirAll(filepath.Join(tmpDir, "activation"), 0755); err != nil {
++		t.Fatal(err)
++	}
++	if err := os.WriteFile(filepath.Join(tmpDir, "activation", "aw_info.json"), []byte(`{"engine_id":"copilot"}`), 0644); err != nil {
++		t.Fatal(err)
++	}
++	// Log content that would otherwise match the coding agent heuristics
++	if err := os.WriteFile(filepath.Join(tmpDir, "agent-stdio.log"), []byte("GitHub Copilot CLI agent starting\n"), 0644); err != nil {
++		t.Fatal(err)
++	}
++
++	if NewCopilotCodingAgentDetector(tmpDir, false).IsGitHubCopilotCodingAgent() {
++		t.Error("Expected agentic workflow run with activation/aw_info.json not to be detected as Copilot coding agent")
++	}
++}
+diff --git a/pkg/cli/logs_metrics.go b/pkg/cli/logs_metrics.go
+index c9282f6..a792e96 100644
+--- a/pkg/cli/logs_metrics.go
++++ b/pkg/cli/logs_metrics.go
+@@ -57,7 +57,10 @@ func extractLogMetrics(logDir string, verbose bool, workflowPath ...string) (Log
+ 
+ 	// First check for aw_info.json to determine the engine
+ 	var detectedEngine workflow.CodingAgentEngine
+-	infoFilePath := filepath.Join(logDir, "aw_info.json")
++	infoFilePath := findAwInfoPath(logDir)
++	if infoFilePath == "" {
++		infoFilePath = filepath.Join(logDir, "aw_info.json")
++	}
+ 	logsMetricsLog.Printf("Checking for aw_info.json at: %s", infoFilePath)
+ 	if _, err := os.Stat(infoFilePath); err == nil {
+ 		logsMetricsLog.Print("Found aw_info.json, extracting engine")

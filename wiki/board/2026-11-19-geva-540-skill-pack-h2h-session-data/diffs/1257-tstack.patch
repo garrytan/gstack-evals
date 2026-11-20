@@ -1,0 +1,54 @@
+diff --git a/middleware/proxy/proxy.go b/middleware/proxy/proxy.go
+index 2883ff5..57733a5 100644
+--- a/middleware/proxy/proxy.go
++++ b/middleware/proxy/proxy.go
+@@ -279,7 +279,7 @@ func BalancerForward(servers []string, clients ...*fasthttp.Client) fiber.Handle
+ 		if !strings.HasPrefix(server, "http") {
+ 			server = "http://" + server
+ 		}
+-		c.Request().Header.Add("X-Real-IP", c.IP())
++		c.Request().Header.Set("X-Real-IP", c.IP())
+ 		return Do(c, server+c.OriginalURL(), clients...)
+ 	}
+ }
+diff --git a/middleware/proxy/proxy_test.go b/middleware/proxy/proxy_test.go
+index dfca5e4..c70a31c 100644
+--- a/middleware/proxy/proxy_test.go
++++ b/middleware/proxy/proxy_test.go
+@@ -985,6 +985,36 @@ func Test_Proxy_Balancer_Forward_Local(t *testing.T) {
+ 	require.Equal(t, "forwarded", string(b))
+ }
+ 
++// go test -run Test_Proxy_Balancer_Forward_OverridesSpoofedRealIP
++func Test_Proxy_Balancer_Forward_OverridesSpoofedRealIP(t *testing.T) {
++	t.Parallel()
++
++	app := fiber.New()
++
++	_, addr := createProxyTestServerIPv4(t, func(c fiber.Ctx) error {
++		values := c.Request().Header.PeekAll("X-Real-IP")
++		parts := make([]string, 0, len(values))
++		for _, v := range values {
++			parts = append(parts, string(v))
++		}
++		return c.SendString(strings.Join(parts, ","))
++	})
++
++	app.Use(BalancerForward([]string{addr}))
++
++	req := httptest.NewRequest(fiber.MethodGet, "/", http.NoBody)
++	req.Header.Set("X-Real-IP", "10.0.0.1")
++
++	resp, err := app.Test(req)
++	require.NoError(t, err)
++	require.Equal(t, fiber.StatusOK, resp.StatusCode)
++
++	b, err := io.ReadAll(resp.Body)
++	require.NoError(t, err)
++
++	require.Equal(t, "0.0.0.0", string(b))
++}
++
+ func Test_Proxy_Immutable(t *testing.T) {
+ 	t.Parallel()
+ 

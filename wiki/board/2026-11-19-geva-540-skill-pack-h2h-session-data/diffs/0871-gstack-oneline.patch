@@ -1,0 +1,17 @@
+diff --git a/unmarshaler.go b/unmarshaler.go
+index 189be52..bbcc223 100644
+--- a/unmarshaler.go
++++ b/unmarshaler.go
+@@ -280,6 +280,12 @@ func (d *decoder) handleRootExpression(expr *unstable.Node, v reflect.Value) err
+ 		}
+ 	}
+ 
++	if d.unmarshalerInterface && v.CanAddr() && v.Addr().CanInterface() {
++		if outi, ok := v.Addr().Interface().(unstable.Unmarshaler); ok {
++			return outi.UnmarshalTOML(expr)
++		}
++	}
++
+ 	switch expr.Kind {
+ 	case unstable.KeyValue:
+ 		if d.skipUntilTable {

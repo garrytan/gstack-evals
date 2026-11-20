@@ -1,0 +1,179 @@
+diff --git a/lib/bridge.js b/lib/bridge.js
+index 6fb4adc..f8f7ecf 100644
+--- a/lib/bridge.js
++++ b/lib/bridge.js
+@@ -167,6 +167,45 @@ const thisSymbolIterator = Symbol.iterator;
+ // load, before any sandbox code runs, so they cannot be redirected.
+ const thisSymbolKeyFor = Symbol.keyFor;
+ const thisStringPrototypeStartsWith = String.prototype.startsWith;
++const thisStringPrototypeCharCodeAt = String.prototype.charCodeAt;
++const thisStringPrototypeSlice = String.prototype.slice;
++
++/*
++ * SECURITY (GHSA-x6m4-chr9-cg97): redact the frame lines of a stack string
++ * formatted in the host realm before it is delivered to the sandbox.
++ *
++ * Host-realm errors (e.g. the SyntaxError thrown by the host-side transformer
++ * when sandbox code calls `eval` with malformed source, or any error thrown by
++ * a host function) have their `.stack` formatted by Node's host formatter,
++ * which emits absolute host paths and host function names. The sandbox-side
++ * prepareStackTrace redaction (GHSA-v27g-jcqj-v8rw) never runs for them.
++ *
++ * Every line whose first non-whitespace token is `at ` is replaced with the
++ * same placeholder the sandbox default formatter emits; header/message lines
++ * are kept. Uses only primitives captured at module load (no prototype
++ * dispatch on sandbox-reachable objects).
++ */
++function redactHostStack(stack) {
++	const len = stack.length;
++	let result = '';
++	let lineStart = 0;
++	for (let i = 0; i <= len; i++) {
++		if (i < len && thisReflectApply(thisStringPrototypeCharCodeAt, stack, [i]) !== 0x0a /* '\n' */) continue;
++		let j = lineStart;
++		let c;
++		while (j < i && ((c = thisReflectApply(thisStringPrototypeCharCodeAt, stack, [j])) === 0x20 || c === 0x09)) j++;
++		const isFrame =
++			j > lineStart &&
++			j + 2 < i &&
++			thisReflectApply(thisStringPrototypeCharCodeAt, stack, [j]) === 0x61 /* 'a' */ &&
++			thisReflectApply(thisStringPrototypeCharCodeAt, stack, [j + 1]) === 0x74 /* 't' */ &&
++			thisReflectApply(thisStringPrototypeCharCodeAt, stack, [j + 2]) === 0x20; /* ' ' */
++		const line = isFrame ? '    at CallSite {}' : thisReflectApply(thisStringPrototypeSlice, stack, [lineStart, i]);
++		result = lineStart === 0 ? line : result + '\n' + line;
++		lineStart = i + 1;
++	}
++	return result;
++}
+ const thisSymbolNodeJSUtilInspectCustom = Symbol.for('nodejs.util.inspect.custom');
+ const thisSymbolNodeJSRejection = Symbol.for('nodejs.rejection');
+ // SECURITY (post-GHSA-47x8 hardening): defense-in-depth — Node's util.promisify
+@@ -1668,6 +1707,9 @@ function createBridge(otherInit, registerProxy) {
+ 				// @other(unsafe)
+ 				throw thisFromOtherForThrow(e);
+ 			}
++			// SECURITY (GHSA-x6m4-chr9-cg97): a host-realm `stack` string was
++			// formatted by the host formatter and carries absolute host paths.
++			if (!isHost && key === 'stack' && typeof ret === 'string') return redactHostStack(ret);
+ 			return handlerFromOtherWithContext(this, ret);
+ 		}
+ 
+@@ -1929,6 +1971,40 @@ function createBridge(otherInit, registerProxy) {
+ 
+ 			if (!desc) return undefined;
+ 
++			// SECURITY (GHSA-x6m4-chr9-cg97): never hand the sandbox a raw host
++			// `stack` string (data value) or the host stack getter (which would
++			// return one when invoked). Materialize the value and redact it.
++			if (!isHost && prop === 'stack') {
++				let value = desc.value;
++				if (desc.get || desc.set) {
++					value = undefined;
++					if (desc.get) {
++						try {
++							value = otherReflectApply(desc.get, object, []);
++						} catch (e) {
++							// @other(unsafe)
++							throw thisFromOtherForThrow(e);
++						}
++					}
++				}
++				if (typeof value === 'string') {
++					const redacted = {
++						__proto__: null,
++						value: redactHostStack(value),
++						writable: desc.writable === true || !!desc.set,
++						enumerable: desc.enumerable === true,
++						configurable: desc.configurable === true,
++					};
++					if (!redacted.configurable) {
++						const oldDesc = thisSafeGetOwnPropertyDescriptor(target, prop);
++						if (!oldDesc || oldDesc.configurable || oldDesc.writable !== redacted.writable || oldDesc.value !== redacted.value) {
++							if (!thisReflectDefineProperty(target, prop, redacted)) throw thisUnexpected();
++						}
++					}
++					return redacted;
++				}
++			}
++
+ 			let thisDesc;
+ 			if (desc.get || desc.set) {
+ 				thisDesc = {
+diff --git a/test/ghsa/GHSA-x6m4-chr9-cg97/repro.js b/test/ghsa/GHSA-x6m4-chr9-cg97/repro.js
+new file mode 100644
+index 0000000..f22078f
+--- /dev/null
++++ b/test/ghsa/GHSA-x6m4-chr9-cg97/repro.js
+@@ -0,0 +1,72 @@
++'use strict';
++
++/**
++ * GHSA-x6m4-chr9-cg97 — host-realm error stacks leak absolute host paths
++ *
++ * A host-realm error (e.g. the SyntaxError thrown by the host-side
++ * transformer when sandbox code calls `eval` with malformed source) has its
++ * `.stack` formatted by Node's host formatter. Reading `.stack` through the
++ * bridge returned that string verbatim, bypassing the sandbox-side
++ * prepareStackTrace redaction added for GHSA-v27g-jcqj-v8rw.
++ *
++ * Fix: the bridge redacts every `at ...` frame line of a `stack` string read
++ * by the sandbox from a host object (get + getOwnPropertyDescriptor traps).
++ */
++
++const assert = require('assert');
++const path = require('path');
++const { VM, NodeVM } = require('../../../lib/main.js');
++
++const LIB_DIR = path.resolve(__dirname, '../../../lib');
++
++function assertNoHostLeak(stack) {
++	assert.strictEqual(typeof stack, 'string');
++	assert.ok(stack.indexOf(LIB_DIR) === -1, 'stack leaks vm2 lib path:\n' + stack);
++	assert.ok(stack.indexOf(__filename) === -1, 'stack leaks embedder path:\n' + stack);
++	assert.ok(!/node:internal|node:vm/.test(stack), 'stack leaks node internals:\n' + stack);
++	assert.ok(!/transformAndCheck|makeNiceSyntaxError/.test(stack), 'stack leaks host function names:\n' + stack);
++}
++
++describe('GHSA-x6m4-chr9-cg97 (host error stack leaks host paths)', () => {
++	it('redacts .stack of host SyntaxError from eval in default VM', () => {
++		const stack = new VM().run(`var s; try { eval("@@@ catch") } catch (e) { s = e.stack } s;`);
++		assert.ok(/^SyntaxError: /.test(stack), stack);
++		assertNoHostLeak(stack);
++	});
++
++	it('redacts .stack when string eval is disabled', () => {
++		const stack = new VM({ eval: false }).run(`var s; try { eval("@@@ catch") } catch (e) { s = e.stack } s;`);
++		assertNoHostLeak(stack);
++	});
++
++	it('redacts .stack of host SyntaxError from Function constructor', () => {
++		const stack = new VM().run(`var s; try { Function("@@@ catch") } catch (e) { s = e.stack } s;`);
++		assertNoHostLeak(stack);
++	});
++
++	it('redacts stack read via Object.getOwnPropertyDescriptor', () => {
++		const stack = new VM().run(`
++			var s; try { eval("@@@ catch") } catch (e) {
++				var d = Object.getOwnPropertyDescriptor(e, 'stack');
++				s = d.get ? d.get.call(e) : d.value;
++			} s;`);
++		assertNoHostLeak(stack);
++	});
++
++	it('redacts stack of host errors thrown by host functions', () => {
++		const vm = new VM({ sandbox: { hostFn() { throw new Error('boom'); } } });
++		const stack = vm.run(`var s; try { hostFn() } catch (e) { s = e.stack } s;`);
++		assert.ok(/^Error: boom/.test(stack), stack);
++		assertNoHostLeak(stack);
++	});
++
++	it('redacts .stack in default NodeVM', () => {
++		const stack = new NodeVM().run(`var s; try { eval("@@@ catch") } catch (e) { s = e.stack } module.exports = s;`);
++		assertNoHostLeak(stack);
++	});
++
++	it('keeps message intact', () => {
++		const msg = new VM().run(`var s; try { eval("@@@ catch") } catch (e) { s = e.message } s;`);
++		assert.strictEqual(msg, "Unexpected character '@'");
++	});
++});

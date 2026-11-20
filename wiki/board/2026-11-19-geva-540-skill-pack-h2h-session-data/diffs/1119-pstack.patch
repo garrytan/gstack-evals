@@ -1,0 +1,52 @@
+diff --git a/internal/transport/http2_server.go b/internal/transport/http2_server.go
+index 63c6539..419bd22 100644
+--- a/internal/transport/http2_server.go
++++ b/internal/transport/http2_server.go
+@@ -511,12 +511,17 @@ func (t *http2Server) operateHeaders(ctx context.Context, frame *http2.MetaHeade
+ 
+ 	// "If :authority is missing, Host must be renamed to :authority." - A41
+ 	if len(mdata[":authority"]) == 0 {
+-		// No-op if host isn't present, no eventual :authority header is a valid
+-		// RPC.
+-		if host, ok := mdata["host"]; ok {
+-			mdata[":authority"] = host
+-			delete(mdata, "host")
++		host, ok := mdata["host"]
++		if !ok {
++			errMsg := "missing both :authority and host headers"
++			if t.logger.V(logLevel) {
++				t.logger.Infof("Aborting the stream early: %v", errMsg)
++			}
++			t.writeEarlyAbort(streamID, s.contentSubtype, status.New(codes.Internal, errMsg), http.StatusBadRequest, !frame.StreamEnded())
++			return nil
+ 		}
++		mdata[":authority"] = host
++		delete(mdata, "host")
+ 	} else {
+ 		// "If :authority is present, Host must be discarded" - A41
+ 		delete(mdata, "host")
+diff --git a/internal/transport/transport_test.go b/internal/transport/transport_test.go
+index 825267a..ed88d1c 100644
+--- a/internal/transport/transport_test.go
++++ b/internal/transport/transport_test.go
+@@ -2315,6 +2315,20 @@ func (s) TestHeadersHTTPStatusGRPCStatus(t *testing.T) {
+ 			grpcStatusWant:  "13",
+ 			grpcMessageWant: "both must only have 1 value as per HTTP/2 spec",
+ 		},
++		{
++			name: "Missing authority and host headers",
++			headers: []struct {
++				name   string
++				values []string
++			}{
++				{name: ":method", values: []string{"POST"}},
++				{name: ":path", values: []string{"foo"}},
++				{name: "content-type", values: []string{"application/grpc"}},
++			},
++			httpStatusWant:  "400",
++			grpcStatusWant:  "13",
++			grpcMessageWant: "missing both :authority and host headers",
++		},
+ 		// If the client sends an HTTP/2 request with a :method header with a
+ 		// value other than POST, as specified in the gRPC over HTTP/2
+ 		// specification, the server should fail the RPC.

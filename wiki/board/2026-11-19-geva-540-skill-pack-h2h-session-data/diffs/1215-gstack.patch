@@ -1,0 +1,57 @@
+diff --git a/pkg/protocol/handshake/message_server_key_exchange.go b/pkg/protocol/handshake/message_server_key_exchange.go
+index 70413f5..127d396 100644
+--- a/pkg/protocol/handshake/message_server_key_exchange.go
++++ b/pkg/protocol/handshake/message_server_key_exchange.go
+@@ -79,8 +79,8 @@ func (m *MessageServerKeyExchange) Unmarshal(data []byte) error { //nolint:cyclo
+ 		return errCipherSuiteUnset
+ 	}
+ 
+-	hintLength := binary.BigEndian.Uint16(data)
+-	if int(hintLength) <= len(data)-2 && m.KeyExchangeAlgorithm.Has(types.KeyExchangeAlgorithmPsk) {
++	hintLength := int(binary.BigEndian.Uint16(data))
++	if hintLength <= len(data)-2 && m.KeyExchangeAlgorithm.Has(types.KeyExchangeAlgorithmPsk) {
+ 		m.IdentityHint = append([]byte{}, data[2:2+hintLength]...)
+ 		data = data[2+hintLength:]
+ 	}
+@@ -96,6 +96,10 @@ func (m *MessageServerKeyExchange) Unmarshal(data []byte) error { //nolint:cyclo
+ 		return errLengthMismatch
+ 	}
+ 
++	if len(data) < 1 {
++		return errBufferTooSmall
++	}
++
+ 	if _, ok := elliptic.CurveTypes()[elliptic.CurveType(data[0])]; ok {
+ 		m.EllipticCurveType = elliptic.CurveType(data[0])
+ 	} else {
+diff --git a/pkg/protocol/handshake/message_server_key_exchange_psk_test.go b/pkg/protocol/handshake/message_server_key_exchange_psk_test.go
+new file mode 100644
+index 0000000..24211ef
+--- /dev/null
++++ b/pkg/protocol/handshake/message_server_key_exchange_psk_test.go
+@@ -0,0 +1,25 @@
++// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
++// SPDX-License-Identifier: MIT
++
++package handshake
++
++import (
++	"testing"
++
++	"github.com/pion/dtls/v3/internal/ciphersuite/types"
++)
++
++func TestServerKeyExchangeECDHEPSKTruncated(t *testing.T) {
++	for _, data := range [][]byte{
++		{0x00, 0x00},
++		{0x00, 0x01, 0xAA},
++		{0x00, 0x01, 0xAA, 0x03},
++	} {
++		m := &MessageServerKeyExchange{
++			KeyExchangeAlgorithm: types.KeyExchangeAlgorithmPsk | types.KeyExchangeAlgorithmEcdhe,
++		}
++		if err := m.Unmarshal(data); err == nil {
++			t.Fatalf("expected error for %x", data)
++		}
++	}
++}

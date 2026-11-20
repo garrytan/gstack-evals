@@ -1,0 +1,126 @@
+diff --git a/slatedb/src/bytes_range.rs b/slatedb/src/bytes_range.rs
+index f05936b..85bf52f 100644
+--- a/slatedb/src/bytes_range.rs
++++ b/slatedb/src/bytes_range.rs
+@@ -43,23 +43,30 @@ impl RangeBounds<Bytes> for BytesRange {
+     }
+ }
+ 
+-fn is_bound_non_empty(bound: &Bound<Bytes>) -> bool {
+-    match bound {
+-        Included(b) | Excluded(b) => !b.is_empty(),
+-        Unbounded => true,
+-    }
++fn is_empty_bound(bound: &Bound<Bytes>) -> bool {
++    matches!(bound, Included(b) | Excluded(b) if b.is_empty())
+ }
+ 
+ impl BytesRange {
++    /// Creates a new range from the given bounds.
++    ///
++    /// Empty byte strings are accepted as bounds. Since SlateDB keys are never
++    /// empty, an empty start bound (included or excluded) covers the same keys
++    /// as [`Unbounded`], and an empty end bound produces an empty range.
++    ///
++    /// # Panics
++    ///
++    /// Panics if the start bound is greater than the end bound (and neither
++    /// bound is empty).
+     pub(crate) fn new(start_bound: Bound<Bytes>, end_bound: Bound<Bytes>) -> Self {
+-        assert!(
+-            is_bound_non_empty(&start_bound),
+-            "Start bound must be non-empty"
+-        );
+-        assert!(
+-            is_bound_non_empty(&end_bound),
+-            "End bound must be non-empty"
+-        );
++        if is_empty_bound(&end_bound) {
++            return Self::new_empty();
++        }
++        let start_bound = if is_empty_bound(&start_bound) {
++            Unbounded
++        } else {
++            start_bound
++        };
+         let inner = ComparableRange::new(start_bound, end_bound);
+         assert!(inner.non_empty(), "Range must be non-empty");
+         Self { inner }
+@@ -310,6 +317,31 @@ pub(crate) mod tests {
+         });
+     }
+ 
++    #[test]
++    fn test_new_with_empty_start_bound_is_unbounded() {
++        let end = Bytes::from("b");
++        for start in [Bound::Included(Bytes::new()), Bound::Excluded(Bytes::new())] {
++            let range = BytesRange::new(start, Bound::Excluded(end.clone()));
++            assert_eq!(range.start_bound(), Unbounded);
++            assert_eq!(range.end_bound(), Bound::Excluded(&end));
++        }
++    }
++
++    #[test]
++    fn test_new_with_empty_end_bound_is_empty() {
++        for end in [Bound::Included(Bytes::new()), Bound::Excluded(Bytes::new())] {
++            for start in [
++                Unbounded,
++                Bound::Included(Bytes::new()),
++                Bound::Included(Bytes::from("a")),
++            ] {
++                let range = BytesRange::new(start, end.clone());
++                assert!(range.empty());
++                assert!(!range.contains(&Bytes::from("a")));
++            }
++        }
++    }
++
+     #[test]
+     fn test_new_with_unbounded_range_is_valid() {
+         BytesRange::new(Unbounded, Unbounded);
+diff --git a/slatedb/src/db.rs b/slatedb/src/db.rs
+index 1bde64f..006447b 100644
+--- a/slatedb/src/db.rs
++++ b/slatedb/src/db.rs
+@@ -2022,6 +2022,41 @@ mod tests {
+         kv_store.close().await.unwrap();
+     }
+ 
++    #[tokio::test]
++    async fn test_scan_accepts_empty_bounds() {
++        let object_store: Arc<dyn ObjectStore> = Arc::new(InMemory::new());
++        let kv_store = Db::builder("/tmp/test_scan_empty_bounds", object_store)
++            .with_settings(test_db_options(0, 1024, None))
++            .build()
++            .await
++            .unwrap();
++
++        kv_store.put(b"a", b"v0").await.unwrap();
++        kv_store.put(b"b", b"v1").await.unwrap();
++
++        // An empty start bound sorts before every key, so it behaves like `..`.
++        let empty: &[u8] = b"";
++        let mut iter = kv_store.scan(empty..).await.unwrap();
++        assert_eq!(iter.next().await.unwrap().unwrap().key.as_ref(), b"a");
++        assert_eq!(iter.next().await.unwrap().unwrap().key.as_ref(), b"b");
++        assert_eq!(iter.next().await.unwrap(), None);
++
++        let mut iter = kv_store
++            .scan::<&[u8], _>((std::ops::Bound::Excluded(empty), std::ops::Bound::Excluded(b"b".as_slice())))
++            .await
++            .unwrap();
++        assert_eq!(iter.next().await.unwrap().unwrap().key.as_ref(), b"a");
++        assert_eq!(iter.next().await.unwrap(), None);
++
++        // An empty end bound sorts before every key, so the scan yields nothing.
++        let mut iter = kv_store.scan(..empty).await.unwrap();
++        assert_eq!(iter.next().await.unwrap(), None);
++        let mut iter = kv_store.scan(empty..=empty).await.unwrap();
++        assert_eq!(iter.next().await.unwrap(), None);
++
++        kv_store.close().await.unwrap();
++    }
++
+     #[tokio::test]
+     async fn test_scan_descending_returns_records_in_reverse_order() {
+         let object_store: Arc<dyn ObjectStore> = Arc::new(InMemory::new());

@@ -1,0 +1,73 @@
+diff --git a/RELEASE_NOTES.md b/RELEASE_NOTES.md
+index 91e9e10..9e199c0 100644
+--- a/RELEASE_NOTES.md
++++ b/RELEASE_NOTES.md
+@@ -64,6 +64,7 @@ extensive correctness work during development — see [Docs/Sampler.md](Docs/Sam
+  * `WaveFileWriter`: removed the finalizer that fired an unconditional `Debug.Assert` and could crash the process on the finalizer thread when construction had thrown
+  * `WaveFileWriter.WriteSample` / `WriteSamples`: fixed 32-bit `WaveFormatExtensible` output writing near-silence or corrupt data — `WriteSample(float)` truncated the normalised float to an `Int32` before scaling (writing zero for almost every sample), and both paths ignored the format's SubFormat; they now write IEEE-float or integer-PCM samples according to the declared subformat (#651)
+  * `WaveExtensionMethods.AsStandardWaveFormat`: now also resolves the SubFormat of a `WaveFormatExtraData` (how an extensible format read from a file/stream is materialised), not just a `WaveFormatExtensible`
++ * `AudioFileReader`: WAV files stored as `WAVE_FORMAT_EXTENSIBLE` with a PCM or IEEE float SubFormat (common for mono and high bit depth files) are now read directly instead of being treated as compressed and routed through ACM conversion (which threw off Windows, and could mis-convert or truncate the audio on Windows)
+  * `AudioClient.Dispose` is now idempotent and safe against concurrent/re-entrant disposal, fixing an intermittent interop `NullReferenceException` (#1183)
+  * `AcmInterop`: serialised all `msacm32` P/Invokes process-wide, fixing process-killing access violations under concurrent ACM use
+  * `WaveFileReader` / `AiffFileReader`: malformed headers declaring `BlockAlign=0` now throw `InvalidDataException` from the constructor instead of `DivideByZeroException` later (#1254); `WaveFileReader` no longer throws on an oversized `fmt` `cbSize` (#482)
+diff --git a/src/NAudio/AudioFileReader.cs b/src/NAudio/AudioFileReader.cs
+index f523fcb..dbd040e 100644
+--- a/src/NAudio/AudioFileReader.cs
++++ b/src/NAudio/AudioFileReader.cs
+@@ -48,7 +48,11 @@ public class AudioFileReader : WaveStream, ISampleProvider
+         if (fileName.EndsWith(".wav", StringComparison.OrdinalIgnoreCase))
+         {
+             readerStream = new WaveFileReader(fileName);
+-            if (readerStream.WaveFormat.Encoding != WaveFormatEncoding.Pcm && readerStream.WaveFormat.Encoding != WaveFormatEncoding.IeeeFloat)
++            // WAVE_FORMAT_EXTENSIBLE files whose SubFormat is PCM or IEEE float (common for
++            // mono/multichannel and high bit depth WAVs) can be read directly by SampleChannel;
++            // routing them through ACM would mis-convert the audio, so resolve the subformat first.
++            var encoding = readerStream.WaveFormat.AsStandardWaveFormat().Encoding;
++            if (encoding != WaveFormatEncoding.Pcm && encoding != WaveFormatEncoding.IeeeFloat)
+             {
+ #if !WINDOWS
+                 throw new InvalidOperationException("WAV files with non-PCM encoding require Windows for ACM codec conversion");
+diff --git a/tests/NAudio.Windows.Tests/WaveStreams/AudioFileReaderTests.cs b/tests/NAudio.Windows.Tests/WaveStreams/AudioFileReaderTests.cs
+index 9eb350e..aaba6fa 100644
+--- a/tests/NAudio.Windows.Tests/WaveStreams/AudioFileReaderTests.cs
++++ b/tests/NAudio.Windows.Tests/WaveStreams/AudioFileReaderTests.cs
+@@ -47,6 +47,39 @@ public class AudioFileReaderTests
+         }
+     }
+ 
++    [TestCase(16)]
++    [TestCase(24)]
++    [TestCase(32)]
++    public void AudioFileReader_MonoExtensibleWav_CopyToReadsWholeFile(int bitsPerSample)
++    {
++        // 16 seconds of 8kHz mono audio stored as WAVE_FORMAT_EXTENSIBLE (PCM / IEEE float subformat)
++        const int sampleRate = 8000;
++        const int seconds = 16;
++        var tmp = Path.Combine(Path.GetTempPath(), "naudio-ext-test-" + Guid.NewGuid() + ".wav");
++        try
++        {
++            using (var writer = new WaveFileWriter(tmp, new WaveFormatExtensible(sampleRate, bitsPerSample, 1)))
++            {
++                for (int i = 0; i < sampleRate * seconds; i++)
++                    writer.WriteSample((float)Math.Sin(2 * Math.PI * 440.0 * i / sampleRate) * 0.5f);
++            }
++
++            using var reader = new AudioFileReader(tmp);
++            Assert.That(reader.WaveFormat.Encoding, Is.EqualTo(WaveFormatEncoding.IeeeFloat));
++            Assert.That(reader.WaveFormat.Channels, Is.EqualTo(1));
++            Assert.That(reader.WaveFormat.SampleRate, Is.EqualTo(sampleRate));
++            Assert.That(reader.TotalTime, Is.EqualTo(TimeSpan.FromSeconds(seconds)));
++
++            var output = new MemoryStream();
++            reader.CopyTo(output);
++            Assert.That(output.Length, Is.EqualTo(sampleRate * seconds * 4L));
++        }
++        finally
++        {
++            File.Delete(tmp);
++        }
++    }
++
+     /// <summary>
+     /// Build a 1kHz sine-in-WAV byte array we can feed to the reader.
+     /// </summary>

@@ -1,0 +1,56 @@
+diff --git a/mage/main_test.go b/mage/main_test.go
+index 6830cc2..2357fbb 100644
+--- a/mage/main_test.go
++++ b/mage/main_test.go
+@@ -1917,3 +1917,24 @@ func fileData(file string) (exeType, archSize, error) {
+ 	}
+ 	return -1, -1, errors.New("unrecognized executable format")
+ }
++
++func TestListBacktickInPackageComment(t *testing.T) {
++	stdout := &bytes.Buffer{}
++	inv := Invocation{
++		Dir:    "./testdata/list_backtick",
++		Stdout: stdout,
++		Stderr: io.Discard,
++		List:   true,
++	}
++
++	code := Invoke(inv)
++	if code != 0 {
++		t.Fatalf("expected to exit with code 0, but got %v", code)
++	}
++	actual := stdout.String()
++	expected := "This is a magefile, to be called with `go tool mage` (github.com/magefile/mage).\n\n" +
++		"Targets:\n  build    does a `build`.\n"
++	if actual != expected {
++		t.Fatalf("expected:\n%q\n\ngot:\n%q", expected, actual)
++	}
++}
+diff --git a/mage/template.go b/mage/template.go
+index eb755be..2d85e7b 100644
+--- a/mage/template.go
++++ b/mage/template.go
+@@ -224,7 +224,7 @@ Options:
+ 	}
+ 
+ 	list := func() error {
+-		{{with .Description}}_fmt.Println(` + "`{{.}}\n`" + `)
++		{{with .Description}}_fmt.Println({{printf "%s\n" . | printf "%q"}})
+ 		{{- end}}
+ 		{{- $default := .DefaultFunc}}
+ 		targets := map[string]string{
+diff --git a/mage/testdata/list_backtick/magefile.go b/mage/testdata/list_backtick/magefile.go
+new file mode 100644
+index 0000000..7b72a16
+--- /dev/null
++++ b/mage/testdata/list_backtick/magefile.go
+@@ -0,0 +1,8 @@
++//go:build mage
++// +build mage
++
++// This is a magefile, to be called with `go tool mage` (github.com/magefile/mage).
++package main
++
++// Build does a `build`.
++func Build() {}

@@ -1,0 +1,189 @@
+diff --git a/modules/caddytls/connpolicy.go b/modules/caddytls/connpolicy.go
+index c9258da..26d3053 100644
+--- a/modules/caddytls/connpolicy.go
++++ b/modules/caddytls/connpolicy.go
+@@ -291,7 +291,7 @@ func (p *ConnectionPolicy) buildStandardTLSConfig(ctx caddy.Context) error {
+ 			// changing of some of its fields. I'm worried this dereference allocates
+ 			// more at handshake-time, but I don't know how to practically pre-build
+ 			// a certmagic config for each combination of conn policy + automation policy...
+-			cfg := *tlsApp.getConfigForName(hello.ServerName)
++			cfg := *tlsApp.getConfigForHandshake(hello.ServerName)
+ 			if p.CertSelection != nil {
+ 				// you would think we could just set this whether or not
+ 				// p.CertSelection is nil, but that leads to panics if
+diff --git a/modules/caddytls/tls.go b/modules/caddytls/tls.go
+index 34ffbf6..b112e97 100644
+--- a/modules/caddytls/tls.go
++++ b/modules/caddytls/tls.go
+@@ -147,6 +147,7 @@ type TLS struct {
+ 	// and hashes of manually-loaded certificates
+ 	// (managing's value is an optional issuer key, for distinction)
+ 	managing, loaded map[string]string
++	managingMu       *sync.RWMutex // guards managing, since it may be read during handshakes
+ }
+ 
+ // CaddyModule returns the Caddy module information.
+@@ -170,6 +171,7 @@ func (t *TLS) Provision(ctx caddy.Context) error {
+ 	t.managing, t.loaded = make(map[string]string), make(map[string]string)
+ 	t.serverNames = make(map[string]struct{})
+ 	t.serverNamesMu = new(sync.Mutex)
++	t.managingMu = new(sync.RWMutex)
+ 
+ 	// set up default DNS module, if any, and make sure it implements all the
+ 	// common libdns interfaces, since it could be used for a variety of things
+@@ -604,7 +606,9 @@ func (t *TLS) Manage(subjects map[string]struct{}) error {
+ 					issuerKey = intIss.IssuerKey()
+ 				}
+ 			}
++			t.managingMu.Lock()
+ 			t.managing[name] = issuerKey
++			t.managingMu.Unlock()
+ 		}
+ 	}
+ 
+@@ -616,6 +620,15 @@ func (t *TLS) Manage(subjects map[string]struct{}) error {
+ // names that it IS managing certs for, or from the otherSubjsToManage which includes names
+ // that WILL be managed.
+ func (t *TLS) managingWildcardFor(subj string, otherSubjsToManage map[string]struct{}) bool {
++	t.managingMu.RLock()
++	defer t.managingMu.RUnlock()
++	return t.managingWildcardForLocked(subj, otherSubjsToManage) != ""
++}
++
++// managingWildcardForLocked returns the most specific managed (or to-be-managed) name
++// that covers subj via wildcard (or subj itself for IP addresses), or empty string if
++// there is none. The caller must hold at least a read lock on t.managingMu.
++func (t *TLS) managingWildcardForLocked(subj string, otherSubjsToManage map[string]struct{}) string {
+ 	// TODO: we could also consider manually-loaded certs using t.HasCertificateForSubject(),
+ 	// but that does not account for how manually-loaded certs may be restricted as to which
+ 	// hostnames or ClientHellos they can be used with by tags, etc; I don't *think* anyone
+@@ -625,8 +638,10 @@ func (t *TLS) managingWildcardFor(subj string, otherSubjsToManage map[string]str
+ 
+ 	// IP addresses must match exactly
+ 	if ip := net.ParseIP(subj); ip != nil {
+-		_, managing := t.managing[subj]
+-		return managing
++		if _, managing := t.managing[subj]; managing {
++			return subj
++		}
++		return ""
+ 	}
+ 
+ 	// replace labels of the domain with wildcards until we get a match
+@@ -638,14 +653,47 @@ func (t *TLS) managingWildcardFor(subj string, otherSubjsToManage map[string]str
+ 		labels[i] = "*"
+ 		candidate := strings.Join(labels, ".")
+ 		if _, ok := t.managing[candidate]; ok {
+-			return true
++			return candidate
+ 		}
+ 		if _, ok := otherSubjsToManage[candidate]; ok {
+-			return true
++			return candidate
+ 		}
+ 	}
+ 
+-	return false
++	return ""
++}
++
++// getConfigForHandshake returns the certmagic config to use for a TLS
++// handshake with the given server name. Usually, this is the config of
++// the first automation policy matching the name. However, if the name is
++// not itself being managed because a wildcard covering it is managed
++// instead (see Manage), the wildcard's automation policy is used; this
++// is important for policies that obtain certificates at handshake-time,
++// e.g. via certificate managers like get_certificate, since otherwise
++// a more specific policy without those managers would be used and no
++// certificate would be found for the name.
++func (t *TLS) getConfigForHandshake(name string) *certmagic.Config {
++	ap := t.getAutomationPolicyForName(name)
++	if ap.OnDemand || name == "" || net.ParseIP(name) != nil {
++		return ap.magic
++	}
++	name = strings.ToLower(name)
++	if _, ok := t.automateNames[name]; ok {
++		return ap.magic
++	}
++
++	t.managingMu.RLock()
++	_, managingName := t.managing[name]
++	var wildcard string
++	if !managingName {
++		wildcard = t.managingWildcardForLocked(name, nil)
++	}
++	t.managingMu.RUnlock()
++
++	if wildcard == "" {
++		return ap.magic
++	}
++	return t.getAutomationPolicyForName(wildcard).magic
+ }
+ 
+ // RegisterServerNames registers the provided DNS names with the TLS app.
+diff --git a/modules/caddytls/tls_test.go b/modules/caddytls/tls_test.go
+new file mode 100644
+index 0000000..91a2d3b
+--- /dev/null
++++ b/modules/caddytls/tls_test.go
+@@ -0,0 +1,60 @@
++package caddytls
++
++import (
++	"sync"
++	"testing"
++
++	"github.com/caddyserver/certmagic"
++)
++
++// Regression test: a subdomain that is covered by a managed wildcard (and
++// thus not managed itself) must use the wildcard's automation policy during
++// handshakes, even if a more specific automation policy exists for it;
++// otherwise certificate managers (e.g. get_certificate) configured on the
++// wildcard's policy would not be consulted.
++func TestGetConfigForHandshakeUsesManagedWildcardPolicy(t *testing.T) {
++	specificAP := &AutomationPolicy{subjects: []string{"wiki.example.com"}, magic: new(certmagic.Config)}
++	wildcardAP := &AutomationPolicy{subjects: []string{"*.example.com"}, magic: new(certmagic.Config)}
++	otherAP := &AutomationPolicy{subjects: []string{"other.test"}, magic: new(certmagic.Config)}
++
++	tlsApp := &TLS{
++		Automation: &AutomationConfig{
++			Policies: []*AutomationPolicy{specificAP, wildcardAP, otherAP},
++		},
++		managing:   map[string]string{"*.example.com": "", "other.test": ""},
++		managingMu: new(sync.RWMutex),
++	}
++
++	if got := tlsApp.getConfigForHandshake("wiki.example.com"); got != wildcardAP.magic {
++		t.Errorf("expected wildcard policy's config for subdomain covered by managed wildcard")
++	}
++	if got := tlsApp.getConfigForHandshake("WIKI.example.com"); got != wildcardAP.magic {
++		t.Errorf("expected wildcard policy's config for mixed-case subdomain")
++	}
++	if got := tlsApp.getConfigForHandshake("foo.example.com"); got != wildcardAP.magic {
++		t.Errorf("expected wildcard policy's config for other subdomain")
++	}
++	if got := tlsApp.getConfigForHandshake("other.test"); got != otherAP.magic {
++		t.Errorf("expected own policy's config for unrelated name")
++	}
++
++	// if the specific name is managed itself, its own policy must be used
++	tlsApp.managing["wiki.example.com"] = ""
++	if got := tlsApp.getConfigForHandshake("wiki.example.com"); got != specificAP.magic {
++		t.Errorf("expected specific policy's config when name itself is managed")
++	}
++	delete(tlsApp.managing, "wiki.example.com")
++
++	// names forced to be automated must use their own policy
++	tlsApp.automateNames = map[string]struct{}{"wiki.example.com": {}}
++	if got := tlsApp.getConfigForHandshake("wiki.example.com"); got != specificAP.magic {
++		t.Errorf("expected specific policy's config when name is forced to be automated")
++	}
++	tlsApp.automateNames = nil
++
++	// on-demand policies must be kept
++	specificAP.OnDemand = true
++	if got := tlsApp.getConfigForHandshake("wiki.example.com"); got != specificAP.magic {
++		t.Errorf("expected specific on-demand policy's config")
++	}
++}

@@ -1,0 +1,389 @@
+diff --git a/app/kuma-dp/pkg/dataplane/meshmetrics/component.go b/app/kuma-dp/pkg/dataplane/meshmetrics/component.go
+index e207929..61af49c 100644
+--- a/app/kuma-dp/pkg/dataplane/meshmetrics/component.go
++++ b/app/kuma-dp/pkg/dataplane/meshmetrics/component.go
+@@ -5,6 +5,7 @@ import (
+ 	"encoding/json"
+ 	"fmt"
+ 	"io"
++	"maps"
+ 	"time"
+ 
+ 	"github.com/pkg/errors"
+@@ -12,11 +13,14 @@ import (
+ 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
+ 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+ 
++	mesh_proto "github.com/kumahq/kuma/v2/api/mesh/v1alpha1"
+ 	"github.com/kumahq/kuma/v2/app/kuma-dp/pkg/dataplane/metrics"
+ 	"github.com/kumahq/kuma/v2/pkg/core"
++	"github.com/kumahq/kuma/v2/pkg/core/kri"
+ 	"github.com/kumahq/kuma/v2/pkg/core/runtime/component"
+ 	"github.com/kumahq/kuma/v2/pkg/plugins/policies/meshmetric/api/v1alpha1"
+ 	"github.com/kumahq/kuma/v2/pkg/plugins/policies/meshmetric/dpapi"
++	meshmetric_plugin "github.com/kumahq/kuma/v2/pkg/plugins/policies/meshmetric/plugin/v1alpha1"
+ 	utilnet "github.com/kumahq/kuma/v2/pkg/util/net"
+ 	"github.com/kumahq/kuma/v2/pkg/util/pointer"
+ )
+@@ -255,6 +259,7 @@ func (m *Manager) reconfigureBackend(ctx context.Context, backendName string, ba
+ }
+ 
+ func (m *Manager) Step(configuration dpapi.MeshMetricDpConfig) error {
++	m.openTelemetryProducer.SetExtraLabels(kumaDPMetricsLabels(configuration.Observability.Metrics.ExtraLabels))
+ 	newApplicationsToScrape := m.mapApplicationToApplicationToScrape(configuration.Observability.Metrics.Applications, configuration.Observability.Metrics.Sidecar, configuration.Observability.Metrics.ExtraLabels)
+ 	m.configurePrometheus(newApplicationsToScrape, getPrometheusBackends(configuration.Observability.Metrics.Backends))
+ 	return m.configureOpenTelemetryExporter(m.ctx, newApplicationsToScrape, getOpenTelemetryBackends(configuration.Observability.Metrics.Backends))
+@@ -278,6 +283,37 @@ func (m *Manager) Shutdown() error {
+ 	return nil
+ }
+ 
++// kumaDPMetricsLabels returns labels attached to metrics emitted directly by
++// kuma-dp (e.g. DNS metrics). On top of the labels attached to Envoy metrics,
++// it adds mesh, zone and namespace derived from the workload KRI when they are
++// not already present, so these metrics can be filtered without joins.
++func kumaDPMetricsLabels(extraLabels map[string]string) map[string]string {
++	labels := maps.Clone(extraLabels)
++	if labels == nil {
++		labels = map[string]string{}
++	}
++	workload, ok := labels[meshmetric_plugin.WorkloadAttributeKey]
++	if !ok || workload == "" {
++		return labels
++	}
++	id, err := kri.FromString(workload)
++	if err != nil {
++		return labels
++	}
++	setIfMissing := func(key, value string) {
++		if value == "" {
++			return
++		}
++		if _, exists := labels[key]; !exists {
++			labels[key] = value
++		}
++	}
++	setIfMissing("mesh", id.Mesh)
++	setIfMissing(mesh_proto.ZoneTag, id.Zone)
++	setIfMissing(mesh_proto.KubeNamespaceTag, id.Namespace)
++	return labels
++}
++
+ func mapToAttributes(extraLabels map[string]string) []attribute.KeyValue {
+ 	var extraAttributes []attribute.KeyValue
+ 	for k, v := range extraLabels {
+diff --git a/app/kuma-dp/pkg/dataplane/meshmetrics/component_test.go b/app/kuma-dp/pkg/dataplane/meshmetrics/component_test.go
+new file mode 100644
+index 0000000..05840e6
+--- /dev/null
++++ b/app/kuma-dp/pkg/dataplane/meshmetrics/component_test.go
+@@ -0,0 +1,34 @@
++package meshmetrics
++
++import (
++	. "github.com/onsi/ginkgo/v2"
++	. "github.com/onsi/gomega"
++)
++
++var _ = Describe("kumaDPMetricsLabels", func() {
++	It("should derive mesh, zone and namespace from the workload KRI", func() {
++		Expect(kumaDPMetricsLabels(map[string]string{
++			"kuma.workload": "kri_wl_default_zone-1_kuma-demo_demo-app_",
++		})).To(Equal(map[string]string{
++			"kuma.workload":         "kri_wl_default_zone-1_kuma-demo_demo-app_",
++			"mesh":                  "default",
++			"kuma.io/zone":          "zone-1",
++			"k8s.kuma.io/namespace": "kuma-demo",
++		}))
++	})
++
++	It("should not override existing labels", func() {
++		Expect(kumaDPMetricsLabels(map[string]string{
++			"kuma.workload": "kri_wl_default___demo-app_",
++			"mesh":          "other",
++		})).To(Equal(map[string]string{
++			"kuma.workload": "kri_wl_default___demo-app_",
++			"mesh":          "other",
++		}))
++	})
++
++	It("should return labels unchanged without workload", func() {
++		Expect(kumaDPMetricsLabels(nil)).To(BeEmpty())
++		Expect(kumaDPMetricsLabels(map[string]string{"mesh": "default"})).To(Equal(map[string]string{"mesh": "default"}))
++	})
++})
+diff --git a/app/kuma-dp/pkg/dataplane/meshmetrics/suite_test.go b/app/kuma-dp/pkg/dataplane/meshmetrics/suite_test.go
+new file mode 100644
+index 0000000..6d00cae
+--- /dev/null
++++ b/app/kuma-dp/pkg/dataplane/meshmetrics/suite_test.go
+@@ -0,0 +1,11 @@
++package meshmetrics
++
++import (
++	"testing"
++
++	"github.com/kumahq/kuma/v2/pkg/test"
++)
++
++func TestMeshMetrics(t *testing.T) {
++	test.RunSpecs(t, "MeshMetrics Suite")
++}
+diff --git a/app/kuma-dp/pkg/dataplane/metrics/labeling_gatherer.go b/app/kuma-dp/pkg/dataplane/metrics/labeling_gatherer.go
+new file mode 100644
+index 0000000..065b1b9
+--- /dev/null
++++ b/app/kuma-dp/pkg/dataplane/metrics/labeling_gatherer.go
+@@ -0,0 +1,116 @@
++package metrics
++
++import (
++	"maps"
++	"slices"
++	"strings"
++	"sync/atomic"
++
++	prom_client "github.com/prometheus/client_golang/prometheus"
++	io_prometheus_client "github.com/prometheus/client_model/go"
++	"github.com/prometheus/otlptranslator"
++	"google.golang.org/protobuf/proto"
++)
++
++// KumaDPMetricsPrefix is the prefix of metrics emitted directly by the kuma-dp
++// process (e.g. DNS proxy metrics) as opposed to the ones scraped from Envoy.
++const KumaDPMetricsPrefix = "kuma_dp_"
++
++// ExtraLabels holds the set of extra labels (e.g. kuma.workload, mesh,
++// k8s.kuma.io/namespace, kuma.io/zone) which are attached to every scraped
++// metric (Envoy, applications). It allows to attach the same labels to metrics
++// emitted directly by kuma-dp, so they can be correlated with Envoy metrics.
++type ExtraLabels struct {
++	labels atomic.Pointer[[]*io_prometheus_client.LabelPair]
++}
++
++func NewExtraLabels() *ExtraLabels {
++	return &ExtraLabels{}
++}
++
++// Set replaces the current set of extra labels. Label names are translated the
++// same way as attributes of metrics exposed through the OpenTelemetry
++// Prometheus exporter (e.g. "kuma.workload" -> "kuma_workload",
++// "k8s.kuma.io/namespace" -> "k8s_kuma_io_namespace").
++func (e *ExtraLabels) Set(extraLabels map[string]string) {
++	namer := otlptranslator.LabelNamer{UTF8Allowed: false}
++	byName := map[string]string{}
++	for _, k := range slices.Sorted(maps.Keys(extraLabels)) {
++		v := extraLabels[k]
++		if v == "" {
++			continue
++		}
++		name, err := namer.Build(k)
++		if err != nil {
++			log.V(1).Info("skipping invalid extra label", "label", k, "err", err)
++			continue
++		}
++		if _, ok := byName[name]; ok {
++			continue
++		}
++		byName[name] = v
++	}
++	pairs := make([]*io_prometheus_client.LabelPair, 0, len(byName))
++	for _, name := range slices.Sorted(maps.Keys(byName)) {
++		pairs = append(pairs, &io_prometheus_client.LabelPair{
++			Name:  proto.String(name),
++			Value: proto.String(byName[name]),
++		})
++	}
++	e.labels.Store(&pairs)
++}
++
++func (e *ExtraLabels) get() []*io_prometheus_client.LabelPair {
++	if e == nil {
++		return nil
++	}
++	if l := e.labels.Load(); l != nil {
++		return *l
++	}
++	return nil
++}
++
++// LabelingGatherer wraps a Gatherer and adds extra labels to all metrics
++// families emitted by kuma-dp itself (prefixed with "kuma_dp_"). Labels that
++// are already present on a metric are not overridden.
++type LabelingGatherer struct {
++	Gatherer    prom_client.Gatherer
++	ExtraLabels *ExtraLabels
++}
++
++var _ prom_client.Gatherer = &LabelingGatherer{}
++
++func (g *LabelingGatherer) Gather() ([]*io_prometheus_client.MetricFamily, error) {
++	families, err := g.Gatherer.Gather()
++	extra := g.ExtraLabels.get()
++	if len(extra) == 0 {
++		return families, err
++	}
++	for _, family := range families {
++		if !strings.HasPrefix(family.GetName(), KumaDPMetricsPrefix) {
++			continue
++		}
++		for _, metric := range family.GetMetric() {
++			metric.Label = withExtraLabels(metric.GetLabel(), extra)
++		}
++	}
++	return families, err
++}
++
++func withExtraLabels(labels []*io_prometheus_client.LabelPair, extra []*io_prometheus_client.LabelPair) []*io_prometheus_client.LabelPair {
++	existing := make(map[string]struct{}, len(labels))
++	for _, l := range labels {
++		existing[l.GetName()] = struct{}{}
++	}
++	result := slices.Clone(labels)
++	for _, l := range extra {
++		if _, ok := existing[l.GetName()]; ok {
++			continue
++		}
++		result = append(result, &io_prometheus_client.LabelPair{Name: proto.String(l.GetName()), Value: proto.String(l.GetValue())})
++	}
++	slices.SortFunc(result, func(a, b *io_prometheus_client.LabelPair) int {
++		return strings.Compare(a.GetName(), b.GetName())
++	})
++	return result
++}
+diff --git a/app/kuma-dp/pkg/dataplane/metrics/labeling_gatherer_test.go b/app/kuma-dp/pkg/dataplane/metrics/labeling_gatherer_test.go
+new file mode 100644
+index 0000000..4c70e27
+--- /dev/null
++++ b/app/kuma-dp/pkg/dataplane/metrics/labeling_gatherer_test.go
+@@ -0,0 +1,67 @@
++package metrics_test
++
++import (
++	"bytes"
++
++	. "github.com/onsi/ginkgo/v2"
++	. "github.com/onsi/gomega"
++	"github.com/prometheus/client_golang/prometheus"
++	"github.com/prometheus/common/expfmt"
++
++	"github.com/kumahq/kuma/v2/app/kuma-dp/pkg/dataplane/metrics"
++)
++
++var _ = Describe("LabelingGatherer", func() {
++	gather := func(g prometheus.Gatherer) string {
++		families, err := g.Gather()
++		Expect(err).ToNot(HaveOccurred())
++		buf := &bytes.Buffer{}
++		for _, f := range families {
++			_, err := expfmt.MetricFamilyToText(buf, f)
++			Expect(err).ToNot(HaveOccurred())
++		}
++		return buf.String()
++	}
++
++	It("should add extra labels to kuma-dp metrics only", func() {
++		// given
++		registry := prometheus.NewRegistry()
++		dnsHistogram := prometheus.NewHistogram(prometheus.HistogramOpts{
++			Name:    "kuma_dp_dns_request_duration_seconds",
++			Buckets: []float64{1},
++		})
++		dnsHistogram.Observe(0.5)
++		other := prometheus.NewCounter(prometheus.CounterOpts{
++			Name: "envoy_server_live",
++		})
++		withLabel := prometheus.NewCounter(prometheus.CounterOpts{
++			Name:        "kuma_dp_other",
++			ConstLabels: prometheus.Labels{"mesh": "original"},
++		})
++		registry.MustRegister(dnsHistogram, other, withLabel)
++
++		extraLabels := metrics.NewExtraLabels()
++		gatherer := &metrics.LabelingGatherer{Gatherer: registry, ExtraLabels: extraLabels}
++
++		// when no labels are set
++		out := gather(gatherer)
++
++		// then
++		Expect(out).To(ContainSubstring("kuma_dp_dns_request_duration_seconds_count 1\n"))
++
++		// when
++		extraLabels.Set(map[string]string{
++			"kuma.workload":         "kri_wl_default_zone-1_kuma-demo_demo-app_",
++			"k8s.kuma.io/namespace": "kuma-demo",
++			"kuma.io/zone":          "zone-1",
++			"mesh":                  "default",
++		})
++		out = gather(gatherer)
++
++		// then
++		Expect(out).To(ContainSubstring(`kuma_dp_dns_request_duration_seconds_count{k8s_kuma_io_namespace="kuma-demo",kuma_io_zone="zone-1",kuma_workload="kri_wl_default_zone-1_kuma-demo_demo-app_",mesh="default"} 1`))
++		Expect(out).To(ContainSubstring(`kuma_dp_dns_request_duration_seconds_bucket{k8s_kuma_io_namespace="kuma-demo",kuma_io_zone="zone-1",kuma_workload="kri_wl_default_zone-1_kuma-demo_demo-app_",mesh="default",le="1"} 1`))
++		Expect(out).To(ContainSubstring(`kuma_dp_other{k8s_kuma_io_namespace="kuma-demo",kuma_io_zone="zone-1",kuma_workload="kri_wl_default_zone-1_kuma-demo_demo-app_",mesh="original"} 0`))
++		Expect(out).To(ContainSubstring("envoy_server_live 0\n"))
++	})
++})
+diff --git a/app/kuma-dp/pkg/dataplane/metrics/metrics_producer.go b/app/kuma-dp/pkg/dataplane/metrics/metrics_producer.go
+index 081b8ec..015f0b4 100644
+--- a/app/kuma-dp/pkg/dataplane/metrics/metrics_producer.go
++++ b/app/kuma-dp/pkg/dataplane/metrics/metrics_producer.go
+@@ -23,6 +23,7 @@ type AggregatedProducer struct {
+ 	AppToScrape               ApplicationToScrape
+ 	applicationsToScrape      []ApplicationToScrape
+ 	applicationsToScrapeMutex *sync.Mutex
++	extraLabels               *ExtraLabels
+ }
+ 
+ var _ sdkmetric.Producer = &AggregatedProducer{}
+@@ -34,9 +35,20 @@ func NewAggregatedMetricsProducer(applicationsToScrape []ApplicationToScrape, is
+ 		httpClientIPv6:            createHttpClient(isUsingTransparentProxy, inPassThroughIPv6),
+ 		applicationsToScrape:      applicationsToScrape,
+ 		applicationsToScrapeMutex: &sync.Mutex{},
++		extraLabels:               NewExtraLabels(),
+ 	}
+ }
+ 
++// SetExtraLabels sets labels which are added to metrics emitted directly by
++// kuma-dp (e.g. DNS metrics) so they match labels of Envoy metrics.
++func (ap *AggregatedProducer) SetExtraLabels(extraLabels map[string]string) {
++	ap.extraLabels.Set(extraLabels)
++}
++
++func (ap *AggregatedProducer) ExtraLabels() *ExtraLabels {
++	return ap.extraLabels
++}
++
+ func (ap *AggregatedProducer) SetApplicationsToScrape(applicationsToScrape []ApplicationToScrape) {
+ 	ap.applicationsToScrapeMutex.Lock()
+ 	defer ap.applicationsToScrapeMutex.Unlock()
+diff --git a/app/kuma-dp/pkg/dataplane/metrics/server.go b/app/kuma-dp/pkg/dataplane/metrics/server.go
+index be6e6da..e7855a3 100644
+--- a/app/kuma-dp/pkg/dataplane/metrics/server.go
++++ b/app/kuma-dp/pkg/dataplane/metrics/server.go
+@@ -177,7 +177,11 @@ func (s *Hijacker) Start(stop <-chan struct{}) error {
+ 		return err
+ 	}
+ 	sdkmetric.NewMeterProvider(sdkmetric.WithReader(promExporter))
+-	s.prometheusHandler = promhttp.HandlerFor(prom_client.DefaultGatherer, promhttp.HandlerOpts{
++	var gatherer prom_client.Gatherer = prom_client.DefaultGatherer
++	if s.producer != nil {
++		gatherer = &LabelingGatherer{Gatherer: gatherer, ExtraLabels: s.producer.ExtraLabels()}
++	}
++	s.prometheusHandler = promhttp.HandlerFor(gatherer, promhttp.HandlerOpts{
+ 		ErrorHandling: promhttp.ContinueOnError,
+ 	})
+ 
+diff --git a/test/e2e_env/kubernetes/meshmetric/meshmetric.go b/test/e2e_env/kubernetes/meshmetric/meshmetric.go
+index 012d570..f750530 100644
+--- a/test/e2e_env/kubernetes/meshmetric/meshmetric.go
++++ b/test/e2e_env/kubernetes/meshmetric/meshmetric.go
+@@ -420,6 +420,9 @@ func MeshMetric() {
+ 			g.Expect(stdout).To(ContainSubstring("kuma_dp_dns_request_duration_seconds"))
+ 			// check if workload attribute was added (KRI format with workload name from ServiceAccount)
+ 			g.Expect(stdout).To(ContainSubstring(fmt.Sprintf("kuma_workload=\"kri_wl_%s_default_%s_default_\"", mainMesh, namespace)))
++			// DNS metrics emitted by kuma-dp should have the same workload label as Envoy metrics
++			g.Expect(stdout).To(MatchRegexp(fmt.Sprintf(`kuma_dp_dns_request_duration_seconds_count\{[^}]*kuma_workload="kri_wl_%s_default_%s_default_"`, mainMesh, namespace)))
++			g.Expect(stdout).To(MatchRegexp(fmt.Sprintf(`kuma_dp_dns_request_duration_seconds_count\{[^}]*k8s_kuma_io_namespace="%s"`, namespace)))
+ 		}).Should(Succeed())
+ 	})
+ 

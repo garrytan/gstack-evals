@@ -1,0 +1,91 @@
+This project includes the following third-party open-source software components. Each is provided under its respective license.
+
+Runtime Dependencies (Production)
+
+
+
+
+Development Dependencies
+
+@anthropic-ai/dxt
+    License: MIT
+    https://www.npmjs.com/package/@anthropic-ai/dxt [npmjs.com]
+@commitlint/cli
+    License: MIT
+    https://www.npmjs.com/package/@commitlint/cli [npmjs.com]
+@commitlint/config-conventional
+    License: MIT
+    https://www.npmjs.com/package/@commitlint/config-conventional [npmjs.com]
+@modelcontextprotocol/inspector
+    License: MIT
+    https://www.npmjs.com/package/@modelcontextprotocol/inspector [npmjs.com]
+@nx/eslint
+    License: MIT
+    https://www.npmjs.com/package/@nx/eslint [npmjs.com]
+@nx/eslint-plugin
+    License: MIT
+    https://www.npmjs.com/package/@nx/eslint-plugin [npmjs.com]
+@nx/js
+    License: MIT
+    https://www.npmjs.com/package/@nx/js [npmjs.com]
+@types/node
+    License: MIT
+    https://www.npmjs.com/package/@types/node [npmjs.com]
+@typescript-eslint/eslint-plugin
+    License: MIT
+    https://www.npmjs.com/package/@typescript-eslint/eslint-plugin [npmjs.com]
+eslint
+    License: MIT
+    https://www.npmjs.com/package/eslint [npmjs.com]
+eslint-plugin-simple-import-sort
+    License: MIT
+    https://www.npmjs.com/package/eslint-plugin-simple-import-sort [npmjs.com]
+eslint-plugin-unused-imports
+    License: MIT
+    https://www.npmjs.com/package/eslint-plugin-unused-imports [npmjs.com]
+husky
+    License: MIT
+    https://www.npmjs.com/package/husky [npmjs.com]
+license-checker-rseidelsohn
+    License: BSD-3-Clause
+    https://www.npmjs.com/package/license-checker-rseidelsohn [npmjs.com]
+mcps-logger
+    License: MIT
+    https://www.npmjs.com/package/mcps-logger [npmjs.com]
+nodemon
+    License: MIT
+    https://www.npmjs.com/package/nodemon [npmjs.com]
+nx
+    License: MIT
+    https://www.npmjs.com/package/nx [npmjs.com]
+prettier
+    License: MIT
+    https://www.npmjs.com/package/prettier [npmjs.com]
+pretty-quick
+    License: MIT
+    https://www.npmjs.com/package/pretty-quick [npmjs.com]
+rimraf
+    License: ISC
+    https://www.npmjs.com/package/rimraf [npmjs.com]
+ts-node
+    License: MIT
+    https://www.npmjs.com/package/ts-node [npmjs.com]
+tslib
+    License: 0BSD
+    https://www.npmjs.com/package/tslib [npmjs.com]
+tsup
+    License: MIT
+    https://www.npmjs.com/package/tsup [npmjs.com]
+typescript
+    License: Apache-2.0
+    https://www.npmjs.com/package/typescript [npmjs.com]
+vitest
+    License: MIT
+    https://www.npmjs.com/package/vitest [npmjs.com]
+
+
+Each component is used in accordance with its open-source license. The
+applicable license texts are included in this repository under the
+licenses/ directory.
+
+For more details, please refer to the LICENSE file for this project.

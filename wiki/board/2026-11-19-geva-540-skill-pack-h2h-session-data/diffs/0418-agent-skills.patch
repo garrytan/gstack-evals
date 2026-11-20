@@ -1,0 +1,93 @@
+diff --git a/src/main/java/tools/jackson/databind/ser/jackson/JsonValueSerializer.java b/src/main/java/tools/jackson/databind/ser/jackson/JsonValueSerializer.java
+index 7d91917..3472ab6 100644
+--- a/src/main/java/tools/jackson/databind/ser/jackson/JsonValueSerializer.java
++++ b/src/main/java/tools/jackson/databind/ser/jackson/JsonValueSerializer.java
+@@ -272,9 +272,13 @@ public class JsonValueSerializer
+             wrapAndThrow(ctxt, e, bean, _accessor.getName() + "()");
+             return; // never gets here
+         }
+-        // and if we got null, can also just write it directly
++        // and if we got null, can also just write it directly -- but still need
++        // to write type id, since it refers to the (non-null) bean, not the value
+         if (value == null) {
++            WritableTypeId typeIdDef = typeSer0.writeTypePrefix(gen, ctxt,
++                    typeSer0.typeId(bean, JsonToken.VALUE_NULL));
+             ctxt.defaultSerializeNullValue(gen);
++            typeSer0.writeTypeSuffix(gen, ctxt, typeIdDef);
+             return;
+         }
+         ValueSerializer<Object> ser = _valueSerializer;
+diff --git a/src/test/java/tools/jackson/databind/jsontype/ext/ExternalTypeIdWithJsonValueNullTest.java b/src/test/java/tools/jackson/databind/jsontype/ext/ExternalTypeIdWithJsonValueNullTest.java
+new file mode 100644
+index 0000000..a435754
+--- /dev/null
++++ b/src/test/java/tools/jackson/databind/jsontype/ext/ExternalTypeIdWithJsonValueNullTest.java
+@@ -0,0 +1,68 @@
++package tools.jackson.databind.jsontype.ext;
++
++import org.junit.jupiter.api.Test;
++
++import com.fasterxml.jackson.annotation.*;
++import com.fasterxml.jackson.annotation.JsonTypeInfo.As;
++import com.fasterxml.jackson.annotation.JsonTypeInfo.Id;
++
++import tools.jackson.databind.ObjectMapper;
++import tools.jackson.databind.testutil.DatabindTestUtil;
++
++import static org.junit.jupiter.api.Assertions.*;
++
++// External type id must be written even if `@JsonValue` accessor returns null
++public class ExternalTypeIdWithJsonValueNullTest extends DatabindTestUtil
++{
++    public interface GenericType {
++        String getValue();
++    }
++
++    public static abstract class AbstractGenericType implements GenericType {
++        protected String value;
++
++        protected AbstractGenericType() { }
++        protected AbstractGenericType(String value) { this.value = value; }
++
++        @Override
++        @JsonValue
++        public String getValue() { return value; }
++    }
++
++    public static class FooType extends AbstractGenericType {
++        public FooType() { super(); }
++        public FooType(String value) { super(value); }
++    }
++
++    public static class Container {
++        @JsonTypeInfo(use = Id.NAME, include = As.EXTERNAL_PROPERTY, property = "type")
++        @JsonSubTypes({ @JsonSubTypes.Type(value = FooType.class, name = "foo") })
++        public GenericType value;
++
++        public Container() { }
++        public Container(GenericType v) { value = v; }
++    }
++
++    private final ObjectMapper MAPPER = newJsonMapper();
++
++    @Test
++    public void testNullContainerValueOmitsTypeId() throws Exception
++    {
++        assertEquals(a2q("{'value':null}"),
++                MAPPER.writeValueAsString(new Container(null)));
++    }
++
++    @Test
++    public void testNonNullJsonValueWritesTypeId() throws Exception
++    {
++        assertEquals(a2q("{'value':'foobar','type':'foo'}"),
++                MAPPER.writeValueAsString(new Container(new FooType("foobar"))));
++    }
++
++    @Test
++    public void testNullJsonValueStillWritesTypeId() throws Exception
++    {
++        assertEquals(a2q("{'value':null,'type':'foo'}"),
++                MAPPER.writeValueAsString(new Container(new FooType())));
++    }
++}

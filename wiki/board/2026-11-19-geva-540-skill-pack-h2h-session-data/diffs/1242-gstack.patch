@@ -1,0 +1,46 @@
+diff --git a/pkg/utils/sanitize_boundary_test.go b/pkg/utils/sanitize_boundary_test.go
+new file mode 100644
+index 0000000..f4ba433
+--- /dev/null
++++ b/pkg/utils/sanitize_boundary_test.go
+@@ -0,0 +1,17 @@
++package utils
++import "testing"
++func TestSanitizeFilePathBoundary(t *testing.T) {
++	cases := []struct{ p, d string; ok bool }{
++		{"/packages/a", "/packages", true},
++		{"/packages/a", "/packages/", true},
++		{"/packages", "/packages", true},
++		{"/packages-extra/evil", "/packages", false},
++		{"/packagesevil", "/packages", false},
++		{"/other", "/packages", false},
++		{"/a/b", "/", true},
++	}
++	for _, c := range cases {
++		_, err := SanitizeFilePath(c.p, c.d)
++		if (err == nil) != c.ok { t.Errorf("%v: err=%v", c, err) }
++	}
++}
+diff --git a/pkg/utils/utils.go b/pkg/utils/utils.go
+index 72b57f2..c7ec37f 100644
+--- a/pkg/utils/utils.go
++++ b/pkg/utils/utils.go
+@@ -301,8 +301,16 @@ func SanitizeFilePath(path string, safedir string) (string, error) {
+ 	if normalizedPath != path {
+ 		return "", errors.New("invalid path")
+ 	}
+-	// check if the path is under the safe directory
+-	if !strings.HasPrefix(normalizedPath, safedir) {
++	// check if the path is under the safe directory, enforcing a path
++	// separator boundary so sibling directories sharing a name prefix
++	// (e.g. /packages-extra vs /packages) are rejected.
++	cleanSafeDir := filepath.Clean(safedir)
++	rel, err := filepath.Rel(cleanSafeDir, normalizedPath)
++	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
++		return "", fmt.Errorf("path %s is not under the safe directory %s", normalizedPath, safedir)
++	}
++	if normalizedPath != cleanSafeDir &&
++		!strings.HasPrefix(normalizedPath, strings.TrimSuffix(cleanSafeDir, string(filepath.Separator))+string(filepath.Separator)) {
+ 		return "", fmt.Errorf("path %s is not under the safe directory %s", normalizedPath, safedir)
+ 	}
+ 	return normalizedPath, nil

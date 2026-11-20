@@ -1,0 +1,737 @@
+diff --git a/rustc-ice-2026-11-18T18_55_41-6679.txt b/rustc-ice-2026-11-18T18_55_41-6679.txt
+new file mode 100644
+index 0000000..cf421c8
+--- /dev/null
++++ b/rustc-ice-2026-11-18T18_55_41-6679.txt
+@@ -0,0 +1,70 @@
++thread 'main' panicked at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:1098:29:
++end byte index 100 is not a char boundary; it is inside '☃' (bytes 98..101) of `    let unicode4 = "☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃`[...]
++stack backtrace:
++   0:     0x74ec9b7a408b - <std[79a19fc51650df1e]::backtrace::Backtrace>::create
++   1:     0x74ec9b7a3fd5 - <std[79a19fc51650df1e]::backtrace::Backtrace>::force_capture
++   2:     0x74ec9a780f78 - std[79a19fc51650df1e]::panicking::update_hook::<alloc[47ac978f0253c7f5]::boxed::Box<rustc_driver_impl[d8ef76f4ca027185]::install_ice_hook::{closure#1}>>::{closure#0}
++   3:     0x74ec9b7b65e2 - std[79a19fc51650df1e]::panicking::panic_with_hook
++   4:     0x74ec9b799018 - std[79a19fc51650df1e]::panicking::panic_handler::{closure#0}
++   5:     0x74ec9b78fd69 - std[79a19fc51650df1e]::sys::backtrace::__rust_end_short_backtrace::<std[79a19fc51650df1e]::panicking::panic_handler::{closure#0}, !>
++   6:     0x74ec9b79aa7d - __rustc[3c0b1ec2ed5e4fc1]::rust_begin_unwind
++   7:     0x74ec98ca679c - core[f4091317e62eea38]::panicking::panic_fmt
++   8:     0x74ec9a0c3f66 - core[f4091317e62eea38]::str::slice_error_fail_rt
++   9:     0x74ec9832a75a - core[f4091317e62eea38]::str::slice_error_fail
++  10:     0x583dcae77d7c - <core[f4091317e62eea38]::ops::range::Range<usize> as core[f4091317e62eea38]::slice::index::SliceIndex<str>>::index
++                               at /rustc/c043085801b7a884054add21a94882216df5971c/library/core/src/str/traits.rs:241:21
++  11:     0x583dcae731e7 - <str as core[f4091317e62eea38]::ops::index::Index<core[f4091317e62eea38]::ops::range::Range<usize>>>::index
++                               at /rustc/c043085801b7a884054add21a94882216df5971c/library/core/src/str/traits.rs:63:15
++  12:     0x583dcae679ee - annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_body::{closure#4}
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:1098:29
++  13:     0x583dcae7cb56 - <alloc[47ac978f0253c7f5]::vec::Vec<annotate_snippets[4a7690ae9e2ec1b4]::snippet::Annotation>>::retain::<annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_body::{closure#4}>::{closure#0}
++                               at /rustc/c043085801b7a884054add21a94882216df5971c/library/alloc/src/vec/mod.rs:2364:32
++  14:     0x583dcae7c351 - <alloc[47ac978f0253c7f5]::vec::Vec<annotate_snippets[4a7690ae9e2ec1b4]::snippet::Annotation>>::retain_mut::<<alloc[47ac978f0253c7f5]::vec::Vec<annotate_snippets[4a7690ae9e2ec1b4]::snippet::Annotation>>::retain<annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_body::{closure#4}>::{closure#0}>
++                               at /rustc/c043085801b7a884054add21a94882216df5971c/library/alloc/src/vec/mod.rs:2437:32
++  15:     0x583dcae7c621 - <alloc[47ac978f0253c7f5]::vec::Vec<annotate_snippets[4a7690ae9e2ec1b4]::snippet::Annotation>>::retain::<annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_body::{closure#4}>
++                               at /rustc/c043085801b7a884054add21a94882216df5971c/library/alloc/src/vec/mod.rs:2364:14
++  16:     0x583dcae6cdcf - annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_body
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:1072:21
++  17:     0x583dcae6e806 - annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_snippet
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:812:20
++  18:     0x583dcae6e588 - annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_message
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:723:19
++  19:     0x583dcae68634 - <annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::DisplayList>::new
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:109:20
++  20:     0x583dcae7a549 - <annotate_snippets[4a7690ae9e2ec1b4]::renderer::Renderer>::render
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/mod.rs:155:9
++  21:     0x583dca93e77d - <rustfmt_nightly[258f32e2bd7cc17f]::format_report_formatter::FormatReportFormatter as core[f4091317e62eea38]::fmt::Display>::fmt
++                               at /testbed/src/format_report_formatter.rs:79:46
++  22:     0x74ec9be217c8 - core[f4091317e62eea38]::fmt::write
++  23:     0x74ec9b7d7ab1 - <&std[79a19fc51650df1e]::io::stdio::Stderr as std[79a19fc51650df1e]::io::Write>::write_fmt
++  24:     0x74ec9b7b6e90 - std[79a19fc51650df1e]::io::stdio::_eprint
++  25:     0x583dca79f288 - rustfmt[f010423fa0d71f5]::format_and_emit_report::<std[79a19fc51650df1e]::io::stdio::Stdout>
++                               at /testbed/src/bin/main.rs:402:17
++  26:     0x583dca79f64f - rustfmt[f010423fa0d71f5]::format::{closure#0}
++                               at /testbed/src/bin/main.rs:371:21
++  27:     0x583dca7908cb - <rustfmt_nightly[258f32e2bd7cc17f]::Session<std[79a19fc51650df1e]::io::stdio::Stdout>>::override_config::<rustfmt[f010423fa0d71f5]::format::{closure#0}, ()>
++                               at /testbed/src/lib.rs:474:22
++  28:     0x583dca7ab8bb - rustfmt[f010423fa0d71f5]::format
++                               at /testbed/src/bin/main.rs:370:25
++  29:     0x583dca7ac287 - rustfmt[f010423fa0d71f5]::execute
++                               at /testbed/src/bin/main.rs:274:14
++  30:     0x583dca7aa5f2 - rustfmt[f010423fa0d71f5]::main
++                               at /testbed/src/bin/main.rs:38:27
++  31:     0x583dca78f37b - <fn() as core[f4091317e62eea38]::ops::function::FnOnce<()>>::call_once
++                               at /usr/local/rustup/toolchains/nightly-2026-02-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ops/function.rs:250:5
++  32:     0x583dca7913de - std[79a19fc51650df1e]::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
++                               at /usr/local/rustup/toolchains/nightly-2026-02-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/backtrace.rs:166:18
++  33:     0x583dca79fc21 - std[79a19fc51650df1e]::rt::lang_start::<()>::{closure#0}
++                               at /usr/local/rustup/toolchains/nightly-2026-02-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:206:18
++  34:     0x74ec9cfffd8a - std[79a19fc51650df1e]::rt::lang_start_internal
++  35:     0x583dca79fc07 - std[79a19fc51650df1e]::rt::lang_start::<()>
++                               at /usr/local/rustup/toolchains/nightly-2026-02-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:205:5
++  36:     0x583dca7b01ae - main
++  37:     0x74ec96916ca8 - <unknown>
++  38:     0x74ec96916d65 - __libc_start_main
++  39:     0x583dca78d811 - _start
++  40:                0x0 - <unknown>
++
++
++rustc version: 1.95.0-nightly (c04308580 2026-02-18)
++platform: x86_64-unknown-linux-gnu
+\ No newline at end of file
+diff --git a/rustc-ice-2026-11-18T18_55_41-6682.txt b/rustc-ice-2026-11-18T18_55_41-6682.txt
+new file mode 100644
+index 0000000..090d33f
+--- /dev/null
++++ b/rustc-ice-2026-11-18T18_55_41-6682.txt
+@@ -0,0 +1,70 @@
++thread 'main' panicked at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:1098:29:
++end byte index 100 is not a char boundary; it is inside '☃' (bytes 98..101) of `    let unicode4 = "☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃`[...]
++stack backtrace:
++   0:     0x737e1b1a408b - <std[79a19fc51650df1e]::backtrace::Backtrace>::create
++   1:     0x737e1b1a3fd5 - <std[79a19fc51650df1e]::backtrace::Backtrace>::force_capture
++   2:     0x737e1a180f78 - std[79a19fc51650df1e]::panicking::update_hook::<alloc[47ac978f0253c7f5]::boxed::Box<rustc_driver_impl[d8ef76f4ca027185]::install_ice_hook::{closure#1}>>::{closure#0}
++   3:     0x737e1b1b65e2 - std[79a19fc51650df1e]::panicking::panic_with_hook
++   4:     0x737e1b199018 - std[79a19fc51650df1e]::panicking::panic_handler::{closure#0}
++   5:     0x737e1b18fd69 - std[79a19fc51650df1e]::sys::backtrace::__rust_end_short_backtrace::<std[79a19fc51650df1e]::panicking::panic_handler::{closure#0}, !>
++   6:     0x737e1b19aa7d - __rustc[3c0b1ec2ed5e4fc1]::rust_begin_unwind
++   7:     0x737e186a679c - core[f4091317e62eea38]::panicking::panic_fmt
++   8:     0x737e19ac3f66 - core[f4091317e62eea38]::str::slice_error_fail_rt
++   9:     0x737e17d2a75a - core[f4091317e62eea38]::str::slice_error_fail
++  10:     0x5636648f6d7c - <core[f4091317e62eea38]::ops::range::Range<usize> as core[f4091317e62eea38]::slice::index::SliceIndex<str>>::index
++                               at /rustc/c043085801b7a884054add21a94882216df5971c/library/core/src/str/traits.rs:241:21
++  11:     0x5636648f21e7 - <str as core[f4091317e62eea38]::ops::index::Index<core[f4091317e62eea38]::ops::range::Range<usize>>>::index
++                               at /rustc/c043085801b7a884054add21a94882216df5971c/library/core/src/str/traits.rs:63:15
++  12:     0x5636648e69ee - annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_body::{closure#4}
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:1098:29
++  13:     0x5636648fbb56 - <alloc[47ac978f0253c7f5]::vec::Vec<annotate_snippets[4a7690ae9e2ec1b4]::snippet::Annotation>>::retain::<annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_body::{closure#4}>::{closure#0}
++                               at /rustc/c043085801b7a884054add21a94882216df5971c/library/alloc/src/vec/mod.rs:2364:32
++  14:     0x5636648fb351 - <alloc[47ac978f0253c7f5]::vec::Vec<annotate_snippets[4a7690ae9e2ec1b4]::snippet::Annotation>>::retain_mut::<<alloc[47ac978f0253c7f5]::vec::Vec<annotate_snippets[4a7690ae9e2ec1b4]::snippet::Annotation>>::retain<annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_body::{closure#4}>::{closure#0}>
++                               at /rustc/c043085801b7a884054add21a94882216df5971c/library/alloc/src/vec/mod.rs:2437:32
++  15:     0x5636648fb621 - <alloc[47ac978f0253c7f5]::vec::Vec<annotate_snippets[4a7690ae9e2ec1b4]::snippet::Annotation>>::retain::<annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_body::{closure#4}>
++                               at /rustc/c043085801b7a884054add21a94882216df5971c/library/alloc/src/vec/mod.rs:2364:14
++  16:     0x5636648ebdcf - annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_body
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:1072:21
++  17:     0x5636648ed806 - annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_snippet
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:812:20
++  18:     0x5636648ed588 - annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_message
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:723:19
++  19:     0x5636648e7634 - <annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::DisplayList>::new
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:109:20
++  20:     0x5636648f9549 - <annotate_snippets[4a7690ae9e2ec1b4]::renderer::Renderer>::render
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/mod.rs:155:9
++  21:     0x5636643bd77d - <rustfmt_nightly[258f32e2bd7cc17f]::format_report_formatter::FormatReportFormatter as core[f4091317e62eea38]::fmt::Display>::fmt
++                               at /testbed/src/format_report_formatter.rs:79:46
++  22:     0x737e1b8217c8 - core[f4091317e62eea38]::fmt::write
++  23:     0x737e1b1d7ab1 - <&std[79a19fc51650df1e]::io::stdio::Stderr as std[79a19fc51650df1e]::io::Write>::write_fmt
++  24:     0x737e1b1b6e90 - std[79a19fc51650df1e]::io::stdio::_eprint
++  25:     0x56366421e288 - rustfmt[f010423fa0d71f5]::format_and_emit_report::<std[79a19fc51650df1e]::io::stdio::Stdout>
++                               at /testbed/src/bin/main.rs:402:17
++  26:     0x56366421e64f - rustfmt[f010423fa0d71f5]::format::{closure#0}
++                               at /testbed/src/bin/main.rs:371:21
++  27:     0x56366420f8cb - <rustfmt_nightly[258f32e2bd7cc17f]::Session<std[79a19fc51650df1e]::io::stdio::Stdout>>::override_config::<rustfmt[f010423fa0d71f5]::format::{closure#0}, ()>
++                               at /testbed/src/lib.rs:474:22
++  28:     0x56366422a8bb - rustfmt[f010423fa0d71f5]::format
++                               at /testbed/src/bin/main.rs:370:25
++  29:     0x56366422b287 - rustfmt[f010423fa0d71f5]::execute
++                               at /testbed/src/bin/main.rs:274:14
++  30:     0x5636642295f2 - rustfmt[f010423fa0d71f5]::main
++                               at /testbed/src/bin/main.rs:38:27
++  31:     0x56366420e37b - <fn() as core[f4091317e62eea38]::ops::function::FnOnce<()>>::call_once
++                               at /usr/local/rustup/toolchains/nightly-2026-02-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ops/function.rs:250:5
++  32:     0x5636642103de - std[79a19fc51650df1e]::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
++                               at /usr/local/rustup/toolchains/nightly-2026-02-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/backtrace.rs:166:18
++  33:     0x56366421ec21 - std[79a19fc51650df1e]::rt::lang_start::<()>::{closure#0}
++                               at /usr/local/rustup/toolchains/nightly-2026-02-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:206:18
++  34:     0x737e1c9ffd8a - std[79a19fc51650df1e]::rt::lang_start_internal
++  35:     0x56366421ec07 - std[79a19fc51650df1e]::rt::lang_start::<()>
++                               at /usr/local/rustup/toolchains/nightly-2026-02-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:205:5
++  36:     0x56366422f1ae - main
++  37:     0x737e16316ca8 - <unknown>
++  38:     0x737e16316d65 - __libc_start_main
++  39:     0x56366420c811 - _start
++  40:                0x0 - <unknown>
++
++
++rustc version: 1.95.0-nightly (c04308580 2026-02-18)
++platform: x86_64-unknown-linux-gnu
+\ No newline at end of file
+diff --git a/rustc-ice-2026-11-18T18_55_44-6973.txt b/rustc-ice-2026-11-18T18_55_44-6973.txt
+new file mode 100644
+index 0000000..c0c7313
+--- /dev/null
++++ b/rustc-ice-2026-11-18T18_55_44-6973.txt
+@@ -0,0 +1,56 @@
++thread 'main' panicked at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:1018:9:
++SourceAnnotation range `100..114` is beyond the end of buffer `111`
++stack backtrace:
++   0:     0x73ad951a408b - <std[79a19fc51650df1e]::backtrace::Backtrace>::create
++   1:     0x73ad951a3fd5 - <std[79a19fc51650df1e]::backtrace::Backtrace>::force_capture
++   2:     0x73ad94180f78 - std[79a19fc51650df1e]::panicking::update_hook::<alloc[47ac978f0253c7f5]::boxed::Box<rustc_driver_impl[d8ef76f4ca027185]::install_ice_hook::{closure#1}>>::{closure#0}
++   3:     0x73ad951b65e2 - std[79a19fc51650df1e]::panicking::panic_with_hook
++   4:     0x73ad95199018 - std[79a19fc51650df1e]::panicking::panic_handler::{closure#0}
++   5:     0x73ad9518fd69 - std[79a19fc51650df1e]::sys::backtrace::__rust_end_short_backtrace::<std[79a19fc51650df1e]::panicking::panic_handler::{closure#0}, !>
++   6:     0x73ad9519aa7d - __rustc[3c0b1ec2ed5e4fc1]::rust_begin_unwind
++   7:     0x73ad926a679c - core[f4091317e62eea38]::panicking::panic_fmt
++   8:     0x6061a9f9207a - annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_body
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:1018:9
++   9:     0x6061a9f94806 - annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_snippet
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:812:20
++  10:     0x6061a9f94588 - annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_message
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:723:19
++  11:     0x6061a9f8e634 - <annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::DisplayList>::new
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:109:20
++  12:     0x6061a9fa0549 - <annotate_snippets[4a7690ae9e2ec1b4]::renderer::Renderer>::render
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/mod.rs:155:9
++  13:     0x6061a9a6477d - <rustfmt_nightly[258f32e2bd7cc17f]::format_report_formatter::FormatReportFormatter as core[f4091317e62eea38]::fmt::Display>::fmt
++                               at /testbed/src/format_report_formatter.rs:79:46
++  14:     0x73ad958217c8 - core[f4091317e62eea38]::fmt::write
++  15:     0x73ad951d7ab1 - <&std[79a19fc51650df1e]::io::stdio::Stderr as std[79a19fc51650df1e]::io::Write>::write_fmt
++  16:     0x73ad951b6e90 - std[79a19fc51650df1e]::io::stdio::_eprint
++  17:     0x6061a98c5288 - rustfmt[f010423fa0d71f5]::format_and_emit_report::<std[79a19fc51650df1e]::io::stdio::Stdout>
++                               at /testbed/src/bin/main.rs:402:17
++  18:     0x6061a98c564f - rustfmt[f010423fa0d71f5]::format::{closure#0}
++                               at /testbed/src/bin/main.rs:371:21
++  19:     0x6061a98b68cb - <rustfmt_nightly[258f32e2bd7cc17f]::Session<std[79a19fc51650df1e]::io::stdio::Stdout>>::override_config::<rustfmt[f010423fa0d71f5]::format::{closure#0}, ()>
++                               at /testbed/src/lib.rs:474:22
++  20:     0x6061a98d18bb - rustfmt[f010423fa0d71f5]::format
++                               at /testbed/src/bin/main.rs:370:25
++  21:     0x6061a98d2287 - rustfmt[f010423fa0d71f5]::execute
++                               at /testbed/src/bin/main.rs:274:14
++  22:     0x6061a98d05f2 - rustfmt[f010423fa0d71f5]::main
++                               at /testbed/src/bin/main.rs:38:27
++  23:     0x6061a98b537b - <fn() as core[f4091317e62eea38]::ops::function::FnOnce<()>>::call_once
++                               at /usr/local/rustup/toolchains/nightly-2026-02-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ops/function.rs:250:5
++  24:     0x6061a98b73de - std[79a19fc51650df1e]::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
++                               at /usr/local/rustup/toolchains/nightly-2026-02-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/backtrace.rs:166:18
++  25:     0x6061a98c5c21 - std[79a19fc51650df1e]::rt::lang_start::<()>::{closure#0}
++                               at /usr/local/rustup/toolchains/nightly-2026-02-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:206:18
++  26:     0x73ad969ffd8a - std[79a19fc51650df1e]::rt::lang_start_internal
++  27:     0x6061a98c5c07 - std[79a19fc51650df1e]::rt::lang_start::<()>
++                               at /usr/local/rustup/toolchains/nightly-2026-02-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:205:5
++  28:     0x6061a98d61ae - main
++  29:     0x73ad90433ca8 - <unknown>
++  30:     0x73ad90433d65 - __libc_start_main
++  31:     0x6061a98b3811 - _start
++  32:                0x0 - <unknown>
++
++
++rustc version: 1.95.0-nightly (c04308580 2026-02-18)
++platform: x86_64-unknown-linux-gnu
+\ No newline at end of file
+diff --git a/rustc-ice-2026-11-18T18_55_44-6976.txt b/rustc-ice-2026-11-18T18_55_44-6976.txt
+new file mode 100644
+index 0000000..a5f20bb
+--- /dev/null
++++ b/rustc-ice-2026-11-18T18_55_44-6976.txt
+@@ -0,0 +1,56 @@
++thread 'main' panicked at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:1018:9:
++SourceAnnotation range `100..114` is beyond the end of buffer `111`
++stack backtrace:
++   0:     0x720c887a408b - <std[79a19fc51650df1e]::backtrace::Backtrace>::create
++   1:     0x720c887a3fd5 - <std[79a19fc51650df1e]::backtrace::Backtrace>::force_capture
++   2:     0x720c87780f78 - std[79a19fc51650df1e]::panicking::update_hook::<alloc[47ac978f0253c7f5]::boxed::Box<rustc_driver_impl[d8ef76f4ca027185]::install_ice_hook::{closure#1}>>::{closure#0}
++   3:     0x720c887b65e2 - std[79a19fc51650df1e]::panicking::panic_with_hook
++   4:     0x720c88799018 - std[79a19fc51650df1e]::panicking::panic_handler::{closure#0}
++   5:     0x720c8878fd69 - std[79a19fc51650df1e]::sys::backtrace::__rust_end_short_backtrace::<std[79a19fc51650df1e]::panicking::panic_handler::{closure#0}, !>
++   6:     0x720c8879aa7d - __rustc[3c0b1ec2ed5e4fc1]::rust_begin_unwind
++   7:     0x720c85ca679c - core[f4091317e62eea38]::panicking::panic_fmt
++   8:     0x6439eea1a07a - annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_body
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:1018:9
++   9:     0x6439eea1c806 - annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_snippet
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:812:20
++  10:     0x6439eea1c588 - annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_message
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:723:19
++  11:     0x6439eea16634 - <annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::DisplayList>::new
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:109:20
++  12:     0x6439eea28549 - <annotate_snippets[4a7690ae9e2ec1b4]::renderer::Renderer>::render
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/mod.rs:155:9
++  13:     0x6439ee4ec77d - <rustfmt_nightly[258f32e2bd7cc17f]::format_report_formatter::FormatReportFormatter as core[f4091317e62eea38]::fmt::Display>::fmt
++                               at /testbed/src/format_report_formatter.rs:79:46
++  14:     0x720c88e217c8 - core[f4091317e62eea38]::fmt::write
++  15:     0x720c887d7ab1 - <&std[79a19fc51650df1e]::io::stdio::Stderr as std[79a19fc51650df1e]::io::Write>::write_fmt
++  16:     0x720c887b6e90 - std[79a19fc51650df1e]::io::stdio::_eprint
++  17:     0x6439ee34d288 - rustfmt[f010423fa0d71f5]::format_and_emit_report::<std[79a19fc51650df1e]::io::stdio::Stdout>
++                               at /testbed/src/bin/main.rs:402:17
++  18:     0x6439ee34d64f - rustfmt[f010423fa0d71f5]::format::{closure#0}
++                               at /testbed/src/bin/main.rs:371:21
++  19:     0x6439ee33e8cb - <rustfmt_nightly[258f32e2bd7cc17f]::Session<std[79a19fc51650df1e]::io::stdio::Stdout>>::override_config::<rustfmt[f010423fa0d71f5]::format::{closure#0}, ()>
++                               at /testbed/src/lib.rs:474:22
++  20:     0x6439ee3598bb - rustfmt[f010423fa0d71f5]::format
++                               at /testbed/src/bin/main.rs:370:25
++  21:     0x6439ee35a287 - rustfmt[f010423fa0d71f5]::execute
++                               at /testbed/src/bin/main.rs:274:14
++  22:     0x6439ee3585f2 - rustfmt[f010423fa0d71f5]::main
++                               at /testbed/src/bin/main.rs:38:27
++  23:     0x6439ee33d37b - <fn() as core[f4091317e62eea38]::ops::function::FnOnce<()>>::call_once
++                               at /usr/local/rustup/toolchains/nightly-2026-02-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ops/function.rs:250:5
++  24:     0x6439ee33f3de - std[79a19fc51650df1e]::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
++                               at /usr/local/rustup/toolchains/nightly-2026-02-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/backtrace.rs:166:18
++  25:     0x6439ee34dc21 - std[79a19fc51650df1e]::rt::lang_start::<()>::{closure#0}
++                               at /usr/local/rustup/toolchains/nightly-2026-02-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:206:18
++  26:     0x720c89fffd8a - std[79a19fc51650df1e]::rt::lang_start_internal
++  27:     0x6439ee34dc07 - std[79a19fc51650df1e]::rt::lang_start::<()>
++                               at /usr/local/rustup/toolchains/nightly-2026-02-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:205:5
++  28:     0x6439ee35e1ae - main
++  29:     0x720c83943ca8 - <unknown>
++  30:     0x720c83943d65 - __libc_start_main
++  31:     0x6439ee33b811 - _start
++  32:                0x0 - <unknown>
++
++
++rustc version: 1.95.0-nightly (c04308580 2026-02-18)
++platform: x86_64-unknown-linux-gnu
+\ No newline at end of file
+diff --git a/rustc-ice-2026-11-18T18_55_44-6979.txt b/rustc-ice-2026-11-18T18_55_44-6979.txt
+new file mode 100644
+index 0000000..3f78f44
+--- /dev/null
++++ b/rustc-ice-2026-11-18T18_55_44-6979.txt
+@@ -0,0 +1,56 @@
++thread 'main' panicked at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:1018:9:
++SourceAnnotation range `100..114` is beyond the end of buffer `111`
++stack backtrace:
++   0:     0x71f4d71a408b - <std[79a19fc51650df1e]::backtrace::Backtrace>::create
++   1:     0x71f4d71a3fd5 - <std[79a19fc51650df1e]::backtrace::Backtrace>::force_capture
++   2:     0x71f4d6180f78 - std[79a19fc51650df1e]::panicking::update_hook::<alloc[47ac978f0253c7f5]::boxed::Box<rustc_driver_impl[d8ef76f4ca027185]::install_ice_hook::{closure#1}>>::{closure#0}
++   3:     0x71f4d71b65e2 - std[79a19fc51650df1e]::panicking::panic_with_hook
++   4:     0x71f4d7199018 - std[79a19fc51650df1e]::panicking::panic_handler::{closure#0}
++   5:     0x71f4d718fd69 - std[79a19fc51650df1e]::sys::backtrace::__rust_end_short_backtrace::<std[79a19fc51650df1e]::panicking::panic_handler::{closure#0}, !>
++   6:     0x71f4d719aa7d - __rustc[3c0b1ec2ed5e4fc1]::rust_begin_unwind
++   7:     0x71f4d46a679c - core[f4091317e62eea38]::panicking::panic_fmt
++   8:     0x58458fa4807a - annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_body
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:1018:9
++   9:     0x58458fa4a806 - annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_snippet
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:812:20
++  10:     0x58458fa4a588 - annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_message
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:723:19
++  11:     0x58458fa44634 - <annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::DisplayList>::new
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:109:20
++  12:     0x58458fa56549 - <annotate_snippets[4a7690ae9e2ec1b4]::renderer::Renderer>::render
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/mod.rs:155:9
++  13:     0x58458f51a77d - <rustfmt_nightly[258f32e2bd7cc17f]::format_report_formatter::FormatReportFormatter as core[f4091317e62eea38]::fmt::Display>::fmt
++                               at /testbed/src/format_report_formatter.rs:79:46
++  14:     0x71f4d78217c8 - core[f4091317e62eea38]::fmt::write
++  15:     0x71f4d71d7ab1 - <&std[79a19fc51650df1e]::io::stdio::Stderr as std[79a19fc51650df1e]::io::Write>::write_fmt
++  16:     0x71f4d71b6e90 - std[79a19fc51650df1e]::io::stdio::_eprint
++  17:     0x58458f37b288 - rustfmt[f010423fa0d71f5]::format_and_emit_report::<std[79a19fc51650df1e]::io::stdio::Stdout>
++                               at /testbed/src/bin/main.rs:402:17
++  18:     0x58458f37b64f - rustfmt[f010423fa0d71f5]::format::{closure#0}
++                               at /testbed/src/bin/main.rs:371:21
++  19:     0x58458f36c8cb - <rustfmt_nightly[258f32e2bd7cc17f]::Session<std[79a19fc51650df1e]::io::stdio::Stdout>>::override_config::<rustfmt[f010423fa0d71f5]::format::{closure#0}, ()>
++                               at /testbed/src/lib.rs:474:22
++  20:     0x58458f3878bb - rustfmt[f010423fa0d71f5]::format
++                               at /testbed/src/bin/main.rs:370:25
++  21:     0x58458f388287 - rustfmt[f010423fa0d71f5]::execute
++                               at /testbed/src/bin/main.rs:274:14
++  22:     0x58458f3865f2 - rustfmt[f010423fa0d71f5]::main
++                               at /testbed/src/bin/main.rs:38:27
++  23:     0x58458f36b37b - <fn() as core[f4091317e62eea38]::ops::function::FnOnce<()>>::call_once
++                               at /usr/local/rustup/toolchains/nightly-2026-02-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ops/function.rs:250:5
++  24:     0x58458f36d3de - std[79a19fc51650df1e]::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
++                               at /usr/local/rustup/toolchains/nightly-2026-02-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/backtrace.rs:166:18
++  25:     0x58458f37bc21 - std[79a19fc51650df1e]::rt::lang_start::<()>::{closure#0}
++                               at /usr/local/rustup/toolchains/nightly-2026-02-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:206:18
++  26:     0x71f4d89ffd8a - std[79a19fc51650df1e]::rt::lang_start_internal
++  27:     0x58458f37bc07 - std[79a19fc51650df1e]::rt::lang_start::<()>
++                               at /usr/local/rustup/toolchains/nightly-2026-02-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:205:5
++  28:     0x58458f38c1ae - main
++  29:     0x71f4d2433ca8 - <unknown>
++  30:     0x71f4d2433d65 - __libc_start_main
++  31:     0x58458f369811 - _start
++  32:                0x0 - <unknown>
++
++
++rustc version: 1.95.0-nightly (c04308580 2026-02-18)
++platform: x86_64-unknown-linux-gnu
+\ No newline at end of file
+diff --git a/rustc-ice-2026-11-18T18_55_44-6982.txt b/rustc-ice-2026-11-18T18_55_44-6982.txt
+new file mode 100644
+index 0000000..65d3803
+--- /dev/null
++++ b/rustc-ice-2026-11-18T18_55_44-6982.txt
+@@ -0,0 +1,56 @@
++thread 'main' panicked at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:1018:9:
++SourceAnnotation range `100..114` is beyond the end of buffer `111`
++stack backtrace:
++   0:     0x763b9ada408b - <std[79a19fc51650df1e]::backtrace::Backtrace>::create
++   1:     0x763b9ada3fd5 - <std[79a19fc51650df1e]::backtrace::Backtrace>::force_capture
++   2:     0x763b99d80f78 - std[79a19fc51650df1e]::panicking::update_hook::<alloc[47ac978f0253c7f5]::boxed::Box<rustc_driver_impl[d8ef76f4ca027185]::install_ice_hook::{closure#1}>>::{closure#0}
++   3:     0x763b9adb65e2 - std[79a19fc51650df1e]::panicking::panic_with_hook
++   4:     0x763b9ad99018 - std[79a19fc51650df1e]::panicking::panic_handler::{closure#0}
++   5:     0x763b9ad8fd69 - std[79a19fc51650df1e]::sys::backtrace::__rust_end_short_backtrace::<std[79a19fc51650df1e]::panicking::panic_handler::{closure#0}, !>
++   6:     0x763b9ad9aa7d - __rustc[3c0b1ec2ed5e4fc1]::rust_begin_unwind
++   7:     0x763b982a679c - core[f4091317e62eea38]::panicking::panic_fmt
++   8:     0x5f2e89d6607a - annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_body
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:1018:9
++   9:     0x5f2e89d68806 - annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_snippet
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:812:20
++  10:     0x5f2e89d68588 - annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_message
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:723:19
++  11:     0x5f2e89d62634 - <annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::DisplayList>::new
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:109:20
++  12:     0x5f2e89d74549 - <annotate_snippets[4a7690ae9e2ec1b4]::renderer::Renderer>::render
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/mod.rs:155:9
++  13:     0x5f2e8983877d - <rustfmt_nightly[258f32e2bd7cc17f]::format_report_formatter::FormatReportFormatter as core[f4091317e62eea38]::fmt::Display>::fmt
++                               at /testbed/src/format_report_formatter.rs:79:46
++  14:     0x763b9b4217c8 - core[f4091317e62eea38]::fmt::write
++  15:     0x763b9add7ab1 - <&std[79a19fc51650df1e]::io::stdio::Stderr as std[79a19fc51650df1e]::io::Write>::write_fmt
++  16:     0x763b9adb6e90 - std[79a19fc51650df1e]::io::stdio::_eprint
++  17:     0x5f2e89699288 - rustfmt[f010423fa0d71f5]::format_and_emit_report::<std[79a19fc51650df1e]::io::stdio::Stdout>
++                               at /testbed/src/bin/main.rs:402:17
++  18:     0x5f2e8969964f - rustfmt[f010423fa0d71f5]::format::{closure#0}
++                               at /testbed/src/bin/main.rs:371:21
++  19:     0x5f2e8968a8cb - <rustfmt_nightly[258f32e2bd7cc17f]::Session<std[79a19fc51650df1e]::io::stdio::Stdout>>::override_config::<rustfmt[f010423fa0d71f5]::format::{closure#0}, ()>
++                               at /testbed/src/lib.rs:474:22
++  20:     0x5f2e896a58bb - rustfmt[f010423fa0d71f5]::format
++                               at /testbed/src/bin/main.rs:370:25
++  21:     0x5f2e896a6287 - rustfmt[f010423fa0d71f5]::execute
++                               at /testbed/src/bin/main.rs:274:14
++  22:     0x5f2e896a45f2 - rustfmt[f010423fa0d71f5]::main
++                               at /testbed/src/bin/main.rs:38:27
++  23:     0x5f2e8968937b - <fn() as core[f4091317e62eea38]::ops::function::FnOnce<()>>::call_once
++                               at /usr/local/rustup/toolchains/nightly-2026-02-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ops/function.rs:250:5
++  24:     0x5f2e8968b3de - std[79a19fc51650df1e]::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
++                               at /usr/local/rustup/toolchains/nightly-2026-02-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/backtrace.rs:166:18
++  25:     0x5f2e89699c21 - std[79a19fc51650df1e]::rt::lang_start::<()>::{closure#0}
++                               at /usr/local/rustup/toolchains/nightly-2026-02-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:206:18
++  26:     0x763b9c5ffd8a - std[79a19fc51650df1e]::rt::lang_start_internal
++  27:     0x5f2e89699c07 - std[79a19fc51650df1e]::rt::lang_start::<()>
++                               at /usr/local/rustup/toolchains/nightly-2026-02-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:205:5
++  28:     0x5f2e896aa1ae - main
++  29:     0x763b95f16ca8 - <unknown>
++  30:     0x763b95f16d65 - __libc_start_main
++  31:     0x5f2e89687811 - _start
++  32:                0x0 - <unknown>
++
++
++rustc version: 1.95.0-nightly (c04308580 2026-02-18)
++platform: x86_64-unknown-linux-gnu
+\ No newline at end of file
+diff --git a/rustc-ice-2026-11-18T18_56_01-8455.txt b/rustc-ice-2026-11-18T18_56_01-8455.txt
+new file mode 100644
+index 0000000..577f9b9
+--- /dev/null
++++ b/rustc-ice-2026-11-18T18_56_01-8455.txt
+@@ -0,0 +1,70 @@
++thread 'main' panicked at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:1098:29:
++end byte index 100 is not a char boundary; it is inside '☃' (bytes 98..101) of `    let unicode4 = "☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃`[...]
++stack backtrace:
++   0:     0x725482da408b - <std[79a19fc51650df1e]::backtrace::Backtrace>::create
++   1:     0x725482da3fd5 - <std[79a19fc51650df1e]::backtrace::Backtrace>::force_capture
++   2:     0x725481d80f78 - std[79a19fc51650df1e]::panicking::update_hook::<alloc[47ac978f0253c7f5]::boxed::Box<rustc_driver_impl[d8ef76f4ca027185]::install_ice_hook::{closure#1}>>::{closure#0}
++   3:     0x725482db65e2 - std[79a19fc51650df1e]::panicking::panic_with_hook
++   4:     0x725482d99018 - std[79a19fc51650df1e]::panicking::panic_handler::{closure#0}
++   5:     0x725482d8fd69 - std[79a19fc51650df1e]::sys::backtrace::__rust_end_short_backtrace::<std[79a19fc51650df1e]::panicking::panic_handler::{closure#0}, !>
++   6:     0x725482d9aa7d - __rustc[3c0b1ec2ed5e4fc1]::rust_begin_unwind
++   7:     0x7254802a679c - core[f4091317e62eea38]::panicking::panic_fmt
++   8:     0x7254816c3f66 - core[f4091317e62eea38]::str::slice_error_fail_rt
++   9:     0x72547f92a75a - core[f4091317e62eea38]::str::slice_error_fail
++  10:     0x641db89c7d7c - <core[f4091317e62eea38]::ops::range::Range<usize> as core[f4091317e62eea38]::slice::index::SliceIndex<str>>::index
++                               at /rustc/c043085801b7a884054add21a94882216df5971c/library/core/src/str/traits.rs:241:21
++  11:     0x641db89c31e7 - <str as core[f4091317e62eea38]::ops::index::Index<core[f4091317e62eea38]::ops::range::Range<usize>>>::index
++                               at /rustc/c043085801b7a884054add21a94882216df5971c/library/core/src/str/traits.rs:63:15
++  12:     0x641db89b79ee - annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_body::{closure#4}
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:1098:29
++  13:     0x641db89ccb56 - <alloc[47ac978f0253c7f5]::vec::Vec<annotate_snippets[4a7690ae9e2ec1b4]::snippet::Annotation>>::retain::<annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_body::{closure#4}>::{closure#0}
++                               at /rustc/c043085801b7a884054add21a94882216df5971c/library/alloc/src/vec/mod.rs:2364:32
++  14:     0x641db89cc351 - <alloc[47ac978f0253c7f5]::vec::Vec<annotate_snippets[4a7690ae9e2ec1b4]::snippet::Annotation>>::retain_mut::<<alloc[47ac978f0253c7f5]::vec::Vec<annotate_snippets[4a7690ae9e2ec1b4]::snippet::Annotation>>::retain<annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_body::{closure#4}>::{closure#0}>
++                               at /rustc/c043085801b7a884054add21a94882216df5971c/library/alloc/src/vec/mod.rs:2437:32
++  15:     0x641db89cc621 - <alloc[47ac978f0253c7f5]::vec::Vec<annotate_snippets[4a7690ae9e2ec1b4]::snippet::Annotation>>::retain::<annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_body::{closure#4}>
++                               at /rustc/c043085801b7a884054add21a94882216df5971c/library/alloc/src/vec/mod.rs:2364:14
++  16:     0x641db89bcdcf - annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_body
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:1072:21
++  17:     0x641db89be806 - annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_snippet
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:812:20
++  18:     0x641db89be588 - annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_message
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:723:19
++  19:     0x641db89b8634 - <annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::DisplayList>::new
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:109:20
++  20:     0x641db89ca549 - <annotate_snippets[4a7690ae9e2ec1b4]::renderer::Renderer>::render
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/mod.rs:155:9
++  21:     0x641db848e77d - <rustfmt_nightly[258f32e2bd7cc17f]::format_report_formatter::FormatReportFormatter as core[f4091317e62eea38]::fmt::Display>::fmt
++                               at /testbed/src/format_report_formatter.rs:79:46
++  22:     0x7254834217c8 - core[f4091317e62eea38]::fmt::write
++  23:     0x725482dd7ab1 - <&std[79a19fc51650df1e]::io::stdio::Stderr as std[79a19fc51650df1e]::io::Write>::write_fmt
++  24:     0x725482db6e90 - std[79a19fc51650df1e]::io::stdio::_eprint
++  25:     0x641db82ef288 - rustfmt[f010423fa0d71f5]::format_and_emit_report::<std[79a19fc51650df1e]::io::stdio::Stdout>
++                               at /testbed/src/bin/main.rs:402:17
++  26:     0x641db82ef64f - rustfmt[f010423fa0d71f5]::format::{closure#0}
++                               at /testbed/src/bin/main.rs:371:21
++  27:     0x641db82e08cb - <rustfmt_nightly[258f32e2bd7cc17f]::Session<std[79a19fc51650df1e]::io::stdio::Stdout>>::override_config::<rustfmt[f010423fa0d71f5]::format::{closure#0}, ()>
++                               at /testbed/src/lib.rs:474:22
++  28:     0x641db82fb8bb - rustfmt[f010423fa0d71f5]::format
++                               at /testbed/src/bin/main.rs:370:25
++  29:     0x641db82fc287 - rustfmt[f010423fa0d71f5]::execute
++                               at /testbed/src/bin/main.rs:274:14
++  30:     0x641db82fa5f2 - rustfmt[f010423fa0d71f5]::main
++                               at /testbed/src/bin/main.rs:38:27
++  31:     0x641db82df37b - <fn() as core[f4091317e62eea38]::ops::function::FnOnce<()>>::call_once
++                               at /usr/local/rustup/toolchains/nightly-2026-02-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ops/function.rs:250:5
++  32:     0x641db82e13de - std[79a19fc51650df1e]::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
++                               at /usr/local/rustup/toolchains/nightly-2026-02-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/backtrace.rs:166:18
++  33:     0x641db82efc21 - std[79a19fc51650df1e]::rt::lang_start::<()>::{closure#0}
++                               at /usr/local/rustup/toolchains/nightly-2026-02-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:206:18
++  34:     0x7254845ffd8a - std[79a19fc51650df1e]::rt::lang_start_internal
++  35:     0x641db82efc07 - std[79a19fc51650df1e]::rt::lang_start::<()>
++                               at /usr/local/rustup/toolchains/nightly-2026-02-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:205:5
++  36:     0x641db83001ae - main
++  37:     0x72547e033ca8 - <unknown>
++  38:     0x72547e033d65 - __libc_start_main
++  39:     0x641db82dd811 - _start
++  40:                0x0 - <unknown>
++
++
++rustc version: 1.95.0-nightly (c04308580 2026-02-18)
++platform: x86_64-unknown-linux-gnu
+\ No newline at end of file
+diff --git a/rustc-ice-2026-11-18T18_56_01-8456.txt b/rustc-ice-2026-11-18T18_56_01-8456.txt
+new file mode 100644
+index 0000000..60f3da3
+--- /dev/null
++++ b/rustc-ice-2026-11-18T18_56_01-8456.txt
+@@ -0,0 +1,70 @@
++thread 'main' panicked at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:1098:29:
++end byte index 100 is not a char boundary; it is inside '☃' (bytes 98..101) of `    let unicode4 = "☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃☃`[...]
++stack backtrace:
++   0:     0x75ec9bda408b - <std[79a19fc51650df1e]::backtrace::Backtrace>::create
++   1:     0x75ec9bda3fd5 - <std[79a19fc51650df1e]::backtrace::Backtrace>::force_capture
++   2:     0x75ec9ad80f78 - std[79a19fc51650df1e]::panicking::update_hook::<alloc[47ac978f0253c7f5]::boxed::Box<rustc_driver_impl[d8ef76f4ca027185]::install_ice_hook::{closure#1}>>::{closure#0}
++   3:     0x75ec9bdb65e2 - std[79a19fc51650df1e]::panicking::panic_with_hook
++   4:     0x75ec9bd99018 - std[79a19fc51650df1e]::panicking::panic_handler::{closure#0}
++   5:     0x75ec9bd8fd69 - std[79a19fc51650df1e]::sys::backtrace::__rust_end_short_backtrace::<std[79a19fc51650df1e]::panicking::panic_handler::{closure#0}, !>
++   6:     0x75ec9bd9aa7d - __rustc[3c0b1ec2ed5e4fc1]::rust_begin_unwind
++   7:     0x75ec992a679c - core[f4091317e62eea38]::panicking::panic_fmt
++   8:     0x75ec9a6c3f66 - core[f4091317e62eea38]::str::slice_error_fail_rt
++   9:     0x75ec9892a75a - core[f4091317e62eea38]::str::slice_error_fail
++  10:     0x5fbca7ea4d7c - <core[f4091317e62eea38]::ops::range::Range<usize> as core[f4091317e62eea38]::slice::index::SliceIndex<str>>::index
++                               at /rustc/c043085801b7a884054add21a94882216df5971c/library/core/src/str/traits.rs:241:21
++  11:     0x5fbca7ea01e7 - <str as core[f4091317e62eea38]::ops::index::Index<core[f4091317e62eea38]::ops::range::Range<usize>>>::index
++                               at /rustc/c043085801b7a884054add21a94882216df5971c/library/core/src/str/traits.rs:63:15
++  12:     0x5fbca7e949ee - annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_body::{closure#4}
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:1098:29
++  13:     0x5fbca7ea9b56 - <alloc[47ac978f0253c7f5]::vec::Vec<annotate_snippets[4a7690ae9e2ec1b4]::snippet::Annotation>>::retain::<annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_body::{closure#4}>::{closure#0}
++                               at /rustc/c043085801b7a884054add21a94882216df5971c/library/alloc/src/vec/mod.rs:2364:32
++  14:     0x5fbca7ea9351 - <alloc[47ac978f0253c7f5]::vec::Vec<annotate_snippets[4a7690ae9e2ec1b4]::snippet::Annotation>>::retain_mut::<<alloc[47ac978f0253c7f5]::vec::Vec<annotate_snippets[4a7690ae9e2ec1b4]::snippet::Annotation>>::retain<annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_body::{closure#4}>::{closure#0}>
++                               at /rustc/c043085801b7a884054add21a94882216df5971c/library/alloc/src/vec/mod.rs:2437:32
++  15:     0x5fbca7ea9621 - <alloc[47ac978f0253c7f5]::vec::Vec<annotate_snippets[4a7690ae9e2ec1b4]::snippet::Annotation>>::retain::<annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_body::{closure#4}>
++                               at /rustc/c043085801b7a884054add21a94882216df5971c/library/alloc/src/vec/mod.rs:2364:14
++  16:     0x5fbca7e99dcf - annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_body
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:1072:21
++  17:     0x5fbca7e9b806 - annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_snippet
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:812:20
++  18:     0x5fbca7e9b588 - annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_message
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:723:19
++  19:     0x5fbca7e95634 - <annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::DisplayList>::new
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:109:20
++  20:     0x5fbca7ea7549 - <annotate_snippets[4a7690ae9e2ec1b4]::renderer::Renderer>::render
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/mod.rs:155:9
++  21:     0x5fbca796b77d - <rustfmt_nightly[258f32e2bd7cc17f]::format_report_formatter::FormatReportFormatter as core[f4091317e62eea38]::fmt::Display>::fmt
++                               at /testbed/src/format_report_formatter.rs:79:46
++  22:     0x75ec9c4217c8 - core[f4091317e62eea38]::fmt::write
++  23:     0x75ec9bdd7ab1 - <&std[79a19fc51650df1e]::io::stdio::Stderr as std[79a19fc51650df1e]::io::Write>::write_fmt
++  24:     0x75ec9bdb6e90 - std[79a19fc51650df1e]::io::stdio::_eprint
++  25:     0x5fbca77cc288 - rustfmt[f010423fa0d71f5]::format_and_emit_report::<std[79a19fc51650df1e]::io::stdio::Stdout>
++                               at /testbed/src/bin/main.rs:402:17
++  26:     0x5fbca77cc64f - rustfmt[f010423fa0d71f5]::format::{closure#0}
++                               at /testbed/src/bin/main.rs:371:21
++  27:     0x5fbca77bd8cb - <rustfmt_nightly[258f32e2bd7cc17f]::Session<std[79a19fc51650df1e]::io::stdio::Stdout>>::override_config::<rustfmt[f010423fa0d71f5]::format::{closure#0}, ()>
++                               at /testbed/src/lib.rs:474:22
++  28:     0x5fbca77d88bb - rustfmt[f010423fa0d71f5]::format
++                               at /testbed/src/bin/main.rs:370:25
++  29:     0x5fbca77d9287 - rustfmt[f010423fa0d71f5]::execute
++                               at /testbed/src/bin/main.rs:274:14
++  30:     0x5fbca77d75f2 - rustfmt[f010423fa0d71f5]::main
++                               at /testbed/src/bin/main.rs:38:27
++  31:     0x5fbca77bc37b - <fn() as core[f4091317e62eea38]::ops::function::FnOnce<()>>::call_once
++                               at /usr/local/rustup/toolchains/nightly-2026-02-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ops/function.rs:250:5
++  32:     0x5fbca77be3de - std[79a19fc51650df1e]::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
++                               at /usr/local/rustup/toolchains/nightly-2026-02-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/backtrace.rs:166:18
++  33:     0x5fbca77ccc21 - std[79a19fc51650df1e]::rt::lang_start::<()>::{closure#0}
++                               at /usr/local/rustup/toolchains/nightly-2026-02-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:206:18
++  34:     0x75ec9d5ffd8a - std[79a19fc51650df1e]::rt::lang_start_internal
++  35:     0x5fbca77ccc07 - std[79a19fc51650df1e]::rt::lang_start::<()>
++                               at /usr/local/rustup/toolchains/nightly-2026-02-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:205:5
++  36:     0x5fbca77dd1ae - main
++  37:     0x75ec96f43ca8 - <unknown>
++  38:     0x75ec96f43d65 - __libc_start_main
++  39:     0x5fbca77ba811 - _start
++  40:                0x0 - <unknown>
++
++
++rustc version: 1.95.0-nightly (c04308580 2026-02-18)
++platform: x86_64-unknown-linux-gnu
+\ No newline at end of file
+diff --git a/rustc-ice-2026-11-18T18_56_01-8459.txt b/rustc-ice-2026-11-18T18_56_01-8459.txt
+new file mode 100644
+index 0000000..be9da07
+--- /dev/null
++++ b/rustc-ice-2026-11-18T18_56_01-8459.txt
+@@ -0,0 +1,56 @@
++thread 'main' panicked at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:1018:9:
++SourceAnnotation range `100..114` is beyond the end of buffer `111`
++stack backtrace:
++   0:     0x7ff0977a408b - <std[79a19fc51650df1e]::backtrace::Backtrace>::create
++   1:     0x7ff0977a3fd5 - <std[79a19fc51650df1e]::backtrace::Backtrace>::force_capture
++   2:     0x7ff096780f78 - std[79a19fc51650df1e]::panicking::update_hook::<alloc[47ac978f0253c7f5]::boxed::Box<rustc_driver_impl[d8ef76f4ca027185]::install_ice_hook::{closure#1}>>::{closure#0}
++   3:     0x7ff0977b65e2 - std[79a19fc51650df1e]::panicking::panic_with_hook
++   4:     0x7ff097799018 - std[79a19fc51650df1e]::panicking::panic_handler::{closure#0}
++   5:     0x7ff09778fd69 - std[79a19fc51650df1e]::sys::backtrace::__rust_end_short_backtrace::<std[79a19fc51650df1e]::panicking::panic_handler::{closure#0}, !>
++   6:     0x7ff09779aa7d - __rustc[3c0b1ec2ed5e4fc1]::rust_begin_unwind
++   7:     0x7ff094ca679c - core[f4091317e62eea38]::panicking::panic_fmt
++   8:     0x56d9a71c107a - annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_body
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:1018:9
++   9:     0x56d9a71c3806 - annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_snippet
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:812:20
++  10:     0x56d9a71c3588 - annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_message
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:723:19
++  11:     0x56d9a71bd634 - <annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::DisplayList>::new
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:109:20
++  12:     0x56d9a71cf549 - <annotate_snippets[4a7690ae9e2ec1b4]::renderer::Renderer>::render
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/mod.rs:155:9
++  13:     0x56d9a6c9377d - <rustfmt_nightly[258f32e2bd7cc17f]::format_report_formatter::FormatReportFormatter as core[f4091317e62eea38]::fmt::Display>::fmt
++                               at /testbed/src/format_report_formatter.rs:79:46
++  14:     0x7ff097e217c8 - core[f4091317e62eea38]::fmt::write
++  15:     0x7ff0977d7ab1 - <&std[79a19fc51650df1e]::io::stdio::Stderr as std[79a19fc51650df1e]::io::Write>::write_fmt
++  16:     0x7ff0977b6e90 - std[79a19fc51650df1e]::io::stdio::_eprint
++  17:     0x56d9a6af4288 - rustfmt[f010423fa0d71f5]::format_and_emit_report::<std[79a19fc51650df1e]::io::stdio::Stdout>
++                               at /testbed/src/bin/main.rs:402:17
++  18:     0x56d9a6af464f - rustfmt[f010423fa0d71f5]::format::{closure#0}
++                               at /testbed/src/bin/main.rs:371:21
++  19:     0x56d9a6ae58cb - <rustfmt_nightly[258f32e2bd7cc17f]::Session<std[79a19fc51650df1e]::io::stdio::Stdout>>::override_config::<rustfmt[f010423fa0d71f5]::format::{closure#0}, ()>
++                               at /testbed/src/lib.rs:474:22
++  20:     0x56d9a6b008bb - rustfmt[f010423fa0d71f5]::format
++                               at /testbed/src/bin/main.rs:370:25
++  21:     0x56d9a6b01287 - rustfmt[f010423fa0d71f5]::execute
++                               at /testbed/src/bin/main.rs:274:14
++  22:     0x56d9a6aff5f2 - rustfmt[f010423fa0d71f5]::main
++                               at /testbed/src/bin/main.rs:38:27
++  23:     0x56d9a6ae437b - <fn() as core[f4091317e62eea38]::ops::function::FnOnce<()>>::call_once
++                               at /usr/local/rustup/toolchains/nightly-2026-02-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ops/function.rs:250:5
++  24:     0x56d9a6ae63de - std[79a19fc51650df1e]::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
++                               at /usr/local/rustup/toolchains/nightly-2026-02-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/backtrace.rs:166:18
++  25:     0x56d9a6af4c21 - std[79a19fc51650df1e]::rt::lang_start::<()>::{closure#0}
++                               at /usr/local/rustup/toolchains/nightly-2026-02-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:206:18
++  26:     0x7ff098fffd8a - std[79a19fc51650df1e]::rt::lang_start_internal
++  27:     0x56d9a6af4c07 - std[79a19fc51650df1e]::rt::lang_start::<()>
++                               at /usr/local/rustup/toolchains/nightly-2026-02-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:205:5
++  28:     0x56d9a6b051ae - main
++  29:     0x7ff092943ca8 - <unknown>
++  30:     0x7ff092943d65 - __libc_start_main
++  31:     0x56d9a6ae2811 - _start
++  32:                0x0 - <unknown>
++
++
++rustc version: 1.95.0-nightly (c04308580 2026-02-18)
++platform: x86_64-unknown-linux-gnu
+\ No newline at end of file
+diff --git a/rustc-ice-2026-11-18T18_56_01-8460.txt b/rustc-ice-2026-11-18T18_56_01-8460.txt
+new file mode 100644
+index 0000000..1dce71b
+--- /dev/null
++++ b/rustc-ice-2026-11-18T18_56_01-8460.txt
+@@ -0,0 +1,56 @@
++thread 'main' panicked at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:1018:9:
++SourceAnnotation range `100..114` is beyond the end of buffer `111`
++stack backtrace:
++   0:     0x799a5b3a408b - <std[79a19fc51650df1e]::backtrace::Backtrace>::create
++   1:     0x799a5b3a3fd5 - <std[79a19fc51650df1e]::backtrace::Backtrace>::force_capture
++   2:     0x799a5a380f78 - std[79a19fc51650df1e]::panicking::update_hook::<alloc[47ac978f0253c7f5]::boxed::Box<rustc_driver_impl[d8ef76f4ca027185]::install_ice_hook::{closure#1}>>::{closure#0}
++   3:     0x799a5b3b65e2 - std[79a19fc51650df1e]::panicking::panic_with_hook
++   4:     0x799a5b399018 - std[79a19fc51650df1e]::panicking::panic_handler::{closure#0}
++   5:     0x799a5b38fd69 - std[79a19fc51650df1e]::sys::backtrace::__rust_end_short_backtrace::<std[79a19fc51650df1e]::panicking::panic_handler::{closure#0}, !>
++   6:     0x799a5b39aa7d - __rustc[3c0b1ec2ed5e4fc1]::rust_begin_unwind
++   7:     0x799a588a679c - core[f4091317e62eea38]::panicking::panic_fmt
++   8:     0x633a573c407a - annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_body
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:1018:9
++   9:     0x633a573c6806 - annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_snippet
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:812:20
++  10:     0x633a573c6588 - annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::format_message
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:723:19
++  11:     0x633a573c0634 - <annotate_snippets[4a7690ae9e2ec1b4]::renderer::display_list::DisplayList>::new
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/display_list.rs:109:20
++  12:     0x633a573d2549 - <annotate_snippets[4a7690ae9e2ec1b4]::renderer::Renderer>::render
++                               at /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/annotate-snippets-0.11.4/src/renderer/mod.rs:155:9
++  13:     0x633a56e9677d - <rustfmt_nightly[258f32e2bd7cc17f]::format_report_formatter::FormatReportFormatter as core[f4091317e62eea38]::fmt::Display>::fmt
++                               at /testbed/src/format_report_formatter.rs:79:46
++  14:     0x799a5ba217c8 - core[f4091317e62eea38]::fmt::write
++  15:     0x799a5b3d7ab1 - <&std[79a19fc51650df1e]::io::stdio::Stderr as std[79a19fc51650df1e]::io::Write>::write_fmt
++  16:     0x799a5b3b6e90 - std[79a19fc51650df1e]::io::stdio::_eprint
++  17:     0x633a56cf7288 - rustfmt[f010423fa0d71f5]::format_and_emit_report::<std[79a19fc51650df1e]::io::stdio::Stdout>
++                               at /testbed/src/bin/main.rs:402:17
++  18:     0x633a56cf764f - rustfmt[f010423fa0d71f5]::format::{closure#0}
++                               at /testbed/src/bin/main.rs:371:21
++  19:     0x633a56ce88cb - <rustfmt_nightly[258f32e2bd7cc17f]::Session<std[79a19fc51650df1e]::io::stdio::Stdout>>::override_config::<rustfmt[f010423fa0d71f5]::format::{closure#0}, ()>
++                               at /testbed/src/lib.rs:474:22
++  20:     0x633a56d038bb - rustfmt[f010423fa0d71f5]::format
++                               at /testbed/src/bin/main.rs:370:25
++  21:     0x633a56d04287 - rustfmt[f010423fa0d71f5]::execute
++                               at /testbed/src/bin/main.rs:274:14
++  22:     0x633a56d025f2 - rustfmt[f010423fa0d71f5]::main
++                               at /testbed/src/bin/main.rs:38:27
++  23:     0x633a56ce737b - <fn() as core[f4091317e62eea38]::ops::function::FnOnce<()>>::call_once
++                               at /usr/local/rustup/toolchains/nightly-2026-02-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ops/function.rs:250:5
++  24:     0x633a56ce93de - std[79a19fc51650df1e]::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
++                               at /usr/local/rustup/toolchains/nightly-2026-02-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/backtrace.rs:166:18
++  25:     0x633a56cf7c21 - std[79a19fc51650df1e]::rt::lang_start::<()>::{closure#0}
++                               at /usr/local/rustup/toolchains/nightly-2026-02-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:206:18
++  26:     0x799a5cbffd8a - std[79a19fc51650df1e]::rt::lang_start_internal
++  27:     0x633a56cf7c07 - std[79a19fc51650df1e]::rt::lang_start::<()>
++                               at /usr/local/rustup/toolchains/nightly-2026-02-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:205:5
++  28:     0x633a56d081ae - main
++  29:     0x799a56633ca8 - <unknown>
++  30:     0x799a56633d65 - __libc_start_main
++  31:     0x633a56ce5811 - _start
++  32:                0x0 - <unknown>
++
++
++rustc version: 1.95.0-nightly (c04308580 2026-02-18)
++platform: x86_64-unknown-linux-gnu
+\ No newline at end of file
+diff --git a/src/items.rs b/src/items.rs
+index 775c763..d514800 100644
+--- a/src/items.rs
++++ b/src/items.rs
+@@ -2586,13 +2586,15 @@ fn rewrite_fn_base(
+             .map_or(false, |last_line| last_line.contains("//"));
+ 
+         if context.config.style_edition() >= StyleEdition::Edition2024 {
+-            if closing_paren_overflow_max_width {
+-                result.push(')');
++            if params_last_line_contains_comment {
++                // The comment must not swallow the closing paren, so this check
++                // takes precedence over the overflow check below.
+                 result.push_str(&indent.to_string_with_newline(context.config));
++                result.push(')');
+                 no_params_and_over_max_width = true;
+-            } else if params_last_line_contains_comment {
+-                result.push_str(&indent.to_string_with_newline(context.config));
++            } else if closing_paren_overflow_max_width {
+                 result.push(')');
++                result.push_str(&indent.to_string_with_newline(context.config));
+                 no_params_and_over_max_width = true;
+             } else {
+                 result.push(')');
+diff --git a/tests/source/issue_fn_param_comment_ret.rs b/tests/source/issue_fn_param_comment_ret.rs
+new file mode 100644
+index 0000000..e6e1fb3
+--- /dev/null
++++ b/tests/source/issue_fn_param_comment_ret.rs
+@@ -0,0 +1,8 @@
++// rustfmt-style_edition: 2024
++// rustfmt-edition: 2024
++
++pub async fn foo(
++    // OriginalUri(original_uri): OriginalUri,
++) -> Option<Option<Option<Option<String>>>> {
++    None
++}
+diff --git a/tests/target/issue_fn_param_comment_ret.rs b/tests/target/issue_fn_param_comment_ret.rs
+new file mode 100644
+index 0000000..079e8d9
+--- /dev/null
++++ b/tests/target/issue_fn_param_comment_ret.rs
+@@ -0,0 +1,7 @@
++// rustfmt-style_edition: 2024
++// rustfmt-edition: 2024
++
++pub async fn foo(// OriginalUri(original_uri): OriginalUri,
++) -> Option<Option<Option<Option<String>>>> {
++    None
++}

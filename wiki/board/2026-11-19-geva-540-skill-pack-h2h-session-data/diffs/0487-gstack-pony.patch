@@ -1,0 +1,52 @@
+diff --git a/src/main/java/tools/jackson/databind/deser/BeanDeserializerFactory.java b/src/main/java/tools/jackson/databind/deser/BeanDeserializerFactory.java
+index d9e438d..35e5086 100644
+--- a/src/main/java/tools/jackson/databind/deser/BeanDeserializerFactory.java
++++ b/src/main/java/tools/jackson/databind/deser/BeanDeserializerFactory.java
+@@ -1048,12 +1048,10 @@ ClassUtil.name(name), ((AnnotatedParameter) m).getIndex());
+         if (ClassUtil.isProxyType(type)) {
+             throw new IllegalArgumentException("Cannot deserialize Proxy class "+type.getName()+" as a Bean");
+         }
+-        // also: can't deserialize some local classes: static are ok; in-method not;
+-        // other non-static inner classes are ok
+-        typeStr = ClassUtil.isLocalType(type, true);
+-        if (typeStr != null) {
+-            throw new IllegalArgumentException("Cannot deserialize Class "+type.getName()+" (of type "+typeStr+") as a Bean");
+-        }
++        // 18-Nov-2026: local/anonymous classes are NOT rejected here: while they
++        //   usually cannot be instantiated, existing instances may still be
++        //   updated (via `readerForUpdating()`). Failure to instantiate is
++        //   reported when (and if) instantiation is actually attempted.
+         return true;
+     }
+ 
+diff --git a/src/test/java/tools/jackson/databind/convert/UpdateViaObjectReaderTest.java b/src/test/java/tools/jackson/databind/convert/UpdateViaObjectReaderTest.java
+index d9c942a..8bd2c4f 100644
+--- a/src/test/java/tools/jackson/databind/convert/UpdateViaObjectReaderTest.java
++++ b/src/test/java/tools/jackson/databind/convert/UpdateViaObjectReaderTest.java
+@@ -392,4 +392,26 @@ public class UpdateViaObjectReaderTest
+         assertNotSame(obj, newObj);
+         assertNull(newObj);
+     }
++
++    // Existing instance of local/anonymous class can be updated
++    @Test
++    public void testUpdateAnonymousInstance() throws Exception
++    {
++        Object anon = new Object() {
++            public int value;
++            @Override public String toString() { return String.valueOf(value); }
++        };
++        Object result = MAPPER.readerForUpdating(anon).readValue("{\"value\": 2}");
++        assertSame(anon, result);
++        assertEquals("2", anon.toString());
++
++        class Local { public int x; }
++        Local local = new Local();
++        assertSame(local, MAPPER.readerForUpdating(local).readValue("{\"x\": 3}"));
++        assertEquals(3, local.x);
++
++        // but instantiating a new one (needs outer instance) still fails
++        assertThrows(DatabindException.class,
++                () -> MAPPER.readValue("{\"x\": 3}", Local.class));
++    }
+ }

@@ -1,0 +1,65 @@
+diff --git a/internal/notification/dispatcher/webhook.go b/internal/notification/dispatcher/webhook.go
+index 387c717..2c56f08 100644
+--- a/internal/notification/dispatcher/webhook.go
++++ b/internal/notification/dispatcher/webhook.go
+@@ -47,9 +47,35 @@ func isBlockedIP(ip net.IP) bool {
+ 	if ip.Equal(net.IPv4bcast) {
+ 		return true
+ 	}
++	// IPv6 transition mechanisms that embed an arbitrary IPv4 address
++	// (6to4, NAT64, Teredo, IPv4-compatible) can be used to smuggle blocked
++	// IPv4 targets (127.0.0.1, 169.254.169.254, ...) past the checks above.
++	if ip.To4() == nil && len(ip) == net.IPv6len {
++		for _, n := range ipv6TransitionNets {
++			if n.Contains(ip) {
++				return true
++			}
++		}
++	}
+ 	return false
+ }
+ 
++func mustCIDR(s string) *net.IPNet {
++	_, n, err := net.ParseCIDR(s)
++	if err != nil {
++		panic(err)
++	}
++	return n
++}
++
++var ipv6TransitionNets = []*net.IPNet{
++	mustCIDR("2002::/16"),      // 6to4 (RFC 3056)
++	mustCIDR("64:ff9b::/96"),   // NAT64 well-known prefix (RFC 6052)
++	mustCIDR("64:ff9b:1::/48"), // NAT64 local-use prefix (RFC 8215)
++	mustCIDR("2001::/32"),      // Teredo (RFC 4380)
++	mustCIDR("::/96"),          // IPv4-compatible IPv6 (deprecated, RFC 4291)
++}
++
+ func safeDialContext(ctx context.Context, network, addr string) (net.Conn, error) {
+ 	host, port, err := net.SplitHostPort(addr)
+ 	if err != nil {
+diff --git a/internal/notification/dispatcher/webhook_test.go b/internal/notification/dispatcher/webhook_test.go
+index 7c1b4ee..0e038a4 100644
+--- a/internal/notification/dispatcher/webhook_test.go
++++ b/internal/notification/dispatcher/webhook_test.go
+@@ -226,9 +226,17 @@ func TestIsBlockedIP(t *testing.T) {
+ 		"fe80::1",
+ 		"224.0.0.1",
+ 		"0.0.0.0",
+-		"0.1.2.3",       // 0.0.0.0/8 — routes to localhost on Linux
+-		"0.255.255.255", // top of 0.0.0.0/8
+-		"255.255.255.255", // limited broadcast
++		"0.1.2.3",              // 0.0.0.0/8 — routes to localhost on Linux
++		"0.255.255.255",        // top of 0.0.0.0/8
++		"255.255.255.255",      // limited broadcast
++		"2002:7f00:0001::1",    // 6to4 -> 127.0.0.1
++		"2002:a9fe:a9fe::1",    // 6to4 -> 169.254.169.254
++		"64:ff9b::7f00:1",      // NAT64 -> 127.0.0.1
++		"64:ff9b::a9fe:a9fe",   // NAT64 -> 169.254.169.254
++		"64:ff9b:1::a9fe:a9fe", // NAT64 local-use
++		"2001:0000:dead:beef:0000:0000:7f00:0001", // Teredo
++		"::127.0.0.1",      // IPv4-compatible
++		"::ffff:127.0.0.1", // IPv4-mapped
+ 	}
+ 	for _, s := range blocked {
+ 		ip := net.ParseIP(s)

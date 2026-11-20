@@ -1,0 +1,154 @@
+diff --git a/Terminal.Gui/Views/DialogTResult.cs b/Terminal.Gui/Views/DialogTResult.cs
+index 94f4d99..6e5bc7a 100644
+--- a/Terminal.Gui/Views/DialogTResult.cs
++++ b/Terminal.Gui/Views/DialogTResult.cs
+@@ -358,7 +358,10 @@ public class Dialog<TResult> : Runnable<TResult>, IDesignable
+         }
+         else
+         {
+-            SchemeName = SchemeManager.SchemesToSchemeName (Schemes.Base);
++            // NOTE: Do not set SchemeName here. The constructor sets it to Schemes.Dialog and callers
++            // (e.g. MessageBox, or user code via `SchemeName = "Dialog"`) may override it. Resetting it
++            // to Base here clobbered the Dialog scheme for every Dialog (and subclasses such as FileDialog,
++            // Prompt) because SetStyle is called from the constructor before IsRunning is true.
+ 
+             // strip out movable and resizable
+             Arrangement &= ~(ViewArrangement.Movable | ViewArrangement.Resizable);
+diff --git a/Tests/UnitTestsParallelizable/Views/DialogSchemeTests.cs b/Tests/UnitTestsParallelizable/Views/DialogSchemeTests.cs
+new file mode 100644
+index 0000000..cfc8982
+--- /dev/null
++++ b/Tests/UnitTestsParallelizable/Views/DialogSchemeTests.cs
+@@ -0,0 +1,132 @@
++using UnitTests;
++
++namespace ViewsTests;
++
++/// <summary>
++///     Tests that verify views using the "Dialog" scheme (including <see cref="Dialog"/> itself) actually render
++///     with the Dialog scheme's attributes.
++/// </summary>
++public class DialogSchemeTests (ITestOutputHelper output) : TestDriverBase
++{
++    private static Scheme DialogScheme => SchemeManager.GetScheme (Schemes.Dialog);
++
++    [Fact]
++    public void Dialog_New_SchemeName_Is_Dialog ()
++    {
++        using Dialog dialog = new ();
++
++        Assert.Equal ("Dialog", dialog.SchemeName);
++        Assert.Equal (DialogScheme, dialog.GetScheme ());
++    }
++
++    [Fact]
++    public void Dialog_Explicit_SchemeName_Dialog_Is_Retained ()
++    {
++        using Dialog dialog = new () { SchemeName = "Dialog" };
++
++        Assert.Equal ("Dialog", dialog.SchemeName);
++        Assert.Equal (DialogScheme.Normal, dialog.GetAttributeForRole (VisualRole.Normal));
++    }
++
++    [Fact]
++    public void Dialog_Running_Uses_Dialog_Scheme ()
++    {
++        using IApplication app = Application.Create ();
++        app.Init (DriverRegistry.Names.ANSI);
++
++        using Dialog dialog = new () { Title = "Test" };
++        string? runningSchemeName = null;
++        Attribute? runningNormal = null;
++
++        app.Iteration += OnIteration;
++        app.Run (dialog);
++        app.Iteration -= OnIteration;
++
++        Assert.Equal ("Dialog", runningSchemeName);
++        Assert.Equal (DialogScheme.GetAttributeForRole (VisualRole.Normal, app.Driver?.DefaultAttribute), runningNormal);
++
++        return;
++
++        void OnIteration (object? s, EventArgs<IApplication?> a)
++        {
++            runningSchemeName = dialog.SchemeName;
++            runningNormal = dialog.GetAttributeForRole (VisualRole.Normal);
++            app.RequestStop ();
++        }
++    }
++
++    [Fact]
++    public void Dialog_Running_Draws_Viewport_With_Dialog_Normal ()
++    {
++        using IApplication app = Application.Create ();
++        app.Init (DriverRegistry.Names.ANSI);
++        app.Driver!.SetScreenSize (40, 15);
++
++        using Dialog dialog = new () { Title = "T", Width = 20, Height = 8, ShadowStyle = ShadowStyle.None };
++        Attribute? cellAttr = null;
++        Attribute? expected = null;
++
++        app.Iteration += OnIteration;
++        app.Run (dialog);
++        app.Iteration -= OnIteration;
++
++        Assert.Equal (expected, cellAttr);
++
++        return;
++
++        void OnIteration (object? s, EventArgs<IApplication?> a)
++        {
++            app.LayoutAndDraw (true);
++            Rectangle vp = dialog.ViewportToScreen (dialog.Viewport with { Location = Point.Empty });
++            cellAttr = app.Driver.Contents! [vp.Y, vp.X].Attribute;
++            expected = DialogScheme.GetAttributeForRole (VisualRole.Normal, app.Driver.DefaultAttribute);
++            app.RequestStop ();
++        }
++    }
++
++    [Theory]
++    [InlineData (typeof (View))]
++    [InlineData (typeof (FrameView))]
++    [InlineData (typeof (Window))]
++    [InlineData (typeof (Label))]
++    public void View_With_SchemeName_Dialog_Draws_With_Dialog_Normal (Type viewType)
++    {
++        IDriver driver = CreateTestDriver (30, 10);
++        driver.Clip = new Region (driver.Screen);
++
++        View view = (View)Activator.CreateInstance (viewType)!;
++        view.Driver = driver;
++        view.X = 0;
++        view.Y = 0;
++        view.Width = 10;
++        view.Height = 5;
++        view.Text = "x";
++        view.SchemeName = "Dialog";
++        view.BeginInit ();
++        view.EndInit ();
++        view.Layout ();
++        view.Draw ();
++
++        Rectangle vp = view.ViewportToScreen (view.Viewport with { Location = Point.Empty });
++        Attribute expected = DialogScheme.Normal;
++
++        output.WriteLine ($"{viewType.Name}: cell={driver.Contents! [vp.Y, vp.X].Attribute} expected={expected}");
++        Assert.Equal (expected, view.GetAttributeForRole (VisualRole.Normal));
++        Assert.Equal (expected, driver.Contents! [vp.Y, vp.X + vp.Width - 1].Attribute);
++
++        view.Dispose ();
++    }
++
++    [Fact]
++    public void SubView_Of_View_With_SchemeName_Dialog_Inherits_Dialog_Scheme ()
++    {
++        View super = new () { SchemeName = "Dialog" };
++        View sub = new ();
++        super.Add (sub);
++
++        Assert.Equal (DialogScheme, sub.GetScheme ());
++        Assert.Equal (DialogScheme.Normal, sub.GetAttributeForRole (VisualRole.Normal));
++
++        super.Dispose ();
++    }
++}

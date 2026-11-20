@@ -1,0 +1,247 @@
+diff --git a/src/Finbuckle.MultiTenant/DependencyInjection/ServiceCollectionExtensions.cs b/src/Finbuckle.MultiTenant/DependencyInjection/ServiceCollectionExtensions.cs
+index c17514d..acf8dfc 100644
+--- a/src/Finbuckle.MultiTenant/DependencyInjection/ServiceCollectionExtensions.cs
++++ b/src/Finbuckle.MultiTenant/DependencyInjection/ServiceCollectionExtensions.cs
+@@ -59,69 +59,88 @@ public static class FinbuckleServiceCollectionExtensions
+         return services.AddMultiTenant<TTenantInfo>(_ => { });
+     }
+ 
+-    // TODO: better document and extract
++    /// <summary>
++    /// Decorates all existing non-keyed registrations of <typeparamref name="TService"/> with
++    /// <typeparamref name="TImpl"/>. Each registration is replaced in place so that registration order and
++    /// lifetimes are preserved. This supports scenarios where multiple implementations of a service are
++    /// registered (e.g. multiple <c>IAuthenticationSchemeProvider</c> registrations).
++    /// </summary>
++    /// <typeparam name="TService">The service type to decorate.</typeparam>
++    /// <typeparam name="TImpl">The decorator implementation type.</typeparam>
++    /// <param name="services">The <see cref="IServiceCollection"/> instance.</param>
++    /// <param name="parameters">Additional constructor parameters passed to the decorator.</param>
++    /// <returns><c>true</c> if at least one registration was decorated.</returns>
++    /// <exception cref="ArgumentException">Thrown if no registration of <typeparamref name="TService"/> exists.</exception>
+     public static bool DecorateService<TService, TImpl>(this IServiceCollection services, params object[] parameters)
+     {
+-        var existingService = services.SingleOrDefault(s => s.ServiceType == typeof(TService));
+-        if (existingService is null)
++        var decorated = false;
++
++        for (var i = 0; i < services.Count; i++)
++        {
++            var existingService = services[i];
++            if (existingService.ServiceType != typeof(TService) || existingService.IsKeyedService)
++                continue;
++
++            services[i] = CreateDecoratedDescriptor<TService, TImpl>(existingService, parameters);
++            decorated = true;
++        }
++
++        if (!decorated)
+             throw new ArgumentException($"No service of type {typeof(TService).Name} found.");
+ 
+-        ServiceDescriptor? newService;
++        return true;
++    }
+ 
+-        if (existingService.ImplementationType is not null)
++    private static ServiceDescriptor CreateDecoratedDescriptor<TService, TImpl>(ServiceDescriptor existingService,
++        object[] parameters)
++    {
++        if (existingService.ImplementationType is { } implementationType)
+         {
+-            newService = new ServiceDescriptor(existingService.ServiceType,
++            return new ServiceDescriptor(existingService.ServiceType,
+                 sp =>
+                 {
+-                    TService inner =
+-                        (TService)ActivatorUtilities.CreateInstance(sp, existingService.ImplementationType);
+-
++                    var inner = ActivatorUtilities.CreateInstance(sp, implementationType);
+                     if (inner is null)
+                         throw new Exception(
+-                            $"Unable to instantiate decorated type via implementation type {existingService.ImplementationType.Name}.");
+-
+-                    var parameters2 = new object[parameters.Length + 1];
+-                    Array.Copy(parameters, 0, parameters2, 1, parameters.Length);
+-                    parameters2[0] = inner;
++                            $"Unable to instantiate decorated type via implementation type {implementationType.Name}.");
+ 
+-                    return ActivatorUtilities.CreateInstance<TImpl>(sp, parameters2)!;
++                    return CreateDecorator<TImpl>(sp, inner, parameters);
+                 },
+                 existingService.Lifetime);
+         }
+-        else if (existingService.ImplementationInstance is not null)
++
++        if (existingService.ImplementationInstance is { } implementationInstance)
+         {
+-            newService = new ServiceDescriptor(existingService.ServiceType,
+-                sp =>
+-                {
+-                    TService inner = (TService)existingService.ImplementationInstance;
+-                    return ActivatorUtilities.CreateInstance<TImpl>(sp, inner, parameters)!;
+-                },
++            return new ServiceDescriptor(existingService.ServiceType,
++                sp => CreateDecorator<TImpl>(sp, implementationInstance, parameters),
+                 existingService.Lifetime);
+         }
+-        else if (existingService.ImplementationFactory is not null)
++
++        if (existingService.ImplementationFactory is { } implementationFactory)
+         {
+-            newService = new ServiceDescriptor(existingService.ServiceType,
++            return new ServiceDescriptor(existingService.ServiceType,
+                 sp =>
+                 {
+-                    TService inner = (TService)existingService.ImplementationFactory(sp);
++                    var inner = implementationFactory(sp);
+                     if (inner is null)
+                         throw new Exception(
+                             "Unable to instantiate decorated type via implementation factory.");
+ 
+-                    return ActivatorUtilities.CreateInstance<TImpl>(sp, inner, parameters)!;
++                    return CreateDecorator<TImpl>(sp, inner, parameters);
+                 },
+                 existingService.Lifetime);
+         }
+-        else
+-        {
+-            throw new Exception(
+-                "Unable to instantiate decorated type.");
+-        }
+ 
+-        services.Remove(existingService);
+-        services.Add(newService);
++        throw new Exception("Unable to instantiate decorated type.");
++    }
+ 
+-        return true;
++    private static object CreateDecorator<TImpl>(IServiceProvider sp, object inner, object[] parameters)
++    {
++        var allParameters = new object[parameters.Length + 1];
++        allParameters[0] = inner;
++        Array.Copy(parameters, 0, allParameters, 1, parameters.Length);
++
++        return ActivatorUtilities.CreateInstance<TImpl>(sp, allParameters)!;
+     }
+ 
+     /// <summary>
+diff --git a/test/Finbuckle.MultiTenant.AspNetCore.Test/Extensions/MultiTenantBuilderExtensionsShould.cs b/test/Finbuckle.MultiTenant.AspNetCore.Test/Extensions/MultiTenantBuilderExtensionsShould.cs
+index 78157f3..7f698e6 100644
+--- a/test/Finbuckle.MultiTenant.AspNetCore.Test/Extensions/MultiTenantBuilderExtensionsShould.cs
++++ b/test/Finbuckle.MultiTenant.AspNetCore.Test/Extensions/MultiTenantBuilderExtensionsShould.cs
+@@ -322,6 +322,30 @@ public class MultiTenantBuilderExtensionsShould
+             Assert.IsType<MultiTenantAuthenticationSchemeProvider>(schemeProvider);
+         }
+ 
++    private class AdditionalAuthenticationSchemeProvider(IOptions<AuthenticationOptions> options)
++        : AuthenticationSchemeProvider(options);
++
++    [Fact]
++    public void ConfigurePerTenantAuthenticationCore_DecorateMultipleSchemeProviders()
++    {
++            var services = new ServiceCollection();
++            services.AddAuthentication();
++            services.AddLogging();
++            // Simulates a library (e.g. Duende.BFF v4) registering an additional scheme provider.
++            services.AddTransient<IAuthenticationSchemeProvider, AdditionalAuthenticationSchemeProvider>();
++            services.AddMultiTenant<TestTenantInfo>()
++                .WithPerTenantAuthenticationCore();
++
++            var sp = services.BuildServiceProvider();
++
++            var schemeProviders = sp.GetServices<IAuthenticationSchemeProvider>().ToList();
++            Assert.Equal(2, schemeProviders.Count);
++            Assert.All(schemeProviders, p => Assert.IsType<MultiTenantAuthenticationSchemeProvider>(p));
++
++            var schemeProvider = sp.GetRequiredService<IAuthenticationSchemeProvider>();
++            Assert.IsType<MultiTenantAuthenticationSchemeProvider>(schemeProvider);
++        }
++
+     [Fact]
+     public void AddRemoteAuthenticationCallbackStrategy()
+     {
+diff --git a/test/Finbuckle.MultiTenant.Test/DependencyInjection/ServiceCollectionExtensionsShould.cs b/test/Finbuckle.MultiTenant.Test/DependencyInjection/ServiceCollectionExtensionsShould.cs
+index 18fd2b3..63a226f 100644
+--- a/test/Finbuckle.MultiTenant.Test/DependencyInjection/ServiceCollectionExtensionsShould.cs
++++ b/test/Finbuckle.MultiTenant.Test/DependencyInjection/ServiceCollectionExtensionsShould.cs
+@@ -10,6 +10,80 @@ namespace Finbuckle.MultiTenant.Test.DependencyInjection;
+ 
+ public class ServiceCollectionExtensionsShould
+ {
++    public interface IDecoratable
++    {
++        string Name { get; }
++    }
++
++    public class DecoratableA : IDecoratable
++    {
++        public string Name => "A";
++    }
++
++    public class DecoratableB : IDecoratable
++    {
++        public string Name => "B";
++    }
++
++    public class Decorator : IDecoratable
++    {
++        private readonly IDecoratable _inner;
++        private readonly string _suffix;
++
++        public Decorator(IDecoratable inner, string suffix = "")
++        {
++            _inner = inner;
++            _suffix = suffix;
++        }
++
++        public string Name => $"Decorated({_inner.Name}){_suffix}";
++    }
++
++    [Fact]
++    public void DecorateService_DecorateAllRegistrations()
++    {
++        var services = new ServiceCollection();
++        services.AddTransient<IDecoratable, DecoratableA>();
++        services.AddSingleton<IDecoratable>(new DecoratableB());
++        services.AddScoped<IDecoratable>(_ => new DecoratableA());
++
++        services.DecorateService<IDecoratable, Decorator>();
++
++        var descriptors = services.Where(s => s.ServiceType == typeof(IDecoratable)).ToList();
++        Assert.Equal(3, descriptors.Count);
++        Assert.Equal(ServiceLifetime.Transient, descriptors[0].Lifetime);
++        Assert.Equal(ServiceLifetime.Singleton, descriptors[1].Lifetime);
++        Assert.Equal(ServiceLifetime.Scoped, descriptors[2].Lifetime);
++
++        using var sp = services.BuildServiceProvider();
++        using var scope = sp.CreateScope();
++        var names = scope.ServiceProvider.GetServices<IDecoratable>().Select(s => s.Name).ToList();
++        Assert.Equal(["Decorated(A)", "Decorated(B)", "Decorated(A)"], names);
++        Assert.Equal("Decorated(A)", scope.ServiceProvider.GetRequiredService<IDecoratable>().Name);
++    }
++
++    [Fact]
++    public void DecorateService_PassParameters()
++    {
++        var services = new ServiceCollection();
++        services.AddTransient<IDecoratable, DecoratableA>();
++        services.AddSingleton<IDecoratable>(new DecoratableB());
++        services.AddTransient<IDecoratable>(_ => new DecoratableA());
++
++        services.DecorateService<IDecoratable, Decorator>("!");
++
++        using var sp = services.BuildServiceProvider();
++        var names = sp.GetServices<IDecoratable>().Select(s => s.Name).ToList();
++        Assert.Equal(["Decorated(A)!", "Decorated(B)!", "Decorated(A)!"], names);
++    }
++
++    [Fact]
++    public void DecorateService_ThrowIfNoRegistration()
++    {
++        var services = new ServiceCollection();
++        Assert.Throws<ArgumentException>(() => services.DecorateService<IDecoratable, Decorator>());
++    }
++
+     [Fact]
+     public void RegisterITenantResolverInDi()
+     {

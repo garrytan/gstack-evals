@@ -1,0 +1,134 @@
+diff --git a/pusher/http.go b/pusher/http.go
+index 0b0304f..e806c2b 100644
+--- a/pusher/http.go
++++ b/pusher/http.go
+@@ -1,7 +1,11 @@
+ package pusher
+ 
+ import (
++	"bytes"
+ 	"context"
++	"crypto/md5" // #nosec G501 -- required by Pusher protocol
++	"crypto/subtle"
++	"encoding/hex"
+ 	"encoding/json"
+ 	"fmt"
+ 	"io"
+@@ -11,6 +15,7 @@ import (
+ 	"strconv"
+ 	"strings"
+ 	"sync"
++	"time"
+ 
+ 	"github.com/anycable/anycable-go/broadcast"
+ 	"github.com/anycable/anycable-go/broker"
+@@ -144,6 +149,10 @@ func NewRestAPI(h broadcast.Handler, b broker.Broker, c *Config, l *slog.Logger)
+ 	return api
+ }
+ 
++// authTimestampTolerance is the maximum allowed difference (in seconds)
++// between auth_timestamp and the current server time
++const authTimestampTolerance = 600
++
+ func (api *RestAPI) Handler(w http.ResponseWriter, r *http.Request) {
+ 	if api.enableCORS {
+ 		server.WriteCORSHeaders(w, r, api.allowedHosts)
+@@ -163,10 +172,11 @@ func (api *RestAPI) Handler(w http.ResponseWriter, r *http.Request) {
+ 	signature := queryParams.Get("auth_signature")
+ 
+ 	var stringToSign string
++	var bodyMD5 string
+ 
+ 	switch r.Method {
+ 	case http.MethodPost:
+-		bodyMD5 := queryParams.Get("body_md5")
++		bodyMD5 = queryParams.Get("body_md5")
+ 		stringToSign = "POST\n" +
+ 			path + "\n" +
+ 			"auth_key=" + key +
+@@ -190,6 +200,39 @@ func (api *RestAPI) Handler(w http.ResponseWriter, r *http.Request) {
+ 		return
+ 	}
+ 
++	ts, err := strconv.ParseInt(authTimestamp, 10, 64)
++	if err != nil {
++		api.log.Debug("invalid auth_timestamp", "timestamp", authTimestamp)
++		w.WriteHeader(http.StatusUnauthorized)
++		return
++	}
++
++	if delta := time.Now().Unix() - ts; delta > authTimestampTolerance || delta < -authTimestampTolerance {
++		api.log.Debug("auth_timestamp is out of the allowed window", "timestamp", authTimestamp)
++		w.WriteHeader(http.StatusUnauthorized)
++		return
++	}
++
++	if r.Method == http.MethodPost {
++		body, err := io.ReadAll(r.Body)
++		if err != nil {
++			api.log.Error("failed to read request body")
++			w.WriteHeader(http.StatusUnprocessableEntity)
++			return
++		}
++
++		sum := md5.Sum(body) // #nosec G401 -- required by Pusher protocol
++		actualMD5 := hex.EncodeToString(sum[:])
++
++		if subtle.ConstantTimeCompare([]byte(actualMD5), []byte(strings.ToLower(bodyMD5))) != 1 {
++			api.log.Debug("body_md5 mismatch")
++			w.WriteHeader(http.StatusUnauthorized)
++			return
++		}
++
++		r.Body = io.NopCloser(bytes.NewReader(body))
++	}
++
+ 	switch r.Method {
+ 	case http.MethodPost:
+ 		api.handleEvents(w, r)
+diff --git a/pusher/http_test.go b/pusher/http_test.go
+index 4794cb3..c3bf038 100644
+--- a/pusher/http_test.go
++++ b/pusher/http_test.go
+@@ -86,6 +86,41 @@ func TestHttpHandler(t *testing.T) {
+ 
+ 		assert.Equal(t, http.StatusUnauthorized, rr.Code)
+ 	})
++
++	t.Run("Rejects when body does not match body_md5", func(t *testing.T) {
++		authParams := "auth_key=" + config.AppKey +
++			"&auth_timestamp=" + strconv.FormatInt(time.Now().Unix(), 10) +
++			"&auth_version=1.0" +
++			"&body_md5=" + fmt.Sprintf("%x", payloadMD5)
++
++		authSignature := verifier.Sign("POST\n/events\n" + authParams)
++
++		forged := `{"name":"injected-event","channel":"admin","data":"malicious"}`
++		req, err := http.NewRequest("POST", "/events?"+authParams+"&auth_signature="+authSignature, strings.NewReader(forged))
++		require.NoError(t, err)
++
++		rr := httptest.NewRecorder()
++		http.HandlerFunc(restAPI.Handler).ServeHTTP(rr, req)
++
++		assert.Equal(t, http.StatusUnauthorized, rr.Code)
++	})
++
++	t.Run("Rejects stale auth_timestamp", func(t *testing.T) {
++		authParams := "auth_key=" + config.AppKey +
++			"&auth_timestamp=" + strconv.FormatInt(time.Now().Unix()-601, 10) +
++			"&auth_version=1.0" +
++			"&body_md5=" + fmt.Sprintf("%x", payloadMD5)
++
++		authSignature := verifier.Sign("POST\n/events\n" + authParams)
++
++		req, err := http.NewRequest("POST", "/events?"+authParams+"&auth_signature="+authSignature, strings.NewReader(string(payload)))
++		require.NoError(t, err)
++
++		rr := httptest.NewRecorder()
++		http.HandlerFunc(restAPI.Handler).ServeHTTP(rr, req)
++
++		assert.Equal(t, http.StatusUnauthorized, rr.Code)
++	})
+ }
+ 
+ func TestGetUsersIntegration(t *testing.T) {

@@ -1,0 +1,203 @@
+diff --git a/crd-generator/src/main/java/io/strimzi/crdgenerator/DocGenerator.java b/crd-generator/src/main/java/io/strimzi/crdgenerator/DocGenerator.java
+index b1b3123..1ff7cb4 100644
+--- a/crd-generator/src/main/java/io/strimzi/crdgenerator/DocGenerator.java
++++ b/crd-generator/src/main/java/io/strimzi/crdgenerator/DocGenerator.java
+@@ -13,6 +13,7 @@ import io.strimzi.crdgenerator.annotations.AddedIn;
+ import io.strimzi.crdgenerator.annotations.Crd;
+ import io.strimzi.crdgenerator.annotations.Description;
+ import io.strimzi.crdgenerator.annotations.DescriptionFile;
++import io.strimzi.crdgenerator.annotations.ExternalLink;
+ import io.strimzi.crdgenerator.annotations.KubeLink;
+ import io.strimzi.crdgenerator.annotations.PresentInVersions;
+ 
+@@ -89,7 +90,7 @@ class DocGenerator {
+         Set<Property> memorableProperties = new HashSet<>();
+ 
+         for (Property property : properties(crApiVersion, cls).values()) {
+-            if (property.isAnnotationPresent(KubeLink.class)) {
++            if (property.isAnnotationPresent(KubeLink.class) || property.isAnnotationPresent(ExternalLink.class)) {
+                 continue;
+             }
+ 
+@@ -121,6 +122,28 @@ class DocGenerator {
+         return isPolymorphic(returnType) ? subtypes(crApiVersion, returnType) : singletonList(returnType);
+     }
+ 
++    /**
++     * Gets the external URL for given property based on the @KubeLink or @ExternalLink annotations
++     *
++     * @param property  Property for which the URL should be found
++     *
++     * @return  The external URL or null if there is none
++     */
++    private String externalUrl(Property property) {
++        KubeLink kubeLink = property.getAnnotation(KubeLink.class);
++        ExternalLink externalLink = property.getAnnotation(ExternalLink.class);
++
++        if (kubeLink != null && externalLink != null) {
++            throw new RuntimeException("Property " + property.getName() + " cannot be annotated with both @KubeLink and @ExternalLink");
++        } else if (externalLink != null) {
++            return externalLink.value();
++        } else if (linker != null && kubeLink != null) {
++            return linker.link(kubeLink);
++        } else {
++            return null;
++        }
++    }
++
+     public void generate(Class<? extends CustomResource> crdClass) throws IOException {
+         Crd crd = crdClass.getAnnotation(Crd.class);
+         appendAnchor(crdClass);
+@@ -151,9 +174,8 @@ class DocGenerator {
+             final Property property = entry.getValue();
+             PropertyType propertyType = property.getType();
+         
+-            // Set the external link to Kubernetes docs or the link for fields distinguished by `type`
+-            KubeLink kubeLink = property.getAnnotation(KubeLink.class);
+-            String externalUrl = linker != null && kubeLink != null ? linker.link(kubeLink) : null;
++            // Set the external link to Kubernetes docs or other external docs
++            String externalUrl = externalUrl(property);
+         
+             // Add the property name
+             out.append("|").append(propertyName);
+diff --git a/crd-generator/src/main/java/io/strimzi/crdgenerator/annotations/ExternalLink.java b/crd-generator/src/main/java/io/strimzi/crdgenerator/annotations/ExternalLink.java
+new file mode 100644
+index 0000000..56cbc42
+--- /dev/null
++++ b/crd-generator/src/main/java/io/strimzi/crdgenerator/annotations/ExternalLink.java
+@@ -0,0 +1,25 @@
++/*
++ * Copyright Strimzi authors.
++ * License: Apache License 2.0 (see the file LICENSE or http://apache.org/licenses/LICENSE-2.0.html).
++ */
++package io.strimzi.crdgenerator.annotations;
++
++import java.lang.annotation.ElementType;
++import java.lang.annotation.Retention;
++import java.lang.annotation.RetentionPolicy;
++import java.lang.annotation.Target;
++
++/**
++ * Configures a link to an arbitrary external documentation (for example to the Gateway API documentation). Unlike
++ * the {@link KubeLink} annotation, the URL is used as-is and does not depend on the Linker used by the generator.
++ */
++@Retention(RetentionPolicy.RUNTIME)
++@Target({ElementType.METHOD, ElementType.FIELD})
++public @interface ExternalLink {
++    /**
++     * Gets the URL to which the link should point.
++     *
++     * @return  URL to which the link should point
++     */
++    String value();
++}
+diff --git a/crd-generator/src/test/java/io/strimzi/crdgenerator/DocGeneratorTest.java b/crd-generator/src/test/java/io/strimzi/crdgenerator/DocGeneratorTest.java
+index 502148f..186a627 100644
+--- a/crd-generator/src/test/java/io/strimzi/crdgenerator/DocGeneratorTest.java
++++ b/crd-generator/src/test/java/io/strimzi/crdgenerator/DocGeneratorTest.java
+@@ -27,4 +27,22 @@ public class DocGeneratorTest {
+         String s = w.toString();
+         assertEquals(CrdTestUtils.readResource("simpleTest.adoc"), s);
+     }
++
++    @Test
++    public void externalLinkTest() throws IOException {
++        StringWriter w = new StringWriter();
++        DocGenerator crdGenerator = new DocGenerator(ApiVersion.V1, 1, singletonList(ExampleWithExternalLinkCrd.class), w, new KubeLinker("{KubeApiReferenceBase}"));
++        crdGenerator.generate(ExampleWithExternalLinkCrd.class);
++        String s = w.toString();
++        assertEquals(CrdTestUtils.readResource("externalLinkTest.adoc"), s);
++    }
++
++    @Test
++    public void externalLinkWithoutLinkerTest() throws IOException {
++        StringWriter w = new StringWriter();
++        DocGenerator crdGenerator = new DocGenerator(ApiVersion.V1, 1, singletonList(ExampleWithExternalLinkCrd.class), w, null);
++        crdGenerator.generate(ExampleWithExternalLinkCrd.class);
++        String s = w.toString();
++        assertThat(s.contains("|reference\n|https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.ParentReference[LocalObjectReference]"), is(true));
++    }
+ }
+diff --git a/crd-generator/src/test/java/io/strimzi/crdgenerator/ExampleWithExternalLinkCrd.java b/crd-generator/src/test/java/io/strimzi/crdgenerator/ExampleWithExternalLinkCrd.java
+new file mode 100644
+index 0000000..0a78105
+--- /dev/null
++++ b/crd-generator/src/test/java/io/strimzi/crdgenerator/ExampleWithExternalLinkCrd.java
+@@ -0,0 +1,50 @@
++/*
++ * Copyright Strimzi authors.
++ * License: Apache License 2.0 (see the file LICENSE or http://apache.org/licenses/LICENSE-2.0.html).
++ */
++package io.strimzi.crdgenerator;
++
++import io.fabric8.kubernetes.api.model.Affinity;
++import io.fabric8.kubernetes.api.model.LocalObjectReference;
++import io.fabric8.kubernetes.client.CustomResource;
++import io.strimzi.crdgenerator.annotations.Crd;
++import io.strimzi.crdgenerator.annotations.ExternalLink;
++import io.strimzi.crdgenerator.annotations.KubeLink;
++
++@Crd(
++    spec = @Crd.Spec(
++        group = "crdgenerator.strimzi.io",
++        names = @Crd.Spec.Names(
++            kind = "ExampleWithExternalLink",
++            plural = "examplewithexternallinks",
++            categories = {"strimzi"}),
++        scope = "Namespaced",
++        versions = {
++            @Crd.Spec.Version(name = "v1", served = true, storage = true)
++        }
++    )
++)
++public class ExampleWithExternalLinkCrd extends CustomResource {
++    private static final long serialVersionUID = 1L;
++
++    private Affinity affinity;
++    private LocalObjectReference reference;
++
++    @KubeLink(group = "core", version = "v1", kind = "affinity")
++    public Affinity getAffinity() {
++        return affinity;
++    }
++
++    public void setAffinity(Affinity affinity) {
++        this.affinity = affinity;
++    }
++
++    @ExternalLink("https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.ParentReference")
++    public LocalObjectReference getReference() {
++        return reference;
++    }
++
++    public void setReference(LocalObjectReference reference) {
++        this.reference = reference;
++    }
++}
+diff --git a/crd-generator/src/test/resources/io/strimzi/crdgenerator/externalLinkTest.adoc b/crd-generator/src/test/resources/io/strimzi/crdgenerator/externalLinkTest.adoc
+new file mode 100644
+index 0000000..a90a851
+--- /dev/null
++++ b/crd-generator/src/test/resources/io/strimzi/crdgenerator/externalLinkTest.adoc
+@@ -0,0 +1,21 @@
++[id='type-ExampleWithExternalLinkCrd-{context}']
++= `ExampleWithExternalLink` schema reference
++
++
++[cols="2,2,3a",options="header"]
++|====
++|Property |Property type |Description
++|affinity
++|{KubeApiReferenceBase}#affinity-v1-core[Affinity]
++|
++|reference
++|https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.ParentReference[LocalObjectReference]
++|
++|spec
++|object
++|
++|status
++|object
++|
++|====
++

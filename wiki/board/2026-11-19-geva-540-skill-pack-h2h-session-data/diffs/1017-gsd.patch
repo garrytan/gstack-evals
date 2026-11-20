@@ -1,0 +1,103 @@
+diff --git a/context.go b/context.go
+index ec7fdd9..036eb88 100644
+--- a/context.go
++++ b/context.go
+@@ -166,16 +166,27 @@ func (c *Context) Scheme() string {
+ 		return "https"
+ 	}
+ 	if scheme := c.request.Header.Get(HeaderXForwardedProto); scheme != "" {
+-		return scheme
++		return sanitizeScheme(scheme)
+ 	}
+ 	if scheme := c.request.Header.Get(HeaderXForwardedProtocol); scheme != "" {
+-		return scheme
++		return sanitizeScheme(scheme)
+ 	}
+ 	if ssl := c.request.Header.Get(HeaderXForwardedSsl); ssl == "on" {
+ 		return "https"
+ 	}
+ 	if scheme := c.request.Header.Get(HeaderXUrlScheme); scheme != "" {
+-		return scheme
++		return sanitizeScheme(scheme)
++	}
++	return "http"
++}
++
++// sanitizeScheme returns the normalized scheme if it is one of the allowed values (http, https, ws, wss)
++// and "http" otherwise. Scheme header values are client controlled and must not be trusted verbatim, as they
++// are used to construct URLs (e.g. redirect Location headers).
++func sanitizeScheme(scheme string) string {
++	switch s := strings.ToLower(strings.TrimSpace(scheme)); s {
++	case "http", "https", "ws", "wss":
++		return s
+ 	}
+ 	return "http"
+ }
+diff --git a/context_test.go b/context_test.go
+index 9376f0f..dc2f10b 100644
+--- a/context_test.go
++++ b/context_test.go
+@@ -1140,6 +1140,46 @@ func TestContext_Scheme(t *testing.T) {
+ 			},
+ 			"http",
+ 		},
++		{
++			&Context{
++				request: &http.Request{
++					Header: http.Header{HeaderXForwardedProto: []string{"javascript"}},
++				},
++			},
++			"http",
++		},
++		{
++			&Context{
++				request: &http.Request{
++					Header: http.Header{HeaderXForwardedProtocol: []string{"file"}},
++				},
++			},
++			"http",
++		},
++		{
++			&Context{
++				request: &http.Request{
++					Header: http.Header{HeaderXUrlScheme: []string{"data"}},
++				},
++			},
++			"http",
++		},
++		{
++			&Context{
++				request: &http.Request{
++					Header: http.Header{HeaderXForwardedProto: []string{" HTTPS "}},
++				},
++			},
++			"https",
++		},
++		{
++			&Context{
++				request: &http.Request{
++					Header: http.Header{HeaderXForwardedProto: []string{"wss"}},
++				},
++			},
++			"wss",
++		},
+ 	}
+ 
+ 	for _, tt := range tests {
+diff --git a/middleware/redirect_test.go b/middleware/redirect_test.go
+index a127ca4..6521e44 100644
+--- a/middleware/redirect_test.go
++++ b/middleware/redirect_test.go
+@@ -169,6 +169,12 @@ func TestRedirectWWWRedirect(t *testing.T) {
+ 			expectLocation:   "https://www.a.com/",
+ 			expectStatusCode: http.StatusMovedPermanently,
+ 		},
++		{
++			whenHost:         "b.com",
++			whenHeader:       map[string][]string{echo.HeaderXForwardedProto: {"javascript"}},
++			expectLocation:   "http://www.b.com/",
++			expectStatusCode: http.StatusMovedPermanently,
++		},
+ 		{
+ 			whenHost:         "www.ip",
+ 			expectLocation:   "",

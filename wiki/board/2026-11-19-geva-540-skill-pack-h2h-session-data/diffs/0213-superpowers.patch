@@ -1,0 +1,330 @@
+diff --git a/src/Riok.Mapperly/Descriptors/MappingBuilderContext.cs b/src/Riok.Mapperly/Descriptors/MappingBuilderContext.cs
+index e18a9fd..ab2b006 100644
+--- a/src/Riok.Mapperly/Descriptors/MappingBuilderContext.cs
++++ b/src/Riok.Mapperly/Descriptors/MappingBuilderContext.cs
+@@ -114,6 +114,20 @@ public class MappingBuilderContext : SimpleMappingBuilderContext
+     /// </summary>
+     /// <param name="mappingName">The name of the mapping.</param>
+     /// <returns>The found mapping, or <c>null</c> if none is found.</returns>
++    /// <summary>
++    /// If the provided named mapping is a generic mapping template,
++    /// a concrete mapping for the current source and target types is created.
++    /// Otherwise, the mapping is returned as is.
++    /// </summary>
++    /// <param name="mapping">The named mapping.</param>
++    /// <returns>The concrete mapping or <c>null</c> if the generic mapping cannot be applied to the current types.</returns>
++    public INewInstanceMapping? ConcretizeNamedMapping(INewInstanceMapping mapping) =>
++        MappingBuilder.ConcretizeNamed(mapping, Source, Target);
++
++    /// <inheritdoc cref="ConcretizeNamedMapping(INewInstanceMapping)"/>
++    public IExistingTargetMapping? ConcretizeNamedMapping(IExistingTargetMapping mapping) =>
++        ExistingTargetMappingBuilder.ConcretizeNamed(mapping, Source, Target);
++
+     public virtual INewInstanceMapping? FindNamedMapping(string mappingName)
+     {
+         var mapping = MappingBuilder.FindOrResolveNamed(this, mappingName, out var ambiguousName);
+diff --git a/src/Riok.Mapperly/Descriptors/MappingBuilders/ExistingTargetMappingBuilder.cs b/src/Riok.Mapperly/Descriptors/MappingBuilders/ExistingTargetMappingBuilder.cs
+index 53225a8..bf4c0a4 100644
+--- a/src/Riok.Mapperly/Descriptors/MappingBuilders/ExistingTargetMappingBuilder.cs
++++ b/src/Riok.Mapperly/Descriptors/MappingBuilders/ExistingTargetMappingBuilder.cs
+@@ -1,3 +1,4 @@
++using Microsoft.CodeAnalysis;
+ using Riok.Mapperly.Descriptors.Mappings.ExistingTarget;
+ using Riok.Mapperly.Symbols;
+ 
+@@ -44,6 +45,10 @@ public class ExistingTargetMappingBuilder(MappingCollection mappings, MapperDecl
+         return mappings.FindExistingInstanceNamedMapping(name, out ambiguousName);
+     }
+ 
++    /// <inheritdoc cref="MappingCollection.ConcretizeNamedExistingTargetMapping"/>
++    public IExistingTargetMapping? ConcretizeNamed(IExistingTargetMapping mapping, ITypeSymbol source, ITypeSymbol target) =>
++        mappings.ConcretizeNamedExistingTargetMapping(mapping, source, target);
++
+     public IExistingTargetMapping? Build(MappingBuilderContext ctx, bool resultIsReusable)
+     {
+         foreach (var mappingBuilder in _builders)
+diff --git a/src/Riok.Mapperly/Descriptors/MappingBuilders/MappingBuilder.cs b/src/Riok.Mapperly/Descriptors/MappingBuilders/MappingBuilder.cs
+index e4320dd..0ccbcb9 100644
+--- a/src/Riok.Mapperly/Descriptors/MappingBuilders/MappingBuilder.cs
++++ b/src/Riok.Mapperly/Descriptors/MappingBuilders/MappingBuilder.cs
+@@ -1,3 +1,4 @@
++using Microsoft.CodeAnalysis;
+ using Riok.Mapperly.Descriptors.Mappings;
+ using Riok.Mapperly.Descriptors.Mappings.UserMappings;
+ using Riok.Mapperly.Symbols;
+@@ -63,6 +64,10 @@ public class MappingBuilder(MappingCollection mappings, MapperDeclaration mapper
+         return mappings.FindNamedNewInstanceMapping(name, out ambiguousName);
+     }
+ 
++    /// <inheritdoc cref="MappingCollection.ConcretizeNamedNewInstanceMapping"/>
++    public INewInstanceMapping? ConcretizeNamed(INewInstanceMapping mapping, ITypeSymbol source, ITypeSymbol target) =>
++        mappings.ConcretizeNamedNewInstanceMapping(mapping, source, target);
++
+     public INewInstanceMapping? Build(MappingBuilderContext ctx, bool resultIsReusable)
+     {
+         foreach (var mappingBuilder in _builders)
+diff --git a/src/Riok.Mapperly/Descriptors/MappingBuilders/UseNamedMappingBuilder.cs b/src/Riok.Mapperly/Descriptors/MappingBuilders/UseNamedMappingBuilder.cs
+index a873a56..ab72fda 100644
+--- a/src/Riok.Mapperly/Descriptors/MappingBuilders/UseNamedMappingBuilder.cs
++++ b/src/Riok.Mapperly/Descriptors/MappingBuilders/UseNamedMappingBuilder.cs
+@@ -20,6 +20,20 @@ public static class UseNamedMappingBuilder
+             return null;
+         }
+ 
++        // generic user implemented mappings need to be instantiated for the concrete types
++        var concreteMapping = ctx.ConcretizeNamedMapping(mapping);
++        if (concreteMapping == null)
++        {
++            ctx.ReportDiagnostic(
++                DiagnosticDescriptors.ReferencedMappingSourceTypeMismatch,
++                ctx.MappingKey.Configuration.UseNamedMapping,
++                mapping.SourceType.ToDisplayString(),
++                ctx.Source.ToDisplayString()
++            );
++            return null;
++        }
++
++        mapping = concreteMapping;
+         if (!ctx.ParameterScope.TryUseParameters(mapping))
+         {
+             ctx.ReportDiagnostic(DiagnosticDescriptors.NamedMappingParametersUnsatisfied, ctx.MappingKey.Configuration.UseNamedMapping);
+@@ -55,6 +69,20 @@ public static class UseNamedMappingBuilder
+         if (existingTargetMapping is null)
+             return null;
+ 
++        // generic user implemented mappings need to be instantiated for the concrete types
++        if (ctx.ConcretizeNamedMapping(existingTargetMapping) is not { } concreteExistingTargetMapping)
++        {
++            ctx.ReportDiagnostic(
++                DiagnosticDescriptors.ReferencedMappingSourceTypeMismatch,
++                useNamedMapping,
++                existingTargetMapping.SourceType.ToDisplayString(),
++                ctx.Source.ToDisplayString()
++            );
++            return null;
++        }
++
++        existingTargetMapping = concreteExistingTargetMapping;
++
+         if (!ctx.ParameterScope.TryUseParameters(existingTargetMapping))
+         {
+             ctx.ReportDiagnostic(DiagnosticDescriptors.NamedMappingParametersUnsatisfied, useNamedMapping);
+diff --git a/src/Riok.Mapperly/Descriptors/MappingCollection.cs b/src/Riok.Mapperly/Descriptors/MappingCollection.cs
+index 3f0feea..ae9ce7e 100644
+--- a/src/Riok.Mapperly/Descriptors/MappingCollection.cs
++++ b/src/Riok.Mapperly/Descriptors/MappingCollection.cs
+@@ -103,11 +103,11 @@ public class MappingCollection(GenericTypeChecker genericTypeChecker)
+ 
+         // Generic user-implemented mapping templates are stored separately
+         // and matched lazily during Find operations.
+-        if (userMapping is GenericUserImplementedNewInstanceMethodMapping genericNewInstance)
++        if (userMapping is GenericUserImplementedNewInstanceMethodMapping { IsAutoMatchable: true } genericNewInstance)
+         {
+             _genericNewInstanceTemplates.Add(genericNewInstance);
+         }
+-        else if (userMapping is GenericUserImplementedExistingTargetMethodMapping genericExistingTarget)
++        else if (userMapping is GenericUserImplementedExistingTargetMethodMapping { IsAutoMatchable: true } genericExistingTarget)
+         {
+             _genericExistingTargetTemplates.Add(genericExistingTarget);
+         }
+@@ -182,9 +182,37 @@ public class MappingCollection(GenericTypeChecker genericTypeChecker)
+         _existingTargetMappings.AddNamedUserMapping(name, mapping);
+     }
+ 
++    /// <summary>
++    /// If the provided mapping is a generic user-implemented mapping template,
++    /// tries to create a concrete mapping for the provided types.
++    /// Otherwise the mapping is returned as is.
++    /// </summary>
++    public INewInstanceMapping? ConcretizeNamedNewInstanceMapping(INewInstanceMapping mapping, ITypeSymbol source, ITypeSymbol target)
++    {
++        if (mapping is not GenericUserImplementedNewInstanceMethodMapping template)
++            return mapping;
++
++        return template.TryCreateConcreteMapping(genericTypeChecker, source, target);
++    }
++
++    /// <inheritdoc cref="ConcretizeNamedNewInstanceMapping"/>
++    public IExistingTargetMapping? ConcretizeNamedExistingTargetMapping(
++        IExistingTargetMapping mapping,
++        ITypeSymbol source,
++        ITypeSymbol target
++    )
++    {
++        if (mapping is not GenericUserImplementedExistingTargetMethodMapping template)
++            return mapping;
++
++        return template.TryCreateConcreteMapping(genericTypeChecker, source, target);
++    }
++
+     private INewInstanceMapping? TryMatchGenericNewInstanceTemplate(TypeMappingKey mappingKey)
+     {
+-        if (_genericNewInstanceTemplates.Count == 0)
++        // mappings with an explicitly configured named mapping
++        // need to be resolved by that name and never by a generic template.
++        if (_genericNewInstanceTemplates.Count == 0 || mappingKey.Configuration.UseNamedMapping != null)
+             return null;
+ 
+         foreach (var template in _genericNewInstanceTemplates)
+@@ -202,7 +230,7 @@ public class MappingCollection(GenericTypeChecker genericTypeChecker)
+ 
+     private IExistingTargetMapping? TryMatchGenericExistingTargetTemplate(TypeMappingKey mappingKey)
+     {
+-        if (_genericExistingTargetTemplates.Count == 0)
++        if (_genericExistingTargetTemplates.Count == 0 || mappingKey.Configuration.UseNamedMapping != null)
+             return null;
+ 
+         foreach (var template in _genericExistingTargetTemplates)
+diff --git a/src/Riok.Mapperly/Descriptors/Mappings/UserMappings/GenericUserImplementedExistingTargetMethodMapping.cs b/src/Riok.Mapperly/Descriptors/Mappings/UserMappings/GenericUserImplementedExistingTargetMethodMapping.cs
+index d1654db..6e69a84 100644
+--- a/src/Riok.Mapperly/Descriptors/Mappings/UserMappings/GenericUserImplementedExistingTargetMethodMapping.cs
++++ b/src/Riok.Mapperly/Descriptors/Mappings/UserMappings/GenericUserImplementedExistingTargetMethodMapping.cs
+@@ -17,7 +17,8 @@ internal sealed class GenericUserImplementedExistingTargetMethodMapping(
+     MethodParameter sourceParameter,
+     MethodParameter targetParameter,
+     MethodParameter? referenceHandlerParameter,
+-    bool isExternal
++    bool isExternal,
++    bool? isDefault = null
+ ) : IExistingTargetUserMapping
+ {
+     public ITypeSymbol SourceType => sourceParameter.Type;
+@@ -28,6 +29,14 @@ internal sealed class GenericUserImplementedExistingTargetMethodMapping(
+ 
+     public bool? Default => false;
+ 
++    /// <summary>
++    /// Whether this template can be used to automatically resolve mappings of matching type pairs
++    /// (without being explicitly referenced by name).
++    /// Templates which are explicitly configured as non-default
++    /// (e.g. external methods only referenced via <c>Use</c>) can only be used by name.
++    /// </summary>
++    public bool IsAutoMatchable => isDefault != false;
++
+     public bool IsExternal => isExternal;
+ 
+     public bool IsSynthetic => false;
+diff --git a/src/Riok.Mapperly/Descriptors/Mappings/UserMappings/GenericUserImplementedNewInstanceMethodMapping.cs b/src/Riok.Mapperly/Descriptors/Mappings/UserMappings/GenericUserImplementedNewInstanceMethodMapping.cs
+index 12c66b7..1f9889f 100644
+--- a/src/Riok.Mapperly/Descriptors/Mappings/UserMappings/GenericUserImplementedNewInstanceMethodMapping.cs
++++ b/src/Riok.Mapperly/Descriptors/Mappings/UserMappings/GenericUserImplementedNewInstanceMethodMapping.cs
+@@ -18,7 +18,8 @@ internal sealed class GenericUserImplementedNewInstanceMethodMapping(
+     ITypeSymbol genericTargetType,
+     MethodParameter? referenceHandlerParameter,
+     bool isExternal,
+-    UserImplementedMethodMapping.TargetNullability targetNullability
++    UserImplementedMethodMapping.TargetNullability targetNullability,
++    bool? isDefault = null
+ ) : INewInstanceUserMapping
+ {
+     public ITypeSymbol SourceType => sourceParameter.Type;
+@@ -29,6 +30,14 @@ internal sealed class GenericUserImplementedNewInstanceMethodMapping(
+ 
+     public bool? Default => false;
+ 
++    /// <summary>
++    /// Whether this template can be used to automatically resolve mappings of matching type pairs
++    /// (without being explicitly referenced by name).
++    /// Templates which are explicitly configured as non-default
++    /// (e.g. external methods only referenced via <c>Use</c>) can only be used by name.
++    /// </summary>
++    public bool IsAutoMatchable => isDefault != false;
++
+     public bool IsExternal => isExternal;
+ 
+     public bool IsSynthetic => false;
+diff --git a/src/Riok.Mapperly/Descriptors/UserMethodMappingExtractor.cs b/src/Riok.Mapperly/Descriptors/UserMethodMappingExtractor.cs
+index c6ce3d7..12f08ab 100644
+--- a/src/Riok.Mapperly/Descriptors/UserMethodMappingExtractor.cs
++++ b/src/Riok.Mapperly/Descriptors/UserMethodMappingExtractor.cs
+@@ -245,7 +245,8 @@ public static class UserMethodMappingExtractor
+                 parameters.Source,
+                 targetParam,
+                 parameters.ReferenceHandler,
+-                isExternal
++                isExternal,
++                isDefault
+             );
+         }
+ 
+@@ -257,7 +258,8 @@ public static class UserMethodMappingExtractor
+             targetType,
+             parameters.ReferenceHandler,
+             isExternal,
+-            targetTypeNullability
++            targetTypeNullability,
++            isDefault
+         );
+     }
+ 
+diff --git a/test/Riok.Mapperly.Tests/Mapping/ObjectPropertyUseNamedMappingTest.cs b/test/Riok.Mapperly.Tests/Mapping/ObjectPropertyUseNamedMappingTest.cs
+index 663cbe4..6b447c1 100644
+--- a/test/Riok.Mapperly.Tests/Mapping/ObjectPropertyUseNamedMappingTest.cs
++++ b/test/Riok.Mapperly.Tests/Mapping/ObjectPropertyUseNamedMappingTest.cs
+@@ -705,6 +705,36 @@ public class ObjectPropertyUseNamedMappingTest
+         return TestHelper.VerifyGenerator(source);
+     }
+ 
++    [Fact]
++    public Task ShouldNotUseGenericExternalMappingForPropertiesWithOtherNamedMappings()
++    {
++        var source = TestSourceBuilder.MapperWithBodyAndTypes(
++            """
++            [MapProperty(nameof(A.NullableStr), nameof(B.NullableStr), Use = nameof(@OtherMapper.TrimToNull))]
++            [MapProperty(nameof(A.Str), nameof(B.Str), Use = nameof(@OtherMapper.Trim))]
++            [MapProperty(nameof(A.IntValue), nameof(B.IntValue), Use = nameof(@OtherMapper.Identity))]
++            public static partial B Map(A source);
++
++            [MapProperty(nameof(A.NullableStr), nameof(B.NullableStr), Use = nameof(@OtherMapper.TrimToNull))]
++            [MapProperty(nameof(A.Str), nameof(B.Str), Use = nameof(@OtherMapper.Trim))]
++            [MapProperty(nameof(A.IntValue), nameof(B.IntValue), Use = nameof(@OtherMapper.Identity))]
++            public static partial void Update(A source, [MappingTarget] B target);
++            """,
++            "class A { public string? NullableStr { get; set; } public string Str { get; set; } public int IntValue { get; set; } }",
++            "class B { public string? NullableStr { get; set; } public string Str { get; set; } public int IntValue { get; set; } }",
++            """
++            static class OtherMapper
++            {
++                public static string? TrimToNull(string? input) => string.IsNullOrWhiteSpace(input) ? null : input;
++                public static string Trim(string input) => input.Trim();
++                public static T Identity<T>(T input) => input;
++            }
++            """
++        );
++
++        return TestHelper.VerifyGenerator(source);
++    }
++
+     [Fact]
+     public Task ShouldSupportExternalMappingsWhenAutoUserMappingsDisabled()
+     {
+diff --git a/test/Riok.Mapperly.Tests/_snapshots/ObjectPropertyUseNamedMappingTest.ShouldNotUseGenericExternalMappingForPropertiesWithOtherNamedMappings#Mapper.g.verified.cs b/test/Riok.Mapperly.Tests/_snapshots/ObjectPropertyUseNamedMappingTest.ShouldNotUseGenericExternalMappingForPropertiesWithOtherNamedMappings#Mapper.g.verified.cs
+new file mode 100644
+index 0000000..631f71a
+--- /dev/null
++++ b/test/Riok.Mapperly.Tests/_snapshots/ObjectPropertyUseNamedMappingTest.ShouldNotUseGenericExternalMappingForPropertiesWithOtherNamedMappings#Mapper.g.verified.cs
+@@ -0,0 +1,23 @@
++﻿//HintName: Mapper.g.cs
++// <auto-generated />
++#nullable enable
++public partial class Mapper
++{
++    [global::System.CodeDom.Compiler.GeneratedCode("Riok.Mapperly", "0.0.1.0")]
++    public static partial global::B Map(global::A source)
++    {
++        var target = new global::B();
++        target.NullableStr = global::OtherMapper.TrimToNull(source.NullableStr);
++        target.Str = global::OtherMapper.Trim(source.Str);
++        target.IntValue = global::OtherMapper.Identity<int>(source.IntValue);
++        return target;
++    }
++
++    [global::System.CodeDom.Compiler.GeneratedCode("Riok.Mapperly", "0.0.1.0")]
++    public static partial void Update(global::A source, global::B target)
++    {
++        target.NullableStr = global::OtherMapper.TrimToNull(source.NullableStr);
++        target.Str = global::OtherMapper.Trim(source.Str);
++        target.IntValue = global::OtherMapper.Identity<int>(source.IntValue);
++    }
++}
+\ No newline at end of file

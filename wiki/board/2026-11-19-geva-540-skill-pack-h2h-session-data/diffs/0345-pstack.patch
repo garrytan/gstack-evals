@@ -1,0 +1,98 @@
+diff --git a/Core/Properties/Resources.resx b/Core/Properties/Resources.resx
+index 758e638..be5213d 100644
+--- a/Core/Properties/Resources.resx
++++ b/Core/Properties/Resources.resx
+@@ -338,6 +338,7 @@ Free up space on that device or change your settings to use another location.
+   <data name="KrakenInstanceNameTaken" xml:space="preserve"><value>This instance name is already taken: {0}</value></data>
+   <data name="KrakenNoInstance" xml:space="preserve"><value>No instance with this name or at this path: {0}</value></data>
+   <data name="DirectoryNotEmpty" xml:space="preserve"><value>Directory not empty: {0}</value></data>
++  <data name="DirectoryCopyIntoItself" xml:space="preserve"><value>Cannot copy {1} into {0} because it is inside the folder being copied</value></data>
+   <data name="RelationshipResolverConflictsWith" xml:space="preserve"><value>{0} conflicts with {1}</value></data>
+   <data name="RelationshipResolverConflictingModDescription" xml:space="preserve"><value>{0} (needed for: {1})</value></data>
+   <data name="RelationshipResolverRequiredButResolver" xml:space="preserve"><value>{0} required, but an incompatible version is in the resolver</value></data>
+diff --git a/Core/Utilities.cs b/Core/Utilities.cs
+index 215fc38..815a0f2 100644
+--- a/Core/Utilities.cs
++++ b/Core/Utilities.cs
+@@ -86,6 +86,12 @@ namespace CKAN
+                                          string[] subFolderRelPathsToLeaveEmpty,
+                                          string[] subFolderRelPathsToForbidHardlinks)
+         {
++            if (IsSameOrWithin(destDirPath, sourceDirPath))
++            {
++                throw new PathErrorKraken(destDirPath,
++                                          string.Format(Properties.Resources.DirectoryCopyIntoItself,
++                                                        destDirPath, sourceDirPath));
++            }
+             using (var transaction = CkanTransaction.CreateTransactionScope())
+             {
+                 CopyDirectory(sourceDirPath, destDirPath, new TxFileManager(),
+@@ -201,6 +207,19 @@ namespace CKAN
+                                   SubPaths(d.Name, subFolderRelPathsToForbidHardlinks).ToArray(),
+                                   allowHardLinks && !subFolderRelPathsToForbidHardlinks.Contains(d.Name)));
+ 
++        private static bool IsSameOrWithin(string path, string parent)
++        {
++            var fullPath   = TrimmedFullPath(path);
++            var fullParent = TrimmedFullPath(parent);
++            return fullPath.Equals(fullParent, Platform.PathComparison)
++                || fullPath.StartsWith(fullParent + Path.DirectorySeparatorChar,
++                                       Platform.PathComparison);
++        }
++
++        private static string TrimmedFullPath(string path)
++            => Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar,
++                                              Path.AltDirectorySeparatorChar);
++
+         // Select only paths within subdir, prune prefixes
+         private static IEnumerable<string> SubPaths(string parent, string[] paths)
+             => paths.Where(p => p.StartsWith($"{parent}/", Platform.PathComparison))
+diff --git a/Tests/Core/UtilitiesTests.cs b/Tests/Core/UtilitiesTests.cs
+index 5e4727d..d91c18c 100644
+--- a/Tests/Core/UtilitiesTests.cs
++++ b/Tests/Core/UtilitiesTests.cs
+@@ -106,6 +106,44 @@ namespace Tests.Core
+             }
+         }
+ 
++        [TestCase("RP1"),
++         TestCase("nested/RP1"),
++         TestCase("nested/../RP1/")]
++        public void CopyDirectory_DestInsideSource_ThrowsWithoutCopying(string destRelPath)
++        {
++            using (var dir = new TemporaryDirectory())
++            {
++                string source = dir;
++                File.WriteAllText(Path.Combine(source, "buildID.txt"), "build");
++                var dest = Path.Combine(source, destRelPath);
++
++                Assert.Throws<PathErrorKraken>(() =>
++                    Utilities.CopyDirectory(source, dest,
++                                            Array.Empty<string>(), Array.Empty<string>(),
++                                            Array.Empty<string>(), Array.Empty<string>()));
++                Assert.IsFalse(Directory.Exists(dest));
++            }
++        }
++
++        [Test]
++        public void CopyDirectory_DestIsSiblingWithSourcePrefix_Copies()
++        {
++            using (var dir = new TemporaryDirectory())
++            {
++                string root = dir;
++                var source = Path.Combine(root, "KSP");
++                var dest   = Path.Combine(root, "KSP-RP1");
++                Directory.CreateDirectory(source);
++                File.WriteAllText(Path.Combine(source, "buildID.txt"), "build");
++
++                Utilities.CopyDirectory(source, dest,
++                                        Array.Empty<string>(), Array.Empty<string>(),
++                                        Array.Empty<string>(), Array.Empty<string>());
++
++                Assert.IsTrue(File.Exists(Path.Combine(dest, "buildID.txt")));
++            }
++        }
++
+         private readonly string goodKspDir = TestData.good_ksp_dir();
+     }
+ }

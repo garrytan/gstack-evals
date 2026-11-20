@@ -1,0 +1,70 @@
+diff --git a/libcaf_net/caf/net/abstract_actor_shell.cpp b/libcaf_net/caf/net/abstract_actor_shell.cpp
+index 22cbf81..7956ebd 100644
+--- a/libcaf_net/caf/net/abstract_actor_shell.cpp
++++ b/libcaf_net/caf/net/abstract_actor_shell.cpp
+@@ -27,6 +27,10 @@ abstract_actor_shell::abstract_actor_shell(actor_config& cfg,
+   mailbox_.try_block();
+   resume_ = make_action([this] {
+     for (;;) {
++      // Note: consume_message may call quit(), which closes the mailbox. In
++      //       this case, we must stop reading from the mailbox.
++      if (terminated())
++        return;
+       if (!consume_message() && try_block_mailbox())
+         return;
+     }
+@@ -52,13 +56,14 @@ void abstract_actor_shell::quit(error reason) {
+ // -- mailbox access -----------------------------------------------------------
+ 
+ mailbox_element_ptr abstract_actor_shell::next_message() {
+-  if (!mailbox_.blocked())
++  if (!mailbox_.closed() && !mailbox_.blocked())
+     return mailbox_.pop_front();
+   return nullptr;
+ }
+ 
+ bool abstract_actor_shell::try_block_mailbox() {
+-  return mailbox_.try_block();
++  // A closed mailbox can never receive new messages, so we can stop reading.
++  return mailbox_.closed() || mailbox_.try_block();
+ }
+ 
+ // -- message processing -------------------------------------------------------
+diff --git a/libcaf_net/caf/net/actor_shell.test.cpp b/libcaf_net/caf/net/actor_shell.test.cpp
+index 6270752..225baff 100644
+--- a/libcaf_net/caf/net/actor_shell.test.cpp
++++ b/libcaf_net/caf/net/actor_shell.test.cpp
+@@ -235,4 +235,33 @@ TEST("actor shells can use flows") {
+   check_eq(to_string_view(buf), msg);
+ }
+ 
++TEST("actor shells may call quit from a response handler") {
++  scoped_actor self{sys};
++  auto self_hdl = actor_cast<actor>(self);
++  auto cb = [self_hdl](app_t* app) {
++    app->self->mail(get_atom_v)
++      .request(self_hdl, 10ms)
++      .then([](const std::string&) {},
++            [app, self_hdl](const error& err) {
++              app->self->quit(err);
++              anon_mail(err).send(self_hdl);
++            });
++  };
++  auto& mpx = sys.network_manager().mpx();
++  auto app = app_t::make(actor{self}, cb);
++  auto transport = net::octet_stream::transport::make(fd1, std::move(app));
++  auto mgr = net::socket_manager::make(&mpx, std::move(transport));
++  require(mpx.start(mgr));
++  fd1.id = net::invalid_socket_id;
++  // Receive the handle of the shell and the request, but never respond.
++  self->receive([](actor&) {},
++                after(1s) >> [this] { fail("shell did not send its handle"); });
++  response_promise pending;
++  self->receive([&](get_atom) { pending = self->make_response_promise(); },
++                after(1s) >> [this] { fail("shell did not send a request"); });
++  self->receive(
++    [this](const error& err) { check_eq(err, sec::request_timeout); },
++    after(1s) >> [this] { fail("shell did not report the timeout"); });
++}
++
+ } // WITH_FIXTURE(fixture)

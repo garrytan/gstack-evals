@@ -1,0 +1,159 @@
+#!/usr/bin/env bash
+# GEVA-540 kit (not committed): parks a kept unit's runtime image and tree volume outside the docker store, byte-exact,
+# and restores them. The runtime image goes to the run's own registry by digest; the tree volume goes to a zstd tar
+# whose uncompressed stream digest is recorded and checked on restore. Nothing is rebuilt. Park removes only the tree
+# volume; kit/unit-gc.py removes images once no pending or unparked kept unit can need them.
+#   park-unit.sh park    O|B ID     push, archive, verify, then remove the tree volume
+#   park-unit.sh restore O|B ID     pull by digest, recreate the volume, verify the stream digest
+#   park-unit.sh drop    O|B ID     a restored unit whose work is done: remove the volume and runtime image, keep the archive
+#   park-unit.sh selftest IMAGE     round trip on a scratch volume and a throwaway tag of IMAGE (no unit touched)
+set -euo pipefail
+ACT=${1:?act} CLS=${2:-} ID=${3:-}
+PARK=${H2H_PARK:-$HOME/h2h/park}
+REG=${H2H_REG:-127.0.0.1:5000}
+VOLROOT=/var/lib/docker/volumes
+mkdir -p "$PARK"
+TAROPT=(--sort=name --format=posix --pax-option=exthdr.name=%d/PaxHeaders/%f,delete=atime,delete=ctime --numeric-owner --xattrs --xattrs-include='*' --acls)
+log() { echo "$(date -u +%FT%TZ) park $ACT $CLS $ID: $*" | tee -a "$PARK/park.log" >&2; }
+die() { log "E_PARK $*"; exit 1; }
+lcname() { echo "$1" | tr 'A-Z' 'a-z' | sed 's/[^a-z0-9_.-]/-/g'; }
+jget() { python3 -c 'import json,sys
+d=json.load(open(sys.argv[1]))
+for k in sys.argv[2].split("."): d=(d or {}).get(k)
+print("" if d is None else d)' "$1" "$2"; }
+streamsha() { sudo tar -C "$VOLROOT/$1/_data" "${TAROPT[@]}" -cf - . | sha256sum | cut -d' ' -f1; }
+
+archive_volume() { # vol out.zst -> prints stream sha
+  local vol=$1 out=$2 t; t=$(mktemp -d)
+  mkfifo "$t/f"; sha256sum < "$t/f" | cut -d' ' -f1 > "$t/sha" & local sp=$!
+  sudo nice -n 19 ionice -c3 tar -C "$VOLROOT/$vol/_data" "${TAROPT[@]}" -cf - . | tee "$t/f" | nice -n 19 ionice -c3 zstd -T4 -3 -q -f -o "$out.tmp"
+  wait $sp
+  local a b; a=$(cat "$t/sha"); b=$(zstd -dc "$out.tmp" | sha256sum | cut -d' ' -f1)
+  rm -rf "$t"
+  [ -n "$a" ] && [ "$a" = "$b" ] || die "archive of $vol does not match its stream ($a vs $b)"
+  mv "$out.tmp" "$out"; echo "$a"
+}
+restore_volume() { # vol zst labelsjson stream_sha
+  local vol=$1 zst=$2 labels=$3 want=$4
+  docker volume inspect "$vol" >/dev/null 2>&1 && die "volume $vol already exists"
+  local largs=(); while IFS= read -r l; do [ -n "$l" ] && largs+=(--label "$l"); done < <(python3 -c 'import json,sys;[print(k+"="+v) for k,v in (json.loads(sys.argv[1]) or {}).items()]' "$labels")
+  docker volume create "${largs[@]}" "$vol" >/dev/null
+  zstd -dc "$zst" | sudo tar -C "$VOLROOT/$vol/_data" --numeric-owner --xattrs --xattrs-include='*' --acls --same-owner -xpf -
+  local got; got=$(streamsha "$vol")
+  [ "$got" = "$want" ] || die "restored $vol stream $got, want $want"
+}
+push_image() { # image ref -> prints pushed digest
+  local img=$1 ref=$2 out d repo
+  repo=${ref#$REG/}; repo=${repo%:*}
+  docker tag "$img" "$ref"
+  out=$(docker push "$ref" 2>&1) || die "push $ref failed: $(echo "$out" | tail -2)"
+  d=$(echo "$out" | grep -o 'digest: sha256:[0-9a-f]*' | tail -1 | cut -d' ' -f2)
+  [ -n "$d" ] || die "push $ref printed no digest"
+  curl -sf -o /dev/null -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json, application/vnd.docker.distribution.manifest.list.v2+json' "http://$REG/v2/$repo/manifests/$d" || die "registry has no manifest $d for $ref"
+  echo "$d"
+}
+rm_image() { # id-or-ref: drop every tag and digest name, then the id; never forced
+  local img=$1 names
+  names=$(docker image inspect --format '{{range .RepoTags}}{{.}} {{end}}{{range .RepoDigests}}{{.}} {{end}}' "$img" 2>/dev/null || true)
+  for n in $names; do docker rmi --no-prune "$n" >/dev/null 2>&1 || true; done
+  if docker image inspect "$img" >/dev/null 2>&1; then docker rmi --no-prune "$img" >/dev/null 2>&1 || log "rmi $img refused (in use?)"; fi
+  if docker image inspect "$img" >/dev/null 2>&1; then return 1; fi
+  return 0
+}
+
+if [ "$ACT" = selftest ]; then
+  IMG=$CLS; V=park-selftest-vol; lc=park-selftest
+  docker volume rm "$V" >/dev/null 2>&1 || true
+  docker volume create "$V" --label h2h=selftest >/dev/null
+  sudo sh -c "cd $VOLROOT/$V/_data && mkdir -p a/b && echo hi > a/b/f && ln -s a/b/f l && chmod 640 a/b/f && chown 1001:1002 a/b/f && touch -d '2026-01-02 03:04:05.123456789' a/b/f && dd if=/dev/urandom of=big bs=1M count=8 status=none && (setfacl -m u:1003:r big 2>/dev/null || true)"
+  s1=$(archive_volume "$V" "$PARK/$lc.tree.tar.zst"); m1=$(sudo stat -c '%n %a %u %g %y' "$VOLROOT/$V/_data/a/b/f")
+  docker volume rm "$V" >/dev/null
+  restore_volume "$V" "$PARK/$lc.tree.tar.zst" '{"h2h":"selftest"}' "$s1"
+  m2=$(sudo stat -c '%n %a %u %g %y' "$VOLROOT/$V/_data/a/b/f")
+  [ "$m1" = "$m2" ] || die "selftest metadata differs: $m1 / $m2"
+  docker volume rm "$V" >/dev/null; rm -f "$PARK/$lc.tree.tar.zst"
+  ID0=$(docker image inspect --format '{{.Id}}' "$IMG")
+  d=$(push_image "$ID0" "$REG/park/$lc:rt")
+  docker rmi --no-prune "$REG/park/$lc:rt" >/dev/null
+  log "selftest volume ok (stream $s1, $m2); image id $ID0 pushed as $d"
+  if [ "$d" = "$ID0" ]; then echo "SELFTEST_OK digest_equals_id"; else echo "SELFTEST_DIGEST_DIFFERS id=$ID0 pushed=$d"; fi
+  exit 0
+fi
+
+case $CLS in O) UJ=$HOME/h2h/o/units/$ID/unit.json ;; B) UJ=$HOME/h2h/bw/units/$ID/unit.json ;; *) echo "E_USAGE class O or B" >&2; exit 2 ;; esac
+[ -f "$UJ" ] || die "no unit.json at $UJ"
+lc=$(lcname "$ID"); VOL=sm-tree-$lc; REC=$PARK/$ID.json; ZST=$PARK/$ID.tree.tar.zst
+RT=$(jget "$UJ" image.runtime_id); BASE=$(jget "$UJ" image.image_id); BREF=$(jget "$UJ" image.ref)
+[ -n "$RT" ] || die "unit has no runtime_id"
+
+if [ "$ACT" = park ]; then
+  if [ -f "$REC" ] && grep -q '"state": "parked"' "$REC"; then log "already parked"; exit 0; fi
+  docker image inspect "$RT" >/dev/null 2>&1 || die "runtime $RT not in the local store"
+  docker volume inspect "$VOL" >/dev/null 2>&1 || die "volume $VOL missing"
+  [ -z "$(docker ps -aq --filter volume=$VOL)" ] || die "a container uses $VOL"
+  [ -z "$(docker ps -aq --filter ancestor=$RT)" ] || die "a container uses $RT"
+  tags=$(docker image inspect --format '{{json .RepoTags}}' "$RT" | python3 -c 'import json,sys;print(json.dumps([t for t in (json.load(sys.stdin) or []) if "@" not in t and not t.startswith(sys.argv[1]+"/park/")]))' "$REG")
+  labels=$(docker volume inspect --format '{{json .Labels}}' "$VOL")
+  vbytes=$(sudo du -sb "$VOLROOT/$VOL/_data" | cut -f1)
+  d=$(push_image "$RT" "$REG/park/$lc:rt")
+  [ "$d" = "$RT" ] || die "pushed digest $d is not the runtime id $RT"
+  sha=$(archive_volume "$VOL" "$ZST")
+  zbytes=$(stat -c %s "$ZST")
+  python3 - "$REC" "$ID" "$CLS" "$RT" "$REG/park/$lc@$d" "$tags" "$BREF" "$BASE" "$VOL" "$labels" "$ZST" "$sha" "$vbytes" "$zbytes" <<'EOF'
+import json,sys,datetime,os
+a=sys.argv
+d={"schema":"geva540-park.v1","id":a[2],"class":a[3],"state":"archived","runtime_id":a[4],"registry_ref":a[5],
+ "runtime_tags":json.loads(a[6]) or [],"base_ref":a[7],"base_id":a[8],"volume":a[9],"volume_labels":json.loads(a[10]) or {},
+ "tree_zst":a[11],"tree_stream_sha256":a[12],"volume_bytes":int(a[13]),"zst_bytes":int(a[14]),
+ "archived_at":datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
+json.dump(d,open(a[1]+".tmp","w"),indent=1); os.replace(a[1]+".tmp",a[1])
+EOF
+  docker volume rm "$VOL" >/dev/null || die "volume rm $VOL failed"
+  python3 - "$REC" <<'EOF'
+import json,sys,datetime,os
+p=sys.argv[1]; d=json.load(open(p)); d["state"]="parked"; d["images"]="left for kit/unit-gc.py"
+d["parked_at"]=datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"); json.dump(d,open(p+".tmp","w"),indent=1); os.replace(p+".tmp",p)
+EOF
+  log "parked: volume $vbytes B -> $zbytes B zst, stream $sha; runtime $RT at $REG/park/$lc"
+  echo PARKED
+  exit 0
+fi
+
+if [ "$ACT" = restore ]; then
+  [ -f "$REC" ] || die "no park record"
+  REF=$(jget "$REC" registry_ref); SHA=$(jget "$REC" tree_stream_sha256)
+  LAB=$(python3 -c 'import json,sys;print(json.dumps(json.load(open(sys.argv[1]))["volume_labels"]))' "$REC")
+  if ! docker image inspect "$RT" >/dev/null 2>&1; then
+    docker pull -q "$REF" >/dev/null || die "pull $REF failed"
+    got=$(docker image inspect --format '{{.Id}}' "$REF"); [ "$got" = "$RT" ] || die "pulled $got, want $RT"
+  fi
+  for t in $(python3 -c 'import json,sys;print(" ".join(json.load(open(sys.argv[1]))["runtime_tags"]))' "$REC"); do docker tag "$RT" "$t"; done
+  restore_volume "$VOL" "$(jget "$REC" tree_zst)" "$LAB" "$SHA"
+  python3 - "$REC" <<'EOF'
+import json,sys,datetime,os
+p=sys.argv[1]; d=json.load(open(p)); d["state"]="restored"; d["restored_at"]=datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+json.dump(d,open(p+".tmp","w"),indent=1); os.replace(p+".tmp",p)
+EOF
+  log "restored: runtime $RT, volume $VOL stream $SHA"
+  echo RESTORED
+  exit 0
+fi
+if [ "$ACT" = drop ]; then
+  [ -f "$REC" ] || die "no park record"
+  [ "$(jget "$REC" state)" = restored ] || die "state is $(jget "$REC" state), not restored"
+  Z=$(jget "$REC" tree_zst); [ -s "$Z" ] || die "no archive $Z"
+  [ "$(jget "$REC" runtime_id)" = "$RT" ] || die "the record's runtime is not the unit's $RT"
+  [ -z "$(docker ps -aq --filter volume=$VOL)" ] || die "a container uses $VOL"
+  [ -z "$(docker ps -aq --filter ancestor=$RT)" ] || die "a container uses $RT"
+  docker volume inspect "$VOL" >/dev/null 2>&1 && { docker volume rm "$VOL" >/dev/null || die "volume rm $VOL failed"; }
+  kept=""; rm_image "$RT" || kept=" (runtime image kept: in use or a child image remains)"
+  python3 - "$REC" <<'EOF'
+import json,sys,datetime,os
+p=sys.argv[1]; d=json.load(open(p)); d["state"]="parked"; d.setdefault("drops",[]).append(datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
+json.dump(d,open(p+".tmp","w"),indent=1); os.replace(p+".tmp",p)
+EOF
+  log "dropped: volume $VOL removed, runtime $RT$kept; archive $Z stays"
+  echo DROPPED
+  exit 0
+fi
+echo "E_USAGE park|restore|drop|selftest" >&2; exit 2

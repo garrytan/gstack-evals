@@ -1,0 +1,65 @@
+// GEVA-540 kit (not committed): stage 2's rule for a session whose scoring failed, and the start gate's pressure check,
+// kept apart from stage-run.ts so stage-gap.test.ts drives them without keys.
+// Section 7 step 6 (README line 178): an infra failure gets one rerun, and a second is a gap. A score_error halts the stage
+// the first time it is seen live; once a human clears HALT, the relaunch clears the result and the worker scores the
+// saved tree again (no model call). A score_error after one cleared score_error is written as a gap: the scorer's own
+// record for a session gap (scoreSession's "a session gap passes through" path, so the shape is the scorer's), gap set to
+// the error code, and its stage record. A session that already has a score or a record, the scorer's own gaps included,
+// is never written over.
+import { existsSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { basename, dirname } from "node:path";
+
+export interface Failed { kind: string; code: string; detail?: string }
+export interface Files { result: string; score: string; record: string; session: string }
+type Scorer = (session: any, recordDir: string, unitDir: string) => { score: Record<string, unknown> };
+
+const readJson = (f: string) => JSON.parse(readFileSync(f, "utf8"));
+const writeAtomic = (f: string, x: unknown, mode = 0o644) => {
+  writeFileSync(f + ".tmp", JSON.stringify(x, null, 1) + "\n", { mode });
+  renameSync(f + ".tmp", f);
+};
+
+/** The session's earlier failed results, each moved aside as <result>.<ms> when it was cleared. */
+export const clearedResults = (f: Files): Failed[] =>
+  readdirSync(dirname(f.result)).filter((n) => n.startsWith(basename(f.result) + ".") && /^\d+$/.test(n.slice(basename(f.result).length + 1))).sort().map((n) => readJson(dirname(f.result) + "/" + n));
+
+/** Moves the current result aside as <result>.<ms>, never onto an earlier one. */
+const aside = (f: Files) => {
+  let n = Date.now();
+  while (existsSync(f.result + "." + n)) n++;
+  renameSync(f.result, f.result + "." + n);
+};
+
+/** Moves the current result aside so the session runs (or scores) again; returns what it held. */
+export function clearResult(f: Files): Failed {
+  const r = readJson(f.result);
+  aside(f);
+  return r;
+}
+
+/** What a session whose current result is a score_error gets: "keep" when it already has a score or a record (nothing
+ *  is written over), "gap" when a score_error was cleared before, else "halt" live and "rescore" at a relaunch. */
+export function scoreFailure(f: Files, at: "live" | "relaunch"): "keep" | "gap" | "rescore" | "halt" {
+  if (existsSync(f.record) || existsSync(f.score)) return "keep";
+  if (clearedResults(f).some((r) => r.kind === "score_error")) return "gap";
+  return at === "live" ? "halt" : "rescore";
+}
+
+/** Writes the second score_error as a gap and moves its result aside; returns the stage record. */
+export function writeGap(f: Files, unitDir: string, base: Record<string, unknown>, score: Scorer, endedAt: string): Record<string, unknown> {
+  if (scoreFailure(f, "live") !== "gap") throw new Error("KIT_STAGE_GAP " + f.result + " is not a second score_error on a session with no score and no record");
+  const r = readJson(f.result) as Failed;
+  if (r.kind !== "score_error") throw new Error("KIT_STAGE_GAP " + f.result + " holds a " + r.kind + ", not a score_error");
+  const sess = readJson(f.session);
+  writeAtomic(f.score, score({ ...sess, gap: r.code }, dirname(f.session), unitDir).score, 0o600);
+  const rec = { ...base, ended_at: endedAt, kind: "session", cost_usd: sess.cost_usd, gap: r.code, session_file: f.session, score_file: f.score, detail: "scoring failed a second time (" + String(r.detail ?? r.code).slice(0, 300) + "); section 7 item 6 makes it a gap" };
+  writeAtomic(f.record, rec);
+  aside(f);
+  return rec;
+}
+
+/** The 60-second "some" average from a /proc/pressure file's text; 0 when there is none. */
+export const pressure60 = (text: string | null): number => Number(/some avg10=([0-9.]+) avg60=([0-9.]+)/.exec(text ?? "")?.[2] ?? 0);
+
+/** Whether starts wait: cpu "some" avg60 over cpuMax, or io over ioMax. */
+export const pressureHold = (cpu: string | null, io: string | null, cpuMax: number, ioMax: number): boolean => pressure60(cpu) > cpuMax || pressure60(io) > ioMax;

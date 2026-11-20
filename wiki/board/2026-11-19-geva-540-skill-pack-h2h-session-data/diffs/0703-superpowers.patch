@@ -1,0 +1,82 @@
+diff --git a/src/build_test.cc b/src/build_test.cc
+index 5ba87fa..80a4a52 100644
+--- a/src/build_test.cc
++++ b/src/build_test.cc
+@@ -3793,6 +3793,47 @@ TEST_F(BuildTest, DyndepBuildDiscoverOutputAndDepfileInput) {
+   EXPECT_TRUE(builder_.AlreadyUpToDate());
+ }
+ 
++TEST_F(BuildTest, DyndepReadyImplicitOutputAsDepfileInputOfLaterEdge) {
++  // Verify that when an already-built dyndep file gives an edge an
++  // implicit output that a depfile lists as an input of another edge,
++  // and that input is visited before the dyndep is loaded, the other
++  // edge is still rebuilt when the implicit output is going to change.
++  ASSERT_NO_FATAL_FAILURE(AssertParse(&state_,
++"rule touch\n"
++"  command = touch $out $out.imp\n"
++"rule cp\n"
++"  command = cp $in $out\n"
++"build dd: cp dd-in\n"
++"build tmp: touch || dd\n"
++"  dyndep = dd\n"
++"build out: cp || tmp\n"
++"  depfile = out.d\n"
++));
++  fs_.Create("dd-in",
++"ninja_dyndep_version = 1\n"
++"build tmp | tmp.imp: dyndep\n"
++);
++  fs_.Tick();
++  fs_.Create("dd",
++"ninja_dyndep_version = 1\n"
++"build tmp | tmp.imp: dyndep\n"
++);
++  fs_.Create("tmp.imp", "");
++  fs_.Tick();
++  fs_.Create("out", "");
++  fs_.Create("out.d", "out: tmp.imp\n");
++  // tmp is missing, so its edge will run and update tmp.imp.
++
++  string err;
++  EXPECT_TRUE(builder_.AddTarget("out", &err));
++  ASSERT_EQ("", err);
++  EXPECT_EQ(builder_.Build(&err), ExitSuccess);
++  EXPECT_EQ("", err);
++  ASSERT_EQ(2u, command_runner_.commands_ran_.size());
++  EXPECT_EQ("touch tmp tmp.imp", command_runner_.commands_ran_[0]);
++  EXPECT_EQ("cp  out", command_runner_.commands_ran_[1]);
++}
++
+ TEST_F(BuildTest, DyndepBuildDiscoverNowWantEdge) {
+   // Verify that a dyndep file can be built and loaded to discover
+   // that an edge is actually wanted due to a missing implicit output.
+diff --git a/src/graph.cc b/src/graph.cc
+index 8e6ff69..2c9605e 100644
+--- a/src/graph.cc
++++ b/src/graph.cc
+@@ -168,11 +168,23 @@ bool DependencyScan::RecomputeNodeDirty(Node* node, std::vector<Node*>* stack,
+   validation_nodes->insert(validation_nodes->end(),
+       edge->validations_.begin(), edge->validations_.end());
+ 
+-  // Visit all inputs; we're dirty if any of the inputs are dirty.
++  // Visit all inputs first.  Visiting one input may load a dyndep file
++  // that gives another, already-visited input an in-edge (e.g. a depfile
++  // input that is an implicit output discovered by the dyndep file).
++  // Only after all inputs have been visited can their state be trusted.
++  for (vector<Node*>::iterator i = edge->inputs_.begin();
++       i != edge->inputs_.end(); ++i) {
++    if (!RecomputeNodeDirty(*i, stack, validation_nodes, err))
++      return false;
++  }
++
++  // We're dirty if any of the inputs are dirty.
+   Node* most_recent_input = NULL;
+   for (vector<Node*>::iterator i = edge->inputs_.begin();
+        i != edge->inputs_.end(); ++i) {
+-    // Visit this input.
++    // Visit this input again in case it gained an in-edge from a dyndep
++    // file loaded while visiting a later input.  This is a no-op for
++    // nodes that were fully visited above.
+     if (!RecomputeNodeDirty(*i, stack, validation_nodes, err))
+       return false;
+ 

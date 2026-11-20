@@ -1,0 +1,62 @@
+diff --git a/pkg/utils/utils.go b/pkg/utils/utils.go
+index 72b57f2..e62c679 100644
+--- a/pkg/utils/utils.go
++++ b/pkg/utils/utils.go
+@@ -301,8 +301,16 @@ func SanitizeFilePath(path string, safedir string) (string, error) {
+ 	if normalizedPath != path {
+ 		return "", errors.New("invalid path")
+ 	}
+-	// check if the path is under the safe directory
+-	if !strings.HasPrefix(normalizedPath, safedir) {
++	// check if the path is under the safe directory. A plain string prefix
++	// check is not sufficient: "/packages-extra/evil" has the prefix
++	// "/packages" but is a sibling directory. Use filepath.Rel so that the
++	// comparison respects path-separator boundaries.
++	cleanSafedir := filepath.Clean(safedir)
++	if filepath.IsAbs(normalizedPath) != filepath.IsAbs(cleanSafedir) {
++		return "", fmt.Errorf("path %s is not under the safe directory %s", normalizedPath, safedir)
++	}
++	rel, err := filepath.Rel(cleanSafedir, normalizedPath)
++	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+ 		return "", fmt.Errorf("path %s is not under the safe directory %s", normalizedPath, safedir)
+ 	}
+ 	return normalizedPath, nil
+diff --git a/pkg/utils/utils_test.go b/pkg/utils/utils_test.go
+index be4cf74..b01b332 100644
+--- a/pkg/utils/utils_test.go
++++ b/pkg/utils/utils_test.go
+@@ -250,3 +250,34 @@ func TestDownloadUrl_OverwriteAllowed(t *testing.T) {
+ 		t.Fatalf("mode after overwrite: got %#o, want 0600", mode)
+ 	}
+ }
++
++func TestSanitizeFilePath(t *testing.T) {
++	tests := []struct {
++		name    string
++		path    string
++		safedir string
++		wantErr bool
++	}{
++		{"file inside safe dir", "/packages/foo.zip", "/packages", false},
++		{"nested file inside safe dir", "/packages/ns/name", "/packages", false},
++		{"safe dir with trailing slash", "/packages/foo", "/packages/", false},
++		{"dot-dot-prefixed name inside", "/packages/..foo", "/packages", false},
++		{"sibling dir with shared prefix", "/packages-extra/evil", "/packages", true},
++		{"sibling file with shared prefix", "/packagesevil", "/packages", true},
++		{"parent dir", "/", "/packages", true},
++		{"traversal not normalized", "/packages/../etc/passwd", "/packages", true},
++		{"traversal via join", filepath.Join("/packages", "../packages-extra/evil"), "/packages", true},
++		{"outside entirely", "/etc/passwd", "/packages", true},
++		{"relative path vs absolute safedir", "packages/foo", "/packages", true},
++		{"empty path", "", "/packages", true},
++		{"empty safedir", "/packages/foo", "", true},
++	}
++	for _, tt := range tests {
++		t.Run(tt.name, func(t *testing.T) {
++			_, err := SanitizeFilePath(tt.path, tt.safedir)
++			if (err != nil) != tt.wantErr {
++				t.Fatalf("SanitizeFilePath(%q, %q) err = %v, wantErr %v", tt.path, tt.safedir, err, tt.wantErr)
++			}
++		})
++	}
++}
