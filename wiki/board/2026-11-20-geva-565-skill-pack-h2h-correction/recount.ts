@@ -14,7 +14,7 @@ import { scriptedTurns } from "../../../lanes/outcome-skills/h2h/sessions/turns.
 
 const D = "wiki/board/2026-11-19-geva-540-skill-pack-h2h-session-data";
 interface Sess {
-  session: string; unit: string; arm: string; class: "O" | "B2"; repo: string; lang: Lang; gap: string | null; cost_usd: number;
+  session: string; unit: string; arm: string; class: "O" | "B2"; repo: string; lang: Lang; gap: string | null; cost_usd: number; continuations: number;
   tools: Record<string, number>; skills_launched: string[]; diff: string | null;
   score: { verified: boolean; lines_changed: number; gap: string | null } | null;
 }
@@ -33,6 +33,8 @@ for (const entry of ["bug", "feature"] as const) {
   const base = scriptedTurns("gstack", entry, "<problem statement>", { prereg: p });
   say("   " + entry + ": scripted turns " + one.length + "; turns carrying the sentence " + one.filter((t) => t.includes(p.texts.oneline)).length + "; the first ends with a blank line and the sentence " + one[0]!.endsWith("\n\n" + p.texts.oneline) + "; every turn is gstack's turn plus that ending " + one.every((t, k) => t === base[k] + "\n\n" + p.texts.oneline));
 }
+const oneS = S.filter((s) => s.arm === "gstack-oneline");
+say("   gstack-oneline sessions with a continuation turn: " + oneS.filter((s) => s.continuations > 0).length + " of " + oneS.length);
 say();
 
 let mismatch = 0;
@@ -85,6 +87,8 @@ say("   changed a test file: gstack " + tg.filter((t) => t.files > 0).length + "
 say("   gstack changed one and gstack-oneline did not: " + both.filter((_, k) => tg[k]!.files > 0 && to[k]!.files === 0).length + "; the reverse: " + both.filter((_, k) => tg[k]!.files === 0 && to[k]!.files > 0).length);
 say("   test-file lines changed: gstack " + tg.reduce((a, t) => a + t.lines, 0) + ", gstack-oneline " + to.reduce((a, t) => a + t.lines, 0));
 say("   lines in files outside the conventions whose path holds test, spec, fixture, snapshots/ or expected: gstack " + tg.reduce((a, t) => a + t.loose, 0) + ", gstack-oneline " + to.reduce((a, t) => a + t.loose, 0) + ", in " + both.filter((_, k) => tg[k]!.loose + to[k]!.loose > 0).length + " units");
+const rg = tg.reduce((a, t) => a + t.lines + t.otherLines, 0), ro = to.reduce((a, t) => a + t.lines + t.otherLines, 0);
+say("   raw changed lines, all files in each diff: gstack " + rg + ", gstack-oneline " + ro + " = " + (ro / rg).toFixed(3));
 say("   files changed outside tests: gstack " + tg.reduce((a, t) => a + t.other, 0) + ", gstack-oneline " + to.reduce((a, t) => a + t.other, 0) + "; units where gstack-oneline changed fewer, as many, more: " + both.filter((_, k) => to[k]!.other < tg[k]!.other).length + ", " + both.filter((_, k) => to[k]!.other === tg[k]!.other).length + ", " + both.filter((_, k) => to[k]!.other > tg[k]!.other).length);
 const pairs = both.map((u) => ({ repo: g.get(u)!.repo, x: g.get(u)!.score!.lines_changed, y: o.get(u)!.score!.lines_changed }));
 const lr = logRatio(pairs, p.bootstrap_seed);

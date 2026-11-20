@@ -2,6 +2,7 @@
    sentence: Make the smallest change that fixes the issue, and nothing more.
    bug: scripted turns 1; turns carrying the sentence 1; the first ends with a blank line and the sentence true; every turn is gstack's turn plus that ending true
    feature: scripted turns 1; turns carrying the sentence 1; the first ends with a blank line and the sentence true; every turn is gstack's turn plus that ending true
+   gstack-oneline sessions with a continuation turn: 0 of 100
 
 sessions 1320; sessions.jsonl and score-records.jsonl disagree on verified or lines_changed in 0
 
@@ -21,6 +22,7 @@ sessions 1320; sessions.jsonl and score-records.jsonl disagree on verified or li
    gstack changed one and gstack-oneline did not: 32; the reverse: 0
    test-file lines changed: gstack 1674, gstack-oneline 197
    lines in files outside the conventions whose path holds test, spec, fixture, snapshots/ or expected: gstack 355, gstack-oneline 14, in 6 units
+   raw changed lines, all files in each diff: gstack 3881, gstack-oneline 1247 = 0.321
    files changed outside tests: gstack 104, gstack-oneline 73; units where gstack-oneline changed fewer, as many, more: 18, 34, 1
    non-test lines (scorer's lines_changed), gstack-oneline over gstack:
      geometric mean of paired ratios (preregistered, bootstrap seed 3169101723): 0.440 [0.366, 0.530], n 53, zero pairs left out 0

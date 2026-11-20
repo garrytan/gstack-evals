@@ -17,8 +17,8 @@ links:
   - garrytan/gstack-evals#352
   - lanes/outcome-skills/h2h/sessions/turns.ts
 attachments:
-  - ee2839aeac247526a0c4791b1addec91403f40410c5ae5745be4d40011045ae7  recount.out
-  - 997609458dad17992920b73cd1cb520618e529e910020dabefc7237536b219f1  recount.ts
+  - 1ec4cf2bfd6e7d5dd665e11295952b4f3a8be45448784f48210e8cffaea9cfb8  recount.out
+  - 1c508c0d4b7dd22ed0c6fc131da57d14c1063c97df7a38a05c0de09c510e7498  recount.ts
 ---
 
 # Correction to the skill-pack head-to-head results: where the one sentence went, and what it did
@@ -73,8 +73,8 @@ On the 53 units both gstack and the sentence arm fixed:
 - In 32 units gstack changed a test file and the sentence arm didn't, and never the reverse.
 - The sentence arm changed fewer files outside the test conventions in 18 units, as many in 34 and more in 1. It changed fewer non-test lines in 43 units, as many in 10 and more in none.
 - Line statistics, sentence arm over gstack: the geometric mean of the 53 paired ratios is 0.440, 95% interval 0.366 to 0.530 (the preregistered statistic, repository-clustered bootstrap with the preregistered seed, the page's figure). Total non-test lines give 0.504. The median paired ratio is 0.552.
-- Counting test-file lines too, the sentence arm's whole change was about a third of gstack's (1,189 lines against 3,643), and most of that drop is tests.
-- Some test material sits outside the scorer's conventions and counts as non-test lines on the page: Go `testdata/` files, telegraf's `testcases/` and rust-analyzer's `macro_expansion_tests/`, among others. Changed files whose paths hold test, spec, fixture, snapshots/ or expected, outside the conventions, carry 355 lines in gstack's diffs and 14 in the sentence arm's, in 6 of the 53 units. The scorer also leaves out generated files and in-source test modules that the published records don't name, so only a lower bound is certain: at least 257 of gstack's lines and none of the sentence arm's are in its non-test count. Taking those out, a post hoc check, moves the geometric mean to 0.488 (0.410 to 0.582) and the total to 0.579. So "about half" holds under either rule, and "less than half" holds only on the preregistered statistic with the scorer's rule.
+- Counting raw diff lines in all files, tests included, the sentence arm's whole change was about a third of gstack's (1,247 lines against 3,881, a ratio of 0.32), and most of that drop is tests.
+- Some test material sits outside the scorer's conventions and counts as non-test lines on the page: Go `testdata/` files, telegraf's `testcases/` and rust-analyzer's `macro_expansion_tests/`, among others. Changed files whose paths hold test, spec, fixture, snapshots/ or expected, outside the conventions, carry 355 lines in gstack's diffs and 14 in the sentence arm's, in 6 of the 53 units. The scorer also leaves out generated files and in-source test modules that the published records don't name, so only a lower bound is certain: at least 257 of gstack's lines and none of the sentence arm's are in its non-test count. Taking those out, a post hoc check, moves the geometric mean to 0.488 (0.410 to 0.582) and the total to 0.579. So the typical paired ratio stays about half under either rule (0.44 and 0.49), the total ratio moves from 0.50 to 0.58, and "less than half" holds only on the preregistered statistic with the scorer's rule.
 - Hidden tests: the sentence arm fixed 61 of 100 and gstack 58. 8 units were fixed only with the sentence and 5 only by gstack. The page already says this comparison is not part of the preregistered family.
 - Sessions with the sentence were shorter: 10.4 tool calls on average against gstack's 13.7.
 
