@@ -1,0 +1,48 @@
+1. Where the sentence goes (sessions/turns.ts scriptedTurns, gstack-oneline against gstack)
+   sentence: Make the smallest change that fixes the issue, and nothing more.
+   bug: scripted turns 1; turns carrying the sentence 1; the first ends with a blank line and the sentence true; every turn is gstack's turn plus that ending true
+   feature: scripted turns 1; turns carrying the sentence 1; the first ends with a blank line and the sentence true; every turn is gstack's turn plus that ending true
+
+sessions 1320; sessions.jsonl and score-records.jsonl disagree on verified or lines_changed in 0
+
+2a. O sessions that changed at least one test file, by arm (exploratory, not preregistered)
+   agent-skills    88 of 100
+   gsd             84 of 100
+   gstack          79 of 100
+   gstack-oneline  28 of 100
+   gstack-pony     82 of 100
+   none            79 of 100
+   pstack          86 of 100
+   superpowers     83 of 100
+   tstack          85 of 100
+
+2b. The 53 O units both gstack and gstack-oneline fixed
+   changed a test file: gstack 41, gstack-oneline 9
+   gstack changed one and gstack-oneline did not: 32; the reverse: 0
+   test-file lines changed: gstack 1674, gstack-oneline 197
+   lines in files outside the conventions whose path holds test, spec, fixture, snapshots/ or expected: gstack 355, gstack-oneline 14, in 6 units
+   files changed outside tests: gstack 104, gstack-oneline 73; units where gstack-oneline changed fewer, as many, more: 18, 34, 1
+   non-test lines (scorer's lines_changed), gstack-oneline over gstack:
+     geometric mean of paired ratios (preregistered, bootstrap seed 3169101723): 0.440 [0.366, 0.530], n 53, zero pairs left out 0
+     total lines: 992 over 1969 = 0.504
+     median paired ratio: 0.552; median lines per unit 8 against 19
+     units smaller, equal, larger: 43, 10, 0
+     sensitivity, not preregistered: those looser test-like lines taken out of lines_changed: geometric mean 0.487 [0.406, 0.584], n 51; total 978 over 1648 = 0.593
+   hidden tests passed (verified), 100 O units: gstack 58, gstack-oneline 61; only gstack 5, only gstack-oneline 8
+   mean tool calls per O session: gstack 13.7, gstack-oneline 10.4
+
+3a. Skill tool calls, skills launched and subagent launches (Agent or Task tool), all sessions per arm
+   agent-skills    sessions 160, with a Skill call 88, with a skill launched 88, with a subagent 0
+   gsd             sessions 160, with a Skill call 0, with a skill launched 0, with a subagent 0
+   gstack          sessions 160, with a Skill call 0, with a skill launched 5, with a subagent 0
+   gstack-oneline  sessions 100, with a Skill call 0, with a skill launched 0, with a subagent 0
+   gstack-pony     sessions 100, with a Skill call 0, with a skill launched 0, with a subagent 0
+   none            sessions 160, with a Skill call 0, with a skill launched 0, with a subagent 0
+   pstack          sessions 160, with a Skill call 0, with a skill launched 0, with a subagent 0
+   superpowers     sessions 160, with a Skill call 2, with a skill launched 2, with a subagent 0
+   tstack          sessions 160, with a Skill call 159, with a skill launched 159, with a subagent 0
+   tool names seen in any session: AskUserQuestion, Bash, Edit, Monitor, Read, ScheduleWakeup, Skill, TaskStop, ToolSearch, Write
+
+3b. Cost per verified fix against no pack (every session's dollars over verified fixes, as the page's table), by class
+   O: 5 of 6 packs cost more per verified fix than no pack (gstack, agent-skills, gsd, pstack, tstack); cost less or the same: superpowers
+   B2: 6 of 6 packs cost more per verified fix than no pack (gstack, superpowers, agent-skills, gsd, pstack, tstack); cost less or the same: none

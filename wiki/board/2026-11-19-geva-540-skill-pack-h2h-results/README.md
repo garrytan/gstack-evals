@@ -7,7 +7,7 @@ author: GEVA-540
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
 date: 2026-11-19
-status: done
+status: superseded
 links:
   - 2026-11-15-geva-538-skill-pack-h2h-prereg
   - 2026-11-19-geva-540-skill-pack-h2h-session-data
