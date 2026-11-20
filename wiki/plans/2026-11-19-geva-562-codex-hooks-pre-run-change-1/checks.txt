@@ -44,6 +44,8 @@ c-met  prompt "$review [stub-met] check this branch against main"
        Three requests: the parent's first, the parent's second (it holds the spawn_agent call and Codex's output
        for it, {"task_name":"/root/adversarial"}), and the sub-agent's own. Six rollouts for five sessions and the
        sub-agent. No hook_prompt in any request.  skill-contract.log: event=met skill=gstack-review missing=-.
+       All three requests name model gpt-6.1-sol, the sub-agent's included. Every rollout of check 2, the
+       sub-agent's included, records cli_version 0.170.0 in session_meta and model gpt-6.1-sol in turn_context.
 r-off  gstack-config set skill_routing off: request 1 carries no routing line.
 c-off  gstack-config set skill_contracts off: one request, no hook_prompt, no contract log line.
 Both switches were set back on after. No codex exec wrote an error line. Result: pass.

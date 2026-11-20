@@ -2,7 +2,7 @@
 id: 2026-11-19-geva-562-codex-hooks-pre-run-change-1
 kind: plan
 title: "Pre-run change 1 to the Codex hooks eval: the gstack pin, its keyless checks, the route table and the pilot draw"
-summary: "Pins gstack v1.102.0.0 (a0534ce6) for both parts, records the five keyless checks (all pass), the route table (40 of 60 covered), the pilot tasks, the sleep-tool setting and four host facts."
+summary: "Pins gstack v1.102.0.0 for both parts, with its five keyless checks (all pass), the route table (40 of 60), the pilot tasks, the sleep-tool setting, host facts and each row's model and Codex source."
 author: GEVA-562
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
@@ -14,7 +14,7 @@ links:
   - 2026-11-17-geva-547-delivery-route-prereg
   - GST-3174
 attachments:
-  - 0a759f2dea8ac701e1665ec9bb5c3725a6025df263af5c8f4994cf6fd3034af5  checks.txt
+  - 7291ed67907ff784cba5128fd7b107e3e68289b40ba36d1a92beff6e87bbd419  checks.txt
   - 5dae5c05a32e0c71df273387e7649a239a41341d0a9c99fdd6cf56303e754b25  route-table.tsv
 ---
 
@@ -109,6 +109,17 @@ If either flag fires on more than one c-on or c-high pilot session, the Captain 
 ## 9. What is still open
 
 The harness build (section 12 of the preregistration) starts after this change. The per-arm prompt-input captures named in section 2 come from the arm images at build, because their digests depend on install paths. Nothing is spent before 2026-11-21 06:00 UTC.
+
+## 10. Model and Codex version per session (added 2026-11-20)
+
+Codex CLI 0.171.0, released 2026-11-20, makes GPT-6.2 Sol its default model. This eval doesn't move: every arm runs `gpt-6.1-sol` on Codex 0.170.0, as the preregistration's section 2 says.
+
+- **The model is named, never defaulted.** The shared driver passes `-m <model>` on every `codex exec` (codexArgs in src/adapters/codex/driver.ts), and this eval passes `gpt-6.1-sol` in every arm. A sub-agent inherits it: in check 2's met run the sub-agent's request named `gpt-6.1-sol` (checks.txt).
+- **The CLI is pinned, never latest.** The trial image installs Codex 0.170.0 from npm's linux-x64 tarball, checked by its sha256, the way main's image installs 0.166.0 today (docker/trial.Dockerfile, which tests/adapters/pins.test.ts holds to docker/host-cli.json and package.json). No arm installs `@openai/codex@latest` or an unversioned package.
+- **Rows read the session record, not this plan.** Each session's row takes its model from the request bodies in the proxy's journal and from the rollout's `turn_context`, and its Codex version from the rollout's `session_meta.cli_version`. It never takes them from the plan or from init.json's copy of the driver's arguments. A session whose root thread ran another model, or whose rollout names another Codex version, is an infrastructure gap under the preregistration's section 4.7. The results tables print the models and versions their sessions recorded.
+- **A sub-agent on another model.** Codex 0.170's spawn_agent takes a `model` override. A sub-agent the model starts on another model is listed and counted per arm, and its session stays graded. If any c-on or c-high pilot session does this, the Captain hears it before c-main spends anything.
+
+This section adds one infrastructure-gap case, a session that ran another model or Codex version. It changes no other rule.
 
 ## Disclosures
 
