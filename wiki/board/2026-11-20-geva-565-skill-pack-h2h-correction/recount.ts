@@ -44,21 +44,27 @@ say("sessions " + S.length + "; sessions.jsonl and score-records.jsonl disagree 
 say();
 
 const LOOSE = /test|spec|fixture|snapshots\/|expected/i;
-const testFiles = (s: Sess): { files: number; lines: number; other: number; loose: number } => {
-  if (!s.diff) return { files: 0, lines: 0, other: 0, loose: 0 };
-  let files = 0, n = 0, other = 0, loose = 0;
+const testFiles = (s: Sess): { files: number; lines: number; other: number; otherLines: number; loose: number } => {
+  if (!s.diff) return { files: 0, lines: 0, other: 0, otherLines: 0, loose: 0 };
+  let files = 0, n = 0, other = 0, otherLines = 0, loose = 0;
   for (const f of fileDiffs(readFileSync(join(D, s.diff), "utf8"))) {
     const path = f.newPath ?? f.oldPath ?? "";
+    const k = f.plus.length + f.minus.length;
     if (!isTestPath(s.lang, path, new Set())) {
       other++;
-      if (LOOSE.test(path)) loose += f.plus.length + f.minus.length;
+      otherLines += k;
+      if (LOOSE.test(path)) loose += k;
       continue;
     }
     files++;
-    n += f.plus.length + f.minus.length;
+    n += k;
   }
-  return { files, lines: n, other, loose };
+  return { files, lines: n, other, otherLines, loose };
 };
+// The test-like lines the scorer must have counted in lines_changed. The scorer also leaves out generated files, lockfiles
+// and in-source test modules, which the published records don't name, so at most (otherLines - lines_changed) of the loose
+// lines were already left out. Subtracting only the rest never removes a line the scorer didn't count.
+const countedLoose = (t: { otherLines: number; loose: number }, linesChanged: number) => Math.max(0, t.loose - Math.max(0, t.otherLines - linesChanged));
 
 const O = S.filter((s) => s.class === "O");
 const arms = [...new Set(S.map((s) => s.arm))].sort();
@@ -90,9 +96,12 @@ say("     geometric mean of paired ratios (preregistered, bootstrap seed " + p.b
 say("     total lines: " + sy + " over " + sx + " = " + (sy / sx).toFixed(3));
 say("     median paired ratio: " + med(ratios).toFixed(3) + "; median lines per unit " + med(pairs.map((q) => q.y).sort((a, b) => a - b)) + " against " + med(pairs.map((q) => q.x).sort((a, b) => a - b)));
 say("     units smaller, equal, larger: " + pairs.filter((q) => q.y < q.x).length + ", " + pairs.filter((q) => q.y === q.x).length + ", " + pairs.filter((q) => q.y > q.x).length);
-const strictPairs = both.map((u, k) => ({ repo: g.get(u)!.repo, x: Math.max(0, g.get(u)!.score!.lines_changed - tg[k]!.loose), y: Math.max(0, o.get(u)!.score!.lines_changed - to[k]!.loose) }));
+const gl = (u: string) => g.get(u)!.score!.lines_changed, ol = (u: string) => o.get(u)!.score!.lines_changed;
+const strictPairs = both.map((u, k) => ({ repo: g.get(u)!.repo, x: gl(u) - countedLoose(tg[k]!, gl(u)), y: ol(u) - countedLoose(to[k]!, ol(u)) }));
+say("     sessions whose non-test diff lines equal the scorer's lines_changed: " + both.filter((u, k) => tg[k]!.otherLines === gl(u)).length + " of " + both.length + " gstack, " + both.filter((u, k) => to[k]!.otherLines === ol(u)).length + " of " + both.length + " gstack-oneline");
+say("     test-like lines the scorer counted (lower bound): gstack " + both.reduce((a, u, k) => a + countedLoose(tg[k]!, gl(u)), 0) + ", gstack-oneline " + both.reduce((a, u, k) => a + countedLoose(to[k]!, ol(u)), 0));
 const lrs = logRatio(strictPairs, p.bootstrap_seed);
-say("     sensitivity, not preregistered: those looser test-like lines taken out of lines_changed: geometric mean " + lrs.ratio!.toFixed(3) + " [" + lrs.ci95![0].toFixed(3) + ", " + lrs.ci95![1].toFixed(3) + "], n " + lrs.n + "; total " + strictPairs.reduce((a, q) => a + q.y, 0) + " over " + strictPairs.reduce((a, q) => a + q.x, 0) + " = " + (strictPairs.reduce((a, q) => a + q.y, 0) / strictPairs.reduce((a, q) => a + q.x, 0)).toFixed(3));
+say("     sensitivity, not preregistered: those counted test-like lines taken out of lines_changed: geometric mean " + lrs.ratio!.toFixed(3) + " [" + lrs.ci95![0].toFixed(3) + ", " + lrs.ci95![1].toFixed(3) + "], n " + lrs.n + "; total " + strictPairs.reduce((a, q) => a + q.y, 0) + " over " + strictPairs.reduce((a, q) => a + q.x, 0) + " = " + (strictPairs.reduce((a, q) => a + q.y, 0) / strictPairs.reduce((a, q) => a + q.x, 0)).toFixed(3));
 const units = [...g.keys()].filter((u) => o.has(u));
 const vg = units.filter((u) => g.get(u)!.score?.verified).length, vo = units.filter((u) => o.get(u)!.score?.verified).length;
 say("   hidden tests passed (verified), 100 O units: gstack " + vg + ", gstack-oneline " + vo + "; only gstack " + units.filter((u) => g.get(u)!.score?.verified && !o.get(u)!.score?.verified).length + ", only gstack-oneline " + units.filter((u) => !g.get(u)!.score?.verified && o.get(u)!.score?.verified).length);

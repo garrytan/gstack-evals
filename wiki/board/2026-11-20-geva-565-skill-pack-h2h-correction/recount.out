@@ -27,7 +27,9 @@ sessions 1320; sessions.jsonl and score-records.jsonl disagree on verified or li
      total lines: 992 over 1969 = 0.504
      median paired ratio: 0.552; median lines per unit 8 against 19
      units smaller, equal, larger: 43, 10, 0
-     sensitivity, not preregistered: those looser test-like lines taken out of lines_changed: geometric mean 0.487 [0.406, 0.584], n 51; total 978 over 1648 = 0.593
+     sessions whose non-test diff lines equal the scorer's lines_changed: 47 of 53 gstack, 50 of 53 gstack-oneline
+     test-like lines the scorer counted (lower bound): gstack 257, gstack-oneline 0
+     sensitivity, not preregistered: those counted test-like lines taken out of lines_changed: geometric mean 0.488 [0.410, 0.582], n 53; total 992 over 1712 = 0.579
    hidden tests passed (verified), 100 O units: gstack 58, gstack-oneline 61; only gstack 5, only gstack-oneline 8
    mean tool calls per O session: gstack 13.7, gstack-oneline 10.4
 
