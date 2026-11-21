@@ -1,0 +1,11 @@
+part, class, n | strictest Holm step | MDD at discordant 0.2 | 0.3 | 0.4
+S, O, 100 | 0.05/10 | 18 | 22 | 26
+S, B, 60 | 0.05/10 | none fits | 27 | 32
+P, O, 100 | 0.05/12 | 18 | 22 | 26
+P, B, 60 | 0.05/12 | none fits | 28 | 33
+L, 100 | 0.05/3 | 16 | 20 | 23
+no-harm pass probability | n | discordant share | true 0 points | true -5 points | true -10 points
+no-harm | 100 | 0.2 | 0.85 | 0.50 | 0.15
+no-harm | 100 | 0.3 | 0.80 | 0.50 | 0.20
+no-harm | 100 | 0.5 | 0.74 | 0.50 | 0.26
+no-harm | 60 | 0.2 | 0.79 | 0.50 | 0.21
