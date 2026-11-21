@@ -47,7 +47,7 @@ describe("cso cli", () => {
     expect(r.out.match(/^PASS ledger lease /gm)?.length).toBe(Object.keys(p.items).length);
     expect(r.out).toContain("nothing ran");
   });
-  test("rerun refuses a bad arm, an arm that never runs on the model, a bad units file, and a real run with no runner", async () => {
+  test("rerun refuses a bad arm, an arm that never runs on the model, a bad units file, and a real run with no driver set", async () => {
     const u = unitsFile(["a"]);
     expect((await capture(() => main(["rerun", "--arm", "gstack", "--model", "opus", "--units", u, "--spend-cap", "5"]))).err).toMatch(/^E_USAGE /);
     const untold = await capture(() => main(["rerun", "--arm", "untold", "--model", "particle", "--units", u, "--spend-cap", "5", "--dry-run"]));
@@ -56,7 +56,10 @@ describe("cso cli", () => {
     expect((await capture(() => main(["rerun", "--arm", "none", "--model", "opus", "--units", unitsFile({ units: [] }), "--spend-cap", "5"]))).code).toBe(3);
     const real = await capture(() => main(["rerun", "--arm", "none", "--model", "opus", "--units", u, "--spend-cap", "5"]));
     expect(real.code).toBe(3);
-    expect(real.err).toMatch(/^E_CSO_RERUN_UNWIRED /);
+    expect(real.err).toMatch(/^E_CSO_RERUN_PRECONDITION CSO_CONTROL is not set/);
+    const sol = await capture(() => main(["rerun", "--arm", "none", "--model", "sol", "--units", u, "--spend-cap", "50"]));
+    expect(sol.code).toBe(3);
+    expect(sol.err).toMatch(/^E_CSO_RERUN_PRECONDITION /);
   });
   test("a wired runner stops before the session whose allowance would pass the cap", async () => {
     const ran: string[] = [];

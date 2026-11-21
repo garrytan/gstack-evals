@@ -1,12 +1,13 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // Plan section 8 (harness plan 15.4): did /cso run? Frozen detectors over one session's transcripts, read against the
 // pinned helper's real output (gstack 5afef04, lib/cso/cli.ts): start prints the RunReportV3 JSON (runId
-// "<13 digits>-<16 hex>", source.root), inspect prints { report, manifest } whose entries pair each path with its pathId,
-// read prints the file, submit prints { runId, findings, completeness }, finish prints { runId, status, completeness },
+// "<13 digits>-<16 hex>", source.root), inspect prints { report, manifest } whose entries carry their plain path, or the
+// path's handle with a displayPath when the helper redacted the path, and never a pathId, read prints the file, submit prints { runId, findings, completeness }, finish prints { runId, status, completeness },
 // and a refusal prints {"ok":false,"error":{code,message}} on stderr with exit 1. Loaded: the /cso command block or the
 // cso skill's base-directory marker. Procedure ran: a start through gstack-cso-launcher returned a run id, an inspect or
 // read used that run, and a finish on it ran. Also read: completeness, findings submitted, tooling errors (a failed
 // launcher call with no helper refusal), host file reads after start, and the helper records (snapshot root and handles).
+import { createHash } from "node:crypto";
 import { events, type Ev } from "../h2h/sessions/exposure.ts";
 import type { Exposure, HelperRecords } from "./types.ts";
 
@@ -14,6 +15,10 @@ type Rec = Record<string, any>;
 export const LAUNCHER = /gstack-cso-launcher(?:\.exe)?['"]?\s+([a-z][a-z0-9-]*)((?:\s+[^\s;&|]+)*)/;
 export const RUN_ID = /\b\d{13}-[0-9a-f]{16}\b/;
 export const HANDLE = (pathId: string): string => "@cso-path//" + pathId;
+/** The pinned helper's path id for one tree-relative path (contracts.ts snapshotPathId): the first 32 hex of the sha256 of
+ *  its canonical { kind: "cso-path-v3", path }. It hashes only the relative path, so the unit's tree resolves it. */
+export const pathId = (path: string): string => createHash("sha256").update('{"kind":"cso-path-v3","path":' + JSON.stringify(path) + "}").digest("hex").slice(0, 32);
+const PRINTED = /@cso-path\/\/([a-f0-9]{32})/g;
 const COMMAND_BLOCK = /<command-name>\/?cso<\/command-name>/;
 const BASE_DIR = /Base directory for this skill:\s*\S*\/cso\/?(\s|$)/;
 const HELPER_REFUSAL = /"ok"\s*:\s*false\s*,\s*"error"\s*:\s*\{\s*"code"/;
@@ -54,8 +59,9 @@ const COMPLETENESS: Record<string, Exposure["completeness"]> = { complete: "comp
 /** Whether the cso skill body expanded in the session. */
 export const loaded = (evs: readonly Ev[]): boolean => evs.some((e) => (e.kind === "context" || e.kind === "tool_result") && (COMMAND_BLOCK.test(e.text) || BASE_DIR.test(e.text)));
 
-/** Section 8's exposure and the helper records from one session's events (both transcripts, read in order). */
-export function csoExposure(records: readonly Rec[]): { exposure: Exposure; helper: HelperRecords } {
+/** Section 8's exposure and the helper records from one session's events (both transcripts, read in order). A handle
+ *  the helper printed is recorded under the tree path whose id it carries; one that names no path in tree stays unrecorded. */
+export function csoExposure(records: readonly Rec[], tree: readonly string[] = []): { exposure: Exposure; helper: HelperRecords } {
   const evs = events(records as Rec[]);
   const calls = helperCalls(evs);
   const start = calls.find((c) => c.op === "start" && !c.error && RUN_ID.test(String(helperJson(c.out)?.runId ?? "")));
@@ -68,11 +74,12 @@ export function csoExposure(records: readonly Rec[]): { exposure: Exposure; help
   const helper: HelperRecords = { snapshot_root: null, handles: {} };
   const root = start ? helperJson(start.out)?.source?.root : undefined;
   if (typeof root === "string" && root) helper.snapshot_root = root;
+  const ids = new Map(tree.map((p) => [pathId(p), p]));
   for (const c of calls) {
-    if (c.error || (c.op !== "inspect" && c.op !== "start" && c.op !== "read")) continue;
+    if (c.error) continue;
+    for (const m of c.out.matchAll(PRINTED)) if (ids.has(m[1]!)) helper.handles[m[0]] = ids.get(m[1]!)!;
+    if (c.op !== "inspect" && c.op !== "start") continue;
     const j = helperJson(c.out);
-    const entries = (j?.manifest?.entries ?? []) as Rec[];
-    for (const en of entries) if (typeof en?.pathId === "string" && /^[a-f0-9]{32}$/.test(en.pathId) && typeof en.path === "string" && !en.path.startsWith("@cso-path//")) helper.handles[HANDLE(en.pathId)] = en.path;
     if (!helper.snapshot_root && typeof j?.manifest?.root === "string") helper.snapshot_root = j.manifest.root;
   }
   const hostReads = start ? evs.filter((e) => e.at > start.at && e.kind === "tool_use" && (HOST_READ_TOOLS.has(e.name!) || (e.name === "Bash" && typeof e.input?.command === "string" && !LAUNCHER.test(e.input.command) && SHELL_READ.test(e.input.command)))).length : 0;

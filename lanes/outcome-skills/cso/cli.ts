@@ -17,6 +17,7 @@ import { readItem } from "../../../src/runner/ledger/record.ts";
 import { HOME_CHECKED } from "../statemachines/image.ts";
 import { everyCellDrops, verifyArm, type CsoArmRecord } from "./arms.ts";
 import { CsoError, csoFail, loadCsoPrereg, type CsoPrereg } from "./prereg.ts";
+import { csoRunner } from "./rerunner.ts";
 import { armRuns, csoLimits } from "./sessions.ts";
 import type { CsoArm, CsoModel, UnitRecord } from "./types.ts";
 import { csoCandidates, cveIds, readAdvisory, repoAdvisoriesFromDb, unitAffected, type FetchText } from "./units/advisory.ts";
@@ -88,8 +89,11 @@ export function ledgerDryRun(p: CsoPrereg, dir = mkdtempSync(join(tmpdir(), "cso
 
 const RERUN_HELP = "Usage: gstack-evals cso rerun --arm <none|cso|untold> --model <opus|particle|sol> --units <file> --spend-cap <usd> [--dry-run]\nRuns one arm on every unit in the file under the spend cap. --dry-run checks the arm, model and units, prints the most the\nrun could spend at the session allowance, opens and settles one ledger lease per frozen item on a temporary ledger, and\nruns nothing. Exits: 0 done, 2 usage, 3 refused precondition, 10 cap stop.";
 
-/** The session runner rerun drives; none is wired yet (E_CSO_RERUN_UNWIRED). */
-export interface CsoRunner { run(o: { arm: CsoArm; model: CsoModel; unit: string; allowance_usd: number; cap_left_usd: number }): Promise<{ cost_usd: number }> }
+/** The session runner rerun drives (rerunner.ts csoRunner); preflight refuses before the first session. */
+export interface CsoRunner {
+  preflight?(o: { arm: CsoArm; model: CsoModel }): void;
+  run(o: { arm: CsoArm; model: CsoModel; unit: string; allowance_usd: number; cap_left_usd: number }): Promise<{ cost_usd: number }>;
+}
 
 export async function rerun(argv: string[], runner: CsoRunner | null = null): Promise<number> {
   const f = flags(argv, ["--arm", "--model", "--units", "--spend-cap"], ["--dry-run"], RERUN_HELP);
@@ -112,6 +116,7 @@ export async function rerun(argv: string[], runner: CsoRunner | null = null): Pr
     return d.checks.every((c) => c.ok) ? 0 : 1;
   }
   if (!runner) return csoFail("E_CSO_RERUN_UNWIRED", "no session runner is wired into gstack-evals cso rerun yet; --dry-run checks the plumbing");
+  runner.preflight?.({ arm, model });
   let spent = 0;
   for (const unit of ids) {
     if (spent + allowance > cap) csoFail("E_CSO_CAP_STOP", "spent $" + spent.toFixed(2) + " of $" + cap.toFixed(2) + "; the next session (" + unit + ") could spend its $" + allowance + " allowance");
@@ -202,7 +207,7 @@ async function preflight(argv: string[]): Promise<number> {
   return res.filled ? 0 : 1;
 }
 
-export const COMMANDS: Record<string, Command> = { units, draw: drawCmd, rerun: (a) => rerun(a, null), preflight, ...JUDGE_COMMANDS };
+export const COMMANDS: Record<string, Command> = { units, draw: drawCmd, rerun: (a) => rerun(a, csoRunner()), preflight, ...JUDGE_COMMANDS };
 
 /** A refusal as lines that each start with the code, then its fix and docs anchor. */
 export function refusal(e: unknown): { code: string; text: string } {

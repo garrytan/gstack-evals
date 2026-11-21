@@ -162,12 +162,13 @@ export function sessionIdentity(records: readonly Rec[]): { model_id: string; ha
   return csoFail("E_CSO_SESSION", "the transcript holds no init record with the model and Claude Code version");
 }
 
-/** One session's record from its last attempt's summary and transcript. Spend and tokens are summed over attempts. */
+/** One session's record from its last attempt's summary and transcript. Spend and tokens are summed over attempts. An
+ *  attempt that left no transcript (an infra gap) reports no model id or harness version, so both are empty. */
 export function csoSessionRecord(o: {
   unit: string; arm: CsoArm; model: CsoModel; stage: CsoStage; attempts: 1 | 2; end: EndRead; summary: Rec | null; records: readonly Rec[]; repoDir: string;
   exposure: Exposure; helper: HelperRecords; usage: Array<{ spent_micros: number; tokens: SessionRecord["tokens"] }>; wall_sec: number;
 }): SessionRecord {
-  const id = sessionIdentity(o.records);
+  const id = o.records.length ? sessionIdentity(o.records) : { model_id: "", harness_version: "" };
   const sum = (k: keyof SessionRecord["tokens"]) => o.usage.reduce((n, u) => n + u.tokens[k], 0);
   return {
     schema: "cso-session.v1", unit: o.unit, arm: o.arm, model: o.model, stage: o.stage, model_id: id.model_id, harness: o.model === "sol" ? "codex" : "claude-code", harness_version: id.harness_version,

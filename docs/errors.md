@@ -472,6 +472,8 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_CSO_GAP_INFRA](#e_cso_gap_infra) | 2 | U20 |
 | [E_CSO_RERUN_PRECONDITION](#e_cso_rerun_precondition) | 2 | U20 |
 | [E_CSO_RERUN_UNWIRED](#e_cso_rerun_unwired) | 2 | U20 |
+| [E_CSO_FINALIZE_HALT](#e_cso_finalize_halt) | 2 | U20 |
+| [E_CSO_E2E_FAIL](#e_cso_e2e_fail) | 2 | U20 |
 | [E_CSO_SCAN](#e_cso_scan) | 2 | U20 |
 | [E_CSO_DROP_INSTALL_ID](#e_cso_drop_install_id) | 2 | U20 |
 | [E_CSO_DROP_INSTALL_DEP](#e_cso_drop_install_dep) | 2 | U20 |
@@ -3697,6 +3699,22 @@ gstack-evals cso rerun has no session runner wired yet, so only --dry-run works.
 Fix: Wire the Harbor session runner into lanes/outcome-skills/cso/cli.ts before a real run; until then use --dry-run.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_CSO_FINALIZE_HALT
+
+A /cso eval session closed with its metering proxy's finalize failed, or its attempt opened a slot and left no summary, so its allowance stops and spend are unknown. The driver halts the item: nothing more opens on it, and the session gets no retry and no record.
+
+Fix: Bring the proxy journal the message names to the Captain. Once the Captain rules on the session, relaunch the driver with --lift-halt &lt;session>.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_E2E_FAIL
+
+A line of the /cso lane's keyless end-to-end run printed FAIL: on a fixture tree in Harbor containers against a fake provider, a session did not end completed with DONE, its slot did not close finalized, a runtime was not on PATH, its record lacks the reported model or Claude Code version, its exposure read wrong for its arm, or the driver did not stop clean.
+
+Fix: Read the FAIL line and the session dir it names, fix the cause, and run the end-to-end run again before any spend.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
 
 ### E_CSO_SCAN
 
