@@ -13,10 +13,12 @@ import { recordPath } from "../../lanes/outcome-skills/h2h/arms/layer.ts";
 import { codexExposure, readCodexEvents } from "../../lanes/outcome-skills/h2h/ext/exposure.ts";
 import type { LookStop } from "../../lanes/outcome-skills/h2h/ext/look.ts";
 import type { ExtPlanned } from "../../lanes/outcome-skills/h2h/ext/plan.ts";
+import { analyzeExt, type ExtScore, type ExtSession, type ExtTests } from "../../lanes/outcome-skills/h2h/ext/analysis.ts";
 import { readExtPrereg } from "../../lanes/outcome-skills/h2h/ext/prereg.ts";
 import { runExtStage, type ExtRunnerDeps } from "../../lanes/outcome-skills/h2h/ext/runner.ts";
 import { checkExtHome, extClaudeConfig, extClaudeRunCopy, extHome, firstInput, rolloutVersion, runExtSession, type ExtHome, type ExtSessionInput, type ExtSessionRecord } from "../../lanes/outcome-skills/h2h/ext/session.ts";
 import { extTests } from "../../lanes/outcome-skills/h2h/ext/tests.ts";
+import { readRecords } from "../../lanes/outcome-skills/h2h/analysis/commands.ts";
 import { readPrereg } from "../../lanes/outcome-skills/h2h/prereg.ts";
 import { scoreSession } from "../../lanes/outcome-skills/h2h/score/score.ts";
 import type { ArmInstall, H2hScore, H2hUnit } from "../../lanes/outcome-skills/h2h/types.ts";
@@ -245,7 +247,7 @@ describe("x-run's stage runner", () => {
     writeFileSync(recordPath(join(lHomes, h)), JSON.stringify({ schema: "h2hx-arm-install.v1", home: h, exit: 0, home_tree_sha256: homeTreeSha256(join(lHomes, h)), sources: [{ name: "gstack", repo: X.gstack.L.repo, sha: X.gstack.L.sha, kind: "clone" }] }));
   }
   const env = { H2H_CONTROL: "http://127.0.0.1:9", H2H_PROXY: "http://127.0.0.1:9", H2H_UNITS: W, H2HX_L_HOMES: lHomes };
-  type Plant = { cost?: (arm: string) => number; gap?: (arm: string) => string | null; stop?: LookStop; looks?: number[] };
+  type Plant = { cost?: (arm: string) => number; gap?: (arm: string) => string | null; stop?: LookStop; looks?: number[]; capAt?: number };
   const deps = (log: string[], hit: string | null = null, p: Plant = {}): ExtRunnerDeps => ({
     unit: (id, u) => ({ dir: join(W, id), input: { ...unitInput, unit: u } }),
     home: (arm, installs) => {
@@ -263,8 +265,10 @@ describe("x-run's stage runner", () => {
     session: async (i) => {
       log.push(i.session.index + " " + i.session.arm + " " + i.home.pin);
       mkdirSync(i.out, { recursive: true });
-      const record = { schema: "h2h-session.v1", unit: i.session.unit, arm: i.session.arm, stage: i.session.stage, index: i.session.index, end: "completed", gap: p.gap?.(i.session.arm) ?? null, cost_usd: p.cost?.(i.session.arm) ?? 0.5 } as unknown as ExtSessionRecord;
+      const cap = p.capAt === i.session.index;
+      const record = { schema: "h2h-session.v1", unit: i.session.unit, arm: i.session.arm, stage: i.session.stage, index: i.session.index, end: cap ? "cap_stop" : "completed", gap: cap ? "CAP_STOP" : (p.gap?.(i.session.arm) ?? null), cost_usd: p.cost?.(i.session.arm) ?? 0.5, wall_ms: 1000, continuations: 0, questions: 0, exposure: null, tokens: { input: 0, output: 0, cache_read: 0, cache_write: 0 } } as unknown as ExtSessionRecord;
       writeFileSync(join(i.out, "session.json"), JSON.stringify(record));
+      if (cap) throw new Error("CAP_STOP " + i.session.unit + "/" + i.session.arm + " stopped at the cap");
       return { record, file: join(i.out, "session.json") };
     },
     score: (r) => ({ score: { schema: "h2h-score.v1", unit: r.unit, arm: r.arm, stage: r.stage, gap: r.gap, verified: r.gap === null } as unknown as H2hScore, warnings: [], main: null, candidates: [] }),
@@ -298,6 +302,28 @@ describe("x-run's stage runner", () => {
     expect(JSON.parse(readFileSync(join(out, "left-out.json"), "utf8")).arms).toEqual([{ arm: "l-gstack-md", settled_usd: X.pilot_caps_usd["l-gstack-md"]! + 1, sessions_run: 1, cap_usd: X.pilot_caps_usd["l-gstack-md"] }]);
     const again = await runExtStage({ part: "L", stage: "stage1", units, out, env, deps: deps(log, null, plant), log: () => {} });
     expect(again).toMatchObject({ ran: 0, kept: 7, left_out: ["l-gstack-md"] });
+  });
+
+  test("a session that stops at the cap and throws leaves no score, and x-analyze over the stage's out dir still reads the part incomplete", async () => {
+    const s2 = units.map((u) => ({ ...u, stage: "stage2" as const }));
+    const read = (out: string) => ({ units: s2, stage: "stage2" as const, sessions: readRecords<ExtSession>(out, "h2h-session.v1"), scores: readRecords<ExtScore>(out, "h2h-score.v1"), tests: readRecords<ExtTests>(out, "h2hx-tests.v1") });
+    const clean = await runExtStage({ part: "L", stage: "stage2", units: s2, out: join(W, "stage-cap-clean"), env, deps: deps([]), log: () => {} });
+    expect(clean).toMatchObject({ ran: clean.plan.sessions.length, stopped: null });
+    const ok = analyzeExt("L", read(join(W, "stage-cap-clean")), { x: X, base: BASE });
+    expect(ok.cap_stop).toBe(false);
+    expect(ok.sentence.some((s) => s.reading !== "incomplete")).toBe(true);
+    const last = clean.plan.sessions.at(-1)!;
+    const out = join(W, "stage-cap-stop");
+    await expect(runExtStage({ part: "L", stage: "stage2", units: s2, out, env, deps: deps([], null, { capAt: last.index }), log: () => {} })).rejects.toThrow(/^CAP_STOP /);
+    const dir = join(out, String(last.index).padStart(4, "0") + "-" + last.unit + "-" + last.arm);
+    expect(existsSync(join(dir, "session.json"))).toBe(true);
+    expect(existsSync(join(dir, "score.json"))).toBe(false);
+    const i = read(out);
+    expect(i.scores).toHaveLength(i.sessions.length - 1);
+    const a = analyzeExt("L", i, { x: X, base: BASE });
+    expect(a.cap_stop).toBe(true);
+    expect(a.sentence.every((s) => s.reading === "incomplete")).toBe(true);
+    expect(a.rows).toEqual(["Part L incomplete: a session stopped at the cap, and the part is not retried"]);
   });
 
   test("parts P and L's stage 2 stop once a cell's gaps pass the incomplete share of its planned sessions", async () => {

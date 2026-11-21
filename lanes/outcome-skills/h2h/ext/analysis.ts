@@ -60,7 +60,7 @@ export class ExtData {
     add(i.scores, this.scores, "h2h-score.v1", "score");
     add(i.sessions, this.sessions, "h2h-session.v1", "session");
     add(i.tests, this.tested, "h2hx-tests.v1", "tests-added");
-    this.capStop = [...this.scores.values()].some((s) => s.gap === "CAP_STOP");
+    this.capStop = [...this.sessions.values()].some((s) => s.end === "cap_stop") || [...this.scores.values()].some((s) => s.gap === "CAP_STOP");
   }
   /** Section 14: a cap stop anywhere in the part's stage ends that part incomplete, so every cell reads incomplete. */
   readonly capStop: boolean;
