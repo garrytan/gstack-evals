@@ -273,10 +273,13 @@ describe("money", () => {
   });
 });
 
+// B1d's counted runs' commit, as its results post records it (wiki/board/2026-11-19-capy-b1d-hook-default-results).
+const B1D_RUN_COMMIT = "709dae5d50018c66cf3dba74ed19e0bc32295862";
+
 describe("the controls' reuse", () => {
-  test("B1c's rows are its published rows, 39 of 60 loaded, and the trees behind them and B1's none arm are the same at this head", () => {
+  test("B1c's rows are its published rows, 39 of 60 loaded, and the trees behind them and B1's none arm are the same at B1d's run commit", () => {
     expect(b1cRows().filter((r) => r.arm === "project-md" && r.outcome === "graded" && r.load?.loaded).length).toBe(39);
-    const a = reuseB1c("HEAD"), b = reuseCheck("HEAD");
+    const a = reuseB1c(B1D_RUN_COMMIT), b = reuseCheck(B1D_RUN_COMMIT);
     expect(a.lines.filter((l) => !l.startsWith("SAME "))).toEqual([expect.stringMatching(/^REUSE PASS/)]);
     expect([a.same, b.same]).toEqual([true, true]);
   });

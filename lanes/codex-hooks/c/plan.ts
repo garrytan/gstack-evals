@@ -102,9 +102,9 @@ export function guard(record: string, item: ItemName, sessionsLeft: number) {
   return { ok: why.length === 0, why, line, left_micros: left, vm_micros: vm, spend_cap_usd: Math.floor(Math.max(0, left - vm) / 10_000) / 100 };
 }
 
-/** Part C's items and the judge item for the all-in stop (../allin.ts), from one ledger record: spent is what settled, with a
- *  done item's VM share (paid outside the ledger); while an item runs it projects at its central plus its parallel allowances,
- *  and the judge item at its central. */
+/** Part C's items and the judge item for the all-in stop (../allin.ts), from one ledger record: spent is what settled plus the
+ *  item's VM share (paid outside the ledger, and inside its central) whether or not it is done; while an item runs it projects at
+ *  its central plus its parallel allowances, and the judge item at its central. */
 export function cSpends(record: string): Spend[] {
   if (!record || !existsSync(record)) refuse("name part C's ledger record for the all-in stop; " + (record || "none") + " does not exist");
   const settled = (item: string) => {
@@ -114,7 +114,7 @@ export function cSpends(record: string): Spend[] {
   return [
     ...ITEM_NAMES.map((item) => {
       const p = ITEMS[item], done = existsSync(doneMark(record, item));
-      return { item, done, spent: settled(item) + (done ? Math.round(p.vm_usd * 1e6) : 0), projection: Math.round((p.central_usd + PARALLEL * p.allowance_usd) * 1e6) };
+      return { item, done, spent: settled(item) + Math.round(p.vm_usd * 1e6), projection: Math.round((p.central_usd + PARALLEL * p.allowance_usd) * 1e6) };
     }),
     { item: JUDGE_ITEM.item, done: false, spent: settled(JUDGE_ITEM.item), projection: JUDGE_ITEM.central_usd * 1e6 },
   ];

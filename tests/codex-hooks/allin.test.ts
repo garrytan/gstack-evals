@@ -35,7 +35,7 @@ describe("codex-hooks all-in stop", () => {
     expect(() => allIn(s, { as_of: "t" } as never)).toThrow("E_USAGE");
   });
 
-  test("part C's items read what settled, a done item's VM share, and never an open lease's reservation", () => {
+  test("part C's items read what settled and their VM share, and never an open lease's reservation", () => {
     const dir = mkdtempSync(join(tmpdir(), "codex-hooks-allin-"));
     try {
       const record = join(dir, "record");
@@ -48,7 +48,7 @@ describe("codex-hooks all-in stop", () => {
       local.close();
       const c = Object.fromEntries(cSpends(record).map((s) => [s.item, s]));
       expect(c["c-main"]).toEqual({ item: "c-main", done: true, spent: 9.6 * M, projection: 266 * M });
-      expect(c["h-main"]).toEqual({ item: "h-main", done: false, spent: 0, projection: 261 * M });
+      expect(c["h-main"]).toEqual({ item: "h-main", done: false, spent: 3 * M, projection: 261 * M });
       expect(c["geva-562-judge"]).toEqual({ item: "geva-562-judge", done: false, spent: 0, projection: 55 * M });
       expect(rSpends({}).map((s) => s.projection)).toEqual([46.2 * M, 129 * M]);
       expect(() => cSpends(join(dir, "nowhere"))).toThrow("does not exist");
