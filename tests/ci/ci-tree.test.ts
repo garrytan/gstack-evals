@@ -301,7 +301,7 @@ describe("ci.yml and .gstack/pregate.json agree on CI carry", () => {
   });
 
   test("the checks job waits for every shard, runs when one fails, and fails unless all passed", () => {
-    expect([workflow.jobs.checks!.needs, workflow.jobs.checks!.if]).toEqual(["tests", "${{ !cancelled() }}"]);
+    expect([workflow.jobs.checks!.needs, workflow.jobs.checks!.if]).toEqual(["tests", "${{ always() }}"]);
     const passed = steps.find((s) => s.name === "Every test shard passed")!;
     expect(passed.env).toEqual({ TESTS: "${{ needs.tests.result }}" });
     const run = (result: string) => spawnSync("bash", ["-e", "-c", passed.run!], { encoding: "utf8", env: { ...process.env, TESTS: result } }).status;

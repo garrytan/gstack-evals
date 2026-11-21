@@ -147,7 +147,7 @@ jobs:
           retention-days: 7
   checks:
     needs: tests
-    if: ${{ !cancelled() }}
+    if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
