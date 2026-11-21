@@ -3074,7 +3074,7 @@ Exit 2. Side effects: No spend: the checker's session has not started. Retry saf
 
 ### E_DAYONE_BACKGROUND
 
-Day-one eval (pin change 2, item B): a planning session held open for background work it started (a background Bash or Agent task, or a pending ScheduleWakeup) reached its time limit with that work still running, so its cell is a recorded gap with that cause and no retry. Every arm's planning sessions hold the same way, at most the stage's minutes; builds and checks do not hold.
+Day-one eval (section 7, item B, of the first pin change): a planning session held open for background work it started (a background Bash or Agent task, or a pending ScheduleWakeup) reached its time limit with that work still running on both of its attempts, so its cell is a recorded gap with that cause. Every arm's planning sessions hold the same way, at most the stage's minutes; builds and checks do not hold.
 
 Fix: Nothing to retry: report the gap beside the arm's result. The session's host/cli-stderr.log names the work still out.
 
