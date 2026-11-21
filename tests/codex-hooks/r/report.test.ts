@@ -12,7 +12,7 @@ const load = (loaded: boolean, rules: string[] = loaded ? ["a"] : []) => ({ load
 const row = (arm: RArm, task: string, o: O = {}): RRow => ({
   schema: "codex-r-session/1", part: "p", arm, task, trial: o.trial ?? arm + "." + task, outcome: o.outcome ?? "graded", reason: "", pass: !!o.pass, reward: o.pass ? 1 : 0,
   limit_stop: o.allowance ? "allowance" : null, allowance: o.allowance ?? null, cost_usd: o.cost ?? 1, tokens: null, wall_s: null, questions: 0, resumes: 0, safety_stop: false,
-  root: null, sub_agents: { count: 0, other_models: [] }, init: null,
+  root: null, sub_agents: { count: 0, other_models: [] }, init: null, destructive: { denies: 0, codex_rejects: 0 }, read_audit: arm === "r-none" ? { calls: 0, skill_text: false } : null,
   loads: { prove_it: load(!!o.loaded, o.rules), verify: load(!!o.verify), steps_arrived: false, named_in_text: false, line_delivered: o.delivered ?? arm === "r-on",
     hook: { position: (o.position ?? (arm === "r-on" ? "alone" : "log missing")) as any, event: null, named: [], lines: 1 }, why_no_load: arm === "r-on" && !o.loaded ? ((o.why ?? "never named") as any) : null },
 } as RRow);

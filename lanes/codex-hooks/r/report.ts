@@ -107,7 +107,7 @@ export function pairs(cell: ReturnType<typeof by>, x: RArm, y: RArm, tasks: stri
   return p;
 }
 
-export type ArmOutcomes = { arm: RArm; tasks: number; sessions: number; graded: number; not_graded: number; cap_stops: number; infra: number; reservation: number; spend: number; time: number; safety: number; incomplete: boolean };
+export type ArmOutcomes = { arm: RArm; tasks: number; sessions: number; graded: number; not_graded: number; cap_stops: number; infra: number; reservation: number; spend: number; time: number; safety: number; questions: number; denies: number; codex_rejects: number; audit_sessions: number; skill_text: number; incomplete: boolean };
 export type Reading = {
   item: string; outcomes: ArmOutcomes[]; covered: number; primary: Contrast | null; mdd: number | null; offShare: number; deliveredShare: number;
   decision: Decision; endToEnd: Contrast | null; withoutRuleB: Contrast | null; perArm: { arm: RArm; graded: number; loads: number; lo: number; hi: number; firstCall: number; verify: number; steps: number }[];
@@ -125,7 +125,9 @@ function outcomes(rows: RRow[], cell: ReturnType<typeof by>, tasks: string[], ar
   const n = (f: (r: RRow) => boolean) => mine.filter(f).length;
   return {
     arm, tasks: tasks.length, sessions: mine.length, graded: g, not_graded: tasks.length - g, cap_stops: n((r) => r.outcome === "cap_stop"), infra: n((r) => r.outcome === "infra"),
-    reservation: n((r) => r.allowance === "reservation"), spend: n((r) => r.allowance === "spend"), time: n((r) => r.limit_stop === "time"), safety: n((r) => r.safety_stop), incomplete: tasks.length - g > gapMax,
+    reservation: n((r) => r.allowance === "reservation"), spend: n((r) => r.allowance === "spend"), time: n((r) => r.limit_stop === "time"), safety: n((r) => r.safety_stop),
+    questions: mine.reduce((x, r) => x + r.questions, 0), denies: mine.reduce((x, r) => x + (r.destructive?.denies ?? 0), 0), codex_rejects: mine.reduce((x, r) => x + (r.destructive?.codex_rejects ?? 0), 0),
+    audit_sessions: n((r) => (r.read_audit?.calls ?? 0) > 0), skill_text: n((r) => !!r.read_audit?.skill_text), incomplete: tasks.length - g > gapMax,
   };
 }
 
@@ -180,8 +182,10 @@ export function renderReading(x: Reading): string {
   if (x.decision.captain) L.push("To the Captain: " + x.decision.captain + ".", "");
   L.push("Primary, covered tasks graded in both arms (" + x.covered + " covered): r-on loads minus r-off loads, " + ci(x.primary) + ".", "");
   L.push("MDD at these pairs and this disagreement: " + (x.mdd === null ? "none fits" : x.mdd + " points") + "; interval width " + (x.primary ? pct(x.primary.hi - x.primary.lo) + " points" : "n/a") + ". r-off loads in " + pct(x.offShare) + "% of the pairs; the line reached " + pct(x.deliveredShare) + "% of their r-on sessions.", "");
-  L.push("## Outcomes and gaps (section 4.7)", "", "| Arm | Tasks | Sessions | Graded | Not graded | Cap stops | Infrastructure | Allowance stops (reservation / spend) | Time stops | Safety stops | Reads |", "|---|---|---|---|---|---|---|---|---|---|---|");
-  for (const o of x.outcomes) L.push("| " + [o.arm, o.tasks, o.sessions, o.graded, o.not_graded, o.cap_stops, o.infra, o.reservation + " / " + o.spend, o.time, o.safety, o.incomplete ? "INCOMPLETE" : "complete"].join(" | ") + " |");
+  L.push("## Outcomes and gaps (section 4.7)", "", "| Arm | Tasks | Sessions | Graded | Not graded | Cap stops | Infrastructure | Allowance stops (reservation / spend) | Time stops | Safety stops | Questions | Destructive-check denies | Codex policy rejects | Reads |", "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|");
+  for (const o of x.outcomes) L.push("| " + [o.arm, o.tasks, o.sessions, o.graded, o.not_graded, o.cap_stops, o.infra, o.reservation + " / " + o.spend, o.time, o.safety, o.questions, o.denies, o.codex_rejects, o.incomplete ? "INCOMPLETE" : "complete"].join(" | ") + " |");
+  const none = x.outcomes.find((o) => o.arm === "r-none")!;
+  L.push("", "r-none read audit (descriptive): " + none.audit_sessions + " of " + none.sessions + " sessions made a call naming gstack, a SKILL.md, a skills folder or a Capy drive; skill text arrived in " + none.skill_text + ".");
   L.push("", "## Beside the primary (section 4.8)", "", "End to end, every task graded in both arms: " + ci(x.endToEnd) + ".", "", "Primary with the loads that count only under rule (b) left out (descriptive, decides nothing): " + ci(x.withoutRuleB) + ".", "");
   L.push("| Arm | Graded | prove-it loads | Wilson 95% | At the first call | /verify loads | Steps arrived |", "|---|---|---|---|---|---|---|");
   for (const a of x.perArm) L.push("| " + [a.arm, a.graded, a.loads, "[" + pct(a.lo) + ", " + pct(a.hi) + "]", a.firstCall, a.verify, a.steps].join(" | ") + " |");

@@ -2,10 +2,12 @@
 // Part R's load detector (section 4.5) against rollouts real Codex 0.170 wrote in the gstack arm images, driven by a
 // scripted stub model (fixtures/README.md).
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { detect, hasWildcard, namesFile, namesOther, outputText, readHookLog, split, whyNoLoad } from "../../../lanes/codex-hooks/r/detect.ts";
+import { AGENT } from "../../../lanes/codex-hooks/r/pins.ts";
+import { rRow } from "../../../lanes/codex-hooks/r/table.ts";
 
 const FX = join(import.meta.dir, "fixtures");
 const d = (name: string) => detect(join(FX, name));
@@ -123,5 +125,30 @@ describe("hook log, reasons and split", () => {
     expect(rows.map((r) => [r.position, r.sessions, r.prove_it, r.verify, r.neither])).toEqual([
       ["alone", 2, 1, 0, 1], ["first of two", 1, 1, 1, 0], ["second of two", 0, 0, 0, 0], ["not named", 0, 0, 0, 0], ["log missing", 1, 0, 1, 0],
     ]);
+  });
+});
+
+describe("destructive-command check, read audit and the table row", () => {
+  test("a gstack deny and Codex's own reject are counted apart", () => {
+    expect(d("careful").guard).toEqual({ denies: 1, codex_rejects: 1 });
+    expect(d("direct").guard).toEqual({ denies: 0, codex_rejects: 0 });
+  });
+  test("the read audit counts calls naming gstack or skill paths", () => {
+    expect(d("none-direct").audit.calls).toBe(1);
+    expect(d("route-off").audit.calls).toBe(0);
+  });
+  test("a trial dir's row carries the loads, the hook's position and the guard", () => {
+    const dir = mkdtempSync(join(tmpdir(), "r-row-"));
+    const root = d("direct").root;
+    mkdirSync(join(dir, "evaluator"), { recursive: true });
+    cpSync(join(FX, "direct"), join(dir, "evaluator"), { recursive: true });
+    writeFileSync(join(dir, "config.json"), JSON.stringify({ agent: { name: AGENT.name, kwargs: { arm: "r-on" } }, task: { path: "x/optuna__optuna-6428" } }));
+    writeFileSync(join(dir, "result.json"), JSON.stringify({ trial_name: "t1", verifier_result: { rewards: { reward: 1 } } }));
+    writeFileSync(join(dir, "evaluator", "laneb-summary.json"), JSON.stringify({ session: { ok_responses: 1 }, result: { thread_id: root } }));
+    const row = rRow(dir, { part: null, sessions: new Map() })!;
+    expect(row.loads).toMatchObject({ prove_it: { loaded: true, at_first_call: true }, line_delivered: true, hook: { position: "alone" }, why_no_load: null });
+    expect(row.destructive).toEqual({ denies: 0, codex_rejects: 0 });
+    expect(row.read_audit).toBeNull();
+    rmSync(dir, { recursive: true, force: true });
   });
 });

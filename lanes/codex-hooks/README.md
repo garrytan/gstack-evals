@@ -16,7 +16,7 @@ Do gstack's routing hook and its /review contract help GPT-6.1 Sol in Codex CLI,
 | r/prepare-run.ts | Lane B's prepare step, then part R's proxy route and the Codex agent in each job, with the driver's argv and env |
 | r/plans.ts, r/money.ts | The items and their parts on L1's host and part machinery; the approval, done mark, launch guard, one rerun and the dry run |
 | r/detect.ts | The load detector (section 4.5) on a session's copied rollouts, what the session's own hook log named, and section 4.6's reasons and split; tested on stub-driven sessions real Codex 0.170 wrote (tests/codex-hooks/r/fixtures) |
-| r/table.ts | One row per session: outcome by section 4.7, cost, tokens, wall time, questions, safety stops, the root thread's model and Codex version from its rollout, the loads, and whether an allowance stop was a refused reservation or spend reaching $5 |
+| r/table.ts | One row per session: outcome by section 4.7, cost, tokens, wall time, questions, safety stops, the root thread's model and Codex version from its rollout, the loads, destructive-check denies, r-none's read audit, and whether an allowance stop was a refused reservation or spend reaching $5 |
 | r/report.ts | The reading (section 4.8) with section 1's routing decision, and the pilot readout (section 9), which gives no load rate |
 | r/cli.ts | `gstack-evals codex-hooks r <command>` |
 

@@ -31,7 +31,17 @@ export type Detection = {
   steps_arrived: boolean;
   named_in_text: boolean;
   line_delivered: boolean;
+  guard: { denies: number; codex_rejects: number };
+  audit: { calls: number };
 };
+
+/** gstack's destructive-command check denies a call with this tool result. Its ask-level warnings leave no trace in the
+ *  rollout or Codex's event stream in an unattended exec session (fixture careful), so only denies are counted. Codex's own
+ *  exec policy rejects rm -f style commands in every arm; those are counted on their own. */
+export const CAREFUL_DENY = "Command blocked by PreToolUse hook: [careful]";
+const CODEX_REJECT = /rejected: .* not permitted/;
+/** The read audit (r-none): a call naming a gstack path, a SKILL.md, a skills folder or a Capy drive. */
+const AUDIT = /gstack|SKILL\.md|\/skills\/|\.capy\/drive/i;
 
 type Item = { root: boolean; type: string; p: any };
 
@@ -108,13 +118,14 @@ export function detect(ev: string, skills: Record<DetectSkill, SkillLines> = rea
   const { items, root, threads } = readItems(ev);
   const calls = new Map<string, { input: string; root: boolean; out: string | null }>();
   const outputs: { id: string | null; text: string; root: boolean }[] = [];
-  let first_call: string | null = null, sawOutput = false, line_delivered = false, named_in_text = false;
+  let first_call: string | null = null, sawOutput = false, line_delivered = false, named_in_text = false, auditCalls = 0;
   const injected: { text: string; root: boolean }[] = [];
   for (const it of items) {
     const { p } = it;
     if (it.type.endsWith("_call")) {
       const input = callInput(p);
       if (/prove-it/i.test(input)) named_in_text = true;
+      if (AUDIT.test(input)) auditCalls++;
       if (typeof p.call_id === "string") calls.set(p.call_id, { input, root: it.root, out: null });
       if (it.root && first_call === null) first_call = p.call_id ?? "";
     }
@@ -156,7 +167,8 @@ export function detect(ev: string, skills: Record<DetectSkill, SkillLines> = rea
     };
   }
   const steps_arrived = outputs.some((o) => o.text.includes(PROVE_IT.stepLine));
-  return { root, threads, first_call, loads, steps_arrived, named_in_text, line_delivered };
+  const guard = { denies: outputs.filter((o) => o.text.includes(CAREFUL_DENY)).length, codex_rejects: outputs.filter((o) => CODEX_REJECT.test(o.text)).length };
+  return { root, threads, first_call, loads, steps_arrived, named_in_text, line_delivered, guard, audit: { calls: auditCalls } };
 }
 
 /** Where the session's own hook log put prove-it, from the first line it wrote for the root thread (the task's prompt;

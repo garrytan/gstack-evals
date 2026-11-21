@@ -22,6 +22,7 @@ tag in the prompt and returns the calls listed below. The gstack hook ran for re
 | sub | r-on | `spawn_agent` and `wait_agent`; the sub-agent reads prove-it's file |
 | route | r-on | B1's prompt for one SWE-rebench task, no call |
 | route-off | r-off | the same, in the home without the hook |
+| careful | r-on | `rm -rf` (Codex's own policy rejects it), `git push --force origin main` (gstack's destructive-command check denies it), then `git reset --hard` and `kubectl delete`, which run with no trace of a warning |
 | none-direct | r-none | `cat` of prove-it's path, which doesn't exist there |
 
 To keep the folder small, each rollout line was trimmed on copy: `additional_tools` lists are
