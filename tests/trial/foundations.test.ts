@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { cacheStale, dirTreeSha256, envValuesHash, newProgress, recordSession, SESSION_KEY_PARTS, sessionKey, staleParts, writeProgress, type SessionKeyInput } from "../../src/trial/cache.ts";
+import { cacheStale, dirTreeSha256, envValuesHash, judgeKey, newProgress, recordSession, SESSION_KEY_PARTS, sessionKey, staleParts, writeProgress, type SessionKeyInput } from "../../src/trial/cache.ts";
 import { removeTree } from "../../src/trial/cleanup.ts";
 import { copyToSink, receiptsSink, volatilePathProblem } from "../../src/trial/durable.ts";
 import { ONBOARDING_MARKERS, seedStateRoot } from "../../src/trial/state-root.ts";
@@ -18,7 +18,7 @@ afterAll(() => roots.forEach((r) => rmSync(r, { recursive: true, force: true }))
 
 const input = (): SessionKeyInput => ({
   arm_tree: "a".repeat(64), task: { id: "add", prompt: "p", check: "true" }, sidecar_entry: null, fixture_tree: "f".repeat(64), verifier: "v", image_digest: "sha256:" + "1".repeat(64),
-  recipe: "r".repeat(64), model: "claude-opus-5-5", host_version: "2.1.0", adapter_sha256: "d".repeat(64), isolation: "docker", timeout_s: 600, env_values: envValuesHash([], {}), judge_model: null, policy: "p".repeat(64),
+  recipe: "r".repeat(64), model: "claude-opus-5-5", host_version: "2.1.0", adapter_sha256: "d".repeat(64), isolation: "docker", timeout_s: 600, env_values: envValuesHash([], {}), policy: "p".repeat(64),
 });
 
 describe("session cache key", () => {
@@ -35,6 +35,15 @@ describe("session cache key", () => {
     expect(stop.code).toBe("E_CACHE_STALE");
     expect(stop.message).toBe("claude-opus-5-5/after/add/1-0: the cached session's key no longer matches; changed: image_digest, model");
     expect(stop.fix).toContain("--repair");
+  });
+
+  // Value: protects=the judge is out of the agent session's key and has a key of its own, so a new judge model, rubric or judge code changes only the judgment's key and never an agent session's; fails_when=the session key gains a judge part again, or a judge change leaves the judgment key unchanged; why_new=the Captain's brief for GEVA-563 (a judge change forced agent reruns); seam=SESSION_KEY_PARTS, judgeKey; no_claim=the resume loop's re-judging, which tests/adapters/run-host.test.ts covers
+  test("the session key has no judge part, and a judgment's key sees the judge model, the rubric and the judge's code", () => {
+    expect(SESSION_KEY_PARTS.some((p) => p.includes("judge"))).toBe(false);
+    const judge = { model: "gpt-6.1-sol", rubric: "The answer greets the user.", code: "c".repeat(64) };
+    const key = judgeKey(judge);
+    expect(judgeKey({ code: judge.code, rubric: judge.rubric, model: judge.model })).toBe(key);
+    for (const part of ["model", "rubric", "code"] as const) expect(judgeKey({ ...judge, [part]: "changed" })).not.toBe(key);
   });
 
   test("the env part hashes declared names and values only, and stores no value", () => {

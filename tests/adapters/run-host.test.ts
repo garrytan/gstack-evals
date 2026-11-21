@@ -191,7 +191,8 @@ describe.skipIf(!HAS_CLAUDE_CLI || !HAS_CODEX_CLI)("the run loop on a real host'
     expect(lines.map((l) => [l.cell.arm, l.judge_route, l.judge_model, l.judgment])).toEqual(expect.arrayContaining([["before", "openai /v1/responses", "gpt-6.1-sol", "done"], ["after", "openai /v1/responses", "gpt-6.1-sol", "done"], ["none", "openai /v1/responses", "gpt-6.1-sol", "done"]]));
     const judged = h.upstream.filter((u) => JSON.stringify(u.body).includes("You are grading one answer"));
     expect(judged).toHaveLength(3);
-    for (const u of judged) expect([Object.keys(u.body).sort(), u.body.input.length, u.body.stream ?? false, u.body.reasoning]).toEqual([["input", "max_output_tokens", "model", "reasoning", "service_tier", "store"], 1, false, { effort: JUDGE_REASONING_EFFORT }]);
+    for (const u of judged) expect([Object.keys(u.body).sort(), u.body.input.length, u.body.input[0].content.length, u.body.stream ?? false, u.body.reasoning]).toEqual([["input", "max_output_tokens", "model", "prompt_cache_key", "reasoning", "service_tier", "store"], 1, 2, false, { effort: JUDGE_REASONING_EFFORT }]);
+    expect(new Set(judged.map((u) => u.body.prompt_cache_key)).size).toBe(1);
     for (const l of lines) expect(existsSync(join(l.dir, "host"))).toBe(false);
     expect(run.input.stops).toEqual([]);
 
@@ -268,6 +269,63 @@ describe.skipIf(!HAS_CLAUDE_CLI || !HAS_CODEX_CLI)("the run loop on a real host'
     expect(journal()).toHaveLength(6);
     expect([...readJournal(out).values()].every((e) => e.key.parts.adapter_sha256 !== undefined)).toBe(true);
   }, 300_000);
+
+  // Value: protects=the judge is keyed apart from the agent's session: --resume with a new judge model or rubric judges every journaled session again from its journaled answer and evidence and reruns none of them, with the same judge it judges nothing, and a changed agent key (with --repair) reruns the session and judges it again; every judge request marks the task's shared prefix for Anthropic's prompt cache; fails_when=a judge change reruns or refuses agent sessions, a reused judgment from another judge counts, an agent change keeps the old judgment, or the judge's request loses its cache marker; why_new=the Captain's brief for GEVA-563 (take the judge out of the agent-session cache key, test both directions); seam=runOnHost's reuse, needsJudgment and adjudicate, judgeKey, cells.ndjson; no_claim=a real judge model's answers or the provider's cache hit rate
+  test("a judge change judges journaled sessions again without rerunning them, and an agent change reruns and judges them", async () => {
+    let sessions = 0;
+    const script: Script = (turn) => {
+      if (firstUser(turn.body).includes("Say hello.")) sessions++;
+      return claudeModel(turn);
+    };
+    const judged: Array<Record<string, any>> = [];
+    const responses: ResponsesScript = (turn) => {
+      if (!JSON.stringify(turn.body.input).includes("You are grading one answer")) return codexModel(turn);
+      judged.push(turn.body);
+      return [{ type: "message", text: "VERDICT: done" }];
+    };
+    const first = await runHost("claude", { judge: true, script, responses });
+    const out = join(first.root, "out");
+    const journal = () => readFileSync(join(out, "cells.ndjson"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    expect(first.run.input.records.map((r) => r.judge)).toEqual(["done", "done", "done"]);
+    expect([sessions >= 3, judged.length, journal().length]).toEqual([true, 3, 3]);
+    const firstKeys = new Set(journal().map((e) => e.judge_key));
+    expect([firstKeys.size, journal().every((e) => typeof e.judge_key === "string" && Array.isArray(e.delta?.added))]).toEqual([1, true]);
+    expect(new Set(judged.map((b) => b.prompt_cache_key)).size).toBe(1);
+    for (const body of judged) {
+      expect(body.input[0].content.map((b: any) => b.type)).toEqual(["input_text", "input_text"]);
+      expect(body.input[0].content[0].text).toContain("The answer greets the user.");
+      expect(body.input[0].content[0].text).not.toContain("HELLO from the task.");
+      expect(body.input[0].content[1].text).toContain("HELLO from the task.");
+    }
+
+    const again = async (extra: Partial<HostRunInput>) => {
+      sessions = 0;
+      judged.length = 0;
+      const r = await runHost("claude", { root: first.root, judge: true, script, responses, extra: { reuse: readJournal(out), ...extra } });
+      return { run: r.run, sessions, judged: judged.map((b) => b.model) };
+    };
+    const same = await again({});
+    expect([same.run.stale, same.sessions, same.judged, same.run.input.records.map((r) => r.judge), journal().length]).toEqual([[], 0, [], ["done", "done", "done"], 3]);
+
+    const otherJudge = await again({ judgeModel: "gpt-6-astra" });
+    expect([otherJudge.run.stale, otherJudge.sessions, otherJudge.judged, otherJudge.run.input.records.map((r) => r.judge), journal().length]).toEqual([[], 0, Array(3).fill("gpt-6-astra"), ["done", "done", "done"], 6]);
+    expect(new Set(journal().slice(3).map((e) => e.judge_key)).size).toBe(1);
+    expect(firstKeys.has(journal().at(-1).judge_key)).toBe(false);
+    const agentPart = (e: any) => JSON.stringify([e.cell, e.key, e.record.turns, e.delta]);
+    expect(journal().slice(3).map(agentPart).sort()).toEqual(journal().slice(0, 3).map(agentPart).sort());
+    const lines = readFileSync(join(out, "adjudication.ndjson"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    expect(lines.slice(-3).map((l) => [l.judge_model, l.judgment])).toEqual(Array(3).fill(["gpt-6-astra", "done"]));
+
+    const newRubric = await again({ judgeModel: "gpt-6-astra", entries: { hello: { judge: "The answer greets the user by name." } } });
+    expect([newRubric.run.stale, newRubric.sessions, newRubric.judged.length, journal().length]).toEqual([[], 0, 3, 9]);
+
+    const changed = { image_digest: null, recipe: "test", host_version: "test", adapter_sha256: "changed", isolation: "process", verifier: "test" } as const;
+    const stale = await again({ keyBase: changed });
+    expect([stale.run.stale.map((s) => s.code), stale.sessions, stale.judged.length]).toEqual([["E_CACHE_STALE", "E_CACHE_STALE", "E_CACHE_STALE"], 0, 0]);
+    const repaired = await again({ keyBase: changed, repair: true });
+    expect([repaired.run.stale, repaired.sessions >= 3, repaired.judged, repaired.run.input.records.map((r) => r.judge)]).toEqual([[], true, Array(3).fill("gpt-6.1-sol"), ["done", "done", "done"]]);
+    expect(journal().slice(-3).every((e) => e.key.parts.adapter_sha256 !== journal()[0].key.parts.adapter_sha256 && firstKeys.has(e.judge_key))).toBe(true);
+  }, 600_000);
 
   // Value: protects=skill-eval runs a persona task on Codex end to end: the model's request_user_input_async question goes to the policy's usersim model through its own slot, the answer comes back as the next user message, and every Codex session pins the reasoning effort codex 0.166.0's catalog gives its model (low for gpt-6.1-sol) in init.json; fails_when=a Codex persona task gets the fallback, the question is lost, or a session runs on Codex's own default effort; why_new=interactive tasks on Codex and the effort pin; seam=runOnHost's session, hostDriver, catalogEffort; no_claim=a real usersim model's answers
   test("a persona task on Codex gets the usersim answer by exec resume, and every Codex session pins the catalog's effort", async () => {

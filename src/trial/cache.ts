@@ -3,8 +3,11 @@
 // Each cached session is keyed by a sha256 over named parts: the arm's installed tree, the task object and its sidecar
 // entry, the fixture directory's tree, the check runner and verifier code, the trial image digest, the rig recipe hash
 // (CI plan v5: the same hash the verdict's rig block takes), model, host version, adapter sha256, isolation, --timeout,
-// the passthrough env values (hashed), judge model and policy. A resumed or reused session whose key differs refuses
-// before any spend (E_CACHE_STALE), names the parts that changed, and points at --repair.
+// the passthrough env values (hashed) and policy. A resumed or reused session whose key differs refuses before any spend
+// (E_CACHE_STALE), names the parts that changed, and points at --repair.
+//
+// The judge is not in the session key, because the agent never sees it. A judgment has its own key (judgeKey): the judge
+// model, the rubric and the judge's code. A changed judge key judges the cached session again and never reruns it.
 //
 // <out>/progress.json is rewritten atomically after every session, so a thread that waits on a background run can read
 // how far it got.
@@ -14,7 +17,7 @@ import { join } from "node:path";
 import type { ReasonCode } from "../errors/codes.ts";
 
 export const SESSION_KEY_PARTS = [
-  "arm_tree", "task", "sidecar_entry", "fixture_tree", "verifier", "image_digest", "recipe", "model", "host_version", "adapter_sha256", "isolation", "timeout_s", "env_values", "judge_model", "policy",
+  "arm_tree", "task", "sidecar_entry", "fixture_tree", "verifier", "image_digest", "recipe", "model", "host_version", "adapter_sha256", "isolation", "timeout_s", "env_values", "policy",
 ] as const;
 export type SessionKeyPart = (typeof SESSION_KEY_PARTS)[number];
 export type SessionKeyInput = Record<SessionKeyPart, unknown>;
@@ -38,6 +41,9 @@ export function sessionKey(input: SessionKeyInput): SessionKey {
   const parts = Object.fromEntries(SESSION_KEY_PARTS.map((name) => [name, sha(canonical(input[name]))])) as Record<SessionKeyPart, string>;
   return { sha256: sha(SESSION_KEY_PARTS.map((name) => name + "=" + parts[name]).join("\n")), parts };
 }
+
+/** A judgment's key: the judge model, the task's rubric and the sha256 of the judge's code. */
+export const judgeKey = (input: { model: string; rubric: string; code: string }): string => sha(canonical(input));
 
 /** The passthrough env part: the declared names with their values, hashed so no value is stored. */
 export const envValuesHash = (declared: readonly string[], source: Record<string, string | undefined>): string => sha(canonical(Object.fromEntries([...declared].sort().map((n) => [n, source[n] ?? null]))));
