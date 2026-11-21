@@ -1,0 +1,1989 @@
+{
+ "schema": "h2hx-l-frame.v1",
+ "draw_seed": 4246445583,
+ "sources": {
+  "o-order.json (base bundle)": "ef44cf555c98df6ad1633ad8ddeb3b3683f366ee67cf9bc45496ccf203be6984",
+  "o-frame.json (base bundle)": "0ff9242877d6f721936a2c56ea1ce2c9f7f89eb03ca53060a8885bca25fb8dca",
+  "su-units.json (this bundle: stage 2 and stage 1 positions)": "a06a4ac09b102c2b659e04a9d95b8f6924f23ee2a6e3007637fce22e3a82b2c6",
+  "stage 0 units and walk counts (GEVA-540 run record: 132 usable, stage 0 at 123 and 132, 56 capped)": "9891c0ca6ba5154a41ab888946a60c2ed98cf289c5a3f22394b930630043f4dd",
+  "named reserves (GEVA-540 custody log)": "9c4c4cbf0b3fb58deeb542d133ad14dd1b6e0197c67028d25db2bb3544524db7",
+  "verdicts.tsv (GEVA-520 export)": "2d5117ac451b14b41196194191914949ce6aea66447d37b7687a507674b616d1",
+  "verdicts.tsv (GEVA-521 export)": "756e739fe5368f393c4d70b8724cfe3dcbde1e0cdcbde8b25c7bbbc37cbae706",
+  "swerebench-r3a4.json": "7d2b2735cd50836364cc2c1fba9a2dd07a5ce42e9ea0f9c4b8d699b9e81ea1af"
+ },
+ "pools": {
+  "1": {
+   "expected": 18,
+   "recovered": 5,
+   "complete": false,
+   "how": "The head-to-head's O draw (o-draw.json) and gate file (gates-o.json) were lost with its runner. Its custody log names 5 reserves (4 with oracle records from the pstack-checks eval and cc65__cc65-2791). The other 5 reserves and the 8 units that passed between stage 0's bug unit (position 123) and its feature unit (position 132) are named by no surviving record. Each missing window lists the o-order.json rows that could hold them: rows not drawn, not capped and not dropped by a surviving verdict record (bug rows only for the passed positions). They are candidates, not units.",
+   "missing": [
+    {
+     "from_index": 488,
+     "to_index": 533,
+     "positions": [
+      112,
+      113,
+      114,
+      115,
+      116,
+      117,
+      118,
+      119
+     ],
+     "role": "reserve",
+     "need": 4,
+     "candidates": [
+      "TanStack__form-1664",
+      "vmware-tanzu__velero-9059",
+      "TanStack__router-4751",
+      "antvis__G2-7021",
+      "dotnet__orleans-9605",
+      "varnishcache__varnish-cache-4370",
+      "ollama__ollama-11509",
+      "grommet__grommet-7712",
+      "gitlab4j__gitlab4j-api-1266",
+      "TryGhost__Ghost-24345",
+      "TanStack__router-4611",
+      "uutils__coreutils-8310",
+      "withastro__starlight-3306",
+      "istio__istio-56962",
+      "apache__accumulo-5763",
+      "webdriverio__webdriverio-14672",
+      "hyperledger__besu-8929",
+      "unplugin__unplugin-vue-components-858",
+      "cytoscape__cytoscape.js-3396",
+      "cloudflare__workers-sdk-10032",
+      "ossf__scorecard-4728",
+      "Shopify__hydrogen-3008",
+      "noir-lang__noir-9323",
+      "dotnet__runtime-118239",
+      "php__php-src-19215",
+      "rook__rook-16087",
+      "apache__jena-3324",
+      "google__go-github-3653",
+      "apple__pkl-1126",
+      "apache__inlong-11947",
+      "GothenburgBitFactory__taskwarrior-3911",
+      "AutoMQ__automq-2699"
+     ]
+    },
+    {
+     "from_index": 535,
+     "to_index": 543,
+     "positions": [
+      121,
+      122
+     ],
+     "role": "reserve",
+     "need": 1,
+     "candidates": [
+      "primefaces__primefaces-14032",
+      "crowdsecurity__crowdsec-3744",
+      "recharts__recharts-6070",
+      "akuity__kargo-4687",
+      "recharts__recharts-6068",
+      "denoland__std-6775"
+     ]
+    },
+    {
+     "from_index": 545,
+     "to_index": 594,
+     "positions": [
+      124,
+      125,
+      126,
+      127,
+      128,
+      129,
+      130,
+      131
+     ],
+     "role": "passed_unassigned",
+     "need": 8,
+     "candidates": [
+      "apache__datafusion-16726",
+      "apache__pinot-16421",
+      "TanStack__router-4716",
+      "linebender__vello-1132",
+      "prometheus__alertmanager-4478",
+      "less__less.js-4349",
+      "quarkusio__quarkus-49065",
+      "microsoft__playwright-java-1825",
+      "clap-rs__clap-6068",
+      "react-hook-form__react-hook-form-12983",
+      "OpenLineage__OpenLineage-3921",
+      "linebender__vello-1100",
+      "php__php-src-19154",
+      "graphql-go__graphql-727",
+      "matrix-org__matrix-rust-sdk-5395",
+      "stripe__stripe-cli-1352",
+      "apache__lucene-14932",
+      "TanStack__router-4685",
+      "siimon__prom-client-679",
+      "grommet__grommet-7709",
+      "uutils__coreutils-8336",
+      "TanStack__form-1620",
+      "lightdash__lightdash-15838",
+      "openai__openai-agents-js-205",
+      "rqlite__rqlite-2190",
+      "Milkdown__milkdown-2041",
+      "php__php-src-19316",
+      "apache__kvrocks-3084",
+      "line__armeria-6325",
+      "honojs__hono-4329",
+      "cucumber__godog-695",
+      "Azure__azure-mcp-604",
+      "jestjs__jest-15714",
+      "apache__inlong-11946",
+      "alibaba__nacos-13650",
+      "fmtlib__fmt-4490",
+      "quarkusio__quarkus-48907",
+      "openfga__openfga-2598"
+     ]
+    }
+   ]
+  },
+  "2": {
+   "expected": 56,
+   "recovered": 56,
+   "complete": true,
+   "how": "Replay of the base walk's repository cap of 3 over o-order.json up to its last drawn unit (OpenAPITools__openapi-generator-21579, position 132), counting the 119 drawn units the records place or name. It gives 56 rows, the walk's recorded count; a drawn unit the records lack could only add capped rows, so the set is exact."
+  },
+  "3": {
+   "expected": 110,
+   "recovered": 110,
+   "complete": true,
+   "how": "The pinned pool's tasks created 2026-03 to 2026-05. 29 carry the state machines eval's oracle verdict (24 kept)."
+  }
+ },
+ "complete": false,
+ "units": [
+  {
+   "id": "MudBlazor__MudBlazor-12775",
+   "pool": 2,
+   "repo": "MudBlazor/MudBlazor",
+   "month": "2026-03",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "MudBlazor__MudBlazor-12817",
+   "pool": 2,
+   "repo": "MudBlazor/MudBlazor",
+   "month": "2026-03",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "MudBlazor__MudBlazor-12907",
+   "pool": 2,
+   "repo": "MudBlazor/MudBlazor",
+   "month": "2026-03",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "MudBlazor__MudBlazor-12908",
+   "pool": 2,
+   "repo": "MudBlazor/MudBlazor",
+   "month": "2026-03",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "MudBlazor__MudBlazor-12915",
+   "pool": 2,
+   "repo": "MudBlazor/MudBlazor",
+   "month": "2026-03",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "MudBlazor__MudBlazor-12918",
+   "pool": 2,
+   "repo": "MudBlazor/MudBlazor",
+   "month": "2026-03",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "MudBlazor__MudBlazor-12920",
+   "pool": 2,
+   "repo": "MudBlazor/MudBlazor",
+   "month": "2026-03",
+   "language": "csharp",
+   "entry": "feature",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "MudBlazor__MudBlazor-12958",
+   "pool": 2,
+   "repo": "MudBlazor/MudBlazor",
+   "month": "2026-04",
+   "language": "csharp",
+   "entry": "feature",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "MudBlazor__MudBlazor-13039",
+   "pool": 2,
+   "repo": "MudBlazor/MudBlazor",
+   "month": "2026-04",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "MudBlazor__MudBlazor-13109",
+   "pool": 2,
+   "repo": "MudBlazor/MudBlazor",
+   "month": "2026-04",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "SubtitleEdit__subtitleedit-10411",
+   "pool": 2,
+   "repo": "SubtitleEdit/subtitleedit",
+   "month": "2026-03",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "SubtitleEdit__subtitleedit-10419",
+   "pool": 2,
+   "repo": "SubtitleEdit/subtitleedit",
+   "month": "2026-03",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "SubtitleEdit__subtitleedit-11851",
+   "pool": 2,
+   "repo": "SubtitleEdit/subtitleedit",
+   "month": "2026-06",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "SubtitleEdit__subtitleedit-11916",
+   "pool": 2,
+   "repo": "SubtitleEdit/subtitleedit",
+   "month": "2026-06",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "SubtitleEdit__subtitleedit-11957",
+   "pool": 2,
+   "repo": "SubtitleEdit/subtitleedit",
+   "month": "2026-06",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "TecharoHQ__anubis-881",
+   "pool": 1,
+   "repo": "TecharoHQ/anubis",
+   "month": "2025-07",
+   "language": "go",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; a reserve of the head-to-head's O draw, named in its custody log (GEVA-540)"
+  },
+  {
+   "id": "aallan__vera-662_interface",
+   "pool": 3,
+   "repo": "aallan/vera",
+   "month": "2026-05",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json",
+   "reused": {
+    "verdict": "kept",
+    "from": "the state machines eval's oracle verdicts (GEVA-520 verdicts.tsv)"
+   }
+  },
+  {
+   "id": "agentscope-ai__qwenpaw-3278",
+   "pool": 3,
+   "repo": "agentscope-ai/QwenPaw",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json",
+   "reused": {
+    "verdict": "E_SM_SMOKE",
+    "from": "the state machines eval's oracle verdicts (GEVA-520 verdicts.tsv)"
+   }
+  },
+  {
+   "id": "agronholm__anyio-1121",
+   "pool": 3,
+   "repo": "agronholm/anyio",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json",
+   "reused": {
+    "verdict": "kept",
+    "from": "the state machines eval's oracle verdicts (GEVA-520 verdicts.tsv)"
+   }
+  },
+  {
+   "id": "agronholm__anyio-1134",
+   "pool": 3,
+   "repo": "agronholm/anyio",
+   "month": "2026-05",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json",
+   "reused": {
+    "verdict": "kept",
+    "from": "the state machines eval's oracle verdicts (GEVA-520 verdicts.tsv)"
+   }
+  },
+  {
+   "id": "alibaba__opensandbox-426",
+   "pool": 3,
+   "repo": "alibaba/OpenSandbox",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "alibaba__opensandbox-816",
+   "pool": 3,
+   "repo": "alibaba/OpenSandbox",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "apache__iceberg-python-3295",
+   "pool": 3,
+   "repo": "apache/iceberg-python",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "astronomy-commons__hats-648",
+   "pool": 3,
+   "repo": "astronomy-commons/hats",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "astronomy-commons__lsdb-1349",
+   "pool": 3,
+   "repo": "astronomy-commons/lsdb",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "astropy__astropy-19438",
+   "pool": 3,
+   "repo": "astropy/astropy",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "azure-samples__azure-search-openai-demo-3025",
+   "pool": 3,
+   "repo": "Azure-Samples/azure-search-openai-demo",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "beever-ai__beever-atlas-102",
+   "pool": 3,
+   "repo": "Beever-AI/beever-atlas",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "cc65__cc65-2791",
+   "pool": 1,
+   "repo": "cc65/cc65",
+   "month": "2025-07",
+   "language": "c",
+   "entry": "bug",
+   "licence": "Zlib",
+   "source": "o-frame.json; a reserve of the head-to-head's O draw, named in its custody log (GEVA-540)"
+  },
+  {
+   "id": "celestoai__smolvm-172",
+   "pool": 3,
+   "repo": "CelestoAI/SmolVM",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "con__nwb2bids-347_interface",
+   "pool": 3,
+   "repo": "con/nwb2bids",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "conan-io__conan-19735_interface",
+   "pool": 3,
+   "repo": "conan-io/conan",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json",
+   "reused": {
+    "verdict": "kept",
+    "from": "the state machines eval's oracle verdicts (GEVA-520 verdicts.tsv)"
+   }
+  },
+  {
+   "id": "conan-io__conan-19750",
+   "pool": 3,
+   "repo": "conan-io/conan",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "containers__ramalama-2487",
+   "pool": 3,
+   "repo": "containers/ramalama",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json",
+   "reused": {
+    "verdict": "E_SM_ORACLE_UNSTABLE",
+    "from": "the state machines eval's oracle verdicts (GEVA-520 verdicts.tsv)"
+   }
+  },
+  {
+   "id": "copier-org__copier-2646",
+   "pool": 3,
+   "repo": "copier-org/copier",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json",
+   "reused": {
+    "verdict": "E_SM_SMOKE",
+    "from": "the state machines eval's oracle verdicts (GEVA-520 verdicts.tsv)"
+   }
+  },
+  {
+   "id": "cpp-linter__cpp-linter-hooks-206_interface",
+   "pool": 3,
+   "repo": "cpp-linter/cpp-linter-hooks",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "cs-si__eodag-2176",
+   "pool": 3,
+   "repo": "CS-SI/eodag",
+   "month": "2026-05",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json",
+   "reused": {
+    "verdict": "kept",
+    "from": "the state machines eval's oracle verdicts (GEVA-520 verdicts.tsv)"
+   }
+  },
+  {
+   "id": "dagster-io__dagster-33605",
+   "pool": 3,
+   "repo": "dagster-io/dagster",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "databricks__dbt-databricks-1428",
+   "pool": 3,
+   "repo": "databricks/dbt-databricks",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "delgan__loguru-1451",
+   "pool": 3,
+   "repo": "Delgan/loguru",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "deltares__hydrolib-core-1049_interface",
+   "pool": 3,
+   "repo": "Deltares/HYDROLIB-core",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "destine-climate-dt__aqua-2768",
+   "pool": 3,
+   "repo": "DestinE-Climate-DT/AQUA",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json",
+   "reused": {
+    "verdict": "kept",
+    "from": "the state machines eval's oracle verdicts (GEVA-520 verdicts.tsv)"
+   }
+  },
+  {
+   "id": "dotnetcore__BootstrapBlazor-6338",
+   "pool": 2,
+   "repo": "dotnetcore/BootstrapBlazor",
+   "month": "2025-07",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "dotnetcore__BootstrapBlazor-6376",
+   "pool": 2,
+   "repo": "dotnetcore/BootstrapBlazor",
+   "month": "2025-07",
+   "language": "csharp",
+   "entry": "feature",
+   "licence": "Apache-2.0",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "dotnetcore__BootstrapBlazor-6663",
+   "pool": 2,
+   "repo": "dotnetcore/BootstrapBlazor",
+   "month": "2025-08",
+   "language": "csharp",
+   "entry": "feature",
+   "licence": "Apache-2.0",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "floci-io__floci-112",
+   "pool": 2,
+   "repo": "floci-io/floci",
+   "month": "2026-03",
+   "language": "java",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "floci-io__floci-153",
+   "pool": 2,
+   "repo": "floci-io/floci",
+   "month": "2026-04",
+   "language": "java",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "floci-io__floci-248",
+   "pool": 2,
+   "repo": "floci-io/floci",
+   "month": "2026-04",
+   "language": "java",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "floci-io__floci-26",
+   "pool": 2,
+   "repo": "floci-io/floci",
+   "month": "2026-03",
+   "language": "java",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "floci-io__floci-299",
+   "pool": 2,
+   "repo": "floci-io/floci",
+   "month": "2026-04",
+   "language": "java",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "floci-io__floci-309",
+   "pool": 2,
+   "repo": "floci-io/floci",
+   "month": "2026-04",
+   "language": "java",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "floci-io__floci-352",
+   "pool": 2,
+   "repo": "floci-io/floci",
+   "month": "2026-04",
+   "language": "java",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "floci-io__floci-463",
+   "pool": 2,
+   "repo": "floci-io/floci",
+   "month": "2026-04",
+   "language": "java",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "floci-io__floci-54",
+   "pool": 2,
+   "repo": "floci-io/floci",
+   "month": "2026-03",
+   "language": "java",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "floci-io__floci-57",
+   "pool": 2,
+   "repo": "floci-io/floci",
+   "month": "2026-03",
+   "language": "java",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "floci-io__floci-88",
+   "pool": 2,
+   "repo": "floci-io/floci",
+   "month": "2026-03",
+   "language": "java",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "genericmappingtools__pygmt-4463",
+   "pool": 3,
+   "repo": "GenericMappingTools/pygmt",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "geopython__pygeoapi-2338",
+   "pool": 3,
+   "repo": "geopython/pygeoapi",
+   "month": "2026-05",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json",
+   "reused": {
+    "verdict": "E_SM_LEAKED",
+    "from": "the state machines eval's oracle verdicts (GEVA-520 verdicts.tsv)"
+   }
+  },
+  {
+   "id": "getmoto__moto-9841",
+   "pool": 3,
+   "repo": "getmoto/moto",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "getmoto__moto-9903",
+   "pool": 3,
+   "repo": "getmoto/moto",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "google__starlark-go-599",
+   "pool": 1,
+   "repo": "google/starlark-go",
+   "month": "2025-07",
+   "language": "go",
+   "entry": "bug",
+   "licence": "BSD-3-Clause",
+   "source": "o-frame.json; a reserve of the head-to-head's O draw, named in its custody log (GEVA-540)"
+  },
+  {
+   "id": "graphistry__pygraphistry-1107_interface",
+   "pool": 3,
+   "repo": "graphistry/pygraphistry",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "graphistry__pygraphistry-1277",
+   "pool": 3,
+   "repo": "graphistry/pygraphistry",
+   "month": "2026-05",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "harumiweb__exstruct-113",
+   "pool": 3,
+   "repo": "harumiWeb/exstruct",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "hiero-ledger__hiero-sdk-python-1914_interface",
+   "pool": 3,
+   "repo": "hiero-ledger/hiero-sdk-python",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "hiero-ledger__hiero-sdk-python-2007_interface",
+   "pool": 3,
+   "repo": "hiero-ledger/hiero-sdk-python",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "hkuds__openharness-217",
+   "pool": 3,
+   "repo": "HKUDS/OpenHarness",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "holoviz__param-1117",
+   "pool": 3,
+   "repo": "holoviz/param",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "huggingface__huggingface_hub-4056",
+   "pool": 3,
+   "repo": "huggingface/huggingface_hub",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "idaholab__montepy-933_interface",
+   "pool": 3,
+   "repo": "idaholab/MontePy",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "itsdnns__docsight-437",
+   "pool": 3,
+   "repo": "itsDNNS/docsight",
+   "month": "2026-05",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "jhlywa__chess.js-546",
+   "pool": 1,
+   "repo": "jhlywa/chess.js",
+   "month": "2025-07",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "BSD-2-Clause",
+   "source": "o-frame.json; a reserve of the head-to-head's O draw, named in its custody log (GEVA-540)"
+  },
+  {
+   "id": "keras-team__keras-22316",
+   "pool": 3,
+   "repo": "keras-team/keras",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "keras-team__keras-22330",
+   "pool": 3,
+   "repo": "keras-team/keras",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json",
+   "reused": {
+    "verdict": "kept",
+    "from": "the state machines eval's oracle verdicts (GEVA-520 verdicts.tsv)"
+   }
+  },
+  {
+   "id": "keras-team__keras-22642",
+   "pool": 3,
+   "repo": "keras-team/keras",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "koxudaxi__datamodel-code-generator-3046",
+   "pool": 3,
+   "repo": "koxudaxi/datamodel-code-generator",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "koxudaxi__datamodel-code-generator-3070",
+   "pool": 3,
+   "repo": "koxudaxi/datamodel-code-generator",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "koxudaxi__datamodel-code-generator-3071",
+   "pool": 3,
+   "repo": "koxudaxi/datamodel-code-generator",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "kubeflow__pipelines-13112",
+   "pool": 3,
+   "repo": "kubeflow/pipelines",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "line__line-bot-sdk-python-981_interface",
+   "pool": 3,
+   "repo": "line/line-bot-sdk-python",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "macbre__sql-metadata-625_interface",
+   "pool": 3,
+   "repo": "macbre/sql-metadata",
+   "month": "2026-05",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json",
+   "reused": {
+    "verdict": "E_SM_LEAKED",
+    "from": "the state machines eval's oracle verdicts (GEVA-520 verdicts.tsv)"
+   }
+  },
+  {
+   "id": "marshmallow-code__marshmallow-2925_interface",
+   "pool": 3,
+   "repo": "marshmallow-code/marshmallow",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "meltano__meltano-9929",
+   "pool": 3,
+   "repo": "meltano/meltano",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "meltano__meltano-9950",
+   "pool": 3,
+   "repo": "meltano/meltano",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "mempalace__mempalace-1004",
+   "pool": 3,
+   "repo": "MemPalace/mempalace",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "microsoft__qcodes-8039",
+   "pool": 3,
+   "repo": "microsoft/Qcodes",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "nesquena__hermes-webui-1818",
+   "pool": 3,
+   "repo": "nesquena/hermes-webui",
+   "month": "2026-05",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json",
+   "reused": {
+    "verdict": "kept",
+    "from": "the state machines eval's oracle verdicts (GEVA-520 verdicts.tsv)"
+   }
+  },
+  {
+   "id": "nesquena__hermes-webui-2056",
+   "pool": 3,
+   "repo": "nesquena/hermes-webui",
+   "month": "2026-05",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "nesquena__hermes-webui-330_interface",
+   "pool": 3,
+   "repo": "nesquena/hermes-webui",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "oemof__tespy-921",
+   "pool": 3,
+   "repo": "oemof/tespy",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json",
+   "reused": {
+    "verdict": "kept",
+    "from": "the state machines eval's oracle verdicts (GEVA-520 verdicts.tsv)"
+   }
+  },
+  {
+   "id": "olofk__fusesoc-776_interface",
+   "pool": 3,
+   "repo": "olofk/fusesoc",
+   "month": "2026-05",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "pallets-eco__wtforms-892_interface",
+   "pool": 3,
+   "repo": "pallets-eco/wtforms",
+   "month": "2026-05",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "pallets__click-3239",
+   "pool": 3,
+   "repo": "pallets/click",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "pandas-dev__pandas-64796",
+   "pool": 3,
+   "repo": "pandas-dev/pandas",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json",
+   "reused": {
+    "verdict": "kept",
+    "from": "the state machines eval's oracle verdicts (GEVA-520 verdicts.tsv)"
+   }
+  },
+  {
+   "id": "pandas-dev__pandas-64797",
+   "pool": 3,
+   "repo": "pandas-dev/pandas",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json",
+   "reused": {
+    "verdict": "kept",
+    "from": "the state machines eval's oracle verdicts (GEVA-520 verdicts.tsv)"
+   }
+  },
+  {
+   "id": "pandas-dev__pandas-64816",
+   "pool": 3,
+   "repo": "pandas-dev/pandas",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json",
+   "reused": {
+    "verdict": "kept",
+    "from": "the state machines eval's oracle verdicts (GEVA-520 verdicts.tsv)"
+   }
+  },
+  {
+   "id": "pdm-project__pdm-3759",
+   "pool": 3,
+   "repo": "pdm-project/pdm",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "pennylaneai__pennylane-9298",
+   "pool": 3,
+   "repo": "PennyLaneAI/pennylane",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "pgmpy__pgmpy-3137",
+   "pool": 3,
+   "repo": "pgmpy/pgmpy",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "pipecat-ai__pipecat-4283",
+   "pool": 3,
+   "repo": "pipecat-ai/pipecat",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json",
+   "reused": {
+    "verdict": "kept",
+    "from": "the state machines eval's oracle verdicts (GEVA-520 verdicts.tsv)"
+   }
+  },
+  {
+   "id": "psd-tools__psd-tools-593",
+   "pool": 3,
+   "repo": "psd-tools/psd-tools",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json",
+   "reused": {
+    "verdict": "kept",
+    "from": "the state machines eval's oracle verdicts (GEVA-520 verdicts.tsv)"
+   }
+  },
+  {
+   "id": "pycqa__isort-2491",
+   "pool": 3,
+   "repo": "PyCQA/isort",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json",
+   "reused": {
+    "verdict": "kept",
+    "from": "the state machines eval's oracle verdicts (GEVA-520 verdicts.tsv)"
+   }
+  },
+  {
+   "id": "pyinfra-dev__pyinfra-1630",
+   "pool": 3,
+   "repo": "pyinfra-dev/pyinfra",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "pyinfra-dev__pyinfra-1665",
+   "pool": 3,
+   "repo": "pyinfra-dev/pyinfra",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json",
+   "reused": {
+    "verdict": "kept",
+    "from": "the state machines eval's oracle verdicts (GEVA-520 verdicts.tsv)"
+   }
+  },
+  {
+   "id": "pyinfra-dev__pyinfra-1679_interface",
+   "pool": 3,
+   "repo": "pyinfra-dev/pyinfra",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "pypa__build-1027",
+   "pool": 3,
+   "repo": "pypa/build",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "pypa__twine-1309",
+   "pool": 3,
+   "repo": "pypa/twine",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "pypsa__pypsa-1653",
+   "pool": 3,
+   "repo": "PyPSA/PyPSA",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "python-scim__scim2-models-139_interface",
+   "pool": 3,
+   "repo": "python-scim/scim2-models",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "python-wheel-build__fromager-1106",
+   "pool": 3,
+   "repo": "python-wheel-build/fromager",
+   "month": "2026-05",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json",
+   "reused": {
+    "verdict": "kept",
+    "from": "the state machines eval's oracle verdicts (GEVA-520 verdicts.tsv)"
+   }
+  },
+  {
+   "id": "python-wheel-build__fromager-1124",
+   "pool": 3,
+   "repo": "python-wheel-build/fromager",
+   "month": "2026-05",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "quartznet__quartznet-2934",
+   "pool": 2,
+   "repo": "quartznet/quartznet",
+   "month": "2026-03",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "quartznet__quartznet-2944",
+   "pool": 2,
+   "repo": "quartznet/quartznet",
+   "month": "2026-03",
+   "language": "csharp",
+   "entry": "feature",
+   "licence": "Apache-2.0",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "raullenchai__rapid-mlx-227",
+   "pool": 3,
+   "repo": "raullenchai/Rapid-MLX",
+   "month": "2026-05",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "raullenchai__rapid-mlx-228",
+   "pool": 3,
+   "repo": "raullenchai/Rapid-MLX",
+   "month": "2026-05",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "raullenchai__rapid-mlx-289",
+   "pool": 3,
+   "repo": "raullenchai/Rapid-MLX",
+   "month": "2026-05",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json",
+   "reused": {
+    "verdict": "kept",
+    "from": "the state machines eval's oracle verdicts (GEVA-520 verdicts.tsv)"
+   }
+  },
+  {
+   "id": "raullenchai__rapid-mlx-341_interface",
+   "pool": 3,
+   "repo": "raullenchai/Rapid-MLX",
+   "month": "2026-05",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json",
+   "reused": {
+    "verdict": "kept",
+    "from": "the state machines eval's oracle verdicts (GEVA-520 verdicts.tsv)"
+   }
+  },
+  {
+   "id": "react-hook-form__react-hook-form-12990",
+   "pool": 1,
+   "repo": "react-hook-form/react-hook-form",
+   "month": "2025-07",
+   "language": "ts",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; a reserve of the head-to-head's O draw, named in its custody log (GEVA-540)"
+  },
+  {
+   "id": "reframe-hpc__reframe-3660_interface",
+   "pool": 3,
+   "repo": "reframe-hpc/reframe",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "riok__mapperly-2207",
+   "pool": 2,
+   "repo": "riok/mapperly",
+   "month": "2026-03",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "riok__mapperly-2232",
+   "pool": 2,
+   "repo": "riok/mapperly",
+   "month": "2026-04",
+   "language": "csharp",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "rust-lang__rust-analyzer-20185",
+   "pool": 2,
+   "repo": "rust-lang/rust-analyzer",
+   "month": "2025-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "rust-lang__rust-analyzer-20381",
+   "pool": 2,
+   "repo": "rust-lang/rust-analyzer",
+   "month": "2025-08",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "rust-lang__rust-analyzer-22046",
+   "pool": 2,
+   "repo": "rust-lang/rust-analyzer",
+   "month": "2026-04",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "rust-lang__rust-analyzer-22804",
+   "pool": 2,
+   "repo": "rust-lang/rust-analyzer",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "rust-lang__rust-analyzer-22822",
+   "pool": 2,
+   "repo": "rust-lang/rust-analyzer",
+   "month": "2026-07",
+   "language": "rust",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "schemathesis__schemathesis-3778",
+   "pool": 3,
+   "repo": "schemathesis/schemathesis",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "schemathesis__schemathesis-3933",
+   "pool": 3,
+   "repo": "schemathesis/schemathesis",
+   "month": "2026-05",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json",
+   "reused": {
+    "verdict": "kept",
+    "from": "the state machines eval's oracle verdicts (GEVA-520 verdicts.tsv)"
+   }
+  },
+  {
+   "id": "schemathesis__schemathesis-4087",
+   "pool": 3,
+   "repo": "schemathesis/schemathesis",
+   "month": "2026-05",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "scikit-learn__scikit-learn-33565",
+   "pool": 3,
+   "repo": "scikit-learn/scikit-learn",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "scrapy__scrapy-7351_interface",
+   "pool": 3,
+   "repo": "scrapy/scrapy",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "sigma67__ytmusicapi-909_interface",
+   "pool": 3,
+   "repo": "sigma67/ytmusicapi",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "spack__spack-52244",
+   "pool": 3,
+   "repo": "spack/spack",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "sqlfluff__sqlfluff-7615",
+   "pool": 3,
+   "repo": "sqlfluff/sqlfluff",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json",
+   "reused": {
+    "verdict": "kept",
+    "from": "the state machines eval's oracle verdicts (GEVA-520 verdicts.tsv)"
+   }
+  },
+  {
+   "id": "sqlfluff__sqlfluff-7617",
+   "pool": 3,
+   "repo": "sqlfluff/sqlfluff",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "sqlfluff__sqlfluff-7622",
+   "pool": 3,
+   "repo": "sqlfluff/sqlfluff",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "stanfordnlp__dspy-9478_interface",
+   "pool": 3,
+   "repo": "stanfordnlp/dspy",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "sunpy__sunpy-8548_interface",
+   "pool": 3,
+   "repo": "sunpy/sunpy",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "sveltejs__svelte-16278",
+   "pool": 2,
+   "repo": "sveltejs/svelte",
+   "month": "2025-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "sveltejs__svelte-16309",
+   "pool": 2,
+   "repo": "sveltejs/svelte",
+   "month": "2025-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "sveltejs__svelte-16389",
+   "pool": 2,
+   "repo": "sveltejs/svelte",
+   "month": "2025-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "sveltejs__svelte-16405",
+   "pool": 2,
+   "repo": "sveltejs/svelte",
+   "month": "2025-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "sveltejs__svelte-16417",
+   "pool": 2,
+   "repo": "sveltejs/svelte",
+   "month": "2025-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "sveltejs__svelte-16449",
+   "pool": 2,
+   "repo": "sveltejs/svelte",
+   "month": "2025-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "sveltejs__svelte-16466",
+   "pool": 2,
+   "repo": "sveltejs/svelte",
+   "month": "2025-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "sveltejs__svelte-16482",
+   "pool": 2,
+   "repo": "sveltejs/svelte",
+   "month": "2025-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "sveltejs__svelte-16502",
+   "pool": 2,
+   "repo": "sveltejs/svelte",
+   "month": "2025-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "sveltejs__svelte-16504",
+   "pool": 2,
+   "repo": "sveltejs/svelte",
+   "month": "2025-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "sveltejs__svelte-16509",
+   "pool": 2,
+   "repo": "sveltejs/svelte",
+   "month": "2025-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "sveltejs__svelte-16526",
+   "pool": 2,
+   "repo": "sveltejs/svelte",
+   "month": "2025-07",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "sveltejs__svelte-16592",
+   "pool": 2,
+   "repo": "sveltejs/svelte",
+   "month": "2025-08",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "sveltejs__svelte-16601",
+   "pool": 2,
+   "repo": "sveltejs/svelte",
+   "month": "2025-08",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "sveltejs__svelte-16619",
+   "pool": 2,
+   "repo": "sveltejs/svelte",
+   "month": "2025-08",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "sveltejs__svelte-16622",
+   "pool": 2,
+   "repo": "sveltejs/svelte",
+   "month": "2025-08",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "sveltejs__svelte-16666",
+   "pool": 2,
+   "repo": "sveltejs/svelte",
+   "month": "2025-08",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "sveltejs__svelte-16668",
+   "pool": 2,
+   "repo": "sveltejs/svelte",
+   "month": "2025-08",
+   "language": "js",
+   "entry": "bug",
+   "licence": "MIT",
+   "source": "o-frame.json; skipped for the repository cap by the replay of the head-to-head's O walk over o-order.json"
+  },
+  {
+   "id": "tobymao__sqlglot-7187",
+   "pool": 3,
+   "repo": "tobymao/sqlglot",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json",
+   "reused": {
+    "verdict": "kept",
+    "from": "the state machines eval's oracle verdicts (GEVA-520 verdicts.tsv)"
+   }
+  },
+  {
+   "id": "tobymao__sqlglot-7457",
+   "pool": 3,
+   "repo": "tobymao/sqlglot",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "tobymao__sqlglot-7479",
+   "pool": 3,
+   "repo": "tobymao/sqlglot",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "tox-dev__tox-3846",
+   "pool": 3,
+   "repo": "tox-dev/tox",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "tox-dev__tox-3904",
+   "pool": 3,
+   "repo": "tox-dev/tox",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "tox-dev__tox-3931",
+   "pool": 3,
+   "repo": "tox-dev/tox",
+   "month": "2026-05",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json",
+   "reused": {
+    "verdict": "kept",
+    "from": "the state machines eval's oracle verdicts (GEVA-520 verdicts.tsv)"
+   }
+  },
+  {
+   "id": "ucfopen__canvasapi-716",
+   "pool": 3,
+   "repo": "ucfopen/canvasapi",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "ultraplot__ultraplot-696",
+   "pool": 3,
+   "repo": "Ultraplot/UltraPlot",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "unit8co__darts-3065",
+   "pool": 3,
+   "repo": "unit8co/darts",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "vprusso__toqito-1484_interface",
+   "pool": 3,
+   "repo": "vprusso/toqito",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "vprusso__toqito-1538",
+   "pool": 3,
+   "repo": "vprusso/toqito",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "youssofal__mtplx-21",
+   "pool": 3,
+   "repo": "youssofal/MTPLX",
+   "month": "2026-05",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "zarr-developers__virtualizarr-979",
+   "pool": 3,
+   "repo": "zarr-developers/VirtualiZarr",
+   "month": "2026-04",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "zauberzeug__nicegui-5858",
+   "pool": 3,
+   "repo": "zauberzeug/nicegui",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "zauberzeug__nicegui-5914",
+   "pool": 3,
+   "repo": "zauberzeug/nicegui",
+   "month": "2026-03",
+   "language": "python",
+   "entry": null,
+   "licence": null,
+   "source": "quick/laneb/tasks/swerebench-r3a4.json",
+   "reused": {
+    "verdict": "kept",
+    "from": "the state machines eval's oracle verdicts (GEVA-520 verdicts.tsv)"
+   }
+  }
+ ]
+}
