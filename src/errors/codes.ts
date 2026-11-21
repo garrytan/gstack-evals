@@ -3832,7 +3832,7 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
-  // cso real-advisory eval (GEVA-561): prereg, ids, containment over arm installs (deviation (a)).
+  // cso real-advisory eval (GEVA-561): prereg, ids, containment over arm installs (deviation (a)), stage 1 release (deviation (b)).
   E_CSO_PREREG: {
     exit: 2,
     meaning: "The /cso real-advisory eval found no usable preregistration: its prereg.json is missing, is not cso-advisories-prereg.v1, lacks an unsigned 32-bit integer seed, or lacks a text or a unit list.",
@@ -3870,7 +3870,15 @@ export const CODES = {
     owner: "U20",
   },
 
-
+  E_CSO_RELEASE: {
+    exit: 2,
+    meaning: "Deviation (b): a /cso eval stage 1 release was asked to carry a judge-check field beyond whether each gold minimum was met and whether each gate passed (a count, a kappa value, a rate or a per-class figure), or lacked a minimum or gate the plan names.",
+    fix: "Release only the booleans deviation (b) allows; everything else stays in the sealed file until stage 2's analysis opens it.",
+    side_effects: NO_SPEND,
+    retry_safe: false,
+    resumable: false,
+    owner: "U20",
+  },
 } as const satisfies Record<string, CodeInfo>;
 
 export type ReasonCode = keyof typeof CODES;

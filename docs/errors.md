@@ -455,6 +455,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_CSO_UNIT_IDS](#e_cso_unit_ids) | 2 | U20 |
 | [E_CSO_SCAN](#e_cso_scan) | 2 | U20 |
 | [E_CSO_DROP_INSTALL_ID](#e_cso_drop_install_id) | 2 | U20 |
+| [E_CSO_RELEASE](#e_cso_release) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -3529,6 +3530,14 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 Deviation (a): a /cso eval unit's GHSA id, a CVE id of its advisory or its fix commit's first 12 hex characters appears in an arm's installed gstack tree (a file, a git object or an archive two levels deep). The unit drops from every cell, so pairing holds; the record names the arm, the path and the id.
 
 Fix: None for the unit: it is dropped by rule and the draw moves to the next usable position. Report the drop per arm in the results.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_RELEASE
+
+Deviation (b): a /cso eval stage 1 release was asked to carry a judge-check field beyond whether each gold minimum was met and whether each gate passed (a count, a kappa value, a rate or a per-class figure), or lacked a minimum or gate the plan names.
+
+Fix: Release only the booleans deviation (b) allows; everything else stays in the sealed file until stage 2's analysis opens it.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
 
