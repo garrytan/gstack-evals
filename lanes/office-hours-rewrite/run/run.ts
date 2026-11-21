@@ -48,7 +48,7 @@ import { pvOutcome } from "../../product-value/parse.ts";
 import { AGENT_TURNS_PER_REPLY, ALLOWANCE, CODEX, HOSTS, MODEL_KEYS, SESSION_MINUTES, SIM_ALLOWANCE, type Pin } from "../frozen.ts";
 import { BEARER_ENV, codexPinCommand, codexPinProblems, codexReads, codexTreeProblems, gapProblems, solDriver } from "./codex.ts";
 import { tapModels, tapOffPin, type OhrRig } from "./codex-rig.ts";
-import type { ArmId, BlockParser, BriefKind, BriefMeta, ManifestEntry, ModelId, PriorSession } from "../types.ts";
+import type { ArmId, BlockParser, BriefKind, BriefMeta, ManifestEntry, ModelId, PriorSession, SkillArm } from "../types.ts";
 import { capProblem, entryId, freezeManifest, loadBriefs, makeManifest, type LaunchName } from "./manifest.ts";
 import type { ManifestLook } from "./half.ts";
 import { armEnvProblems, containerPinCommand, containerPinProblems, containerRoot, isSkillArm, nullPinProblem, pinProblems, type Pins } from "./pins.ts";
@@ -58,7 +58,7 @@ import { assistantModels, cliVersion, offPin, servedModel } from "../pinned.ts";
 import { attemptOutcome, closingLoop, firstMessage, safetyStop, sessionKindOf, settle, type AttemptRead, type Line, type Outcome } from "./session.ts";
 import type { PersonSheet, SimCall } from "../../../src/persona-sim/sim.ts";
 import { loadPerson } from "../sim/founder.ts";
-import { CLAUDE_SESSION } from "../read/load.ts";
+import { CLAUDE_SESSION, startOutput } from "../read/load.ts";
 
 export { copyReceipts, receiptsAfter };
 
@@ -253,6 +253,9 @@ export const solLaunch: Launch = async (o) => {
   return { termination, gstack_reads: skillArm ? [] : [...gstackReads(transcript), ...codexReads(rollouts)], contained, pin: found.pin, overflow: read.state === "infra" && read.reason === "context overflow", safety: safetyStop(transcript), session_kind: sessionKindOf(transcript), off_pin: tapOffPin(codex.tapLog, binding.slot, model), served_model: servedModel(tapModels(codex.tapLog, binding.slot)), cli_version: cliVersion(transcript), micros: meter.micros };
 };
 
+/** The start step's output in Claude Code's session file, or null when the file is missing or holds no whole head and tail around one. */
+const loadedStart = (file: string, arm: SkillArm): string | null => (existsSync(file) ? startOutput(readFileSync(file, "utf8"), arm) : null);
+
 /** One attempt on the Docker rig; a Sol session runs on Codex (solLaunch). */
 export const dockerLaunch: Launch = async (o) => {
   if (HOSTS[o.entry.model] === "codex") return solLaunch(o);
@@ -291,7 +294,7 @@ export const dockerLaunch: Launch = async (o) => {
   const transcript = existsSync(path) ? readFileSync(path, "utf8") : "";
   const read = pvOutcome(termination, transcript).outcome;
   const contained = found.contained === null ? null : [...found.contained, ...envProblems.map((e) => "agent env: " + e)];
-  return { termination, gstack_reads: skillArm ? [] : gstackReads(transcript), contained, pin: found.pin, overflow: read.state === "infra" && read.reason === "context overflow", safety: safetyStop(transcript), session_kind: sessionKindOf(transcript), off_pin: offPin(transcript, model), served_model: servedModel(assistantModels(transcript)), cli_version: cliVersion(transcript), micros: meter.micros };
+  return { termination, gstack_reads: skillArm ? [] : gstackReads(transcript), contained, pin: found.pin, overflow: read.state === "infra" && read.reason === "context overflow", safety: safetyStop(transcript), session_kind: sessionKindOf(transcript, skillArm ? loadedStart(join(o.dir, "host", CLAUDE_SESSION), o.entry.arm as SkillArm) : null), off_pin: offPin(transcript, model), served_model: servedModel(assistantModels(transcript)), cli_version: cliVersion(transcript), micros: meter.micros };
 };
 
 /** An attempt a crash left with a marker and no row: an unknown harness failure at the settled and unknown spend its ledger meter holds, recorded in reconcile.json. */

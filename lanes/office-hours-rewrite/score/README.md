@@ -32,9 +32,10 @@ check labels); `judgeCheck` reads each judge; stage 2 builds `buildLabelPackets`
 
 The marker strings in `markers/` are candidates, read from both pins' office-hours text in their prose-question forms:
 the current pin at 858679423cc4778f9961d4aaf3c061a9368985ec (the second attempt's pre-run change 5, which leaves every
-current marker matching) and the new pin at 0787a1e01f2d847f8e915a680e7f6afec777be88, read before the content change's
-final head; pre-run change 5 names the new-pin markers that do not match that head. Each file records the sha256 of the
-office-hours files it was read from. They pass the planted fixtures in tests/ohr/score/detect.test.ts. Stage 1
+current marker matching) and the new pin at 8fcca8a5a0491ca6077b28103d85a47938fa6264. Pre-run change 5 replaced the
+seven new-pin markers that stopped matching at that head (pivot-love-or-size, pivot-sunk-cost and pivot-commitment in
+questions and in startup_only, and startup_only's wallet) with markers read from the reworded lines. Each file records
+the sha256 of the office-hours files it was read from. They pass the planted fixtures in tests/ohr/score/detect.test.ts. Stage 1
 transcripts freeze the final sets (section 12 stage 4), before they read stage 2. The definitions in detect.ts do not
 move.
 

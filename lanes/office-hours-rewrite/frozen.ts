@@ -51,6 +51,15 @@ export const CODEX = {
   provider: "openai",
 } as const;
 /**
+ * Pre-run change 5: the name every Sol exec runs CODEX.bin under, through a fresh link (run/codex.ts codexLaunch). gstack's
+ * gstack-session-kind reads a session as headless when the nearest process above the tool shell named codex, codex.js
+ * or codex.exe runs exec, e or review. The harness drives Sol through codex exec, so under the plain name every skill
+ * session would read headless. Under this name gstack finds no such process and behaves as it does for a person at
+ * Codex's terminal, while Codex sets its own variables (CODEX_THREAD_ID, CODEX_CI and the rest) as it always does. It is a
+ * harness difference, and pre-run change 5 records the keyless check behind it.
+ */
+export const CODEX_LINK = "codex-ohr";
+/**
  * Every Sol session's Codex settings beside the proxy's provider entry, passed as -c pairs under --strict-config. Effort
  * and window are the catalog's own values for gpt-6.1-sol (default_reasoning_level low, context_window 500000), written
  * out. model_auto_compact_token_limit is Codex's auto-compaction key; unset, Codex 0.170.0 compacts at 9/10 of the
@@ -76,29 +85,30 @@ export const CODEX_SETTINGS = {
   "analytics.enabled": false,
 } as const;
 /**
- * The one layout fix. gstack's `./setup --host codex` lists three skills twice under CODEX_HOME/skills: office-hours,
- * plan-design-review and gstack-upgrade each as gstack-<name> (a link into the tree's .agents/skills) and as a copy in the
- * runtime root, gstack/<name>/SKILL.md, with the same name and bytes. With office-hours listed twice, Codex injects
- * nothing for "$office-hours". Each Sol skill arm disables the three copies with one [[skills.config]] entry each,
- * path = "<CODEX_HOME>/<entry>" and enabled = false, and hides nothing else.
+ * Pre-run change 5: every Sol skill arm runs gstack's `./setup --host codex` as shipped. At the moved pins Codex lists
+ * office-hours once and "$office-hours" injects the whole render, so the layout fix of the second attempt's pre-run
+ * change 2 (three disabled [[skills.config]] entries for duplicate copies) is gone. The rendered office-hours SKILL.md
+ * each pin's Codex install serves sits under HOME at both entries; the Sol arms' install check reads both.
  */
-export const CODEX_LAYOUT_FIX = ["skills/gstack/office-hours/SKILL.md", "skills/gstack/plan-design-review/SKILL.md", "skills/gstack/gstack-upgrade/SKILL.md"] as const;
-/** The rendered office-hours SKILL.md each pin's Codex install serves, under HOME at both entries; the Sol arms' install check. */
-export const CODEX_SKILL_FILES = [".codex/skills/gstack-office-hours/SKILL.md", ".codex/" + CODEX_LAYOUT_FIX[0]] as const;
+export const CODEX_SKILL_FILES = [".codex/skills/gstack-office-hours/SKILL.md", ".codex/skills/gstack/office-hours/SKILL.md"] as const;
 export const CODEX_RENDERED: Readonly<Record<SkillArm, { sha256: string; bytes: number }>> = {
   current: { sha256: "9aabb2d1949aab7be03eb09814d56279cf1eba3a39f86e362739d48a263b1f72", bytes: 48_068 },
   new: { sha256: "7b927e4de37d5a2ca3db4d8691ec6926a1cc807d460b6a262454edaa9f22cdd7", bytes: 48_058 },
 };
 /**
- * A8's body on Claude Code (the second attempt's pre-run change 3): each pin's office-hours/SKILL.md less its frontmatter
- * (the lines from the opening --- to the closing --- and one blank line after it), which is what Claude Code 2.1.314
- * expands /office-hours into. The expansion is one user-side message in Claude Code's own session file: "Base directory
- * for this skill: <dir>", a blank line, this body, then "\n\nARGUMENTS: " and the rest of the first message. A keyless
- * capture on that binary showed the body arrives byte for byte, with no substitution. chars counts UTF-16 code units.
+ * A8's body on Claude Code (the second attempt's pre-run change 3, split by pre-run change 5). At the moved pins each
+ * office-hours/SKILL.md holds two load-time lines that Claude Code 2.1.314 runs as it expands /office-hours: the first
+ * prints the preamble section, the same in every session, and the second runs the skill's start step, whose output
+ * differs per session. So the body is frozen in two parts around that output. head is the body less its frontmatter (the
+ * lines from the opening --- to the closing --- and one blank line after it) up to the start line, with the preamble
+ * line read as office-hours/sections/preamble.md less its last newline; tail is the body after the start line. The
+ * expansion is one user-side message in Claude Code's own session file: "Base directory for this skill: <dir>", a blank
+ * line, head, the start step's output, tail, then "\n\nARGUMENTS: " and the rest of the first message. chars counts
+ * UTF-16 code units.
  */
-export const CLAUDE_BODY: Readonly<Record<SkillArm, { sha256: string; chars: number }>> = {
-  current: { sha256: "59f9c4c1f2ce21e27440d114ec0aba5a5b85af755a06a080c0a9d10f39231d9c", chars: 42_936 },
-  new: { sha256: "ba035a7b7201c0217a7ece0059ca5c2e242aea22fe78b864200c2de6ffc9c93b", chars: 42_862 },
+export const CLAUDE_BODY: Readonly<Record<SkillArm, { head: { sha256: string; chars: number }; tail: { sha256: string; chars: number } }>> = {
+  current: { head: { sha256: "def89776bac5fca440d0213140fef5a6136a87dc2a34f5d3e1f2c732e81551cb", chars: 23_740 }, tail: { sha256: "5cd9377e2676a750111089a9e48f6f79cdda63562b6f78bee5e53150edfb957b", chars: 42_108 } },
+  new: { head: { sha256: "def89776bac5fca440d0213140fef5a6136a87dc2a34f5d3e1f2c732e81551cb", chars: 23_740 }, tail: { sha256: "368833a2fcd516e65d4328543490a36db03eae86c69265539a7f4646e18b1c93", chars: 42_034 } },
 };
 /** Changed lines in the unified diff from current to new, the same for the pins' office-hours/SKILL.md and for Codex's render of it. */
 export const RENDER_GAP = 62;

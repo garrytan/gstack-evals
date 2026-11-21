@@ -145,6 +145,10 @@ export interface LoadPlant {
   body?: SkillArm;
   /** Characters cut off the body's end. */
   cut?: number;
+  /** Claude Code's start-step output between the head and the tail; PLANTED_START by default. */
+  start?: string;
+  /** Claude Code's head in place of the planted one. */
+  head?: string;
   /** What follows the body: Claude Code's ARGUMENTS line, or Codex's closing tag, by default. */
   tail?: string;
   /** The record the body rides in; a user record by default. */
@@ -152,13 +156,19 @@ export interface LoadPlant {
   /** The file A8 reads: written (the default), missing, a directory, or text with no skill block. */
   copy?: "written" | "missing" | "dir" | "junk";
 }
-/** A planted body per pin; each shows an ARGUMENTS line inside itself, so the boundary is read by length, not by the first such line. */
+/** A planted body per pin; each shows an ARGUMENTS line inside itself, so the boundary is read by length, not by the first such line. Codex's <skill> item carries it whole; on Claude Code it is the tail. */
 const plantedBody = (arm: SkillArm) => "# The planted office-hours body, " + arm + " pin\n\n" + Array.from({ length: 40 }, (_, k) => "Line " + (k + 1) + " of the planted " + arm + " body, caf\u00e9 included.").join("\n") + "\n\nARGUMENTS: an example inside the body\n\nThe end of the planted " + arm + " body.\n";
-export function plantLoad(o: LoadPlant): { row: SessionRow; bodies: Bodies; done: () => void } {
+/** Claude Code's planted head, the same at both pins; like the real one it names other session kinds. */
+const PLANTED_HEAD = "# The planted office-hours head\n\nThe preamble's own text names SESSION_KIND: spawned and SESSION_KIND: headless.\n" + Array.from({ length: 20 }, (_, k) => "Head line " + (k + 1) + ", caf\u00e9 included.").join("\n") + "\n";
+/** Claude Code's planted start-step output, what the skill's load-time start line printed. */
+export const PLANTED_START = "SESSION_KIND: interactive\nREPO_MODE: solo";
+const plantedTail = (arm: SkillArm) => "\n" + plantedBody(arm);
+export function plantLoad(o: LoadPlant): { row: SessionRow; bodies: Bodies; want: string; done: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "ohr-a8-"));
   const host = join(dir, "host");
   mkdirSync(host);
-  const whole = plantedBody(o.body ?? o.arm);
+  const claudeWhole = (arm: SkillArm) => (o.head ?? PLANTED_HEAD) + (o.start ?? PLANTED_START) + plantedTail(arm);
+  const whole = o.host === "claude" ? claudeWhole(o.body ?? o.arm) : plantedBody(o.body ?? o.arm);
   const body = whole.slice(0, whole.length - (o.cut ?? 0));
   const text = o.host === "claude"
     ? "Base directory for this skill: " + CONTAINER_HOME + "/.claude/skills/office-hours\n\n" + body + (o.tail ?? "\n\nARGUMENTS: the founder's first message")
@@ -172,12 +182,14 @@ export function plantLoad(o: LoadPlant): { row: SessionRow; bodies: Bodies; done
   else if (copy === "dir") mkdirSync(file);
   else if (copy === "junk") writeFileSync(file, opening + "\nnot a json line\n");
   const sum = (x: string) => createHash("sha256").update(x).digest("hex");
+  const part = (x: string) => ({ sha256: sum(x), chars: x.length });
   const [current, next] = [plantedBody("current"), plantedBody("new")];
   const bodies: Bodies = {
-    claude: { current: { sha256: sum(current), chars: current.length }, new: { sha256: sum(next), chars: next.length } },
+    claude: { current: { head: part(PLANTED_HEAD), tail: part(plantedTail("current")) }, new: { head: part(PLANTED_HEAD), tail: part(plantedTail("new")) } },
     codex: { current: { sha256: sum(current), bytes: Buffer.byteLength(current) }, new: { sha256: sum(next), bytes: Buffer.byteLength(next) } },
   };
-  return { row: sessionRow({ brief: "k01", model: o.host === "codex" ? "sol" : "opus", arm: o.arm, transcript: join(host, "transcript.ndjson") }), bodies, done: () => rmSync(dir, { recursive: true, force: true }) };
+  const want = sum(o.host === "claude" ? claudeWhole(o.arm) : plantedBody(o.arm));
+  return { row: sessionRow({ brief: "k01", model: o.host === "codex" ? "sol" : "opus", arm: o.arm, transcript: join(host, "transcript.ndjson") }), bodies, want, done: () => rmSync(dir, { recursive: true, force: true }) };
 }
 
 // ---- Section 10 on planted data ----

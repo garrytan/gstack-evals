@@ -1,12 +1,12 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // Value: protects=the Sol arms on Codex CLI (the second attempt's pre-run change 2): the pinned CLI, the install check, the first message, the settings, the none arm's cleanliness, the model tap, the transcript form the readers take and the question loop; fails_when=a Sol session runs another CLI, a duplicate skill hides the injection, a question reaches no simulator or a Codex transcript reads differently from Claude Code's.
 import { describe, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
-import { CODEX, CODEX_LAYOUT_FIX, CODEX_SETTINGS, CONTAINER_HOME, firstMessage, LENS_LINE, RENDER_GAP } from "../../../lanes/office-hours-rewrite/frozen.ts";
-import { BEARER_ENV, codexPinProblems, codexReads, codexTranscript, codexTreeProblems, gapProblems, homeCommand, homeProblems, renderGap, solArgv, solDriver, solEnv } from "../../../lanes/office-hours-rewrite/run/codex.ts";
+import { CODEX, CODEX_LINK, CODEX_SETTINGS, CODEX_SKILL_FILES, CONTAINER_HOME, firstMessage, LENS_LINE, RENDER_GAP } from "../../../lanes/office-hours-rewrite/frozen.ts";
+import { BEARER_ENV, codexLaunch, codexPinProblems, codexReads, codexTranscript, codexTreeProblems, gapProblems, homeCommand, homeProblems, renderGap, solArgv, solDriver, solEnv } from "../../../lanes/office-hours-rewrite/run/codex.ts";
 import { tapOffPin } from "../../../lanes/office-hours-rewrite/run/codex-rig.ts";
 import { reportedModels } from "../../../lanes/office-hours-rewrite/run/tap.ts";
 import { trialEnv, TrialEnvError } from "../../../src/trial/env.ts";
@@ -30,14 +30,27 @@ describe("1. pin", () => {
     expect(codexPinProblems(CODEX.binary_sha256 + "  " + CODEX.bin + "\n", null)).toEqual([]);
     expect(codexPinProblems("0".repeat(64) + "  " + CODEX.bin + "\n", null)).toHaveLength(1);
   });
+  test("every Sol exec runs the pinned binary through a fresh link named codex-ohr, so gstack's exec check finds no process named codex (pre-run change 5)", async () => {
+    expect(CODEX_LINK).toBe("codex-ohr");
+    const dir = tmp();
+    const bin = join(dir, "codex");
+    writeFileSync(bin, '#!/bin/sh\necho "$(basename "$0") $(readlink -f "$0") $PATH $*"\n');
+    chmodSync(bin, 0o755);
+    const argv = codexLaunch(["exec", "-"]).map((x) => (x === CODEX.bin ? bin : x));
+    const [name, target, path, ...rest] = spawnSync(argv[0]!, argv.slice(1), { encoding: "utf8", env: { PATH: process.env.PATH!, TMPDIR: dir } }).stdout.trim().split(" ");
+    expect([name, target, path!.split(":")[0], rest]).toEqual([CODEX_LINK, realpathSync(bin), CODEX.path_dir, ["exec", "-"]]);
+    const s = fakeSession(FAKE.replace('process.env.ASK !== "0"', "false"));
+    await solDriver({ ...o, out: tmp(), nextUser: async () => ({ end: true }) }).run(s as any, { id: "ohr", prompt: "hi" } as any, 60_000);
+    const exec = s.spawned.find((a) => a.includes(CODEX.bin))!;
+    expect(exec.slice(0, 4)).toEqual(codexLaunch([]));
+    expect(exec.filter((a) => a.startsWith("skills.config="))).toEqual([]);
+  });
 });
 
 describe("2. install", () => {
-  test("a Sol skill arm hides the three duplicate copies, one [[skills.config]] entry each, and nothing else; none hides nothing", () => {
-    const pairs = (skillArm: boolean) => solArgv({ ...o, skillArm }, null).filter((a, i, all) => all[i - 1] === "-c" && a.startsWith("skills.config="));
-    expect(CODEX_LAYOUT_FIX).toEqual(["skills/gstack/office-hours/SKILL.md", "skills/gstack/plan-design-review/SKILL.md", "skills/gstack/gstack-upgrade/SKILL.md"]);
-    expect(pairs(true)).toEqual(['skills.config=[{path="' + CONTAINER_HOME + '/.codex/skills/gstack/office-hours/SKILL.md",enabled=false},{path="' + CONTAINER_HOME + '/.codex/skills/gstack/plan-design-review/SKILL.md",enabled=false},{path="' + CONTAINER_HOME + '/.codex/skills/gstack/gstack-upgrade/SKILL.md",enabled=false}]']);
-    expect(pairs(false)).toEqual([]);
+  test("gstack's Codex install runs as shipped: no Sol arm's exec hides a skill, and its one skills key turns Codex's bundled skills off (pre-run change 5)", () => {
+    expect(solArgv(o, null).filter((a, i, all) => all[i - 1] === "-c" && a.startsWith("skills."))).toEqual(["skills.bundled.enabled=false"]);
+    expect(CODEX_SKILL_FILES).toEqual([".codex/skills/gstack-office-hours/SKILL.md", ".codex/skills/gstack/office-hours/SKILL.md"]);
   });
   test("the install check reads the rendered SKILL.md at both entries, and the current-to-new gap must be 62 lines in the pins and in the render", () => {
     const h = tmp();
@@ -217,7 +230,7 @@ function fakeSession(fake: string) {
     spawn(argv: string[]) {
       spawned.push(argv);
       const a = argv.map((x) => (x === CODEX.bin ? bin : x));
-      return spawn(a[0]!, a.slice(1), { cwd: dir, env: { PATH: process.env.PATH!, HOME: dir }, stdio: ["pipe", "pipe", "pipe"] });
+      return spawn(a[0]!, a.slice(1), { cwd: dir, env: { PATH: process.env.PATH!, HOME: dir, TMPDIR: dir }, stdio: ["pipe", "pipe", "pipe"] });
     },
     stop() {},
   };

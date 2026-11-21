@@ -125,8 +125,10 @@ export function safetyStop(transcript: string): string | null {
   return null;
 }
 
-/** The SESSION_KIND value the first main-agent tool result printed, or null. */
-export function sessionKindOf(transcript: string): string | null {
+/** The SESSION_KIND value the skill's start step printed at load (pre-run change 5; read/load.ts startOutput), else the first main-agent tool result's, or null. */
+export function sessionKindOf(transcript: string, start: string | null = null): string | null {
+  const atLoad = start === null ? null : /SESSION_KIND: ([A-Za-z0-9._-]+)/.exec(start);
+  if (atLoad) return atLoad[1]!;
   for (const m of readTranscript(transcript) as Record<string, any>[]) {
     if (m.type !== "user" || m.parent_tool_use_id || !Array.isArray(m.message?.content)) continue;
     for (const b of m.message.content) {

@@ -6,10 +6,8 @@
 //   bearer as OPENAI_API_KEY, the reasoning effort (frozen.CODEX_SETTINGS' low), question capture from the rollout
 //   (request_user_input_async; Codex answers request_user_input "unavailable in Default mode") with each answer back
 //   by exec resume, and its records under host/codex/. The lane adds what is this eval's: the pinned 0.170.0 binary,
-//   CODEX_SETTINGS' other keys through the adapter's settings (solSettings), a skill arm's layout fix (one
-//   [[skills.config]] entry each, disabled, for the duplicate copies of office-hours, plan-design-review and
-//   gstack-upgrade, CODEX_LAYOUT_FIX, as a -c pair, since the adapter's settings take scalars only), the HOME check
-//   before the first exec (homeCommand), a cap of AGENT_TURNS_PER_REPLY tool items per reply that kills the reply and
+//   run through a fresh link named CODEX_LINK (codexLaunch, pre-run change 5), CODEX_SETTINGS' other keys through the
+//   adapter's settings (solSettings), the HOME check before the first exec (homeCommand), a cap of AGENT_TURNS_PER_REPLY tool items per reply that kills the reply and
 //   ends the session as a turn cap (Codex has no turn limit of its own), and after the session the rollouts copied out
 //   with host/transcript.ndjson rewritten from the main one (codexTranscript). The sleep tool is off, so a model cannot
 //   wait inside a turn for a reply that comes only with the next one.
@@ -35,7 +33,7 @@ import type { ContractTask } from "../../../src/skill-eval/contract/tasks.ts";
 import type { AgentSession } from "../../../src/trial/sandbox.ts";
 import type { AgentDriver, AgentOutcome } from "../../../src/trial/trial.ts";
 import type { Termination, TokenUsage } from "../../../src/types.ts";
-import { AGENT_TURNS_PER_REPLY, ARM_ENV, CODEX, CODEX_LAYOUT_FIX, CODEX_RENDERED, CODEX_SETTINGS, CODEX_SKILL_FILES, PINS, RENDER_GAP } from "../frozen.ts";
+import { AGENT_TURNS_PER_REPLY, ARM_ENV, CODEX, CODEX_LINK, CODEX_RENDERED, CODEX_SETTINGS, CODEX_SKILL_FILES, PINS, RENDER_GAP } from "../frozen.ts";
 import type { SkillArm } from "../types.ts";
 
 const sha256 = (b: string | Buffer) => createHash("sha256").update(b).digest("hex");
@@ -68,15 +66,11 @@ export function solSettings(): Record<string, string | number | boolean> {
 
 const adapter = (o: Pick<SolOptions, "proxy">) => ({ model: CODEX.model, provider: CODEX.provider as CodexProvider, proxy: o.proxy, effort: CODEX_SETTINGS.model_reasoning_effort, settings: solSettings() });
 
-/** A skill arm's layout fix as one -c pair, before resume and the message's "-": [[skills.config]] takes an array of tables. */
-export function withLayout(argv: string[], o: Pick<SolOptions, "home" | "skillArm">): string[] {
-  if (!o.skillArm) return argv;
-  const at = argv.includes("resume") ? argv.indexOf("resume") : argv.length - 1;
-  return [...argv.slice(0, at), "-c", "skills.config=[" + CODEX_LAYOUT_FIX.map((f) => "{path=" + JSON.stringify(posix.join(o.home, ".codex", f)) + ",enabled=false}").join(",") + "]", ...argv.slice(at)];
-}
-
 /** The argv after the binary, as the adapter builds it with the lane's settings; the message follows on stdin. thread resumes that session. */
-export const solArgv = (o: Pick<SolOptions, "proxy" | "home" | "skillArm">, thread: string | null): string[] => withLayout(codexArgs(adapter(o), thread), o);
+export const solArgv = (o: Pick<SolOptions, "proxy">, thread: string | null): string[] => codexArgs(adapter(o), thread);
+
+/** The command that runs CODEX.bin with args: Codex's own directory first on PATH, then the binary through a fresh link named CODEX_LINK in a new temporary directory (pre-run change 5). */
+export const codexLaunch = (args: string[]): string[] => ["sh", "-c", 'export PATH="' + CODEX.path_dir + ':$PATH" && L="$(mktemp -d -t ' + CODEX_LINK + '.XXXXXX)/' + CODEX_LINK + '" && ln -s "$0" "$L" && exec "$L" "$@"', CODEX.bin, ...args];
 
 /** The variable that carries the slot's per-session bearer (the adapter's). The trial env admits it in the agent env only with a gse_ session bearer, never a provider key, so the containment probe exempts this one name on Sol (ohrProbed). */
 export const BEARER_ENV = "OPENAI_API_KEY";
@@ -138,7 +132,7 @@ export function solDriver(o: SolOptions): AgentDriver & { env: Record<string, st
         ...session,
         spawn(argv, env) {
           if (argv[0] !== CODEX_BIN) return session.spawn(argv, env);
-          const actual = ["sh", "-c", 'PATH="' + CODEX.path_dir + ':$PATH" exec "$0" "$@"', CODEX.bin, ...withLayout(argv.slice(1), o)];
+          const actual = codexLaunch(argv.slice(1));
           appendFileSync(join(o.out, "codex", "exec-argv.ndjson"), JSON.stringify(actual) + "\n");
           const child = session.spawn(actual, env);
           let reply = 0;

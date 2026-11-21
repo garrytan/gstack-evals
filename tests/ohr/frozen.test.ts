@@ -63,7 +63,7 @@ describe("frozen values match the posts", () => {
     const n = (x: number) => x.toLocaleString("en-US");
     for (const arm of ["current", "new"] as const) {
       expect(pinMove).toContain(n(CODEX_RENDERED[arm].bytes) + " bytes, sha256 " + CODEX_RENDERED[arm].sha256);
-      expect(pinMove).toContain(CLAUDE_BODY[arm].sha256 + " (" + n(CLAUDE_BODY[arm].chars) + " characters)");
+      for (const part of ["head", "tail"] as const) expect(pinMove).toContain(part + " " + CLAUDE_BODY[arm][part].sha256 + " (" + n(CLAUDE_BODY[arm][part].chars) + " characters)");
     }
     expect(pinMove).toContain("The gap is " + RENDER_GAP + " changed diff lines");
   });

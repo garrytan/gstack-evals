@@ -40,7 +40,9 @@ Copied and adapted, because the shapes differ:
 - The end state "refusal" is never written, since no provider marker apart from those reaches the driver.
 - A skill arm that prints a SESSION_KIND other than interactive retries once, then scores missing with
   E_OHR_SESSION_KIND; no print reads null and is scored as it ends.
-- session_kind is read from the first main-agent tool result that prints it.
+- session_kind is the SESSION_KIND line the skill's start step printed as Claude Code loaded it, read from
+  host/claude-session.jsonl between A8's head and tail (pre-run change 5), else the first main-agent tool result that
+  prints one.
 - served_model is the models the scored attempt's replies report: Claude Code's transcript for Opus and particle-1, and
   the model tap for Sol, because Codex's own records name the model it asked for. cli_version is the version the
   transcript's init line names. rows flags either when it is not the pin, except that a model drift halt already names

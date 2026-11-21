@@ -30,8 +30,8 @@ import { dockerRig, type HostRig } from "../../../src/skill-eval/cli/run-host.ts
 import { readJournalLines } from "../../../src/trial/review/cost.ts";
 import { openMeter } from "../../product-value/meter.ts";
 import { createHash } from "node:crypto";
-import { ARMS, CLAUDE_BODY, CLOSING, CODEX, CODEX_RENDERED, DENIED_TOOLS, firstMessage, LENS_LINE, MODEL_KEYS, PINS } from "../frozen.ts";
-import { CLAUDE_SESSION, skillLoad } from "../read/load.ts";
+import { ARMS, CLOSING, CODEX, CODEX_RENDERED, DENIED_TOOLS, firstMessage, LENS_LINE, MODEL_KEYS, PINS } from "../frozen.ts";
+import { CLAUDE_SESSION, skillLoad, startOutput } from "../read/load.ts";
 import { withCodex } from "./codex-rig.ts";
 import { parseBlock } from "../score/block.ts";
 import { simTurn } from "../sim/founder.ts";
@@ -262,7 +262,9 @@ export async function runE2e(o: E2eOptions = {}): Promise<{ checks: Check[]; dir
       check(arm + " on " + brief + ": the container printed SESSION_KIND: interactive and the row reads it", r?.session_kind === "interactive", String(r?.session_kind));
       check(arm + " on " + brief + ": gstack-slug prints idea in the work repo", /SLUG: idea\b/.test(transcript(arm, brief)), (/SLUG: [\w-]+/.exec(transcript(arm, brief)) ?? ["no SLUG line"])[0]);
       const load = r ? skillLoad(r) : null;
-      check(arm + " on " + brief + ": Claude Code's session file came out as host/claude-session.jsonl, and A8 reads the pin's whole skill body in it", load?.pass === true && load.sha256 === CLAUDE_BODY[arm].sha256, load ? load.why + " (" + load.sha256?.slice(0, 12) + ")" : "no row");
+      check(arm + " on " + brief + ": Claude Code's session file came out as host/claude-session.jsonl, and A8 reads the pin's whole head and tail in it around the start step's output", load?.pass === true, load ? load.why + " (" + load.sha256?.slice(0, 12) + ")" : "no row");
+      const start = r?.transcript ? startOutput(readFileSync(join(dirname(r.transcript), CLAUDE_SESSION), "utf8"), arm) : null;
+      check(arm + " on " + brief + ": the row's session kind is the one the start step printed at load", start !== null && r?.session_kind === /SESSION_KIND: ([A-Za-z0-9._-]+)/.exec(start)?.[1], start === null ? "no start output" : String(r?.session_kind));
       check(arm + " on " + brief + ": the pin check in the container passed and the state root was copied out", lines.find((l) => l.id === "s1/opus/" + arm + "/" + brief)?.attempts.every((a) => a.contained !== null) === true && !!r?.state_root && existsSync(r.state_root), r?.state_root ?? "no row");
     }
   }
