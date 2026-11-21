@@ -38,9 +38,9 @@ jobs:
   tests:
     name: tests (${{ matrix.shard }}/16)
     # Ubicloud runner on the Ubuntu 26.04 image ubuntu-latest gave. GitHub's hosted runners are one pool for every repository on the
-    # account, and jobs waited up to 2.6 to 3.9 minutes for it at p95 in November 2026 (GEVA-566). Each shard runs bun test serially,
-    # so 2 vCPUs per shard; the PR that moved to 16 shards compared it with 4 on real runs.
-    runs-on: ubicloud-standard-2-ubuntu-2604
+    # account, and jobs waited up to 2.6 to 3.9 minutes for it at p95 in November 2026 (GEVA-566). 4 vCPUs, not 2: bun test is serial
+    # in a shard, but the tests spawn processes, and on 2 vCPUs the same files took 1.99 times as long (run 44884246209).
+    runs-on: ubicloud-standard-4-ubuntu-2604
     # 45, not 25: on 2026-11-06 (08:55 to 19:10 UTC) green runs took 16.8 to 24.8 minutes, main's push at 2ef5833 took 24.2, and three attempts were cancelled at the 25-minute limit.
     timeout-minutes: 45
     strategy:
