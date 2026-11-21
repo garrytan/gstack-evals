@@ -33,7 +33,7 @@ Call settled: none
 
 ## What worked
 
-The judge agreed with the settled labels on part B, the later-correction calls: 11 of the 12 gold items it answered. Its lists of findings that describe the same defect (call A2) matched Opus's lists on all 17 items both answered, and Astra's on 11. The keyless packet build, the masking of reviewer names, the custody of private items and the labels-before-judge order all held: the labels file's sha256 (9714cefb4f8de68705919b1ea8c286742f9b6e95a168692e92c51504c78154ef) was recorded with a timestamp before the first judge call, and the leak check found no private text in this post.
+The judge agreed with the settled labels on part B, the later-correction calls: 11 of the 12 gold items it answered. Its lists of findings that describe the same defect (call A2) matched Opus's lists on all 17 items both answered, and Astra's on 11. The keyless packet build, the masking of reviewer names in the part A1 finding text, the custody of private items and the labels-before-judge order all held: the labels file's sha256 (9714cefb4f8de68705919b1ea8c286742f9b6e95a168692e92c51504c78154ef) was recorded with a timestamp before the first judge call, and the leak check found no private text in this post.
 
 ## What didn't work
 
@@ -60,7 +60,7 @@ This is a void, not a null: the instrument could not produce a reading.
 
 ## Setup
 
-The preregistration drew 145 fixed review findings from merged full-depth /ship pull requests in five public repositories whose description and commits show every first-pass finding: 40 each from the red team and the first pass, and all 32 adversarial and 33 second-model findings. Part B took 116 merged pull requests that a later pull request corrected within 7 days. The judge was Gemini 4 Carbon (google/gemini-4-carbon) on OpenRouter, pinned to google-vertex with data collection denied, reasoning effort high and at most 16,000 output tokens. Reviewer names were masked in the part A1 finding text. The A2 packets, which ask which findings describe the same defect, show finding ids and fix-commit trailers as they are.
+The preregistration drew 145 fixed review findings from merged full-depth /ship pull requests in five public repositories whose description and commits show every first-pass finding: 40 each from the red team and the first pass, and all 32 adversarial and 33 second-model findings. Part B took 116 merged pull requests that a later pull request corrected within 7 days. The judge was Gemini 4 Carbon (google/gemini-4-carbon) on OpenRouter, pinned to google-vertex with data collection denied, reasoning effort high and at most 16,000 output tokens. Reviewer names were masked in the part A1 finding text. The A2 packets, which ask which findings describe the same defect, show these unmasked: the finding's id and text, the full message of each fix commit with its trailers, and the pull request's first-pass and later-voice entries, taken from the description or from commit messages.
 
 The R111 pilot ran in three steps:
 
