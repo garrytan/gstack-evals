@@ -7,6 +7,7 @@ import { sourceRepo } from "./helpers.ts";
 import { removeTree } from "../../../src/trial/cleanup.ts";
 import { main } from "../../../src/trial/review/cli.ts";
 import { collect } from "../../cli/helpers.ts";
+import { armRef, codexArmsText } from "../../../lanes/codex-hooks/c/pins.ts";
 
 const PSTACK = "pstack=cursor/plugins@c742dd61706fbacc1b95f1a20b7b988cf096ce6c:harness/pstack/claude-code";
 const GSTACK = "gstack=garrytan/gstack@53522b1bbc60b3dc820842371f80ebc9db7911ec";
@@ -234,3 +235,44 @@ describe("review-units R2 settings (keyless)", () => {
   });
 });
 
+describe("review-units --host codex (keyless)", () => {
+  // Value: protects=--host codex takes each arm's effort, hook trust, settings, gstack config, switches, installer and $skill prompt prefix from the codex-arms file and shows them in the dry run, and refuses a run with no codex-arms file, a codex-arms file that names another arm or leaves one out, a gstack arm with no $skill prefix, a bare arm with one, a Claude-only flag, a model with no Codex route, and --upstream while a provider key is set; fails_when=a Codex run starts without its arm settings, a keyless upstream runs beside a real key, or the Claude-only flags pass silently; why_new=GEVA-562 part C (review-units was fixed to host claude); seam=main's --host and --codex-arms handling, parseCodexArms; no_claim=the Docker rig, which the end-to-end check covers
+  test("refusals and the dry run", async () => {
+    const dir = mkdtempSync(join(REPO_ROOT, ".review-units-cli-"));
+    const out = join(dir, "out");
+    const run = async (argv: string[], env: Record<string, string> = {}) => {
+      const io = collect();
+      const code = await main(argv, io, env);
+      return { code, ...io.text() };
+    };
+    const file = (name: string, text: string) => {
+      writeFileSync(join(dir, name), text);
+      return join(dir, name);
+    };
+    const arms = file("arms.json", codexArmsText(["c-on", "c-none"]));
+    const base = ["--suite", "gsta167-14pr", "--units", "3593", "--models", "gpt-6.1-sol", "--out", out, "--source", "garrytan/gstack=/nowhere", "--host", "codex", "--arms", armRef("c-on"), armRef("c-none")];
+    const dry = await run([...base, "--codex-arms", arms, "--dry-run", "--spend-cap", "10"]);
+    expect(dry.code).toBe(0);
+    expect(dry.out).toContain("host codex: every session runs /opt/codex-0.170.0/bin/codex; codex arms sha256 ");
+    expect(dry.out).toContain('c-on: effort low, hook trust on, settings {"features.sleep_tool":false}, gstack config {}, switches skill_routing,skill_contracts,destructive_guard, install "PATH=/opt/codex-0.170.0/bin:$PATH ./setup --host codex --no-browser -q"');
+    expect(dry.out).toContain("c-none: effort low, hook trust off");
+    expect(dry.out).toContain('c-on (told gstack, "$review Report findings only;');
+    expect(dry.out).toContain("c-none (told none)");
+    expect(existsSync(out)).toBe(false);
+    expect((await run([...base, "--dry-run"])).err).toMatch(/^E_USAGE review-units: --host codex needs --codex-arms <file>/);
+    expect((await run([...base, "--codex-arms", file("one.json", codexArmsText(["c-on"])), "--dry-run"])).err).toMatch(/^E_USAGE.*has no entry for arm c-none/);
+    expect((await run([...base, "--codex-arms", file("three.json", codexArmsText(["c-on", "c-none", "c-off"])), "--dry-run"])).err).toMatch(/^E_USAGE.*names arms the run does not: c-off/);
+    const noPrefix = JSON.parse(codexArmsText(["c-on", "c-none"]));
+    noPrefix.arms["c-on"].told_prefix = null;
+    expect((await run([...base, "--codex-arms", file("np.json", JSON.stringify(noPrefix)), "--dry-run"])).err).toMatch(/^E_USAGE.*c-on/);
+    const barePrefix = JSON.parse(codexArmsText(["c-on", "c-none"]));
+    barePrefix.arms["c-none"].told_prefix = "$review look";
+    expect((await run([...base, "--codex-arms", file("bp.json", JSON.stringify(barePrefix)), "--dry-run"])).err).toMatch(/^E_USAGE.*c-none/);
+    expect((await run([...base, "--codex-arms", arms, "--told-prefix", "c-on=" + arms, "--dry-run"])).err).toMatch(/^E_USAGE review-units: --told-prefix run on host claude only/);
+    expect((await run([...base, "--codex-arms", arms, "--cap-stops", "--dry-run"])).err).toMatch(/^E_USAGE.*--cap-stops/);
+    expect((await run([...base.map((a) => (a === "gpt-6.1-sol" ? "claude-opus-5-5" : a)), "--codex-arms", arms, "--dry-run"])).err).toMatch(/no Codex route/);
+    expect((await run([...base, "--codex-arms", arms, "--upstream", "http://127.0.0.1:1", "--dry-run"], { OPENAI_API_KEY: "set" })).err).toMatch(/^E_USAGE review-units: --upstream is for keyless checks, and a provider key is set/);
+    expect((await run([...base, "--codex-arms", arms, "--upstream", "http://127.0.0.1:1", "--dry-run"])).code).toBe(0);
+    removeTree(dir);
+  });
+});

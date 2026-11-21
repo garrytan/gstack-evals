@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, truncateSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -21,8 +22,8 @@ afterEach(() => {
 
 const MODEL = "gpt-6.1-sol";
 
-async function run(script: ResponsesScript, o: { skill?: (home: string) => CodexOptions["skill"]; provider?: "openai" | "openrouter"; model?: string; capMicros?: number; env?: Record<string, string>; setupHome?: (home: string) => void; effort?: string | null; entry?: SidecarTask; nextUser?: (texts: string[]) => Promise<NextUser>; freeform?: (persona: string, question: string) => Promise<PersonaAnswer>; sessionKind?: "unattended"; stateRoot?: boolean } = {}) {
-  const h = harness(() => [], { responses: script, ...(o.capMicros === undefined ? {} : { capMicros: o.capMicros }), ...(o.env ? { env: o.env } : {}) });
+async function run(script: ResponsesScript, o: { skill?: (home: string) => CodexOptions["skill"]; provider?: "openai" | "openrouter"; model?: string; capMicros?: number; env?: Record<string, string>; setupHome?: (home: string) => void; effort?: string | null; entry?: SidecarTask; nextUser?: (texts: string[]) => Promise<NextUser>; freeform?: (persona: string, question: string) => Promise<PersonaAnswer>; sessionKind?: "unattended"; stateRoot?: boolean; requestFields?: string[]; driver?: (home: string) => Partial<CodexOptions> } = {}) {
+  const h = harness(() => [], { responses: script, ...(o.capMicros === undefined ? {} : { capMicros: o.capMicros }), ...(o.env ? { env: o.env } : {}), ...(o.requestFields ? { requestFields: o.requestFields } : {}) });
   open.push(h);
   const model = o.model ?? MODEL;
   const provider = o.provider ?? "openai";
@@ -35,7 +36,7 @@ async function run(script: ResponsesScript, o: { skill?: (home: string) => Codex
   const extra = { ...(o.entry ? { entry: o.entry } : {}), ...(o.nextUser ? { nextUser: o.nextUser } : {}), ...(o.freeform ? { freeform: o.freeform } : {}), ...(o.sessionKind ? { sessionKind: o.sessionKind } : {}) };
   const driver = o.sessionKind
     ? hostDriver({ host: "codex", model, provider, proxy, interactive: false, effort, skill: o.skill?.(home) ?? null, out: join(h.dir, "host"), ...extra })
-    : codexDriver({ model, provider, proxy, effort, skill: o.skill?.(home) ?? null, out: join(h.dir, "host"), ...extra });
+    : codexDriver({ model, provider, proxy, effort, skill: o.skill?.(home) ?? null, out: join(h.dir, "host"), ...extra, ...o.driver?.(home) });
   mkdirSync(work, { recursive: true });
   const state = o.stateRoot ? seedStateRoot(work, work) : {};
   const session = h.session(work, home, { ...state, ...driver.env });
@@ -220,6 +221,39 @@ describe.skipIf(!HAS_CODEX_CLI)("Codex adapter on codex exec --json, against a f
     expect(none.responses().map((u) => u.body.reasoning?.effort)).toEqual([undefined]);
   }, 180_000);
 
+  // Value: protects=init.json records the host facts the Codex hooks eval reads (Codex's version, hooks.json's sha256 or null, the gstack switches as gstack-config prints them, the bin and the arm record), every rollout under the session's sessions/ is copied to codex-sessions/ at its path, and a proxy given requestFields journals each request's reasoning; fails_when=a fact is dropped or taken from the options instead of the host, a rollout stays in the sandbox, or the journal loses the effort; why_new=GEVA-562 part C (prereg section 2); seam=hostFacts, copyRollouts, init.json, MeteringProxy requestFields; no_claim=the trial image's own Codex, which the Docker tier covers
+  test("init.json records the host facts, the rollouts are copied out and the journal keeps each request's effort", async () => {
+    const setupHome = (home: string) => {
+      mkdirSync(join(home, ".codex"), { recursive: true });
+      writeFileSync(join(home, "gstack-config"), '#!/bin/sh\n[ "$1" = get ] && echo "on-$2"\n', { mode: 0o755 });
+    };
+    const arm = { gstack: { repo: "https://github.com/garrytan/gstack", sha: "a0534ce6db39a8da1f3c23ec070aac2479e44be9", version: "1.102.0.0" }, tree_sha256: "t".repeat(64), prompt_input_sha256: "p".repeat(64) };
+    const r = await run(final, { requestFields: ["reasoning"], setupHome, driver: (home) => ({ switches: { bin: join(home, "gstack-config"), keys: ["skill_contracts", "skill_routing"] }, arm }) });
+    expect(r.outcome.termination).toEqual({ kind: "completed" });
+    const init = r.read("init.json");
+    expect(init.codex_version).toMatch(/^codex-cli \d+\.\d+\.\d+$/);
+    expect(init.hooks_json_sha256).toBeNull();
+    expect(init.switches).toEqual({ skill_contracts: "on-skill_contracts", skill_routing: "on-skill_routing" });
+    expect(init.hook_trust).toBe(false);
+    expect([init.gstack, init.arm_tree_sha256, init.prompt_input_sha256]).toEqual([arm.gstack, arm.tree_sha256, arm.prompt_input_sha256]);
+    expect(init.rollouts.failed).toEqual([]);
+    expect(init.rollouts.copied).toHaveLength(1);
+    expect(init.rollouts.copied[0]).toMatch(/^sessions\/\d{4}\/\d{2}\/\d{2}\/rollout-.*\.jsonl$/);
+    const meta = JSON.parse(readFileSync(join(r.h.dir, "host", "codex-sessions", init.rollouts.copied[0]), "utf8").split("\n")[0]!);
+    expect([meta.type, meta.payload.id]).toEqual(["session_meta", init.thread_id]);
+    const requests = readFileSync(join(r.h.dir, "journal.ndjson"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)).filter((l) => l.kind === "request");
+    expect(requests.length).toBeGreaterThan(0);
+    expect(requests.map((l) => l.fields.reasoning.effort)).toEqual(requests.map(() => "low"));
+    const again = await run(final, { setupHome: (home) => {
+      mkdirSync(join(home, ".codex"), { recursive: true });
+      writeFileSync(join(home, ".codex", "hooks.json"), '{"hooks":{}}\n');
+    } });
+    expect(again.read("init.json").hooks_json_sha256).toBe(createHash("sha256").update('{"hooks":{}}\n').digest("hex"));
+    expect(again.read("init.json").switches).toBeNull();
+    const plain = readFileSync(join(again.h.dir, "journal.ndjson"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)).filter((l) => l.kind === "request");
+    expect(plain.every((l) => !("fields" in l))).toBe(true);
+  }, 240_000);
+
   // Value: protects=a Codex session gets GSTACK_SESSION_KIND from sessionKind through hostDriver, and the trial's seeded gstack state root (GSTACK_STATE_ROOT, GSTACK_HOME and its config) reaches the model's shell commands, as on Claude Code; fails_when=hostDriver drops sessionKind for Codex or Codex's shell env drops the variables; why_new=parity with the Claude Code arm; seam=codexEnv, hostDriver, the session env; no_claim=how gstack reads them
   test("sessionKind and the seeded state root reach the model's shell on Codex", async () => {
     const probe: ResponsesScript = ({ outputs }) => {
@@ -374,6 +408,17 @@ describe("Codex adapter pieces", () => {
     expect(codexArgs({ ...o, effort: null }).some((a) => a.startsWith("model_reasoning_effort="))).toBe(false);
     expect(() => codexArgs({ ...o, settings: { model_reasoning_effort: "high" } })).toThrow("E_INTERNAL");
     expect(() => codexArgs({ ...o, settings: { "model_providers.gstack_evals_proxy.base_url": "http://elsewhere" } })).toThrow("E_INTERNAL");
+  });
+
+  // Value: protects=the hook-trust bypass is passed only when the caller asks, before the model flag, so a gstack arm's hooks run under codex exec and a no-gstack arm's command line is unchanged; fails_when=the flag is always or never passed, or lands after the stdin dash; why_new=the Codex hooks eval's gstack arms (GEVA-562 preregistration, section 2); seam=codexArgs; no_claim=that Codex runs the hooks, which the eval's keyless checks show
+  test("codexArgs passes --dangerously-bypass-hook-trust only when hookTrust is set", () => {
+    const o = { model: "gpt-6.1-sol", provider: "openai" as const, proxy: { baseUrl: "http://10.231.7.2:8080", slot: "s_abc", token: "t" }, effort: "low" };
+    expect(codexArgs(o)).not.toContain("--dangerously-bypass-hook-trust");
+    expect(codexArgs({ ...o, hookTrust: false })).not.toContain("--dangerously-bypass-hook-trust");
+    const argv = codexArgs({ ...o, hookTrust: true });
+    expect(argv.filter((a) => a === "--dangerously-bypass-hook-trust")).toHaveLength(1);
+    expect(argv.indexOf("--dangerously-bypass-hook-trust")).toBeLessThan(argv.indexOf("-m"));
+    expect(argv.at(-1)).toBe("-");
   });
 
   // Value: protects=skill-eval's explicit effort for each model it runs on Codex is the default_reasoning_level of codex 0.166.0's own catalog (codex debug models), and null for a model the catalog lacks, where Codex sends no effort; fails_when=a value drifts from the pinned catalog or a catalog-less model gets an effort it never had; why_new=the effort pin keeps skill-eval's behaviour; seam=catalogEffort; no_claim=that these efforts suit any eval
