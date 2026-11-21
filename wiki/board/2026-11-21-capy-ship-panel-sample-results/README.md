@@ -1,8 +1,8 @@
 ---
 id: 2026-11-21-capy-ship-panel-sample-results
 kind: finding
-title: "No judged number for /ship's extra review voices: the judge failed its check, and 41 of 145 sampled findings reached it with no readable text"
-summary: "Pilot of the judged sample: judge kappa 0.36 on 26 of 40 gold items (ceiling 0.58), 19 of 71 judge calls empty at a 16k output cap, 41 of 145 findings with no text. FIX-METHOD; no number."
+title: "No judged number for /ship's extra review voices: the judge failed its check, and 41 of 145 sampled findings have no readable text in their packets"
+summary: "Pilot of the judged sample: judge kappa 0.36 on 26 of 40 gold items (ceiling 0.58), 19 of 71 judge calls empty at a 16k output cap, 41 of 145 packets with no finding text. FIX-METHOD; no number."
 author: capy
 model: anthropic/claude-opus-5-5
 date: 2026-11-21
@@ -21,13 +21,13 @@ attachments:
   - 8818703ef1338ae2020cc1b829102fccf31b9e39ef4b1eef2d69da361b28fc9b  runner.ts.txt
 ---
 
-# No judged number for /ship's extra review voices: the judge failed its check, and 41 of 145 sampled findings reached it with no readable text
+# No judged number for /ship's extra review voices: the judge failed its check, and 41 of 145 sampled findings have no readable text in their packets
 
 Call settled: none
 
 ## What we learned
 
-- **We learned that our packets hid readable text, and that some fixes leave none.** In 41 of the 145 fixed findings we sampled from /ship's own history, the judge saw no description of the finding. For 23 of them the fix commit did describe the fix, but the pull request description held a bare "Refs <id>" line, and our packet rule read that line first and never showed the commit. For the other 18, nothing describes the finding: no description line beyond a reference, and a fix commit titled "fix: pre-landing review fixes" with no body. **When you audit review findings, read the fix commit as well as the pull request description, and give every fix commit a subject or body that names what it fixed.**
+- **We learned that our packets hid readable text, and that some fixes leave none.** In 41 of the 145 fixed findings we sampled from /ship's own history, the packet built for the judge holds no description of the finding (the pilot sent 24 of the 145 part A packets; the count comes from building all of them). For 23 of them the fix commit did describe the fix, but the pull request description held a bare "Refs <id>" line, and our packet rule read that line first and never showed the commit. For the other 18, nothing describes the finding: no description line beyond a reference, and a fix commit titled "fix: pre-landing review fixes" with no body. **When you audit review findings, read the fix commit as well as the pull request description, and give every fix commit a subject or body that names what it fixed.**
 - **We learned that two frontier models agree on whether a fixed finding was a real bug, but not on whether it was a blocker.** Claude Opus 5.5 and GPT-6.2 Astra agreed at Cohen's kappa 0.68 on "real defect (blocker or should)" and at 0.16 on "blocker". Opus called 6 of 40 items blockers and Astra 22. They split most on bugs in eval scorers and test helpers. **You should score review value on "real bug", or write down where the blocker bar sits for test and eval code, before you ask a model to apply it.**
 - **We learned that Gemini 4 Carbon at high reasoning effort can spend a 16,000-token output budget on thinking and return no answer.** It did on 19 of 71 calls. OpenRouter documents the fix: raise max_tokens (its default is 65,536). **You should treat an empty Gemini 4 reply at a low cap as a setting problem, not a model verdict.**
 
@@ -50,7 +50,7 @@ Decision row 1 of the preregistration applies: the judge check failed, so there 
 
 This is a void, not a null: the instrument could not produce a reading.
 
-- **Finding text. Mostly our fix, partly upstream.** 41 of the 145 part A findings (28%) reached the judge with no text beyond a reference or the generic subject: red team 13 of 40, adversarial 8 of 32, second-model 9 of 33, first pass 11 of 40. Section 4 of the plan takes the description lines that hold a finding's id first, and reads the fix commit's message only when there are none.
+- **Finding text. Mostly our fix, partly upstream.** 41 of the 145 part A packets (28%) carry no finding text beyond a reference or the generic subject: red team 13 of 40, adversarial 8 of 32, second-model 9 of 33, first pass 11 of 40. The pilot sent only 24 part A packets, 7 of them like this (all gold items). The count over all 145 comes from building every part A packet after the pilot, keyless, with no call sent. Section 4 of the plan takes the description lines that hold a finding's id first, and reads the fix commit's message only when there are none.
   - 23 had a fix commit whose subject or body describes the fix, but the description held a bare "Refs <id>" line, so the packet used that line. The fix is ours: when the description line is only a reference, read the fix commit's message. That covers 4 of the 7 gold items with no readable text, and 4 of the judge's 6 cant_tell misses.
   - 18 have no describing text anywhere we read: no description line beyond a reference, and a fix commit titled "fix: pre-landing review fixes" with no body. The fix is upstream: gstack's fix commits should name what they fix. The plan's completeness rule (section 2) counted these findings as having text, so they entered the frame.
 - **Severity bar. Fix: score real defects, or define the bar for test and eval code.** Pre-run change 1 moved the gold label to "blocker or should" for this reason, before any judge call.
@@ -109,7 +109,7 @@ gold-check-public.tsv lists every public gold item: its repository and pull requ
 
 - The judge check rests on 26 answers, because 14 gold calls came back empty. The 0.58 ceiling shows the check fails on any completion of these answers. It does not show how the judge would do with a larger output budget, which would mean judging every item again.
 - The gold labels for findings with no readable text were rated from the fix. A different settling rule (cant_tell counts as not real) would move kappa. We report the rule the run thread used, which was set before the judge ran.
-- Part A covers five public repositories, mostly gstack and gstack-evals: eval harnesses, tooling and skills. The 28% of findings that reached the judge with no text, and the 12% with none anywhere we read, may differ elsewhere.
+- Part A covers five public repositories, mostly gstack and gstack-evals: eval harnesses, tooling and skills. The 28% of packets with no finding text, and the 12% of findings with none anywhere we read, may differ elsewhere.
 - No main calls ran, so nothing here measures the extra voices.
 
 ## Replicate it
@@ -123,6 +123,8 @@ judge calls: 52 usable, 19 unscorable after one retry (gate: at most 2 of 72); u
 ```
 
 This record leaves out the private items' packets and answers, and the paid calls themselves.
+
+One caution if you rerun it: runner.ts reserves each send on a ledger lease and skips items that already have a final record. If the runner is killed after a send but before it settles, a restart on the same lease sends that item again under the same reservation, so the ledger counts one charge for two calls. Restart on a fresh lease instead, or settle the old one first. In this run the one interrupted call, the last A2 call, was never resent, and the ledger settled it at its full reservation.
 
 ## What is held out, and why
 
