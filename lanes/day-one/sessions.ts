@@ -8,9 +8,10 @@
 //   /work/app; the checker's is empty.
 // - Planning sessions take the owner loop (owner.ts) as nextUser. Builds and checks take a loop that ends the session
 //   at its first reply.
-// - Planning sessions of every arm hold (pin change 2, item B): when a turn ends with background work the session started
-//   still running, the driver keeps the session open for it, in all at most the session's minutes. A session that
-//   reaches that limit while held is a gap row, E_DAYONE_BACKGROUND, with no retry. Builds and checks do not hold.
+// - Planning sessions of every arm hold (section 7, item B, of the first pin change): when a turn ends with background work
+//   the session started still running, the driver keeps the session open for it, in all at most the session's minutes. A
+//   session that reaches that limit while held gets the one retry, and on the retry it is a gap row, E_DAYONE_BACKGROUND.
+//   Builds and checks do not hold.
 // - gstack arms: the arm's gstack at its pin, a fresh state root copied out to host/gstack-state, GSTACK_SESSION_KIND
 //   unattended, and GPT-6 Astra as the Codex voice on its own slot (C2): its own meter and allowance, OPENAI_API_KEY in the
 //   container set to that slot's bearer and never the provider key, and GSTACK_CODEX_NO_SANDBOX=1. Every other arm has
@@ -231,7 +232,7 @@ export type Outcome =
   | { state: "ended"; how: Termination["kind"] }
   | { state: "contaminated"; code: ReasonCode; why: string }
   | { state: "missing"; code: ReasonCode; why: string }
-  | { state: "retry"; why: string }
+  | { state: "retry"; why: string; code?: ReasonCode }
   | { state: "cap"; why: string }
   | { state: "halt"; code: ReasonCode; why: string };
 
@@ -246,7 +247,7 @@ export function attemptOutcome(a: AttemptRead, owner: OwnerFailure): Outcome {
   if (owner?.reason === "allowance") return { state: "missing", code: "E_DAYONE_OWNER", why: "the responder's allowance refused a call: " + owner.detail };
   if (a.web > 0) return { state: "contaminated", code: "E_DAYONE_CONTAMINATED", why: a.web + " web tool result(s)" };
   if (a.gstack_reads.length) return { state: "contaminated", code: "E_DAYONE_CONTAMINATED", why: "read " + a.gstack_reads.slice(0, 3).join(", ") };
-  if (t.kind === "missing" && t.code === "E_BACKGROUND_DEADLINE") return { state: "missing", code: "E_DAYONE_BACKGROUND", why: "background work the session started still ran at its time limit" };
+  if (t.kind === "missing" && t.code === "E_BACKGROUND_DEADLINE") return { state: "retry", why: "background work the session started still ran at its time limit", code: "E_DAYONE_BACKGROUND" };
   if (a.contained === null) return { state: "retry", why: "the containment probe could not run" + (t.kind === "infra" && t.incident ? ": " + t.incident : "") };
   if (owner?.reason === "provider") return { state: "retry", why: "a responder provider failure: " + owner.detail };
   if (t.kind === "completed" || t.kind === "turn_cap" || t.kind === "timeout" || t.kind === "allowance_stop") return { state: "ended", how: t.kind };
@@ -256,7 +257,7 @@ export function attemptOutcome(a: AttemptRead, owner: OwnerFailure): Outcome {
 /** One retry in all: a retryable outcome on the first attempt retries; on the second it is a gap. */
 export function settle(o: Outcome, attempt: number): Outcome {
   if (o.state !== "retry" || attempt < 2) return o;
-  return { state: "missing", code: "E_DAYONE_GAP", why: o.why + ", on the retry" };
+  return { state: "missing", code: o.code ?? "E_DAYONE_GAP", why: o.why + ", on the retry" };
 }
 
 /** The loop for sessions with no owner: the first reply ends the session; its texts are kept. */
