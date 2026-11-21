@@ -203,6 +203,27 @@ def test_reservation_bound_429_is_retried_in_the_turn(base_url, log):
         h2h_codex.RESERVATION_RETRY_AFTER_S, h2h_codex.RESERVATION_RETRIES = saved, 3
 
 
+def test_reservation_retry_respects_the_turn_ceiling(base_url, log):
+    import h2h_codex
+    saved = h2h_codex.RESERVATION_RETRY_AFTER_S
+    try:
+        h2h_codex.RESERVATION_RETRY_AFTER_S = 0
+        cfg, d = session("ceil0", base_url, ["[fx:boundlate] Fix the parser."], limits={"max_turns": 1})
+        s = run(cfg)
+        t = s["turns"][0]
+        assert t["termination"] == "turn_ceiling" and t["reservation_retries"] == 0 and len(t["results"]) == 1 and s["turns_used"] == 1, t
+        cfg, d = session("ceil1", base_url, ["[fx:boundlate] Fix the parser."], limits={"max_turns": 2})
+        s = run(cfg)
+        t = s["turns"][0]
+        assert t["termination"] == "turn_ceiling" and t["reservation_retries"] == 1 and [x["kind"] for x in t["results"]] == ["turn", "retry"] and s["turns_used"] == 2, t
+        h2h_codex.RESERVATION_RETRY_AFTER_S = 1
+        cfg, d = session("ceil-under", base_url, ["[fx:bound] Fix the parser."])
+        t = run(cfg)["turns"][0]
+        assert t["termination"] == "completed" and t["reservation_retries"] == 1 and t["wall_s"] >= 1, t
+    finally:
+        h2h_codex.RESERVATION_RETRY_AFTER_S = saved
+
+
 def test_a_failed_generations_lookup_still_closes_the_slot(base_url, log):
     closed = []
 
@@ -362,7 +383,7 @@ def test_agent_dispatch():
         h2h_agent.CodexTurns, h2h_agent.Turns, h2h_agent.egress.apply, h2h_agent.subprocess.run = saved
 
 
-TESTS = [test_done_in_one_turn, test_continuations_to_the_cap, test_async_question_gets_the_reply_on_the_same_thread, test_question_at_the_turn_ceiling_gets_no_reply, test_sync_question_is_counted_unanswered, test_two_scripted_turns_resume_one_thread, test_ci_unset_and_env_reaches_tools, test_policy_failure_is_a_refusal, test_reservation_bound_429_is_retried_in_the_turn, test_a_failed_generations_lookup_still_closes_the_slot, test_wall_limit_kills_codex, test_hooks_run_under_the_trust_bypass, test_pack_config_is_kept_and_a_clash_refuses_before_the_slot, test_home_rules_and_wrong_binary_refuse]
+TESTS = [test_done_in_one_turn, test_continuations_to_the_cap, test_async_question_gets_the_reply_on_the_same_thread, test_question_at_the_turn_ceiling_gets_no_reply, test_sync_question_is_counted_unanswered, test_two_scripted_turns_resume_one_thread, test_ci_unset_and_env_reaches_tools, test_policy_failure_is_a_refusal, test_reservation_bound_429_is_retried_in_the_turn, test_reservation_retry_respects_the_turn_ceiling, test_a_failed_generations_lookup_still_closes_the_slot, test_wall_limit_kills_codex, test_hooks_run_under_the_trust_bypass, test_pack_config_is_kept_and_a_clash_refuses_before_the_slot, test_home_rules_and_wrong_binary_refuse]
 
 
 def main() -> int:

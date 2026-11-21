@@ -35,7 +35,9 @@ records differ.
   a 502), and Codex runs with request_max_retries 0, so its turn.failed then names "last status: 429". Such a turn waits
   the proxy's retry-after (RESERVATION_RETRY_AFTER_S) and resumes the thread with the continuation text, at most
   RESERVATION_RETRIES times a turn and only while the wall deadline allows; each retry is an exec of kind "retry",
-  counted in the turn's reservation_retries. A 429 past that bound ends the turn by the rule above.
+  counted in the turn's reservation_retries. Before a retry the failed exec's rollout is read and its model responses
+  count against max_turns, and a turn with none left ends as turn_ceiling. A 429 past that bound ends the turn by the
+  rule above.
 
 Records under out, beside h2h_turns' own: codex-events.jsonl (every exec's JSONL events, each with its phase and exec
 number), codex-stderr.log, codex-sessions/ (every rollout), codex-config.toml (the config the session ran) and
@@ -354,6 +356,14 @@ class CodexTurns(Turns):
                     info["termination"] = e["killed"]
                     break
                 if e["failed"] and RESERVATION_429.search(e["failed"]) and info["reservation_retries"] < RESERVATION_RETRIES and time.time() + RESERVATION_RETRY_AFTER_S < self.deadline:
+                    rollout = self.rollout()
+                    if rollout is not None:
+                        total = model_responses(rollout)
+                        info["num_turns"] += max(total - self.responses, 0)
+                        self.responses = max(total, self.responses)
+                    if self.summary["turns_used"] + info["num_turns"] >= int(self.limits["max_turns"]):
+                        info["termination"] = "turn_ceiling"
+                        break
                     info["reservation_retries"] += 1
                     await asyncio.sleep(RESERVATION_RETRY_AFTER_S)
                     message, kind = (self.cfg["continuation"], "retry") if self.thread else (message, kind)

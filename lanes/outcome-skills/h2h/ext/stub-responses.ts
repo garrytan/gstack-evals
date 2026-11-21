@@ -11,6 +11,7 @@
 //   asksync     request_user_input with one question, then DONE after Codex's own answer
 //   fail        response.failed with error code cyber_policy
 //   bound       the metering proxy's 429 E_H2H_RESERVATION_BOUND refusal, then DONE after the next user message
+//   boundlate   one exec cell that runs true, then the proxy's 429 on the next request, after every user message
 //   hang        no answer until the client goes away
 //   cmd:<sh>    a code-mode exec cell that runs <sh> through tools.exec_command, then DONE (the rest of the message's
 //               first line after the tag is the command)
@@ -56,6 +57,7 @@ export function next(body: any): Item | Item[] | "fail" | "bound" | null {
   if (script === "hang") return null;
   if (script === "fail") return reply ? message("Fixed.\nDONE") : "fail";
   if (script === "bound") return reply ? message("Fixed.\nDONE") : "bound";
+  if (script === "boundlate") return steps === 0 ? cell("true") : "bound";
   const arg = (m?.[2] ?? "").trim();
   if (script === "tdd" && !reply && steps < 3) {
     const [test, src] = arg.split("|");

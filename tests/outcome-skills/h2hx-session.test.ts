@@ -138,6 +138,18 @@ describe("parts P and L on the Claude Code path", () => {
     await expect(runExtSession(input(planned("p-none", "h2hx-p-pilot"), nullHome("p-none", { base_arm: "none" }), join(W, "p-missing")))).rejects.toThrow(/^E_H2HX_ROUTE_RECORD no generation record for answer gen-9/);
   });
 
+  test("part P refuses when the generation lookup failed, or when a slot that spent money checked no answer; a slot that checked its answers still passes", async () => {
+    plan([{ files: pSession({ "gen-1": "Particle AI" }, ["gen-1"]) }]);
+    expect((await runExtSession(input(planned("p-none", "h2hx-p-pilot"), nullHome("p-none", { base_arm: "none" }), join(W, "p-clean")))).record).toMatchObject({ served_by: ["Particle AI"], end: "completed" });
+    plan([{ files: { ...pSession({ "gen-1": "Particle AI" }, ["gen-1"]), "h2h-summary.json": summary(1.25, "completed", { generations_error: "OSError: disk full" }) } }]);
+    await expect(runExtSession(input(planned("p-none", "h2hx-p-pilot"), nullHome("p-none", { base_arm: "none" }), join(W, "p-generr")))).rejects.toThrow(/^E_H2HX_ROUTE_RECORD the generation lookup failed \(OSError: disk full\)/);
+    expect(existsSync(join(W, "p-generr", "session.json"))).toBe(false);
+    plan([{ files: pSession({}, []) }]);
+    await expect(runExtSession(input(planned("p-none", "h2hx-p-pilot"), nullHome("p-none", { base_arm: "none" }), join(W, "p-none-checked")))).rejects.toThrow(/^E_H2HX_ROUTE_RECORD the slot spent \$1\.25 and no answer had a generation record to check/);
+    plan([{ files: { ...pSession({}, []), "h2h-summary.json": summary(0, "completed") } }]);
+    expect((await runExtSession(input(planned("p-none", "h2hx-p-pilot"), nullHome("p-none", { base_arm: "none" }), join(W, "p-free")))).record).toMatchObject({ served_by: [] });
+  });
+
   test("a part L session retries once on an upstream end at the full allowance and reads its sentence from the recorded first request", async () => {
     const md = X.parts.L.claude_md["l-gstack-md"]!;
     const first = { system: [{ type: "text", text: "s" }], messages: [{ role: "user", content: [{ type: "text", text: md }] }] };

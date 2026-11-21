@@ -242,6 +242,9 @@ export async function runExtSession(i: ExtSessionInput, x: ExtPrereg = readExtPr
       const g = fileLookup(join(ev, "generations.jsonl"));
       const session = existsSync(join(ev, "claude-session.jsonl")) ? answerIds(readFileSync(join(ev, "claude-session.jsonl"), "utf8")) : [];
       const checked = await checkServedBy([...new Set([...session, ...g.ids])], g.lookup, claudeRoute(s.arm, x));
+      if (typeof summary?.generations_error === "string") h2hFail("E_H2HX_ROUTE_RECORD", "the generation lookup failed (" + summary.generations_error + "), so not every answer was checked; part P's items stop for the Captain; " + dir);
+      const spent = attemptUsage(attempt, summary, allowance).spent_micros;
+      if (checked.checked === 0 && spent > 0) h2hFail("E_H2HX_ROUTE_RECORD", "the slot spent $" + (spent / 1_000_000).toFixed(2) + " and no answer had a generation record to check; part P's items stop for the Captain; " + dir);
       for (const n of checked.served_by) served.add(n);
     }
     if (ev) for (const f of KEEP[host]) if (existsSync(join(ev, f))) copyFileSync(join(ev, f), join(i.out, f));
