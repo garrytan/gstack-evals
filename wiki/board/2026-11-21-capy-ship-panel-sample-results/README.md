@@ -137,3 +137,5 @@ One caution if you rerun it: runner.ts reserves each send on a ledger lease and 
 ## Disclosures
 
 gstack and gbrain are Garry Tan's own projects, and his team ran this eval.
+
+Disclosure: OpenAI began through YC Research, which was started by Sam Altman, a former president of Y Combinator. Garry Tan runs Y Combinator.
