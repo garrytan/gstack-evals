@@ -60,7 +60,7 @@ This is a void, not a null: the instrument could not produce a reading.
 
 ## Setup
 
-The preregistration drew 145 fixed review findings from merged full-depth /ship pull requests in five public repositories whose description and commits show every first-pass finding: 40 each from the red team and the first pass, and all 32 adversarial and 33 second-model findings. Part B took 116 merged pull requests that a later pull request corrected within 7 days. The judge was Gemini 4 Carbon (google/gemini-4-carbon) on OpenRouter, pinned to google-vertex with data collection denied, reasoning effort high and at most 16,000 output tokens. Reviewer names were masked in every packet.
+The preregistration drew 145 fixed review findings from merged full-depth /ship pull requests in five public repositories whose description and commits show every first-pass finding: 40 each from the red team and the first pass, and all 32 adversarial and 33 second-model findings. Part B took 116 merged pull requests that a later pull request corrected within 7 days. The judge was Gemini 4 Carbon (google/gemini-4-carbon) on OpenRouter, pinned to google-vertex with data collection denied, reasoning effort high and at most 16,000 output tokens. Reviewer names were masked in the part A1 finding text. The A2 packets, which ask which findings describe the same defect, show finding ids and fix-commit trailers as they are.
 
 The R111 pilot ran in three steps:
 
@@ -122,9 +122,9 @@ judge on gold at the real-defect line: 26 of 40 usable; kappa 0.358 (gate: at le
 judge calls: 52 usable, 19 unscorable after one retry (gate: at most 2 of 72); usable A1 or B by stratum: {'AD': 5, 'B': 14, 'FR': 3, 'RT': 5, 'SM': 4} (gate: at least 5 each)
 ```
 
-This record leaves out the private items' packets and answers, and the paid calls themselves.
+This record leaves out the private items' packets and answers, the paid calls themselves, and the short keyless script that sorted the 41 part A packets with no finding text into their two kinds (23 and 18).
 
-One caution if you rerun it: runner.ts reserves each send on a ledger lease and skips items that already have a final record. If the runner is killed after a send but before it settles, a restart on the same lease sends that item again under the same reservation, so the ledger counts one charge for two calls. A new lease on the same ledger file does not help, because it refuses with E_RESERVE_CONFLICT. After a kill, settle the lease, which counts the interrupted call at its full reservation, and run any remaining items against a separate --ledger file. In this run the one interrupted call, the last A2 call, was never resent, and the ledger settled it at its full reservation.
+One caution if you rerun it: runner.ts reserves each send on a ledger lease and skips items that already have a final record. If the runner is killed after a send but before it settles, a restart on the same lease sends that item again under the same reservation, so the ledger counts one charge for two calls. Neither a new lease on the same ledger file nor a fresh ledger file resumes cleanly: the first refuses with E_RESERVE_CONFLICT, and the second holds no lease to reserve against. So after a kill, settle the lease, which counts the interrupted call at its full reservation, and don't restart this runner on the remaining items: resuming safely needs a runner that records each attempt before it sends. In this run the one interrupted call, the last A2 call, was never resent, and the ledger settled it at its full reservation.
 
 ## What is held out, and why
 
