@@ -83,10 +83,11 @@ export const GSTACK_CONFIG = GSTACK_SRC + "/bin/gstack-config";
 export const SEED_CONFIG = { telemetry: "off", update_check: "false", artifacts_sync_mode: "off", artifacts_sync_mode_prompted: "true", codex_reviews: "disabled", routing_declined: "true", proactive: "core" } as const;
 
 // Codex 0.170.0 in every task image, from npm's linux-x64 tarball by its sha256, with every binary of its musl vendor
-// folder beside codex (codex-code-mode-host must sit beside it). The lines follow B1's task setup (TASK_SETUP below).
+// folder kept whole under /opt/laneb/codex (bin/codex beside bin/codex-code-mode-host). The lines follow B1's task setup
+// byte for byte (TASK_SETUP below).
 export const CODEX_TARBALL = "https://registry.npmjs.org/@openai/codex/-/codex-" + CODEX.version + "-linux-x64.tgz";
-export const CODEX_BIN = "/opt/laneb/codex/codex";
-export const TASK_SETUP = { file: join(REPO, HERE, "task-setup.Dockerfile"), sha256: "__TASK_SETUP_SHA256__", b1: B1_TASK_SETUP } as const;
+export const CODEX_BIN = "/opt/laneb/codex/bin/codex";
+export const TASK_SETUP = { file: join(REPO, HERE, "task-setup.Dockerfile"), sha256: "153dca92670706a3c13c8d45167a78712073472cb5b4410506f04136a3146488", b1: B1_TASK_SETUP } as const;
 
 // The metering proxy's route for part R (proxy.json beside this file): the OpenAI Responses API at api.openai.com, keyed by
 // OPENAI_API_KEY, served by Lane B's session proxy (quick/laneb/runner/responses.ts).
@@ -94,6 +95,12 @@ export const PROXY_CONFIG = join(REPO, HERE, "proxy.json");
 export const PROXY_MODEL = "gpt-6.1-sol";
 export const PROXY_KEY_ENV = "OPENAI_API_KEY";
 export const PROXY_SLOT = "laneb";
+
+// The session settings (section 2): effort low in every arm of part R, the question reply the driver gives, and the agent
+// that runs the session in the task container.
+export const R_EFFORT = EFFORT.low;
+export const QUESTION_REPLY = "No one is available. Treat this question as answered with your recommended option, and keep going.";
+export const AGENT = { name: "laneb-codex", import_path: "laneb_codex:LanebCodexAgent", cells: "cells.codex-hooks-r.json" } as const;
 
 // The pilot (section 9 and change 1 section 4): B1's two smoke tasks and the first four covered candidates.
 export const PILOT_TASKS = [...SMOKE_TASKS, "BerriAI__litellm-16997", "narwhals-dev__narwhals-3480", "delgan__loguru-1425", "koxudaxi__datamodel-code-generator-2996"] as const;

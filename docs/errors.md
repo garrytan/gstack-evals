@@ -451,6 +451,12 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_OHR_DRYRUN_FAIL](#e_ohr_dryrun_fail) | 2 | U20 |
 | [E_OHR_PREFLIGHT_FAIL](#e_ohr_preflight_fail) | 2 | U20 |
 | [E_OHR_MODEL_DRIFT](#e_ohr_model_drift) | 2 | U20 |
+| [E_CODEX_R_PIN](#e_codex_r_pin) | 2 | U20 |
+| [E_CODEX_R_ARMS](#e_codex_r_arms) | 2 | U20 |
+| [E_CODEX_R_PREPARE](#e_codex_r_prepare) | 2 | U20 |
+| [E_CODEX_R_TABLE](#e_codex_r_table) | 2 | U20 |
+| [E_CODEX_R_MONEY](#e_codex_r_money) | 2 | U20 |
+| [E_CODEX_R_LAUNCH](#e_codex_r_launch) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -3495,6 +3501,54 @@ Office-hours rewrite eval (pre-run change 4): a reply named a model other than t
 Fix: Keep the journal and the transcript that show the reported model, and send the question to the Captain. Never retry the item on another model or route.
 
 Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CODEX_R_PIN
+
+A part R frozen value does not hold (lanes/codex-hooks/r/pins.ts): prove-it on Codex is not built from B1's skill at its digests, the committed route table is not change 1's bytes, or the route table's first four covered candidates are not change 1's pilot tasks.
+
+Fix: Fix the input that changed and run the command again. Never edit a frozen file to make it match; a changed value needs a dated change to the preregistration.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_CODEX_R_ARMS
+
+Part R's arm build or check failed (lanes/codex-hooks/r/arms.ts): gstack did not check out at its pin, the docker build failed, the builder's Codex is not 0.170.0, a gstack arm lacks prove-it at its digest, a listing of it in Codex's start capture or a switch as the arm sets it, the no-gstack arm holds a file, or a run's tar is not its committed manifest's.
+
+Fix: Read the named problem. Rebuild with bun lanes/codex-hooks/cli.ts r arms build, and register new manifests only through a pull request before any paid session.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_CODEX_R_PREPARE
+
+Part R's prepare step (lanes/codex-hooks/r/prepare-run.ts) found a job agent it cannot turn into the Codex agent: an arm that is not part R's, or a kwarg the Codex agent does not take.
+
+Fix: Prepare the part with part R's own profile (bun lanes/codex-hooks/cli.ts r prepare) and arm specs, then run it again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_CODEX_R_TABLE
+
+Part R's session table (lanes/codex-hooks/r/table.ts) found a Codex trial whose arm is not one of r-on, r-off and r-none.
+
+Fix: Point the table config at part R's pulled jobs only, then run it again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_CODEX_R_MONEY
+
+A part R ledger step was refused (lanes/codex-hooks/r/money.ts): an approval at an amount other than the item's recorded cap or on a ledger that already holds rows, a ledger with no approval row for its item, a done mark while a reservation is open, a plan whose sessions or cap rule differ from section 11, or a dry run whose ledger did not read back as approved, settled and done.
+
+Fix: Use the recorded cap and a fresh ledger, settle open reservations first, and take a cap or plan change to the Captain.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_CODEX_R_LAUNCH
+
+A part R launch was refused before it started (lanes/codex-hooks/r/money.ts launchGuard): the item's projection would pass its cap, every item's projection plus the crew file's counter would pass the all-in stop the Captain set, the item is marked done, or r-main was asked to start before r-pilot was marked done.
+
+Fix: Take the guard's lines to the Captain before launching. A cap raise needs the Captain's record and a new approval row; nothing launches until the guard passes.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
 
 ## Exit 3: calibration failed (INCOMPLETE)
 
