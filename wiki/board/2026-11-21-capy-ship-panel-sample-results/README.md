@@ -41,7 +41,7 @@ The preregistration (section 5, as amended by pre-run change 1) requires the jud
 
 - **The judge answered 26 of the 40 gold items, at kappa 0.36.** Sensitivity was 13 of 20 and specificity 5 of 6. Even if all 14 missing gold items had agreed, kappa could reach at most 0.58, so the check fails on the answers in hand.
 - **Six of the seven part A misses are the judge saying cant_tell** on findings whose packet text is only "Refs [id]" or "fix: pre-landing review fixes". The labellers saw the later history of those lines and rated them from the fix, and the run thread settled the splits the same way. The judge, which sees only the finding and the fix as the plan specifies, read the prompt as written: the finding text describes nothing. For 4 of those 6, the fix commit described the fix, but the packet never showed it (see below).
-- **19 of the 71 judge calls sent came back empty** after their one retry: HTTP 200, 16,000 output tokens, 15,997 of them reasoning, no text. The pilot gate allows 2 of 72. One more call, the last A2 call, never ran because the run hit the 90-minute timeout it was started with.
+- **19 of the 71 judge calls with a recorded reply came back empty** after their one retry: HTTP 200, 16,000 output tokens, 15,997 of them reasoning, no text. The pilot gate allows 2 of 72. The 72nd call, the last A2 call, has no reply on record: it was reserved when the run hit the 90-minute timeout it was started with, so it may have reached the provider, and the ledger settled it at its full reservation.
 - **Two strata fell short of 5 usable answers:** FR had 3 and SM 4.
 
 Decision row 1 of the preregistration applies: the judge check failed, so there is no judged number, the verdict is FIX-METHOD on the instrument, and harness-evals#486's advice stands alone. This sample changes nothing about whether gstack keeps the red team, adversarial and second-model review voices at gate class.
@@ -124,7 +124,7 @@ judge calls: 52 usable, 19 unscorable after one retry (gate: at most 2 of 72); u
 
 This record leaves out the private items' packets and answers, and the paid calls themselves.
 
-One caution if you rerun it: runner.ts reserves each send on a ledger lease and skips items that already have a final record. If the runner is killed after a send but before it settles, a restart on the same lease sends that item again under the same reservation, so the ledger counts one charge for two calls. Restart on a fresh lease instead, or settle the old one first. In this run the one interrupted call, the last A2 call, was never resent, and the ledger settled it at its full reservation.
+One caution if you rerun it: runner.ts reserves each send on a ledger lease and skips items that already have a final record. If the runner is killed after a send but before it settles, a restart on the same lease sends that item again under the same reservation, so the ledger counts one charge for two calls. A new lease on the same ledger file does not help, because it refuses with E_RESERVE_CONFLICT. After a kill, settle the lease, which counts the interrupted call at its full reservation, and run any remaining items against a separate --ledger file. In this run the one interrupted call, the last A2 call, was never resent, and the ledger settled it at its full reservation.
 
 ## What is held out, and why
 
