@@ -18,6 +18,8 @@ A family SM stage is --stage <item>=<model>@<arm>,<arm>: one lease on the item f
 at its per-model allowance, with a proxy that refuses provider-side tools.
 A PF stage is --stage <pf item>=pf:<arm>,pf:<arm> (pf:P, pf:C, pf:N, or pf:blind on pf-blind): one lease on the item for
 the models it pays for, two slots per session (task and wrap-up), with a proxy that refuses provider-side tools.
+A cso stage is --stage <cso item>=cso:<arm>,cso:<arm> (cso-smoke and cso-pilot serve cso:none, cso:cso and cso:untold;
+cso-main serves cso:none and cso:cso): one lease on the item, serving each arm at prereg.json's models and allowances.
 --pf-allowance <json file> replaces the task-turn allowance table (the doubled one admission's cost reading writes).
 
 Opens one U4 lease per stage at its line item's cap through O6's envelope, one metering proxy per lease on --host, and a
@@ -72,11 +74,11 @@ export async function main(argv: string[]): Promise<number> {
     if (k === "--stage") {
       const m = v.match(/^([^=]+)=(.+)$/);
       if (!m) {
-        console.error(lines("E_USAGE", "--stage takes <item>=<arm>, for family SM <item>=<model>@<arm>,<arm>, or for PF <item>=pf:<arm>,pf:<arm>, not " + v));
+        console.error(lines("E_USAGE", "--stage takes <item>=<arm>, for family SM <item>=<model>@<arm>,<arm>, for PF <item>=pf:<arm>,pf:<arm>, or for cso <item>=cso:<arm>,cso:<arm>, not " + v));
         return 2;
       }
       const sm = m[2]!.match(/^([^@]+)@(.+)$/);
-      stages.push(m[2]!.startsWith("pf:") ? { item: m[1]!, arm: m[1]!, arms: m[2]!.split(",") } : sm ? { item: m[1]!, arm: m[1]!, model: sm[1]!, arms: sm[2]!.split(",") } : { item: m[1]!, arm: m[2]! });
+      stages.push(m[2]!.startsWith("pf:") || m[2]!.startsWith("cso:") ? { item: m[1]!, arm: m[1]!, arms: m[2]!.split(",") } : sm ? { item: m[1]!, arm: m[1]!, model: sm[1]!, arms: sm[2]!.split(",") } : { item: m[1]!, arm: m[2]! });
     } else flags.set(k, v);
   }
   const missing = ["--run", "--envelope-host", "--host", "--dir"].filter((k) => !flags.has(k));
