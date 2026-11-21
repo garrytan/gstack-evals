@@ -71,10 +71,18 @@ describe("arms, hosts and turns", () => {
 
 describe("the session plan", () => {
   const units = [
-    { id: "a", kind: "O" as const, entry: "bug" as const },
-    { id: "b", kind: "O" as const, entry: "feature" as const },
-    { id: "c", kind: "B2" as const, entry: "bug" as const },
+    { id: "a", kind: "O" as const, entry: "bug" as const, position: 1 },
+    { id: "b", kind: "O" as const, entry: "feature" as const, position: 2 },
+    { id: "c", kind: "B2" as const, entry: "bug" as const, position: 1 },
   ];
+  test("the run order comes from the frozen draw order (kind, then draw position), never from the order a file lists units in", () => {
+    const many = Array.from({ length: 40 }, (_, k) => ({ id: "u" + String(39 - k).padStart(2, "0"), kind: (k % 3 ? "O" : "B2") as "O" | "B2", entry: "bug" as const, position: k + 1 }));
+    const p = planExtStage("S", many, "stage2", x);
+    expect(planExtStage("S", [...many].reverse(), "stage2", x)).toEqual(p);
+    expect(planExtStage("S", [...many].sort((a, b) => a.id.localeCompare(b.id)), "stage2", x)).toEqual(p);
+    const moved = many.map((u, k) => (k === 0 ? { ...u, position: 99 } : u));
+    expect(planExtStage("S", moved, "stage2", x).units).not.toEqual(p.units);
+  });
   test("every arm of every unit once, in a seeded order that repeats", () => {
     const p = planExtStage("S", units, "stage2", x);
     expect(p.sessions).toHaveLength(7 + 7 + 6);

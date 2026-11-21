@@ -29,8 +29,11 @@ const SH = [join(HERE, "../../pfchecks/sh"), join(HERE, "../sessions/sh")];
 const SH_DIR = "/opt/h2h-sh";
 const REPO = "/w";
 const PLAIN = "/opt/h2hx-plain/codex";
-/** The one probe each session runs: the session kind gstack's preamble would read, and CI as the command sees it. */
-export const PROBE = 'K=$HOME/gstack/bin/gstack-session-kind; if test -x "$K"; then echo "SESSION_KIND=$("$K")"; else echo SESSION_KIND=none; fi; echo "CI=@@{CI-unset} GITHUB_ACTIONS=@@{GITHUB_ACTIONS-unset}"'.replaceAll("@@{", "$" + "{");
+/** The one probe each session runs: the session kind gstack's preamble would read, CI as the command sees it, and
+ *  whether the command's shell kept the container's PATH (the runtime bin dir and bun on it), which a login shell on an
+ *  image whose /etc/profile resets PATH would drop. */
+export const PROBE = ('K=$HOME/gstack/bin/gstack-session-kind; if test -x "$K"; then echo "SESSION_KIND=$("$K")"; else echo SESSION_KIND=none; fi; echo "CI=@@{CI-unset} GITHUB_ACTIONS=@@{GITHUB_ACTIONS-unset}"; ' +
+  'echo "BUN=$(command -v bun || echo none)"; case ":$PATH:" in *":' + RUNTIMES_DIR + '/bin:"*) echo PATH_KEPT=yes;; *) echo PATH_KEPT=no;; esac').replaceAll("@@{", "$" + "{");
 const ID = /(?<![0-9a-f])[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?![0-9a-f])/g;
 const MS = /(unix_ms\\?":)\d{13}/g;
 const TIME = /\b\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z?\b/g;
@@ -52,7 +55,7 @@ export function requestTools(body: any): string[] {
   return [...names(Array.isArray(body?.tools) ? body.tools : []), ...extra];
 }
 
-export interface Stage0Run { name: "link" | "plain"; bin: string; exit: number; session_kind: string | null; ci: string | null; github_actions: string | null; first_request: string; session_meta: Record<string, unknown> | null; summary_end: string | null }
+export interface Stage0Run { name: "link" | "plain"; bin: string; exit: number; session_kind: string | null; ci: string | null; github_actions: string | null; bun: string | null; path_kept: boolean; first_request: string; session_meta: Record<string, unknown> | null; summary_end: string | null }
 export interface Stage0Report {
   schema: "h2hx-stage0.v1"; arm: SArm; codex_version: string | null; runs: Stage0Run[];
   tools: string[]; question_tools: string[]; same_request: boolean; request_diff: string[]; same_session_meta: boolean; session_meta_diff: string[];
@@ -73,13 +76,16 @@ async function stub(logDir: string): Promise<{ port: number; kill: () => void }>
   return { port: Number(m[1]), kill: () => p.kill() };
 }
 
-async function oneRun(name: "link" | "plain", o: { arm: SArm; home: string; out: string; image: string; volume: string; pathEnv: string; turns?: string[] }): Promise<Stage0Run & { body: any; meta_raw: any; container: string }> {
+/** One stage 0 run in its own container. On success the caller owns the container (codexStage0 probes it, then removes
+ *  it); on any failure after docker run, the container is removed here, so a failed launch leaves nothing running. */
+export async function oneRun(name: "link" | "plain", o: { arm: SArm; home: string; out: string; image: string; volume: string; pathEnv: string; turns?: string[] }): Promise<Stage0Run & { body: any; meta_raw: any; container: string }> {
   const x = readExtPrereg();
   const p = readPrereg();
   const dir = join(o.out, name);
   mkdirSync(dir, { recursive: true });
   const s = await stub(join(dir, "requests"));
   const container = "h2hx-stage0-" + name + "-" + crypto.randomUUID().slice(0, 8);
+  let kept = false;
   try {
     const up = docker(["run", "-d", "--name", container, "--network", "host", "-e", "CI=true", "-e", "GITHUB_ACTIONS=true", "-e", "PATH=" + o.pathEnv, "-v", o.volume + ":" + RUNTIMES_DIR + ":ro", "--entrypoint", "sleep", o.image, "infinity"]);
     if (up.status !== 0) fail("the stage 0 container did not start: " + up.stderr.trim().slice(-300));
@@ -112,9 +118,11 @@ async function oneRun(name: "link" | "plain", o: { arm: SArm; home: string; out:
     const rollouts = (summary?.codex_sessions ?? []) as string[];
     const metaLine = rollouts.length ? readFileSync(join(dir, "out", "codex-sessions", rollouts[0]!), "utf8").split("\n").find((l) => l.includes('"session_meta"')) : undefined;
     const meta = metaLine ? JSON.parse(metaLine).payload : null;
-    return { name, bin, exit, session_kind: pick(/SESSION_KIND=([a-z]+)/), ci: pick(/^CI=(\S+)/m), github_actions: pick(/GITHUB_ACTIONS=(\S+)/), first_request: first ? join(name, "requests", reqs.find((f) => JSON.parse(readFileSync(join(dir, "requests", f), "utf8")).method === "POST")!) : "", session_meta: meta ? { originator: meta.originator, cli_version: meta.cli_version } : null, summary_end: summary?.turns?.[0]?.termination ?? null, body: first?.body ?? null, meta_raw: meta, container };
+    kept = true;
+    return { name, bin, exit, session_kind: pick(/SESSION_KIND=([a-z]+)/), ci: pick(/^CI=(\S+)/m), github_actions: pick(/GITHUB_ACTIONS=(\S+)/), bun: pick(/^BUN=(\/\S+)/m), path_kept: pick(/PATH_KEPT=(yes|no)/) === "yes", first_request: first ? join(name, "requests", reqs.find((f) => JSON.parse(readFileSync(join(dir, "requests", f), "utf8")).method === "POST")!) : "", session_meta: meta ? { originator: meta.originator, cli_version: meta.cli_version } : null, summary_end: summary?.turns?.[0]?.termination ?? null, body: first?.body ?? null, meta_raw: meta, container };
   } finally {
     s.kill();
+    if (!kept) docker(["rm", "-f", container], 60_000);
   }
 }
 
@@ -164,7 +172,6 @@ export async function codexStage0(o: { arm: SArm; home: string; out: string; ima
     return report;
   } finally {
     for (const r of runs) docker(["rm", "-f", r.container], 60_000);
-    docker(["ps", "-aq", "--filter", "name=h2hx-stage0-"]).stdout.split("\n").filter(Boolean).forEach(() => undefined);
   }
 }
 

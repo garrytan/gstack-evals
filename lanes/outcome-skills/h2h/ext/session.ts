@@ -71,8 +71,10 @@ export function extHome(arm: ExtArm, o: { sHomes?: string; homes?: string; insta
   if (home === "l-none") return { arm, part, dir: null, home_rule: "none", home_tree_sha256: null, pin: home };
   const dir = join(need(o.lHomes, "part L's installed homes (H2HX_L_HOMES)"), home);
   if (!existsSync(recordPath(dir))) h2hFail("E_H2H_SESSION_INPUT", "arm " + arm + "'s home " + dir + " has no install record at " + recordPath(dir));
-  const rec = JSON.parse(readFileSync(recordPath(dir), "utf8")) as { schema?: string; home?: string; exit?: number; home_tree_sha256?: string | null };
+  const rec = JSON.parse(readFileSync(recordPath(dir), "utf8")) as { schema?: string; home?: string; exit?: number; home_tree_sha256?: string | null; sources?: { name?: string; sha?: string }[] };
   if (rec.schema !== "h2hx-arm-install.v1" || rec.home !== home || rec.exit !== 0 || typeof rec.home_tree_sha256 !== "string") h2hFail("E_H2H_SESSION_INPUT", recordPath(dir) + " is not a finished " + home + " install record");
+  const gstack = rec.sources?.find((s) => s.name === "gstack")?.sha ?? "none";
+  if (gstack !== x.gstack.L.sha) h2hFail("E_H2H_SESSION_INPUT", recordPath(dir) + " installed gstack " + gstack + ", not the plan's pin " + x.gstack.L.sha);
   return { arm, part, dir, home_rule: "gstack", home_tree_sha256: rec.home_tree_sha256!, pin: home };
 }
 

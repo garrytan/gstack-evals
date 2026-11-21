@@ -104,7 +104,7 @@ export function interimLook(i: ExtInput, o: { x?: ExtPrereg; base?: H2hPrereg; c
   ], x.sentence_family.holm_within, x);
   contrasts.push({ label: "s-gstack-line: less-code ratio with both no-harm criteria passing", crossed: !line.incomplete && three[0]! && line.fixes_kept && line.tests_kept });
   const gaps = (["O", "B"] as const).some((c) => x.parts.S.arms.some((arm) => d.of(c, arm).length > 0 && cellOf(d, base, c, arm).incomplete));
-  const stop: LookStop = o.capStop ? "cap" : gaps ? "gaps" : contrasts.every((c) => c.crossed) ? "efficacy" : "continue";
+  const stop: LookStop = o.capStop || d.capStop ? "cap" : gaps ? "gaps" : contrasts.every((c) => c.crossed) ? "efficacy" : "continue";
   return { half: got, contrasts, stop };
 }
 
