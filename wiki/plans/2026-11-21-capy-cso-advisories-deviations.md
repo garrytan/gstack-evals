@@ -120,6 +120,12 @@ The same guide lists Carbon's thinking levels as low, medium (Carbon's default) 
 
 **How it runs.** Stage 0's 10 sessions are judged again on cso-judge at medium in a fresh out dir, with no new sessions. The 16,000, 48,000 and 128,000 replies stay in their own out dirs as the record. The 128,000 re-judge was stopped after its stage 0 calls, and it judged no stage 1 session. One probe call down each judge and labeller route at its setting runs before stage 1's judging, as section 7's probe does.
 
+**Result on stage 0, and the judge's money.** At medium, stage 0's 10 sessions took 18 judge calls; two reports listed no findings, so they needed no second pass. Every call finished on its own, the longest at 27,021 tokens on the packet that was cut off at every high-effort cap. There were no retries and no judge gaps, and every stage 0 arm passed. The calls cost $2.17, or $0.217 a session, against the plan's $0.12. At that rate, with the plan's gold cost and the stage 0 re-judges already spent, the judge item came to about $199 through stage 2 at 60 units, over its $174 cap. On 2026-11-21, before any stage 1 judge call, the owner moved $40 of the $90 reserve to the judge item:
+
+> I've moved $40 from cso-reserve to cso-judge, which is now capped at $214 [...]
+
+Gold's cost is measured on the check's first 10 gold calls, and the check stops there if its projection passes $214. A gold reply cut off at its 32,000 cap is a gold gap for that report. Stage 2's judging is re-priced after stage 1, under section 14.
+
 Code: lanes/outcome-skills/cso/prereg.ts (`judgeMaxOutput` and `judgeEffort`), lanes/outcome-skills/cso/judge/client.ts and lanes/outcome-skills/cso/judge/meter.ts. Tests: tests/outcome-skills/cso-judge.test.ts and tests/outcome-skills/cso-judge-meter.test.ts. The tests check that:
 
 - the judge's request asks for 65,536 at medium effort, and the gold labellers keep high effort;
@@ -151,4 +157,4 @@ This applies only to the conditional Sol stage, which runs on the owner's go wit
 
 ## What does not change
 
-Arms, models, texts, the candidate lists and their order, seeds, scoring, the judge model, the labellers, the check thresholds, the analysis, the stages, the caps and the money all stay as merged. Only the judge's output cap and effort change, under (d). Run receipts name each deviation by its letter and the commit that landed it.
+Arms, models, texts, the candidate lists and their order, seeds, scoring, the judge model, the labellers, the check thresholds, the analysis, the stages, the other caps and the total all stay as merged. Only the judge's output cap and effort, and the judge item's cap, change, under (d). Run receipts name each deviation by its letter and the commit that landed it.
