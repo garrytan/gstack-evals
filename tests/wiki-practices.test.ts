@@ -324,6 +324,13 @@ describe("tighter parsing", () => {
     expect(check(prereg(swap("Judge: openai/gpt-6-astra scores", "Judge: openrouter/openai/gpt-6-astra scores")))).toEqual([]);
   });
 
+  test("the judge's lab is the first segment, whatever follows the model name", () => {
+    const suffix = check(prereg(swap("Judge: openai/gpt-6-astra scores", "Judge: anthropic/claude-fable-5-2/high scores")));
+    expect(has(suffix, 'practice 5: judge "anthropic/claude-fable-5-2/high" is from the same model family as "anthropic/claude-opus-5-5"')).toBe(true);
+    const slash = check(prereg(swap("Judge: openai/gpt-6-astra scores anthropic/claude-opus-5-5", "Judge: anthropic/claude-fable-5-2/ scores anthropic/claude-opus-5-5/")));
+    expect(has(slash, 'practice 5: judge "anthropic/claude-fable-5-2/" is from the same model family as "anthropic/claude-opus-5-5/"')).toBe(true);
+  });
+
   test("numbered prereg and results ids are checked", () => {
     expect(check(prereg("# Plan\n", "2026-11-20-geva-9-hook-prereg-v2", "A plan")).filter((p) => p.includes("practice"))).toHaveLength(4);
     expect(check(prereg("# Plan\n", "2026-11-20-geva-9-hook-prereg-2", "A plan")).filter((p) => p.includes("practice"))).toHaveLength(4);

@@ -428,7 +428,10 @@ const dollars = (s: string | undefined) => {
   const m = (s ?? "").match(/\$ *(\d[\d,]*(?:\.\d+)?)([km])?(?![\d.,]*(?:[a-z]|\s+(?:[km]|thousand|million|billion)\b))/i);
   return m ? Number(m[1].replaceAll(",", "")) * (m[2] ? (m[2].toLowerCase() === "k" ? 1e3 : 1e6) : 1) : null;
 };
-const labOf = (model: string) => model.split("/").slice(-2)[0].toLowerCase();
+const labOf = (model: string) => {
+  const parts = model.toLowerCase().split("/").filter(Boolean);
+  return (parts[0] === "openrouter" && parts.length > 2 ? parts[1] : parts[0]) ?? "";
+};
 const blank = (s: string | undefined) => !s || /^(?:-|none|n\/a)$/i.test(s.trim());
 const HOW = " (wiki/README.md, Eval plans and results, gives the format)";
 
