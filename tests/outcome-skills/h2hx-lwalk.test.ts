@@ -11,7 +11,7 @@ import type { LicenceRead } from "../../lanes/outcome-skills/h2h/ordinary/frame.
 import { readPrereg } from "../../lanes/outcome-skills/h2h/prereg.ts";
 import { readExtPrereg } from "../../lanes/outcome-skills/h2h/ext/prereg.ts";
 import { readSuUnits } from "../../lanes/outcome-skills/h2h/ext/units.ts";
-import { basePools, cappedRows, L_FRAME_PATH, L_ORDER_PATH, lOrder, lPlan, readLFrame, readLOrder, walkL, type LUnit, type Pool } from "../../lanes/outcome-skills/h2h/ext/lframe.ts";
+import { basePools, cappedRows, drawLines, L_FRAME_PATH, L_ORDER_PATH, lOrder, lPlan, readLFrame, readLOrder, walkL, type LUnit, type Pool } from "../../lanes/outcome-skills/h2h/ext/lframe.ts";
 import { containReading, L_GATES, lGates, type LGateInputs } from "../../lanes/outcome-skills/h2h/ext/lgates.ts";
 
 const ROOT = join(import.meta.dir, "..", "..");
@@ -27,10 +27,16 @@ describe("part L's frame and order", () => {
     const placed = new Map(readSuUnits().units.filter((u) => u.kind === "O").map((u) => [u.id, u.position] as [string, number]));
     placed.set("cc65__cc65-2761", 123);
     placed.set("OpenAPITools__openapi-generator-21579", 132);
-    const reserves = frame.units.filter((u) => u.pool === 1).map((u) => u.id);
+    const reserves = frame.units.filter((u) => u.pool === 1 && u.source.includes("custody log")).map((u) => u.id);
     const bp = basePools({ order, frame: of, placed, reserves, drops: new Set(), usable: 132, reservePositions: [112, 113, 114, 115, 116, 117, 118, 119, 121, 122], passedPositions: [124, 125, 126, 127, 128, 129, 130, 131], cap: 3, capped: 56 });
     expect(bp.pool2.sort()).toEqual(frame.units.filter((u) => u.pool === 2).map((u) => u.id).sort());
     expect(bp.pool1Missing.map((w) => [w.role, w.need])).toEqual([["reserve", 4], ["reserve", 1], ["passed_unassigned", 8]]);
+    expect(frame.pools[1].missing!.map((w) => [w.role, w.from_index, w.to_index, w.positions, w.need, w.candidates.length])).toEqual([
+      ["reserve", 490, 498, [112, 113], 1, 7], ["reserve", 508, 523, [115, 116, 117, 118], 3, 12], ["reserve", 538, 543, [122], 1, 4],
+      ["passed_unassigned", 548, 553, [124, 125], 2, 5], ["passed_unassigned", 561, 565, [126, 127], 2, 4], ["passed_unassigned", 567, 568, [129], 1, 2], ["passed_unassigned", 572, 588, [130, 131], 2, 12],
+    ]);
+    expect(frame.units.filter((u) => u.pool === 1 && !u.source.includes("custody log")).map((u) => [u.id, u.source.includes("walk log") && u.source.includes("position 128")])).toEqual([["apache__lucene-14932", true]]);
+    expect(Object.keys(frame.sources).some((k) => k.startsWith("walk-logs MANIFEST.sha256"))).toBe(true);
     expect(frame.pools[2]).toMatchObject({ expected: 56, recovered: 56, complete: true });
     expect(frame.pools[3]).toMatchObject({ expected: 110, recovered: 110, complete: true });
     expect(frame.units.filter((u) => u.pool === 3 && u.reused?.verdict === "kept").length).toBe(24);
@@ -40,13 +46,13 @@ describe("part L's frame and order", () => {
   });
 
   test("pool 1 is incomplete, so the committed order is provisional and a walk refuses it", () => {
-    expect(frame.pools[1]).toMatchObject({ expected: 18, recovered: 5, complete: false });
+    expect(frame.pools[1]).toMatchObject({ expected: 18, recovered: 6, complete: false });
     expect(frame.complete).toBe(false);
     const order = JSON.parse(readFileSync(L_ORDER_PATH, "utf8"));
     expect(order).toEqual(lOrder(frame, readFileSync(L_FRAME_PATH, "utf8")));
     expect(order.draw_seed).toBe(x.draw_seed);
     expect(order.months[0] > order.months[order.months.length - 1]).toBe(true);
-    expect(() => readLOrder()).toThrow(/^E_H2HX_UNITS_POOL.*pool 1: 5 of 18/);
+    expect(() => readLOrder()).toThrow(/^E_H2HX_UNITS_POOL.*pool 1: 6 of 18/);
   });
 
   test("a complete frame's order reads, and an order that is not the frame's refuses", () => {
@@ -55,7 +61,7 @@ describe("part L's frame and order", () => {
     const text = JSON.stringify(f);
     writeFileSync(join(d, "f.json"), text);
     writeFileSync(join(d, "o.json"), JSON.stringify(lOrder(f, text)));
-    expect(readLOrder(join(d, "f.json"), join(d, "o.json")).order.order.length).toBe(171);
+    expect(readLOrder(join(d, "f.json"), join(d, "o.json")).order.order.length).toBe(172);
     writeFileSync(join(d, "o.json"), JSON.stringify({ ...lOrder(f, text), order: [...lOrder(f, text).order].reverse() }));
     expect(() => readLOrder(join(d, "f.json"), join(d, "o.json"))).toThrow(/^E_H2HX_UNITS_INPUT/);
   });
@@ -78,6 +84,21 @@ describe("basePools and cappedRows on a planted walk", () => {
     expect(() => basePools({ ...r, capped: 2 })).toThrow(/^E_H2HX_UNITS_INPUT.*recorded 2/);
     expect(() => basePools({ ...r, placed: new Map([["a2", 1], ["a1", 2], ["a3", 4], ["e1", 7]]) })).toThrow(/^E_H2HX_UNITS_INPUT.*does not follow/);
     expect(() => basePools({ ...r, reserves: ["b1", "b2", "d1"] })).toThrow(/^E_H2HX_UNITS_INPUT.*named reserves/);
+  });
+  test("the walk log's draw lines fix a window's units where the usable delta equals its candidates, narrow the rest, and refuse counts that do not fit", () => {
+    const line = (at: string, usable: number, dropped: number, capped: number, waits?: string) => at + " draw exit " + (waits ? 2 : 0) + ": O: usable " + usable + ", stage 1 0, stage 2 0, reserves 0, stage 0 0, dropped " + dropped + ", capped " + capped + (waits ? " | E_H2H_DRAW_PENDING O waits on " + waits + " at gate oracle (no oracle result)" : "");
+    const log = (t3: [number, number], t4: [number, number]) => drawLines(["converted 10 units", line("t1", 3, 0, 0, "a3"), line("t2", 4, 1, 1, "b2"), line("t3", t3[0], t3[1], 1, "d1"), line("t4", t4[0], t4[1], 1, "e1"), line("t5", 7, 2, 1), line("t6 WALK_DONE", 7, 2, 1)].join("\n"));
+    expect(log([5, 1], [6, 2]).map((d) => [d.at, d.usable, d.dropped, d.capped, d.waits])).toEqual([["t1", 3, 0, 0, "a3"], ["t2", 4, 1, 1, "b2"], ["t3", 5, 1, 1, "d1"], ["t4", 6, 2, 1, "e1"], ["t5", 7, 2, 1, null], ["t6", 7, 2, 1, null]]);
+    const r = { order, frame, placed: new Map([["a1", 1], ["a2", 2], ["a3", 4], ["e1", 7]]), reserves: ["b1"], drops: new Set(["c1"]), usable: 7, reservePositions: [3, 5], passedPositions: [6], cap: 3, capped: 1 };
+    const fixed = basePools({ ...r, draws: log([5, 1], [6, 2]) });
+    expect(fixed.pool1).toEqual(["b1", "b2", "d1"]);
+    expect(fixed.pool1Logged.map((u) => [u.id, u.positions, u.evidence])).toEqual([["b2", [5], "o-walk.out line at t3: usable 4 to 5 over o-order.json rows 6 to 6"], ["d1", [6], "o-walk.out line at t4: usable 5 to 6 over o-order.json rows 7 to 8"]]);
+    expect(fixed.pool1Missing).toEqual([]);
+    const open = basePools({ ...r, draws: log([4, 2], [6, 2]) });
+    expect(open.pool1Logged).toEqual([]);
+    expect(open.pool1Missing).toEqual([{ from_index: 7, to_index: 8, positions: [5], role: "reserve", need: 1, candidates: ["d1", "c2"] }, { from_index: 7, to_index: 8, positions: [6], role: "passed_unassigned", need: 1, candidates: ["d1"] }]);
+    expect(() => basePools({ ...r, draws: log([5, 2], [6, 2]) })).toThrow(/^E_H2HX_UNITS_INPUT.*line at t3 resolves 2 units over order rows 6 to 6/);
+    expect(() => basePools({ ...r, draws: log([5, 1], [6, 2]).map((d) => (d.at === "t2" ? { ...d, capped: 0, dropped: 2 } : d)) })).toThrow(/^E_H2HX_UNITS_INPUT.*cap replay puts 1 capped rows in order rows 3 to 5/);
   });
 });
 
