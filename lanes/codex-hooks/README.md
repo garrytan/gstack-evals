@@ -8,6 +8,7 @@ Do gstack's routing hook and its /review contract help GPT-6.1 Sol in Codex CLI,
 |---|---|
 | pins.ts | Values both parts share: the gstack pin, the Codex CLI and its digests, the model, and the settings every arm passes |
 | cli.ts | `gstack-evals codex-hooks r|c <command>` |
+| allin.ts | The all-in stop (section 11, pre-run change 2): before a part R launch, a part C step or a judge run, every item of both parts and the judge item counts at its spend or projection, plus the crew counter, and past $1,200 nothing starts |
 | c/pins.ts | Part C's frozen values: the suite and its seeded pilot draw, the prefix, the four arms as review-units' codex-arms entries, and the four ledger items |
 | c/rollout.ts | A session's rollouts as the readouts read them: the root thread, sub-agent threads, turns, messages, tool calls and contract blocks |
 | c/states.ts | Each session's final and first-stop states and their findings, and the blind copy the judge reads |
@@ -33,7 +34,7 @@ Do gstack's routing hook and its /review contract help GPT-6.1 Sol in Codex CLI,
 | c/analysis/decide.ts | The readings of section 1's contract table and E3 table |
 | c/analysis/pilot.ts | The pilot readout and the R113 line |
 | c/analysis/cli.ts | `gstack-evals codex-hooks c analysis <command>` |
-| r/pins.ts | Part R's frozen values: the three arms, prove-it on Codex, the pilot tasks, the items and caps, the session allowance, the Codex install line, the proxy route and the route table's digest |
+| r/pins.ts | Part R's frozen values: the three arms, the Codex settings they pass (the shared ones plus a non-login shell, pre-run change 3), prove-it on Codex, the pilot tasks, the items and caps, the session allowance, the Codex install line, the proxy route and the route table's digest |
 | r/routes.ts, r/route-table.tsv | The keyless route table (section 4.4): each prompt through the r-on home's routing hook; its output is change 1's table byte for byte |
 | r/arms/Dockerfile, r/arms.ts | The three arm tars (gstack at ~/gstack set up with `./setup --host codex`, prove-it beside it, the seeded user; r-off with `skill_routing off`; r-none empty), each with a manifest: the tar's and tree's digests, the switches and Codex's own start capture |
 | r/task-setup.Dockerfile | B1's task setup byte for byte, then Codex 0.170.0 from npm's tarball by its sha256 at /opt/laneb/codex |
