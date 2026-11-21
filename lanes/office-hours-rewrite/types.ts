@@ -130,6 +130,13 @@ export interface SessionRow extends ManifestEntry {
   replies: number;
   /** The SESSION_KIND value the skill printed, or null. Skill sessions must print "interactive" (A7). */
   session_kind: string | null;
+  /**
+   * The models the scored attempt's replies report, joined by ", " (Claude Code's transcript, or the model tap for Sol),
+   * or null with no reply; and the CLI version its transcript names. rowProblems checks both against the pins (the
+   * second attempt's pre-run change 2).
+   */
+  served_model: string | null;
+  cli_version: string | null;
   /** Simulator turns that failed the reveal guard after its retries (pre-run change 1, item 4b). */
   guard_failures: number;
   /** gstack files read in the none arm's tool calls (the read audit). */

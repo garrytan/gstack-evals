@@ -25,6 +25,8 @@ export const LENS_LINE = "Act as a YC partner holding office hours with me.";
 export const SKILL_PREFIX = "/office-hours ";
 /** The eval owner's ruling of 2026-11-19 (the second attempt's pre-run change 2): Sol runs in Codex CLI; Opus and particle-1 stay on Claude Code. */
 export const HOSTS: Readonly<Record<ModelId, "claude" | "codex">> = { opus: "claude", sol: "codex", particle: "claude" };
+/** The Claude Code version every Opus and particle-1 session runs, docker/host-cli.json's claude pin; each row's transcript must name it (the second attempt's pre-run change 2). */
+export const CLAUDE_CODE_VERSION = "2.1.314";
 /** A Codex skill arm names the skill with Codex's own mention syntax; the rest of the message is the same. */
 export const CODEX_SKILL_PREFIX = "$office-hours ";
 export const firstMessage = (arm: ArmId, opening: string, model: ModelId = "opus"): string => (arm === "none" ? "" : HOSTS[model] === "codex" ? CODEX_SKILL_PREFIX : SKILL_PREFIX) + LENS_LINE + "\n\n" + opening.trim();

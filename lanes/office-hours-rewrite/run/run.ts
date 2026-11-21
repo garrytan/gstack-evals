@@ -47,14 +47,14 @@ import { pool, type Meter } from "../../product-value/meter.ts";
 import { pvOutcome } from "../../product-value/parse.ts";
 import { AGENT_TURNS_PER_REPLY, ALLOWANCE, CODEX, HOSTS, MODEL_KEYS, SESSION_MINUTES, SIM_ALLOWANCE, type Pin } from "../frozen.ts";
 import { BEARER_ENV, codexPinCommand, codexPinProblems, codexReads, codexTreeProblems, gapProblems, solDriver } from "./codex.ts";
-import { tapOffPin, type OhrRig } from "./codex-rig.ts";
+import { tapModels, tapOffPin, type OhrRig } from "./codex-rig.ts";
 import type { ArmId, BlockParser, BriefKind, BriefMeta, ManifestEntry, ModelId, PriorSession } from "../types.ts";
 import { capProblem, entryId, freezeManifest, loadBriefs, makeManifest, type LaunchName } from "./manifest.ts";
 import type { ManifestLook } from "./half.ts";
 import { armEnvProblems, containerPinCommand, containerPinProblems, containerRoot, isSkillArm, nullPinProblem, pinProblems, type Pins } from "./pins.ts";
 import { readRows, sessionRow, type RowLine } from "./rows.ts";
 import { priorProblem, seedPrior } from "./seed.ts";
-import { offPin } from "../pinned.ts";
+import { assistantModels, cliVersion, offPin, servedModel } from "../pinned.ts";
 import { attemptOutcome, closingLoop, firstMessage, safetyStop, sessionKindOf, settle, type AttemptRead, type Line, type Outcome } from "./session.ts";
 import type { PersonSheet, SimCall } from "../../../src/persona-sim/sim.ts";
 import { loadPerson } from "../sim/founder.ts";
@@ -215,7 +215,7 @@ export function ohrProbed(sandbox: Sandbox, o: { docker: string; home: string; p
 export const solLaunch: Launch = async (o) => {
   const model = CODEX.model;
   const codex = (o.rig as OhrRig).codex;
-  const none = { gstack_reads: [], contained: [], pin: [], overflow: false, safety: null, session_kind: null, off_pin: [], micros: 0 };
+  const none = { gstack_reads: [], contained: [], pin: [], overflow: false, safety: null, session_kind: null, off_pin: [], served_model: null, cli_version: null, micros: 0 };
   if (!codex) return { ...none, termination: { kind: "infra", incident: "the rig has no Codex installs for a Sol session" } };
   let binding: Awaited<ReturnType<HostRig["bind"]>>;
   try {
@@ -250,7 +250,7 @@ export const solLaunch: Launch = async (o) => {
   const rollouts = existsSync(rolloutDir) ? readdirSync(rolloutDir).map((f) => readFileSync(join(rolloutDir, f), "utf8")) : [];
   const read = pvOutcome(termination, transcript).outcome;
   const contained = found.contained === null || homeFound === null ? null : [...found.contained, ...(homeFound as string[]), ...envProblems.map((e) => "agent env: " + e)];
-  return { termination, gstack_reads: skillArm ? [] : [...gstackReads(transcript), ...codexReads(rollouts)], contained, pin: found.pin, overflow: read.state === "infra" && read.reason === "context overflow", safety: safetyStop(transcript), session_kind: sessionKindOf(transcript), off_pin: tapOffPin(codex.tapLog, binding.slot, model), micros: meter.micros };
+  return { termination, gstack_reads: skillArm ? [] : [...gstackReads(transcript), ...codexReads(rollouts)], contained, pin: found.pin, overflow: read.state === "infra" && read.reason === "context overflow", safety: safetyStop(transcript), session_kind: sessionKindOf(transcript), off_pin: tapOffPin(codex.tapLog, binding.slot, model), served_model: servedModel(tapModels(codex.tapLog, binding.slot)), cli_version: cliVersion(transcript), micros: meter.micros };
 };
 
 /** One attempt on the Docker rig; a Sol session runs on Codex (solLaunch). */
@@ -258,7 +258,7 @@ export const dockerLaunch: Launch = async (o) => {
   if (HOSTS[o.entry.model] === "codex") return solLaunch(o);
   const model = MODEL_KEYS[o.entry.model];
   const provider = providerOf(o.policy, model) as ClaudeProvider;
-  const none = { gstack_reads: [], contained: [], pin: [], overflow: false, safety: null, session_kind: null, off_pin: [], micros: 0 };
+  const none = { gstack_reads: [], contained: [], pin: [], overflow: false, safety: null, session_kind: null, off_pin: [], served_model: null, cli_version: null, micros: 0 };
   let binding: Awaited<ReturnType<HostRig["bind"]>>;
   try {
     binding = await o.rig.bind({ cell: { run_id: o.runId, arm: o.entry.arm, task: entryId(o.entry), model, trial: 1, attempt: o.attempt }, models: slotModels(o.policy, model, null), allowance_micros: o.allowanceMicros });
@@ -291,7 +291,7 @@ export const dockerLaunch: Launch = async (o) => {
   const transcript = existsSync(path) ? readFileSync(path, "utf8") : "";
   const read = pvOutcome(termination, transcript).outcome;
   const contained = found.contained === null ? null : [...found.contained, ...envProblems.map((e) => "agent env: " + e)];
-  return { termination, gstack_reads: skillArm ? [] : gstackReads(transcript), contained, pin: found.pin, overflow: read.state === "infra" && read.reason === "context overflow", safety: safetyStop(transcript), session_kind: sessionKindOf(transcript), off_pin: offPin(transcript, model), micros: meter.micros };
+  return { termination, gstack_reads: skillArm ? [] : gstackReads(transcript), contained, pin: found.pin, overflow: read.state === "infra" && read.reason === "context overflow", safety: safetyStop(transcript), session_kind: sessionKindOf(transcript), off_pin: offPin(transcript, model), served_model: servedModel(assistantModels(transcript)), cli_version: cliVersion(transcript), micros: meter.micros };
 };
 
 /** An attempt a crash left with a marker and no row: an unknown harness failure at the settled and unknown spend its ledger meter holds, recorded in reconcile.json. */
@@ -312,7 +312,7 @@ function reconcile(dir: string, parse: BlockParser, ledger: string | null): Atte
   const lines = existsSync(transcript) ? readFileSync(transcript, "utf8").split("\n").filter(Boolean).length : 0;
   writeFileSync(join(dir, "reconcile.json"), JSON.stringify({ meter, ledger_micros: spent, session_log_lines: lines, reconciled_at: new Date().toISOString() }, null, 2) + "\n");
   const loop = closingLoop({ parse, founder: async () => ({ kind: "call-failed", reason: "provider", detail: "", rejected: [], requests: [] }) }).state;
-  return { termination: { kind: "infra", incident: "an unknown outcome, reconciled" }, loop, gstack_reads: [], contained: [], pin: [], overflow: false, safety: null, session_kind: null, off_pin: [], micros: spent ?? 0, sim_micros: 0 };
+  return { termination: { kind: "infra", incident: "an unknown outcome, reconciled" }, loop, gstack_reads: [], contained: [], pin: [], overflow: false, safety: null, session_kind: null, off_pin: [], served_model: null, cli_version: null, micros: spent ?? 0, sim_micros: 0 };
 }
 
 const hostTree = (rig: HostRig, arm: ArmId, pin: Pin): string[] => pinProblems(gstackDir(rig.arms[arm] ?? { gstack: null }), pin);

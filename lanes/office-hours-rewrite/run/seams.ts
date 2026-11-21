@@ -100,7 +100,7 @@ export const scriptedLaunch = (scripts: Map<string, ScriptedAttempt[]>, calls: s
     }
     if ("end" in next) break;
   }
-  return { termination: a.termination ?? ended, gstack_reads: a.gstack_reads ?? [], contained: a.contained === undefined ? [] : a.contained, pin: a.pin === undefined ? [] : a.pin, overflow: a.overflow ?? false, safety: a.safety ?? null, session_kind: a.session_kind === undefined ? (o.entry.arm === "none" ? null : "interactive") : a.session_kind, off_pin: a.off_pin ?? [], micros: a.micros ?? 0 };
+  return { termination: a.termination ?? ended, gstack_reads: a.gstack_reads ?? [], contained: a.contained === undefined ? [] : a.contained, pin: a.pin === undefined ? [] : a.pin, overflow: a.overflow ?? false, safety: a.safety ?? null, session_kind: a.session_kind === undefined ? (o.entry.arm === "none" ? null : "interactive") : a.session_kind, off_pin: a.off_pin ?? [], served_model: null, cli_version: null, micros: a.micros ?? 0 };
 };
 
 const reply = (o: Partial<Extract<SimOutcome, { kind: "reply" }>> = {}): SimOutcome => ({ kind: "reply", reply: "Six members asked for it.", revealed: ["f1"], rules: [3], done: false, attempts: 1, rejected: [], requests: [], ...o });
@@ -117,7 +117,7 @@ export async function scriptedRun(o: { launch?: LaunchName; scripts?: Map<string
   const calls: string[] = [];
   const rig = { recovery: null, arms: {}, close: async () => ({ committed: 0, unknown: 0, lease_id: null }) } as unknown as HostRig;
   const inner = scriptedLaunch(o.scripts ?? new Map(), calls);
-  const launch: Launch = async (x) => (o.only && !o.only(x.entry) ? { termination: { kind: "missing", code: "E_LEDGER_UNAVAILABLE" }, gstack_reads: [], contained: [], pin: [], overflow: false, safety: null, session_kind: null, off_pin: [], micros: 0 } : inner(x));
+  const launch: Launch = async (x) => (o.only && !o.only(x.entry) ? { termination: { kind: "missing", code: "E_LEDGER_UNAVAILABLE" }, gstack_reads: [], contained: [], pin: [], overflow: false, safety: null, session_kind: null, off_pin: [], served_model: null, cli_version: null, micros: 0 } : inner(x));
   const run = await runLaunch({ launch: o.launch ?? "stage1", briefsDir: briefs, out, runId: "seam", models: ["opus"], arms: o.arms ?? [...ARMS], pins: o.pins ?? PINS, buildCommit: o.buildCommit ?? "b".repeat(40), dropped: o.dropped ?? [], allowances: ALLOWANCES, cap: o.cap ?? 100 * D, simCap: o.simCap ?? 50 * D, parallel: 1, policy: loadPolicy(DEFAULT_POLICY) as LoadedPolicy, docker: "docker", day: o.day ?? DAY, ledger: o.ledger ?? null, log: () => {} }, {
     openRig: () => (o.opened?.(), rig),
     simSlot: () => ({ call: async () => ({ kind: "text", text: "" }), spent: () => 0 }),
@@ -170,7 +170,7 @@ const tx = (...m: object[]) => m.map((x) => JSON.stringify(x)).join("\n") + "\n"
 
 function attempt(o: Partial<AttemptRead>): AttemptRead {
   const loop = closingLoop({ parse: parseBlock, founder: async () => reply() }).state;
-  return { termination: { kind: "completed" }, loop, gstack_reads: [], contained: [], pin: [], overflow: false, safety: null, session_kind: null, off_pin: [], micros: 0, sim_micros: 0, ...o };
+  return { termination: { kind: "completed" }, loop, gstack_reads: [], contained: [], pin: [], overflow: false, safety: null, session_kind: null, off_pin: [], served_model: null, cli_version: null, micros: 0, sim_micros: 0, ...o };
 }
 
 export const seams: Seam[] = [

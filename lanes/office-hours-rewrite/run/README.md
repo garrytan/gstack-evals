@@ -41,6 +41,10 @@ Copied and adapted, because the shapes differ:
 - A skill arm that prints a SESSION_KIND other than interactive retries once, then scores missing with
   E_OHR_SESSION_KIND; no print reads null and is scored as it ends.
 - session_kind is read from the first main-agent tool result that prints it.
+- served_model is the models the scored attempt's replies report: Claude Code's transcript for Opus and particle-1, and
+  the model tap for Sol, because Codex's own records name the model it asked for. cli_version is the version the
+  transcript's init line names. rows flags either when it is not the pin, except that a model drift halt already names
+  the model in its own code.
 - Each launch uses two ledger items (arms through the rig's lease, simulator through the meter), because one item
   allows one open lease; the launch refuses caps whose sum passes the frozen line (E_OHR_CAP_LINE).
 - Stage 2's order sorts the comparison ids and shuffles them with SEED; each brief's models follow MODELS order and the

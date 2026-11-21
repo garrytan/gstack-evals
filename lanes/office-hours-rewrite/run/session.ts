@@ -153,6 +153,10 @@ export interface AttemptRead {
   session_kind: string | null;
   /** Models the session's assistant messages name that are not its pin (pinned.ts offPin); any one halts the launch. */
   off_pin: string[];
+  /** The models the session's replies report (pinned.ts servedModel): Claude Code's transcript, or the tap for Sol. */
+  served_model: string | null;
+  /** The CLI version the session's transcript names (pinned.ts cliVersion). */
+  cli_version: string | null;
   micros: number;
   sim_micros: number;
 }

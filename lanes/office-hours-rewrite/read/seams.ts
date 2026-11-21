@@ -81,7 +81,7 @@ export function founderRows(p: FounderPlan): ScoredSession[] {
 /** One run row as the run side hands it in, a block in an interactive skill session (or a clean none session). */
 export const sessionRow = (o: Partial<SessionRow>): SessionRow => ({
   stage: 1, brief: "k01", model: "opus", arm: "none", end: "block", code: null, block: null, founder_turns: [], closings: 1, founder_done: true, replies: 6,
-  session_kind: (o.arm ?? "none") === "none" ? null : "interactive", guard_failures: 0, gstack_reads: [], usd: 1, sim_usd: 0.1, attempts: 1, transcript: null, state_root: null, ...o,
+  session_kind: (o.arm ?? "none") === "none" ? null : "interactive", served_model: null, cli_version: null, guard_failures: 0, gstack_reads: [], usd: 1, sim_usd: 0.1, attempts: 1, transcript: null, state_root: null, ...o,
 });
 
 /** Stage 1's calibration briefs: twins k01 and k02, twins k03 and k04, unpaired founders k05 and k06, builders k07 and k08. */

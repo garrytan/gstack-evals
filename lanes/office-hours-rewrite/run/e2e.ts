@@ -302,6 +302,7 @@ export async function runE2e(o: E2eOptions = {}): Promise<{ checks: Check[]; dir
   const asked = new Set(jl.filter((x: any) => x.kind === "request" && x.provider === "openai").map((x: any) => x.reservation_id));
   const openai = jl.filter((x: any) => x.kind === "outcome" && asked.has(x.reservation_id)).map((x: any) => x.outcome);
   check("the proxy metered every Sol call on the arms item with its cached and reasoning tokens", openai.length === sol.length && openai.every((x: any) => x?.kind === "spent" && x.spent_micros > 0 && x.usage?.cache_read === 800 && x.usage?.reasoning === 5), openai.length + " openai outcomes; " + JSON.stringify(openai[0] ?? null));
+  check("every row names the models its replies report and the CLI version it ran, and rows finds both pinned", lines.length > 0 && lines.every((l) => l.row.served_model !== null && l.row.cli_version !== null), lines.map((l) => l.id + ": " + l.row.served_model + " on " + l.row.cli_version).join("; "));
   const problems = lines.flatMap((l) => rowProblems(l));
   const report = rowsReport(readManifest(join(out, "manifest.json")), rows);
   check("the rows parse and match the frozen manifest", problems.length === 0 && report.problems.length === 0 && report.unrun.length === 0, lines.length + " rows" + (problems.length + report.problems.length ? ": " + [...problems, ...report.problems].join("; ") : ""));

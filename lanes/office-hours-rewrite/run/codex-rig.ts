@@ -31,17 +31,23 @@ export interface CodexArms {
 }
 export type OhrRig = HostRig & { codex?: CodexArms };
 
-/** The models the tap saw a slot's successful responses report that are not the pin, each once; a response with no model reads "(no model)". */
-export function tapOffPin(log: string, slot: string, pin: string): string[] {
-  if (!existsSync(log)) return ["(no tap log)"];
+/** The models the tap saw a slot's successful responses report, each once; a response with no model reads "(no model)". Null when there is no tap log. */
+export function tapModels(log: string, slot: string): string[] | null {
+  if (!existsSync(log)) return null;
   const seen = new Set<string>();
   for (const l of readFileSync(log, "utf8").split("\n")) {
     if (!l.trim()) continue;
     const r = JSON.parse(l) as { slot: string; status: number; responses: { model: string | null }[] };
     if (r.slot !== slot || r.status < 200 || r.status >= 300) continue;
-    for (const x of r.responses.length ? r.responses : [{ model: null }]) if (!reportsPin(pin, x.model)) seen.add(x.model ?? "(no model)");
+    for (const x of r.responses.length ? r.responses : [{ model: null }]) seen.add(x.model ?? "(no model)");
   }
   return [...seen];
+}
+
+/** The models the tap saw a slot's successful responses report that are not the pin, each once; no tap log reads "(no tap log)". */
+export function tapOffPin(log: string, slot: string, pin: string): string[] {
+  const models = tapModels(log, slot);
+  return models === null ? ["(no tap log)"] : models.filter((m) => !reportsPin(pin, m));
 }
 
 export function withCodex(rig: HostRig, o: { arms: readonly ArmSpec[]; env: Record<string, string | undefined>; out: string; tasks: string; runId: string; nonce: string }): OhrRig {
