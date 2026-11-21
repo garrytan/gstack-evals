@@ -53,7 +53,7 @@ Read on the pooled contrast over the three models, gstack with prove-it minus gs
 | Passes not shown either way, and passes with a regression test above 0 | Test-first leaves the same number of fixes and more of them carry a test. KEEP as it is: the routing rule and the bug line stay, gstack doesn't ship its own skill, and its docs claim tests, not fixes. |
 | Neither shown | A null. One "Why null?" cycle (section 9.4), then CUT-CANDIDATE for the same two parts, unless the cycle finds an exposure, task-fit or power cause (FIX-METHOD), or a ceiling (FIX-METHOD once, with one attempt to raise it, R61). |
 
-"Above 0" and "below 0" for passes use the group-sequential bounds of the interim look (2.917 at the look, 2.068 at the end); for passes with a regression test, |z| of at least 2.576 at the end (section 9).
+"Above 0" and "below 0" for passes use the group-sequential bounds of the interim look (2.917 at the look, 2.068 at the end); for passes with a regression test, |z| of at least 2.576 at the end of a run that went past the look (section 9).
 
 Beside every reading the report prints, from the same table: prove-it minus none (the no-gstack arm, R44), gstack minus none, the one line minus none, and each model on its own. When the pooled reading is a KEEP and Opus 5.5's or GPT-6.2 Sol's own passes interval lies wholly below 0, the reading names that model in the same line.
 
@@ -159,7 +159,7 @@ For a contrast A minus B, each complete model m and task t give d = A's outcome 
 
 ### 9.3 Bounds
 
-The 5% type I error is split between the two co-primaries. Passes get 4%, with one interim look (below) and O'Brien-Fleming-shaped bounds: |z| of at least 2.917 at the look, 2.068 at the end (power.txt; the same code gives 2.797 and 1.977 at 5% and half, the published values). Passes with a regression test get 1%, read at the end only, at |z| of at least 2.576, or at the look's units when the run stops there. The delivery-form contrast (prove-it minus line, passes) is read only after a passes reading above 0, with its 95% interval, uncorrected. Every other contrast is descriptive. The per-model Newcombe intervals are 95% and descriptive.
+The 5% type I error is split between the two co-primaries. Passes get 4%, with one interim look (below) and O'Brien-Fleming-shaped bounds: |z| of at least 2.917 at the look, 2.068 at the end (power.txt; the same code gives 2.797 and 1.977 at 5% and half, the published values). Passes with a regression test get 1%, read at the end only, on the full 183 tasks, at |z| of at least 2.576. The delivery-form contrast (prove-it minus line, passes) is read only after a passes reading above 0, with its 95% interval, uncorrected. Every other contrast is descriptive. The per-model Newcombe intervals are 95% and descriptive.
 
 ### 9.4 Why null?
 
@@ -179,7 +179,7 @@ Stop bounds: |z| of at least 2.917 at the look and 2.068 at the end, on the pool
 
 Other looks: none
 
-Each model's first four parts hold tasks 1 to 92. The look is taken once all of them have settled for every model, on the tasks graded in both arms, before any later part starts. If |z| is at least 2.917 either way, the run stops there and every reading is made on those units, with passes with a regression test at 2.576. Otherwise the run goes on to the end. Nobody reads any outcome before the look or between the look and the end; the run's controllers print progress counts only.
+Each model's first four parts hold tasks 1 to 92. The look is taken once all of them have settled for every model, on the tasks graded in both arms, before any later part starts. If |z| is at least 2.917 either way, the run stops there and the reading rests on passes alone: passes with a regression test are reported on those units as descriptive, with their 95% interval, and take no part in the decision table. Otherwise the run goes on to the end. Nobody reads any outcome before the look or between the look and the end; the run's controllers print progress counts only.
 
 ## 12. Pilots
 
