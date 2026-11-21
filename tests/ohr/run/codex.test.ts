@@ -6,10 +6,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { CODEX, CODEX_LAYOUT_FIX, CODEX_SETTINGS, CONTAINER_HOME, firstMessage, LENS_LINE, RENDER_GAP } from "../../../lanes/office-hours-rewrite/frozen.ts";
-import { BEARER_ENV, codexPinProblems, codexQuestions, codexReads, codexTranscript, codexTreeProblems, gapProblems, homeCommand, homeProblems, renderGap, solArgv, solDriver, solEnv } from "../../../lanes/office-hours-rewrite/run/codex.ts";
+import { BEARER_ENV, codexPinProblems, codexReads, codexTranscript, codexTreeProblems, gapProblems, homeCommand, homeProblems, renderGap, solArgv, solDriver, solEnv } from "../../../lanes/office-hours-rewrite/run/codex.ts";
 import { tapOffPin } from "../../../lanes/office-hours-rewrite/run/codex-rig.ts";
 import { reportedModels } from "../../../lanes/office-hours-rewrite/run/tap.ts";
 import { trialEnv, TrialEnvError } from "../../../src/trial/env.ts";
+import { codexEnv, codexQuestions } from "../../../src/adapters/codex/driver.ts";
 import { safetyStop, sessionKindOf } from "../../../lanes/office-hours-rewrite/run/session.ts";
 import { replies } from "../../../lanes/office-hours-founder/parse.ts";
 import { exposure, loadMarkers, questionsAsked } from "../../../lanes/office-hours-rewrite/score/detect.ts";
@@ -113,6 +114,7 @@ describe("5. none arm clean", () => {
     const bearer = "gse_" + "a".repeat(32);
     const env = solEnv({ proxy: { ...o.proxy, token: bearer } });
     expect(BEARER_ENV).toBe("OPENAI_API_KEY");
+    expect(Object.keys(codexEnv({ proxy: o.proxy }))).toEqual([BEARER_ENV]);
     expect(env[BEARER_ENV]).toBe(bearer);
     expect(trialEnv("agent", { PATH: "/usr/bin", HOME: CONTAINER_HOME, ...env }, [], {})).toEqual({ PATH: "/usr/bin", HOME: CONTAINER_HOME, ...env });
     expect(() => trialEnv("agent", { ...env, OPENAI_API_KEY: "sk-not-a-session-bearer" }, [], {})).toThrow(TrialEnvError);
@@ -198,7 +200,7 @@ describe("7. transcript", () => {
     expect(form(cx)).toEqual(form(cc));
     const toolNames = (t: string) => t.split("\n").filter(Boolean).map((l) => JSON.parse(l)).flatMap((x) => (x.type === "assistant" ? x.message.content.filter((c: any) => c.type === "tool_use").map((c: any) => c.name) : []));
     expect(toolNames(cx)).toEqual(["exec"]);
-    expect(codexQuestions(codexRollout())).toEqual([{ call_id: "q1", text: Q1, questions: [{ title: Q1, options: null }] }]);
+    expect(codexQuestions(codexRollout())).toEqual([{ call_id: "q1", questions: [{ title: Q1 }] }]);
   });
 });
 
@@ -220,7 +222,7 @@ function fakeSession(fake: string) {
     stop() {},
   };
 }
-const FAKE = 'const input = await Bun.stdin.text(); const resume = process.argv.includes("resume"); const out = (o) => console.log(JSON.stringify(o));\nout({ type: "thread.started", thread_id: "th-1" }); out({ type: "turn.started" });\nif (process.env.ASK !== "0" && !resume) { out({ type: "item.completed", item: { id: "call_q1", type: "agent_message", text: "' + Q1 + '" } }); out({ type: "item.completed", item: { id: "i1", type: "agent_message", text: "I asked above." } }); }\nelse out({ type: "item.completed", item: { id: "i2", type: "agent_message", text: resume ? "Thanks: " + input.trim() : "A plan with no question." } });\nout({ type: "turn.completed", usage: { input_tokens: 10, cached_input_tokens: 4, output_tokens: 3, reasoning_output_tokens: 1 } });';
+const FAKE = 'const fs = require("node:fs"); const dir = process.env.HOME + "/.codex/sessions/2026/11/19"; fs.mkdirSync(dir, { recursive: true }); fs.appendFileSync(dir + "/rollout-x-th-1.jsonl", JSON.stringify({ type: "session_meta", payload: { id: "th-1" } }) + "\\n");\nconst input = await Bun.stdin.text(); const resume = process.argv.includes("resume"); const out = (o) => fs.writeSync(1, JSON.stringify(o) + "\\n");\nout({ type: "thread.started", thread_id: "th-1" }); out({ type: "turn.started" });\nif (process.env.ASK !== "0" && !resume) { out({ type: "item.completed", item: { id: "call_q1", type: "agent_message", text: "' + Q1 + '" } }); out({ type: "item.completed", item: { id: "i1", type: "agent_message", text: "I asked above." } }); }\nelse out({ type: "item.completed", item: { id: "i2", type: "agent_message", text: resume ? "Thanks: " + input.trim() : "A plan with no question." } });\nout({ type: "turn.completed", usage: { input_tokens: 10, cached_input_tokens: 4, output_tokens: 3, reasoning_output_tokens: 1 } });';
 
 describe("questions", () => {
   test("a question asked through Codex reaches the closing loop as reply text, the simulator's answer goes back by exec resume, and the session continues", async () => {
@@ -234,6 +236,15 @@ describe("questions", () => {
     expect(execs).toHaveLength(2);
     expect(execs[1]!.slice(-3)).toEqual(["resume", "th-1", "-"]);
     expect(r.usage).toEqual({ input: 6, output: 2, reasoning: 1, cache_read: 4, cache_write: 0 });
+  });
+  test("a reply that starts more tool items than the cap is killed and ends the session as a turn cap, before the loop is asked", async () => {
+    const s = fakeSession(FAKE.replace('out({ type: "turn.started" });', 'out({ type: "turn.started" }); for (let i = 0; i < 3; i++) out({ type: "item.started", item: { id: "c" + i, type: "command_execution" } }); await Bun.sleep(5000);'));
+    const seen: string[][] = [];
+    const d = solDriver({ ...o, out: tmp(), maxToolItems: 2, nextUser: async (texts) => (seen.push(texts), { end: true }) });
+    const r = await d.run(s as any, { id: "ohr", prompt: "hi" } as any, 60_000);
+    expect(r.termination).toEqual({ kind: "turn_cap" });
+    expect(r.agent_turns).toBe(3);
+    expect(seen).toEqual([]);
   });
   test("a session with no question ends after one exec when the loop ends it, and reads as done", async () => {
     const s = fakeSession(FAKE.replace('process.env.ASK !== "0"', "false"));

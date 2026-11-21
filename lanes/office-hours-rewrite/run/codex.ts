@@ -1,24 +1,18 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // The office-hours rewrite eval's Sol host (the second attempt's pre-run change 2: the eval owner ruled on 2026-11-19
 // that every Sol arm session runs in Codex CLI, not Claude Code; Opus and particle-1 keep the Claude Code driver).
-// - solArgv: codex exec --json for the first message and codex exec --json resume <thread> for each later one, the
-//   message on stdin, every setting a -c pair under --strict-config: the proxy's provider entry (frozen.CODEX's model on
-//   OpenAI's Responses route, the slot's bearer as BEARER_ENV, retries off since the proxy retries), CODEX_SETTINGS,
-//   and on a skill arm the layout fix: one [[skills.config]] entry each, disabled, for the duplicate copies of
-//   office-hours, plan-design-review and gstack-upgrade (CODEX_LAYOUT_FIX), and nothing else.
-//   Approvals and Codex's own sandbox are bypassed: the trial container is the sandbox and nobody is there to approve.
-//   No --ephemeral, because resume needs the session's rollout.
-// - solDriver: the closing loop as nextUser after every turn, as on Claude Code. A reply whose turn starts more than
-//   AGENT_TURNS_PER_REPLY tool items is killed and ends the session as a turn cap (Codex has no turn limit of its own),
-//   the session's wall clock spans every exec, and a failed turn maps like the Codex adapter's (refusalIn). Before the
-//   first exec the driver checks the arm's HOME (homeCommand); after every turn it copies the session's rollouts out
-//   and rewrites host/transcript.ndjson from the main one (codexTranscript).
-// - Questions: Codex 0.170.0 in exec's Default mode offers request_user_input (Plan mode only; it answers "unavailable
-//   in Default mode") and request_user_input_async, which answers {"accepted":true} at once, puts the question on exec's
-//   event stream as an agent message and takes any reply as a new user message. So a question reaches the closing loop
-//   as reply text, whether asked in prose or through the tool, and the simulator's answer goes back as the next user
-//   message, by exec resume; host/questions.json lists the tool's questions. The sleep tool is off (frozen.CODEX_SETTINGS)
-//   so a model cannot wait inside a turn for a reply that comes only with the next one.
+// - solDriver: the shared Codex adapter (src/adapters/codex/driver.ts, codexDriver) with the closing loop as its
+//   nextUser, as on Claude Code. The adapter owns the exec and resume loop, the proxy's provider entry, the slot's
+//   bearer as OPENAI_API_KEY, the reasoning effort (frozen.CODEX_SETTINGS' low), question capture from the rollout
+//   (request_user_input_async; Codex answers request_user_input "unavailable in Default mode") with each answer back
+//   by exec resume, and its records under host/codex/. The lane adds what is this eval's: the pinned 0.170.0 binary,
+//   CODEX_SETTINGS' other keys through the adapter's settings (solSettings), a skill arm's layout fix (one
+//   [[skills.config]] entry each, disabled, for the duplicate copies of office-hours, plan-design-review and
+//   gstack-upgrade, CODEX_LAYOUT_FIX, as a -c pair, since the adapter's settings take scalars only), the HOME check
+//   before the first exec (homeCommand), a cap of AGENT_TURNS_PER_REPLY tool items per reply that kills the reply and
+//   ends the session as a turn cap (Codex has no turn limit of its own), and after the session the rollouts copied out
+//   with host/transcript.ndjson rewritten from the main one (codexTranscript). The sleep tool is off, so a model cannot
+//   wait inside a turn for a reply that comes only with the next one.
 // - codexTranscript: the rollout in the shape Claude Code's transcript has, so every reader of host/transcript.ndjson
 //   reads a Codex session the same way: a system init line, the main agent's assistant text and tool calls, tool
 //   results and skill or AGENTS.md text as user messages, and a result line at every turn's end. The founder's own
@@ -35,8 +29,8 @@ import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, posix } from "node:path";
-import { createInterface } from "node:readline";
-import { refusalIn, refusalTermination, type NextUser } from "../../../src/adapters/claude-code/driver.ts";
+import type { NextUser } from "../../../src/adapters/claude-code/driver.ts";
+import { ASYNC_QUESTION, CODEX_BIN, codexArgs, codexConfig, codexDriver, codexEnv, type CodexProvider } from "../../../src/adapters/codex/driver.ts";
 import type { ContractTask } from "../../../src/skill-eval/contract/tasks.ts";
 import type { AgentSession } from "../../../src/trial/sandbox.ts";
 import type { AgentDriver, AgentOutcome } from "../../../src/trial/trial.ts";
@@ -44,9 +38,6 @@ import type { Termination, TokenUsage } from "../../../src/types.ts";
 import { AGENT_TURNS_PER_REPLY, ARM_ENV, CODEX, CODEX_LAYOUT_FIX, CODEX_RENDERED, CODEX_SETTINGS, CODEX_SKILL_FILES, PINS, RENDER_GAP } from "../frozen.ts";
 import type { SkillArm } from "../types.ts";
 
-export const PROVIDER_ID = "gstack_evals_proxy";
-/** The variable that carries the slot's per-session bearer. The trial env admits it in the agent env only with a gse_ session bearer, never a provider key, so the containment probe exempts this one name on Sol (ohrProbed). */
-export const BEARER_ENV = "OPENAI_API_KEY";
 const sha256 = (b: string | Buffer) => createHash("sha256").update(b).digest("hex");
 type Rec = Record<string, any>;
 
@@ -63,31 +54,35 @@ export interface SolOptions {
   onHome?: (problems: string[] | null) => void;
 }
 
-/** Every -c pair, as key and TOML value. */
-export function solSettings(o: Pick<SolOptions, "proxy" | "home" | "skillArm">): [string, string][] {
-  const p = "model_providers." + PROVIDER_ID + ".";
-  const toml = (v: string | number | boolean) => (typeof v === "string" ? JSON.stringify(v) : String(v));
-  return [
-    ["model_provider", toml(PROVIDER_ID)],
-    [p + "name", toml("gstack-evals metering proxy")],
-    [p + "base_url", toml(o.proxy.baseUrl.replace(/\/+$/, "") + "/" + o.proxy.slot + "/" + CODEX.provider + "/v1")],
-    [p + "wire_api", toml("responses")],
-    [p + "env_key", toml(BEARER_ENV)],
-    [p + "request_max_retries", "0"],
-    [p + "stream_max_retries", "0"],
-    ...Object.entries(CODEX_SETTINGS).map(([k, v]): [string, string] => [k, toml(v)]),
-    ...(o.skillArm ? [["skills.config", "[" + CODEX_LAYOUT_FIX.map((f) => "{path=" + JSON.stringify(posix.join(o.home, ".codex", f)) + ",enabled=false}").join(",") + "]"] as [string, string]] : []),
-  ];
+/** CODEX_SETTINGS beyond the adapter's own: less the effort, which the adapter writes, and the keys the adapter already sets, which must hold the frozen values. */
+export function solSettings(): Record<string, string | number | boolean> {
+  const own = codexConfig({ provider: CODEX.provider as CodexProvider, proxy: { baseUrl: "", slot: "", token: "" } });
+  const out: Record<string, string | number | boolean> = {};
+  for (const [k, v] of Object.entries(CODEX_SETTINGS)) {
+    if (k === "model_reasoning_effort") continue;
+    if (!(k in own)) out[k] = v;
+    else if (own[k] !== v) throw new Error("E_INTERNAL: the Codex adapter writes " + k + " = " + JSON.stringify(own[k]) + ", not the frozen " + JSON.stringify(v));
+  }
+  return out;
 }
 
-/** The argv after the binary; the message follows on stdin. thread resumes that session. */
-export function solArgv(o: Pick<SolOptions, "proxy" | "home" | "skillArm">, thread: string | null): string[] {
-  const settings = solSettings(o).flatMap(([k, v]) => ["-c", k + "=" + v]);
-  return ["exec", "--json", "--strict-config", "--skip-git-repo-check", "--dangerously-bypass-approvals-and-sandbox", "--color", "never", "-m", CODEX.model, ...settings, ...(thread ? ["resume", thread] : []), "-"];
+const adapter = (o: Pick<SolOptions, "proxy">) => ({ model: CODEX.model, provider: CODEX.provider as CodexProvider, proxy: o.proxy, effort: CODEX_SETTINGS.model_reasoning_effort, settings: solSettings() });
+
+/** A skill arm's layout fix as one -c pair, before resume and the message's "-": [[skills.config]] takes an array of tables. */
+export function withLayout(argv: string[], o: Pick<SolOptions, "home" | "skillArm">): string[] {
+  if (!o.skillArm) return argv;
+  const at = argv.includes("resume") ? argv.indexOf("resume") : argv.length - 1;
+  return [...argv.slice(0, at), "-c", "skills.config=[" + CODEX_LAYOUT_FIX.map((f) => "{path=" + JSON.stringify(posix.join(o.home, ".codex", f)) + ",enabled=false}").join(",") + "]", ...argv.slice(at)];
 }
 
-/** The agent env the driver adds: the slot's bearer and section 4 step 2's ARM_ENV, set in every arm. */
-export const solEnv = (o: Pick<SolOptions, "proxy">): Record<string, string> => ({ [BEARER_ENV]: o.proxy.token, ...ARM_ENV });
+/** The argv after the binary, as the adapter builds it with the lane's settings; the message follows on stdin. thread resumes that session. */
+export const solArgv = (o: Pick<SolOptions, "proxy" | "home" | "skillArm">, thread: string | null): string[] => withLayout(codexArgs(adapter(o), thread), o);
+
+/** The variable that carries the slot's per-session bearer (the adapter's). The trial env admits it in the agent env only with a gse_ session bearer, never a provider key, so the containment probe exempts this one name on Sol (ohrProbed). */
+export const BEARER_ENV = "OPENAI_API_KEY";
+
+/** The agent env: the adapter's (the slot's bearer; no session kind, which every arm leaves unset) and section 4 step 2's ARM_ENV. */
+export const solEnv = (o: Pick<SolOptions, "proxy">): Record<string, string> => ({ ...codexEnv({ proxy: o.proxy }), ...ARM_ENV });
 
 /** The shell step that lists what an arm's HOME and work dir hold before Codex first runs. */
 export const homeCommand = 'W="$PWD"; cd "$HOME" && for p in .codex .codex/config.toml .codex/AGENTS.md .codex/skills .agents .claude .gstack .local/share/gstack AGENTS.md; do test -e "$p" && echo "present $p"; done; find "$HOME" "$W" -maxdepth 8 -name AGENTS.md -o -name AGENTS.override.md 2>/dev/null | sed "s/^/agents /"; find "$HOME" -maxdepth 8 -name SKILL.md 2>/dev/null | head -1 | sed "s/^/skill /"; true';
@@ -100,9 +95,6 @@ export function homeProblems(printed: string, skillArm: boolean): string[] {
 }
 
 const TOOL_ITEMS = new Set(["command_execution", "file_change", "mcp_tool_call", "web_search", "collab_tool_call", "todo_list", "image_view"]);
-/** Codex's input_tokens include its cached input and its output_tokens its reasoning; TokenUsage keeps each class apart. */
-const tokens = (u: Rec): TokenUsage => ({ input: Math.max(0, (u.input_tokens ?? 0) - (u.cached_input_tokens ?? 0) - (u.cache_write_input_tokens ?? 0)), output: Math.max(0, (u.output_tokens ?? 0) - (u.reasoning_output_tokens ?? 0)), reasoning: u.reasoning_output_tokens ?? 0, cache_read: u.cached_input_tokens ?? 0, cache_write: u.cache_write_input_tokens ?? 0 });
-
 async function readAll(session: AgentSession, argv: string[]): Promise<string> {
   const child = session.spawn(argv, {});
   let text = "";
@@ -112,93 +104,69 @@ async function readAll(session: AgentSession, argv: string[]): Promise<string> {
   return text;
 }
 
+/** Every rollout of the session into out/rollouts, and the main one (the adapter's thread) as out/rollout.jsonl and out/transcript.ndjson. */
+async function copyOut(session: AgentSession, out: string): Promise<void> {
+  let thread: string | null = null;
+  try {
+    thread = JSON.parse(readFileSync(join(out, "codex", "init.json"), "utf8")).thread_id ?? null;
+  } catch {
+    return;
+  }
+  const files = (await readAll(session, ["sh", "-c", 'ls "$HOME"/.codex/sessions/*/*/*/rollout-*.jsonl 2>/dev/null'])).split("\n").map((l) => l.trim()).filter(Boolean);
+  mkdirSync(join(out, "rollouts"), { recursive: true });
+  for (const f of files) {
+    const text = await readAll(session, ["cat", f]);
+    writeFileSync(join(out, "rollouts", posix.basename(f)), text);
+    if (thread && f.endsWith("-" + thread + ".jsonl")) {
+      writeFileSync(join(out, "rollout.jsonl"), text);
+      writeFileSync(join(out, "transcript.ndjson"), codexTranscript(text));
+    }
+  }
+}
+
 export function solDriver(o: SolOptions): AgentDriver & { env: Record<string, string> } {
   const cap = o.maxToolItems ?? AGENT_TURNS_PER_REPLY;
   return {
     env: solEnv(o),
     async run(session: AgentSession, task: ContractTask, timeoutMs: number): Promise<AgentOutcome> {
       mkdirSync(o.out, { recursive: true });
-      const deadline = Date.now() + timeoutMs;
-      const turns: string[] = [];
-      let usage: TokenUsage | null = null;
-      let thread: string | null = null;
-      let toolItems = 0;
       const home = session.exec(homeCommand, 60_000);
       o.onHome?.(home.exitCode === 0 ? homeProblems(home.stdout, o.skillArm) : null);
-      const copyOut = async () => {
-        if (!thread) return;
-        const files = (await readAll(session, ["sh", "-c", 'ls "$HOME"/.codex/sessions/*/*/*/rollout-*.jsonl 2>/dev/null'])).split("\n").map((l) => l.trim()).filter(Boolean);
-        mkdirSync(join(o.out, "rollouts"), { recursive: true });
-        for (const f of files) {
-          const text = await readAll(session, ["cat", f]);
-          writeFileSync(join(o.out, "rollouts", posix.basename(f)), text);
-          if (f.endsWith("-" + thread + ".jsonl")) {
-            writeFileSync(join(o.out, "rollout.jsonl"), text);
-            writeFileSync(join(o.out, "transcript.ndjson"), codexTranscript(text));
-            writeFileSync(join(o.out, "questions.json"), JSON.stringify(codexQuestions(text), null, 2) + "\n");
-          }
-        }
-      };
-      const outcome = (termination: Termination): AgentOutcome => ({ turns, termination, opened: null, files_read: [], asked: [], usage, cost_micros: null, agent_turns: toolItems, loaded_bytes: null, text_output: turns.length > 0 });
-      let message = task.prompt;
-      for (;;) {
-        const argv = solArgv(o, thread);
-        appendFileSync(join(o.out, "init.ndjson"), JSON.stringify({ argv: [CODEX.bin, ...argv], at: new Date().toISOString() }) + "\n");
-        const child = session.spawn(["sh", "-c", 'PATH="' + CODEX.path_dir + ':$PATH" exec "$0" "$@"', CODEX.bin, ...argv], {});
-        let completed = false;
-        let failed: string | null = null;
-        let lastError: string | null = null;
-        let capped = false;
-        let replyTools = 0;
-        const texts: string[] = [];
-        const left = deadline - Date.now();
-        let timedOut = left <= 0;
-        const timer = setTimeout(() => {
-          timedOut = true;
-          child.kill("SIGKILL");
-        }, Math.max(1, left));
-        child.stderr?.on("data", (d: Buffer) => appendFileSync(join(o.out, "cli-stderr.log"), d));
-        child.stdin?.on("error", () => {});
-        child.stdin?.end(message);
-        const closed = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => child.on("close", (code, signal) => resolve({ code, signal })));
-        if (child.stdout)
-          for await (const line of createInterface({ input: child.stdout })) {
-            if (!line.trim()) continue;
-            appendFileSync(join(o.out, "events.ndjson"), line + "\n");
-            let ev: Rec;
-            try {
-              ev = JSON.parse(line);
-            } catch {
-              continue;
+      let capped = false;
+      let toolItems = 0;
+      const lane: AgentSession = {
+        ...session,
+        spawn(argv, env) {
+          if (argv[0] !== CODEX_BIN) return session.spawn(argv, env);
+          const actual = ["sh", "-c", 'PATH="' + CODEX.path_dir + ':$PATH" exec "$0" "$@"', CODEX.bin, ...withLayout(argv.slice(1), o)];
+          appendFileSync(join(o.out, "codex", "exec-argv.ndjson"), JSON.stringify(actual) + "\n");
+          const child = session.spawn(actual, env);
+          let reply = 0;
+          let rest = "";
+          child.stdout?.on("data", (d: Buffer) => {
+            const lines = (rest + d.toString("utf8")).split("\n");
+            rest = lines.pop() ?? "";
+            for (const l of lines) {
+              let ev: Rec;
+              try {
+                ev = JSON.parse(l);
+              } catch {
+                continue;
+              }
+              if (ev.type !== "item.started" || !TOOL_ITEMS.has(ev.item?.type)) continue;
+              toolItems++;
+              if (++reply > cap && !capped) {
+                capped = true;
+                child.kill("SIGKILL");
+              }
             }
-            if (ev.type === "thread.started" && typeof ev.thread_id === "string") thread ??= ev.thread_id;
-            else if (ev.type === "item.started" && TOOL_ITEMS.has(ev.item?.type) && ++replyTools > cap && !capped) {
-              capped = true;
-              child.kill("SIGKILL");
-            } else if (ev.type === "item.completed" && ev.item?.type === "agent_message" && typeof ev.item.text === "string" && ev.item.text.trim()) texts.push(ev.item.text);
-            else if (ev.type === "turn.completed") {
-              completed = true;
-              if (ev.usage) usage = tokens(ev.usage);
-            } else if (ev.type === "turn.failed") failed = ev.error?.message ?? "turn failed";
-            else if (ev.type === "error") lastError = ev.message ?? "error";
-          }
-        const exit = await closed;
-        clearTimeout(timer);
-        toolItems += replyTools;
-        turns.push(...texts);
-        await copyOut();
-        if (timedOut) return outcome({ kind: "timeout" });
-        if (capped) return outcome({ kind: "turn_cap" });
-        const exited = exit.signal === null;
-        if (!(completed && !failed && exited && exit.code === 0)) {
-          const refusal = refusalIn(failed ?? lastError ?? "");
-          return outcome(refusal && exited ? refusalTermination(refusal) : failed && exited ? { kind: "missing", code: "UPSTREAM" } : { kind: "arm_failure", failure: "harness_crash" });
-        }
-        const next = await o.nextUser(texts);
-        if ("stop" in next) return outcome(next.stop);
-        if ("end" in next) return outcome({ kind: "completed" });
-        message = next.reply;
-      }
+          });
+          return child;
+        },
+      };
+      const outcome = await codexDriver({ ...adapter(o), skill: null, out: join(o.out, "codex"), nextUser: o.nextUser }).run(lane, task, timeoutMs);
+      await copyOut(session, o.out);
+      return { ...outcome, agent_turns: toolItems, ...(capped ? { termination: { kind: "turn_cap" } as Termination } : {}) };
     },
   };
 }
@@ -206,25 +174,6 @@ export function solDriver(o: SolOptions): AgentDriver & { env: Record<string, st
 const textOf = (c: unknown): string => (typeof c === "string" ? c : Array.isArray(c) ? c.map((b) => (typeof b?.text === "string" ? b.text : "")).join("\n") : c == null ? "" : JSON.stringify(c));
 const provenance = (p: Rec): string[] => (p.internal_chat_message_metadata_passthrough?.content_item_metadata ?? []).map((m: Rec) => String(m?.provenance?.type ?? ""));
 const INJECTED = new Set(["skills", "agents_md"]);
-/** Codex 0.170.0's question tool in Default mode: it answers {"accepted":true} at once, shows the question as an AgentMessage with delivery async, and takes any reply as a new user message. */
-export const ASYNC_QUESTION = "request_user_input_async";
-
-/** The questions a session put to the founder through ASYNC_QUESTION, in order, as the rollout shows them. */
-export function codexQuestions(rollout: string): { call_id: string; text: string; questions: unknown }[] {
-  const out: { call_id: string; text: string; questions: unknown }[] = [];
-  for (const raw of rollout.split("\n")) {
-    let d: Rec;
-    try {
-      d = JSON.parse(raw);
-    } catch {
-      continue;
-    }
-    const it = d.payload?.item;
-    if (d.type === "event_msg" && d.payload?.type === "item_completed" && it?.type === "AgentMessage" && it.delivery === "async") out.push({ call_id: String(it.id), text: textOf(it.content), questions: it.questions ?? null });
-  }
-  return out;
-}
-
 /** A Codex rollout as the transcript.ndjson shape Claude Code writes for the same conversation. */
 export function codexTranscript(rollout: string): string {
   const lines: Rec[] = [];
