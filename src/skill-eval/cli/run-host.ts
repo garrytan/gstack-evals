@@ -111,7 +111,7 @@ export interface HostRunInput {
   runId: string;
   out: string;
   tasksDir: string;
-  /** The loaded sidecar's path, left out of the fixture tree beside the lock; null when none was loaded. Unset means tasks.ext.json. */
+  /** The loaded sidecar's path, left out of the fixture tree, which always leaves out tasks.ext.json and the lock too; null or unset when none was loaded. */
   sidecar?: string | null;
   policy: LoadedPolicy;
   arms: ArmSpec[];
@@ -305,8 +305,8 @@ export async function runOnHost(o: HostRunInput, rig: HostRig, log: (line: strin
     return micros;
   };
   const byId = new Map(o.tasks.map((t) => [t.id, t]));
-  const sidecar = o.sidecar === undefined ? SIDECAR_FILE : o.sidecar && relative(o.tasksDir, resolve(o.sidecar)).split(sep).join("/");
-  const fixtureTree = dirTreeSha256(o.tasksDir, new Set([LOCK_FILE, ...(sidecar && !/^\.\.(\/|$)/.test(sidecar) ? [sidecar] : [])]));
+  const sidecar = o.sidecar ? relative(o.tasksDir, resolve(o.sidecar)).split(sep).join("/") : null;
+  const fixtureTree = dirTreeSha256(o.tasksDir, new Set([LOCK_FILE, SIDECAR_FILE, ...(sidecar && !/^\.\.(\/|$)/.test(sidecar) ? [sidecar] : [])]));
   const keyOf = (model: string, arm: ArmSpec, task: ContractTask): SessionKey => {
     const entry = o.entries[task.id];
     const { judge: _rubric, ...agentEntry } = entry ?? {};

@@ -346,6 +346,9 @@ describe.skipIf(!HAS_CLAUDE_CLI || !HAS_CODEX_CLI)("the run loop on a real host'
     writeFileSync(rubrics, JSON.stringify({ schema_version: 1, tasks: { hello: { judge: "The answer greets the user warmly." } } }));
     const custom = await again({ keyBase: changed, sidecar: rubrics, entries: { hello: { judge: "The answer greets the user warmly." } } });
     expect([custom.run.stale, custom.sessions, custom.judged.length]).toEqual([[], 0, 3]);
+    writeFileSync(join(tasks, "tasks.ext.json"), JSON.stringify({ schema_version: 1, tasks: { hello: { judge: "A leftover rubric nothing loads." } } }));
+    const leftover = await again({ keyBase: changed, sidecar: rubrics, entries: { hello: { judge: "The answer greets the user warmly." } } });
+    expect([leftover.run.stale, leftover.sessions, leftover.judged.length]).toEqual([[], 0, 0]);
   }, 600_000);
 
   // Value: protects=skill-eval runs a persona task on Codex end to end: the model's request_user_input_async question goes to the policy's usersim model through its own slot, the answer comes back as the next user message, and every Codex session pins the reasoning effort codex 0.166.0's catalog gives its model (low for gpt-6.1-sol) in init.json; fails_when=a Codex persona task gets the fallback, the question is lost, or a session runs on Codex's own default effort; why_new=interactive tasks on Codex and the effort pin; seam=runOnHost's session, hostDriver, catalogEffort; no_claim=a real usersim model's answers
