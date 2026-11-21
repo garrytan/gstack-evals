@@ -451,6 +451,10 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_OHR_DRYRUN_FAIL](#e_ohr_dryrun_fail) | 2 | U20 |
 | [E_OHR_PREFLIGHT_FAIL](#e_ohr_preflight_fail) | 2 | U20 |
 | [E_OHR_MODEL_DRIFT](#e_ohr_model_drift) | 2 | U20 |
+| [E_CSO_PREREG](#e_cso_prereg) | 2 | U20 |
+| [E_CSO_UNIT_IDS](#e_cso_unit_ids) | 2 | U20 |
+| [E_CSO_SCAN](#e_cso_scan) | 2 | U20 |
+| [E_CSO_DROP_INSTALL_ID](#e_cso_drop_install_id) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -3495,6 +3499,38 @@ Office-hours rewrite eval (pre-run change 4): a reply named a model other than t
 Fix: Keep the journal and the transcript that show the reported model, and send the question to the Captain. Never retry the item on another model or route.
 
 Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_PREREG
+
+The /cso real-advisory eval found no usable preregistration: its prereg.json is missing, is not cso-advisories-prereg.v1, lacks an unsigned 32-bit integer seed, or lacks a text or a unit list.
+
+Fix: prereg.json changes only through a dated pre-data change post. Nothing runs on values chosen anywhere else.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_UNIT_IDS
+
+A /cso eval unit's containment ids are malformed: its GHSA id, a CVE id of its advisory at the pinned advisory database, or its fix commit (40 hex characters) has the wrong shape, so a scan for it would find nothing by construction.
+
+Fix: Rebuild the unit's record from the pinned advisory database and b2-frame.json; never scan with a hand-typed id.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_SCAN
+
+A /cso eval id scan did not finish: the tree is missing, a find, grep or git cat-file step failed, or the scan script exited non-zero. Containment fails closed, so no unit counts as clean on that tree.
+
+Fix: Read the failed step in the message, repair the tree or the tool, and scan again from the start. A store git cannot read is never skipped.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_CSO_DROP_INSTALL_ID
+
+Deviation (a): a /cso eval unit's GHSA id, a CVE id of its advisory or its fix commit's first 12 hex characters appears in an arm's installed gstack tree (a file, a git object or an archive two levels deep). The unit drops from every cell, so pairing holds; the record names the arm, the path and the id.
+
+Fix: None for the unit: it is dropped by rule and the draw moves to the next usable position. Report the drop per arm in the results.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
 
 ## Exit 3: calibration failed (INCOMPLETE)
 

@@ -3832,6 +3832,45 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  // cso real-advisory eval (GEVA-561): prereg, ids, containment over arm installs (deviation (a)).
+  E_CSO_PREREG: {
+    exit: 2,
+    meaning: "The /cso real-advisory eval found no usable preregistration: its prereg.json is missing, is not cso-advisories-prereg.v1, lacks an unsigned 32-bit integer seed, or lacks a text or a unit list.",
+    fix: "prereg.json changes only through a dated pre-data change post. Nothing runs on values chosen anywhere else.",
+    side_effects: NO_SPEND,
+    retry_safe: false,
+    resumable: false,
+    owner: "U20",
+  },
+  E_CSO_UNIT_IDS: {
+    exit: 2,
+    meaning: "A /cso eval unit's containment ids are malformed: its GHSA id, a CVE id of its advisory at the pinned advisory database, or its fix commit (40 hex characters) has the wrong shape, so a scan for it would find nothing by construction.",
+    fix: "Rebuild the unit's record from the pinned advisory database and b2-frame.json; never scan with a hand-typed id.",
+    side_effects: NO_SPEND,
+    retry_safe: false,
+    resumable: false,
+    owner: "U20",
+  },
+  E_CSO_SCAN: {
+    exit: 2,
+    meaning: "A /cso eval id scan did not finish: the tree is missing, a find, grep or git cat-file step failed, or the scan script exited non-zero. Containment fails closed, so no unit counts as clean on that tree.",
+    fix: "Read the failed step in the message, repair the tree or the tool, and scan again from the start. A store git cannot read is never skipped.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
+  },
+  E_CSO_DROP_INSTALL_ID: {
+    exit: 2,
+    meaning: "Deviation (a): a /cso eval unit's GHSA id, a CVE id of its advisory or its fix commit's first 12 hex characters appears in an arm's installed gstack tree (a file, a git object or an archive two levels deep). The unit drops from every cell, so pairing holds; the record names the arm, the path and the id.",
+    fix: "None for the unit: it is dropped by rule and the draw moves to the next usable position. Report the drop per arm in the results.",
+    side_effects: NO_SPEND,
+    retry_safe: false,
+    resumable: false,
+    owner: "U20",
+  },
+
+
 } as const satisfies Record<string, CodeInfo>;
 
 export type ReasonCode = keyof typeof CODES;
