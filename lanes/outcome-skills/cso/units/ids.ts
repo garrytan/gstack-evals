@@ -35,11 +35,17 @@ export function unitNeedles(u: UnitIds): IdNeedle[] {
 
 /** The scan's extended-regex line for a needle: ids hold only [a-z0-9-], so each is its own literal. */
 const pattern = (n: IdNeedle) => (n.kind === "cve" ? n.needle + "([^0-9]|$)" : n.needle);
+/** The scan's needle file: one pattern a line, and empty with no needles, so the scan exits at once and never runs grep
+ *  with an empty pattern (which matches every line of every file). */
+export const needleFile = (ns: readonly IdNeedle[]): string => {
+  const lines = [...new Set(ns.map(pattern))];
+  return lines.length ? lines.join("\n") + "\n" : "";
+};
 
 function scanTree(root: string, ns: IdNeedle[]): { raw: Array<{ where: "file" | "git"; path: string; match: string }>; stores: string[] } {
   const dir = mkdtempSync(join(tmpdir(), "cso-ids-"));
   try {
-    writeFileSync(join(dir, "needles"), [...new Set(ns.map(pattern))].join("\n") + "\n");
+    writeFileSync(join(dir, "needles"), needleFile(ns));
     const r = spawnSync("bash", ["-c", SCAN_IDS, "bash", root, join(dir, "needles")], { encoding: "utf8", maxBuffer: 512 * 1024 * 1024, timeout: 3_600_000 });
     if (r.status !== 0) csoFail("E_CSO_SCAN", "the id scan of " + root + " exited " + r.status + ": " + (r.stderr ?? "").slice(-300));
     const b64 = (s: string) => Buffer.from(s, "base64").toString("utf8");
