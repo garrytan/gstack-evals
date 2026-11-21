@@ -91,14 +91,14 @@ export async function captureArm(sandbox: Sandbox, o: { argv: string[]; dir: str
   const work = join(o.dir, "work-" + o.id);
   rmSync(work, { recursive: true, force: true });
   mkdirSync(work, { recursive: true });
-  let session;
+  let box;
   try {
-    session = sandbox.agent("capture", { work, env: { PATH: "/usr/local/bin:/usr/bin:/bin", HOME: o.home, LANG: "C.UTF-8", TERM: "dumb" }, network: null });
+    box = sandbox.agent("capture", { work, env: { PATH: "/usr/local/bin:/usr/bin:/bin", HOME: o.home, LANG: "C.UTF-8", TERM: "dumb" }, network: null });
   } catch (e) {
     return { problem: "the arm's sandbox could not start: " + (e as Error).message };
   }
   try {
-    const r = await sessionRead(session, o.argv, 120_000, 64 * 1024 * 1024);
+    const r = await sessionRead(box, o.argv, 120_000, 64 * 1024 * 1024);
     const shown = o.argv.slice(0, 3).join(" ");
     if (!r) return { problem: shown + " did not finish within 120 s or printed over 64 MiB" };
     if (r.code !== 0 || !r.out.length) return { problem: shown + " exited " + r.code + (r.out.length ? "" : " with no output") };
@@ -106,7 +106,7 @@ export async function captureArm(sandbox: Sandbox, o: { argv: string[]; dir: str
     writeFileSync(file, r.out);
     return { file, sha256: createHash("sha256").update(r.out).digest("hex") };
   } finally {
-    session.stop();
+    box.stop();
     rmSync(work, { recursive: true, force: true });
   }
 }
