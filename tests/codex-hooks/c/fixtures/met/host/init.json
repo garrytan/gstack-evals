@@ -1,0 +1,10 @@
+{
+  "thread_id": "01a1fcc8-5c0c-7c53-aae8-ba93956e4b07",
+  "rollouts": {
+    "copied": [
+      "sessions/2026/11/21/rollout-2026-11-21T06-25-51-01a1fcc8-5c0c-7c53-aae8-ba93956e4b07.jsonl",
+      "sessions/2026/11/21/rollout-2026-11-21T06-25-51-01a1fcc8-5cc2-72a0-b580-0c655047da4a.jsonl"
+    ],
+    "failed": []
+  }
+}

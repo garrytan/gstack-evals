@@ -13,6 +13,7 @@ import { stackKind } from "../../arms/stacks.ts";
 import { parseStackRef, type ResolvedArms } from "../../skill-eval/cli/arms.ts";
 import type { ArmSpec } from "../../types.ts";
 import { HOST_PROVIDERS, newRunId } from "../../skill-eval/cli/call.ts";
+import type { Host } from "../../types.ts";
 import { allowanceMicros, SESSION_ALLOWANCE } from "../../skill-eval/cli/dry-run.ts";
 import { DEFAULT_POLICY, loadPolicy, modelProblem, providerOf, type LoadedPolicy } from "../../skill-eval/cli/policy.ts";
 import { adapterSha256, dockerRig } from "../../skill-eval/cli/run-host.ts";
@@ -32,6 +33,7 @@ import { pvMain } from "./pv-cli.ts";
 import { ER_LENS } from "./eng-review.ts";
 import { erMain } from "./er-cli.ts";
 import { prTextProblem, TOLD_COMMANDS, TOLD_PR_SHA256, TOLD_PREFIX, TOLD_SHA256, toldArmOf, toldSkill } from "./told.ts";
+import { loadCodexArms, type CodexArms } from "./codex.ts";
 import { buildUnitRepo, buildUnitTree, DEFAULT_BRANCHES, DEFAULT_INSTALL, historyProblems, UnitError, unitTaskId, type UnitRepo } from "./unit.ts";
 
 type Env = Record<string, string | undefined>;
@@ -49,7 +51,7 @@ export const REVIEW_UNITS_HELP = [
   "    [--plan <lens> [--arm-models <arm>=<model>[,<model>]...]] [--sealed-root <dir>]",
   "    [--system-prompt <arm>=sdk-default|claude-code-preset]... [--told-prefix <arm>=<file>]... [--render <arm>=interactive|unattended]...",
   "    [--max-turns <n>] [--session-kind unattended | --arm-session-kind <arm>=unattended...] [--cap-stops] [--reader-map <file>] [--background-wait <s>]",
-  "    [--pr-context <dir>]",
+  "    [--pr-context <dir>] [--host claude|codex --codex-arms <file> [--upstream <url>]]",
   "",
   "--plan ceo runs plan units (a plan suite): arms none, lens, placebo, gstack=<repo>@<sha>, gstack-<suffix>=<repo>@<sha> (a second",
   "gstack arm, which needs a --told-prefix) and gstack-auto=<repo>@<sha>, each with its plan line and the frozen plan output",
@@ -91,9 +93,17 @@ export const REVIEW_UNITS_HELP = [
   "TOLD_PR_TEMPLATE), the same for every arm. Every selected unit needs a pr.md with no control character but line feeds and",
   "tabs, or the run is refused. The session key, arm.json's told record and units.json carry the template's and each pr.md's",
   "sha256; left out, every prompt and record is today's.",
+  "",
+  "--host codex runs code units in Codex CLI (src/trial/review/codex.ts) on models with an openai or openrouter route. Every",
+  "arm then takes its effort, hook trust, extra -c settings, gstack config, recorded switches, installer and $skill prompt",
+  "prefix from --codex-arms <file>, which also names the Codex binary every session runs; a gstack arm needs a told_prefix, and",
+  "--told-prefix, --system-prompt, --render, --reader-map, --cap-stops and --plan do not apply. <name>=none names a no-skill",
+  "arm. Each arm's model input is captured keylessly before the first session (captures/). --upstream <url> sends every",
+  "model call to that base URL instead of the provider, for keyless checks only: it is refused while a provider key is set, and the proxy gets placeholder keys.",
+  "On --host codex the proxy's journal also keeps each request's reasoning field on its request line, so every request's effort can be read.",
 ].join("\n");
 
-const VALUE = new Set(["--suite", "--passes", "--out", "--ledger", "--record", "--item", "--spend-cap", "--repair", "--parallel", "--timeout", "--allowance", "--severity-map", "--policy", "--date", "--plan", "--sealed-root", "--max-turns", "--session-kind", "--reader-map", "--background-wait", "--pr-context"]);
+const VALUE = new Set(["--host", "--codex-arms", "--upstream", "--suite", "--passes", "--out", "--ledger", "--record", "--item", "--spend-cap", "--repair", "--parallel", "--timeout", "--allowance", "--severity-map", "--policy", "--date", "--plan", "--sealed-root", "--max-turns", "--session-kind", "--reader-map", "--background-wait", "--pr-context"]);
 const LIST = new Set(["--units", "--arms", "--models", "--source", "--base-branch", "--install", "--test", "--arm-models", "--system-prompt", "--told-prefix", "--render", "--arm-session-kind"]);
 const BOOL = new Set(["--resume", "--dry-run", "--cap-stops"]);
 
@@ -156,6 +166,17 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   for (const f of ["--suite", "--units", "--arms", "--models", "--out"]) if (!flags.has(f)) throw new Usage("needs " + f);
   const dry = flags.has("--dry-run");
   const resume = flags.has("--resume");
+  const host = (one("--host") ?? "claude") as Host;
+  if (host !== "claude" && host !== "codex") throw new Usage("--host takes claude or codex");
+  const codexOnly = ["--codex-arms", "--upstream"].filter((f) => flags.has(f));
+  if (host === "claude" && codexOnly.length) throw new Usage(codexOnly.join(" and ") + " run with --host codex");
+  if (host === "codex") {
+    const claudeOnly = ["--plan", "--told-prefix", "--system-prompt", "--render", "--reader-map", "--cap-stops", "--arm-models"].filter((f) => flags.has(f));
+    if (claudeOnly.length) throw new Usage(claudeOnly.join(", ") + " run on host claude only");
+    if (!flags.has("--codex-arms")) throw new Usage("--host codex needs --codex-arms <file>");
+  }
+  const upstream = one("--upstream");
+  if (upstream !== null && ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY"].some((k) => env[k])) throw new Usage("--upstream is for keyless checks, and a provider key is set in this environment; unset it, or leave out --upstream");
   let loaded: ReturnType<typeof loadSuite>;
   try {
     loaded = loadSuite(one("--suite")!, { sealedRoot: one("--sealed-root") });
@@ -184,12 +205,13 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   const models = flags.get("--models")!;
   for (const m of models) {
     const provider = providerOf(policy as LoadedPolicy, m);
-    if (!provider || !HOST_PROVIDERS.claude.includes(provider)) throw new Usage("--models: " + m + " has no Claude Code route in the policy (anthropic or openrouter)");
+    if (!provider || !HOST_PROVIDERS[host].includes(provider)) throw new Usage("--models: " + m + " has no " + (host === "claude" ? "Claude Code route in the policy (anthropic or openrouter)" : "Codex route in the policy (openai or openrouter)"));
     const problem = (policy as LoadedPolicy).policy.models[m]?.smoke_only ? modelProblem(policy as LoadedPolicy, m, "subject", { smoke: false, item: one("--item") }) : null;
     if (problem) throw new Usage("--models: " + problem);
   }
   const specs: ArmSpec[] = flags.get("--arms")!.map((s) => {
     if (s === "none") return { name: "none", kind: "bare" };
+    if (/^[a-z][a-z0-9_-]*=none$/.test(s)) return { name: s.slice(0, s.indexOf("=")), kind: "bare" };
     if (lens && s === "lens") return { name: "lens", kind: "bare" };
     if (lens && s === "placebo") return { name: "placebo", kind: "placebo", of: "gstack" };
     const at = s.indexOf("=");
@@ -268,6 +290,23 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
     return { name: a.name, told, ...(systemPrompts.has(a.name) ? { systemPrompt: systemPrompts.get(a.name) as SystemPrompt } : {}), ...(prefix !== undefined ? { toldPrefix: prefix } : {}) };
   });
   for (const a of arms) if (armKinds.has(a.name)) a.sessionKind = "unattended";
+  let codexArms: CodexArms | null = null;
+  if (host === "codex") {
+    try {
+      codexArms = loadCodexArms(one("--codex-arms")!, arms.map((a) => a.name));
+    } catch (e) {
+      throw new Usage((e as Error).message.replace(/^E_USAGE: /, ""));
+    }
+    for (const a of arms) {
+      const spec = codexArms.arms[a.name]!;
+      const armSpec = specs.find((x) => x.name === a.name)!;
+      if (a.told === "gstack" && spec.told_prefix === null) throw new Usage("--codex-arms: arm " + a.name + " runs gstack, so it needs a told_prefix that opens with its $skill mention, such as $review");
+      if (a.told === "none" && (spec.told_prefix !== null || spec.install !== null)) throw new Usage("--codex-arms: arm " + a.name + " runs no skill, so it takes no told_prefix and no install");
+      if (a.told !== "gstack" && (Object.keys(spec.gstack_config).length || spec.switches.length)) throw new Usage("--codex-arms: arm " + a.name + " installs no gstack, so it takes no gstack_config and no switches");
+      if (spec.told_prefix !== null) a.toldPrefix = spec.told_prefix;
+      if (spec.install !== null && armSpec.kind === "stack") armSpec.install.codex = spec.install;
+    }
+  }
   const mapFile = one("--reader-map");
   const readerMap = mapFile === null ? null : loadReaderMap(mapFile);
   if (readerMap && "problem" in readerMap) throw new Usage("--reader-map " + mapFile + ": " + readerMap.problem);
@@ -373,6 +412,12 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
     io.err("E_CACHE_STALE review-units: run " + prior.run_id + " ran with " + was + (waits ? "; background wait " + priorWait + " s" : "") + ", and this resume gives " + now + (waits ? "; " + backgroundWaitS + " s" : "") + "\n  fix: resume with the run's own --max-turns, --session-kind, --allowance, --reader-map and --background-wait, or start a new run in a new --out");
     return 2;
   }
+  const priorHost = (prior as { host?: string } | null)?.host ?? "claude";
+  const priorCodex = (prior as { codex_arms_sha256?: string } | null)?.codex_arms_sha256 ?? null;
+  if (prior && (priorHost !== host || priorCodex !== (codexArms?.sha256 ?? null))) {
+    io.err("E_CACHE_STALE review-units: run " + prior.run_id + " ran on host " + priorHost + (priorCodex ? " with codex arms " + priorCodex : "") + ", and this resume gives host " + host + (codexArms ? " with codex arms " + codexArms.sha256 : "") + "\n  fix: resume with the run's own --host and --codex-arms file, or start a new run in a new --out");
+    return 2;
+  }
   const kindsNow = JSON.stringify(Object.fromEntries([...armKinds].sort()));
   const kindsWas = JSON.stringify(Object.fromEntries(Object.entries(prior?.arm_session_kinds ?? {}).sort()));
   if (prior && kindsWas !== kindsNow) {
@@ -385,6 +430,10 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
     io.out("review-units dry run: nothing is built, written or spent");
     io.out("suite " + suite.id + " (sha256 " + loaded.sha256 + ")");
     io.out(ceo ? "plan lens " + CEO_LENS + "; ceo-outcome template sha256 " + CEO_TEMPLATE_SHA256 + "; ceo parser sha256 " + CEO_PARSER_SHA256 + "; rec user sha256 " + REC_USER_SHA256 + "; cap stops on; one follow-up turn; every arm's agent env sets CLAUDE_CODE_DISABLE_1M_CONTEXT=1 (a 200,000-token window)" : lens ? "plan lens " + lens + "; told plan template sha256 " + TOLD_PLAN_SHA256 + "; plan parser sha256 " + PLAN_PARSER_SHA256 + "; rec user sha256 " + REC_USER_SHA256 : "told template sha256 " + TOLD_SHA256 + "; parser sha256 " + PARSER_SHA256);
+    if (codexArms) {
+      io.out("host codex: every session runs " + (codexArms.bin ?? "the image's codex") + "; codex arms sha256 " + codexArms.sha256 + (upstream !== null ? "; every model call goes to " + upstream + " (keyless)" : ""));
+      for (const [name, a] of Object.entries(codexArms.arms)) io.out("  " + name + ": effort " + a.effort + ", hook trust " + (a.hook_trust ? "on" : "off") + ", settings " + JSON.stringify(a.settings) + ", gstack config " + JSON.stringify(a.gstack_config) + ", switches " + (a.switches.join(",") || "none") + (a.install ? ", install " + JSON.stringify(a.install) : ""));
+    }
     io.out("units (" + units.length + "):");
     for (const u of units) io.out("  " + u.id + "  task " + unitTaskId(u) + "  base branch " + (branches.get(u.repo) ?? DEFAULT_BRANCHES[u.repo]) + "  source " + sources.get(u.repo) + (lens ? "  plan unit: no install or test" : "  install " + JSON.stringify(installs.get(u.repo) ?? DEFAULT_INSTALL) + "  test " + JSON.stringify(tests.get(u.repo) ?? "bun test")));
     io.out("arms: " + arms.map((a) => a.name + (lens ? " (" + JSON.stringify(ceo ? ceoArmLine(a.name as CeoArm) : planToldLine(a.told as PlanArm, lens, a.toldPrefix)) + " on " + modelsOf(a.name).join(", ") + ")" : " (told " + a.told + ((a.toldPrefix ?? TOLD_PREFIX[a.told as keyof typeof TOLD_PREFIX]) ? ", " + JSON.stringify(a.toldPrefix ?? TOLD_PREFIX[a.told as keyof typeof TOLD_PREFIX]) : "") + ")") + (a.systemPrompt ? " system prompt " + a.systemPrompt : "") + (renders.has(a.name) ? " render " + renders.get(a.name) : "")).join(", "));
@@ -452,14 +501,16 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   mkdirSync(dirname(tasks), { recursive: true });
   writeFileSync(tasks, "[]\n");
   const runId = prior?.run_id ?? newRunId("review-units");
-  writeFileSync(runFile, JSON.stringify({ run_id: runId, max_turns: maxTurns, session_kind: sessionKind, ...(armKinds.size ? { arm_session_kinds: Object.fromEntries([...armKinds].sort()) } : {}), background_wait_s: backgroundWaitS, ...(allowanceUsd !== null ? { allowance_usd: allowanceUsd } : {}), ...(mapPin ? { reader_map: { sha256: mapPin.sha256, gstack: mapPin.gstack } } : {}) }, null, 2) + "\n");
+  writeFileSync(runFile, JSON.stringify({ run_id: runId, ...(host === "codex" ? { host, codex_arms_sha256: codexArms!.sha256, ...(upstream !== null ? { upstream: "keyless" } : {}) } : {}), max_turns: maxTurns, session_kind: sessionKind, ...(armKinds.size ? { arm_session_kinds: Object.fromEntries([...armKinds].sort()) } : {}), background_wait_s: backgroundWaitS, ...(allowanceUsd !== null ? { allowance_usd: allowanceUsd } : {}), ...(mapPin ? { reader_map: { sha256: mapPin.sha256, gstack: mapPin.gstack } } : {}) }, null, 2) + "\n");
   const served = specs.map((a): ArmSpec => (a.kind === "stack" && renders.has(a.name) ? { ...a, render: renders.get(a.name) as "interactive" | "unattended" } : a));
   const resolved: ResolvedArms = { arms: [...served.filter((a) => a.kind !== "placebo"), ...served.filter((a) => a.kind === "placebo")], base: null, skill: null, notes: [] };
-  const call = { host: "claude" as const, arms: resolved, tasks, out: { path: out, rule: "--out" }, ledger: ledgerPath(one("--ledger") ?? undefined, env), record: recordPath(one("--record") ?? undefined, env), item, runId, models, policy: policy as LoadedPolicy };
-  const rig = dockerRig(call, { env, skill: null, skills, nonce: randomBytes(6).toString("hex"), cap, ...(lens ? { voice: false } : {}), ...(ceo && specs.some((a) => a.name === ENFORCED_ARM) ? { gstackConfig: { [ENFORCED_ARM]: GATE_CONFIG } } : {}) });
+  const call = { host, arms: resolved, tasks, out: { path: out, rule: "--out" }, ledger: ledgerPath(one("--ledger") ?? undefined, env), record: recordPath(one("--record") ?? undefined, env), item, runId, models, policy: policy as LoadedPolicy };
+  const codexConfig = codexArms ? Object.fromEntries(Object.entries(codexArms.arms).filter(([, a]) => Object.keys(a.gstack_config).length).map(([name, a]) => [name, a.gstack_config])) : {};
+  const gstackConfig = { ...(ceo && specs.some((a) => a.name === ENFORCED_ARM) ? { [ENFORCED_ARM]: GATE_CONFIG } : {}), ...codexConfig };
+  const rig = dockerRig(call, { env: upstream !== null ? { ...env, ANTHROPIC_API_KEY: "stub-not-a-key", OPENAI_API_KEY: "stub-not-a-key", OPENROUTER_API_KEY: "stub-not-a-key" } : env, skill: null, skills, nonce: randomBytes(6).toString("hex"), cap, ...(lens || host === "codex" ? { voice: false } : {}), ...(Object.keys(gstackConfig).length ? { gstackConfig } : {}), ...(upstream !== null ? { upstream } : {}), ...(host === "codex" ? { requestFields: ["reasoning"] } : {}) });
   let run: Awaited<ReturnType<typeof runReviewUnits>>;
   try {
-    run = await runReviewUnits({ host: "claude", suite: { id: suite.id, sha256: loaded.sha256, sealed: suite.sealed, sealedCatalogs, ...(bound ?? {}) }, units: prepared, arms, models, passes, parallel, timeoutS, cap, allowanceMicros: allowance, runId, out, date, policy: policy as LoadedPolicy, keyBase: { image_digest: rig.imageDigest, recipe: recipeHash(recipeInputs()), host_version: null, adapter_sha256: adapterSha256("claude"), isolation: "docker" }, journal: rig.recovery?.journal ?? null, reuse: resume ? readReviewJournal(out) : new Map(), repair: flags.has("--repair"), ...(severityMap ? { severityMap } : {}), ...(lens ? { plan: { lens: ceo ? CEO_LENS : lens } } : {}), ...(armModels.size ? { armModels: Object.fromEntries(armModels) } : {}), maxTurns, backgroundWaitS, ...(sessionKind ? { sessionKind: "unattended" as const } : {}), ...(readerMap && "map" in readerMap ? { readers: { map: readerMap.map, sha256: readerMap.sha256 } } : {}), ...(capStops ? { capStops: true } : {}), env }, rig, (line) => io.err(line));
+    run = await runReviewUnits({ host, ...(codexArms ? { codex: codexArms } : {}), suite: { id: suite.id, sha256: loaded.sha256, sealed: suite.sealed, sealedCatalogs, ...(bound ?? {}) }, units: prepared, arms, models, passes, parallel, timeoutS, cap, allowanceMicros: allowance, runId, out, date, policy: policy as LoadedPolicy, keyBase: { image_digest: rig.imageDigest, recipe: recipeHash(recipeInputs()), host_version: null, adapter_sha256: adapterSha256(host), isolation: "docker" }, journal: rig.recovery?.journal ?? null, reuse: resume ? readReviewJournal(out) : new Map(), repair: flags.has("--repair"), ...(severityMap ? { severityMap } : {}), ...(lens ? { plan: { lens: ceo ? CEO_LENS : lens } } : {}), ...(armModels.size ? { armModels: Object.fromEntries(armModels) } : {}), maxTurns, backgroundWaitS, ...(sessionKind ? { sessionKind: "unattended" as const } : {}), ...(readerMap && "map" in readerMap ? { readers: { map: readerMap.map, sha256: readerMap.sha256 } } : {}), ...(capStops ? { capStops: true } : {}), env }, rig, (line) => io.err(line));
   } finally {
     const closed = await rig.close();
     io.out("lease " + closed.lease_id + " settled: " + usd(closed.committed) + " committed, " + closed.unknown + " unknown calls");

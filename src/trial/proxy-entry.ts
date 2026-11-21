@@ -18,6 +18,8 @@ export interface ProxyConfig {
   retry: RetryBudget;
   /** Test only: a base URL every upstream call goes to in place of the provider's, keeping its path, so a keyless end-to-end check can stand a stub model server behind the real proxy container. A paid run never sets it. */
   upstream?: string;
+  /** Top-level request fields every request line in the journal records (MeteringProxy's requestFields). */
+  request_fields?: string[];
 }
 
 if (import.meta.main) {
@@ -32,6 +34,7 @@ if (import.meta.main) {
     journal: config.journal,
     retry: config.retry,
     env: process.env,
+    ...(config.request_fields ? { requestFields: config.request_fields } : {}),
     ...(config.upstream ? { fetch: (url: string, init: RequestInit) => fetch(config.upstream!.replace(/\/+$/, "") + new URL(url).pathname + new URL(url).search, init) } : {}),
   });
   proxy.start();

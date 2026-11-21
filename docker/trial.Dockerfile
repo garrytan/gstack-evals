@@ -26,5 +26,16 @@ RUN tar -xzf /tmp/codex.tgz -C /tmp package/vendor/x86_64-unknown-linux-musl/bin
  && rm -rf /tmp/codex.tgz /tmp/package \
  && codex --version \
  && codex-code-mode-host --help >/dev/null
+# Codex 0.170.0 beside that default, for the Codex hooks eval (lanes/codex-hooks, docker/host-cli.json's codex_hooks_eval).
+# The same package's vendor/<triple> tree, laid out as npm lays it out, goes into /opt/codex-0.170.0, so bin/codex finds
+# codex-code-mode-host beside it. The binary is checked by its own sha256 as well as the tarball's. Nothing on PATH changes:
+# a session runs it by its full path (the Codex driver's bin option).
+ADD --checksum=sha256:67c4bccce8e6c3a2b9ae0e586750e0efac7e0b8cd85e6b4734ad474317d2cc32 https://registry.npmjs.org/@openai/codex/-/codex-0.170.0-linux-x64.tgz /tmp/codex-0.170.0.tgz
+RUN mkdir -p /opt/codex-0.170.0 \
+ && tar -xzf /tmp/codex-0.170.0.tgz -C /opt/codex-0.170.0 --strip-components=3 package/vendor/x86_64-unknown-linux-musl \
+ && rm /tmp/codex-0.170.0.tgz \
+ && echo "880819aab735adcf16f36cd628940b9f1e652a36c01d10a5d32f83cc84902971  /opt/codex-0.170.0/bin/codex" | sha256sum -c - \
+ && /opt/codex-0.170.0/bin/codex --version \
+ && /opt/codex-0.170.0/bin/codex-code-mode-host --help >/dev/null
 ENV HOME=/home/agent LANG=C.UTF-8
 WORKDIR /work
