@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { main, probeTranscripts } from "../../lanes/day-one/cli.ts";
+import { checkStagesSha256, main, probeTranscripts } from "../../lanes/day-one/cli.ts";
 import { read, type ScoredBuild } from "../../lanes/day-one/analysis.ts";
 import { PROBE_QUESTIONS } from "../../lanes/day-one/frozen.ts";
 import { fixtureUnit } from "../../lanes/day-one/dryrun.ts";
@@ -56,8 +56,8 @@ describe.skipIf(!onShm)("day-one read", () => {
       expect(c.r107).toBe("not counted");
       expect(c.blocked.length).toBe(2);
 
-      writeFileSync(join(out, "validation.json"), JSON.stringify({ admitted: true, tags: ["counted"], checker_sha256: "repaired" }));
-      writeFileSync(join(out, "fixtures-real.json"), JSON.stringify({ passed: true }));
+      writeFileSync(join(out, "validation.json"), JSON.stringify({ admitted: true, tags: ["counted"], checker_sha256: "repaired", rows_sha256: checkStagesSha256(out, ["counted"]) }));
+      writeFileSync(join(out, "fixtures-real.json"), JSON.stringify({ passed: true, checker_sha256: "repaired" }));
       const gated = JSON.parse((await run(argv("counted"))).out);
       expect(gated.counted).toBe(true);
       expect(gated.r107).toBe("undecided");
@@ -83,13 +83,13 @@ describe.skipIf(!onShm)("day-one read", () => {
       stageDir(out, "base-counted", [planRow("base", "cccccc", "n", 100)]);
       stageDir(out, "review-counted", [planRow("review", "cccccc", "d", 100)]);
       stageDir(out, "check-counted", [checkRow("cccccc", "n", [true, false, false, false, false]), checkRow("cccccc", "d", [true, true, false, false, false])], { units: ["cccccc"], reps: [1], checker_sha256: "repaired" });
-      writeFileSync(join(out, "fixtures-real.json"), JSON.stringify({ passed: true }));
+      writeFileSync(join(out, "fixtures-real.json"), JSON.stringify({ passed: true, checker_sha256: "repaired" }));
       const argv = ["read", "--out", out, "--units-dir", units, "--tag", "counted", "--arms", "n", "d"];
       writeFileSync(join(out, "validation.json"), JSON.stringify({ admitted: true, tags: ["repaired"], checker_sha256: "repaired" }));
       const other = JSON.parse((await run(argv)).out);
       expect(other.counted).toBe(false);
       expect(other.blocked).toEqual(["the checker validation scored repaired, not this reading's check stages"]);
-      writeFileSync(join(out, "validation.json"), JSON.stringify({ admitted: true, tags: ["counted"], checker_sha256: "repaired" }));
+      writeFileSync(join(out, "validation.json"), JSON.stringify({ admitted: true, tags: ["counted"], checker_sha256: "repaired", rows_sha256: checkStagesSha256(out, ["counted"]) }));
       expect(JSON.parse((await run(argv)).out).counted).toBe(true);
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -107,12 +107,12 @@ describe.skipIf(!onShm)("day-one read", () => {
       stageDir(out, "check-frozen", [checkRow("cccccc", "n", [false, false, false, false, false]), checkRow("cccccc", "d", [false, false, false, false, false])], { units: ["cccccc"], reps: [1] });
       stageDir(out, "check-counted", [checkRow("cccccc", "n", [true, false, false, false, false]), checkRow("cccccc", "d", [true, true, false, false, false])], { units: ["cccccc"], reps: [1], checker_sha256: "repaired" });
       stageDir(out, "check-counted-s", [], { units: ["cccccc"], reps: [1], checker_sha256: "repaired" });
-      writeFileSync(join(out, "fixtures-real.json"), JSON.stringify({ passed: true }));
+      writeFileSync(join(out, "fixtures-real.json"), JSON.stringify({ passed: true, checker_sha256: "repaired" }));
       const argv = (...tags: string[]) => ["read", "--out", out, "--units-dir", units, "--tag", ...tags, "--arms", "n", "d"];
-      writeFileSync(join(out, "validation.json"), JSON.stringify({ admitted: true, tags: ["counted"], checker_sha256: "repaired" }));
+      writeFileSync(join(out, "validation.json"), JSON.stringify({ admitted: true, tags: ["counted"], checker_sha256: "repaired", rows_sha256: checkStagesSha256(out, ["counted"]) }));
       const mixed = JSON.parse((await run(argv("frozen", "counted"))).out);
       expect(mixed.counted).toBe(false);
-      expect(mixed.blocked).toEqual(["the checker validation scored checker repaired, and this reading's check stages ran none, repaired"]);
+      expect(mixed.blocked).toEqual(["the checker validation scored checker repaired, and this reading's check stages ran none, repaired", "the fixtures with the real checker ran checker repaired, and this reading's check stages ran none, repaired"]);
       const shared = JSON.parse((await run(argv("counted", "counted-s"))).out);
       expect(shared.counted).toBe(true);
       expect(shared.arms.d.share).toBe(0.4);
@@ -133,7 +133,7 @@ describe.skipIf(!onShm)("day-one read", () => {
       stageDir(out, "base-counted", [planRow("base", "cccccc", "n", 100)]);
       stageDir(out, "review-counted", [planRow("review", "cccccc", "d", 100)]);
       stageDir(out, "check-counted", [checkRow("cccccc", "n", [true, false, false, false, false]), checkRow("cccccc", "d", [true, true, false, false, false])], { units: ["cccccc"], reps: [1], checker_sha256: "repaired" });
-      writeFileSync(join(out, "fixtures-real.json"), JSON.stringify({ passed: true }));
+      writeFileSync(join(out, "fixtures-real.json"), JSON.stringify({ passed: true, checker_sha256: "repaired" }));
       const argv = ["read", "--out", out, "--units-dir", units, "--tag", "counted", "--arms", "n", "d"];
       for (const receipt of [{ admitted: true }, { admitted: true, checker_sha256: "repaired" }, { admitted: true, tags: [], checker_sha256: "repaired" }]) {
         writeFileSync(join(out, "validation.json"), JSON.stringify(receipt));
@@ -436,3 +436,50 @@ describe.skipIf(!onShm)("day-one controls", () => {
     }
   });
 });
+
+// Value: protects=the validation gate's binding to the rows it scored and the fixtures' binding to the checker (pin change section 14): a passing receipt counts a reading only when the reading's own check rows under the receipt's tags are the rows it scored, and the fixtures receipt counts only when it ran the checker the reading's check stages ran; fails_when=a receipt from another output tree that reuses the tag counts a reading, or a passing fixtures receipt from an older checker stands in for the current one; why_new=the read-only full review of the #395 head, which built both; seam=readings, validateScore and runRealFixtures; no_claim=the hand labels themselves
+describe.skipIf(!onShm)("day-one read, the receipts' bindings", () => {
+  const tree = async (shm: string, name: string, ids: string[], units: string) => {
+    const out = join(shm, name);
+    const rows = ids.flatMap((u, i) => ["n", "d", "r", "a"].map((a, j) => checkRow(u, a, [true, (i + j) % 2 === 0, j > 1, false, i === 2])));
+    stageDir(out, "check-wave", rows, { units: ids, reps: [1], checker_sha256: "repaired" });
+    for (const r of rows) mkdirSync(join(out, "builds", r.cell.unit, "r1", r.cell.arm, "tree"), { recursive: true });
+    const key = join(shm, name + "-key.json");
+    expect((await run(["validate", "draw", "--out", out, "--units-dir", units, "--tag", "wave", "--dest", join(shm, name + "-draw"), "--key", key, "--count", "12"])).code).toBe(0);
+    const k = JSON.parse(readFileSync(key, "utf8")) as Record<string, { row: string }>;
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    writeFileSync(join(shm, name + "-agree.ndjson"), Object.keys(k).map((l) => JSON.stringify({ label: l, tasks: byId.get(k[l]!.row)!.check.parse.tasks.map((t) => ({ id: t.id, done: t.done })) })).join("\n") + "\n");
+    return { out, key, labels: join(shm, name + "-agree.ndjson") };
+  };
+
+  test("a receipt from another output tree that reuses the tag does not count a reading, and fixtures from another checker do not count", async () => {
+    const shm = mkdtempSync("/dev/shm/day-one-bind-");
+    try {
+      const units = join(shm, "units");
+      const a = ["aaaaaa", "bbbbbb", "cccccc", "dddddd"];
+      const b = ["eeeeee", "ffffff", "gggggg", "hhhhhh"];
+      for (const id of [...a, ...b]) fixtureUnit(units, id, 2);
+      const A = await tree(shm, "a", a, units);
+      const B = await tree(shm, "b", b, units);
+      expect((await run(["validate", "score", "--out", A.out, "--tag", "wave", "--key", A.key, "--labels", A.labels])).code).toBe(0);
+      const fixtures = (out: string, checker?: string) => writeFileSync(join(out, "fixtures-real.json"), JSON.stringify({ schema: "day-one.fixtures-real.v1", apps: [], passed: true, spent_micros: 0, ...(checker ? { checker_sha256: checker } : {}) }));
+      const reading = async (out: string, ...extra: string[]) => JSON.parse((await run(["read", "--out", out, "--units-dir", units, "--tag", "wave", "--arms", "n", "d", ...extra])).out);
+      fixtures(A.out, "repaired");
+      fixtures(B.out, "repaired");
+      expect((await reading(A.out)).blocked).toEqual([]);
+      const borrowed = await reading(B.out, "--validation-receipt", join(A.out, "validation.json"));
+      expect(borrowed.counted).toBe(false);
+      expect(borrowed.blocked).toEqual(["the checker validation scored other check rows than this reading's check stages hold under its tags"]);
+      fixtures(A.out, "pre-repair");
+      expect((await reading(A.out)).blocked).toEqual(["the fixtures with the real checker ran checker pre-repair, and this reading's check stages ran repaired"]);
+      fixtures(A.out);
+      expect((await reading(A.out)).blocked).toEqual(["the fixtures with the real checker ran checker none, and this reading's check stages ran repaired"]);
+      writeFileSync(join(shm, "old-fixtures.json"), JSON.stringify({ passed: true, checker_sha256: "pre-repair" }));
+      fixtures(A.out, "repaired");
+      expect((await reading(A.out, "--fixtures-receipt", join(shm, "old-fixtures.json"))).blocked).toEqual(["the fixtures with the real checker ran checker pre-repair, and this reading's check stages ran repaired"]);
+    } finally {
+      rmSync(shm, { recursive: true, force: true });
+    }
+  });
+});
+
