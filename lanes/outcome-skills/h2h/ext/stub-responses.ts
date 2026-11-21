@@ -14,6 +14,9 @@
 //   cmd:<sh>    a code-mode exec cell that runs <sh> through tools.exec_command, then DONE (the rest of the message's
 //               first line after the tag is the command)
 //   direct:<sh> a direct exec_command function call that runs <sh>, then DONE
+//   patch:<p>   a code-mode cell that adds file <p> through tools.apply_patch, then DONE
+//   plan:<p>    one response with a "Using writing-plans to ..." message and the patch cell for <p>, then DONE
+//   tdd:<t>|<s> the patch cell for test file <t>, a cell whose command fails, the patch cell for source file <s>, then DONE
 // Every request is written to LOG_DIR as req-NNN.json (path, headers without authorization, body). Usage:
 // bun stub-responses.ts [--port N]; it prints "stub-responses listening <port>" when ready.
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -30,13 +33,14 @@ const usage = { input_tokens: 1000, input_tokens_details: { cached_tokens: 200 }
 const message = (text: string): Item => ({ type: "message", id: "msg_" + n, role: "assistant", status: "completed", content: [{ type: "output_text", text, annotations: [] }] });
 const call = (name: string, args: unknown): Item => ({ type: "function_call", id: "fc_" + n, call_id: "call_" + name + "_" + n, name, arguments: JSON.stringify(args), status: "completed" });
 const cell = (cmd: string): Item => ({ type: "custom_tool_call", id: "ctc_" + n, call_id: "call_exec_" + n, name: "exec", input: "const r = await tools.exec_command({cmd: " + JSON.stringify(cmd) + "});\ntext(typeof r === \"string\" ? r : (r.output ?? JSON.stringify(r)));", status: "completed" });
+const patchCell = (path: string): Item => ({ type: "custom_tool_call", id: "ctc_" + n, call_id: "call_exec_" + n, name: "exec", input: "await tools.apply_patch(" + JSON.stringify("*** Begin Patch\n*** Add File: " + path + "\n+x\n*** End Patch\n") + ");\ntext(\"patched\");", status: "completed" });
 const question = { questions: [{ id: "scope", header: "Scope", question: "Should I also add a regression test?", options: [{ label: "Yes", description: "Add one" }, { label: "No", description: "Skip it" }] }] };
 
 const textOf = (i: any): string => (Array.isArray(i?.content) ? i.content.map((c: any) => (typeof c?.text === "string" ? c.text : "")).join("") : typeof i?.content === "string" ? i.content : "");
 const isUser = (i: any) => i?.type === "message" && i.role === "user" && !textOf(i).startsWith("<environment_context>") && !textOf(i).startsWith("<skill>");
 
 /** The script's next output item for one request body, or null for hang. */
-export function next(body: any): Item | "fail" | null {
+export function next(body: any): Item | Item[] | "fail" | null {
   const input: any[] = Array.isArray(body?.input) ? body.input : [];
   const users = input.map((x, i) => [x, i] as const).filter(([x]) => isUser(x));
   const last = users.at(-1);
@@ -49,7 +53,14 @@ export function next(body: any): Item | "fail" | null {
   if (script === "nodone") return message("Still working on it.");
   if (script === "hang") return null;
   if (script === "fail") return reply ? message("Fixed.\nDONE") : "fail";
+  const arg = (m?.[2] ?? "").trim();
+  if (script === "tdd" && !reply && steps < 3) {
+    const [test, src] = arg.split("|");
+    return [patchCell(test ?? "tests/test_x.py"), cell("echo FAILED: 1 failing; exit 1"), patchCell(src ?? "src/x.py")][steps]!;
+  }
   if (reply || steps > 0) return message("Fixed it.\n\nDONE");
+  if (script === "patch") return patchCell(arg);
+  if (script === "plan") return [message("Using writing-plans to write the plan for this change."), patchCell(arg)];
   if (script === "ask") return call("request_user_input_async", question);
   if (script === "asksync") return call("request_user_input", question);
   if (script === "cmd") return cell(rest);
@@ -81,7 +92,8 @@ if (import.meta.main) {
         return new Response(null, { status: 499 });
       }
       if (item === "fail") return sse([{ type: "response.created", response: { id } }, { type: "response.failed", response: { id, status: "failed", error: { code: "cyber_policy", message: "This request was flagged under cyber_policy." }, usage } }]);
-      return sse([{ type: "response.created", response: { id } }, { type: "response.output_item.done", output_index: 0, item }, { type: "response.completed", response: { id, status: "completed", usage } }]);
+      const items = Array.isArray(item) ? item : [item];
+      return sse([{ type: "response.created", response: { id } }, ...items.map((it, i) => ({ type: "response.output_item.done", output_index: i, item: it })), { type: "response.completed", response: { id, status: "completed", usage } }]);
     },
   });
   console.log("stub-responses listening " + server.port);
