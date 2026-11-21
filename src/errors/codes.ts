@@ -4031,6 +4031,15 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_CSO_E2E_FAIL: {
+    exit: 2,
+    meaning: "A line of the /cso lane's keyless end-to-end run printed FAIL: on a fixture tree in Harbor containers against a fake provider, a session did not end completed with DONE, its slot did not close finalized, a runtime was not on PATH, its record lacks the reported model or Claude Code version, its exposure read wrong for its arm, or the driver did not stop clean.",
+    fix: "Read the FAIL line and the session dir it names, fix the cause, and run the end-to-end run again before any spend.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: true,
+    owner: "U20",
+  },
   E_CSO_SCAN: {
     exit: 2,
     meaning: "A /cso eval id scan did not finish: the tree is missing, a find, grep or git cat-file step failed, or the scan script exited non-zero. Containment fails closed, so no unit counts as clean on that tree.",

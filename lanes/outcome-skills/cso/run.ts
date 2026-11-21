@@ -29,6 +29,8 @@ const ROOT = join(import.meta.dir, "../../..");
 export const CSO_BASE_IMAGE = INSTALL_IMAGE.base;
 export const CSO_REPO_DIR = "/work/repo";
 export const CSO_WORK_DIR = "/work";
+/** The base image's own node, which runs the in-container egress probe. */
+export const CSO_PROBE_NODE = "/usr/local/bin/node";
 /** The whole-session retry's meta.rerun. */
 export const CSO_RERUN = "upstream or infra end";
 const KEYS = /^(ANTHROPIC|OPENAI|OPENROUTER|UBICLOUD|GEMINI|GOOGLE|XAI|DEEPSEEK|TYPESAFE|EXA|AGENTRUN)_[A-Z_]*KEY$|_TOKEN$/;
@@ -90,7 +92,7 @@ export function csoRunCopy(i: CsoSessionInput, attempt: 1 | 2, dir: string, p: C
   env.PYTHONDONTWRITEBYTECODE = "1";
   const ak: Record<string, string> = {
     skip_install: "true", task_json: taskJson, h2h_config: h2hJson, arm: CSO_PREFIX + i.arm, arm_tar: armTar, upstream_model: upstream, control_url: i.control, ledger: "u4", task_label: label(i), trial_n: "1",
-    ...(attempt === 2 ? { rerun: CSO_RERUN } : {}), image_id: i.image.image_id, manifest, manifest_sha256: manifestSha, repo_dir: CSO_REPO_DIR, workdir: CSO_WORK_DIR,
+    ...(attempt === 2 ? { rerun: CSO_RERUN } : {}), image_id: i.image.image_id, manifest, manifest_sha256: manifestSha, repo_dir: CSO_REPO_DIR, workdir: CSO_WORK_DIR, probe_node: CSO_PROBE_NODE,
   };
   const argv = ["run", "-y", "-p", task, "-a", "h2h_agent:H2hAgent", "-m", harborModel(i.model, p), "--base-url", /^https?:\/\//.test(i.proxy) ? i.proxy : "http://" + i.proxy, ...Object.entries(ak).flatMap(([k, v]) => ["--ak", k + "=" + v]), "-e", "docker", "--extra-docker-compose", join(ROOT, "quick/laneb/runner/agent-caps.compose.yaml"), "--extra-docker-compose", compose, "-o", join(dir, "jobs"), "--job-name", (i.jobName ?? "cso-" + i.unit.unit + "-" + i.arm + "-" + i.model + "-" + i.index) + "-a" + attempt, "--disable-verification"];
   return { argv, env, config };

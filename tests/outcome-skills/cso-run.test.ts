@@ -81,7 +81,7 @@ test("Harbor's argv runs h2h_agent on the cso arm, the driver's model name and t
   const ak = Object.fromEntries(argv.flatMap((a, n) => (argv[n - 1] === "--ak" ? [[a.slice(0, a.indexOf("=")), a.slice(a.indexOf("=") + 1)] as [string, string]] : [])));
   expect(argv.slice(0, 7)).toEqual(["run", "-y", "-p", join(dir, "task"), "-a", "h2h_agent:H2hAgent", "-m"]);
   expect(argv[7]).toBe("anthropic/particle-ai/particle-1");
-  expect(ak).toMatchObject({ arm: "cso:cso", upstream_model: "particle-ai/particle-1", rerun: CSO_RERUN, image_id: IMAGE.image_id, repo_dir: "/work/repo", ledger: "u4", task_label: "u1/cso/particle/stage0/0" });
+  expect(ak).toMatchObject({ arm: "cso:cso", upstream_model: "particle-ai/particle-1", rerun: CSO_RERUN, image_id: IMAGE.image_id, repo_dir: "/work/repo", probe_node: "/usr/local/bin/node", ledger: "u4", task_label: "u1/cso/particle/stage0/0" });
   expect(config).toMatchObject({ arm: "cso:cso", home: "/homes/cso", home_rule: "gstack", limits: { allowance_usd: 3 } });
   expect(env.ANTHROPIC_API_KEY).toBe("placeholder-not-a-key");
   expect(Object.keys(env).filter((k) => /OPENROUTER|OPENAI|EXA/.test(k))).toEqual([]);
@@ -161,4 +161,13 @@ test("rerun's runner refuses Sol, a missing driver or home, an unknown stage and
   expect(pre(env, "none")).toThrow(/^E_CSO_RERUN_PRECONDITION arm record .*none\.json/);
   expect(pre(env, "cso")).not.toThrow();
   expect(pre(env, "untold")).not.toThrow();
+});
+test("an attempt pair that leaves no summary and no transcript is an infra gap with an empty identity, never a refusal", async () => {
+  const dir = tmp();
+  const bin = join(dir, "harbor");
+  writeFileSync(bin, "#!/usr/bin/env bash\nexit 1\n");
+  chmodSync(bin, 0o755);
+  const { record } = await runCsoSession(input({ harbor: bin }));
+  expect(record).toMatchObject({ end: "gap", attempts: 2, model_id: "", harness_version: "", texts: [], cost_usd: 0 });
+  expect(record.reason).toStartWith("E_CSO_GAP_INFRA");
 });
