@@ -463,6 +463,9 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_CSO_PACKET](#e_cso_packet) | 2 | U20 |
 | [E_CSO_CHECK_INPUT](#e_cso_check_input) | 2 | U20 |
 | [E_CSO_ANCHOR](#e_cso_anchor) | 2 | U20 |
+| [E_CSO_ANALYSIS_INPUT](#e_cso_analysis_input) | 2 | U20 |
+| [E_CSO_READOUT_KEY](#e_cso_readout_key) | 2 | U20 |
+| [E_CSO_READOUT_OUT](#e_cso_readout_out) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -3601,6 +3604,30 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable:
 A /cso eval anchor or format variant can't be written for a unit: no pre-fix hunk lies in a file of the audited tree, no weakness family is free of the advisory's CWE ids, or no line of the fix file sits 30 lines from every hunk.
 
 Fix: Use another stage 1 unit for the format variants, in check_seed order, and record the unit that couldn't host one.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_ANALYSIS_INPUT
+
+The /cso eval analysis or stage 1 readout was handed input it can't use: a unit listed twice, two scores for one unit, arm and model, a score for a unit outside the stage, a cell with no stage 1 cost, or a prereg.json analysis, headroom, limits or interim-look constant missing.
+
+Fix: Feed the analysis one score per unit, arm and model from the scorer, with the stage's own unit list; prereg.json changes only through a dated pre-data change post.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_READOUT_KEY
+
+The /cso eval stage 1 readout key is unusable: missing, inside this repository or a git work tree, readable by group or others, the wrong length, or not the key the sealed file was written with.
+
+Fix: Mint a fresh 32-byte key in the sealed store outside any work tree, mode 0600, before the readout runs; keep it until stage 2's analysis opens the file.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_READOUT_OUT
+
+The /cso eval sealed stage 1 file can't be written or opened: it already exists, can't be created, is not a cso-sealed.v1 file, or doesn't match the sha256 the run record holds.
+
+Fix: A sealed file is written once and never overwritten. Open it only with the recorded sha256 after stage 2's analysis.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
 

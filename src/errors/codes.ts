@@ -3941,6 +3941,33 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_CSO_ANALYSIS_INPUT: {
+    exit: 2,
+    meaning: "The /cso eval analysis or stage 1 readout was handed input it can't use: a unit listed twice, two scores for one unit, arm and model, a score for a unit outside the stage, a cell with no stage 1 cost, or a prereg.json analysis, headroom, limits or interim-look constant missing.",
+    fix: "Feed the analysis one score per unit, arm and model from the scorer, with the stage's own unit list; prereg.json changes only through a dated pre-data change post.",
+    side_effects: NO_SPEND,
+    retry_safe: false,
+    resumable: false,
+    owner: "U20",
+  },
+  E_CSO_READOUT_KEY: {
+    exit: 2,
+    meaning: "The /cso eval stage 1 readout key is unusable: missing, inside this repository or a git work tree, readable by group or others, the wrong length, or not the key the sealed file was written with.",
+    fix: "Mint a fresh 32-byte key in the sealed store outside any work tree, mode 0600, before the readout runs; keep it until stage 2's analysis opens the file.",
+    side_effects: NO_SPEND,
+    retry_safe: false,
+    resumable: false,
+    owner: "U20",
+  },
+  E_CSO_READOUT_OUT: {
+    exit: 2,
+    meaning: "The /cso eval sealed stage 1 file can't be written or opened: it already exists, can't be created, is not a cso-sealed.v1 file, or doesn't match the sha256 the run record holds.",
+    fix: "A sealed file is written once and never overwritten. Open it only with the recorded sha256 after stage 2's analysis.",
+    side_effects: NO_SPEND,
+    retry_safe: false,
+    resumable: false,
+    owner: "U20",
+  },
 } as const satisfies Record<string, CodeInfo>;
 
 export type ReasonCode = keyof typeof CODES;
