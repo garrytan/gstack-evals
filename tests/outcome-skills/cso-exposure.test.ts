@@ -19,7 +19,9 @@ const call = (command: string, out: string, error = false) => {
 const tool = (name: string, input: Record<string, unknown>) => [{ type: "AssistantMessage", parent_tool_use_id: null, content: [{ type: "tool_use", id: "x" + n++, name, input }] }];
 const LOADED = [{ type: "UserMessage", content: [{ type: "text", text: "<command-message>cso</command-message>\n<command-name>/cso</command-name>" }] }];
 const startOut = JSON.stringify({ schemaVersion: 3, runId: RUN, repoId: "r", status: "running", completeness: "not assessed", source: { root: "<REDACTED-internal.user_path>" } }, null, 2);
-const inspectOut = JSON.stringify({ report: { runId: RUN }, manifest: { root: "<REDACTED-internal.user_path>", entries: [{ path: "src/a.ts", pathId: PID }] } }, null, 2);
+const SECRET = "@cso-path//613263fe85be84650fb80c786d861b18";
+const inspectOut = JSON.stringify({ report: { runId: RUN }, manifest: { root: "<REDACTED-internal.user_path>", entries: [{ originalHash: "0".repeat(64), bytes: 22, mode: 420, path: "src/a.ts" }, { originalHash: "1".repeat(64), bytes: 9, mode: 420, path: SECRET, displayPath: "config/secrets/[redacted]" }] } }, null, 2);
+const TREE = ["src/a.ts", "config/secrets/prod.env"];
 const full = [
   ...LOADED,
   ...call(L + " start --repo /work/repo", startOut),
@@ -31,9 +33,10 @@ const full = [
 
 describe("cso exposure", () => {
   test("a full run: loaded, procedure ran, completeness, findings submitted, helper records", () => {
-    const r = csoExposure(full);
+    const r = csoExposure(full, TREE);
     expect(r.exposure).toEqual({ loaded: true, procedure_ran: true, run_id: RUN, completeness: "complete", findings_submitted: 2, tooling_errors: 0, host_reads_after_start: 0 });
-    expect(r.helper).toEqual({ snapshot_root: "<REDACTED-internal.user_path>", handles: { ["@cso-path//" + PID]: "src/a.ts" } });
+    expect(r.helper).toEqual({ snapshot_root: "<REDACTED-internal.user_path>", handles: { [SECRET]: "config/secrets/prod.env" } });
+    expect(csoExposure(full).helper.handles).toEqual({});
   });
   test("the base-directory marker for the cso skill counts as loaded; another skill's does not", () => {
     const ctx = (t: string) => [{ type: "UserMessage", content: [{ type: "text", text: t }] }];
